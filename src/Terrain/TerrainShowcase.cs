@@ -67,13 +67,16 @@ public static class TerrainShowcase
         // Vaud: three-lens pedestrian heads, arrows on the plates; Geneva: neither (#759)
         ("Vaud", () => TrafficLight(pedestrianAmber: true, arrowPlates: true)),
         ("Geneva", () => TrafficLight(pedestrianAmber: false)),
+        // riders may turn right on red (#711, signal 5.18): beside the bike head's red lamp, else the car head's
+        ("Bike right on red", () => TrafficLight(pedestrianAmber: true, rightOnRed: true)),
+        ("Bike right on red, no bike head", () => TrafficLight(pedestrianAmber: true, rightOnRed: true, bikeHead: false)),
     ];
 
-    private static Node3D TrafficLight(bool pedestrianAmber, bool arrowPlates = false)
+    private static Node3D TrafficLight(bool pedestrianAmber, bool arrowPlates = false, bool rightOnRed = false, bool bikeHead = true)
     {
         var plan = SignalPlan.Build(
         [
-            new SignalArm(0, true, true, LeftPocket: true, Pedestrians: true, BikeSignal: true, Rank: 2),
+            new SignalArm(0, true, true, LeftPocket: true, Pedestrians: true, BikeSignal: bikeHead, Rank: 2, BikeRightOnRed: rightOnRed),
             new SignalArm(Math.PI / 2, true, true, Pedestrians: true),
             new SignalArm(Math.PI, true, true, LeftPocket: true, Pedestrians: true, Rank: 2),
             new SignalArm(-Math.PI / 2, true, true, Pedestrians: true),

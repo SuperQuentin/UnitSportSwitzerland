@@ -228,7 +228,7 @@ public class SignalPlanTests(ITestOutputHelper output)
     [Fact]
     public void RoadTile_RoundTripsTheSignalSection()
     {
-        var plan = SignalPlan.Build([Arm(N, true, true, bike: true), Arm(E), Arm(S, true), Arm(W, right: true)], seed: 99, pedestrianAmber: false);
+        var plan = SignalPlan.Build([Arm(N, true, true, bike: true) with { BikeRightOnRed = true }, Arm(E), Arm(S, true), Arm(W, right: true)], seed: 99, pedestrianAmber: false);
         plan.ArrowPlates = true;   // bit 1 of the pedestrian byte, beside bit 0 (#759)
         var tile = new RoadTile
         {
@@ -246,6 +246,7 @@ public class SignalPlanTests(ITestOutputHelper output)
         Assert.False(p.PedestrianAmber);
         Assert.True(p.ArrowPlates);
         Assert.Equal(plan.Arms.Count, p.Arms.Count);
+        Assert.Equal([true, false, false, false], p.Arms.Select(a => a.BikeRightOnRed));   // bit 6 of the arm byte (#711)
         Assert.Equal(plan.Groups.Count, p.Groups.Count);
         Assert.Equal(11f, back.Signals[0].Stops[11]);
         for (double t = 0; t < 2 * plan.Cycle; t += 0.25)

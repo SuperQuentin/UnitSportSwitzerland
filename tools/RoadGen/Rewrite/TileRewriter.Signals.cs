@@ -176,7 +176,7 @@ public static partial class TileRewriter
         public int Junctions, Inferred, FromData, Arms, Approaches, LeftPockets, RightPockets, StopLines, Groups, TwoLensPedestrian, Invalid;
         /// <summary>Where OSM decides, what the inference rule would have said: both, rule only, OSM only (#348 tuning).</summary>
         public int RuleAndOsm, RuleOnly, OsmOnly, InternalArms;
-        public int StopsBack, SignsAboveHeads, Poles, PolesPastPath, PolesRejected, SignsOnPoles, BikeSignals, Crossings, PathStopLines, Refuges;
+        public int StopsBack, SignsAboveHeads, BikeRightOnRed, Poles, PolesPastPath, PolesRejected, SignsOnPoles, BikeSignals, Crossings, PathStopLines, Refuges;
         /// <summary>Dashed lines through a junction between two lanes with the same turn (#700).</summary>
         public int PairGuides;
         /// <summary>Pedestrian crossings drawn from OSM crossing nodes (#700): at junctions without lights, and at lit arms with no sidewalk.</summary>
@@ -200,7 +200,7 @@ public static partial class TileRewriter
             sb.Append(c, $"{LeftPockets:N0} with a left-turn pocket, {RightPockets:N0} with a right-turn pocket, {StopLines:N0} stop lines without a left pocket, {Groups:N0} signal groups, ");
             sb.Append(c, $"{TwoLensPedestrian:N0} with 2-lens pedestrian heads, cycles s: {string.Join(", ", Cycles.Select(kv => $"{kv.Key} x{kv.Value}"))}, invalid plans {Invalid:N0}, dashed lines through the junction between two lanes with the same turn {PairGuides:N0} (#700), crossings from OSM crossing nodes {DataCrossings:N0}, refuges where one crosses an exit hatch {Refuges:N0} (#700), junctions whose crosswalks follow OSM {CrossingsMapped:N0}, arms with a sidewalk and no mapped crossing there {CrosswalksUnmapped:N0}, arms without a pedestrian signal (no crosswalk) {ArmsWithoutPedestrians:N0} (#711)").AppendLine();
             sb.Append(c, $"      where OSM decides, the inference rule agrees on {RuleAndOsm:N0}, adds {RuleOnly:N0} OSM does not have, misses {OsmOnly:N0}; {InternalArms:N0} arms inside a junction of several nodes; inferred at LV95 {string.Join(" ", InferredAt)}; crosswalks left out by OSM at LV95 {string.Join(" ", UnmappedAt)}").AppendLine();
-            sb.Append(c, $"      stop lines moved {StopBehindCrosswalk:F0} m behind their crosswalk {StopsBack:N0} (#711), poles (#350) {Poles:N0} ({PolesPastPath:N0} main poles right of their path, #711), rejected (no clear spot) {PolesRejected:N0}, priority signs moved onto a pole {SignsOnPoles:N0} ({SignsAboveHeads:N0} above the heads, beside a bike head, #711), approaches with a bike signal {BikeSignals:N0} (#351)").AppendLine();
+            sb.Append(c, $"      stop lines moved {StopBehindCrosswalk:F0} m behind their crosswalk {StopsBack:N0}, approaches where riders turn right on red {BikeRightOnRed:N0} (#711), poles (#350) {Poles:N0} ({PolesPastPath:N0} main poles right of their path, #711), rejected (no clear spot) {PolesRejected:N0}, priority signs moved onto a pole {SignsOnPoles:N0} ({SignsAboveHeads:N0} above the heads, beside a bike head, #711), approaches with a bike signal {BikeSignals:N0} (#351)").AppendLine();
             foreach (var x in InvalidExamples) sb.Append("      invalid: ").Append(x).AppendLine();
             return sb.ToString();
         }
@@ -323,6 +323,7 @@ public static partial class TileRewriter
             var islandArms = new Dictionary<int, IslandExit>();   // arm -> where the lane after its exit island starts (#682)
             var exitArms = new Dictionary<int, IslandExit>();   // arm -> where its exit lane starts at the mouth, no island (#711)
             var approachArms = new List<(int Arm, int PlanArm, float[] Stop)>();   // their lane records (#353)
+            var riderArms = new Dictionary<int, (bool OwnLine, int LinkId, LinkEnd End, bool Inside)>();   // per plan arm, for right on red (#711)
             var armInPlan = new int[junction.Arms.Count];   // each junction arm's index in the plan, -1 none (#406)
             Array.Fill(armInPlan, -1);
             // 50 km/h inside a locality: the yellow lasts 3 s (#349)
@@ -464,8 +465,13 @@ public static partial class TileRewriter
                 // cross (layout (a)); a bike lane between the pocket and the through lane (b) goes with the
                 // cars. The path or lane as built at the arm's end (the line's own sides do not know a
                 // street's paths, #120)
-                bool path = bikeSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, drawnRight).HasTrack;
+                var riderSide = bikeSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, drawnRight);
+                bool path = riderSide.HasTrack;
                 bool bikeSignal = approach && (path || layout is { KerbsideBike: true });
+                // (#711, SSV Art. 69a) riders turning right on red need a line of their own ahead of the cars': a path stopping at
+                // its line by the crosswalk, a kerbside bike lane whose cars' line stands back, or a right-turn lane of its own
+                bool ownLine = approach && (crosswalk && path || back > 0 && layout is null && riderSide.HasLane || rightPocket);
+                riderArms[arms.Count] = (ownLine, plan.Arms[i].LinkId, plan.Arms[i].End, inside);
                 if (bikeSignal) stats.BikeSignals++;
                 if (approach && !path && layout is { KerbsideBike: true }) kerbside.Add((arms.Count, layout));
                 armInPlan[i] = arms.Count;
@@ -484,6 +490,25 @@ public static partial class TileRewriter
             string? canton = cantons?.CodeAt(junction.Centre.X, junction.Centre.Y);
             bool amber = PedestrianAmber(canton);
             uint seed = (uint)(long)Math.Round(junction.Centre.X) * 73856093u ^ (uint)(long)Math.Round(junction.Centre.Y) * 19349663u;
+            // riders may turn right on red (the user's rule, #711: SSV Art. 69a, signal 5.18) where the street directly on the right
+            // has a bike lane or path on the side they join and the approach gives them a line of their own
+            for (int a = 0; a < arms.Count; a++)
+            {
+                if (!arms[a].In || !riderArms.TryGetValue(a, out var own) || !own.OwnLine) continue;
+                int target = -1;
+                double sharpest = 0;
+                for (int k = 0; k < arms.Count; k++)
+                {
+                    if (k == a || !arms[k].Out || SignalPlan.Turn(arms, a, k) != SignalMoves.Right) continue;
+                    double delta = Math.IEEERemainder(arms[k].Heading - (arms[a].Heading + Math.PI), 2 * Math.PI);
+                    if (target < 0 || delta < sharpest) (target, sharpest) = (k, delta);
+                }
+                if (target < 0 || !riderArms.TryGetValue(target, out var exit) || exit.Inside) continue;
+                var joined = bikeSideAt(exit.LinkId, exit.End, exit.End != LinkEnd.End);   // the side going away from the junction
+                if (!joined.HasTrack && !joined.HasLane) continue;
+                arms[a] = arms[a] with { BikeRightOnRed = true };
+                stats.BikeRightOnRed++;
+            }
             var signalPlan = SignalPlan.Build(arms, seed, amber);
             // layout (a) only where the plan gives the kerbside bike lane a phase with the right arrow
             // red; else the weave must come before the line: layout (b), and the plan again (#351)

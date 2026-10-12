@@ -48,7 +48,9 @@ public readonly record struct SignalArm(
     float CrossingM = 7,
     byte Rank = 1,
     /// <summary>Turns this approach may not make (#700: its lane data or an OSM restriction): its groups leave them out. Not stored: the groups carry it.</summary>
-    SignalMoves Banned = SignalMoves.None);
+    SignalMoves Banned = SignalMoves.None,
+    /// <summary>Riders may turn right on red (SSV Art. 69a, signal 5.18, #711): the sign stands beside the red lamp.</summary>
+    bool BikeRightOnRed = false);
 
 public readonly record struct SignalInterval(SignalAspect Aspect, float From, float To);
 
@@ -789,7 +791,7 @@ public sealed class RoadSignal
     public const byte SectionVersion = 2;
 
     [Flags]
-    private enum ArmBits : byte { In = 1, Out = 2, LeftPocket = 4, RightPocket = 8, Pedestrians = 16, Bike = 32 }
+    private enum ArmBits : byte { In = 1, Out = 2, LeftPocket = 4, RightPocket = 8, Pedestrians = 16, Bike = 32, BikeRightOnRed = 64 }
 
     public static void Write(BinaryWriter w, IReadOnlyList<RoadSignal> signals)
     {
@@ -808,7 +810,8 @@ public sealed class RoadSignal
                 var a = p.Arms[i];
                 w.Write((float)a.Heading);
                 var bits = (a.In ? ArmBits.In : 0) | (a.Out ? ArmBits.Out : 0) | (a.LeftPocket ? ArmBits.LeftPocket : 0)
-                    | (a.RightPocket ? ArmBits.RightPocket : 0) | (a.Pedestrians ? ArmBits.Pedestrians : 0) | (a.BikeSignal ? ArmBits.Bike : 0);
+                    | (a.RightPocket ? ArmBits.RightPocket : 0) | (a.Pedestrians ? ArmBits.Pedestrians : 0) | (a.BikeSignal ? ArmBits.Bike : 0)
+                    | (a.BikeRightOnRed ? ArmBits.BikeRightOnRed : 0);
                 w.Write((byte)bits);
                 w.Write((byte)Math.Clamp(MathF.Round(a.SpeedKmh), 0, 255));
                 w.Write(a.Rank);
@@ -863,7 +866,8 @@ public sealed class RoadSignal
                 byte rank = r.ReadByte();
                 float crossing = r.ReadUInt16() / 10f;
                 plan.Arms.Add(new SignalArm(heading, bits.HasFlag(ArmBits.In), bits.HasFlag(ArmBits.Out), bits.HasFlag(ArmBits.LeftPocket),
-                    bits.HasFlag(ArmBits.RightPocket), bits.HasFlag(ArmBits.Pedestrians), bits.HasFlag(ArmBits.Bike), speed, crossing, rank));
+                    bits.HasFlag(ArmBits.RightPocket), bits.HasFlag(ArmBits.Pedestrians), bits.HasFlag(ArmBits.Bike), speed, crossing, rank,
+                    BikeRightOnRed: bits.HasFlag(ArmBits.BikeRightOnRed)));
                 stops[i * 3] = r.ReadSingle(); stops[i * 3 + 1] = r.ReadSingle(); stops[i * 3 + 2] = r.ReadSingle();
             }
             for (int g = 0; g < groups; g++)

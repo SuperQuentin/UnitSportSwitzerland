@@ -349,20 +349,8 @@ void fragment() {
                 flat.Line(new(-0.12f, -0.44f), new(-0.4f, -0.82f), 0.14f);
                 break;
             case Icon.Bike:
-            {
-                // two wheels, the diamond frame, saddle and bars
-                Vector2 rear = new(-0.5f, -0.28f), crank = new(-0.02f, -0.28f), seat = new(-0.18f, 0.2f),
-                    head = new(0.36f, 0.2f), front = new(0.5f, -0.28f);
-                flat.Ring(rear, 0.34f, 0.1f, 12);
-                flat.Ring(front, 0.34f, 0.1f, 12);
-                const float W = 0.09f;
-                flat.Line(rear, crank, W); flat.Line(rear, seat, W); flat.Line(seat, crank, W);
-                flat.Line(seat, head, W); flat.Line(head, crank, W); flat.Line(head, front, W);
-                flat.Line(new(-0.32f, 0.3f), new(-0.06f, 0.3f), 0.08f);
-                flat.Line(head, new(0.3f, 0.38f), W);
-                flat.Line(new(0.24f, 0.4f), new(0.44f, 0.36f), 0.08f);
+                foreach (var polygon in SignalGlyphs.Bike()) flat.Fan(polygon);   // two wheels, the diamond frame, saddle and bars
                 break;
-            }
             default: flat.Disc(Vector2.Zero, 1f, 10); break;
         }
         return Meshes[(int)key] = flat.Mesh();

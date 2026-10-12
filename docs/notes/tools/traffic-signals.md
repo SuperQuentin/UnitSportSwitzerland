@@ -87,6 +87,19 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   Where the cars' line stands back behind a crosswalk, both poles stand by the crosswalk on its
   near side, `PoleBehindCrosswalk` 0.4 m behind its edge, not by the cars' line (the user's
   review, #711); with no room for that line they stay on its far side (`PoleAlong`).
+- **Riders turn right on red** (the user's rule, #711; SSV Art. 69a, signal 5.18 "Rechtsabbiegen
+  für Radfahrer gestattet": yellow bike and arrow on black, beside the red lamp, right of it; the
+  red then means "no priority" for riders turning right). An approach gets it
+  (`SignalArm.BikeRightOnRed`, `SGNL` arm bit 64, older readers ignore it) where the street
+  directly on its right (the sharpest right turn among `SignalPlan.Turn`'s, not a link inside the
+  junction) has a bike lane or path on the side riders join, and the approach gives riders a line
+  of their own (Art. 69a, the user's choice "both"): a path stopping at its line by a crosswalk, a
+  kerbside bike lane whose cars' line stands back (its yellow line ahead), or a right-turn pocket.
+  Sion: 8 approaches. Drawn by `SignalBuilder.RightOnRedSign`: a black square the size of a lens
+  right against the red lamp's visor, in front of the white band (the user's review), on
+  the bike head where the arm has one, else on the main pole's rightmost car head (the user's
+  choice: always right of red). The bike is `SignalGlyphs.Bike`, shared with the bike lens. Sign
+  only: no game rule reads it yet. Model viewer: "Traffic light - Bike right on red" (two).
 - **The cars' stop line behind a crosswalk** (the user's review, #711: 0.3 m was too close):
   `StopBehindCrosswalk` 2 m further back where the approach has a crosswalk and `StopBackRoom`
   15 m left behind the moved line (`PlanStopBacks`, before the pockets; `StopBack(node, arm)`).
