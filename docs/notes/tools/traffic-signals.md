@@ -84,15 +84,19 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   path with no stop line keeps it at the kerb, as a bike head on its own pole would). Sion: 11.
   A pole never stands on its side's path (`PlacePole` skips it: one did, and the sign pass took
   its priority sign off the pole); the foot is on the side's profile (`RoadStreetSection.HeightAt`).
-  Beside a crosswalk both poles stand by it on its near side, `PoleBehindCrosswalk` 0.4 m behind
-  its edge, not by the cars' stop line (the user's review, #711); with no crosswalk `PoleAlong`.
+  Where the cars' line stands back behind a crosswalk, both poles stand by the crosswalk on its
+  near side, `PoleBehindCrosswalk` 0.4 m behind its edge, not by the cars' line (the user's
+  review, #711); with no room for that line they stay on its far side (`PoleAlong`).
 - **The cars' stop line behind a crosswalk** (the user's review, #711: 0.3 m was too close):
   `StopBehindCrosswalk` 2 m further back where the approach has a crosswalk and `StopBackRoom`
   15 m left behind the moved line (`PlanStopBacks`, before the pockets; `StopBack(node, arm)`).
-  The crosswalk stays at `SignalStopSetback` and so do the riders' lines (the path's yellow line,
-  a left pocket's advanced line and bike box, a right pocket's layout (b) line); a kerbside bike
-  lane without a pocket gets its own yellow line there, the cars' bar stopping at its edge (an
-  advanced bike stop line, as SSV Art. 69a asks for bikes turning right on red). Pocket lines,
+  The crosswalk stays at `SignalStopSetback`; the riders' lines on the right (the path's yellow
+  line, a kerbside bike lane's own yellow line, the cars' bar stopping at its edge: an advanced
+  bike stop line, as SSV Art. 69a asks for bikes turning right on red) stand `RiderLineBehindPole`
+  0.5 m behind the pole (`RiderStop`), the left pocket's advanced line and bike box and a right
+  pocket's layout (b) line stay. The path's line lies level at the path's height on the street's
+  final pieces (`_pathLines`, `PieceHeight`): sampled from the source line at each end, with the
+  height 0.1 m in, it lay 4 cm under a path with no verge. Pocket lines,
   arrows, the lane records, the solid centre line and the exit's hatch follow the cars' line.
   Sion: 24 of 63 approaches. A sign on a signal pole (`OnSignalPole`) stays there: the yielding
   arm's sign moved back with its teeth (`MoveYieldBack`), and `MoveSignsOffPaths`, left it.

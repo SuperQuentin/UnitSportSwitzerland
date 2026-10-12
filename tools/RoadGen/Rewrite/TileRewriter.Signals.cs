@@ -96,6 +96,16 @@ public static partial class TileRewriter
 
     /// <summary>Beside a crosswalk the poles stand this far behind its near edge (#711, the user's review).</summary>
     private const double PoleBehindCrosswalk = 0.4;
+
+    /// <summary>The riders' stop line beside a pole at the crosswalk starts this far behind the pole (#711, the user's review).</summary>
+    private const double RiderLineBehindPole = 0.5;
+
+    /// <summary>
+    /// Where the riders stop on an approach, out from the mouth (#711): by the crosswalk; where the cars' line stands back the pole
+    /// stands at the crosswalk, and the riders a little behind it.
+    /// </summary>
+    private static double RiderStop(double mouthSkew, double back) =>
+        back > 0 ? mouthSkew + SignalStopSetback - ZebraClear + PoleBehindCrosswalk + RiderLineBehindPole : mouthSkew + SignalStopSetback;
     private const int PoleTries = 6;
 
     /// <summary>A priority sign on a signal pole (#350) has its plate's top this high: below the heads' 2.35 m (SSV Art. 71).</summary>
@@ -349,7 +359,7 @@ public static partial class TileRewriter
                     });
                     if (riders > 0)
                     {
-                        var bikeBar = mid + u * (MouthSkew(junction, arm) + SignalStopSetback + BikeStopLine * 0.5);
+                        var bikeBar = mid + u * (RiderStop(MouthSkew(junction, arm), back) + BikeStopLine * 0.5);
                         Get(paint, source.Tile).Add(new RoadPaint
                         {
                             Shape = PaintShape.Polyline, Type = PaintType.StopLine, Rgba = PaintEmitter.Yellow, Width = BikeStopLine,
@@ -365,7 +375,7 @@ public static partial class TileRewriter
                     stops.AddRange(local);
                     approachArms.Add((i, arms.Count, local));
                     // its painted bike lane stops at the line, solid before it (#406)
-                    stopsAt[(plan.Arms[i].LinkId, plan.Arms[i].End)] = MouthSkew(junction, arm) + SignalStopSetback;
+                    stopsAt[(plan.Arms[i].LinkId, plan.Arms[i].End)] = RiderStop(MouthSkew(junction, arm), back);
                 }
                 else stops.AddRange([float.NaN, float.NaN, float.NaN]);
                 // poles (#350): on the approach's right the main heads, on its left a second head
@@ -391,7 +401,7 @@ public static partial class TileRewriter
                         EmitCrossing(paint, source, mid, u, right, MouthSkew(junction, arm) + SignalStopSetback, -(half + (pockets.GetValueOrDefault((junction.NodeId, i))?.ExitWidening ?? 0)), to, streetRight, streetLeft, areas, stats,
                             pockets.GetValueOrDefault((junction.NodeId, i)) is { ExitWay: { } edgeWay, ExitFar: false } ? s => (edgeWay.OuterEdge(Math.Max(s, 0)).P - (mid + u * s)).Dot(right) : null,
                             insetLeft: junction.KerbInset.GetValueOrDefault((i, false)), insetRight: junction.KerbInset.GetValueOrDefault((i, true)),   // diagonal beside a tight corner (#700)
-                            linkId: plan.Arms[i].LinkId);
+                            linkId: plan.Arms[i].LinkId, riderStop: RiderStop(MouthSkew(junction, arm), back));
                 }
                 // none on a link inside a junction of several nodes: its ends are the junction's own. Pedestrian heads only
                 // where the arm has a crosswalk (#711); an arm whose street is in another block keeps them
@@ -423,8 +433,9 @@ public static partial class TileRewriter
                         ? new IslandExit(way.HatchAt(0) + way.Frame0, way.ExitCar, exitSide.HasTrack || exitSide.HasLane)
                         : new IslandExit(info.Attributes.OneWay != 0 ? -half : 0, info.Attributes.OneWay != 0 ? 2 * half - bikeLane : half - bikeLane, exitSide.HasTrack || exitSide.HasLane);
                 }
-                // (#711, the user's review) beside a crosswalk the poles stand by it, on its near side (not by the cars' stop line)
-                double poleAlong = crosswalk ? MouthSkew(junction, arm) + SignalStopSetback - ZebraClear + PoleBehindCrosswalk : along;
+                // (#711, the user's review) beside a crosswalk whose cars' line stands back the poles stand by it, on its near side;
+                // with no room for that line they stay on its far side
+                double poleAlong = back > 0 ? MouthSkew(junction, arm) + SignalStopSetback - ZebraClear + PoleBehindCrosswalk : along;
                 // the main pole stands right of the approach's separated path where the path stops at its own line (the user's
                 // rule, #711: riders wait beside it, the pole is not between them and the road); a path with no line (no
                 // crosswalk) keeps it at the kerb. (The bike head is on this pole: a bike head on its own pole would keep it too.)

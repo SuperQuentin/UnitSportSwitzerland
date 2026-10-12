@@ -31,7 +31,7 @@ public static partial class TileRewriter
     /// </summary>
     private static void EmitCrossing(Dictionary<TileId, List<RoadPaint>> paint, Source source, Vec2 mid, Vec2 u, Vec2 right,
         double stopAt, double lo, double hi, RoadSide rightSide, RoadSide leftSide, Dictionary<TileId, List<RoadAreaProp>> areas, SignalStats stats, Func<double, double>? leftEdgeAt = null,
-        double insetLeft = 0, double insetRight = 0, (double From, double To)? gap = null, int linkId = -1)
+        double insetLeft = 0, double insetRight = 0, (double From, double To)? gap = null, int linkId = -1, double? riderStop = null)
     {
         static double Strip(RoadSide s) => s.HasTrack ? (s.VergeDm + s.BikeDm + s.BufferDm) / 10.0 : 0;
         double pathR = Strip(rightSide), pathL = Strip(leftSide);
@@ -113,14 +113,20 @@ public static partial class TileRewriter
         // the approach's path stops before the bars: a yellow line across it, the cars' line's distance out
         if (rightSide.HasTrack && pathR > 0)
         {
-            double along = stopAt + BikeStopLine * 0.5;
+            double along = (riderStop ?? stopAt) + BikeStopLine * 0.5;   // behind the pole where it stands at the crosswalk (#711)
             double from = hi + rightSide.VergeDm / 10.0, to = hi + (rightSide.VergeDm + rightSide.BikeDm) / 10.0;
-            float lift = RoadStreetSection.HeightAt(rightSide, (float)(rightSide.VergeDm / 10.0 + 0.1));
-            Get(paint, source.Tile).Add(new RoadPaint
+            float lift = RoadStreetSection.TrackHeight(rightSide);   // the path's own height (#711: 0.1 m in, a path with no verge read its sloped kerb)
+            // (#711) level across, as the street's side stands, and clear of the sloped kerb where a crossing lowers it; once the
+            // street's pieces are final it takes their height (they are draped on their own: on the line's own it lay 4 cm under the path)
+            float axisY = source.SampleHeight(mid + u * along);
+            double lineFrom = Math.Max(from + 0.1, hi + RoadStreetSection.SlopedKerbRun + 0.05);
+            var line = new RoadPaint
             {
                 Shape = PaintShape.Polyline, Type = PaintType.StopLine, Rgba = PaintEmitter.Yellow, Width = BikeStopLine,
-                Vertices = Local(source.Tile, [mid + u * along + right * (from + 0.1), mid + u * along + right * (to - 0.1)], source.SampleHeight, lift),
-            });
+                Vertices = Local(source.Tile, [mid + u * along + right * lineFrom, mid + u * along + right * (to - 0.1)], _ => axisY, lift),
+            };
+            Get(paint, source.Tile).Add(line);
+            if (linkId >= 0) (_pathLines ??= []).Add((line, linkId, mid + u * along, lift));
             stats.PathStopLines++;
         }
     }

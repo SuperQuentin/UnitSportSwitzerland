@@ -748,6 +748,12 @@ public static partial class TileRewriter
                     if (segmentOf.TryGetValue(ramp.LinkId, out var rampOn))
                         Lower(rampOn.Item1, rampOn.Item2, ramp.Points, ramp.Margin, finalPieces, output, netStats.Bikes);
                 _ramps.Clear();
+                // the paths' stop lines on their street's final pieces (#711)
+                foreach (var (line, linkId, axis, lift) in _pathLines ?? [])
+                    if (segmentOf.TryGetValue(linkId, out var lineOn)
+                        && PieceHeight(finalPieces.TryGetValue(lineOn.Item1, out var linePieces) && linePieces.Count > 0 ? linePieces : [lineOn.Item1], lineOn.Item2, axis) is float y)
+                        for (int k = 1; k < line.Vertices.Length; k += 3) line.Vertices[k] = y + lift;
+                _pathLines?.Clear();
                 foreach (var (segment, tileId, start, end) in trackPaint)
                     EmitTrackPaint(finalPieces.TryGetValue(segment, out var pieces) ? pieces : [segment], start, end, Get(paint, tileId));
                 KerbArcs(priority, townArcs, kerbArcs);
@@ -976,6 +982,30 @@ public static partial class TileRewriter
 
     /// <summary>The ramps the crossings ask for while a block is laid out, applied once its pieces are final (#711).</summary>
     [ThreadStatic] private static List<KerbRamp>? _ramps;
+
+    /// <summary>The paths' stop lines laid while a block is laid out: put on their street's final pieces' height (#711).</summary>
+    [ThreadStatic] private static List<(RoadPaint Line, int LinkId, Vec2 Axis, float Lift)>? _pathLines;
+
+    /// <summary>The height of a street's final pieces' centreline nearest an LV95 point, null when they have none.</summary>
+    private static float? PieceHeight(IReadOnlyList<RoadSegment> pieces, TileId tile, Vec2 p)
+    {
+        var q = new Vec2(p.X - tile.MinE, p.Y - tile.MaxN);
+        double best = double.MaxValue;
+        float? y = null;
+        foreach (var piece in pieces)
+        {
+            var v = piece.Points;
+            for (int i = 0; i + 1 < piece.PointCount; i++)
+            {
+                Vec2 a = new(v[i * 3], -v[i * 3 + 2]), b = new(v[i * 3 + 3], -v[i * 3 + 5]);
+                var ab = b - a;
+                double len2 = ab.Dot(ab), t = len2 < 1e-12 ? 0 : Math.Clamp((q - a).Dot(ab) / len2, 0, 1);
+                double d = q.DistanceTo(a + ab * t);
+                if (d < best) { best = d; y = v[i * 3 + 1] + (v[i * 3 + 4] - v[i * 3 + 1]) * (float)t; }
+            }
+        }
+        return y;
+    }
 
     /// <summary>
     /// Lowers the kerbs of an arm's street over a ramp's stretch (#711): the final pieces are cut where the stretch starts and
