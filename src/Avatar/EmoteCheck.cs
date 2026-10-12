@@ -69,6 +69,36 @@ public static class EmoteCheck
             signatures.Add((i, sig));
         }
 
+        // #728: every style's moves and both halves of a break set, standing and walking, and the
+        // floor moves flowing in and out: no vertex lost, none through the floor (a floor move may
+        // reach further out: the windmill's legs sweep round the shoulders)
+        foreach (var style in System.Enum.GetValues<Audio.Cd.MusicStyle>())
+        {
+            int moves = HumanMeshBuilder.MoveCount(style);
+            var all = new List<int>();
+            for (int m = 0; m < moves; m++) all.Add(m);
+            if (style == Audio.Cd.MusicStyle.HipHop)
+                all.AddRange(new[] { HumanMeshBuilder.BreakDown, HumanMeshBuilder.BreakPowerWindmill, HumanMeshBuilder.BreakPowerHeadspin });
+            for (int k = 0; k < all.Count; k++)
+            {
+                int move = all[k];
+                bool floor = move >= HumanMeshBuilder.BreakMoves;
+                int prev = move == HumanMeshBuilder.BreakDown ? 0 : floor ? HumanMeshBuilder.BreakDown : all[(k + all.Count - 1) % all.Count];
+                for (int f = 0; f < 32; f++)
+                {
+                    float bars = f / 16f;
+                    var dance = new DanceParams(style, move, (bars * 4f) % 1f, bars % 1f, (int)bars, 1f,
+                        f < 2 ? prev : -1, f < 2 ? 0.5f : 1f);
+                    foreach (float speed in new[] { 0f, 1.4f })
+                    {
+                        built++;
+                        if (Problem(Vertices(HumanMeshBuilder.BuildStride(palette, speed, bars % 1f, dance: dance)), floor ? 1.9f : 1.3f) is { } why)
+                            Fail($"{style} {HumanMeshBuilder.MoveName(style, move)} at bar {bars:F2}, speed {speed}: {why}");
+                    }
+                }
+            }
+        }
+
         GD.Print(failed == 0
             ? $"[emotecheck] RESULT: ok ({count} emotes, {built} figures)"
             : $"[emotecheck] RESULT: FAILED — {failed} problems");
@@ -79,12 +109,12 @@ public static class EmoteCheck
         mesh.GetSurfaceCount() == 0 ? System.Array.Empty<Vector3>()
             : mesh.SurfaceGetArrays(0)[(int)Mesh.ArrayType.Vertex].AsVector3Array();
 
-    private static string? Problem(Vector3[] vertices)
+    private static string? Problem(Vector3[] vertices, float reach = 1.3f)
     {
         if (vertices.Length == 0) return "no surface";
         foreach (var v in vertices)
             if (!float.IsFinite(v.X) || !float.IsFinite(v.Y) || !float.IsFinite(v.Z)
-                || Mathf.Abs(v.X) > 1.3f || Mathf.Abs(v.Z) > 1.3f || v.Y < -0.05f || v.Y > 2.7f)
+                || Mathf.Abs(v.X) > reach || Mathf.Abs(v.Z) > reach || v.Y < -0.05f || v.Y > 2.7f)
                 return $"a vertex at {v}";
         return null;
     }

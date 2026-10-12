@@ -408,7 +408,7 @@ public static class FreighterMeshBuilder
         {
             float z = zs[i];
             var (_, _, top) = Section(z);
-            float y = Mathf.Min(FlightDeckCeilingY, top - FreighterLayout.Skin - 0.05f), w = InnerAt(z, y);
+            float y = Mathf.Min(FlightDeckCeilingY, top - FreighterLayout.Skin - 0.2f), w = InnerAt(z, y + 0.04f) - 0.06f;   // clear of the skin's crown: the 4 cm lining used to poke through it (#755)
             rings[i] = new[] { new Vector3(-w, y, z), new Vector3(w, y, z), new Vector3(w, y + 0.04f, z), new Vector3(-w, y + 0.04f, z) };
         }
         m.Loft(rings, Rep(Lining, 4), Lining);
@@ -536,9 +536,10 @@ public static class FreighterMeshBuilder
         {
             float ang = Mathf.Tau * b / 4f + 0.4f;
             var dir = new Vector3(Mathf.Cos(ang), Mathf.Sin(ang), 0);
-            f.Box(dir * (0.3f + (PropRadius - 0.3f) * 0.5f), new Vector3(PropRadius - 0.3f, 0.3f, 0.05f), Dark,
+            // the blade stops where the yellow tip begins instead of running under it (#755)
+            f.Box(dir * (0.3f + (PropRadius - 0.53f) * 0.5f), new Vector3(PropRadius - 0.53f, 0.3f, 0.05f), Dark,
                 new Basis(Vector3.Back, ang) * new Basis(Vector3.Right, 0.35f));
-            f.Box(dir * (PropRadius - 0.12f) + new Vector3(0, 0, 0.01f), new Vector3(0.22f, 0.3f, 0.06f), new Color(0.9f, 0.75f, 0.1f),
+            f.Box(dir * (PropRadius - 0.115f) + new Vector3(0, 0, 0.01f), new Vector3(0.23f, 0.3f, 0.06f), new Color(0.9f, 0.75f, 0.1f),
                 new Basis(Vector3.Back, ang) * new Basis(Vector3.Right, 0.35f));
         }
         var node = new Node3D { Name = $"Fan{i}", Position = Flip(new Vector3(EngineX[i], EngineY(i), PropZ)) };
@@ -790,22 +791,137 @@ public static class FreighterMeshBuilder
     private static void Marks(MeshScratch m)
     {
         float finY = 8.3f, finZ = FinFront(finY) + (FinRear(finY) - FinFront(finY)) * 0.4f;
-        float finX = FinThick(finY) * 0.5f * Prof(0.4f) + 0.01f;
-        Square(m, new Vector3(finX, finY, finZ), Vector3.Right, 1.6f);
-        Square(m, new Vector3(-finX, finY, finZ), Vector3.Left, 1.6f);
+        FinSquare(m, finY, finZ, 1, 1.6f);
+        FinSquare(m, finY, finZ, -1, 1.6f);
         Square(m, new Vector3(OuterX(-3.6f, 2.8f) + 0.005f, 2.8f, -3.6f), Vector3.Right, 1.1f);
         Square(m, new Vector3(-OuterX(-3.6f, 2.8f) - 0.005f, 2.8f, -3.6f), Vector3.Left, 1.1f);
         foreach (int sg in new[] { 1, -1 })
         {
             float x = 16.5f, z = (WingLeading(x) + WingTrailing(x)) * 0.5f + 0.2f;
-            float top = WPt(sg, x, 0.3f, 1).Y + 0.01f, bottom = WPt(sg, x, 0.3f, -1).Y - 0.01f;
-            m.Box(new Vector3(sg * x, top, z), new Vector3(1.4f, 0.02f, 1.4f), Red);
-            m.Box(new Vector3(sg * x, top + 0.012f, z), new Vector3(0.28f, 0.02f, 0.84f), Colors.White);
-            m.Box(new Vector3(sg * x, top + 0.012f, z), new Vector3(0.84f, 0.02f, 0.28f), Colors.White);
-            m.Box(new Vector3(sg * x, bottom, z), new Vector3(1.4f, 0.02f, 1.4f), Red);
-            m.Box(new Vector3(sg * x, bottom - 0.012f, z), new Vector3(0.28f, 0.02f, 0.84f), Colors.White);
-            m.Box(new Vector3(sg * x, bottom - 0.012f, z), new Vector3(0.84f, 0.02f, 0.28f), Colors.White);
+            WingRoundel(m, sg, x, z, true);
+            WingRoundel(m, sg, x, z, false);
         }
+    }
+
+    /// <summary>The wing's skin height (upper or lower) at span x (right wing) and station z, read off the very triangle of the lofted wing (#755).</summary>
+    private static float WingSkinY(float x, float z, bool upper)
+    {
+        var segments = new (float From, float To, float Fte)[]
+        {
+            (WingRootX, InnerFlapFrom, 1f), (InnerFlapFrom, InnerFlapTo, FlapChord), (InnerFlapTo, OuterFlapFrom, 1f),
+            (OuterFlapFrom, OuterFlapTo, FlapChord), (OuterFlapTo, AileronFrom, 1f), (AileronFrom, AileronTo, FlapChord),
+            (AileronTo, WingTipX, 1f),
+        };
+        foreach (var (from, to, fte) in segments)
+        {
+            if (x < from || x > to) continue;
+            float[] fs = { 0f, 0.12f, 0.35f, 0.85f * fte, fte };
+            for (int i = 0; i < fs.Length - 1; i++)
+            {
+                Vector3 P(float xx, int k) => WPt(1, xx, fs[k], k == 0 ? 0 : upper ? 1 : -1);
+                Vector3 ai = P(from, i), aj = P(from, i + 1), bj = P(to, i + 1), bi = P(to, i);
+                if (PlaneY(ai, aj, bj, x, z) is { } y1) return y1;
+                if (PlaneY(ai, bj, bi, x, z) is { } y2) return y2;
+            }
+        }
+        return WPt(1, x, 0.3f, upper ? 1 : -1).Y;
+    }
+
+    private static float? PlaneY(Vector3 a, Vector3 b, Vector3 c, float x, float z)
+    {
+        float d = (b.Z - c.Z) * (a.X - c.X) + (c.X - b.X) * (a.Z - c.Z);
+        if (Mathf.Abs(d) < 1e-9f) return null;
+        float u = ((b.Z - c.Z) * (x - c.X) + (c.X - b.X) * (z - c.Z)) / d;
+        float v = ((c.Z - a.Z) * (x - c.X) + (a.X - c.X) * (z - c.Z)) / d;
+        float w = 1f - u - v;
+        const float e = -1e-4f;
+        return u < e || v < e || w < e ? null : u * a.Y + v * b.Y + w * c.Y;
+    }
+
+    /// <summary>
+    /// The red wing roundel with its white cross, tilted to the skin and lifted by the worst
+    /// deviation under it so it stands clear of the faceted skin instead of sinking into it (#755).
+    /// </summary>
+    private static void WingRoundel(MeshScratch m, int sg, float x, float z, bool upper)
+    {
+        const float size = 1.4f, d = 0.05f, thick = 0.02f;
+        float y0 = WingSkinY(x, z, upper);
+        float dydx = (WingSkinY(x + d, z, upper) - WingSkinY(x - d, z, upper)) / (2 * d);
+        float dydz = (WingSkinY(x, z + d, upper) - WingSkinY(x, z - d, upper)) / (2 * d);
+        var n = new Vector3(-dydx, 1f, -dydz).Normalized() * (upper ? 1f : -1f);
+        float dev = 0f;
+        for (int i = 0; i <= 4; i++)
+            for (int j = 0; j <= 4; j++)
+            {
+                float dx = (i / 4f - 0.5f) * size, dz = (j / 4f - 0.5f) * size;
+                dev = Mathf.Max(dev, new Vector3(dx, WingSkinY(x + dx, z + dz, upper) - y0, dz).Dot(n));
+            }
+        var bx = (Vector3.Right - n * n.Dot(Vector3.Right)).Normalized();
+        var basis = new Basis(bx, n, bx.Cross(n));
+        var centre = new Vector3(x, y0, z) + n * (dev + 0.012f + thick * 0.5f);
+        // the left roundel is the right one reflected: R * B * R keeps the basis a pure rotation
+        Vector3 R(Vector3 v) => new(sg * v.X, v.Y, v.Z);
+        var mb = sg < 0 ? new Basis(-R(basis.X), R(basis.Y), R(basis.Z)) : basis;
+        m.Box(R(centre), new Vector3(size, thick, size), Red, mb);
+        var cross = R(centre + n * (thick * 0.6f));
+        m.Box(cross, new Vector3(size * 0.2f, thick, size * 0.6f), Colors.White, mb);
+        m.Box(cross, new Vector3(size * 0.6f, thick, size * 0.2f), Colors.White, mb);
+    }
+
+    /// <summary>The fin skin's half width at height y and station z, as the loft in <see cref="Tail"/> builds it (#755).</summary>
+    private static float FinSkinX(float y, float z)
+    {
+        var (from, to, fte) = y < RudderFrom ? (FinRootY - 0.3f, RudderFrom, 1f) : y < RudderTo ? (RudderFrom, RudderTo, RudderF) : (RudderTo, FinTopY, 1f);
+        // the skin is two flat triangles per quad between the segment's rings: read the very one (y, z) lies in
+        float[] fs = { 0f, 0.3f, fte };
+        for (int i = 0; i < 2; i++)
+        {
+            Vector3 P(float yy, int k) => FinPt(yy, fs[k], k == 0 ? 0 : 1);
+            Vector3 ai = P(from, i), aj = P(from, i + 1), bj = P(to, i + 1), bi = P(to, i);
+            if (SkinPlaneX(ai, aj, bj, y, z) is { } x1) return x1;
+            if (SkinPlaneX(ai, bj, bi, y, z) is { } x2) return x2;
+        }
+        return 0f;
+    }
+
+    private static float? SkinPlaneX(Vector3 a, Vector3 b, Vector3 c, float y, float z)
+    {
+        float d = (b.Z - c.Z) * (a.Y - c.Y) + (c.Y - b.Y) * (a.Z - c.Z);
+        if (Mathf.Abs(d) < 1e-9f) return null;
+        float u = ((b.Z - c.Z) * (y - c.Y) + (c.Y - b.Y) * (z - c.Z)) / d;
+        float v = ((c.Z - a.Z) * (y - c.Y) + (a.Y - c.Y) * (z - c.Z)) / d;
+        float w = 1f - u - v;
+        const float e = -1e-4f;
+        return u < e || v < e || w < e ? null : u * a.X + v * b.X + w * c.X;
+    }
+
+    /// <summary>
+    /// A red roundel-style square lying on the fin: tilted to the skin's slope and lifted by the
+    /// worst deviation under it, so it stands 1 cm clear instead of half sunk into the skin (#755).
+    /// </summary>
+    private static void FinSquare(MeshScratch m, float y, float z, int side, float size)
+    {
+        const float d = 0.05f;
+        float dxdy = (FinSkinX(y + d, z) - FinSkinX(y - d, z)) / (2 * d), dxdz = (FinSkinX(y, z + d) - FinSkinX(y, z - d)) / (2 * d);
+        var n = new Vector3(1f, -dxdy, -dxdz).Normalized();
+        float x0 = FinSkinX(y, z);
+        float dev = 0f;
+        foreach (float dy in new[] { -0.5f, 0.5f })
+            foreach (float dz in new[] { -0.5f, 0.5f })
+            {
+                var q = new Vector3(FinSkinX(y + dy * size, z + dz * size) - x0, dy * size, dz * size);
+                dev = Mathf.Max(dev, q.Dot(n));
+            }
+        var up = (Vector3.Up - n * n.Dot(Vector3.Up)).Normalized();
+        var basis = new Basis(n, up, n.Cross(up));
+        var centre = new Vector3(x0, y, z) + n * (dev + 0.025f);
+        Vector3 Mirror(Vector3 v) => new(side * v.X, v.Y, v.Z);
+        // the left plate is the right one reflected: R * B * R keeps the basis a pure rotation
+        var mb = side < 0 ? new Basis(-Mirror(basis.X), Mirror(basis.Y), Mirror(basis.Z)) : basis;
+        m.Box(Mirror(centre), new Vector3(0.03f, size, size), Red, mb);
+        var front = Mirror(centre + n * 0.025f);
+        m.Box(front, new Vector3(0.03f, size * 0.6f, size * 0.2f), Colors.White, mb);
+        m.Box(front, new Vector3(0.03f, size * 0.2f, size * 0.6f), Colors.White, mb);
     }
 
     private static void Square(MeshScratch m, Vector3 at, Vector3 normal, float size)

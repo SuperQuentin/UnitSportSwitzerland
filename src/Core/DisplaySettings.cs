@@ -17,7 +17,7 @@ public partial class DisplaySettings : Node
         ProcessMode = ProcessModeEnum.Always;
         // before the first Apply: it sizes the window, and the PS1 scale depends on that size
         GetWindow().SizeChanged += ApplyScale;
-        Styles.StyleKit.ChoiceChanged += ApplyScale;
+        Styles.StyleKit.ChoiceChanged += ApplyView;
         GameSettings.Changed += Apply;
         Apply();
     }
@@ -25,7 +25,7 @@ public partial class DisplaySettings : Node
     public override void _ExitTree()
     {
         GameSettings.Changed -= Apply;
-        Styles.StyleKit.ChoiceChanged -= ApplyScale;
+        Styles.StyleKit.ChoiceChanged -= ApplyView;
         GetWindow().SizeChanged -= ApplyScale;
     }
 
@@ -47,10 +47,42 @@ public partial class DisplaySettings : Node
         // In VR the window is the monitor view: its render scale still applies
         GetViewport().Scaling3DScale = EffectiveScale(GameSettings.Current.RenderScale, GetWindow().Size);
 
+    /// <summary>What a style change touches: the 3D scale and the anti-aliasing.</summary>
+    private void ApplyView()
+    {
+        ApplyScale();
+        ApplyAntiAliasing();
+    }
+
+    /// <summary>
+    /// <c>--aa off|fxaa|msaa2x|msaa4x|msaa8x</c>: this run's anti-aliasing whatever the saved setting
+    /// says, for shots that compare them (#768).
+    /// </summary>
+    private static readonly AntiAliasing? AaOverride =
+        Enum.TryParse<AntiAliasing>(CmdArgs.Value("--aa"), ignoreCase: true, out var aa) ? aa : null;
+
+    /// <summary>
+    /// The main view's MSAA or FXAA (#768), off in PS1, whose jagged low-resolution edges are its
+    /// look. Door portals and photos copy the main viewport's, the headset has its own (VrMsaa).
+    /// </summary>
+    private void ApplyAntiAliasing()
+    {
+        var view = GetViewport();
+        var aa = Styles.StyleKit.Style == Styles.VisualStyle.Ps1 ? AntiAliasing.Off : AaOverride ?? GameSettings.Current.AntiAliasing;
+        view.Msaa3D = aa switch
+        {
+            AntiAliasing.Msaa2x => Viewport.Msaa.Msaa2X,
+            AntiAliasing.Msaa4x => Viewport.Msaa.Msaa4X,
+            AntiAliasing.Msaa8x => Viewport.Msaa.Msaa8X,
+            _ => Viewport.Msaa.Disabled,
+        };
+        view.ScreenSpaceAA = aa == AntiAliasing.Fxaa ? Viewport.ScreenSpaceAAEnum.Fxaa : Viewport.ScreenSpaceAAEnum.Disabled;
+    }
+
     private void Apply()
     {
         var s = GameSettings.Current;
-        ApplyScale();
+        ApplyView();
         // In VR the headset paces the frames, and a desktop vsync on top would hold it to the
         // monitor's rate.
         if (!XR.XrSession.Active)

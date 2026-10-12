@@ -21,8 +21,9 @@ namespace UnitSport.Core;
 /// <item><b>Equipment</b> (skis, paraglider, wingsuit) — everyone. It is worn and gone when taken
 /// off; nothing is left behind for the others.</item>
 /// <item><b>Getting into</b> a vehicle already in the world — everyone.</item>
-/// <item><b>Place search teleport and the fly camera</b> — everyone. <c>/city</c> already moves
-/// any player to any town, and the fly camera leaves the body where it stands.</item>
+/// <item><b>Place search teleport and the fly camera</b> — everyone, unless the server was started
+/// with <c>--no-teleport</c> (#799, <see cref="CanTeleport"/>): then only admins jump, and walking back
+/// from the fly camera returns to the body where it stands.</item>
 /// </list>
 /// </para>
 /// </summary>
@@ -41,8 +42,25 @@ public static class Permissions
         Changed?.Invoke();
     }
 
-    /// <summary>Back to a non-admin, on leaving a server.</summary>
-    internal static void Reset() => SetAdmin(false);
+    /// <summary>Back to a non-admin who may teleport, on leaving a server.</summary>
+    internal static void Reset()
+    {
+        SetAdmin(false);
+        SetServerTeleport(true);
+    }
+
+    /// <summary>The server lets players who are not admins teleport (<c>Net/Arrival</c>, #799). Meaningless offline.</summary>
+    public static bool ServerTeleport { get; private set; } = true;
+
+    internal static void SetServerTeleport(bool allowed)
+    {
+        if (ServerTeleport == allowed) return;
+        ServerTeleport = allowed;
+        Changed?.Invoke();
+    }
+
+    /// <summary>The place search, the VR hand map and the fly camera may move the player somewhere else.</summary>
+    public static bool CanTeleport => !Online || IsAdmin || ServerTeleport;
 
     /// <summary>Connected to a server, i.e. not the world of your own.</summary>
     public static bool Online

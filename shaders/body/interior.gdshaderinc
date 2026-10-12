@@ -57,6 +57,9 @@ instance uniform vec3 disco_center = vec3(0.0);
 global uniform float world_disco_beat;
 
 varying vec3 world_pos;
+// the mesh's own space: the room's is the building's frame (its mesh sits at the interior node), a
+// door leaf's, a lift door's or a pallet's moves with it, so their plaster and boards do too (#724)
+varying vec3 local_pos;
 
 #ifdef INTERIOR_REAL
 uniform sampler2D tex_plaster : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -137,6 +140,7 @@ vec3 room_light(vec3 p, vec3 n) {
 
 void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+    local_pos = VERTEX;
     POSITION = retro_snap(PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0));
 }
 
@@ -159,16 +163,19 @@ void fragment() {
         vec3 n = normalize(mat3(interior_frame) * (mat3(INV_VIEW_MATRIX) * nv));
         vec3 p = (interior_frame * vec4(world_pos, 1.0)).xyz;
 #ifdef INTERIOR_REAL
-        // plaster on walls and ceilings in the wall's own plane; boards on wooden floors
-        if (n.y > 0.7 && col.r > col.b * 1.25) {
-            vec2 q = p.xz;
+        // plaster on walls and ceilings in the wall's own plane; boards on wooden floors: laid out
+        // in the mesh's own space, so a swinging door or a carried pallet takes its texture along
+        vec3 ln = normalize(transpose(mat3(MODEL_MATRIX)) * (mat3(INV_VIEW_MATRIX) * nv));
+        vec3 lp = local_pos;
+        if (ln.y > 0.7 && col.r > col.b * 1.25) {
+            vec2 q = lp.xz;
             float plank = floor(q.x / 0.16);
             float seam = smoothstep(0.0, 0.012, fract(q.x / 0.16) * 0.16) * smoothstep(0.0, 0.012, (1.0 - fract(q.x / 0.16)) * 0.16);
             float joint = floor(q.y / 1.6 + room_hash(vec2(plank, 1.0)));
             col *= (0.88 + 0.24 * room_hash(vec2(plank, joint))) * mix(0.55, 1.0, seam)
                 * (0.94 + 0.06 * sin(q.y * 23.0 + plank * 3.1));
         } else {
-            vec2 uv = abs(n.y) > 0.7 ? p.xz : vec2(abs(n.x) > abs(n.z) ? p.z : p.x, p.y);
+            vec2 uv = abs(ln.y) > 0.7 ? lp.xz : vec2(abs(ln.x) > abs(ln.z) ? lp.z : lp.x, lp.y);
             col = style_tinted(tex_plaster, uv / 3.0, col, 0.1);
         }
 #endif

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 
 namespace UnitSport.Audio.Cd;
@@ -22,7 +23,20 @@ public static class BeatAnalyzer
     /// <returns>Tempo in BPM (60..200), seconds to the first beat, style class, loudness 0..1.</returns>
     public static (float bpm, float beatOffset, MusicStyle style, float energy) Analyse(float[] mono, int rate)
     {
-        if (mono == null || mono.Length == 0 || rate < 8000) return (120f, 0f, MusicStyle.Pop, 0f);
+        var r = AnalyseFull(mono, rate);
+        return (r.bpm, r.beatOffset, r.style, r.energy);
+    }
+
+    /// <summary>
+    /// <see cref="Analyse"/> plus the <see cref="CdAnalysis"/> block (envelope, downbeat, sections, #725).
+    /// The block is laid on the grid <paramref name="gridBpm"/>/<paramref name="gridOffset"/> when
+    /// <paramref name="gridBpm"/> &gt; 0 (a CD whose grid is set by hand, or a backfill on the stored
+    /// grid), else on the tempo and offset found here. Null only for input too short to analyse.
+    /// </summary>
+    public static (float bpm, float beatOffset, MusicStyle style, float energy, CdAnalysis? analysis) AnalyseFull(
+        float[] mono, int rate, float gridBpm = 0f, float gridOffset = 0f)
+    {
+        if (mono == null || mono.Length == 0 || rate < 8000) return (120f, 0f, MusicStyle.Pop, 0f, null);
 
         double sumSq = 0;
         for (int i = 0; i < mono.Length; i++) sumSq += (double)mono[i] * mono[i];
@@ -31,11 +45,14 @@ public static class BeatAnalyzer
 
         float fps = rate / (float)Hop;
         int n = mono.Length >= Win ? (mono.Length - Win) / Hop + 1 : 0;
-        if (n < (int)(fps * 3f)) return (120f, 0f, MusicStyle.Pop, energy);
+        if (n < (int)(fps * 3f)) return (120f, 0f, MusicStyle.Pop, energy, null);
 
-        // ---- Spectral flux, plus the per-frame features the style rules need ----
+        // ---- Spectral flux, plus the per-frame features the style rules and the CdAnalysis need ----
         float[] flux = new float[n];
         float[] frameRms = new float[n];
+        var ft = new Features(n);
+        int[] bandOf = BandMap(rate, out int[] bandCount);
+        float[] bandAcc = new float[NBands];
         float[] hann = new float[Win];
         for (int i = 0; i < Win; i++) hann[i] = 0.5f - 0.5f * MathF.Cos(2f * MathF.PI * i / Win);
         float[] re = new float[Win], im = new float[Win];
@@ -75,7 +92,8 @@ public static class BeatAnalyzer
             {
                 float[] mag = w == 0 ? magA : magB;
                 int idx = f + w;
-                float fl = 0f, tot = 0f, low = 0f, cw = 0f;
+                float fl = 0f, tot = 0f, low = 0f, cw = 0f, lfl = 0f;
+                Array.Clear(bandAcc);
                 for (int k = 1; k < Bins; k++)
                 {
                     float m = mag[k];
@@ -85,9 +103,21 @@ public static class BeatAnalyzer
                     prevLog[k] = lg;
                     tot += m;
                     cw += m * k;
-                    if (k <= lowBin) low += m;
+                    if (k <= lowBin)
+                    {
+                        low += m;
+                        if (d > 0f) lfl += d;
+                    }
+                    int band = bandOf[k];
+                    if (band >= 0) bandAcc[band] += m;
                 }
                 flux[idx] = idx == 0 ? 0f : fl;
+                ft.LowFlux[idx] = idx == 0 ? 0f : lfl;
+                ft.Low[idx] = low;
+                ft.Tot[idx] = tot;
+                ft.Cen[idx] = cw;
+                for (int b = 0; b < NBands; b++)
+                    ft.Bands[idx * NBands + b] = MathF.Log(1f + bandAcc[b] / Math.Max(1, bandCount[b]));
                 totSum += tot;
                 lowSum += low;
                 cenSum += cw;
@@ -105,18 +135,24 @@ public static class BeatAnalyzer
         float rmsCv = rmsMean > 1e-6f ? (float)(Math.Sqrt(rmsVar / n) / rmsMean) : 0f;
 
         // ---- Onset envelope: flux minus its local mean (~0.5 s), half-wave rectified ----
-        float[] env = LocalMeanSubtract(flux, Math.Max(3, (int)(fps * 0.5f)) | 1);
+        int meanWin = Math.Max(3, (int)(fps * 0.5f)) | 1;
+        float[] env = LocalMeanSubtract(flux, meanWin);
+        ft.Rms = frameRms;
+        ft.Env = env;
+        ft.LowEnv = LocalMeanSubtract(ft.LowFlux, meanWin);
+        CdAnalysis Block(float bpmFound, float offFound) =>
+            Describe(mono, rate, ft, gridBpm > 0f ? gridBpm : bpmFound, gridBpm > 0f ? gridOffset : offFound);
         double envSum = 0;
         for (int i = 0; i < n; i++) envSum += env[i];
         float envMean = (float)(envSum / n);
-        if (envMean < 1e-9f) return (120f, 0f, MusicStyle.Chill, energy);
+        if (envMean < 1e-9f) return (120f, 0f, MusicStyle.Chill, energy, Block(120f, 0f));
 
         // ---- Tempo: autocorrelation with a log-Gaussian prior around 120 BPM ----
         float[] acf = Autocorrelation(env, envMean, Math.Min(n - 2, (int)(8.5f * fps) + 4));
         int acfLen = acf.Length;
         int lagMin = Math.Max(2, (int)MathF.Floor(fps * 60f / 200f));
         int lagMax = Math.Min(acfLen - 2, (int)MathF.Ceiling(fps * 60f / 60f));
-        if (lagMax <= lagMin + 2) return (120f, 0f, MusicStyle.Pop, energy);
+        if (lagMax <= lagMin + 2) return (120f, 0f, MusicStyle.Pop, energy, Block(120f, 0f));
 
         int bestLag = lagMin;
         float bestScore = float.MinValue;
@@ -169,7 +205,7 @@ public static class BeatAnalyzer
         // ---- Style ----
         float onsetsPerSec = CountOnsets(env, envMean) / (n / fps);
         MusicStyle style = Classify(bpm, onsetsPerSec, lowRatio, centroid, rmsCv, regularity, energy);
-        return (bpm, offset, style, energy);
+        return (bpm, offset, style, energy, Block(bpm, offset));
     }
 
     private static float ComfortDistance(float bpm) => bpm < 90f ? 90f - bpm : bpm > 150f ? bpm - 150f : 0f;
@@ -319,9 +355,337 @@ public static class BeatAnalyzer
         return MusicStyle.Pop;
     }
 
+    // ---------------------------------------------------------------- CdAnalysis (#725)
+
+    private const int NBands = 12;
+
+    /// <summary>Per-bar feature vector: RMS, &lt;150 Hz share, log centroid, then the log band energies.</summary>
+    private const int FeatDims = 3 + NBands;
+
+    /// <summary>Half the Foote checkerboard kernel, in bars (the kernel spans 8).</summary>
+    private const int KernelHalf = 4;
+
+    private const int MinSectionBars = 4;
+
+    /// <summary>Per-STFT-frame features kept for the <see cref="CdAnalysis"/> block.</summary>
+    private sealed class Features
+    {
+        public readonly int N;
+        public readonly float[] LowFlux, Low, Tot, Cen, Bands;
+        public float[] Rms = Array.Empty<float>(), Env = Array.Empty<float>(), LowEnv = Array.Empty<float>();
+
+        public Features(int n)
+        {
+            N = n;
+            LowFlux = new float[n];
+            Low = new float[n];
+            Tot = new float[n];
+            Cen = new float[n];
+            Bands = new float[n * NBands];
+        }
+    }
+
+    /// <summary>FFT bin to one of <see cref="NBands"/> log-spaced bands over 40 Hz..10 kHz, -1 outside.</summary>
+    private static int[] BandMap(int rate, out int[] count)
+    {
+        int[] map = new int[Bins];
+        count = new int[NBands];
+        float lo = 40f, hi = Math.Min(10000f, rate * 0.5f);
+        float span = MathF.Log(hi / lo);
+        for (int k = 0; k < Bins; k++)
+        {
+            float f = k * rate / (float)Win;
+            if (k == 0 || f < lo || f >= hi) { map[k] = -1; continue; }
+            int b = Math.Clamp((int)(NBands * MathF.Log(f / lo) / span), 0, NBands - 1);
+            map[k] = b;
+            count[b]++;
+        }
+        return map;
+    }
+
+    /// <summary>First STFT frame whose centre is at or after <paramref name="t"/> seconds.</summary>
+    private static int FrameAt(double t, int rate) => (int)Math.Ceiling((t * rate - Win * 0.5) / Hop);
+
+    private static CdAnalysis Describe(float[] mono, int rate, Features ft, float bpm, float offset)
+    {
+        double dur = mono.Length / (double)rate;
+        string env = Envelope(mono, rate, ft, dur);
+        double per = bpm > 0f ? 60.0 / bpm : 0.0;
+        int downbeat = per > 0.0 ? Downbeat(ft, rate, per, offset, dur) : 0;
+        float[] starts = { 0f };
+        int[] kinds = { (int)SectionKind.Groove };
+        if (per > 0.0) (starts, kinds) = Sections(ft, rate, per, offset + downbeat * per, dur);
+        return new CdAnalysis
+        {
+            Version = CdAnalysis.CurrentVersion, Env = env, Downbeat = downbeat,
+            SectionStarts = starts, SectionKinds = kinds,
+        };
+    }
+
+    /// <summary>20 Hz frames: RMS loudness and the peak low-band onset in each, both normalised per track.</summary>
+    private static string Envelope(float[] mono, int rate, Features ft, double dur)
+    {
+        int er = CdAnalysis.EnvRate;
+        int m = Math.Max(1, (int)Math.Ceiling(dur * er));
+        float[] lv = new float[m], kk = new float[m];
+        for (int i = 0; i < m; i++)
+        {
+            long s0 = (long)i * rate / er, s1 = Math.Min(mono.Length, (long)(i + 1) * rate / er);
+            double ss = 0;
+            for (long s = s0; s < s1; s++) ss += (double)mono[s] * mono[s];
+            lv[i] = s1 > s0 ? (float)Math.Sqrt(ss / (s1 - s0)) : 0f;
+        }
+        for (int f = 0; f < ft.N; f++)
+        {
+            // the flux fires OnsetDelay samples after the frame start: that is when the hit is heard
+            int i = (int)((f * (double)Hop + OnsetDelay) / rate * er);
+            if (i < m && ft.LowEnv[f] > kk[i]) kk[i] = ft.LowEnv[f];
+        }
+        float lref = Reference(lv), kref = Reference(kk);
+        byte[] b = new byte[2 * m];
+        for (int i = 0; i < m; i++)
+        {
+            b[2 * i] = ToByte(lv[i] / lref);
+            b[2 * i + 1] = ToByte(kk[i] / kref);
+        }
+        return Convert.ToBase64String(b);
+    }
+
+    /// <summary>What reads as full scale: the 99th percentile, or most of the peak when hits are rare.</summary>
+    private static float Reference(float[] x)
+    {
+        float max = 0f;
+        foreach (float v in x) max = Math.Max(max, v);
+        if (max <= 1e-12f) return 1f;
+        return Math.Max(Percentile(x, 0.99f), 0.6f * max);
+    }
+
+    private static float Percentile(float[] x, float q)
+    {
+        float[] c = (float[])x.Clone();
+        Array.Sort(c);
+        return c[Math.Clamp((int)(q * (c.Length - 1)), 0, c.Length - 1)];
+    }
+
+    private static byte ToByte(float v) => (byte)Math.Clamp((int)MathF.Round(v * 255f), 0, 255);
+
+    /// <summary>
+    /// Which beat of four starts a bar: the phase whose beats carry the most low-band onset plus
+    /// spectral change (log band energies of the beat against the beat before: chords and bass
+    /// notes move on the one).
+    /// </summary>
+    private static int Downbeat(Features ft, int rate, double per, float offset, double dur)
+    {
+        int nBeats = (int)Math.Floor((dur - offset) / per) + 1;
+        if (nBeats < 8) return 0;
+        float[] low = new float[nBeats], change = new float[nBeats];
+        float[] prev = new float[NBands], cur = new float[NBands];
+        bool hasPrev = false;
+        for (int b = 0; b < nBeats; b++)
+        {
+            double t = offset + b * per;
+            if (t < 0.0) continue;
+            int c = (int)Math.Round((t * rate - OnsetDelay) / Hop);
+            float pk = 0f;
+            for (int f = Math.Max(0, c - 2); f <= Math.Min(ft.N - 1, c + 2); f++) pk = Math.Max(pk, ft.LowEnv[f]);
+            low[b] = pk;
+            if (!MeanBands(ft, rate, t, t + per, cur)) { hasPrev = false; continue; }
+            if (hasPrev)
+            {
+                float d = 0f;
+                for (int k = 0; k < NBands; k++) { float e = cur[k] - prev[k]; d += e * e; }
+                change[b] = MathF.Sqrt(d);
+            }
+            (prev, cur) = (cur, prev);
+            hasPrev = true;
+        }
+        NormaliseByMean(low);
+        NormaliseByMean(change);
+        int best = 0;
+        float bestScore = float.MinValue;
+        for (int k = 0; k < 4; k++)
+        {
+            float s = 0f;
+            int cnt = 0;
+            for (int b = k; b < nBeats; b += 4) { s += low[b] + change[b]; cnt++; }
+            if (cnt > 0 && s / cnt > bestScore) { bestScore = s / cnt; best = k; }
+        }
+        return best;
+    }
+
+    /// <summary>Mean log band energies of the frames centred in [t0, t1); false when there are none.</summary>
+    private static bool MeanBands(Features ft, int rate, double t0, double t1, float[] into)
+    {
+        int f0 = Math.Max(0, FrameAt(t0, rate)), f1 = Math.Min(ft.N, FrameAt(t1, rate));
+        Array.Clear(into);
+        if (f1 <= f0) return false;
+        for (int f = f0; f < f1; f++)
+            for (int k = 0; k < NBands; k++) into[k] += ft.Bands[f * NBands + k];
+        for (int k = 0; k < NBands; k++) into[k] /= f1 - f0;
+        return true;
+    }
+
+    private static void NormaliseByMean(float[] x)
+    {
+        double s = 0;
+        foreach (float v in x) s += v;
+        float mean = x.Length > 0 ? (float)(s / x.Length) : 0f;
+        if (mean <= 1e-12f) return;
+        for (int i = 0; i < x.Length; i++) x[i] /= mean;
+    }
+
+    /// <summary>
+    /// Sections on the bar grid starting at <paramref name="first"/> (the first downbeat): one
+    /// feature vector per bar, z-scored, a cosine self-similarity matrix, Foote checkerboard novelty
+    /// over 8 bars, peaks above an adaptive threshold at least <see cref="MinSectionBars"/> apart.
+    /// Each section is labelled by its loudness against the track's bars, and loud sections that
+    /// sound alike (the repeated loud part) become <see cref="SectionKind.Chorus"/>.
+    /// </summary>
+    private static (float[] starts, int[] kinds) Sections(Features ft, int rate, double per, double first, double dur)
+    {
+        double barLen = 4.0 * per;
+        int nb = first < dur ? (int)Math.Floor((dur - first) / barLen) : 0;
+        if (nb < 2 * KernelHalf) return (new[] { 0f }, new[] { (int)SectionKind.Groove });
+
+        const int D = FeatDims;
+        float[] feat = new float[nb * D];
+        float[] barRms = new float[nb];
+        float[] bands = new float[NBands];
+        for (int j = 0; j < nb; j++)
+        {
+            double t0 = first + j * barLen;
+            int f0 = Math.Max(0, FrameAt(t0, rate)), f1 = Math.Min(ft.N, FrameAt(t0 + barLen, rate));
+            if (f1 <= f0) continue;
+            double rms = 0, low = 0, tot = 0, cen = 0;
+            for (int f = f0; f < f1; f++) { rms += ft.Rms[f]; low += ft.Low[f]; tot += ft.Tot[f]; cen += ft.Cen[f]; }
+            MeanBands(ft, rate, t0, t0 + barLen, bands);
+            int o = j * D;
+            barRms[j] = (float)(rms / (f1 - f0));
+            feat[o] = barRms[j];
+            feat[o + 1] = tot > 1e-12 ? (float)(low / tot) : 0f;
+            feat[o + 2] = tot > 1e-12 ? MathF.Log(1f + (float)(cen / tot * rate / Win)) : 0f;
+            Array.Copy(bands, 0, feat, o + 3, NBands);
+        }
+
+        // z-score each dimension over the bars (a floor keeps a flat dimension from blowing up its noise)
+        for (int d = 0; d < D; d++)
+        {
+            double s = 0, s2 = 0;
+            for (int j = 0; j < nb; j++) { float v = feat[j * D + d]; s += v; s2 += (double)v * v; }
+            double mean = s / nb;
+            double sd = Math.Sqrt(Math.Max(0.0, s2 / nb - mean * mean));
+            sd = Math.Max(sd, 0.02 * Math.Abs(mean) + 1e-9);
+            for (int j = 0; j < nb; j++) feat[j * D + d] = (float)((feat[j * D + d] - mean) / sd);
+        }
+
+        float[] sim = new float[nb * nb];
+        for (int i = 0; i < nb; i++)
+            for (int j = i; j < nb; j++)
+                sim[i * nb + j] = sim[j * nb + i] = Cosine(feat, i * D, feat, j * D, D);
+
+        // Foote novelty: boundary i = bar i starts a new section
+        float[] nov = new float[nb];
+        double sigma2 = 2.0 * (KernelHalf * 0.5) * (KernelHalf * 0.5);
+        int lo = 2, hi = nb - 2;
+        double ns = 0, ns2 = 0;
+        for (int i = lo; i <= hi; i++)
+        {
+            double sum = 0, wsum = 0;
+            for (int a = -KernelHalf; a < KernelHalf; a++)
+            {
+                int ia = i + a;
+                if (ia < 0 || ia >= nb) continue;
+                for (int b = -KernelHalf; b < KernelHalf; b++)
+                {
+                    int ib = i + b;
+                    if (ib < 0 || ib >= nb) continue;
+                    double w = Math.Exp(-((a + 0.5) * (a + 0.5) + (b + 0.5) * (b + 0.5)) / sigma2);
+                    sum += ((a < 0) == (b < 0) ? w : -w) * sim[ia * nb + ib];
+                    wsum += w;
+                }
+            }
+            nov[i] = wsum > 0 ? (float)(sum / wsum) : 0f;
+            ns += nov[i];
+            ns2 += (double)nov[i] * nov[i];
+        }
+        int cnt = hi - lo + 1;
+        double nMean = ns / cnt, nSd = Math.Sqrt(Math.Max(0.0, ns2 / cnt - nMean * nMean));
+        float thr = (float)Math.Max(0.1, nMean + 0.5 * nSd);
+
+        var cands = new List<int>();
+        for (int i = lo; i <= hi; i++)
+        {
+            if (nov[i] <= thr) continue;
+            if (i > lo && nov[i] < nov[i - 1]) continue;
+            if (i < hi && nov[i] < nov[i + 1]) continue;
+            cands.Add(i);
+        }
+        cands.Sort((x, y) => nov[y].CompareTo(nov[x]));
+        var cuts = new List<int>();
+        foreach (int c in cands)
+        {
+            bool far = true;
+            foreach (int a in cuts) if (Math.Abs(a - c) < MinSectionBars) { far = false; break; }
+            if (far) cuts.Add(c);
+        }
+        cuts.Sort();
+
+        int count = cuts.Count + 1;
+        float[] starts = new float[count];
+        int[] from = new int[count + 1];
+        for (int s = 1; s < count; s++)
+        {
+            starts[s] = (float)(first + cuts[s - 1] * barLen);
+            from[s] = cuts[s - 1];
+        }
+        from[count] = nb;
+
+        // loudness label against the track's bars
+        float p10 = Percentile(barRms, 0.1f), p90 = Percentile(barRms, 0.9f);
+        double rmsMean = 0;
+        foreach (float v in barRms) rmsMean += v;
+        rmsMean /= nb;
+        float spread = p90 - p10;
+        int[] kinds = new int[count];
+        float[] secMean = new float[count * D];
+        for (int s = 0; s < count; s++)
+        {
+            double r = 0;
+            int len = from[s + 1] - from[s];
+            for (int j = from[s]; j < from[s + 1]; j++)
+            {
+                r += barRms[j];
+                for (int d = 0; d < D; d++) secMean[s * D + d] += feat[j * D + d] / len;
+            }
+            float u = spread >= 0.15f * rmsMean ? (float)((r / len - p10) / spread) : 0.5f;
+            kinds[s] = (int)(u < 0.33f ? SectionKind.Calm : u > 0.67f ? SectionKind.Peak : SectionKind.Groove);
+        }
+        bool[] chorus = new bool[count];
+        for (int a = 0; a < count; a++)
+            for (int b = a + 1; b < count; b++)
+                if (kinds[a] == (int)SectionKind.Peak && kinds[b] == (int)SectionKind.Peak
+                    && Cosine(secMean, a * D, secMean, b * D, D) > 0.8f)
+                    chorus[a] = chorus[b] = true;
+        for (int s = 0; s < count; s++) if (chorus[s]) kinds[s] = (int)SectionKind.Chorus;
+        return (starts, kinds);
+    }
+
+    private static float Cosine(float[] x, int xo, float[] y, int yo, int len)
+    {
+        double xy = 0, xx = 0, yy = 0;
+        for (int k = 0; k < len; k++)
+        {
+            float a = x[xo + k], b = y[yo + k];
+            xy += a * b;
+            xx += a * a;
+            yy += b * b;
+        }
+        return xx > 1e-12 && yy > 1e-12 ? (float)(xy / Math.Sqrt(xx * yy)) : 0f;
+    }
+
     // ---------------------------------------------------------------- self-test
 
-    /// <summary>Synthetic clicks at known tempos must come back at that tempo and phase.</summary>
+    /// <summary>Synthetic clicks at known tempos must come back at that tempo and phase, with the right downbeat, sections and envelope.</summary>
     public static bool SelfCheck()
     {
         const int rate = 22050;
@@ -377,8 +741,151 @@ public static class BeatAnalyzer
             Report(3, bpm, off, style, pass);
             ok &= pass;
         }
+
+        // 4, 5: a louder low kick every 4th beat from a known beat gives the downbeat, and the
+        // envelope's kick peaks sit on the clicks.
+        ok &= DownbeatCase(4, 120f, 0.25f, 1);
+        ok &= DownbeatCase(5, 100f, 0.4f, 3);
+
+        // 6: 16 quiet bars, then 16 loud, spectrally different bars: one boundary, Calm then Peak.
+        {
+            const float bpm = 120f, first = 0.1f;
+            float per = 60f / bpm;
+            int total = (int)((first + 33 * 4 * per) * rate);   // 32 bars and a spare one
+            float[] x = new float[total];
+            var rng = new Rng(6);
+            float change = first + 64 * per;   // beat 64 = bar 16
+            for (int i = 0; i < total; i++)
+            {
+                float t = i / (float)rate;
+                x[i] = 0.01f * rng.Next();
+                if (t < change) x[i] += 0.03f * MathF.Sin(2f * MathF.PI * 3000f * t);
+                else
+                    for (int h = 1; h <= 6; h++) x[i] += 0.25f / h * MathF.Sin(2f * MathF.PI * 110f * h * t);
+            }
+            int beat = 0;
+            for (float t = first; t < total / (float)rate - 0.3f; t += per, beat++)
+            {
+                bool loud = t >= change - 1e-3f;
+                AddClick(x, rate, t, loud ? 0.7f : 0.15f, rng);
+                if (loud && beat % 4 == 0) AddKick(x, rate, t, 0.8f);
+            }
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var (gotBpm, _, _, _, an) = AnalyseFull(x, rate);
+            long ms = sw.ElapsedMilliseconds;
+            bool pass = an != null && an.SectionStarts.Length == 2
+                && Math.Abs(an.SectionStarts[1] - change) <= 4f * per + 0.05f
+                && an.SectionKinds[0] == (int)SectionKind.Calm && an.SectionKinds[1] == (int)SectionKind.Peak;
+            float quiet = 0f, loudLv = 0f;
+            if (an != null)
+            {
+                byte[] e = an.EnvBytes();
+                int c = (int)(change * CdAnalysis.EnvRate);
+                quiet = MeanLevel(e, 20, c - 20);
+                loudLv = MeanLevel(e, c + 20, e.Length / 2 - 20);
+                pass &= quiet < loudLv;
+
+                // the block survives the JSON file and the RPC dictionary
+                var cd = new CdInfo(1, "t", 66f, gotBpm, 0.1f, MusicStyle.Pop, 0.5f, Analysis: an);
+                foreach (var back in new[] { CdInfo.FromJson(cd.ToJson()), CdInfo.FromDict(cd.ToDict()) })
+                    pass &= back?.Analysis is { } b && b.Version == an.Version && b.Env == an.Env && b.Downbeat == an.Downbeat
+                        && b.SectionStarts.AsSpan().SequenceEqual(an.SectionStarts) && b.SectionKinds.AsSpan().SequenceEqual(an.SectionKinds);
+            }
+            string sections = an == null ? "none" : string.Join(",", Array.ConvertAll(an.SectionStarts,
+                s => s.ToString("F1", CultureInfo.InvariantCulture)));
+            string kinds = an == null ? "" : string.Join(",", Array.ConvertAll(an.SectionKinds, k => ((SectionKind)k).ToString()));
+            Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                $"[beatcheck] case6 bpm={gotBpm:F1} sections={sections} kinds={kinds} level quiet={quiet:F0} loud={loudLv:F0} ({ms} ms for {total / rate} s) {(pass ? "ok" : "FAIL")}"));
+            ok &= pass;
+        }
+
+        // 7: a CD without a block reads as nothing, the runtime helpers stay safe.
+        {
+            var cd = new CdInfo(1, "t", 10f, 120f, 0f, MusicStyle.Pop, 0.5f);
+            bool pass = !CdAnalysisRuntime.Sample(cd, 1.0, out _, out _)
+                && CdAnalysisRuntime.SectionAt(cd, 1.0, out int si) == SectionKind.Groove && si == 0
+                && CdAnalysisRuntime.BeatInBar(cd, -1) == 3;
+            var back = CdInfo.FromJson(cd.ToJson());
+            pass &= back != null && back.Analysis == null;
+            Console.WriteLine($"[beatcheck] case7 no analysis {(pass ? "ok" : "FAIL")}");
+            ok &= pass;
+        }
         return ok;
     }
+
+    private static bool DownbeatCase(int n, float bpm, float first, int kickPhase)
+    {
+        const int rate = 22050;
+        const int len = rate * 24;
+        float[] x = new float[len];
+        var rng = new Rng((uint)n);
+        for (int i = 0; i < len; i++) x[i] = 0.02f * rng.Next();
+        float per = 60f / bpm;
+        var clicks = new List<float>();
+        var kicks = new List<float>();
+        int beat = 0;
+        for (float t = first; t < len / (float)rate - 0.3f; t += per, beat++)
+        {
+            AddClick(x, rate, t, 0.5f, rng);
+            clicks.Add(t);
+            if (beat % 4 == kickPhase) { AddKick(x, rate, t, 0.8f); kicks.Add(t); }
+        }
+        var (gotBpm, off, _, _, an) = AnalyseFull(x, rate);
+        bool pass = an != null && Math.Abs(gotBpm - bpm) <= 2f && CircDist(off, first, per) <= 0.03f && an.Downbeat == kickPhase;
+
+        // every kick shows within a frame, and every strong kick frame is within a frame of a click
+        int missed = 0, stray = 0;
+        if (an != null)
+        {
+            byte[] e = an.EnvBytes();
+            int m = e.Length / 2;
+            foreach (float t in kicks)
+            {
+                int c = (int)(t * CdAnalysis.EnvRate);
+                int pk = 0;
+                for (int i = Math.Max(0, c - 1); i <= Math.Min(m - 1, c + 1); i++) pk = Math.Max(pk, e[2 * i + 1]);
+                if (pk < 128) missed++;
+            }
+            for (int i = 0; i < m; i++)
+            {
+                if (e[2 * i + 1] < 128) continue;
+                bool near = false;
+                foreach (float t in clicks) if (Math.Abs((int)(t * CdAnalysis.EnvRate) - i) <= 1) { near = true; break; }
+                if (!near) stray++;
+            }
+            pass &= missed == 0 && stray == 0;
+        }
+        Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+            $"[beatcheck] case{n} bpm={gotBpm:F1} offset={off:F3} downbeat={an?.Downbeat ?? -1} (want {kickPhase}) kicks missed={missed} stray={stray} {(pass ? "ok" : "FAIL")}"));
+        return pass;
+    }
+
+    private static float MeanLevel(byte[] env, int from, int to)
+    {
+        double s = 0;
+        int c = 0;
+        for (int i = Math.Max(0, from); i < Math.Min(env.Length / 2, to); i++) { s += env[2 * i]; c++; }
+        return c > 0 ? (float)(s / c) : 0f;
+    }
+
+    private static void AddClick(float[] x, int rate, float t, float amp, Rng rng)
+    {
+        int s0 = (int)MathF.Round(t * rate);
+        int cl = (int)(0.05f * rate);
+        for (int k = 0; k < cl && s0 + k < x.Length; k++)
+            x[s0 + k] += amp * rng.Next() * MathF.Exp(-(k / (float)rate) / 0.008f);
+    }
+
+    private static void AddKick(float[] x, int rate, float t, float amp)
+    {
+        int s0 = (int)MathF.Round(t * rate);
+        for (int k = 0; k < (int)(0.3f * rate) && s0 + k < x.Length; k++)
+        {
+            float tt = k / (float)rate;
+            x[s0 + k] += amp * MathF.Sin(2f * MathF.PI * 60f * tt) * MathF.Exp(-tt / 0.12f);
+        }
+    }
+
 
     private static void Report(int n, float bpm, float off, MusicStyle style, bool pass) =>
         Console.WriteLine(string.Create(CultureInfo.InvariantCulture,

@@ -27,6 +27,9 @@ public static class DoorIndex
 
         /// <summary>The building the door is on: the key of its plan and of the space behind it.</summary>
         public BuildingKey Building => Key.Building;
+
+        /// <summary>The shop behind it, if any (a farm co-op is found by it, #494).</summary>
+        public Loot.ShopType Shop { get; init; }
     }
 
     private static readonly Dictionary<TileId, Entry[]> Tiles = new();
@@ -38,7 +41,7 @@ public static class DoorIndex
             if (d.Width > 0)
                 list.Add(new Entry(d.KeyIn(id), tileOrigin + d.Position, d.Outward, d.Width, d.Height, d.Kind)
                 {
-                    Hang = d.Hang, Vehicle = d.Vehicle, Link = d.Link, Ramp = d.Ramp, RampDir = d.RampDir,
+                    Hang = d.Hang, Vehicle = d.Vehicle, Link = d.Link, Ramp = d.Ramp, RampDir = d.RampDir, Shop = d.Shop,
                 });
         Tiles[id] = list.ToArray();
     }
@@ -137,6 +140,9 @@ public static class DoorIndex
                 return (Door: e, Distance: distance, Rejected: rejected);
             })
             .OrderBy(c => c.Distance);
+
+    /// <summary>As <see cref="Nearest(Vector3, float)"/>, only the doors of one type of shop (a farm co-op, #494).</summary>
+    public static Entry? Nearest(Vector3 at, float reach, Loot.ShopType shop) => Nearest(at, reach, e => e.Shop == shop);
 
     /// <summary>
     /// The nearest door a player on foot enters an interior by. <paramref name="deeper"/> gives a

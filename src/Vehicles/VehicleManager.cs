@@ -18,6 +18,9 @@ namespace UnitSport.Vehicles;
 /// </summary>
 public partial class VehicleManager : Node3D, Core.IOriginContainer
 {
+    /// <summary>Recorded for the movie studio (#775).</summary>
+    public override void _EnterTree() => Movie.ReplayWatch.Container(this);
+
     public const string NodeName = "Vehicles";
 
     public ChunkManager? Terrain { get; set; }
@@ -47,6 +50,44 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
     /// <summary>Drops the subscribers a world left behind when it was freed (<see cref="Core.WorldStatics"/>).</summary>
     internal static void ResetEvents() => Refused = null;
     private double _housekeeping;
+
+    // ---- object containers (#689) ----------------------------------------------------------
+
+    /// <summary>
+    /// Server: true for a vehicle the object containers keep (put to sleep far from everyone,
+    /// never cleared as lonely). Null: every vehicle is cleared as lonely, as before.
+    /// </summary>
+    public Func<VehicleBody, bool>? Keeps { get; set; }
+
+    /// <summary>Server: a vehicle by this name is asleep in a container; nothing may be placed under it meanwhile.</summary>
+    public Func<string, bool>? Filed { get; set; }
+
+    /// <summary>Server: a vehicle is about to leave the world for good (claimed): the containers write that down first.</summary>
+    public Action<VehicleBody>? Removing { get; set; }
+
+    /// <summary>Spawns <paramref name="state"/> for everyone, a new oid given unless it keeps its own (a woken one, #689).</summary>
+    private void Spawn(VehicleState state, bool keepOid = false)
+    {
+        if (!keepOid || state.Oid == 0) state = state with { Oid = VehicleState.NewOid() };
+        _spawner!.Spawn(state.ToDict());
+    }
+
+    /// <summary>A claim is in flight for this vehicle: it must not be put to sleep under the claimant.</summary>
+    public bool IsClaimed(string name) => _claimed.Contains(name);
+
+    /// <summary>
+    /// Server: brings a vehicle back from a container (#689), or hands a leaving player's vehicle
+    /// to the server: exactly where it stood, asleep, the server its authority, its oid kept. Under
+    /// its own name unless something holds that name now. Returns the name it got.
+    /// </summary>
+    public string? Restore(VehicleState state)
+    {
+        if (!Multiplayer.IsServer() || _spawner == null) return null;
+        string name = state.Name;
+        if (string.IsNullOrEmpty(name) || HasNode(name)) name = $"veh_r_{++_counter}";
+        Spawn(state with { Owner = 0, Name = name }, keepOid: true);
+        return name;
+    }
 
     /// <summary>Wrecks are cleared this long after they burn.</summary>
     private const double WreckLifetime = 90;
@@ -110,7 +151,9 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
             return name;
         }
         if (!Multiplayer.IsServer() || _spawner == null) return null;
-        _spawner.Spawn(state.ToDict());
+        // asleep in a container (#689): it comes back from there when someone is near, not twice
+        if (Filed?.Invoke(name) == true) return null;
+        Spawn(state);
         return name;
     }
 
@@ -146,9 +189,15 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
     /// <summary>How far from a car's side a player may be to work its doors, m.</summary>
     public const float DoorReach = 3f;
 
-    /// <summary>A vehicle someone could get into now: not burnt out, not a lone trailer, not being claimed.</summary>
+    /// <summary>A vehicle someone could get into now: not burnt out, not a lone trailer, not a boat strapped to its trailer, not being claimed.</summary>
     public bool Enterable(VehicleBody v) =>
-        IsInstanceValid(v) && v.GetParent() == this && !v.Wrecked && v.Trailer == null && !_claimed.Contains(v.Name);
+        IsInstanceValid(v) && v.GetParent() == this && !v.Wrecked && v.Trailer == null && !OnTrailer(v) && !_claimed.Contains(v.Name);
+
+    /// <summary>
+    /// A boat strapped to its trailer (#463): carried, launched only from the towing vehicle (or
+    /// winched aboard), never got into on the bunks.
+    /// </summary>
+    public static bool OnTrailer(VehicleBody v) => v.InHold && v.Ride is Player.Boat;
 
     /// <summary>The nearest drivable vehicle within reach of a point, or null.</summary>
     public VehicleBody? Nearest(Vector3 point, float reach)
@@ -156,7 +205,7 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
         VehicleBody? best = null;
         float bestDist = reach;
         foreach (var node in GetChildren())
-            if (node is VehicleBody { Wrecked: false, Trailer: null } v && !_claimed.Contains(v.Name))
+            if (node is VehicleBody { Wrecked: false, Trailer: null } v && !OnTrailer(v) && !_claimed.Contains(v.Name))
             {
                 // measured to the door where there is one (a truck's cab, a bus's front door, metres
                 // from the middle), else to the box, roughly: a plane's cockpit is metres from its origin
@@ -164,6 +213,23 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
                 float d = entry != Vector3.Zero
                     ? v.ToGlobal(entry).DistanceTo(point)
                     : v.GlobalPosition.DistanceTo(point) - v.Ride.ParkedBox.Size.X * 0.25f;
+                if (d < bestDist) { bestDist = d; best = v; }
+            }
+        return best;
+    }
+
+    /// <summary>
+    /// The nearest free vehicle of one kind within <paramref name="reach"/> of a point, measured from
+    /// its origin: a boat floating behind its trailer, to winch aboard (#463).
+    /// </summary>
+    public VehicleBody? NearestOfKind(Vector3 point, float reach, Player.RideKind kind)
+    {
+        VehicleBody? best = null;
+        float bestDist = reach;
+        foreach (var node in GetChildren())
+            if (node is VehicleBody { Wrecked: false } v && v.Ride.Kind == kind && Enterable(v))
+            {
+                float d = v.GlobalPosition.DistanceTo(point);
                 if (d < bestDist) { bestDist = d; best = v; }
             }
         return best;
@@ -228,7 +294,7 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
             Name = $"veh_{sender}_{++_counter}",
             SpawnedAt = VehicleState.Now,
         };
-        _spawner.Spawn(state.ToDict());
+        Spawn(state);
     }
 
     /// <summary>
@@ -239,7 +305,7 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
     {
         if (!Multiplayer.IsServer() || _spawner == null) return;
         if (_driving.TryGetValue(owner, out int driving)) _driving[owner] = Math.Max(0, driving - parked.Units);
-        _spawner.Spawn((parked with { Owner = owner, Name = $"veh_{owner}_{++_counter}", SpawnedAt = VehicleState.Now }).ToDict());
+        Spawn(parked with { Owner = owner, Name = $"veh_{owner}_{++_counter}", SpawnedAt = VehicleState.Now });
     }
 
     /// <summary>
@@ -263,6 +329,8 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
             return;
         }
         var state = vehicle.Capture();
+        // off the containers' book before anyone has it (#689): a crash now must not bring it back
+        Removing?.Invoke(vehicle);
         vehicle.QueueFree();   // the spawner removes it on every client
         _claimed.Remove(name);
         _driving[sender] = _driving.GetValueOrDefault(sender) + state.Units;
@@ -288,7 +356,7 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
     {
         if (!Multiplayer.IsServer()) return;
         long sender = Multiplayer.GetRemoteSenderId();
-        if (GetNodeOrNull<VehicleBody>(name) is not { Wrecked: false, Ride: Player.Car or Player.Truck { IsBus: true } or Player.Steamer or Player.Airliner } vehicle) return;
+        if (GetNodeOrNull<VehicleBody>(name) is not { Wrecked: false, Ride: Player.Car or Player.Truck { IsBus: true } or Player.Truck { CarDoors: true } or Player.Steamer or Player.Airliner } vehicle) return;
         // the server's copy of the asker: only someone standing at the car works its doors
         var asker = GetTree().GetNodesInGroup(Player.FootPlayer.Group).OfType<Player.FootPlayer>()
             .FirstOrDefault(p => p.Name == sender.ToString());
@@ -336,12 +404,21 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
     private void ParkRefused(string kind) =>
         Refused?.Invoke($"Only an admin can spawn vehicles on this server; your {kind} was not left in the world.");
 
-    /// <summary>Server: a player left, and nobody is simulating their vehicles any more.</summary>
+    /// <summary>
+    /// Server: a player left, and nobody is simulating their vehicles any more. Where the object
+    /// containers keep them (#689) each stays where it stands, the server's now; else it goes.
+    /// </summary>
     public void ForgetOwner(long peer)
     {
         _driving.Remove(peer);
+        var handOver = new List<VehicleState>();
         foreach (var node in GetChildren())
-            if (node is VehicleBody v && v.Owner == peer) v.QueueFree();
+            if (node is VehicleBody v && v.Owner == peer)
+            {
+                if (!v.Wrecked && Keeps?.Invoke(v) == true) handOver.Add(v.Capture());
+                v.QueueFree();
+            }
+        foreach (var state in handOver) Restore(state with { Velocity = Vector3.Zero, EngineOn = false });
     }
 
     /// <summary>
@@ -364,6 +441,8 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
         {
             if (node is not VehicleBody v) continue;
             if (v.Wrecked && v.WreckAge > WreckLifetime) { v.QueueFree(); continue; }
+            // the object containers put it to sleep instead (#689)
+            if (Keeps?.Invoke(v) == true) { v.LonelyFor = 0; continue; }
             var at = Interiors.InteriorManager.SurfacePoint(v.GlobalPosition, Ground);
             bool near = players.Any(p => p.DistanceTo(at) < LonelyDistance);
             v.LonelyFor = near ? 0 : v.LonelyFor + step;

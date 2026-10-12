@@ -19,6 +19,7 @@ Usage:
     python tools/swiss_data.py gwr --canton vs
     python tools/swiss_data.py veloland
     python tools/swiss_data.py osm          # OpenStreetMap extract (ODbL), newest dated Geofabrik file
+    python tools/swiss_data.py lwb          # federal farm land use (MGDM 153.1), the freely published cantons (#494)
     python tools/swiss_data.py --dry-run swissalti3d --bbox 2579000 1109000 2586000 1115000
     python tools/swiss_data.py swissalti3d --tiles-file my_tiles.txt       # "2583-1113" per line
     python tools/swiss_data.py --out D:/swissalti3d swissalti3d --bbox 2485000 1075000 2834000 1296000
@@ -726,6 +727,19 @@ def resolve_osm(args):
     yield GEOFABRIK_EUROPE + name, name, None
 
 
+GEODIENSTE_LWB = "https://geodienste.ch/info/services.json?base_topics=lwb_nutzungsflaechen"
+
+
+def resolve_lwb(args):
+    """geodienste.ch's per-canton INTERLIS zips of the LWB Nutzungsflaechen (MGDM 153.1). Only the
+    cantons published "Frei erhaeltlich" are fetched; the others (VD, NE, TI, NW, OW, FL) need a
+    registration or a release and are filled from OpenStreetMap by the fields stage."""
+    for s in http_get_json(GEODIENSTE_LWB)["services"]:
+        url = s.get("dataset_url")
+        if url and str(s.get("publication_data", "")).startswith("Frei erh"):
+            yield url, url.rsplit("/", 1)[-1], None
+
+
 DATASETS = {
     "swissalti3d": {
         "subdir": "swiss_chunks",
@@ -767,6 +781,12 @@ DATASETS = {
         "subdir": "osm",
         "resolve": resolve_osm,
         "help": "OpenStreetMap Switzerland extract (Geofabrik, ODbL; optional road attribute overlay)",
+        "needs_bbox": False,
+    },
+    "lwb": {
+        "subdir": "lwb",
+        "resolve": resolve_lwb,
+        "help": "LWB farm land use per canton, freely published ones (geodienste.ch; for TerrainPreprocessor --fields)",
         "needs_bbox": False,
     },
     "mountainbikeland": {

@@ -94,7 +94,7 @@ if [ "${TILES:-1}" = 1 ]; then
   # pre-compressed .gz copies beside the tiles (made by the deploy), else gzip on the fly
   if [ "${TILES_PRECOMPRESS:-1}" = 1 ]; then serve=$'file_server {\n\t\t\tprecompressed gzip\n\t\t}'
   else serve=$'encode gzip\n\t\tfile_server'; fi
-  new=$(<"$HERE/Caddyfile"); new=${new//@TILES_SITE@/"$TILES_SITE"}; new=${new//@CHUNKS_DIR@/"$CHUNKS_DIR"}; new=${new//@COMPRESS@/"$serve"}
+  new=$(<"$HERE/Caddyfile"); new=${new//@TILES_SITE@/"$TILES_SITE"}; new=${new//@CHUNKS_DIR@/"$CHUNKS_DIR"}; new=${new//@WEB_DIR@/"$DEPLOY_DIR/web"}; new=${new//@COMPRESS@/"$serve"}
   cf=/etc/caddy/Caddyfile
   if [ "$DRY" = 1 ]; then echo "  [dry] write $cf (site $TILES_SITE, /tiles/ -> $CHUNKS_DIR)"
   elif [ "$(cat "$cf" 2>/dev/null)" != "$new" ]; then printf '%s\n' "$new" > "$cf"; fi
@@ -103,10 +103,20 @@ if [ "${TILES:-1}" = 1 ]; then
     d=$CHUNKS_DIR; while [ "$d" != / ]; do d=$(dirname "$d"); setfacl -m u:caddy:x "$d"; done
     setfacl -R -m u:caddy:rX "$CHUNKS_DIR" && setfacl -d -m u:caddy:rX "$CHUNKS_DIR"
   fi
+  # the status page (#740): the deploy uploads index.html, the game server writes status.json
+  web=$DEPLOY_DIR/web
+  act mkdir -p "$web" && act chown "$TARGET_USER": "$web"
+  if [ "$DRY" != 1 ] && ! runuser -u caddy -- test -r "$web/." 2>/dev/null; then
+    d=$web; while [ "$d" != / ]; do d=$(dirname "$d"); setfacl -m u:caddy:x "$d"; done
+    setfacl -R -m u:caddy:rX "$web" && setfacl -d -m u:caddy:rX "$web"
+  fi
   act systemctl enable caddy >/dev/null 2>&1; act systemctl reload-or-restart caddy
   if [ "$DRY" = 1 ]; then did "tiles http" "caddy $TILES_SITE/tiles/ -> $CHUNKS_DIR"
   elif systemctl is-active -q caddy && runuser -u caddy -- test -r "$CHUNKS_DIR/."; then ok "tiles http" "caddy $TILES_SITE/tiles/ -> $CHUNKS_DIR"
   else bad "tiles http" "caddy not running or cannot read $CHUNKS_DIR (journalctl -u caddy)"; fi
+  if [ "$DRY" = 1 ]; then did "web page" "caddy $TILES_SITE/ -> $web"
+  elif runuser -u caddy -- test -r "$web/."; then ok "web page" "caddy $TILES_SITE/ -> $web"
+  else bad "web page" "caddy cannot read $web"; fi
 fi
 
 # --- firewall: ssh first so enabling ufw never locks us out -----------------

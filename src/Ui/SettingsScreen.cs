@@ -4,7 +4,7 @@ using UnitSport.Core;
 namespace UnitSport.Ui;
 
 /// <summary>
-/// Settings, in tabs: Video, Audio, Gameplay, Vehicles, Controls, Wheel, World, Performance, About. Every
+/// Settings, in tabs: Video, Audio, Gameplay, Character, Vehicles, Controls, Wheel, World, Performance, About. Every
 /// control writes straight into <see cref="GameSettings.Current"/> and commits, so the world
 /// re-applies itself live and the file is saved — there is no Apply button to forget. LB / RB
 /// (or Q / E) change tab. One instance serves the title screen and the in-game pause menu.
@@ -66,6 +66,7 @@ public partial class SettingsScreen : Screen
                     (w, h) => (GameSettings.Current.WindowWidth, GameSettings.Current.WindowHeight) = (w, h));
             }
             ScaleRow(rows, "3D resolution", s.RenderScale, v => GameSettings.Current.RenderScale = v);
+            AntiAliasingRow(rows, s.AntiAliasing);
             // Realistic+ needs Forward+ through a relaunch, which a phone cannot do (#63)
             var styles = Styles.StyleKit.MenuStyles.Where(v => Platform.CanSpawnProcesses || !Styles.StyleKit.NeedsForwardPlus(v)).ToArray();
             var styleOption = UiKit.OptionRow(rows, "Visual style", styles.Select(Styles.StyleKit.Label).ToArray(),
@@ -116,6 +117,8 @@ public partial class SettingsScreen : Screen
                 v => GameSettings.Current.ScreenShake = (float)v, Percent);
             UiKit.ToggleRow(rows, "Pigeon flies tail first", s.TailFirstPigeon, on => GameSettings.Current.TailFirstPigeon = on,
                 "The backwards bird of old, kept as an option; drawing only, every pigeon on your screen");
+            UiKit.SliderRow(rows, "Replay buffer", 0, 15, 1, s.ReplayMinutes, v => GameSettings.Current.ReplayMinutes = (int)v,
+                v => v <= 0 ? "off" : $"{v:F0} min", "The last minutes of everyone in view, for the movie studio (F5 or Pause > Save clip)");
             UiKit.ToggleRow(rows, "Find servers on your network", s.LanDiscovery, on => GameSettings.Current.LanDiscovery = on,
                 "Lists LAN servers on the Multiplayer screen");
             // the first-run tutorial (#517): now if a world is up (it shows when the menus close), else in the next one
@@ -134,6 +137,8 @@ public partial class SettingsScreen : Screen
             if (Tutorial.Current != null) { replay.Text = "Playing"; replay.Disabled = true; }
         });
 
+        Tab("Character", CharacterPage.Fill);
+
         Tab("Vehicles", rows =>
         {
             rows.AddChild(UiKit.Section("Wear"));
@@ -141,6 +146,11 @@ public partial class SettingsScreen : Screen
             UiKit.ToggleRow(rows, "Brake wear and fade (cars)", s.BrakeWear, on => GameSettings.Current.BrakeWear = on);
             UiKit.OptionRow(rows, "Truck gearbox", new[] { "Automatic", "Sequential", "Sequential + clutch", "H-pattern + splitter", "H-pattern (auto splitter)" },
                 (int)s.HeavyGearbox, i => GameSettings.Current.HeavyGearbox = (Player.HeavyShift)i);
+            UiKit.OptionRow(rows, "Car gearbox", new[] { "Automatic", "Sequential", "Manual (clutch)" },
+                (int)s.CarGearbox, i => GameSettings.Current.CarGearbox = (Player.CarGearbox)i,
+                "Sequential: shift up and down yourself, the clutch is automatic. Manual: the gates (1-6, R, N or a wheel's H-shifter) "
+                + "and the clutch pedal; it grinds without the clutch and stalls when the clutch is dropped. "
+                + "In either, the pad's shoulders shift instead of the trick and the boost");
             UiKit.OptionRow(rows, "Airliner handling", new[] { "Arcade", "Light sim" }, (int)s.Airliner,
                 i => GameSettings.Current.Airliner = (Player.AirlinerHandling)i,
                 "Arcade: protected, wings level on their own, ready to taxi. Light sim: engine start, autopilot, trim, fuel");
@@ -466,6 +476,21 @@ public partial class SettingsScreen : Screen
             ? "PS1 keeps its low resolution on any screen; lower is chunkier"
             : "100 % is the window's own resolution; lower is chunkier and faster";
         UiKit.OptionRow(into, name, labels, index, i => set(scales[i]), hint);
+    }
+
+    /// <summary>
+    /// The main view's anti-aliasing (#768), greyed out while the style is PS1, which turns it off
+    /// as it keeps its own low resolution (<see cref="DisplaySettings"/>); it follows a live style switch.
+    /// </summary>
+    private static void AntiAliasingRow(Container into, AntiAliasing current)
+    {
+        var option = UiKit.OptionRow(into, "Anti-aliasing", new[] { "Off", "FXAA", "MSAA 2x", "MSAA 4x", "MSAA 8x" },
+            (int)current, i => GameSettings.Current.AntiAliasing = (AntiAliasing)i,
+            "Smooths 3D edges; off in PS1, whose jagged edges are its look. MSAA is sharper, but distant ground sparkles");
+        void Sync() => option.Disabled = Styles.StyleKit.Style == Styles.VisualStyle.Ps1;
+        Sync();
+        Styles.StyleKit.ChoiceChanged += Sync;
+        option.TreeExiting += () => Styles.StyleKit.ChoiceChanged -= Sync;
     }
 
     /// <summary>Common window sizes that fit on the screen the window is on.</summary>

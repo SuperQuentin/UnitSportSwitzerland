@@ -69,7 +69,7 @@ public partial class FootPlayer
     /// In the water, swimming (on every peer: a remote copy reads it from the replicated pose).
     /// Items are holstered while it lasts.
     /// </summary>
-    public bool IsSwimming => IsMultiplayerAuthority()
+    public bool IsSwimming => !Net.NetLink.Dropped(this) && IsMultiplayerAuthority()
         ? _swimming
         : PoseKind == PoseSwim && RideKindId == (int)RideKind.OnFoot;
 

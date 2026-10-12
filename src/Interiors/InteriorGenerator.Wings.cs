@@ -187,7 +187,8 @@ public static partial class InteriorGenerator
             // a lone wing (an outline at other angles, #598) takes every door, wherever on its
             // slanted walls it stands: the wing's own wall facing the same way is its doorway
             bool lone = wings.Count == 1;
-            float bestD = lone ? float.MaxValue : 2.0f;
+            // the garage door (#694) is on the facade's own wall, which a stepped facade can leave up to 4 m off the wing's simplified edge
+            float bestD = lone ? float.MaxValue : d.Vehicle && d.Link.Any ? 4.0f : 2.0f;
             foreach (var w in wings)
             {
                 var R = w.R;
@@ -457,6 +458,12 @@ public static partial class InteriorGenerator
                 var a = ToBox(w, rail.X0, rail.Z0);
                 var b = ToBox(w, rail.X1, rail.Z1);
                 into.Rails.Add(new RectPlan(a.X, a.Z, b.X, b.Z));
+            }
+            foreach (var guard in from.Guards)
+            {
+                var a = ToBox(w, guard.X0, guard.Z0);
+                var b = ToBox(w, guard.X1, guard.Z1);
+                into.Guards.Add(new RectPlan(a.X, a.Z, b.X, b.Z));
             }
             foreach (var fl in from.AllFlights())
             {

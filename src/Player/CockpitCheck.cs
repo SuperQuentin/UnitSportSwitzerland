@@ -13,22 +13,43 @@ namespace UnitSport.Player;
 /// </summary>
 public static class CockpitCheck
 {
+    /// <summary>
+    /// A kart has no roof, glass or bulkhead to fit the driver under: only that the hands and feet reach
+    /// the wheel and the pedals however the wheel is turned, and that the rig seats a driver (#715).
+    /// </summary>
+    private static int CheckKart(CarSpec spec)
+    {
+        var seat = CarMeshBuilder.SeatFor(spec.Body, spec.Wheelbase);
+        float reach = 0f;
+        foreach (float turn in new[] { 0f, HumanMeshBuilder.MaxGripTurn, -HumanMeshBuilder.MaxGripTurn })
+        {
+            var (hr, hl, fr, fl) = HumanMeshBuilder.DriverReach(seat, turn);
+            reach = Mathf.Max(reach, Mathf.Max(Mathf.Max(hr, hl), Mathf.Max(fr, fl)));
+        }
+        var rig = CarRig.Create(spec.Body, spec.Wheelbase, spec.Gauges, HumanPalette.Default);
+        bool driver = rig.GetNode<Node3D>("Body").HasNode("Driver");
+        rig.Free();
+        bool ok = reach < 0.01f && driver;
+        GD.Print($"[cockpitcheck] {spec.Label,-24} {spec.Body.Shape,-10} reach {reach * 1000,4:F0}mm  {(ok ? "ok" : "FAIL" + (driver ? "" : " no driver"))}");
+        return ok ? 0 : 1;
+    }
+
     public static int Run()
     {
         int failed = 0;
         GD.Print("[cockpitcheck] car                      shape      recline  eye (x, y, z)         head  ahead  behind  reach  pedals");
         foreach (var spec in CarCatalog.All)
         {
+            if (spec.Body.Shape == BodyShape.Kart) { failed += CheckKart(spec); continue; }
             var d = CarMeshBuilder.For(spec.Body, spec.Wheelbase);
-            var seat = CarMeshBuilder.SeatFor(d);
+            var seat = CarMeshBuilder.SeatFor(d, spec.Body.LeftHandDrive);
             var eye = HumanMeshBuilder.DriverEye(seat.Hip, seat.Recline);
 
             // the head box's top is ~10 cm above the eye; the headlining hangs 7 cm under the roof
-            float head = d.Roof - 0.07f - (eye.Y + 0.1f);
-            float Rake(float y, float bottom, float top) => Mathf.Lerp(bottom, top, (y - d.Belt) / (d.Roof - d.Belt));
-            float ahead = Rake(eye.Y, d.WsBase, d.WsTop) - eye.Z;
+            float head = d.RoofAt(eye.Z) - 0.07f - (eye.Y + 0.1f);
+            float ahead = d.FrontAt(eye.Y) - eye.Z;
             // the back of the head is ~19 cm behind the eye
-            float behind = eye.Z - 0.19f - Rake(eye.Y + 0.05f, d.RgBase, d.RgTop);
+            float behind = eye.Z - 0.19f - d.RearAt(eye.Y + 0.05f);
             float reach = 0f;
             foreach (float turn in new[] { 0f, HumanMeshBuilder.MaxGripTurn, -HumanMeshBuilder.MaxGripTurn })
             {
@@ -44,13 +65,17 @@ public static class CockpitCheck
             bool glass = shell.Mesh is ArrayMesh m && Enumerable.Range(0, m.GetSurfaceCount())
                 .Any(i => m.SurfaceGetName(i) == MeshScratch.GlassSurface);
             bool driver = rig.GetNode<Node3D>("Body").HasNode("Driver");
+            // the driver sits on the side the car is built for, and gets in through the door there
+            // (#760): authored +X is the driver's left, node −X the car's left
+            bool lhd = spec.Body.LeftHandDrive;
+            bool side = seat.Hip.X > 0f == lhd && rig.DoorPivot(CarRig.DriverDoor) is { } door && door.Position.X < 0f == lhd;
             rig.Free();
 
-            bool ok = head >= 0f && ahead >= 0.2f && behind >= 0f && reach < 0.01f && pedals >= 0f && glass && driver;
+            bool ok = head >= 0f && ahead >= 0.2f && behind >= 0f && reach < 0.01f && pedals >= 0f && glass && driver && side;
             if (!ok) failed++;
             GD.Print($"[cockpitcheck] {spec.Label,-24} {spec.Body.Shape,-10} {Mathf.RadToDeg(seat.Recline),5:F0}°  "
                 + $"({eye.X,5:F2}, {eye.Y,4:F2}, {eye.Z,5:F2})  {head * 100,4:F0}  {ahead * 100,5:F0}  {behind * 100,6:F0}  "
-                + $"{reach * 1000,4:F0}mm {pedals * 100,5:F0}  {(ok ? "ok" : "FAIL" + (glass ? "" : " no glass surface") + (driver ? "" : " no driver"))}");
+                + $"{reach * 1000,4:F0}mm {pedals * 100,5:F0}  {(lhd ? "LHD" : "RHD")}  {(ok ? "ok" : "FAIL" + (glass ? "" : " no glass surface") + (driver ? "" : " no driver") + (side ? "" : " driver on the wrong side"))}");
         }
         GD.Print("[cockpitcheck] head/ahead/behind/pedals in cm of room (head under the headlining, windscreen ahead of the eye, "
             + "rear glass behind the head, pedal hinges behind the bulkhead); reach = how far a hand or foot falls short");
@@ -66,7 +91,7 @@ public static class CockpitCheck
     /// <summary>
     /// The trucks and buses (#157): the same fit from the cab (<see cref="HeavyCabin.SeatFor"/>), the
     /// eye between the dash and the top of the windscreen, the seat inside the walls, and the seats
-    /// a passenger can take (#158): a truck's cab two, a bus at least twenty.
+    /// a passenger can take (#158): a truck's cab two, the pickup's five (#463), a bus at least twenty.
     /// </summary>
     private static int CheckHeavy()
     {
@@ -75,7 +100,7 @@ public static class CockpitCheck
         foreach (var spec in HeavyCatalog.All)
             failed += CheckCab(spec.Label, Enumerable.Range(0, spec.Sections.Length)
                 .Select(k => HeavyRig.Create(spec, k, 0.5f, k == 0 ? HumanPalette.Default : null)).ToList(),
-                spec.Class is HeavyClass.Tractor or HeavyClass.Rigid ? 1 : 20);
+                spec.Class switch { HeavyClass.Tractor or HeavyClass.Rigid or HeavyClass.FarmTractor or HeavyClass.Combine => 1, HeavyClass.Pickup => 4, HeavyClass.Offroader => 3, HeavyClass.Transporter => 10, _ => 20 });
         // the airstairs' cab (#417): a heavy cockpit in a low cab, its seat in front of the back wall
         var stairs = Avatar.AirstairsMeshBuilder.CreateRig(2.5f, HumanPalette.Default);
         float back = stairs.Cockpit!.Seat.Hip.Z - 0.3f - (Avatar.AirstairsLayout.CabRear + Avatar.AirstairsLayout.CabWall);

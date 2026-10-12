@@ -84,8 +84,8 @@ Write-Host "== $($t.Branch)  ($path)  mode $Mode"
 # Godot: $env:GODOT, else the console exe from winget or Chocolatey (docs/notes/general/godot-exe.md), else godot on PATH
 $godot = $env:GODOT
 if (-not $godot) {
-    $cands = @(Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\GodotEngine.GodotEngine.Mono_*\Godot_v4.7.1-stable_mono_win64\Godot_v4.7.1-stable_mono_win64_console.exe" -ErrorAction SilentlyContinue).FullName +
-        "C:\ProgramData\chocolatey\lib\godot-mono\tools\godot_v4.7.1-stable_mono_win64\godot_v4.7.1-stable_mono_win64_console.exe"
+    $cands = @(Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\GodotEngine.GodotEngine.Mono_*\Godot_v4.7.2-stable_mono_win64\Godot_v4.7.2-stable_mono_win64_console.exe" -ErrorAction SilentlyContinue).FullName +
+        "C:\ProgramData\chocolatey\lib\godot-mono\tools\godot_v4.7.2-stable_mono_win64\godot_v4.7.2-stable_mono_win64_console.exe"
     $godot = $cands | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
     if (-not $godot) { $godot = (Get-Command godot -ErrorAction Stop).Source }
 }

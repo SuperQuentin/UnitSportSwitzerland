@@ -27,7 +27,7 @@ namespace UnitSport.Vehicles;
 /// nothing. Every peer watches <see cref="Wrecked"/>: the frame it flips, it explodes there too.
 /// </para>
 /// </summary>
-public partial class VehicleBody : CharacterBody3D
+public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity
 {
     public const string Group = "vehicles";
 
@@ -83,6 +83,9 @@ public partial class VehicleBody : CharacterBody3D
     /// <summary>A car's rig, for finding the door a player is at; null for anything else, or headless.</summary>
     public CarRig? Rig => _visual as CarRig;
 
+    /// <summary>Its doors worked one by one, a car's or the pickup's (#463); null when it has none here (or headless).</summary>
+    public IHingedDoors? Doors => _visual is IHingedDoors { DoorCount: > 0 } doors ? doors : null;
+
     /// <summary>
     /// The drawn machine, for outlining it (#261), and the frame of its first section (a parked
     /// train's others are its children named <c>Section{k}</c>). Null on a headless peer, but for a
@@ -107,7 +110,38 @@ public partial class VehicleBody : CharacterBody3D
     private float _heavySpin;
     private float _restTime;
     private bool _asleep;
-    private MultiplayerSynchronizer? _sync;
+    private MultiplayerSynchronizer? _sync, _relay;
+
+    // ---- entity interest (#689) ----
+    public GlobalPos InterestAt => Global;
+    /// <summary>The size it presents, m: the largest side of its parked box.</summary>
+    public float InterestSize => Ride.ParkedBox.Size is var s ? Mathf.Max(s.X, Mathf.Max(s.Y, s.Z)) : 4f;
+    /// <remarks>
+    /// One parked in a hold (#418) goes where its carrier goes, which its own published position
+    /// need not follow: it is sent to every peer, as before entity interest.
+    /// </remarks>
+    public float InterestRange(Net.Interest.View view) =>
+        InHold ? float.MaxValue : Net.EntityInterestRules.VehicleRange(InterestSize, view.Far, view.FovDeg);
+    public bool InterestBig => InHold || InterestSize > Net.EntityInterest.CellSize;
+    public void RefreshInterest(long peer) => Net.EntityNet.Refresh(this, peer);
+    public void RelayRate(bool moving) { if (_relay != null) _relay.ReplicationInterval = moving ? 0.05f : 2f; }
+
+    /// <summary>
+    /// Online, this peer only has the vehicle within its interest range (#689): its model fades out
+    /// before that range and in after it, so it arrives invisible and leaves already gone, never popping.
+    /// The range is the server's rule for this peer's own lens.
+    /// </summary>
+    private void FadeAtRange(Node visual)
+    {
+        float range = Net.EntityInterestRules.VehicleRange(InterestSize, GameSettings.Current.CameraFar, FootPlayer.BaseFov);
+        foreach (var node in visual.FindChildren("*", nameof(GeometryInstance3D), recursive: true, owned: false))
+            if (node is GeometryInstance3D g && g.VisibilityRangeEnd == 0f)
+            {
+                g.VisibilityRangeEnd = range * Net.EntityInterestRules.FadeEnd;
+                g.VisibilityRangeEndMargin = range * Net.EntityInterestRules.FadeMargin;
+                g.VisibilityRangeFadeMode = GeometryInstance3D.VisibilityRangeFadeModeEnum.Self;
+            }
+    }
     private bool _anchored;
     private bool _charred;
     private bool _wasWrecked;
@@ -207,7 +241,8 @@ public partial class VehicleBody : CharacterBody3D
             ReplicationInterval = 0.05f,
         };
         sync.SetMultiplayerAuthority(GetMultiplayerAuthority());
-        AddChild(sync);
+        // only to the peers near enough to have it (#689), a client's vehicle relayed by the server
+        _relay = Net.EntityNet.Add(this, sync, 0.05f);
 
         // Placed by the dedicated server itself (VehicleManager.Place): the server has no ground
         // collision to simulate it on, so it stands exactly where it was put, asleep, until a
@@ -232,6 +267,11 @@ public partial class VehicleBody : CharacterBody3D
             _visual = Ride.BuildParkedVisual((int)Math.Max(1, Owner));
             _visual.Name = "Visual";
             AddChild(_visual);
+            if (Multiplayer.MultiplayerPeer is not (null or OfflineMultiplayerPeer) && !Multiplayer.IsServer()) FadeAtRange(_visual);
+            // parked near music (#734): the body bounces on its springs, the wheels and the collider stay
+            if (_visual is Items.IBeatReactive reactive) Items.BeatField.Add(reactive, _visual);
+            else if (_visual.FindChildren("*", "", true, false).OfType<Items.IBeatReactive>().FirstOrDefault() is { } inner)
+                Items.BeatField.Add(inner, _visual);
             Hurtbox.Fit(_visual);
             if (Ride is Helicopter or Plane or Airliner or IEngined)
             {
@@ -340,7 +380,10 @@ public partial class VehicleBody : CharacterBody3D
             : Ride is IBed { HasBed: true } bed ? bed.FlagsWithBed(_initial.Flags, BedLoad) : _initial.Flags, _initial.Load,
         _initial.Radio, _initial.Cd,
         // in a hold (#418): its carrier now (it may have changed hands since it was parked) and its spot
-        HoldPlace.Key, HoldPlace.Section, HoldPlace.Pos, HoldPlace.Yaw);
+        HoldPlace.Key, HoldPlace.Section, HoldPlace.Pos, HoldPlace.Yaw, _initial.Oid);
+
+    /// <summary>Which vehicle this is to the object containers (#689); 0 = not persisted.</summary>
+    public long Oid => _initial.Oid;
 
     /// <summary>The live station its radio plays, as the driver left it (spawn data only: nobody tunes a parked car).</summary>
     public int Radio => _initial.Radio;
@@ -357,7 +400,7 @@ public partial class VehicleBody : CharacterBody3D
     /// <summary>Opens or shuts one door. The authority's call: others ask <see cref="VehicleManager.ToggleDoor"/>.</summary>
     public void ToggleDoor(byte bit)
     {
-        if (Wrecked || Ride is not (Car or Truck { IsBus: true } or Steamer or Airliner)) return;
+        if (Wrecked || Ride is not (Car or Truck { IsBus: true } or Truck { CarDoors: true } or Steamer or Airliner)) return;
         DoorsOpen ^= (byte)(bit & 15);
         _shutDriverIn = 0f;   // a door someone chose to leave open stays open
     }
@@ -404,7 +447,7 @@ public partial class VehicleBody : CharacterBody3D
 
         // at rest long enough: sleep, and stop asking for collision
         // (a boat: barely moving on water too flat to move it, or aground)
-        bool still = Ride is Boat ? _boatCalm : onFloor && Velocity.LengthSquared() < 0.04f && _flight.Spool < 0.05f;
+        bool still = Ride is Boat ? _boatCalm : onFloor && Velocity.LengthSquared() < 0.04f && _flight.Spool < 0.05f && Mathf.Abs(_spin) < 0.05f;
         _restTime = still ? _restTime + dt : 0f;
         if (_restTime > 1f)
         {
@@ -516,13 +559,18 @@ public partial class VehicleBody : CharacterBody3D
             // would creep on for ever, with nobody aboard to stop it
             truck.EngineRunning = false;
             truck.Box.ClutchHeld = false;
+            truck.Box.ClutchFoot = 0f;
+            truck.Selector = Player.DriveSelector.None;
         }
+        // nobody's hand on a selector either (#290): the parked car behaves as it always has
+        if (Ride is Player.Car parkedCar) parkedCar.Selector = Player.DriveSelector.None;
         _motion.Yaw = Rotation.Y;
         Ride.Step(new RideInput(0f, 0f, 0f, false), new RideGround(onFloor, grade, surface), dt, ref _motion);
+        _motion.Yaw += Spin(dt, onFloor);
         Rotation = new Vector3(0, _motion.Yaw, 0);
         heading = -GlobalTransform.Basis.Z with { Y = 0 };
         heading = heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector3.Forward;
-        var v = heading.Rotated(Vector3.Up, _motion.Slip) * _motion.Speed;
+        var v = heading.Rotated(Vector3.Up, _motion.Slip) * _motion.Speed + Slide(dt, onFloor);
         v.Y = onFloor ? Mathf.Min(Velocity.Y, 0f) : Velocity.Y - Rideable.Gravity * dt;
         Velocity = v;
         MoveAndSlide();
@@ -539,7 +587,7 @@ public partial class VehicleBody : CharacterBody3D
         _motion.Speed = Mathf.MoveToward(_motion.Speed, 0f, (onFloor ? 3f : 0.3f) * dt);
         var heading = -GlobalTransform.Basis.Z with { Y = 0 };
         heading = heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector3.Forward;
-        var v = heading * _motion.Speed;
+        var v = heading * _motion.Speed + Slide(dt, onFloor);
         v.Y = onFloor ? Mathf.Min(Velocity.Y, 0f) : Velocity.Y - Rideable.Gravity * dt;
         Velocity = v;
         MoveAndSlide();
@@ -549,6 +597,7 @@ public partial class VehicleBody : CharacterBody3D
 
     public override void _Process(double delta)
     {
+        if (Net.NetLink.Dropped(this)) return;   // freed with the link a frame later
         float dt = (float)delta;
 
         if (Wrecked && !_wasWrecked)
@@ -579,7 +628,7 @@ public partial class VehicleBody : CharacterBody3D
             if (_visual is HeavyRig bedRig) bedRig.BedLoad = BedLoad;
         }
         if (_visual is CarRig doors) doors.DoorsOpen = DoorsOpen;
-        else if (_visual is HeavyRig bus && Ride is Truck { IsBus: true })
+        else if (_visual is HeavyRig bus && Ride is Truck { IsBus: true } or Truck { CarDoors: true })
         {
             // the bus's leaves swing on its rig, an articulated one's on both halves
             bus.DoorsOpen = DoorsOpen;
@@ -634,7 +683,7 @@ public partial class VehicleBody : CharacterBody3D
             truck.UnpackFlags(_initial.Flags);
             if (truck.HasBed) truck.BedLoad = BedLoad;
             // a bus's doors are live, worked by its buttons as it rolls: not as the driver left them
-            if (truck.IsBus) truck.DoorsOpen = DoorsOpen;
+            if (truck.IsBus || truck.CarDoors) truck.DoorsOpen = DoorsOpen;
             _heavySpin += Velocity.Length() / truck.WheelRadius * dt;
             _dressedAtRest = Velocity == Vector3.Zero ? Wrecked : null;
             _heavySections ??= heavy.FindChildren("Section*", "", false, false).OfType<HeavyRig>().Prepend(heavy).ToArray();
@@ -731,7 +780,7 @@ public partial class VehicleBody : CharacterBody3D
             hull.GlobalTransform = poses[0] * new Transform3D(Basis.Identity, Ride.ParkedBox.Centre);
         // the extra boxes are the sections behind, in order — after a semi-trailer's own running
         // gear, which is part of its first section
-        bool gear = Ride is ParkedTrailer && bodies[0].Spec.Pivot != Coupling.Drawbar;
+        bool gear = Ride is ParkedTrailer { HasGearBox: true };
         int extra = 0;
         foreach (var (_, centre, _) in Ride.ExtraBoxes())
         {
@@ -747,7 +796,28 @@ public partial class VehicleBody : CharacterBody3D
         // one query for all its rays (a new one and a new exclude array per ray before, #221); not a
         // player: one standing in a parked bus by its front axle (up from the wheel, #162) was read as
         // the road, and the bus stood on their head, two metres up
-        World.GroundQuery.Under(this, _groundRay, _groundExclude ??= new Godot.Collections.Array<Rid> { GetRid() }, p, Terrain, pastPlayers: true);
+        World.GroundQuery.Under(this, _groundRay, _groundExclude ??= GroundExclude(), p, Terrain, pastPlayers: true);
+
+    /// <summary>Itself and what it carries (a boat on its trailer, #463): a parked trailer stood on its own boat's hull.</summary>
+    private Godot.Collections.Array<Rid> GroundExclude()
+    {
+        var rids = new Godot.Collections.Array<Rid> { GetRid() };
+        foreach (var c in _cargo) if (IsInstanceValid(c)) rids.Add(c.GetRid());
+        return rids;
+    }
+
+    private readonly List<PhysicsBody3D> _cargo = new();
+
+    /// <summary>A parked vehicle hooked to this carrier (<c>VehicleBody.Hold.cs</c>), or let go of it.</summary>
+    internal void Cargo(PhysicsBody3D body, bool on)
+    {
+        if (on == _cargo.Contains(body)) return;
+        if (on) _cargo.Add(body); else _cargo.Remove(body);
+        // stood again, its boxes too: it may have read the cargo as its ground before it was hooked
+        _groundExclude = null;
+        _standIn = 0f;
+        _stoodAsleep = false;
+    }
 
     /// <summary>Blows it up: the flag every peer watches. Only the authority calls this.</summary>
     public void Explode()

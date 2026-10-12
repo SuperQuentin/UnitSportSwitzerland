@@ -161,6 +161,8 @@ public partial class PlaceSearchUi : CanvasLayer
             // the fly-cam holds the mouse captured; typing needs it released
             Input.MouseMode = Input.MouseModeEnum.Visible;
             _query.Clear();
+            _hint.Text = Permissions.CanTeleport ? "Enter to jump   Esc to close"
+                : "This server does not allow teleporting   Esc to close";
             Refresh();
             _query.GrabFocus();
         }
@@ -197,6 +199,12 @@ public partial class PlaceSearchUi : CanvasLayer
         if (index < 0 || index >= _shown.Count) return;
         var place = _shown[index];
 
+        // a server without teleporting (#799): say so where the jump was asked for
+        if (!Permissions.CanTeleport)
+        {
+            _hint.Text = "This server does not allow teleporting. Walk, ride or fly there.";
+            return;
+        }
         _teleporter.TeleportTo(place.E, place.N, place.Name);
         SetOpen(false);
     }

@@ -23,18 +23,33 @@ public readonly record struct RadioPlay(int CdId, double StartedAt, float Length
     /// <summary>Still within the CD at <paramref name="serverNow"/>.</summary>
     public bool Sounding(double serverNow) => serverNow - StartedAt < Length;
 
-    public static RadioPlay? Decode(string? text)
+    /// <summary>
+    /// A radio switched off with a tap (#725): "cd;0;len;mode;off". Five fields, so
+    /// <see cref="Decode"/> (and with it every speaker, dancer and sparkle) reads silence, while
+    /// <see cref="DecodeAny"/> still finds the CD the next tap puts back on.
+    /// </summary>
+    public static string Off(RadioPlay last) =>
+        string.Create(CultureInfo.InvariantCulture, $"{last.CdId};0;{last.Length:R};{(int)last.Mode};off");
+
+    /// <summary>What plays, or null for silence (an empty string, a switched-off radio, garbage).</summary>
+    public static RadioPlay? Decode(string? text) => Parse(text, allowOff: false);
+
+    /// <summary>Like <see cref="Decode"/>, but also the CD left in a switched-off radio.</summary>
+    public static RadioPlay? DecodeAny(string? text) => Parse(text, allowOff: true);
+
+    private static RadioPlay? Parse(string? text, bool allowOff)
     {
         if (string.IsNullOrEmpty(text)) return null;
         var parts = text.Split(';');
-        if (parts.Length is < 3 or > 4
+        if (parts.Length == 5 && (!allowOff || parts[4] != "off")) return null;
+        if (parts.Length is < 3 or > 5
             || !int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int cd) || cd == 0
             || !double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out double at)
             || !float.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float length)
             || !double.IsFinite(at) || !float.IsFinite(length))
             return null;
         var mode = RadioMode.Once;
-        if (parts.Length == 4 && int.TryParse(parts[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out int m))
+        if (parts.Length >= 4 && int.TryParse(parts[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out int m))
             mode = RadioQueue.Clamp(m);
         return new RadioPlay(cd, at, length, mode);
     }

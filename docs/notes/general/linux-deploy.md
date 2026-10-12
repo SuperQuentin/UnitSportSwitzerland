@@ -9,7 +9,7 @@
 - **Export preset:** `export_presets.cfg` is gitignored and per machine; the script appends a `"Linux Server"` preset
   (`platform="Linux"`, `dedicated_server=true`, the Windows preset's `exclude_filter`) when it is missing. Output: `build/linux/`.
 - **.NET:** the local SDK must match the csproj `TargetFramework` (net8 -> SDK 8.x) and Godot must be the csproj's `Godot.NET.Sdk`
-  version (4.7.1 mono); both checked first. The export bundles the .NET runtime (`data_*/libcoreclr.so`), so the host needs none;
+  version (4.7.2 mono); both checked first. The export bundles the .NET runtime (`data_*/libcoreclr.so`), so the host needs none;
   if an export ever comes out framework-dependent, setup installs `dotnet-runtime-<major>.0` instead.
 - **Host setup** (`tools/deploy/remote-setup.sh`, run as root, idempotent, one OK/INSTALLED/FAIL line per item):
   - apt: `ffmpeg tmux avahi-daemon ufw cron curl ca-certificates tar unzip` + a `libicu` (.NET globalization).
@@ -32,9 +32,14 @@
   The `.gz` files are left out of the compare and of `--prune`. The server starts with `--tiles-url`: `https://TILES_DOMAIN/tiles/`,
   else `http://<DEPLOY_HOST without user@>/tiles/`. Set `TILES_URL` when `DEPLOY_HOST` is an ssh alias, or for a CDN.
   Check: `curl -sI -H 'Accept-Encoding: gzip' <url>chunk_2593_1119.terr` shows `Content-Encoding: gzip`.
+- **Status page** (#740, `net/status-page`): the same Caddy serves `$DEPLOY_DIR/web` at `/`: `index.html` uploaded on
+  every start install, `status.json` written by the server (`--status-file`). Players, names, version and the latest
+  release's downloads at `http(s)://<host>/`. Needs `TILES=1`; a host set up before it needs `--setup` once.
 - **Server process:** a detached tmux session `unitsport`, so its stdin console still works:
   `ssh -t user@host tmux attach -t unitsport` (detach Ctrl-b d). A deploy kills the session (no graceful save exists) and
-  restarts it, then waits for the UDP port (about 30 s) and prints the log tail.
+  restarts it, then waits for the UDP port (about 30 s) and prints the log tail. **Ctrl-d in the console ends its stdin**:
+  the server keeps running but reads no more commands until a restart. Inside the session `start-server.sh run`
+  loops so the in-game `/update` can restart on a new release (`net/server-update`, `update-server.sh` installed beside it).
 - **Terrain chunks** (the real set is ~111 GB in ~246k files, one flat directory): the source is MapSetup's
   `terrain_location.json` `"chunks"`, else `terrain_chunks/`, else `CHUNKS_SRC=`; run from the main checkout (worktrees have no tiles).
   Files whose name, size or mtime differ are copied (`--checksum` compares md5 instead: reads every byte on both sides).

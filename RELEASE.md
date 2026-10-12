@@ -21,12 +21,12 @@ Deploying the dedicated Linux server is a separate step: [`docs/notes/general/li
 
 1. **Tools**: Git Bash (Windows) or WSL, `gh` logged in (`gh auth login`), the .NET SDK that matches the csproj
    `TargetFramework`, `curl`, `unzip`, `tar`, `xz`, and `zip` (PowerShell `Compress-Archive` is used when `zip` is missing).
-2. **Godot 4.7.1 mono**, the same version as the csproj's `Godot.NET.Sdk`. The script uses the Chocolatey install path by
+2. **Godot 4.7.2 mono**, the same version as the csproj's `Godot.NET.Sdk`. The script uses the Chocolatey install path by
    default; override it with `GODOT=/path/to/godot_console.exe` (on WSL: `GODOT=godot`). See
    [`docs/notes/general/godot-exe.md`](docs/notes/general/godot-exe.md).
-3. **Export templates** (mono, 4.7.1): Godot editor > *Editor > Manage Export Templates* > Download, or unzip
-   `Godot_v4.7.1-stable_mono_export_templates.tpz` so that `version.txt` and the `windows_*`, `linux_*` and `macos.zip`
-   templates land in `%APPDATA%/Godot/export_templates/4.7.1.stable.mono/`.
+3. **Export templates** (mono, 4.7.2): Godot editor > *Editor > Manage Export Templates* > Download, or unzip
+   `Godot_v4.7.2-stable_mono_export_templates.tpz` so that `version.txt` and the `windows_*`, `linux_*` and `macos.zip`
+   templates land in `%APPDATA%/Godot/export_templates/4.7.2.stable.mono/`.
 4. **`export_presets.cfg`** in the repo root. It is gitignored (one per machine). Create a **"Windows Desktop"** preset in
    *Project > Export* with:
    - the same `exclude_filter` as the Linux preset in `tools/deploy-linux.sh` (keeps data folders out of the build),
@@ -59,6 +59,10 @@ What happens:
   even uncommitted ones, are never touched.
 - The outputs (archives, `notes.md`) are in `test_output/release/`.
 - The GitHub release `vX.Y.Z` is created on that commit, with the changelog as notes and the three archives attached.
+- **Feature GIFs**: every `test_output/release/clips/*.gif` is attached too and shown first in the notes, under
+  `### Highlights` (caption: `<name>.txt` beside it, else the name). Record them with `tools/record-clip.sh` or `/clip`
+  in the chat ([`docs/notes/general/feature-clips.md`](docs/notes/general/feature-clips.md)); after the release they
+  move to `clips/released/vX.Y.Z/`.
 
 ## 3. Full release by hand
 
@@ -74,7 +78,9 @@ git log --no-merges --format='%s' "$last..HEAD"    # read the commits, apply the
 V=1.4.0                                            # example
 ```
 
-Write `test_output/release/notes.md` with three sections, each commit subject as one bullet without its gitmoji:
+Write `test_output/release/notes.md` with three sections (after an optional `### Highlights` of feature GIFs, each
+`![caption](https://github.com/SuperQuentin/UnitSportSwitzerland/releases/download/v$V/<name>.gif)`, the GIFs then
+passed to `gh release create` with the archives), each commit subject as one bullet without its gitmoji:
 `### Features and changes`, `### Fixes` (`:bug:` `:ambulance:`), `### Docs and maintenance`
 (`:memo:` `:wrench:` `:recycle:` `:art:` `:white_check_mark:`), then a last line
 `**Full diff:** https://github.com/SuperQuentin/UnitSportSwitzerland/compare/<last>...v$V`.

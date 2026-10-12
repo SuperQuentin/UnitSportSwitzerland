@@ -20,11 +20,28 @@ public static class CdCache
     /// <summary>The Ogg for a CD if this machine already has it, else null.</summary>
     public static string? LocalPath(int id)
     {
-        if (id < 0) return CdLibrary.Instance?.PersonalPath(id);
-        string own = Path.Combine(CdLibrary.Directory, $"{id}.ogg");
-        if (File.Exists(own)) return own;
-        string cached = Path.Combine(CacheDirectory, $"{id}.ogg");
-        return File.Exists(cached) ? cached : null;
+        if (CdLibrary.Instance is not { } lib) return null;
+        if (id < 0) return lib.PersonalPath(id);
+        // a client's own folder holds its offline burns, whose ids name other songs than the server's
+        if (lib.OwnsFiles)
+        {
+            string own = Path.Combine(CdLibrary.Directory, $"{id}.ogg");
+            return File.Exists(own) ? own : null;
+        }
+        return CachePath(id) is { } cached && File.Exists(cached) ? cached : null;
+    }
+
+    /// <summary>
+    /// The cached copy's file: the id and a fingerprint of the CD's title and length, since the
+    /// same id is another song on another server (or after a server reused it). Null while the
+    /// list does not know the CD.
+    /// </summary>
+    private static string? CachePath(int id)
+    {
+        if (CdLibrary.Instance?.Find(id) is not { } cd) return null;
+        string key = $"{cd.Title}|{cd.Duration.ToString("R", System.Globalization.CultureInfo.InvariantCulture)}";
+        byte[] hash = System.Security.Cryptography.SHA1.HashData(System.Text.Encoding.UTF8.GetBytes(key));
+        return Path.Combine(CacheDirectory, $"{id}-{Convert.ToHexString(hash, 0, 4).ToLowerInvariant()}.ogg");
     }
 
     /// <summary>
@@ -48,6 +65,8 @@ public static class CdCache
 
     private static async Task<string?> Fetch(ChunkStreamer streamer, int id, CancellationToken ct)
     {
+        // main thread: the list may change under the worker
+        if (CachePath(id) is not { } path) return null;
         var result = await streamer.FetchAsync(AssetKind.Cd, new TileId(id, 0), ct);
         if (result.Data is not { } bytes)
         {
@@ -57,7 +76,6 @@ public static class CdCache
         try
         {
             Directory.CreateDirectory(CacheDirectory);
-            string path = Path.Combine(CacheDirectory, $"{id}.ogg");
             string temp = $"{path}.{Guid.NewGuid():N}.part";
             try
             {

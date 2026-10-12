@@ -7,9 +7,10 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 
 ## Architecture
 
+- `free-cursor` — Tap Alt in game frees the mouse, MMO style (#654, `Core/CursorToggle`): a tap not a chord, a world click recaptures, never touches a pointer a menu owns
 - `modes` — Modes: (`GameMode`, `Core/WorldLaunch`): Explore / GpxReplay / Multiplayer, picked on the title screen or by --connect/--gpx; Esc = pause menu
 - `ground-start` — Explore from the menus starts on foot on open ground (#517, `Core/GroundStart`): waits for building collision, ring search for dry, open-sky, room-to-stand; command-line runs keep the fly camera
-- `steering-wheel` — Steering wheel: (`Core/SteeringWheel`, #68): SDL3 wheel and pedals, 1:1 direct steering, force feedback (aligning, soft lock, road, engine, knocks), Godot's copy of the device ignored, presets + Settings → Wheel tab
+- `steering-wheel` — Steering wheel: (`Core/SteeringWheel`, #68): SDL3 wheel and pedals, 1:1 direct steering, force feedback (aligning, soft lock, road, engine, knocks), paddles, H-shifter lever and clutch travel (#290), Godot's copy of the device ignored, versioned presets + Settings → Wheel tab
 - `input` — Input: (`Core/PlayerInput`): every gameplay control is a named `InputMap` action registered in code at boot...
 - `settings` — Settings: (`Core/GameSettings`, `Ui/SettingsScreen` tabs, `user://settings.json`): render distance in tile rings (6..40,...
 - `performance-overlay` — Performance overlay: (`Core/PerfOverlay`, F3 cycles Off / FPS / Detailed, saved as `GameSettings.PerfOverlay`, also...
@@ -30,11 +31,12 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 - `floating-origin` — Floating origin (#185): world space follows the camera, online too (each peer its own origin, LV95 on the wire); keep `GlobalPos` or handle `IOriginShiftAware`; containers; `Follow` for shared point lists; Jolt kinematic teleport; the renderer across a shift (SDFGI, shadows, particles, snow); `--origincheck`, `--originstress`
 - `json-store` — Persist JSON only via `JsonStore.Save` (atomic, `user://` ok, static options); never `FileAccess` Write / `File.WriteAllText`; InteriorManager still to migrate
 - `perf-saves-background` — Gameplay saves (plant, deposit, loot, claim) via `JsonStore.SaveAsync` (one ordered background writer, `SaveQueue`, flushed on quit); never `JsonStore.Save` in an RPC handler
+- `collision-matrix` (general) — `Core/Collision`: `CollisionTargets` (every collidable thing from the registries, the known gaps), `--collidecheck` (car + walker vs every target, drawn vs solid: ghost / invisible wall), `--collidesandbox` (#699)
 - `mathx` — `MathX.Flat/FlatLength/FlatDistance/Damp/WrapAngle` and `Mathf.SmoothStep`, never a private copy; only where floats stay identical (`-dt / tau` is not `Damp`); tier-0 tested (#221)
 
 ## Commands
 
-- `commands` — Commands: --at, --chatcheck, --debugcheck, --debugview, --fakewheel, --ffbcheck, --ffblog, --origincheck, --originshift, --originstress, --goto, --licenses, --menu, --nohud, --origin, --path, --probe, --settings wheel, --shot, --shot-queue (g and i heights, frame=), --title, --wheelcheck, --wheellock, --wheelwatch
+- `commands` — Commands: --at, --chatcheck, --debugcheck, --debugview, --fakewheel, --ffbcheck, --ffblog, --origincheck, --originshift, --originstress, --goto, --licenses, --menu, --nohud, --origin, --path, --probe, --settings wheel, --shot, --shot-queue (g and i heights, frame=), --clip / --clip-quit, --title, --wheelcheck, --wheellock, --wheelwatch
 
 ## Gotchas
 

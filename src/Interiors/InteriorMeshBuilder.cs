@@ -44,6 +44,17 @@ public static partial class InteriorMeshBuilder
             Tri(a, c, d, col, collide);
         }
 
+        /// <summary>A box that is only collision: nothing drawn, something to walk against.</summary>
+        public void Collider(Vector3 min, Vector3 max)
+        {
+            void Face(Vector3 a, Vector3 b, Vector3 c, Vector3 d) { Col.Add(a); Col.Add(b); Col.Add(c); Col.Add(a); Col.Add(c); Col.Add(d); }
+            Face(new(min.X, max.Y, min.Z), new(max.X, max.Y, min.Z), new(max.X, max.Y, max.Z), new(min.X, max.Y, max.Z));
+            Face(new(min.X, min.Y, min.Z), new(max.X, min.Y, min.Z), new(max.X, max.Y, min.Z), new(min.X, max.Y, min.Z));
+            Face(new(min.X, min.Y, max.Z), new(min.X, max.Y, max.Z), new(max.X, max.Y, max.Z), new(max.X, min.Y, max.Z));
+            Face(new(min.X, min.Y, min.Z), new(min.X, max.Y, min.Z), new(min.X, max.Y, max.Z), new(min.X, min.Y, max.Z));
+            Face(new(max.X, min.Y, min.Z), new(max.X, min.Y, max.Z), new(max.X, max.Y, max.Z), new(max.X, max.Y, min.Z));
+        }
+
         /// <summary>Quad with a darker lower edge — cheap ambient occlusion where wall meets floor.</summary>
         public void WallQuad(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Color col, float y0, float height)
         {
@@ -153,6 +164,7 @@ public static partial class InteriorMeshBuilder
             // a stairwell's half landings (#571): a stone slab, stood on, its underside seen from below
             foreach (var g in floor.Landings)
                 s.Box(new Vector3(g.X0 + 0.02f, y0 + h * g.Level - 0.22f, g.Z0), new Vector3(g.X1 - 0.02f, y0 + h * g.Level, g.Z1 - 0.02f), StairStone);
+            foreach (var g in floor.Guards) Guard(s, g, y0);
             foreach (var r in floor.Rails)
             {
                 var lo = new Vector3(Math.Min(r.X0, r.X1) - 0.03f, y0, Math.Min(r.Z0, r.Z1));
@@ -410,6 +422,36 @@ public static partial class InteriorMeshBuilder
             pieces = next;
         }
         return pieces;
+    }
+
+    /// <summary>
+    /// An open railing along <paramref name="g"/> (#680): square balusters under a handrail, with
+    /// a collision slab you cannot pass, so the stair is seen from its passage and not walled off.
+    /// </summary>
+    private static void Guard(Scratch s, RectPlan g, float y0)
+    {
+        bool alongX = Math.Abs(g.X1 - g.X0) > Math.Abs(g.Z1 - g.Z0);
+        float a = alongX ? Math.Min(g.X0, g.X1) : Math.Min(g.Z0, g.Z1);
+        float b = alongX ? Math.Max(g.X0, g.X1) : Math.Max(g.Z0, g.Z1);
+        float at = alongX ? (g.Z0 + g.Z1) / 2 : (g.X0 + g.X1) / 2;
+        Vector3 P(float u, float y, float d) => alongX ? new Vector3(u, y, at + d) : new Vector3(at + d, y, u);
+        void Block(float u0, float u1, float ya, float yb, float half, bool collide, Color col)
+        {
+            var p = P(u0, y0 + ya, -half);
+            var q = P(u1, y0 + yb, half);
+            s.Box(new Vector3(Math.Min(p.X, q.X), p.Y, Math.Min(p.Z, q.Z)), new Vector3(Math.Max(p.X, q.X), q.Y, Math.Max(p.Z, q.Z)), col, collide);
+        }
+        Block(a, b, 0.0f, 0.08f, 0.03f, false, Handrail);
+        Block(a, b, 0.90f, 0.96f, 0.045f, false, Handrail);
+        int posts = Math.Max(2, (int)MathF.Round((b - a) / 0.14f));
+        for (int i = 0; i <= posts; i++)
+        {
+            float u = a + 0.02f + (b - a - 0.04f) * i / posts;
+            Block(u - 0.015f, u + 0.015f, 0.08f, 0.90f, 0.015f, false, Rail);
+        }
+        var lo = P(a, y0, -0.03f);
+        var hi = P(b, y0 + 1.0f, 0.03f);
+        s.Collider(new Vector3(Math.Min(lo.X, hi.X), y0, Math.Min(lo.Z, hi.Z)), new Vector3(Math.Max(lo.X, hi.X), y0 + 1.0f, Math.Max(lo.Z, hi.Z)));
     }
 
     // ---- stairs ------------------------------------------------------------------------------

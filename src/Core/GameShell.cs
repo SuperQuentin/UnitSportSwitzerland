@@ -199,12 +199,64 @@ public partial class GameShell : Node
         _launch = world.Launch;
         world.MenuOpen = () => MenuOpen;
         world.PauseRequested += OpenPause;
+        world.MovieStudioRequested += OpenMovieStudio;
         world.Disconnected += OnDisconnected;
         if (Direct)
         {
             _state = State.InWorld;
             // "--tutorial" with a probe that rides something (--ride car:0,8,out.png): the ride's intro card
             if (CmdArgs.Has("--tutorial")) Callable.From(world.StartVehicleIntros).CallDeferred();
+            // "--moviestudio <s> [t] [--moviesong <file>] [--moviekeys]": after s seconds of play, the movie
+            // studio over it (#638), at movie time t, a song added (#656), camera keys set (#669), for screenshotting it
+            if (CmdArgs.Double("--moviestudio", 1) is { } studioAt)
+                GetTree().CreateTimer(studioAt).Timeout += () =>
+                {
+                    Movie.MovieSession.SaveClip(quiet: true);
+                    OpenPause();
+                    var studio = Movie.MovieStudio.Create(world, CmdArgs.Double("--moviestudio", 2));
+                    Push(studio);
+                    if (CmdArgs.Value("--moviesong") is { } song) studio.Import(song);
+                    if (CmdArgs.Has("--moviekeys")) Callable.From(studio.ScreenshotKeys).CallDeferred();
+                    if (CmdArgs.Double("--movieexport", 1) is { } exportSeconds)
+                        GetTree().CreateTimer(1.0, processAlways: true).Timeout += () => studio.ExportForCheck(exportSeconds);
+                    if (CmdArgs.Has("--movieeditcheck")) GetTree().CreateTimer(1.0, processAlways: true).Timeout += studio.EditCheck;
+                    if (CmdArgs.Has("--moviewipe")) GetTree().CreateTimer(0.5, processAlways: true).Timeout += studio.ScreenshotWipe;
+                    if (CmdArgs.Has("--movieshots")) GetTree().CreateTimer(0.5, processAlways: true).Timeout += studio.ScreenshotShots;
+                };
+            // "--movierecord <a> <b>": Record / Stop (#775) from a to b seconds of play, then the saved file
+            // read back: one actor clip, a world clip and the game's sound expected, RESULT printed
+            if (CmdArgs.Double("--movierecord", 1) is { } recordAt && CmdArgs.Double("--movierecord", 2) is { } stopAt)
+            {
+                double hourAtStart = double.NaN;
+                int playersAtStart = 0;
+                GetTree().CreateTimer(recordAt).Timeout += () =>
+                {
+                    hourAtStart = UnitSport.World.DayNight.Instance?.Hour ?? double.NaN;
+                    // a command-line launch on the real map starts in the fly camera: no body to record
+                    playersAtStart = Player.PlayerSnapshot.Of(GetTree()).Count(x => !x.Player.Puppet);
+                    Movie.MovieSession.ToggleRecording();
+                };
+                GetTree().CreateTimer(stopAt).Timeout += Movie.MovieSession.ToggleRecording;
+                // stopping hands the session to its spool's worker (#782): the file is read once it is saved
+                Movie.MovieSession.RecordingSaved += newest =>
+                {
+                    var p = newest != null && Movie.MovieSession.Load(newest) == null ? Movie.MovieSession.Project : null;
+                    int actors = p?.Clips.Count(c => !c.Audio && !c.World) ?? 0, worlds = p?.Clips.Count(c => c.World) ?? 0;
+                    int sounds = p?.Clips.Count(c => c.Audio) ?? 0;
+                    double span = stopAt - recordAt, length = p?.Duration ?? 0;
+                    // the sky: the hour the recording began at, kept with it
+                    var env = p?.Worlds.FirstOrDefault()?.Entities.FirstOrDefault(e => e.IsEnvironment);
+                    double recordedHour = env?.EnvironmentAt(0).Hour ?? double.NaN;
+                    bool sky = double.IsNaN(hourAtStart) || Math.Abs(recordedHour - hourAtStart) < 0.05;
+                    // with --moviespool shorter than the span it came in pieces: each player still one clip, one world, one sound
+                    bool joined = actors <= Math.Max(1, playersAtStart);
+                    bool ok = actors >= Math.Min(1, playersAtStart) && joined && worlds == 1 && sounds == 1 && Math.Abs(length - span) < 1.0 && sky;
+                    GD.Print($"[movierecord] \"{newest}\": {actors} actor clips ({playersAtStart} players), {worlds} world, {sounds} sound, {length:F1} s of {span:F1} s, "
+                        + $"the hour {recordedHour:F3} recorded at {hourAtStart:F3} {(sky ? "ok" : "WRONG")}");
+                    GD.Print(ok ? "[movierecord] RESULT: ok" : "[movierecord] RESULT: FAILED");
+                    GetTree().Quit(ok ? 0 : 1);
+                };
+            }
             // "--menu" / "--settings" open the pause menu over the world, for screenshotting it
             if (CmdArgs.Has("--menu") || CmdArgs.Has("--settings"))
                 Callable.From(() =>
@@ -251,6 +303,9 @@ public partial class GameShell : Node
         }
         UpdateMenuState();
     }
+
+    /// <summary>Every page closed at once: straight back into the game (the movie editor's "Back to game").</summary>
+    public void CloseAll() => ClearStack();
 
     private void ClearStack()
     {
@@ -321,14 +376,16 @@ public partial class GameShell : Node
     // ---- sessions -------------------------------------------------------------------------------
 
     /// <summary>
-    /// Shows the map so the player picks where to land, then launches (#515). The marker starts
-    /// where they landed last, else Riddes. Skipped when the launch already names a landing (the
-    /// map has just been through), for a GPX replay (the track says where to be), and for any
-    /// command-line run, which must still boot straight into the world.
+    /// Shows the map so the player picks where to start, then launches (#515). The marker starts
+    /// where they started last, else Riddes. Skipped when the launch already names a landing (the
+    /// map has just been through), for a GPX replay (the track says where to be), online (the
+    /// server says where everyone starts, <c>Net/Arrival</c>, #799), and for any command-line run,
+    /// which must still boot straight into the world.
     /// </summary>
     public void LaunchVia(WorldLaunch launch)
     {
-        if (launch.Landing != null || launch.FromCommandLine || Direct || launch.Mode == GameMode.GpxReplay)
+        if (launch.Landing != null || launch.FromCommandLine || Direct
+            || launch.Mode is GameMode.GpxReplay or GameMode.Multiplayer)
         {
             Launch(launch);
             return;
@@ -395,11 +452,13 @@ public partial class GameShell : Node
     }
 
     /// <summary>"Host a game": starts the server process, then joins it once it answers.</summary>
-    public void Host(string name, int port, bool lanVisible)
+    /// <param name="spawn">Where every player starts on it (#799), LV95 metres.</param>
+    /// <param name="teleport">Players who are not admins may teleport.</param>
+    public void Host(string name, int port, bool lanVisible, (double E, double N)? spawn = null, bool teleport = true)
     {
         if (_state != State.Title) return;
         _hosted = new HostedServer(name, port);
-        if (_hosted.Start(lanVisible) is { } err)
+        if (_hosted.Start(lanVisible, spawn, teleport) is { } err)
         {
             _hosted = null;
             Modal.Inform(_menuRoot, "Could not host", err);
@@ -436,9 +495,8 @@ public partial class GameShell : Node
         {
             _hostProbe.Dispose();
             _hostProbe = null;
-            // The server is up; the map now asks where to land, as it does for any other world.
-            // Safe to push a page from here: the probe is already disposed, so this branch cannot
-            // be re-entered while the player is choosing.
+            // The server is up: join it. Where the host starts is the server's, as for everyone
+            // (the start point was picked in the Host dialog, #799).
             LaunchVia(new WorldLaunch
             {
                 Mode = GameMode.Multiplayer,
@@ -495,6 +553,14 @@ public partial class GameShell : Node
         else if (_state == State.Loading) LeaveWorld(null);
     }
 
+    /// <summary>F5 (#779): the last minutes into the movie editor, which opens full screen. A pad and VR use Pause > Movie studio.</summary>
+    private void OpenMovieStudio()
+    {
+        if (_state != State.InWorld || _stack.Count > 0 || _world == null) return;
+        Movie.MovieSession.SaveClip(quiet: true);
+        Push(Movie.MovieStudio.Create(_world));
+    }
+
     private void OpenPause()
     {
         if (_state != State.InWorld || _stack.Count > 0) return;
@@ -534,12 +600,18 @@ public partial class GameShell : Node
         _loading.Begin("Back to the menu");
         _loading.Report("Leaving", 1, "");
         _error = error;
-        Callable.From(Teardown).CallDeferred();
+        Teardown();
     }
 
     private async void Teardown()
     {
+        // The "Leaving" screen draws first (#807): the frees below hold the main thread, and run in
+        // the same frame as the click they left the last world frame frozen on screen, menu gone.
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         string from = _returnTo;
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        long removeMs = 0;
         try
         {
             var peer = Multiplayer.MultiplayerPeer;
@@ -550,9 +622,13 @@ public partial class GameShell : Node
 
             if (_world != null && IsInstanceValid(_world))
             {
-                // removed first so its _ExitTree runs now (the tile workers are waited for) and the
+                // removed first so its _ExitTree runs now and the
                 // name "World" is free for the next session; a sibling renamed "World2" would break RPC paths
+                long before = clock.ElapsedMilliseconds;
+                // the tile workers wind down on their own: the engine lives on (ChunkManager.ReleaseWorkers)
+                _world.Chunks?.ReleaseWorkers();
                 _world.GetParent()?.RemoveChild(_world);
+                removeMs = clock.ElapsedMilliseconds - before;
                 _world.QueueFree();
             }
             _world = null;
@@ -564,6 +640,7 @@ public partial class GameShell : Node
             HardRestart();
             return;
         }
+        GD.Print($"[shell] teardown {clock.ElapsedMilliseconds} ms (world out of the tree {removeMs} ms)");
         if (CmdArgs.Has("--leave-restart")) { HardRestart(); return; }
 
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);

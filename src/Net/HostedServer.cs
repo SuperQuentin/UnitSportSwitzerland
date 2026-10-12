@@ -37,7 +37,9 @@ public sealed class HostedServer
     }
 
     /// <summary>Launches the process. Returns an error message, or null when it started.</summary>
-    public string? Start(bool lanVisible)
+    /// <param name="spawn">Where players start (<c>--spawn</c>, #799), LV95 metres; null: the server's default.</param>
+    /// <param name="teleport">Players who are not admins may teleport; false adds <c>--no-teleport</c>.</param>
+    public string? Start(bool lanVisible, (double E, double N)? spawn = null, bool teleport = true)
     {
         System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(LogPath)!);
         var args = new List<string> { "--headless", "--log-file", LogPath };
@@ -48,6 +50,10 @@ public sealed class HostedServer
         // the status port answers the client that waits for the server to be up; hidden from the
         // LAN, it answers only on loopback
         if (!lanVisible) { args.Add("--query-bind"); args.Add("127.0.0.1"); }
+        // where players start and whether they may jump around (Net/Arrival, #799)
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        if (spawn is { } at) { args.Add("--spawn"); args.Add(string.Create(inv, $"{at.E:F0},{at.N:F0}")); }
+        if (!teleport) args.Add("--no-teleport");
         // the same terrain this client reads; a copy without any gets the generated world
         string chunks = TerrainPaths.FindChunkDir();
         args.AddRange(new[] { "--chunks", chunks });

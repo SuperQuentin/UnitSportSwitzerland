@@ -43,3 +43,4 @@
   the viewport, Space, Esc (not the pause menu), `/debug`, clay through a `/style` restyle and back.
   `tools/debugcheck.sh` (net): a server with `--admin-password`; refused, `/login`, offered,
   `/admin remove`, every tool off. The view picker is set through `ItemSelected`, not its popup.
+- **Z-fighting** overlay (`zfight`) and **Flicker shot** button (`--debugview flicker`): `general/zfight` (#788).

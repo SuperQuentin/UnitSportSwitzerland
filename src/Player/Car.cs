@@ -24,6 +24,13 @@ public enum Differential { Open, Viscous, Mechanical, Torsen }
 public enum Drivetrain { Rear, All, Front }
 
 /// <summary>
+/// What the car itself has between the engine and the wheels: a stepped box with a clutch and a
+/// lever (shifted as the driver's <see cref="CarGearbox"/> setting says), or a hybrid's power-split
+/// e-CVT, with no steps and no clutch, that holds the engine at the revs the pedal asks for (#760).
+/// </summary>
+public enum CarTransmission { Stepped, ECvt }
+
+/// <summary>
 /// One car as numbers. Real-world figures for the machines each one stands for, so the Sim
 /// profile drives like the car and not like a tuned guess. The roster is <see cref="CarCatalog"/>.
 /// </summary>
@@ -52,8 +59,10 @@ public sealed record CarSpec
     public float PeakRpm { get; init; }
     public float IdleRpm { get; init; } = 850f;
     public float Redline { get; init; }
-    /// <summary>Forward gear ratios, first to top.</summary>
+    /// <summary>Forward gear ratios, first to top; an e-CVT's are the two ends of its range, lowest first.</summary>
     public float[] Gears { get; init; } = System.Array.Empty<float>();
+    /// <summary>Stepped with a clutch, or a hybrid's e-CVT; the catalog gives the body two pedals and a selector to match.</summary>
+    public CarTransmission Transmission { get; init; }
     public float FinalDrive { get; init; }
     public float Reverse { get; init; } = 3.5f;
     public Drivetrain Drive { get; init; } = Drivetrain.Rear;
@@ -179,7 +188,7 @@ public sealed record CarSpec
 /// Game adds grip, power and a counter-steer assist on the same equations; Sim has none of them.
 /// </para>
 /// </summary>
-public sealed class Car : Rideable, IEngined
+public sealed partial class Car : Rideable, IEngined
 {
     /// <summary>The car as tuned: the catalog's numbers under the garage's body (<see cref="CarTuning.Apply"/>).</summary>
     public CarSpec Spec { get; }
@@ -201,7 +210,7 @@ public sealed class Car : Rideable, IEngined
     public override bool IsVehicle => true;
     public override bool HasEngine => true;
     public override bool CanHop => false;
-    public override float MaxHealth => 160f;
+    public override float MaxHealth => IsKart ? 110f : 160f;
     public override float WheelLock => Core.SteeringWheel.LockOverride ?? Spec.LockTurns * Mathf.Tau;
     /// <summary>Steering-wheel turn over road-wheel angle: the spec's, unless <c>--wheellock</c> sets another lock.</summary>
     private float Ratio => Core.SteeringWheel.LockOverride is { } l ? l * 0.5f / Spec.MaxSteer : Spec.SteerRatio;
@@ -209,32 +218,40 @@ public sealed class Car : Rideable, IEngined
     private Core.WheelFeel _feel;
 
     // the driver's own eye, in the visual's frame (faces −Z, so +X is the driver's right): the
-    // seat is derived from the body (CarCabin), right-hand drive — these are Japanese-market cars
+    // seat is derived from the body (CarCabin), right-hand drive for the Japanese-market cars and
+    // left-hand drive for the European ones (CarBody.LeftHandDrive, #760)
     public override Vector3 FirstPersonEye => _eye ??=
         HumanMeshBuilder.MountsForDriver(CarMeshBuilder.SeatFor(Spec.Body, Spec.Wheelbase)).Eye
         + new Vector3(0, Spec.Body.Lift - Spec.Body.Drop, 0);
     private Vector3? _eye;
-    public override float EyeHeight => 1.1f;
+    public override float EyeHeight => IsKart ? 0.8f : 1.1f;
     // Up and behind, looking down ~25° over the roof: from a level camera at roof height the car
-    // itself hid the road you were about to drive onto.
-    public override float ChaseDistance => 6.2f;
-    public override float ChaseHeight => 4.1f;
-    public override float ChasePitch => -0.44f;
+    // itself hid the road you were about to drive onto. A kart is 1 m high: closer and lower.
+    public override float ChaseDistance => IsKart ? 4.2f : 6.2f;
+    public override float ChaseHeight => IsKart ? 2.4f : 4.1f;
+    public override float ChasePitch => IsKart ? -0.34f : -0.44f;
     // stays above the car in a drift rather than swinging round to the side of it
     public override float ChaseFollowsTravel => 0.15f;
     public override float BaseFov => 68f;
     public override float MaxFov => 90f;
-    public override float FovSpeed => 45f;
-    public override float BodyRadius => 0.85f;
-    public override float BodyHeight => 1.7f;
+    // a kart tops out at 18 m/s: the view opens fully there, so 65 km/h at ground level feels like it
+    public override float FovSpeed => IsKart ? 18f : 45f;
+    // a kart is 1.4 m wide and 1.1 m high with its driver: the car's capsule would be a van's
+    public override float BodyRadius => IsKart ? 0.7f : 0.85f;
+    public override float BodyHeight => IsKart ? 1.2f : 1.7f;
+    // its hull starts where the frame does, not at a car's 0.45 m, or only the driver would collide
+    public override float HullLift => IsKart ? 0.1f : 0.45f;
     public override float DismountSpeed => 1.5f;
+    // out on the driver's side: the left on a left-hand-drive car
+    public override bool ExitLeft => Spec.Body.LeftHandDrive;
     // measured from this model's own mesh (Rideable.Measured): an AE86 is not an NSX. Cached per
     // model and preset (an SUV stands taller than the same car on semi-slicks), so always that
-    // preset's look with stock garage parts and the doors shut: an open door is not hull
+    // preset's look with stock garage parts and the doors shut: an open door is not hull. Always
+    // the PS1 body, never a lit style's rounded one (#760): what you hit is the same on every client
     public override (Vector3 Centre, Vector3 Size) ParkedBox => Measured((Kind, Spec.SetupId), _ =>
     {
         var body = CarCatalog.For(Kind) is { } stock ? CarSetups.For(Spec.SetupId).Apply(stock).Body : Spec.Body;
-        return CarRig.Create(body, Spec.Wheelbase);
+        return CarRig.Create(body, Spec.Wheelbase, smooth: false);
     });
 
     // ---- what the feel layer and the rig read ----
@@ -242,9 +259,13 @@ public sealed class Car : Rideable, IEngined
     public float Rpm { get; private set; }
     public EngineProfile Sound => _sound ??= EngineProfile.For(Spec.Engine, Spec.IdleRpm, Spec.Redline);
     private EngineProfile? _sound;
-    /// <summary>idle 0 .. redline 1, for <c>EngineSynth.Set</c>.</summary>
-    public float Rpm01 => Mathf.Clamp((Rpm - Spec.IdleRpm) / (Spec.Redline - Spec.IdleRpm), 0f, 1f);
-    /// <summary>1-based forward gear, −1 reverse.</summary>
+    /// <summary>idle 0 .. redline 1, for <c>EngineSynth.Set</c>; 0 while a hybrid's engine is stopped.</summary>
+    public float Rpm01 => EngineAsleep ? 0f : Mathf.Clamp((Rpm - Spec.IdleRpm) / (Spec.Redline - Spec.IdleRpm), 0f, 1f);
+    /// <summary>A hybrid's (#760): the petrol engine stopped and the car moving on its motor alone — creeping, gently away, coasting, in reverse. Silent.</summary>
+    public bool EngineAsleep { get; private set; }
+    /// <summary>A hybrid's power-split e-CVT (#760): always the automatic, whatever box the driver picks (<see cref="SetGearbox"/>).</summary>
+    public bool IsECvt => Spec.Transmission == CarTransmission.ECvt;
+    /// <summary>1-based forward gear, −1 reverse; 0 neutral, only in the driver's own box (<see cref="Gearbox"/>).</summary>
     public int Gear { get; private set; } = 1;
     /// <summary>Throttle actually applied (the pedal, or the brake pedal in reverse), 0..1.</summary>
     public float Throttle { get; private set; }
@@ -295,6 +316,8 @@ public sealed class Car : Rideable, IEngined
     /// <summary>Hydraulics pumping, as the driver set them: O / D-pad left on a car that has them (#464).</summary>
     public bool Bouncing { get; set; }
     public bool HasHydraulics => Spec.Body.Hydraulics;
+    /// <summary>A rental go-kart (#715): no suspension, a solid rear axle, a driver who sits on the road, and a body that can trip and tip over.</summary>
+    public bool IsKart => Spec.Body.Shape == BodyShape.Kart;
     /// <summary>Longitudinal and lateral acceleration, m/s² (+ forward, + left), for body pitch and roll.</summary>
     public float AccelX { get; private set; }
     public float AccelY { get; private set; }
@@ -318,6 +341,29 @@ public sealed class Car : Rideable, IEngined
     private const int Substeps = 4;
 
     private float _steer;   // eased steering input, −1..1
+
+    // ---- a kart that has tripped (#715) ----
+    /// <summary>Seconds left on its side, and which side: + onto its left.</summary>
+    private float _tipTime;
+    private float _tipSide;
+    /// <summary>How long it has been sliding sideways past what its tyres hold, s.</summary>
+    private float _trip;
+    /// <summary>Lying on its side: the kart scrapes to a halt and nobody steers it.</summary>
+    public bool Tipped => _tipTime > 0f;
+    /// <summary>Seconds a tripped kart lies there before it is stood up again, and how hard the road scrapes it to a stop, m/s².</summary>
+    private const float TipDuration = 1.8f, TipScrape = 11f;
+    /// <summary>
+    /// A kart trips when it slides sideways, wheels square to nothing: past this angle between its
+    /// nose and its travel (rad) for this long (s), at speed. Loose ground digs in sooner than tarmac.
+    /// </summary>
+    private const float TripTime = 0.12f, TripSpeed = 7f;
+    internal static float TripAngle(Audio.Surface surface) => surface switch
+    {
+        Audio.Surface.Asphalt or Audio.Surface.Wood or Audio.Surface.Indoor => 0.8f,
+        Audio.Surface.Gravel or Audio.Surface.Snow or Audio.Surface.Ice => 0.6f,
+        Audio.Surface.Grass or Audio.Surface.Forest => 0.45f,
+        _ => 0.7f,
+    };
     /// <summary>
     /// Game: how much of the arcade help is left, 1 all .. 0 none. The foot brake taking the whole
     /// rear circle while the rear slides past its peak (a locked rear let go, last step) takes it away: the counter-steer assist, the yaw
@@ -327,6 +373,10 @@ public sealed class Car : Rideable, IEngined
     /// </summary>
     private float _help = 1f;
     private float _shiftTimer;
+    /// <summary>The revs an e-CVT is holding the engine at, rpm: swept toward what the pedal asks for (#760).</summary>
+    private float _cvtRpm;
+    /// <summary>How fast an e-CVT sweeps the engine's revs, rpm/s: a flare of a second or so, floored.</summary>
+    private const float CvtSweep = 4000f;
 
     /// <summary>
     /// A copy with the same gear, rack position and read-outs: <see cref="Step"/> is pure apart from
@@ -336,7 +386,17 @@ public sealed class Car : Rideable, IEngined
     public Car Clone() => (Car)MemberwiseClone();
 
     public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default) =>
-        CarRig.Create(Spec.Body, Spec.Wheelbase, Spec.Gauges, HumanPalette.ForRider(riderIndex) with { Outfit = outfit });
+        CarRig.Create(Dressed(riderIndex), Spec.Wheelbase, Spec.Gauges, HumanPalette.ForRider(riderIndex) with { Outfit = outfit });
+
+    /// <summary>
+    /// The body as <paramref name="riderIndex"/> sees it: a rental kart wears the colour and number its
+    /// rider's seed picks (<see cref="KartMeshBuilder.Dress"/>), unless the garage has painted it; every
+    /// other car is the catalog's own.
+    /// </summary>
+    private CarBody Dressed(int riderIndex) =>
+        !IsKart ? Spec.Body
+        : Spec.SetupId == CarSetups.ArmyId ? KartMeshBuilder.Army(Spec.Body, riderIndex)
+        : Tuning[TuneSlot.Paint] == 0 ? KartMeshBuilder.Dress(Spec.Body, riderIndex) : Spec.Body;
 
     public override Avatar.SeatAnchor[] Seats => SeatsOf((Kind, Spec.SetupId), () =>
     {
@@ -349,7 +409,7 @@ public sealed class Car : Rideable, IEngined
     public override bool Driverless => true;
 
     /// <summary>Left in the world: the same car with nobody at the wheel.</summary>
-    public override Node3D BuildParkedVisual(int riderIndex) => CarRig.Create(Spec.Body, Spec.Wheelbase, Spec.Gauges);
+    public override Node3D BuildParkedVisual(int riderIndex) => CarRig.Create(Dressed(riderIndex), Spec.Wheelbase, Spec.Gauges);
 
     public override void Step(in RideInput input, in RideGround ground, float dt, ref RideMotion motion)
     {
@@ -368,20 +428,43 @@ public sealed class Car : Rideable, IEngined
         float roughDrag = CarSetups.RoughDrag(ground.Surface, harsh);
         float tyreC = (arcade ? ArcadeTyreC : SimTyreC) * Tyres.CurveC;
 
+        if (IsKart && TipStep(ground, dt, ref motion)) return;
+
         // planar state in the body frame: u forward, w to the left
         float u = motion.Speed * Mathf.Cos(motion.Slip);
         float w = motion.Speed * Mathf.Sin(motion.Slip);
         float r = motion.YawRate;
 
-        // gear: brake at a standstill selects reverse, throttle selects first
-        if (Gear > 0 && u < 0.5f && input.Brake > 0.3f && input.Throttle < 0.05f) Gear = -1;
-        else if (Gear < 0 && u > -0.5f && input.Throttle > 0.3f) Gear = 1;
+        // gear: brake at a standstill selects reverse, throttle selects first. The driver's own box
+        // (#290) has a reverse gear of its own, driven on the gas like any other
+        // An automatic worked by a wheel's selector (P R N D) takes its gear from the lever instead
+        bool auto = Gearbox == CarGearbox.Automatic;
+        bool pedalsPick = auto && Selector == DriveSelector.None;
+        StepClutch(dt);
+        if (auto && !pedalsPick) SelectGear(u);
+        else if (pedalsPick && Gear > 0 && u < 0.5f && input.Brake > 0.3f && input.Throttle < 0.05f) Gear = -1;
+        else if (pedalsPick && Gear < 0 && u > -0.5f && input.Throttle > 0.3f) Gear = 1;
         bool reverse = Gear < 0;
-        float pedal = reverse ? input.Brake : input.Throttle;
-        float brake = reverse ? input.Throttle : input.Brake;
+        float pedal = reverse && pedalsPick ? input.Brake : input.Throttle;
+        float brake = reverse && pedalsPick ? input.Throttle : input.Brake;
         // in reverse the brake pedal drives; braking then is the gas pedal against the motion
-        if (reverse && u > 0.5f) { brake = Mathf.Max(brake, pedal); pedal = 0f; }
+        if (reverse && pedalsPick && u > 0.5f) { brake = Mathf.Max(brake, pedal); pedal = 0f; }
+        // P: the pawl holds the car once it is down to walking pace
+        if (auto && Selector == DriveSelector.Park && Mathf.Abs(u) < 1.5f) brake = 1f;
         Throttle = pedal;
+        bool cvt = IsECvt;
+        if (cvt)
+        {
+            // An e-CVT has no steps: it holds the engine where the pedal asks, just off idle at a
+            // light foot and at the power peak floored, and the ratio follows the road speed.
+            float want = Mathf.Lerp(s.IdleRpm * 1.5f, s.PeakRpm, Mathf.Clamp(pedal * 1.25f, 0f, 1f));
+            _cvtRpm = Mathf.MoveToward(Mathf.Max(_cvtRpm, s.IdleRpm), want, CvtSweep * dt);
+            // Its engine stops whenever the motor alone will do: at a standstill, creeping, pulling
+            // gently away, coasting, braking and in reverse (a gap between waking and stopping
+            // again, or a foot held on the edge starts it every frame)
+            bool light = EngineAsleep ? pedal < 0.35f && u < 15f : pedal < 0.25f && u < 13f;
+            EngineAsleep = reverse || pedal < 0.02f || light;
+        }
         Braking = brake > 0.05f;
         BrakePedal = brake;
         HandbrakeOn = input.Handbrake;
@@ -435,12 +518,32 @@ public sealed class Car : Rideable, IEngined
             }
 
             // --- engine and gearbox ---
-            float ratio = (reverse ? s.Reverse : s.Gears[Gear - 1]) * s.FinalDrive;
-            float wheelRpm = Mathf.Abs(u) / WheelRadius * 60f / Mathf.Tau;
-            Rpm = Mathf.Max(s.IdleRpm, wheelRpm * ratio);
-            float torque = Rpm >= s.Redline ? 0f : s.TorqueAt(Rpm) * powerScale;
-            float drive = _shiftTimer > 0 ? 0f : pedal * torque * ratio * Driveline / WheelRadius;
-            if (reverse) drive = -drive;
+            float drive;
+            if (Gearbox == CarGearbox.Manual) drive = ManualDrive(pedal, u, powerScale, h);
+            else if (Gear == 0)
+            {
+                // the sequential box in neutral: the engine revs on the throttle, nothing drives
+                Rpm = Mathf.MoveToward(Mathf.Max(Rpm, s.IdleRpm), Mathf.Lerp(s.IdleRpm, s.Redline * 0.95f, pedal), 15000f * h);
+                drive = 0f;
+            }
+            else
+            {
+                float wheelRpm = Mathf.Abs(u) / WheelRadius * 60f / Mathf.Tau;
+                // an e-CVT's ratio puts the engine at its held revs, within the ends of its range (#760)
+                float ratio = cvt && Gear > 0
+                    ? Mathf.Clamp(_cvtRpm / Mathf.Max(wheelRpm * s.FinalDrive, 1f), s.Gears[^1], s.Gears[0]) * s.FinalDrive
+                    : GearRatio(Gear);
+                // the drive and the box's shift points take the engine as coupled to the wheels; what
+                // the tach, the sound and the wheel's shake follow is the converter's slipping engine
+                // (an e-CVT has no converter: its engine is where the ratio holds it)
+                _coupledRpm = Mathf.Max(s.IdleRpm, wheelRpm * ratio);
+                Rpm = auto && !cvt ? ConverterRpm(wheelRpm * ratio, pedal, h) : _coupledRpm;
+                float torque = _coupledRpm >= s.Redline ? 0f : s.TorqueAt(_coupledRpm) * powerScale;
+                drive = _shiftTimer > 0 ? 0f : pedal * torque * ratio * Driveline / WheelRadius;
+                // in D or R on the selector, the converter creeps the car at walking pace off the pedals
+                drive = Mathf.Max(drive, Creep(u, reverse));
+                if (reverse) drive = -drive;
+            }
 
             // --- load transfer from last substep's longitudinal acceleration ---
             float nf = m * (Gravity * b - AccelX * s.CgHeight) / L;
@@ -470,8 +573,8 @@ public sealed class Car : Rideable, IEngined
                 case Drivetrain.Front: fxF += drive; break;
                 default: fxR += drive; break;
             }
-            // no force to push against below walking pace once stopped
-            if (Mathf.Abs(u) < 0.3f && drive == 0f) { fxF = 0f; fxR = 0f; u = Mathf.MoveToward(u, 0f, 3f * h); }
+            // no force to push against below walking pace once stopped; nor when the brake holds the creep
+            if (Mathf.Abs(u) < 0.3f && (drive == 0f || brakeForce >= Mathf.Abs(drive) && pedal < 0.02f)) { fxF = 0f; fxR = 0f; u = Mathf.MoveToward(u, 0f, 3f * h); }
             float capF = grip * nf * WornGrip(TyreWearFront), capR = grip * nr * WornGrip(TyreWearRear);
             // demand past the circle, on whichever axle is driven
             float wheelspin = Mathf.Max(0f, Mathf.Max(Mathf.Abs(fxR) / capR, Mathf.Abs(fxF) / capF) - 0.9f) * 10f;
@@ -571,10 +674,11 @@ public sealed class Car : Rideable, IEngined
 
         // automatic gearbox: up near the redline, down when it bogs; a brief cut of drive on each
         _shiftTimer = Mathf.Max(0f, _shiftTimer - dt);
-        if (!reverse && ground.OnFloor)
+        CheckStall();
+        if (auto && !cvt && Gear > 0 && ground.OnFloor)
         {
-            if (Rpm > s.Redline * 0.94f && Gear < s.Gears.Length && pedal > 0.2f) { Gear++; _shiftTimer = 0.18f; }
-            else if (Gear > 1 && Rpm < s.PeakRpm * 0.55f) Gear--;
+            if (_coupledRpm > s.Redline * 0.94f && Gear < s.Gears.Length && pedal > 0.2f) { Gear++; _shiftTimer = 0.18f; }
+            else if (Gear > 1 && _coupledRpm < s.PeakRpm * 0.55f) Gear--;
         }
 
         TyreSlide = ground.OnFloor ? Mathf.Clamp(slideAccum / Substeps, 0f, 1f) * Mathf.Clamp(Mathf.Abs(u) / 4f, 0f, 1f) : 0f;
@@ -599,6 +703,40 @@ public sealed class Car : Rideable, IEngined
     }
 
     /// <summary>
+    /// A kart's trip (#715): sliding sideways at speed (the angle between its nose and its travel past
+    /// <see cref="TripAngle"/>) long enough digs the tyres in and it goes over onto the side it was
+    /// sliding toward. Over, it scrapes to a stop in a second or two with nothing to steer or drive, then
+    /// is stood up again. True while it lies there: the step is over.
+    /// </summary>
+    private bool TipStep(in RideGround ground, float dt, ref RideMotion motion)
+    {
+        if (_tipTime <= 0f)
+        {
+            float across = Mathf.Atan2(Mathf.Abs(Mathf.Sin(motion.Slip)), Mathf.Abs(Mathf.Cos(motion.Slip)));
+            if (ground.OnFloor && motion.Speed > TripSpeed && across > TripAngle(ground.Surface)) _trip += dt;
+            else _trip = Mathf.Max(0f, _trip - 2f * dt);
+            if (_trip < TripTime) return false;
+            (_trip, _tipTime, _tipSide) = (0f, TipDuration, motion.Slip >= 0f ? 1f : -1f);
+        }
+        _tipTime -= dt;
+        Throttle = BrakePedal = 0f;
+        Braking = HandbrakeOn = false;
+        Rpm = Spec.IdleRpm;
+        float before = motion.Speed;
+        motion.Speed = Mathf.MoveToward(motion.Speed, 0f, TipScrape * dt);
+        motion.YawRate = Mathf.MoveToward(motion.YawRate, 0f, 5f * dt);
+        motion.Yaw += motion.YawRate * dt;
+        motion.Lean = motion.Bank = 0f;
+        AccelX = (motion.Speed - before) / dt;
+        AccelY = 0f;
+        TyreSlide = motion.Speed > 1f ? 1f : 0f;
+        SteerAngle = Mathf.MoveToward(SteerAngle, 0f, 2f * dt);
+        _steer = 0f;
+        if (_tipTime <= 0f) { _tipSide = 0f; motion.Slip = 0f; }
+        return true;
+    }
+
+    /// <summary>
     /// What another player needs to draw this car's moving parts: the body's slide already travels
     /// in the replicated transform, so these are the front-wheel angle (which also turns the
     /// driver's wheel and hands), the wheels' spin RATE (each peer turns its own wheels by it — an
@@ -610,12 +748,26 @@ public sealed class Car : Rideable, IEngined
     public override Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight) =>
         new(SteerAngle, motion.Speed * Mathf.Cos(motion.Slip) / WheelRadius, Rpm01,
             (Braking ? PoseBrake : 0) | (Headlights ? PoseHeadlights : 0) | (RoofOpen ? PoseRoof : 0) | (Bouncing ? PoseBounce : 0)
-            | Mathf.RoundToInt(Mathf.Clamp(Throttle, 0f, 1f) * PoseThrottleSteps) << PoseThrottleShift);
+            | Mathf.RoundToInt(Mathf.Clamp(Throttle, 0f, 1f) * PoseThrottleSteps) << PoseThrottleShift
+            | KartPose());
 
     private const int PoseBrake = 1, PoseHeadlights = 2, PoseRoof = 4;
     private const int PoseThrottleShift = 3, PoseThrottleSteps = 7;
     /// <summary>Above the throttle's three bits.</summary>
     private const int PoseBounce = 64;
+    /// <summary>A kart's (#715): over on its left side / its right, then the lifted rear wheel's height in eighths (3 bits) and whether it is the left one.</summary>
+    private const int PoseTipLeft = 128, PoseTipRight = 256, PoseLiftShift = 9, PoseLiftSteps = 7, PoseLiftLeft = 4096;
+
+    /// <summary>How far the inside rear wheel comes up in a corner: 0 below 0.65 g of side force, 1 at 1 g, + the left wheel.</summary>
+    private float Lift => IsKart ? Mathf.Clamp((Mathf.Abs(AccelY) / Gravity - 0.65f) / 0.35f, 0f, 1f) * Mathf.Sign(AccelY) : 0f;
+
+    private int KartPose()
+    {
+        if (!IsKart) return 0;
+        float lift = Lift;
+        return (_tipTime > 0f ? (_tipSide > 0f ? PoseTipLeft : PoseTipRight) : 0)
+            | Mathf.RoundToInt(Mathf.Abs(lift) * PoseLiftSteps) << PoseLiftShift | (lift > 0f ? PoseLiftLeft : 0);
+    }
 
     private float _remoteSpin;
 
@@ -630,6 +782,11 @@ public sealed class Car : Rideable, IEngined
         rig.Headlights = (flags & PoseHeadlights) != 0;
         rig.RoofOpen = (flags & PoseRoof) != 0;
         rig.Bouncing = (flags & PoseBounce) != 0;
+        if (IsKart)
+        {
+            rig.Tip = (flags & PoseTipLeft) != 0 ? 1f : (flags & PoseTipRight) != 0 ? -1f : 0f;
+            rig.Lift = ((flags >> PoseLiftShift) & PoseLiftSteps) / (float)PoseLiftSteps * ((flags & PoseLiftLeft) != 0 ? 1f : -1f);
+        }
         Rpm = Mathf.Lerp(Spec.IdleRpm, Spec.Redline, pose.Z);
         rig.WheelTurn = pose.X * Ratio;
         rig.Throttle = ((flags >> PoseThrottleShift) & PoseThrottleSteps) / (float)PoseThrottleSteps;
@@ -643,7 +800,9 @@ public sealed class Car : Rideable, IEngined
         if (visual is not CarRig rig) return;
         rig.SteerAngle = SteerAngle;
         rig.WheelSpin = WheelSpin;
-        rig.BodyPitch = Mathf.Clamp(AccelX * 0.006f / Spec.Stiffness, -0.05f, 0.05f);
+        // a kart has no suspension: it does not pitch, and its inside rear wheel lifts instead
+        rig.BodyPitch = IsKart ? 0f : Mathf.Clamp(AccelX * 0.006f / Spec.Stiffness, -0.05f, 0.05f);
+        if (IsKart) (rig.Tip, rig.Lift) = (_tipTime > 0f ? _tipSide : 0f, Lift);
         rig.BrakeLights = Braking;
         rig.Headlights = Headlights;
         rig.RoofOpen = RoofOpen;
@@ -651,8 +810,10 @@ public sealed class Car : Rideable, IEngined
         rig.WheelTurn = SteerAngle * Ratio;
         rig.Throttle = Throttle;
         rig.Brake = BrakePedal;
+        rig.Clutch = ClutchPedal;
         rig.Handbrake = HandbrakeOn;
-        rig.Rpm = Rpm;
+        // a hybrid's stopped engine drops the rev needle to nothing
+        rig.Rpm = EngineAsleep ? 0f : Rpm;
         rig.Gear = Gear;
         rig.SpeedKmh = motion.Speed * Mathf.Cos(motion.Slip) * 3.6f;
     }

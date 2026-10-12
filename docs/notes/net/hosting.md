@@ -9,6 +9,10 @@
   --port P --server-name N --parent-pid <client pid> --host-token <random> --chunks <the client's chunk dir>`, plus
   `--generated-world` when there is no manifest and `--query-bind 127.0.0.1` when not LAN visible.
   `--path` only outside an export (`OS.HasFeature("template")`); the editor's own binary works too.
+- **Start point and teleporting** (#799): the Host dialog names where players start ("Choose on the
+  map…" opens `MapScreen.CreateServerSpawn`, closing the dialog and reopening it with its fields kept)
+  and has "Players can teleport anywhere"; both are remembered (`GameSettings.HostSpawnE/N`,
+  `HostTeleport`) and become `--spawn E,N` / `--no-teleport` (`net/arrival`).
 - **Orphans**: the server checks `--parent-pid` once a second and quits when the client is gone
   (crash, task manager).
 - **Shared `user://`**: the hosted server and offline play use the same folder, so placed objects,

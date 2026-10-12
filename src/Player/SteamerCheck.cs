@@ -727,7 +727,9 @@ public partial class SteamerCheck : Node
         float lx = SteamerMeshBuilder.LadderX, la = SteamerMeshBuilder.LadderAt;
         if (Deck(me, lx + 1.2f, d, la) is { } foot) me.StartSwimmingAtSurface(foot);
         await Wait(0.5);
-        Expect(me.IsSwimming && me.TryInteract() && me.OnShipLadder, $"E swimming by the ladder gets onto it ({WhereText(me)})");
+        bool swimmingThere = me.IsSwimming, grabbed = swimmingThere && me.TryInteract();
+        Expect(swimmingThere && grabbed && me.OnShipLadder,
+            $"E swimming by the ladder gets onto it ({WhereText(me)}, swimming {swimmingThere}, E took {grabbed}, on it {me.OnShipLadder})");
         me.ForceLadderClimb = 1f;
         await Wait(0.5);
         await Shot("ladder_climb", () => OnShip(me, lx + 7f, SteamerMeshBuilder.DeckY + 0.6f, la + 6f, lx, SteamerMeshBuilder.DeckY - 0.6f, la));

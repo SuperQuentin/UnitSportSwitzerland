@@ -265,7 +265,23 @@ public static class BuildingFootprint
     public static Vector2? StreetNear(RoadTile? roads, Vector2 at) =>
         RoadPoints.Build(roads).Nearest(at, 60f) ?? RoadPoints.Build(roads, paths: true).Nearest(at, 40f);
 
+    /// <summary>
+    /// The doors of a building. An underground garage door (#694) is kept only when the generator plans a ramp behind it
+    /// (<see cref="InteriorGenerator.PlansGarageRamp"/>, which runs the planner itself, so the two cannot disagree: a block planned wing by
+    /// wing, a stairwell where a joined wing's door stands...): the other end of the facade is tried, then none, so no door reads as locked.
+    /// </summary>
     private static Footprint? Compute(BuildingTile tile, int index, (RoadPoints Streets, RoadPoints Paths) roads, ChunkGrid? grid)
+    {
+        for (int skip = 0; ; skip++)
+        {
+            var fp = Compute(tile, index, roads, grid, skip);
+            if (fp == null || !fp.Extra.Any(d => d.Ramp != GarageRule.RampKind.None)) return fp;
+            if (InteriorGenerator.PlansGarageRamp(fp, tile.Buildings[index], BuildingTypes.For(tile).GroupOf(index)?.Type ?? BuildingType.None)) return fp;
+        }
+    }
+
+    /// <param name="skipGarage">How many of the garage door's candidate places to pass over (the ones the planner found no ramp behind).</param>
+    private static Footprint? Compute(BuildingTile tile, int index, (RoadPoints Streets, RoadPoints Paths) roads, ChunkGrid? grid, int skipGarage)
     {
         var b = tile.Buildings[index];
         var key = new BuildingKey(tile.Id.E, tile.Id.N, index);
@@ -596,6 +612,7 @@ public static class BuildingFootprint
                     bool left = dir > 0;
                     float minIn = left ? laneHi + GarageRule.LaneGap + wellW / 2 : laneLo - GarageRule.LaneGap - wellW / 2;
                     if (GarageAt(gx) is not { } spot) continue;
+                    var movedDoor = door;
                     // the entrance: where it stands if clear of the lane, else slid along the wall to just clear of it
                     bool inLane = left ? mainX < minIn : mainX > minIn;
                     if (inLane)
@@ -609,8 +626,10 @@ public static class BuildingFootprint
                         float g0 = GroundAt(xz), by = Math.Max(g0, b.MinY);
                         var moved = door with { Position = new Vector3(xz.X + main.Normal.X * 0.03f, by, xz.Y + main.Normal.Y * 0.03f) };
                         if (!DoorOnWall(b, moved) || Covered(xz) || g0 < b.MinY - 0.6f || g0 > b.MaxY - moved.Height - 0.3f) { GarageWhyNot = "the entrance cannot move beside the lane"; continue; }
-                        door = moved;
+                        movedDoor = moved;
                     }
+                    if (skipGarage-- > 0) continue;   // the planner found no ramp behind the door there: the next place
+                    door = movedDoor;
                     garage = spot with { Ramp = rampKind, RampDir = dir };
                     garageLeft = left;
                     keepX = minIn;

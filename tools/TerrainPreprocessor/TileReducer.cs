@@ -202,7 +202,16 @@ public static class AtomicFile
         string tmp = path + ".tmp";
         using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16))
             write(fs);
-        File.Move(tmp, path, overwrite: true);
+        // Windows: a scanner or indexer briefly holding the old file makes the replace fail with
+        // "access denied"; a nationwide water pass hit it after 725 of 17,180 tiles
+        for (int attempt = 0; ; attempt++)
+        {
+            try { File.Move(tmp, path, overwrite: true); return; }
+            catch (Exception e) when (attempt < 8 && e is UnauthorizedAccessException or IOException)
+            {
+                Thread.Sleep(50 << attempt);
+            }
+        }
     }
 
     public static void WriteAllBytes(string path, byte[] bytes) => Write(path, s => s.Write(bytes));

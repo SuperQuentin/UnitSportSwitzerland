@@ -64,6 +64,7 @@ public partial class OccasionCreatures : Node3D, Core.IOriginContainer, Core.IOr
 
     public override void _Ready()
     {
+        Movie.ReplayWatch.Container(this);   // recorded for the movie studio (#775)
         _material = Styles.StyleKit.Material(Styles.MaterialRole.Prop);
         _material.SetShaderParameter("flicker", 0.6f);
         FogUniforms.Apply(_material);

@@ -18,6 +18,12 @@ public enum BodyShape
     Roadster,
     /// <summary>Mid-engined: cab forward, long rear deck (MR2, NSX).</summary>
     Midship,
+    /// <summary>A rental go-kart (#715): a tube frame, no body to speak of, built by <see cref="KartMeshBuilder"/> and not by <see cref="CarMeshBuilder"/>.</summary>
+    Kart,
+    /// <summary>A tall supermini: short sloping nose, the windscreen far forward, a high roof and an upright hatch (XP90 Yaris, #760).</summary>
+    TallHatch,
+    /// <summary>A five-door liftback in one arc: raked windscreen, the roof's peak over the B-pillar, a long rear glass down to a high Kamm tail split by a spoiler (XW20 Prius, #760).</summary>
+    Liftback,
 }
 
 /// <summary>A rear wing, from none to a GT wing on tall stands.</summary>
@@ -61,6 +67,23 @@ public sealed record CarBody
     public bool Scoop { get; init; }
     /// <summary>Lowrider hydraulics: the body hops on its wheels while <see cref="CarRig.Bouncing"/> (#464).</summary>
     public bool Hydraulics { get; init; }
+    /// <summary>
+    /// The driver sits on the left (a European car); off, on the right, as in the Japanese Initial D
+    /// cars. The driver's door is <see cref="CarRig.DriverDoor"/> either way (#760).
+    /// </summary>
+    public bool LeftHandDrive { get; init; }
+    /// <summary>
+    /// Two pedals and a selector on the dash, the gear display reading D: set by the catalog from the
+    /// car's gearbox (<c>CarSpec.Transmission</c>), never by hand (#760).
+    /// </summary>
+    public bool Automatic { get; init; }
+    /// <summary>
+    /// No dials behind the wheel: a digital display in a hood at the top middle of the dash (speed in
+    /// figures, the gear, READY, the lamps) and a touchscreen under it, as in the XW20 Prius (#760).
+    /// </summary>
+    public bool CentreDisplay { get; init; }
+    /// <summary>The speed reflected into the windscreen above the wheel, in the driver's line of sight (the XW30 Prius, #760).</summary>
+    public bool Hud { get; init; }
 
     // ---- garage parts (Player/CarTuning); the defaults are the catalog look ----
     /// <summary>Under the front bumper: 0 nothing, 1 a lip, 2 a splitter.</summary>
@@ -78,6 +101,13 @@ public sealed record CarBody
     public int RimSize { get; init; }
     /// <summary>Wide, low racing slicks.</summary>
     public bool Slicks { get; init; }
+    /// <summary>A kart's race number, on its plates (1..99); 0 = none (#715).</summary>
+    public int Number { get; init; }
+    /// <summary>
+    /// A kart's military plate, white on black ("M 40 245"): the army skin (#715). Empty = the rental
+    /// look, a white plate with the race number on it.
+    /// </summary>
+    public string Plate { get; init; } = "";
 }
 
 /// <summary>What the local driver sees of their own figure from the seat (<see cref="CarRig.View"/>).</summary>
@@ -102,7 +132,7 @@ public enum CockpitView
 /// <c>_Process</c>, the roof and the pods moving there over a moment rather than snapping —
 /// except on the first frame, so a car built with its top down does not fold it in front of you.
 /// </summary>
-public partial class CarRig : Node3D
+public partial class CarRig : Node3D, IHingedDoors, Items.IBeatReactive
 {
     /// <summary>Front road-wheel angle, radians, + = left.</summary>
     public float SteerAngle { get; set; }
@@ -120,6 +150,8 @@ public partial class CarRig : Node3D
     /// <summary>Pedals, 0..1: they swing on their hinges and the driver's right foot presses them.</summary>
     public float Throttle { get; set; }
     public float Brake { get; set; }
+    /// <summary>The clutch pedal, 0..1: a manual car's (#290), up in an automatic.</summary>
+    public float Clutch { get; set; }
     public bool Handbrake { get; set; }
     public float SpeedKmh { get; set; }
     public float Rpm { get; set; }
@@ -137,9 +169,16 @@ public partial class CarRig : Node3D
     /// <summary>The seats a player can take, the driver's first (#158).</summary>
     public SeatAnchor[] Seats => _cabin.Seats;
 
+    /// <summary>
+    /// The door bits, named for a right-hand-drive car. The front two follow the driver: on a
+    /// left-hand-drive car (<see cref="CarBody.LeftHandDrive"/>) <see cref="DoorRight"/> is the left
+    /// door and <see cref="DoorLeft"/> the right one, as on the pickup (#760).
+    /// </summary>
     public const byte DoorLeft = 1, DoorRight = 2, DoorRearLeft = 4, DoorRearRight = 8;
-    /// <summary>These are right-hand-drive cars: the driver gets in and out on the right.</summary>
+    /// <summary>The driver's door, on whichever side the driver sits; the driver gets in and out through it.</summary>
     public const byte DriverDoor = DoorRight;
+    /// <summary>The front passenger's door.</summary>
+    public const byte PassengerDoor = DoorLeft;
     /// <summary>Seconds for a door to swing fully open or shut.</summary>
     private const float DoorTime = 0.4f;
     /// <summary>Headlights on. On a car with pop-ups this also raises them.</summary>
@@ -148,6 +187,16 @@ public partial class CarRig : Node3D
     public bool RoofOpen { get; set; }
     /// <summary>Hydraulics pumping: the body hops, nose and tail in turn, to its clip. Nothing on a car without them.</summary>
     public bool Bouncing { get; set; }
+    /// <summary>
+    /// A kart over on its side (#715): −1 .. 1, + onto its left side, 0 upright. The body and the wheels
+    /// roll about the outer wheels' contact line; it eases there, and back, over a fraction of a second.
+    /// </summary>
+    public float Tip { get; set; }
+    /// <summary>
+    /// A kart's solid rear axle in a hard corner (#715): −1 .. 1, + = the left rear wheel lifts, − the
+    /// right one, as a share of <see cref="InsideLift"/>. Nothing on a car with suspension.
+    /// </summary>
+    public float Lift { get; set; }
 
     /// <summary>Seconds for the top to fold and the pods to rise.</summary>
     private const float RoofTime = 2.2f, FlapTime = 0.6f;
@@ -179,12 +228,23 @@ public partial class CarRig : Node3D
     private static readonly System.Random HopRng = new(464);
     /// <summary>One hop, s, its height at the body's pivot, m, and the nose-or-tail tilt that leads it, rad.</summary>
     private const float HopPeriod = 0.62f, HopHeight = 0.32f, HopTilt = 0.09f;
+    /// <summary>A tipped kart lies this far over, rad; the inside rear wheel of a hard corner rises this far, m.</summary>
+    private const float TipAngle = 1.45f, InsideLift = 0.045f;
+    /// <summary>Seconds to go over, in the eased value's units per second.</summary>
+    private const float TipSpeed = 5f;
+    private float _tipShown;
+    private bool _kartMoved;
+    private readonly Vector3[] _wheelHome = new Vector3[4];
+    private float _kartHalfWidth = 0.7f;
     /// <summary>The clip played while it bounces, if the file is there; the landings thud either way.</summary>
     public const string BounceClipRes = "res://assets/audio/yaris_bounce.ogg";
 
     private CarCabin _cabin = null!;
     private Node3D _wheel = null!, _tach = null!, _speedo = null!;
     private MeshInstance3D _digit = null!;
+    /// <summary>A digital speedometer's figures, units first, and the km/h they show (#760); empty on a car with dials.</summary>
+    private MeshInstance3D[] _speedDigits = System.Array.Empty<MeshInstance3D>();
+    private int _kmhShown = -1;
     private MeshInstance3D[] _lamps = System.Array.Empty<MeshInstance3D>();
     private Node3D[] _pedals = System.Array.Empty<Node3D>();
     private HumanPalette? _driverPalette;
@@ -204,16 +264,18 @@ public partial class CarRig : Node3D
 
     /// <param name="gauges">The dials' full scales; the default suits a sports car.</param>
     /// <param name="driver">The figure at the wheel, in its colours; null for an empty car (parked, previewed).</param>
-    public static CarRig Create(CarBody body, float wheelbase, CarGauges? gauges = null, HumanPalette? driver = null)
+    /// <param name="smooth">The lit styles' rounded body where the shape has one (#760); null = as the style says, false for the hull's measure.</param>
+    public static CarRig Create(CarBody body, float wheelbase, CarGauges? gauges = null, HumanPalette? driver = null, bool? smooth = null)
     {
         var rig = new CarRig { Name = "Car", _driverPalette = driver };
-        rig.Assemble(CarMeshBuilder.Build(body, wheelbase, gauges));
+        rig.Assemble(CarMeshBuilder.Build(body, wheelbase, gauges, smooth));
         // a preset's ride height, tread and off-road kit: the body moves with everything on it,
         // the wheels stay on the road (they are the rig's own children)
         rig._body.Position += Vector3.Up * body.Lift;
         CarKit.Fit(rig._body, body, wheelbase, rig._spin);
         rig._bodyY = rig._body.Position.Y;
         rig._hydraulics = body.Hydraulics;
+        rig._kartHalfWidth = body.Width * 0.5f;
         return rig;
     }
 
@@ -291,11 +353,14 @@ public partial class CarRig : Node3D
             var pivot = new Node3D
             {
                 Name = "Wheel" + names[i],
-                Position = new Vector3((left ? -1f : 1f) * p.HalfTrack, p.WheelRadius, front ? -p.FrontAxleZ : -p.RearAxleZ),
+                // a kart's front tyres are smaller than its rear ones (#715)
+                Position = new Vector3((left ? -1f : 1f) * p.HalfTrack, front ? p.FrontWheelRadius ?? p.WheelRadius : p.WheelRadius,
+                    front ? -p.FrontAxleZ : -p.RearAxleZ),
             };
+            _wheelHome[i] = pivot.Position;
             AddChild(pivot);
             var spin = new Node3D { Name = "Spin" };
-            spin.AddChild(new MeshInstance3D { Mesh = p.Wheel, MaterialOverride = body });
+            spin.AddChild(new MeshInstance3D { Mesh = front ? p.FrontWheel ?? p.Wheel : p.Wheel, MaterialOverride = body });
             pivot.AddChild(spin);
             _steer[i] = pivot;
             _spin[i] = spin;
@@ -330,6 +395,11 @@ public partial class CarRig : Node3D
         _speedo = NeedleNode("Speedo", cabin.Speedo);
         _digit = new MeshInstance3D { Name = "Gear", MaterialOverride = lit, Position = offset };
         _body.AddChild(_digit);
+        if (cabin.SpeedDigits is { } figures)
+        {
+            _speedDigits = figures.Select((_, i) => new MeshInstance3D { Name = $"Speed{i}", MaterialOverride = lit, Position = offset }).ToArray();
+            foreach (var figure in _speedDigits) _body.AddChild(figure);
+        }
         _lamps = cabin.Lamps.Select((mesh, i) => new MeshInstance3D { Name = $"Lamp{i}", Mesh = mesh, MaterialOverride = lit, Position = offset, Visible = false }).ToArray();
         foreach (var lamp in _lamps) _body.AddChild(lamp);
         _pedals = cabin.Pedals.Select((pedal, i) =>
@@ -449,11 +519,29 @@ public partial class CarRig : Node3D
         _tach.Basis = new Basis(_cabin.Tach.Axis, CarNeedle.Angle(_rpmShown / _cabin.Gauges.TachRpm));
         _speedo.Basis = new Basis(_cabin.Speedo.Axis, CarNeedle.Angle(_speedShown / _cabin.Gauges.SpeedoKmh));
         _digit.Mesh = _cabin.GearDigits[CarCabin.DigitFor(Gear)];
+        if (_cabin.SpeedDigits is { } figures)
+        {
+            // the figures change only when the whole km/h does: no leading zeros
+            int kmh = Mathf.Clamp(Mathf.RoundToInt(_speedShown), 0, 999);
+            if (kmh != _kmhShown)
+            {
+                _kmhShown = kmh;
+                // readouts of CarCabin.SpeedPlaces places each, units first: the display, then the HUD
+                for (int place = 0; place < _speedDigits.Length; place++)
+                {
+                    int k = place % CarCabin.SpeedPlaces, div = k == 0 ? 1 : k == 1 ? 10 : 100;
+                    _speedDigits[place].Visible = k == 0 || kmh >= div;
+                    _speedDigits[place].Mesh = figures[place][kmh / div % 10];
+                }
+            }
+        }
         _lamps[CarCabin.LampHandbrake].Visible = Handbrake;
         _lamps[CarCabin.LampLights].Visible = Headlights;
         _lamps[CarCabin.LampEngine].Visible = !EngineRunning;
         _pedals[CarCabin.PedalThrottle].Basis = new Basis(Vector3.Right, DriverSeat.PedalTravel * Mathf.Clamp(Throttle, 0f, 1f));
         _pedals[CarCabin.PedalBrake].Basis = new Basis(Vector3.Right, DriverSeat.PedalTravel * Mathf.Clamp(Brake, 0f, 1f));
+        if (_pedals.Length > CarCabin.PedalClutch)
+            _pedals[CarCabin.PedalClutch].Basis = new Basis(Vector3.Right, DriverSeat.PedalTravel * Mathf.Clamp(Clutch, 0f, 1f));
 
         _glass.AlbedoColor = Colors.White with { A = View == CockpitView.Outside ? 1f : GlassFromSeat };
 
@@ -538,12 +626,63 @@ public partial class CarRig : Node3D
     private static AudioStream? _bounceClip;
     private static bool _bounceClipLoaded;
 
+    /// <summary>
+    /// A kart's own movement (#715): the inside rear wheel rising in a hard corner (a solid axle has no
+    /// differential and no suspension, so one wheel comes off), and the whole kart rolling over onto its
+    /// side about the outer wheels' contact line when it trips. Nothing else in the rig moves like this,
+    /// so it costs a car one float compare a frame.
+    /// </summary>
+    private void ApplyKart(float dt)
+    {
+        if (!_kartMoved && Lift == 0f && Tip == 0f) return;
+        float lift = Mathf.Clamp(Lift, -1f, 1f);
+        _tipShown = Mathf.MoveToward(_tipShown, Mathf.Clamp(Tip, -1f, 1f), TipSpeed * dt);
+        // one more pass once both are back at 0 puts every part home
+        _kartMoved = lift != 0f || _tipShown != 0f;
+        var rearLeft = _wheelHome[2] + Vector3.Up * (lift > 0f ? lift * InsideLift : 0f);
+        var rearRight = _wheelHome[3] + Vector3.Up * (lift < 0f ? -lift * InsideLift : 0f);
+        _steer[2].Position = rearLeft;
+        _steer[3].Position = rearRight;
+        if (_tipShown == 0f)
+        {
+            _body.Position = new Vector3(0, _bodyY, 0);
+            _steer[0].Position = _wheelHome[0];
+            _steer[1].Position = _wheelHome[1];
+            return;
+        }
+        // over its left side (−X) for a + tip: roll about the left outer tyre's edge, + about Z lifts +X
+        var edge = new Vector3(-Mathf.Sign(_tipShown) * _kartHalfWidth, 0f, 0f);
+        var over = new Transform3D(new Basis(Vector3.Back, _tipShown * TipAngle), Vector3.Zero);
+        var about = new Transform3D(Basis.Identity, edge) * over * new Transform3D(Basis.Identity, -edge);
+        _body.Transform = about * new Transform3D(Basis.FromEuler(new Vector3(BodyPitch, 0, 0)), new Vector3(0, _bodyY, 0));
+        for (int i = 0; i < 4; i++)
+        {
+            var pos = i == 2 ? rearLeft : i == 3 ? rearRight : _wheelHome[i];
+            _steer[i].Transform = about * new Transform3D(Basis.FromEuler(new Vector3(0, i < 2 ? SteerAngle : 0f, 0)), pos);
+        }
+    }
+
+    private float _beatDy, _beatShown, _beatRoll;
+
+    /// <summary>Music reaching the parked car (#734): sink on the kick, rock side to side over two beats.</summary>
+    public void OnBeat(float reach, in Items.RadioGroove groove)
+    {
+        _beatDy = -0.06f * reach * groove.Kick * groove.BounceScale;
+        _beatRoll = 0.025f * reach * groove.Level * Mathf.Sin(Mathf.Pi * ((groove.Beat & 1) + groove.Phase));
+    }
+
     public override void _Process(double delta)
     {
         if (_body == null) return;
         float dt = (float)delta;
         float hopPitch = _hydraulics ? ApplyHydraulics(dt) : 0f;
-        _body.Rotation = new Vector3(BodyPitch + hopPitch, 0, 0);   // + rotates −Z (the nose) up
+        _body.Rotation = new Vector3(BodyPitch + hopPitch, 0, _beatRoll);   // + rotates −Z (the nose) up
+        // parked near music (#734): the body sinks on the bass and rocks with the swing, drawing only
+        if (_beatDy != _beatShown)
+        {
+            _body.Position += new Vector3(0, _beatDy - _beatShown, 0);
+            _beatShown = _beatDy;
+        }
         for (int i = 0; i < 4; i++)
         {
             _steer[i].Rotation = new Vector3(0, i < 2 ? SteerAngle : 0f, 0);   // + yaw turns −Z toward −X: left
@@ -557,6 +696,7 @@ public partial class CarRig : Node3D
             _doorOpen[i] = Mathf.MoveToward(_doorOpen[i], target, step);
             _doorPivots[i].Quaternion = Quaternion.Identity.Slerp(_doors[i].Open, Mathf.SmoothStep(0f, 1f, _doorOpen[i]));
         }
+        ApplyKart(dt);
         ApplyMovingParts(dt);
         ApplyLamps();
         ApplyCabin(dt);

@@ -17,7 +17,7 @@
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
     <!-- Godot's managed maths (Vector3, Mathf) for the linked src/Core/MathX.cs; no engine is loaded -->
-    <PackageReference Include="GodotSharp" Version="4.7.1" />
+    <PackageReference Include="GodotSharp" Version="4.7.2" />
   </ItemGroup>
 
   <ItemGroup>
@@ -25,6 +25,11 @@
     <ProjectReference Include="..\..\tools\RoadGen\RoadGen.csproj" />
     <Compile Include="..\..\src\World\TimeCommand.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\SimClock.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Avatar\DancePick.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Items\RadioLoudness.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Items\RadioFocus.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Audio\Cd\CdUploadRules.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Audio\Cd\CdScanner.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\ClockSave.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\TutorialSteps.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\VehicleIntros.cs" Link="Game\%(Filename)%(Extension)" />
@@ -34,6 +39,8 @@
     <Compile Include="..\..\src\XR\XrControlNames.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\IChunkSource.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Vehicles\VehicleSlot.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\World\ContainerRules.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Net\EntityInterestRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Fixture\*.cs" Link="Game\Fixture\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\ItemId.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Crafting\Recipes.cs" Link="Game\%(Filename)%(Extension)" />
@@ -41,12 +48,20 @@
     <Compile Include="..\..\src\Items\Fishing\FishWaters.cs" Link="Game\Fishing\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\Fishing\FishRules.cs" Link="Game\Fishing\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Crafting\CampfireClock.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\FarmTables.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\FarmRules.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\FieldCells.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\FieldTile.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\Face\FaceGenome.cs" Link="Game\Face\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\Face\FaceState.cs" Link="Game\Face\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Avatar\Face\DanceFace.cs" Link="Game\Face\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\HitGuard.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\FightRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\BattleRoyale\BrStats.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Fnv.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Playtest\McpProtocol.cs" Link="Game\Playtest\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Playtest\LoopbackHttp.cs" Link="Game\Playtest\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Playtest\PlaytestLedger.cs" Link="Game\Playtest\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Loot\ShopTables.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\DoorBudget.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\GarageRule.cs" Link="Game\%(Filename)%(Extension)" />
@@ -55,13 +70,29 @@
     <Compile Include="..\..\src\Interiors\GarageLink.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\DoorKey.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\LiftRide.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Movie\ActorTrack.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Movie\ReplayRing.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Movie\MovieProject.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Movie\MovieFile.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Movie\BeatDetector.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Movie\Pcm.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Movie\SoundRing.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Movie\CameraTrack.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Movie\ShotMath.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Movie\Soundtrack.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Movie\AutoDirector.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Movie\WorldTrack.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Movie\SessionSpool.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\InnerDoorLock.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Loot\ShopLedger.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\SaveQueue.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\MathX.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\ZFight.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\Flicker.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Vehicles\CargoFit.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- traffic-light heads (#350): the lens layout, Godot maths only -->
     <Compile Include="..\..\src\Terrain\SignalBuilder.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\SignalGlyphs.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the water pass's exact distance transform (#298); the rest of the preprocessor is not linked -->
     <Compile Include="..\..\tools\TerrainPreprocessor\DistanceTransform.cs" Link="Tools\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\WaveSpectrum.cs" Link="Game\%(Filename)%(Extension)" />
@@ -73,6 +104,7 @@
     <Compile Include="..\..\src\Player\Wading.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\CmdArgs.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\PigeonFlight.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Player\CruiseControl.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\AirlinerCatalog.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Audio\TurbopropTone.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\AirlinerFlight.cs" Link="Game\%(Filename)%(Extension)" />
@@ -122,11 +154,21 @@
     <!-- update check (#532): version compare, asset pick, GitHub's JSON, delta updates -->
     <Compile Include="..\..\src\Core\UpdateInfo.cs;..\..\src\Core\BinaryDelta.cs;..\..\src\Core\UpdatePackage.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\Landmarks.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- the farm machines' tanks, codes and draft (#494) -->
+    <Compile Include="..\..\src\Farming\MachineLoad.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- selling (#494): prices, specialty buyers, contracts, the farm stand -->
+    <Compile Include="..\..\src\Farming\FarmPrices.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\FarmBuyers.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\FarmBuyerSite.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\FarmContracts.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\FarmStandRules.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the road blend (#603): plain C# over TerrainFormat, as tools/BlendCheck links it -->
     <Compile Include="..\..\src\Terrain\TerrainMeshBuilder.RoadBlend.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- forklift pallets (#583): the load byte, the ids and the fork rule, against the forks' numbers;
          and the stacks on a site's apron (phase 3) -->
     <Compile Include="..\..\src\Avatar\ForkliftLayout.cs;..\..\src\Items\Pallets.cs;..\..\src\Items\SitePallets.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- the trailer (#706): its song's bar clock and the cut check -->
+    <Compile Include="..\..\src\Trailer\Song.cs" Link="Game\%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

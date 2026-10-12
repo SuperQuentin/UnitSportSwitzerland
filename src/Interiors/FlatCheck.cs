@@ -57,6 +57,26 @@ public static class FlatCheck
             GD.Print($"[flatcheck] {(ok ? "ok  " : "FAIL")} {what}");
         }
 
+        // flats of every size the cutter can be handed: no room under the validator's metre (a 4.65 m deep studio had a 0.98 m
+        // kitchenette, which rejected 12 of the first garage blocks, #694)
+        int thin = 0, swept = 0;
+        string firstThin = "";
+        for (float v = GarageRule.MinFlatSide; v <= 9f; v += 0.05f)
+            for (float u = 4.4f; u <= 21f; u += 0.37f)
+                foreach (var e in new[] { InteriorGenerator.Ext.Plain(true, false, true), InteriorGenerator.Ext.Plain(true, true, true), InteriorGenerator.Ext.Plain(false, false, true), InteriorGenerator.Ext.Plain(false, true, false) })
+                    foreach (float door in u < 7.4f ? new[] { 0.7f, u - 0.7f } : new[] { 0.7f, u / 2, u - 0.7f })   // Flat() puts a narrow flat's door at an end
+                    {
+                        swept++;
+                        var rooms = InteriorGenerator.FlatRooms(u, v, door, e, new Random(swept));
+                        if (rooms.Find(r => Math.Min(r.U1 - r.U0, r.V1 - r.V0) < 1.0f) is { } bad)
+                        {
+                            thin++;
+                            if (System.Environment.GetEnvironmentVariable("FLATSWEEP") != null) GD.Print($"[flatcheck] thin u {u:F2} v {v:F2} door {door:F2} {bad}");
+                            if (firstThin.Length == 0) firstThin = $"u {u:F2} v {v:F2} door {door:F2}: {bad}";
+                        }
+                    }
+        Expect(thin == 0, $"{swept} flats from 4.4 x 3.4 to 21 x 9 m: {thin} with a room under 1 m ({firstThin})");
+
         string dir = ProjectSettings.GlobalizePath("res://test_output/flats");
         System.IO.Directory.CreateDirectory(dir);
         var tile = Tile();
@@ -64,6 +84,9 @@ public static class FlatCheck
         int flats = 0, locked = 0, lit = 0, livings = 0, wetLit = 0, wet = 0, deadEnds = 0;
         var walkedThrough = new List<string>();
         var dark = new List<string>();
+        var blockedRooms = new List<string>();
+        var turnedAway = new List<string>();
+        int tvs = 0, tvsFacing = 0;
 
         for (int i = 0; i < Boxes.Length; i++)
         {
@@ -186,6 +209,30 @@ public static class FlatCheck
             if (box.Shops)
                 Expect(ground.Rooms.Any(r => r.Type == RoomType.Shop), $"{box.What}: shops on the ground floor");
 
+            // furniture leaves a way through (#680): from a room's first doorway, every other is reachable
+            for (int f = 0; f < l.Floors.Count; f++)
+                foreach (var r in l.Floors[f].Rooms)
+                {
+                    var pieces = l.Furniture.Where(p => p.Floor == f && p.H > 0.05f && p.X > r.X0 && p.X < r.X1 && p.Z > r.Z0 && p.Z < r.Z1)
+                        .Select(p => p.Turns % 2 == 0
+                            ? new RectPlan(p.X - p.W / 2, p.Z - p.D / 2, p.X + p.W / 2, p.Z + p.D / 2)
+                            : new RectPlan(p.X - p.D / 2, p.Z - p.W / 2, p.X + p.D / 2, p.Z + p.W / 2)).ToList();
+                    if (InteriorGenerator.ShutDoorways(r, pieces) > 0) blockedRooms.Add($"{box.What} floor {f} {r.Type} {r.X0:F1},{r.Z0:F1}");
+                    // and no corner of it is walled off by a cage or a cupboard (a 1.5 m² pocket at most)
+                    if (InteriorGenerator.SealedFloor(r, pieces) > 1.5f) blockedRooms.Add($"{box.What} floor {f} {r.Type} {r.X0:F1},{r.Z0:F1}: {InteriorGenerator.SealedFloor(r, pieces):F1} m² sealed off");
+                    // a TV looks at its sofa
+                    if (r.Type != RoomType.Living) continue;
+                    foreach (var tv in l.Furniture.Where(p => p.Floor == f && p.Type == FurnitureType.Tv && p.X > r.X0 && p.X < r.X1 && p.Z > r.Z0 && p.Z < r.Z1))
+                    {
+                        var sofa = l.Furniture.FirstOrDefault(p => p.Floor == f && p.Type == FurnitureType.Sofa && p.X > r.X0 && p.X < r.X1 && p.Z > r.Z0 && p.Z < r.Z1);
+                        if (sofa == null) continue;
+                        tvs++;
+                        var (fx, fz) = (tv.Turns & 3) switch { 0 => (0f, 1f), 1 => (1f, 0f), 2 => (0f, -1f), _ => (-1f, 0f) };
+                        if (fx * (sofa.X - tv.X) + fz * (sofa.Z - tv.Z) > -0.5f) tvsFacing++;
+                        else turnedAway.Add($"{box.What} floor {f} room {r.X0:F1},{r.Z0:F1}-{r.X1:F1},{r.Z1:F1} sofa {sofa.X:F1},{sofa.Z:F1} t{sofa.Turns} tv {tv.X:F1},{tv.Z:F1} t{tv.Turns}");
+                    }
+                }
+
             var mine = doors.Where(d => d.Index == i && d.Width > 0).ToList();
             foreach (var d in mine)
                 Expect(l.EntranceOf(d.KeyIn(tile.Id).ToString()) != null,
@@ -200,6 +247,8 @@ public static class FlatCheck
         GD.Print($"[flatcheck] {wetLit} of {wet} kitchens, bathrooms and WCs have one (those on a facade)");
         Expect(walkedThrough.Count == 0, $"{deadEnds - walkedThrough.Count} of {deadEnds} bedrooms, bathrooms and WCs have one door"
             + (walkedThrough.Count > 0 ? ": " + string.Join("; ", walkedThrough.Distinct().Take(6)) : ""));
+        Expect(blockedRooms.Count == 0, "no room has a doorway or a corner shut off by its furniture" + (blockedRooms.Count > 0 ? ": " + string.Join("; ", blockedRooms.Take(6)) : ""));
+        Expect(tvs == 0 || tvsFacing == tvs, $"{tvsFacing} of {tvs} TVs face their sofa" + (turnedAway.Count > 0 ? ": " + string.Join("; ", turnedAway.Distinct().Take(8)) : ""));
         failures += Ramps(dir);
         GD.Print($"[flatcheck] plans in {dir}");
         GD.Print($"[flatcheck] RESULT: {(failures == 0 ? "ok" : $"FAILED ({failures})")}");
@@ -218,10 +267,14 @@ public static class FlatCheck
         // the first set is as shallow as a ramp fits (80 x 18 m), the turned one has room to spare
         // the last two are L-shaped (#694): a 60 x 14 m wing on the street (the ramp runs along it) and a 40 x 24 m one (a square ramp), a wing behind each
         float[][] lAlong = [[-30, 6, 30, 20], [10, -10, 30, 6]], lSquare = [[-20, -4, 20, 20], [-20, -16, -8, -4]];
+        // and two with a wing joined off the end of the garage's wing, standing out toward the street (#694): the wing the door is on is joined
+        // off its side, which used to leave the door locked; the ramp is there now, or the door is at the other end of the wall
+        float[][] jAlong = [[-40, 6, 20, 20], [20, 6, 40, 24]], jSquare = [[-20, -4, 20, 20], [-36, -4, -20, 24]];
         var kinds = new List<(float Turn, int N, float Depth, float[][]? Parts)>
         {
             (0f, Copies, 18f, null), (31f, Copies, 24f, null), (0f, Copies, 14.5f, null), (31f, Copies, 15f, null),
             (0f, Copies, 40f, lAlong), (31f, Copies, 40f, lSquare),
+            (0f, Copies, 44f, jAlong), (31f, Copies, 44f, jSquare),
         };
         var blocks = new List<Building>();
         var segments = new List<RoadSegment>();
@@ -275,11 +328,13 @@ public static class FlatCheck
         int squares = garages.Count(g => g.Ramp == GarageRule.RampKind.Square), alongs = garages.Count(g => g.Ramp == GarageRule.RampKind.Along);
         Expect(garages.Any(g => g.Index < Copies) && turnedGarages > 0, $"ramps: some square to the world and {turnedGarages} turned 31 degrees");
         Expect(squares > 0 && alongs > 0, $"ramps: {squares} square to the front wall, {alongs} along the facade");
+        int joinedAlong = garages.Count(g => g.Index >= 6 * Copies && g.Index < 7 * Copies), joinedSquare = garages.Count(g => g.Index >= 7 * Copies);
+        Expect(joinedAlong > 0 && joinedSquare > 0, $"ramps: {joinedAlong} along and {joinedSquare} square garage doors in a wing another wing joins");
         bool written = false, writtenAlong = false;
         foreach (var g in garages)
         {
             bool alongKind = g.Ramp == GarageRule.RampKind.Along;
-            string what = $"ramps: block {g.Index} ({g.Ramp}{(g.Index >= 4 * Copies ? " in the wing of an L" : "")}{(g.Index >= Copies && g.Index < 2 * Copies || g.Index >= 3 * Copies && g.Index < 4 * Copies || g.Index >= 5 * Copies ? ", turned" : "")})";
+            string what = $"ramps: block {g.Index} ({g.Ramp}{(g.Index >= 6 * Copies ? " in a wing another wing joins" : g.Index >= 4 * Copies ? " in the wing of an L" : "")}{(g.Index >= Copies && g.Index < 2 * Copies || g.Index >= 3 * Copies && g.Index < 4 * Copies || g.Index >= 5 * Copies && g.Index < 6 * Copies || g.Index >= 7 * Copies ? ", turned" : "")})";
             var l = InteriorGenerator.Generate(tile, g.Index, roads, null);
             if (l == null) { Expect(false, $"{what}: no plan"); continue; }
             var problems = InteriorValidator.Validate(l);

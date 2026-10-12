@@ -22,13 +22,16 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Items.RadioManager? _radios;
     private Interiors.ChurchRadios? _churchRadios;
     private Items.DroppedItems? _dropped;
+    private EntityInterest? _entityInterest;
     private PlayerRegistry? _registry;
     private ChatManager? _chat;
     private ChunkStreamer? _streamer;
     private Interiors.InteriorManager? _interiors;
     private WorldOrigin? _origin;
     private Items.PlacedObjects? _placed;
+    private Farming.FarmStands? _farmStands;
     private Net.Sleepers? _sleepers;
+    private Net.Arrival? _arrival;
     private Items.PalletService? _pallets;
     private Build.Structures? _structures;
     private Occasions.OccasionManager? _occasions;
@@ -132,7 +135,11 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // items dropped and thrown on the ground (#206), the same spawn-and-claim pattern
         _dropped = Items.DroppedItems.Create(this, origin);
         _dropped.PlayerPositions = _vehicles.PlayerPositions;
+        // which peer has which of those (#689): only what it could see from where it stands; before
+        // anything is spawned, every entity's synchronizers ask it
+        _entityInterest = EntityInterest.CreateServer(this, _players, _interest, _vehicles, _dropped, _radios);
         Audio.Cd.CdLibrary.Create(this, server: true);
+        Audio.Cd.CdUpload.Create(this, server: true);   // a player's own file, scanned on the server (#736)
         // the radio by the pastor rat in every church (#370)
         _churchRadios = Interiors.ChurchRadios.Create(this);
         Net.ClockSync.Create(this);
@@ -148,6 +155,10 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // touched, every peer works the fleet out for itself from the tile and nothing is sent
         if (Systems.On(Systems.Dormant) && _chunks.Origin is { } dormantOrigin)
             AddChild(new Vehicles.DormantVehicles(_chunks, dormantOrigin));
+        // vehicles and items far from everyone go to sleep in their tile's container and come back
+        // when someone does, and after a restart (#689); after the dormant fleets, whose woken
+        // slots it keeps awake
+        World.ObjectContainers.CreateServer(this, _vehicles, _dropped, _radios, _players);
         // the paddle steamer at the Nyon landing (#303), put back each time its tile loads
         AddChild(new World.SteamerBerth(_chunks));
         // jetskis and speedboats along the harbour jetties (#383), put back a while after they are taken
@@ -161,11 +172,15 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // handed to everyone who walks in afterwards
         _interiors = Interiors.InteriorManager.Create(this, source, origin);
         _interiors.Players = _players;
+        // a check's farm co-op on a fixture world (#494, --farmcoop E,N): the clients are given the same
+        Farming.FarmMarket.StandInFromArgs(local, origin);
 
         // loot in those interiors: the server rolls it and remembers what was taken
         Loot.LootService.Create(this);
         // shops and vending machines (#273): the server keeps what was sold and charges the card
         Loot.ShopService.Create(this);
+        // farm fields (#494): the server keeps the worked cells (user://farm) and checks the work
+        if (Systems.On(Systems.Farming)) Farming.FarmField.Create(this, source, origin, _chunks, dedicated: true);
 
         // occasions run on the server's calendar and are replicated, so every player shares one
         _occasions = Occasions.OccasionManager.Create(this);
@@ -234,6 +249,9 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Items.PhotoTransfer.Create(this, server: true);
         _placed = Items.PlacedObjects.Create(this, origin, server: true);
         _placed.NameOf = _chat.NameOfPeer;
+        // where a new player starts, and whether players may teleport (#799): the server's call
+        _arrival = Net.Arrival.CreateServer(this);
+        _chat.Arrival = _arrival;
         // players who left, asleep where they were (#644)
         _sleepers = Net.Sleepers.Create(this, origin, server: true);
         _sleepers.GroundAt = (e, n) => _chunks != null && _chunks.TryGetHeight(origin.ToWorld(e, n, 0), out float h) ? h : null;
@@ -241,6 +259,14 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _pallets = Items.PalletService.Create(this, origin, server: true);
         _pallets.Source = () => source;
         _chat.NameAssigned += bank.SendBalance;
+        // selling farm produce (#494): load prices, specialty buyers, contracts; farm stands' crates and cash
+        if (Systems.On(Systems.Farming))
+        {
+            Farming.FarmSales.Create(this, origin, server: true).NameOf = _chat.NameOfPeer;
+            _farmStands = Farming.FarmStands.Create(this, origin, server: true);
+            _farmStands.NameOf = _chat.NameOfPeer;
+            _farmStands.Source = () => source;
+        }
         // built structures (#274): checked, kept and saved here; match ones cleared after the match
         if (Systems.On(Systems.Build))
         {
@@ -311,18 +337,21 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Multiplayer.PeerConnected += OnPeerConnected;
         Multiplayer.PeerDisconnected += OnPeerDisconnected;
 
+        string name = QueryResponder.ParseServerName();
+        string version = (string)ProjectSettings.GetSetting("application/config/version", "");
+        string world = manifest.Tiles.Count > 0 ? "real" : "generated";
+        var registry = _registry;
         // status queries on port + 1: LAN lists find this server, saved lists show it is up
         // and how full it is (Net/QueryResponder, docs/notes/net/server-query.md)
         if (QueryResponder.ParsePort(port) is { } queryPort)
-        {
-            string name = QueryResponder.ParseServerName();
-            string version = (string)ProjectSettings.GetSetting("application/config/version", "");
-            string world = manifest.Tiles.Count > 0 ? "real" : "generated";
-            var registry = _registry;
             AddChild(new QueryResponder(queryPort, () => new ServerStatus(
                 name, port, registry?.Players.Count ?? 0, NetworkManager.MaxClients, version, world) { Wire = Handshake.Protocol },
                 QueryResponder.ParseBind()));
-        }
+        // the same, as a file the web page beside a deployed server reads (#740, docs/notes/net/status-page.md)
+        if (StatusFile.ParsePath() is { } statusPath)
+            AddChild(new StatusFile(statusPath, () => new StatusFileData(
+                name, version, world, port, registry?.Players.Count ?? 0, NetworkManager.MaxClients,
+                registry is null ? [] : registry.Players.Select(p => p.Name).Order(StringComparer.OrdinalIgnoreCase).ToArray())));
         _parentPid = HostedServer.ParseParentPid();
     }
 
@@ -424,13 +453,17 @@ public partial class ServerWorld : Node3D, IOriginContainer
         var node = _spawner!.Spawn(id);
         if (node is Node3D player)
             _chunks!.AddAnchor(player);
+        _arrival?.SendTo(id);
         _interiors?.SendTableTo(id);
         _churchRadios?.SendTo(id);
         _passengers?.SendTo(id);
         _occasions?.SendTo(id);
         _placed?.SendTo(id);
+        _farmStands?.SendTo(id);
         _sleepers?.SendTo(id);
         _pallets?.SendTo(id);
+        // the dormant slots woken anywhere (#689): a far one's car is not sent, its bay must be empty
+        Vehicles.DormantVehicles.Instance?.SendTo(id);
         _structures?.SendTo(id);
         _br?.SendTo(id);
         _brCrates?.SendTo(id);
@@ -456,6 +489,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _interiors?.ForgetPeer(id);
         _streamer?.ForgetPeer(id);
         _interest?.ForgetPeer(id);
+        _entityInterest?.ForgetPeer(id);
         _npcs?.PeerLeft(id);   // its race NPCs go to someone near them, or retire
 
         if (_players!.GetNodeOrNull<Node3D>(id.ToString()) is { } player)
