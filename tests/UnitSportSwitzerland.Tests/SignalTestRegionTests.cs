@@ -186,6 +186,61 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
     }
 
     [Fact]
+    public void Sidewalk_corners_follow_the_kerb_arc_beside_a_split_lead_in()
+    {
+        // the T without lights (#711): the west arm's lead-in widens both its edges, so its corner beside the side road
+        // (north-west: x < 0, z < 0) rounds a widened kerb (the mirror strip's: before #711 that corner had no kerb patch, and
+        // the sidewalk corner followed the junction's own ring, a bare triangle between). The kerb arc is lined all along: the
+        // main road's side, carried on to the kerb (its band ends found in 5 cm steps), then the sidewalk corner, whose kerb
+        // is the pavement patch's arc point for point. (The east arm widens only its south side, for the exit: that corner stays.)
+        double e = SignalTestRegion.TownTeeE, n = SignalTestRegion.RowN;
+        var id = TileId.FromLv95(e, n);
+        double cx = e - id.MinE, cz = id.MaxN - n;
+        var tile = region.Tile(e, n);
+        List<List<(double X, double Z)>> In(int sx, params AreaPropType[] types) => tile.AreaProps.Where(a => types.Contains(a.Type))
+            .Select(a => Points(a.Vertices))
+            .Where(p => p.Average(q => q.X) - cx is var x && Math.Sign(x) == sx && Math.Abs(x) < 15
+                && p.Average(q => q.Z) - cz is var z && z < -1 && z > -15).ToList();
+        var kerbs = In(-1, AreaPropType.Pavement);
+        var walks = In(-1, AreaPropType.Sidewalk);
+        var bands = In(-1, AreaPropType.Grass, AreaPropType.BikePath, AreaPropType.Kerb, AreaPropType.Sidewalk);
+        Assert.True(kerbs.Count > 0, "no kerb patch at the north-west corner");
+        bool Touches(List<List<(double X, double Z)>> props, (double X, double Z) p, double within) =>
+            props.Any(w => w.Any(q => Math.Abs(q.X - p.X) < within && Math.Abs(q.Z - p.Z) < within));
+        var arc = kerbs.SelectMany(k => k).Where(p => Touches(walks, p, 0.02) || Touches(bands, p, 0.1)).Distinct().Count();
+        // (#711: the corner is laid in its sides' bands, swept round the arc: one of them starts on it)
+        Assert.True(bands.Any(w => w.Count(p => Touches(kerbs, p, 0.02)) >= 2), "the north-west corner does not start on the kerb arc");
+        Assert.True(arc >= 6, $"only {arc} points of the north-west kerb arc are lined by the sidewalk corner or the carried side");
+    }
+
+    [Fact]
+    public void Without_lights_the_path_runs_to_the_kerb_and_the_edge_guide_follows_the_widening()
+    {
+        // the T without lights (#711, the user's rules): the main road's paths run on into the corners up to the side road's
+        // kerb, so the red crossing spans only the side road (6 m and its kerb arcs, not mouth to mouth across the corners);
+        // the dashed edge guide across the mouth starts on the west arm's widened edge, further north than the east arm's
+        double e = SignalTestRegion.TownTeeE, n = SignalTestRegion.RowN;
+        var id = TileId.FromLv95(e, n);
+        double cx = e - id.MinE, cz = id.MaxN - n;
+        var tile = region.Tile(e, n);
+        bool Near(IReadOnlyList<(double X, double Z)> p) => p.All(q => Math.Abs(q.X - cx) < 15 && Math.Abs(q.Z - cz) < 15);
+        var red = tile.Paint.Where(p => p.Type == PaintType.BikeCrossing).Select(p => Points(p.Vertices)).Where(Near).ToList();
+        Assert.Single(red);
+        Assert.True(red[0].Max(q => Math.Abs(q.X - cx)) < 7.5, $"the red crossing reaches {red[0].Max(q => Math.Abs(q.X - cx)):F1} m from the side road's axis");
+        var paths = tile.AreaProps.Where(a => a.Type == AreaPropType.BikePath).Select(a => Points(a.Vertices))
+            .Select(p => (X: p.Average(q => q.X) - cx, Z: p.Average(q => q.Z) - cz)).ToList();
+        foreach (int sx in (ReadOnlySpan<int>)[-1, 1])
+            Assert.True(paths.Any(c => Math.Sign(c.X) == sx && Math.Abs(c.X) > 3 && Math.Abs(c.X) < 14 && c.Z < -5 && c.Z > -11),
+                $"no path carried into the corner on side {sx}");
+        var guide = tile.Paint.Where(p => p.Type == PaintType.WhiteDashed && p.Shape == PaintShape.Polyline).Select(p => Points(p.Vertices))
+            .Where(p => Near(p) && p.All(q => q.Z < cz - 3) && p.Min(q => q.X) < cx - 4 && p.Max(q => q.X) > cx + 4).ToList();
+        Assert.Single(guide);
+        var west = guide[0].MinBy(q => q.X);
+        var east = guide[0].MaxBy(q => q.X);
+        Assert.True(east.Z - west.Z > 0.5, $"the edge guide's west end is only {east.Z - west.Z:F2} m further out than its east end");
+    }
+
+    [Fact]
     public void Bike_lanes_across_the_lights_are_red_only_where_a_car_crosses_in_the_same_phase()
     {
         int Red(string name, double radius)

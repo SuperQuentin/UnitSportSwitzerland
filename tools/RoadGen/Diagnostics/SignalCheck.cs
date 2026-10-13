@@ -16,6 +16,9 @@ public static class SignalCheck
     {
         var c = CultureInfo.InvariantCulture;
         int tiles = 0, junctions = 0, invalid = 0;
+        // (#711, the user's review) every approach has its main pole, and one with a left pocket its second head (a pole or an island's)
+        int approaches = 0, noMain = 0, pocketArms = 0, noSecond = 0;
+        var poleMisses = new List<string>();
         var shapes = new SortedDictionary<string, int>(StringComparer.Ordinal);
         var cycles = new SortedDictionary<int, int>();
         (double Distance, string Text)? nearest = null;
@@ -59,6 +62,17 @@ public static class SignalCheck
                     log($"  INVALID {where}: {string.Join("; ", errors.Take(3))}");
                 }
                 if (p.Cycle < 30) log($"  odd: {where} cycle {p.Cycle:F1} s ({shape})");
+                for (int a = 0; a < p.Arms.Count; a++)
+                {
+                    if (!p.Arms[a].In) continue;
+                    approaches++;
+                    bool main = s.Poles.Any(q => q.Arm == a && (q.Flags & SignalPoleFlags.Main) != 0);
+                    bool second = s.Poles.Any(q => q.Arm == a && (q.Flags & SignalPoleFlags.Second) != 0);
+                    if (!main) noMain++;
+                    if (p.Arms[a].LeftPocket) { pocketArms++; if (!second) noSecond++; }
+                    if (!main || p.Arms[a].LeftPocket && !second)
+                        poleMisses.Add(string.Create(c, $"    {where} arm {a} heading {p.Arms[a].Heading * 180 / Math.PI:F0} deg: {(main ? "" : "no main pole")}{(!main && p.Arms[a].LeftPocket && !second ? ", " : "")}{(p.Arms[a].LeftPocket && !second ? "no second head" : "")}"));
+                }
                 if (list) log(string.Create(c, $"  {where}: {shape}, {p.Arms.Count(a => a.RightPocket)} right pockets, cycle {p.Cycle:F0} s, {p.Groups.Count} groups"));
                 if (at is not null)
                 {
@@ -82,9 +96,11 @@ public static class SignalCheck
         if (nearest is { } near) log(near.Text);
         log(string.Create(c, $"  lane records (#353): {lanes.Approaches} approaches ({lanes.Signalised} signalised, every signalised approach has one: {lanes.Missing == 0}), {lanes.Lanes} lanes, banned turns on {lanes.Banned}, bad {lanes.Bad}"));
         foreach (var (_, text) in nearLanes.OrderBy(x => x.Distance).Take(8)) log(text);
-        bool ok = invalid == 0 && lanes.Bad == 0 && lanes.Missing == 0;
+        log(string.Create(c, $"  poles (#350, #711): {approaches} approaches, {noMain} without a main pole; {pocketArms} with a left pocket, {noSecond} without its second head"));
+        foreach (var miss in poleMisses.Take(list ? int.MaxValue : 30)) log(miss);
+        bool ok = invalid == 0 && lanes.Bad == 0 && lanes.Missing == 0 && noMain == 0 && noSecond == 0;
         log(ok ? "[signalcheck] RESULT: ok"
-            : $"[signalcheck] RESULT: FAILED {invalid} invalid plans, {lanes.Bad} bad lane records, {lanes.Missing} signalised approaches without one");
+            : $"[signalcheck] RESULT: FAILED {invalid} invalid plans, {lanes.Bad} bad lane records, {lanes.Missing} signalised approaches without one, {noMain} approaches without a main pole, {noSecond} without a second head");
         return ok ? 0 : 2;
     }
 

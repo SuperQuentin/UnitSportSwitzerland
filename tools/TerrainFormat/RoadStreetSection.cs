@@ -54,8 +54,11 @@ public static class RoadStreetSection
     /// <summary>Distance from the carriageway edge to the middle of the bike path (0 without one).</summary>
     public static float TrackCentre(RoadSide side) => side.HasTrack ? (side.VergeDm + side.BikeDm * 0.5f) / 10f : 0f;
 
-    /// <summary>The profile of a side, null when it has nothing beside the carriageway.</summary>
-    public static Profile? For(RoadSide side)
+    /// <summary>
+    /// The profile of a side, null when it has nothing beside the carriageway. <paramref name="lowered"/>: every kerb sloped,
+    /// a crossing's kerb ramp (<see cref="RoadAttrFlags.LoweredKerbs"/>, #711: walkers and riders never meet a vertical kerb).
+    /// </summary>
+    public static Profile? For(RoadSide side, bool lowered = false)
     {
         if (side.OuterDm == 0) return null;
         float kerb = side.KerbCm / 100f;
@@ -81,7 +84,7 @@ public static class RoadStreetSection
             float end = at + width;
             if (Math.Abs(top - height) > 1e-4f)
             {
-                bool sloped = surface == StreetSurface.Track || (b > 0 && bands[b - 1].Surface == StreetSurface.Track);
+                bool sloped = lowered || surface == StreetSurface.Track || (b > 0 && bands[b - 1].Surface == StreetSurface.Track);
                 float run = sloped ? Math.Min(SlopedKerbRun, width * 0.5f) : 0f;
                 d.Add(at + run); h.Add(top); s.Add(StreetSurface.Kerb);
             }

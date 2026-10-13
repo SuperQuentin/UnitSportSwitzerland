@@ -217,14 +217,17 @@ public static class RoadStreetBuilder
             foreach (bool right in new[] { false, true })
             {
                 var mine = right ? seg.Attributes.Right : seg.Attributes.Left;
-                if (RoadStreetSection.For(mine) is not { } profile) continue;
+                if (RoadStreetSection.For(mine, seg.Attributes.Has(RoadAttrFlags.LoweredKerbs)) is not { } profile) continue;
                 yield return Build(seg, right, profile,
                     !Continues(tile, ends, s, atStart: true, right), !Continues(tile, ends, s, atStart: false, right));
             }
         }
     }
 
-    /// <summary>Whether another segment meets this end and carries a sidewalk on the same side of the street.</summary>
+    /// <summary>
+    /// Whether another segment meets this end and carries a sidewalk on the same side of the street. A side with a vertical kerb
+    /// next to a crossing's lowered one (#711) ends there: its end face closes the step between the two kerbs.
+    /// </summary>
     private static bool Continues(RoadTile tile, Dictionary<(int, int), List<(int Seg, bool AtStart)>> ends,
         int s, bool atStart, bool right)
     {
@@ -237,7 +240,7 @@ public static class RoadStreetBuilder
             // end to start runs the same way: same side; end to end or start to start: the other side
             bool sameWay = atStart != otherAtStart;
             var theirs = sameWay == right ? o.Right : o.Left;
-            if (theirs.OuterDm > 0) return true;
+            if (theirs.OuterDm > 0 && !(o.Has(RoadAttrFlags.LoweredKerbs) && !seg.Attributes.Has(RoadAttrFlags.LoweredKerbs))) return true;
         }
         return false;
     }

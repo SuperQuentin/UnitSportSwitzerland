@@ -69,6 +69,8 @@ public static class CrossSectionPlanner
         public int LanesOneWay { get; internal set; }
         public int LanesFwd { get; internal set; }
         public int LanesBwd { get; internal set; }
+        /// <summary>An odd OSM lane count with no direction split (#711), 0 none: the extra lane goes toward a junction.</summary>
+        public int OddOsmLanes { get; internal set; }
         public float Width { get; internal set; }
         public byte Priority { get; internal set; }
         /// <summary>The plan the geometry is built from: <see cref="Plan"/>, shifted for a motorway carriageway.</summary>
@@ -144,6 +146,7 @@ public static class CrossSectionPlanner
             Add(ends, Key(line.Plan[^1]), (line, false));
         }
 
+        OddLanesTowardJunctions(lines, ends);
         OrientRoundabouts(lines, ends);
 
         var divided = lines.Where(l => TileRewriter.IsDividedCarRoad(l.Segment)).ToList();
@@ -173,6 +176,24 @@ public static class CrossSectionPlanner
 
         stats.ConnectivityConflicts += conflicts;
         foreach (var line in lines) if (line.Write) Count(line, stats);
+    }
+
+    /// <summary>
+    /// An odd OSM lane count with no <c>lanes:forward/backward</c> (#711, the user's rule): the extra lane goes to the traffic
+    /// arriving at a junction (the usual case: a turn lane before it), at the end where more car roads meet; where neither
+    /// end is a junction, or both alike, the fixed split stays (the extra lane against the drawing).
+    /// </summary>
+    private static void OddLanesTowardJunctions(List<Line> lines, Dictionary<(long, long), List<(Line Line, bool AtStart)>> ends)
+    {
+        int Arms(Vec2 p) => ends.TryGetValue(Key(p), out var list) ? list.Count(e => IsCarRoad(e.Line.Segment)) : 0;
+        foreach (var line in lines)
+        {
+            if (line.OddOsmLanes is not (int n and >= 3)) continue;
+            int atStart = Arms(line.Plan[0]), atEnd = Arms(line.Plan[^1]);
+            // forward traffic arrives at the end, backward at the start
+            if (atEnd >= 3 && atEnd > atStart) (line.LanesFwd, line.LanesBwd) = (n - n / 2, n / 2);
+            else if (atStart >= 3 && atStart > atEnd) (line.LanesFwd, line.LanesBwd) = (n / 2, n - n / 2);
+        }
     }
 
     /// <summary>The v3 attributes of a piece of <paramref name="line"/>, after the OSM row of that piece (if any) was applied.</summary>
@@ -229,7 +250,11 @@ public static class CrossSectionPlanner
             line.OsmLanes = true;
             if (osmFwd + osmBwd > 0) (fwd, bwd) = (osmFwd, osmBwd);
             else if (row!.OneWay is "1" or "-1" || oneWayCarriageway) oneWayLanes = osmLanes;
-            else if (osmLanes >= 2) (fwd, bwd) = (osmLanes / 2, osmLanes - osmLanes / 2);
+            else if (osmLanes >= 2)
+            {
+                (fwd, bwd) = (osmLanes / 2, osmLanes - osmLanes / 2);
+                if (osmLanes % 2 == 1) line.OddOsmLanes = osmLanes;
+            }
             if (row!.OneWay is "1" or "-1" || oneWayCarriageway) oneWayLanes = Math.Max(osmLanes, Math.Max(osmFwd, osmBwd));
         }
         oneWayLanes = Math.Clamp(oneWayLanes, 0, 6);

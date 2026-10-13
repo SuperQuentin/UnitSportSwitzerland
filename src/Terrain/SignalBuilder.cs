@@ -20,6 +20,7 @@ public static class SignalBuilder
     private static readonly Color PoleColour = new(0.55f, 0.59f, 0.62f);   // RAL 7001 silver grey
     private static readonly Color Housing = new(0.07f, 0.07f, 0.08f);      // RAL 9017 traffic black
     private static readonly Color WhitePlate = new(0.93f, 0.93f, 0.91f);   // RAL 9016 traffic white
+    private static readonly Color SignYellow = new(0.98f, 0.76f, 0.05f);   // signal 5.18's yellow bike and arrow, on black
     private static readonly Color Rim = new(0.20f, 0.20f, 0.22f);           // the lens ring, a shade off the housing
 
     /// <summary>Lens pitch and the 200 mm lens drawn a little smaller than its housing's cell.</summary>
@@ -64,9 +65,10 @@ public static class SignalBuilder
 
     /// <summary>
     /// A bike head (#351): 100 mm lenses (Stadt Zürich Velostandards LSA), half a car head, low on
-    /// the main pole below the priority sign, facing the approach.
+    /// the main pole below the priority sign, facing the approach; its middle lens at a rider's shoulder (the user's review,
+    /// #711: 1.05 m was below it).
     /// </summary>
-    private const float BikeScale = 0.5f, BikeLowerEdge = 1.05f;
+    private const float BikeScale = 0.5f, BikeLowerEdge = 1.2f;
 
     public enum Role : byte { Red, Amber, Green, Flash }
 
@@ -110,6 +112,7 @@ public static class SignalBuilder
                 float top = 0f;
                 foreach (var h in heads) top = Mathf.Max(top, h.Centre.Y - pole.Y + h.Half + BoardMargin);
                 Column(vertices, colors, uvs, uv2s, indices, foot, top);
+                RightOnRedSign(vertices, colors, uvs, uv2s, indices, signal.Plan, pole, heads);   // #711
                 foreach (var h in heads)
                 {
                     float half = h.Half, w = HeadWidth * h.Scale, depth = HeadDepth * h.Scale;
@@ -181,6 +184,44 @@ public static class SignalBuilder
                     }
                 }
             }
+    }
+
+    /// <summary>
+    /// Signal 5.18 "right turn for cyclists permitted" (SSV Art. 69a, #711, the user's rule): a black square the size of a
+    /// lens beside the red lamp, right against its visor in front of the white band, a yellow bike over a yellow arrow to the right. On the
+    /// approach's bike head where it has one, else on the rightmost car head of its main pole (no head stands beside it).
+    /// </summary>
+    private static void RightOnRedSign(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
+        SignalPlan plan, SignalPole pole, List<Head> heads)
+    {
+        if ((pole.Flags & SignalPoleFlags.Main) == 0 || pole.Arm >= plan.Arms.Count || !plan.Arms[pole.Arm].BikeRightOnRed) return;
+        var foot = new Vector3(pole.X, pole.Y, pole.Z);
+        Head? on = null;
+        foreach (var h in heads)
+        {
+            if (h.Shape == Shape.Bike) { on = h; break; }
+            if (h.Shape == Shape.Square) continue;
+            if (on is not { } best || (h.Centre - foot).Dot(h.Right) > (best.Centre - foot).Dot(best.Right)) on = h;
+        }
+        if (on is not { } head) return;
+        // right against the red lamp's visor, in front of the white band (the user's review)
+        float s = LensRadius * head.Scale, edge = HeadWidth * head.Scale * 0.5f + 0.005f * head.Scale;
+        var red = head.Centre + Vector3.Up * (head.Half - Pitch * head.Scale * 0.5f);
+        var centre = red + head.Right * (edge + s) + head.Front * 0.006f;
+        RoundedPlate(vertices, colors, uvs, uv2s, indices, Housing.SrgbToLinear(), centre, head.Right, s, s, 0f);
+        var yellow = SignYellow.SrgbToLinear();
+        void Draw(List<Vector2[]> polygons, Vector2 at, float size)
+        {
+            foreach (var polygon in polygons)
+            {
+                var ring = new Vector3[polygon.Length];
+                for (int i = 0; i < polygon.Length; i++)
+                    ring[i] = centre + head.Front * 0.003f + head.Right * ((at.X + polygon[i].X * size) * s) + Vector3.Up * ((at.Y + polygon[i].Y * size) * s);
+                Polygon(vertices, colors, uvs, uv2s, indices, yellow, ring);
+            }
+        }
+        Draw(SignalGlyphs.Bike(), new Vector2(0f, 0.3f), 0.85f);
+        Draw(SignalGlyphs.Arrow(SignalMoves.Right), new Vector2(0f, -0.55f), 0.32f);
     }
 
     /// <summary>Collision triangles for the poles: a closed square column from below the ground to the top head.</summary>

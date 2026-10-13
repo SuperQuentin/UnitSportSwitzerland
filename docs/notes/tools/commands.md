@@ -55,7 +55,8 @@
   limit, `--skip-rewritten` / `--force` for rewritten tiles with no raw input, `--debug-street
   E,N` to trace the street and corner decisions near a point)
 - Street review (#119, `urban-streets`): `RoadGen --street-svg E,N [--size M] --chunks DIR --svg
-  FILE` (plan view), `--dump-street E,N --chunks DIR`, `--street-check` (self-check).
+  FILE` (plan view), `--dump-street E,N --chunks DIR`, `--street-check` (self-check), `--kerb-check --chunks DIR [--at E,N]
+  [--list]` (every zebra and bike crossing meets only sloped kerbs, #711).
 - Place index: `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --features-only --places --gwr ressources/data/gwr/data.sqlite --tlm <tlm.gpkg>`
   (`--tlm` adds named summits and passes; without it the index is towns only). This also
   re-runs roads and the network stage; `--places-only` skips them.

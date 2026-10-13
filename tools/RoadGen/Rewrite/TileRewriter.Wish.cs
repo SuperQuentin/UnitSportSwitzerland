@@ -29,6 +29,15 @@ public static partial class TileRewriter
     /// allow among <paramref name="allowed"/> (a lane with no marked move, or none that the approach has, shows every
     /// one of them); null where the row has no <c>turn:lanes</c> for the traffic arriving at that end.
     /// </summary>
+    /// <summary>The speed limit OSM maps for traffic arriving at the junction at the link's end (km/h, #711), 0 where none.</summary>
+    private static int ApproachSpeed(OsmOverlayReader? overlay, RoadLink link, LinkEnd end)
+    {
+        if (overlay is null || link.Tag is not Source { Key: { } key } source || source.Plan.Length < 2) return 0;
+        bool atEnd = end == LinkEnd.End;
+        double m = key.FromM + source.AlongOf(atEnd ? source.Plan[^1] : source.Plan[0]);
+        return overlay.AtEnd(key.Uuid, key.Part, m, atEnd)?.MaxSpeed(atEnd) ?? 0;
+    }
+
     private static SignalMoves[]? WishedLanes(OsmOverlayReader? overlay, RoadLink link, LinkEnd end, SignalMoves allowed)
     {
         if (overlay is null || link.Tag is not Source { Key: { } key } source || source.Plan.Length < 2) return null;
@@ -51,22 +60,52 @@ public static partial class TileRewriter
     }
 
     /// <summary>
-    /// The lanes of a multi-lane approach without OSM lane data (#700): straight on in every lane, the leftmost also
-    /// left and the rightmost also right where the approach has those turns; without a straight on (the stem of a T)
-    /// the left half turns left and the right half right.
+    /// The lanes of a multi-lane approach without OSM lane data (#700, #711: the user's rule, OSM's lane count is the truth):
+    /// as many lanes go straight on as the straight exit takes (<paramref name="outThrough"/>, its departing lanes); the
+    /// lanes left over become left-only lanes on the left (as many as the left exit takes) and then right-only lanes on
+    /// the right; any still left over go straight on too. A turn with no lane of its own shares the outermost through
+    /// lane (the leftmost also turns left, the rightmost also right). Without a straight on (the stem of a T) the lanes
+    /// go left and right by the exits' lanes (half each where unknown). Exits unknown: <see cref="int.MaxValue"/>.
     /// </summary>
-    internal static SignalMoves[] InferredLanes(SignalMoves allowed, int lanes)
+    public static SignalMoves[] InferredLanes(SignalMoves allowed, int lanes, int outLeft = int.MaxValue, int outThrough = int.MaxValue,
+        int outRight = int.MaxValue)
     {
+        bool l = (allowed & SignalMoves.Left) != 0, t = (allowed & SignalMoves.Through) != 0, r = (allowed & SignalMoves.Right) != 0;
         var result = new SignalMoves[lanes];
-        for (int k = 0; k < lanes; k++)
+        if (!t)
         {
-            var moves = allowed & SignalMoves.Through;
-            if (k == 0) moves |= allowed & SignalMoves.Left;
-            if (k == lanes - 1) moves |= allowed & SignalMoves.Right;
-            if (moves == SignalMoves.None) moves = allowed & (k < lanes / 2.0 ? SignalMoves.Left : SignalMoves.Right);
-            result[k] = moves == SignalMoves.None ? allowed : moves;
+            // the stem of a T: the left lanes turn left, the right ones right
+            int lefts = !l ? 0 : !r ? lanes
+                : outLeft == int.MaxValue && outRight == int.MaxValue ? (int)Math.Ceiling(lanes / 2.0)
+                : Math.Clamp(Math.Min(outLeft, lanes - Math.Min(outRight, lanes - 1)), 1, lanes - 1);
+            for (int k = 0; k < lanes; k++) result[k] = k < lefts ? SignalMoves.Left : r ? SignalMoves.Right : allowed;
+            if (lanes > 0 && result.All(m => m == SignalMoves.None)) Array.Fill(result, allowed);
+            return result;
         }
+        int through = Math.Clamp(outThrough, 1, lanes), spare = lanes - through;
+        int left = l ? Math.Min(spare, Math.Max(1, outLeft)) : 0;
+        int right = r ? Math.Min(spare - left, Math.Max(1, outRight)) : 0;
+        through += spare - left - right;
+        for (int k = 0; k < lanes; k++)
+            result[k] = k < left ? SignalMoves.Left : k < left + through ? SignalMoves.Through : SignalMoves.Right;
+        if (l && left == 0) result[0] |= SignalMoves.Left;
+        if (r && right == 0) result[^1] |= SignalMoves.Right;
         return result;
+    }
+
+    /// <summary>
+    /// The lanes traffic leaving by arm <paramref name="arm"/> may take (#711): an undivided road's lanes away from the
+    /// junction, a one-way road's lanes where cars may leave along it; 0 where none may.
+    /// </summary>
+    private static int OutLanes(Junction j, int arm, RoadNetwork net)
+    {
+        var a = j.Arms[arm];
+        if (InfoOf(net.Links[a.LinkId]) is not { } info || !PriorityPlanner.IsCarRoad(info.Class)) return 0;
+        var end = PriorityPlanner.EndAt(net, j, a);
+        if (!PriorityPlanner.Leaves(info, end)) return 0;
+        var at = info.Attributes;
+        if (at.OneWay != 0) return Math.Max(1, Math.Max((int)at.LanesForward, at.LanesBackward));
+        return Math.Max(1, (int)(end == LinkEnd.End ? at.LanesBackward : at.LanesForward));
     }
 
     /// <summary>
@@ -104,11 +143,12 @@ public static partial class TileRewriter
     /// from the centre line toward the approaching driver's right, <paramref name="laneWidth"/> one lane's width.
     /// </summary>
     private static int OwnArrows(RoadSegment seg, RoadSegment painted, TileId tile, bool atEnd, List<RoadPaint> paint, double centre, double laneWidth,
-        SignalMoves[] own, double stop, bool signal)
+        SignalMoves[] own, double stop, JunctionRules rules)
     {
         var way = new Widening(seg, painted, tile, 0, atEnd, atEnd ? 1 : -1, 1, 0);
-        // at the lights the lines between the lanes go solid before the stop line and stop there
-        if (signal && own.Length > 1) way.SolidToStop(paint, stop - SignalStopLine * 0.5);
+        // the lines between the lanes go solid before the junction (#711: at every junction): at the lights up to the stop line, without them to the mouth
+        if (own.Length > 1) way.SolidToStop(paint, rules.Has(JunctionRule.StopLine) ? stop - SignalStopLine * 0.5 : stop,
+            rules.Has(JunctionRule.SolidCentreBeforeStop) ? CentreSolidAtLights : TurnSolid, centreAt: centre - laneWidth * 0.5);
         double total = SegmentLength(seg);
         int made = 0;
         foreach (double tip in (ReadOnlySpan<double>)[5 + PaintEmitter.ArrowLength, 20 + PaintEmitter.ArrowLength])
@@ -139,8 +179,9 @@ public static partial class TileRewriter
     /// Returns how many it drew.
     /// </summary>
     private static int EmitPairGuides(Dictionary<TileId, List<RoadPaint>> paint, TileId home, Junction junction, RoadNetwork net,
-        List<(int Arm, RoadApproach Record)> records, List<(Vec2 At, float Height)> anchors)
+        List<(int Arm, RoadApproach Record)> records, List<(Vec2 At, float Height)> anchors, JunctionRules? rules = null)
     {
+        bool stopLine = (rules ?? JunctionRules.Lights).Has(JunctionRule.StopLine);
         int drawn = 0;
         foreach (var (arm, record) in records)
         {
@@ -173,8 +214,9 @@ public static partial class TileRewriter
                     double outAt = (exit.Centre(c) + exit.Centre(c + 1)) * 0.5;
                     var target = junction.Arms[to];
                     var ut = Vec2.FromHeading(target.OutwardHeading);
-                    double crossIn = MouthSkew(junction, from) + SignalStopSetback - ZebraClear - ZebraDepth;
-                    double crossOut = MouthSkew(junction, target) + SignalStopSetback - ZebraClear - ZebraDepth;
+                    // at the lights from the crosswalk's junction edge; without them from the mouth (#711)
+                    double crossIn = MouthSkew(junction, from) + (stopLine ? SignalStopSetback - ZebraClear - ZebraDepth : 0);
+                    double crossOut = MouthSkew(junction, target) + (stopLine ? SignalStopSetback - ZebraClear - ZebraDepth : 0);
                     Vec2 start = (from.Left + from.Right) * 0.5 + u.Perp * entry + u * Math.Max(0, crossIn);
                     Vec2 end = (target.Left + target.Right) * 0.5 - ut.Perp * outAt + ut * Math.Max(0, crossOut);
                     var line = new List<Vec2>();

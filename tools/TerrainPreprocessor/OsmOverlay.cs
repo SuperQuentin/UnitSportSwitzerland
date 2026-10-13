@@ -38,6 +38,7 @@ public static class OsmOverlay
         "sidewalk", "sidewalk:left", "sidewalk:right", "sidewalk:both",
         "cycleway", "cycleway:left", "cycleway:right", "cycleway:both",
         "turn:lanes", "turn:lanes:forward", "turn:lanes:backward",
+        "maxspeed", "maxspeed:forward", "maxspeed:backward",
     ];
 
     private static readonly HashSet<string> IgnoredHighways =
@@ -55,7 +56,7 @@ public static class OsmOverlay
     public sealed record Row(string Uuid, int Part, double From, double To, long Way, bool SameDir, string Highway,
         string OneWay, string Lanes, string LanesFwd, string LanesBwd, string Width,
         string SidewalkLeft, string SidewalkRight, string CyclewayLeft, string CyclewayRight,
-        string TurnFwd, string TurnBwd, bool Roundabout, bool Tram);
+        string TurnFwd, string TurnBwd, bool Roundabout, bool Tram, string MaxSpeedFwd = "", string MaxSpeedBwd = "");
 
     public sealed record Conflict(string Uuid, int Part, double From, double To, long Way, double E, double N, string Reason);
 
@@ -345,7 +346,10 @@ public static class OsmOverlay
             Metres(t.GetValueOrDefault("width")),
             same ? sl : sr, same ? sr : sl, same ? cl : cr, same ? cr : cl,
             same ? fwdTurn : bwdTurn, same ? bwdTurn : fwdTurn,
-            roundabout, tramCount * 2 >= tram.Length);
+            roundabout, tramCount * 2 >= tram.Length,
+            // the speed limit per direction (#711): maxspeed:forward/backward where OSM splits it, else maxspeed
+            OsmSpeed.Kmh(t.GetValueOrDefault(same ? "maxspeed:forward" : "maxspeed:backward") ?? t.GetValueOrDefault("maxspeed")),
+            OsmSpeed.Kmh(t.GetValueOrDefault(same ? "maxspeed:backward" : "maxspeed:forward") ?? t.GetValueOrDefault("maxspeed")));
     }
 
     private static string Int(string? v) => int.TryParse(v, NumberStyles.None, CultureInfo.InvariantCulture, out int n) ? n.ToString(CultureInfo.InvariantCulture) : "";
@@ -361,19 +365,19 @@ public static class OsmOverlay
     // ---- output --------------------------------------------------------------------------------
 
     public const string Header = "uuid\tpart\tfrom_m\tto_m\tosm_way\tdir\thighway\toneway\tlanes\tlanes_fwd\tlanes_bwd\twidth"
-        + "\tsidewalk_left\tsidewalk_right\tcycleway_left\tcycleway_right\tturn_lanes_fwd\tturn_lanes_bwd\troundabout\ttram";
+        + "\tsidewalk_left\tsidewalk_right\tcycleway_left\tcycleway_right\tturn_lanes_fwd\tturn_lanes_bwd\troundabout\ttram\tmaxspeed_fwd\tmaxspeed_bwd";
 
     public static string Format(List<Row> rows, string pbfName, string tlmName, double minE, double minN, double maxE, double maxN)
     {
         var sb = new StringBuilder();
         sb.Append(CultureInfo.InvariantCulture,
-            $"# osm_overlay v1 osm={pbfName} tlm={tlmName} bbox={minE:F0},{minN:F0},{maxE:F0},{maxN:F0} (c) OpenStreetMap contributors, ODbL\n");
+            $"# osm_overlay v2 osm={pbfName} tlm={tlmName} bbox={minE:F0},{minN:F0},{maxE:F0},{maxN:F0} (c) OpenStreetMap contributors, ODbL\n");
         sb.Append(Header).Append('\n');
         foreach (var r in rows)
             sb.Append(CultureInfo.InvariantCulture,
                 $"{r.Uuid}\t{r.Part}\t{r.From:F1}\t{r.To:F1}\t{r.Way}\t{(r.SameDir ? '+' : '-')}\t{Clean(r.Highway)}\t{r.OneWay}\t{r.Lanes}\t{r.LanesFwd}\t{r.LanesBwd}\t{r.Width}"
                 + $"\t{Clean(r.SidewalkLeft)}\t{Clean(r.SidewalkRight)}\t{Clean(r.CyclewayLeft)}\t{Clean(r.CyclewayRight)}"
-                + $"\t{Clean(r.TurnFwd)}\t{Clean(r.TurnBwd)}\t{(r.Roundabout ? 1 : 0)}\t{(r.Tram ? 1 : 0)}\n");
+                + $"\t{Clean(r.TurnFwd)}\t{Clean(r.TurnBwd)}\t{(r.Roundabout ? 1 : 0)}\t{(r.Tram ? 1 : 0)}\t{r.MaxSpeedFwd}\t{r.MaxSpeedBwd}\n");
         return sb.ToString();
     }
 

@@ -165,6 +165,44 @@ public class LaneDataRegionTests(SignalTestRegionFixture region) : IClassFixture
     }
 
     [Fact]
+    public void At_lights_with_crossing_data_the_crosswalks_go_only_on_the_mapped_arms()
+    {
+        // J3 has sidewalks on its north arm, but OSM maps its only crossing on the west arm (#711)
+        var j3 = region.Junction("J3-");
+        var id = TileId.FromLv95(j3.E, j3.N);
+        double cx = j3.E - id.MinE, cz = id.MaxN - j3.N;
+        var zebras = Zebras(region.Tile(j3.E, j3.N), cx, cz, 30);
+        Assert.Contains(zebras, z => z.Average(q => q.X) < cx - 3);   // on the west arm
+        Assert.DoesNotContain(zebras, z => z.Average(q => q.Z) < cz - 3);   // none on the north arm
+        // a pedestrian signal only where there is a crosswalk: on the west arm
+        var signal = region.Tile(j3.E, j3.N).Signals.MinBy(s => Math.Abs(s.X - cx) + Math.Abs(s.Z - cz))!;
+        var walk = signal.Plan.Groups.Where(g => g.Kind == SignalGroupKind.Pedestrian).ToList();
+        Assert.Single(walk);
+        Assert.True(Math.Abs(Math.Cos(signal.Plan.Arms[walk[0].Arm].Heading) + 1) < 0.1, "the pedestrian group should cross the west arm");
+        Assert.All(signal.Poles.Where(p => (p.Flags & SignalPoleFlags.Pedestrian) != 0), p => Assert.Equal(walk[0].Arm, p.Arm));
+    }
+
+    [Fact]
+    public void At_lights_a_left_turn_with_its_bike_lane_is_guided_and_the_centre_line_is_solid_before_the_stop_line()
+    {
+        // J3 (#711, the user's review): the west and east pockets' left turns go with a left-turn bike lane into exits without an
+        // island: each guided by two dashed lines (the cars' inner edge, between cars and bikes); the north and south ones toward
+        // an island by one. The north arm (one lane each way) has its centre line solid before the stop line
+        var j3 = region.Junction("J3-");
+        var id = TileId.FromLv95(j3.E, j3.N);
+        double cx = j3.E - id.MinE, cz = id.MaxN - j3.N;
+        var paint = region.Tile(j3.E, j3.N).Paint;
+        bool Near(RoadPaint p, double r) => Enumerable.Range(0, p.Vertices.Length / 3)
+            .All(i => Math.Abs(p.Vertices[i * 3] - cx) < r && Math.Abs(p.Vertices[i * 3 + 2] - cz) < r);
+        int guides = paint.Count(p => p.Type == PaintType.WhiteDashed && p.Dash == 1f && p.Gap == 1f && Near(p, 30));
+        Assert.True(guides >= 6, $"{guides} left-turn guides");
+        // the north arm runs north (z smaller); its centre line is on its axis, solid from the stop line 20 m out
+        Assert.Contains(paint, p => p.Type == PaintType.WhiteSolid && p.Shape == PaintShape.Polyline && p.Vertices.Length >= 6
+            && Enumerable.Range(0, p.Vertices.Length / 3).All(i => Math.Abs(p.Vertices[i * 3] - cx) < 0.5 && p.Vertices[i * 3 + 2] < cz - 10)
+            && p.Vertices.Where((_, k) => k % 3 == 2).Max() - p.Vertices.Where((_, k) => k % 3 == 2).Min() > 18);
+    }
+
+    [Fact]
     public void A_crossing_beside_a_tight_corner_runs_diagonal_at_most_30_degrees()
     {
         // J7 has no sidewalks: its zebras come from the data, on the north and east arms beside the tight north-east corner

@@ -41,6 +41,113 @@ public sealed class NetworkBuilder
     /// <summary>Dead ends carried onto a nearby road by <see cref="JoinNearEnds"/> in the last build.</summary>
     public int NearEndsJoined { get; private set; }
 
+    /// <summary>
+    /// Footpaths and car roads (#711, the user's rule: a footpath joining a junction broke it; it simply connects to the
+    /// sidewalk and is ignored): a footpath never splits a car road, never joins its flank and never shares its node, and an
+    /// end left on a carriageway is trimmed back to its edge (under the sidewalk). Null = every link nodes with every other.
+    /// </summary>
+    public Func<RoadLink, bool>? IsFootpath { get; init; }
+
+    /// <summary>The car roads <see cref="IsFootpath"/> keeps footpaths apart from.</summary>
+    public Func<RoadLink, bool>? IsCarRoad { get; init; }
+
+    /// <summary>Footpath ends trimmed back off a carriageway in the last build.</summary>
+    public int FootpathEndsTrimmed { get; private set; }
+
+    /// <summary>
+    /// Footpath ends that meet another footpath's end (a path crossing a street through one of its points, where OSM maps
+    /// the crossing): these keep their node with the street, so the crossing stays (#711).
+    /// </summary>
+    private HashSet<(int LinkId, bool AtStart)> _crossingEnds = [];
+
+    /// <summary>Whether two links never node: a footpath and a car road (<see cref="IsFootpath"/>).</summary>
+    private bool Apart(RoadLink a, RoadLink b) => IsFootpath is not null && IsCarRoad is not null
+        && (IsFootpath(a) && IsCarRoad(b) || IsFootpath(b) && IsCarRoad(a));
+
+    /// <summary>
+    /// Footpath ends near a junction of car roads (#711, the user's review: a footpath joining the junction broke it): only these
+    /// are kept apart; a footpath meeting a street elsewhere keeps its node (OSM's crossing there stays).
+    /// </summary>
+    private HashSet<(int LinkId, bool AtStart)> _nearJunction = [];
+
+    /// <summary>A footpath end within this (m) of a junction of car roads is kept apart from them.</summary>
+    private const double FootpathJunctionReach = 15;
+
+    /// <summary><see cref="Apart"/> for one footpath end: near a car junction, and not a crossing's (<see cref="_crossingEnds"/>).</summary>
+    private bool Apart(RoadLink a, bool aAtStart, RoadLink b, bool bAtStart) => Apart(a, b)
+        && (_nearJunction.Contains((a.Id, aAtStart)) || _nearJunction.Contains((b.Id, bAtStart)))
+        && !_crossingEnds.Contains((a.Id, aAtStart)) && !_crossingEnds.Contains((b.Id, bAtStart));
+
+    /// <summary>
+    /// Finds the footpath ends near a junction of car roads: where three car ends meet, or a car end lands on another car
+    /// road's flank (the network is not noded yet).
+    /// </summary>
+    private void FindNearJunction(RoadNetwork net)
+    {
+        _nearJunction = [];
+        if (IsFootpath is null || IsCarRoad is null) return;
+        var cars = net.Links.Where(l => l.Centreline.Count >= 2 && IsCarRoad(l)).ToList();
+        var index = new SegmentIndex(cars, 16);
+        var carEnds = cars.SelectMany(l => new[] { (l.Id, P: l.First, l.Layer), (l.Id, P: l.Last, l.Layer) }).ToList();
+        var grid = new Dictionary<(long, long), List<int>>();
+        for (int k = 0; k < carEnds.Count; k++)
+        {
+            var key = ((long)Math.Floor(carEnds[k].P.X / 2), (long)Math.Floor(carEnds[k].P.Y / 2));
+            if (!grid.TryGetValue(key, out var cell)) grid[key] = cell = [];
+            cell.Add(k);
+        }
+        var junctions = new List<(Vec2 P, int Layer)>();
+        foreach (var (id, p, layer) in carEnds)
+        {
+            int meeting = 0;
+            long cx = (long)Math.Floor(p.X / 2), cy = (long)Math.Floor(p.Y / 2);
+            for (long dx = -1; dx <= 1; dx++)
+                for (long dy = -1; dy <= 1; dy++)
+                    if (grid.TryGetValue((cx + dx, cy + dy), out var cell))
+                        foreach (int k in cell) if (carEnds[k].Layer == layer && carEnds[k].P.DistanceTo(p) <= SnapTolerance) meeting++;
+            bool onFlank = index.Near(p, SnapTolerance).Any(o => o != id && net.Links[o].Layer == layer
+                && ClosestOnPolyline(net.Links[o].Centreline, p, out double d, out double st) && d <= SnapTolerance
+                && st > SnapTolerance && st < Polyline.Length(net.Links[o].Centreline) - SnapTolerance);
+            if (meeting >= 3 || onFlank) junctions.Add((p, layer));
+        }
+        foreach (var l in net.Links)
+        {
+            if (l.Centreline.Count < 2 || !IsFootpath(l)) continue;
+            foreach (bool atStart in new[] { true, false })
+            {
+                var p = atStart ? l.First : l.Last;
+                if (junctions.Any(j => j.Layer == l.Layer && j.P.DistanceTo(p) <= FootpathJunctionReach)) _nearJunction.Add((l.Id, atStart));
+            }
+        }
+    }
+
+    /// <summary>Finds the footpath ends that meet another footpath end within the snap tolerance.</summary>
+    private void FindCrossingEnds(RoadNetwork net)
+    {
+        _crossingEnds = [];
+        if (IsFootpath is null) return;
+        var ends = new List<(int Id, bool AtStart, Vec2 P, int Layer)>();
+        foreach (var l in net.Links)
+            if (l.Centreline.Count >= 2 && IsFootpath(l)) { ends.Add((l.Id, true, l.First, l.Layer)); ends.Add((l.Id, false, l.Last, l.Layer)); }
+        var cells = new Dictionary<(long, long), List<int>>();
+        for (int i = 0; i < ends.Count; i++)
+        {
+            var key = ((long)Math.Floor(ends[i].P.X / 2), (long)Math.Floor(ends[i].P.Y / 2));
+            if (!cells.TryGetValue(key, out var list)) cells[key] = list = [];
+            list.Add(i);
+        }
+        for (int i = 0; i < ends.Count; i++)
+        {
+            long cx = (long)Math.Floor(ends[i].P.X / 2), cy = (long)Math.Floor(ends[i].P.Y / 2);
+            for (long dx = -1; dx <= 1; dx++)
+                for (long dy = -1; dy <= 1; dy++)
+                    if (cells.TryGetValue((cx + dx, cy + dy), out var list))
+                        foreach (int j in list)
+                            if (ends[j].Id != ends[i].Id && ends[j].Layer == ends[i].Layer && ends[j].P.DistanceTo(ends[i].P) <= SnapTolerance)
+                                _crossingEnds.Add((ends[i].Id, ends[i].AtStart));
+        }
+    }
+
     public sealed record Stats(int Nodes, int Junctions, int Links, int SplitsApplied,
         int CrossingsFound, int EndpointsMerged);
 
@@ -49,8 +156,11 @@ public sealed class NetworkBuilder
         // Crossings first: they create new endpoints, which the T-junction pass then gets to
         // treat like any other endpoint landing on a flank.
         int crossings = SplitAtCrossings ? SplitCrossings(net) : 0;
+        FindCrossingEnds(net);
+        FindNearJunction(net);
         int splits = SplitAtTJunctions ? SplitLinks(net) : 0;
         int merged = BuildNodes(net);
+        TrimFootpathEnds(net);
         return new Stats(net.Nodes.Count, net.Nodes.Count(n => n.IsJunction), net.Links.Count,
             splits, crossings, merged);
     }
@@ -206,6 +316,7 @@ public sealed class NetworkBuilder
                     // position alone is exactly how a motorway gets welded to the lane
                     // running underneath its bridge.
                     if (other.Layer != link.Layer) continue;
+                    if (Apart(link, atStart, other, true) && Apart(link, atStart, other, false)) continue;   // a footpath ends beside the street, it does not join it (#711)
 
                     if (!ClosestOnPolyline(other.Centreline, end, out double distance, out double station))
                         continue;
@@ -242,7 +353,7 @@ public sealed class NetworkBuilder
         {
             if (otherId == link.Id) continue;
             var other = net.Links[otherId];
-            if (other.Layer != link.Layer || other.Centreline.Count < 2) continue;
+            if (other.Layer != link.Layer || other.Centreline.Count < 2 || Apart(link, atStart, other, true) && Apart(link, atStart, other, false)) continue;
             // a dead end only: another end or a flank inside the tolerance is the normal path's
             if (other.First.DistanceTo(end) <= SnapTolerance || other.Last.DistanceTo(end) <= SnapTolerance) return false;
             if (!ClosestOnPolyline(other.Centreline, end, out double distance, out double station)) continue;
@@ -262,6 +373,52 @@ public sealed class NetworkBuilder
         AddCut(cuts, best, bestStation, Polyline.Length(line));
         NearEndsJoined++;
         return true;
+    }
+
+    /// <summary>
+    /// A footpath end lying on a car road's carriageway (OSM ends it on the road's centreline, or the path runs on across the
+    /// road through its node) is trimmed back to where it leaves the carriageway (#711): it meets the sidewalk there, which
+    /// stands over it, or the kerb where there is none. At most 45 % of the path, so a stub is kept.
+    /// </summary>
+    private void TrimFootpathEnds(RoadNetwork net)
+    {
+        FootpathEndsTrimmed = 0;
+        if (IsFootpath is null || IsCarRoad is null) return;
+        var cars = net.Links.Where(l => l.Centreline.Count >= 2 && IsCarRoad(l)).ToList();
+        if (cars.Count == 0) return;
+        var index = new SegmentIndex(cars, 16);
+        bool OnCarriageway(Vec2 p, int layer)
+        {
+            foreach (int id in index.Near(p, 12))
+            {
+                var car = net.Links[id];
+                if (car.Layer != layer) continue;
+                if (ClosestOnPolyline(car.Centreline, p, out double d, out _) && d < car.Profile.HalfWidth) return true;
+            }
+            return false;
+        }
+        const double Step = 0.25;
+        foreach (var path in net.Links)
+        {
+            if (path.Centreline.Count < 2 || !IsFootpath(path)) continue;
+            var line = path.Centreline;
+            var lengths = Polyline.ArcLengths(line);
+            double total = lengths[^1];
+            foreach (bool atStart in new[] { true, false })
+            {
+                double trim = 0;
+                for (double s = 0; s <= total * 0.45; s += Step)
+                {
+                    var p = Polyline.PointAt(line, lengths, atStart ? s : total - s);
+                    if (!OnCarriageway(p, path.Layer)) break;
+                    trim = s + Step;
+                }
+                if (trim <= 0) continue;
+                trim = Math.Min(trim, total * 0.45);
+                if (atStart) path.TrimStart = Math.Max(path.TrimStart, trim); else path.TrimEnd = Math.Max(path.TrimEnd, trim);
+                FootpathEndsTrimmed++;
+            }
+        }
     }
 
     private static bool ClosestOnPolyline(IReadOnlyList<Vec2> pts, Vec2 query,
@@ -339,6 +496,7 @@ public sealed class NetworkBuilder
                 {
                     if (j <= i) continue;
                     if (endpoints[i].Position.DistanceTo(endpoints[j].Position) > SnapTolerance) continue;
+                    if (Apart(net.Links[endpoints[i].LinkId], endpoints[i].End == LinkEnd.Start, net.Links[endpoints[j].LinkId], endpoints[j].End == LinkEnd.Start)) continue;   // #711
                     if (Find(i) != Find(j)) { Union(i, j); merges++; }
                 }
             }

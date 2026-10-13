@@ -78,10 +78,59 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   `PoleAlong` 0.6 m past the mouth, `PoleClear` 0.5 m out from the kerb, stepping 0.4 m out (6
   tries) until clear of carriageways and junctions (`PriorityPlanner.Clearance`), widening strips
   (`OnPavement`) and buildings; foot at the road height plus the kerb where there is a sidewalk.
+  Where the approach's separated path stops at its own line (it has a crosswalk), the main pole
+  stands right of the path, `PoleClear` out from its outer edge on the sidewalk, foot at the
+  profile's height there (the user's rule, #711: not between the waiting riders and the road; a
+  path with no stop line keeps it at the kerb, as a bike head on its own pole would). Sion: 11.
+  A pole never stands on its side's path (`PlacePole` skips it: one did, and the sign pass took
+  its priority sign off the pole); the foot is on the side's profile (`RoadStreetSection.HeightAt`).
+  Where the cars' line stands back behind a crosswalk, both poles stand by the crosswalk on its
+  near side, `PoleBehindCrosswalk` 0.4 m behind its edge, not by the cars' line (the user's
+  review, #711); with no room for that line they stay on its far side (`PoleAlong`).
+- **Riders turn right on red** (the user's rule, #711; SSV Art. 69a, signal 5.18 "Rechtsabbiegen
+  für Radfahrer gestattet": yellow bike and arrow on black, beside the red lamp, right of it; the
+  red then means "no priority" for riders turning right). An approach gets it
+  (`SignalArm.BikeRightOnRed`, `SGNL` arm bit 64, older readers ignore it) where the street
+  directly on its right (the sharpest right turn among `SignalPlan.Turn`'s, not a link inside the
+  junction) has a bike lane or path on the side riders join, and the approach gives riders a line
+  of their own (Art. 69a, the user's choice "both"): a path stopping at its line by a crosswalk, a
+  kerbside bike lane whose cars' line stands back (its yellow line ahead), or a right-turn pocket.
+  Sion: 8 approaches. Drawn by `SignalBuilder.RightOnRedSign`: a black square the size of a lens
+  right against the red lamp's visor, in front of the white band (the user's review), on
+  the bike head where the arm has one, else on the main pole's rightmost car head (the user's
+  choice: always right of red). The bike is `SignalGlyphs.Bike`, shared with the bike lens. Sign
+  only: no game rule reads it yet. Model viewer: "Traffic light - Bike right on red" (two).
+- **The cars' stop line where the kerb's curve begins** (the user's review, #711: in the test region's J3 it stood inside
+  the corner's rounding, missing the point of the turn radius). `CurveStart`: the furthest point of the junction's outline
+  on the arm's kerb line; beside a widening the corner patch's arc (`ArcOf`'s tangent point, `CurveStops` before the
+  pockets are painted). The line stands no nearer than that; with no crosswalk and no riders crossing the mouth
+  (`RidersCross`: two arms nearly opposite with a lane or path on the side facing it) it moves up to it (no 3.6 m past
+  it). A pocket's bike box or advanced line, or a bike lane beside a right pocket, keeps the usual setback. Sion: 29.
+- **The cars' stop line behind a crosswalk** (the user's review, #711: 0.3 m was too close):
+  `StopBehindCrosswalk` 2 m further back where the approach has a crosswalk and `StopBackRoom`
+  15 m left behind the moved line (`PlanStopBacks`, before the pockets; `StopBack(node, arm)`).
+  The crosswalk stays at `SignalStopSetback`; the riders' lines on the right (the path's yellow
+  line, a kerbside bike lane's own yellow line, the cars' bar stopping at its edge: an advanced
+  bike stop line, as SSV Art. 69a asks for bikes turning right on red) stand `RiderLineBehindPole`
+  0.5 m behind the pole (`RiderStop`), the left pocket's advanced line and bike box and a right
+  pocket's layout (b) line stay. The path's line lies level at the path's height on the street's
+  final pieces (`_pathLines`, `PieceHeight`): sampled from the source line at each end, with the
+  height 0.1 m in, it lay 4 cm under a path with no verge. Pocket lines,
+  arrows, the lane records, the solid centre line and the exit's hatch follow the cars' line.
+  Sion: 24 of 63 approaches. A sign on a signal pole (`OnSignalPole`) stays there: the yielding
+  arm's sign moved back with its teeth (`MoveYieldBack`), and `MoveSignsOffPaths`, left it.
   The right pole of an approach is `Main` (main head, pocket arrows, flashers), the left one
-  `Second` only when the approach has a pocket (main head and left arrow, never the right
-  arrow); both carry the arm's pedestrian head, facing across. No pole on a link inside a
-  junction. The approach's 3.02/3.03 (fallback) moves onto its main pole, plate top 2.25 m.
+  `Second` only when the approach has more than one lane: a pocket, or lanes of its own from OSM's
+  lane data (#711: those had none) (main head and left arrow, never the right
+  arrow); both carry the arm's pedestrian head, facing across. Where no spot beside the kerb is
+  clear (another road, a widening strip), the pole is tried `PoleBackStep` 1.5 m further out
+  along the arm, up to 6 m (#711: 4 Sion approaches and one in the test region had no main
+  pole). `--signal-check` counts approaches without a main pole or second head and fails on
+  any (tier 0 `Every_approach_has_its_poles`). No pole on a link inside a
+  junction. The approach's 3.02/3.03 (fallback) moves onto its main pole, plate top 2.25 m; where
+  the pole carries a bike head (no room below), on top, 0.15 m above the car heads (the user's
+  review, #711; `CarHeadsTop` mirrors `SignalBuilder`). Marked `PropFlags.OnSignalPole` (bit 1):
+  later sign passes leave it. Sion: 5 of 29 on top.
   `SGNL` version 2 stores the poles (`SignalPole`, 22 B); version 1 still reads. Geneva: 1,489
   poles, 259 rejected (no clear spot), 390 signs moved. Runtime: `SignalBuilder` (worker) bakes
   RAL 7001 poles, RAL 9017 housings, black backboards with a white border and brackets into the
@@ -164,7 +213,7 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   3 s lead green, #349) on approaches with a separated path (read from the street's built end
   piece: the line's own sides do not know a street's paths), or a painted lane kerbside of a
   right pocket (layout (a)); its head is a half-size three-lens head (100 mm lenses,
-  `Shape.Bike`) on the main pole, lower edge 1.05 m, below the priority sign. Screenshots from
+  `Shape.Bike`) on the main pole, lower edge 1.2 m (middle lens at a rider's shoulder, #711; was 1.05), below the priority sign. Screenshots from
   above and from the driver's seat at LV95 2499901,1118599. #406: the left-turn bike lane's edges
   run on to its own line (box or advanced line), solid over the `TurnSolid` 10 m before the cars'
   line; where it has an advanced line the cars' stop line stops at its edges instead of crossing it.

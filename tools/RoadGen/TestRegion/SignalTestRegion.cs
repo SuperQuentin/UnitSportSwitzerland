@@ -24,6 +24,13 @@ public static class SignalTestRegion
     public const int MinTileE = 2910, MaxTileE = 2917, MinTileN = 1321, MaxTileN = 1323;
     /// <summary>The junctions' row, LV95 N: the middle of the tile row N 1322.</summary>
     public const double RowN = 1322500;
+    /// <summary>The T without lights in town (#711), LV95 E on <see cref="RowN"/>: a split lead-in from the west.</summary>
+    public const double TownTeeE = 2911750;
+    /// <summary>
+    /// The twins (#711 phase 4): the same T in town, LV95 E on <see cref="TwinRowN"/>, once with lights and once without. Their
+    /// paint differs only in what <see cref="UnitSport.Tools.RoadGen.Junctions.JunctionRules"/> lists.
+    /// </summary>
+    public const double TwinRowN = 1321400, TwinLitE = 2910750, TwinUnlitE = 2912250;
     /// <summary>The ground, metres (as the fixture courses).</summary>
     public const double Ground = 500;
     /// <summary>Region centre: the manifest's suggested origin.</summary>
@@ -71,12 +78,14 @@ public static class SignalTestRegion
         // the main road A, west to east through every junction: a 10 m cantonal through road at the two
         // ideal crossroads, 8 m from the mismatched one on; split where TLM would (junctions, attribute changes)
         double j1 = 2910500, j2 = 2911500, j3 = 2912500, j3b = 2913500, j4 = 2914500, j5a = 2915450, j5b = 2915550, j6 = 2916500, j7 = 2917500;
+        const double jt = TownTeeE;   // a T without lights in town (#711), east of J2
         void A(string id, double from, double to, string objektart, string sidewalk = "") =>
             lines.Add(new Line(id, objektart, "Durchgangsstrasse", "Kanton", [(from, n), (to, n)], "secondary", sidewalk));
         A("A0", 2910050, j1, "10m Strasse");
         A("A1", j1, 2910900, "10m Strasse");
         A("A2", 2910900, j2, "10m Strasse", "yes");
-        A("A3", j2, 2911900, "10m Strasse", "yes");
+        A("A3", j2, jt, "10m Strasse", "yes");
+        A("A3b", jt, 2911900, "10m Strasse", "yes");
         A("A4", 2911900, j3, "8m Strasse");
         A("A5", j3, j3b, "8m Strasse");
         A("A6", j3b, j4, "8m Strasse");
@@ -97,16 +106,23 @@ public static class SignalTestRegion
         junctions.Add(new Junction("J1-ideal-lanes", j1, n, "ideal crossroads, painted bike lanes, bike box (W) and advanced lines",
             Arms("L|T|R", "L|T|R", "L|T|R", "L|T|R")));
 
-        // 2. the same crossroads in town (OSM maps sidewalks): separated bike paths
+        // 2. the same crossroads in town (OSM maps sidewalks): separated bike paths. In town (50 km/h, no OSM speed) no
+        // approach gets a right-turn pocket (#711, the user's rule: only on roads faster than 50 km/h)
         Cross("J2S", j2, n - 400, n, "10m Strasse", "Verbindungsstrasse", "secondary", sidewalk: "yes");
         Cross("J2N", j2, n, n + 400, "10m Strasse", "Verbindungsstrasse", "secondary", sidewalk: "yes");
-        junctions.Add(new Junction("J2-ideal-paths", j2, n, "ideal crossroads in town, separated bike paths: bike signals, square crossings",
-            Arms("L|T|R", "L|T|R", "L|T|R", "L|T|R")));
+        junctions.Add(new Junction("J2-ideal-paths", j2, n, "ideal crossroads in town, separated bike paths: bike signals, square crossings, no right pockets at 50 km/h",
+            Arms("L|TR", "L|TR", "L|TR", "L|TR")));
+
+        // 2t. a T without lights in town (#711): a 6 m road gives way to the main road from the north. The main road's left
+        // pocket from the west splits its lead-in between both edges (#700), so its corners round a widened kerb on both
+        // sides of the west arm: the sidewalk corners follow those kerb arcs. No designed junction: no lights
+        Cross("JTN", jt, n, n + 300, "6m Strasse", "Verbindungsstrasse", "tertiary", sidewalk: "yes");
 
         // 3. mismatched room. W: a long arm, L|T|R. E: houses 1.5 m from the kerb from 68 m out (the corner radius of #682 takes ~16 m of the arm): only the
         // shortest left pocket (20 + 20 m) fits, and a right pocket reaches at most 8 m past the left's storage (#682):
         // L|T|R. N: houses 1 m from the kerb from the corner on: no room for a widening, one lane. S: a 6 m
-        // road 52 m long to a T where it gives way: too short for a left pocket, long enough for a right.
+        // road 52 m long to a T where it gives way: too short for a left pocket, long enough for a right. W: the houses beside the
+        // north road give its last metres sidewalks, a street in town (50 km/h): no right pocket (#711), L|TR.
         Cross("J3N", j3, n, n + 400, "8m Strasse", "Verbindungsstrasse", "tertiary");
         Cross("J3S", j3, n - 52, n, "6m Strasse", "k_W", "tertiary");
         lines.Add(new Line("J3D0", "6m Strasse", "k_W", "Gemeinde", [(j3 - 300, n - 52), (j3, n - 52)], "tertiary"));
@@ -119,7 +135,7 @@ public static class SignalTestRegion
         boxes.Add(new Box(j3 - 17, n + 55, j3 - 5, n + 75, 12));
         boxes.Add(new Box(j3 - 17, n + 78, j3 - 5, n + 100, 9));
         junctions.Add(new Junction("J3-mismatch", j3, n, "mismatched room: long arm, houses at the kerb, a short arm",
-            Arms("L|T|R", "L|T|R", "LT|R", "LTR")));
+            Arms("L|TR", "L|T|R", "LT|R", "LTR")));
 
         // 3b. a narrower road class: a 4 m road (no pockets on that class) meets an 8 m and a 6 m road. The 6 m
         // road's left pocket has no through lane to carry on into the 4 m road (#123: no main road out), so
@@ -172,13 +188,25 @@ public static class SignalTestRegion
             Rows: [new OsmRow(0, 400, Lanes: "4")]));
         lines.Add(new Line("J7N", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(j7, n), (j7, n + 400)], "secondary",
             Rows: [new OsmRow(0, 400, Lanes: "4")]));
+        // 8. the twins (#711 phase 4): the same T twice in town, a 10 m main road with sidewalks and a 4 m road joining from the
+        // north (a class with no pockets, so planning is alike: the main road's left pocket from the west at both), once with
+        // lights. Each main road is its own line from a dead end 650 m west to one 650 m east, nothing else near
+        foreach (var (id, e) in new[] { ("TA", TwinLitE), ("TB", TwinUnlitE) })   // ids whose hash gives both mains the same path layout (5)
+        {
+            lines.Add(new Line(id + "W", "10m Strasse", "Durchgangsstrasse", "Kanton", [(e - 650, TwinRowN), (e, TwinRowN)], "secondary", "yes"));
+            lines.Add(new Line(id + "E", "10m Strasse", "Durchgangsstrasse", "Kanton", [(e, TwinRowN), (e + 650, TwinRowN)], "secondary", "yes"));
+            Cross(id + "N", e, TwinRowN, TwinRowN + 300, "4m Strasse", "k_W", "unclassified", sidewalk: "yes");
+        }
+        junctions.Add(new Junction("J8-twin-lights", TwinLitE, TwinRowN, "the twins' T with lights (the other, 1.5 km east, has none)",
+            Arms(null, null, null, null)));
         junctions.Add(new Junction("J7-double-left", j7, n, "a double left pocket from lanes:forward=3 and turn:lanes; no left pocket where OSM marks none",
             Arms("L|L|TR", "T", "LT|TR", "LT|TR")));
         // pedestrian crossings from OSM (#700): J7 is lit and has no sidewalks, so only the data draws its zebras, the ones beside
-        // the tight north-east corner diagonal; the T south of J3 has no lights: zebras on two arms, the unmarked one on its east arm none
+        // the tight north-east corner diagonal; the T south of J3 has no lights: zebras on two arms, the unmarked one on its east arm none.
+        // J3 maps one crossing, on its west arm: its crosswalks follow the data, none on the north arm's sidewalks (#711)
         var crossings = new List<CrossingNode>
         {
-            new("A13", 8, "zebra"), new("J7N", 8, "zebra"),
+            new("A13", 8, "zebra"), new("J7N", 8, "zebra"), new("A4", 592, "traffic_signals"),
             new("J3S", 6, "zebra"), new("J3D0", 294, "marked"), new("J3D1", 6, "unmarked"),
         };
         return new Design(lines, boxes, junctions, crossings);

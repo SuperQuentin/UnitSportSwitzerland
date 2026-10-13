@@ -128,6 +128,7 @@ public enum RoadAttrFlags : ushort
     OnStreet = 1 << 8,     // railway: TLM auf_strasse, the track runs in a street (#124)
     Embedded = 1 << 9,     // railway piece inside a carriageway: no ballast, no raised rails, RailGroove paint (#124)
     PavedBed = 1 << 10,    // tram track in a town, outside any carriageway: a paved bed, no ballast, flush rails as RailGroove paint (#119)
+    LoweredKerbs = 1 << 11, // every kerb of this piece's sides is sloped: a crossing's kerb ramp (#711)
 }
 
 /// <summary>Bike provision on one side of a carriageway (#120).</summary>
@@ -339,6 +340,7 @@ public enum PropFlags : ushort
 {
     None = 0,
     Solid = 1 << 0,  // gets collision
+    OnSignalPole = 1 << 1,  // a priority sign moved onto a traffic signal's pole (#350, #711): later passes leave it there
 }
 
 /// <summary>

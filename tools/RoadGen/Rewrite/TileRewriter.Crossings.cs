@@ -31,7 +31,7 @@ public static partial class TileRewriter
     /// </summary>
     private static void EmitCrossing(Dictionary<TileId, List<RoadPaint>> paint, Source source, Vec2 mid, Vec2 u, Vec2 right,
         double stopAt, double lo, double hi, RoadSide rightSide, RoadSide leftSide, Dictionary<TileId, List<RoadAreaProp>> areas, SignalStats stats, Func<double, double>? leftEdgeAt = null,
-        double insetLeft = 0, double insetRight = 0, (double From, double To)? gap = null)
+        double insetLeft = 0, double insetRight = 0, (double From, double To)? gap = null, int linkId = -1, double? riderStop = null)
     {
         static double Strip(RoadSide s) => s.HasTrack ? (s.VergeDm + s.BikeDm + s.BufferDm) / 10.0 : 0;
         double pathR = Strip(rightSide), pathL = Strip(leftSide);
@@ -73,6 +73,15 @@ public static partial class TileRewriter
             Quad(s0 - shift, s1 - shift, l, l + ZebraBar, lift);
         }
         if (verts.Count == 0) return;
+        // the kerbs either side are sloped where the walkers cross (#711): the bars' stretch of the street, and the mouth when they
+        // start near it, half a metre on either way
+        if (linkId >= 0)
+        {
+            var at = new List<Vec2>();
+            for (int k = 0; k + 2 < verts.Count; k += 3) at.Add(new Vec2(source.Tile.MinE + verts[k], source.Tile.MaxN - verts[k + 2]));
+            if (s0 < 1.5) at.Add(mid);
+            (_ramps ??= []).Add(new KerbRamp(linkId, at, 0.6));
+        }
         Get(paint, source.Tile).Add(new RoadPaint
         {
             Shape = PaintShape.Triangles, Type = PaintType.YellowSolid, Rgba = PaintEmitter.Yellow, Vertices = verts.ToArray(), Indices = index.ToArray(),
@@ -96,19 +105,28 @@ public static partial class TileRewriter
                 });
             }
         }
-        Cut(rightSide, _ => hi, 1);
-        Cut(leftSide, LeftAt, -1);
+        if (linkId < 0)   // (#711: with a ramp the street's own path takes the grass strips' width there)
+        {
+            Cut(rightSide, _ => hi, 1);
+            Cut(leftSide, LeftAt, -1);
+        }
         // the approach's path stops before the bars: a yellow line across it, the cars' line's distance out
         if (rightSide.HasTrack && pathR > 0)
         {
-            double along = stopAt + BikeStopLine * 0.5;
+            double along = (riderStop ?? stopAt) + BikeStopLine * 0.5;   // behind the pole where it stands at the crosswalk (#711)
             double from = hi + rightSide.VergeDm / 10.0, to = hi + (rightSide.VergeDm + rightSide.BikeDm) / 10.0;
-            float lift = RoadStreetSection.HeightAt(rightSide, (float)(rightSide.VergeDm / 10.0 + 0.1));
-            Get(paint, source.Tile).Add(new RoadPaint
+            float lift = RoadStreetSection.TrackHeight(rightSide);   // the path's own height (#711: 0.1 m in, a path with no verge read its sloped kerb)
+            // (#711) level across, as the street's side stands, and clear of the sloped kerb where a crossing lowers it; once the
+            // street's pieces are final it takes their height (they are draped on their own: on the line's own it lay 4 cm under the path)
+            float axisY = source.SampleHeight(mid + u * along);
+            double lineFrom = Math.Max(from + 0.1, hi + RoadStreetSection.SlopedKerbRun + 0.05);
+            var line = new RoadPaint
             {
                 Shape = PaintShape.Polyline, Type = PaintType.StopLine, Rgba = PaintEmitter.Yellow, Width = BikeStopLine,
-                Vertices = Local(source.Tile, [mid + u * along + right * (from + 0.1), mid + u * along + right * (to - 0.1)], source.SampleHeight, lift),
-            });
+                Vertices = Local(source.Tile, [mid + u * along + right * lineFrom, mid + u * along + right * (to - 0.1)], _ => axisY, lift),
+            };
+            Get(paint, source.Tile).Add(line);
+            if (linkId >= 0) (_pathLines ??= []).Add((line, linkId, mid + u * along, lift));
             stats.PathStopLines++;
         }
     }
@@ -120,10 +138,12 @@ public static partial class TileRewriter
     /// The left turn of arm <paramref name="arm"/> through the junction (#682): one dashed white line (SSV guide line, 0.15 m,
     /// 1 m / 1 m), the inner edge of its lane, from the pocket's left edge at the mouth round to the exit lane of the arm on its
     /// left, ending where that lane starts (past the island, <paramref name="islandArms"/> gives the hatch's width there) and
-    /// arriving along the arm, so the car is led to the right of the island, not into it. Drawn only where the exit has an island.
+    /// arriving along the arm, so the car is led to the right of the island, not into it. Drawn where the exit has an island, or
+    /// where a left-turn bike lane turns with the cars (#711, the user's rule: several lanes turning alike; from <paramref name="exitArms"/>,
+    /// ending at the exit's crosswalk edge). Returns the exit arm it leads into, -1 none.
     /// </summary>
-    private static void EmitLeftGuides(Dictionary<TileId, List<RoadPaint>> paint, TileId home, Junction junction, int arm,
-        ApproachLayout? layout, List<(Vec2 At, float Height)> anchors, Dictionary<int, IslandExit> islandArms)
+    private static int EmitLeftGuides(Dictionary<TileId, List<RoadPaint>> paint, TileId home, Junction junction, int arm,
+        ApproachLayout? layout, List<(Vec2 At, float Height)> anchors, Dictionary<int, IslandExit> islandArms, Dictionary<int, IslandExit> exitArms)
     {
         // no pocket: the guide starts at the through lane's left edge, the centre line side (where the left turn shares the lane)
         var lane = layout?.LeftPocketLane ?? new ApproachLayout.Lane(0, 0);
@@ -138,31 +158,38 @@ public static partial class TileRewriter
             double dot = Vec2.FromHeading(junction.Arms[k].OutwardHeading).Dot(-u.Perp);
             if (dot > best) { best = dot; to = k; }
         }
-        if (to < 0 || !islandArms.TryGetValue(to, out var exit)) return;
+        if (to < 0) return -1;
+        bool island = islandArms.TryGetValue(to, out var exit);
+        if (!island && (layout?.LeftBikeLane is null || !exitArms.TryGetValue(to, out exit))) return -1;
         double lead = exit.Hatch;
         var target = junction.Arms[to];
         var ut = Vec2.FromHeading(target.OutwardHeading);
         var mid = (target.Left + target.Right) * 0.5;
         // the lane's left edge at the mouth, and the exit lane's inner edge at the target's mouth (the departing side is -ut.Perp)
         // the turn starts past the island of its own arm, and ends where the island at its exit ends, to the right of it
-        double beyondOwn = islandArms.ContainsKey(arm) ? IslandInsideM + 0.3 : 0, beyondExit = IslandInsideM + 0.3;
+        double beyondOwn = islandArms.ContainsKey(arm) ? IslandInsideM + 0.3 : 0, beyondExit = island ? IslandInsideM + 0.3 : 0;
+        // without an island it runs on straight from the mouth to the exit's crosswalk edge, as it leaves its own (#711)
+        double exitEdge = island ? 0 : GuideEdge(junction, to);   // the exit's crosswalk edge, else its stop line (#711)
         // the inner edge of the turn, and where a bike lane runs at the entry (the left-turn bike lane) and at the exit, its outer edge too
+        // (#711, the user's review) on an arm with no crosswalk nor island the curve itself runs out to the stop line
+        bool openIn = !islandArms.ContainsKey(arm) && _crosswalkArms?.Contains((junction.NodeId, arm)) == false, openOut = !island && _crosswalkArms?.Contains((junction.NodeId, to)) == false;
         void Guide(double entryAt, double exitAt)
         {
-            Vec2 start = (from.Left + from.Right) * 0.5 + u.Perp * entryAt - u * beyondOwn;
-            Vec2 end = mid - ut.Perp * exitAt - ut * beyondExit;
+            Vec2 start = (from.Left + from.Right) * 0.5 + u.Perp * entryAt + u * (openIn ? GuideEdge(junction, arm) : -beyondOwn);
+            Vec2 end = mid - ut.Perp * exitAt + ut * (openOut ? exitEdge : -beyondExit);
             // tangent to the way in (along -u) and to the way out (along ut): the control is where their lines meet
             double den = (-u).Cross(ut);
             Vec2 control = Math.Abs(den) < 1e-6 ? junction.Centre : start + (-u) * ((end - start).Cross(ut) / den);
             var line = new List<Vec2>();
-            // straight from the crosswalk's junction edge to where the curve starts
-            double crosswalkEdge = MouthSkew(junction, from) + SignalStopSetback - ZebraClear - ZebraDepth;
-            line.Add((from.Left + from.Right) * 0.5 + u.Perp * entryAt + u * crosswalkEdge);
+            // straight from the crosswalk's junction edge (else the stop line, #711) to where the curve starts
+            double crosswalkEdge = GuideEdge(junction, arm);
+            if (!openIn) line.Add((from.Left + from.Right) * 0.5 + u.Perp * entryAt + u * crosswalkEdge);
             for (int k = 0; k <= 16; k++)
             {
                 double t = k / 16.0, mt = 1 - t;
                 line.Add(start * (mt * mt) + control * (2 * mt * t) + end * (t * t));
             }
+            if (exitEdge > 0 && !openOut) line.Add(end + ut * exitEdge);
             Get(paint, home).Add(new RoadPaint
             {
                 Shape = PaintShape.Polyline, Type = PaintType.WhiteDashed, Rgba = PaintEmitter.White, Width = PaintEmitter.LineWidth,
@@ -173,6 +200,7 @@ public static partial class TileRewriter
         double shift = layout?.Shift ?? 0;
         Guide((layout?.LeftPocketLane is null ? (layout?.Through().From ?? 0) + 0.1 : lane.From + 0.1) - shift, lead);
         if (layout?.LeftBikeLane is { } bikeLane && exit.Bike) Guide(bikeLane.From - shift, lead + exit.Lane);   // between the car turn lane and the bike lane
+        return to;
     }
 }
 
