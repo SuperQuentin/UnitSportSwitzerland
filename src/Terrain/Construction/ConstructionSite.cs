@@ -101,11 +101,12 @@ public readonly record struct HoardingRun(Vector2 A, Vector2 B);
 /// <summary>
 /// The excavation a site is dug into (#619), in the SITE frame (x along the plan box's <c>AxisU</c>,
 /// z along <c>AxisV</c>, from its centre). <see cref="Area"/> is the hole: the plan box and a working
-/// margin round it, and on the street side the <see cref="Lane"/> the machines' ramp runs down,
-/// along the front wall, from its top at the <see cref="TopEnd"/> end of the lane (+1: the end at the
-/// lane's greater x or z) to the pit's floor. <see cref="Basements"/> storeys go below the ground.
+/// margin round it, and along one wall the <see cref="Lane"/> the machines' ramp runs down (the
+/// street side's wherever the ground there is free; <see cref="Side"/> is that wall's outward normal),
+/// from its top at the <see cref="TopEnd"/> end of the lane (+1: the end at the lane's greater x or z)
+/// to the pit's floor. <see cref="Basements"/> storeys go below the ground.
 /// </summary>
-public sealed record SitePit(Rect2D Area, Rect2D Lane, bool LaneAlongX, int TopEnd, int Basements)
+public sealed record SitePit(Rect2D Area, Rect2D Lane, bool LaneAlongX, int TopEnd, int Basements, Vector2 Side)
 {
     /// <summary>How far the lane runs, m: the ramp and the flat at its foot.</summary>
     public float LaneLength => LaneAlongX ? Lane.Width : Lane.Depth;
@@ -234,9 +235,30 @@ public static class ConstructionSites
         Vector2 front, Vector2 along, float gateAlong, Func<Vector2, bool> blocked)
     {
         if (phase != SitePhase.Foundations && !(phase == SitePhase.Shell && built <= PitOpenUpTo)) return null;
+        // the lane along the street side; where a road or a neighbour has that ground, along a side
+        // (the one toward the gate first, its ramp coming up at its street end), else the back.
+        // A lane too short for the pit's depth even at the steepest ramp made gives way to the next one
+        // long enough, then to the longest lane there is (a slope may still take the pit deeper, and
+        // PitPlans leaves out a ramp it cannot make)
+        int toGate = Math.Abs(gateAlong) > 0.5f ? Math.Sign(gateAlong) : 1;
+        float drop = Basements(key, box, target) * Storey + 0.3f;
+        SitePit? longest = null;
+        foreach (var side in new[] { front, along * toGate, -along * toGate, -front })
+        {
+            if (PitOn(key, box, built, target, small, side, front, along, gateAlong, blocked) is not { } pit) continue;
+            if (pit.LaneLength >= drop / PitPlans.MaxGrade + PitPlans.FootRoom) return pit;
+            if (longest == null || pit.LaneLength > longest.LaneLength) longest = pit;
+        }
+        return longest;
+    }
+
+    /// <summary>The pit with its ramp's lane along the wall facing <paramref name="side"/>, or null where it cannot be dug.</summary>
+    private static SitePit? PitOn(string key, PlanBox box, int built, int target, bool small, Vector2 side,
+        Vector2 front, Vector2 along, float gateAlong, Func<Vector2, bool> blocked)
+    {
         float hw = box.Width / 2, hd = box.Depth / 2, m = PitMargin, lw = small ? PitLaneSmall : PitLane;
         var area = new Rect2D(-hw - m, -hd - m, hw + m, hd + m);
-        float fu = front.Dot(box.AxisU), fv = front.Dot(box.AxisV);
+        float fu = side.Dot(box.AxisU), fv = side.Dot(box.AxisV);
         bool alongX = Math.Abs(fv) > 0.5f;
         Rect2D lane;
         if (!alongX)
@@ -249,24 +271,42 @@ public static class ConstructionSites
             area = fv > 0 ? area with { Z1 = area.Z1 + lw } : area with { Z0 = area.Z0 - lw };
             lane = fv > 0 ? new Rect2D(area.X0, hd + m, area.X1, hd + m + lw) : new Rect2D(area.X0, -hd - m - lw, area.X1, -hd - m);
         }
-        // the ramp comes up at the end nearer the gate, so a machine from the gate has the shorter way round
-        float axis = alongX ? along.Dot(box.AxisU) : along.Dot(box.AxisV);
-        int side = Math.Abs(gateAlong) > 0.5f ? Math.Sign(gateAlong) : Fnv.Unit(key + "|site|ramp") < 0.5 ? -1 : 1;
-        int top = side * Math.Sign(axis);
+        int top;
+        var laneAxis = alongX ? box.AxisU : box.AxisV;
+        if (Math.Abs(side.Dot(front)) > 0.5f)
+        {
+            // along the street side or the back: the ramp comes up at the end nearer the gate, so a
+            // machine from the gate has the shorter way round
+            int end = Math.Abs(gateAlong) > 0.5f ? Math.Sign(gateAlong) : Fnv.Unit(key + "|site|ramp") < 0.5 ? -1 : 1;
+            top = end * Math.Sign(along.Dot(laneAxis));
+        }
+        // along a side: it comes up at its street end, into the yard
+        else top = Math.Sign(front.Dot(laneAxis));
 
         // inside the tile, with the seam margin
         float max = (float)ChunkFormat.TileSizeM - PitSeam;
         foreach (var c in InPlan(box, area).Corners())
             if (c.X < PitSeam || c.Y < PitSeam || c.X > max || c.Y > max) return null;
         // nothing dug under a road or a neighbour: the ring round the building, a metre apart
-        for (float x = area.X0; x <= area.X1 + 0.01f; x += 1f)
-            for (float z = area.Z0; z <= area.Z1 + 0.01f; z += 1f)
+        // (both edges sampled: a metre or less apart, from one to the other)
+        int nx = Math.Max(1, (int)MathF.Ceiling(area.Width)), nz = Math.Max(1, (int)MathF.Ceiling(area.Depth));
+        for (int i = 0; i <= nx; i++)
+            for (int j = 0; j <= nz; j++)
             {
-                float px = Math.Min(x, area.X1), pz = Math.Min(z, area.Z1);
+                float px = area.X0 + area.Width * i / nx, pz = area.Z0 + area.Depth * j / nz;
                 if (Math.Abs(px) < hw + 0.5f && Math.Abs(pz) < hd + 0.5f) continue;
                 if (blocked(box.Center + box.AxisU * px + box.AxisV * pz)) return null;
             }
-        return new SitePit(area, lane, alongX, top, Basements(key, box, target));
+        return new SitePit(area, lane, alongX, top, Basements(key, box, target),
+            new Vector2(Math.Abs(fu) > 0.5f ? Math.Sign(fu) : 0, Math.Abs(fv) > 0.5f ? Math.Sign(fv) : 0));
+    }
+
+    /// <summary>Which wall a pit's lane is along, seen from the street: 0 the front, 1 a side, 2 the back; -1 no pit.</summary>
+    public static int LaneWall(SitePit? pit, PlanBox box, Vector2 front)
+    {
+        if (pit == null) return -1;
+        float d = pit.Side.Dot(new Vector2(front.Dot(box.AxisU), front.Dot(box.AxisV)));
+        return d > 0.5f ? 0 : d < -0.5f ? 2 : 1;
     }
 
     /// <summary>The ground kept clear past a pit's ramp top, in the site frame.</summary>
@@ -312,13 +352,16 @@ public static class ConstructionSites
 
         // ---- the site: deep at the front for the yard, narrow round the rest -------------------
         float size = Math.Clamp((box.Area - 150f) / 1500f, 0f, 1f);
-        float frontM = (small ? 8f : 14f + 8f * size) + 2f * (float)R("front-margin")
-            // the ramp's lane takes a strip of the yard: the yard moves out by as much
-            + (pit == null ? 0f : pit.LaneWidth);
+        // the ramp's lane takes a strip of the yard on its wall's side: the site grows by as much there
+        int laneWall = LaneWall(pit, box, front);
+        float laneW = pit?.LaneWidth ?? 0f;
+        float frontM = (small ? 8f : 14f + 8f * size) + 2f * (float)R("front-margin") + (laneWall == 0 ? laneW : 0f);
         float sideM = 4.5f + 2f * (float)R("side-margin") + 3f * size;
-        // a pit's ramp comes up at a side: room there for a machine to come round and turn into it
-        if (pit != null) sideM = Math.Max(sideM, small ? PitSideSmall : PitSide);
-        float backM = 3f + (float)R("back-margin");
+        // a ramp along the front or the back comes up at a side: room there for a machine to come
+        // round and turn into it
+        if (laneWall is 0 or 2) sideM = Math.Max(sideM, small ? PitSideSmall : PitSide);
+        if (laneWall == 1) sideM += laneW;
+        float backM = 3f + (float)R("back-margin") + (laneWall == 2 ? laneW : 0f);
         var area = new SiteRect(box.Center + front * ((frontM - backM) / 2), along,
             2 * hs + 2 * sideM, 2 * hf + frontM + backM);
 

@@ -28,6 +28,8 @@ public sealed class PitPlan
     public Vector2 Down { get; set; }
     public float RampLength { get; set; }
     public float Grade { get; set; }
+    /// <summary>Whether the pit has its ramp: not where a slope took it too deep for its lane (0 <see cref="RampLength"/>).</summary>
+    public bool HasRamp => RampLength > 0;
     public List<PitBridge> Bridges { get; } = new();
     /// <summary>Walkable slopes, collision only: from the ground onto each footbridge's deck.</summary>
     public List<ShellRamp> Ramps { get; } = new();
@@ -89,15 +91,20 @@ public static class PitPlans
         var (outer, inner, down) = RampTop(pit);
         float hOuter = ground(outer.X, outer.Y), hInner = ground(inner.X, inner.Y);
         float drop = Math.Max(hOuter, hInner) - plan.Floor;
-        plan.Grade = Math.Clamp(drop / Math.Max(1f, pit.LaneLength - FootRoom), RampGrade, MaxGrade);
+        // 1 in 4 with room at its foot; steeper where the lane is short, up to MaxGrade, giving up the
+        // room at the foot before the grade
+        plan.Grade = Math.Max(RampGrade, drop / Math.Max(1f, pit.LaneLength - FootRoom));
+        if (plan.Grade > MaxGrade) plan.Grade = Math.Max(MaxGrade, drop / Math.Max(1f, pit.LaneLength - 1f));
         plan.RampLength = drop / plan.Grade;
+        // a pit a slope took too deep for its lane: no ramp at all, rather than a wall to drive at
+        if (plan.Grade > MaxGrade + 1e-4f) plan.RampLength = 0;
         plan.TopOuter = new Vector3(outer.X, hOuter, outer.Y);
         plan.TopInner = new Vector3(inner.X, hInner, inner.Y);
         plan.Down = down;
         // the opening the ramp comes up through: no pile and no rail across it
         var mouth = (outer + inner) / 2;
         float mouthHalf = pit.LaneWidth / 2;
-        bool InMouth(Vector2 p) => (p - mouth).Dot(down) > -0.5f && (p - mouth).Dot(down) < 0.5f
+        bool InMouth(Vector2 p) => plan.HasRamp && (p - mouth).Dot(down) > -0.5f && (p - mouth).Dot(down) < 0.5f
             && Math.Abs((p - mouth).Dot(new Vector2(-down.Y, down.X))) < mouthHalf + 0.05f;
 
         // ---- footbridges over a shell's trench: the way onto its ground floor --------------------
@@ -197,6 +204,7 @@ public static class PitPlans
         }
 
         // ---- the way in, for the check: on the ramp's top, down it, along the floor beside the slab
+        if (!plan.HasRamp) return plan;
         float mouthY = (hOuter + hInner) / 2;
         var onTop = mouth + down * EntryOnRamp;
         plan.Route.Add(new Vector3(onTop.X, mouthY - plan.Grade * EntryOnRamp, onTop.Y));
@@ -240,10 +248,9 @@ public static class PitPlans
         if (site.Pit is not { } pit) return list;
         float hw = site.Box.Width / 2, hd = site.Box.Depth / 2;
         var ws = wings is { Count: > 0 } ? wings : new[] { new Rect2D(-hw, -hd, hw, hd) };
-        var front = new Vector2(site.Front.Dot(site.Box.AxisU), site.Front.Dot(site.Box.AxisV));
         foreach (var n in new[] { new Vector2(1, 0), new Vector2(-1, 0), new Vector2(0, 1), new Vector2(0, -1) })
         {
-            if (n.Dot(front) > 0.5f) continue;
+            if (n.Dot(pit.Side) > 0.5f) continue;
             // from the pit's edge on this side, inward along the side's middle, to the first wall
             float edge = n.X > 0 ? pit.Area.X1 : n.X < 0 ? -pit.Area.X0 : n.Y > 0 ? pit.Area.Z1 : -pit.Area.Z0;
             float best = float.MinValue;

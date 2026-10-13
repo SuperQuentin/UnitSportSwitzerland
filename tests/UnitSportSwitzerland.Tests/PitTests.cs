@@ -75,6 +75,38 @@ public class PitTests
     }
 
     [Fact]
+    public void A_pit_too_deep_for_every_lane_has_no_ramp_and_is_closed_all_round()
+    {
+        // 14 x 11 m with six floors: two basements, 6 m down, and no lane longer than 17 m
+        var (s, _, pit) = Dig(Site("2500_1120_3", 14, 11, 1.2f, 6));
+        Assert.Equal(2, s.Pit!.Basements);
+        Assert.False(pit.HasRamp);
+        Assert.Empty(pit.Route);
+        // no mouth: the guard rail's solid sheet runs the whole way round
+        var a = s.Pit.Area;
+        float railed = pit.Boxes.Where(b => b.Part == ShellPart.Invisible).Sum(b => Math.Max(b.Max.X - b.Min.X, b.Max.Z - b.Min.Z) - 0.04f);
+        Assert.True(railed > 2 * (a.Width + a.Depth) - 2f, $"{railed:F1} m of rail round {2 * (a.Width + a.Depth):F1} m");
+    }
+
+    [Fact]
+    public void A_footpath_on_the_street_side_puts_the_lane_along_a_side_its_ramp_up_at_the_street()
+    {
+        // a house, a cellar under it; a path 2.5 m in front of its front wall (z grows to the street):
+        // through the front lane, clear of the margin
+        var s = Site("2500_1120_3", 14, 11, 1.0f, 2, blocked: p => p.Y > 507.5f && p.Y < 508.5f && Math.Abs(p.X - 500) < 60);
+        var pit = s.Pit!;
+        var front = new Vector2(s.Front.Dot(s.Box.AxisU), s.Front.Dot(s.Box.AxisV));
+        Assert.True(Math.Abs(pit.Side.Dot(front)) < 0.5f, $"the lane's side {pit.Side}, the front {front}");
+        Assert.Equal(1, ConstructionSites.LaneWall(pit, s.Box, s.Front));
+        // its mouth faces the street, so a machine comes to it from the yard
+        var (_, _, down) = PitPlans.RampTop(pit);
+        Assert.True(down.Dot(front) < -0.9f, $"the ramp runs down {down}, the front is {front}");
+        // and nothing of the yard on its apron
+        var apron = ConstructionSites.InPlan(s.Box, ConstructionSites.Apron(pit));
+        Assert.DoesNotContain(s.Zones, z => z.Rect.Overlaps(apron));
+    }
+
+    [Fact]
     public void No_pit_at_a_tile_seam_or_under_a_road()
     {
         // 4 m from the tile's west edge: the margin alone crosses it
@@ -124,16 +156,20 @@ public class PitTests
     }
 
     [Theory]
-    [InlineData("2500_1120_3", 14f, 11f)]
-    [InlineData("2500_1120_8", 24f, 15f)]
-    [InlineData("2500_1120_4", 50f, 34f)]
-    public void The_ramp_goes_down_to_the_floor_within_its_lane(string key, float w, float d)
+    [InlineData("2500_1120_3", 14f, 11f, (byte)2)]   // a house: a cellar, the mini machines' lane
+    [InlineData("2500_1120_8", 24f, 15f, (byte)6)]   // a block with two basements: 6 m down
+    [InlineData("2500_1120_4", 50f, 34f, (byte)6)]
+    public void The_ramp_goes_down_to_the_floor_within_its_lane(string key, float w, float d, byte floors)
     {
-        var (s, shell, pit) = Dig(Site(key, w, d, 1.2f, 6));
+        var (s, shell, pit) = Dig(Site(key, w, d, 1.2f, floors));
+        Assert.True(pit.HasRamp);
         // a storey down per basement, under the ground floor's slab
         Assert.Equal(0.12f - s.Pit!.Basements * s.StoreyHeight, shell.Levels[0], 3);
         Assert.Equal(shell.Levels[0] - PitPlans.Blinding, pit.Floor, 3);
-        Assert.InRange(pit.Grade, PitPlans.RampGrade - 1e-4f, PitPlans.MaxGrade + 1e-4f);
+        Assert.True(pit.Grade >= PitPlans.RampGrade - 1e-4f);
+        // steeper than the cap only where the cap would run it past the lane's end
+        Assert.True(pit.Grade <= PitPlans.MaxGrade + 1e-4f || MathF.Abs(pit.RampLength - (s.Pit.LaneLength - 1f)) < 0.01f, $"{100 * pit.Grade:F0} %");
+        Assert.True(pit.RampLength <= s.Pit.LaneLength - 1f + 0.01f, $"{pit.RampLength:F1} m of ramp in a {s.Pit.LaneLength:F1} m lane");
         Assert.Equal(0f - pit.Floor, pit.RampLength * pit.Grade, 2);
         // the slope and room at its foot fit in the lane
         Assert.True(pit.RampLength + PitPlans.FootRoom <= s.Pit.LaneLength + 0.01f || pit.Grade >= PitPlans.MaxGrade - 1e-4f,
@@ -156,12 +192,11 @@ public class PitTests
         // a flight up every storey, the basements' too
         Assert.Equal(2 * (shell.Levels.Count - 1), shell.Ramps.Count);
         Assert.Equal(shell.Levels[0], shell.Route[0].Y, 3);
-        // bridges on the sides, never on the street side where the ramp's lane is
+        // bridges on the sides, never on the side the ramp's lane is on
         Assert.NotEmpty(pit.Bridges);
-        var front = new Vector2(s.Front.Dot(s.Box.AxisU), s.Front.Dot(s.Box.AxisV));
         foreach (var br in pit.Bridges)
         {
-            Assert.True(br.Normal.Dot(front) < 0.5f);
+            Assert.True(br.Normal.Dot(s.Pit.Side) < 0.5f);
             // the doorway it lands at: nothing solid in the wall there, a body's height up
             for (float up = 0.2f; up < 2.0f; up += 0.3f)
             {

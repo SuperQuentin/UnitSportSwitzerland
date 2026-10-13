@@ -120,16 +120,27 @@ public static class PitTerrain
     {
         if (pits.Count == 0) return (vertices, colors, indices);
         var bounds = pits.Select(p => Bounds(p.Rect)).ToArray();
-        var verts = new List<Vector3>(vertices);
-        var cols = new List<Color>(colors);
-        var idx = new List<int>(indices.Length);
+        // the lattice rows any pit reaches, so most triangles are passed over with one division
+        int rowLo = int.MaxValue, rowHi = int.MinValue;
+        foreach (var (_, z0, _, z1) in bounds)
+        {
+            rowLo = Math.Min(rowLo, (int)MathF.Floor(z0 / quad) - 1);
+            rowHi = Math.Max(rowHi, (int)MathF.Floor(z1 / quad) + 1);
+        }
+        var verts = new List<Vector3>();
+        var cols = new List<Color>();
+        var idx = new List<int>();
+        // the triangles kept as they were, in runs copied whole
+        var kept = new int[indices.Length];
+        int keptCount = 0;
         int grid = m * m;
         var tri = new List<(Vector3, Color)>(3);
         for (int t = 0; t + 2 < indices.Length; t += 3)
         {
             int i0 = indices[t], i1 = indices[t + 1], i2 = indices[t + 2];
             bool near = false;
-            if (i0 < grid && i1 < grid && i2 < grid)
+            int row = i0 / m;
+            if (row >= rowLo && row <= rowHi && i0 < grid && i1 < grid && i2 < grid)
             {
                 var a = vertices[i0]; var b = vertices[i1]; var c = vertices[i2];
                 float tx0 = Math.Min(a.X, Math.Min(b.X, c.X)), tx1 = Math.Max(a.X, Math.Max(b.X, c.X));
@@ -139,7 +150,7 @@ public static class PitTerrain
             }
             if (!near)
             {
-                idx.Add(i0); idx.Add(i1); idx.Add(i2);
+                kept[keptCount++] = i0; kept[keptCount++] = i1; kept[keptCount++] = i2;
                 continue;
             }
             tri.Clear();
@@ -149,13 +160,14 @@ public static class PitTerrain
                 if (Area(Inside(tri, pit.Rect)) > 1e-5f) { touches = true; break; }
             if (!touches)
             {
-                idx.Add(i0); idx.Add(i1); idx.Add(i2);
+                kept[keptCount++] = i0; kept[keptCount++] = i1; kept[keptCount++] = i2;
                 continue;
             }
-            // clipping keeps the vertex order, so the pieces face the way the triangle did
+            // clipping keeps the vertex order, so the pieces face the way the triangle did; the new
+            // vertices are numbered after the mesh's own
             foreach (var piece in OutsideAll(tri, pits))
             {
-                int first = verts.Count;
+                int first = vertices.Length + verts.Count;
                 foreach (var (p, col) in piece) { verts.Add(p); cols.Add(col); }
                 for (int k = 1; k + 1 < piece.Count; k++) { idx.Add(first); idx.Add(first + k); idx.Add(first + k + 1); }
             }
@@ -166,12 +178,21 @@ public static class PitTerrain
             {
                 // the ground's front face: clockwise from where it is seen (BuildSurfaceCore's winding)
                 if ((b - a).Cross(d - a).Dot(facing) > 0) (b, d) = (d, b);
-                int first = verts.Count;
+                int first = vertices.Length + verts.Count;
                 verts.Add(a); verts.Add(b); verts.Add(d);
                 cols.Add(col); cols.Add(col); cols.Add(col);
                 idx.Add(first); idx.Add(first + 1); idx.Add(first + 2);
             });
-        return (verts.ToArray(), cols.ToArray(), idx.ToArray());
+        var outV = new Vector3[vertices.Length + verts.Count];
+        var outC = new Color[outV.Length];
+        Array.Copy(vertices, outV, vertices.Length);
+        Array.Copy(colors, outC, colors.Length);
+        verts.CopyTo(outV, vertices.Length);
+        cols.CopyTo(outC, colors.Length);
+        var outI = new int[keptCount + idx.Count];
+        Array.Copy(kept, outI, keptCount);
+        idx.CopyTo(outI, keptCount);
+        return (outV, outC, outI);
     }
 
     /// <summary>
