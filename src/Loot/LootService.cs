@@ -291,6 +291,15 @@ public partial class LootService : Node
     /// <summary>The yard containers planned round the player so far (for the probes).</summary>
     public IEnumerable<YardStock> YardsAround => _yards.All;
 
+    /// <summary>
+    /// For the probes: asks the server for a stack of a yard container this period with no panel
+    /// open and none of the client's own reach checks, as a cheating client would.
+    /// </summary>
+    public void TakeUnchecked(string key, int index, int stack)
+    {
+        if (Online) RpcId(1, MethodName.RequestTake, key, index, LootTables.Epoch(key, Now), stack);
+    }
+
     // ---- client: a Battle Royale crate in the same panel (#194) --------------------------------
 
     /// <summary>The crate (<c>BattleRoyale.BrCrates</c>) open in the panel instead of furniture, if any.</summary>
@@ -510,6 +519,13 @@ public partial class LootService : Node
     private void Contents(string key, int furniture, long epoch, int[] ids, int[] counts, int mask)
     {
         if (_open is not { } open || open.Key != key || open.Furniture != furniture) return;
+        if (mask == RefusedMask)
+        {
+            // the server says this player is not at that yard container (#627): nothing to show
+            Close();
+            Items?.Ui.Toast("Too far away to search that.");
+            return;
+        }
         _waiting = false;
         _openEpoch = epoch;
         _openStacks = ids.Zip(counts, (id, c) => new ItemStack((ItemId)id, c)).ToList();
@@ -693,14 +709,22 @@ public partial class LootService : Node
         return SiteLoot.InServerReach(c, at.E, at.N, at.Alt);
     }
 
+    /// <summary>
+    /// The take mask of a <c>Contents</c> reply that refuses a yard container (#627): the asker is
+    /// not at it, or it is none. The panel closes. No RPC of its own, so the node's RPC list is unchanged.
+    /// </summary>
+    public const int RefusedMask = -1;
+
+    private void RefuseYard(long peer, string key, int index, string why)
+    {
+        GD.Print($"[loot] {why}: peer {peer}, yard container {key} #{index}");
+        Reply(peer, MethodName.Contents, key, index, LootTables.Epoch(key, Now), Array.Empty<int>(), Array.Empty<int>(), RefusedMask);
+    }
+
     private async void ServeYardContents(long peer, string key, int index)
     {
-        if (await YardFor(key, index) is not { } c) return;
-        if (!AtYard(peer, c))
-        {
-            GD.Print($"[loot] peer {peer} is not at yard container {key} #{index}");
-            return;
-        }
+        if (await YardFor(key, index) is not { } c) { RefuseYard(peer, key, index, "search refused, no such container"); return; }
+        if (!AtYard(peer, c)) { RefuseYard(peer, key, index, "search refused, not at it"); return; }
         long epoch = LootTables.Epoch(key, Now);
         // a pallet a machine has moved (#615) holds nothing: what it held was where it stood
         if (Moved(c))
@@ -715,15 +739,18 @@ public partial class LootService : Node
 
     private async void ServeYardTake(long peer, string key, int index, long epoch, int stack)
     {
-        if (await YardFor(key, index) is not { } c || Moved(c)) return;
+        if (await YardFor(key, index) is not { } c) { RefuseYard(peer, key, index, "take refused, no such container"); return; }
+        if (!AtYard(peer, c)) { RefuseYard(peer, key, index, "take refused, not at it"); return; }
         long now = LootTables.Epoch(key, Now);
+        if (Moved(c))
+        {
+            Reply(peer, MethodName.Contents, key, index, now, Array.Empty<int>(), Array.Empty<int>(), 0);
+            return;
+        }
         var stacks = LootTables.YardContents(key, index, c.Kind, now);
         int mask = MaskOf(key, index, now);
-        // too far (the panel stays as it is: what it shows is only the roll anyone can work out),
         // restocked since the panel opened, or someone else was quicker: send what is there now
-        bool at = AtYard(peer, c);
-        if (!at) GD.Print($"[loot] take refused: peer {peer} is not at yard container {key} #{index}");
-        if (!at || epoch != now || stack < 0 || stack >= stacks.Count || (mask & (1 << stack)) != 0)
+        if (epoch != now || stack < 0 || stack >= stacks.Count || (mask & (1 << stack)) != 0)
         {
             Reply(peer, MethodName.Contents, key, index, now,
                 stacks.Select(s => (int)s.Id).ToArray(), stacks.Select(s => s.Count).ToArray(), mask);

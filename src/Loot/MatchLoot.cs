@@ -3,14 +3,6 @@ using UnitSport.Items;
 
 namespace UnitSport.Loot;
 
-/// <summary>The kinds of thing a Battle Royale match fills (#194). Sent as an int: append only.</summary>
-public enum MatchTable
-{
-    Furniture = 0, GunLocker = 1, Safe = 2, Supply = 3, Military = 4, Airdrop = 5,
-    // the outdoor sites (#198)
-    Bunker = 6, HighSeat = 7, HayStash = 8, SacBox = 9, Wreck = 10, FishingHut = 11,
-}
-
 /// <summary>
 /// What a Battle Royale match puts in its containers and crates (#194): weapons with rounds for
 /// them, ammunition, bandages and first-aid kits, armour, a little food. Pure and seeded like

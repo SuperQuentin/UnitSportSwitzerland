@@ -28,8 +28,11 @@ site office's loot is interior loot (#822: the office is the site building's int
 - **The check** (`AtYard`): the peer is in no interior (`InteriorManager.SpaceOf` empty) and its body
   is within `SearchReach` (1.3 m) + `ServerSlack` (2.5 m) of the container's edge, within 4 m of
   its height (`SiteLoot.InServerReach`), as `BrCrates.RequestTake` checks the body.
-- A refused take is answered with the current contents (as a stale one is), so the panel does not
-  hang. The contents are no secret: anyone can roll them from the seed.
+- **A refused search or take** (not at it, or no such container) is answered with a `Contents`
+  whose mask is `LootService.RefusedMask` (-1): the client closes the panel ("Too far away to search
+  that."), so it never hangs waiting. No RPC of its own: a new one would renumber the node's RPC
+  list, a protocol bump. A stale take (restocked, someone quicker) gets the current contents, as
+  in an interior.
 - `Taken` goes to the other peers **outdoors within 60 m** of the container (an interior's goes to
   `SpaceOf == key`).
 - **A site pallet a machine has moved holds nothing** (`LootService.Moved(YardStock)`:
@@ -53,8 +56,14 @@ compares them with sampling (8 yard rows) and checks a typical yard's yield.
 | Pallet of cement | 55 % | 1 | gravel bag 75, stone 25 |
 
 A typical yard (rebar, four pallets, two formwork stacks, the rings, two skips) gives **10.4 items
-a restock** (sampled), worth a few francs; a house gives about 14 and its cash. In a Battle Royale
-match the yard keeps these tables (its masks are the match's, in memory, as the building's).
+a restock** (sampled), worth a few francs; a house gives about 14 and its cash (kept so, agreed).
+
+**In a Battle Royale match** (`br/loot`) a yard container in the match region rolls the match's
+table, as the site's building does: `YardMatch.MatchTableOf` (`Loot/MatchTable.cs`, pure, beside the
+`MatchTable` enum it now holds) gives `MatchTable.Supply` for every kind (a supply crate's planks
+and stone suit a site), seeded with the match epoch (`LootTables.Epoch`), its taken marks in the
+match's memory (`MaskOf`/`SetMask`), cleared at the end. Outside the region, or with no match, the
+yard's own tables.
 
 ## Client
 
@@ -83,16 +92,23 @@ as for furniture and Battle Royale crates. The panel by mouse, pad or the VR las
   skips over it; liftable pallets flagged by their slot; each where the dressing drew it, on its
   ground, in the site; determinism; reach, facing, level, the server's slack, a long bundle beside
   you. Verified to fail (9) with the skips' spots left out.
-- `--lootchancecheck`: the yard rows and the typical yard.
+- `YardMatchTests` (tier 0, 3): in a match region every kind rolls the match's supply table;
+  outside it, or with no match, the yard's own.
+- `--lootchancecheck`: the yard rows, the typical yard, and `YardContents` equal to
+  `MatchLoot.Roll(Supply, ...)` in a match region and to `YardRoll` outside it (300 seeds).
 - `tools/yardlootnetcheck.sh` (net, generated world, port 7893, ~2 min): A finds the nearest
   generated site whose skip holds something, stands beside it (the prompt must read "Search the
   skip") and opens it with E; B, there with it open, sees the stack A takes go from its panel by
   itself and the rest stay; C joins once B has gone, with a user:// of its own (with B's identity
   key it woke at B's sleeper, fell from the sky and E did nothing), and finds that stack gone and
-  the rest there. `WINDOWED=1` saves `test_output/yardloot_prompt.png` and `yardloot_panel.png`.
+  the rest there. C then asks for a stack from 15 m away, past the client's own checks
+  (`LootService.TakeUnchecked`, as a cheat would): refused, nothing in its pack; back at the skip
+  the stack is still there and is granted. `WINDOWED=1` saves `test_output/yardloot_prompt.png` and
+  `yardloot_panel.png`.
 
 ## Not done
 
 - No model: the containers are the dressing's boxes, so nothing shows a skip emptied.
-- A yard record is dropped with the interiors' plan version (`InteriorLayout.CurrentVersion`), as
-  every loot record is: harmless, the yard restocks.
+- **Accepted**: a yard's taken marks are dropped whenever `InteriorLayout.CurrentVersion` is bumped
+  (#822's office may bump it), as every loot record of the building is: the yard restocks early.
+  No version of its own.

@@ -117,6 +117,23 @@ public static class LootChanceCheck
             ok &= fair;
             GD.Print($"[lootchance] {(fair ? "ok  " : "FAIL")} a typical yard gives {mean:F1} items a restock (4-12)");
         }
+        // in a Battle Royale match's region a yard rolls the match's table, elsewhere its own
+        {
+            var savedMatch = LootTables.MatchEpoch;
+            LootTables.MatchEpoch = k => k.StartsWith("2588_1118_") ? 1_000_000_007L : null;
+            bool same = true;
+            static string S(List<ItemStack> l) => string.Join(",", l.Select(s => $"{s.Id}x{s.Count}"));
+            for (int i = 0; i < 300; i++)
+            {
+                var kind = (SiteStockKind)(i % 6);
+                long ep = 1_000_000_007L;
+                same &= S(LootTables.YardContents("2588_1118_34", 1000 + i, kind, ep)) == S(MatchLoot.Roll(MatchTable.Supply, LootTables.RngFor("2588_1118_34", 1000 + i, ep)));
+                same &= S(LootTables.YardContents("2590_1120_3", 1000 + i, kind, 20_000 + i)) == S(LootTables.YardRoll(kind, LootTables.RngFor("2590_1120_3", 1000 + i, 20_000 + i)));
+            }
+            LootTables.MatchEpoch = savedMatch;
+            ok &= same;
+            GD.Print($"[lootchance] {(same ? "ok  " : "FAIL")} a yard in a match region rolls the match's supply table, outside it its own");
+        }
 
         // a combination: right length, 0-99, neighbours apart, and the same on every call (server and client agree)
         bool comboOk = true;

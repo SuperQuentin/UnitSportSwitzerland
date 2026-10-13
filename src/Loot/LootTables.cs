@@ -501,9 +501,16 @@ public static class LootTables
     public static double YardChance(SiteStockKind kind, ItemId item) =>
         YardContainers.TryGetValue(kind, out var c) ? NonEmpty(c, 1f) * PicksChance(c, Candidates(null, c), 1f, item) : 0;
 
-    /// <summary>What yard container <paramref name="index"/> of a site holds this period, before anyone has taken anything: seeded as a piece of furniture is.</summary>
+    /// <summary>
+    /// What yard container <paramref name="index"/> of a site holds this period, before anyone has
+    /// taken anything: seeded as a piece of furniture is. In a Battle Royale match's region it rolls
+    /// the match's table instead (<see cref="YardMatch"/>), as the site's building would, with the
+    /// match epoch <see cref="Epoch"/> gives.
+    /// </summary>
     public static List<ItemStack> YardContents(string buildingKey, int index, SiteStockKind kind, long epoch) =>
-        YardRoll(kind, RngFor(buildingKey, index, epoch));
+        YardMatch.MatchTableOf(buildingKey, kind, MatchEpoch) is { } table
+            ? MatchLoot.Roll(table, RngFor(buildingKey, index, epoch))
+            : YardRoll(kind, RngFor(buildingKey, index, epoch));
 
     /// <summary>Probability a container gives francs (they are cash, not an item: <see cref="Roll"/> stacks them as <see cref="ItemId.Francs"/>).</summary>
     public static double ChanceFrancs(BuildingKind kind, FurnitureType type, float abundance, RoomType? room = null) =>

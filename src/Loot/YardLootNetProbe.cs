@@ -57,6 +57,9 @@ public partial class YardLootNetProbe : ChatProbe
         var world = new ProceduralWorld(SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
         var sites = world.SitesNear(at.E, at.N, 4000).OrderBy(s => Sq(s.E - at.E) + Sq(s.N - at.N)).Take(6).ToList();
         GD.Print($"{Log} {sites.Count} generated sites within 4 km");
+        // two stacks or more if the nearest site has such a skip (C then takes the second, after a
+        // refused try from afar), else any skip with something in it
+        YardStock? any = null;
         foreach (var site in sites)
         {
             var tile = TileId.FromLv95(site.E, site.N);
@@ -66,10 +69,12 @@ public partial class YardLootNetProbe : ChatProbe
             {
                 var stacks = LootTables.YardContents(c.Building, c.Index, c.Kind, LootTables.Epoch(c.Building, Now));
                 GD.Print($"{Log} {c.Building} #{c.Index} skip at {F(c.E)},{F(c.N)}: {stacks.Count} stacks");
-                if (stacks.Count > 0) return c;
+                if (stacks.Count >= 2 && site == sites[0]) return c;
+                if (stacks.Count > 0) any ??= c;
             }
+            if (any != null) return any;
         }
-        return null;
+        return any;
     }
 
     private static double Sq(double v) => v * v;
@@ -212,6 +217,30 @@ public partial class YardLootNetProbe : ChatProbe
         if (await Open(me, skip) is not { } stacks) return;
         Expect(!stacks.Any(s => s.Index == gone), $"joining late, C finds stack {gone} gone");
         Expect(stacks.Count == total - 1, $"and the rest there ({stacks.Count} of {total})");
+
+        // a take from 15 m away, past the client's own checks, as a cheat would ask: refused
+        int ask = stacks.Count > 0 ? stacks[0].Index : gone;
+        var askId = stacks.Count > 0 ? stacks[0].Stack.Id : ItemId.None;
+        Loot.Close();
+        var outward = skip.AxisV * (skip.HalfV + 15f);
+        var away = me.Origin!.ToWorld(skip.E + outward.X, skip.N - outward.Y, skip.Bottom + 1f);
+        if (me.Terrain != null && me.Terrain.TryGetHeight(away, out float g)) away.Y = g + 0.5f;
+        me.PlaceAt(away, me.Rotation.Y);
+        await Seconds(2.5);   // the server has the body where it is now
+        int before = askId == ItemId.None ? 0 : CountOf(askId);
+        Loot.TakeUnchecked(skip.Building, skip.Index, ask);
+        await Seconds(2.0);
+        Expect(SiteLoot.EdgeDistance(skip, me.Global.E, me.Global.N) > 10 && (askId == ItemId.None || CountOf(askId) == before),
+            $"a take of stack {ask} from {F(SiteLoot.EdgeDistance(skip, me.Global.E, me.Global.N))} m away is refused");
+        if (askId != ItemId.None)
+        {
+            // back at it: still there, and granted
+            if (!await StandAt(me, skip)) { Fail($"C could not stand facing {skip.Building} #{skip.Index} again"); return; }
+            if (await Open(me, skip) is not { } again) return;
+            Expect(again.Any(s => s.Index == ask), $"stack {ask} is still there");
+            Loot.Take(ask);
+            Expect(await Until(() => !Loot.Waiting && CountOf(askId) > before, 8), $"taken at the skip, it is granted ({askId})");
+        }
         Say("seen");
     }
 }
