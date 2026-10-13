@@ -52,6 +52,12 @@ src/Terrain/Construction/ quick --constructioncheck --systems ui
 # #608: a body walks every storey of hand-made sites' shells, on their real collision
 src/Terrain/Construction/ quick --shellwalkcheck --world flat
 src/Terrain/BuildingMeshBuilder quick --shellwalkcheck --world flat
+# #619: the pits of building sites, under the ground's real collision: rays, drops, an excavator down a ramp and backed out, a shell's basement walked
+src/Terrain/Construction/ quick --pitcheck --chunks fixture:site --traffic 0
+src/Terrain/ChunkManager quick --pitcheck --chunks fixture:site --traffic 0
+src/Terrain/TerrainMeshBuilder quick --pitcheck --chunks fixture:site --traffic 0
+src/Terrain/Fixture/     quick  --pitcheck --chunks fixture:site --traffic 0
+src/Player/Excavator      quick  --pitcheck --chunks fixture:site --traffic 0
 src/Terrain/WaterProbe   quick  --waterprobe 2553000,1139500,30,10 --systems terrain,generated,physics
 tools/TerrainFormat/Water quick --waterprobe 2553000,1139500,30,10 --systems terrain,generated,physics
 src/Items/               quick  --invcheck

@@ -19,6 +19,8 @@ namespace UnitSport.Terrain.Fixture;
 /// drop-off to 25 m and a river coming in from the west; a slipway road runs into it.</item>
 /// <item><c>airport</c> (#422): flat, a 2.7 km runway, a taxiway, a terminal apron with six stands and
 /// a cargo apron with two (<see cref="FixtureAirport"/>).</item>
+/// <item><c>site</c> (#619): three building sites with pits on a street, flat: a block at its foundations, a
+/// shell over its basement, a house plot turned 25° (<c>--pitcheck</c>).</item>
 /// </list>
 /// </summary>
 public sealed class FixtureCourse

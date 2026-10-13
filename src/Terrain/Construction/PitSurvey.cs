@@ -35,6 +35,7 @@ public static class PitSurvey
         var rows = new ConcurrentBag<(SitePhase Phase, bool Wanted, string Outcome, int Basements, float Depth, float Grade, float Ramp, float Lane, int Wall)>();
         var costs = new ConcurrentBag<(double Dig, double Holes, double Faces)>();
         var pitTiles = new ConcurrentBag<TileId>();
+        var samples = new ConcurrentBag<(string Key, double E, double N, float Depth, int Wall, bool Ramp)>();
         var sw = System.Diagnostics.Stopwatch.StartNew();
         Parallel.ForEach(ids, new ParallelOptions { MaxDegreeOfParallelism = 4 }, id =>
         {
@@ -75,6 +76,8 @@ public static class PitSurvey
                 rows.Add((site.Phase, wanted, "dug", site.Pit.Basements, pit.TopOuter.Y - pit.Floor, pit.Grade, pit.RampLength, site.Pit.LaneLength,
                     ConstructionSites.LaneWall(site.Pit, site.Box, site.Front)));
                 any = true;
+                var c = site.Box.Center;
+                samples.Add((site.Key, id.MinE + c.X, id.MaxN - c.Y, pit.TopOuter.Y - pit.Floor, ConstructionSites.LaneWall(site.Pit, site.Box, site.Front), pit.HasRamp));
             }
             if (any) pitTiles.Add(id);
         });
@@ -114,6 +117,10 @@ public static class PitSurvey
         }
         if (timed.Count > 0)
             GD.Print($"[pitsurvey] the ground mesh cut at stride 1: {timed.Average():F0} ms a tile (worst {timed.Max():F0}) over {timed.Count} tiles");
+        // a few to go and look at: the deepest, and one with its lane along each wall
+        var seen = samples.ToList();
+        foreach (var s in seen.OrderByDescending(s => s.Depth).Take(2).Concat(seen.GroupBy(s => s.Wall).Select(g => g.OrderBy(s => s.Key, StringComparer.Ordinal).First())))
+            GD.Print($"[pitsurvey] look at {s.Key}: --at {s.E:F0},{s.N:F0}, {s.Depth:F1} m deep, lane along the {(s.Wall == 0 ? "front" : s.Wall == 1 ? "side" : "back")}, {(s.Ramp ? "a ramp" : "no ramp")}");
         GD.Print("[pitsurvey] RESULT: ok");
         return 0;
     }
