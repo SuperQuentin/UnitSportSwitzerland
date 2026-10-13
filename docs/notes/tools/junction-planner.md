@@ -22,11 +22,15 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   longest transition, each side to the first building, other line, ground step > 1.2 m or tile edge, 20 m max);
   (5) rounds: align from the base sections, fit with the size search, align again from the fitted lanes, fit again; an exit
   that cannot hold its hatch (fit step "7 the pocket feeding this exit") drops its feeder's pocket, all again.
-- **Room order** (`MouthPlanner.Fit`): 1 verge and buffer, 2 island, 3 lane widths to 2.75 / bike 1.25, 4 right pocket,
+- **Room order** (`MouthPlanner.Fit`): 1 verge and buffer, 2 island, left-turn bike lane, added through bike lane, 3 lane widths to 2.75 / bike 1.25, 4 right pocket,
   5 sidewalk to 1.5 m, 7 the pocket feeding this exit, 7 left pocket, 8 painted bike lane. Size choice (step 6) comes
   first in effect (the user). Room is checked per station against what the transition still holds there (`Stretch`):
   houses 68 m out limit only a long storage. Where the street already reaches past its room (sidewalks to the facades),
   as far as the street does.
+- **Through riders before turning ones** (the user, Oct 13): where a left-turn bike lane is built (lights) and the
+  arriving side has neither a painted bike lane nor a path, the mouth adds a through bike lane, kerbside (id 115); short of
+  room the left-turn bike lane goes first, then the added lane (ladder step 2, before any car lane narrows). J1 N gets one;
+  J3 E and N have room for neither.
 - **The exit hatch is not dropped by the ladder**: it lines the through lane up (a jog of a lane without it). A split
   lead-in share stays at most half (all on the far side would jog the oncoming traffic as much).
 - **Checks**: `--junctions new` prints a region line (pockets, splits, hatches, steps taken) and a comparison with the

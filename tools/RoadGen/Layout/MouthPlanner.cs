@@ -62,7 +62,7 @@ public static class MouthPlanner
     public const string FeederStep = "7 the pocket feeding this exit";
 
     /// <summary>Ids of strips the planner adds: above any a normal section numbers.</summary>
-    public const int LeftPocketId = 100, LeftBikeId = 110, RightPocketId = 120, HatchId = 130;
+    public const int LeftPocketId = 100, LeftBikeId = 110, AddedBikeId = 115, RightPocketId = 120, HatchId = 130;
 
     /// <summary>
     /// The section the data wants at the mouth: the normal section's sides and departing lanes kept, the arriving side laid out
@@ -108,7 +108,13 @@ public static class MouthPlanner
         for (int k = 0; k < pocket.Length; k++)
             arriving.Add(new Strip(StripKind.CarLane, laneIn, StripWay.In, pocket[k] & allowed, LeftPocketId + k));
         if (pocket.Length > 0 && w.LeftTurnBikeLane)
+        {
             arriving.Add(new Strip(StripKind.BikeLane, LeftBikeLane, StripWay.In, SignalMoves.Left, LeftBikeId));
+            // the through riders first (the user, Oct 13 2026): where they have neither a painted lane nor a path on this side,
+            // the mouth gets them a bike lane, kerbside
+            if (bikeIn is null && !rightBands.Any(x => x.Kind == StripKind.Path))
+                bikeIn = new Strip(StripKind.BikeLane, LeftBikeLane, StripWay.In, Id: AddedBikeId);
+        }
         // the own lanes: as the data assigned them, else what the pockets leave of the turns
         bool right = w.RightPocket && (allowed & SignalMoves.Right) != 0;
         var rest = allowed & ~(pocket.Length > 0 ? SignalMoves.Left : 0) & ~(right ? SignalMoves.Right : 0);
@@ -171,7 +177,8 @@ public static class MouthPlanner
 
     /// <summary>
     /// Shrinks <paramref name="wanted"/> until it fits <paramref name="room"/>, in the user's order (Oct 13 2026): (1) verge
-    /// and buffer, (2) island (the exit hatch stays: it lines the through lane up), (3) lane widths to their least, (4) right pocket, (5) sidewalk to 1.5 m,
+    /// and buffer, (2) island (the exit hatch stays: it lines the through lane up), the left-turn bike lane, then a through bike
+    /// lane the mouth added (the through riders before the turning ones), (3) lane widths to their least, (4) right pocket, (5) sidewalk to 1.5 m,
     /// (6) [longitudinal: storage and lead-in, decided with the lengths], (7) the pocket feeding this exit (its hatch), then
     /// its own left pocket, (8) painted bike lane. Car
     /// through lanes and the data's lane count never drop. Where the street already reaches past its room (its sidewalks
@@ -194,6 +201,9 @@ public static class MouthPlanner
             // the exit hatch itself lines the through lane up (a jog without it): it is not dropped here; an exit that cannot hold it
             // takes the pocket that feeds it (the planner's)
             ("2 island", x => Without(x, k => k is StripKind.Island)),
+            // a left-turn bike lane only beside the through riders' own (the user): it goes first, then a through lane the mouth added
+            ("2 left-turn bike lane", x => WithoutId(x, LeftBikeId)),
+            ("2 added through bike lane", x => x.Strips.Any(y => y.Id == LeftBikeId) ? null : WithoutId(x, AddedBikeId)),
             ("3 lane widths to their least", LeastWidths),
             ("4 right pocket", x => WithoutLane(x, RightPocketId, SignalMoves.Right)),
             ("5 sidewalk to 1.5 m", x => Narrowed(x, StripKind.Sidewalk, SidewalkMin)),
@@ -256,6 +266,12 @@ public static class MouthPlanner
             kept.Add(x);
         }
         return new Section(kept, s.CarriagewayLeft + leftGone) { KerbLeftCm = s.KerbLeftCm, KerbRightCm = s.KerbRightCm };
+    }
+
+    private static Section? WithoutId(Section s, int id)
+    {
+        if (!s.Strips.Any(x => x.Id == id)) return null;
+        return new Section(s.Strips.Where(x => x.Id != id).ToList(), s.CarriagewayLeft) { KerbLeftCm = s.KerbLeftCm, KerbRightCm = s.KerbRightCm };
     }
 
     private static Section LeastWidths(Section s)

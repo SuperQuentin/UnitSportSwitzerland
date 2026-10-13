@@ -77,6 +77,27 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
     }
 
     [Fact]
+    public void A_left_turn_bike_lane_comes_only_after_a_through_one()
+    {
+        // a 10 m road with no bike lane at lights: the mouth adds the through riders' lane, kerbside, beside the left-turn one
+        var normal = Section.Normal(new RoadAttributes(LanesForward: 1, LanesBackward: 1, WidthCm: 1000), 10f, true);
+        var all = SignalMoves.Left | SignalMoves.Through | SignalMoves.Right;
+        var mouth = MouthPlanner.Wanted(normal, new ArmWants(true, all, SignalMoves.None, [SignalMoves.Left], null, false, false, LeftTurnBikeLane: true));
+        var bikes = mouth.Strips.Where(x => x.Kind == StripKind.BikeLane).ToList();
+        Assert.Equal([MouthPlanner.LeftBikeId, MouthPlanner.AddedBikeId], bikes.Select(x => x.Id));
+        Assert.Equal(StripKind.BikeLane, mouth.Strips[mouth.LastCarriageway].Kind);
+
+        // no room beyond the street: the left-turn bike lane goes first, then the added through lane, before any car lane narrows
+        var (nl, nr) = MouthPlanner.Reach(normal);
+        var steps = new List<string>();
+        MouthPlanner.Fit(mouth, normal, ArmRoom.Flat(nl, MouthPlanner.Reach(mouth).Right - 1.4), new Stretch(40, 30), new Stretch(40, 30), steps);
+        Assert.Equal(["2 left-turn bike lane"], steps);
+        steps.Clear();
+        MouthPlanner.Fit(mouth, normal, ArmRoom.Flat(nl, MouthPlanner.Reach(mouth).Right - 2.9), new Stretch(40, 30), new Stretch(40, 30), steps);
+        Assert.Equal(["2 left-turn bike lane", "2 added through bike lane"], steps);
+    }
+
+    [Fact]
     public void A_section_shrinks_in_the_users_order_until_it_fits()
     {
         var side = new RoadSide(SidewalkDm: 30, Bike: BikeKind.Track, BikeDm: 20, KerbCm: 12, VergeDm: 10);
