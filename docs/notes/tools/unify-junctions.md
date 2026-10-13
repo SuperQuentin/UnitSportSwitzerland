@@ -299,7 +299,9 @@ lights), an island to avoid, or several lanes turning alike (`EmitPairGuides`, a
 - **A core lane's exit widened beside its bike lane at the lights** (the user's review of J3's south arm: the solid centre
   line left the exit 1.7 m beside its bike lane; the user chose to widen): an exit strip (`Widening`, `SetWidth`) of what
   the car lane lacks of `CarLaneBesideBike` 3 m, held to where the solid centre line ends, then tapered over
-  `ExitBikeTaper` 20 m (as fits a short street, the taper down to 10 m); the bike lane moves out with the edge, and the
+  `ExitBikeTaper` 20 m (as fits a short street, the taper down to 10 m, ending `ExitBikeFarClear` 12 m before the street's far
+  end: it ran into J3D's crosswalk); the corner beside it follows its edge (`ArmLanes.BikeExitWay`: the SW corner kept the
+  old kerb); the bike lane moves out with the edge, and the
   arm's `ExitWidening` carries it to the left-turn guides, the crosswalk and the left pole. Test region 5, Sion 3 (4 no
   room). The user's idea for later: the junction lays its own surface from the data and the room it has, with
   transitions before and after, instead of such widenings per case.

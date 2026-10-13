@@ -137,6 +137,12 @@ public static partial class TileRewriter
     /// <summary>A core lane's exit widened beside its bike lane at the lights tapers back over this (m, #711).</summary>
     private const double ExitBikeTaper = 20, ExitBikeTaperMin = 10;
 
+    /// <summary>
+    /// That taper ends at least this far (m) from the street's far end: clear of the next junction's crosswalk and corners
+    /// (the user's review: it ran into J3D's crosswalk).
+    /// </summary>
+    private const double ExitBikeFarClear = 12;
+
     /// <summary>The lead-in that widens a narrow approach for that runs at 1:6 (a town street), at least this long.</summary>
     private const double LeadInMin = 6, LeadInPerMetre = 6;
     private const double HatchStep = 2.5, HatchWidth = 0.3;
@@ -669,7 +675,7 @@ public static partial class TileRewriter
                 if (extra < 0.05) continue;
                 double hold = MouthSkew(junction, junction.Arms[i]) + SignalStopSetback + StopBack(junction.NodeId, i) + CentreSolidAtLights;
                 // a short street: the hold and the taper as fit (the taper no shorter than ExitBikeTaperMin)
-                double room = SegmentLength(so.Segment) - TurnClear, taper = Math.Clamp(room - hold, ExitBikeTaperMin, ExitBikeTaper);
+                double room = SegmentLength(so.Segment) - ExitBikeFarClear, taper = Math.Clamp(room - hold, ExitBikeTaperMin, ExitBikeTaper);
                 hold = Math.Min(hold, room - taper);
                 if (hold < 1) { stats.ExitsNarrowBesideBike++; continue; }
                 var tileSegments = Get(output, so.Tile);
@@ -685,6 +691,7 @@ public static partial class TileRewriter
                 // the arm's exit stands out by it at the mouth: guides, crosswalk and the left pole follow (the user's review)
                 var exitLanes = Arm(junction.NodeId, i, TileId.FromLv95(junction.Centre.X, junction.Centre.Y));
                 exitLanes.ExitWidening = Math.Max(exitLanes.ExitWidening, extra);
+                exitLanes.BikeExitWay = exitWay;
                 stats.ExitsWidenedBesideBike++;
             }
         }
@@ -724,7 +731,7 @@ public static partial class TileRewriter
                 var outLanes = placed.GetValueOrDefault((junction.NodeId, j));
                 var outWay = outLanes?.ExitWay;
                 // (#711: a split lead-in's mirror strip widens arm j's departing side too)
-                if (inWay is null && outWay is null && outLanes?.Mirror is null) continue;
+                if (inWay is null && outWay is null && outLanes?.Mirror is null && outLanes?.BikeExitWay is null) continue;
                 if (net.Links[ai.LinkId].Tag is not Source si || net.Links[aj.LinkId].Tag is not Source sj) continue;
                 // in town a sidewalk or path runs round the corner (#119, #120): its corner follows the kerb arc
                 // (#682 bands at the lights, #711 CornerPlanner elsewhere), clamped to the mouths where the sidewalk begins
@@ -735,7 +742,8 @@ public static partial class TileRewriter
                 Vec2 ui = Vec2.FromHeading(ai.OutwardHeading), uj = Vec2.FromHeading(aj.OutwardHeading);
                 (Vec2 P, float Y) EdgeI(double d) => inWay?.OuterEdge(d) ?? (ai.Left + ui * d, si.SampleHeight(ai.Left + ui * d));
                 // (#700: beside a split lead-in with no exit there, its mirror strip is that edge)
-                (Vec2 P, float Y) EdgeJ(double d) => outWay?.OuterEdge(d, outLanes!.ExitFar) ?? outLanes?.Mirror?.OuterEdge(d) ?? (aj.Right + uj * d, sj.SampleHeight(aj.Right + uj * d));
+                (Vec2 P, float Y) EdgeJ(double d) => outWay?.OuterEdge(d, outLanes!.ExitFar) ?? outLanes?.Mirror?.OuterEdge(d)
+                    ?? outLanes?.BikeExitWay?.OuterEdge(d) ?? (aj.Right + uj * d, sj.SampleHeight(aj.Right + uj * d));
                 const bool pastMouth = true;   // #711: no path bands round the arc, at the lights neither (the user's review)
                 if (town && arcs is not null && ArcOf(junction, i, EdgeI, EdgeJ, Kerb(ai.HalfWidth), Kerb(aj.HalfWidth), true, pastMouth) is { } arc) arcs[(junction.NodeId, i)] = arc;
                 if (CornerPatch(junction, i, EdgeI, EdgeJ, Kerb(ai.HalfWidth), Kerb(aj.HalfWidth), anchors, town, town && pastMouth) is not { } patches)
@@ -1028,6 +1036,8 @@ public static partial class TileRewriter
         /// <summary>That widening (#406: the corner beside it), seen from its far end when it is a strip merged with the next pocket (#325).</summary>
         public Widening? ExitWay;
         public bool ExitFar;
+        /// <summary>A core lane's exit widened beside its bike lane at the lights (#711): the corner beside it follows its edge.</summary>
+        public Widening? BikeExitWay;
         /// <summary>A yellow advanced bike stop line <see cref="AdvancedBikeLine"/> ahead of the cars' (#351).</summary>
         public bool AdvancedBikeLine;
         /// <summary>The right-turn pocket, its lanes painted after the signal plan (#351).</summary>
