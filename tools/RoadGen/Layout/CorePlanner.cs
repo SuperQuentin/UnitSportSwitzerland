@@ -737,6 +737,44 @@ public static class CorePlanner
         if (ring.Count > 1 && ring[0].DistanceTo(ring[^1]) < 1e-4) ring.RemoveAt(ring.Count - 1);
     }
 
+    /// <summary>
+    /// The surface's heights (the plan's step 2, as today's cap): every mouth line is on its arm's height there, every other
+    /// outline point blends the mouths by inverse square distance to the mouth line (a point on a mouth takes it exactly, so
+    /// the core meets each arm with no step). Sets <see cref="JunctionCore.Heights"/> and the steepest triangle's grade.
+    /// </summary>
+    public static void Lift(JunctionCore core, Func<CoreMouth, double> mouthHeight)
+    {
+        var anchors = core.Mouths.Select(m => (m.Left, m.Right, Height: mouthHeight(m))).ToList();
+        core.Heights.Clear();
+        foreach (var p in core.Outline) core.Heights.Add(HeightAt(anchors, p));
+        // the steepest a driver meets: along a connector, from its mouth's height to its exit's
+        var at = core.Mouths.ToDictionary(m => m.Arm, m => mouthHeight(m));
+        core.SteepestGrade = 0;
+        foreach (var c in core.Connectors)
+        {
+            double length = 0;
+            for (int k = 1; k < c.Centre.Count; k++) length += c.Centre[k].DistanceTo(c.Centre[k - 1]);
+            if (length > 1 && at.TryGetValue(c.FromArm, out double h0) && at.TryGetValue(c.ToArm, out double h1))
+                core.SteepestGrade = Math.Max(core.SteepestGrade, Math.Abs(h1 - h0) / length);
+        }
+    }
+
+    /// <summary>A point's height blended from mouth lines (inverse square distance to each line, exact on one).</summary>
+    public static double HeightAt(IReadOnlyList<(Vec2 Left, Vec2 Right, double Height)> anchors, Vec2 p)
+    {
+        double weights = 0, sum = 0;
+        foreach (var (a, b, h) in anchors)
+        {
+            var ab = b - a;
+            double t = ab.LengthSquared < 1e-12 ? 0 : Math.Clamp((p - a).Dot(ab) / ab.LengthSquared, 0, 1);
+            double d2 = (a + ab * t).DistanceSquaredTo(p);
+            if (d2 < 1e-6) return h;
+            weights += 1 / d2;
+            sum += h / d2;
+        }
+        return weights > 0 ? sum / weights : 0;
+    }
+
     /// <summary>No two edges of the ring cross (neighbours share their end).</summary>
     public static bool Simple(IReadOnlyList<Vec2> ring)
     {

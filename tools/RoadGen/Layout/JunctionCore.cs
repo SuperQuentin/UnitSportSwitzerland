@@ -114,6 +114,10 @@ public sealed class JunctionCore
     public double Area { get; set; }
     /// <summary>The surface: triangles over <see cref="Outline"/>'s points (as today's cap).</summary>
     public List<int> Triangles { get; } = new();
+    /// <summary>The surface's height at each <see cref="Outline"/> point (m, LV95 heights as the arms').</summary>
+    public List<double> Heights { get; } = new();
+    /// <summary>The steepest grade along a connector, from its mouth's height to its exit's (0.05 is 5 %).</summary>
+    public double SteepestGrade { get; set; }
     /// <summary>The outline does not cross itself (a check).</summary>
     public bool Simple { get; set; } = true;
     /// <summary>Checks: kerbs whose curve starts outside their mouth; connectors whose edges leave the outline; mouths held at the most.</summary>

@@ -22,8 +22,35 @@ public sealed class ArmPlan
     public required Section Wanted { get; set; }
     public required Section Mouth { get; set; }
     public ArmRoom Room { get; set; } = ArmRoom.Unbounded;
-    /// <summary>The street's length from the mouth to its far end (m).</summary>
-    public double Length { get; init; }
+    /// <summary>The street's length from the mouth to its far end (m): what its transition has (the second pass: from the core's mouth).</summary>
+    public double Length { get; set; }
+    /// <summary>The street's length between today's trims at its two ends (m).</summary>
+    public double StreetLength { get; init; }
+    /// <summary>How far the core's mouth stands out past today's trim (m, negative inside it): the transition starts there.</summary>
+    public double MouthShift { get; set; }
+    /// <summary>How far the final core moved the mouth from where the transitions were planned from (m; a check).</summary>
+    public double MouthDrift { get; set; }
+
+    private ArmWants? _keptWants;
+
+    /// <summary>Remembers what the data wants, before any planning, for <see cref="Reset"/>.</summary>
+    public void Keep() => _keptWants = Wants;
+
+    /// <summary>Back to what the data wants, nothing planned: the arm planned again (from the core's mouths).</summary>
+    public void Reset()
+    {
+        Wants = _keptWants ?? Wants;
+        Wanted = Mouth = MouthPlanner.Wanted(Normal, Wants);
+        Base = null!;
+        Room = ArmRoom.Unbounded;
+        Openings.Clear();
+        Sizes.Clear();
+        Steps.Clear();
+        FitSteps.Clear();
+        SizeTried = 0;
+        Split = 0;
+        MergedWith = null;
+    }
     /// <summary>The lanes that open along the transition, with their lengths.</summary>
     public List<Opening> Openings { get; } = new();
     /// <summary>The pockets' sizes the fit may try, longest first (each a set of openings).</summary>
@@ -78,6 +105,8 @@ public sealed class JunctionPlan
     /// <summary>Today's cap (<c>JunctionBuilder</c>), its area and its tight corners (#700, pairs of arms), for the comparison while both run.</summary>
     public IReadOnlyList<Vec2> OldOutline { get; init; } = [];
     public double OldArea { get; init; }
+    /// <summary>The steepest grade between two arm ends of today's cap (their heights as <c>ToJunction</c> anchors them).</summary>
+    public double OldSteepest { get; init; }
     public HashSet<(int A, int B)> OldTight { get; init; } = new();
 
     /// <summary>
@@ -154,10 +183,16 @@ public sealed class JunctionPlan
         var biggest = cores.OrderByDescending(p => Math.Abs(p.Core!.Area - p.OldAreaToMouths)).Take(4)
             .Select(p => string.Create(inv, $"{p.Centre.X:F0},{p.Centre.Y:F0} {p.OldAreaToMouths:F0}->{p.Core!.Area:F0}"));
         double Median(List<double> xs) => xs.Count == 0 ? 0 : xs[xs.Count / 2];
+        var grades = cores.Select(p => p.Core!.SteepestGrade).OrderBy(x => x).ToList();
+        var oldGrades = cores.Select(p => p.OldSteepest).OrderBy(x => x).ToList();
+        double P(List<double> xs, double q) => xs.Count == 0 ? 0 : xs[Math.Min(xs.Count - 1, (int)(xs.Count * q))];
+        var steepest = cores.OrderByDescending(p => p.Core!.SteepestGrade).Take(3)
+            .Select(p => string.Create(inv, $"{p.Centre.X:F0},{p.Centre.Y:F0} {p.Core!.SteepestGrade * 100:F1} % (cap {p.OldSteepest * 100:F1} %)"));
         var outside = cores.Where(p => p.Core!.ConnectorsOutside > 0).ToList();
         var notTangent = cores.Where(p => p.Core!.KerbsNotTangent > 0).ToList();
         return string.Create(inv, $"    junction cores (#818 step 2): {cores.Count:N0} cores ({multi:N0} more joined to another node by a street under 30 m: multi-node, phase 5, left out), {conns.Count:N0} connectors ({conns.Count(c => c.Kind == ConnectorKind.Bike):N0} for bikes; ")
             + string.Create(inv, $"{conns.Count(c => c.Radius > 0):N0} arcs, {conns.Count(c => c.Fill < 1 - 1e-6 && c.Radius > 0 && c.WideRadius > c.MinRadius + 0.01):N0} narrowed for a mouth or the room, {conns.Count(c => c.Fill < 0 || c.UnderRadius):N0} under their vehicle's radius; {conns.Count(c => c.Truck):N0} for a truck, {cores.Sum(p => p.Core!.TrucksAsCars):N0} turns between Major roads left to a car for want of room), ")
+            + string.Create(inv, $"transitions planned from the mouths: {cores.SelectMany(p => p.Arms).Count(a => Math.Abs(a.MouthDrift) > 0.5):N0} mouths moved over 0.5 m by the final core (most {cores.SelectMany(p => p.Arms).Select(a => Math.Abs(a.MouthDrift)).DefaultIfEmpty(0).Max():F1} m), ")
             + string.Create(inv, $"mouths median {Median(mouths):F1} m (p90 {(mouths.Count == 0 ? 0 : mouths[mouths.Count * 9 / 10]):F1}, {cores.Sum(p => p.Core!.MouthsAtMost):N0} held at the most, {cores.Sum(p => p.Core!.MouthsAtReach):N0} at half a street to the next junction); ")
             + string.Create(inv, $"corners: arcs {corners.Count(c => c.Shape == CornerShape.Arc):N0} ({corners.Count(c => c.Tight):N0} tight, {corners.Count(c => c.RoomClipped):N0} held by buildings), ")
             + string.Create(inv, $"vertices {corners.Count(c => c.Shape == CornerShape.Vertex):N0}, chords {corners.Count(c => c.Shape == CornerShape.Chord):N0}, gores {corners.Count(c => c.Shape == CornerShape.Gore):N0}\n")
@@ -166,7 +201,8 @@ public sealed class JunctionPlan
             + string.Create(inv, $"outlines crossing themselves {cores.Count(p => !p.Core!.Simple):N0}{(cores.Any(p => !p.Core!.Simple) ? " (at " + At(cores.Where(p => !p.Core!.Simple)) + ")" : "")}\n")
             + string.Create(inv, $"      against today: tight corners in both {both:N0}, planner only {newOnly:N0}{(newOnly > 0 ? " (at " + At(newOnlyAt.Distinct()) + ")" : "")}, ")
             + string.Create(inv, $"#700 only {oldOnly:N0}{(oldOnly > 0 ? " (at " + At(oldOnlyAt.Distinct()) + ")" : "")}; paved area out to the new mouths today (cap and ribbons) {oldArea:N0} m2, of the cores {newArea:N0} m2 ")
-            + string.Create(inv, $"(per junction median x{Median(ratios):F2}, p10 x{(ratios.Count == 0 ? 0 : ratios[ratios.Count / 10]):F2}, p90 x{(ratios.Count == 0 ? 0 : ratios[ratios.Count * 9 / 10]):F2}; most changed {string.Join("; ", biggest)})");
+            + string.Create(inv, $"(per junction median x{Median(ratios):F2}, p10 x{(ratios.Count == 0 ? 0 : ratios[ratios.Count / 10]):F2}, p90 x{(ratios.Count == 0 ? 0 : ratios[ratios.Count * 9 / 10]):F2}; most changed {string.Join("; ", biggest)}); ")
+            + string.Create(inv, $"steepest grade mouth to mouth per junction: cores median {Median(grades) * 100:F1} %, p99 {P(grades, 0.99) * 100:F1} % (caps {Median(oldGrades) * 100:F1} %, p99 {P(oldGrades, 0.99) * 100:F1} %; steepest {string.Join("; ", steepest)})");
     }
 
     /// <summary>Every arm's sections, room and steps, for <c>--debug-junction</c>.</summary>

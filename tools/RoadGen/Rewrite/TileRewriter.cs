@@ -1673,7 +1673,7 @@ public static partial class TileRewriter
         if (junction.Vertices.Count < 3 || junction.Triangles.Count < 3) return null;
         if (junction.Vertices.Count > ushort.MaxValue) return null;
 
-        var anchors = new List<(Vec2 At, float Height)>();
+        var anchors = CapAnchors(junction, net);
         RoadClass dominant = RoadClass.Unknown;
         int bestPriority = int.MinValue;
 
@@ -1681,9 +1681,6 @@ public static partial class TileRewriter
         {
             var link = net.Links[arm.LinkId];
             if (link.Tag is not Source source) continue;
-
-            var mid = (arm.Left + arm.Right) * 0.5;
-            anchors.Add((mid, source.SampleHeight(mid)));
 
             if (link.Profile.Priority > bestPriority)
             {
@@ -1714,6 +1711,19 @@ public static partial class TileRewriter
             Vertices = vertices,
             Indices = indices,
         };
+    }
+
+    /// <summary>Each arm end's middle with its road's height there: what a cap's heights blend (<see cref="HeightAt"/>).</summary>
+    private static List<(Vec2 At, float Height)> CapAnchors(Junction junction, RoadNetwork net)
+    {
+        var anchors = new List<(Vec2 At, float Height)>();
+        foreach (var arm in junction.Arms)
+            if (net.Links[arm.LinkId].Tag is Source source)
+            {
+                var mid = (arm.Left + arm.Right) * 0.5;
+                anchors.Add((mid, source.SampleHeight(mid)));
+            }
+        return anchors;
     }
 
     private static float HeightAt(List<(Vec2 At, float Height)> anchors, Vec2 p)
