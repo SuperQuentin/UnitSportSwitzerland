@@ -280,7 +280,7 @@ public partial class SiteCranes : Node3D
     }
 
     /// <summary>Four slings from the hook down to a pallet's corners, one metre long: the node scales them to the drop.</summary>
-    private static PierMeshBuilder.MeshData SlingMesh()
+    internal static PierMeshBuilder.MeshData SlingMesh()
     {
         var vertices = new List<Vector3>();
         var colors = new List<Color>();
