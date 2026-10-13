@@ -180,8 +180,9 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   holds the carriageway), `KerbCheck` and `--street-svg` all read it. Ordinary streets: kerb and seam checks identical to main.
 - **Measured** (Oct 14 2026): test region 10 of 13 junctions written (2 a street beyond the block, 1 its partner), 30 transitions
   over 32 pieces, 0 decoded differently, kerb check ok, seams as before. Sion 423 of 1,017 written (546 multi-node, 24 a check, 12
-  beyond the block, 9 partners, 3 a path joins), 83 transitions over 142 pieces, 0 decoded differently, 2 pieces lost by a later
-  cut (dropped, drawn plain); kerb check: no failure that the old layout does not have; seams at five junctions with transitions
-  at or under the old layout's.
+  beyond the block, 9 partners, 3 a path joins), 83 transitions over 142 pieces, 0 decoded differently, no piece lost (a piece
+  two transitions overlap on stays with the first); kerb check: no failure that the old layout does not have; seams at five
+  junctions with transitions at or under the old layout's. Size (KB/tile raw): `TRNS` 0.9 (+0.6 %, the plan's budget 3 %); the
+  caps (cores, simplified to 1.5 cm) make the v2 part 82.0 against 73.7, while `APRP` falls 118 -> 56 until phase 4's corners.
 - **Not yet**: traffic still drives the old lanes (phase 5), lights and lane records at written junctions (phases 4-5), path lines
   along a transition's bands, a transition over a bridge or tunnel (not written), lowered kerbs on a transition (phase 4).

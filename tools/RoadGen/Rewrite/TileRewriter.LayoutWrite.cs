@@ -22,11 +22,12 @@ public static partial class TileRewriter
         public int Junctions, Skipped, Transitions, Pieces, Lines, Marks, Trimmed, Extended, Orphaned, CoreVertices, CapVertices;
         /// <summary>Written junctions with a transition (LV95), for the seam check and pictures.</summary>
         public readonly List<Vec2> WithTransitions = new();
+        public readonly List<Vec2> OrphanedAt = new();
         public readonly SortedDictionary<string, int> Why = new(StringComparer.Ordinal);
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
             $"    junction planner written (#818 phase 3): {Junctions:N0} junctions as cores, {Skipped:N0} left to the old layout ({string.Join(", ", Why.Select(kv => $"{kv.Key} {kv.Value}"))}); ")
-            + string.Create(CultureInfo.InvariantCulture, $"{Transitions:N0} transitions over {Pieces:N0} pieces, {Lines:N0} lines and {Marks:N0} marks; arms trimmed to their mouth {Trimmed:N0}, run on to it {Extended:N0}; pieces lost by a later cut {Orphaned:N0}; cap vertices {CapVertices:N0} of the cores' {CoreVertices:N0}")
+            + string.Create(CultureInfo.InvariantCulture, $"{Transitions:N0} transitions over {Pieces:N0} pieces, {Lines:N0} lines and {Marks:N0} marks; arms trimmed to their mouth {Trimmed:N0}, run on to it {Extended:N0}; pieces lost by a later cut {Orphaned:N0}{(OrphanedAt.Count > 0 ? " (at " + string.Join("; ", OrphanedAt.Take(6).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")}; cap vertices {CapVertices:N0} of the cores' {CoreVertices:N0}")
             + (WithTransitions.Count > 0 ? "\n      with transitions at " + string.Join("; ", WithTransitions.Take(12).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) : "");
     }
 
@@ -84,12 +85,14 @@ public static partial class TileRewriter
     }
 
     /// <summary>A tile's transitions whose segment it still holds (a check: any other is counted and left out, its piece drawn plain).</summary>
-    private static List<RoadTransition> Placed(List<RoadTransition>? transitions, List<RoadSegment> segments, LayoutWriteStats stats)
+    private static List<RoadTransition> Placed(TileId id, List<RoadTransition>? transitions, List<RoadSegment> segments, LayoutWriteStats stats)
     {
         if (transitions is null || transitions.Count == 0) return [];
         var held = new HashSet<RoadSegment>(segments, ReferenceEqualityComparer.Instance);
         var placed = transitions.Where(t => held.Contains(t.Segment)).ToList();
         stats.Orphaned += transitions.Count - placed.Count;
+        foreach (var t in transitions.Where(t => !held.Contains(t.Segment)))
+            stats.OrphanedAt.Add(new Vec2(id.MinE + t.Segment.Points[0], id.MaxN - t.Segment.Points[2]));
         return placed;
     }
 
@@ -270,7 +273,8 @@ public static partial class TileRewriter
                         len = sp.Length;
                     }
                 }
-                covered.Add((sp, d, Math.Min(length, d + len)));
+                // a piece another transition already holds (the two overlap there: a street too short for both) stays with it
+                if (!sp.Piece.Attributes.Has(RoadAttrFlags.InTransition)) covered.Add((sp, d, Math.Min(length, d + len)));
                 touched.Add(sp.Link);
                 d += len;
             }

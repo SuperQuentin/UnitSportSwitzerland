@@ -873,7 +873,7 @@ public static partial class TileRewriter
                     Signals = signalRecords.TryGetValue(id, out var sg) ? sg : new List<RoadSignal>(),
                     Approaches = approachRecords.TryGetValue(id, out var ap) ? ap : new List<RoadApproach>(),
                     Parking = parkBays.TryGetValue(id, out var pb) ? pb : new List<ParkingBay>(),   // #499
-                    Transitions = Placed(transitionsOf.GetValueOrDefault(id), segments, netStats.LayoutWrite),   // #818
+                    Transitions = Placed(id, transitionsOf.GetValueOrDefault(id), segments, netStats.LayoutWrite),   // #818
                 };
                 rails.ClearTrackZones(tile.Paint, id);
                 built.Add(tile);
