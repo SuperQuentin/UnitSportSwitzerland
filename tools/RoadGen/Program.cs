@@ -54,6 +54,8 @@ if (args.Length == 0 || args.Contains("--help") || args.Contains("-h"))
           --test-region DIR     the traffic-lights test region (#386): flat tiles, designed junctions, OSM signal
                                  nodes, then the network stage; prints the junction table (--temp DIR: raw input,
                                  default DIR_temp). Clears DIR first, only if this command wrote it
+          --junctions new       (--rewrite, --test-region) also run the junction planner (#818) and report its plans;
+                                 --debug-junction E,N prints the plan of the junction there
           --compare-v2 V2DIR --chunks V3DIR
                                  v3 tiles against a v2 build of the same region: same geometry,
                                  one-way agreement with the runtime inference, bytes per tile
@@ -142,7 +144,9 @@ else if (args.Contains("--signal-check"))
 }
 else if (ArgValue("--test-region") is { } regionDir)
 {
-    return UnitSport.Tools.RoadGen.TestRegion.SignalTestRegion.Run(regionDir, ArgValue("--temp"), Console.WriteLine);
+    DebugJunctionArg();
+    return UnitSport.Tools.RoadGen.TestRegion.SignalTestRegion.Run(regionDir, ArgValue("--temp"), Console.WriteLine,
+        newJunctions: ArgValue("--junctions") == "new");
 }
 else if (args.Contains("--priority-check"))
 {
@@ -159,6 +163,7 @@ else if (args.Contains("--rewrite"))
     double dividedScale = double.Parse(ArgValue("--divided-scale") ?? "1.0", CultureInfo.InvariantCulture);
     bool dryRun = args.Contains("--dry-run");
     UnitSport.Tools.RoadGen.Network.CrossSectionPlanner.ShiftCarriageways = !args.Contains("--no-shift");
+    DebugJunctionArg();
     if (ArgValue("--debug-street") is { } dbg)
     {
         var en = dbg.Split(',');
@@ -191,7 +196,8 @@ else if (args.Contains("--rewrite"))
         AuditHeights: !args.Contains("--no-audit"),
         RawDir: RawRoads.DirFor(temp),
         OsmOverlay: Path.Combine(temp, "osm_overlay.tsv"),
-        SkipRewritten: args.Contains("--skip-rewritten")), Console.WriteLine);
+        SkipRewritten: args.Contains("--skip-rewritten"),
+        NewJunctions: ArgValue("--junctions") == "new"), Console.WriteLine);
     }
     catch (TileRewriter.AlreadyRewrittenException e)
     {
@@ -295,6 +301,13 @@ void RunCase(string name, Func<RoadNetwork> build, Func<Vec2, double>? height)
             : $"overlap {was:N1} m² -> {now:N1} m² ({100 * (1 - now / was):F1}% removed)";
     Console.WriteLine($"  VERDICT: {verdict}; "
                       + $"worst turn {before.Report.WorstTurn:F1}° -> {generated.Report.WorstTurn:F1}°");
+}
+
+void DebugJunctionArg()
+{
+    if (ArgValue("--debug-junction") is not { } at) return;
+    var en = at.Split(',');
+    TileRewriter.DebugJunction = (double.Parse(en[0], CultureInfo.InvariantCulture), double.Parse(en[1], CultureInfo.InvariantCulture));
 }
 
 string? ArgValue(string flag)

@@ -33,6 +33,15 @@ public static partial class TileRewriter
         public bool Fast => (Kmh > 0 ? Kmh : Town ? 50 : 80) > RightPocketSpeed;
     }
 
+    /// <summary>The turns arm <paramref name="i"/>'s traffic has: to every other arm cars may leave by, as the signal plans name them (#386).</summary>
+    private static SignalMoves CanOf(List<SignalArm> arms, int i)
+    {
+        var can = SignalMoves.None;
+        for (int k = 0; k < arms.Count; k++)
+            if (k != i && arms[k].Out) can |= SignalPlan.Turn(arms, i, k);
+        return can;
+    }
+
     /// <summary>
     /// The needs of arm <paramref name="i"/> of a main-road (#123) or signalised (#348) junction, null where the arm gets no
     /// pockets at all: not a main arm (without lights), not an approach or inside a junction of several nodes (at the lights),
@@ -67,11 +76,8 @@ public static partial class TileRewriter
             if (every && !PriorityPlanner.Leaves(info, plan.Arms[k].End)) continue;   // a one-way road in
             if (d.X * v.Y - d.Y * v.X > 0) { left = true; leftArm = k; } else right = true;
         }
-        // the turns the approach has, as the signal plans name them (#386)
         var armsHere = ArmsOf(junction, net);
-        var can = SignalMoves.None;
-        for (int k = 0; k < armsHere.Count; k++)
-            if (k != i && armsHere[k].Out) can |= SignalPlan.Turn(armsHere, i, k);
+        var can = CanOf(armsHere, i);
         // OSM's lane data at the junction end (#700), among the turns the approach has and OSM does not forbid:
         // assigned to the lanes the carriageway holds; the pockets it wants are built, and none it does not want
         var banned = restrictions?.Banned(junction, i, net, scratchLanes) ?? SignalMoves.None;

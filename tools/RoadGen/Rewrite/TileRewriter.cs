@@ -58,7 +58,12 @@ public static partial class TileRewriter
         /// <summary><c>osm_overlay.tsv</c>; null or missing = no OSM attributes.</summary>
         string? OsmOverlay = null,
         /// <summary>Leave rewritten tiles that have no raw input alone instead of refusing.</summary>
-        bool SkipRewritten = false);
+        bool SkipRewritten = false,
+        /// <summary>
+        /// Run the junction planner (#818, <c>--junctions new</c>): for now its plans are kept in
+        /// <see cref="NetworkStats.Layouts"/> and reported beside the pocket layout, which still writes the tiles.
+        /// </summary>
+        bool NewJunctions = false);
 
     public sealed record Stats(
         int TilesRead, int TilesWritten, int Junctions, int SegmentsWritten, int SegmentsDropped,
@@ -78,6 +83,8 @@ public static partial class TileRewriter
         /// <summary>Overlap area per class pair (<c>--measure</c>), e.g. "motorway+motorway".</summary>
         public SortedDictionary<string, double> OverlapPairs = new(StringComparer.Ordinal);
         public readonly CrossSectionPlanner.Stats Carriageways = new();
+        /// <summary>The junction planner's plans (#818, <see cref="Options.NewJunctions"/>), block after block.</summary>
+        public readonly List<Layout.JunctionPlan> Layouts = new();
         public readonly RoundaboutShaper.Stats Roundabouts = new();
         public readonly TurnLaneStats TurnLanes = new();
         public readonly SignalStats Signals = new();
@@ -661,6 +668,9 @@ public static partial class TileRewriter
                     }
                     return StreetSideAt(linkId, end, right);
                 }
+                if (options.NewJunctions)
+                    netStats.Layouts.AddRange(PlanLayouts(priority, result, segmentOf, output, block, wanted, grids, buildings, StreetSideAt,
+                        overlay, restrictions, null));
                 var openings = new List<PocketOpening>();
                 var townArcs = new Dictionary<(int Node, int Arm), CornerArc>();
                 var pendingGuides = new List<(TileId Home, RoadPaint Guide, Widening Exit, int Node, int ExitArm)>();   // through guides, drawn past an island only (#711)

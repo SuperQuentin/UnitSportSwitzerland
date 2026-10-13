@@ -214,7 +214,7 @@ public static class SignalTestRegion
 
     // ---- build ---------------------------------------------------------------------------------
 
-    public static int Run(string chunkDir, string? tempDir, Action<string> log)
+    public static int Run(string chunkDir, string? tempDir, Action<string> log, bool newJunctions = false)
     {
         tempDir ??= RawRoads.DefaultTempDir(chunkDir);
         var clock = System.Diagnostics.Stopwatch.StartNew();
@@ -243,10 +243,16 @@ public static class SignalTestRegion
             + $"{design.Buildings.Count} buildings, {design.Junctions.Count} signal nodes; written in {clock.Elapsed.TotalSeconds:F1} s");
 
         var stats = TileRewriter.Run(chunkDir, roadTiles, new TileRewriter.Options(
-            RawDir: RawRoads.DirFor(tempDir), OsmOverlay: Path.Combine(tempDir, "osm_overlay.tsv")), log);
+            RawDir: RawRoads.DirFor(tempDir), OsmOverlay: Path.Combine(tempDir, "osm_overlay.tsv"), NewJunctions: newJunctions), log);
         log(stats.Network.Format(stats.TilesWritten));
         log("");
         int bad = Report(chunkDir, design.Junctions, log);
+        if (newJunctions)
+        {
+            log("");
+            int planned = ReportPlans(stats.Network.Layouts, design.Junctions, log);
+            log(planned == 0 ? "[testregion] planner (#818): every designed approach as designed" : $"[testregion] planner (#818): {planned} approaches not as designed");
+        }
         log(string.Create(CultureInfo.InvariantCulture, $"{clock.Elapsed.TotalSeconds:F1} s; chunks {chunkDir}, raw input {tempDir}"));
         log(bad == 0 ? "[testregion] RESULT: ok" : $"[testregion] RESULT: FAILED {bad} approaches not as designed");
         return bad == 0 ? 0 : 2;
@@ -580,6 +586,44 @@ public static class SignalTestRegion
             foreach (var (dir, want) in j.Design)
                 if (want is not null && !seen.Contains(dir)) { bad++; arms.Add($"{dir}: MISSING ({want})"); }
             log(string.Create(inv, $"{j.Name,-16} {j.E:F0},{j.N:F0}   {string.Join("; ", arms)}   {plan.Cycle:F0} s   {Phases(plan)}"));
+        }
+        return bad;
+    }
+
+    /// <summary>
+    /// The junction planner's mouth sections (#818) against the design: per designed junction its arms' arriving car lanes
+    /// as planned, left to right. Returns how many designed approaches came out otherwise (or are missing).
+    /// </summary>
+    public static int ReportPlans(IReadOnlyList<Layout.JunctionPlan> plans, IReadOnlyList<Junction> junctions, Action<string> log)
+    {
+        int bad = 0;
+        log("junction         planned arriving car lanes, left to right (designed)");
+        foreach (var j in junctions)
+        {
+            var plan = plans.Where(p => Math.Abs(p.Centre.X - j.E) < 15 && Math.Abs(p.Centre.Y - j.N) < 15)
+                .OrderBy(p => Math.Abs(p.Centre.X - j.E) + Math.Abs(p.Centre.Y - j.N)).FirstOrDefault();
+            if (plan is null)
+            {
+                log(string.Create(CultureInfo.InvariantCulture, $"{j.Name,-16} NO PLAN"));
+                bad += j.Design.Count(a => a.Value is not null);
+                continue;
+            }
+            var arms = new List<string>();
+            var seen = new HashSet<string>();
+            foreach (var a in plan.Arms.OrderBy(a => Layout.JunctionPlan.Compass(a.Heading)))
+            {
+                string dir = Layout.JunctionPlan.Compass(a.Heading);
+                seen.Add(dir);
+                string car = a.Mouth.CarLanesIn();
+                if (car.Length == 0) continue;
+                string designed = j.Design.GetValueOrDefault(dir) ?? "-";
+                bool ok = designed == "-" || designed == car;
+                if (!ok) bad++;
+                arms.Add($"{dir}: {car} ({designed}{(ok ? "" : " MISMATCH")}){(a.Steps.Count > 0 ? " [" + string.Join("; ", a.Steps) + "]" : "")}");
+            }
+            foreach (var (dir, want) in j.Design)
+                if (want is not null && !seen.Contains(dir)) { bad++; arms.Add($"{dir}: MISSING ({want})"); }
+            log($"{j.Name,-16} {string.Join("; ", arms)}");
         }
         return bad;
     }
