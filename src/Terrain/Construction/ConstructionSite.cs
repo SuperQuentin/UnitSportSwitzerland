@@ -202,6 +202,11 @@ public static class ConstructionSites
     public const int PitOpenUpTo = 2;
     /// <summary>Ground kept clear past the ramp's top, m: where a machine lines up to go down.</summary>
     public const float RampApron = 6f;
+    /// <summary>
+    /// A site with a pit is at least this wide beside the building, m: a 20 t excavator (9.5 m long)
+    /// turns on the spot in the strip between the pit and the hoarding to go down the ramp; a mini one in less.
+    /// </summary>
+    public const float PitSide = 8f, PitSideSmall = 5.5f;
 
     public static bool IsSmall(PlanBox box, int targetStoreys) => box.Area < SmallArea && targetStoreys <= SmallStoreys;
 
@@ -311,6 +316,8 @@ public static class ConstructionSites
             // the ramp's lane takes a strip of the yard: the yard moves out by as much
             + (pit == null ? 0f : pit.LaneWidth);
         float sideM = 4.5f + 2f * (float)R("side-margin") + 3f * size;
+        // a pit's ramp comes up at a side: room there for a machine to come round and turn into it
+        if (pit != null) sideM = Math.Max(sideM, small ? PitSideSmall : PitSide);
         float backM = 3f + (float)R("back-margin");
         var area = new SiteRect(box.Center + front * ((frontM - backM) / 2), along,
             2 * hs + 2 * sideM, 2 * hf + frontM + backM);

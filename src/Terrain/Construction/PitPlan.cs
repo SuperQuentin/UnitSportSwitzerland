@@ -29,11 +29,16 @@ public sealed class PitPlan
     public float RampLength { get; set; }
     public float Grade { get; set; }
     public List<PitBridge> Bridges { get; } = new();
+    /// <summary>Walkable slopes, collision only: from the ground onto each footbridge's deck.</summary>
+    public List<ShellRamp> Ramps { get; } = new();
     /// <summary>
-    /// The way a machine goes in: from the apron in line with the lane, over the ramp's top, down to
-    /// its foot and onto the middle of the slab. What <c>--pitcheck</c> drives an excavator along.
+    /// The way a machine goes in, in the site frame: on the ramp's top (the whole machine in the lane),
+    /// down to its foot, along the floor beside the slab. What <c>--pitcheck</c> drives an excavator
+    /// along, then backs it up the lane to <see cref="Exit"/>: a 9.5 m machine does not turn in a 4.6 m lane.
     /// </summary>
     public List<Vector3> Route { get; } = new();
+    /// <summary>Just out of the ramp's mouth, on the ground beside the pit.</summary>
+    public Vector3 Exit { get; set; }
 }
 
 /// <summary>
@@ -55,6 +60,8 @@ public static class PitPlans
     /// <summary>Sheet piles stand this far out of the ground, a pile this wide, the profile this deep.</summary>
     public const float PileProud = 0.3f, PileWidth = 0.6f, PileDepth = 0.16f;
     public const float BridgeWidth = 1.2f, RailHeight = 1.05f, PostSpacing = 2.5f;
+    /// <summary>The check's start, m down the ramp from its mouth: a 9.5 m machine's middle with all of it in the lane.</summary>
+    public const float EntryOnRamp = 5.5f;
 
     /// <summary>
     /// The floor a pit is dug to: the slab of the lowest basement, under the ground floor's slab by a
@@ -119,7 +126,9 @@ public static class PitPlans
                 depthMin = Math.Min(depthMin, g - plan.Floor);
                 // the profile: pans facing in and out by turns, every one in front of the dug face
                 float o0 = k % 2 == 0 ? -PileDepth + 0.02f : -0.02f, o1 = o0 + PileDepth + 0.04f;
-                Box(p0.X + n.X * o0, plan.Floor - 0.6f, p0.Y + n.Y * o0, p1.X + n.X * o1, g + PileProud, p1.Y + n.Y * o1,
+                // cut down to the ground under a footbridge, so its ramp meets no lip
+                bool bridged = plan.Bridges.Any(b => b.From.DistanceTo(mid) < BridgeWidth / 2 + 0.4f);
+                Box(p0.X + n.X * o0, plan.Floor - 0.6f, p0.Y + n.Y * o0, p1.X + n.X * o1, bridged ? g - 0.03f : g + PileProud, p1.Y + n.Y * o1,
                     ShellPart.SheetPile, true);
             }
         }
@@ -169,10 +178,14 @@ public static class PitPlans
             // the deck runs level at the slab's top and rests on the ground past the piles, where a
             // slope may stand the ground a step over or under it
             var far = b.From + b.Normal * 0.8f;
-            float top = groundFloor;
+            float top = groundFloor, g = ground(far.X, far.Y);
             var c0 = b.To - across;
-            var c1 = far + across;
+            var c1 = b.From + across;
             Box(c0.X, top - 0.08f, c0.Y, c1.X, top, c1.Y, ShellPart.Deck, true);
+            // its end on the ground: planks drawn level, walked as a slope from the ground's height
+            Box(b.From.X - across.X, top - 0.08f, b.From.Y - across.Y, far.X + across.X, top, far.Y + across.Y, ShellPart.Deck, false);
+            Vector3 P(Vector2 p, float y) => new(p.X, y, p.Y);
+            plan.Ramps.Add(new ShellRamp(P(far - across, g), P(far + across, g), P(b.From + across, top), P(b.From - across, top)));
             foreach (float side in new[] { -1f, 1f })
             {
                 var s0 = b.To + across * side * 1.04f;
@@ -183,13 +196,17 @@ public static class PitPlans
             }
         }
 
-        // ---- the way in, for the check: lined up on the apron, down the ramp, onto the slab ------
-        var lineUp = mouth - down * 5f;
-        plan.Route.Add(new Vector3(lineUp.X, ground(lineUp.X, lineUp.Y), lineUp.Y));
-        plan.Route.Add(new Vector3(mouth.X, (hOuter + hInner) / 2, mouth.Y));
+        // ---- the way in, for the check: on the ramp's top, down it, along the floor beside the slab
+        float mouthY = (hOuter + hInner) / 2;
+        var onTop = mouth + down * EntryOnRamp;
+        plan.Route.Add(new Vector3(onTop.X, mouthY - plan.Grade * EntryOnRamp, onTop.Y));
         var foot = mouth + down * plan.RampLength;
         plan.Route.Add(new Vector3(foot.X, plan.Floor, foot.Y));
-        plan.Route.Add(new Vector3(0, floor, 0));
+        var end = mouth + down * Math.Min(pit.LaneLength - 2f, plan.RampLength + 2.5f);
+        plan.Route.Add(new Vector3(end.X, plan.Floor, end.Y));
+        // and out: backed up the lane, through the mouth onto the ground beside the pit
+        var exit = mouth - down * 1f;
+        plan.Exit = new Vector3(exit.X, ground(exit.X, exit.Y), exit.Y);
         return plan;
     }
 

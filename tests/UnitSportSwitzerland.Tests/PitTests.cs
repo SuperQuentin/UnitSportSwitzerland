@@ -140,8 +140,8 @@ public class PitTests
             $"{pit.RampLength:F1} m of ramp in a {s.Pit.LaneLength:F1} m lane");
         // its top is on the pit's edge, its mouth the lane's width
         Assert.Equal(s.Pit.LaneWidth, new Vector2(pit.TopOuter.X - pit.TopInner.X, pit.TopOuter.Z - pit.TopInner.Z).Length(), 2);
-        // the way in ends on the slab
-        Assert.Equal(shell.Levels[0], pit.Route[^1].Y, 3);
+        // the way in ends on the floor beside the slab
+        Assert.Equal(pit.Floor, pit.Route[^1].Y, 3);
     }
 
     [Fact]

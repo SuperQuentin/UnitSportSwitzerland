@@ -295,6 +295,8 @@ public static class SiteShellBuilder
             if (pit != null)
             {
                 foreach (var box in pit.Boxes) g.Box(box, T);
+                foreach (var r in pit.Ramps)
+                    g.Solid(T(r.A.X, r.A.Y, r.A.Z), T(r.B.X, r.B.Y, r.B.Z), T(r.C.X, r.C.Y, r.C.Z), T(r.D.X, r.D.Y, r.D.Z));
                 pits.Add(CutOf(site, pit));
             }
             foreach (var m in yard.Mounds) Mound(g, m, site);

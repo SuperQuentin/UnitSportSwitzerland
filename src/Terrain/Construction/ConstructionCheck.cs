@@ -107,6 +107,32 @@ public static class ConstructionCheck
                 if (site.Cranes.Count > 0 && !site.Cranes.Any(k => k.Base.DistanceTo(corner) <= k.JibLength))
                     Expect(false, $"{what}: no crane reaches the corner at {corner}");
 
+            // the pit (#619): dug at the foundations and under a low shell, inside its tile, nothing of
+            // the yard in it, a ramp down to its floor in its lane, the ground cut round it
+            bool wantsPit = site.Phase == SitePhase.Foundations || site.Phase == SitePhase.Shell && site.BuiltStoreys <= ConstructionSites.PitOpenUpTo;
+            if (wantsPit) Expect(site.Pit != null, $"{what}: digs a pit");
+            if (site.Pit is { } pit)
+            {
+                var grid = world.BuildGrid(id, 1);
+                var (shell, dig) = SiteShellBuilder.Dig(t.Tile, site, grid);
+                var area = ConstructionSites.InPlan(site.Box, pit.Area);
+                int inPit = site.Zones.Count(z => z.Rect.Overlaps(area)) + site.Machines.Count(m => area.Contains(m.At))
+                    + site.Cranes.Count(k => !k.Inside && area.Contains(k.Base));
+                Expect(inPit == 0, $"{what}: {inPit} thing(s) of the yard in the pit");
+                Expect(dig != null && dig.Grade <= PitPlans.MaxGrade + 1e-3f && dig.RampLength < pit.LaneLength,
+                    $"{what}: pit {pit.Area.Width:F1} x {pit.Area.Depth:F1} m, {pit.Basements} basement(s), floor {dig?.Floor:F1} m, "
+                    + $"ramp {dig?.RampLength:F1} m at {100 * dig?.Grade:F0} % in a {pit.LaneLength:F1} m lane, {shell.Levels.Count - 1} storey(s) built");
+                if (grid != null && dig != null)
+                {
+                    // the ground's cut: no ground left in the pit, every quad round it put back
+                    var cut = SiteShellBuilder.CutOf(site, dig);
+                    var holes = PitTerrain.Holes(new[] { cut });
+                    var faces = PitTerrain.CollisionFaces(new[] { cut }, holes, (c, r) => (float)grid.HeightMetersAt(c, r));
+                    Expect(holes.Count >= (int)(area.Width * area.Depth) && faces.Count > 0,
+                        $"{what}: {holes.Count} quad(s) cut for {area.Width * area.Depth:F0} m², {faces.Count / 3} collision triangles round and in it");
+                }
+            }
+
             drawn.Add(new SitePlanSvg.Entry(site, t.Roads, map.Boxes, $"{site.Key}"));
         }
 
