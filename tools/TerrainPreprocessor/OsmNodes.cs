@@ -54,7 +54,10 @@ public static class OsmNodes
         t.GetValueOrDefault("cycleway") == "asl" || t.GetValueOrDefault("cycleway:right") == "asl"
         || t.GetValueOrDefault("cycleway:left") == "asl" || t.GetValueOrDefault("cycleway:both") == "asl";
 
-    public static bool KeepNode(Dictionary<string, string> t) => IsSignal(t) || IsAsl(t);
+    /// <summary>A pedestrian crossing on a road (#700): <c>highway=crossing</c>, its kind in <c>crossing=*</c> (zebra, marked, uncontrolled, unmarked, traffic_signals).</summary>
+    public static bool IsCrossing(Dictionary<string, string> t) => t.GetValueOrDefault("highway") == "crossing";
+
+    public static bool KeepNode(Dictionary<string, string> t) => IsSignal(t) || IsAsl(t) || IsCrossing(t);
 
     public static bool KeepRelation(Dictionary<string, string> t) => t.GetValueOrDefault("type") == "restriction";
 
@@ -76,6 +79,8 @@ public static class OsmNodes
         public int Asl;
         public readonly Dictionary<(string Kind, string Junction), int> Snapped = new();
         public int SignalsUnmatched, AslUnmatched;
+        /// <summary>Pedestrian crossing nodes read (#700), and those on no TLM line.</summary>
+        public int Crossings, CrossingsUnmatched;
         public int Restrictions, RestrictionsMapped, RestrictionsViaWay, RestrictionsUnmatched, RestrictionsOther, RestrictionsOutside;
         /// <summary>How each row was placed (overlay row, the way's own geometry, nearest line) and why some were not.</summary>
         public readonly SortedDictionary<string, int> How = new(StringComparer.Ordinal);
@@ -105,8 +110,8 @@ public static class OsmNodes
 
         foreach (var p in points)
         {
-            bool signal = IsSignal(p.Tags), asl = IsAsl(p.Tags);
-            string kind0 = signal ? "signal" : "asl";
+            bool signal = IsSignal(p.Tags), asl = IsAsl(p.Tags), crossing = IsCrossing(p.Tags);
+            string kind0 = signal ? "signal" : asl ? "asl" : "crossing";
             if (signal)
             {
                 stats.Signals++;
@@ -114,6 +119,7 @@ public static class OsmNodes
                 if (Direction(p.Tags) != "") stats.SignalsWithDir++;
             }
             if (asl) stats.Asl++;
+            if (crossing) stats.Crossings++;
 
             var (snap, why) = ctx.SnapPoint(p);
             if (snap is not { } s)
@@ -121,6 +127,7 @@ public static class OsmNodes
                 stats.Count(kind0, "unmatched, " + why);
                 if (signal) stats.SignalsUnmatched++;
                 if (asl) stats.AslUnmatched++;
+                if (crossing) stats.CrossingsUnmatched++;
                 continue;
             }
             stats.Count(kind0, s.How + (why != "" ? " (" + why + ")" : ""));
@@ -138,11 +145,11 @@ public static class OsmNodes
                 _ => "",
             };
             string tags = TagString(p.Tags);
-            foreach (var kind in (string[])[signal ? "signal" : "", asl ? "asl" : ""])
+            foreach (var kind in (string[])[signal ? "signal" : "", asl ? "asl" : "", crossing ? "crossing" : ""])
             {
                 if (kind == "") continue;
                 rows.Add(new NodeRow(kind, p.Id, p.E, p.N, line.Uuid, line.Part, s.Along, junction, end, endE, endN,
-                    dir, "", "", -1, "", tags));
+                    dir, kind == "crossing" ? p.Tags.GetValueOrDefault("crossing", "") : "", "", -1, "", tags));
                 stats.Snapped[(kind, junction)] = stats.Snapped.GetValueOrDefault((kind, junction)) + 1;
             }
         }
@@ -484,6 +491,8 @@ public static class OsmNodes
         sb.Append(inv, $"  signal rows with a direction (+/-/both): {rows.Count(r => r.Kind == "signal" && r.Dir != "")}\n");
         sb.Append(inv, $"  asl nodes read {s.Asl}: junction node {Snapped("asl", "node")}, approach {Snapped("asl", "approach")}, ")
             .Append(inv, $"mid-block {Snapped("asl", "mid")}, unmatched {s.AslUnmatched}\n");
+        sb.Append(inv, $"  crossing nodes read {s.Crossings} (#700; by crossing=*: {string.Join(", ", rows.Where(r => r.Kind == "crossing").GroupBy(r => r.Value == "" ? "-" : r.Value).OrderBy(g => g.Key, StringComparer.Ordinal).Select(g => $"{g.Key} {g.Count()}"))}): junction node {Snapped("crossing", "node")}, ")
+            .Append(inv, $"approach {Snapped("crossing", "approach")}, mid-block {Snapped("crossing", "mid")}, unmatched {s.CrossingsUnmatched}\n");
         sb.Append(inv, $"  restrictions read {s.Restrictions}: mapped {s.RestrictionsMapped}, dropped via-way {s.RestrictionsViaWay}, ")
             .Append(inv, $"unmatched {s.RestrictionsUnmatched}, other values {s.RestrictionsOther} (outside the region, not counted: {s.RestrictionsOutside})\n");
         foreach (var g in rows.Where(r => r.Kind == "restriction").GroupBy(r => r.Value).OrderBy(g => g.Key, StringComparer.Ordinal))
@@ -517,14 +526,14 @@ public static class OsmNodes
         var pos = new Dictionary<long, (double E, double N)>
         {
             [10] = (100, 1), [11] = (15, 1), [12] = (0, 1), [13] = (-20, 1), [14] = (-100, 1),
-            [20] = (1, -100), [15] = (1, -12), [23] = (1, 8), [22] = (1, 60), [21] = (1, 100), [30] = (-20, 60), [31] = (20, 60),
+            [20] = (1, -100), [24] = (1, -25), [15] = (1, -12), [23] = (1, 8), [22] = (1, 60), [21] = (1, 100), [30] = (-20, 60), [31] = (20, 60),
         };
         OsmWay Way(long id, string highway, params long[] refs) =>
             new(id, refs.Select(r => pos[r].E).ToArray(), refs.Select(r => pos[r].N).ToArray(), new() { ["highway"] = highway }, refs);
         var osm = new List<OsmWay>
         {
             Way(100, "secondary", 10, 11, 12), Way(101, "secondary", 12, 13, 14),
-            Way(200, "residential", 20, 15, 12), Way(201, "residential", 12, 23), Way(202, "residential", 23, 22, 21),
+            Way(200, "residential", 20, 24, 15, 12), Way(201, "residential", 12, 23), Way(202, "residential", 23, 22, 21),
             Way(300, "footway", 30, 22, 31), // a crossing footway: node 22 is no junction
         };
         Point P(long id, params (string K, string V)[] tags) => new(id, pos[id].E, pos[id].N, tags.ToDictionary(t => t.K, t => t.V));
@@ -534,6 +543,7 @@ public static class OsmNodes
             P(13, ("highway", "traffic_signals"), ("traffic_signals:direction", "backward"), ("button_operated", "no")),
             P(12, ("highway", "traffic_signals")),
             P(15, ("cycleway", "asl")),
+            P(24, ("highway", "crossing"), ("crossing", "zebra")),
             P(22, ("highway", "crossing"), ("crossing", "traffic_signals"), ("button_operated", "yes")),
             P(23, ("highway", "traffic_signals"), ("traffic_signals:direction", "backward")),
         };
@@ -573,6 +583,11 @@ public static class OsmNodes
         var s22 = Get("signal", 22);
         Check(s22 is { Uuid: "north", Junction: "mid", LineEnd: "" } && s22.Tags.Contains("crossing=traffic_signals"),
             $"signal 22: pedestrian signal mid-block on the north line (footway node is no junction), got {s22}");
+        var c24 = Get("crossing", 24);
+        Check(c24 is { Uuid: "south", Junction: "approach", LineEnd: "end", Value: "zebra" } && Math.Abs(c24.Along - 75) < 0.01,
+            $"crossing 24: a zebra on the south line at 75 m, approach to its end, got {c24}");
+        var c22 = Get("crossing", 22);
+        Check(c22 is { Junction: "mid", Value: "traffic_signals" } && s22 is not null, $"crossing 22: the pedestrian signal is a crossing row too, got {c22}");
         var r900 = Get("restriction", 900);
         Check(r900 is { Uuid: "west", LineEnd: "end", ToUuid: "north", ToPart: 0, ToEnd: "start", Value: "no_left_turn", Junction: "via", Along: 100 },
             $"restriction 900: from west (end) to north (start, by the way's geometry), got {r900}");

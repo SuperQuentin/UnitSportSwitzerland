@@ -62,6 +62,24 @@ public static partial class TileRewriter
         }
 
         /// <summary>
+        /// Whether OSM forbids the turn from arm <paramref name="from"/> of a node into arm <paramref name="to"/> (#700, before the
+        /// junction is built): a <c>no_*</c> restriction to that arm's line, or an <c>only_*</c> one to another line.
+        /// </summary>
+        public bool Forbids(RoadNetwork net, RoadNode node, Approach from, Approach to)
+        {
+            if (net.Links[from.LinkId].Tag is not Source { Key: { } key } || !_byFrom.TryGetValue((key.Uuid, key.Part), out var list)
+                || net.Links[to.LinkId].Tag is not Source { Key: { } tk })
+                return false;
+            foreach (var e in list)
+            {
+                if (new Vec2(e.E, e.N).DistanceTo(node.Position) > Reach || e.Value == "no_u_turn") continue;
+                bool toThis = e.ToUuid == tk.Uuid && e.ToPart == tk.Part;
+                if (e.Value.StartsWith("no_", StringComparison.Ordinal) && toThis) return true;
+                if (e.Value.StartsWith("only_", StringComparison.Ordinal) && !toThis) return true;
+            }
+            return false;
+        }
+        /// <summary>
         /// The turns forbidden from arm <paramref name="from"/> of a junction: a <c>no_*</c>
         /// restriction bans the turn to its to-line's arm, an <c>only_*</c> one every other turn
         /// (<c>no_u_turn</c> is not a movement here). Turns as the signal plans name them.
@@ -107,6 +125,9 @@ public static partial class TileRewriter
         return arms;
     }
 
+    /// <summary>The lanes a carriageway already holds (#700) take their own lines over these distances before the stop line: fully there at 15 m, from 30 m.</summary>
+    private const float OwnLaneFull = 15f, OwnLaneFrom = 30f;
+
     /// <summary>The stop bar across a #123 pocket without lights lies this far from the mouth (its middle).</summary>
     private const double PocketBarMiddle = 0.1 + StopBar * 0.5;
 
@@ -128,8 +149,17 @@ public static partial class TileRewriter
             var moves = SignalMoves.None;
             for (int k = 0; k < plan.Arms.Count; k++)
                 if (k != planArm && plan.Arms[k].Out) moves |= SignalPlan.Turn(plan.Arms, planArm, k);
-            centre = (float)OwnLaneCentre(j, arm, net);
-            lanes = [new ApproachLane(0f, 0f, 0f, moves, ApproachLaneKind.Car)];
+            var (own, laneWidth, n) = OwnLanes(j, arm, net);
+            centre = (float)own;
+            lanes = [];
+            // every lane of a multi-lane carriageway is there all along, from 30 m before the line (#700)
+            for (int k = 0; k < n; k++)
+            {
+                // the moves OSM's lane data gave each lane (#700), else every turn the approach has
+                var laneMoves = built?.OwnMoves is { } given && given.Length == n ? given[k] : moves;
+                lanes.Add(n == 1 ? new ApproachLane(0f, 0f, 0f, laneMoves, ApproachLaneKind.Car)
+                    : new ApproachLane(k * laneWidth, OwnLaneFull, OwnLaneFrom, laneMoves, ApproachLaneKind.Car));
+            }
         }
         var record = new RoadApproach
         {
@@ -165,6 +195,32 @@ public static partial class TileRewriter
             }
     }
 
+    /// <summary>
+    /// The car lanes an approach already has in its carriageway (#700): how many drive toward the
+    /// junction, the leftmost lane's centre from the carriageway's centre line (where
+    /// <see cref="OwnLaneCentre"/> has the single lane's), and one lane's width. One lane: as before.
+    /// </summary>
+    private static (double Centre, float LaneWidth, int Lanes) OwnLanes(Junction j, int arm, RoadNetwork net)
+    {
+        var a = j.Arms[arm];
+        if (InfoOf(net.Links[a.LinkId]) is not { } info) return (0, 0, 1);
+        var at = info.Attributes;
+        bool atEnd = PriorityPlanner.EndAt(net, j, a) == LinkEnd.End;
+        if (at.OneWay != 0)
+        {
+            int n = Math.Max(1, Math.Max((int)at.LanesForward, at.LanesBackward));
+            float lane = RoadCrossSection.LaneWidth(info.Class);
+            float right = RoadCrossSection.RightLaneOffset(info.Class, info.Width, n);
+            return n == 1 || right == 0 ? (0, 0, 1) : (right - (n - 1) * lane, lane, n);
+        }
+        int into = Math.Max(1, (int)(atEnd ? at.LanesForward : at.LanesBackward)), outOf = Math.Max(1, (int)(atEnd ? at.LanesBackward : at.LanesForward));
+        if (into == 1) return (OwnLaneCentre(j, arm, net), 0, 1);
+        float rightBike = (atEnd ? at.Right : at.Left) is { HasLane: true } r ? r.BikeDm / 10f : 0f;
+        float leftBike = (atEnd ? at.Left : at.Right) is { HasLane: true } l ? l.BikeDm / 10f : 0f;
+        return (RoadCrossSection.TwoWayLaneOffset(info.Width, rightBike, leftBike, into, outOf, inner: into - 1),
+            RoadCrossSection.TwoWayLaneWidth(info.Width, leftBike, rightBike, into, outOf), into);
+    }
+
     /// <summary>The middle of the approach's own lane (no pocket): between the centre line and a painted bike lane on its right, 0 on a one-way road.</summary>
     private static double OwnLaneCentre(Junction j, int arm, RoadNetwork net)
     {
@@ -188,7 +244,7 @@ public static partial class TileRewriter
         var lanes = new List<ApproachLane>();
         float D(double fromMouth) => (float)Math.Max(0, fromMouth - stop);
         double centre = (layout.Half - layout.Bike) * 0.5;   // the original lane: between the centre line and a bike lane
-        float O(ApproachLayout.Lane lane) => (float)(lane.Mid - centre);
+        float O(ApproachLayout.Lane lane) => (float)(lane.Mid - centre - layout.Shift);   // (#700: from the original lane, less a split lead-in's shift)
 
         // where the lanes right of a left pocket move out over its widening: the taper and the
         // lead-in before it, or held out all along a strip merged with the exit before (#325);
@@ -198,10 +254,16 @@ public static partial class TileRewriter
         {
             // the pocket appears beside the through lane where the hatch closes (#123), or opens out
             // of the lane-wide hatch over the entry diagonal (#325)
-            double full = p.Storage, opens = p.Merged ? p.Storage + TurnEntry : p.Storage;
+            // (#700: past the angled closing line, the pocket opens over its slant)
+            double full = p.Storage, opens = p.Merged ? p.Storage + TurnEntry : p.Storage + lw.LeadSlant;
             bool box = p.Signal && lw.HasLeftBikeLane && lw.BikeBox, advanced = p.Signal && lw.HasLeftBikeLane && !lw.BikeBox;
-            lanes.Add(new ApproachLane(O(layout.LeftPocketLane!.Value), D(full), D(opens), SignalMoves.Left, ApproachLaneKind.Car,
-                box ? (float)BikeBoxDepth : advanced ? (float)AdvancedBikeLine : 0f));
+            // the pocket's lanes, left to right (#700: a double left has two). Only the leftmost opens where the hatch ends;
+            // the ones right of it carry the approach's own lane on, moving out over the taper as the through lane does
+            for (int k = 0; k < layout.LeftLanes; k++)
+                lanes.Add(new ApproachLane(O(layout.LeftLane(k)), D(full),
+                    k == 0 || p.Merged ? D(opens) : D(lw.Length + lw.Lead),
+                    p.PocketMoves is { } pm && k < pm.Length ? pm[k] : SignalMoves.Left, ApproachLaneKind.Car,
+                    box ? (float)BikeBoxDepth : advanced ? (float)AdvancedBikeLine : 0f));
             if (layout.LeftBikeLane is { } leftBike)   // the left-turn bike lane (#351): stops at the box's front line, or the advanced line
                 lanes.Add(new ApproachLane(O(leftBike), D(full), D(opens), SignalMoves.Left, ApproachLaneKind.Bike,
                     0f));
@@ -226,7 +288,7 @@ public static partial class TileRewriter
         // (#386: only the turns the approach has, so the stem of a T beside its right pocket turns left only)
         var turns = p.Turns == 0 ? SignalMoves.Left | SignalMoves.Through | SignalMoves.Right : p.Turns;
         SignalMoves Can(SignalMoves m) => (m & turns) != 0 ? m & turns : turns & ~SignalMoves.Right;
-        var throughMoves = Can(p.LeftWay is not null
+        var throughMoves = p.OwnMoves is { Length: > 0 } own ? Can(own[0]) : Can(p.LeftWay is not null
             ? SignalMoves.Through | (p.ThroughRight ? SignalMoves.Right : 0)
             : SignalMoves.Through | (p.RightWay is { LeftTurn: true } ? SignalMoves.Left : 0));
         lanes.Add(new ApproachLane(O(through), throughFull, throughFrom, throughMoves, ApproachLaneKind.Car));

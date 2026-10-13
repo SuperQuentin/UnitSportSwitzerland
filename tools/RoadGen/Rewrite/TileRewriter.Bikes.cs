@@ -27,6 +27,54 @@ public static partial class TileRewriter
             : string.Create(System.Globalization.CultureInfo.InvariantCulture, $"~{s.Line.Plan[0].X:F1},{s.Line.Plan[0].Y:F1}");
     }
 
+    /// <summary>A path this short of a junction's mouth is carried on to it (<see cref="PathsToMouth"/>).</summary>
+    private const double CrossingLookIn = 8.0;
+
+    /// <summary>
+    /// A street's separated path (and the sidewalk beside it) that stops within <see cref="CrossingLookIn"/> m of a
+    /// junction's mouth goes on to the mouth (#700, the user's rule: the path reaches the road it crosses before its
+    /// crossing starts). A joining road's corner zone stops it a few metres short where the junction's setback is small;
+    /// the pieces between take the side as it is where it starts. <paramref name="atStart"/>/<paramref name="atEnd"/>:
+    /// which ends of the street are a junction's mouth.
+    /// </summary>
+    private static List<RoadSegment> PathsToMouth(List<RoadSegment> pieces, bool atStart, bool atEnd)
+    {
+        if (pieces.Count < 2) return pieces;
+        var result = new List<RoadSegment>(pieces);
+        foreach (bool fromStart in (ReadOnlySpan<bool>)[true, false])
+        {
+            if (fromStart ? !atStart : !atEnd) continue;
+            foreach (bool right in (ReadOnlySpan<bool>)[false, true])
+            {
+                RoadSide SideOf(RoadSegment s) => right ? s.Attributes.Right : s.Attributes.Left;
+                double gap = 0;
+                int p = 0;
+                for (; p < result.Count; p++)
+                {
+                    var piece = fromStart ? result[p] : result[^(p + 1)];
+                    if (SideOf(piece).HasTrack) break;
+                    gap += RoadPaintGeometry.Length(piece.Points);
+                    if (gap > CrossingLookIn) break;
+                }
+                if (p == 0 || p >= result.Count || gap > CrossingLookIn) continue;
+                var found = SideOf(fromStart ? result[p] : result[^(p + 1)]);
+                ushort shift = fromStart ? found.ShiftStartCm : found.ShiftEndCm;
+                var carried = found with { ShiftStartCm = shift, ShiftEndCm = shift };
+                for (int q = 0; q < p; q++)
+                {
+                    int index = fromStart ? q : result.Count - 1 - q;
+                    var s = result[index];
+                    result[index] = new RoadSegment
+                    {
+                        Class = s.Class, Surface = s.Surface, Flags = s.Flags, Width = s.Width, Points = s.Points,
+                        Attributes = right ? s.Attributes with { Right = carried } : s.Attributes with { Left = carried },
+                    };
+                }
+            }
+        }
+        return result;
+    }
+
     /// <summary>A link end that is a junction's mouth or a dead end (not a road simply carrying on).</summary>
     private static bool EndsAtJunction(RoadNetwork net, int node) =>
         node < 0 || node >= net.Nodes.Count || net.Nodes[node].Degree != 2;
@@ -42,10 +90,27 @@ public static partial class TileRewriter
     private static void BikeLaneToStop(List<RoadPaint> paint, int from, RoadSegment piece, bool right, double stop, double solid)
     {
         double lo = Math.Min(stop, solid), hi = Math.Max(stop, solid);
+        double pieceLength = RoadPaintGeometry.Length(piece.Points);
+        bool barred = false;
         for (int k = paint.Count - 1; k >= from; k--)
         {
             var p = paint[k];
             if (p.Type != PaintType.YellowDashed || !ReferenceEquals(p.Segment, piece) || (p.Offset > 0) != right) continue;
+            // #700: the riders going straight on stop at their own yellow line, level with the cars'
+            // (which ends at the lane's line): across the lane, on the cars' side of the stop
+            if (!barred && stop >= 0 && stop <= pieceLength)
+            {
+                barred = true;
+                var side = right ? piece.Attributes.Right : piece.Attributes.Left;
+                float edge = piece.Width * 0.5f + side.ShiftStartCm / 100f, line = Math.Abs(p.Offset);
+                if (edge - line > 0.5f)
+                {
+                    float sign = right ? 1f : -1f;
+                    double near = right ? stop - BikeStopLine : stop, far = right ? stop : stop + BikeStopLine;
+                    paint.Add(RoadPaint.AlongSegment(piece, PaintType.StopLine, PaintEmitter.Yellow, edge - line - 0.1f, 0, 0,
+                        sign * (line + edge) * 0.5f, Math.Max(0, near), Math.Min(pieceLength, far), p.Variant));
+                }
+            }
             double a = p.From, b = float.IsPositiveInfinity(p.To)
                 ? RoadPaintGeometry.Length(RoadPaintGeometry.Offset(piece, p.Offset)) : p.To;
             if (b <= lo && right || a >= hi && !right) continue;   // all of it before the solid stretch
@@ -160,6 +225,9 @@ public static partial class TileRewriter
                 double LaneShift(int armIndex, bool armLeft, double shift) =>
                     armLeft && lanes.GetValueOrDefault((junction.NodeId, armIndex))?.Approach is { BikeBetween: true } l
                         ? l.BikeLane()!.Value.To - l.Half : shift;
+                // how far in from the mouth the side's path or lane starts (#700: with a short setback a joining road's corner
+                // can stop it a few metres in, and the crossing runs on to where it starts)
+                var endInset = new Dictionary<(int, bool), double>();
                 RoadSide SideOf(int armIndex, bool armLeft)
                 {
                     var arm = junction.Arms[armIndex];
@@ -168,6 +236,19 @@ public static partial class TileRewriter
                     if (segmentOf.TryGetValue(arm.LinkId, out var so))
                     {
                         var pieces = finalPieces.TryGetValue(so.Segment, out var list) && list.Count > 0 ? list : [so.Segment];
+                        double inset = 0;
+                        for (int p = 0; p < pieces.Count && inset <= CrossingLookIn; p++)
+                        {
+                            var piece = end == LinkEnd.Start ? pieces[p] : pieces[^(p + 1)];
+                            var side = segRight ? piece.Attributes.Right : piece.Attributes.Left;
+                            if (side.HasTrack || side.HasLane)
+                            {
+                                endShift[(armIndex, armLeft)] = side.ShiftAt(end == LinkEnd.Start ? 0 : 1);
+                                endInset[(armIndex, armLeft)] = inset;
+                                return side;
+                            }
+                            inset += RoadPaintGeometry.Length(piece.Points);
+                        }
                         var seg = end == LinkEnd.Start ? pieces[0] : pieces[^1];
                         var found = segRight ? seg.Attributes.Right : seg.Attributes.Left;
                         endShift[(armIndex, armLeft)] = found.ShiftAt(end == LinkEnd.Start ? 0 : 1);
@@ -191,6 +272,9 @@ public static partial class TileRewriter
                             && Math.Sign(ua.Cross(Vec2.FromHeading(junction.Arms[i].OutwardHeading))) == sideSign)
                         .ToList();
                     Vec2 da = (ca - from).Normalized(), db = (cb - to).Normalized();
+                    // the crossing's ends where the paths or lanes start (#700)
+                    ca += ua * endInset.GetValueOrDefault((ia, k == 0));
+                    cb += ub * endInset.GetValueOrDefault((ib, k != 0));
                     // a curve through the junction, offset from the carriageway edge (+ outward, - inward) at each arm
                     List<Vec2> Bezier(double oa, double ob, bool simplify = true)
                     {
@@ -237,16 +321,33 @@ public static partial class TileRewriter
                             int riders = k == 0 ? ia : ib;
                             double stop = stopsAt.GetValueOrDefault((junction.Arms[riders].LinkId, plan.Arms[riders].End));
                             Vec2 backA = k == 0 ? ua * stop : Vec2.Zero, backB = k == 0 ? Vec2.Zero : ub * stop;
-                            List<Vec2> Straight(double oa, double ob) => Densify(ca + da * oa + backA, cb + db * ob + backB, 2.0);
+                            // a widened arm's lane runs on straight along its kerb until the corner's radius starts (#700), then across
+                            double maxIn = (from - junction.Centre).Length + (to - junction.Centre).Length;
+                            double ta = StraightIn(junction, ca + da * xa, -ua, maxIn), tb = StraightIn(junction, cb + db * xb, -ub, maxIn);
+                            // ... only where the line straight across would cut over a kerb (the user's rule): the least of it that clears
+                            (ta, tb) = ClearOfKerbs(junction, ca + da * (xa - lw), ca + da * xa, da, ua, from, cb + db * (xb - lw), cb + db * xb, db, ub, to, ta, tb);
+                            Vec2 LeadA(double oa) => ca + da * oa + backA;
+                            Vec2 BendA(double oa) => ca + da * oa - ua * ta;
+                            Vec2 BendB(double ob) => cb + db * ob - ub * tb;
+                            Vec2 LeadB(double ob) => cb + db * ob + backB;
+                            List<Vec2> Straight(double oa, double ob) => Densify(2.0, LeadA(oa), BendA(oa), BendB(ob), LeadB(ob));
                             double ra = (lw + la - lw * 0.5) * 0.5, rb = (lw + lb - lw * 0.5) * 0.5;
                             float band = (float)(Math.Min(la, lb) - lw * 1.5 - 2 * RedInset);
-                            // red only on the half (or halves) where a car movement crosses it while the riders have green (#682)
-                            Vec2 s0 = ca + da * (-ra + xa) + backA, s1 = cb + db * (-rb + xb) + backB;
+                            // red only on the half (or halves) where a car movement crosses it while the riders have green (#682);
+                            // a run from either end of the crossing carries on over the straight lead there
+                            Vec2 s0 = BendA(-ra + xa), s1 = BendB(-rb + xb);
                             var runs = RedRuns(ConflictsOf(lights, riders, joined, lanes.GetValueOrDefault((junction.NodeId, riders))?.Approach, junction, s0, s1));
                             bool crossed = runs.Count > 0;
                             if (band > 0.3f)
                                 foreach (var (from0, to0) in runs)
-                                    Add(Densify(s0 + (s1 - s0) * from0, s0 + (s1 - s0) * to0, 2.0), PaintType.BikeCrossing, PaintEmitter.Red, band, 0);
+                                {
+                                    var corners = new List<Vec2>();
+                                    if (from0 <= 1e-6) corners.Add(LeadA(-ra + xa));
+                                    corners.Add(s0 + (s1 - s0) * from0);
+                                    corners.Add(s0 + (s1 - s0) * to0);
+                                    if (to0 >= 1 - 1e-6) corners.Add(LeadB(-rb + xb));
+                                    Add(Densify(2.0, [.. corners]), PaintType.BikeCrossing, PaintEmitter.Red, band, 0);
+                                }
                             Add(Straight(-lw * 0.5 + xa, -lw * 0.5 + xb), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
                             Add(Straight(-la + xa, -lb + xb), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
                             if (crossed) stats.SignalLanesRed++; else stats.SignalLanesDashed++;
@@ -386,6 +487,98 @@ public static partial class TileRewriter
         return line;
     }
 
+    /// <summary><see cref="Densify"/> along a polyline of corners, each shared corner once.</summary>
+    private static List<Vec2> Densify(double step, params Vec2[] corners)
+    {
+        var line = new List<Vec2> { corners[0] };
+        for (int i = 1; i < corners.Length; i++)
+        {
+            if (corners[i].DistanceTo(corners[i - 1]) < 0.05) continue;
+            var piece = Densify(corners[i - 1], corners[i], step);
+            line.AddRange(piece.Skip(1));
+        }
+        return line;
+    }
+
+    /// <summary>
+    /// How far the straight edge of a widened arm runs on into the junction (#700, the user's rule: lanes, bike lanes and
+    /// their markings follow the straight edge until the corner's radius starts): from <paramref name="start"/>, the arm's
+    /// kerb at its mouth, along <paramref name="inward"/> to where it meets the junction's ring. 0 where the kerb is the
+    /// mouth's own corner (an arm not widened: its radius starts there).
+    /// </summary>
+    private static double StraightIn(Junction junction, Vec2 start, Vec2 inward, double max)
+    {
+        var ring = junction.Boundary;
+        if (ring.Count < 3) return 0;
+        double best = double.MaxValue;
+        for (int i = 0; i < ring.Count; i++)
+        {
+            Vec2 p = ring[i], q = ring[(i + 1) % ring.Count], e = q - p;
+            double den = inward.Cross(e);
+            if (Math.Abs(den) < 1e-9) continue;
+            var w = p - start;
+            double t = w.Cross(e) / den, s = w.Cross(inward) / den;
+            if (s >= 0 && s <= 1 && t >= 0 && t < best) best = t;
+        }
+        if (best >= 0.3) return best > max ? 0 : best;
+        // the kerb is the mouth's corner: the ring runs on along it where a tight corner keeps its edge straight (#700)
+        double run = 0;
+        for (double t = 0.25; t <= max; t += 0.25)
+        {
+            var at = start + inward * t;
+            double near = double.MaxValue;
+            for (int i = 0; i < ring.Count; i++) near = Math.Min(near, DistanceToSegment(at, ring[i], ring[(i + 1) % ring.Count]));
+            if (near > 0.15) break;
+            run = t;
+        }
+        return run < 0.5 ? 0 : run;
+    }
+
+    /// <summary>
+    /// Of a crossing's straight runs in along each arm's kerb (<paramref name="ta"/>, <paramref name="tb"/>), the least that keeps
+    /// the line across on the junction (#700): none, one side's, the other's, both. A line point counts once it is past both
+    /// arms' mouths (<paramref name="midA"/>, <paramref name="midB"/>); beside an arm's straight kerb (up to its run in) it
+    /// must stay inside that kerb's line, past both runs inside the junction's ring.
+    /// </summary>
+    private static (double, double) ClearOfKerbs(Junction junction, Vec2 lineA, Vec2 kerbA, Vec2 da, Vec2 ua, Vec2 midA,
+        Vec2 lineB, Vec2 kerbB, Vec2 db, Vec2 ub, Vec2 midB, double ta, double tb)
+    {
+        bool Clear(double a, double b)
+        {
+            Vec2 p0 = lineA - ua * a, p1 = lineB - ub * b;
+            for (int s = 1; s < 40; s++)
+            {
+                var p = p0 + (p1 - p0) * (s / 40.0);
+                double inA = -(p - midA).Dot(ua), inB = -(p - midB).Dot(ub);
+                if (inA < 0.3 || inB < 0.3) continue;   // on an arm, not yet in the junction
+                if (inA <= ta) { if ((p - kerbA).Dot(da) > 0.05) return false; }
+                else if (inB <= tb) { if ((p - kerbB).Dot(db) > 0.05) return false; }
+                else if (!Inside(junction.Boundary, p)) return false;
+            }
+            return true;
+        }
+        foreach (var (a, b) in (ReadOnlySpan<(double, double)>)[(0, 0), (ta, 0), (0, tb), (ta, tb)])
+            if (Clear(a, b)) return (a, b);
+        return (ta, tb);
+    }
+
+    private static bool Inside(List<Vec2> ring, Vec2 p)
+    {
+        bool inside = false;
+        for (int i = 0, j = ring.Count - 1; i < ring.Count; j = i++)
+            if ((ring[i].Y > p.Y) != (ring[j].Y > p.Y)
+                && p.X < (ring[j].X - ring[i].X) * (p.Y - ring[i].Y) / (ring[j].Y - ring[i].Y) + ring[i].X)
+                inside = !inside;
+        return inside;
+    }
+
+    private static double DistanceToSegment(Vec2 p, Vec2 a, Vec2 b)
+    {
+        var e = b - a;
+        double l2 = e.Dot(e), t = l2 < 1e-12 ? 0 : Math.Clamp((p - a).Dot(e) / l2, 0, 1);
+        return p.DistanceTo(a + e * t);
+    }
+
     /// <summary>
     /// Whether a car movement crosses a bike lane through a signalised junction while its riders
     /// have green (#406). The riders come from arm <paramref name="from"/> (junction arm indices)
@@ -500,7 +693,7 @@ public static partial class TileRewriter
 
         public static SquareCrossing? For(Junction junction, int armIndex, ArmLanes? lanes, Vec2 fromA, double xa, double xb, bool force = false)
         {
-            double widenIn = lanes?.Approach is { } l ? l.Edge() - l.Half : 0, widenOut = lanes?.ExitWidening ?? 0;
+            double widenIn = lanes?.Approach is { } l ? l.EdgeOut : 0, widenOut = lanes?.ExitWidening ?? 0;
             if (!force && widenIn < 0.05 && widenOut < 0.05 && xa < 0.05 && xb < 0.05) return null;
             var arm = junction.Arms[armIndex];
             var u = Vec2.FromHeading(arm.OutwardHeading);

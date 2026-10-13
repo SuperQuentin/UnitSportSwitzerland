@@ -64,4 +64,32 @@ public static class RoadCrossSection
         float margin = IsHighSpeed(c) ? Math.Min(InnerMargin(c), width - block) : (width - block) * 0.5f;
         return -width * 0.5f + margin + block - lane * 0.5f;
     }
+
+    // ---- an undivided road, lanes both ways (#700) -------------------------------------------
+    // Drawing frame: offsets from the centreline, positive on the right of the drawing's direction.
+    // Traffic keeps right, so the lanes against the drawing are on the left; painted bike lanes
+    // take their width off both edges and the car lanes share what is left, equally.
+
+    /// <summary>A car lane of an undivided two-way road (a direction with no lane counts one: the paint's rule).</summary>
+    public static float TwoWayLaneWidth(float width, float leftBike, float rightBike, int back, int fwd) =>
+        (width - leftBike - rightBike) / (Math.Max(1, back) + Math.Max(1, fwd));
+
+    /// <summary>
+    /// Boundary <paramref name="k"/> (1 .. back + fwd - 1) between the car lanes, from the drawing's
+    /// centreline; <c>k == back</c> is the centre line.
+    /// </summary>
+    public static float TwoWayLineOffset(float width, float leftBike, float rightBike, int back, int fwd, int k) =>
+        -width * 0.5f + leftBike + k * TwoWayLaneWidth(width, leftBike, rightBike, back, fwd);
+
+    /// <summary>
+    /// Centre of the rightmost car lane of one direction of an undivided two-way road, metres right
+    /// of the centreline in that direction's travel frame (<paramref name="lanesIn"/> lanes there,
+    /// <paramref name="lanesOut"/> the other way; <paramref name="rightBike"/> the bike lane on its
+    /// right, <paramref name="leftBike"/> the one on its left); <paramref name="inner"/> lanes in from it.
+    /// </summary>
+    public static float TwoWayLaneOffset(float width, float rightBike, float leftBike, int lanesIn, int lanesOut, int inner = 0)
+    {
+        float lane = TwoWayLaneWidth(width, leftBike, rightBike, lanesIn, lanesOut);
+        return width * 0.5f - rightBike - lane * (0.5f + Math.Clamp(inner, 0, Math.Max(1, lanesIn) - 1));
+    }
 }

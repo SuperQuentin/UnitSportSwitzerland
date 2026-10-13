@@ -252,6 +252,7 @@ public static partial class TileRewriter
             ? OsmNodesReader.TryLoad(Path.Combine(Path.GetDirectoryName(nodesBeside) ?? ".", OsmNodesReader.FileName)) : null;
         var signalSites = SignalSites.From(osmNodes);
         var restrictions = Restrictions.From(osmNodes);   // turns forbidden at an approach (#353)
+        var crossingNodes = CrossingNodes.From(osmNodes);   // pedestrian crossings (#700)
         if (signalSites is not null) log($"  OSM traffic signals: {signalSites.Count:N0} junction signals");
         if (overlay is not null) log($"  OSM overlay: {overlay.RowCount:N0} rows from {options.OsmOverlay}");
 
@@ -264,7 +265,7 @@ public static partial class TileRewriter
             Grid = id => LoadGrid(chunkDir, id),
             Buildings = id => Facades.Read(chunkDir, id),
             Parking = id => RawParking.Read(parkDir, id),
-            Overlay = overlay, Cantons = cantons, SignalSites = signalSites, Restrictions = restrictions,
+            Overlay = overlay, Cantons = cantons, SignalSites = signalSites, Restrictions = restrictions, Crossings = crossingNodes,
         });
 
         int blockIndex = 0;
@@ -321,6 +322,7 @@ public static partial class TileRewriter
         internal Cantons? Cantons { get; init; }
         internal SignalSites? SignalSites { get; init; }
         internal Restrictions? Restrictions { get; init; }
+        internal CrossingNodes? Crossings { get; init; }
     }
 
     /// <summary>
@@ -361,6 +363,7 @@ public static partial class TileRewriter
             var cantons = inputs.Cantons;
             var signalSites = inputs.SignalSites;
             var restrictions = inputs.Restrictions;
+            var crossingNodes = inputs.Crossings;
             var built = new List<RoadTile>();
 
             var context = WithHalo(block, options.Halo);
@@ -443,7 +446,8 @@ public static partial class TileRewriter
                     SimplifyTolerance: options.SimplifyTolerance,
                     ChordTolerance: options.ChordTolerance,
                     Analyze: options.Measure,
-                    JoinNearEnds: MayJoinNearEnd));
+                    JoinNearEnds: MayJoinNearEnd,
+                    TightCorner: (n, node, from, to) => NoRightTurn(n, node, from, to, restrictions, overlay)));
                 netStats.Priority.NearEndsJoined += result.NearEndsJoined;
                 // traffic lights: from OSM where the overlay covers a junction, else where two main
                 // roads cross in a dense core (#348)
@@ -599,6 +603,7 @@ public static partial class TileRewriter
                     var home = TileId.FromLv95(junction.Centre.X, junction.Centre.Y);
                     if (!block.Contains(home) || !wanted.Contains(home)) continue;
 
+                    netStats.TurnLanes.TightCorners += junction.TightCorners.Count;   // #700
                     var record = ToJunction(junction, result.Network, home);
                     if (record is null) continue;
 
@@ -621,7 +626,7 @@ public static partial class TileRewriter
                 var openings = new List<PocketOpening>();
                 var townArcs = new Dictionary<(int Node, int Arm), CornerArc>();
                 var pockets = EmitTurnLanes(priority, result, segmentOf, output, block, wanted, grids, buildings, paint, islands, signs,
-                    bikeBetween, stripOwners, netStats.TurnLanes, StreetSideAt, openings, townArcs);
+                    bikeBetween, stripOwners, netStats.TurnLanes, StreetSideAt, openings, townArcs, overlay, restrictions);
                 var openingsOf = openings.GroupBy(o => o.Segment, ReferenceEqualityComparer.Instance)
                     .ToDictionary(g => (RoadSegment)g.Key!, g => g.ToList(), ReferenceEqualityComparer.Instance);
                 // the bike side of a link's end piece (#351): its separated path, else its painted lane
@@ -641,7 +646,8 @@ public static partial class TileRewriter
                 var stopsAt = new Dictionary<(int Link, LinkEnd End), double>();
                 var signalPlans = new Dictionary<int, (SignalPlan Plan, int[] PlanArm)>();
                 EmitSignals(priority, result, pockets, BikeSideAt, block, wanted, paint, signalRecords, cantons, field, buildings, islands, signs, netStats.Signals,
-                    approachRecords, restrictions, netStats.Lanes, stopsAt, signalPlans, StreetSideAt);
+                    approachRecords, restrictions, netStats.Lanes, stopsAt, signalPlans, StreetSideAt, crossingNodes);
+                netStats.Signals.DataCrossings += EmitDataCrossings(priority, result, pockets, crossingNodes, block, wanted, paint, islands, netStats.Signals, StreetSideAt);
                 EmitRightLanes(pockets, paint, bikeBetween, netStats.TurnLanes);
                 EmitPocketApproaches(priority, result, pockets, approachRecords, restrictions, netStats.Lanes);
 
@@ -652,6 +658,8 @@ public static partial class TileRewriter
                 var stripsOf = new Dictionary<RoadSegment, List<RoadAreaProp>>(ReferenceEqualityComparer.Instance);
                 foreach (var (strip, owner) in stripOwners)
                     (stripsOf.TryGetValue(owner, out var owned) ? owned : stripsOf[owner] = new()).Add(strip);
+                var linkOfSegment = new Dictionary<RoadSegment, int>(ReferenceEqualityComparer.Instance);
+                foreach (var (link, so) in segmentOf) linkOfSegment[so.Item1] = link;
                 foreach (var (tileId, list) in output)
                 {
                     for (int i = list.Count - 1; i >= 0; i--)
@@ -663,6 +671,11 @@ public static partial class TileRewriter
                         var final = strips is null ? pieces : pieces.SelectMany(x => ShiftOffPavement(x, strips, netStats.Bikes)).ToList();
                         // a gap in the grass where a left-turn pocket opens, for cyclists to reach it (#352)
                         if (cut) final = CutVerges(list[i], tileId, final, opened!, block.Contains(tileId) && wanted.Contains(tileId) ? netStats.Bikes : null);
+                        // a path stopped a few metres short of a junction's mouth goes on to it (#700, the user's rule): it reaches
+                        // the road it crosses before its crossing starts
+                        if (linkOfSegment.TryGetValue(list[i], out var pathLink))
+                            final = PathsToMouth(final, EndsAtJunction(result.Network, result.Network.Links[pathLink].StartNode),
+                                EndsAtJunction(result.Network, result.Network.Links[pathLink].EndNode));
                         finalPieces[list[i]] = final;
                         list.RemoveAt(i);
                         list.InsertRange(i, final);

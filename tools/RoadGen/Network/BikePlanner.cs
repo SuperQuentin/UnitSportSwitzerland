@@ -176,7 +176,8 @@ public static class BikePlanner
             }
 
             bool oneWay = line.OneWay != 0 || (s.Flags & RoadFlags.Divided) != 0;
-            (line.BikeLaneDm, line.BikeWhy) = LaneFor(line.Width, oneWay, urban);
+            (line.BikeLaneDm, line.BikeWhy) = LaneFor(line.Width, oneWay, urban,
+                oneWay ? Math.Max(1, line.LanesOneWay) : Math.Max(1, line.LanesFwd) + Math.Max(1, line.LanesBwd));
             if (!line.Write) continue;
             switch (line.BikeWhy)
             {
@@ -192,17 +193,20 @@ public static class BikePlanner
     /// car lanes of at least <see cref="MinCarLane"/> beside them (a centre line stays), else a
     /// Kernfahrbahn whose lanes take what the <see cref="MinCore"/> leaves, down to
     /// <see cref="MinLaneWidth"/>, else none. A one-way road: one lane on the right of travel and
-    /// one car lane of <see cref="MinOneWayLane"/>.
+    /// one car lane of <see cref="MinOneWayLane"/>. With <paramref name="carLanes"/> (#700, all directions of a two-way road, 0 = the
+    /// class default) every car lane beside the bike lanes keeps its width, and only a road with one lane each way can be a Kernfahrbahn.
     /// </summary>
-    public static (byte Dm, Why Why) LaneFor(double width, bool oneWay, bool urban)
+    public static (byte Dm, Why Why) LaneFor(double width, bool oneWay, bool urban, int carLanes = 0)
     {
         double full = LaneWidth(urban);
         if (oneWay)
         {
-            double lane = Math.Min(full, width - MinOneWayLane);
+            double lane = Math.Min(full, width - MinOneWayLane * Math.Max(1, carLanes));
             return lane >= MinLaneWidth ? (Dm(lane), Why.Lane) : ((byte)0, Why.Narrow);
         }
-        if (width - 2 * full >= 2 * MinCarLane) return (Dm(full), Why.Lane);
+        int cars = carLanes > 0 ? carLanes : 2;
+        if (width - 2 * full >= cars * MinCarLane) return (Dm(full), Why.Lane);
+        if (cars > 2) return ((byte)0, Why.Narrow);   // a Kernfahrbahn shares one lane each way
         double kern = Math.Min(full, (width - MinCore) * 0.5);
         return kern >= MinLaneWidth - 1e-9 ? (Dm(kern), Why.Kern) : ((byte)0, Why.Narrow);
     }

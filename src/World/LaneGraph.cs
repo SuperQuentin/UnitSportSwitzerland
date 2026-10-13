@@ -32,6 +32,18 @@ public sealed class LaneEdge
     public float RightLane { get; init; }
 
     /// <summary>
+    /// An undivided two-way road (#700): the rightmost car lane's centre, metres right of the centreline in the
+    /// direction of travel (drawing order <c>Fwd</c>, against it <c>Bwd</c>), clear of a painted bike lane; the car
+    /// lanes each way and one lane's width (also the lane width of a one-way edge with <see cref="OneWayLanes"/> lanes).
+    /// </summary>
+    public float RightLaneFwd { get; init; }
+    public float RightLaneBwd { get; init; }
+    public int LanesFwd { get; init; } = 1;
+    public int LanesBwd { get; init; } = 1;
+    public int OneWayLanes { get; init; } = 1;
+    public float LaneWidth { get; init; }
+
+    /// <summary>
     /// Traffic leaving this edge at its first (<see cref="RoadAttrFlags.YieldAtStart"/>) or last
     /// point (<see cref="RoadAttrFlags.YieldAtEnd"/>) gives way there: the side road of a junction
     /// with a main road (#121, v3 tiles; none in v1/v2).
@@ -183,9 +195,9 @@ public sealed class LaneApproach
         from <= full + 0.01f ? (d <= full ? 1f : 0f) : Mathf.Clamp((from - d) / (from - full), 0f, 1f);
 
     /// <summary>The car lane for a turn: the one whose arrows show it and fewest others; else the one carrying the original lane on.</summary>
-    public int LaneFor(SignalMoves turn)
+    public int LaneFor(SignalMoves turn, uint habit = 0)
     {
-        int best = -1, bestCount = int.MaxValue, root = -1;
+        int best = -1, bestCount = int.MaxValue, root = -1, ties = 0;
         for (int i = 0; i < Lanes.Length; i++)
         {
             var l = Lanes[i];
@@ -193,7 +205,9 @@ public sealed class LaneApproach
             if (Parent[i] < 0 && (root < 0 || l.TaperFrom > Lanes[root].TaperFrom)) root = i;
             if ((l.Moves & turn) == 0) continue;
             int count = System.Numerics.BitOperations.PopCount((uint)l.Moves);
-            if (count < bestCount) { best = i; bestCount = count; }
+            if (count < bestCount) { best = i; bestCount = count; ties = 1; }
+            // several lanes show it equally (#700: two through lanes): the car's habit picks, so both carry cars
+            else if (count == bestCount && habit % (uint)++ties == 0) best = i;
         }
         return best >= 0 ? best : root;
     }
@@ -264,8 +278,20 @@ public sealed class LaneGraph
                 }
                 if (cum[^1] < 1f) continue;
 
+                // an undivided road: each direction keeps to its rightmost lane, clear of a painted bike lane
+                // (#700); under 4.5 m the two share the road and keep 0.3 m over, as before
+                var at = seg.Attributes;
+                int back = Math.Max(1, (int)at.LanesBackward), fwd = Math.Max(1, (int)at.LanesForward);
+                bool shared = seg.Width < 4.5f;
+                float leftBike = at.Left.HasLane ? at.Left.BikeDm / 10f : 0f, rightBike = at.Right.HasLane ? at.Right.BikeDm / 10f : 0f;
                 var edge = new LaneEdge
                 {
+                    RightLaneFwd = shared ? 0.3f : RoadCrossSection.TwoWayLaneOffset(seg.Width, rightBike, leftBike, fwd, back),
+                    RightLaneBwd = shared ? 0.3f : RoadCrossSection.TwoWayLaneOffset(seg.Width, leftBike, rightBike, back, fwd),
+                    LanesFwd = shared ? 1 : fwd, LanesBwd = shared ? 1 : back,
+                    OneWayLanes = Math.Max(1, (int)Math.Max(at.LanesForward, at.LanesBackward)),
+                    LaneWidth = at.OneWay != 0 ? RoadCrossSection.LaneWidth(seg.Class)
+                        : shared ? 0f : RoadCrossSection.TwoWayLaneWidth(seg.Width, leftBike, rightBike, back, fwd),
                     Points = pts, Cumulative = cum, Class = seg.Class, Flags = seg.Flags,
                     Width = seg.Width, KeyStart = keyStart, KeyEnd = keyEnd,
                     OneWay = seg.Attributes.OneWay,

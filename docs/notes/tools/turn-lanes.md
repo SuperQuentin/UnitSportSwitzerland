@@ -3,11 +3,13 @@
 
 # Turn lanes: left-turn pockets (#123)
 
+Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `intersection-parts` (diagram).
+
 - **Where** (`tools/RoadGen/Rewrite/TileRewriter.TurnLanes.cs`, after the #121 priority output):
   each main-road arm (`Role.Main` at a `Kind.Main` junction) that is a two-way, paved, at-grade
   Major or Road, with a yielding car road (class up to Lane) leaving to the approaching driver's
   left at more than 30 deg from straight on. A yielding road to the right as well makes the new
-  lane's arrows straight + right. No OSM `turn:lanes` yet: `OsmOverlayReader` parses it per lane since #347 (`TurnLanes`), the planner does not use it (#348).
+  lane's arrows straight + right. Where OSM has `turn:lanes` at the junction end it decides instead (#700, `lane-data-intersections`): which pockets, how many lanes, the arrows.
 - **Shape**: the ribbon keeps one width per segment, so the approach widens by one 3 m lane on
   the driver's right as a flush `APRP` `Pavement` strip (new `AreaPropType.Pavement = 4`,
   Height 0) along the segment's edge: a taper, then storage to the junction mouth, as long as
@@ -111,9 +113,9 @@
   by whichever pocket came first, from the exiting one without the lights' stop line (J5b's west
   approach: a 0.4 m bar at the mouth, no line across its TR lane).
 - **Not done**: right-turn lanes without lights,
-  pockets across a tile seam, OSM `turn:lanes` (read, not used: #348). Roads with 3 lanes (8 m, lane lines at ±1.33 m,
+  pockets across a tile seam. Roads with 3 lanes (8 m, lane lines at ±1.33 m,
   no centre line) still get a pocket laid out for 2 lanes of half the width: the hatch covers a
-  lane and a half (seen at LV95 2506561,1138202).
+  lane and a half (seen at LV95 2506561,1138202); #700 builds no pocket where 2+ lanes already run toward the junction.
 - **In town** (#325): a built-up stretch's lines are laid on an Urban-flagged copy of the segment
   (#119, `paintOn` in `TileRewriter`), so until #325 the widening never found the centre line to
   make solid nor the edge line to cut there (47 widenings of the 20-tile region below). The

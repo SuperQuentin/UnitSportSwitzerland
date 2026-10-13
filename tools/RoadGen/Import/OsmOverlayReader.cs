@@ -60,6 +60,26 @@ public sealed class OsmOverlayReader
     }
 
     /// <summary>
+    /// The row at one end of a line (#700): OSM maps a widened approach as its own short way, which
+    /// never covers half of the TLM line, so <see cref="Best"/> does not see it. The row overlapping
+    /// the <paramref name="window"/> metres before <paramref name="m"/> (traffic arriving at it,
+    /// <paramref name="towardEnd"/>) or after it the most; none where no row reaches that stretch.
+    /// </summary>
+    public Row? AtEnd(string uuid, int part, double m, bool towardEnd, double window = 12)
+    {
+        if (!_rows.TryGetValue((uuid, part), out var list)) return null;
+        double from = towardEnd ? m - window : m, to = towardEnd ? m : m + window;
+        Row? best = null;
+        double bestOverlap = 0;
+        foreach (var row in list)
+        {
+            double overlap = Math.Min(to, row.To) - Math.Max(from, row.From);
+            if (overlap > bestOverlap) { bestOverlap = overlap; best = row; }
+        }
+        return best;
+    }
+
+    /// <summary>
     /// Folds a row into the attributes. OneWay is only taken where <paramref name="a"/> has none
     /// yet: the caller infers divided carriageways first, and TLM wins (the overlay already emptied
     /// OSM directions that contradict a divided line).

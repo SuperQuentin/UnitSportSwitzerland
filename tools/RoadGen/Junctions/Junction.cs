@@ -35,6 +35,15 @@ public sealed class Junction
     public required int Layer { get; init; }
     public List<JunctionArm> Arms { get; } = new();
 
+    /// <summary>Corners left tight (#700): corner i lies between arm i's left edge and the next arm's right edge; no right turn rounds it.</summary>
+    public HashSet<int> TightCorners { get; } = new();
+
+    /// <summary>
+    /// Where an arm's kerb ends beside a tight corner (#700): metres inside its mouth, along the arm, on its left edge
+    /// (<c>true</c>) or right edge (<c>false</c>) looking outward. Absent: at the mouth.
+    /// </summary>
+    public Dictionary<(int Arm, bool Left), double> KerbInset { get; } = new();
+
     /// <summary>Boundary ring, counter-clockwise, closed implicitly.</summary>
     public List<Vec2> Boundary { get; } = new();
 
