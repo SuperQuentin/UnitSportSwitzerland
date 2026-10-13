@@ -32,7 +32,7 @@ public enum StripWay : sbyte { Out = -1, None = 0, In = 1 }
 /// One strip across an arm (#818): its kind, its width (m), its traffic's way, the moves an in-lane makes at the junction
 /// and an id that stays the same along the arm, so the same id at both ends of a transition is the same lane.
 /// <see cref="SharedWithBikes"/>: a car lane cyclists ride in too (a right pocket beside a bike lane between, the user's rule:
-/// riders turning right share it; bike symbols in it, a bike connector from it).
+/// riders turning right share it: a bike connector from it, no bike symbol painted in it).
 /// </summary>
 public readonly record struct Strip(StripKind Kind, double Width, StripWay Way = StripWay.None, SignalMoves Moves = SignalMoves.None, int Id = 0,
     bool SharedWithBikes = false)

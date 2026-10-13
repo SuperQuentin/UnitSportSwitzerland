@@ -89,7 +89,7 @@ and the transition lengths.
   which survives when possible; the
   left-turn bike lane goes early. Beside a right pocket the bike lane runs between it and the through lane (b): without
   lights always, at the lights only where traffic from the arm the pocket turns into cannot turn left (else kerbside, a).
-  In (b) riders turning right share the cars' right pocket (bike symbols in it); no bike right-turn lane. The signal plan follows the layout.
+  In (b) riders turning right share the cars' right pocket (no bike symbol in it, no bike right-turn lane). The signal plan follows the layout.
 - **Room** (`ArmRoom`, measured once per arm and shared by everything): at every 2.5 m station out to the next
   junction, the free width each side of the axis (facades via `Facades`, other lines via `LineIndex`, the raw ground
   within 1.2 m of the road, the block's halo), and the arm's length to the next junction's own claim. Today this is

@@ -38,8 +38,7 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   forbidden, no lane shows it), else kerbside (a), painted or added. Replaces #351's coin flip (`NeedsOf.BikeBetween`, kept
   for the old layout). The signal plan follows the layout (a kerbside lane gets its bike signal); it no longer
   forces (b). In (b) the bike lane goes straight on only; **riders turning right share the right pocket** (the user:
-  `Strip.SharedWithBikes`, bike symbols in it in phase 3, a bike connector from it in phase 5; no bike right-turn lane or
-  bypass). J1: kerbside on every arm (every arm turns left).
+  `Strip.SharedWithBikes`: a bike connector from it in phase 5; no bike symbol in it, no bike right-turn lane or bypass). J1: kerbside on every arm (every arm turns left).
 - **Lanes and sidewalks narrow per side** (steps 3 and 5): only on the side that lacks room (J3 N's departing lane keeps
   its 4 m).
 - **The exit hatch is not dropped by the ladder**: it lines the through lane up (a jog of a lane without it). A split
