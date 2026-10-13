@@ -22,7 +22,7 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   longest transition, each side to the first building, other line, ground step > 1.2 m or tile edge, 20 m max);
   (5) rounds: align from the base sections, fit with the size search, align again from the fitted lanes, fit again; an exit
   that cannot hold its hatch (fit step "7 the pocket feeding this exit") drops its feeder's pocket, all again.
-- **Room order** (`MouthPlanner.Fit`): 1 verge and buffer, 2 island, left-turn bike lane, 3 lane widths to 2.75 / bike 1.25, 4 right pocket,
+- **Room order** (`MouthPlanner.Fit`): 1 bike right-turn lane, verge and buffer, 2 island, left-turn bike lane, 3 lane widths to 2.75 / bike 1.25, 4 right pocket,
   5 sidewalk to 1.5 m, 7 the pocket feeding this exit, 7 left pocket, 8 painted bike lane. Size choice (step 6) comes
   first in effect (the user). Room is checked per station against what the transition still holds there (`Stretch`):
   houses 68 m out limit only a long storage. Where the street already reaches past its room (sidewalks to the facades),
@@ -37,8 +37,9 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   at the lights (b) only where the traffic arriving from the arm the pocket turns into cannot turn left (one-way out,
   forbidden, no lane shows it), else kerbside (a), painted or added. Replaces #351's coin flip (`NeedsOf.BikeBetween`, kept
   for the old layout). The signal plan follows the layout (a kerbside lane gets its bike signal); it no longer
-  forces (b). In (b) the bike lane goes straight on only; **riders turning right share the right pocket** (the user:
-  `Strip.SharedWithBikes`: a bike connector from it in phase 5; no bike symbol in it, no bike right-turn lane or bypass). J1: kerbside on every arm (every arm turns left).
+  forces (b). In (b) the bike lane goes straight on only; riders turning right get **a bike right-turn lane at the kerb**, right
+  of the pocket (id 125), where there is plenty of room: it is the first thing the room order gives up (step 1); then
+  they **share the right pocket** (`Strip.SharedWithBikes`: a bike connector from it in phase 5, no bike symbol in it). J1: kerbside on every arm (every arm turns left).
 - **Lanes and sidewalks narrow per side** (steps 3 and 5): only on the side that lacks room (J3 N's departing lane keeps
   its 4 m).
 - **The exit hatch is not dropped by the ladder**: it lines the through lane up (a jog of a lane without it). A split

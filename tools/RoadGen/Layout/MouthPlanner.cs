@@ -65,7 +65,7 @@ public static class MouthPlanner
     public const string FeederStep = "7 the pocket feeding this exit";
 
     /// <summary>Ids of strips the planner adds: above any a normal section numbers.</summary>
-    public const int LeftPocketId = 100, LeftBikeId = 110, AddedBikeId = 115, RightPocketId = 120, HatchId = 130;
+    public const int LeftPocketId = 100, LeftBikeId = 110, AddedBikeId = 115, RightPocketId = 120, RightBikeId = 125, HatchId = 130;
 
     /// <summary>
     /// The section the data wants at the mouth: the normal section's sides and departing lanes kept, the arriving side laid out
@@ -131,9 +131,11 @@ public static class MouthPlanner
         var rightLane = new Strip(StripKind.CarLane, laneIn, StripWay.In, SignalMoves.Right, RightPocketId);
         if (right && bikeIn is { } b && w.BikeBetween)
         {
-            // the bike lane between goes straight on; riders turning right share the pocket (the user, Oct 13 2026)
+            // the bike lane between goes straight on; riders turning right get their own lane at the kerb, right of the pocket,
+            // where there is plenty of room (it goes first), else share the pocket (the user, Oct 13 2026)
             arriving.Add(b with { Moves = lastOwn.Moves & SignalMoves.Through });
-            arriving.Add(rightLane with { SharedWithBikes = true });
+            arriving.Add(rightLane);
+            arriving.Add(new Strip(StripKind.BikeLane, LeftBikeLane, StripWay.In, SignalMoves.Right, RightBikeId));
         }
         else
         {
@@ -199,6 +201,8 @@ public static class MouthPlanner
         if (Fits(s)) return s;
         (string Name, Func<Section, Section?> Step)[] ladder =
         [
+            // a bike right-turn lane only where there is plenty of room: riders turning right share the pocket instead
+            ("1 bike right-turn lane", WithoutRightBike),
             ("1 verge and buffer", x => Without(x, k => k is StripKind.Verge or StripKind.Buffer)),
             // the exit hatch itself lines the through lane up (a jog without it): it is not dropped here; an exit that cannot hold it
             // takes the pocket that feeds it (the planner's)
@@ -273,6 +277,13 @@ public static class MouthPlanner
         return new Section(kept, s.CarriagewayLeft + leftGone) { KerbLeftCm = s.KerbLeftCm, KerbRightCm = s.KerbRightCm };
     }
 
+    private static Section? WithoutRightBike(Section s)
+    {
+        if (!s.Strips.Any(x => x.Id == RightBikeId)) return null;
+        var strips = s.Strips.Where(x => x.Id != RightBikeId).Select(x => x.Id == RightPocketId ? x with { SharedWithBikes = true } : x).ToList();
+        return new Section(strips, s.CarriagewayLeft) { KerbLeftCm = s.KerbLeftCm, KerbRightCm = s.KerbRightCm };
+    }
+
     private static Section? WithoutId(Section s, int id)
     {
         if (!s.Strips.Any(x => x.Id == id)) return null;
@@ -301,10 +312,10 @@ public static class MouthPlanner
             s.CarriagewayLeft)
         { KerbLeftCm = s.KerbLeftCm, KerbRightCm = s.KerbRightCm };
 
-    /// <summary>The lane <paramref name="id"/> left out, its moves going to the arriving lane beside it.</summary>
+    /// <summary>The lane <paramref name="id"/> left out, its moves going to the arriving lane beside it (a right pocket takes its bike right-turn lane with it).</summary>
     private static Section? WithoutLane(Section s, int id, SignalMoves moves)
     {
-        var strips = s.Strips.ToList();
+        var strips = s.Strips.Where(x => !(id == RightPocketId && x.Id == RightBikeId)).ToList();
         int at = strips.FindIndex(x => x.Id == id);
         if (at < 0) return null;
         strips.RemoveAt(at);

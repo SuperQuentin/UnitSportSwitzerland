@@ -89,15 +89,18 @@ and the transition lengths.
   which survives when possible; the
   left-turn bike lane goes early. Beside a right pocket the bike lane runs between it and the through lane (b): without
   lights always, at the lights only where traffic from the arm the pocket turns into cannot turn left (else kerbside, a).
-  In (b) riders turning right share the cars' right pocket (no bike symbol in it, no bike right-turn lane). The signal plan follows the layout.
+  In (b) riders turning right get a bike right-turn lane at the kerb, right of the pocket, where there is plenty of room
+  (the first thing the room order gives up), else share the cars' right pocket (no bike symbol in it). The signal plan follows the layout.
 - **Room** (`ArmRoom`, measured once per arm and shared by everything): at every 2.5 m station out to the next
   junction, the free width each side of the axis (facades via `Facades`, other lines via `LineIndex`, the raw ground
   within 1.2 m of the road, the block's halo), and the arm's length to the next junction's own claim. Today this is
   probed three ways (`Widening.Check`, `StreetPlanner.Measure`, `CornerPlanner.Check`).
 - **When the room is short**, the wanted section shrinks in this order until it and its transitions fit (the user's
-  order): (1) verge and buffer, (2) exit hatch and island, (3) lane widths to their minimum (car 3.0 -> 2.75 m, bike
-  1.5 -> 1.25 m), (4) right pocket, (5) sidewalk to 1.5 m, (6) left pocket storage then its lead-in hatch (the sizes
-  #123 tries: 30+40, 25+30, 20+20), (7) left pocket, (8) painted bike lane, last. Car through lanes and the data's lane
+  order, as refined while building): (1) a bike right-turn lane, verge and buffer, (2) island (the exit hatch itself
+  stays: it lines the through lane up), the left-turn bike lane, (3) lane widths to their minimum (car 3.0 -> 2.75 m,
+  bike 1.5 -> 1.25 m), each side only where it lacks room, (4) right pocket, (5) sidewalk to 1.5 m, (6) left pocket
+  storage then its lead-in hatch (the sizes #123 tries: 30+40, 25+30, 20+20), (7) the pocket feeding this exit, left
+  pocket, (8) painted (and added through) bike lane, last. Car through lanes and the data's lane
   count never drop. Each step taken is counted and printed by `--debug-junction`, so a review can ask why.
   **The pockets' sizes are chosen before any pocket goes** (the user, Oct 13: step 6 ranks before 4 and 7 in effect): the
   fit tries the sizes longest first and takes the first where every pocket stays (J3 east: 20+20 and 10+15, L|T|R).

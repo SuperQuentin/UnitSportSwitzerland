@@ -104,6 +104,27 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
     }
 
     [Fact]
+    public void Between_layout_gives_riders_turning_right_their_own_lane_only_where_there_is_plenty_of_room()
+    {
+        // layout (b): the bike lane between the through lane and the right pocket goes straight on; a bike right-turn lane
+        // at the kerb, right of the pocket
+        var normal = Section.Normal(Street(), 9f, junctionAtEnd: true);
+        var all = SignalMoves.Left | SignalMoves.Through | SignalMoves.Right;
+        var mouth = MouthPlanner.Wanted(normal, new ArmWants(false, all, SignalMoves.None, [], null, RightPocket: true, BikeBetween: true, LeftTurnBikeLane: false));
+        var inside = mouth.Strips.Skip(mouth.FirstCarriageway).Take(mouth.LastCarriageway - mouth.FirstCarriageway + 1).ToList();
+        Assert.Equal([MouthPlanner.RightPocketId, MouthPlanner.RightBikeId], inside.TakeLast(2).Select(x => x.Id));
+        Assert.Equal(SignalMoves.Through, inside[^3].Moves);
+        Assert.Equal(StripKind.BikeLane, inside[^3].Kind);
+
+        // a little short of room: it is the first thing to go, and riders share the pocket
+        var (nl, _) = MouthPlanner.Reach(normal);
+        var steps = new List<string>();
+        var fit = MouthPlanner.Fit(mouth, normal, ArmRoom.Flat(nl, MouthPlanner.Reach(mouth).Right - 0.5), new Stretch(30, 15), new Stretch(30, 15), steps);
+        Assert.Equal(["1 bike right-turn lane"], steps);
+        Assert.True(fit.Strips.Single(x => x.Id == MouthPlanner.RightPocketId).SharedWithBikes);
+    }
+
+    [Fact]
     public void A_section_shrinks_in_the_users_order_until_it_fits()
     {
         var side = new RoadSide(SidewalkDm: 30, Bike: BikeKind.Track, BikeDm: 20, KerbCm: 12, VergeDm: 10);
