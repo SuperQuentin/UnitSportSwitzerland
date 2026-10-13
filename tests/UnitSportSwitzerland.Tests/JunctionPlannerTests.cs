@@ -441,4 +441,79 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
         // at the far mouth, the far arm's own section seen from this end
         Assert.Equal(mouthB.CarriagewayWidth, t.At(60).CarriagewayWidth, 3);
     }
+
+    [Fact]
+    public void An_ordinary_segment_has_one_section_all_along_and_a_transition_its_strips_at_every_point()
+    {
+        var seg = new RoadSegment
+        {
+            Class = RoadClass.Road, Surface = RoadSurface.Paved, Width = 9, Points = [0, 0, 0, 20, 0, 0, 40, 0, 0],
+            Attributes = Street() with { Flags = RoadAttrFlags.Urban },
+        };
+        var plain = SegmentSections.Of(seg);
+        Assert.False(plain.Varies);
+        Assert.All(Enumerable.Range(0, 3), i => Assert.Equal((-4.5f, 4.5f), (plain.RibbonLeft[i], plain.RibbonRight[i])));
+        Assert.Same(plain.RightProfile[0], plain.RightProfile[2]);
+        Assert.Equal(2.0f, plain.LeftProfile[1]!.Width, 3);
+        // a pocket of 3 m opening at the right over the segment, the sidewalk beside it narrowed to 1.5 m at its first point
+        var t = new RoadTransition
+        {
+            Segment = seg, Stations = [0, 40], Centre = [-0.75f, -0.75f], Anchor = 2,
+            Strips =
+            [
+                new RoadTransitionStrip { Kind = StripKind.Sidewalk, Id = 1, Widths = [2, 2] },
+                new RoadTransitionStrip { Kind = StripKind.CarLane, Id = 2, Travel = -1, Widths = [3.75f, 3.75f] },
+                new RoadTransitionStrip { Kind = StripKind.CarLane, Id = 3, Travel = 1, Widths = [3.75f, 3.75f] },
+                new RoadTransitionStrip { Kind = StripKind.CarLane, Id = 120, Travel = 1, Widths = [3, 0] },
+                new RoadTransitionStrip { Kind = StripKind.BikeLane, Id = 4, Travel = 1, Widths = [1.5f, 1.5f] },
+                new RoadTransitionStrip { Kind = StripKind.Sidewalk, Id = 5, Widths = [1.5f, 2] },
+            ],
+        };
+        var s = SegmentSections.Of(seg, t);
+        Assert.True(s.Varies);
+        Assert.Equal(-4.5f, s.RibbonLeft[0], 3);
+        Assert.Equal(7.5f, s.RibbonRight[0], 3);
+        Assert.Equal(6.0f, s.RibbonRight[1], 3);
+        Assert.Equal(4.5f, s.RibbonRight[2], 3);
+        // one shape all along: the narrowed sidewalk is the same profile, its width per point
+        Assert.Equal(s.RightProfile[0]!.Count, s.RightProfile[2]!.Count);
+        Assert.Equal(1.5f, s.RightProfile[0]!.Width, 3);
+        Assert.Equal(2.0f, s.RightProfile[2]!.Width, 3);
+        Assert.Equal(7.5f + 1.5f, s.OuterRight(0), 3);
+    }
+
+    [Fact]
+    public void The_written_test_region_holds_its_cores_and_transitions_and_decodes_them_alike()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "unitsport-818w-" + Guid.NewGuid().ToString("N"));
+        var log = new List<string>();
+        try
+        {
+            Assert.Equal(0, SignalTestRegion.Run(dir, null, log.Add, newJunctions: true, writeJunctions: true));
+            var written = log.FirstOrDefault(l => l.Contains("junction planner written (#818 phase 3)", StringComparison.Ordinal));
+            Assert.NotNull(written);
+            Assert.Contains("pieces lost by a later cut 0", written);
+            Assert.Contains(log, l => l.Contains("paint encoding", StringComparison.Ordinal) && l.Contains(" 0 decoded differently", StringComparison.Ordinal));
+            int transitions = 0;
+            foreach (var file in Directory.EnumerateFiles(dir, "roads_*.road"))
+            {
+                using var fs = File.OpenRead(file);
+                var tile = RoadCodec.Decode(fs);
+                foreach (var t in tile.Transitions)
+                {
+                    transitions++;
+                    Assert.True(t.Segment.Attributes.Has(RoadAttrFlags.InTransition));
+                    Assert.Equal(SegmentSections.Stations(t.Segment)[^1], t.Stations[^1], 1);
+                }
+            }
+            Assert.True(transitions >= 20, $"{transitions} transitions written");
+            // every kerb a zebra or bike crossing meets is still sloped
+            Assert.Equal(0, UnitSport.Tools.RoadGen.Diagnostics.KerbCheck.Run(dir, null, false, _ => { }));
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+            if (Directory.Exists(dir + "_temp")) Directory.Delete(dir + "_temp", recursive: true);
+        }
+    }
 }

@@ -19,14 +19,14 @@ public static partial class TileRewriter
     /// <summary>What the planner wrote, for the region report.</summary>
     public sealed class LayoutWriteStats
     {
-        public int Junctions, Skipped, Transitions, Pieces, Lines, Marks, Trimmed, Extended, Orphaned;
+        public int Junctions, Skipped, Transitions, Pieces, Lines, Marks, Trimmed, Extended, Orphaned, CoreVertices, CapVertices;
         /// <summary>Written junctions with a transition (LV95), for the seam check and pictures.</summary>
         public readonly List<Vec2> WithTransitions = new();
         public readonly SortedDictionary<string, int> Why = new(StringComparer.Ordinal);
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
             $"    junction planner written (#818 phase 3): {Junctions:N0} junctions as cores, {Skipped:N0} left to the old layout ({string.Join(", ", Why.Select(kv => $"{kv.Key} {kv.Value}"))}); ")
-            + string.Create(CultureInfo.InvariantCulture, $"{Transitions:N0} transitions over {Pieces:N0} pieces, {Lines:N0} lines and {Marks:N0} marks; arms trimmed to their mouth {Trimmed:N0}, run on to it {Extended:N0}; pieces lost by a later cut {Orphaned:N0}")
+            + string.Create(CultureInfo.InvariantCulture, $"{Transitions:N0} transitions over {Pieces:N0} pieces, {Lines:N0} lines and {Marks:N0} marks; arms trimmed to their mouth {Trimmed:N0}, run on to it {Extended:N0}; pieces lost by a later cut {Orphaned:N0}; cap vertices {CapVertices:N0} of the cores' {CoreVertices:N0}")
             + (WithTransitions.Count > 0 ? "\n      with transitions at " + string.Join("; ", WithTransitions.Take(12).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) : "");
     }
 
@@ -153,14 +153,22 @@ public static partial class TileRewriter
             var core = jp.Core!;
             if (!capOf.TryGetValue(jp.Node, out var old) || core.Outline.Count < 3 || core.Outline.Count > ushort.MaxValue || core.Triangles.Count < 3) continue;
             var home = old.Home;
-            var vertices = new float[core.Outline.Count * 3];
-            for (int i = 0; i < core.Outline.Count; i++)
+            // the outline as the cap keeps it: its kerbs sampled every half metre simplified to the tolerance of the sides (the
+            // mouths' corners kept, where the ribbons meet it), triangulated again
+            var keep = SimplifiedRing(core.Outline, core.Heights, core.Mouths.SelectMany(m => new[] { m.Left, m.Right }).ToList());
+            var ring = keep.Select(i => core.Outline[i]).ToList();
+            var triangles = keep.Count == core.Outline.Count ? core.Triangles : Junctions.EarClip.Triangulate(ring);
+            if (triangles.Count < 3) (keep, ring, triangles) = (Enumerable.Range(0, core.Outline.Count).ToList(), core.Outline, core.Triangles);
+            var vertices = new float[ring.Count * 3];
+            for (int i = 0; i < ring.Count; i++)
             {
-                vertices[i * 3] = (float)(core.Outline[i].X - home.MinE);
-                vertices[i * 3 + 1] = (float)core.Heights[i];
-                vertices[i * 3 + 2] = (float)(home.MaxN - core.Outline[i].Y);
+                vertices[i * 3] = (float)(ring[i].X - home.MinE);
+                vertices[i * 3 + 1] = (float)core.Heights[keep[i]];
+                vertices[i * 3 + 2] = (float)(home.MaxN - ring[i].Y);
             }
-            var cap = new RoadJunction { Class = old.Cap.Class, Layer = old.Cap.Layer, Vertices = vertices, Indices = core.Triangles.Select(i => (ushort)i).ToArray() };
+            stats.CoreVertices += core.Outline.Count;
+            stats.CapVertices += ring.Count;
+            var cap = new RoadJunction { Class = old.Cap.Class, Layer = old.Cap.Layer, Vertices = vertices, Indices = triangles.Select(i => (ushort)i).ToArray() };
             var list = caps[home];
             list[list.IndexOf(old.Cap)] = cap;
             writtenCaps.Add(cap);
@@ -371,6 +379,48 @@ public static partial class TileRewriter
             Segment = piece, Stations = stations, Strips = strips, Anchor = towardJunction ? t.Anchor : n - t.Anchor,
             Centre = order.Select(o => RoadTransition.Cm(towardJunction ? t.CentreAt(o.At) : -t.CentreAt(o.At))).ToArray(),
         };
+    }
+
+    /// <summary>A cap's outline may leave its kerb by this much in plan and in height (as the sides' vertices, <c>RoadStreetBuilder</c>).</summary>
+    private const double CapPlanTolerance = 0.015, CapHeightTolerance = 0.01;
+
+    /// <summary>
+    /// The indices of a ring's points worth keeping (Douglas-Peucker in plan and height on each run between two points that stay):
+    /// every point of <paramref name="fixedAt"/> stays.
+    /// </summary>
+    private static List<int> SimplifiedRing(List<Vec2> ring, List<double> heights, List<Vec2> fixedAt)
+    {
+        int n = ring.Count;
+        var keep = new bool[n];
+        for (int i = 0; i < n; i++) keep[i] = fixedAt.Any(f => f.DistanceTo(ring[i]) < 1e-6);
+        if (!keep.Any(k => k)) keep[0] = true;
+        void Run(int a, int b)
+        {
+            // points strictly between a and b round the ring
+            int len = (b - a + n) % n;
+            if (len < 2) return;
+            double worst = 0;
+            int at = -1;
+            var pa = ring[a];
+            var ab = ring[b] - pa;
+            double l2 = ab.LengthSquared;
+            for (int s = 1; s < len; s++)
+            {
+                int i = (a + s) % n;
+                double t = l2 < 1e-12 ? 0 : Math.Clamp((ring[i] - pa).Dot(ab) / l2, 0, 1);
+                double plan = ring[i].DistanceTo(pa + ab * t) / CapPlanTolerance;
+                double up = Math.Abs(heights[a] + (heights[b] - heights[a]) * t - heights[i]) / CapHeightTolerance;
+                double off = Math.Max(plan, up);
+                if (off > 1 && off > worst) { worst = off; at = i; }
+            }
+            if (at < 0) return;
+            keep[at] = true;
+            Run(a, at);
+            Run(at, b);
+        }
+        var fixedIdx = Enumerable.Range(0, n).Where(i => keep[i]).ToList();
+        for (int k = 0; k < fixedIdx.Count; k++) Run(fixedIdx[k], fixedIdx[(k + 1) % fixedIdx.Count]);
+        return Enumerable.Range(0, n).Where(i => keep[i]).ToList();
     }
 
     /// <summary>A band's width on a side as the street planner laid it (0 where the side has none).</summary>
