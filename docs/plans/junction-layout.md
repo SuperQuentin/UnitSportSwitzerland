@@ -3,7 +3,7 @@
 
 # Junctions lay their own surface: sections, cores and transitions (#818)
 
-Status: **in progress** on `feat/818-junction-layout` (PR #820): phases 1 and 2 built (`docs/notes/tools/junction-planner.md`). Settled with the user (Oct 13 2026, below). Coding starts once #704 and #712 are merged (this
+Status: **in progress** on `feat/818-junction-layout` (PR #820): phases 1, 2 and 3 built (`docs/notes/tools/junction-planner.md`; phase 3 writes behind `--junctions write`). Settled with the user (Oct 13 2026, below). Coding starts once #704 and #712 are merged (this
 replaces most of what they built, so it branches from the `main` that has them). Absorbs #709 (traffic follows the
 junction's paths). Part names as in `docs/notes/tools/intersection-parts.md`.
 
@@ -311,3 +311,6 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
   a narrowed sidewalk or verge) at 1:6 (6 m at least) just beyond its side's last opening. The exit hatch and a pocket's
   lead-in hatch are the same median between the two directions, so a #325 merged street is that median running mouth to
   mouth.
+- Built (Oct 14 2026), two points to confirm with the user: the writing runs behind **`--junctions write`** (`new` still plans
+  and reports only, so the comparison with the pocket layout and the old checks keep working); and a split lead-in's centre line
+  moves **with the pocket's taper** (the timing rule as proposed moved it at 1:6 after the taper, which jogs the through lane).

@@ -137,3 +137,51 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   connectors outside 2, 1 outline crossing itself, five junctions in all, each at a gore, arms swapping order, or a node with
   two arms on one heading; tight corners: planner only 15 (corners no turn uses that #700 rounded), #700 only 4 (a left turn
   passes them); area x1.17 median (p10 1.08, p90 1.34).
+
+## Phase 3: transitions, written into the tiles
+
+- **Model** (`Layout/Transition`, `Layout/TransitionPlanner`): a transition is stations from the mouth outward and every strip's
+  width at each (linear between), the centre line as the anchor (strips left of it stack out to the left, the rest to the right).
+  Strips: the mouth's, a lead-in hatch (id 131) right of the centre line where a centre-side pocket opens, the normal's the mouth
+  dropped, each after its left neighbour.
+- **One timing rule by role** (the user, Oct 13): a pocket held over its storage, then closing over its taper (centre side: it gives
+  way to the lead-in hatch along the diagonal closing line, `ClosingSlant` 10 m at most half the taper; kerb side: the kerb moves in);
+  an exit hatch closes over 30 m; an added bike lane is held 20 m (and beside a kerb-side pocket while it lasts), going at 1:6;
+  every other width change at 1:6 (6 m at least) just beyond its side's last opening. **A split lead-in's centre line moves with
+  the pocket's taper** (not at 1:6 after it: the through lane would jog left then right; it is the pocket's own displacement).
+- **Both ends as one** where the street between two planned mouths is shorter than both transitions (or a #325 merge): every strip
+  sums both ends' changes on a base easing from one end's normal to the other's; the median (exit hatch 130, lead-in hatch 131,
+  swapped when mirrored) is the wider of the two ends'. The far end's added strips get id + 1000. Normals not matching strip for
+  strip: apart, each squeezed into its share.
+- **The street runs on** past nodes where only two car roads meet (`StreetOn`: TLM splits a street at every attribute change),
+  up to 150 m: `TransitionRoom`, `FarArm`. A transition longer than its street is squeezed (reported over 2 m).
+- **Paint by rule** (`Layout/TransitionPaint`, the user's generalization: every marking is the boundary between two strips, its
+  style from the pair): two lanes the same way a lane line (arriving or a pocket: 3/3, solid the last 10 m by a mouth), the centre
+  line solid beside a pocket or hatch and the last 20 m at the lights, else the street's (`StreetPaint.Of(segment)`: Leitlinie,
+  none on a narrow road or a Kernfahrbahn, solid with four lanes); anything beside a striped hatch solid (so the lead-in hatch's
+  edge with its pocket is the angled closing line, no rule of its own); a hatch under 1.5 x 20 m is no hatch (its centre-line
+  side alone); bike lanes yellow dashed; Randlinien where the street has them, none beside a bike lane; stripes at 45 deg every
+  2.5 m leaning with the traffic; arrows two per arriving car lane (5 m and 15 m on, 8 m in a short storage; no SSV arrow for
+  L+R or all three); a bike symbol at each bike lane's mouth end.
+- **Written** behind `--junctions write` (`new` plans and reports only, keeping the comparison with the pocket layout):
+  `TileRewriter.LayoutWrite`. Writable: a core whose checks pass, every arm a car road of the block, no internal street, every
+  street a transition runs on in the block and at grade, the junction beyond a shared transition written too. The core is the
+  cap; each arm is trimmed (or run on along its axis, heights from the line) to its mouth; every transition is cut at its end
+  first, then the pieces it covers are flagged `InTransition`, each with its own `TRNS` record (its stations along the piece's
+  drawing, mirrored where it is drawn away from the junction) and its lines (`RoadPaint.AlongTransition`); stripes, arrows and
+  symbols as geometry; the street's own paint laid again on what is left of it. **A band is its own piece's width plus the
+  transition's change** (the street planner's gaps for a driveway stay: a transition changes widths, the street decides the rest).
+  The old passes get the priority plans without those junctions (`WithoutWritten`): no pocket strips, stop lines, crosswalks,
+  poles, signals, corners or signs there until phase 4. Bike-lane, track paint, `CutBack` and `Lower` skip transition pieces.
+- **Game** (the user's generalization): every street is built from `SegmentSections`, a cross-section per point: ribbon edges,
+  where each side starts and its profile; an ordinary segment's is constant (`ShiftAt` a case of it), a `TRNS` piece's varies.
+  `RoadMeshBuilder.AppendSegment` (edges per point, no type join on a transition), `RoadStreetBuilder` (a profile per point, one
+  shape; a varying side simplified on every profile line), the road blend (`Line`: edges per piece, so the heightfield collision
+  holds the carriageway), `KerbCheck` and `--street-svg` all read it. Ordinary streets: kerb and seam checks identical to main.
+- **Measured** (Oct 14 2026): test region 10 of 13 junctions written (2 a street beyond the block, 1 its partner), 30 transitions
+  over 32 pieces, 0 decoded differently, kerb check ok, seams as before. Sion 423 of 1,017 written (546 multi-node, 24 a check, 12
+  beyond the block, 9 partners, 3 a path joins), 83 transitions over 142 pieces, 0 decoded differently, 2 pieces lost by a later
+  cut (dropped, drawn plain); kerb check: no failure that the old layout does not have; seams at five junctions with transitions
+  at or under the old layout's.
+- **Not yet**: traffic still drives the old lanes (phase 5), lights and lane records at written junctions (phases 4-5), path lines
+  along a transition's bands, a transition over a bridge or tunnel (not written), lowered kerbs on a transition (phase 4).
