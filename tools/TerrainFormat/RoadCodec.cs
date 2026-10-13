@@ -367,6 +367,16 @@ public static class RoadCodec
         return tile;
     }
 
+    /// <summary>The tile's paint in the order a decoder gives it back: PNT2's, then each transition's lines (<c>TRNS</c>).</summary>
+    public static List<RoadPaint> PaintInFileOrder(RoadTile tile)
+    {
+        var order = PaintOutsideTransitions(tile);
+        if (tile.Transitions.Count == 0) return order;
+        order = order.ToList();
+        foreach (var t in tile.Transitions) order.AddRange(tile.Paint.Where(p => ReferenceEquals(p.Transition, t)));
+        return order;
+    }
+
     /// <summary>The tile's paint but the lines along its own transitions (those go into <c>TRNS</c>).</summary>
     private static List<RoadPaint> PaintOutsideTransitions(RoadTile tile)
     {

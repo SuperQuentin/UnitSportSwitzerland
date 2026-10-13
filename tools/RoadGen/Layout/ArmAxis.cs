@@ -43,6 +43,22 @@ public sealed class ArmAxis
     /// <summary>The point at station <paramref name="s"/>, <paramref name="offset"/> to the right of a driver arriving.</summary>
     public Vec2 At(double s, double offset) => PointAt(s) + RightAt(s) * offset;
 
+    /// <summary>The station of the axis point nearest <paramref name="p"/> (within its length).</summary>
+    public double StationOf(Vec2 p)
+    {
+        double best = double.MaxValue, result = 0;
+        for (int k = 0; k + 1 < _points.Length; k++)
+        {
+            var a = _points[k];
+            var ab = _points[k + 1] - a;
+            double len2 = ab.LengthSquared;
+            double t = len2 < 1e-12 ? 0 : Math.Clamp((p - a).Dot(ab) / len2, 0, 1);
+            double d = p.DistanceSquaredTo(a + ab * t);
+            if (d < best) { best = d; result = _at[k] + t * (_at[k + 1] - _at[k]); }
+        }
+        return result;
+    }
+
     private Vec2 DirOf(int k) => (_points[k + 1] - _points[k]) / (_at[k + 1] - _at[k]);
 
     private int Segment(double s)

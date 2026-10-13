@@ -220,6 +220,7 @@ public static class TransitionPaint
                 into.Add(new TransitionMark(k, BikePlanner.SymbolFromEnd + BikePlanner.SymbolSize, PaintArrow.None, true, x.Way == StripWay.Out));
             if (!arrows || !x.IsCarLane || x.Way != StripWay.In || x.Moves == SignalMoves.None) continue;
             var arrow = ArrowOf(x.Moves);
+            if (!PaintEmitter.HasArrow(arrow)) continue;
             foreach (double tip in (ReadOnlySpan<double>)[ArrowFirst, ArrowFirst + apart])
             {
                 double tail = tip + PaintEmitter.ArrowLength;

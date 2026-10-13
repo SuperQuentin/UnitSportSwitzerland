@@ -214,7 +214,7 @@ public static class SignalTestRegion
 
     // ---- build ---------------------------------------------------------------------------------
 
-    public static int Run(string chunkDir, string? tempDir, Action<string> log, bool newJunctions = false)
+    public static int Run(string chunkDir, string? tempDir, Action<string> log, bool newJunctions = false, bool writeJunctions = false)
     {
         tempDir ??= RawRoads.DefaultTempDir(chunkDir);
         var clock = System.Diagnostics.Stopwatch.StartNew();
@@ -243,15 +243,23 @@ public static class SignalTestRegion
             + $"{design.Buildings.Count} buildings, {design.Junctions.Count} signal nodes; written in {clock.Elapsed.TotalSeconds:F1} s");
 
         var stats = TileRewriter.Run(chunkDir, roadTiles, new TileRewriter.Options(
-            RawDir: RawRoads.DirFor(tempDir), OsmOverlay: Path.Combine(tempDir, "osm_overlay.tsv"), NewJunctions: newJunctions), log);
+            RawDir: RawRoads.DirFor(tempDir), OsmOverlay: Path.Combine(tempDir, "osm_overlay.tsv"), NewJunctions: newJunctions, WriteJunctions: writeJunctions), log);
         log(stats.Network.Format(stats.TilesWritten));
         log("");
         int bad = Report(chunkDir, design.Junctions, log);
+        int planned = 0;
         if (newJunctions)
         {
             log("");
-            int planned = ReportPlans(stats.Network.Layouts, design.Junctions, log);
+            planned = ReportPlans(stats.Network.Layouts, design.Junctions, log);
             log(planned == 0 ? "[testregion] planner (#818): every designed approach as designed" : $"[testregion] planner (#818): {planned} approaches not as designed");
+        }
+        // the planner writing its junctions (#818 phase 3): their lights and lane records come with phases 4 and 5, so the table
+        // above is the old layout's only where it still builds; the planner's own report decides
+        if (writeJunctions)
+        {
+            log($"[testregion] the planner wrote its junctions: the lights' table above is left out of the result ({bad} approaches there)");
+            bad = planned;
         }
         log(string.Create(CultureInfo.InvariantCulture, $"{clock.Elapsed.TotalSeconds:F1} s; chunks {chunkDir}, raw input {tempDir}"));
         log(bad == 0 ? "[testregion] RESULT: ok" : $"[testregion] RESULT: FAILED {bad} approaches not as designed");

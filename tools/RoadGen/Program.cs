@@ -54,7 +54,8 @@ if (args.Length == 0 || args.Contains("--help") || args.Contains("-h"))
           --test-region DIR     the traffic-lights test region (#386): flat tiles, designed junctions, OSM signal
                                  nodes, then the network stage; prints the junction table (--temp DIR: raw input,
                                  default DIR_temp). Clears DIR first, only if this command wrote it
-          --junctions new       (--rewrite, --test-region) also run the junction planner (#818) and report its plans;
+          --junctions new       (--rewrite, --test-region) also run the junction planner (#818) and report its plans; --junctions write
+                                 also writes them (cores, transitions; phase 3);
                                  --debug-junction E,N prints the plan of the junction there (--junction-svg FILE draws it); --junction-failures FILE
                                  describes every core failing a check
           --compare-v2 V2DIR --chunks V3DIR
@@ -147,7 +148,7 @@ else if (ArgValue("--test-region") is { } regionDir)
 {
     DebugJunctionArg();
     return UnitSport.Tools.RoadGen.TestRegion.SignalTestRegion.Run(regionDir, ArgValue("--temp"), Console.WriteLine,
-        newJunctions: ArgValue("--junctions") == "new");
+        newJunctions: ArgValue("--junctions") is "new" or "write", writeJunctions: ArgValue("--junctions") == "write");
 }
 else if (args.Contains("--priority-check"))
 {
@@ -198,7 +199,7 @@ else if (args.Contains("--rewrite"))
         RawDir: RawRoads.DirFor(temp),
         OsmOverlay: Path.Combine(temp, "osm_overlay.tsv"),
         SkipRewritten: args.Contains("--skip-rewritten"),
-        NewJunctions: ArgValue("--junctions") == "new"), Console.WriteLine);
+        NewJunctions: ArgValue("--junctions") is "new" or "write", WriteJunctions: ArgValue("--junctions") == "write"), Console.WriteLine);
     }
     catch (TileRewriter.AlreadyRewrittenException e)
     {
