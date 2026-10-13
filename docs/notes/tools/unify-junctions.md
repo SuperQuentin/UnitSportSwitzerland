@@ -286,3 +286,13 @@ lights), an island to avoid, or several lanes turning alike (`EmitPairGuides`, a
 - Tier 0 `Without_lights_the_path_runs_to_the_kerb_and_the_edge_guide_follows_the_widening` (the T: red within 7.5 m of
   the side road's axis, paths carried into both corners, the guide's west end > 0.5 m further out); the corner test now
   checks the kerb arc is lined by the corner or the carried side.
+- **A footpath joining a junction is not an arm of it** (the user's review of LV95 2507454,1137645, where a track joining
+  the lights split them into two nodes 5 m apart: no corners, stop lines off). `NetworkBuilder.IsFootpath`/`IsCarRoad`
+  (paths everywhere, tracks in town by the urban field, the user's choice): a footpath end within 15 m of a junction of
+  car roads (`FindNearJunction`) never splits a car road, joins its flank or shares its node; one meeting another footpath
+  end there (a path crossing the street through its node) still does, so OSM's crossing stays. A footpath end left on a
+  carriageway is trimmed back to its edge (`TrimFootpathEnds`, at most 45 % of the path): it runs under the sidewalk.
+  Its last 8 m do not stop a sidewalk (`FootpathJoinsSidewalk`). Sion: junctions 1,925 -> 1,833; OSM crossings 195 -> 182
+  (the rest were at footpath nodes by a junction); zebras 220 -> 207. **Left**: at that junction the SW arm's first piece
+  starts 2.75 m off the junction outline, so the corner planner does not see that arm (NW corner bare), and the NE arm's
+  OSM crossing is not found.

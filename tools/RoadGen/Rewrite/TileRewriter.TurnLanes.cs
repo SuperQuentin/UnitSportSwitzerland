@@ -154,8 +154,49 @@ public static partial class TileRewriter
     private static double ExitStop(PocketPlan? exiting, PocketPlan? facing) =>
         exiting is not { ExitStopLine: true } p ? 0
         : SignalStopSetback + p.ExitSkew + SignalStopLine * 0.5
-          + Math.Max(facing is { Dropped: false, In.ApproachWay.HasLeftBikeLane: true } ? (facing.BikeBox ? BikeBoxDepth : AdvancedBikeLine) : 0,
-              facing is { Dropped: false } ? StopBack(facing.Node, facing.Arm) : 0);
+          + CarsBehind(facing is { Dropped: false, In.ApproachWay.HasLeftBikeLane: true } ? (facing.BikeBox ? BikeBoxDepth : AdvancedBikeLine) : 0,
+              StopBack(p.Node, p.ExitArm));
+
+    /// <summary>
+    /// (#711, the user's review) beside a widening the kerb's curve into the junction (<see cref="ArcOf"/>, the corner patch's)
+    /// may begin well out along the approach: the cars' stop line stands no nearer the junction than where it begins, so the
+    /// rounding serves the turning cars. Before the pockets are painted, from the same widened edges <see cref="Corners"/> uses.
+    /// </summary>
+    private static void CurveStops(PriorityResult priority, RoadNetwork net, List<PocketPlan> pockets, Dictionary<(int Node, int Arm), RightPlan> rightOf)
+    {
+        var kerb = new JunctionOptions();
+        foreach (var (junction, plan) in priority.Plans)
+        {
+            if (plan.Kind != PriorityPlanner.Kind.Signal) continue;
+            int n = junction.Arms.Count;
+            if (n < 3 || plan.Arms.Count != n) continue;
+            for (int i = 0; i < n; i++)
+            {
+                if (!plan.Arms[i].Approach) continue;
+                int j = (i + 1) % n;
+                var ai = junction.Arms[i];
+                var aj = junction.Arms[j];
+                var inWay = rightOf.GetValueOrDefault((junction.NodeId, i))?.Way
+                    ?? pockets.FirstOrDefault(pk => !pk.Dropped && pk.Node == junction.NodeId && pk.Arm == i)?.In.ApproachWay;
+                var exiting = pockets.FirstOrDefault(pk => !pk.Dropped && pk.Node == junction.NodeId && pk.ExitArm == j);
+                var outWay = exiting?.Out.ExitWay;
+                if (inWay is null && outWay is null) continue;
+                if (net.Links[ai.LinkId].Tag is not Source si || net.Links[aj.LinkId].Tag is not Source sj) continue;
+                Vec2 ui = Vec2.FromHeading(ai.OutwardHeading), uj = Vec2.FromHeading(aj.OutwardHeading);
+                (Vec2 P, float Y) EdgeI(double d) => inWay?.OuterEdge(d) ?? (ai.Left + ui * d, si.SampleHeight(ai.Left + ui * d));
+                (Vec2 P, float Y) EdgeJ(double d) => outWay?.OuterEdge(d, exiting!.Out.Merged) ?? (aj.Right + uj * d, sj.SampleHeight(aj.Right + uj * d));
+                if (ArcOf(junction, i, EdgeI, EdgeJ, kerb.Kerb(ai.HalfWidth), kerb.Kerb(aj.HalfWidth), true, pastMouth: true) is not { } arc) continue;
+                double curve = (arc.Fi - (ai.Left + ai.Right) * 0.5).Dot(ui) - MouthSkew(junction, ai) - SignalStopSetback;
+                if (curve > StopBack(junction.NodeId, i) + 0.05) _stopBack![(junction.NodeId, i)] = curve;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Where a pocket's cars stop, past <see cref="SignalStopSetback"/>: behind its bike box or advanced line
+    /// (<paramref name="depth"/>, 0 none) and the approach's own setback <paramref name="back"/> (#711), whichever is further.
+    /// </summary>
+    private static double CarsBehind(double depth, double back) => depth > 0 ? Math.Max(depth, back) : back;
 
     private static double Sq(double v) => v * v;
 
@@ -443,6 +484,10 @@ public static partial class TileRewriter
             ExitStop(exiting, exiting is null ? null : leftPocketAt.GetValueOrDefault((exiting.Node, exiting.ExitArm)));
         ArmLanes Arm(int node, int arm, TileId home) =>
             placed.TryGetValue((node, arm), out var l) ? l : placed[(node, arm)] = new ArmLanes(home) { Turns = turns.GetValueOrDefault((node, arm)) };
+        // (#711) a left-turn bike lane's box or advanced line stands at the usual setback: its approach's cars do not move up to the mouth
+        foreach (var pk in pockets)
+            if (!pk.Dropped && pk.In.ApproachWay is { HasLeftBikeLane: true } && StopBack(pk.Node, pk.Arm) < 0) _stopBack![(pk.Node, pk.Arm)] = 0;
+        CurveStops(priority, net, pockets, rightOf);
         foreach (var pocket in pockets)
         {
             if (pocket.Dropped) continue;
@@ -532,6 +577,8 @@ public static partial class TileRewriter
             lanes.Approach ??= LanesOf(null, r, true);
             r.Way!.Emit(Get(paint, tile), Get(areas, tile), stripOwners);
             r.Way.StopShift = r.Skew;
+            // (#711) a bike lane beside a right pocket has its own line at the usual setback: its approach's cars stay behind it
+            if (StopBack(r.Node, r.Arm) < 0 && lanes.Approach?.BikeLane() is not null) _stopBack![(r.Node, r.Arm)] = 0;
             r.Way.StopBack = StopBack(r.Node, r.Arm);
             r.Way.Layout = lanes.Approach;
             lanes.RightWay = r;   // its lanes are painted once the signal plan has settled layout (a) or (b)
@@ -1882,7 +1929,7 @@ public static partial class TileRewriter
             bool box = _bikeLeft > 0 && BikeBox;
             // the pocket's arrows and its stop line stand behind a bike box (#351)
             bool advanced = _bikeLeft > 0 && !BikeBox;
-            double pocketBack = Math.Max(cars, setback + (box ? BikeBoxDepth : advanced ? AdvancedBikeLine : 0));   // #682: the advanced line stands level with the through lane's, the cars' behind it
+            double pocketBack = setback + (signal ? CarsBehind(box ? BikeBoxDepth : advanced ? AdvancedBikeLine : 0, StopBack) : box ? BikeBoxDepth : advanced ? AdvancedBikeLine : 0);   // #682: the advanced line stands level with the through lane's, the cars' behind it
             if (_bikeLeft > 0)
             {
                 // the left-turn bike lane (#351): yellow lines both sides, from where the pocket opens

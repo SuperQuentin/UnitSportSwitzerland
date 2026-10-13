@@ -449,7 +449,12 @@ public static partial class TileRewriter
                     ChordTolerance: options.ChordTolerance,
                     Analyze: options.Measure,
                     JoinNearEnds: MayJoinNearEnd,
-                    TightCorner: (n, node, from, to) => NoRightTurn(n, node, from, to, restrictions, overlay)));
+                    TightCorner: (n, node, from, to) => NoRightTurn(n, node, from, to, restrictions, overlay),
+                    // (#711, the user's rule) a footpath joining a street connects to its sidewalk: no junction with it; a track too
+                    // in town (the user's choice: in the countryside tractors turn there)
+                    IsFootpath: l => l.Tag is Source s && (s.Segment.Class == RoadClass.Path || s.Segment.Class == RoadClass.Track
+                        && l.Centreline.Count >= 2 && (field.Density(l.First.X, l.First.Y) >= UrbanField.UrbanAt || field.Density(l.Last.X, l.Last.Y) >= UrbanField.UrbanAt)),
+                    IsCarRoad: l => l.Tag is Source s && PriorityPlanner.IsCarRoad(s.Segment.Class)));
                 netStats.Priority.NearEndsJoined += result.NearEndsJoined;
                 // traffic lights: from OSM where the overlay covers a junction, else where two main
                 // roads cross in a dense core (#348)
@@ -498,8 +503,23 @@ public static partial class TileRewriter
                     if ((seg.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) != 0) continue;
                     // a track laid in the street (auf_strasse) is inside the carriageway, not beside it
                     if (seg.Class == RoadClass.Railway && seg.Attributes.Has(RoadAttrFlags.OnStreet)) continue;
-                    obstacles.Add(plans[k].Plan, plans[k].Source.Line.Width * 0.5, k, StreetPlanner.IsCandidate(seg),
-                        footway: seg.Class is RoadClass.Path or RoadClass.Track,
+                    bool footway = seg.Class is RoadClass.Path or RoadClass.Track;
+                    var obstacle = plans[k].Plan;
+                    // (#711) a footpath left apart from a street (its end loose, trimmed off the carriageway) joins its sidewalk:
+                    // its last metres do not stop the sidewalk, which runs on across it
+                    if (footway)
+                    {
+                        var fl = result.Network.Links[plans[k].LinkId];
+                        bool Loose(int node, double trim) => trim > 0 && node >= 0 && result.Network.Nodes[node].Degree == 1;
+                        double cutStart = Loose(fl.StartNode, fl.TrimStart) ? FootpathJoinsSidewalk : 0, cutEnd = Loose(fl.EndNode, fl.TrimEnd) ? FootpathJoinsSidewalk : 0;
+                        if (cutStart + cutEnd > 0)
+                        {
+                            if (Polyline.Length(obstacle) <= cutStart + cutEnd + 0.1) continue;
+                            obstacle = Polyline.Trim(obstacle, cutStart, cutEnd);
+                        }
+                    }
+                    obstacles.Add(obstacle, plans[k].Source.Line.Width * 0.5, k, StreetPlanner.IsCandidate(seg),
+                        footway: footway,
                         carriageway: seg.Class <= RoadClass.Lane || seg.Class == RoadClass.Railway);
                 }
                 foreach (var (tileId, kept) in passthrough)
@@ -979,6 +999,9 @@ public static partial class TileRewriter
     /// street between two LV95 points on it whose kerbs are all sloped (<see cref="RoadAttrFlags.LoweredKerbs"/>).
     /// </summary>
     private sealed record KerbRamp(int LinkId, IReadOnlyList<Vec2> Points, double Margin);
+
+    /// <summary>A footpath joining a street's sidewalk does not stop it over this much of its end (m): verge, path and sidewalk (#711).</summary>
+    private const double FootpathJoinsSidewalk = 8.0;
 
     /// <summary>The ramps the crossings ask for while a block is laid out, applied once its pieces are final (#711).</summary>
     [ThreadStatic] private static List<KerbRamp>? _ramps;

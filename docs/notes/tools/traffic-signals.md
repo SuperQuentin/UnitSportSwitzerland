@@ -100,6 +100,12 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   the bike head where the arm has one, else on the main pole's rightmost car head (the user's
   choice: always right of red). The bike is `SignalGlyphs.Bike`, shared with the bike lens. Sign
   only: no game rule reads it yet. Model viewer: "Traffic light - Bike right on red" (two).
+- **The cars' stop line where the kerb's curve begins** (the user's review, #711: in the test region's J3 it stood inside
+  the corner's rounding, missing the point of the turn radius). `CurveStart`: the furthest point of the junction's outline
+  on the arm's kerb line; beside a widening the corner patch's arc (`ArcOf`'s tangent point, `CurveStops` before the
+  pockets are painted). The line stands no nearer than that; with no crosswalk and no riders crossing the mouth
+  (`RidersCross`: two arms nearly opposite with a lane or path on the side facing it) it moves up to it (no 3.6 m past
+  it). A pocket's bike box or advanced line, or a bike lane beside a right pocket, keeps the usual setback. Sion: 29.
 - **The cars' stop line behind a crosswalk** (the user's review, #711: 0.3 m was too close):
   `StopBehindCrosswalk` 2 m further back where the approach has a crosswalk and `StopBackRoom`
   15 m left behind the moved line (`PlanStopBacks`, before the pockets; `StopBack(node, arm)`).

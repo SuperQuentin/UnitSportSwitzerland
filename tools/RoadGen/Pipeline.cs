@@ -21,7 +21,10 @@ public sealed record PipelineOptions(
     /// <summary>Which dead ends may be carried onto a road flank within its half width (#121); null = none.</summary>
     Func<RoadLink, RoadLink, bool>? JoinNearEnds = null,
     /// <summary>Which junction corners stay tight (#700, <see cref="JunctionBuilder.TightCorner"/>); null = none.</summary>
-    Func<RoadNetwork, RoadNode, Approach, Approach, bool>? TightCorner = null);
+    Func<RoadNetwork, RoadNode, Approach, Approach, bool>? TightCorner = null,
+    /// <summary>Footpaths never node with car roads (<see cref="NetworkBuilder.IsFootpath"/>, #711); null = they do.</summary>
+    Func<RoadLink, bool>? IsFootpath = null,
+    Func<RoadLink, bool>? IsCarRoad = null);
 
 public sealed class RoadGenResult
 {
@@ -56,6 +59,8 @@ public static class Pipeline
             SnapTolerance = opts.SnapTolerance,
             SplitAtTJunctions = true,
             JoinNearEnds = opts.JoinNearEnds,
+            IsFootpath = opts.IsFootpath,
+            IsCarRoad = opts.IsCarRoad,
         };
         var graphStats = builder.Build(net);
 
