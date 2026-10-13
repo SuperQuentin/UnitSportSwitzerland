@@ -2882,7 +2882,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             var candidate = raw;
             // in a tunnel, out beside the vehicle only within the bore: past its wall is the hill
             if (Terrain != null && Terrain.InTunnel(at) && !Terrain.InTunnel(raw)) continue;
-            if (raw.Y <= at.Y + 0.01f && !Indoors && Terrain != null && !Terrain.InTunnel(raw) && Terrain.TryGetHeight(raw, out float g))
+            // (in a pit too, #619: the height queries answer the ground at its top)
+            if (raw.Y <= at.Y + 0.01f && !Indoors && Terrain != null && !Terrain.InTunnel(raw) && !Terrain.InPit(raw) && Terrain.TryGetHeight(raw, out float g))
                 candidate = raw with { Y = Mathf.Max(raw.Y, g) };
             var query = new PhysicsShapeQueryParameters3D
             {
@@ -3931,7 +3932,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         else if (Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float ground))
         {
-            if (GlobalPosition.Y >= ground - 2f || Terrain.InTunnel(GlobalPosition)
+            if (GlobalPosition.Y >= ground - 2f || Terrain.InTunnel(GlobalPosition) || Terrain.InPit(GlobalPosition)
                 || Terrain.FloorBelow(this, GlobalPosition, GetRid())) return false;
             // back up on the ground, or on the water where there is some: never on a lake bed (#299)
             to = GlobalPosition with { Y = (Terrain.TryGetSurface(GlobalPosition, out float surface) ? surface : ground) + 1f };

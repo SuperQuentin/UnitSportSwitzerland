@@ -53,6 +53,8 @@ public static class SiteShellBuilder
         C(0.12f, 0.12f, 0.13f),   // Rope
         // a light source (alpha 1): darkened by day, shining at its own colour at night
         new Color(0.95f, 0.08f, 0.05f).SrgbToLinear() with { A = 1f },   // LampRed
+        C(0.33f, 0.27f, 0.22f),   // SheetPile, rusted steel
+        C(0.86f, 0.18f, 0.14f),   // Barrier, the guard rail's red
     };
 
     /// <summary>Faces lit by the sun in a flat-shaded world: the top full, the sides darker, the bottom darkest.</summary>
@@ -111,14 +113,57 @@ public static class SiteShellBuilder
         });
 
     /// <summary>The shell of one site, its wings read off its own roof (<see cref="PlanOutline.Wings"/>, #577).</summary>
-    public static ShellPlan Shell(BuildingTile tile, ConstructionSite site, ChunkGrid? grid)
+    public static ShellPlan Shell(BuildingTile tile, ConstructionSite site, ChunkGrid? grid) => Dig(tile, site, grid).Shell;
+
+    /// <summary>
+    /// A site's shell and, when it has one, its pit (#619): the pit's floor is the lowest slab's top,
+    /// a storey under the ground floor per basement and at least <see cref="PitPlans.MinWall"/> under
+    /// the lowest ground round the pit; the shell stands on it.
+    /// </summary>
+    public static (ShellPlan Shell, PitPlan? Pit) Dig(BuildingTile tile, ConstructionSite site, ChunkGrid? grid)
     {
         int index = int.Parse(site.Key.Split('_')[2]);
         var b = tile.Buildings[index];
         var wings = PlanOutline.Wings(b, site.Box.Center, site.Box.AxisU, site.Box.Width, site.Box.Depth)?
             .Select(r => new Rect2D(r.X0, r.Z0, r.X1, r.Z1)).ToList();
         var (high, low) = Ground(site, tile.Id, grid, b);
-        return ShellPlans.Plan(site, wings, high, low);
+        if (site.Pit is not { } pit) return (ShellPlans.Plan(site, wings, high, low), null);
+        float Local(float x, float z)
+        {
+            var p = ToTile(site, new Vector3(x, 0, z));
+            return GroundAt(tile, site, grid, new Vector2(p.X, p.Z));
+        }
+        // the lowest ground on the pit's edge, every metre or so
+        float rimLow = float.MaxValue;
+        var a = pit.Area;
+        int nx = Math.Max(1, (int)MathF.Ceiling(a.Width)), nz = Math.Max(1, (int)MathF.Ceiling(a.Depth));
+        for (int i = 0; i <= nx; i++)
+        {
+            float x = Mathf.Lerp(a.X0, a.X1, (float)i / nx);
+            rimLow = Math.Min(rimLow, Math.Min(Local(x, a.Z0), Local(x, a.Z1)));
+        }
+        for (int j = 0; j <= nz; j++)
+        {
+            float z = Mathf.Lerp(a.Z0, a.Z1, (float)j / nz);
+            rimLow = Math.Min(rimLow, Math.Min(Local(a.X0, z), Local(a.X1, z)));
+        }
+        float floor = PitPlans.FloorOf(site, high, rimLow);
+        var shell = ShellPlans.Plan(site, wings, high, low, floor);
+        return (shell, PitPlans.Plan(site, shell.Wings, floor, shell.Levels[shell.Basements], Local));
+    }
+
+    /// <summary>A site's pit as the ground is cut (#619): tile-local, from its <see cref="PitPlan"/>.</summary>
+    public static PitCut CutOf(ConstructionSite site, PitPlan plan)
+    {
+        var pit = site.Pit!;
+        Vector2 T(Vector2 p)
+        {
+            var t = ToTile(site, new Vector3(p.X, 0, p.Y));
+            return new Vector2(t.X, t.Z);
+        }
+        var down = T(plan.Down) - T(Vector2.Zero);
+        return new PitCut(ConstructionSites.InPlan(site.Box, pit.Area), plan.Floor,
+            T(new Vector2(plan.TopOuter.X, plan.TopOuter.Z)), T(new Vector2(plan.TopInner.X, plan.TopInner.Z)), down, plan.RampLength);
     }
 
     /// <summary>
@@ -130,8 +175,20 @@ public static class SiteShellBuilder
         PierMeshBuilder.MeshData Jib, PierMeshBuilder.MeshData Trolley, PierMeshBuilder.MeshData Hook,
         PierMeshBuilder.MeshData Rope, PierMeshBuilder.MeshData Load, Vector3[] Lamps);
 
-    /// <summary>A tile's sites: the mesh of everything that stands still, its collision faces, and the cranes' moving parts.</summary>
-    public sealed record SiteBuild(PierMeshBuilder.MeshData? Mesh, Vector3[] Faces, List<CraneRigData> Cranes);
+    /// <summary>
+    /// A tile's sites: the mesh of everything that stands still, its collision faces, the cranes'
+    /// moving parts, and the pits the ground is cut by (#619; the ground's own build cuts them).
+    /// </summary>
+    public sealed record SiteBuild(PierMeshBuilder.MeshData? Mesh, Vector3[] Faces, List<CraneRigData> Cranes, List<PitCut> Pits);
+
+    /// <summary>The pits a tile's sites dig (#619), without building anything else.</summary>
+    public static List<PitCut> Pits(BuildingTile tile, IReadOnlyList<ConstructionSite> sites, ChunkGrid? grid)
+    {
+        var pits = new List<PitCut>();
+        foreach (var site in sites)
+            if (site.Pit != null && Dig(tile, site, grid).Pit is { } plan) pits.Add(CutOf(site, plan));
+        return pits;
+    }
 
     /// <summary>The mesh lists and collision triangles being built.</summary>
     private sealed class Geo(bool mesh, bool collision)
@@ -227,13 +284,19 @@ public static class SiteShellBuilder
         if (sites.Count == 0 || !mesh && !collision) return null;
         var g = new Geo(mesh, collision);
         var cranes = new List<CraneRigData>();
+        var pits = new List<PitCut>();
         foreach (var site in sites)
         {
-            var shell = Shell(tile, site, grid);
+            var (shell, pit) = Dig(tile, site, grid);
             var yard = Dressing(tile, site, grid);
             Vector3 T(float x, float y, float z) => ToTile(site, new Vector3(x, y, z));
             foreach (var box in shell.Boxes) g.Box(box, T);
             foreach (var box in yard.Boxes) g.Box(box, T);
+            if (pit != null)
+            {
+                foreach (var box in pit.Boxes) g.Box(box, T);
+                pits.Add(CutOf(site, pit));
+            }
             foreach (var m in yard.Mounds) Mound(g, m, site);
             foreach (var r in shell.Ramps)
                 g.Solid(T(r.A.X, r.A.Y, r.A.Z), T(r.B.X, r.B.Y, r.B.Z), T(r.C.X, r.C.Y, r.C.Z), T(r.D.X, r.D.Y, r.D.Z));
@@ -245,6 +308,13 @@ public static class SiteShellBuilder
                 var d0 = crane.Base - site.Box.Center;
                 var at = new Vector2(d0.Dot(site.Box.AxisU), d0.Dot(site.Box.AxisV));
                 float ground = GroundAt(tile, site, grid, crane.Base);
+                if (pit != null && crane.Inside)
+                {
+                    // a crane in the building stands on the pit's floor (#619), its mast as much taller
+                    float floor = shell.Levels[0];
+                    crane = crane with { HookHeight = crane.HookHeight + ground - floor };
+                    ground = floor;
+                }
                 foreach (var box in CranePlans.Mast(crane, at, ground)) g.Box(box, T);
                 if (!mesh) continue;
                 var pivot = new Vector3(crane.Base.X, ground + CranePlans.MastHeight(crane), crane.Base.Y);
@@ -256,7 +326,7 @@ public static class SiteShellBuilder
                     MeshOf(CranePlans.Hook()), MeshOf(CranePlans.Rope()), MeshOf(CranePlans.Load(load)), CranePlans.Lamps(crane)));
             }
         }
-        return new SiteBuild(g.Data(), g.Faces.ToArray(), cranes);
+        return new SiteBuild(g.Data(), g.Faces.ToArray(), cranes, pits);
     }
 
     /// <summary>A heap: an eight-sided foot, a shoulder, a crown and a point.</summary>
