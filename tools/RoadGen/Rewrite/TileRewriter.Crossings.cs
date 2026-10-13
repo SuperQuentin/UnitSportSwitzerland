@@ -171,23 +171,25 @@ public static partial class TileRewriter
         // without an island it runs on straight from the mouth to the exit's crosswalk edge, as it leaves its own (#711)
         double exitEdge = island ? 0 : GuideEdge(junction, to);   // the exit's crosswalk edge, else its stop line (#711)
         // the inner edge of the turn, and where a bike lane runs at the entry (the left-turn bike lane) and at the exit, its outer edge too
+        // (#711, the user's review) on an arm with no crosswalk nor island the curve itself runs out to the stop line
+        bool openIn = !islandArms.ContainsKey(arm) && _crosswalkArms?.Contains((junction.NodeId, arm)) == false, openOut = !island && _crosswalkArms?.Contains((junction.NodeId, to)) == false;
         void Guide(double entryAt, double exitAt)
         {
-            Vec2 start = (from.Left + from.Right) * 0.5 + u.Perp * entryAt - u * beyondOwn;
-            Vec2 end = mid - ut.Perp * exitAt - ut * beyondExit;
+            Vec2 start = (from.Left + from.Right) * 0.5 + u.Perp * entryAt + u * (openIn ? GuideEdge(junction, arm) : -beyondOwn);
+            Vec2 end = mid - ut.Perp * exitAt + ut * (openOut ? exitEdge : -beyondExit);
             // tangent to the way in (along -u) and to the way out (along ut): the control is where their lines meet
             double den = (-u).Cross(ut);
             Vec2 control = Math.Abs(den) < 1e-6 ? junction.Centre : start + (-u) * ((end - start).Cross(ut) / den);
             var line = new List<Vec2>();
             // straight from the crosswalk's junction edge (else the stop line, #711) to where the curve starts
             double crosswalkEdge = GuideEdge(junction, arm);
-            line.Add((from.Left + from.Right) * 0.5 + u.Perp * entryAt + u * crosswalkEdge);
+            if (!openIn) line.Add((from.Left + from.Right) * 0.5 + u.Perp * entryAt + u * crosswalkEdge);
             for (int k = 0; k <= 16; k++)
             {
                 double t = k / 16.0, mt = 1 - t;
                 line.Add(start * (mt * mt) + control * (2 * mt * t) + end * (t * t));
             }
-            if (exitEdge > 0) line.Add(end + ut * exitEdge);
+            if (exitEdge > 0 && !openOut) line.Add(end + ut * exitEdge);
             Get(paint, home).Add(new RoadPaint
             {
                 Shape = PaintShape.Polyline, Type = PaintType.WhiteDashed, Rgba = PaintEmitter.White, Width = PaintEmitter.LineWidth,
