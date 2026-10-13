@@ -72,6 +72,10 @@ and the transition lengths.
   exits take; pockets where the class and kind allow (`JunctionRules`: left pockets on the main road's arms or every lit
   approach, double lefts from data, right pockets above 50 km/h, none where OSM marks no left lane or forbids the turn);
   equal lane widths across the approach. This logic exists and is data logic: it moves, it is not rewritten.
+- **Forbidden turns** (OSM `no_*` / `only_*` restrictions, `Restrictions.Banned`; arms nobody may leave by, one-way in;
+  turns `turn:lanes` shows no lane for): no lane gets the move or its arrow, no connector is drawn for it (no path for
+  traffic, no signal group), a corner no right turn uses stays tight, and **no pocket is built for a banned turn** (today
+  a left pocket is planned from geometry alone without lane data: 10 in Geneva stand where OSM forbids the left turn).
 - **Lanes out**: as many as the arm's departing lanes, the exit's car lane continuing the facing through lane.
 - **Alignment across the junction** (replaces the veer share, `SetExit`, `SetExitLane`, mirror strips and the exit
   shrink): for every straight pair (approach A, exit B), A's through lane and B's lane are on one line. The planner
