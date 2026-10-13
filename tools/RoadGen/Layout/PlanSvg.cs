@@ -50,6 +50,7 @@ public static class PlanSvg
         double ease = a.Openings.Count > 0 ? a.Openings.Max(o => Math.Max(o.Taper, 1)) : 0;
         bool hatched = a.Mouth.Strips.Any(s => s.Kind == StripKind.Hatch);
         if (a.Openings.Count == 0 && (hatched || a.Split > 0)) ease = 30;   // an exit's hatch closes over TurnExit
+        if (a.Openings.Count == 0 && a.Mouth.Strips.Any(s => s.Id == MouthPlanner.AddedBikeId)) (hold, ease) = (Math.Max(hold, 20), Math.Max(ease, 9));
         double length = Math.Min(Shown, Math.Max(5, a.Length));
         var ids = Order(a.Mouth, a.Normal);
         double ux = Math.Cos(a.Heading), uy = Math.Sin(a.Heading);

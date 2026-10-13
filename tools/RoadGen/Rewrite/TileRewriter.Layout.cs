@@ -269,7 +269,14 @@ public static partial class TileRewriter
 
     /// <summary>The right side's transition: the pockets' storage held, then their longest taper (an exit alone: <see cref="TurnExit"/>).</summary>
     private static Stretch RightStretch(ArmPlan a) =>
-        a.Openings.Count == 0 ? new Stretch(0, TurnExit) : new Stretch(a.Openings.Max(o => o.Storage), a.Openings.Max(o => o.Taper * Lanes(a, o)));
+        a.Openings.Count > 0 ? new Stretch(a.Openings.Max(o => o.Storage), a.Openings.Max(o => o.Taper * Lanes(a, o)))
+        : a.Mouth.Strips.Any(x => x.Id == MouthPlanner.AddedBikeId) ? AddedBikeStretch : new Stretch(0, TurnExit);
+
+    /// <summary>
+    /// A through bike lane the mouth adds (#818) runs as far back as the lights' solid centre line (<see cref="CentreSolidAtLights"/>)
+    /// and comes in over 1:6 before it.
+    /// </summary>
+    internal static readonly Stretch AddedBikeStretch = new(CentreSolidAtLights, MouthPlanner.LeftBikeLane * LeadInPerMetre);
 
     /// <summary>The left side's: a split lead-in's as the pocket's, an exit hatch closing over <see cref="TurnExit"/>.</summary>
     private static Stretch LeftStretch(ArmPlan a)
