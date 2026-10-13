@@ -831,8 +831,15 @@ public static partial class InteriorMeshBuilder
         var basis = new Basis(Vector3.Up, p.Turns * Mathf.Pi / 2);
         var at = new Vector3(p.X, y0, p.Z);
         float w = p.W / 2, d = p.D / 2, H = p.H;
+        // #497's wall pieces were authored with their fronts on -Z, which is the wall: lockers opened
+        // into it, the hats hung in it, a whiteboard showed its back. Mirrored so they face the room
+        // (found by #822, whose office is lined with them).
+        bool mirror = p.Type is FurnitureType.Locker or FurnitureType.HardHatRack
+            or FurnitureType.SafetySign or FurnitureType.TimeClock or FurnitureType.Whiteboard or FurnitureType.Banner
+            or FurnitureType.DeskCounter;
         void B(float xa, float ya, float za, float xb, float yb, float zb, Color col, bool collide = false)
         {
+            if (mirror) (za, zb) = (-zb, -za);
             var min = new Vector3(xa, ya, za);
             var max = new Vector3(xb, yb, zb);
             s.Box(at + min, at + max, col, collide, basis, at);

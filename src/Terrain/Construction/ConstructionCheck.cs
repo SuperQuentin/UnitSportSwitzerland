@@ -145,7 +145,8 @@ public static class ConstructionCheck
             var sill = SiteShellBuilder.ToTile(site, office.Doors[i].Sill);
             expect(Math.Abs(spot.Position.Y - office.Ground) < 0.001f
                 && new Vector2(spot.Position.X - spot.Outward.X * 0.03f - sill.X, spot.Position.Z - spot.Outward.Z * 0.03f - sill.Z).Length() < 0.001f,
-                $"{what}: door {i} on its container's door, its sill at {spot.Position.Y:F2} m (ground {office.Ground:F2})");
+                $"{what}: door {i} on its container's door, its sill at {spot.Position.Y:F2} m (ground {office.Ground:F2}), "
+                + $"--at {tile.Id.MinE + spot.Position.X:F1},{tile.Id.MaxN - spot.Position.Z:F1} facing E {spot.Outward.X:F2} N {-spot.Outward.Z:F2}");
         }
 
         var plan = InteriorGenerator.Generate(tile, index, roads, grid);
