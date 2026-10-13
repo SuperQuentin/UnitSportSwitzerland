@@ -44,6 +44,11 @@ public partial class CraneService : Node
 
     public static CraneService? Instance { get; private set; }
 
+    /// <summary>A line for the player: why a crane was refused (the client's toast).</summary>
+    public static event Action<string>? Said;
+
+    public static void Say(string message) => Said?.Invoke(message);
+
     /// <summary>A crane somebody works, or has let go and that has not gone back to its schedule yet.</summary>
     public sealed class Hold
     {

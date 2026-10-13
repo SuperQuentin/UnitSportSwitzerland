@@ -804,6 +804,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Vehicles.VehicleManager.Refused += Toast;
         Movie.MovieSession.Said += Toast;
         Vehicles.PassengerService.Said += Toast;
+        Terrain.Construction.CraneService.Said += Toast;
 
         // Chat exists from boot, not only once connected: offline it runs its commands itself
         // (/city, /spawn ...), and StartNetworking just keeps using it. World/Chat is also the
@@ -1317,6 +1318,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Vehicles.VehicleManager.Refused -= Toast;
         Movie.MovieSession.Said -= Toast;
         Vehicles.PassengerService.Said -= Toast;
+        Terrain.Construction.CraneService.Said -= Toast;
         if (_networked)
         {
             Multiplayer.ConnectedToServer -= OnConnected;
@@ -1706,8 +1708,17 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (p.Vehicle == null && p.ButtonInReach() is { } button)
                 yield return (PlayerInput.InteractMount, button.Open ? "Shut the door" : "Open the door");
             if (p.RidingAlong && p.StereoOwner != null) yield return (PlayerInput.RadioPanel, "Radio");
+            // at a crane's controls (#618): the hook, the view, and letting go; the levers are in F1
+            if (p.CraneWorking)
+            {
+                var (take, setAt) = p.HookAction();
+                if (take != null) yield return (PlayerInput.Couple, "Hook it on");
+                else if (setAt != null) yield return (PlayerInput.Couple, "Set it down");
+                yield return (PlayerInput.CameraToggle, p.CraneHookView ? "Your own view" : "Hook camera");
+                yield return (PlayerInput.InteractMount, "Let go of the crane");
+            }
             // walking about in a vehicle, or sat in one somebody else hosts (#158, #162)
-            if (p.Aboard)
+            else if (p.Aboard)
             {
                 if (p.DeckHint is { } deckHint) yield return (PlayerInput.InteractMount, deckHint);
                 yield return (PlayerInput.CameraToggle, "Camera");

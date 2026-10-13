@@ -1071,6 +1071,8 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
             else if (!p.Indoors) door = OutsideDoorInReach(p.GlobalPosition);
             // outdoors: a farm stand at hand, a specialty buyer's yard (#494)
             if (door == null && !p.Indoors) text = Farming.FarmSales.PromptFor(p);
+            // a building site crane's ladder, its remote's box, or the climb itself (#618)
+            if (door == null && !p.Indoors) text ??= p.CranePrompt();
             if (door != null)
                 text = InputHints.Prompt(PlayerInput.InteractMount, _doors.ContainsKey(door) ? "Close the door" : "Open the door");
             // a Battle Royale crate at your feet comes first, as E opens it first (#194)
