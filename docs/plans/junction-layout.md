@@ -3,7 +3,7 @@
 
 # Junctions lay their own surface: sections, cores and transitions (#818)
 
-Status: **plan**, the user's decisions of Oct 13 2026 below. Coding starts once #704 and #712 are merged (this
+Status: **plan**, settled with the user (Oct 13 2026, below). Coding starts once #704 and #712 are merged (this
 replaces most of what they built, so it branches from the `main` that has them). Absorbs #709 (traffic follows the
 junction's paths). Part names as in `docs/notes/tools/intersection-parts.md`.
 
@@ -97,8 +97,8 @@ and the transition lengths.
 - **Connectors**: for every in-lane and each of its moves, a curve to the exit lane it feeds (left into the leftmost
   out lane, right into the rightmost, same-turn pairs lane to lane, a through lane to its aligned lane; bike lanes and
   paths get their own). A connector leaves its lane's centre at the mouth along the arm's heading and arrives along the
-  exit's: two tangents joined by a circular arc of at least the turning radius (car 6 m on the inner edge, more on
-  Major roads; open below), straight runs for the rest. Each carries its lane width, so its two edges are curves too.
+  exit's: two tangents joined by a circular arc of at least the turning radius (car 6 m on the inner edge, a truck's
+  10 m where a Major road is involved), straight runs for the rest. Each carries its lane width, so its two edges are curves too.
 - **The core's outline**: between arm i's right edge and arm j's left edge, the **kerb curve** is the outer edge of
   the outermost right-turn connector between them (plus its bike lane where riders turn with it), so the corner is as
   round as the turn that uses it. Where no right turn uses the corner (one-way, OSM, no lane: #700's tight corners) it
@@ -111,7 +111,7 @@ and the transition lengths.
   main road's centre line (the boundary between its two straight connectors), edge guides (the right connectors'
   outer edges, without lights), left-turn guides, same-turn pair guides, the through guide past an island (#711 phase 3).
 - **Multi-node junctions** (a divided road's crossing, two-node lights `Internal` < 30 m, a track splitting the lights):
-  the core may span several nodes joined by internal links; connectors run through. Phase 5, see open questions.
+  the core may span several nodes joined by internal links; connectors run through. Phase 5.
 
 ### 3. The exterior
 
@@ -232,11 +232,9 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
 - **Transitions are objects of their own**, owning carriageway, side bands and paint (the user's idea; chosen over a
   junction mesh covering the transitions, over ribbons plus generated strips, and over variable-width segments).
 
-## Open (my defaults, for the user's review)
+## Settled with the user (Oct 13 2026, second round)
 
-- **Turning radius**: the kerb follows the right-turn connector of a car (inner edge 6 m) on Minor/Road, a truck
-  (10 m) on Major; or one radius sized by the room as #682 does now?
-- **Multi-node cores** in this PR (phase 5) or a follow-up issue? Default: this PR, limited to links under 30 m between
-  two junction nodes of car roads.
-- **Slip lanes (#708) and continuous sidewalks (#710)** stay their own issues; the model has room for both (a slip is
-  a connector with its own kerb and an island between; a continuous sidewalk is a corner the core does not round).
+- **Turning radius by vehicle**: the kerb follows the right-turn connector's outer edge, a car (6 m inner edge) on
+  Minor/Road arms, a truck (10 m) where a Major road is involved; the room clips it smaller.
+- **Multi-node cores in #818** (phase 5): car-road junction nodes joined by links under 30 m form one core.
+- **Slip lanes (#708) and continuous sidewalks (#710) stay their own issues**, built on this model afterwards.
