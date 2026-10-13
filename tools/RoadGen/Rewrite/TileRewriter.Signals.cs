@@ -42,6 +42,18 @@ public static partial class TileRewriter
     /// <summary>Each lights approach's extra stop-line setback behind its crosswalk (#711), while a block is laid out.</summary>
     [ThreadStatic] private static Dictionary<(int Node, int Arm), double>? _stopBack;
 
+    /// <summary>The lights' arms with a crosswalk, while a block is laid out (#711).</summary>
+    [ThreadStatic] private static HashSet<(int Node, int Arm)>? _crosswalkArms;
+
+    /// <summary>
+    /// Where a guide through the lights meets an arm, out from its mouth (#711, the user's review): the crosswalk's junction
+    /// edge where it has one, else its stop line (where the kerb's curve begins, past the usual setback).
+    /// </summary>
+    private static double GuideEdge(Junction junction, int arm) =>
+        _crosswalkArms?.Contains((junction.NodeId, arm)) != false
+            ? MouthSkew(junction, junction.Arms[arm]) + SignalStopSetback - ZebraClear - ZebraDepth
+            : MouthSkew(junction, junction.Arms[arm]) + SignalStopSetback + StopBack(junction.NodeId, arm);
+
     /// <summary>
     /// How much further back than <see cref="SignalStopSetback"/> the cars' stop line stands on an approach (#711): more behind a
     /// crosswalk, <c>-SignalStopSetback</c> (at the mouth, where the kerb's curve begins) where nothing crosses it.
@@ -112,6 +124,7 @@ public static partial class TileRewriter
     private static void PlanStopBacks(PriorityResult priority, RoadNetwork net, Func<int, LinkEnd, bool, RoadSide> streetSideAt, CrossingNodes? crossings)
     {
         _stopBack = [];
+        _crosswalkArms = [];
         var signalNodes = priority.Plans.Where(p => p.Plan.Kind == PriorityPlanner.Kind.Signal).Select(p => p.Junction.NodeId).ToHashSet();
         var signalJunctions = priority.Plans.Where(p => p.Plan.Kind == PriorityPlanner.Kind.Signal).ToDictionary(p => p.Junction.NodeId, p => p.Junction);
         foreach (var (junction, plan) in priority.Plans)
@@ -129,7 +142,9 @@ public static partial class TileRewriter
                 // 3.6 m past it with nothing to keep clear, missed the point of the turn radius); past the usual setback relative to it
                 double curve = CurveStart(junction, i) - MouthSkew(junction, junction.Arms[i]) - SignalStopSetback;
                 double back;
-                if (!CrosswalkOn(junction, i, net, crossings, crossingsMapped, right, left).Crosswalk)
+                bool crosswalkHere = CrosswalkOn(junction, i, net, crossings, crossingsMapped, right, left).Crosswalk;
+                if (crosswalkHere) _crosswalkArms.Add((junction.NodeId, i));
+                if (!crosswalkHere)
                     // up to the curve only where nothing crosses the mouth (no riders going straight across it)
                     back = curve > 0 || !RidersCross(junction, i, plan, streetSideAt) ? Math.Max(curve, -SignalStopSetback) : 0;
                 else

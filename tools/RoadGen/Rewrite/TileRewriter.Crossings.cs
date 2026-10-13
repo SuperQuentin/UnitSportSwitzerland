@@ -169,7 +169,7 @@ public static partial class TileRewriter
         // the turn starts past the island of its own arm, and ends where the island at its exit ends, to the right of it
         double beyondOwn = islandArms.ContainsKey(arm) ? IslandInsideM + 0.3 : 0, beyondExit = island ? IslandInsideM + 0.3 : 0;
         // without an island it runs on straight from the mouth to the exit's crosswalk edge, as it leaves its own (#711)
-        double exitEdge = island ? 0 : MouthSkew(junction, junction.Arms[to]) + SignalStopSetback - ZebraClear - ZebraDepth;
+        double exitEdge = island ? 0 : GuideEdge(junction, to);   // the exit's crosswalk edge, else its stop line (#711)
         // the inner edge of the turn, and where a bike lane runs at the entry (the left-turn bike lane) and at the exit, its outer edge too
         void Guide(double entryAt, double exitAt)
         {
@@ -179,8 +179,8 @@ public static partial class TileRewriter
             double den = (-u).Cross(ut);
             Vec2 control = Math.Abs(den) < 1e-6 ? junction.Centre : start + (-u) * ((end - start).Cross(ut) / den);
             var line = new List<Vec2>();
-            // straight from the crosswalk's junction edge to where the curve starts
-            double crosswalkEdge = MouthSkew(junction, from) + SignalStopSetback - ZebraClear - ZebraDepth;
+            // straight from the crosswalk's junction edge (else the stop line, #711) to where the curve starts
+            double crosswalkEdge = GuideEdge(junction, arm);
             line.Add((from.Left + from.Right) * 0.5 + u.Perp * entryAt + u * crosswalkEdge);
             for (int k = 0; k <= 16; k++)
             {

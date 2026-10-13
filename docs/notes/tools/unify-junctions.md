@@ -305,3 +305,6 @@ lights), an island to avoid, or several lanes turning alike (`EmitPairGuides`, a
   arm's `ExitWidening` carries it to the left-turn guides, the crosswalk and the left pole. Test region 5, Sion 3 (4 no
   room). The user's idea for later: the junction lays its own surface from the data and the room it has, with
   transitions before and after, instead of such widenings per case.
+- **Left-turn guides meet each arm at its crosswalk edge, else its stop line** (`GuideEdge`, the user's review of J3's
+  south leg): with the stop line back at the kerb's curve start the guide ended at the mouth; it now runs straight out to
+  the line where the arm has no crosswalk (`_crosswalkArms`, recorded by `PlanStopBacks`), at both its start and its end.
