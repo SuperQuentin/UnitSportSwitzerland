@@ -128,6 +128,25 @@ public static partial class TileRewriter
     }
 
     /// <summary>
+    /// Cuts the dashed bike lane line on one side of a piece at <paramref name="cut"/> (piece metres): keeps what lies before it
+    /// (<paramref name="keepBefore"/>) or after it (#711: an exit's bike lane starts where the left-turn guides leave it).
+    /// </summary>
+    private static void BikeLaneFrom(List<RoadPaint> paint, int from, RoadSegment piece, bool right, double cut, bool keepBefore)
+    {
+        for (int k = paint.Count - 1; k >= from; k--)
+        {
+            var p = paint[k];
+            if (p.Type != PaintType.YellowDashed || !ReferenceEquals(p.Segment, piece) || (p.Offset > 0) != right) continue;
+            double a = p.From, b = float.IsPositiveInfinity(p.To) ? RoadPaintGeometry.Length(RoadPaintGeometry.Offset(piece, p.Offset)) : p.To;
+            double keepA = keepBefore ? a : Math.Max(a, cut), keepB = keepBefore ? Math.Min(b, cut) : b;
+            if (keepA <= a + 1e-6 && keepB >= b - 1e-6) continue;   // all of it kept
+            paint.RemoveAt(k);
+            if (keepB - keepA > 0.3)
+                paint.Insert(k, RoadPaint.AlongSegment(piece, p.Type, p.Rgba, p.Width, p.Dash, p.Gap, p.Offset, keepA, keepB, p.Variant));
+        }
+    }
+
+    /// <summary>
     /// The paint of a street's separated paths, piece by piece: the yellow dashed line between a
     /// path at the sidewalk's height and the sidewalk (layouts 1 and 2), and a Velo symbol where
     /// the path starts or ends (a junction, or a stretch without it).

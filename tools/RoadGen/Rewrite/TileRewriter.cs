@@ -754,6 +754,15 @@ public static partial class TileRewriter
                             skipLeft: Inside(false), skipRight: Inside(true));
                         foreach (var (right, stop, solid) in stops)
                             BikeLaneToStop(into, before, pieces[i], right, stop - (s - station), solid - (s - station));
+                        // an exit's bike lane starts where the left-turn guides leave it (#711): the left side at a link's end,
+                        // the right side at its start
+                        if (linkOf.TryGetValue(segment, out int exitLink))
+                        {
+                            if (_exitBikeFrom?.TryGetValue((exitLink, LinkEnd.End), out double fromEnd) == true)
+                                BikeLaneFrom(into, before, pieces[i], right: false, total - fromEnd - (s - station), keepBefore: true);
+                            if (_exitBikeFrom?.TryGetValue((exitLink, LinkEnd.Start), out double fromStart) == true)
+                                BikeLaneFrom(into, before, pieces[i], right: true, fromStart - (s - station), keepBefore: false);
+                        }
                         s += length;
                     }
                 }

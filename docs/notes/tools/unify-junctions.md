@@ -313,3 +313,6 @@ lights), an island to avoid, or several lanes turning alike (`EmitPairGuides`, a
   split lead-in's mirror strip frames the exit beside it and was laid as that exit stood before the pocket facing it set its
   hatch (`SetExit`), 1.77 m wide against the corner's 3.77 m; a pre-pass now sets every exit first. The corner beside an exit
   framed by a mirror takes the mirror's edge.
+- **An exit's bike lane starts where the left-turn guides leave it** (the user's review of J3's south leg): on a lights arm
+  with no crosswalk nor island the dashed bike lane line of the exit side starts level with the stop line (`_exitBikeFrom`,
+  `BikeLaneFrom`), not at the mouth.

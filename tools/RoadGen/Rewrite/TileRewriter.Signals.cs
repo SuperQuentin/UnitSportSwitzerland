@@ -42,6 +42,12 @@ public static partial class TileRewriter
     /// <summary>Each lights approach's extra stop-line setback behind its crosswalk (#711), while a block is laid out.</summary>
     [ThreadStatic] private static Dictionary<(int Node, int Arm), double>? _stopBack;
 
+    /// <summary>
+    /// Where an exit's bike lane starts, out from its mouth, per link end (#711, the user's review of J3's south leg): on an arm
+    /// with no crosswalk nor island, where the left-turn guides leave it (its stop line's level), not at the mouth.
+    /// </summary>
+    [ThreadStatic] private static Dictionary<(int Link, LinkEnd End), double>? _exitBikeFrom;
+
     /// <summary>The lights' arms with a crosswalk, while a block is laid out (#711).</summary>
     [ThreadStatic] private static HashSet<(int Node, int Arm)>? _crosswalkArms;
 
@@ -125,6 +131,7 @@ public static partial class TileRewriter
     {
         _stopBack = [];
         _crosswalkArms = [];
+        _exitBikeFrom = [];
         var signalNodes = priority.Plans.Where(p => p.Plan.Kind == PriorityPlanner.Kind.Signal).Select(p => p.Junction.NodeId).ToHashSet();
         var signalJunctions = priority.Plans.Where(p => p.Plan.Kind == PriorityPlanner.Kind.Signal).ToDictionary(p => p.Junction.NodeId, p => p.Junction);
         foreach (var (junction, plan) in priority.Plans)
@@ -515,6 +522,8 @@ public static partial class TileRewriter
                         islandArms[i] = new IslandExit(exitWay.HatchAt(0) + exitWay.Frame0, exitWay.ExitCar, exitSide.HasTrack || exitSide.HasLane);   // from the axis (#700)
                     }
                 }
+                if (!inside && leaves && !crosswalk && !islandArms.ContainsKey(i))
+                    _exitBikeFrom![(plan.Arms[i].LinkId, plan.Arms[i].End)] = GuideEdge(junction, i);
                 if (!inside && leaves)
                 {
                     // the exit lane at the mouth (#711): past the exit's hatch where a pocket's through lane widened it, else from the centre line
