@@ -31,10 +31,10 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   bike lane nor a path, the mouth adds a through bike lane, kerbside (id 115). Short of room the left-turn bike lane goes
   early (step 2); the through one **survives when possible**: it goes with the painted ones, last (step 8). J1 N gets one;
   J3 E keeps it with the short pockets; J3 N has room for a pocket or the bike lane: the pocket goes (LTR, as designed).
-- **Bike lane beside a right pocket** (the user, Oct 13): between it and the through lane (layout b) only where the traffic
-  arriving from the arm the pocket turns into cannot turn left (one-way out, forbidden, no lane shows it); else kerbside (a),
-  lit or not, painted or added. Replaces #351's coin flip (`NeedsOf.BikeBetween`, kept for the old layout) and #711's
-  "always (b) without lights". The signal plan follows the layout (a kerbside lane gets its bike signal); it no longer
+- **Bike lane beside a right pocket** (the user, Oct 13): without lights always between it and the through lane (layout b);
+  at the lights (b) only where the traffic arriving from the arm the pocket turns into cannot turn left (one-way out,
+  forbidden, no lane shows it), else kerbside (a), painted or added. Replaces #351's coin flip (`NeedsOf.BikeBetween`, kept
+  for the old layout). The signal plan follows the layout (a kerbside lane gets its bike signal); it no longer
   forces (b). J1: kerbside on every arm (every arm turns left).
 - **Lanes and sidewalks narrow per side** (steps 3 and 5): only on the side that lacks room (J3 N's departing lane keeps
   its 4 m).
