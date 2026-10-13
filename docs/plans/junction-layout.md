@@ -295,3 +295,19 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
   building at its corner, no mouth past half the street), else a car's. Trucks elsewhere swing out and yield: #821.
 - **Multi-node cores in #818** (phase 5): car-road junction nodes joined by links under 30 m form one core.
 - **Slip lanes (#708) and continuous sidewalks (#710) stay their own issues**, built on this model afterwards.
+
+## Settled with the user (Oct 13 2026, third round: phase 3)
+
+- **What phase 3 writes** (under `--junctions new`): at every planned single-node junction the core (as its cap: outline,
+  heights), the arms' segments trimmed to the mouths, and the transitions (`TRNS`, paint by rule). The old pocket strips,
+  exit tapers and their paint are skipped there, and so is the old exterior (stop lines, crosswalks, poles, sidewalk corners,
+  signs) until phase 4 rebuilds it from the core. Multi-node junctions stay on the old layout entirely.
+- **The game builds every street from a cross-section per point** (the generalization): ribbon, sides, blend and collision
+  take edges and band widths per point; an ordinary segment is the constant case read from ATR2, a `TRNS` piece the varying
+  one (`ShiftAt` becomes a case of it). One code path.
+- **One timing rule by role** for a transition's strips: a pocket lane held over its storage, then closing over its taper
+  (centre side: it gives way to a lead-in hatch, the closing line the diagonal where the two meet; kerb side: the kerb moves
+  in); an exit hatch closes over 30 m; an added bike lane held 20 m, coming on at 1:6; every other width change (lane widths,
+  a narrowed sidewalk or verge) at 1:6 (6 m at least) just beyond its side's last opening. The exit hatch and a pocket's
+  lead-in hatch are the same median between the two directions, so a #325 merged street is that median running mouth to
+  mouth.
