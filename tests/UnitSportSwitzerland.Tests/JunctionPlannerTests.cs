@@ -77,7 +77,7 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
     }
 
     [Fact]
-    public void A_left_turn_bike_lane_comes_only_after_a_through_one()
+    public void A_through_bike_lane_comes_before_a_left_turn_one_and_survives_when_possible()
     {
         // a 10 m road with no bike lane at lights: the mouth adds the through riders' lane, kerbside, beside the left-turn one
         var normal = Section.Normal(new RoadAttributes(LanesForward: 1, LanesBackward: 1, WidthCm: 1000), 10f, true);
@@ -87,14 +87,17 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
         Assert.Equal([MouthPlanner.LeftBikeId, MouthPlanner.AddedBikeId], bikes.Select(x => x.Id));
         Assert.Equal(StripKind.BikeLane, mouth.Strips[mouth.LastCarriageway].Kind);
 
-        // no room beyond the street: the left-turn bike lane goes first, then the added through lane, before any car lane narrows
+        // short of room: the left-turn bike lane goes first; then the arriving lanes narrow, the through bike lane stays
         var (nl, nr) = MouthPlanner.Reach(normal);
         var steps = new List<string>();
         MouthPlanner.Fit(mouth, normal, ArmRoom.Flat(nl, MouthPlanner.Reach(mouth).Right - 1.4), new Stretch(40, 30), new Stretch(40, 30), steps);
         Assert.Equal(["2 left-turn bike lane"], steps);
         steps.Clear();
-        MouthPlanner.Fit(mouth, normal, ArmRoom.Flat(nl, MouthPlanner.Reach(mouth).Right - 2.9), new Stretch(40, 30), new Stretch(40, 30), steps);
-        Assert.Equal(["2 left-turn bike lane", "2 added through bike lane"], steps);
+        var fit = MouthPlanner.Fit(mouth, normal, ArmRoom.Flat(nl, MouthPlanner.Reach(mouth).Right - 2.9), new Stretch(40, 30), new Stretch(40, 30), steps);
+        Assert.Equal(["2 left-turn bike lane", "3 lane widths to their least"], steps);
+        Assert.Contains(fit.Strips, x => x.Id == MouthPlanner.AddedBikeId);
+        // the departing lane had room: it keeps its width
+        Assert.Equal(5.0, fit.CarLanes(StripWay.Out).Single().Strip.Width, 6);
     }
 
     [Fact]

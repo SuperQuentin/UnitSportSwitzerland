@@ -110,7 +110,7 @@ public static partial class TileRewriter
         // all to the far side would jog the oncoming traffic as much: a share stays at most half), and all again
         foreach (var jp in plans)
         {
-            for (int round = 0; round < 4; round++)
+            for (int round = 0; round < 6; round++)
             {
                 Align(jp, a => a.Base);
                 FitAll(jp, search: true);
@@ -123,6 +123,15 @@ public static partial class TileRewriter
                     {
                         NoLeftPocket(feeder);
                         feeder.Steps.Add("7 left pocket: no room for its exit");
+                        dropped = true;
+                    }
+                // a fit that gave up an arm's own left pocket: the arm planned again without it (its lanes were narrowed and
+                // moved for the pocket)
+                foreach (var a in jp.Arms)
+                    if (a.FitSteps.Contains("7 left pocket") && a.Base.Strips.Any(x => IsLeftPocket(x.Id)))
+                    {
+                        NoLeftPocket(a);
+                        a.Steps.Add("7 left pocket: no room");
                         dropped = true;
                     }
                 if (!dropped) break;

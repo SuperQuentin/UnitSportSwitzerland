@@ -596,11 +596,11 @@ public static class SignalTestRegion
     /// </summary>
     /// <summary>
     /// Where the planner's lanes are meant to differ from the pocket layout's design (#818, the user's decisions), by junction
-    /// and arm. J3 N: the lanes narrow to 2.75 m and the road moves left where the houses leave room, so a pocket fits (the
-    /// room order: lane widths before a pocket, Oct 13 2026). Merged into <see cref="Junction.Design"/> at the switch.
+    /// and arm; none so far (J3 N: room for a pocket or a through bike lane, not both: the bike lane stays, as designed, LTR).
+    /// Merged into <see cref="Junction.Design"/> at the switch.
     /// </summary>
     public static readonly IReadOnlyDictionary<(string Junction, string Arm), string> PlannerDesign =
-        new Dictionary<(string, string), string> { [("J3-mismatch", "N")] = "L|TR" };
+        new Dictionary<(string, string), string>();
 
     public static int ReportPlans(IReadOnlyList<Layout.JunctionPlan> plans, IReadOnlyList<Junction> junctions, Action<string> log)
     {

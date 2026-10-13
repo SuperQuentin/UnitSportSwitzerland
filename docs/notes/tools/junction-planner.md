@@ -22,21 +22,23 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   longest transition, each side to the first building, other line, ground step > 1.2 m or tile edge, 20 m max);
   (5) rounds: align from the base sections, fit with the size search, align again from the fitted lanes, fit again; an exit
   that cannot hold its hatch (fit step "7 the pocket feeding this exit") drops its feeder's pocket, all again.
-- **Room order** (`MouthPlanner.Fit`): 1 verge and buffer, 2 island, left-turn bike lane, added through bike lane, 3 lane widths to 2.75 / bike 1.25, 4 right pocket,
+- **Room order** (`MouthPlanner.Fit`): 1 verge and buffer, 2 island, left-turn bike lane, 3 lane widths to 2.75 / bike 1.25, 4 right pocket,
   5 sidewalk to 1.5 m, 7 the pocket feeding this exit, 7 left pocket, 8 painted bike lane. Size choice (step 6) comes
   first in effect (the user). Room is checked per station against what the transition still holds there (`Stretch`):
   houses 68 m out limit only a long storage. Where the street already reaches past its room (sidewalks to the facades),
   as far as the street does.
-- **Through riders before turning ones** (the user, Oct 13): where a left-turn bike lane is built (lights) and the
-  arriving side has neither a painted bike lane nor a path, the mouth adds a through bike lane, kerbside (id 115); short of
-  room the left-turn bike lane goes first, then the added lane (ladder step 2, before any car lane narrows). J1 N gets one;
-  J3 E and N have room for neither.
+- **Through riders before turning ones** (the user, Oct 13): at the lights, where the arriving side has neither a painted
+  bike lane nor a path, the mouth adds a through bike lane, kerbside (id 115). Short of room the left-turn bike lane goes
+  early (step 2); the through one **survives when possible**: it goes with the painted ones, last (step 8). J1 N gets one;
+  J3 E keeps it with the short pockets; J3 N has room for a pocket or the bike lane: the pocket goes (LTR, as designed).
+- **Lanes and sidewalks narrow per side** (steps 3 and 5): only on the side that lacks room (J3 N's departing lane keeps
+  its 4 m).
 - **The exit hatch is not dropped by the ladder**: it lines the through lane up (a jog of a lane without it). A split
   lead-in share stays at most half (all on the far side would jog the oncoming traffic as much).
 - **Checks**: `--junctions new` prints a region line (pockets, splits, hatches, steps taken) and a comparison with the
   pocket layout (pockets in both / planner only / pocket layout only, with places); `--debug-junction E,N` prints every
   arm's normal, wanted and mouth section, room, openings, split and steps. The test region reports the planned lanes
-  against its design (`ReportPlans`; `PlannerDesign` holds where the planner is meant to differ: J3 N). Tier 0
+  against its design (`ReportPlans`; `PlannerDesign` holds where the planner is meant to differ: none now). Tier 0
   `JunctionPlannerTests`.
 - **Measured** (Oct 13 2026): test region every designed approach as planned. 20 Sion tiles (LV95 2505-2509 / 1136-1139,
   the Oct 2026 `test120` copy: no OSM speeds or signal nodes): 1,017 junctions, 3,100 car arms; left pockets in both 27,
