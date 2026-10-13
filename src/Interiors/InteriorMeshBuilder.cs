@@ -1579,14 +1579,15 @@ public static partial class InteriorMeshBuilder
             case FurnitureType.CoffeeMachine:
             {
                 // #822: a low cupboard with the machine on it, its front to the room (+Z), cups beside it
-                B(-w, 0, -d, w, 0.85f, d, white * 0.92f);
+                // the cupboard runs up into the worktop, and the machine stands into it: no faces flush (zfight)
+                B(-w + 0.01f, 0, -d + 0.01f, w - 0.01f, 0.87f, d - 0.01f, white * 0.92f);
                 B(-w, 0.85f, -d, w, 0.89f, d, C(0.30f, 0.30f, 0.32f));
                 float mw = Math.Min(w, 0.17f);
-                B(-mw, 0.89f, -d + 0.04f, mw, H, -d + 0.36f, dark);
+                B(-mw, 0.88f, -d + 0.04f, mw, H, -d + 0.36f, dark);
                 B(-mw + 0.04f, 0.97f, -d + 0.36f, mw - 0.04f, 1.0f, -d + 0.4f, metal);       // the drip tray
                 B(-mw + 0.05f, H - 0.12f, -d + 0.36f, mw - 0.05f, H - 0.04f, -d + 0.37f, C(0.85f, 0.15f, 0.12f)); // the lit button
                 foreach (float cx in new[] { mw + 0.06f, mw + 0.14f })
-                    if (cx + 0.035f < w) B(cx - 0.035f, 0.89f, -d + 0.2f, cx + 0.035f, 0.98f, -d + 0.27f, white);
+                    if (cx + 0.035f < w) B(cx - 0.035f, 0.88f, -d + 0.2f, cx + 0.035f, 0.98f, -d + 0.27f, white);
                 break;
             }
             case FurnitureType.Heater:
