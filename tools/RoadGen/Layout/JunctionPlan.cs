@@ -55,7 +55,7 @@ public sealed class ArmPlan
     public bool Internal { get; init; }
     /// <summary>How far out its mouth may go: the street's length, half of it where a junction stands at its other end (m).</summary>
     public double Reach { get; init; } = double.MaxValue;
-    /// <summary>A Major road (or bigger): turns to and from it are laid for a truck (<see cref="CorePlanner.TruckInner"/>) with <c>--truck-radius</c>.</summary>
+    /// <summary>A Major road (or bigger): a turn between two of them is laid for a truck (<see cref="CorePlanner.TruckInner"/>) where it fits untouched.</summary>
     public bool Major { get; init; }
     public bool HasLeft => Mouth.Strips.Any(s => PocketRules.Left.Owns(s.Id));
     public bool HasRight => Mouth.Strips.Any(s => PocketRules.Right.Owns(s.Id));
@@ -157,7 +157,7 @@ public sealed class JunctionPlan
         var outside = cores.Where(p => p.Core!.ConnectorsOutside > 0).ToList();
         var notTangent = cores.Where(p => p.Core!.KerbsNotTangent > 0).ToList();
         return string.Create(inv, $"    junction cores (#818 step 2): {cores.Count:N0} cores ({multi:N0} more joined to another node by a street under 30 m: multi-node, phase 5, left out), {conns.Count:N0} connectors ({conns.Count(c => c.Kind == ConnectorKind.Bike):N0} for bikes; ")
-            + string.Create(inv, $"{conns.Count(c => c.Radius > 0):N0} arcs, {conns.Count(c => c.Fill < 1 - 1e-6 && c.Radius > 0 && c.WideRadius > c.MinRadius + 0.01):N0} narrowed for a mouth or the room, {conns.Count(c => c.Fill < 0 || c.UnderRadius):N0} under their vehicle's radius), ")
+            + string.Create(inv, $"{conns.Count(c => c.Radius > 0):N0} arcs, {conns.Count(c => c.Fill < 1 - 1e-6 && c.Radius > 0 && c.WideRadius > c.MinRadius + 0.01):N0} narrowed for a mouth or the room, {conns.Count(c => c.Fill < 0 || c.UnderRadius):N0} under their vehicle's radius; {conns.Count(c => c.Truck):N0} for a truck, {cores.Sum(p => p.Core!.TrucksAsCars):N0} turns between Major roads left to a car for want of room), ")
             + string.Create(inv, $"mouths median {Median(mouths):F1} m (p90 {(mouths.Count == 0 ? 0 : mouths[mouths.Count * 9 / 10]):F1}, {cores.Sum(p => p.Core!.MouthsAtMost):N0} held at the most, {cores.Sum(p => p.Core!.MouthsAtReach):N0} at half a street to the next junction); ")
             + string.Create(inv, $"corners: arcs {corners.Count(c => c.Shape == CornerShape.Arc):N0} ({corners.Count(c => c.Tight):N0} tight, {corners.Count(c => c.RoomClipped):N0} held by buildings), ")
             + string.Create(inv, $"vertices {corners.Count(c => c.Shape == CornerShape.Vertex):N0}, chords {corners.Count(c => c.Shape == CornerShape.Chord):N0}, gores {corners.Count(c => c.Shape == CornerShape.Gore):N0}\n")

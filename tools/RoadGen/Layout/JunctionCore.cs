@@ -32,6 +32,8 @@ public sealed class Connector
     public double WideRadius { get; set; }
     /// <summary>The centre-line radius laid; 0 for a straight line or an S.</summary>
     public double Radius { get; set; }
+    /// <summary>Laid for a truck's radius (a turn between two Major roads with room for it).</summary>
+    public bool Truck { get; init; }
     /// <summary>Its mouths leave no room for its vehicle's radius: laid as tight as fits.</summary>
     public bool UnderRadius { get; set; }
     /// <summary>1 as wide as fits, 0 at its least radius, below 0 under it (the room clipped the corner it passes).</summary>
@@ -118,6 +120,8 @@ public sealed class JunctionCore
     public int KerbsNotTangent { get; set; }
     public int ConnectorsOutside { get; set; }
     public int MouthsAtMost { get; set; }
+    /// <summary>Turns between two Major roads laid for a car after all: a truck's radius did not fit untouched (pairs of arms).</summary>
+    public int TrucksAsCars { get; set; }
     /// <summary>Mouths held by their street's length (half of it where another junction stands at its far end): a multi-node core (phase 5).</summary>
     public int MouthsAtReach { get; set; }
 }

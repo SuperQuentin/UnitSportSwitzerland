@@ -233,7 +233,7 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
     /// A crossroads of four straight streets (step 2's core): each arm's lane making the moves <paramref name="movesOf"/> gives
     /// it (by its outward heading, east first, counter-clockwise), the street <paramref name="street"/>.
     /// </summary>
-    private static JunctionPlan Crossroads(Func<int, SignalMoves> movesOf, RoadAttributes street, float width, bool major = false)
+    private static JunctionPlan Crossroads(Func<int, SignalMoves> movesOf, RoadAttributes street, float width, Func<int, bool>? major = null)
     {
         var jp = new JunctionPlan { Node = 1, Centre = new UnitSport.Tools.RoadGen.Geometry.Vec2(2600000, 1200000), Lights = false };
         for (int i = 0; i < 4; i++)
@@ -246,7 +246,7 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
             var arm = new ArmPlan
             {
                 Arm = i, LinkId = i, Heading = heading, Normal = normal, Wants = wants, Wanted = mouth, Mouth = mouth,
-                Axis = ArmAxis.Straight(jp.Centre, heading), Major = major,
+                Axis = ArmAxis.Straight(jp.Centre, heading), Major = major?.Invoke(i) ?? false,
             };
             // arriving from heading h: the left turn leaves toward h - 90 degrees, the right toward h + 90, straight on h + 180
             if ((moves & SignalMoves.Left) != 0) arm.Toward[SignalMoves.Left] = (i + 3) % 4;
@@ -281,17 +281,32 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
     }
 
     [Fact]
-    public void Turns_on_a_major_road_are_laid_for_a_truck_only_behind_the_flag()
+    public void A_turn_between_two_major_roads_is_laid_for_a_truck_where_it_fits_untouched()
     {
         var street = new RoadAttributes(LanesForward: 1, LanesBackward: 1, WidthCm: 600, Left: Town, Right: Town);
-        // off by default (the user, Oct 13 2026): every turn for a car
-        var car = CorePlanner.Plan(Crossroads(_ => AllMoves, street, 6f, major: true));
-        Assert.All(car.Connectors.Where(c => c.Turns), c => Assert.Equal(CorePlanner.CarInner + c.Width * 0.5, c.MinRadius, 3));
-        // --truck-radius: a truck's on a Major road, the mouths further out
-        var truck = CorePlanner.Plan(Crossroads(_ => AllMoves, street, 6f, major: true), trucks: true);
-        Assert.All(truck.Connectors.Where(c => c.Turns), c => Assert.Equal(CorePlanner.TruckInner + c.Width * 0.5, c.MinRadius, 3));
-        Assert.True(truck.Mouths.Min(m => m.Station) > car.Mouths.Max(m => m.Station));
-        Assert.Equal(0, truck.KerbsNotTangent);
+        double Inner(Connector c) => c.MinRadius - (c.Width + c.ToWidth) * 0.25;
+        // east and west are Major roads, north and south not: only the turns between east and west would be a truck's, and
+        // those are through moves; every turn into or out of a side street is a car's (the user: both arms big)
+        var mixed = CorePlanner.Plan(Crossroads(_ => AllMoves, street, 6f, i => i % 2 == 0));
+        Assert.All(mixed.Connectors.Where(c => c.Turns && c.Kind == ConnectorKind.Car), c => Assert.Equal(CorePlanner.CarInner, Inner(c), 3));
+
+        // four Major roads with room everywhere: every turn a truck's, the mouths further out than a car's
+        var truck = CorePlanner.Plan(Crossroads(_ => AllMoves, street, 6f, _ => true));
+        var turns = truck.Connectors.Where(c => c.Turns && c.Kind == ConnectorKind.Car).ToList();
+        Assert.All(turns, c => Assert.True(c.Truck && Math.Abs(Inner(c) - CorePlanner.TruckInner) < 1e-3));
+        Assert.True(truck.Mouths.Min(m => m.Station) > mixed.Mouths.Max(m => m.Station));
+        Assert.Equal((0, 0), (truck.KerbsNotTangent, truck.TrucksAsCars));
+
+        // a house in the north-east corner, 11.6 m out along its bisector: the truck's kerb and sidewalk would reach it, so the
+        // east arm's right turn (into the north) falls back to a car's; the other turns keep the truck's
+        var jp = Crossroads(_ => AllMoves, street, 6f, _ => true);
+        var house = jp.Centre + new UnitSport.Tools.RoadGen.Geometry.Vec2(8.2, 8.2);
+        var held = CorePlanner.Plan(jp, p => p.DistanceTo(house) < 1.5);
+        var east = held.Connectors.Single(c => c.Kind == ConnectorKind.Car && c.FromArm == 0 && c.Move == SignalMoves.Right);
+        Assert.False(east.Truck);
+        Assert.Equal(1, held.TrucksAsCars);
+        Assert.Contains(held.Connectors, c => c.Truck);
+        Assert.Equal(0, held.ConnectorsOutside);
     }
 
     [Fact]

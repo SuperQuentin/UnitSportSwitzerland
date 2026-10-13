@@ -11,7 +11,7 @@ using UnitSport.Tools.RoadGen.Junctions;
 /// centre line, right into the kerb lane, same-turn lanes lane to lane, through lanes in order from the centre line; bike
 /// lanes into the exit's bike lane, else the kerb side of its kerb lane);</item>
 /// <item>the mouths: each arm's pushed out until every turn's arc at its vehicle's least radius (car 6 m on the inner edge;
-/// with <c>trucks</c> a truck's 10 m where a Major road is involved; a bike lane concentric inside the car's) and both its
+/// a truck's 10 m between two Major roads where it fits untouched; a bike lane concentric inside the car's) and both its
 /// corners' kerbs start inside it;</item>
 /// <item>every connector as wide as fits between the mouths (the user's rule), narrowed back toward its least radius where
 /// its corner's kerb would start outside a mouth, and under it where buildings hold the corner;</item>
@@ -24,8 +24,8 @@ using UnitSport.Tools.RoadGen.Junctions;
 public static class CorePlanner
 {
     /// <summary>
-    /// A car's and a truck's turning radius on the inner edge (m). A truck's where a Major road is involved (the user's rule),
-    /// only with <c>trucks</c> (<c>--truck-radius</c>): off for now, the user's call (Oct 13 2026), every turn laid for a car.
+    /// A car's and a truck's turning radius on the inner edge (m). A truck's only for a turn between two Major (or bigger) roads,
+    /// and only where it fits untouched (the user, Oct 13 2026): <see cref="Plan"/> falls back to a car's otherwise.
     /// </summary>
     public const double CarInner = 6, TruckInner = 10;
     /// <summary>A corner no one turns round: its kerb runs on this far along both edges from where they meet (#700's tight corner).</summary>
@@ -38,6 +38,8 @@ public static class CorePlanner
     public static readonly double TurnAngle = 30 * Math.PI / 180;
     /// <summary>Lane lines closer than this to parallel are not joined by an arc.</summary>
     private static readonly double ParallelAngle = 2 * Math.PI / 180;
+    /// <summary>Buildings are looked for beside kerb arcs up to this radius (m).</summary>
+    private const double RoomRadius = 100;
     /// <summary>The largest kerb radius considered (m).</summary>
     private const double MostRadius = 500;
     /// <summary>A connector's edge may stand this far outside the outline (m): the arcs' chords, the kerbside lanes' edges on the kerb.</summary>
@@ -53,7 +55,30 @@ public static class CorePlanner
         public double StationOf(Vec2 p) => Station + (p - At).Dot(U);
     }
 
-    public static JunctionCore Plan(JunctionPlan jp, Func<Vec2, bool>? blocked = null, bool trucks = false)
+    /// <summary>
+    /// The core, a truck's radius on a turn between two Major (or bigger) roads only where it fits untouched (the user): a truck
+    /// turn the buildings beside its corner or a held mouth (half the street to the next junction, <see cref="MostMouth"/>)
+    /// would lay under its radius falls back to a car's, nothing in between, and the core is laid again. Without
+    /// <paramref name="trucks"/> every turn is a car's.
+    /// </summary>
+    public static JunctionCore Plan(JunctionPlan jp, Func<Vec2, bool>? blocked = null, bool trucks = true)
+    {
+        var asCar = new HashSet<(int From, int To)>();
+        for (int round = 0; ; round++)
+        {
+            var core = Lay(jp, blocked, (a, b) => trucks && a.Major && b.Major && !asCar.Contains((a.Arm, b.Arm)));
+            bool fellBack = false;
+            foreach (var c in core.Connectors)
+                if (c.Truck && (c.Fill < 0 || c.UnderRadius)) fellBack |= asCar.Add((c.FromArm, c.ToArm));
+            if (!fellBack || round >= 4)
+            {
+                core.TrucksAsCars = asCar.Count;
+                return core;
+            }
+        }
+    }
+
+    private static JunctionCore Lay(JunctionPlan jp, Func<Vec2, bool>? blocked, Func<ArmPlan, ArmPlan, bool> truck)
     {
         var core = new JunctionCore();
         var arms = jp.Arms.Where(a => a.Axis is not null).OrderBy(a => Angles.Normalize(a.Heading)).ToList();
@@ -61,7 +86,7 @@ public static class CorePlanner
         if (n < 2) return core;
         var index = new Dictionary<int, int>();
         for (int k = 0; k < n; k++) index[arms[k].Arm] = k;
-        core.Connectors.AddRange(Connectors(arms, index, trucks));
+        core.Connectors.AddRange(Connectors(arms, index, truck));
 
         // 2. the mouths: pushed out until every turn's arc at its least radius and both kerbs start inside them
         var m = new double[n];
@@ -173,7 +198,7 @@ public static class CorePlanner
 
     // ------------------------------------------------------------------ connectors: which lanes join
 
-    private static List<Connector> Connectors(List<ArmPlan> arms, Dictionary<int, int> index, bool trucks)
+    private static List<Connector> Connectors(List<ArmPlan> arms, Dictionary<int, int> index, Func<ArmPlan, ArmPlan, bool> truck)
     {
         var list = new List<Connector>();
         foreach (var a in arms)
@@ -187,7 +212,8 @@ public static class CorePlanner
                 // the exit's departing lanes from its centre line out
                 var outs = b.Mouth.CarLanes(StripWay.Out).Reverse().ToList();
                 if (outs.Count == 0) continue;
-                double inner = trucks && (a.Major || b.Major) ? TruckInner : CarInner;
+                bool forTruck = truck(a, b);
+                double inner = forTruck ? TruckInner : CarInner;
                 // left into the lane by the centre line, same-turn lanes lane to lane; right counted from the kerb
                 var lanes = inCars.Where(l => (l.Strip.Moves & move) != 0).ToList();
                 for (int k = 0; k < lanes.Count; k++)
@@ -198,7 +224,7 @@ public static class CorePlanner
                     {
                         FromArm = a.Arm, FromId = lanes[k].Strip.Id, ToArm = b.Arm, ToId = o.Strip.Id, Move = move, Kind = ConnectorKind.Car,
                         Width = lanes[k].Strip.Width, ToWidth = o.Strip.Width, FromOffset = Mid(sec.Span(lanes[k].Index)), ToOffset = Mid(b.Mouth.Span(o.Index)),
-                        MinRadius = inner + (lanes[k].Strip.Width + o.Strip.Width) * 0.25,
+                        MinRadius = inner + (lanes[k].Strip.Width + o.Strip.Width) * 0.25, Truck = forTruck,
                     });
                 }
                 // the riders: each arriving bike lane making the move, into the exit's bike lane, else the kerb side of its kerb lane;
@@ -552,9 +578,15 @@ public static class CorePlanner
             return true;
         }
         if (!Clear(floor)) return MostRadius;
-        if (Clear(MostRadius)) return MostRadius;
-        double lo = floor, hi = MostRadius;
-        for (int k = 0; k < 30 && hi - lo > 0.01; k++)
+        // outward from the least rounding to the first radius whose arc reaches a building (a far larger one would pass it)
+        double lo = floor, hi = double.NaN;
+        for (double r = floor + 0.5; r <= RoomRadius; r += 0.5)
+        {
+            if (!Clear(r)) { hi = r; break; }
+            lo = r;
+        }
+        if (double.IsNaN(hi)) return MostRadius;
+        for (int k = 0; k < 12 && hi - lo > 0.01; k++)
         {
             double mid = (lo + hi) * 0.5;
             if (Clear(mid)) lo = mid; else hi = mid;
@@ -571,25 +603,35 @@ public static class CorePlanner
     {
         var passing = connectors.Where(k => k.WideRadius > 0 && k.Left.Concat(k.Right).Any(p => InWedge(p, c, ui, uj))).ToList();
         if (passing.Count == 0) return;
-        var fills = passing.Select(k => k.Fill).ToArray();
-        void At(double f)
+        var fills = passing.ToDictionary(k => k, k => k.Fill);
+        void At(List<Connector> set, double f)
         {
-            for (int k = 0; k < passing.Count; k++)
+            foreach (var k in set)
             {
-                passing[k].Fill = Math.Min(fills[k], f);
-                Lay(frames, index, passing[k]);
+                k.Fill = Math.Min(fills[k], f);
+                Lay(frames, index, k);
             }
         }
-        At(lowest);
-        if (Envelope(c, ui, uj, half, bisector, connectors, floor) > cap + 1e-3) return;
-        double lo = lowest, hi = fills.Max();
-        for (int k = 0; k < 20 && hi - lo > 1e-3; k++)
+        bool Fits() => Envelope(c, ui, uj, half, bisector, connectors, floor) <= cap + 1e-3;
+        // the most fill in [lo, hi] the set may keep with the corner fitting (left at lo where even that does not)
+        void Search(List<Connector> set, double lo, double hi)
         {
-            double mid = (lo + hi) * 0.5;
-            At(mid);
-            if (Envelope(c, ui, uj, half, bisector, connectors, floor) <= cap + 1e-3) lo = mid; else hi = mid;
+            At(set, lo);
+            if (!Fits()) return;
+            for (int k = 0; k < 20 && hi - lo > 1e-3; k++)
+            {
+                double mid = (lo + hi) * 0.5;
+                At(set, mid);
+                if (Fits()) lo = mid; else hi = mid;
+            }
+            At(set, lo);
         }
-        At(lo);
+        // the turns passing the corner narrowed together, down to their vehicles' radius
+        Search(passing, 0, fills.Values.Max());
+        if (Fits() || lowest >= 0) return;
+        // under it (the room): only those that still reach past the cap on their own
+        var still = passing.Where(k => Envelope(c, ui, uj, half, bisector, [k], floor) > cap + 1e-3).ToList();
+        if (still.Count > 0) Search(still, lowest, 0);
     }
 
     // ------------------------------------------------------------------ lines through the core

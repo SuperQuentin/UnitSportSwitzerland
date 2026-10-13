@@ -84,8 +84,10 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   right into the kerb lane (counted from the kerb), same-turn lanes lane to lane, through lanes from the centre line out;
   bike lanes into the exit's bike lane, else the kerb side of its kerb lane.
 - **Radii** (the user, Oct 13): every turn **as wide as fits** between the mouths; the mouths come from each turn's least
-  radius (car 6 m on the inner edge; a truck's 10 m where a Major road is involved only with `--truck-radius`: off for now,
-  the user's call, it put a side street's mouths 19 m out at J3b), so the order is: mouths at the least radii,
+  radius (car 6 m on the inner edge; a **truck's 10 m only between two Major (or bigger) roads, and only where it fits
+  untouched**, the user, Oct 13: `CorePlanner.Plan` lays the core, and a truck turn that buildings beside its corner or a held
+  mouth would lay under its radius falls back to a car's, nothing in between, and lays again; a Major road turning into a
+  side street is a car's: it put J3b's side-street mouths 19 m out), so the order is: mouths at the least radii,
   then every connector widened, then narrowed back where its corner's kerb would start outside a mouth. A bike lane turning
   with a car lane is **concentric inside the car's turn** (its least radius the car's less its width: the kerb at ~4.5 m).
 - **A turn is a deflection, not a move name**: a connector turning 30 degrees or more sets the mouths at its least radius; a
@@ -113,8 +115,12 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   (10 cm tolerance), tight corners against #700's, paved area against today's cap **plus its ribbons out to the new mouths**
   (the cap alone is a fraction of it). `--debug-junction` lists mouths, corners (radius, floor, the connector that rounds it)
   and connectors (radii least/widest/fill, S holds, OUTSIDE); `--junction-svg` draws the real geometry over today's cap.
-- **Measured** (Oct 13 2026, car radius everywhere): test region 13 cores, every check 0, J7's tight corner as #700, mouths
-  median 12.9 m (16.9 with `--truck-radius`), area x1.12. Sion 452 single-node cores, 2,772 connectors: kerbs outside their
+- **Narrowing for the room** lowers the turns passing a corner together down to their vehicles' radius; under it, only
+  those that still reach past the room on their own (a truck's wide left turn is not dragged under its radius by the right
+  turn the building holds).
+- **Truck paths** (swing out, then turn; the truck yields while it borrows lanes) are #821, after phase 5.
+- **Measured** (Oct 13 2026): test region 13 cores, every check 0, J7's tight corner as #700, 68 truck turns (1 left to a
+  car by a building), mouths median 15.2 m, area x1.15. Sion (141 truck turns, none left to a car) 452 single-node cores, 2,772 connectors: kerbs outside their
   mouth 21, connectors outside 16, 1 outline crossing itself (gores under 20 degrees, arms whose order flips between node and
   mouth on curved links); tight corners: both 1, planner only 31 (mostly near-straight corners whose 5-degree "right turn"
   needs no rounding), #700 only 7 (a left turn passes them); area x1.18 median (p10 1.08, p90 1.36).
