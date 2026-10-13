@@ -640,3 +640,9 @@ src/Interiors/DoorLeaf   quick  --collidecheck --world flat --targets doors/
 src/Playtest/            quick  --playtestcheck
 src/Playtest/            quick  --playtest --playtest-smoke --world fixture --chunks fixture:flat
 src/Player/FootPlayer.Deck quick --playtest --playtest-smoke --world fixture --chunks fixture:flat
+# #627: a building site's skip searched outdoors, the take seen by a peer with it open and by a late joiner (generated world)
+src/Loot/                net    tools/yardlootnetcheck.sh
+src/Terrain/Construction/SiteLoot net tools/yardlootnetcheck.sh
+src/Terrain/Construction/SiteDressing net tools/yardlootnetcheck.sh
+src/Terrain/Construction/SitePlans net tools/yardlootnetcheck.sh
+tools/yardlootnetcheck   net    tools/yardlootnetcheck.sh

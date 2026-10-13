@@ -215,6 +215,7 @@ its loot exactly as before; one that has been moved is no container any more**:
 it with nothing and refuses a take. Its records key on the furniture index at a fixed spot, so a
 shuffled pallet has nowhere to keep them. Put back on the same spot it is a loose pallet, still not
 a container. A small, real loss, stated so it is not found later.
+A building site's pallet of bricks or cement (`<building>:c<slot>`) is a yard container too (#627), and the same rule holds: once a machine has moved it, it holds nothing (`loot/yard-loot`).
 
 ## Checks
 

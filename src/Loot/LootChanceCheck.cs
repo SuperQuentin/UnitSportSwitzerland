@@ -3,6 +3,7 @@ using UnitSport.Interiors;
 using UnitSport.Items;
 using UnitSport.Terrain.Format;
 using UnitSport.Core;
+using UnitSport.Terrain.Construction;
 
 namespace UnitSport.Loot;
 
@@ -78,6 +79,61 @@ public static class LootChanceCheck
         foreach (var c in roomCases)
             Row($"{c.Kind} {c.Type} in {c.Room?.ToString() ?? "-"} {c.Item}",
                 LootTables.Chance(c.Kind, c.Type, 1f, c.Item, null, c.Room), Sample(c.Kind, c.Type, 1f, c.Item, c.Room));
+
+        // a building site's yard (#627): its own tables, no building kind, no francs, no occasion
+        var yardCases = new (SiteStockKind Kind, ItemId Item)[]
+        {
+            (SiteStockKind.Skip, ItemId.Stone),
+            (SiteStockKind.Skip, ItemId.CopperWire),
+            (SiteStockKind.Skip, ItemId.Bread),             // 0: no food in a skip
+            (SiteStockKind.Rebar, ItemId.ScrapMetal),
+            (SiteStockKind.Formwork, ItemId.WoodPlanks),
+            (SiteStockKind.Rings, ItemId.SandBag),
+            (SiteStockKind.Bricks, ItemId.Stone),
+            (SiteStockKind.Cement, ItemId.SandBag),
+        };
+        foreach (var c in yardCases)
+        {
+            int hit = 0;
+            for (int i = 0; i < Samples; i++)
+                if (LootTables.YardRoll(c.Kind, new Random(Mix(i))).Any(s => s.Id == c.Item)) hit++;
+            Row($"yard {c.Kind} {c.Item}", LootTables.YardChance(c.Kind, c.Item), (double)hit / Samples);
+        }
+        // what a typical yard gives in a restock (rebar, four pallets, two formwork stacks, the rings,
+        // two skips): worth a look, and less than a house's ~14 items and its cash
+        {
+            var yard = new[]
+            {
+                SiteStockKind.Rebar, SiteStockKind.Bricks, SiteStockKind.Bricks, SiteStockKind.Cement, SiteStockKind.Cement,
+                SiteStockKind.Formwork, SiteStockKind.Formwork, SiteStockKind.Rings, SiteStockKind.Skip, SiteStockKind.Skip,
+            };
+            const int yards = 20_000;
+            long items = 0;
+            for (int y = 0; y < yards; y++)
+                for (int k = 0; k < yard.Length; k++)
+                    items += LootTables.YardRoll(yard[k], new Random(Mix(y * 16 + k))).Sum(s => s.Count);
+            double mean = (double)items / yards;
+            bool fair = mean is > 4 and < 12;
+            ok &= fair;
+            GD.Print($"[lootchance] {(fair ? "ok  " : "FAIL")} a typical yard gives {mean:F1} items a restock (4-12)");
+        }
+        // in a Battle Royale match's region a yard rolls the match's table, elsewhere its own
+        {
+            var savedMatch = LootTables.MatchEpoch;
+            LootTables.MatchEpoch = k => k.StartsWith("2588_1118_") ? 1_000_000_007L : null;
+            bool same = true;
+            static string S(List<ItemStack> l) => string.Join(",", l.Select(s => $"{s.Id}x{s.Count}"));
+            for (int i = 0; i < 300; i++)
+            {
+                var kind = (SiteStockKind)(i % 6);
+                long ep = 1_000_000_007L;
+                same &= S(LootTables.YardContents("2588_1118_34", 1000 + i, kind, ep)) == S(MatchLoot.Roll(MatchTable.Supply, LootTables.RngFor("2588_1118_34", 1000 + i, ep)));
+                same &= S(LootTables.YardContents("2590_1120_3", 1000 + i, kind, 20_000 + i)) == S(LootTables.YardRoll(kind, LootTables.RngFor("2590_1120_3", 1000 + i, 20_000 + i)));
+            }
+            LootTables.MatchEpoch = savedMatch;
+            ok &= same;
+            GD.Print($"[lootchance] {(same ? "ok  " : "FAIL")} a yard in a match region rolls the match's supply table, outside it its own");
+        }
 
         // a combination: right length, 0-99, neighbours apart, and the same on every call (server and client agree)
         bool comboOk = true;
