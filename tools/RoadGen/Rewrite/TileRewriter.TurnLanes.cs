@@ -497,6 +497,23 @@ public static partial class TileRewriter
         foreach (var pk in pockets)
             if (!pk.Dropped && pk.In.ApproachWay is { HasLeftBikeLane: true } && StopBack(pk.Node, pk.Arm) < 0) _stopBack![(pk.Node, pk.Arm)] = 0;
         CurveStops(priority, net, pockets, rightOf);
+        // every exit's width before any strip is laid (#711, the user's review of J3's east arm): a split lead-in's mirror strip
+        // frames the exit beside it and was laid with the exit as it stood then, before the pocket facing it set its hatch, 2 m
+        // narrower than the corner beside it
+        foreach (var pocket in pockets)
+        {
+            if (pocket.Dropped || pocket.In.ApproachWay is not { } way || pocket.Out.ExitWay is not { } exit) continue;
+            var layout = LanesOf(way, rightOf.GetValueOrDefault((pocket.Node, pocket.Arm)), equal: true);
+            if (layout is not { Equal: true, LeftPocketLane: { } facing }) continue;
+            double hatch = facing.To + layout.LeftBike, lane = layout.LaneWidth;
+            if (pocket.Rules.Has(JunctionRule.ExitLaneContinuesThrough) && pocket.ExitArm >= 0)
+            {
+                if (lane > TurnLane && crossings?.OnArm(plansByNode[pocket.Node].Junction, pocket.ExitArm, net) is not null)
+                    (hatch, lane) = (hatch + lane - TurnLane, TurnLane);
+                exit.SetExitLane(lane);
+            }
+            exit.SetExit(hatch, lane);
+        }
         foreach (var pocket in pockets)
         {
             if (pocket.Dropped) continue;
@@ -742,7 +759,10 @@ public static partial class TileRewriter
                 Vec2 ui = Vec2.FromHeading(ai.OutwardHeading), uj = Vec2.FromHeading(aj.OutwardHeading);
                 (Vec2 P, float Y) EdgeI(double d) => inWay?.OuterEdge(d) ?? (ai.Left + ui * d, si.SampleHeight(ai.Left + ui * d));
                 // (#700: beside a split lead-in with no exit there, its mirror strip is that edge)
-                (Vec2 P, float Y) EdgeJ(double d) => outWay?.OuterEdge(d, outLanes!.ExitFar) ?? outLanes?.Mirror?.OuterEdge(d)
+                // (#711, the user's review of J3's east arm) an exit framed by the arm's split lead-in is not drawn itself: the mirror
+                // strip is the edge there (the exit's own width stood 2.3 m out, a step at the mouth)
+                var drawnOut = outWay is { Framed: true } && outLanes?.Mirror is not null ? null : outWay;
+                (Vec2 P, float Y) EdgeJ(double d) => drawnOut?.OuterEdge(d, outLanes!.ExitFar) ?? outLanes?.Mirror?.OuterEdge(d)
                     ?? outLanes?.BikeExitWay?.OuterEdge(d) ?? (aj.Right + uj * d, sj.SampleHeight(aj.Right + uj * d));
                 const bool pastMouth = true;   // #711: no path bands round the arc, at the lights neither (the user's review)
                 if (town && arcs is not null && ArcOf(junction, i, EdgeI, EdgeJ, Kerb(ai.HalfWidth), Kerb(aj.HalfWidth), true, pastMouth) is { } arc) arcs[(junction.NodeId, i)] = arc;

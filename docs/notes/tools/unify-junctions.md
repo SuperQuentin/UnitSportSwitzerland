@@ -308,3 +308,7 @@ lights), an island to avoid, or several lanes turning alike (`EmitPairGuides`, a
 - **Left-turn guides meet each arm at its crosswalk edge, else its stop line** (`GuideEdge`, the user's review of J3's
   south leg): with the stop line back at the kerb's curve start the guide ended at the mouth; it now runs straight out to
   the line where the arm has no crosswalk (`_crosswalkArms`, recorded by `PlanStopBacks`), at both its start and its end.
+- **Every exit's width is set before any strip is laid** (the user's review of J3's east arm: a 2.3 m step at the mouth): a
+  split lead-in's mirror strip frames the exit beside it and was laid as that exit stood before the pocket facing it set its
+  hatch (`SetExit`), 1.77 m wide against the corner's 3.77 m; a pre-pass now sets every exit first. The corner beside an exit
+  framed by a mirror takes the mirror's edge.
