@@ -72,6 +72,34 @@ public static class RoadStreetSection
         }
         if (side.SidewalkDm > 0)
             bands.Add((kerb > 0 ? StreetSurface.Sidewalk : StreetSurface.Paving, side.SidewalkDm / 10f, kerb));
+        return Of(bands, lowered);
+    }
+
+    /// <summary>
+    /// The profile of a transition's side at one point (#818): its band strips outward from the kerb, as wide as they are there
+    /// (a band zero wide keeps its points, so every point of the transition has a profile of the same shape), their heights from
+    /// the segment's side (its kerb, its path's kind). Null without any band.
+    /// </summary>
+    public static Profile? For(RoadSide side, IReadOnlyList<(StripKind Kind, float Width)> bands, bool lowered = false)
+    {
+        float kerb = side.KerbCm / 100f;
+        // a path the side does not name lies at the sidewalk's height
+        float path = side.Bike == BikeKind.TrackMid ? kerb * 0.5f : kerb;
+        var list = new List<(StreetSurface Surface, float Width, float Height)>(bands.Count);
+        foreach (var (kind, width) in bands)
+            list.Add(kind switch
+            {
+                StripKind.Verge => (StreetSurface.Verge, width, path),
+                StripKind.Path => (StreetSurface.Track, width, path),
+                StripKind.Buffer => (StreetSurface.Buffer, width, path),
+                _ => (kerb > 0 ? StreetSurface.Sidewalk : StreetSurface.Paving, width, kerb),
+            });
+        return Of(list, lowered);
+    }
+
+    /// <summary>The profile of bands laid outward from the carriageway's edge, each at its height; a kerb face wherever the height steps.</summary>
+    private static Profile? Of(List<(StreetSurface Surface, float Width, float Height)> bands, bool lowered)
+    {
         if (bands.Count == 0) return null;
 
         var d = new List<float> { 0f };
