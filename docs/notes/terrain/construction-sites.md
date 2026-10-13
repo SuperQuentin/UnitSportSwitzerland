@@ -252,7 +252,10 @@ building: a door that opens, a portal, an interior to walk round and search.
   table, bench, fridge, counter, coffee, rail, heater. A doorway between the two at the back,
   windows where the containers have theirs. New furniture `CoffeeMachine` and `Heater` (appended;
   in the model viewer by themselves). A site office's rooms are never a core (`Furnish`). Plan
-  version not bumped: no stored plan changes (a site had none).
+  version not bumped: no stored plan changes (a site had none). **A stored office plan is matched
+  to the building's solid only** (`InteriorLayout.Matches`), not to the site plan or the roads: a
+  change to the planner's office zone or to `SiteOffices` must bump `InteriorLayout.CurrentVersion`,
+  or stored offices keep their old doors.
 - **Collision.** The office's solid boxes go into the tile's **building** body (both windings: it
   is one-sided), not the road cells (`SiteBuild.OfficeFaces`), so `InteriorManager.BeforeMove`
   lets a body standing in an open office doorway through them like any facade.
