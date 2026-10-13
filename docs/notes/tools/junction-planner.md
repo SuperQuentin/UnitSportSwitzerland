@@ -30,6 +30,12 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
 - **Through riders before turning ones** (the user, Oct 13): where the arriving side has neither a painted bike lane nor a
   path and the straight-on exit carries one on (a departing bike lane or path), the mouth adds a through bike lane (id 115),
   lit or not; never one leading into nothing. At the lights always: every bike lane ends at its advanced line or bike box.
+- **One rule for the three bike moves** (the user, Oct 13): a bike lane beside the car lane making the move (left and right
+  ones beside the car pocket; the right one only in layout b, where the kerbside lane does not turn right), where the street
+  the move goes into carries riders on, or at the lights (an advanced line or a bike box ends it). So a left-turn bike
+  lane may exist without lights now (#711 had it lights-only; `JunctionRule.LeftTurnBikeLane` is the old layout's).
+  Differences left: no bike box without lights; the order they go when room is short (lights: right first, left after the
+  island; without lights right then left, first of all; through last).
 - **Bike stops at the lights, the same rule for the three moves** (the user, Oct 13; #351 had it for left-turners only):
   an arriving bike lane ends at an advanced line where the street its move goes into carries riders on (a departing bike
   lane or path, `Section.CarriesBikesAway`), else in a bike box (`Strip.Stop`, `BikeStops`; a kerbside lane straight on

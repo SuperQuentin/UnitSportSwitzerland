@@ -82,8 +82,10 @@ and the transition lengths.
   chooses each arm's `Frame` and the width of B's `Hatch` strip so the lines meet; where the room allows it splits the
   offset half on each side (today's 0.5 share), else less (0.25, 0), else the hatch takes it all. A lit exit's hatch
   keeps 1.7 m where an island will stand; an OSM crosswalk on the exit narrows its lane to 3 m for a refuge (#711).
-- **Bike infrastructure**: the bike planner's layout per street (lane, path, left-turn bike lane at the lights, 3 m car
-  lane beside a bike lane) becomes strips of the mouth section. Through riders before turning ones (the user, Oct 13):
+- **Bike infrastructure**: the bike planner's layout per street (lane, path, 3 m car lane beside a bike lane) becomes
+  strips of the mouth section. **One rule for the three bike moves** (the user): a bike lane beside the car lane making
+  the move, where the street it goes into carries riders on, or at the lights (an advanced line or a bike box ends it);
+  no bike box without lights; only the order they go when room is short differs. Through riders before turning ones (the user, Oct 13):
   a mouth whose riders have no lane or path gets a through bike lane where the straight-on exit carries one on (lit or not)
   or, at the lights, where a bike box takes them,
   which survives when possible; the
@@ -189,6 +191,27 @@ normal stretch (one transition, both ends planned together, the closer events me
   the lines the paint draws: the split lead-in, double lefts, tight corners, exits back over the exit taper (#709's
   list). `LANE` stays written as a projection of the plan until the game no longer reads it, then goes.
 - **Size**: a transition record is a few dozen bytes per strip; budget +3 % raw per tile (measured on the Sion tiles).
+
+## Generalizations (the user's aim, Oct 13 2026)
+
+The user wants the rework to look for general rules that replace families of special cases, so the code is reasoned about
+once. Found so far:
+
+- **Transitions**: pockets, lead-ins, exit tapers, a bike lane's lead-in and two close junctions merged (#325) are one object
+  going from one section to another.
+- **The core's outline is the envelope of the allowed connectors**: kerb corners, tight corners, the kerb allowance and the
+  stop line's curve start all follow from which turns may be driven.
+- **The exit hatch is the through lanes' alignment**: veer share, `SetExit`, mirror strips and the exit shrink are one rule.
+- **One room measurement, one shrink order** for every strip of a section.
+- **Allowed moves are one source**: lanes, arrows, connectors, corners and signal groups all read the same moves.
+- **One rule for the three bike moves**: a bike lane beside the car lane making the move, where its destination carries
+  riders on or at the lights; every bike lane at the lights ends at an advanced line or a bike box by its own destination.
+  Only the order they go when room is short, and no box without lights, differ.
+
+Candidates to check as the work goes on: left and right car pockets as one rule (a lane per move, beside the car lane
+it splits from, differing only by when it is wanted and the order it goes); every marking as the boundary between two
+strips, its style from the pair of kinds; stop lines, crosswalks and give-way rows as lines across an arm at a station,
+per move group; lights and no lights as nothing but parameters of `JunctionRules`.
 
 ## What exists and where it goes
 

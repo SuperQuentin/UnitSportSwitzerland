@@ -110,7 +110,7 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
         // at the kerb, right of the pocket
         var normal = Section.Normal(Street(), 9f, junctionAtEnd: true);
         var all = SignalMoves.Left | SignalMoves.Through | SignalMoves.Right;
-        var mouth = MouthPlanner.Wanted(normal, new ArmWants(false, all, SignalMoves.None, [], null, RightPocket: true, BikeBetween: true, LeftTurnBikeLane: false));
+        var mouth = MouthPlanner.Wanted(normal, new ArmWants(false, all, SignalMoves.None, [], null, RightPocket: true, BikeBetween: true, LeftTurnBikeLane: false, RightTurnBike: true));
         var inside = mouth.Strips.Skip(mouth.FirstCarriageway).Take(mouth.LastCarriageway - mouth.FirstCarriageway + 1).ToList();
         Assert.Equal([MouthPlanner.RightPocketId, MouthPlanner.RightBikeId], inside.TakeLast(2).Select(x => x.Id));
         Assert.Equal(SignalMoves.Through, inside[^3].Moves);
@@ -122,6 +122,24 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
         var fit = MouthPlanner.Fit(mouth, normal, ArmRoom.Flat(nl, MouthPlanner.Reach(mouth).Right - 0.5), new Stretch(30, 15), new Stretch(30, 15), steps);
         Assert.Equal(["1 bike right-turn lane"], steps);
         Assert.True(fit.Strips.Single(x => x.Id == MouthPlanner.RightPocketId).SharedWithBikes);
+    }
+
+    [Fact]
+    public void Without_lights_the_turning_riders_lanes_go_first_right_then_left()
+    {
+        var normal = Section.Normal(Street(), 9f, junctionAtEnd: true);
+        var all = SignalMoves.Left | SignalMoves.Through | SignalMoves.Right;
+        var wants = new ArmWants(false, all, SignalMoves.None, [SignalMoves.Left], null, RightPocket: true, BikeBetween: true,
+            LeftTurnBikeLane: true, ThroughBike: true, RightTurnBike: true);
+        var mouth = MouthPlanner.Wanted(normal, wants);
+        var (nl, _) = MouthPlanner.Reach(normal);
+        var steps = new List<string>();
+        MouthPlanner.Fit(mouth, normal, ArmRoom.Flat(nl, MouthPlanner.Reach(mouth).Right - 2.0), new Stretch(40, 30), new Stretch(40, 30), steps, lights: false);
+        Assert.Equal(["1 bike right-turn lane", "1 left-turn bike lane"], steps);
+        // at the lights the left-turn bike lane holds out past the verge and the island
+        steps.Clear();
+        MouthPlanner.Fit(mouth, normal, ArmRoom.Flat(nl, MouthPlanner.Reach(mouth).Right - 2.0), new Stretch(40, 30), new Stretch(40, 30), steps, lights: true);
+        Assert.Equal(["1 bike right-turn lane", "2 left-turn bike lane"], steps);
     }
 
     [Fact]

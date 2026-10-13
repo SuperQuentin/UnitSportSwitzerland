@@ -65,7 +65,7 @@ public static partial class TileRewriter
                 var wants = new ArmWants(lights, can, banned,
                     leftPocket ? need!.Wish?.Pocket ?? [SignalMoves.Left] : [],
                     need?.Wish?.Own ?? need?.Inferred,
-                    need?.WantRight ?? false, need?.BikeBetween ?? false, rules.Has(JunctionRule.LeftTurnBikeLane));
+                    need?.WantRight ?? false, need?.BikeBetween ?? false, LeftTurnBikeLane: false);
                 var wantedSection = MouthPlanner.Wanted(normal, wants);
                 jp.Arms.Add(new ArmPlan
                 {
@@ -98,7 +98,14 @@ public static partial class TileRewriter
                     bool leftThere = into is not null && into.Wanted.CarLanes(StripWay.In).Any(l => (l.Strip.Moves & SignalMoves.Left) != 0);
                     between = !lights || !leftThere;
                 }
-                a.Wants = a.Wants with { BikeBetween = between, ThroughBike = carriesOn || lights };
+                // one rule for the three bike moves (the user): beside the car lane making the move, where the street it goes into
+                // carries riders on, or at the lights (an advanced line or a bike box ends it)
+                bool Carries(SignalMoves move) => lights || Toward(a, move) is { Normal.CarriesBikesAway: true };
+                a.Wants = a.Wants with
+                {
+                    BikeBetween = between, ThroughBike = carriesOn || lights,
+                    LeftTurnBikeLane = Carries(SignalMoves.Left), RightTurnBike = Carries(SignalMoves.Right),
+                };
                 a.Wanted = a.Mouth = MouthPlanner.Wanted(a.Normal, a.Wants);
             }
             if (jp.Arms.Count >= 3) plans.Add(jp);
@@ -215,7 +222,7 @@ public static partial class TileRewriter
                 a.Openings.Clear();
                 a.Openings.AddRange(tries[t]);
                 var steps = new List<string>();
-                a.Mouth = MouthPlanner.Fit(aligned, a.Normal, a.Room, LeftStretch(a), RightStretch(a), steps);
+                a.Mouth = MouthPlanner.Fit(aligned, a.Normal, a.Room, LeftStretch(a), RightStretch(a), steps, jp.Lights);
                 bool kept = !steps.Contains("7 left pocket") && !steps.Contains("4 right pocket");
                 if (!kept && t + 1 < tries.Count) continue;
                 a.SizeTried = t;

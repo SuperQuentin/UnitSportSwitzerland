@@ -9,11 +9,16 @@ using UnitSport.Terrain.Format;
 /// <param name="PocketMoves">The left pocket's lanes, left to right; empty for none.</param>
 /// <param name="OwnMoves">The carriageway's own lanes, left to right, null to share the remaining turns out (one lane: all of them).</param>
 /// <param name="BikeBetween">Beside a right pocket the painted bike lane runs between it and the through lane, layout (b) (#351).</param>
-/// <param name="LeftTurnBikeLane">A left-turn bike lane between the left pocket and the through lane (lights, #351).</param>
-/// <param name="ThroughBike">Riders arriving with neither a bike lane nor a path get a through bike lane: the straight-on exit carries
-/// one on, or (at the lights) it ends at its advanced line or bike box anyway.</param>
+/// <param name="LeftTurnBikeLane">A left-turn bike lane between the left pocket and the through lane.</param>
+/// <param name="ThroughBike">Riders arriving with neither a bike lane nor a path get a through bike lane.</param>
+/// <param name="RightTurnBike">Beside a right pocket with the bike lane between (b), a bike right-turn lane at the kerb.</param>
+/// <remarks>
+/// The three bike moves follow one rule (the user, Oct 13 2026): a bike lane beside the car lane making that move (the left
+/// and right ones beside the car pocket), where the street the move goes into carries riders on (a departing bike lane or
+/// path), or at the lights, where it ends at its advanced line or bike box anyway. The planner decides the three flags.
+/// </remarks>
 public sealed record ArmWants(bool Lights, SignalMoves Can, SignalMoves Banned, SignalMoves[] PocketMoves, SignalMoves[]? OwnMoves,
-    bool RightPocket, bool BikeBetween, bool LeftTurnBikeLane, bool ThroughBike = false);
+    bool RightPocket, bool BikeBetween, bool LeftTurnBikeLane, bool ThroughBike = false, bool RightTurnBike = false);
 
 /// <summary>
 /// The free room beside an arm (#818): at stations out from the mouth (m), how far each way from its axis the section may
@@ -135,7 +140,8 @@ public static class MouthPlanner
             // where there is plenty of room (it goes first), else share the pocket (the user, Oct 13 2026)
             arriving.Add(b with { Moves = lastOwn.Moves & SignalMoves.Through });
             arriving.Add(rightLane);
-            arriving.Add(new Strip(StripKind.BikeLane, LeftBikeLane, StripWay.In, SignalMoves.Right, RightBikeId));
+            if (w.RightTurnBike) arriving.Add(new Strip(StripKind.BikeLane, LeftBikeLane, StripWay.In, SignalMoves.Right, RightBikeId));
+            else arriving[^1] = rightLane with { SharedWithBikes = true };
         }
         else
         {
@@ -181,7 +187,8 @@ public static class MouthPlanner
 
     /// <summary>
     /// Shrinks <paramref name="wanted"/> until it fits <paramref name="room"/>, in the user's order (Oct 13 2026): (1) verge
-    /// and buffer, (2) island (the exit hatch stays: it lines the through lane up), the left-turn bike lane (a through bike
+    /// and buffer, (2) island (the exit hatch stays: it lines the through lane up), the left-turn bike lane (without lights
+    /// right after the bike right-turn lane, first of all; a through bike
     /// lane the mouth added survives when possible: it goes with the painted ones, last), (3) lane widths to their least, (4) right pocket, (5) sidewalk to 1.5 m,
     /// (6) [longitudinal: storage and lead-in, decided with the lengths], (7) the pocket feeding this exit (its hatch), then
     /// its own left pocket, (8) painted bike lane. Car
@@ -189,7 +196,7 @@ public static class MouthPlanner
     /// were laid to the facades), the section need only reach no further than the street does. Each step taken is named in
     /// <paramref name="steps"/>.
     /// </summary>
-    public static Section Fit(Section wanted, Section normal, ArmRoom room, Stretch left, Stretch right, List<string> steps)
+    public static Section Fit(Section wanted, Section normal, ArmRoom room, Stretch left, Stretch right, List<string> steps, bool lights = true)
     {
         var (roomL, roomR) = MouthRoom(normal, room, left, right);
         bool Fits(Section s)
@@ -199,7 +206,7 @@ public static class MouthPlanner
         }
         var s = wanted;
         if (Fits(s)) return s;
-        (string Name, Func<Section, Section?> Step)[] ladder =
+        List<(string Name, Func<Section, Section?> Step)> ladder =
         [
             // a bike right-turn lane only where there is plenty of room: riders turning right share the pocket instead
             ("1 bike right-turn lane", WithoutRightBike),
@@ -220,6 +227,14 @@ public static class MouthPlanner
             ("7 left pocket", WithoutLeftPocket),
             ("8 painted bike lane", x => Without(x, k => k is StripKind.BikeLane)),
         ];
+        // without lights the turning riders' lanes go first of all: the right one, then the left one (the user)
+        if (!lights)
+        {
+            int at = ladder.FindIndex(x => x.Name == "2 left-turn bike lane");
+            var leftBike = ladder[at];
+            ladder.RemoveAt(at);
+            ladder.Insert(1, ("1 left-turn bike lane", leftBike.Step));
+        }
         foreach (var (name, step) in ladder)
         {
             if (step(s) is not { } next || Same(next, s)) continue;
