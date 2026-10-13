@@ -49,6 +49,15 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   forces (b). In (b) the bike lane goes straight on only; riders turning right get **a bike right-turn lane at the kerb**, right
   of the pocket (id 125), where there is plenty of room: it is the first thing the room order gives up (step 1); then
   they **share the right pocket** (`Strip.SharedWithBikes`: a bike connector from it in phase 5, no bike symbol in it). J1: kerbside on every arm (every arm turns left).
+- **One pocket rule** (the user's generalization, Oct 13): `Layout/PocketRules` holds the left and right pocket as one rule
+  with a table (move, side, speed condition, sizes, ids, most lanes from data, room step). What a pocket displaces follows
+  from its side, not its move: a centre-side pocket pushes the through lane out (alignment, split, merge with the far exit);
+  a kerb-side one meets the kerbside bike lane. `Lengths`, `NoPocket`, `MouthPlanner.WithoutPocket` are generic.
+- **OSM `turn:lanes` are the truth** (the user, Oct 13): `DataLanes.Of`: the lanes beyond the carriageway's own are the
+  pockets, taken from each end (left-turning at the centre, right-only at the kerb, up to 3 each: double rights too), at
+  any speed and on multi-lane approaches (they used to be folded); the room order never drops them (`keepPockets`, and
+  `keepHatch` on the exit one feeds; "does not fit" is reported instead), a too short street keeps their shortest size.
+  The old layout keeps `Assign` (byte-identical). Sion: right pockets 14 -> 17.
 - **Lanes and sidewalks narrow per side** (steps 3 and 5): only on the side that lacks room (J3 N's departing lane keeps
   its 4 m).
 - **The exit hatch is not dropped by the ladder**: it lines the through lane up (a jog of a lane without it). A split

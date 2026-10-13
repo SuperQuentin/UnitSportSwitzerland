@@ -208,8 +208,11 @@ once. Found so far:
   riders on or at the lights; every bike lane at the lights ends at an advanced line or a bike box by its own destination.
   Only the order they go when room is short, and no box without lights, differ.
 
-Candidates to check as the work goes on: left and right car pockets as one rule (a lane per move, beside the car lane
-it splits from, differing only by when it is wanted and the order it goes); every marking as the boundary between two
+- **One pocket rule** (`PocketRules`): a lane added for a move on that move's side; what it displaces follows from the side;
+  a table holds what differs (speed condition, sizes, room step). OSM `turn:lanes` are the truth: their lanes beyond the
+  carriageway's are the pockets, from each end, at any speed, never dropped for room (double rights too).
+
+Candidates to check as the work goes on: every marking as the boundary between two
 strips, its style from the pair of kinds; stop lines, crosswalks and give-way rows as lines across an arm at a station,
 per move group; lights and no lights as nothing but parameters of `JunctionRules`.
 

@@ -62,7 +62,7 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
     {
         var normal = Section.Normal(Street(), 9f, junctionAtEnd: true);
         var all = SignalMoves.Left | SignalMoves.Through | SignalMoves.Right;
-        var wants = new ArmWants(Lights: false, all, SignalMoves.None, [SignalMoves.Left], null, RightPocket: true, BikeBetween: false, LeftTurnBikeLane: false);
+        var wants = new ArmWants(Lights: false, all, SignalMoves.None, [SignalMoves.Left], null, RightPocket: [SignalMoves.Right], BikeBetween: false, LeftTurnBikeLane: false);
         var mouth = MouthPlanner.Wanted(normal, wants);
         Assert.Equal("L|T|R", mouth.CarLanesIn());
         // the street's lanes are wider than a full lane: the mouth's are at most 3.5 m where lanes are added
@@ -82,9 +82,9 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
         // a 10 m road with no bike lane at lights: the mouth adds the through riders' lane, kerbside, beside the left-turn one
         var normal = Section.Normal(new RoadAttributes(LanesForward: 1, LanesBackward: 1, WidthCm: 1000), 10f, true);
         var all = SignalMoves.Left | SignalMoves.Through | SignalMoves.Right;
-        var mouth = MouthPlanner.Wanted(normal, new ArmWants(true, all, SignalMoves.None, [SignalMoves.Left], null, false, false, LeftTurnBikeLane: true, ThroughBike: true));
+        var mouth = MouthPlanner.Wanted(normal, new ArmWants(true, all, SignalMoves.None, [SignalMoves.Left], null, [], false, LeftTurnBikeLane: true, ThroughBike: true));
         // the straight-on exit carries no bike lane on: none is added (the left-turn one stays, beside nothing)
-        var none = MouthPlanner.Wanted(normal, new ArmWants(true, all, SignalMoves.None, [SignalMoves.Left], null, false, false, LeftTurnBikeLane: true));
+        var none = MouthPlanner.Wanted(normal, new ArmWants(true, all, SignalMoves.None, [SignalMoves.Left], null, [], false, LeftTurnBikeLane: true));
         Assert.DoesNotContain(none.Strips, x => x.Id == MouthPlanner.AddedBikeId);
         var bikes = mouth.Strips.Where(x => x.Kind == StripKind.BikeLane).ToList();
         Assert.Equal([MouthPlanner.LeftBikeId, MouthPlanner.AddedBikeId], bikes.Select(x => x.Id));
@@ -110,7 +110,7 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
         // at the kerb, right of the pocket
         var normal = Section.Normal(Street(), 9f, junctionAtEnd: true);
         var all = SignalMoves.Left | SignalMoves.Through | SignalMoves.Right;
-        var mouth = MouthPlanner.Wanted(normal, new ArmWants(false, all, SignalMoves.None, [], null, RightPocket: true, BikeBetween: true, LeftTurnBikeLane: false, RightTurnBike: true));
+        var mouth = MouthPlanner.Wanted(normal, new ArmWants(false, all, SignalMoves.None, [], null, RightPocket: [SignalMoves.Right], BikeBetween: true, LeftTurnBikeLane: false, RightTurnBike: true));
         var inside = mouth.Strips.Skip(mouth.FirstCarriageway).Take(mouth.LastCarriageway - mouth.FirstCarriageway + 1).ToList();
         Assert.Equal([MouthPlanner.RightPocketId, MouthPlanner.RightBikeId], inside.TakeLast(2).Select(x => x.Id));
         Assert.Equal(SignalMoves.Through, inside[^3].Moves);
@@ -129,7 +129,7 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
     {
         var normal = Section.Normal(Street(), 9f, junctionAtEnd: true);
         var all = SignalMoves.Left | SignalMoves.Through | SignalMoves.Right;
-        var wants = new ArmWants(false, all, SignalMoves.None, [SignalMoves.Left], null, RightPocket: true, BikeBetween: true,
+        var wants = new ArmWants(false, all, SignalMoves.None, [SignalMoves.Left], null, RightPocket: [SignalMoves.Right], BikeBetween: true,
             LeftTurnBikeLane: true, ThroughBike: true, RightTurnBike: true);
         var mouth = MouthPlanner.Wanted(normal, wants);
         var (nl, _) = MouthPlanner.Reach(normal);
@@ -143,12 +143,44 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
     }
 
     [Fact]
+    public void Osm_lanes_beyond_the_carriageways_are_the_pockets_taken_from_each_end()
+    {
+        var all = SignalMoves.Left | SignalMoves.Through | SignalMoves.Right;
+        SignalMoves L = SignalMoves.Left, T = SignalMoves.Through, R = SignalMoves.Right;
+        // two lanes toward the junction, the data shows three: the left-only one is a pocket (it used to be folded)
+        var d = DataLanes.Of([L, T, T | R], 2, all);
+        Assert.Equal([L], d.Left);
+        Assert.Equal([T, T | R], d.Own);
+        Assert.Empty(d.Right);
+        // one lane, the data a double right at any speed and a left
+        d = DataLanes.Of([L, T, R, R], 1, all);
+        Assert.Equal([L], d.Left);
+        Assert.Equal([T], d.Own);
+        Assert.Equal([R, R], d.Right);
+        // as many lanes as the carriageway holds: no pocket, the lanes in place
+        d = DataLanes.Of([L, T | R], 2, all);
+        Assert.Empty(d.Left);
+        Assert.Equal([L, T | R], d.Own);
+
+        // the room order never drops a pocket the data asks for
+        var normal = Section.Normal(Street(), 9f, junctionAtEnd: true);
+        var wants = new ArmWants(false, all, SignalMoves.None, [L], [T], [R, R], false, false, FromData: true);
+        var mouth = MouthPlanner.Wanted(normal, wants);
+        Assert.Equal("L|T|R|R", mouth.CarLanesIn());
+        var (nl, nr) = MouthPlanner.Reach(normal);
+        var steps = new List<string>();
+        var fit = MouthPlanner.Fit(mouth, normal, ArmRoom.Flat(nl, nr), new Stretch(40, 30), new Stretch(40, 30), steps, keepPockets: true);
+        Assert.Equal("L|T|R|R", fit.CarLanesIn());
+        Assert.Contains("does not fit", steps);
+    }
+
+    [Fact]
     public void A_section_shrinks_in_the_users_order_until_it_fits()
     {
         var side = new RoadSide(SidewalkDm: 30, Bike: BikeKind.Track, BikeDm: 20, KerbCm: 12, VergeDm: 10);
         var normal = Section.Normal(new RoadAttributes(LanesForward: 1, LanesBackward: 1, WidthCm: 700, Left: side, Right: side), 7f, true);
         var all = SignalMoves.Left | SignalMoves.Through | SignalMoves.Right;
-        var wanted = MouthPlanner.Wanted(normal, new ArmWants(false, all, SignalMoves.None, [SignalMoves.Left], null, true, false, false));
+        var wanted = MouthPlanner.Wanted(normal, new ArmWants(false, all, SignalMoves.None, [SignalMoves.Left], null, [SignalMoves.Right], false, false));
         var (nl, nr) = MouthPlanner.Reach(normal);
         var (wl, wr) = MouthPlanner.Reach(wanted);
         Assert.True(wr > nr);
@@ -169,7 +201,7 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
 
         // a street with nothing beside its kerbs: only the left pocket can go, the through lane takes the left turn
         var bare = Section.Normal(new RoadAttributes(LanesForward: 1, LanesBackward: 1, WidthCm: 600), 6f, true);
-        var bareWanted = MouthPlanner.Wanted(bare, new ArmWants(false, all, SignalMoves.None, [SignalMoves.Left], null, false, false, false));
+        var bareWanted = MouthPlanner.Wanted(bare, new ArmWants(false, all, SignalMoves.None, [SignalMoves.Left], null, [], false, false));
         steps.Clear();
         fit = MouthPlanner.Fit(bareWanted, bare, ArmRoom.Flat(3, 3), new Stretch(40, 30), new Stretch(40, 30), steps);
         Assert.Equal(["3 lane widths to their least", "7 left pocket"], steps);

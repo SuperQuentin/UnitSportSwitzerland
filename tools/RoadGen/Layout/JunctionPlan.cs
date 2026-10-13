@@ -47,8 +47,8 @@ public sealed class ArmPlan
     /// <summary>What the pocket layout (#123, #348) built on this approach, for the comparison while both run.</summary>
     public bool BuiltLeft { get; set; }
     public bool BuiltRight { get; set; }
-    public bool HasLeft => Mouth.Strips.Any(s => s.Id is >= MouthPlanner.LeftPocketId and < MouthPlanner.LeftPocketId + 10);
-    public bool HasRight => Mouth.Strips.Any(s => s.Id == MouthPlanner.RightPocketId);
+    public bool HasLeft => Mouth.Strips.Any(s => PocketRules.Left.Owns(s.Id));
+    public bool HasRight => Mouth.Strips.Any(s => PocketRules.Right.Owns(s.Id));
 }
 
 /// <summary>A junction as the planner lays it out (#818): its arms, step 1 of <c>docs/plans/junction-layout.md</c>.</summary>
@@ -72,7 +72,7 @@ public sealed class JunctionPlan
         var inv = CultureInfo.InvariantCulture;
         var arms = plans.SelectMany(p => p.Arms).ToList();
         int lefts = arms.Count(a => a.HasLeft);
-        int doubles = arms.Count(a => a.Mouth.Strips.Count(s => s.Id is >= MouthPlanner.LeftPocketId and < MouthPlanner.LeftPocketId + 10) >= 2);
+        int doubles = arms.Count(a => a.Mouth.Strips.Count(s => PocketRules.Left.Owns(s.Id)) >= 2);
         int rights = arms.Count(a => a.HasRight);
         int splits = arms.Count(a => a.Split > 0);
         int hatches = arms.Count(a => a.Mouth.Strips.Any(s => s.Kind == StripKind.Hatch));

@@ -30,7 +30,7 @@ public static class PlanSvg
         foreach (var a in plan.Arms)
         {
             string steps = string.Join("; ", a.Steps.Concat(a.FitSteps));
-            string open = string.Join(", ", a.Openings.Select(o => string.Create(inv, $"{(o.Id == MouthPlanner.RightPocketId ? "right" : "left")} {o.Taper:F0}+{o.Storage:F0} m")));
+            string open = string.Join(", ", a.Openings.Select(o => string.Create(inv, $"{(PocketRules.Right.Owns(o.Id) ? "right" : "left")} {o.Taper:F0}+{o.Storage:F0} m")));
             string line = $"{JunctionPlan.Compass(a.Heading)}: {a.Mouth.CarLanesIn()}"
                 + (open.Length > 0 ? $"   pockets {open}" : "")
                 + (a.Split > 0 ? string.Create(inv, $"   split {a.Split:F2} m") : "")
@@ -144,8 +144,8 @@ public static class PlanSvg
         StripKind.BikeLane => "#e6d79a",
         StripKind.Hatch => "#b9c0c4",
         StripKind.Island => "#7f8a8f",
-        StripKind.CarLane when s.Id is >= MouthPlanner.LeftPocketId and < MouthPlanner.LeftPocketId + 10 => "#2f7f8f",
-        StripKind.CarLane when s.Id == MouthPlanner.RightPocketId => "#4f6fb0",
+        StripKind.CarLane when PocketRules.Left.Owns(s.Id) => "#2f7f8f",
+        StripKind.CarLane when PocketRules.Right.Owns(s.Id) => "#4f6fb0",
         StripKind.CarLane when s.Way == StripWay.Out => "#7a838a",
         _ => "#5d666c",
     };

@@ -3,11 +3,14 @@ namespace UnitSport.Tools.RoadGen.Layout;
 using UnitSport.Terrain.Format;
 
 /// <summary>
-/// What the data wants of an approach (#818), as the junction planner reads it: the turns it has and those banned, the left
-/// pocket's lanes and the carriageway's own lanes with their moves, a right pocket, the bike layout and the junction's kind.
+/// What the data wants of an approach (#818), as the junction planner reads it: the turns it has and those banned, the
+/// pockets' lanes (<see cref="PocketRules"/>) and the carriageway's own lanes with their moves, the bike layout and the
+/// junction's kind.
 /// </summary>
-/// <param name="PocketMoves">The left pocket's lanes, left to right; empty for none.</param>
+/// <param name="LeftPocket">The left pocket's lanes, left to right; empty for none.</param>
+/// <param name="RightPocket">The right pocket's lanes, left to right; empty for none.</param>
 /// <param name="OwnMoves">The carriageway's own lanes, left to right, null to share the remaining turns out (one lane: all of them).</param>
+/// <param name="FromData">The lanes are OSM's <c>turn:lanes</c> (the user: the truth; the room order never drops their pockets).</param>
 /// <param name="BikeBetween">Beside a right pocket the painted bike lane runs between it and the through lane, layout (b) (#351).</param>
 /// <param name="LeftTurnBikeLane">A left-turn bike lane between the left pocket and the through lane.</param>
 /// <param name="ThroughBike">Riders arriving with neither a bike lane nor a path get a through bike lane.</param>
@@ -17,8 +20,46 @@ using UnitSport.Terrain.Format;
 /// and right ones beside the car pocket), where the street the move goes into carries riders on (a departing bike lane or
 /// path), or at the lights, where it ends at its advanced line or bike box anyway. The planner decides the three flags.
 /// </remarks>
-public sealed record ArmWants(bool Lights, SignalMoves Can, SignalMoves Banned, SignalMoves[] PocketMoves, SignalMoves[]? OwnMoves,
-    bool RightPocket, bool BikeBetween, bool LeftTurnBikeLane, bool ThroughBike = false, bool RightTurnBike = false);
+public sealed record ArmWants(bool Lights, SignalMoves Can, SignalMoves Banned, SignalMoves[] LeftPocket, SignalMoves[]? OwnMoves,
+    SignalMoves[] RightPocket, bool BikeBetween, bool LeftTurnBikeLane, bool ThroughBike = false, bool RightTurnBike = false,
+    bool FromData = false)
+{
+    /// <summary>The lanes wanted for a pocket of <paramref name="rule"/>.</summary>
+    public SignalMoves[] Pocket(PocketRule rule) => rule == PocketRules.Left ? LeftPocket : RightPocket;
+
+    /// <summary>These wants without that pocket.</summary>
+    public ArmWants Without(PocketRule rule) => rule == PocketRules.Left ? this with { LeftPocket = [] } : this with { RightPocket = [] };
+}
+
+/// <summary>
+/// OSM's <c>turn:lanes</c> fitted onto a carriageway of <c>own</c> lanes toward the junction (#818, the user: the data is the
+/// truth): its lanes beyond the carriageway's own are the pockets, taken from each end, the left-turning ones at the centre
+/// and the right-only ones at the kerb (at most <see cref="PocketRule.MaxLanes"/> each); the rest lie on the own lanes, any
+/// still left over folded into their neighbour. Moves are among <c>allowed</c> (a lane showing none keeps them all).
+/// </summary>
+public readonly record struct DataLanes(SignalMoves[] Left, SignalMoves[] Own, SignalMoves[] Right, int Folded)
+{
+    public static DataLanes Of(SignalMoves[] wished, int own, SignalMoves allowed)
+    {
+        var wish = wished.Select(m => m & allowed).Select(m => m == SignalMoves.None ? allowed : m).ToArray();
+        int m = wish.Length, extra = Math.Max(0, m - Math.Max(1, own));
+        int left = 0, right = 0;
+        while (left < extra && left < PocketRules.Left.MaxLanes && (wish[left] & SignalMoves.Left) != 0) left++;
+        while (right < extra - left && right < PocketRules.Right.MaxLanes && wish[m - 1 - right] == SignalMoves.Right) right++;
+        var middle = wish[left..(m - right)];
+        int n = Math.Max(1, own);
+        var lanes = new SignalMoves[n];
+        int folded = Math.Max(0, middle.Length - n);
+        if (middle.Length >= n)
+        {
+            for (int k = 0; k <= folded; k++) lanes[0] |= middle[k];
+            for (int k = 1; k < n; k++) lanes[k] = middle[folded + k];
+        }
+        else
+            for (int k = 0; k < n; k++) lanes[k] = middle[Math.Max(0, k - (n - middle.Length))];
+        return new DataLanes(wish[..left], lanes, wish[(m - right)..], folded);
+    }
+}
 
 /// <summary>
 /// The free room beside an arm (#818): at stations out from the mouth (m), how far each way from its axis the section may
@@ -69,7 +110,9 @@ public static class MouthPlanner
     public const string FeederStep = "7 the pocket feeding this exit";
 
     /// <summary>Ids of strips the planner adds: above any a normal section numbers.</summary>
-    public const int LeftPocketId = 100, LeftBikeId = 110, AddedBikeId = 115, RightPocketId = 120, RightBikeId = 125, HatchId = 130;
+    public const int LeftBikeId = 110, AddedBikeId = 115, RightBikeId = 125, HatchId = 130;
+    /// <summary>The first lane of each pocket (<see cref="PocketRule.FirstId"/>).</summary>
+    public static readonly int LeftPocketId = PocketRules.Left.FirstId, RightPocketId = PocketRules.Right.FirstId;
 
     /// <summary>
     /// The section the data wants at the mouth: the normal section's sides and departing lanes kept, the arriving side laid out
@@ -89,7 +132,10 @@ public static class MouthPlanner
         // an arriving lane as wide as the street's own, between a full lane and LaneMax where lanes are added
         double laneIn = Lane;
         foreach (var (_, s) in normal.CarLanes(StripWay.In)) laneIn = Math.Max(laneIn, s.Width);
-        bool adds = (w.PocketMoves.Length > 0 && (w.Can & ~w.Banned & SignalMoves.Left) != 0) || (w.RightPocket && (w.Can & ~w.Banned & SignalMoves.Right) != 0);
+        var allowedHere = w.Can & ~w.Banned;
+        // each pocket's lanes, only for a move that may be made
+        SignalMoves[] Lanes(PocketRule rule) => (allowedHere & rule.Move) != 0 ? w.Pocket(rule) : [];
+        bool adds = PocketRules.All.Any(r => Lanes(r).Length > 0);
         if (adds) laneIn = Math.Min(laneIn, LaneMax);
         for (int k = 0; k < strips.Count; k++)
         {
@@ -108,10 +154,10 @@ public static class MouthPlanner
         if (inCars.Count == 0)
             return new Section([.. leftBands, .. outSide, .. rightBands], normal.CarriagewayLeft) { KerbLeftCm = normal.KerbLeftCm, KerbRightCm = normal.KerbRightCm };
 
-        var allowed = w.Can & ~w.Banned;
+        var allowed = allowedHere;
         var arriving = new List<Strip>();
-        // the left pocket's lanes, only for a turn that may be made
-        var pocket = (allowed & SignalMoves.Left) != 0 ? w.PocketMoves : [];
+        // the centre side's pocket (left), then the own lanes, then the kerb side's (right): one rule, the side from the table
+        var pocket = Lanes(PocketRules.Left);
         for (int k = 0; k < pocket.Length; k++)
             arriving.Add(new Strip(StripKind.CarLane, laneIn, StripWay.In, pocket[k] & allowed, LeftPocketId + k));
         if (pocket.Length > 0 && w.LeftTurnBikeLane)
@@ -122,7 +168,8 @@ public static class MouthPlanner
         if (w.ThroughBike && bikeIn is null && !rightBands.Any(x => x.Kind == StripKind.Path))
             bikeIn = new Strip(StripKind.BikeLane, LeftBikeLane, StripWay.In, Id: AddedBikeId);
         // the own lanes: as the data assigned them, else what the pockets leave of the turns
-        bool right = w.RightPocket && (allowed & SignalMoves.Right) != 0;
+        var rights = Lanes(PocketRules.Right);
+        bool right = rights.Length > 0;
         var rest = allowed & ~(pocket.Length > 0 ? SignalMoves.Left : 0) & ~(right ? SignalMoves.Right : 0);
         if (rest == SignalMoves.None) rest = allowed;
         for (int k = 0; k < inCars.Count; k++)
@@ -133,19 +180,22 @@ public static class MouthPlanner
             arriving.Add(new Strip(StripKind.CarLane, adds ? laneIn : inCars[k].Width, StripWay.In, moves, inCars[k].Id));
         }
         var lastOwn = arriving[^1];
-        var rightLane = new Strip(StripKind.CarLane, laneIn, StripWay.In, SignalMoves.Right, RightPocketId);
+        var rightLanes = rights.Select((m, k) => new Strip(StripKind.CarLane, laneIn, StripWay.In, m & allowed, RightPocketId + k)).ToList();
         if (right && bikeIn is { } b && w.BikeBetween)
         {
             // the bike lane between goes straight on; riders turning right get their own lane at the kerb, right of the pocket,
             // where there is plenty of room (it goes first), else share the pocket (the user, Oct 13 2026)
             arriving.Add(b with { Moves = lastOwn.Moves & SignalMoves.Through });
-            arriving.Add(rightLane);
-            if (w.RightTurnBike) arriving.Add(new Strip(StripKind.BikeLane, LeftBikeLane, StripWay.In, SignalMoves.Right, RightBikeId));
-            else arriving[^1] = rightLane with { SharedWithBikes = true };
+            if (w.RightTurnBike)
+            {
+                arriving.AddRange(rightLanes);
+                arriving.Add(new Strip(StripKind.BikeLane, LeftBikeLane, StripWay.In, SignalMoves.Right, RightBikeId));
+            }
+            else arriving.AddRange(rightLanes.Select((x, k) => k == rightLanes.Count - 1 ? x with { SharedWithBikes = true } : x));
         }
         else
         {
-            if (right) arriving.Add(rightLane);
+            arriving.AddRange(rightLanes);
             if (bikeIn is { } b2) arriving.Add(b2 with { Moves = (lastOwn.Moves | (right ? SignalMoves.Right : 0)) & (SignalMoves.Through | SignalMoves.Right) & allowed });
         }
 
@@ -192,11 +242,13 @@ public static class MouthPlanner
     /// lane the mouth added survives when possible: it goes with the painted ones, last), (3) lane widths to their least, (4) right pocket, (5) sidewalk to 1.5 m,
     /// (6) [longitudinal: storage and lead-in, decided with the lengths], (7) the pocket feeding this exit (its hatch), then
     /// its own left pocket, (8) painted bike lane. Car
-    /// through lanes and the data's lane count never drop. Where the street already reaches past its room (its sidewalks
+    /// through lanes and the data's lane count never drop; with <paramref name="keepPockets"/> (OSM's lanes) nor its pockets, and
+    /// with <paramref name="keepHatch"/> (an exit fed by such a pocket) nor the exit's hatch. Where the street already reaches past its room (its sidewalks
     /// were laid to the facades), the section need only reach no further than the street does. Each step taken is named in
     /// <paramref name="steps"/>.
     /// </summary>
-    public static Section Fit(Section wanted, Section normal, ArmRoom room, Stretch left, Stretch right, List<string> steps, bool lights = true)
+    public static Section Fit(Section wanted, Section normal, ArmRoom room, Stretch left, Stretch right, List<string> steps, bool lights = true,
+        bool keepPockets = false, bool keepHatch = false)
     {
         var (roomL, roomR) = MouthRoom(normal, room, left, right);
         bool Fits(Section s)
@@ -220,11 +272,11 @@ public static class MouthPlanner
             // each side narrows only where it lacks room: the arriving lanes reach right, the departing ones left
             ("3 lane widths to their least", x => LeastWidths(x, StripWay.In)),
             ("3 lane widths to their least", x => LeastWidths(x, StripWay.Out)),
-            ("4 right pocket", x => WithoutLane(x, RightPocketId, SignalMoves.Right)),
+            (PocketRules.Right.DropStep, x => keepPockets ? null : WithoutPocket(x, PocketRules.Right)),
             ("5 sidewalk to 1.5 m", x => Narrowed(x, StripKind.Sidewalk, SidewalkMin, left: false)),
             ("5 sidewalk to 1.5 m", x => Narrowed(x, StripKind.Sidewalk, SidewalkMin, left: true)),
-            (FeederStep, x => Without(x, k => k is StripKind.Hatch)),
-            ("7 left pocket", WithoutLeftPocket),
+            (FeederStep, x => keepHatch ? null : Without(x, k => k is StripKind.Hatch)),
+            (PocketRules.Left.DropStep, x => keepPockets ? null : WithoutPocket(x, PocketRules.Left)),
             ("8 painted bike lane", x => Without(x, k => k is StripKind.BikeLane)),
         ];
         // without lights the turning riders' lanes go first of all: the right one, then the left one (the user)
@@ -295,7 +347,8 @@ public static class MouthPlanner
     private static Section? WithoutRightBike(Section s)
     {
         if (!s.Strips.Any(x => x.Id == RightBikeId)) return null;
-        var strips = s.Strips.Where(x => x.Id != RightBikeId).Select(x => x.Id == RightPocketId ? x with { SharedWithBikes = true } : x).ToList();
+        int kerbmost = s.Strips.Where(x => PocketRules.Right.Owns(x.Id)).Select(x => x.Id).DefaultIfEmpty(-1).Max();
+        var strips = s.Strips.Where(x => x.Id != RightBikeId).Select(x => x.Id == kerbmost ? x with { SharedWithBikes = true } : x).ToList();
         return new Section(strips, s.CarriagewayLeft) { KerbLeftCm = s.KerbLeftCm, KerbRightCm = s.KerbRightCm };
     }
 
@@ -327,27 +380,22 @@ public static class MouthPlanner
             s.CarriagewayLeft)
         { KerbLeftCm = s.KerbLeftCm, KerbRightCm = s.KerbRightCm };
 
-    /// <summary>The lane <paramref name="id"/> left out, its moves going to the arriving lane beside it (a right pocket takes its bike right-turn lane with it).</summary>
-    private static Section? WithoutLane(Section s, int id, SignalMoves moves)
+    /// <summary>
+    /// The pocket of <paramref name="rule"/> left out (and its bike lane), its move going to the own lane on its side: the
+    /// first own lane for the centre side's, the last for the kerb side's.
+    /// </summary>
+    public static Section? WithoutPocket(Section s, PocketRule rule)
     {
-        var strips = s.Strips.Where(x => !(id == RightPocketId && x.Id == RightBikeId)).ToList();
-        int at = strips.FindIndex(x => x.Id == id);
-        if (at < 0) return null;
-        strips.RemoveAt(at);
-        int near = -1;
-        for (int k = 0; k < strips.Count; k++)
-            if (strips[k].IsCarLane && strips[k].Way == StripWay.In) near = k;   // the rightmost own lane
-        if (near >= 0) strips[near] = strips[near] with { Moves = strips[near].Moves | moves };
-        return new Section(strips, s.CarriagewayLeft) { KerbLeftCm = s.KerbLeftCm, KerbRightCm = s.KerbRightCm };
-    }
-
-    private static Section? WithoutLeftPocket(Section s)
-    {
+        int bike = rule.CentreSide ? LeftBikeId : RightBikeId;
         var strips = s.Strips.ToList();
-        int removed = strips.RemoveAll(x => x.Id is >= LeftPocketId and < LeftPocketId + 10 || x.Id == LeftBikeId);
+        int removed = strips.RemoveAll(x => rule.Owns(x.Id) || x.Id == bike);
         if (removed == 0) return null;
-        int first = strips.FindIndex(x => x.IsCarLane && x.Way == StripWay.In);
-        if (first >= 0) strips[first] = strips[first] with { Moves = strips[first].Moves | SignalMoves.Left };
+        var own = strips.Select((x, k) => (x, k)).Where(p => p.x.IsCarLane && p.x.Way == StripWay.In && PocketRules.Of(p.x.Id) is null).Select(p => p.k).ToList();
+        if (own.Count > 0)
+        {
+            int at = rule.CentreSide ? own[0] : own[^1];
+            strips[at] = strips[at] with { Moves = strips[at].Moves | rule.Move };
+        }
         return new Section(strips, s.CarriagewayLeft) { KerbLeftCm = s.KerbLeftCm, KerbRightCm = s.KerbRightCm };
     }
 }
