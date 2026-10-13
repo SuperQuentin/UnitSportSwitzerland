@@ -100,10 +100,23 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   arc) hold the radius smaller and narrow the turns, under their vehicle's radius if need be.
 - **Mouths**: pushed out until every turn's least-radius arc and both corners' kerbs start inside them (the mouth is where the
   kerb leaves the straight edge); monotone after two rounds (on a curved arm the kerb's meet moves with the mouth); at most
-  40 m, and half the street where another car-road junction stands at its far end.
+  40 m, and half the street where another car-road junction stands at its far end. Once the connectors are final, every kerb
+  is drawn again from them (narrowing a turn at one corner tightens its arc into the other) and a kerb still starting outside
+  its mouth pushes the mouth out, and all again.
+- **Mouth first** (phase 1 against the core): a transition has the street between its mouth and the far junction's, so the
+  arms are planned twice, the second time from the first core's mouths (`ArmPlan.MouthShift`: past today's trim): lengths
+  from there, the room measured from the mouth. The report counts the mouths the final core moved (Sion: 22 over 0.5 m, most
+  6.7 m). Sion loses six left pockets to it (streets of 26-34 m: too short once the mouths are counted).
+- **Heights** (the surface): each mouth line on its arm's height there (`Source.SampleHeight`, as the cap), every other
+  outline point blended by inverse square distance to the mouth lines (exact on one: no step into an arm). Checked as the
+  steepest grade along a connector, mouth to mouth, against today's cap arm end to arm end (Sion median 3.0 % vs 2.9 %, p99
+  15 % vs 12 %). Triangle grades are no measure: ear clipping leaves slivers (today's caps too).
+- **`--junction-failures FILE`** writes the plan of every single-node core failing a check, in one run.
 - **An S holds its lane while a kerb runs beside it** on the side it moves toward (to the corner on the driver's right), then
-  moves at 1:5 at the most; a kerb between arms nearly in line (175 degrees and more, or kerbs meeting far off) is an S between
-  the two kerbs, so a lane moving sideways along it stays inside. Gores (arms under 20 degrees apart) push their mouths to
+  moves at 1:5 at the most. **A corner is an arc only where a turn can round it**: a gap over 150 degrees (180 less a turn's
+  30) is passed by straighter connectors only, so its kerb is an S between the two mouths' kerbs, **pushed out wherever a
+  connector's edge passes beyond it** (the envelope rule again: every kerb, corner or in line, keeps every connector paved).
+  Gores (arms within 20 degrees, either order: curved links may swap them between node and mouth) push their mouths to
   where the kerbs between them meet.
 - **Lines through the core** are connector edges, chosen by `JunctionRules`: the main road's centre line (between its two
   outer-left connectors) where the priority plan carries it; edge guides without lights (the rightmost connector's right
@@ -112,7 +125,7 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
 - **Multi-node cores** (phase 5): a junction whose street to another car-road junction is under 30 m is left out of the
   checks (Sion: 565 of 1,017 junctions; TLM splits many crossings into nodes metres apart).
 - **Checks** (`--junctions new` prints `junction cores`): kerbs starting outside their mouth, connectors leaving the outline
-  (10 cm tolerance), tight corners against #700's, paved area against today's cap **plus its ribbons out to the new mouths**
+  (15 cm tolerance: the mitred edges of a lane whose width eases along a tight curve), tight corners against #700's, paved area against today's cap **plus its ribbons out to the new mouths**
   (the cap alone is a fraction of it). `--debug-junction` lists mouths, corners (radius, floor, the connector that rounds it)
   and connectors (radii least/widest/fill, S holds, OUTSIDE); `--junction-svg` draws the real geometry over today's cap.
 - **Narrowing for the room** lowers the turns passing a corner together down to their vehicles' radius; under it, only
@@ -120,7 +133,7 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   turn the building holds).
 - **Truck paths** (swing out, then turn; the truck yields while it borrows lanes) are #821, after phase 5.
 - **Measured** (Oct 13 2026): test region 13 cores, every check 0, J7's tight corner as #700, 68 truck turns (1 left to a
-  car by a building), mouths median 15.2 m, area x1.15. Sion (141 truck turns, none left to a car) 452 single-node cores, 2,772 connectors: kerbs outside their
-  mouth 21, connectors outside 16, 1 outline crossing itself (gores under 20 degrees, arms whose order flips between node and
-  mouth on curved links); tight corners: both 1, planner only 31 (mostly near-straight corners whose 5-degree "right turn"
-  needs no rounding), #700 only 7 (a left turn passes them); area x1.18 median (p10 1.08, p90 1.36).
+  car by a building), area x1.16. Sion 452 single-node cores, 2,773 connectors (141 for a truck): kerbs outside their mouth 3,
+  connectors outside 2, 1 outline crossing itself, five junctions in all, each at a gore, arms swapping order, or a node with
+  two arms on one heading; tight corners: planner only 15 (corners no turn uses that #700 rounded), #700 only 4 (a left turn
+  passes them); area x1.17 median (p10 1.08, p90 1.34).

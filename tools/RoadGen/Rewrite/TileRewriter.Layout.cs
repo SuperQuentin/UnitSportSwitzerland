@@ -18,6 +18,9 @@ public static partial class TileRewriter
     /// <summary>Print the plan of the junction nearest this LV95 point (<c>--debug-junction E,N</c>), within 30 m.</summary>
     public static (double E, double N)? DebugJunction;
 
+    /// <summary>Every single-node core failing a check (kerb outside its mouth, connector outside, outline crossing itself) described here (<c>--junction-failures FILE</c>).</summary>
+    public static string? JunctionFailures;
+
     /// <summary>With <see cref="DebugJunction"/>, its plan drawn here as an SVG (<c>--junction-svg FILE</c>).</summary>
     public static string? JunctionSvg;
 
@@ -223,6 +226,9 @@ public static partial class TileRewriter
                         else a.MouthDrift = m.Station - a.OldTrim - a.MouthShift;
                     }
         }
+        if (JunctionFailures is { } failures)
+            File.AppendAllText(failures, string.Concat(plans.Where(jp => jp.Core is { } c && !jp.Arms.Any(a => a.Internal)
+                && (c.KerbsNotTangent > 0 || c.ConnectorsOutside > 0 || !c.Simple)).Select(jp => jp.Describe() + "\n")));
         if (DebugJunction is { } dbg)
             foreach (var jp in plans.Where(jp => Math.Abs(dbg.E - jp.Centre.X) < 30 && Math.Abs(dbg.N - jp.Centre.Y) < 30))
             {
@@ -546,7 +552,7 @@ public static partial class TileRewriter
         var stations = new List<double>();
         var lefts = new List<double>();
         var rights = new List<double>();
-        for (double d = 0; d <= Math.Min(reach, length - Math.Max(0, from)) + 1e-6; d += TurnStation)
+        for (double d = 0; d <= Math.Max(0, Math.Min(reach, length - Math.Max(0, from))) + 1e-6; d += TurnStation)
         {
             var (x, y, z, rx, rz) = ArmPoint(seg, atEnd, Math.Max(0, from + d));
             double left = RoomReach, right = RoomReach;

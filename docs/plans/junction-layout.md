@@ -218,6 +218,8 @@ once. Found so far:
   connector (a bend through, a slight "turn" at a fork) fits between them.
 - **A connector's width eases from its lane's to the exit lane's** along its curve: lanes of different widths join with no
   special case.
+- **Every kerb is an envelope**: a corner's arc and the S between arms in line alike keep every connector paved; a corner is
+  an arc only where a turn can round it (a gap under 180 degrees less a turn's 30).
 
 Candidates to check as the work goes on: every marking as the boundary between two
 strips, its style from the pair of kinds; stop lines, crosswalks and give-way rows as lines across an arm at a station,

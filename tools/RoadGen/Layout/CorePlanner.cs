@@ -33,7 +33,12 @@ public static class CorePlanner
     /// <summary>A mouth is never pushed further out than this from the node (m); past it the turn is laid tighter than its vehicle wants.</summary>
     public const double MostMouth = 40;
     /// <summary>Arms closer than this merge their carriageways (a gore); arms within this of a straight line meet with a straight kerb.</summary>
-    public static readonly double GoreAngle = 20 * Math.PI / 180, StraightAngle = 175 * Math.PI / 180;
+    public static readonly double GoreAngle = 20 * Math.PI / 180;
+    /// <summary>
+    /// A corner wider than this is passed only by connectors turning less than <see cref="TurnAngle"/>: no turn rounds it,
+    /// so its kerb is the S between the two mouths (one number with the turn's: 180 degrees less a turn).
+    /// </summary>
+    public static readonly double StraightAngle = Math.PI - 30 * Math.PI / 180;
     /// <summary>A connector turning less than this is laid between the mouths rather than setting them (a bend through, a slight "turn" at a fork).</summary>
     public static readonly double TurnAngle = 30 * Math.PI / 180;
     /// <summary>Lane lines closer than this to parallel are not joined by an arc.</summary>
@@ -42,8 +47,8 @@ public static class CorePlanner
     private const double RoomRadius = 100;
     /// <summary>The largest kerb radius considered (m).</summary>
     private const double MostRadius = 500;
-    /// <summary>A connector's edge may stand this far outside the outline (m): the arcs' chords, the kerbside lanes' edges on the kerb.</summary>
-    public const double OutsideTolerance = 0.1;
+    /// <summary>A connector's edge may stand this far outside the outline (m): the mitred edges of a lane whose width eases along a tight curve.</summary>
+    public const double OutsideTolerance = 0.15;
     /// <summary>An arc is drawn with chords no longer than this (m).</summary>
     private const double Chord = 0.5;
 
@@ -134,14 +139,21 @@ public static class CorePlanner
             }
             if (settled) break;
         }
-        frames = Frames(arms, m);
         core.MouthsAtMost = Enumerable.Range(0, n).Count(k => held[k] && Most(k) >= MostMouth);
         core.MouthsAtReach = Enumerable.Range(0, n).Count(k => held[k] && Most(k) < MostMouth);
 
+        // 3 and 4, until every kerb starts inside its mouth: a corner the final connectors round further (a bend through the
+        // mouths did not reckon with) pushes its mouths out, and all again
+        var least = core.Connectors.ToDictionary(c => c, c => c.MinRadius);
+        List<CoreCorner> corners;
+        for (int round = 0; ; round++)
+        {
+        frames = Frames(arms, m);
         // 3. every connector as wide as fits between the mouths
         foreach (var c in core.Connectors)
         {
             int a = index[c.FromArm], b = index[c.ToArm];
+            (c.MinRadius, c.UnderRadius) = (least[c], false);
             var x = Meet(frames, a, b, c);
             if (x is not { } meet || meet.In <= 0 || meet.Out <= 0)
             {
@@ -162,7 +174,21 @@ public static class CorePlanner
 
         // 4. the corners: each the envelope of its connectors, the turns narrowed where it would start outside a mouth
         // or reach a building
-        var corners = Corners(arms, frames, core.Connectors, index, blocked, mouthCap: true);
+        var narrowed = Corners(arms, frames, core.Connectors, index, blocked, mouthCap: true);
+        // every kerb drawn again from the final connectors: narrowing a turn at one corner tightens its arc, which may cut
+        // deeper into the corner at its other side
+        corners = Corners(arms, frames, core.Connectors, index, blocked, mouthCap: true, narrow: false);
+        for (int k = 0; k < corners.Count; k++) corners[k].RoomClipped = narrowed[k].RoomClipped;
+        bool pushed = false;
+        foreach (var corner in corners.Where(c => c.Shape == CornerShape.Arc))
+            foreach (var (k, at) in (ReadOnlySpan<(int, double)>)[(index[corner.ArmA], corner.StationA), (index[corner.ArmB], corner.StationB)])
+                if (at > m[k] + 0.02 && m[k] < Most(k) - 0.02)
+                {
+                    m[k] = Math.Min(at, Most(k));
+                    pushed = true;
+                }
+        if (!pushed || round >= 3) break;
+        }
         core.Corners.AddRange(corners);
         foreach (var corner in corners)
         {
@@ -364,7 +390,7 @@ public static class CorePlanner
         double alpha = Math.Atan2(ui.Cross(uj), ui.Dot(uj));
         if (alpha <= 0) alpha += 2 * Math.PI;
         double cross = ui.Cross(uj);
-        if (alpha < GoreAngle || alpha >= StraightAngle || Math.Abs(cross) < 1e-9) return null;
+        if (alpha < GoreAngle || alpha > 2 * Math.PI - GoreAngle || alpha >= StraightAngle || Math.Abs(cross) < 1e-9) return null;
         var ki = frames[i].Point(arms[i].Mouth.CarriagewayRight);
         var kj = frames[j].Point(arms[j].Mouth.CarriagewayLeft);
         var meet = ki + ui * ((kj - ki).Cross(uj) / cross);
@@ -414,7 +440,7 @@ public static class CorePlanner
     /// inside both mouths and keeps off the buildings, and each corner's kerb is drawn.
     /// </summary>
     private static List<CoreCorner> Corners(List<ArmPlan> arms, Frame[] frames, List<Connector> connectors, Dictionary<int, int> index,
-        Func<Vec2, bool>? blocked, bool mouthCap)
+        Func<Vec2, bool>? blocked, bool mouthCap, bool narrow = true)
     {
         int n = arms.Count;
         var corners = new List<CoreCorner>(n);
@@ -435,7 +461,8 @@ public static class CorePlanner
             Vec2? meet = Math.Abs(cross) < 1e-9 ? null : ki + ui * ((kj - ki).Cross(uj) / cross);
             double si = meet is { } q ? fi.StationOf(q) : double.NaN, sj = meet is { } r0 ? fj.StationOf(r0) : double.NaN;
             corner.StationA = corner.StationB = double.NaN;
-            if (alpha < GoreAngle)
+            // arms within GoreAngle either way (their order at the mouths may differ from the node's)
+            if (alpha < GoreAngle || alpha > 2 * Math.PI - GoreAngle)
             {
                 // two arms leaving almost together: their carriageways part where the kerbs between them meet (the gore's
                 // nose); the mouths are pushed out to it, as far as they go
@@ -462,21 +489,11 @@ public static class CorePlanner
                 }
                 else
                 {
-                    // arms in line: the kerb eases from one to the other as an S (a lane moving sideways along it stays inside)
+                    // arms in line: the kerb eases from one to the other as an S, pushed out where a connector passes beyond it
+                    // (the envelope rule, as at a corner: every kerb keeps every connector paved)
                     corner.Shape = CornerShape.Chord;
                     if (mouthCap)
-                    {
-                        var from = fi.Point(arms[i].Mouth.CarriagewayRight);
-                        var to = fj.Point(arms[j].Mouth.CarriagewayLeft);
-                        double l = from.DistanceTo(to) / 3;
-                        Vec2 c1 = from - ui * l, c2 = to - uj * l;
-                        const int Steps = 12;
-                        for (int k = 1; k < Steps; k++)
-                        {
-                            double t = (double)k / Steps, mt = 1 - t;
-                            corner.Kerb.Add(from * (mt * mt * mt) + c1 * (3 * mt * mt * t) + c2 * (3 * mt * t * t) + to * (t * t * t));
-                        }
-                    }
+                        corner.Kerb.AddRange(InLineKerb(fi.Point(arms[i].Mouth.CarriagewayRight), -ui, fj.Point(arms[j].Mouth.CarriagewayLeft), uj, connectors));
                 }
                 continue;
             }
@@ -494,7 +511,7 @@ public static class CorePlanner
                 double cap = Math.Max(corner.Floor, legs * Math.Tan(half));
                 double band = Math.Max(Bands(arms[i].Mouth, right: true), Bands(arms[j].Mouth, right: false));
                 double room = blocked is null ? MostRadius : Room(c, half, bisector, band, corner.Floor, blocked);
-                if (r > Math.Min(cap, room) + 1e-3)
+                if (narrow && r > Math.Min(cap, room) + 1e-3)
                 {
                     corner.RoomClipped = room < cap && r > room + 1e-3;
                     Narrow(frames, index, connectors, c, ui, uj, half, bisector, corner.Floor, Math.Min(cap, room), lowest: corner.RoomClipped ? -1 : 0);
@@ -517,6 +534,39 @@ public static class CorePlanner
             for (int k = 0; k <= steps; k++) corner.Kerb.Add(o + Vec2.FromHeading(a0 + sweep * k / steps) * r);
         }
         return corners;
+    }
+
+    /// <summary>
+    /// The kerb between two arms in line, from arm A's right kerb at its mouth (leaving along <paramref name="din"/>) to arm B's
+    /// left kerb at its (arriving along <paramref name="dout"/>), its ends left out: an S between them, each point pushed out
+    /// (to the right of the way from A to B: away from the core) as far as a connector's edge passes beyond it there.
+    /// </summary>
+    private static List<Vec2> InLineKerb(Vec2 from, Vec2 din, Vec2 to, Vec2 dout, List<Connector> connectors)
+    {
+        double l = from.DistanceTo(to) / 3;
+        Vec2 c1 = from + din * l, c2 = to - dout * l;
+        int steps = Math.Max(4, (int)Math.Ceiling(from.DistanceTo(to) / Chord));
+        var s = new List<Vec2>(steps + 1);
+        for (int k = 0; k <= steps; k++)
+        {
+            double t = (double)k / steps, mt = 1 - t;
+            s.Add(from * (mt * mt * mt) + c1 * (3 * mt * mt * t) + c2 * (3 * mt * t * t) + to * (t * t * t));
+        }
+        var edges = connectors.SelectMany(c => c.Left.Concat(c.Right)).ToList();
+        var kerb = new List<Vec2>(steps - 1);
+        for (int k = 1; k < steps; k++)
+        {
+            var along = (s[k + 1] - s[k - 1]).Normalized();
+            var outward = -along.Perp;
+            double half = s[k + 1].DistanceTo(s[k - 1]) * 0.5, push = 0;
+            foreach (var p in edges)
+            {
+                var d = p - s[k];
+                if (Math.Abs(d.Dot(along)) <= half) push = Math.Max(push, d.Dot(outward));
+            }
+            kerb.Add(s[k] + outward * (push > 0 ? push + 0.02 : 0));
+        }
+        return kerb;
     }
 
     /// <summary>The side bands' width beyond a section's kerb: its right side's (seen driving in) or its left side's.</summary>

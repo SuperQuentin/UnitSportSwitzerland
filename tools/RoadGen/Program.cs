@@ -55,7 +55,8 @@ if (args.Length == 0 || args.Contains("--help") || args.Contains("-h"))
                                  nodes, then the network stage; prints the junction table (--temp DIR: raw input,
                                  default DIR_temp). Clears DIR first, only if this command wrote it
           --junctions new       (--rewrite, --test-region) also run the junction planner (#818) and report its plans;
-                                 --debug-junction E,N prints the plan of the junction there (--junction-svg FILE draws it)
+                                 --debug-junction E,N prints the plan of the junction there (--junction-svg FILE draws it); --junction-failures FILE
+                                 describes every core failing a check
           --compare-v2 V2DIR --chunks V3DIR
                                  v3 tiles against a v2 build of the same region: same geometry,
                                  one-way agreement with the runtime inference, bytes per tile
@@ -305,6 +306,7 @@ void RunCase(string name, Func<RoadNetwork> build, Func<Vec2, double>? height)
 
 void DebugJunctionArg()
 {
+    TileRewriter.JunctionFailures = ArgValue("--junction-failures");
     if (ArgValue("--debug-junction") is not { } at) return;
     var en = at.Split(',');
     TileRewriter.DebugJunction = (double.Parse(en[0], CultureInfo.InvariantCulture), double.Parse(en[1], CultureInfo.InvariantCulture));
