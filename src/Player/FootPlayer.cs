@@ -2583,6 +2583,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (TryFarmTank()) return true;
         // the door (or the machine) you are at, worked precisely (#261): no more "whatever is in 3.5 m"
         if (TryVehicleAt()) return true;
+        // a building site's skip or materials faced (#627): searched in the loot panel, before a door
+        if (Loot.LootService.Instance?.TrySearchYard(this) == true) return true;
 
         // someone else's vehicle, being driven: a seat in it (#158), standing at it
         if (OnlineSeats && DrivenVehicleInReach(EnterReach) is { } driven)

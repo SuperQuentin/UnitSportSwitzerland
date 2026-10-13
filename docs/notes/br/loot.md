@@ -10,6 +10,7 @@
   - `LootService.MaskOf/SetMask` keep a match's taken marks in memory (`_matchMasks`), never in
     `user://loot/`. `ForgetMatch()` clears them at the end. Free-roam loot and its files are untouched.
   - Gun lockers and safes still need the dial. Their combination uses the match epoch.
+  - A building site's yard containers in the region (#627) roll `MatchTable.Supply` (`YardMatch`, the `loot/yard-loot` note).
 - **`MatchLoot.Roll(MatchTable, rng)`** (pure). A gun always comes with rounds for it.
 
   | Table | Contents |

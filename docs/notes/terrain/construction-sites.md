@@ -216,8 +216,8 @@ foundations, the office two high, determinism. Pictures: `--shot-queue` on the g
 
 ### Not done
 
-- **Loot outside the office** (the materials, the skips) needs a container identity outside an
-  interior and server ownership: #627. The office's is ordinary interior loot (#822).
+- Loot: the materials and the skips are searched outdoors (#627, `loot/yard-loot`); the office's
+  and the cabins' is ordinary interior loot (#822).
 - The office has no stair to its upper containers (see "The site office (#822)", Not done); the
   lamps do not blink at night.
 
@@ -375,3 +375,5 @@ The sound of a site (#617): hammering, a vibrator, a grinder, a beeper, a radio 
 The machines on a site (#616): its excavator and wheel loader stand as dormant vehicles and wake when aimed at. The crew's van stands as a car. The rest wait for #613 and #614: `vehicles/dormant-vehicles` (the fourth provider), `tools/sitemachinenetcheck.sh`.
 
 In the model viewer (`--models`): `Construction/SiteShowcase`, "Terrain / Building site", one hand-made site per phase (foundations, shell, a topped-out house and block), planned, shelled, dressed and craned by the game's own builders on flat ground, the cranes slewing by the clocks.
+
+The yard's skips and materials are loot containers outdoors (#627): `loot/yard-loot`.

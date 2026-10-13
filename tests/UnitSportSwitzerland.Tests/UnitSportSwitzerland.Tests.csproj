@@ -121,6 +121,10 @@
     <Compile Include="..\..\src\Terrain\Construction\ShellPlan.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Construction\SiteDressing.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Construction\SiteOffice.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- the yard's loot containers (#627), Godot maths only -->
+    <Compile Include="..\..\src\Terrain\Construction\SiteLoot.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- and what one rolls in a Battle Royale match (#627) -->
+    <Compile Include="..\..\src\Loot\MatchTable.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Construction\CraneMotion.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Construction\CranePlan.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the sound of a site (#617): the scheduler and the synthesis, Godot maths only -->

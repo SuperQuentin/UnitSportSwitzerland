@@ -649,3 +649,9 @@ src/Terrain/Construction/SiteOffice quick --interiorcheck --doorkind UnderConstr
 src/Interiors/InteriorGenerator.SiteOffice net tools/siteofficenetcheck.sh
 src/Interiors/SiteOfficeNetProbe net tools/siteofficenetcheck.sh
 src/Terrain/Construction/SiteOffice net tools/siteofficenetcheck.sh
+# #627: a building site's skip searched outdoors, the take seen by a peer with it open and by a late joiner (generated world)
+src/Loot/                net    tools/yardlootnetcheck.sh
+src/Terrain/Construction/SiteLoot net tools/yardlootnetcheck.sh
+src/Terrain/Construction/SiteDressing net tools/yardlootnetcheck.sh
+src/Terrain/Construction/SitePlans net tools/yardlootnetcheck.sh
+tools/yardlootnetcheck   net    tools/yardlootnetcheck.sh
