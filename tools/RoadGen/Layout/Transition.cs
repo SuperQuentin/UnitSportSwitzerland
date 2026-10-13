@@ -65,6 +65,8 @@ public sealed class Transition
     public int KerbRightCm { get; init; }
     /// <summary>What happens along it, in order, for <c>--debug-junction</c> (e.g. "lane 100 closes 40-50 m").</summary>
     public List<string> Events { get; } = new();
+    /// <summary>Its paint, by rule (<see cref="TransitionPaint"/>).</summary>
+    public TransitionMarkings? Markings { get; set; }
     /// <summary>Its events did not fit the street before the far end (m squeezed off; a check).</summary>
     public double Squeezed { get; set; }
 

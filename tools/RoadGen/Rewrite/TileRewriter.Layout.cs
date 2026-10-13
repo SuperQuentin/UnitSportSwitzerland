@@ -237,6 +237,10 @@ public static partial class TileRewriter
             a.TransitionRoom = Math.Max(0, a.Length + on - (a.StreetOn.Count > 0 ? a.FarArm?.MouthShift ?? 0 : 0));
         }
         TransitionPlanner.PlanAll(plans);
+        var planOf = plans.SelectMany(p => p.Arms.Select(a => (a, p))).ToDictionary(x => x.a, x => x.p);
+        foreach (var t in plans.SelectMany(p => p.Arms).Select(a => a.Transition).OfType<Transition>().Distinct())
+            t.Markings = TransitionPaint.Of(t, StreetPaint.Of(segmentOf[t.Arm.LinkId].Segment), planOf[t.Arm].Lights,
+                t.Far is { } f && planOf[f].Lights);
         if (JunctionFailures is { } failures)
             File.AppendAllText(failures, string.Concat(plans.Where(jp => jp.Core is { } c && !jp.Arms.Any(a => a.Internal)
                 && (c.KerbsNotTangent > 0 || c.ConnectorsOutside > 0 || !c.Simple)).Select(jp => jp.Describe() + "\n")));

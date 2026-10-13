@@ -185,11 +185,18 @@ public static class PlanSvg
             if (!near) strip = strip with { Way = strip.Way == StripWay.In ? StripWay.Out : strip.Way == StripWay.Out ? StripWay.In : StripWay.None };
             var pts = list.Select(x => P(x.S, x.Span.From)).Concat(list.AsEnumerable().Reverse().Select(x => P(x.S, x.Span.To)));
             sb.Append("<polygon points=\"").Append(string.Join(" ", pts.Select(pt)))
-              .Append(inv, $"\" fill=\"{Fill(strip)}\" stroke=\"#ffffff\" stroke-width=\"0.08\" stroke-opacity=\"0.6\"/>\n");
+              .Append(inv, $"\" fill=\"{Fill(strip)}\"{(t.Markings is null ? " stroke=\"#ffffff\" stroke-width=\"0.08\" stroke-opacity=\"0.6\"" : "")}/>\n");
         }
-        // the centre line, the transition's far end, and the lane arrows' moves at the mouth
-        var centre = at.Select(s => P(s, near ? t.CentreAt(Math.Min(s, t.Length)) : -t.CentreAt(Math.Max(0, t.Length - s)))).ToList();
-        sb.Append("<polyline points=\"").Append(string.Join(" ", centre.Select(pt))).Append("\" fill=\"none\" stroke=\"#f2c230\" stroke-width=\"0.3\"/>\n");
+        if (t.Markings is { } paint)
+        {
+            // the paint by rule (drawn by the arm whose mouth is at its station 0)
+            if (near) Markings(sb, t, paint, length, P, pt);
+        }
+        else
+        {
+            var centre = at.Select(s => P(s, near ? t.CentreAt(Math.Min(s, t.Length)) : -t.CentreAt(Math.Max(0, t.Length - s)))).ToList();
+            sb.Append("<polyline points=\"").Append(string.Join(" ", centre.Select(pt))).Append("\" fill=\"none\" stroke=\"#f2c230\" stroke-width=\"0.3\"/>\n");
+        }
         if (near && t.Length <= length)
         {
             var (l, r) = (t.BoundaryAt(0, t.Length), t.BoundaryAt(t.Strips.Count, t.Length));
@@ -207,6 +214,36 @@ public static class PlanSvg
         }
         var label = pt(P(length + 4, 0)).Split(',');
         sb.Append(inv, $"<text x=\"{label[0]}\" y=\"{double.Parse(label[1], inv) + 1.5:F2}\" font-size=\"4.5\" font-weight=\"700\" text-anchor=\"middle\" fill=\"#1b2327\">{JunctionPlan.Compass(a.Heading)}</text>\n");
+    }
+
+    /// <summary>A transition's paint: lines along their boundaries (dashed as painted), hatch stripes, arrows and bike symbols as glyphs.</summary>
+    private static void Markings(StringBuilder sb, Transition t, TransitionMarkings paint, double length, Func<double, double, Vec2> p, Func<Vec2, string> pt)
+    {
+        var inv = CultureInfo.InvariantCulture;
+        foreach (var l in paint.Lines)
+        {
+            double to = Math.Min(l.To, length);
+            if (to <= l.From) continue;
+            var ss = new SortedSet<double> { l.From, to };
+            for (double s = Math.Ceiling(l.From * 2) / 2; s < to; s += 0.5) ss.Add(s);
+            foreach (double s in t.Stations) if (s > l.From && s < to) ss.Add(s);
+            var pts = ss.Select(s => p(s, t.BoundaryAt(l.Boundary, s) + l.Offset));
+            string colour = l.Rgba == Meshing.PaintEmitter.Yellow ? "#f0c419" : "#ffffff";
+            string dash = l.Dash > 0 ? string.Create(inv, $" stroke-dasharray=\"{l.Dash} {l.Gap}\"") : "";
+            sb.Append("<polyline points=\"").Append(string.Join(" ", pts.Select(pt)))
+              .Append(inv, $"\" fill=\"none\" stroke=\"{colour}\" stroke-width=\"{l.Width:F2}\"{dash}/>\n");
+        }
+        foreach (var q in paint.Stripes)
+            if (q.All(x => x.S <= length))
+                sb.Append("<polygon points=\"").Append(string.Join(" ", q.Select(x => pt(p(x.S, x.O))))).Append("\" fill=\"#ffffff\"/>\n");
+        foreach (var mark in paint.Marks)
+        {
+            if (mark.Station > length) continue;
+            var (f, to) = t.SpanAt(mark.Strip, mark.Station);
+            var at = pt(p(mark.Station - (mark.Bike ? 0.5 : 3.25), (f + to) * 0.5)).Split(',');
+            string text = mark.Bike ? "bike" : (mark.Arrow.HasFlag(PaintArrow.Left) ? "←" : "") + (mark.Arrow.HasFlag(PaintArrow.Straight) ? "↑" : "") + (mark.Arrow.HasFlag(PaintArrow.Right) ? "→" : "");
+            sb.Append(inv, $"<text x=\"{at[0]}\" y=\"{double.Parse(at[1], inv) + 0.6:F2}\" font-size=\"{(mark.Bike ? 1.0 : 1.8)}\" text-anchor=\"middle\" fill=\"{(mark.Bike ? "#5b4a00" : "#ffffff")}\">{text}</text>\n");
+        }
     }
 
     /// <summary>Every strip id of either section, in their left-to-right order (the mouth's, the normal's merged in).</summary>
