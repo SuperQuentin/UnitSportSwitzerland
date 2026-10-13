@@ -18,6 +18,9 @@ public static partial class TileRewriter
     /// <summary>Print the plan of the junction nearest this LV95 point (<c>--debug-junction E,N</c>), within 30 m.</summary>
     public static (double E, double N)? DebugJunction;
 
+    /// <summary>With <see cref="DebugJunction"/>, its plan drawn here as an SVG (<c>--junction-svg FILE</c>).</summary>
+    public static string? JunctionSvg;
+
     /// <summary>The room beside an arm is measured this far out from its axis at most (m), every <see cref="TurnStation"/>.</summary>
     private const double RoomReach = 20, RoomStep = 0.25;
 
@@ -125,7 +128,11 @@ public static partial class TileRewriter
                 if (!dropped) break;
             }
             if (DebugJunction is { } dbg && Math.Abs(dbg.E - jp.Centre.X) < 30 && Math.Abs(dbg.N - jp.Centre.Y) < 30)
+            {
                 (log ?? Console.WriteLine)(jp.Describe());
+                if (JunctionSvg is { } svg)
+                    File.WriteAllText(svg, PlanSvg.Draw(jp, FormattableString.Invariant($"junction plan at LV95 {jp.Centre.X:F0},{jp.Centre.Y:F0}{(jp.Lights ? ", lights" : "")} (#818, schematic: arms straight along their heading)")));
+            }
         }
         return plans;
     }
