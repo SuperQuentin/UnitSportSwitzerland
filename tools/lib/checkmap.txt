@@ -52,6 +52,11 @@ src/Terrain/Construction/ quick --constructioncheck --systems ui
 # #608: a body walks every storey of hand-made sites' shells, on their real collision
 src/Terrain/Construction/ quick --shellwalkcheck --world flat
 src/Terrain/BuildingMeshBuilder quick --shellwalkcheck --world flat
+# #618: a tower crane climbed, worked on the real levers, a pallet hooked onto the top slab, let go and resumed, the remote
+src/Terrain/Construction/ quick --cranecheck --world flat --systems physics,ui
+src/Player/FootPlayer.Crane quick --cranecheck --world flat --systems physics,ui
+src/Player/FootPlayer.Carried quick --cranecheck --world flat --systems physics,ui
+src/Items/PalletService   quick  --cranecheck --world flat --systems physics,ui
 src/Terrain/WaterProbe   quick  --waterprobe 2553000,1139500,30,10 --systems terrain,generated,physics
 tools/TerrainFormat/Water quick --waterprobe 2553000,1139500,30,10 --systems terrain,generated,physics
 src/Items/               quick  --invcheck
