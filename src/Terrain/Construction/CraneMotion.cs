@@ -95,12 +95,17 @@ public static class CraneMotion
     }
 
     /// <summary>Each crane on its own phase, so two cranes of a site never lift in step.</summary>
-    private static double Offset(CraneJob job) => Fnv.Unit(job.Key + "|crane|phase") * Cycle;
+    private static double Offset(CraneJob job) => Offset(job.Key);
+
+    private static double Offset(string key) => Fnv.Unit(key + "|crane|phase") * Cycle;
 
     /// <summary>When the first cycle after <paramref name="sim"/> starts, simulated seconds.</summary>
-    public static double NextCycle(CraneJob job, double sim)
+    public static double NextCycle(CraneJob job, double sim) => NextCycle(job.Key, sim);
+
+    /// <summary>When the first cycle of the crane named <paramref name="key"/> after <paramref name="sim"/> starts.</summary>
+    public static double NextCycle(string key, double sim)
     {
-        double offset = Offset(job);
+        double offset = Offset(key);
         return (Math.Floor((sim + offset) / Cycle) + 1) * Cycle - offset;
     }
 
@@ -125,8 +130,8 @@ public static class CraneMotion
     }
 
     /// <summary>Whether a release still shapes the pose at <paramref name="sim"/>: false once the crane is back on its schedule.</summary>
-    public static bool Resuming(CraneJob job, double leftAt, double sim) =>
-        sim < NextCycle(job, leftAt) + Cycle * ResumeShare;
+    public static bool Resuming(string key, double leftAt, double sim) =>
+        sim < NextCycle(key, leftAt) + Cycle * ResumeShare;
 
     /// <summary>The yaw that points the jib at a target, and how far out the trolley must run.</summary>
     public static (float Yaw, float Out) Aim(CraneJob job, Vector3 target)

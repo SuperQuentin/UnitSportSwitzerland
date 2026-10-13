@@ -862,6 +862,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         // pallets a forklift has moved (#583): the server keeps them for the session, offline this client does
         Items.PalletService.Create(this, origin, server: false).Source = () => _chunks?.Source;
+        // cranes players work (#618): the server says who works which, offline this client does
+        Terrain.Construction.CraneService.Create(this, server: false).Source = () => _chunks?.Source;
         // built structures (#274): the server owns them, offline this client does
         if (Systems.On(Systems.Build))
         {

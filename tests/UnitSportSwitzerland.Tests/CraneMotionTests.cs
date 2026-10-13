@@ -144,8 +144,8 @@ public class CraneMotionTests
         // past the blend it is the schedule exactly, and no longer resuming
         double after = start + CraneMotion.Cycle * CraneMotion.ResumeShare + 0.01;
         Assert.Equal(CraneMotion.Pose(Job, after, hour, 1), CraneMotion.Resume(Job, Left, at, after, hour, 1));
-        Assert.False(CraneMotion.Resuming(Job, at, after));
-        Assert.True(CraneMotion.Resuming(Job, at, after - 0.1));
+        Assert.False(CraneMotion.Resuming(Job.Key, at, after));
+        Assert.True(CraneMotion.Resuming(Job.Key, at, after - 0.1));
     }
 
     [Fact]
