@@ -168,7 +168,7 @@ public sealed class Section
         return sb.ToString();
     }
 
-    private static string Name(StripKind k) => k switch
+    public static string Name(StripKind k) => k switch
     {
         StripKind.Sidewalk => "walk",
         StripKind.Buffer => "buffer",

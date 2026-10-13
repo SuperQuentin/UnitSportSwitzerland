@@ -22,7 +22,7 @@ public static class PlanSvg
         var inv = CultureInfo.InvariantCulture;
         var core = plan.Core;
         double reach = core is { Mouths.Count: > 0 } ? core.Mouths.Max(m => m.Station) : MouthAt;
-        double half = reach + Shown + 8;
+        double half = reach + plan.Arms.Select(ShownOf).DefaultIfEmpty(Shown).Max() + 8;
         int px = (int)(half * 2 * Scale);
         double rows = plan.Arms.Count * 4.2 + 12;
         var sb = new StringBuilder();
@@ -92,8 +92,15 @@ public static class PlanSvg
         _ => "#f4f4f4",
     };
 
+    /// <summary>How far out an arm is drawn: its transition and a little of the street beyond, at most <see cref="MaxShown"/>.</summary>
+    private static double ShownOf(ArmPlan a) =>
+        Math.Min(Math.Max(5, a.Length), Math.Min(MaxShown, Math.Max(Shown, (a.Transition?.Length ?? 0) + 6)));
+
+    private const double MaxShown = 110;
+
     private static void Arm(StringBuilder sb, ArmPlan a, double mouthAt, Func<Vec2, string> pt)
     {
+        if (a.Transition is { } tr) { TransitionArm(sb, a, tr, mouthAt, pt); return; }
         var inv = CultureInfo.InvariantCulture;
         var axis = a.Axis ?? ArmAxis.Straight(Vec2.Zero, a.Heading);
         double hold = a.Openings.Count > 0 ? a.Openings.Max(o => o.Storage) : 0;
@@ -144,6 +151,59 @@ public static class PlanSvg
             var at = pt(P(3.5, (f + t) * 0.5)).Split(',');
             bool bike = s.Kind == StripKind.BikeLane;
             sb.Append(inv, $"<text x=\"{at[0]}\" y=\"{double.Parse(at[1], inv) + 0.8:F2}\" font-size=\"{(bike ? 1.6 : 2.4)}\" text-anchor=\"middle\" font-weight=\"700\" fill=\"{(bike ? "#5b4a00" : "#ffffff")}\">{(bike ? "b" : "")}{Section.MovesName(s.Moves)}</text>\n");
+        }
+        var label = pt(P(length + 4, 0)).Split(',');
+        sb.Append(inv, $"<text x=\"{label[0]}\" y=\"{double.Parse(label[1], inv) + 1.5:F2}\" font-size=\"4.5\" font-weight=\"700\" text-anchor=\"middle\" fill=\"#1b2327\">{JunctionPlan.Compass(a.Heading)}</text>\n");
+    }
+
+    /// <summary>
+    /// An arm drawn from its transition (step 4): every strip's span along it, metre by metre and at each station, then the street's
+    /// normal section on beyond; for the far end of a transition shared with the next junction, the same seen from this end.
+    /// </summary>
+    private static void TransitionArm(StringBuilder sb, ArmPlan a, Transition t, double mouthAt, Func<Vec2, string> pt)
+    {
+        var inv = CultureInfo.InvariantCulture;
+        var axis = a.Axis ?? ArmAxis.Straight(Vec2.Zero, a.Heading);
+        bool near = t.Arm == a;
+        double length = ShownOf(a);
+        Vec2 P(double s, double o) => axis.At(mouthAt + s, o);
+        // stations from this arm's mouth, a metre apart and at the transition's own
+        var at = new SortedSet<double>();
+        for (double s = 0; s <= length + 1e-6; s += Step) at.Add(s);
+        foreach (double s in t.Stations) { double here = near ? s : t.Length - s; if (here >= 0 && here <= length) at.Add(here); }
+        (double From, double To) Span(int k, double s)
+        {
+            if (near) return t.SpanAt(k, Math.Min(s, t.Length));
+            var (f, to) = t.SpanAt(k, Math.Max(0, t.Length - s));
+            return (-to, -f);
+        }
+        for (int k = 0; k < t.Strips.Count; k++)
+        {
+            var list = at.Select(s => (S: s, Span: Span(k, s))).ToList();
+            if (list.All(x => x.Span.To - x.Span.From < 0.01)) continue;
+            var strip = t.Strips[k].Strip;
+            if (!near) strip = strip with { Way = strip.Way == StripWay.In ? StripWay.Out : strip.Way == StripWay.Out ? StripWay.In : StripWay.None };
+            var pts = list.Select(x => P(x.S, x.Span.From)).Concat(list.AsEnumerable().Reverse().Select(x => P(x.S, x.Span.To)));
+            sb.Append("<polygon points=\"").Append(string.Join(" ", pts.Select(pt)))
+              .Append(inv, $"\" fill=\"{Fill(strip)}\" stroke=\"#ffffff\" stroke-width=\"0.08\" stroke-opacity=\"0.6\"/>\n");
+        }
+        // the centre line, the transition's far end, and the lane arrows' moves at the mouth
+        var centre = at.Select(s => P(s, near ? t.CentreAt(Math.Min(s, t.Length)) : -t.CentreAt(Math.Max(0, t.Length - s)))).ToList();
+        sb.Append("<polyline points=\"").Append(string.Join(" ", centre.Select(pt))).Append("\" fill=\"none\" stroke=\"#f2c230\" stroke-width=\"0.3\"/>\n");
+        if (near && t.Length <= length)
+        {
+            var (l, r) = (t.BoundaryAt(0, t.Length), t.BoundaryAt(t.Strips.Count, t.Length));
+            sb.Append("<polyline points=\"").Append(pt(P(t.Length, l - 1))).Append(' ').Append(pt(P(t.Length, r + 1)))
+              .Append("\" fill=\"none\" stroke=\"#1b2327\" stroke-width=\"0.15\" stroke-dasharray=\"0.5 0.5\"/>\n");
+        }
+        for (int k = 0; k < a.Mouth.Strips.Count; k++)
+        {
+            var s = a.Mouth.Strips[k];
+            if (s.Way != StripWay.In || s.Moves == SignalMoves.None) continue;
+            var (f, to) = a.Mouth.Span(k);
+            var p = pt(P(3.5, (f + to) * 0.5)).Split(',');
+            bool bike = s.Kind == StripKind.BikeLane;
+            sb.Append(inv, $"<text x=\"{p[0]}\" y=\"{double.Parse(p[1], inv) + 0.8:F2}\" font-size=\"{(bike ? 1.6 : 2.4)}\" text-anchor=\"middle\" font-weight=\"700\" fill=\"{(bike ? "#5b4a00" : "#ffffff")}\">{(bike ? "b" : "")}{Section.MovesName(s.Moves)}</text>\n");
         }
         var label = pt(P(length + 4, 0)).Split(',');
         sb.Append(inv, $"<text x=\"{label[0]}\" y=\"{double.Parse(label[1], inv) + 1.5:F2}\" font-size=\"4.5\" font-weight=\"700\" text-anchor=\"middle\" fill=\"#1b2327\">{JunctionPlan.Compass(a.Heading)}</text>\n");

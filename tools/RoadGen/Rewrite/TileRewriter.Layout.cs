@@ -95,7 +95,7 @@ public static partial class TileRewriter
                     Arm = i, LinkId = arm.LinkId, AtEnd = atEnd, Heading = junction.Arms[i].OutwardHeading, Normal = normal, Wants = wants,
                     Wanted = wantedSection, Mouth = wantedSection, Length = SegmentLength(so.Segment), StreetLength = SegmentLength(so.Segment), Exit = need?.Exit ?? -1,
                     Major = info.Class <= RoadClass.Major, Axis = AxisOf(net.Links[arm.LinkId], atEnd), OldTrim = junction.Arms[i].Trim,
-                    Reach = ReachOf(net, net.Links[arm.LinkId], atEnd, out bool inner), Internal = inner,
+                    Reach = ReachOf(net, net.Links[arm.LinkId], atEnd, out bool inner), Internal = inner, StreetOn = StreetOn(net, arm.LinkId, atEnd).Links,
                 });
             }
             // beside a right pocket the through riders' lane runs between it and the through lane (layout b): without lights always;
@@ -226,6 +226,17 @@ public static partial class TileRewriter
                         else a.MouthDrift = m.Station - a.OldTrim - a.MouthShift;
                     }
         }
+        // 7. each arm's transition from its mouth out (step 4), one for both ends where the street between is too short for two;
+        // the street runs on past nodes where only two car roads meet
+        foreach (var a in plans.SelectMany(p => p.Arms))
+        {
+            double on = 0;
+            foreach (var (link, _) in a.StreetOn)
+                on += net.Links[link].Alignment is { IsEmpty: false } al ? al.Length : PolylineLength(net.Links[link].Centreline);
+            a.FarArm = a.StreetOn.Count > 0 ? byEnd.GetValueOrDefault((a.StreetOn[^1].Link, !a.StreetOn[^1].AtEnd)) : Far(a);
+            a.TransitionRoom = Math.Max(0, a.Length + on - (a.StreetOn.Count > 0 ? a.FarArm?.MouthShift ?? 0 : 0));
+        }
+        TransitionPlanner.PlanAll(plans);
         if (JunctionFailures is { } failures)
             File.AppendAllText(failures, string.Concat(plans.Where(jp => jp.Core is { } c && !jp.Arms.Any(a => a.Internal)
                 && (c.KerbsNotTangent > 0 || c.ConnectorsOutside > 0 || !c.Simple)).Select(jp => jp.Describe() + "\n")));
@@ -256,6 +267,41 @@ public static partial class TileRewriter
         inner = junction && length < InternalLink;
         // the street goes on past a node that is no junction of car roads (an end may only be the block's edge)
         return !inner && junction ? length * 0.5 : double.MaxValue;
+    }
+
+    /// <summary>A transition runs on along its street at most this far past its own link (m).</summary>
+    private const double StreetOnMost = 150;
+
+    /// <summary>
+    /// The links a street runs on past an arm's own link, junction side first (#818: a transition may run on there): on through
+    /// every node where only two car roads meet (TLM splits a street wherever an attribute changes, or a path joins), up to
+    /// <see cref="StreetOnMost"/> m, each with whether the junction side is its last point; and their length.
+    /// </summary>
+    private static (List<(int Link, bool AtEnd)> Links, double Length) StreetOn(RoadNetwork net, int linkId, bool atEnd)
+    {
+        var links = new List<(int, bool)>();
+        double length = 0;
+        var seen = new HashSet<int> { linkId };
+        int link = linkId;
+        bool end = atEnd;
+        while (length < StreetOnMost)
+        {
+            var l = net.Links[link];
+            int node = end ? l.StartNode : l.EndNode;
+            if (node < 0 || node >= net.Nodes.Count) break;
+            var cars = net.Nodes[node].Approaches.Where(a => InfoOf(net.Links[a.LinkId]) is { } info && PriorityPlanner.IsCarRoad(info.Class)).ToList();
+            if (cars.Count != 2) break;
+            var here = end ? LinkEnd.Start : LinkEnd.End;   // where this link meets the node
+            var next = cars.FirstOrDefault(a => a.LinkId != link || a.End != here);
+            if (next.LinkId == link || !seen.Add(next.LinkId)) break;
+            // the next link leaves this node: its junction side is the end at this node
+            link = next.LinkId;
+            end = next.End == LinkEnd.End;
+            links.Add((link, end));
+            var nl = net.Links[link];
+            length += nl.Alignment is { IsEmpty: false } al ? al.Length : PolylineLength(nl.Centreline);
+        }
+        return (links, length);
     }
 
     private static double PolylineLength(List<Vec2> line)

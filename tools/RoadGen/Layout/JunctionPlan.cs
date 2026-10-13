@@ -84,6 +84,17 @@ public sealed class ArmPlan
     public double Reach { get; init; } = double.MaxValue;
     /// <summary>A Major road (or bigger): a turn between two of them is laid for a truck (<see cref="CorePlanner.TruckInner"/>) where it fits untouched.</summary>
     public bool Major { get; init; }
+    /// <summary>Its transition from the mouth out (step 4), shared with the arm at the street's far end where both are one; null where nothing changes.</summary>
+    public Transition? Transition { get; set; }
+    /// <summary>
+    /// The links its street runs on past its own, junction side first (through nodes where only two car roads meet: TLM splits a
+    /// street wherever an attribute changes), with whether the junction side is each one's last point: a transition runs on there.
+    /// </summary>
+    public List<(int Link, bool AtEnd)> StreetOn { get; init; } = new();
+    /// <summary>The street from the mouth to the junction at its far end's mouth (or as far as it runs on): what a transition has (m).</summary>
+    public double TransitionRoom { get; set; }
+    /// <summary>The planned arm at the street's far end (past <see cref="StreetOn"/>), whose transition may be one with this arm's.</summary>
+    public ArmPlan? FarArm { get; set; }
     public bool HasLeft => Mouth.Strips.Any(s => PocketRules.Left.Owns(s.Id));
     public bool HasRight => Mouth.Strips.Any(s => PocketRules.Right.Owns(s.Id));
 }
@@ -205,6 +216,26 @@ public sealed class JunctionPlan
             + string.Create(inv, $"steepest grade mouth to mouth per junction: cores median {Median(grades) * 100:F1} %, p99 {P(grades, 0.99) * 100:F1} % (caps {Median(oldGrades) * 100:F1} %, p99 {P(oldGrades, 0.99) * 100:F1} %; steepest {string.Join("; ", steepest)})");
     }
 
+    /// <summary>
+    /// The region's transitions in one line (#818 step 4): how many, how many hold both ends of a short street (#325 and its
+    /// kin), their lengths, and those squeezed into a street too short for their events (a check).
+    /// </summary>
+    /// <summary>A transition squeezed by more than this (m) into its street is reported: its 1:6 eases run under a lane change's length.</summary>
+    public const double SqueezeReported = 2;
+
+    public static string TransitionSummary(IReadOnlyList<JunctionPlan> plans)
+    {
+        var inv = CultureInfo.InvariantCulture;
+        // a multi-node core's internal street is the core's (phase 5): left out
+        var all = plans.SelectMany(p => p.Arms).Where(a => !a.Internal).Select(a => a.Transition).OfType<Transition>().Distinct().ToList();
+        var lengths = all.Select(t => t.Length).OrderBy(x => x).ToList();
+        var squeezed = all.Where(t => t.Squeezed > SqueezeReported).OrderByDescending(t => t.Squeezed).ToList();
+        string At(Transition t) => string.Create(inv, $"{t.Arm.Axis?.PointAt(0).X ?? 0:F0},{t.Arm.Axis?.PointAt(0).Y ?? 0:F0} {Compass(t.Arm.Heading)}");
+        return string.Create(inv, $"    transitions (#818 step 4, internal streets of multi-node cores left out): {all.Count:N0} ({all.Count(t => t.Far is not null):N0} holding both ends of a short street), ")
+            + string.Create(inv, $"length median {(lengths.Count == 0 ? 0 : lengths[lengths.Count / 2]):F0} m, most {lengths.DefaultIfEmpty(0).Max():F0} m; ")
+            + string.Create(inv, $"squeezed over {SqueezeReported:F0} m into a short street {squeezed.Count:N0}{(squeezed.Count > 0 ? " (at " + string.Join("; ", squeezed.Take(6).Select(t => At(t) + string.Create(inv, $" by {t.Squeezed:F1} m"))) + ")" : "")}");
+    }
+
     /// <summary>Every arm's sections, room and steps, for <c>--debug-junction</c>.</summary>
     public string Describe()
     {
@@ -221,6 +252,8 @@ public sealed class JunctionPlan
                 sb.Append("    opens   ").Append(string.Join(", ", a.Openings.Select(o => string.Create(inv, $"lane {o.Id}: taper {o.Taper:F0} + storage {o.Storage:F0} m")))).Append('\n');
             if (a.Split > 0) sb.Append(inv, $"    split lead-in: {a.Split:F2} m to the left\n");
             if (a.Steps.Count + a.FitSteps.Count > 0) sb.Append("    steps   ").Append(string.Join("; ", a.Steps.Concat(a.FitSteps))).Append('\n');
+            if (a.Transition is { } t)
+                sb.Append(t.Arm == a ? t.Describe() : string.Create(inv, $"    transition: one with the junction at the street's far end ({t.Length:F1} m, planned there)\n"));
         }
         if (Core is { } core)
         {

@@ -348,4 +348,97 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
         Assert.Contains("kerbs starting outside their mouth 0,", line);
         Assert.Contains("connectors leaving the outline 0", line);
     }
+
+    /// <summary>An arm of <see cref="Street"/> with a left pocket of (taper, storage), its section moved left by <paramref name="split"/>.</summary>
+    private static ArmPlan PocketArm(double taper, double storage, double split = 0, bool atEnd = true)
+    {
+        var normal = Section.Normal(Street(), 9f, junctionAtEnd: atEnd);
+        var wants = new ArmWants(false, AllMoves, SignalMoves.None, [SignalMoves.Left], null, [], false, false);
+        var mouth = MouthPlanner.Moved(MouthPlanner.Wanted(normal, wants), -split);
+        var a = new ArmPlan { Arm = 0, LinkId = 1, AtEnd = atEnd, Heading = 0, Normal = normal, Wants = wants, Wanted = mouth, Mouth = mouth, Length = 200, TransitionRoom = 200, Split = split };
+        a.Openings.Add(new Opening(MouthPlanner.LeftPocketId, taper, storage));
+        return a;
+    }
+
+    private static int StripIndex(Transition t, int id) => t.Strips.FindIndex(x => x.Strip.Id == id);
+
+    [Fact]
+    public void A_left_pocket_is_held_over_its_storage_then_gives_way_to_its_lead_in_hatch_over_the_taper()
+    {
+        var a = PocketArm(taper: 30, storage: 40, split: 1.5);
+        TransitionPlanner.PlanAll([new JunctionPlan { Node = 1, Centre = default, Lights = false, Arms = { a } }]);
+        var t = a.Transition!;
+        int pocket = StripIndex(t, MouthPlanner.LeftPocketId), hatch = StripIndex(t, TransitionPlanner.LeadInHatchId);
+        Assert.True(pocket > hatch && hatch >= t.Anchor, "the lead-in hatch lies between the centre line and the pocket");
+        Assert.Equal(a.Mouth.Strips.First(x => x.Id == MouthPlanner.LeftPocketId).Width, t.WidthAt(pocket, 40), 6);
+        Assert.Equal(0, t.WidthAt(hatch, 40), 6);
+        // the closing line: the pocket narrows to nothing over the slant (10 m) while the hatch takes its place
+        Assert.Equal(0, t.WidthAt(pocket, 50), 6);
+        Assert.True(t.WidthAt(hatch, 45) > 0 && t.WidthAt(pocket, 45) > 0);
+        // the through lane runs on one line: pocket and hatch together close linearly over the taper, the centre line moving
+        // back with the split's share
+        double Wide(double s) => t.WidthAt(pocket, s) + t.WidthAt(hatch, s);
+        Assert.Equal((Wide(40) + Wide(70)) / 2, Wide(55), 6);
+        Assert.Equal(0, Wide(70), 6);
+        Assert.Equal(a.Mouth.CentreLine!.Value, t.CentreAt(40), 6);
+        Assert.Equal(a.Normal.CentreLine!.Value, t.CentreAt(70), 6);
+        var through = StripIndex(t, a.Normal.Strips.First(x => x.IsCarLane && x.Way == StripWay.In).Id);
+        double Edge(double s) => t.SpanAt(through, s).From;
+        Assert.Equal((Edge(40) + Edge(70)) / 2, Edge(55), 6);
+        // past the transition the normal section, strip for strip
+        var end = t.At(t.Length);
+        Assert.Equal(a.Normal.Strips.Select(x => (x.Id, Math.Round(x.Width, 3))), end.Strips.Select(x => (x.Id, Math.Round(x.Width, 3))));
+        Assert.Equal(a.Normal.CarriagewayLeft, end.CarriagewayLeft, 6);
+    }
+
+    [Fact]
+    public void An_exit_hatch_closes_over_thirty_metres_and_every_other_change_comes_after_at_one_in_six()
+    {
+        var normal = Section.Normal(Street(), 9f, junctionAtEnd: true);
+        // the departing lane wider at the mouth, beside an exit hatch
+        var mouth = MouthPlanner.WithExitHatch(normal, 2.0);
+        var strips = mouth.Strips.Select(x => x.IsCarLane && x.Way == StripWay.Out ? x.WithWidth(x.Width + 0.5) : x).ToList();
+        mouth = new Section(strips, mouth.CarriagewayLeft - 0.5);
+        var wants = new ArmWants(false, AllMoves, SignalMoves.None, [], null, [], false, false);
+        var a = new ArmPlan { Arm = 0, LinkId = 1, AtEnd = true, Heading = 0, Normal = normal, Wants = wants, Wanted = mouth, Mouth = mouth, Length = 200, TransitionRoom = 200 };
+        TransitionPlanner.PlanAll([new JunctionPlan { Node = 1, Centre = default, Lights = false, Arms = { a } }]);
+        var t = a.Transition!;
+        int hatch = StripIndex(t, MouthPlanner.HatchId), lane = StripIndex(t, normal.Strips.First(x => x.IsCarLane && x.Way == StripWay.Out).Id);
+        Assert.True(hatch < t.Anchor, "the exit hatch lies on the departing side");
+        Assert.Equal(1.0, t.WidthAt(hatch, 15), 6);
+        Assert.Equal(0, t.WidthAt(hatch, TransitionPlanner.ExitTaper), 6);
+        // the lane's extra 0.5 m goes beyond the hatch, over 6 m (1:6 has a 6 m floor)
+        Assert.Equal(mouth.Strips.First(x => x.IsCarLane && x.Way == StripWay.Out).Width, t.WidthAt(lane, TransitionPlanner.ExitTaper), 6);
+        Assert.Equal(normal.Strips.First(x => x.IsCarLane && x.Way == StripWay.Out).Width, t.WidthAt(lane, TransitionPlanner.ExitTaper + 6), 6);
+        Assert.Equal(TransitionPlanner.ExitTaper + 6, t.Length, 6);
+        // the centre line stays where it is: the departing side moves out to the left
+        Assert.Equal(normal.CentreLine!.Value, t.CentreAt(10), 6);
+    }
+
+    [Fact]
+    public void A_street_too_short_for_two_transitions_holds_one_with_the_median_running_mouth_to_mouth()
+    {
+        // a pocket merged with the exit of the junction beyond (#325): one transition, the lead-in median meeting that exit's hatch
+        var a = PocketArm(taper: 0, storage: 30);
+        var normalB = Section.Normal(Street(), 9f, junctionAtEnd: false);
+        var wantsB = new ArmWants(false, AllMoves, SignalMoves.None, [], null, [], false, false);
+        var mouthB = MouthPlanner.WithExitHatch(normalB, a.Mouth.Strips.Where(x => x.Id == MouthPlanner.LeftPocketId).Sum(x => x.Width));
+        var b = new ArmPlan { Arm = 0, LinkId = 1, AtEnd = false, Heading = Math.PI, Normal = normalB, Wants = wantsB, Wanted = mouthB, Mouth = mouthB, Length = 60 };
+        a.Length = 60;
+        a.MergedWith = b;
+        (a.FarArm, b.FarArm, a.TransitionRoom, b.TransitionRoom) = (b, a, 60, 60);
+        TransitionPlanner.PlanAll([new JunctionPlan { Node = 1, Centre = default, Lights = false, Arms = { a } },
+            new JunctionPlan { Node = 2, Centre = default, Lights = false, Arms = { b } }]);
+        var t = a.Transition!;
+        Assert.Same(t, b.Transition);
+        Assert.Same(b, t.Far);
+        Assert.Equal(60, t.Length, 6);
+        int hatch = StripIndex(t, TransitionPlanner.LeadInHatchId);
+        double width = a.Mouth.Strips.Where(x => x.Id == MouthPlanner.LeftPocketId || x.Id == MouthPlanner.LeftBikeId).Sum(x => x.Width);
+        // the pocket opens out of the median over the merged entry, the median then runs on to the far mouth (2+1 kept)
+        Assert.Equal(0, t.WidthAt(hatch, 30), 6);
+        Assert.True(t.WidthAt(hatch, 50) >= width - 1e-6 && t.WidthAt(hatch, 60) > 0);
+        // at the far mouth, the far arm's own section seen from this end
+        Assert.Equal(mouthB.CarriagewayWidth, t.At(60).CarriagewayWidth, 3);
+    }
 }
