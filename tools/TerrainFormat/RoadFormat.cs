@@ -129,6 +129,7 @@ public enum RoadAttrFlags : ushort
     Embedded = 1 << 9,     // railway piece inside a carriageway: no ballast, no raised rails, RailGroove paint (#124)
     PavedBed = 1 << 10,    // tram track in a town, outside any carriageway: a paved bed, no ballast, flush rails as RailGroove paint (#119)
     LoweredKerbs = 1 << 11, // every kerb of this piece's sides is sloped: a crossing's kerb ramp (#711)
+    InTransition = 1 << 12, // a transition (#818, TRNS) covers this piece: a build that knows it draws its carriageway, sides and paint from there, an older one the plain street
 }
 
 /// <summary>Bike provision on one side of a carriageway (#120).</summary>
@@ -280,6 +281,29 @@ public sealed class RoadPaint
     /// <summary>Horizontal metres along the offset line (cm in the file); To past the end (infinity) = to the end.</summary>
     public float From { get; init; }
     public float To { get; init; } = float.PositiveInfinity;
+
+    /// <summary>
+    /// A polyline along a transition's strip boundary (#818): then <see cref="Vertices"/> are
+    /// <see cref="RoadPaintGeometry.AlongTransition"/>(Transition, Boundary, Offset, From, To), with From and To stations along its
+    /// segment; the file stores it in <c>TRNS</c> with its transition, and the decoder rebuilds the vertices.
+    /// </summary>
+    public RoadTransition? Transition { get; init; }
+    /// <summary>The strip whose left boundary the line follows (<see cref="RoadTransition.BoundaryAt"/>).</summary>
+    public int Boundary { get; init; }
+
+    /// <summary>A line along transition <paramref name="t"/>'s boundary <paramref name="boundary"/>, its numbers rounded as the file stores them.</summary>
+    public static RoadPaint AlongTransition(RoadTransition t, int boundary, PaintType type, uint rgba, float width, float dash, float gap,
+        double offset, double from, double to)
+    {
+        float o = FileOffset(offset);
+        float f = (float)(Math.Round(Math.Max(0, from) * 100) / 100);
+        float e = double.IsPositiveInfinity(to) ? float.PositiveInfinity : (float)(Math.Max(1, Math.Round(to * 100)) / 100);
+        return new RoadPaint
+        {
+            Shape = PaintShape.Polyline, Type = type, Rgba = rgba, Width = width, Dash = dash, Gap = gap,
+            Transition = t, Boundary = boundary, Offset = o, From = f, To = e, Vertices = RoadPaintGeometry.AlongTransition(t, boundary, o, f, e),
+        };
+    }
 
     /// <summary>An offset rounded to the millimetre the file keeps.</summary>
     public static float FileOffset(double offset) => MathF.Round((float)offset * 1000f) / 1000f;
@@ -449,6 +473,8 @@ public sealed class RoadTile
     public List<RoadSignal> Signals { get; init; } = new();
     /// <summary>The lanes of each approach with a pocket or traffic lights (#353, <c>LANE</c>).</summary>
     public List<RoadApproach> Approaches { get; init; } = new();
+    /// <summary>The tile's transitions (#818, <c>TRNS</c>): each over one of its segments, flagged <see cref="RoadAttrFlags.InTransition"/>.</summary>
+    public List<RoadTransition> Transitions { get; init; } = new();
     /// <summary>Marked bays of the tile's car parks (#499, <c>PARK</c>), in the planner's stable order.</summary>
     public List<ParkingBay> Parking { get; init; } = new();
 }

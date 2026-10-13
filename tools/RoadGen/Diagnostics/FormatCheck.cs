@@ -94,9 +94,65 @@ public static class FormatCheck
         Check(PaintSeamIsContinuous(), "paint dashes continue across a tile seam, no stub at a dead end");
         Check(PaintFollowsCrossSection(), "paint on the cross-section's lanes, no centre line on a narrow road");
         Check(RailCrossingIsEmbedded(), "level crossing: rail embedded at road height, blended back, grooves, road paint cut");
+        Check(TransitionRoundTrips(out string why), "transition (TRNS): byte-identical round trip, widths, a line along a boundary rebuilt, a newer version skipped" + why);
 
         log(failures == 0 ? "format check passed" : $"format check: {failures} failure(s)");
         return failures == 0;
+    }
+
+    /// <summary>
+    /// A 40 m segment under a transition (#818): a car lane each way, a pocket closing from 3 m at 20 m to nothing at 40 m on
+    /// the right, a dashed line between the pocket and the lane beside it. The bytes round trip, the decoder rebuilds the line's
+    /// vertices on the boundary, and a TRNS of a version this build does not know is skipped whole (the paint without it stays).
+    /// </summary>
+    private static bool TransitionRoundTrips(out string why)
+    {
+        why = "";
+        var seg = new RoadSegment
+        {
+            Class = RoadClass.Road, Surface = RoadSurface.Paved, Width = 6, Points = [100, 0, 500, 120, 0, 500, 140, 0, 500],
+            Attributes = new RoadAttributes(RoadAttrFlags.InTransition | RoadAttrFlags.Urban, LanesForward: 1, LanesBackward: 1, WidthCm: 600),
+        };
+        var t = new RoadTransition
+        {
+            Segment = seg, Stations = [0, 20, 40], Centre = [0, 0, 0], Anchor = 1,
+            Strips =
+            [
+                new RoadTransitionStrip { Kind = StripKind.CarLane, Id = 2, Travel = -1, Widths = [3, 3, 3] },
+                new RoadTransitionStrip { Kind = StripKind.CarLane, Id = 3, Travel = 1, Moves = SignalMoves.Through, Widths = [3, 3, 3] },
+                new RoadTransitionStrip { Kind = StripKind.CarLane, Id = 120, Travel = 1, Moves = SignalMoves.Right, Widths = [3, 3, 0] },
+            ],
+        };
+        var tile = new RoadTile { Id = new TileId(2600, 1200), Segments = [seg], Flags = RoadTileFlags.Network };
+        tile.Transitions.Add(t);
+        tile.Paint.Add(RoadPaint.AlongTransition(t, 2, PaintType.WhiteDashed, Meshing.PaintEmitter.White, 0.15f, 3, 3, 0, 0, 30));
+        tile.Paint.Add(RoadPaint.AlongSegment(seg, PaintType.WhiteSolid, Meshing.PaintEmitter.White, 0.15f, 0, 0, -2.8));
+        byte[] bytes = Encode(tile);
+        var back = Decode(bytes);
+        if (!Encode(back).AsSpan().SequenceEqual(bytes)) { why = ": not byte-identical"; return false; }
+        if (back.Transitions.Count != 1 || back.Transitions[0].Segment != back.Segments[0]) { why = ": transition lost"; return false; }
+        var bt = back.Transitions[0];
+        if (!bt.Strips.Zip(t.Strips).All(x => x.First.Widths.SequenceEqual(x.Second.Widths) && x.First.Id == x.Second.Id && x.First.Moves == x.Second.Moves))
+        { why = ": widths differ"; return false; }
+        var line = back.Paint.FirstOrDefault(p => p.Transition == bt);
+        if (line is null || !line.Vertices.SequenceEqual(tile.Paint[0].Vertices)) { why = ": line not rebuilt alike"; return false; }
+        // the boundary between the through lane and the pocket: 3 m right of the drawing (z grows south: right of east is +z)
+        if (Math.Abs(line.Vertices[2] - 503) > 1e-4 || Math.Abs(line.Vertices[^3] - 130) > 1e-3) { why = ": line not on the boundary"; return false; }
+        if (Math.Abs(bt.SpanAt(2, 30).To - 4.5f) > 1e-4) { why = ": span between stations"; return false; }
+        // a newer TRNS: its version byte bumped, skipped whole
+        int at = FindTag(bytes, RoadCodec.TagTransitions);
+        var newer = (byte[])bytes.Clone();
+        newer[at + 8]++;
+        var skipped = Decode(newer);
+        if (skipped.Transitions.Count != 0 || skipped.Paint.Count != 1) { why = ": a newer version not skipped"; return false; }
+        return true;
+    }
+
+    private static int FindTag(byte[] bytes, uint tag)
+    {
+        for (int i = 0; i + 4 <= bytes.Length; i++)
+            if (BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(i)) == tag) return i;
+        return -1;
     }
 
     /// <summary>

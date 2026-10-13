@@ -4,27 +4,6 @@ using System.Globalization;
 using System.Text;
 using UnitSport.Terrain.Format;
 
-/// <summary>What a strip of an arm's cross-section is (#818). Part names: <c>docs/notes/tools/intersection-parts.md</c>.</summary>
-public enum StripKind : byte
-{
-    /// <summary>Raised walkway beside the kerb.</summary>
-    Sidewalk,
-    /// <summary>Grass between a bike path and the sidewalk.</summary>
-    Buffer,
-    /// <summary>Separated bike path at sidewalk height (or halfway down).</summary>
-    Path,
-    /// <summary>Grass between the carriageway and a bike path.</summary>
-    Verge,
-    /// <summary>Painted bike lane in the carriageway (Radstreifen).</summary>
-    BikeLane,
-    /// <summary>A car lane.</summary>
-    CarLane,
-    /// <summary>Striped median (Sperrfläche): flush, no one drives on it.</summary>
-    Hatch,
-    /// <summary>Raised, kerbed island in the carriageway (a refuge, a signal's island).</summary>
-    Island,
-}
-
 /// <summary>
 /// Where an arriving bike lane's riders stop at the lights (#818, the user's rule, the same for every move): ahead of the
 /// cars at an advanced line where the street they go into carries their way on (a bike lane or path), else in a bike box
