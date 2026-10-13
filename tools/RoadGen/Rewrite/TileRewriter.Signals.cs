@@ -507,7 +507,8 @@ public static partial class TileRewriter
                     double bikeLane = exitSide.HasLane ? exitSide.BikeDm / 10.0 : 0;
                     exitArms[i] = pockets.GetValueOrDefault((junction.NodeId, i)) is { ExitWay: { } way, ExitFar: false }
                         ? new IslandExit(way.HatchAt(0) + way.Frame0, way.ExitCar, exitSide.HasTrack || exitSide.HasLane)
-                        : new IslandExit(info.Attributes.OneWay != 0 ? -half : 0, info.Attributes.OneWay != 0 ? 2 * half - bikeLane : half - bikeLane, exitSide.HasTrack || exitSide.HasLane);
+                        : new IslandExit(info.Attributes.OneWay != 0 ? -half : 0, (info.Attributes.OneWay != 0 ? 2 * half - bikeLane : half - bikeLane)
+                            + (pockets.GetValueOrDefault((junction.NodeId, i))?.ExitWidening ?? 0), exitSide.HasTrack || exitSide.HasLane);   // (#711: an exit widened beside its bike lane)
                 }
                 // (#711, the user's review) beside a crosswalk whose cars' line stands back the poles stand by it, on its near side;
                 // with no room for that line they stay on its far side

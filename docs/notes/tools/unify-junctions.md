@@ -296,3 +296,10 @@ lights), an island to avoid, or several lanes turning alike (`EmitPairGuides`, a
   (the rest were at footpath nodes by a junction); zebras 220 -> 207. **Left**: at that junction the SW arm's first piece
   starts 2.75 m off the junction outline, so the corner planner does not see that arm (NW corner bare), and the NE arm's
   OSM crossing is not found.
+- **A core lane's exit widened beside its bike lane at the lights** (the user's review of J3's south arm: the solid centre
+  line left the exit 1.7 m beside its bike lane; the user chose to widen): an exit strip (`Widening`, `SetWidth`) of what
+  the car lane lacks of `CarLaneBesideBike` 3 m, held to where the solid centre line ends, then tapered over
+  `ExitBikeTaper` 20 m (as fits a short street, the taper down to 10 m); the bike lane moves out with the edge, and the
+  arm's `ExitWidening` carries it to the left-turn guides, the crosswalk and the left pole. Test region 5, Sion 3 (4 no
+  room). The user's idea for later: the junction lays its own surface from the data and the room it has, with
+  transitions before and after, instead of such widenings per case.

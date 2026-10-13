@@ -26,7 +26,7 @@ public static partial class TileRewriter
     public sealed class TurnLaneStats
     {
         public int AtSignals, RightPockets, RightRejected;
-        public int LeftBikeLanes, BikeBoxes, AdvancedBikeLines, KerbsideBike, BetweenBike, BetweenForced;
+        public int ExitsWidenedBesideBike, ExitsNarrowBesideBike, LeftBikeLanes, BikeBoxes, AdvancedBikeLines, KerbsideBike, BetweenBike, BetweenForced;
         public int Candidates, Placed, Merged, Short, Building, OtherLine, Ground, Seam, NoSegment, NoExit, Arrows, Stripes, StopBars, SignsMoved, BesideBike, LeadIns;
         /// <summary>Approaches whose carriageway already holds two or more lanes toward the junction: no pocket is built (#700).</summary>
         public int MultiLane;
@@ -46,7 +46,7 @@ public static partial class TileRewriter
         public readonly SortedDictionary<string, List<string>> LayoutExamples = new();
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
-            $"    turn lanes (#123): {Candidates:N0} main-road approaches with a left turn, {Placed:N0} pockets placed with their exit taper (storage m: {string.Join(", ", Storage.Select(kv => $"{kv.Key:F0} x{kv.Value}"))}), {Merged:N0} of them merged with the exit of the junction before (#325), {AtSignals:N0} at traffic lights (#348), {RightPockets:N0} right-turn pockets (approaches with a right turn faster than 50 km/h {SpeedFast:N0} / not {SpeedSlow:N0} / no OSM speed in town {SpeedNoneTown:N0}, outside {SpeedNoneRural:N0}, #711; {RightRejected:N0} rejected; beside a bike lane: kerbside (a) {KerbsideBike:N0}, between (b) by hash {BetweenBike:N0}, (b) forced by the plan {BetweenForced:N0}, #351), {LeftBikeLanes:N0} left-turn bike lanes ({BikeBoxes:N0} bike boxes, {AdvancedBikeLines:N0} advanced bike lines, #351), {Arrows:N0} arrows, {StopBars:N0} stop bars, {Stripes:N0} median stripes ({HatchesSkipped:N0} hatches left out: narrower than 1.5 m or shorter than 20 m, #406), {SignsMoved:N0} signs moved off the widening, {Corners:N0} corners rounded beside a widening ({CornersRejected:N0} failed, {CornersInTown:N0} left square beside a sidewalk or path, #406), {BesideBike:N0} approaches widened for a bike lane ({LeadIns:N0} with a lead-in, #120), {TightCorners:N0} junction corners left tight (no right turn rounds them, #700), {SplitLeadIns:N0} lead-ins split between both edges ({MirrorGuides:N0} edge guides moved out onto the other edge, #711), {ThroughGuides:N0} through-lane guides across the junction past an island (#700, #711), {PairGuidesNoLights:N0} lines between two same-turn lanes through a junction without lights (#711), {SolidCentres:N0} centre lines solid before a stop line (#711); " +
+            $"    turn lanes (#123): {Candidates:N0} main-road approaches with a left turn, {Placed:N0} pockets placed with their exit taper (storage m: {string.Join(", ", Storage.Select(kv => $"{kv.Key:F0} x{kv.Value}"))}), {Merged:N0} of them merged with the exit of the junction before (#325), {AtSignals:N0} at traffic lights (#348), {RightPockets:N0} right-turn pockets (approaches with a right turn faster than 50 km/h {SpeedFast:N0} / not {SpeedSlow:N0} / no OSM speed in town {SpeedNoneTown:N0}, outside {SpeedNoneRural:N0}, #711; {RightRejected:N0} rejected; beside a bike lane: kerbside (a) {KerbsideBike:N0}, between (b) by hash {BetweenBike:N0}, (b) forced by the plan {BetweenForced:N0}, #351), {LeftBikeLanes:N0} left-turn bike lanes ({BikeBoxes:N0} bike boxes, {AdvancedBikeLines:N0} advanced bike lines, #351), {Arrows:N0} arrows, {StopBars:N0} stop bars, {Stripes:N0} median stripes ({HatchesSkipped:N0} hatches left out: narrower than 1.5 m or shorter than 20 m, #406), {SignsMoved:N0} signs moved off the widening, {Corners:N0} corners rounded beside a widening ({CornersRejected:N0} failed, {CornersInTown:N0} left square beside a sidewalk or path, #406), {BesideBike:N0} approaches widened for a bike lane ({LeadIns:N0} with a lead-in, #120), {TightCorners:N0} junction corners left tight (no right turn rounds them, #700), {SplitLeadIns:N0} lead-ins split between both edges ({MirrorGuides:N0} edge guides moved out onto the other edge, #711), {ThroughGuides:N0} through-lane guides across the junction past an island (#700, #711), {PairGuidesNoLights:N0} lines between two same-turn lanes through a junction without lights (#711), {SolidCentres:N0} centre lines solid before a stop line (#711), {ExitsWidenedBesideBike:N0} exits widened to a full lane beside their bike lane ({ExitsNarrowBesideBike:N0} with no room, #711); " +
             $"rejected (approach or exit): too short {Short:N0}, building {Building:N0}, another line {OtherLine:N0}, ground off the road {Ground:N0}, tile seam {Seam:N0}, no segment {NoSegment:N0}, no main road out {NoExit:N0}, two lanes or more already and no lane data {MultiLane:N0}; OSM lane data (#700): {Wished:N0} approaches, {WishFolded:N0} wished lanes folded, {WishNoLeft:N0} with a road to the left and no left lane, {WishInPlace:N0} assigned in place, {WishArrows:N0} arrows over them\n") +
             string.Concat(LayoutExamples.Select(kv => $"      right pockets beside a bike lane, layout {kv.Key} at LV95 {string.Join("; ", kv.Value)}\n"));
 
@@ -133,6 +133,9 @@ public static partial class TileRewriter
     /// solid line (Kanton Zürich Standards Veloverkehr: 3.00 m beside a Radstreifen).
     /// </summary>
     private const double CarLaneBesideBike = 3.0;
+
+    /// <summary>A core lane's exit widened beside its bike lane at the lights tapers back over this (m, #711).</summary>
+    private const double ExitBikeTaper = 20, ExitBikeTaperMin = 10;
 
     /// <summary>The lead-in that widens a narrow approach for that runs at 1:6 (a town street), at least this long.</summary>
     private const double LeadInMin = 6, LeadInPerMetre = 6;
@@ -646,6 +649,43 @@ public static partial class TileRewriter
                     way.CentreLine(Get(paint, so.Tile), stopEdge, stopEdge + CentreSolidAtLights);
                     stats.SolidCentres++;
                 }
+            }
+            // (#711, the user's review of J3) on a core lane between bike lanes the solid centre line leaves the exit a lane too
+            // narrow beside its bike lane: the exit widens to a full one (CarLaneBesideBike) out to where that line ends, then
+            // tapers back; its bike lane moves out with the edge. A pocket's exit has its own widening
+            for (int i = 0; i < junction.Arms.Count && i < plan.Arms.Count; i++)
+            {
+                var arm = plan.Arms[i];
+                // (the arm's own pockets widen its approach side only)
+                if (!arm.Approach || Internal(net.Links[arm.LinkId], junction.NodeId, signalNodes)
+                    || pockets.Any(pk => !pk.Dropped && pk.Node == junction.NodeId && pk.ExitArm == i)
+                    || InfoOf(net.Links[arm.LinkId]) is not { Attributes.OneWay: 0 }
+                    || !segmentOf.TryGetValue(arm.LinkId, out var so) || !block.Contains(so.Tile)) continue;
+                bool atEnd = arm.End == LinkEnd.End;
+                int exitSide = atEnd ? -1 : 1;
+                var bike = exitSide > 0 ? so.Painted.Attributes.Right : so.Painted.Attributes.Left;
+                if (!bike.HasLane) continue;
+                double car = so.Segment.Width * 0.5 - bike.BikeDm / 10.0, extra = CarLaneBesideBike - car;
+                if (extra < 0.05) continue;
+                double hold = MouthSkew(junction, junction.Arms[i]) + SignalStopSetback + StopBack(junction.NodeId, i) + CentreSolidAtLights;
+                // a short street: the hold and the taper as fit (the taper no shorter than ExitBikeTaperMin)
+                double room = SegmentLength(so.Segment) - TurnClear, taper = Math.Clamp(room - hold, ExitBikeTaperMin, ExitBikeTaper);
+                hold = Math.Min(hold, room - taper);
+                if (hold < 1) { stats.ExitsNarrowBesideBike++; continue; }
+                var tileSegments = Get(output, so.Tile);
+                var exitWay = new Widening(so.Segment, so.Painted, so.Tile, tileSegments.IndexOf(so.Segment), atEnd, exitSide,
+                    hold + taper, taper, exit: true, leadIn: false);
+                exitWay.SetWidth(d => extra * Math.Clamp((hold + taper - d) / taper, 0, 1));
+                if (exitWay.Check(Lines(so.Tile), grids, buildings) is { } why)
+                {
+                    stats.ExitsNarrowBesideBike++;
+                    continue;
+                }
+                exitWay.Emit(Get(paint, so.Tile), Get(areas, so.Tile), stripOwners);
+                // the arm's exit stands out by it at the mouth: guides, crosswalk and the left pole follow (the user's review)
+                var exitLanes = Arm(junction.NodeId, i, TileId.FromLv95(junction.Centre.X, junction.Centre.Y));
+                exitLanes.ExitWidening = Math.Max(exitLanes.ExitWidening, extra);
+                stats.ExitsWidenedBesideBike++;
             }
         }
         Corners(priority, net, placed, block, wanted, areas, stats, streetSide, arcs);
