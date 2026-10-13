@@ -266,11 +266,14 @@ and search.
   (`BreakRoom`, with the site's own piece list `SiteMess`) is the changing room too: lockers first,
   table, bench, fridge, counter, coffee, rail, heater. A doorway between the two at the back,
   windows where the containers have theirs. New furniture `CoffeeMachine` and `Heater` (appended;
-  in the model viewer by themselves), and for the cabins `Urinal`, `PaperRoll`, `Mirror`, `CoatHook`. A site office's rooms are never a core (`Furnish`). Plan
-  version not bumped: no stored plan changes (a site had none). **A stored office plan is matched
-  to the building's solid only** (`InteriorLayout.Matches`), not to the site plan or the roads: a
-  change to the planner's office zone or to `SiteOffices` must bump `InteriorLayout.CurrentVersion`,
-  or stored offices keep their old doors.
+  in the model viewer by themselves), and for the cabins `Urinal`, `PaperRoll`, `Mirror`, `CoatHook`.
+  A site office's rooms are never a core (`Furnish`). **Plan version 27.** A stored office plan is
+  matched to the building's solid only (`InteriorLayout.Matches`), not to the site plan or the
+  roads: a change to the planner's office or toilet zones or to `SiteOffices` must bump
+  `InteriorLayout.CurrentVersion`, or stored plans keep their old doors (a plan stored before the
+  cabins had no entrance for them, and their doors read as locked: that is what 27 is for).
+  A cabin's leaf swings in, as every pedestrian leaf does (`DoorHang.Inward`): in a metre-square
+  room it lies along the mirror's wall. Real cabins' doors swing out; there is no single outward leaf.
 - **Collision.** The office's solid boxes go into the tile's **building** body (both windings: it
   is one-sided), not the road cells (`SiteBuild.OfficeFaces`), so `InteriorManager.BeforeMove`
   lets a body standing in an open office doorway through them like any facade.
