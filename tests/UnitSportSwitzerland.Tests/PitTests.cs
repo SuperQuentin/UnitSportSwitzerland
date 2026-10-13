@@ -1,6 +1,7 @@
 using Godot;
 using UnitSport.Interiors;
 using UnitSport.Terrain.Construction;
+using UnitSport.Terrain.Format;
 using Xunit;
 
 namespace UnitSportSwitzerland.Tests;
@@ -104,6 +105,31 @@ public class PitTests
         // and nothing of the yard on its apron
         var apron = ConstructionSites.InPlan(s.Box, ConstructionSites.Apron(pit));
         Assert.DoesNotContain(s.Zones, z => z.Rect.Overlaps(apron));
+    }
+
+    [Fact]
+    public void A_pit_keeps_off_a_streets_sidewalk_as_well_as_its_carriageway()
+    {
+        // a 6 m street along the front, 11.5 m from the wall: its carriageway clear of the front
+        // lane, its 3 m sidewalks not
+        var b = ConstructionSiteTests.Box(500, 500, 24, 15, 1.2f, 4);
+        var pts = new float[] { 440f, 400f, 519f, 560f, 400f, 519f };
+        var road = new RoadSegment
+        {
+            Class = RoadClass.Road, Surface = RoadSurface.Paved, Width = 6f, Points = pts,
+            Attributes = new RoadAttributes(WidthCm: 600, Left: new RoadSide(SidewalkDm: 30), Right: new RoadSide(SidewalkDm: 30)),
+        };
+        var roads = new RoadTile { Id = new TileId(2500, 1120), Segments = [road] };
+        var box = PlanBox.Of(b)!.Value;
+        var obstacles = new SiteObstacles(new PlanBox?[] { box }, 0, roads);
+        var street = new Vector2(500, 519);
+        var carriageway = ConstructionSites.Plan("2500_1120_8", b, box, street, obstacles.Blocked)!;
+        var sidewalk = ConstructionSites.Plan("2500_1120_8", b, box, street, obstacles.Blocked, obstacles.Undiggable)!;
+        Assert.Equal(0, ConstructionSites.LaneWall(carriageway.Pit, box, carriageway.Front));
+        Assert.NotEqual(0, ConstructionSites.LaneWall(sidewalk.Pit, box, sidewalk.Front));
+        // nothing of the pit within the sidewalk
+        foreach (var c in ConstructionSites.InPlan(box, sidewalk.Pit!.Area).Corners())
+            Assert.False(obstacles.Undiggable(c));
     }
 
     [Fact]

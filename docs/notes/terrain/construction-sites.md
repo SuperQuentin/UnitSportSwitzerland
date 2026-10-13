@@ -300,7 +300,9 @@ a topped-out site has none.
   back; failing a long enough lane, the longest free one. Along the front or the back the ramp
   comes up at the end nearer the gate.
 - **No pit** where the area comes within `PitSeam` (3 m) of the tile's edge (the next tile does not
-  plan this one's sites, so it could not cut its share), or where every lane's ground is taken. The
+  plan this one's sites, so it could not cut its share), or where every lane's ground is taken: by
+  another building, or a road with its sidewalks, verges and paths (`SiteObstacles.Undiggable`, the
+  carriageway alone would leave a sidewalk slab over the pit; the yard keeps `Blocked`). The
   ring round the building is scanned at a metre or less, both edges included (a first version
   stopped short of the far edge and missed a path along it).
 - **The yard**: the site grows by the lane on its wall's side; a lane along the front or back makes
@@ -361,7 +363,7 @@ walls a heightfield cannot hold. The ground is cut from its own lattice and heig
 
 ### Checks
 
-- `PitTests` (tier 0, 27): which sites dig, the area and the lane, basements, seams and roads, the
+- `PitTests` (tier 0, 28): which sites dig, the area and the lane, basements, seams, roads and sidewalks, the
   side fallback, nothing of the yard in the pit or on the apron, the ramp in its lane, no ramp past
   36 %, the shell's basements and its doors at the bridges; the ground cut at strides 1 to 20 leaves
   exactly the tile less the pit as ground and the pit as floor, and the collision puts back every
@@ -377,11 +379,12 @@ walls a heightfield cannot hold. The ground is cut from its own lattice and heig
 - `--constructioncheck`: every foundations site and low shell digs, nothing of the yard in it, the
   ramp in its lane, the ground cut; the plan views draw the pit, the lane and the apron.
 - `--pitsurvey --chunks <terrain_chunks>` (`PitSurvey`, real data, in no tier): over the 626 local
-  tiles, **248 sites want a pit, 181 dig one** (front lane 114, side 53, back 14; 49 stopped by a road
-  or a neighbour, 18 by a seam); 150 with one basement, 31 with two; depth 1.2-10.1 m (mean 3.3);
-  ramps 25-36 %, 13 pits without one. Cost per pit: plan and lining ~1 ms (worst 50), holes 2-4 ms,
-  collision faces 4-6 ms (worst 40); the stride-1 ground mesh cut 60-80 ms a tile (worst 165), on the
-  worker, on 1-2 % of tiles (it was 120 ms before it passed over the rows no pit reaches).
+  tiles, **248 sites want a pit, 159 dig one** (front lane 94, side 53, back 12; 71 stopped by a road,
+  its sidewalk or a neighbour, 18 by a seam); 134 with one basement, 25 with two; depth 1.2-9.3 m
+  (mean 3.2); ramps 25-36 %, 14 pits without one. Counting sidewalks took 22 pits away (they would
+  have cut under one). Cost per pit: plan and lining ~1 ms (worst 26), holes ~1.6 ms, collision faces
+  ~3.7 ms (worst 18); the stride-1 ground mesh cut ~62 ms a tile (worst 116), on the worker, on 1-2 %
+  of tiles (it was 120 ms before it passed over the rows no pit reaches).
 
 ### Not done
 

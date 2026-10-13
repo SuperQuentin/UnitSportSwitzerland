@@ -40,7 +40,7 @@ public static class SitePlans
             var key = new BuildingKey(tile.Id.E, tile.Id.N, i).ToString();
             var street = BuildingFootprint.StreetNear(roads, box.Center);
             var obstacles = new SiteObstacles(map.Boxes, i, roads, Clearance);
-            var site = ConstructionSites.Plan(key, b, box, street, obstacles.Blocked);
+            var site = ConstructionSites.Plan(key, b, box, street, obstacles.Blocked, obstacles.Undiggable);
             if (site != null) sites.Add(site);
         }
         return sites;

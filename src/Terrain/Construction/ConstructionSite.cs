@@ -326,7 +326,12 @@ public static class ConstructionSites
     /// Whether a plan point is on a road or inside another building. The site's own box is kept out
     /// by the planner itself; the callback may report it too.
     /// </param>
-    public static ConstructionSite? Plan(string key, Building b, PlanBox box, Vector2? street, Func<Vector2, bool> blocked)
+    /// <param name="undiggable">
+    /// Whether a plan point may not be dug for the pit (#619): <see cref="SiteObstacles.Undiggable"/>,
+    /// which keeps it off a road's sidewalks too. Null: <paramref name="blocked"/>.
+    /// </param>
+    public static ConstructionSite? Plan(string key, Building b, PlanBox box, Vector2? street, Func<Vector2, bool> blocked,
+        Func<Vector2, bool>? undiggable = null)
     {
         if (b.Kind != BuildingKind.UnderConstruction || box.Width < 1f || box.Depth < 1f) return null;
         double R(string q) => Fnv.Unit(key + "|site|" + q);
@@ -348,7 +353,7 @@ public static class ConstructionSites
 
         // ---- the pit (#619): the ground dug out under the building, the ramp along the front --
         var pit = Pit(key, box, phase, built, target, small, front, along,
-            street is { } sp ? (sp - box.Center).Dot(along) : 0f, blocked);
+            street is { } sp ? (sp - box.Center).Dot(along) : 0f, undiggable ?? blocked);
 
         // ---- the site: deep at the front for the yard, narrow round the rest -------------------
         float size = Math.Clamp((box.Area - 150f) / 1500f, 0f, 1f);
@@ -720,14 +725,22 @@ public sealed class SiteObstacles
         {
             if (RoadFormat.IsAerial(s.Class)) continue;
             float half = s.Width * 0.5f;
+            float side = Math.Max(s.Attributes.Left.Reach, s.Attributes.Right.Reach);
             for (int k = 0; k + 1 < s.PointCount; k++)
             {
                 var a = new Vector2(s.Points[k * 3], s.Points[k * 3 + 2]);
                 var c = new Vector2(s.Points[k * 3 + 3], s.Points[k * 3 + 5]);
-                if (Distance(own.Center, a, c) < reach + half) _roads.Add((a, c, half));
+                if (Distance(own.Center, a, c) < reach + half + side)
+                {
+                    _roads.Add((a, c, half));
+                    _sides.Add(side);
+                }
             }
         }
     }
+
+    /// <summary>Each road piece's sidewalks, verges and paths beside its carriageway, m: its wider side.</summary>
+    private readonly List<float> _sides = new();
 
     public int Count => _boxes.Count + _roads.Count;
 
@@ -738,6 +751,22 @@ public sealed class SiteObstacles
             if (b.DistanceTo(p) < _clearance) return true;
         foreach (var (a, c, half) in _roads)
             if (Distance(p, a, c) < half + _clearance) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// Whether a plan point may not be dug (#619): in another building, or on a road or its
+    /// sidewalk, verge or path, which stand beside the carriageway and would be left over the pit.
+    /// </summary>
+    public bool Undiggable(Vector2 p)
+    {
+        foreach (var b in _boxes)
+            if (b.DistanceTo(p) < _clearance) return true;
+        for (int k = 0; k < _roads.Count; k++)
+        {
+            var (a, c, half) = _roads[k];
+            if (Distance(p, a, c) < half + _sides[k] + _clearance) return true;
+        }
         return false;
     }
 
