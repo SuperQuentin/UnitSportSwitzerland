@@ -1,5 +1,6 @@
 using UnitSport.Interiors;
 using UnitSport.Items;
+using UnitSport.Terrain.Construction;
 using UnitSport.Terrain.Format;
 
 namespace UnitSport.Loot;
@@ -332,26 +333,7 @@ public static class LootTables
         if (ContainerFor(type, room) is not { } c) return result;
         if (rng.NextDouble() >= (1 - c.Empty) * abundance) return result;
 
-        var candidates = Candidates(kind, c);
-
-        var found = new Dictionary<ItemId, int>();
-        float total = candidates.Sum(x => x.W);
-        if (total > 0)
-        {
-            float rolls = rng.Next(c.MinRolls, c.MaxRolls + 1) * RollFactor(kind);
-            int n = (int)rolls + (rng.NextDouble() < rolls - (int)rolls ? 1 : 0);
-            for (int i = 0; i < n; i++)
-            {
-                double pick = rng.NextDouble() * total;
-                var id = candidates[^1].Id;
-                foreach (var (cid, w) in candidates)
-                {
-                    pick -= w;
-                    if (pick < 0) { id = cid; break; }
-                }
-                found[id] = found.GetValueOrDefault(id) + Quantity(id, rng);
-            }
-        }
+        var found = Picks(c, Candidates(kind, c), RollFactor(kind), rng);
 
         if (c.FrancsChance > 0 && rng.NextDouble() < c.FrancsChance * FrancsFactor(kind))
         {
@@ -374,10 +356,40 @@ public static class LootTables
     }
 
     /// <summary>
-    /// Every item a container can give with its weight, the kind applied (an item in two pools
-    /// appears twice). One place for <see cref="Roll"/> and <see cref="Chance"/>, so they cannot drift.
+    /// The picks of a container found non-empty: MinRolls..MaxRolls (times <paramref name="rollFactor"/>,
+    /// rounded up at random by its fraction) weighted draws from <paramref name="candidates"/>, each a
+    /// quantity of its item. Shared by <see cref="Roll"/> and <see cref="YardRoll"/>, which draw the
+    /// same way; <see cref="PicksChance"/> is its closed form.
     /// </summary>
-    private static List<(ItemId Id, float W)> Candidates(BuildingKind kind, Container c)
+    private static Dictionary<ItemId, int> Picks(Container c, List<(ItemId Id, float W)> candidates, float rollFactor, Random rng)
+    {
+        var found = new Dictionary<ItemId, int>();
+        float total = candidates.Sum(x => x.W);
+        if (total > 0)
+        {
+            float rolls = rng.Next(c.MinRolls, c.MaxRolls + 1) * rollFactor;
+            int n = (int)rolls + (rng.NextDouble() < rolls - (int)rolls ? 1 : 0);
+            for (int i = 0; i < n; i++)
+            {
+                double pick = rng.NextDouble() * total;
+                var id = candidates[^1].Id;
+                foreach (var (cid, w) in candidates)
+                {
+                    pick -= w;
+                    if (pick < 0) { id = cid; break; }
+                }
+                found[id] = found.GetValueOrDefault(id) + Quantity(id, rng);
+            }
+        }
+        return found;
+    }
+
+    /// <summary>
+    /// Every item a container can give with its weight, the kind applied (an item in two pools
+    /// appears twice); with no kind (<see cref="YardRoll"/>) every category counts 1. One place for
+    /// <see cref="Roll"/> and <see cref="Chance"/>, so they cannot drift.
+    /// </summary>
+    private static List<(ItemId Id, float W)> Candidates(BuildingKind? kind, Container c)
     {
         var candidates = new List<(ItemId Id, float W)>();
         foreach (var pool in c.Pools)
@@ -386,7 +398,7 @@ public static class LootTables
             foreach (var id in pool.Items)
             {
                 var cat = ItemDefs.Get(id)!.Category;
-                float w = pool.Weight * TierWeight(Tiers[id]) / tierSum * KindFactor(kind, cat);
+                float w = pool.Weight * TierWeight(Tiers[id]) / tierSum * (kind is { } k ? KindFactor(k, cat) : 1f);
                 if (w > 0) candidates.Add((id, w));
             }
         }
@@ -414,28 +426,84 @@ public static class LootTables
         if (ContainerFor(type, room) is not { } c) return 0;
 
         // everything below happens only in a container that was not empty, so work conditionally
-        double any = 0;
-        var cand = Candidates(kind, c);
-        double total = cand.Sum(x => (double)x.W);
-        double pk = total > 0 ? cand.Where(x => x.Id == item).Sum(x => (double)x.W) / total : 0;
-        if (pk > 0)
-        {
-            // each of MinRolls..MaxRolls equally likely; a fractional count rounds up with that probability
-            int span = c.MaxRolls - c.MinRolls + 1;
-            for (int r = c.MinRolls; r <= c.MaxRolls; r++)
-            {
-                float rolls = r * RollFactor(kind);
-                int lo = (int)rolls;
-                double up = rolls - lo;
-                any += ((1 - up) * (1 - Math.Pow(1 - pk, lo)) + up * (1 - Math.Pow(1 - pk, lo + 1))) / span;
-            }
-        }
+        double any = PicksChance(c, Candidates(kind, c), RollFactor(kind), item);
 
         double seasonal = 0;   // the occasions' extra roll, drawn after the empty check, like Roll
         if (Seasonal?.Invoke(type) is { Items.Length: > 0 } treats)
             seasonal = Math.Clamp(treats.Chance, 0f, 1f) * treats.Items.Count(i => i == item) / treats.Items.Length;
         return NonEmpty(c, abundance) * (1 - (1 - any) * (1 - seasonal));
     }
+
+    /// <summary>
+    /// The closed form of <see cref="Picks"/>: the probability that a container found non-empty
+    /// draws <paramref name="item"/> at least once.
+    /// </summary>
+    private static double PicksChance(Container c, List<(ItemId Id, float W)> cand, float rollFactor, ItemId item)
+    {
+        double total = cand.Sum(x => (double)x.W);
+        double pk = total > 0 ? cand.Where(x => x.Id == item).Sum(x => (double)x.W) / total : 0;
+        if (pk <= 0) return 0;
+        double any = 0;
+        // each of MinRolls..MaxRolls equally likely; a fractional count rounds up with that probability
+        int span = c.MaxRolls - c.MinRolls + 1;
+        for (int r = c.MinRolls; r <= c.MaxRolls; r++)
+        {
+            float rolls = r * rollFactor;
+            int lo = (int)rolls;
+            double up = rolls - lo;
+            any += ((1 - up) * (1 - Math.Pow(1 - pk, lo)) + up * (1 - Math.Pow(1 - pk, lo + 1))) / span;
+        }
+        return any;
+    }
+
+    // ---- a building site's yard (#627) ----------------------------------------------------------
+    //
+    // The skips and the materials stand outside any interior (Terrain/Construction/SiteLoot), so
+    // they are no furniture type and draw from tables of their own: no building kind scales them,
+    // no francs, no occasion's treats. Materials in the yard (stone, timber, rebar as scrap), rubble
+    // in the skips. Worth a look, not a house: a typical yard (rebar, four pallets, two formwork
+    // stacks, the rings, two skips) gives about 10 items worth a few francs, a house about 14 and
+    // its cash. The tools and hard hats are the site office's (#822): an interior's furniture.
+
+    private static readonly ItemId[] Rubble = { ItemId.Stone, ItemId.ScrapMetal, ItemId.WoodPlanks, ItemId.Plastic, ItemId.Glass };
+    private static readonly ItemId[] Offcuts = { ItemId.CopperWire, ItemId.Rubber, ItemId.Screws };
+    private static readonly ItemId[] RebarScrap = { ItemId.ScrapMetal };
+    private static readonly ItemId[] Strap = { ItemId.Rope };
+    private static readonly ItemId[] Timber = { ItemId.WoodPlanks };
+    private static readonly ItemId[] Fixings = { ItemId.Screws };
+    private static readonly ItemId[] Masonry = { ItemId.Stone };
+    private static readonly ItemId[] Gravel = { ItemId.SandBag };
+
+    private static readonly Dictionary<SiteStockKind, Container> YardContainers = new()
+    {
+        [SiteStockKind.Skip] = new(0.45f, 1, 2, new[] { P(Rubble, 85), P(Offcuts, 15) }),
+        [SiteStockKind.Rebar] = new(0.50f, 1, 2, new[] { P(RebarScrap, 85), P(Strap, 15) }),
+        [SiteStockKind.Formwork] = new(0.55f, 1, 1, new[] { P(Timber, 80), P(Fixings, 20) }),
+        [SiteStockKind.Rings] = new(0.65f, 1, 1, new[] { P(Masonry, 70), P(Gravel, 30) }),
+        [SiteStockKind.Bricks] = new(0.55f, 1, 1, new[] { P(Masonry, 100) }),
+        [SiteStockKind.Cement] = new(0.55f, 1, 1, new[] { P(Gravel, 75), P(Masonry, 25) }),
+    };
+
+    /// <summary>
+    /// What a yard container holds (#627), deterministic in <paramref name="rng"/> like
+    /// <see cref="Roll"/>: the empty check, then <see cref="Picks"/>, nothing else.
+    /// </summary>
+    public static List<ItemStack> YardRoll(SiteStockKind kind, Random rng)
+    {
+        var result = new List<ItemStack>();
+        if (!YardContainers.TryGetValue(kind, out var c) || rng.NextDouble() >= 1 - c.Empty) return result;
+        foreach (var (id, count) in Picks(c, Candidates(null, c), 1f, rng))
+            result.Add(new ItemStack(id, Math.Min(count, ItemDefs.Get(id)!.MaxStack)));
+        return result;
+    }
+
+    /// <summary>The exact probability that a yard container holds at least one <paramref name="item"/> when restocked: the closed form of <see cref="YardRoll"/>.</summary>
+    public static double YardChance(SiteStockKind kind, ItemId item) =>
+        YardContainers.TryGetValue(kind, out var c) ? NonEmpty(c, 1f) * PicksChance(c, Candidates(null, c), 1f, item) : 0;
+
+    /// <summary>What yard container <paramref name="index"/> of a site holds this period, before anyone has taken anything: seeded as a piece of furniture is.</summary>
+    public static List<ItemStack> YardContents(string buildingKey, int index, SiteStockKind kind, long epoch) =>
+        YardRoll(kind, RngFor(buildingKey, index, epoch));
 
     /// <summary>Probability a container gives francs (they are cash, not an item: <see cref="Roll"/> stacks them as <see cref="ItemId.Francs"/>).</summary>
     public static double ChanceFrancs(BuildingKind kind, FurnitureType type, float abundance, RoomType? room = null) =>

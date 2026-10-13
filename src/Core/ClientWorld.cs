@@ -869,7 +869,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             structures.GroundAt = p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null;
         }
 
-        if (Systems.On(Systems.Loot)) Loot.LootService.Create(this).Items = items;
+        if (Systems.On(Systems.Loot))
+        {
+            var loot = Loot.LootService.Create(this);
+            loot.Items = items;
+            // a building site's skips and materials (#627) are worked out from the tiles
+            loot.Source = () => _chunks?.Source;
+        }
         // shops and PAUSA vending machines (#273): same node path as the server's, which keeps the sold counts
         if (Systems.On(Systems.Loot)) Loot.ShopService.Create(this).Items = items;
         // selling farm produce (#494): World/FarmSales and World/FarmStands, same paths as the server's; offline this client plays it
