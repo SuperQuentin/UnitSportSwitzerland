@@ -36,6 +36,14 @@ public sealed class SiteDressingPlan
     /// body is let through at an open office door, so they collide with the buildings, not the yard.
     /// </summary>
     public (int Start, int Count) OfficeBoxes { get; set; }
+
+    /// <summary>Which of <see cref="Boxes"/> are the toilet cabins (#822): their walls collide with the buildings too.</summary>
+    public (int Start, int Count) ToiletBoxes { get; set; }
+
+    /// <summary>Whether box <paramref name="i"/> is a wall of a container or cabin with a door: the office's or a toilet's.</summary>
+    public bool WithDoor(int i) =>
+        i >= OfficeBoxes.Start && i < OfficeBoxes.Start + OfficeBoxes.Count
+        || i >= ToiletBoxes.Start && i < ToiletBoxes.Start + ToiletBoxes.Count;
 }
 
 /// <summary>
@@ -139,11 +147,10 @@ public static class SiteDressings
                     plan.Boxes.AddRange(office.Boxes);
                     break;
                 case SiteZoneKind.Toilets:
-                    for (int i = 0; i < 2; i++)
-                    {
-                        float u = 0.2f + i * 1.25f;
-                        ZoneBox(u, g, 0.25f, u + 1.1f, g + 2.3f, 1.35f, i == 0 ? ShellPart.Toilet : ShellPart.ToiletAlt, true);
-                    }
+                    // a blue and a green cabin, each with a door into the site's plan (#822): SiteOffices
+                    if (SiteOffices.Toilets(site, ground, 0) is not { } cabins) break;
+                    plan.ToiletBoxes = (plan.Boxes.Count, cabins.Boxes.Count);
+                    plan.Boxes.AddRange(cabins.Boxes);
                     break;
                 case SiteZoneKind.Skips:
                 {

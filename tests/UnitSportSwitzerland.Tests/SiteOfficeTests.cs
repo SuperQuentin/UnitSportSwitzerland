@@ -8,7 +8,7 @@ namespace UnitSportSwitzerland.Tests;
 
 /// <summary>
 /// <see cref="SiteOffices.Plan"/> (#822): the site office's containers, their doors and the rooms
-/// behind them. What matters: it is a function of the site alone (every peer and the server agree),
+/// behind them, and the yard's toilet cabins, doors of the same site. What matters: it is a function of the site alone (every peer and the server agree),
 /// each door stands on the door drawn in its container's end and faces out of it, the interior's
 /// plan box is the ground row of containers with every door on its front wall, and the rooms fill
 /// the row one per container.
@@ -63,9 +63,9 @@ public class SiteOfficeTests
         var (_, office, boxes) = Make(key, w, d, h, floors, turn, new Vector2(se, sn));
         var ground = GroundContainers(office, boxes);
         Assert.NotEmpty(ground);
-        Assert.Equal(ground.Count, office.Doors.Count);
+        Assert.Equal(ground.Count, office.ContainerDoors);
         Assert.Equal(Enumerable.Range(0, office.Doors.Count), office.Doors.Select(x => x.Slot));
-        Assert.Equal(office.Doors.Count, office.Rooms.Count);
+        Assert.Equal(office.ContainerDoors, office.Rooms.Count);
     }
 
     [Theory]
@@ -76,8 +76,8 @@ public class SiteOfficeTests
         // the drawn doors: the thin trim panels across a container's end, on the ground floor
         var panels = boxes.Where(b => b.Part == ShellPart.ContainerTrim && b.Min.Y > office.Ground + 0.05f
             && b.Max.Y < office.Ground + SiteOffices.ContainerHeight - 0.3f).ToList();
-        Assert.Equal(office.Doors.Count, panels.Count);
-        foreach (var door in office.Doors)
+        Assert.Equal(office.ContainerDoors, panels.Count);
+        foreach (var door in office.Doors.Take(office.ContainerDoors))
         {
             var o = new Vector3(door.Outward.X, 0, door.Outward.Y);
             var across = new Vector3(-door.Outward.Y, 0, door.Outward.X);
@@ -104,7 +104,7 @@ public class SiteOfficeTests
     {
         var (_, office, boxes) = Make(key, w, d, h, floors, turn, new Vector2(se, sn));
         var ground = GroundContainers(office, boxes);
-        foreach (var door in office.Doors)
+        foreach (var door in office.Doors.Take(office.ContainerDoors))
         {
             var o = new Vector3(door.Outward.X, 0, door.Outward.Y);
             Assert.Equal(1f, door.Outward.Length(), 3);
@@ -126,7 +126,7 @@ public class SiteOfficeTests
                 var p = office.ToInterior(corner);
                 Assert.True(Math.Abs(p.X) <= hw + 0.01f && Math.Abs(p.Y) <= hd + 0.01f, $"{key}: a container's corner {p} outside the plan box");
             }
-        foreach (var door in office.Doors)
+        foreach (var door in office.Doors.Take(office.ContainerDoors))
         {
             var p = office.ToInterior(new Vector2(door.Sill.X, door.Sill.Z));
             // the trim's face, 2 cm in front of the container's end: the plan box's front wall
@@ -159,8 +159,8 @@ public class SiteOfficeTests
     [Fact]
     public void A_big_site_has_an_office_and_a_mess_room_a_house_plot_an_office()
     {
-        Assert.Equal(2, Make("2582_1102_61", 52f, 30f, 18.4f, 6, 2.4f, new Vector2(500, 440)).Office.Doors.Count);   // over 1,500 m²: two stacks
-        Assert.Single(Make("2580_1112_61", 14f, 11f, 6.3f, 2, -0.7f, new Vector2(440, 500)).Office.Doors);
+        Assert.Equal(2, Make("2582_1102_61", 52f, 30f, 18.4f, 6, 2.4f, new Vector2(500, 440)).Office.ContainerDoors);   // over 1,500 m²: two stacks
+        Assert.Equal(1, Make("2580_1112_61", 14f, 11f, 6.3f, 2, -0.7f, new Vector2(440, 500)).Office.ContainerDoors);
     }
 
     [Fact]
@@ -187,6 +187,80 @@ public class SiteOfficeTests
         Assert.Equal(boxes, yard.Boxes.Skip(yard.OfficeBoxes.Start).Take(yard.OfficeBoxes.Count));
         Assert.All(yard.Boxes.Where((x, i) => x.Part == ShellPart.Container && (i < yard.OfficeBoxes.Start || i >= yard.OfficeBoxes.Start + yard.OfficeBoxes.Count)),
             x => Assert.Fail($"a container outside the office's boxes at {x.Min}"));
+    }
+
+    // ---- the toilet cabins (#822): doors of the same site, rooms of the same plan ------------------
+
+    [Theory]
+    [MemberData(nameof(Sites))]
+    public void Each_toilet_cabin_has_a_door_after_the_containers(string key, float w, float d, float h, byte floors, float turn, float se, float sn)
+    {
+        var (site, office, _) = Make(key, w, d, h, floors, turn, new Vector2(se, sn));
+        var (toilets, cabinBoxes) = SiteOffices.Toilets(site, Slope, office.ContainerDoors)!.Value;
+        Assert.Equal(SiteOffices.Cabins, office.Toilets.Count);
+        Assert.Equal(toilets, office.Toilets);
+        Assert.Equal(office.Toilets.Select(t => t.Door), office.Doors.Skip(office.ContainerDoors));
+        var cabins = cabinBoxes.Where(b => b.Solid).ToList();
+        Assert.Equal(SiteOffices.Cabins, cabins.Count);
+        for (int i = 0; i < office.Toilets.Count; i++)
+        {
+            var t = office.Toilets[i];
+            Assert.Equal(office.ContainerDoors + i, t.Door.Slot);
+            // its footprint is the cabin drawn
+            Assert.Equal(cabins[i].Min.X, t.Min.X, 3);
+            Assert.Equal(cabins[i].Max.Z, t.Max.Y, 3);
+            Assert.Equal(cabins[i].Min.Y, t.Ground, 3);
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(Sites))]
+    public void A_toilet_door_stands_on_its_cabin_s_door_facing_out(string key, float w, float d, float h, byte floors, float turn, float se, float sn)
+    {
+        var (site, office, _) = Make(key, w, d, h, floors, turn, new Vector2(se, sn));
+        var (_, boxes) = SiteOffices.Toilets(site, Slope, office.ContainerDoors)!.Value;
+        var cabins = boxes.Where(b => b.Solid).ToList();
+        var panels = boxes.Where(b => b.Part == ShellPart.ContainerTrim).ToList();
+        Assert.Equal(cabins.Count, panels.Count);
+        foreach (var t in office.Toilets)
+        {
+            var door = t.Door;
+            var o = new Vector3(door.Outward.X, 0, door.Outward.Y);
+            var across = new Vector3(-door.Outward.Y, 0, door.Outward.X);
+            var up = Vector3.Up * 1f;
+            Assert.Equal(1f, door.Outward.Length(), 3);
+            Assert.Equal(t.Ground, door.Sill.Y, 3);
+            // on its cabin's face, the panel's width, the portal in front of the panel
+            var panel = Assert.Single(panels, p => Contains(p, door.Sill - o * 0.03f + up, 0.001f));
+            Assert.Equal(SiteOffices.CabinDoorWidth, Math.Abs((panel.Max - panel.Min).Dot(across)), 2);
+            Assert.False(Contains(panel, door.Sill + o * 0.02f + up, 0.001f), $"{key}: cabin door {door.Slot}'s portal inside its panel");
+            Assert.Single(cabins, c => Contains(c, door.Sill - o * 0.3f + up, 0f));
+            Assert.DoesNotContain(boxes, c => c.Solid && Contains(c, door.Sill + o * 0.3f + up, 0f));
+            Assert.True(door.Height >= panel.Max.Y - t.Ground - 0.001f);
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(Sites))]
+    public void The_cabins_open_towards_the_office_and_stand_clear_of_its_rooms(string key, float w, float d, float h, byte floors, float turn, float se, float sn)
+    {
+        var (_, office, _) = Make(key, w, d, h, floors, turn, new Vector2(se, sn));
+        float hw = office.Width / 2, hd = office.Depth / 2;
+        foreach (var t in office.Toilets)
+        {
+            var middle = (t.Min + t.Max) / 2;
+            // the face towards the office, not away from it
+            Assert.True(t.Door.Outward.Dot(office.Center - middle) >= -0.01f, $"{key}: cabin door {t.Door.Slot} faces away from the office");
+            // square to the office's frame, so a room of its plan, and not in the containers' rooms
+            var a = office.ToInterior(t.Min);
+            var b = office.ToInterior(t.Max);
+            var o = new Vector2(t.Door.Outward.Dot(office.Across), -t.Door.Outward.Dot(office.Outward));
+            Assert.True(Math.Abs(Math.Abs(o.X) + Math.Abs(o.Y) - 1f) < 0.001f, $"{key}: cabin door {t.Door.Slot} not square to the office ({o})");
+            bool apart = Math.Min(a.X, b.X) >= hw || Math.Max(a.X, b.X) <= -hw || Math.Min(a.Y, b.Y) >= hd || Math.Max(a.Y, b.Y) <= -hd;
+            Assert.True(apart, $"{key}: cabin {t.Door.Slot} at {a}..{b} overlaps the containers' rooms");
+            Assert.Equal(SiteOffices.CabinSide, Math.Abs(b.X - a.X), 3);
+            Assert.Equal(SiteOffices.CabinSide, Math.Abs(b.Y - a.Y), 3);
+        }
     }
 
     private static bool Contains(ShellBox b, Vector3 p, float margin) =>

@@ -123,16 +123,17 @@ public static class SiteShellBuilder
 
     /// <summary>
     /// The site building's doors (#822): its office's, one per ground-floor container, slot 0 first,
+    /// then its toilet cabins' (one each),
     /// tile-local like every <see cref="DoorSpot"/> (3 cm proud of the facade plane, on the sill).
     /// Plain pedestrian doors swinging in.
     /// </summary>
     public static DoorSpot[] OfficeDoors(SiteOffice office, ConstructionSite site, int index)
     {
         var doors = new DoorSpot[office.Doors.Count];
-        var outward = ToTileDir(site, office.Doors.Count > 0 ? office.Doors[0].Outward : Vector2.Zero);
         for (int i = 0; i < doors.Length; i++)
         {
             var d = office.Doors[i];
+            var outward = ToTileDir(site, d.Outward);
             var at = ToTile(site, d.Sill);
             doors[i] = new DoorSpot(index, new Vector3(at.X + outward.X * 0.03f, at.Y, at.Z + outward.Y * 0.03f),
                 new Vector3(outward.X, 0, outward.Y), d.Width, d.Height)
@@ -284,7 +285,7 @@ public static class SiteShellBuilder
             foreach (var box in shell.Boxes) g.Box(box, T);
             for (int k = 0; k < yard.Boxes.Count; k++)
             {
-                g.Office = k >= yard.OfficeBoxes.Start && k < yard.OfficeBoxes.Start + yard.OfficeBoxes.Count;
+                g.Office = yard.WithDoor(k);
                 g.Box(yard.Boxes[k], T);
             }
             g.Office = false;

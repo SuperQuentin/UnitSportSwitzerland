@@ -223,8 +223,9 @@ foundations, the office two high, determinism. Pictures: `--shot-queue` on the g
 
 ## The site office (#822)
 
-The office containers are the site building's doors and interior, so it is entered like any other
-building: a door that opens, a portal, an interior to walk round and search.
+The office containers and the yard's toilet cabins are the site building's doors and interior, so
+they are entered like any other building: a door that opens, a portal, an interior to walk round
+and search.
 
 - **`SiteOffices.Plan`** (pure, `SiteOffice.cs`, tier 0) lays out the office zone's containers
   (what `SiteDressings` used to draw itself, box for box) and returns a `SiteOffice`: one door per
@@ -232,10 +233,16 @@ building: a door that opens, a portal, an interior to walk round and search.
   (the ground row's middle, `Outward` = the containers' door end, `Across` = interior +X so that +Z
   is into them), one room per container (two side by side meet in the middle of the 0.3 m gap) and
   the windows' Z. `SiteDressings.Plan` calls it and keeps its boxes in `SiteDressingPlan.OfficeBoxes`.
+- **The toilets** (`SiteOffices.Toilets`, same file): the blue and the green cabin of #609, each
+  with a door (0.8 x 2.0 m, a blue panel 3 cm proud, the doorway plane 2 cm out) in its long face
+  towards the office zone (towards the gate on a site with none). Their doors are the site's next
+  slots after the containers' (`SiteOffice.Toilets`, `ContainerDoors`); their boxes are
+  `SiteDressingPlan.ToiletBoxes`, and collide with the buildings like the containers'.
 - **Doors.** `BuildingFootprint.ComputeDoors` gives an `UnderConstruction` building its office's
   doors (`OfficeDoors`, through `SiteShellBuilder.Office` and `OfficeDoors`): slot 0 the office,
-  slot 1 the mess room, plain pedestrian doors swinging in, 0.9 x 2.1 m, on the ground the
-  containers are drawn on. The site is planned from the same tile and roads (`SitePlans.Of`, or the
+  slot 1 the mess room where there are two containers, then the two cabins; plain pedestrian doors
+  swinging in, 0.9 x 2.1 m (a cabin's 0.8 x 2.0), on the ground the containers (the cabins) are
+  drawn on. The site is planned from the same tile and roads (`SitePlans.Of`, or the
   `sites` `ChunkManager` already planned, so they are not planned twice). The interior key is the
   site's ordinary building key, so `InteriorManager`, `DoorIndex`, `DoorLeaf`, `DoorLink`, loot and
   sync are unchanged; `BuildingMeshBuilder` bakes no facade door for it (`Drawn`): the containers
@@ -243,15 +250,23 @@ building: a door that opens, a portal, an interior to walk round and search.
   portal quad, 2 cm further out, stands in front of the drawn door panel (3 cm proud) and covers it
   while the door is open, so the outside mesh is unchanged. The leaf is the container's blue
   (`DoorLeafColorFor`).
-- **Interior** (`InteriorGenerator.SiteOffice.cs`): the plan box is the ground row of containers,
-  not the building's, its front wall their door end, so each doorway is where its container's door
-  is and the `DoorLink` is a plain drop (0.0 cm off in `--constructioncheck`). A 2.6 m storey, one
+- **Interior** (`InteriorGenerator.SiteOffice.cs`): every room stands in the plan where its
+  container or cabin stands in the yard, in the containers' frame (the yard is square to the site,
+  so a cabin is square to it too); the plan box is the bounding box of them all, not the building's.
+  So each doorway is where its door is and every `DoorLink` is a plain drop (0.0 cm off in
+  `--constructioncheck`). **A door's link does not need its room at the plan box's edge**:
+  `DoorLink.Create` maps the facade frame to the entrance's own point and inward direction
+  (`EntrancePlan.X/Z/InX/InZ`), any room of the ground floor, so rooms standing apart in the yard
+  are rooms of one plan, each reached only through its own door. A 2.6 m storey, one
   floor. The office (`RoomType.SiteOffice`, new): desk, plans table, locker, the hard-hat and
-  hi-vis rail, coffee machine, heater, tool chest, whiteboard, chair, extinguisher. The mess room
+  hi-vis rail, coffee machine, heater, tool chest, whiteboard, chair, extinguisher. A cabin (`RoomType.WC`, 2.2 m
+  clear) is furnished by hand (`FurnishCabin`: a metre square leaves no room for the furnisher's
+  clearances): the seat and a urinal against the back wall, the paper beside the seat, a mirror
+  (a `WallMirror` on it) and a coat hook on the other wall. The mess room
   (`BreakRoom`, with the site's own piece list `SiteMess`) is the changing room too: lockers first,
   table, bench, fridge, counter, coffee, rail, heater. A doorway between the two at the back,
   windows where the containers have theirs. New furniture `CoffeeMachine` and `Heater` (appended;
-  in the model viewer by themselves). A site office's rooms are never a core (`Furnish`). Plan
+  in the model viewer by themselves), and for the cabins `Urinal`, `PaperRoll`, `Mirror`, `CoatHook`. A site office's rooms are never a core (`Furnish`). Plan
   version not bumped: no stored plan changes (a site had none). **A stored office plan is matched
   to the building's solid only** (`InteriorLayout.Matches`), not to the site plan or the roads: a
   change to the planner's office zone or to `SiteOffices` must bump `InteriorLayout.CurrentVersion`,
@@ -266,7 +281,7 @@ building: a door that opens, a portal, an interior to walk round and search.
   rail but are not items.
 - **The binoculars** label the site "Building site" again: its door is in `DoorIndex` with its kind.
 - Found on the way: #497's wall pieces (locker, hat rail, safety sign, time clock, whiteboard,
-  banner, desk counter) faced the wall they stand against; `InteriorMeshBuilder` mirrors them.
+  banner, desk counter, tool chest) faced the wall they stand against; `InteriorMeshBuilder` mirrors them.
 
 ### Checks
 
@@ -274,12 +289,16 @@ building: a door that opens, a portal, an interior to walk round and search.
   its end (its sill on the containers' ground, its plane the trim's face, the portal in front of
   the panel and of every rail), facing out of it, every door on the plan box's front wall in its
   own room, the rooms filling the row, two containers on a big site and one on a house plot,
-  determinism, and the dressing drawing the office it plans. Sites turned and fronting each way,
-  on sloping ground.
+  determinism, and the dressing drawing the office it plans; the cabins (12 more): a door each
+  after the containers', on the panel drawn in its face and facing out of it, towards the office,
+  square to the office's frame and clear of its rooms. Sites turned and fronting each way, on
+  sloping ground.
 - `--constructioncheck`: for every built site, the office doors among the tile's doors (the same
   with the sites handed in or planned alone), each on its container's door, the plan valid, one
   room per container, every door's doorway lined up with it (distance and facing) and the opening
-  the door's size, something to search, the plan the same twice. Logs each door's `--at` and facing.
+  the door's size, nothing of the yard in the 0.6 m in front of any door, each cabin a room with
+  its one doorway holding its seat, urinal, paper, mirror and hook, something to search, the plan
+  the same twice. Logs each door's `--at` and facing.
 - `--interiorcheck --doorkind UnderConstruction --generated on --at 2586561,1115543` (quick,
   headless): walks into the generated office, searches its desk, walks out, shuts the door from
   inside and walks out as it swings, and the door shuts by itself.

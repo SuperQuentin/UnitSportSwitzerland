@@ -831,12 +831,12 @@ public static partial class InteriorMeshBuilder
         var basis = new Basis(Vector3.Up, p.Turns * Mathf.Pi / 2);
         var at = new Vector3(p.X, y0, p.Z);
         float w = p.W / 2, d = p.D / 2, H = p.H;
-        // #497's wall pieces were authored with their fronts on -Z, which is the wall: lockers opened
+        // #497's wall pieces were authored with their fronts on -Z, which is the wall: lockers and tool chests opened
         // into it, the hats hung in it, a whiteboard showed its back. Mirrored so they face the room
         // (found by #822, whose office is lined with them).
         bool mirror = p.Type is FurnitureType.Locker or FurnitureType.HardHatRack
             or FurnitureType.SafetySign or FurnitureType.TimeClock or FurnitureType.Whiteboard or FurnitureType.Banner
-            or FurnitureType.DeskCounter;
+            or FurnitureType.DeskCounter or FurnitureType.ToolChest;
         void B(float xa, float ya, float za, float xb, float yb, float zb, Color col, bool collide = false)
         {
             if (mirror) (za, zb) = (-zb, -za);
@@ -889,7 +889,9 @@ public static partial class InteriorMeshBuilder
             or FurnitureType.GuitarStand
             // #497: paint on the floor, a beam overhead, and signs flat on the wall
             or FurnitureType.FloorMarking or FurnitureType.Gantry or FurnitureType.SafetySign
-            or FurnitureType.Banner or FurnitureType.Whiteboard or FurnitureType.TimeClock);
+            or FurnitureType.Banner or FurnitureType.Whiteboard or FurnitureType.TimeClock
+            // #822: what hangs on a cabin's walls
+            or FurnitureType.PaperRoll or FurnitureType.Mirror or FurnitureType.CoatHook);
         if (solid) CollisionBox(s, at, basis, new Vector3(-w, 0, -d), new Vector3(w, H, d));
 
         var wood = C(0.52f, 0.36f, 0.22f);
@@ -1590,6 +1592,30 @@ public static partial class InteriorMeshBuilder
                     if (cx + 0.035f < w) B(cx - 0.035f, 0.88f, -d + 0.2f, cx + 0.035f, 0.98f, -d + 0.27f, white);
                 break;
             }
+            case FurnitureType.Urinal:
+            {
+                // #822: a wall bowl at its height, a flush pipe up from it
+                const float y = 0.45f;
+                B(-w, y, -d, w, y + 0.12f, d * 0.6f, white);
+                B(-w * 0.85f, y + 0.12f, -d, w * 0.85f, y + H * 0.6f, -d + 0.12f, white);
+                B(-w, y - 0.06f, -d, w, y, d, white * 0.9f);
+                B(-0.015f, y + H * 0.6f, -d, 0.015f, y + H, -d + 0.03f, metal);
+                break;
+            }
+            case FurnitureType.PaperRoll:
+                // #822: a holder on the wall and the roll under it (the piece stands at its lift)
+                B(-w, H - 0.02f, -d, w, H, d * 0.2f, metal);
+                B(-w * 0.8f, 0, -d * 0.2f, w * 0.8f, H - 0.035f, d, white);
+                break;
+            case FurnitureType.Mirror:
+                // #822: a frame on the wall; the glass is a WallMirror on it
+                B(-w, 0, -d, w, H, d, C(0.70f, 0.72f, 0.74f));
+                break;
+            case FurnitureType.CoatHook:
+                // #822: a peg on a small plate
+                B(-w, 0, -d, w, H, -d + 0.015f, metal * 0.8f);
+                B(-0.015f, H * 0.3f, -d + 0.015f, 0.015f, H * 0.55f, d, metal);
+                break;
             case FurnitureType.Heater:
             {
                 // #822: an oil-filled radiator on castors: fins across its width, a dial on top

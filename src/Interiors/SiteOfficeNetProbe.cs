@@ -13,7 +13,8 @@ namespace UnitSport.Interiors;
 /// of its containers. B, there from the start and waiting outside, must see the door open (the
 /// server's broadcast), then walk in through it and find the stack gone from the same container.
 /// C joins late, after A's take: the door must already be open (the server's door table) and the
-/// stack gone. Coordinated through chat lines; A repeats its take until both answer. Every peer
+/// stack gone, and then walks into a toilet cabin by its own door (a room of the same plan).
+/// Coordinated through chat lines; A repeats its take until both answer. Every peer
 /// finds the same door from the tile alone (<see cref="DoorIndex.NearestOfKind"/>).
 /// </summary>
 public partial class SiteOfficeNetProbe : ChatProbe
@@ -142,8 +143,36 @@ public partial class SiteOfficeNetProbe : ChatProbe
             Expect(!left.Any(x => x.Index == gone), $"{_role} finds the stack A took gone from the {layout.Furniture[index].Type}");
             loot.Close();
             Say("done");
+            if (_role == "C") await Toilet(me, interiors, door);
         }
         await Finish(2);
+    }
+
+    /// <summary>
+    /// C also uses a toilet: back out in the yard, in through the last toilet cabin's door, and
+    /// into that cabin, a room of the same plan reached only through its own door.
+    /// </summary>
+    private async Task Toilet(FootPlayer me, InteriorManager interiors, DoorIndex.Entry office)
+    {
+        DoorIndex.Entry? last = null;
+        foreach (var e in DoorIndex.All())
+            if (e.Key.Building == office.Key.Building && (last == null || e.Key.Slot > last.Value.Key.Slot)) last = e;
+        if (last is not { } cabin || cabin.Key.Slot == 0) { Expect(false, "the site has a toilet cabin door"); return; }
+        string key = cabin.Key.ToString();
+        var inward = -cabin.Outward;
+        me.LeaveInterior(cabin.World + cabin.Outward * 1.1f + Vector3.Up * 0.3f, Mathf.Atan2(-inward.X, -inward.Z));
+        me.Velocity = Vector3.Zero;
+        await Seconds(1.5);
+        await Until(() => me.IsOnFloor(), 10);
+        Expect(!me.Indoors, $"out in the yard by the cabin door {key}");
+        me.TryInteract();
+        if (!await Until(() => interiors.Links.TryGetValue(key, out var l) && l.Passable && l.Swing >= 1f, 15))
+        { Expect(false, $"the cabin door {key} opened"); return; }
+        if (!await WalkIn(me, interiors, key)) return;
+        var layout = interiors.Current!;
+        var local = interiors.CurrentNode!.GlobalTransform.AffineInverse() * me.GlobalPosition;
+        var room = layout.GroundFloor.Rooms.FirstOrDefault(r => local.X > r.X0 && local.X < r.X1 && local.Z > r.Z0 && local.Z < r.Z1);
+        Expect(room?.Type == RoomType.WC, $"C stands in a toilet cabin of {layout.Key} ({room?.Type.ToString() ?? "no room"} at {local.X:F2},{local.Z:F2})");
     }
 
     /// <summary>Walks through the open door into the office: the player's space must become it.</summary>
