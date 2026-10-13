@@ -15,7 +15,7 @@ public static class PlanSvg
 {
     /// <summary>Where the mouths are drawn without a core, metres from the node.</summary>
     public const double MouthAt = 14;
-    private const double Shown = 70, Step = 1, Scale = 5;
+    private const double Shown = 40, Step = 1, Scale = 7;
 
     public static string Draw(JunctionPlan plan, string title)
     {
@@ -24,7 +24,7 @@ public static class PlanSvg
         double reach = core is { Mouths.Count: > 0 } ? core.Mouths.Max(m => m.Station) : MouthAt;
         double half = reach + Shown + 8;
         int px = (int)(half * 2 * Scale);
-        double rows = plan.Arms.Count * 4.2 + 8;
+        double rows = plan.Arms.Count * 4.2 + 12;
         var sb = new StringBuilder();
         sb.Append(inv, $"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{px}\" height=\"{(int)((half * 2 + 16 + rows) * Scale)}\" viewBox=\"{-half} {-half - 14} {half * 2} {half * 2 + 16 + rows}\" font-family=\"Segoe UI, Arial, sans-serif\">\n");
         sb.Append(inv, $"<rect x=\"{-half}\" y=\"{-half - 14}\" width=\"{half * 2}\" height=\"{half * 2 + 16 + rows}\" fill=\"#e9ece6\"/>\n");
@@ -76,7 +76,10 @@ public static class PlanSvg
             y += 4.2;
         }
         if (core is not null)
-            sb.Append(inv, $"<text x=\"{-half + 2}\" y=\"{y:F1}\" font-size=\"3\" fill=\"#1b2327\">{Esc(string.Create(inv, $"core {core.Area:F0} m2 (today: cap {plan.OldArea:F0} m2 dashed, with its ribbons to these mouths {plan.OldAreaToMouths:F0} m2), {core.Connectors.Count} connectors, kerbs starting outside their mouth {core.KerbsNotTangent}, connectors leaving the outline {core.ConnectorsOutside}"))}</text>\n");
+        {
+            sb.Append(inv, $"<text x=\"{-half + 2}\" y=\"{y:F1}\" font-size=\"3\" fill=\"#1b2327\">{Esc(string.Create(inv, $"core {core.Area:F0} m2 (today: cap {plan.OldArea:F0} m2 dashed, with its ribbons to these mouths {plan.OldAreaToMouths:F0} m2), {core.Connectors.Count} connectors"))}</text>\n");
+            sb.Append(inv, $"<text x=\"{-half + 2}\" y=\"{y + 4.2:F1}\" font-size=\"3\" fill=\"#1b2327\">{Esc(string.Create(inv, $"checks: kerbs starting outside their mouth {core.KerbsNotTangent}, connectors leaving the outline {core.ConnectorsOutside}"))}</text>\n");
+        }
         Legend(sb, half);
         sb.Append("</svg>\n");
         return sb.ToString();

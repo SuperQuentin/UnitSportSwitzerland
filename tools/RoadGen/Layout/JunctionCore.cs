@@ -110,6 +110,10 @@ public sealed class JunctionCore
     public List<Vec2> Outline { get; } = new();
     public List<CoreLine> Lines { get; } = new();
     public double Area { get; set; }
+    /// <summary>The surface: triangles over <see cref="Outline"/>'s points (as today's cap).</summary>
+    public List<int> Triangles { get; } = new();
+    /// <summary>The outline does not cross itself (a check).</summary>
+    public bool Simple { get; set; } = true;
     /// <summary>Checks: kerbs whose curve starts outside their mouth; connectors whose edges leave the outline; mouths held at the most.</summary>
     public int KerbsNotTangent { get; set; }
     public int ConnectorsOutside { get; set; }

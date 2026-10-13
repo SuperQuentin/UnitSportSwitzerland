@@ -155,6 +155,9 @@ public static class CorePlanner
         }
         Dedupe(core.Outline);
         core.Area = Math.Abs(SignedArea(core.Outline));
+        // the surface: the outline triangulated (as today's cap); an outline crossing itself is reported
+        core.Simple = Simple(core.Outline);
+        core.Triangles.AddRange(EarClip.Triangulate(core.Outline));
         foreach (var c in core.Connectors)
         {
             c.Outside = c.Left.Concat(c.Right).Select(p => Outside(core.Outline, p)).Max();
@@ -687,6 +690,24 @@ public static class CorePlanner
         for (int k = ring.Count - 1; k > 0; k--)
             if (ring[k].DistanceTo(ring[k - 1]) < 1e-4) ring.RemoveAt(k);
         if (ring.Count > 1 && ring[0].DistanceTo(ring[^1]) < 1e-4) ring.RemoveAt(ring.Count - 1);
+    }
+
+    /// <summary>No two edges of the ring cross (neighbours share their end).</summary>
+    public static bool Simple(IReadOnlyList<Vec2> ring)
+    {
+        int n = ring.Count;
+        for (int i = 0; i < n; i++)
+        {
+            Vec2 a = ring[i], b = ring[(i + 1) % n];
+            for (int j = i + 2; j < n; j++)
+            {
+                if (i == 0 && j == n - 1) continue;
+                Vec2 c = ring[j], d = ring[(j + 1) % n];
+                double d1 = (b - a).Cross(c - a), d2 = (b - a).Cross(d - a), d3 = (d - c).Cross(a - c), d4 = (d - c).Cross(b - c);
+                if ((d1 > 1e-9 && d2 < -1e-9 || d1 < -1e-9 && d2 > 1e-9) && (d3 > 1e-9 && d4 < -1e-9 || d3 < -1e-9 && d4 > 1e-9)) return false;
+            }
+        }
+        return true;
     }
 
     public static double SignedArea(IReadOnlyList<Vec2> ring)

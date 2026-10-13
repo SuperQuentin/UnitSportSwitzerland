@@ -162,7 +162,8 @@ public sealed class JunctionPlan
             + string.Create(inv, $"corners: arcs {corners.Count(c => c.Shape == CornerShape.Arc):N0} ({corners.Count(c => c.Tight):N0} tight, {corners.Count(c => c.RoomClipped):N0} held by buildings), ")
             + string.Create(inv, $"vertices {corners.Count(c => c.Shape == CornerShape.Vertex):N0}, chords {corners.Count(c => c.Shape == CornerShape.Chord):N0}, gores {corners.Count(c => c.Shape == CornerShape.Gore):N0}\n")
             + string.Create(inv, $"      checks: kerbs starting outside their mouth {cores.Sum(p => p.Core!.KerbsNotTangent):N0}{(notTangent.Count > 0 ? " (at " + At(notTangent) + ")" : "")}, ")
-            + string.Create(inv, $"connectors leaving the outline {cores.Sum(p => p.Core!.ConnectorsOutside):N0}{(outside.Count > 0 ? " (at " + At(outside) + ")" : "")}\n")
+            + string.Create(inv, $"connectors leaving the outline {cores.Sum(p => p.Core!.ConnectorsOutside):N0}{(outside.Count > 0 ? " (at " + At(outside) + ")" : "")}, ")
+            + string.Create(inv, $"outlines crossing themselves {cores.Count(p => !p.Core!.Simple):N0}{(cores.Any(p => !p.Core!.Simple) ? " (at " + At(cores.Where(p => !p.Core!.Simple)) + ")" : "")}\n")
             + string.Create(inv, $"      against today: tight corners in both {both:N0}, planner only {newOnly:N0}{(newOnly > 0 ? " (at " + At(newOnlyAt.Distinct()) + ")" : "")}, ")
             + string.Create(inv, $"#700 only {oldOnly:N0}{(oldOnly > 0 ? " (at " + At(oldOnlyAt.Distinct()) + ")" : "")}; paved area out to the new mouths today (cap and ribbons) {oldArea:N0} m2, of the cores {newArea:N0} m2 ")
             + string.Create(inv, $"(per junction median x{Median(ratios):F2}, p10 x{(ratios.Count == 0 ? 0 : ratios[ratios.Count / 10]):F2}, p90 x{(ratios.Count == 0 ? 0 : ratios[ratios.Count * 9 / 10]):F2}; most changed {string.Join("; ", biggest)})");
