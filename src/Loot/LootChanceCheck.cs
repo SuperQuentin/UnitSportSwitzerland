@@ -48,7 +48,7 @@ public static class LootChanceCheck
             (BuildingKind.Garage, FurnitureType.Car, 1f, ItemId.Tyre),
             (BuildingKind.Agricultural, FurnitureType.HayBale, 1f, ItemId.Firewood),
             (BuildingKind.Civic, FurnitureType.Shelf, 0.8f, ItemId.Bandage),
-            (BuildingKind.UnderConstruction, FurnitureType.Crate, 1f, ItemId.Stone),
+            (BuildingKind.UnderConstruction, FurnitureType.Crate, 1f, ItemId.Stone),       // a site's minerals x2 (#822)
             (BuildingKind.Sacral, FurnitureType.Fridge, 1f, ItemId.Bread),             // 0: a church stocks no food
             (BuildingKind.House, FurnitureType.Desk, 0.5f, ItemId.SmartBinoculars),
             (BuildingKind.House, FurnitureType.Shelf, 1f, ItemId.SmartBinoculars),
@@ -74,6 +74,13 @@ public static class LootChanceCheck
             (BuildingKind.House, FurnitureType.GunLocker, null, ItemId.Shells),
             (BuildingKind.Commercial, FurnitureType.Safe, null, ItemId.Francs),
             (BuildingKind.Commercial, FurnitureType.Safe, null, ItemId.Electronics),
+            // a building site's office (#822): tools in the lockers and the tool chest, clothes in
+            // the mess room's lockers, the crew's lunch in its fridge
+            (BuildingKind.UnderConstruction, FurnitureType.Locker, RoomType.SiteOffice, ItemId.Screws),
+            (BuildingKind.UnderConstruction, FurnitureType.ToolChest, RoomType.SiteOffice, ItemId.DuctTape),
+            (BuildingKind.UnderConstruction, FurnitureType.Desk, RoomType.SiteOffice, ItemId.Francs),
+            (BuildingKind.UnderConstruction, FurnitureType.Locker, RoomType.BreakRoom, ItemId.Cloth),
+            (BuildingKind.UnderConstruction, FurnitureType.Fridge, RoomType.BreakRoom, ItemId.Bread),
         };
         foreach (var c in roomCases)
             Row($"{c.Kind} {c.Type} in {c.Room?.ToString() ?? "-"} {c.Item}",

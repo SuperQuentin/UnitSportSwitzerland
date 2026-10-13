@@ -125,6 +125,8 @@ public static partial class InteriorMeshBuilder
         RoomType.ControlRoom or RoomType.Dispatch => (C(0.46f, 0.48f, 0.52f), C(0.86f, 0.87f, 0.84f), C(0.93f, 0.93f, 0.93f)),
         RoomType.LockerRoom => (C(0.56f, 0.58f, 0.60f), C(0.74f, 0.80f, 0.82f), C(0.92f, 0.92f, 0.92f)),
         RoomType.BreakRoom => (C(0.72f, 0.68f, 0.62f), C(0.90f, 0.88f, 0.80f), C(0.95f, 0.95f, 0.93f)),
+        // #822: a site container's grey vinyl floor and white panelled walls
+        RoomType.SiteOffice => (C(0.44f, 0.46f, 0.48f), C(0.90f, 0.90f, 0.88f), C(0.94f, 0.94f, 0.93f)),
         RoomType.PartsStore => (Concrete, C(0.76f, 0.76f, 0.73f), C(0.66f, 0.66f, 0.64f)),
         RoomType.PaintBooth => (C(0.62f, 0.64f, 0.66f), C(0.92f, 0.93f, 0.94f), C(0.90f, 0.91f, 0.92f)),
         // #501: sealed grey concrete, a pale shell and the lit ceiling of a big-box shop floor
@@ -1565,6 +1567,33 @@ public static partial class InteriorMeshBuilder
                     B(x - 0.22f, 0.85f, d - 0.3f, x + 0.22f, 0.88f, d - 0.25f, dark);
                     B(x - 0.06f, 0.8f, -d + 0.25f, x + 0.06f, 0.84f, -d + 0.45f, dark);
                 }
+                break;
+            }
+            case FurnitureType.CoffeeMachine:
+            {
+                // #822: a low cupboard with the machine on it, its front to the room (+Z), cups beside it
+                B(-w, 0, -d, w, 0.85f, d, white * 0.92f);
+                B(-w, 0.85f, -d, w, 0.89f, d, C(0.30f, 0.30f, 0.32f));
+                float mw = Math.Min(w, 0.17f);
+                B(-mw, 0.89f, -d + 0.04f, mw, H, -d + 0.36f, dark);
+                B(-mw + 0.04f, 0.97f, -d + 0.36f, mw - 0.04f, 1.0f, -d + 0.4f, metal);       // the drip tray
+                B(-mw + 0.05f, H - 0.12f, -d + 0.36f, mw - 0.05f, H - 0.04f, -d + 0.37f, C(0.85f, 0.15f, 0.12f)); // the lit button
+                foreach (float cx in new[] { mw + 0.06f, mw + 0.14f })
+                    if (cx + 0.035f < w) B(cx - 0.035f, 0.89f, -d + 0.2f, cx + 0.035f, 0.98f, -d + 0.27f, white);
+                break;
+            }
+            case FurnitureType.Heater:
+            {
+                // #822: an oil-filled radiator on castors: fins across its width, a dial on top
+                var fin = C(0.88f, 0.88f, 0.86f);
+                B(-w, 0.06f, -d * 0.5f, w, 0.12f, d * 0.5f, dark);
+                int fins = Math.Max(4, (int)(p.W / 0.07f));
+                for (int i = 0; i < fins; i++)
+                {
+                    float x = -w + 2 * w * (i + 0.5f) / fins;
+                    B(x - 0.022f, 0.1f, -d, x + 0.022f, H, d, fin);
+                }
+                B(w - 0.12f, H, -d * 0.4f, w - 0.04f, H + 0.04f, d * 0.4f, dark);
                 break;
             }
             case FurnitureType.Bench:

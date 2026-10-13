@@ -27,6 +27,15 @@ public sealed class SiteDressingPlan
     public List<ShellBox> Boxes { get; } = new();
     public List<ShellMound> Mounds { get; } = new();
     public List<SitePalletSpot> Pallets { get; } = new();
+
+    /// <summary>The site office (#822): its doors and the rooms behind them; null on a site with none.</summary>
+    public SiteOffice? Office { get; set; }
+
+    /// <summary>
+    /// Which of <see cref="Boxes"/> are the office's containers: the solid ones are the walls a
+    /// body is let through at an open office door, so they collide with the buildings, not the yard.
+    /// </summary>
+    public (int Start, int Count) OfficeBoxes { get; set; }
 }
 
 /// <summary>
@@ -123,28 +132,12 @@ public static class SiteDressings
             switch (zone.Kind)
             {
                 case SiteZoneKind.Office:
-                {
-                    // containers two high, side by side across the zone
-                    int across = Math.Max(1, (int)(width / (ContainerWidth + 0.3f)));
-                    float u0 = (length - ContainerLength) / 2;
-                    for (int i = 0; i < across; i++)
-                        for (int level = 0; level < 2; level++)
-                        {
-                            float w0 = 0.15f + i * (ContainerWidth + 0.3f), y = g + level * ContainerHeight;
-                            ZoneBox(u0, y, w0, u0 + ContainerLength, y + ContainerHeight, w0 + ContainerWidth, ShellPart.Container, true);
-                            ZoneBox(u0 - 0.02f, y, w0 - 0.02f, u0 + ContainerLength + 0.02f, y + 0.18f, w0 + ContainerWidth + 0.02f, ShellPart.ContainerTrim, false);
-                            ZoneBox(u0 - 0.02f, y + ContainerHeight - 0.18f, w0 - 0.02f, u0 + ContainerLength + 0.02f, y + ContainerHeight, w0 + ContainerWidth + 0.02f, ShellPart.ContainerTrim, false);
-                            // two windows on each long face, and a door on the ground floor's street face
-                            for (int wnd = 0; wnd < 2; wnd++)
-                            {
-                                float wu = u0 + 1.2f + wnd * 2.6f;
-                                ZoneBox(wu, y + 1.0f, w0 - 0.03f, wu + 1.1f, y + 2.0f, w0 + ContainerWidth + 0.03f, ShellPart.Window, false);
-                            }
-                            if (level == 0)
-                                ZoneBox(u0 + ContainerLength - 0.03f, g + 0.1f, w0 + 0.7f, u0 + ContainerLength + 0.03f, g + 2.1f, w0 + 1.6f, ShellPart.ContainerTrim, false);
-                        }
+                    // the containers, their doors and the rooms behind them (#822): SiteOffices
+                    if (plan.Office != null || SiteOffices.Plan(site, ground) is not { } office) break;
+                    plan.Office = office.Office;
+                    plan.OfficeBoxes = (plan.Boxes.Count, office.Boxes.Count);
+                    plan.Boxes.AddRange(office.Boxes);
                     break;
-                }
                 case SiteZoneKind.Toilets:
                     for (int i = 0; i < 2; i++)
                     {

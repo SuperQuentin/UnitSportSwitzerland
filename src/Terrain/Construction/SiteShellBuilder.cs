@@ -110,6 +110,39 @@ public static class SiteShellBuilder
             return GroundAt(tile, site, grid, new Vector2(p.X, p.Z));
         });
 
+    /// <summary>The site office of one site (#822), on the ground its containers are drawn on; null when it has none.</summary>
+    public static SiteOffice? Office(BuildingTile tile, ConstructionSite site, ChunkGrid? grid) =>
+        SiteOffices.Plan(site, (x, z) =>
+        {
+            var p = ToTile(site, new Vector3(x, 0, z));
+            return GroundAt(tile, site, grid, new Vector2(p.X, p.Z));
+        })?.Office;
+
+    /// <summary>A direction of a site's frame (x, z) in the tile's plan (x east, z south).</summary>
+    public static Vector2 ToTileDir(ConstructionSite site, Vector2 d) => site.Box.AxisU * d.X + site.Box.AxisV * d.Y;
+
+    /// <summary>
+    /// The site building's doors (#822): its office's, one per ground-floor container, slot 0 first,
+    /// tile-local like every <see cref="DoorSpot"/> (3 cm proud of the facade plane, on the sill).
+    /// Plain pedestrian doors swinging in.
+    /// </summary>
+    public static DoorSpot[] OfficeDoors(SiteOffice office, ConstructionSite site, int index)
+    {
+        var doors = new DoorSpot[office.Doors.Count];
+        var outward = ToTileDir(site, office.Doors.Count > 0 ? office.Doors[0].Outward : Vector2.Zero);
+        for (int i = 0; i < doors.Length; i++)
+        {
+            var d = office.Doors[i];
+            var at = ToTile(site, d.Sill);
+            doors[i] = new DoorSpot(index, new Vector3(at.X + outward.X * 0.03f, at.Y, at.Z + outward.Y * 0.03f),
+                new Vector3(outward.X, 0, outward.Y), d.Width, d.Height)
+            {
+                Slot = d.Slot, Hang = DoorHang.Inward, Vehicle = false, Kind = BuildingKind.UnderConstruction,
+            };
+        }
+        return doors;
+    }
+
     /// <summary>The shell of one site, its wings read off its own roof (<see cref="PlanOutline.Wings"/>, #577).</summary>
     public static ShellPlan Shell(BuildingTile tile, ConstructionSite site, ChunkGrid? grid)
     {
@@ -130,8 +163,13 @@ public static class SiteShellBuilder
         PierMeshBuilder.MeshData Jib, PierMeshBuilder.MeshData Trolley, PierMeshBuilder.MeshData Hook,
         PierMeshBuilder.MeshData Rope, PierMeshBuilder.MeshData Load, Vector3[] Lamps);
 
-    /// <summary>A tile's sites: the mesh of everything that stands still, its collision faces, and the cranes' moving parts.</summary>
-    public sealed record SiteBuild(PierMeshBuilder.MeshData? Mesh, Vector3[] Faces, List<CraneRigData> Cranes);
+    /// <summary>
+    /// A tile's sites: the mesh of everything that stands still, its collision faces, the cranes'
+    /// moving parts, and the site offices' walls (#822), which collide with the tile's buildings so a
+    /// body standing in an open office doorway is let through them like any facade
+    /// (<c>InteriorManager.BeforeMove</c>).
+    /// </summary>
+    public sealed record SiteBuild(PierMeshBuilder.MeshData? Mesh, Vector3[] Faces, List<CraneRigData> Cranes, Vector3[] OfficeFaces);
 
     /// <summary>The mesh lists and collision triangles being built.</summary>
     private sealed class Geo(bool mesh, bool collision)
@@ -140,6 +178,10 @@ public static class SiteShellBuilder
         public readonly List<Color> Colors = new();
         public readonly List<int> Indices = new();
         public readonly List<Vector3> Faces = new();
+        /// <summary>The site offices' walls (#822), both windings: the building body is one-sided.</summary>
+        public readonly List<Vector3> OfficeFaces = new();
+        /// <summary>Solid boxes go to <see cref="OfficeFaces"/> while set.</summary>
+        public bool Office;
         private readonly Vector3[] _p = new Vector3[8];
 
         public bool Mesh => mesh;
@@ -169,7 +211,14 @@ public static class SiteShellBuilder
                     Indices.Add(i); Indices.Add(i + 1); Indices.Add(i + 2);
                     Indices.Add(i); Indices.Add(i + 2); Indices.Add(i + 3);
                 }
-                if (solid)
+                if (solid && Office)
+                {
+                    OfficeFaces.Add(p[a]); OfficeFaces.Add(p[b]); OfficeFaces.Add(p[c]);
+                    OfficeFaces.Add(p[a]); OfficeFaces.Add(p[c]); OfficeFaces.Add(p[d]);
+                    OfficeFaces.Add(p[a]); OfficeFaces.Add(p[c]); OfficeFaces.Add(p[b]);
+                    OfficeFaces.Add(p[a]); OfficeFaces.Add(p[d]); OfficeFaces.Add(p[c]);
+                }
+                else if (solid)
                 {
                     Faces.Add(p[a]); Faces.Add(p[b]); Faces.Add(p[c]);
                     Faces.Add(p[a]); Faces.Add(p[c]); Faces.Add(p[d]);
@@ -233,7 +282,12 @@ public static class SiteShellBuilder
             var yard = Dressing(tile, site, grid);
             Vector3 T(float x, float y, float z) => ToTile(site, new Vector3(x, y, z));
             foreach (var box in shell.Boxes) g.Box(box, T);
-            foreach (var box in yard.Boxes) g.Box(box, T);
+            for (int k = 0; k < yard.Boxes.Count; k++)
+            {
+                g.Office = k >= yard.OfficeBoxes.Start && k < yard.OfficeBoxes.Start + yard.OfficeBoxes.Count;
+                g.Box(yard.Boxes[k], T);
+            }
+            g.Office = false;
             foreach (var m in yard.Mounds) Mound(g, m, site);
             foreach (var r in shell.Ramps)
                 g.Solid(T(r.A.X, r.A.Y, r.A.Z), T(r.B.X, r.B.Y, r.B.Z), T(r.C.X, r.C.Y, r.C.Z), T(r.D.X, r.D.Y, r.D.Z));
@@ -256,7 +310,7 @@ public static class SiteShellBuilder
                     MeshOf(CranePlans.Hook()), MeshOf(CranePlans.Rope()), MeshOf(CranePlans.Load(load)), CranePlans.Lamps(crane)));
             }
         }
-        return new SiteBuild(g.Data(), g.Faces.ToArray(), cranes);
+        return new SiteBuild(g.Data(), g.Faces.ToArray(), cranes, g.OfficeFaces.ToArray());
     }
 
     /// <summary>A heap: an eight-sided foot, a shoulder, a crown and a point.</summary>

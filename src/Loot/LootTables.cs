@@ -259,6 +259,13 @@ public static class LootTables
         [(FurnitureType.Car, RoomType.Showroom)] = new(0.75f, 0, 1, new[] { P(VehicleParts, 100) }, 0.05f, 1, 10),
         [(FurnitureType.Car, RoomType.ServiceBay)] = new(0.20f, 1, 3, new[] { P(VehicleParts, 100) }, 0.20f, 1, 15),
         [(FurnitureType.Desk, RoomType.Dispatch)] = new(0.35f, 1, 2, new[] { P(Gadgets, 40), P(Wire, 25), P(Scrap, 25), P(Optics, 2) }, 0.45f, 5, 60),
+        // #822: a building site's office container: the foreman's desk (the petty cash, the radio's
+        // spare batteries), the crew's tools locked away, their work clothes, the first-aid kit
+        [(FurnitureType.Desk, RoomType.SiteOffice)] = new(0.35f, 1, 2, new[] { P(Gadgets, 35), P(Hardware, 30), P(Wire, 15), P(Medical, 10), P(Optics, 2) }, 0.40f, 5, 40),
+        [(FurnitureType.Locker, RoomType.SiteOffice)] = new(0.25f, 1, 3, new[] { P(Hardware, 55), P(Cloth, 25), P(Medical, 15), P(Minerals, 5) }),
+        [(FurnitureType.ToolChest, RoomType.SiteOffice)] = new(0.15f, 2, 4, new[] { P(Hardware, 60), P(Parts, 15), P(Scrap, 20), P(Minerals, 5) }),
+        // its mess container is the changing room: spare clothes, a snack, a tool left in a pocket
+        [(FurnitureType.Locker, RoomType.BreakRoom)] = new(0.30f, 1, 2, new[] { P(Cloth, 40), P(Sweets, 20), P(Hardware, 20), P(Medical, 10), P(Games, 6), P(Purses, 4) }, 0.25f, 2, 20),
         [(FurnitureType.Desk, RoomType.ControlRoom)] = new(0.35f, 1, 2, new[] { P(Gadgets, 45), P(Wire, 30), P(Scrap, 25), P(Optics, 3) }, 0.35f, 5, 50),
     };
 
@@ -301,11 +308,14 @@ public static class LootTables
         },
         BuildingKind.Civic => c == ItemCategory.Medical ? 3f : 1f,
         BuildingKind.Sacral => 0f,
+        // a building site's loot is its office's (#822): the containers' furniture gives tools and
+        // work clothes (RoomContainers, SiteOffice and BreakRoom), and the crew's lunch in the mess
         BuildingKind.UnderConstruction => c switch
         {
-            ItemCategory.Mineral => 3f,
-            ItemCategory.Scrap => 2f,
-            _ => 0f,
+            ItemCategory.Mineral => 2f,
+            ItemCategory.Scrap => 1.5f,
+            ItemCategory.Food => 0.8f,
+            _ => 1f,
         },
         _ => 1f,
     };

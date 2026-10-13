@@ -25,6 +25,8 @@ public enum RoomType
     Stairwell,
     // #558: the ramp down to an apartment block's car park, behind its garage door
     Ramp,
+    // #822: a building site's office container (its mess room next door is a BreakRoom)
+    SiteOffice,
 }
 
 public enum OpeningKind { Door, Window, Entry, Arch }
@@ -217,6 +219,8 @@ public enum FurnitureType
     BlahajBin = 83,
     // #557: apartment blocks
     Pillar, StorageCage, Mailboxes, BikeRack,
+    // #822: a building site's office and mess room
+    CoffeeMachine, Heater,
 }
 
 public sealed class FurniturePlan

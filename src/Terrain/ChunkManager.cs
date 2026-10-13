@@ -2175,6 +2175,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 ArrayMesh? siteMesh = null;
                 Construction.CraneRig[]? craneRigs = null;
                 Vector3[]? siteFaces = null;
+                Vector3[]? officeFaces = null;
+                List<Construction.ConstructionSite>? sites = null;
                 if (wantBuildings || wantCollision)
                 {
                     var bTile = await source.LoadBuildingsAsync(id, ct);
@@ -2187,13 +2189,15 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     {
                         var siteRoads = roadTile ?? await source.LoadRoadsAsync(id, ct);
                         ct.ThrowIfCancellationRequested();
-                        var sites = Construction.SitePlans.For(bTile, siteRoads);
+                        sites = Construction.SitePlans.For(bTile, siteRoads);
                         bool siteMeshWanted = wantBuildings && pierMaterial != null;
                         if (Construction.SiteShellBuilder.Build(bTile, sites, grid, siteMeshWanted, wantCollision) is { } shells)
                         {
                             ct.ThrowIfCancellationRequested();
                             if (shells.Mesh is { } shellData) siteMesh = ChunkNode.ToPropMesh(shellData, pierMaterial!);
                             siteFaces = shells.Faces;
+                            // the site offices' walls are a building's (#822): let through at an open door
+                            officeFaces = shells.OfficeFaces;
                             // what the cranes slew (#610): meshes made here, nodes on the main thread
                             if (siteMeshWanted && shells.Cranes.Count > 0)
                                 craneRigs = shells.Cranes.Select(c => Construction.CraneRig.Make(c, pierMaterial!)).ToArray();
@@ -2207,7 +2211,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         // choice would depend on load order and disagree between peers.
                         var doorRoads = roadTile ?? await source.LoadRoadsAsync(id, ct);
                         ct.ThrowIfCancellationRequested();
-                        doors = Interiors.BuildingFootprint.ComputeDoors(bTile, doorRoads, grid.Stride == 1 ? grid : null);
+                        doors = Interiors.BuildingFootprint.ComputeDoors(bTile, doorRoads, grid.Stride == 1 ? grid : null, sites);
                         if (BuildingMeshBuilder.Build(bTile, doors, detail) is { } buildingData)
                         {
                             ct.ThrowIfCancellationRequested();
@@ -2231,10 +2235,10 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         {
                             var linkRoads = roadTile ?? await source.LoadRoadsAsync(id, ct);
                             ct.ThrowIfCancellationRequested();
-                            linkDoors = Interiors.BuildingFootprint.ComputeDoors(bTile, linkRoads, grid.Stride == 1 ? grid : null);
+                            linkDoors = Interiors.BuildingFootprint.ComputeDoors(bTile, linkRoads, grid.Stride == 1 ? grid : null, sites);
                         }
                         buildingFaces = ChunkNode.SplitByCell(bTile != null
-                            ? [.. BuildingMeshBuilder.BuildCollisionFaces(bTile), .. BuildingMeshBuilder.LinkFaces(linkDoors)] : []);
+                            ? [.. BuildingMeshBuilder.BuildCollisionFaces(bTile), .. BuildingMeshBuilder.LinkFaces(linkDoors), .. officeFaces ?? []] : []);
                     }
                     Lap(StBldgMesh, stageMs, clock);
                 }
