@@ -103,9 +103,11 @@ and the transition lengths.
   paths get their own). A connector leaves its lane's centre at the mouth along the arm's heading and arrives along the
   exit's: two tangents joined by a circular arc of at least the turning radius (car 6 m on the inner edge, a truck's
   10 m where a Major road is involved), straight runs for the rest. Each carries its lane width, so its two edges are curves too.
-- **The core's outline**: between arm i's right edge and arm j's left edge, the **kerb curve** is the outer edge of
-  the outermost right-turn connector between them (plus its bike lane where riders turn with it), so the corner is as
-  round as the turn that uses it. Where no right turn uses the corner (one-way, OSM, no lane: #700's tight corners) it
+- **The core's outline follows the allowed movements** (the user, Oct 13): only allowed turns get a connector, so the
+  shape depends directly on what may be driven. Between arm i's right edge and arm j's left edge, the **kerb curve** is
+  the outer envelope of every allowed connector passing that corner: usually the right turn between them (plus its bike
+  lane where riders turn with it), but a left turn into a narrow arm or a truck's turn may swing wider. The corner is as
+  round as the turns that use it. Where no turn uses the corner (one-way, OSM, no lane: #700's tight corners) it
   stays tight (`TightKerb` 1.5 m). The mouth station `m` of each arm is pushed out until both its corners' curves start
   at or inside it: the mouth is where the kerb leaves the straight edge (today's kerb allowance and `CurveStops` merge
   into this). Room clips the curve (a building, the other arm's mouth): the radius shrinks, the turn's speed with it.
