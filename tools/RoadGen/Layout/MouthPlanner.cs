@@ -131,8 +131,9 @@ public static class MouthPlanner
         var rightLane = new Strip(StripKind.CarLane, laneIn, StripWay.In, SignalMoves.Right, RightPocketId);
         if (right && bikeIn is { } b && w.BikeBetween)
         {
+            // the bike lane between goes straight on; riders turning right share the pocket (the user, Oct 13 2026)
             arriving.Add(b with { Moves = lastOwn.Moves & SignalMoves.Through });
-            arriving.Add(rightLane);
+            arriving.Add(rightLane with { SharedWithBikes = true });
         }
         else
         {
