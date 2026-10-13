@@ -73,6 +73,20 @@ public static partial class TileRewriter
                     Wanted = wantedSection, Mouth = wantedSection, Length = SegmentLength(so.Segment), Exit = need?.Exit ?? -1,
                 });
             }
+            // beside a right pocket the through riders' lane runs between it and the through lane (layout b) only where the traffic
+            // arriving from the arm the pocket turns into cannot turn left (one-way out, forbidden, no lane shows it); else at
+            // the kerb (the user, Oct 13 2026; replaces #351's coin flip and #711's "always b without lights"). The signal plan
+            // follows the layout: a kerbside lane beside a right pocket gets its bike signal there
+            foreach (var a in jp.Arms)
+            {
+                if (!a.Wants.RightPocket) continue;
+                int k = Enumerable.Range(0, armsHere.Count).FirstOrDefault(k => k != a.Arm && armsHere[k].Out
+                    && SignalPlan.Turn(armsHere, a.Arm, k) == SignalMoves.Right, -1);
+                var into = jp.Arms.FirstOrDefault(x => x.Arm == k);
+                bool leftThere = into is not null && into.Wanted.CarLanes(StripWay.In).Any(l => (l.Strip.Moves & SignalMoves.Left) != 0);
+                a.Wants = a.Wants with { BikeBetween = !leftThere };
+                a.Wanted = a.Mouth = MouthPlanner.Wanted(a.Normal, a.Wants);
+            }
             if (jp.Arms.Count >= 3) plans.Add(jp);
         }
 
