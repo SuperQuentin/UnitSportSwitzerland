@@ -55,7 +55,7 @@ public sealed class ArmPlan
     public bool Internal { get; init; }
     /// <summary>How far out its mouth may go: the street's length, half of it where a junction stands at its other end (m).</summary>
     public double Reach { get; init; } = double.MaxValue;
-    /// <summary>A Major road (or bigger): turns to and from it are laid for a truck (<see cref="CorePlanner.TruckInner"/>).</summary>
+    /// <summary>A Major road (or bigger): turns to and from it are laid for a truck (<see cref="CorePlanner.TruckInner"/>) with <c>--truck-radius</c>.</summary>
     public bool Major { get; init; }
     public bool HasLeft => Mouth.Strips.Any(s => PocketRules.Left.Owns(s.Id));
     public bool HasRight => Mouth.Strips.Any(s => PocketRules.Right.Owns(s.Id));

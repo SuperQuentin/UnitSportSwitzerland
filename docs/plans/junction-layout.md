@@ -288,6 +288,7 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
 ## Settled with the user (Oct 13 2026, second round)
 
 - **Turning radius by vehicle**: the kerb follows the right-turn connector's outer edge, a car (6 m inner edge) on
-  Minor/Road arms, a truck (10 m) where a Major road is involved; the room clips it smaller.
+  Minor/Road arms, a truck (10 m) where a Major road is involved; the room clips it smaller. **Truck radius ignored for now**
+  (the user, Oct 13, after phase 2's pictures): kept behind `RoadGen --truck-radius`, every turn laid for a car by default.
 - **Multi-node cores in #818** (phase 5): car-road junction nodes joined by links under 30 m form one core.
 - **Slip lanes (#708) and continuous sidewalks (#710) stay their own issues**, built on this model afterwards.

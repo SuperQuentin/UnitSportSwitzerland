@@ -10,9 +10,9 @@ using UnitSport.Tools.RoadGen.Junctions;
 /// <item>a connector for every allowed move of every arriving lane, into the exit lane it feeds (left into the lane by the
 /// centre line, right into the kerb lane, same-turn lanes lane to lane, through lanes in order from the centre line; bike
 /// lanes into the exit's bike lane, else the kerb side of its kerb lane);</item>
-/// <item>the mouths: each arm's pushed out until every turn's arc at its vehicle's least radius (car 6 m on the inner edge,
-/// a truck's 10 m where a Major road is involved, a bike lane concentric inside the car's) and both its corners' kerbs start
-/// inside it;</item>
+/// <item>the mouths: each arm's pushed out until every turn's arc at its vehicle's least radius (car 6 m on the inner edge;
+/// with <c>trucks</c> a truck's 10 m where a Major road is involved; a bike lane concentric inside the car's) and both its
+/// corners' kerbs start inside it;</item>
 /// <item>every connector as wide as fits between the mouths (the user's rule), narrowed back toward its least radius where
 /// its corner's kerb would start outside a mouth, and under it where buildings hold the corner;</item>
 /// <item>each corner's kerb: the least rounding (legs of at least <see cref="TightLeg"/>) that keeps every connector
@@ -23,7 +23,10 @@ using UnitSport.Tools.RoadGen.Junctions;
 /// </summary>
 public static class CorePlanner
 {
-    /// <summary>A car's and a truck's turning radius on the inner edge (m): a truck's where a Major road is involved (the user).</summary>
+    /// <summary>
+    /// A car's and a truck's turning radius on the inner edge (m). A truck's where a Major road is involved (the user's rule),
+    /// only with <c>trucks</c> (<c>--truck-radius</c>): off for now, the user's call (Oct 13 2026), every turn laid for a car.
+    /// </summary>
     public const double CarInner = 6, TruckInner = 10;
     /// <summary>A corner no one turns round: its kerb runs on this far along both edges from where they meet (#700's tight corner).</summary>
     public static readonly double TightLeg = new JunctionOptions().TightKerb;
@@ -50,7 +53,7 @@ public static class CorePlanner
         public double StationOf(Vec2 p) => Station + (p - At).Dot(U);
     }
 
-    public static JunctionCore Plan(JunctionPlan jp, Func<Vec2, bool>? blocked = null)
+    public static JunctionCore Plan(JunctionPlan jp, Func<Vec2, bool>? blocked = null, bool trucks = false)
     {
         var core = new JunctionCore();
         var arms = jp.Arms.Where(a => a.Axis is not null).OrderBy(a => Angles.Normalize(a.Heading)).ToList();
@@ -58,7 +61,7 @@ public static class CorePlanner
         if (n < 2) return core;
         var index = new Dictionary<int, int>();
         for (int k = 0; k < n; k++) index[arms[k].Arm] = k;
-        core.Connectors.AddRange(Connectors(arms, index));
+        core.Connectors.AddRange(Connectors(arms, index, trucks));
 
         // 2. the mouths: pushed out until every turn's arc at its least radius and both kerbs start inside them
         var m = new double[n];
@@ -170,7 +173,7 @@ public static class CorePlanner
 
     // ------------------------------------------------------------------ connectors: which lanes join
 
-    private static List<Connector> Connectors(List<ArmPlan> arms, Dictionary<int, int> index)
+    private static List<Connector> Connectors(List<ArmPlan> arms, Dictionary<int, int> index, bool trucks)
     {
         var list = new List<Connector>();
         foreach (var a in arms)
@@ -184,7 +187,7 @@ public static class CorePlanner
                 // the exit's departing lanes from its centre line out
                 var outs = b.Mouth.CarLanes(StripWay.Out).Reverse().ToList();
                 if (outs.Count == 0) continue;
-                double inner = a.Major || b.Major ? TruckInner : CarInner;
+                double inner = trucks && (a.Major || b.Major) ? TruckInner : CarInner;
                 // left into the lane by the centre line, same-turn lanes lane to lane; right counted from the kerb
                 var lanes = inCars.Where(l => (l.Strip.Moves & move) != 0).ToList();
                 for (int k = 0; k < lanes.Count; k++)

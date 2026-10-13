@@ -18,6 +18,9 @@ public static partial class TileRewriter
     /// <summary>Print the plan of the junction nearest this LV95 point (<c>--debug-junction E,N</c>), within 30 m.</summary>
     public static (double E, double N)? DebugJunction;
 
+    /// <summary>Turns to and from a Major road laid for a truck's radius (<c>--truck-radius</c>; off: every turn for a car).</summary>
+    public static bool TruckRadius;
+
     /// <summary>With <see cref="DebugJunction"/>, its plan drawn here as an SVG (<c>--junction-svg FILE</c>).</summary>
     public static string? JunctionSvg;
 
@@ -191,7 +194,7 @@ public static partial class TileRewriter
             }
             if (jp.Lights) BikeStops(jp);
             // 6. the core between the mouths (step 2): connectors, kerb corners, the outline
-            jp.Core = CorePlanner.Plan(jp, buildings.Contains);
+            jp.Core = CorePlanner.Plan(jp, buildings.Contains, TruckRadius);
             if (DebugJunction is { } dbg && Math.Abs(dbg.E - jp.Centre.X) < 30 && Math.Abs(dbg.N - jp.Centre.Y) < 30)
             {
                 (log ?? Console.WriteLine)(jp.Describe());

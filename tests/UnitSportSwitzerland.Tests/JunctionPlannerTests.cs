@@ -233,7 +233,7 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
     /// A crossroads of four straight streets (step 2's core): each arm's lane making the moves <paramref name="movesOf"/> gives
     /// it (by its outward heading, east first, counter-clockwise), the street <paramref name="street"/>.
     /// </summary>
-    private static JunctionPlan Crossroads(Func<int, SignalMoves> movesOf, RoadAttributes street, float width)
+    private static JunctionPlan Crossroads(Func<int, SignalMoves> movesOf, RoadAttributes street, float width, bool major = false)
     {
         var jp = new JunctionPlan { Node = 1, Centre = new UnitSport.Tools.RoadGen.Geometry.Vec2(2600000, 1200000), Lights = false };
         for (int i = 0; i < 4; i++)
@@ -246,7 +246,7 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
             var arm = new ArmPlan
             {
                 Arm = i, LinkId = i, Heading = heading, Normal = normal, Wants = wants, Wanted = mouth, Mouth = mouth,
-                Axis = ArmAxis.Straight(jp.Centre, heading),
+                Axis = ArmAxis.Straight(jp.Centre, heading), Major = major,
             };
             // arriving from heading h: the left turn leaves toward h - 90 degrees, the right toward h + 90, straight on h + 180
             if ((moves & SignalMoves.Left) != 0) arm.Toward[SignalMoves.Left] = (i + 3) % 4;
@@ -278,6 +278,20 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
         }
         // the turns are as wide as fits: a left turn wider than its least radius
         Assert.All(core.Connectors.Where(c => c.Move == SignalMoves.Left), c => Assert.True(c.Radius > c.MinRadius + 0.5));
+    }
+
+    [Fact]
+    public void Turns_on_a_major_road_are_laid_for_a_truck_only_behind_the_flag()
+    {
+        var street = new RoadAttributes(LanesForward: 1, LanesBackward: 1, WidthCm: 600, Left: Town, Right: Town);
+        // off by default (the user, Oct 13 2026): every turn for a car
+        var car = CorePlanner.Plan(Crossroads(_ => AllMoves, street, 6f, major: true));
+        Assert.All(car.Connectors.Where(c => c.Turns), c => Assert.Equal(CorePlanner.CarInner + c.Width * 0.5, c.MinRadius, 3));
+        // --truck-radius: a truck's on a Major road, the mouths further out
+        var truck = CorePlanner.Plan(Crossroads(_ => AllMoves, street, 6f, major: true), trucks: true);
+        Assert.All(truck.Connectors.Where(c => c.Turns), c => Assert.Equal(CorePlanner.TruckInner + c.Width * 0.5, c.MinRadius, 3));
+        Assert.True(truck.Mouths.Min(m => m.Station) > car.Mouths.Max(m => m.Station));
+        Assert.Equal(0, truck.KerbsNotTangent);
     }
 
     [Fact]
