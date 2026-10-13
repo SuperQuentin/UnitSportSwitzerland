@@ -65,8 +65,7 @@ public static partial class TileRewriter
                 var wants = new ArmWants(lights, can, banned,
                     leftPocket ? need!.Wish?.Pocket ?? [SignalMoves.Left] : [],
                     need?.Wish?.Own ?? need?.Inferred,
-                    need?.WantRight ?? false, need?.BikeBetween ?? false, rules.Has(JunctionRule.LeftTurnBikeLane),
-                    BikeBox: leftPocket && need!.BikeBox && rules.Has(JunctionRule.LeftTurnBikeLane));
+                    need?.WantRight ?? false, need?.BikeBetween ?? false, rules.Has(JunctionRule.LeftTurnBikeLane));
                 var wantedSection = MouthPlanner.Wanted(normal, wants);
                 jp.Arms.Add(new ArmPlan
                 {
@@ -78,8 +77,8 @@ public static partial class TileRewriter
             // at the lights only where the traffic arriving from the arm the pocket turns into cannot turn left (one-way out,
             // forbidden, no lane shows it), else at the kerb (the user, Oct 13 2026; replaces #351's coin flip). The signal plan
             // follows the layout: a kerbside lane beside a right pocket gets its bike signal there
-            // a through bike lane added only where the straight-on exit carries one (a departing bike lane or path) on, or a bike
-            // box takes the riders (the user)
+            // a through bike lane added only where the straight-on exit carries one (a departing bike lane or path) on, or at the
+            // lights, where every bike lane ends at an advanced line or in a bike box (the user)
             ArmPlan? Toward(ArmPlan a, SignalMoves turn)
             {
                 int k = Enumerable.Range(0, armsHere.Count).FirstOrDefault(k => k != a.Arm && armsHere[k].Out
@@ -88,9 +87,10 @@ public static partial class TileRewriter
             }
             foreach (var a in jp.Arms)
             {
+                foreach (var move in (ReadOnlySpan<SignalMoves>)[SignalMoves.Left, SignalMoves.Through, SignalMoves.Right])
+                    if (Toward(a, move) is { } to) a.Toward[move] = to.Arm;
                 var straight = Toward(a, SignalMoves.Through);
-                bool carriesOn = straight is not null && (straight.Normal.Strips.Any(x => x.Kind == StripKind.BikeLane && x.Way == StripWay.Out)
-                    || straight.Normal.Strips.Take(Math.Max(0, straight.Normal.FirstCarriageway)).Any(x => x.Kind == StripKind.Path));
+                bool carriesOn = straight is not null && straight.Normal.CarriesBikesAway;
                 bool between = a.Wants.BikeBetween;
                 if (a.Wants.RightPocket)
                 {
@@ -98,8 +98,7 @@ public static partial class TileRewriter
                     bool leftThere = into is not null && into.Wanted.CarLanes(StripWay.In).Any(l => (l.Strip.Moves & SignalMoves.Left) != 0);
                     between = !lights || !leftThere;
                 }
-                // at the lights a bike box in front of the cars is somewhere for the lane to lead (the user): no exit lane needed
-                a.Wants = a.Wants with { BikeBetween = between, ThroughBike = carriesOn || a.Wants.BikeBox };
+                a.Wants = a.Wants with { BikeBetween = between, ThroughBike = carriesOn || lights };
                 a.Wanted = a.Mouth = MouthPlanner.Wanted(a.Normal, a.Wants);
             }
             if (jp.Arms.Count >= 3) plans.Add(jp);
@@ -165,6 +164,7 @@ public static partial class TileRewriter
                     }
                 if (!dropped) break;
             }
+            if (jp.Lights) BikeStops(jp);
             if (DebugJunction is { } dbg && Math.Abs(dbg.E - jp.Centre.X) < 30 && Math.Abs(dbg.N - jp.Centre.Y) < 30)
             {
                 (log ?? Console.WriteLine)(jp.Describe());
@@ -173,6 +173,30 @@ public static partial class TileRewriter
             }
         }
         return plans;
+    }
+
+    /// <summary>
+    /// Where every arriving bike lane's riders stop at the lights (the user's rule, the same for the three moves): at an
+    /// advanced line where the street their move goes into carries their way on (a departing bike lane or path), else in a
+    /// bike box. A lane for several moves (kerbside, straight on and right) goes by its straight-on move.
+    /// </summary>
+    private static void BikeStops(JunctionPlan jp)
+    {
+        foreach (var a in jp.Arms)
+        {
+            var strips = a.Mouth.Strips.ToList();
+            bool changed = false;
+            for (int k = 0; k < strips.Count; k++)
+            {
+                var s = strips[k];
+                if (s.Kind != StripKind.BikeLane || s.Way != StripWay.In || s.Moves == SignalMoves.None) continue;
+                var move = (s.Moves & SignalMoves.Through) != 0 ? SignalMoves.Through : (s.Moves & SignalMoves.Left) != 0 ? SignalMoves.Left : SignalMoves.Right;
+                bool carries = a.Toward.TryGetValue(move, out int to) && jp.Arms.FirstOrDefault(x => x.Arm == to) is { } dest && dest.Normal.CarriesBikesAway;
+                strips[k] = s with { Stop = carries ? BikeStop.Advanced : BikeStop.Box };
+                changed = true;
+            }
+            if (changed) a.Mouth = new Section(strips, a.Mouth.CarriagewayLeft) { KerbLeftCm = a.Mouth.KerbLeftCm, KerbRightCm = a.Mouth.KerbRightCm };
+        }
     }
 
     /// <summary>

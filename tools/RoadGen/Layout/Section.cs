@@ -25,6 +25,13 @@ public enum StripKind : byte
     Island,
 }
 
+/// <summary>
+/// Where an arriving bike lane's riders stop at the lights (#818, the user's rule, the same for every move): ahead of the
+/// cars at an advanced line where the street they go into carries their way on (a bike lane or path), else in a bike box
+/// in front of the cars (SSV 6.26; ASTRA: box 4.0 m, advanced line 3.0 m). None without lights.
+/// </summary>
+public enum BikeStop : byte { None, Advanced, Box }
+
 /// <summary>Which way a strip's traffic goes, seen from the junction: toward it (in), away from it (out), or none.</summary>
 public enum StripWay : sbyte { Out = -1, None = 0, In = 1 }
 
@@ -35,7 +42,7 @@ public enum StripWay : sbyte { Out = -1, None = 0, In = 1 }
 /// riders turning right share it where their own lane at the kerb did not fit: a bike connector from it, no bike symbol in it).
 /// </summary>
 public readonly record struct Strip(StripKind Kind, double Width, StripWay Way = StripWay.None, SignalMoves Moves = SignalMoves.None, int Id = 0,
-    bool SharedWithBikes = false)
+    bool SharedWithBikes = false, BikeStop Stop = BikeStop.None)
 {
     /// <summary>Lies between the carriageway's kerbs (lanes, hatches, islands).</summary>
     public bool InCarriageway => Kind is StripKind.BikeLane or StripKind.CarLane or StripKind.Hatch or StripKind.Island;
@@ -130,6 +137,11 @@ public sealed class Section
             if (Strips[k].IsCarLane && Strips[k].Way == way) yield return (k, Strips[k]);
     }
 
+    /// <summary>The departing side carries riders on: a departing bike lane, or a path on that side (left, seen driving in).</summary>
+    public bool CarriesBikesAway =>
+        Strips.Any(x => x.Kind == StripKind.BikeLane && x.Way == StripWay.Out)
+        || Strips.Take(Math.Max(0, FirstCarriageway)).Any(x => x.Kind == StripKind.Path);
+
     /// <summary>The car lanes arriving, left to right, as the test region names them: "L|T|R" (#386).</summary>
     public string CarLanesIn() =>
         string.Join("|", CarLanes(StripWay.In).Select(l => MovesName(l.Strip.Moves)));
@@ -150,6 +162,7 @@ public sealed class Section
               .Append(' ').Append(s.Width.ToString("F2", inv));
             if (s.Moves != SignalMoves.None) sb.Append(' ').Append(MovesName(s.Moves));
             if (s.SharedWithBikes) sb.Append(" +bikes");
+            if (s.Stop != BikeStop.None) sb.Append(s.Stop == BikeStop.Box ? " [box]" : " [adv]");
         }
         sb.Append(inv, $"  (carriageway {CarriagewayLeft:F2} .. {CarriagewayRight:F2})");
         return sb.ToString();

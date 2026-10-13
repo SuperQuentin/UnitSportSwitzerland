@@ -140,7 +140,8 @@ All on the arm side of each mouth, read from the arm's sections and the core's c
   mapped arms (OSM crossing nodes, `CrossingsMapped`) or every arm with a sidewalk at unmapped lights; its span is the
   section there (exact, also over a taper: no more re-measuring), refuges cut from the `Hatch` strip where wide enough.
 - **Stop line** behind it (lights 0.5 m, `StopSetback`), across the in-lanes of the section there; the pocket bar
-  without lights; bike box or advanced bike line; give-way rows and signs on yielding arms, moved behind a path
+  without lights; at the lights every bike lane (through, left, right alike, the user) ends at an advanced line where the
+  street its riders go into carries their way on, else in a bike box; give-way rows and signs on yielding arms, moved behind a path
   crossing. The stop distance is one number per arm, computed once (the end of `_stopBack`).
 - **Poles** at the section's kerb beside the stop line, the repeater on its exit island.
 - **Bike crossings** follow the bike connectors; red where a car connector crosses them (in the same phase at the

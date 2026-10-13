@@ -38,6 +38,8 @@ public sealed class ArmPlan
     public Section Base { get; set; } = null!;
     /// <summary>How far the mouth section stands to the left of the normal one's axis: a split lead-in's share (#700).</summary>
     public double Split { get; set; }
+    /// <summary>The arm each move leaves by (as the signal plans name the turns).</summary>
+    public Dictionary<Terrain.Format.SignalMoves, int> Toward { get; } = new();
     /// <summary>The arm the through lane leaves by (-1 none).</summary>
     public int Exit { get; init; } = -1;
     /// <summary>The street is too short for this pocket and the exit at its other end apart: one transition holds both (#325).</summary>
