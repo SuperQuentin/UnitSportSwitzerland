@@ -65,7 +65,8 @@ public static partial class TileRewriter
                 var wants = new ArmWants(lights, can, banned,
                     leftPocket ? need!.Wish?.Pocket ?? [SignalMoves.Left] : [],
                     need?.Wish?.Own ?? need?.Inferred,
-                    need?.WantRight ?? false, need?.BikeBetween ?? false, rules.Has(JunctionRule.LeftTurnBikeLane));
+                    need?.WantRight ?? false, need?.BikeBetween ?? false, rules.Has(JunctionRule.LeftTurnBikeLane),
+                    BikeBox: leftPocket && need!.BikeBox && rules.Has(JunctionRule.LeftTurnBikeLane));
                 var wantedSection = MouthPlanner.Wanted(normal, wants);
                 jp.Arms.Add(new ArmPlan
                 {
@@ -77,7 +78,8 @@ public static partial class TileRewriter
             // at the lights only where the traffic arriving from the arm the pocket turns into cannot turn left (one-way out,
             // forbidden, no lane shows it), else at the kerb (the user, Oct 13 2026; replaces #351's coin flip). The signal plan
             // follows the layout: a kerbside lane beside a right pocket gets its bike signal there
-            // a through bike lane added only where the straight-on exit carries one (a departing bike lane or path) on (the user)
+            // a through bike lane added only where the straight-on exit carries one (a departing bike lane or path) on, or a bike
+            // box takes the riders (the user)
             ArmPlan? Toward(ArmPlan a, SignalMoves turn)
             {
                 int k = Enumerable.Range(0, armsHere.Count).FirstOrDefault(k => k != a.Arm && armsHere[k].Out
@@ -96,7 +98,8 @@ public static partial class TileRewriter
                     bool leftThere = into is not null && into.Wanted.CarLanes(StripWay.In).Any(l => (l.Strip.Moves & SignalMoves.Left) != 0);
                     between = !lights || !leftThere;
                 }
-                a.Wants = a.Wants with { BikeBetween = between, ThroughBike = carriesOn };
+                // at the lights a bike box in front of the cars is somewhere for the lane to lead (the user): no exit lane needed
+                a.Wants = a.Wants with { BikeBetween = between, ThroughBike = carriesOn || a.Wants.BikeBox };
                 a.Wanted = a.Mouth = MouthPlanner.Wanted(a.Normal, a.Wants);
             }
             if (jp.Arms.Count >= 3) plans.Add(jp);

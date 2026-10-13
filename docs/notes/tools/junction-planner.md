@@ -29,7 +29,8 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   as far as the street does.
 - **Through riders before turning ones** (the user, Oct 13): where the arriving side has neither a painted bike lane nor a
   path and the straight-on exit carries one on (a departing bike lane or path), the mouth adds a through bike lane (id 115),
-  lit or not; never one leading into nothing. Short of room the left-turn bike lane goes
+  lit or not; never one leading into nothing. At the lights a bike box (#351, the left turn's street has no bike lane or
+  path) is somewhere for it to lead: no exit lane needed there (the user). Short of room the left-turn bike lane goes
   early (step 2); the through one **survives when possible**: it goes with the painted ones, last (step 8). J1 N gets one;
   J3 E keeps it with the short pockets; J3 N has room for a pocket or the bike lane: the pocket goes (LTR, as designed).
 - **Bike lane beside a right pocket** (the user, Oct 13): without lights always between it and the through lane (layout b);
