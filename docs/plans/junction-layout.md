@@ -93,6 +93,10 @@ and the transition lengths.
   1.5 -> 1.25 m), (4) right pocket, (5) sidewalk to 1.5 m, (6) left pocket storage then its lead-in hatch (the sizes
   #123 tries: 30+40, 25+30, 20+20), (7) left pocket, (8) painted bike lane, last. Car through lanes and the data's lane
   count never drop. Each step taken is counted and printed by `--debug-junction`, so a review can ask why.
+  **The pockets' sizes are chosen before any pocket goes** (the user, Oct 13: step 6 ranks before 4 and 7 in effect): the
+  fit tries the sizes longest first and takes the first where every pocket stays (J3 east: 20+20 and 10+15, L|T|R).
+  **Lane widths shrink before a pocket is dropped** (the user, Oct 13): J3 north (houses 1 m from the kerb) gets its
+  pocket with 2.75 m lanes, the road moving 2 m left where there is room (L|TR; the old layout built none).
 
 ### 2. Connect the lanes: the core
 

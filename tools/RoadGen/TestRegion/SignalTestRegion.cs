@@ -594,6 +594,14 @@ public static class SignalTestRegion
     /// The junction planner's mouth sections (#818) against the design: per designed junction its arms' arriving car lanes
     /// as planned, left to right. Returns how many designed approaches came out otherwise (or are missing).
     /// </summary>
+    /// <summary>
+    /// Where the planner's lanes are meant to differ from the pocket layout's design (#818, the user's decisions), by junction
+    /// and arm. J3 N: the lanes narrow to 2.75 m and the road moves left where the houses leave room, so a pocket fits (the
+    /// room order: lane widths before a pocket, Oct 13 2026). Merged into <see cref="Junction.Design"/> at the switch.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<(string Junction, string Arm), string> PlannerDesign =
+        new Dictionary<(string, string), string> { [("J3-mismatch", "N")] = "L|TR" };
+
     public static int ReportPlans(IReadOnlyList<Layout.JunctionPlan> plans, IReadOnlyList<Junction> junctions, Action<string> log)
     {
         int bad = 0;
@@ -616,7 +624,7 @@ public static class SignalTestRegion
                 seen.Add(dir);
                 string car = a.Mouth.CarLanesIn();
                 if (car.Length == 0) continue;
-                string designed = j.Design.GetValueOrDefault(dir) ?? "-";
+                string designed = PlannerDesign.GetValueOrDefault((j.Name, dir)) ?? j.Design.GetValueOrDefault(dir) ?? "-";
                 bool ok = designed == "-" || designed == car;
                 if (!ok) bad++;
                 arms.Add($"{dir}: {car} ({designed}{(ok ? "" : " MISMATCH")}){(a.Steps.Count > 0 ? " [" + string.Join("; ", a.Steps) + "]" : "")}");
