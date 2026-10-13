@@ -10,8 +10,9 @@ using UnitSport.Terrain.Format;
 /// <param name="OwnMoves">The carriageway's own lanes, left to right, null to share the remaining turns out (one lane: all of them).</param>
 /// <param name="BikeBetween">Beside a right pocket the painted bike lane runs between it and the through lane, layout (b) (#351).</param>
 /// <param name="LeftTurnBikeLane">A left-turn bike lane between the left pocket and the through lane (lights, #351).</param>
+/// <param name="ThroughBike">The straight-on exit carries a bike lane or path on: riders arriving with neither get a through bike lane.</param>
 public sealed record ArmWants(bool Lights, SignalMoves Can, SignalMoves Banned, SignalMoves[] PocketMoves, SignalMoves[]? OwnMoves,
-    bool RightPocket, bool BikeBetween, bool LeftTurnBikeLane);
+    bool RightPocket, bool BikeBetween, bool LeftTurnBikeLane, bool ThroughBike = false);
 
 /// <summary>
 /// The free room beside an arm (#818): at stations out from the mouth (m), how far each way from its axis the section may
@@ -109,9 +110,9 @@ public static class MouthPlanner
             arriving.Add(new Strip(StripKind.CarLane, laneIn, StripWay.In, pocket[k] & allowed, LeftPocketId + k));
         if (pocket.Length > 0 && w.LeftTurnBikeLane)
             arriving.Add(new Strip(StripKind.BikeLane, LeftBikeLane, StripWay.In, SignalMoves.Left, LeftBikeId));
-        // the through riders first (the user, Oct 13 2026): at the lights, where they have neither a painted lane nor a path on
-        // this side, the mouth gets them a bike lane, kerbside (with or without a left-turn one)
-        if (w.LeftTurnBikeLane && bikeIn is null && !rightBands.Any(x => x.Kind == StripKind.Path))
+        // the through riders first (the user, Oct 13 2026): where they have neither a painted lane nor a path on this side and
+        // the straight-on exit carries one on, the mouth gets them a bike lane (lit or not)
+        if (w.ThroughBike && bikeIn is null && !rightBands.Any(x => x.Kind == StripKind.Path))
             bikeIn = new Strip(StripKind.BikeLane, LeftBikeLane, StripWay.In, Id: AddedBikeId);
         // the own lanes: as the data assigned them, else what the pockets leave of the turns
         bool right = w.RightPocket && (allowed & SignalMoves.Right) != 0;

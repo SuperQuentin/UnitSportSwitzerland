@@ -84,7 +84,8 @@ and the transition lengths.
   keeps 1.7 m where an island will stand; an OSM crosswalk on the exit narrows its lane to 3 m for a refuge (#711).
 - **Bike infrastructure**: the bike planner's layout per street (lane, path, left-turn bike lane at the lights, 3 m car
   lane beside a bike lane) becomes strips of the mouth section. Through riders before turning ones (the user, Oct 13):
-  at the lights a mouth whose riders have no lane or path gets a through bike lane, which survives when possible; the
+  a mouth whose riders have no lane or path gets a through bike lane where the straight-on exit carries one on (lit or not),
+  which survives when possible; the
   left-turn bike lane goes early. Beside a right pocket the bike lane runs between it and the through lane (b): without
   lights always, at the lights only where traffic from the arm the pocket turns into cannot turn left (else kerbside, a). The signal plan follows the layout.
 - **Room** (`ArmRoom`, measured once per arm and shared by everything): at every 2.5 m station out to the next

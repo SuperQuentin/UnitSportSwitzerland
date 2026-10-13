@@ -82,7 +82,10 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
         // a 10 m road with no bike lane at lights: the mouth adds the through riders' lane, kerbside, beside the left-turn one
         var normal = Section.Normal(new RoadAttributes(LanesForward: 1, LanesBackward: 1, WidthCm: 1000), 10f, true);
         var all = SignalMoves.Left | SignalMoves.Through | SignalMoves.Right;
-        var mouth = MouthPlanner.Wanted(normal, new ArmWants(true, all, SignalMoves.None, [SignalMoves.Left], null, false, false, LeftTurnBikeLane: true));
+        var mouth = MouthPlanner.Wanted(normal, new ArmWants(true, all, SignalMoves.None, [SignalMoves.Left], null, false, false, LeftTurnBikeLane: true, ThroughBike: true));
+        // the straight-on exit carries no bike lane on: none is added (the left-turn one stays, beside nothing)
+        var none = MouthPlanner.Wanted(normal, new ArmWants(true, all, SignalMoves.None, [SignalMoves.Left], null, false, false, LeftTurnBikeLane: true));
+        Assert.DoesNotContain(none.Strips, x => x.Id == MouthPlanner.AddedBikeId);
         var bikes = mouth.Strips.Where(x => x.Kind == StripKind.BikeLane).ToList();
         Assert.Equal([MouthPlanner.LeftBikeId, MouthPlanner.AddedBikeId], bikes.Select(x => x.Id));
         Assert.Equal(StripKind.BikeLane, mouth.Strips[mouth.LastCarriageway].Kind);

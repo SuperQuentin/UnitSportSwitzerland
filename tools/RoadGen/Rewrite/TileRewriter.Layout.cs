@@ -77,14 +77,26 @@ public static partial class TileRewriter
             // at the lights only where the traffic arriving from the arm the pocket turns into cannot turn left (one-way out,
             // forbidden, no lane shows it), else at the kerb (the user, Oct 13 2026; replaces #351's coin flip). The signal plan
             // follows the layout: a kerbside lane beside a right pocket gets its bike signal there
+            // a through bike lane added only where the straight-on exit carries one (a departing bike lane or path) on (the user)
+            ArmPlan? Toward(ArmPlan a, SignalMoves turn)
+            {
+                int k = Enumerable.Range(0, armsHere.Count).FirstOrDefault(k => k != a.Arm && armsHere[k].Out
+                    && SignalPlan.Turn(armsHere, a.Arm, k) == turn, -1);
+                return jp.Arms.FirstOrDefault(x => x.Arm == k);
+            }
             foreach (var a in jp.Arms)
             {
-                if (!a.Wants.RightPocket) continue;
-                int k = Enumerable.Range(0, armsHere.Count).FirstOrDefault(k => k != a.Arm && armsHere[k].Out
-                    && SignalPlan.Turn(armsHere, a.Arm, k) == SignalMoves.Right, -1);
-                var into = jp.Arms.FirstOrDefault(x => x.Arm == k);
-                bool leftThere = into is not null && into.Wanted.CarLanes(StripWay.In).Any(l => (l.Strip.Moves & SignalMoves.Left) != 0);
-                a.Wants = a.Wants with { BikeBetween = !lights || !leftThere };
+                var straight = Toward(a, SignalMoves.Through);
+                bool carriesOn = straight is not null && (straight.Normal.Strips.Any(x => x.Kind == StripKind.BikeLane && x.Way == StripWay.Out)
+                    || straight.Normal.Strips.Take(Math.Max(0, straight.Normal.FirstCarriageway)).Any(x => x.Kind == StripKind.Path));
+                bool between = a.Wants.BikeBetween;
+                if (a.Wants.RightPocket)
+                {
+                    var into = Toward(a, SignalMoves.Right);
+                    bool leftThere = into is not null && into.Wanted.CarLanes(StripWay.In).Any(l => (l.Strip.Moves & SignalMoves.Left) != 0);
+                    between = !lights || !leftThere;
+                }
+                a.Wants = a.Wants with { BikeBetween = between, ThroughBike = carriesOn };
                 a.Wanted = a.Mouth = MouthPlanner.Wanted(a.Normal, a.Wants);
             }
             if (jp.Arms.Count >= 3) plans.Add(jp);
