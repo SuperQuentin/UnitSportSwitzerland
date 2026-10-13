@@ -3,7 +3,7 @@
 
 # Junctions lay their own surface: sections, cores and transitions (#818)
 
-Status: **in progress** on `feat/818-junction-layout` (PR #820): phase 1 built (`docs/notes/tools/junction-planner.md`). Settled with the user (Oct 13 2026, below). Coding starts once #704 and #712 are merged (this
+Status: **in progress** on `feat/818-junction-layout` (PR #820): phases 1 and 2 built (`docs/notes/tools/junction-planner.md`). Settled with the user (Oct 13 2026, below). Coding starts once #704 and #712 are merged (this
 replaces most of what they built, so it branches from the `main` that has them). Absorbs #709 (traffic follows the
 junction's paths). Part names as in `docs/notes/tools/intersection-parts.md`.
 
@@ -211,6 +211,13 @@ once. Found so far:
 - **One pocket rule** (`PocketRules`): a lane added for a move on that move's side; what it displaces follows from the side;
   a table holds what differs (speed condition, sizes, room step). OSM `turn:lanes` are the truth: their lanes beyond the
   carriageway's are the pockets, from each end, at any speed, never dropped for room (double rights too).
+
+- **The core's corners are one envelope rule** (phase 2): the least rounding that keeps every allowed connector paved, with
+  1.5 m legs as the floor; #700's tight corner is a corner no connector passes, not a flag.
+- **A turn is its deflection, not its move's name**: 30 degrees or more sets the mouths at its vehicle's radius; a straighter
+  connector (a bend through, a slight "turn" at a fork) fits between them.
+- **A connector's width eases from its lane's to the exit lane's** along its curve: lanes of different widths join with no
+  special case.
 
 Candidates to check as the work goes on: every marking as the boundary between two
 strips, its style from the pair of kinds; stop lines, crosswalks and give-way rows as lines across an arm at a station,

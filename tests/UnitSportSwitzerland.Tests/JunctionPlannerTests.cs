@@ -228,4 +228,95 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
         Assert.True(region.Code == 0, string.Join("\n", region.Log.Where(l => l.Contains("RESULT", StringComparison.Ordinal))));
         Assert.Contains(region.Log, l => l.Contains("planner (#818): every designed approach as designed", StringComparison.Ordinal));
     }
+
+    /// <summary>
+    /// A crossroads of four straight streets (step 2's core): each arm's lane making the moves <paramref name="movesOf"/> gives
+    /// it (by its outward heading, east first, counter-clockwise), the street <paramref name="street"/>.
+    /// </summary>
+    private static JunctionPlan Crossroads(Func<int, SignalMoves> movesOf, RoadAttributes street, float width)
+    {
+        var jp = new JunctionPlan { Node = 1, Centre = new UnitSport.Tools.RoadGen.Geometry.Vec2(2600000, 1200000), Lights = false };
+        for (int i = 0; i < 4; i++)
+        {
+            double heading = i * Math.PI / 2;
+            var normal = Section.Normal(street, width, junctionAtEnd: true);
+            var moves = movesOf(i);
+            var wants = new ArmWants(false, moves, SignalMoves.None, [], null, [], false, false);
+            var mouth = MouthPlanner.Wanted(normal, wants);
+            var arm = new ArmPlan
+            {
+                Arm = i, LinkId = i, Heading = heading, Normal = normal, Wants = wants, Wanted = mouth, Mouth = mouth,
+                Axis = ArmAxis.Straight(jp.Centre, heading),
+            };
+            // arriving from heading h: the left turn leaves toward h - 90 degrees, the right toward h + 90, straight on h + 180
+            if ((moves & SignalMoves.Left) != 0) arm.Toward[SignalMoves.Left] = (i + 3) % 4;
+            if ((moves & SignalMoves.Through) != 0) arm.Toward[SignalMoves.Through] = (i + 2) % 4;
+            if ((moves & SignalMoves.Right) != 0) arm.Toward[SignalMoves.Right] = (i + 1) % 4;
+            jp.Arms.Add(arm);
+        }
+        return jp;
+    }
+
+    private const SignalMoves AllMoves = SignalMoves.Left | SignalMoves.Through | SignalMoves.Right;
+
+    [Fact]
+    public void The_core_joins_every_allowed_move_and_its_kerbs_start_inside_the_mouths()
+    {
+        var jp = Crossroads(_ => AllMoves, new RoadAttributes(LanesForward: 1, LanesBackward: 1, WidthCm: 600, Left: Town, Right: Town), 6f);
+        var core = CorePlanner.Plan(jp);
+        Assert.Equal(12, core.Connectors.Count);
+        Assert.Equal(0, core.KerbsNotTangent);
+        Assert.Equal(0, core.ConnectorsOutside);
+        Assert.All(core.Corners, c => Assert.Equal(CornerShape.Arc, c.Shape));
+        // every corner as round as the right turn round it: its kerb at least a car's turning radius (its lane at the kerb)
+        Assert.All(core.Corners, c => Assert.True(c.Radius >= CorePlanner.CarInner - 1e-3, $"corner {c.ArmA}-{c.ArmB}: r {c.Radius:F2}"));
+        // each kerb leaves its arm's straight edge inside the mouth: the mouth is where the kerb curve starts
+        foreach (var c in core.Corners)
+        {
+            Assert.True(c.StationA <= core.Mouths.Single(m => m.Arm == c.ArmA).Station + 0.02);
+            Assert.True(c.StationB <= core.Mouths.Single(m => m.Arm == c.ArmB).Station + 0.02);
+        }
+        // the turns are as wide as fits: a left turn wider than its least radius
+        Assert.All(core.Connectors.Where(c => c.Move == SignalMoves.Left), c => Assert.True(c.Radius > c.MinRadius + 0.5));
+    }
+
+    [Fact]
+    public void A_corner_no_one_turns_round_stays_tight_by_the_same_rule()
+    {
+        // the south arm (heading 270) may not turn right: the corner between it and the east arm keeps only the least rounding
+        var jp = Crossroads(i => i == 3 ? SignalMoves.Left | SignalMoves.Through : AllMoves,
+            new RoadAttributes(LanesForward: 1, LanesBackward: 1, WidthCm: 600, Left: Town, Right: Town), 6f);
+        var core = CorePlanner.Plan(jp);
+        var tight = core.Corners.Single(c => c.Tight);
+        Assert.Equal((3, 0), (tight.ArmA, tight.ArmB));
+        Assert.Equal(CorePlanner.TightLeg, tight.Radius, 3);
+        Assert.Equal(0, core.ConnectorsOutside);
+    }
+
+    [Fact]
+    public void A_bike_lane_turning_right_rounds_the_kerb_inside_the_cars_turn()
+    {
+        // a painted bike lane at the kerb on every arm, turning right with the car lane: the kerb follows the bike connector,
+        // concentric inside the car's turn (the user: the car keeps its radius, the bike lane turns within it)
+        var side = Town with { Bike = BikeKind.Lane, BikeDm = 15 };
+        var jp = Crossroads(_ => AllMoves, new RoadAttributes(LanesForward: 1, LanesBackward: 1, WidthCm: 900, Left: side, Right: side), 9f);
+        var core = CorePlanner.Plan(jp);
+        Assert.Equal(0, core.ConnectorsOutside);
+        foreach (var corner in core.Corners)
+        {
+            var car = core.Connectors.Single(c => c.Kind == ConnectorKind.Car && c.Move == SignalMoves.Right && c.FromArm == corner.ArmA);
+            var bike = core.Connectors.Single(c => c.Kind == ConnectorKind.Bike && c.Move == SignalMoves.Right && c.FromArm == corner.ArmA);
+            Assert.Same(bike, corner.Bound);
+            Assert.True(corner.Radius < car.Radius - car.Width * 0.5 - 1.0, $"kerb r {corner.Radius:F2}, car's inner edge {car.Radius - car.Width * 0.5:F2}");
+        }
+    }
+
+    [Fact]
+    public void Every_core_of_the_test_region_keeps_its_connectors_and_starts_its_kerbs_inside_the_mouths()
+    {
+        var line = region.Log.FirstOrDefault(l => l.Contains("junction cores (#818 step 2)", StringComparison.Ordinal));
+        Assert.NotNull(line);
+        Assert.Contains("kerbs starting outside their mouth 0,", line);
+        Assert.Contains("connectors leaving the outline 0", line);
+    }
 }

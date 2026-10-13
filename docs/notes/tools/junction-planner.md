@@ -73,3 +73,46 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   an old bug), exits whose sidewalks already reach the facades (2508497,1139784: the old check ignored the sidewalks).
 - **Pitfall**: a dropped pocket must be planned again from the wants (`NoLeftPocket`), not cut out of the section: its
   lanes were sized for the pocket and the section was moved by its split.
+
+## Phase 2: the core (connectors, mouths, kerb corners, outline, lines)
+
+- **Model** (`Layout/JunctionCore`, `Layout/CorePlanner`, `Layout/ArmAxis`): each arm's axis is its link's alignment from the
+  node (LV95, a point a metre); inside the core an arm is taken straight along its tangent at the mouth. `Connector`: from an
+  arriving lane to a departing one (ids, offsets, width easing from its lane's to the exit lane's along the curve only),
+  `CoreCorner` (arc, vertex, chord, gore), `CoreMouth`, `CoreLine`. Plans only: nothing is written to tiles yet.
+- **Which lanes join**: every allowed move of every arriving lane (`ArmPlan.Toward`): left into the lane by the centre line,
+  right into the kerb lane (counted from the kerb), same-turn lanes lane to lane, through lanes from the centre line out;
+  bike lanes into the exit's bike lane, else the kerb side of its kerb lane.
+- **Radii** (the user, Oct 13): every turn **as wide as fits** between the mouths; the mouths come from each turn's least
+  radius (car 6 m on the inner edge, truck 10 m where a Major road is involved), so the order is: mouths at the least radii,
+  then every connector widened, then narrowed back where its corner's kerb would start outside a mouth. A bike lane turning
+  with a car lane is **concentric inside the car's turn** (its least radius the car's less its width: the kerb at ~4.5 m).
+- **A turn is a deflection, not a move name**: a connector turning 30 degrees or more sets the mouths at its least radius; a
+  straighter one (a bend through, a "right turn" of 5 degrees at a fork) fits between them, as an arc where its lines meet
+  inside both mouths, else a smooth S. An arc only where the lane lines meet near the junction (within 40 m).
+- **One envelope rule for every corner** (the user's generalization, Oct 13): the kerb is the least rounding (legs of at
+  least `TightKerb` 1.5 m) that keeps every connector edge point paved (a point in the sidewalk's wedge is paved when no disc
+  of the radius inside the wedge covers it: nested, so found by halving). A corner no connector passes stays tight with no
+  rule of its own; a left turn swinging into a narrow arm rounds it too. Buildings beside the corner (side bands behind the
+  arc) hold the radius smaller and narrow the turns, under their vehicle's radius if need be.
+- **Mouths**: pushed out until every turn's least-radius arc and both corners' kerbs start inside them (the mouth is where the
+  kerb leaves the straight edge); monotone after two rounds (on a curved arm the kerb's meet moves with the mouth); at most
+  40 m, and half the street where another car-road junction stands at its far end.
+- **An S holds its lane while a kerb runs beside it** on the side it moves toward (to the corner on the driver's right), then
+  moves at 1:5 at the most; a kerb between arms nearly in line (175 degrees and more, or kerbs meeting far off) is an S between
+  the two kerbs, so a lane moving sideways along it stays inside. Gores (arms under 20 degrees apart) push their mouths to
+  where the kerbs between them meet.
+- **Lines through the core** are connector edges, chosen by `JunctionRules`: the main road's centre line (between its two
+  outer-left connectors) where the priority plan carries it; edge guides without lights (the rightmost connector's right
+  edge, dashed where a road joins on that side); at the lights the left-turn guide (inner edge) toward an exit island or beside
+  a left-turn bike lane, and the line between them; same-turn pair lines; the through guide past an exit island.
+- **Multi-node cores** (phase 5): a junction whose street to another car-road junction is under 30 m is left out of the
+  checks (Sion: 565 of 1,017 junctions; TLM splits many crossings into nodes metres apart).
+- **Checks** (`--junctions new` prints `junction cores`): kerbs starting outside their mouth, connectors leaving the outline
+  (10 cm tolerance), tight corners against #700's, paved area against today's cap **plus its ribbons out to the new mouths**
+  (the cap alone is a fraction of it). `--debug-junction` lists mouths, corners (radius, floor, the connector that rounds it)
+  and connectors (radii least/widest/fill, S holds, OUTSIDE); `--junction-svg` draws the real geometry over today's cap.
+- **Measured** (Oct 13 2026): test region 13 cores, every check 0, J7's tight corner as #700. Sion 452 single-node cores,
+  2,772 connectors: kerbs outside their mouth 20, connectors outside 21 (gores under 20 degrees, arms whose order flips
+  between node and mouth on curved links); tight corners: both 1, planner only 25 (near-straight corners whose 5-degree
+  "right turn" needs no rounding), #700 only 7 (a left turn passes them); area x1.19 median (p10 1.10, p90 1.40).

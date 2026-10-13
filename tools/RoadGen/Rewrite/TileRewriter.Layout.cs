@@ -47,7 +47,13 @@ public static partial class TileRewriter
             if (!block.Contains(home) || !wanted.Contains(home) || junction.Arms.Count < 3 || plan.Arms.Count != junction.Arms.Count) continue;
             var rules = JunctionRules.Of(plan.Kind);
             bool lights = plan.Kind == PriorityPlanner.Kind.Signal;
-            var jp = new JunctionPlan { Node = junction.NodeId, Centre = junction.Centre, Lights = lights };
+            var main = Enumerable.Range(0, plan.Arms.Count).Where(k => plan.Arms[k].Role == PriorityPlanner.Role.Main).ToArray();
+            var oldTight = junction.TightCorners.Select(k => (k, (k + 1) % junction.Arms.Count)).ToHashSet();
+            var jp = new JunctionPlan
+            {
+                Node = junction.NodeId, Centre = junction.Centre, Lights = lights, MainArms = main, CentreLineThrough = plan.CentreLine is not null,
+                EdgeGuides = plan.Guides.Count > 0, OldOutline = junction.Boundary.ToList(), OldArea = junction.Area, OldTight = oldTight,
+            };
             var armsHere = ArmsOf(junction, net);
             bool layout = plan.Kind is PriorityPlanner.Kind.Main or PriorityPlanner.Kind.Signal;
             for (int i = 0; i < junction.Arms.Count; i++)
@@ -80,6 +86,8 @@ public static partial class TileRewriter
                 {
                     Arm = i, LinkId = arm.LinkId, AtEnd = atEnd, Heading = junction.Arms[i].OutwardHeading, Normal = normal, Wants = wants,
                     Wanted = wantedSection, Mouth = wantedSection, Length = SegmentLength(so.Segment), Exit = need?.Exit ?? -1,
+                    Major = info.Class <= RoadClass.Major, Axis = AxisOf(net.Links[arm.LinkId], atEnd), OldTrim = junction.Arms[i].Trim,
+                    Reach = ReachOf(net, net.Links[arm.LinkId], atEnd, out bool inner), Internal = inner,
                 });
             }
             // beside a right pocket the through riders' lane runs between it and the through lane (layout b): without lights always;
@@ -182,14 +190,64 @@ public static partial class TileRewriter
                 if (!dropped) break;
             }
             if (jp.Lights) BikeStops(jp);
+            // 6. the core between the mouths (step 2): connectors, kerb corners, the outline
+            jp.Core = CorePlanner.Plan(jp, buildings.Contains);
             if (DebugJunction is { } dbg && Math.Abs(dbg.E - jp.Centre.X) < 30 && Math.Abs(dbg.N - jp.Centre.Y) < 30)
             {
                 (log ?? Console.WriteLine)(jp.Describe());
                 if (JunctionSvg is { } svg)
-                    File.WriteAllText(svg, PlanSvg.Draw(jp, FormattableString.Invariant($"junction plan at LV95 {jp.Centre.X:F0},{jp.Centre.Y:F0}{(jp.Lights ? ", lights" : "")} (#818, schematic: arms straight along their heading)")));
+                    File.WriteAllText(svg, PlanSvg.Draw(jp, FormattableString.Invariant($"junction plan at LV95 {jp.Centre.X:F0},{jp.Centre.Y:F0}{(jp.Lights ? ", lights" : "")} (#818)")));
             }
         }
         return plans;
+    }
+
+    /// <summary>A street shorter than this between two junction nodes makes them one core (the plan: phase 5's multi-node cores).</summary>
+    private const double InternalLink = 30;
+
+    /// <summary>
+    /// How far out an arm's mouth may go (#818): half its street where a junction stands at the far end, else unbounded. A
+    /// street under <see cref="InternalLink"/> to another junction is <paramref name="inner"/> (unbounded until phase 5 joins the two).
+    /// </summary>
+    private static double ReachOf(RoadNetwork net, RoadLink link, bool atEnd, out bool inner)
+    {
+        double length = link.Alignment is { IsEmpty: false } al ? al.Length : PolylineLength(link.Centreline);
+        int far = atEnd ? link.StartNode : link.EndNode;
+        // a junction of car roads (paths and tracks joining a street make a node, not a junction core)
+        bool junction = far >= 0 && far < net.Nodes.Count
+            && net.Nodes[far].Approaches.Count(a => InfoOf(net.Links[a.LinkId]) is { } info && PriorityPlanner.IsCarRoad(info.Class)) >= 3;
+        inner = junction && length < InternalLink;
+        // the street goes on past a node that is no junction of car roads (an end may only be the block's edge)
+        return !inner && junction ? length * 0.5 : double.MaxValue;
+    }
+
+    private static double PolylineLength(List<Vec2> line)
+    {
+        double sum = 0;
+        for (int k = 1; k < line.Count; k++) sum += line[k].DistanceTo(line[k - 1]);
+        return sum;
+    }
+
+    /// <summary>An arm's axis from its node outward (#818): its link's alignment (its drawing where it has none), a point a metre.</summary>
+    private static ArmAxis AxisOf(RoadLink link, bool atEnd)
+    {
+        var points = new List<Vec2>();
+        if (link.Alignment is { IsEmpty: false } al)
+        {
+            double length = al.Length;
+            for (double s = 0; ; s += 1)
+            {
+                double at = Math.Min(s, length);
+                points.Add(al.PointAt(atEnd ? length - at : at));
+                if (at >= length || s >= 150) break;
+            }
+        }
+        else
+        {
+            points.AddRange(link.Centreline);
+            if (atEnd) points.Reverse();
+        }
+        return new ArmAxis(points);
     }
 
     /// <summary>
