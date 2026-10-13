@@ -7,6 +7,16 @@
 plan lets a player take one over, lift a pallet with it, and hand it back to the clocks without a
 snap.
 
+## Status
+
+Built on `feat/618-operate-crane` as planned; the note is `docs/notes/terrain/crane-operation.md`.
+Differences from the plan:
+
+- The claim is taken at the cab's door (or the remote's box), not at the ladder's foot: nobody holds
+  a crane through a 20 s climb, and a climber who finds it taken climbs back down.
+- The resume eases over the cycle's first tenth (the hook's way down to the pick), not a quarter.
+- #610's scheduled load was buried 0.9 m at the pick; fixed on the way (`LoadHeight` 2.3).
+
 ## Decisions (agreed with the user, 2026-10-14)
 
 - **Two ways to the controls.** On a tower crane, **climb the mast ladder into the cab**. On any

@@ -385,6 +385,10 @@ src/Player/FootPlayer.Fo quick  --forkliftcheck --world flat --systems physics,u
 src/Terrain/Construction/SiteDressing net tools/sitepalletnetcheck.sh
 src/Terrain/Construction/SitePlans net tools/sitepalletnetcheck.sh
 src/Items/SitePalletNetProbe net tools/sitepalletnetcheck.sh
+# #618: B sees A work a site's crane, hook a pallet onto the top slab, and the crane resume after A lets go
+src/Terrain/Construction/Crane net tools/cranenetcheck.sh
+src/Player/FootPlayer.Crane net tools/cranenetcheck.sh
+src/Items/PalletService   net    tools/cranenetcheck.sh
 # #615: a pallet in a tipper's body or a mini dumper's skip: set in from forks or a bucket, tipped out (flat), and over the network
 src/Items/BedCheck        quick  --bedcheck tipper --world flat --systems physics,ui
 src/Items/BedCheck        quick  --bedcheck dumper,bucket --world flat --systems physics,ui
