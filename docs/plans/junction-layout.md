@@ -3,7 +3,7 @@
 
 # Junctions lay their own surface: sections, cores and transitions (#818)
 
-Status: **plan**, settled with the user (Oct 13 2026, below). Coding starts once #704 and #712 are merged (this
+Status: **in progress** on `feat/818-junction-layout` (PR #820): phase 1 built (`docs/notes/tools/junction-planner.md`). Settled with the user (Oct 13 2026, below). Coding starts once #704 and #712 are merged (this
 replaces most of what they built, so it branches from the `main` that has them). Absorbs #709 (traffic follows the
 junction's paths). Part names as in `docs/notes/tools/intersection-parts.md`.
 

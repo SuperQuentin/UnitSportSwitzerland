@@ -627,7 +627,7 @@ public static class SignalTestRegion
                 string designed = PlannerDesign.GetValueOrDefault((j.Name, dir)) ?? j.Design.GetValueOrDefault(dir) ?? "-";
                 bool ok = designed == "-" || designed == car;
                 if (!ok) bad++;
-                arms.Add($"{dir}: {car} ({designed}{(ok ? "" : " MISMATCH")}){(a.Steps.Count > 0 ? " [" + string.Join("; ", a.Steps) + "]" : "")}");
+                arms.Add($"{dir}: {car} ({designed}{(ok ? "" : " MISMATCH")}){(a.Steps.Count + a.FitSteps.Count > 0 ? " [" + string.Join("; ", a.Steps.Concat(a.FitSteps)) + "]" : "")}");
             }
             foreach (var (dir, want) in j.Design)
                 if (want is not null && !seen.Contains(dir)) { bad++; arms.Add($"{dir}: MISSING ({want})"); }

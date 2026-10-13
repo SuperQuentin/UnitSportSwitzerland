@@ -37,6 +37,7 @@ public static partial class TileRewriter
         var scratchLanes = new LaneStats();
         var plans = new List<JunctionPlan>();
 
+        // 1. what the data wants at every mouth of the block
         foreach (var (junction, plan) in priority.Plans)
         {
             var home = TileId.FromLv95(junction.Centre.X, junction.Centre.Y);
@@ -65,13 +66,34 @@ public static partial class TileRewriter
                 var wantedSection = MouthPlanner.Wanted(normal, wants);
                 jp.Arms.Add(new ArmPlan
                 {
-                    Arm = i, LinkId = arm.LinkId, AtEnd = atEnd, Heading = junction.Arms[i].OutwardHeading, Normal = normal,
+                    Arm = i, LinkId = arm.LinkId, AtEnd = atEnd, Heading = junction.Arms[i].OutwardHeading, Normal = normal, Wants = wants,
                     Wanted = wantedSection, Mouth = wantedSection, Length = SegmentLength(so.Segment), Exit = need?.Exit ?? -1,
                 });
             }
-            if (jp.Arms.Count < 3) continue;
+            if (jp.Arms.Count >= 3) plans.Add(jp);
+        }
 
-            Lengths(jp);
+        // 2. the exits each junction's pockets want (lined up as if there were room everywhere)
+        foreach (var jp in plans) Align(jp, a => a.Wanted);
+        // 3. the pockets' lengths, the street shared with the junction at its other end
+        var byEnd = new Dictionary<(int Link, bool AtEnd), ArmPlan>();
+        foreach (var jp in plans)
+            foreach (var a in jp.Arms) byEnd[(a.LinkId, a.AtEnd)] = a;
+        foreach (var jp in plans) Lengths(jp, a => byEnd.GetValueOrDefault((a.LinkId, !a.AtEnd)));
+        // an exit hatch closes over TurnExit with TurnClear to spare, unless the pocket beyond merges with it (#325): else no pocket feeds it
+        var mergedInto = plans.SelectMany(p => p.Arms).Where(a => a.MergedWith is not null).Select(a => a.MergedWith!).ToHashSet();
+        foreach (var jp in plans)
+            foreach (var b in jp.Arms)
+                if (b.Mouth.Strips.Any(x => x.Kind == StripKind.Hatch) && b.Length < TurnExit + TurnClear && !mergedInto.Contains(b)
+                    && jp.Arms.FirstOrDefault(f => f.Exit == b.Arm && f.HasLeft) is { } feeder)
+                {
+                    NoLeftPocket(feeder);
+                    feeder.Mouth = feeder.Base;
+                    feeder.Steps.Add("7 left pocket: its exit is too short");
+                    b.Mouth = MouthPlanner.WithExitHatch(b.Mouth, 0);
+                }
+        // 4. the room beside every arm, as far out as its longest transition
+        foreach (var jp in plans)
             foreach (var a in jp.Arms)
             {
                 var so = segmentOf[a.LinkId];
@@ -79,37 +101,66 @@ public static partial class TileRewriter
                 a.Room = MeasureRoom(so.Segment, so.Tile, output[so.Tile].IndexOf(so.Segment), a.AtEnd, Math.Min(reach, a.Length),
                     Lines(so.Tile), grids, buildings);
             }
-            // line the through lanes up and fit each section to its room, trying the pockets' sizes longest first (step 6: a
-            // shorter storage before no pocket); then again with the lanes and sizes as they fitted
-            for (int round = 0; round < 2; round++)
+        // 5. line the through lanes up and fit each section to its room, trying the pockets' sizes longest first (step 6: a
+        // shorter storage before no pocket); then line them up again as they fitted and fit once more. An exit that cannot
+        // hold its hatch takes the pocket feeding it (its through lane would jog a lane across the junction; moving the pocket
+        // all to the far side would jog the oncoming traffic as much: a share stays at most half), and all again
+        foreach (var jp in plans)
+        {
+            for (int round = 0; round < 4; round++)
             {
-                Align(jp);
-                foreach (var a in jp.Arms)
-                {
-                    var aligned = a.Mouth;
-                    var tries = a.Sizes.Count > 0 ? a.Sizes : [a.Openings.ToList()];
-                    for (int t = round == 0 ? 0 : a.SizeTried; t < tries.Count; t++)
+                Align(jp, a => a.Base);
+                FitAll(jp, search: true);
+                Align(jp, a => MouthPlanner.Moved(MouthPlanner.WithExitHatch(a.Mouth, 0), a.Split));
+                FitAll(jp, search: false);
+                bool dropped = false;
+                foreach (var b in jp.Arms)
+                    if ((b.FitSteps.Contains("does not fit") || b.FitSteps.Contains(MouthPlanner.FeederStep))
+                        && jp.Arms.FirstOrDefault(f => f.Exit == b.Arm && f.Base.Strips.Any(x => IsLeftPocket(x.Id))) is { } feeder)
                     {
-                        a.Openings.Clear();
-                        a.Openings.AddRange(tries[t]);
-                        var steps = new List<string>();
-                        a.Mouth = MouthPlanner.Fit(aligned, a.Normal, a.Room, LeftStretch(a), RightStretch(a), steps);
-                        bool kept = !steps.Any(x => x.StartsWith("7", StringComparison.Ordinal) || x.StartsWith("4", StringComparison.Ordinal));
-                        if (!kept && t + 1 < tries.Count) continue;
-                        a.SizeTried = t;
-                        if (round == 1 && t > 0) a.Steps.Add(FormattableString.Invariant($"6 pockets shorter: {string.Join(", ", tries[t].Select(o => $"{o.Taper:F0}+{o.Storage:F0}"))}"));
-                        if (round == 1) a.Steps.AddRange(steps);
-                        // what the fit dropped no longer opens
-                        a.Openings.RemoveAll(o => !a.Mouth.Strips.Any(x => x.Id == o.Id));
-                        break;
+                        NoLeftPocket(feeder);
+                        feeder.Steps.Add("7 left pocket: no room for its exit");
+                        dropped = true;
                     }
-                }
+                if (!dropped) break;
             }
-            plans.Add(jp);
-            if (DebugJunction is { } dbg && Math.Abs(dbg.E - junction.Centre.X) < 30 && Math.Abs(dbg.N - junction.Centre.Y) < 30)
+            if (DebugJunction is { } dbg && Math.Abs(dbg.E - jp.Centre.X) < 30 && Math.Abs(dbg.N - jp.Centre.Y) < 30)
                 (log ?? Console.WriteLine)(jp.Describe());
         }
         return plans;
+    }
+
+    /// <summary>
+    /// Fits every arm's aligned section to its room (<see cref="MouthPlanner.Fit"/>): with <paramref name="search"/> the pockets'
+    /// sizes from the longest still allowed, the first that keeps every pocket; else the size settled on.
+    /// </summary>
+    private static void FitAll(JunctionPlan jp, bool search)
+    {
+        foreach (var a in jp.Arms)
+        {
+            var aligned = a.Mouth;
+            var tries = a.Sizes.Count > 0 ? a.Sizes : [new List<Opening>()];
+            int from = search ? 0 : Math.Min(a.SizeTried, tries.Count - 1);
+            for (int t = from; t < tries.Count; t++)
+            {
+                a.Openings.Clear();
+                a.Openings.AddRange(tries[t]);
+                var steps = new List<string>();
+                a.Mouth = MouthPlanner.Fit(aligned, a.Normal, a.Room, LeftStretch(a), RightStretch(a), steps);
+                bool kept = !steps.Contains("7 left pocket") && !steps.Contains("4 right pocket");
+                if (!kept && t + 1 < tries.Count) continue;
+                a.SizeTried = t;
+                if (t > 0) steps.Insert(0, FormattableString.Invariant($"6 pockets shorter: {string.Join(", ", tries[t].Select(o => $"{o.Taper:F0}+{o.Storage:F0}"))}"));
+                // the second fit starts from the first's lanes: its steps add to the first's
+                if (search) a.FitSteps.Clear();
+                a.FitSteps.RemoveAll(x => x.StartsWith("6 ", StringComparison.Ordinal));
+                foreach (var step in steps)
+                    if (!a.FitSteps.Contains(step)) a.FitSteps.Add(step);
+                // what the fit dropped no longer opens
+                a.Openings.RemoveAll(o => !a.Mouth.Strips.Any(x => x.Id == o.Id));
+                break;
+            }
+        }
     }
 
     /// <summary>
@@ -131,21 +182,34 @@ public static partial class TileRewriter
     /// <summary>
     /// The pockets' lengths (#123 sizes, longest first): every pair of left and right sizes whose taper (per lane) and storage
     /// fit the street with <see cref="TurnClear"/> to spare, a right pocket reaching at most <see cref="RightEarlier"/> past the
-    /// left's storage (#682); the fit tries them in turn (step 6). A left pocket no size fits is dropped (step 7, "too short");
-    /// a right pocket likewise (step 4).
+    /// left's storage (#682); the fit tries them in turn (step 6). Where the junction at the street's other end (<paramref name="far"/>)
+    /// lays an exit hatch on the same side, it keeps <see cref="TurnExit"/> + <see cref="TurnRejoin"/> of the street; where then no
+    /// size fits, the two merge (#325): one transition from that exit to this pocket, the hatch a lane wide all along and the
+    /// pocket opening out of it over <see cref="TurnEntry"/>. A left pocket no size fits is dropped (step 7, "too short"); a
+    /// right pocket likewise (step 4).
     /// </summary>
-    private static void Lengths(JunctionPlan jp)
+    private static void Lengths(JunctionPlan jp, Func<ArmPlan, ArmPlan?> far)
     {
         foreach (var a in jp.Arms)
         {
-            double room = a.Length - TurnClear;
+            var other = far(a);
+            bool exitBeyond = other is not null && other.Mouth.Strips.Any(x => x.Kind == StripKind.Hatch);
+            double room = a.Length - TurnClear - (exitBeyond ? TurnExit + TurnRejoin : 0);
             var left = a.Mouth.Strips.Where(s => IsLeftPocket(s.Id)).ToList();
             bool right = a.Mouth.Strips.Any(s => s.Id == MouthPlanner.RightPocketId);
             var lefts = new List<(double Taper, double Storage)?>();
             if (left.Count > 0)
             {
                 lefts.AddRange(PocketSizes.Where(z => z.Taper * left.Count + z.Storage <= room).Select(z => ((double, double)?)z));
-                if (lefts.Count == 0) { a.Steps.Add("7 left pocket: street too short"); a.Mouth = DropLeft(a.Mouth); }
+                double merged = Math.Min(PocketSizes[0].Storage, a.Length - TurnEntry - TurnMinHatch);
+                if (lefts.Count == 0 && exitBeyond && merged >= PocketSizes[^1].Storage)
+                {
+                    // one strip mouth to mouth (2+1 kept): no taper, the pocket opens out of the exit's hatch
+                    lefts.Add((0, merged));
+                    a.MergedWith = other;
+                    a.Steps.Add(FormattableString.Invariant($"merged with the exit beyond (#325), storage {merged:F0} m"));
+                }
+                if (lefts.Count == 0) { a.Steps.Add("7 left pocket: street too short"); NoLeftPocket(a); }
             }
             if (lefts.Count == 0) lefts.Add(null);
             bool anyRight = false;
@@ -154,30 +218,37 @@ public static partial class TileRewriter
                 var pair = new List<Opening>();
                 if (l is { } ls) pair.AddRange(left.Select(lane => new Opening(lane.Id, ls.Taper, ls.Storage)));
                 (double Taper, double Storage)? r = null;
-                if (right)
+                // never beside a merged strip (#348)
+                if (right && a.MergedWith is null)
                     foreach (var z in RightPocketSizes)
                         if (z.Taper + z.Storage <= room && (l is null || z.Taper + z.Storage <= l.Value.Storage + RightEarlier)) { r = z; break; }
                 if (r is { } rs) { pair.Add(new Opening(MouthPlanner.RightPocketId, rs.Taper, rs.Storage)); anyRight = true; }
                 if (pair.Count > 0) a.Sizes.Add(pair);
             }
-            if (right && !anyRight) { a.Steps.Add("4 right pocket: street too short"); a.Mouth = DropRight(a.Mouth); }
+            if (right && !anyRight)
+            {
+                a.Steps.Add("4 right pocket: street too short");
+                a.Wants = a.Wants with { RightPocket = false };
+                a.Sizes.RemoveAll(z => z.Any(o => o.Id == MouthPlanner.RightPocketId));
+            }
+            a.Base = MouthPlanner.Wanted(a.Normal, a.Wants);
             if (a.Sizes.Count > 0) a.Openings.AddRange(a.Sizes[0]);
         }
+    }
 
-        static Section DropLeft(Section s)
-        {
-            var strips = s.Strips.Where(x => !(x.Id is >= MouthPlanner.LeftPocketId and < MouthPlanner.LeftPocketId + 10 || x.Id == MouthPlanner.LeftBikeId)).ToList();
-            int first = strips.FindIndex(x => x.IsCarLane && x.Way == StripWay.In);
-            if (first >= 0) strips[first] = strips[first] with { Moves = strips[first].Moves | SignalMoves.Left };
-            return new Section(strips, s.CarriagewayLeft) { KerbLeftCm = s.KerbLeftCm, KerbRightCm = s.KerbRightCm };
-        }
-        static Section DropRight(Section s)
-        {
-            var strips = s.Strips.Where(x => x.Id != MouthPlanner.RightPocketId).ToList();
-            int last = strips.FindLastIndex(x => x.IsCarLane && x.Way == StripWay.In);
-            if (last >= 0) strips[last] = strips[last] with { Moves = strips[last].Moves | SignalMoves.Right };
-            return new Section(strips, s.CarriagewayLeft) { KerbLeftCm = s.KerbLeftCm, KerbRightCm = s.KerbRightCm };
-        }
+    /// <summary>
+    /// The arm without its left pocket: planned again from its data with none (the street's own lanes, as wide as they are),
+    /// its sizes without one.
+    /// </summary>
+    private static void NoLeftPocket(ArmPlan a)
+    {
+        a.Wants = a.Wants with { PocketMoves = [] };
+        a.Base = MouthPlanner.Wanted(a.Normal, a.Wants);
+        a.Sizes.RemoveAll(z => z.Any(o => IsLeftPocket(o.Id)));
+        for (int k = 0; k < a.Sizes.Count; k++) a.Sizes[k] = a.Sizes[k].Where(o => !IsLeftPocket(o.Id)).ToList();
+        a.Sizes.RemoveAll(z => z.Count == 0);
+        a.Openings.RemoveAll(o => IsLeftPocket(o.Id));
+        a.SizeTried = 0;
     }
 
     /// <summary>The right side's transition: the pockets' storage held, then their longest taper (an exit alone: <see cref="TurnExit"/>).</summary>
@@ -204,10 +275,10 @@ public static partial class TileRewriter
     /// left pocket moves its section left by a share of the pocket where the room on its left allows (half, a quarter,
     /// none: the approach side always takes at least half); the exit it feeds gets a hatch between its centre line and its
     /// departing lanes as wide as the through lane stands further right than that exit's lane (at the lights at least
-    /// <see cref="IslandKeepHatch"/> where an island will stand, the shares giving way alike). Starts again from each
-    /// section as it stands, unmoved and without its hatch, so it can run after a fit.
+    /// <see cref="IslandKeepHatch"/> where an island will stand, the shares giving way alike). Starts from the sections
+    /// <paramref name="from"/> gives, unmoved and without a hatch: the planned ones, or the fitted ones to line them up as they fitted.
     /// </summary>
-    private static void Align(JunctionPlan jp)
+    private static void Align(JunctionPlan jp, Func<ArmPlan, Section> from)
     {
         static int ThroughLane(Section s) =>
             s.Strips.Select((x, k) => (x, k)).Where(p => p.x.IsCarLane && p.x.Way == StripWay.In && p.x.Id < MouthPlanner.LeftPocketId)
@@ -215,9 +286,9 @@ public static partial class TileRewriter
         static int InnerOut(Section s) =>
             s.Strips.Select((x, k) => (x, k)).Where(p => p.x.IsCarLane && p.x.Way == StripWay.Out).Select(p => p.k).DefaultIfEmpty(-1).Last();
 
-        // each section back where the street's axis has it, without a hatch
+        // each section where the street's axis has it, without a hatch
         var bare = new Dictionary<ArmPlan, Section>();
-        foreach (var a in jp.Arms) bare[a] = MouthPlanner.Moved(MouthPlanner.WithExitHatch(a.Mouth, 0), a.Split);
+        foreach (var a in jp.Arms) bare[a] = from(a);
         // the shares: what the room on the approach's left takes
         foreach (var a in jp.Arms)
         {

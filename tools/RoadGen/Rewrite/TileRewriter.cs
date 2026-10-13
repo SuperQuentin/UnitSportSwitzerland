@@ -114,7 +114,8 @@ public static partial class TileRewriter
                     urban     {Urban:N0} ({UrbanKm:F1} km)   roundabout {Roundabout:N0}
                     OSM       {Osm:N0} ({OsmKm:F1} km) on {OsmTiles} tiles flagged OSM
                     bytes     {Bytes / 1024.0:F0} KB, {(double)Bytes / Math.Max(1, tiles) / 1024:F1} KB/tile, max {MaxBytes / 1024.0:F1} KB ({MaxBytesTile}), deflated on the wire {(double)DeflatedBytes / Math.Max(1, tiles) / 1024:F1} KB/tile
-                """) + "\n" + FormatParts(tiles) + "\n" + Paint.Format(tiles) + "\n" + Carriageways.Format() + "\n" + Roundabouts.Format() + "\n" + Rail.Format() + "\n" + Priority.Format() + "\n" + TurnLanes.Format() + "\n" + Signals.Format() + Lanes.Format() + "\n" + Bikes.Format();
+                """) + "\n" + FormatParts(tiles) + "\n" + Paint.Format(tiles) + "\n" + Carriageways.Format() + "\n" + Roundabouts.Format() + "\n" + Rail.Format() + "\n" + Priority.Format() + "\n" + TurnLanes.Format() + "\n" + Signals.Format() + Lanes.Format() + "\n" + Bikes.Format()
+                + (Layouts.Count > 0 ? "\n" + Layout.JunctionPlan.Summary(Layouts) : "");
         }
     }
 
@@ -668,15 +669,21 @@ public static partial class TileRewriter
                     }
                     return StreetSideAt(linkId, end, right);
                 }
-                if (options.NewJunctions)
-                    netStats.Layouts.AddRange(PlanLayouts(priority, result, segmentOf, output, block, wanted, grids, buildings, StreetSideAt,
-                        overlay, restrictions, null));
+                var layouts = options.NewJunctions
+                    ? PlanLayouts(priority, result, segmentOf, output, block, wanted, grids, buildings, StreetSideAt, overlay, restrictions, null)
+                    : null;
+                if (layouts is not null) netStats.Layouts.AddRange(layouts);
                 var openings = new List<PocketOpening>();
                 var townArcs = new Dictionary<(int Node, int Arm), CornerArc>();
                 var pendingGuides = new List<(TileId Home, RoadPaint Guide, Widening Exit, int Node, int ExitArm)>();   // through guides, drawn past an island only (#711)
                 PlanStopBacks(priority, result.Network, StreetSideAt, crossingNodes);   // the cars' stop lines behind crosswalks (#711)
                 var pockets = EmitTurnLanes(priority, result, segmentOf, output, block, wanted, grids, buildings, paint, islands, signs,
                     bikeBetween, stripOwners, netStats.TurnLanes, StreetSideAt, openings, townArcs, overlay, restrictions, crossingNodes, pendingGuides);
+                // what the pocket layout built, beside each plan (#818: the planner's report compares them)
+                foreach (var jp in layouts ?? [])
+                    foreach (var a in jp.Arms)
+                        if (pockets.TryGetValue((jp.Node, a.Arm), out var placedHere))
+                            (a.BuiltLeft, a.BuiltRight) = (placedHere.Left, placedHere.Right);
                 var openingsOf = openings.GroupBy(o => o.Segment, ReferenceEqualityComparer.Instance)
                     .ToDictionary(g => (RoadSegment)g.Key!, g => g.ToList(), ReferenceEqualityComparer.Instance);
                 // the bike side of a link's end piece (#351): its separated path, else its painted lane
