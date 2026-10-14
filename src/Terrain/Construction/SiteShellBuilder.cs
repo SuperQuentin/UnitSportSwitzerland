@@ -162,9 +162,29 @@ public static class SiteShellBuilder
     /// (tile-local), its job, and the meshes of what slews (<see cref="CranePlans"/>) in the
     /// pivot's frame. <see cref="SiteCranes"/> stands them up and moves them.
     /// </summary>
+    /// <param name="Ground">The ground at the mast's foot, tile-local.</param>
+    /// <param name="Face">The ladder's side of the mast, tile-local (x, z): see <see cref="CranePlans.LadderFace"/> (#618).</param>
     public sealed record CraneRigData(CraneSpot Spot, CraneJob Job, Vector3 Pivot,
         PierMeshBuilder.MeshData Jib, PierMeshBuilder.MeshData Trolley, PierMeshBuilder.MeshData Hook,
-        PierMeshBuilder.MeshData Rope, PierMeshBuilder.MeshData Load, Vector3[] Lamps);
+        PierMeshBuilder.MeshData Rope, PierMeshBuilder.MeshData Load, Vector3[] Lamps, float Ground, Vector2 Face);
+
+    /// <summary>
+    /// Where a site's crane stands (#618), without its job or meshes: the ground at its foot, its
+    /// pivot and its ladder's side, all tile-local. What the server needs to place an operator.
+    /// </summary>
+    public readonly record struct CraneStand(CraneSpot Spot, float Ground, Vector3 Pivot, float JibY, Vector2 Face, Vector2 FaceInSite);
+
+    /// <summary>The <paramref name="k"/>th crane of a site, stood on the drawn ground (#618).</summary>
+    public static CraneStand Stand(BuildingTile tile, ConstructionSite site, ChunkGrid? grid, int k)
+    {
+        var crane = site.Cranes[k];
+        float ground = GroundAt(tile, site, grid, crane.Base);
+        var pivot = new Vector3(crane.Base.X, ground + CranePlans.MastHeight(crane), crane.Base.Y);
+        float jibY = pivot.Y + CranePlans.JibBottom * (crane.Kind == CraneKind.Tower ? 1f : 0.62f);
+        var face = CranePlans.LadderFace(new Vector2(site.Front.Dot(site.Box.AxisU), site.Front.Dot(site.Box.AxisV)));
+        var faceTile = site.Box.AxisU * face.X + site.Box.AxisV * face.Y;
+        return new CraneStand(crane, ground, pivot, jibY, faceTile, face);
+    }
 
     /// <summary>
     /// A tile's sites: the mesh of everything that stands still, its collision faces, the cranes'
@@ -301,19 +321,31 @@ public static class SiteShellBuilder
                 var crane = site.Cranes[k];
                 var d0 = crane.Base - site.Box.Center;
                 var at = new Vector2(d0.Dot(site.Box.AxisU), d0.Dot(site.Box.AxisV));
-                float ground = GroundAt(tile, site, grid, crane.Base);
-                foreach (var box in CranePlans.Mast(crane, at, ground)) g.Box(box, T);
+                var stand = Stand(tile, site, grid, k);
+                foreach (var box in CranePlans.Mast(crane, at, stand.Ground, stand.FaceInSite)) g.Box(box, T);
                 if (!mesh) continue;
-                var pivot = new Vector3(crane.Base.X, ground + CranePlans.MastHeight(crane), crane.Base.Y);
-                float jibY = pivot.Y + CranePlans.JibBottom * (crane.Kind == CraneKind.Tower ? 1f : 0.62f);
-                var job = new CraneJob($"{site.Key}|{k}", crane.Base, jibY, crane.JibLength, crane.RestYaw,
+                var job = new CraneJob(CraneKey(site.Key, k), crane.Base, stand.JibY, crane.JibLength, crane.RestYaw,
                     PickOf(tile, site, grid, crane), DropsOf(site, shell));
                 int load = Core.Fnv.Unit($"{site.Key}|crane|load|{k}") < 0.6 ? 0 : 1;
-                cranes.Add(new CraneRigData(crane, job, pivot, MeshOf(CranePlans.Jib(crane)), MeshOf(CranePlans.Trolley(crane)),
-                    MeshOf(CranePlans.Hook()), MeshOf(CranePlans.Rope()), MeshOf(CranePlans.Load(load)), CranePlans.Lamps(crane)));
+                cranes.Add(new CraneRigData(crane, job, stand.Pivot, MeshOf(CranePlans.Jib(crane)), MeshOf(CranePlans.Trolley(crane)),
+                    MeshOf(CranePlans.Hook()), MeshOf(CranePlans.Rope()), MeshOf(CranePlans.Load(load)), CranePlans.Lamps(crane),
+                    stand.Ground, stand.Face));
             }
         }
         return new SiteBuild(g.Data(), g.Faces.ToArray(), cranes, g.OfficeFaces.ToArray());
+    }
+
+    /// <summary>A crane's name, every peer's and the server's: its site's building and its place in the site's list (#610).</summary>
+    public static string CraneKey(string building, int k) => $"{building}|{k}";
+
+    /// <summary>The building and the index of a crane's key, or false.</summary>
+    public static bool TryParseCraneKey(string key, out string building, out int k)
+    {
+        int bar = key.LastIndexOf('|');
+        building = bar > 0 ? key[..bar] : "";
+        k = -1;
+        return bar > 0 && int.TryParse(key.AsSpan(bar + 1), System.Globalization.NumberStyles.None,
+            System.Globalization.CultureInfo.InvariantCulture, out k);
     }
 
     /// <summary>A heap: an eight-sided foot, a shoulder, a crown and a point.</summary>

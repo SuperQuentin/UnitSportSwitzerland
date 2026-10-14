@@ -109,4 +109,49 @@ public class CraneMotionTests
             Assert.True(CranePlans.MastHeight(spot) > spot.HookHeight);
         }
     }
+    // --- #618: a crane a player let go of ---
+
+    private static readonly CranePose Left = new(4.0f, 22f, 505f, false);
+
+    [Fact]
+    public void A_released_crane_holds_until_its_next_cycle()
+    {
+        const double at = 5000;
+        double start = CraneMotion.NextCycle(Job, at);
+        Assert.InRange(start - at, 0.0001, CraneMotion.Cycle);
+        for (double t = at; t < start; t += 1.3)
+            Assert.Equal(Left, CraneMotion.Resume(Job, Left, at, t, 10, 1));
+        // and the cycle it waits for is the schedule's own: the next one starts a cycle later
+        Assert.Equal(start + CraneMotion.Cycle, CraneMotion.NextCycle(Job, start + 0.001), 6);
+    }
+
+    [Theory]
+    [InlineData(10.0)]  // working: it eases into the way down to the pick
+    [InlineData(22.0)]  // resting: it eases into the weathervane
+    public void It_eases_back_into_its_schedule_without_a_jump(double hour)
+    {
+        const double at = 5000;
+        double start = CraneMotion.NextCycle(Job, at);
+        var last = CraneMotion.Resume(Job, Left, at, start - 0.05, hour, 1);
+        for (double t = start; t < start + CraneMotion.Cycle; t += 0.05)
+        {
+            var p = CraneMotion.Resume(Job, Left, at, t, hour, 1);
+            Assert.True(MathF.Abs(Mathf.AngleDifference(last.Yaw, p.Yaw)) < 0.05f, $"slewed {Mathf.AngleDifference(last.Yaw, p.Yaw):F3} rad in a frame at {t - start:F2}");
+            Assert.True(MathF.Abs(p.Trolley - last.Trolley) < 0.3f, $"trolley jumped at {t - start:F2}");
+            Assert.True(MathF.Abs(p.HookY - last.HookY) < 0.5f, $"hook jumped at {t - start:F2}");
+            last = p;
+        }
+        // past the blend it is the schedule exactly, and no longer resuming
+        double after = start + CraneMotion.Cycle * CraneMotion.ResumeShare + 0.01;
+        Assert.Equal(CraneMotion.Pose(Job, after, hour, 1), CraneMotion.Resume(Job, Left, at, after, hour, 1));
+        Assert.False(CraneMotion.Resuming(Job.Key, at, after));
+        Assert.True(CraneMotion.Resuming(Job.Key, at, after - 0.1));
+    }
+
+    [Fact]
+    public void A_released_crane_shows_none_of_the_schedules_load_while_it_holds()
+    {
+        var loaded = Left with { Loaded = true };
+        Assert.False(CraneMotion.Resume(Job, loaded, 5000, 5001, 10, 1).Loaded);
+    }
 }

@@ -126,6 +126,7 @@
     <!-- and what one rolls in a Battle Royale match (#627) -->
     <Compile Include="..\..\src\Loot\MatchTable.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Construction\CraneMotion.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Construction\CraneControl.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Construction\CranePlan.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the sound of a site (#617): the scheduler and the synthesis, Godot maths only -->
     <Compile Include="..\..\src\Terrain\Construction\SiteSoundPlan.cs" Link="Game\%(Filename)%(Extension)" />

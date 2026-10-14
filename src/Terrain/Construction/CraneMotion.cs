@@ -38,8 +38,14 @@ public static class CraneMotion
     public const double Cycle = 140;
     /// <summary>The trolley never runs closer to the mast than this, m.</summary>
     public const float MinTrolley = 4f;
-    /// <summary>The hook's lowest point over what it lifts: the load's height, m.</summary>
-    public const float LoadHeight = 1.4f;
+    /// <summary>
+    /// The hook over the ground where it sets its load down, m: the load hangs 0.95 m under the
+    /// hook's origin and is 1.35 m tall (<see cref="CranePlans.Load"/>). It was 1.4 until #618,
+    /// which buried the skip 0.9 m at the pick.
+    /// </summary>
+    public const float LoadHeight = 2.3f;
+    /// <summary>The share of a cycle a released crane takes to ease back into its schedule (#618).</summary>
+    public const float ResumeShare = 0.10f;
 
     /// <summary>Whether a crane is working at this hour of this day (0 = the clock's first day).</summary>
     public static bool Working(double hour, long day) =>
@@ -54,8 +60,7 @@ public static class CraneMotion
     /// <param name="day">The environment day number.</param>
     public static CranePose Pose(CraneJob job, double sim, double hour, long day)
     {
-        // each crane on its own phase, so two cranes of a site never lift in step
-        double offset = Fnv.Unit(job.Key + "|crane|phase") * Cycle;
+        double offset = Offset(job);
         float top = job.JibY - 1.2f;
         if (!Working(hour, day) || job.Drops.Count == 0)
         {
@@ -89,6 +94,45 @@ public static class CraneMotion
         return new CranePose(Turn(dropYaw, pickYaw, back), Mathf.Lerp(dropOut, pickOut, back), top, false);
     }
 
+    /// <summary>Each crane on its own phase, so two cranes of a site never lift in step.</summary>
+    private static double Offset(CraneJob job) => Offset(job.Key);
+
+    private static double Offset(string key) => Fnv.Unit(key + "|crane|phase") * Cycle;
+
+    /// <summary>When the first cycle after <paramref name="sim"/> starts, simulated seconds.</summary>
+    public static double NextCycle(CraneJob job, double sim) => NextCycle(job.Key, sim);
+
+    /// <summary>When the first cycle of the crane named <paramref name="key"/> after <paramref name="sim"/> starts.</summary>
+    public static double NextCycle(string key, double sim)
+    {
+        double offset = Offset(key);
+        return (Math.Floor((sim + offset) / Cycle) + 1) * Cycle - offset;
+    }
+
+    /// <summary>
+    /// A crane a player let go of (#618): it holds the pose it was left in until its next cycle
+    /// starts, then eases from it into <see cref="Pose"/> over the cycle's first
+    /// <see cref="ResumeShare"/> (the hook's way down to the pick), so it never snaps. Every peer
+    /// gets the same answer from the same release, which the server stamps.
+    /// </summary>
+    /// <param name="left">The pose it was left in (its load is never the schedule's).</param>
+    /// <param name="leftAt">When it was let go, simulated seconds.</param>
+    public static CranePose Resume(CraneJob job, CranePose left, double leftAt, double sim, double hour, long day)
+    {
+        double start = NextCycle(job, leftAt);
+        if (sim < start) return left with { Loaded = false };
+        var to = Pose(job, sim, hour, day);
+        float k = (float)((sim - start) / (Cycle * ResumeShare));
+        if (k >= 1f) return to;
+        k = S(k);
+        return new CranePose(Turn(left.Yaw, to.Yaw, k), Mathf.Lerp(left.Trolley, to.Trolley, k),
+            Mathf.Lerp(left.HookY, to.HookY, k), to.Loaded);
+    }
+
+    /// <summary>Whether a release still shapes the pose at <paramref name="sim"/>: false once the crane is back on its schedule.</summary>
+    public static bool Resuming(string key, double leftAt, double sim) =>
+        sim < NextCycle(key, leftAt) + Cycle * ResumeShare;
+
     /// <summary>The yaw that points the jib at a target, and how far out the trolley must run.</summary>
     public static (float Yaw, float Out) Aim(CraneJob job, Vector3 target)
     {
@@ -98,7 +142,7 @@ public static class CraneMotion
     }
 
     /// <summary>From one yaw to another the short way round.</summary>
-    private static float Turn(float from, float to, float k)
+    public static float Turn(float from, float to, float k)
     {
         float d = Wrap(to - from + MathF.PI) - MathF.PI;
         return Wrap(from + d * k);
@@ -107,7 +151,7 @@ public static class CraneMotion
     /// <summary>Ease in and out: a crane starts and stops gently.</summary>
     private static float S(float x) => x * x * (3 - 2 * x);
 
-    private static float Wrap(float a)
+    public static float Wrap(float a)
     {
         a %= MathF.Tau;
         return a < 0 ? a + MathF.Tau : a;

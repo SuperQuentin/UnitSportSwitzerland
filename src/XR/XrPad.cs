@@ -66,7 +66,9 @@ internal sealed class XrPad
         foreach (var b in _pulses) Button(b, false);
         _pulses.Clear();
 
-        bool onFoot = player == null || player.Ride == RideKind.OnFoot && player.RidingWith == 0;
+        // at a crane's controls (#618) the sticks are its levers, as when mounted
+        bool crane = player?.CraneWorking == true;
+        bool onFoot = player == null || player.Ride == RideKind.OnFoot && player.RidingWith == 0 && !crane;
         // the pigeon (#217) drops on the right trigger, like using an item on foot; it flaps on A
         bool shoulders = onFoot || player?.Ride == RideKind.Pigeon;
         // the triggers change role on mounting: the prompts name them again (#435)
@@ -125,7 +127,9 @@ internal sealed class XrPad
         var r = _right.GetVector2("primary");
         // the stronger axis only, so a diagonal never presses two directions
         bool vertical = Mathf.Abs(r.Y) >= Mathf.Abs(r.X);
-        bool up = Hysteresis(vertical ? r.Y : 0f, ref _dpadUpWas), down = Hysteresis(vertical ? -r.Y : 0f, ref _dpadDownWas);
+        // a crane's hoist is the right stick's Y (#618): back raises, as on a pad; ← stays the hook (couple)
+        Axis(JoyAxis.RightY, crane ? -r.Y : 0f);
+        bool up = Hysteresis(vertical && !crane ? r.Y : 0f, ref _dpadUpWas), down = Hysteresis(vertical && !crane ? -r.Y : 0f, ref _dpadDownWas);
         bool left = Hysteresis(shoulders || vertical ? 0f : -r.X, ref _dpadLeftWas);
         bool right = Hysteresis(shoulders || vertical ? 0f : r.X, ref _dpadRightWas);
         Button(JoyButton.DpadUp, up);

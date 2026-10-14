@@ -117,4 +117,23 @@ public static class SitePlans
         }
         return null;
     }
+
+    /// <summary>
+    /// The server's answer to "where does crane <c>&lt;building&gt;|&lt;k&gt;</c> stand" (#618): from the
+    /// tile's own files, as every peer builds it. Null if there is no such crane.
+    /// </summary>
+    public static SiteShellBuilder.CraneStand? CraneAt(IChunkSource source, string key, out TileId tileId)
+    {
+        tileId = default;
+        if (!SiteShellBuilder.TryParseCraneKey(key, out var building, out int k) || !BuildingKey.TryParse(building, out var b)) return null;
+        tileId = b.Tile;
+        var tile = source.LoadBuildingsAsync(b.Tile).GetAwaiter().GetResult();
+        if (tile is not { Buildings.Count: > 0 } || !HasSite(tile)) return null;
+        var roads = source.LoadRoadsAsync(b.Tile).GetAwaiter().GetResult();
+        var grid = source.LoadChunkAsync(b.Tile).GetAwaiter().GetResult();
+        foreach (var site in For(tile, roads))
+            if (site.Key == building)
+                return k >= 0 && k < site.Cranes.Count ? SiteShellBuilder.Stand(tile, site, grid, k) : null;
+        return null;
+    }
 }
