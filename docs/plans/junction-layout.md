@@ -326,3 +326,9 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
 - **A path crossing follows the path's curve** (as today): from one arm's path to the other's through the junction, red over the
   carriageway by the rule, the corners carrying the path to the kerb where the curve meets it. A bike lane turning through the
   core follows its connector.
+- **Facing edges line up across the whole junction** (Oct 14, after the Geneva review: a split lead-in left the facing arm's
+  edge 2.25 m short, its path crossing diagonal): where an arm's arriving side stops short of the departing side of the arm
+  whose through traffic comes into it, its arriving lanes move out behind a hatch right of the centre line (`LineUpHatchId`)
+  by its share of the jog: one slope from 30 m out on it to the other mouth, the core taking the rest; as far as its room
+  allows. Rejected: mirroring the split exactly (a full extra hatch at the mouth), splitting the jog between the two arms,
+  moving the lead-in to the kerb side, a taper from sidewalk to sidewalk (it narrows the wide side).

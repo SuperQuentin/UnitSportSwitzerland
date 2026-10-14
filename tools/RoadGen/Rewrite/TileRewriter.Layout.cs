@@ -613,7 +613,24 @@ public static partial class TileRewriter
             double h = hatch.GetValueOrDefault(a);
             a.Mouth = MouthPlanner.Moved(MouthPlanner.WithExitHatch(bare[a], Math.Max(0, h)), -a.Split);
         }
+        // the facing edges in line across the whole junction (the user, Oct 14 2026): where an arm's arriving side stops short of
+        // the departing side of the arm whose through traffic comes into it (a split lead-in moved that one out), its arriving
+        // lanes move out behind a hatch right of its centre line by its share of the jog: one slope from LineUpTaper out on it
+        // to the other mouth, the core taking the rest; as far as its room allows
+        foreach (var b in jp.Arms)
+        {
+            if (jp.Arms.FirstOrDefault(x => x != b && x.Exit == b.Arm) is not { } a || b.Mouth.CentreLine is null) continue;
+            double jog = -a.Mouth.CarriagewayLeft - b.Mouth.CarriagewayRight;
+            if (jog < LineUpMin) continue;
+            double core = Math.Max(0, a.OldTrim + a.MouthShift) + Math.Max(0, b.OldTrim + b.MouthShift);
+            var (_, roomR) = MouthPlanner.MouthRoom(b.Normal, b.Room, LeftStretch(b), RightStretch(b));
+            double w = Math.Min(jog * LineUpTaper / (LineUpTaper + core), roomR - MouthPlanner.Reach(b.Mouth).Right);
+            if (w >= LineUpMin) b.Mouth = MouthPlanner.WithLineUpHatch(b.Mouth, w);
+        }
     }
+
+    /// <summary>A jog between facing edges under this is left to the core (m); a line-up hatch closes over <see cref="LineUpTaper"/> (m).</summary>
+    internal const double LineUpMin = 0.25, LineUpTaper = TransitionPlanner.ExitTaper;
 
     /// <summary>
     /// The room beside an arm (#818): at every <see cref="TurnStation"/> from its junction end out to <paramref name="reach"/>,

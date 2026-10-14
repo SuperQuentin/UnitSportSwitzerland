@@ -167,6 +167,13 @@ public static class TransitionPlanner
             eOut = ExitTaper;
             events.Add(string.Create(inv, $"exit hatch closes 0-{ExitTaper:F0} m"));
         }
+        if (W(mouth, MouthPlanner.LineUpHatchId) is var lineUp and > 0)
+        {
+            // the facing edge's share of the jog: one slope from its start to the mouth and on through the core (the user)
+            widths[MouthPlanner.LineUpHatchId].HoldThen(0, ExitTaper, 0);
+            eIn = Math.Max(eIn, ExitTaper);
+            events.Add(string.Create(inv, $"line-up hatch {lineUp:F2} closes 0-{ExitTaper:F0} m"));
+        }
         if (W(mouth, MouthPlanner.AddedBikeId) is var added and > 0)
         {
             // held as far as the lights' solid centre line, and beside a kerb-side pocket while it is there
@@ -178,7 +185,7 @@ public static class TransitionPlanner
         }
         // every other width change at 1:6, just beyond its side's last opening
         var handled = new HashSet<int>(a.Openings.Select(o => o.Id))
-            { MouthPlanner.LeftBikeId, MouthPlanner.RightBikeId, MouthPlanner.HatchId, MouthPlanner.AddedBikeId, LeadInHatchId };
+            { MouthPlanner.LeftBikeId, MouthPlanner.RightBikeId, MouthPlanner.HatchId, MouthPlanner.AddedBikeId, LeadInHatchId, MouthPlanner.LineUpHatchId };
         foreach (var x in order)
         {
             if (handled.Contains(x.Id)) continue;

@@ -416,6 +416,31 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
     }
 
     [Fact]
+    public void A_line_up_hatch_moves_the_arriving_side_out_and_closes_over_thirty_metres()
+    {
+        var normal = Section.Normal(Street(), 9f, junctionAtEnd: true);
+        var exit = MouthPlanner.WithExitHatch(normal, 2.0);
+        var mouth = MouthPlanner.WithLineUpHatch(exit, 1.2);
+        // the departing side and the centre line stay; the arriving side moves out by the hatch
+        Assert.Equal(exit.CarriagewayLeft, mouth.CarriagewayLeft, 6);
+        Assert.Equal(exit.CentreLine!.Value, mouth.CentreLine!.Value, 6);
+        Assert.Equal(exit.CarriagewayRight + 1.2, mouth.CarriagewayRight, 6);
+        // the exit hatch taken off (the planner lines the arms up again) takes the line-up hatch with it, the left edge back in
+        var bare = MouthPlanner.WithExitHatch(mouth, 0);
+        Assert.Equal(normal.CarriagewayLeft, bare.CarriagewayLeft, 6);
+        Assert.Equal(normal.CarriagewayRight, bare.CarriagewayRight, 6);
+
+        var wants = new ArmWants(false, AllMoves, SignalMoves.None, [], null, [], false, false);
+        var a = new ArmPlan { Arm = 0, LinkId = 1, AtEnd = true, Heading = 0, Normal = normal, Wants = wants, Wanted = mouth, Mouth = mouth, Length = 200, TransitionRoom = 200 };
+        TransitionPlanner.PlanAll([new JunctionPlan { Node = 1, Centre = default, Lights = false, Arms = { a } }]);
+        var t = a.Transition!;
+        int hatch = StripIndex(t, MouthPlanner.LineUpHatchId);
+        Assert.True(hatch >= t.Anchor, "the line-up hatch lies right of the centre line");
+        Assert.Equal(0.6, t.WidthAt(hatch, 15), 6);
+        Assert.Equal(0, t.WidthAt(hatch, TransitionPlanner.ExitTaper), 6);
+    }
+
+    [Fact]
     public void A_street_too_short_for_two_transitions_holds_one_with_the_median_running_mouth_to_mouth()
     {
         // a pocket merged with the exit of the junction beyond (#325): one transition, the lead-in median meeting that exit's hatch

@@ -110,7 +110,7 @@ public static class MouthPlanner
     public const string FeederStep = "7 the pocket feeding this exit";
 
     /// <summary>Ids of strips the planner adds: above any a normal section numbers.</summary>
-    public const int LeftBikeId = 110, AddedBikeId = 115, RightBikeId = 125, HatchId = 130;
+    public const int LeftBikeId = 110, AddedBikeId = 115, RightBikeId = 125, HatchId = 130, LineUpHatchId = 132;
     /// <summary>The first lane of each pocket (<see cref="PocketRule.FirstId"/>).</summary>
     public static readonly int LeftPocketId = PocketRules.Left.FirstId, RightPocketId = PocketRules.Right.FirstId;
 
@@ -217,9 +217,23 @@ public static class MouthPlanner
             if (at < 0) at = s.LastCarriageway + 1;
             strips.Insert(at, new Strip(StripKind.Hatch, width, StripWay.None, Id: HatchId));
         }
-        // the hatch widens the carriageway on the left (the departing side, seen driving in)
-        double grown = strips.Where(x => x.InCarriageway).Sum(x => x.Width) - s.CarriagewayWidth;
+        // the hatch widens the carriageway on the left (the departing side, seen driving in); a line-up hatch right of the centre
+        // line goes with the right edge
+        double grown = (width > 0.05 ? width : 0) - s.Strips.Where(x => x.Kind == StripKind.Hatch && x.Way != StripWay.In).Sum(x => x.Width);
         return new Section(strips, s.CarriagewayLeft - grown) { KerbLeftCm = s.KerbLeftCm, KerbRightCm = s.KerbRightCm };
+    }
+
+    /// <summary>
+    /// The section with a hatch of <paramref name="width"/> right of the centre line, before the arriving lanes (the user, Oct 14
+    /// 2026: the facing arm's edge lined up across the whole junction): the arriving side moves out by it, the departing side stays.
+    /// It is an arriving strip, so the centre line stays on its left.
+    /// </summary>
+    public static Section WithLineUpHatch(Section s, double width)
+    {
+        var strips = s.Strips.Where(x => x.Id != LineUpHatchId).ToList();
+        int at = strips.FindIndex(x => x.Way == StripWay.In && x.InCarriageway);
+        if (width > 0.05 && at >= 0) strips.Insert(at, new Strip(StripKind.Hatch, width, StripWay.In, Id: LineUpHatchId));
+        return new Section(strips, s.CarriagewayLeft) { KerbLeftCm = s.KerbLeftCm, KerbRightCm = s.KerbRightCm };
     }
 
     /// <summary>The section moved <paramref name="by"/> metres to the right across the arm (a split lead-in moves it left: negative).</summary>

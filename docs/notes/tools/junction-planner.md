@@ -200,6 +200,12 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   **A path on a side no road joins runs on along the core's kerb** (`BridgePath` on the kerb from one mouth to the next,
   `KerbAlong` + `OffsetAlong`: ends square off their arms, inner points mitred); the sidewalk corner under it is dropped
   (`Unbridged`), and arms whose profiles differ keep the corner.
+  **Facing edges line up across the whole junction** (the user, Oct 14): opposite a split lead-in (or any arm reaching
+  further on its departing side than the arm its through traffic goes into does on its arriving side), that arm gets a
+  line-up hatch (id 132, `MouthPlanner.WithLineUpHatch`: an arriving-side hatch, so right of the centre line) of
+  jog x 30 / (30 + core length), clamped to its room, closing linearly over 30 m (`TileRewriter.Align`). Geneva
+  2496643,1118197: N 1.14 m, E 1.27 m. Its jog is measured from the sections: a bend in the street (the arms at 163 deg there)
+  is not a jog and still bends the crossing over the joining road.
 - **Checked**: test region RESULT ok, `--signal-check` ok, `--kerb-check` ok (12 zebras, 32 bike crossings), 0 decoded differently;
   Sion kerb check one failure the old layout lacks (an odd junction of 5-7 m links), six of the old ones gone.
   Paths along a kerb (Oct 14 2026): test region 3 (the T's south sides, 2 corners replaced), RESULT, kerb and signal checks

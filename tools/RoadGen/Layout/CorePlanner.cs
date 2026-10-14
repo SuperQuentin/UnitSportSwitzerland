@@ -748,7 +748,7 @@ public static class CorePlanner
                     && HasIsland(arms[index[t.ToArm]]) && !leftInto.Contains(t.ToArm))
                     core.Lines.Add(new CoreLine("through", t.Left, Dashed: true));
 
-        static bool HasIsland(ArmPlan exit) => exit.Mouth.Strips.Any(s => s.Kind is StripKind.Hatch or StripKind.Island);
+        static bool HasIsland(ArmPlan exit) => exit.Mouth.Strips.Any(s => s.Kind is StripKind.Island || s.Kind == StripKind.Hatch && s.Way == StripWay.None);
     }
 
     /// <summary>The line halfway between two lines running the same way, matched by their share of length.</summary>

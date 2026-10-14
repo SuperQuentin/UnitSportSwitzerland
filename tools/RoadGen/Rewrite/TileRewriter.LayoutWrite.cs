@@ -464,7 +464,7 @@ public static partial class TileRewriter
         {
             int k = towardJunction ? j : n - 1 - j;
             var x = t.Strips[k].Strip;
-            sbyte travel = x.Way == StripWay.None ? (sbyte)0 : (x.Way == StripWay.In) == towardJunction ? (sbyte)1 : (sbyte)-1;
+            sbyte travel = x.Way == StripWay.None || x.Kind == StripKind.Hatch ? (sbyte)0 : (x.Way == StripWay.In) == towardJunction ? (sbyte)1 : (sbyte)-1;
             // a band is the piece's own (the street planner's: a gap for a driveway, a narrower sidewalk) changed as the transition
             // changes it from the normal section: a transition changes widths, the street decides the rest
             double? own = null;
