@@ -43,6 +43,16 @@ public sealed class ArmAxis
     /// <summary>The point at station <paramref name="s"/>, <paramref name="offset"/> to the right of a driver arriving.</summary>
     public Vec2 At(double s, double offset) => PointAt(s) + RightAt(s) * offset;
 
+    /// <summary>
+    /// The station of <paramref name="p"/> with the axis run on straight past its far end (#818: a street run on past its own
+    /// link, through a node, lies beyond the axis; <see cref="StationOf"/> stops at its length).
+    /// </summary>
+    public double StationPast(Vec2 p)
+    {
+        double s = StationOf(p);
+        return s < Length - 1e-6 ? s : Length + Math.Max(0, (p - PointAt(Length)).Dot(DirAt(Length)));
+    }
+
     /// <summary>The station of the axis point nearest <paramref name="p"/> (within its length).</summary>
     public double StationOf(Vec2 p)
     {

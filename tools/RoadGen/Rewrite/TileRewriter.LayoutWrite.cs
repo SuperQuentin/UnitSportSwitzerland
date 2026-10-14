@@ -143,6 +143,7 @@ public static partial class TileRewriter
         {
             var old = PiecesOf(whole);
             var list = output[tile];
+            if (old.Count == 0) return;
             int first = list.FindIndex(x => ReferenceEquals(x, old[0]));
             if (first < 0) return;
             list.RemoveRange(first, old.Count);
@@ -183,6 +184,25 @@ public static partial class TileRewriter
             stats.Junctions++;
         }
 
+        // a piece run on toward the node along its arm's axis from station <from> (its junction end) to <to> (the mouth), a point a
+        // metre, its heights from its line's own; null where its line has no source
+        float[]? RunOn(ArmPlan a, StreetPiece sp, double from, double to)
+        {
+            if (net.Links[sp.Link].Tag is not Source source) return null;
+            var p = sp.Piece.Points;
+            var extra = new List<float>();
+            for (double s = to; s < from - 0.05; s += 1)
+            {
+                var q = a.Axis!.PointAt(s);
+                extra.Add((float)(q.X - sp.Tile.MinE)); extra.Add(source.SampleHeight(q)); extra.Add((float)(sp.Tile.MaxN - q.Y));
+            }
+            // the junction end first, outward: drawn toward the junction they go after the piece's points, reversed
+            if (!sp.TowardJunction) return [.. extra, .. p];
+            var back = new List<float>(p);
+            for (int k = extra.Count - 3; k >= 0; k -= 3) back.AddRange(extra.Skip(k).Take(3));
+            return back.ToArray();
+        }
+
         // 2. every arm's street trimmed to its mouth, or run on to it along the axis
         foreach (var jp in mine)
             foreach (var a in jp.Arms)
@@ -194,48 +214,41 @@ public static partial class TileRewriter
                 var p = first.Piece.Points;
                 int endAt = first.TowardJunction ? p.Length - 3 : 0;
                 var end = new Vec2(first.Tile.MinE + p[endAt], first.Tile.MaxN - p[endAt + 2]);
-                double delta = mouth - a.Axis!.StationOf(end);
+                double delta = mouth - a.Axis!.StationPast(end);
                 touched.Add(a.LinkId);
                 if (delta > 0.01)
                 {
-                    // cut off the junction end, piece by piece
-                    double left = delta;
+                    // cut off the junction end, piece by piece, each at the mouth's station along the axis (a street run on through a
+                    // node has a gap there, today's cap for that node: lengths alone cut that much too far)
                     var byWhole = new Dictionary<RoadSegment, List<RoadSegment>>(ReferenceEqualityComparer.Instance);
                     foreach (var sp in street)
                     {
-                        if (left <= 1e-6) break;
+                        var v = sp.Piece.Points;
+                        int nearAt = sp.TowardJunction ? v.Length - 3 : 0;
+                        double sNear = a.Axis.StationPast(new Vec2(sp.Tile.MinE + v[nearAt], sp.Tile.MaxN - v[nearAt + 2]));
                         var pieces = byWhole.TryGetValue(sp.Whole, out var got) ? got : byWhole[sp.Whole] = PiecesOf(sp.Whole).ToList();
                         int at = pieces.FindIndex(x => ReferenceEquals(x, sp.Piece));
-                        double len = sp.Length;
+                        if (sNear >= mouth - 0.01)
+                        {
+                            // past a node the street was cut back for (today's cap there): run on back to the mouth
+                            if (sNear > mouth + 0.05 && RunOn(a, sp, sNear, mouth) is { } on) { pieces[at] = Copy(sp.Piece, on); touched.Add(sp.Link); }
+                            break;
+                        }
+                        double len = sp.Length, left = mouth - sNear;
                         touched.Add(sp.Link);
-                        if (len <= left + 0.05) { pieces.RemoveAt(at); left -= len; continue; }
+                        if (len <= left + 0.05) { pieces.RemoveAt(at); continue; }
                         var points = sp.TowardJunction ? StreetPlanner.Slice(sp.Piece, 0, len - left) : StreetPlanner.Slice(sp.Piece, left, double.PositiveInfinity);
                         pieces[at] = Copy(sp.Piece, points);
-                        left = 0;
+                        break;
                     }
+                    // (a link the mouth passes whole goes: it lies under the core)
                     foreach (var (whole, pieces) in byWhole)
-                        if (pieces.Count > 0) Replace(whole, segmentOf[street.First(x => ReferenceEquals(x.Whole, whole)).Link].Tile, pieces);
+                        Replace(whole, segmentOf[street.First(x => ReferenceEquals(x.Whole, whole)).Link].Tile, pieces);
                     stats.Trimmed++;
                 }
-                else if (delta < -0.01 && net.Links[a.LinkId].Tag is Source source)
+                else if (delta < -0.01 && RunOn(a, first, mouth - delta, mouth) is { } points)
                 {
-                    // run on toward the node along the axis, a point a metre, its heights from the line's own
-                    var extra = new List<float>();
-                    double s0 = mouth - delta;
-                    for (double s = mouth; s < s0 - 0.05; s += 1)
-                    {
-                        var q = a.Axis.PointAt(s);
-                        extra.Add((float)(q.X - first.Tile.MinE)); extra.Add(source.SampleHeight(q)); extra.Add((float)(first.Tile.MaxN - q.Y));
-                    }
-                    // the junction end first, outward: drawn toward the junction they go after the piece's points, reversed
-                    float[] points;
-                    if (first.TowardJunction)
-                    {
-                        var back = new List<float>(p);
-                        for (int k = extra.Count - 3; k >= 0; k -= 3) back.AddRange(extra.Skip(k).Take(3));
-                        points = back.ToArray();
-                    }
-                    else points = [.. extra, .. p];
+                    // run on toward the node along the axis
                     var pieces = PiecesOf(first.Whole).ToList();
                     pieces[pieces.FindIndex(x => ReferenceEquals(x, first.Piece))] = Copy(first.Piece, points);
                     Replace(first.Whole, first.Tile, pieces);

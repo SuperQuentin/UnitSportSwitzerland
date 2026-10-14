@@ -20,6 +20,10 @@
   `--generated off`: outside Switzerland the generated fill has no relief to follow. Tab (or
   `--goto J3`) finds the junctions: `places.json` names them (towns with no buildings, so no
   occasion or town sound picks them).
+- **A lane arm through a tracks' node** (#818, `ShortArmE` 2914000 on the twins' row N 1321400): a town T without lights, a
+  3 m lane from the south whose first link ends 7 m out where two tracks branch off (on the main road's own path band). The
+  planner's core puts the lane's mouth past that node: the lane is trimmed to it along the run-on street (it left a hole
+  before `ArmAxis.StationPast`).
 - **Where**: tiles E 2910-2917 N 1321-1323 (24 tiles; J6/J7 #700 in 2916-2917), flat at 500 m, one 6 km rewrite block),
   outside Switzerland on purpose: no real tile, streamed or cached, shares an id. Manifest origin
   2913000,1322500 (shots' world x = E - 2913000, z = 1322500 - N). Junctions on one row, N 1322500,

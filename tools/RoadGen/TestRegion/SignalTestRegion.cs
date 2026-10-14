@@ -31,6 +31,11 @@ public static class SignalTestRegion
     /// paint differs only in what <see cref="UnitSport.Tools.RoadGen.Junctions.JunctionRules"/> lists.
     /// </summary>
     public const double TwinRowN = 1321400, TwinLitE = 2910750, TwinUnlitE = 2912250;
+    /// <summary>
+    /// A road that is no arm of a core but meets it (#818, the edge case 2670385,1253605), LV95 E on <see cref="TwinRowN"/>: a T
+    /// whose lane arm reaches a node 7 m out, where two tracks branch off, inside the core.
+    /// </summary>
+    public const double ShortArmE = 2914000;
     /// <summary>The ground, metres (as the fixture courses).</summary>
     public const double Ground = 500;
     /// <summary>Region centre: the manifest's suggested origin.</summary>
@@ -197,6 +202,19 @@ public static class SignalTestRegion
             lines.Add(new Line(id + "E", "10m Strasse", "Durchgangsstrasse", "Kanton", [(e, TwinRowN), (e + 650, TwinRowN)], "secondary", "yes"));
             Cross(id + "N", e, TwinRowN, TwinRowN + 300, "4m Strasse", "k_W", "unclassified", sidewalk: "yes");
         }
+        // 9. a road that is no arm of the core but meets it (#818, the user's edge case 2670385,1253605): a town T without lights on
+        // a 10 m main road with sidewalks, a 3 m lane from the south whose first link ends 7 m out, where two tracks branch off; the
+        // lane runs on south with its sidewalks (the core's mouth lies past that node: the lane is trimmed to it there)
+        {
+            const double nb = TwinRowN, e1 = ShortArmE;
+            lines.Add(new Line("SAW", "10m Strasse", "Durchgangsstrasse", "Kanton", [(e1 - 600, nb), (e1, nb)], "secondary", "yes"));
+            lines.Add(new Line("SAE", "10m Strasse", "Durchgangsstrasse", "Kanton", [(e1, nb), (e1 + 600, nb)], "secondary", "yes"));
+            lines.Add(new Line("SAS1", "3m Strasse", "k_W", "Gemeinde", [(e1, nb - 7), (e1, nb)], "service"));
+            lines.Add(new Line("SAS0", "3m Strasse", "k_W", "Gemeinde", [(e1, nb - 250), (e1, nb - 7)], "service", "yes"));
+            lines.Add(new Line("SATW", "2m Weg", "k_W", "Gemeinde", [(e1 - 90, nb - 40), (e1, nb - 7)], "track"));
+            lines.Add(new Line("SATE", "2m Weg", "k_W", "Gemeinde", [(e1, nb - 7), (e1 + 90, nb - 40)], "track"));
+        }
+
         junctions.Add(new Junction("J8-twin-lights", TwinLitE, TwinRowN, "the twins' T with lights (the other, 1.5 km east, has none)",
             Arms(null, null, null, null)));
         junctions.Add(new Junction("J7-double-left", j7, n, "a double left pocket from lanes:forward=3 and turn:lanes; no left pocket where OSM marks none",

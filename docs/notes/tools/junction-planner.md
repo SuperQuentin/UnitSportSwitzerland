@@ -230,6 +230,11 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   end within 1.5 m of a core corner's kerb marks it (`CornerInput.Landing`); the corner is laid as beside a crosswalk, its
   kerb sloped and the grass folded into the path. 168 tiles: 578 corners; kerb check 51 against the old layout's 124, two
   only the new layout has, both in `junction-edge-cases` (roads that are no arm of the core but meet it).
+- **Trimming a run-on street** (test region `ShortArmE`): an arm's axis is its own link only, and `StationOf` stops at its
+  length, so every piece of the street run on past it read as that station: the lane past a 7 m first link was cut 3.8 m too
+  far (a hole between core and lane). The trim measures with `ArmAxis.StationPast` (straight on past the axis's end), runs the
+  first piece left past the mouth back on to it (`RunOn`), and drops a link the mouth passes whole. The real T 2670381,1253603
+  keeps its 9 cm step: not this bug (it stays in `junction-edge-cases`).
 - **Carried sides that cross in one corner** (each arm's path carried across the other's road) are left to the corner, as
   the old layout's #711 rule (`LayCarriedSides`, shared): `BikeCrossWrite` laid both, one over the other, and riders met a
   6 cm step where the bands of different heights overlapped (Geneva 2496643,1118197: 3 kerb failures gone).
