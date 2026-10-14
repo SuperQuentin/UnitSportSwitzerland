@@ -32,11 +32,11 @@ public static class CornerPlanner
 
     public sealed class Stats
     {
-        public int Corners, Built, OneSided, Squared, Banded, Arcs, Gaps, Fillets, Covered, Facade, Road, Shape;
+        public int Corners, Built, OneSided, Squared, Banded, Arcs, Gaps, Fillets, Covered, Facade, Road, Shape, CoreCorners, CoreArmsMissing;
         public double Area;
 
         public string Format() => string.Create(CultureInfo.InvariantCulture, $"""
-                corners: {Corners:N0} with a sidewalk on either side, {Built:N0} built ({Squared:N0} squared, {Banded:N0} along the kerb, {Area:N0} m2; {Arcs:N0} round a widening's kerb arc, #711), {Covered:N0} covered by a side carried on to the kerb ({Gaps:N0} wedges laid before its bands, #711), {OneSided:N0} one-sided, {Fillets:N0} outer corners rounded (#711); rejected: a wall {Facade:N0}, a carriageway {Road:N0}, shape {Shape:N0}
+                corners: {Corners:N0} with a sidewalk on either side, {Built:N0} built ({Squared:N0} squared, {Banded:N0} along the kerb, {Area:N0} m2; {Arcs:N0} round a widening's kerb arc, #711), {Covered:N0} covered by a side carried on to the kerb ({Gaps:N0} wedges laid before its bands, #711), {OneSided:N0} one-sided, {Fillets:N0} outer corners rounded (#711); rejected: a wall {Facade:N0}, a carriageway {Road:N0}, shape {Shape:N0}; of the planner's cores (#818) {CoreCorners:N0} corners given, {CoreArmsMissing:N0} whose arm lies in another tile
             """);
     }
 
@@ -65,14 +65,25 @@ public static class CornerPlanner
     /// </summary>
     public sealed record PathEnd(Vec2 At, Vec2 Out, Vec2 Start);
 
+    /// <summary>
+    /// One corner of a junction core (#818 phase 4), given explicitly: the ends of the two arms' first pieces at their mouths
+    /// (tile-local plan, x east, y = -z), arm A's right kerb seen arriving (its left looking out) round <see cref="Arc"/> to arm B's.
+    /// </summary>
+    public sealed record CornerInput(Vec2 EndA, Vec2 EndB, KerbArc Arc);
+
     /// <summary>The arms' directions match an arc's within this (cosine of 30 degrees).</summary>
     private const double ArcArmCos = 0.866;
 
     public static List<RoadAreaProp> Plan(TileId id, IReadOnlyList<RoadSegment> segments, IReadOnlyList<RoadJunction> caps,
         Facades facades, Stats stats, IReadOnlyList<RoadAreaProp>? pavement = null, IReadOnlyList<KerbArc>? arcs = null,
-        IReadOnlyList<PathEnd>? pathEnds = null, IEnumerable<RoadAreaProp>? bands = null)
+        IReadOnlyList<PathEnd>? pathEnds = null, IEnumerable<RoadAreaProp>? bands = null,
+        IReadOnlyDictionary<RoadJunction, List<CornerInput>>? cores = null, IReadOnlyList<RoadTransition>? transitions = null)
     {
         _pathEnds = pathEnds;
+        // a transition's piece (#818): its kerb and its sides from its own section per point
+        _sections = new Dictionary<RoadSegment, SegmentSections>(ReferenceEqualityComparer.Instance);
+        _transitionOf = new Dictionary<RoadSegment, RoadTransition>(ReferenceEqualityComparer.Instance);
+        foreach (var t in transitions ?? []) { _sections[t.Segment] = SegmentSections.Of(t.Segment, t); _transitionOf[t.Segment] = t; }
         _extra = [];
         _bandTris = [];
         foreach (var band in bands ?? [])
@@ -105,6 +116,28 @@ public static class CornerPlanner
         foreach (var cap in caps)
         {
             if (cap.Layer != 0 || cap.VertexCount < 4) continue;
+            if (cores?.TryGetValue(cap, out var corners) == true)
+            {
+                // a core's cap (#818): its ring is its outline (no centre vertex), its corners given with their arms and kerbs
+                var outline = new List<(Vec2 P, float Y)>();
+                for (int i = 0; i < cap.VertexCount; i++)
+                    outline.Add((new Vec2(cap.Vertices[i * 3], -cap.Vertices[i * 3 + 2]), cap.Vertices[i * 3 + 1]));
+                (End End, Vec2 Out)? ArmAt(Vec2 p)
+                {
+                    if (!ends.TryGetValue(Key(((float)p.X, (float)-p.Y)), out var at)) return null;
+                    foreach (var e in at) if (IsRoad(segments[e.Seg])) return (e, Outward(segments[e.Seg], e.AtStart));
+                    return null;
+                }
+                foreach (var c in corners)
+                {
+                    if (ArmAt(c.EndA) is not { } a || ArmAt(c.EndB) is not { } b) { stats.CoreArmsMissing++; continue; }
+                    claimed.Add(a.End);
+                    claimed.Add(b.End);
+                    stats.CoreCorners++;
+                    Pair(id, segments, ends, a, b, outline, cap, facades, stats, props, null, c.Arc);
+                }
+                continue;
+            }
             var ring = new List<(Vec2 P, float Y)>();
             for (int i = 1; i < cap.VertexCount; i++)
                 ring.Add((new Vec2(cap.Vertices[i * 3], -cap.Vertices[i * 3 + 2]), cap.Vertices[i * 3 + 1]));
@@ -153,46 +186,7 @@ public static class CornerPlanner
             var a = ordered[i];
             var b = ordered[(i + 1) % ordered.Count];
             if (ordered.Count == 2 && i == 1 && ring == null) break;   // a bend has one inside and one outside: both from i = 0 below
-            var ca = Walk(segments, ends, a.End, left: true);
-            var cb = Walk(segments, ends, b.End, left: false);
-            var node = Plan(segments[a.End.Seg].Points, a.End.AtStart ? 0 : segments[a.End.Seg].PointCount - 1);
-            if (Traced(id, node))
-                Console.WriteLine($"[corner] node ({id.MinE + node.X:F1},{id.MaxN + node.Y:F1}) {(ring != null ? "cap" : "bend")}: "
-                    + $"{segments[a.End.Seg].Class} left -> {(ca == null ? "no sidewalk" : $"{ca.Width:F1} m after {ca.Kerb.Count} kerb points")}, "
-                    + $"{segments[b.End.Seg].Class} right -> {(cb == null ? "no sidewalk" : $"{cb.Width:F1} m after {cb.Kerb.Count} kerb points")}");
-            if (ca == null && cb == null) continue;
-            stats.Corners++;
-            if (ca == null || cb == null || (ca.Kerb_ > 0) != (cb.Kerb_ > 0)) { stats.OneSided++; continue; }
-            // beside a side carried on to the kerb (#711) the corner starts where that side's outer edge meets the kerb
-            var nodeB = Plan(segments[b.End.Seg].Points, b.End.AtStart ? 0 : segments[b.End.Seg].PointCount - 1);
-            var carried = ring == null ? (null, null) : (EndOf(node, a.Out, left: true), EndOf(nodeB, b.Out, left: false));
-            if (Traced(id, node) && (carried.Item1 ?? carried.Item2) != null) Console.WriteLine($"[corner]   beside a path carried to the kerb ({(carried.Item1 != null ? "A" : "")}{(carried.Item2 != null ? "B" : "")})");
-            // round the kerb arc beside a widening (#711), else (or where that corner cannot stand) round the cap
-            RoadAreaProp? prop = null;
-            bool covered = false;
-            var (squaredBefore, gapsBefore) = (stats.Squared, stats.Gaps);
-            if (ArcOf(arcs, a.Out, b.Out) is { } arc)
-            {
-                var (facade, road, shape) = (stats.Facade, stats.Road, stats.Shape);
-                prop = Build(id, segments, ca, cb, ring, cap, facades, stats, arc, carried, out covered);
-                if (prop == null) (stats.Facade, stats.Road, stats.Shape) = (facade, road, shape);
-                else stats.Arcs++;
-                if (Traced(id, node)) Console.WriteLine($"[corner]   round a kerb arc of {arc.Line.Count} points: {(prop == null ? covered ? "covered by the carried side" : "failed" : "built")}");
-            }
-            if (prop == null && !covered)
-            {
-                var (facade, road, shape) = (stats.Facade, stats.Road, stats.Shape);
-                prop = Build(id, segments, ca, cb, ring, cap, facades, stats, null, carried, out covered);
-                if (Traced(id, node)) Console.WriteLine($"[corner]   round the cap: {(prop != null ? "built" : covered ? "covered by the carried side" : $"failed (facade {stats.Facade - facade}, road {stats.Road - road}, shape {stats.Shape - shape})")}");
-            }
-            if (covered) stats.Covered++;
-            if (prop != null) props.Add(prop);
-            if (_extra is { Count: > 0 } extra) { props.AddRange(extra); extra.Clear(); }   // a wedge laid in its sides' bands (#711)
-            bool pieceAtCorner = stats.Squared > squaredBefore || stats.Gaps > gapsBefore;   // a corner piece reaching the block's corner
-            // (that piece rounds its own outside corner: a patch over it is only for a corner whose piece stops short of it)
-            string? filletWhy = "the corner piece rounds it";
-            if (!pieceAtCorner && Fillet(id, segments, cap, facades, stats, ca, cb, carried, pieceAtCorner, out filletWhy) is { } fillet) props.Add(fillet);
-            if (Traced(id, node)) Console.WriteLine($"[corner]   outer corner: {filletWhy ?? "rounded"}");
+            Pair(id, segments, ends, a, b, ring, cap, facades, stats, props, arcs);
             if (ordered.Count == 2 && ring == null)
             {
                 // the bend's other corner: B's left and A's right
@@ -202,6 +196,56 @@ public static class CornerPlanner
                     && Build(id, segments, cb2, ca2, null, null, facades, stats, null, (null, null), out _) is { } p2) props.Add(p2);
             }
         }
+    }
+
+    /// <summary>
+    /// The corner between arm A's left and arm B's right looking out (each arm's end at the node and its direction out of it):
+    /// round <paramref name="fixedArc"/> where one is given (a core's own kerb, #818), else round the matching kerb arc of
+    /// <paramref name="arcs"/>, else round the cap's ring; its outer fillet.
+    /// </summary>
+    private static void Pair(TileId id, IReadOnlyList<RoadSegment> segments, Dictionary<(long, long), List<End>> ends, (End End, Vec2 Out) a, (End End, Vec2 Out) b,
+        List<(Vec2 P, float Y)>? ring, RoadJunction? cap, Facades facades, Stats stats, List<RoadAreaProp> props, List<KerbArc>? arcs, KerbArc? fixedArc = null)
+    {
+        var ca = Walk(segments, ends, a.End, left: true);
+        var cb = Walk(segments, ends, b.End, left: false);
+        var node = Plan(segments[a.End.Seg].Points, a.End.AtStart ? 0 : segments[a.End.Seg].PointCount - 1);
+        if (Traced(id, node))
+            Console.WriteLine($"[corner] node ({id.MinE + node.X:F1},{id.MaxN + node.Y:F1}) {(ring != null ? "cap" : "bend")}: "
+                + $"{segments[a.End.Seg].Class} left -> {(ca == null ? "no sidewalk" : $"{ca.Width:F1} m after {ca.Kerb.Count} kerb points")}, "
+                + $"{segments[b.End.Seg].Class} right -> {(cb == null ? "no sidewalk" : $"{cb.Width:F1} m after {cb.Kerb.Count} kerb points")}");
+        if (ca == null && cb == null) return;
+        stats.Corners++;
+        if (ca == null || cb == null || (ca.Kerb_ > 0) != (cb.Kerb_ > 0)) { stats.OneSided++; return; }
+        // beside a side carried on to the kerb (#711) the corner starts where that side's outer edge meets the kerb
+        var nodeB = Plan(segments[b.End.Seg].Points, b.End.AtStart ? 0 : segments[b.End.Seg].PointCount - 1);
+        var carried = ring == null ? (null, null) : (EndOf(node, a.Out, left: true), EndOf(nodeB, b.Out, left: false));
+        if (Traced(id, node) && (carried.Item1 ?? carried.Item2) != null) Console.WriteLine($"[corner]   beside a path carried to the kerb ({(carried.Item1 != null ? "A" : "")}{(carried.Item2 != null ? "B" : "")})");
+        // round the kerb arc beside a widening (#711), else (or where that corner cannot stand) round the cap
+        RoadAreaProp? prop = null;
+        bool covered = false;
+        var (squaredBefore, gapsBefore) = (stats.Squared, stats.Gaps);
+        if (ArcOf(arcs, a.Out, b.Out) is { } arc)
+        {
+            var (facade, road, shape) = (stats.Facade, stats.Road, stats.Shape);
+            prop = Build(id, segments, ca, cb, ring, cap, facades, stats, arc, carried, out covered);
+            if (prop == null) (stats.Facade, stats.Road, stats.Shape) = (facade, road, shape);
+            else stats.Arcs++;
+            if (Traced(id, node)) Console.WriteLine($"[corner]   round a kerb arc of {arc.Line.Count} points: {(prop == null ? covered ? "covered by the carried side" : "failed" : "built")}");
+        }
+        if (prop == null && !covered)
+        {
+            var (facade, road, shape) = (stats.Facade, stats.Road, stats.Shape);
+            prop = Build(id, segments, ca, cb, ring, cap, facades, stats, null, carried, out covered);
+            if (Traced(id, node)) Console.WriteLine($"[corner]   round the cap: {(prop != null ? "built" : covered ? "covered by the carried side" : $"failed (facade {stats.Facade - facade}, road {stats.Road - road}, shape {stats.Shape - shape})")}");
+        }
+        if (covered) stats.Covered++;
+        if (prop != null) props.Add(prop);
+        if (_extra is { Count: > 0 } extra) { props.AddRange(extra); extra.Clear(); }   // a wedge laid in its sides' bands (#711)
+        bool pieceAtCorner = stats.Squared > squaredBefore || stats.Gaps > gapsBefore;   // a corner piece reaching the block's corner
+        // (that piece rounds its own outside corner: a patch over it is only for a corner whose piece stops short of it)
+        string? filletWhy = "the corner piece rounds it";
+        if (!pieceAtCorner && Fillet(id, segments, cap, facades, stats, ca, cb, carried, pieceAtCorner, out filletWhy) is { } fillet) props.Add(fillet);
+        if (Traced(id, node)) Console.WriteLine($"[corner]   outer corner: {filletWhy ?? "rounded"}");
     }
 
     /// <summary>
@@ -219,7 +263,7 @@ public static class CornerPlanner
             var seg = segments[cur.Seg];
             // looking out of the node along the drawing direction (an arm starting there) its left is the segment's left
             bool right = cur.AtStart ? !left : left;
-            var side = right ? seg.Attributes.Right : seg.Attributes.Left;
+            var side = SideAt(seg, right, cur.AtStart);   // a transition's piece: its bands at this end (#818)
             var edge = Edge(seg, right);
             if (!cur.AtStart) edge.Reverse();
             if (side.OuterDm > 0)   // the whole side: a bike path (#120) and its sidewalk
@@ -1149,6 +1193,36 @@ public static class CornerPlanner
     /// <summary>The tile's sides carried on to the kerb while a tile is planned (<see cref="Plan"/>, #711).</summary>
     [ThreadStatic] private static IReadOnlyList<PathEnd>? _pathEnds;
 
+    /// <summary>The per-point sections of the tile's transition pieces (#818), set by <see cref="Plan"/>.</summary>
+    [ThreadStatic] private static Dictionary<RoadSegment, SegmentSections>? _sections;
+    [ThreadStatic] private static Dictionary<RoadSegment, RoadTransition>? _transitionOf;
+
+    /// <summary>
+    /// A segment's side at one of its ends (#818): its attributes', or on a transition's piece the bands its strips give there
+    /// (decimetres, the kerb and the path's kind from its attributes).
+    /// </summary>
+    private static RoadSide SideAt(RoadSegment seg, bool right, bool atStart)
+    {
+        var side = right ? seg.Attributes.Right : seg.Attributes.Left;
+        if (_transitionOf?.TryGetValue(seg, out var t) != true) return side;
+        double s = atStart ? 0 : t!.Stations[^1];
+        double walk = 0, path = 0, verge = 0, buffer = 0;
+        foreach (var (kind, width) in t!.BandsAt(right, s))
+            switch (kind)
+            {
+                case StripKind.Sidewalk: walk += width; break;
+                case StripKind.Path: path += width; break;
+                case StripKind.Verge: verge += width; break;
+                case StripKind.Buffer: buffer += width; break;
+            }
+        static byte Dm(double m) => (byte)Math.Clamp(Math.Round(m * 10), 0, 255);
+        return side with
+        {
+            SidewalkDm = Dm(walk), Bike = path > 0.05 ? (side.HasTrack ? side.Bike : BikeKind.Track) : side.HasTrack ? BikeKind.None : side.Bike,
+            BikeDm = path > 0.05 ? Dm(path) : side.HasTrack ? (byte)0 : side.BikeDm, VergeDm = Dm(verge), BufferDm = Dm(buffer), ShiftStartCm = 0, ShiftEndCm = 0,
+        };
+    }
+
     /// <summary>
     /// The side carried on to the kerb (#711) on an arm's left (or right) looking out from <paramref name="node"/>: its
     /// direction within <see cref="ArcArmCos"/> of the arm's, on that side of it, the nearest within 25 m; or null.
@@ -1247,9 +1321,11 @@ public static class CornerPlanner
         // the kerb runs past a turn lane's widening where the side is shifted out (#120)
         var side = right ? seg.Attributes.Right : seg.Attributes.Left;
         var along = side.ShiftStartCm != 0 || side.ShiftEndCm != 0 ? RoadStreetSection.Fractions(seg) : null;
+        // a transition's piece (#818): its sides start at its own kerb, point by point
+        var sections = _sections?.GetValueOrDefault(seg);
         for (int i = 0; i < n; i++)
         {
-            double off = half + (along is null ? 0 : side.ShiftAt(along[i]));
+            double off = sections is not null ? (right ? sections.SideRight[i] : -sections.SideLeft[i]) : half + (along is null ? 0 : side.ShiftAt(along[i]));
             int a = i == 0 ? 0 : i - 1, b = i == n - 1 ? n - 1 : i + 1;
             if (i == 0) b = 1; else if (i == n - 1) a = n - 2;
             double fx = seg.Points[b * 3] - seg.Points[a * 3], fz = seg.Points[b * 3 + 2] - seg.Points[a * 3 + 2];

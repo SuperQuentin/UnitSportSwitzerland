@@ -116,11 +116,13 @@ public static partial class TileRewriter
         Dictionary<TileId, List<RoadSegment>> output, Dictionary<int, (TileId Home, RoadJunction Cap)> capOf, Dictionary<TileId, List<RoadJunction>> caps,
         HashSet<RoadJunction> writtenCaps, Dictionary<TileId, List<RoadPaint>> paint, Dictionary<int, (double Station, bool Start, bool End)> paintStation,
         Dictionary<TileId, List<RoadTransition>> transitionsOf, Dictionary<TileId, List<RoadAreaProp>> areas, Dictionary<TileId, List<RoadPointProp>> signs,
-        Dictionary<TileId, List<RoadSignal>> signals, Dictionary<TileId, List<RoadApproach>> approaches, Cantons? cantons, SignalStats signalStats, LayoutWriteStats stats)
+        Dictionary<TileId, List<RoadSignal>> signals, Dictionary<TileId, List<RoadApproach>> approaches, Cantons? cantons, SignalStats signalStats, LayoutWriteStats stats,
+        Dictionary<TileId, Dictionary<RoadJunction, List<CornerPlanner.CornerInput>>> coreCorners)
     {
         var net = result.Network;
         var mine = plans.Where(p => written.Contains(p.Node)).ToList();
         var touched = new HashSet<int>();
+        var capOfPlan = new Dictionary<JunctionPlan, (TileId Home, RoadJunction Cap)>();
         List<RoadSegment> PiecesOf(RoadSegment whole) => finalPieces.TryGetValue(whole, out var p) && p.Count > 0 ? p : [whole];
         // the street from an arm's junction outward, piece by piece
         List<StreetPiece> Street(ArmPlan a)
@@ -176,6 +178,7 @@ public static partial class TileRewriter
             var list = caps[home];
             list[list.IndexOf(old.Cap)] = cap;
             writtenCaps.Add(cap);
+            capOfPlan[jp] = (home, cap);
             stats.Junctions++;
         }
 
@@ -387,6 +390,44 @@ public static partial class TileRewriter
                     PaintEmitter.Emit(Copy(so.Painted, points.ToArray()), ps.Station + runFrom, into, i == 0 && ps.Start, j == pieces.Count && ps.End, bikeLanes: false);
                 i = j;
             }
+        }
+
+        // 4b. the sidewalk corners each core gives its corner builder (phase 4): between two arms, their first pieces' ends at the
+        // mouths and the core's kerb from arm A's mouth corner round to arm B's, on the core's heights
+        foreach (var jp in mine)
+        {
+            if (!capOfPlan.TryGetValue(jp, out var hc)) continue;
+            var (home, cap) = hc;
+            var core = jp.Core!;
+            var anchors = new List<(Vec2 At, float Height)>();
+            foreach (var m in core.Mouths)
+                if (net.Links[jp.Arms.First(a => a.Arm == m.Arm).LinkId].Tag is Source s) anchors.Add(((m.Left + m.Right) * 0.5, s.SampleHeight((m.Left + m.Right) * 0.5)));
+            Vec2 Local2(Vec2 p) => new(p.X - home.MinE, p.Y - home.MaxN);
+            Vec2? EndOf(ArmPlan a)
+            {
+                var street = Street(a);
+                if (street.Count == 0 || street[0].Tile != home) return null;
+                var p = street[0].Piece.Points;
+                int at = street[0].TowardJunction ? p.Length - 3 : 0;
+                return new Vec2(p[at], -p[at + 2]);
+            }
+            var list = new List<CornerPlanner.CornerInput>();
+            foreach (var c in core.Corners)
+            {
+                if (c.Shape == CornerShape.Gore || c.Kerb.Count == 0) continue;
+                var a = jp.Arms.First(x => x.Arm == c.ArmA);
+                var b = jp.Arms.First(x => x.Arm == c.ArmB);
+                if (EndOf(a) is not { } ea || EndOf(b) is not { } eb) continue;
+                var ma = core.Mouths.First(m => m.Arm == c.ArmA);
+                var mb = core.Mouths.First(m => m.Arm == c.ArmB);
+                var line = new List<(Vec2 P, float Y)>();
+                foreach (var p in c.Kerb.Prepend(ma.Right).Append(mb.Left))
+                    if (line.Count == 0 || line[^1].P.DistanceTo(Local2(p)) > 0.01) line.Add((Local2(p), HeightAt(anchors, p)));
+                if (line.Count < 2) continue;
+                list.Add(new CornerPlanner.CornerInput(ea, eb, new CornerPlanner.KerbArc(line, a.Axis!.DirAt(ma.Station), b.Axis!.DirAt(mb.Station))));
+            }
+            if (!coreCorners.TryGetValue(home, out var byCap)) coreCorners[home] = byCap = new(ReferenceEqualityComparer.Instance);
+            byCap[cap] = list;
         }
 
         // 5. the exterior (phase 4): every arm's bars, refuge and signs

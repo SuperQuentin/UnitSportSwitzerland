@@ -442,6 +442,7 @@ public static partial class TileRewriter
             var paint = new Dictionary<TileId, List<RoadPaint>>();
             var transitionsOf = new Dictionary<TileId, List<RoadTransition>>();   // the junction planner's transitions (#818)
             var writtenCaps = new HashSet<RoadJunction>(ReferenceEqualityComparer.Instance);   // its cores: no old corners round them
+            var coreCorners = new Dictionary<TileId, Dictionary<RoadJunction, List<CornerPlanner.CornerInput>>>();   // ... but their own, given (phase 4)
             var signs = new Dictionary<TileId, List<RoadPointProp>>();
             var signalRecords = new Dictionary<TileId, List<RoadSignal>>();   // traffic lights (#348)
             var approachRecords = new Dictionary<TileId, List<RoadApproach>>();   // their lanes (#353)
@@ -762,7 +763,7 @@ public static partial class TileRewriter
                 // the junction planner's junctions written (#818 phase 3): cores, trims, transitions and their paint
                 if (layouts is not null && writtenNodes.Count > 0)
                     WriteLayouts(layouts, writtenNodes, result, segmentOf, finalPieces, output, capOf, caps, writtenCaps, paint, paintStation,
-                        transitionsOf, islands, signs, signalRecords, approachRecords, cantons, netStats.Signals, netStats.LayoutWrite);
+                        transitionsOf, islands, signs, signalRecords, approachRecords, cantons, netStats.Signals, netStats.LayoutWrite, coreCorners);
 
                 // the paths' paint on their final pieces, and the crossings at the junctions (#120)
                 var linkOf = new Dictionary<RoadSegment, int>(ReferenceEqualityComparer.Instance);
@@ -866,7 +867,7 @@ public static partial class TileRewriter
                     Paint = paint.TryGetValue(id, out var p) ? p : new List<RoadPaint>(),
                     LinearProps = walls,
                     AreaProps = [.. islands.TryGetValue(id, out var isl) ? isl : [],
-                        .. Unbridged(id, CornerPlanner.Plan(id, segments, writtenCaps.Count == 0 ? junctions : junctions.Where(x => !writtenCaps.Contains(x)).ToList(), facades, cornerStats, isl, kerbArcs.GetValueOrDefault(id), pathEnds.GetValueOrDefault(id), bridges.Select(x => x.Band)), bridges, netStats.Bikes),   // sidewalk corners (#119)
+                        .. Unbridged(id, CornerPlanner.Plan(id, segments, junctions, facades, cornerStats, isl, kerbArcs.GetValueOrDefault(id), pathEnds.GetValueOrDefault(id), bridges.Select(x => x.Band), coreCorners.GetValueOrDefault(id), transitionsOf.GetValueOrDefault(id)), bridges, netStats.Bikes),   // sidewalk corners (#119)
                         .. bridges.Select(x => x.Band),
                         .. parkAreas.TryGetValue(id, out var pa) ? pa : []],   // car park pad, islands, walks (#499)
                     PointProps = pointProps,
