@@ -19,8 +19,7 @@ wait $B
 # the late joiner: B has gone, A is still there and tells it which skip. Its own user:// (a
 # player of its own: with B's identity key it would wake at B's sleeper)
 rm -rf "$OUT/userdata_yardlootnet_C"; mkdir -p "$OUT/userdata_yardlootnet_C"
-C_UD="$PWD/$OUT/userdata_yardlootnet_C"
-( if _guard_windows; then export APPDATA="$(cygpath -w "$C_UD")"; else export XDG_DATA_HOME="$C_UD"; fi
+( tc_userdata "$OUT/userdata_yardlootnet_C"
   WINDOWED= tc_client 240 "$OUT/yardlootnet_C.log" --connect 127.0.0.1:$PORT --name YardC $WORLD --yardlootnet C ) & C=$!
 wait $A $C
 tc_stop
