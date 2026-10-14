@@ -314,3 +314,15 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
 - **A split lead-in's centre line moves with the pocket's taper** (the user, Oct 14 2026: the 1:6 after it jogged the through lane).
 - **The writing runs behind its own flag, `--junctions write`** (the user, Oct 14 2026; `new` still plans
   and reports only, so the comparison with the pocket layout and the old checks keep working).
+
+## Settled with the user (Oct 14 2026, phase 4: the exterior)
+
+- **One stack of bars per arm** (the generalization): laid outward from the mouth: the crosswalk, the riders' stop, the cars'
+  stop line or give-way row; poles and signs at the kerb beside the bar they belong to. Each bar spans the strips of its kind in
+  the section at its station (a crosswalk the carriageway, a stop line the arriving car lanes); the stop distance falls out of
+  the stack; `JunctionRules` only decides which bars exist. Kerb ramps wherever a bar crosses a band.
+- **One riders' line per approach at the lights**: every bike lane stops there; the cars' line is 3 m behind it where any has an
+  advanced line, 4 m where any has a bike box; the box (yellow outline, symbol) spans all the arriving car lanes between them.
+- **A path crossing follows the path's curve** (as today): from one arm's path to the other's through the junction, red over the
+  carriageway by the rule, the corners carrying the path to the kerb where the curve meets it. A bike lane turning through the
+  core follows its connector.
