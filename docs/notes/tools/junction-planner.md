@@ -187,3 +187,17 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   caps (cores, simplified to 1.5 cm) make the v2 part 82.0 against 73.7, while `APRP` falls 118 -> 56 until phase 4's corners.
 - **Not yet**: traffic still drives the old lanes (phase 5), lights and lane records at written junctions (phases 4-5), path lines
   along a transition's bands, a transition over a bridge or tunnel (not written), lowered kerbs on a transition (phase 4).
+
+## Phase 4: the exterior (in progress, Oct 14 2026)
+
+- **Built** (`Layout/Exterior`, `TileRewriter.ExteriorWrite`, `TileRewriter.BikeCrossWrite`): one stack of bars per arm (crosswalk
+  right outside the mouth or where OSM maps it, one riders' line, the cars' line 3 m / 4 m behind it, pocket bars, give-way rows),
+  refuges, 3.02/3.03 signs, kerbs lowered under each crosswalk (grass folded into the path); at the lights the plan from the mouth
+  sections, poles beside the cars' line or on the refuge, `LANE` from the transitions; lines through the cores; a transition's
+  paint clear of its exterior, its arrows and solid stretches from the stop line; corners given explicitly to `CornerPlanner`
+  (`CornerInput`, kerbs and bands of transition pieces from `SegmentSections`); bike lanes through the core along their connector,
+  paths along their curve carried to the kerb (`PathsToKerb` with the core as carriageway); core paint on the cap's surface.
+- **Checked**: test region RESULT ok, `--signal-check` ok, `--kerb-check` ok (12 zebras, 32 bike crossings), 0 decoded differently;
+  Sion kerb check one failure the old layout lacks (an odd junction of 5-7 m links), six of the old ones gone.
+- **Left**: a path on a side no road joins is not carried through (the corner lays a sidewalk over its line: `BridgePath` along
+  the core's kerb); seams where a carried path's sloped strip meets the corner's wedge (as the old unlit layout's); tier 1 rerun.
