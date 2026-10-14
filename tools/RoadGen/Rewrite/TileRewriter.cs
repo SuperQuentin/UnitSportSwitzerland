@@ -682,7 +682,7 @@ public static partial class TileRewriter
                     return StreetSideAt(linkId, end, right);
                 }
                 var layouts = options.NewJunctions
-                    ? PlanLayouts(priority, result, segmentOf, output, block, wanted, grids, buildings, StreetSideAt, overlay, restrictions, null)
+                    ? PlanLayouts(priority, result, segmentOf, output, block, wanted, grids, buildings, StreetSideAt, overlay, restrictions, null, crossingNodes)
                     : null;
                 if (layouts is not null) netStats.Layouts.AddRange(layouts);
                 // the junctions the planner writes (#818 phase 3): the old passes lay out the others only
@@ -762,7 +762,7 @@ public static partial class TileRewriter
                 // the junction planner's junctions written (#818 phase 3): cores, trims, transitions and their paint
                 if (layouts is not null && writtenNodes.Count > 0)
                     WriteLayouts(layouts, writtenNodes, result, segmentOf, finalPieces, output, capOf, caps, writtenCaps, paint, paintStation,
-                        transitionsOf, netStats.LayoutWrite);
+                        transitionsOf, islands, signs, signalRecords, approachRecords, cantons, netStats.Signals, netStats.LayoutWrite);
 
                 // the paths' paint on their final pieces, and the crossings at the junctions (#120)
                 var linkOf = new Dictionary<RoadSegment, int>(ReferenceEqualityComparer.Instance);

@@ -113,7 +113,10 @@ public static class RoadStreetSection
             if (Math.Abs(top - height) > 1e-4f)
             {
                 bool sloped = lowered || surface == StreetSurface.Track || (b > 0 && bands[b - 1].Surface == StreetSurface.Track);
-                float run = sloped ? Math.Min(SlopedKerbRun, width * 0.5f) : 0f;
+                // a band a transition closed (zero wide) leaves its slope the room of the bands after it at its height
+                float room = width;
+                for (int n = b + 1; room < 1e-3f && n < bands.Count && Math.Abs(bands[n].Height - top) < 1e-4f; n++) room += bands[n].Width;
+                float run = sloped ? Math.Min(SlopedKerbRun, room * 0.5f) : 0f;
                 d.Add(at + run); h.Add(top); s.Add(StreetSurface.Kerb);
             }
             d.Add(end); h.Add(top); s.Add(surface);

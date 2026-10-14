@@ -19,7 +19,7 @@ public static partial class TileRewriter
     /// <summary>What the planner wrote, for the region report.</summary>
     public sealed class LayoutWriteStats
     {
-        public int Junctions, Skipped, Transitions, Pieces, Lines, Marks, Trimmed, Extended, Orphaned, CoreVertices, CapVertices;
+        public int Junctions, Skipped, Transitions, Pieces, Lines, Marks, Trimmed, Extended, Orphaned, CoreVertices, CapVertices, Bars, Refuges, Signs, Ramps, Signals, SignalsInvalid, Poles;
         /// <summary>Written junctions with a transition (LV95), for the seam check and pictures.</summary>
         public readonly List<Vec2> WithTransitions = new();
         public readonly List<Vec2> OrphanedAt = new();
@@ -27,7 +27,7 @@ public static partial class TileRewriter
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
             $"    junction planner written (#818 phase 3): {Junctions:N0} junctions as cores, {Skipped:N0} left to the old layout ({string.Join(", ", Why.Select(kv => $"{kv.Key} {kv.Value}"))}); ")
-            + string.Create(CultureInfo.InvariantCulture, $"{Transitions:N0} transitions over {Pieces:N0} pieces, {Lines:N0} lines and {Marks:N0} marks; arms trimmed to their mouth {Trimmed:N0}, run on to it {Extended:N0}; pieces lost by a later cut {Orphaned:N0}{(OrphanedAt.Count > 0 ? " (at " + string.Join("; ", OrphanedAt.Take(6).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")}; cap vertices {CapVertices:N0} of the cores' {CoreVertices:N0}")
+            + string.Create(CultureInfo.InvariantCulture, $"{Transitions:N0} transitions over {Pieces:N0} pieces, {Lines:N0} lines and {Marks:N0} marks; arms trimmed to their mouth {Trimmed:N0}, run on to it {Extended:N0}; pieces lost by a later cut {Orphaned:N0}{(OrphanedAt.Count > 0 ? " (at " + string.Join("; ", OrphanedAt.Take(6).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")}; cap vertices {CapVertices:N0} of the cores' {CoreVertices:N0}; exterior: {Bars:N0} bars, {Refuges:N0} refuges, {Signs:N0} signs, {Ramps:N0} crosswalks with lowered kerbs; lights {Signals:N0} ({SignalsInvalid:N0} plans invalid), {Poles:N0} poles")
             + (WithTransitions.Count > 0 ? "\n      with transitions at " + string.Join("; ", WithTransitions.Take(12).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) : "");
     }
 
@@ -115,7 +115,8 @@ public static partial class TileRewriter
         Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf, Dictionary<RoadSegment, List<RoadSegment>> finalPieces,
         Dictionary<TileId, List<RoadSegment>> output, Dictionary<int, (TileId Home, RoadJunction Cap)> capOf, Dictionary<TileId, List<RoadJunction>> caps,
         HashSet<RoadJunction> writtenCaps, Dictionary<TileId, List<RoadPaint>> paint, Dictionary<int, (double Station, bool Start, bool End)> paintStation,
-        Dictionary<TileId, List<RoadTransition>> transitionsOf, LayoutWriteStats stats)
+        Dictionary<TileId, List<RoadTransition>> transitionsOf, Dictionary<TileId, List<RoadAreaProp>> areas, Dictionary<TileId, List<RoadPointProp>> signs,
+        Dictionary<TileId, List<RoadSignal>> signals, Dictionary<TileId, List<RoadApproach>> approaches, Cantons? cantons, SignalStats signalStats, LayoutWriteStats stats)
     {
         var net = result.Network;
         var mine = plans.Where(p => written.Contains(p.Node)).ToList();
@@ -238,9 +239,72 @@ public static partial class TileRewriter
                 }
             }
 
+        // a street's piece split at <at> m from its junction end: the junction side returned, the yield flags kept on their ends
+        RoadSegment? Split(StreetPiece sp, double at)
+        {
+            double len = sp.Length;
+            if (at < 0.05 || at > len - 0.05) return null;
+            var near = sp.TowardJunction ? StreetPlanner.Slice(sp.Piece, len - at, double.PositiveInfinity) : StreetPlanner.Slice(sp.Piece, 0, at);
+            var far = sp.TowardJunction ? StreetPlanner.Slice(sp.Piece, 0, len - at) : StreetPlanner.Slice(sp.Piece, at, double.PositiveInfinity);
+            if (near.Length < 6 || far.Length < 6) return null;
+            var a = sp.Piece.Attributes;
+            var nearPiece = Copy(sp.Piece, near, a with { Flags = a.Flags & ~(sp.TowardJunction ? RoadAttrFlags.YieldAtStart : RoadAttrFlags.YieldAtEnd) });
+            var farPiece = Copy(sp.Piece, far, a with { Flags = a.Flags & ~(sp.TowardJunction ? RoadAttrFlags.YieldAtEnd : RoadAttrFlags.YieldAtStart) });
+            var pieces = PiecesOf(sp.Whole).ToList();
+            int i = pieces.FindIndex(x => ReferenceEquals(x, sp.Piece));
+            pieces.RemoveAt(i);
+            pieces.InsertRange(i, sp.TowardJunction ? [farPiece, nearPiece] : [nearPiece, farPiece]);
+            Replace(sp.Whole, sp.Tile, pieces);
+            return nearPiece;
+        }
+        // the street split at <at> m out from the arm's mouth
+        void SplitStreetAt(ArmPlan a, double at)
+        {
+            double d = 0;
+            foreach (var sp in Street(a))
+            {
+                double len = sp.Length;
+                if (at > d + 0.05 && at < d + len - 0.05) { Split(sp, at - d); return; }
+                d += len;
+                if (d > at) return;
+            }
+        }
+
+        // 2b. the kerbs lowered where a crosswalk crosses the sides (#711): its stretch and 0.6 m either way, its own pieces
+        foreach (var jp in mine)
+            foreach (var ex in jp.Exterior)
+            {
+                if (ex.Crosswalk is not { } cw) continue;
+                double from = Math.Max(0, cw.From - RampMargin), to = cw.To + RampMargin;
+                SplitStreetAt(ex.Arm, from);
+                SplitStreetAt(ex.Arm, to);
+                double d = 0;
+                var lower = new List<StreetPiece>();
+                foreach (var sp in Street(ex.Arm))
+                {
+                    double len = sp.Length;
+                    if (d >= from - 0.06 && d + len <= to + 0.06) lower.Add(sp);
+                    d += len;
+                    if (d > to) break;
+                }
+                foreach (var sp in lower)
+                {
+                    var pieces = PiecesOf(sp.Whole).ToList();
+                    int i = pieces.FindIndex(x => ReferenceEquals(x, sp.Piece));
+                    if (i < 0) continue;
+                    // where the walkers cross, the path takes the grass strips' width and its sloped kerb meets the road (as Lower, #711)
+                    static RoadSide Fold(RoadSide s) => s.HasTrack ? s with { BikeDm = (byte)(s.BikeDm + s.VergeDm + s.BufferDm), VergeDm = 0, BufferDm = 0 } : s;
+                    var at = sp.Piece.Attributes;
+                    pieces[i] = Copy(sp.Piece, sp.Piece.Points, at with { Flags = at.Flags | RoadAttrFlags.LoweredKerbs, Left = Fold(at.Left), Right = Fold(at.Right) });
+                    Replace(sp.Whole, sp.Tile, pieces);
+                    touched.Add(sp.Link);
+                }
+                stats.Ramps++;
+            }
+
         // 3. the transitions: every one cut at its end first (so no cut splits a piece another one flagged), then the pieces each
         // covers flagged, each with its TRNS record and the paint on it
-        var all = mine.SelectMany(p => p.Arms).Select(a => a.Transition).OfType<Transition>().Distinct().ToList();
+        var all =mine.SelectMany(p => p.Arms).Select(a => a.Transition).OfType<Transition>().Distinct().ToList();
         List<(StreetPiece Piece, double From, double To)> Cover(Transition t, bool cut)
         {
             var street = Street(t.Arm);
@@ -252,26 +316,11 @@ public static partial class TileRewriter
                 double len = sp.Length;
                 // the far mouth of a shared transition: the last piece covers to its end
                 bool last = t.Far is not null && (k == street.Count - 1 || d + len >= length - 0.5);
-                if (cut && !last && d + len > length + 0.01)
+                // cut where the transition ends: the junction side is the transition's
+                if (cut && !last && d + len > length + 0.01 && Split(sp, length - d) is { } near)
                 {
-                    // cut where the transition ends: the junction side is the transition's
-                    double at = length - d;
-                    var near = sp.TowardJunction ? StreetPlanner.Slice(sp.Piece, len - at, double.PositiveInfinity) : StreetPlanner.Slice(sp.Piece, 0, at);
-                    var far = sp.TowardJunction ? StreetPlanner.Slice(sp.Piece, 0, len - at) : StreetPlanner.Slice(sp.Piece, at, double.PositiveInfinity);
-                    if (near.Length >= 6 && far.Length >= 6)
-                    {
-                        var a = sp.Piece.Attributes;
-                        // the yield flags stay on the ends they belong to
-                        var nearPiece = Copy(sp.Piece, near, a with { Flags = a.Flags & ~(sp.TowardJunction ? RoadAttrFlags.YieldAtStart : RoadAttrFlags.YieldAtEnd) });
-                        var farPiece = Copy(sp.Piece, far, a with { Flags = a.Flags & ~(sp.TowardJunction ? RoadAttrFlags.YieldAtEnd : RoadAttrFlags.YieldAtStart) });
-                        var pieces = PiecesOf(sp.Whole).ToList();
-                        int i = pieces.FindIndex(x => ReferenceEquals(x, sp.Piece));
-                        pieces.RemoveAt(i);
-                        pieces.InsertRange(i, sp.TowardJunction ? [farPiece, nearPiece] : [nearPiece, farPiece]);
-                        Replace(sp.Whole, sp.Tile, pieces);
-                        sp = sp with { Piece = nearPiece };
-                        len = sp.Length;
-                    }
+                    sp = sp with { Piece = near };
+                    len = sp.Length;
                 }
                 // a piece another transition already holds (the two overlap there: a street too short for both) stays with it
                 if (!sp.Piece.Attributes.Has(RoadAttrFlags.InTransition)) covered.Add((sp, d, Math.Min(length, d + len)));
@@ -336,6 +385,13 @@ public static partial class TileRewriter
                 i = j;
             }
         }
+
+        // 5. the exterior (phase 4): every arm's bars, refuge and signs
+        foreach (var jp in mine)
+        {
+            WriteExterior(jp, result, segmentOf, finalPieces, paint, areas, signs, signalStats, stats);
+            if (jp.Lights) WriteSignals(jp, result, signals, approaches, cantons, signalStats, stats);
+        }
     }
 
     /// <summary>
@@ -386,6 +442,9 @@ public static partial class TileRewriter
     }
 
     /// <summary>A cap's outline may leave its kerb by this much in plan and in height (as the sides' vertices, <c>RoadStreetBuilder</c>).</summary>
+    /// <summary>A crosswalk lowers the kerbs either side this far past its bars each way (#711).</summary>
+    private const double RampMargin = 0.6;
+
     private const double CapPlanTolerance = 0.015, CapHeightTolerance = 0.01;
 
     /// <summary>

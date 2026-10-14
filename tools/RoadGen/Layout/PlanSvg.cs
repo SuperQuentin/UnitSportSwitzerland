@@ -57,6 +57,9 @@ public static class PlanSvg
             }
             foreach (var m in core.Mouths)
                 sb.Append(inv, $"<line x1=\"{m.Left.X - plan.Centre.X:F2}\" y1=\"{-(m.Left.Y - plan.Centre.Y):F2}\" x2=\"{m.Right.X - plan.Centre.X:F2}\" y2=\"{-(m.Right.Y - plan.Centre.Y):F2}\" stroke=\"#f2c230\" stroke-width=\"0.25\"/>\n");
+            foreach (var ex in plan.Exterior)
+                if (core.Mouths.FirstOrDefault(m => m.Arm == ex.Arm.Arm) is { } mouth && ex.Arm.Axis is { } axis)
+                    Exterior(sb, ex, axis, mouth.Station, Pt);
         }
         if (plan.OldOutline.Count > 2)
             sb.Append("<polygon points=\"").Append(Pts(plan.OldOutline)).Append("\" fill=\"none\" stroke=\"#c2185b\" stroke-width=\"0.25\" stroke-dasharray=\"1 0.7\"/>\n");
@@ -214,6 +217,54 @@ public static class PlanSvg
         }
         var label = pt(P(length + 4, 0)).Split(',');
         sb.Append(inv, $"<text x=\"{label[0]}\" y=\"{double.Parse(label[1], inv) + 1.5:F2}\" font-size=\"4.5\" font-weight=\"700\" text-anchor=\"middle\" fill=\"#1b2327\">{JunctionPlan.Compass(a.Heading)}</text>\n");
+    }
+
+    /// <summary>An arm's exterior (phase 4): its bars (zebra stripes, riders' lines, the box, stop lines, give-way rows), its refuge, poles and signs.</summary>
+    private static void Exterior(StringBuilder sb, ArmExterior ex, ArmAxis axis, double mouthAt, Func<Vec2, string> pt)
+    {
+        var inv = CultureInfo.InvariantCulture;
+        Vec2 P(double s, double o) => axis.At(mouthAt + s, o);
+        string Quad(double s0, double s1, double l, double r) => string.Join(" ", new[] { P(s0, l), P(s1, l), P(s1, r), P(s0, r) }.Select(pt));
+        if (ex.Refuge is { } rf)
+            sb.Append("<polygon points=\"").Append(Quad(rf.From, rf.To, rf.Left, rf.Right)).Append("\" fill=\"#a7b0a2\" stroke=\"#1b2327\" stroke-width=\"0.08\"/>\n");
+        foreach (var b in ex.Bars)
+            switch (b.Kind)
+            {
+                case BarKind.Crosswalk:
+                    // the zebra: 0.5 m bars 0.5 m apart along the arm's width, the refuge's span left out
+                    for (double o = b.Left + 0.25; o + 0.5 <= b.Right - 0.15; o += 1.0)
+                    {
+                        if (b.Gap is { } g && o + 0.5 > g.Left && o < g.Right) continue;
+                        sb.Append("<polygon points=\"").Append(Quad(b.From, b.To, o, o + 0.5)).Append("\" fill=\"#f0c419\"/>\n");
+                    }
+                    break;
+                case BarKind.BikeBox:
+                    sb.Append("<polygon points=\"").Append(Quad(b.From, b.To, b.Left, b.Right)).Append("\" fill=\"#e6d79a\" fill-opacity=\"0.35\" stroke=\"#f0c419\" stroke-width=\"0.15\"/>\n");
+                    break;
+                case BarKind.GiveWay:
+                    for (double o = b.Left; o + 0.5 <= b.Right + 1e-6; o += 0.75)
+                        sb.Append("<polygon points=\"").Append(string.Join(" ", new[] { P(b.From, o), P(b.From, o + 0.5), P(b.To, o + 0.25) }.Select(pt))).Append("\" fill=\"#ffffff\"/>\n");
+                    break;
+                default:
+                    sb.Append("<polygon points=\"").Append(Quad(b.From, b.To, b.Left, b.Right))
+                      .Append(inv, $"\" fill=\"{(b.Kind == BarKind.RidersLine ? "#f0c419" : "#ffffff")}\"/>\n");
+                    break;
+            }
+        foreach (var p in ex.Poles)
+        {
+            var sp = ExteriorPlanner.SectionAt(ex.Arm, p.Station);
+            double o = p.OnRefuge && ex.Refuge is { } r ? (r.Left + r.Right) * 0.5 : p.RightKerb ? sp.CarriagewayRight + 0.6 : sp.CarriagewayLeft - 0.6;
+            var at = pt(P(p.Station, o)).Split(',');
+            sb.Append(inv, $"<circle cx=\"{at[0]}\" cy=\"{at[1]}\" r=\"0.35\" fill=\"#1b2327\"/>\n");
+        }
+        foreach (var s in ex.Signs)
+        {
+            var sp = ExteriorPlanner.SectionAt(ex.Arm, s.Station);
+            double o = s.RightKerb ? sp.CarriagewayRight + 0.8 : sp.CarriagewayLeft - 0.8;
+            var at = pt(P(s.Station, o)).Split(',');
+            string fill = s.Type == PointPropType.MainRoadSign ? "#f2c230" : "#d0412f";
+            sb.Append(inv, $"<rect x=\"{double.Parse(at[0], inv) - 0.35:F2}\" y=\"{double.Parse(at[1], inv) - 0.35:F2}\" width=\"0.7\" height=\"0.7\" fill=\"{fill}\" stroke=\"#1b2327\" stroke-width=\"0.06\"/>\n");
+        }
     }
 
     /// <summary>A transition's paint: lines along their boundaries (dashed as painted), hatch stripes, arrows and bike symbols as glyphs.</summary>

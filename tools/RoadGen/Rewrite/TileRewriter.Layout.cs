@@ -33,7 +33,8 @@ public static partial class TileRewriter
     private static List<JunctionPlan> PlanLayouts(PriorityResult priority, RoadGenResult result,
         Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf, Dictionary<TileId, List<RoadSegment>> output,
         HashSet<TileId> block, HashSet<TileId> wanted, Dictionary<TileId, ChunkGrid>? grids, Footprints buildings,
-        Func<int, LinkEnd, bool, RoadSide> streetSide, OsmOverlayReader? overlay, Restrictions? restrictions, Action<string>? log)
+        Func<int, LinkEnd, bool, RoadSide> streetSide, OsmOverlayReader? overlay, Restrictions? restrictions, Action<string>? log,
+        CrossingNodes? crossings = null)
     {
         var net = result.Network;
         var signalNodes = priority.Plans.Where(p => p.Plan.Kind == PriorityPlanner.Kind.Signal).Select(p => p.Junction.NodeId).ToHashSet();
@@ -241,6 +242,28 @@ public static partial class TileRewriter
         foreach (var t in plans.SelectMany(p => p.Arms).Select(a => a.Transition).OfType<Transition>().Distinct())
             t.Markings = TransitionPaint.Of(t, StreetPaint.Of(segmentOf[t.Arm.LinkId].Segment), planOf[t.Arm].Lights,
                 t.Far is { } f && planOf[f].Lights);
+        // 8. each arm's exterior (phase 4): its stack of bars from the mouth out
+        var signalJunctions = priority.Plans.Where(p => p.Plan.Kind == PriorityPlanner.Kind.Signal).ToDictionary(p => p.Junction.NodeId, p => p.Junction);
+        var priorityOf = priority.Plans.ToDictionary(p => p.Junction.NodeId);
+        foreach (var jp in plans)
+        {
+            if (jp.Core is null || !priorityOf.TryGetValue(jp.Node, out var pp)) continue;
+            var (junction, plan) = pp;
+            bool mapped = jp.Lights && CrossingsMapped(junction, net, signalNodes, signalJunctions, crossings);
+            jp.Exterior.Clear();
+            foreach (var a in jp.Arms)
+            {
+                double mouth = jp.Core.Mouths.FirstOrDefault(m => m.Arm == a.Arm)?.Station ?? a.OldTrim;
+                // OSM's crossing node is the crosswalk's middle; one within a few metres of the mouth goes right outside it
+                double? osm = crossings?.OnArm(junction, a.Arm, net) is { } d ? d + junction.Arms[a.Arm].Trim - mouth - ExteriorPlanner.CrosswalkDepth * 0.5 : null;
+                if (osm is < ExteriorPlanner.CrosswalkFromMouth + 4) osm = ExteriorPlanner.CrosswalkFromMouth;
+                bool sidewalk = a.Normal.Strips.Any(x => x.Kind == StripKind.Sidewalk);
+                double? at = osm ?? (jp.Lights && !mapped && sidewalk && JunctionRules.Lights.Has(JunctionRule.CrosswalkOnSidewalkArms) ? ExteriorPlanner.CrosswalkFromMouth : null);
+                var u = Vec2.FromHeading(a.Heading);
+                var signs = plan.Signs.Where(x => x.LinkId == a.LinkId).Select(x => (x.Type, x.Variant, FacesArriving: x.Facing.Dot(u) > 0)).ToList();
+                jp.Exterior.Add(ExteriorPlanner.Plan(jp, a, at, yields: plan.Teeth.Any(t => t.LinkId == a.LinkId), signs));
+            }
+        }
         if (JunctionFailures is { } failures)
             File.AppendAllText(failures, string.Concat(plans.Where(jp => jp.Core is { } c && !jp.Arms.Any(a => a.Internal)
                 && (c.KerbsNotTangent > 0 || c.ConnectorsOutside > 0 || !c.Simple)).Select(jp => jp.Describe() + "\n")));

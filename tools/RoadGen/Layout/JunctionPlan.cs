@@ -107,6 +107,8 @@ public sealed class JunctionPlan
     public required Vec2 Centre { get; init; }
     public required bool Lights { get; init; }
     public List<ArmPlan> Arms { get; } = new();
+    /// <summary>Each arm's exterior (phase 4): its bars from the mouth out, poles and signs; in the order of <see cref="Arms"/>.</summary>
+    public List<ArmExterior> Exterior { get; } = new();
     /// <summary>The main road's two arms (<see cref="ArmPlan.Arm"/>), as the priority plan chose them; empty without.</summary>
     public int[] MainArms { get; init; } = [];
     /// <summary>The priority plan carries the main road's centre line through, and its edge guides.</summary>
@@ -255,6 +257,7 @@ public sealed class JunctionPlan
             if (a.Steps.Count + a.FitSteps.Count > 0) sb.Append("    steps   ").Append(string.Join("; ", a.Steps.Concat(a.FitSteps))).Append('\n');
             if (a.Transition is { } t)
                 sb.Append(t.Arm == a ? t.Describe() : string.Create(inv, $"    transition: one with the junction at the street's far end ({t.Length:F1} m, planned there)\n"));
+            if (Exterior.FirstOrDefault(x => x.Arm == a) is { } ex) sb.Append(ex.Describe());
         }
         if (Core is { } core)
         {
