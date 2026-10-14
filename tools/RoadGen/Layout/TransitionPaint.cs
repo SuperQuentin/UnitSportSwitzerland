@@ -64,7 +64,9 @@ public static class TransitionPaint
 
     private enum Style { None, Solid, Dashed, LaneChange, Bike }
 
-    public static TransitionMarkings Of(Transition t, StreetPaint street, bool lights, bool farLights = false)
+    /// <param name="nearStop">Where the arriving traffic stops at the mouth end (m out from the mouth, its stop line or bar): the solid
+    /// stretches and the arrows count from there (the exterior, phase 4); <paramref name="farStop"/> the same at a shared transition's far end.</param>
+    public static TransitionMarkings Of(Transition t, StreetPaint street, bool lights, bool farLights = false, double nearStop = 0, double farStop = 0)
     {
         var m = new TransitionMarkings();
         var st = t.Stations;
@@ -111,7 +113,7 @@ public static class TransitionPaint
             }
             // runs, split where a solid stretch by a mouth starts or ends inside the interval: lanes the last 10 m, the centre
             // line 20 m at the lights
-            double[] cuts = [s0, .. new[] { SolidToMouth, SolidAtLights, t.Length - SolidToMouth, t.Length - SolidAtLights }.Where(x => x > s0 + 1e-6 && x < s1 - 1e-6).Order(), s1];
+            double[] cuts = [s0, .. new[] { nearStop + SolidToMouth, nearStop + SolidAtLights, t.Length - farStop - SolidToMouth, t.Length - farStop - SolidAtLights }.Where(x => x > s0 + 1e-6 && x < s1 - 1e-6).Order(), s1];
             for (int c = 0; c + 1 < cuts.Length; c++)
             {
                 double a0 = cuts[c], a1 = cuts[c + 1], mid = (a0 + a1) * 0.5;
@@ -119,8 +121,8 @@ public static class TransitionPaint
                 foreach (var (key, style) in lines)
                 {
                     var s = style;
-                    if (style == Style.LaneChange && (mid < SolidToMouth || (t.Far is not null && mid > t.Length - SolidToMouth))) s = Style.Solid;
-                    if (key.Item1 == CentreBoundary(t, i) && ((lights && mid < SolidAtLights) || (farLights && t.Far is not null && mid > t.Length - SolidAtLights)) && s == Style.Dashed) s = Style.Solid;
+                    if (style == Style.LaneChange && (mid < nearStop + SolidToMouth || (t.Far is not null && mid > t.Length - farStop - SolidToMouth))) s = Style.Solid;
+                    if (key.Item1 == CentreBoundary(t, i) && ((lights && mid < nearStop + SolidAtLights) || (farLights && t.Far is not null && mid > t.Length - farStop - SolidAtLights)) && s == Style.Dashed) s = Style.Solid;
                     now[key] = s;
                 }
                 foreach (var key in open.Keys.ToList())
@@ -132,7 +134,7 @@ public static class TransitionPaint
         foreach (var key in open.Keys.ToList()) Close(key, t.Length);
 
         for (int k = 0; k < n; k++) if (striped[k]) Stripes(t, k, m.Stripes);
-        Marks(t, lights, m.Marks);
+        Marks(t, lights, m.Marks, nearStop);
         return m;
     }
 
@@ -207,7 +209,7 @@ public static class TransitionPaint
     /// <see cref="ArrowApartShort"/> m on in a storage under 20 m); a bike symbol at each bike lane's mouth end (none in a
     /// pocket riders share). A far end's arriving lanes (departing here) likewise, pointing at its mouth.
     /// </summary>
-    private static void Marks(Transition t, bool lights, List<TransitionMark> into)
+    private static void Marks(Transition t, bool lights, List<TransitionMark> into, double stop)
     {
         double storage = t.Arm.Openings.Count > 0 ? t.Arm.Openings.Max(o => o.Storage) : 0;
         bool arrows = lights || t.Arm.Openings.Count > 0;
@@ -221,7 +223,7 @@ public static class TransitionPaint
             if (!arrows || !x.IsCarLane || x.Way != StripWay.In || x.Moves == SignalMoves.None) continue;
             var arrow = ArrowOf(x.Moves);
             if (!PaintEmitter.HasArrow(arrow)) continue;
-            foreach (double tip in (ReadOnlySpan<double>)[ArrowFirst, ArrowFirst + apart])
+            foreach (double tip in (ReadOnlySpan<double>)[stop + ArrowFirst, stop + ArrowFirst + apart])
             {
                 double tail = tip + PaintEmitter.ArrowLength;
                 if (tail <= t.Length && t.WidthAt(k, tail) > 2.4 && t.WidthAt(k, tip) > 2.4) into.Add(new TransitionMark(k, tail, arrow, false, false));

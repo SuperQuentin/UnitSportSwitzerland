@@ -239,9 +239,6 @@ public static partial class TileRewriter
         }
         TransitionPlanner.PlanAll(plans);
         var planOf = plans.SelectMany(p => p.Arms.Select(a => (a, p))).ToDictionary(x => x.a, x => x.p);
-        foreach (var t in plans.SelectMany(p => p.Arms).Select(a => a.Transition).OfType<Transition>().Distinct())
-            t.Markings = TransitionPaint.Of(t, StreetPaint.Of(segmentOf[t.Arm.LinkId].Segment), planOf[t.Arm].Lights,
-                t.Far is { } f && planOf[f].Lights);
         // 8. each arm's exterior (phase 4): its stack of bars from the mouth out
         var signalJunctions = priority.Plans.Where(p => p.Plan.Kind == PriorityPlanner.Kind.Signal).ToDictionary(p => p.Junction.NodeId, p => p.Junction);
         var priorityOf = priority.Plans.ToDictionary(p => p.Junction.NodeId);
@@ -264,6 +261,12 @@ public static partial class TileRewriter
                 jp.Exterior.Add(ExteriorPlanner.Plan(jp, a, at, yields: plan.Teeth.Any(t => t.LinkId == a.LinkId), signs));
             }
         }
+        // 9. each transition's paint, its solid stretches and arrows counted from where its arms' traffic stops (the exterior)
+        double StopOf(ArmPlan? a) => a is null ? 0 : planOf[a].Exterior.FirstOrDefault(x => x.Arm == a)?.Bars
+            .Where(b => b.Kind is BarKind.StopLine or BarKind.PocketBar or BarKind.GiveWay).Select(b => b.To).DefaultIfEmpty(0).Max() ?? 0;
+        foreach (var t in plans.SelectMany(p => p.Arms).Select(a => a.Transition).OfType<Transition>().Distinct())
+            t.Markings = TransitionPaint.Of(t, StreetPaint.Of(segmentOf[t.Arm.LinkId].Segment), planOf[t.Arm].Lights,
+                t.Far is { } f && planOf[f].Lights, StopOf(t.Arm), StopOf(t.Far));
         if (JunctionFailures is { } failures)
             File.AppendAllText(failures, string.Concat(plans.Where(jp => jp.Core is { } c && !jp.Arms.Any(a => a.Internal)
                 && (c.KerbsNotTangent > 0 || c.ConnectorsOutside > 0 || !c.Simple)).Select(jp => jp.Describe() + "\n")));

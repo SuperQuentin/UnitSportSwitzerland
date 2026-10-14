@@ -19,7 +19,7 @@ public static partial class TileRewriter
     /// <summary>What the planner wrote, for the region report.</summary>
     public sealed class LayoutWriteStats
     {
-        public int Junctions, Skipped, Transitions, Pieces, Lines, Marks, Trimmed, Extended, Orphaned, CoreVertices, CapVertices, Bars, Refuges, Signs, Ramps, Signals, SignalsInvalid, Poles;
+        public int Junctions, Skipped, Transitions, Pieces, Lines, Marks, Trimmed, Extended, Orphaned, CoreVertices, CapVertices, Bars, Refuges, Signs, Ramps, Signals, SignalsInvalid, Poles, CoreLines;
         /// <summary>Written junctions with a transition (LV95), for the seam check and pictures.</summary>
         public readonly List<Vec2> WithTransitions = new();
         public readonly List<Vec2> OrphanedAt = new();
@@ -27,7 +27,7 @@ public static partial class TileRewriter
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
             $"    junction planner written (#818 phase 3): {Junctions:N0} junctions as cores, {Skipped:N0} left to the old layout ({string.Join(", ", Why.Select(kv => $"{kv.Key} {kv.Value}"))}); ")
-            + string.Create(CultureInfo.InvariantCulture, $"{Transitions:N0} transitions over {Pieces:N0} pieces, {Lines:N0} lines and {Marks:N0} marks; arms trimmed to their mouth {Trimmed:N0}, run on to it {Extended:N0}; pieces lost by a later cut {Orphaned:N0}{(OrphanedAt.Count > 0 ? " (at " + string.Join("; ", OrphanedAt.Take(6).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")}; cap vertices {CapVertices:N0} of the cores' {CoreVertices:N0}; exterior: {Bars:N0} bars, {Refuges:N0} refuges, {Signs:N0} signs, {Ramps:N0} crosswalks with lowered kerbs; lights {Signals:N0} ({SignalsInvalid:N0} plans invalid), {Poles:N0} poles")
+            + string.Create(CultureInfo.InvariantCulture, $"{Transitions:N0} transitions over {Pieces:N0} pieces, {Lines:N0} lines and {Marks:N0} marks; arms trimmed to their mouth {Trimmed:N0}, run on to it {Extended:N0}; pieces lost by a later cut {Orphaned:N0}{(OrphanedAt.Count > 0 ? " (at " + string.Join("; ", OrphanedAt.Take(6).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")}; cap vertices {CapVertices:N0} of the cores' {CoreVertices:N0}; exterior: {Bars:N0} bars, {Refuges:N0} refuges, {Signs:N0} signs, {Ramps:N0} crosswalks with lowered kerbs; lights {Signals:N0} ({SignalsInvalid:N0} plans invalid), {Poles:N0} poles, {CoreLines:N0} lines through the cores")
             + (WithTransitions.Count > 0 ? "\n      with transitions at " + string.Join("; ", WithTransitions.Take(12).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) : "");
     }
 
@@ -333,6 +333,8 @@ public static partial class TileRewriter
         foreach (var t in all)
         {
             var covered = Cover(t, cut: false);
+            var clear = ClearOf(t, mine);
+            var clearRiders = ClearOf(t, mine, riders: true);
             foreach (var (sp, from, to) in covered)
             {
                 var flagged = Copy(sp.Piece, sp.Piece.Points, sp.Piece.Attributes with { Flags = sp.Piece.Attributes.Flags | RoadAttrFlags.InTransition });
@@ -344,17 +346,18 @@ public static partial class TileRewriter
                 stats.Pieces++;
                 var into = Get(paint, sp.Tile);
                 foreach (var l in t.Markings?.Lines ?? [])
-                {
-                    double f = Math.Max(l.From, from), e = Math.Min(l.To, to);
-                    if (e - f < 0.05) continue;
-                    var (pf, pe) = sp.TowardJunction ? (to - e, to - f) : (f - from, e - from);
-                    int n = t.Strips.Count;
-                    into.Add(RoadPaint.AlongTransition(rt, sp.TowardJunction ? l.Boundary : n - l.Boundary, l.Type, l.Rgba, l.Width, l.Dash, l.Gap,
-                        sp.TowardJunction ? l.Offset : -l.Offset, pf, pe));
-                    stats.Lines++;
-                }
+                    foreach (var (lf, lt) in Without(l.From, l.To, l.Rgba == PaintEmitter.Yellow ? clearRiders : clear))
+                    {
+                        double f = Math.Max(lf, from), e = Math.Min(lt, to);
+                        if (e - f < 0.05) continue;
+                        var (pf, pe) = sp.TowardJunction ? (to - e, to - f) : (f - from, e - from);
+                        int n = t.Strips.Count;
+                        into.Add(RoadPaint.AlongTransition(rt, sp.TowardJunction ? l.Boundary : n - l.Boundary, l.Type, l.Rgba, l.Width, l.Dash, l.Gap,
+                            sp.TowardJunction ? l.Offset : -l.Offset, pf, pe));
+                        stats.Lines++;
+                    }
             }
-            Marks(t, covered, paint, stats);
+            Marks(t, covered, paint, stats, clear);
             if (mine.First(p => p.Arms.Contains(t.Arm)) is { } owner && !stats.WithTransitions.Contains(owner.Centre)) stats.WithTransitions.Add(owner.Centre);
             stats.Transitions++;
         }
@@ -390,6 +393,7 @@ public static partial class TileRewriter
         foreach (var jp in mine)
         {
             WriteExterior(jp, result, segmentOf, finalPieces, paint, areas, signs, signalStats, stats);
+            WriteCoreLines(jp, result, paint, stats);
             if (jp.Lights) WriteSignals(jp, result, signals, approaches, cantons, signalStats, stats);
         }
     }
@@ -497,10 +501,52 @@ public static partial class TileRewriter
     };
 
     /// <summary>
+    /// What a transition's paint keeps clear of (#818 phase 4): its arms' exteriors, in its own stations: at the lights everything
+    /// up to the cars' line (lane lines end at a stop line), else the crosswalk and a little either side.
+    /// </summary>
+    private static List<(double From, double To)> ClearOf(Transition t, List<JunctionPlan> plans, bool riders = false)
+    {
+        var clear = new List<(double, double)>();
+        foreach (var jp in plans)
+            foreach (var ex in jp.Exterior)
+            {
+                bool near = ex.Arm == t.Arm;
+                if (!near && ex.Arm != t.Far) continue;
+                (double From, double To)? zone = null;
+                // a bike lane's lines (<riders>) run on to its riders' line, every other one ends at the cars' line
+                double stop = ex.Bars.Where(b => riders ? b.Kind == BarKind.RidersLine : b.Kind is BarKind.StopLine or BarKind.RidersLine).Select(b => b.To).DefaultIfEmpty(0).Max();
+                if (jp.Lights && stop > 0) zone = (0, stop);
+                else if (ex.Crosswalk is { } cw) zone = (cw.From - 0.3, cw.To + 0.3);
+                if (zone is not { } z) continue;
+                clear.Add(near ? z : (t.Length - z.To, t.Length - z.From));
+            }
+        return clear;
+    }
+
+    /// <summary>The pieces of [<paramref name="from"/>, <paramref name="to"/>] outside every range of <paramref name="clear"/>.</summary>
+    private static List<(double From, double To)> Without(double from, double to, List<(double From, double To)> clear)
+    {
+        var parts = new List<(double, double)> { (from, to) };
+        foreach (var (c0, c1) in clear)
+        {
+            var next = new List<(double, double)>();
+            foreach (var (a, b) in parts)
+            {
+                if (c1 <= a || c0 >= b) { next.Add((a, b)); continue; }
+                if (c0 > a) next.Add((a, c0));
+                if (c1 < b) next.Add((c1, b));
+            }
+            parts = next;
+        }
+        return parts;
+    }
+
+    /// <summary>
     /// A transition's hatch stripes, arrows and bike symbols as geometry on the pieces it covers: each point (station, offset)
     /// found on its piece, on the road's height there.
     /// </summary>
-    private static void Marks(Transition t, List<(StreetPiece Piece, double From, double To)> covered, Dictionary<TileId, List<RoadPaint>> paint, LayoutWriteStats stats)
+    private static void Marks(Transition t, List<(StreetPiece Piece, double From, double To)> covered, Dictionary<TileId, List<RoadPaint>> paint, LayoutWriteStats stats,
+        List<(double From, double To)> clear)
     {
         if (t.Markings is not { } m || covered.Count == 0) return;
         // a point of the transition on its piece: tile-local position, and the drawing's forward direction there
@@ -532,6 +578,7 @@ public static partial class TileRewriter
         {
             var pts = quad.Select(q => At(q.S, q.O)).ToList();
             if (pts.Any(q => q is null) || pts.Select(q => q!.Value.Tile).Distinct().Count() > 1) continue;
+            if (quad.Any(q => clear.Any(c => q.S > c.From && q.S < c.To))) continue;
             Get(paint, pts[0]!.Value.Tile).Add(new RoadPaint
             {
                 Shape = PaintShape.Triangles, Type = PaintType.Hatch, Rgba = PaintEmitter.White,
@@ -541,6 +588,9 @@ public static partial class TileRewriter
         }
         foreach (var mark in m.Marks)
         {
+            // a mark clear of the exterior: none in its stretch
+            double markFrom = mark.Station - (mark.Bike ? BikePlanner.SymbolSize : PaintEmitter.ArrowLength);
+            if (clear.Any(c => markFrom < c.To && mark.Station > c.From)) continue;
             var (f0, f1) = t.SpanAt(mark.Strip, mark.Station);
             double o = (f0 + f1) * 0.5;
             if (mark.Bike)

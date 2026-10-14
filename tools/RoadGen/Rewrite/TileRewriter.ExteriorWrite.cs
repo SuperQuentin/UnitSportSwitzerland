@@ -189,6 +189,40 @@ public static partial class TileRewriter
         return (Math.Max(0, full - stop), Math.Max(0, from - stop));
     }
 
+    /// <summary>
+    /// The lines painted through a core (#818 phase 2's, connector edges chosen by <c>JunctionRules</c>): the main road's centre
+    /// line (the street's dashes), the edge guides (dashed across a joining road, solid else, none in towns), the left-turn, pair
+    /// and through guides (dashed); on the core's surface, its heights blended from the mouths.
+    /// </summary>
+    private static void WriteCoreLines(JunctionPlan jp, RoadGenResult result, Dictionary<TileId, List<RoadPaint>> paint, LayoutWriteStats stats)
+    {
+        var core = jp.Core!;
+        var home = TileId.FromLv95(jp.Centre.X, jp.Centre.Y);
+        var anchors = new List<(Vec2 At, float Height)>();
+        foreach (var m in core.Mouths)
+            if (result.Network.Links[jp.Arms.First(a => a.Arm == m.Arm).LinkId].Tag is Source s)
+            {
+                var mid = (m.Left + m.Right) * 0.5;
+                anchors.Add((mid, s.SampleHeight(mid)));
+            }
+        if (anchors.Count == 0) return;
+        bool urban = jp.Arms.Any(a => a.Normal.KerbLeftCm > 0 || a.Normal.KerbRightCm > 0);
+        foreach (var line in core.Lines)
+        {
+            if (line.Points.Count < 2) continue;
+            bool centre = line.Kind == "centre";
+            if (!centre && !line.Dashed && urban) continue;
+            float dash = centre ? 3f : line.Dashed ? GuideDash : 0f, gap = centre ? (urban ? 3f : 6f) : line.Dashed ? GuideDash : 0f;
+            Get(paint, home).Add(new RoadPaint
+            {
+                Shape = PaintShape.Polyline, Type = dash > 0 ? PaintType.WhiteDashed : PaintType.WhiteSolid, Rgba = PaintEmitter.White,
+                Width = PaintEmitter.LineWidth, Dash = dash, Gap = gap,
+                Vertices = RoadPaintGeometry.Simplify(Local(home, line.Points, p => HeightAt(anchors, p), 0f)),
+            });
+            stats.CoreLines++;
+        }
+    }
+
     private static void WriteExterior(JunctionPlan jp, RoadGenResult result, Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf,
         Dictionary<RoadSegment, List<RoadSegment>> finalPieces, Dictionary<TileId, List<RoadPaint>> paint, Dictionary<TileId, List<RoadAreaProp>> areas,
         Dictionary<TileId, List<RoadPointProp>> signs, SignalStats signalStats, LayoutWriteStats stats)
