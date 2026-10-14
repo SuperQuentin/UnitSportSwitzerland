@@ -312,5 +312,5 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
   lead-in hatch are the same median between the two directions, so a #325 merged street is that median running mouth to
   mouth.
 - **A split lead-in's centre line moves with the pocket's taper** (the user, Oct 14 2026: the 1:6 after it jogged the through lane).
-- Built (Oct 14 2026), to confirm with the user: the writing runs behind **`--junctions write`** (`new` still plans
+- **The writing runs behind its own flag, `--junctions write`** (the user, Oct 14 2026; `new` still plans
   and reports only, so the comparison with the pocket layout and the old checks keep working).
