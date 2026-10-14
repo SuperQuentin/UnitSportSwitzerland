@@ -45,3 +45,4 @@
   its low resolution. For bigger PNGs give Godot the window size: `<godot> --path . --resolution
   1920x1080 -- --models,<dir> ...` (#759).
 - **`--zfight`** paints the model's z-fighting faces magenta; **`--flicker`** (PNG runs) saves flicker heat shots instead (`general/zfight`, #788).
+- **`--glb`** (PNG runs) also writes each model as a `.glb` beside its PNG (vertex colours, node rigs, no normals: flat faces), to clean in Blender or compare with a generated model before it goes in `styles/ModelCatalog` (`styles/assets`, #829).
