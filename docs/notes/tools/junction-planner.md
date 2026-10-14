@@ -226,6 +226,10 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   their paths), kerb check 56 against the old layout's 124; new-only: 2618148,1263279 (a skewed crossroads: the side
   street's path crossings on their curve meet the corners' path bands with a 6 cm kerb), 2670381,1253603 (a T: the main
   road's path crossing ends on the corner's path band behind a 14 cm kerb) and the edge case 2619787,1264697.
+- **A corner a path crossing lands on** (the user, Oct 14: "there shouldn't be grass on the cyclist path"): a path crossing's
+  end within 1.5 m of a core corner's kerb marks it (`CornerInput.Landing`); the corner is laid as beside a crosswalk, its
+  kerb sloped and the grass folded into the path. 168 tiles: 578 corners; kerb check 51 against the old layout's 124, two
+  only the new layout has, both in `junction-edge-cases` (roads that are no arm of the core but meet it).
 - **Carried sides that cross in one corner** (each arm's path carried across the other's road) are left to the corner, as
   the old layout's #711 rule (`LayCarriedSides`, shared): `BikeCrossWrite` laid both, one over the other, and riders met a
   6 cm step where the bands of different heights overlapped (Geneva 2496643,1118197: 3 kerb failures gone).

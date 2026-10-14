@@ -21,7 +21,8 @@ public static partial class TileRewriter
 
     private static void WriteBikeCrossings(JunctionPlan jp, RoadGenResult result, Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf,
         Dictionary<RoadSegment, List<RoadSegment>> finalPieces, SignalPlan? plan, RoadJunction? cap, Dictionary<TileId, List<RoadPaint>> paint,
-        Dictionary<TileId, List<(RoadAreaProp Band, List<Vec2> Ring)>> bridges, Dictionary<TileId, List<CornerPlanner.PathEnd>> pathEnds, LayoutWriteStats stats)
+        Dictionary<TileId, List<(RoadAreaProp Band, List<Vec2> Ring)>> bridges, Dictionary<TileId, List<CornerPlanner.PathEnd>> pathEnds, LayoutWriteStats stats,
+        List<Vec2> landings)
     {
         var core = jp.Core!;
         var net = result.Network;
@@ -149,6 +150,8 @@ public static partial class TileRewriter
                 run.Add(k0 * (mt * mt * mt) + (k0 - ua * l) * (3 * mt * mt * t) + (k1 - ub * l) * (3 * mt * t * t) + k1 * (t * t * t));
             }
             double width = Math.Min(pathA, pathB);
+            landings.Add(k0);
+            landings.Add(k1);
             // red where a car crosses it in the riders' phase (without lights: wherever a road joins, as here), yellow edges all across
             int riders = GroupOf(a.Arm, SignalMoves.Through, bike: true);
             bool red = plan is null || Conflicts(run, riders).Count > 0;
@@ -209,6 +212,22 @@ public static partial class TileRewriter
         double sum = 0;
         for (int i = 1; i < line.Count; i++) sum += line[i].DistanceTo(line[i - 1]);
         return sum;
+    }
+
+    /// <summary>A path crossing ending this close to a core corner's kerb (m) lands on that corner.</summary>
+    private const double LandingReach = 1.5;
+
+    /// <summary>The distance from <paramref name="p"/> to the nearest point of a polyline.</summary>
+    private static double DistanceToPolyline(List<Vec2> line, Vec2 p)
+    {
+        double best = double.MaxValue;
+        for (int i = 0; i + 1 < line.Count; i++)
+        {
+            var ab = line[i + 1] - line[i];
+            double l2 = ab.Dot(ab), t = l2 < 1e-12 ? 0 : Math.Clamp((p - line[i]).Dot(ab) / l2, 0, 1);
+            best = Math.Min(best, p.DistanceTo(line[i] + ab * t));
+        }
+        return best;
     }
 
     /// <summary>The part of a polyline between two distances along it.</summary>

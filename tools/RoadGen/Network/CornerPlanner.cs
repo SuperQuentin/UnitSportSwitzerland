@@ -69,7 +69,9 @@ public static class CornerPlanner
     /// One corner of a junction core (#818 phase 4), given explicitly: the ends of the two arms' first pieces at their mouths
     /// (tile-local plan, x east, y = -z), arm A's right kerb seen arriving (its left looking out) round <see cref="Arc"/> to arm B's.
     /// </summary>
-    public sealed record CornerInput(Vec2 EndA, Vec2 EndB, KerbArc Arc);
+    /// <remarks><see cref="Landing"/>: a path crossing ends on it (the user, Oct 14 2026): it is laid as beside a crosswalk, its kerb
+    /// sloped all round and the grass folded into the path, so a rider leaving the crossing meets no kerb.</remarks>
+    public sealed record CornerInput(Vec2 EndA, Vec2 EndB, KerbArc Arc, bool Landing = false);
 
     /// <summary>The arms' directions match an arc's within this (cosine of 30 degrees).</summary>
     private const double ArcArmCos = 0.866;
@@ -134,7 +136,7 @@ public static class CornerPlanner
                     claimed.Add(a.End);
                     claimed.Add(b.End);
                     stats.CoreCorners++;
-                    Pair(id, segments, ends, a, b, outline, cap, facades, stats, props, null, c.Arc);
+                    Pair(id, segments, ends, a, b, outline, cap, facades, stats, props, null, c.Arc, c.Landing);
                 }
                 continue;
             }
@@ -204,10 +206,18 @@ public static class CornerPlanner
     /// <paramref name="arcs"/>, else round the cap's ring; its outer fillet.
     /// </summary>
     private static void Pair(TileId id, IReadOnlyList<RoadSegment> segments, Dictionary<(long, long), List<End>> ends, (End End, Vec2 Out) a, (End End, Vec2 Out) b,
-        List<(Vec2 P, float Y)>? ring, RoadJunction? cap, Facades facades, Stats stats, List<RoadAreaProp> props, List<KerbArc>? arcs, KerbArc? fixedArc = null)
+        List<(Vec2 P, float Y)>? ring, RoadJunction? cap, Facades facades, Stats stats, List<RoadAreaProp> props, List<KerbArc>? arcs, KerbArc? fixedArc = null,
+        bool landing = false)
     {
         var ca = Walk(segments, ends, a.End, left: true);
         var cb = Walk(segments, ends, b.End, left: false);
+        // a path crossing ends on it (#818): laid as beside a crosswalk, its kerb sloped and the grass folded into the path
+        if (landing)
+        {
+            static RoadSide Fold(RoadSide s) => s.HasTrack ? s with { BikeDm = (byte)(s.BikeDm + s.VergeDm + s.BufferDm), VergeDm = 0, BufferDm = 0 } : s;
+            if (ca is not null) ca = ca with { Lowered = true, Side = Fold(ca.Side) };
+            if (cb is not null) cb = cb with { Lowered = true, Side = Fold(cb.Side) };
+        }
         var node = Plan(segments[a.End.Seg].Points, a.End.AtStart ? 0 : segments[a.End.Seg].PointCount - 1);
         if (Traced(id, node))
             Console.WriteLine($"[corner] node ({id.MinE + node.X:F1},{id.MaxN + node.Y:F1}) {(ring != null ? "cap" : "bend")}: "
