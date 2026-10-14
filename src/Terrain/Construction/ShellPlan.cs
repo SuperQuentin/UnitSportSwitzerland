@@ -17,6 +17,8 @@ public enum ShellPart : byte
     Brick = 19, Cement = 20, Fence = 21, Banner = 22, Lamp = 23, Window = 24, SignBoard = 25,
     // the cranes (#610)
     CraneYellow = 26, Cab = 27, HookBlock = 28, Rope = 29, LampRed = 30,
+    // the pit (#619): the sheet piles, and the red and white guard rail round its top
+    SheetPile = 31, Barrier = 32,
 }
 
 /// <summary>
@@ -51,8 +53,10 @@ public sealed class ShellPlan
 {
     public List<ShellBox> Boxes { get; } = new();
     public List<ShellRamp> Ramps { get; } = new();
-    /// <summary>The height of each slab's top, ground floor first.</summary>
+    /// <summary>The height of each slab's top, the lowest first: the basements' (#619), then the ground floor's.</summary>
     public List<float> Levels { get; } = new();
+    /// <summary>How many of the <see cref="Levels"/> are under the ground floor: <c>Levels[Basements]</c> is its slab.</summary>
+    public int Basements { get; set; }
     /// <summary>The stair core in the site frame, and whether its flights run along x.</summary>
     public Rect2D Core { get; set; }
     public bool CoreAlongX { get; set; }
@@ -94,7 +98,12 @@ public static class ShellPlans
     /// <param name="wings">The building's wings in the site frame, or null for the whole plan box.</param>
     /// <param name="groundHigh">The highest ground under the building: the ground floor's slab top.</param>
     /// <param name="groundLow">The lowest: the plinth reaches down to it.</param>
-    public static ShellPlan Plan(ConstructionSite site, IReadOnlyList<Rect2D>? wings, float groundHigh, float groundLow)
+    /// <param name="pitFloor">
+    /// A site with a pit (#619): the lowest slab's top, at the pit's floor (<see cref="PitPlans.FloorOf"/>).
+    /// A site at its foundations casts its base slab there; a shell stands its basement storeys on it.
+    /// </param>
+    public static ShellPlan Plan(ConstructionSite site, IReadOnlyList<Rect2D>? wings, float groundHigh, float groundLow,
+        float? pitFloor = null)
     {
         var plan = new ShellPlan();
         float hw = site.Box.Width / 2, hd = site.Box.Depth / 2;
@@ -106,9 +115,19 @@ public static class ShellPlans
                 new Vector3(Math.Max(x0, x1), Math.Max(y0, y1), Math.Max(z0, z1)), part, solid));
 
         float storey = site.StoreyHeight;
-        int top = site.Phase == SitePhase.Foundations ? 0 : site.BuiltStoreys;
-        for (int k = 0; k <= top; k++) plan.Levels.Add(groundHigh + k * storey);
+        // the storeys under the ground (#619): a shell over an open pit has its basements built
+        bool dug = site.Pit != null && pitFloor != null;
+        int below = dug && site.Phase == SitePhase.Shell ? site.Pit!.Basements : 0;
+        int top = below + (site.Phase == SitePhase.Foundations ? 0 : site.BuiltStoreys);
+        if (dug && site.Phase == SitePhase.Foundations) plan.Levels.Add(pitFloor!.Value);
+        else
+            for (int k = 0; k <= top; k++)
+                // the lowest slab is on the pit's floor, which a slope may have taken deeper than a storey
+                plan.Levels.Add(k == 0 && below > 0 ? pitFloor!.Value : groundHigh + (k - below) * storey);
+        plan.Basements = below;
         float L(int k) => plan.Levels[k];
+        // where a footbridge over the trench lands, the ground floor has a doorway
+        var bridges = dug && site.Phase == SitePhase.Shell ? PitPlans.Bridges(site, ws) : new List<PitBridge>();
 
         // ---- cranes standing in the building: an opening round each mast ----------------------
         var holes = new List<Rect2D>();
@@ -162,8 +181,10 @@ public static class ShellPlans
         var well = new Rect2D(Math.Min(wx0, wx1), Math.Min(wz0, wz1), Math.Max(wx0, wx1), Math.Max(wz0, wz1));
 
         // ---- the ground slab, on a plinth down to the lowest ground --------------------------
+        // (in a pit, the base slab on the gravel of its floor)
+        float plinth = dug ? L(0) - Slab - 0.05f : Math.Min(groundLow, groundHigh - Slab) - 0.3f;
         foreach (var w in ws)
-            Box(w.X0, Math.Min(groundLow, groundHigh - Slab) - 0.3f, w.Z0, w.X1, L(0), w.Z1, ShellPart.Concrete, true);
+            Box(w.X0, plinth, w.Z0, w.X1, L(0), w.Z1, ShellPart.Concrete, true);
 
         // ---- the columns' grid, per wing, and the outer bays along it ------------------------
         var bays = new List<(float X0, float Z0, float X1, float Z1, float Nx, float Nz)>();
@@ -207,18 +228,23 @@ public static class ShellPlans
                 Box(x - Column / 2, floor, z - Column / 2, x + Column / 2, ceiling, z + Column / 2, ShellPart.Concrete, true);
 
             // the outer walls: closed bays are a wall with a window in it; a shell's top storey
-            // has more of its bays still open, a topped-out building has them all closed
-            bool topStorey = s == top - 1;
-            double closed = site.Phase == SitePhase.ToppedOut ? 1.0 : topStorey ? 0.45 : 0.85;
+            // has more of its bays still open, a topped-out building has them all closed; a
+            // basement's are blank concrete, a door in some (#619). The rolls are by storey above
+            // the ground, so a shell over a pit keeps the walls it had without one.
+            bool topStorey = s == top - 1, basement = s < below;
+            int g = s - below;
+            double closed = site.Phase == SitePhase.ToppedOut || basement ? 1.0 : topStorey ? 0.45 : 0.85;
             for (int k = 0; k < bays.Count; k++)
             {
-                if (R($"bay{s}.{k}") >= closed) continue;
-                bool door = s == 0 && R($"door{k}") < 0.15;
-                WallBay(bays[k], floor, ceiling, door, site.Phase == SitePhase.ToppedOut && R($"ins{s}.{k}") < 0.55 && s < top * 0.7f);
+                bool bridged = g == 0 && bridges.Any(b => OnBay(bays[k], b.To));
+                if (!bridged && R(basement ? $"cellar{s}.{k}" : $"bay{g}.{k}") >= closed) continue;
+                bool door = bridged || g == 0 && R($"door{k}") < 0.15 || basement && R($"cellar-door{s}.{k}") < 0.2;
+                WallBay(bays[k], floor, ceiling, door, site.Phase == SitePhase.ToppedOut && R($"ins{g}.{k}") < 0.55 && g < (top - below) * 0.7f,
+                    blank: basement);
             }
 
             // the switchback: up the low side of the core to the far landing, back up the high side
-            float mid = floor + storey / 2, upper = L(s + 1);
+            float upper = L(s + 1), mid = (floor + upper) / 2;
             Flight(NearLanding, aLen - FarLanding, 0, FlightWidth, floor, mid);
             CoreBox(aLen - FarLanding, mid - 0.2f, 0, aLen, mid, coreWid, ShellPart.Concrete, true);
             Flight(aLen - FarLanding, NearLanding, coreWid - FlightWidth, coreWid, mid, upper);
@@ -248,7 +274,7 @@ public static class ShellPlans
             plan.Route.Add(P(0.5f, laneA, L(0)));
             for (int s = 0; s < top; s++)
             {
-                float mid = L(s) + storey / 2;
+                float mid = (L(s) + L(s + 1)) / 2;
                 plan.Route.Add(P(NearLanding + 0.3f, laneA, L(s)));
                 plan.Route.Add(P(aLen - FarLanding - 0.2f, laneA, mid));
                 plan.Route.Add(P(aLen - 0.6f, laneA, mid));
@@ -324,8 +350,15 @@ public static class ShellPlans
         return plan;
 
         // a closed bay: the wall under the sill, over the head, and either side of the window
-        void WallBay((float X0, float Z0, float X1, float Z1, float Nx, float Nz) b, float floor, float ceiling, bool door, bool insulated)
+        void WallBay((float X0, float Z0, float X1, float Z1, float Nx, float Nz) b, float floor, float ceiling, bool door, bool insulated,
+            bool blank = false)
         {
+            // a basement's bay: blank, or a doorway
+            if (blank && !door)
+            {
+                WallPiece(b, 0, BayLength(b), floor, ceiling, false);
+                return;
+            }
             float len = BayLength(b), win = Math.Min(door ? 1.3f : WindowWidth, len - 1.0f);
             float w0 = (len - win) / 2, w1 = w0 + win;
             float sill = door ? 0f : SillHeight;
@@ -384,6 +417,16 @@ public static class ShellPlans
         }
     }
 
+    /// <summary>Whether a point of the site frame is on a bay's wall line, within its length: where a footbridge lands on it.</summary>
+    private static bool OnBay((float X0, float Z0, float X1, float Z1, float Nx, float Nz) b, Vector2 p)
+    {
+        float len = BayLength(b);
+        float ux = (b.X1 - b.X0) / len, uz = (b.Z1 - b.Z0) / len;
+        float t = (p.X - b.X0) * ux + (p.Y - b.Z0) * uz;
+        float off = (p.X - b.X0) * b.Nx + (p.Y - b.Z0) * b.Nz;
+        return t > 0.3f && t < len - 0.3f && MathF.Abs(off) < 0.3f;
+    }
+
     private static float BayLength((float X0, float Z0, float X1, float Z1, float Nx, float Nz) b) =>
         MathF.Sqrt((b.X1 - b.X0) * (b.X1 - b.X0) + (b.Z1 - b.Z0) * (b.Z1 - b.Z0));
 
@@ -423,7 +466,8 @@ public static class ShellPlans
                 }
             }
             bool netted = roll($"net{k}") < (site.Phase == SitePhase.ToppedOut ? 0.6 : 0.3);
-            for (int lift = 1; lift < plan.Levels.Count; lift++)
+            // a lift at every slab over the ground floor: a basement's are in the pit (#619)
+            for (int lift = plan.Basements + 1; lift < plan.Levels.Count; lift++)
             {
                 float y = plan.Levels[lift];
                 var (dx0, dz0) = Along(b, t0, ScaffoldIn);

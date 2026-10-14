@@ -60,6 +60,18 @@ public static class SitePlanSvg
         foreach (var b in entry.Boxes)
             if (b is { } o && o.Center.DistanceTo(c) < view && o.Center.DistanceTo(s.Box.Center) > 0.01f)
                 Poly(o.Corners(), "#c9b9a3", "#7d6e5c");
+        // the pit (#619): dug ground, the ramp's lane and the apron kept clear past its top
+        if (s.Pit is { } pit)
+        {
+            Poly(ConstructionSites.InPlan(s.Box, pit.Area).Corners(), "#8c6d4f", "#4a3a2a", 1.2f, "fill-opacity=\"0.55\"");
+            Poly(ConstructionSites.InPlan(s.Box, pit.Lane).Corners(), "#b08860", "#4a3a2a", 0.8f, "fill-opacity=\"0.7\"");
+            Poly(ConstructionSites.InPlan(s.Box, ConstructionSites.Apron(pit)).Corners(), "none", "#4a3a2a", 0.8f, "stroke-dasharray=\"3,3\"");
+            var (top, inner, down) = PitPlans.RampTop(pit);
+            Vector2 P(Vector2 q) => s.Box.Center + s.Box.AxisU * q.X + s.Box.AxisV * q.Y;
+            var mouth = (top + inner) / 2;
+            Line(P(mouth), P(mouth + down * 6f), "#4a3a2a", 2f);
+            Text(P(mouth + down * 3f) + new Vector2(0, -4), $"ramp, {pit.Basements} basement(s)", 9);
+        }
         Poly(s.Box.Corners(), "#dcdcdc", "#444", 1.5f, "stroke-dasharray=\"4,2\"");
         Text(s.Box.Center, "building", 11);
         foreach (var z in s.Zones)

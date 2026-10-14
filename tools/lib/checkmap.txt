@@ -52,6 +52,12 @@ src/Terrain/Construction/ quick --constructioncheck --systems ui
 # #608: a body walks every storey of hand-made sites' shells, on their real collision
 src/Terrain/Construction/ quick --shellwalkcheck --world flat
 src/Terrain/BuildingMeshBuilder quick --shellwalkcheck --world flat
+# #619: the pits of building sites, under the ground's real collision: rays, drops, an excavator down a ramp and backed out, a shell's basement walked
+src/Terrain/Construction/ quick --pitcheck --chunks fixture:site --traffic 0
+src/Terrain/ChunkManager quick --pitcheck --chunks fixture:site --traffic 0
+src/Terrain/TerrainMeshBuilder quick --pitcheck --chunks fixture:site --traffic 0
+src/Terrain/Fixture/     quick  --pitcheck --chunks fixture:site --traffic 0
+src/Player/Excavator      quick  --pitcheck --chunks fixture:site --traffic 0
 # #618: a tower crane climbed, worked on the real levers, a pallet hooked onto the top slab, let go and resumed, the remote
 src/Terrain/Construction/ quick --cranecheck --world flat --systems physics,ui
 src/Player/FootPlayer.Crane quick --cranecheck --world flat --systems physics,ui

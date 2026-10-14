@@ -99,6 +99,21 @@ public sealed record MachineSlot(MachineRole Role, int Ordinal, Vector2 At, floa
 public readonly record struct HoardingRun(Vector2 A, Vector2 B);
 
 /// <summary>
+/// The excavation a site is dug into (#619), in the SITE frame (x along the plan box's <c>AxisU</c>,
+/// z along <c>AxisV</c>, from its centre). <see cref="Area"/> is the hole: the plan box and a working
+/// margin round it, and along one wall the <see cref="Lane"/> the machines' ramp runs down (the
+/// street side's wherever the ground there is free; <see cref="Side"/> is that wall's outward normal),
+/// from its top at the <see cref="TopEnd"/> end of the lane (+1: the end at the lane's greater x or z)
+/// to the pit's floor. <see cref="Basements"/> storeys go below the ground.
+/// </summary>
+public sealed record SitePit(Rect2D Area, Rect2D Lane, bool LaneAlongX, int TopEnd, int Basements, Vector2 Side)
+{
+    /// <summary>How far the lane runs, m: the ramp and the flat at its foot.</summary>
+    public float LaneLength => LaneAlongX ? Lane.Width : Lane.Depth;
+    public float LaneWidth => LaneAlongX ? Lane.Depth : Lane.Width;
+}
+
+/// <summary>
 /// A building site (#606): one <see cref="BuildingKind.UnderConstruction"/> building and the ground
 /// round it, as <see cref="ConstructionSites.Plan"/> lays it out. Everything is in tile-local plan
 /// metres, heights above <see cref="Base"/>.
@@ -119,7 +134,8 @@ public sealed record ConstructionSite(
     IReadOnlyList<HoardingRun> Hoarding,
     IReadOnlyList<SiteZone> Zones,
     IReadOnlyList<CraneSpot> Cranes,
-    IReadOnlyList<MachineSlot> Machines)
+    IReadOnlyList<MachineSlot> Machines,
+    SitePit? Pit = null)
 {
     /// <summary>How high the building will stand when it is finished, m above <see cref="Base"/>.</summary>
     public float TargetHeight => TargetStoreys * StoreyHeight;
@@ -177,7 +193,149 @@ public static class ConstructionSites
     /// <summary>The jib lengths a crane is made in: a crane is ordered to reach, within these.</summary>
     public const float TowerJibMin = 25f, TowerJibMax = 75f, SelfErectingJibMin = 16f, SelfErectingJibMax = 40f;
 
+    /// <summary>The pit's working margin round the plan box (#619): the scaffolding stands in it, so it is <see cref="Scaffold"/>.</summary>
+    public const float PitMargin = Scaffold;
+    /// <summary>The ramp's lane along the front wall, m wide: a 20 t excavator's tracks, or the mini machines'.</summary>
+    public const float PitLane = 4.6f, PitLaneSmall = 3.4f;
+    /// <summary>A pit stays this far inside its tile: the next tile does not plan this one's sites, so it could not cut its share.</summary>
+    public const float PitSeam = 3f;
+    /// <summary>A shell keeps its pit open up to this many storeys; past that the trench round the basement is backfilled.</summary>
+    public const int PitOpenUpTo = 2;
+    /// <summary>Ground kept clear past the ramp's top, m: where a machine lines up to go down.</summary>
+    public const float RampApron = 6f;
+    /// <summary>
+    /// A site with a pit is at least this wide beside the building, m: a 20 t excavator (9.5 m long)
+    /// turns on the spot in the strip between the pit and the hoarding to go down the ramp; a mini one in less.
+    /// </summary>
+    public const float PitSide = 8f, PitSideSmall = 5.5f;
+    /// <summary>On a site with a pit, the way kept across the materials where there is room, m: a telehandler coming at a pallet.</summary>
+    public const float MaterialsApproach = 8f;
+
     public static bool IsSmall(PlanBox box, int targetStoreys) => box.Area < SmallArea && targetStoreys <= SmallStoreys;
+
+    /// <summary>
+    /// How many storeys a building has under the ground (#619). GWR does not say, so it is hashed: a
+    /// house has its cellar, a block one or two, a big block two (the car park and the cellars).
+    /// </summary>
+    public static int Basements(string key, PlanBox box, int targetStoreys)
+    {
+        if (IsSmall(box, targetStoreys)) return 1;
+        if (box.Area > 1500f || targetStoreys >= 6) return 2;
+        return Fnv.Unit(key + "|site|basements") < 0.4 ? 2 : 1;
+    }
+
+    /// <summary>A rectangle of a site's frame (x along the plan box's <c>AxisU</c>, z along <c>AxisV</c>, from its centre) in tile-local plan metres.</summary>
+    public static SiteRect InPlan(PlanBox box, Rect2D r) =>
+        new(box.Center + box.AxisU * ((r.X0 + r.X1) / 2) + box.AxisV * ((r.Z0 + r.Z1) / 2), box.AxisU, r.Width, r.Depth);
+
+    /// <summary>
+    /// The pit a site at its foundations, or a shell not past <see cref="PitOpenUpTo"/> storeys, is dug
+    /// into (#619), or null: a topped-out site, a pit that would cross its tile's edge
+    /// (<see cref="PitSeam"/>), or one whose ground has a road or another building on it.
+    /// </summary>
+    private static SitePit? Pit(string key, PlanBox box, SitePhase phase, int built, int target, bool small,
+        Vector2 front, Vector2 along, float gateAlong, Func<Vector2, bool> blocked)
+    {
+        if (phase != SitePhase.Foundations && !(phase == SitePhase.Shell && built <= PitOpenUpTo)) return null;
+        // the lane along the street side; where a road or a neighbour has that ground, along a side
+        // (the one toward the gate first, its ramp coming up at its street end), else the back.
+        // A lane too short for the pit's depth even at the steepest ramp made gives way to the next one
+        // long enough, then to the longest lane there is (a slope may still take the pit deeper, and
+        // PitPlans leaves out a ramp it cannot make)
+        int toGate = Math.Abs(gateAlong) > 0.5f ? Math.Sign(gateAlong) : 1;
+        float drop = Basements(key, box, target) * Storey + 0.3f;
+        SitePit? longest = null;
+        foreach (var side in new[] { front, along * toGate, -along * toGate, -front })
+        {
+            if (PitOn(key, box, built, target, small, side, front, along, gateAlong, blocked) is not { } pit) continue;
+            if (pit.LaneLength >= drop / PitPlans.MaxGrade + PitPlans.FootRoom) return pit;
+            if (longest == null || pit.LaneLength > longest.LaneLength) longest = pit;
+        }
+        return longest;
+    }
+
+    /// <summary>The pit with its ramp's lane along the wall facing <paramref name="side"/>, or null where it cannot be dug.</summary>
+    private static SitePit? PitOn(string key, PlanBox box, int built, int target, bool small, Vector2 side,
+        Vector2 front, Vector2 along, float gateAlong, Func<Vector2, bool> blocked)
+    {
+        float hw = box.Width / 2, hd = box.Depth / 2, m = PitMargin, lw = small ? PitLaneSmall : PitLane;
+        var area = new Rect2D(-hw - m, -hd - m, hw + m, hd + m);
+        float fu = side.Dot(box.AxisU), fv = side.Dot(box.AxisV);
+        bool alongX = Math.Abs(fv) > 0.5f;
+        Rect2D lane;
+        if (!alongX)
+        {
+            area = fu > 0 ? area with { X1 = area.X1 + lw } : area with { X0 = area.X0 - lw };
+            lane = fu > 0 ? new Rect2D(hw + m, area.Z0, hw + m + lw, area.Z1) : new Rect2D(-hw - m - lw, area.Z0, -hw - m, area.Z1);
+        }
+        else
+        {
+            area = fv > 0 ? area with { Z1 = area.Z1 + lw } : area with { Z0 = area.Z0 - lw };
+            lane = fv > 0 ? new Rect2D(area.X0, hd + m, area.X1, hd + m + lw) : new Rect2D(area.X0, -hd - m - lw, area.X1, -hd - m);
+        }
+        int top;
+        var laneAxis = alongX ? box.AxisU : box.AxisV;
+        if (Math.Abs(side.Dot(front)) > 0.5f)
+        {
+            // along the street side or the back: the ramp comes up at the end nearer the gate, so a
+            // machine from the gate has the shorter way round
+            int end = Math.Abs(gateAlong) > 0.5f ? Math.Sign(gateAlong) : Fnv.Unit(key + "|site|ramp") < 0.5 ? -1 : 1;
+            top = end * Math.Sign(along.Dot(laneAxis));
+        }
+        // along a side: it comes up at its street end, into the yard
+        else top = Math.Sign(front.Dot(laneAxis));
+
+        // inside the tile, with the seam margin
+        float max = (float)ChunkFormat.TileSizeM - PitSeam;
+        foreach (var c in InPlan(box, area).Corners())
+            if (c.X < PitSeam || c.Y < PitSeam || c.X > max || c.Y > max) return null;
+        // nothing dug under a road or a neighbour: the ring round the building, a metre apart
+        // (both edges sampled: a metre or less apart, from one to the other)
+        int nx = Math.Max(1, (int)MathF.Ceiling(area.Width)), nz = Math.Max(1, (int)MathF.Ceiling(area.Depth));
+        for (int i = 0; i <= nx; i++)
+            for (int j = 0; j <= nz; j++)
+            {
+                float px = area.X0 + area.Width * i / nx, pz = area.Z0 + area.Depth * j / nz;
+                if (Math.Abs(px) < hw + 0.5f && Math.Abs(pz) < hd + 0.5f) continue;
+                if (blocked(box.Center + box.AxisU * px + box.AxisV * pz)) return null;
+            }
+        return new SitePit(area, lane, alongX, top, Basements(key, box, target),
+            new Vector2(Math.Abs(fu) > 0.5f ? Math.Sign(fu) : 0, Math.Abs(fv) > 0.5f ? Math.Sign(fv) : 0));
+    }
+
+    /// <summary>Which wall a pit's lane is along, seen from the street: 0 the front, 1 a side, 2 the back; -1 no pit.</summary>
+    public static int LaneWall(SitePit? pit, PlanBox box, Vector2 front)
+    {
+        if (pit == null) return -1;
+        float d = pit.Side.Dot(new Vector2(front.Dot(box.AxisU), front.Dot(box.AxisV)));
+        return d > 0.5f ? 0 : d < -0.5f ? 2 : 1;
+    }
+
+    /// <summary>
+    /// Whether a site's materials have a way in for a machine (#619): a strip <see cref="MaterialsApproach"/>
+    /// deep on the side the pallets face (away from the building), inside the hoarding, out of the building's
+    /// scaffolding or its pit and clear of every other zone and machine. Where the yard has no room for one,
+    /// the pallets cannot be reached.
+    /// </summary>
+    public static bool MaterialsWayIn(ConstructionSite s)
+    {
+        if (s.Zones.FirstOrDefault(z => z.Kind == SiteZoneKind.Materials) is not { } m) return false;
+        var r = m.Rect;
+        var keep = s.Pit is { } p ? InPlan(s.Box, p.Area) : new SiteRect(s.Box.Center, s.Box.AxisU, s.Box.Width + 2 * Scaffold, s.Box.Depth + 2 * Scaffold);
+        // the side the pallets face: away from the building (the dressing turns them to)
+        int sign = (r.Center - s.Box.Center).Dot(r.AxisV) >= 0 ? 1 : -1;
+        var way = new SiteRect(r.Center + r.AxisV * (sign * (r.Depth + MaterialsApproach) / 2), r.AxisU, r.Width, MaterialsApproach - 0.1f);
+        return way.Corners().All(c => s.Area.Contains(c)) && !way.Overlaps(keep)
+            && !s.Zones.Any(z => z.Kind != SiteZoneKind.Materials && way.Overlaps(z.Rect))
+            && !s.Machines.Any(x => way.Contains(x.At));
+    }
+
+    /// <summary>The ground kept clear past a pit's ramp top, in the site frame.</summary>
+    public static Rect2D Apron(SitePit pit) => pit.LaneAlongX
+        ? pit.TopEnd > 0 ? new Rect2D(pit.Area.X1, pit.Lane.Z0, pit.Area.X1 + RampApron, pit.Lane.Z1)
+            : new Rect2D(pit.Area.X0 - RampApron, pit.Lane.Z0, pit.Area.X0, pit.Lane.Z1)
+        : pit.TopEnd > 0 ? new Rect2D(pit.Lane.X0, pit.Area.Z1, pit.Lane.X1, pit.Area.Z1 + RampApron)
+            : new Rect2D(pit.Lane.X0, pit.Area.Z0 - RampApron, pit.Lane.X1, pit.Area.Z0);
 
     /// <summary>
     /// Plans the site of one <see cref="BuildingKind.UnderConstruction"/> building, or null for any
@@ -189,7 +347,12 @@ public static class ConstructionSites
     /// Whether a plan point is on a road or inside another building. The site's own box is kept out
     /// by the planner itself; the callback may report it too.
     /// </param>
-    public static ConstructionSite? Plan(string key, Building b, PlanBox box, Vector2? street, Func<Vector2, bool> blocked)
+    /// <param name="undiggable">
+    /// Whether a plan point may not be dug for the pit (#619): <see cref="SiteObstacles.Undiggable"/>,
+    /// which keeps it off a road's sidewalks too. Null: <paramref name="blocked"/>.
+    /// </param>
+    public static ConstructionSite? Plan(string key, Building b, PlanBox box, Vector2? street, Func<Vector2, bool> blocked,
+        Func<Vector2, bool>? undiggable = null)
     {
         if (b.Kind != BuildingKind.UnderConstruction || box.Width < 1f || box.Depth < 1f) return null;
         double R(string q) => Fnv.Unit(key + "|site|" + q);
@@ -209,11 +372,22 @@ public static class ConstructionSites
         float hf = Math.Abs(front.Dot(box.AxisU)) > 0.5f ? box.Width / 2 : box.Depth / 2;
         float hs = Math.Abs(front.Dot(box.AxisU)) > 0.5f ? box.Depth / 2 : box.Width / 2;
 
+        // ---- the pit (#619): the ground dug out under the building, the ramp along the front --
+        var pit = Pit(key, box, phase, built, target, small, front, along,
+            street is { } sp ? (sp - box.Center).Dot(along) : 0f, undiggable ?? blocked);
+
         // ---- the site: deep at the front for the yard, narrow round the rest -------------------
         float size = Math.Clamp((box.Area - 150f) / 1500f, 0f, 1f);
-        float frontM = (small ? 8f : 14f + 8f * size) + 2f * (float)R("front-margin");
+        // the ramp's lane takes a strip of the yard on its wall's side: the site grows by as much there
+        int laneWall = LaneWall(pit, box, front);
+        float laneW = pit?.LaneWidth ?? 0f;
+        float frontM = (small ? 8f : 14f + 8f * size) + 2f * (float)R("front-margin") + (laneWall == 0 ? laneW : 0f);
         float sideM = 4.5f + 2f * (float)R("side-margin") + 3f * size;
-        float backM = 3f + (float)R("back-margin");
+        // a ramp along the front or the back comes up at a side: room there for a machine to come
+        // round and turn into it
+        if (laneWall is 0 or 2) sideM = Math.Max(sideM, small ? PitSideSmall : PitSide);
+        if (laneWall == 1) sideM += laneW;
+        float backM = 3f + (float)R("back-margin") + (laneWall == 2 ? laneW : 0f);
         var area = new SiteRect(box.Center + front * ((frontM - backM) / 2), along,
             2 * hs + 2 * sideM, 2 * hf + frontM + backM);
 
@@ -224,16 +398,21 @@ public static class ConstructionSites
         gateAlong = Math.Clamp(gateAlong, -area.Width / 2 + gateWidth / 2 + 1f, area.Width / 2 - gateWidth / 2 - 1f);
         var gate = box.Center + front * frontEdge + along * gateAlong;
 
-        var keepOut = new SiteRect(box.Center, box.AxisU, box.Width + 2 * Scaffold, box.Depth + 2 * Scaffold);
+        // the building and its scaffolding, or the whole pit with its ramp
+        var keepOut = pit == null
+            ? new SiteRect(box.Center, box.AxisU, box.Width + 2 * Scaffold, box.Depth + 2 * Scaffold)
+            : InPlan(box, pit.Area);
         // the way in, from the gate to the building, kept clear of everything
         float laneLength = frontM - Scaffold;
         var lane = new SiteRect(gate - front * (laneLength / 2), along, gateWidth, laneLength);
+        var clear = new List<SiteRect> { keepOut, lane };
+        if (pit != null) clear.Add(InPlan(box, Apron(pit)));
 
         var hoarding = Hoarding(area, gate, gateWidth, front, blocked);
 
         // ---- what stands in it ---------------------------------------------------------------
         // a 0.5 m grid on a house plot, 1 m on a block, 1.5 m on the biggest: a few thousand points each
-        var placer = new Placer(area, keepOut, lane, blocked, small ? 0.5f : area.Width * area.Depth > 6000f ? 1.5f : 1f);
+        var placer = new Placer(area, clear, blocked, small ? 0.5f : area.Width * area.Depth > 6000f ? 1.5f : 1f);
         var cranes = Cranes(key, box, phase, small, target * storey, front, placer);
 
         var zones = new List<SiteZone>();
@@ -241,6 +420,19 @@ public static class ConstructionSites
         // failing that it shrinks: a smaller heap is still a heap, none is a missing site
         void Zone(SiteZoneKind kind, float w, float d, Func<Vector2, float> score)
         {
+            // the materials (#619): with a way in kept for a machine on the side their pallets face,
+            // where the yard the machines left has room for one; on a site with a pit, the pit took the
+            // scaffolding's ground that way was. Failing that, where they stood before (decided with the
+            // user: the machines keep their room first; and every site, pit or not, the pallets facing
+            // the yard)
+            if (kind == SiteZoneKind.Materials)
+                foreach (float scale in new[] { 1f, 0.7f })
+                    foreach (var axis in new[] { front, along })
+                        if (placer.PlaceWithWay(w * scale, d * scale, MaterialsApproach, axis, score, box.Center) is { } r)
+                        {
+                            zones.Add(new SiteZone(kind, r));
+                            return;
+                        }
             foreach (float scale in new[] { 1f, 0.7f })
                 foreach (var axis in new[] { front, along })
                     if (placer.Place(w * scale, d * scale, axis, score) is { } r)
@@ -298,7 +490,7 @@ public static class ConstructionSites
         Zone(SiteZoneKind.Skips, small ? 4.4f : 9f, 2.6f, p => p.DistanceTo(gate) + 4f);
 
         return new ConstructionSite(key, phase, box, b.MinY, measured, storey, built, target,
-            area, front, gate, gateWidth, hoarding, zones, cranes, machines);
+            area, front, gate, gateWidth, hoarding, zones, cranes, machines, pit);
     }
 
     /// <summary>
@@ -479,7 +671,7 @@ public static class ConstructionSites
     /// fits wins, so a site costs a handful of obstacle tests per thing, not one per grid point;
     /// ties go to grid order (a stable sort), which is the same on every peer.
     /// </summary>
-    private sealed class Placer(SiteRect area, SiteRect keepOut, SiteRect lane, Func<Vector2, bool> blocked, float step)
+    private sealed class Placer(SiteRect area, IReadOnlyList<SiteRect> clear, Func<Vector2, bool> blocked, float step)
     {
         private readonly List<SiteRect> _taken = new();
         private readonly List<Vector2> _grid = Grid(area, step);
@@ -519,13 +711,59 @@ public static class ConstructionSites
             return null;
         }
 
+        /// <summary>
+        /// Like <see cref="Place"/>, with a way in <paramref name="way"/> m deep along its long side away
+        /// from the <paramref name="building"/> kept for a machine (#619: the dressing turns the materials'
+        /// pallets to face that way): the way may lie over the clear ways (the gate's lane, the ramp's
+        /// apron) but not over the first clear rectangle (the building or its pit), nothing placed, the
+        /// hoarding's line, a road or a building; it is kept as taken.
+        /// </summary>
+        public SiteRect? PlaceWithWay(float width, float depth, float way, Vector2 axis, Func<Vector2, float> score, Vector2 building)
+        {
+            var u = new Vector2(axis.Y, -axis.X);
+            var order = new int[_grid.Count];
+            var scores = new float[_grid.Count];
+            for (int k = 0; k < order.Length; k++)
+            {
+                order[k] = k;
+                scores[k] = score(_grid[k]);
+            }
+            Array.Sort(order, (a, b) => scores[a] != scores[b] ? scores[a].CompareTo(scores[b]) : a.CompareTo(b));
+            foreach (int k in order)
+            {
+                var r = new SiteRect(_grid[k], u, width, depth);
+                if (!Fits(r)) continue;
+                int sign = (r.Center - building).Dot(axis) >= 0 ? 1 : -1;
+                var w = new SiteRect(r.Center + axis * (sign * (depth + way) / 2), u, width, way);
+                if (!WayFits(w)) continue;
+                _taken.Add(r);
+                _taken.Add(w);
+                return r;
+            }
+            return null;
+        }
+
+        private bool WayFits(SiteRect w)
+        {
+            if (w.Overlaps(clear[0])) return false;
+            foreach (var t in _taken)
+                if (w.Overlaps(t)) return false;
+            var corners = w.Corners();
+            foreach (var p in corners)
+                if (!area.Contains(p, -Gap)) return false;
+            foreach (var p in corners)
+                if (blocked(p)) return false;
+            return !blocked(w.Center);
+        }
+
         /// <summary>Gives back a rectangle <see cref="Place"/> took, when the caller decided against it.</summary>
         public void Release(SiteRect r) => _taken.Remove(r);
 
         private bool Fits(SiteRect r)
         {
             // the cheap tests first: the obstacle callback is the costly one
-            if (r.Overlaps(keepOut) || r.Overlaps(lane)) return false;
+            foreach (var c in clear)
+                if (r.Overlaps(c)) return false;
             foreach (var t in _taken)
                 if (r.Overlaps(t, Gap)) return false;
             var corners = r.Corners();
@@ -566,14 +804,22 @@ public sealed class SiteObstacles
         {
             if (RoadFormat.IsAerial(s.Class)) continue;
             float half = s.Width * 0.5f;
+            float side = Math.Max(s.Attributes.Left.Reach, s.Attributes.Right.Reach);
             for (int k = 0; k + 1 < s.PointCount; k++)
             {
                 var a = new Vector2(s.Points[k * 3], s.Points[k * 3 + 2]);
                 var c = new Vector2(s.Points[k * 3 + 3], s.Points[k * 3 + 5]);
-                if (Distance(own.Center, a, c) < reach + half) _roads.Add((a, c, half));
+                if (Distance(own.Center, a, c) < reach + half + side)
+                {
+                    _roads.Add((a, c, half));
+                    _sides.Add(side);
+                }
             }
         }
     }
+
+    /// <summary>Each road piece's sidewalks, verges and paths beside its carriageway, m: its wider side.</summary>
+    private readonly List<float> _sides = new();
 
     public int Count => _boxes.Count + _roads.Count;
 
@@ -584,6 +830,22 @@ public sealed class SiteObstacles
             if (b.DistanceTo(p) < _clearance) return true;
         foreach (var (a, c, half) in _roads)
             if (Distance(p, a, c) < half + _clearance) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// Whether a plan point may not be dug (#619): in another building, or on a road or its
+    /// sidewalk, verge or path, which stand beside the carriageway and would be left over the pit.
+    /// </summary>
+    public bool Undiggable(Vector2 p)
+    {
+        foreach (var b in _boxes)
+            if (b.DistanceTo(p) < _clearance) return true;
+        for (int k = 0; k < _roads.Count; k++)
+        {
+            var (a, c, half) = _roads[k];
+            if (Distance(p, a, c) < half + _sides[k] + _clearance) return true;
+        }
         return false;
     }
 

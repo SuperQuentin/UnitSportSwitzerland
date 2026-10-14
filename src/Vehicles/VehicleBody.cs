@@ -430,7 +430,7 @@ public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity
 
         // the player's safety net, for vehicles: never under the terrain surface
         if (!inside && Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float ground) && GlobalPosition.Y < ground - 1f
-            && !Terrain.InTunnel(GlobalPosition) && !Terrain.FloorBelow(this, GlobalPosition, GetRid()))
+            && !Terrain.InTunnel(GlobalPosition) && !Terrain.InPit(GlobalPosition) && !Terrain.FloorBelow(this, GlobalPosition, GetRid()))
         {
             GlobalPosition = GlobalPosition with { Y = ground + 0.2f };
             Velocity = Velocity with { Y = 0f };
