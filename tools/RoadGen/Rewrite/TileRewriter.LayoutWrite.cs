@@ -19,7 +19,7 @@ public static partial class TileRewriter
     /// <summary>What the planner wrote, for the region report.</summary>
     public sealed class LayoutWriteStats
     {
-        public int Junctions, Skipped, Transitions, Pieces, Lines, Marks, Trimmed, Extended, Orphaned, CoreVertices, CapVertices, Bars, Refuges, Signs, Ramps, Signals, SignalsInvalid, Poles, CoreLines;
+        public int Junctions, Skipped, Transitions, Pieces, Lines, Marks, Trimmed, Extended, Orphaned, CoreVertices, CapVertices, Bars, Refuges, Signs, Ramps, Signals, SignalsInvalid, Poles, CoreLines, BikeCrossings, PathCrossings, PathsCarried;
         /// <summary>Written junctions with a transition (LV95), for the seam check and pictures.</summary>
         public readonly List<Vec2> WithTransitions = new();
         public readonly List<Vec2> OrphanedAt = new();
@@ -27,7 +27,7 @@ public static partial class TileRewriter
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
             $"    junction planner written (#818 phase 3): {Junctions:N0} junctions as cores, {Skipped:N0} left to the old layout ({string.Join(", ", Why.Select(kv => $"{kv.Key} {kv.Value}"))}); ")
-            + string.Create(CultureInfo.InvariantCulture, $"{Transitions:N0} transitions over {Pieces:N0} pieces, {Lines:N0} lines and {Marks:N0} marks; arms trimmed to their mouth {Trimmed:N0}, run on to it {Extended:N0}; pieces lost by a later cut {Orphaned:N0}{(OrphanedAt.Count > 0 ? " (at " + string.Join("; ", OrphanedAt.Take(6).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")}; cap vertices {CapVertices:N0} of the cores' {CoreVertices:N0}; exterior: {Bars:N0} bars, {Refuges:N0} refuges, {Signs:N0} signs, {Ramps:N0} crosswalks with lowered kerbs; lights {Signals:N0} ({SignalsInvalid:N0} plans invalid), {Poles:N0} poles, {CoreLines:N0} lines through the cores")
+            + string.Create(CultureInfo.InvariantCulture, $"{Transitions:N0} transitions over {Pieces:N0} pieces, {Lines:N0} lines and {Marks:N0} marks; arms trimmed to their mouth {Trimmed:N0}, run on to it {Extended:N0}; pieces lost by a later cut {Orphaned:N0}{(OrphanedAt.Count > 0 ? " (at " + string.Join("; ", OrphanedAt.Take(6).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")}; cap vertices {CapVertices:N0} of the cores' {CoreVertices:N0}; exterior: {Bars:N0} bars, {Refuges:N0} refuges, {Signs:N0} signs, {Ramps:N0} crosswalks with lowered kerbs; lights {Signals:N0} ({SignalsInvalid:N0} plans invalid), {Poles:N0} poles, {CoreLines:N0} lines through the cores, {BikeCrossings:N0} bike lanes through them, {PathCrossings:N0} path crossings ({PathsCarried:N0} ends carried to the kerb)")
             + (WithTransitions.Count > 0 ? "\n      with transitions at " + string.Join("; ", WithTransitions.Take(12).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) : "");
     }
 
@@ -117,7 +117,8 @@ public static partial class TileRewriter
         HashSet<RoadJunction> writtenCaps, Dictionary<TileId, List<RoadPaint>> paint, Dictionary<int, (double Station, bool Start, bool End)> paintStation,
         Dictionary<TileId, List<RoadTransition>> transitionsOf, Dictionary<TileId, List<RoadAreaProp>> areas, Dictionary<TileId, List<RoadPointProp>> signs,
         Dictionary<TileId, List<RoadSignal>> signals, Dictionary<TileId, List<RoadApproach>> approaches, Cantons? cantons, SignalStats signalStats, LayoutWriteStats stats,
-        Dictionary<TileId, Dictionary<RoadJunction, List<CornerPlanner.CornerInput>>> coreCorners)
+        Dictionary<TileId, Dictionary<RoadJunction, List<CornerPlanner.CornerInput>>> coreCorners, Dictionary<TileId, List<CornerPlanner.PathEnd>> pathEnds,
+        Dictionary<TileId, List<(RoadAreaProp Band, List<Vec2> Ring)>> bridges)
     {
         var net = result.Network;
         var mine = plans.Where(p => written.Contains(p.Node)).ToList();
@@ -434,8 +435,10 @@ public static partial class TileRewriter
         foreach (var jp in mine)
         {
             WriteExterior(jp, result, segmentOf, finalPieces, paint, areas, signs, signalStats, stats);
-            WriteCoreLines(jp, result, paint, stats);
-            if (jp.Lights) WriteSignals(jp, result, signals, approaches, cantons, signalStats, stats);
+            var capHere = capOfPlan.TryGetValue(jp, out var hc2) ? hc2.Cap : null;
+            WriteCoreLines(jp, result, capHere, paint, stats);
+            var plan = jp.Lights ? WriteSignals(jp, result, signals, approaches, cantons, signalStats, stats) : null;
+            WriteBikeCrossings(jp, result, segmentOf, finalPieces, plan, capHere, paint, bridges, pathEnds, stats);
         }
     }
 

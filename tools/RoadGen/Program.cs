@@ -147,6 +147,12 @@ else if (args.Contains("--signal-check"))
 else if (ArgValue("--test-region") is { } regionDir)
 {
     DebugJunctionArg();
+    if (ArgValue("--debug-street") is { } dbgStreet)
+    {
+        var en = dbgStreet.Split(',');
+        UnitSport.Tools.RoadGen.Network.StreetPlanner.Debug = UnitSport.Tools.RoadGen.Network.CornerPlanner.Debug =
+            (double.Parse(en[0], CultureInfo.InvariantCulture), double.Parse(en[1], CultureInfo.InvariantCulture));
+    }
     return UnitSport.Tools.RoadGen.TestRegion.SignalTestRegion.Run(regionDir, ArgValue("--temp"), Console.WriteLine,
         newJunctions: ArgValue("--junctions") is "new" or "write", writeJunctions: ArgValue("--junctions") == "write");
 }

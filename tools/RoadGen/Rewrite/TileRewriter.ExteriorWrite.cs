@@ -26,7 +26,7 @@ public static partial class TileRewriter
     /// as the old layout's), its poles at the kerb beside each cars' line (the second at the other kerb or on the refuge), the
     /// cars' line's middle per arm (<c>SGNL</c> stops), and each approach's lanes (<c>LANE</c>) as its transition lays them out.
     /// </summary>
-    private static void WriteSignals(JunctionPlan jp, RoadGenResult result, Dictionary<TileId, List<RoadSignal>> signals,
+    private static SignalPlan? WriteSignals(JunctionPlan jp, RoadGenResult result, Dictionary<TileId, List<RoadSignal>> signals,
         Dictionary<TileId, List<RoadApproach>> approaches, Cantons? cantons, SignalStats signalStats, LayoutWriteStats stats)
     {
         var net = result.Network;
@@ -51,7 +51,7 @@ public static partial class TileRewriter
                 CrossingM: (float)(mouth.CarriagewayWidth), Rank: (byte)Math.Clamp(info is { } i ? PriorityPlanner.Rank(i) / 4 : 1, 1, 255),
                 Banned: approach ? a.Wants.Banned : SignalMoves.None));
         }
-        if (arms.Count(x => x.In) < 2) return;
+        if (arms.Count(x => x.In) < 2) return null;
         string? canton = cantons?.CodeAt(jp.Centre.X, jp.Centre.Y);
         bool amber = PedestrianAmber(canton);
         uint seed = (uint)(long)Math.Round(jp.Centre.X) * 73856093u ^ (uint)(long)Math.Round(jp.Centre.Y) * 19349663u;
@@ -72,7 +72,7 @@ public static partial class TileRewriter
         if (plan.Validate() is { Count: > 0 })
         {
             stats.SignalsInvalid++;
-            return;
+            return null;
         }
         plan.ArrowPlates = ArrowPlates(canton);
 
@@ -132,6 +132,7 @@ public static partial class TileRewriter
             Get(approaches, home).Add(ApproachOf(exterior[k], at, stop, home, index, (byte)k, net));
         stats.Signals++;
         signalStats.Junctions++;
+        return plan;
     }
 
     /// <summary>
@@ -194,7 +195,7 @@ public static partial class TileRewriter
     /// line (the street's dashes), the edge guides (dashed across a joining road, solid else, none in towns), the left-turn, pair
     /// and through guides (dashed); on the core's surface, its heights blended from the mouths.
     /// </summary>
-    private static void WriteCoreLines(JunctionPlan jp, RoadGenResult result, Dictionary<TileId, List<RoadPaint>> paint, LayoutWriteStats stats)
+    private static void WriteCoreLines(JunctionPlan jp, RoadGenResult result, RoadJunction? cap, Dictionary<TileId, List<RoadPaint>> paint, LayoutWriteStats stats)
     {
         var core = jp.Core!;
         var home = TileId.FromLv95(jp.Centre.X, jp.Centre.Y);
@@ -217,7 +218,7 @@ public static partial class TileRewriter
             {
                 Shape = PaintShape.Polyline, Type = dash > 0 ? PaintType.WhiteDashed : PaintType.WhiteSolid, Rgba = PaintEmitter.White,
                 Width = PaintEmitter.LineWidth, Dash = dash, Gap = gap,
-                Vertices = RoadPaintGeometry.Simplify(Local(home, line.Points, p => HeightAt(anchors, p), 0f)),
+                Vertices = RoadPaintGeometry.Simplify(Local(home, line.Points, p => cap is null ? HeightAt(anchors, p) : CapHeightAt(cap, home, p), 0f)),
             });
             stats.CoreLines++;
         }

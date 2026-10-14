@@ -955,9 +955,15 @@ public static partial class TileRewriter
     private static (List<(RoadAreaProp Band, List<Vec2> Ring)> Bands, int SplitAt, Func<double, Vec2> KerbA, Func<double, Vec2> KerbB, List<CornerPlanner.PathEnd> Ends)?
         PathsToKerb(TileId home, Junction junction, List<RoadAreaProp>? pavement, List<int> joined, RoadSide sa, RoadSide sb,
             Vec2 ca, Vec2 da, Vec2 ua, double xa, Vec2 cb, Vec2 db, Vec2 ub, double xb, double reach, Func<Vec2, float> junctionHeight,
+            Func<Vec2, float>? streetA = null, Func<Vec2, float>? streetB = null, Func<Vec2, float>? roadHeight = null) =>
+        PathsToKerb(home, Carriageway(junction, home, pavement, joined), sa, sb, ca, da, ua, xa, cb, db, ub, xb, reach, junctionHeight, streetA, streetB, roadHeight);
+
+    /// <summary>The same, the carriageway given as a test (#818: a junction core's outline and the arms its path crosses).</summary>
+    private static (List<(RoadAreaProp Band, List<Vec2> Ring)> Bands, int SplitAt, Func<double, Vec2> KerbA, Func<double, Vec2> KerbB, List<CornerPlanner.PathEnd> Ends)?
+        PathsToKerb(TileId home, Func<Vec2, bool> road, RoadSide sa, RoadSide sb,
+            Vec2 ca, Vec2 da, Vec2 ua, double xa, Vec2 cb, Vec2 db, Vec2 ub, double xb, double reach, Func<Vec2, float> junctionHeight,
             Func<Vec2, float>? streetA = null, Func<Vec2, float>? streetB = null, Func<Vec2, float>? roadHeight = null)
     {
-        var road = Carriageway(junction, home, pavement, joined);
 
         // from the edge's point at offset o, inward along the arm, the first step on the carriageway (the line along the edge
         // itself is the outline's: 5 cm out)
