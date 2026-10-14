@@ -310,6 +310,17 @@ a topped-out site has none.
   and turn into the ramp; the pit and an `Apron` (6 m past the ramp's top) are kept clear of zones,
   machines and cranes. On a 24 x 15 m block the outside crane's spot is now in the pit, so its crane
   stands inside, on the slab.
+- **The materials' way in**: a telehandler came at the pallets (#615) over the scaffolding's ground,
+  which the pit has taken. On a site with a pit the materials are placed with a way in kept clear
+  across them (`MaterialsApproach`, 8 m, `Placer.PlaceWithWay`: over the gate's lane or the apron is
+  fine, never the pit), where the yard the machines left has room; failing that where they stood
+  before. **Decided with the user: the machines keep their room first.** Measured over the 159 real
+  pits (`MaterialsWayIn`): machines first then materials anywhere left 28 of 532 machines without
+  room, 19 sites without materials and 21 with materials no machine can come at; this order, 28, 19
+  and 17; materials first with their way, 54 machines (42 sites), 4 and 14. `tools/sitepalletnetcheck.sh`
+  moved from the foundations site it used (its pallets now against its pit, no way in) to a topped-out
+  one whose pallets have one (`--constructioncheck` prints which do), and its probe no longer comes
+  at a pallet over a pit (`InPit`: the pit is clear at a telehandler's height, and empty under it).
 
 ### The pit's dressing (`PitPlans`, pure, tier 0)
 
@@ -363,7 +374,7 @@ walls a heightfield cannot hold. The ground is cut from its own lattice and heig
 
 ### Checks
 
-- `PitTests` (tier 0, 28): which sites dig, the area and the lane, basements, seams, roads and sidewalks, the
+- `PitTests` (tier 0, 30): which sites dig, the area and the lane, basements, seams, roads and sidewalks, the
   side fallback, nothing of the yard in the pit or on the apron, the ramp in its lane, no ramp past
   36 %, the shell's basements and its doors at the bridges; the ground cut at strides 1 to 20 leaves
   exactly the tile less the pit as ground and the pit as floor, and the collision puts back every
@@ -384,7 +395,8 @@ walls a heightfield cannot hold. The ground is cut from its own lattice and heig
   (mean 3.2); ramps 25-36 %, 14 pits without one. Counting sidewalks took 22 pits away (they would
   have cut under one). Cost per pit: plan and lining ~1 ms (worst 26), holes ~1.6 ms, collision faces
   ~3.7 ms (worst 18); the stride-1 ground mesh cut ~62 ms a tile (worst 116), on the worker, on 1-2 %
-  of tiles (it was 120 ms before it passed over the rows no pit reaches).
+  of tiles (it was 120 ms before it passed over the rows no pit reaches). The yards: 28 of 532 machines
+  without room (20 sites), 19 sites without materials, 17 with materials no machine can reach.
 
 ### Not done
 

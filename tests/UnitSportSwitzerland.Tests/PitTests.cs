@@ -171,6 +171,20 @@ public class PitTests
             Assert.False(area.Contains(c.Base), "a crane's base in the pit");
     }
 
+    [Theory]
+    // a yard with room once the machines have theirs: the machines come first, decided with the user
+    // (a 24 x 15 m block or a house plot has none left, and its materials stand where they did before)
+    [InlineData(60f, 24f, 0f)]
+    [InlineData(32f, 20f, 1.1f)]
+    [InlineData(40f, 18f, 0.4f)]
+    public void The_materials_keep_a_machines_way_in_clear_of_the_pit_where_the_yard_has_room(float w, float d, float turn)
+    {
+        // the pit took the scaffolding's ground a telehandler used to come at the pallets from
+        var s = Site("2537_1152_41", w, d, 1.2f, 5, turn);
+        var materials = s.Zones.Single(z => z.Kind == SiteZoneKind.Materials).Rect;
+        Assert.True(ConstructionSites.MaterialsWayIn(s), $"no way in to the materials at {materials.Center}");
+    }
+
     /// <summary>The pit's plan on flat ground at 0, its floor as the builder works it out.</summary>
     private static (ConstructionSite Site, ShellPlan Shell, PitPlan Pit) Dig(ConstructionSite s, Func<float, float, float>? ground = null)
     {

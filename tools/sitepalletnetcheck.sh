@@ -8,8 +8,10 @@
 #   GODOT=<exe> [PORT=] [AT=E,N] tools/sitepalletnetcheck.sh      output in test_output/sitepalletnet_*.log
 . "$(dirname "$0")/lib/twoclient.sh" sitepalletnet
 PORT=${PORT:-7887}
-# a generated Foundations site with pallets of materials (--constructioncheck lists each site's)
-AT=${AT:-2588796,1118441}
+# a generated site whose pallets a machine can come at (--constructioncheck lists each site's pallets
+# and whether they have a way in): the foundations site it used, 2588796,1118441, has its pit (#619)
+# where a telehandler came from, and its yard no room left for another way in
+AT=${AT:-2591105,1117796}
 WORLD="--generated-world --traffic 0 --at $AT"
 tc_server 420 120 "$OUT/sitepalletnet_server.log" --server --port $PORT --generated-world --admin-password test
 tc_client 300 "$OUT/sitepalletnet_A.log" --connect 127.0.0.1:$PORT --name SiteA $WORLD --sitepalletnet A & A=$!

@@ -208,6 +208,8 @@ public static class ConstructionSites
     /// turns on the spot in the strip between the pit and the hoarding to go down the ramp; a mini one in less.
     /// </summary>
     public const float PitSide = 8f, PitSideSmall = 5.5f;
+    /// <summary>On a site with a pit, the way kept across the materials where there is room, m: a telehandler coming at a pallet.</summary>
+    public const float MaterialsApproach = 8f;
 
     public static bool IsSmall(PlanBox box, int targetStoreys) => box.Area < SmallArea && targetStoreys <= SmallStoreys;
 
@@ -309,6 +311,27 @@ public static class ConstructionSites
         return d > 0.5f ? 0 : d < -0.5f ? 2 : 1;
     }
 
+    /// <summary>
+    /// Whether a site's materials have a way in for a machine (#619): a strip <see cref="MaterialsApproach"/>
+    /// deep across the pallets, on one side or the other, out of the building or its pit and clear of
+    /// every other zone and machine. Where the yard has no room for one, the pallets of a site with a pit
+    /// cannot be reached.
+    /// </summary>
+    public static bool MaterialsWayIn(ConstructionSite s)
+    {
+        if (s.Zones.FirstOrDefault(z => z.Kind == SiteZoneKind.Materials) is not { } m) return false;
+        var r = m.Rect;
+        var keep = s.Pit is { } p ? InPlan(s.Box, p.Area) : new SiteRect(s.Box.Center, s.Box.AxisU, s.Box.Width, s.Box.Depth);
+        foreach (int sign in new[] { 1, -1 })
+        {
+            var way = new SiteRect(r.Center + r.AxisV * (sign * (r.Depth + MaterialsApproach) / 2), r.AxisU, r.Width, MaterialsApproach - 0.1f);
+            if (way.Overlaps(keep)) continue;
+            if (s.Zones.Any(z => z.Kind != SiteZoneKind.Materials && way.Overlaps(z.Rect)) || s.Machines.Any(x => way.Contains(x.At))) continue;
+            return true;
+        }
+        return false;
+    }
+
     /// <summary>The ground kept clear past a pit's ramp top, in the site frame.</summary>
     public static Rect2D Apron(SitePit pit) => pit.LaneAlongX
         ? pit.TopEnd > 0 ? new Rect2D(pit.Area.X1, pit.Lane.Z0, pit.Area.X1 + RampApron, pit.Lane.Z1)
@@ -399,6 +422,18 @@ public static class ConstructionSites
         // failing that it shrinks: a smaller heap is still a heap, none is a missing site
         void Zone(SiteZoneKind kind, float w, float d, Func<Vector2, float> score)
         {
+            // the materials on a site with a pit (#619): with a way in kept for a machine across the
+            // pallets, where the yard the machines left has room for one; the pit took the scaffolding's
+            // ground that way was. Failing that, where they stood before (decided with the user: the
+            // machines keep their room first)
+            if (kind == SiteZoneKind.Materials && pit != null)
+                foreach (float scale in new[] { 1f, 0.7f })
+                    foreach (var axis in new[] { front, along })
+                        if (placer.PlaceWithWay(w * scale, d * scale, MaterialsApproach, axis, score) is { } r)
+                        {
+                            zones.Add(new SiteZone(kind, r));
+                            return;
+                        }
             foreach (float scale in new[] { 1f, 0.7f })
                 foreach (var axis in new[] { front, along })
                     if (placer.Place(w * scale, d * scale, axis, score) is { } r)
@@ -675,6 +710,52 @@ public static class ConstructionSites
                 return r;
             }
             return null;
+        }
+
+        /// <summary>
+        /// Like <see cref="Place"/>, with a way in <paramref name="way"/> m deep along one of its long
+        /// sides kept for a machine (#619): the way may lie over the clear ways (the gate's lane, the
+        /// ramp's apron) but not over the first clear rectangle (the building or its pit), nothing
+        /// placed, the hoarding's line, a road or a building; it is kept as taken.
+        /// </summary>
+        public SiteRect? PlaceWithWay(float width, float depth, float way, Vector2 axis, Func<Vector2, float> score)
+        {
+            var u = new Vector2(axis.Y, -axis.X);
+            var order = new int[_grid.Count];
+            var scores = new float[_grid.Count];
+            for (int k = 0; k < order.Length; k++)
+            {
+                order[k] = k;
+                scores[k] = score(_grid[k]);
+            }
+            Array.Sort(order, (a, b) => scores[a] != scores[b] ? scores[a].CompareTo(scores[b]) : a.CompareTo(b));
+            foreach (int k in order)
+            {
+                var r = new SiteRect(_grid[k], u, width, depth);
+                if (!Fits(r)) continue;
+                foreach (int sign in new[] { 1, -1 })
+                {
+                    var w = new SiteRect(r.Center + axis * (sign * (depth + way) / 2), u, width, way);
+                    if (!WayFits(w)) continue;
+                    _taken.Add(r);
+                    _taken.Add(w);
+                    return r;
+                }
+            }
+            return null;
+        }
+
+        private bool WayFits(SiteRect w)
+        {
+            if (w.Overlaps(clear[0])) return false;
+            foreach (var t in _taken)
+                if (w.Overlaps(t)) return false;
+            var corners = w.Corners();
+            foreach (var p in corners)
+                if (!area.Contains(p, -Gap)) return false;
+            foreach (var p in corners)
+                if (blocked(p)) return false;
+            return !blocked(w.Center);
         }
 
         /// <summary>Gives back a rectangle <see cref="Place"/> took, when the caller decided against it.</summary>

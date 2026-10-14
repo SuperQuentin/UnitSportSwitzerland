@@ -88,7 +88,10 @@ public partial class SitePalletNetProbe : ChatProbe
         {
             var from = pallet.GlobalPosition + Vector3.Up * 1.2f + dir * 0.9f;
             var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(from, from + dir * 7.5f));
-            if (hit.Count == 0) { side = dir; break; }
+            // and ground to stand on: a site's pit (#619) is clear at that height, and empty under it
+            bool overPit = false;
+            for (float k = 0f; k <= 7.5f && !overPit; k += 0.5f) overPit = me.Terrain?.InPit(from + dir * k) == true;
+            if (hit.Count == 0 && !overPit) { side = dir; break; }
         }
         if (side is not { } outward) { Fail($"no clear side to come at {pallet.Id} from"); return; }
         var tines = th.TinesFrame.Origin;

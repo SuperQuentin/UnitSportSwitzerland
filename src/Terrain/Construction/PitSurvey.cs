@@ -36,6 +36,7 @@ public static class PitSurvey
         var costs = new ConcurrentBag<(double Dig, double Holes, double Faces)>();
         var pitTiles = new ConcurrentBag<TileId>();
         var samples = new ConcurrentBag<(string Key, double E, double N, float Depth, int Wall, bool Ramp)>();
+        var yards = new ConcurrentBag<(int Rolled, int Dropped, bool Materials, bool WayIn)>();
         var sw = System.Diagnostics.Stopwatch.StartNew();
         Parallel.ForEach(ids, new ParallelOptions { MaxDegreeOfParallelism = 4 }, id =>
         {
@@ -76,6 +77,9 @@ public static class PitSurvey
                 rows.Add((site.Phase, wanted, "dug", site.Pit.Basements, pit.TopOuter.Y - pit.Floor, pit.Grade, pit.RampLength, site.Pit.LaneLength,
                     ConstructionSites.LaneWall(site.Pit, site.Box, site.Front)));
                 any = true;
+                var roles = ConstructionSites.Roles(site.Phase, site.Small);
+                int rolled = Enumerable.Range(0, roles.Count).Count(k => roles[k].Chance >= 1 || Fnv.Unit($"{site.Key}|site|machine{k}") < roles[k].Chance);
+                yards.Add((rolled, rolled - site.Machines.Count, site.Zones.Any(z => z.Kind == SiteZoneKind.Materials), ConstructionSites.MaterialsWayIn(site)));
                 var c = site.Box.Center;
                 samples.Add((site.Key, id.MinE + c.X, id.MaxN - c.Y, pit.TopOuter.Y - pit.Floor, ConstructionSites.LaneWall(site.Pit, site.Box, site.Front), pit.HasRamp));
             }
@@ -117,6 +121,11 @@ public static class PitSurvey
         }
         if (timed.Count > 0)
             GD.Print($"[pitsurvey] the ground mesh cut at stride 1: {timed.Average():F0} ms a tile (worst {timed.Max():F0}) over {timed.Count} tiles");
+        // what the pit costs the yard: machines that found no room, materials with none
+        var y = yards.ToList();
+        if (y.Count > 0)
+            GD.Print($"[pitsurvey] the yards of the {y.Count} pits: {y.Sum(t => t.Dropped)} machine(s) of {y.Sum(t => t.Rolled)} found no room (on {y.Count(t => t.Dropped > 0)} sites), "
+                + $"{y.Count(t => !t.Materials)} without their materials, {y.Count(t => t.Materials && !t.WayIn)} with materials no machine can come at");
         // a few to go and look at: the deepest, and one with its lane along each wall
         var seen = samples.ToList();
         foreach (var s in seen.OrderByDescending(s => s.Depth).Take(2).Concat(seen.GroupBy(s => s.Wall).Select(g => g.OrderBy(s => s.Key, StringComparer.Ordinal).First())))
