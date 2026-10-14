@@ -211,9 +211,54 @@ public static class DoorCheck
         }
 
         failures += Garages();
+        failures += FacedDoors();
 
         GD.Print($"[doorcheck] RESULT: {(failures == 0 ? "ok" : $"FAILED ({failures})")}");
         return failures == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// E works the door the player faces (#822): a real building site in Graubünden (LV95
+    /// 2742681/1254064) has its toilet cabins 1.4 m in front of the office door, their doors facing
+    /// it, 2 m lower down the slope. Standing at the office door, a cabin's door is the nearer one,
+    /// so the nearest-door pick opened the toilet and the office could never be entered. The three
+    /// doors and the doorstep as that site's probe logged them, in a stand-in tile.
+    /// </summary>
+    private static int FacedDoors()
+    {
+        int failures = 0;
+        void Expect(bool ok, string what)
+        {
+            if (!ok) failures++;
+            GD.Print($"[doorcheck] {(ok ? "ok  " : "FAIL")} {what}");
+        }
+
+        var tile = new TileId(-2, -2);
+        var outOffice = new Vector3(-0.48452148f, 0, -0.87477934f);
+        DoorSpot Spot(int slot, Vector3 at, Vector3 outward, float width) =>
+            new(0, at, outward, width, 2.0f) { Slot = slot, Kind = BuildingKind.UnderConstruction };
+        DoorIndex.SetTile(tile, Vector3.Zero,
+        [
+            Spot(0, new Vector3(681.026f, 651.8086f, -63.925232f), outOffice, 0.9f),
+            Spot(1, new Vector3(680.8676f, 649.7846f, -65.346436f), -outOffice, 0.8f),
+            Spot(2, new Vector3(679.7741f, 649.7846f, -64.74078f), -outOffice, 0.8f),
+        ]);
+        var player = new Vector3(680.4446f, 652.0358f, -64.97497f);
+        const float reach = 1.6f;
+        string? Slot(DoorIndex.Entry? e) => e?.Key.Slot.ToString();
+        try
+        {
+            Expect(Slot(DoorIndex.NearestEntrance(player, reach)) == "1",
+                $"the nearest door to the office's doorstep is a cabin's (slot {Slot(DoorIndex.NearestEntrance(player, reach))}): the case still bites");
+            Expect(Slot(DoorIndex.FacedEntrance(player, -outOffice, reach)) == "0",
+                $"looking at the office, E works the office door (slot {Slot(DoorIndex.FacedEntrance(player, -outOffice, reach))})");
+            Expect(Slot(DoorIndex.FacedEntrance(player, outOffice, reach)) is "1" or "2",
+                $"turned round to the cabins, E works a cabin's (slot {Slot(DoorIndex.FacedEntrance(player, outOffice, reach))})");
+            Expect(Slot(DoorIndex.FacedEntrance(player, Vector3.Up, reach)) == "1",
+                "looking straight up, the nearest door, as before");
+        }
+        finally { DoorIndex.ClearTile(tile); }
+        return failures;
     }
 
     /// <summary>

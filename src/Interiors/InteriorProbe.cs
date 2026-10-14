@@ -926,6 +926,10 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                 Check(!_player.Indoors, $"walked out while {door} swung shut{(swinging ? "" : " (it had shut first)")}");
                 Check(_player.GlobalPosition.Y > InteriorManager.InteriorBaseY + 1000f,
                     $"on the street, not in the void under it (y {_player.GlobalPosition.Y:F1})");
+                // turned round to the door, as someone would before E: E works the door faced, and
+                // walking out faces whatever is across the street (a site's toilet cabins, #822)
+                var face = -_door.Outward;
+                _player.LookYaw = Mathf.Atan2(-face.X, -face.Z);
                 _shut = 4;
                 _shutT = 0;
                 return null;

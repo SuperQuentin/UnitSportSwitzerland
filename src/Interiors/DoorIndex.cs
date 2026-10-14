@@ -152,6 +152,28 @@ public static class DoorIndex
         Nearest(at, reach, _ => true, deeper);
 
     /// <summary>
+    /// As <see cref="NearestEntrance"/>, but the nearest door whose facade the player faces
+    /// (<paramref name="look"/>, flattened) wins over a nearer one at their back: two doors facing
+    /// each other across a gap, a building site's toilet cabins a step in front of its office on a
+    /// real site (#822). With no such door in reach, the nearest one.
+    /// </summary>
+    public static Entry? FacedEntrance(Vector3 at, Vector3 look, float reach, Func<Entry, float>? deeper = null)
+    {
+        Entry? faced = null, any = null;
+        float facedD = reach, anyD = reach;
+        foreach (var doors in Tiles.Values)
+            foreach (var e in doors)
+            {
+                var (d, rejected) = Measure(e, at, deeper);
+                if (rejected != null) continue;
+                if (d < anyD) { anyD = d; any = e; }
+                // facing into it: the look against the door's outward normal
+                if (d < facedD && look.X * e.Outward.X + look.Z * e.Outward.Z < 0f) { facedD = d; faced = e; }
+            }
+        return faced ?? any;
+    }
+
+    /// <summary>
     /// The nearest door a vehicle drives through (<see cref="DoorSpot.Vehicle"/>)
     /// within <paramref name="reach"/> in front of it, at most <paramref name="halfAngle"/>
     /// radians off square: a vehicle heading at a garage or a barn, not driving past one.
