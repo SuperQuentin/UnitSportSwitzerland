@@ -16,6 +16,17 @@
 
 src/Net/                 quick  --interestcheck
 src/Player/FootPlayer.cs  quick  --vrposecheck
+# #833: first person keeps your figure for the shadow and the mirrors
+src/Player/FootPlayer.cs  quick  --ownbodycheck --world flat
+src/Player/FootPlayer.Fight quick --ownbodycheck --world flat
+src/Player/OwnBodyCheck   quick  --ownbodycheck --world flat
+src/Avatar/OwnBody       quick  --ownbodycheck --world flat
+src/Avatar/CarRig        quick  --ownbodycheck --world flat
+src/Avatar/HeavyRig      quick  --ownbodycheck --world flat
+src/Items/HeldItemVisual quick  --ownbodycheck --world flat
+src/Items/ItemEvents     quick  --ownbodycheck --world flat
+src/Interiors/WallMirror quick  --ownbodycheck --world flat
+src/Interiors/DoorPortals quick --ownbodycheck --world flat
 src/XR/                  quick  --vrposecheck
 src/Audio/Cd/            quick  --beatcheck
 src/Audio/               quick  --earscheck --world fixture --view third

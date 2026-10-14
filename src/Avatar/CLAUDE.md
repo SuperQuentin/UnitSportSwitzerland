@@ -17,6 +17,7 @@ touches its topic; search with `grep -ril <word> docs/notes/avatar`.
 - (`VehicleDeck`/`DeckBuilder`, a vehicle's walkable deck built with its model: see the player note `walk-aboard`)
 - `heavy-cabin` — Truck cabs and bus driver's place and saloon (#157): hollow cabs with panes, derived seat and flat wheel (hands' reach at `MaxGrip`), air gauge and gear display, binnacle square to the dials, 2+2 bus seats, seat anchors for passengers
 - `aircraft-cockpit` (player) — `AircraftCockpit` + `CockpitLayout` per airliner, `InstrumentCanvas` atlas, `CockpitInstruments` pure math (tier 0), `HumanMeshBuilder.AppendPilot`; builders keep only the static boxes
+- `own-body-from-eye` — First person keeps your third-person figure (on foot, a cockpit's head) on `OwnBody.Layer`: eye cameras cull it, mirrors keep it; a `ShadowsOnly` twin on layer 1 casts the shadow (Godot drops shadows of culled layers); `--ownbodycheck` (#833)
 - `cockpit-kit` — Wheel, column, dials, needles, lamps, pedals and mirrors of cars and heavies come from `CockpitKit` + a per-vehicle `CockpitSpec`; never copy them into a cabin; no static field built from another partial's statics (#221)
 - `item-arm-poses` — Held items pose the arms (ItemArmPose, replicated ItemAction) and the held mesh follows the hand basis
 - `body-shape` — The figure's body (#394): builds (`Physique`), lofted trunk (`Torso`, spine 0-4) and head (`Head`), limb `Zones`/`LimbBand`, hands, boots, hair and `HairCover`; no allocation per rebuild; `--bodies` pages

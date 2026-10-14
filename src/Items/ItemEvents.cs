@@ -138,7 +138,8 @@ public partial class ItemEvents : Node
     /// <summary>Where a held item's business end is: the hand plus <paramref name="reach"/> along the aim, else in front of the camera.</summary>
     public static Vector3 MuzzleOf(FootPlayer player, Vector3 direction, float reach = 0.55f)
     {
-        if (player.HandLocal is { } hand)
+        // a first-person shot leaves from the eye it was aimed with, not the unseen figure's hand (#833)
+        if (player.HandLocal is { } hand && (!player.BodyFromEye || XR.XrSession.Active))
             return (player.GlobalTransform * hand).Origin + direction * reach;
         var cam = player.Camera;
         return cam.GlobalPosition + direction * (reach + 0.2f) - cam.GlobalTransform.Basis.Y * 0.15f;

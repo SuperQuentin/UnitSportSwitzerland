@@ -287,10 +287,13 @@ public partial class FootPlayer
         {
             Rotation = new Vector3(0, _viewYaw, 0);
             ApplyFootPose();
+            SeeBodyFromEye(true);
             return true;
         }
         if (_walker != null) _walker.Visible = true;
+        // side-on, out of the head: the camera sees the body even in first person (#833)
         ApplyFootPose();
+        SeeBodyFromEye(false);
         if (_camera == null) return true;
 
         var other = _fightOpponent?.GlobalPosition ?? GlobalPosition - Basis.Z * 2f;

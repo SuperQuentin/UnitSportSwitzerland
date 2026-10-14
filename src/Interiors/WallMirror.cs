@@ -18,8 +18,8 @@ public partial class WallMirror : Node3D
     public static readonly Vector2 Size = new(0.5f, 0.6f);
     private const int Pixels = 96;
     private const float Range = 5f, Far = 40f;
-    /// <summary>What it sees: the world and figures (your own VR body included), not the held-item viewmodel nor door portals' quads.</summary>
-    private const uint Cull = 0xFFFFFu & ~Items.HeldItemVisual.ViewmodelLayer & ~DoorPortals.AllQuadLayers
+    /// <summary>What it sees: the world and figures (your own first-person body included), not the held-item viewmodel nor door portals' quads.</summary>
+    public const uint Cull = 0xFFFFFu & ~Items.HeldItemVisual.ViewmodelLayer & ~DoorPortals.AllQuadLayers
                               | XR.XrSession.SpectatorOnlyLayer;
 
     private static readonly List<WallMirror> All = new();

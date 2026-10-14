@@ -121,8 +121,9 @@ public static class XrSession
     public const uint HeadsetOnlyLayer = 1u << 14;
 
     /// <summary>
-    /// Drawn only for the monitor's third-person camera: the VR player's own body on foot, which
-    /// first person otherwise does not draw at all. The headset and first-person views leave it out.
+    /// The player's own figure while seen from its eye (<c>Avatar.OwnBody.Layer</c>, #833): on foot,
+    /// a cockpit's head. The eye's cameras leave it out (the headset, the desktop camera, the
+    /// monitor's first-person view, door portals); mirrors and the monitor's third-person camera keep it.
     /// </summary>
     public const uint SpectatorOnlyLayer = 1u << 15;
 

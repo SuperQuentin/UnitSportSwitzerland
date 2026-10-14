@@ -370,6 +370,10 @@ void fragment() {{
         if (_player.HandLocal is { } hand && any)
         {
             _inHand.Visible = true;
+            // in a first-person figure's hand it is for its mirror image only: the eye has the
+            // viewmodel (#833). A VR hand is seen from the eye: there it is the item.
+            uint layers = _player.BodyFromEye && !XR.XrSession.Active ? Avatar.OwnBody.Layer : Avatar.OwnBody.World;
+            if (_inHand.Layers != layers) Avatar.OwnBody.SetLayers(_inHand, layers);
             // the wrist is the end of the arm, so the grip sits a hand's length past it
             _inHand.Scale = Vector3.One * ItemScale;
             var basis = vrGun && XR.XrSession.ItemHand is { } aim ? GlobalBasis.Inverse() * aim.Basis.Orthonormalized() : hand.Basis;
@@ -489,7 +493,7 @@ void fragment() {{
             _sparkles?.Off();
             return;
         }
-        if (_sparkles == null) _inHand.AddChild(_sparkles = new RadioSparkles());
+        if (_sparkles == null) _inHand.AddChild(_sparkles = new RadioSparkles { Layers = _inHand.Layers });
         _sparkles.Step(true, RadioGroove.Of(play.CdId, play.StartedAt, Net.ClockSync.ServerNow), dt);
     }
 
