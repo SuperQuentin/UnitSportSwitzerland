@@ -26,7 +26,26 @@ public static class SiteShowcase
 
     [Showcase("Terrain", "Building site")]
     private static IEnumerable<(string, Func<Node3D>)> Sites() =>
-        Buildings.Select(b => (b.Name, (Func<Node3D>)(() => Site(b.W, b.D, b.H, b.Floors))));
+        Buildings.Select(b => (b.Name, (Func<Node3D>)(() => Site(b.W, b.D, b.H, b.Floors))))
+            .Append(("a pallet on a crane's hook (#618)", HookedPallet));
+
+    /// <summary>A crane's hook block with a pallet of bricks in its four slings, as a worked crane carries one (#618).</summary>
+    private static Node3D HookedPallet()
+    {
+        var material = StyleKit.Material(MaterialRole.Prop);
+        var root = new Node3D { Name = "HookedPallet" };
+        float hookY = CraneControl.SlingHang;
+        root.AddChild(new MeshInstance3D { Name = "Hook", Mesh = ChunkNode.ToPropMesh(SiteShellBuilder.MeshOf(CranePlans.Hook()), material), Position = new Vector3(0, hookY, 0) });
+        root.AddChild(new MeshInstance3D
+        {
+            Name = "Slings", Mesh = ChunkNode.ToPropMesh(SiteCranes.SlingMesh(), material),
+            Position = new Vector3(0, hookY - CraneControl.HookBottom, 0), Scale = new Vector3(1, CraneControl.Slings, 1),
+        });
+        var pallet = Items.PalletNode.Carried(Items.Pallets.LoadOf(0.95f, Items.Pallets.NarrowDepth));
+        pallet.Position = new Vector3(0, Items.Pallets.Seat, 0);
+        root.AddChild(pallet);
+        return root;
+    }
 
     /// <summary>A flat-topped prism, as swissBUILDINGS3D draws an <c>Im Bau</c> volume, turned a little.</summary>
     private static Building Prism(Vector2 c, float w, float d, float h, byte floors)

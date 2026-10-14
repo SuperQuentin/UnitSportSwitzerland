@@ -24,16 +24,47 @@ public static class CranePlans
         to.Add(new ShellBox(new Vector3(Math.Min(x0, x1), Math.Min(y0, y1), Math.Min(z0, z1)),
             new Vector3(Math.Max(x0, x1), Math.Max(y0, y1), Math.Max(z0, z1)), part, solid));
 
+    /// <summary>Half the mast's side, m.</summary>
+    public static float MastHalf(CraneSpot c) => 0.8f * Scale(c);
+
+    /// <summary>The top of the base, where the mast stands, over the ground, m.</summary>
+    public static float FootHeight(CraneSpot c) => c.Kind == CraneKind.Tower ? 0.8f : 0.5f;
+
+    /// <summary>A climber on the ladder stands this far out from the mast's centre, m (#618).</summary>
+    public static float LadderOut(CraneSpot c) => MastHalf(c) + 0.45f;
+
+    /// <summary>How high up the ladder, over the base, the climb ends at the cab's door, m (#618).</summary>
+    public static float LadderTop(CraneSpot c) => MastHeight(c) - FootHeight(c) - 2.4f;
+
+    /// <summary>Where the operator stands in the cab, in the pivot's frame (#618): the jib ahead, the windows round.</summary>
+    public static readonly Vector3 CabSeat = new(1.9f, -0.6f, -0.6f);
+
+    /// <summary>
+    /// The mast's side the ladder goes up, in the site frame (#618): the one facing the site's
+    /// front, where the yard and the gate are, snapped to the mast's sides (x or z).
+    /// </summary>
+    /// <param name="front">The site's front in its own frame (along AxisU, along AxisV).</param>
+    public static Vector2 LadderFace(Vector2 front) =>
+        Math.Abs(front.X) >= Math.Abs(front.Y) ? new Vector2(Math.Sign(front.X) is 0 ? 1 : Math.Sign(front.X), 0)
+        : new Vector2(0, Math.Sign(front.Y));
+
+    /// <summary>The side the radio remote's box hangs on, a quarter turn round from the ladder's (#618).</summary>
+    public static Vector2 RemoteFace(Vector2 ladder) => new(-ladder.Y, ladder.X);
+
+    /// <summary>The remote's box over the ground, m: at hand height.</summary>
+    public const float RemoteHeight = 1.1f;
+
     /// <summary>The base and the lattice mast, in the site frame, on the ground at <paramref name="ground"/>.</summary>
     /// <param name="at">The mast's centre in the site frame (x, z).</param>
-    public static List<ShellBox> Mast(CraneSpot c, Vector2 at, float ground)
+    /// <param name="face">The ladder's side (<see cref="LadderFace"/>): a tower crane's ladder, and every crane's remote box a side round.</param>
+    public static List<ShellBox> Mast(CraneSpot c, Vector2 at, float ground, Vector2 face)
     {
         var boxes = new List<ShellBox>();
         float k = Scale(c), s = 1.6f * k, half = s / 2, top = ground + MastHeight(c);
         float baseSide = c.Kind == CraneKind.Tower ? ConstructionSites.TowerBase : ConstructionSites.SelfErectingBase;
         float b = baseSide / 2;
         // the cross base on its ballast blocks
-        float foot = ground + (c.Kind == CraneKind.Tower ? 0.8f : 0.5f);
+        float foot = ground + FootHeight(c);
         Box(boxes, at.X - b, ground - 0.1f, at.Y - b, at.X + b, foot, at.Y + b, ShellPart.Concrete, true);
         // the four chords, and the bracing every 2 m, as a lattice reads from the street
         float chord = 0.14f * k;
@@ -50,6 +81,31 @@ public static class CranePlans
         }
         // what a body or a helicopter meets: the mast as one solid box (drawn as its lattice)
         Box(boxes, at.X - half, foot, at.Y - half, at.X + half, top, at.Y + half, ShellPart.Invisible, true);
+
+        // #618: the ladder up the face towards the yard (a tower crane's: a self-erecting one has no
+        // cab), two stiles and a rung every 0.35 m, from the base to the cab's door
+        var side = new Vector2(-face.Y, face.X);
+        Vector2 On(float outward, float across) => at + face * outward + side * across;
+        void Upright(Vector2 p, float w, float y0, float y1, ShellPart part) =>
+            Box(boxes, p.X - w, y0, p.Y - w, p.X + w, y1, p.Y + w, part, false);
+        if (c.Kind == CraneKind.Tower)
+        {
+            float ladderTop = foot + LadderTop(c) + 1.2f;
+            Upright(On(half + 0.12f, -0.25f), 0.03f, foot, ladderTop, ShellPart.Tube);
+            Upright(On(half + 0.12f, 0.25f), 0.03f, foot, ladderTop, ShellPart.Tube);
+            for (float y = foot + 0.3f; y < ladderTop; y += 0.35f)
+            {
+                var a = On(half + 0.12f, -0.25f);
+                var z = On(half + 0.12f, 0.25f);
+                Box(boxes, Math.Min(a.X, z.X) - 0.02f, y, Math.Min(a.Y, z.Y) - 0.02f, Math.Max(a.X, z.X) + 0.02f, y + 0.04f,
+                    Math.Max(a.Y, z.Y) + 0.02f, ShellPart.Tube, false);
+            }
+        }
+        // and the radio remote's box a side round, at hand height (every crane: a remote works any)
+        var remote = RemoteFace(face);
+        var box = at + remote * (half + 0.12f);
+        Box(boxes, box.X - 0.18f, ground + RemoteHeight - 0.22f, box.Y - 0.18f, box.X + 0.18f, ground + RemoteHeight + 0.22f, box.Y + 0.18f,
+            ShellPart.Cab, false);
         return boxes;
     }
 

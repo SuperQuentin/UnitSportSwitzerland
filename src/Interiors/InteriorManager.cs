@@ -1075,6 +1075,9 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
                 text = InputHints.Prompt(PlayerInput.InteractMount, _doors.ContainsKey(door) ? "Close the door" : "Open the door");
             // a building site's skip or materials faced outdoors (#627): E searches it before a door
             if (!p.Indoors && Loot.LootService.Instance?.YardPromptFor(p) is { } yard) text = yard;
+            // a building site crane's ladder, its remote's box, or the climb itself (#618): E takes
+            // them before a skip's search, as TryInteract does
+            if (!p.Indoors && p.CranePrompt() is { } crane) text = crane;
             // a Battle Royale crate at your feet comes first, as E opens it first (#194)
             if (BattleRoyale.BrCrates.Instance?.PromptFor(p) is { } crate) text = crate;
         }

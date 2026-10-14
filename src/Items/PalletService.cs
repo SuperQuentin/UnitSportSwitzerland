@@ -707,6 +707,8 @@ public partial class PalletService : Node
                 RpcId(other, MethodName.Took, id, (int)load, peer);
         // the server's own copy, and offline the client's: the same call
         Took(id, load, peer);
+        // a crane's hook (#618) carries it on the crane's own record, which everyone is told
+        Terrain.Construction.CraneService.Instance?.Hooked(peer, Pallets.Carried(load), (float)at.Alt);
     }
 
     private void ServeDrop(long peer, byte load, double e, double n, double alt, float yaw)
@@ -727,6 +729,7 @@ public partial class PalletService : Node
             foreach (int other in Multiplayer.GetPeers())
                 RpcId(other, MethodName.Dropped, id, e, n, alt, yaw, (int)load, peer);
         Dropped(id, e, n, alt, yaw, load, peer);
+        Terrain.Construction.CraneService.Instance?.Hooked(peer, 0, float.NaN);
     }
 
     private void Refuse(long peer, string id, string why)
@@ -744,8 +747,11 @@ public partial class PalletService : Node
     {
         if (!Online) return null;
         if (GetNodeOrNull<FootPlayer>("../Players/" + peer) is not { } body) return "Nobody there.";
-        if (CarryingOf(body.Ride, body.Anim) is not { } carrying) return "Not on a machine with forks.";
-        var on = Pallets.LoadCarried(carrying);
+        // working a crane (#618): its hook is the carrier, on the crane's record
+        int? carrying = Terrain.Construction.CraneService.Instance?.HookOf(peer) is { } hook ? hook.Carrying
+            : CarryingOf(body.Ride, body.Anim);
+        if (carrying == null) return "Not on a machine with forks.";
+        var on = Pallets.LoadCarried(carrying.Value);
         return on == load ? null : load == null ? "The forks are full." : "That is not on the forks.";
     }
 
@@ -766,6 +772,10 @@ public partial class PalletService : Node
     private bool InReach(long peer, GlobalPos at, float more = 0f)
     {
         if (!Online) return true;
+        // a crane's operator reaches with its hook (#618): the pallet hangs a sling's length under it
+        if (Terrain.Construction.CraneService.Instance?.HookOf(peer) is { } crane)
+            return crane.Hook is { } hook
+                   && hook.DistanceTo(at with { Alt = at.Alt + Terrain.Construction.CraneControl.SlingHang - 0.5 }) <= Reach + more;
         if (GetNodeOrNull<FootPlayer>("../Players/" + peer) is not { } body) return false;
         return body.Global.DistanceTo(at) <= Reach + more;
     }

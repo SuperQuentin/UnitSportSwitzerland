@@ -2519,6 +2519,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (Ragdolled || Downed) return true;
         // in a fist fight (#495) the hands are busy
         if (Fighting) return true;
+        // on a crane's ladder nothing; at its controls, let go of them (#618)
+        if (_craneAt != CraneSeat.None) return TryCrane() || true;
         // a walkable vehicle's passenger stands up into the aisle; any other gets out
         if (RidingWith != 0) return StandUp() || TryLeaveSeat();
         if (_ride is { IsVehicle: true })
@@ -2576,6 +2578,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         // swimming beside a steamer's gangway: up its ladder onto the deck (#303)
         if (TryClimbAboard()) return true;
+        // a building site crane's ladder or its remote's box (#618)
+        if (TryCrane()) return true;
 
         // a farm stand at hand, or a specialty buyer's weighbridge with its goods in the pack (#494)
         if (Farming.FarmSales.TryInteract(this)) return true;
@@ -3277,7 +3281,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
 
-        if (@event.IsActionPressed(PlayerInput.CameraToggle) && !@event.IsEcho())
+        // at a crane's controls the view switch is its hook camera (#618, WorkCrane)
+        if (@event.IsActionPressed(PlayerInput.CameraToggle) && !@event.IsEcho() && !CraneWorking)
         {
             ToggleView();
             GetViewport().SetInputAsHandled();
@@ -3433,6 +3438,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         // an excavator digging has the right stick for its boom and bucket (#611): the mouse still looks
         if (_ride is Excavator { Digging: true } or WheelLoader { Working: true } or Telehandler { Working: true }) return;
+        // and a crane's operator hoists with it (#618)
+        if (CraneWorking) return;
         var look = PlayerInput.LookRate;
         // on foot a steering wheel turns the view; mounted or seated it only steers
         if (_ride == null && RidingWith == 0) look.X += PlayerInput.WheelLookRate;

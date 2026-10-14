@@ -268,7 +268,7 @@ same view 25 s apart (the hook down on the bricks), and at 22:30 (the lamps lit)
 ### Not done
 
 - The hook's load is drawn whenever the pose says loaded: nothing is taken from the materials.
-- Operating a crane is #618.
+- Operating a crane is #618: `terrain/crane-operation` (the mast's ladder and remote box, `World/Cranes`, the hook on pallets).
 
 A site's tipper and mixer (#613) park on it as the lorries they are: `player/trucks-buses`, "Site lorries".
 
