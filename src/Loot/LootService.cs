@@ -6,6 +6,8 @@ using UnitSport.Core;
 using UnitSport.Interiors;
 using UnitSport.Items;
 using UnitSport.Player;
+using UnitSport.Terrain;
+using UnitSport.Terrain.Construction;
 
 namespace UnitSport.Loot;
 
@@ -122,6 +124,15 @@ public partial class LootService : Node
     /// <summary>A hall's own pallet that a forklift has taken from where the plan put it (#583).</summary>
     public static bool Moved(string key, int furniture) => UnitSport.Items.PalletService.Instance?.IsTakenHall(key, furniture) == true;
 
+    /// <summary>
+    /// A building site's pallet of bricks or cement (#615) that a machine has taken from where the
+    /// dressing put it (<c>&lt;building&gt;:c&lt;slot&gt;</c>): as a hall's, it holds nothing any more (#627).
+    /// </summary>
+    public static bool Moved(in YardStock c) =>
+        c.Pallet && UnitSport.Items.PalletService.Instance?.IsTaken(Pallets.SiteId(c.Building, c.Slot)) == true;
+
+    private static readonly Func<YardStock, bool> MovedYard = c => Moved(c);
+
     /// <summary>The bank's teller desk the player is facing, if any (#213).</summary>
     public static int NearestCounter(FootPlayer p, InteriorLayout layout, InteriorNode node) =>
         layout.IsBank ? NearestOf(p, layout, node, t => t == FurnitureType.TellerDesk) : -1;
@@ -217,6 +228,76 @@ public partial class LootService : Node
         if (Online) RpcId(1, MethodName.RequestContents, layout.Key, i);
         else ServeContents(1, layout.Key, i);
         return true;
+    }
+
+    // ---- client: a building site's skips and materials, outdoors (#627) ------------------------
+
+    /// <summary>The tiles' files, for the building sites' yard containers (#627): the world's chunk source.</summary>
+    public Func<IChunkSource?>? Source { get; set; }
+
+    /// <summary>Client: the yard containers round the player, planned per tile on a worker.</summary>
+    private readonly YardIndex _yards = new();
+    /// <summary>The yard container open in the panel, when <see cref="_open"/> is one.</summary>
+    private YardStock _openYard;
+
+    /// <summary>
+    /// The yard container a player on foot outdoors faces (#627), if any: a skip, the rebar, a
+    /// pallet still where the dressing put it, a formwork stack, the rings.
+    /// </summary>
+    public bool NearestYard(FootPlayer p, out YardStock found)
+    {
+        found = default;
+        if (p.Indoors || p.Ride != RideKind.OnFoot || Source?.Invoke() is not { } source) return false;
+        var at = p.Global;
+        _yards.Around(source, at.E, at.N);
+        var look = -p.Camera.GlobalTransform.Basis.Z;
+        // the world's x is east and its z south, as a tile's frame
+        return _yards.Nearest(at.E, at.N, (float)at.Alt, new Vector2(look.X, look.Z), MovedYard, out found);
+    }
+
+    /// <summary>The prompt line for the yard container the player faces outdoors (#627), or null.</summary>
+    public string? YardPromptFor(FootPlayer p)
+    {
+        if (_ui?.IsOpen == true || _lockUi?.IsOpen == true || _simonUi?.IsOpen == true || _counterUi?.IsOpen == true) return null;
+        // a machine aimed at wins, as E gets into it first
+        if (Vehicles.VehicleReach.Current != null || !NearestYard(p, out var c)) return null;
+        string what = SiteLoot.Describe(c.Kind);
+        bool empty = _seenEmpty.TryGetValue((c.Building, c.Index), out long ep) && ep == LootTables.Epoch(c.Building, Now);
+        return InputHints.Prompt(PlayerInput.InteractMount, empty ? $"Search the {what} (empty)" : $"Search the {what}");
+    }
+
+    /// <summary>
+    /// E outdoors at a building site's skip or materials (#627): opens it in the loot panel, or shuts
+    /// the yard panel open. False when there is none faced.
+    /// </summary>
+    public bool TrySearchYard(FootPlayer p)
+    {
+        if (_ui?.IsOpen == true && _open is { } o && SiteLoot.IsYard(o.Furniture)) { Close(); return true; }
+        if (_ui?.IsOpen == true || !NearestYard(p, out var c)) return false;
+        Close();
+        _open = (c.Building, c.Index);
+        _openYard = c;
+        _searcher = p;
+        _openStacks = new();
+        _openMask = 0;
+        _waiting = true;
+        _ui?.Open(SiteLoot.Describe(c.Kind));
+        Play(SfxSynth.Tick, 0.6f);
+        if (Online) RpcId(1, MethodName.RequestContents, c.Building, c.Index);
+        else ServeContents(1, c.Building, c.Index);
+        return true;
+    }
+
+    /// <summary>The yard containers planned round the player so far (for the probes).</summary>
+    public IEnumerable<YardStock> YardsAround => _yards.All;
+
+    /// <summary>
+    /// For the probes: asks the server for a stack of a yard container this period with no panel
+    /// open and none of the client's own reach checks, as a cheating client would.
+    /// </summary>
+    public void TakeUnchecked(string key, int index, int stack)
+    {
+        if (Online) RpcId(1, MethodName.RequestTake, key, index, LootTables.Epoch(key, Now), stack);
     }
 
     // ---- client: a Battle Royale crate in the same panel (#194) --------------------------------
@@ -355,6 +436,13 @@ public partial class LootService : Node
             || InteriorManager.Instance?.Current?.Key != pick.Key)) StopPicking();
         if (_open == null) return;
         var p = _searcher;
+        // a building site's skip or materials (#627): out of doors, and within reach of its edge
+        if (SiteLoot.IsYard(_open.Value.Furniture))
+        {
+            if (p == null || !IsInstanceValid(p) || !p.IsViewing || p.Indoors
+                || SiteLoot.EdgeDistance(_openYard, p.Global.E, p.Global.N) > SiteLoot.CloseReach) Close();
+            return;
+        }
         var interior = InteriorManager.Instance;
         if (p == null || !IsInstanceValid(p) || !p.IsViewing || interior?.Current?.Key != _open.Value.Key || interior.CurrentNode == null)
         {
@@ -431,6 +519,13 @@ public partial class LootService : Node
     private void Contents(string key, int furniture, long epoch, int[] ids, int[] counts, int mask)
     {
         if (_open is not { } open || open.Key != key || open.Furniture != furniture) return;
+        if (mask == RefusedMask)
+        {
+            // the server says this player is not at that yard container (#627): nothing to show
+            Close();
+            Items?.Ui.Toast("Too far away to search that.");
+            return;
+        }
         _waiting = false;
         _openEpoch = epoch;
         _openStacks = ids.Zip(counts, (id, c) => new ItemStack((ItemId)id, c)).ToList();
@@ -484,6 +579,11 @@ public partial class LootService : Node
 
     private async void ServeContents(long peer, string key, int furniture)
     {
+        if (SiteLoot.IsYard(furniture))
+        {
+            ServeYardContents(peer, key, furniture);
+            return;
+        }
         var layout = await LayoutFor(peer, key);
         if (layout == null || furniture < 0 || furniture >= layout.Furniture.Count) return;
         long epoch = LootTables.Epoch(key, Now);
@@ -506,6 +606,11 @@ public partial class LootService : Node
 
     private async void ServeTake(long peer, string key, int furniture, long epoch, int index)
     {
+        if (SiteLoot.IsYard(furniture))
+        {
+            ServeYardTake(peer, key, furniture, epoch, index);
+            return;
+        }
         var layout = await LayoutFor(peer, key);
         if (layout == null || furniture < 0 || furniture >= layout.Furniture.Count || Moved(key, furniture)) return;
         long now = LootTables.Epoch(key, Now);
@@ -542,6 +647,129 @@ public partial class LootService : Node
         _openMask |= mask;
         if (!OpenContents().Any()) _seenEmpty[(key, furniture)] = epoch;
         _ui?.Refresh();
+    }
+
+    // ---- server: a building site's yard (#627) ---------------------------------------------------
+
+    /// <summary>Server: the sites' yards it has worked out, by building key (a few per player).</summary>
+    private readonly Dictionary<string, YardStock[]> _siteYards = new();
+    private readonly Dictionary<string, Task<YardStock[]>> _siteYardsLoading = new();
+    /// <summary>A peer this far from a yard container (LV95) hears that something was taken from it.</summary>
+    private const double YardTellReach = 60;
+
+    /// <summary>
+    /// The yard container <paramref name="index"/> of the site <paramref name="key"/>, from the tile's
+    /// own files (<see cref="SitePlans.YardAt"/>): nothing the asker sends says where it is or what
+    /// it is. Known ones answer synchronously, the client's own index first, so an offline "take
+    /// all" takes every stack in one loop (<c>offline-take-all-needs-sync-layout</c>).
+    /// </summary>
+    private Task<YardStock?> YardFor(string key, int index)
+    {
+        if (_yards.TryFind(key, index, out var mine)) return Task.FromResult<YardStock?>(mine);
+        if (_siteYards.TryGetValue(key, out var known)) return Task.FromResult(Find(known, index));
+        return Resolve();
+
+        async Task<YardStock?> Resolve()
+        {
+            if (Source?.Invoke() is not { } source) return null;
+            if (!_siteYardsLoading.TryGetValue(key, out var task))
+                _siteYardsLoading[key] = task = Task.Run(() => SitePlans.YardAt(source, key));
+            YardStock[] all;
+            try { all = await task; }
+            catch (Exception e)
+            {
+                GD.PushError($"[loot] yard {key}: {e.Message}");
+                all = [];
+            }
+            _siteYardsLoading.Remove(key);
+            if (_siteYards.Count > 256) _siteYards.Clear();
+            _siteYards[key] = all;
+            return Find(all, index);
+        }
+
+        static YardStock? Find(YardStock[] all, int index)
+        {
+            foreach (var c in all)
+                if (c.Index == index) return c;
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Server: whether a peer may search a yard container: outdoors (in no interior), and its body
+    /// within reach of the container's edge (<see cref="SiteLoot.InServerReach"/>), as a Battle
+    /// Royale crate checks the body. Offline there is no one to check.
+    /// </summary>
+    private bool AtYard(long peer, in YardStock c)
+    {
+        if (!Online) return true;
+        if (InteriorManager.Instance is { } interiors && interiors.SpaceOf(peer).Length > 0) return false;
+        if (GetNodeOrNull<FootPlayer>("../Players/" + peer) is not { } body) return false;
+        var at = body.Global;
+        return SiteLoot.InServerReach(c, at.E, at.N, at.Alt);
+    }
+
+    /// <summary>
+    /// The take mask of a <c>Contents</c> reply that refuses a yard container (#627): the asker is
+    /// not at it, or it is none. The panel closes. No RPC of its own, so the node's RPC list is unchanged.
+    /// </summary>
+    public const int RefusedMask = -1;
+
+    private void RefuseYard(long peer, string key, int index, string why)
+    {
+        GD.Print($"[loot] {why}: peer {peer}, yard container {key} #{index}");
+        Reply(peer, MethodName.Contents, key, index, LootTables.Epoch(key, Now), Array.Empty<int>(), Array.Empty<int>(), RefusedMask);
+    }
+
+    private async void ServeYardContents(long peer, string key, int index)
+    {
+        if (await YardFor(key, index) is not { } c) { RefuseYard(peer, key, index, "search refused, no such container"); return; }
+        if (!AtYard(peer, c)) { RefuseYard(peer, key, index, "search refused, not at it"); return; }
+        long epoch = LootTables.Epoch(key, Now);
+        // a pallet a machine has moved (#615) holds nothing: what it held was where it stood
+        if (Moved(c))
+        {
+            Reply(peer, MethodName.Contents, key, index, epoch, Array.Empty<int>(), Array.Empty<int>(), 0);
+            return;
+        }
+        var stacks = LootTables.YardContents(key, index, c.Kind, epoch);
+        Reply(peer, MethodName.Contents, key, index, epoch,
+            stacks.Select(s => (int)s.Id).ToArray(), stacks.Select(s => s.Count).ToArray(), MaskOf(key, index, epoch));
+    }
+
+    private async void ServeYardTake(long peer, string key, int index, long epoch, int stack)
+    {
+        if (await YardFor(key, index) is not { } c) { RefuseYard(peer, key, index, "take refused, no such container"); return; }
+        if (!AtYard(peer, c)) { RefuseYard(peer, key, index, "take refused, not at it"); return; }
+        long now = LootTables.Epoch(key, Now);
+        if (Moved(c))
+        {
+            Reply(peer, MethodName.Contents, key, index, now, Array.Empty<int>(), Array.Empty<int>(), 0);
+            return;
+        }
+        var stacks = LootTables.YardContents(key, index, c.Kind, now);
+        int mask = MaskOf(key, index, now);
+        // restocked since the panel opened, or someone else was quicker: send what is there now
+        if (epoch != now || stack < 0 || stack >= stacks.Count || (mask & (1 << stack)) != 0)
+        {
+            Reply(peer, MethodName.Contents, key, index, now,
+                stacks.Select(s => (int)s.Id).ToArray(), stacks.Select(s => s.Count).ToArray(), mask);
+            return;
+        }
+        SetMask(key, index, now, mask | (1 << stack));
+        Reply(peer, MethodName.Granted, key, index, stack, (int)stacks[stack].Id, stacks[stack].Count);
+        GD.Print($"[loot] {key} #{index} ({c.Kind}): stack {stack} ({stacks[stack].Id} x{stacks[stack].Count}) to peer {peer}");
+
+        // anyone else outdoors near the site may have the same container open: tell them it is gone
+        if (!Online) return;
+        var interiors = InteriorManager.Instance;
+        var here = new GlobalPos(c.E, c.N, c.Bottom);
+        foreach (int other in Multiplayer.GetPeers())
+        {
+            if (other == peer || interiors?.SpaceOf(other) is { Length: > 0 }) continue;
+            if (GetNodeOrNull<FootPlayer>("../Players/" + other) is not { } body || body.Global.HorizontalDistanceTo(here) > YardTellReach) continue;
+            RpcId(other, MethodName.Taken, key, index, now, mask | (1 << stack));
+        }
     }
 
     // ---- gun lockers and safes (#165) -------------------------------------------------------------

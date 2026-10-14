@@ -65,6 +65,34 @@ public static class SitePlans
         }
     }
 
+    /// <summary>A tile's yard containers (#627), every site's, for a client's index round the player.</summary>
+    public static YardStock[] YardOfTile(IChunkSource source, TileId id) => YardOf(source, id, null);
+
+    /// <summary>
+    /// The server's answer to "what is yard container <paramref name="building"/>, index i" (#627):
+    /// the site's containers worked out from the tile's own files, as every peer lists them, so
+    /// nothing the asker sends decides where one is or what it is. Empty if the building is no site.
+    /// </summary>
+    public static YardStock[] YardAt(IChunkSource source, string building) =>
+        BuildingKey.TryParse(building, out var key) ? YardOf(source, key.Tile, building) : [];
+
+    /// <summary>
+    /// The yard containers (<see cref="SiteLoot"/>) of a tile's sites, or of one site only
+    /// (<paramref name="only"/>), on the ground the dressing stands on. Off the main thread.
+    /// </summary>
+    private static YardStock[] YardOf(IChunkSource source, TileId id, string? only)
+    {
+        var tile = source.LoadBuildingsAsync(id).GetAwaiter().GetResult();
+        if (tile is not { Buildings.Count: > 0 } || !HasSite(tile)) return [];
+        var roads = source.LoadRoadsAsync(id).GetAwaiter().GetResult();
+        var grid = source.LoadChunkAsync(id).GetAwaiter().GetResult();
+        var all = new List<YardStock>();
+        foreach (var site in For(tile, roads))
+            if (only == null || site.Key == only)
+                all.AddRange(SiteLoot.Of(site, SiteShellBuilder.Dressing(tile, site, grid), tile.Id.MinE, tile.Id.MaxN));
+        return all.ToArray();
+    }
+
     /// <summary>
     /// The server's answer to "which pallet is <c>&lt;building&gt;:c&lt;slot&gt;</c>": worked out from the
     /// tile's own files as every peer draws it, so nothing the asker sends decides where it is or

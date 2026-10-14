@@ -177,7 +177,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Farming.FarmMarket.StandInFromArgs(local, origin);
 
         // loot in those interiors: the server rolls it and remembers what was taken
-        Loot.LootService.Create(this);
+        Loot.LootService.Create(this).Source = () => source;
         // shops and vending machines (#273): the server keeps what was sold and charges the card
         Loot.ShopService.Create(this);
         // farm fields (#494): the server keeps the worked cells (user://farm) and checks the work

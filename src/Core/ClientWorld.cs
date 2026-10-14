@@ -726,7 +726,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // reconnect, and the player it acts on is resolved per frame like the picker's.
         var inventory = Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
             || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Interiors.LiftSyncProbe.Role != null || Interiors.HallCarProbe.Role != null || Loot.BankProbe.Role != null
-            || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.ExcavatorNetProbe.Role != null || Items.SitePalletNetProbe.Role != null || Terrain.Construction.CraneNetProbe.Role != null || Items.BedNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
+            || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.ExcavatorNetProbe.Role != null || Items.SitePalletNetProbe.Role != null || Loot.YardLootNetProbe.Role != null || Terrain.Construction.CraneNetProbe.Role != null || Items.BedNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
             || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
@@ -765,6 +765,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.ExcavatorNetProbe.Role != null) AddChild(new Player.ExcavatorNetProbe(items));
         if (Items.SitePalletNetProbe.Role != null) AddChild(new Items.SitePalletNetProbe(items));
         if (Terrain.Construction.CraneNetProbe.Role != null) AddChild(new Terrain.Construction.CraneNetProbe(items));
+        if (Loot.YardLootNetProbe.Role != null) AddChild(new Loot.YardLootNetProbe(items));
         if (Items.BedNetProbe.Role != null) AddChild(new Items.BedNetProbe(items));
         if (Player.FreighterNetProbe.Role != null) AddChild(new Player.FreighterNetProbe(items));
         if (Player.An124NetProbe.Role != null) AddChild(new Player.An124NetProbe(items));
@@ -873,7 +874,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             structures.GroundAt = p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null;
         }
 
-        if (Systems.On(Systems.Loot)) Loot.LootService.Create(this).Items = items;
+        if (Systems.On(Systems.Loot))
+        {
+            var loot = Loot.LootService.Create(this);
+            loot.Items = items;
+            // a building site's skips and materials (#627) are worked out from the tiles
+            loot.Source = () => _chunks?.Source;
+        }
         // shops and PAUSA vending machines (#273): same node path as the server's, which keeps the sold counts
         if (Systems.On(Systems.Loot)) Loot.ShopService.Create(this).Items = items;
         // selling farm produce (#494): World/FarmSales and World/FarmStands, same paths as the server's; offline this client plays it
