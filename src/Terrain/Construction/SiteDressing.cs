@@ -113,13 +113,19 @@ public static class SiteDressings
             float cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
             float g = ground(cx, cz);
             bool longX = x1 - x0 >= z1 - z0;
+            float length = longX ? x1 - x0 : z1 - z0, width = longX ? z1 - z0 : x1 - x0;
+            // the materials keep their low side (the rebar) toward the building and face the yard, where
+            // a machine comes at their pallets from (#619): w then runs from the zone's side nearer the
+            // building, whichever of its sides that is (the building's middle is the frame's origin)
+            bool flip = zone.Kind == SiteZoneKind.Materials && (longX ? cz : cx) < 0;
+            float W(float w) => flip ? width - w : w;
             // a box in the zone's own terms: u along its long side, w across, from its low corner
             void ZoneBox(float u0, float y0, float w0, float u1, float y1, float w1, ShellPart part, bool solid)
             {
+                (w0, w1) = (Math.Min(W(w0), W(w1)), Math.Max(W(w0), W(w1)));
                 if (longX) Box(x0 + u0, y0, z0 + w0, x0 + u1, y1, z0 + w1, part, solid);
                 else Box(x0 + w0, y0, z0 + u0, x0 + w1, y1, z0 + u1, part, solid);
             }
-            float length = longX ? x1 - x0 : z1 - z0, width = longX ? z1 - z0 : x1 - x0;
             switch (zone.Kind)
             {
                 case SiteZoneKind.Office:
@@ -183,7 +189,7 @@ public static class SiteDressings
                             {
                                 float deck = depth >= Items.Pallets.SquareDepth - 0.01f ? Items.Pallets.SquareDepth : Items.Pallets.NarrowDepth;
                                 // runners along the zone's long side, the deck centred in the slot
-                                float mu = u + Items.Pallets.Length / 2, mw = (w0 + w1) / 2;
+                                float mu = u + Items.Pallets.Length / 2, mw = W((w0 + w1) / 2);
                                 var centre = longX ? new Vector3(x0 + mu, g, z0 + mw) : new Vector3(x0 + mw, g, z0 + mu);
                                 plan.Pallets.Add(new SitePalletSpot(i, centre, longX, Items.Pallets.LoadOf(bricks ? 0.95f : 0.8f, deck)));
                             }

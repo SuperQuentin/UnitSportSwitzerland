@@ -88,6 +88,9 @@ public partial class SitePalletNetProbe : ChatProbe
         {
             var from = pallet.GlobalPosition + Vector3.Up * 1.2f + dir * 0.9f;
             var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(from, from + dir * 7.5f));
+            // nothing low either: the materials' rebar bundle is 0.35 m high (#619 turns it to the building)
+            var low = from - Vector3.Up * 0.95f;
+            if (hit.Count == 0) hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(low, low + dir * 7.5f));
             // and ground to stand on: a site's pit (#619) is clear at that height, and empty under it
             bool overPit = false;
             for (float k = 0f; k <= 7.5f && !overPit; k += 0.5f) overPit = me.Terrain?.InPit(from + dir * k) == true;

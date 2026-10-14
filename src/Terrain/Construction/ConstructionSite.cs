@@ -313,7 +313,7 @@ public static class ConstructionSites
 
     /// <summary>
     /// Whether a site's materials have a way in for a machine (#619): a strip <see cref="MaterialsApproach"/>
-    /// deep across the pallets, on one side or the other, out of the building or its pit and clear of
+    /// deep on the side the pallets face (away from the building), out of the building or its pit and clear of
     /// every other zone and machine. Where the yard has no room for one, the pallets of a site with a pit
     /// cannot be reached.
     /// </summary>
@@ -322,14 +322,11 @@ public static class ConstructionSites
         if (s.Zones.FirstOrDefault(z => z.Kind == SiteZoneKind.Materials) is not { } m) return false;
         var r = m.Rect;
         var keep = s.Pit is { } p ? InPlan(s.Box, p.Area) : new SiteRect(s.Box.Center, s.Box.AxisU, s.Box.Width, s.Box.Depth);
-        foreach (int sign in new[] { 1, -1 })
-        {
-            var way = new SiteRect(r.Center + r.AxisV * (sign * (r.Depth + MaterialsApproach) / 2), r.AxisU, r.Width, MaterialsApproach - 0.1f);
-            if (way.Overlaps(keep)) continue;
-            if (s.Zones.Any(z => z.Kind != SiteZoneKind.Materials && way.Overlaps(z.Rect)) || s.Machines.Any(x => way.Contains(x.At))) continue;
-            return true;
-        }
-        return false;
+        // the side the pallets face: away from the building (the dressing turns them to)
+        int sign = (r.Center - s.Box.Center).Dot(r.AxisV) >= 0 ? 1 : -1;
+        var way = new SiteRect(r.Center + r.AxisV * (sign * (r.Depth + MaterialsApproach) / 2), r.AxisU, r.Width, MaterialsApproach - 0.1f);
+        return !way.Overlaps(keep) && !s.Zones.Any(z => z.Kind != SiteZoneKind.Materials && way.Overlaps(z.Rect))
+            && !s.Machines.Any(x => way.Contains(x.At));
     }
 
     /// <summary>The ground kept clear past a pit's ramp top, in the site frame.</summary>
@@ -429,7 +426,7 @@ public static class ConstructionSites
             if (kind == SiteZoneKind.Materials && pit != null)
                 foreach (float scale in new[] { 1f, 0.7f })
                     foreach (var axis in new[] { front, along })
-                        if (placer.PlaceWithWay(w * scale, d * scale, MaterialsApproach, axis, score) is { } r)
+                        if (placer.PlaceWithWay(w * scale, d * scale, MaterialsApproach, axis, score, box.Center) is { } r)
                         {
                             zones.Add(new SiteZone(kind, r));
                             return;
@@ -713,12 +710,13 @@ public static class ConstructionSites
         }
 
         /// <summary>
-        /// Like <see cref="Place"/>, with a way in <paramref name="way"/> m deep along one of its long
-        /// sides kept for a machine (#619): the way may lie over the clear ways (the gate's lane, the
-        /// ramp's apron) but not over the first clear rectangle (the building or its pit), nothing
-        /// placed, the hoarding's line, a road or a building; it is kept as taken.
+        /// Like <see cref="Place"/>, with a way in <paramref name="way"/> m deep along its long side away
+        /// from the <paramref name="building"/> kept for a machine (#619: the dressing turns the materials'
+        /// pallets to face that way): the way may lie over the clear ways (the gate's lane, the ramp's
+        /// apron) but not over the first clear rectangle (the building or its pit), nothing placed, the
+        /// hoarding's line, a road or a building; it is kept as taken.
         /// </summary>
-        public SiteRect? PlaceWithWay(float width, float depth, float way, Vector2 axis, Func<Vector2, float> score)
+        public SiteRect? PlaceWithWay(float width, float depth, float way, Vector2 axis, Func<Vector2, float> score, Vector2 building)
         {
             var u = new Vector2(axis.Y, -axis.X);
             var order = new int[_grid.Count];
@@ -733,14 +731,12 @@ public static class ConstructionSites
             {
                 var r = new SiteRect(_grid[k], u, width, depth);
                 if (!Fits(r)) continue;
-                foreach (int sign in new[] { 1, -1 })
-                {
-                    var w = new SiteRect(r.Center + axis * (sign * (depth + way) / 2), u, width, way);
-                    if (!WayFits(w)) continue;
-                    _taken.Add(r);
-                    _taken.Add(w);
-                    return r;
-                }
+                int sign = (r.Center - building).Dot(axis) >= 0 ? 1 : -1;
+                var w = new SiteRect(r.Center + axis * (sign * (depth + way) / 2), u, width, way);
+                if (!WayFits(w)) continue;
+                _taken.Add(r);
+                _taken.Add(w);
+                return r;
             }
             return null;
         }
