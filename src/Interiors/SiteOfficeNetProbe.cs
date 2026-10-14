@@ -88,10 +88,11 @@ public partial class SiteOfficeNetProbe : ChatProbe
             Expect(await Until(() => !loot.Waiting && !loot.OpenContents().Any(c => c.Index == first.Index), 5), "A's take was granted");
             Expect(PackTotal() - before == first.Stack.Count, $"A's pack gained {PackTotal() - before} of {first.Stack.Count} {first.Stack.Id}");
             loot.Close();
-            // by the door inside, so it is not shut for want of anybody near it
+            // inside, within 6 m of the door so it is not shut for want of anybody near it, and 3 m
+            // in, out of the way of B and C walking in
             var placement = InteriorManager.PlacementFor(layout, _origin);
             var way = layout.EntranceFor(doorKey);
-            var by = placement * new Vector3(way.X + way.InX * 1.2f, 0.1f, way.Z + way.InZ * 1.2f);
+            var by = placement * new Vector3(way.X + way.InX * 3.0f, 0.1f, way.Z + way.InZ * 3.0f);
             me.EnterInterior(layout.Key, by, me.Rotation.Y);
             // said over and over: C has not joined yet
             bool b = false, c = false;
