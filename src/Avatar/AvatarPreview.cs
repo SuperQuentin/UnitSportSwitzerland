@@ -551,6 +551,8 @@ public partial class AvatarPreview : Node3D
         // #716: the recruit
         (new[] { Items.ItemId.BlackBeanie, Items.ItemId.TazJacket, Items.ItemId.TazTrousers, Items.ItemId.CombatBoots }, Headwear.None),
         (new[] { Items.ItemId.ArmyTee, Items.ItemId.TazTrousers, Items.ItemId.CombatBoots }, Headwear.None),
+        // #822: the building site's crew
+        (new[] { Items.ItemId.HardHat, Items.ItemId.HiVisVest, Items.ItemId.CargoPants, Items.ItemId.CombatBoots }, Headwear.None),
     };
 
     private void BuildOutfits()

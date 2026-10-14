@@ -6,7 +6,9 @@
 - **Data**: `Avatar.Garments.All` is the wardrobe. Each `Garment` row is one look (ItemId, name,
   `WearSlot`, `Code`, `GarmentShape`, `GarmentStyle` Basic/Gothic/Kawaii/Special, colours A/B/C,
   `Finish`, mask `MaskFace`). The item rows (`ItemDefs.All`) are generated from it (`ItemDefs.Cloth`),
-  so a new look is one `Garments` line plus an `ItemId` (65-149, then 354-356 of #716; append only).
+  so a new look is one `Garments` line plus an `ItemId` (65-149, then 354-356 of #716, 357-358 of
+  #822; append only). `GarmentStyle.Workwear` (#822: the building site's hard hat and hi-vis vest)
+  is in no wardrobe pool: only the site's hard-hat rail and lockers give it (`terrain/construction-sites`).
 - **Slots**: `WearSlot` Head, Eyes, Face, Ears, Neck, Top, Bottom, Legs, Feet, Hands. Occasion hats are
   Head items too. A Robe/Dress (`CoversBottom`) takes the bottom slot as well.
 - **Replication**: `Outfit` packs 6 bits of `Garment.Code` per slot (1-63, 0 = nothing) into a

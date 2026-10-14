@@ -218,8 +218,8 @@ foundations, the office two high, determinism. Pictures: `--shot-queue` on the g
 
 - Loot: the materials and the skips are searched outdoors (#627, `loot/yard-loot`); the office's
   and the cabins' is ordinary interior loot (#822).
-- The office has no stair to its upper containers (see "The site office (#822)", Not done); the
-  lamps do not blink at night.
+- The office has no stair to its upper containers: raised doors are #827. The lamps do not blink
+  at night.
 
 ## The site office (#822)
 
@@ -272,16 +272,22 @@ and search.
   roads: a change to the planner's office or toilet zones or to `SiteOffices` must bump
   `InteriorLayout.CurrentVersion`, or stored plans keep their old doors (a plan stored before the
   cabins had no entrance for them, and their doors read as locked: that is what 27 is for).
-  A cabin's leaf swings in, as every pedestrian leaf does (`DoorHang.Inward`): in a metre-square
-  room it lies along the mirror's wall. Real cabins' doors swing out; there is no single outward leaf.
+  **A cabin's leaf swings out** (`DoorHang.Outward`, appended for the cabins only: one leaf on the
+  facade, hinged on the -X jamb, like one half of a barn's pair, `DoorLeaf.CreateOutwardSingle`;
+  from inside a shutter like a barn's). Swinging in it filled the metre-square room. Every other
+  door and every kind's default hang is unchanged (`DoorBudgetTests`).
 - **Collision.** The office's solid boxes go into the tile's **building** body (both windings: it
   is one-sided), not the road cells (`SiteBuild.OfficeFaces`), so `InteriorManager.BeforeMove`
   lets a body standing in an open office doorway through them like any facade.
 - **Loot** is ordinary interior loot. The `UnderConstruction` kind factor no longer zeroes all but
   minerals and scrap (minerals x2, scrap x1.5, food x0.8, the rest x1); room pools for the
   office's desk (petty cash, gadgets, tools), locker and tool chest (tools, work clothes, first
-  aid) and the mess room's lockers (clothes, a snack). Hard hats and hi-vis vests are drawn on the
-  rail but are not items.
+  aid) and the mess room's lockers (clothes, a snack).
+- **Workwear** (#822): a **hard hat** (head) and a **hi-vis vest** over a grey work T-shirt (top),
+  garments of a new `GarmentStyle.Workwear` (`avatar/clothing`). Kept out of every wardrobe
+  (`LootTables.Clothes` skips them); the `Workwear` pool is the hard-hat rail's (now a container:
+  a works hall's rail gives them too) and part of the site office's and mess room's lockers.
+  Worn, they replicate in `OutfitBits` like every garment.
 - **The binoculars** label the site "Building site" again: its door is in `DoorIndex` with its kind.
 - Found on the way: #497's wall pieces (locker, hat rail, safety sign, time clock, whiteboard,
   banner, desk counter, tool chest) faced the wall they stand against; `InteriorMeshBuilder` mirrors them.
@@ -307,18 +313,19 @@ and search.
   inside and walks out as it swings, and the door shuts by itself.
 - `tools/siteofficenetcheck.sh` (net): a server on the generated world and three clients. A opens
   the office door and takes a stack; B, waiting outside, sees the door open, walks in and finds the
-  stack gone; C joins after the take and finds the door open and the stack gone.
+  stack gone; C joins after the take and finds the door open and the stack gone, then walks into a
+  toilet cabin by its own door. A puts on the hard hat and hi-vis vest off the office's rail, and
+  B and C see A wearing them (`OutfitBits`).
 - Pictures: `--shot-queue` with `i1.6` shots (through a door) at that site. Take the doors' world
   positions from a probe's log: `--constructioncheck`'s `--at` is its own world's, a few metres off
   the live one.
 
 ### Not done
 
-- **The upper containers** have no way in: the issue's outside steel stair and walkway with a door
-  per container. A door whose sill is above the ground needs the door system to know an entrance's
-  floor (`EntrancePlan` is ground floor only: `DoorLink.Create`, `InsideDoorAt`, the leaf,
-  `OpeningOf`, `FitEntry` and the validator's reachability all assume it). An open question on #822.
-- Hard hats and hi-vis vests to wear are not items yet.
+- **The upper containers** stay closed: the outside stair, the walkway and a door each are #827
+  (raised doors). A door whose sill is above the ground needs the door system to know an
+  entrance's floor (`EntrancePlan` is ground floor only: `DoorLink.Create`, `InsideDoorAt`, the
+  leaf, `OpeningOf`, `FitEntry` and the validator's reachability all assume it).
 
 ## The cranes (#610)
 
