@@ -217,7 +217,7 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   against the old layout's 124, 76 only the old one has. Two only the new layout has: 2506155,1137801 (a crosswalk widened
   by an added bike lane ends on the corner's fallback strip, a 30 m sidewalk band the corner builder lays along an arm side
   with no bands; the strip ignores `Lowered`, which only the compact corner honours) and 2619787,1264697 (a neighbouring
-  Minor street's sidewalk lies inside the grown core, over the bike lane crossing it).
+  Minor street's sidewalk lies inside the grown core, over the bike lane crossing it: in `junction-edge-cases`).
 - **Carried sides that cross in one corner** (each arm's path carried across the other's road) are left to the corner, as
   the old layout's #711 rule (`LayCarriedSides`, shared): `BikeCrossWrite` laid both, one over the other, and riders met a
   6 cm step where the bands of different heights overlapped (Geneva 2496643,1118197: 3 kerb failures gone).
