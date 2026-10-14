@@ -79,7 +79,7 @@ public static partial class HumanMeshBuilder
         // head clothes replace an occasion hat; a helmet replaces both
         if (helmet || fullFace || headwear != null) hat = Headwear.None;
         var cover = fullFace || hat == Headwear.PumpkinHead ? HairCover.Head
-            : helmet || hat is Headwear.WitchHat or Headwear.SantaHat || headwear?.Shape == GarmentShape.Beanie ? HairCover.Hat
+            : helmet || hat is Headwear.WitchHat or Headwear.SantaHat || headwear?.Shape is GarmentShape.Beanie or GarmentShape.HardHat ? HairCover.Hat
             : HairCover.None;
 
         var look = Dress(palette, o, top, bottom);
@@ -172,6 +172,8 @@ public static partial class HumanMeshBuilder
                 GarmentShape.Longsleeve => look with { Top = c.A, SleeveTo = 2f },
                 GarmentShape.Hoodie => look with { Top = c.A, SleeveTo = 2f, TopFrom = 1.55f },
                 GarmentShape.FieldJacket => look with { Top = c.A, SleeveTo = 2f, TopFrom = 1.55f },
+                // the work T-shirt under the vest (#822): the vest is laid over it (TopDetail)
+                GarmentShape.HiVisVest => look with { Top = c.C, SleeveTo = 0.5f },
                 // the blouse under a short jacket: the jacket is laid over it (TopDetail)
                 GarmentShape.CroppedJacket => look with { Top = c.B, SleeveTo = 2f },
                 GarmentShape.Robe => look with { Top = c.A, SleeveTo = 1f, TopFrom = 1.5f },
@@ -367,6 +369,26 @@ public static partial class HumanMeshBuilder
                 {
                     s.Box(t.Front(3.12f, 0.006f) + side * x, new Vector3(0.062f, 0.058f, 0.012f), c.A, TrunkBasis(fit, 3.12f));
                     s.Box(t.Front(3.25f, 0.007f) + side * x, new Vector3(0.066f, 0.022f, 0.014f), c.B, TrunkBasis(fit, 3.25f));
+                }
+                break;
+            }
+
+            case GarmentShape.HiVisVest:
+            {
+                // #822: the vest over the work T-shirt, from the hem to the chest, two silver
+                // reflective bands round it and one up over each shoulder
+                t.Band(s, 1.60f, 3.55f, c.A, 0.010f);
+                t.Band(s, 1.95f, 2.07f, c.B, 0.014f);
+                t.Band(s, 2.40f, 2.52f, c.B, 0.014f);
+                foreach (float sgn in stackalloc[] { -1f, 1f })
+                {
+                    float Mirror(float a) => sgn > 0 ? a : 180f - a;
+                    var front = t.Surface(3.50f, Mirror(64f) * Deg, 0.012f);
+                    var over = t.Surface(3.93f, Mirror(24f) * Deg, 0.014f);
+                    var back = t.Surface(3.50f, Mirror(296f) * Deg, 0.012f);
+                    s.Tube(front, over, 0.026f, c.A, 5);
+                    s.Tube(over, back, 0.026f, c.A, 5);
+                    s.Tube(front + (over - front) * 0.1f, over, 0.012f, c.B, 4);
                 }
                 break;
             }
@@ -997,6 +1019,23 @@ public static partial class HumanMeshBuilder
                             s.Box(at + fwd * 0.012f + up * 0.012f, new Vector3(0.026f, 0.024f, 0.010f), c.B, f.Basis);
                 }
                 break;
+            case GarmentShape.HardHat:
+            {
+                // #822: a domed shell a few centimetres clear of the head, a ridge down its crown,
+                // a short peak at the front and a narrow brim round the rest
+                var from = head.Centre(0.13f);
+                float r = hw + 0.03f, height = (top - from).Dot(up) + 0.03f;
+                // the dome: rings up a quarter circle, so it reads as a shell and not a bucket
+                ReadOnlySpan<Vector2> dome = [new(0f, 1f), new(0.38f, 0.97f), new(0.66f, 0.86f), new(0.86f, 0.66f), new(1f, 0.30f)];
+                for (int i = 0; i + 1 < dome.Length; i++)
+                    s.Tube(from + up * dome[i].X * height, from + up * dome[i + 1].X * height, r * dome[i].Y, r * dome[i + 1].Y, c.A, 12);
+                s.Tube(from - up * 0.006f, from + up * 0.004f, r + 0.018f, r + 0.018f, c.C, 12);
+                s.Box(from + fwd * (r + 0.035f) + up * 0.002f, new Vector3(0.16f, 0.010f, 0.07f), c.A, f.Basis);
+                s.Box(from + up * (height * 0.86f), new Vector3(0.024f, 0.022f, 2f * r * 0.62f), c.C, f.Basis);
+                // the harness band inside the shell, seen under the brim
+                s.Tube(from - up * 0.012f, from - up * 0.002f, hw + 0.012f, c.B, 10);
+                break;
+            }
             case GarmentShape.Beanie:
             {
                 var from = head.Centre(0.14f);

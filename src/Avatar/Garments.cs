@@ -61,13 +61,15 @@ public enum GarmentShape
     PlatformBoots, CombatBoots, Sneakers, MaryJanes,
     // hands
     ArmWarmers, StripedWarmers, Fingerless, Paws, Gloves,
+    // #822: a building site's workwear (head, top)
+    HardHat, HiVisVest,
 }
 
 /// <summary>The pixel face printed on a <see cref="GarmentShape.Mask"/>.</summary>
 public enum MaskFace { Plain, Uwu, SwirlA, SwirlW, Fang, Tongue, Skull, CatMouth }
 
 /// <summary>Which look a garment belongs to, for the blurb and the loot pools.</summary>
-public enum GarmentStyle { Basic, Gothic, Kawaii, Special }
+public enum GarmentStyle { Basic, Gothic, Kawaii, Special, Workwear }
 
 /// <summary>
 /// One wearable look: the item it is, where it goes, how it is drawn and in which colours.
@@ -151,6 +153,8 @@ public static class Garments
         new(ItemId.BlackBeanie, "Black beanie", WearSlot.Head, 9, GarmentShape.Beanie, GarmentStyle.Basic, Charcoal, new("2c2c32"), Charcoal),
         new(ItemId.RainbowCatEars, "Rainbow cat ears", WearSlot.Head, 10, GarmentShape.CatEars, GarmentStyle.Special, White, White, White, Finish.Rainbow),
         new(ItemId.NeonHeadset, "Neon headset", WearSlot.Head, 11, GarmentShape.Headset, GarmentStyle.Special, new("ff3fc0"), new("30f0ff"), new("ff3fc0"), Finish.Neon),
+        // #822: a building site's: the shell, the inner harness band, the brim's darker edge
+        new(ItemId.HardHat, "Hard hat", WearSlot.Head, 12, GarmentShape.HardHat, GarmentStyle.Workwear, new("f2c21a"), new("3a3a3e"), new("d8a810")),
 
         // ---- eyes ----
         new(ItemId.RoundGlasses, "Round glasses", WearSlot.Eyes, 1, GarmentShape.RoundGlasses, GarmentStyle.Basic, new("c8a04a"), new("c8e0f0"), Black),
@@ -211,6 +215,8 @@ public static class Garments
         // B is the jacket's dark trim and the trousers' pockets, C the near-black of the buckle
         new(ItemId.TazJacket, "TAZ 90 jacket", WearSlot.Top, 23, GarmentShape.FieldJacket, GarmentStyle.Basic, TazGreen, new("3a4428"), new("1f2418"), Finish.Camo),
         new(ItemId.ArmyTee, "Olive army T-shirt", WearSlot.Top, 24, GarmentShape.TShirt, GarmentStyle.Basic, new("5a6638"), new("5a6638"), new("5a6638")),
+        // #822: the fluorescent yellow vest, its silver reflective bands, over a grey work T-shirt
+        new(ItemId.HiVisVest, "Hi-vis vest", WearSlot.Top, 25, GarmentShape.HiVisVest, GarmentStyle.Workwear, new("d6f01e"), new("c8ccd2"), new("6a6e74")),
 
         // ---- bottom ----
         new(ItemId.JoggingShorts, "Grey jogging shorts", WearSlot.Bottom, 1, GarmentShape.Shorts, GarmentStyle.Basic, new("8a8a8e"), White, new("8a8a8e")),

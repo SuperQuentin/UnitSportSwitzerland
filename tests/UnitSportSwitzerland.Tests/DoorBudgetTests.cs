@@ -11,6 +11,24 @@ namespace UnitSportSwitzerland.Tests;
 public class DoorBudgetTests
 {
     [Fact]
+    public void TheHangsDoorsAlreadyHadAreUntouched()
+    {
+        // #822 appended a single outward leaf for site toilets: every existing hang keeps its number
+        // (stored plans and door rows carry it) and every kind its default
+        Assert.Equal(0, (int)DoorHang.Inward);
+        Assert.Equal(1, (int)DoorHang.OutwardPair);
+        Assert.Equal(2, (int)DoorHang.RollUp);
+        Assert.Equal(3, (int)DoorHang.Outward);
+        foreach (var kind in Enum.GetValues<BuildingKind>())
+            Assert.Equal(kind switch
+            {
+                BuildingKind.Agricultural => DoorHang.OutwardPair,
+                BuildingKind.Garage => DoorHang.RollUp,
+                _ => DoorHang.Inward,
+            }, DoorBudget.HangFor(kind));
+    }
+
+    [Fact]
     public void AHouseKeepsItsOneFrontDoor()
     {
         Assert.Equal(1, DoorBudget.Total(BuildingKind.House, 10, 8));

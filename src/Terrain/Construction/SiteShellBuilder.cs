@@ -125,7 +125,7 @@ public static class SiteShellBuilder
     /// The site building's doors (#822): its office's, one per ground-floor container, slot 0 first,
     /// then its toilet cabins' (one each),
     /// tile-local like every <see cref="DoorSpot"/> (3 cm proud of the facade plane, on the sill).
-    /// Plain pedestrian doors swinging in.
+    /// Plain pedestrian doors: the containers' swing in, the cabins' out.
     /// </summary>
     public static DoorSpot[] OfficeDoors(SiteOffice office, ConstructionSite site, int index)
     {
@@ -138,7 +138,9 @@ public static class SiteShellBuilder
             doors[i] = new DoorSpot(index, new Vector3(at.X + outward.X * 0.03f, at.Y, at.Z + outward.Y * 0.03f),
                 new Vector3(outward.X, 0, outward.Y), d.Width, d.Height)
             {
-                Slot = d.Slot, Hang = DoorHang.Inward, Vehicle = false, Kind = BuildingKind.UnderConstruction,
+                // a toilet cabin's leaf swings out: in, it would fill the cabin (#822)
+                Slot = d.Slot, Hang = i < office.ContainerDoors ? DoorHang.Inward : DoorHang.Outward,
+                Vehicle = false, Kind = BuildingKind.UnderConstruction,
             };
         }
         return doors;

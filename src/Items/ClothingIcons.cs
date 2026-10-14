@@ -29,6 +29,25 @@ public static class ClothingIcons
         "...kkkkkkkkkk...",
     };
 
+    /// <summary>#822: a hard hat from the side, its peak to the right and the ridge on its crown.</summary>
+    private static readonly string[] HardHat =
+    {
+        "................",
+        "................",
+        "................",
+        ".......kkk......",
+        ".....kk333kk....",
+        "....k1113111k...",
+        "...k111131111k..",
+        "...k111131111k..",
+        "..k1111131111k..",
+        "..k11111111111k.",
+        "..k111111111111k",
+        ".kkkkkkkkkkkkkkk",
+        ".k333333333333k.",
+        "..kkkkkkkkkkkk..",
+    };
+
     private static readonly string[] Tank =
     {
         "................",
@@ -304,7 +323,8 @@ public static class ClothingIcons
     private static string[] TemplateFor(GarmentShape shape) => shape switch
     {
         GarmentShape.TShirt or GarmentShape.PrintTee or GarmentShape.Polo => Tee,
-        GarmentShape.Marcel or GarmentShape.Corset => Tank,
+        GarmentShape.Marcel or GarmentShape.Corset or GarmentShape.HiVisVest => Tank,
+        GarmentShape.HardHat => HardHat,
         GarmentShape.Longsleeve or GarmentShape.Hoodie or GarmentShape.CroppedJacket or GarmentShape.FieldJacket => Long,
         GarmentShape.CropTop => Crop,
         GarmentShape.Robe or GarmentShape.Dress => Dress,

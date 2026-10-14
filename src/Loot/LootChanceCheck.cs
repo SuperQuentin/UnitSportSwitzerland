@@ -82,6 +82,10 @@ public static class LootChanceCheck
             (BuildingKind.UnderConstruction, FurnitureType.Desk, RoomType.SiteOffice, ItemId.Francs),
             (BuildingKind.UnderConstruction, FurnitureType.Locker, RoomType.BreakRoom, ItemId.Cloth),
             (BuildingKind.UnderConstruction, FurnitureType.Fridge, RoomType.BreakRoom, ItemId.Bread),
+            // its workwear (#822): the rail's hats and vests, the lockers' now and then; never a house wardrobe's
+            (BuildingKind.UnderConstruction, FurnitureType.HardHatRack, RoomType.SiteOffice, ItemId.HardHat),
+            (BuildingKind.UnderConstruction, FurnitureType.Locker, RoomType.BreakRoom, ItemId.HiVisVest),
+            (BuildingKind.House, FurnitureType.Wardrobe, null, ItemId.HardHat),
         };
         foreach (var c in roomCases)
             Row($"{c.Kind} {c.Type} in {c.Room?.ToString() ?? "-"} {c.Item}",

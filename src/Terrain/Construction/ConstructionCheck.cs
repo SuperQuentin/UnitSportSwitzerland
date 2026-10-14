@@ -134,8 +134,9 @@ public static class ConstructionCheck
         var doors = BuildingFootprint.ComputeDoors(tile, roads, grid, sites).Where(d => d.Index == index && d.Width > 0).ToList();
         expect(doors.Count == office.Doors.Count && doors.Select(d => d.Slot).SequenceEqual(Enumerable.Range(0, doors.Count)),
             $"{what}: {doors.Count} door(s) among the tile's doors, one per ground-floor container ({office.ContainerDoors}) and toilet cabin ({office.Toilets.Count})");
-        expect(doors.All(d => d.Kind == BuildingKind.UnderConstruction && d.Hang == DoorHang.Inward && !d.Vehicle),
-            $"{what}: the office doors are a building site's plain doors");
+        expect(doors.All(d => d.Kind == BuildingKind.UnderConstruction && !d.Vehicle
+                && d.Hang == (d.Slot < office.ContainerDoors ? DoorHang.Inward : DoorHang.Outward)),
+            $"{what}: a building site's plain doors, the containers' swinging in and the cabins' out");
         // the tile's doors without the planned sites handed in: the same doors
         var alone = BuildingFootprint.ComputeDoors(tile, roads, grid).Where(d => d.Index == index && d.Width > 0).ToList();
         expect(alone.SequenceEqual(doors), $"{what}: the doors are the same planned with the tile or on their own");

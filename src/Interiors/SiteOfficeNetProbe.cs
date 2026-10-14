@@ -13,7 +13,8 @@ namespace UnitSport.Interiors;
 /// of its containers. B, there from the start and waiting outside, must see the door open (the
 /// server's broadcast), then walk in through it and find the stack gone from the same container.
 /// C joins late, after A's take: the door must already be open (the server's door table) and the
-/// stack gone, and then walks into a toilet cabin by its own door (a room of the same plan).
+/// stack gone, and then walks into a toilet cabin by its own door (a room of the same plan). A also
+/// puts on the hard hat and hi-vis vest off the office's rail, and B and C must see A wearing them.
 /// Coordinated through chat lines; A repeats its take until both answer. Every peer
 /// finds the same door from the tile alone (<see cref="DoorIndex.NearestOfKind"/>).
 /// </summary>
@@ -88,6 +89,8 @@ public partial class SiteOfficeNetProbe : ChatProbe
             Expect(await Until(() => !loot.Waiting && !loot.OpenContents().Any(c => c.Index == first.Index), 5), "A's take was granted");
             Expect(PackTotal() - before == first.Stack.Count, $"A's pack gained {PackTotal() - before} of {first.Stack.Count} {first.Stack.Id}");
             loot.Close();
+            await Seconds(0.5);
+            await Workwear(me, layout, node, loot);
             // inside, within 6 m of the door so it is not shut for want of anybody near it, and 3 m
             // in, out of the way of B and C walking in
             var placement = InteriorManager.PlacementFor(layout, _origin);
@@ -143,6 +146,17 @@ public partial class SiteOfficeNetProbe : ChatProbe
             GD.Print($"{Log} the {layout.Furniture[index].Type} holds {string.Join(", ", left.Select(x => $"{x.Stack.Id} x{x.Stack.Count}"))}");
             Expect(!left.Any(x => x.Index == gone), $"{_role} finds the stack A took gone from the {layout.Furniture[index].Type}");
             loot.Close();
+            // A's hard hat and vest (#822), as this peer draws A: one replicated long
+            bool dressed = await Until(() => Dressed() is not null, 30);
+            Expect(dressed, $"{_role} sees A wearing the hard hat and the hi-vis vest (OutfitBits)");
+            if (dressed && DisplayServer.GetName() != "headless")
+            {
+                var a = Dressed()!;
+                var look = a.GlobalPosition + Vector3.Up * 1.2f;
+                me.LookAtFromPosition(me.GlobalPosition, new Vector3(look.X, me.GlobalPosition.Y, look.Z), Vector3.Up);
+                await Seconds(1.0);
+                GD.Print($"{Log} picture of A dressed: {Shot($"siteoffice_{_role}_sees_A_dressed")}");
+            }
             Say("done");
             if (_role == "C") await Toilet(me, interiors, door);
         }
@@ -176,6 +190,51 @@ public partial class SiteOfficeNetProbe : ChatProbe
         Expect(room?.Type == RoomType.WC, $"C stands in a toilet cabin of {layout.Key} ({room?.Type.ToString() ?? "no room"} at {local.X:F2},{local.Z:F2})");
     }
 
+    /// <summary>A remote player wearing the site's hard hat and hi-vis vest, if one is in this peer's world.</summary>
+    private FootPlayer? Dressed() => Find(GetTree().Root);
+
+    private FootPlayer? Find(Node n)
+    {
+        if (n is FootPlayer p && p != Me && !p.IsMultiplayerAuthority())
+        {
+            var o = new Avatar.Outfit(p.OutfitBits);
+            if (o[Avatar.WearSlot.Head]?.Item == ItemId.HardHat && o[Avatar.WearSlot.Top]?.Item == ItemId.HiVisVest) return p;
+        }
+        foreach (var c in n.GetChildren())
+            if (Find(c) is { } found) return found;
+        return null;
+    }
+
+    /// <summary>
+    /// A takes what the office's hard-hat rail holds and puts on a hard hat and a hi-vis vest (#822).
+    /// What the rail does not hold this restock period is given, so the outfit is always seen.
+    /// </summary>
+    private async Task Workwear(FootPlayer me, InteriorLayout layout, InteriorNode node, LootService loot)
+    {
+        int rail = layout.Furniture.FindIndex(f => f.Type == FurnitureType.HardHatRack);
+        if (rail >= 0 && await Search(me, layout, node, loot, rail))
+        {
+            GD.Print($"{Log} the hard-hat rail holds {string.Join(", ", loot.OpenContents().Select(x => $"{x.Stack.Id} x{x.Stack.Count}"))}");
+            loot.TakeAll();
+            await Until(() => !loot.Waiting && !loot.OpenContents().Any(), 10);
+            loot.Close();
+        }
+        var inv = _items.Inventory;
+        foreach (var id in new[] { ItemId.HardHat, ItemId.HiVisVest })
+        {
+            if (CountOf(id) == 0)
+            {
+                GD.Print($"{Log} no {id} on the rail this restock: given");
+                inv.Add(id, 1);
+            }
+            int slot = SlotOf(id);
+            if (slot >= 0) inv.Wear(slot);
+        }
+        Expect(inv.WornIn(Avatar.WearSlot.Head).Id == ItemId.HardHat && inv.WornIn(Avatar.WearSlot.Top).Id == ItemId.HiVisVest,
+            "A wears the hard hat and the hi-vis vest");
+        Expect(await Until(() => me.OutfitBits == inv.Outfit.Bits, 5), "A's outfit is published on A's player");
+    }
+
     /// <summary>Walks through the open door into the office: the player's space must become it.</summary>
     private async Task<bool> WalkIn(FootPlayer me, InteriorManager interiors, string doorKey)
     {
@@ -199,7 +258,8 @@ public partial class SiteOfficeNetProbe : ChatProbe
         me.Velocity = Vector3.Zero;
         await Seconds(0.8);
         Expect(LootService.NearestContainer(me, layout, node) == index, $"standing in front of the {f.Type}");
-        Expect(me.TryInteract() && loot.IsOpen, $"opened the {f.Type}");
+        // the search itself, not E: by the door E works the door (AtExit wins), and would shut it
+        Expect(loot.TrySearch(me) && loot.IsOpen, $"opened the {f.Type}");
         if (!await Until(() => !loot.Waiting, 10)) { Fail("its contents never arrived"); return false; }
         return true;
     }
