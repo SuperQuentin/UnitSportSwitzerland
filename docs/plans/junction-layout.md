@@ -311,6 +311,6 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
   a narrowed sidewalk or verge) at 1:6 (6 m at least) just beyond its side's last opening. The exit hatch and a pocket's
   lead-in hatch are the same median between the two directions, so a #325 merged street is that median running mouth to
   mouth.
-- Built (Oct 14 2026), two points to confirm with the user: the writing runs behind **`--junctions write`** (`new` still plans
-  and reports only, so the comparison with the pocket layout and the old checks keep working); and a split lead-in's centre line
-  moves **with the pocket's taper** (the timing rule as proposed moved it at 1:6 after the taper, which jogs the through lane).
+- **A split lead-in's centre line moves with the pocket's taper** (the user, Oct 14 2026: the 1:6 after it jogged the through lane).
+- Built (Oct 14 2026), to confirm with the user: the writing runs behind **`--junctions write`** (`new` still plans
+  and reports only, so the comparison with the pocket layout and the old checks keep working).
