@@ -33,6 +33,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Net.Sleepers? _sleepers;
     private Net.Arrival? _arrival;
     private Items.PalletService? _pallets;
+    private Terrain.Construction.CraneService? _cranes;
     private Build.Structures? _structures;
     private Occasions.OccasionManager? _occasions;
     private World.RaceNpcs? _npcs;
@@ -176,7 +177,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Farming.FarmMarket.StandInFromArgs(local, origin);
 
         // loot in those interiors: the server rolls it and remembers what was taken
-        Loot.LootService.Create(this);
+        Loot.LootService.Create(this).Source = () => source;
         // shops and vending machines (#273): the server keeps what was sold and charges the card
         Loot.ShopService.Create(this);
         // farm fields (#494): the server keeps the worked cells (user://farm) and checks the work
@@ -258,6 +259,9 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // pallets a forklift has moved (#583): which of the plan's have gone, and where they were put
         _pallets = Items.PalletService.Create(this, origin, server: true);
         _pallets.Source = () => source;
+        // cranes players work (#618): who works which, and where one was let go
+        _cranes = Terrain.Construction.CraneService.Create(this, server: true);
+        _cranes.Source = () => source;
         _chat.NameAssigned += bank.SendBalance;
         // selling farm produce (#494): load prices, specialty buyers, contracts; farm stands' crates and cash
         if (Systems.On(Systems.Farming))
@@ -462,6 +466,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _farmStands?.SendTo(id);
         _sleepers?.SendTo(id);
         _pallets?.SendTo(id);
+        _cranes?.SendTo(id);
         // the dormant slots woken anywhere (#689): a far one's car is not sent, its bay must be empty
         Vehicles.DormantVehicles.Instance?.SendTo(id);
         _structures?.SendTo(id);
@@ -483,6 +488,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _passengers?.PeerLeft(id);
         _br?.PeerLeft(id);
         _fight?.PeerLeft(id);
+        _cranes?.PeerLeft(id);
         _vehicles?.ForgetOwner(id);
         _radios?.ForgetOwner(id);
         _dropped?.ForgetOwner(id);

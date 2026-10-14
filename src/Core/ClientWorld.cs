@@ -726,7 +726,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // reconnect, and the player it acts on is resolved per frame like the picker's.
         var inventory = Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
             || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Interiors.LiftSyncProbe.Role != null || Interiors.HallCarProbe.Role != null || Loot.BankProbe.Role != null
-            || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.ExcavatorNetProbe.Role != null || Items.SitePalletNetProbe.Role != null || Items.BedNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
+            || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.ExcavatorNetProbe.Role != null || Items.SitePalletNetProbe.Role != null || Loot.YardLootNetProbe.Role != null || Terrain.Construction.CraneNetProbe.Role != null || Items.BedNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
             || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
@@ -764,6 +764,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.TractorNetProbe.Role != null) AddChild(new Player.TractorNetProbe(items));
         if (Player.ExcavatorNetProbe.Role != null) AddChild(new Player.ExcavatorNetProbe(items));
         if (Items.SitePalletNetProbe.Role != null) AddChild(new Items.SitePalletNetProbe(items));
+        if (Terrain.Construction.CraneNetProbe.Role != null) AddChild(new Terrain.Construction.CraneNetProbe(items));
+        if (Loot.YardLootNetProbe.Role != null) AddChild(new Loot.YardLootNetProbe(items));
         if (Items.BedNetProbe.Role != null) AddChild(new Items.BedNetProbe(items));
         if (Player.FreighterNetProbe.Role != null) AddChild(new Player.FreighterNetProbe(items));
         if (Player.An124NetProbe.Role != null) AddChild(new Player.An124NetProbe(items));
@@ -804,6 +806,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Vehicles.VehicleManager.Refused += Toast;
         Movie.MovieSession.Said += Toast;
         Vehicles.PassengerService.Said += Toast;
+        Terrain.Construction.CraneService.Said += Toast;
 
         // Chat exists from boot, not only once connected: offline it runs its commands itself
         // (/city, /spawn ...), and StartNetworking just keeps using it. World/Chat is also the
@@ -862,6 +865,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         // pallets a forklift has moved (#583): the server keeps them for the session, offline this client does
         Items.PalletService.Create(this, origin, server: false).Source = () => _chunks?.Source;
+        // cranes players work (#618): the server says who works which, offline this client does
+        Terrain.Construction.CraneService.Create(this, server: false).Source = () => _chunks?.Source;
         // built structures (#274): the server owns them, offline this client does
         if (Systems.On(Systems.Build))
         {
@@ -869,7 +874,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             structures.GroundAt = p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null;
         }
 
-        if (Systems.On(Systems.Loot)) Loot.LootService.Create(this).Items = items;
+        if (Systems.On(Systems.Loot))
+        {
+            var loot = Loot.LootService.Create(this);
+            loot.Items = items;
+            // a building site's skips and materials (#627) are worked out from the tiles
+            loot.Source = () => _chunks?.Source;
+        }
         // shops and PAUSA vending machines (#273): same node path as the server's, which keeps the sold counts
         if (Systems.On(Systems.Loot)) Loot.ShopService.Create(this).Items = items;
         // selling farm produce (#494): World/FarmSales and World/FarmStands, same paths as the server's; offline this client plays it
@@ -1315,6 +1326,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Vehicles.VehicleManager.Refused -= Toast;
         Movie.MovieSession.Said -= Toast;
         Vehicles.PassengerService.Said -= Toast;
+        Terrain.Construction.CraneService.Said -= Toast;
         if (_networked)
         {
             Multiplayer.ConnectedToServer -= OnConnected;
@@ -1704,8 +1716,17 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (p.Vehicle == null && p.ButtonInReach() is { } button)
                 yield return (PlayerInput.InteractMount, button.Open ? "Shut the door" : "Open the door");
             if (p.RidingAlong && p.StereoOwner != null) yield return (PlayerInput.RadioPanel, "Radio");
+            // at a crane's controls (#618): the hook, the view, and letting go; the levers are in F1
+            if (p.CraneWorking)
+            {
+                var (take, setAt) = p.HookAction();
+                if (take != null) yield return (PlayerInput.Couple, "Hook it on");
+                else if (setAt != null) yield return (PlayerInput.Couple, "Set it down");
+                yield return (PlayerInput.CameraToggle, p.CraneHookView ? "Your own view" : "Hook camera");
+                yield return (PlayerInput.InteractMount, "Let go of the crane");
+            }
             // walking about in a vehicle, or sat in one somebody else hosts (#158, #162)
-            if (p.Aboard)
+            else if (p.Aboard)
             {
                 if (p.DeckHint is { } deckHint) yield return (PlayerInput.InteractMount, deckHint);
                 yield return (PlayerInput.CameraToggle, "Camera");

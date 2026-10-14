@@ -99,6 +99,8 @@ internal sealed partial class XrCabControls : Node3D
     private static string ContextOf(FootPlayer? p)
     {
         if (p == null || p.RidingWith != 0 || !XrSession.Active) return "";
+        // a tower crane's cab (#618): no ride at all, the player is carried in it
+        if (p.CraneInCab) return "crane";
         return p.Vehicle switch
         {
             Truck t when p.InCockpit => (t.EffectiveMode is HeavyShift.HPattern or HeavyShift.HPatternSplitter ? "truck-h" : "truck-seq")
@@ -181,6 +183,16 @@ internal sealed partial class XrCabControls : Node3D
             // a mini's blade lever (#614), low and outboard of the left joystick: aft raises it
             if (context == "miniexcavator")
                 Add(Kind.Hold, new(-0.48f, -0.48f, -0.06f), Vector3.Back, PlayerInput.BladeRaise, PlayerInput.BladeLower);
+        }
+        else if (context == "crane")
+        {
+            // a tower crane's cab (#618): its two joysticks either side of the seat in the ISO crane
+            // pattern, each as the levers it is: the left slews (side to side) and runs the trolley
+            // (forward is out), the right hoists (aft is up); the hook's button on the left console
+            Add(Kind.Hold, new(-0.32f, -0.42f, -0.18f), Vector3.Left, PlayerInput.ArmSlewLeft, PlayerInput.ArmSlewRight);
+            Add(Kind.Hold, new(-0.32f, -0.42f, -0.32f), Vector3.Forward, PlayerInput.ArmStickOut, PlayerInput.ArmStickIn);
+            Add(Kind.Hold, new(0.32f, -0.42f, -0.25f), Vector3.Back, PlayerInput.ArmBoomUp, PlayerInput.ArmBoomDown);
+            Add(Kind.Poke, new(-0.26f, -0.34f, -0.45f), plus: PlayerInput.Couple);
         }
         else if (context == "loader")
         {
