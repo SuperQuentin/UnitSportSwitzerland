@@ -55,8 +55,13 @@ public partial class SiteOfficeNetProbe : ChatProbe
         Expect(door.Kind == BuildingKind.UnderConstruction, $"{doorKey} is a building site's door");
 
         var inward = -door.Outward;
-        void Doorstep(float out_) =>
-            me.LeaveInterior(door.World + door.Outward * out_ + Vector3.Up * 0.3f, Mathf.Atan2(-inward.X, -inward.Z));
+        // the door looked up again each time: an entry kept from before an origin shift (the
+        // teleport to the site sets them off) stands where the door was, kilometres off
+        void Doorstep(float out_)
+        {
+            var at = (DoorIndex.Find(door.Key) ?? door).World;
+            me.LeaveInterior(at + door.Outward * out_ + Vector3.Up * 0.3f, Mathf.Atan2(-inward.X, -inward.Z));
+        }
 
         if (_role == "A")
         {
