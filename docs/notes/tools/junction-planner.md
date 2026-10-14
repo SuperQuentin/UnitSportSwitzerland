@@ -213,10 +213,16 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   other seams 57 -> 43 at 2912250; two 0 cm "cracks" on the carried sidewalk's outer edge (terrain beyond: the checker's sampling).
   Tier 1 (`tools/test.sh quick src/Terrain/Fixture/`): all 8 pass.
   The 168 real tiles of the Mac's `terrain_chunks` (Geneva, Zurich and others; a copy rewritten with `--junctions write`):
-  2,186 junctions written, 264 paths carried along a kerb, sidewalk corners replaced 585 -> 836. Kerb check: 49 failures
-  against the old layout's 124; 4 places only the new layout fails (2506155,1137801 a zebra at the corner; 2496635,1118200
-  a five-arm junction at the lights whose path crossings run diagonally across the core; 2619787,1264697 a path crossing
-  meeting the cap's edge), 80 only the old one.
+  2,181 junctions written, 264 paths carried along a kerb, sidewalk corners replaced 585 -> 836. Kerb check: 48 failures
+  against the old layout's 124, 76 only the old one has. Two only the new layout has: 2506155,1137801 (a crosswalk widened
+  by an added bike lane ends on the corner's fallback strip, a 30 m sidewalk band the corner builder lays along an arm side
+  with no bands; the strip ignores `Lowered`, which only the compact corner honours) and 2619787,1264697 (a neighbouring
+  Minor street's sidewalk lies inside the grown core, over the bike lane crossing it).
+- **Carried sides that cross in one corner** (each arm's path carried across the other's road) are left to the corner, as
+  the old layout's #711 rule (`LayCarriedSides`, shared): `BikeCrossWrite` laid both, one over the other, and riders met a
+  6 cm step where the bands of different heights overlapped (Geneva 2496643,1118197: 3 kerb failures gone).
+- **A path crossing over a joining road keeps following the street's curve** (the user, Oct 14), even where the street bends
+  at the node (Geneva: 17 deg, the crossing 6-8 m inside the joining arm's zebra); not square beside the zebra as the old layout.
 - **Pitfall**: a corner's band past 65,535 indices crashed the encoder (`checked` ushort count; Zurich 2689054,1252758, a
   238 m2 corner cut into 57,721 cells). `CornerPlanner` capped only the vertices; a full band now goes on in a new mesh.
 - **Left**: seams where a carried path's sloped strip meets the corner's wedge (as the old unlit layout's).

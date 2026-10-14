@@ -332,3 +332,6 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
   by its share of the jog: one slope from 30 m out on it to the other mouth, the core taking the rest; as far as its room
   allows. Rejected: mirroring the split exactly (a full extra hatch at the mouth), splitting the jog between the two arms,
   moving the lead-in to the kerb side, a taper from sidewalk to sidewalk (it narrows the wide side).
+- **A path crossing over a joining road keeps following the street's curve** (Oct 14, shown the old layout's square
+  crossings beside each zebra at the same Geneva junction): also where the street bends at the node; only the kerbs where it
+  ends are fixed.

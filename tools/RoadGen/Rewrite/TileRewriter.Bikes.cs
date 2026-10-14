@@ -527,9 +527,17 @@ public static partial class TileRewriter
                 }
             }
         }
-        // (#711) two sides carried on to the kerb that cross in one corner (a junction of several nodes: each arm's path carried
-        // across the other's road) would lie over each other: neither is laid, the corner planner lays that corner in its sides'
-        // bands (path along the kerb, sidewalk outside), and both crossings start at its kerb
+        stats.PathsToKerbCrossing += LayCarriedSides(carriedSides, bridges);
+    }
+
+    /// <summary>
+    /// The sides carried on to the kerb, laid (#711): two that cross in one corner (each arm's path carried across the other's
+    /// road) would lie over each other: neither is laid, the corner planner lays that corner in its sides' bands (path along the
+    /// kerb, sidewalk outside), and both crossings start at its kerb. Returns how many were left to their corner.
+    /// </summary>
+    private static int LayCarriedSides(List<(TileId Home, List<(RoadAreaProp Band, List<Vec2> Ring)> Bands)> carriedSides,
+        Dictionary<TileId, List<(RoadAreaProp Band, List<Vec2> Ring)>> bridges)
+    {
         static bool Over(List<(RoadAreaProp Band, List<Vec2> Ring)> x, List<(RoadAreaProp Band, List<Vec2> Ring)> y) =>
             x.Any(a => y.Any(b => b.Ring.Any(p => PriorityPlanner.Inside(a.Ring, p)) || a.Ring.Any(p => PriorityPlanner.Inside(b.Ring, p))));
         var crossing = new HashSet<int>();
@@ -540,9 +548,9 @@ public static partial class TileRewriter
                     crossing.Add(x);
                     crossing.Add(y);
                 }
-        stats.PathsToKerbCrossing += crossing.Count;
         for (int x = 0; x < carriedSides.Count; x++)
             if (!crossing.Contains(x)) Get(bridges, carriedSides[x].Home).AddRange(carriedSides[x].Bands);
+        return crossing.Count;
     }
 
     /// <summary>A side carried on to the kerb turns the corner instead only where its carried stretch is shorter than this (m, #711).</summary>

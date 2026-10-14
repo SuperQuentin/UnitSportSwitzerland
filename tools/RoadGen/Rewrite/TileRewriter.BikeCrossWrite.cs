@@ -91,6 +91,7 @@ public static partial class TileRewriter
             stats.BikeCrossings++;
         }
 
+        var carriedSides = new List<(TileId Home, List<(RoadAreaProp Band, List<Vec2> Ring)> Bands)>();
         // 2. paths straight on, along the path's curve from one arm's path to the other's: each arm's side carried on from its
         // mouth to the kerb (PathsToKerb: every band to where it meets the carriageway, a sloped kerb there, the corners beside
         // starting where its outer edge meets the kerb), the crossing between the two kerb points
@@ -131,8 +132,9 @@ public static partial class TileRewriter
             bool OnRoad(Vec2 p) => Inside(core.Outline, p) || between.Any(x => OnArm(jp, x, p));
             if (PathsToKerb(home, OnRoad, sideA, sideB, ca, da, ua, 0, cb, db, ub, 0, ca.DistanceTo(cb) + 5, H, srcA.SampleHeight, srcB.SampleHeight, H) is not { } carried)
                 continue;
-            // as the old layout's carried sides: bands the sidewalk corners keep clear of
-            foreach (var b2 in carried.Bands) Get(bridges, home).Add(b2);
+            // as the old layout's carried sides: bands the sidewalk corners keep clear of, each side apart (laid after the loop)
+            carriedSides.Add((home, carried.Bands.GetRange(0, carried.SplitAt)));
+            carriedSides.Add((home, carried.Bands.GetRange(carried.SplitAt, carried.Bands.Count - carried.SplitAt)));
             foreach (var end in carried.Ends) Get(pathEnds, home).Add(end);
             stats.PathsCarried += 2;
             // the crossing: from kerb to kerb at the paths' middles, leaving and joining along the arms
@@ -155,6 +157,7 @@ public static partial class TileRewriter
             Line(OffsetLine(run, -(width * 0.5 - lw * 0.5)), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
             stats.PathCrossings++;
         }
+        stats.PathsCrossingInCorner += LayCarriedSides(carriedSides, bridges);
 
         // an arm's side at its mouth as the street planner laid it, seen arriving
         RoadSide SideOfArm(ArmPlan arm, bool right)
