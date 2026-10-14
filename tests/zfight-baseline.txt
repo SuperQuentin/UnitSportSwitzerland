@@ -417,8 +417,10 @@
 279.6	Clothes / Gothic round shades
 540.6	Clothes / Green polo
 257.8	Clothes / Grey jogging shorts
+273.3	Clothes / Hard hat
 346.2	Clothes / Heart choker
 792.2	Clothes / Heart shades
+759.3	Clothes / Hi-vis vest
 166.9	Clothes / Holo mask
 416.4	Clothes / Holo skirt
 282.7	Clothes / Industrial bar and nose ring
