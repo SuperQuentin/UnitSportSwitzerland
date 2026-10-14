@@ -50,7 +50,8 @@ public static partial class BuildingMeshBuilder
         var f = new List<float>(doors.Length * 120); // UV2.y flag per vertex
         var types = BuildingTypes.For(tile);
         foreach (var d in doors)
-            if (d.Width > 0) AppendDoor(v, c, f, d, KindOf(tile.Buildings[d.Index], types.TypeOf(d.Index)));
+            // a building site's doors are its office's (#822), drawn with the containers
+            if (d.Width > 0 && Drawn(tile.Buildings[d.Index])) AppendDoor(v, c, f, d, KindOf(tile.Buildings[d.Index], types.TypeOf(d.Index)));
 
         int n = data.Vertices.Length;
         var vertices = new Vector3[n + v.Count];

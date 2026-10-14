@@ -16,6 +16,11 @@ public enum DoorHang
     OutwardPair,
     /// <summary>Slats on the facade, rolling up into the lintel: a garage's.</summary>
     RollUp,
+    /// <summary>
+    /// One leaf on the facade, swinging out (#822): a site's toilet cabin, a metre square inside,
+    /// where a leaf swinging in would fill the room. Stored and sent as its number: append only.
+    /// </summary>
+    Outward,
 }
 
 /// <summary>

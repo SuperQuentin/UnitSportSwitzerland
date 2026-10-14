@@ -61,13 +61,15 @@ public enum GarmentShape
     PlatformBoots, CombatBoots, Sneakers, MaryJanes,
     // hands
     ArmWarmers, StripedWarmers, Fingerless, Paws, Gloves,
+    // #822: a building site's workwear (head, top)
+    HardHat, HiVisVest,
 }
 
 /// <summary>The pixel face printed on a <see cref="GarmentShape.Mask"/>.</summary>
 public enum MaskFace { Plain, Uwu, SwirlA, SwirlW, Fang, Tongue, Skull, CatMouth }
 
 /// <summary>Which look a garment belongs to, for the blurb and the loot pools.</summary>
-public enum GarmentStyle { Basic, Gothic, Kawaii, Special }
+public enum GarmentStyle { Basic, Gothic, Kawaii, Special, Workwear }
 
 /// <summary>
 /// One wearable look: the item it is, where it goes, how it is drawn and in which colours.
@@ -248,6 +250,14 @@ public static class Garments
         new(ItemId.PawGloves, "Pink paw gloves", WearSlot.Hands, 3, GarmentShape.Paws, GarmentStyle.Kawaii, Rose, new("ff7ab8"), Rose),
         new(ItemId.StripedArmWarmers, "Striped arm warmers", WearSlot.Hands, 4, GarmentShape.StripedWarmers, GarmentStyle.Kawaii, new("ff9fd0"), White, new("ff9fd0")),
         new(ItemId.NeonGloves, "Neon gloves", WearSlot.Hands, 5, GarmentShape.Gloves, GarmentStyle.Special, new("30f0ff"), new("30f0ff"), new("30f0ff"), Finish.Neon),
+
+        // ---- #822: a building site's workwear. New looks go at the END of the array, whatever
+        // their slot: the model viewer dresses each row's figure by its place here, so a row put in
+        // the middle changes every figure after it (and their z-fight baseline lines) ----
+        // the shell, the inner harness band, the brim's darker edge
+        new(ItemId.HardHat, "Hard hat", WearSlot.Head, 12, GarmentShape.HardHat, GarmentStyle.Workwear, new("f2c21a"), new("3a3a3e"), new("d8a810")),
+        // the fluorescent yellow vest, its silver reflective bands, over a grey work T-shirt
+        new(ItemId.HiVisVest, "Hi-vis vest", WearSlot.Top, 25, GarmentShape.HiVisVest, GarmentStyle.Workwear, new("d6f01e"), new("c8ccd2"), new("6a6e74")),
     };
 
     private static readonly Dictionary<ItemId, Garment> ById = All.ToDictionary(g => g.Item);

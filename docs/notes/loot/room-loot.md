@@ -28,3 +28,6 @@
   At Riddes (2026-10): houses 40% lockers / 15% safes, apartment blocks ~96% (one try per floor), shops 74% safes.
   House targets still pass (minerals 0.6, parts 0.12 — the low ends: they now come from cellars, halls and
   stoves, not every living-room shelf). A running occasion (Halloween) inflates food: read the date.
+- **Building sites** (#822): a site's loot is its office's (`terrain/construction-sites`, "The site office"):
+  `(Desk|Locker|ToolChest, SiteOffice)` tools, work clothes, petty cash; `(Locker, BreakRoom)` the mess
+  room's changing lockers. The `UnderConstruction` kind factor is minerals x2, scrap x1.5, food x0.8.

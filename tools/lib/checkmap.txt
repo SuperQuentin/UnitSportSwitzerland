@@ -649,6 +649,15 @@ src/Interiors/DoorLeaf   quick  --collidecheck --world flat --targets doors/
 src/Playtest/            quick  --playtestcheck
 src/Playtest/            quick  --playtest --playtest-smoke --world fixture --chunks fixture:flat
 src/Player/FootPlayer.Deck quick --playtest --playtest-smoke --world fixture --chunks fixture:flat
+# #822: a building site's office: its doors and plan (constructioncheck), walked into and searched
+# (interiorcheck on a generated site's office), and over the network: the door and a take seen by a
+# second peer and by a late one (generated world)
+src/Interiors/InteriorGenerator.SiteOffice quick --constructioncheck --systems ui
+src/Interiors/InteriorGenerator.SiteOffice quick --interiorcheck --doorkind UnderConstruction --generated on --at 2586561,1115543 --traffic 0
+src/Terrain/Construction/SiteOffice quick --interiorcheck --doorkind UnderConstruction --generated on --at 2586561,1115543 --traffic 0
+src/Interiors/InteriorGenerator.SiteOffice net tools/siteofficenetcheck.sh
+src/Interiors/SiteOfficeNetProbe net tools/siteofficenetcheck.sh
+src/Terrain/Construction/SiteOffice net tools/siteofficenetcheck.sh
 # #627: a building site's skip searched outdoors, the take seen by a peer with it open and by a late joiner (generated world)
 src/Loot/                net    tools/yardlootnetcheck.sh
 src/Terrain/Construction/SiteLoot net tools/yardlootnetcheck.sh

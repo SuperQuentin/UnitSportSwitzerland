@@ -143,10 +143,13 @@ public partial class WallMirror : Node3D
     {
         foreach (var p in layout.Furniture)
         {
-            if (p.Type != FurnitureType.Sink) continue;
-            // the basin is authored with its back to −Z: the glass on that wall, facing the room
+            if (p.Type is not (FurnitureType.Sink or FurnitureType.Mirror)) continue;
+            // the basin is authored with its back to −Z: the glass on that wall, facing the room;
+            // a cabin's mirror (#822) is its own frame, the glass on its face
             var basis = new Basis(Vector3.Up, p.Turns * Mathf.Pi / 2);
-            var at = new Vector3(p.X, layout.FloorY(p.Floor) + 1.45f, p.Z) + basis * new Vector3(0f, 0f, -p.D / 2 + 0.012f);
+            bool framed = p.Type == FurnitureType.Mirror;
+            float y = framed ? p.Lift + p.H / 2 : 1.45f, z = framed ? p.D / 2 + 0.012f : -p.D / 2 + 0.012f;
+            var at = new Vector3(p.X, layout.FloorY(p.Floor) + y, p.Z) + basis * new Vector3(0f, 0f, z);
             interior.AddChild(new WallMirror { Name = $"Mirror{interior.GetChildCount()}", Transform = new Transform3D(basis, at) });
         }
     }

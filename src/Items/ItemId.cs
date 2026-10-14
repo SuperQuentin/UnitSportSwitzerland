@@ -198,6 +198,8 @@ public enum ItemId
     Gamelle = 353,
     /// <summary>Garments (Avatar.Garments): the Swiss camouflage TAZ 90, and an olive army T-shirt.</summary>
     TazJacket = 354, TazTrousers = 355, ArmyTee = 356,
+    /// <summary>Garments (#822): a building site's workwear, found in its office: a hard hat and a hi-vis vest.</summary>
+    HardHat = 357, HiVisVest = 358,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>

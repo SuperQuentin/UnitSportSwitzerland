@@ -731,6 +731,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
             || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
             || World.ContainerNetProbe.Role != null
+            || Interiors.SiteOfficeNetProbe.Role != null
             || Player.TractorNetProbe.Role != null || Farming.FarmProbe.Requested || Farming.HandFarmCheck.Requested || Farming.FarmNetProbe.Role != null || Farming.SellNetProbe.Role != null || Farming.CoopNetProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
         if (Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null) Crafting.CampfireProbe.Stock(inventory);
@@ -750,6 +751,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(new Player.EmoteWheel(() => _onFoot ? LocalPlayer : null) { Name = "EmoteWheel" });
         if (Items.InventoryUiProbe.Requested) AddChild(new Items.InventoryUiProbe(items));
         if (Loot.LootSyncProbe.Role != null) AddChild(new Loot.LootSyncProbe(items, origin));
+        if (Interiors.SiteOfficeNetProbe.Role != null) AddChild(new Interiors.SiteOfficeNetProbe(items, origin));
         if (Loot.LockSyncProbe.Role != null) AddChild(new Loot.LockSyncProbe(items, origin));
         if (Interiors.LiftSyncProbe.Role != null) AddChild(new Interiors.LiftSyncProbe(items, origin));
         if (Interiors.HallCarProbe.Role != null) AddChild(new Interiors.HallCarProbe(items, origin));
@@ -1816,7 +1818,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             }
             else
             {
-                if (Interiors.InteriorManager.Instance?.OutsideDoorInReach(p.GlobalPosition) == null
+                if (Interiors.InteriorManager.Instance?.OutsideDoorInReach(p) == null
                     && Items.RadioManager.Instance?.NearestMusic(p.GlobalPosition, Items.RadioManager.DanceRadius, heard: p.DanceId == 0) != null)
                     yield return (PlayerInput.InteractMount, p.DanceId == 0 ? "Dance" : "Stop dancing");
                 if (Vehicles.VehicleReach.Current is { } at)

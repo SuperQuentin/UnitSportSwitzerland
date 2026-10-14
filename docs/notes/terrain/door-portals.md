@@ -139,6 +139,14 @@ changed is how you get there.
   within 1.8 m of the doorway's span, not its centre (`ExitAt`). An open door reaches deeper on the
   side its leaves stand by `DoorLeaf.OpenReach` (leaf width less 1 m: nothing for a house door, 4 m
   out for a 10 m barn pair). The server allows `ServerDoorReach` plus the door's width.
+- **The door faced (#822).** Of the doors in reach outside, E (keyboard and pad, and the prompt)
+  works the nearest one whose facade the camera looks into (`DoorIndex.FacedEntrance`), and the
+  nearest of all only when none is faced. The plain nearest pick opened the wrong door where two
+  face each other across a gap: on a real site in Graubünden (LV95 2742681/1254064) the toilet
+  cabins stand 1.4 m in front of the office door, facing it, and from the office's doorstep a
+  cabin's door was the nearer. A probe that presses E outside must face the door first (as
+  `StandOutside` does). The VR hand still takes the door nearest the hand (0.7 m). Client only: the
+  server checks the asked door's distance, as before. `--doorcheck` holds that site's three doors.
 - **Check.** `--interiorcheck` also shuts the door from inside and walks into it (must stay in);
   for a barn it asks for the door from where its open leaves' edges stand (in reach) and again shut
   (not in reach).

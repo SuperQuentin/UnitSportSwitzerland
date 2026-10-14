@@ -34,7 +34,7 @@ deserves, and each of them is a real door: it opens, it has a portal, you walk t
   that is already pedestrian (a long shop front gets more 1.8 m shop doors), else
   `DoorBudget.ServiceWidth` x `ServiceHeight` (1.0 x 2.1 m) — a barn's side door, a works' fire exit.
   It is guaranteed under the eave; a **main** door is not (see the `--doorcheck` note about low sheds).
-- **The leaf is a fact about the door, not about its kind.** `DoorHang { Inward, OutwardPair, RollUp }`
+- **The leaf is a fact about the door, not about its kind.** `DoorHang { Inward, OutwardPair, RollUp, Outward }` (`Outward`, one facade leaf swinging out, is a site toilet cabin's, #822)
   plus `bool Vehicle` on `DoorSpot`, `EntrancePlan`, `DoorLink` and `DoorIndex.Entry`;
   `DoorBudget.HangFor(kind)` / `VehicleFor(kind)` are the defaults a door starts from.
   `DoorLeaf.SwingsOut/RollsUp/OnFacade/LeafWidth/OpenReach` take the hang, and `CreateOnFacade`

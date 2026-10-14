@@ -74,7 +74,7 @@ public static class LootTables
         foreach (var g in Avatar.Garments.All)
             tiers[g.Item] = g.Style switch
             {
-                Avatar.GarmentStyle.Basic => Tier.Common,
+                Avatar.GarmentStyle.Basic or Avatar.GarmentStyle.Workwear => Tier.Common,
                 Avatar.GarmentStyle.Special => Tier.Rare,
                 _ => Tier.Uncommon,
             };
@@ -131,7 +131,9 @@ public static class LootTables
     /// <summary>Potatoes and carrots in a cellar, flour in a pantry (#494).</summary>
     private static readonly ItemId[] Roots = { ItemId.Potato, ItemId.Carrot, ItemId.Flour };
     /// <summary>Clothes to wear, plain, gothic and kawaii (#251): what a wardrobe mostly holds.</summary>
-    private static readonly ItemId[] Clothes = Avatar.Garments.All.Where(g => !g.IsSpecial).Select(g => g.Item).ToArray();
+    private static readonly ItemId[] Clothes = Avatar.Garments.All.Where(g => !g.IsSpecial && g.Style != Avatar.GarmentStyle.Workwear).Select(g => g.Item).ToArray();
+    /// <summary>A building site's hard hats and hi-vis vests (#822): only its office's rail and lockers give them.</summary>
+    private static readonly ItemId[] Workwear = Avatar.Garments.All.Where(g => g.Style == Avatar.GarmentStyle.Workwear).Select(g => g.Item).ToArray();
     /// <summary>The rare ones with a finish that moves: rainbow, disco ball, galaxy…</summary>
     private static readonly ItemId[] Specials = Avatar.Garments.All.Where(g => g.IsSpecial).Select(g => g.Item).ToArray();
     /// <summary>What comes out of the wash: tees, shorts, socks.</summary>
@@ -193,6 +195,8 @@ public static class LootTables
         [FurnitureType.Machine] = new(0.45f, 1, 2, new[] { P(Scrap, 50), P(Parts, 35), P(Wire, 15) }),
         [FurnitureType.Compressor] = new(0.50f, 0, 2, new[] { P(Hardware, 40), P(Parts, 35), P(Scrap, 25) }),
         // somebody's locker: their spare clothes, their snack, the odd note
+        // the hard hats and hi-vis vests on their pegs (#822): a works' rail and a site office's
+        [FurnitureType.HardHatRack] = new(0.30f, 1, 2, new[] { P(Workwear, 100) }),
         [FurnitureType.Locker] = new(0.35f, 1, 2, new[] { P(Cloth, 35), P(Sweets, 25), P(Gadgets, 20), P(Medical, 10), P(Purses, 10), P(Games, 8), P(MessKit, 4) }, 0.30f, 2, 25),
         [FurnitureType.TruckProp] = new(0.30f, 1, 2, new[] { P(VehicleParts, 100) }, 0.15f, 1, 10),
         // the till of a goods office or a sales desk
@@ -260,6 +264,13 @@ public static class LootTables
         [(FurnitureType.Car, RoomType.Showroom)] = new(0.75f, 0, 1, new[] { P(VehicleParts, 100) }, 0.05f, 1, 10),
         [(FurnitureType.Car, RoomType.ServiceBay)] = new(0.20f, 1, 3, new[] { P(VehicleParts, 100) }, 0.20f, 1, 15),
         [(FurnitureType.Desk, RoomType.Dispatch)] = new(0.35f, 1, 2, new[] { P(Gadgets, 40), P(Wire, 25), P(Scrap, 25), P(Optics, 2) }, 0.45f, 5, 60),
+        // #822: a building site's office container: the foreman's desk (the petty cash, the radio's
+        // spare batteries), the crew's tools locked away, their work clothes, the first-aid kit
+        [(FurnitureType.Desk, RoomType.SiteOffice)] = new(0.35f, 1, 2, new[] { P(Gadgets, 35), P(Hardware, 30), P(Wire, 15), P(Medical, 10), P(Optics, 2) }, 0.40f, 5, 40),
+        [(FurnitureType.Locker, RoomType.SiteOffice)] = new(0.25f, 1, 3, new[] { P(Hardware, 50), P(Workwear, 20), P(Cloth, 20), P(Medical, 15), P(Minerals, 5) }),
+        [(FurnitureType.ToolChest, RoomType.SiteOffice)] = new(0.15f, 2, 4, new[] { P(Hardware, 60), P(Parts, 15), P(Scrap, 20), P(Minerals, 5) }),
+        // its mess container is the changing room: spare clothes, a snack, a tool left in a pocket
+        [(FurnitureType.Locker, RoomType.BreakRoom)] = new(0.30f, 1, 2, new[] { P(Cloth, 35), P(Workwear, 20), P(Sweets, 20), P(Hardware, 20), P(Medical, 10), P(Games, 6), P(Purses, 4) }, 0.25f, 2, 20),
         [(FurnitureType.Desk, RoomType.ControlRoom)] = new(0.35f, 1, 2, new[] { P(Gadgets, 45), P(Wire, 30), P(Scrap, 25), P(Optics, 3) }, 0.35f, 5, 50),
     };
 
@@ -302,11 +313,14 @@ public static class LootTables
         },
         BuildingKind.Civic => c == ItemCategory.Medical ? 3f : 1f,
         BuildingKind.Sacral => 0f,
+        // a building site's loot is its office's (#822): the containers' furniture gives tools and
+        // work clothes (RoomContainers, SiteOffice and BreakRoom), and the crew's lunch in the mess
         BuildingKind.UnderConstruction => c switch
         {
-            ItemCategory.Mineral => 3f,
-            ItemCategory.Scrap => 2f,
-            _ => 0f,
+            ItemCategory.Mineral => 2f,
+            ItemCategory.Scrap => 1.5f,
+            ItemCategory.Food => 0.8f,
+            _ => 1f,
         },
         _ => 1f,
     };
@@ -736,6 +750,8 @@ public static class LootTables
         FurnitureType.WaterTank => "water tank",
         FurnitureType.ToyBox => "toy box",
         FurnitureType.BlahajBin => "bin of Blåhajs",
+        FurnitureType.HardHatRack => "hard-hat rail",
+        FurnitureType.ToolChest => "tool chest",
         _ => t.ToString().ToLowerInvariant(),
     };
 }
