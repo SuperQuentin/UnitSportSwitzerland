@@ -185,6 +185,20 @@ public class PitTests
         Assert.True(ConstructionSites.MaterialsWayIn(s), $"no way in to the materials at {materials.Center}");
     }
 
+    [Theory]
+    [InlineData(60f, 24f, 0f)]
+    [InlineData(32f, 20f, 1.1f)]
+    [InlineData(40f, 18f, 0.4f)]
+    public void A_site_without_a_pit_keeps_its_materials_a_way_in_too(float w, float d, float turn)
+    {
+        // the pallets face the yard on every site, so a topped-out one keeps the way on that side too,
+        // inside the hoarding and off the scaffolding
+        var s = Site("2537_1152_41", w, d, 18.2f, 6, turn);
+        Assert.Null(s.Pit);
+        var materials = s.Zones.Single(z => z.Kind == SiteZoneKind.Materials).Rect;
+        Assert.True(ConstructionSites.MaterialsWayIn(s), $"no way in to the materials at {materials.Center}");
+    }
+
     /// <summary>The pit's plan on flat ground at 0, its floor as the builder works it out.</summary>
     private static (ConstructionSite Site, ShellPlan Shell, PitPlan Pit) Dig(ConstructionSite s, Func<float, float, float>? ground = null)
     {

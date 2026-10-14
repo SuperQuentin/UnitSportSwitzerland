@@ -313,19 +313,20 @@ public static class ConstructionSites
 
     /// <summary>
     /// Whether a site's materials have a way in for a machine (#619): a strip <see cref="MaterialsApproach"/>
-    /// deep on the side the pallets face (away from the building), out of the building or its pit and clear of
-    /// every other zone and machine. Where the yard has no room for one, the pallets of a site with a pit
-    /// cannot be reached.
+    /// deep on the side the pallets face (away from the building), inside the hoarding, out of the building's
+    /// scaffolding or its pit and clear of every other zone and machine. Where the yard has no room for one,
+    /// the pallets cannot be reached.
     /// </summary>
     public static bool MaterialsWayIn(ConstructionSite s)
     {
         if (s.Zones.FirstOrDefault(z => z.Kind == SiteZoneKind.Materials) is not { } m) return false;
         var r = m.Rect;
-        var keep = s.Pit is { } p ? InPlan(s.Box, p.Area) : new SiteRect(s.Box.Center, s.Box.AxisU, s.Box.Width, s.Box.Depth);
+        var keep = s.Pit is { } p ? InPlan(s.Box, p.Area) : new SiteRect(s.Box.Center, s.Box.AxisU, s.Box.Width + 2 * Scaffold, s.Box.Depth + 2 * Scaffold);
         // the side the pallets face: away from the building (the dressing turns them to)
         int sign = (r.Center - s.Box.Center).Dot(r.AxisV) >= 0 ? 1 : -1;
         var way = new SiteRect(r.Center + r.AxisV * (sign * (r.Depth + MaterialsApproach) / 2), r.AxisU, r.Width, MaterialsApproach - 0.1f);
-        return !way.Overlaps(keep) && !s.Zones.Any(z => z.Kind != SiteZoneKind.Materials && way.Overlaps(z.Rect))
+        return way.Corners().All(c => s.Area.Contains(c)) && !way.Overlaps(keep)
+            && !s.Zones.Any(z => z.Kind != SiteZoneKind.Materials && way.Overlaps(z.Rect))
             && !s.Machines.Any(x => way.Contains(x.At));
     }
 
@@ -419,11 +420,12 @@ public static class ConstructionSites
         // failing that it shrinks: a smaller heap is still a heap, none is a missing site
         void Zone(SiteZoneKind kind, float w, float d, Func<Vector2, float> score)
         {
-            // the materials on a site with a pit (#619): with a way in kept for a machine across the
-            // pallets, where the yard the machines left has room for one; the pit took the scaffolding's
-            // ground that way was. Failing that, where they stood before (decided with the user: the
-            // machines keep their room first)
-            if (kind == SiteZoneKind.Materials && pit != null)
+            // the materials (#619): with a way in kept for a machine on the side their pallets face,
+            // where the yard the machines left has room for one; on a site with a pit, the pit took the
+            // scaffolding's ground that way was. Failing that, where they stood before (decided with the
+            // user: the machines keep their room first; and every site, pit or not, the pallets facing
+            // the yard)
+            if (kind == SiteZoneKind.Materials)
                 foreach (float scale in new[] { 1f, 0.7f })
                     foreach (var axis in new[] { front, along })
                         if (placer.PlaceWithWay(w * scale, d * scale, MaterialsApproach, axis, score, box.Center) is { } r)

@@ -83,18 +83,26 @@ public partial class SitePalletNetProbe : ChatProbe
         // across its runners (they run along the row of materials), from whichever side is clear
         var across = (pallet.GlobalTransform.Basis.Z with { Y = 0 }).Normalized();
         var space = me.GetWorld3D().DirectSpaceState;
+        // A's own body aside: it spawns at the site, and is placed at the side found anyway
+        Godot.Collections.Dictionary Ray(Vector3 a, Vector3 b)
+        {
+            var q = PhysicsRayQueryParameters3D.Create(a, b);
+            q.Exclude = new Godot.Collections.Array<Rid> { me.GetRid() };
+            return space.IntersectRay(q);
+        }
         Vector3? side = null;
         foreach (var dir in new[] { across, -across })
         {
             var from = pallet.GlobalPosition + Vector3.Up * 1.2f + dir * 0.9f;
-            var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(from, from + dir * 7.5f));
+            var hit = Ray(from, from + dir * 7.5f);
             // nothing low either: the materials' rebar bundle is 0.35 m high (#619 turns it to the building)
             var low = from - Vector3.Up * 0.95f;
-            if (hit.Count == 0) hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(low, low + dir * 7.5f));
+            if (hit.Count == 0) hit = Ray(low, low + dir * 7.5f);
             // and ground to stand on: a site's pit (#619) is clear at that height, and empty under it
             bool overPit = false;
             for (float k = 0f; k <= 7.5f && !overPit; k += 0.5f) overPit = me.Terrain?.InPit(from + dir * k) == true;
             if (hit.Count == 0 && !overPit) { side = dir; break; }
+            GD.Print(FormattableString.Invariant($"[sitepalletnet A]   side {dir.X:F2},{dir.Z:F2}: {(hit.Count == 0 ? "clear" : $"hits {(hit["collider"].AsGodotObject() as Node)?.GetPath()} at {hit["position"]}")}{(overPit ? ", over the pit" : "")}"));
         }
         if (side is not { } outward) { Fail($"no clear side to come at {pallet.Id} from"); return; }
         var tines = th.TinesFrame.Origin;
@@ -111,9 +119,8 @@ public partial class SitePalletNetProbe : ChatProbe
         float Ahead() => -((me.GlobalTransform * th.TinesFrame).AffineInverse() * pallet.GlobalPosition).Z;
         me.RideControls = () => new RideInput(0.25f, 0f, 0f, false);
         await Until(() => Ahead() < Pallets.LoadAhead + 0.05f || me.Velocity.Length() < 0.01f && me.GroundSpeed > 0.3f, 15);
-        // no handbrake: on a telehandler the brake reverses from a standstill
-        me.RideControls = () => new RideInput(0f, 0f, 0f, false);
-        await Until(() => me.GroundSpeed < 0.05f, 5);
+        await BrakeToStop(me);
+        GD.Print(FormattableString.Invariant($"[sitepalletnet A]   telehandler stopped: {Ahead():F2} m ahead of the heel"));
         XrPad.Press(PlayerInput.ArmBoomUp, true);
         bool lifted = await Until(() => th.Carrying != 0, 6);
         await Seconds(1.0);
@@ -193,8 +200,8 @@ public partial class SitePalletNetProbe : ChatProbe
         // steered onto it on the way in, as a driver would: the pallet aside of the bucket's middle turns it
         me.RideControls = () => new RideInput(0.25f, 0f, Mathf.Clamp(Aside() * 1.5f, -1f, 1f), false);
         await Until(() => InIt() < WheelLoaderLayout.BucketFloorZ + 0.1f || me.Velocity.Length() < 0.01f && me.GroundSpeed > 0.3f, 15);
-        me.RideControls = () => new RideInput(0f, 0f, 0f, false);
-        await Until(() => me.GroundSpeed < 0.05f, 5);
+        await BrakeToStop(me);
+        GD.Print(FormattableString.Invariant($"[sitepalletnet A]   loader stopped: {InIt():F2} m ahead of the pin, {Aside():F2} m aside"));
         await HoldFor(PlayerInput.ArmBucketCurl, (WheelLoaderLayout.TiltMax - loader.Tilt) / WheelLoaderLayout.TiltRate + 0.2);
         XrPad.Press(PlayerInput.ArmBoomUp, true);
         bool scooped = await Until(() => loader.Carrying != 0, 6);
@@ -240,6 +247,19 @@ public partial class SitePalletNetProbe : ChatProbe
         return null;
     }
 
+    /// <summary>
+    /// Braked while it still rolls on, then let go: at the 1.3 m/s a quarter throttle makes, a machine
+    /// coasts its tines or bucket past a pallet and into it. No handbrake: the brake of a telehandler or
+    /// a loader reverses from a standstill.
+    /// </summary>
+    private async Task BrakeToStop(FootPlayer me)
+    {
+        float Onward() => me.Velocity.Dot(-me.GlobalTransform.Basis.Z);
+        me.RideControls = () => new RideInput(0f, Onward() > 0.15f ? 1f : 0f, 0f, false);
+        await Until(() => me.GroundSpeed < 0.05f, 5);
+        me.RideControls = () => new RideInput(0f, 0f, 0f, false);
+    }
+
     private async Task HoldFor(string action, double seconds)
     {
         XrPad.Press(action, true);
@@ -251,6 +271,9 @@ public partial class SitePalletNetProbe : ChatProbe
     private async Task RunB(FootPlayer me)
     {
         if (!await Heard("A", "hello", 90)) { Fail("A never said hello"); return; }
+        // out of the yard: both spawn at the site, and B standing by a pallet blocks A's way in to it
+        if (OpenGround(me, me.GlobalPosition) is { } aside) me.PlaceAt(aside, 0f);
+        await Seconds(1);
         Say("ready");
         if (!await Heard("A", "lifted", 120)) { Fail("A never lifted a site pallet"); return; }
         var w = _heard.Last(l => l.Contains("SP A lifted")).Split(' ');

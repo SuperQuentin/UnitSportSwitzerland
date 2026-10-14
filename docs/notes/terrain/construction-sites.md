@@ -313,16 +313,24 @@ a topped-out site has none.
   machines and cranes. On a 24 x 15 m block the outside crane's spot is now in the pit, so its crane
   stands inside, on the slab.
 - **The materials' way in**: a telehandler came at the pallets (#615) over the scaffolding's ground,
-  which the pit has taken. On a site with a pit the materials are placed with a way in kept clear
-  across them (`MaterialsApproach`, 8 m, `Placer.PlaceWithWay`: over the gate's lane or the apron is
-  fine, never the pit), where the yard the machines left has room; failing that where they stood
-  before. **Decided with the user: the machines keep their room first.** Measured over the 159 real
+  which the pit has taken. The materials are placed with a way in kept clear on the side their pallets
+  face, away from the building (`MaterialsApproach`, 8 m, `Placer.PlaceWithWay`: over the gate's lane
+  or the apron is fine, never the pit or the scaffolding, never past the hoarding), where the yard
+  the machines left has room; failing that where they stood before. **Decided with the user: the
+  machines keep their room first; and every site gets the way, pit or not**, since the dressing
+  turns every site's pallets to the yard (a topped-out site's materials used to face the hoarding a
+  metre off, with the rebar between them and the building). `MaterialsWayIn` checks the hoarding
+  line and the scaffolding too. Measured over the 159 real
   pits (`MaterialsWayIn`): machines first then materials anywhere left 28 of 532 machines without
   room, 19 sites without materials and 21 with materials no machine can come at; this order, 28, 19
   and 17; materials first with their way, 54 machines (42 sites), 4 and 14. `tools/sitepalletnetcheck.sh`
-  moved from the foundations site it used (its pallets now against its pit, no way in) to a topped-out
-  one whose pallets have one (`--constructioncheck` prints which do), and its probe no longer comes
-  at a pallet over a pit (`InPit`: the pit is clear at a telehandler's height, and empty under it).
+  moved from the foundations site it used (its pallets now against its pit, no way in) to the
+  topped-out one at 2582832,1102441 whose pallets have one (`--constructioncheck` prints which do;
+  in the generated world only it and the shell at 2577592,1102821). Its probe no longer comes at a
+  pallet over a pit (`InPit`: the pit is clear at a telehandler's height, and empty under it), leaves
+  its own body out of the side rays, moves B out of the yard first (both spawn at the site), and
+  brakes each machine to a stop at the pallet (`BrakeToStop`): at a quarter throttle a telehandler
+  rolls 1.3 m/s and coasted its tines 1.25 m past the pallet, into its face.
 
 ### The pit's dressing (`PitPlans`, pure, tier 0)
 
