@@ -1015,10 +1015,11 @@
 483.9	Rides / Wheel loader (forks) (parked)
 513.1	Rides / Wheel loader (parked)
 270.6	Rides / Wingsuit
-295727.7	Terrain / Building site - foundations, a block of four floors
-295727.7	Terrain / Building site - shell, a block of four floors
-909208.4	Terrain / Building site - topped out, a house
-2228729	Terrain / Building site - topped out, a six-floor block
+157090.4	Terrain / Building site - foundations, a block of four floors
+153701.8	Terrain / Building site - foundations, a house
+152483.5	Terrain / Building site - shell, a block of four floors
+709075.2	Terrain / Building site - topped out, a house
+1957418	Terrain / Building site - topped out, a six-floor block
 91640	Terrain / Garage door - Sidewalk
 515456.5	Terrain / Garage ramp
 7741.9	Terrain / Landing - Jetty

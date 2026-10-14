@@ -76,6 +76,13 @@ public static class SiteShowcase
     private const float Lift = 8f;
 
     /// <summary>
+    /// The block's top this far under the plot, m: the yard's boxes stand on <see cref="Lift"/>, and the
+    /// prop material draws both sides, so a ground flush with their feet z-fought every one
+    /// (`--zfightcheck`, docs/notes/general/zfight.md).
+    /// </summary>
+    private const float GroundDrop = 0.02f;
+
+    /// <summary>
     /// The plot's ground: a 1 m lattice <see cref="Lift"/> up, the site's square and 3 m round it, with the
     /// pits cut in it and lined by the ground's own code (<see cref="PitTerrain.Cut"/>), and its sides
     /// down to the viewer's floor.
@@ -94,7 +101,7 @@ public static class SiteShowcase
         for (int r = 0; r < m; r++)
             for (int k = 0; k < m; k++)
             {
-                v[r * m + k] = new Vector3(k * quad, Lift, r * quad);
+                v[r * m + k] = new Vector3(k * quad, Lift - GroundDrop, r * quad);
                 c[r * m + k] = grass;
             }
         var idx = new List<int>();
@@ -120,7 +127,7 @@ public static class SiteShowcase
             var a = corners[s] + new Vector3(origin.X, 0, origin.Y);
             var b = corners[(s + 1) % 4] + new Vector3(origin.X, 0, origin.Y);
             int i = verts.Count;
-            verts.AddRange(new[] { a, b, b + Vector3.Up * Lift, a + Vector3.Up * Lift });
+            verts.AddRange(new[] { a, b, b + Vector3.Up * (Lift - GroundDrop), a + Vector3.Up * (Lift - GroundDrop) });
             cols.AddRange(new[] { earth, earth, earth, earth });
             tris.AddRange(new[] { i, i + 1, i + 2, i, i + 2, i + 3 });
         }
