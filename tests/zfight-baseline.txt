@@ -417,10 +417,10 @@
 279.6	Clothes / Gothic round shades
 540.6	Clothes / Green polo
 257.8	Clothes / Grey jogging shorts
-273.3	Clothes / Hard hat
+234.5	Clothes / Hard hat
 346.2	Clothes / Heart choker
 792.2	Clothes / Heart shades
-759.3	Clothes / Hi-vis vest
+609.5	Clothes / Hi-vis vest
 166.9	Clothes / Holo mask
 416.4	Clothes / Holo skirt
 282.7	Clothes / Industrial bar and nose ring
@@ -743,9 +743,11 @@
 3	Items / GreenPolo
 5.9	Items / Hammer
 7.6	Items / Handbag
+4.7	Items / HardHat
 2.3	Items / HayBale
 4.7	Items / HayHideout
 4.7	Items / HeartChoker
+3	Items / HiVisVest
 6.1	Items / HikingPack
 2.3	Items / Hoe
 6	Items / HoloMask
