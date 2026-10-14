@@ -21,12 +21,22 @@ public readonly record struct ShellMound(Vector2 Center, float RadiusX, float Ra
 /// </summary>
 public readonly record struct SitePalletSpot(int Slot, Vector3 Centre, bool AlongX, byte Load);
 
+/// <summary>
+/// One searchable piece of a site's yard (#627): a skip, the rebar bundle, or a piece of the
+/// materials' row (a pallet, a formwork stack, the concrete rings), as the axis-aligned box it stands
+/// in, in the site frame. <see cref="Slot"/> names it (<c>SiteLoot</c>): a row piece's is its place in
+/// the row, the same as its <see cref="SitePalletSpot.Slot"/> when it is a pallet a machine lifts.
+/// </summary>
+public readonly record struct SiteStockSpot(int Slot, SiteStockKind Kind, Vector3 Min, Vector3 Max);
+
 /// <summary>What a site's yard holds, in the site frame: boxes, heaps, and the pallets a machine can lift.</summary>
 public sealed class SiteDressingPlan
 {
     public List<ShellBox> Boxes { get; } = new();
     public List<ShellMound> Mounds { get; } = new();
     public List<SitePalletSpot> Pallets { get; } = new();
+    /// <summary>What can be searched (#627): the skips and the materials, each a box (<c>SiteLoot</c>).</summary>
+    public List<SiteStockSpot> Stock { get; } = new();
 }
 
 /// <summary>
@@ -126,6 +136,14 @@ public static class SiteDressings
                 if (longX) Box(x0 + u0, y0, z0 + w0, x0 + u1, y1, z0 + w1, part, solid);
                 else Box(x0 + w0, y0, z0 + u0, x0 + w1, y1, z0 + u1, part, solid);
             }
+            // a searchable piece in the same terms (#627), turned with the materials as their boxes are
+            void Stock(int slot, SiteStockKind kind, float u0, float y0, float w0, float u1, float y1, float w1)
+            {
+                (w0, w1) = (Math.Min(W(w0), W(w1)), Math.Max(W(w0), W(w1)));
+                plan.Stock.Add(longX
+                    ? new SiteStockSpot(slot, kind, new Vector3(x0 + u0, y0, z0 + w0), new Vector3(x0 + u1, y1, z0 + w1))
+                    : new SiteStockSpot(slot, kind, new Vector3(x0 + w0, y0, z0 + u0), new Vector3(x0 + w1, y1, z0 + u1)));
+            }
             switch (zone.Kind)
             {
                 case SiteZoneKind.Office:
@@ -166,6 +184,7 @@ public static class SiteDressings
                         float u = 0.2f + i * 4.5f;
                         ZoneBox(u, g, 0.35f, u + 4.0f, g + 1.4f, 2.25f, ShellPart.Skip, true);
                         ZoneBox(u + 0.15f, g + 1.4f, 0.5f, u + 3.85f, g + 1.6f, 2.1f, ShellPart.Debris, false);
+                        Stock(SiteLoot.FirstSkipSlot + i, SiteStockKind.Skip, u, g, 0.35f, u + 4.0f, g + 1.6f, 2.25f);
                     }
                     break;
                 }
@@ -173,6 +192,7 @@ public static class SiteDressings
                 {
                     // a bundle of rebar the length of the zone, then a row of pallets and stacks
                     ZoneBox(0.2f, g, 0.2f, length - 0.2f, g + 0.35f, 0.8f, ShellPart.Rebar, true);
+                    Stock(SiteLoot.RebarSlot, SiteStockKind.Rebar, 0.2f, g, 0.2f, length - 0.2f, g + 0.35f, 0.8f);
                     float u = 0.2f;
                     for (int i = 0; u + 1.4f < length; i++)
                     {
@@ -189,15 +209,17 @@ public static class SiteDressings
                             {
                                 float deck = depth >= Items.Pallets.SquareDepth - 0.01f ? Items.Pallets.SquareDepth : Items.Pallets.NarrowDepth;
                                 // runners along the zone's long side, the deck centred in the slot
-                                float mu = u + Items.Pallets.Length / 2, mw = W((w0 + w1) / 2);
-                                var centre = longX ? new Vector3(x0 + mu, g, z0 + mw) : new Vector3(x0 + mw, g, z0 + mu);
+                                float mu = u + Items.Pallets.Length / 2, mw = (w0 + w1) / 2;
+                                var centre = longX ? new Vector3(x0 + mu, g, z0 + W(mw)) : new Vector3(x0 + W(mw), g, z0 + mu);
                                 plan.Pallets.Add(new SitePalletSpot(i, centre, longX, Items.Pallets.LoadOf(bricks ? 0.95f : 0.8f, deck)));
+                                Stock(i, bricks ? SiteStockKind.Bricks : SiteStockKind.Cement, u, g, mw - deck / 2, u + Items.Pallets.Length, g + 1.0f, mw + deck / 2);
                             }
                             else
                             {
                                 ZoneBox(u, g, w0, u + 1.2f, g + 0.15f, w1, ShellPart.Deck, true);
                                 ZoneBox(u + 0.05f, g + 0.15f, w0 + 0.05f, u + 1.15f, g + (bricks ? 1.0f : 0.95f), w1 - 0.05f,
                                     bricks ? ShellPart.Brick : ShellPart.Cement, true);
+                                Stock(i, bricks ? SiteStockKind.Bricks : SiteStockKind.Cement, u, g, w0, u + 1.2f, g + 1.0f, w1);
                             }
                             u += 1.6f;
                         }
@@ -206,12 +228,14 @@ public static class SiteDressings
                             // a stack of formwork panels
                             float l = Math.Min(2.7f, length - u - 0.2f);
                             ZoneBox(u, g, w0, u + l, g + 0.9f, w1, ShellPart.Formwork, true);
+                            Stock(i, SiteStockKind.Formwork, u, g, w0, u + l, g + 0.9f, w1);
                             u += l + 0.4f;
                         }
                         else
                         {
                             // concrete rings, two high
                             ZoneBox(u, g, w0, u + 1.2f, g + 2.0f, w1, ShellPart.FreshConcrete, true);
+                            Stock(i, SiteStockKind.Rings, u, g, w0, u + 1.2f, g + 2.0f, w1);
                             u += 1.6f;
                         }
                     }

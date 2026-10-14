@@ -165,6 +165,17 @@ public partial class ControlsHelp : CanvasLayer
             new("Dig: boom up / down (hold)", Keys: "{arm_boom_up} / {arm_boom_down}", Pad: "right stick ↓ ↑"),
             new("Dig: bucket curl / dump (hold)", Keys: "{arm_bucket_curl} / {arm_bucket_dump}", Pad: "right stick ← →"),
         }),
+        ("Tower crane (#618): at the ladder's foot or the remote's box on the mast", new Row[]
+        {
+            // the ladder up into the cab, or the radio remote from the ground; the sticks in the ISO crane pattern
+            new("Climb the ladder / take the remote; at the controls, let go of them", PlayerInput.InteractMount),
+            new("Ladder: up / down; let go", Keys: "{move_forward} / {move_back}; {jump}", Pad: "left stick ↑ ↓; {jump}"),
+            new("Slew left / right (hold)", Keys: "{arm_slew_left} / {arm_slew_right}", Pad: "left stick ← →"),
+            new("Trolley out / in (hold)", Keys: "{arm_stick_out} / {arm_stick_in}", Pad: "left stick ↑ ↓"),
+            new("Hoist up / down (hold)", Keys: "{arm_boom_up} / {arm_boom_down}", Pad: "right stick ↓ ↑"),
+            new("Hook a pallet on / set it down", PlayerInput.Couple),
+            new("Hook camera / your own view", PlayerInput.CameraToggle),
+        }),
         ("Mini excavator (#614): the excavator's controls, and", new Row[]
         {
             // the excavator's controls, and a dozer blade on the gear paddles, driving or digging

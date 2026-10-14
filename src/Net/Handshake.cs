@@ -59,8 +59,9 @@ public partial class Handshake : Node
     /// 11, ShopType.FarmCoop 12, items 300-340, HeavyCatalog 102-103, TrailerCatalog 6-9 and the boat
     /// trailers it builds on (#463).
     /// 33: World/Arrival (Rules: the server's spawn point and teleport rule) (#799).
+    /// 34: World/Cranes (AskOperate, Send, AskRelease; Operated, Posed, Released, Carry, Snapshot) (#618).
     /// </summary>
-    public const int Protocol = 33;
+    public const int Protocol = 34;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;
