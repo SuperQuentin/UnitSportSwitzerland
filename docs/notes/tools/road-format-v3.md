@@ -102,6 +102,12 @@
   `RoadPaintGeometry.AlongTransition` and appends to the tile's paint (so they come back after PNT2's; `PaintInFileOrder`). The
   game builds the piece from it (`SegmentSections`: carriageway edges and bands per point, kerb heights and the path's kind
   from the segment's sides); an older build ignores both and draws the plain street. Self-check `--format-check`.
+- **`JPTH`** junction paths (#818 phase 5, #709, `RoadJunctionPath.cs`, `junction-planner`): `version u8` (1; skipped whole when
+  unknown), `count varint`, per path `junction varint` (the core's cap in the tile), its two ends (`x, y, z, offset` zigzag cm: where
+  the arm's road meets the mouth on its centreline, tile-local, possibly just past the tile's edge, and the lane's offset right of
+  a driver arriving on that arm), `move u8`, `kind u8` (car, bike), `signal zigzag` (the SGNL record, -1 without lights), `group
+  u8`, `width, toWidth varint cm`, `pointCount varint`, points as zigzag cm (the first absolute, then deltas). Ends are positions,
+  not segments, so a path reaches a road in the next tile; the game ties them to road ends by position, as road ends to each other.
 - **Varying along a link** (a sidewalk width per sample, OSM lanes changing mid-line): the
   stage splits the segment; attributes are per segment. Segments already meet end to end at
   tile seams and junction trims.

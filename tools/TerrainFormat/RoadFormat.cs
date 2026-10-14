@@ -477,6 +477,8 @@ public sealed class RoadTile
     public List<RoadTransition> Transitions { get; init; } = new();
     /// <summary>Marked bays of the tile's car parks (#499, <c>PARK</c>), in the planner's stable order.</summary>
     public List<ParkingBay> Parking { get; init; } = new();
+    /// <summary>Lane-to-lane paths through the tile's junction cores (#818 phase 5, #709, <c>JPTH</c>).</summary>
+    public List<RoadJunctionPath> JunctionPaths { get; init; } = new();
 }
 
 public static class RoadFormat

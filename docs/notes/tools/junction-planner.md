@@ -247,3 +247,23 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
 - **Pitfall**: a corner's band past 65,535 indices crashed the encoder (`checked` ushort count; Zurich 2689054,1252758, a
   238 m2 corner cut into 57,721 cells). `CornerPlanner` capped only the vertices; a full band now goes on in a new mesh.
 - **Left**: seams where a carried path's sloped strip meets the corner's wedge (as the old unlit layout's).
+
+## Phase 5: traffic paths and multi-node cores (in progress, Oct 15 2026)
+
+- **Steps**: 5a the tools write every written core's connectors as paths (`JPTH`) and check them; 5b the game's `LaneGraph` uses
+  them instead of `JoinTrimmedEnds`' straight connectors at those cores, a car taking the path of its lane and exit, and lanes
+  along transitions from `TRNS` (today traffic reads neither: `KeepRight` offsets, `LaneApproach.Lateral`, straight connectors
+  with every lane offset 0); 5c cores spanning several nodes. The marking details (bike boxes, solid lines, guides past islands)
+  are settled in phase 6's review (the user, Oct 15).
+- **5a, written** (`TileRewriter.LayoutWrite` `WritePaths`): one path per connector, car and bike; its ends where the arm's road
+  meets the mouth (the axis point at the mouth station, height from the cap) with the lane's offset right of a driver arriving
+  (the connector's `FromOffset`/`ToOffset`); signal record and group as the bike crossings find them; points on the cap's
+  surface, simplified. Ends by position, not by segment: an arm's piece at the mouth can lie in the next tile, or an arm's link in
+  the home tile can lie whole under the core (a first try naming segments lost 1,566 of 12,687 paths that way).
+- **Checked**: `--format-check` (round trip, a path without its cap left out, a newer version skipped); `--signal-check` (each end
+  on its lane: the end point plus the offset across the road arriving there, and on a lane of it; every point on the cap). Test
+  region 145 paths on 10 cores, all ok. 168 real tiles 12,687 paths on 1,977 cores, 51 ends 0.3-0.9 m off (curved road ends: the
+  check takes the road's last stretch as its way), none off a core; `JPTH` 5.3 KB/tile raw, 3.9 deflated (the plan's budget for
+  the whole rework +3 %).
+- **Pitfall**: `PiecesOf` read an emptied link (passed whole by a mouth) as uncut and returned the original segment, not in the
+  tile; an empty list now means no pieces.

@@ -41,6 +41,9 @@ public static class RoadCodec
     /// <summary>Marked parking bays (#499).</summary>
     public static readonly uint TagParking = FourCC("PARK");
 
+    /// <summary>#818 phase 5 (#709): lane-to-lane paths through junction cores (<see cref="RoadJunctionPath"/>).</summary>
+    public static readonly uint TagJunctionPaths = FourCC("JPTH");
+
     private static uint FourCC(string s) => BitConverter.ToUInt32(Encoding.ASCII.GetBytes(s));
 
     /// <param name="legacySections">Write the pre-#116b ATTR and PANT payloads (format self-check only).</param>
@@ -148,6 +151,8 @@ public static class RoadCodec
             sections.Add((TagTransitions, Section(s => RoadTransition.Write(s, tile.Transitions, tile.Segments, tile.Paint))));
         if (tile.Parking.Count > 0)
             sections.Add((TagParking, Section(s => ParkingBay.Write(s, tile.Parking))));
+        if (tile.JunctionPaths.Count > 0)
+            sections.Add((TagJunctionPaths, Section(s => RoadJunctionPath.Write(s, tile.JunctionPaths, tile.Junctions))));
 
         w.Write((uint)sections.Count);
         foreach (var (tag, payload) in sections)
@@ -205,6 +210,7 @@ public static class RoadCodec
         RoadAttributes[]? attributes = null;
         List<(int Paint, int Segment)>? references = null;
         List<RoadTransition.Raw>? transitions = null;
+        List<RoadJunctionPath.Raw>? junctionPaths = null;
         var tile = new RoadTile
         {
             Id = id, Segments = new List<RoadSegment>((int)count), Junctions = junctions,
@@ -327,6 +333,11 @@ public static class RoadCodec
                     transitions = RoadTransition.Read(r);
                     if (transitions is null) input.Position = end;   // a newer section version: skipped whole
                 }
+                else if (tag == TagJunctionPaths)
+                {
+                    junctionPaths = RoadJunctionPath.Read(r);
+                    if (junctionPaths is null) input.Position = end;   // a newer section version: skipped whole
+                }
                 else if (tag == TagParking)
                 {
                     if (ParkingBay.Read(r) is { } bays) tile.Parking.AddRange(bays);
@@ -364,6 +375,8 @@ public static class RoadCodec
             foreach (var l in tr.Lines)
                 tile.Paint.Add(RoadPaint.AlongTransition(t, l.Boundary, l.Type, l.Rgba, l.Width, l.Dash, l.Gap, l.Offset, l.From, l.To));
         }
+        // junction paths (#818 phase 5) on the tile's caps
+        if (junctionPaths is not null) tile.JunctionPaths.AddRange(RoadJunctionPath.Resolve(junctionPaths, tile.Junctions));
         return tile;
     }
 

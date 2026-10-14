@@ -95,6 +95,7 @@ public static class FormatCheck
         Check(PaintFollowsCrossSection(), "paint on the cross-section's lanes, no centre line on a narrow road");
         Check(RailCrossingIsEmbedded(), "level crossing: rail embedded at road height, blended back, grooves, road paint cut");
         Check(TransitionRoundTrips(out string why), "transition (TRNS): byte-identical round trip, widths, a line along a boundary rebuilt, a newer version skipped" + why);
+        Check(JunctionPathRoundTrips(out string whyPath), "junction path (JPTH): byte-identical round trip, ends and points kept, a newer version skipped" + whyPath);
 
         log(failures == 0 ? "format check passed" : $"format check: {failures} failure(s)");
         return failures == 0;
@@ -145,6 +146,45 @@ public static class FormatCheck
         newer[at + 8]++;
         var skipped = Decode(newer);
         if (skipped.Transitions.Count != 0 || skipped.Paint.Count != 1) { why = ": a newer version not skipped"; return false; }
+        return true;
+    }
+
+    /// <summary>
+    /// A junction path (#818 phase 5): a cap between two segments, a left turn from the west road's end (its lane 1.5 m right of
+    /// a driver arriving) to the north road's (1.5 m left of a driver arriving there, the departing lane). The bytes round trip,
+    /// the ends and points stay within a centimetre, a path whose cap the tile lacks is left out, and a newer version is skipped.
+    /// </summary>
+    private static bool JunctionPathRoundTrips(out string why)
+    {
+        why = "";
+        var west = new RoadSegment { Class = RoadClass.Road, Surface = RoadSurface.Paved, Width = 6, Points = [100, 0, 500, 190, 0, 500] };
+        var north = new RoadSegment { Class = RoadClass.Road, Surface = RoadSurface.Paved, Width = 6, Points = [200, 0, 490, 200, 0, 400] };
+        var cap = new RoadJunction { Class = RoadClass.Road, Vertices = [190, 0, 497, 203, 0, 497, 203, 0, 490, 190, 0, 503], Indices = [0, 1, 2, 0, 2, 3] };
+        var path = new RoadJunctionPath
+        {
+            Junction = cap, From = new JunctionPathEnd(190, 0.01f, 500, 1.5f), To = new JunctionPathEnd(200, 0.03f, 490, -1.5f), Move = SignalMoves.Left,
+            Signal = 0, Group = 2, Width = 3, ToWidth = 3.25f, Points = [190, 0.01f, 501.5f, 195.12f, 0.02f, 499.7f, 198.5f, 0.03f, 490],
+        };
+        var tile = new RoadTile { Id = new TileId(2600, 1200), Segments = [west, north], Junctions = [cap], Flags = RoadTileFlags.Network };
+        tile.JunctionPaths.Add(path);
+        byte[] bytes = Encode(tile);
+        var back = Decode(bytes);
+        if (!Encode(back).AsSpan().SequenceEqual(bytes)) { why = ": not byte-identical"; return false; }
+        if (back.JunctionPaths.Count != 1) { why = ": path lost"; return false; }
+        var p = back.JunctionPaths[0];
+        if (p.Junction != back.Junctions[0]) { why = ": cap not resolved"; return false; }
+        static bool Near(JunctionPathEnd a, JunctionPathEnd b) =>
+            Math.Abs(a.X - b.X) < 0.006f && Math.Abs(a.Y - b.Y) < 0.006f && Math.Abs(a.Z - b.Z) < 0.006f && Math.Abs(a.Offset - b.Offset) < 0.006f;
+        if (!Near(p.From, path.From) || !Near(p.To, path.To) || p.Move != SignalMoves.Left || p.Group != 2 || Math.Abs(p.ToWidth - 3.25f) > 1e-4)
+        { why = ": fields differ"; return false; }
+        if (p.Points.Length != path.Points.Length || p.Points.Zip(path.Points).Any(x => Math.Abs(x.First - x.Second) > 0.006f)) { why = ": points moved"; return false; }
+        var orphan = new RoadTile { Id = tile.Id, Segments = [west, north], Flags = RoadTileFlags.Network };
+        orphan.JunctionPaths.Add(path);
+        if (Decode(Encode(orphan)).JunctionPaths.Count != 0) { why = ": a path to a missing cap kept"; return false; }
+        int at = FindTag(bytes, RoadCodec.TagJunctionPaths);
+        var newer = (byte[])bytes.Clone();
+        newer[at + 8]++;
+        if (Decode(newer).JunctionPaths.Count != 0) { why = ": a newer version not skipped"; return false; }
         return true;
     }
 

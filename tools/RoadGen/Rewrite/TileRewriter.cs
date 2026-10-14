@@ -441,6 +441,7 @@ public static partial class TileRewriter
             var pathEnds = new Dictionary<TileId, List<CornerPlanner.PathEnd>>();   // sidewalk corners beside a path carried to the kerb (#711)
             var paint = new Dictionary<TileId, List<RoadPaint>>();
             var transitionsOf = new Dictionary<TileId, List<RoadTransition>>();   // the junction planner's transitions (#818)
+            var pathsOf = new Dictionary<TileId, List<RoadJunctionPath>>();   // its paths for traffic (#818 phase 5, JPTH)
             var writtenCaps = new HashSet<RoadJunction>(ReferenceEqualityComparer.Instance);   // its cores: no old corners round them
             var coreCorners = new Dictionary<TileId, Dictionary<RoadJunction, List<CornerPlanner.CornerInput>>>();   // ... but their own, given (phase 4)
             var signs = new Dictionary<TileId, List<RoadPointProp>>();
@@ -778,7 +779,7 @@ public static partial class TileRewriter
                 // the junction planner's junctions written (#818 phase 3): cores, trims, transitions and their paint
                 if (layouts is not null && writtenNodes.Count > 0)
                     WriteLayouts(layouts, writtenNodes, result, segmentOf, finalPieces, output, capOf, caps, writtenCaps, paint, paintStation,
-                        transitionsOf, islands, signs, signalRecords, approachRecords, cantons, netStats.Signals, netStats.LayoutWrite, coreCorners, pathEnds, bikeBridges);
+                        transitionsOf, islands, signs, signalRecords, approachRecords, cantons, netStats.Signals, netStats.LayoutWrite, coreCorners, pathEnds, bikeBridges, pathsOf);
 
                 // the paths' paint on their final pieces, and the crossings at the junctions (#120)
                 var linkOf = new Dictionary<RoadSegment, int>(ReferenceEqualityComparer.Instance);
@@ -890,6 +891,7 @@ public static partial class TileRewriter
                     Approaches = approachRecords.TryGetValue(id, out var ap) ? ap : new List<RoadApproach>(),
                     Parking = parkBays.TryGetValue(id, out var pb) ? pb : new List<ParkingBay>(),   // #499
                     Transitions = Placed(id, transitionsOf.GetValueOrDefault(id), segments, netStats.LayoutWrite),   // #818
+                    JunctionPaths = pathsOf.GetValueOrDefault(id) ?? [],   // #818 phase 5: the writer keeps those whose cap the tile holds
                 };
                 rails.ClearTrackZones(tile.Paint, id);
                 built.Add(tile);
