@@ -606,6 +606,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public bool ChoseFirstPerson => !_thirdPerson || _borrowedThird;
 
     /// <summary>
+    /// True while this owner's on-foot figure is seen from its own eye (first person, a scope, a
+    /// throw's lens still in the head): built, posed and drawn on <see cref="Avatar.OwnBody.Layer"/> (#833).
+    /// </summary>
+    public bool BodyFromEye => _walker != null && _walker.Layers == Avatar.OwnBody.Layer;
+
+    /// <summary>
     /// 0..1: an item held ready to throw wants the close over-the-shoulder camera (set every frame by
     /// <see cref="Items.ItemController"/>, like <see cref="FovOverride"/>). In first person the view
     /// is lent to third person for as long as it lasts, pulled out of the head and back.
@@ -1407,6 +1413,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 Near = 0.08f,
                 Far = Core.GameSettings.Current.CameraFar,
                 Fov = BaseFov,
+                // the eye never sees its own body (#833): first person puts it on that layer
+                CullMask = 0xFFFFFu & ~Avatar.OwnBody.Layer,
             };
             AddChild(_camera);
             _camera.Current = true;
@@ -1489,8 +1497,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         if (kind == RideKind.OnFoot)
         {
-            // first person: nothing to draw, except in VR for the monitor's third-person view (#186)
-            if (IsMultiplayerAuthority() && !Npc && !_thirdPerson && !XR.XrSession.Active) return;
+            // first person builds it too (#833): the eye does not see it, but its shadow and the
+            // mirrors do, and in VR the monitor's third-person view (#186)
             _walkPalette = FigurePalette(rider);
             _poseOutfit = OutfitBits;
             _face.Reset();   // a new node: its face uniforms start over
@@ -1500,7 +1508,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, 0f, 0f, hat: Hat),
                 MaterialOverride = Avatar.HumanMeshBuilder.FigureMaterial(),
             };
-            if (IsMultiplayerAuthority() && !Npc && !_thirdPerson) _walker.Layers = XR.XrSession.SpectatorOnlyLayer;
+            if (IsMultiplayerAuthority() && !Npc && !_thirdPerson) _walker.Layers = Avatar.OwnBody.Layer;
             _visual = _walker;
         }
         else
@@ -1671,8 +1679,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             if (!_thirdPerson)
             {
                 Rotation = new Vector3(0, _viewYaw, 0);
-                // the body only the monitor's third-person camera sees (#186)
-                if (XR.XrSession.Active) ApplyFootPose();
+                // the body the eye does not see: its shadow, the mirrors and the VR monitor do (#186, #833)
+                ApplyFootPose();
+                SeeBodyFromEye(true);
             }
             else if (ScopeView && _camera != null)
             {
@@ -1680,15 +1689,15 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 Rotation = new Vector3(0, _viewYaw, 0);
                 _camera.Transform = new Transform3D(new Basis(Vector3.Right, _pitch + _punch),
                     new Vector3(0, EyeHeight + _landingDip, 0));
-                if (_walker != null) _walker.Visible = false;
-                HandLocal = null;
+                ApplyFootPose();
+                SeeBodyFromEye(true);
                 _pivotY = float.NaN;
             }
             else
             {
                 // borrowed from first person for a throw: the body only shows once the lens is out of the head
-                if (_walker != null) _walker.Visible = !_borrowedThird || _throwBlend > 0.3f;
                 ApplyFootPose();
+                SeeBodyFromEye(_borrowedThird && _throwBlend <= 0.3f);
                 UpdateThirdPersonCamera(dt);
             }
             BlendOutCrashCamera(dt);
@@ -2106,6 +2115,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private Avatar.HumanPose CarriedFigure() =>
         PoseKind == PoseHang ? Avatar.HumanPose.Hanging
         : Anim.X > 0.5f ? Avatar.HumanPose.ClimbRight : Avatar.HumanPose.ClimbLeft;
+
+    private MeshInstance3D? _bodyShadow;
+
+    /// <summary>The owner's figure from its eye or not (<see cref="Avatar.OwnBody"/>), after the pose: its shadow takes the mesh.</summary>
+    private void SeeBodyFromEye(bool fromEye)
+    {
+        if (_walker != null) Avatar.OwnBody.See(_walker, fromEye, ref _bodyShadow);
+    }
 
     private void ApplyFootPose()
     {
