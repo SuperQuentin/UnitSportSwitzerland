@@ -235,6 +235,10 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   far (a hole between core and lane). The trim measures with `ArmAxis.StationPast` (straight on past the axis's end), runs the
   first piece left past the mouth back on to it (`RunOn`), and drops a link the mouth passes whole. The real T 2670381,1253603
   keeps its 9 cm step: not this bug (it stays in `junction-edge-cases`).
+- **A road joining short of a mouth** (the user, Oct 15, on the test region's copies of the two edge cases): where the arm's
+  street runs on through a node within 4 m past its mouth at which anything else meets it (a road dividing, a link, a track),
+  the junction spans several nodes and stays on the old layout until phase 5 (`RoadJoinsShortOfMouth`). 168 tiles: 192 more
+  left to the old layout (1,978 written); kerb check 53 against the old layout's 124, none only the new layout has.
 - **Carried sides that cross in one corner** (each arm's path carried across the other's road) are left to the corner, as
   the old layout's #711 rule (`LayCarriedSides`, shared): `BikeCrossWrite` laid both, one over the other, and riders met a
   6 cm step where the bands of different heights overlapped (Geneva 2496643,1118197: 3 kerb failures gone).

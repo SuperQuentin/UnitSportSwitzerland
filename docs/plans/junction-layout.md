@@ -335,3 +335,6 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
 - **A path crossing over a joining road keeps following the street's curve** (Oct 14, shown the old layout's square
   crossings beside each zebra at the same Geneva junction): also where the street bends at the node; only the kerbs where it
   ends are fixed.
+- **A road joining an arm short of its mouth leaves the junction to the old layout until phase 5** (Oct 15, on the test
+  region's copy of 2619795,1264700, where the main road divides 6 m from the T): a road dividing, a link or a track meeting
+  the arm's street before (or within 4 m past) its mouth makes it a junction of several nodes.

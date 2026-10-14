@@ -36,6 +36,11 @@ public static class SignalTestRegion
     /// whose lane arm reaches a node 7 m out, where two tracks branch off, inside the core.
     /// </summary>
     public const double ShortArmE = 2914000;
+    /// <summary>
+    /// The real junction 2619795,1264700 (#818, the user's edge case) moved here as it is, its T's node at this LV95 E on
+    /// <see cref="TwinRowN"/>: 6 m west of the T the main road divides into two 2.2 m carriageways, joined at their start by a link.
+    /// </summary>
+    public const double DividedTeeE = 2915300;
     /// <summary>The ground, metres (as the fixture courses).</summary>
     public const double Ground = 500;
     /// <summary>Region centre: the manifest's suggested origin.</summary>
@@ -51,7 +56,7 @@ public static class SignalTestRegion
 
     /// <summary>One TLM line as the extractor would read it, with its OSM overlay row.</summary>
     private sealed record Line(string Id, string Objektart, string Verkehrsbedeutung, string Eigentuemer, (double E, double N)[] Points,
-        string Highway, string Sidewalk = "", string Cycleway = "", OsmRow[]? Rows = null)
+        string Highway, string Sidewalk = "", string Cycleway = "", OsmRow[]? Rows = null, bool Divided = false)
     {
         public string Uuid => "{386-" + Id + "}";
     }
@@ -213,6 +218,22 @@ public static class SignalTestRegion
             lines.Add(new Line("SAS0", "3m Strasse", "k_W", "Gemeinde", [(e1, nb - 250), (e1, nb - 7)], "service", "yes"));
             lines.Add(new Line("SATW", "2m Weg", "k_W", "Gemeinde", [(e1 - 90, nb - 40), (e1, nb - 7)], "track"));
             lines.Add(new Line("SATE", "2m Weg", "k_W", "Gemeinde", [(e1, nb - 7), (e1 + 90, nb - 40)], "track"));
+        }
+        // 10. the real junction 2619795,1264700 (#818, the user's edge case), its points moved by (295505.6, 56695.2): a T of an
+        // 8 m main road and an 8 m side road from the south-south-east; 6 m west of the T (node B) the main road divides into two
+        // 2.2 m carriageways ~3 m apart (richtungsgetrennt), the southern one starting 1.4 m south of B at a 1.5 m link (C)
+        {
+            const double dx = 295505.6, dy = 56695.2;
+            (double, double) R(double e, double n) => (e + dx, n + dy);
+            var a = R(2619794.4, 1264704.8);
+            var b = R(2619788.8, 1264702.8);
+            var c = R(2619789.2, 1264701.4);
+            lines.Add(new Line("DTE", "8m Strasse", "Durchgangsstrasse", "Kanton", [a, R(2619803.4, 1264708.3), R(2620073.0, 1264813.0)], "secondary", "yes"));
+            lines.Add(new Line("DTS", "8m Strasse", "Durchgangsstrasse", "Kanton", [R(2619842.3, 1264548.3), a], "secondary", "yes"));
+            lines.Add(new Line("DTW", "8m Strasse", "Durchgangsstrasse", "Kanton", [b, a], "secondary", "yes"));
+            lines.Add(new Line("DTN", "4m Strasse", "Durchgangsstrasse", "Kanton", [b, R(2619739.9, 1264688.7), R(2619500.0, 1264620.0)], "secondary", "yes", Divided: true));
+            lines.Add(new Line("DTD", "4m Strasse", "Durchgangsstrasse", "Kanton", [R(2619501.3, 1264616.9), R(2619741.2, 1264685.6), c], "secondary", "yes", Divided: true));
+            lines.Add(new Line("DTL", "Verbindung", "Durchgangsstrasse", "Kanton", [c, b], "secondary"));
         }
 
         junctions.Add(new Junction("J8-twin-lights", TwinLitE, TwinRowN, "the twins' T with lights (the other, 1.5 km east, has none)",
@@ -380,7 +401,7 @@ public static class SignalTestRegion
         {
             var cls = RoadFormat.ParseClass(line.Objektart);
             var surface = RoadFormat.ParseSurface("Hart");
-            var flags = RoadFormat.ParseFlags(null, null, null, "Falsch");
+            var flags = RoadFormat.ParseFlags(null, null, null, line.Divided ? "Wahr" : "Falsch");
             var attr = new RoadAttributes(
                 Flags: RoadFormat.ParseAttrFlags("Falsch", line.Eigentuemer),
                 Layer: RoadFormat.LayerFor("0", flags),

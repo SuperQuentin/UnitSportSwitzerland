@@ -24,6 +24,10 @@
   3 m lane from the south whose first link ends 7 m out where two tracks branch off (on the main road's own path band). The
   planner's core puts the lane's mouth past that node: the lane is trimmed to it along the run-on street (it left a hole
   before `ArmAxis.StationPast`).
+- **The divided-road T** (#818, `DividedTeeE` 2915300 on N 1321400): the real junction 2619795,1264700 moved here as it is
+  (points shifted by 295505.6, 56695.2): 6 m west of the T the main road divides into two 2.2 m carriageways
+  (`Line.Divided`: TLM `richtungsgetrennt`) joined by a 1.5 m `Verbindung`. Both #818 cases stay on the old layout (a road
+  joins short of a mouth).
 - **Where**: tiles E 2910-2917 N 1321-1323 (24 tiles; J6/J7 #700 in 2916-2917), flat at 500 m, one 6 km rewrite block),
   outside Switzerland on purpose: no real tile, streamed or cached, shares an id. Manifest origin
   2913000,1322500 (shots' world x = E - 2913000, z = 1322500 - N). Junctions on one row, N 1322500,

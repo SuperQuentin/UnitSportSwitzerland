@@ -56,6 +56,7 @@ public static partial class TileRewriter
             else if (jp.Arms.Any(a => a.Internal)) no = "multi-node";
             else if (!junctions.TryGetValue(jp.Node, out var j) || j.Arms.Count != jp.Arms.Count) no = "a path or track joins";
             else if (jp.Arms.Any(a => a.Axis is null || !core.Mouths.Any(m => m.Arm == a.Arm))) no = "an arm without a mouth";
+            else if (jp.Arms.Any(a => RoadJoinsShortOfMouth(result.Network, a, core.Mouths.First(m => m.Arm == a.Arm).Station))) no = "a road joins short of a mouth";
             else
                 foreach (var a in jp.Arms)
                     foreach (int link in a.StreetOn.Select(x => x.Link).Prepend(a.LinkId))
@@ -83,6 +84,28 @@ public static partial class TileRewriter
         stats.Skipped += why.Count;
         return ok;
     }
+
+    /// <summary>
+    /// Another road joins the arm's street short of its mouth (the user, Oct 14 2026): a node the street runs on through within
+    /// <see cref="JoinMargin"/> past the mouth where anything else meets it (a road dividing, a link, a track). The junction spans
+    /// several nodes: the old layout keeps it until phase 5 plans such cores whole.
+    /// </summary>
+    private static bool RoadJoinsShortOfMouth(RoadNetwork net, ArmPlan a, double mouth)
+    {
+        var l0 = net.Links[a.LinkId];
+        var nodes = new List<int> { a.AtEnd ? l0.StartNode : l0.EndNode };
+        foreach (var (link, atEnd) in a.StreetOn) { var l = net.Links[link]; nodes.Add(atEnd ? l.StartNode : l.EndNode); }
+        foreach (int node in nodes)
+        {
+            if (node < 0 || node >= net.Nodes.Count) break;
+            if (a.Axis!.StationPast(net.Nodes[node].Position) > mouth + JoinMargin) break;
+            if (net.Nodes[node].Degree > 2) return true;
+        }
+        return false;
+    }
+
+    /// <summary>A road joining an arm's street this far past its mouth (m, its crosswalk's reach) still joins the junction.</summary>
+    private const double JoinMargin = 4.0;
 
     /// <summary>A tile's transitions whose segment it still holds (a check: any other is counted and left out, its piece drawn plain).</summary>
     private static List<RoadTransition> Placed(TileId id, List<RoadTransition>? transitions, List<RoadSegment> segments, LayoutWriteStats stats)
