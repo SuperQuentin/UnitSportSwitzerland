@@ -443,11 +443,17 @@ public static class CornerPlanner
             // one welded mesh per band (type, base height): vertices at one point are one vertex, so an edge two pieces share has
             // no skirt; only the band's outline gets one. A band whose height varies carries the difference in its vertices
             var bands = new Dictionary<(AreaPropType Type, float Height, bool Kerb), (List<float> V, List<ushort> I, Dictionary<(long, long, long), ushort> At)>();
+            // a band past the format's 16-bit counts goes on in a new mesh (a large corner cut into fine cells, #818)
+            var full = new List<((AreaPropType Type, float Height, bool Kerb) Key, (List<float> V, List<ushort> I, Dictionary<(long, long, long), ushort> At) Mesh)>();
             void Lay(AreaPropType type, float height, List<(Vec2 P, float Y)> part)
             {
                 bool kerb = type == AreaPropType.Kerb;
                 if (!bands.TryGetValue((type, height, kerb), out var mesh)) bands[(type, height, kerb)] = mesh = ([], [], new());
-                if (mesh.V.Count / 3 + part.Count > ushort.MaxValue) return;
+                if (mesh.V.Count / 3 + part.Count > ushort.MaxValue || mesh.I.Count + 3 * part.Count > ushort.MaxValue)
+                {
+                    full.Add(((type, height, kerb), mesh));
+                    bands[(type, height, kerb)] = mesh = ([], [], new());
+                }
                 ushort Index((Vec2 P, float Y) q)
                 {
                     var key = ((long)Math.Round(q.P.X * 1000), (long)Math.Round(q.P.Y * 1000), (long)Math.Round(q.Y * 1000));
@@ -601,7 +607,7 @@ public static class CornerPlanner
             stats.Built++;
             stats.Area += area;
             if (Environment.GetEnvironmentVariable("CORNERGAPS") == "1") Console.WriteLine($"[gap] {id.MinE + chainA.Out.X:F0},{id.MaxN + chainA.Out.Y:F0} {area:F1} m2");
-            foreach (var ((type, height, isKerb), mesh) in bands)
+            foreach (var ((type, height, isKerb), mesh) in full.Concat(bands.Select(b => (b.Key, b.Value))))
             {
                 var band = new RoadAreaProp
                 {

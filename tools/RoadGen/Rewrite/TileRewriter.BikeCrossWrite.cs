@@ -11,7 +11,8 @@ using UnitSport.Tools.RoadGen.Network;
 /// core: yellow dashed edges, red where a car's connector crosses it (at the lights only where the two are green together: the
 /// user's rule, #682; without lights wherever a road joins). A separated path follows the path's curve (the user's choice): from
 /// the arm's path at its mouth to the straight-on arm's, red over the carriageway by the same rule, its side's bands laid along
-/// the curve up to the kerb with a sloped kerb strip there, and the corners told where the carried path meets the kerb.
+/// the curve up to the kerb with a sloped kerb strip there, and the corners told where the carried path meets the kerb. Where no
+/// road joins on its side, the path's side runs on along the core's kerb instead of the sidewalk corner.
 /// </summary>
 public static partial class TileRewriter
 {
@@ -103,9 +104,6 @@ public static partial class TileRewriter
             var secA = ExteriorPlanner.SectionAt(a, 0);
             var secB = ExteriorPlanner.SectionAt(b, 0);
             if (PathBand(secA, right: true) is null || PathBand(secB, right: false) is null) continue;
-            // only where a road joins between them on that side (else the corner's bands carry it through)
-            var between = jp.Arms.Where(x => x != a && x != b && Between(a.Heading, b.Heading, x.Heading)).ToList();
-            if (between.Count == 0) continue;
             if (net.Links[a.LinkId].Tag is not Source srcA || net.Links[b.LinkId].Tag is not Source srcB) continue;
             var sideA = SideOfArm(a, right: true);
             var sideB = SideOfArm(b, right: false);
@@ -116,6 +114,20 @@ public static partial class TileRewriter
             var cb = b.Axis.At(mb.Station, secB.CarriagewayLeft);
             var da = a.Axis.RightAt(ma.Station);
             var db = -b.Axis.RightAt(mb.Station);
+            // where no road joins on that side, the side's bands run on along the core's kerb (the old layout's BridgePath):
+            // the sidewalk corner they cover is dropped (Unbridged); profiles that differ keep the corner
+            var between = jp.Arms.Where(x => x != a && x != b && Between(a.Heading, b.Heading, x.Heading)).ToList();
+            if (between.Count == 0)
+            {
+                if (core.Corners.FirstOrDefault(c => c.ArmA == a.Arm && c.ArmB == b.Arm) is not { Shape: not CornerShape.Gore } corner) continue;
+                var kerb = KerbAlong(ma.Right, corner.Kerb, mb.Left);
+                if (BridgePath(home, sideA, sideB, ua, ub, (oa, ob) => OffsetAlong(kerb, oa, ob, da, db), H) is { } bands)
+                {
+                    Get(bridges, home).AddRange(bands);
+                    stats.PathsThrough++;
+                }
+                continue;
+            }
             bool OnRoad(Vec2 p) => Inside(core.Outline, p) || between.Any(x => OnArm(jp, x, p));
             if (PathsToKerb(home, OnRoad, sideA, sideB, ca, da, ua, 0, cb, db, ub, 0, ca.DistanceTo(cb) + 5, H, srcA.SampleHeight, srcB.SampleHeight, H) is not { } carried)
                 continue;
@@ -225,6 +237,49 @@ public static partial class TileRewriter
             if (d.Length < 1e-9) { result.Add(line[i]); continue; }
             d = d / d.Length;
             result.Add(line[i] + new Vec2(d.Y, -d.X) * by);
+        }
+        return result;
+    }
+
+    /// <summary>A core's kerb from one mouth's corner point to the next one's, through the corner's own kerb, resampled every half metre or less.</summary>
+    private static List<Vec2> KerbAlong(Vec2 from, List<Vec2> corner, Vec2 to)
+    {
+        var line = new List<Vec2> { from };
+        foreach (var p in corner.Append(to))
+            if (p.DistanceTo(line[^1]) > 1e-3) line.Add(p);
+        var dense = new List<Vec2> { line[0] };
+        for (int i = 0; i + 1 < line.Count; i++)
+        {
+            int n = Math.Max(1, (int)Math.Ceiling(line[i].DistanceTo(line[i + 1]) / 0.5));
+            for (int k = 1; k <= n; k++) dense.Add(line[i] + (line[i + 1] - line[i]) * ((double)k / n));
+        }
+        return dense;
+    }
+
+    /// <summary>
+    /// A kerb moved outward (to its right: the core's outline runs counter-clockwise) by an offset easing from
+    /// <paramref name="oa"/> to <paramref name="ob"/> along it, every point kept (the bands' lines pair up); the ends move
+    /// square off their arms (<paramref name="da"/>, <paramref name="db"/>), the inner points along their bisector, mitred.
+    /// </summary>
+    private static List<Vec2> OffsetAlong(List<Vec2> kerb, double oa, double ob, Vec2 da, Vec2 db)
+    {
+        double total = Math.Max(Length(kerb), 1e-9), along = 0;
+        var result = new List<Vec2>(kerb.Count);
+        for (int i = 0; i < kerb.Count; i++)
+        {
+            if (i > 0) along += kerb[i].DistanceTo(kerb[i - 1]);
+            double o = oa + (ob - oa) * along / total;
+            Vec2 n;
+            if (i == 0) n = da;
+            else if (i == kerb.Count - 1) n = db;
+            else
+            {
+                Vec2 Right(Vec2 d) { d = d / Math.Max(d.Length, 1e-9); return new Vec2(d.Y, -d.X); }
+                Vec2 n0 = Right(kerb[i] - kerb[i - 1]), n1 = Right(kerb[i + 1] - kerb[i]), sum = n0 + n1;
+                n = sum.Length < 1e-9 ? n0 : sum / sum.Length;
+                n = n / Math.Max(n.Dot(n0), 0.5);
+            }
+            result.Add(kerb[i] + n * o);
         }
         return result;
     }

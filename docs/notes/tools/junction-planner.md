@@ -197,7 +197,20 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   paint clear of its exterior, its arrows and solid stretches from the stop line; corners given explicitly to `CornerPlanner`
   (`CornerInput`, kerbs and bands of transition pieces from `SegmentSections`); bike lanes through the core along their connector,
   paths along their curve carried to the kerb (`PathsToKerb` with the core as carriageway); core paint on the cap's surface.
+  **A path on a side no road joins runs on along the core's kerb** (`BridgePath` on the kerb from one mouth to the next,
+  `KerbAlong` + `OffsetAlong`: ends square off their arms, inner points mitred); the sidewalk corner under it is dropped
+  (`Unbridged`), and arms whose profiles differ keep the corner.
 - **Checked**: test region RESULT ok, `--signal-check` ok, `--kerb-check` ok (12 zebras, 32 bike crossings), 0 decoded differently;
   Sion kerb check one failure the old layout lacks (an odd junction of 5-7 m links), six of the old ones gone.
-- **Left**: a path on a side no road joins is not carried through (the corner lays a sidewalk over its line: `BridgePath` along
-  the core's kerb); seams where a carried path's sloped strip meets the corner's wedge (as the old unlit layout's); tier 1 rerun.
+  Paths along a kerb (Oct 14 2026): test region 3 (the T's south sides, 2 corners replaced), RESULT, kerb and signal checks
+  ok; seams at the three Ts: the bands bring the street profile's own 6 cm grass-to-sidewalk step along (as on the arms), the
+  other seams 57 -> 43 at 2912250; two 0 cm "cracks" on the carried sidewalk's outer edge (terrain beyond: the checker's sampling).
+  Tier 1 (`tools/test.sh quick src/Terrain/Fixture/`): all 8 pass.
+  The 168 real tiles of the Mac's `terrain_chunks` (Geneva, Zurich and others; a copy rewritten with `--junctions write`):
+  2,186 junctions written, 264 paths carried along a kerb, sidewalk corners replaced 585 -> 836. Kerb check: 49 failures
+  against the old layout's 124; 4 places only the new layout fails (2506155,1137801 a zebra at the corner; 2496635,1118200
+  a five-arm junction at the lights whose path crossings run diagonally across the core; 2619787,1264697 a path crossing
+  meeting the cap's edge), 80 only the old one.
+- **Pitfall**: a corner's band past 65,535 indices crashed the encoder (`checked` ushort count; Zurich 2689054,1252758, a
+  238 m2 corner cut into 57,721 cells). `CornerPlanner` capped only the vertices; a full band now goes on in a new mesh.
+- **Left**: seams where a carried path's sloped strip meets the corner's wedge (as the old unlit layout's).
