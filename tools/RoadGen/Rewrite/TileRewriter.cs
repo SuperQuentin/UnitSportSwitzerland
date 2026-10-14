@@ -666,6 +666,21 @@ public static partial class TileRewriter
                     var piece = end == LinkEnd.Start ? ends[0] : ends[^1];
                     return right ? piece.Attributes.Right : piece.Attributes.Left;
                 }
+                // ... as the street runs up to the junction (#818: the planner's normal section): past a stub the street planner left at
+                // its end (a side cut for today's cap or a line close by), the first piece reaching EndStub out
+                RoadSide StreetSideOf(int linkId, LinkEnd end, bool right)
+                {
+                    if (!segmentOf.TryGetValue(linkId, out var so)) return default;
+                    var ends = streetPieces.TryGetValue(so.Item1, out var cut) && cut.Count > 0 ? cut : [so.Item1];
+                    double gone = 0;
+                    for (int p = 0; p < ends.Count; p++)
+                    {
+                        var piece = end == LinkEnd.Start ? ends[p] : ends[^(p + 1)];
+                        gone += RoadPaintGeometry.Length(piece.Points);
+                        if (gone > EndStub || p == ends.Count - 1) return right ? piece.Attributes.Right : piece.Attributes.Left;
+                    }
+                    return default;
+                }
                 // ... as it will reach the mouth (#711): a path stopping within CrossingLookIn of it is carried on to it (PathsToMouth),
                 // so a crosswalk laid before that crosses it too
                 RoadSide StreetSideToMouth(int linkId, LinkEnd end, bool right)
@@ -683,7 +698,7 @@ public static partial class TileRewriter
                     return StreetSideAt(linkId, end, right);
                 }
                 var layouts = options.NewJunctions
-                    ? PlanLayouts(priority, result, segmentOf, output, block, wanted, grids, buildings, StreetSideAt, overlay, restrictions, null, crossingNodes)
+                    ? PlanLayouts(priority, result, segmentOf, output, block, wanted, grids, buildings, StreetSideOf, overlay, restrictions, null, crossingNodes)
                     : null;
                 if (layouts is not null) netStats.Layouts.AddRange(layouts);
                 // the junctions the planner writes (#818 phase 3): the old passes lay out the others only
@@ -1043,6 +1058,9 @@ public static partial class TileRewriter
     /// A joining road's side cut back from a junction (#711): <c>Length</c> metres from the segment's end there
     /// (<c>AtEnd</c>) on the drawing's right or left (<c>Right</c>), where a crossing road's side carried on to the kerb covers it.
     /// </summary>
+    /// <summary>A street's last piece at most this long (m) is a stub: the planner reads the street's section past it (#818).</summary>
+    private const double EndStub = 5.0;
+
     private sealed record SideCut(RoadSegment Whole, TileId Tile, bool AtEnd, bool Right, double Length, bool Path = false);
 
     /// <summary>

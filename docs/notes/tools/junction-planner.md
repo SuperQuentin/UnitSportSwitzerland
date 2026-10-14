@@ -218,6 +218,14 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   by an added bike lane ends on the corner's fallback strip, a 30 m sidewalk band the corner builder lays along an arm side
   with no bands; the strip ignores `Lowered`, which only the compact corner honours) and 2619787,1264697 (a neighbouring
   Minor street's sidewalk lies inside the grown core, over the bike lane crossing it: in `junction-edge-cases`).
+- **The normal section past an end stub** (`StreetSideOf`, `EndStub` 5 m): the street planner can leave a short last piece at
+  the node with a side cut (today's cap, a line close by: link 101 at 2506169,1137800, 2.3 m with its right side gone); the
+  planner read that stub as the street's section, saw no path or sidewalk there, added a through bike lane and the corner
+  builder filled the side with a 30 m fallback strip the crosswalk ended on. It reads the first piece reaching past 5 m.
+  168 tiles after it: 2,165 junctions written (16 more wait on a neighbour beyond: longer transitions now that the arms see
+  their paths), kerb check 56 against the old layout's 124; new-only: 2618148,1263279 (a skewed crossroads: the side
+  street's path crossings on their curve meet the corners' path bands with a 6 cm kerb), 2670381,1253603 (a T: the main
+  road's path crossing ends on the corner's path band behind a 14 cm kerb) and the edge case 2619787,1264697.
 - **Carried sides that cross in one corner** (each arm's path carried across the other's road) are left to the corner, as
   the old layout's #711 rule (`LayCarriedSides`, shared): `BikeCrossWrite` laid both, one over the other, and riders met a
   6 cm step where the bands of different heights overlapped (Geneva 2496643,1118197: 3 kerb failures gone).
