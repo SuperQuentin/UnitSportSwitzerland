@@ -342,3 +342,6 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
   each junction's core is planned on its own; where two cores' mouths would overlap on the link between them (no room for
   both), they merge into one core; else they stay two cores and the short street between keeps its markings. Replaces the
   earlier "always one core" for nodes joined by a link under 30 m.
+- **A merged core follows the planner's rules as any crossroads** (Oct 15, on the test region's staggered T's 8 m apart):
+  left pockets where the rules want them, even where they push the side roads' mouths out (17 m against 10.5 m without)
+  and leave large corners. Rejected: no pockets on unlit merged cores, none on any, only where they fit.

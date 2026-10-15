@@ -92,6 +92,7 @@ public static partial class TileRewriter
         public readonly List<Layout.JunctionPlan> Layouts = new();
         /// <summary>What the planner wrote (#818 phase 3, <see cref="Options.WriteJunctions"/>).</summary>
         public readonly LayoutWriteStats LayoutWrite = new();
+        public readonly MergeStats Merge = new();
         public readonly RoundaboutShaper.Stats Roundabouts = new();
         public readonly TurnLaneStats TurnLanes = new();
         public readonly SignalStats Signals = new();
@@ -122,7 +123,7 @@ public static partial class TileRewriter
                     OSM       {Osm:N0} ({OsmKm:F1} km) on {OsmTiles} tiles flagged OSM
                     bytes     {Bytes / 1024.0:F0} KB, {(double)Bytes / Math.Max(1, tiles) / 1024:F1} KB/tile, max {MaxBytes / 1024.0:F1} KB ({MaxBytesTile}), deflated on the wire {(double)DeflatedBytes / Math.Max(1, tiles) / 1024:F1} KB/tile
                 """) + "\n" + FormatParts(tiles) + "\n" + Paint.Format(tiles) + "\n" + Carriageways.Format() + "\n" + Roundabouts.Format() + "\n" + Rail.Format() + "\n" + Priority.Format() + "\n" + TurnLanes.Format() + "\n" + Signals.Format() + Lanes.Format() + "\n" + Bikes.Format()
-                + (Layouts.Count > 0 ? "\n" + Layout.JunctionPlan.Summary(Layouts) + "\n" + Layout.JunctionPlan.CoreSummary(Layouts) + "\n" + Layout.JunctionPlan.TransitionSummary(Layouts) + (LayoutWrite.Junctions + LayoutWrite.Skipped > 0 ? "\n" + LayoutWrite.Format() : "") : "");
+                + (Layouts.Count > 0 ? "\n" + Layout.JunctionPlan.Summary(Layouts) + "\n" + Layout.JunctionPlan.CoreSummary(Layouts) + "\n" + Merge.Summary() + "\n" + Layout.JunctionPlan.TransitionSummary(Layouts) + (LayoutWrite.Junctions + LayoutWrite.Skipped > 0 ? "\n" + LayoutWrite.Format() : "") : "");
         }
     }
 
@@ -699,7 +700,7 @@ public static partial class TileRewriter
                     return StreetSideAt(linkId, end, right);
                 }
                 var layouts = options.NewJunctions
-                    ? PlanLayouts(priority, result, segmentOf, output, block, wanted, grids, buildings, StreetSideOf, overlay, restrictions, null, crossingNodes)
+                    ? PlanAndMerge(priority, result, segmentOf, output, block, wanted, grids, buildings, StreetSideOf, overlay, restrictions, crossingNodes, netStats.Merge)
                     : null;
                 if (layouts is not null) netStats.Layouts.AddRange(layouts);
                 // the junctions the planner writes (#818 phase 3): the old passes lay out the others only

@@ -37,7 +37,9 @@ public static partial class TileRewriter
         CrossingNodes? crossings = null)
     {
         var net = result.Network;
-        var signalNodes = priority.Plans.Where(p => p.Plan.Kind == PriorityPlanner.Kind.Signal).Select(p => p.Junction.NodeId).ToHashSet();
+        // a merged junction's members are all lit where it is (#818 phase 5c)
+        var signalNodes = priority.Plans.Where(p => p.Plan.Kind == PriorityPlanner.Kind.Signal)
+            .SelectMany(p => p.Junction.Members ?? (IEnumerable<int>)[p.Junction.NodeId]).ToHashSet();
         var indexes = new Dictionary<TileId, EmbankmentPlanner.LineIndex>();
         EmbankmentPlanner.LineIndex Lines(TileId t) =>
             indexes.TryGetValue(t, out var l) ? l : indexes[t] = new EmbankmentPlanner.LineIndex(output[t]);
@@ -60,7 +62,7 @@ public static partial class TileRewriter
                     if (p.At.DistanceTo(q.At) > 1) oldSteepest = Math.Max(oldSteepest, Math.Abs(p.Height - q.Height) / p.At.DistanceTo(q.At));
             var jp = new JunctionPlan
             {
-                Node = junction.NodeId, Centre = junction.Centre, Lights = lights, MainArms = main, CentreLineThrough = plan.CentreLine is not null,
+                Node = junction.NodeId, Merged = junction.Members is null ? null : junction, Centre = junction.Centre, Lights = lights, MainArms = main, CentreLineThrough = plan.CentreLine is not null,
                 EdgeGuides = plan.Guides.Count > 0, OldOutline = junction.Boundary.ToList(), OldArea = junction.Area, OldTight = oldTight, OldSteepest = oldSteepest,
             };
             var armsHere = ArmsOf(junction, net);
@@ -97,7 +99,9 @@ public static partial class TileRewriter
                     Wanted = wantedSection, Mouth = wantedSection, Length = SegmentLength(so.Segment), StreetLength = SegmentLength(so.Segment), Exit = need?.Exit ?? -1,
                     Major = info.Class <= RoadClass.Major, Axis = AxisOf(net.Links[arm.LinkId], atEnd), OldTrim = junction.Arms[i].Trim,
                     Reach = ReachOf(net, net.Links[arm.LinkId], atEnd, out bool inner), Internal = inner, StreetOn = StreetOn(net, arm.LinkId, atEnd).Links,
-                    InsideLights = Internal(net.Links[arm.LinkId], junction.NodeId, signalNodes),
+                    InsideLights = Internal(net.Links[arm.LinkId], junction, signalNodes),
+                    // round a merged core the arms lie in the order of where they leave it, not of their headings (#818 phase 5c)
+                    Ring = junction.Members is null ? null : RingOf(junction, junction.Arms[i]),
                 });
             }
             // beside a right pocket the through riders' lane runs between it and the through lane (layout b): without lights always;
@@ -625,7 +629,9 @@ public static partial class TileRewriter
             if (jp.Arms.FirstOrDefault(x => x != b && x.Exit == b.Arm) is not { } a || b.Mouth.CentreLine is null) continue;
             double jog = -a.Mouth.CarriagewayLeft - b.Mouth.CarriagewayRight;
             if (jog < LineUpMin) continue;
-            double core = Math.Max(0, a.OldTrim + a.MouthShift) + Math.Max(0, b.OldTrim + b.MouthShift);
+            // (a merged core: plus the way between the two arms' nodes)
+            double core = Math.Max(0, a.OldTrim + a.MouthShift) + Math.Max(0, b.OldTrim + b.MouthShift)
+                + (a.Axis is { } aa && b.Axis is { } ba ? aa.PointAt(0).DistanceTo(ba.PointAt(0)) : 0);
             var (_, roomR) = MouthPlanner.MouthRoom(b.Normal, b.Room, LeftStretch(b), RightStretch(b));
             double w = Math.Min(jog * LineUpTaper / (LineUpTaper + core), roomR - MouthPlanner.Reach(b.Mouth).Right);
             if (w >= LineUpMin) b.Mouth = MouthPlanner.WithLineUpHatch(b.Mouth, w);

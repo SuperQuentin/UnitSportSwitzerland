@@ -53,7 +53,7 @@ public static partial class TileRewriter
     {
         bool every = rules.Has(JunctionRule.PocketsOnEveryApproach);
         var arm = plan.Arms[i];
-        if ((every ? !arm.Approach || Internal(net.Links[arm.LinkId], junction.NodeId, signalNodes) : arm.Role != PriorityPlanner.Role.Main)
+        if ((every ? !arm.Approach || Internal(net.Links[arm.LinkId], junction, signalNodes) : arm.Role != PriorityPlanner.Role.Main)
             || !TurnLaneRoad(net.Links[arm.LinkId])) return null;
         // the lanes the carriageway already holds toward the junction (#700)
         int ownLanes = segmentOf.TryGetValue(arm.LinkId, out var laneSeg) ? CarLanesIn(laneSeg.Segment, arm.End == LinkEnd.End) : 1;

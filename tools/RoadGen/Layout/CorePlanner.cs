@@ -86,7 +86,7 @@ public static class CorePlanner
     private static JunctionCore Lay(JunctionPlan jp, Func<Vec2, bool>? blocked, Func<ArmPlan, ArmPlan, bool> truck)
     {
         var core = new JunctionCore();
-        var arms = jp.Arms.Where(a => a.Axis is not null).OrderBy(a => Angles.Normalize(a.Heading)).ToList();
+        var arms = jp.Arms.Where(a => a.Axis is not null).OrderBy(a => Angles.Normalize(a.RingHeading)).ToList();
         int n = arms.Count;
         if (n < 2) return core;
         var index = new Dictionary<int, int>();
@@ -181,15 +181,18 @@ public static class CorePlanner
         // deeper into the corner at its other side
         corners = Corners(arms, frames, core.Connectors, index, blocked, mouthCap: true, narrow: false);
         for (int k = 0; k < corners.Count; k++) corners[k].RoomClipped = narrowed[k].RoomClipped;
+        // (pushed at most four times; the connectors and corners are then laid once more on the final mouths, a kerb still
+        // starting outside its mouth failing the check: they ended at the mouths before the last push)
         bool pushed = false;
-        foreach (var corner in corners.Where(c => c.Shape == CornerShape.Arc))
-            foreach (var (k, at) in (ReadOnlySpan<(int, double)>)[(index[corner.ArmA], corner.StationA), (index[corner.ArmB], corner.StationB)])
-                if (at > m[k] + 0.02 && m[k] < Most(k) - 0.02)
-                {
-                    m[k] = Math.Min(at, Most(k));
-                    pushed = true;
-                }
-        if (!pushed || round >= 3) break;
+        if (round < 4)
+            foreach (var corner in corners.Where(c => c.Shape == CornerShape.Arc))
+                foreach (var (k, at) in (ReadOnlySpan<(int, double)>)[(index[corner.ArmA], corner.StationA), (index[corner.ArmB], corner.StationB)])
+                    if (at > m[k] + 0.02 && m[k] < Most(k) - 0.02)
+                    {
+                        m[k] = Math.Min(at, Most(k));
+                        pushed = true;
+                    }
+        if (!pushed) break;
         }
         core.Corners.AddRange(corners);
         foreach (var corner in corners)

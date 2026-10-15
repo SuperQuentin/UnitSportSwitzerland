@@ -19,15 +19,17 @@ public static partial class TileRewriter
     /// <summary>What the planner wrote, for the region report.</summary>
     public sealed class LayoutWriteStats
     {
-        public int Junctions, Skipped, Transitions, Pieces, Lines, Marks, Trimmed, Extended, Orphaned, CoreVertices, CapVertices, Bars, Refuges, Signs, Ramps, Signals, SignalsInvalid, Poles, CoreLines, BikeCrossings, PathCrossings, PathsCarried, PathsThrough, PathsCrossingInCorner, CornersLanded, Paths, PathsLeftOut;
+        public int Junctions, Skipped, Transitions, Pieces, Lines, Marks, Trimmed, Extended, Orphaned, CoreVertices, CapVertices, Bars, Refuges, Signs, Ramps, Signals, SignalsInvalid, Poles, CoreLines, BikeCrossings, PathCrossings, PathsCarried, PathsThrough, PathsCrossingInCorner, CornersLanded, Paths, PathsLeftOut, InnerEmptied;
         /// <summary>Written junctions with a transition (LV95), for the seam check and pictures.</summary>
         public readonly List<Vec2> WithTransitions = new();
         public readonly List<Vec2> OrphanedAt = new();
+        /// <summary>The merged cores written (#818 phase 5c) and their node counts.</summary>
+        public readonly List<(Vec2 At, int Nodes)> MergedAt = new();
         public readonly SortedDictionary<string, int> Why = new(StringComparer.Ordinal);
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
             $"    junction planner written (#818 phase 3): {Junctions:N0} junctions as cores, {Skipped:N0} left to the old layout ({string.Join(", ", Why.Select(kv => $"{kv.Key} {kv.Value}"))}); ")
-            + string.Create(CultureInfo.InvariantCulture, $"{Transitions:N0} transitions over {Pieces:N0} pieces, {Lines:N0} lines and {Marks:N0} marks; arms trimmed to their mouth {Trimmed:N0}, run on to it {Extended:N0}; pieces lost by a later cut {Orphaned:N0}{(OrphanedAt.Count > 0 ? " (at " + string.Join("; ", OrphanedAt.Take(6).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")}; cap vertices {CapVertices:N0} of the cores' {CoreVertices:N0}; exterior: {Bars:N0} bars, {Refuges:N0} refuges, {Signs:N0} signs, {Ramps:N0} crosswalks with lowered kerbs; lights {Signals:N0} ({SignalsInvalid:N0} plans invalid), {Poles:N0} poles, {CoreLines:N0} lines through the cores, {BikeCrossings:N0} bike lanes through them, {PathCrossings:N0} path crossings ({PathsCarried:N0} ends carried to the kerb, {PathsCrossingInCorner:N0} of them crossing another in a corner: left to it), {PathsThrough:N0} paths carried along a kerb, {CornersLanded:N0} corners a path crossing ends on; paths for traffic (JPTH) {Paths:N0}, left out {PathsLeftOut:N0}")
+            + string.Create(CultureInfo.InvariantCulture, $"{Transitions:N0} transitions over {Pieces:N0} pieces, {Lines:N0} lines and {Marks:N0} marks; arms trimmed to their mouth {Trimmed:N0}, run on to it {Extended:N0}; pieces lost by a later cut {Orphaned:N0}{(OrphanedAt.Count > 0 ? " (at " + string.Join("; ", OrphanedAt.Take(6).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")}; cap vertices {CapVertices:N0} of the cores' {CoreVertices:N0}; exterior: {Bars:N0} bars, {Refuges:N0} refuges, {Signs:N0} signs, {Ramps:N0} crosswalks with lowered kerbs; lights {Signals:N0} ({SignalsInvalid:N0} plans invalid), {Poles:N0} poles, {CoreLines:N0} lines through the cores, {BikeCrossings:N0} bike lanes through them, {PathCrossings:N0} path crossings ({PathsCarried:N0} ends carried to the kerb, {PathsCrossingInCorner:N0} of them crossing another in a corner: left to it), {PathsThrough:N0} paths carried along a kerb, {CornersLanded:N0} corners a path crossing ends on; paths for traffic (JPTH) {Paths:N0}, left out {PathsLeftOut:N0}; merged cores written {MergedAt.Count:N0} (of {MergedAt.Sum(m => m.Nodes):N0} nodes{(MergedAt.Count > 0 ? "; at " + string.Join(" ", MergedAt.GroupBy(m => m.Nodes).OrderBy(g => g.Key).SelectMany(g => g.OrderBy(m => m.At.X).Take(4)).Select(m => string.Create(CultureInfo.InvariantCulture, $"{m.At.X:F0},{m.At.Y:F0}x{m.Nodes}"))) : "")}), streets under them {InnerEmptied:N0}")
             + (WithTransitions.Count > 0 ? "\n      with transitions at " + string.Join("; ", WithTransitions.Take(12).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) : "");
     }
 
@@ -57,7 +59,7 @@ public static partial class TileRewriter
             else if (jp.CoresOverlap) no = "cores overlap";
             else if (!core.Simple || core.KerbsNotTangent > 0 || core.ConnectorsOutside > 0)
                 no = jp.Arms.Any(a => a.Internal) ? "a check failed next to a junction under 30 m" : "a check failed";
-            else if (!junctions.TryGetValue(jp.Node, out var j) || j.Arms.Count != jp.Arms.Count) no = "a path or track joins";
+            else if ((jp.Merged ?? junctions.GetValueOrDefault(jp.Node)) is not { } j || j.Arms.Count != jp.Arms.Count) no = "a path or track joins";
             else if (jp.Arms.Any(a => a.Axis is null || !core.Mouths.Any(m => m.Arm == a.Arm))) no = "an arm without a mouth";
             else if (jp.Arms.Any(a => RoadJoinsShortOfMouth(result.Network, a, core.Mouths.First(m => m.Arm == a.Arm).Station))) no = "a road joins short of a mouth";
             else
@@ -88,6 +90,8 @@ public static partial class TileRewriter
         }
         foreach (var w in why.Values) stats.Why[w] = stats.Why.GetValueOrDefault(w) + 1;
         stats.Skipped += why.Count;
+        // a merged core is written for all its members: the old layout lays none of them (#818 phase 5c)
+        foreach (var p in plans.Where(p => p.Merged is not null && ok.Contains(p.Node)).ToList()) ok.UnionWith(p.Nodes);
         return ok;
     }
 
@@ -249,6 +253,10 @@ public static partial class TileRewriter
             list[list.IndexOf(old.Cap)] = cap;
             writtenCaps.Add(cap);
             capOfPlan[jp] = (home, cap);
+            if (jp.Merged is not null) stats.MergedAt.Add((jp.Centre, jp.Nodes.Count()));
+            // a merged core's other members have no cap of their own: the core covers them
+            foreach (int node in jp.Nodes)
+                if (node != jp.Node && capOf.TryGetValue(node, out var member)) caps[member.Home].Remove(member.Cap);
             stats.Junctions++;
         }
 
@@ -323,6 +331,18 @@ public static partial class TileRewriter
                     stats.Extended++;
                 }
             }
+
+        // a merged core's streets between its members lie under it: none left (#818 phase 5c)
+        var mergedOf = mine.Where(p => p.Merged is not null).SelectMany(p => p.Nodes.Select(n => (n, p))).ToDictionary(x => x.n, x => x.p);
+        if (mergedOf.Count > 0)
+            for (int link = 0; link < net.Links.Count; link++)
+                if (mergedOf.TryGetValue(net.Links[link].StartNode, out var ps) && mergedOf.TryGetValue(net.Links[link].EndNode, out var pe) && ps == pe
+                    && segmentOf.TryGetValue(link, out var so))
+                {
+                    Replace(so.Segment, so.Tile, []);
+                    touched.Add(link);
+                    stats.InnerEmptied++;
+                }
 
         // a street's piece split at <at> m from its junction end: the junction side returned, the yield flags kept on their ends
         RoadSegment? Split(StreetPiece sp, double at)

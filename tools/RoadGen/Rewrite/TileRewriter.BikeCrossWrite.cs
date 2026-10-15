@@ -118,7 +118,7 @@ public static partial class TileRewriter
             var db = -b.Axis.RightAt(mb.Station);
             // where no road joins on that side, the side's bands run on along the core's kerb (the old layout's BridgePath):
             // the sidewalk corner they cover is dropped (Unbridged); profiles that differ keep the corner
-            var between = jp.Arms.Where(x => x != a && x != b && Between(a.Heading, b.Heading, x.Heading)).ToList();
+            var between = jp.Arms.Where(x => x != a && x != b && Between(a.RingHeading, b.RingHeading, x.RingHeading)).ToList();
             if (between.Count == 0)
             {
                 if (core.Corners.FirstOrDefault(c => c.ArmA == a.Arm && c.ArmB == b.Arm) is not { Shape: not CornerShape.Gore } corner) continue;

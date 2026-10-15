@@ -290,8 +290,25 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   before), 1,223 overlapping (step 2), 21 next to a junction under 30 m failing a check (82 elsewhere); kerb check 33
   crossings meeting a vertical kerb (53 before); `JPTH` 16,301 paths, 57 ends 0.3-1.2 m off, none off a core. "Cores overlap"
   is tested before the core's checks: a merged core is checked whole.
+- **5c step 2, merged cores** (`TileRewriter.Merge`): the block is planned once node by node; each group of overlapping cores
+  (`JunctionPlan.OverlapGroups`) becomes one synthetic `Junction` (`Members`, its arms the members' arms but the streets
+  between them, in their order round the core) with one priority plan (lit where any member is, the members' signs and
+  give-way rows), and the block is planned again with it in place of its members. Link-end tests go through
+  `Junction.Holds` (`EndAt`, `Internal`); arms sort round the core by `ArmPlan.Ring` (where they leave it, seen from its
+  centre); the line-up distance adds the way between two arms' nodes. Written: every member counts as written (the old
+  layout skips them), the other members' caps go, the streets between them are emptied. Not merged: a roundabout member, a
+  street of 30 m or more between two members, a centre outside every member's tile. A merged core follows the planner's
+  rules as any crossroads (the user, Oct 15: pockets even where they push the side roads out). 168 real tiles: 501 groups
+  merged of 1,126 junctions, 2,734 cores written (226 merged, of 481 nodes), `JPTH` 18,343 paths, 67 ends off their lane;
+  kerb check 33. Test region: the 8 m pair one core, traffic 371 paths taken, no step, no red run.
+- **Pitfall** (`CorePlanner`, before 5c): the corner loop pushed a mouth out on its last round and stopped, the connectors
+  still ending at the earlier mouth (paths 3.5 m off their lane). It now lays once more after the last push; a kerb still
+  outside its mouth fails the check.
+- **Open (to judge against aerial imagery and Geneva's marking data, the user)**: which groups to merge. Larger groups look
+  worse than the old layout (a 3-node plaza, a lost triangle island in Sion 2505369,1136761, a 100 m slab beside a Zurich
+  tram 2669101,1253917); a pair at Geneva 2495103,1120529 has large sidewalk wedges and two bike crossings crossing.
 - **Debug**: `--debug-junction E,N` also prints why a junction there is left to the old layout, its links (`?` = not in the
   block).
 - **Not yet**: lanes along a transition from `TRNS` (cars follow `LANE`'s taper rule, or the 40 m lead-in); riders' paths
-  (riders are not traffic); merged cores (5c step 2); `LANE` dropped once the game no longer needs it (phase 6). Phase 6
+  (riders are not traffic); `LANE` dropped once the game no longer needs it (phase 6). Phase 6
   review: the bike-path band along a lit core's straight side has a slightly wavy edge (J9).

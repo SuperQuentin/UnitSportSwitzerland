@@ -83,6 +83,10 @@ public sealed class ArmPlan
     public bool Internal { get; init; }
     /// <summary>Its street joins another lit node closer than 30 m: inside one set of lights (#348), no stop line, no approach.</summary>
     public bool InsideLights { get; init; }
+    /// <summary>On a merged core (#818 phase 5c): the direction it leaves the core in, seen from the core's centre (radians, as <see cref="Heading"/>); null at one node.</summary>
+    public double? Ring { get; init; }
+    /// <summary>Where the arm lies round its core: <see cref="Ring"/>, else its heading.</summary>
+    public double RingHeading => Ring ?? Heading;
     /// <summary>How far out its mouth may go: the street's length, half of it where a junction stands at its other end (m).</summary>
     public double Reach { get; init; } = double.MaxValue;
     /// <summary>A Major road (or bigger): a turn between two of them is laid for a truck (<see cref="CorePlanner.TruckInner"/>) where it fits untouched.</summary>
@@ -118,11 +122,49 @@ public sealed class JunctionPlan
     public bool EdgeGuides { get; init; }
     /// <summary>The core laid between the mouths (step 2).</summary>
     public JunctionCore? Core { get; set; }
+    /// <summary>The junction merged from several nodes this plan lays one core for (#818 phase 5c), null for one node.</summary>
+    public UnitSport.Tools.RoadGen.Junctions.Junction? Merged { get; init; }
+    /// <summary>Its node, or a merged core's member nodes.</summary>
+    public IEnumerable<int> Nodes => Merged?.Members ?? (IEnumerable<int>)[Node];
     /// <summary>
     /// The core wanted more than its half of a link to another junction under <see cref="ArmPlan.Internal"/>'s length away:
     /// the two cores overlap, one core of both (phase 5). Where both fit they stay two (the user, Oct 15).
     /// </summary>
     public bool CoresOverlap => Core is { } c && Arms.Any(a => a.Internal && c.ArmsAtReach.Contains(a.Arm));
+
+    /// <summary>
+    /// The junctions whose cores overlap, in groups to merge (phase 5c): each joined to the one past an inner street where a mouth
+    /// was held at half of it (the far junction too, whether or not its own mouth was held there).
+    /// </summary>
+    public static List<List<JunctionPlan>> OverlapGroups(IReadOnlyList<JunctionPlan> plans)
+    {
+        var planOf = plans.SelectMany(p => p.Arms.Select(a => (a, p))).ToDictionary(x => x.a, x => x.p);
+        var links = new Dictionary<JunctionPlan, List<JunctionPlan>>();
+        void Join(JunctionPlan x, JunctionPlan y)
+        {
+            (links.TryGetValue(x, out var lx) ? lx : links[x] = []).Add(y);
+            (links.TryGetValue(y, out var ly) ? ly : links[y] = []).Add(x);
+        }
+        foreach (var p in plans.Where(p => p.CoresOverlap))
+            foreach (var a in p.Arms.Where(a => a.Internal && p.Core!.ArmsAtReach.Contains(a.Arm)))
+                if (a.FarArm is { } f && planOf.TryGetValue(f, out var q) && q != p) Join(p, q);
+                else Join(p, p);
+        var groups = new List<List<JunctionPlan>>();
+        var seen = new HashSet<JunctionPlan>();
+        foreach (var start in links.Keys)
+        {
+            if (!seen.Add(start)) continue;
+            var group = new List<JunctionPlan>();
+            var todo = new Stack<JunctionPlan>([start]);
+            while (todo.TryPop(out var x))
+            {
+                group.Add(x);
+                foreach (var y in links[x]) if (seen.Add(y)) todo.Push(y);
+            }
+            groups.Add(group);
+        }
+        return groups;
+    }
     /// <summary>Today's cap (<c>JunctionBuilder</c>), its area and its tight corners (#700, pairs of arms), for the comparison while both run.</summary>
     public IReadOnlyList<Vec2> OldOutline { get; init; } = [];
     public double OldArea { get; init; }
@@ -177,6 +219,10 @@ public sealed class JunctionPlan
     /// more than the least rounding), the checks (kerbs starting outside their mouth, connectors leaving the outline), the
     /// tight corners against #700's and the paved area against today's caps.
     /// </summary>
+    /// <summary>The overlap groups by size: "2 nodes 410, 3 nodes 52, ..."; a group whose far junction has no plan counts its planned ones.</summary>
+    private static string GroupSizes(IReadOnlyList<JunctionPlan> plans) =>
+        string.Join(", ", OverlapGroups(plans).GroupBy(g => g.Count).OrderBy(g => g.Key).Select(g => $"{g.Key} nodes {g.Count():N0}"));
+
     public static string CoreSummary(IReadOnlyList<JunctionPlan> plans)
     {
         var inv = CultureInfo.InvariantCulture;
@@ -211,7 +257,7 @@ public sealed class JunctionPlan
             .Select(p => string.Create(inv, $"{p.Centre.X:F0},{p.Centre.Y:F0} {p.Core!.SteepestGrade * 100:F1} % (cap {p.OldSteepest * 100:F1} %)"));
         var outside = cores.Where(p => p.Core!.ConnectorsOutside > 0).ToList();
         var notTangent = cores.Where(p => p.Core!.KerbsNotTangent > 0).ToList();
-        return string.Create(inv, $"    junction cores (#818 step 2): {cores.Count:N0} cores ({multi:N0} more joined to another node by a street under 30 m: multi-node, phase 5, left out), {conns.Count:N0} connectors ({conns.Count(c => c.Kind == ConnectorKind.Bike):N0} for bikes; ")
+        return string.Create(inv, $"    junction cores (#818 step 2): {cores.Count:N0} cores ({multi:N0} more overlapping the core of a junction under 30 m away, in groups to merge {GroupSizes(plans)}), {conns.Count:N0} connectors ({conns.Count(c => c.Kind == ConnectorKind.Bike):N0} for bikes; ")
             + string.Create(inv, $"{conns.Count(c => c.Radius > 0):N0} arcs, {conns.Count(c => c.Fill < 1 - 1e-6 && c.Radius > 0 && c.WideRadius > c.MinRadius + 0.01):N0} narrowed for a mouth or the room, {conns.Count(c => c.Fill < 0 || c.UnderRadius):N0} under their vehicle's radius; {conns.Count(c => c.Truck):N0} for a truck, {cores.Sum(p => p.Core!.TrucksAsCars):N0} turns between Major roads left to a car for want of room), ")
             + string.Create(inv, $"transitions planned from the mouths: {cores.SelectMany(p => p.Arms).Count(a => Math.Abs(a.MouthDrift) > 0.5):N0} mouths moved over 0.5 m by the final core (most {cores.SelectMany(p => p.Arms).Select(a => Math.Abs(a.MouthDrift)).DefaultIfEmpty(0).Max():F1} m), ")
             + string.Create(inv, $"mouths median {Median(mouths):F1} m (p90 {(mouths.Count == 0 ? 0 : mouths[mouths.Count * 9 / 10]):F1}, {cores.Sum(p => p.Core!.MouthsAtMost):N0} held at the most, {cores.Sum(p => p.Core!.MouthsAtReach):N0} at half a street to the next junction); ")
