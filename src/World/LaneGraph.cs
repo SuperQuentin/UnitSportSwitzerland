@@ -58,8 +58,14 @@ public sealed class LaneEdge
     public (LaneApproach Approach, float StopBack)? ApproachAtEnd { get; set; }
     public (LaneApproach Approach, float StopBack)? ApproachAtStart { get; set; }
 
-    /// <summary>A straight link across a junction between two trimmed road ends (<see cref="LaneGraph.JoinTrimmedEnds"/>).</summary>
+    /// <summary>A straight link across a junction between two trimmed road ends (<see cref="LaneGraph.JoinTrimmedEnds"/>), or a junction path.</summary>
     public bool Connector { get; init; }
+
+    /// <summary>
+    /// A path through a junction core (#818 phase 5, <c>JPTH</c>): a lane-to-lane line the junction's paint draws, driven on its
+    /// own line (no lane offset) from its lane at one arm's mouth to its lane at the exit's. Null on a road or a plain connector.
+    /// </summary>
+    public JunctionPathInfo? Path { get; init; }
 
     public float Length => Cumulative[^1];
 
@@ -92,6 +98,12 @@ public sealed class LaneEdge
         return d.LengthSquared() > 1e-8f ? d.Normalized() : Vector3.Forward;
     }
 }
+
+/// <summary>
+/// What traffic needs of a junction path (#818 phase 5): its move, where its lane lies at each end (metres right of a driver
+/// arriving on that arm, from the road's centreline), and the lights and group it goes on (null and -1 without lights).
+/// </summary>
+public sealed record JunctionPathInfo(SignalMoves Move, float FromOffset, float ToOffset, SignalSite? Site, int Group);
 
 /// <summary>
 /// A signalised junction as traffic sees it (#353): its plan (#349, shared with the lamps, a
@@ -211,6 +223,23 @@ public sealed class LaneApproach
         }
         return best >= 0 ? best : root;
     }
+
+    /// <summary>
+    /// The car lane whose centre at the stop line lies nearest <paramref name="offset"/> (metres right of the road's centreline):
+    /// the lane a junction path starts from (#818 phase 5); -1 without a car lane.
+    /// </summary>
+    public int LaneNearest(float offset)
+    {
+        int best = -1;
+        float bestGap = float.MaxValue;
+        for (int i = 0; i < Lanes.Length; i++)
+        {
+            if (Lanes[i].Kind != ApproachLaneKind.Car) continue;
+            float gap = Mathf.Abs(LaneCentre + Lanes[i].Offset - offset);
+            if (gap < bestGap) { best = i; bestGap = gap; }
+        }
+        return best;
+    }
 }
 
 /// <summary>
@@ -315,6 +344,32 @@ public sealed class LaneGraph
                 for (int a = 0; a < outs.Length; a++) outs[a] = OutOf(plan.Arms[a].Heading);
                 g.Signals.Add(sites[k] = new SignalSite { Plan = plan, Out = outs });
             }
+            // the junction paths (#818 phase 5): each a one-way edge from the road end at its arm's mouth to the exit's; their ends meet
+            // those roads, so JoinTrimmedEnds leaves the junction to them. Cars only (riders are not traffic)
+            foreach (var jpath in tile.JunctionPaths)
+            {
+                if (jpath.Kind != JunctionPathKind.Car || jpath.PointCount < 2) continue;
+                int n = jpath.PointCount;
+                var pts = new Vector3[n];
+                var cum = new float[n];
+                for (int i = 0; i < n; i++)
+                {
+                    pts[i] = origin.ToWorld(tile.Id.MinE + jpath.Points[i * 3], tile.Id.MaxN - jpath.Points[i * 3 + 2], jpath.Points[i * 3 + 1]);
+                    if (i > 0) cum[i] = cum[i - 1] + pts[i].DistanceTo(pts[i - 1]);
+                }
+                if (cum[^1] < 0.5f) continue;
+                var site = jpath.Signal >= 0 && jpath.Signal < sites.Length ? sites[jpath.Signal] : null;
+                var edge = new LaneEdge
+                {
+                    Points = pts, Cumulative = cum, Class = jpath.Junction.Class, Width = Math.Max(jpath.Width, jpath.ToWidth), OneWay = 1, Connector = true,
+                    KeyStart = Key(tile.Id.MinE + jpath.From.X, tile.Id.MaxN - jpath.From.Z), KeyEnd = Key(tile.Id.MinE + jpath.To.X, tile.Id.MaxN - jpath.To.Z),
+                    Path = new JunctionPathInfo(jpath.Move, jpath.From.Offset, jpath.To.Offset, site, site is null ? -1 : jpath.Group),
+                };
+                g.Edges.Add(edge);
+                g.Link(edge.KeyStart, edge, true);
+                g.Link(edge.KeyEnd, edge, false);
+                g.Paths++;
+            }
             // the lanes of every approach the tile records (#353), then any signalised approach it does not (an older tile)
             var recorded = new HashSet<(int, int)>();
             foreach (var r in tile.Approaches)
@@ -340,6 +395,9 @@ public sealed class LaneGraph
         }
         return g;
     }
+
+    /// <summary>The junction paths it holds (#818 phase 5).</summary>
+    public int Paths { get; private set; }
 
     /// <summary>Every approach tied to an edge (#353).</summary>
     public List<LaneApproach> Approaches { get; } = new();

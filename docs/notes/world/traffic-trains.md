@@ -92,3 +92,7 @@
   `CHUNKS=<Geneva copy> JUNCTION=2499901,1118599` (the real record, 16 groups): 40 instants over
   4 changes, identical, skew 3.1 ms.
 - Around a race the cars behave like drivers who see it coming: `traffic-and-races`.
+- **Junction paths** (#818 phase 5, `junction-planner`): where a tile has `JPTH`, cars drive each junction core on its paths
+  (`LaneEdge.Path`) instead of `JoinTrimmedEnds`' straight connector: lane chosen from the path, a 40 m lead-in onto its lane where
+  no `LANE` record steers, the line handed over at both ends (`Traffic.HandOver`). `--trafficcheck` prints paths taken and the
+  sideways steps onto them.

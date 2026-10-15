@@ -267,3 +267,18 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   the whole rework +3 %).
 - **Pitfall**: `PiecesOf` read an emptied link (passed whole by a mouth) as uncut and returned the original segment, not in the
   tile; an empty list now means no pieces.
+- **5b, the game drives them** (`LaneGraph`, `Traffic`): every car path is a one-way connector edge (`LaneEdge.Path`, with its move,
+  lane offsets at both ends, signal site and group) from the road end at its arm's mouth to the exit's; its ends meet those roads,
+  so `JoinTrimmedEnds` leaves the junction to them. `NextRoad`: a road arriving takes a path (an exit chosen with one weight
+  whatever its lane count, then the lane nearest the car's usual line), a path ends on its road (never another path back into the
+  junction from the same mouth). `Approach`: the path ahead sets the turn, the `LANE` lane nearest its first lane
+  (`LaneNearest`) and its group, chosen again when the path ahead changes; with no lane record to steer by, the car eases onto the
+  path's first lane over the last 40 m (`PathLeadIn`). `HandOver`: onto a path or off one, the car's line carries over (a path
+  has no lane offset: it starts on its lane, ends on the exit's) and eases back from there.
+- **Checked** (test region, `--trafficcheck --at ... --dense --seconds 60 --generated off`): J1 8 paths taken, no step over 1 m;
+  J2 15, 2 steps over 1 m; J7 14, 1; the town T 27, 4 (cars spawned by `--dense` inside the last 40 m); no red run anywhere. With
+  `--feed` at J1 72 paths, 2 steps (fed cars too close to a right pocket to change lane). The probe prints paths taken, the
+  largest step onto and off one, and the steps over 1 m. Tier 1 `src/World/`: all pass but `--swimcheck` and
+  `--steamercheck` (the lake swell), which fail on `main` too.
+- **Not yet**: lanes along a transition from `TRNS` (cars follow `LANE`'s taper rule, or the 40 m lead-in); riders' paths
+  (riders are not traffic); multi-node cores (5c); `LANE` dropped once the game no longer needs it (phase 6).
