@@ -39,8 +39,8 @@ public static partial class TileRewriter
 
     /// <summary>
     /// The junctions the planner may write: a core with its checks passed (kerbs inside the mouths, connectors inside the
-    /// outline, an outline not crossing itself), every arm a car road of the block with no internal street (a multi-node core is
-    /// phase 5), every street a transition runs on in the block and at grade, and the far junction of every transition shared
+    /// outline, an outline not crossing itself), every arm a car road of the block, no core overlapping its neighbour's (a merged
+    /// core is phase 5), every street a transition runs on in the block and at grade, and the far junction of every transition shared
     /// with one written too.
     /// </summary>
     private static HashSet<int> WritableLayouts(List<JunctionPlan> plans, RoadGenResult result, Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf,
@@ -52,8 +52,11 @@ public static partial class TileRewriter
         {
             string? no = null;
             if (jp.Core is not { } core) no = "no core";
-            else if (!core.Simple || core.KerbsNotTangent > 0 || core.ConnectorsOutside > 0) no = "a check failed";
-            else if (jp.Arms.Any(a => a.Internal)) no = "multi-node";
+            // two junctions under InternalLink apart stay two cores where both fit on the link between (the user, Oct 15); where
+            // this core wanted more than its half there they would overlap: one core of both, later in phase 5 (its checks then)
+            else if (jp.CoresOverlap) no = "cores overlap";
+            else if (!core.Simple || core.KerbsNotTangent > 0 || core.ConnectorsOutside > 0)
+                no = jp.Arms.Any(a => a.Internal) ? "a check failed next to a junction under 30 m" : "a check failed";
             else if (!junctions.TryGetValue(jp.Node, out var j) || j.Arms.Count != jp.Arms.Count) no = "a path or track joins";
             else if (jp.Arms.Any(a => a.Axis is null || !core.Mouths.Any(m => m.Arm == a.Arm))) no = "an arm without a mouth";
             else if (jp.Arms.Any(a => RoadJoinsShortOfMouth(result.Network, a, core.Mouths.First(m => m.Arm == a.Arm).Station))) no = "a road joins short of a mouth";
@@ -63,6 +66,9 @@ public static partial class TileRewriter
                         if (!segmentOf.TryGetValue(link, out var so)) no ??= "a street beyond the block";
                         else if ((so.Segment.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) != 0) no ??= "a bridge or tunnel";
             if (no is not null) why[jp.Node] = no;
+            if (no is not null && DebugJunction is { } dbg && Math.Abs(dbg.E - jp.Centre.X) < 30 && Math.Abs(dbg.N - jp.Centre.Y) < 30)
+                Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"[junction] node {jp.Node} at {jp.Centre.X:F1},{jp.Centre.Y:F1} left to the old layout: {no}"
+                    + $" (links {string.Join(" ", jp.Arms.SelectMany(a => a.StreetOn.Select(x => x.Link).Prepend(a.LinkId)).Select(l => segmentOf.ContainsKey(l) ? $"{l}" : $"{l}?"))})"));
         }
         var ok = plans.Where(p => !why.ContainsKey(p.Node)).Select(p => p.Node).ToHashSet();
         var planOf = plans.SelectMany(p => p.Arms.Select(a => (a, p))).ToDictionary(x => x.a, x => x.p);

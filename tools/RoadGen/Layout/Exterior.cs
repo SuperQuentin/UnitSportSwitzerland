@@ -167,7 +167,8 @@ public static class ExteriorPlanner
                 ex.Signs.Add(new SignSpot(Math.Max(MainSignOut, s + 1), sign.Type, sign.Variant, RightKerb: sign.FacesArriving, sign.FacesArriving));
         var here = SectionAt(a, s + 1);
         bool arrives = here.CarLanes(StripWay.In).Any();
-        if (!arrives) return ex;
+        // a street to another lit node closer than 30 m is inside the lights (#348): no line, the traffic on it is in the junction
+        if (!arrives || (jp.Lights && a.InsideLights)) return ex;
         if (jp.Lights)
         {
             var bikes = Runs(here, BikeIn);

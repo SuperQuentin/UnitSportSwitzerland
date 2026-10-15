@@ -41,6 +41,12 @@ public static class SignalTestRegion
     /// <see cref="TwinRowN"/>: 6 m west of the T the main road divides into two 2.2 m carriageways, joined at their start by a link.
     /// </summary>
     public const double DividedTeeE = 2915300;
+    /// <summary>
+    /// Staggered T's (#818 phase 5), LV95 E on <see cref="TwinRowN"/>: a 10 m main road with a side road north here and one south
+    /// 24 m east (both cores fit on the link between: two cores), 150 m east a pair 8 m apart (the cores overlap: one core), and
+    /// 300 m east a pair 24 m apart with lights at both (J9).
+    /// </summary>
+    public const double StaggerE = 2916500;
     /// <summary>The ground, metres (as the fixture courses).</summary>
     public const double Ground = 500;
     /// <summary>Region centre: the manifest's suggested origin.</summary>
@@ -235,7 +241,21 @@ public static class SignalTestRegion
             lines.Add(new Line("DTD", "4m Strasse", "Durchgangsstrasse", "Kanton", [R(2619501.3, 1264616.9), R(2619741.2, 1264685.6), c], "secondary", "yes", Divided: true));
             lines.Add(new Line("DTL", "Verbindung", "Durchgangsstrasse", "Kanton", [c, b], "secondary"));
         }
+        // 11. staggered T's (#818 phase 5): a side road north at StaggerE and one south 24 m east, two cores; 150 m east a pair
+        // 8 m apart, whose cores overlap; 300 m east a pair 24 m apart with lights at both (the street between is inside them, #348)
+        {
+            const double nb = TwinRowN, e = StaggerE;
+            double[] at = [e - 450, e, e + 24, e + 150, e + 158, e + 300, e + 324, e + 450];   // inside the tile: a street run on into the next block is not written
+            string[] ids = ["SGW", "SGA", "SGM", "SGB", "SGC", "SGL", "SGE"];
+            for (int i = 0; i < ids.Length; i++)
+                lines.Add(new Line(ids[i], "10m Strasse", "Durchgangsstrasse", "Kanton", [(at[i], nb), (at[i + 1], nb)], "secondary", "yes"));
+            foreach (var (id, x, north) in new[] { ("SGN1", e, true), ("SGS1", e + 24, false), ("SGN2", e + 150, true), ("SGS2", e + 158, false),
+                ("SGN3", e + 300, true), ("SGS3", e + 324, false) })
+                lines.Add(new Line(id, "4m Strasse", "k_W", "Gemeinde", [(x, nb), (x, north ? nb + 250 : nb - 250)], "unclassified", "yes"));
+        }
 
+        junctions.Add(new Junction("J9-stagger-west", StaggerE + 300, TwinRowN, "staggered T's 24 m apart, both lit: the west one", Arms(null, null, null, null)));
+        junctions.Add(new Junction("J9-stagger-east", StaggerE + 324, TwinRowN, "staggered T's 24 m apart, both lit: the east one", Arms(null, null, null, null)));
         junctions.Add(new Junction("J8-twin-lights", TwinLitE, TwinRowN, "the twins' T with lights (the other, 1.5 km east, has none)",
             Arms(null, null, null, null)));
         junctions.Add(new Junction("J7-double-left", j7, n, "a double left pocket from lanes:forward=3 and turn:lanes; no left pocket where OSM marks none",

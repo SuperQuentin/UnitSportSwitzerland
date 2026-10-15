@@ -338,3 +338,7 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
 - **A road joining an arm short of its mouth leaves the junction to the old layout until phase 5** (Oct 15, on the test
   region's copy of 2619795,1264700, where the main road divides 6 m from the T): a road dividing, a link or a track meeting
   the arm's street before (or within 4 m past) its mouth makes it a junction of several nodes.
+- **Junctions under 30 m apart: merged only where their cores overlap** (Oct 15, on four real examples, mostly staggered T's):
+  each junction's core is planned on its own; where two cores' mouths would overlap on the link between them (no room for
+  both), they merge into one core; else they stay two cores and the short street between keeps its markings. Replaces the
+  earlier "always one core" for nodes joined by a link under 30 m.

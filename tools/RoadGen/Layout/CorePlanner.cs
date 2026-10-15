@@ -141,6 +141,8 @@ public static class CorePlanner
         }
         core.MouthsAtMost = Enumerable.Range(0, n).Count(k => held[k] && Most(k) >= MostMouth);
         core.MouthsAtReach = Enumerable.Range(0, n).Count(k => held[k] && Most(k) < MostMouth);
+        for (int k = 0; k < n; k++)
+            if (held[k] && Most(k) < MostMouth) core.ArmsAtReach.Add(arms[k].Arm);
 
         // 3 and 4, until every kerb starts inside its mouth: a corner the final connectors round further (a bend through the
         // mouths did not reckon with) pushes its mouths out, and all again

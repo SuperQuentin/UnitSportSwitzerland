@@ -28,6 +28,9 @@
   (points shifted by 295505.6, 56695.2): 6 m west of the T the main road divides into two 2.2 m carriageways
   (`Line.Divided`: TLM `richtungsgetrennt`) joined by a 1.5 m `Verbindung`. Both #818 cases stay on the old layout (a road
   joins short of a mouth).
+- **Staggered T's** (#818 phase 5, `StaggerE` 2916500 on N 1321400, all in tile 2916 so no street runs on into another
+  block): a 10 m main road with side roads alternately north and south: 24 m apart (two cores), 8 m apart (the cores overlap:
+  old layout until they merge), and 300 m east 24 m apart with lights at both (J9: the street between is inside the lights).
 - **Where**: tiles E 2910-2917 N 1321-1323 (24 tiles; J6/J7 #700 in 2916-2917), flat at 500 m, one 6 km rewrite block),
   outside Switzerland on purpose: no real tile, streamed or cached, shares an id. Manifest origin
   2913000,1322500 (shots' world x = E - 2913000, z = 1322500 - N). Junctions on one row, N 1322500,

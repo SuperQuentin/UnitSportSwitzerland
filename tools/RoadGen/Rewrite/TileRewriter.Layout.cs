@@ -97,6 +97,7 @@ public static partial class TileRewriter
                     Wanted = wantedSection, Mouth = wantedSection, Length = SegmentLength(so.Segment), StreetLength = SegmentLength(so.Segment), Exit = need?.Exit ?? -1,
                     Major = info.Class <= RoadClass.Major, Axis = AxisOf(net.Links[arm.LinkId], atEnd), OldTrim = junction.Arms[i].Trim,
                     Reach = ReachOf(net, net.Links[arm.LinkId], atEnd, out bool inner), Internal = inner, StreetOn = StreetOn(net, arm.LinkId, atEnd).Links,
+                    InsideLights = Internal(net.Links[arm.LinkId], junction.NodeId, signalNodes),
                 });
             }
             // beside a right pocket the through riders' lane runs between it and the through lane (layout b): without lights always;
@@ -255,7 +256,8 @@ public static partial class TileRewriter
                 double? osm = crossings?.OnArm(junction, a.Arm, net) is { } d ? d + junction.Arms[a.Arm].Trim - mouth - ExteriorPlanner.CrosswalkDepth * 0.5 : null;
                 if (osm is < ExteriorPlanner.CrosswalkFromMouth + 4) osm = ExteriorPlanner.CrosswalkFromMouth;
                 bool sidewalk = a.Normal.Strips.Any(x => x.Kind == StripKind.Sidewalk);
-                double? at = osm ?? (jp.Lights && !mapped && sidewalk && JunctionRules.Lights.Has(JunctionRule.CrosswalkOnSidewalkArms) ? ExteriorPlanner.CrosswalkFromMouth : null);
+                // none on a street inside the lights (#348): its ends are the junction's own
+                double? at = a.InsideLights ? null : osm ?? (jp.Lights && !mapped && sidewalk && JunctionRules.Lights.Has(JunctionRule.CrosswalkOnSidewalkArms) ? ExteriorPlanner.CrosswalkFromMouth : null);
                 var u = Vec2.FromHeading(a.Heading);
                 var signs = plan.Signs.Where(x => x.LinkId == a.LinkId).Select(x => (x.Type, x.Variant, FacesArriving: x.Facing.Dot(u) > 0)).ToList();
                 jp.Exterior.Add(ExteriorPlanner.Plan(jp, a, at, yields: plan.Teeth.Any(t => t.LinkId == a.LinkId), signs));
@@ -268,7 +270,7 @@ public static partial class TileRewriter
             t.Markings = TransitionPaint.Of(t, StreetPaint.Of(segmentOf[t.Arm.LinkId].Segment), planOf[t.Arm].Lights,
                 t.Far is { } f && planOf[f].Lights, StopOf(t.Arm), StopOf(t.Far));
         if (JunctionFailures is { } failures)
-            File.AppendAllText(failures, string.Concat(plans.Where(jp => jp.Core is { } c && !jp.Arms.Any(a => a.Internal)
+            File.AppendAllText(failures, string.Concat(plans.Where(jp => jp.Core is { } c && !jp.CoresOverlap
                 && (c.KerbsNotTangent > 0 || c.ConnectorsOutside > 0 || !c.Simple)).Select(jp => jp.Describe() + "\n")));
         if (DebugJunction is { } dbg)
             foreach (var jp in plans.Where(jp => Math.Abs(dbg.E - jp.Centre.X) < 30 && Math.Abs(dbg.N - jp.Centre.Y) < 30))
@@ -295,8 +297,9 @@ public static partial class TileRewriter
         bool junction = far >= 0 && far < net.Nodes.Count
             && net.Nodes[far].Approaches.Count(a => InfoOf(net.Links[a.LinkId]) is { } info && PriorityPlanner.IsCarRoad(info.Class)) >= 3;
         inner = junction && length < InternalLink;
-        // the street goes on past a node that is no junction of car roads (an end may only be the block's edge)
-        return !inner && junction ? length * 0.5 : double.MaxValue;
+        // half the street where a junction stands at its other end (a link under InternalLink too: its two cores stay apart where
+        // both fit, the user, Oct 15); on past a node that is no junction of car roads (an end may only be the block's edge)
+        return junction ? length * 0.5 : double.MaxValue;
     }
 
     /// <summary>A transition runs on along its street at most this far past its own link (m).</summary>

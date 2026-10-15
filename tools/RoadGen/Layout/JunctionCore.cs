@@ -128,4 +128,6 @@ public sealed class JunctionCore
     public int TrucksAsCars { get; set; }
     /// <summary>Mouths held by their street's length (half of it where another junction stands at its far end): a multi-node core (phase 5).</summary>
     public int MouthsAtReach { get; set; }
+    /// <summary>The arms whose mouth was held at half their street (another junction at its far end): there the two cores would overlap.</summary>
+    public HashSet<int> ArmsAtReach { get; } = new();
 }

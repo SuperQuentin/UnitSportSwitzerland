@@ -280,5 +280,18 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   `--feed` at J1 72 paths, 2 steps (fed cars too close to a right pocket to change lane). The probe prints paths taken, the
   largest step onto and off one, and the steps over 1 m. Tier 1 `src/World/`: all pass but `--swimcheck` and
   `--steamercheck` (the lake swell), which fail on `main` too.
+- **5c, junctions under 30 m apart** (the user, Oct 15: "merge only if overlapping"): each node plans its own core; a link to
+  another junction under 30 m away gives it half the link as reach, as a longer one does (`ReachOf`). Where a mouth was held
+  at that half (`JunctionCore.ArmsAtReach`) the two cores would overlap: `JunctionPlan.CoresOverlap`, left to the old layout
+  ("cores overlap") until step 2 merges them into one core. Elsewhere both are written with the short street between. A street
+  to another lit node under 30 m away is inside the lights (#348, `ArmPlan.InsideLights`): no stop line, no crosswalk, no
+  approach; its paths carry no signal group. Test region `StaggerE` (signal-test-region): a 24 m pair, an 8 m pair (overlap),
+  a lit 24 m pair (J9); traffic at both 24 m pairs: no step over 1 m, no red run. 168 real tiles: 2,602 cores written (1,978
+  before), 1,223 overlapping (step 2), 21 next to a junction under 30 m failing a check (82 elsewhere); kerb check 33
+  crossings meeting a vertical kerb (53 before); `JPTH` 16,301 paths, 57 ends 0.3-1.2 m off, none off a core. "Cores overlap"
+  is tested before the core's checks: a merged core is checked whole.
+- **Debug**: `--debug-junction E,N` also prints why a junction there is left to the old layout, its links (`?` = not in the
+  block).
 - **Not yet**: lanes along a transition from `TRNS` (cars follow `LANE`'s taper rule, or the 40 m lead-in); riders' paths
-  (riders are not traffic); multi-node cores (5c); `LANE` dropped once the game no longer needs it (phase 6).
+  (riders are not traffic); merged cores (5c step 2); `LANE` dropped once the game no longer needs it (phase 6). Phase 6
+  review: the bike-path band along a lit core's straight side has a slightly wavy edge (J9).

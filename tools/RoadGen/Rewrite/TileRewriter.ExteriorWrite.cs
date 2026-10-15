@@ -184,7 +184,10 @@ public static partial class TileRewriter
             var (f, to) = sec.Span(k);
             sections.Add((s, (f + to) * 0.5, to - f));
         }
-        var first = sections.First(x => x.S >= stop - 1e-6);
+        // a line past the transition's end stands on the street's own lanes: as without one
+        int at = sections.FindIndex(x => x.S >= stop - 1e-6);
+        if (at < 0 || double.IsNaN(sections[at].Mid)) return (15, 30);
+        var first = sections[at];
         double full = sections.TakeWhile(x => x.S < stop - 1e-6 || (!double.IsNaN(x.Mid) && Math.Abs(x.Mid - first.Mid) < 0.02 && Math.Abs(x.W - first.W) < 0.02)).Last().S;
         double from = t.Length;
         return (Math.Max(0, full - stop), Math.Max(0, from - stop));

@@ -79,8 +79,10 @@ public sealed class ArmPlan
     public ArmAxis? Axis { get; set; }
     /// <summary>Where today's cap cut the street back (<c>JunctionBuilder</c>'s trim, m from the node), for the comparison.</summary>
     public double OldTrim { get; init; }
-    /// <summary>Its street joins another junction node closer than 30 m: the two are one core (phase 5); left out of the checks till then.</summary>
+    /// <summary>Its street joins another junction node closer than 30 m: two cores where both fit, one where they overlap (<see cref="JunctionPlan.CoresOverlap"/>).</summary>
     public bool Internal { get; init; }
+    /// <summary>Its street joins another lit node closer than 30 m: inside one set of lights (#348), no stop line, no approach.</summary>
+    public bool InsideLights { get; init; }
     /// <summary>How far out its mouth may go: the street's length, half of it where a junction stands at its other end (m).</summary>
     public double Reach { get; init; } = double.MaxValue;
     /// <summary>A Major road (or bigger): a turn between two of them is laid for a truck (<see cref="CorePlanner.TruckInner"/>) where it fits untouched.</summary>
@@ -116,6 +118,11 @@ public sealed class JunctionPlan
     public bool EdgeGuides { get; init; }
     /// <summary>The core laid between the mouths (step 2).</summary>
     public JunctionCore? Core { get; set; }
+    /// <summary>
+    /// The core wanted more than its half of a link to another junction under <see cref="ArmPlan.Internal"/>'s length away:
+    /// the two cores overlap, one core of both (phase 5). Where both fit they stay two (the user, Oct 15).
+    /// </summary>
+    public bool CoresOverlap => Core is { } c && Arms.Any(a => a.Internal && c.ArmsAtReach.Contains(a.Arm));
     /// <summary>Today's cap (<c>JunctionBuilder</c>), its area and its tight corners (#700, pairs of arms), for the comparison while both run.</summary>
     public IReadOnlyList<Vec2> OldOutline { get; init; } = [];
     public double OldArea { get; init; }
@@ -173,9 +180,9 @@ public sealed class JunctionPlan
     public static string CoreSummary(IReadOnlyList<JunctionPlan> plans)
     {
         var inv = CultureInfo.InvariantCulture;
-        // a junction with an internal arm is half of a multi-node core (phase 5): counted apart
-        int multi = plans.Count(p => p.Core is not null && p.Arms.Any(a => a.Internal));
-        var cores = plans.Where(p => p.Core is not null && !p.Arms.Any(a => a.Internal)).ToList();
+        // a junction whose core overlaps its neighbour's is half of a multi-node core (phase 5): counted apart
+        int multi = plans.Count(p => p.CoresOverlap);
+        var cores = plans.Where(p => p.Core is not null && !p.CoresOverlap).ToList();
         var conns = cores.SelectMany(p => p.Core!.Connectors).ToList();
         var corners = cores.SelectMany(p => p.Core!.Corners).ToList();
         var mouths = cores.SelectMany(p => p.Core!.Mouths.Select(m => m.Station)).OrderBy(x => x).ToList();
@@ -230,7 +237,7 @@ public sealed class JunctionPlan
     {
         var inv = CultureInfo.InvariantCulture;
         // a multi-node core's internal street is the core's (phase 5): left out
-        var all = plans.SelectMany(p => p.Arms).Where(a => !a.Internal).Select(a => a.Transition).OfType<Transition>().Distinct().ToList();
+        var all = plans.Where(p => !p.CoresOverlap).SelectMany(p => p.Arms).Select(a => a.Transition).OfType<Transition>().Distinct().ToList();
         var lengths = all.Select(t => t.Length).OrderBy(x => x).ToList();
         var squeezed = all.Where(t => t.Squeezed > SqueezeReported).OrderByDescending(t => t.Squeezed).ToList();
         string At(Transition t) => string.Create(inv, $"{t.Arm.Axis?.PointAt(0).X ?? 0:F0},{t.Arm.Axis?.PointAt(0).Y ?? 0:F0} {Compass(t.Arm.Heading)}");
@@ -262,7 +269,7 @@ public sealed class JunctionPlan
         if (Core is { } core)
         {
             sb.Append(inv, $"  core: area {core.Area:F0} m2 (today: cap {OldArea:F0} m2, with its ribbons to the new mouths {OldAreaToMouths:F0} m2), kerbs not tangent {core.KerbsNotTangent}, connectors outside {core.ConnectorsOutside}\n");
-            foreach (var m in core.Mouths) sb.Append(inv, $"    mouth arm {m.Arm}: {m.Station:F1} m out{(Arms.First(a => a.Arm == m.Arm) is { } am ? (am.Internal ? " (internal: multi-node)" : am.Reach < 1e9 ? $" (reach {am.Reach:F1} m)" : "") : "")}\n");
+            foreach (var m in core.Mouths) sb.Append(inv, $"    mouth arm {m.Arm}: {m.Station:F1} m out{(Arms.First(a => a.Arm == m.Arm) is { } am ? (am.Internal && core.ArmsAtReach.Contains(am.Arm) ? " (internal: cores overlap)" : am.Reach < 1e9 ? $" (reach {am.Reach:F1} m)" : "") : "")}\n");
             foreach (var c in core.Corners)
                 sb.Append(inv, $"    corner {c.ArmA}-{c.ArmB}: {c.Shape}{(c.Shape == CornerShape.Arc ? $" r {c.Radius:F1} m (floor {c.Floor:F1}){(c.Tight ? " tight" : "")}{(c.RoomClipped ? " held by buildings" : "")}, kerb from {c.StationA:F1} / {c.StationB:F1} m{(c.Bound is { } k ? $", round {k.FromArm}:{k.FromId}->{k.ToArm}:{k.ToId} {Section.MovesName(k.Move)}" : "")}" : "")}, gap {c.Angle * 180 / Math.PI:F0} deg{(OldTight.Contains((c.ArmA, c.ArmB)) ? ", #700 tight" : "")}\n");
             foreach (var c in core.Connectors)
