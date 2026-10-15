@@ -312,10 +312,12 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   Geneva the marking cadastre on `ge.ch/terags/rest/services/DIRECTIVES_SIGNAL_CHANTIERS/MapServer` (37 lines, 38 kerbs,
   44 coloured surfaces, 48 road cover: carriageway, sidewalk, islands) as GeoJSON by bbox. Three panels (aerial, old, new)
   per site, the cadastre drawn over the aerial.
-- **Open at merged cores**: a path crossing between two arms of different members runs straight from one kerb to the other,
-  cutting into the carriageway and across the other bike route (Geneva 2495103,1120529, lit); a street with no sidewalk for
-  its first metres gets large sloped corner wedges from the old corner code (not merge-specific). Data that is wrong
-  (Geneva 2497015,1119379: TLM roads on a pedestrian promenade) is no layout question.
+- **Riders' crossings and corners** (the user, Oct 16, at Geneva 2495103,1120529): a crossing between two mouths facing each
+  other (a jog, under `JogAngle` 10 degrees between its ends) goes straight across, a bend still follows the curve
+  (`BikeCrossWrite`). A core's sidewalk corner is laid only where both streets have their side at the mouth
+  (`CornerPlanner.Walk` with `onward: false` for a given corner; the old corners still walk up to 30 m to the first
+  sidewalk); where the crossed street has no sidewalk, a carried side brings its path but not its sidewalk. Data that is
+  wrong (Geneva 2497015,1119379: TLM roads on a pedestrian promenade) is no layout question.
 - **Debug**: `--debug-junction E,N` also prints why a junction there is left to the old layout, its links (`?` = not in the
   block).
 - **Not yet**: lanes along a transition from `TRNS` (cars follow `LANE`'s taper rule, or the 40 m lead-in); riders' paths

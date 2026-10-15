@@ -9,7 +9,8 @@ using UnitSport.Tools.RoadGen.Network;
 /// <summary>
 /// The riders' crossings of a planned junction (#818 phase 4). A bike lane going straight on follows its connector through the
 /// core: yellow dashed edges, red where a car's connector crosses it (at the lights only where the two are green together: the
-/// user's rule, #682; without lights wherever a road joins). A separated path follows the path's curve (the user's choice): from
+/// user's rule, #682; without lights wherever a road joins); between two mouths facing each other (a jog) it goes straight across
+/// (the user, Oct 16). A separated path follows the path's curve (the user's choice), a jog straight across: from
 /// the arm's path at its mouth to the straight-on arm's, red over the carriageway by the same rule, its side's bands laid along
 /// the curve up to the kerb with a sloped kerb strip there, and the corners told where the carried path meets the kerb. Where no
 /// road joins on its side, the path's side runs on along the core's kerb instead of the sidewalk corner.
@@ -84,11 +85,20 @@ public static partial class TileRewriter
         // 1. bike lanes straight on, along their connector
         foreach (var c in core.Connectors.Where(c => c.Kind == ConnectorKind.Bike && c.Move == SignalMoves.Through))
         {
-            Line(Inset(c.Left, -lw * 0.5), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
-            Line(Inset(c.Right, lw * 0.5), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
-            double length = Length(c.Centre);
-            foreach (var (from, to) in Runs(Conflicts(c.Centre, GroupOf(c.FromArm, SignalMoves.Through, bike: true)), length))
-                Line(Cut(c.Centre, from, to), PaintType.BikeCrossing, PaintEmitter.Red, (float)(Math.Min(c.Width, c.ToWidth) - 1.5 * lw - 2 * RedInset), 0);
+            // a jog between two mouths facing each other goes straight across (the user, Oct 16: a real crossing does not curve);
+            // a bend follows its connector
+            List<Vec2> centre = c.Centre, left = c.Left, right = c.Right;
+            if (c.Centre.Count >= 2 && Jog(c.Centre[1] - c.Centre[0], c.Centre[^1] - c.Centre[^2]))
+            {
+                centre = Straight(c.Centre[0], c.Centre[^1]);
+                double half = Math.Min(c.Width, c.ToWidth) * 0.5;
+                (left, right) = (OffsetLine(centre, -half), OffsetLine(centre, half));
+            }
+            Line(Inset(left, -lw * 0.5), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
+            Line(Inset(right, lw * 0.5), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
+            double length = Length(centre);
+            foreach (var (from, to) in Runs(Conflicts(centre, GroupOf(c.FromArm, SignalMoves.Through, bike: true)), length))
+                Line(Cut(centre, from, to), PaintType.BikeCrossing, PaintEmitter.Red, (float)(Math.Min(c.Width, c.ToWidth) - 1.5 * lw - 2 * RedInset), 0);
             stats.BikeCrossings++;
         }
 
@@ -130,6 +140,13 @@ public static partial class TileRewriter
                 }
                 continue;
             }
+            // a crossed street with no sidewalk on the side facing a corner: only the path is carried round that corner, not the
+            // sidewalk (the user, Oct 16: the bands filled the whole corner)
+            double Ccw(ArmPlan x) { double d = (x.RingHeading - a.RingHeading) % (2 * Math.PI); return d < 0 ? d + 2 * Math.PI : d; }
+            var nearA = between.MinBy(Ccw)!;
+            var nearB = between.MaxBy(Ccw)!;
+            if (SideOfArm(nearA, right: false).SidewalkDm == 0) sideA = sideA with { SidewalkDm = 0 };
+            if (SideOfArm(nearB, right: true).SidewalkDm == 0) sideB = sideB with { SidewalkDm = 0 };
             bool OnRoad(Vec2 p) => Inside(core.Outline, p) || between.Any(x => OnArm(jp, x, p));
             if (PathsToKerb(home, OnRoad, sideA, sideB, ca, da, ua, 0, cb, db, ub, 0, ca.DistanceTo(cb) + 5, H, srcA.SampleHeight, srcB.SampleHeight, H) is not { } carried)
                 continue;
@@ -144,11 +161,13 @@ public static partial class TileRewriter
             var k1 = carried.KerbB(sideB.VergeDm / 10.0 + pathB * 0.5);
             double l = k0.DistanceTo(k1) / 3;
             var run = new List<Vec2>();
-            for (int k = 0; k <= 24; k++)
-            {
-                double t = k / 24.0, mt = 1 - t;
-                run.Add(k0 * (mt * mt * mt) + (k0 - ua * l) * (3 * mt * mt * t) + (k1 - ub * l) * (3 * mt * t * t) + k1 * (t * t * t));
-            }
+            if (Jog(-ua, ub)) run = Straight(k0, k1);
+            else
+                for (int k = 0; k <= 24; k++)
+                {
+                    double t = k / 24.0, mt = 1 - t;
+                    run.Add(k0 * (mt * mt * mt) + (k0 - ua * l) * (3 * mt * mt * t) + (k1 - ub * l) * (3 * mt * t * t) + k1 * (t * t * t));
+                }
             double width = Math.Min(pathA, pathB);
             landings.Add(k0);
             landings.Add(k1);
@@ -248,6 +267,14 @@ public static partial class TileRewriter
         }
         return result;
     }
+
+    /// <summary>A crossing turning less than this between its two ends is a jog, laid straight; more, a bend, laid along the curve.</summary>
+    private static readonly double JogAngle = 10 * Math.PI / 180;
+
+    private static bool Jog(Vec2 inward, Vec2 outward) =>
+        inward.Length > 1e-9 && outward.Length > 1e-9 && inward.Normalized().Dot(outward.Normalized()) > Math.Cos(JogAngle);
+
+    private static List<Vec2> Straight(Vec2 from, Vec2 to) => Enumerable.Range(0, 25).Select(k => from + (to - from) * (k / 24.0)).ToList();
 
     /// <summary>A polyline moved <paramref name="by"/> metres to its right (per-vertex bisector).</summary>
     private static List<Vec2> OffsetLine(List<Vec2> line, double by)

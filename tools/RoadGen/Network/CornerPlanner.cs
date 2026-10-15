@@ -209,8 +209,10 @@ public static class CornerPlanner
         List<(Vec2 P, float Y)>? ring, RoadJunction? cap, Facades facades, Stats stats, List<RoadAreaProp> props, List<KerbArc>? arcs, KerbArc? fixedArc = null,
         bool landing = false)
     {
-        var ca = Walk(segments, ends, a.End, left: true);
-        var cb = Walk(segments, ends, b.End, left: false);
+        // a core's corner (#818) only where both arms have their side at the mouth (the user, Oct 16: walking on to a sidewalk
+        // further out laid a wedge over the whole gap)
+        var ca = Walk(segments, ends, a.End, left: true, onward: fixedArc is null);
+        var cb = Walk(segments, ends, b.End, left: false, onward: fixedArc is null);
         // a path crossing ends on it (#818): laid as beside a crosswalk, its kerb sloped and the grass folded into the path
         if (landing)
         {
@@ -261,9 +263,9 @@ public static class CornerPlanner
     /// <summary>
     /// Along the arm from the node, on its left (or right) looking out: the kerb line up to the
     /// first piece carrying a sidewalk on that side, and that sidewalk. Null if none starts within
-    /// <see cref="ChainReach"/> or the street branches first.
+    /// <see cref="ChainReach"/> or the street branches first; without <paramref name="onward"/>, null unless the first piece carries it.
     /// </summary>
-    private static Chain? Walk(IReadOnlyList<RoadSegment> segments, Dictionary<(long, long), List<End>> ends, End arm, bool left)
+    private static Chain? Walk(IReadOnlyList<RoadSegment> segments, Dictionary<(long, long), List<End>> ends, End arm, bool left, bool onward = true)
     {
         var kerb = new List<(Vec2 P, float Y)>();
         double travelled = 0;
@@ -290,7 +292,7 @@ public static class CornerPlanner
                 double w = side.OuterDm / 10.0;
                 return new Chain(kerb, edge[0].P + across * w, w, side.KerbCm / 100f, dir * -1, side, seg.Attributes.Has(RoadAttrFlags.LoweredKerbs), edge);
             }
-            if (!IsStreet(seg)) return null;
+            if (!IsStreet(seg) || !onward) return null;
             kerb.AddRange(kerb.Count == 0 ? edge : edge.Skip(1));
             for (int k = 1; k < edge.Count; k++) travelled += edge[k].P.DistanceTo(edge[k - 1].P);
             if (travelled > ChainReach) return null;
