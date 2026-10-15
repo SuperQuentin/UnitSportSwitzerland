@@ -96,3 +96,11 @@
   (`LaneEdge.Path`) instead of `JoinTrimmedEnds`' straight connector: lane chosen from the path, a 40 m lead-in onto its lane where
   no `LANE` record steers, the line handed over at both ends (`Traffic.HandOver`). `--trafficcheck` prints paths taken and the
   sideways steps onto them.
+- **Transition lanes** (#818 phase 5d): an edge built from a transition's piece keeps its `TRNS` record (`LaneEdge.Transition`).
+  On it a car follows one strip (`Vehicle.Strip`, the strip id stable along the arm): the one at the mouth nearest the path
+  ahead's first lane, carried back over the transition's pieces (`StripAt`), or after a path the one its exit lane lies in. Its
+  line is the strip's centre at its station (`LaneAt`); a lane opening or closing under 2.5 m takes it between it and the lane
+  it branches from or merges into, so a pocket opening never jumps. Overrides the `LANE` taper rule and the 40 m lead-in there.
+  Between two pieces of a street the car's line is rebased (the pieces' usual lines differ), and a spawned car starts on its
+  lane (`Vehicle.Placed`). Test region, `--dense --feed` 60 s at J1, J2, J7, the town T, the staggered pairs: no step over 1 m
+  onto a path (the largest 0.49 m; 15 over 1 m at the town T before), no red run.

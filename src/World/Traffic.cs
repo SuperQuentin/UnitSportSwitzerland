@@ -555,6 +555,10 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         target = Mathf.Min(target, GiveWay(car, obstacles));
         // its lane, and the traffic lights (#353)
         float lights = Approach(car);
+        FollowTransition(car);
+        // a car just spawned starts on the lane it would be in (#818 phase 5: else one spawned close to a junction reaches its path
+        // off its lane); after that it eases
+        if (!car.Placed) (car.Lane, car.Placed) = (car.LaneWanted, true);
         target = Mathf.Min(target, lights);
 
         bool sampled = false;
@@ -1110,6 +1114,9 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     public float PathStepIn { get; private set; }
     public float PathStepOut { get; private set; }
     public int PathStepsOver1m { get; private set; }
+    /// <summary>Cars that took a transition's lane to follow toward a junction path (#818 phase 5), and the transitions' pieces in the graph.</summary>
+    public int TransitionFollows { get; private set; }
+    public int TransitionPieces => _roads?.Transitions ?? 0;
     public int RedStops { get; private set; }
     public int AmberClears { get; private set; }
     public int LinesCrossed { get; private set; }
@@ -1163,7 +1170,40 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             // the path ends on the exit lane: -ToOffset right of a driver leaving along the exit (ToOffset is right of one arriving)
             PathStepOut = Mathf.Max(PathStepOut, Mathf.Abs(car.Lane));
             car.Lane = car.Lane - off.ToOffset - KeepRight(to, car.Route.Forward, car.Habit);
+            // leaving onto a transition (an exit's hatch, lanes merging): the lane the path ends on, followed along it
+            car.Strip = to.StripAt(car.Route.Forward, atTravelEnd: false, -off.ToOffset);
         }
+        else if (from.Path is null && to.Path is null && (from.Transition is not null || to.Transition is not null))
+            // from one piece of a street to the next where a transition's lanes steer it: it stays where it is (the pieces' usual
+            // lines differ with their widths), then eases on from there
+            car.Lane += KeepRight(from, fromForward, car.Habit) - KeepRight(to, car.Route.Forward, car.Habit);
+    }
+
+    /// <summary>
+    /// On a transition's piece (#818 phase 5): the car follows its own lane from station to station, the one its path ahead
+    /// starts from at the mouth (carried back over the transition's pieces before it), or the one the path behind ended on;
+    /// while it opens or closes, between it and the lane it branches from or merges into. Overrides the lane record and the lead-in there.
+    /// </summary>
+    private void FollowTransition(Vehicle car)
+    {
+        var (edge, forward) = (car.Route.Edge, car.Route.Forward);
+        if (edge.Transition is null || edge.Path is not null) { car.Strip = -1; return; }
+        var legs = car.Route.Legs;
+        for (int i = car.Route.Leg + 1; i < legs.Count; i++)
+        {
+            var (e, _) = legs[i];
+            if (e.Path is { } path)
+            {
+                var (mouth, mouthForward) = legs[i - 1];
+                int strip = mouth.StripAt(mouthForward, atTravelEnd: true, path.FromOffset);
+                if (strip >= 0 && car.Strip < 0) TransitionFollows++;
+                car.Strip = strip;
+                break;
+            }
+            if (e.Transition is null) break;   // a stretch of street at its normal section before the junction
+        }
+        if (car.Strip < 0 || edge.LaneAt(forward, car.Route.Arc, car.Strip) is not { } lane) return;
+        car.LaneWanted = lane - KeepRight(edge, forward, car.Habit);
     }
 
     private (LaneEdge, bool)? NextRoad((LaneEdge Edge, bool Forward) leg, Vehicle? car = null)
@@ -1412,7 +1452,11 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         public SignalMoves Turn;
         public int LaneIndex = -1, Group = -1;
         public JunctionPathInfo? PathAhead;
+        /// <summary>The transition lane it follows (#818 phase 5: the strip's id, stable along the arm), -1 none.</summary>
+        public int Strip = -1;
         public float Lane, LaneWanted;
+        /// <summary>Placed on its lane at its first step.</summary>
+        public bool Placed;
         public float Lift;
         public float Offset;
         public Vector3 Head;

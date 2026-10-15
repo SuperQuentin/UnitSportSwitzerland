@@ -320,6 +320,7 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   wrong (Geneva 2497015,1119379: TLM roads on a pedestrian promenade) is no layout question.
 - **Debug**: `--debug-junction E,N` also prints why a junction there is left to the old layout, its links (`?` = not in the
   block).
-- **Not yet**: lanes along a transition from `TRNS` (cars follow `LANE`'s taper rule, or the 40 m lead-in); riders' paths
-  (riders are not traffic); `LANE` dropped once the game no longer needs it (phase 6). Phase 6
+- **5d, lanes along transitions in the game**: cars follow a transition's own lanes (`world/traffic-trains`, transition
+  lanes).
+- **Not yet**: riders' paths (riders are not traffic); `LANE` dropped once the game no longer needs it (phase 6). Phase 6
   review: the bike-path band along a lit core's straight side has a slightly wavy edge (J9).
