@@ -51,8 +51,9 @@ public static partial class TileRewriter
     /// <summary>
     /// One junction of <paramref name="nodes"/> with its priority plan: the members' arms but the streets between two members (each
     /// under <see cref="InternalLink"/>), their signs and give-way rows on those arms, lit where any member is. Null (and why)
-    /// where it cannot be: a member without its plan, outside the block, a roundabout, a longer street between two members, or
-    /// a centre outside every member's tile (the core's records go in one tile).
+    /// where it cannot be: a member without its plan, outside the block, a roundabout, a longer street between two members,
+    /// streets between members closing a loop (an island), or a centre outside every member's tile (the core's records go in
+    /// one tile).
     /// </summary>
     private static (Junction Junction, PriorityPlanner.Plan Plan)? Merge(PriorityResult priority, HashSet<int> nodes, RoadNetwork net,
         HashSet<TileId> block, HashSet<TileId> wanted, out string? no)
@@ -71,6 +72,9 @@ public static partial class TileRewriter
                 if (link.StartNode == link.EndNode || LinkLength(link) >= InternalLink) { no = "a longer street between two members"; return null; }
                 inner.Add(arm.LinkId);
             }
+        // streets between the members that close a loop enclose an island (a triangle, a divided road's square): real, so the
+        // members stay as they are (the user, Oct 16, against the aerials); a tree of them (a pair, a chain) is one junction
+        if (inner.Count >= nodes.Count) { no = "streets between members enclose an island"; return null; }
         var centre = new Vec2(members.Average(p => p.Junction.Centre.X), members.Average(p => p.Junction.Centre.Y));
         var home = TileId.FromLv95(centre.X, centre.Y);
         var rep = members.Where(p => Home(p.Junction) == home).OrderBy(p => p.Junction.Centre.DistanceTo(centre)).FirstOrDefault();

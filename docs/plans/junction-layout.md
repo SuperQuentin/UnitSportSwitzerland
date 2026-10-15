@@ -345,3 +345,7 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
 - **A merged core follows the planner's rules as any crossroads** (Oct 15, on the test region's staggered T's 8 m apart):
   left pockets where the rules want them, even where they push the side roads' mouths out (17 m against 10.5 m without)
   and leave large corners. Rejected: no pockets on unlit merged cores, none on any, only where they fit.
+- **Merge a group only when the streets between its members form a tree** (Oct 16, against SWISSIMAGE and Geneva's
+  marking data: a real crossroads drawn as two nodes merges; a Sion triangle's grass island is real): a pair or a chain
+  merges into one core; streets closing a loop round an island (a triangle, a divided road's square) leave the members as
+  they are. Rejected: pairs only, sampling more first.

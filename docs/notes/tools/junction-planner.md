@@ -304,9 +304,18 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
 - **Pitfall** (`CorePlanner`, before 5c): the corner loop pushed a mouth out on its last round and stopped, the connectors
   still ending at the earlier mouth (paths 3.5 m off their lane). It now lays once more after the last push; a kerb still
   outside its mouth fails the check.
-- **Open (to judge against aerial imagery and Geneva's marking data, the user)**: which groups to merge. Larger groups look
-  worse than the old layout (a 3-node plaza, a lost triangle island in Sion 2505369,1136761, a 100 m slab beside a Zurich
-  tram 2669101,1253917); a pair at Geneva 2495103,1120529 has large sidewalk wedges and two bike crossings crossing.
+- **Which groups merge** (the user, Oct 16, against SWISSIMAGE and SITG's marking cadastre): only where the streets between
+  the members form a tree (a pair, a chain); a loop of them encloses a real island (Sion 2505369,1136761) and the members
+  stay as they are. 168 real tiles: 489 groups merged, 16 enclosing left alone, 2,655 cores written (188 merged); kerb
+  check 30, 52 path ends off their lane.
+- **Comparing with reality**: SWISSIMAGE crops from `wms.geo.admin.ch` (`ch.swisstopo.swissimage`, EPSG:2056 bbox); in
+  Geneva the marking cadastre on `ge.ch/terags/rest/services/DIRECTIVES_SIGNAL_CHANTIERS/MapServer` (37 lines, 38 kerbs,
+  44 coloured surfaces, 48 road cover: carriageway, sidewalk, islands) as GeoJSON by bbox. Three panels (aerial, old, new)
+  per site, the cadastre drawn over the aerial.
+- **Open at merged cores**: a path crossing between two arms of different members runs straight from one kerb to the other,
+  cutting into the carriageway and across the other bike route (Geneva 2495103,1120529, lit); a street with no sidewalk for
+  its first metres gets large sloped corner wedges from the old corner code (not merge-specific). Data that is wrong
+  (Geneva 2497015,1119379: TLM roads on a pedestrian promenade) is no layout question.
 - **Debug**: `--debug-junction E,N` also prints why a junction there is left to the old layout, its links (`?` = not in the
   block).
 - **Not yet**: lanes along a transition from `TRNS` (cars follow `LANE`'s taper rule, or the 40 m lead-in); riders' paths
