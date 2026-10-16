@@ -62,7 +62,7 @@ public static class TransitionPaint
     /// <summary>A lane line's 3/3 dashes in a pocket's storage and lead-in (#123).</summary>
     public const float LaneDash = 3f, LaneGap = 3f;
 
-    private enum Style { None, Solid, Dashed, LaneChange, Bike }
+    private enum Style { None, Solid, Dashed, LaneChange, Bike, BikePocket, BikeSolid }
 
     /// <param name="nearStop">Where the arriving traffic stops at the mouth end (m out from the mouth, its stop line or bar): the solid
     /// stretches and the arrows count from there (the exterior, phase 4); <paramref name="farStop"/> the same at a shared transition's far end.</param>
@@ -109,8 +109,14 @@ public static class TransitionPaint
                 if (j == here.Count - 1) continue;
                 var b = t.Strips[here[j + 1]].Strip;
                 int boundary = here[j + 1];
-                Put(boundary, 0, PairStyle(a, b, striped[here[j]], striped[here[j + 1]], boundary == t.Anchor || (here[j] < t.Anchor && here[j + 1] >= t.Anchor), pocketHere, street));
+                var pair = PairStyle(a, b, striped[here[j]], striped[here[j + 1]], boundary == t.Anchor || (here[j] < t.Anchor && here[j + 1] >= t.Anchor), pocketHere, street);
+                // a bike pocket's lines (an arriving bike lane between two car lanes) go solid before its line, as a car pocket's
+                // (the user, Oct 17)
+                if (pair == Style.Bike && (BikePocketAt(j) || BikePocketAt(j + 1))) pair = Style.BikePocket;
+                Put(boundary, 0, pair);
             }
+            bool BikePocketAt(int p) => t.Strips[here[p]].Strip is { Kind: StripKind.BikeLane, Way: StripWay.In } && p > 0 && p + 1 < here.Count
+                && t.Strips[here[p - 1]].Strip.IsCarLane && t.Strips[here[p + 1]].Strip.IsCarLane;
             // runs, split where a solid stretch by a mouth starts or ends inside the interval: lanes the last 10 m, the centre
             // line 20 m at the lights
             double[] cuts = [s0, .. new[] { nearStop + SolidToMouth, nearStop + SolidAtLights, t.Length - farStop - SolidToMouth, t.Length - farStop - SolidAtLights }.Where(x => x > s0 + 1e-6 && x < s1 - 1e-6).Order(), s1];
@@ -122,6 +128,7 @@ public static class TransitionPaint
                 {
                     var s = style;
                     if (style == Style.LaneChange && (mid < nearStop + SolidToMouth || (t.Far is not null && mid > t.Length - farStop - SolidToMouth))) s = Style.Solid;
+                    if (style == Style.BikePocket) s = mid < nearStop + SolidToMouth || (t.Far is not null && mid > t.Length - farStop - SolidToMouth) ? Style.BikeSolid : Style.Bike;
                     if (key.Item1 == CentreBoundary(t, i) && ((lights && mid < nearStop + SolidAtLights) || (farLights && t.Far is not null && mid > t.Length - farStop - SolidAtLights)) && s == Style.Dashed) s = Style.Solid;
                     now[key] = s;
                 }
@@ -171,6 +178,7 @@ public static class TransitionPaint
         Style.Solid => new(boundary, offset, from, to, PaintType.WhiteSolid, PaintEmitter.White, PaintEmitter.LineWidth, 0, 0),
         Style.Dashed => new(boundary, offset, from, to, PaintType.WhiteDashed, PaintEmitter.White, PaintEmitter.LineWidth, street.Dash, street.Gap),
         Style.LaneChange => new(boundary, offset, from, to, PaintType.WhiteDashed, PaintEmitter.White, PaintEmitter.LineWidth, LaneDash, LaneGap),
+        Style.BikeSolid => new(boundary, offset, from, to, PaintType.YellowSolid, PaintEmitter.Yellow, BikePlanner.LineWidth, 0, 0),
         _ => new(boundary, offset, from, to, PaintType.YellowDashed, PaintEmitter.Yellow, BikePlanner.LineWidth, BikePlanner.Dash, BikePlanner.Gap),
     };
 
