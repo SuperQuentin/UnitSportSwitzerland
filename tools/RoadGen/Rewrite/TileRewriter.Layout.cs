@@ -390,7 +390,12 @@ public static partial class TileRewriter
                 if (s.Kind != StripKind.BikeLane || s.Way != StripWay.In || s.Moves == SignalMoves.None) continue;
                 var move = (s.Moves & SignalMoves.Through) != 0 ? SignalMoves.Through : (s.Moves & SignalMoves.Left) != 0 ? SignalMoves.Left : SignalMoves.Right;
                 bool carries = a.Toward.TryGetValue(move, out int to) && jp.Arms.FirstOrDefault(x => x.Arm == to) is { } dest && dest.Normal.CarriesBikesAway;
-                strips[k] = s with { Stop = carries ? BikeStop.Advanced : BikeStop.Box };
+                // a box only where the bike lane lies beside a car lane making its riders' move, the lane the box covers (the user,
+                // Oct 17: J1 south's kerb lane lies beside the right-turn lane, its riders going straight on)
+                bool Serves(int j) => j >= 0 && j < strips.Count && strips[j].IsCarLane && strips[j].Way == StripWay.In
+                    && (strips[j].Moves == SignalMoves.None || (strips[j].Moves & move) != 0);
+                bool beside = Serves(k - 1) || Serves(k + 1);
+                strips[k] = s with { Stop = !carries && beside ? BikeStop.Box : BikeStop.Advanced };
                 changed = true;
             }
             if (changed) a.Mouth = new Section(strips, a.Mouth.CarriagewayLeft) { KerbLeftCm = a.Mouth.KerbLeftCm, KerbRightCm = a.Mouth.KerbRightCm };
