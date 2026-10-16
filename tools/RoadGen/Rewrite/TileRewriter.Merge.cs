@@ -25,7 +25,11 @@ public static partial class TileRewriter
         MergeStats stats)
     {
         var plans = PlanLayouts(priority, result, segmentOf, output, block, wanted, grids, buildings, streetSide, overlay, restrictions, null, crossings);
-        var groups = JunctionPlan.OverlapGroups(plans);
+        // overlapping cores are first laid apart, each mouth held at half the street between (turns tighter than their vehicle):
+        // only a group where that fails a check merges (the user, Oct 17: two junctions across a grass strip at Sion
+        // 2505653,1137735 are two, not one paved triangle)
+        var groups = JunctionPlan.OverlapGroups(plans).Where(g => g.Any(p => p.CoresOverlap && p.CoreFails)).ToList();
+        stats.HeldApart += plans.Count(p => p.CoresOverlap && !p.CoreFails);
         if (groups.Count == 0) return plans;
         var merged = new PriorityResult();
         var gone = new HashSet<int>();
@@ -119,11 +123,11 @@ public static partial class TileRewriter
     /// <summary>The merges of a region (#818 phase 5c).</summary>
     public sealed class MergeStats
     {
-        public int Merged, Members;
+        public int Merged, Members, HeldApart;
         public readonly Dictionary<string, int> Why = new();
 
         public string Summary() =>
-            $"    merged cores (#818 phase 5c): {Merged:N0} of {Members:N0} junctions"
+            $"    merged cores (#818 phase 5c): {Merged:N0} of {Members:N0} junctions ({HeldApart:N0} overlapping ones laid apart, held at half the street between)"
             + (Why.Count > 0 ? $"; not merged: {string.Join(", ", Why.OrderBy(w => w.Key).Select(w => $"{w.Key} {w.Value:N0}"))}" : "");
     }
 }

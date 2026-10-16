@@ -239,7 +239,7 @@ public static class CornerPlanner
         if (ArcOf(arcs, a.Out, b.Out) is { } arc)
         {
             var (facade, road, shape) = (stats.Facade, stats.Road, stats.Shape);
-            prop = Build(id, segments, ca, cb, ring, cap, facades, stats, arc, carried, out covered);
+            prop = Build(id, segments, ca, cb, ring, cap, facades, stats, arc, carried, out covered, bandOnly: fixedArc is not null);
             if (prop == null) (stats.Facade, stats.Road, stats.Shape) = (facade, road, shape);
             else stats.Arcs++;
             if (Traced(id, node)) Console.WriteLine($"[corner]   round a kerb arc of {arc.Line.Count} points: {(prop == null ? covered ? "covered by the carried side" : "failed" : "built")}");
@@ -247,7 +247,7 @@ public static class CornerPlanner
         if (prop == null && !covered)
         {
             var (facade, road, shape) = (stats.Facade, stats.Road, stats.Shape);
-            prop = Build(id, segments, ca, cb, ring, cap, facades, stats, null, carried, out covered);
+            prop = Build(id, segments, ca, cb, ring, cap, facades, stats, null, carried, out covered, bandOnly: fixedArc is not null);
             if (Traced(id, node)) Console.WriteLine($"[corner]   round the cap: {(prop != null ? "built" : covered ? "covered by the carried side" : $"failed (facade {stats.Facade - facade}, road {stats.Road - road}, shape {stats.Shape - shape})")}");
         }
         if (covered) stats.Covered++;
@@ -308,7 +308,7 @@ public static class CornerPlanner
 
     private static RoadAreaProp? Build(TileId id, IReadOnlyList<RoadSegment> segments, Chain a, Chain b,
         List<(Vec2 P, float Y)>? ring, RoadJunction? cap, Facades facades, Stats stats, KerbArc? arc,
-        (PathEnd? A, PathEnd? B) ends, out bool covered)
+        (PathEnd? A, PathEnd? B) ends, out bool covered, bool bandOnly = false)
     {
         covered = false;
         // kerb: A's sidewalk start in to the node, round the cap, out to B's sidewalk start; beside a widening
@@ -348,7 +348,8 @@ public static class CornerPlanner
         // (#711) beside a side carried on to the kerb the corner is laid in its sides' bands, round the carried ones and off any
         // road or footpath (the path runs on round the corner); else as before, from where the carried side meets the kerb
         // (#711) beside a crossing's kerb ramp too: the corner's kerb slopes on from the ramp, easing to the other side's kerb
-        if ((ends.A ?? ends.B) != null || a.Lowered || b.Lowered)
+        // (a core's corner, #818: the band along its kerb only, from where the carried side meets it, no whole corner round it)
+        if (!bandOnly && ((ends.A ?? ends.B) != null || a.Lowered || b.Lowered))
         {
             int gapsBefore = stats.Gaps;
             Gap(out covered);
@@ -394,7 +395,9 @@ public static class CornerPlanner
         bool compact = squared && corner!.Value.DistanceTo(a.Out) < 8 && corner.Value.DistanceTo(b.Out) < 8;
 
         string? why = null;
-        if (compact && Polygon(id, segments, withCorner, kerbCount, cap, facades, a, out why) is { } square)
+        // a core's corner (#818, the user, Oct 17: grass behind it at Sion 2506169,1137800) is the sidewalk carried round its kerb,
+        // never the whole corner paved
+        if (compact && !bandOnly && Polygon(id, segments, withCorner, kerbCount, cap, facades, a, out why) is { } square)
         {
             stats.Squared++;
             return square;
@@ -402,7 +405,7 @@ public static class CornerPlanner
         if (Traced(id, poly[0].P)) Console.WriteLine($"[corner]   squared: {(corner is null ? "outer edges do not meet ahead" : !compact ? "not compact" : why)}");
         if (Strip(id, segments, poly, bandOuter, facades, a, stats, out var bandWhy) is { } strip) return strip;
         if (Traced(id, a.Kerb[0].P)) Console.WriteLine($"[corner]   band: {bandWhy}");
-        if (Polygon(id, segments, chord, kerbCount, cap, facades, a, out why) is { } cut) return cut;
+        if (!bandOnly && Polygon(id, segments, chord, kerbCount, cap, facades, a, out why) is { } cut) return cut;
         // (#711) beside a side carried on to the kerb, what is left may be a sliver: nothing to lay, the sides meet
         if ((ends.A ?? ends.B) != null && Math.Abs(SignedArea(withCorner.Select(p => p.P).ToList())) < 0.2) return Gap(out covered);
         if (why != null && why.StartsWith("wall")) stats.Facade++; else if (why == "road") stats.Road++; else stats.Shape++;

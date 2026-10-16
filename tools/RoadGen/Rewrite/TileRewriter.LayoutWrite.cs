@@ -54,9 +54,10 @@ public static partial class TileRewriter
         {
             string? no = null;
             if (jp.Core is not { } core) no = "no core";
-            // two junctions under InternalLink apart stay two cores where both fit on the link between (the user, Oct 15); where
-            // this core wanted more than its half there they would overlap: one core of both, later in phase 5 (its checks then)
-            else if (jp.CoresOverlap) no = "cores overlap";
+            // two junctions under InternalLink apart stay two cores where both fit on the link between (the user, Oct 15), held at
+            // half of it where they wanted more (Oct 17); a group where that fails a check was merged (TileRewriter.Merge), or
+            // could not be: "cores overlap"
+            else if (jp.CoresOverlap && jp.CoreFails) no = "cores overlap";
             else if (!core.Simple || core.KerbsNotTangent > 0 || core.ConnectorsOutside > 0)
                 no = jp.Arms.Any(a => a.Internal) ? "a check failed next to a junction under 30 m" : "a check failed";
             else if ((jp.Merged ?? junctions.GetValueOrDefault(jp.Node)) is not { } j || j.Arms.Count != jp.Arms.Count) no = "a path or track joins";

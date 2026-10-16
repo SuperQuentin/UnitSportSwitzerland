@@ -361,3 +361,12 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
 - **Phase 6 review, left-turn guides** (Oct 17): the inner guide (the left edge of the leftmost left turn) only where an
   island stands on the exit; the outer guide only where a bike lane turns left beside the cars, as the guide between two
   left lanes.
+- **Phase 6 review, a core's corner is a band along its kerb** (Oct 17, against SWISSIMAGE at Sion 2506169,1137800: grass
+  behind a sidewalk along the kerb): the sidewalk carried round the corner at its width, never the whole corner paved
+  (no squared fill, no fill round a carried side or a crosswalk's ramp).
+- **Phase 6 review, overlapping cores are first held apart** (Oct 17, Sion 2505653,1137735: two junctions with a grass
+  strip and trees between): each mouth held at half the street between, its turns tighter than its vehicle; a group merges
+  only where that fails a check.
+- **Phase 6 review, red without lights only along the main road** (Oct 17, Sion 2505948,1137484): an unlit junction's
+  riders' crossing is red (by halves) only where it runs from one main arm to the other, across a road joining; none
+  across the main road or at a junction without one.
