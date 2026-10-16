@@ -211,7 +211,11 @@ public static class ExteriorPlanner
                 carFront = riders + Math.Max(RidersLineWidth, behind);
                 if (stops.Contains(BikeStop.Box))
                     foreach (var (l, r) in BikeBoxes(SectionAt(a, riders + 2)))
+                    {
+                        // the riders' line across the box's whole front (the user, Oct 17: a box without its stop line)
+                        ex.Bars.Add(new ExteriorBar(BarKind.RidersLine, riders, riders + RidersLineWidth, l, r));
                         ex.Bars.Add(new ExteriorBar(BarKind.BikeBox, riders + RidersLineWidth, carFront, l, r));
+                    }
             }
             else carFront = s + (crosswalkAt is not null ? StopBehindCrosswalk : StopFromMouth);
             double width = JunctionRules.StopLineWidth;

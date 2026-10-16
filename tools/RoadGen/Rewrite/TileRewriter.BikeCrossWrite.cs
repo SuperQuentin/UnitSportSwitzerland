@@ -76,6 +76,9 @@ public static partial class TileRewriter
         // 1. bike lanes straight on, along their connector
         foreach (var c in core.Connectors.Where(c => c.Kind == ConnectorKind.Bike && c.Move == SignalMoves.Through))
         {
+            // marked through the core only where the exit carries the riders' way on (the user, Oct 17): else they wait in their
+            // box and ride on in the traffic, the connector unmarked
+            if (jp.Arms.FirstOrDefault(x => x.Arm == c.ToArm) is not { Normal.CarriesBikesAway: true }) continue;
             // a jog between two mouths facing each other goes straight across (the user, Oct 16: a real crossing does not curve);
             // a bend follows its connector
             List<Vec2> centre = c.Centre, left = c.Left, right = c.Right;

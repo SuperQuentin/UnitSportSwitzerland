@@ -376,3 +376,6 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
 - **Phase 6 review, the inner left-turn guide needs a raised island** on the exit; a painted hatch does not count (Oct 17).
 - **A straight side keeps its street's profile** (Oct 17, J9): a crosswalk at one end folds its piece's grass into the path;
   the side between two arms in line no longer blends that along its whole length.
+- **Phase 6 review, a bike box has its stop line** (Oct 17): the riders' line runs across the box's whole front. **A bike lane
+  is marked through the core only into an exit carrying the riders' way on**; else they wait in their box and ride on in the
+  traffic, the connector unmarked.
