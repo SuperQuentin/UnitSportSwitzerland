@@ -258,6 +258,9 @@ public static partial class TileRewriter
             foreach (int node in jp.Nodes)
                 if (node != jp.Node && capOf.TryGetValue(node, out var member)) caps[member.Home].Remove(member.Cap);
             stats.Junctions++;
+            if (JunctionList is { } listFile)
+                File.AppendAllText(listFile, string.Create(CultureInfo.InvariantCulture,
+                    $"{jp.Centre.X:F0},{jp.Centre.Y:F0} arms {jp.Arms.Count} lights {(jp.Lights ? 1 : 0)} left {jp.Arms.Count(a => a.HasLeft)} right {jp.Arms.Count(a => a.HasRight)} split {jp.Arms.Count(a => Math.Abs(a.Split) > 0.01)} bikelanes {jp.Arms.Count(a => a.Mouth.Strips.Any(x => x.Kind == StripKind.BikeLane))} paths {jp.Arms.Count(a => a.Mouth.Strips.Any(x => x.Kind == StripKind.Path))} nodes {jp.Nodes.Count()}\n"));
         }
 
         // a piece run on toward the node along its arm's axis from station <from> (its junction end) to <to> (the mouth), a point a

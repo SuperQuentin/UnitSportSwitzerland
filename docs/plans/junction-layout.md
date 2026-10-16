@@ -355,3 +355,9 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
 - **A core's sidewalk corner only where both streets have their sidewalk at the mouth** (Oct 16, same place): the old
   corner code walked on along a street to its first sidewalk (up to 30 m) and laid a wedge over the whole gap; where the
   crossed street has no sidewalk, a carried side brings its path round the corner but not its sidewalk.
+- **Phase 6 review, red at the lights as the old rule** (Oct 17, on the test region's J2 and J7): a riders' crossing is red
+  on its first half, its second half or both, by where cars cross it while the riders have green (#682), not on the
+  conflict spots alone (patches) nor all along.
+- **Phase 6 review, left-turn guides** (Oct 17): the inner guide (the left edge of the leftmost left turn) only where an
+  island stands on the exit; the outer guide only where a bike lane turns left beside the cars, as the guide between two
+  left lanes.

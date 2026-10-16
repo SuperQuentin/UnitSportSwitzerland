@@ -314,6 +314,7 @@ void RunCase(string name, Func<RoadNetwork> build, Func<Vec2, double>? height)
 void DebugJunctionArg()
 {
     TileRewriter.JunctionFailures = ArgValue("--junction-failures");
+    TileRewriter.JunctionList = ArgValue("--junction-list");
     if (ArgValue("--debug-junction") is not { } at) return;
     var en = at.Split(',');
     TileRewriter.DebugJunction = (double.Parse(en[0], CultureInfo.InvariantCulture), double.Parse(en[1], CultureInfo.InvariantCulture));

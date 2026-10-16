@@ -569,7 +569,9 @@ public static class CorePlanner
                 var d = p - s[k];
                 if (Math.Abs(d.Dot(along)) <= half) push = Math.Max(push, d.Dot(outward));
             }
-            kerb.Add(s[k] + outward * (push > 0 ? push + 0.02 : 0));
+            // (a few centimetres, a lane edge's mitred points along the kerb, within the outline's tolerance: no push, else the
+            // kerb and the bands carried along it wave, J9)
+            kerb.Add(s[k] + outward * (push > OutsideTolerance ? push + 0.02 : 0));
         }
         return kerb;
     }
@@ -732,7 +734,9 @@ public static class CorePlanner
             {
                 var lefts = mine.Where(c => c.Move == SignalMoves.Left).OrderBy(c => c.FromOffset).ToList();
                 var bike = core.Connectors.FirstOrDefault(c => c.Kind == ConnectorKind.Bike && c.FromArm == arm.Arm && c.Move == SignalMoves.Left);
-                if (lefts.Count > 0 && (HasIsland(arms[index[lefts[0].ToArm]]) || bike is not null))
+                // the inner guide only where an island stands on the exit; the outer one only beside a bike lane turning left too,
+                // as the guide between two left lanes (the user, Oct 17)
+                if (lefts.Count > 0 && HasIsland(arms[index[lefts[0].ToArm]]))
                 {
                     core.Lines.Add(new CoreLine("left", lefts[0].Left, Dashed: true));
                     leftInto.Add(lefts[0].ToArm);

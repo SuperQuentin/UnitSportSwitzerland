@@ -8,8 +8,8 @@ using UnitSport.Tools.RoadGen.Network;
 
 /// <summary>
 /// The riders' crossings of a planned junction (#818 phase 4). A bike lane going straight on follows its connector through the
-/// core: yellow dashed edges, red where a car's connector crosses it (at the lights only where the two are green together: the
-/// user's rule, #682; without lights wherever a road joins); between two mouths facing each other (a jog) it goes straight across
+/// core: yellow dashed edges, red on the half or halves where a car's connector crosses it (at the lights only where the two are
+/// green together: the user's rule, #682); between two mouths facing each other (a jog) it goes straight across
 /// (the user, Oct 16). A separated path follows the path's curve (the user's choice), a jog straight across: from
 /// the arm's path at its mouth to the straight-on arm's, red over the carriageway by the same rule, its side's bands laid along
 /// the curve up to the kerb with a sloped kerb strip there, and the corners told where the carried path meets the kerb. Where no
@@ -17,8 +17,6 @@ using UnitSport.Tools.RoadGen.Network;
 /// </summary>
 public static partial class TileRewriter
 {
-    /// <summary>A car crossing reddens the riders' way this far either side of its lane.</summary>
-    private const double RedPastLane = 1.0;
 
     private static void WriteBikeCrossings(JunctionPlan jp, RoadGenResult result, Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf,
         Dictionary<RoadSegment, List<RoadSegment>> finalPieces, SignalPlan? plan, RoadJunction? cap, Dictionary<TileId, List<RoadPaint>> paint,
@@ -62,15 +60,6 @@ public static partial class TileRewriter
             }
             return hits;
         }
-        List<(double From, double To)> Runs(List<(double At, double Half)> hits, double length)
-        {
-            var runs = hits.Select(h => (From: Math.Max(0, h.At - h.Half - RedPastLane), To: Math.Min(length, h.At + h.Half + RedPastLane))).OrderBy(r => r.From).ToList();
-            var merged = new List<(double, double)>();
-            foreach (var r in runs)
-                if (merged.Count > 0 && r.From <= merged[^1].Item2) merged[^1] = (merged[^1].Item1, Math.Max(merged[^1].Item2, r.To));
-                else merged.Add(r);
-            return merged;
-        }
         void Line(List<Vec2> pts, PaintType type, uint rgba, float width, float dash)
         {
             if (pts.Count < 2) return;
@@ -97,8 +86,9 @@ public static partial class TileRewriter
             Line(Inset(left, -lw * 0.5), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
             Line(Inset(right, lw * 0.5), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
             double length = Length(centre);
-            foreach (var (from, to) in Runs(Conflicts(centre, GroupOf(c.FromArm, SignalMoves.Through, bike: true)), length))
-                Line(Cut(centre, from, to), PaintType.BikeCrossing, PaintEmitter.Red, (float)(Math.Min(c.Width, c.ToWidth) - 1.5 * lw - 2 * RedInset), 0);
+            // red on the half or halves where cars cross it in conflict (the old layout's rule, #682; the user, Oct 17)
+            foreach (var (from, to) in RedRuns(Conflicts(centre, GroupOf(c.FromArm, SignalMoves.Through, bike: true)).Select(h => h.At / length).ToList()))
+                Line(Cut(centre, from * length, to * length), PaintType.BikeCrossing, PaintEmitter.Red, (float)(Math.Min(c.Width, c.ToWidth) - 1.5 * lw - 2 * RedInset), 0);
             stats.BikeCrossings++;
         }
 
@@ -171,10 +161,13 @@ public static partial class TileRewriter
             double width = Math.Min(pathA, pathB);
             landings.Add(k0);
             landings.Add(k1);
-            // red where a car crosses it in the riders' phase (without lights: wherever a road joins, as here), yellow edges all across
+            // red on the half or halves where a car crosses it in the riders' phase (#682, the user, Oct 17; without lights all along,
+            // a road joins here), yellow edges all across
             int riders = GroupOf(a.Arm, SignalMoves.Through, bike: true);
-            bool red = plan is null || Conflicts(run, riders).Count > 0;
-            if (red) Line(run, PaintType.BikeCrossing, PaintEmitter.Red, (float)(width - 2 * lw - 2 * RedInset), 0);
+            double runLength = Length(run);
+            var reds = plan is null ? [(0.0, 1.0)] : RedRuns(Conflicts(run, riders).Select(h => h.At / runLength).ToList());
+            foreach (var (from, to) in reds)
+                Line(Cut(run, from * runLength, to * runLength), PaintType.BikeCrossing, PaintEmitter.Red, (float)(width - 2 * lw - 2 * RedInset), 0);
             Line(OffsetLine(run, width * 0.5 - lw * 0.5), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
             Line(OffsetLine(run, -(width * 0.5 - lw * 0.5)), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
             stats.PathCrossings++;

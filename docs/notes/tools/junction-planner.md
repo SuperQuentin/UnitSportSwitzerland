@@ -318,6 +318,12 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   (`CornerPlanner.Walk` with `onward: false` for a given corner; the old corners still walk up to 30 m to the first
   sidewalk); where the crossed street has no sidewalk, a carried side brings its path but not its sidewalk. Data that is
   wrong (Geneva 2497015,1119379: TLM roads on a pedestrian promenade) is no layout question.
+- **Phase 6 review** (in progress, Oct 17): red on a riders' crossing by halves (#682's rule); the inner left-turn guide only
+  with an island on the exit, the outer one only beside a left-turning bike lane; an in-line kerb (`InLineKerb`) pushed only
+  where a connector passes more than `OutsideTolerance` beyond it (lane edges' mitred points made it wave). Open: the bands
+  along a straight side between two arms still change profile over the side (J9, `CornerPlanner`'s wedge before the
+  carried bands, #711). `--junction-list FILE` lists every core written (centre, arms, lights, pockets, bike lanes, paths,
+  nodes) to pick review sites.
 - **Debug**: `--debug-junction E,N` also prints why a junction there is left to the old layout, its links (`?` = not in the
   block).
 - **5d, lanes along transitions in the game**: cars follow a transition's own lanes (`world/traffic-trains`, transition

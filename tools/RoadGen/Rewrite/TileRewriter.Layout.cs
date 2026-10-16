@@ -21,6 +21,9 @@ public static partial class TileRewriter
     /// <summary>Every single-node core failing a check (kerb outside its mouth, connector outside, outline crossing itself) described here (<c>--junction-failures FILE</c>).</summary>
     public static string? JunctionFailures;
 
+    /// <summary>Every core written listed here, one line each (<c>--junction-list FILE</c>, for a review): LV95 centre, arms, lights, pockets, merged nodes.</summary>
+    public static string? JunctionList;
+
     /// <summary>With <see cref="DebugJunction"/>, its plan drawn here as an SVG (<c>--junction-svg FILE</c>).</summary>
     public static string? JunctionSvg;
 
