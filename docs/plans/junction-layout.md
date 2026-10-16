@@ -379,9 +379,9 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
 - **Phase 6 review, a bike box has its stop line** (Oct 17): the riders' line runs across the box's whole front. **A bike lane
   is marked through the core only into an exit carrying the riders' way on**; else they wait in their box and ride on in the
   traffic, the connector unmarked.
-- **Phase 6 review, a bike pocket's lines go solid before its line** (Oct 17): an arriving bike lane between two car lanes
-  (a left-turn bike lane) has solid yellow lines over the last 10 m, as a car pocket's lane line; a kerb-side bike lane stays
-  dashed.
+- **Phase 6 review, an arriving bike lane's lines go solid before its line** (Oct 17): every line between an arriving bike
+  lane and a car lane is solid yellow over the last 10 m, as a car pocket's lane line (a left-turn bike lane between two car
+  lanes and a kerb-side bike lane alike).
 - **Phase 6 review, a bike box only beside its lane** (Oct 17, J1 south): a bike lane stops at a box only where it lies
   beside a car lane making its riders' move (the lane the box covers) and that move's exit carries no bike way; else at an
   advanced line (J1 south's kerb lane lies beside the right-turn lane, its riders going straight on). A boxed bike lane's

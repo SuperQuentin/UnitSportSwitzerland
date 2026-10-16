@@ -111,15 +111,14 @@ public static class TransitionPaint
                 var b = t.Strips[here[j + 1]].Strip;
                 int boundary = here[j + 1];
                 var pair = PairStyle(a, b, striped[here[j]], striped[here[j + 1]], boundary == t.Anchor || (here[j] < t.Anchor && here[j + 1] >= t.Anchor), pocketHere, street);
-                // a bike pocket's lines (an arriving bike lane between two car lanes) go solid before its line, as a car pocket's
-                // (the user, Oct 17)
-                if (pair == Style.Bike && (BikePocketAt(j) || BikePocketAt(j + 1))) pair = Style.BikePocket;
+                // an arriving bike lane's line against a car lane goes solid before its stop, as a car pocket's (the user, Oct 17:
+                // the kerb-side lane too, not only one between two car lanes)
+                if (pair == Style.Bike && (ArrivingBike(a) && b.IsCarLane || ArrivingBike(b) && a.IsCarLane)) pair = Style.BikePocket;
                 Put(boundary, 0, pair);
                 // a bike lane stopping at a box: its lines end at the box's back, the cars' line (the box draws its own sides)
                 if (t.Strips[here[j]].Strip.Stop == BikeStop.Box || t.Strips[here[j + 1]].Strip.Stop == BikeStop.Box) boxed.Add((boundary, 0));
             }
-            bool BikePocketAt(int p) => t.Strips[here[p]].Strip is { Kind: StripKind.BikeLane, Way: StripWay.In } && p > 0 && p + 1 < here.Count
-                && t.Strips[here[p - 1]].Strip.IsCarLane && t.Strips[here[p + 1]].Strip.IsCarLane;
+            static bool ArrivingBike(Strip x) => x is { Kind: StripKind.BikeLane, Way: StripWay.In };
             // runs, split where a solid stretch by a mouth starts or ends inside the interval: lanes the last 10 m, the centre
             // line 20 m at the lights
             double[] cuts = [s0, .. new[] { nearStop, nearStop + SolidToMouth, nearStop + SolidAtLights, t.Length - farStop - SolidToMouth, t.Length - farStop - SolidAtLights }.Where(x => x > s0 + 1e-6 && x < s1 - 1e-6).Order(), s1];
