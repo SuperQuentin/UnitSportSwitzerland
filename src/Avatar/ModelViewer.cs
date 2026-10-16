@@ -12,7 +12,7 @@ namespace UnitSport.Avatar;
 /// <c>godot --path . -- --models</c>: Left/Right (A/D, D-pad) step through a category,
 /// Up/Down (W/S, D-pad) switch category, drag orbits, wheel zooms.
 /// <c>--models,&lt;dir&gt;</c> writes one PNG per model to that directory, prints the builder
-/// classes nothing shows, and quits with a RESULT line.
+/// classes nothing shows, and quits with a RESULT line; with <c>--glb</c> each model also as a <c>.glb</c>.
 /// </para>
 /// <para>
 /// The list is not written here: every <see cref="ShowcaseAttribute"/> method in the assembly is
@@ -38,6 +38,8 @@ public partial class ModelViewer : Node3D
     private MeshInstance3D? _patches;
     // --flicker (with --models,<dir>): each PNG is a FlickerShot, flickering pixels in magenta (#788)
     private readonly bool _flicker = CmdArgs.Has("--flicker");
+    // --glb (with --models,<dir>): each model also as a .glb beside its PNG, to clean in Blender or review (#829)
+    private readonly bool _glb = CmdArgs.Has("--glb");
     private readonly HashSet<Type> _covered = new();
 
     public static bool Requested() => CmdArgs.FlagWithShot("--models").Requested;
@@ -317,6 +319,8 @@ public partial class ModelViewer : Node3D
                 }
                 else
                     GetViewport().GetTexture().GetImage().SavePng(file);
+                if (_glb && _model != null && !ExportGlb(_model, System.IO.Path.ChangeExtension(file, ".glb")))
+                    failed++;
                 count++;
             }
         ShowcaseTrace.Built = null;
@@ -325,6 +329,17 @@ public partial class ModelViewer : Node3D
         GD.Print($"[models] wrote {count} models in {_categories.Count} categories to {_shots}");
         GD.Print(failed == 0 ? "[models] RESULT: ok" : $"[models] RESULT: FAILED ({failed} models threw)");
         GetTree().Quit(failed == 0 ? 0 : 1);
+    }
+
+    /// <summary>The model, vertex colours and node rigs included, as a binary glTF (#829).</summary>
+    private static bool ExportGlb(Node3D model, string file)
+    {
+        var doc = new GltfDocument();
+        var state = new GltfState();
+        var error = doc.AppendFromScene(model, state);
+        if (error == Error.Ok) error = doc.WriteToFilesystem(state, file);
+        if (error != Error.Ok) GD.PushError($"[models] {file}: glTF export failed ({error})");
+        return error == Error.Ok;
     }
 
     private static string Slug(string s) =>
