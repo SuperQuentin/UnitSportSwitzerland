@@ -370,3 +370,9 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
 - **Phase 6 review, red without lights only along the main road** (Oct 17, Sion 2505948,1137484): an unlit junction's
   riders' crossing is red (by halves) only where it runs from one main arm to the other, across a road joining; none
   across the main road or at a junction without one.
+- **Phase 6 review, bike boxes** (Oct 17): a box only where the riders' exit carries no bike way on (as before); one per bike
+  lane, over it and the car lanes up to the nearest one making its riders' move (not the whole approach); two merged only
+  where they touch; no red surface (yellow sides and the bike symbol).
+- **Phase 6 review, the inner left-turn guide needs a raised island** on the exit; a painted hatch does not count (Oct 17).
+- **A straight side keeps its street's profile** (Oct 17, J9): a crosswalk at one end folds its piece's grass into the path;
+  the side between two arms in line no longer blends that along its whole length.

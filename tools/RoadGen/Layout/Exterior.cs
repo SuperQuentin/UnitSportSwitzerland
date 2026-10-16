@@ -131,6 +131,34 @@ public static class ExteriorPlanner
     }
 
     private static bool CarIn(Strip x) => x.IsCarLane && x.Way == StripWay.In;
+
+    /// <summary>
+    /// The bike boxes in front of an approach's cars (the user, Oct 17): one per bike lane stopping at a box, over that lane and
+    /// the car lanes up to the nearest one making its riders' move (not the whole approach), two merged only where they touch.
+    /// </summary>
+    private static List<(double Left, double Right)> BikeBoxes(Section sec)
+    {
+        var cars = sec.Strips.Select((x, k) => (x, k)).Where(p => CarIn(p.x)).Select(p => (Span: sec.Span(p.k), p.x.Moves)).ToList();
+        var boxes = new List<(double Left, double Right)>();
+        for (int k = 0; k < sec.Strips.Count; k++)
+        {
+            var x = sec.Strips[k];
+            if (!BikeIn(x) || x.Stop != BikeStop.Box) continue;
+            var (bl, br) = sec.Span(k);
+            var move = (x.Moves & SignalMoves.Through) != 0 ? SignalMoves.Through : (x.Moves & SignalMoves.Left) != 0 ? SignalMoves.Left : SignalMoves.Right;
+            double mid = (bl + br) * 0.5;
+            var lane = cars.Where(c => c.Moves == SignalMoves.None || (c.Moves & move) != 0)
+                .OrderBy(c => Math.Abs((c.Span.From + c.Span.To) * 0.5 - mid)).Select(c => ((double From, double To)?)c.Span).FirstOrDefault()
+                ?? cars.OrderBy(c => Math.Abs((c.Span.From + c.Span.To) * 0.5 - mid)).Select(c => ((double From, double To)?)c.Span).FirstOrDefault();
+            boxes.Add(lane is { } c0 ? (Math.Min(bl, c0.From), Math.Max(br, c0.To)) : (bl, br));
+        }
+        boxes.Sort((p, q) => p.Left.CompareTo(q.Left));
+        var merged = new List<(double Left, double Right)>();
+        foreach (var b in boxes)
+            if (merged.Count > 0 && b.Left <= merged[^1].Right + 0.1) merged[^1] = (merged[^1].Left, Math.Max(merged[^1].Right, b.Right));
+            else merged.Add(b);
+        return merged;
+    }
     private static bool BikeIn(Strip x) => x.Kind == StripKind.BikeLane && x.Way == StripWay.In;
 
     /// <param name="crosswalkAt">The crosswalk's junction edge, m out from the mouth (null for none): right outside it, or where OSM maps it.</param>
@@ -182,12 +210,8 @@ public static class ExteriorPlanner
                 double behind = stops.Contains(BikeStop.Box) ? BikeBoxDepth : stops.Contains(BikeStop.Advanced) ? AdvancedLine : 0;
                 carFront = riders + Math.Max(RidersLineWidth, behind);
                 if (stops.Contains(BikeStop.Box))
-                {
-                    var cars = SectionAt(a, riders + 2);
-                    double l = cars.Strips.Select((x, k) => (x, k)).Where(p => CarIn(p.x)).Select(p => cars.Span(p.k).From).DefaultIfEmpty(0).Min();
-                    double r = cars.Strips.Select((x, k) => (x, k)).Where(p => CarIn(p.x)).Select(p => cars.Span(p.k).To).DefaultIfEmpty(0).Max();
-                    ex.Bars.Add(new ExteriorBar(BarKind.BikeBox, riders + RidersLineWidth, carFront, l, r));
-                }
+                    foreach (var (l, r) in BikeBoxes(SectionAt(a, riders + 2)))
+                        ex.Bars.Add(new ExteriorBar(BarKind.BikeBox, riders + RidersLineWidth, carFront, l, r));
             }
             else carFront = s + (crosswalkAt is not null ? StopBehindCrosswalk : StopFromMouth);
             double width = JunctionRules.StopLineWidth;

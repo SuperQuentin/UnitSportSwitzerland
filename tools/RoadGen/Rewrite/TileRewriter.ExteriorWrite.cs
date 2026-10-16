@@ -266,13 +266,8 @@ public static partial class TileRewriter
                         break;
                     case BarKind.BikeBox:
                     {
-                        // the box's red surface, its yellow sides and the bike symbol in it, the riders facing the junction
+                        // the box's yellow sides and the bike symbol in it, the riders facing the junction; no red surface (the user, Oct 17)
                         double c = (b.Left + b.Right) * 0.5;
-                        into.Add(new RoadPaint
-                        {
-                            Shape = PaintShape.Polyline, Type = PaintType.BikeCrossing, Rgba = PaintEmitter.Red, Width = (float)(b.Right - b.Left - 0.3),
-                            Vertices = Local(tile, [P(b.From + 0.05, c), P(b.To - 0.05, c)], source.SampleHeight, 0f),
-                        });
                         foreach (double o in (ReadOnlySpan<double>)[b.Left + 0.075, b.Right - 0.075])
                             into.Add(new RoadPaint
                             {

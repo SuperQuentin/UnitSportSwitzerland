@@ -73,6 +73,9 @@ public static class CornerPlanner
     /// sloped all round and the grass folded into the path, so a rider leaving the crossing meets no kerb.</remarks>
     public sealed record CornerInput(Vec2 EndA, Vec2 EndB, KerbArc Arc, bool Landing = false);
 
+    /// <summary>Two arms closer than this to a straight line (cosine of 30 degrees off it) are in line: the kerb between them is a straight side.</summary>
+    private const double InLineCos = 0.866;
+
     /// <summary>The arms' directions match an arc's within this (cosine of 30 degrees).</summary>
     private const double ArcArmCos = 0.866;
 
@@ -211,8 +214,19 @@ public static class CornerPlanner
     {
         // a core's corner (#818) only where both arms have their side at the mouth (the user, Oct 16: walking on to a sidewalk
         // further out laid a wedge over the whole gap)
+        // a core's corner proper (not a straight side between two arms in line, whose bands run on as the street's): a band along
+        // its kerb only (#818, the user, Oct 17)
+        bool coreCorner = fixedArc is not null && fixedArc.OutA.Dot(fixedArc.OutB) > -InLineCos;
         var ca = Walk(segments, ends, a.End, left: true, onward: fixedArc is null);
         var cb = Walk(segments, ends, b.End, left: false, onward: fixedArc is null);
+        // a straight side between two arms in line (#818) keeps the street's own profile from end to end: a crosswalk at one end
+        // folds its piece's grass into the path (walkers cross on paving), which the side must not blend along its whole length
+        // (the lit pair J9: the grass narrowed to nothing over 20 m)
+        if (fixedArc is not null && !coreCorner && ca is not null && cb is not null && Math.Abs(ca.Width - cb.Width) < 0.05)
+        {
+            var street = ca.Side.VergeDm + ca.Side.BufferDm >= cb.Side.VergeDm + cb.Side.BufferDm ? ca.Side : cb.Side;
+            (ca, cb) = (ca with { Side = street }, cb with { Side = street });
+        }
         // a path crossing ends on it (#818): laid as beside a crosswalk, its kerb sloped and the grass folded into the path
         if (landing)
         {
@@ -239,7 +253,7 @@ public static class CornerPlanner
         if (ArcOf(arcs, a.Out, b.Out) is { } arc)
         {
             var (facade, road, shape) = (stats.Facade, stats.Road, stats.Shape);
-            prop = Build(id, segments, ca, cb, ring, cap, facades, stats, arc, carried, out covered, bandOnly: fixedArc is not null);
+            prop = Build(id, segments, ca, cb, ring, cap, facades, stats, arc, carried, out covered, bandOnly: coreCorner);
             if (prop == null) (stats.Facade, stats.Road, stats.Shape) = (facade, road, shape);
             else stats.Arcs++;
             if (Traced(id, node)) Console.WriteLine($"[corner]   round a kerb arc of {arc.Line.Count} points: {(prop == null ? covered ? "covered by the carried side" : "failed" : "built")}");
@@ -247,7 +261,7 @@ public static class CornerPlanner
         if (prop == null && !covered)
         {
             var (facade, road, shape) = (stats.Facade, stats.Road, stats.Shape);
-            prop = Build(id, segments, ca, cb, ring, cap, facades, stats, null, carried, out covered, bandOnly: fixedArc is not null);
+            prop = Build(id, segments, ca, cb, ring, cap, facades, stats, null, carried, out covered, bandOnly: coreCorner);
             if (Traced(id, node)) Console.WriteLine($"[corner]   round the cap: {(prop != null ? "built" : covered ? "covered by the carried side" : $"failed (facade {stats.Facade - facade}, road {stats.Road - road}, shape {stats.Shape - shape})")}");
         }
         if (covered) stats.Covered++;

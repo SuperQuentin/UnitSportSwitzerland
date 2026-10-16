@@ -323,9 +323,11 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   `bandOnly`); overlapping cores held apart at half the street first, merged only where that fails a check
   (`JunctionPlan.CoreFails`); the inner left-turn guide only
   with an island on the exit, the outer one only beside a left-turning bike lane; an in-line kerb (`InLineKerb`) pushed only
-  where a connector passes more than `OutsideTolerance` beyond it (lane edges' mitred points made it wave). Open: the bands
-  along a straight side between two arms still change profile over the side (J9, `CornerPlanner`'s wedge before the
-  carried bands, #711). `--junction-list FILE` lists every core written (centre, arms, lights, pockets, bike lanes, paths,
+  where a connector passes more than `OutsideTolerance` beyond it (lane edges' mitred points made it wave). Bike boxes per bike
+  lane (`ExteriorPlanner.BikeBoxes`), merged where they touch, unfilled; the inner left guide needs a raised island. A
+  straight side between two arms in line keeps the street's profile at both ends (a crosswalk's folded piece no longer
+  blends along it, J9; a small notch remains where the side's two pieces meet). A core's corner proper is a band along its
+  kerb; a straight side is not a corner (`CornerPlanner.InLineCos`). `--junction-list FILE` lists every core written (centre, arms, lights, pockets, bike lanes, paths,
   nodes) to pick review sites.
 - **Debug**: `--debug-junction E,N` also prints why a junction there is left to the old layout, its links (`?` = not in the
   block).

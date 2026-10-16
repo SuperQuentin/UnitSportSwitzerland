@@ -734,9 +734,9 @@ public static class CorePlanner
             {
                 var lefts = mine.Where(c => c.Move == SignalMoves.Left).OrderBy(c => c.FromOffset).ToList();
                 var bike = core.Connectors.FirstOrDefault(c => c.Kind == ConnectorKind.Bike && c.FromArm == arm.Arm && c.Move == SignalMoves.Left);
-                // the inner guide only where an island stands on the exit; the outer one only beside a bike lane turning left too,
+                // the inner guide only where a raised island stands on the exit; the outer one only beside a bike lane turning left too,
                 // as the guide between two left lanes (the user, Oct 17)
-                if (lefts.Count > 0 && HasIsland(arms[index[lefts[0].ToArm]]))
+                if (lefts.Count > 0 && HasRaisedIsland(arms[index[lefts[0].ToArm]]))
                 {
                     core.Lines.Add(new CoreLine("left", lefts[0].Left, Dashed: true));
                     leftInto.Add(lefts[0].ToArm);
@@ -758,6 +758,8 @@ public static class CorePlanner
                     core.Lines.Add(new CoreLine("through", t.Left, Dashed: true));
 
         static bool HasIsland(ArmPlan exit) => exit.Mouth.Strips.Any(s => s.Kind is StripKind.Island || s.Kind == StripKind.Hatch && s.Way == StripWay.None);
+        // a kerbed island, not a painted hatch (the user, Oct 17)
+        static bool HasRaisedIsland(ArmPlan exit) => exit.Mouth.Strips.Any(s => s.Kind is StripKind.Island);
     }
 
     /// <summary>The line halfway between two lines running the same way, matched by their share of length.</summary>
