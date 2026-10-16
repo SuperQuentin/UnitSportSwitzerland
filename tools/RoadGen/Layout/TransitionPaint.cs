@@ -99,6 +99,7 @@ public static class TransitionPaint
             var here = Enumerable.Range(0, n).Where(k => t.Strips[k].Strip.InCarriageway && Present(k, i)).ToList();
             bool pocketHere = here.Any(k => CentreSidePocket(t.Strips[k].Strip.Id)) || here.Any(k => t.Strips[k].Strip.Kind == StripKind.Hatch);
             var lines = new Dictionary<(int, double), Style>();
+            var boxed = new HashSet<(int, double)>();
             void Put(int boundary, double offset, Style s) { if (s != Style.None) lines[(boundary, offset)] = s; }
             for (int j = 0; j < here.Count; j++)
             {
@@ -114,12 +115,14 @@ public static class TransitionPaint
                 // (the user, Oct 17)
                 if (pair == Style.Bike && (BikePocketAt(j) || BikePocketAt(j + 1))) pair = Style.BikePocket;
                 Put(boundary, 0, pair);
+                // a bike lane stopping at a box: its lines end at the box's back, the cars' line (the box draws its own sides)
+                if (t.Strips[here[j]].Strip.Stop == BikeStop.Box || t.Strips[here[j + 1]].Strip.Stop == BikeStop.Box) boxed.Add((boundary, 0));
             }
             bool BikePocketAt(int p) => t.Strips[here[p]].Strip is { Kind: StripKind.BikeLane, Way: StripWay.In } && p > 0 && p + 1 < here.Count
                 && t.Strips[here[p - 1]].Strip.IsCarLane && t.Strips[here[p + 1]].Strip.IsCarLane;
             // runs, split where a solid stretch by a mouth starts or ends inside the interval: lanes the last 10 m, the centre
             // line 20 m at the lights
-            double[] cuts = [s0, .. new[] { nearStop + SolidToMouth, nearStop + SolidAtLights, t.Length - farStop - SolidToMouth, t.Length - farStop - SolidAtLights }.Where(x => x > s0 + 1e-6 && x < s1 - 1e-6).Order(), s1];
+            double[] cuts = [s0, .. new[] { nearStop, nearStop + SolidToMouth, nearStop + SolidAtLights, t.Length - farStop - SolidToMouth, t.Length - farStop - SolidAtLights }.Where(x => x > s0 + 1e-6 && x < s1 - 1e-6).Order(), s1];
             for (int c = 0; c + 1 < cuts.Length; c++)
             {
                 double a0 = cuts[c], a1 = cuts[c + 1], mid = (a0 + a1) * 0.5;
@@ -129,6 +132,7 @@ public static class TransitionPaint
                     var s = style;
                     if (style == Style.LaneChange && (mid < nearStop + SolidToMouth || (t.Far is not null && mid > t.Length - farStop - SolidToMouth))) s = Style.Solid;
                     if (style == Style.BikePocket) s = mid < nearStop + SolidToMouth || (t.Far is not null && mid > t.Length - farStop - SolidToMouth) ? Style.BikeSolid : Style.Bike;
+                    if (boxed.Contains(key) && mid < nearStop) s = Style.None;
                     if (key.Item1 == CentreBoundary(t, i) && ((lights && mid < nearStop + SolidAtLights) || (farLights && t.Far is not null && mid > t.Length - farStop - SolidAtLights)) && s == Style.Dashed) s = Style.Solid;
                     now[key] = s;
                 }
