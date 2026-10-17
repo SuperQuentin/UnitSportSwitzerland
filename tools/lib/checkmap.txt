@@ -685,3 +685,12 @@ src/BattleRoyale/BrState   net  tools/brbotcheck.sh
 src/BattleRoyale/BrStats   net  tools/brbotcheck.sh
 src/BattleRoyale/BrBotProbe net tools/brbotcheck.sh
 src/Bots/                  net  tools/brbotcheck.sh
+# invites, parties, the quick menu and the Activities screen between two clients (#840)
+src/Net/Invites/         net    tools/invitecheck.sh
+src/Net/ChatManager.Invites net tools/invitecheck.sh
+src/Ui/QuickMenu         net    tools/invitecheck.sh
+src/Ui/ActivitiesScreen  net    tools/invitecheck.sh
+src/Ui/InviteToasts      net    tools/invitecheck.sh
+src/Combat/FightManager  net    tools/invitecheck.sh
+src/World/RaceManager    net    tools/invitecheck.sh
+src/BattleRoyale/BrManager.cs net tools/invitecheck.sh

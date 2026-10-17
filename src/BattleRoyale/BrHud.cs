@@ -76,13 +76,13 @@ public partial class BrHud : CanvasLayer
             {
                 case BrPhase.Lobby:
                     top = $"BATTLE ROYALE · {s.AreaName} · {s.Entrants.Count} joined";
-                    sub = mine == null ? "Type /br join to play"
+                    sub = mine == null ? Core.InputHints.Format("Hold {quick_menu} › Activities to join, or /br join")
                         : s.Bots >= BrManager.MinPlayers ? $"Bots fill the field to {s.Bots} at GO"
                         : $"Waiting for players ({BrManager.MinPlayers} to start)";
                     break;
                 case BrPhase.Countdown:
                     top = $"BATTLE ROYALE · {s.AreaName} · starts in {Clock(s.CountdownEnds - now)}";
-                    sub = mine == null ? $"{s.Entrants.Count} players · /br join" : $"{s.Entrants.Count} players";
+                    sub = mine == null ? Core.InputHints.Format($"{s.Entrants.Count} players · hold {{quick_menu}} › Activities to join") : $"{s.Entrants.Count} players";
                     break;
                 case BrPhase.Playing when br.Aboard && s.Flight is { } plane:
                     // in the cargo plane's hold (#207)

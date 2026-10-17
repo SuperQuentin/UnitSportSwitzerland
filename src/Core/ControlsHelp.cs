@@ -55,9 +55,15 @@ public partial class ControlsHelp : CanvasLayer
             new("Pick a hotbar slot", Keys: "1–6 / Wheel", Pad: "{next_item}"),
             new("Quick wheel (hold)", PlayerInput.QuickWheel),
             new("Emote wheel: dances and gestures (hold; tap: stop / again)", PlayerInput.EmoteWheel),
-            new("Inventory", PlayerInput.Inventory),
+            new("Inventory", PlayerInput.Inventory, Pad: "{inventory} (tap)"),
             new("Gather stone, water, wood (hold)", PlayerInput.Gather),
             new("Bird journal", PlayerInput.BirdJournal),
+        }),
+        ("Quick menu and invites (#840)", new Row[]
+        {
+            new("Quick menu: activities, invites, inventory, vehicles, map, emotes (hold, aim, let go)", PlayerInput.QuickMenu, Pad: "{quick_menu} (hold)"),
+            new("Accept the invite on screen", PlayerInput.QuickMenu, Keys: "{quick_menu} (tap)", Pad: "{menu}, then A"),
+            new("Decline the invite on screen", PlayerInput.InviteDecline, Pad: "{quick_menu} (hold) › Invites"),
         }),
         ("Fishing (rod in hand)", new Row[]
         {

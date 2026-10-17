@@ -165,6 +165,14 @@ public partial class PlayerInput : Node
     public const string AimItem = "aim_item";
     public const string Inventory = "inventory";
     public const string QuickWheel = "quick_wheel";
+    /// <summary>
+    /// The quick menu (#840, <see cref="Ui.QuickMenu"/>): hold F2, or hold Back on a pad (a tap of Back is still the
+    /// inventory), for a ring of Activities, Invites, Inventory, Vehicles, Map, Emotes, Bird journal, Controls.
+    /// A tap of F2 while an invite is up accepts it.
+    /// </summary>
+    public const string QuickMenu = "quick_menu";
+    /// <summary>Shift+F2 (#840): declines the newest invite. A pad declines from the quick menu's Invites or the Start menu.</summary>
+    public const string InviteDecline = "invite_decline";
     /// <summary>Hold on foot for the emote wheel (<see cref="Player.EmoteWheel"/>, #404): dances and gestures, any time.</summary>
     public const string EmoteWheel = "emote_wheel";
     /// <summary>
@@ -652,6 +660,10 @@ public partial class PlayerInput : Node
         // B only looks behind when mounted; D-pad up is the engine in a vehicle and turns the
         // hammer's piece, so the emote wheel does not open with the hammer in hand
         Bind(EmoteWheel, Keys(Key.B), Button(JoyButton.DpadUp));
+        // F2 is free everywhere (F1 help, F3 F4 the perf tools); a pad has no free button, so the
+        // quick menu is a hold of Back, whose tap stays the inventory (Ui/QuickMenu tells them apart)
+        Bind(QuickMenu, Keys(Key.F2), Button(JoyButton.Back));
+        Bind(InviteDecline, new InputEvent[] { new InputEventKey { PhysicalKeycode = Key.F2, ShiftPressed = true } });
         // a fist fight (#495): its own context, with items and wheels off, so the item buttons
         // punch and kick (VR's triggers send RB / LB on foot) and B, the crouch, guards (the stick crouches);
         // J K L for an arcade row under the right hand

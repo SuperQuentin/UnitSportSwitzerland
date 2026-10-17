@@ -44,7 +44,8 @@ public partial class ChatManager
     /// <summary>Server: parties (#840), wired by ServerWorld.</summary>
     public Parties? Parties { get; set; }
 
-    private readonly Dictionary<long, ulong> _tpAskedAt = new();
+    /// <summary>When each player last asked to teleport (real time: a rate limit, plumbing).</summary>
+    private readonly Dictionary<long, double> _tpAskedAt = new();
 
     private void InviteCommand(long sender, string verb, string rest)
     {
@@ -79,9 +80,9 @@ public partial class ChatManager
         if (_registry?.FindByName(name) is not { } target) return $"No player matching '{name}'.";
         if (target.PeerId == sender) return "You are already there.";
         if (TeleportRefusal(sender, sender, target.PeerId) is { } why) return why;
-        ulong now = Time.GetTicksMsec();
-        if (_tpAskedAt.TryGetValue(sender, out ulong at) && now - at < TpCooldown * 1000)
-            return $"Wait {TpCooldown - (now - at) / 1000.0:0} s before asking again.";
+        double now = Core.RealClock.Now;
+        if (_tpAskedAt.TryGetValue(sender, out double at) && now - at < TpCooldown)
+            return $"Wait {TpCooldown - (now - at):0} s before asking again.";
         string title = here ? $"{NameOf(sender)} asks you to teleport to them" : $"{NameOf(sender)} asks to teleport to you";
         string reply = _invites!.Send(here ? TpHereKind : TpKind, sender, target.PeerId, title, "", out var sent);
         if (sent != null) _tpAskedAt[sender] = now;
