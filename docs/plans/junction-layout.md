@@ -401,3 +401,6 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
   to the pocket's full width; its left line is solid from the transition's start to the conflict area, its right line
   absent while the right-turn bike lane opens beside it (it leads straight into it), crossing dashes over
   the conflict (where the car pocket opens), solid again from the pocket's full width on.
+- **Phase 6 review, a departing lane widened at the lights keeps its width along the solid centre line** (Oct 17, J7 west):
+  #711's full lane beside a bike lane (no straddling the solid line to pass a cyclist) is held over the 20 m the centre line
+  is solid, then eased back to the street's width at 1:6; it was eased away within 6 m of the mouth (a kink before the turn).

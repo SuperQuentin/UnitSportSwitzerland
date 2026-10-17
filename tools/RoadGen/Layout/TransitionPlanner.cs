@@ -195,7 +195,11 @@ public static class TransitionPlanner
             if (handled.Contains(x.Id)) continue;
             double wm = W(mouth, x.Id), wn = W(normal, x.Id);
             if (Math.Abs(wm - wn) < 1e-3) continue;
-            double from = right.Contains(x.Id) ? eIn : eOut, to = from + Math.Max(EaseMin, Math.Abs(wm - wn) * EasePerMetre);
+            // (at the lights a departing lane widened beside its bike lane, #711, keeps that width along the solid centre line's
+            // stretch: the user, Oct 17; it was eased away within 6 m of the mouth)
+            double from = right.Contains(x.Id) ? eIn
+                : a.Wants.Lights && x.IsCarLane && wm > wn ? Math.Max(eOut, TransitionPaint.SolidAtLights) : eOut;
+            double to = from + Math.Max(EaseMin, Math.Abs(wm - wn) * EasePerMetre);
             widths[x.Id].HoldThen(from, to, wn);
             events.Add(string.Create(inv, $"{Section.Name(x.Kind)} {x.Id} {wm:F2}->{wn:F2} at {from:F0}-{to:F0} m"));
         }
