@@ -390,8 +390,8 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
   cars cross it: crossing dashes (1 m) on both its lines and red over it; past the opening, toward the mouth, both its lines
   solid; its right line stays dashed where it does not run on from the kerb-side bike lane (riders cross over to it from
   the right).
-- **Phase 6 review, the kerb bike lane follows the kerb through a right pocket's opening** (Oct 17): with an in-between bike
-  lane, the street's own kerb bike lane runs on along the kerb as the kerb-side (right-turn) one, its line following the
-  kerb, and the in-between lane and the car pocket open between it and the through lane (the through riders' lane opens
-  from the right). Without an in-between lane the pocket and its bike lane open together over the taper. The in-between
-  lane is red with crossing dashes for the whole opening, the red as wide as the lane in pieces of about a metre.
+- **Phase 6 review, a right pocket's bike lane follows the kerb** (Oct 17): the car pocket opens over the taper; the
+  kerb-side (right-turn) bike lane beyond it opens over a short ease just past the taper's outer end and is at full width
+  over the whole taper, its line following the kerb. The in-between bike lane stays straight; it is red with crossing
+  dashes where the car pocket opens (the cars cross it), dashed beside the right-turn bike lane opening before it (riders
+  cross over), solid from the pocket's full width on.

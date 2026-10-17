@@ -134,11 +134,10 @@ public static class TransitionPaint
             for (int p = 1; p + 1 < here.Count; p++)
             {
                 var x = t.Strips[here[p]].Strip;
-                // (on its right the pocket, or while that is still shut the kerb-side bike lane opening first)
-                var right = t.Strips[here[p + 1]].Strip;
-                if (!ArrivingBike(x) || !t.Strips[here[p - 1]].Strip.IsCarLane || !(right.IsCarLane || ArrivingBike(right))) continue;
-                // opening while any lane on its right still widens (the pocket, the kerb-side bike lane beyond it)
-                bool opening = here.Skip(p + 1).Any(r => Math.Abs(t.Strips[r].Widths[i] - t.Strips[r].Widths[i + 1]) > 0.05);
+                if (!ArrivingBike(x) || !t.Strips[here[p - 1]].Strip.IsCarLane || !t.Strips[here[p + 1]].Strip.IsCarLane) continue;
+                // opening while a car lane on its right still widens: the cars cross it there (the kerb-side bike lane beyond opens
+                // apart, before the pocket)
+                bool opening = here.Skip(p + 1).Any(r => t.Strips[r].Strip.IsCarLane && Math.Abs(t.Strips[r].Widths[i] - t.Strips[r].Widths[i + 1]) > 0.05);
                 between[(here[p], 0)] = opening ? Style.BikeCross : Style.BikeSolid;
                 between[(here[p + 1], 0)] = opening ? Style.BikeCross : FromKerb(here[p]) ? Style.BikeSolid : Style.Bike;
                 if (opening)

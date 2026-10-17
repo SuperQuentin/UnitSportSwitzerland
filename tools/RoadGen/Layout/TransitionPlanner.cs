@@ -126,7 +126,6 @@ public static class TransitionPlanner
         foreach (var x in order) widths[x.Id] = new Profile(W(mouth, x.Id));
 
         var events = new List<string>();
-        var kerbLaneRunsOn = new HashSet<int>();
         var inv = CultureInfo.InvariantCulture;
         double eIn = 0, eOut = 0;
         double cM = mouth.CentreLine ?? 0, cN = normal.CentreLine ?? cM;
@@ -157,26 +156,12 @@ public static class TransitionPlanner
             }
             else
             {
-                // the kerb moves out on one slope over the taper. With a kerb-side bike lane beside the pocket and an in-between one
-                // left of it, the street's own kerb bike lane runs on along the kerb as the kerb-side one, its line following the
-                // kerb (the user, Oct 17), and the in-between lane and the car pocket open between it and the through lane: the
-                // through riders' lane opens from the right
-                int inBetween = -1;
-                if (ids.Contains(bike))
-                {
-                    var strips = mouth.Strips.ToList();
-                    int first = strips.FindIndex(x => ids.Contains(x.Id));
-                    if (first > 0 && strips[first - 1] is { Kind: StripKind.BikeLane, Way: StripWay.In } x0 && W(normal, x0.Id) > 1e-3) inBetween = x0.Id;
-                }
-                if (inBetween >= 0)
-                {
-                    widths[bike].HoldThen(storage, storage + taper, W(normal, inBetween));
-                    widths[inBetween].HoldThen(storage, storage + taper, 0);
-                    foreach (int id in ids.Where(id => id != bike)) widths[id].HoldThen(storage, storage + taper, 0);
-                    kerbLaneRunsOn.Add(inBetween);
-                }
-                else foreach (int id in ids) widths[id].HoldThen(storage, storage + taper, 0);
-                eIn = Math.Max(eIn, storage + taper);
+                // the car pocket opens over the taper; the kerb-side bike lane beyond it opens just past (out from) it, over a short
+                // ease, and is at full width over the whole taper: its line follows the kerb (the user, Oct 17)
+                double bikeOpen = ids.Contains(bike) ? Math.Max(EaseMin, W(mouth, bike) * EasePerMetre) : 0;
+                foreach (int id in ids)
+                    widths[id].HoldThen(id == bike ? storage + taper : storage, id == bike ? storage + taper + bikeOpen : storage + taper, 0);
+                eIn = Math.Max(eIn, storage + taper + bikeOpen);
                 events.Add(string.Create(inv, $"pocket {string.Join("+", ids)} held {storage:F0} m, taper to {storage + taper:F0} m"));
             }
         }
@@ -205,7 +190,6 @@ public static class TransitionPlanner
         // every other width change at 1:6, just beyond its side's last opening
         var handled = new HashSet<int>(a.Openings.Select(o => o.Id))
             { MouthPlanner.LeftBikeId, MouthPlanner.RightBikeId, MouthPlanner.HatchId, MouthPlanner.AddedBikeId, LeadInHatchId, MouthPlanner.LineUpHatchId };
-        handled.UnionWith(kerbLaneRunsOn);
         foreach (var x in order)
         {
             if (handled.Contains(x.Id)) continue;
