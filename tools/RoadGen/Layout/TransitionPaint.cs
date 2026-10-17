@@ -150,8 +150,12 @@ public static class TransitionPaint
                     || (openBefore.Contains(x.Id) && here.Any(r => Math.Abs(t.Strips[r].Widths[i] - t.Strips[r].Widths[i + 1]) > 0.05));
                 if (opening) openNow.Add(x.Id);
                 if (!opening && right is not { IsCarLane: true }) continue;
-                between[(here[p], 0)] = opening ? Style.BikeCross : Style.BikeSolid;
-                if (right is not null) between[(here[p + 1], 0)] = opening ? Style.BikeCross : FromKerb(here[p]) ? Style.BikeSolid : Style.Bike;
+                // crossing dashes only over the conflict, where a car lane on its right opens (the cars cross it there); from the
+                // transition's start to the conflict its lines continuous (the user, Oct 17)
+                bool conflict = here.Skip(p + 1).Any(r => t.Strips[r].Strip.IsCarLane && Math.Abs(t.Strips[r].Widths[i] - t.Strips[r].Widths[i + 1]) > 0.05);
+                var lineStyle = conflict ? Style.BikeCross : Style.BikeSolid;
+                between[(here[p], 0)] = lineStyle;
+                if (right is not null) between[(here[p + 1], 0)] = opening ? lineStyle : FromKerb(here[p]) ? Style.BikeSolid : Style.Bike;
                 if (opening)
                 {
                     // red over it in pieces about a metre long, each as wide as the lane there (it may open from nothing)
