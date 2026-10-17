@@ -101,6 +101,8 @@ public static class TransitionPaint
             if (!open.Remove(key, out var run) || at - run.From < 0.05 || run.Style == Style.None) return;
             m.Lines.Add(LineOf(key.Item1, key.Item2, run.From, at, run.Style, street));
         }
+        var openBefore = new HashSet<int>();
+        var openNow = new HashSet<int>();
         for (int i = 0; i + 1 < st.Length; i++)
         {
             double s0 = st[i], s1 = st[i + 1];
@@ -131,18 +133,25 @@ public static class TransitionPaint
             // Oct 17): where the pocket on its right opens the cars cross it, crossing dashes and red; nearer the mouth its lines
             // solid, its right one dashed where it does not run on from the kerb-side lane (riders cross over to it from the right)
             var between = new Dictionary<(int, double), Style>();
-            for (int p = 1; p + 1 < here.Count; p++)
+            openBefore = openNow;
+            openNow = new HashSet<int>();
+            for (int p = 1; p < here.Count; p++)
             {
                 var x = t.Strips[here[p]].Strip;
-                // (on its right the pocket, or before it opens the kerb-side bike lane opening first: the transition's start)
-                var right = t.Strips[here[p + 1]].Strip;
-                if (!ArrivingBike(x) || !t.Strips[here[p - 1]].Strip.IsCarLane || !(right.IsCarLane || ArrivingBike(right))) continue;
+                // (on its right the pocket, or before it opens the kerb-side bike lane opening first; or nothing yet at the
+                // transition's start, carried on from the opening)
+                Strip? right = p + 1 < here.Count ? t.Strips[here[p + 1]].Strip : null;
+                if (!ArrivingBike(x) || !t.Strips[here[p - 1]].Strip.IsCarLane) continue;
+                if (right is { } r0 ? !(r0.IsCarLane || ArrivingBike(r0)) : !openBefore.Contains(x.Id)) continue;
                 // opening, red from the transition's start (the user, Oct 17), while any lane on its right still widens: the kerb-side
                 // bike lane, then the car pocket
-                bool opening = here.Skip(p + 1).Any(r => Math.Abs(t.Strips[r].Widths[i] - t.Strips[r].Widths[i + 1]) > 0.05);
-                if (!opening && !right.IsCarLane) continue;
+                bool opening = here.Skip(p + 1).Any(r => Math.Abs(t.Strips[r].Widths[i] - t.Strips[r].Widths[i + 1]) > 0.05)
+                    // (and on out over the rest of the transition's start while anything still changes there, the lane beside it easing)
+                    || (openBefore.Contains(x.Id) && here.Any(r => Math.Abs(t.Strips[r].Widths[i] - t.Strips[r].Widths[i + 1]) > 0.05));
+                if (opening) openNow.Add(x.Id);
+                if (!opening && right is not { IsCarLane: true }) continue;
                 between[(here[p], 0)] = opening ? Style.BikeCross : Style.BikeSolid;
-                between[(here[p + 1], 0)] = opening ? Style.BikeCross : FromKerb(here[p]) ? Style.BikeSolid : Style.Bike;
+                if (right is not null) between[(here[p + 1], 0)] = opening ? Style.BikeCross : FromKerb(here[p]) ? Style.BikeSolid : Style.Bike;
                 if (opening)
                 {
                     // red over it in pieces about a metre long, each as wide as the lane there (it may open from nothing)
