@@ -349,7 +349,7 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
   marking data: a real crossroads drawn as two nodes merges; a Sion triangle's grass island is real): a pair or a chain
   merges into one core; streets closing a loop round an island (a triangle, a divided road's square) leave the members as
   they are. Rejected: pairs only, sampling more first.
-- **A riders' crossing between two mouths facing each other goes straight across** (Oct 16, on the Geneva crossroads
+- **A path crossing between two mouths facing each other goes straight across** (Oct 16, on the Geneva crossroads
   2495103,1120529 merged from two nodes: "the path would not curve, it would go straight across"): a jog is laid straight;
   a crossing still follows the curve where the street bends (more than 10 degrees between its ends).
 - **A core's sidewalk corner only where both streets have their sidewalk at the mouth** (Oct 16, same place): the old
@@ -403,5 +403,5 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
   is solid, then eased back to the street's width at 1:6; it was eased away within 6 m of the mouth (a kink before the turn).
 - **Phase 6 review, departing lanes keep the street's widths** (Oct 17, J7 west): #711's full lane beside a bike lane at the
   lights is dropped (it kinked the exit kerb before the turn; holding it over the solid stretch only moved the kink). A
-  bike lane jogging between two facing mouths stays one straight line from mouth to mouth (laying the jog right after the
-  mouth looked worse).
+  bike lane through the core follows its connector again (a straight line across the core cut J7's tight north-east
+  corner); only a path crossing goes straight from kerb to kerb (the Oct 16 rule was about the path at Geneva).
