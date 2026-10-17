@@ -114,7 +114,11 @@ public partial class BotDirector : Node
         // the body reads no keys: its walk, jump, crouch come from the brain's intent
         body.WalkControls = () => (bot.Intent.Wish, bot.Intent.Run);
         body.FootActions = () => (bot.Intent.Jump, bot.Intent.Crouch);
-        body.Died += (killer, cause) => Died?.Invoke(bot, killer, cause);
+        body.Died += (killer, cause) =>
+        {
+            GD.Print($"[bots] {body.Name} \"{profile.Name}\" {(body.Eliminated ? "eliminated" : "knocked out")} by {killer} ({cause})");
+            Died?.Invoke(bot, killer, cause);
+        };
         body.WentDown += attacker => Downed?.Invoke(bot, attacker);
         _bots[id] = bot;
         GD.Print($"[bots] spawned {body.Name} \"{profile.Name}\" ({profile.Difficulty}) at {at}");

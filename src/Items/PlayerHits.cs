@@ -102,12 +102,16 @@ public static class PlayerHits
         return true;
     }
 
-    /// <summary>The bodies a shot can hit: other real players, standing, as this peer draws them.</summary>
+    /// <summary>
+    /// The bodies a shot can hit: other real players and bots (#837), standing, as this peer draws
+    /// them. Race NPCs are not targets.
+    /// </summary>
     private static List<FootPlayer> Targets(FootPlayer shooter)
     {
         var list = new List<FootPlayer>();
         foreach (var n in shooter.GetTree().GetNodesInGroup(FootPlayer.Group))
-            if (n is FootPlayer p && p != shooter && !p.Npc && p.Down != 1 && PeerOf(p) > 0 && p.IsInsideTree())   // downed (2) can be finished, #475
+            if (n is FootPlayer p && p != shooter && (p.Bot || !p.Npc && PeerOf(p) > 0)
+                && p.Down != 1 && p.IsInsideTree())   // downed (2) can be finished, #475
                 list.Add(p);
         return list;
     }

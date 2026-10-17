@@ -675,3 +675,7 @@ src/Terrain/Construction/SiteLoot net tools/yardlootnetcheck.sh
 src/Terrain/Construction/SiteDressing net tools/yardlootnetcheck.sh
 src/Terrain/Construction/SitePlans net tools/yardlootnetcheck.sh
 tools/yardlootnetcheck   net    tools/yardlootnetcheck.sh
+# #837: bots the server runs: marked, walking on the server's collision, shot down by a client, seen from a second one
+src/Bots/                net    tools/botcheck.sh
+src/Items/PlayerHits     net    tools/botcheck.sh
+src/Terrain/CollisionReach net  tools/botcheck.sh

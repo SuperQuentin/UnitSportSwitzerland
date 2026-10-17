@@ -3024,7 +3024,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         Health = Mathf.Max(0f, Health - amount);
         _sinceHurt = 0;
         Hurt?.Invoke(amount);
-        PlayerInput.Rumble(0.6f, Mathf.Clamp(amount / 40f, 0.2f, 1f), 0.25f);
+        if (!Npc) PlayerInput.Rumble(0.6f, Mathf.Clamp(amount / 40f, 0.2f, 1f), 0.25f);
         if (Health <= 0f)
         {
             long killer = now - _lastAttackedAt <= CreditSeconds ? _lastAttacker : 0;

@@ -186,14 +186,17 @@ public partial class ItemEvents : Node
         if (!Combat.PvpRules.Allows(sender, hit.Victim)) return;
         if (Weapons.Get(hit.Weapon) is not { } weapon || hit.Damage > weapon.MaxHit + 0.5f) return;
         var shooter = GetNodeOrNull<FootPlayer>("../Players/" + sender);
-        var victim = GetNodeOrNull<FootPlayer>("../Players/" + hit.Victim);
+        // a bot's body is npc_1_n (#837), a player's its peer id
+        var victim = GetNodeOrNull<FootPlayer>("../Players/" + Net.PlayerReplication.NodeName(hit.Victim));
         if (shooter == null || victim == null || victim.Down == 1 || shooter.Down != 0) return;   // a downed victim (2) can be finished, #475
+        bool bot = victim.Bot && victim.IsMultiplayerAuthority();
         // the bodies are where their owners last said (in LV95, #185): allow for a quarter second of
         // running at both ends
         const float Slack = 8f;
         if (!(shooter.Global.DistanceTo(victim.Global) <= weapon.Range + Slack)) return;
         if (!(victim.Global.DistanceTo(position) <= Slack)) return;
-        if (!Multiplayer.GetPeers().Contains((int)hit.Victim)) return;
+        // never RpcId a bot's negative id: Godot reads it as "everyone but"
+        if (!bot && !Multiplayer.GetPeers().Contains((int)hit.Victim)) return;
         var eye = shooter.Global;
         if (!weapon.Melee && GetNodeOrNull<Net.InterestService>("../" + Net.InterestService.NodeName)?.Ground is { } ground
             && !Combat.HitGuard.TerrainClear((eye.E, eye.N, eye.Alt + 1.6), (position.E, position.N, position.Alt),
@@ -209,7 +212,9 @@ public partial class ItemEvents : Node
             return;
         }
         GD.Print(FormattableString.Invariant($"[pvp] peer {sender} hit peer {hit.Victim} for {hit.Damage:F1} ({hit.Weapon})"));
-        RpcId(hit.Victim, MethodName.Deliver, sender, (int)ItemEventKind.Hit, position.E, position.N, position.Alt, direction, extra);
+        // a bot is run here: the server is its victim side (armour, kill credit, down or out, #837)
+        if (bot) victim.ShotHit(hit.Damage, sender);
+        else RpcId(hit.Victim, MethodName.Deliver, sender, (int)ItemEventKind.Hit, position.E, position.N, position.Alt, direction, extra);
         Combat.PvpRules.RaiseHit(sender, hit.Victim, hit.Damage);
     }
 
