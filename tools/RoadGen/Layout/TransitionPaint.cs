@@ -83,11 +83,10 @@ public static class TransitionPaint
             striped[k] = w.Max() >= HatchMinWidth && to - from >= HatchMinLength;
         }
         bool Present(int k, int i) => Math.Max(t.Strips[k].Widths[i], t.Strips[k].Widths[i + 1]) > 1e-3;
-        // a bike lane running on from the kerb-side lane: where it starts (its outermost station) no car lane lies on its right
+        // a bike lane opening from the kerb-side lane: at the transition's outer end no car lane lies on its right
         bool FromKerb(int k)
         {
-            int at = Array.FindLastIndex(t.Strips[k].Widths, w => w > 1e-3);
-            if (at < 0) return false;
+            int at = t.Strips[k].Widths.Length - 1;
             for (int r = k + 1; r < n; r++)
                 if (t.Strips[r].Strip.IsCarLane && t.Strips[r].Widths[at] > 1e-3) return false;
             return true;
@@ -144,9 +143,16 @@ public static class TransitionPaint
                 between[(here[p + 1], 0)] = opening ? Style.BikeCross : FromKerb(here[p]) ? Style.BikeSolid : Style.Bike;
                 if (opening)
                 {
-                    float w = (float)Math.Min(t.Strips[here[p]].Widths[i], t.Strips[here[p]].Widths[i + 1]);
-                    float band = w - 2 * BikePlanner.LineWidth - 0.1f;
-                    if (band > 0.3f) m.Lines.Add(new TransitionLine(here[p], w * 0.5, s0, s1, PaintType.BikeCrossing, PaintEmitter.Red, band, 0, 0));
+                    // red over it in pieces about a metre long, each as wide as the lane there (it may open from nothing)
+                    var wl = t.Strips[here[p]].Widths;
+                    int pieces = Math.Max(1, (int)Math.Ceiling(s1 - s0));
+                    for (int q = 0; q < pieces; q++)
+                    {
+                        double f0 = (double)q / pieces, f1 = (double)(q + 1) / pieces;
+                        float w = (float)Math.Min(wl[i] + (wl[i + 1] - wl[i]) * f0, wl[i] + (wl[i + 1] - wl[i]) * f1);
+                        float band = w - 2 * BikePlanner.LineWidth - 0.1f;
+                        if (band > 0.3f) m.Lines.Add(new TransitionLine(here[p], w * 0.5, s0 + (s1 - s0) * f0, s0 + (s1 - s0) * f1, PaintType.BikeCrossing, PaintEmitter.Red, band, 0, 0));
+                    }
                 }
             }
             // runs, split where a solid stretch by a mouth starts or ends inside the interval: lanes the last 10 m, the centre
