@@ -712,10 +712,8 @@ public static class CorePlanner
         if (jp.MainArms.Length == 2 && jp.CentreLineThrough)
         {
             int a = jp.MainArms[0], b = jp.MainArms[1];
-            var ab = Outer(a, b, leftmost: true);
-            var ba = Outer(b, a, leftmost: true);
-            var line = ab is not null && ba is not null ? Middle(ab.Left, Reversed(ba.Left)) : ab?.Left ?? (ba is null ? null : Reversed(ba.Left));
-            if (line is not null) core.Lines.Add(new CoreLine("centre", line, Dashed: true));
+            // no centre line through a core (the user, Oct 17: halfway between two offset through lanes it matched no lane); the
+            // edge guides below still run on
             if (rules.Has(JunctionRule.EdgeGuides) && jp.EdgeGuides)
                 foreach (var (from, to) in (ReadOnlySpan<(int, int)>)[(a, b), (b, a)])
                     if (Outer(from, to, leftmost: false) is { } c)

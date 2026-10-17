@@ -409,3 +409,6 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
   straight from its mouth to where the exit carries it on (into a path behind the kerb: the path's centre where it starts,
   that corner's kerb lowered), along its connector where either of its lines would leave the core (J7's tight corner).
   **No marking is drawn off the road**: lines through the core (bike lanes, red, guides) are cut to the core's surface.
+- **Phase 6 review, no centre line through a core** (Oct 17): the main road's centre line carried through (#121), halfway
+  between the two opposing through lanes, matched no lane where they were offset (pockets, hatches, a split lead-in); it is
+  dropped at every core. The edge guides still run on.
