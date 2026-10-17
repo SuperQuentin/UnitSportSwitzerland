@@ -393,5 +393,6 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
 - **Phase 6 review, a right pocket's bike lane follows the kerb** (Oct 17): the car pocket opens over the taper; the
   kerb-side (right-turn) bike lane beyond it opens over a short ease just past the taper's outer end and is at full width
   over the whole taper, its line following the kerb. The in-between bike lane stays straight; it is red from the transition's start
-  to the pocket's full width; its lines are solid from the transition's start to the conflict area, crossing dashes over
+  to the pocket's full width; its left line is solid from the transition's start to the conflict area, its right line
+  absent while the right-turn bike lane opens beside it (it leads straight into it), crossing dashes over
   the conflict (where the car pocket opens), solid again from the pocket's full width on.

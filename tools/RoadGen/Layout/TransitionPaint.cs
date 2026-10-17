@@ -155,7 +155,8 @@ public static class TransitionPaint
                 bool conflict = here.Skip(p + 1).Any(r => t.Strips[r].Strip.IsCarLane && Math.Abs(t.Strips[r].Widths[i] - t.Strips[r].Widths[i + 1]) > 0.05);
                 var lineStyle = conflict ? Style.BikeCross : Style.BikeSolid;
                 between[(here[p], 0)] = lineStyle;
-                if (right is not null) between[(here[p + 1], 0)] = opening ? lineStyle : FromKerb(here[p]) ? Style.BikeSolid : Style.Bike;
+                // no line on its right while the right-turn bike lane opens beside it: it leads straight into it (the user, Oct 17)
+                if (right is { } r1) between[(here[p + 1], 0)] = ArrivingBike(r1) ? Style.None : opening ? lineStyle : FromKerb(here[p]) ? Style.BikeSolid : Style.Bike;
                 if (opening)
                 {
                     // red over it in pieces about a metre long, each as wide as the lane there (it may open from nothing)
