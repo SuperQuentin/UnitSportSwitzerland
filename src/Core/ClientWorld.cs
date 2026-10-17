@@ -750,6 +750,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(items);
         _items = items;
         AddChild(new Player.EmoteWheel(() => _onFoot ? LocalPlayer : null) { Name = "EmoteWheel" });
+        // the quick menu (#840): hold F2 / pad Back for activities, invites, inventory, vehicles, map...
+        var emotes = GetNodeOrNull<Player.EmoteWheel>("EmoteWheel");
+        AddChild(new Ui.QuickMenu(() => MenuOpen?.Invoke() == true, () => _onFoot && LocalPlayer is { Ride: Player.RideKind.OnFoot, RidingWith: 0 },
+            () => emotes));
+        AddChild(new Ui.InviteToasts());
         if (Items.InventoryUiProbe.Requested) AddChild(new Items.InventoryUiProbe(items));
         if (Loot.LootSyncProbe.Role != null) AddChild(new Loot.LootSyncProbe(items, origin));
         if (Interiors.SiteOfficeNetProbe.Role != null) AddChild(new Interiors.SiteOfficeNetProbe(items, origin));
@@ -796,6 +801,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.SwimNetProbe.Role != null) AddChild(new Player.SwimNetProbe(items));
         if (Player.EmoteNetProbe.Role != null) AddChild(new Player.EmoteNetProbe(items));
         if (Player.FightNetProbe.Role != null) AddChild(new Player.FightNetProbe(items));
+        if (Net.InviteProbe.Role != null) AddChild(new Net.InviteProbe(items));
         if (Items.SwissNetProbe.Role != null) AddChild(new Items.SwissNetProbe(items));
         if (Items.Fishing.FishNetProbe.Role != null) AddChild(new Items.Fishing.FishNetProbe(items));
         if (World.ClockNetProbe.Role != null) AddChild(new World.ClockNetProbe(items));
@@ -1414,6 +1420,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.EconomyProbe.Password != null && _items != null && _chat != null)
             AddChild(new Items.EconomyProbe(_chat, _items.Inventory));
 
+        // World/Invites and World/Parties on both sides (#840): what others ask of this player
+        AddChild(InviteService.CreateClient());
+        AddChild(Parties.CreateClient());
+
         // World/Race on both sides; the client side puts this player on the grid and times the run
         var race = World.RaceManager.CreateClient(_worldOrigin!);
         race.LocalPlayer = () => LocalPlayer;
@@ -1835,6 +1845,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 if (!Permissions.InMatch) yield return (PlayerInput.ToggleMode, "Fly camera");
             }
         }
+        // the quick menu (#840): activities, invites and the rest, from anywhere
+        yield return (PlayerInput.QuickMenu, "Quick menu");
         yield return (PlayerInput.Help, "All controls");
     }
 

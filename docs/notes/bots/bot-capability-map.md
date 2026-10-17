@@ -62,6 +62,7 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | Capability | Seam | Server path | Sense | Skill | Status |
 |---|---|---|---|---|---|
 | join the field | — | `BrManager.PlaceBots` at GO | — | — | ok (on the ground in the first circle) |
+| invites, parties, teleport requests (#840) | — | none: never offered (`InviteService` skips negative ids); a bot joins through `PlaceBots` | — | — | n/a |
 | board the plane, jump | — | `BrManager.Jump` (RPC by sender) | the plane's line | `Drop` | gap: phase 2 |
 | the zone's damage | — | `BrManager.BotZone` | the zone (state) | `Zone` | ok (damage); running from it: phase 2 |
 | eliminated, kill credit, careers | — | `OnBotDied`, `Eliminate`, `BotKills`, no career | — | — | ok |

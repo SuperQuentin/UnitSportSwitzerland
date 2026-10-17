@@ -39,6 +39,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private World.RaceNpcs? _npcs;
     private BattleRoyale.BrManager? _br;
     private Combat.FightManager? _fight;
+    private InviteService? _invites;
+    private Parties? _parties;
     private BattleRoyale.BrCrates? _brCrates;
     private Handshake? _handshake;
 
@@ -204,6 +206,14 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _handshake = Handshake.CreateServer(_chat);
         _handshake.Accepted += OnPeerAccepted;
         AddChild(_handshake);
+
+        // invites (#840): World/Invites, one system every activity asks through; parties ride on it
+        var invites = _invites = InviteService.CreateServer(_chat);
+        AddChild(invites);
+        _chat.Invites = invites;
+        _parties = Parties.CreateServer(_chat, invites);
+        AddChild(_parties);
+        _chat.Parties = _parties;
 
         // car races between players: World/Race, like World/Chat, so the RPCs find it
         var race = World.RaceManager.CreateServer(_chat, _players, source);
@@ -478,6 +488,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _structures?.SendTo(id);
         _br?.SendTo(id);
         _brCrates?.SendTo(id);
+        _invites?.SendTo(id);
         _chat?.SendWorldTimeTo(id);
         _chat?.SendWorldSpeedTo(id);
         _chat?.SendSeaStateTo(id);
@@ -494,6 +505,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _passengers?.PeerLeft(id);
         _br?.PeerLeft(id);
         _fight?.PeerLeft(id);
+        _invites?.PeerLeft(id);
+        _parties?.PeerLeft(id);
         _cranes?.PeerLeft(id);
         _vehicles?.ForgetOwner(id);
         _radios?.ForgetOwner(id);

@@ -95,6 +95,8 @@ public sealed class BrState
     /// lobby; the bots themselves are entrants like anyone (<see cref="BrEntrant.Bot"/>).
     /// </summary>
     public int Bots { get; set; }
+    /// <summary>How well those bots play (<c>Bots.BotDifficulty</c> as an int: 0 easy, 1 normal, 2 hard), for the Activities screen (#840).</summary>
+    public int BotLevel { get; set; } = 1;
     public List<BrEntrant> Entrants { get; set; } = new();
 
     [JsonIgnore] public int AliveCount => Entrants.Count(e => e.Alive);

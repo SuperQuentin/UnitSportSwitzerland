@@ -17,6 +17,7 @@
   LB aim) are trick/boost when mounted. `HeldItemVisual` draws the item: a swaying viewmodel on the
   camera in first person, else on `FootPlayer.HandLocal` (the wrist from the same rig the body is
   posed from). Controls: **1–6** / wheel / D-pad → select, **hold X / D-pad ←** radial quick wheel
-  (aim with mouse or right stick, release), **I / Tab / Back** inventory (Minecraft-style: see
+  (aim with mouse or right stick, release), **I / Tab / Back** inventory (a pad's Back opens it on the release: a hold is the quick menu,
+  `ui/quick-menu`; Minecraft-style: see
   the `cursor-inventory` note; money: the `cash-account` note). Something new that does not fit (a developed photo, a flag picked up, `/spawn`, a radio picked up, the hunting-season gun) goes through `ItemController.Give`: the rest is dropped on the ground in front of you instead of lost. Screenshot with `--ride foot,5,out.png` plus
   `--hold <item>`, `--aim`, `--inventory`.

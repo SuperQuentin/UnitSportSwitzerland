@@ -5,7 +5,8 @@
   mouse pushes a virtual stick (`Relative / 90`, as the quick wheel), the right stick aims directly.
   Release picks; a left click picks too. Pages: mouse wheel, Q / E, `ui_left` / `ui_right` (D-pad, left
   stick). A tap (< 0.25 s, nothing aimed) stops the dance, or replays the last emote. Esc closes
-  without a change. It registers with `UiFocus` while open, so the body does not walk.
+  without a change. It registers with `UiFocus` while open, so the body does not walk. From the quick
+  menu (#840) it opens **latched** (`Open(latched: true)`): no key is held, so a click or A picks.
 - **Not with the hammer in hand**: its D-pad up turns the piece. Nor mounted, swimming, sliding,
   knocked out or on a zipline/ladder (`FootPlayer.CanEmote`).
 - **Wire**: nothing new. `FootPlayer.DanceId` (already replicated) is 0 none, 1 the radio dance,

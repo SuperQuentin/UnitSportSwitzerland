@@ -48,6 +48,7 @@ public partial class BrManager
         if (!_state.Running && _state.Phase != BrPhase.Idle)
         {
             _state.Bots = _botTarget;
+            _state.BotLevel = (int)_botLevel;
             Push();
         }
         return _botTarget == 0 ? "Bots off." : $"Matches will be topped up with {_botLevel.ToString().ToLowerInvariant()} bots to {_botTarget} players.";
