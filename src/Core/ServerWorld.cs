@@ -127,6 +127,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         AddChild(_spawner);
         // race NPCs: spawned here for everyone, simulated on the client that asked (issue #39)
         AddChild(_npcs = World.RaceNpcs.CreateServer(_spawner, _players));
+        // bots (#837): bodies the server runs itself, through the same spawner
+        AddChild(Bots.BotDirector.CreateServer(_spawner, _players));
 
         // vehicles standing in the world; the server spawns and removes them for everyone
         _vehicles = Vehicles.VehicleManager.Create(this, null, origin);

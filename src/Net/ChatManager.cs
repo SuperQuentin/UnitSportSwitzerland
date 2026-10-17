@@ -697,6 +697,11 @@ public partial class ChatManager : Node
                 if (BattleRoyale == null) ReplyTo(sender, "Battle Royale is not available on this server.", ChatKind.Error);
                 else ReplyTo(sender, BattleRoyale.Command(sender, rest, IsAdmin(sender)), ChatKind.Private);
                 return;
+            case "bot" or "bots":
+                if (Bots.BotDirector.Instance is not { } bots) ReplyTo(sender, "Bots are not available on this server.", ChatKind.Error);
+                else ReplyTo(sender, bots.Command(sender, rest, IsAdmin(sender),
+                    id => _players?.GetNodeOrNull<Player.FootPlayer>(id.ToString())), ChatKind.Private);
+                return;
             case "race":
                 if (Race == null) ReplyTo(sender, "Races are not available on this server.", ChatKind.Error);
                 else if (sender == ConsolePeerId && !rest.StartsWith("cancel") && !rest.StartsWith("list")) ReplyTo(sender, "'/race' needs a player.", ChatKind.Error);
@@ -782,7 +787,7 @@ public partial class ChatManager : Node
                 "admin: /say <text>  /tp <player>  /bring <player>  /tpall <town>  "
                 + "/kick <player> [reason]  /update  /admin list|add <name>|remove <name>  "
                 + "/occasion start|stop <id>|auto  /spawn <item> [count]  /catalogue  /debug  "
-                + "/give <player> <item> [count]  /clear [player]  /transfer <from> <to>  /money <amount> [player]  "
+                + "/give <player> <item> [count]  /clear [player]  /transfer <from> <to>  /money <amount> [player]  /bot add [n] [easy|normal|hard]|clear|list  "
                 + "/bank <player> [set|add|take <amount>]  "
                 + "/time set <hh:mm|noon|night...>|add <h>|speed <min>  /speed <0.05..8|normal>  "
                 + "/seastate <0..1|calm|chop|storm|gamey>  — Tab completes",
