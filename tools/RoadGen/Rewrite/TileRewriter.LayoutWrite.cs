@@ -39,6 +39,27 @@ public static partial class TileRewriter
         public double Length => RoadPaintGeometry.Length(Piece.Points);
     }
 
+    /// <summary>A polyline (x, y, z per point) with a point added at each distance along it (plan metres) where none lies within 0.2 m.</summary>
+    private static float[] WithPointsAt(float[] points, IEnumerable<double> distances)
+    {
+        var list = new List<float>(points);
+        foreach (double d in distances.OrderByDescending(x => x))
+        {
+            double run = 0;
+            for (int i = 0; i + 1 < list.Count / 3; i++)
+            {
+                float x0 = list[i * 3], z0 = list[i * 3 + 2], x1 = list[i * 3 + 3], z1 = list[i * 3 + 5];
+                double len = Math.Sqrt((x1 - x0) * (x1 - x0) + (z1 - z0) * (z1 - z0));
+                if (run + len < d) { run += len; continue; }
+                double f = len < 1e-6 ? 0 : (d - run) / len;
+                if (f * len > 0.2 && (1 - f) * len > 0.2)
+                    list.InsertRange(i * 3 + 3, [(float)(x0 + (x1 - x0) * f), (float)(list[i * 3 + 1] + (list[i * 3 + 4] - list[i * 3 + 1]) * f), (float)(z0 + (z1 - z0) * f)]);
+                break;
+            }
+        }
+        return list.ToArray();
+    }
+
     /// <summary>Whether an arriving bike lane lies between two arriving car lanes at a mouth (a through bike lane beside a right pocket).</summary>
     private static bool BikeBetweenCars(Section s)
     {
@@ -455,7 +476,11 @@ public static partial class TileRewriter
             var clearRiders = ClearOf(t, mine, riders: true);
             foreach (var (sp, from, to) in covered)
             {
-                var flagged = Copy(sp.Piece, sp.Piece.Points, sp.Piece.Attributes with { Flags = sp.Piece.Attributes.Flags | RoadAttrFlags.InTransition });
+                // a point at every station the transition's widths change at: the game builds the section at the piece's points only,
+                // so a kerb between two far points ran straight past a pocket's taper (the user, Oct 17)
+                double pieceLen = sp.Length;
+                var at = t.Stations.Where(s => s > from + 0.05 && s < to - 0.05).Select(s => sp.TowardJunction ? pieceLen - (s - from) : s - from);
+                var flagged = Copy(sp.Piece, WithPointsAt(sp.Piece.Points, at), sp.Piece.Attributes with { Flags = sp.Piece.Attributes.Flags | RoadAttrFlags.InTransition });
                 var pieces = PiecesOf(sp.Whole).ToList();
                 pieces[pieces.FindIndex(x => ReferenceEquals(x, sp.Piece))] = flagged;
                 Replace(sp.Whole, sp.Tile, pieces);

@@ -329,6 +329,10 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   blends along it, J9; a small notch remains where the side's two pieces meet). A core's corner proper is a band along its
   kerb; a straight side is not a corner (`CornerPlanner.InLineCos`). `--junction-list FILE` lists every core written (centre, arms, lights, pockets, bike lanes, paths,
   nodes) to pick review sites.
+- **Pitfall** (found Oct 17): a transition's piece kept the street's own points, and the game (and `--street-svg`) builds a
+  piece's section at its points only, so a width change between two far points ran straight past it (a pocket's kerb
+  missed its taper by metres, the lines drawn at the stations did not). The writer now adds a point at every station
+  (`WithPointsAt`).
 - **Debug**: `--debug-junction E,N` also prints why a junction there is left to the old layout, its links (`?` = not in the
   block).
 - **5d, lanes along transitions in the game**: cars follow a transition's own lanes (`world/traffic-trains`, transition
