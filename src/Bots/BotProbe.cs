@@ -48,6 +48,16 @@ public partial class BotProbe : ChatProbe
         var bots = Bots();
         GD.Print($"{Log} {bots.Length} bot(s) here: {string.Join(", ", bots.Select(b => $"{b.Name} \"{b.BotName}\""))}");
         Expect(bots.All(b => b.GetNodeOrNull("BotTag") != null && b.BotName.Length > 0), "every bot is marked (tag and name)");
+        if (DisplayServer.GetName() != "headless")
+        {
+            // a look at them: facing the nearest bot from a few metres, its tag over its head
+            var near = bots.MinBy(b => b.GlobalPosition.DistanceTo(me.GlobalPosition))!;
+            var look = (near.GlobalPosition + Vector3.Up * 1.4f - me.EyePosition).Normalized();
+            me.LookYaw = Mathf.Atan2(-look.X, -look.Z);
+            me.LookPitch = Mathf.Asin(Mathf.Clamp(look.Y, -1f, 1f));
+            await Seconds(1.0);
+            Shot("a_bots");
+        }
 
         // walking on the server's collision: someone moved, and stands on the ground
         var start = bots.ToDictionary(b => b, b => b.Global);
