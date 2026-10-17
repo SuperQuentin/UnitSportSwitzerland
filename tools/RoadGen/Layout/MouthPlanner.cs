@@ -118,8 +118,7 @@ public static class MouthPlanner
     /// The section the data wants at the mouth: the normal section's sides and departing lanes kept, the arriving side laid out
     /// from the centre line: the left pocket's lanes, the left-turn bike lane, the own lanes, then the right pocket and the
     /// painted bike lane in layout (a) or (b). Every arriving car lane is at least <see cref="Lane"/> and as wide as the
-    /// street's own; a departing car lane beside a bike lane is at least <see cref="Lane"/> (#120: a car passes a cyclist
-    /// without crossing the solid centre line). The carriageway keeps its left edge (no split lead-in yet: the alignment's).
+    /// street's own; the departing lanes keep the street's widths. The carriageway keeps its left edge (no split lead-in yet: the alignment's).
     /// </summary>
     public static Section Wanted(Section normal, ArmWants w)
     {
@@ -146,10 +145,8 @@ public static class MouthPlanner
             else if (s.Kind == StripKind.BikeLane) bikeIn = s;
             else if (s.IsCarLane) inCars.Add(s);
         }
-        // at the lights a departing car lane beside its bike lane is a full lane (#711: the solid centre line before the stop line)
-        for (int k = 0; w.Lights && k < outSide.Count; k++)
-            if (outSide[k].IsCarLane && (k > 0 && outSide[k - 1].Kind == StripKind.BikeLane) && outSide[k].Width < Lane)
-                outSide[k] = outSide[k].WithWidth(Lane);
+        // the departing lanes keep the street's width (the user, Oct 17: #711's full lane beside a bike lane at the lights made the
+        // exit kerb kink, J7 west)
         // a one-way street leaving the junction: nothing arrives
         if (inCars.Count == 0)
             return new Section([.. leftBands, .. outSide, .. rightBands], normal.CarriagewayLeft) { KerbLeftCm = normal.KerbLeftCm, KerbRightCm = normal.KerbRightCm };
