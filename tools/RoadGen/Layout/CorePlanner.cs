@@ -741,7 +741,9 @@ public static class CorePlanner
                     core.Lines.Add(new CoreLine("left", lefts[0].Left, Dashed: true));
                     leftInto.Add(lefts[0].ToArm);
                 }
-                if (lefts.Count > 0 && bike is not null) core.Lines.Add(new CoreLine("left bike", Middle(lefts[^1].Right, bike.Left), Dashed: true));
+                // (only into an exit carrying the riders' way on, as a bike lane marked through the core: the user, Oct 17)
+                if (lefts.Count > 0 && bike is not null && arms[index[bike.ToArm]].Normal.CarriesBikesAway)
+                    core.Lines.Add(new CoreLine("left bike", Middle(lefts[^1].Right, bike.Left), Dashed: true));
             }
             foreach (var move in (ReadOnlySpan<SignalMoves>)[SignalMoves.Left, SignalMoves.Through, SignalMoves.Right])
             {

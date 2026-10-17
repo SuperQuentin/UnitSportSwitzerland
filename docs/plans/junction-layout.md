@@ -374,6 +374,8 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
   lane, over it and the car lanes up to the nearest one making its riders' move (not the whole approach); two merged only
   where they touch; no red surface (yellow sides and the bike symbol).
 - **Phase 6 review, the inner left-turn guide needs a raised island** on the exit; a painted hatch does not count (Oct 17).
+  The outer one (beside a left-turning bike lane) only into an exit carrying a bike lane or path on, as a bike lane marked
+  through the core.
 - **A straight side keeps its street's profile** (Oct 17, J9): a crosswalk at one end folds its piece's grass into the path;
   the side between two arms in line no longer blends that along its whole length.
 - **Phase 6 review, a bike box has its stop line** (Oct 17): the riders' line runs across the box's whole front. **A bike lane
