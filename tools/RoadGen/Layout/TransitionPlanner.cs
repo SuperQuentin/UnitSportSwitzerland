@@ -156,7 +156,12 @@ public static class TransitionPlanner
             }
             else
             {
-                foreach (int id in ids) widths[id].HoldThen(storage, storage + taper, 0);
+                // the kerb moves out on one slope over the taper; the kerb-side bike lane takes its share first (the outer end) and
+                // is at its full width from there, the car pocket opening over the rest (the user, Oct 17: the right-turn bike
+                // lane was very narrow for most of the taper)
+                double bikeWidth = ids.Contains(bike) ? W(mouth, bike) : 0;
+                double carsUntil = storage + taper * (width > 1e-6 ? (width - bikeWidth) / width : 1);
+                foreach (int id in ids) widths[id].HoldThen(id == bike ? carsUntil : storage, id == bike ? storage + taper : carsUntil, 0);
                 eIn = Math.Max(eIn, storage + taper);
                 events.Add(string.Create(inv, $"pocket {string.Join("+", ids)} held {storage:F0} m, taper to {storage + taper:F0} m"));
             }
