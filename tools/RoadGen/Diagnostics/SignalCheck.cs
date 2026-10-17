@@ -23,6 +23,7 @@ public static class SignalCheck
         var cycles = new SortedDictionary<int, int>();
         (double Distance, string Text)? nearest = null;
         var lanes = new LaneTally();
+        var paths = new PathTally();
         var nearLanes = new List<(double Distance, string Text)>();   // lane records within 60 m of --at
         double atE = 0, atN = 0;
         if (at is not null)
@@ -37,6 +38,7 @@ public static class SignalCheck
             RoadTile tile;
             using (var stream = File.OpenRead(path)) tile = RoadCodec.Decode(stream);
             CheckLanes(tile, lanes, log, list);
+            CheckPaths(tile, paths, log, list);
             if (at is not null)
                 foreach (var a in tile.Approaches)
                 {
@@ -98,13 +100,121 @@ public static class SignalCheck
         foreach (var (_, text) in nearLanes.OrderBy(x => x.Distance).Take(8)) log(text);
         log(string.Create(c, $"  poles (#350, #711): {approaches} approaches, {noMain} without a main pole; {pocketArms} with a left pocket, {noSecond} without its second head"));
         foreach (var miss in poleMisses.Take(list ? int.MaxValue : 30)) log(miss);
-        bool ok = invalid == 0 && lanes.Bad == 0 && lanes.Missing == 0 && noMain == 0 && noSecond == 0;
+        log(string.Create(c, $"  junction paths (#818, JPTH): {paths.Paths} on {paths.Cores} cores; ends off their lane {paths.OffLane}, points off the core {paths.OffCore}"));
+        bool ok = invalid == 0 && lanes.Bad == 0 && lanes.Missing == 0 && noMain == 0 && noSecond == 0 && paths.OffLane == 0 && paths.OffCore == 0;
         log(ok ? "[signalcheck] RESULT: ok"
-            : $"[signalcheck] RESULT: FAILED {invalid} invalid plans, {lanes.Bad} bad lane records, {lanes.Missing} signalised approaches without one, {noMain} approaches without a main pole, {noSecond} without a second head");
+            : $"[signalcheck] RESULT: FAILED {invalid} invalid plans, {lanes.Bad} bad lane records, {lanes.Missing} signalised approaches without one, {noMain} approaches without a main pole, {noSecond} without a second head, {paths.OffLane + paths.OffCore} bad junction paths");
         return ok ? 0 : 2;
     }
 
     private sealed class LaneTally { public int Approaches, Signalised, Lanes, Banned, Bad, Missing; }
+
+    private sealed class PathTally { public int Paths, Cores, OffLane, OffCore; }
+
+    /// <summary>A path's end this far from its lane's centre at the mouth (m), or a point this far off its core, is wrong.</summary>
+    private const float PathEndTolerance = 0.3f, PathCoreTolerance = 0.5f;
+
+    /// <summary>
+    /// The junction paths of a tile (#818 phase 5, <c>JPTH</c>): each starts and ends on its lane where its road meets the mouth
+    /// (the end's point and offset; on a road of the tile ending there, the offset on a lane: a lane strip of a transition piece,
+    /// within the carriageway of a plain segment), and every point lies on its core's cap.
+    /// </summary>
+    private static void CheckPaths(RoadTile tile, PathTally t, Action<string> log, bool list)
+    {
+        var c = CultureInfo.InvariantCulture;
+        t.Cores += tile.JunctionPaths.Select(p => p.Junction).Distinct().Count();
+        foreach (var p in tile.JunctionPaths)
+        {
+            t.Paths++;
+            int n = p.PointCount;
+            string? bad = null;
+            foreach (var (end, at) in new[] { (p.From, 0), (p.To, n - 1) })
+            {
+                int a0 = at == 0 ? 0 : n - 1, a1 = at == 0 ? 1 : n - 2;
+                // the road ending there in this tile, and the arm's way toward the junction along it (else along the path's first
+                // step inward, which a turn curving from the mouth tilts)
+                // (only a road arriving from outside: one whose way toward its end agrees with the path's, not a piece under the core)
+                float px = p.Points[a1 * 3] - p.Points[a0 * 3], pz = p.Points[a1 * 3 + 2] - p.Points[a0 * 3 + 2];
+                RoadSegment? road = null;
+                int k = -1;
+                float dx = px, dz = pz;
+                foreach (var seg in tile.Segments)
+                {
+                    var v = seg.Points;
+                    if (seg.PointCount < 2) continue;
+                    foreach (int j in new[] { seg.PointCount - 1, 0 })
+                    {
+                        if (MathF.Abs(v[j * 3] - end.X) >= 1f || MathF.Abs(v[j * 3 + 2] - end.Z) >= 1f) continue;
+                        int j2 = j == 0 ? 1 : j - 1;
+                        float ux = v[j * 3] - v[j2 * 3], uz = v[j * 3 + 2] - v[j2 * 3 + 2];   // from inside the road out to its end
+                        if (ux * px + uz * pz <= 0) continue;
+                        (road, k, dx, dz) = (seg, j, ux, uz);
+                        break;
+                    }
+                    if (road is not null) break;
+                }
+                float len = MathF.Sqrt(dx * dx + dz * dz);
+                if (len < 1e-6f) continue;
+                (dx, dz) = (dx / len, dz / len);
+                // right of a driver heading (dx, dz) toward the junction (tile-local x east, z south): (-dz, dx)
+                float ex = end.X - dz * end.Offset, ez = end.Z + dx * end.Offset;
+                float gap = MathF.Sqrt((p.Points[a0 * 3] - ex) * (p.Points[a0 * 3] - ex) + (p.Points[a0 * 3 + 2] - ez) * (p.Points[a0 * 3 + 2] - ez));
+                bool onLane = true;
+                if (road is not null)
+                {
+                    // the offset across the road's drawing: drawn toward the junction (its last point there) keeps its sign
+                    float o = k == road.PointCount - 1 ? end.Offset : -end.Offset;
+                    if (tile.Transitions.FirstOrDefault(x => ReferenceEquals(x.Segment, road)) is { } tr)
+                    {
+                        double s = k == 0 ? 0 : tr.Stations[^1];
+                        onLane = Enumerable.Range(0, tr.Strips.Count).Any(i => tr.Strips[i].Kind is StripKind.CarLane or StripKind.BikeLane
+                            && tr.SpanAt(i, s) is var span && o > span.From - 0.05f && o < span.To + 0.05f);
+                    }
+                    else onLane = MathF.Abs(o) <= road.Width * 0.5f + 0.05f;
+                }
+                if (gap > PathEndTolerance || !onLane)
+                {
+                    t.OffLane++;
+                    bad ??= string.Create(c, $"end {(at == 0 ? "from" : "to")} {gap:F2} m from its lane{(onLane ? "" : ", not on a lane")} (offset {end.Offset:F2}{(road is null ? ", road in another tile" : "")})");
+                }
+            }
+            for (int i = 0; i < n; i++)
+                if (DistanceToCap(p.Junction, p.Points[i * 3], p.Points[i * 3 + 2]) > PathCoreTolerance)
+                {
+                    t.OffCore++;
+                    bad ??= "a point off its core";
+                    break;
+                }
+            if (bad is not null && (list || t.OffLane + t.OffCore <= 20))
+                log(string.Create(c, $"  junction path at LV95 {tile.Id.MinE + p.Points[0]:F1},{tile.Id.MaxN - p.Points[2]:F1} ({p.Move}, {p.Kind}): {bad}"));
+        }
+    }
+
+    /// <summary>How far a tile-local point lies from a cap's triangles (0 on it).</summary>
+    private static float DistanceToCap(RoadJunction cap, float x, float z)
+    {
+        var v = cap.Vertices;
+        float best = float.MaxValue;
+        for (int t = 0; t + 2 < cap.Indices.Length; t += 3)
+        {
+            int a = cap.Indices[t] * 3, b = cap.Indices[t + 1] * 3, cc = cap.Indices[t + 2] * 3;
+            float d = (v[b + 2] - v[cc + 2]) * (v[a] - v[cc]) + (v[cc] - v[b]) * (v[a + 2] - v[cc + 2]);
+            if (MathF.Abs(d) > 1e-9f)
+            {
+                float wa = ((v[b + 2] - v[cc + 2]) * (x - v[cc]) + (v[cc] - v[b]) * (z - v[cc + 2])) / d;
+                float wb = ((v[cc + 2] - v[a + 2]) * (x - v[cc]) + (v[a] - v[cc]) * (z - v[cc + 2])) / d;
+                if (wa >= -1e-4f && wb >= -1e-4f && 1 - wa - wb >= -1e-4f) return 0;
+            }
+            foreach (var (i, j) in new[] { (a, b), (b, cc), (cc, a) })
+            {
+                float ex = v[j] - v[i], ez = v[j + 2] - v[i + 2], l2 = ex * ex + ez * ez;
+                float u = l2 < 1e-12f ? 0 : Math.Clamp(((x - v[i]) * ex + (z - v[i + 2]) * ez) / l2, 0, 1);
+                float dx = v[i] + ex * u - x, dz = v[i + 2] + ez * u - z;
+                best = MathF.Min(best, MathF.Sqrt(dx * dx + dz * dz));
+            }
+        }
+        return best;
+    }
 
     /// <summary>
     /// The lane records (#353) of a tile: a signalised one points at an approach of a junction of

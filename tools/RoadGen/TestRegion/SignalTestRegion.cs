@@ -31,6 +31,22 @@ public static class SignalTestRegion
     /// paint differs only in what <see cref="UnitSport.Tools.RoadGen.Junctions.JunctionRules"/> lists.
     /// </summary>
     public const double TwinRowN = 1321400, TwinLitE = 2910750, TwinUnlitE = 2912250;
+    /// <summary>
+    /// A road that is no arm of a core but meets it (#818, the edge case 2670385,1253605), LV95 E on <see cref="TwinRowN"/>: a T
+    /// whose lane arm reaches a node 7 m out, where two tracks branch off, inside the core.
+    /// </summary>
+    public const double ShortArmE = 2914000;
+    /// <summary>
+    /// The real junction 2619795,1264700 (#818, the user's edge case) moved here as it is, its T's node at this LV95 E on
+    /// <see cref="TwinRowN"/>: 6 m west of the T the main road divides into two 2.2 m carriageways, joined at their start by a link.
+    /// </summary>
+    public const double DividedTeeE = 2915300;
+    /// <summary>
+    /// Staggered T's (#818 phase 5), LV95 E on <see cref="TwinRowN"/>: a 10 m main road with a side road north here and one south
+    /// 24 m east (both cores fit on the link between: two cores), 150 m east a pair 8 m apart (the cores overlap: one core), and
+    /// 300 m east a pair 24 m apart with lights at both (J9).
+    /// </summary>
+    public const double StaggerE = 2916500;
     /// <summary>The ground, metres (as the fixture courses).</summary>
     public const double Ground = 500;
     /// <summary>Region centre: the manifest's suggested origin.</summary>
@@ -46,7 +62,7 @@ public static class SignalTestRegion
 
     /// <summary>One TLM line as the extractor would read it, with its OSM overlay row.</summary>
     private sealed record Line(string Id, string Objektart, string Verkehrsbedeutung, string Eigentuemer, (double E, double N)[] Points,
-        string Highway, string Sidewalk = "", string Cycleway = "", OsmRow[]? Rows = null)
+        string Highway, string Sidewalk = "", string Cycleway = "", OsmRow[]? Rows = null, bool Divided = false)
     {
         public string Uuid => "{386-" + Id + "}";
     }
@@ -197,6 +213,49 @@ public static class SignalTestRegion
             lines.Add(new Line(id + "E", "10m Strasse", "Durchgangsstrasse", "Kanton", [(e, TwinRowN), (e + 650, TwinRowN)], "secondary", "yes"));
             Cross(id + "N", e, TwinRowN, TwinRowN + 300, "4m Strasse", "k_W", "unclassified", sidewalk: "yes");
         }
+        // 9. a road that is no arm of the core but meets it (#818, the user's edge case 2670385,1253605): a town T without lights on
+        // a 10 m main road with sidewalks, a 3 m lane from the south whose first link ends 7 m out, where two tracks branch off; the
+        // lane runs on south with its sidewalks (the core's mouth lies past that node: the lane is trimmed to it there)
+        {
+            const double nb = TwinRowN, e1 = ShortArmE;
+            lines.Add(new Line("SAW", "10m Strasse", "Durchgangsstrasse", "Kanton", [(e1 - 600, nb), (e1, nb)], "secondary", "yes"));
+            lines.Add(new Line("SAE", "10m Strasse", "Durchgangsstrasse", "Kanton", [(e1, nb), (e1 + 600, nb)], "secondary", "yes"));
+            lines.Add(new Line("SAS1", "3m Strasse", "k_W", "Gemeinde", [(e1, nb - 7), (e1, nb)], "service"));
+            lines.Add(new Line("SAS0", "3m Strasse", "k_W", "Gemeinde", [(e1, nb - 250), (e1, nb - 7)], "service", "yes"));
+            lines.Add(new Line("SATW", "2m Weg", "k_W", "Gemeinde", [(e1 - 90, nb - 40), (e1, nb - 7)], "track"));
+            lines.Add(new Line("SATE", "2m Weg", "k_W", "Gemeinde", [(e1, nb - 7), (e1 + 90, nb - 40)], "track"));
+        }
+        // 10. the real junction 2619795,1264700 (#818, the user's edge case), its points moved by (295505.6, 56695.2): a T of an
+        // 8 m main road and an 8 m side road from the south-south-east; 6 m west of the T (node B) the main road divides into two
+        // 2.2 m carriageways ~3 m apart (richtungsgetrennt), the southern one starting 1.4 m south of B at a 1.5 m link (C)
+        {
+            const double dx = 295505.6, dy = 56695.2;
+            (double, double) R(double e, double n) => (e + dx, n + dy);
+            var a = R(2619794.4, 1264704.8);
+            var b = R(2619788.8, 1264702.8);
+            var c = R(2619789.2, 1264701.4);
+            lines.Add(new Line("DTE", "8m Strasse", "Durchgangsstrasse", "Kanton", [a, R(2619803.4, 1264708.3), R(2620073.0, 1264813.0)], "secondary", "yes"));
+            lines.Add(new Line("DTS", "8m Strasse", "Durchgangsstrasse", "Kanton", [R(2619842.3, 1264548.3), a], "secondary", "yes"));
+            lines.Add(new Line("DTW", "8m Strasse", "Durchgangsstrasse", "Kanton", [b, a], "secondary", "yes"));
+            lines.Add(new Line("DTN", "4m Strasse", "Durchgangsstrasse", "Kanton", [b, R(2619739.9, 1264688.7), R(2619500.0, 1264620.0)], "secondary", "yes", Divided: true));
+            lines.Add(new Line("DTD", "4m Strasse", "Durchgangsstrasse", "Kanton", [R(2619501.3, 1264616.9), R(2619741.2, 1264685.6), c], "secondary", "yes", Divided: true));
+            lines.Add(new Line("DTL", "Verbindung", "Durchgangsstrasse", "Kanton", [c, b], "secondary"));
+        }
+        // 11. staggered T's (#818 phase 5): a side road north at StaggerE and one south 24 m east, two cores; 150 m east a pair
+        // 8 m apart, whose cores overlap; 300 m east a pair 24 m apart with lights at both (the street between is inside them, #348)
+        {
+            const double nb = TwinRowN, e = StaggerE;
+            double[] at = [e - 450, e, e + 24, e + 150, e + 158, e + 300, e + 324, e + 450];   // inside the tile: a street run on into the next block is not written
+            string[] ids = ["SGW", "SGA", "SGM", "SGB", "SGC", "SGL", "SGE"];
+            for (int i = 0; i < ids.Length; i++)
+                lines.Add(new Line(ids[i], "10m Strasse", "Durchgangsstrasse", "Kanton", [(at[i], nb), (at[i + 1], nb)], "secondary", "yes"));
+            foreach (var (id, x, north) in new[] { ("SGN1", e, true), ("SGS1", e + 24, false), ("SGN2", e + 150, true), ("SGS2", e + 158, false),
+                ("SGN3", e + 300, true), ("SGS3", e + 324, false) })
+                lines.Add(new Line(id, "4m Strasse", "k_W", "Gemeinde", [(x, nb), (x, north ? nb + 250 : nb - 250)], "unclassified", "yes"));
+        }
+
+        junctions.Add(new Junction("J9-stagger-west", StaggerE + 300, TwinRowN, "staggered T's 24 m apart, both lit: the west one", Arms(null, null, null, null)));
+        junctions.Add(new Junction("J9-stagger-east", StaggerE + 324, TwinRowN, "staggered T's 24 m apart, both lit: the east one", Arms(null, null, null, null)));
         junctions.Add(new Junction("J8-twin-lights", TwinLitE, TwinRowN, "the twins' T with lights (the other, 1.5 km east, has none)",
             Arms(null, null, null, null)));
         junctions.Add(new Junction("J7-double-left", j7, n, "a double left pocket from lanes:forward=3 and turn:lanes; no left pocket where OSM marks none",
@@ -214,7 +273,7 @@ public static class SignalTestRegion
 
     // ---- build ---------------------------------------------------------------------------------
 
-    public static int Run(string chunkDir, string? tempDir, Action<string> log)
+    public static int Run(string chunkDir, string? tempDir, Action<string> log, bool newJunctions = false, bool writeJunctions = false)
     {
         tempDir ??= RawRoads.DefaultTempDir(chunkDir);
         var clock = System.Diagnostics.Stopwatch.StartNew();
@@ -243,10 +302,24 @@ public static class SignalTestRegion
             + $"{design.Buildings.Count} buildings, {design.Junctions.Count} signal nodes; written in {clock.Elapsed.TotalSeconds:F1} s");
 
         var stats = TileRewriter.Run(chunkDir, roadTiles, new TileRewriter.Options(
-            RawDir: RawRoads.DirFor(tempDir), OsmOverlay: Path.Combine(tempDir, "osm_overlay.tsv")), log);
+            RawDir: RawRoads.DirFor(tempDir), OsmOverlay: Path.Combine(tempDir, "osm_overlay.tsv"), NewJunctions: newJunctions, WriteJunctions: writeJunctions), log);
         log(stats.Network.Format(stats.TilesWritten));
         log("");
         int bad = Report(chunkDir, design.Junctions, log);
+        int planned = 0;
+        if (newJunctions)
+        {
+            log("");
+            planned = ReportPlans(stats.Network.Layouts, design.Junctions, log);
+            log(planned == 0 ? "[testregion] planner (#818): every designed approach as designed" : $"[testregion] planner (#818): {planned} approaches not as designed");
+        }
+        // the planner writing its junctions (#818 phase 3): their lights and lane records come with phases 4 and 5, so the table
+        // above is the old layout's only where it still builds; the planner's own report decides
+        if (writeJunctions)
+        {
+            log($"[testregion] the planner wrote its junctions: the lights' table above is left out of the result ({bad} approaches there)");
+            bad = planned;
+        }
         log(string.Create(CultureInfo.InvariantCulture, $"{clock.Elapsed.TotalSeconds:F1} s; chunks {chunkDir}, raw input {tempDir}"));
         log(bad == 0 ? "[testregion] RESULT: ok" : $"[testregion] RESULT: FAILED {bad} approaches not as designed");
         return bad == 0 ? 0 : 2;
@@ -348,7 +421,7 @@ public static class SignalTestRegion
         {
             var cls = RoadFormat.ParseClass(line.Objektart);
             var surface = RoadFormat.ParseSurface("Hart");
-            var flags = RoadFormat.ParseFlags(null, null, null, "Falsch");
+            var flags = RoadFormat.ParseFlags(null, null, null, line.Divided ? "Wahr" : "Falsch");
             var attr = new RoadAttributes(
                 Flags: RoadFormat.ParseAttrFlags("Falsch", line.Eigentuemer),
                 Layer: RoadFormat.LayerFor("0", flags),
@@ -580,6 +653,52 @@ public static class SignalTestRegion
             foreach (var (dir, want) in j.Design)
                 if (want is not null && !seen.Contains(dir)) { bad++; arms.Add($"{dir}: MISSING ({want})"); }
             log(string.Create(inv, $"{j.Name,-16} {j.E:F0},{j.N:F0}   {string.Join("; ", arms)}   {plan.Cycle:F0} s   {Phases(plan)}"));
+        }
+        return bad;
+    }
+
+    /// <summary>
+    /// The junction planner's mouth sections (#818) against the design: per designed junction its arms' arriving car lanes
+    /// as planned, left to right. Returns how many designed approaches came out otherwise (or are missing).
+    /// </summary>
+    /// <summary>
+    /// Where the planner's lanes are meant to differ from the pocket layout's design (#818, the user's decisions), by junction
+    /// and arm; none so far (J3 N: room for a pocket or a through bike lane, not both: the bike lane stays, as designed, LTR).
+    /// Merged into <see cref="Junction.Design"/> at the switch.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<(string Junction, string Arm), string> PlannerDesign =
+        new Dictionary<(string, string), string>();
+
+    public static int ReportPlans(IReadOnlyList<Layout.JunctionPlan> plans, IReadOnlyList<Junction> junctions, Action<string> log)
+    {
+        int bad = 0;
+        log("junction         planned arriving car lanes, left to right (designed)");
+        foreach (var j in junctions)
+        {
+            var plan = plans.Where(p => Math.Abs(p.Centre.X - j.E) < 15 && Math.Abs(p.Centre.Y - j.N) < 15)
+                .OrderBy(p => Math.Abs(p.Centre.X - j.E) + Math.Abs(p.Centre.Y - j.N)).FirstOrDefault();
+            if (plan is null)
+            {
+                log(string.Create(CultureInfo.InvariantCulture, $"{j.Name,-16} NO PLAN"));
+                bad += j.Design.Count(a => a.Value is not null);
+                continue;
+            }
+            var arms = new List<string>();
+            var seen = new HashSet<string>();
+            foreach (var a in plan.Arms.OrderBy(a => Layout.JunctionPlan.Compass(a.Heading)))
+            {
+                string dir = Layout.JunctionPlan.Compass(a.Heading);
+                seen.Add(dir);
+                string car = a.Mouth.CarLanesIn();
+                if (car.Length == 0) continue;
+                string designed = PlannerDesign.GetValueOrDefault((j.Name, dir)) ?? j.Design.GetValueOrDefault(dir) ?? "-";
+                bool ok = designed == "-" || designed == car;
+                if (!ok) bad++;
+                arms.Add($"{dir}: {car} ({designed}{(ok ? "" : " MISMATCH")}){(a.Steps.Count + a.FitSteps.Count > 0 ? " [" + string.Join("; ", a.Steps.Concat(a.FitSteps)) + "]" : "")}");
+            }
+            foreach (var (dir, want) in j.Design)
+                if (want is not null && !seen.Contains(dir)) { bad++; arms.Add($"{dir}: MISSING ({want})"); }
+            log($"{j.Name,-16} {string.Join("; ", arms)}");
         }
         return bad;
     }

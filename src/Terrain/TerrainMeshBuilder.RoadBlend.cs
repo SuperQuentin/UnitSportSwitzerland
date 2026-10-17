@@ -116,11 +116,12 @@ public static partial class TerrainMeshBuilder
         try
         {
             var carries = CarriedOn(roadTile);
+            var transitions = SegmentSections.TransitionsOf(roadTile);   // a transition's piece holds its own section (#818)
             for (int si = 0; si < roadTile.Segments.Count; si++)
             {
                 var seg = roadTile.Segments[si];
                 if (!RoadEmbankment.IsAtGrade(seg) || seg.PointCount < 2) continue;
-                var line = new Line(seg, carries.Contains((si, true)), carries.Contains((si, false)));
+                var line = new Line(seg, carries.Contains((si, true)), carries.Contains((si, false)), transitions[si]);
                 for (int i = 0; i < seg.PointCount - 1; i++)
                     line.Piece(scratch, i);
                 for (int i = 0; i < seg.PointCount; i++)
@@ -247,26 +248,51 @@ public static partial class TerrainMeshBuilder
         private readonly float[] _p;
         private readonly int _count;
         private readonly double _left, _right, _reach, _radius, _raiseLeft, _raiseRight, _endEdge;
+        // a transition's level cross-section (#818): its edges per point, else _left and _right all along
+        private readonly double[]? _leftAt, _rightAt;
         // the line really ends there (no straight continuation into another segment)
         private readonly bool _startOpen, _endOpen;
 
-        public Line(RoadSegment seg, bool startCarries, bool endCarries)
+        public Line(RoadSegment seg, bool startCarries, bool endCarries, RoadTransition? transition = null)
         {
             _startOpen = !startCarries;
             _endOpen = !endCarries;
             _p = seg.Points;
             _count = seg.PointCount;
-            _left = RoadEmbankment.EdgeOffset(seg, right: false);
-            _right = RoadEmbankment.EdgeOffset(seg, right: true);
             _reach = RoadEmbankment.Reach(seg.Class);
-            _radius = Math.Max(_left, _right) + _reach;
             var a = seg.Attributes;
-            // round the line's ends only the carriageway is level: a sidewalk stops at the end of
-            // its piece, and past it may lie a corner patch (or nothing) at another height
-            _endEdge = Math.Max(Math.Max(seg.Width, a.WidthCm / 100.0) * 0.5, ChunkFormat.SpacingM);
-            // the side's outer height (#119 sidewalk top; #120 the sidewalk behind a bike path)
-            _raiseLeft = RoadStreetSection.For(a.Left)?.OuterHeight ?? 0;
-            _raiseRight = RoadStreetSection.For(a.Right)?.OuterHeight ?? 0;
+            _leftAt = _rightAt = null;
+            if (transition is not null)
+            {
+                // its section at every point: the carriageway's edges and the bands beyond, as wide as they are there
+                var sections = SegmentSections.Of(seg, transition);
+                _leftAt = new double[_count];
+                _rightAt = new double[_count];
+                for (int i = 0; i < _count; i++)
+                {
+                    _leftAt[i] = Math.Max(sections.OuterLeft(i), ChunkFormat.SpacingM);
+                    _rightAt[i] = Math.Max(sections.OuterRight(i), ChunkFormat.SpacingM);
+                }
+                _left = _leftAt.Max();
+                _right = _rightAt.Max();
+                int last = _count - 1;
+                _endEdge = Math.Max(Math.Max(Math.Max(-sections.RibbonLeft[0], sections.RibbonRight[0]),
+                    Math.Max(-sections.RibbonLeft[last], sections.RibbonRight[last])), ChunkFormat.SpacingM);
+                _raiseLeft = sections.LeftProfile[0]?.OuterHeight ?? 0;
+                _raiseRight = sections.RightProfile[0]?.OuterHeight ?? 0;
+            }
+            else
+            {
+                _left = RoadEmbankment.EdgeOffset(seg, right: false);
+                _right = RoadEmbankment.EdgeOffset(seg, right: true);
+                // round the line's ends only the carriageway is level: a sidewalk stops at the end of
+                // its piece, and past it may lie a corner patch (or nothing) at another height
+                _endEdge = Math.Max(Math.Max(seg.Width, a.WidthCm / 100.0) * 0.5, ChunkFormat.SpacingM);
+                // the side's outer height (#119 sidewalk top; #120 the sidewalk behind a bike path)
+                _raiseLeft = RoadStreetSection.For(a.Left)?.OuterHeight ?? 0;
+                _raiseRight = RoadStreetSection.For(a.Right)?.OuterHeight ?? 0;
+            }
+            _radius = Math.Max(_left, _right) + _reach;
         }
 
         private double X(int i) => _p[i * 3] / ChunkFormat.SpacingM;
@@ -279,10 +305,13 @@ public static partial class TerrainMeshBuilder
             double ax = X(i), az = Z(i), bx = X(i + 1), bz = Z(i + 1);
             double len = Math.Sqrt((bx - ax) * (bx - ax) + (bz - az) * (bz - az));
             if (len < 1e-6) return;
+            // a transition's piece as wide as the wider of its two ends
+            double left = _leftAt is null ? _left : Math.Max(_leftAt[i], _leftAt[i + 1]);
+            double right = _rightAt is null ? _right : Math.Max(_rightAt[i], _rightAt[i + 1]);
             // past each end by what the bend there needs: the outside of a turn of θ opens a gap
             // of θ·radius at the slope's reach, which the two pieces close half each
             Strip(s, ax, az, Y(i), Y(i + 1), (bx - ax) / len, (bz - az) / len, len, -Overlap(i), len + Overlap(i + 1),
-                startEnd: i == 0 && _startOpen, endEnd: i + 1 == _count - 1 && _endOpen);
+                startEnd: i == 0 && _startOpen, endEnd: i + 1 == _count - 1 && _endOpen, left, right);
         }
 
         /// <summary>Every cell within the radius of vertex i, at that vertex's height: a strip of no length.</summary>
@@ -292,8 +321,9 @@ public static partial class TerrainMeshBuilder
             int a = Math.Max(0, i - 1), b = Math.Min(_count - 1, i + 1);
             double fx = X(b) - X(a), fz = Z(b) - Z(a), fl = Math.Sqrt(fx * fx + fz * fz);
             if (fl < 1e-6) return;
-            double rad = _radius / ChunkFormat.SpacingM;
-            Strip(s, X(i), Z(i), Y(i), Y(i), fx / fl, fz / fl, 0, -rad, rad, startEnd: i == 0, endEnd: i == _count - 1);
+            double left = _leftAt?[i] ?? _left, right = _rightAt?[i] ?? _right;
+            double rad = (Math.Max(left, right) + _reach) / ChunkFormat.SpacingM;
+            Strip(s, X(i), Z(i), Y(i), Y(i), fx / fl, fz / fl, 0, -rad, rad, startEnd: i == 0, endEnd: i == _count - 1, left, right);
         }
 
         /// <summary>
@@ -306,18 +336,18 @@ public static partial class TerrainMeshBuilder
         /// </summary>
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveOptimization)]
         private void Strip(Scratch s, double ax, double az, double ay, double by, double ux, double uz,
-            double len, double a0, double a1, bool startEnd, bool endEnd)
+            double len, double a0, double a1, bool startEnd, bool endEnd, double left, double right)
         {
             float[] lo = s.Lo, hi = s.Hi, coreDist = s.CoreDist, edgeDist = s.EdgeDist;
             byte[] seen = s.Seen;
             var touched = s.Touched;
             int n = s.N;
-            double left = _left, right = _right, reach = _reach, spacing = ChunkFormat.SpacingM;
+            double reach = _reach, spacing = ChunkFormat.SpacingM;
             double raiseLeft = _raiseLeft, raiseRight = _raiseRight, endEdge = _endEdge;
             double fill = RoadEmbankment.FillSlope, cut = RoadEmbankment.CutSlope;
             // right of the drawing direction, X east and Z south
             double rx = -uz, rz = ux;
-            double rad = _radius / spacing;
+            double rad = (Math.Max(left, right) + reach) / spacing;
 
             // corners of the strip, for the row range
             double minZ = double.MaxValue, maxZ = double.MinValue;

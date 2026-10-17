@@ -218,9 +218,22 @@ public static partial class TileRewriter
     {
         int other = link.StartNode == node ? link.EndNode : link.StartNode;
         if (other == node || !signalNodes.Contains(other)) return false;
+        return LinkLength(link) < InternalLinkM;
+    }
+
+    /// <summary>As <see cref="Internal(RoadLink, int, HashSet{int})"/> from a junction that may be merged from several nodes (#818).</summary>
+    private static bool Internal(RoadLink link, Junction j, HashSet<int> signalNodes)
+    {
+        int other = j.Holds(link.StartNode) ? link.EndNode : link.StartNode;
+        if (j.Holds(other) || !signalNodes.Contains(other)) return false;
+        return LinkLength(link) < InternalLinkM;
+    }
+
+    private static double LinkLength(RoadLink link)
+    {
         double length = 0;
         for (int i = 1; i < link.Centreline.Count; i++) length += link.Centreline[i].DistanceTo(link.Centreline[i - 1]);
-        return length < InternalLinkM;
+        return length;
     }
 
     /// <summary>
@@ -238,8 +251,8 @@ public static partial class TileRewriter
             {
                 if (crossings.OnArm(node, i, net, unmarked: true) is not null) return true;
                 var link = net.Links[node.Arms[i].LinkId];
-                int other = link.StartNode == node.NodeId ? link.EndNode : link.StartNode;
-                if (Internal(link, node.NodeId, signalNodes) && seen.Add(other) && signalJunctions.TryGetValue(other, out var next)) todo.Push(next);
+                int other = node.Holds(link.StartNode) ? link.EndNode : link.StartNode;
+                if (Internal(link, node, signalNodes) && seen.Add(other) && signalJunctions.TryGetValue(other, out var next)) todo.Push(next);
             }
         return false;
     }
