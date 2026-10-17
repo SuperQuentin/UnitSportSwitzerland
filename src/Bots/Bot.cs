@@ -59,6 +59,9 @@ public sealed class Bot
     public double NextShotAt;
     public float Heat;
     public double HeatAt;
+    /// <summary>A timed use under way (<see cref="BotHands.Use"/>): what, and the clock it applies at (0 = none).</summary>
+    public ItemId UseItem;
+    public double UseUntil;
     public bool Alive => GodotObject.IsInstanceValid(Body) && !Body.Eliminated;
 }
 

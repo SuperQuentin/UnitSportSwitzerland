@@ -3001,6 +3001,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// Takes <paramref name="amount"/> of health. A weapon hit names its shooter
     /// (<paramref name="attacker"/>, a peer id) and is half soaked by <see cref="Armor"/> while it lasts.
     /// </summary>
+    /// <summary>Who hurt this body last (an id, 0 for none) and when (simulation time): a bot turns towards it (#837).</summary>
+    public long LastAttacker => _lastAttacker;
+    public double LastAttackedAt => _lastAttackedAt;
+
     public void TakeDamage(float amount, long attacker, DamageCause cause)
     {
         if (amount <= 0 || _deadTimer > 0) return;

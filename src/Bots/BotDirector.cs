@@ -165,7 +165,8 @@ public partial class BotDirector : Node
                 bot.Body.SquareToView = true;
             }
             else bot.Body.SquareToView = false;
-            // the hands: a shot when the brain asks for one and the weapon is ready
+            // the hands: a shot when the brain asks for one and the weapon is ready; a use runs its time
+            BotHands.Tick(bot, now);
             if (bot.Intent.FireAt is { } target) BotHands.Fire(bot, target);
             else if (bot.Body.ItemAction == 1 && now >= bot.NextShotAt + 1.5) bot.Body.ItemAction = 0;   // arms down after a while
         }
