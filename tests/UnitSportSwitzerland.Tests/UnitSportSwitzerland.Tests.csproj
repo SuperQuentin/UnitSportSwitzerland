@@ -24,6 +24,7 @@
     <ProjectReference Include="..\..\tools\TerrainFormat\TerrainFormat.csproj" />
     <ProjectReference Include="..\..\tools\RoadGen\RoadGen.csproj" />
     <Compile Include="..\..\src\World\TimeCommand.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\CollisionReach.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\SimClock.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\DancePick.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\RadioLoudness.cs" Link="Game\%(Filename)%(Extension)" />

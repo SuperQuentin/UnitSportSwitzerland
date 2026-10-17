@@ -1211,7 +1211,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     public override void _EnterTree()
     {
-        if (Terrain != null && !Terrain.HasAnchor(this)) Terrain.AddAnchor(this, collision: true);
+        // on the dedicated server only a body the server runs itself (a bot, #837) wants collision:
+        // a player's proxy re-entering the tree stays a plain anchor
+        if (Terrain != null && !Terrain.HasAnchor(this))
+            Terrain.AddAnchor(this, collision: !Net.NetworkManager.DedicatedServer || IsMultiplayerAuthority());
     }
 
     public override void _ExitTree()
