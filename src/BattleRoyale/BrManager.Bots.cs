@@ -94,6 +94,7 @@ public partial class BrManager
     {
         if (count <= 0 || Director is not { } director || _state.Flight is not { } flight || Origin == null) return;
         HookBots();
+        LoadRoads();
         var zone = _state.Zone();
         var centre = zone.CentreOf(0);
         float radius = zone.RadiusOf(0) * BotEdgeMargin;
@@ -149,6 +150,29 @@ public partial class BrManager
             foreach (double t in new[] { wanted + k * MinJumpGap * 0.5, wanted - k * MinJumpGap * 0.5 })
                 if (t >= from && t <= to && taken.All(x => Math.Abs(x - t) >= MinJumpGap)) return t;
         return wanted;   // more bots than the doors have moments: as wanted, with the lateral spread
+    }
+
+    /// <summary>
+    /// The match area's streets as a graph (#837): bots crossing a town walk them (<c>BrBrain</c>), loaded
+    /// off the main thread at GO from the same road tiles everyone draws. Null until it is in.
+    /// </summary>
+    public Gpx.RoadNetwork? Roads => _roads is { IsCompletedSuccessfully: true } done ? done.Result : null;
+    private Task<Gpx.RoadNetwork>? _roads;
+
+    private void LoadRoads()
+    {
+        if (_source == null) return;
+        double h = _state.Side * 0.5;
+        var source = _source;
+        double e0 = _state.AreaE - h, n0 = _state.AreaN - h, e1 = _state.AreaE + h, n1 = _state.AreaN + h;
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        _roads = Task.Run(async () =>
+        {
+            var net = await Gpx.RoadNetwork.LoadAsync(source, e0, n0, e1, n1);
+            net.BuildWalkGraph();
+            GD.Print($"[br] bots: the streets are in, {net.Edges.Count} edges in {clock.ElapsedMilliseconds} ms");
+            return net;
+        });
     }
 
     /// <summary>The bots still in the plane's hold.</summary>
@@ -213,6 +237,7 @@ public partial class BrManager
     private void RemoveBots(BrState was)
     {
         _aboardBots.Clear();
+        _roads = null;
         if (Director is not { } director) return;
         foreach (var e in was.Entrants.Where(e => e.Bot)) director.Remove(e.Peer);
     }

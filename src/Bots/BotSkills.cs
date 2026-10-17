@@ -8,10 +8,17 @@ namespace UnitSport.Bots;
 /// <summary>Where a bot is walking and how it is getting on (<see cref="BotSkills.MoveTo"/>).</summary>
 public sealed class BotNav
 {
-    public Vector3 From;
     public double CheckAt;
     public int Stuck;
     public bool JumpHeld;
+    /// <summary>The goal of the walk under way, and the nearest it has come to it.</summary>
+    public Vector3 Target;
+    public float Best;
+    /// <summary>A wall follow (<see cref="BotSkills.MoveTo"/>): on, which side the wall is (+1 left), the heading, the distance where it began.</summary>
+    public bool Following;
+    public int Side = 1;
+    public Vector3 FollowDir;
+    public float HitDist;
     /// <summary>A way round chosen by a scan, followed until <see cref="SteerUntil"/>.</summary>
     public Vector3 Steer;
     public double SteerUntil;
@@ -33,10 +40,14 @@ public static class BotSkills
     private const double CheckEvery = 2.0, Detour = 2.5;
 
     /// <summary>
-    /// Walks towards <paramref name="target"/> (world): straight there, round what stands in the way
-    /// (a probe left and right of a blocked line), over what is low (a jump: the body mantles a ledge it
-    /// jumps at), and off at an angle for a while when it makes no headway, alternating sides. True once
-    /// within <paramref name="arrive"/> m (flat); the wish is then zero.
+    /// Walks towards <paramref name="target"/> (world). Straight there while the way is open; a low wall
+    /// is jumped (the body mantles a ledge it jumps at). A wall it cannot jump starts a wall follow: it
+    /// keeps the wall on one side (the more open side first) until the straight way is open again and it
+    /// is nearer the goal than where it met the wall, the "bug" way round any obstacle. Picking the most
+    /// open way afresh each time shuttled between a wall and the way back (seen: 15 m to and fro for a
+    /// minute while the zone came). Headway is judged towards the goal over 4 s, so shuttling counts as
+    /// stuck: the follow switches sides, and a bot still stuck takes any open way out for a few seconds.
+    /// True once within <paramref name="arrive"/> m (flat); the wish is then zero.
     /// </summary>
     public static bool MoveTo(Bot bot, Vector3 target, bool run, float arrive, PhysicsDirectSpaceState3D space, double now)
     {
@@ -46,19 +57,30 @@ public static class BotSkills
         var to = new Vector3(target.X - pos.X, 0, target.Z - pos.Z);
         float dist = to.Length();
         bot.Intent.Jump = false;
+        // a new goal (a street route's next waypoint is one too): a fresh walk; its stuck count stays, so a
+        // bot that keeps failing waypoint after waypoint still ends up taking a way out. Judged against the
+        // old goal, a waypoint 5 m on read as no headway and sent it off on an escape: a zig-zag.
+        if (nav.Target.DistanceSquaredTo(target) > 1f)
+        {
+            nav.Target = target;
+            nav.Following = false;
+            nav.Best = dist;
+            nav.CheckAt = now + CheckEvery;
+        }
         if (dist <= arrive)
         {
             bot.Intent.Wish = Vector3.Zero;
+            nav.Following = false;
+            nav.Best = dist;
             nav.CheckAt = now + CheckEvery;
-            nav.From = pos;
             return true;
         }
         var dir = to / dist;
 
-        // no headway for a while: the most open way, whatever the goal, for a few seconds (out of a corner)
+        // headway towards the goal, every few seconds: none is being stuck (shuttling included)
         if (now >= nav.CheckAt)
         {
-            if (nav.CheckAt > 0 && new Vector3(pos.X - nav.From.X, 0, pos.Z - nav.From.Z).Length() < Progress)
+            if (nav.Best - dist < Progress)
             {
                 nav.Stuck++;
                 // boxed in under a roof: only the late collision put it there (a building built round it after
@@ -70,39 +92,65 @@ public static class BotSkills
                     nav.Stuck = 0;
                     nav.LastOpen = -1;
                 }
-                nav.Steer = MostOpen(space, body, pos, dir, goalWeight: 0f);
-                nav.LastOpen = LastScanOpen;
-                nav.SteerUntil = now + Detour + Math.Min(nav.Stuck, 3);
+                else if (nav.Following && nav.Stuck % 2 == 0)
+                {
+                    nav.Side = -nav.Side;   // the wall the other way round
+                    nav.FollowDir = -nav.FollowDir;
+                }
+                else if (nav.Stuck >= 3)
+                {
+                    // still nowhere: any open way out of here for a while, then try again
+                    nav.Steer = MostOpen(space, body, pos, dir, goalWeight: 0f);
+                    nav.LastOpen = LastScanOpen;
+                    nav.SteerUntil = now + Detour + Math.Min(nav.Stuck, 3);
+                    nav.Following = false;
+                }
             }
             else nav.Stuck = 0;
-            nav.From = pos;
-            nav.CheckAt = now + CheckEvery;
+            nav.Best = Math.Min(nav.Best, dist);
+            nav.CheckAt = now + CheckEvery * 2;
         }
 
-        // a wall ahead at the knee: over it if it is low, else the most open way still heading roughly
-        // there, kept for a moment (a probe every thought flip-flops at a corner)
-        bool following = now < nav.SteerUntil;
-        if (Blocked(space, body, pos, dir, Knee) && !following)
+        if (now < nav.SteerUntil) dir = nav.Steer;
+        else if (nav.Following)
+        {
+            // off the wall once the straight way is open and it is nearer than where it met the wall
+            if (!Blocked(space, body, pos, dir, Knee) && dist < nav.HitDist - 1f) nav.Following = false;
+            else dir = nav.FollowDir = Hug(space, body, pos, nav.FollowDir, nav.Side);
+        }
+        else if (Blocked(space, body, pos, dir, Knee))
         {
             if (!Blocked(space, body, pos, dir, Head) && body.IsOnFloor() && !nav.JumpHeld) bot.Intent.Jump = true;   // a jump at a ledge is a mantle
             else
             {
-                nav.Steer = MostOpen(space, body, pos, dir, goalWeight: 1f);
+                // the wall on the side that is more open the other way: follow it from here
+                var open = MostOpen(space, body, pos, dir, goalWeight: 1f);
                 nav.LastOpen = LastScanOpen;
-                nav.SteerUntil = now + 1.2;
-                following = true;
+                nav.Side = open.Cross(dir).Y > 0f ? -1 : 1;
+                nav.Following = true;
+                nav.HitDist = dist;
+                dir = nav.FollowDir = open;
             }
-        }
-        if (following)
-        {
-            // the way to the goal is open again: back to it
-            if (nav.Stuck == 0 && !Blocked(space, body, pos, dir, Knee) && now > nav.SteerUntil - 0.6) nav.SteerUntil = 0;
-            else dir = nav.Steer;
         }
         nav.JumpHeld = bot.Intent.Jump;   // a press, then a release: the body jumps on the edge
         bot.Intent.Wish = dir;
         bot.Intent.Run = run;
         return false;
+    }
+
+    /// <summary>
+    /// The next heading along a wall kept on <paramref name="side"/> (+1 = on its left): from turned 75°
+    /// towards the wall, swept away from it, the first open one. Turning towards the wall first keeps
+    /// contact round outside corners; sweeping away gets round inside ones.
+    /// </summary>
+    private static Vector3 Hug(PhysicsDirectSpaceState3D space, Player.FootPlayer body, Vector3 pos, Vector3 heading, int side)
+    {
+        for (int k = 0; k <= 10; k++)
+        {
+            var cand = heading.Rotated(Vector3.Up, Mathf.DegToRad(side * (75f - k * 20f)));
+            if (!Blocked(space, body, pos, cand, Knee)) return cand;
+        }
+        return -heading;
     }
 
     [ThreadStatic] private static float LastScanOpen;

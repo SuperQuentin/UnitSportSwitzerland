@@ -72,7 +72,7 @@ public sealed class BrBrain : IBotBrain
         var space = bot.World.Space;
         bot.Senses.Look(bot, bot.World.Bodies(), space, now);
         var s = Situation(bot, now, out var enemy, out var downed, out var crate, out var zone);
-        _status = FormattableString.Invariant($"goal {Goal} inside {zone.Inside:F2} out {s.OutsideBy:F0} run {s.ZoneRunNeeded:F0} enemy {s.EnemyDistance:F0} crate {s.CrateDistance:F0} stuck {bot.Nav.Stuck} open {bot.Nav.LastOpen:F1}");
+        _status = FormattableString.Invariant($"goal {Goal} inside {zone.Inside:F2} out {s.OutsideBy:F0} run {s.ZoneRunNeeded:F0} enemy {s.EnemyDistance:F0} crate {s.CrateDistance:F0} stuck {bot.Nav.Stuck} open {bot.Nav.LastOpen:F1} route {(_route == null ? "-" : $"{_routeNext}/{_route.Count}")} roads {(_br.Roads != null)} follow {bot.Nav.Following}");
         var goal = BrTactics.Choose(s, Goal);
         if (goal != Goal) GD.Print($"[bots] {body.Name} \"{bot.Profile.Name}\" {Goal} -> {goal}");
         Goal = goal;
@@ -81,7 +81,7 @@ public sealed class BrBrain : IBotBrain
         switch (goal)
         {
             case BrGoal.Zone:
-                BotSkills.MoveTo(bot, zone.Safe, run: true, 4f, space, now);
+                GoTo(bot, zone.Safe, run: true, 4f, space, now);
                 return 0.3;
             case BrGoal.Fight:
                 Fight(bot, enemy, s, space, now);
@@ -103,7 +103,7 @@ public sealed class BrBrain : IBotBrain
                 Loot(bot, c, space, now);
                 return 0.25;
             case BrGoal.Investigate when bot.Senses.Heard is { } heard:
-                if (BotSkills.MoveTo(bot, heard.At, run: false, 6f, space, now)) bot.Senses.Heard = null;
+                if (GoTo(bot, heard.At, run: false, 6f, space, now)) bot.Senses.Heard = null;
                 return 0.3;
             default:
                 Roam(bot, zone, space, now);
@@ -343,7 +343,7 @@ public sealed class BrBrain : IBotBrain
         if (_crates!.WorldOf(c, bot.Body.GlobalPosition.Y) is not { } at) { _emptied.Add(c.Id); return; }
         if (!_crates.Reachable(c, bot.Body.GlobalPosition))
         {
-            BotSkills.MoveTo(bot, at, run: true, 1.2f, space, now);
+            GoTo(bot, at, run: true, 1.2f, space, now);
             // a crate it cannot get to (on a roof, behind a fence) is given up after a while
             if (bot.Nav.Stuck >= 4) { _emptied.Add(c.Id); bot.Nav.Stuck = 0; }
             return;
@@ -352,10 +352,57 @@ public sealed class BrBrain : IBotBrain
         if (!BotSkills.TakeOne(bot, _crates, c)) _emptied.Add(c.Id);
     }
 
+    // ---- the streets --------------------------------------------------------------------------------
+
+    /// <summary>Further than this, a bot walks the streets (<see cref="BrManager.Roads"/>) rather than straight.</summary>
+    private const float StreetsFrom = 80f;
+    private Vector3? _routeGoal;
+    private List<Vector3>? _route;
+    private int _routeNext;
+    private int _routeFails;
+    private double _routeAt;
+
+    /// <summary>
+    /// To <paramref name="target"/>: along the streets when it is far and there are streets, waypoint by
+    /// waypoint (skipping ahead when a later one is nearer), else straight (<see cref="BotSkills.MoveTo"/>,
+    /// which still goes round walls). True once there.
+    /// </summary>
+    private bool GoTo(Bot bot, Vector3 target, bool run, float arrive, PhysicsDirectSpaceState3D space, double now)
+    {
+        var pos = bot.Body.GlobalPosition;
+        float straight = new Vector2(target.X - pos.X, target.Z - pos.Z).Length();
+        if (straight > StreetsFrom && _br.Roads is { } roads && bot.Body.Origin is { } origin)
+        {
+            // a new goal, or a stale route: plan again (at most every 10 s for the same goal)
+            if (_routeGoal is not { } g || g.DistanceTo(target) > 40f || (_route == null && now - _routeAt > 10))
+            {
+                _routeGoal = target;
+                _routeAt = now;
+                var (fe, fn) = origin.ToLv95(pos);
+                var (te, tn) = origin.ToLv95(target);
+                _route = roads.Path(fe, fn, te, tn)?.Select(p => origin.ToWorld(p.E, p.N, pos.Y)).ToList();
+                _routeNext = 0;
+                if (_route == null && _routeFails++ < 3)
+                    GD.Print(FormattableString.Invariant($"[bots] {bot.Body.Name} no street route {fe:F0}/{fn:F0} -> {te:F0}/{tn:F0}: {roads.Near(fe, fn, 150, 3).Count} roads near it, {roads.Near(te, tn, 150, 3).Count} near the goal"));
+            }
+            if (_route is { Count: > 0 } route && _routeNext < route.Count)
+            {
+                // a later waypoint already nearer: on to it
+                for (int k = route.Count - 1; k > _routeNext; k--)
+                    if (Flat(route[k] - pos) < Flat(route[_routeNext] - pos) && Flat(route[k] - pos) < 25f) { _routeNext = k; break; }
+                if (BotSkills.MoveTo(bot, route[_routeNext], run, 4f, space, now)) _routeNext++;
+                return false;
+            }
+        }
+        return BotSkills.MoveTo(bot, target, run, arrive, space, now);
+    }
+
+    private static float Flat(Vector3 v) => new Vector2(v.X, v.Z).Length();
+
     private void Roam(Bot bot, ZoneView zone, PhysicsDirectSpaceState3D space, double now)
     {
         var body = bot.Body;
-        if (_roam is not { } goal || BotSkills.MoveTo(bot, goal, run: false, 5f, space, now) || bot.Nav.Stuck >= 3)
+        if (_roam is not { } goal || GoTo(bot, goal, run: false, 5f, space, now) || bot.Nav.Stuck >= 3)
         {
             // somewhere else inside the circle it must be in, a few hundred metres off at most
             var next = zone.Roam;
