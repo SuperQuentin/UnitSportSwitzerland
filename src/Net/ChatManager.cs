@@ -787,7 +787,7 @@ public partial class ChatManager : Node
                 "admin: /say <text>  /tp <player>  /bring <player>  /tpall <town>  "
                 + "/kick <player> [reason]  /update  /admin list|add <name>|remove <name>  "
                 + "/occasion start|stop <id>|auto  /spawn <item> [count]  /catalogue  /debug  "
-                + "/give <player> <item> [count]  /clear [player]  /transfer <from> <to>  /money <amount> [player]  /bot add [n] [easy|normal|hard]|clear|list  "
+                + "/give <player> <item> [count]  /clear [player]  /transfer <from> <to>  /money <amount> [player]  /bot add [n] [easy|normal|hard]|arm <weapon>|fire|clear|list  "
                 + "/bank <player> [set|add|take <amount>]  "
                 + "/time set <hh:mm|noon|night...>|add <h>|speed <min>  /speed <0.05..8|normal>  "
                 + "/seastate <0..1|calm|chop|storm|gamey>  — Tab completes",

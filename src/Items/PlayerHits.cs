@@ -38,11 +38,17 @@ public static class PlayerHits
     }
 
     /// <summary>
+    /// Where a hit goes: (victim, hit point, aim, hit). Null is a player's own: one Hit event to the
+    /// server. A bot's hands (#837, <c>Bots/BotHands</c>) pass the server's own instead.
+    /// </summary>
+    public delegate void HitSink(FootPlayer victim, Vector3 at, Vector3 aim, Hit hit);
+
+    /// <summary>
     /// Fires <paramref name="weapon"/> from <paramref name="eye"/> along <paramref name="aim"/>:
     /// every pellet finds the nearest player body it crosses that no wall hides, and each player hit
     /// gets one Hit event with the sum. Returns the number of players hit.
     /// </summary>
-    public static int Shoot(FootPlayer shooter, Vector3 eye, Vector3 aim, WeaponDef weapon, float? spreadDeg = null)
+    public static int Shoot(FootPlayer shooter, Vector3 eye, Vector3 aim, WeaponDef weapon, float? spreadDeg = null, HitSink? sink = null)
     {
         var targets = Targets(shooter);
         if (targets.Count == 0) return 0;
@@ -75,12 +81,12 @@ public static class PlayerHits
         }
 
         foreach (var (victim, (damage, head, at)) in sums)
-            Send(shooter, victim, at, aim, new Hit(PeerOf(victim), damage, weapon.Id, head));
+            (sink ?? Send)(victim, at, aim, new Hit(PeerOf(victim), damage, weapon.Id, head));
         return sums.Count;
     }
 
     /// <summary>A blade: the nearest standing player within reach in front of <paramref name="shooter"/>.</summary>
-    public static bool Stab(FootPlayer shooter, Vector3 eye, Vector3 aim, WeaponDef weapon)
+    public static bool Stab(FootPlayer shooter, Vector3 eye, Vector3 aim, WeaponDef weapon, HitSink? sink = null)
     {
         FootPlayer? best = null;
         float bestD = weapon.Range;
@@ -98,7 +104,7 @@ public static class PlayerHits
         if (best == null) return false;
         var at = best.GlobalPosition + Vector3.Up * 1.1f;
         if (Blocked(shooter.GetWorld3D().DirectSpaceState, shooter, best, eye, at)) return false;
-        Send(shooter, best, at, aim, new Hit(PeerOf(best), weapon.Damage, weapon.Id, false));
+        (sink ?? Send)(best, at, aim, new Hit(PeerOf(best), weapon.Damage, weapon.Id, false));
         return true;
     }
 
@@ -155,7 +161,7 @@ public static class PlayerHits
         return hit.Count > 0 && hit["collider"].AsGodotObject() is not FootPlayer;
     }
 
-    private static void Send(FootPlayer shooter, FootPlayer victim, Vector3 at, Vector3 aim, Hit hit)
+    private static void Send(FootPlayer victim, Vector3 at, Vector3 aim, Hit hit)
     {
         GD.Print(FormattableString.Invariant($"[pvp] hit peer {hit.Victim} for {hit.Damage:F1} with {hit.Weapon}{(hit.Head ? " (head)" : "")}"));
         ItemEvents.Instance?.Send(ItemEventKind.Hit, at, aim, hit.Pack());

@@ -165,6 +165,9 @@ public partial class BotDirector : Node
                 bot.Body.SquareToView = true;
             }
             else bot.Body.SquareToView = false;
+            // the hands: a shot when the brain asks for one and the weapon is ready
+            if (bot.Intent.FireAt is { } target) BotHands.Fire(bot, target);
+            else if (bot.Body.ItemAction == 1 && now >= bot.NextShotAt + 1.5) bot.Body.ItemAction = 0;   // arms down after a while
         }
         // a body freed under us (a teardown, a kick of the node): forget it
         foreach (var gone in _bots.Where(kv => !GodotObject.IsInstanceValid(kv.Value.Body)).Select(kv => kv.Key).ToList())
@@ -228,8 +231,30 @@ public partial class BotDirector : Node
                     if (Add(at, (float)(rng.NextDouble() * Math.Tau), BotProfile.For(_seed, i, difficulty, taken)) != null) added++;
                 }
                 return added == count ? $"Added {added} bot(s)." : $"Added {added} of {count} bot(s) (at most {MaxBots}).";
+            case "arm":
+            {
+                // /bot arm <weapon> [rounds]: every bot takes it (a check, a test of the hands)
+                string name = args.Length > 1 ? args[1] : "pistol";
+                if (!Enum.TryParse<Items.ItemId>(name, true, out var weapon) || Items.Weapons.Get(weapon) == null)
+                    return $"'{name}' is not a weapon (pistol, rifle, huntingrifle, shotgun, knife).";
+                int rounds = args.Length > 2 && int.TryParse(args[2], out int r) ? Math.Clamp(r, 0, 300) : 30;
+                foreach (var bot in _bots.Values) BotHands.Arm(bot, weapon, rounds);
+                return $"{_bots.Count} bot(s) armed with a {weapon}.";
+            }
+            case "fire":
+            {
+                // /bot fire: every bot in reach shoots once at the sender's chest (a check of the hands)
+                if (bodyOf(sender) is not { } target) return "'/bot fire' needs your body in the world.";
+                int fired = 0;
+                foreach (var bot in _bots.Values)
+                    if (bot.Alive && BotHands.Pick(bot) is var (_, w)
+                        && bot.Body.GlobalPosition.DistanceTo(target.GlobalPosition) <= w.Range
+                        && BotHands.Fire(bot, target.GlobalPosition + Vector3.Up * 1.2f))
+                        fired++;
+                return $"{fired} bot(s) fired.";
+            }
             default:
-                return "Usage: /bot add [n] [easy|normal|hard] | clear | list";
+                return "Usage: /bot add [n] [easy|normal|hard] | arm <weapon> [rounds] | fire | clear | list";
         }
     }
 }

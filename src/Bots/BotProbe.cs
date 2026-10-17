@@ -87,6 +87,17 @@ public partial class BotProbe : ChatProbe
         Say("down");
         // free roam: knocked out for 3.5 s, then up again (Battle Royale keeps a bot down)
         Expect(await Until(() => walker.Down == 0, 10), "the bot stands up again (knocked out, not eliminated, in free roam)");
+
+        // the bots shoot back (#837, Bots/BotHands): armed, each one in reach fires once at A
+        Chat!.Send("/login botcheck");
+        if (!await Until(() => Permissions.IsAdmin, 10)) { Expect(false, "logged in as admin"); return; }
+        Chat.Send("/bot arm pistol 10");
+        await Seconds(1.0);
+        float before = me.Health;
+        Chat.Send("/bot fire");
+        bool hurt = await Until(() => me.Health < before, 5);
+        Expect(hurt, $"a bot's pistol hurt A: health {before:F0} -> {me.Health:F0} (the server fired, A's machine took it)");
+        Say("fired");
         me.WalkControls = null;
         Say("finished");
         await Heard("B", "done", 20);
@@ -101,8 +112,11 @@ public partial class BotProbe : ChatProbe
         Expect(bot != null, $"B sees {name} too");
         Say("seen");
         if (bot == null) return;
+        bool botShot = false;
+        ItemEvents.Received += e => { if (e.Kind == ItemEventKind.Shot && e.Peer < 0) botShot = true; };
         if (!await Heard("A", "down", 60)) { Expect(false, "A shot the bot down"); return; }
         Expect(bot.Down != 0 || await Until(() => bot.Down != 0, 3), $"B sees {name} down");
+        if (await Heard("A", "fired", 60)) Expect(botShot || await Until(() => botShot, 3), "B heard a bot's shot (the server's Shot event)");
         await Heard("A", "finished", 30);
         Say("done");
     }

@@ -20,6 +20,8 @@ public struct BotIntent
     public float? FaceYaw;
     /// <summary>The view's pitch when <see cref="FaceYaw"/> is set (radians, + up).</summary>
     public float Pitch;
+    /// <summary>Fire (or stab) at this world point this tick, if the weapon is ready (<see cref="BotHands.Fire"/>).</summary>
+    public Vector3? FireAt;
 
     public static BotIntent Stand => default;
 }
@@ -53,6 +55,10 @@ public sealed class Bot
     public double NextThink;
     /// <summary>Whether a human is near enough to see it act (the near level of detail).</summary>
     public bool Watched;
+    /// <summary>The hands' state (<see cref="BotHands"/>): when the weapon is ready again, the barrel's heat and since when.</summary>
+    public double NextShotAt;
+    public float Heat;
+    public double HeatAt;
     public bool Alive => GodotObject.IsInstanceValid(Body) && !Body.Eliminated;
 }
 

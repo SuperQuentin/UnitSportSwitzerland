@@ -1167,6 +1167,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private const float MantleTime = 0.36f;
 
     public Camera3D Camera => _camera!;
+    /// <summary>The camera when this body has one: never a remote copy, an NPC or a bot (#837).</summary>
+    public Camera3D? CameraOrNull => _camera;
 
     /// <summary>True while sliding — for footstep/scrape audio and third-person poses.</summary>
     public bool IsSliding => _sliding;

@@ -66,7 +66,7 @@ public sealed class ChatCompleter
         ("race", false, false, "start | duel <player> | join | leave | list | npc | cancel"),
         ("fight", false, false, "<player> | accept | decline | leave"),
         ("br", false, false, "open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] | join | leave | start | bots [n|off] [easy|normal|hard] | cancel | status"),
-        ("bot", true, false, "add [n] [easy|normal|hard] | clear | list"),
+        ("bot", true, false, "add [n] [easy|normal|hard] | arm <weapon> [rounds] | fire | clear | list"),
         ("say", true, false, "<message>"),
         ("admin", true, false, "list | add <player> | remove <player>"),
         ("tp", true, false, "<player>"),
@@ -217,8 +217,9 @@ public sealed class ChatCompleter
             case "bot" or "bots":   // #837
                 options = argIndex switch
                 {
-                    0 => ["add", "clear", "list"],
+                    0 => ["add", "arm", "fire", "clear", "list"],
                     _ when words[1].ToLowerInvariant() == "add" => ["easy", "normal", "hard"],
+                    _ when words[1].ToLowerInvariant() == "arm" => ["pistol", "rifle", "huntingrifle", "shotgun", "knife"],
                     _ => [],
                 };
                 break;
