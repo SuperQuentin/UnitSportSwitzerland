@@ -65,7 +65,8 @@ public sealed class ChatCompleter
         ("stream", false, false, ""),
         ("race", false, false, "start | duel <player> | join | leave | list | npc | cancel"),
         ("fight", false, false, "<player> | accept | decline | leave"),
-        ("br", false, false, "open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] | join | leave | start | cancel | status"),
+        ("br", false, false, "open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] | join | leave | start | bots [n|off] [easy|normal|hard] | cancel | status"),
+        ("bot", true, false, "add [n] [easy|normal|hard] | clear | list"),
         ("say", true, false, "<message>"),
         ("admin", true, false, "list | add <player> | remove <player>"),
         ("tp", true, false, "<player>"),
@@ -202,14 +203,24 @@ public sealed class ChatCompleter
                 bool admin = Permissions.IsAdmin;
                 options = argIndex switch
                 {
-                    0 => admin ? ["join", "leave", "status", "open", "start", "zone", "cancel"] : ["join", "leave", "status"],
+                    0 => admin ? ["join", "leave", "status", "open", "start", "zone", "bots", "cancel"] : ["join", "leave", "status"],
                     _ when admin && words[1].ToLowerInvariant() == "open" => ["here", "short", "normal", "long", "5", "6", "7"],
+                    _ when admin && words[1].ToLowerInvariant() == "bots" => ["off", "10", "20", "easy", "normal", "hard"],
                     _ => [],
                 };
                 break;
 
             case "pvp":
                 options = argIndex == 0 ? ["on", "off"] : [];
+                break;
+
+            case "bot" or "bots":   // #837
+                options = argIndex switch
+                {
+                    0 => ["add", "clear", "list"],
+                    _ when words[1].ToLowerInvariant() == "add" => ["easy", "normal", "hard"],
+                    _ => [],
+                };
                 break;
 
             case "fight":

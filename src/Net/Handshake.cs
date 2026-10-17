@@ -60,8 +60,9 @@ public partial class Handshake : Node
     /// trailers it builds on (#463).
     /// 33: World/Arrival (Rules: the server's spawn point and teleport rule) (#799).
     /// 34: World/Cranes (AskOperate, Send, AskRelease; Operated, Posed, Released, Carry, Snapshot) (#618).
+    /// 35: bots (#837): NPC spawn data carries a driver kind and a name, BrEntrant.Bot/BotKills, BrState.Bots.
     /// </summary>
-    public const int Protocol = 34;
+    public const int Protocol = 35;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

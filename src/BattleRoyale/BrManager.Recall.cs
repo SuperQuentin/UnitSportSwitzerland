@@ -68,7 +68,7 @@ public partial class BrManager
         if (!_server || !RecallOpen || Origin == null) return;
         long peer = Multiplayer.GetRemoteSenderId();
         if (_state.Find(peer) is not { Alive: true, Downed: false, Team: not 0 } r
-            || _players?.GetNodeOrNull<Node3D>(peer.ToString()) is not { } body) return;
+            || BodyOf(peer) is not { } body) return;
         var (be, bn) = Origin.ToLv95(body.GlobalPosition);
         var here = new Vector2((float)(be - _state.AreaE), (float)(bn - _state.AreaN));
         var stop = Stops().OrderBy(s => s.At.DistanceTo(here)).FirstOrDefault();
@@ -131,7 +131,7 @@ public partial class BrManager
     private void RecallNews(long recalled, long by)
     {
         if (_server) return;
-        string t = _state.Find(recalled)?.Name ?? "?", b = _state.Find(by)?.Name ?? "?";
+        string t = _state.Find(recalled)?.Shown ?? "?", b = _state.Find(by)?.Shown ?? "?";
         _feed.Add(new FeedLine($"{b} recalled {t}", recalled == Me || by == Me, Time.GetTicksMsec() / 1000.0));
         if (_feed.Count > 8) _feed.RemoveAt(0);
         if (by == Me && Inventory() is { } inv)

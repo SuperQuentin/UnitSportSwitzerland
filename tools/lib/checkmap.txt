@@ -679,3 +679,9 @@ tools/yardlootnetcheck   net    tools/yardlootnetcheck.sh
 src/Bots/                net    tools/botcheck.sh
 src/Items/PlayerHits     net    tools/botcheck.sh
 src/Terrain/CollisionReach net  tools/botcheck.sh
+# #837: one player against bots in a whole match: top-up at GO, kills of bots "(n bots)", record and board, bots gone after
+src/BattleRoyale/BrManager net  tools/brbotcheck.sh
+src/BattleRoyale/BrState   net  tools/brbotcheck.sh
+src/BattleRoyale/BrStats   net  tools/brbotcheck.sh
+src/BattleRoyale/BrBotProbe net tools/brbotcheck.sh
+src/Bots/                  net  tools/brbotcheck.sh
