@@ -53,6 +53,7 @@ public partial class InterestService : Node
     /// <summary>Server: true when two peers race each other; always relevant then.</summary>
     public Func<long, long, bool>? Together { get; set; }
 
+    private readonly HashSet<long> _connected = new();
     private readonly Dictionary<long, Interest.View> _views = new();
     private readonly Dictionary<long, HashSet<long>> _sets = new();
     private readonly Dictionary<(long, long), double> _flipped = new();
@@ -147,11 +148,15 @@ public partial class InterestService : Node
     {
         // despawns whose grace ran out (see DespawnDelay)
         _expired.Clear();
+        // a viewer is a connected peer: a body whose peer has just left stays in the tree a moment, and a
+        // visibility refresh for a gone peer is an engine error per target (many with bots, #837)
+        _connected.Clear();
+        foreach (int peer in Multiplayer.GetPeers()) _connected.Add(peer);
         foreach (var (pair, at) in _leaving) if (now >= at) _expired.Add(pair);
         foreach (var (viewer, target) in _expired)
         {
             _leaving.Remove((viewer, target));
-            if (_byId.GetValueOrDefault(target) is { } t && IsInstanceValid(t)) t.RefreshNetVisibility(viewer);
+            if (_connected.Contains(viewer) && _byId.GetValueOrDefault(target) is { } t && IsInstanceValid(t)) t.RefreshNetVisibility(viewer);
         }
 
         _scratch.Clear();
@@ -161,7 +166,7 @@ public partial class InterestService : Node
         foreach (var child in Players!.GetChildren())
             if (child is FootPlayer p && FootPlayer.NetId(p.Name) is long id)
             {
-                if (id > 0) { _scratch.Add((id, p)); _viewerIndex.Add(_targets.Count); }
+                if (id > 0 && _connected.Contains(id)) { _scratch.Add((id, p)); _viewerIndex.Add(_targets.Count); }
                 _targets.Add((id, p));
                 _byId[id] = p;
                 var to = Where(p);

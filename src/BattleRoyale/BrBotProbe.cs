@@ -21,7 +21,7 @@ namespace UnitSport.BattleRoyale;
 /// </summary>
 public partial class BrBotProbe : ChatProbe
 {
-    public static bool Requested => CmdArgs.Has("--brbotcheck");
+    public static bool Requested => CmdArgs.Has("--brbotcheck") || CmdArgs.Has("--brbotwatch");
 
     public BrBotProbe(ItemController items) : base(items, "brbots", "BB", "brbots_") { }
     public BrBotProbe() : this(null!) { }
@@ -39,8 +39,41 @@ public partial class BrBotProbe : ChatProbe
     {
         if (!await Joined(150, () => Br != null)) return;
         await Seconds(2.0);
-        await Run();
+        if (Watch) await RunWatch(); else await Run();
         await Finish(1.0);
+    }
+
+    /// <summary><c>--brbotwatch</c>: a match against 8 bots that play it (phase 2's brain), watched to the end.</summary>
+    private static bool Watch => CmdArgs.Has("--brbotwatch");
+
+    private async Task RunWatch()
+    {
+        var br = Br!;
+        Chat!.Send("/login brbots");
+        if (!await Until(() => Permissions.IsAdmin, 10)) { Fail("not logged in as admin"); return; }
+        Chat.Send("/br bots 9 normal");
+        await Seconds(0.5);
+        Chat.Send("/br open 5 short");
+        if (!await Until(() => br.State.Phase == BrPhase.Lobby, 20)) { Fail("no lobby"); return; }
+        Chat.Send("/br join");
+        await Until(() => br.State.Phase == BrPhase.Countdown, 10);
+        Chat.Send("/br start");
+        if (!await Until(() => br.InMatch && br.State.Phase == BrPhase.Playing, 60)) { Fail("never dropped"); return; }
+        if (br.State.Flight is { } flight)
+        {
+            await Until(() => flight.DoorsOpen(ClockSync.ServerNow), 90);
+            br.JumpOut();
+            await Seconds(0.5);
+            Me!.Leap(Me.GlobalPosition, Vector3.Zero, RideKind.OnFoot);
+        }
+        bool ended = await Until(() => br.State.Phase == BrPhase.Ended, 2200);
+        var s = br.State;
+        var bots = s.Entrants.Where(e => e.Bot).ToList();
+        GD.Print($"{Log} watch: {(ended ? "ended" : "still running")}, winner {s.Find(s.Winner)?.Shown ?? "-"}; "
+            + string.Join(", ", bots.OrderBy(b => b.Place).Select(b => $"#{b.Place} {b.Name} {b.Kills}k {b.Damage:F0}dmg")));
+        Expect(ended, "the match ended");
+        Expect(bots.Sum(b => b.Kills) > 0, $"bots killed ({bots.Sum(b => b.Kills)} kills by bots)");
+        Expect(bots.Any(b => b.Damage > 0), "bots dealt damage");
     }
 
     private FootPlayer? BodyOf(long id) => GetParent().GetNodeOrNull<FootPlayer>("Players/" + PlayerReplication.NodeName(id));
@@ -50,7 +83,7 @@ public partial class BrBotProbe : ChatProbe
         var br = Br!;
         Chat!.Send("/login brbots");
         if (!await Until(() => Permissions.IsAdmin, 10)) { Fail("not logged in as admin"); return; }
-        Chat.Send("/br bots 3");
+        Chat.Send("/br bots 3 easy");   // easy: slower to react, so the knife duels go A's way
         await Seconds(0.5);
         Chat.Send("/br open 5 short");
         if (!await Until(() => br.State.Phase == BrPhase.Lobby, 20)) { Fail("no lobby"); return; }
@@ -63,7 +96,7 @@ public partial class BrBotProbe : ChatProbe
         var s = br.State;
         var bots = s.Entrants.Where(e => e.Bot).ToList();
         Expect(bots.Count == 2 && s.Field == 3, $"GO topped the field up to 3: {bots.Count} bots, field {s.Field}");
-        Expect(bots.All(b => b.Peer < 0 && b.Jumped && b.Shown.EndsWith("[bot]")), "bots: negative ids, already on the ground, marked [bot]");
+        Expect(bots.All(b => b.Peer < 0 && !b.Jumped && b.Shown.EndsWith("[bot]")), "bots: negative ids, aboard the plane, marked [bot]");
         if (bots.Count < 2) return;
 
         // out of the plane as soon as the doors open, then down on foot
@@ -72,8 +105,16 @@ public partial class BrBotProbe : ChatProbe
         Expect(br.JumpOut(), "jumped");
         var me = Me!;
         await Seconds(0.5);
-        me.Leap(me.GlobalPosition, Vector3.Zero, RideKind.OnFoot);
+        me.Leap(me.GlobalPosition, Vector3.Zero, RideKind.OnFoot);   // out of the wingsuit first: a teleport in one is a SPLAT
+        // down at the first circle's centre, where the check lands the bots (--brbotspread)
+        var c0 = br.State.Zone().CentreOf(0);
+        br.Teleport(br.State.AreaE + c0.X + 30, br.State.AreaN + c0.Y, "the circle's centre");
+        await Until(() => me.IsOnFloor(), 30);
 
+        // the bots jump on their own, glide and open their canopies: wait until both stand on the ground
+        bool landed = await Until(() => bots.All(b => br.State.Find(b.Peer) is { Jumped: true }
+            && BodyOf(b.Peer) is { } body && body.Ride == RideKind.OnFoot && body.Visible), 240);
+        Expect(landed, "both bots jumped, flew and landed on foot");
         int knife = SlotOf(ItemId.Knife);
         _items.Inventory.Select(knife);
         for (int i = 0; i < bots.Count; i++)
@@ -89,6 +130,15 @@ public partial class BrBotProbe : ChatProbe
                 Expect(BrHud.Kills(mine?.Kills ?? 0, mine?.BotKills ?? 0) == "1 kill (1 bot)", "the HUD reads \"1 kill (1 bot)\"");
                 Expect(await Until(() => BrCrates.Instance?.All.Any(c => c.Style == CrateStyle.DeathBox && c.Label.StartsWith(bot.Name)) == true, 8),
                     $"{bot.Name}'s death box is where it fell");
+                // patch up before the next one, with the kit's bandages, as a player would
+                for (int b = 0; b < 3 && me.Health < 95f && SlotOf(ItemId.Bandage) is int slot and >= 0; b++)
+                {
+                    if (!Inventory.IsHotbar(slot)) { _items.Inventory.SwapWithHotbar(slot, 5); slot = 5; }
+                    _items.UseSlot(me, slot);
+                    await Seconds(ItemController.MedicalSeconds(ItemId.Bandage) + 0.6);
+                }
+                GD.Print($"{Log} health before the next bot: {me.Health:F0}");
+                _items.Inventory.Select(knife);
             }
         }
 
@@ -116,20 +166,23 @@ public partial class BrBotProbe : ChatProbe
         for (int i = 0; i < 20 && br.State.Find(id)?.Alive == true; i++)
         {
             if (BodyOf(id) is not { } body) break;
-            var (e, n) = br.Origin!.ToLv95(body.GlobalPosition);
-            // beside it, not on it: a remote body is solid, and standing on its head puts it out of a knife's reach
-            br.Teleport(e + 1.6, n, "next to the bot");
-            // a teleport lands a few frames later: wait until we really stand by it (it walks on meanwhile)
-            await Until(() => BodyOf(id) is { } near && Flat(near.GlobalPosition - me.GlobalPosition) < 2.0f
-                && Mathf.Abs(near.GlobalPosition.Y - me.GlobalPosition.Y) < 0.8f && me.IsOnFloor(), 6);
+            // out of a knife's reach: beside it again (not on it: a remote body is solid, and its head is out of reach)
+            if (Flat(body.GlobalPosition - me.GlobalPosition) > 1.9f || Mathf.Abs(body.GlobalPosition.Y - me.GlobalPosition.Y) > 0.8f)
+            {
+                var (e, n) = br.Origin!.ToLv95(body.GlobalPosition);
+                br.Teleport(e + 1.6, n, "next to the bot");
+                // a teleport lands a few frames later: wait until we really stand by it (it walks on meanwhile)
+                await Until(() => BodyOf(id) is { } near && Flat(near.GlobalPosition - me.GlobalPosition) < 2.0f
+                    && Mathf.Abs(near.GlobalPosition.Y - me.GlobalPosition.Y) < 0.8f && me.IsOnFloor(), 6);
+            }
             if (BodyOf(id) is not { } b) break;
             var dir = (b.GlobalPosition + Vector3.Up * 1.1f - me.EyePosition).Normalized();
             me.LookYaw = Mathf.Atan2(-dir.X, -dir.Z);
             me.LookPitch = Mathf.Asin(Mathf.Clamp(dir.Y, -1f, 1f));
-            await Seconds(0.15);
+            await Seconds(0.05);
             GD.Print(FormattableString.Invariant($"{Log} stab {i}: {Flat(b.GlobalPosition - me.GlobalPosition):F1} m, dy {b.GlobalPosition.Y - me.GlobalPosition.Y:F1}"));
             _items.UseSlot(me, SlotOf(ItemId.Knife));
-            await Seconds(0.7);
+            await Seconds(Weapons.Get(ItemId.Knife)!.Interval + 0.05);
         }
         bool out_ = await Until(() => br.State.Find(id)?.Alive == false, 5);
         if (!out_) Fail($"bot {id} never went out");

@@ -9,12 +9,12 @@
     `--brbots 0`). The loopback duel (`tools/brcheck.sh`) turns bots off first.
   - With bots set, one player is enough to start the countdown.
   - The region (`BrRegion.SideFor`) and the first circle (`Field`) are sized for players plus bots.
-- **GO**: `BotsAtGo()` counts the bots, `Field` includes them, the zone is drawn, then
-  `PlaceBots`:
-  - spread over 85 % of the first circle's radius, off water where the horizon lattice tells;
-  - each spawned at sea level, put on the ground once its collision is built;
-  - each with the match kit (knife, 3 bandages) and an entrant `{ Peer = bot id, Bot = true, Jumped = true }`;
-  - phase 1 bots do not board the plane. `Board` is sent to players only.
+- **GO**: `BotsAtGo()` counts the bots, `Field` includes them, the zone and the plane's line are drawn,
+  then `BoardBots`:
+  - each bot boards the plane (carried, hidden on clients while its entrant is not `Jumped`), with the
+    match kit (knife, 3 bandages), a `BrBrain`, a landing spot in the first circle and a jump time
+    (`brain`);
+  - `Board` is sent to players only.
 - **What a client does for its player, the server does for its bots**:
   - **death**: `OnBotDied` makes the death box from `Bot.Inventory`, then `Eliminate` (cause via
     `OutOf(cause, killer)`, the client's mapping, shared);
@@ -30,11 +30,8 @@
   - Bots get no career: they are skipped in `RecordStats`.
 - **Marks**: `BrEntrant.Shown` is "Name [bot]", used in the feed, the results (in grey), the team line
   and the winner line. Your own results row always shows, even outside the first twelve.
-- **End**: the match ends once no player is left standing (`NoPlayerLeft`). If bots of several sides are
-  still in it, nobody wins ("No player is left standing"). One bot side left: it wins like anyone. This
-  holds only while bots stroll: once `BrBrain` fights (phase 2), bots play the match out to a winner
-  and spectators watch.
-- **The drop**: phase 1 bots appear on the ground; phase 2 bots board the plane, jump and glide to where
-  they choose to land, like players.
+- **End**: bots play the match out to a winner while a player of it is still connected (out players
+  spectate). Once no player is connected (`NoPlayerLeft`) it ends; if bots of several sides are still in
+  it, nobody wins ("Every player has left").
 - **After**: `Finish` frees every bot body (`RemoveBots`).
 - Check: `tools/brbotcheck.sh` (net, `commands`).
