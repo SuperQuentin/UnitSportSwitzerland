@@ -1414,6 +1414,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.EconomyProbe.Password != null && _items != null && _chat != null)
             AddChild(new Items.EconomyProbe(_chat, _items.Inventory));
 
+        // World/Invites and World/Parties on both sides (#840): what others ask of this player
+        AddChild(InviteService.CreateClient());
+        AddChild(Parties.CreateClient());
+
         // World/Race on both sides; the client side puts this player on the grid and times the run
         var race = World.RaceManager.CreateClient(_worldOrigin!);
         race.LocalPlayer = () => LocalPlayer;
