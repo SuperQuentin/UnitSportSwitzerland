@@ -21,7 +21,7 @@ namespace UnitSport.BattleRoyale;
 /// </summary>
 public partial class BrBotProbe : ChatProbe
 {
-    public static bool Requested => CmdArgs.Has("--brbotcheck");
+    public static bool Requested => CmdArgs.Has("--brbotcheck") || CmdArgs.Has("--brbotwatch");
 
     public BrBotProbe(ItemController items) : base(items, "brbots", "BB", "brbots_") { }
     public BrBotProbe() : this(null!) { }
@@ -39,8 +39,41 @@ public partial class BrBotProbe : ChatProbe
     {
         if (!await Joined(150, () => Br != null)) return;
         await Seconds(2.0);
-        await Run();
+        if (Watch) await RunWatch(); else await Run();
         await Finish(1.0);
+    }
+
+    /// <summary><c>--brbotwatch</c>: a match against 8 bots that play it (phase 2's brain), watched to the end.</summary>
+    private static bool Watch => CmdArgs.Has("--brbotwatch");
+
+    private async Task RunWatch()
+    {
+        var br = Br!;
+        Chat!.Send("/login brbots");
+        if (!await Until(() => Permissions.IsAdmin, 10)) { Fail("not logged in as admin"); return; }
+        Chat.Send("/br bots 9 normal");
+        await Seconds(0.5);
+        Chat.Send("/br open 5 short");
+        if (!await Until(() => br.State.Phase == BrPhase.Lobby, 20)) { Fail("no lobby"); return; }
+        Chat.Send("/br join");
+        await Until(() => br.State.Phase == BrPhase.Countdown, 10);
+        Chat.Send("/br start");
+        if (!await Until(() => br.InMatch && br.State.Phase == BrPhase.Playing, 60)) { Fail("never dropped"); return; }
+        if (br.State.Flight is { } flight)
+        {
+            await Until(() => flight.DoorsOpen(ClockSync.ServerNow), 90);
+            br.JumpOut();
+            await Seconds(0.5);
+            Me!.Leap(Me.GlobalPosition, Vector3.Zero, RideKind.OnFoot);
+        }
+        bool ended = await Until(() => br.State.Phase == BrPhase.Ended, 2200);
+        var s = br.State;
+        var bots = s.Entrants.Where(e => e.Bot).ToList();
+        GD.Print($"{Log} watch: {(ended ? "ended" : "still running")}, winner {s.Find(s.Winner)?.Shown ?? "-"}; "
+            + string.Join(", ", bots.OrderBy(b => b.Place).Select(b => $"#{b.Place} {b.Name} {b.Kills}k {b.Damage:F0}dmg")));
+        Expect(ended, "the match ended");
+        Expect(bots.Sum(b => b.Kills) > 0, $"bots killed ({bots.Sum(b => b.Kills)} kills by bots)");
+        Expect(bots.Any(b => b.Damage > 0), "bots dealt damage");
     }
 
     private FootPlayer? BodyOf(long id) => GetParent().GetNodeOrNull<FootPlayer>("Players/" + PlayerReplication.NodeName(id));

@@ -4865,7 +4865,19 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private void UpdateCameraFeel(float dt, bool running, bool onFloor)
     {
-        if (_camera == null) return;
+        if (_camera == null)
+        {
+            // a body with no camera (an NPC, a bot, #837) still lands hard: the fall's damage, not its feel
+            if (Npc && onFloor && !_wasOnFloor)
+            {
+                if (_fallSpeed > 1.5f) Landed?.Invoke(_fallSpeed);
+                if (_fallSpeed > 11f && _ejected <= 0 && !SoftLanding) TakeDamage((_fallSpeed - 11f) * 9f, 0, DamageCause.Fall);
+                _fallSpeed = 0f;
+                SoftLanding = false;
+            }
+            if (Npc) _wasOnFloor = onFloor;
+            return;
+        }
 
         float groundSpeed = MathX.FlatLength(Velocity);
         _speedSmoothed = Mathf.Lerp(_speedSmoothed, groundSpeed, MathX.Damp(8f, dt));
