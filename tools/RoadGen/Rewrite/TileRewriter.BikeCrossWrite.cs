@@ -63,7 +63,7 @@ public static partial class TileRewriter
             return hits;
         }
         // a marking cut to the core's surface: none drawn off the road (the user, Oct 17)
-        List<Vec2> ClipToCore(List<Vec2> pts) => ClipToRing(pts, core.Outline);
+        List<Vec2> ClipToCore(List<Vec2> pts) => ClipToRing(pts, core.Outline, core.Mouths);
         void Line(List<Vec2> pts, PaintType type, uint rgba, float width, float dash)
         {
             if (pts.Count < 2) return;
@@ -106,16 +106,17 @@ public static partial class TileRewriter
                 double half = Math.Min(c.Width, c.ToWidth) * 0.5;
                 var (sl, sr) = (OffsetLine(straight, -half), OffsetLine(straight, half));
                 // both its lines on the core (but onto the path, over its last metres): else along its connector
-                var closed = new List<Vec2>(core.Outline) { core.Outline[0] };
-                bool On(Vec2 p) => Inside(core.Outline, p) || DistanceToPolyline(closed, p) < 0.2 || (ontoPath && p.DistanceTo(end) < 3);
+                bool On(Vec2 p) => OnCore(core.Outline, core.Mouths, p) || (ontoPath && p.DistanceTo(end) < 3);
                 if (sl.All(On) && sr.All(On))
                 {
                     (centre, left, right) = (straight, sl, sr);
                     if (ontoPath) landings.Add(exitMouth!.Left);
                 }
             }
-            Line(ClipToCore(Inset(left, -lw * 0.5)), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
-            Line(ClipToCore(Inset(right, lw * 0.5)), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
+            // each line half its width inside the lane's edge (OffsetLine moves to the right of the way: the left edge right, the
+            // right edge left; the other way round a lane along a kerb had its line half off the road, J7 north-east)
+            Line(ClipToCore(Inset(left, lw * 0.5)), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
+            Line(ClipToCore(Inset(right, -lw * 0.5)), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
             double length = Length(centre);
             // red on the half or halves where cars cross it in conflict (the old layout's rule, #682; the user, Oct 17); without lights
             // only along the main road (Oct 17: none across it, Sion 2505948,1137484)
@@ -267,11 +268,10 @@ public static partial class TileRewriter
     /// A line kept on a ring's surface (with a 0.2 m tolerance at its edge: a mouth is on it): sampled every half metre, the
     /// longest run of points on it; empty where none is.
     /// </summary>
-    private static List<Vec2> ClipToRing(List<Vec2> pts, List<Vec2> ring)
+    private static List<Vec2> ClipToRing(List<Vec2> pts, List<Vec2> ring, IReadOnlyList<CoreMouth>? mouths = null)
     {
         if (pts.Count < 2 || ring.Count < 3) return pts;
-        var closed = new List<Vec2>(ring) { ring[0] };
-        bool On(Vec2 p) => Inside(ring, p) || DistanceToPolyline(closed, p) < 0.2;
+        bool On(Vec2 p) => OnCore(ring, mouths, p);
         if (pts.All(On)) return pts;
         var dense = new List<Vec2> { pts[0] };
         for (int i = 1; i < pts.Count; i++)
@@ -288,6 +288,16 @@ public static partial class TileRewriter
         }
         if (run.Count > best.Count) best = run;
         return best.Count >= 2 ? best : [];
+    }
+
+    /// <summary>
+    /// Whether a marking's point lies on a core's surface: inside its outline with a line's half width to spare from a kerb, or
+    /// within half a metre of a mouth (the street carries on there).
+    /// </summary>
+    private static bool OnCore(List<Vec2> ring, IReadOnlyList<CoreMouth>? mouths, Vec2 p)
+    {
+        if (mouths is not null && mouths.Any(m => DistanceToPolyline([m.Left, m.Right], p) < 0.5)) return true;
+        return Inside(ring, p) && DistanceToPolyline([.. ring, ring[0]], p) >= BikePlanner.LineWidth;
     }
 
     private static double DistanceToPolyline(List<Vec2> line, Vec2 p)

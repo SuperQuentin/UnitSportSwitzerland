@@ -213,7 +213,7 @@ public static partial class TileRewriter
         bool urban = jp.Arms.Any(a => a.Normal.KerbLeftCm > 0 || a.Normal.KerbRightCm > 0);
         foreach (var line in core.Lines)
         {
-            if (line.Points.Count < 2 || ClipToRing(line.Points, core.Outline).Count < 2) continue;
+            if (line.Points.Count < 2 || ClipToRing(line.Points, core.Outline, core.Mouths).Count < 2) continue;
             bool centre = line.Kind == "centre";
             if (!centre && !line.Dashed && urban) continue;
             float dash = centre ? 3f : line.Dashed ? GuideDash : 0f, gap = centre ? (urban ? 3f : 6f) : line.Dashed ? GuideDash : 0f;
@@ -222,7 +222,7 @@ public static partial class TileRewriter
                 Shape = PaintShape.Polyline, Type = dash > 0 ? PaintType.WhiteDashed : PaintType.WhiteSolid, Rgba = PaintEmitter.White,
                 Width = PaintEmitter.LineWidth, Dash = dash, Gap = gap,
                 // cut to the core's surface: none off the road (the user, Oct 17)
-                Vertices = RoadPaintGeometry.Simplify(Local(home, ClipToRing(line.Points, core.Outline), p => cap is null ? HeightAt(anchors, p) : CapHeightAt(cap, home, p), 0f)),
+                Vertices = RoadPaintGeometry.Simplify(Local(home, ClipToRing(line.Points, core.Outline, core.Mouths), p => cap is null ? HeightAt(anchors, p) : CapHeightAt(cap, home, p), 0f)),
             });
             stats.CoreLines++;
         }
