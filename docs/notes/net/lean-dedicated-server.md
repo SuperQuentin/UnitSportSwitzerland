@@ -4,6 +4,8 @@
   DedicatedServer` — not `Multiplayer.IsServer()`, which is also true offline): no visual, no held
   item, no processing, collision disabled; the replication setter writes `Position` directly.
 - `Engine.MaxFps = 60` (headless had no cap).
+- The one exception (#837): collision is built round the bots the server runs, within 300 m of each
+  (`bots/server-collision`); proxies are plain anchors and keep the coarse, collision-less tiles below.
 - Terrain: the server ring is 5x5 tiles of **coarse** `.terrc` (5 KB) and loads neither holes nor
   the cover raster: nothing on the server builds on the ground. It was ~50 MB per spread player.
   **Stride 0 is not "full"** (issue #65): with meshes off every want has stride 0, and

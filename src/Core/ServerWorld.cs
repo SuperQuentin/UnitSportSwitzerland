@@ -98,12 +98,16 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // allows. 60 matches the physics tick and every client's send rate is well under it.
         Engine.MaxFps = 60;
 
-        _chunks = new ChunkManager { Name = "Terrain", BuildMeshes = false, BuildCollision = false };
+        // Collision only around server-run bots (#837), within a few hundred metres of each: players'
+        // proxies are plain anchors and keep coarse, collision-less tiles (net/lean-dedicated-server).
+        _chunks = new ChunkManager { Name = "Terrain", BuildMeshes = false, BuildCollision = true, CollisionByRadius = true };
         _chunks.Initialize(source, origin, manifest, null);
         if (fallback != null) _chunks.UseFallback(fallback, source.Invalidate);
         // the landings (#377): where the steamer lies; the piers are the clients' (no collision here)
         World.Landings.Use(await World.Landings.LoadAsync(source));
         AddChild(_chunks);
+        // solid trunks around the bots, the same pool the clients keep round their own body (#837)
+        AddChild(new World.TreeColliders(_chunks, origin));
         // the water (#299): the server answers water queries too, and owns the sea state
         World.WaterField.Bind(_chunks);
         if (World.SeaStateCommand.FromArgs(args, out string seaError) is { } sea) World.WaterField.SetSeaState(sea);
@@ -123,6 +127,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         AddChild(_spawner);
         // race NPCs: spawned here for everyone, simulated on the client that asked (issue #39)
         AddChild(_npcs = World.RaceNpcs.CreateServer(_spawner, _players));
+        // bots (#837): bodies the server runs itself, through the same spawner
+        AddChild(Bots.BotDirector.CreateServer(_spawner, _players));
 
         // vehicles standing in the world; the server spawns and removes them for everyone
         _vehicles = Vehicles.VehicleManager.Create(this, null, origin);
@@ -456,7 +462,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
 
         var node = _spawner!.Spawn(id);
         if (node is Node3D player)
-            _chunks!.AddAnchor(player);
+            _chunks!.AddAnchor(player, collision: false);   // a proxy: height queries only, no collision (#837)
         _arrival?.SendTo(id);
         _interiors?.SendTableTo(id);
         _churchRadios?.SendTo(id);

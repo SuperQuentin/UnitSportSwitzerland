@@ -728,7 +728,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Interiors.LiftSyncProbe.Role != null || Interiors.HallCarProbe.Role != null || Loot.BankProbe.Role != null
             || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.ExcavatorNetProbe.Role != null || Items.SitePalletNetProbe.Role != null || Loot.YardLootNetProbe.Role != null || Terrain.Construction.CraneNetProbe.Role != null || Items.BedNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
-            || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
+            || Items.PvpProbe.Role != null || Bots.BotProbe.Role != null || BattleRoyale.BrBotProbe.Requested || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
             || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
             || World.ContainerNetProbe.Role != null
             || Interiors.SiteOfficeNetProbe.Role != null
@@ -738,6 +738,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.PlantProbe.Role != null) inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.SwissFlag, 1));   // on the hotbar for --hold
         if (Items.ShotgunProbe.Role != null) { inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.Shotgun, 1)); inventory.Add(Items.ItemId.Shells, 25); }   // on the hotbar for --hold
         if (Items.PvpProbe.Role != null) Items.PvpProbe.Stock(inventory);
+        if (Bots.BotProbe.Role != null) Bots.BotProbe.Stock(inventory);
         if (Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null) Build.BuildProbe.Stock(inventory);
         // the account claimed cash goes to: the server's online, this machine's offline. Made
         // before the items, whose panel shows the balance from its first frame.
@@ -777,6 +778,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.ShotgunProbe.Role != null) AddChild(new Items.ShotgunProbe(items));
         if (Items.PlantProbe.Role != null) AddChild(new Items.PlantProbe(items));
         if (Items.PvpProbe.Role != null) AddChild(new Items.PvpProbe(items));
+        if (Bots.BotProbe.Role != null) AddChild(new Bots.BotProbe(items));
         if (Build.BuildProbe.Requested) AddChild(new Build.BuildProbe(items));
         if (Build.BuildNetProbe.Role != null) AddChild(new Build.BuildNetProbe(items));
         if (Build.GadgetProbe.Requested) { Build.GadgetProbe.Stock(items.Inventory); AddChild(new Build.GadgetProbe(items)); }
@@ -788,6 +790,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new World.ContainerNetProbe(containerNet, _chunks, containerOrigin));
         if (BattleRoyale.PrefabProbe.Requested) AddChild(new BattleRoyale.PrefabProbe());
         if (BattleRoyale.BrProbe.Role != null) AddChild(new BattleRoyale.BrProbe(items));
+        if (BattleRoyale.BrBotProbe.Requested) AddChild(new BattleRoyale.BrBotProbe(items));
         if (Crafting.CampfireProbe.Requested) AddChild(new Crafting.CampfireProbe(items));
         if (Crafting.CampfireNetProbe.Role != null) AddChild(new Crafting.CampfireNetProbe(items));
         if (Player.SwimNetProbe.Role != null) AddChild(new Player.SwimNetProbe(items));

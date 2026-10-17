@@ -19,8 +19,13 @@ public static class PvpRules
     /// </summary>
     public static Func<long, long, bool?>? Override { get; set; }
 
-    /// <summary>Whether <paramref name="shooter"/>'s weapons may hurt <paramref name="victim"/> now.</summary>
-    public static bool Allows(long shooter, long victim) => Override?.Invoke(shooter, victim) ?? Enabled;
+    /// <summary>
+    /// Whether <paramref name="shooter"/>'s weapons may hurt <paramref name="victim"/> now. A bot
+    /// (#837) is fair game whatever <see cref="Enabled"/> says, and fights back: a mode's override
+    /// still decides first (no friendly fire in a Battle Royale team).
+    /// </summary>
+    public static bool Allows(long shooter, long victim) =>
+        Override?.Invoke(shooter, victim) ?? (Enabled || Net.PlayerReplication.IsBotId(victim) || Net.PlayerReplication.IsBotId(shooter));
 
     /// <summary>Server: a hit was passed on to its victim (shooter peer, victim peer, damage). For match statistics.</summary>
     public static event Action<long, long, float>? HitRelayed;

@@ -120,7 +120,7 @@ public partial class BrManager
         // the others still aboard stay hidden in the hold (this client's own body: FootPlayer.Carried)
         foreach (var e in _state.Entrants)
         {
-            if (e.Peer == Me || GetNodeOrNull<FootPlayer>("../Players/" + e.Peer) is not { } body) continue;
+            if (e.Peer == Me || GetNodeOrNull<FootPlayer>("../Players/" + PlayerReplication.NodeName(e.Peer)) is not { } body) continue;
             body.Stowed = flight is { } fh && !e.Jumped && now < fh.ClosesAt + 3;
             if (body.Stowed) _hidden.Add(e.Peer);
             else _hidden.Remove(e.Peer);
@@ -158,7 +158,7 @@ public partial class BrManager
     private void ShowHidden()
     {
         foreach (long peer in _hidden)
-            if (GetNodeOrNull<FootPlayer>("../Players/" + peer) is { } body) body.Stowed = false;
+            if (GetNodeOrNull<FootPlayer>("../Players/" + PlayerReplication.NodeName(peer)) is { } body) body.Stowed = false;
         _hidden.Clear();
     }
 }

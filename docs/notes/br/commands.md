@@ -2,7 +2,8 @@
 
 - Chat:
   - Anyone: `/br join`, `/br leave`, `/br status` (bare `/br` = status).
-  - Admin: `/br open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads]`, `/br start`, `/br zone`, `/br cancel`.
+  - Admin: `/br open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads]`, `/br start`, `/br zone`, `/br cancel`,
+    `/br bots [n|off] [easy|normal|hard]` (#837: the field bots top a match up to at GO, `bots/battle-royale`; `--brbots n` on the server).
   - `/br zone` (#425): the current wait ends now and the zone starts closing (from the loot time: phase 1's
     shrink). `BrState.Started` moves back by what was left (`ZoneSchedule.NextShrinkAt`), so every client
     follows from the state message. Refused before the plane's doors close, while shrinking, once over.

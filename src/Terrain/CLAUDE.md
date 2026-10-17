@@ -62,6 +62,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 
 ## Gotchas
 
+- `server-collision` (bots) — the dedicated server builds collision only within 300 m of a bot (`CollisionByRadius`, `CollisionReach`: look-ahead, none in the air, released at 400 m); proxies stay plain anchors on coarse tiles (#837)
 - `collision-build-load-road-tile` — Any collision or near-field build must load the road tile even when the roads are already drawn (or the ground swallows them after flying away and back, or on the #553 street-level cell switch, #603)
 - `road-s-collision-core-takes` — A road's collision core takes the height at the cell's perpendicular foot on the centreline, nearest segment wins
 - `concavepolygonshape3d-one-sided-collision-unless` — `ConcavePolygonShape3D` is one-sided for collision unless told otherwise, and geometry that "looks right" can still...

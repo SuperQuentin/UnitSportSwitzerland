@@ -1069,6 +1069,23 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public Func<(Vector3 Wish, bool Run)>? WalkControls { get; set; }
 
     /// <summary>
+    /// Jump and crouch for a body that reads no keys (an <see cref="Npc"/>, a server-run bot, #837),
+    /// read with <see cref="WalkControls"/>: held, as the keys would be (a jump is a press = false then
+    /// true). Null: neither.
+    /// </summary>
+    public Func<(bool Jump, bool Crouch)>? FootActions { get; set; }
+
+    /// <summary>
+    /// A bot (#837): a body the dedicated server runs itself (authority 1), an <see cref="Npc"/> with
+    /// no race driver. Set from the spawn data on every peer, before the node enters the tree: clients
+    /// mark it (<see cref="Bots.BotTag"/>), the server's <c>Bots.BotDirector</c> drives it.
+    /// </summary>
+    public bool Bot { get; set; }
+
+    /// <summary>A bot's display name (spawn data), shown on its <see cref="Bots.BotTag"/>; empty for everyone else.</summary>
+    public string BotName { get; set; } = "";
+
+    /// <summary>
     /// Replaces the keys while flying, when set, as <see cref="RideControls"/> does on the ground: a
     /// scripted pilot (the trailer's aircraft, #706) flies through it, so several craft can fly at
     /// once without pressing the one global input map.
@@ -1150,6 +1167,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private const float MantleTime = 0.36f;
 
     public Camera3D Camera => _camera!;
+    /// <summary>The camera when this body has one: never a remote copy, an NPC or a bot (#837).</summary>
+    public Camera3D? CameraOrNull => _camera;
 
     /// <summary>True while sliding — for footstep/scrape audio and third-person poses.</summary>
     public bool IsSliding => _sliding;
@@ -1211,7 +1230,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     public override void _EnterTree()
     {
-        if (Terrain != null && !Terrain.HasAnchor(this)) Terrain.AddAnchor(this, collision: true);
+        // on the dedicated server only a body the server runs itself (a bot, #837) wants collision:
+        // a player's proxy re-entering the tree stays a plain anchor
+        if (Terrain != null && !Terrain.HasAnchor(this))
+            Terrain.AddAnchor(this, collision: !Net.NetworkManager.DedicatedServer || IsMultiplayerAuthority());
     }
 
     public override void _ExitTree()
@@ -1322,7 +1344,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // stream can never disagree about whether a peer has this node.
         _relayNear = MakeRelay("RelayNear", replication, spawn: true, 1f / 30f);
         _relayFar = MakeRelay("RelayFar", replication, spawn: false, 1f / 6f);
-        if (NetProxy && netId != 0)
+        // on the dedicated server for every body it relays: a player's proxy, and a bot it runs itself
+        // (#837: authority 1, no proxy; without the filters it would spawn and stream to every peer)
+        if (Net.NetworkManager.DedicatedServer && netId != 0)
         {
             // peer 0 = "everyone?": must be no, or Godot broadcasts; the owner has its own copy —
             // for a race NPC its CURRENT simulator, which the server can change (#50)
@@ -1352,7 +1376,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             VisibilityUpdateMode = MultiplayerSynchronizer.VisibilityUpdateModeEnum.None,
         };
         _vis.SetMultiplayerAuthority(1);
-        if (NetProxy && netId != 0)
+        if (Net.NetworkManager.DedicatedServer && netId != 0)
             // peer 0 is Godot asking "visible to everyone?": the answer must be no, or it
             // broadcasts and never asks per peer. A race NPC always exists on its simulator.
             _vis.AddVisibilityFilter(Callable.From((long peer) => peer != 0
@@ -1399,6 +1423,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // no camera to anchor the streamer: the body asks for its own ground and trunks
             Terrain?.AddAnchor(this, collision: true);
             SetProcessUnhandledInput(false);
+            // no camera to put behind it: it faces where it goes, or where it looks (SquareToView)
+            _thirdPerson = true;
             // spawned here after a handoff (#50): the spawn state put the mount in RideKindId, not under the body
             if (RideKindId != (int)RideKind.OnFoot && _ride == null) ApplyRide((RideKind)RideKindId, NetVel, TuningBits, CarSetupId);
         }
@@ -1450,8 +1476,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         RefreshVisual();
 
-        // every copy draws what is in the hand; only the local one also has a viewmodel
-        AddChild(new Items.HeldItemVisual(this) { Name = "HeldItem" });
+        // every copy draws what is in the hand; only the local one also has a viewmodel. The
+        // dedicated server draws nothing, even for a bot it runs (#837)
+        if (!Net.NetworkManager.DedicatedServer) AddChild(new Items.HeldItemVisual(this) { Name = "HeldItem" });
+        // a bot is marked over its head on every client (#837)
+        if (Bot && !Net.NetworkManager.DedicatedServer) AddChild(new Bots.BotTag(this));
 
         if (IsMultiplayerAuthority() && !Npc && _interest != null)
             Callable.From(() => _interest.ReportView(Core.GameSettings.Current.CameraFar, BaseFov)).CallDeferred();
@@ -1636,7 +1665,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             NetYaw = Rotation.Y;
             NetTime = Time.GetTicksUsec() / 1e6;
             float dt = (float)delta;
-            ApplyStickLook(dt);
+            // an NPC or a bot reads no keys (#837): a server has no look actions at all
+            if (!Npc) ApplyStickLook(dt);
             // walkable vehicles nearby: their decks where they are drawn, and this player with one it stands on
             CarryOnDeck(dt);
             if (RidingWith != 0)
@@ -2996,7 +3026,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         Health = Mathf.Max(0f, Health - amount);
         _sinceHurt = 0;
         Hurt?.Invoke(amount);
-        PlayerInput.Rumble(0.6f, Mathf.Clamp(amount / 40f, 0.2f, 1f), 0.25f);
+        if (!Npc) PlayerInput.Rumble(0.6f, Mathf.Clamp(amount / 40f, 0.2f, 1f), 0.25f);
         if (Health <= 0f)
         {
             long killer = now - _lastAttackedAt <= CreditSeconds ? _lastAttacker : 0;
@@ -3550,7 +3580,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // in a fist fight (#495, FootPlayer.Fight.cs)
         if (FightPhysics(dt, onFloor)) return;
 
-        if (Npc)
+        if (Npc && WalkControls == null)
         {
             // thrown out of its car: it only falls and stands until it gets back in
             Velocity = new Vector3(0, onFloor ? 0f : velocity.Y - Gravity * dt, 0);
@@ -3558,22 +3588,26 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
 
-        var input = PlayerInput.Move;
+        // an NPC or a bot reads no keys (#837): its walk comes from WalkControls, its jump and
+        // crouch from FootActions
+        bool keys = !Npc;
+        var acts = keys ? default : FootActions?.Invoke() ?? default;
+        var input = keys ? PlayerInput.Move : Vector2.Zero;
         // a steering wheel's pedals walk forward and back
-        if (input == Vector2.Zero) input.Y = PlayerInput.WheelWalk;
+        if (keys && input == Vector2.Zero) input.Y = PlayerInput.WheelWalk;
         if (_stunTimer > 0)
         {
             _stunTimer -= dt;
             input = Vector2.Zero;
         }
 
-        bool sprintDown = PlayerInput.Held(PlayerInput.Sprint);
+        bool sprintDown = keys && PlayerInput.Held(PlayerInput.Sprint);
         if (sprintDown && !_sprintHeld && PlayerInput.LastDevice == InputDevice.Gamepad) _sprintLatch = true;
         _sprintHeld = sprintDown;
         if (input.LengthSquared() < 0.09f) _sprintLatch = false;   // stick let go: back to a walk
 
         bool running = sprintDown || _sprintLatch;
-        bool crouchHeld = PlayerInput.Held(PlayerInput.CrouchSlide);
+        bool crouchHeld = keys ? PlayerInput.Held(PlayerInput.CrouchSlide) : acts.Crouch;
 
         // Wall jumps and slide entries need the *edge*, not the state: the ground jump below
         // polls, so holding Space bunny-hops, and a polled wall jump would rocket you up a
@@ -3583,7 +3617,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // ends at ~2 m/s, the walk accelerates you back over the entry threshold in about a
         // second, and a held key starts the next one — so holding Ctrl became a permanent
         // 7 m/s crouch-run. A slide is one move; you re-press to take another.
-        bool spaceDown = PlayerInput.Held(PlayerInput.Jump);
+        bool spaceDown = keys ? PlayerInput.Held(PlayerInput.Jump) : acts.Jump;
         bool jumpPressed = spaceDown && !_jumpHeld;
         _jumpHeld = spaceDown;
         // downed (#475): a crawl, nothing more

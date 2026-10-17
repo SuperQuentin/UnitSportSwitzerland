@@ -946,6 +946,35 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 
     private readonly HashSet<Node3D> _collisionAnchors = new();
 
+    /// <summary>
+    /// The dedicated server's mode (#837): a collision anchor (a server-run bot) wants collision on the
+    /// tiles within <see cref="CollisionReach.RadiusM"/> of it or of its look-ahead point, not the
+    /// client's ring of <see cref="LodPolicy.CollisionMaxDist"/> tiles, none high in the air, and a
+    /// tile every such anchor has left by <see cref="CollisionReach.ReleaseM"/> is freed back to its
+    /// coarse grid. Off on clients.
+    /// </summary>
+    public bool CollisionByRadius { get; set; }
+
+    /// <summary>Where a radius-mode anchor is and where it is heading (LV95), and whether it is high in the air.</summary>
+    private (double E, double N, double AheadE, double AheadN, bool Airborne) ReachOf(Node3D anchor)
+    {
+        var pos = anchor.GlobalPosition;
+        var (e, n) = _origin!.ToLv95(pos);
+        var v = anchor is CharacterBody3D body ? body.Velocity : Vector3.Zero;
+        var ahead = CollisionReach.Ahead(e, n, pos.Y, v.X, -v.Z, v.Y);
+        bool airborne = TryGetHeight(pos, out float ground)
+            && pos.Y - ground > CollisionReach.AirGapM && ahead.Alt - ground > CollisionReach.AirGapM;
+        return (e, n, ahead.E, ahead.N, airborne);
+    }
+
+    /// <summary>The ring key's part for a radius-mode anchor: its 250 m cell, its look-ahead's, airborne.</summary>
+    private long ReachKey(Node3D anchor)
+    {
+        if (!CollisionByRadius || !_collisionAnchors.Contains(anchor)) return 0;
+        var r = ReachOf(anchor);
+        return CollisionReach.CellKey(r.E, r.N) * 31 ^ CollisionReach.CellKey(r.AheadE, r.AheadN) ^ (r.Airborne ? 1 : 0);
+    }
+
     /// <summary>The anchors that want collision around them (<see cref="World.TreeColliders"/> follows them too).</summary>
     public IEnumerable<Node3D> CollisionAnchors => _collisionAnchors.Where(GodotObject.IsInstanceValid);
 
@@ -1645,14 +1674,14 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// the LOD policy, the world version and <see cref="BuildMeshes"/>. Compared field by field at
     /// 10 Hz, with nothing allocated (it was a string built every evaluation, #221).
     /// </summary>
-    private readonly List<(TileId Tile, bool Collision)> _desiredKey = new(), _keyNow = new();
+    private readonly List<(TileId Tile, bool Collision, long Reach)> _desiredKey = new(), _keyNow = new();
     private (LodPolicy? Lod, long Version, bool Meshes) _desiredKeyRest;
 
     private bool RingKeyChanged()
     {
         _keyNow.Clear();
         foreach (var anchor in _anchors)
-            _keyNow.Add((_origin!.TileAt(anchor.GlobalPosition), _collisionAnchors.Contains(anchor)));
+            _keyNow.Add((_origin!.TileAt(anchor.GlobalPosition), _collisionAnchors.Contains(anchor), ReachKey(anchor)));
         (LodPolicy? Lod, long Version, bool Meshes) rest = (Lod, _worldVersion, BuildMeshes);
         if (rest == _desiredKeyRest   // the policy by reference: a new one is a new key
             && System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_keyNow).SequenceEqual(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_desiredKey)))
@@ -1769,7 +1798,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 // it (#603).
                 bool nearMesh = BuildMeshes && want.Stride > 0 && want.Stride <= TerrainMeshBuilder.MaxHoleStride;
                 StartBuild(id, state, want.Stride, needCollision, needRoads, needBuildings,
-                    roadsForBlend: (needCollision || nearMesh) && want.Roads, fine: fine, cells: wantCells,
+                    // a server builds no roads to draw, but a bot's collision needs the road tile: decks,
+                    // kerbs, walls and tunnel bores are cut from it (#837)
+                    roadsForBlend: (needCollision || nearMesh) && (want.Roads || !BuildMeshes), fine: fine, cells: wantCells,
                     buildingsOnly: needBuildings && cellSwitch);
             }
         }
@@ -1783,6 +1814,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         {
             var center = _origin!.TileAt(anchor.GlobalPosition);
             int radius = Lod.MaxDist;
+            bool byRadius = CollisionByRadius && _collisionAnchors.Contains(anchor);
+            var reach = byRadius ? ReachOf(anchor) : default;
             for (int de = -radius; de <= radius; de++)
                 for (int dn = -radius; dn <= radius; dn++)
                 {
@@ -1795,8 +1828,10 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     // are the fast movers, and a 1001^2 HeightMapShape3D costs ~80 ms to commit -
                     // building nine of them under a camera nothing collides with was the single
                     // biggest hitch in a flight.
-                    bool collision = BuildCollision && dist <= Lod.CollisionMaxDist
-                        && _collisionAnchors.Contains(anchor);
+                    bool collision = BuildCollision && _collisionAnchors.Contains(anchor)
+                        && (byRadius
+                            ? CollisionReach.Wants(id, reach.E, reach.N, reach.AheadE, reach.AheadN, reach.Airborne)
+                            : dist <= Lod.CollisionMaxDist);
                     bool roads = BuildMeshes && dist <= Lod.RoadMaxDist;
                     bool buildings = BuildMeshes && dist <= Lod.BuildingMaxDist;
                     // strides are all 0 when meshes are off, otherwise all > 0: min = finest
@@ -1838,6 +1873,14 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 
         // unload with hysteresis
         var toRemove = new List<TileId>();
+        // A server-run bot's collision is freed once every bot has left the tile by the release
+        // radius (#837): the tile goes back to its 5 KB coarse grid on the next evaluation, or every
+        // tile a bot ever walked past would keep its 2 MB grid and its bodies.
+        if (CollisionByRadius)
+            foreach (var (id, want) in _wanted)
+                if (!want.Collision && _chunks.TryGetValue(id, out var held)
+                    && (held.HasCollision || held.PendingCollision || held.CollisionQueued) && !CollisionHeld(id))
+                    toRemove.Add(id);
         foreach (var (id, state) in _chunks)
         {
             if (desired.ContainsKey(id)) continue;
@@ -1848,6 +1891,18 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 toRemove.Add(id);
         }
         foreach (var id in toRemove) UnloadTile(id);
+    }
+
+    /// <summary>Whether some radius-mode anchor is still within the release radius of a tile.</summary>
+    private bool CollisionHeld(TileId id)
+    {
+        foreach (var anchor in _collisionAnchors)
+        {
+            if (!GodotObject.IsInstanceValid(anchor)) continue;
+            var r = ReachOf(anchor);
+            if (CollisionReach.Wants(id, r.E, r.N, r.AheadE, r.AheadN, r.Airborne, holding: true)) return true;
+        }
+        return false;
     }
 
     /// <summary>
@@ -2029,8 +2084,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 if (grid == null) { _failedBuilds.Enqueue(id); return; }
                 ct.ThrowIfCancellationRequested();
 
-                // a headless server draws nothing: holes and the 1 MB cover raster are for meshes
-                var holes = holesLoaded || !BuildMeshes ? cachedHoles : await source.LoadHolesAsync(id, ct);
+                // a headless server draws nothing: the 1 MB cover raster is for meshes, and holes only
+                // matter under a bot's collision (tunnel mouths, #837)
+                var holes = holesLoaded || (!BuildMeshes && !wantCollision) ? cachedHoles : await source.LoadHolesAsync(id, ct);
                 var cover = coverLoaded || !BuildMeshes ? cachedCover : await source.LoadCoverAsync(id, ct);
                 // still water (#299): the source's layer, else the legacy one from the cover
                 var waterLayer = cachedWater ?? await LoadWaterLayerAsync(source, id, grid, cover, ct);
