@@ -86,9 +86,7 @@ public static class BotSkills
     private static bool Blocked(PhysicsDirectSpaceState3D space, Player.FootPlayer body, Vector3 pos, Vector3 dir, float height)
     {
         var from = pos + Vector3.Up * height;
-        var query = PhysicsRayQueryParameters3D.Create(from, from + dir * Probe, uint.MaxValue,
-            new Godot.Collections.Array<Rid> { body.GetRid() });
-        var hit = space.IntersectRay(query);
+        var hit = BotRays.Cast(space, from, from + dir * Probe, body.GetRid());
         if (hit.Count == 0 || hit["collider"].AsGodotObject() is Player.FootPlayer) return false;
         // a slope it can walk is not a wall
         return hit["normal"].AsVector3().Y < 0.6f;

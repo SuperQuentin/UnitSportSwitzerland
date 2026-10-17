@@ -14,6 +14,8 @@
   - `--botlog`: `[bots] status` per bot every 5 s (position, speed, on the floor, placed, health,
     watched).
   - `--brbots N`: the BR field size (default 20, 0 = off).
+  - `--brbotspread M`: every bot's landing spot within M m of the first circle's centre (checks: the
+    bots meet at once).
 - **Checks** (net tier, `tools/lib/checkmap.txt`):
   - `tools/botcheck.sh`: server + A + B, 3 bots, generated world.
     - A sees them marked, sees one walk on the ground, walks up to it and downs it with a pistol (the
@@ -24,5 +26,9 @@
     - `/br bots 3` gives 2 bots; A jumps and knifes both.
     - Death box, the feed's `[bot]`, "1 kill (1 bot)".
     - A wins with "2 kills (2 bots)" in the record and on `/br top`; the bots are gone after.
-  - Tier 0: `CollisionReachTests`, `BotProfileTests`, `BrStatsTests` (bot kills); `--brcheck` (bots in
+  - `tools/brbotwatch.sh` (full tier, not in the map: minutes long): a whole match played by bots
+    (`/br bots 9`), watched to the end. It must end, and bots must have dealt damage and killed.
+    `BRPACE` (0.13 by default: too fast for a runner to keep up with the zone), `SPREAD=80` to land
+    them together, `BOTLOG=1`, `SERVER_ARGS="--serverstats"`.
+  - Tier 0: `BrTacticsTests`, `CollisionReachTests`, `BotProfileTests`, `BrStatsTests` (bot kills); `--brcheck` (bots in
     the state JSON, solo bot sides, the top-up).

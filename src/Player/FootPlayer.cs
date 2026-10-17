@@ -4033,17 +4033,20 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private void FlyPhysics(float dt, bool onFloor, Flyer flyer)
     {
         if (FlyerIntoWater(flyer)) return;
-        bool typing = UiFocus.TextEntryActive;
+        // an NPC or a bot reads no keys (#837): it flies through FlyControls. A dedicated server has no
+        // input actions at all, and every read logs an error with its backtrace (seen: 60-400 ms frames)
+        bool keys = !Npc;
+        bool typing = keys && UiFocus.TextEntryActive;
         // analog through the input map: any pad, and the VR triggers (#436); 0 while typing (Blocked)
-        float tr = PlayerInput.Strength(PlayerInput.TriggerRight);
-        float tl = PlayerInput.Strength(PlayerInput.TriggerLeft);
-        bool jumpDown = PlayerInput.Held(PlayerInput.Jump);
+        float tr = keys ? PlayerInput.Strength(PlayerInput.TriggerRight) : 0f;
+        float tl = keys ? PlayerInput.Strength(PlayerInput.TriggerLeft) : 0f;
+        bool jumpDown = keys && PlayerInput.Held(PlayerInput.Jump);
         bool action = jumpDown && !_jumpHeld;
         _jumpHeld = jumpDown;
-        bool downHeld = PlayerInput.Held(PlayerInput.CrouchSlide);
+        bool downHeld = keys && PlayerInput.Held(PlayerInput.CrouchSlide);
 
         // a wingsuit or canopy also leans toward where the free look points (#207)
-        var stick = PlayerInput.Move;
+        var stick = keys ? PlayerInput.Move : Vector2.Zero;
         if (flyer.LookBank > 0f && !typing && !onFloor)
             stick.X = Mathf.Clamp(stick.X - Mathf.Clamp(_lookYaw / 0.8f, -1f, 1f) * flyer.LookBank, -1f, 1f);
 
@@ -4051,10 +4054,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             Stick: stick,
             Up: Mathf.Max(jumpDown ? 1f : 0f, tr),
             Down: Mathf.Max(downHeld ? 1f : 0f, tl),
-            LeverUp: Mathf.Max(PlayerInput.Held(PlayerInput.Sprint) ? 1f : 0f, tr),
+            LeverUp: Mathf.Max(keys && PlayerInput.Held(PlayerInput.Sprint) ? 1f : 0f, tr),
             LeverDown: Mathf.Max(downHeld ? 1f : 0f, tl),
             Action: action,
-            Effort: PlayerInput.Held(PlayerInput.TuckBoost),
+            Effort: keys && PlayerInput.Held(PlayerInput.TuckBoost),
             ViewYaw: _viewYaw,
             Engine: EngineOn || !flyer.HasEngine,
             ViewPitch: _pitch,
@@ -4067,7 +4070,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         if (flyer is Pigeon) PigeonStep(input, dt);
         if (flyer is Airliner trimmed)
-            trimmed.TrimHeld = typing ? 0f : PlayerInput.Strength(PlayerInput.TrimNoseUp) - PlayerInput.Strength(PlayerInput.TrimNoseDown);
+            trimmed.TrimHeld = typing || !keys ? 0f : PlayerInput.Strength(PlayerInput.TrimNoseUp) - PlayerInput.Strength(PlayerInput.TrimNoseDown);
         if (flyer is Airliner padded) AirlinerPadHold(dt, padded);
         var ev = flyer.Fly(input, new FlightEnv(onFloor, Clearance, altitude), dt, ref _flight);
         // a game mode's fence (#485: a Battle Royale's zone, while gliding): no flying out of it
@@ -4173,7 +4176,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         else TakeDamage((speed - 8f) * 3.5f, 0, DamageCause.Crash);
         Impacted?.Invoke(Mathf.Max(speed, 8f));
         Announced?.Invoke(flyer is Wingsuit or Pigeon ? "SPLAT!" : "CRASH!", false);
-        PlayerInput.Rumble(1f, 1f, 0.5f);
+        if (!Npc) PlayerInput.Rumble(1f, 1f, 0.5f);
         ApplyRide(RideKind.OnFoot, Vector3.Zero);
         _stunTimer = 1.5f;
     }

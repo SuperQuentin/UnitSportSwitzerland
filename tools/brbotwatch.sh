@@ -6,7 +6,7 @@
 . "$(dirname "$0")/lib/twoclient.sh" brbotwatch
 AT=2583250,1113250
 PORT=${PORT:-7834}
-tc_server 2400 120 "$OUT/brbotwatch_server.log" --server --generated-world --port $PORT --no-query --admin-password brbots --brpace ${BRPACE:-0.13} ${BOTLOG:+--botlog} ${SPREAD:+--brbotspread $SPREAD}
+tc_server 2400 120 "$OUT/brbotwatch_server.log" --server --generated-world --port $PORT --no-query --admin-password brbots --brpace ${BRPACE:-0.13} ${BOTLOG:+--botlog} ${SPREAD:+--brbotspread $SPREAD} ${SERVER_ARGS:-}
 tc_client 2300 "$OUT/brbotwatch_A.log" --connect 127.0.0.1:$PORT --name "BRBA" --cache "$OUT/brbotwatch_cache_A" --at "$AT" --view first --brbotwatch ${CLIENT_ARGS:-}
 tc_stop
 grep -h "\[brbots" "$OUT/brbotwatch_A.log" | grep -v " say "

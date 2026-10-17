@@ -167,8 +167,15 @@ public sealed class BrBrain : IBotBrain
         var me = state.Find(bot.Id);
         bool Hostile(long id) => me != null && state.Find(id) is { Alive: true } e && BrState.Hostile(me, e);
 
-        enemy = bot.Senses.Seen.Where(x => !x.Downed && Hostile(x.Id)).OrderBy(x => x.Distance).Cast<Sighting?>().FirstOrDefault();
-        downed = bot.Senses.Seen.Where(x => x.Downed && x.Body.Down == 2 && Hostile(x.Id)).OrderBy(x => x.Distance).Cast<Sighting?>().FirstOrDefault();
+        // the nearest enemy standing, and the nearest one down (#475): plain loops, every thought
+        enemy = null;
+        downed = null;
+        foreach (var x in bot.Senses.Seen)
+        {
+            if (!Hostile(x.Id)) continue;
+            if (!x.Downed) { if (enemy is not { } e0 || x.Distance < e0.Distance) enemy = x; }
+            else if (x.Body.Down == 2 && (downed is not { } d0 || x.Distance < d0.Distance)) downed = x;
+        }
         if (enemy != null) _lastEnemyAt = now;
 
         var gun = BotHands.Pick(bot) is var (_, w) && !w.Melee ? w : null;
@@ -192,16 +199,29 @@ public sealed class BrBrain : IBotBrain
             if (z.Phase > 0) runNeeded = BrTactics.ZoneRunNeeded(at.DistanceTo(centre) - radius, (float)z.Left + (z.Shrinking ? 0f : 60f));
         }
 
-        // a crate in view it has not emptied, landed, not locked
+        // a crate in view it has not emptied, landed, not locked: within a few steps, or with nothing
+        // solid between its eyes and the crate (the nearest few are tested, a ray each)
         crate = null;
         float crateDistance = float.PositiveInfinity;
         if (_crates != null)
+        {
+            _near.Clear();
             foreach (var c in _crates.All)
             {
                 if (_emptied.Contains(c.Id) || c.Locked || ServerNow < c.LandsAt || _crates.WorldOf(c, body.GlobalPosition.Y) is not { } at) continue;
                 float d = new Vector2(at.X - body.GlobalPosition.X, at.Z - body.GlobalPosition.Z).Length();
-                if (d < crateDistance && d <= BrTactics.CrateDraw) { crate = c; crateDistance = d; }
+                if (d <= BrTactics.CrateDraw) _near.Add((c, at, d));
             }
+            _near.Sort((x, y) => x.D.CompareTo(y.D));
+            for (int i = 0; i < Math.Min(_near.Count, 3); i++)
+            {
+                var (c, at, d) = _near[i];
+                if (d > CrateKnown && !InSight(bot, at + Vector3.Up * 0.6f)) continue;
+                crate = c;
+                crateDistance = d;
+                break;
+            }
+        }
 
         float heard = bot.Senses.Heard is { } h && now - h.When < 20 && Hostile(h.Who) ? body.GlobalPosition.DistanceTo(h.At) : float.PositiveInfinity;
         return new BrSituation(
@@ -211,6 +231,16 @@ public sealed class BrBrain : IBotBrain
             HeardDistance: heard, HurtRecently: Core.GameClock.Now - body.LastAttackedAt < 3 && Hostile(body.LastAttacker),
             SecondsSinceEnemy: (float)(now - _lastEnemyAt), OutsideBy: outsideBy, ZoneRunNeeded: runNeeded,
             CrateDistance: crateDistance, Boldness: bot.Profile.Boldness, LootGreed: bot.Profile.LootGreed);
+    }
+
+    /// <summary>A crate this close is noticed whatever stands between (it walked past it, it heard it).</summary>
+    private const float CrateKnown = 25f;
+    private readonly List<(Crate C, Vector3 At, float D)> _near = new();
+
+    /// <summary>Nothing solid between its eyes and <paramref name="at"/> (the server's collision round it).</summary>
+    private static bool InSight(Bot bot, Vector3 at)
+    {
+        return BotRays.Clear(bot.World.Space, bot.Body.EyePosition, at, bot.Body.GetRid());
     }
 
     // ---- what it does -----------------------------------------------------------------------------

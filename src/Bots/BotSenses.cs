@@ -62,7 +62,7 @@ public sealed class BotSenses
         float facing = bot.Intent.FaceYaw ?? me.Rotation.Y;
         var ahead = new Vector3(-Mathf.Sin(facing), 0, -Mathf.Cos(facing));
         float cosHalf = Mathf.Cos(Mathf.DegToRad(FieldOfView * 0.5f));
-        var exclude = new Godot.Collections.Array<Rid> { me.GetRid() };
+        var self = me.GetRid();
         foreach (var other in bodies)
         {
             if (other == me || other.Eliminated || !other.IsInsideTree() || (other.Npc && !other.Bot)) continue;
@@ -74,9 +74,7 @@ public sealed class BotSenses
             var flat = new Vector3(to.X, 0, to.Z);
             if (d > NearSense && flat.LengthSquared() > 0.01f && flat.Normalized().Dot(ahead) < cosHalf) continue;
             // nothing solid between the eyes and the chest (other figures do not hide anyone)
-            var query = PhysicsRayQueryParameters3D.Create(eye, chest, uint.MaxValue, exclude);
-            var hit = space.IntersectRay(query);
-            if (hit.Count > 0 && hit["collider"].AsGodotObject() is not FootPlayer) continue;
+            if (!BotRays.Clear(space, eye, chest, self)) continue;
             bool downed = other.Down != 0;
             Seen.Add(new Sighting(id, other, other.GlobalPosition, d, downed));
             Memory[id] = (other.GlobalPosition, now);
