@@ -32,11 +32,22 @@
   - investigate a shot heard within 300 m: 30-55 by boldness, only with a gun;
   - roam 10.
 - **Skills** (`BotSkills`, mode-free):
+  - `BrBrain.GoTo`: further than 80 m, along the streets. `BrManager.Roads` is the match area's
+    `Gpx.RoadNetwork`, loaded at GO off the main thread (5101 edges in 7-12 s for a 5 km generated
+    town). `RoadNetwork.Path` is an A* over a walking graph with a node at every road vertex; each dead
+    end is tied to the nearest vertex of another road within 4 m, because a street ending at another's
+    side never joined it in the edge graph, so no route crossed town. The bot walks it waypoint by
+    waypoint (skipping ahead to a nearer later one) and plans again when the goal moves 40 m (at most
+    every 10 s for the same goal).
   - `MoveTo`: straight there. A knee ray 2.2 m ahead finds a wall: a jump over it when the head ray is
-    clear (the body mantles), else a scan of 11 ways (±30° to 180°, 6 m each) picks the most open one
-    still heading roughly there, followed for 1.2 s. Under 0.8 m of headway in 2 s (`Nav.Stuck`): the
-    most open way whatever the goal, for 2.5 s plus a second per stuck check (up to 3). Seen before the
-    scan: a bot stuck in a corner of a generated town for 30 s while the zone killed it.
+    clear (the body mantles), else a **wall follow** (the "bug" way round): the wall kept on one side
+    (the more open side first, `Hug` sweeping from 75° towards it), until the straight way is open and
+    it is nearer than where it met the wall. Headway is judged towards the goal over 4 s, so shuttling
+    counts as stuck; the follow then switches sides, and a bot still stuck takes the most open way
+    whatever the goal for a few seconds. Each new goal (a street waypoint too) is a fresh walk; the stuck
+    count stays.
+  - Seen before these: a bot stuck in a town's corner for 30 s, another shuttling 15 m to and fro for a
+    minute, bots crawling at 30-200 m a minute; each died in the zone.
   - Roaming spots are always inside the circle it must be in; on its way to that circle it keeps going
     until 30 % of the radius inside (no stopping at the edge and wandering back out).
   - Goals are sticky (`BrTactics.Stickiness` 12 on the current goal); a crate it walks to stays its crate
