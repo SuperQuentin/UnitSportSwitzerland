@@ -386,3 +386,7 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
   beside a car lane making its riders' move (the lane the box covers) and that move's exit carries no bike way; else at an
   advanced line (J1 south's kerb lane lies beside the right-turn lane, its riders going straight on). A boxed bike lane's
   lines end at the box's back.
+- **Phase 6 review, the in-between bike lane** (Oct 17, Geneva 2495580,1120909): where the right pocket beside it opens, the
+  cars cross it: crossing dashes (1 m) on both its lines and red over it; past the opening, toward the mouth, both its lines
+  solid; its right line stays dashed where it does not run on from the kerb-side bike lane (riders cross over to it from
+  the right).

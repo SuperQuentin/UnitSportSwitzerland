@@ -39,6 +39,15 @@ public static partial class TileRewriter
         public double Length => RoadPaintGeometry.Length(Piece.Points);
     }
 
+    /// <summary>Whether an arriving bike lane lies between two arriving car lanes at a mouth (a through bike lane beside a right pocket).</summary>
+    private static bool BikeBetweenCars(Section s)
+    {
+        for (int k = 1; k + 1 < s.Strips.Count; k++)
+            if (s.Strips[k] is { Kind: StripKind.BikeLane, Way: StripWay.In } && s.Strips[k - 1] is { IsCarLane: true, Way: StripWay.In }
+                && s.Strips[k + 1] is { IsCarLane: true, Way: StripWay.In } && (s.Strips[k].Moves & SignalMoves.Through) != 0) return true;
+        return false;
+    }
+
     /// <summary>
     /// The junctions the planner may write: a core with its checks passed (kerbs inside the mouths, connectors inside the
     /// outline, an outline not crossing itself), every arm a car road of the block, no core overlapping its neighbour's (a merged
@@ -261,7 +270,7 @@ public static partial class TileRewriter
             stats.Junctions++;
             if (JunctionList is { } listFile)
                 File.AppendAllText(listFile, string.Create(CultureInfo.InvariantCulture,
-                    $"{jp.Centre.X:F0},{jp.Centre.Y:F0} arms {jp.Arms.Count} lights {(jp.Lights ? 1 : 0)} left {jp.Arms.Count(a => a.HasLeft)} right {jp.Arms.Count(a => a.HasRight)} split {jp.Arms.Count(a => Math.Abs(a.Split) > 0.01)} bikelanes {jp.Arms.Count(a => a.Mouth.Strips.Any(x => x.Kind == StripKind.BikeLane))} paths {jp.Arms.Count(a => a.Mouth.Strips.Any(x => x.Kind == StripKind.Path))} nodes {jp.Nodes.Count()}\n"));
+                    $"{jp.Centre.X:F0},{jp.Centre.Y:F0} arms {jp.Arms.Count} lights {(jp.Lights ? 1 : 0)} left {jp.Arms.Count(a => a.HasLeft)} right {jp.Arms.Count(a => a.HasRight)} split {jp.Arms.Count(a => Math.Abs(a.Split) > 0.01)} bikelanes {jp.Arms.Count(a => a.Mouth.Strips.Any(x => x.Kind == StripKind.BikeLane))} paths {jp.Arms.Count(a => a.Mouth.Strips.Any(x => x.Kind == StripKind.Path))} nodes {jp.Nodes.Count()} between {jp.Arms.Count(a => BikeBetweenCars(a.Mouth))}\n"));
         }
 
         // a piece run on toward the node along its arm's axis from station <from> (its junction end) to <to> (the mouth), a point a
