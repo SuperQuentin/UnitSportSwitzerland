@@ -27,6 +27,7 @@ occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new o
 `perf-no-per-frame-allocations` (static `StringName`, no LINQ/strings/lists per frame, UI text and shader params only on change),
 `perf-221-migration` (**read before merging main into a branch started before Oct 2026**: every #221 rule note and the rebase order),
 `new-action-three-devices` (every new key or interaction: keyboard, gamepad and VR decided together),
+`new-feature-bots` (every new action, item, mount or interactable usable by server-run bots: intent seams, a server path; #837),
 `plans-on-main` (up-front plans commit on `main`; their status updates ride the feature branch),
 `uid-files` (commit a script's `.uid` with it; never `git add -A` after an import),
 `dotnet-sdk-pin` (`global.json` pins SDK 9: C# 14 binds `array.Reverse()` to the void Span overload),
@@ -62,6 +63,10 @@ occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new o
   coding a new key, decide its pad button and its VR way (grip the thing, or the pad through
   `XrPad`), show it with `InputHints`, and add its row to `xr/vr-action-map`
   (`docs/notes/general/new-action-three-devices.md`).
+- **Every new thing a player can do, use or meet is decided for bots too** (server-run players, #837):
+  gameplay acts on an intent (`WalkControls`, `RideControls`, an item entry taking the player), never a
+  raw `Input` read, and every client RPC action has a server method a bot can call; the PR says what a
+  bot would need (`docs/notes/general/new-feature-bots.md`).
 - **Every new procedural model is in the model viewer**: tag its builder `[Showcase("Category")]`,
   or extend the set that already covers it (a new enum value or catalog row usually shows by
   itself), and check it with `--models,test_output/models` (`docs/notes/avatar/model-viewer.md`).
