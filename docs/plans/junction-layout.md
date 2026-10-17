@@ -349,6 +349,9 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
   marking data: a real crossroads drawn as two nodes merges; a Sion triangle's grass island is real): a pair or a chain
   merges into one core; streets closing a loop round an island (a triangle, a divided road's square) leave the members as
   they are. Rejected: pairs only, sampling more first.
+- **A bike lane jogging between two facing mouths jogs right after its own mouth, then runs in line with the exit lane**
+  (Oct 17, J7: a diagonal across the whole core reached the exit at an angle and clipped its corner); path crossings stay
+  straight from kerb to kerb.
 - **A riders' crossing between two mouths facing each other goes straight across** (Oct 16, on the Geneva crossroads
   2495103,1120529 merged from two nodes: "the path would not curve, it would go straight across"): a jog is laid straight;
   a crossing still follows the curve where the street bends (more than 10 degrees between its ends).

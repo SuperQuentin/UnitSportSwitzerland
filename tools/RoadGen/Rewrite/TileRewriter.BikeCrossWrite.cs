@@ -84,7 +84,9 @@ public static partial class TileRewriter
             List<Vec2> centre = c.Centre, left = c.Left, right = c.Right;
             if (c.Centre.Count >= 2 && Jog(c.Centre[1] - c.Centre[0], c.Centre[^1] - c.Centre[^2]))
             {
-                centre = Straight(c.Centre[0], c.Centre[^1]);
+                // the jog right after its own mouth, then straight in line with the exit lane into it (the user, Oct 17: a diagonal
+                // across the whole core reached the exit at an angle and clipped its corner, J7)
+                centre = JogThenStraight(c.Centre[0], c.Centre[1] - c.Centre[0], c.Centre[^1], c.Centre[^1] - c.Centre[^2]);
                 double half = Math.Min(c.Width, c.ToWidth) * 0.5;
                 (left, right) = (OffsetLine(centre, -half), OffsetLine(centre, half));
             }
@@ -273,6 +275,30 @@ public static partial class TileRewriter
 
     private static bool Jog(Vec2 inward, Vec2 outward) =>
         inward.Length > 1e-9 && outward.Length > 1e-9 && inward.Normalized().Dot(outward.Normalized()) > Math.Cos(JogAngle);
+
+    /// <summary>A jog laid in its first <see cref="JogLength"/> m (at most 40 % of the way), the rest in line with the exit.</summary>
+    private const double JogLength = 6;
+
+    private static List<Vec2> JogThenStraight(Vec2 from, Vec2 din, Vec2 to, Vec2 dout)
+    {
+        din = din.Normalized();
+        dout = dout.Normalized();
+        double along = (to - from).Dot(dout);
+        double jog = Math.Min(JogLength, Math.Max(0, along) * 0.4);
+        if (jog < 0.5) return Straight(from, to);
+        // where the exit lane's line, run back, lies level with the jog's end
+        var e = to - dout * (along - jog);
+        double l = jog / 3;
+        var pts = new List<Vec2>();
+        for (int k = 0; k <= 12; k++)
+        {
+            double t = k / 12.0, mt = 1 - t;
+            pts.Add(from * (mt * mt * mt) + (from + din * l) * (3 * mt * mt * t) + (e - dout * l) * (3 * mt * t * t) + e * (t * t * t));
+        }
+        int rest = Math.Max(1, (int)Math.Ceiling(e.DistanceTo(to) / 2));
+        for (int k = 1; k <= rest; k++) pts.Add(e + (to - e) * ((double)k / rest));
+        return pts;
+    }
 
     private static List<Vec2> Straight(Vec2 from, Vec2 to) => Enumerable.Range(0, 25).Select(k => from + (to - from) * (k / 24.0)).ToList();
 
