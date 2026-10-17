@@ -405,3 +405,7 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
   lights is dropped (it kinked the exit kerb before the turn; holding it over the solid stretch only moved the kink). A
   bike lane through the core follows its connector again (a straight line across the core cut J7's tight north-east
   corner); only a path crossing goes straight from kerb to kerb (the Oct 16 rule was about the path at Geneva).
+- **Phase 6 review, a bike lane through the core points at the exit's bike infra** (Oct 17, Geneva 2495103,1120529): it runs
+  straight from its mouth to where the exit carries it on (into a path behind the kerb: the path's centre where it starts,
+  that corner's kerb lowered), along its connector where either of its lines would leave the core (J7's tight corner).
+  **No marking is drawn off the road**: lines through the core (bike lanes, red, guides) are cut to the core's surface.

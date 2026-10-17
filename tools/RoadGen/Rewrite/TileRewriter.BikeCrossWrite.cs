@@ -62,6 +62,8 @@ public static partial class TileRewriter
             }
             return hits;
         }
+        // a marking cut to the core's surface: none drawn off the road (the user, Oct 17)
+        List<Vec2> ClipToCore(List<Vec2> pts) => ClipToRing(pts, core.Outline);
         void Line(List<Vec2> pts, PaintType type, uint rgba, float width, float dash)
         {
             if (pts.Count < 2) return;
@@ -79,17 +81,47 @@ public static partial class TileRewriter
             // marked through the core only where the exit carries the riders' way on (the user, Oct 17): else they wait in their
             // box and ride on in the traffic, the connector unmarked
             if (jp.Arms.FirstOrDefault(x => x.Arm == c.ToArm) is not { Normal.CarriesBikesAway: true }) continue;
-            // along its connector: the core's corners keep it paved (a straight line across the core cut a tight corner, the user,
-            // Oct 17, J7 north-east); a path crossing goes straight across instead (below)
+            // straight from its mouth to where the exit carries it on (the user, Oct 17): into an exit with a path behind the kerb,
+            // to the kerb where the path starts, that corner's kerb lowered (riders ride up onto it); along its connector where a
+            // straight line would leave the core (a tight corner, J7 north-east)
             List<Vec2> centre = c.Centre, left = c.Left, right = c.Right;
-            Line(Inset(left, -lw * 0.5), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
-            Line(Inset(right, lw * 0.5), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
+            var exit = jp.Arms.First(x => x.Arm == c.ToArm);
+            var exitMouth = core.Mouths.FirstOrDefault(m => m.Arm == c.ToArm);
+            var end = c.Centre[^1];
+            bool ontoPath = false;
+            if (exitMouth is not null && exit.Axis is not null)
+            {
+                var secX = ExteriorPlanner.SectionAt(exit, 0);
+                bool laneThere = secX.Strips.Take(Math.Max(0, secX.FirstCarriageway + 1)).Any(x => x is { Kind: StripKind.BikeLane, Way: StripWay.Out });
+                if (!laneThere && PathBand(secX, right: false) is { } pb)
+                {
+                    // at the path's centre where it starts (left of a driver arriving on the exit): the marking ends at the kerb
+                    // line, cut to the core, right where the path begins
+                    end = exit.Axis.At(exitMouth.Station, pb.Centre);
+                    ontoPath = true;
+                }
+            }
+            {
+                var straight = Straight(c.Centre[0], end);
+                double half = Math.Min(c.Width, c.ToWidth) * 0.5;
+                var (sl, sr) = (OffsetLine(straight, -half), OffsetLine(straight, half));
+                // both its lines on the core (but onto the path, over its last metres): else along its connector
+                var closed = new List<Vec2>(core.Outline) { core.Outline[0] };
+                bool On(Vec2 p) => Inside(core.Outline, p) || DistanceToPolyline(closed, p) < 0.2 || (ontoPath && p.DistanceTo(end) < 3);
+                if (sl.All(On) && sr.All(On))
+                {
+                    (centre, left, right) = (straight, sl, sr);
+                    if (ontoPath) landings.Add(exitMouth!.Left);
+                }
+            }
+            Line(ClipToCore(Inset(left, -lw * 0.5)), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
+            Line(ClipToCore(Inset(right, lw * 0.5)), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
             double length = Length(centre);
             // red on the half or halves where cars cross it in conflict (the old layout's rule, #682; the user, Oct 17); without lights
             // only along the main road (Oct 17: none across it, Sion 2505948,1137484)
             if (plan is not null || AlongMain(c.FromArm, c.ToArm))
             foreach (var (from, to) in RedRuns(Conflicts(centre, GroupOf(c.FromArm, SignalMoves.Through, bike: true)).Select(h => h.At / length).ToList()))
-                Line(Cut(centre, from * length, to * length), PaintType.BikeCrossing, PaintEmitter.Red, (float)(Math.Min(c.Width, c.ToWidth) - 1.5 * lw - 2 * RedInset), 0);
+                Line(ClipToCore(Cut(centre, from * length, to * length)), PaintType.BikeCrossing, PaintEmitter.Red, (float)(Math.Min(c.Width, c.ToWidth) - 1.5 * lw - 2 * RedInset), 0);
             stats.BikeCrossings++;
         }
 
@@ -231,6 +263,33 @@ public static partial class TileRewriter
     private const double LandingReach = 1.5;
 
     /// <summary>The distance from <paramref name="p"/> to the nearest point of a polyline.</summary>
+    /// <summary>
+    /// A line kept on a ring's surface (with a 0.2 m tolerance at its edge: a mouth is on it): sampled every half metre, the
+    /// longest run of points on it; empty where none is.
+    /// </summary>
+    private static List<Vec2> ClipToRing(List<Vec2> pts, List<Vec2> ring)
+    {
+        if (pts.Count < 2 || ring.Count < 3) return pts;
+        var closed = new List<Vec2>(ring) { ring[0] };
+        bool On(Vec2 p) => Inside(ring, p) || DistanceToPolyline(closed, p) < 0.2;
+        if (pts.All(On)) return pts;
+        var dense = new List<Vec2> { pts[0] };
+        for (int i = 1; i < pts.Count; i++)
+        {
+            int n = Math.Max(1, (int)Math.Ceiling(pts[i].DistanceTo(pts[i - 1]) / 0.5));
+            for (int k = 1; k <= n; k++) dense.Add(pts[i - 1] + (pts[i] - pts[i - 1]) * ((double)k / n));
+        }
+        List<Vec2> best = [], run = [];
+        foreach (var p in dense)
+        {
+            if (On(p)) { run.Add(p); continue; }
+            if (run.Count > best.Count) best = run;
+            run = [];
+        }
+        if (run.Count > best.Count) best = run;
+        return best.Count >= 2 ? best : [];
+    }
+
     private static double DistanceToPolyline(List<Vec2> line, Vec2 p)
     {
         double best = double.MaxValue;
