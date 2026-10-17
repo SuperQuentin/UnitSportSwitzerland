@@ -13,7 +13,7 @@
   - `--bots N [--botsat E,N]`: N bots round that point, one second after start.
   - `--botlog`: `[bots] status` per bot every 5 s (position, speed, on the floor, placed, health,
     watched).
-  - `--brbots N`: the BR field size.
+  - `--brbots N`: the BR field size (default 20, 0 = off).
 - **Checks** (net tier, `tools/lib/checkmap.txt`):
   - `tools/botcheck.sh`: server + A + B, 3 bots, generated world.
     - A sees them marked, sees one walk on the ground, walks up to it and downs it with a pistol (the

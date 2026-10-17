@@ -16,14 +16,14 @@ namespace UnitSport.BattleRoyale;
 public partial class BrManager
 {
     /// <summary>
-    /// The field a match is topped up to when nobody says otherwise: none until bots can play a match
-    /// (phase 2 of #837). <c>/br bots n</c> or <c>--brbots n</c> sets it.
+    /// The field a match is topped up to when nobody says otherwise (#837). <c>/br bots n|off</c> or
+    /// <c>--brbots n</c> (0 = off) changes it.
     /// </summary>
-    public const int DefaultBots = 0;
+    public const int DefaultBots = 20;
     /// <summary>A bot is put at least this far inside the first circle's edge.</summary>
     private const float BotEdgeMargin = 0.85f;
 
-    private int _botTarget = Core.CmdArgs.Int("--brbots") is int b && b > 0 ? Math.Min(b, BotDirector.MaxBots) : DefaultBots;
+    private int _botTarget = Core.CmdArgs.Int("--brbots") is int b && b >= 0 ? Math.Min(b, BotDirector.MaxBots) : DefaultBots;
     private BotDifficulty _botLevel = BotDifficulty.Normal;
     private bool _botsHooked;
     private double _botZoneTick;
@@ -162,6 +162,10 @@ public partial class BrManager
             }
     }
 
-    /// <summary>Players were in it and none is left standing: only bots would play on (#837).</summary>
+    /// <summary>
+    /// Players were in it and none is left standing: only bots would play on (#837). The match ends
+    /// then while bots only stroll; once <c>BrBrain</c> fights (phase 2), bots play it out to a winner
+    /// and spectators watch (decided on #837).
+    /// </summary>
     private bool NoPlayerLeft => _state.Entrants.Any(e => !e.Bot) && _state.HumansAlive == 0;
 }

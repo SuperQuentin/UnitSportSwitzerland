@@ -56,6 +56,7 @@ public partial class BrProbe : ChatProbe
         Chat!.Send("/login brcheck");
         await Until(() => Permissions.IsAdmin, 10);
         Expect(Permissions.IsAdmin, "logged in as admin");
+        Chat.Send("/br bots off");   // a duel between the two of us: no bots topping the field up (#837)
         Chat.Send("/br open 5 short");
         if (!await Until(() => Br!.State.Phase == BrPhase.Lobby, 20)) { Fail("no lobby"); return; }
         Chat.Send("/br join");
@@ -399,6 +400,7 @@ public partial class BrProbe : ChatProbe
     {
         Chat!.Send("/login brcheck");
         await Until(() => Permissions.IsAdmin, 10);
+        Chat.Send("/br bots off");   // #837
         Chat.Send("/br open 5 short duos");
         if (!await Until(() => Br!.State.Phase == BrPhase.Lobby, 20)) { Fail("no lobby"); return; }
         Chat.Send("/br join");

@@ -5,7 +5,8 @@
 
 - **The field**: `/br bots [n|off] [easy|normal|hard]` (admin), or `--brbots n` on the server, sets the
   field size GO tops up to (`BrState.Bots`, shown in the lobby).
-  - `DefaultBots` is 0 until phase 2's brain can play a match.
+  - `DefaultBots` is 20: every match is topped up to 20 unless an admin says otherwise (`/br bots off`,
+    `--brbots 0`). The loopback duel (`tools/brcheck.sh`) turns bots off first.
   - With bots set, one player is enough to start the countdown.
   - The region (`BrRegion.SideFor`) and the first circle (`Field`) are sized for players plus bots.
 - **GO**: `BotsAtGo()` counts the bots, `Field` includes them, the zone is drawn, then
@@ -30,6 +31,10 @@
 - **Marks**: `BrEntrant.Shown` is "Name [bot]", used in the feed, the results (in grey), the team line
   and the winner line. Your own results row always shows, even outside the first twelve.
 - **End**: the match ends once no player is left standing (`NoPlayerLeft`). If bots of several sides are
-  still in it, nobody wins ("No player is left standing"). One bot side left: it wins like anyone.
+  still in it, nobody wins ("No player is left standing"). One bot side left: it wins like anyone. This
+  holds only while bots stroll: once `BrBrain` fights (phase 2), bots play the match out to a winner
+  and spectators watch.
+- **The drop**: phase 1 bots appear on the ground; phase 2 bots board the plane, jump and glide to where
+  they choose to land, like players.
 - **After**: `Finish` frees every bot body (`RemoveBots`).
 - Check: `tools/brbotcheck.sh` (net, `commands`).
