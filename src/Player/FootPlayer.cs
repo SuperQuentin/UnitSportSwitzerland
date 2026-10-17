@@ -4866,15 +4866,23 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// Head bob, landing impact and a running FOV kick. All of it is camera-only: the
     /// body never moves, so none of this can push the player through geometry.
     /// </summary>
+    /// <summary>Where a body with no camera left the floor (#837): its landing's damage is capped by the drop from here.</summary>
+    private float _leftFloorY;
+
     private void UpdateCameraFeel(float dt, bool running, bool onFloor)
     {
         if (_camera == null)
         {
-            // a body with no camera (an NPC, a bot, #837) still lands hard: the fall's damage, not its feel
+            // a body with no camera (an NPC, a bot, #837) still lands hard: the fall's damage, not its feel.
+            // Capped by the height it really fell: a bot caught on a fence's edge (no floor, no drop) gathers
+            // fall speed while it hangs there, and landed from nowhere for 95 damage.
+            if (Npc && !onFloor && _wasOnFloor) _leftFloorY = GlobalPosition.Y;
             if (Npc && onFloor && !_wasOnFloor)
             {
-                if (_fallSpeed > 1.5f) Landed?.Invoke(_fallSpeed);
-                if (_fallSpeed > 11f && _ejected <= 0 && !SoftLanding) TakeDamage((_fallSpeed - 11f) * 9f, 0, DamageCause.Fall);
+                float dropped = Mathf.Max(0f, _leftFloorY - GlobalPosition.Y);
+                float speed = Mathf.Min(_fallSpeed, Mathf.Sqrt(2f * Gravity * dropped));
+                if (speed > 1.5f) Landed?.Invoke(speed);
+                if (speed > 11f && _ejected <= 0 && !SoftLanding) TakeDamage((speed - 11f) * 9f, 0, DamageCause.Fall);
                 _fallSpeed = 0f;
                 SoftLanding = false;
             }

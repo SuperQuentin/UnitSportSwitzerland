@@ -108,7 +108,7 @@ public partial class BotDirector : Node
         foreach (var bot in _bots.Values)
             if (GodotObject.IsInstanceValid(bot.Body))
                 GD.Print($"[bots] status {bot.Body.Name} at {bot.Body.Global} v {bot.Body.Velocity.Length():F1} "
-                    + $"floor {bot.Body.IsOnFloor()} {bot.Body.WalkState} hp {bot.Body.Health:F0}{(bot.Watched ? " watched" : "")}");
+                    + $"floor {bot.Body.IsOnFloor()} {bot.Body.WalkState} hp {bot.Body.Health:F0}{(bot.Watched ? " watched" : "")} {bot.Brain.Status}");
     }
     public override void _ExitTree()
     {
@@ -170,6 +170,13 @@ public partial class BotDirector : Node
     public override void _PhysicsProcess(double delta)
     {
         if (_bots.Count == 0) return;
+        long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+        RunBots();
+        ServerStats.Ran("bots", t0);
+    }
+
+    private void RunBots()
+    {
         double now = Now;
         Log(now);
         if (now >= _watchAt)

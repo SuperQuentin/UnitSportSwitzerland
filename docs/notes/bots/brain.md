@@ -21,8 +21,8 @@
   - **hurt**: `FootPlayer.LastAttacker`/`LastAttackedAt`. A bot shot at by someone it cannot see turns
     to where it last saw that body.
 - **Choices** (`BrTactics`, pure, `BrTacticsTests`): scores, the highest wins.
-  - zone hurting 100, zone about to cut it off 85 (`ZoneRunNeeded`: the walk at 5 m/s × 1.5 + 15 s
-    against the time left);
+  - zone hurting 100, zone about to cut it off 85 (`ZoneRunNeeded`: the distance at 4.5 m/s × 1.5 + 30 s
+    against the time left; its run is 5.8 m/s, the margin pays for walls, detours and fights);
   - fight 70-90 in its gun's reach, or 60-85 within 18 m to rush with a blade, or 55 when shot at
     unseen;
   - finish a downed enemy within 40 m: 78;
@@ -32,9 +32,15 @@
   - investigate a shot heard within 300 m: 30-55 by boldness, only with a gun;
   - roam 10.
 - **Skills** (`BotSkills`, mode-free):
-  - `MoveTo`: straight there; knee and head rays 2.2 m ahead go round a wall left or right, or jump it
-    when low (the body mantles); with under 0.8 m of headway in 2 s it detours at 80° for 2.5 s,
-    alternating sides (`Nav.Stuck` counts it).
+  - `MoveTo`: straight there. A knee ray 2.2 m ahead finds a wall: a jump over it when the head ray is
+    clear (the body mantles), else a scan of 11 ways (±30° to 180°, 6 m each) picks the most open one
+    still heading roughly there, followed for 1.2 s. Under 0.8 m of headway in 2 s (`Nav.Stuck`): the
+    most open way whatever the goal, for 2.5 s plus a second per stuck check (up to 3). Seen before the
+    scan: a bot stuck in a corner of a generated town for 30 s while the zone killed it.
+  - Roaming spots are always inside the circle it must be in; on its way to that circle it keeps going
+    until 30 % of the radius inside (no stopping at the edge and wandering back out).
+  - Goals are sticky (`BrTactics.Stickiness` 12 on the current goal); a crate it walks to stays its crate
+    out of sight.
   - `Wants` (guns it lacks or better than its best, rounds for its guns, meds up to 6, a vest, a
     blade) and `TakeOne` (one stack per thought through `BrCrates.TryTake`).
   - `BotHands.Fire` and `BotHands.Use` (bandage 2.2 s, kit 5.6 s, vest 0.5 s; spent at the end; a shot
@@ -51,8 +57,9 @@
     (`Carrier`) from its first frame. A body spawned in the air with nothing holding it would wait for
     ground the server never builds up there. Its entrant is not `Jumped`, so clients hide it, as they
     hide players.
-  - **landing spot**: random in the first circle (85 % of its radius, off water by the lattice;
-    `--brbotspread m` caps it for checks).
+  - **landing spot**: random in the inner half of the first circle (off water by the lattice;
+    `--brbotspread m` caps it for checks). Spread over 85 % of the radius, the bots on the far side died
+    in the first shrink at every pace: the edge closes faster than anyone runs (26 m/s at pace 0.5).
   - **jump time**: the plane's nearest pass to the spot, ± 1 s, at least 0.7 s from every other bot's.
     Bots leaving as one hit each other at plane speed and crash in the air (seen: a bot dead 1 s
     after the ramp).
@@ -68,6 +75,7 @@
   - **flight controls**: `body.FlyControls` builds the `FlightInput` from `Intent.Steer`, `LookYaw` and
     `LookPitch`. The deploy or cut-away press (`Action`) is true only while the ride is not the one
     wanted (`Intent.Canopy`): a held press toggles canopy and wingsuit every physics step.
+- **While looting** (phase 0) it roams in the inner half of the circle: the next circle can be anywhere inside it.
 - **Fall damage**: a body with no camera (an NPC, a bot) still takes it on landing
   (`FootPlayer.UpdateCameraFeel`'s early branch).
 - **Play-out**: while a player of the match is still connected (even out and spectating), the bots play

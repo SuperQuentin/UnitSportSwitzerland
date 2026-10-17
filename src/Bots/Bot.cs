@@ -104,4 +104,7 @@ public interface IBotBrain
 {
     /// <summary>Seconds until it wants to think again (the director slows this far from humans).</summary>
     double Think(Bot bot, double now);
+
+    /// <summary>What it is up to, for <c>--botlog</c>'s status lines.</summary>
+    string Status => "";
 }

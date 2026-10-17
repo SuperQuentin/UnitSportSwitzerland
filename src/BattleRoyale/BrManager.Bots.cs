@@ -21,8 +21,11 @@ public partial class BrManager
     /// <c>--brbots n</c> (0 = off) changes it.
     /// </summary>
     public const int DefaultBots = 20;
-    /// <summary>A bot is put at least this far inside the first circle's edge.</summary>
-    private const float BotEdgeMargin = 0.85f;
+    /// <summary>
+    /// Bots land within this share of the first circle's radius: the zone's first shrink closes faster
+    /// than anyone runs, and a bot landed on the far edge of the circle dies in it (seen at every pace).
+    /// </summary>
+    private const float BotEdgeMargin = 0.5f;
 
     private int _botTarget = Core.CmdArgs.Int("--brbots") is int b && b >= 0 ? Math.Min(b, BotDirector.MaxBots) : DefaultBots;
     private BotDifficulty _botLevel = BotDifficulty.Normal;

@@ -10,10 +10,13 @@ public sealed class BotNav
 {
     public Vector3 From;
     public double CheckAt;
-    public double DetourUntil;
-    public int DetourSide = 1;
     public int Stuck;
     public bool JumpHeld;
+    /// <summary>A way round chosen by a scan, followed until <see cref="SteerUntil"/>.</summary>
+    public Vector3 Steer;
+    public double SteerUntil;
+    /// <summary>The longest clear way the last scan found, m (for <c>--botlog</c>: near 0 = boxed in).</summary>
+    public float LastOpen = -1;
 }
 
 /// <summary>
@@ -52,35 +55,112 @@ public static class BotSkills
         }
         var dir = to / dist;
 
-        // no headway for a while: off at an angle, the other side next time
+        // no headway for a while: the most open way, whatever the goal, for a few seconds (out of a corner)
         if (now >= nav.CheckAt)
         {
             if (nav.CheckAt > 0 && new Vector3(pos.X - nav.From.X, 0, pos.Z - nav.From.Z).Length() < Progress)
             {
                 nav.Stuck++;
-                nav.DetourSide = -nav.DetourSide;
-                nav.DetourUntil = now + Detour;
+                // boxed in under a roof: only the late collision put it there (a building built round it after
+                // it landed); out to the nearest open ground, as the void rescue puts a body back on the ground
+                if (nav.Stuck >= 4 && nav.LastOpen >= 0f && nav.LastOpen < 3f && Roofed(space, body, pos) && OpenGroundNear(space, body, pos) is { } outside)
+                {
+                    GD.Print($"[bots] {body.Name} \"{bot.Profile.Name}\" boxed in under a roof at {body.Global}: out to {outside}");
+                    body.DebugLaunch(outside, Vector3.Zero);
+                    nav.Stuck = 0;
+                    nav.LastOpen = -1;
+                }
+                nav.Steer = MostOpen(space, body, pos, dir, goalWeight: 0f);
+                nav.LastOpen = LastScanOpen;
+                nav.SteerUntil = now + Detour + Math.Min(nav.Stuck, 3);
             }
             else nav.Stuck = 0;
             nav.From = pos;
             nav.CheckAt = now + CheckEvery;
         }
-        if (now < nav.DetourUntil) dir = dir.Rotated(Vector3.Up, nav.DetourSide * Mathf.DegToRad(80f));
 
-        // a wall ahead at the knee: round it if a side is clear, over it if it is low
-        if (Blocked(space, body, pos, dir, Knee))
+        // a wall ahead at the knee: over it if it is low, else the most open way still heading roughly
+        // there, kept for a moment (a probe every thought flip-flops at a corner)
+        bool following = now < nav.SteerUntil;
+        if (Blocked(space, body, pos, dir, Knee) && !following)
         {
-            bool low = !Blocked(space, body, pos, dir, Head);
-            var left = dir.Rotated(Vector3.Up, Mathf.DegToRad(45f));
-            var right = dir.Rotated(Vector3.Up, Mathf.DegToRad(-45f));
-            if (low && body.IsOnFloor() && !nav.JumpHeld) bot.Intent.Jump = true;   // a jump at a ledge is a mantle
-            else if (!Blocked(space, body, pos, left, Knee)) dir = left;
-            else if (!Blocked(space, body, pos, right, Knee)) dir = right;
+            if (!Blocked(space, body, pos, dir, Head) && body.IsOnFloor() && !nav.JumpHeld) bot.Intent.Jump = true;   // a jump at a ledge is a mantle
+            else
+            {
+                nav.Steer = MostOpen(space, body, pos, dir, goalWeight: 1f);
+                nav.LastOpen = LastScanOpen;
+                nav.SteerUntil = now + 1.2;
+                following = true;
+            }
+        }
+        if (following)
+        {
+            // the way to the goal is open again: back to it
+            if (nav.Stuck == 0 && !Blocked(space, body, pos, dir, Knee) && now > nav.SteerUntil - 0.6) nav.SteerUntil = 0;
+            else dir = nav.Steer;
         }
         nav.JumpHeld = bot.Intent.Jump;   // a press, then a release: the body jumps on the edge
         bot.Intent.Wish = dir;
         bot.Intent.Run = run;
         return false;
+    }
+
+    [ThreadStatic] private static float LastScanOpen;
+
+    /// <summary>Angles a scan tries, degrees off the wanted way.</summary>
+    private static readonly float[] ScanAngles = { 30, -30, 60, -60, 90, -90, 120, -120, 150, -150, 180 };
+    /// <summary>How far a scan looks down each way.</summary>
+    private const float ScanReach = 6f;
+
+    /// <summary>
+    /// The most open way round from here: each scanned way scored by how far it is clear (up to
+    /// <see cref="ScanReach"/>), times how much it still heads towards <paramref name="dir"/>
+    /// (<paramref name="goalWeight"/> 0 = any way out).
+    /// </summary>
+    private static Vector3 MostOpen(PhysicsDirectSpaceState3D space, Player.FootPlayer body, Vector3 pos, Vector3 dir, float goalWeight)
+    {
+        var best = -dir;
+        float bestScore = float.MinValue, open = 0f;
+        var from = pos + Vector3.Up * Knee;
+        foreach (float deg in ScanAngles)
+        {
+            var way = dir.Rotated(Vector3.Up, Mathf.DegToRad(deg));
+            var hit = BotRays.Cast(space, from, from + way * ScanReach, body.GetRid());
+            float clear = hit.Count == 0 || hit["collider"].AsGodotObject() is Player.FootPlayer ? ScanReach
+                : from.DistanceTo(hit["position"].AsVector3());
+            open = Mathf.Max(open, clear);
+            float score = clear * (1f + goalWeight * (way.Dot(dir) + 1f));
+            if (score > bestScore) { bestScore = score; best = way; }
+        }
+        LastScanOpen = open;
+        return best;
+    }
+
+    /// <summary>Something solid over the head (a roof, a ceiling) within 30 m.</summary>
+    private static bool Roofed(PhysicsDirectSpaceState3D space, Player.FootPlayer body, Vector3 pos)
+    {
+        var hit = BotRays.Cast(space, pos + Vector3.Up * 2.2f, pos + Vector3.Up * 30f, body.GetRid());
+        return hit.Count > 0 && hit["collider"].AsGodotObject() is not Player.FootPlayer;
+    }
+
+    /// <summary>
+    /// The nearest spot with open sky and ground under it, on rings from 6 m to 40 m round <paramref name="pos"/>:
+    /// a ray down from 40 m up hits the ground there first, not a roof. Null when there is none.
+    /// </summary>
+    private static Vector3? OpenGroundNear(PhysicsDirectSpaceState3D space, Player.FootPlayer body, Vector3 pos)
+    {
+        for (float r = 6f; r <= 40f; r += 4f)
+            for (int k = 0; k < 12; k++)
+            {
+                float a = k * Mathf.Tau / 12f;
+                var at = pos + new Vector3(Mathf.Cos(a) * r, 0, Mathf.Sin(a) * r);
+                var hit = BotRays.Cast(space, at + Vector3.Up * 40f, at + Vector3.Down * 20f, body.GetRid());
+                if (hit.Count == 0 || hit["collider"].AsGodotObject() is Player.FootPlayer) continue;
+                var ground = hit["position"].AsVector3();
+                // the ground, not a roof: within a few metres of where the bot stands, and level enough
+                if (Mathf.Abs(ground.Y - pos.Y) < 4f && hit["normal"].AsVector3().Y > 0.7f) return ground + Vector3.Up * 0.2f;
+            }
+        return null;
     }
 
     private static bool Blocked(PhysicsDirectSpaceState3D space, Player.FootPlayer body, Vector3 pos, Vector3 dir, float height)

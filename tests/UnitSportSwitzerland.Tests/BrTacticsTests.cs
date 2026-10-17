@@ -63,6 +63,20 @@ public class BrTacticsTests
     }
 
     [Fact]
+    public void It_sticks_to_what_it_is_doing_unless_something_clearly_better_comes_up()
+    {
+        // a crate a little further: roaming does not drop it for a near-equal score, looting keeps it
+        var s = Calm() with { CrateDistance = 100, LootGreed = 0f };   // loot 15 vs roam 10
+        Assert.Equal(BrGoal.Loot, BrTactics.Choose(s));
+        Assert.Equal(BrGoal.Loot, BrTactics.Choose(s, BrGoal.Loot));                   // once looting, it keeps looting
+        Assert.Equal(BrGoal.Roam, BrTactics.Choose(s, BrGoal.Roam));                   // 15 does not beat 10 + 12
+        // the zone, about to cut it off, beats looting even with looting's stickiness
+        Assert.Equal(BrGoal.Zone, BrTactics.Choose(s with { ZoneRunNeeded = 300, HasGun = false }, BrGoal.Loot));
+        // an enemy in reach beats anything sticky but the zone hurting
+        Assert.Equal(BrGoal.Fight, BrTactics.Choose(s with { EnemyDistance = 30 }, BrGoal.Heal));
+    }
+
+    [Fact]
     public void Aim_widens_with_distance_and_speed_and_settles_with_time()
     {
         float near = BrTactics.AimError(2f, 25, 0, 2), far = BrTactics.AimError(2f, 200, 0, 2);

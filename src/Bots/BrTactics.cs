@@ -52,13 +52,21 @@ public static class BrTactics
     public const float CrateDraw = 120f;
     /// <summary>A shot this far is worth a look.</summary>
     public const float EarDraw = 300f;
+    /// <summary>
+    /// What the goal it is already pursuing is worth on top: a bot sticks to what it is doing unless
+    /// something clearly better comes up (seen without it: loot and roam swapped every thought as a crate
+    /// came in and out of sight, zone and loot as a margin flickered, and the bot ran nowhere).
+    /// </summary>
+    public const float Stickiness = 12f;
 
-    public static BrGoal Choose(in BrSituation s)
+    /// <param name="current">The goal it is pursuing now (it keeps it unless another beats it by <see cref="Stickiness"/>).</param>
+    public static BrGoal Choose(in BrSituation s, BrGoal? current = null)
     {
         var best = BrGoal.Roam;
-        float score = 10f;
+        float score = current == BrGoal.Roam ? 10f + Stickiness : 10f;
         void Offer(BrGoal goal, float value)
         {
+            if (goal == current) value += Stickiness;
             if (value > score) { best = goal; score = value; }
         }
 
@@ -111,9 +119,10 @@ public static class BrTactics
     /// circle against the time before that circle closes, with a margin. 0 when there is time, else the
     /// distance still to cover.
     /// </summary>
-    public static float ZoneRunNeeded(float distanceToNextEdge, float secondsLeft, float speed = 5f)
+    public static float ZoneRunNeeded(float distanceToNextEdge, float secondsLeft, float speed = 4.5f)
     {
         if (distanceToNextEdge <= 0f) return 0f;
-        return distanceToNextEdge / speed * 1.5f + 15f >= secondsLeft ? distanceToNextEdge : 0f;
+        // slower than its run (5.8 m/s) and a long margin: walls, detours and a fight on the way
+        return distanceToNextEdge / speed * 1.5f + 30f >= secondsLeft ? distanceToNextEdge : 0f;
     }
 }

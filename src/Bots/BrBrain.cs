@@ -35,6 +35,8 @@ public sealed class BrBrain : IBotBrain
     private double _strafeUntil;
     private int _strafeSide = 1;
     public BrGoal Goal { get; private set; }
+    private string _status = "";
+    public string Status => _status;
     /// <summary>Where it means to land (world), chosen when it boarded.</summary>
     public Vector3? DropTarget { get; init; }
     /// <summary>The server clock at which it jumps: the plane's nearest pass to <see cref="DropTarget"/>.</summary>
@@ -70,7 +72,8 @@ public sealed class BrBrain : IBotBrain
         var space = bot.World.Space;
         bot.Senses.Look(bot, bot.World.Bodies(), space, now);
         var s = Situation(bot, now, out var enemy, out var downed, out var crate, out var zone);
-        var goal = BrTactics.Choose(s);
+        _status = FormattableString.Invariant($"goal {Goal} inside {zone.Inside:F2} out {s.OutsideBy:F0} run {s.ZoneRunNeeded:F0} enemy {s.EnemyDistance:F0} crate {s.CrateDistance:F0} stuck {bot.Nav.Stuck} open {bot.Nav.LastOpen:F1}");
+        var goal = BrTactics.Choose(s, Goal);
         if (goal != Goal) GD.Print($"[bots] {body.Name} \"{bot.Profile.Name}\" {Goal} -> {goal}");
         Goal = goal;
         if (goal is not (BrGoal.Fight or BrGoal.Finish)) bot.Intent.FaceYaw = null;
@@ -152,13 +155,22 @@ public sealed class BrBrain : IBotBrain
         bot.Intent.FaceYaw = null;
         float turn = Mathf.Clamp(-Mathf.AngleDifference(body.Flight.Yaw, desired) * 1.5f, -1f, 1f);
         float brake = height < FlareAt ? 1f : dist < 20f && height > 60f ? 0.6f : 0f;   // over the spot: slow, drop
+        // low, over ground whose collision is not built yet (the server builds it only round bots, and late):
+        // circle on the brakes until it is, or it lands inside a building whose walls appear round it
+        if (height < 60f && body.Terrain is { } terrain && !(terrain.HasCollisionAt(pos) && terrain.BuildingCollisionDoneAt(pos)))
+        {
+            bot.Intent.Steer = new Vector2(1f, 1f);
+            return true;
+        }
         bot.Intent.Steer = new Vector2(dist > 8f ? turn : 0f, brake);
         return true;
     }
 
     // ---- what it knows ----------------------------------------------------------------------------
 
-    private readonly record struct ZoneView(Vector3 Safe, Vector2 Centre, float Radius);
+    /// <param name="Safe">A point well inside the circle it must reach (world).</param>
+    /// <param name="Inside">How far inside that circle it stands, as a share of its radius (negative outside).</param>
+    private readonly record struct ZoneView(Vector3 Safe, Vector2 Centre, float Radius, float Inside, Vector3 Roam);
 
     private BrSituation Situation(Bot bot, double now, out Sighting? enemy, out Sighting? downed, out Crate? crate, out ZoneView zone)
     {
@@ -183,7 +195,7 @@ public sealed class BrBrain : IBotBrain
         int meds = bot.Inventory.CountPlain(ItemId.Bandage) + bot.Inventory.CountPlain(ItemId.FirstAidKit);
 
         // the zone, in this match's metres east/north of the region's centre
-        zone = new ZoneView(body.GlobalPosition, Vector2.Zero, float.MaxValue);
+        zone = new ZoneView(body.GlobalPosition, Vector2.Zero, float.MaxValue, 1f, body.GlobalPosition);
         float outsideBy = 0f, runNeeded = 0f;
         if (body.Origin is { } origin && state.Phase == BrPhase.Playing)
         {
@@ -194,9 +206,18 @@ public sealed class BrBrain : IBotBrain
             var centre = z.Phase > 0 ? z.NextCentre : z.Centre;
             float radius = z.Phase > 0 ? z.NextRadius : z.Radius;
             var safeAt = centre + (at - centre).LimitLength(radius * 0.6f);
-            zone = new ZoneView(origin.ToWorld(state.AreaE + safeAt.X, state.AreaN + safeAt.Y, body.GlobalPosition.Y), z.Centre, z.Radius);
+            // somewhere to wander to, always inside the circle it must be in; while looting (phase 0),
+            // in its inner half: the first circle shown next is anywhere inside it
+            double a = _rng.NextDouble() * Math.Tau, r = radius * (z.Phase == 0 ? 0.45 : 0.7) * Math.Sqrt(_rng.NextDouble());
+            var roamAt = centre + new Vector2((float)(Math.Cos(a) * r), (float)(Math.Sin(a) * r));
+            float inside = radius > 1f ? 1f - at.DistanceTo(centre) / radius : 1f;
+            zone = new ZoneView(origin.ToWorld(state.AreaE + safeAt.X, state.AreaN + safeAt.Y, body.GlobalPosition.Y), z.Centre, z.Radius,
+                inside, origin.ToWorld(state.AreaE + roamAt.X, state.AreaN + roamAt.Y, body.GlobalPosition.Y));
             if (z.Dps > 0f && z.Outside(at)) outsideBy = -z.DistanceToEdge(at);
             if (z.Phase > 0) runNeeded = BrTactics.ZoneRunNeeded(at.DistanceTo(centre) - radius, (float)z.Left + (z.Shrinking ? 0f : 60f));
+            // once on its way to the circle it keeps going until well inside (30 % of the radius), or it
+            // stops at the very edge, wanders back out and turns round again
+            if (Goal == BrGoal.Zone && inside < 0.3f) runNeeded = Math.Max(runNeeded, 1f);
         }
 
         // a crate in view it has not emptied, landed, not locked: within a few steps, or with nothing
@@ -213,14 +234,17 @@ public sealed class BrBrain : IBotBrain
                 if (d <= BrTactics.CrateDraw) _near.Add((c, at, d));
             }
             _near.Sort((x, y) => x.D.CompareTo(y.D));
-            for (int i = 0; i < Math.Min(_near.Count, 3); i++)
+            // the crate it is already walking to stays its crate, seen or not, until it is emptied
+            foreach (var (c, _, d) in _near)
+                if (c.Id == _lootCrate) { crate = c; crateDistance = d; }
+            for (int i = 0; crate == null && i < Math.Min(_near.Count, 3); i++)
             {
                 var (c, at, d) = _near[i];
                 if (d > CrateKnown && !InSight(bot, at + Vector3.Up * 0.6f)) continue;
                 crate = c;
                 crateDistance = d;
-                break;
             }
+            _lootCrate = crate?.Id ?? 0;
         }
 
         float heard = bot.Senses.Heard is { } h && now - h.When < 20 && Hostile(h.Who) ? body.GlobalPosition.DistanceTo(h.At) : float.PositiveInfinity;
@@ -236,6 +260,7 @@ public sealed class BrBrain : IBotBrain
     /// <summary>A crate this close is noticed whatever stands between (it walked past it, it heard it).</summary>
     private const float CrateKnown = 25f;
     private readonly List<(Crate C, Vector3 At, float D)> _near = new();
+    private long _lootCrate;
 
     /// <summary>Nothing solid between its eyes and <paramref name="at"/> (the server's collision round it).</summary>
     private static bool InSight(Bot bot, Vector3 at)
@@ -332,10 +357,10 @@ public sealed class BrBrain : IBotBrain
         var body = bot.Body;
         if (_roam is not { } goal || BotSkills.MoveTo(bot, goal, run: false, 5f, space, now) || bot.Nav.Stuck >= 3)
         {
-            // somewhere else inside the circle, a few hundred metres off, nearer the middle than the edge
-            double a = _rng.NextDouble() * Math.Tau, r = 80 + _rng.NextDouble() * 220;
-            var next = body.GlobalPosition + new Vector3((float)(Math.Cos(a) * r), 0, (float)(Math.Sin(a) * r));
-            _roam = next.Lerp(zone.Safe, 0.35f);
+            // somewhere else inside the circle it must be in, a few hundred metres off at most
+            var next = zone.Roam;
+            var hop = (next - body.GlobalPosition) with { Y = 0 };
+            _roam = hop.Length() > 300f ? body.GlobalPosition + hop.Normalized() * 300f : next;
             bot.Nav.Stuck = 0;
         }
     }
