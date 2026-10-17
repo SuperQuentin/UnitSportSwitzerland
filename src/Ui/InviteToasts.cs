@@ -128,7 +128,9 @@ public partial class InviteToasts : CanvasLayer
         {
             double left = c.View.Left;
             float frac = c.View.Seconds > 0 ? (float)(left / c.View.Seconds) : 0f;
-            c.Bar.CustomMinimumSize = new Vector2((Width - 20f) * Mathf.Clamp(frac, 0f, 1f), 3f);
+            // a layout pass only when the bar has moved a pixel (perf-no-per-frame-allocations)
+            float width = Mathf.Round((Width - 20f) * Mathf.Clamp(frac, 0f, 1f));
+            if (width != c.Bar.CustomMinimumSize.X) c.Bar.CustomMinimumSize = new Vector2(width, 3f);
             int secs = Mathf.CeilToInt((float)left);
             if (secs == c.ShownSeconds) continue;
             c.ShownSeconds = secs;
