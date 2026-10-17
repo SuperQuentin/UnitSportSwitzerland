@@ -91,9 +91,14 @@
   (`FootPlayer.UpdateCameraFeel`'s early branch).
 - **Play-out**: while a player of the match is still connected (even out and spectating), the bots play
   on to a winner. The match ends early only once no player is connected.
+- **Measured, full pace** (`tools/brbotwatch.sh BRPACE=1`, 8 bots over the whole circle, a generated
+  town): all dropped and landed; 27 crate takes; 6 bot kills, the winner with 3; 1 died in the zone.
+  Server: busy p50 2 ms while they fly, 6-8 ms while they walk (the bodies, not the brains: the director
+  is ~0.02 ms a frame), ws ~880 MB on the generated world. Four road collision cells took 47-83 ms
+  each to commit (one piece each; clients pay the same).
 - **Measured** (`tools/brbotwatch.sh`, pace 0.3, spread 80):
   - 8 bots jumped and landed;
   - knife fights: 4 bot kills; death boxes looted, bandages used;
   - a bot won; 2 died in the zone (the test pace outruns a runner).
-  - At pace 0.13 and 0.35 with landings spread over the whole circle, every bot died in the zone
-    before meeting another: the zone moves faster than 5.8 m/s at those paces.
+  - Below full pace with landings spread over the circle, most bots die in the zone: its first shrink
+    closes at ~26 m/s at pace 0.5, and a bot in the circle's inner half can have 550 m to run.
