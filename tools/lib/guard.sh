@@ -9,7 +9,8 @@
 # or when it has been held longer than the owner's max_hold_s + 120 s.
 #   guard_run <timeout_s> <log> cmd... run cmd with its output in log; kill its process tree,
 #                                      and only that, if it overruns (124) or if free RAM falls under
-#                                      GUARD_MIN_FREE_MB (137). Otherwise returns cmd's exit code.
+#                                      GUARD_MIN_FREE_MB, or if cmd's own memory passes GUARD_MAX_MB
+#                                      (137). Otherwise returns cmd's exit code.
 #   guard_watch <pid> [min_free_mb]    background RAM watchdog for a process you started yourself
 #                                      (not through guard_run): kills that PID's tree, and only it,
 #                                      when free RAM falls under the floor. Prints the watchdog's PID.
@@ -18,6 +19,9 @@
 # RAM watchdog: free RAM is read every GUARD_MEM_EVERY (2) s from /proc/meminfo (Git Bash maps it
 # to Windows' free physical memory, ~30 ms); under GUARD_MIN_FREE_MB (1500) the run is killed
 # before Windows or WSL run out of memory and take everything else down with them.
+# Memory cap: every GUARD_MAX_EVERY (10) s guard_run sums its run's memory (macOS: the footprint, compressed
+# and swapped pages too; Linux: resident) and kills it over GUARD_MAX_MB (10240). On macOS free pages hide a
+# leak: compression and swap kept them above the floor while a leaking client reached 128 GB (#837).
 # Works in Git Bash on Windows, on Linux and on macOS (vm_stat). Never kills by name: only the PIDs it started.
 
 GUARD_LOCK_DIR=${GUARD_LOCK_DIR:-${TMPDIR:-${TEMP:-/tmp}}/unitsport-heavy.lock}
@@ -26,6 +30,8 @@ GUARD_BEAT=${GUARD_BEAT:-10}
 GUARD_STALE=${GUARD_STALE:-45}
 GUARD_MIN_FREE_MB=${GUARD_MIN_FREE_MB:-1500}
 GUARD_MEM_EVERY=${GUARD_MEM_EVERY:-2}
+GUARD_MAX_MB=${GUARD_MAX_MB:-10240}
+GUARD_MAX_EVERY=${GUARD_MAX_EVERY:-10}
 _guard_have_lock=0
 _guard_beat_pid=
 
@@ -153,6 +159,22 @@ _guard_tree() {
     END { q = root; while (q != "") { n = split(q, a, " "); q = ""; for (i = 1; i <= n; i++) { print a[i]; q = q kids[a[i]] } } }'
 }
 
+# one run's memory in whole MB, its whole tree: macOS's footprint (top's MEM: compressed and swapped pages
+# too), Linux's resident size; 0 on Windows (not measured there)
+_guard_mem_mb() {
+  _guard_windows && { echo 0; return; }
+  local p m total=0
+  for p in $(_guard_tree "$1"); do
+    if [ "$(uname)" = Darwin ]; then
+      m=$(top -l 1 -pid "$p" -stats mem 2>/dev/null | tail -1 | tr -d ' +-' | awk '/G$/ { print int($0 * 1024); next } /M$/ { print int($0); next } { print 0 }')
+    else
+      m=$(( $(ps -o rss= -p "$p" 2>/dev/null | tr -dc '0-9' || echo 0) / 1024 ))
+    fi
+    total=$(( total + ${m:-0} ))
+  done
+  echo "$total"
+}
+
 # kill one PID we started, with everything it started
 _guard_kill_tree() {
   local pid=$1 p
@@ -197,6 +219,15 @@ guard_run() {
       free=$(guard_free_mb)
       if [ "$free" -lt "$GUARD_MIN_FREE_MB" ]; then
         echo "[guard] only ${free} MB free (floor ${GUARD_MIN_FREE_MB} MB): killing PID $pid and its children" | tee -a "$log" >&2
+        _guard_kill_tree "$pid"
+        wait "$pid" 2>/dev/null
+        return 137
+      fi
+    fi
+    if [ "$elapsed" -gt 0 ] && [ $(( elapsed % GUARD_MAX_EVERY )) -eq 0 ]; then
+      local used; used=$(_guard_mem_mb "$pid")
+      if [ "${used:-0}" -gt "$GUARD_MAX_MB" ]; then
+        echo "[guard] PID $pid uses ${used} MB (cap GUARD_MAX_MB ${GUARD_MAX_MB} MB): killing it and its children" | tee -a "$log" >&2
         _guard_kill_tree "$pid"
         wait "$pid" 2>/dev/null
         return 137
