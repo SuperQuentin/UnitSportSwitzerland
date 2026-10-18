@@ -37,10 +37,10 @@ public partial class BrManager
         if (_state.Flight is not { } flight) return;
         _aboard = true;
         me.Carrier = Hold;
-        var frame = PlaneFrame(flight, ClockSync.ServerNow);
+        var frame = PlaneFrame(flight, ClockSync.SimNow);
         me.LookYaw = frame.Yaw;
         me.LookPitch = -0.3f;
-        GD.Print(FormattableString.Invariant($"[br] aboard the plane to {_state.AreaName}, doors open in {flight.OpensAt - ClockSync.ServerNow:F0} s"));
+        GD.Print(FormattableString.Invariant($"[br] aboard the plane to {_state.AreaName}, doors open in {flight.OpensAt - ClockSync.SimNow:F0} s"));
     }
 
     /// <summary>The plane at a server time: world position, yaw (nose along the line), velocity.</summary>
@@ -57,7 +57,7 @@ public partial class BrManager
     private (Vector3 At, float Yaw, Vector3 Velocity)? Hold()
     {
         if (!_aboard || _state.Flight is not { } flight || Origin == null) return null;
-        var f = PlaneFrame(flight, ClockSync.ServerNow);
+        var f = PlaneFrame(flight, ClockSync.SimNow);
         return (f.At + Vector3.Down * 1.2f, f.Yaw, f.Velocity);
     }
 
@@ -68,7 +68,7 @@ public partial class BrManager
     public bool JumpOut(bool pushed = false)
     {
         if (!_aboard || LocalPlayer() is not { } me || _state.Flight is not { } flight) return false;
-        double now = ClockSync.ServerNow;
+        double now = ClockSync.SimNow;
         if (!pushed && !flight.DoorsOpen(now))
         {
             me.Announce(now < flight.OpensAt ? $"DOORS OPEN IN {flight.OpensAt - now:F0} S" : "DOORS CLOSED", false);
@@ -94,7 +94,7 @@ public partial class BrManager
     private void FlightTick(FootPlayer? me)
     {
         var flight = _state.Flight;
-        double now = ClockSync.ServerNow;
+        double now = ClockSync.SimNow;
 
         // the plane, for everyone while it flies (spectators and free-roamers see it go over too)
         if (flight is { } fl && now < fl.GoneAt && Origin != null)
