@@ -36,6 +36,59 @@ public partial class BrManager
 
     private FootPlayer? BodyOf(long id) => _players?.GetNodeOrNull<FootPlayer>(PlayerReplication.NodeName(id));
 
+    /// <summary>An entrant's body on the server (a player's proxy or a bot), for the bots' brains.</summary>
+    public FootPlayer? BodyOfPeer(long id) => BodyOf(id);
+
+    /// <summary>
+    /// GO, once teams are drawn (#837 phase 4): a squad's bots land as a group. A bot-only team flies to its
+    /// leader's spot (the lowest id), a few metres apart, the mates jumping one after another; a team with a
+    /// human jumps after the human and flies after them. Then every bot's moment is spaced again.
+    /// </summary>
+    private void PlanTeamDrops()
+    {
+        if (_state.TeamSize <= 1 || Director is not { } director || _state.Flight is not { } flight) return;
+        var all = new List<BrBrain>();
+        foreach (var team in _state.Entrants.Where(e => e.Team != 0).GroupBy(e => e.Team))
+        {
+            var bots = team.Where(e => e.Bot).OrderBy(e => -e.Peer).Select(e => director.Get(e.Peer)?.Brain as BrBrain)
+                .Where(b => b != null).Cast<BrBrain>().ToList();
+            if (bots.Count == 0) continue;
+            if (team.FirstOrDefault(e => !e.Bot) is { } human)
+            {
+                for (int k = 0; k < bots.Count; k++)
+                {
+                    bots[k].JumpWith = human.Peer;
+                    bots[k].JumpDelay = 0.8 * (k + 1);
+                }
+                continue;
+            }
+            var lead = bots[0];
+            for (int k = 1; k < bots.Count; k++)
+            {
+                double a = k * Math.Tau / Math.Max(1, bots.Count - 1);
+                if (lead.DropTarget is { } spot) bots[k].DropTarget = spot + new Vector3((float)Math.Cos(a), 0, (float)Math.Sin(a)) * 12f;
+                bots[k].JumpAt = lead.JumpAt + k * MinJumpGap;
+            }
+            all.AddRange(bots);
+        }
+        // every bot jumping on its own clock (not after a human): never two together, as at boarding
+        all.AddRange(_state.Entrants.Where(e => e.Bot && e.Team == 0).Select(e => director.Get(e.Peer)?.Brain as BrBrain).Where(b => b != null).Cast<BrBrain>());
+        Space(all, flight.OpensAt + 0.2, flight.ClosesAt - 0.2);
+    }
+
+    /// <summary>The moments in their order, at least <see cref="MinJumpGap"/> apart; spread over the window when they do not fit.</summary>
+    private static void Space(List<BrBrain> brains, double from, double to)
+    {
+        if (brains.Count * MinJumpGap > to - from) { SpreadJumps(brains, from, to); return; }
+        double last = double.NegativeInfinity;
+        foreach (var b in brains.OrderBy(b => b.JumpAt))
+        {
+            b.JumpAt = Math.Max(Math.Max(b.JumpAt, from), last + MinJumpGap);
+            last = b.JumpAt;
+        }
+        if (last > to) SpreadJumps(brains, from, to);
+    }
+
     /// <summary><c>/br bots [n|off] [easy|normal|hard]</c> (admin): the field bots top a match up to.</summary>
     private string BotsCommand(string[] words)
     {

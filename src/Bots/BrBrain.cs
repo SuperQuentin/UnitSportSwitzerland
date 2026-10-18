@@ -41,7 +41,14 @@ public sealed class BrBrain : IBotBrain
     /// <summary><c>--brbotsharmless</c> on a server: bots play the match but never strike (checks only).</summary>
     private static readonly bool Harmless = Core.CmdArgs.Has("--brbotsharmless");
     /// <summary>Where it means to land (world), chosen when it boarded.</summary>
-    public Vector3? DropTarget { get; init; }
+    public Vector3? DropTarget { get; set; }
+    /// <summary>
+    /// A squad's human (#837 phase 4): this bot jumps <see cref="JumpDelay"/> s after they do and flies after
+    /// them, instead of at <see cref="JumpAt"/> to <see cref="DropTarget"/>. 0: none.
+    /// </summary>
+    public long JumpWith { get; set; }
+    public double JumpDelay { get; set; }
+    private double _withJumpedAt;
     /// <summary>The server clock at which it jumps: the plane's nearest pass to <see cref="DropTarget"/>.</summary>
     public double JumpAt { get; set; }
 
@@ -149,7 +156,13 @@ public sealed class BrBrain : IBotBrain
         if (me is { Jumped: false })
         {
             bot.Intent = BotIntent.Stand;
-            if (SimNow >= JumpAt) _br.BotJump(bot);
+            if (JumpWith != 0)
+            {
+                // after its human, a beat apart from the other mates (pushed out at the doors if they never go)
+                if (_withJumpedAt == 0 && _br.State.Find(JumpWith) is { Jumped: true }) _withJumpedAt = SimNow;
+                if (_withJumpedAt > 0 && SimNow >= _withJumpedAt + JumpDelay) _br.BotJump(bot);
+            }
+            else if (SimNow >= JumpAt) _br.BotJump(bot);
             return true;
         }
         var ride = body.Ride;
@@ -157,6 +170,9 @@ public sealed class BrBrain : IBotBrain
         bot.Intent.Wish = Vector3.Zero;
         bot.Intent.FireAt = null;
         var pos = body.GlobalPosition;
+        // after its human: where they are now, a few metres to the side (they choose where the team lands)
+        if (JumpWith != 0 && _br.BodyOfPeer(JumpWith) is { } human && _br.State.Find(JumpWith) is { Alive: true })
+            DropTarget = human.GlobalPosition + new Vector3(Mathf.Cos((float)JumpDelay * 2.1f), 0, Mathf.Sin((float)JumpDelay * 2.1f)) * 10f;
         var spot = DropTarget ?? pos;
         var to = new Vector3(spot.X - pos.X, 0, spot.Z - pos.Z);
         float dist = to.Length();
