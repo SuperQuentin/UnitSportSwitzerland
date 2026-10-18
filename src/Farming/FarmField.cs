@@ -30,6 +30,9 @@ public partial class FarmField : Node
     /// <summary>A tile's field data arrived on this peer (main thread): the herds on its pastures are put there (#863).</summary>
     public static event Action<FieldTile>? TileReady;
 
+    /// <summary>A tile's field data came back empty on this peer (no farm layer there): the herds go on its open land instead.</summary>
+    public static event Action<TileId>? TileNoFields;
+
     /// <summary>A tile's field data was dropped on this peer: its herds go with it.</summary>
     public static event Action<TileId>? TileGone;
 
@@ -157,6 +160,7 @@ public partial class FarmField : Node
             t.Loaded = true;
             if (_dedicated) DrainWaiting(t);
             if (t.Data != null) TileReady?.Invoke(t.Data);
+            else TileNoFields?.Invoke(t.Id);
         }
 
         if (_dedicated)

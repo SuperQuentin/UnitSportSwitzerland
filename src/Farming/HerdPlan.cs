@@ -114,6 +114,92 @@ public static class HerdPlan
             && owner[cell - Gap * Side] == own && owner[cell + Gap * Side] == own;
     }
 
+    // ---- no field data: open land ---------------------------------------------------------------
+
+    /// <summary>The fallback's grid of 250 m cells, each with at most one herd, a herd in this share of them.</summary>
+    public const int LandCell = 250;
+    public const float LandShare = 0.4f;
+
+    /// <summary>
+    /// The herds of a tile with no field data (the map built without the farm layer, the generated
+    /// fill): from the land cover instead. Each 250 m cell of the tile may hold one herd (two in
+    /// five do, by hash), on the first of a hashed lattice of candidates that stands on open land
+    /// (<see cref="CoverClass.Open"/> all round within 28 m), 50 m from any building, 20 m from any
+    /// road or path, on ground no steeper than 4 m in 20. Pure and hashed like <see cref="For"/>:
+    /// the server's and every client's agree, as they read the same tile files.
+    /// </summary>
+    /// <param name="cover">The tile's cover raster (<see cref="CoverFormat"/>: 1 m, rows south from the north edge).</param>
+    public static List<Herd> FromLand(TileId id, byte[] cover, BuildingTile? buildings, RoadTile? roads, ChunkGrid? grid)
+    {
+        var herds = new List<Herd>();
+        const int Side = ChunkFormat.GridSize, Block = 10, Blocks = (Side + Block - 1) / Block;
+        if (cover.Length < Side * Side) return herds;
+
+        // 10 m blocks near a building (50 m) or a road (20 m): no herd there
+        var blocked = new bool[Blocks * Blocks];
+        void Mark(float x, float z, int r)
+        {
+            int bx = (int)(x / Block), bz = (int)(z / Block);
+            for (int dz = -r; dz <= r; dz++)
+                for (int dx = -r; dx <= r; dx++)
+                {
+                    int cx = bx + dx, cz = bz + dz;
+                    if ((uint)cx < Blocks && (uint)cz < Blocks) blocked[cz * Blocks + cx] = true;
+                }
+        }
+        if (buildings != null)
+            foreach (var b in buildings.Buildings)
+                for (int o = 0; o + 2 < b.Triangles.Length; o += 9) Mark(b.Triangles[o], b.Triangles[o + 2], 5);
+        if (roads != null)
+            foreach (var r in roads.Segments)
+                for (int k = 0; k + 5 < r.Points.Length; k += 3)
+                {
+                    float ax = r.Points[k], az = r.Points[k + 2], bx = r.Points[k + 3], bz = r.Points[k + 5];
+                    int steps = Math.Max(1, (int)(MathF.Sqrt((bx - ax) * (bx - ax) + (bz - az) * (bz - az)) / 5f));
+                    for (int t = 0; t <= steps; t++) Mark(ax + (bx - ax) * t / steps, az + (bz - az) * t / steps, 2);
+                }
+
+        bool Open(int x, int z) => (uint)x < Side && (uint)z < Side && (CoverClass)cover[z * Side + x] == CoverClass.Open;
+        float Height(int x, int z) => grid == null ? 0f : (float)grid.HeightMetersAt(Math.Clamp(x, 0, Side - 1), Math.Clamp(z, 0, Side - 1));
+
+        uint tileSeed = Hash((uint)id.E, (uint)id.N, 0x1A4D);
+        int cells = (Side - 1) / LandCell;
+        for (int cz = 0; cz < cells; cz++)
+            for (int cx = 0; cx < cells; cx++)
+            {
+                uint cellSeed = Hash(tileSeed, (uint)(cz * cells + cx), 0x2B);
+                if (Unit(cellSeed, 1) >= LandShare) continue;
+                // a 5 x 5 lattice 50 m apart inside the cell, tried in a hashed order
+                for (int tries = 0; tries < 25; tries++)
+                {
+                    int pick = (int)((Hash(cellSeed, 3) + (uint)tries * 7u) % 25u);
+                    int x = cx * LandCell + 25 + pick % 5 * 50, z = cz * LandCell + 25 + pick / 5 * 50;
+                    if (blocked[z / Block * Blocks + x / Block]) continue;
+                    bool open = true;
+                    for (int dz = -28; dz <= 28 && open; dz += 7)
+                        for (int dx = -28; dx <= 28 && open; dx += 7)
+                            if (dx * dx + dz * dz <= 28 * 28 && !Open(x + dx, z + dz)) open = false;
+                    if (!open) continue;
+                    if (grid != null)
+                    {
+                        float h0 = Height(x - 10, z), h1 = Height(x + 10, z), h2 = Height(x, z - 10), h3 = Height(x, z + 10);
+                        if (Math.Abs(h1 - h0) > 4f || Math.Abs(h3 - h2) > 4f) continue;
+                    }
+                    var spots = new List<Vector2>();
+                    for (int dz = -24; dz <= 24; dz += 6)
+                        for (int dx = -24; dx <= 24; dx += 6)
+                            if (dx * dx + dz * dz <= 24 * 24 && Open(x + dx, z + dz) && !blocked[(z + dz) / Block * Blocks + (x + dx) / Block])
+                                spots.Add(new Vector2(dx, -dz));
+                    if (spots.Count < MinSpots) continue;
+                    int cows = 3 + (int)(Unit(cellSeed, 4) * 6f);
+                    var breed = Unit(cellSeed, 5) < 0.6f ? CowBreed.Brown : CowBreed.Simmental;
+                    herds.Add(new Herd(id, herds.Count, id.MinE + x, id.MaxN - z, spots.ToArray(), breed, cows, cellSeed));
+                    break;
+                }
+            }
+        return herds;
+    }
+
     /// <summary>A herd the trailer director stages at an LV95 point: <paramref name="count"/> cows on open ground round it.</summary>
     public static Herd Staged(int index, double e, double n, int count, CowBreed breed, float radius = 18f, uint seed = 1)
     {

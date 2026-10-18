@@ -86,12 +86,14 @@ public partial class Herds : Node3D, IOriginContainer
     {
         Instance = this;
         FarmField.TileReady += OnTileReady;
+        FarmField.TileNoFields += OnTileNoFields;
         FarmField.TileGone += OnTileGone;
     }
 
     public override void _ExitTree()
     {
         FarmField.TileReady -= OnTileReady;
+        FarmField.TileNoFields -= OnTileNoFields;
         FarmField.TileGone -= OnTileGone;
         foreach (var h in _all) foreach (var c in h.Cows) TractorBeams.Unregister(c);
         if (Instance == this) Instance = null;
@@ -130,8 +132,48 @@ public partial class Herds : Node3D, IOriginContainer
         _byTile[tile.Id] = list;
     }
 
+    /// <summary>A tile with no farm layer: its herds from the land cover (<see cref="HerdPlan.FromLand"/>), worked out on a worker.</summary>
+    private void OnTileNoFields(TileId id)
+    {
+        if (_byTile.ContainsKey(id) || !_landPending.Add(id) || _chunks?.Source is not { } source) return;
+        Task.Run(async () =>
+        {
+            try
+            {
+                var cover = await source.LoadCoverAsync(id).ConfigureAwait(false);
+                if (cover == null) { _landDone.Enqueue((id, new List<Herd>())); return; }
+                var buildings = await source.LoadBuildingsAsync(id).ConfigureAwait(false);
+                var roads = await source.LoadRoadsAsync(id).ConfigureAwait(false);
+                var grid = await source.LoadChunkAsync(id).ConfigureAwait(false);
+                _landDone.Enqueue((id, HerdPlan.FromLand(id, cover, buildings, roads, grid is { Stride: 1 } ? grid : null)));
+            }
+            catch (Exception e)
+            {
+                GD.PushWarning($"[herds] {id}: {e.Message}");
+                _landDone.Enqueue((id, new List<Herd>()));
+            }
+        });
+    }
+
+    private readonly HashSet<TileId> _landPending = new();
+    private readonly System.Collections.Concurrent.ConcurrentQueue<(TileId Id, List<Herd> Herds)> _landDone = new();
+
+    /// <summary>Main thread: the open-land herds worked out, put in if their tile is still held.</summary>
+    private void TakeLand()
+    {
+        while (_landDone.TryDequeue(out var done))
+        {
+            if (!_landPending.Remove(done.Id) || _byTile.ContainsKey(done.Id)) continue;
+            var list = new List<Live>();
+            foreach (var plan in done.Herds) list.Add(Add(plan));
+            _byTile[done.Id] = list;
+            if (done.Herds.Count > 0) GD.Print($"[herds] {done.Id}: {done.Herds.Count} herd(s) on open land (no farm layer)");
+        }
+    }
+
     private void OnTileGone(TileId id)
     {
+        _landPending.Remove(id);
         if (!_byTile.Remove(id, out var list)) return;
         foreach (var h in list) Remove(h);
     }
@@ -315,6 +357,7 @@ public partial class Herds : Node3D, IOriginContainer
 
     public override void _PhysicsProcess(double delta)
     {
+        if (!_landDone.IsEmpty) TakeLand();
         // a cow back with its herd needs no override any more (both sides drop it by the same rule)
         if (_over.Count == 0) return;
         double now = Now;

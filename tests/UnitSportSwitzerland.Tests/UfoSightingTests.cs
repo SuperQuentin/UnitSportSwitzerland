@@ -98,6 +98,32 @@ public class UfoSightingTests
     [Fact]
     public void A_small_pasture_gets_none() => Assert.Empty(HerdPlan.For(Pasture(size: 40f)));
 
+    [Fact]
+    public void Open_land_gets_herds_where_there_is_no_farm_layer()
+    {
+        const int Side = ChunkFormat.GridSize;
+        var id = new TileId(2600, 1200);
+        var open = new byte[Side * Side];   // all CoverClass.Open
+        var herds = HerdPlan.FromLand(id, open, null, null, null);
+        Assert.InRange(herds.Count, 3, 16);
+        Assert.Equal(herds.Count, HerdPlan.FromLand(id, open, null, null, null).Count);
+        foreach (var h in herds)
+        {
+            Assert.InRange(h.E, id.MinE, id.MinE + 1000);
+            Assert.InRange(h.N, id.MinN, id.MaxN);
+        }
+        // a forest everywhere: none
+        var forest = Enumerable.Repeat((byte)CoverClass.Forest, Side * Side).ToArray();
+        Assert.Empty(HerdPlan.FromLand(id, forest, null, null, null));
+        // a road through every herd's spot keeps it off there
+        var roads = new RoadTile
+        {
+            Segments = herds.Select(h => new RoadSegment { Points = new[] { (float)(h.E - id.MinE) - 30, 0f, (float)(id.MaxN - h.N), (float)(h.E - id.MinE) + 30, 0f, (float)(id.MaxN - h.N) } }).ToList(),
+        };
+        foreach (var h in HerdPlan.FromLand(id, open, null, roads, null))
+            Assert.DoesNotContain(herds, o => Math.Abs(o.E - h.E) < 1 && Math.Abs(o.N - h.N) < 1);
+    }
+
     // ---- a cow ----------------------------------------------------------------------------------
 
     private static Herd Herd() => HerdPlan.For(Pasture())[0];
