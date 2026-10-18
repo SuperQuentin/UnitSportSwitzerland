@@ -206,7 +206,9 @@ public partial class ServerWorld : Node3D, IOriginContainer
         AddChild(_chat);
 #if PLAYTEST
         // the playtest recorder (#844): the authoritative positions, for the top view's server-vs-client lines
-        if (Playtest.Recording.PlaytestRecorder.Requested) AddChild(new Playtest.Recording.PlaytestRecorder(server: true, () => origin));
+        if (Playtest.Recording.PlaytestRecorder.Requested)
+            AddChild(new Playtest.Recording.PlaytestRecorder(server: true, () => origin, ground: new Playtest.TopView.GroundSpec(null,
+                Systems.FixtureCourse is { } fixtureCourse ? Systems.FixturePrefix + fixtureCourse : chunkDir, SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N)));
 #endif
 
         // nothing goes to a peer before it has said which protocol it speaks (World/Handshake)

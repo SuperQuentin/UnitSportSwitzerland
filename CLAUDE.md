@@ -34,7 +34,7 @@ occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new o
 `zfight` (`--zfightcheck` baseline, viewer `--zfight`/`--flicker`, F9 z-fight overlay and flicker shot),
 `playtest` (`tools/playtest.sh`: scenarios a person judges in one game, in batches or with Claude live through the in-game MCP server, committed ledger in `tests/playtests/`),
 `playtest-recorder` (`--playtest-record`: a session's bundle in `test_output/playtest/sessions/`, `report.md` first; F12 notes),
-`topview` (a recorded session from above: `tools/playtest.sh topview`, Shift+F12 live, server-vs-client offsets),
+`topview` (a recorded session from above over its terrain, cover, buildings and roads: `tools/playtest.sh topview`, Shift+F12 live, server-vs-client offsets),
 `collision-matrix` (`--collidecheck` rams every vehicle, prop, piece and door with a car and a walker; `--collidesandbox` to drive into them; the known-gaps table).
 
 ## Rules
