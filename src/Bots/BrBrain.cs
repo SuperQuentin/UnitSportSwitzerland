@@ -79,6 +79,8 @@ public sealed class BrBrain : IBotBrain
         if (goal != Goal) GD.Print($"[bots] {body.Name} \"{bot.Profile.Name}\" {Goal} -> {goal}");
         Goal = goal;
         if (goal is not (BrGoal.Fight or BrGoal.Finish)) bot.Intent.FaceYaw = null;
+        // a UFO sighting (#863) when nothing presses: look up and wave, or run out from under a beam
+        if (goal is BrGoal.Roam or BrGoal.Loot or BrGoal.Investigate && BotUfo.React(bot, now)) return 0.25;
 
         switch (goal)
         {
