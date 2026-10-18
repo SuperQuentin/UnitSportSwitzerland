@@ -58,6 +58,8 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | dropped items | — | `DroppedItems.RequestPickUp` (RPC, replies `RpcId`) | — | `Loot` | gap: a server claim that returns the stack (a follow-up) |
 | parked car, bike: get in, drive | `RideControls` (`AutoPilot.Drive`) | entering is a client request | vehicles in view | `Drive` | gap: a server entry, phase 3 |
 | mounts from the ride menu | — | `RideUi` (refused in a match anyway) | — | — | n/a in BR |
+| a UFO sighting: look up, wave, run from a beam (#863) | `BotIntent.FaceYaw`/`Pitch`, `Wish` + `Run`, `DanceId` (wave) | — (the sightings are the server's) | the plans, `UfoSightings.Nearest` (300 m) | `BotUfo.React` (`WanderBrain`; `BrBrain` roaming, looting, investigating) | ok |
+| board a landed sighting saucer and fly it (#863) | — | the parked UFO's `RequestClaim`, like any parked vehicle | the plans | — | gap: bots cannot fly a UFO yet (#861) |
 
 ## Battle Royale
 
