@@ -11,7 +11,8 @@ namespace UnitSport.BattleRoyale;
 
 /// <summary>
 /// <c>--brbotcheck</c> with <c>--connect</c> (driven by <c>tools/brbotcheck.sh</c>, #837): one player against
-/// bots in a whole match, on a server started with <c>--admin-password brbots --brpace 0.13</c>. The player
+/// bots in a whole match, on a server started with <c>--admin-password brbots --brseed n</c> at the real pace (#873: a test
+/// pace let the zone finish the bots while they still hung under their canopies). The player
 /// opens a match topped up to 3 (<c>/br bots 3</c>), alone in the lobby: the countdown starts anyway, and
 /// GO adds two bots (entrants with negative ids, marked "[bot]", on the ground in the first circle,
 /// their bodies here). The player jumps, then goes to each bot and knifes it: the server eliminates it,
@@ -131,7 +132,9 @@ public partial class BrBotProbe : ChatProbe
             // the second one may go out another way first (the zone, a fall): a match as it happens
             bool mineKill = (mine?.Kills ?? 0) > before;
             if (i > 0 && !mineKill) { GD.Print($"{Log} {bot.Name} went out before I got to it: fine"); continue; }
-            Expect(mineKill && mine!.Kills == mine.BotKills, $"my kills: {BrHud.Kills(mine?.Kills ?? 0, mine?.BotKills ?? 0)}");
+            // not mine: say how it went out and where the zone stood (#873: the zone used to finish the first bot)
+            Expect(mineKill && mine!.Kills == mine.BotKills, $"my kills: {BrHud.Kills(mine?.Kills ?? 0, mine?.BotKills ?? 0)}"
+                + (mineKill ? "" : $" ({br.Feed.LastOrDefault().Text}; {ZoneLine(me)})"));
             Expect(br.Feed.Any(f => f.Text.Contains($"{bot.Name} [bot]")), $"the feed marks the bot ({br.Feed.LastOrDefault().Text})");
             if (i == 0)
             {
