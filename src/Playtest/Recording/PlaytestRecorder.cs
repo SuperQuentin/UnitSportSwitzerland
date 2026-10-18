@@ -332,6 +332,8 @@ public partial class PlaytestRecorder : Node
     private void Diff(FootPlayer p, int id)
     {
         ActorIo.Read(p, _scratch);
+        // the first second of a player is its own setup (outfit, held item, ride): not news
+        bool settling = Entities.TryGetValue(id, out var seen) && Now - seen.First < 1.5;
         if (!_props.TryGetValue(id, out var was))
         {
             was = new ActorState(ActorIo.Names.Length);
@@ -344,11 +346,17 @@ public partial class PlaytestRecorder : Node
         {
             bool numChanged = was.Num[i] != _scratch.Num[i], strChanged = was.Str[i] != _scratch.Str[i];
             if (!numChanged && !strChanged) continue;
+            if (settling)
+            {
+                was.Num[i] = _scratch.Num[i];
+                was.Str[i] = _scratch.Str[i];
+                continue;
+            }
             string name = ActorIo.Names[i];
             string label = Entities.GetValueOrDefault(id)?.Label ?? $"#{id}";
             object? from = strChanged ? was.Str[i] : was.Num[i], to = strChanged ? _scratch.Str[i] : _scratch.Num[i];
             if (i == ActorIo.RideKind)
-                Event("ride", ("player", label), ("from", ((RideKind)was.Num[i]).ToString()), ("to", ((RideKind)_scratch.Num[i]).ToString()));
+                Event("ride", ("player", label), ("from", RideLabel((RideKind)was.Num[i])), ("to", RideLabel((RideKind)_scratch.Num[i])));
             else Event("prop", ("player", label), ("name", name), ("from", from), ("to", to));
             was.Num[i] = _scratch.Num[i];
             was.Str[i] = _scratch.Str[i];
@@ -472,6 +480,8 @@ public partial class PlaytestRecorder : Node
         return label;
     }
 
+    private static string RideLabel(RideKind kind) => kind == RideKind.OnFoot ? "on foot" : VehicleLabel(kind);
+
     private void Describe(TraceEntity e)
     {
         Entities[e.Id] = e;
@@ -553,7 +563,7 @@ public partial class PlaytestRecorder : Node
         {
             ["t"] = Math.Round(t, 3), ["type"] = "note", ["id"] = id, ["text"] = text, ["source"] = source, ["scenario"] = scenario,
             ["e"] = at?.E, ["n"] = at?.N, ["alt"] = at?.Alt,
-            ["ride"] = me == null ? "" : me.Ride == RideKind.OnFoot ? "on foot" : me.Ride.ToString(),
+            ["ride"] = me == null ? "" : RideLabel(me.Ride),
             ["wall"] = DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture), ["shot"] = shotFile, ["top"] = top,
         });
         var notes = _notes!;

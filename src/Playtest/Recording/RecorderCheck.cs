@@ -55,6 +55,16 @@ public partial class RecorderCheck : Node
         var cars = director.Placed().Where(IsInstanceValid).Select(v => (Name: v.Name.ToString(), At: v.Global)).ToList();
         int note = _recorder.Note("scripted note: the car looks fine", "check", NoteTaker.Grab(GetViewport()));
         Expect(note > 0, "a note is taken");
+        // with a screen: the live top view over the game, kept as a picture to look at
+        if (DisplayServer.GetName() != "headless" && _recorder.GetNodeOrNull<TopViewOverlay>("TopViewOverlay") is { } overlay)
+        {
+            overlay.Shown = true;
+            await Wait(2);
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            string shot = Path.Combine(PlaytestDirector.Root, "test_output", "playtest", "recordcheck_overlay.png");
+            Expect(GetViewport().GetTexture().GetImage().SavePng(shot) == Error.Ok, $"the live top view is on screen ({shot})");
+            overlay.Shown = false;
+        }
         await Wait(14);   // the note's top view waits for the 10 s after it
         bool notePicture = File.Exists(Path.Combine(_recorder.Dir, $"notes/{note:000}_top.png"));
         Expect(notePicture, "the note's top view is drawn 10 s after it");

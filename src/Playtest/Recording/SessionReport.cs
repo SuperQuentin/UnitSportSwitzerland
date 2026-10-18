@@ -101,14 +101,14 @@ public static class SessionReport
             L();
             L($"> {n.Str("text").Replace("\n", " ")}");
             L();
-            L($"- from {n.Str("source")}, at E {n.Num("e")?.ToString("0.0", Inv)} N {n.Num("n")?.ToString("0.0", Inv)} alt {n.Num("alt")?.ToString("0.0", Inv)}, {n.Str("ride")}");
+            L($"- from {n.Str("source")}, {n.Str("ride")}, at E {n.Num("e")?.ToString("0.0", Inv)} N {n.Num("n")?.ToString("0.0", Inv)} alt {n.Num("alt")?.ToString("0.0", Inv)}");
             var pics = new List<string>();
             if (n.Str("shot").Length > 0) pics.Add($"screenshot `{n.Str("shot")}`");
             if (n.Str("top").Length > 0) pics.Add($"top view ±{NoteWindow:0} s `{n.Str("top")}`");
             if (pics.Count > 0) L("- " + string.Join(", ", pics));
-            L($"- top view again: `--topview {dir.Replace('\\', '/')} --from {(n.T - NoteWindow).ToString("0.#", Inv)} --to {(n.T + NoteWindow).ToString("0.#", Inv)} --at {n.T.ToString("0.#", Inv)} --out test_output/note{id}.png`");
+            L($"- top view again: `--topview {dir.Replace('\\', '/')} --from {Math.Max(0, n.T - NoteWindow).ToString("0.#", Inv)} --to {(n.T + NoteWindow).ToString("0.#", Inv)} --at {n.T.ToString("0.#", Inv)} --out test_output/note{id}.png`");
             var near = events.Where(e => Math.Abs(e.T - n.T) <= NoteWindow && e.Type != "note").ToList();
-            var happenings = near.Where(e => e.Type != "log").Take(15).ToList();
+            var happenings = near.Where(e => e.Type != "log" && !(e.Type == "session" && e.Str("what") == "start")).Take(15).ToList();
             var bad = near.Where(e => e.Type == "log" && e.Str("level") is "error" or "warn").Take(10).ToList();
             if (happenings.Count > 0)
             {

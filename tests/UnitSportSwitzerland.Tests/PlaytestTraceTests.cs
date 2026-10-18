@@ -224,6 +224,7 @@ public class PlaytestTraceTests : IDisposable
         Assert.Contains("### Note 1: 12.0 s, scenario `collide-wall`", report);
         Assert.Contains("> the car went through the wall", report);
         Assert.Contains("--from 2 --to 22 --at 12", report);
+        Assert.Contains("- from key, Car, at E 2600000.5", report);
         // the ride 2 s before and the errors 3 s before are around the note; the line at 30 s is not
         Assert.Contains("10.0 s ride: player=you, from=OnFoot, to=Car", report);
         Assert.Contains("9.0 s `[car] wheel left the ground`", report);

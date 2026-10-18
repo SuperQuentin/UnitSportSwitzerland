@@ -21,7 +21,7 @@ public partial class TopViewOverlay : CanvasLayer
 
     private readonly PlaytestRecorder _recorder;
     private Canvas _canvas = null!;
-    private double _span = 100;
+    private double _span = 150;
     /// <summary>The time shown when stopped; null while live.</summary>
     private double? _held;
     private double _drawnFor = double.NaN;
@@ -154,6 +154,7 @@ public partial class TopViewOverlay : CanvasLayer
                 if (pts.Length > 1) DrawPolyline(pts, C(t.Color, 0.85f), 2);
                 foreach (var tick in t.Ticks) DrawCircle(P(tick), 2, C(t.Color));
             }
+            foreach (var p in s.Pins) DrawCircle(P(p.At), 5, new Color("#e03131"));
             foreach (var v in s.Vectors) DrawLine(P(v.From), P(v.To), new Color(1, 1, 1, 0.7f), 1.5f);
             foreach (var b in s.Boxes)
             {
@@ -175,8 +176,6 @@ public partial class TopViewOverlay : CanvasLayer
                 DrawColoredPolygon([D(h, 9), D(h + 2.5f, 7), at, D(h - 2.5f, 7)], C(a.Color));
                 DrawString(font, at + new Vector2(8, 14), a.Label, fontSize: 11, modulate: C(a.Color));
             }
-            foreach (var p in s.Pins) DrawCircle(P(p.At), 5, new Color("#e03131"));
-
             float barPx = (float)(bar * k);
             DrawRect(new Rect2(12, Px - 20, barPx, 5), Colors.White);
             DrawString(font, new Vector2(12, Px - 26), $"{bar:0.#} m", fontSize: 11, modulate: Colors.White);
