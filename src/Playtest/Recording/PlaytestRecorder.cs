@@ -49,6 +49,8 @@ public partial class PlaytestRecorder : Node
     /// <summary>The bundle's folder.</summary>
     public string Dir { get; }
     public bool Running => _trace != null && !_stopped;
+    /// <summary>The local player, on a client (the checks drive it).</summary>
+    internal FootPlayer? LocalPlayer => _local();
     /// <summary>Seconds since the session began (wall clock): the time of every frame, event and note.</summary>
     public double Now => _zero + _clock.Elapsed.TotalSeconds;
     /// <summary>The last minute in memory, for the live top view and the notes' pictures.</summary>
@@ -135,6 +137,7 @@ public partial class PlaytestRecorder : Node
             AddChild(new NoteTaker(this));
             AddChild(new TopViewOverlay(this));
             if (RecorderCheck.Requested) AddChild(new RecorderCheck(this));
+            if (RecorderNetCheck.Requested) AddChild(new RecorderNetCheck(this));
         }
         Event("session", ("what", "start"), ("role", _server ? "server" : "client"), ("wall", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)),
             ("commit", Git("rev-parse", "--short", "HEAD")), ("args", string.Join(' ', CmdArgs.All)));
