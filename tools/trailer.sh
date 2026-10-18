@@ -2,7 +2,8 @@
 # The trailer (#706): preview its shots, frame them, or film the whole thing and cut it on its
 # song. One game launch per run; the director stages each shot. The films: FILM=story (default,
 # docs/trailer/script.md, StoryScript.cs), FILM=showcase (docs/trailer/storyboard.md,
-# TrailerScript.cs) and FILM=drognens (the music clip, docs/trailer/drognens.md, DrognensScript.cs).
+# TrailerScript.cs), FILM=drognens (the music clip, docs/trailer/drognens.md, DrognensScript.cs) and
+# FILM=fondue ("The Stolen Fondue", docs/trailer/fondue.md, FondueScript.cs, #864).
 #
 #   tools/trailer.sh preview [shots]   play in a window, each shot with its part of the song
 #   tools/trailer.sh stills  [shots]   first, middle and last frame of each shot as PNGs
@@ -22,7 +23,7 @@
 # from a worktree), SIZE (default 1920x1080), LOG=1 prints every actor twice a second,
 # TRAILERS (where the versions go), VERSION (which one `cut` cuts; default the newest).
 # The film's song (incompetech.com, CC BY 4.0: "Voxel Revolution" for the trailers, "I Got a Stick
-# Feat James Gavins" for the clip) is downloaded once into <trailers>/ (not committed). Needs ffmpeg
+# Feat James Gavins" for the clip, "Hep Cats" for the fondue film) is downloaded once into <trailers>/ (not committed). Needs ffmpeg
 # on PATH (or bin/).
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -39,6 +40,7 @@ scratch=test_output/trailer/$FILM
 mkdir -p "$films" "$scratch"
 case $FILM in
   drognens) title="I Got a Stick Feat James Gavins" ;;
+  fondue) title="Hep Cats" ;;
   *) title="Voxel Revolution" ;;
 esac
 song=$TRAILERS/$(echo "$title" | tr 'A-Z ' 'a-z_').mp3
