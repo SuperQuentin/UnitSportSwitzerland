@@ -39,6 +39,7 @@ scratch=test_output/trailer/$FILM
 mkdir -p "$films" "$scratch"
 case $FILM in
   drognens) title="I Got a Stick Feat James Gavins" ;;
+  invasion) title="Space 1990" ;;
   *) title="Voxel Revolution" ;;
 esac
 song=$TRAILERS/$(echo "$title" | tr 'A-Z ' 'a-z_').mp3

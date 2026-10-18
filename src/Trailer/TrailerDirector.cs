@@ -128,6 +128,7 @@ public partial class TrailerDirector : Node
     {
         "showcase" => TrailerScript.Shots,
         "drognens" => DrognensScript.Shots,
+        "invasion" => InvasionScript.Shots,
         _ => StoryScript.Shots,
     };
 
