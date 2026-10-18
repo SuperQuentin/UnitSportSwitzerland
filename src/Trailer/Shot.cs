@@ -196,6 +196,20 @@ public sealed record Cast
     public Spot? Board { get; init; }
     /// <summary>A boat: how deep its body is put under the surface, m (the steamer floats at 1.6).</summary>
     public float Draught { get; init; } = 0.2f;
+
+    /// <summary>A fist fight's pose by time (<see cref="FootPlayer.FightPose"/>: a stance, or 16 + a move), 0 = none.</summary>
+    public Func<double, int>? Fight { get; init; }
+    /// <summary>What it wears on its head (<see cref="FootPlayer.HeadwearId"/>: 1 witch hat, 2 pumpkin head, 3 Santa hat, 4 antlers).</summary>
+    public int Hat { get; init; }
+    /// <summary>A farm machine's implement or header let down (<c>Truck.Lowered</c>): the plough in the ground, the combine's header.</summary>
+    public bool Lowered { get; init; }
+    /// <summary>
+    /// On foot: jump and crouch held by time (<see cref="FootPlayer.FootActions"/>; a jump is a press,
+    /// false then true): a slide (crouch at a run), a wall jump, a base jump. A walker with these is an NPC body.
+    /// </summary>
+    public Func<double, (bool Jump, bool Crouch)>? Actions { get; init; }
+    /// <summary>A radio in its hand plays (<see cref="FootPlayer.HeldRadio"/>): it sparkles and bounces to the beat.</summary>
+    public bool Radio { get; init; }
 }
 
 /// <summary>
@@ -217,6 +231,8 @@ public sealed record Prop(Spot At, float Bearing, Vector3 Size, Color Colour)
     public Vector3? InSet { get; init; }
     /// <summary>A character sitting there instead, the hip at the spot, facing <see cref="Bearing"/>: a still figure, as a passenger sits.</summary>
     public Character? Seated { get; init; }
+    /// <summary>A placed object's look instead (<see cref="Items.PlacedKind"/>: a burning campfire, a workbench, a gadget), drawn only, never placed.</summary>
+    public Items.PlacedKind Placed { get; init; }
 }
 
 /// <summary>
@@ -275,6 +291,15 @@ public sealed record Shot
     public double? Photo { get; init; }
     /// <summary>Where the photo is taken from (the photographer's view, the film's camera elsewhere); null: the film's frame.</summary>
     public Key? PhotoFrom { get; init; }
+    /// <summary>The photo's picture from this PNG instead of a render (a screenshot of the game's own screens: the map, the studio).</summary>
+    public string? PhotoFile { get; init; }
+    /// <summary>
+    /// The occasion over the world for the shot: <c>halloween</c> or <c>christmas</c> (pumpkins, snow),
+    /// <c>none</c> (neither, whatever the calendar says), null (the calendar's, as the game runs).
+    /// </summary>
+    public string? Occasion { get; init; }
+    /// <summary>A Battle Royale zone's wall (<see cref="BattleRoyale.ZoneWall"/>) round this spot, this many metres out.</summary>
+    public (Spot Centre, float Radius)? Zone { get; init; }
     /// <summary>Seconds of fade from black at the start and to black at the end.</summary>
     public double FadeIn { get; init; }
     public double FadeOut { get; init; }

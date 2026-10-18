@@ -44,6 +44,15 @@
   `Board` spot, then `PlaceBoat` on the water. `Dance`, `Item` (held), `Doors` (the freighter's
   ramp is bit 3), `Trailer`, `Lights`, `Seed` (looks). `StopAt` stops a `Follow` driver at an arc
   (3 m/s² of braking).
+- **More on an actor or a shot** (#865): `Cast.Fight` (a fist fight's pose by time, `FightPose`:
+  stance or 16 + move), `Cast.Hat` (`HeadwearId`), `Cast.Lowered` (a farm machine's implement or
+  header down), `Cast.Actions` (jump and crouch by time: a slide, a wall jump; the walker becomes an
+  NPC body, which walks on `WalkControls` since #837), `Cast.Radio` (a held radio plays: sparkles);
+  `Prop.Placed` (a placed object's look only, never placed or saved: a burning campfire, a
+  workbench, a gadget), `Shot.Zone` (the Battle Royale's zone wall round a spot), `Shot.Occasion`
+  (`halloween`, `christmas`, `none` or null = the calendar's: Halloween runs all of September and
+  October, so a film that wants none says so; the run ends with `/occasion auto`), `Shot.PhotoFile`
+  (the polaroid shows a PNG, a screenshot of one of the game's screens, instead of a render).
 - **Characters** (`Character`: a name, a chat colour, an `Appearance` and the clothes worn): a
   `Cast.Who` has the same face and clothes in every shot. `FromDoor` puts one on the step of the
   front door nearest its spot, the door opened (`InteriorManager.OpenDoorForCamera`). `Aboard` puts

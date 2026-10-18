@@ -66,6 +66,7 @@ public partial class TrailerDirector : Node
     private double _t, _waitWall, _settledFor, _drawnFor, _preroll;
     private double _phaseStart;
     private string _style = "";
+    private string? _occasion;
     private Texture2D? _photo;
     private bool _photoAsked;
     private float _sea = float.NaN;
@@ -231,6 +232,7 @@ public partial class TrailerDirector : Node
         _index++;
         if (_index >= _shots.Count)
         {
+            if (_occasion != null) RunCommand?.Invoke("/occasion auto");
             Enter(Phase.Finished);
             GD.Print(_failures == 0 ? "[trailer] RESULT: ok" : $"[trailer] RESULT: FAILED ({_failures} problem(s), above)");
             GetTree().Quit(_failures == 0 ? 0 : 1);
@@ -246,6 +248,15 @@ public partial class TrailerDirector : Node
         {
             RunCommand?.Invoke($"/style {shot.Style}");
             _style = shot.Style;
+        }
+        // an occasion's look (pumpkins, snow) for this shot only: the next one starts without it
+        if (shot.Occasion != null && shot.Occasion != _occasion)
+        {
+            // the calendar's own (Halloween runs through September and October) set aside, then the shot's
+            RunCommand?.Invoke("/occasion stop halloween");
+            RunCommand?.Invoke("/occasion stop christmas");
+            if (shot.Occasion != "none") RunCommand?.Invoke($"/occasion start {shot.Occasion}");
+            _occasion = shot.Occasion;
         }
         // every shot its own sea: a storm must not carry over into the next lake
         float sea = shot.Sea ?? Shot.CalmSea;
@@ -280,6 +291,15 @@ public partial class TrailerDirector : Node
             };
             AddChild(moon);
             _props.Add(moon);
+        }
+        if (shot.Zone is { } zone)
+        {
+            // the Battle Royale's zone wall round the spot, its middle at the ground's height there
+            var wall = new BattleRoyale.ZoneWall { Name = "Zone" };
+            AddChild(wall);
+            var c = _origin.ToWorld(zone.Centre.E, zone.Centre.N, 0);
+            wall.Place(c with { Y = _chunks.TryGetHeight(c, out float zg) ? zg : 500f }, zone.Radius);
+            _props.Add(wall);
         }
         _shotCamera = CameraFor(shot);
         _settledFor = 0;
@@ -359,6 +379,18 @@ public partial class TrailerDirector : Node
             AddChild(figure);
             figure.GlobalTransform = new Transform3D(new Basis(Vector3.Up, Mathf.DegToRad(-bearing)), at);
             _props.Add(figure);
+            return;
+        }
+        if (prop.Placed != Items.PlacedKind.None)
+        {
+            // a placed object's look only (a burning fire, a workbench): never placed, so nothing is saved
+            float ground = FloorAt(at) ?? at.Y;
+            var payload = prop.Placed == Items.PlacedKind.Campfire ? Crafting.CampfireClock.Lit(World.WorldClock.EnvNow) : "";
+            if (Items.PlacedObjects.VisualOf(new Items.PlacedObject(0, prop.Placed, "", 0, 0, 0, Quaternion.Identity, payload)) is not { } look) return;
+            look.Name = $"Prop{_props.Count}";
+            AddChild(look);
+            look.GlobalTransform = new Transform3D(new Basis(Vector3.Up, Mathf.DegToRad(-bearing)), at with { Y = ground + prop.At.H });
+            _props.Add(look);
             return;
         }
         if (prop.Item != Items.ItemId.None)
@@ -581,7 +613,8 @@ public partial class TrailerDirector : Node
             AddChild(eye);
             CameraFor(_shot with { Keys = [view with { T = 0 }], KeysFrom = 0, Smooth = 0, Shake = 0 }).Apply(eye, 0, 0);
         }
-        var image = await Items.PhotoCapture.Render(this, eye, eye.Fov);
+        // a screenshot of one of the game's own screens instead of a render (the map, the studio)
+        var image = _shot.PhotoFile is { } file && File.Exists(file) ? Image.LoadFromFile(file) : await Items.PhotoCapture.Render(this, eye, eye.Fov);
         if (eye != _camera) eye.QueueFree();
         _photo = ImageTexture.CreateFromImage(image);
     }
