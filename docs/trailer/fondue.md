@@ -67,7 +67,7 @@ Times are `start-end` in the film. Places in LV95. Lenses full-frame mm.
 
 | # | Bars | Time | Place | What happens | Camera | Feature | Lines |
 |---|---|---|---|---|---|---|---|
-| 1 | 1-3 | 0:00.0-0:09.6 | Gornergrat, 2627300/1092800 → the Matterhorn | Sunset on the Matterhorn, fade up | Slow drone push along the ridge, 50 | Real terrain, sunset | Card `s01` GORNERGRAT · 3135 M · 18:30 |
+| 1 | 1-3 | 0:00.0-0:09.6 | Gornergrat, 2627300/1092800 → the Matterhorn | Sunset on the Matterhorn, fade up | Slow drone push along the ridge, 50 | Real terrain, sunset | Card `s01` GORNERGRAT · 3135 M · 17:40 |
 | 2 | 4-5 | 0:09.6-0:15.0 | Gornergrat, the flat by the Kulmhotel 2626790/1092478 | The four round the pot, the radio on its rock; Jonas holds the bread | Orbit at chest height, 28 | Characters, items (pot, radio, bread) | [BUBBLE] `f02a` LÉA "Fondue's ready!" · `f02b` MARCO "Finally. I'm starving." |
 | 3 | 6 | 0:15.0-0:17.6 | Same | A light in the sky, coming in from the north-east | Low behind them, looking up at it, 28 | [UFO] arrival | [BUBBLE] `f03` JONAS "Uh... guys?" |
 | 4 | 7-8 | 0:17.6-0:23.0 | Same | The saucer hovers over them; its beam lifts the caquelon; Léa waves her arms | Wide and low from the south, tilting up, 24 | [UFO] tractor beam | [BUBBLE] `f04` LÉA "HEY! That's OUR fondue!" (shout) |
@@ -83,7 +83,7 @@ Times are `start-end` in the film. Places in LV95. Lenses full-frame mm.
 | 9 | 15 | 0:39.0-0:41.6 | Over Riffelalp, 2624900/1093900 at 2500 m | The canopy opens | Swinging round him, 35 | Parachute | — |
 | 10 | 16 | 0:41.6-0:44.3 | Theodul glacier, 2621770/1089700 | Marco in a full tuck, flat out | Low ahead, he passes, 24 | Skis | [BUBBLE] `f10` MARCO "Wait for meeee!" |
 | 11 | 17-18 | 0:44.3-0:49.6 | Gornergrat ridge, 2626800/1092385 | Nina's helicopter lifts off the ridge | From the ridge, 35 | Helicopter | [BUBBLE] `f11` NINA "I'll take the chopper." |
-| 12 | 19-20 | 0:49.6-0:55.0 | Over the Aletsch, 2646200/1151600 at 3150 m | Nina in the light plane, the saucer ahead over the ice | Wing-man position, 35 | Light plane; [UFO] | [BUBBLE] `f12` NINA "Got it! Heading north!" |
+| 12 | 19-20 | 0:49.6-0:55.0 | Over the Aletsch, 2646200/1151600 at 3150 m | Nina in the light plane, the saucer ahead over the ice | Wing-man position, 35 | Light plane; [UFO] | [BUBBLE] `f12` NINA "Got it! It's over the glacier!" |
 | 13 | 21 | 0:55.0-0:57.6 | Interlaken, 2632479/1170652, 380 m up | Léa under her paraglider | Orbit round the canopy, 35 | Paraglider | — |
 | 14 | 22-23 | 0:57.6-1:03.0 | Lauterbrunnen valley, 2635900/1159300 | The helicopter up the valley, waterfalls, the village | Alongside, 35 | Real valleys and villages | [BUBBLE] `f14` NINA "Lost it. Where did it go?" |
 | 15 | 24 | 1:03.0-1:05.6 | The Bernese Oberland from 9 km up | The map: where could it be? | Straight down (stand-in for the map screen) | **The map** (needs a director addition, below) | [BUBBLE] `f15` LÉA "Everyone split up. Find clues." |
@@ -129,14 +129,14 @@ Times are `start-end` in the film. Places in LV95. Lenses full-frame mm.
 | 45 | 71 | 3:08.3-3:11.0 | Lauterbrunnen | Three wingsuits streak past | Static in the air, 24 | Wingsuits | — |
 | 46 | 72 | 3:11.0-3:13.6 | Lauterbrunnen meadow, 2635930/1159420 | Jonas and Marco run for the zone, its wall glowing behind | Behind them, 28 | Battle Royale: the zone | [BUBBLE] `f46` JONAS "The zone is closing!" |
 | 47 | 73 | 3:13.6-3:16.3 | Same | Marco holds up his loot: a cheese | Low, 24 | Battle Royale: loot | [BUBBLE] `f47` MARCO "Cheese! ...Wrong cheese." |
-| 48 | 74-75 | 3:16.3-3:21.6 | Zürich, 2683480/1246900 | Evening gridlock; the saucer over the crossroads | High, long lens, 50 | A real city, traffic; [UFO] | Card `s48` ZÜRICH · 19:40 |
+| 48 | 74-75 | 3:16.3-3:21.6 | Zürich, 2683480/1246900 | Evening gridlock; the saucer over the crossroads | High, long lens, 50 | A real city, traffic; [UFO] | Card `s48` ZÜRICH · 18:20 |
 | 49 | 76-77 | 3:21.6-3:27.0 | Bern, Kramgasse at night | Marco's Yaris down the arcades, headlights on | Low in the street, 28 | Night, headlights | [BUBBLE] `f49` MARCO "It's heading back to the mountain!" |
 
 ### The end: the thief comes back (bars 78-93)
 
 | # | Bars | Time | Place | What happens | Camera | Feature | Lines |
 |---|---|---|---|---|---|---|---|
-| 50 | 78-79 | 3:27.0-3:32.3 | Gornergrat | The bait set where it all began, the four hiding behind | Low by the pot, 35 | Items, a real summit | Card `s50` GORNERGRAT · 18:20 · [BUBBLE] `f50` LÉA "Shh. Here it comes." |
+| 50 | 78-79 | 3:27.0-3:32.3 | Gornergrat | The bait set where it all began, the four hiding behind | Low by the pot, 35 | Items, a real summit | Card `s50` GORNERGRAT · 17:30 · [BUBBLE] `f50` LÉA "Shh. Here it comes." |
 | 51 | 80-81 | 3:32.3-3:37.6 | Same | The saucer lands on its legs; the ramp opens | From the ridge, 35 | [UFO] landing legs, the ramp | — |
 | 52 | 82 | 3:37.6-3:40.3 | Same | Zorp on the ramp, the old caquelon in its hands; Léa, arms crossed | Over her shoulder, 35 | [UFO] its pilot | [BUBBLE] `f52a` ZORP "Fondue... please?" · `f52b` LÉA "...You could have asked." |
 | 53 | 83-84 | 3:40.3-3:45.6 | Same | Five round the pot | Orbit, 28 | Multiplayer: together | System line `y53` ZORP joined the game · [BUBBLE] `f53` LÉA "Okay. But you bring the bread." |

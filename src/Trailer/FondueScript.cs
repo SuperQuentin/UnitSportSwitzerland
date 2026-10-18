@@ -64,7 +64,7 @@ public static class FondueScript
         ["f08"] = "Stop, thief! Bring back the cheese!",
         ["f10"] = "Wait for meeee!",
         ["f11"] = "I'll take the chopper.",
-        ["f12"] = "Got it! Heading north!",
+        ["f12"] = "Got it! It's over the glacier!",
         ["f14"] = "Lost it. Where did it go?",
         ["f15"] = "Everyone split up. Find clues.",
         ["f18"] = "Pigeon! Wait!",
@@ -102,7 +102,7 @@ public static class FondueScript
     /// <summary>The cards and titles on screen by id (places, dates, the title, the game's system line).</summary>
     public static readonly IReadOnlyDictionary<string, string> Cards = new Dictionary<string, string>
     {
-        ["s01"] = "GORNERGRAT · 3135 M · 18:30",
+        ["s01"] = "GORNERGRAT · 3135 M · 17:40",
         ["s16"] = "LAUSANNE · 21:00",
         ["s17"] = "BERN · 23:10",
         ["s20"] = "GENÈVE · 07:00",
@@ -114,8 +114,8 @@ public static class FondueScript
         ["s39"] = "31 OCTOBER",
         ["s40"] = "24 DECEMBER",
         ["s41"] = "GENÈVE · 26 DECEMBER",
-        ["s48"] = "ZÜRICH · 19:40",
-        ["s50"] = "GORNERGRAT · 18:20",
+        ["s48"] = "ZÜRICH · 18:20",
+        ["s50"] = "GORNERGRAT · 17:30",
         ["t06"] = "THE STOLEN FONDUE",
         ["t06b"] = "a UnitSport Switzerland film",
         ["y53"] = "ZORP joined the game",
@@ -129,7 +129,7 @@ public static class FondueScript
     // ---- places ---------------------------------------------------------------------------------
 
     /// <summary>The Gornergrat ridge's south edge, where it drops to the Gorner glacier (to frame).</summary>
-    private static readonly Spot GornerEdge = Crew.Toward(160, 30);
+    private static readonly Spot GornerEdge = Crew.Toward(165, 36);
     /// <summary>The Riddes plain (VS): IKEA, the fields along the Rhône.</summary>
     private static readonly Spot RiddesIkea = new(2582265, 1112638);
     private static readonly Spot RiddesField = new(2584199, 1113836), RiddesFieldEnd = new(2584426, 1113972);
@@ -175,7 +175,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 3, Name = "Alpenglow", Feature = "real terrain, sunset",
-            Hour = 18.45, FadeIn = 1.8,
+            Hour = 17.65, FadeIn = 1.8,
             Keys =
             [
                 new(0, Pt.Alt(2627300, 1092800, 3330), Pt.Alt(Matterhorn.E, Matterhorn.N, 3980), 50),
@@ -186,17 +186,17 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 2, Name = "Fondue time", Feature = "characters, items (pot, radio, bread)",
-            Hour = 18.5,
+            Hour = 17.7,
             Cast = Ring(Crew, Wave, Clap, Cheer, 0),
             Props = Pot(Crew),
-            Keys = Orbit(Crew, 6.5f, 5.5f, 1.6f, 1.8f, 120f, 75f, 2 * B, 28, lookUp: 1.0f),
+            Keys = Orbit(Crew, 6.0f, 5.2f, 1.5f, 1.7f, 150f, 120f, 2 * B, 28, lookUp: 0.9f),
             Preroll = 0.5,
             Chat = [Say("f02a", 0.3, Lea), Say("f02b", 2.6, Marco)],
         },
         new()
         {
             Number = 0, FromBar = 0, Bars = 1, Name = "A light in the sky", Feature = "UFO (#861)",
-            Hour = 18.55,
+            Hour = 17.75,
             Cast =
             [
                 .. Ring(Crew, 0, 0, 0, 0),
@@ -206,8 +206,8 @@ public static class FondueScript
             Props = Pot(Crew),
             Keys =
             [
-                new(0, Ground(Crew, 200, 4.5f, 0.7f), Pt.On(4, 0f, 0f), 28),
-                new(B, Ground(Crew, 205, 4.3f, 0.7f), Pt.On(4, 0f, 0f), 28),
+                new(0, Ground(Crew, 115, 4.5f, 0.7f), Pt.On(4, 0f, 0f), 28),
+                new(B, Ground(Crew, 112, 4.3f, 0.7f), Pt.On(4, 0f, 0f), 28),
             ],
             Smooth = 0.2f, Preroll = 0.3,
             Chat = [Say("f03", 0.4, Jonas)],
@@ -215,7 +215,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 2, Name = "The beam", Feature = "UFO (#861): the tractor beam",
-            Hour = 18.55,
+            Hour = 17.75,
             Cast =
             [
                 .. Ring(Crew, ArmWave, Shrug, Shrug, Shrug),
@@ -225,8 +225,8 @@ public static class FondueScript
             Props = Pot(Crew),
             Keys =
             [
-                new(0, Ground(Crew, 160, 14, 1.2f), Ground(Crew, 0, 0, 6f), 24),
-                new(2 * B, Ground(Crew, 165, 12, 1.0f), Ground(Crew, 0, 0, 10f), 24),
+                new(0, Ground(Crew, 100, 9, 0.8f), Ground(Crew, 0, 0, 4f), 24),
+                new(2 * B, Ground(Crew, 104, 8, 0.7f), Ground(Crew, 0, 0, 9f), 24),
             ],
             Preroll = 0.5,
             Chat = [Say("f04", 0.6, Lea)],
@@ -234,7 +234,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 1, Name = "Gone", Feature = "UFO (#861)",
-            Hour = 18.55,
+            Hour = 17.75,
             Cast =
             [
                 // UFO (#861) in stage 2: away toward the Matterhorn, then north
@@ -250,10 +250,16 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 2, Name = "After it!", Feature = "emotes, the title",
-            Hour = 18.55,
-            Cast = Ring(Crew, FistPump, FistPump, Salute, Cheer, 0),
+            Hour = 17.75,
+            Cast =
+            [
+                new() { Who = Marco, At = Crew.Toward(0, 1.8f), Heading = 95, Dance = FistPump },
+                new() { Who = Lea, At = Crew.Toward(0, 0.6f), Heading = 90, Dance = Cheer },
+                new() { Who = Nina, At = Crew.Toward(180, 0.6f), Heading = 85, Dance = Salute },
+                new() { Who = Jonas, At = Crew.Toward(180, 1.8f), Heading = 80, Dance = FistPump },
+            ],
             Props = [Pot(Crew)[1]],
-            Keys = Orbit(Crew, 4.2f, 4.6f, 0.6f, 0.8f, 250f, 290f, 2 * B, 24, lookUp: 1.4f),
+            Keys = Orbit(Crew, 4.6f, 4.2f, 0.6f, 0.7f, 78f, 100f, 2 * B, 24, lookUp: 1.3f),
             Preroll = 0.5,
             Chat = [Say("f06", 0.2, Marco)],
             Captions = [new(1.0, 4.0, Card("t06"), Card("t06b"), Title: true)],
@@ -263,12 +269,12 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 1, Name = "Over the edge", Feature = "on foot: run, base jump into the wingsuit",
-            Hour = 18.6,
+            Hour = 17.8,
             Cast =
             [
                 new()
                 {
-                    Who = Jonas, At = GornerEdge.Toward(340, 14), Heading = 160, Drive = Drive.Walk,
+                    Who = Jonas, At = GornerEdge, Heading = 165, Drive = Drive.Walk,
                     Walk = _ => (new Vector2(0f, 1f), true),
                     // jump, jump: a hop at the edge, then the wingsuit once he falls
                     Actions = t => (t > 1.0 && (int)(t * 6) % 2 == 0, false),
@@ -285,7 +291,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 2, Name = "Wingsuit", Feature = "wingsuit; UFO (#861) ahead",
-            Hour = 18.6,
+            Hour = 17.8,
             Cast =
             [
                 new() { Who = Jonas, Ride = RideKind.Wingsuit, At = Spot.Alt(2626400, 1091900, 3000), Heading = 245, Drive = Drive.Fly, Launch = 45, Climb = -15, Flight = _ => Stick(0f, -0.15f) },
@@ -303,15 +309,15 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 1, Name = "Canopy", Feature = "parachute",
-            Hour = 18.62,
-            Cast = [new() { Who = Jonas, Ride = RideKind.Wingsuit, At = Spot.Alt(2624900, 1093900, 2500), Heading = 300, Drive = Drive.Fly, Launch = 40, Climb = -15, Flight = t => Chute(t, 0.9) }],
+            Hour = 17.82,
+            Cast = [new() { Who = Jonas, Ride = RideKind.Wingsuit, At = Spot.Alt(2624600, 1094800, 2700), Heading = 320, Drive = Drive.Fly, Launch = 40, Climb = -15, Flight = t => Chute(t, 0.9) }],
             Keys = Around(0, 14f, 3f, 150f, 110f, B, 35, lookUp: 2f),
             Smooth = 0.2f, Preroll = 0.5,
         },
         new()
         {
             Number = 0, FromBar = 0, Bars = 1, Name = "Skis", Feature = "skis",
-            Hour = 18.6,
+            Hour = 17.8,
             Cast = [new() { Who = Marco, Ride = RideKind.Skis, At = Slope, Heading = 290, Drive = Drive.Controls, Controls = _ => new RideInput(0f, 0f, 0f, true) }],
             Keys =
             [
@@ -324,7 +330,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 2, Name = "Chopper", Feature = "helicopter",
-            Hour = 18.62,
+            Hour = 17.82,
             Cast = [new() { Who = Nina, Ride = RideKind.Helicopter, At = Spot.Alt(2626800, 1092385, 3130), Heading = 352, Drive = Drive.Fly, Launch = 10, Flight = _ => Stick(0f, -0.4f, up: 1f) }],
             Keys =
             [
@@ -337,7 +343,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 2, Name = "The Aletsch", Feature = "light plane; UFO (#861) ahead",
-            Hour = 18.3,
+            Hour = 17.5,
             Cast =
             [
                 new() { Who = Nina, Ride = RideKind.Plane, At = Spot.Alt(2646200, 1151600, 3150), Heading = 145, Drive = Drive.Fly, Launch = 55, Flight = _ => Stick(lever: 1f) },
@@ -355,7 +361,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 1, Name = "Paraglider", Feature = "paraglider",
-            Hour = 18.2,
+            Hour = 17.4,
             Cast = [new() { Who = Lea, Ride = RideKind.Paraglider, At = new Spot(2632479, 1170652, 380), Heading = 250, Drive = Drive.Fly, Launch = 10, Flight = _ => Stick(0.12f) }],
             Keys = Around(0, 22f, 4f, 120f, 75f, B, 35, lookUp: 3f),
             Smooth = 0.3f, Preroll = 2,
@@ -363,7 +369,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 2, Name = "Lost it", Feature = "real valleys and villages, helicopter",
-            Hour = 18.3,
+            Hour = 17.5,
             Cast = [new() { Who = Nina, Ride = RideKind.Helicopter, At = new Spot(2635900, 1159300, 120), Heading = 355, Drive = Drive.Fly, Launch = 30, Flight = _ => Stick(0f, -1f, up: 0.2f, effort: true) }],
             Keys =
             [
@@ -390,7 +396,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 2, Name = "Night falls", Feature = "day and night, lit windows",
-            Hour = 18.3, MinutesPerDay = 0.75f,
+            Hour = 17.5, MinutesPerDay = 0.75f,
             Keys =
             [
                 new(0, Pt.At(2542900, 1151150, 90), Pt.Dir(248, -5), 35),
@@ -455,7 +461,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 2, Name = "The garage", Feature = "the 30 cars, the 74 motorbikes, on foot",
-            Hour = 7.0, Traffic = 0,
+            Hour = 7, Traffic = 0,
             Cast =
             [
                 new()
@@ -515,7 +521,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 1, Name = "Cockpit", Feature = "cockpit view; UFO (#861) through the windscreen",
-            Hour = 9.0, Traffic = 0,
+            Hour = 9, Traffic = 0,
             Cast =
             [
                 new() { Who = Marco, Ride = Car(Supra), At = Furka, Toward = FurkaTop, Drive = Drive.Road, Route = "cockpit", Arc = 900, Skill = 1.05f, FirstPerson = true },
@@ -532,7 +538,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 1, Name = "The grid", Feature = "races with AI drivers",
-            Hour = 9.0, Traffic = 0,
+            Hour = 9, Traffic = 0,
             Cast = [.. Grid([Supra, Bnr32, Fd3s, Evo3, Nsx, S13], Furka, FurkaTop, "grid", 1350, goAt: 1.25)],
             Keys =
             [
@@ -545,7 +551,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 2, Name = "The pack", Feature = "racecraft",
-            Hour = 9.0, Traffic = 0,
+            Hour = 9, Traffic = 0,
             Cast = Grid([Supra, Bnr32, Fd3s, Evo3, Nsx, S13], Furka, FurkaTop, "pack", 1380, goAt: 0),
             Keys =
             [
@@ -596,7 +602,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 2, Name = "Harvest", Feature = "farming: tractor, combine, fields; UFO (#861)",
-            Hour = 11.0, Traffic = 0,
+            Hour = 11, Traffic = 0,
             Cast =
             [
                 new() { Who = Jonas, Ride = Heavy(6), Trailer = 6, At = RiddesField, Toward = RiddesFieldEnd, Drive = Drive.Follow, Route = "field", Arc = 0, Speed = 7 },
@@ -633,7 +639,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 2, Name = "The steamer", Feature = "the CGN paddle steamer; UFO (#861)",
-            Hour = 13.0,
+            Hour = 13,
             Cast =
             [
                 new()
@@ -655,7 +661,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 2, Name = "Chillon", Feature = "jetski, speedboat",
-            Hour = 14.0, Sea = 0.25f,
+            Hour = 14, Sea = 0.25f,
             Cast =
             [
                 new() { Who = Marco, Ride = RideKind.Jetski, At = new Spot(2560693, 1140362), Heading = 315, Board = ChillonBoard, Launch = 15, Drive = Drive.Controls, Controls = t => Pedal(1f, 0.1f * Mathf.Sin((float)t * 1.6f)) },
@@ -672,7 +678,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 1, Name = "Fishing", Feature = "fishing; UFO (#861) takes the fish",
-            Hour = 15.0,
+            Hour = 15,
             Cast = [new() { Who = Jonas, At = NyonPier, Heading = 125, Item = (int)ItemId.FishingRod }],
             Keys =
             [
@@ -685,7 +691,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 2, Name = "The trap", Feature = "building sites, works machines, tower cranes",
-            Hour = 16.0,
+            Hour = 16,
             Cast =
             [
                 new() { Who = Jonas, Ride = RideKind.Excavator, At = PullySite, Heading = 30, Drive = Drive.Controls, Controls = _ => Pedal(0.4f, 0.6f) },
@@ -720,7 +726,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 1, Name = "The bait", Feature = "cooking at a campfire, the radio",
-            Hour = 17.0,
+            Hour = 17,
             Cast = [new() { Who = Lea, At = new Spot(2542900, 1152270).Toward(250, 1.4f), Heading = 70, Item = (int)ItemId.Cheese }],
             Props =
             [
@@ -776,7 +782,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 2, Name = "Take-off", Feature = "the A320",
-            Hour = 9.0,
+            Hour = 9,
             Cast = [new() { Who = Nina, Ride = RideKind.A320, At = new Spot(2496388, 1120293, 40), Heading = 226, Drive = Drive.Fly, Launch = 80, Climb = 8, Flight = _ => Stick(lever: 1f) }],
             Keys =
             [
@@ -790,7 +796,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 2, Name = "Heavy metal", Feature = "the AN-124",
-            Hour = 10.0,
+            Hour = 10,
             Cast = [new() { Ride = RideKind.An124, At = Spot.Alt(2508144, 1137170, 440), Heading = 222, Drive = Drive.Fly, Board = NyonPark, Launch = 80, Flight = _ => Stick(lever: 0.7f) }],
             Keys =
             [
@@ -802,7 +808,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 1, Name = "The drop plane", Feature = "Battle Royale: the cargo plane",
-            Hour = 11.0,
+            Hour = 11,
             Cast = [new() { Who = Nina, Ride = RideKind.Freighter, At = Spot.Alt(2638000, 1163000, 3100), Heading = 200, Doors = 1 << 3, Drive = Drive.Fly, Launch = 72, Flight = _ => Stick(lever: 0.6f) }],
             Keys =
             [
@@ -814,7 +820,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 1, Name = "Jump", Feature = "Battle Royale: the drop",
-            Hour = 11.0,
+            Hour = 11,
             Cast =
             [
                 new() { Who = Nina, Ride = RideKind.Freighter, At = Spot.Alt(2638000, 1163000, 3100), Heading = 200, Doors = 1 << 3, Drive = Drive.Fly, Launch = 72, Flight = _ => Stick(lever: 0.6f) },
@@ -834,7 +840,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 1, Name = "Dive", Feature = "wingsuits",
-            Hour = 11.0,
+            Hour = 11,
             Cast = new[] { Lea, Marco, Jonas }.Select((who, i) => new Cast
             {
                 Who = who, Ride = RideKind.Wingsuit, At = Spot.Alt(2635950 + (i - 1) * 9, 1158575 + i * 6, 1515 + i * 3), Heading = 180,
@@ -882,7 +888,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 2, Name = "The city", Feature = "a real city, traffic; UFO (#861) over it",
-            Hour = 19.6, Traffic = 80,
+            Hour = 18.3, Traffic = 80,
             Cast =
             [
                 // UFO (#861) in stage 2: over the crossroads
@@ -914,7 +920,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 2, Name = "The lure", Feature = "items, the radio, a real summit",
-            Hour = 18.4,
+            Hour = 17.6,
             Cast =
             [
                 new() { Who = Lea, At = Crew.Toward(300, 9), Heading = 120, Dance = Shrug },
@@ -935,7 +941,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 2, Name = "Landing", Feature = "UFO (#861): landing legs, the ramp",
-            Hour = 18.45,
+            Hour = 17.65,
             Cast =
             [
                 // UFO (#861) in stage 2: settling by the pot on its legs, the ramp opening
@@ -952,7 +958,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 1, Name = "Face to face", Feature = "UFO (#861): its pilot",
-            Hour = 18.5,
+            Hour = 17.7,
             // the pilot (#861) in stage 2, on the ramp facing her
             Cast = [new() { Who = Lea, At = Crew.Toward(270, 2.2f), Heading = 90 }],
             Props = Pot(Crew),
@@ -967,7 +973,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 2, Name = "Sharing", Feature = "multiplayer: together",
-            Hour = 18.5,
+            Hour = 17.7,
             // the pilot (#861) in stage 2, the fifth at the pot
             Cast = Ring(Crew, Wave, Clap, Cheer, 0),
             Props = Pot(Crew),
@@ -978,7 +984,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 2, Name = "The party", Feature = "emotes and dances",
-            Hour = 18.55,
+            Hour = 17.75,
             // the pilot (#861) in stage 2, dancing too
             Cast = Ring(Crew, Charleston, Griddy, Robot, Moonwalk),
             Props = Pot(Crew),
@@ -988,7 +994,7 @@ public static class FondueScript
         new()
         {
             Number = 0, FromBar = 0, Bars = 2, Name = "Lift-off", Feature = "UFO (#861): leaving",
-            Hour = 18.6,
+            Hour = 17.8,
             Cast =
             [
                 .. Ring(Crew, Wave, Wave, ArmWave, Wave),
@@ -1041,7 +1047,7 @@ public static class FondueScript
     private static Shot Ending(int bars, double from) => new()
     {
         Number = 0, FromBar = 0, Bars = bars, Name = from == 0 ? "Say cheese" : "The photo", Feature = "the photo, the end card",
-        Hour = 18.62,
+        Hour = 17.82,
         Cast =
         [
             new() { Who = Lea, At = Crew.Toward(0, 0.6f), Heading = 90, Item = (int)ItemId.Camera, Dance = from == 0 ? 0 : Cheer },

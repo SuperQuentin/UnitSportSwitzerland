@@ -1,10 +1,10 @@
 {
   "s01": {
-    "en": "GORNERGRAT · 3135 M · 18:30",
-    "fr": "GORNERGRAT · 3135 M · 18:30",
-    "de": "GORNERGRAT · 3135 M · 18:30",
-    "it": "GORNERGRAT · 3135 M · 18:30",
-    "rm": "GORNERGRAT · 3135 M · 18:30"
+    "en": "GORNERGRAT · 3135 M · 17:40",
+    "fr": "GORNERGRAT · 3135 M · 17:40",
+    "de": "GORNERGRAT · 3135 M · 17:40",
+    "it": "GORNERGRAT · 3135 M · 17:40",
+    "rm": "GORNERGRAT · 3135 M · 17:40"
   },
   "s16": {
     "en": "LAUSANNE · 21:00",
@@ -84,18 +84,18 @@
     "rm": "GENEVRA · 26 DA DECEMBER"
   },
   "s48": {
-    "en": "ZÜRICH · 19:40",
-    "fr": "ZURICH · 19:40",
-    "de": "ZÜRICH · 19:40",
-    "it": "ZURIGO · 19:40",
-    "rm": "TURITG · 19:40"
+    "en": "ZÜRICH · 18:20",
+    "fr": "ZURICH · 18:20",
+    "de": "ZÜRICH · 18:20",
+    "it": "ZURIGO · 18:20",
+    "rm": "TURITG · 18:20"
   },
   "s50": {
-    "en": "GORNERGRAT · 18:20",
-    "fr": "GORNERGRAT · 18:20",
-    "de": "GORNERGRAT · 18:20",
-    "it": "GORNERGRAT · 18:20",
-    "rm": "GORNERGRAT · 18:20"
+    "en": "GORNERGRAT · 17:30",
+    "fr": "GORNERGRAT · 17:30",
+    "de": "GORNERGRAT · 17:30",
+    "it": "GORNERGRAT · 17:30",
+    "rm": "GORNERGRAT · 17:30"
   },
   "t06": {
     "en": "THE STOLEN FONDUE",
@@ -175,11 +175,11 @@
     "rm": "Jau prend l'helicopter."
   },
   "f12": {
-    "en": "Got it! Heading north!",
-    "fr": "Je l'ai ! Cap au nord !",
-    "de": "Hab ihn! Richtung Norden!",
-    "it": "Preso! Va verso nord!",
-    "rm": "Al hai! En direcziun nord!"
+    "en": "Got it! It's over the glacier!",
+    "fr": "Je l'ai ! Il survole le glacier !",
+    "de": "Hab ihn! Er ist über dem Gletscher!",
+    "it": "Preso! È sopra il ghiacciaio!",
+    "rm": "Al hai! El è sur il glatscher!"
   },
   "f14": {
     "en": "Lost it. Where did it go?",
