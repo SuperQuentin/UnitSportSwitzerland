@@ -56,7 +56,7 @@ fi
 
 log=()
 [ "${LOG:-}" = 1 ] && log=(--trailer-log)
-game=(--chunks "$CHUNKS" --title "trailer $mode $shots" --trailer "$shots" --trailer-film "$FILM" --trailer-size "$SIZE" "${log[@]}")
+game=(--chunks "$CHUNKS" --title "trailer $mode $shots" --trailer "$shots" --trailer-film "$FILM" --trailer-size "$SIZE" ${log[@]+"${log[@]}"})
 
 # the newest version's number, 0 when there is none yet
 newest() {
