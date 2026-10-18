@@ -19,16 +19,21 @@ server; real time is per-process and never synced.
 ## The guard that keeps them three (phase 5)
 
 `ClockDisciplineTests` (tier 0, no Godot) fails if any file under `src/` reads
-`Time.GetTicksMsec`, `Time.GetTicksUsec` or `Time.GetUnixTimeFromSystem` without an entry in its
-`Allowed` table giving a reason. **New code must either pick one of the four clocks or justify
+`Time.GetTicksMsec`, `Time.GetTicksUsec`, `Time.GetUnixTimeFromSystem`, `ClockSync.ServerNow`,
+`ClockSync.ServerUnixNow`, `DateTime(Offset).Now/UtcNow` or `Environment.TickCount` without an entry
+in its `Allowed` table giving a reason. `SimClock.SimAt(ClockSync.ServerNow)` and line comments do not
+count. The server-clock and `DateTime` reads were added in #867, after battle royale (#855), the
+traffic lights and the lifts had all slipped through on `ServerNow` and ignored `/speed`. **New code must either pick one of the four clocks or justify
 itself there.** This is the only thing that stops the buckets rotting back into one: a raw
 wall-clock read looks harmless, is invisible at 1x speed, and only shows up as "the sun did not slow
 down" long after the commit that did it.
 
-- Reasons are one of three kinds, enforced by a second test: **clock** (it is the clock, or the
-  fallback under it), **plumbing** (network liveness, rate limits, hardware, worker threads) and
-  **presentation** (an animation phase or a UI timeout — the player is not slowed even when their
-  character is).
+- Reasons are one of four kinds, enforced by a second test: **clock** (it is the clock, or the
+  fallback under it), **plumbing** (network liveness, rate limits, hardware, worker threads, file
+  names), **presentation** (an animation phase, a UI timeout, or music and what dances to it, since
+  audio plays in real time — the player is not slowed even when their character is) and
+  **calendar** (the real date on purpose: the farm month, the birds, the occasions, the 24 h loot
+  and shop restock).
 - A third test fails on **stale** entries, because an exception list is only safe while every
   exception is still real: a leftover entry would quietly permit a future wall-clock read in a file
   that had stopped needing one.
@@ -59,6 +64,8 @@ Moved to **simulation** time, because they are part of the world and must slow w
 | Kill-credit window | `Player/FootPlayer._lastAttackedAt` | a hit and the kill it is credited for are both in the world |
 | Build growth | `Build/Structures.Now` | `SimClock.SimAt`, not `GameClock.Now`: `BuiltAt` crosses the wire |
 | Wave phase | `World/WaterField.Now` | the swell is physics, and the boats riding it are simulated |
+| Traffic lights | `Terrain/SignalLamps.Clock` (`ClockSync.SimNow`), read by the lamps and by `Traffic`'s cars | **simulation, not environment** (#867): a cycle is tens of seconds, and env time runs 60x real at the default day, so the lights would cycle in a second — the build-growth trap again. `/time speed` leaves them alone |
+| Elevators | `Interiors/InteriorManager.Lifts.Clock` (`ClockSync.SimNow`) | a cabin slows with its riders (#867) |
 | Battle royale match | `BattleRoyale/BrManager.Now`, `Net.ClockSync.SimNow` | every `BrState` stamp (lobby countdown, plane doors, zone, airdrops, bot jumps) is in simulated seconds (#855); only the flare and ping rate limits stay real (`RealNow`) |
 
 Moved to **environment** time, with every constant re-expressed in env units:

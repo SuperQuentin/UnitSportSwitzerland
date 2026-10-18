@@ -888,7 +888,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             return float.MaxValue;
         }
         if (toLine > SignalLookAhead || toLine < -0.5f) return float.MaxValue;
-        var aspect = site.Plan.State(car.Group, Net.ClockSync.ServerNow);
+        var aspect = site.Plan.State(car.Group, SignalLamps.Clock());
         // crossing the line on red, unless it was already clearing a yellow it could not stop for
         if (crossed)
         {
