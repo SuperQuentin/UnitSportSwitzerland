@@ -204,6 +204,10 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _registry = new PlayerRegistry(PlayerRegistry.ParseAdminPassword(), PlayerRegistry.ParseHostToken());
         _chat = ChatManager.CreateServer(_registry, _players, origin, places);
         AddChild(_chat);
+#if PLAYTEST
+        // the playtest recorder (#844): the authoritative positions, for the top view's server-vs-client lines
+        if (Playtest.Recording.PlaytestRecorder.Requested) AddChild(new Playtest.Recording.PlaytestRecorder(server: true, () => origin));
+#endif
 
         // nothing goes to a peer before it has said which protocol it speaks (World/Handshake)
         _handshake = Handshake.CreateServer(_chat);

@@ -131,6 +131,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the playtest suite's scenarios, MCP endpoint and ledger (#751)
         (() => Playtest.PlaytestCheck.Requested, Playtest.PlaytestCheck.Run),
         (() => Playtest.PlaytestCheck.ListRequested, Playtest.PlaytestCheck.List),
+        // the playtest recorder's offline top view and report (#844)
+        (() => Playtest.TopView.TopViewCli.Requested, Playtest.TopView.TopViewCli.Run),
+        (() => Playtest.TopView.TopViewCli.ReportRequested, Playtest.TopView.TopViewCli.Report),
 #endif
     };
 
@@ -840,6 +843,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         items.RunCommand = _chat.Send;
         _chat.CatalogueRequested += () => items.Catalogue.Open();
 #if PLAYTEST
+        // the playtest recorder (#844, docs/notes/general/playtest-recorder.md): offline or online, before the director that reports to it
+        if (Playtest.Recording.PlaytestRecorder.Requested)
+            AddChild(new Playtest.Recording.PlaytestRecorder(server: false, () => _chunks?.Origin, () => LocalPlayer, _chat));
         // the playtest suite (#751, docs/notes/general/playtest.md): Debug builds with --playtest, offline
         if (Playtest.PlaytestDirector.Requested && !Launch.Networked)
             AddChild(new Playtest.PlaytestDirector(() => LocalPlayer, _chat.Send, _fixtureStart));

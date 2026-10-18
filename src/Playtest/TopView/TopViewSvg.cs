@@ -40,13 +40,14 @@ public static class TopViewSvg
 
         foreach (var t in s.Tracks)
         {
-            sb.Append($"<polyline fill=\"none\" stroke=\"{t.Color.Hex}\" stroke-width=\"{(t.Server ? 1.5 : 2)}\" stroke-opacity=\"0.8\"{(t.Server ? " stroke-dasharray=\"5 4\"" : "")} points=\"");
+            sb.Append($"<polyline fill=\"none\" stroke=\"{t.Color.Hex}\" stroke-width=\"{(t.Minor ? 1 : t.Server ? 1.5 : 2)}\" stroke-opacity=\"{(t.Minor ? 0.5 : 0.8)}\"{(t.Server ? " stroke-dasharray=\"5 4\"" : "")} points=\"");
             foreach (var p in t.Points)
             {
                 var (x, y) = P(p);
                 sb.Append(F(x)).Append(',').Append(F(y)).Append(' ');
             }
             sb.Append("\"/>");
+            if (t.Minor) continue;
             foreach (var p in t.Ticks)
             {
                 var (x, y) = P(p);
@@ -63,6 +64,16 @@ public static class TopViewSvg
         }
 
         var labels = new List<(double X, double Y, string Text, string Color)>();
+        // the notes first: what stood there is drawn over them
+        int pin = 0;
+        foreach (var p in s.Pins)
+        {
+            var (x, y) = P(p.At);
+            pin++;
+            sb.Append($"<circle cx=\"{F(x)}\" cy=\"{F(y)}\" r=\"7\" fill=\"#e03131\" stroke=\"#fff\" stroke-width=\"2\"/>");
+            labels.Add((x + 10, y - 8, $"NOTE {pin}: {Clip(p.Label, 48)}", "#e03131"));
+        }
+
         foreach (var b in s.Boxes)
         {
             var fwd = EN.Bearing(b.Heading);
@@ -75,13 +86,13 @@ public static class TopViewSvg
             // the front edge, thicker: which way it faces
             sb.Append($"<line x1=\"{F(corners[0].X)}\" y1=\"{F(corners[0].Y)}\" x2=\"{F(corners[1].X)}\" y2=\"{F(corners[1].Y)}\" stroke=\"{b.Color.Hex}\" stroke-width=\"3\"/>");
             var (lx, ly) = P(b.Center);
-            if (!b.Server) labels.Add((lx + 6, ly - 6, b.Label, "#222"));
+            if (!b.Server && b.Label.Length > 0) labels.Add((lx + 6, ly - 6, b.Label, "#222"));
         }
 
         foreach (var a in s.Arrows)
         {
             var (x, y) = P(a.At);
-            double len = Math.Max(12, 2.5 * k);
+            double len = Math.Max(18, 2.5 * k);
             double h = a.Heading;
             // screen y grows south: a bearing's screen direction is (sin h, -cos h)
             (double X, double Y) D(double ang, double r) => (x + Math.Sin(ang) * r, y - Math.Cos(ang) * r);
@@ -99,15 +110,6 @@ public static class TopViewSvg
             var (x2, y2) = P(o.Server);
             sb.Append($"<line x1=\"{F(x1)}\" y1=\"{F(y1)}\" x2=\"{F(x2)}\" y2=\"{F(y2)}\" stroke=\"{TopViewScene.ServerColor.Hex}\" stroke-width=\"2\" stroke-dasharray=\"2 2\"/>");
             if (o.Metres >= 0.05) labels.Add(((x1 + x2) / 2 + 6, (y1 + y2) / 2 + 4, $"Δ{o.Metres.ToString("0.0", Inv)} m", TopViewScene.ServerColor.Hex));
-        }
-
-        int pin = 0;
-        foreach (var p in s.Pins)
-        {
-            var (x, y) = P(p.At);
-            pin++;
-            sb.Append($"<circle cx=\"{F(x)}\" cy=\"{F(y)}\" r=\"7\" fill=\"#e03131\" stroke=\"#fff\" stroke-width=\"2\"/>");
-            labels.Add((x + 10, y - 8, $"NOTE {pin}: {Clip(p.Label, 48)}", "#e03131"));
         }
 
         foreach (var (x, y, text, color) in labels) Text(sb, x, y, text, 11, color, pixelText);
@@ -227,6 +229,7 @@ internal static class PixelFont
         ['<'] = "00010001000100010000010000010000010", ['*'] = "00000001001010101110101010010000000",
         ['Δ'] = "00100001000101001010100011000111111", ['·'] = "00000000000000001100011000000000000",
         ['…'] = "00000000000000000000000001010110101", ['"'] = "01010010100000000000000000000000000",
+        ['@'] = "01110100011011110101101111000001110", ['±'] = "00100001001111100100001000000011111",
         [' '] = "00000000000000000000000000000000000",
     };
 

@@ -25,7 +25,9 @@ public sealed record TraceEntity
     [JsonPropertyName("local")] public bool Local { get; init; }
     [JsonPropertyName("first")] public double First { get; init; }
 
-    public bool IsPlayer => Kind == "player";
+    [JsonIgnore] public bool IsPlayer => Kind == "player";
+    /// <summary>Small fry the top view draws faintly and never fits its square to: birds.</summary>
+    [JsonIgnore] public bool IsMinor => Kind == "bird";
 }
 
 /// <summary>One thing at one instant, in LV95 metres. Heading is a compass bearing (0 north, π/2 east).</summary>
@@ -34,10 +36,14 @@ public struct TraceState
     public int Id;
     public double E, N;
     public float Alt, Heading, VE, VN, VUp, Spin;
-    /// <summary>Players only (<see cref="HasPlayer"/>): ride kind, seat, held item, whose vehicle it rides in.</summary>
+    /// <summary>
+    /// Players only (<see cref="HasPlayer"/>): ride kind, seat, held item, whose vehicle it rides in,
+    /// and the ride's footprint (metres across and along; 0 on foot), measured when the ride changes.
+    /// </summary>
     public short Ride;
     public sbyte Seat;
     public int Held, RidingWith;
+    public float RideAcross, RideAlong;
     public bool HasPlayer;
 
     public readonly float Speed => MathF.Sqrt(VE * VE + VN * VN + VUp * VUp);
@@ -128,7 +134,7 @@ public static class TraceFormat
             w.Write(s.E); w.Write(s.N); w.Write(s.Alt);
             w.Write(s.Heading); w.Write(s.VE); w.Write(s.VN); w.Write(s.VUp); w.Write(s.Spin);
             if (!s.HasPlayer) continue;
-            w.Write(s.Ride); w.Write(s.Seat); w.Write(s.Held); w.Write(s.RidingWith);
+            w.Write(s.Ride); w.Write(s.Seat); w.Write(s.Held); w.Write(s.RidingWith); w.Write(s.RideAcross); w.Write(s.RideAlong);
         }
     }
 
@@ -151,6 +157,7 @@ public static class TraceFormat
                 s.Heading = r.ReadSingle(); s.VE = r.ReadSingle(); s.VN = r.ReadSingle(); s.VUp = r.ReadSingle(); s.Spin = r.ReadSingle();
                 if (!s.HasPlayer) continue;
                 s.Ride = r.ReadInt16(); s.Seat = r.ReadSByte(); s.Held = r.ReadInt32(); s.RidingWith = r.ReadInt32();
+                s.RideAcross = r.ReadSingle(); s.RideAlong = r.ReadSingle();
             }
             return true;
         }

@@ -13,10 +13,10 @@ public readonly record struct EN(double E, double N)
     public static EN Bearing(double heading) => new(Math.Sin(heading), Math.Cos(heading));
 }
 
-/// <summary>A colour as the top view draws it: an <c>#rrggbb</c> and its kind.</summary>
+/// <summary>A colour as the top view draws it, <c>#rrggbb</c>.</summary>
 public readonly record struct TopColor(string Hex);
 
-public sealed record TopTrack(int Id, TopColor Color, List<EN> Points, List<EN> Ticks, bool Server);
+public sealed record TopTrack(int Id, TopColor Color, List<EN> Points, List<EN> Ticks, bool Server, bool Minor = false);
 /// <summary>An oriented box: <paramref name="Across"/> by <paramref name="Along"/> metres, its long side along <paramref name="Heading"/>.</summary>
 public sealed record TopBox(EN Center, double Across, double Along, double Heading, TopColor Color, string Label, bool Server);
 public sealed record TopArrow(EN At, double Heading, TopColor Color, string Label, bool Server);
@@ -73,10 +73,12 @@ public sealed class TopViewInput
 public static class TopViewScene
 {
     public static readonly TopColor PlayerColor = new("#2f7de1"), LocalColor = new("#1450a8"), VehicleColor = new("#e8822a"),
-        TrafficColor = new("#8a8f98"), ItemColor = new("#3aa65a"), OtherColor = new("#9b59b6"), ServerColor = new("#d23c3c");
+        TrafficColor = new("#8a8f98"), ItemColor = new("#3aa65a"), OtherColor = new("#9b59b6"), ServerColor = new("#d23c3c"),
+        MinorColor = new("#b9b2a3");
 
     public static TopColor ColorOf(TraceEntity e) =>
         e.IsPlayer ? e.Local ? LocalColor : PlayerColor
+        : e.IsMinor ? MinorColor
         : e.Class.Contains("Traffic", StringComparison.Ordinal) ? TrafficColor
         : e.Class.Contains("Item", StringComparison.Ordinal) ? ItemColor
         : e.Class.Contains("Vehicle", StringComparison.Ordinal) ? VehicleColor
@@ -99,7 +101,8 @@ public static class TopViewScene
         if (around is { } c && radius is { } rad)
             ids = ids.Where(id => frames.Any(f => f.TryGet(id, out var s) && Math.Abs(s.E - c.E) <= rad && Math.Abs(s.N - c.N) <= rad));
         var reference = around ?? Centroid(seen.Values);
-        var chosen = ids.OrderBy(id => input.Entities.TryGetValue(id, out var e) && e.IsPlayer ? 0 : 1)
+        int Rank(int id) => !input.Entities.TryGetValue(id, out var e) ? 2 : e.IsPlayer ? 0 : e.IsMinor ? 3 : 1;
+        var chosen = ids.OrderBy(Rank)
             .ThenBy(id => (seen[id] - reference).Length)
             .Take(input.MaxThings)
             .ToHashSet();
@@ -108,9 +111,10 @@ public static class TopViewScene
         {
             var e = input.Entities.GetValueOrDefault(id) ?? new TraceEntity { Id = id, Kind = "?", Label = $"#{id}" };
             var color = ColorOf(e);
-            var track = TrackOf(frames, id, color, server: false);
+            var track = TrackOf(frames, id, color, server: false) with { Minor = e.IsMinor };
             if (track.Points.Count > 1) shapes.Tracks.Add(track);
-            if (at != null && at.TryGet(id, out var s)) Mark(shapes, e, s, color, server: false);
+            // small fry: the track only, faint, no box and no label
+            if (!e.IsMinor && at != null && at.TryGet(id, out var s)) Mark(shapes, e, s, color, server: false);
         }
 
         // the server's view of the same things, matched by node name: its tracks, its boxes, and how far off the client was
@@ -183,7 +187,11 @@ public static class TopViewScene
         var at = new EN(s.E, s.N);
         string label = e.Label.Length > 0 ? e.Label : e.Name;
         if (e.IsPlayer)
+        {
+            // the vehicle it drives, under its arrow
+            if (s.RideAlong > 0) shapes.Boxes.Add(new TopBox(at, Math.Max(s.RideAcross, 0.5), s.RideAlong, s.Heading, color, "", server));
             shapes.Arrows.Add(new TopArrow(at, s.Heading, color, label, server));
+        }
         else
             // a thing with no size still shows: a metre square
             shapes.Boxes.Add(new TopBox(at, Math.Max(e.Size[0], 1), Math.Max(e.Size[2], 1), s.Heading, color, label, server));
@@ -200,7 +208,7 @@ public static class TopViewScene
             shapes.Side = 2 * r;
             return;
         }
-        var points = shapes.Tracks.SelectMany(t => t.Points)
+        var points = shapes.Tracks.Where(t => !t.Minor).SelectMany(t => t.Points)
             .Concat(shapes.Boxes.Select(b => b.Center)).Concat(shapes.Arrows.Select(a => a.At)).Concat(shapes.Pins.Select(p => p.At)).ToList();
         if (points.Count == 0)
         {

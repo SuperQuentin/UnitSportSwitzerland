@@ -180,6 +180,58 @@ public class PlaytestTraceTests : IDisposable
         Assert.Contains(shapes.Boxes, b => b.Server);
     }
 
+    [Fact]
+    public void ADriverGetsTheBoxOfWhatItDrives()
+    {
+        var f = new TraceFrame();
+        f.Clear(1);
+        ref var me = ref f.Add();
+        me.Id = 1; me.E = 100; me.N = 200; me.Heading = MathF.PI / 2; me.HasPlayer = true; me.Ride = 40; me.RideAcross = 2.5f; me.RideAlong = 12;
+        var shapes = TopViewScene.Build(new TopViewInput
+        {
+            Frames = [f], Entities = new Dictionary<int, TraceEntity> { [1] = new() { Id = 1, Kind = "player", Label = "you", Local = true } }, T0 = 0, T1 = 2,
+        });
+        var bus = Assert.Single(shapes.Boxes);
+        Assert.Equal(12, bus.Along);
+        Assert.Equal("", bus.Label);
+        Assert.Single(shapes.Arrows);
+    }
+
+    [Fact]
+    public void ReportListsScenariosNotesAndErrors()
+    {
+        Directory.CreateDirectory(Path.Combine(_dir, "perf"));
+        File.WriteAllLines(Path.Combine(_dir, SessionReport.EventsFile),
+        [
+            """{"t":0.1,"type":"session","what":"start","role":"client","wall":"2026-10-18 22:00:00","commit":"abc1234","args":"--playtest"}""",
+            """{"t":2,"type":"scenario","what":"start","id":"collide-wall","title":"Car into a wall"}""",
+            """{"t":9,"type":"log","level":"error","tag":"car","text":"[car] wheel left the ground"}""",
+            """{"t":9.5,"type":"log","level":"error","tag":"car","text":"[car] wheel left the ground"}""",
+            """{"t":10,"type":"ride","player":"you","from":"OnFoot","to":"Car"}""",
+            """{"t":14,"type":"scenario","what":"verdict","id":"collide-wall","verdict":"failed","note":"went through"}""",
+            """{"t":30,"type":"log","level":"info","tag":"","text":"far away"}""",
+            """{"t":31,"type":"broken""",
+        ]);
+        File.WriteAllLines(Path.Combine(_dir, SessionReport.NotesFile),
+        [
+            """{"t":12,"type":"note","id":1,"text":"the car went through the wall","source":"key","scenario":"collide-wall","e":2600000.5,"n":1200000,"alt":500,"ride":"Car","shot":"notes/001.png","top":"notes/001_top.png"}""",
+        ]);
+        File.WriteAllLines(Path.Combine(_dir, "perf", "summary.txt"), ["frames 100", "== DIAGNOSIS ==", "- GPU-bound: 80 % of frames"]);
+        string report = SessionReport.Write(_dir);
+        Assert.True(File.Exists(Path.Combine(_dir, SessionReport.ReportFile)));
+        Assert.Contains("commit `abc1234`", report);
+        Assert.Contains("| 14.0 s | collide-wall | FAILED | went through |", report);
+        Assert.Contains("### Note 1: 12.0 s, scenario `collide-wall`", report);
+        Assert.Contains("> the car went through the wall", report);
+        Assert.Contains("--from 2 --to 22 --at 12", report);
+        // the ride 2 s before and the errors 3 s before are around the note; the line at 30 s is not
+        Assert.Contains("10.0 s ride: player=you, from=OnFoot, to=Car", report);
+        Assert.Contains("9.0 s `[car] wheel left the ground`", report);
+        Assert.DoesNotContain("far away", report);
+        Assert.Contains("2× from 9.0 s (error)", report);
+        Assert.Contains("- GPU-bound: 80 % of frames", report);
+    }
+
     [Theory]
     [InlineData(100, 20)]
     [InlineData(40, 5)]
