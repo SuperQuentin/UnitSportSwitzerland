@@ -114,17 +114,26 @@ public static class RoundaboutCore
             double kerb = right ? a.Mouth.CarriagewayRight : a.Mouth.CarriagewayLeft, side = right ? 1 : -1;
             double Kerb(double s) => kerb + side * arm.Flare(s);
             // the kerb follows the arm (curved, flared) from the mouth down to where it leaves for the fillet, straight from there
-            double low = Math.Min(arm.Mouth - 1, double.IsNaN(arm.Base) ? StationAt(a, kerb, outer + rf * 0.5) : arm.Base);
-            var bottom = At(a, low, Kerb(low));
-            var u = At(a, low + 1, Kerb(low + 1)) - bottom;
-            u /= Math.Max(1e-9, u.Length);
-            // away from the arm: an arm's offsets grow to the right of a driver arriving, the outward direction's left (Perp)
-            var away = u.Perp * side;
-            var b = bottom + away * rf - o;
-            double bu = b.Dot(u), disc = bu * bu - (b.LengthSquared - (outer + rf) * (outer + rf));
-            if (disc < 0) return null;
-            // (coming in from the mouth, the first place the fillet touches the ring; not above where the kerb leaves the arm)
-            double t = Math.Min(0, -bu + Math.Sqrt(disc));
+            double low = Math.Min(arm.Mouth - 1, double.IsNaN(arm.Base) ? StationAt(a, kerb, outer) : arm.Base);
+            Vec2 bottom = default, u = default, away = default;
+            double t = 0;
+            // (twice: where the fillet first touches, then the kerb leaving the arm there, on a curved arm along its direction there)
+            for (int pass = 0; pass < 2; pass++)
+            {
+                bottom = At(a, low, Kerb(low));
+                u = At(a, low + 1, Kerb(low + 1)) - bottom;
+                u /= Math.Max(1e-9, u.Length);
+                // away from the arm: an arm's offsets grow to the right of a driver arriving, the outward direction's left (Perp)
+                away = u.Perp * side;
+                var b = bottom + away * rf - o;
+                double bu = b.Dot(u), disc = bu * bu - (b.LengthSquared - (outer + rf) * (outer + rf));
+                if (disc < 0) return null;
+                // (coming in from the mouth, the first place the fillet touches the ring)
+                t = -bu + Math.Sqrt(disc);
+                if (t <= 0 || pass == 1) break;
+                low = Math.Min(arm.Mouth - 0.5, low + t);
+            }
+            t = Math.Min(0, t);
             var f = bottom + u * t + away * rf;
             var tp = bottom + u * t;
             var c = o + (f - o) * (outer / (outer + rf));
@@ -276,12 +285,14 @@ public static class RoundaboutCore
                         Turns = true, Radius = radius,
                     };
                     c.Centre = Path(a, c.FromOffset, b, c.ToOffset);
-                    // its lane's width in and round the ring; out on the exit, from where it leaves the ring, easing to the exit lane's
+                    // its lane's width on the entry, the exit lane's on the exit, easing from one to the other round the ring
                     var along = new double[c.Centre.Count];
                     for (int q = 1; q < along.Length; q++) along[q] = along[q - 1] + c.Centre[q].DistanceTo(c.Centre[q - 1]);
-                    int off = c.Centre.Count - 1;
-                    while (off > 0 && c.Centre[off - 1].DistanceTo(o) > outer) off--;
-                    double Half(int q) => (q <= off ? c.Width : c.Width + (c.ToWidth - c.Width) * (along[q] - along[off]) / Math.Max(1e-9, along[^1] - along[off])) * 0.5;
+                    int on = 0, off = c.Centre.Count - 1;
+                    while (on < off && c.Centre[on].DistanceTo(o) > outer) on++;
+                    while (off > on && c.Centre[off].DistanceTo(o) > outer) off--;
+                    double Half(int q) => (q <= on ? c.Width : q >= off ? c.ToWidth
+                        : c.Width + (c.ToWidth - c.Width) * (along[q] - along[on]) / Math.Max(1e-9, along[off] - along[on])) * 0.5;
                     c.Left = CorePlanner.Offset(c.Centre, q => -Half(q));
                     c.Right = CorePlanner.Offset(c.Centre, q => Half(q));
                     c.Outside = c.Left.Concat(c.Right).Select(p => CorePlanner.Outside(core.Outline, p)).DefaultIfEmpty(0).Max();
@@ -298,30 +309,60 @@ public static class RoundaboutCore
         }
         return core;
 
-        // a lane's path: in along its arm (flared round the splitter island) to the ring's outer edge, curving onto the ring lane
-        // counter-clockwise, round it, curving off toward the exit and out along the exit (flared) to its mouth
+        // a lane's path: in along its arm (flared round the splitter island), onto the ring lane on a circular fillet tangent to
+        // both (a right turn), counter-clockwise round it, off on a fillet onto the exit lane and out along it (flared) to its mouth
         List<Vec2> Path(Arm a, double offA, Arm b, double offB)
         {
+            // a lane line near the ring: a point on it, its station and its outward direction there
+            (Vec2 P, double S, Vec2 U) LaneLine(Arm arm, double off, double sign)
+            {
+                double s0 = Math.Min(StationAt(arm.Plan, off + sign * IslandHalf, outer + RunOut), arm.Mouth);
+                var p0 = At(arm.Plan, s0, off + sign * arm.Flare(s0));
+                var u0 = At(arm.Plan, s0 + 1, off + sign * arm.Flare(s0 + 1)) - p0;
+                return (p0, s0, u0 / Math.Max(1e-9, u0.Length));
+            }
+            // the fillet off a lane line onto the ring lane, its centre on the side given (+1: the line's Perp side) and outside the
+            // ring lane: the tangent point on the line (and its station), on the ring lane, and the fillet's centre
+            (Vec2 T, double S, Vec2 C, Vec2 F)? Join((Vec2 P, double S, Vec2 U) line, double side, double re)
+            {
+                var away = line.U.Perp * side;
+                var q = line.P + away * re - o;
+                double qu = q.Dot(line.U), disc = qu * qu - (q.LengthSquared - (radius + re) * (radius + re));
+                if (disc < 0) return null;
+                double t = -qu + Math.Sqrt(disc);
+                var tp = line.P + line.U * t;
+                var f = tp + away * re;
+                return (tp, line.S + t, o + (f - o) * (radius / (radius + re)), f);
+            }
+            static void Arc(List<Vec2> into, Vec2 f, Vec2 from, Vec2 to)
+            {
+                double r = from.DistanceTo(f), h0 = (from - f).Heading, dh = Angles.Delta(h0, (to - f).Heading);
+                int steps = Math.Max(2, (int)Math.Ceiling(Math.Abs(dh) * r / 0.75));
+                for (int k = 0; k <= steps; k++) into.Add(f + Vec2.FromHeading(h0 + dh * k / steps) * r);
+            }
+            var inLine = LaneLine(a, offA, +1);
+            var outLine = LaneLine(b, offB, -1);
+            double armSweep = Ccw(Heading(a), Heading(b));
+            (Vec2 T, double S, Vec2 C, Vec2 F)? jin = null, jout = null;
+            double ringSweep = 0;
+            // the fillets smaller until they meet the ring lane in order and start inside their mouths
+            for (double re = Math.Clamp(0.8 * radius + 3, 4, 15); re >= 1; re *= 0.75)
+            {
+                jin = Join(inLine, +1, re);
+                jout = Join(outLine, -1, re);
+                if (jin is not { } ji || jout is not { } jo) continue;
+                ringSweep = Ccw((ji.C - o).Heading, (jo.C - o).Heading);
+                if (ringSweep <= armSweep + 0.3 && ji.S < a.Mouth - 0.2 && jo.S < b.Mouth - 0.2) break;
+            }
             var pts = new List<Vec2>();
-            double sA = StationAt(a.Plan, offA + IslandHalf, outer + RunOut), sB = StationAt(b.Plan, offB - IslandHalf, outer + RunOut);
-            sA = Math.Min(sA, a.Mouth);
-            sB = Math.Min(sB, b.Mouth);
-            for (double s = a.Mouth; s > sA; s -= 1) pts.Add(At(a.Plan, s, offA + a.Flare(s)));
-            var p1 = At(a.Plan, sA, offA + a.Flare(sA));
-            pts.Add(p1);
-            var din = p1 - At(a.Plan, sA + 1, offA + a.Flare(sA + 1));
-            din /= Math.Max(1e-9, din.Length);
-            var q1 = At(b.Plan, sB, offB - b.Flare(sB));
-            var dout = At(b.Plan, sB + 1, offB - b.Flare(sB + 1)) - q1;
-            dout /= Math.Max(1e-9, dout.Length);
-            double lead = Math.Max(3, (p1.DistanceTo(o) - radius) * 1.5);
-            double hIn = (p1 - o).Heading + lead / radius, hOut = (q1 - o).Heading - lead / radius;
-            double sweep = Ccw(hIn, hOut);
-            Bezier(pts, p1, din, o + Vec2.FromHeading(hIn) * radius, Vec2.FromHeading(hIn + Math.PI / 2));
-            int steps = Math.Max(1, (int)Math.Ceiling(sweep * radius / 1.0));
-            for (int q = 1; q < steps; q++) pts.Add(o + Vec2.FromHeading(hIn + sweep * q / steps) * radius);
-            Bezier(pts, o + Vec2.FromHeading(hOut) * radius, Vec2.FromHeading(hOut + Math.PI / 2), q1, dout);
-            for (double s = sB + 1; s < b.Mouth; s += 1) pts.Add(At(b.Plan, s, offB - b.Flare(s)));
+            if (jin is not { } i || jout is not { } x) return pts;
+            for (double s = a.Mouth; s > i.S; s -= 1) pts.Add(At(a.Plan, s, offA + a.Flare(s)));
+            Arc(pts, i.F, i.T, i.C);
+            int steps = Math.Max(1, (int)Math.Ceiling(ringSweep * radius / 1.0));
+            double h0 = (i.C - o).Heading;
+            for (int q = 1; q < steps; q++) pts.Add(o + Vec2.FromHeading(h0 + ringSweep * q / steps) * radius);
+            Arc(pts, x.F, x.C, x.T);
+            for (double s = Math.Ceiling(x.S); s < b.Mouth; s += 1) if (s > x.S + 0.05) pts.Add(At(b.Plan, s, offB - b.Flare(s)));
             pts.Add(At(b.Plan, b.Mouth, offB));
             Dedupe(pts);
             return pts;
