@@ -25,8 +25,8 @@ namespace UnitSport.Bots;
 public partial class BotDirector : Node
 {
     public const string NodeName = "Bots";
-    /// <summary>At most this many bots at once on a server.</summary>
-    public const int MaxBots = 64;
+    /// <summary>At most this many bots at once on a server (a 100-player match is the aim).</summary>
+    public const int MaxBots = 128;
     /// <summary>A human within this sees a bot act: its brain runs at its own rate. Further, at most <see cref="FarThink"/>.</summary>
     public const float WatchedRange = 300f;
     /// <summary>Seconds between thoughts for a bot no human is near.</summary>

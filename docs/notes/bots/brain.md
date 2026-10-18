@@ -82,7 +82,7 @@
     spot. Its height is the lower of the loaded ground and the horizon lattice
     (`BrManager.GroundAt`), since far tiles are not loaded on the server.
   - **canopy**: `Intent.Steer.x` turns towards the spot (positive turns right, lowering the yaw), it
-    brakes the last 15 m, and it drops slowly over the spot. The body lands on foot by itself.
+    brakes the last 30 m, and it drops slowly over the spot. The body lands on foot by itself.
   - **flight controls**: `body.FlyControls` builds the `FlightInput` from `Intent.Steer`, `LookYaw` and
     `LookPitch`. The deploy or cut-away press (`Action`) is true only while the ride is not the one
     wanted (`Intent.Canopy`): a held press toggles canopy and wingsuit every physics step.
