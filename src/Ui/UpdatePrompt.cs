@@ -5,25 +5,35 @@ namespace UnitSport.Ui;
 
 /// <summary>
 /// The update check (#532): once per session the title screen asks GitHub for the releases; when
-/// the latest is newer than this build, a modal offers to update or Later.
+/// the latest is newer than this build, <see cref="Available"/> holds its tag and the title shows an
+/// "Update to" entry (#845). Pressing it calls <see cref="UpdateNow"/>, which asks nothing:
 /// <list type="bullet">
 /// <item>Delta update, when every release since this one has a delta for this platform and they
 /// weigh less than the full archive (<see cref="UpdateInfo.DeltaChain"/>): the deltas are
 /// downloaded, staged beside the install on a worker thread (<see cref="UpdatePackage.Staging"/>, every
-/// hash checked), and <see cref="UpdateScript"/> swaps them in when the game quits, restarting it if asked.</item>
+/// hash checked), and <see cref="UpdateScript"/> swaps them in once the game quits, then restarts it.</item>
 /// <item>Otherwise, or when patching fails: the full archive into the Downloads folder, to unpack by hand.</item>
 /// </list>
 /// A development build (no stamped <c>config/version</c>), an editor run (never patched) and a headless
-/// run never ask. <c>--fakeversion 0.0.1</c> pretends to be an old build, <c>--updatefeed URL</c> reads
-/// another release list, <c>--updateaccept</c> answers yes to every question (end-to-end checks).
+/// run never look. <c>--fakeversion 0.0.1</c> pretends to be an old build, <c>--updatefeed URL</c> reads
+/// another release list, <c>--updateaccept</c> answers yes to the failure questions (end-to-end checks).
 /// </summary>
 public partial class UpdatePrompt : Node
 {
     private static readonly string[] Headers = { "User-Agent: UnitSportSwitzerland", "Accept: application/vnd.github+json" };
 
     private static bool _checked;
-    /// <summary>A newer release found but not offered yet (the title was covered when the answer came).</summary>
+    /// <summary>The release list, kept once it holds a release newer than this build.</summary>
     private static List<UpdateInfo.Release>? _pending;
+
+    /// <summary>The newest release's tag when it is newer than this build, else null.</summary>
+    public static string? Available { get; private set; }
+    /// <summary>Raised with the tag when the check finds a newer release.</summary>
+    public static event Action<string>? Found;
+
+    /// <summary>The update that <see cref="UpdateNow"/> started stopped without restarting the game
+    /// (failed, cancelled, or a full archive saved to unpack by hand).</summary>
+    public event Action? Stopped;
 
     private sealed record Job(string Url, string Path, long Size);
 
@@ -44,7 +54,7 @@ public partial class UpdatePrompt : Node
         CmdArgs.Value("--fakeversion") ?? (string)ProjectSettings.GetSetting("application/config/version", "");
     private static bool AutoAccept => CmdArgs.Has("--updateaccept");
 
-    /// <summary>Starts the check from the title screen (once per session), or offers what it already found.</summary>
+    /// <summary>Starts the check from the title screen, once per session.</summary>
     public static UpdatePrompt? Attach(TitleScreen title)
     {
         // a phone cannot patch its own APK, and the releases page would offer it desktop builds (#63)
@@ -57,12 +67,6 @@ public partial class UpdatePrompt : Node
             p.Check();
         }
         return p;
-    }
-
-    /// <summary>The title came to the front: offer a release found while it was covered.</summary>
-    public void OnTitleShown()
-    {
-        if (_pending != null) Callable.From(Offer).CallDeferred();
     }
 
     private void Check()
@@ -82,7 +86,8 @@ public partial class UpdatePrompt : Node
             if (latest == null || !UpdateInfo.IsNewer(latest.Tag, CurrentVersion)) return;
             GD.Print($"[update] {latest.Tag} is out (this build is v{CurrentVersion})");
             _pending = releases;
-            Offer();
+            Available = latest.Tag;
+            Found?.Invoke(latest.Tag);
         };
         if (http.Request(CmdArgs.Value("--updatefeed") ?? UpdateInfo.ReleasesUrl, Headers) != Error.Ok) http.QueueFree();
     }
@@ -111,33 +116,41 @@ public partial class UpdatePrompt : Node
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return false; }
     }
 
-    private void Ask(string title, string message, string okText, Action ok, string cancelText = "Later", Action? cancel = null)
+    /// <summary>A failure question; the update has stopped, so the title entry comes back.</summary>
+    private void Fail(string title, string message, string okText, Action ok)
     {
-        if (AutoAccept) { GD.Print($"[update] {title}: {okText} (--updateaccept)"); ok(); return; }
-        Modal.Confirm(_title, title, message, okText, ok, cancel, cancelText: cancelText);
+        Stopped?.Invoke();
+        Ask(title, message, okText, ok);
     }
 
-    private void Offer()
+    private void Ask(string title, string message, string okText, Action ok)
     {
-        if (_pending is not { } releases || !_title.IsVisibleInTree() || Modal.Current != null) return;
-        _pending = null;
+        if (AutoAccept) { GD.Print($"[update] {title}: {okText} (--updateaccept)"); ok(); return; }
+        Modal.Confirm(_title, title, message, okText, ok, cancelText: "Close");
+    }
+
+    /// <summary>Updates to <see cref="Available"/> without a question: a delta patch that restarts the
+    /// game when it can, else the full archive into Downloads, else the release page.
+    /// False when nothing was started (no release found, or only the page was opened).</summary>
+    public bool UpdateNow()
+    {
+        if (_pending is not { } releases || _download != null || _install != null) return false;
         var latest = UpdateInfo.Latest(releases)!;
         var full = UpdateInfo.AssetFor(latest, OS.GetName());
         var chain = UpdateInfo.DeltaChain(releases, CurrentVersion, OS.GetName());
         long deltaBytes = chain?.Sum(c => c.Delta.Size) ?? long.MaxValue;
-        string intro = $"UnitSport {latest.Tag} is out; you are playing v{CurrentVersion}.";
+        GD.Print($"[update] updating to {latest.Tag}");
 
         if (chain != null && full != null && deltaBytes < full.Size * UpdateInfo.DeltaWorthIt && CanPatch())
-        {
-            string steps = chain.Count > 1 ? $" in {chain.Count} steps" : "";
-            Ask("New version available",
-                $"{intro} Update now{steps}? {Size(deltaBytes)} to download instead of {Size(full.Size)}; the game restarts to finish.",
-                "Update", () => Patch(latest, chain, full));
-        }
+            Patch(latest, chain, full);
         else if (full != null)
-            Ask("New version available", $"{intro} Download it now ({Size(full.Size)})?", "Download", () => DownloadFull(latest, full));
+            DownloadFull(latest, full);
         else
-            Ask("New version available", intro, "Open release page", () => OS.ShellOpen(latest.PageUrl));
+        {
+            OS.ShellOpen(latest.PageUrl);
+            return false;
+        }
+        return true;
     }
 
     // ---- downloads: a queue of files behind one progress modal
@@ -149,7 +162,7 @@ public partial class UpdatePrompt : Node
         _doneBytes = 0;
         _totalBytes = _jobs.Sum(j => j.Size);
         _jobsDone = done; _jobsFailed = failed;
-        _progress = Modal.Progress(_title, title, null, CancelAll, out var bar, out var status);
+        _progress = Modal.Progress(_title, title, null, () => { CancelAll(); Stopped?.Invoke(); }, out var bar, out var status);
         _bar = bar; _status = status;
         NextJob();
     }
@@ -234,13 +247,14 @@ public partial class UpdatePrompt : Node
         Fetch($"Downloading {release.Tag}", new[] { new Job(asset.Url, file, asset.Size) },
             () =>
             {
+                Stopped?.Invoke();
                 string mac = OS.GetName() == "macOS" ? " On a Mac, run xattr -cr UnitSportSwitzerland.app once before opening it." : "";
                 Ask("Download complete",
                     $"{release.Tag} is saved as {file}. Quit this game, unpack the archive and play the new version.{mac}",
-                    "Show file", () => OS.ShellShowInFileManager(file), cancelText: "Close");
+                    "Show file", () => OS.ShellShowInFileManager(file));
             },
-            why => Ask("Download failed", $"{why} You can get {release.Tag} from the release page instead.",
-                "Open release page", () => OS.ShellOpen(release.PageUrl), cancelText: "Close"));
+            why => Fail("Download failed", $"{why} You can get {release.Tag} from the release page instead.",
+                "Open release page", () => OS.ShellOpen(release.PageUrl)));
     }
 
     // ---- delta update
@@ -292,32 +306,31 @@ public partial class UpdatePrompt : Node
             return;
         }
         GD.Print($"[update] {_target!.Tag} staged in {_staging!.Dir}");
-        Ask("Update ready", $"{_target.Tag} is ready. Restart now, or it is installed when you quit.",
-            "Restart now", () => Swap(true), cancelText: "When I quit", cancel: () => Swap(false));
+        Swap();
     }
 
-    /// <summary>Starts the swap script, which waits for this process to end; then quits if restarting.</summary>
-    private void Swap(bool restart)
+    /// <summary>Starts the swap script, which waits for this process to end and restarts the game; then quits.</summary>
+    private void Swap()
     {
         bool windows = OS.GetName() == "Windows";
         string script = System.IO.Path.Combine(_staging!.Dir, UpdateScript.FileName(windows));
         System.IO.File.WriteAllText(script, UpdateScript.Text(windows, OS.GetProcessId(), InstallRoot(),
-            restart ? System.IO.Path.GetFullPath(OS.GetExecutablePath()) : null), new System.Text.UTF8Encoding(windows));
+            System.IO.Path.GetFullPath(OS.GetExecutablePath())), new System.Text.UTF8Encoding(windows));
         var (program, args) = UpdateScript.Command(windows, script);
         int pid = OS.CreateProcess(program, args);
         GD.Print($"[update] swap script {script}: pid {pid}");
         if (pid <= 0) { PatchFailed("The installer script could not start."); return; }
-        if (restart) _title.Shell.Quit();
+        _title.Shell.Quit();
     }
 
     private void PatchFailed(string why)
     {
         if (_target is not { } release) return;
         if (_full is { } full)
-            Ask("Update failed", $"{why} Download the full {release.Tag} instead ({Size(full.Size)})?",
-                "Download", () => DownloadFull(release, full), cancelText: "Close");
+            Fail("Update failed", $"{why} Download the full {release.Tag} instead ({Size(full.Size)})?",
+                "Download", () => DownloadFull(release, full));
         else
-            Ask("Update failed", why, "Open release page", () => OS.ShellOpen(release.PageUrl), cancelText: "Close");
+            Fail("Update failed", why, "Open release page", () => OS.ShellOpen(release.PageUrl));
     }
 
     public override void _ExitTree() => CancelAll();

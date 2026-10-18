@@ -42,6 +42,9 @@ one bar per shot after the drop, then one long pull-out.
 
 Captions are white, centred low, on the beat; never more than five words.
 
+The film is in the Cartoon style, all but the style sequence (shots 20-22), which shows PS1, Cartoon
+and Realistic in turn (`TrailerScript.Shots`).
+
 ## Shot list
 
 Times are song time. Lens in mm (full-frame equivalent; the director converts to a vertical FOV).

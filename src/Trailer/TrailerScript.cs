@@ -594,7 +594,8 @@ public static class TrailerScript
                 new(9.8, 5.6, "", Song.VoxelRevolution.Credit),
             ],
         },
-    };
+    // filmed in Cartoon, all but the style sequence, which shows each look in turn
+    }.Select(s => s.Feature == "visual styles" ? s : s with { Style = "cartoon" }).ToList();
 
     /// <summary>Dancers in a ring round <paramref name="c"/>, facing in, each with its own move.</summary>
     internal static Cast[] Circle(Spot c, float r, int[] dances, int seed) =>
