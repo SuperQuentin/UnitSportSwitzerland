@@ -34,10 +34,11 @@ public static partial class BuildingMeshBuilder
 
     /// <summary>
     /// A castle's wall (#859): UV is (metres along, metres above the wall run's foot) and UV2.x the
-    /// run's height. <see cref="CastleLevelWallFlag"/> is one whose head is level (not a gable), which
-    /// also gets the corbel band under it.
+    /// run's height; UV2.y is <see cref="CastleWallFlag"/>, +1 when its head is level (not a gable:
+    /// it gets the corbel table), +2 when its foot is on the ground (within
+    /// <see cref="CastleFootReach"/> of the solid's base: it gets the damp foot), so 4 to 7.
     /// </summary>
-    public const float CastleWallFlag = 4f, CastleLevelWallFlag = 5f;
+    public const float CastleWallFlag = 4f, CastleFootReach = 1.5f;
 
     /// <summary>
     /// The building mesh plus a front door on each building. The doors are a few boxes appended
@@ -218,7 +219,7 @@ public static partial class BuildingMeshBuilder
             int castleOf = part == BuildingPart.None ? types.CastleOf(bi) : -1;
             bool castle = castleOf >= 0;
             var wall = (castle ? CastleStone(castleOf, b.YearBuilt) : WallColor(kind, b.YearBuilt, type)).SrgbToLinear();
-            var roof = (castle ? CastleRoof : RoofColor(kind, type)).SrgbToLinear();
+            var roof = (castle ? CastleRoof(castleOf) : RoofColor(kind, type)).SrgbToLinear();
             var (storey, storeyCount) = part switch
             {
                 // facade v in metres; the slits, windows and corbels are the shader's, per wall run
@@ -371,7 +372,8 @@ public static partial class BuildingMeshBuilder
                     uvA = FacadeUv(a, run, baseY, storey);
                     uvB = FacadeUv(c, run, baseY, storey);
                     uvC = FacadeUv(d, run, baseY, storey);
-                    if (castle) triUv2 = new Vector2(run.Top - run.Bottom, run.Level ? CastleLevelWallFlag : CastleWallFlag);
+                    if (castle) triUv2 = new Vector2(run.Top - run.Bottom, CastleWallFlag
+                        + (run.Level ? 1f : 0f) + (run.Bottom < b.MinY + CastleFootReach ? 2f : 0f));
                     // too short for one window: the wall's bands and plinth, no glass
                     else if (run.Scale == 0f && uv2.Y == 0f) triUv2 = new Vector2(uv2.X, BlankWallFlag);
                 }
@@ -455,7 +457,7 @@ public static partial class BuildingMeshBuilder
     /// <see cref="Level"/> whether it is a rectangle (its top a level wall head, not a gable): a
     /// castle's wall measures its slits and its corbel band from them (#859).
     /// </remarks>
-    private readonly record struct WallRun(Vector3 Tangent, float Start, float Scale, float Bottom = 0f, float Top = 0f, bool Level = false);
+    private readonly record struct WallRun(Vector3 Tangent, float Start, float Scale, float Bottom = 0f, float Top = 0f, bool Level = false, float Length = 0f);
 
     /// <summary>
     /// Groups a building's wall triangles into wall runs and gives each triangle its run's frame
@@ -566,7 +568,7 @@ public static partial class BuildingMeshBuilder
             int columns = Mathf.RoundToInt(len / WindowSpacing);
             // a rectangle fills its span: area (the sum is twice it) against width times height
             bool level = facing[r].Area * 0.5f >= 0.85f * len * (y1 - y0);
-            runs[t] = new WallRun(tangent, u0, columns > 0 ? columns * WindowSpacing / len : 0f, y0, y1, level);
+            runs[t] = new WallRun(tangent, u0, columns > 0 ? columns * WindowSpacing / len : 0f, y0, y1, level, len);
         }
     }
 

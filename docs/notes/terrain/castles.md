@@ -23,20 +23,29 @@
   Schloss Lenzburg 32.
 - **Regenerate** after a building rebuild (solid indices do not matter, points do: a re-seated or
   re-cut solid still covers its point unless its footprint changed).
-- **Dress** (`BuildingMeshBuilder.Castle.cs`, only solids of no church group): stone by castle name
-  (limestone, grey, lime render, sandstone, kept off white), weathered at 40% of `ApplyAge`, deep
-  tile roofs, no solar panels. Walls carry UV2.y 4 (5: a level head) with v in metres above their
-  **wall run's** foot and UV2.x the run's height (`WallRun.Bottom/Top/Level`), so one solid with a
-  44 m keep and 15 m curtain walls gets each wall's openings right. Shader `castle_wall`: ashlar
-  courses, battered foot, a column every 5.2 m with an arrow slit (some with a crossbow bar) or a
-  round-arched window high up (lit at night), corbels and machicolation gaps under a level head.
-  The per-wall hash seed is rounded: the interpolated tangent jitters and the hash made speckle.
+- **Dress** (`BuildingMeshBuilder.Castle.cs`, only solids of no church group), tuned on photos of
+  Chillon (Oct 2026): stone and roof each from a palette by castle name (grey-beige rubble, Chillon's
+  limestone, warm limestone, sandstone, lime-wash; red-brown, weathered brown-grey, slate tiles;
+  ordered so Chillon lands on its own), weathered at 40% of `ApplyAge`, no solar panels.
+- **Walls** carry UV2.y 4 to 7 (4, +1 a level head, +2 a foot within 1.5 m of the solid's base) with
+  v in metres above their **wall run's** foot and UV2.x the run's height (`WallRun.Bottom/Top/Level`),
+  so one solid with a 44 m keep and 15 m curtain walls gets each wall's openings right. Shader
+  `castle_wall`: rubble courses of uneven stones, noise patches and rain streaks, a damp dark-green
+  foot 2.6-3.8 m up (the run starts under the ground or the water), up to two rows of two-light
+  Gothic windows (pointed lancets, a mullion, a dressed frame; some lit at night) and small square
+  ones on the upper floors, arrow slits (some with a crossbow bar) below, and an **arched corbel
+  table** (corbels, round arches, the dark machicolation) under a level head. The per-wall hash seed
+  is rounded: the interpolated tangent jitters and the hash made speckle.
 - **Geometry** (appended after the doors): a 0.9 m parapet plus merlons on every open edge of a flat
-  roof (an edge no other flat face shares, with nothing of the solid as high 0.4 m past it), and a
-  7 m pole with a Swiss flag on the apex of each castle's tallest solid (12 m+). Visual only: no
-  collision.
+  roof (an edge no other flat face shares, with nothing of the solid as high 0.4 m past it; each
+  corner owned by one edge); **iron finials** on every roof peak (a vertex topping 2+ sloping faces
+  with no roof vertex as high within 6 m: tower cones and pyramids, not ridges); **wooden oriels**
+  (Chillon's latrines) 4.2 m under the head of long (14 m+), tall (12 m+) rectangular walls standing on
+  the ground, one per 22 m, 4 a solid at most; a 7 m pole with a Swiss flag on the apex of each
+  castle's tallest solid (12 m+). Visual only: no collision.
 - **Check:** model viewer `--models,test_output/models --modelsonly castle` (a keep on Chillon's
-  point); in game a `--shot-queue` from the lake, origin 2560000,1140000:
-  `600,395,-330,-6,320,8,<png>` (yaw grows counter-clockwise, 0 = north).
+  point); in game a `--shot-queue`, origin 2560000,1140000 (yaw grows counter-clockwise, 0 = north):
+  lake front `640,378,-370,6,322,6,<png>`, Montreux side `655,378,-500,8,215,6,<png>`, land side
+  `770,381,-470,10,140,6,<png>` (the three photo viewpoints).
 - **Not yet:** interiors (a castle is not a `BuildingGroup`; its interior is whatever its kind
   plans), OSM multipolygon castles (relations are skipped), cantonal flags, ruins drawn as ruins.

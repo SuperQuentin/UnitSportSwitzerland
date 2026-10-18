@@ -402,76 +402,127 @@ vec3 solar_field(vec3 col, inout vec3 n, inout float glass, vec2 q, vec2 ext, fl
 
 varying float garage_flag;  // UV2.y: 0 plain, 1 neon sign, 2 garage wall (storey_count = eave m),
                             // 3 a wall run too short for a window (bands and plinth only),
-                            // 4/5 a castle wall (storey_count = the run's height m; 5: a level head)
+                            // 4-7 a castle wall (storey_count = the run's height m; +1 a level head, +2 its foot on the ground)
 
 // --- castles (#859) ---------------------------------------------------------------------
-// A castle's wall: v is metres above its wall run's foot, h the run's height. Coursed ashlar with
-// darker mortar and a stone-to-stone tone, a battered darker foot, a column every 5.2 m holding an
-// arrow slit (some with a crossbow bar) or, high up, a round-arched window lit at night, and under
-// a level wall head a band of corbels with the dark machicolation gaps between them.
-vec3 castle_wall(vec3 col, vec2 q, float h, bool level, vec2 seed, float px, inout vec3 glow) {
-    // ashlar: 0.5 m courses, 1.1 m stones, every other course offset by half a stone
-    float row = floor(q.y / 0.5);
-    float sx = q.x / 1.1 + 0.5 * mod(row, 2.0);
-    vec2 in_stone = vec2(fract(sx) * 1.1, fract(q.y / 0.5) * 0.5);
-    float joint = min(min(in_stone.x, 1.1 - in_stone.x), min(in_stone.y, 0.5 - in_stone.y));
-    col *= 1.0 + (hash(vec2(floor(sx), row) + seed) - 0.5) * 0.14 * fine_detail(0.5, px);
-    col *= mix(1.0, 0.76, step(joint, 0.03) * fine_detail(0.03, px));
-    // the battered foot
-    if (q.y < 1.4) {
-        col *= mix(1.0, 0.84, fine_detail(0.2, px));
-    } else if (q.y < 1.48) {
-        col *= mix(1.0, 1.1, fine_detail(0.06, px));
+// A castle's wall, drawn after photos of Chillon: v is metres above its wall run's foot, h the
+// run's height. Rubble courses of uneven stones, patches and rain streaks, a dark damp foot where
+// the wall meets the ground or the lake, two-light Gothic windows and small square ones in rows on
+// the upper floors, arrow slits below, and under a level wall head an arched corbel table.
+
+// smooth value noise, for the weathering
+float castle_noise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+
+// A two-light Gothic window, q from its bottom middle (across, up), w x h inside its frame:
+// 0 wall, 1 the stone frame and mullion, 2 glass. Each light ends in a pointed (equilateral) head.
+int gothic_window(vec2 q, float w, float h) {
+    float fw = 0.13;
+    if (abs(q.x) > w * 0.5 + fw || q.y < -fw || q.y > h + fw) return 0;
+    if (q.y < 0.0 || abs(q.x) < 0.05 || abs(q.x) > w * 0.5) return 1;
+    float a = (w * 0.5 - 0.05) * 0.5;               // half a light's width
+    float lx = abs(q.x) - 0.05 - a;                  // from that light's middle
+    float spring = h - 1.732 * a;                    // where its pointed head starts
+    if (q.y < spring) return 2;
+    vec2 d = vec2(lx, q.y - spring);
+    return (length(d - vec2(a, 0.0)) < 2.0 * a && length(d + vec2(a, 0.0)) < 2.0 * a) ? 2 : 1;
+}
+
+vec3 castle_wall(vec3 col, vec2 q, float h, bool level, bool foot, vec2 seed, float px, inout vec3 glow) {
+    // rubble: 0.42 m courses, each its own stone length and offset, every stone its own tone
+    float row = floor(q.y / 0.42);
+    float len = 0.55 + 0.8 * hash(vec2(row, 1.3) + seed);
+    float sx = q.x / len + hash(vec2(row, 5.1) + seed);
+    vec2 in_stone = vec2(fract(sx) * len, fract(q.y / 0.42) * 0.42);
+    float joint = min(min(in_stone.x, len - in_stone.x), min(in_stone.y, 0.42 - in_stone.y));
+    col *= 1.0 + (hash(vec2(floor(sx), row) + seed) - 0.5) * 0.24 * fine_detail(0.4, px);
+    col *= mix(1.0, 0.72, step(joint, 0.03) * fine_detail(0.03, px));
+    // weathering: broad patches, then rain streaks running down from the head
+    col *= mix(0.84, 1.08, castle_noise(q * vec2(0.22, 0.3) + seed));
+    float streak = castle_noise(vec2(q.x * 1.4, q.y * 0.07) + seed * 3.0);
+    col *= 1.0 - 0.14 * smoothstep(0.55, 0.92, streak) * smoothstep(0.0, 6.0, q.y);
+    // the foot: damp, dark and green where it stands in the ground or the lake
+    if (foot) {
+        // the run starts below the ground or the water line, so the band reaches well up
+        float fh = 2.6 + 1.2 * castle_noise(vec2(q.x * 0.35, 0.5) + seed);
+        float damp = 1.0 - smoothstep(fh - 0.7, fh, q.y);
+        col = mix(col, col * vec3(0.40, 0.45, 0.38), damp);
     }
 
-    // openings, one column every 5.2 m
-    float cu = q.x / 5.2;
-    float lu = (fract(cu) - 0.5) * 5.2; // metres from the column's middle
-    float r = hash(vec2(floor(cu), 0.0) + seed);
-    float open = 0.0; // 1 inside an opening
-    bool glazed = false;
-    if (h > 4.5 && r < 0.5) {
-        // an arrow slit, its foot a third of the way up
-        float y0 = clamp(h * 0.33, 1.8, h - 2.4);
-        bool slit = abs(lu) < 0.14 && q.y > y0 && q.y < y0 + 1.8;
-        bool bar = r < 0.2 && abs(lu) < 0.42 && abs(q.y - (y0 + 1.0)) < 0.11;
-        open = (slit || bar) ? 1.0 : 0.0;
-        // the splayed reveal around it catches the light
-        if (open < 0.5 && abs(lu) < 0.24 && q.y > y0 - 0.1 && q.y < y0 + 1.9) col *= mix(1.0, 1.1, fine_detail(0.08, px));
-    } else if (h > 8.0 && r < 0.8) {
-        // a round-arched window high in the wall, in a lighter stone surround
-        float y0 = min(h * 0.6, h - 3.2);
-        vec2 arch = vec2(lu, q.y - (y0 + 1.2));
-        bool inside = abs(lu) < 0.5 && q.y > y0 && (q.y < y0 + 1.2 || length(arch) < 0.5);
-        bool frame = abs(lu) < 0.66 && q.y > y0 - 0.15 && (q.y < y0 + 1.2 || length(arch) < 0.66);
-        if (inside) {
-            open = 1.0;
-            glazed = true;
-        } else if (frame) {
-            col *= mix(1.0, 1.12, fine_detail(0.1, px));
+    // the openings: window rows on the upper floors, slits below
+    vec3 dark = vec3(0.05, 0.05, 0.06);
+    int open = 0; // 1 frame, 2 glass, 3 a slit
+    bool lit = false;
+    float rows_from = h;
+    if (h > 9.0) {
+        // up to two rows of windows, 3.6 m apart, the top one 3.4 m under the head
+        for (int k = 0; k < 2; k++) {
+            float y0 = h - 3.4 - float(k) * 3.8;
+            if (y0 < max(4.0, h * 0.4)) break;
+            rows_from = y0;
+            float shift = (hash(vec2(float(k), 9.1) + seed) - 0.5) * 1.6;
+            float cu = (q.x + shift) / 3.6;
+            float r = hash(vec2(floor(cu), float(k) + 2.0) + seed);
+            vec2 wq = vec2((fract(cu) - 0.5) * 3.6, q.y - y0);
+            int w = 0;
+            if (r < 0.42) {
+                w = gothic_window(wq, 1.1, 1.7);
+            } else if (r < 0.62) {
+                // a small square window
+                w = abs(wq.x) < 0.27 && wq.y > 0.4 && wq.y < 1.1 ? 2
+                  : abs(wq.x) < 0.38 && wq.y > 0.29 && wq.y < 1.21 ? 1 : 0;
+            }
+            if (w > 0) {
+                open = w;
+                lit = hash(vec2(floor(cu), float(k) + 7.7) + seed) > mix(0.93, 0.45, world_night);
+            }
         }
     }
-    if (open > 0.5) {
-        float legible = fine_detail(glazed ? 0.9 : 0.28, px); // the opening's own size: gone under ~1 px
-        vec3 dark = vec3(0.05, 0.05, 0.06);
-        if (glazed) {
-            bool lit = hash(vec2(floor(cu), 7.7) + seed) > mix(0.92, 0.45, world_night);
-            dark = lit ? window_lit : window_color;
+    if (open == 0 && h > 4.5) {
+        // arrow slits under the windows, their foot a third of the way up
+        float cu = q.x / 5.2;
+        float lu = (fract(cu) - 0.5) * 5.2;
+        float r = hash(vec2(floor(cu), 0.0) + seed);
+        float y0 = clamp(min(h * 0.33, rows_from - 3.0), 1.8, h - 2.4);
+        if (r < 0.5) {
+            bool slit = abs(lu) < 0.13 && q.y > y0 && q.y < y0 + 1.7;
+            bool bar = r < 0.2 && abs(lu) < 0.4 && abs(q.y - (y0 + 0.95)) < 0.1;
+            if (slit || bar) {
+                open = 3;
+            } else if (abs(lu) < 0.24 && q.y > y0 - 0.1 && q.y < y0 + 1.8) {
+                col *= mix(1.0, 1.1, fine_detail(0.08, px)); // the splayed reveal
+            }
+        }
+    }
+    if (open == 1) {
+        col = mix(col, col * 1.16, fine_detail(0.1, px)); // dressed stone round the glass
+    } else if (open >= 2) {
+        float legible = fine_detail(open == 3 ? 0.26 : 0.5, px);
+        if (open == 2) {
+            dark = lit ? window_lit : window_color * 0.8;
             if (lit) glow = window_lit * legible;
         }
         col = mix(col, dark, legible);
     }
 
-    // corbels and machicolations under a level wall head
+    // an arched corbel table under a level wall head: corbels, a round arch between each pair,
+    // the dark machicolation behind it, the parapet proud above
     if (level && h > 6.0) {
-        float band = fine_detail(0.25, px);
-        if (q.y > h - 1.1 && q.y < h - 0.55) {
-            float k = fract(q.x / 0.7);
-            col *= (k > 0.3 && k < 0.7) ? mix(1.0, 1.06, band) : mix(1.0, 0.35, band);
-        } else if (q.y > h - 1.28 && q.y <= h - 1.1) {
-            col *= mix(1.0, 0.78, band); // the corbels' shadow on the wall
-        } else if (q.y >= h - 0.55) {
-            col *= mix(1.0, 1.04, band); // the parapet they carry, proud of the wall
+        float band = fine_detail(0.2, px);
+        float yb = q.y - (h - 1.25);
+        if (yb > 0.0 && yb < 0.8) {
+            float k = fract(q.x / 0.85) * 0.85;
+            float a = 0.3, cx = 0.25 + a, spring = 0.8 - a - 0.06;
+            bool corbel = k < 0.25;
+            bool hole = !corbel && (yb < spring || length(vec2(k - cx, yb - spring)) < a);
+            col *= corbel ? mix(1.0, 1.08, band) : hole ? mix(1.0, 0.32, band) : mix(1.0, 1.02, band);
+        } else if (yb <= 0.0 && yb > -0.16) {
+            col *= mix(1.0, 0.76, band); // the corbels' shadow on the wall
+        } else if (yb >= 0.8) {
+            col *= mix(1.0, 1.05, band);
         }
     }
     return col;
@@ -542,7 +593,8 @@ void fragment() {
         // the wall's seed, rounded: the interpolated tangent jitters in its last bits, and the hash
         // turns that into speckle
         vec2 seed = floor(wall_frame.xy * 17.0 + 0.5) + vec2(floor(storey_count + 0.5));
-        col = castle_wall(col, facade, storey_count, garage_flag > 4.5, seed, cpx, glow);
+        float bits = garage_flag - 4.0; // +1 a level head, +2 a foot on the ground
+        col = castle_wall(col, facade, storey_count, mod(bits, 2.0) > 0.5, bits > 1.5, seed, cpx, glow);
     } else if (!garage_wall && facade.y >= 0.0 && facade.y < top && detail < 0.6) {
         float u = facade.x;
         float wall_v = fract(facade.y);
