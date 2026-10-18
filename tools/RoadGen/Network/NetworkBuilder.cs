@@ -70,8 +70,8 @@ public sealed class NetworkBuilder
     /// </summary>
     private HashSet<(int LinkId, bool AtStart)> _nearJunction = [];
 
-    /// <summary>A footpath end within this (m) of a junction of car roads is kept apart from them.</summary>
-    private const double FootpathJunctionReach = 15;
+    /// <summary>A footpath end within this (m) of a junction of car roads is kept apart from them (#854: as far as its mouths reach).</summary>
+    private const double FootpathJunctionReach = 30;
 
     /// <summary><see cref="Apart"/> for one footpath end: near a car junction, and not a crossing's (<see cref="_crossingEnds"/>).</summary>
     private bool Apart(RoadLink a, bool aAtStart, RoadLink b, bool bAtStart) => Apart(a, b)

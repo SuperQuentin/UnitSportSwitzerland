@@ -471,9 +471,8 @@ public static partial class TileRewriter
                     JoinNearEnds: MayJoinNearEnd,
                     TightCorner: (n, node, from, to) => NoRightTurn(n, node, from, to, restrictions, overlay),
                     // (#711, the user's rule) a footpath joining a street connects to its sidewalk: no junction with it; a track too
-                    // in town (the user's choice: in the countryside tractors turn there)
-                    IsFootpath: l => l.Tag is Source s && (s.Segment.Class == RoadClass.Path || s.Segment.Class == RoadClass.Track
-                        && l.Centreline.Count >= 2 && (field.Density(l.First.X, l.First.Y) >= UrbanField.UrbanAt || field.Density(l.Last.X, l.Last.Y) >= UrbanField.UrbanAt)),
+                    // (#854, the user, Oct 18: near a junction it ends at the carriageway's edge, no arm of it)
+                    IsFootpath: l => l.Tag is Source s && s.Segment.Class is RoadClass.Path or RoadClass.Track,
                     IsCarRoad: l => l.Tag is Source s && PriorityPlanner.IsCarRoad(s.Segment.Class)));
                 netStats.Priority.NearEndsJoined += result.NearEndsJoined;
                 // traffic lights: from OSM where the overlay covers a junction, else where two main

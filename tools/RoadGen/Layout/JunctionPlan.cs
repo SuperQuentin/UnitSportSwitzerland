@@ -139,9 +139,10 @@ public sealed class JunctionPlan
 
     /// <summary>
     /// The junctions whose cores overlap, in groups to merge (phase 5c): each joined to the one past an inner street where a mouth
-    /// was held at half of it (the far junction too, whether or not its own mouth was held there).
+    /// was held at half of it (the far junction too, whether or not its own mouth was held there), and the pairs in
+    /// <paramref name="also"/> (a car road joining an arm short of its mouth, #854).
     /// </summary>
-    public static List<List<JunctionPlan>> OverlapGroups(IReadOnlyList<JunctionPlan> plans)
+    public static List<List<JunctionPlan>> OverlapGroups(IReadOnlyList<JunctionPlan> plans, IEnumerable<(JunctionPlan, JunctionPlan)>? also = null)
     {
         var planOf = plans.SelectMany(p => p.Arms.Select(a => (a, p))).ToDictionary(x => x.a, x => x.p);
         var links = new Dictionary<JunctionPlan, List<JunctionPlan>>();
@@ -154,6 +155,7 @@ public sealed class JunctionPlan
             foreach (var a in p.Arms.Where(a => a.Internal && p.Core!.ArmsAtReach.Contains(a.Arm)))
                 if (a.FarArm is { } f && planOf.TryGetValue(f, out var q) && q != p) Join(p, q);
                 else Join(p, p);
+        foreach (var (x, y) in also ?? []) Join(x, y);
         var groups = new List<List<JunctionPlan>>();
         var seen = new HashSet<JunctionPlan>();
         foreach (var start in links.Keys)

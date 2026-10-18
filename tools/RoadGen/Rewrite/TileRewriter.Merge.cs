@@ -28,7 +28,18 @@ public static partial class TileRewriter
         // overlapping cores are first laid apart, each mouth held at half the street between (turns tighter than their vehicle):
         // only a group where that fails a check merges (the user, Oct 17: two junctions across a grass strip at Sion
         // 2505653,1137735 are two, not one paved triangle)
-        var groups = JunctionPlan.OverlapGroups(plans).Where(g => g.Any(p => p.CoresOverlap && p.CoreFails)).ToList();
+        // a car road joining an arm short of its mouth: its node and the junction are one (the user, Oct 18: a lane between two car
+        // parks, a link of a divided road), merged where the streets between form a tree as any group
+        var byNode = plans.ToDictionary(p => p.Node);
+        var joins = new List<(JunctionPlan, JunctionPlan)>();
+        foreach (var p in plans)
+            if (p.Core is { } core)
+                foreach (var a in p.Arms)
+                    if (a.Axis is not null && core.Mouths.FirstOrDefault(m => m.Arm == a.Arm) is { } mouth
+                        && NodeShortOfMouth(result.Network, a, mouth.Station) is int node && byNode.TryGetValue(node, out var q) && q != p)
+                        joins.Add((p, q));
+        var joined = joins.SelectMany(j => new[] { j.Item1, j.Item2 }).ToHashSet();
+        var groups = JunctionPlan.OverlapGroups(plans, joins).Where(g => g.Any(p => p.CoresOverlap && p.CoreFails || joined.Contains(p))).ToList();
         stats.HeldApart += plans.Count(p => !p.Beyond && p.CoresOverlap && !p.CoreFails);
         var planned = plans.Select(p => p.Node).ToHashSet();
         if (groups.Count == 0) return plans;

@@ -138,7 +138,10 @@ public static partial class TileRewriter
     /// <see cref="JoinMargin"/> past the mouth where anything else meets it (a road dividing, a link, a track). The junction spans
     /// several nodes: the old layout keeps it until phase 5 plans such cores whole.
     /// </summary>
-    private static bool RoadJoinsShortOfMouth(RoadNetwork net, ArmPlan a, double mouth)
+    private static bool RoadJoinsShortOfMouth(RoadNetwork net, ArmPlan a, double mouth) => NodeShortOfMouth(net, a, mouth) is not null;
+
+    /// <summary>The node <see cref="RoadJoinsShortOfMouth"/> finds: the first along the arm's street where anything else joins.</summary>
+    private static int? NodeShortOfMouth(RoadNetwork net, ArmPlan a, double mouth)
     {
         var l0 = net.Links[a.LinkId];
         var nodes = new List<int> { a.AtEnd ? l0.StartNode : l0.EndNode };
@@ -147,9 +150,9 @@ public static partial class TileRewriter
         {
             if (node < 0 || node >= net.Nodes.Count) break;
             if (a.Axis!.StationPast(net.Nodes[node].Position) > mouth + JoinMargin) break;
-            if (net.Nodes[node].Degree > 2) return true;
+            if (net.Nodes[node].Degree > 2) return node;
         }
-        return false;
+        return null;
     }
 
     /// <summary>
