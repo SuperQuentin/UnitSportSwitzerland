@@ -70,6 +70,8 @@ public sealed class Bot
     public BotSenses Senses { get; } = new();
     /// <summary>Its walk (<see cref="BotSkills.MoveTo"/>).</summary>
     public BotNav Nav { get; } = new();
+    /// <summary>Its drive (<see cref="BotDriving"/>): the route, the pilot.</summary>
+    public BotDrive Drive { get; } = new();
     /// <summary>The world it acts in: the physics space and the bodies there (set by the director).</summary>
     public BotWorld World { get; set; } = null!;
     /// <summary>A timed use under way (<see cref="BotHands.Use"/>): what, and the clock it applies at (0 = none).</summary>

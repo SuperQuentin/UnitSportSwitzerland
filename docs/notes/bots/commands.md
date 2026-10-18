@@ -6,6 +6,7 @@
 - **Chat** (admin):
   - `/bot add [n] [easy|normal|hard]`: n bots (at most 16 a call) 6-16 m round you, in free roam.
   - `/bot arm <weapon> [rounds]`: every bot takes the weapon.
+  - `/bot drive [metres]`: every bot to a point that far ahead of you, by car or bike if one is in sight (`vehicles`).
   - `/bot fire`: every bot in its weapon's reach shoots once at your chest.
   - `/bot clear`, and `/bot list` (anyone).
   - `/br bots [n|off] [easy|normal|hard]`: the BR field size (`battle-royale`).
