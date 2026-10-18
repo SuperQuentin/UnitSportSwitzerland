@@ -54,7 +54,57 @@ public partial class ChatBubbles : CanvasLayer
         _speaker = speaker;
     }
 
-    public override void _Ready() => _chat.Spoken += OnSpoken;
+    public override void _Ready()
+    {
+        _chat.Spoken += OnSpoken;
+        if (CheckRequested)
+        {
+            // one's own bubble needs the camera off one's head
+            GameSettings.Current.ThirdPerson = true;
+            GameSettings.Current.ChatBubbles = true;
+            RunCheck();
+        }
+    }
+
+    /// <summary>
+    /// <c>--bubblecheck</c> (with <c>--autostart</c>, on foot): once one's body has stood a few
+    /// seconds, a command (no bubble) then a line said (a bubble over one's head) then one shouted;
+    /// screenshots in <c>test_output/bubbles/</c>, <c>[bubbles] RESULT</c>, quits.
+    /// </summary>
+    public static bool CheckRequested => CmdArgs.Has("--bubblecheck");
+
+    private async void RunCheck()
+    {
+        var tree = GetTree();
+        double start = RealClock.Now, found = double.NaN;
+        while (RealClock.Now - start < 240)
+        {
+            if (_speaker(ChatManager.OfflineSelf) != null && double.IsNaN(found)) found = RealClock.Now;
+            if (!double.IsNaN(found) && RealClock.Now - found > 8) break;
+            await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        }
+        var problems = new List<string>();
+        if (double.IsNaN(found)) problems.Add("no body of one's own to speak from");
+        string dir = ProjectSettings.GlobalizePath("res://test_output/bubbles");
+        System.IO.Directory.CreateDirectory(dir);
+        async System.Threading.Tasks.Task Say(string line, string png, BubbleShape? want)
+        {
+            _chat.Send(line);
+            await ToSignal(tree.CreateTimer(1.6, true, false, true), SceneTreeTimer.SignalName.Timeout);
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            var shown = _entries.Find(e => e.View.Visible || e.Sprite?.Visible == true);
+            if (want == null && _entries.Count > 0) problems.Add($"\"{line}\" made a bubble");
+            if (want != null && (shown == null || shown.Shape != want)) problems.Add($"\"{line}\": {(shown == null ? "no bubble on screen" : $"a {shown.Shape} bubble, not {want}")}");
+            GetViewport().GetTexture().GetImage().SavePng(System.IO.Path.Combine(dir, png));
+            GD.Print($"[bubbles] {line} -> {png}: {_entries.Count} bubble(s)");
+        }
+        await Say("/time 13", "command.png", null);
+        await Say("Anyone up for a fondue on the Gornergrat?", "say.png", BubbleShape.Say);
+        await Say("NOBODY TOUCHES MY CHEESE", "shout.png", BubbleShape.Shout);
+        foreach (var p in problems) GD.PrintErr($"[bubbles] {p}");
+        GD.Print(problems.Count == 0 ? "[bubbles] RESULT: ok" : "[bubbles] RESULT: FAILED");
+        tree.Quit(problems.Count == 0 ? 0 : 1);
+    }
 
     public override void _ExitTree() => _chat.Spoken -= OnSpoken;
 
