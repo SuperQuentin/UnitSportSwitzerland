@@ -129,14 +129,14 @@ public static class FondueScript
     // ---- places ---------------------------------------------------------------------------------
 
     /// <summary>The Gornergrat ridge's south edge, where it drops to the Gorner glacier (to frame).</summary>
-    private static readonly Spot GornerEdge = Crew.Toward(165, 36);
+    private static readonly Spot GornerEdge = Crew.Toward(167, 46);
     /// <summary>The Riddes plain (VS): IKEA, the fields along the Rhône.</summary>
     private static readonly Spot RiddesIkea = new(2582265, 1112638);
     private static readonly Spot RiddesField = new(2584199, 1113836), RiddesFieldEnd = new(2584426, 1113972);
     /// <summary>Geneva airport's apron by the freighter's stand: flat, wide, a car park for the garage.</summary>
     private static readonly Spot Apron = new(2497250, 1121000);
     /// <summary>The Nyon pier and the park the party danced in.</summary>
-    private static readonly Spot NyonPier = new(2508061, 1137475), NyonPark = new(2507810, 1137290);
+    private static readonly Spot NyonPier = new(2508077, 1137494), NyonPark = new(2507810, 1137290);
     /// <summary>Lauterbrunnen's main street, the Staubbach behind.</summary>
     private static readonly Spot Lauterbrunnen = new(2635922, 1160430);
     private static readonly Spot PullySite = new(2542905, 1152292);
@@ -225,8 +225,8 @@ public static class FondueScript
             Props = Pot(Crew),
             Keys =
             [
-                new(0, Ground(Crew, 100, 9, 0.8f), Ground(Crew, 0, 0, 4f), 24),
-                new(2 * B, Ground(Crew, 104, 8, 0.7f), Ground(Crew, 0, 0, 9f), 24),
+                new(0, Ground(Crew, 100, 7, 1.4f), Ground(Crew, 0, 0, 0.8f), 24),
+                new(2 * B, Ground(Crew, 104, 6.5f, 1.2f), Ground(Crew, 0, 0, 4f), 24),
             ],
             Preroll = 0.5,
             Chat = [Say("f04", 0.6, Lea)],
@@ -262,7 +262,7 @@ public static class FondueScript
             Keys = Orbit(Crew, 4.6f, 4.2f, 0.6f, 0.7f, 78f, 100f, 2 * B, 24, lookUp: 1.3f),
             Preroll = 0.5,
             Chat = [Say("f06", 0.2, Marco)],
-            Captions = [new(1.0, 4.0, Card("t06"), Card("t06b"), Title: true)],
+            Captions = [new(1.8, 3.4, Card("t06"), Card("t06b"), Title: true)],
         },
 
         // ==== act one: down the mountain, into the sky (bars 12-26) ================================
@@ -283,10 +283,10 @@ public static class FondueScript
             ],
             Keys =
             [
-                new(0, Pt.On(0, 1.4f, 1.8f, 4.0f), Pt.On(0, 0f, 0.4f, -8f), 24),
-                new(B, Pt.On(0, 1.0f, 2.4f, 5.0f), Pt.On(0, 0f, -2f, -10f), 24),
+                new(0, Pt.On(0, 0.4f, 1.8f, 3.6f), Pt.On(0, 0f, 0.2f, -8f), 24),
+                new(B, Pt.On(0, 0.2f, 2.6f, 4.6f), Pt.On(0, 0f, -2f, -10f), 24),
             ],
-            Smooth = 0.08f, Preroll = 0.3,
+            Smooth = 0.08f, Preroll = 0.8,
         },
         new()
         {
@@ -435,8 +435,8 @@ public static class FondueScript
             ],
             Keys =
             [
-                new(0, Pt.On(0, 2.4f, 1.0f, -3.5f), Pt.On(0, 0f, 0.9f), 28),
-                new(B, Pt.On(0, 2.6f, 0.7f, -2.5f), Pt.On(0, 0f, 0.6f), 28),
+                new(0, Pt.On(0, 0.9f, 1.0f, 3.4f), Pt.On(0, 0f, 0.7f, -3f), 28),
+                new(B, Pt.On(0, 0.9f, 0.6f, 3.0f), Pt.On(0, 0f, 0.4f, -3f), 28),
             ],
             Smooth = 0.1f, Preroll = 1.0,
             Chat = [Say("f18", 0.2, Lea)],
@@ -452,8 +452,8 @@ public static class FondueScript
             ],
             Keys =
             [
-                new(0, Pt.At(2600851, 1199653.5, 0.5f), Pt.At(2600850.8, 1199656, 0.6f), 28),
-                new(2 * B, Pt.At(2600851.3, 1199653.8, 0.6f), Pt.At(2600850.8, 1199656, 0.7f), 28),
+                new(0, Pt.At(2600851, 1199651.6, 0.9f), Pt.At(2600850.8, 1199656, 0.8f), 28),
+                new(2 * B, Pt.At(2600851.2, 1199651.9, 0.9f), Pt.At(2600850.8, 1199656, 0.8f), 28),
             ],
             Preroll = 0.5,
             Chat = [Say("f19a", 0.3, Pigeon), Say("f19b", 3.3, Lea)],
@@ -467,7 +467,7 @@ public static class FondueScript
                 new()
                 {
                     Who = Marco, At = Apron.Toward(316, 4), Heading = 136, Drive = Drive.Walk,
-                    Walk = _ => (new Vector2(0f, 0.35f), false),
+                    Walk = _ => (new Vector2(0f, 0.7f), false),
                 },
                 // cars in a row on his right, bikes on his left, all facing him
                 .. Enumerable.Range(0, 12).Select(i => new Cast { Ride = Car(i * 2 + 1), At = Apron.Toward(136, i * 3.4f).Toward(46, 4.5f), Heading = 226, Seed = 120 + i }),
@@ -475,8 +475,8 @@ public static class FondueScript
             ],
             Keys =
             [
-                new(0, Pt.On(0, 0f, 1.7f, -4.5f), Pt.On(0, 0f, 1.5f), 28),
-                new(2 * B, Pt.On(0, 0.5f, 2.2f, -5.5f), Pt.On(0, 0f, 1.4f), 28),
+                new(0, Pt.On(0, 0.6f, 2.4f, 4.5f), Pt.On(0, 0f, 0.8f, -12f), 24),
+                new(2 * B, Pt.On(0, 0.4f, 2.8f, 5.0f), Pt.On(0, 0f, 0.6f, -12f), 24),
             ],
             Smooth = 0.2f, Preroll = 0.3,
             Supers = [new(0.2, 2.6, Card("s20"))],
@@ -612,8 +612,8 @@ public static class FondueScript
             ],
             Keys =
             [
-                new(0, Pt.On(0, -9f, 3f, -12f), Pt.On(0, 0f, 2f, 10f), 28),
-                new(2 * B, Pt.On(0, -10f, 3.5f, -8f), Pt.On(0, 0f, 2f, 10f), 28),
+                new(0, Pt.On(0, 8f, 5f, -12f), Pt.On(0, 0f, 2f, 12f), 28),
+                new(2 * B, Pt.On(0, 9f, 5.5f, -8f), Pt.On(0, 0f, 2f, 12f), 28),
             ],
             Smooth = 0.3f, Preroll = 3,
             Supers = [new(0.3, 3.0, Card("s29"))],
@@ -626,12 +626,13 @@ public static class FondueScript
             Cast =
             [
                 new() { Who = Lea, At = RiddesIkea, FromDoor = true, Item = (int)ItemId.FonduePot },
-                new() { Who = Nina, At = RiddesIkea, FromDoor = true, Item = (int)ItemId.Blahaj },
+                // beside her on the step (out of the same door, the two stood in one another)
+                new() { Who = Nina, At = new Spot(2582253, 1112644).Toward(125, 1.6f), Heading = 215, Item = (int)ItemId.Blahaj },
             ],
             Keys =
             [
-                new(0, Pt.On(0, 1.6f, 1.4f, -5.0f), Pt.On(0, 0f, 1.3f), 28),
-                new(2 * B, Pt.On(0, 1.2f, 1.5f, -4.0f), Pt.On(0, 0f, 1.4f), 28),
+                new(0, Pt.On(0, 2.6f, 1.6f, -7.5f), Pt.On(0, -0.8f, 1.6f), 28),
+                new(2 * B, Pt.On(0, 2.2f, 1.6f, -6.0f), Pt.On(0, -0.8f, 1.5f), 28),
             ],
             Smooth = 0.3f, Preroll = 0.4,
             Chat = [Say("f30", 0.5, Lea)],
@@ -648,7 +649,7 @@ public static class FondueScript
                     Draught = 1.6f, Launch = 5f, Drive = Drive.Controls, Controls = _ => Pedal(1f), Seed = 70,
                 },
                 // UFO (#861) in stage 2: low over the lake ahead of the steamer
-                new() { Ride = RideKind.Plane, At = Spot.Alt(2546700, 1148760, 420), Heading = 290, Drive = Drive.Fly, Launch = 40, Flight = _ => Stick(lever: 0.4f), Seed = 99 },
+                new() { Ride = RideKind.Plane, At = Spot.Alt(2546700, 1148760, 420), Board = new Spot(2546900, 1148950), Heading = 290, Drive = Drive.Fly, Launch = 40, Flight = _ => Stick(lever: 0.4f), Seed = 99 },
             ],
             Keys =
             [
@@ -669,10 +670,10 @@ public static class FondueScript
             ],
             Keys =
             [
-                new(0, Pt.Alt(2560628, 1140350, 373.4f), Pt.At(2560720, 1140445, 9), 35),
-                new(2 * B, Pt.Alt(2560626, 1140348, 373.4f), Pt.At(2560714, 1140445, 9), 35),
+                new(0, Pt.On(0, -4f, 1.4f, -14f), Pt.On(0, 0f, 0.6f, 4f), 28),
+                new(2 * B, Pt.On(0, -5f, 1.6f, -6f), Pt.On(0, 0f, 0.6f, 4f), 28),
             ],
-            Preroll = 1.0,
+            Smooth = 0.2f, Preroll = 2.0,
             Chat = [Say("f32", 1.0, Marco)],
         },
         new()
@@ -682,8 +683,8 @@ public static class FondueScript
             Cast = [new() { Who = Jonas, At = NyonPier, Heading = 125, Item = (int)ItemId.FishingRod }],
             Keys =
             [
-                new(0, Pt.On(0, 2.5f, 1.2f, -2.5f), Pt.On(0, -1f, 1.6f, -4f), 28),
-                new(B, Pt.On(0, 2.3f, 1.2f, -2.2f), Pt.On(0, -1f, 1.8f, -4f), 28),
+                new(0, Pt.On(0, -3.4f, 1.3f, 0.6f), Pt.On(0, 0.4f, 1.2f, -1.6f), 28),
+                new(B, Pt.On(0, -3.2f, 1.3f, 0.4f), Pt.On(0, 0.4f, 1.3f, -1.6f), 28),
             ],
             Preroll = 0.5,
             Chat = [Say("f33", 1.0, Jonas)],
@@ -730,14 +731,14 @@ public static class FondueScript
             Cast = [new() { Who = Lea, At = new Spot(2542900, 1152270).Toward(250, 1.4f), Heading = 70, Item = (int)ItemId.Cheese }],
             Props =
             [
-                new(new Spot(2542900, 1152270), 0, default, default) { Item = ItemId.Campfire, Scale = 1.4f },
+                new(new Spot(2542900, 1152270), 0, default, default) { Item = ItemId.Campfire, Scale = 4f },
                 new(new Spot(2542900, 1152270).Up(0.35f), 0, default, default) { Item = ItemId.FonduePot, Scale = 1.4f },
                 new(new Spot(2542900, 1152270).Toward(120, 1.6f), 300, default, default) { Item = ItemId.Radio, Scale = 1.4f },
             ],
             Keys =
             [
-                new(0, Ground(new Spot(2542900, 1152270), 160, 3.2f, 1.0f), Ground(new Spot(2542900, 1152270), 0, 0, 0.6f), 28),
-                new(B, Ground(new Spot(2542900, 1152270), 150, 2.8f, 0.9f), Ground(new Spot(2542900, 1152270), 0, 0, 0.6f), 28),
+                new(0, Ground(new Spot(2542900, 1152270), 170, 2.6f, 0.8f), Ground(new Spot(2542900, 1152270), 0, 0, 0.5f), 28),
+                new(B, Ground(new Spot(2542900, 1152270), 160, 2.3f, 0.7f), Ground(new Spot(2542900, 1152270), 0, 0, 0.5f), 28),
             ],
             Preroll = 0.5,
             Chat = [Say("f36", 0.2, Lea)],
@@ -751,7 +752,7 @@ public static class FondueScript
                 new() { Who = Marco, At = new Spot(2542906, 1152264), Heading = 90, Fight = t => t < 1.6 ? GuardHigh : t < 2.0 ? Jab : t < 3.4 ? GuardHigh : t < 3.9 ? Kick : t < 5.0 ? GuardHigh : Victory },
                 new() { Who = Jonas, At = new Spot(2542908, 1152264), Heading = 270, Fight = t => t < 2.4 ? GuardHigh : t < 2.9 ? Uppercut : t < 4.0 ? GuardHigh : Down },
             ],
-            Props = [new(new Spot(2542900, 1152270), 0, default, default) { Item = ItemId.Campfire, Scale = 1.4f }],
+            Props = [new(new Spot(2542900, 1152270), 0, default, default) { Item = ItemId.Campfire, Scale = 4f }],
             Keys =
             [
                 new(0, Ground(new Spot(2542907, 1152264), 180, 5.0f, 1.2f), Ground(new Spot(2542907, 1152264), 0, 0, 1.1f), 28),
@@ -857,7 +858,7 @@ public static class FondueScript
         {
             Number = 0, FromBar = 0, Bars = 1, Name = "The zone", Feature = "Battle Royale: the zone, bots",
             Hour = 11.2,
-            Zone = (new Spot(2635900, 1159600), 160f),
+            Zone = (new Spot(2635900, 1159600), 200f),
             Cast =
             [
                 new() { Who = Jonas, At = new Spot(2635930, 1159420), Heading = 0, Drive = Drive.Walk, Walk = _ => (new Vector2(0f, 1f), true) },
@@ -865,8 +866,9 @@ public static class FondueScript
             ],
             Keys =
             [
-                new(0, Pt.On(0, -2.0f, 1.6f, -6f), Pt.On(0, 0f, 1.2f), 28),
-                new(B, Pt.On(0, -2.0f, 1.6f, -5f), Pt.On(0, 0f, 1.2f), 28),
+                // in front of them, the wall glowing behind them
+                new(0, Pt.On(0, -1.5f, 1.5f, -6.5f), Pt.On(0, -0.5f, 1.4f, 4f), 24),
+                new(B, Pt.On(0, -1.5f, 1.5f, -5.5f), Pt.On(0, -0.5f, 1.4f, 4f), 24),
             ],
             Smooth = 0.15f, Preroll = 0.8,
             Chat = [Say("f46", 0.3, Jonas)],
@@ -875,8 +877,8 @@ public static class FondueScript
         {
             Number = 0, FromBar = 0, Bars = 1, Name = "Loot", Feature = "Battle Royale: loot",
             Hour = 11.3,
-            Zone = (new Spot(2635900, 1159600), 120f),
-            Cast = [new() { Who = Marco, At = new Spot(2635915, 1159470), Heading = 160, Item = (int)ItemId.Cheese, Dance = Cheer }],
+            Zone = (new Spot(2635900, 1159600), 190f),
+            Cast = [new() { Who = Marco, At = new Spot(2635932, 1159436), Heading = 180, Item = (int)ItemId.Cheese, Dance = Cheer }],
             Keys =
             [
                 new(0, Pt.On(0, 0.8f, 1.0f, -2.8f), Pt.On(0, 0f, 1.5f), 24),
@@ -1031,8 +1033,8 @@ public static class FondueScript
         ],
         Keys =
         [
-            new(0, Pt.At(2635929, 1160418, 1.6f), Pt.At(Lauterbrunnen.E, Lauterbrunnen.N + 7, 1.5f), 28),
-            new(bars * B, Pt.At(2635929, 1160420, 1.6f), Pt.At(Lauterbrunnen.E, Lauterbrunnen.N + 7, 1.5f), 28),
+            new(0, Pt.At(2635927, 1160423, 1.5f), Pt.At(Lauterbrunnen.E, Lauterbrunnen.N + 7, 1.4f), 35),
+            new(bars * B, Pt.At(2635927, 1160424.5, 1.5f), Pt.At(Lauterbrunnen.E, Lauterbrunnen.N + 7, 1.4f), 35),
         ],
         Preroll = 0.5,
         Supers = [new(0.2, 3.0, card)],
