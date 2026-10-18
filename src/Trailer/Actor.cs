@@ -59,7 +59,7 @@ public sealed class Actor
     public System.Func<Vector3, Vector3?> SetPoint { get; init; } = _ => null;
 
     private bool OnRoad => Spec.Drive is Drive.Road or Drive.Follow || Spec.Route != null;
-    private bool Boat => Spec.Board != null && Spec.Drive != Drive.Fly;
+    private bool Boat => Spec.Board != null && Spec.Drive != Drive.Fly && !Spec.Swim;
 
     /// <summary>A spot on the surface, in this frame's world space (null: the ground is not in yet).</summary>
     private Vector3? Ground(Spot spot)
@@ -90,6 +90,15 @@ public sealed class Actor
             return;
         }
 
+        if (Spec.Swim && !_afloat)
+        {
+            // stood on the shore: now in the water at its spot, at the surface
+            if (!Body.IsOnFloor()) return;
+            var into = _origin.ToWorld(Spec.At.E, Spec.At.N, 0);
+            if (!World.WaterField.TryLevelAt(into, out float surface) || !Body.StartSwimmingAtSurface(into with { Y = surface })) return;
+            Body.Rotation = new Vector3(0, -Mathf.DegToRad(Spec.Heading), 0);
+            _afloat = true;
+        }
         if (!Body.IsOnFloor() && !_launched && !_afloat) return;
         // a boat is mounted and put on the water in one step: a steamer left mounted on its dry spot
         // for a frame stands in whatever is there (Chillon's castle and railway), and is wrecked
@@ -132,6 +141,7 @@ public sealed class Actor
             _pilot.D.Near = _route.Line.IndexAt(_arc);
         }
         Body.DanceId = Spec.Dance;
+        if (Spec.Headwear != 0) Body.HeadwearId = Spec.Headwear;
         Body.HeldItemId = Spec.Item;
         if (Spec.FirstPerson) Body.ViewForCheck(thirdPerson: false);
         Ready = true;

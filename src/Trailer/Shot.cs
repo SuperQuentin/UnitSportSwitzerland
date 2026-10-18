@@ -208,6 +208,13 @@ public sealed record Cast
     /// Such a walker is an NPC body, which reads these instead of the keyboard.
     /// </summary>
     public Func<double, (bool Jump, bool Crouch)>? Actions { get; init; }
+    /// <summary>What it wears on its head (<see cref="FootPlayer.HeadwearId"/>: an item, the pumpkin head, a Santa hat), 0 = its own.</summary>
+    public int Headwear { get; init; }
+    /// <summary>
+    /// Swims at <see cref="At"/> (water), stroking with <see cref="Walk"/>: put in on the dry
+    /// <see cref="Board"/> spot, then at the surface there.
+    /// </summary>
+    public bool Swim { get; init; }
 }
 
 /// <summary>
