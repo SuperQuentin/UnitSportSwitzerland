@@ -362,8 +362,8 @@ public static class CornerPlanner
         // (#711) beside a side carried on to the kerb the corner is laid in its sides' bands, round the carried ones and off any
         // road or footpath (the path runs on round the corner); else as before, from where the carried side meets the kerb
         // (#711) beside a crossing's kerb ramp too: the corner's kerb slopes on from the ramp, easing to the other side's kerb
-        // (a core's corner, #818: the band along its kerb only, from where the carried side meets it, no whole corner round it)
-        if (!bandOnly && ((ends.A ?? ends.B) != null || a.Lowered || b.Lowered))
+        // (a core's corner, #818: its sides' bands at their own widths round the kerb, no whole corner filled, the user, Oct 18)
+        if ((ends.A ?? ends.B) != null || a.Lowered || b.Lowered)
         {
             int gapsBefore = stats.Gaps;
             Gap(out covered);
@@ -625,6 +625,8 @@ public static class CornerPlanner
                     var part = tri.ToList();
                     if (s > 0) part = ClipBy(part, v => v.D - Start(s, v.F));
                     if (s + 1 < count && part.Count >= 3) part = ClipBy(part, v => Start(s + 1, v.F) - v.D - 1e-9);
+                    // a core's corner: the sidewalk at its own width too, ground behind it (else it takes the rest of the corner)
+                    if (bandOnly && s + 1 == count && part.Count >= 3) part = ClipBy(part, v => Start(s, v.F) + Width(s, v.F) - v.D - 1e-9);
                     if (part.Count < 3 || Math.Abs(SignedArea(part.Select(v => v.P).ToList())) < 1e-5) continue;
                     var type = slotsA[s].Type;
                     // a raised band's own height is its lowest; what it rises above that is in its vertices

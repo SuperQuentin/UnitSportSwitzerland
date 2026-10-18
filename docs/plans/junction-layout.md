@@ -412,3 +412,6 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
 - **Phase 6 review, no centre line through a core** (Oct 17): the main road's centre line carried through (#121), halfway
   between the two opposing through lanes, matched no lane where they were offset (pockets, hatches, a split lead-in); it is
   dropped at every core. The edge guides still run on.
+- **Phase 6 review, a core's corner beside a carried side carries both sides' bands round** (Oct 18, Geneva
+  2495103,1120529 and Sion 2506169,1137800): the arm's path and sidewalk run round the kerb at their own widths and meet
+  the carried side, grass behind; no band narrowing to a point.
