@@ -400,9 +400,12 @@ public partial class BrManager : Node
         int botCount = _state.Entrants.Count(e => e.Bot);
         Broadcast($"GO! {_state.Entrants.Count - botCount} players"
             + (botCount > 0 ? $" and {botCount} bots" : "") + $" aboard the plane to {_state.AreaName}. Jump once the doors open over the zone "
-            + $"(in {flight.OpensAt - Now:F0} s); the zone ({zone.RadiusOf(0) * 2 / 1000:F1} km across) shows {ZoneSchedule.LootSeconds * zone.Scale / 60:F0} min after they close.");
+            + $"(in {flight.OpensAt - Now:F0} s); the zone ({zone.RadiusOf(0) * 2 / 1000:F1} km across) shows {LootTime(ZoneSchedule.LootSeconds * zone.Scale)} after they close.");
         GD.Print(FormattableString.Invariant($"[br] go: {_state.Entrants.Count} players, plane at {flight.Altitude:F0} m, doors {flight.OpensAt - Now:F0}-{flight.ClosesAt - Now:F0} s"));
     }
+
+    /// <summary>"29 s", "4 min": the loot time in the GO line (a test pace's 29 s read "0 min", #873).</summary>
+    private static string LootTime(double seconds) => seconds < 90 ? $"{seconds:F0} s" : $"{seconds / 60:F0} min";
 
     private bool _pushedOut;
     private Task<HorizonIndex?>? _horizon;
