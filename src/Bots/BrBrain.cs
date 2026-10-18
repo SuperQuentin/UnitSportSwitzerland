@@ -43,7 +43,7 @@ public sealed class BrBrain : IBotBrain
     /// <summary>Where it means to land (world), chosen when it boarded.</summary>
     public Vector3? DropTarget { get; init; }
     /// <summary>The server clock at which it jumps: the plane's nearest pass to <see cref="DropTarget"/>.</summary>
-    public double JumpAt { get; init; }
+    public double JumpAt { get; set; }
 
     /// <summary>The canopy opens this high over the ground (it takes a second or two to slow), or lower once over the spot.</summary>
     private const float OpenAt = 300f, OpenOverSpot = 180f;

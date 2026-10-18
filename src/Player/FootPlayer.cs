@@ -4141,7 +4141,16 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 if (real.Length() <= _flight.Velocity.Length() + 0.5f) _flight.Velocity = real;
                 Velocity = _flight.Velocity;
             }
-            else if (impact > flyer.CrashSpeed) ev = FlightEvent.Crashed;
+            else if (impact > flyer.CrashSpeed)
+            {
+                ev = FlightEvent.Crashed;
+                // what a bot's craft met (#837: bots crashing in the air during a big drop)
+                if (Bot)
+                {
+                    var hit = GetSlideCollisionCount() > 0 && GetSlideCollision(0).GetCollider() is Node n ? $"{n.Name} ({n.GetClass()})" : "nothing";
+                    GD.Print(FormattableString.Invariant($"[bots] {Name} crashed into {hit} at {impact:F1} m/s, {GlobalPosition.Y:F0} m, floor {IsOnFloor()}"));
+                }
+            }
             else
             {
                 // knocks below a crash still dent a vehicle, and enough of them finish it
