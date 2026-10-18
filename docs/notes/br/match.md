@@ -5,8 +5,8 @@
   with `br.Together`, so everyone in a running match sees everyone else in it) and in
   `ClientWorld.StartNetworking`. There is no offline mode.
 - **State**: `BrState`, sent whole as JSON (`SetState`) on every change and to a joining peer
-  (`SendTo`). It holds the phase, the area, seed, pace, `CountdownEnds`/`Started` (server clock,
-  `ClockSync.ServerNow`), the winner and the entrants. Each `BrEntrant` has peer, name, `Team` (0 = solo),
+  (`SendTo`). It holds the phase, the area, seed, pace, `CountdownEnds`/`Started` (simulated
+  seconds, `ClockSync.SimNow`, so `/speed` paces the whole match, #855), the winner and the entrants. Each `BrEntrant` has peer, name, `Team` (0 = solo),
   alive, kills, damage, place and seconds survived.
 - **Phases**: `Idle -> Lobby -> Countdown -> Playing -> Ended -> Idle`, ticked in `ServerTick`.
   - Lobby: the countdown starts once 2 have joined (60 s); `/br start` shortens it to 10 s.

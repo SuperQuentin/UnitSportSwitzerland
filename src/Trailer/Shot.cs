@@ -191,7 +191,8 @@ public sealed record Cast
     public Vector3? InSet { get; init; }
     /// <summary>Its machine's doors (<see cref="FootPlayer.DoorsOpen"/>): the freighter's ramp is bit 3.</summary>
     public byte Doors { get; init; }
-    /// <summary>A boat: a dry spot to get in at, before it is put on the water at <see cref="At"/>.</summary>
+    /// <summary>A boat: a dry spot to get in at, before it is put on the water at <see cref="At"/>. A flyer
+    /// (<see cref="Drive.Fly"/>) launched over water: where it mounts before it is launched at <see cref="At"/>.</summary>
     public Spot? Board { get; init; }
     /// <summary>A boat: how deep its body is put under the surface, m (the steamer floats at 1.6).</summary>
     public float Draught { get; init; } = 0.2f;

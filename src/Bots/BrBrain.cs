@@ -61,7 +61,8 @@ public sealed class BrBrain : IBotBrain
         _rng = new Random(seed);
     }
 
-    private static double ServerNow => Net.ClockSync.ServerNow;
+    /// <summary>The match timeline, simulated seconds like every stamp in the match state (#855).</summary>
+    private static double SimNow => Net.ClockSync.SimNow;
 
     public double Think(Bot bot, double now)
     {
@@ -148,7 +149,7 @@ public sealed class BrBrain : IBotBrain
         if (me is { Jumped: false })
         {
             bot.Intent = BotIntent.Stand;
-            if (ServerNow >= JumpAt) _br.BotJump(bot);
+            if (SimNow >= JumpAt) _br.BotJump(bot);
             return true;
         }
         var ride = body.Ride;
@@ -222,7 +223,7 @@ public sealed class BrBrain : IBotBrain
         float outsideBy = 0f, runNeeded = 0f;
         if (body.Origin is { } origin && state.Phase == BrPhase.Playing)
         {
-            var z = state.Zone().At(ServerNow - state.Started);
+            var z = state.Zone().At(SimNow - state.Started);
             var (pe, pn) = origin.ToLv95(body.GlobalPosition);
             var at = new Vector2((float)(pe - state.AreaE), (float)(pn - state.AreaN));
             // the circle it must be in: the next one once shown, else the current one
@@ -252,7 +253,7 @@ public sealed class BrBrain : IBotBrain
             _near.Clear();
             foreach (var c in _crates.All)
             {
-                if (_emptied.Contains(c.Id) || c.Locked || ServerNow < c.LandsAt || _crates.WorldOf(c, body.GlobalPosition.Y) is not { } at) continue;
+                if (_emptied.Contains(c.Id) || c.Locked || SimNow < c.LandsAt || _crates.WorldOf(c, body.GlobalPosition.Y) is not { } at) continue;
                 float d = new Vector2(at.X - body.GlobalPosition.X, at.Z - body.GlobalPosition.Z).Length();
                 if (d <= BrTactics.CrateDraw) _near.Add((c, at, d));
             }

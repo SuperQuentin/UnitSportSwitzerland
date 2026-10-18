@@ -96,6 +96,10 @@
   - A pigeon on the ground (and one launched from there) takes off only on a flap (`Up`), not on the stick.
   - A boat is mounted on dry ground (`Board`) and then `PlaceBoat`ed: its spot must be water
     (`WaterField.TryLevelAt`), or it waits forever; the steamer floats at 1.6 m (`Draught`).
+  - A flyer whose spot is over water swims there and can never mount (`SetRide` wants the floor):
+    give it a dry `Board` spot, where it mounts before it is launched at its spot (the AN-124 off Nyon).
+  - A shot framed on the generated fill moves once real tiles are built there: Nyon's jetty camera
+    stood in a slope and lost the AN-124 behind trees; check stills after a region download.
   - Skis are gravity only and carving is their brake: face them down the real fall line (try
     several headings with `--trailer-log`), keep the steer small.
   - A road route's direction is the road's, not `Toward`'s: read it off the route dump before

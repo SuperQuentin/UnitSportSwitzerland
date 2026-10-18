@@ -157,7 +157,7 @@ public partial class BrCrates : Node3D, IOriginContainer
     /// </summary>
     public TakeResult TryTake(long taker, long id, int index, ItemId item, int count)
     {
-        if (!_crates.TryGetValue(id, out var c) || !MayLoot(taker) || ClockSync.ServerNow < c.LandsAt || c.Locked
+        if (!_crates.TryGetValue(id, out var c) || !MayLoot(taker) || ClockSync.SimNow < c.LandsAt || c.Locked
             || GetNodeOrNull<Node3D>("../Players/" + Net.PlayerReplication.NodeName(taker)) is not { } body
             || !Near(c, body.GlobalPosition, Reach + 2.5f))
         {
@@ -381,7 +381,7 @@ public partial class BrCrates : Node3D, IOriginContainer
         _nodes.TryGetValue(id, out var node) && IsInstanceValid(node) && Flat(node.GlobalPosition - at) <= Reach + slack
         && Mathf.Abs(node.GlobalPosition.Y - at.Y) < 3f;
 
-    public bool Landed(Crate c) => ClockSync.ServerNow >= c.LandsAt;
+    public bool Landed(Crate c) => ClockSync.SimNow >= c.LandsAt;
 
     /// <summary>The landed crate this player stands at, nearest first.</summary>
     public Crate? NearestTo(FootPlayer p)
@@ -519,7 +519,7 @@ public partial class BrCrates : Node3D, IOriginContainer
             else if (c.Alt == Ground) at.Y = -5000f;   // not here yet: out of sight until the terrain is
         }
         else _snapped.Add(c.Id);
-        double left = c.LandsAt - ClockSync.ServerNow;
+        double left = c.LandsAt - ClockSync.SimNow;
         if (left > 0) at.Y += Mathf.Min(DropHeight, (float)left * FallSpeed);
         node.GlobalPosition = at;
         node.Rotation = new Vector3(0, float.IsNaN(c.Yaw) ? (c.Id * 0.7f) % Mathf.Tau : c.Yaw, 0);
