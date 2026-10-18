@@ -17,8 +17,13 @@ public static class TractorBeamMath
     public const float ApexRadius = 1.4f, HalfAngle = 0.35f;
     /// <summary>Lift speed up the beam, m/s, and how fast a thing is drawn to the axis, 1/s (capped).</summary>
     public const float LiftSpeed = 3.2f, CentreRate = 1.2f, MaxCentring = 4f;
-    /// <summary>A held thing stops this far under the hatch, m, and bobs about it.</summary>
-    public const float HoldDepth = 2.2f;
+    /// <summary>
+    /// A held thing stops this far under the hatch, m, and bobs about it: over two metres under the
+    /// craft's flying body (whose capsule reaches its leg feet, 2.2 m under the belly), so a car held
+    /// there never touches it (one held inside the capsule shoved the craft up, and the pull
+    /// followed, for ever; one touching it was a floor the craft landed on).
+    /// </summary>
+    public const float HoldDepth = 4.5f;
     /// <summary>Let down when the beam lets go, m/s: gentle enough that nothing breaks.</summary>
     public const float LowerSpeed = 2.5f;
     /// <summary>The fastest correction toward the hold point, m/s, on top of the craft's own velocity.</summary>

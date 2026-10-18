@@ -376,6 +376,11 @@ src/Player/FlightCheck   quick  --flycheck pigeon --world flat
 src/Player/Ufo           quick  --flycheck ufo --world flat
 src/Player/FootPlayer.Ufo quick  --flycheck ufo --world flat
 src/Player/FlightCheck   quick  --flycheck ufo --world flat
+src/Player/TractorBeam   quick  --beamcheck --world flat
+src/Player/BeamCheck     quick  --beamcheck --world flat
+src/Player/FootPlayer.Ufo quick  --beamcheck --world flat
+src/Items/DroppedItem.Beam quick --beamcheck --world flat
+src/Vehicles/VehicleBody.Beam quick --beamcheck --world flat
 src/Player/Pigeon        quick  --flycheck pigeoncrash --systems birds
 src/Birds/BirdLife       quick  --flycheck pigeoncrash --systems birds
 src/Player/FlightCheck   quick  --flycheck a320 --world flat

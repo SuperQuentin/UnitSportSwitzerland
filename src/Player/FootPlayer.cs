@@ -3617,6 +3617,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (SwimPhysics(dt, onFloor)) return;
         // in a fist fight (#495, FootPlayer.Fight.cs)
         if (FightPhysics(dt, onFloor)) return;
+        // in a UFO's tractor beam (#861, FootPlayer.Ufo.cs)
+        if (BeamPhysics(dt, onFloor)) return;
 
         if (Npc && WalkControls == null)
         {

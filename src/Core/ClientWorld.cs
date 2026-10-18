@@ -395,6 +395,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         radios.PlayerPositions = vehicles.PlayerPositions;
         // items dropped and thrown on the ground (#206)
         Items.DroppedItems.Create(this, origin).PlayerPositions = vehicles.PlayerPositions;
+        // the UFOs' tractor beams (#861): what each peer simulates, moved when a beam holds it
+        Player.TractorBeams.Create(this);
         var chunksForDrops = _chunks;
         // on the water where there is some (#299): nothing is dropped onto a lake bed
         Items.DroppedItems.GroundHeight = p => chunksForDrops != null && chunksForDrops.TryGetSurface(p, out float y) ? y : null;
