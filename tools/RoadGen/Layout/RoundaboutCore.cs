@@ -24,7 +24,7 @@ public static class RoundaboutCore
     /// <summary>The ring's carriageway at least this wide (m): TLM's ring line is one 3.3 m lane, a Swiss compact roundabout's ring 6-8 m.</summary>
     public const double LeastRing = 6;
     /// <summary>The entry and exit kerbs' fillet into the ring: this share of the ring's outer radius plus a constant, within limits (m).</summary>
-    public const double FilletShare = 0.6, FilletPlus = 4, FilletLeast = 2, FilletMost = 15;
+    public const double FilletShare = 0.4, FilletPlus = 2, FilletLeast = 2, FilletMost = 12;
     /// <summary>A connector's run along its arm down to this far out from the ring's outer edge before it curves in (m).</summary>
     public const double RunOut = 0.5;
     /// <summary>The mouth stands this far out past where its kerbs leave their fillets, or past a splitter island's tip (m).</summary>
@@ -32,6 +32,8 @@ public static class RoundaboutCore
     /// <summary>A splitter island: half as wide at the ring as this (m), from 1 m in from the mouth to 1 m out from the ring; the lanes
     /// keep <see cref="IslandMargin"/> off it; none shorter than <see cref="IslandLeast"/>.</summary>
     public const double IslandHalf = 1.25, IslandMargin = 0.3, IslandLeast = 4;
+    /// <summary>A splitter island laid where TLM draws no tip (an arm of one line): this long out from the ring (m).</summary>
+    public const double IslandLength = 8;
     /// <summary>The give-way row this far out from the ring's outer edge (m).</summary>
     public const double TeethOut = 0.3;
     /// <summary>An arm turned further than this from the ring's radius runs past the ring (a bypass, a slip): not laid whole.</summary>
@@ -104,6 +106,8 @@ public static class RoundaboutCore
             arm.Mouth = atTip ? MouthPast : 0;
             bool twoWay = a.Mouth.CarLanes(StripWay.In).Any() && a.Mouth.CarLanes(StripWay.Out).Any();
             if (atTip && twoWay && !mini && arm.Mouth - 1 - ringAt >= IslandLeast) (arm.Apex, arm.Base) = (arm.Mouth - 1, ringAt);
+            // (an arm TLM draws as one line still gets its splitter island on a compact ring: its mouth out past it, #854)
+            else if (!atTip && twoWay && !mini) (arm.Base, arm.Apex, arm.Mouth) = (ringAt, ringAt + IslandLength, ringAt + IslandLength + 1);
         }
 
         // the kerbs: each arm's right kerb and the next arm's left kerb, as straight lines down from the mouth (flared past a splitter
@@ -121,7 +125,8 @@ public static class RoundaboutCore
             for (int pass = 0; pass < 2; pass++)
             {
                 bottom = At(a, low, Kerb(low));
-                u = At(a, low + 1, Kerb(low + 1)) - bottom;
+                // (its direction just in from there: past a splitter island's base the flare holds, the kerb runs along the arm)
+                u = bottom - At(a, low - 1, Kerb(low - 1));
                 u /= Math.Max(1e-9, u.Length);
                 // away from the arm: an arm's offsets grow to the right of a driver arriving, the outward direction's left (Perp)
                 away = u.Perp * side;
@@ -154,7 +159,7 @@ public static class RoundaboutCore
         var leftOf = new (Vec2 T, Vec2 C, List<Vec2> Arc)?[n];
         var apartAt = new bool[n];
         // an arm starting on the ring: its mouth out past where its kerbs leave their fillets (laid first from the ring's edge)
-        foreach (var arm in arms.Where(x => x.Mouth == 0))
+        foreach (var arm in arms.Where(x => x.Mouth == 0 && double.IsNaN(x.Apex)))
         {
             // (measured from a mouth well out, then set where the kerbs leave their fillets)
             arm.Mouth = outer - radius + rf0 + 5;
