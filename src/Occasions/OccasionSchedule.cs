@@ -47,6 +47,10 @@ public static class OccasionSchedule
     {
         startYear = date.Year;
 
+        // "fri#1" .. "+1": the first Friday of every month and the day after it (#863)
+        if (OccasionWeekdays.IsToken(window.From))
+            return OccasionWeekdays.Contains(window.From, window.To, date, out startYear);
+
         if (TryFull(window.From, out var from) && TryFull(window.To, out var to))
         {
             startYear = from.Year;

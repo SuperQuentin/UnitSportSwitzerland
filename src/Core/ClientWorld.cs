@@ -932,6 +932,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Systems.On(Systems.Farming))
         {
             Farming.FarmField.Create(this, _chunks?.Source, origin, _chunks, dedicated: false);
+            // the herds on the pastures (#863): worked out here from the fields, drawn, beamed up by the server
+            Farming.Herds.Create(this, _chunks, origin, dedicated: false);
             AddChild(new Farming.HandFarming(items, origin));
             if (Farming.FarmProbe.Requested) AddChild(new Farming.FarmProbe(items, origin));
             if (Farming.HandFarmCheck.Requested) AddChild(new Farming.HandFarmCheck(items, origin));

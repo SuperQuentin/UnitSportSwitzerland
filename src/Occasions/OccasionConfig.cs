@@ -7,7 +7,9 @@ namespace UnitSport.Occasions;
 /// <summary>One date range an occasion runs in, inclusive at both ends.</summary>
 /// <remarks>
 /// Either both ends are <c>MM-DD</c>, which recurs every year and may wrap over new year
-/// (<c>12-20</c> → <c>01-06</c>), or both are <c>YYYY-MM-DD</c> for a one-off such as an Olympics.
+/// (<c>12-20</c> → <c>01-06</c>), or both are <c>YYYY-MM-DD</c> for a one-off such as an Olympics,
+/// or <c>From</c> is a weekday of the month (<c>fri#1</c>, <c>sat#-1</c>) and <c>To</c> the same
+/// token or <c>+N</c> days after it (<see cref="OccasionWeekdays"/>).
 /// </remarks>
 public sealed class DateWindow
 {
