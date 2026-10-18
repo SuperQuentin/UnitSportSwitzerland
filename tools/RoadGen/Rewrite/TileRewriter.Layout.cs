@@ -315,26 +315,16 @@ public static partial class TileRewriter
     private const double StreetOnMost = 150;
 
     /// <summary>
-    /// A junction homed outside the block but this near it (m, from its centre) is planned with it (#818: its core, transitions
-    /// and exterior may reach into the block); a transition shares its street with the junction beyond, planned too.
-    /// </summary>
-    private const double NearBlock = 400;
-
-    /// <summary>
     /// The halo's links the junction planner reads (#818: a junction is laid out alike from every block it reaches, each writing its
-    /// share): the arms and the street on (<see cref="StreetOn"/>) of every junction of the block and of those
-    /// <see cref="NearBlock"/> or one street from it, and the lines beside them in their tiles (the room beside an arm). Built as
-    /// their own block builds them, never written. <c>Near</c>: those junctions homed outside the block.
+    /// share): the arms and the street on (<see cref="StreetOn"/>) of every junction of the block, of every junction outside it
+    /// one of whose arms or streets on lies in it (what it writes goes on those), and of the junction one street on from either
+    /// (a transition may be shared with it); and the lines beside them in their tiles (the room beside an arm). Built as their
+    /// own block builds them, never written. <c>Near</c>: those junctions homed outside the block.
     /// </summary>
     private static (HashSet<int> Links, HashSet<int> Near) Band(PriorityResult priority, RoadGenResult result, HashSet<TileId> block, HashSet<TileId> wanted)
     {
         var net = result.Network;
-        double minE = block.Min(t => t.MinE), maxE = block.Max(t => t.MinE) + 1000, minN = block.Min(t => t.MinN), maxN = block.Max(t => t.MaxN);
-        double Off(Vec2 p)
-        {
-            double dx = Math.Max(0, Math.Max(minE - p.X, p.X - maxE)), dy = Math.Max(0, Math.Max(minN - p.Y, p.Y - maxN));
-            return Math.Sqrt(dx * dx + dy * dy);
-        }
+        bool InBlock(int link) => net.Links[link].Tag is Source s && block.Contains(s.Tile);
         var planOf = new Dictionary<int, (Junction Junction, PriorityPlanner.Plan Plan)>();
         foreach (var p in priority.Plans) planOf[p.Junction.NodeId] = p;
         var near = new HashSet<int>();
@@ -343,7 +333,11 @@ public static partial class TileRewriter
         {
             var home = Home(p.Junction);
             if (block.Contains(home) && wanted.Contains(home)) planned.Add(p.Junction.NodeId);
-            else if (Off(p.Junction.Centre) <= NearBlock && near.Add(p.Junction.NodeId)) planned.Add(p.Junction.NodeId);
+            else if (p.Plan.Arms.Any(arm => InBlock(arm.LinkId) || StreetOn(net, arm.LinkId, arm.End == LinkEnd.End).Links.Any(x => InBlock(x.Link))))
+            {
+                near.Add(p.Junction.NodeId);
+                planned.Add(p.Junction.NodeId);
+            }
         }
         var links = new HashSet<int>();
         void Arms(PriorityPlanner.Plan plan, bool onward)
@@ -373,13 +367,16 @@ public static partial class TileRewriter
                 (byTile.TryGetValue(s.Tile, out var list) ? list : byTile[s.Tile] = []).Add(l);
         static (double X0, double Y0, double X1, double Y1) Box(List<Vec2> line, double grow) =>
             (line.Min(p => p.X) - grow, line.Min(p => p.Y) - grow, line.Max(p => p.X) + grow, line.Max(p => p.Y) + grow);
+        var boxes = new Dictionary<int, (double X0, double Y0, double X1, double Y1)>();
+        foreach (var list in byTile.Values)
+            foreach (int o in list) boxes[o] = Box(net.Links[o].Centreline, 0);
         foreach (int l in links.ToList())
         {
             if (net.Links[l].Tag is not Source s || block.Contains(s.Tile) || !byTile.TryGetValue(s.Tile, out var others)) continue;
             var box = Box(net.Links[l].Centreline, RoomReach + 5);
             foreach (int o in others)
             {
-                var b = Box(net.Links[o].Centreline, 0);
+                var b = boxes[o];
                 if (b.X1 >= box.X0 && b.X0 <= box.X1 && b.Y1 >= box.Y0 && b.Y0 <= box.Y1) links.Add(o);
             }
         }

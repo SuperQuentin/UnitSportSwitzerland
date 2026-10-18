@@ -52,6 +52,13 @@
   Geneva (28, OSM overlay + signals) test regions. In game, `--fly` through the towns at 50 m/s:
   road reads ~8 s of 90 s worker time, no hitch in flight (`--perflog`: the one >33 ms frame is
   the start tile's mesh commit).
+- **The junction planner (#818)** lays generated junctions too (the default since Oct 18 2026). A
+  tile is its own block, and most junctions reach a neighbour: each block builds the halo's streets
+  the planner reads (a band round it, never written) and plans the junctions near it, so a junction
+  comes out alike from every tile it reaches (`junction-planner`, the switch). Check: 52/52 tiles
+  identical served one at a time and built as a block, 22 of 25 junctions on the new layout,
+  ~78 ms a road tile (52 before). With `--villages 10` two tiles (2584,1114 and 2585,1114) differ,
+  as on `main` before the planner.
 - **Lights** need crossroads, which villages lack (every junction a T): the generator's **towns**
   (`generated-relief`, `ProceduralWorld.Towns.cs`) give each a 4-arm crossing of two 6 m roads in
   a dense core, so `PriorityPlanner.InferSignal` fires there (5 lights over 8 settlements).

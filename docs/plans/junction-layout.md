@@ -415,3 +415,9 @@ Each phase: tier 0, `--test-region`, `--signal-check`, `--priority-check`, the 2
 - **Phase 6 review, a core's corner beside a carried side carries both sides' bands round** (Oct 18, Geneva
   2495103,1120529 and Sion 2506169,1137800): the arm's path and sidewalk run round the kerb at their own widths and meet
   the carried side, grass behind; no band narrowing to a point.
+- **The switch: flip now, delete later** (Oct 18): this PR makes the planner the default everywhere (map builds and the
+  game's generated tiles), its junction tests ported; a follow-up brings the old layout's share to zero and deletes it
+  (phase 6's list above). The generated tiles get it fully in this PR (the user's choice over keeping them on the old
+  layout): every block lays out the junctions that reach it, from the halo's streets built for the planner only.
+- **A double left pocket's lead-in hatch is at most one lane wide** (Oct 18, #700 kept): the lane by the centre line opens
+  out of the hatch, the other lanes first, beside it from the through lanes.

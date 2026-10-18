@@ -4,7 +4,8 @@
 # Junction planner (#818)
 
 Plan and the user's decisions: `docs/plans/junction-layout.md`. Junctions become streets, transitions and cores; this note
-records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-region ... --junctions new` until the switch.
+records what is built, phase by phase. The default since Oct 18 2026 (the switch, below): `--junctions old` turns it
+off, `--junctions new` plans and reports without writing.
 
 ## Phase 1: mouth sections from the data, within the room
 
@@ -339,3 +340,32 @@ records what is built, phase by phase. Runs behind `RoadGen --rewrite|--test-reg
   lanes).
 - **Not yet**: riders' paths (riders are not traffic); `LANE` dropped once the game no longer needs it (phase 6). Phase 6
   review: the bike-path band along a lit core's straight side has a slightly wavy edge (J9).
+
+## The switch (Oct 18 2026)
+
+- **Default**: `TileRewriter.Options` writes the planner's junctions (`NewJunctions`, `WriteJunctions` true): map builds
+  (`RoadStage`), the game's generated tiles and the test region. The old layout still builds what the planner cannot
+  (the reasons in `left to the old layout`); a follow-up brings those to zero and deletes it.
+- **Every block lays out the junctions that reach it** (`TileRewriter.Band`): a junction's streets often leave the block (the
+  game builds a generated tile as its own block), and the writer had left those to the old layout ("a street beyond the
+  block"; 4 of 25 generated junctions written, tiles differing by block size). Each block now builds the halo's streets the
+  planner reads, never written: the arms and street on (`StreetOn`) of every junction of the block, of every junction
+  outside it one of whose arms or streets on lies in it (what it writes goes on those), and of the junction one street on
+  from either (a shared transition), and the lines beside them in their tiles (the room). It plans those junctions
+  too (`JunctionPlan.Beyond`, left out of the block's numbers), and writes each one's share inside the block; the writer goes
+  through them in a fixed order (centre east then north), so a tile's records do not depend on node numbers. Planning is
+  the cost (~0.5 s a junction in dense Geneva, before the band too): Geneva 2495-2497/1118-1120 (two blocks meeting) took
+  1,111 s against 731 s without the band, Sion 2505-2507/1136-1138 (one block) 83 s against 78 s, the generated roads
+  ~78-93 ms a road tile against 52. Planning every junction within 400 m instead tripled a one-tile block's planning.
+- **A transition missing a mouth** (`MissesMouth`): a mouth car lane whose middle lies on no car lane where the arm's
+  transition starts leaves the junction to the old layout. Seen at two pockets merged back to back across 70 m (#325, the
+  test region's J5 pair): `TransitionPlanner.Joined` ends on a hatch where the core's lanes leave.
+- **Rules ported from the old layout** while flipping its tests: exit hatches lean as #406 wants (`TransitionPaint.Stripes`
+  by the edge that moves and the traffic beside it: going with it, a stripe runs out toward its lane; a hatch strip's
+  exit part and lead-in part lean apart); a hatch is one mesh (`Hatch`, stripes broken only where the exterior keeps clear),
+  closed by a line where its stripes start (the cars' line at the lights, past a crosswalk); the centre line solid 20 m
+  before the stop line where the street has none (`SolidCentreBeforeStop`); a double left pocket's lead-in hatch at most one
+  lane wide (#700: the lane by the centre line opens out of it, the others first, beside it from the through lanes, the
+  user again Oct 18); pedestrian heads only on an arm with a crosswalk.
+- **Not ported**: the old layout's left-repeater islands at the lights (`ExitIslands`); the planner lays an island only as a
+  crosswalk's refuge across an exit hatch.
