@@ -401,7 +401,81 @@ vec3 solar_field(vec3 col, inout vec3 n, inout float glass, vec2 q, vec2 ext, fl
 }
 
 varying float garage_flag;  // UV2.y: 0 plain, 1 neon sign, 2 garage wall (storey_count = eave m),
-                            // 3 a wall run too short for a window (bands and plinth only)
+                            // 3 a wall run too short for a window (bands and plinth only),
+                            // 4/5 a castle wall (storey_count = the run's height m; 5: a level head)
+
+// --- castles (#859) ---------------------------------------------------------------------
+// A castle's wall: v is metres above its wall run's foot, h the run's height. Coursed ashlar with
+// darker mortar and a stone-to-stone tone, a battered darker foot, a column every 5.2 m holding an
+// arrow slit (some with a crossbow bar) or, high up, a round-arched window lit at night, and under
+// a level wall head a band of corbels with the dark machicolation gaps between them.
+vec3 castle_wall(vec3 col, vec2 q, float h, bool level, vec2 seed, float px, inout vec3 glow) {
+    // ashlar: 0.5 m courses, 1.1 m stones, every other course offset by half a stone
+    float row = floor(q.y / 0.5);
+    float sx = q.x / 1.1 + 0.5 * mod(row, 2.0);
+    vec2 in_stone = vec2(fract(sx) * 1.1, fract(q.y / 0.5) * 0.5);
+    float joint = min(min(in_stone.x, 1.1 - in_stone.x), min(in_stone.y, 0.5 - in_stone.y));
+    col *= 1.0 + (hash(vec2(floor(sx), row) + seed) - 0.5) * 0.14 * fine_detail(0.5, px);
+    col *= mix(1.0, 0.76, step(joint, 0.03) * fine_detail(0.03, px));
+    // the battered foot
+    if (q.y < 1.4) {
+        col *= mix(1.0, 0.84, fine_detail(0.2, px));
+    } else if (q.y < 1.48) {
+        col *= mix(1.0, 1.1, fine_detail(0.06, px));
+    }
+
+    // openings, one column every 5.2 m
+    float cu = q.x / 5.2;
+    float lu = (fract(cu) - 0.5) * 5.2; // metres from the column's middle
+    float r = hash(vec2(floor(cu), 0.0) + seed);
+    float open = 0.0; // 1 inside an opening
+    bool glazed = false;
+    if (h > 4.5 && r < 0.5) {
+        // an arrow slit, its foot a third of the way up
+        float y0 = clamp(h * 0.33, 1.8, h - 2.4);
+        bool slit = abs(lu) < 0.14 && q.y > y0 && q.y < y0 + 1.8;
+        bool bar = r < 0.2 && abs(lu) < 0.42 && abs(q.y - (y0 + 1.0)) < 0.11;
+        open = (slit || bar) ? 1.0 : 0.0;
+        // the splayed reveal around it catches the light
+        if (open < 0.5 && abs(lu) < 0.24 && q.y > y0 - 0.1 && q.y < y0 + 1.9) col *= mix(1.0, 1.1, fine_detail(0.08, px));
+    } else if (h > 8.0 && r < 0.8) {
+        // a round-arched window high in the wall, in a lighter stone surround
+        float y0 = min(h * 0.6, h - 3.2);
+        vec2 arch = vec2(lu, q.y - (y0 + 1.2));
+        bool inside = abs(lu) < 0.5 && q.y > y0 && (q.y < y0 + 1.2 || length(arch) < 0.5);
+        bool frame = abs(lu) < 0.66 && q.y > y0 - 0.15 && (q.y < y0 + 1.2 || length(arch) < 0.66);
+        if (inside) {
+            open = 1.0;
+            glazed = true;
+        } else if (frame) {
+            col *= mix(1.0, 1.12, fine_detail(0.1, px));
+        }
+    }
+    if (open > 0.5) {
+        float legible = fine_detail(glazed ? 0.9 : 0.28, px); // the opening's own size: gone under ~1 px
+        vec3 dark = vec3(0.05, 0.05, 0.06);
+        if (glazed) {
+            bool lit = hash(vec2(floor(cu), 7.7) + seed) > mix(0.92, 0.45, world_night);
+            dark = lit ? window_lit : window_color;
+            if (lit) glow = window_lit * legible;
+        }
+        col = mix(col, dark, legible);
+    }
+
+    // corbels and machicolations under a level wall head
+    if (level && h > 6.0) {
+        float band = fine_detail(0.25, px);
+        if (q.y > h - 1.1 && q.y < h - 0.55) {
+            float k = fract(q.x / 0.7);
+            col *= (k > 0.3 && k < 0.7) ? mix(1.0, 1.06, band) : mix(1.0, 0.35, band);
+        } else if (q.y > h - 1.28 && q.y <= h - 1.1) {
+            col *= mix(1.0, 0.78, band); // the corbels' shadow on the wall
+        } else if (q.y >= h - 0.55) {
+            col *= mix(1.0, 1.04, band); // the parapet they carry, proud of the wall
+        }
+    }
+    return col;
+}
 
 void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -434,6 +508,8 @@ void fragment() {
         col = style_tinted(tex_roof, roof_uv / 2.5, col, 0.25); // a pitched roof: courses along its eave
     } else if (n.y > 0.25 || facade.y < 0.0) {
         col = style_tinted(tex_roof, vec2(pattern_xz(world_pos).x + world_pos.y * 0.7, pattern_xz(world_pos).y) / 2.5, col, 0.25);
+    } else if (garage_flag > 3.5) {
+        col = style_tinted(tex_plaster, facade / 3.0, col, 0.15); // a castle wall: v is already metres
     } else {
         col = style_tinted(tex_plaster, vec2(facade.x, facade.y * max(wall_frame.z, 2.8)) / 3.0, col, 0.15);
     }
@@ -460,7 +536,14 @@ void fragment() {
     float top = storey_count - 0.22;
     vec3 glow = vec3(0.0);
     bool garage_wall = garage_flag > 1.5 && garage_flag < 2.5;
-    if (!garage_wall && facade.y >= 0.0 && facade.y < top && detail < 0.6) {
+    bool castle = garage_flag > 3.5 && roof_kind < 0.5;
+    if (castle && facade.y >= 0.0) {
+        float cpx = max(fwidth(facade.x), detail);
+        // the wall's seed, rounded: the interpolated tangent jitters in its last bits, and the hash
+        // turns that into speckle
+        vec2 seed = floor(wall_frame.xy * 17.0 + 0.5) + vec2(floor(storey_count + 0.5));
+        col = castle_wall(col, facade, storey_count, garage_flag > 4.5, seed, cpx, glow);
+    } else if (!garage_wall && facade.y >= 0.0 && facade.y < top && detail < 0.6) {
         float u = facade.x;
         float wall_v = fract(facade.y);
         float col_u = fract(u / window_spacing);
@@ -574,7 +657,7 @@ void fragment() {
     // A string of bulbs along the eaves, just under the wall plate, on about 60% of the houses
     // that have a window grid. Drawn here rather than as geometry: every house in view gets them
     // for the cost of a few instructions, and they follow the facade frame the windows use.
-    if (!garage_wall && world_lights > 0.0 && storey_count > 0.5 && detail < 0.6) {
+    if (!garage_wall && !castle && world_lights > 0.0 && storey_count > 0.5 && detail < 0.6) {
         float house = fract(sin(dot(floor(pattern_xz(world_pos) / 24.0), vec2(41.3, 17.9))) * 9731.7);
         float eave = storey_count - 0.05;
         if (house < 0.6 && facade.y > eave - 0.08 && facade.y < eave) {

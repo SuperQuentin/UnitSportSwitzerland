@@ -188,6 +188,35 @@ public partial class PortalDemo : Node3D
         })));
 
     /// <summary>
+    /// A castle's keep (#859): a flat-topped tower standing on Chillon's first point in its own tile,
+    /// so <see cref="Castles"/> matches it as the game would: dressed stone, slits, corbels, the
+    /// parapet with its merlons and the flag.
+    /// </summary>
+    [Showcase("Terrain", "Castle")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseCastle() => new[] { ("Keep", (Func<Node3D>)(() =>
+    {
+        var (_, points) = Castles.List.First(c => c.Name == "Château de Chillon");
+        var id = TileId.FromLv95(points[0], points[1]);
+        var at = new Vector2((float)(points[0] - id.MinE), (float)(id.MaxN - points[1]));
+        var tile = new BuildingTile
+        {
+            Id = id,
+            Buildings = new List<Building>
+            {
+                // eave = ridge: the roof's two faces lie flat, a wall walk at 20 m
+                new() { Kind = BuildingKind.Annex, YearBuilt = 1150, MinY = 0, MaxY = 20f, Triangles = Solid(at, 12f, 12f, 20f, 20f) },
+            },
+        };
+        var node = new Node3D();
+        node.AddChild(new MeshInstance3D
+        {
+            Mesh = ChunkNode.ToArrayMesh(BuildingMeshBuilder.Build(tile, Array.Empty<DoorSpot>())!, World(Styles.MaterialRole.Building)),
+            Position = new Vector3(-at.X, 0f, -at.Y),
+        });
+        return node;
+    })) };
+
+    /// <summary>
     /// A block of flats' underground garage door (#558) with each road link: the pavement with its
     /// bollards and dropped kerb, the access road flaring into a T. A road's own surface is not
     /// drawn here as the game draws it; a dark strip stands in for the road the link meets.
