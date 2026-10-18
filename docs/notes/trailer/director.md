@@ -96,9 +96,15 @@
   the version folder for English and every language the file has (a missing translation is the
   English, with a warning), lines on together merged into one subtitle each stretch (`mov_text`
   cannot overlap; two speakers each on a dashed line), then muxes them into `trailer.mp4` and
-  `trailer_share.mp4` (`-c:s mov_text`, `language=eng|fra|deu|ita|roh`, a `title`, none on by
-  default: the bubbles are burnt in, in English). A version filmed before #862 has no cues: its
-  cut has no subtitles. Check a cut: `ffprobe -v error -show_entries stream=index,codec_name:stream_tags=language,title trailer.mp4`.
+  `trailer_share.mp4` (`-c:s mov_text`, `language=eng|fra|deu|ita|roh`, `title` and
+  `handler_name` = the language's own name, which players list; none on by default: the bubbles are
+  burnt in, in English). ffmpeg's mp4 muxer always enables the first track of a kind when none is
+  default (QuickTime would then show English), so `subtitles_off` clears the `tkhd` enabled flag
+  of the text tracks with a few lines of python3 (`ffprobe` then reads `default=0` on all five).
+  With four speakers in a tight frame a late bubble can still end up over a face (every spot
+  clear of heads taken): frame wider or let a line go before the next comes. A version filmed before #862 has no cues: its
+  cut has no subtitles. Checked on the demo (`FILM=bubbles tools/trailer.sh render`, 12 s,
+  360 frames, five tracks of 13 cues, `rm` falling back once). Check a cut: `ffprobe -v error -show_entries stream=index,codec_name:stream_tags=language,title trailer.mp4`.
 - **Picture**: the root renders at `--trailer-size` (1920x1080) whatever the window
   (`ContentScaleMode.Viewport`), every `CanvasLayer` but the captions hidden (walked once, then
   `NodeAdded`), `Captions` sized from the frame's height, fades as a black veil.

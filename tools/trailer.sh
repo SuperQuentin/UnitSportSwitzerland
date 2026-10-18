@@ -90,7 +90,43 @@ cut_film() {
   subtitle_tracks "$out"
   ffmpeg -y -loglevel error -i "$out/trailer.mp4" -map 0 -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 160k \
     -c:s copy -movflags +faststart "$out/trailer_share.mp4"
+  subtitles_off "$out/trailer.mp4"
+  subtitles_off "$out/trailer_share.mp4"
   echo "wrote $out/trailer.mp4 and trailer_share.mp4 ($(ls "$out"/shots/shot*.mp4 | wc -l) shots, the song from ${start} s)"
+}
+
+# every subtitle track of MP4 $1 off by default: ffmpeg's mp4 muxer enables the first track of
+# each kind when none is default (QuickTime then shows it), so the tkhd "enabled" flag is cleared
+# on the text tracks by hand (python3; without it, a warning and the first track stays on)
+subtitles_off() {
+  [ -f "$1" ] || return 0
+  python3 - "$1" <<'PY' || echo "warning: could not turn the subtitle tracks off by default in $1" >&2
+import struct, sys
+path = sys.argv[1]
+data = bytearray(open(path, "rb").read())
+def atoms(start, end):
+    while start + 8 <= end:
+        size, kind = struct.unpack(">I4s", data[start:start + 8])
+        if size < 8: return
+        yield start, size, kind
+        start += size
+off = 0
+for at, size, kind in atoms(0, len(data)):
+    if kind != b"moov": continue
+    for t, tsize, tkind in atoms(at + 8, at + size):
+        if tkind != b"trak": continue
+        tkhd = handler = None
+        for c, csize, ckind in atoms(t + 8, t + tsize):
+            if ckind == b"tkhd": tkhd = c
+            if ckind == b"mdia":
+                for m, msize, mkind in atoms(c + 8, c + csize):
+                    if mkind == b"hdlr": handler = bytes(data[m + 16:m + 20])
+        if tkhd is not None and handler in (b"sbtl", b"text", b"subt"):
+            data[tkhd + 11] &= 0xFE
+            off += 1
+open(path, "wb").write(data)
+print(f"subtitle tracks off by default: {off}")
+PY
 }
 
 # the cut's subtitles (#862): <film>.<lang>.srt from the shots' cues and the translations, muxed
@@ -116,7 +152,8 @@ subtitle_tracks() {
       rm) iso=roh; title=Rumantsch ;;
     esac
     inputs+=(-i "$out/$FILM.$lang.srt")
-    meta+=(-map $((n + 1)):s "-metadata:s:s:$n" "language=$iso" "-metadata:s:s:$n" "title=$title" "-disposition:s:$n" 0)
+    meta+=(-map $((n + 1)):s "-metadata:s:s:$n" "language=$iso" "-metadata:s:s:$n" "title=$title"
+      "-metadata:s:s:$n" "handler_name=$title" "-disposition:s:$n" 0)
     n=$((n + 1))
   done
   [ "$n" -gt 0 ] || return 0
