@@ -10,6 +10,11 @@
   Everything hashed from field ids and cells, never a shared stream: the server's herds and every
   client's are the same, and a tile that comes back has the same herd. The flat fixture has a
   pasture south-west of the spawn (`0xF1E1D004`), so `--chunks fixture:flat` shows a herd.
+- **No farm layer** (the real map here was built without `--layers fields`; the generated fill):
+  a tile whose field data comes back empty (`FarmField.TileNoFields`) gets herds from its land cover
+  instead (`HerdPlan.FromLand`, on a worker, pure, tested): each 250 m cell, two in five by hash,
+  takes the first of a hashed 5 x 5 lattice of candidates with open cover all round within 28 m,
+  no building within 50 m, no road or path within 20 m, and under 4 m of rise over 20 m.
 - **When**: they are there all year, built on whichever peer holds the field tile
   (`FarmField.TileReady` / `TileGone`, fired beside the tile's data; the client holds tiles within
   700 m of the camera, the server those a client subscribed to). `Farming.Herds` at `World/Herds`
