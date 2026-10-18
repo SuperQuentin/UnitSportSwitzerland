@@ -184,7 +184,8 @@ public static class TouristScript
         {
             Number = 3, Name = "Jonas's door", FromBar = 6, Bars = 2, Song = S, Hour = 23.7, Moon = Moonlight,
             Feature = "real buildings and their doors, a torch",
-            Cast = [new() { Who = Jonas, At = Farm, FromDoor = true, Item = Torch }],
+            // out of the farmhouse into the yard (the nearest door index found none within 40 m of the house)
+            Cast = [new() { Who = Jonas, At = Yard, Heading = 135, Item = Torch }],
             Keys =
             [
                 new(0, Pt.On(0, 1.4f, 1.3f, -4.2f), Pt.On(0, 0f, 1.3f), 28),
@@ -1057,8 +1058,9 @@ public static class TouristScript
                 new(5.8, 4.4, "", MightyLikeUs.Credit),
             ],
         },
-    // Cartoon throughout (no PS1, no Realistic); the calendar's occasion off but where a shot names one
-    }.Select(s => s with { Style = "cartoon", Occasion = s.Occasion ?? "none" }).ToList();
+    // Cartoon throughout (no PS1, no Realistic). The occasion is the calendar's but where a shot names
+    // one: "none" (/occasion stop) left broken giant shapes over Riddes in the first stills
+    }.Select(s => s with { Style = "cartoon" }).ToList();
 
     /// <summary>Shots 11-13: BLIP's disguises, the same frame each time, a friend's verdict.</summary>
     private static Shot Disguise(int number, int bar, Character look, Character judge, string line) => new()

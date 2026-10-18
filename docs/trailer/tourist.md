@@ -98,7 +98,7 @@ dialogue, symbols are BLIP's speech; the `sNN_*` ids are the line ids in
 |---|---|---|---|---|---|---|---|
 | 1 | 1-3 | 0:00-0:08.6 | Riddes, over the field, 2583300/1112700 | 🛸 Fade in on stars over the Rhône valley. A light streaks across and dives toward the field. Super: "RIDDES (VS) · 23:40" | 40 m up, tilting down from the sky to the field, 28 mm | Night, the real valley | |
 | 2 | 4-5 | 0:08.6-0:13.9 | The field, 2583470/1112930 | 🛸 The saucer wobbles in low, smoking, and skids to a stop in the crop | Low across the field, a jolt, 35 mm | The UFO | |
-| 3 | 6-7 | 0:13.9-0:19.3 | The farm, 2583392/1113007 | JONAS steps out of the farmhouse door with a torch | Low, in front of him, 28 mm | Real buildings and their doors, the torch | 💬 JONAS: WHAT WAS THAT?! |
+| 3 | 6-7 | 0:13.9-0:19.3 | The farmyard, 2583405/1112990 | JONAS comes out into the yard with a torch | Low, in front of him, 28 mm | Real buildings, the torch | 💬 JONAS: WHAT WAS THAT?! |
 | 4 | 8-9 | 0:19.3-0:24.6 | Across the field | The four walk toward the glow, torches up | Behind NINA, 28 mm | On foot, together | 💬 LÉA: call the police? MARCO: call the TV! |
 | 5 | 10-11 | 0:24.6-0:29.9 | By the saucer | 🛸 The hatch opens and the ramp comes down. BLIP walks down it and steps toward them | Low from the friends' side, pushing in, 35→50 mm | The alien, the UFO | 💬 BLIP: ◉ ◉ ... BLIP? |
 | 6 | 12 | 0:29.9-0:32.6 | The four in a row | Frozen. MARCO waves, slowly | In front of them, 35 mm | Emotes | 💬 MARCO: ...hi? |
@@ -240,12 +240,16 @@ Added for this film (`docs/notes/trailer/director.md`, "More on an actor or a sh
 - `Cast.Radio` (50)
 - `Prop.Placed`: the campfire, the workbench, the camo net (10, 48, 50, 53)
 - `Shot.Zone` (36, 37)
-- `Shot.Occasion` (51, 52, and `none` everywhere else: the calendar runs Halloween all of
-  September and October)
+- `Shot.Occasion` (51, 52). Its `none` (`/occasion stop halloween`, `/occasion stop christmas`)
+  left giant broken shapes over Riddes in the first stills, so the other shots keep the
+  calendar's occasion. Halloween runs all of September and October, so a render in those months
+  shows its pumpkins everywhere. The stop needs a look in stage 2.
 - `Shot.PhotoFile`: the map and studio screenshots (14, 53)
 
 Not staged yet, each with the smallest addition that would do it:
 
+- **A door**: `FromDoor` found no entrance within 40 m of the Riddes farmhouse, so JONAS comes
+  out into the yard instead (shot 3).
 - **Wall jump, base jump from foot**: `Cast.Actions` can press jump, but a wall jump needs a
   run at a wall timed by stills, and a base jump needs a cliff edge. Both are possible with what
   exists; they were left out of stage 1.
