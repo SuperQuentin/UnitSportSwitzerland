@@ -37,6 +37,8 @@
     <Compile Include="..\..\src\Net\AdminArgs.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Net\PlayerKey.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Net\SleeperBook.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Net\Invites\InviteBook.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Net\Invites\PartyBook.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\XR\XrControlNames.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\IChunkSource.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Vehicles\VehicleSlot.cs" Link="Game\%(Filename)%(Extension)" />

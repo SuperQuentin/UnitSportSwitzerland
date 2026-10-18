@@ -24,6 +24,9 @@
   - In a worktree whose Git LFS assets are still pointers, the import rewrites the textures'
     `.import` files to `valid=false` and drops their `dest_files`. Those 28 files are **not** to be
     committed: `git checkout --` them before staging.
+  - A Godot older than the project's SDK pin (4.7.1 against `Godot.NET.Sdk/4.7.2`) rewrites
+    `UnitSportSwitzerland.csproj` to its own version and leaves `UnitSportSwitzerland.csproj.old`:
+    `git checkout -- UnitSportSwitzerland.csproj` and delete the `.old` before staging.
 - Exactly one script UID is referenced from a scene: `scenes/Main.tscn` -> `src/Core/Main.cs`
   (`uid://dwp85ey20g8h7`). Every other script is attached by path, so an add/add conflict on any
   other `.uid` can be resolved by taking either side.

@@ -9,7 +9,8 @@
     running race who have not finished.
   - **Commands**: `/race start [metres] [mount|open]`, `/race start air <place|metres> [mount]`,
     `/race duel <player> [same args]` (a private challenge; the race starts the moment it is accepted
-    with `/race join`), `/race join [id]` (no id: the duel you were challenged to, else the newest open
+    with `/race join`; it is an invite of kind `race`, #840, `net/invites`: a toast, F2, and a decline
+    ends the duel; an open race invites everyone the same way, and joining dismisses the invite), `/race join [id]` (no id: the duel you were challenged to, else the newest open
     race), `/race leave`, `/race cancel [id]` (host or console), `/race list`, `/race npc [n] [metres] [mount]`, `/race duel npc` (NPC opponents, below). Mounts: `foot bike skis
     car <car name> moto|r1 monster plane heli paraglider wingsuit`, or `open` (everyone keeps theirs).
     Default: the AE86 on the ground, the plane in the air. A class whose `Rideable.Create` is null (the

@@ -65,7 +65,14 @@ public sealed class ChatCompleter
         ("stream", false, false, ""),
         ("race", false, false, "start | duel <player> | join | leave | list | npc | cancel"),
         ("fight", false, false, "<player> | accept | decline | leave"),
-        ("br", false, false, "open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] | join | leave | start | bots [n|off] [easy|normal|hard] | cancel | status"),
+        ("br", false, false, "open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] | join | leave | team [name] | invite <player> | start | bots [n|off] [easy|normal|hard] | cancel | status"),
+        // invites (#840)
+        ("invites", false, false, ""),
+        ("accept", false, false, "[player | kind | #id]"),
+        ("decline", false, false, "[player | kind | #id]"),
+        ("tpa", false, false, "<player>"),
+        ("tphere", false, false, "<player>"),
+        ("party", false, false, "[list] | invite <player> | leave | kick <player>"),
         ("bot", true, false, "add [n] [easy|normal|hard] | arm <weapon> [rounds] | fire | clear | list"),
         ("say", true, false, "<message>"),
         ("admin", true, false, "list | add <player> | remove <player>"),
@@ -146,7 +153,7 @@ public sealed class ChatCompleter
                 options = ItemLookup.Names();
                 break;
 
-            case "tp" or "bring":
+            case "tp" or "bring" or "tpa" or "tphere" or "accept" or "decline":
                 if (argIndex != 0) return [];
                 options = PlayerNames();
                 break;
@@ -203,7 +210,8 @@ public sealed class ChatCompleter
                 bool admin = Permissions.IsAdmin;
                 options = argIndex switch
                 {
-                    0 => admin ? ["join", "leave", "status", "open", "start", "zone", "bots", "cancel"] : ["join", "leave", "status"],
+                    0 => admin ? ["join", "leave", "team", "invite", "status", "open", "start", "zone", "bots", "cancel"] : ["join", "leave", "team", "invite", "status"],
+                    1 when words[1].ToLowerInvariant() == "invite" => PlayerNames(),
                     _ when admin && words[1].ToLowerInvariant() == "open" => ["here", "short", "normal", "long", "5", "6", "7"],
                     _ when admin && words[1].ToLowerInvariant() == "bots" => ["off", "10", "20", "easy", "normal", "hard"],
                     _ => [],
@@ -220,6 +228,15 @@ public sealed class ChatCompleter
                     0 => ["add", "arm", "fire", "clear", "list"],
                     _ when words[1].ToLowerInvariant() == "add" => ["easy", "normal", "hard"],
                     _ when words[1].ToLowerInvariant() == "arm" => ["pistol", "rifle", "huntingrifle", "shotgun", "knife"],
+                    _ => [],
+                };
+                break;
+
+            case "party":
+                options = argIndex switch
+                {
+                    0 => ["list", "invite", "leave", "kick"],
+                    1 when words[1].ToLowerInvariant() is "invite" or "kick" => PlayerNames(),
                     _ => [],
                 };
                 break;

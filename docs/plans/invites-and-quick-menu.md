@@ -3,16 +3,28 @@
 
 # Quick menu, Activities screen and one invite system
 
-Status: **planned**. Tracking issue: #840. One PR.
+Status: **built** (PR #841). Tracking issue: #840. One PR.
 
 | Part | State | What it does |
 |---|---|---|
-| 1 Invite service | planned | One server-owned book of invites; each activity registers a kind with its accept handler |
-| 2 Client invites | planned | Toasts with a timer, `F2` / `Shift+F2`, `/accept` `/decline` `/invites`, the Start menu's first entry |
-| 3 Kinds | planned | Battle Royale, teleport requests, parties, fist fights and race duels (moved on), open races |
-| 4 Quick menu | planned | A radial on hold `F2` / hold pad `Back`: Activities, Invites, Inventory, Vehicles, Map, Emotes, Bird journal, Controls |
-| 5 Activities screen | planned | A shell page with tabs Invites, Battle Royale, Race: configure, launch, join |
-| 6 Checks and notes | planned | Unit tests for the book and parties, a two-client invite check, screenshots, notes |
+| 1 Invite service | done | One server-owned book of invites; each activity registers a kind with its accept handler |
+| 2 Client invites | done | Toasts with a timer, `F2` / `Shift+F2`, `/accept` `/decline` `/invites`, the Start menu's first entry |
+| 3 Kinds | done | Battle Royale, teleport requests, parties, fist fights and race duels (moved on), open races |
+| 4 Quick menu | done | A radial on hold `F2` / hold pad `Back`: Activities, Invites, Inventory, Vehicles, Map, Emotes, Bird journal, Controls |
+| 5 Activities screen | done | A shell page with tabs Invites, Battle Royale, Race: configure, launch, join |
+| 6 Checks and notes | done | Unit tests for the book and parties, a two-client invite check, screenshots, notes |
+
+## Built differently from the plan
+
+- Non-admins see "How it works" on the Battle Royale tab's right column instead of read-only settings.
+- The Invites tab also sends: teleport requests, a party invite and a fist-fight challenge to a picked
+  player, and shows the party (put out, leave). Parties and teleports needed a UI way, and the menu's
+  activities are only Battle Royale and Race.
+- `tools/invitecheck.sh` runs on `--chunks fixture:straight` (the fixture world has no road or terrain for
+  a race course) and also holds pad Back. No separate `--activitiescheck`: `SHOTS=1` writes the tabs.
+- Pad Back is caught by the quick menu in `_Input` while no panel holds `UiFocus`, rather than handed over
+  by `InventoryUi`: no change to the inventory's code.
+- `BrState.BotLevel` was added so the screen can show the bots' skill.
 
 ## Goal
 

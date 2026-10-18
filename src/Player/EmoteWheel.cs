@@ -22,6 +22,8 @@ public partial class EmoteWheel : CanvasLayer
     private Vector2 _aim;
     private double _openedAt;
     private int _lastEmote = -1;
+    /// <summary>Opened from the quick menu (#840): no key is held, so it stays open until a pick (click, A) or Esc.</summary>
+    private bool _latched;
 
     public EmoteWheel(Func<FootPlayer?> player) => _player = player;
     public EmoteWheel() : this(() => null) { }
@@ -45,10 +47,23 @@ public partial class EmoteWheel : CanvasLayer
     private FootPlayer? Emoter =>
         _player() is { IsViewing: true } p && p.CanEmote && p.HeldItemId != (int)Items.ItemId.Hammer ? p : null;
 
+    /// <summary>Whether the body may emote now (the quick menu greys its wedge otherwise, #840).</summary>
+    public bool CanOpen => Emoter != null;
+
     public override void _UnhandledInput(InputEvent e)
     {
         if (IsOpen || UiFocus.TextEntryActive || !e.IsActionPressed(PlayerInput.EmoteWheel) || e.IsEcho()) return;
-        if (Emoter is not { } p) return;
+        if (Open(latched: false)) GetViewport().SetInputAsHandled();
+    }
+
+    /// <summary>
+    /// Opens the wheel. <paramref name="latched"/>: from the quick menu (#840), where no key is held, so
+    /// it stays open until a pick. False when the body may not emote now.
+    /// </summary>
+    public bool Open(bool latched)
+    {
+        if (IsOpen || Emoter is not { } p) return false;
+        _latched = latched;
         _aim = Vector2.Zero;
         _view.Highlight = -1;
         _view.Playing = p.Emote;
@@ -59,7 +74,7 @@ public partial class EmoteWheel : CanvasLayer
         // in VR the right hand aims, from where it is now (#437)
         if (XR.XrSession.Active) XR.XrSession.ZeroHandAim();
         UiFocus.Set(this, true);
-        GetViewport().SetInputAsHandled();
+        return true;
     }
 
     public override void _Input(InputEvent e)
@@ -87,7 +102,8 @@ public partial class EmoteWheel : CanvasLayer
                 TurnPage(1);
                 break;
             default:
-                if (e.IsActionReleased(PlayerInput.EmoteWheel)) Close(choose: true);
+                if (e.IsActionReleased(PlayerInput.EmoteWheel) && !_latched) Close(choose: true);
+                else if (_latched && e.IsActionPressed("ui_accept") && !e.IsEcho()) Close(choose: true);
                 else if (e.IsActionPressed("ui_left") && !e.IsEcho()) TurnPage(-1);
                 else if (e.IsActionPressed("ui_right") && !e.IsEcho()) TurnPage(1);
                 else if (e.IsActionPressed(PlayerInput.Menu) || e.IsActionPressed("ui_cancel")) Close(choose: false);
@@ -118,7 +134,7 @@ public partial class EmoteWheel : CanvasLayer
             p.DanceId = FootPlayer.EmoteDanceBase + emote;
             _lastEmote = emote;
         }
-        else if (GameClock.Now - _openedAt < TapSeconds)
+        else if (GameClock.Now - _openedAt < TapSeconds && !_latched)
         {
             // a tap: stop whatever dance is on, else the last emote again
             if (p.DanceId != 0) p.DanceId = 0;
@@ -137,9 +153,7 @@ public partial class EmoteWheel : CanvasLayer
         else if (XR.XrSession.Active) _aim = XR.XrSession.HandAim.LimitLength(1.2f);
         int count = _view.SlotsOnPage;
         int before = _view.Highlight;
-        _view.Highlight = _aim.Length() < 0.35f
-            ? -1
-            : Mathf.PosMod((int)Mathf.Round(Mathf.Atan2(_aim.X, -_aim.Y) / (Mathf.Tau / count)), count);
+        _view.Highlight = Radial.Aimed(_aim, count);
         if (_view.Highlight != before) _view.QueueRedraw();
     }
 
@@ -157,30 +171,9 @@ public partial class EmoteWheel : CanvasLayer
             // lifted clear of the hotbar, which its page line would otherwise sit behind
             var centre = Size * 0.5f - new Vector2(0f, Mathf.Min(70f, Size.Y * 0.5f - outer - 16f));
             int n = SlotsOnPage, first = Page * Avatar.HumanMeshBuilder.EmotesPerPage;
-            float step = Mathf.Tau / n;
             var font = UiTheme.Font;
-            var shadow = new Color(0, 0, 0, 0.55f);
-
-            DrawCircle(centre, outer + 6f, new Color(UiTheme.Glass, 0.78f));
-            for (int i = 0; i < n; i++)
-            {
-                // sector i is centred on angle i*step from the top, clockwise
-                float a0 = (i - 0.5f) * step - Mathf.Pi * 0.5f, a1 = a0 + step;
-                if (i == Highlight) DrawSector(centre, inner, outer, a0, a1, new Color(UiTheme.Amber, 0.22f));
-                var dir = new Vector2(Mathf.Cos(a0), Mathf.Sin(a0));
-                DrawLine(centre + dir * inner, centre + dir * outer, UiTheme.Hairline, 1.5f, true);
-
-                float am = a0 + step * 0.5f;
-                var at = centre + new Vector2(Mathf.Cos(am), Mathf.Sin(am)) * (inner + outer) * 0.5f;
-                int emote = first + i;
-                var color = i == Highlight || emote == Playing ? UiTheme.Amber : UiTheme.Text;
-                string name = Avatar.HumanMeshBuilder.EmoteName(emote);
-                var pos = at + new Vector2(-60f, 5f);
-                DrawString(font, pos + new Vector2(1, 2), name, HorizontalAlignment.Center, 120, UiTheme.FontSmall, shadow);
-                DrawString(font, pos, name, HorizontalAlignment.Center, 120, UiTheme.FontSmall, color);
-            }
-            DrawArc(centre, inner, 0f, Mathf.Tau, 48, UiTheme.Hairline, 1.5f, true);
-            DrawArc(centre, outer + 6f, 0f, Mathf.Tau, 96, UiTheme.Hairline, 1.5f, true);
+            Radial.Draw(this, centre, inner, outer, n, Highlight, i => Avatar.HumanMeshBuilder.EmoteName(first + i),
+                i => i == Highlight || first + i == Playing ? UiTheme.Amber : UiTheme.Text);
 
             // the middle: what letting go does
             string middle = Highlight >= 0 ? Avatar.HumanMeshBuilder.EmoteName(first + Highlight)
@@ -199,20 +192,6 @@ public partial class EmoteWheel : CanvasLayer
                 : $"Wheel or {InputHints.Keyboard(Key.Q)} / {InputHints.Keyboard(Key.E)} : page";
             DrawString(font, centre + new Vector2(-150f, outer + 72f), hint, HorizontalAlignment.Center, 300,
                 UiTheme.FontTiny, UiTheme.TextFaint);
-        }
-
-        private void DrawSector(Vector2 c, float r0, float r1, float a0, float a1, Color color)
-        {
-            const int segs = 12;
-            var pts = new Vector2[(segs + 1) * 2];
-            for (int k = 0; k <= segs; k++)
-            {
-                float a = Mathf.Lerp(a0, a1, k / (float)segs);
-                var d = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
-                pts[k] = c + d * r1;
-                pts[pts.Length - 1 - k] = c + d * r0;
-            }
-            DrawColoredPolygon(pts, color);
         }
 
         public override void _Notification(int what)

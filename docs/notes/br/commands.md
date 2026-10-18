@@ -1,7 +1,10 @@
 # Battle Royale commands and checks
 
 - Chat:
-  - Anyone: `/br join`, `/br leave`, `/br status` (bare `/br` = status).
+  - Anyone: `/br join`, `/br leave`, `/br status` (bare `/br` = status), `/br team [name]`, `/br invite <player>`
+    (an entrant, or an admin: an invite of kind `br`, `net/invites`).
+  - The same from the Activities screen's Battle Royale tab (`ui/activities`, #840); opening a lobby invites
+    everyone online (the invite is withdrawn at GO or on cancel), and a party plays as one team.
   - Admin: `/br open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads]`, `/br start`, `/br zone`, `/br cancel`,
     `/br bots [n|off] [easy|normal|hard]` (#837: the field bots top a match up to at GO, `bots/battle-royale`; `--brbots n` on the server).
   - `/br zone` (#425): the current wait ends now and the zone starts closing (from the loot time: phase 1's

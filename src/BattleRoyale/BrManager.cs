@@ -22,6 +22,8 @@ namespace UnitSport.BattleRoyale;
 public partial class BrManager : Node
 {
     public const string NodeName = "BattleRoyale";
+    /// <summary>The invite kind (#840): to a lobby, keyed by its seed.</summary>
+    public const string InviteId = "br";
     public const int MinPlayers = 2;
     /// <summary>The lobby's countdown once <see cref="MinPlayers"/> have joined; <c>/br start</c> shortens it.</summary>
     public const double LobbyWait = 60, StartWait = 10;
@@ -58,6 +60,13 @@ public partial class BrManager : Node
         // the living may loot, the winner during the results too
         if (crates != null) crates.MayLoot = peer => m._state.Running && m._state.Find(peer) is { Alive: true };
         Combat.PvpRules.HitRelayed += m.OnHit;
+        // invites (#840): an open lobby invites everyone, an entrant a friend; accepting is /br join
+        chat.Invites?.Register(new InviteKind
+        {
+            Id = InviteId, Label = "Battle Royale", Seconds = 120, TellAccepted = false,
+            Accept = (peer, invite) => invite.Key == m._state.Seed && m._state.Phase is BrPhase.Lobby or BrPhase.Countdown
+                ? m.Join(peer) : "That Battle Royale lobby has closed.",
+        });
         return m;
     }
 
@@ -100,6 +109,9 @@ public partial class BrManager : Node
             case "team":
                 if (!player) return "'/br team' needs a player.";
                 return Party(sender, string.Join(' ', words[1..]));
+            case "invite":
+                if (!player) return "'/br invite' needs a player.";
+                return InviteFriend(sender, string.Join(' ', words[1..]), admin);
         }
         if (!admin) return $"'/br {verb}' is an admin command.";
         switch (verb)
@@ -121,7 +133,7 @@ public partial class BrManager : Node
             case "zone": return ForceShrink();
             case "bots": return BotsCommand(words[1..]);
             default:
-                return "Usage: /br open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] · join · leave · team [name] · start · zone · bots [n|off] [easy|normal|hard] · cancel · status · stats [name] · top";
+                return "Usage: /br open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] · join · leave · team [name] · invite <player> · start · zone · bots [n|off] [easy|normal|hard] · cancel · status · stats [name] · top";
         }
     }
 
@@ -209,6 +221,7 @@ public partial class BrManager : Node
             Phase = BrPhase.Lobby, AreaE = area.E, AreaN = area.N, Side = area.Side, AreaName = area.Name, Seed = seed, Pace = pace,
             TeamSize = team,
             Bots = _botTarget,   // #837
+            BotLevel = (int)_botLevel,
             Leaders = Stats.Board(3).ToList(),   // shown in the lobby (#479)
         };
         double minutes = new ZoneSchedule(seed, area.Side, pace).Duration / 60.0;
@@ -217,6 +230,8 @@ public partial class BrManager : Node
         string mode = team switch { 2 => ", duos", 3 => ", trios", 4 => ", squads", _ => "" };
         Broadcast($"Battle Royale lobby open: {area.Name} ({area.Side / 1000:F0} × {area.Side / 1000:F0} km{mode}, about {minutes + 2:F0} min). Type /br join to play!");
         Push();
+        _chat?.Invites?.Send(InviteId, sender, Invite.Everyone, $"{(sender == ChatManager.ConsolePeerId ? "The server" : _chat.NameOfPeer(sender))} opens a Battle Royale",
+            LobbyLine(), out _, key: seed, seconds: InviteBook.MaxSeconds);
         return "Lobby open.";
     }
 
@@ -230,7 +245,9 @@ public partial class BrManager : Node
     {
         if (_state.Phase is not (BrPhase.Lobby or BrPhase.Countdown)) return _state.Running ? "A match is running; wait for the next lobby." : "No lobby is open.";
         if (_state.Find(peer) != null) return "You are already in.";
-        _state.Entrants.Add(new BrEntrant { Peer = peer, Name = _chat?.NameOfPeer(peer) ?? peer.ToString() });
+        // a party plays as a team unless its members pick one with /br team (#840)
+        _state.Entrants.Add(new BrEntrant { Peer = peer, Name = _chat?.NameOfPeer(peer) ?? peer.ToString(), Party = Parties.Server?.Of(peer)?.TeamName ?? "" });
+        _chat?.Invites?.Dismiss(InviteId, _state.Seed, peer);
         Broadcast($"{_chat?.NameOfPeer(peer)} joined the Battle Royale ({_state.Entrants.Count}).");
         // with bots to fill the field (#837), one player is enough to start the countdown
         if (_state.Phase == BrPhase.Lobby && (_state.Entrants.Count >= MinPlayers || _state.Bots >= MinPlayers))
@@ -261,6 +278,27 @@ public partial class BrManager : Node
         return _state.TeamSize <= 1
             ? $"Team '{party}' noted, but this match is solo."
             : $"Team '{party}': with {mates}" + (with.Count + 1 > _state.TeamSize ? $" (more than {_state.TeamSize}: split at GO)" : "") + ".";
+    }
+
+    /// <summary><c>/br invite &lt;player&gt;</c> (#840): an entrant (or an admin) asks a friend into the lobby.</summary>
+    private string InviteFriend(long sender, string name, bool admin)
+    {
+        if (_state.Phase is not (BrPhase.Lobby or BrPhase.Countdown)) return "No lobby is open.";
+        if (_state.Find(sender) == null && !admin) return "Join first: /br join";
+        if (_chat == null) return "No chat here.";
+        long peer = _chat.PeerByName(name);
+        if (peer <= 0) return $"No player matching '{name}'.";
+        if (_state.Find(peer) != null) return $"{_chat.NameOfPeer(peer)} is already in.";
+        return _chat.Invites?.Send(InviteId, sender, peer, $"{_chat.NameOfPeer(sender)} invites you to a Battle Royale", LobbyLine(),
+            out _, key: _state.Seed) ?? "Invites are not running.";
+    }
+
+    /// <summary>"Zug · 6 × 6 km · duos · 3 joined": what an invite to the lobby says under its title.</summary>
+    private string LobbyLine()
+    {
+        var s = _state;
+        string mode = s.TeamSize switch { 2 => " · duos", 3 => " · trios", 4 => " · squads", _ => "" };
+        return $"{s.AreaName} · {s.Side / 1000:F0} × {s.Side / 1000:F0} km{mode} · {s.Entrants.Count} joined";
     }
 
     private string Leave(long peer)
@@ -323,6 +361,7 @@ public partial class BrManager : Node
             return;
         }
         _state.Phase = BrPhase.Playing;
+        _chat?.Invites?.Withdraw(InviteId, _state.Seed);
         // the first circle is sized for who actually boards (docs/notes/br/zone.md), and the bots that
         // top the field up (#837), put inside it once it is drawn
         int bots = BotsAtGo();
@@ -830,6 +869,7 @@ public partial class BrManager : Node
     private void Finish()
     {
         var was = _state;
+        _chat?.Invites?.Withdraw(InviteId, was.Seed);
         Combat.PvpRules.Override = null;
         ClearLoot();
         RemoveBots(was);

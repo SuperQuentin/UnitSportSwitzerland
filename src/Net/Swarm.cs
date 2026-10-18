@@ -313,6 +313,9 @@ public partial class Swarm : Node
         // class is a per-process singleton (Instance) that a second copy would clobber
         world.AddChild(ChatManager.CreateClient());
         world.AddChild(World.RaceManager.CreateClient(_origin));
+        // an open lobby invites everyone (#840): a swarm bot is offered it like any player
+        world.AddChild(InviteService.CreateClient());
+        world.AddChild(Parties.CreateClient());
         // ChunkStream only answers requests, and a bot makes none
         foreach (string stub in new[] { "Vehicles", "Combat", "Interiors", "Loot", "ChunkStream" })
             world.AddChild(new Node { Name = stub });
