@@ -425,8 +425,10 @@ public static partial class TileRewriter
             BikePlanner.PlanLines(lines, field, netStats.Bikes);   // bike lanes (#120), before the junctions read the lines
             // roundabout rings rebuilt as arcs before anything is built from them (#122)
             var islands = new Dictionary<TileId, List<RoadAreaProp>>();
+            var rings = new List<RoundaboutShaper.Ring>();   // tight ones laid whole by the junction planner (#854)
             foreach (var ring in RoundaboutShaper.Shape(lines, netStats.Roundabouts))
             {
+                rings.Add(ring);
                 var at = TileId.FromLv95(ring.Centre.X, ring.Centre.Y);
                 if (!block.Contains(at) || RoundaboutShaper.Island(ring, at) is not { } island) continue;
                 if (!islands.TryGetValue(at, out var list)) islands[at] = list = new List<RoadAreaProp>();
@@ -729,7 +731,7 @@ public static partial class TileRewriter
                     return StreetSideAt(linkId, end, right);
                 }
                 var layouts = options.NewJunctions
-                    ? PlanAndMerge(priority, result, layoutSegmentOf, layoutOutput, block, wanted, nearJunctions, grids, buildings, StreetSideOf, overlay, restrictions, crossingNodes, netStats.Merge)
+                    ? PlanAndMerge(priority, result, layoutSegmentOf, layoutOutput, block, wanted, nearJunctions, rings, grids, buildings, StreetSideOf, overlay, restrictions, crossingNodes, netStats.Merge)
                     : null;
                 if (layouts is not null) netStats.Layouts.AddRange(layouts.Where(p => !p.Beyond));
                 // the junctions the planner writes (#818 phase 3): the old passes lay out the others only

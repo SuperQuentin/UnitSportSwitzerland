@@ -163,7 +163,7 @@ public static partial class TileRewriter
                     a.Length = Math.Max(0, a.StreetLength - a.MouthShift - (Far(a)?.MouthShift ?? 0));
                 }
             // 2. the exits each junction's pockets want (lined up as if there were room everywhere)
-            foreach (var jp in plans) Align(jp, a => a.Wanted);
+            foreach (var jp in plans.Where(p => p.Merged?.Ring is null)) Align(jp, a => a.Wanted);
             // 3. the pockets' lengths, the street shared with the junction at its other end
             foreach (var jp in plans) Lengths(jp, Far);
             // an exit hatch closes over TurnExit with TurnClear to spare, unless the pocket beyond merges with it (#325): else no pocket feeds it
@@ -193,11 +193,13 @@ public static partial class TileRewriter
             // all to the far side would jog the oncoming traffic as much: a share stays at most half), and all again
             foreach (var jp in plans)
             {
+                // (a roundabout's entries are not lined up across it: each meets the ring)
+                bool ring = jp.Merged?.Ring is not null;
                 for (int round = 0; round < 6; round++)
                 {
-                    Align(jp, a => a.Base);
+                    if (!ring) Align(jp, a => a.Base);
                     FitAll(jp, search: true);
-                    Align(jp, a => MouthPlanner.Moved(MouthPlanner.WithExitHatch(a.Mouth, 0), a.Split));
+                    if (!ring) Align(jp, a => MouthPlanner.Moved(MouthPlanner.WithExitHatch(a.Mouth, 0), a.Split));
                     FitAll(jp, search: false);
                     bool dropped = false;
                     foreach (var b in jp.Arms)
@@ -222,7 +224,7 @@ public static partial class TileRewriter
                 }
                 if (jp.Lights) BikeStops(jp);
                 // 6. the core between the mouths (step 2): connectors, kerb corners, the outline
-                jp.Core = CorePlanner.Plan(jp, buildings.Contains);
+                jp.Core = jp.Merged?.Ring is { } circle ? RoundaboutCore.Plan(jp, circle) : CorePlanner.Plan(jp, buildings.Contains);
             // its surface on the arms' heights at the mouths
             CorePlanner.Lift(jp.Core, m => net.Links[jp.Arms.First(a => a.Arm == m.Arm).LinkId].Tag is Source source
                 ? source.SampleHeight((m.Left + m.Right) * 0.5) : 0);
@@ -269,7 +271,7 @@ public static partial class TileRewriter
                 double? at = a.InsideLights ? null : osm ?? (jp.Lights && !mapped && sidewalk && JunctionRules.Lights.Has(JunctionRule.CrosswalkOnSidewalkArms) ? ExteriorPlanner.CrosswalkFromMouth : null);
                 var u = Vec2.FromHeading(a.Heading);
                 var signs = plan.Signs.Where(x => x.LinkId == a.LinkId).Select(x => (x.Type, x.Variant, FacesArriving: x.Facing.Dot(u) > 0)).ToList();
-                jp.Exterior.Add(ExteriorPlanner.Plan(jp, a, at, yields: plan.Teeth.Any(t => t.LinkId == a.LinkId), signs));
+                jp.Exterior.Add(ExteriorPlanner.Plan(jp, a, at, yields: jp.Merged?.Ring is null && plan.Teeth.Any(t => t.LinkId == a.LinkId), signs));
             }
         }
         // 9. each transition's paint, its solid stretches and arrows counted from where its arms' traffic stops (the exterior)

@@ -211,6 +211,23 @@ public static partial class TileRewriter
             }
         if (anchors.Count == 0) return;
         bool urban = jp.Arms.Any(a => a.Normal.KerbLeftCm > 0 || a.Normal.KerbRightCm > 0);
+        float Height(Vec2 p) => cap is null ? HeightAt(anchors, p) : CapHeightAt(cap, home, p);
+        // a roundabout's entries give way at the ring's edge (#854): whole teeth, centred, apexes toward the arriving driver
+        foreach (var (left, right) in core.Teeth)
+        {
+            double period = RoadSigns.ToothBase + RoadSigns.ToothGap, length = left.DistanceTo(right);
+            int count = (int)Math.Floor((length + RoadSigns.ToothGap) / period);
+            if (count < 1) continue;
+            double used = count * period - RoadSigns.ToothGap;
+            var u = (right - left) / length;
+            var a0 = left + u * ((length - used) * 0.5);
+            Get(paint, home).Add(new RoadPaint
+            {
+                Shape = PaintShape.Polyline, Type = PaintType.SharkTooth, Rgba = PaintEmitter.White, Width = RoadSigns.ToothHeight,
+                Dash = RoadSigns.ToothBase, Gap = RoadSigns.ToothGap, Vertices = Local(home, [a0, a0 + u * used], Height, 0f),
+            });
+            stats.Bars++;
+        }
         foreach (var line in core.Lines)
         {
             if (line.Points.Count < 2 || ClipToRing(line.Points, core.Outline, core.Mouths).Count < 2) continue;

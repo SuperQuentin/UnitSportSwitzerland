@@ -111,6 +111,10 @@ public sealed class JunctionCore
     /// <summary>The paved outline, counter-clockwise: each mouth, then the corner after it.</summary>
     public List<Vec2> Outline { get; } = new();
     public List<CoreLine> Lines { get; } = new();
+    /// <summary>Raised islands inside the core (a roundabout's splitter islands, #854), each a ring of points counter-clockwise.</summary>
+    public List<List<Vec2>> Islands { get; } = new();
+    /// <summary>Give-way rows inside the core (a roundabout's entries at the ring's edge, #854): from the arriving lanes' left to right.</summary>
+    public List<(Vec2 Left, Vec2 Right)> Teeth { get; } = new();
     public double Area { get; set; }
     /// <summary>The surface: triangles over <see cref="Outline"/>'s points (as today's cap).</summary>
     public List<int> Triangles { get; } = new();
@@ -120,6 +124,8 @@ public sealed class JunctionCore
     public double SteepestGrade { get; set; }
     /// <summary>The outline does not cross itself (a check).</summary>
     public bool Simple { get; set; } = true;
+    /// <summary>Why its builder could not lay it (a roundabout's arm running past its ring, #854); null when it could.</summary>
+    public string? Refused { get; set; }
     /// <summary>Checks: kerbs whose curve starts outside their mouth; connectors whose edges leave the outline; mouths held at the most.</summary>
     public int KerbsNotTangent { get; set; }
     public int ConnectorsOutside { get; set; }

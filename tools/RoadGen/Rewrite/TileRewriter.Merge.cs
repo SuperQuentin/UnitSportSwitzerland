@@ -20,10 +20,19 @@ public static partial class TileRewriter
     /// </summary>
     private static List<JunctionPlan> PlanAndMerge(PriorityResult priority, RoadGenResult result,
         Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf, Dictionary<TileId, List<RoadSegment>> output,
-        HashSet<TileId> block, HashSet<TileId> wanted, HashSet<int> near, Dictionary<TileId, ChunkGrid>? grids, Footprints buildings,
+        HashSet<TileId> block, HashSet<TileId> wanted, HashSet<int> near, IReadOnlyList<RoundaboutShaper.Ring> rings,
+        Dictionary<TileId, ChunkGrid>? grids, Footprints buildings,
         Func<int, LinkEnd, bool, RoadSide> streetSide, OsmOverlayReader? overlay, Restrictions? restrictions, CrossingNodes? crossings,
         MergeStats stats)
     {
+        // a tight roundabout is one junction, its ring's nodes its members (#854, the user, Oct 18): laid whole by RoundaboutCore
+        bool Planned(Junction j) => block.Contains(Home(j)) && wanted.Contains(Home(j)) || near.Contains(j.NodeId);
+        if (rings.Count > 0 && Rings(priority, rings, result.Network, Planned, stats) is { } withRings)
+        {
+            priority = withRings;
+            near = new HashSet<int>(near);
+            foreach (var (j, _) in priority.Plans) if (j.Ring is not null && j.Members!.Any(near.Contains)) near.Add(j.NodeId);
+        }
         var plans = PlanLayouts(priority, result, segmentOf, output, block, wanted, near, grids, buildings, streetSide, overlay, restrictions, null, crossings);
         // overlapping cores are first laid apart, each mouth held at half the street between (turns tighter than their vehicle):
         // only a group where that fails a check merges (the user, Oct 17: two junctions across a grass strip at Sion
@@ -75,31 +84,31 @@ public static partial class TileRewriter
     /// one tile).
     /// </summary>
     private static (Junction Junction, PriorityPlanner.Plan Plan)? Merge(PriorityResult priority, HashSet<int> nodes, RoadNetwork net,
-        HashSet<int> planned, out string? no)
+        HashSet<int> planned, out string? no, RoundaboutShaper.Ring? ring = null)
     {
         no = null;
         var members = priority.Plans.Where(p => nodes.Contains(p.Junction.NodeId)).ToList();
         if (members.Count != nodes.Count || members.Any(p => p.Plan.Arms.Count != p.Junction.Arms.Count)) { no = "a member without its plan"; return null; }
         if (members.Any(p => !planned.Contains(p.Junction.NodeId))) { no = "a member beyond the block"; return null; }
-        if (members.Any(p => p.Plan.Kind == PriorityPlanner.Kind.Roundabout)) { no = "a roundabout"; return null; }
+        if (ring is null && members.Any(p => p.Plan.Kind == PriorityPlanner.Kind.Roundabout)) { no = "a roundabout"; return null; }
         var inner = new HashSet<int>();
         foreach (var (j, _) in members)
             foreach (var arm in j.Arms)
             {
                 var link = net.Links[arm.LinkId];
                 if (!nodes.Contains(link.StartNode) || !nodes.Contains(link.EndNode)) continue;
-                if (link.StartNode == link.EndNode || LinkLength(link) >= InternalLink) { no = "a longer street between two members"; return null; }
+                if (link.StartNode == link.EndNode || ring is null && LinkLength(link) >= InternalLink) { no = "a longer street between two members"; return null; }
                 inner.Add(arm.LinkId);
             }
         // streets between the members that close a loop enclose an island (a triangle, a divided road's square): real, so the
         // members stay as they are (the user, Oct 16, against the aerials); a tree of them (a pair, a chain) is one junction
-        if (inner.Count >= nodes.Count) { no = "streets between members enclose an island"; return null; }
-        var centre = new Vec2(members.Average(p => p.Junction.Centre.X), members.Average(p => p.Junction.Centre.Y));
+        if (ring is null && inner.Count >= nodes.Count) { no = "streets between members enclose an island"; return null; }
+        var centre = ring?.Centre ?? new Vec2(members.Average(p => p.Junction.Centre.X), members.Average(p => p.Junction.Centre.Y));
         var home = TileId.FromLv95(centre.X, centre.Y);
         var rep = members.Where(p => Home(p.Junction) == home).OrderBy(p => p.Junction.Centre.DistanceTo(centre)).FirstOrDefault();
         if (rep.Junction is null) { no = "a centre outside its members' tiles"; return null; }
 
-        var junction = new Junction { NodeId = rep.Junction.NodeId, Centre = centre, Layer = rep.Junction.Layer, Members = nodes };
+        var junction = new Junction { NodeId = rep.Junction.NodeId, Centre = centre, Layer = rep.Junction.Layer, Members = nodes, Ring = ring };
         var plan = new PriorityPlanner.Plan
         {
             // lit where any member is (one set of lights for the whole core), else the strongest member's kind
@@ -129,6 +138,58 @@ public static partial class TileRewriter
         return (junction, plan);
     }
 
+    /// <summary>
+    /// The priority plans with each tight roundabout (<see cref="RoundaboutCore.Tight"/>) one junction: the ring's nodes (the
+    /// roundabout plans standing on its circle) merged, every other link an arm. A ring some of whose nodes are not planned with
+    /// the block, or that will not merge, keeps its nodes. Null where no ring changed anything.
+    /// </summary>
+    private static PriorityResult? Rings(PriorityResult priority, IReadOnlyList<RoundaboutShaper.Ring> rings, RoadNetwork net,
+        Func<Junction, bool> planned, MergeStats stats)
+    {
+        var made = new List<(Junction, PriorityPlanner.Plan)>();
+        var gone = new HashSet<int>();
+        foreach (var ring in rings)
+        {
+            if (!RoundaboutCore.Tight(ring.Radius, ring.Width)) continue;
+            var members = priority.Plans.Where(p => p.Plan.Kind == PriorityPlanner.Kind.Roundabout && !gone.Contains(p.Junction.NodeId)
+                && Math.Abs(p.Junction.Centre.DistanceTo(ring.Centre) - ring.Radius) <= 2.5).ToList();
+            if (members.Count < 2) continue;
+            var nodes = members.Select(p => p.Junction.NodeId).ToHashSet();
+            // a splitter island's tip: a node off the ring that two of the ring's nodes lead to directly (TLM draws an arm's entry
+            // and exit apart up to there)
+            var leadsTo = new Dictionary<int, int>();
+            foreach (var (j, _) in members)
+                foreach (var arm in j.Arms)
+                {
+                    var l = net.Links[arm.LinkId];
+                    int other = l.StartNode == j.NodeId ? l.EndNode : l.StartNode;
+                    if (other >= 0 && !nodes.Contains(other)) leadsTo[other] = leadsTo.GetValueOrDefault(other) + 1;
+                }
+            foreach (var (tip, count) in leadsTo)
+                if (count >= 2 && priority.Plans.FirstOrDefault(p => p.Junction.NodeId == tip) is { Junction: not null } t && !gone.Contains(tip)
+                    && t.Junction.Centre.DistanceTo(ring.Centre) <= ring.Radius + ring.Width * 0.5 + RoundaboutCore.TipReach)
+                {
+                    members.Add(t);
+                    nodes.Add(tip);
+                }
+            if (!members.All(p => planned(p.Junction))) continue;
+            if (Merge(priority, nodes, net, nodes, out string? no, ring) is { } m)
+            {
+                made.Add(m);
+                gone.UnionWith(nodes);
+                stats.Rings++;
+            }
+            else stats.Why["a roundabout: " + no] = stats.Why.GetValueOrDefault("a roundabout: " + no) + 1;
+        }
+        if (made.Count == 0) return null;
+        var result = new PriorityResult();
+        result.Plans.AddRange(made);
+        result.Plans.AddRange(priority.Plans.Where(p => !gone.Contains(p.Junction.NodeId)));
+        foreach (var (k, v) in priority.Yield) result.Yield[k] = v;
+        result.SignalsFromData.UnionWith(priority.SignalsFromData);
+        return result;
+    }
+
     private static TileId Home(Junction j) => TileId.FromLv95(j.Centre.X, j.Centre.Y);
 
     /// <summary>Where an arm of a merged junction leaves its core, seen from the core's centre: its mouth 10 m on along it.</summary>
@@ -138,11 +199,11 @@ public static partial class TileRewriter
     /// <summary>The merges of a region (#818 phase 5c).</summary>
     public sealed class MergeStats
     {
-        public int Merged, Members, HeldApart;
+        public int Merged, Members, HeldApart, Rings;
         public readonly Dictionary<string, int> Why = new();
 
         public string Summary() =>
-            $"    merged cores (#818 phase 5c): {Merged:N0} of {Members:N0} junctions ({HeldApart:N0} overlapping ones laid apart, held at half the street between)"
+            $"    merged cores (#818 phase 5c): {Merged:N0} of {Members:N0} junctions ({HeldApart:N0} overlapping ones laid apart, held at half the street between); tight roundabouts laid whole {Rings:N0} (#854)"
             + (Why.Count > 0 ? $"; not merged: {string.Join(", ", Why.OrderBy(w => w.Key).Select(w => $"{w.Key} {w.Value:N0}"))}" : "");
     }
 }

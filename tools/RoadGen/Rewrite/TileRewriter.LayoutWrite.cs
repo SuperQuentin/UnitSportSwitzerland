@@ -25,11 +25,13 @@ public static partial class TileRewriter
         public readonly List<Vec2> OrphanedAt = new();
         /// <summary>The merged cores written (#818 phase 5c) and their node counts.</summary>
         public readonly List<(Vec2 At, int Nodes)> MergedAt = new();
+        /// <summary>The roundabouts written whole (#854).</summary>
+        public readonly List<Vec2> RingsAt = new();
         public readonly SortedDictionary<string, int> Why = new(StringComparer.Ordinal);
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
             $"    junction planner written (#818 phase 3): {Junctions:N0} junctions as cores, {Skipped:N0} left to the old layout ({string.Join(", ", Why.Select(kv => $"{kv.Key} {kv.Value}"))}); ")
-            + string.Create(CultureInfo.InvariantCulture, $"{Transitions:N0} transitions over {Pieces:N0} pieces, {Lines:N0} lines and {Marks:N0} marks; arms trimmed to their mouth {Trimmed:N0}, run on to it {Extended:N0}; pieces lost by a later cut {Orphaned:N0}{(OrphanedAt.Count > 0 ? " (at " + string.Join("; ", OrphanedAt.Take(6).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")}; cap vertices {CapVertices:N0} of the cores' {CoreVertices:N0}; exterior: {Bars:N0} bars, {Refuges:N0} refuges, {Signs:N0} signs, {Ramps:N0} crosswalks with lowered kerbs; lights {Signals:N0} ({SignalsInvalid:N0} plans invalid), {Poles:N0} poles, {CoreLines:N0} lines through the cores, {BikeCrossings:N0} bike lanes through them, {PathCrossings:N0} path crossings ({PathsCarried:N0} ends carried to the kerb, {PathsCrossingInCorner:N0} of them crossing another in a corner: left to it), {PathsThrough:N0} paths carried along a kerb, {CornersLanded:N0} corners a path crossing ends on; paths for traffic (JPTH) {Paths:N0}, left out {PathsLeftOut:N0}; merged cores written {MergedAt.Count:N0} (of {MergedAt.Sum(m => m.Nodes):N0} nodes{(MergedAt.Count > 0 ? "; at " + string.Join(" ", MergedAt.GroupBy(m => m.Nodes).OrderBy(g => g.Key).SelectMany(g => g.OrderBy(m => m.At.X).Take(4)).Select(m => string.Create(CultureInfo.InvariantCulture, $"{m.At.X:F0},{m.At.Y:F0}x{m.Nodes}"))) : "")}), streets under them {InnerEmptied:N0}")
+            + string.Create(CultureInfo.InvariantCulture, $"{Transitions:N0} transitions over {Pieces:N0} pieces, {Lines:N0} lines and {Marks:N0} marks; arms trimmed to their mouth {Trimmed:N0}, run on to it {Extended:N0}; pieces lost by a later cut {Orphaned:N0}{(OrphanedAt.Count > 0 ? " (at " + string.Join("; ", OrphanedAt.Take(6).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")}; cap vertices {CapVertices:N0} of the cores' {CoreVertices:N0}; exterior: {Bars:N0} bars, {Refuges:N0} refuges, {Signs:N0} signs, {Ramps:N0} crosswalks with lowered kerbs; lights {Signals:N0} ({SignalsInvalid:N0} plans invalid), {Poles:N0} poles, {CoreLines:N0} lines through the cores, {BikeCrossings:N0} bike lanes through them, {PathCrossings:N0} path crossings ({PathsCarried:N0} ends carried to the kerb, {PathsCrossingInCorner:N0} of them crossing another in a corner: left to it), {PathsThrough:N0} paths carried along a kerb, {CornersLanded:N0} corners a path crossing ends on; paths for traffic (JPTH) {Paths:N0}, left out {PathsLeftOut:N0}; merged cores written {MergedAt.Count:N0} (of {MergedAt.Sum(m => m.Nodes):N0} nodes{(MergedAt.Count > 0 ? "; at " + string.Join(" ", MergedAt.GroupBy(m => m.Nodes).OrderBy(g => g.Key).SelectMany(g => g.OrderBy(m => m.At.X).Take(4)).Select(m => string.Create(CultureInfo.InvariantCulture, $"{m.At.X:F0},{m.At.Y:F0}x{m.Nodes}"))) : "")}), streets under them {InnerEmptied:N0}; roundabouts written whole {RingsAt.Count:N0}{(RingsAt.Count > 0 ? " (at " + string.Join(" ", RingsAt.OrderBy(v => v.X).Take(8).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")} (#854)")
             + (WithTransitions.Count > 0 ? "\n      with transitions at " + string.Join("; ", WithTransitions.Take(12).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) : "");
     }
 
@@ -84,6 +86,7 @@ public static partial class TileRewriter
         {
             string? no = null;
             if (jp.Core is not { } core) no = "no core";
+            else if (core.Refused is { } refused) no = refused;
             // two junctions under InternalLink apart stay two cores where both fit on the link between (the user, Oct 15), held at
             // half of it where they wanted more (Oct 17); a group where that fails a check was merged (TileRewriter.Merge), or
             // could not be: "cores overlap"
@@ -99,6 +102,7 @@ public static partial class TileRewriter
                     foreach (int link in a.StreetOn.Select(x => x.Link).Prepend(a.LinkId))
                         if (!segmentOf.TryGetValue(link, out var so)) no ??= "a street beyond the block";
                         else if ((so.Segment.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) != 0) no ??= "a bridge or tunnel";
+            if (no is not null && jp.Merged?.Ring is not null) no = "a roundabout: " + no;
             if (no is not null) why[jp.Node] = no;
             if (no is not null && DebugJunction is { } dbg && Math.Abs(dbg.E - jp.Centre.X) < 30 && Math.Abs(dbg.N - jp.Centre.Y) < 30)
                 Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"[junction] node {jp.Node} at {jp.Centre.X:F1},{jp.Centre.Y:F1} left to the old layout: {no}"
@@ -313,6 +317,29 @@ public static partial class TileRewriter
             foreach (int node in jp.Nodes)
                 if (node != jp.Node && capOf.TryGetValue(node, out var member)) caps[member.Home].Remove(member.Cap);
             stats.Junctions++;
+            // a roundabout laid whole (#854): its splitter islands on the cap, its central island for the ring as laid (wider than
+            // TLM's line, so the shaper's island is replaced)
+            foreach (var splitter in core.Islands)
+            {
+                var tris = Junctions.EarClip.Triangulate(splitter);
+                if (tris.Count < 3) continue;
+                Get(areas, home).Add(new RoadAreaProp
+                {
+                    Type = AreaPropType.Island, Variant = 2, Flags = PropFlags.Solid, Height = RoundaboutShaper.IslandKerb,
+                    Vertices = splitter.SelectMany(p => new[] { (float)(p.X - home.MinE), CapHeightAt(cap, home, p), (float)(home.MaxN - p.Y) }).ToArray(),
+                    Indices = tris.Select(i => (ushort)i).ToArray(),
+                });
+                stats.Refuges++;
+            }
+            if (jp.Merged?.Ring is { } shaped)
+            {
+                stats.RingsAt.Add(shaped.Centre);
+                var at = TileId.FromLv95(shaped.Centre.X, shaped.Centre.Y);
+                if (areas.TryGetValue(at, out var props))
+                    props.RemoveAll(x => x.Type == AreaPropType.Island && x.Variant is 0 or 1 && x.Vertices.Length >= 3
+                        && Math.Abs(x.Vertices[0] + at.MinE - shaped.Centre.X) < 1.5 && Math.Abs(at.MaxN - x.Vertices[2] - shaped.Centre.Y) < 1.5);
+                if (RoundaboutShaper.Island(shaped with { Width = RoundaboutCore.RingWidth(shaped.Width) }, at) is { } centre) Get(areas, at).Add(centre);
+            }
             if (JunctionList is { } listFile)
                 File.AppendAllText(listFile, string.Create(CultureInfo.InvariantCulture,
                     $"{jp.Centre.X:F0},{jp.Centre.Y:F0} arms {jp.Arms.Count} lights {(jp.Lights ? 1 : 0)} left {jp.Arms.Count(a => a.HasLeft)} right {jp.Arms.Count(a => a.HasRight)} split {jp.Arms.Count(a => Math.Abs(a.Split) > 0.01)} bikelanes {jp.Arms.Count(a => a.Mouth.Strips.Any(x => x.Kind == StripKind.BikeLane))} paths {jp.Arms.Count(a => a.Mouth.Strips.Any(x => x.Kind == StripKind.Path))} nodes {jp.Nodes.Count()} between {jp.Arms.Count(a => BikeBetweenCars(a.Mouth))}\n"));

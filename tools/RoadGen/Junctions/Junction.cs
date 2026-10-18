@@ -41,6 +41,12 @@ public sealed class Junction
     /// </summary>
     public IReadOnlySet<int>? Members { get; init; }
 
+    /// <summary>
+    /// A tight roundabout laid whole (#854): its ring as <c>RoundaboutShaper</c> fitted it, the ring's nodes and its splitter
+    /// islands' tips its <see cref="Members"/>. Null for any other junction.
+    /// </summary>
+    public Network.RoundaboutShaper.Ring? Ring { get; init; }
+
     /// <summary>Whether <paramref name="node"/> is this junction's node or one of its members.</summary>
     public bool Holds(int node) => node == NodeId || Members?.Contains(node) == true;
 

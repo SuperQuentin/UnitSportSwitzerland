@@ -1,0 +1,319 @@
+namespace UnitSport.Tools.RoadGen.Layout;
+
+using UnitSport.Terrain.Format;
+using UnitSport.Tools.RoadGen.Geometry;
+using UnitSport.Tools.RoadGen.Junctions;
+using UnitSport.Tools.RoadGen.Network;
+
+/// <summary>
+/// A tight roundabout's core (#854, <c>docs/plans/roundabout-core.md</c>): the whole roundabout one junction, its ring the
+/// circle <c>RoundaboutShaper</c> fitted (#122), its carriageway at least <see cref="LeastRing"/> wide. An arm that TLM draws as
+/// an entry and an exit meeting at a splitter island's tip starts there: from its mouth by the tip the entry and the exit flare
+/// apart round a raised splitter island down to the ring. Between two arms the kerb runs from one mouth's corner on a fillet
+/// into the ring's outer circle, along it, and out on a fillet to the next mouth. Every arriving lane is joined to every other
+/// arm's departing lane: in to the ring lane (its centreline), counter-clockwise round it, out to the exit; each entry gives
+/// way at the ring's edge. Produces a <see cref="JunctionCore"/> as <see cref="CorePlanner"/> does, so transitions, the
+/// exterior, the writer and the traffic paths take it as any core.
+/// </summary>
+public static class RoundaboutCore
+{
+    /// <summary>A ring this small outside (its centreline radius plus half its carriageway, m) is laid whole; a larger one as T's.</summary>
+    public const double TightOuter = 20;
+    /// <summary>A splitter island's tip (where TLM's entry and exit lines meet) this far out past the ring's outer edge at most (m).</summary>
+    public const double TipReach = 30;
+    /// <summary>The ring's carriageway at least this wide (m): TLM's ring line is one 3.3 m lane, a Swiss compact roundabout's ring 6-8 m.</summary>
+    public const double LeastRing = 6;
+    /// <summary>The entry and exit kerbs' fillet into the ring: this share of the ring's outer radius plus a constant, within limits (m).</summary>
+    public const double FilletShare = 0.6, FilletPlus = 4, FilletLeast = 2, FilletMost = 15;
+    /// <summary>A connector's run along its arm down to this far out from the ring's outer edge before it curves in (m).</summary>
+    public const double RunOut = 0.5;
+    /// <summary>The mouth stands this far out past where its kerbs leave their fillets, or past a splitter island's tip (m).</summary>
+    public const double MouthPast = 0.5;
+    /// <summary>A splitter island: half as wide at the ring as this (m), from 1 m in from the mouth to 1 m out from the ring; the lanes
+    /// keep <see cref="IslandMargin"/> off it; none shorter than <see cref="IslandLeast"/>.</summary>
+    public const double IslandHalf = 1.25, IslandMargin = 0.3, IslandLeast = 4;
+    /// <summary>The give-way row this far out from the ring's outer edge (m).</summary>
+    public const double TeethOut = 0.3;
+    /// <summary>An arm turned further than this from the ring's radius runs past the ring (a bypass, a slip): not laid whole.</summary>
+    public static readonly double PastRing = 50 * Math.PI / 180;
+    /// <summary>An entry and an exit line closer than this round the ring are one road's, apart round a splitter island (TLM, no tip).</summary>
+    public static readonly double SplitPair = 30 * Math.PI / 180;
+
+    /// <summary>The ring's carriageway as laid: TLM's, at least <see cref="LeastRing"/>.</summary>
+    public static double RingWidth(double width) => Math.Max(width, LeastRing);
+
+    /// <summary>Whether a ring of centreline radius <paramref name="radius"/> and carriageway <paramref name="width"/> is laid whole.</summary>
+    public static bool Tight(double radius, double width) => radius + width * 0.5 <= TightOuter;
+
+    /// <summary>One arm as the builder sees it: its mouth station, its splitter island's span (none: both stations NaN).</summary>
+    private sealed class Arm
+    {
+        public required ArmPlan Plan;
+        public double Mouth;
+        public double Apex = double.NaN, Base = double.NaN;
+        public double Centre;
+        /// <summary>How far the arriving side moves right and the departing side left of the arm's own offsets at station s.</summary>
+        public double Flare(double s) => double.IsNaN(Apex) || s >= Apex ? 0 : s <= Base ? IslandHalf : IslandHalf * (Apex - s) / (Apex - Base);
+    }
+
+    public static JunctionCore Plan(JunctionPlan jp, RoundaboutShaper.Ring shaped)
+    {
+        var core = new JunctionCore();
+        var o = shaped.Centre;
+        double radius = shaped.Radius, width = RingWidth(shaped.Width), outer = radius + width * 0.5;
+        bool mini = radius - width * 0.5 < RoundaboutShaper.MiniIsland;
+        var arms = jp.Arms.Where(a => a.Axis is not null).OrderBy(a => Angles.Normalize((a.Axis!.PointAt(0) - o).Heading))
+            .Select(a => new Arm { Plan = a, Centre = a.Mouth.CentreLine ?? 0 }).ToList();
+        int n = arms.Count;
+        if (n < 2) return core;
+        foreach (var arm in arms)
+        {
+            var start = arm.Plan.Axis!.PointAt(0);
+            if (Math.Abs(Angles.Delta((start - o).Heading, arm.Plan.Axis.DirAt(0).Heading)) > PastRing) { core.Refused = "an arm runs past the ring"; return core; }
+        }
+
+        // a point of an arm at station s (negative: on past its first point toward the ring, straight) and offset (right of a driver
+        // arriving)
+        static Vec2 At(ArmPlan a, double s, double offset) =>
+            s >= 0 ? a.Axis!.At(s, offset) : a.Axis!.At(0, offset) - a.Axis.DirAt(0) * -s;
+        // the station where a line of the arm at this offset reaches distance d from the ring's centre, coming in from s = 30
+        double StationAt(ArmPlan a, double offset, double d)
+        {
+            double lo = -2 * outer - TipReach, hi = 30;
+            if (At(a, hi, offset).DistanceTo(o) < d) return hi;
+            for (int it = 0; it < 50; it++)
+            {
+                double mid = (lo + hi) * 0.5;
+                if (At(a, mid, offset).DistanceTo(o) >= d) hi = mid; else lo = mid;
+            }
+            return hi;
+        }
+
+        // the mouths, and the splitter islands where an arm starts at a tip off the ring with both an arriving and a departing lane
+        foreach (var arm in arms)
+        {
+            var a = arm.Plan;
+            double ringAt = StationAt(a, arm.Centre, outer + 1);
+            bool atTip = a.Axis!.PointAt(0).DistanceTo(o) > outer + 2;
+            arm.Mouth = atTip ? MouthPast : 0;
+            bool twoWay = a.Mouth.CarLanes(StripWay.In).Any() && a.Mouth.CarLanes(StripWay.Out).Any();
+            if (atTip && twoWay && !mini && arm.Mouth - 1 - ringAt >= IslandLeast) (arm.Apex, arm.Base) = (arm.Mouth - 1, ringAt);
+        }
+
+        // the kerbs: each arm's right kerb and the next arm's left kerb, as straight lines down from the mouth (flared past a splitter
+        // island), filleted into the ring's outer circle on the side away from the arm
+        (Vec2 T, Vec2 C, List<Vec2> Arc)? Fillet(Arm arm, bool right, double rf)
+        {
+            var a = arm.Plan;
+            double kerb = right ? a.Mouth.CarriagewayRight : a.Mouth.CarriagewayLeft, side = right ? 1 : -1;
+            double low = Math.Min(arm.Mouth - 1, double.IsNaN(arm.Base) ? StationAt(a, kerb, outer) : arm.Base);
+            var top = At(a, arm.Mouth, kerb);
+            var bottom = At(a, low, kerb + side * arm.Flare(low));
+            var u = top - bottom;
+            if (u.Length < 0.5) { bottom = At(a, arm.Mouth - 5, kerb); u = top - bottom; }
+            u /= u.Length;
+            // away from the arm: an arm's offsets grow to the right of a driver arriving, the outward direction's left (Perp)
+            var away = u.Perp * side;
+            var b = top + away * rf - o;
+            double bu = b.Dot(u), disc = bu * bu - (b.LengthSquared - (outer + rf) * (outer + rf));
+            if (disc < 0) return null;
+            // (coming in from the mouth, the first place the fillet touches the ring)
+            double t = -bu + Math.Sqrt(disc);
+            var f = top + u * t + away * rf;
+            var tp = top + u * t;
+            var c = o + (f - o) * (outer / (outer + rf));
+            var run = new List<Vec2>();
+            Line(run, top, tp);
+            double a0 = (tp - f).Heading, da = Angles.Delta(a0, (c - f).Heading);
+            int steps = Math.Max(2, (int)Math.Ceiling(Math.Abs(da) * rf / 0.75));
+            for (int k = 1; k <= steps; k++) run.Add(f + Vec2.FromHeading(a0 + da * k / steps) * rf);
+            return (tp, c, run);
+        }
+        double Heading(Arm arm) => (arm.Plan.Axis!.PointAt(0) - o).Heading;
+        bool OneWay(Arm arm, StripWay way) => arm.Plan.Mouth.CarLanes(way).Any() && !arm.Plan.Mouth.CarLanes(way == StripWay.In ? StripWay.Out : StripWay.In).Any();
+        bool Split(Arm a, Arm b) => Ccw(Heading(a), Heading(b)) < SplitPair
+            && (OneWay(a, StripWay.In) && OneWay(b, StripWay.Out) || OneWay(a, StripWay.Out) && OneWay(b, StripWay.In));
+        double rf0 = Math.Clamp(FilletShare * outer + FilletPlus, FilletLeast, FilletMost);
+        var rightOf = new (Vec2 T, Vec2 C, List<Vec2> Arc)?[n];
+        var leftOf = new (Vec2 T, Vec2 C, List<Vec2> Arc)?[n];
+        // an arm starting on the ring: its mouth out past where its kerbs leave their fillets (laid first from the ring's edge)
+        foreach (var arm in arms.Where(x => x.Mouth == 0))
+        {
+            double s = outer - radius + MouthPast;
+            foreach (bool right in (ReadOnlySpan<bool>)[true, false])
+                if (Fillet(arm, right, rf0) is { } fl) s = Math.Max(s, (fl.T - arm.Plan.Axis!.PointAt(0)).Dot(arm.Plan.Axis.DirAt(0)) + MouthPast);
+            arm.Mouth = s;
+        }
+        for (int k = 0; k < n; k++)
+        {
+            int j = (k + 1) % n;
+            for (double rf = rf0; ; rf *= 0.75)
+            {
+                var r = Fillet(arms[k], true, rf);
+                var l = Fillet(arms[j], false, rf);
+                bool apart = r is { } rr && l is { } ll && Ccw(Heading(arms[k]), (rr.C - o).Heading) <= Ccw(Heading(arms[k]), (ll.C - o).Heading);
+                if (apart || rf < FilletLeast) { (rightOf[k], leftOf[j]) = (r, l); break; }
+            }
+        }
+
+        // the outline: each mouth across its carriageway, then the kerb to the next one
+        for (int k = 0; k < n; k++)
+        {
+            int j = (k + 1) % n;
+            var a = arms[k].Plan;
+            var left = At(a, arms[k].Mouth, a.Mouth.CarriagewayLeft);
+            var right = At(a, arms[k].Mouth, a.Mouth.CarriagewayRight);
+            core.Mouths.Add(new CoreMouth(a.Arm, arms[k].Mouth, left, right));
+            core.Outline.Add(left);
+            core.Outline.Add(right);
+            var corner = new CoreCorner { ArmA = a.Arm, ArmB = arms[j].Plan.Arm, Shape = CornerShape.Arc, Radius = rf0 };
+            if (Split(arms[k], arms[j]))
+            {
+                // one road's entry and exit drawn apart: the kerb down each to the ring and across, grass between them
+                var b = arms[j].Plan;
+                double sa = StationAt(a, a.Mouth.CarriagewayRight, outer + 1), sb = StationAt(b, b.Mouth.CarriagewayLeft, outer + 1);
+                corner.Kerb.Add(At(a, Math.Min(sa, arms[k].Mouth - 0.5), a.Mouth.CarriagewayRight));
+                corner.Kerb.Add(At(b, Math.Min(sb, arms[j].Mouth - 0.5), b.Mouth.CarriagewayLeft));
+                corner.Shape = CornerShape.Gore;
+            }
+            else if (rightOf[k] is { } r && leftOf[j] is { } l)
+            {
+                corner.Kerb.AddRange(r.Arc);
+                double h0 = (r.C - o).Heading, sweep = Ccw(h0, (l.C - o).Heading);
+                int steps = Math.Max(1, (int)Math.Ceiling(sweep * outer / 1.0));
+                for (int q = 1; q < steps; q++) corner.Kerb.Add(o + Vec2.FromHeading(h0 + sweep * q / steps) * outer);
+                corner.Kerb.AddRange(Enumerable.Reverse(l.Arc));
+            }
+            else corner.Shape = CornerShape.Chord;
+            core.Corners.Add(corner);
+            core.Outline.AddRange(corner.Kerb);
+        }
+        Dedupe(core.Outline);
+        core.Area = Math.Abs(CorePlanner.SignedArea(core.Outline));
+        core.Simple = CorePlanner.Simple(core.Outline);
+        core.Triangles.AddRange(EarClip.Triangulate(core.Outline));
+
+        // the splitter islands, between the flared arriving and departing lanes
+        foreach (var arm in arms.Where(x => !double.IsNaN(x.Apex)))
+        {
+            var island = new List<Vec2>();
+            int steps = Math.Max(2, (int)Math.Ceiling((arm.Apex - arm.Base) / 1.0));
+            for (int q = 0; q <= steps; q++)
+            {
+                double s = arm.Apex - (arm.Apex - arm.Base) * q / steps, h = Math.Max(0, arm.Flare(s) - IslandMargin);
+                island.Add(At(arm.Plan, s, arm.Centre + h));
+            }
+            for (int q = steps; q >= 0; q--)
+            {
+                double s = arm.Apex - (arm.Apex - arm.Base) * q / steps, h = Math.Max(0, arm.Flare(s) - IslandMargin);
+                island.Add(At(arm.Plan, s, arm.Centre - h));
+            }
+            Dedupe(island);
+            if (island.Count >= 3) core.Islands.Add(CorePlanner.SignedArea(island) < 0 ? Enumerable.Reverse(island).ToList() : island);
+        }
+
+        // the give-way rows across each entry at the ring's edge
+        foreach (var arm in arms)
+        {
+            var ins = arm.Plan.Mouth.CarLanes(StripWay.In).ToList();
+            if (ins.Count == 0) continue;
+            double from = ins.Min(l => arm.Plan.Mouth.Span(l.Index).From), to = ins.Max(l => arm.Plan.Mouth.Span(l.Index).To);
+            double s = StationAt(arm.Plan, (from + to) * 0.5 + IslandHalf, outer + TeethOut);
+            double f = arm.Flare(s);
+            core.Teeth.Add((At(arm.Plan, s, from + f + 0.15), At(arm.Plan, s, to + f - 0.15)));
+        }
+
+        // the connectors: every arriving lane to every other arm's departing lane, counter-clockwise round the ring lane
+        for (int k = 0; k < n; k++)
+        {
+            var a = arms[k];
+            foreach (var (index, lane) in a.Plan.Mouth.CarLanes(StripWay.In))
+                for (int step = 1; step < n; step++)
+                {
+                    var b = arms[(k + step) % n];
+                    var outs = b.Plan.Mouth.CarLanes(StripWay.Out).ToList();
+                    if (outs.Count == 0) continue;
+                    var to = outs[0];
+                    double sweep = Ccw(Heading(a), Heading(b));
+                    var move = sweep < 0.75 * Math.PI ? SignalMoves.Right : sweep < 1.25 * Math.PI ? SignalMoves.Through : SignalMoves.Left;
+                    var c = new Connector
+                    {
+                        FromArm = a.Plan.Arm, FromId = lane.Id, ToArm = b.Plan.Arm, ToId = to.Strip.Id, Move = move, Kind = ConnectorKind.Car,
+                        Width = lane.Width, ToWidth = to.Strip.Width, FromOffset = Mid(a.Plan.Mouth.Span(index)), ToOffset = Mid(b.Plan.Mouth.Span(to.Index)),
+                        Turns = true, Radius = radius,
+                    };
+                    c.Centre = Path(a, c.FromOffset, b, c.ToOffset);
+                    c.Left = CorePlanner.Offset(c.Centre, -c.Width * 0.5);
+                    c.Right = CorePlanner.Offset(c.Centre, c.Width * 0.5);
+                    c.Outside = c.Left.Concat(c.Right).Select(p => CorePlanner.Outside(core.Outline, p)).DefaultIfEmpty(0).Max();
+                    if (c.Outside > CorePlanner.OutsideTolerance) core.ConnectorsOutside++;
+                    core.Connectors.Add(c);
+                }
+        }
+        return core;
+
+        // a lane's path: in along its arm (flared round the splitter island) to the ring's outer edge, curving onto the ring lane
+        // counter-clockwise, round it, curving off toward the exit and out along the exit (flared) to its mouth
+        List<Vec2> Path(Arm a, double offA, Arm b, double offB)
+        {
+            var pts = new List<Vec2>();
+            double sA = StationAt(a.Plan, offA + IslandHalf, outer + RunOut), sB = StationAt(b.Plan, offB - IslandHalf, outer + RunOut);
+            sA = Math.Min(sA, a.Mouth);
+            sB = Math.Min(sB, b.Mouth);
+            for (double s = a.Mouth; s > sA; s -= 1) pts.Add(At(a.Plan, s, offA + a.Flare(s)));
+            var p1 = At(a.Plan, sA, offA + a.Flare(sA));
+            pts.Add(p1);
+            var din = p1 - At(a.Plan, sA + 1, offA + a.Flare(sA + 1));
+            din /= Math.Max(1e-9, din.Length);
+            var q1 = At(b.Plan, sB, offB - b.Flare(sB));
+            var dout = At(b.Plan, sB + 1, offB - b.Flare(sB + 1)) - q1;
+            dout /= Math.Max(1e-9, dout.Length);
+            double lead = Math.Max(3, (p1.DistanceTo(o) - radius) * 1.5);
+            double hIn = (p1 - o).Heading + lead / radius, hOut = (q1 - o).Heading - lead / radius;
+            double sweep = Ccw(hIn, hOut);
+            Bezier(pts, p1, din, o + Vec2.FromHeading(hIn) * radius, Vec2.FromHeading(hIn + Math.PI / 2));
+            int steps = Math.Max(1, (int)Math.Ceiling(sweep * radius / 1.0));
+            for (int q = 1; q < steps; q++) pts.Add(o + Vec2.FromHeading(hIn + sweep * q / steps) * radius);
+            Bezier(pts, o + Vec2.FromHeading(hOut) * radius, Vec2.FromHeading(hOut + Math.PI / 2), q1, dout);
+            for (double s = sB + 1; s < b.Mouth; s += 1) pts.Add(At(b.Plan, s, offB - b.Flare(s)));
+            pts.Add(At(b.Plan, b.Mouth, offB));
+            Dedupe(pts);
+            return pts;
+        }
+    }
+
+    private static double Mid((double From, double To) span) => (span.From + span.To) * 0.5;
+
+    /// <summary>The counter-clockwise turn from <paramref name="from"/> to <paramref name="to"/>, in [0, 2π).</summary>
+    private static double Ccw(double from, double to)
+    {
+        double d = Angles.Normalize(to - from);
+        return d < 0 ? d + 2 * Math.PI : d;
+    }
+
+    private static void Line(List<Vec2> into, Vec2 a, Vec2 b)
+    {
+        int steps = Math.Max(1, (int)Math.Ceiling(a.DistanceTo(b) / 1.0));
+        for (int k = 0; k <= steps; k++) into.Add(a + (b - a) * ((double)k / steps));
+    }
+
+    /// <summary>A cubic from <paramref name="a"/> heading <paramref name="da"/> to <paramref name="b"/> heading <paramref name="db"/>.</summary>
+    private static void Bezier(List<Vec2> into, Vec2 a, Vec2 da, Vec2 b, Vec2 db)
+    {
+        double k = a.DistanceTo(b) / 3;
+        Vec2 c1 = a + da * k, c2 = b - db * k;
+        int steps = Math.Max(4, (int)Math.Ceiling(a.DistanceTo(b) / 0.75));
+        for (int i = 0; i <= steps; i++)
+        {
+            double t = (double)i / steps, u = 1 - t;
+            into.Add(a * (u * u * u) + c1 * (3 * u * u * t) + c2 * (3 * u * t * t) + b * (t * t * t));
+        }
+    }
+
+    private static void Dedupe(List<Vec2> pts)
+    {
+        for (int i = pts.Count - 1; i > 0; i--)
+            if (pts[i].DistanceTo(pts[i - 1]) < 0.01) pts.RemoveAt(i);
+        if (pts.Count > 2 && pts[0].DistanceTo(pts[^1]) < 0.01) pts.RemoveAt(pts.Count - 1);
+    }
+}
