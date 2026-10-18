@@ -4,6 +4,7 @@ using System.Linq;
 using Godot;
 using UnitSport.BattleRoyale;
 using UnitSport.Items;
+using UnitSport.Vehicles;
 
 namespace UnitSport.Bots;
 
@@ -73,6 +74,8 @@ public sealed class BrBrain : IBotBrain
         bot.Intent.Steer = Vector2.Zero;
         var space = bot.World.Space;
         bot.Senses.Look(bot, bot.World.Bodies(), space, now);
+        // at the wheel (#837 phase 3): drive on, or brake and get out (arrived, stuck, or an enemy close)
+        if (BotDriving.Mounted(bot)) return Driving(bot, now);
         var s = Situation(bot, now, out var enemy, out var downed, out var crate, out var zone);
         _status = FormattableString.Invariant($"goal {Goal} inside {zone.Inside:F2} out {s.OutsideBy:F0} run {s.ZoneRunNeeded:F0} enemy {s.EnemyDistance:F0} crate {s.CrateDistance:F0} stuck {bot.Nav.Stuck} open {bot.Nav.LastOpen:F1} route {(_route == null ? "-" : $"{_routeNext}/{_route.Count}")} roads {(_br.Roads != null)} follow {bot.Nav.Following}");
         var goal = BrTactics.Choose(s, Goal);
@@ -356,6 +359,42 @@ public sealed class BrBrain : IBotBrain
         if (!BotSkills.TakeOne(bot, _crates, c)) _emptied.Add(c.Id);
     }
 
+    // ---- vehicles (#837 phase 3) ---------------------------------------------------------------------
+
+    /// <summary>A trip longer than this is worth a car or a bike, when one is in sight within <see cref="CarSpot"/>.</summary>
+    private const float DriveFrom = 350f, CarSpot = 70f;
+    /// <summary>An enemy this close and it gets out to fight (nobody shoots from the wheel).</summary>
+    private const float BailFrom = 80f;
+    private VehicleBody? _car;
+    private Vector3? _travel;
+    private double _noCarUntil;
+
+    /// <summary>In a vehicle: towards where it was going; out on arrival, when stuck, or with an enemy close.</summary>
+    private double Driving(Bot bot, double now)
+    {
+        var state = _br.State;
+        var me = state.Find(bot.Id);
+        bool enemyClose = false;
+        foreach (var x in bot.Senses.Seen)
+            if (!x.Downed && x.Distance < BailFrom && me != null && state.Find(x.Id) is { Alive: true } e && BrState.Hostile(me, e)) enemyClose = true;
+        bot.Intent.FaceYaw = null;
+        bot.Intent.FireAt = null;
+        if (_travel is not { } goal || enemyClose || bot.Drive.Stopping)
+        {
+            if (BotDriving.GetOut(bot)) _travel = null;
+            _status = $"goal Drive out{(enemyClose ? " (enemy)" : "")}";
+            return 0.15;
+        }
+        var progress = BotDriving.Towards(bot, goal, now);
+        if (progress is BotDriving.Progress.Arrived or BotDriving.Progress.Failed)
+        {
+            bot.Drive.Stopping = true;
+            if (progress == BotDriving.Progress.Failed) _noCarUntil = now + 30;   // walk for a while
+        }
+        _status = $"goal Drive {progress} speed {bot.Body.RideSpeed:F0}";
+        return 0.15;
+    }
+
     // ---- the streets --------------------------------------------------------------------------------
 
     /// <summary>Further than this, a bot walks the streets (<see cref="BrManager.Roads"/>) rather than straight.</summary>
@@ -375,6 +414,17 @@ public sealed class BrBrain : IBotBrain
     {
         var pos = bot.Body.GlobalPosition;
         float straight = new Vector2(target.X - pos.X, target.Z - pos.Z).Length();
+        // far, and a car or a bike in sight: go and take it, then drive there
+        if (straight > DriveFrom && now >= _noCarUntil)
+        {
+            if (_car == null || !GodotObject.IsInstanceValid(_car)) _car = BotDriving.Spot(bot, CarSpot);
+            if (_car != null)
+            {
+                if (BotDriving.GetIn(bot, _car, space, now)) { _travel = target; _car = null; }
+                else if (!GodotObject.IsInstanceValid(_car) || VehicleManager.Instance?.Enterable(_car) != true) _car = null;
+                return false;
+            }
+        }
         if (straight > StreetsFrom && _br.Roads is { } roads && bot.Body.Origin is { } origin)
         {
             // a new goal, or a stale route: plan again (at most every 10 s for the same goal)

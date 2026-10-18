@@ -2701,8 +2701,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     }
 
     /// <summary>Takes over a vehicle from the world: its position, heading, momentum and damage.</summary>
+    /// <summary>The name of the vehicle got into (#837): it is parked under it again (a Battle Royale match's car stays the match's).</summary>
+    private string _rideName = "";
+
     private void EnterVehicle(VehicleState state)
     {
+        _rideName = state.Name;
         if (_sliding) EndSlide();
         // off the bus's deck and out of every deck now, not in the next _Process: a physics step in
         // between stood the bus just got into on its own parked deck, 0.7 m up, then on its roof (#323)
@@ -2805,7 +2809,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 : _ride is Airliner { State.OnGround: false } aloft ? aloft.State.Attitude.Orthonormalized().GetEuler() : default,
             Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : _ride is Airliner af ? af.PackFlags() : _ride is Airstairs sf ? sf.PackFlags() : _ride is Forklift lf ? lf.PackFlags() : _ride is Excavator ef ? ef.PackFlags() : _ride is WheelLoader wf ? wf.PackFlags() : _ride is CompactRoller rf ? rf.PackFlags() : _ride is MiniDumper df ? df.PackFlags() : _ride is Telehandler hf ? hf.PackFlags() : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
             Radio: wrecked ? 0 : CarRadio, Cd: wrecked ? "" : CarCd,
-            Carrier: wrecked ? "" : hold.Key, CarrierSection: hold.Section, CarrierPos: hold.Pos, CarrierYaw: hold.Yaw);
+            Carrier: wrecked ? "" : hold.Key, CarrierSection: hold.Section, CarrierPos: hold.Pos, CarrierYaw: hold.Yaw,
+            Name: _rideName);
     }
 
     /// <summary>
@@ -3251,6 +3256,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <param name="setup">A car's preset (<see cref="CarSetups"/>), likewise.</param>
     private void ApplyRide(RideKind kind, Vector3 velocity, long tuning = 0, int setup = 0)
     {
+        // back on foot: the vehicle it had got into is behind it (parked, wrecked, left), its name with it
+        if (kind == RideKind.OnFoot) _rideName = "";
         // anything mounted ends a ragdoll (#214): the body is in the saddle now, not on the road
         if (kind != RideKind.OnFoot) EndRagdoll();
         // and the decks walked about on go at once, not at the next frame (#303): a steamer taken
