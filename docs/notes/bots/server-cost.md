@@ -52,7 +52,16 @@
 - **Client**: with every bot near and in view, 67 fps at 20, 21 fps at 50, 8.5 fps at 100. Each near,
   visible remote figure is rebuilt every frame (`HoldRemoteFigure` holds only far or off-screen ones). In
   the match, 10-90 fps depending on the crowd in view.
-- **Client memory**: the replay buffer kept a copy of every pulsing light (`WorldRecorder`, fixed on `main`):
-  75,000 orphan nodes and 128 GB. After the fix, orphans stay ~300, and Godot's own counters are flat
-  (static 826 MB, VRAM 870 MB, managed 1 GB). But the macOS footprint still grew from 4 GB to 10 GB in
-  13 minutes, outside Godot's allocator (the Metal/MoltenVK driver?). Not found yet.
+- **Client memory**, two bugs on `main`, both fixed there:
+  - the replay buffer kept a copy of every pulsing light (`WorldRecorder`): 75,000 orphan nodes, 128 GB;
+  - the chat's trim loop spun forever once the log passed 80 lines (`ChatUi.Append`, `QueueFree` with the
+    child still counted): a frozen client growing ~100 MB/s, at about 35 alive in a 100-player match, when
+    the kill feed passes 80 lines.
+  The second was found with a footprint sampler every 5 s (`top`) and, at the jump, `sample <pid> 5` with
+  `DOTNET_PerfMapEnabled=1`: `/tmp/perf-<pid>.map` names the C# frames the stack sample shows as unknown
+  addresses (Godot's own frames stay `???`, the binary is stripped). Malloc sat under `Node.QueueFree`
+  from `ChatUi.Append`. Godot's own counters (static, VRAM, managed) stayed flat throughout: a growth they do
+  not see is native, so look at `footprint <pid>` (here `MALLOC_TINY`).
+- **After both fixes**, a whole 100-bot match (22 min, windowed client): it ends, with 70 bot kills; the client stays
+  at 3.7-3.9 GB with ~700 orphan nodes; 32 fps on average (p50 20 ms, p99 140 ms). The server's busy p50 is 16 ms
+  over the match, its 5 s windows have a median of 18 ms and a 90th percentile of 47 ms; 9 s of GC pauses in all.
