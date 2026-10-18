@@ -16,7 +16,7 @@ namespace UnitSport.BattleRoyale;
 /// GO adds two bots (entrants with negative ids, marked "[bot]", on the ground in the first circle,
 /// their bodies here). The player jumps, then goes to each bot and knifes it: the server eliminates it,
 /// its death box appears, the feed marks it, and the kills read "1 kill (1 bot)". With the second bot
-/// out the player wins with "2 kills (2 bots)", in the record and on the board; after the results the
+/// out (by its hand, or the zone's) the player wins with "n kills (n bots)", in the record and on the board; after the results the
 /// bots are gone. Scratch inventory.
 /// </summary>
 public partial class BrBotProbe : ChatProbe
@@ -120,10 +120,14 @@ public partial class BrBotProbe : ChatProbe
         for (int i = 0; i < bots.Count; i++)
         {
             var bot = bots[i];
+            int before = br.MyEntry?.Kills ?? 0;
             if (!await Knife(me, bot.Peer)) return;
             var mine = br.MyEntry;
             Expect(br.State.Find(bot.Peer)?.Alive == false, $"{bot.Name} is out");
-            Expect(mine?.Kills == i + 1 && mine.BotKills == i + 1, $"my kills: {BrHud.Kills(mine?.Kills ?? 0, mine?.BotKills ?? 0)}");
+            // the second one may go out another way first (the zone, a fall): a match as it happens
+            bool mineKill = (mine?.Kills ?? 0) > before;
+            if (i > 0 && !mineKill) { GD.Print($"{Log} {bot.Name} went out before I got to it: fine"); continue; }
+            Expect(mineKill && mine!.Kills == mine.BotKills, $"my kills: {BrHud.Kills(mine?.Kills ?? 0, mine?.BotKills ?? 0)}");
             Expect(br.Feed.Any(f => f.Text.Contains($"{bot.Name} [bot]")), $"the feed marks the bot ({br.Feed.LastOrDefault().Text})");
             if (i == 0)
             {
@@ -145,10 +149,12 @@ public partial class BrBotProbe : ChatProbe
         if (!await Until(() => br.State.Phase == BrPhase.Ended, 20)) { Expect(false, "the match ended"); return; }
         var end = br.State;
         Expect(end.Winner == br.Me, $"I won ({end.Find(end.Winner)?.Shown})");
-        Expect(await Until(() => _heard.Any(l => l.Contains("Your Battle Royale record: 1 match · 1 win · 2 kills (2 bots)")), 8),
-            "my record: 2 kills (2 bots)");
+        int k = end.Find(br.Me)?.Kills ?? 0;
+        string kills = BrStats.KillText(k, k);
+        Expect(await Until(() => _heard.Any(l => l.Contains($"Your Battle Royale record: 1 match · 1 win · {kills}")), 8),
+            $"my record: {kills}");
         Chat.Send("/br top");
-        Expect(await Until(() => _heard.Any(l => l.Contains("1. BRBA — 1 win, 2 kills (2 bots)")), 8), "/br top: 2 kills (2 bots)");
+        Expect(await Until(() => _heard.Any(l => l.Contains($"1. BRBA — 1 win, {kills}")), 8), $"/br top: {kills}");
         Expect(!_heard.Any(l => l.Contains(". " + bots[0].Name + " —")), "no bot on the board");
         if (DisplayServer.GetName() != "headless") Shot("results");
 

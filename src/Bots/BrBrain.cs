@@ -37,6 +37,8 @@ public sealed class BrBrain : IBotBrain
     public BrGoal Goal { get; private set; }
     private string _status = "";
     public string Status => _status;
+    /// <summary><c>--brbotsharmless</c> on a server: bots play the match but never strike (checks only).</summary>
+    private static readonly bool Harmless = Core.CmdArgs.Has("--brbotsharmless");
     /// <summary>Where it means to land (world), chosen when it boarded.</summary>
     public Vector3? DropTarget { get; init; }
     /// <summary>The server clock at which it jumps: the plane's nearest pass to <see cref="DropTarget"/>.</summary>
@@ -316,6 +318,8 @@ public sealed class BrBrain : IBotBrain
         }
         else bot.Intent.Wish = Vector3.Zero;
 
+        // --brbotsharmless (a check of the match's plumbing, not of a duel's luck): it never strikes
+        if (Harmless) return;
         // it fires once it has had time to react, with its error
         double seenFor = bot.Senses.FirstSeen.TryGetValue(target.Id, out double first) ? now - first : 0;
         if (seenFor < bot.Profile.ReactionSeconds || weapon == null) return;

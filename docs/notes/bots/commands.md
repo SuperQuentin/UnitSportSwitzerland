@@ -14,6 +14,8 @@
   - `--botlog`: `[bots] status` per bot every 5 s (position, speed, on the floor, placed, health,
     watched).
   - `--brbots N`: the BR field size (default 20, 0 = off).
+  - `--brbotsharmless`: BR bots play the match but never strike (`tools/brbotcheck.sh`: the match's
+    plumbing with bots, not a knife duel's luck; bots fighting back are `botcheck` and `brbotwatch`).
   - `--brbotspread M`: every bot's landing spot within M m of the first circle's centre (checks: the
     bots meet at once).
 - **Checks** (net tier, `tools/lib/checkmap.txt`):
