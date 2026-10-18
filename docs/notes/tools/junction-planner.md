@@ -345,7 +345,7 @@ off, `--junctions new` plans and reports without writing.
 
 - **Default**: `TileRewriter.Options` writes the planner's junctions (`NewJunctions`, `WriteJunctions` true): map builds
   (`RoadStage`), the game's generated tiles and the test region. The old layout still builds what the planner cannot
-  (the reasons in `left to the old layout`); a follow-up brings those to zero and deletes it.
+  (the reasons in `left to the old layout`); #854 brings those to zero and deletes it.
 - **Every block lays out the junctions that reach it** (`TileRewriter.Band`): a junction's streets often leave the block (the
   game builds a generated tile as its own block), and the writer had left those to the old layout ("a street beyond the
   block"; 4 of 25 generated junctions written, tiles differing by block size). Each block now builds the halo's streets the
