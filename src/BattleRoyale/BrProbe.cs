@@ -10,7 +10,7 @@ namespace UnitSport.BattleRoyale;
 /// <c>--brprobe A|B</c> with <c>--connect</c> (driven by <c>tools/brcheck.sh</c>): one whole match over loopback
 /// against a server started with <c>--admin-password brcheck --brpace 0.13</c> (a match in under two minutes).
 /// <list type="bullet">
-/// <item>A logs in as admin, opens a lobby and starts the match once B has joined.</item>
+/// <item>A logs in as admin, opens a lobby and starts the match once B has joined; at <c>/speed 0.5</c> the countdown slows with it (#855).</item>
 /// <item>Both are dropped in the region with an empty pack, a knife and bandages; the travel menu is locked.</item>
 /// <item>B stands outside the zone until it hurts, then next to A.</item>
 /// <item>A, an admin, gets no fly camera, debug menu, catalogue or <c>/spawn</c> in the match (#425), and forces the zone to close (<c>/br zone</c>).</item>
@@ -67,6 +67,7 @@ public partial class BrProbe : ChatProbe
         }
         if (Br!.State.Entrants.Count < 2) { Fail("B never joined"); return; }
         Chat.Send("/br start");
+        await CountdownFollowsSpeed();
         if (!await Dropped()) return;
         await NoAdminTools(Me!);
 
@@ -119,6 +120,24 @@ public partial class BrProbe : ChatProbe
         Expect(await Until(() => b.Down != 0, 3), "B is down");
         await LootDeathBox(me);
         await Ended();
+    }
+
+    /// <summary>
+    /// The match runs on simulated time (#855): at <c>/speed 0.5</c> the countdown loses half a second
+    /// per second of the server's real clock, then normal speed again for the rest of the match.
+    /// </summary>
+    private async Task CountdownFollowsSpeed()
+    {
+        if (!await Until(() => Br!.State.Phase == BrPhase.Countdown, 10)) { Expect(false, "the countdown started"); return; }
+        Chat!.Send("/speed 0.5");
+        if (!await Until(() => SimClock.Scale == 0.5 && !SimClock.HasPending, 5)) { Expect(false, "the simulation went to x0.5"); return; }
+        double real0 = ClockSync.ServerNow, left0 = Br!.State.CountdownEnds - ClockSync.SimNow;
+        await Until(() => ClockSync.ServerNow - real0 >= 2.0, 5);
+        double real = ClockSync.ServerNow - real0, rate = (left0 - (Br.State.CountdownEnds - ClockSync.SimNow)) / real;
+        Expect(Br.State.Phase == BrPhase.Countdown && Math.Abs(rate - 0.5) < 0.1,
+            Fmt($"at /speed 0.5 the countdown runs at x{rate:F2} of real time ({left0:F1} s left, {real:F1} s later)"));
+        Chat.Send("/speed normal");
+        Expect(await Until(() => SimClock.Scale == 1.0 && !SimClock.HasPending, 5), "back to normal speed");
     }
 
     /// <summary>
