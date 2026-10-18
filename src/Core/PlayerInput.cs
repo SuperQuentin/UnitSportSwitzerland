@@ -157,6 +157,15 @@ public partial class PlayerInput : Node
     public const string DebugMenu = "debug_menu";
     /// <summary>The playtest panel (<c>Playtest/PlaytestPanel</c>, #751): Debug builds run with <c>--playtest</c> only; a pad uses both stick clicks.</summary>
     public const string PlaytestPanel = "playtest_panel";
+    /// <summary>
+    /// The playtest recorder's note (#844, <c>Playtest/Recording/NoteTaker</c>): F12 asks "what's wrong?" and
+    /// stamps it with the time, the place and a screenshot. A pad and VR note from the playtest panel's Note button.
+    /// </summary>
+    public const string PlaytestNote = "playtest_note";
+    /// <summary>Shift+F12: the playtest top view (#844, <c>Playtest/TopView/TopViewOverlay</c>); a pad and VR from the panel's Top view button.</summary>
+    public const string PlaytestTopView = "playtest_topview";
+    /// <summary>Ctrl+F12: the top view stops on the last minute and scrubs it (Ctrl + wheel); keyboard only, a tuning aid.</summary>
+    public const string PlaytestTopViewScrub = "playtest_topview_scrub";
 
     // --- items (on foot) ---
     public const string UseItem = "use_item";
@@ -648,6 +657,10 @@ public partial class PlayerInput : Node
 #if PLAYTEST
         // a pad opens it with L3+R3 together (PlaytestPanel reads the chord): no single button is free
         Bind(PlaytestPanel, Keys(Key.F10));
+        // F12 is free; Shift/Ctrl+F12 are told apart with exact matching (Playtest/Recording)
+        Bind(PlaytestNote, Keys(Key.F12));
+        Bind(PlaytestTopView, new InputEvent[] { new InputEventKey { PhysicalKeycode = Key.F12, ShiftPressed = true } });
+        Bind(PlaytestTopViewScrub, new InputEvent[] { new InputEventKey { PhysicalKeycode = Key.F12, CtrlPressed = true } });
 #endif
 
         // Items are an on-foot thing, so they reuse the shoulders that only mean something

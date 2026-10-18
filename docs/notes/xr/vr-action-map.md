@@ -130,6 +130,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | teleport (place search, BR map) | M / — | ok: wrist menu (#437), hand-held map with point and pull (#439) | keep |
 | help / debug | F1 F9 / — | help: wrist menu (#437); debug: gap | debug in the wrist menu for admins |
 | playtest_panel (Debug `--playtest`, #751) | F10 / L3 + R3 | ok: both stick clicks (XrPad), the panel on the XrUi screen; typing to Claude: gap (no keyboard) | the laser key grid planned for the chat |
+| playtest_note (Debug `--playtest-record`, #844) | F12 / panel › Note | ok: the panel's Note button (L3 + R3, XrPad) marks the moment with a screenshot; its text: gap (no keyboard) | the laser key grid planned for the chat |
+| playtest_topview / _scrub (#844) | Shift+F12, Ctrl+F12 / panel › Top view | ok: the panel's Top view button toggles it on the XrUi screen; zoom and scrub (Shift/Ctrl + wheel): keyboard only, a tuning aid | — |
 | fly camera up / down / boost | Space Ctrl… / A B L3 | ok: A B L3 | keep |
 | BR jump out / spectate | E, ←→ / Y, D-pad | ok | spectate on R stick ←/→ |
 | loot, shop, lock, Simon, vending | mouse + keys | ok: laser + trigger | lock dial by **wrist twist** |

@@ -123,7 +123,7 @@ public static class MovieSession
     }
 
     /// <summary>Writes <paramref name="p"/> under its name; an error message, or null.</summary>
-    private static string? Write(MovieProject p)
+    internal static string? Write(MovieProject p)
     {
         try
         {

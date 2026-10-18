@@ -121,11 +121,12 @@ public partial class PerfRecorder : Node, IOriginShiftAware
         if (what == NotificationWMCloseRequest) Stop();
     }
 
-    public void Start()
+    /// <summary>Starts recording into <paramref name="dir"/>, or a new folder under <c>user://perf_logs</c> (the playtest recorder gives its bundle's, #844).</summary>
+    public void Start(string? dir = null)
     {
         if (Recording) return;
         string stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture);
-        _dir = Path.Combine(ProjectSettings.GlobalizePath(Root), stamp);
+        _dir = dir ?? Path.Combine(ProjectSettings.GlobalizePath(Root), stamp);
         Directory.CreateDirectory(_dir);
 
         _frames = Open("frames.csv",

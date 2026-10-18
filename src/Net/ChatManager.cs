@@ -175,6 +175,15 @@ public partial class ChatManager : Node
             else DebugRequested();
             return;
         }
+#if PLAYTEST
+        // a playtest note (#844): stamped on this screen, never sent
+        if (text.Trim() is var noteLine && (noteLine.Equals("/note", StringComparison.OrdinalIgnoreCase) || noteLine.StartsWith("/note ", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (NoteRequested is null) LineReceived?.Invoke("Notes need a recorded playtest (--playtest-record).", ChatKind.Error);
+            else NoteRequested(noteLine[5..].Trim());
+            return;
+        }
+#endif
         if (IsLocal)
         {
             text = text.Trim();
@@ -236,6 +245,10 @@ public partial class ChatManager : Node
 
     /// <summary>Client: <c>/debug</c> was typed by someone allowed it (alone, or an admin); the debug menu opens.</summary>
     public event Action? DebugRequested;
+#if PLAYTEST
+    /// <summary>Client: <c>/note &lt;text&gt;</c>, a playtest note (#844), for the recorder to stamp.</summary>
+    public event Action<string>? NoteRequested;
+#endif
 
     /// <summary>Client: the catalogue is offered alone, or to an admin. The server re-checks every <c>/spawn</c> it sends.</summary>
     public bool CanUseCatalogue => !Permissions.InMatch && (IsLocal || Permissions.IsAdmin);

@@ -277,6 +277,8 @@ public partial class ControlsHelp : CanvasLayer
             new("Debug menu (offline or admin)", PlayerInput.DebugMenu),
 #if PLAYTEST
             new("Playtest panel (--playtest, Debug builds)", Keys: "F10", Pad: "L3 + R3"),
+            new("Playtest note: what's wrong, stamped with the place (--playtest-record)", Keys: "F12", Pad: "L3 + R3 › Note"),
+            new("Playtest top view / pause and scrub it (Ctrl + wheel)", Keys: "Shift+F12 / Ctrl+F12", Pad: "L3 + R3 › Top view"),
 #endif
         }),
     };

@@ -56,6 +56,9 @@ public sealed class ChatCompleter
         ("spawn", true, true, "<item> [count]"),
         ("catalogue", true, true, ""),
         ("debug", true, true, ""),
+#if PLAYTEST
+        ("note", false, true, "<what's wrong>"),
+#endif
         ("clear", false, true, "[player]"),
         ("money", true, true, "<amount> [player]"),
         ("bank", true, true, "[player] [set | add | take <amount>]"),
