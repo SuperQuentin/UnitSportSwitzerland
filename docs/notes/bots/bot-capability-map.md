@@ -9,7 +9,7 @@ This is the living table that `general/new-feature-bots` asks every feature to u
 The columns:
 - **Seam**: how a body is driven without keys.
 - **Server path**: the server method a bot calls (bots have no client).
-- **Sense**: how a bot learns of it. `BotSenses` lands in phase 2; until then a brain reads nothing.
+- **Sense**: how a bot learns of it (`BotSenses`: sight with a ray, hearing, memory; `brain`).
 - **Skill**: what a brain chains.
 - **Status**: **ok** works for a bot today, **gap** not yet (the target is named), **n/a** not a bot's
   business.
@@ -21,25 +21,26 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | Capability | Seam | Server path | Sense | Skill | Status |
 |---|---|---|---|---|---|
 | walk, run | `WalkControls` (wish, run) | the body's physics on the server's collision | its own position | `MoveTo` (phase 2) | ok |
-| jump, crouch, slide | `FootActions` (jump, crouch) | the body | — | `MoveTo` | ok (seam; no brain uses it yet) |
-| mantle a ledge | jump at a wall (`FootActions`) | the body | — | `MoveTo` | ok (seam) |
+| jump, crouch, slide | `FootActions` (jump, crouch) | the body | — | `MoveTo` (jumps low walls; no slide yet) | ok |
+| mantle a ledge | jump at a wall (`FootActions`) | the body | knee and head rays | `MoveTo` | ok |
 | face / aim | `LookYaw`, `LookPitch`, `SquareToView` (`BotIntent.FaceYaw`) | the body | — | `Engage` | ok |
-| swim | `WalkControls` overrides the stroke | the body | — | `MoveTo` | gap: dive and climb-out read keys (`FootPlayer.Swim`, `limp` for an Npc), phase 2 |
+| swim | `WalkControls` overrides the stroke | the body | — | `MoveTo` | gap: dive and climb-out read keys (`FootPlayer.Swim`, `limp` for an Npc); landings avoid water (a follow-up) |
 | knocked out, down, revived, out | — | `TakeDamage`, `TryGoDown`, `ReviveInPlace`, `FinishDowned` on the server | — | — | ok |
 | run over by a vehicle | — | `KnockedByVehicle` | — | — | gap: skipped for an Npc (`FootPlayer.Crash`), phase 3 |
-| caught in a blast | — | `Explosion.Blast` | — | — | gap: subscribed only by a body with a camera, phase 2 |
+| fall damage | — | the landing in `UpdateCameraFeel` (an early branch for a body with no camera) | — | — | ok |
+| caught in a blast | — | `Explosion.Blast` | — | — | gap: subscribed only by a body with a camera (a follow-up) |
 | hit by aircraft guns | — | `CombatManager.Hit` | — | — | gap: the server flies no rounds; damage only on the authority, later |
 | fist fight | — | `FightManager` | — | — | gap: `FightPhysics` returns for an Npc, later |
-| wingsuit, parachute (and the BR drop) | `FlyControls` | the body | its height over the ground | `Drop` | gap: deploy and steer read keys in flight, phase 2 |
+| wingsuit, parachute (and the BR drop) | `FlyControls` from `Intent.Steer`/`Canopy` and the facing | the body | its height: the loaded ground, else the lattice (`BrManager.GroundAt`) | `BrBrain.Drop` | ok |
 
 ## Items
 
 | Capability | Seam | Server path | Sense | Skill | Status |
 |---|---|---|---|---|---|
-| pistol, rifle, hunting rifle, shotgun | `BotIntent.FireAt` | `BotHands.Fire`: rate, ammo, bloom, `PlayerHits` with a sink, `ItemEvents.ServerHit` / `ServerSend` | shots heard (phase 2) | `Engage` | ok |
+| pistol, rifle, hunting rifle, shotgun | `BotIntent.FireAt` | `BotHands.Fire`: rate, ammo, bloom, `PlayerHits` with a sink, `ItemEvents.ServerHit` / `ServerSend` | sight; shots heard (`ItemEvents.ServerHeard`) | `BrBrain` fight: reaction, aim error, bands, strafing | ok |
 | knife | `BotIntent.FireAt` | `BotHands.Fire` (`PlayerHits.Stab`) | — | `Engage` | ok |
-| bandage, first-aid kit | — | — | its own health | `UseItem` | gap: no timed medical use in `BotHands`, phase 2 |
-| armour vest | — | `FootPlayer.AddArmor` (server is the authority) | — | `UseItem` | gap: not used by `BotHands` yet, phase 2 |
+| bandage, first-aid kit | — | `BotHands.Use` (2.2 s / 5.6 s, spent at the end, a shot cancels) | its own health | `BrBrain` heal (safe 4 s) | ok |
+| armour vest | — | `BotHands.Use` → `FootPlayer.AddArmor` | its own armour | `BrBrain` vest | ok |
 | flare gun, binoculars, horn, smoke | — | — | — | — | gap: later, as a mode needs them |
 | hammer, structure pieces, gadgets | — | `Build/` (client RPCs) | — | `Build` | gap: phase 2+ (building is a follow-up issue) |
 | thrown items (bonk) | — | `ItemEvents.RelayBonk` (client sender) | — | — | gap: later |
@@ -49,11 +50,11 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 
 | Capability | Seam | Server path | Sense | Skill | Status |
 |---|---|---|---|---|---|
-| BR crates, supply drops, death boxes: take | — | `BrCrates.RequestTake` checks in the RPC handler | crates in view (phase 2) | `Loot` | gap: extract a server `TryTake`, phase 2 |
+| BR crates, supply drops, death boxes: take | — | `BrCrates.TryTake` (a player's request goes through it too) | a crate within 120 m in sight (a ray), or within 25 m | `BotSkills.TakeOne`, `Wants` | ok |
 | a bot's own death box | — | `BrManager.DeathBox` from `Bot.Inventory` | — | — | ok |
-| building loot (furniture) | — | `LootService.ServeTake` needs the bot in the interior's space | — | `Loot` | gap: interiors on the server, phase 2 |
-| doors, building interiors | — | `InteriorManager` (presents nothing on the server) | doors in view | `MoveTo` | gap: interior collision on the server, phase 2 |
-| dropped items | — | `DroppedItems.RequestPickUp` (RPC, replies `RpcId`) | — | `Loot` | gap: a server claim that returns the stack, phase 2 |
+| building loot (furniture) | — | `LootService.ServeTake` needs the bot in the interior's space | — | `Loot` | gap: interiors on the server (a follow-up) |
+| doors, building interiors | — | `InteriorManager` (presents nothing on the server) | doors in view | `MoveTo` | gap: interior collision on the server (a follow-up) |
+| dropped items | — | `DroppedItems.RequestPickUp` (RPC, replies `RpcId`) | — | `Loot` | gap: a server claim that returns the stack (a follow-up) |
 | parked car, bike: get in, drive | `RideControls` (`AutoPilot.Drive`) | entering is a client request | vehicles in view | `Drive` | gap: a server entry, phase 3 |
 | mounts from the ride menu | — | `RideUi` (refused in a match anyway) | — | — | n/a in BR |
 
@@ -61,10 +62,10 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 
 | Capability | Seam | Server path | Sense | Skill | Status |
 |---|---|---|---|---|---|
-| join the field | — | `BrManager.PlaceBots` at GO | — | — | ok (on the ground in the first circle) |
-| invites, parties, teleport requests (#840) | — | none: never offered (`InviteService` skips negative ids); a bot joins through `PlaceBots` | — | — | n/a |
-| board the plane, jump | — | `BrManager.Jump` (RPC by sender) | the plane's line | `Drop` | gap: phase 2 |
-| the zone's damage | — | `BrManager.BotZone` | the zone (state) | `Zone` | ok (damage); running from it: phase 2 |
+| join the field | — | `BrManager.BoardBots` at GO | — | — | ok (aboard the plane) |
+| invites, parties, teleport requests (#840) | — | none: never offered (`InviteService` skips negative ids); a bot joins through `BoardBots` | — | — | n/a |
+| board the plane, jump | — | `BrManager.BoardBots`, `BotJump`, `BotPlane` (push-out) | its landing spot and jump time, chosen at GO | `BrBrain.Drop` | ok |
+| the zone's damage, and running from it | — | `BrManager.BotZone` | the zone (state, as a player's HUD) | `BrBrain` zone (`BrTactics.ZoneRunNeeded`) | ok |
 | eliminated, kill credit, careers | — | `OnBotDied`, `Eliminate`, `BotKills`, no career | — | — | ok |
 | downed, revived by a player, finished | — | `Downed`, `RequestRevive` (bot target), `OutIfAllDown` | — | — | ok |
 | revive a team-mate | — | `RequestRevive` (RPC by sender) | mates' state | `Revive` | gap: phase 4 |

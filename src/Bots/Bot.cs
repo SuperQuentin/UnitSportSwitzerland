@@ -22,6 +22,13 @@ public struct BotIntent
     public float Pitch;
     /// <summary>Fire (or stab) at this world point this tick, if the weapon is ready (<see cref="BotHands.Fire"/>).</summary>
     public Vector3? FireAt;
+    /// <summary>
+    /// In the air: whether it wants the parachute open (else the wingsuit). The body's flight controls
+    /// turn the wish into the deploy or cut-away press only when the ride differs, never a held key.
+    /// </summary>
+    public bool Canopy;
+    /// <summary>The flight stick in the air: a canopy's turn (x, + right) and brakes (y, + brake); a wingsuit's override.</summary>
+    public Vector2 Steer;
 
     public static BotIntent Stand => default;
 }
@@ -59,7 +66,33 @@ public sealed class Bot
     public double NextShotAt;
     public float Heat;
     public double HeatAt;
+    /// <summary>What it perceives (<see cref="BotSenses"/>): the only way its brain learns about the world.</summary>
+    public BotSenses Senses { get; } = new();
+    /// <summary>Its walk (<see cref="BotSkills.MoveTo"/>).</summary>
+    public BotNav Nav { get; } = new();
+    /// <summary>The world it acts in: the physics space and the bodies there (set by the director).</summary>
+    public BotWorld World { get; set; } = null!;
+    /// <summary>A timed use under way (<see cref="BotHands.Use"/>): what, and the clock it applies at (0 = none).</summary>
+    public ItemId UseItem;
+    public double UseUntil;
     public bool Alive => GodotObject.IsInstanceValid(Body) && !Body.Eliminated;
+}
+
+/// <summary>
+/// What a brain may reach of the world (#837): the physics space for its senses and its walk, and
+/// the bodies there for its senses to look at. Nothing else: a brain never reads the world directly.
+/// </summary>
+public sealed class BotWorld
+{
+    public BotWorld(Node3D players) => Players = players;
+
+    public Node3D Players { get; }
+    public PhysicsDirectSpaceState3D Space => Players.GetWorld3D().DirectSpaceState;
+
+    public System.Collections.Generic.IEnumerable<FootPlayer> Bodies()
+    {
+        foreach (var n in Players.GetChildren()) if (n is FootPlayer p) yield return p;
+    }
 }
 
 /// <summary>
@@ -71,4 +104,7 @@ public interface IBotBrain
 {
     /// <summary>Seconds until it wants to think again (the director slows this far from humans).</summary>
     double Think(Bot bot, double now);
+
+    /// <summary>What it is up to, for <c>--botlog</c>'s status lines.</summary>
+    string Status => "";
 }

@@ -13,14 +13,19 @@
   miss, and an honest one would make it stutter at that player's frame rate.
 - **Layers**, every one shared except the brain:
   - **Body**: `FootPlayer`, driven only through its seams: `WalkControls` (wish, run), `FootActions`
-    (jump, crouch), and the facing (`LookYaw`/`LookPitch` with `SquareToView`).
+    (jump, crouch), the facing (`LookYaw`/`LookPitch` with `SquareToView`), and in the air
+    `FlyControls`, built by the director from the intent.
   - **Hands**: `BotHands`, a player's item rules on the server (`hits`).
   - **Inventory**: `Bot.Inventory`, server-side, never saved (`Persist = false`); a mode turns it into
     a death box.
   - **Brain** (`IBotBrain.Think(bot, now)` returns the seconds until the next thought): writes
-    `Bot.Intent` (`BotIntent`: `Wish`, `Run`, `Jump`, `Crouch`, `FaceYaw`, `Pitch`, `FireAt`). One brain
-    per mode. Phase 1 has `WanderBrain` only: strolls 25 m round home, rests, picks a new goal when it
-    makes under 1 m of progress in 3 s.
+    `Bot.Intent` (`BotIntent`: `Wish`, `Run`, `Jump`, `Crouch`, `FaceYaw`, `Pitch`, `FireAt`, and in the
+    air `Canopy`, `Steer`). One brain per mode:
+    - `WanderBrain`, free roam (`/bot add`): strolls 25 m round home, rests, picks a new goal when it
+      makes under 1 m of progress in 3 s;
+    - `BrBrain`, Battle Royale (`brain`).
+  - **Senses** (`BotSenses`), **skills** (`BotSkills`, `BotNav`) and the **world** a brain may reach
+    (`BotWorld`: the physics space and the bodies there): `brain`. Shared by every mode.
   - **Profile**: `BotProfile.For(seed, n, difficulty, taken)`, pure and unit-tested. It gives a name (Swiss
     first names, none repeated in a match) and the knobs `ReactionSeconds`, `AimErrorDeg`, `Boldness`,
     `LootGreed`, from easy / normal / hard.

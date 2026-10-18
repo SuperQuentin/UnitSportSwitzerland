@@ -3001,6 +3001,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// Takes <paramref name="amount"/> of health. A weapon hit names its shooter
     /// (<paramref name="attacker"/>, a peer id) and is half soaked by <see cref="Armor"/> while it lasts.
     /// </summary>
+    /// <summary>Who hurt this body last (an id, 0 for none) and when (simulation time): a bot turns towards it (#837).</summary>
+    public long LastAttacker => _lastAttacker;
+    public double LastAttackedAt => _lastAttackedAt;
+
     public void TakeDamage(float amount, long attacker, DamageCause cause)
     {
         if (amount <= 0 || _deadTimer > 0) return;
@@ -4029,17 +4033,20 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private void FlyPhysics(float dt, bool onFloor, Flyer flyer)
     {
         if (FlyerIntoWater(flyer)) return;
-        bool typing = UiFocus.TextEntryActive;
+        // an NPC or a bot reads no keys (#837): it flies through FlyControls. A dedicated server has no
+        // input actions at all, and every read logs an error with its backtrace (seen: 60-400 ms frames)
+        bool keys = !Npc;
+        bool typing = keys && UiFocus.TextEntryActive;
         // analog through the input map: any pad, and the VR triggers (#436); 0 while typing (Blocked)
-        float tr = PlayerInput.Strength(PlayerInput.TriggerRight);
-        float tl = PlayerInput.Strength(PlayerInput.TriggerLeft);
-        bool jumpDown = PlayerInput.Held(PlayerInput.Jump);
+        float tr = keys ? PlayerInput.Strength(PlayerInput.TriggerRight) : 0f;
+        float tl = keys ? PlayerInput.Strength(PlayerInput.TriggerLeft) : 0f;
+        bool jumpDown = keys && PlayerInput.Held(PlayerInput.Jump);
         bool action = jumpDown && !_jumpHeld;
         _jumpHeld = jumpDown;
-        bool downHeld = PlayerInput.Held(PlayerInput.CrouchSlide);
+        bool downHeld = keys && PlayerInput.Held(PlayerInput.CrouchSlide);
 
         // a wingsuit or canopy also leans toward where the free look points (#207)
-        var stick = PlayerInput.Move;
+        var stick = keys ? PlayerInput.Move : Vector2.Zero;
         if (flyer.LookBank > 0f && !typing && !onFloor)
             stick.X = Mathf.Clamp(stick.X - Mathf.Clamp(_lookYaw / 0.8f, -1f, 1f) * flyer.LookBank, -1f, 1f);
 
@@ -4047,10 +4054,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             Stick: stick,
             Up: Mathf.Max(jumpDown ? 1f : 0f, tr),
             Down: Mathf.Max(downHeld ? 1f : 0f, tl),
-            LeverUp: Mathf.Max(PlayerInput.Held(PlayerInput.Sprint) ? 1f : 0f, tr),
+            LeverUp: Mathf.Max(keys && PlayerInput.Held(PlayerInput.Sprint) ? 1f : 0f, tr),
             LeverDown: Mathf.Max(downHeld ? 1f : 0f, tl),
             Action: action,
-            Effort: PlayerInput.Held(PlayerInput.TuckBoost),
+            Effort: keys && PlayerInput.Held(PlayerInput.TuckBoost),
             ViewYaw: _viewYaw,
             Engine: EngineOn || !flyer.HasEngine,
             ViewPitch: _pitch,
@@ -4063,7 +4070,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         if (flyer is Pigeon) PigeonStep(input, dt);
         if (flyer is Airliner trimmed)
-            trimmed.TrimHeld = typing ? 0f : PlayerInput.Strength(PlayerInput.TrimNoseUp) - PlayerInput.Strength(PlayerInput.TrimNoseDown);
+            trimmed.TrimHeld = typing || !keys ? 0f : PlayerInput.Strength(PlayerInput.TrimNoseUp) - PlayerInput.Strength(PlayerInput.TrimNoseDown);
         if (flyer is Airliner padded) AirlinerPadHold(dt, padded);
         var ev = flyer.Fly(input, new FlightEnv(onFloor, Clearance, altitude), dt, ref _flight);
         // a game mode's fence (#485: a Battle Royale's zone, while gliding): no flying out of it
@@ -4169,7 +4176,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         else TakeDamage((speed - 8f) * 3.5f, 0, DamageCause.Crash);
         Impacted?.Invoke(Mathf.Max(speed, 8f));
         Announced?.Invoke(flyer is Wingsuit or Pigeon ? "SPLAT!" : "CRASH!", false);
-        PlayerInput.Rumble(1f, 1f, 0.5f);
+        if (!Npc) PlayerInput.Rumble(1f, 1f, 0.5f);
         ApplyRide(RideKind.OnFoot, Vector3.Zero);
         _stunTimer = 1.5f;
     }
@@ -4859,9 +4866,29 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// Head bob, landing impact and a running FOV kick. All of it is camera-only: the
     /// body never moves, so none of this can push the player through geometry.
     /// </summary>
+    /// <summary>Where a body with no camera left the floor (#837): its landing's damage is capped by the drop from here.</summary>
+    private float _leftFloorY;
+
     private void UpdateCameraFeel(float dt, bool running, bool onFloor)
     {
-        if (_camera == null) return;
+        if (_camera == null)
+        {
+            // a body with no camera (an NPC, a bot, #837) still lands hard: the fall's damage, not its feel.
+            // Capped by the height it really fell: a bot caught on a fence's edge (no floor, no drop) gathers
+            // fall speed while it hangs there, and landed from nowhere for 95 damage.
+            if (Npc && !onFloor && _wasOnFloor) _leftFloorY = GlobalPosition.Y;
+            if (Npc && onFloor && !_wasOnFloor)
+            {
+                float dropped = Mathf.Max(0f, _leftFloorY - GlobalPosition.Y);
+                float speed = Mathf.Min(_fallSpeed, Mathf.Sqrt(2f * Gravity * dropped));
+                if (speed > 1.5f) Landed?.Invoke(speed);
+                if (speed > 11f && _ejected <= 0 && !SoftLanding) TakeDamage((speed - 11f) * 9f, 0, DamageCause.Fall);
+                _fallSpeed = 0f;
+                SoftLanding = false;
+            }
+            if (Npc) _wasOnFloor = onFloor;
+            return;
+        }
 
         float groundSpeed = MathX.FlatLength(Velocity);
         _speedSmoothed = Mathf.Lerp(_speedSmoothed, groundSpeed, MathX.Damp(8f, dt));

@@ -104,6 +104,9 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // proxies are plain anchors and keep coarse, collision-less tiles (net/lean-dedicated-server).
         _chunks = new ChunkManager { Name = "Terrain", BuildMeshes = false, BuildCollision = true, CollisionByRadius = true };
         _chunks.Initialize(source, origin, manifest, null);
+        // the bots' collision pieces (#837) commit within 2 ms a frame, not a client's 4: a server frame
+        // carries every player's relays, and the build of a spread field landing at once is many pieces
+        _chunks.CommitBudgetMs = 2;
         if (fallback != null) _chunks.UseFallback(fallback, source.Invalidate);
         // the landings (#377): where the steamer lies; the piers are the clients' (no collision here)
         World.Landings.Use(await World.Landings.LoadAsync(source));

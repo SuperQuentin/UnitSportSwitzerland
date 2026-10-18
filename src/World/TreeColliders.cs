@@ -87,6 +87,13 @@ public partial class TreeColliders : Node3D, Core.IOriginContainer
 
     public override void _PhysicsProcess(double delta)
     {
+        long t0 = Stopwatch.GetTimestamp();
+        PlaceTrunks();
+        Net.ServerStats.Ran("trees", t0);   // a no-op but on a server run with --serverstats (#837)
+    }
+
+    private void PlaceTrunks()
+    {
         var watch = Stopwatch.StartNew();
         _wanted.Clear();
         foreach (var anchor in _chunks.CollisionAnchors)
