@@ -509,12 +509,14 @@ public static class TrailerScript
             Hour = 18.6,
             Cast =
             [
-                new() { Ride = RideKind.An124, At = Spot.Alt(2508144, 1137170, 440), Heading = 222, Drive = Drive.Fly, Launch = 80, Flight = _ => Stick(lever: 0.7f) },
+                // its spot is over the lake: it mounts in the park by the shore, then is launched
+                new() { Ride = RideKind.An124, At = Spot.Alt(2508144, 1137170, 440), Heading = 222, Drive = Drive.Fly, Board = new Spot(2507810, 1137290), Launch = 80, Flight = _ => Stick(lever: 0.7f) },
             ],
             Keys =
             [
-                new(0, Pt.Alt(2507835, 1137200, 374.8f), Pt.On(0, 0f, 0f), 35),
-                new(3.9, Pt.Alt(2507835, 1137200, 374.8f), Pt.On(0, 0f, 0f), 35),
+                // on the lake off the shore: the jetty of the generated world is a slope on the real one
+                new(0, Pt.Alt(2507780, 1137080, 375.5f), Pt.On(0, 0f, 0f), 35),
+                new(3.9, Pt.Alt(2507780, 1137080, 375.5f), Pt.On(0, 0f, 0f), 35),
             ],
             Smooth = 0.06f, Preroll = 0.3,
         },
