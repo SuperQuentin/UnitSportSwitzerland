@@ -91,7 +91,9 @@ public sealed class Ufo : Flyer
         float below = Mathf.Min(Below, env.Clearance);
         UfoFlight.Controls c;
         if (input.Piloted)
-            c = new UfoFlight.Controls(input.Stick, input.Up, input.Down, input.Boost, input.ViewYaw,
+            c = new UfoFlight.Controls(input.Stick, input.Up, input.Down, input.Boost || input.Effort && input.ViewPitch == null,
+                // a script with no look (ViewPitch null) and no heading of its own (ViewYaw 0) keeps the heading
+                input.ViewPitch == null && input.ViewYaw == 0f ? m.Yaw : input.ViewYaw,
                 input.Hatch, input.Beam, input.Lights);
         else
             // nobody aboard: an empty saucer sinks gently onto its legs and stays there, beam off
@@ -108,6 +110,20 @@ public sealed class Ufo : Flyer
         m.Spool = input.Piloted ? State.Hum : State.Landed ? 0f : State.Hum;
         return FlightEvent.None;
     }
+
+    // ---- switches set directly: scripts (the trailer director), bots, the server ------------------
+
+    /// <summary>The tractor beam on or off, as a held switch rather than a press (a script, a bot).</summary>
+    public void SetBeam(bool on) => State.Beam = on;
+
+    /// <summary>The rim lamps on or off.</summary>
+    public void SetLights(bool on) => State.Lights = on;
+
+    /// <summary>The ramp's wish on the ground: open, shut, or null for automatic (opens once settled).</summary>
+    public void SetRamp(bool? open) => State.RampWanted = open;
+
+    /// <summary>The legs' wish in the air: down, up, or null for automatic (down near the ground).</summary>
+    public void SetLegs(bool? down) => State.LegsWanted = down;
 
     // ---- what is drawn, and what the others get --------------------------------------------
 
