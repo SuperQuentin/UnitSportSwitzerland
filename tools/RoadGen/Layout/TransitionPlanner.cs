@@ -286,10 +286,25 @@ public static class TransitionPlanner
             return 0;
         }
         bool Median(int id) => id is MouthPlanner.HatchId or LeadInHatchId;
+        // the median at each mouth is that mouth's own: the other end's (a pocket merged with the exit beyond holds its hatch on
+        // to the far mouth, #325) eases down to it at 1:6, the departing lane there where the core's lanes leave (#854)
+        double MedianA(int id, double s) => a.Widths.TryGetValue(id, out var p) ? p.At(s) : NormalA(id);
+        double MedianB(int id, double s) => bWidths.TryGetValue(id, out var p) ? p.At(d - s) : NormalB(id);
+        double Eased(int id, double s) => Math.Max(
+            Math.Min(MedianA(id, s), MedianB(id, d) + (d - s) / EasePerMetre),
+            Math.Min(MedianB(id, s), MedianA(id, 0) + s / EasePerMetre));
+        var easeEnds = new List<double>();
+        foreach (int id in (ReadOnlySpan<int>)[MouthPlanner.HatchId, LeadInHatchId])
+        {
+            double mostA = a.Widths.TryGetValue(id, out var pa) ? pa.Knots.Max(k => k.V) : NormalA(id);
+            double mostB = bWidths.TryGetValue(id, out var pb) ? pb.Knots.Max(k => k.V) : NormalB(id);
+            if (mostB > MedianA(id, 0)) easeEnds.Add((mostB - MedianA(id, 0)) * EasePerMetre);
+            if (mostA > MedianB(id, d)) easeEnds.Add(d - (mostA - MedianB(id, d)) * EasePerMetre);
+        }
 
         var stations = a.Widths.Values.SelectMany(p => p.Knots.Select(k => k.S)).Concat(a.Centre.Knots.Select(k => k.S))
             .Concat(b.Widths.Values.SelectMany(p => p.Knots.Select(k => d - k.S))).Concat(b.Centre.Knots.Select(k => d - k.S))
-            .Append(0).Append(d).Where(s => s >= 0 && s <= d).Distinct().OrderBy(s => s).ToList();
+            .Concat(easeEnds).Append(0).Append(d).Where(s => s >= 0 && s <= d).Distinct().OrderBy(s => s).ToList();
         Dedupe(stations);
         var at0 = stations.ToArray();
         var strips = new List<TransitionStrip>();
@@ -302,7 +317,7 @@ public static class TransitionPlanner
                 double wa = a.Widths.TryGetValue(x.Id, out var pa) ? pa.At(s) : NormalA(x.Id);
                 double wb = bWidths.TryGetValue(x.Id, out var pb) ? pb.At(d - s) : NormalB(x.Id);
                 double nA = NormalA(x.Id), nB = NormalB(x.Id);
-                w[k] = Math.Max(0, Median(x.Id) ? Math.Max(wa, wb) : nA + (nB - nA) * f + (wa - nA) + (wb - nB));
+                w[k] = Math.Max(0, Median(x.Id) ? Eased(x.Id, s) : nA + (nB - nA) * f + (wa - nA) + (wb - nB));
             }
             strips.Add(new TransitionStrip(x, w));
         }

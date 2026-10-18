@@ -170,10 +170,9 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
             islands += tile.AreaProps.Count(a => a.Type == AreaPropType.Island && a.Variant == 2 && (a.Flags & PropFlags.Solid) != 0 && a.Height > 0);
             poles += tile.Signals.Sum(s => s.Poles.Count(p => (p.Flags & SignalPoleFlags.Second) != 0));
         }
-        // (#818) the old layout's, one an arm with a left repeater at J5a and J5b, which it still lays out (their pockets merged
-        // back to back across the 70 m between, #325, miss the mouths in the planner's transition); the planner lays islands only as
-        // a crosswalk's refuge across an exit hatch
-        Assert.True(islands >= 6, $"{islands} islands");
+        // (#854) the planner's: a crosswalk's refuge across an exit hatch, else at the lights an island over the exit hatch's wide
+        // end from the mouth to past the cars' line, where it is wide enough all along (the old layout's left-repeater island, #682)
+        Assert.True(islands >= 5, $"{islands} islands");
         Assert.True(poles >= islands / 2, $"{poles} second poles for {islands} islands");
     }
     [Fact]

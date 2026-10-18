@@ -93,6 +93,8 @@ public static class ExteriorPlanner
     public const double SignBehindTeeth = 2.0;
     /// <summary>A refuge: an island of at least 1.2 m with 0.25 m of hatch either side, running on 1 m past the crosswalk each way.</summary>
     public const double RefugeMargin = 0.25, RefugeMinWidth = 1.2, RefugeBeyond = 1.0;
+    /// <summary>A left repeater's island at the lights (#682, #854): from this far out past the mouth to this far past the cars' line.</summary>
+    public const double IslandFromMouth = 0.5, IslandPastStop = 2.0;
     /// <summary>A 3.03 main-road sign stands this far out from the mouth.</summary>
     public const double MainSignOut = 3.0;
 
@@ -105,6 +107,20 @@ public static class ExteriorPlanner
         if (a.Transition is not { } t) return a.Mouth;
         if (t.Arm == a) return s >= t.Length ? a.Normal : t.At(Math.Max(0, s));
         return Mirrored(t.At(Math.Clamp(t.Length - s, 0, t.Length)));
+    }
+
+    /// <summary>The exit hatch's span at station <paramref name="s"/> (a hatch left of the centre line; a lead-in's lies right of it).</summary>
+    private static (double Left, double Right)? ExitHatch(ArmPlan a, double s)
+    {
+        var sec = SectionAt(a, s);
+        for (int k = 0; k < sec.Strips.Count; k++)
+            if (sec.Strips[k].Kind == StripKind.Hatch && sec.Strips[k].Way == StripWay.None && sec.Strips[k].Width > 0.05)
+            {
+                var (l, r) = sec.Span(k);
+                if (sec.CentreLine is { } c && r > c + 1e-3) continue;
+                return (l, r);
+            }
+        return null;
     }
 
     /// <summary>A section seen from the other way: its strips reversed, their ways swapped, its offsets mirrored.</summary>
@@ -222,6 +238,14 @@ public static class ExteriorPlanner
             foreach (var (l, r) in Runs(SectionAt(a, carFront + width * 0.5), CarIn))
                 ex.Bars.Add(new ExteriorBar(BarKind.StopLine, carFront, carFront + width, l, r));
             ex.CarStop = carFront + width * 0.5;
+            // without a crosswalk's refuge, an island over the exit hatch's wide end where it is wide enough all along, from the
+            // mouth to past the cars' line: the left repeater's (ExitIslands, #682; the old layout's, #854)
+            if (ex.Refuge is null && JunctionRules.Lights.Has(JunctionRule.ExitIslands) && ExitHatch(a, IslandFromMouth) is { } near
+                && ExitHatch(a, carFront + width + IslandPastStop) is { } far)
+            {
+                double l = Math.Max(near.Left, far.Left) + RefugeMargin, r = Math.Min(near.Right, far.Right) - RefugeMargin;
+                if (r - l >= RefugeMinWidth) ex.Refuge = new Refuge(IslandFromMouth, carFront + width + IslandPastStop, l, r);
+            }
             // the poles beside the cars' line: the main one at the right kerb, the second at the left one or on the refuge
             bool second = a.HasLeft || a.HasRight || here.CarLanes(StripWay.In).Count() > 1;
             // pedestrian heads only where the arm has a crosswalk (#711; where OSM maps its crossings on other arms, none here)
