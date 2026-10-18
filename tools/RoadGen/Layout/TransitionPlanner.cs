@@ -142,17 +142,29 @@ public static class TransitionPlanner
             if (rule.CentreSide)
             {
                 // the pocket gives way to a lead-in hatch along the angled closing line, the hatch closing over the taper; merged
-                // with the exit beyond (#325), the hatch runs on to the far mouth (its median)
+                // with the exit beyond (#325), the hatch runs on to the far mouth (its median). Two or more lanes (#700, the user
+                // again Oct 18): the hatch at most one lane wide, out of which only the lane by the centre line opens; the others
+                // (and the left-turn bike lane) open first, beside the hatch from the through lanes over one lane's taper each, and
+                // the first lane opens from them across the lane-change line
                 double slant = merged ? MergedEntry : Math.Min(ClosingSlant, taper * 0.5);
-                foreach (int id in ids) widths[id].HoldThen(storage, storage + slant, 0);
+                var first = ids.FirstOrDefault(id => rule.Owns(id));
+                var later = merged || lanes.Count < 2 ? [] : ids.Where(id => id != first).ToList();
+                if (later.Count > 0)
+                {
+                    double one = lanes.Max(o => o.Taper);
+                    foreach (int id in later) widths[id].HoldThen(storage + slant, storage + slant + one * (lanes.Count - 1), 0);
+                    width = W(mouth, first);
+                }
+                foreach (int id in ids.Except(later)) widths[id].HoldThen(storage, storage + slant, 0);
                 var hatch = widths[LeadInHatchId];
                 if (merged) hatch.HoldThen(storage, storage + slant, width);
                 else hatch.HoldThen(storage, storage + slant, width * (1 - slant / Math.Max(slant, taper))).HoldThen(storage + slant, storage + taper, 0);
                 // a split lead-in's share moves back with the pocket's taper (the through lane runs on one line)
                 if (Math.Abs(cM - cN) > 1e-3 && !merged) { centre.HoldThen(storage, storage + taper, cN); centreDone = true; }
                 double end = merged ? storage + slant : storage + taper;
+                foreach (int id in later) end = Math.Max(end, widths[id].End);
                 eIn = Math.Max(eIn, end);
-                events.Add(string.Create(inv, $"{(merged ? "merged " : "")}pocket {string.Join("+", ids)} held {storage:F0} m, closing line {storage:F0}-{storage + slant:F0} m, lead-in hatch to {end:F0} m"));
+                events.Add(string.Create(inv, $"{(merged ? "merged " : "")}pocket {string.Join("+", ids)} held {storage:F0} m, closing line {storage:F0}-{storage + slant:F0} m{(later.Count > 0 ? $" ({string.Join("+", later)} on to {storage + slant + lanes.Max(o => o.Taper) * (lanes.Count - 1):F0} m)" : "")}, lead-in hatch to {end:F0} m"));
             }
             else
             {

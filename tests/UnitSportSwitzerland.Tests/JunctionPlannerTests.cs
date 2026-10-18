@@ -12,7 +12,7 @@ public sealed class JunctionPlannerFixture : IDisposable
     public readonly int Code;
     public readonly List<string> Log = new();
 
-    public JunctionPlannerFixture() => Code = SignalTestRegion.Run(Dir, null, Log.Add, newJunctions: true);
+    public JunctionPlannerFixture() => Code = SignalTestRegion.Run(Dir, null, Log.Add, newJunctions: true, writeJunctions: false);
 
     public void Dispose()
     {

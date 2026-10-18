@@ -284,7 +284,7 @@ public static class PlanSvg
             sb.Append("<polyline points=\"").Append(string.Join(" ", pts.Select(pt)))
               .Append(inv, $"\" fill=\"none\" stroke=\"{colour}\" stroke-width=\"{l.Width:F2}\"{dash}/>\n");
         }
-        foreach (var q in paint.Stripes)
+        foreach (var (_, q) in paint.Stripes)
             if (q.All(x => x.S <= length))
                 sb.Append("<polygon points=\"").Append(string.Join(" ", q.Select(x => pt(p(x.S, x.O))))).Append("\" fill=\"#ffffff\"/>\n");
         foreach (var mark in paint.Marks)

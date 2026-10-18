@@ -60,15 +60,15 @@ public static partial class TileRewriter
         /// <summary>Leave rewritten tiles that have no raw input alone instead of refusing.</summary>
         bool SkipRewritten = false,
         /// <summary>
-        /// Run the junction planner (#818, <c>--junctions new</c>): its plans are kept in
-        /// <see cref="NetworkStats.Layouts"/> and reported beside the pocket layout, which writes the tiles unless <see cref="WriteJunctions"/>.
+        /// Run the junction planner (#818; the default, <c>--junctions old</c> turns it off): its plans are kept in
+        /// <see cref="NetworkStats.Layouts"/> and reported.
         /// </summary>
-        bool NewJunctions = false,
+        bool NewJunctions = true,
         /// <summary>
-        /// Write the planner's junctions into the tiles (#818 phase 3, <c>--junctions write</c>, with <see cref="NewJunctions"/>): cores,
-        /// trims and transitions where its checks pass; the old layout builds the rest (and nothing of its own there).
+        /// Write the planner's junctions into the tiles (#818, the default; <c>--junctions new</c> plans only): cores, trims,
+        /// transitions, exteriors and paths where its checks pass; the old layout builds the rest (and nothing of its own there).
         /// </summary>
-        bool WriteJunctions = false);
+        bool WriteJunctions = true);
 
     public sealed record Stats(
         int TilesRead, int TilesWritten, int Junctions, int SegmentsWritten, int SegmentsDropped,

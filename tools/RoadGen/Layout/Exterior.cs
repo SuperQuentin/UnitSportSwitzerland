@@ -224,9 +224,11 @@ public static class ExteriorPlanner
             ex.CarStop = carFront + width * 0.5;
             // the poles beside the cars' line: the main one at the right kerb, the second at the left one or on the refuge
             bool second = a.HasLeft || a.HasRight || here.CarLanes(StripWay.In).Count() > 1;
-            ex.Poles.Add(new PoleSpot(carFront + width * 0.5, RightKerb: true, OnRefuge: false, SignalPoleFlags.Main | SignalPoleFlags.Pedestrian));
+            // pedestrian heads only where the arm has a crosswalk (#711; where OSM maps its crossings on other arms, none here)
+            var walk = crosswalkAt is not null ? SignalPoleFlags.Pedestrian : 0;
+            ex.Poles.Add(new PoleSpot(carFront + width * 0.5, RightKerb: true, OnRefuge: false, SignalPoleFlags.Main | walk));
             ex.Poles.Add(new PoleSpot(ex.Refuge is { } rf ? (rf.From + rf.To) * 0.5 : carFront + width * 0.5, RightKerb: false, OnRefuge: ex.Refuge is not null,
-                (second ? SignalPoleFlags.Second : 0) | SignalPoleFlags.Pedestrian));
+                (second ? SignalPoleFlags.Second : 0) | walk));
             return ex;
         }
         // without lights: a pocket's own bar, and on a yielding arm the give-way row across the arriving lanes

@@ -54,8 +54,8 @@ if (args.Length == 0 || args.Contains("--help") || args.Contains("-h"))
           --test-region DIR     the traffic-lights test region (#386): flat tiles, designed junctions, OSM signal
                                  nodes, then the network stage; prints the junction table (--temp DIR: raw input,
                                  default DIR_temp). Clears DIR first, only if this command wrote it
-          --junctions new       (--rewrite, --test-region) also run the junction planner (#818) and report its plans; --junctions write
-                                 also writes them (cores, transitions; phase 3);
+          --junctions old       (--rewrite, --test-region) the old junction layout only (#818: the planner writes the junctions by
+                                 default, the old layout the ones it cannot); --junctions new plans them without writing;
                                  --debug-junction E,N prints the plan of the junction there (--junction-svg FILE draws it); --junction-failures FILE
                                  describes every core failing a check
           --compare-v2 V2DIR --chunks V3DIR
@@ -154,7 +154,7 @@ else if (ArgValue("--test-region") is { } regionDir)
             (double.Parse(en[0], CultureInfo.InvariantCulture), double.Parse(en[1], CultureInfo.InvariantCulture));
     }
     return UnitSport.Tools.RoadGen.TestRegion.SignalTestRegion.Run(regionDir, ArgValue("--temp"), Console.WriteLine,
-        newJunctions: ArgValue("--junctions") is "new" or "write", writeJunctions: ArgValue("--junctions") == "write");
+        newJunctions: ArgValue("--junctions") != "old", writeJunctions: ArgValue("--junctions") is null or "write");
 }
 else if (args.Contains("--priority-check"))
 {
@@ -205,7 +205,7 @@ else if (args.Contains("--rewrite"))
         RawDir: RawRoads.DirFor(temp),
         OsmOverlay: Path.Combine(temp, "osm_overlay.tsv"),
         SkipRewritten: args.Contains("--skip-rewritten"),
-        NewJunctions: ArgValue("--junctions") is "new" or "write", WriteJunctions: ArgValue("--junctions") == "write"), Console.WriteLine);
+        NewJunctions: ArgValue("--junctions") != "old", WriteJunctions: ArgValue("--junctions") is null or "write"), Console.WriteLine);
     }
     catch (TileRewriter.AlreadyRewrittenException e)
     {

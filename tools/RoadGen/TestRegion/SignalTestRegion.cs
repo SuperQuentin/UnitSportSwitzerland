@@ -273,7 +273,7 @@ public static class SignalTestRegion
 
     // ---- build ---------------------------------------------------------------------------------
 
-    public static int Run(string chunkDir, string? tempDir, Action<string> log, bool newJunctions = false, bool writeJunctions = false)
+    public static int Run(string chunkDir, string? tempDir, Action<string> log, bool newJunctions = true, bool writeJunctions = true)
     {
         tempDir ??= RawRoads.DefaultTempDir(chunkDir);
         var clock = System.Diagnostics.Stopwatch.StartNew();

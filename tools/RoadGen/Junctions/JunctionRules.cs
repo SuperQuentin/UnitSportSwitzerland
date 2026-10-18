@@ -86,6 +86,8 @@ public sealed class JunctionRules
     /// </summary>
     public static IReadOnlyList<(PaintType Type, uint Rgba)> PaintOf(JunctionRule rule) => rule switch
     {
+        // (#818) every approach laid lane by lane at the lights: its arrows, and a hatch where its lanes shift to meet the far side's
+        JunctionRule.PocketsOnEveryApproach => [(PaintType.Arrow, White), (PaintType.Hatch, White)],
         JunctionRule.StopLine => [(PaintType.StopLine, White), (PaintType.StopLine, Yellow)],   // a bike lane's or path's yellow stop line
         JunctionRule.SolidCentreBeforeStop => [(PaintType.WhiteSolid, White), (PaintType.WhiteDashed, White)],
         JunctionRule.PocketStopBar => [(PaintType.StopLine, White)],

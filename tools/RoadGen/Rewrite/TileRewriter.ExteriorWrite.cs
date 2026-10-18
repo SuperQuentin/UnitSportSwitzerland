@@ -250,6 +250,18 @@ public static partial class TileRewriter
                 Shape = PaintShape.Polyline, Type = type, Rgba = rgba, Width = width,
                 Vertices = Local(tile, [P(s, l), P(s, r)], source.SampleHeight, 0f),
             };
+            // a hatch wide at the mouth (an exit's, a line-up's) closed by a solid line across it, as the old layout's (#123): where
+            // its stripes and borders start (the line on their ends), past what the transition's paint keeps clear (the cars' line at the lights, a crosswalk)
+            double barsTo = ex.Bars.Where(b => b.Kind is BarKind.StopLine or BarKind.RidersLine).Select(b => b.To).DefaultIfEmpty(0).Max();
+            double closeAt = jp.Lights && barsTo > 0 ? barsTo : ex.Crosswalk is { } zebra && zebra.From - 0.3 < 0.5 ? zebra.To + 0.3 : 0;
+            var atMouth = ExteriorPlanner.SectionAt(a, closeAt);
+            for (int k = 0; k < atMouth.Strips.Count; k++)
+                if (atMouth.Strips[k].Kind == StripKind.Hatch && atMouth.Strips[k].Width >= 0.5)
+                {
+                    var (hl, hr) = atMouth.Span(k);
+                    into.Add(Across(closeAt, hl, hr, PaintType.WhiteSolid, PaintEmitter.White, PaintEmitter.LineWidth));
+                    stats.Marks++;
+                }
             foreach (var b in ex.Bars)
             {
                 switch (b.Kind)

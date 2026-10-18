@@ -35,11 +35,11 @@ public readonly record struct StreetPaint(bool CentreLine, bool SolidCentre, boo
     }
 }
 
-/// <summary>Everything a transition paints: lines along strip boundaries, hatch stripes (quads of (station, offset)), arrows and symbols.</summary>
+/// <summary>Everything a transition paints: lines along strip boundaries, hatch stripes (quads of (station, offset), each with its hatch's strip), arrows and symbols.</summary>
 public sealed class TransitionMarkings
 {
     public List<TransitionLine> Lines { get; } = new();
-    public List<(double S, double O)[]> Stripes { get; } = new();
+    public List<(int Strip, (double S, double O)[] Quad)> Stripes { get; } = new();
     public List<TransitionMark> Marks { get; } = new();
 }
 
@@ -110,6 +110,7 @@ public static class TransitionPaint
             bool pocketHere = here.Any(k => CentreSidePocket(t.Strips[k].Strip.Id)) || here.Any(k => t.Strips[k].Strip.Kind == StripKind.Hatch);
             var lines = new Dictionary<(int, double), Style>();
             var boxed = new HashSet<(int, double)>();
+            var bare = new HashSet<(int, double)>();
             void Put(int boundary, double offset, Style s) { if (s != Style.None) lines[(boundary, offset)] = s; }
             for (int j = 0; j < here.Count; j++)
             {
@@ -125,6 +126,8 @@ public static class TransitionPaint
                 // the kerb-side lane too, not only one between two car lanes)
                 if (pair == Style.Bike && (ArrivingBike(a) && b.IsCarLane || ArrivingBike(b) && a.IsCarLane)) pair = Style.BikePocket;
                 Put(boundary, 0, pair);
+                // a street without a centre line still gets it solid before the stop line at the lights (the user's rule, #711)
+                if (pair == Style.None && a.IsCarLane && b.IsCarLane && a.Way != b.Way) bare.Add((boundary, 0));
                 // a bike lane stopping at a box: its lines end at the box's back, the cars' line (the box draws its own sides)
                 if (t.Strips[here[j]].Strip.Stop == BikeStop.Box || t.Strips[here[j + 1]].Strip.Stop == BikeStop.Box) boxed.Add((boundary, 0));
             }
@@ -179,6 +182,9 @@ public static class TransitionPaint
             {
                 double a0 = cuts[c], a1 = cuts[c + 1], mid = (a0 + a1) * 0.5;
                 var now = new Dictionary<(int, double), Style>();
+                foreach (var key in bare)
+                    if (key.Item1 == CentreBoundary(t, i) && ((lights && mid < nearStop + SolidAtLights) || (farLights && t.Far is not null && mid > t.Length - farStop - SolidAtLights)))
+                        now[key] = Style.Solid;
                 foreach (var (key, given) in lines)
                 {
                     var style = between.TryGetValue(key, out var b0) && b0 == Style.BikePocket ? Style.BikePocket : given;
@@ -242,14 +248,38 @@ public static class TransitionPaint
     };
 
     /// <summary>
-    /// A hatch's stripes at 45 degrees every <see cref="HatchStep"/> m, leaning the way the hatch pushes a car: an exit hatch's (on
-    /// the departing side) away from the mouth, a lead-in's toward it; each a quad clipped to the hatch.
+    /// A hatch's stripes at 45 degrees every <see cref="HatchStep"/> m, leaning the way the hatch pushes a car (#406): going with
+    /// the traffic beside its moving edge, a stripe runs out toward that traffic's lane. A lead-in's (its edge along the arriving
+    /// lanes moving) lean toward the mouth at that edge, an exit hatch's (its edge along the departing lane moving) away from it,
+    /// though the two are one strip; each a quad clipped to the hatch.
     /// </summary>
-    private static void Stripes(Transition t, int k, List<(double S, double O)[]> into)
+    private static void Stripes(Transition t, int k, List<(int Strip, (double S, double O)[] Quad)> into)
     {
-        double sigma = k < t.Anchor ? 1 : -1;
         double from = t.Stations[0], to = t.Length;
         double h = HatchStripe * Math.Sqrt(0.5);
+        double fallback = k < t.Anchor ? 1 : -1;
+        // the traffic beside an edge: the nearest car lane on that side, arriving (toward the mouth, s falling) or not
+        bool? Arriving(int step, double s)
+        {
+            for (int r = k + step; r >= 0 && r < t.Strips.Count; r += step)
+                if (t.Strips[r].Strip.IsCarLane && t.WidthAt(r, s) > 0.05) return t.Strips[r].Strip.Way == StripWay.In;
+            return null;
+        }
+        // s = c + sigma * u from the left edge: the left end at c, the right one sigma * width further from the mouth
+        double SigmaAt(double c)
+        {
+            double a = Math.Max(from, c - 1), b = Math.Min(to, c + 1);
+            if (b - a < 1e-3) return fallback;
+            var (l0, r0) = t.SpanAt(k, a);
+            var (l1, r1) = t.SpanAt(k, b);
+            double left = Math.Abs(l1 - l0), right = Math.Abs(r1 - r0);
+            if (Math.Max(left, right) < 1e-3) return fallback;
+            // the end at the moving edge further along that traffic's way: an arriving lane's toward the mouth
+            bool leftMoves = left > right;
+            if (Arriving(leftMoves ? -1 : 1, c) is not { } arriving) return fallback;
+            return leftMoves == arriving ? 1 : -1;
+        }
+        double sigma = fallback;
         // a stripe's line: s = c + sigma * (o - left(s)) is solved by stepping across: o runs from the hatch's left edge outward
         (double S, double O)? Point(double c, double across, bool far)
         {
@@ -264,10 +294,11 @@ public static class TransitionPaint
         }
         for (double c = from + 0.6; c < to; c += HatchStep)
         {
+            sigma = SigmaAt(c);
             if (Point(c - h, 0, false) is not { } a0 || Point(c - h, 0, true) is not { } a1) continue;
             if (Point(c + h, 0, false) is not { } b0 || Point(c + h, 0, true) is not { } b1) continue;
             if (Math.Abs(a1.O - a0.O) < 0.3 && Math.Abs(b1.O - b0.O) < 0.3) continue;
-            into.Add([a0, a1, b1, b0]);
+            into.Add((k, [a0, a1, b1, b0]));
         }
     }
 

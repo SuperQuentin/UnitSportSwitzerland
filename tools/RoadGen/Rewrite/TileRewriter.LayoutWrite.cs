@@ -768,18 +768,33 @@ public static partial class TileRewriter
             }
             return null;
         }
-        foreach (var quad in m.Stripes)
+        // a hatch's stripes one mesh, as the old layout's (#406): a run of them in one tile, broken where the exterior keeps clear
+        var mesh = new List<float>();
+        var indices = new List<ushort>();
+        (int Strip, TileId Tile)? run = null;
+        void Flush()
+        {
+            if (run is { } r && indices.Count > 0)
+                Get(paint, r.Tile).Add(new RoadPaint { Shape = PaintShape.Triangles, Type = PaintType.Hatch, Rgba = PaintEmitter.White, Vertices = mesh.ToArray(), Indices = indices.ToArray() });
+            mesh.Clear();
+            indices.Clear();
+            run = null;
+        }
+        foreach (var (strip, quad) in m.Stripes)
         {
             var pts = quad.Select(q => At(q.S, q.O)).ToList();
-            if (pts.Any(q => q is null) || pts.Select(q => q!.Value.Tile).Distinct().Count() > 1) continue;
-            if (quad.Any(q => clear.Any(c => q.S > c.From && q.S < c.To))) continue;
-            Get(paint, pts[0]!.Value.Tile).Add(new RoadPaint
+            if (pts.Any(q => q is null) || pts.Select(q => q!.Value.Tile).Distinct().Count() > 1 || quad.Any(q => clear.Any(c => q.S > c.From && q.S < c.To)))
             {
-                Shape = PaintShape.Triangles, Type = PaintType.Hatch, Rgba = PaintEmitter.White,
-                Vertices = pts.SelectMany(q => new[] { q!.Value.X, q.Value.Y, q.Value.Z }).ToArray(), Indices = [0, 1, 2, 0, 2, 3],
-            });
+                Flush();
+                continue;
+            }
+            if (run != (strip, pts[0]!.Value.Tile)) { Flush(); run = (strip, pts[0]!.Value.Tile); }
+            ushort b = (ushort)(mesh.Count / 3);
+            mesh.AddRange(pts.SelectMany(q => new[] { q!.Value.X, q.Value.Y, q.Value.Z }));
+            indices.AddRange([b, (ushort)(b + 1), (ushort)(b + 2), b, (ushort)(b + 2), (ushort)(b + 3)]);
             stats.Marks++;
         }
+        Flush();
         foreach (var mark in m.Marks)
         {
             // a mark clear of the exterior: none in its stretch
