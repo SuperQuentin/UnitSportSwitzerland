@@ -378,6 +378,16 @@ public partial class Herds : Node3D, IOriginContainer
     /// <summary>Cows off the ground now on this peer (held or being let down).</summary>
     public int InAir => _over.Values.Count(o => o.Air);
 
+    /// <summary>The cow highest above its ground on this peer now: its key and that height (probes), or null.</summary>
+    public (long Key, float Lift)? Lifted()
+    {
+        (long, float)? best = null;
+        foreach (var (key, o) in _over)
+            if (o.Air && GroundAt(o.E, o.N) is var g && !float.IsNaN(g) && (best == null || o.Alt - g > best.Value.Item2))
+                best = (key, o.Alt - g);
+        return best;
+    }
+
     /// <summary>The highest a cow is above its ground on this peer, m (0 if none is up).</summary>
     public float HighestLift()
     {

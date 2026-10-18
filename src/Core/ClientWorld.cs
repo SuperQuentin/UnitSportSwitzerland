@@ -808,6 +808,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Crafting.CampfireNetProbe.Role != null) AddChild(new Crafting.CampfireNetProbe(items));
         if (Player.SwimNetProbe.Role != null) AddChild(new Player.SwimNetProbe(items));
         if (Player.EmoteNetProbe.Role != null) AddChild(new Player.EmoteNetProbe(items));
+        if (Occasions.SightingNetProbe.Role != null) AddChild(new Occasions.SightingNetProbe(items));
         if (Player.FightNetProbe.Role != null) AddChild(new Player.FightNetProbe(items));
         if (Net.InviteProbe.Role != null) AddChild(new Net.InviteProbe(items));
         if (Items.SwissNetProbe.Role != null) AddChild(new Items.SwissNetProbe(items));

@@ -53,9 +53,13 @@ public partial class UfoSightings : Node3D, IOriginContainer
     private long _slot = long.MinValue;
     private double _checkIn;
 
-    /// <summary><c>--sighting kind</c>: one of that kind as soon as there is a player and ground, night or day, occasion or not.</summary>
-    private SightingKind? _forced;
+    /// <summary>
+    /// <c>--sighting kind[,kind…]</c>: one of each, in turn, as soon as there is a player and ground
+    /// (the next once the last has ended), night or day, occasion or not.
+    /// </summary>
+    private readonly List<SightingKind> _forced = new();
     private int _forcedCount;
+    private double _forcedUntil;
 
     public UfoSightings(ChunkManager? chunks, WorldOrigin origin, bool dedicated)
     {
@@ -88,7 +92,8 @@ public partial class UfoSightings : Node3D, IOriginContainer
 
     public override void _Ready()
     {
-        if (CmdArgs.Value("--sighting") is { } kind && Enum.TryParse<SightingKind>(kind, true, out var k)) _forced = k;
+        foreach (var kind in (CmdArgs.Value("--sighting") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries))
+            if (Enum.TryParse<SightingKind>(kind.Trim(), true, out var k)) _forced.Add(k);
         if (!_dedicated) ReadyDraw();
     }
 
@@ -141,7 +146,7 @@ public partial class UfoSightings : Node3D, IOriginContainer
     /// </summary>
     private bool SeesSightings => _dedicated
         || OccasionManager.Instance?.IsActive(OccasionIds.Ufo, OccasionFacets.Decorations) == true
-        || _forced != null || _staged;
+        || _forced.Count > 0 || _staged;
 
     // ---- queries (bots, the occasion's sound) --------------------------------------------------
 
@@ -244,7 +249,7 @@ public partial class UfoSightings : Node3D, IOriginContainer
     private void PlanSlot(double now)
     {
         long slot = SightingPlanner.Slot(now);
-        bool forcedDue = _forced != null && _forcedCount == 0;
+        bool forcedDue = _forcedCount < _forced.Count && now > _forcedUntil;
         if (slot == _slot && !forcedDue) return;
 
         bool runs = OccasionManager.Instance?.WorldRuns(OccasionIds.Ufo, OccasionFacets.Decorations) == true;
@@ -261,9 +266,10 @@ public partial class UfoSightings : Node3D, IOriginContainer
         {
             var who = players[0].Global;
             var (ce, cn) = SightingPlanner.Cell(who.E, who.N);
-            if (TryPlan(_forced!.Value, ce, cn, slot, (uint)(now * 1000) ^ 0xF0F0u, who, now) is { } forced)
+            if (TryPlan(_forced[_forcedCount], ce, cn, slot, (uint)(now * 1000) ^ 0xF0F0u, who, now) is { } forced)
             {
                 _forcedCount++;
+                _forcedUntil = forced.End + 2;
                 Publish(forced);
             }
             return;   // the ground or the herd may not be in yet: again in half a second
