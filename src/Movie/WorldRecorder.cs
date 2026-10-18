@@ -268,10 +268,16 @@ public sealed class WorldRecorder
         return new WorldPose { X = x, Y = y, Z = z, Rot = b.Orthonormalized().GetRotationQuaternion(), Scale = scale };
     }
 
-    /// <summary>What a light or a particle emitter looks like now: the settings that show.</summary>
+    /// <summary>
+    /// What a light or a particle emitter looks like now: the settings that show. A light's energy and
+    /// range are snapped (<see cref="EnergyStep"/>, <see cref="RangeStep"/>): a pulsing light (an airdrop's
+    /// beacon) had a new key at every walk, and each new key keeps a detached copy for good. A 100-player
+    /// Battle Royale client held 75,000 of them and reached 128 GB (#837).
+    /// </summary>
     private readonly record struct TemplateKey(int Kind, Color Color, float Energy, float Range, float Angle, bool Shadow,
         ulong Material, ulong Mesh, int Amount, bool Emitting);
     private readonly Dictionary<TemplateKey, int> _templateIndex = new();
+    private const float EnergyStep = 0.25f, RangeStep = 0.5f;
 
     /// <summary>
     /// A light or particle emitter's look: a detached copy of the node as it is now (no script, no
@@ -282,11 +288,11 @@ public sealed class WorldRecorder
     {
         var key = node switch
         {
-            OmniLight3D o => new TemplateKey(1, o.LightColor, o.LightEnergy, o.OmniRange, 0, o.ShadowEnabled, 0, 0, 0, false),
-            SpotLight3D sp => new TemplateKey(2, sp.LightColor, sp.LightEnergy, sp.SpotRange, sp.SpotAngle, sp.ShadowEnabled, 0, 0, 0, false),
+            OmniLight3D o => new TemplateKey(1, o.LightColor, Mathf.Snapped(o.LightEnergy, EnergyStep), Mathf.Snapped(o.OmniRange, RangeStep), 0, o.ShadowEnabled, 0, 0, 0, false),
+            SpotLight3D sp => new TemplateKey(2, sp.LightColor, Mathf.Snapped(sp.LightEnergy, EnergyStep), Mathf.Snapped(sp.SpotRange, RangeStep), sp.SpotAngle, sp.ShadowEnabled, 0, 0, 0, false),
             GpuParticles3D g => new TemplateKey(3, default, (float)g.Lifetime, 0, 0, false,
                 g.ProcessMaterial?.GetInstanceId() ?? 0, g.DrawPass1?.GetInstanceId() ?? 0, g.Amount, g.Emitting),
-            Light3D l => new TemplateKey(4, l.LightColor, l.LightEnergy, 0, 0, l.ShadowEnabled, 0, 0, 0, false),
+            Light3D l => new TemplateKey(4, l.LightColor, Mathf.Snapped(l.LightEnergy, EnergyStep), 0, 0, l.ShadowEnabled, 0, 0, 0, false),
             _ => default,
         };
         if (_templateIndex.TryGetValue(key, out int i)) return i;
