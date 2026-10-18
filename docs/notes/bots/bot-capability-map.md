@@ -58,6 +58,9 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | dropped items | — | `DroppedItems.RequestPickUp` (RPC, replies `RpcId`) | — | `Loot` | gap: a server claim that returns the stack (a follow-up) |
 | parked car, bike: get in, drive | `RideControls` (`AutoPilot.Drive`) | entering is a client request | vehicles in view | `Drive` | gap: a server entry, phase 3 |
 | mounts from the ride menu | — | `RideUi` (refused in a match anyway) | — | — | n/a in BR |
+| fly the UFO (#861) | `FlyControls` (`FlightInput`: stick, Up/Down, Boost or Effort, `ViewYaw` the heading) | the body (a server-run bot flies its own); getting in is a client request | — | — | gap: no `Fly` skill or brain yet; mounting a parked one needs the server entry (phase 3) |
+| UFO beam, ramp / legs, lights (#861) | `Ufo.SetBeam` / `SetRamp` / `SetLegs` / `SetLights`, or the `FlightInput` edges `Beam` / `Hatch` / `Lights` | the beam acts on every peer from the pilot's replicated pose (`TractorBeams`): the server lifts what it owns, so a bot's beam needs nothing more | — | — | gap: no skill uses it |
+| be lifted by a UFO's beam (#861) | `WalkControls`: a bot standing still is lifted, a walking one is let down (`FootPlayer.BeamPhysics`, run on the bot's server body) | the body | a beam in view: the pilot's pose (`Ufo.BeamOn(Anim)`), cone `TractorBeamMath.InCone` | `MoveTo` (walk out) | gap: no brain flees a beam (#863 adds one) |
 
 ## Battle Royale
 
