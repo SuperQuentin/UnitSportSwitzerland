@@ -18,9 +18,10 @@ public partial class UfoRig : Node3D
     /// <param name="Ramp">0 shut .. 1 open.</param>
     /// <param name="Beam">The tractor beam is on.</param>
     /// <param name="Lights">The rim lamps chase (off: dark lamps, a dim glow).</param>
-    public readonly record struct Look(float Hum, float Legs, float Ramp, bool Beam, bool Lights);
+    /// <param name="Landed">Standing on its legs: the thud as it touches down.</param>
+    public readonly record struct Look(float Hum, float Legs, float Ramp, bool Beam, bool Lights, bool Landed = false);
 
-    private static readonly Look ParkedLook = new(0.1f, 1f, 1f, false, true);
+    private static readonly Look ParkedLook = new(0f, 1f, 1f, false, true, true);
 
     private Node3D _hull = null!, _ramp = null!;
     private readonly Node3D[] _legs = new Node3D[3];
@@ -33,6 +34,9 @@ public partial class UfoRig : Node3D
     private float _shownGlow = -1f, _shownGlowEnergy = -1f;
     private float _chase, _bob;
     private Look _shown = new(-1f, -1f, -1f, false, false);
+    private AudioStreamPlayer3D? _humVoice, _beamVoice, _servoVoice, _thudVoice;
+    private float _shownHum = -1f;
+    private readonly System.Random _rng = new();
 
     /// <summary>The legs' angles round the axis, rad: clear of the ramp at the front.</summary>
     private static readonly float[] LegAngles = { Mathf.Pi / 3f, Mathf.Pi, 5f * Mathf.Pi / 3f };
@@ -109,12 +113,60 @@ public partial class UfoRig : Node3D
             LightColor = GlowColour, LightEnergy = 4f, SpotRange = Player.TractorBeamMath.Reach + 5f,
             SpotAngle = Mathf.RadToDeg(Player.TractorBeamMath.HalfAngle) + 3f, ShadowEnabled = false,
         });
+        // its voices (none headless): the hum, the beam, the servo, the touchdown
+        if (DisplayServer.GetName() != "headless")
+        {
+            _humVoice = Voice("Hum", Audio.UfoSounds.Hum, 16f);
+            _beamVoice = Voice("BeamSound", Audio.UfoSounds.BeamDrone, 12f);
+            _servoVoice = Voice("Servo", Audio.UfoSounds.Servo, 6f);
+            _thudVoice = Voice("Thud", null, 10f);
+        }
+
         // the underside's glow on whatever is below (a field at night)
         _hull.AddChild(_glow = new OmniLight3D
         {
             Name = "Glow", Position = new Vector3(0, Belly - 0.6f, 0), LightColor = GlowColour,
             OmniRange = 9f, LightEnergy = 0f, ShadowEnabled = false,
         });
+    }
+
+    private AudioStreamPlayer3D Voice(string name, AudioStream? stream, float unitSize)
+    {
+        var voice = new AudioStreamPlayer3D
+        {
+            Name = name, Stream = stream, UnitSize = unitSize, MaxDistance = 700f, Bus = Audio.SfxBus.Name,
+            Position = new Vector3(0, Belly, 0),
+        };
+        _hull.AddChild(voice);
+        return voice;
+    }
+
+    /// <summary>The voices from the look: the hum's pitch and level with the speed, the beam, the servo while a part moves, a thud on touchdown.</summary>
+    private void Sound(in Look look, in Look was)
+    {
+        if (_humVoice == null || _beamVoice == null || _servoVoice == null || _thudVoice == null) return;
+        // the first look (just built) is not a change: no thud, no servo for a model appearing
+        if (was.Hum < 0f) return;
+        float hum = Mathf.Snapped(look.Hum, 0.02f);
+        if (!Mathf.IsEqualApprox(hum, _shownHum))
+        {
+            _shownHum = hum;
+            bool on = hum > 0.04f;
+            if (on != _humVoice.Playing) { if (on) _humVoice.Play(); else _humVoice.Stop(); }
+            _humVoice.PitchScale = 0.75f + 0.7f * hum;
+            _humVoice.VolumeDb = Mathf.LinearToDb(0.3f + 0.7f * hum) - 3f;
+        }
+        if (look.Beam != _beamVoice.Playing) { if (look.Beam) _beamVoice.Play(); else _beamVoice.Stop(); }
+        bool moving = !Mathf.IsEqualApprox(look.Legs, was.Legs) || !Mathf.IsEqualApprox(look.Ramp, was.Ramp);
+        if (moving != _servoVoice.Playing) { if (moving) _servoVoice.Play(); else _servoVoice.Stop(); }
+        if (look.Landed && !was.Landed)
+        {
+            var (stream, pitch, db) = Audio.UfoSounds.LegsBank.Pick(_rng);
+            _thudVoice.Stream = stream;
+            _thudVoice.PitchScale = pitch;
+            _thudVoice.VolumeDb = db;
+            _thudVoice.Play();
+        }
     }
 
     /// <summary>Where the pilot's figure stands, authored: its hip on the left seat's cushion.</summary>
@@ -147,6 +199,7 @@ public partial class UfoRig : Node3D
             _ramp.GetChild<Node3D>(1).Visible = look.Ramp > 0.5f;
         }
         if (look.Beam != _shown.Beam) _beam.Visible = _beamLight.Visible = look.Beam;
+        Sound(look, _shown);
         _shown = look;
 
         // a hovering saucer bobs a little; on its legs it is still

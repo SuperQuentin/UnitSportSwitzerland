@@ -141,7 +141,8 @@ public sealed class Ufo : Flyer
     public static UfoRig.Look LookOf(Vector4 pose)
     {
         int bits = Mathf.RoundToInt(pose.W);
-        return new UfoRig.Look(pose.X, 1f - pose.Y, 1f - pose.Z, (bits & BeamBit) != 0, (bits & LightsOffBit) == 0);
+        return new UfoRig.Look(pose.X, 1f - pose.Y, 1f - pose.Z, (bits & BeamBit) != 0, (bits & LightsOffBit) == 0,
+            (bits & LandedBit) != 0);
     }
 
     /// <summary>The beam is on in this pose (any peer, from the replicated <c>Anim</c>): what the beam service reads.</summary>
@@ -151,7 +152,8 @@ public sealed class Ufo : Flyer
 
     public override void AnimateFlight(Node3D visual, in FlightMotion m, float dt)
     {
-        if (visual is UfoRig rig) rig.Show(LookOf(Pack(State)), dt);
+        // the hum is the spool: the pilot's step sets it, a parked one's body replicates it (quiet on the ground)
+        if (visual is UfoRig rig) rig.Show(LookOf(Pack(State)) with { Hum = m.Spool }, dt);
     }
 
     public override void AnimateRemote(Node3D visual, Vector4 pose, float dt)
