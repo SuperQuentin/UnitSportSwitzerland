@@ -79,7 +79,8 @@ public partial class ChatBubbles : CanvasLayer
         double start = RealClock.Now, found = double.NaN;
         while (RealClock.Now - start < 240)
         {
-            if (_speaker(ChatManager.OfflineSelf) != null && double.IsNaN(found)) found = RealClock.Now;
+            // the body and the world in view: the loading screen gone
+            if (_speaker(ChatManager.OfflineSelf) != null && GameShell.Instance?.InWorld != false && double.IsNaN(found)) found = RealClock.Now;
             if (!double.IsNaN(found) && RealClock.Now - found > 8) break;
             await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
         }
@@ -90,7 +91,7 @@ public partial class ChatBubbles : CanvasLayer
         async System.Threading.Tasks.Task Say(string line, string png, BubbleShape? want)
         {
             _chat.Send(line);
-            await ToSignal(tree.CreateTimer(1.6, true, false, true), SceneTreeTimer.SignalName.Timeout);
+            await ToSignal(tree.CreateTimer(2.4, true, false, true), SceneTreeTimer.SignalName.Timeout);
             await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
             var shown = _entries.Find(e => e.View.Visible || e.Sprite?.Visible == true);
             if (want == null && _entries.Count > 0) problems.Add($"\"{line}\" made a bubble");

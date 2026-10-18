@@ -59,9 +59,46 @@
   several shots carry one move on (the three style shots).
 - **On top** (`Captions`, the one layer left): `Captions` (low line or middle title), `Chat`
   (the friends' group chat bottom left, names in their colours, typed in; a null `Who` is a
-  system line), `Supers` (place and hour, top left), `Photo` (at that second a view is rendered once
+  system line), `Bubbles` (below), `Supers` (place and hour, top left), `Photo` (at that second a view is rendered once
   with `PhotoCapture`: the film's camera, or `PhotoFrom`'s key, a photographer's of its own; a
   white flash, then a polaroid settling on screen, the title under it and a low line over it), fades.
+- **Speech bubbles** (`Shot.Bubbles`, #862: the films' dialogue, in place of `Chat`, which still
+  works): `new Bubble(T, actorIndex, "Text", BubbleShape.Say|Shout|Whisper|Think)`, optional
+  `Seconds` (default: long enough to type and read, `BubbleGeometry.ReadingTime`, never past the
+  shot), `At` (a point of the frame, 0..1, for a voice off; the actor index is then ignored),
+  `Colour` (a tint washed into the white; default the actor's `Character.Colour`), `Id`
+  (subtitles). The tail ends on the actor's `FootPlayer.HeadTop`, projected through the film's
+  camera every frame (behind the camera: mirrored under the frame); the bubble is kept on screen,
+  leans away from the near edge, sits against the top with a shorter tail, beside or under the
+  head when there is no room over it; bubbles never overlap (`BubbleLayout`: a later one climbs
+  over an earlier one, else goes beside or under it, never over a speaker's head), and one pushed
+  far from its speaker goes under the others (its long tail too). Comic look (`Ui/Bubbles/SpeechBubble`):
+  white body, black ink twice as wide as it shows (the fills cover its inner half and the joint
+  of tail and body), a soft offset shadow, capitals in the system's comic face (Comic Sans MS on
+  macOS and Windows, Comic Neue where installed; a plain bold elsewhere), a shout spiky with a
+  zigzag tail and 18 % larger, a whisper dashed and in small letters, a thought a cloud with three
+  circles to the head (none for a thinker off the frame). Lettering 3.2 % of the frame's height;
+  typed in at 32 letters a second (45 shouted, 24 whispered), a pop from 60 % through 108 % in
+  0.3 s from the tail's root, faded out over 0.2 s unless it lasts to the cut. Demo and check:
+  `FILM=bubbles tools/trailer.sh stills` (`BubbleDemoScript`, the four friends on the Gornergrat,
+  every shape at once, then speakers at both edges and a voice off; not a film to show).
+- **Subtitles** (#862): every English line (caption text and sub, bubble, chat line) has an id,
+  its `Id` or else the slug of its English (`SubtitleTrack.Slug`: "Who stole the fondue?!" →
+  `who-stole-the-fondue`, at most 48 letters): retiming or moving a line keeps it, rewording the
+  English makes a new line (its translations then show as missing, never silently stale). Supers
+  (place names and hours) are not subtitled. Each filmed shot gets `shotNN.cues.json` beside its
+  MP4 (`{"shot", "fps", "frames", "cues": [{"id", "kind", "en", "from", "to"}]}`, frames from the
+  shot's first, `to` excluded), so a cut of shots from several versions adds them up frame-exactly.
+  Translations: `docs/trailer/<film>.subtitles.json`, `{"id": {"en": "...", "fr": "...", "de": "...",
+  "it": "...", "rm": "..."}}` (`rm` Rumantsch Grischun); `tools/trailer.sh lines` adds the film's
+  lines to it (translations kept, reworded and unused ids listed). `tools/trailer.sh cut` (and
+  `render`) runs Godot headless (`--trailer-subtitles DIR`) to write `<film>.<lang>.srt` into
+  the version folder for English and every language the file has (a missing translation is the
+  English, with a warning), lines on together merged into one subtitle each stretch (`mov_text`
+  cannot overlap; two speakers each on a dashed line), then muxes them into `trailer.mp4` and
+  `trailer_share.mp4` (`-c:s mov_text`, `language=eng|fra|deu|ita|roh`, a `title`, none on by
+  default: the bubbles are burnt in, in English). A version filmed before #862 has no cues: its
+  cut has no subtitles. Check a cut: `ffprobe -v error -show_entries stream=index,codec_name:stream_tags=language,title trailer.mp4`.
 - **Picture**: the root renders at `--trailer-size` (1920x1080) whatever the window
   (`ContentScaleMode.Viewport`), every `CanvasLayer` but the captions hidden (walked once, then
   `NodeAdded`), `Captions` sized from the frame's height, fades as a black veil.
@@ -74,7 +111,8 @@
   ~15 min on this machine, the 38 of the story ~25; either film is exactly 3810 frames, 127.000 s.
 - **Versions**: every render is a new folder, never written over: `test_output/trailer/<film>/v1`,
   `v2`, ... in the **main checkout** (`TRAILERS=` elsewhere), so a film outlives the worktree it
-  was made in. Each holds `trailer.mp4`, `trailer_share.mp4` (CRF 23, to send), `shots/`,
+  was made in. Each holds `trailer.mp4`, `trailer_share.mp4` (CRF 23, to send), `<film>.<lang>.srt`,
+  `shots/` (with each shot's `.start` and `.cues.json`),
   `render.log` and `version.txt` (when, the commit and whether there were local changes, which
   shots were filmed and from which version the others came). `VERSION=2 tools/trailer.sh cut`
   re-cuts an older one. Stills stay scratch, in the checkout's `test_output/trailer/<film>/stills`.
