@@ -210,10 +210,21 @@ public partial class ChatUi : CanvasLayer
     // ---- lines -----------------------------------------------------------------------------
 
     /// <summary>Adds a line to the scrollback and floats it up on screen.</summary>
+    /// <summary>Lines in the log (for <c>--chatcheck</c>): never more than <see cref="MaxLines"/>.</summary>
+    public int LogLines => _log.GetChildCount();
+
     public void Append(string line, ChatKind kind)
     {
         _log.AddChild(Line(line, kind, floating: false));
-        while (_log.GetChildCount() > MaxLines) _log.GetChild(0).QueueFree();
+        // out of the tree first: QueueFree only frees at the end of the frame, so the count never fell and
+        // this loop spun forever on line 81, queueing it again and again (a frozen client growing ~100 MB/s:
+        // a 100-player match's kill feed passed 80 lines, #837)
+        while (_log.GetChildCount() > MaxLines)
+        {
+            var old = _log.GetChild(0);
+            _log.RemoveChild(old);
+            old.QueueFree();
+        }
         if (IsTyping) ScrollToEnd();
 
         var floating = Line(line, kind, floating: true);

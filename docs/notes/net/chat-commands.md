@@ -34,6 +34,9 @@
   **`/time`** (Minecraft style; `world/day-night`): the query is answered client-side from the
   clock on screen, set/add/speed go to the server, admin only, and change it for everyone.
 - **Look** (`Core/ChatUi`): floating lines sit exactly where the same lines sit in the open panel's scrollback (`AlignFeed`: inside the panel margin, just above the input; same font size and line gap in both lists, a short scrollback bottom-aligned), so opening the chat only adds the glass behind them. The open panel is see-through (`GlassPanel(0.55)`). `--chatopen [s]` opens the input after s seconds, for screenshots.
+- **The scrollback keeps 80 lines** (`MaxLines`): a trimmed line leaves the tree before its `QueueFree`. Freed
+  only at the end of the frame, it kept the count up, and the trim loop spun forever on line 81 (a frozen client
+  growing ~100 MB/s once a 100-player match's kill feed passed 80 lines, #837). `--chatcheck` appends 100.
 - **Invites (#840, `net/invites`)**: `/invites` (open to you and from you), `/accept [player|kind|#id]`,
   `/decline [...]` (no argument: the newest), `/tpa <player>` (ask to go to them) and `/tphere <player>` (ask
   them over), anyone, 20 s apart, refused in a running match or race; `/party [list] | invite <player> |

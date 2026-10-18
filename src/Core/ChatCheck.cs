@@ -157,6 +157,10 @@ public static class ChatCheck
         Step(Key.Down, "dra", "stays on the draft");
         ui.CloseInput(recaptureMouse: false);
 
+        // past the log's cap (#837): trimming with QueueFree alone spun forever once a line had to go
+        for (int i = 0; i < 100; i++) ui.Append($"line {i}", ChatKind.Say);
+        Expect(ui.LogLines <= 80, $"the log keeps 80 lines (has {ui.LogLines})");
+
         ui.QueueFree();
         chat.QueueFree();
     }
