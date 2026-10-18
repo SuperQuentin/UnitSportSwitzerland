@@ -26,7 +26,7 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | face / aim | `LookYaw`, `LookPitch`, `SquareToView` (`BotIntent.FaceYaw`) | the body | — | `Engage` | ok |
 | swim | `WalkControls` overrides the stroke | the body | — | `MoveTo` | gap: dive and climb-out read keys (`FootPlayer.Swim`, `limp` for an Npc); landings avoid water (a follow-up) |
 | knocked out, down, revived, out | — | `TakeDamage`, `TryGoDown`, `ReviveInPlace`, `FinishDowned` on the server | — | — | ok |
-| run over by a vehicle | — | `KnockedByVehicle` | — | — | gap: skipped for an Npc (`FootPlayer.Crash`), phase 3 |
+| run over by a vehicle | — | `KnockedByVehicle` | — | — | gap: skipped for an Npc (`FootPlayer.Crash`), and players' proxies have no physics body on the server: a knock from `PlayerSnapshot` positions, a follow-up (`vehicles`) |
 | get down from a roof | — | the body (a jump off it) | its height over the ground | `MoveTo` | gap: a bot landed on a roof walks along it and never comes down (seen in `tools/botfilm.sh`); landing spots should avoid roofs, or `MoveTo` should drop off a low edge (#842) |
 | fall damage | — | the landing in `UpdateCameraFeel` (an early branch for a body with no camera) | — | — | ok |
 | caught in a blast | — | `Explosion.Blast` | — | — | gap: subscribed only by a body with a camera (a follow-up) |
@@ -56,7 +56,7 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | building loot (furniture) | — | `LootService.ServeTake` needs the bot in the interior's space | — | `Loot` | gap: interiors on the server (a follow-up) |
 | doors, building interiors | — | `InteriorManager` (presents nothing on the server) | doors in view | `MoveTo` | gap: interior collision on the server (a follow-up) |
 | dropped items | — | `DroppedItems.RequestPickUp` (RPC, replies `RpcId`) | — | `Loot` | gap: a server claim that returns the stack (a follow-up) |
-| parked car, bike: get in, drive | `RideControls` (`AutoPilot.Drive`) | entering is a client request | vehicles in view | `Drive` | gap: a server entry, phase 3 |
+| parked car, motorbike, bike: get in, drive, get out | `RideControls` (`BotDriving.Controls`: `AutoPilot`) | `VehicleManager.ServerClaim`, `FootPlayer.TakeVehicle`, `ExitVehicle` with the server's `Park` | in sight within 150 m (`BotDriving.Spot`) | `BotDriving`; `BrBrain` for trips over 300 m | ok (`vehicles`) |
 | mounts from the ride menu | — | `RideUi` (refused in a match anyway) | — | — | n/a in BR |
 
 ## Battle Royale

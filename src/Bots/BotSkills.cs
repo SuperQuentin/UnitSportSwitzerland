@@ -38,6 +38,8 @@ public static class BotSkills
     /// <summary>Making less than this in <see cref="CheckEvery"/> while walking is being stuck.</summary>
     private const float Progress = 0.8f;
     private const double CheckEvery = 2.0, Detour = 2.5;
+    /// <summary>This many headway checks (4 s each) without headway: wedged, moved out (<see cref="OpenGroundNear"/>).</summary>
+    private const int Wedged = 8;
 
     /// <summary>
     /// Walks towards <paramref name="target"/> (world). Straight there while the way is open; a low wall
@@ -91,6 +93,17 @@ public static class BotSkills
                     body.DebugLaunch(outside, Vector3.Zero);
                     nav.Stuck = 0;
                     nav.LastOpen = -1;
+                }
+                // wedged (half a minute without headway: a courtyard, a gap between a wall and a fence it
+                // keeps jumping at): out to open ground nearer the goal. Seen: bots running on the spot in
+                // a 10 m patch, or standing still, until the zone killed them
+                else if (nav.Stuck >= Wedged && OpenGroundNear(space, body, pos, target) is { } nearer)
+                {
+                    GD.Print($"[bots] {body.Name} \"{bot.Profile.Name}\" wedged at {body.Global} (stuck {nav.Stuck}): out to {nearer}");
+                    body.DebugLaunch(nearer, Vector3.Zero);
+                    nav.Stuck = 0;
+                    nav.LastOpen = -1;
+                    nav.Following = false;
                 }
                 else if (nav.Following && nav.Stuck % 2 == 0)
                 {
@@ -193,15 +206,18 @@ public static class BotSkills
 
     /// <summary>
     /// The nearest spot with open sky and ground under it, on rings from 6 m to 40 m round <paramref name="pos"/>:
-    /// a ray down from 40 m up hits the ground there first, not a roof. Null when there is none.
+    /// a ray down from 40 m up hits the ground there first, not a roof. With <paramref name="toward"/>, only
+    /// spots at least 4 m nearer it than <paramref name="pos"/>. Null when there is none.
     /// </summary>
-    private static Vector3? OpenGroundNear(PhysicsDirectSpaceState3D space, Player.FootPlayer body, Vector3 pos)
+    private static Vector3? OpenGroundNear(PhysicsDirectSpaceState3D space, Player.FootPlayer body, Vector3 pos, Vector3? toward = null)
     {
+        float from = toward is { } t0 ? new Vector2(t0.X - pos.X, t0.Z - pos.Z).Length() : 0f;
         for (float r = 6f; r <= 40f; r += 4f)
             for (int k = 0; k < 12; k++)
             {
                 float a = k * Mathf.Tau / 12f;
                 var at = pos + new Vector3(Mathf.Cos(a) * r, 0, Mathf.Sin(a) * r);
+                if (toward is { } t && new Vector2(t.X - at.X, t.Z - at.Z).Length() > from - 4f) continue;
                 var hit = BotRays.Cast(space, at + Vector3.Up * 40f, at + Vector3.Down * 20f, body.GetRid());
                 if (hit.Count == 0 || hit["collider"].AsGodotObject() is Player.FootPlayer) continue;
                 var ground = hit["position"].AsVector3();

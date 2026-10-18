@@ -43,7 +43,7 @@ public partial class BrBotProbe : ChatProbe
         await Finish(1.0);
     }
 
-    /// <summary><c>--brbotwatch</c>: a match against 8 bots that play it (phase 2's brain), watched to the end.</summary>
+    /// <summary><c>--brbotwatch [field]</c>: a match topped up to the field (9: 8 bots) that the bots play, watched to the end.</summary>
     private static bool Watch => CmdArgs.Has("--brbotwatch");
 
     private async Task RunWatch()
@@ -51,7 +51,7 @@ public partial class BrBotProbe : ChatProbe
         var br = Br!;
         Chat!.Send("/login brbots");
         if (!await Until(() => Permissions.IsAdmin, 10)) { Fail("not logged in as admin"); return; }
-        Chat.Send("/br bots 9 normal");
+        Chat.Send($"/br bots {CmdArgs.Int("--brbotwatch") ?? 9} normal");
         await Seconds(0.5);
         Chat.Send("/br open 5 short");
         if (!await Until(() => br.State.Phase == BrPhase.Lobby, 20)) { Fail("no lobby"); return; }
@@ -66,7 +66,19 @@ public partial class BrBotProbe : ChatProbe
             await Seconds(0.5);
             Me!.Leap(Me.GlobalPosition, Vector3.Zero, RideKind.OnFoot);
         }
-        bool ended = await Until(() => br.State.Phase == BrPhase.Ended, 2200);
+        // every 20 s, how many orphan nodes the client holds (a leak grew this client to 128 GB)
+        bool ended = false, named = false;
+        for (int i = 0; i < 110 && !ended; i++)
+        {
+            ended = await Until(() => br.State.Phase == BrPhase.Ended, 20);
+            GD.Print($"{Log} {OrphanCensus.Line()}");
+            // named once, early, when they pile up: the end may never come (a leak took this client to 128 GB)
+            if (!named && Node.GetOrphanNodeIds().Count >= 3000) { named = true; Node.PrintOrphanNodes(); }
+        }
+        // a leak shows as thousands (the replay buffer's light copies were 75,000 in a 100-player match); a few
+        // hundred is normal. Named only when it fails: the list is a line a node
+        int orphans = Node.GetOrphanNodeIds().Count;
+        if (orphans >= 5000 && !named) Node.PrintOrphanNodes();
         var s = br.State;
         var bots = s.Entrants.Where(e => e.Bot).ToList();
         GD.Print($"{Log} watch: {(ended ? "ended" : "still running")}, winner {s.Find(s.Winner)?.Shown ?? "-"}; "
@@ -74,6 +86,7 @@ public partial class BrBotProbe : ChatProbe
         Expect(ended, "the match ended");
         Expect(bots.Sum(b => b.Kills) > 0, $"bots killed ({bots.Sum(b => b.Kills)} kills by bots)");
         Expect(bots.Any(b => b.Damage > 0), "bots dealt damage");
+        Expect(orphans < 5000, $"no node leak on this client ({orphans} orphan nodes)");
     }
 
     private FootPlayer? BodyOf(long id) => GetParent().GetNodeOrNull<FootPlayer>("Players/" + PlayerReplication.NodeName(id));

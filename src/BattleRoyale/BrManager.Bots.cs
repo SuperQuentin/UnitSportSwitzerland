@@ -106,6 +106,7 @@ public partial class BrManager
         var taken = new HashSet<string>(_state.Entrants.Select(e => e.Name));
         var plane = PlaneFrame(flight, Now);
         var jumps = new List<double>();
+        var brains = new List<BrBrain>();
         for (int i = 0; i < count; i++)
         {
             double e = 0, n = 0;
@@ -135,14 +136,30 @@ public partial class BrManager
             jumpAt = FreeMoment(jumps, jumpAt, flight.OpensAt + 0.2, flight.ClosesAt - 0.2);
             jumps.Add(jumpAt);
             var target = Origin.ToWorld(e, n, (float)BrMapImage.Height(horizon, e, n));
-            bot.Brain = new BrBrain(this, _crates, _state.Seed ^ (i * 7919)) { DropTarget = target, JumpAt = jumpAt };
+            var brain = new BrBrain(this, _crates, _state.Seed ^ (i * 7919)) { DropTarget = target, JumpAt = jumpAt };
+            bot.Brain = brain;
+            brains.Add(brain);
             _state.Entrants.Add(new BrEntrant { Peer = id, Name = profile.Name, Bot = true });
         }
+        SpreadJumps(brains, flight.OpensAt + 0.2, flight.ClosesAt - 0.2);
         GD.Print($"[br] bots: {_state.Entrants.Count(x => x.Bot)} aboard ({_botLevel})");
     }
 
     /// <summary>Seconds between two bots leaving the ramp (55 m at cruise, more at a test pace).</summary>
     private const double MinJumpGap = 0.7;
+
+    /// <summary>
+    /// A field the doors cannot space <see cref="MinJumpGap"/> apart (99 bots into 48 s): FreeMoment gave a third of
+    /// them the moment they wanted, together, and 18 crashed into each other in the air. Then the bots leave in the
+    /// order they wanted, evenly over the doors' window (0.48 s apart for 99, 26 m at cruise, with the lateral spread).
+    /// </summary>
+    private static void SpreadJumps(List<BrBrain> brains, double from, double to)
+    {
+        if (brains.Count * MinJumpGap <= to - from) return;
+        double step = (to - from) / brains.Count;
+        int k = 0;
+        foreach (var brain in brains.OrderBy(b => b.JumpAt)) brain.JumpAt = from + (k++ + 0.5) * step;
+    }
 
     /// <summary>The moment nearest <paramref name="wanted"/> in [from, to] at least <see cref="MinJumpGap"/> from each taken one.</summary>
     private static double FreeMoment(List<double> taken, double wanted, double from, double to)
@@ -197,11 +214,14 @@ public partial class BrManager
         double now = Now;
         if (!pushed && !flight.DoorsOpen(now)) return false;
         var f = PlaneFrame(flight, now);
-        var side = new Basis(Vector3.Up, f.Yaw) * Vector3.Right * (float)(_rng.NextDouble() * 6 - 3);
-        var exit = f.At + new Basis(Vector3.Up, f.Yaw) * BrPlane.Ramp + Vector3.Down * 2f + side;
+        // one side of the ramp, then the other, drifting outwards: a bot slows in the wingsuit at once, and the
+        // next one out half a second later at plane speed caught it up from behind (air crashes in a 100 field)
+        _jumpSide = -_jumpSide;
+        var right = new Basis(Vector3.Up, f.Yaw) * Vector3.Right;
+        var exit = f.At + new Basis(Vector3.Up, f.Yaw) * BrPlane.Ramp + Vector3.Down * 2f + right * _jumpSide * (float)(4 + _rng.NextDouble() * 4);
         var forward = f.Velocity.LengthSquared() > 1f ? f.Velocity.Normalized() : new Basis(Vector3.Up, f.Yaw) * Vector3.Forward;
         _aboardBots.Remove(bot.Id);
-        bot.Body.Leap(exit, forward * Math.Min(flight.Speed, ExitSpeed) + Vector3.Down * 4f, RideKind.Wingsuit);
+        bot.Body.Leap(exit, forward * Math.Min(flight.Speed, ExitSpeed) + right * _jumpSide * 2f + Vector3.Down * 4f, RideKind.Wingsuit);
         if (_state.Find(bot.Id) is { } e) e.Jumped = true;
         _pushSoon = true;   // one state message for every bot that jumped this frame
         GD.Print($"[br] {bot.Body.Name} \"{bot.Profile.Name}\" {(pushed ? "pushed out" : "jumped")} {flight.ClosesAt - now:F0} s before the doors close");
@@ -209,6 +229,7 @@ public partial class BrManager
     }
 
     private bool _pushSoon;
+    private int _jumpSide = 1;
 
     /// <summary>ServerTick: the doors have closed, out with every bot still aboard; the jumps' state goes out once.</summary>
     private void BotPlane()

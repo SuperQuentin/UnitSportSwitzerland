@@ -109,6 +109,29 @@ public partial class BotProbe : ChatProbe
         Expect(hurt, $"a bot's pistol hurt A: health {before:F0} -> {me.Health:F0} (the server fired, A's machine took it)");
         Say("fired");
         me.WalkControls = null;
+
+        // a bot drives (#837 phase 3): A parks a car beside them, sends them 300 m ahead, and one takes it
+        var carKind = (RideKind)Player.CarCatalog.First;
+        Expect(me.SetRide(carKind) && await Until(() => me.Ride == carKind, 5), $"A takes a {carKind} from the ride menu");
+        await Seconds(1.0);
+        me.ExitVehicle();
+        bool parked = await Until(() => Vehicles.VehicleManager.Instance?.GetChildren().OfType<Vehicles.VehicleBody>()
+            .Any(v => v.GlobalPosition.DistanceTo(me.GlobalPosition) < 12f) == true, 10);
+        Expect(parked, "the car is parked beside A");
+        Chat.Send("/bot drive 300");
+        FootPlayer? driver = null;
+        bool inCar = await Until(() => (driver = Bots().FirstOrDefault(b => b.Ride == carKind)) != null, 60);
+        Expect(inCar, $"a bot got into the car ({driver?.Name})");
+        if (driver != null)
+        {
+            var from = driver.Global;
+            bool drove = await Until(() => !GodotObject.IsInstanceValid(driver) || driver.Global.DistanceTo(from) > 120, 90);
+            Expect(drove && GodotObject.IsInstanceValid(driver), $"it drove off ({(GodotObject.IsInstanceValid(driver) ? driver.Global.DistanceTo(from) : 0):F0} m)");
+            bool outAgain = await Until(() => GodotObject.IsInstanceValid(driver) && driver.Ride == RideKind.OnFoot, 90);
+            Expect(outAgain, "it got out at the end");
+            Expect(await Until(() => Vehicles.VehicleManager.Instance?.GetChildren().OfType<Vehicles.VehicleBody>()
+                .Any(v => v.GlobalPosition.DistanceTo(driver.GlobalPosition) < 15f) == true, 10), "the car is parked again where it left it");
+        }
         Say("finished");
         await Heard("B", "done", 20);
     }
@@ -127,7 +150,7 @@ public partial class BotProbe : ChatProbe
         if (!await Heard("A", "down", 60)) { Expect(false, "A shot the bot down"); return; }
         Expect(bot.Down != 0 || await Until(() => bot.Down != 0, 3), $"B sees {name} down");
         if (await Heard("A", "fired", 60)) Expect(botShot || await Until(() => botShot, 3), "B heard a bot's shot (the server's Shot event)");
-        await Heard("A", "finished", 30);
+        await Heard("A", "finished", 300);
         Say("done");
     }
 }
