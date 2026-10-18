@@ -1,6 +1,21 @@
 # Batch playtest: record everything, judge many scenarios, fix offline, replay
 
-Issue #844. Status: in progress on `feat/844-playtest-recorder` (PR #847).
+Issue #844. Status: built on `feat/844-playtest-recorder` (PR #847); the real batch run with a
+player (verification 5) is still to do.
+
+**Built differently from the plan below:**
+- Times are wall-clock seconds since the session began, not game time: a relaunch appends to the
+  same bundle, and a server's trace lines up with a client's on one machine.
+- The movie is saved in `user://movies` as "Playtest <session>" (the studio opens only from there)
+  and named in the report, not copied into the bundle; closing the window loses it, End session saves it.
+- No contact events: vehicles are `CharacterBody3D` (no `body_entered`); the top view's boxes show
+  the contacts instead.
+- The offline PNG draws its labels with a 5×7 pixel font (ThorVG draws no SVG `<text>` headless).
+- Players carry their ride's footprint in the trace (a driver is drawn over the box of what it drives);
+  birds are a faint "minor" kind; sounds, lights and particles in a container are not traced.
+- Extras: `tools/playtest.sh last|report|topview`, `--playtest-report <dir>`, an MCP `note` tool,
+  the panel's Note / Top view buttons (the pad and VR way), `tools/playtestnetcheck.sh`.
+- Not built: the terrain or roads under the top view (`--ground`).
 
 ## Context
 
