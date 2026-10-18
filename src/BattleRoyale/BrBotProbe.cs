@@ -61,7 +61,7 @@ public partial class BrBotProbe : ChatProbe
         if (!await Until(() => br.InMatch && br.State.Phase == BrPhase.Playing, 60)) { Fail("never dropped"); return; }
         if (br.State.Flight is { } flight)
         {
-            await Until(() => flight.DoorsOpen(ClockSync.ServerNow), 90);
+            await Until(() => flight.DoorsOpen(ClockSync.SimNow), 90);
             br.JumpOut();
             await Seconds(0.5);
             Me!.Leap(Me.GlobalPosition, Vector3.Zero, RideKind.OnFoot);
@@ -101,7 +101,7 @@ public partial class BrBotProbe : ChatProbe
 
         // out of the plane as soon as the doors open, then down on foot
         if (s.Flight is not { } flight) { Fail("no flight"); return; }
-        await Until(() => flight.DoorsOpen(ClockSync.ServerNow), 90);
+        await Until(() => flight.DoorsOpen(ClockSync.SimNow), 90);
         Expect(br.JumpOut(), "jumped");
         var me = Me!;
         await Seconds(0.5);

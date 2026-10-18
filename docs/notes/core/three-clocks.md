@@ -9,7 +9,7 @@ Every timed system reads exactly one of three clocks. Plan and phase status:
 | Clock | Read it as | What belongs in it |
 |---|---|---|
 | **Environment** | `World.WorldClock` (`Hour`, and `EnvNow` from phase 3) | time of day, traffic and railway signals, plant and build growth, campfire burn, craft stations, resource regrowth, fishing odds, the dawn chorus, clocks on walls |
-| **Simulation** | `Core.GameClock.Now` locally; the server-owned `SimNow` for anything compared across peers (phase 2) | physics, vehicles, player movement, projectiles, weapon rate of fire, AI and NPCs, ragdolls, damage windows |
+| **Simulation** | `Core.GameClock.Now` locally; the server-owned `Net.ClockSync.SimNow` for anything compared across peers (phase 2) | physics, vehicles, player movement, projectiles, weapon rate of fire, AI and NPCs, ragdolls, damage windows |
 | **Real** | `Core.RealClock.Now` | UI, audio presentation, network plumbing, persistence stamps, force feedback, polling worker threads |
 
 Environment time rides simulation speed, so at 0.25x the sun and the traffic lights crawl along
@@ -59,6 +59,7 @@ Moved to **simulation** time, because they are part of the world and must slow w
 | Kill-credit window | `Player/FootPlayer._lastAttackedAt` | a hit and the kill it is credited for are both in the world |
 | Build growth | `Build/Structures.Now` | `SimClock.SimAt`, not `GameClock.Now`: `BuiltAt` crosses the wire |
 | Wave phase | `World/WaterField.Now` | the swell is physics, and the boats riding it are simulated |
+| Battle royale match | `BattleRoyale/BrManager.Now`, `Net.ClockSync.SimNow` | every `BrState` stamp (lobby countdown, plane doors, zone, airdrops, bot jumps) is in simulated seconds (#855); only the flare and ping rate limits stay real (`RealNow`) |
 
 Moved to **environment** time, with every constant re-expressed in env units:
 

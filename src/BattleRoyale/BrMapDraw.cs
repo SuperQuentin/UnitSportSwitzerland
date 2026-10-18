@@ -46,12 +46,12 @@ public static class BrMapDraw
         }
 
         // the cargo plane (#207) until its doors close: its line, the stretch the doors are open, the plane
-        if (br.State.Flight is { } flight && Net.ClockSync.ServerNow < flight.ClosesAt)
+        if (br.State.Flight is { } flight && Net.ClockSync.SimNow < flight.ClosesAt)
         {
             var (open, shut) = flight.JumpStretch;
             DashedLine(c, toScreen(flight.From), toScreen(open), Plane with { A = 0.6f });
             c.DrawLine(toScreen(open), toScreen(shut), Plane, 2.5f);
-            Arrow(c, toScreen(flight.At(Net.ClockSync.ServerNow)), flight.Dir, Plane);
+            Arrow(c, toScreen(flight.At(Net.ClockSync.SimNow)), flight.Dir, Plane);
         }
 
         // supply drops (#194): a blue crate, with its canopy while it is still coming down

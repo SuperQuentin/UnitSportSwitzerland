@@ -202,9 +202,9 @@ public partial class BrProbe : ChatProbe
         var me = Me!;
         var br = Br!;
         if (br.State.Flight is not { } flight) { Fail("no flight in the match state"); return false; }
-        Expect(br.Aboard && me.Carrier != null, Fmt($"aboard the cargo plane at {flight.Altitude:F0} m, doors open in {flight.OpensAt - ClockSync.ServerNow:F0} s"));
+        Expect(br.Aboard && me.Carrier != null, Fmt($"aboard the cargo plane at {flight.Altitude:F0} m, doors open in {flight.OpensAt - ClockSync.SimNow:F0} s"));
         await Seconds(1.0);
-        var plane = br.PlaneFrame(flight, ClockSync.ServerNow).At;
+        var plane = br.PlaneFrame(flight, ClockSync.SimNow).At;
         Expect(me.GlobalPosition.DistanceTo(plane) < 8f + flight.Speed * 0.25f && !me.Visible,
             Fmt($"held in the hold, hidden ({me.GlobalPosition.DistanceTo(plane):F1} m from the plane)"));
         Shot($"{_role.ToLowerInvariant()}_plane");
@@ -212,9 +212,9 @@ public partial class BrProbe : ChatProbe
         var them = GetParent().GetNodeOrNull<FootPlayer>("Players/" + PeerOf(other));
         if (_role == "A")
         {
-            Expect(ClockSync.ServerNow >= flight.OpensAt || !br.JumpOut(), "E before the doors open is refused");
-            await Until(() => flight.DoorsOpen(ClockSync.ServerNow), 60);
-            var exit = flight.At(ClockSync.ServerNow);
+            Expect(ClockSync.SimNow >= flight.OpensAt || !br.JumpOut(), "E before the doors open is refused");
+            await Until(() => flight.DoorsOpen(ClockSync.SimNow), 60);
+            var exit = flight.At(ClockSync.SimNow);
             Expect(br.JumpOut() && me.Ride == RideKind.Wingsuit && !br.Aboard, "E with the doors open: out of the ramp in a wingsuit");
             var zone = br.State.Zone();
             Expect(exit.DistanceTo(zone.CentreOf(0)) <= zone.RadiusOf(0) + 5f,
@@ -249,8 +249,8 @@ public partial class BrProbe : ChatProbe
         else
         {
             bool pushed = await Until(() => !br.Aboard, 90);
-            Expect(pushed && ClockSync.ServerNow >= flight.ClosesAt - 0.5 && me.Ride == RideKind.Wingsuit,
-                Fmt($"pushed out in a wingsuit when the doors closed ({ClockSync.ServerNow - flight.ClosesAt:F1} s after)"));
+            Expect(pushed && ClockSync.SimNow >= flight.ClosesAt - 0.5 && me.Ride == RideKind.Wingsuit,
+                Fmt($"pushed out in a wingsuit when the doors closed ({ClockSync.SimNow - flight.ClosesAt:F1} s after)"));
             Expect(br.State.Find(PeerOf("A"))?.Jumped == true && them is { Visible: true }, "A jumped earlier and shows here");
             await Seconds(1.0);
             Shot("b_pushed");
