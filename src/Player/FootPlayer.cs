@@ -2764,6 +2764,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_ride is CompactRoller parkedRoller) parkedRoller.UnpackFlags(state.Flags);
         if (_ride is MiniDumper parkedDumper) parkedDumper.UnpackFlags(state.Flags);
         if (_ride is Telehandler parkedBoom) parkedBoom.UnpackFlags(state.Flags);
+        // a saucer's ramp and lamps as they were left (#861)
+        if (_ride is Ufo parkedUfo) parkedUfo.UnpackFlags(state.Flags);
         // the steamer's gangways as they were left (#303)
         if (_ride is Steamer berthed) berthed.DoorsOpen = (byte)(state.DoorsOpen & 3);
         EngineOn = true;
@@ -2803,7 +2805,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // an airliner left in the air (stood up from its seat): its attitude, or it is put down level (#456)
             Angles: _ride is Truck ta ? ta.Angles : _ride is Boat tilted ? new Basis(tilted.State.Attitude).GetEuler()
                 : _ride is Airliner { State.OnGround: false } aloft ? aloft.State.Attitude.Orthonormalized().GetEuler() : default,
-            Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : _ride is Airliner af ? af.PackFlags() : _ride is Airstairs sf ? sf.PackFlags() : _ride is Forklift lf ? lf.PackFlags() : _ride is Excavator ef ? ef.PackFlags() : _ride is WheelLoader wf ? wf.PackFlags() : _ride is CompactRoller rf ? rf.PackFlags() : _ride is MiniDumper df ? df.PackFlags() : _ride is Telehandler hf ? hf.PackFlags() : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
+            Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : _ride is Ufo uf ? uf.PackFlags() : _ride is Airliner af ? af.PackFlags() : _ride is Airstairs sf ? sf.PackFlags() : _ride is Forklift lf ? lf.PackFlags() : _ride is Excavator ef ? ef.PackFlags() : _ride is WheelLoader wf ? wf.PackFlags() : _ride is CompactRoller rf ? rf.PackFlags() : _ride is MiniDumper df ? df.PackFlags() : _ride is Telehandler hf ? hf.PackFlags() : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
             Radio: wrecked ? 0 : CarRadio, Cd: wrecked ? "" : CarCd,
             Carrier: wrecked ? "" : hold.Key, CarrierSection: hold.Section, CarrierPos: hold.Pos, CarrierYaw: hold.Yaw);
     }
@@ -2910,6 +2912,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         ApplyRide(RideKind.OnFoot, state.Velocity + right * 2f);
         if (aisle is { } spot) StandIn(spot, state.Velocity, (door, right, side, frame, vehicle));
+        // down the ramp of a landed saucer (#861): at its foot, if that is clear
+        else if (grounded && vehicle.ExitSpot is { } foot && ClearStandAt(frame * foot) is { } stand) GlobalPosition = stand;
         else GlobalPosition = FindExit(door, right, side, frame, vehicle, grounded);
         // over the side of a boat: onto a pier or jetty alongside (#377), else into the water beside
         // it, swimming (#302, #301)
@@ -3368,6 +3372,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         {
             EngineOn = !EngineOn;
             EngineToggled?.Invoke(EngineOn);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (_ride is Ufo && SeatIndex == 0 && HandleUfoInput(@event))
+        {
             GetViewport().SetInputAsHandled();
             return;
         }
@@ -4085,7 +4095,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             ViewYaw: _viewYaw,
             Engine: EngineOn || !flyer.HasEngine,
             ViewPitch: _pitch,
-            Brake: jumpDown ? 1f : 0f);
+            Brake: jumpDown ? 1f : 0f,
+            Boost: keys && (PlayerInput.Held(PlayerInput.Sprint) || PlayerInput.Held(PlayerInput.Boost)),
+            Hatch: TakeUfoPress(UfoPressHatch),
+            Beam: TakeUfoPress(UfoPressBeam),
+            Lights: TakeUfoPress(UfoPressLights));
 
         Clearance = Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float ground)
             ? GlobalPosition.Y - ground : 999f;
@@ -4093,6 +4107,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         float altitude = Origin is { } here ? (float)here.ToGlobal(GlobalPosition).Alt : GlobalPosition.Y;
 
         if (flyer is Pigeon) PigeonStep(input, dt);
+        if (flyer is Ufo saucer) UfoStep(saucer);
         if (flyer is Airliner trimmed)
             trimmed.TrimHeld = typing || !keys ? 0f : PlayerInput.Strength(PlayerInput.TrimNoseUp) - PlayerInput.Strength(PlayerInput.TrimNoseDown);
         if (flyer is Airliner padded) AirlinerPadHold(dt, padded);
