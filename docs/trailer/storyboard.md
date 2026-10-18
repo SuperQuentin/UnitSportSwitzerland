@@ -42,8 +42,9 @@ one bar per shot after the drop, then one long pull-out.
 
 Captions are white, centred low, on the beat; never more than five words.
 
-The film is in the Cartoon style, all but the style sequence (shots 20-22), which shows PS1, Cartoon
-and Realistic in turn (`TrailerScript.Shots`).
+The film is in the Cartoon style, all but shot 20 of the style sequence (shots 20-22: PS1, Cartoon,
+then Cartoon under "Pick your look."). The Realistic styles are not shown: they are not ready
+(`TrailerScript.Shots`).
 
 ## Shot list
 
@@ -89,7 +90,7 @@ Times are song time. Lens in mm (full-frame equivalent; the director converts to
 | 19 | 35-36 | 1:06.5-1:10.4 | **Party.** Friends dance in the park by the lake at Nyon at dusk (YMCA, the cabbage patch, the chicken, the Macarena, the griddy, Gangnam style). *"Together."* | Slow orbit at chest height, 28 mm | Emotes, dances, multiplayer |
 | 20 | 37 | 1:10.4-1:12.4 | **PS1.** The Lauterbrunnen valley from the air. *"PS1"* | One continuous drone move across shots 20-22, 35 mm | Visual styles |
 | 21 | 38 | 1:12.4-1:14.3 | **Cartoon.** The same move goes on, Cartoon style. *"Cartoon"* | (continues) | |
-| 22 | 39 | 1:14.3-1:16.3 | **Realistic.** The same move goes on, Realistic style. *"Realistic"* | (continues) | |
+| 22 | 39 | 1:14.3-1:16.3 | **Your pick.** The same move goes on, back in Cartoon. *"Pick your look."* | (continues) | |
 | 23 | 40 | 1:16.3-1:18.2 | **The drop plane.** The military freighter over the Bernese Alps at golden hour, its ramp open, on the riser. *"Drop in."* | Formation flight beside it, 35 mm | Battle Royale plane |
 
 ### Act IV: everything at once (drop, bars 41-57)
