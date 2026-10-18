@@ -374,10 +374,11 @@ public static class TrailerScript
             Captions = [new(0.25, 3.5, "Together.")],
             Preroll = 1,
         },
-        StyleShot(20, 37, "ps1", "PS1", 0),
-        StyleShot(21, 38, "cartoon", "Cartoon", 1),
-        // the Realistic styles are not ready to be shown: the move ends back in Cartoon
-        StyleShot(22, 39, "cartoon", "Pick your look.", 2),
+        // one drone move up the valley, cut on three bars (once the styles sequence; the film is
+        // all in Cartoon now: PS1 and the Realistic styles are not shown)
+        ValleyShot(20, 37, "One country.", 0),
+        ValleyShot(21, 38, "Every valley.", 1),
+        ValleyShot(22, 39, "Yours to explore.", 2),
         new()
         {
             Number = 23, Name = "The drop plane", FromBar = 40, Bars = 1, Feature = "Battle Royale plane",
@@ -597,8 +598,8 @@ public static class TrailerScript
                 new(9.8, 5.6, "", Song.VoxelRevolution.Credit),
             ],
         },
-    // filmed in Cartoon, all but the style sequence, which shows PS1 then Cartoon
-    }.Select(s => s.Feature == "visual styles" ? s : s with { Style = "cartoon" }).ToList();
+    // filmed in Cartoon: PS1 and the Realistic styles are not shown
+    }.Select(s => s with { Style = "cartoon" }).ToList();
 
     /// <summary>Dancers in a ring round <paramref name="c"/>, facing in, each with its own move.</summary>
     internal static Cast[] Circle(Spot c, float r, int[] dances, int seed) =>
@@ -617,13 +618,13 @@ public static class TrailerScript
         }).ToArray();
 
     /// <summary>
-    /// Shots 20-22: one drone move up the Lauterbrunnen valley, cut into three bars: PS1, Cartoon, and
-    /// Cartoon again under "Pick your look."; each starts its keys where the previous one stopped.
+    /// Shots 20-22: one drone move up the Lauterbrunnen valley, cut into three bars, a caption each;
+    /// each starts its keys where the previous one stopped.
     /// </summary>
-    private static Shot StyleShot(int number, int bar, string style, string label, int part) => new()
+    private static Shot ValleyShot(int number, int bar, string label, int part) => new()
     {
-        Number = number, Name = label, FromBar = bar, Bars = 1, Feature = "visual styles",
-        Hour = 11.5, Style = style,
+        Number = number, Name = label, FromBar = bar, Bars = 1, Feature = "the Lauterbrunnen valley",
+        Hour = 11.5,
         Keys =
         [
             new(0, Pt.Alt(2635980, 1158700, 1080), Pt.Alt(2635950, 1160600, 860), 35),
