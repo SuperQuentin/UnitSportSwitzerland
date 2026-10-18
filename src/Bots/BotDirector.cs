@@ -171,8 +171,9 @@ public partial class BotDirector : Node
     {
         if (_bots.Count == 0) return;
         long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
-        RunBots();
+        using (BodyProfiler.Time(BodyProfiler.Slot.Brains, true)) RunBots();
         ServerStats.Ran("bots", t0);
+        BodyProfiler.Report(Now);
     }
 
     private void RunBots()

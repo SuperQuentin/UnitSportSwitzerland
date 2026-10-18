@@ -292,6 +292,14 @@ public partial class BrManager
     /// <summary>Spectating: the player watched, else 0.</summary>
     public long Watching => _spectator is { Current: true } ? _watching : 0;
 
+    /// <summary>Out of the match: follow this living entrant (a probe filming bots, #842); false when it is not one.</summary>
+    public bool Watch(long id)
+    {
+        if (_state.Find(id) is not { Alive: true }) return false;
+        _watching = id;
+        return true;
+    }
+
     // ------------------------------------------------------------------------------------
     // RPCs from the server
     // ------------------------------------------------------------------------------------

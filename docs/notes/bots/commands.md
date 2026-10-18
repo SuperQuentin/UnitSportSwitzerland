@@ -30,5 +30,10 @@
     (`/br bots 9`), watched to the end. It must end, and bots must have dealt damage and killed.
     `BRPACE` (0.13 by default: too fast for a runner to keep up with the zone), `SPREAD=80` to land
     them together, `BOTLOG=1`, `SERVER_ARGS="--serverstats"`.
+  - `tools/botfilm.sh` (by hand, windowed): films bots playing a BR match. The client opens it, leaves
+    at once and spectates (`BrManager.Watch`), following the first bot out of the plane, then whichever
+    bot stands nearest another on foot. It writes `test_output/clips/bots-drop` and `bots-fight`
+    (`.mp4`, `.gif`). `CLIENT_ARGS="--screen 1"`, `BRPACE`, `SPREAD` (#842).
+  - `--botprofile` on a server: `server-cost`.
   - Tier 0: `BrTacticsTests`, `CollisionReachTests`, `BotProfileTests`, `BrStatsTests` (bot kills); `--brcheck` (bots in
     the state JSON, solo bot sides, the top-up).
