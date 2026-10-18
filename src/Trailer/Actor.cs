@@ -132,6 +132,7 @@ public sealed class Actor
             _pilot.D.Near = _route.Line.IndexAt(_arc);
         }
         Body.DanceId = Spec.Dance;
+        Body.HeadwearId = Spec.Headwear;
         Body.HeldItemId = Spec.Item;
         if (Spec.FirstPerson) Body.ViewForCheck(thirdPerson: false);
         Ready = true;
@@ -251,6 +252,9 @@ public sealed class Actor
                     var ahead = (-b.Z with { Y = 0 }).Normalized();
                     return ((right * wish.X + ahead * wish.Y).LimitLength(1f), run);
                 };
+                // jumps and crouches scripted (a slide, a wall jump, a base jump), the wingsuit flown after
+                if (Spec.Actions != null) body.FootActions = () => Spec.Actions(_moving);
+                if (Spec.Flight != null) body.FlyControls = () => Spec.Flight(_moving);
                 break;
             case Drive.Stand when Spec.Ride != RideKind.OnFoot:
                 body.RideControls = () => new RideInput(0f, 0f, 0f, false, Handbrake: true);
@@ -331,6 +335,7 @@ public sealed class Actor
         if (_moving >= 0) _moving += dt;
         if (Ready && Body.HeldItemId != Spec.Item) Body.HeldItemId = Spec.Item;
         if (Ready && Spec.Use != null) Body.ItemAction = _moving >= 0 && Spec.Use(_moving) ? 2 : 0;
+        if (Ready && Spec.Fight != null) Body.FightPose = _moving >= 0 ? Spec.Fight(_moving) : 0;
         if (Body.BackItemId != 0) Body.BackItemId = 0;
         var v = Body.IsFlying ? Body.Flight.Velocity : Body.Ride == RideKind.OnFoot ? Body.Velocity : Body.WorldVelocity;
         var flat = v with { Y = 0 };

@@ -3618,7 +3618,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         // an NPC or a bot reads no keys (#837): its walk comes from WalkControls, its jump and
         // crouch from FootActions
-        bool keys = !Npc;
+        // a scripted walker (the trailer's actors) handed FootActions reads no keys either
+        bool keys = !Npc && FootActions == null;
         var acts = keys ? default : FootActions?.Invoke() ?? default;
         var input = keys ? PlayerInput.Move : Vector2.Zero;
         // a steering wheel's pedals walk forward and back

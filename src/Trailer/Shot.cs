@@ -159,6 +159,16 @@ public sealed record Cast
     public int Trailer { get; init; } = -1;
     /// <summary>On foot: a wish in its own frame (x right, y ahead, length ≤ 1) and whether it runs.</summary>
     public Func<double, (Vector2 Wish, bool Run)>? Walk { get; init; }
+    /// <summary>
+    /// On foot (<see cref="Drive.Walk"/>): jump and crouch held (<see cref="FootPlayer.FootActions"/>): a
+    /// crouch at a run slides, a jump at a wall wall-jumps, a second jump falling high up opens the
+    /// wingsuit (then flown by <see cref="Flight"/>). A jump is a press: false, then true.
+    /// </summary>
+    public Func<double, (bool Jump, bool Crouch)>? Actions { get; init; }
+    /// <summary>Its fist-fight pose (<see cref="FootPlayer.FightPose"/>: a <c>FightStance</c>, or 16 + a <c>FightMove</c>), 0 = none.</summary>
+    public Func<double, int>? Fight { get; init; }
+    /// <summary>An occasion's hat (<see cref="Avatar.Headwear"/>), 0 = none.</summary>
+    public int Headwear { get; init; }
 
     /// <summary>A dance move or emote (<see cref="FootPlayer.DanceId"/>), 0 = none.</summary>
     public int Dance { get; init; }
@@ -239,6 +249,13 @@ public sealed record Shot
     public string Style { get; init; } = "ps1";
     /// <summary>The sea state for the lakes, 0..1; null: <see cref="CalmSea"/>.</summary>
     public float? Sea { get; init; }
+    /// <summary>
+    /// The occasion the world dresses for (<c>halloween</c>, <c>christmas</c>; <c>none</c> = no
+    /// occasion at all, whatever the calendar says); null: left as the shot before had it.
+    /// </summary>
+    public string? Occasion { get; init; }
+    /// <summary>A Battle Royale zone's wall standing on this circle (<see cref="BattleRoyale.ZoneWall"/>), radius in m; null: none.</summary>
+    public (Spot Centre, float Radius)? Zone { get; init; }
     public const float CalmSea = 0.15f;
     /// <summary>Traffic cars around the camera; null: the player's setting.</summary>
     public int? Traffic { get; init; }

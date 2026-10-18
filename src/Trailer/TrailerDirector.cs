@@ -69,6 +69,7 @@ public partial class TrailerDirector : Node
     private Texture2D? _photo;
     private bool _photoAsked;
     private float _sea = float.NaN;
+    private string? _occasion;
     private FrameRecorder? _recorder;
     private int _framesWanted;
     private readonly Queue<(double T, string Path)> _stills = new();
@@ -249,6 +250,13 @@ public partial class TrailerDirector : Node
         float sea = shot.Sea ?? Shot.CalmSea;
         if (sea != _sea) RunCommand?.Invoke(string.Create(CultureInfo.InvariantCulture, $"/seastate {sea:F2}"));
         _sea = sea;
+        if (shot.Occasion is { } occasion && occasion != _occasion)
+        {
+            // one occasion at a time, or none, whatever the calendar says
+            foreach (var id in new[] { Occasions.OccasionIds.Halloween, Occasions.OccasionIds.Christmas })
+                RunCommand?.Invoke(id == occasion ? $"/occasion start {id}" : $"/occasion stop {id}");
+            _occasion = occasion;
+        }
         GameSettings.Current.TrafficCars = shot.Traffic ?? _defaultTraffic;
         World.Traffic.Current?.Forget();
         HoldClock(shot.Hour);
@@ -264,6 +272,14 @@ public partial class TrailerDirector : Node
             AddChild(_set);
             _set.GlobalPosition = _origin.ToWorld(shot.SetAt.E, shot.SetAt.N, SetAltitude);
             _props.Add(_set);
+        }
+        if (shot.Zone is { } zone)
+        {
+            // the zone's wall, 3 km tall round its middle: its middle a kilometre above the sea
+            var wall = new BattleRoyale.ZoneWall { Name = "Zone" };
+            AddChild(wall);
+            wall.Place(_origin.ToWorld(zone.Centre.E, zone.Centre.N, 1000), zone.Radius);
+            _props.Add(wall);
         }
         if (shot.Moon > 0f)
         {
