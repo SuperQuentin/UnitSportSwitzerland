@@ -9,5 +9,6 @@ interactable is decided for bots too: `docs/notes/general/new-feature-bots.md`.
 - `brain` — BrBrain (phase 2): BotSenses (sight cone + ray, hearing, memory), BrTactics scores (pure), BotSkills (MoveTo with wall following, crate takes), streets (RoadNetwork.Path, GoTo), fighting (reaction, aim error, bands, strafing), the drop (board, jump 0.7 s apart, wingsuit, canopy), play-out
 - `hits` — players hit bots (targets, server applies `ShotHit`), bots fire (`BotHands`, `PlayerHits` sink, `ItemEvents.ServerHit`/`ServerSend`), PvP lets bots be hit anywhere, never `RpcId` a bot id
 - `battle-royale` — `/br bots`, top-up at GO in the first circle, server does death box/down/zone/revive for bots, `BotKills` "10 kills (3 bots)", `[bot]` marks, no careers, ends when no player is left
+- `server-cost` — the server builds no figure mesh for its bodies (0.8 ms and 180 KB a bot a frame before); 20 bots 17.2 -> 2.5 ms busy; `--botprofile` per-block costs (#842)
 - `commands` — `/bot add|arm|fire|clear|list`, `--bots`/`--botsat`/`--botlog`/`--brbots`, `tools/botcheck.sh`, `tools/brbotcheck.sh`, unit tests
 - `bot-capability-map` — the living table: every action, item, mount, vehicle and interactable, its seam, server path, sense, skill and status (ok / gap / n/a)

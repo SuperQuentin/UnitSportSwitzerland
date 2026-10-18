@@ -1652,8 +1652,15 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     public override void _Process(double delta)
     {
+        using var profile = Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Process, Bot);
+        ProcessStep(delta);
+    }
+
+    private void ProcessStep(double delta)
+    {
         if (Net.NetLink.Dropped(this)) return;   // freed with the link a frame later
-        TickWade((float)delta);   // wading's spray and strides, every peer (#380, FootPlayer.Wade.cs)
+        using (Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Wade, Bot))
+            TickWade((float)delta);   // wading's spray and strides, every peer (#380, FootPlayer.Wade.cs)
         _punch *= Mathf.Exp(-12f * (float)delta);
         _jolt *= Mathf.Exp(-9f * (float)delta);
         if (IsMultiplayerAuthority())
@@ -1668,7 +1675,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // an NPC or a bot reads no keys (#837): a server has no look actions at all
             if (!Npc) ApplyStickLook(dt);
             // walkable vehicles nearby: their decks where they are drawn, and this player with one it stands on
-            CarryOnDeck(dt);
+            using (Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Deck2, Bot)) CarryOnDeck(dt);
             if (RidingWith != 0)
             {
                 // a passenger (#158): in its seat on the host's vehicle, looking out of it
@@ -1699,7 +1706,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             }
 
             // published whatever the view: first person draws no body, but everyone else does
-            PublishFootPose(dt);
+            using (Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Publish, Bot)) PublishFootPose(dt);
             StepThrowView(dt);
             // a fist fight (#495): its own side-on view
             if (FightView(dt)) return;
@@ -1726,6 +1733,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             else
             {
                 // borrowed from first person for a throw: the body only shows once the lens is out of the head
+                using var pose = Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Pose, Bot);
                 ApplyFootPose();
                 SeeBodyFromEye(_borrowedThird && _throwBlend <= 0.3f);
                 UpdateThirdPersonCamera(dt);
@@ -2214,7 +2222,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 _ => Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase, arm, blend, dance, vr),
             };
         }
-        if (key != _poseKey && !HoldRemoteFigure())
+        // the dedicated server draws nothing (#842): a bot it runs walks without its figure being rebuilt
+        // every frame (0.8 ms and 180 KB a bot a frame, the whole of a bot's cost); clients rebuild their
+        // copy from the replicated pose, and the hand's mounts above stay exact for what it holds
+        if (key != _poseKey && !HoldRemoteFigure() && !Net.NetworkManager.DedicatedServer)
         {
             _poseKey = key;
             _poseWait = 0f;
@@ -2242,7 +2253,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _walker.Transform *= FlinchPose(dt);
         PlaceHand(mounts);
         PlaceBack(mounts);
-        StepFace(dt);
+        if (!Net.NetworkManager.DedicatedServer) StepFace(dt);   // a face nobody sees (#842)
     }
 
     /// <summary>What the figure was last built from: the same key, the same mesh (#221).</summary>
@@ -3520,6 +3531,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     public override void _PhysicsProcess(double delta)
     {
+        Bots.BodyProfiler.CountFrame();
+        using var profile = Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Physics, Bot);
+        PhysicsStep(delta);
+    }
+
+    private void PhysicsStep(double delta)
+    {
         if (Net.NetLink.Dropped(this)) return;   // freed with the link a frame later
         // held by the Battle Royale cargo plane (#207): it moves the body, nothing else does
         if (Carried()) return;
@@ -3538,17 +3556,23 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // a passenger is carried by the vehicle it sits in (#158)
         if (RidingWith != 0) { RideAlong(); return; }
         // aboard a walkable vehicle, or about to be (#162)
-        if (_ride == null && DeckPhysics((float)delta)) return;
+        using (Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Deck, Bot))
+            if (_ride == null && DeckPhysics((float)delta)) return;
         // before any path runs, so none of them (mantle, a thrown-out NPC) can skip it
-        if (RescueFromVoid(delta)) return;
+        using (Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Void, Bot))
+            if (RescueFromVoid(delta)) return;
 
         float dt = (float)delta;
         // inside another player (a shared spawn): ease apart rather than be shoved out (#203)
-        SeparateFromPlayers(dt);
+        using (Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Separate, Bot)) SeparateFromPlayers(dt);
         var velocity = Velocity;
         bool onFloor = IsOnFloor();
-        TickHealth(dt, onFloor);
-        TickFarmFoot(dt);
+        using (Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Health, Bot))
+        {
+            TickHealth(dt, onFloor);
+            TickFarmFoot(dt);
+        }
+        using var walkTime = Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Walk, Bot);
 
         // limp after a crash (#214): the body goes where its hips are, so the replicated position follows the ragdoll
         if (_ragdoll != null)

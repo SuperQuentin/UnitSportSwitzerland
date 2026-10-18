@@ -14,6 +14,8 @@
   - `--botlog`: `[bots] status` per bot every 5 s (position, speed, on the floor, placed, health,
     watched).
   - `--brbots N`: the BR field size (default 20, 0 = off).
+  - `--brbotsharmless`: BR bots play the match but never strike (`tools/brbotcheck.sh`: the match's
+    plumbing with bots, not a knife duel's luck; bots fighting back are `botcheck` and `brbotwatch`).
   - `--brbotspread M`: every bot's landing spot within M m of the first circle's centre (checks: the
     bots meet at once).
 - **Checks** (net tier, `tools/lib/checkmap.txt`):
@@ -30,5 +32,10 @@
     (`/br bots 9`), watched to the end. It must end, and bots must have dealt damage and killed.
     `BRPACE` (0.13 by default: too fast for a runner to keep up with the zone), `SPREAD=80` to land
     them together, `BOTLOG=1`, `SERVER_ARGS="--serverstats"`.
+  - `tools/botfilm.sh` (by hand, windowed): films bots playing a BR match. The client opens it, leaves
+    at once and spectates (`BrManager.Watch`), following the first bot out of the plane, then whichever
+    bot stands nearest another on foot. It writes `test_output/clips/bots-drop` and `bots-fight`
+    (`.mp4`, `.gif`). `CLIENT_ARGS="--screen 1"`, `BRPACE`, `SPREAD` (#842).
+  - `--botprofile` on a server: `server-cost`.
   - Tier 0: `BrTacticsTests`, `CollisionReachTests`, `BotProfileTests`, `BrStatsTests` (bot kills); `--brcheck` (bots in
     the state JSON, solo bot sides, the top-up).
