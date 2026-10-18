@@ -93,7 +93,10 @@ public static partial class TileRewriter
             else if (jp.CoresOverlap && jp.CoreFails) no = "cores overlap";
             else if (!core.Simple || core.KerbsNotTangent > 0 || core.ConnectorsOutside > 0)
                 no = jp.Arms.Any(a => a.Internal) ? "a check failed next to a junction under 30 m" : "a check failed";
-            else if ((jp.Merged ?? junctions.GetValueOrDefault(jp.Node)) is not { } j || j.Arms.Count != jp.Arms.Count) no = "a path or track joins";
+            // (a path meeting a roundabout's node is its crossing's: no arm of it, #854)
+            else if ((jp.Merged ?? junctions.GetValueOrDefault(jp.Node)) is not { } j
+                || (j.Ring is null ? j.Arms.Count : j.Arms.Count(x => InfoOf(result.Network.Links[x.LinkId]) is { } i && Junctions.PriorityPlanner.IsCarRoad(i.Class))) != jp.Arms.Count)
+                no = "a path or track joins";
             else if (jp.Arms.Any(a => a.Axis is null || !core.Mouths.Any(m => m.Arm == a.Arm))) no = "an arm without a mouth";
             else if (jp.Arms.Any(a => RoadJoinsShortOfMouth(result.Network, a, core.Mouths.First(m => m.Arm == a.Arm).Station))) no = "a road joins short of a mouth";
             else if (jp.Arms.Any(MissesMouth)) no = "a transition misses its mouth";
@@ -419,10 +422,14 @@ public static partial class TileRewriter
 
         // a merged core's streets between its members lie under it: none left (#818 phase 5c)
         var mergedOf = mine.Where(p => p.Merged is not null).SelectMany(p => p.Nodes.Select(n => (n, p))).ToDictionary(x => x.n, x => x.p);
+        // (a roundabout's ring too, whatever node splits it: a tile's edge, #854)
+        var rings = mine.Where(p => p.Merged?.Ring is not null).ToList();
+        bool OnRing(int node, JunctionPlan p) => node >= 0 && p.Merged!.Ring is { } r && Math.Abs(net.Nodes[node].Position.DistanceTo(r.Centre) - r.Radius) <= 2.5;
+        bool Under(RoadLink l) => mergedOf.TryGetValue(l.StartNode, out var ps) && mergedOf.TryGetValue(l.EndNode, out var pe) && ps == pe
+            || rings.Any(p => OnRing(l.StartNode, p) && OnRing(l.EndNode, p));
         if (mergedOf.Count > 0)
             for (int link = 0; link < net.Links.Count; link++)
-                if (mergedOf.TryGetValue(net.Links[link].StartNode, out var ps) && mergedOf.TryGetValue(net.Links[link].EndNode, out var pe) && ps == pe
-                    && segmentOf.TryGetValue(link, out var so))
+                if (Under(net.Links[link]) && segmentOf.TryGetValue(link, out var so))
                 {
                     Replace(so.Segment, so.Tile, []);
                     touched.Add(link);

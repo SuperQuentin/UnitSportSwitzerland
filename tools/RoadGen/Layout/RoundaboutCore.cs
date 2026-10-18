@@ -69,7 +69,13 @@ public static class RoundaboutCore
         foreach (var arm in arms)
         {
             var start = arm.Plan.Axis!.PointAt(0);
-            if (Math.Abs(Angles.Delta((start - o).Heading, arm.Plan.Axis.DirAt(0).Heading)) > PastRing) { core.Refused = "an arm runs past the ring"; return core; }
+            if (Math.Abs(Angles.Delta((start - o).Heading, arm.Plan.Axis.DirAt(0).Heading)) > PastRing)
+            {
+                if (Environment.GetEnvironmentVariable("RINGDBG") == "1")
+                    Console.WriteLine(System.FormattableString.Invariant($"[ring] {o.X:F0},{o.Y:F0} arm {arm.Plan.Arm} (link {arm.Plan.LinkId}) starts {start.DistanceTo(o):F1} m from the centre heading {arm.Plan.Axis.DirAt(0).Heading * 180 / Math.PI:F0} deg, the radius there {(start - o).Heading * 180 / Math.PI:F0} deg"));
+                core.Refused = "an arm runs past the ring";
+                return core;
+            }
         }
 
         // a point of an arm at station s (negative: on past its first point toward the ring, straight) and offset (right of a driver
@@ -106,24 +112,25 @@ public static class RoundaboutCore
         {
             var a = arm.Plan;
             double kerb = right ? a.Mouth.CarriagewayRight : a.Mouth.CarriagewayLeft, side = right ? 1 : -1;
-            double low = Math.Min(arm.Mouth - 1, double.IsNaN(arm.Base) ? StationAt(a, kerb, outer) : arm.Base);
-            var top = At(a, arm.Mouth, kerb);
-            var bottom = At(a, low, kerb + side * arm.Flare(low));
-            var u = top - bottom;
-            if (u.Length < 0.5) { bottom = At(a, arm.Mouth - 5, kerb); u = top - bottom; }
-            u /= u.Length;
+            double Kerb(double s) => kerb + side * arm.Flare(s);
+            // the kerb follows the arm (curved, flared) from the mouth down to where it leaves for the fillet, straight from there
+            double low = Math.Min(arm.Mouth - 1, double.IsNaN(arm.Base) ? StationAt(a, kerb, outer + rf * 0.5) : arm.Base);
+            var bottom = At(a, low, Kerb(low));
+            var u = At(a, low + 1, Kerb(low + 1)) - bottom;
+            u /= Math.Max(1e-9, u.Length);
             // away from the arm: an arm's offsets grow to the right of a driver arriving, the outward direction's left (Perp)
             var away = u.Perp * side;
-            var b = top + away * rf - o;
+            var b = bottom + away * rf - o;
             double bu = b.Dot(u), disc = bu * bu - (b.LengthSquared - (outer + rf) * (outer + rf));
             if (disc < 0) return null;
-            // (coming in from the mouth, the first place the fillet touches the ring)
-            double t = -bu + Math.Sqrt(disc);
-            var f = top + u * t + away * rf;
-            var tp = top + u * t;
+            // (coming in from the mouth, the first place the fillet touches the ring; not above where the kerb leaves the arm)
+            double t = Math.Min(0, -bu + Math.Sqrt(disc));
+            var f = bottom + u * t + away * rf;
+            var tp = bottom + u * t;
             var c = o + (f - o) * (outer / (outer + rf));
             var run = new List<Vec2>();
-            Line(run, top, tp);
+            for (double s = arm.Mouth; s > low; s -= 1) run.Add(At(a, s, Kerb(s)));
+            Line(run, bottom, tp);
             double a0 = (tp - f).Heading, da = Angles.Delta(a0, (c - f).Heading);
             int steps = Math.Max(2, (int)Math.Ceiling(Math.Abs(da) * rf / 0.75));
             for (int k = 1; k <= steps; k++) run.Add(f + Vec2.FromHeading(a0 + da * k / steps) * rf);
@@ -136,9 +143,12 @@ public static class RoundaboutCore
         double rf0 = Math.Clamp(FilletShare * outer + FilletPlus, FilletLeast, FilletMost);
         var rightOf = new (Vec2 T, Vec2 C, List<Vec2> Arc)?[n];
         var leftOf = new (Vec2 T, Vec2 C, List<Vec2> Arc)?[n];
+        var apartAt = new bool[n];
         // an arm starting on the ring: its mouth out past where its kerbs leave their fillets (laid first from the ring's edge)
         foreach (var arm in arms.Where(x => x.Mouth == 0))
         {
+            // (measured from a mouth well out, then set where the kerbs leave their fillets)
+            arm.Mouth = outer - radius + rf0 + 5;
             double s = outer - radius + MouthPast;
             foreach (bool right in (ReadOnlySpan<bool>)[true, false])
                 if (Fillet(arm, right, rf0) is { } fl) s = Math.Max(s, (fl.T - arm.Plan.Axis!.PointAt(0)).Dot(arm.Plan.Axis.DirAt(0)) + MouthPast);
@@ -152,7 +162,7 @@ public static class RoundaboutCore
                 var r = Fillet(arms[k], true, rf);
                 var l = Fillet(arms[j], false, rf);
                 bool apart = r is { } rr && l is { } ll && Ccw(Heading(arms[k]), (rr.C - o).Heading) <= Ccw(Heading(arms[k]), (ll.C - o).Heading);
-                if (apart || rf < FilletLeast) { (rightOf[k], leftOf[j]) = (r, l); break; }
+                if (apart || rf < FilletLeast) { (rightOf[k], leftOf[j], apartAt[k]) = (r, l, apart); break; }
             }
         }
 
@@ -175,6 +185,29 @@ public static class RoundaboutCore
                 corner.Kerb.Add(At(a, Math.Min(sa, arms[k].Mouth - 0.5), a.Mouth.CarriagewayRight));
                 corner.Kerb.Add(At(b, Math.Min(sb, arms[j].Mouth - 0.5), b.Mouth.CarriagewayLeft));
                 corner.Shape = CornerShape.Gore;
+            }
+            else if (!apartAt[k])
+            {
+                // two arms so close their fillets overlap: their kerbs meet at a point out from the ring, or run straight across
+                var b = arms[j].Plan;
+                Vec2 pa = At(a, arms[k].Mouth, a.Mouth.CarriagewayRight), pb = At(b, arms[j].Mouth, b.Mouth.CarriagewayLeft);
+                Vec2 da = -a.Axis.DirAt(Math.Max(0, arms[k].Mouth)), db = -b.Axis!.DirAt(Math.Max(0, arms[j].Mouth));
+                double cross = da.Cross(db);
+                if (Math.Abs(cross) > 1e-6)
+                {
+                    double t = (pb - pa).Cross(db) / cross;
+                    var x = pa + da * t;
+                    if (t > 0 && x.DistanceTo(o) >= outer) corner.Kerb.Add(x);
+                }
+                corner.Shape = corner.Kerb.Count > 0 ? CornerShape.Vertex : CornerShape.Chord;
+            }
+            else if (rightOf[k] is { } rc && leftOf[j] is { } lc && Crossing(rc.Arc, lc.Arc) is { } cross)
+            {
+                // two arms so close their kerbs cross before the ring: the corner is where they meet
+                corner.Kerb.AddRange(rc.Arc.Take(cross.I + 1));
+                corner.Kerb.Add(cross.At);
+                for (int q = cross.J; q >= 0; q--) corner.Kerb.Add(lc.Arc[q]);
+                corner.Shape = CornerShape.Vertex;
             }
             else if (rightOf[k] is { } r && leftOf[j] is { } l)
             {
@@ -243,10 +276,23 @@ public static class RoundaboutCore
                         Turns = true, Radius = radius,
                     };
                     c.Centre = Path(a, c.FromOffset, b, c.ToOffset);
-                    c.Left = CorePlanner.Offset(c.Centre, -c.Width * 0.5);
-                    c.Right = CorePlanner.Offset(c.Centre, c.Width * 0.5);
+                    // its lane's width in and round the ring; out on the exit, from where it leaves the ring, easing to the exit lane's
+                    var along = new double[c.Centre.Count];
+                    for (int q = 1; q < along.Length; q++) along[q] = along[q - 1] + c.Centre[q].DistanceTo(c.Centre[q - 1]);
+                    int off = c.Centre.Count - 1;
+                    while (off > 0 && c.Centre[off - 1].DistanceTo(o) > outer) off--;
+                    double Half(int q) => (q <= off ? c.Width : c.Width + (c.ToWidth - c.Width) * (along[q] - along[off]) / Math.Max(1e-9, along[^1] - along[off])) * 0.5;
+                    c.Left = CorePlanner.Offset(c.Centre, q => -Half(q));
+                    c.Right = CorePlanner.Offset(c.Centre, q => Half(q));
                     c.Outside = c.Left.Concat(c.Right).Select(p => CorePlanner.Outside(core.Outline, p)).DefaultIfEmpty(0).Max();
                     if (c.Outside > CorePlanner.OutsideTolerance) core.ConnectorsOutside++;
+                    // (RINGDBG=1: where a connector leaves the outline, for a look at a ring that fails its checks)
+                    if (c.Outside > CorePlanner.OutsideTolerance && Environment.GetEnvironmentVariable("RINGDBG") == "1")
+                    {
+                        var all = c.Left.Concat(c.Right).ToList();
+                        int wi = Enumerable.Range(0, all.Count).MaxBy(i => CorePlanner.Outside(core.Outline, all[i]));
+                        Console.WriteLine(System.FormattableString.Invariant($"[ring] {o.X:F0},{o.Y:F0} connector {c.FromArm}->{c.ToArm} leaves the outline by {c.Outside:F2} m, {all[wi].DistanceTo(o):F1} m from the centre (point {wi % c.Left.Count} of {c.Left.Count}, {(wi < c.Left.Count ? "left" : "right")} edge); mouths {a.Mouth:F1}/{b.Mouth:F1}, outline simple {core.Simple}, corners {string.Join(",", core.Corners.Select(x => x.Shape))}; across the exit at {b.Plan.Axis!.StationPast(all[wi]):F1} m: {(all[wi] - b.Plan.Axis.PointAt(b.Plan.Axis.StationPast(all[wi]))).Dot(b.Plan.Axis.RightAt(b.Plan.Axis.StationPast(all[wi]))):F2} (carriageway {b.Plan.Mouth.CarriagewayLeft:F2}..{b.Plan.Mouth.CarriagewayRight:F2}, lane at {c.ToOffset:F2} w {c.ToWidth:F2})"));
+                    }
                     core.Connectors.Add(c);
                 }
         }
@@ -283,6 +329,21 @@ public static class RoundaboutCore
     }
 
     private static double Mid((double From, double To) span) => (span.From + span.To) * 0.5;
+
+    /// <summary>Where two polylines first cross: the segments (after point I of a, point J of b) and the point.</summary>
+    private static (int I, int J, Vec2 At)? Crossing(List<Vec2> a, List<Vec2> b)
+    {
+        for (int i = 0; i + 1 < a.Count; i++)
+            for (int j = 0; j + 1 < b.Count; j++)
+            {
+                Vec2 p = a[i], r = a[i + 1] - a[i], q = b[j], s = b[j + 1] - b[j];
+                double d = r.Cross(s);
+                if (Math.Abs(d) < 1e-12) continue;
+                double t = (q - p).Cross(s) / d, u = (q - p).Cross(r) / d;
+                if (t >= 0 && t <= 1 && u >= 0 && u <= 1) return (i, j, p + r * t);
+            }
+        return null;
+    }
 
     /// <summary>The counter-clockwise turn from <paramref name="from"/> to <paramref name="to"/>, in [0, 2π).</summary>
     private static double Ccw(double from, double to)

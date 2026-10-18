@@ -179,6 +179,8 @@ public static partial class TileRewriter
             carriedSides.Add((home, carried.Bands.GetRange(carried.SplitAt, carried.Bands.Count - carried.SplitAt)));
             foreach (var end in carried.Ends) Get(pathEnds, home).Add(end);
             stats.PathsCarried += 2;
+            // (no riders' crossing through a roundabout: they ride its ring with the cars, #854)
+            if (jp.Merged?.Ring is not null) continue;
             // the crossing: from kerb to kerb at the paths' middles, leaving and joining along the arms
             double pathA = sideA.BikeDm / 10.0, pathB = sideB.BikeDm / 10.0;
             var k0 = carried.KerbA(sideA.VergeDm / 10.0 + pathA * 0.5);

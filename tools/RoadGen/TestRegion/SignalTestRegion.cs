@@ -47,6 +47,12 @@ public static class SignalTestRegion
     /// 300 m east a pair 24 m apart with lights at both (J9).
     /// </summary>
     public const double StaggerE = 2916500;
+
+    /// <summary>
+    /// Roundabouts (#854), LV95 N <see cref="RingN"/>: a compact one (ring centreline radius 8 m, four two-way arms) at
+    /// <see cref="RingE"/> and a mini one (radius 5 m, three arms) at <see cref="MiniRingE"/>; both tight, laid whole.
+    /// </summary>
+    public const double RingN = 1321850, RingE = 2911100, MiniRingE = 2913000;
     /// <summary>The ground, metres (as the fixture courses).</summary>
     public const double Ground = 500;
     /// <summary>Region centre: the manifest's suggested origin.</summary>
@@ -62,7 +68,7 @@ public static class SignalTestRegion
 
     /// <summary>One TLM line as the extractor would read it, with its OSM overlay row.</summary>
     private sealed record Line(string Id, string Objektart, string Verkehrsbedeutung, string Eigentuemer, (double E, double N)[] Points,
-        string Highway, string Sidewalk = "", string Cycleway = "", OsmRow[]? Rows = null, bool Divided = false)
+        string Highway, string Sidewalk = "", string Cycleway = "", OsmRow[]? Rows = null, bool Divided = false, bool Ring = false)
     {
         public string Uuid => "{386-" + Id + "}";
     }
@@ -254,6 +260,26 @@ public static class SignalTestRegion
                 lines.Add(new Line(id, "4m Strasse", "k_W", "Gemeinde", [(x, nb), (x, north ? nb + 250 : nb - 250)], "unclassified", "yes"));
         }
 
+        // 12. roundabouts (#854): a ring of flagged lines (TLM's kreisel) between its arms' nodes, counter-clockwise, and its arms
+        void Ring(string id, double e, double n, double radius, double[] armDegrees, string objektart)
+        {
+            var nodes = armDegrees.Select(d => (E: e + radius * Math.Cos(d * Math.PI / 180), N: n + radius * Math.Sin(d * Math.PI / 180))).ToArray();
+            for (int k = 0; k < armDegrees.Length; k++)
+            {
+                double a0 = armDegrees[k], a1 = armDegrees[(k + 1) % armDegrees.Length];
+                if (a1 <= a0) a1 += 360;
+                var arc = new List<(double E, double N)>();
+                for (double d = a0; d < a1 - 1e-6; d += 10) arc.Add((e + radius * Math.Cos(d * Math.PI / 180), n + radius * Math.Sin(d * Math.PI / 180)));
+                arc.Add(nodes[(k + 1) % armDegrees.Length]);
+                lines.Add(new Line($"{id}R{k}", objektart, "Verbindungsstrasse", "Gemeinde", arc.ToArray(), "secondary", Ring: true));
+                var dir = (Math.Cos(a0 * Math.PI / 180), Math.Sin(a0 * Math.PI / 180));
+                lines.Add(new Line($"{id}A{k}", "6m Strasse", "Verbindungsstrasse", "Gemeinde",
+                    [nodes[k], (nodes[k].E + dir.Item1 * 140, nodes[k].N + dir.Item2 * 140)], "secondary", "yes"));
+            }
+        }
+        Ring("RB", RingE, RingN, 8, [0, 90, 180, 270], "6m Strasse");
+        Ring("RM", MiniRingE, RingN, 5, [30, 150, 270], "4m Strasse");
+
         junctions.Add(new Junction("J9-stagger-west", StaggerE + 300, TwinRowN, "staggered T's 24 m apart, both lit: the west one", Arms(null, null, null, null)));
         junctions.Add(new Junction("J9-stagger-east", StaggerE + 324, TwinRowN, "staggered T's 24 m apart, both lit: the east one", Arms(null, null, null, null)));
         junctions.Add(new Junction("J8-twin-lights", TwinLitE, TwinRowN, "the twins' T with lights (the other, 1.5 km east, has none)",
@@ -423,7 +449,7 @@ public static class SignalTestRegion
             var surface = RoadFormat.ParseSurface("Hart");
             var flags = RoadFormat.ParseFlags(null, null, null, line.Divided ? "Wahr" : "Falsch");
             var attr = new RoadAttributes(
-                Flags: RoadFormat.ParseAttrFlags("Falsch", line.Eigentuemer),
+                Flags: RoadFormat.ParseAttrFlags(line.Ring ? "Wahr" : "Falsch", line.Eigentuemer),
                 Layer: RoadFormat.LayerFor("0", flags),
                 Priority: RoadFormat.PriorityFor(cls, line.Verkehrsbedeutung),
                 WidthCm: RoadFormat.NominalWidthCm(line.Objektart));

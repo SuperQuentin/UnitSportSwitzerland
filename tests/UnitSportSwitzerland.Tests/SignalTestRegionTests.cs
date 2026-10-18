@@ -175,6 +175,40 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
         Assert.True(islands >= 5, $"{islands} islands");
         Assert.True(poles >= islands / 2, $"{poles} second poles for {islands} islands");
     }
+    [Theory]
+    [InlineData(SignalTestRegion.RingE, 8.0, 4)]
+    [InlineData(SignalTestRegion.MiniRingE, 5.0, 3)]
+    public void A_tight_roundabout_is_one_core_its_paths_counter_clockwise_round_the_ring(double e, double radius, int arms)
+    {
+        // #854: the ring's nodes one junction laid by RoundaboutCore; every lane to every other arm, never over the central island
+        // (the ring at least 6 m wide round it), counter-clockwise (right-hand traffic); the island laid again for the ring
+        double n = SignalTestRegion.RingN;
+        var id = TileId.FromLv95(e, n);
+        double cx = e - id.MinE, cz = id.MaxN - n;
+        var tile = region.Tile(e, n);
+        var paths = tile.JunctionPaths.Where(p => Enumerable.Range(0, p.PointCount).Any(i => Math.Abs(p.Points[i * 3] - cx) < 3 && Math.Abs(p.Points[i * 3 + 2] - cz) < radius + 3)).ToList();
+        Assert.True(paths.Count >= arms * (arms - 1), $"{paths.Count} paths round the ring with {arms} arms");
+        double inner = radius - 3.0;
+        foreach (var p in paths)
+        {
+            double sweep = 0, nearest = double.MaxValue;
+            for (int i = 0; i < p.PointCount; i++)
+            {
+                // plan view: x east, z south; the angle measured north-up (counter-clockwise from east)
+                double x = p.Points[i * 3] - cx, y = cz - p.Points[i * 3 + 2];
+                nearest = Math.Min(nearest, Math.Sqrt(x * x + y * y));
+                if (i == 0) continue;
+                double x0 = p.Points[i * 3 - 3] - cx, y0 = cz - p.Points[i * 3 - 1];
+                sweep += Math.IEEERemainder(Math.Atan2(y, x) - Math.Atan2(y0, x0), 2 * Math.PI);
+            }
+            Assert.True(sweep > 0, $"a path round the ring at {e:F0} turns clockwise ({sweep:F2} rad)");
+            Assert.True(nearest >= inner + p.Width * 0.5 - 0.3, $"a path round the ring at {e:F0} comes {nearest:F1} m from the centre (island edge {inner:F1})");
+        }
+        var islands = tile.AreaProps.Where(a => a.Type == AreaPropType.Island && a.Variant is 0 or 1
+            && Math.Abs(a.Vertices[0] - cx) < 1.5 && Math.Abs(a.Vertices[2] - cz) < 1.5).ToList();
+        Assert.Single(islands);
+    }
+
     [Fact]
     public void No_car_stop_line_crosses_a_bike_lane_with_an_advanced_line()
     {

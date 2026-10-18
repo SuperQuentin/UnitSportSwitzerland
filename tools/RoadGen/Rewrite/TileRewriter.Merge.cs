@@ -96,7 +96,9 @@ public static partial class TileRewriter
             foreach (var arm in j.Arms)
             {
                 var link = net.Links[arm.LinkId];
-                if (!nodes.Contains(link.StartNode) || !nodes.Contains(link.EndNode)) continue;
+                // (a ring's links are its own whatever node splits them: a tile's edge, #854)
+                bool OnRing(int node) => ring is { } r && node >= 0 && Math.Abs(net.Nodes[node].Position.DistanceTo(r.Centre) - r.Radius) <= 2.5;
+                if (!(nodes.Contains(link.StartNode) || OnRing(link.StartNode)) || !(nodes.Contains(link.EndNode) || OnRing(link.EndNode))) continue;
                 if (link.StartNode == link.EndNode || ring is null && LinkLength(link) >= InternalLink) { no = "a longer street between two members"; return null; }
                 inner.Add(arm.LinkId);
             }
