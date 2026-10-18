@@ -102,7 +102,7 @@ public partial class TopViewOverlay : CanvasLayer
         double at = _held ?? ring.Last!.T;
         var frames = ring.Window(at - Trail, at);
         EN? centre = null;
-        int me = _recorder.Entities.Values.FirstOrDefault(x => x.Local)?.Id ?? -1;
+        int me = _recorder.LocalId;
         for (int i = frames.Count - 1; i >= 0 && centre == null; i--)
             if (frames[i].TryGet(me, out var s)) centre = new EN(s.E, s.N);
         var shapes = TopViewScene.Build(new TopViewInput

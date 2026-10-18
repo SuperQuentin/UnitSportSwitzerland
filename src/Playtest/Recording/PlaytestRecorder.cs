@@ -33,7 +33,7 @@ namespace UnitSport.Playtest.Recording;
 public partial class PlaytestRecorder : Node
 {
     public const double Rate = 10, RingSeconds = 60;
-    /// <summary>World objects are traced within this many metres of a player.</summary>
+    /// <summary>World objects are traced within this many metres (east or north) of a player or, on a client, the camera.</summary>
     public const double ObjectRange = 400;
     private const int MaxObjects = 400;
 
@@ -49,6 +49,8 @@ public partial class PlaytestRecorder : Node
     /// <summary>The bundle's folder.</summary>
     public string Dir { get; }
     public bool Running => _trace != null && !_stopped;
+    /// <summary>The local player's trace id as of the last sample (a respawn is a new node, so a new id); -1 before.</summary>
+    public int LocalId { get; private set; } = -1;
     /// <summary>The local player, on a client (the checks drive it).</summary>
     internal FootPlayer? LocalPlayer => _local();
     /// <summary>Seconds since the session began (wall clock): the time of every frame, event and note.</summary>
@@ -118,6 +120,8 @@ public partial class PlaytestRecorder : Node
             _events = Append(SessionReport.EventsFile);
             _notes = Append(SessionReport.NotesFile);
             _noteCount = SessionReport.ReadLines(Path.Combine(Dir, SessionReport.NotesFile)).Count;
+            // a relaunch goes on numbering after the things the first part traced: an id never means two things
+            if (_zero > 0) _nextId = new TraceReader(Dir).Entities.Keys.DefaultIfEmpty(0).Max();
         }
         catch (Exception e)
         {
@@ -301,6 +305,7 @@ public partial class PlaytestRecorder : Node
                 Size = [0.6f, 1.8f, 0.6f], Peer = p.GetMultiplayerAuthority(), Local = p == local, First = Math.Round(now, 3),
             });
             _players.Add(id);
+            if (p == local) LocalId = id;
             var g = p.Global;
             var v = sample.Vel;
             ref var s = ref frame.Add();
@@ -366,6 +371,8 @@ public partial class PlaytestRecorder : Node
     private void SampleObjects(TraceFrame frame, double now)
     {
         var origin = _origin();
+        // the camera is a centre too: flying free, there is no body, but the world around is what is seen
+        if (!_server && origin != null && GetViewport().GetCamera3D() is { } cam) _playerSpots.Add(origin.ToLv95(cam.GlobalPosition));
         int count = 0;
         foreach (var container in ReplayWatch.Containers)
         {
@@ -579,7 +586,7 @@ public partial class PlaytestRecorder : Node
     /// <summary>Where the local player was at <paramref name="t"/>, from the ring: a note is stamped where its key was pressed.</summary>
     private GlobalPos? LocalAt(double t)
     {
-        int me = Entities.Values.FirstOrDefault(e => e.Local)?.Id ?? -1;
+        int me = LocalId;
         TraceFrame? best = null;
         for (int i = 0; i < Ring.Count; i++)
             if (Ring[i].TryGet(me, out _) && (best == null || Math.Abs(Ring[i].T - t) < Math.Abs(best.T - t))) best = Ring[i];
@@ -596,7 +603,7 @@ public partial class PlaytestRecorder : Node
         {
             // as far as the local player went in the window, and whatever stood within 120 m of the note
             double far = 0;
-            int me = Entities.Values.FirstOrDefault(e => e.Local)?.Id ?? -1;
+            int me = LocalId;
             foreach (var f in frames)
                 for (int i = 0; i < f.Count; i++)
                 {
