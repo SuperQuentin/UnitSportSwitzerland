@@ -166,6 +166,7 @@ public partial class ItemEvents : Node
         // a sound somewhere the sender is not is not an item it is holding
         if (GetNodeOrNull<FootPlayer>("../Players/" + sender) is { } body && !(body.Global.DistanceTo(at) <= MaxOffset))
             return;
+        ServerHeard?.Invoke(sender, (ItemEventKind)kind, at);
         var interest = GetNodeOrNull<Net.InterestService>("../" + Net.InterestService.NodeName);
         foreach (int peer in Multiplayer.GetPeers())
             if (peer != sender && interest?.ServerSees(peer, sender) != false)
@@ -175,6 +176,12 @@ public partial class ItemEvents : Node
     // ---- server: a body the server runs fires (a bot, #837) ----------------------------------------
 
     /// <summary>
+    /// Server: an item event happened (who, what, where in LV95): a player's relayed one or a bot's own.
+    /// What bots hear (#837, <c>Bots/BotSenses</c>): a shot within its weapon's earshot, a horn.
+    /// </summary>
+    public static event Action<long, ItemEventKind, Core.GlobalPos>? ServerHeard;
+
+    /// <summary>
     /// Server: <paramref name="shooter"/> (a bot's id) fired: every peer that sees it hears and sees the
     /// shot, as a player's own shot is relayed (<see cref="Relay"/>). World space, this server's origin.
     /// </summary>
@@ -182,6 +189,7 @@ public partial class ItemEvents : Node
     {
         if (!_server) return;
         var at = _origin.ToGlobal(position);
+        ServerHeard?.Invoke(shooter, kind, at);
         var interest = GetNodeOrNull<Net.InterestService>("../" + Net.InterestService.NodeName);
         foreach (int peer in Multiplayer.GetPeers())
             if (interest?.ServerSees(peer, shooter) != false)

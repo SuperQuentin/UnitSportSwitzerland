@@ -300,6 +300,7 @@ public partial class BrManager : Node
                     Push();
                 }
                 // the zone has closed and someone is still standing (a draw cannot linger)
+                BotPlane();
                 var zone = _state.Zone();
                 Airdrops(zone);
                 BotZone(zone, delta);
@@ -327,14 +328,15 @@ public partial class BrManager : Node
         int bots = BotsAtGo();
         _state.Field = _state.Entrants.Count + bots;
         _state.ZoneCentres = GroundCentres();
-        PlaceBots(bots);
-        _state.AssignTeams();
-        _sidesAtGo = _state.TeamsAlive;
         // everyone boards the cargo plane (#207); the zone's clock starts when its doors close
         _state.FlightStart = Now;
         _state.FlightAlt = PlaneAltitude();
         var flight = new BrFlight(_state);
         _state.Started = flight.ClosesAt;
+        // the bots board too, once the line is known (#837), and are in the teams
+        BoardBots(bots);
+        _state.AssignTeams();
+        _sidesAtGo = _state.TeamsAlive;
         _pushedOut = false;
         Combat.PvpRules.Override = Allowed;
         SetMatchLoot(_state);
@@ -344,8 +346,8 @@ public partial class BrManager : Node
         // never RpcId a bot's negative id: Godot reads it as "everyone but" (#837)
         foreach (var e in _state.Entrants.Where(e => !e.Bot)) RpcId(e.Peer, MethodName.Board);
         int botCount = _state.Entrants.Count(e => e.Bot);
-        Broadcast($"GO! {_state.Entrants.Count - botCount} players aboard the plane to {_state.AreaName}"
-            + (botCount > 0 ? $", {botCount} bots already down there" : "") + ". Jump once the doors open over the zone "
+        Broadcast($"GO! {_state.Entrants.Count - botCount} players"
+            + (botCount > 0 ? $" and {botCount} bots" : "") + $" aboard the plane to {_state.AreaName}. Jump once the doors open over the zone "
             + $"(in {flight.OpensAt - Now:F0} s); the zone ({zone.RadiusOf(0) * 2 / 1000:F1} km across) shows {ZoneSchedule.LootSeconds * zone.Scale / 60:F0} min after they close.");
         GD.Print(FormattableString.Invariant($"[br] go: {_state.Entrants.Count} players, plane at {flight.Altitude:F0} m, doors {flight.OpensAt - Now:F0}-{flight.ClosesAt - Now:F0} s"));
     }
@@ -755,7 +757,7 @@ public partial class BrManager : Node
         if (_state.Phase != BrPhase.Playing) return;
         // someone standing wins; a team that is all down (#475) is on its way out, and when only
         // the downed are left there is no winner
-        // No player left and bots of more than one side standing (#837): nobody won it; they place together.
+        // Every player gone and bots of more than one side standing (#837): nobody won it; they place together.
         bool botsOnly = NoPlayerLeft && _state.TeamsAlive > 1;
         int standing = _state.AliveCount;
         var winner = botsOnly ? null : _state.Entrants.FirstOrDefault(e => e.Alive && !e.Downed)
@@ -777,7 +779,7 @@ public partial class BrManager : Node
         _state.Phase = BrPhase.Ended;
         _endedAt = Now;
         Combat.PvpRules.Override = null;
-        Broadcast(botsOnly ? $"No player is left standing: the Battle Royale ends ({standing} bots still in it)."
+        Broadcast(botsOnly ? $"Every player has left: the Battle Royale ends ({standing} bots still in it)."
             : winner == null ? "The Battle Royale ended without a winner."
             : winner.Team != 0
                 ? $"Team {winner.Team} WINS the Battle Royale in {_state.AreaName}! ({string.Join(", ", _state.Entrants.Where(e => e.Team == winner.Team).Select(e => e.Name))})"

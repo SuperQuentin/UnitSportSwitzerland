@@ -1307,6 +1307,14 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 
     public override void _Process(double delta)
     {
+        long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+        ProcessTerrain(delta);
+        // the server's share of a frame (#837: collision round the bots); a client is timed by its own tools
+        if (!BuildMeshes) Net.ServerStats.Ran("terrain", t0);
+    }
+
+    private void ProcessTerrain(double delta)
+    {
         if (_source == null || _origin == null) return;
         CollectBuildGarbage();
 

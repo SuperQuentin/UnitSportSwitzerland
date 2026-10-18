@@ -1,7 +1,9 @@
+using System;
 using System.Linq;
 using Godot;
 using UnitSport.Core;
 using UnitSport.Items;
+using UnitSport.Player;
 
 namespace UnitSport.Bots;
 
@@ -45,6 +47,7 @@ public static class BotHands
         if (body.Eliminated || body.KnockedOut || body.Down != 0) return false;
         double now = GameClock.Now;
         if (now < bot.NextShotAt) return false;
+        Cancel(bot);   // a shot ends any bandaging
         bot.Inventory.Select(slot);
         body.HeldItemId = (int)weapon.Id;
         body.ItemAction = 1;   // aiming: the arms come up on every peer
@@ -71,6 +74,57 @@ public static class BotHands
         body.BodyJolt();
         PlayerHits.Shoot(body, eye, aim, weapon, spread, sink);
         return true;
+    }
+
+    /// <summary>
+    /// Starts dressing a wound or putting on a vest, as a player's <c>ItemController</c> does: the item
+    /// on the hotbar, the use takes its time (<see cref="ItemController.MedicalSeconds"/>; a vest 0.5 s),
+    /// the arms show it (<c>ItemAction</c> 2), and it applies at the end (<see cref="Tick"/>) unless the
+    /// bot fires meanwhile, which cancels it and keeps the item. False when there is nothing to use or
+    /// no need (full health, full armour, down).
+    /// </summary>
+    public static bool Use(Bot bot, ItemId item)
+    {
+        var body = bot.Body;
+        if (bot.UseUntil > 0 || body.Eliminated || body.KnockedOut || body.Down != 0) return false;
+        int slot = Enumerable.Range(0, Inventory.Size).FirstOrDefault(i => bot.Inventory[i].Id == item && !bot.Inventory[i].IsEmpty, -1);
+        if (slot < 0 || ItemDefs.Get(item) is not { } def) return false;
+        bool vest = def.Use == ItemUse.Armor;
+        if (vest ? body.Armor >= FootPlayer.MaxArmor - 0.01f : body.Health >= FootPlayer.MaxHealth - 0.01f) return false;
+        // on the hotbar first, as a player must (a pack slot cannot be held)
+        if (!Inventory.IsHotbar(slot))
+        {
+            int free = Enumerable.Range(0, Inventory.HotbarSize).FirstOrDefault(i => bot.Inventory[i].IsEmpty, Inventory.HotbarSize - 1);
+            bot.Inventory.SwapWithHotbar(slot, free);
+            slot = free;
+        }
+        bot.Inventory.Select(slot);
+        body.HeldItemId = (int)item;
+        body.ItemAction = 2;
+        bot.UseItem = item;
+        bot.UseUntil = GameClock.Now + (vest ? 0.5 : Math.Max(0.6, ItemController.MedicalSeconds(item)));
+        return true;
+    }
+
+    /// <summary>The director, every frame: a use that has run its time applies (the item is spent then, not before).</summary>
+    public static void Tick(Bot bot, double now)
+    {
+        if (bot.UseUntil <= 0 || now < bot.UseUntil) return;
+        var item = bot.UseItem;
+        bot.UseUntil = 0;
+        bot.Body.ItemAction = 0;
+        int slot = Enumerable.Range(0, Inventory.Size).FirstOrDefault(i => bot.Inventory[i].Id == item && !bot.Inventory[i].IsEmpty, -1);
+        if (slot < 0 || ItemDefs.Get(item) is not { } def) return;
+        bool done = def.Use == ItemUse.Armor ? bot.Body.AddArmor(FootPlayer.MaxArmor) : bot.Body.Heal(def.Heal);
+        if (done) bot.Inventory.TakeOne(slot);
+    }
+
+    /// <summary>Firing or switching cancels a use under way; the item is kept.</summary>
+    public static void Cancel(Bot bot)
+    {
+        if (bot.UseUntil <= 0) return;
+        bot.UseUntil = 0;
+        bot.Body.ItemAction = 0;
     }
 
     /// <summary>Gives a bot a weapon and rounds for it (<c>/bot arm</c>, a mode's kit).</summary>

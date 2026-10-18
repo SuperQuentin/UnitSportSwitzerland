@@ -37,6 +37,7 @@ public partial class BotDirector : Node
     private MultiplayerSpawner _spawner = null!;
     private Node3D _players = null!;
     private readonly Dictionary<long, Bot> _bots = new();
+    private BotWorld? _world;
     private double _watchAt;
 
     /// <summary>A bot fell for good or was knocked out: (bot, killer id or 0, cause). Raised on the server.</summary>
@@ -47,7 +48,25 @@ public partial class BotDirector : Node
     public static BotDirector CreateServer(MultiplayerSpawner spawner, Node3D players) =>
         new() { Name = NodeName, _spawner = spawner, _players = players };
 
-    public override void _EnterTree() => Instance = this;
+    public override void _EnterTree()
+    {
+        Instance = this;
+        Items.ItemEvents.ServerHeard += OnHeard;
+    }
+
+    /// <summary>A shot somewhere: every bot within its earshot hears it (<see cref="BotSenses.Hear"/>).</summary>
+    private void OnHeard(long who, Items.ItemEventKind kind, GlobalPos at)
+    {
+        if (kind != Items.ItemEventKind.Shot || _bots.Count == 0) return;
+        var origin = GetParent()?.GetNodeOrNull<Items.ItemEvents>(Items.ItemEvents.NodeName)?.Origin;
+        if (origin == null) return;
+        var world = origin.ToWorld(at);
+        double now = Now;
+        // the relay passes the kind, not the gun: a rifle's earshot for every shot
+        float earshot = BotSenses.HearShot(Items.ItemId.Rifle);
+        foreach (var bot in _bots.Values)
+            if (bot.Alive) bot.Senses.Hear(bot, world, who, earshot, now);
+    }
 
     /// <summary>
     /// <c>--bots N [--botsat E,N]</c>: N bots round that point (the default spawn) a second after the
@@ -89,9 +108,13 @@ public partial class BotDirector : Node
         foreach (var bot in _bots.Values)
             if (GodotObject.IsInstanceValid(bot.Body))
                 GD.Print($"[bots] status {bot.Body.Name} at {bot.Body.Global} v {bot.Body.Velocity.Length():F1} "
-                    + $"floor {bot.Body.IsOnFloor()} {bot.Body.WalkState} hp {bot.Body.Health:F0}{(bot.Watched ? " watched" : "")}");
+                    + $"floor {bot.Body.IsOnFloor()} {bot.Body.WalkState} hp {bot.Body.Health:F0}{(bot.Watched ? " watched" : "")} {bot.Brain.Status}");
     }
-    public override void _ExitTree() { if (Instance == this) Instance = null; }
+    public override void _ExitTree()
+    {
+        Items.ItemEvents.ServerHeard -= OnHeard;
+        if (Instance == this) Instance = null;
+    }
 
     public IReadOnlyCollection<Bot> All => _bots.Values;
     public int Count => _bots.Count;
@@ -110,10 +133,15 @@ public partial class BotDirector : Node
         long id = PlayerReplication.BotId(n);
         if (_spawner.Spawn(PlayerReplication.BotData(n, at, yaw, profile.Name)) is not FootPlayer body) return null;
 
-        var bot = new Bot(id, n, body, profile) { NextThink = Now };
+        var bot = new Bot(id, n, body, profile) { NextThink = Now, World = _world ??= new BotWorld(_players) };
         // the body reads no keys: its walk, jump, crouch come from the brain's intent
         body.WalkControls = () => (bot.Intent.Wish, bot.Intent.Run);
         body.FootActions = () => (bot.Intent.Jump, bot.Intent.Crouch);
+        // in the air: the wingsuit follows where it faces (LookYaw/LookPitch), the canopy its stick; the
+        // deploy or cut-away press only while the ride is not the one wanted (a held press toggles every step)
+        body.FlyControls = () => new Player.FlightInput(bot.Intent.Steer, 0f, 0f, 0f, 0f,
+            Action: bot.Intent.Canopy ? body.Ride == RideKind.Wingsuit : body.Ride == RideKind.Parachute,
+            Effort: false, ViewYaw: body.LookYaw, ViewPitch: body.LookPitch);
         body.Died += (killer, cause) =>
         {
             GD.Print($"[bots] {body.Name} \"{profile.Name}\" {(body.Eliminated ? "eliminated" : "knocked out")} by {killer} ({cause})");
@@ -142,6 +170,13 @@ public partial class BotDirector : Node
     public override void _PhysicsProcess(double delta)
     {
         if (_bots.Count == 0) return;
+        long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+        RunBots();
+        ServerStats.Ran("bots", t0);
+    }
+
+    private void RunBots()
+    {
         double now = Now;
         Log(now);
         if (now >= _watchAt)
@@ -165,7 +200,8 @@ public partial class BotDirector : Node
                 bot.Body.SquareToView = true;
             }
             else bot.Body.SquareToView = false;
-            // the hands: a shot when the brain asks for one and the weapon is ready
+            // the hands: a shot when the brain asks for one and the weapon is ready; a use runs its time
+            BotHands.Tick(bot, now);
             if (bot.Intent.FireAt is { } target) BotHands.Fire(bot, target);
             else if (bot.Body.ItemAction == 1 && now >= bot.NextShotAt + 1.5) bot.Body.ItemAction = 0;   // arms down after a while
         }

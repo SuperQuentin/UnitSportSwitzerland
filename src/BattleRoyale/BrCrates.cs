@@ -135,33 +135,55 @@ public partial class BrCrates : Node3D, IOriginContainer
     {
         if (!_server) return;
         long peer = Multiplayer.GetRemoteSenderId();
-        if (!_crates.TryGetValue(id, out var c) || !MayLoot(peer) || ClockSync.ServerNow < c.LandsAt
-            || GetNodeOrNull<Node3D>("../Players/" + peer) is not { } body || !Near(c, body.GlobalPosition, Reach + 2.5f))
+        var result = TryTake(peer, id, index, (ItemId)item, count);
+        if (result == TakeResult.Refused) RpcId(peer, MethodName.Refused, id);
+        else if (result == TakeResult.Stale)
         {
-            var at = GetNodeOrNull<Node3D>("../Players/" + peer)?.GlobalPosition;
-            GD.Print($"[br crates] take from {peer} refused: crate {id} {(c == null ? "gone" : c.Label)}, may loot {MayLoot(peer)}, body at {at}");
+            // the panel was out of date (someone else was quicker): it gets the crate as it is now
             RpcId(peer, MethodName.Refused, id);
-            return;
+            if (_crates.TryGetValue(id, out var c)) RpcId(peer, MethodName.Changed, id, c.Ids, c.Counts);
+        }
+        // the new contents went first (TryTake), then the grant: the taker's "take all" goes on from the crate as it now is
+        else RpcId(peer, MethodName.Granted, id, item, count);
+    }
+
+    public enum TakeResult { Taken, Refused, Stale }
+
+    /// <summary>
+    /// Server: <paramref name="taker"/> (a player, or a bot the server runs, #837) takes one stack out of a
+    /// crate: a living entrant standing at a crate that has landed, and the stack still the one it saw.
+    /// Everyone is told the crate's new contents; the caller hands the stack over (a player's
+    /// <c>Granted</c>, a bot's own inventory).
+    /// </summary>
+    public TakeResult TryTake(long taker, long id, int index, ItemId item, int count)
+    {
+        if (!_crates.TryGetValue(id, out var c) || !MayLoot(taker) || ClockSync.ServerNow < c.LandsAt || c.Locked
+            || GetNodeOrNull<Node3D>("../Players/" + Net.PlayerReplication.NodeName(taker)) is not { } body
+            || !Near(c, body.GlobalPosition, Reach + 2.5f))
+        {
+            var at = GetNodeOrNull<Node3D>("../Players/" + Net.PlayerReplication.NodeName(taker))?.GlobalPosition;
+            GD.Print($"[br crates] take from {taker} refused: crate {id} {(c == null ? "gone" : c.Label)}, may loot {MayLoot(taker)}, body at {at}");
+            return TakeResult.Refused;
         }
         var stacks = c.Stacks();
-        // the panel was out of date (someone else was quicker): it gets the crate as it is now
-        if (index < 0 || index >= stacks.Count || (int)stacks[index].Id != item || stacks[index].Count != count)
-        {
-            RpcId(peer, MethodName.Refused, id);
-            RpcId(peer, MethodName.Changed, id, c.Ids, c.Counts);
-            return;
-        }
+        if (index < 0 || index >= stacks.Count || stacks[index].Id != item || stacks[index].Count != count) return TakeResult.Stale;
         stacks.RemoveAt(index);
         c.SetStacks(stacks);
-        // the new contents first, then the grant: the taker's "take all" goes on from the crate as it now is
         if (stacks.Count == 0)
         {
             _crates.Remove(id);
             Rpc(MethodName.Removed, id);
         }
         else Rpc(MethodName.Changed, id, c.Ids, c.Counts);
-        RpcId(peer, MethodName.Granted, id, item, count);
+        return TakeResult.Taken;
     }
+
+    /// <summary>Server: whether a body at <paramref name="at"/> (world) could open crate <paramref name="c"/> (#837: a bot walks up to it first).</summary>
+    public bool Reachable(Crate c, Vector3 at) => Near(c, at, Reach + 2.5f);
+
+    /// <summary>Server: where a crate is, in this server's world space (its ground height when it has none), or null.</summary>
+    public Vector3? WorldOf(Crate c, float groundY) =>
+        Origin == null ? null : Origin.ToWorld(c.E, c.N, c.Alt == Ground ? groundY : c.Alt);
 
     /// <summary>The dial's numbers for a locked crate: the same on the server and every client, never sent.</summary>
     public static int[] Combination(long id, int seed) =>
