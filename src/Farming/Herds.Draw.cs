@@ -92,6 +92,7 @@ public partial class Herds
         h.HeadPitch = new float[n];
         h.HeadYaw = new float[n];
         h.WasAir = new bool[n];
+        h.AirAt = new Vector3[n];
         Array.Fill(h.Ground, float.NaN);
         MultiMeshInstance3D Make(string name, Mesh mesh) => new()
         {
@@ -122,6 +123,7 @@ public partial class Herds
         {
             var (e, n, alt, yaw, head, gait) = Where(h, i, now);
             bool air = !float.IsNaN(alt);
+            bool lifted = air && !h.WasAir[i];
             if (air != h.WasAir[i])
             {
                 h.WasAir[i] = air;
@@ -140,6 +142,12 @@ public partial class Herds
                 y = float.IsNaN(h.Ground[i]) ? anchorY : h.Ground[i];
             }
             var local = new Vector3((float)(e - plan.E), y - anchorY, (float)(plan.N - n));
+            if (air)
+            {
+                // the authority's updates come ~10 a second: ease toward them (at once on this peer if it is the authority)
+                h.AirAt[i] = lifted || Authority ? local : h.AirAt[i].Lerp(local, MathX.Damp(12f, dt));
+                local = h.AirAt[i];
+            }
 
             // the head: grazing or up; up and turned to a camera that comes close to a standing cow
             float wantPitch = head * CowMeshBuilder.GrazePitch, wantYaw = 0f;

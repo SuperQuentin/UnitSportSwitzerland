@@ -62,6 +62,8 @@ public partial class Herds : Node3D, IOriginContainer
         public Vector2[] GroundAt = [];
         public float[] HeadPitch = [], HeadYaw = [];
         public bool[] WasAir = [];
+        /// <summary>Where a cow in the air is drawn: eased toward the server's ~10 updates a second.</summary>
+        public Vector3[] AirAt = [];
         public float AnchorGround = float.NaN;
     }
 
