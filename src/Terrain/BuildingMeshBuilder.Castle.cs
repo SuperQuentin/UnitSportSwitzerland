@@ -100,28 +100,37 @@ public static partial class BuildingMeshBuilder
             }
         }
 
-        foreach (var (count, p, q, r) in edges.Values)
+        foreach (var edge in edges.Values)
         {
+            var (count, p, q, r) = edge;
             if (count != 1) continue;
             var along = new Vector3(q.X - p.X, 0f, q.Z - p.Z);
             float len = along.Length();
             if (len < ParapetMinEdge || Mathf.Abs(q.Y - p.Y) > 0.3f) continue;
             along /= len;
-            // outward: away from the flat face's third corner
+            // outward (away from the flat face's third corner) always on the same side of along:
+            // every edge then runs the same way round the roof, and starting each one a parapet's
+            // depth in leaves each corner to exactly one of its two edges (no coplanar overlap)
             var o = new Vector3(along.Z, 0f, -along.X);
-            if (o.Dot(r - p) > 0f) o = -o;
+            if (o.Dot(r - p) > 0f)
+            {
+                (p, q) = (q, p);
+                along = -along;
+                o = -o;
+            }
             float y = Mathf.Max(p.Y, q.Y);
             var mid = (p + q) * 0.5f + o * 0.4f;
             if (SurfaceAbove(b, mid.X, mid.Z, y - 0.5f)) continue;
 
             // the parapet, its outer face flush with the wall below, then the teeth on it
-            Box(v, c, f, p, along, o, 0f, len, y, y + ParapetHeight, -ParapetDepth, 0f, stone);
-            int teeth = Mathf.Max(1, Mathf.RoundToInt((len + CrenelWidth) / (MerlonWidth + CrenelWidth)));
-            float pitch = len / teeth;
+            Box(v, c, f, p, along, o, ParapetDepth, len, y, y + ParapetHeight, -ParapetDepth, 0f, stone);
+            float run = len - ParapetDepth;
+            int teeth = Mathf.Max(1, Mathf.RoundToInt((run + CrenelWidth) / (MerlonWidth + CrenelWidth)));
+            float pitch = run / teeth;
             float w = Mathf.Min(MerlonWidth, pitch * 0.6f);
             for (int i = 0; i < teeth; i++)
             {
-                float s = i * pitch + (pitch - w) * 0.5f;
+                float s = ParapetDepth + i * pitch + (pitch - w) * 0.5f;
                 Box(v, c, f, p, along, o, s, s + w, y + ParapetHeight, y + ParapetHeight + MerlonHeight,
                     -ParapetDepth, 0f, stone * 1.03f);
             }
@@ -157,7 +166,7 @@ public static partial class BuildingMeshBuilder
         var red = new Color(0.85f, 0.10f, 0.12f).SrgbToLinear();
         var white = new Color(0.96f, 0.96f, 0.94f).SrgbToLinear();
         const float height = 7f, side = 2.4f;
-        Box(v, c, f, apex, Vector3.Right, Vector3.Back, -0.12f, 0.12f, apex.Y - 0.5f, apex.Y + height, -0.12f, 0.12f, pole);
+        Box(v, c, f, apex, Vector3.Right, Vector3.Back, -0.12f, 0.12f, apex.Y - 0.5f, apex.Y + height + 0.1f, -0.12f, 0.12f, pole); // its top inside the cap
         Box(v, c, f, apex, Vector3.Right, Vector3.Back, -0.18f, 0.18f, apex.Y + height, apex.Y + height + 0.2f, -0.18f, 0.18f, pole * 1.3f);
         float cell = side / 6f, top = apex.Y + height - 0.1f;
         for (int i = 0; i < 6; i++)
