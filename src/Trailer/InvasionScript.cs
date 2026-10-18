@@ -83,16 +83,14 @@ public static class InvasionScript
     private static readonly Spot Meadow = new(2635820, 1160480);
     /// <summary>Lauterbrunnen's main street, by the meadow.</summary>
     private static readonly Spot MainStreet = new(2635924, 1160470);
-    /// <summary>The open valley floor south of Lauterbrunnen: the drop zone.</summary>
-    private static readonly Spot ValleyFloor = new(2635880, 1158950);
-    /// <summary>IKEA Riddes: its car park (full of parked cars) and the blue facade (scouted from above).</summary>
-    private static readonly Spot IkeaPark = new(2582300, 1112690), IkeaFront = new(2582345, 1112655);
+    /// <summary>IKEA Riddes: its car park, full of parked cars, the blue facade to its south-east (scouted from above).</summary>
+    private static readonly Spot IkeaPark = new(2582300, 1112690);
     /// <summary>The Riddes straight (VS), west end and east end, as in the showcase.</summary>
     private static readonly Spot RiddesW = new(2583100, 1113236), RiddesE = new(2583390, 1113236);
     /// <summary>Nyon: the harbour mole, the lake to the east; the park above the shore.</summary>
     private static readonly Spot NyonMole = new(2507915, 1137230), NyonPark = new(2507810, 1137290);
     /// <summary>Lausanne, Sous-Gare: the avenue down to Ouchy (the story's).</summary>
-    private static readonly Spot AvenueTop = new(2537625, 1151830);
+    private static readonly Spot AvenueTop = new(2537625, 1151830), AvenueFoot = new(2537660, 1151300);
     private static readonly Spot PullySite = new(2542905, 1152292);
     private static readonly Spot Slope = new(2621770, 1089700);
     private static readonly Spot GotthardOn = new(2686150, 1154560);
@@ -101,11 +99,10 @@ public static class InvasionScript
 
     /// <summary>
     /// UFO (#861) in stage 2: a stand-in, a light plane in flight (<paramref name="speed"/> over 20 m/s)
-    /// or a helicopter hovering, where a saucer will be.
-    /// </summary>
-    private static Cast Ufo(Spot at, float heading, float speed = 0f, int seed = 300) => speed > 20f
-        ? new() { Ride = RideKind.Plane, At = at, Heading = heading, Drive = Drive.Fly, Launch = speed, Flight = _ => Stick(lever: 0.8f), Seed = seed }
-        : new() { Ride = RideKind.Helicopter, At = at, Heading = heading, Drive = Drive.Fly, Launch = speed, Flight = _ => Stick(up: 0.55f), Seed = seed };
+    /// or a helicopter hovering, where a saucer will be. A flyer mounts on the floor at its spot (or on <paramref name="board"/>: over water, over a steep face) before it is launched.
+    private static Cast Ufo(Spot at, float heading, float speed = 0f, int seed = 300, Spot? board = null) => speed > 20f
+        ? new() { Ride = RideKind.Plane, At = at, Heading = heading, Drive = Drive.Fly, Launch = speed, Flight = _ => Stick(lever: 0.8f), Seed = seed, Board = board }
+        : new() { Ride = RideKind.Helicopter, At = at, Heading = heading, Drive = Drive.Fly, Launch = speed, Flight = _ => Stick(up: 0.55f), Seed = seed, Board = board };
 
     /// <summary>A hay bale (a straw-coloured box) until a real one is beamed up.</summary>
     private static Prop HayBale(Spot at) => new(at, 0, new Vector3(1.4f, 1.2f, 1.2f), new Color(0.86f, 0.74f, 0.38f));
@@ -187,11 +184,12 @@ public static class InvasionScript
         {
             Number = 4, Name = "Harvest", FromBar = 8, Bars = 1, Feature = "farming: the combine harvester",
             Hour = 9.6,
-            Cast = [new() { Ride = Heavy(7), At = ValleyFloor, Heading = 10, Drive = Drive.Controls, Controls = _ => Pedal(0.4f), Seed = 31 }],
+            // on the meadow north of Heidi's, heading south, seen from its left: the cliff beyond
+            Cast = [new() { Ride = Heavy(7), At = Meadow.Toward(330, 40), Heading = 190, Drive = Drive.Controls, Controls = _ => Pedal(0.4f), Seed = 31 }],
             Keys =
             [
-                new(0, Pt.On(0, -7f, 1.4f, -14f), Pt.On(0, 0f, 2.2f), 35),
-                new(B, Pt.On(0, -8f, 1.5f, -11f), Pt.On(0, 0f, 2.2f), 35),
+                new(0, Pt.On(0, -9f, 1.6f, -16f), Pt.On(0, 0f, 2.2f), 35),
+                new(B, Pt.On(0, -10f, 1.7f, -12f), Pt.On(0, 0f, 2.2f), 35),
             ],
             Smooth = 0.3f, Preroll = 1.5,
         },
@@ -264,8 +262,8 @@ public static class InvasionScript
             ],
             Keys =
             [
-                new(0, Pt.Road("gotthard", 745, -45f, 22f), Pt.On(1, 0f, 2f, 0f), 50),
-                new(2 * B, Pt.Road("gotthard", 745, -45f, 22f), Pt.On(1, 0f, 2f, 0f), 50),
+                new(0, Pt.Road("gotthard", 745, -45f, 22f), Pt.On(0, 0f, 2f, 4f), 50),
+                new(2 * B, Pt.Road("gotthard", 745, -45f, 22f), Pt.On(0, 0f, 2f, 4f), 50),
             ],
             Smooth = 0.3f, Preroll = 12,
             Supers = [new(0.3, 3.2, "GOTTHARD · 11:00")],
@@ -311,9 +309,9 @@ public static class InvasionScript
             Cast =
             [
                 // UFO (#861) in stage 2: saucers in a V out of the Matterhorn's sky, the mothership above them
-                Ufo(Spot.Alt(2619600, 1091900, 3950), 70, 45f, 301),
-                Ufo(Spot.Alt(2619540, 1091960, 3960), 70, 45f, 302),
-                Ufo(Spot.Alt(2619540, 1091840, 3960), 70, 45f, 303),
+                Ufo(Spot.Alt(2619600, 1091900, 3950), 70, 45f, 301, Crew),
+                Ufo(Spot.Alt(2619540, 1091960, 3960), 70, 45f, 302, Crew.Toward(0, 30)),
+                Ufo(Spot.Alt(2619540, 1091840, 3960), 70, 45f, 303, Crew.Toward(180, 30)),
             ],
             Keys =
             [
@@ -363,8 +361,9 @@ public static class InvasionScript
             Cast = [Ufo(IkeaPark.Up(25), 40, 0f, 305)],
             Keys =
             [
-                new(0, Pt.At(2582250, 1112640, 1.6f), Pt.At(IkeaPark.E, IkeaPark.N, 6f), 28),
-                new(2 * B, Pt.At(2582252, 1112642, 1.6f), Pt.At(IkeaPark.E, IkeaPark.N, 14f), 28),
+                // from the far side of the car park, clear of the IKEA pylon, the blue facade beyond
+                new(0, Pt.At(2582262, 1112735, 2.5f), Pt.At(IkeaPark.E, IkeaPark.N, 5f), 28),
+                new(2 * B, Pt.At(2582264, 1112733, 2.5f), Pt.At(IkeaPark.E, IkeaPark.N, 14f), 28),
             ],
             Smooth = 0.3f, Preroll = 0.5,
             Supers = [new(0.3, 3.0, "RIDDES · 14:30")],
@@ -382,7 +381,7 @@ public static class InvasionScript
                 },
                 new() { Who = Tourist, Ride = RideKind.Jetski, At = new Spot(2560700, 1140360), Heading = 250, Board = ChillonBoard, Launch = 15, Drive = Drive.Controls, Controls = _ => Pedal(1f) },
                 // UFO (#861) in stage 2: a saucer hangs over the steamer's funnel
-                Ufo(Spot.Alt(2560650, 1140450, 410), 300, 0f, 306),
+                Ufo(Spot.Alt(2560650, 1140450, 410), 300, 0f, 306, ChillonBoard),
             ],
             Keys =
             [
@@ -423,8 +422,8 @@ public static class InvasionScript
             ],
             Keys =
             [
-                new(0, Pt.On(0, 0.8f, 0.3f, -6f), Pt.On(0, 0f, 0.5f, 10f), 24),
-                new(2 * B, Pt.On(0, 0.6f, 0.4f, -5f), Pt.On(0, 0f, 2f, 20f), 24),
+                new(0, Pt.On(0, 0.5f, 0.2f, -2.6f), Pt.On(0, 0f, 0.6f, 10f), 24),
+                new(2 * B, Pt.On(0, 0.4f, 0.3f, -2.2f), Pt.On(0, 0f, 3f, 20f), 24),
             ],
             Smooth = 0.05f, Preroll = 0.8,
         },
@@ -452,8 +451,8 @@ public static class InvasionScript
             // MOTHERSHIP (#861) in stage 2: parked over the summit, its rim lights chasing
             Keys =
             [
-                new(0, Ground(Crew, 250, 30, 2f), Pt.Alt(Matterhorn.E, Matterhorn.N, 4560), 85),
-                new(2 * B, Ground(Crew, 250, 30, 2f), Pt.Alt(Matterhorn.E, Matterhorn.N, 4600), 70),
+                new(0, Pt.Alt(2627300, 1092800, 3330), Pt.Alt(Matterhorn.E, Matterhorn.N, 4560), 85),
+                new(2 * B, Pt.Alt(2627300, 1092800, 3330), Pt.Alt(Matterhorn.E, Matterhorn.N, 4620), 70),
             ],
             Smooth = 0.4f, Preroll = 0.5,
             Chat = [Say("zorp_pointy", 0.8, Zorp, "We take the pointy mountain.")],
@@ -464,15 +463,15 @@ public static class InvasionScript
             Hour = 16.0, Traffic = 0,
             Cast =
             [
-                Runner(new Spot(2537628, 1151790), 175, seed: 41),
-                Runner(new Spot(2537632, 1151800), 178, seed: 42),
-                Runner(new Spot(2537624, 1151808), 172, seed: 43),
-                new() { Who = Passer, At = new Spot(2537636, 1151760), Heading = 0, Item = (int)ItemId.Chocolate, Use = t => t % 1.6 > 1.0 },
+                Runner(AvenueTop, 0, seed: 41) with { Route = "avenue", Toward = AvenueFoot, Arc = 60 },
+                Runner(AvenueTop, 0, seed: 42) with { Route = "avenue", Toward = AvenueFoot, Arc = 55 },
+                Runner(AvenueTop, 0, seed: 43) with { Route = "avenue", Toward = AvenueFoot, Arc = 51 },
+                new() { Who = Passer, At = AvenueTop, Route = "avenue", Toward = AvenueFoot, Arc = 72, Item = (int)ItemId.Chocolate, Use = t => t % 1.6 > 1.0 },
             ],
             Keys =
             [
-                new(0, Pt.At(2537640, 1151745, 1.5f), Pt.At(2537628, 1151790, 1.6f), 35),
-                new(2 * B, Pt.At(2537642, 1151748, 1.5f), Pt.At(2537634, 1151765, 1.5f), 35),
+                new(0, Pt.Road("avenue", 80, 1.5f, 1.5f), Pt.On(0, 0f, 1.4f), 35),
+                new(2 * B, Pt.Road("avenue", 80, 1.8f, 1.5f), Pt.On(3, 0f, 1.4f), 35),
             ],
             Smooth = 0.3f, Preroll = 0.5,
             Supers = [new(0.3, 3.0, "LAUSANNE · 16:00")],
@@ -584,8 +583,8 @@ public static class InvasionScript
             Cues = [new(0.2, 0, ItemEventKind.Fondue)],
             Keys =
             [
-                new(0, Ground(Crew, 330, 2.6f, 1.2f), Ground(Crew, 0, 0, 0.4f), 35),
-                new(2 * B, Ground(Crew, 340, 2.2f, 1.6f), Pt.On(1, 0f, 1.5f), 35),
+                new(0, Ground(Crew, 315, 4.6f, 1.9f), Ground(Crew, 0, 0, 0.5f), 35),
+                new(2 * B, Ground(Crew, 320, 4.2f, 2.0f), Pt.On(1, 0f, 1.4f), 35),
             ],
             Smooth = 0.3f, Preroll = 0.5,
             Chat = [Say("luca_better", 2.4, Luca, "Ah. Much better.")],
@@ -593,7 +592,7 @@ public static class InvasionScript
         new()
         {
             Number = 29, Name = "Swiss-made barricade", FromBar = 58, Bars = 2, Feature = "building with the hammer: sandbag and stone walls",
-            Hour = 18.45,
+            Hour = 17.8,
             Cast = [new() { Who = Rochat, At = Crew.Toward(200, 14), Heading = 20, Item = (int)ItemId.Hammer, Use = t => t % 0.7 < 0.35 }],
             Props =
             [
@@ -603,8 +602,8 @@ public static class InvasionScript
             ],
             Keys =
             [
-                new(0, Pt.On(0, -3f, 1.4f, 5f), Pt.On(0, 0f, 1.4f, -4f), 28),
-                new(2 * B, Pt.On(0, -4.5f, 1.8f, 4f), Pt.On(0, 0f, 1.4f, -4f), 28),
+                new(0, Pt.On(0, -4f, 1.6f, -1f), Pt.On(0, 0f, 1.3f, -2f), 28),
+                new(2 * B, Pt.On(0, -4.6f, 1.9f, 0.5f), Pt.On(0, 0f, 1.3f, -2.5f), 28),
             ],
             Smooth = 0.3f, Preroll = 0.5,
             Chat = [Say("rochat_barricade", 0.6, Rochat, "Swiss-made barricade. Very neutral.")],
@@ -612,15 +611,16 @@ public static class InvasionScript
         new()
         {
             Number = 30, Name = "IKEA", FromBar = 60, Bars = 2, Feature = "IKEA and the shops; items: the Blåhaj",
-            Hour = 19.4,
-            Cast = [new() { Who = Luca, At = IkeaFront, FromDoor = true, Drive = Drive.Walk, Walk = t => (new Vector2(0f, t > 0.6 ? 1f : 0f), false), Item = (int)ItemId.Blahaj }],
+            Hour = 17.2,
+            // from the blue facade toward the car park
+            Cast = [Runner(IkeaPark.Toward(135, 15), 315, Luca, run: false, from: 0.4) with { Item = (int)ItemId.Blahaj }],
             Keys =
             [
                 new(0, Pt.On(0, 1.2f, 1.5f, -7f), Pt.On(0, 0f, 1.3f), 35),
                 new(2 * B, Pt.On(0, 1.0f, 1.5f, -5.5f), Pt.On(0, 0f, 1.3f), 35),
             ],
             Smooth = 0.3f, Preroll = 0.4,
-            Supers = [new(0.2, 3.0, "IKEA RIDDES · 19:25")],
+            Supers = [new(0.2, 3.0, "IKEA RIDDES · 17:10")],
             Chat = [Say("luca_ikea", 1.0, Luca, "IKEA has everything.")],
         },
 
@@ -731,7 +731,7 @@ public static class InvasionScript
         new()
         {
             Number = 37, Name = "Everybody in", FromBar = 74, Bars = 2, Feature = "the military freighter: the Battle Royale's plane",
-            Hour = 17.6,
+            Hour = 13.5,
             Cast =
             [
                 new() { Who = Yvonne, Ride = RideKind.Freighter, At = new Spot(2497250, 1121000), Heading = 226, Drive = Drive.Stand, Doors = 1 << 3 },
@@ -744,13 +744,13 @@ public static class InvasionScript
                 new(2 * B, Pt.On(0, -12f, 2.0f, -20f), Pt.On(0, 0f, 3.5f, 4f), 35),
             ],
             Preroll = 0.5,
-            Supers = [new(0.2, 3.0, "GENÈVE · 17:35")],
+            Supers = [new(0.2, 3.0, "GENÈVE · 13:30")],
             Chat = [Say("yvonne_board", 0.8, Yvonne, "Everybody in. Next stop: the saucer.")],
         },
         new()
         {
             Number = 38, Name = "Above the Alps", FromBar = 76, Bars = 2, Feature = "the freighter in flight, its ramp open",
-            Hour = 18.2,
+            Hour = 13.8,
             Cast = [new() { Who = Yvonne, Ride = RideKind.Freighter, At = Spot.Alt(2624000, 1104000, 3300), Heading = 175, Doors = 1 << 3, Drive = Drive.Fly, Launch = 72, Flight = _ => Stick(lever: 0.6f) }],
             Keys =
             [
@@ -762,7 +762,7 @@ public static class InvasionScript
         new()
         {
             Number = 39, Name = "Go go go", FromBar = 78, Bars = 2, Feature = "the Battle Royale drop: the wingsuit",
-            Hour = 18.25,
+            Hour = 13.85,
             Cast =
             [
                 new() { Who = Yvonne, Ride = RideKind.Freighter, At = Spot.Alt(2624000, 1104000, 3300), Heading = 175, Doors = 1 << 3, Drive = Drive.Fly, Launch = 72, Flight = _ => Stick(lever: 0.6f) },
@@ -783,7 +783,7 @@ public static class InvasionScript
         new()
         {
             Number = 40, Name = "Canopies", FromBar = 80, Bars = 2, Feature = "the parachute",
-            Hour = 18.3,
+            Hour = 13.9,
             Cast = Enumerable.Range(0, 3).Select(i => new Cast
             {
                 Who = new[] { Rochat, Luca, Heidi }[i], Ride = RideKind.Parachute,
@@ -792,8 +792,8 @@ public static class InvasionScript
             }).ToArray(),
             Keys =
             [
-                new(0, Pt.Alt(2625194, 1099326, 2000), Pt.On(1, 0f, 3f), 35),
-                new(2 * B, Pt.Alt(2625200, 1099330, 1996), Pt.On(1, 0f, 3f), 35),
+                new(0, Pt.On(1, 6f, 1f, 10f), Pt.On(1, 0f, 3f), 35),
+                new(2 * B, Pt.On(1, 9f, 0f, 6f), Pt.On(1, 0f, 3f), 35),
             ],
             Smooth = 0.2f, Preroll = 0.5,
         },
@@ -802,17 +802,17 @@ public static class InvasionScript
         new()
         {
             Number = 41, Name = "Loot", FromBar = 82, Bars = 2, Feature = "Battle Royale loot on the ground; the zone",
-            Hour = 18.4,
-            Cast = [new() { Who = Luca, At = ValleyFloor, Heading = 200, Item = (int)ItemId.Blahaj, Dance = Shrug }],
+            Hour = 15.0,
+            Cast = [new() { Who = Luca, At = Meadow, Heading = 200, Item = (int)ItemId.Blahaj, Dance = Shrug }],
             Props =
             [
-                new(ValleyFloor.Toward(170, 2.2f), 30, default, default) { Item = ItemId.Shotgun, Scale = 1.4f },
-                new(ValleyFloor.Toward(215, 2.0f), 80, default, default) { Item = ItemId.SmokeCanister, Scale = 1.6f },
-                new(ValleyFloor.Toward(240, 2.6f), 140, default, default) { Item = ItemId.FlareGun, Scale = 1.6f },
-                new(ValleyFloor.Toward(150, 3.0f), 10, default, default) { Item = ItemId.FirstAidKit, Scale = 1.6f },
-                new(ValleyFloor.Toward(195, 3.4f), 60, default, default) { Item = ItemId.FonduePot, Scale = 1.4f },
+                new(Meadow.Toward(170, 2.2f), 30, default, default) { Item = ItemId.Shotgun, Scale = 1.4f },
+                new(Meadow.Toward(215, 2.0f), 80, default, default) { Item = ItemId.SmokeCanister, Scale = 1.6f },
+                new(Meadow.Toward(240, 2.6f), 140, default, default) { Item = ItemId.FlareGun, Scale = 1.6f },
+                new(Meadow.Toward(150, 3.0f), 10, default, default) { Item = ItemId.FirstAidKit, Scale = 1.6f },
+                new(Meadow.Toward(195, 3.4f), 60, default, default) { Item = ItemId.FonduePot, Scale = 1.4f },
             ],
-            Zone = (ValleyFloor.Toward(190, 260), 230f),
+            Zone = (Meadow.Toward(250, 200), 230f),
             Keys =
             [
                 new(0, Pt.On(0, 0.8f, 1.6f, -4.0f), Pt.On(0, 0f, 0.8f, 1.5f), 28),
@@ -824,25 +824,25 @@ public static class InvasionScript
         new()
         {
             Number = 42, Name = "The zone", FromBar = 84, Bars = 2, Feature = "the Battle Royale zone, players and bots running in",
-            Hour = 18.45,
+            Hour = 15.05,
             Cast =
             [
-                .. Enumerable.Range(0, 6).Select(i => Runner(ValleyFloor.Toward(160 + i * 9, 40 + i * 6), 340 + i * 9, seed: 50 + i)),
+                .. Enumerable.Range(0, 6).Select(i => Runner(Meadow.Toward(220 + i * 9, 40 + i * 6), 250, seed: 50 + i)),
                 // UFO (#861) in stage 2: the saucer landed in the middle of the zone
-                new() { Ride = RideKind.Helicopter, At = ValleyFloor.Toward(190, 260), Heading = 0, Seed = 310 },
+                new() { Ride = RideKind.Helicopter, At = Meadow.Toward(250, 200), Heading = 0, Seed = 310 },
             ],
-            Zone = (ValleyFloor.Toward(190, 260), 230f),
+            Zone = (Meadow.Toward(250, 200), 230f),
             Keys =
             [
-                new(0, Ground(ValleyFloor, 10, 60, 40f), Ground(ValleyFloor, 190, 200, 0f), 28),
-                new(2 * B, Ground(ValleyFloor, 10, 40, 55f), Ground(ValleyFloor, 190, 240, 0f), 28),
+                new(0, Ground(Meadow, 70, 60, 40f), Ground(Meadow, 250, 200, 0f), 28),
+                new(2 * B, Ground(Meadow, 70, 40, 55f), Ground(Meadow, 250, 240, 0f), 28),
             ],
             Smooth = 0.4f, Preroll = 1,
         },
         new()
         {
             Number = 43, Name = "Pursuit", FromBar = 86, Bars = 2, Feature = "cars chase a UFO; racing",
-            Hour = 18.5, Traffic = 0,
+            Hour = 15.2, Traffic = 0,
             Cast =
             [
                 new() { Who = Luca, Ride = Car(Fd3s), At = Tremola, Toward = TremolaFoot, Drive = Drive.Road, Route = "tremola", Arc = 505, Skill = 1.1f },
@@ -860,7 +860,7 @@ public static class InvasionScript
         new()
         {
             Number = 44, Name = "The pack", FromBar = 88, Bars = 2, Feature = "races with AI drivers",
-            Hour = 18.5, Traffic = 0,
+            Hour = 15.2, Traffic = 0,
             Cast = Grid([Supra, Bnr32, Fd3s, Evo3, Nsx, S13], Furka, FurkaTop, "pack", 1380, goAt: 0),
             Keys =
             [
@@ -872,7 +872,7 @@ public static class InvasionScript
         new()
         {
             Number = 45, Name = "Lean", FromBar = 90, Bars = 1, Feature = "motorbikes lean through a bend",
-            Hour = 18.55, Traffic = 0,
+            Hour = 15.3, Traffic = 0,
             Cast =
             [
                 new() { Ride = Car(Bnr32), At = Furka, Toward = FurkaTop, Drive = Drive.Follow, Route = "lean", Arc = 460, Speed = 20, Seed = 48 },
@@ -888,7 +888,7 @@ public static class InvasionScript
         new()
         {
             Number = 46, Name = "Downhill", FromBar = 91, Bars = 1, Feature = "the road bike",
-            Hour = 18.55, Traffic = 0,
+            Hour = 15.3, Traffic = 0,
             Cast = [new() { Who = Volunteers[3], Ride = RideKind.RoadBike, At = Tremola, Toward = TremolaFoot, Drive = Drive.Road, Route = "tremola", Arc = 120 }],
             Keys =
             [
@@ -900,7 +900,7 @@ public static class InvasionScript
         new()
         {
             Number = 47, Name = "Up the valley", FromBar = 92, Bars = 2, Feature = "the helicopter chases a UFO",
-            Hour = 18.6,
+            Hour = 15.4,
             Cast =
             [
                 new() { Who = Yvonne, Ride = RideKind.Helicopter, At = new Spot(2635900, 1159300, 120), Heading = 355, Drive = Drive.Fly, Launch = 30, Flight = _ => Stick(0f, -1f, up: 0.2f, effort: true) },
@@ -917,7 +917,7 @@ public static class InvasionScript
         new()
         {
             Number = 48, Name = "Air force", FromBar = 94, Bars = 2, Feature = "the paraglider and the light plane",
-            Hour = 18.6,
+            Hour = 15.5,
             Cast =
             [
                 new() { Who = Volunteers[5], Ride = RideKind.Paraglider, At = new Spot(2632479, 1170652, 380), Heading = 250, Drive = Drive.Fly, Launch = 10, Flight = _ => Stick(0.12f) },
@@ -927,12 +927,12 @@ public static class InvasionScript
             ],
             Keys = Around(0, 26f, 4f, 120f, 30f, 2 * B, 35, lookUp: 3f),
             Smooth = 0.3f, Preroll = 2,
-            Supers = [new(0.2, 3.0, "INTERLAKEN · 18:35")],
+            Supers = [new(0.2, 3.0, "INTERLAKEN · 15:30")],
         },
         new()
         {
             Number = 49, Name = "Pigeon squadron", FromBar = 96, Bars = 2, Feature = "pigeons and the birds",
-            Hour = 18.65,
+            Hour = 15.6,
             Cast =
             [
                 .. Enumerable.Range(0, 5).Select(i => new Cast
@@ -953,13 +953,13 @@ public static class InvasionScript
         new()
         {
             Number = 50, Name = "The navy", FromBar = 98, Bars = 2, Feature = "the jetski, the speedboat, the steamer",
-            Hour = 18.7, Sea = 0.3f,
+            Hour = 15.7, Sea = 0.3f,
             Cast =
             [
                 new() { Ride = RideKind.Jetski, At = new Spot(2560693, 1140362), Heading = 315, Board = ChillonBoard, Launch = 15, Drive = Drive.Controls, Controls = t => Pedal(1f, 0.25f * Mathf.Sin((float)t * 1.4f)), Seed = 8 },
                 new() { Who = Tourist, Ride = RideKind.Speedboat, At = new Spot(2560689, 1140349), Heading = 315, Board = ChillonBoard, Launch = 14, Drive = Drive.Controls, Controls = _ => Pedal(1f, 0.15f) },
                 // UFO (#861) in stage 2: the saucer skimming the water, the boats circling it
-                Ufo(Spot.Alt(2560740, 1140420, 385), 0, 0f, 315),
+                Ufo(Spot.Alt(2560740, 1140420, 385), 0, 0f, 315, ChillonBoard),
             ],
             Keys =
             [
@@ -971,7 +971,7 @@ public static class InvasionScript
         new()
         {
             Number = 51, Name = "Swiss fist", FromBar = 100, Bars = 2, Feature = "fist fights",
-            Hour = 18.75,
+            Hour = 15.8,
             Cast =
             [
                 new()
@@ -996,11 +996,11 @@ public static class InvasionScript
         new()
         {
             Number = 52, Name = "Catch of the day", FromBar = 102, Bars = 2, Feature = "fishing; swimming",
-            Hour = 18.8,
+            Hour = 16.0,
             Cast =
             [
                 new() { Who = Heidi, At = NyonMole, Heading = 95, Item = (int)ItemId.FishingRod, Use = t => t > 0.3 },
-                new() { Who = Zib, At = NyonMole.Toward(95, 9), Board = NyonMole.Toward(275, 4), Swim = true, Heading = 275, Drive = Drive.Walk, Walk = _ => (new Vector2(0f, 0.5f), false) },
+                new() { Who = Zib, At = NyonMole.Toward(95, 9), Board = NyonMole.Toward(0, 6), Swim = true, Heading = 275, Drive = Drive.Walk, Walk = _ => (new Vector2(0f, 0.5f), false) },
             ],
             Cues = [new(0.4, 0, ItemEventKind.FishCast)],
             Keys =
@@ -1009,13 +1009,13 @@ public static class InvasionScript
                 new(2 * B, Pt.On(0, -2.6f, 1.7f, 3.8f), Pt.On(1, 0f, 0.3f), 28),
             ],
             Smooth = 0.3f, Preroll = 0.5,
-            Supers = [new(0.2, 3.0, "NYON · 18:50")],
+            Supers = [new(0.2, 3.0, "NYON · 16:00")],
             Chat = [Say("heidi_catch", 2.2, Heidi, "Biggest catch of the year.")],
         },
         new()
         {
             Number = 53, Name = "I'm OK", FromBar = 104, Bars = 2, Feature = "the crash: thrown through the windscreen",
-            Hour = 18.85, Traffic = 0,
+            Hour = 16.1, Traffic = 0,
             Cast = [new() { Who = Luca, Ride = Car(Gc8), At = RiddesW, Toward = RiddesE, Drive = Drive.Follow, Route = "riddes", Arc = 60, Speed = 24 }],
             // UFO (#861) in stage 2: the landed saucer across the road; a wall stands in for it
             Props = [new(default, 0, new Vector3(12f, 3f, 0.8f), new Color(0.62f, 0.6f, 0.56f)) { Route = "riddes", Arc = 150 }],
@@ -1030,7 +1030,7 @@ public static class InvasionScript
         new()
         {
             Number = 54, Name = "Base jump", FromBar = 106, Bars = 2, Feature = "the base jump into the wingsuit",
-            Hour = 18.9,
+            Hour = 16.2,
             Cast = [new() { Who = Volunteers[2], Ride = RideKind.Wingsuit, At = Spot.Alt(2635350, 1161600, 1500), Heading = 185, Drive = Drive.Fly, Launch = 42, Climb = -15, Flight = _ => Stick(0f, -0.15f) }],
             Keys =
             [
@@ -1042,12 +1042,12 @@ public static class InvasionScript
         new()
         {
             Number = 55, Name = "Parkour", FromBar = 108, Bars = 2, Feature = "on foot: run, slide, jump",
-            Hour = 19.0, Traffic = 0,
+            Hour = 16.3, Traffic = 0,
             Cast =
             [
                 new()
                 {
-                    Who = Luca, At = AvenueTop, Heading = 178, Drive = Drive.Walk,
+                    Who = Luca, At = AvenueTop, Route = "avenue", Toward = AvenueFoot, Arc = 40, Drive = Drive.Walk,
                     Walk = _ => (new Vector2(0f, 1f), true),
                     Actions = t => (t > 3.2 && t < 3.4, t > 1.6 && t < 1.8),
                 },

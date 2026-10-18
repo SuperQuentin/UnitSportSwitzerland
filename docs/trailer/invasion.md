@@ -78,7 +78,7 @@ Places are LV95. "Agl" is metres above the ground. Lenses are full-frame mm.
 | 1 | 1-3 | 0:00.0 | Gornergrat ridge → Matterhorn (2627300, 1092800) | Alpenglow; a slow drone push toward the peak, 50 mm. Super: **SWITZERLAND · A QUIET TUESDAY** | the real relief, sunrise | — |
 | 2 | 4-5 | 0:06.5 | Lavaux terraces (2547020, 1149060) | The paddle steamer below the vineyards; a slow truck, 35 mm. Super: **LAVAUX · 08:35** | real terrain, vineyards, the CGN steamer | — |
 | 3 | 6-7 | 0:10.8 | Heidi's meadow, Lauterbrunnen (2635820, 1160480) | Heidi mows on her Fendt; the cliffs behind; **[COWS]** grazing around her. 35 mm. Super: **LAUTERBRUNNEN · 09:10** | farming: the tractor and its mower | **[BUB]** HEIDI: Nothing ever happens here. |
-| 4 | 8 | 0:15.2 | Valley floor south of Lauterbrunnen (2635880, 1158950) | The Claas combine crossing the meadow, low, 35 mm | the combine harvester | — |
+| 4 | 8 | 0:15.2 | The meadow north of Heidi's (40 m NNW) | The Claas combine crossing the meadow, low, 35 mm | the combine harvester | — |
 | 5 | 9 | 0:17.3 | Bern, Kramgasse (2601080, 1199661) | A pigeon dives down the street, chased by the camera, 24 mm. Super: **BERN · 10:00** | play as a pigeon, a real city | — |
 | 6 | 10-11 | 0:19.5 | Pully building site (2542905, 1152292) | Excavator, loader and roller at work, tower cranes slewing; a rising crane move. Super: **PULLY · 10:30** | building sites, tower cranes, works machines | — |
 | 7 | 12-13 | 0:23.8 | Tremola hairpins (2686790, 1156030) | Luca's white AE86 drifts a hairpin; a pan from the outside, 50 mm. Super: **TREMOLA · 10:45** | cars, a real pass road | — |
@@ -99,7 +99,7 @@ Places are LV95. "Agl" is metres above the ground. Lenses are full-frame mm.
 | 17 | 33-34 | 1:09.2 | Tremola | **[UFO][BEAM]** The AE86 lifts off the cobbles; Luca stands dazed beside it, and the camera tilts up with the car | the beam takes a car | **[BUB]** LUCA: NOT THE AE86! |
 | 18 | 35-36 | 1:13.5 | Bern, Kramgasse | The pigeon flees down the street with **[UFO]** a small saucer right behind it; the camera flies ahead of the pigeon looking back | the pigeon | — |
 | 19 | 37-38 | 1:17.9 | Gotthard road | Rochat beside his Duro, saluting the sky, close, 35 mm | the army, emotes | **[BUB]** ROCHAT: This is NOT routine. |
-| 20 | 39-40 | 1:22.2 | Gornergrat → Matterhorn, 85 → 70 mm | **[MS]** The mothership parks over the summit, its rim lights chasing | the mothership | **[BUB]** ZORP (off): We take the pointy mountain. |
+| 20 | 39-40 | 1:22.2 | Above the Gornergrat ridge → Matterhorn, 85 → 70 mm | **[MS]** The mothership parks over the summit, its rim lights chasing | the mothership | **[BUB]** ZORP (off): We take the pointy mountain. |
 | 21 | 41-42 | 1:26.5 | Lausanne, Sous-Gare avenue (2537628, 1151790) | People run down the avenue toward camera; a passer-by stays put eating chocolate. Super: **LAUSANNE · 16:00** | on foot: running; food | **[BUB]** PASSER-BY: I'm finishing my chocolate first. |
 | 22 | 43-44 | 1:30.8 | Over the Aletsch | The A320 banks hard as **[UFO]** a saucer cuts across its nose; from the right wing | the A320 | **[BUB]** YVONNE: Ladies and gentlemen, hold on. |
 | 23 | 45-46 | 1:35.2 | Lauterbrunnen from straight above | The in-game map with the saucers' markers (a director addition, see below); until then the valley from above, like a map | the in-game map | **[BUB]** ROCHAT: They're everywhere. All 26 cantons. |
@@ -114,7 +114,7 @@ Places are LV95. "Agl" is metres above the ground. Lenses are full-frame mm.
 | 27 | 53-55 | 1:52.5 | Gornergrat, by the Kulmhotel (2626790, 1092478) | Dusk. The four around the fondue pot; a slow orbit. Super: **GORNERGRAT · 18:10** | multiplayer, friends together | **[BUB]** ROCHAT: Options? · LUCA: Fast cars. · YVONNE: Big planes. · HEIDI: Fondue first. |
 | 28 | 56-57 | 1:58.9 | Gornergrat | Close on the pot, bubbling with a warm glow (the fondue event heals everyone near); Luca eats | cooking, fondue heals | **[BUB]** LUCA: Ah. Much better. |
 | 29 | 58-59 | 2:03.3 | Gornergrat, 10 m south of the pot | Rochat with the hammer among sandbag and stone walls he built | building with the hammer | **[BUB]** ROCHAT: Swiss-made barricade. Very neutral. |
-| 30 | 60-61 | 2:07.6 | IKEA Riddes, the door (2582345, 1112655) | Evening: Luca walks out of IKEA with a Blåhaj under his arm. Super: **IKEA RIDDES · 19:25** | IKEA, shops, items | **[BUB]** LUCA: IKEA has everything. |
+| 30 | 60-61 | 2:07.6 | IKEA Riddes, by the blue facade (2582311, 1112679) | Late afternoon: Luca walks out of IKEA with a Blåhaj under his arm. Super: **IKEA RIDDES · 17:10** | IKEA, shops, items | **[BUB]** LUCA: IKEA has everything. |
 
 ### Mobilisation (bars 62-73)
 
@@ -131,7 +131,7 @@ Places are LV95. "Agl" is metres above the ground. Lenses are full-frame mm.
 
 | # | Bars | Time | Place | What happens · camera | Feature | Bubbles |
 |---|---|---|---|---|---|---|
-| 37 | 74-75 | 2:37.9 | Genève, military apron (2497250, 1121000) | The freighter, ramp down, Rochat and Luca walking up to it. Super: **GENÈVE · 17:35** | the freighter (the Battle Royale's plane) | **[BUB]** YVONNE: Everybody in. Next stop: the saucer. |
+| 37 | 74-75 | 2:37.9 | Genève, military apron (2497250, 1121000), early afternoon | The freighter, ramp down, Rochat and Luca walking up to it. Super: **GENÈVE · 13:30** | the freighter (the Battle Royale's plane) | **[BUB]** YVONNE: Everybody in. Next stop: the saucer. |
 | 38 | 76-77 | 2:42.2 | Above the Mattertal, 3300 m | The freighter at golden hour, ramp open; formation flight | the BR plane in flight | — |
 | 39 | 78-79 | 2:46.5 | Above the Mattertal | The four jump from the ramp in wingsuits; from above the tail | the Battle Royale drop, wingsuit | **[BUB]** ROCHAT: GO GO GO! |
 | 40 | 80-81 | 2:50.8 | Mattertal, 2000 m (2625194, 1099326) | Three parachutes open around the camera | the parachute | — |
@@ -140,18 +140,18 @@ Places are LV95. "Agl" is metres above the ground. Lenses are full-frame mm.
 
 | # | Bars | Time | Place | What happens · camera | Feature | Bubbles |
 |---|---|---|---|---|---|---|
-| 41 | 82-83 | 2:55.2 | Valley floor, Lauterbrunnen | Landed among the loot (shotgun, smoke, flare gun, first-aid kit, fondue pot); Luca holds up a Blåhaj and shrugs; the zone's wall glows beyond | BR loot, the zone | **[BUB]** LUCA: Who packed the Blåhaj? |
-| 42 | 84-85 | 2:59.5 | Valley floor, from 40 m up | The zone's wall round **[UFO]** a landed saucer, six players running in | the BR zone, bots | — |
+| 41 | 82-83 | 2:55.2 | Heidi's meadow, Lauterbrunnen | Landed among the loot (shotgun, smoke, flare gun, first-aid kit, fondue pot); Luca holds up a Blåhaj and shrugs; the zone's wall glows beyond | BR loot, the zone | **[BUB]** LUCA: Who packed the Blåhaj? |
+| 42 | 84-85 | 2:59.5 | Over Heidi's meadow, 40 m up | The zone's wall round **[UFO]** a landed saucer, six players running in | the BR zone, bots | — |
 | 43 | 86-87 | 3:03.8 | Tremola | Luca's FD3S and a GT-R chase **[UFO]** a saucer down the hairpins; door to door | racing | — |
 | 44 | 88-89 | 3:08.1 | Furka, from 80 m straight up | The pack of six through a bend | races with AI drivers | — |
 | 45 | 90 | 3:12.5 | Furka | A Monster leans past a GT-R | motorbikes | — |
 | 46 | 91 | 3:14.6 | Tremola | A volunteer on a road bike, flat out downhill | the road bike | — |
 | 47 | 92-93 | 3:16.8 | Lauterbrunnen valley | Yvonne's helicopter on the tail of **[UFO]** a saucer up the valley | the helicopter | — |
-| 48 | 94-95 | 3:21.1 | Interlaken (2632479, 1170652) | A paraglider and a light plane circle **[UFO]** a saucer; an orbit round the glider. Super: **INTERLAKEN · 18:35** | the paraglider, the light plane | — |
+| 48 | 94-95 | 3:21.1 | Interlaken (2632479, 1170652) | A paraglider and a light plane circle **[UFO]** a saucer; an orbit round the glider. Super: **INTERLAKEN · 15:30** | the paraglider, the light plane | — |
 | 49 | 96-97 | 3:25.4 | Bern, Kramgasse | A squadron of five pigeons dives on **[UFO]** the saucer over the Zytglogge | pigeons, birds | — |
 | 50 | 98-99 | 3:29.8 | Off Chillon | The jetski and the speedboat circle **[UFO]** a saucer skimming the water; chop on the lake | jetski, speedboat | — |
 | 51 | 100-101 | 3:34.1 | Heidi's meadow | Rochat against Zorp: guard, Zorp's jump kick, jab, jab, uppercut; Zorp dazed, Rochat in his victory pose | fist fights | **[BUB]** ROCHAT: Swiss army. Swiss fist. |
-| 52 | 102-103 | 3:38.4 | Nyon, the harbour mole (2507915, 1137230) | Heidi casts her rod into the lake and hooks... Zib, swimming. Super: **NYON · 18:50** | fishing, swimming | **[BUB]** HEIDI: Biggest catch of the year. |
+| 52 | 102-103 | 3:38.4 | Nyon, the harbour mole (2507915, 1137230) | Heidi casts her rod into the lake and hooks... Zib, swimming. Super: **NYON · 16:00** | fishing, swimming | **[BUB]** HEIDI: Biggest catch of the year. |
 | 53 | 104-105 | 3:42.7 | Riddes straight | Luca's GC8 hits **[UFO]** a saucer landed across the road (a wall stands in) and he flies through the windscreen | the crash, the windscreen | **[BUB]** LUCA: I'm OK! |
 | 54 | 106-107 | 3:47.1 | Lauterbrunnen cliffs, 1500 m | A volunteer base-jumps into a wingsuit down the valley; a shoulder camera | base jump, wingsuit | — |
 | 55 | 108-109 | 3:51.4 | Lausanne, Sous-Gare avenue | Luca runs down the avenue, slides, jumps | run, slide, jump | — |
