@@ -664,6 +664,7 @@ src/Player/FootPlayer.Deck quick --playtest --playtest-smoke --world fixture --c
 src/Playtest/            quick  --playtest --playtest-record test_output/playtest/recordcheck --playtest-recordcheck --playtest-nomovie --world fixture --chunks fixture:flat
 src/Movie/ReplayWatch    quick  --playtest --playtest-record test_output/playtest/recordcheck --playtest-recordcheck --playtest-nomovie --world fixture --chunks fixture:flat
 src/Core/PerfRecorder    quick  --playtest --playtest-record test_output/playtest/recordcheck --playtest-recordcheck --playtest-nomovie --world fixture --chunks fixture:flat
+src/Playtest/Recording/  net    tools/playtestnetcheck.sh
 # #822: a building site's office: its doors and plan (constructioncheck), walked into and searched
 # (interiorcheck on a generated site's office), and over the network: the door and a take seen by a
 # second peer and by a late one (generated world)
