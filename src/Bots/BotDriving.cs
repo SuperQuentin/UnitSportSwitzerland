@@ -51,9 +51,10 @@ public static class BotDriving
         float bestD = range;
         foreach (var node in vehicles.GetChildren())
         {
-            if (node is not VehicleBody v || !vehicles.Enterable(v) || v.Kind == RideKind.OnFoot || !AutoPilot.Drives(v.Kind)) continue;
+            // the cheap test first: most of a match's vehicles are far off
+            if (node is not VehicleBody v) continue;
             float d = v.GlobalPosition.DistanceTo(bot.Body.GlobalPosition);
-            if (d >= bestD) continue;
+            if (d >= bestD || v.Kind == RideKind.OnFoot || !vehicles.Enterable(v) || !AutoPilot.Drives(v.Kind)) continue;
             // in sight, or close enough to know it is there
             if (d > 25f && !BotRays.Clear(bot.World.Space, eye, v.GlobalPosition + Vector3.Up * 0.8f, bot.Body.GetRid())) continue;
             best = v;

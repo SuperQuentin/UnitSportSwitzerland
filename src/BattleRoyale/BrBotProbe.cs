@@ -67,16 +67,18 @@ public partial class BrBotProbe : ChatProbe
             Me!.Leap(Me.GlobalPosition, Vector3.Zero, RideKind.OnFoot);
         }
         // every 20 s, how many orphan nodes the client holds (a leak grew this client to 128 GB)
-        bool ended = false;
+        bool ended = false, named = false;
         for (int i = 0; i < 110 && !ended; i++)
         {
             ended = await Until(() => br.State.Phase == BrPhase.Ended, 20);
             GD.Print($"{Log} {OrphanCensus.Line()}");
+            // named once, early, when they pile up: the end may never come (a leak took this client to 128 GB)
+            if (!named && Node.GetOrphanNodeIds().Count >= 3000) { named = true; Node.PrintOrphanNodes(); }
         }
         // a leak shows as thousands (the replay buffer's light copies were 75,000 in a 100-player match); a few
         // hundred is normal. Named only when it fails: the list is a line a node
         int orphans = Node.GetOrphanNodeIds().Count;
-        if (orphans >= 5000) Node.PrintOrphanNodes();
+        if (orphans >= 5000 && !named) Node.PrintOrphanNodes();
         var s = br.State;
         var bots = s.Entrants.Where(e => e.Bot).ToList();
         GD.Print($"{Log} watch: {(ended ? "ended" : "still running")}, winner {s.Find(s.Winner)?.Shown ?? "-"}; "
