@@ -476,6 +476,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Occasions.OccasionAmbience(_chunks, origin, EarNode));
             // …and snow falling round the camera, except indoors
             AddChild(new Occasions.OccasionPrecip());
+            // the UFO sightings (#863): the server's plans played back here, their beams, their landings
+            Occasions.UfoSightings.Create(this, _chunks, origin, dedicated: false);
         }
         // a sign over every bank door (#213)
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.BankSigns(_chunks));

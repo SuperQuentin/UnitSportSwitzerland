@@ -94,7 +94,7 @@ public partial class FootPlayer
         var beam = TractorBeams.At(GetTree(), chest, this);
         if (beam is { } b && !walking && (_beamHold == BeamHold.Lifted || onFloor && MathX.FlatLength(Velocity) < 0.6f))
         {
-            if (_beamHold != BeamHold.Lifted) GD.Print($"[beam] {Name} lifted by {b.Pilot.Name}");
+            if (_beamHold != BeamHold.Lifted) GD.Print($"[beam] {Name} lifted by {b.Pilot?.Name ?? "a sighting"}");
             _beamHold = BeamHold.Lifted;
             HoldOff(b.Pilot);
             _beamTime += dt;

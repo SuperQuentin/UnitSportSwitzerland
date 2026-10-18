@@ -43,8 +43,17 @@ public partial class TractorBeams : Node
 {
     public const string NodeName = "TractorBeams";
 
-    /// <summary>One beam on this tick: the saucer's pilot, the hatch (the cone's apex), the craft's velocity.</summary>
-    public readonly record struct Beam(FootPlayer Pilot, Vector3 Apex, Vector3 Velocity);
+    /// <summary>
+    /// One beam on this tick: the saucer's pilot (null for a scripted saucer, a UFO sighting's, #863),
+    /// the hatch (the cone's apex), the craft's velocity.
+    /// </summary>
+    public readonly record struct Beam(FootPlayer? Pilot, Vector3 Apex, Vector3 Velocity);
+
+    /// <summary>
+    /// Beams no player flies (#863): called once a physics tick by <see cref="Active"/> to add them.
+    /// The UFO sightings put their saucers' beams here, on every peer, from the shared clock.
+    /// </summary>
+    public static Action<List<Beam>>? Scripted { get; set; }
 
     private static readonly List<IBeamable> Things = new();
     private static readonly List<Beam> Beams = new();
@@ -91,6 +100,7 @@ public partial class TractorBeams : Node
         foreach (var s in PlayerSnapshot.Of(tree))
             if (s.Ride == RideKind.Ufo && Ufo.BeamOn(s.Player.Anim))
                 Beams.Add(new Beam(s.Player, s.Pos + Ufo.HatchOffset, s.Vel));
+        Scripted?.Invoke(Beams);
         return Beams;
     }
 
@@ -148,7 +158,7 @@ public partial class TractorBeams : Node
         {
             _wakeIn = 0.25f;
             foreach (var beam in beams)
-                if (beam.Pilot.IsMultiplayerAuthority() && !beam.Pilot.NetProxy) WakeDormant(beam);
+                if (beam.Pilot is { } pilot && pilot.IsMultiplayerAuthority() && !pilot.NetProxy) WakeDormant(beam);
         }
     }
 

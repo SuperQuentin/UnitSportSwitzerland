@@ -92,7 +92,11 @@ public static class OccasionConfig
         DefaultIgnoreCondition = JsonIgnoreCondition.Never,
     };
 
-    /// <summary>Halloween through September and October, Christmas through November and December.</summary>
+    /// <summary>
+    /// Halloween through September and October, Christmas through November and December, UFO
+    /// sightings on the first Friday of every month and the morning after (#863; the saucers only
+    /// come at night, 21:00-05:00 game time, <see cref="SightingPlanner"/>).
+    /// </summary>
     public static List<OccasionEntry> Defaults() => new()
     {
         new OccasionEntry
@@ -104,6 +108,14 @@ public static class OccasionConfig
         {
             Id = OccasionIds.Christmas, Priority = 10,
             Schedule = { new DateWindow("11-01", "12-31") },
+        },
+        new OccasionEntry
+        {
+            // below the seasons: on a Halloween Friday, Halloween keeps its sky
+            Id = OccasionIds.Ufo, Priority = 5,
+            Schedule = { new DateWindow("fri#1", "+1") },
+            // no loot, no hunt, no hat: the saucers (Decorations), the green night, the wail
+            Facets = new FacetToggles { Loot = false, Hunt = false, Hats = false },
         },
     };
 
