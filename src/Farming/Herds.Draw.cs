@@ -74,10 +74,11 @@ public partial class Herds
                 if (h.Bodies is { Visible: true }) h.Bodies.Visible = h.Heads!.Visible = false;
                 continue;
             }
-            if (h.Bodies == null) Build(h);
+            bool fresh = h.Bodies == null;
+            if (fresh) Build(h);
             if (!h.Bodies!.Visible) h.Bodies.Visible = h.Heads!.Visible = true;
             // far herds a few times a second, staggered so they do not all land on one frame
-            if (dist > NearRange && !any && (_frame + h.Plan.Index) % 8 != 0) continue;
+            if (!fresh && dist > NearRange && !any && (_frame + h.Plan.Index) % 8 != 0) continue;
             Pose(h, now, eye, ee, en, dist > NearRange ? dt * 8f : dt);
         }
 
