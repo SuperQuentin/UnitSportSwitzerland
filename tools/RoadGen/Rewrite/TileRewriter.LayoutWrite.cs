@@ -93,6 +93,7 @@ public static partial class TileRewriter
             else if ((jp.Merged ?? junctions.GetValueOrDefault(jp.Node)) is not { } j || j.Arms.Count != jp.Arms.Count) no = "a path or track joins";
             else if (jp.Arms.Any(a => a.Axis is null || !core.Mouths.Any(m => m.Arm == a.Arm))) no = "an arm without a mouth";
             else if (jp.Arms.Any(a => RoadJoinsShortOfMouth(result.Network, a, core.Mouths.First(m => m.Arm == a.Arm).Station))) no = "a road joins short of a mouth";
+            else if (jp.Arms.Any(MissesMouth)) no = "a transition misses its mouth";
             else
                 foreach (var a in jp.Arms)
                     foreach (int link in a.StreetOn.Select(x => x.Link).Prepend(a.LinkId))
@@ -119,8 +120,14 @@ public static partial class TileRewriter
                     changed = true;
                 }
         }
-        foreach (var w in why.Values) stats.Why[w] = stats.Why.GetValueOrDefault(w) + 1;
-        stats.Skipped += why.Count;
+        // (the block's own junctions counted: one planned for what it lays in the block is its own block's)
+        var beyond = plans.Where(p => p.Beyond).Select(p => p.Node).ToHashSet();
+        foreach (var (node, w) in why)
+        {
+            if (beyond.Contains(node)) continue;
+            stats.Why[w] = stats.Why.GetValueOrDefault(w) + 1;
+            stats.Skipped++;
+        }
         // a merged core is written for all its members: the old layout lays none of them (#818 phase 5c)
         foreach (var p in plans.Where(p => p.Merged is not null && ok.Contains(p.Node)).ToList()) ok.UnionWith(p.Nodes);
         return ok;
@@ -143,6 +150,19 @@ public static partial class TileRewriter
             if (net.Nodes[node].Degree > 2) return true;
         }
         return false;
+    }
+
+    /// <summary>
+    /// A car lane of the arm's mouth whose middle lies on no car lane where its transition starts (#818: two pockets merged back to
+    /// back across a short street, <c>TransitionPlanner.Joined</c>, can end on a hatch there): the core's paths would leave off a lane.
+    /// </summary>
+    private static bool MissesMouth(ArmPlan a)
+    {
+        if (a.Transition is null) return false;
+        static List<(double From, double To)> Lanes(Section s) =>
+            Enumerable.Range(0, s.Strips.Count).Where(k => s.Strips[k].IsCarLane && s.Strips[k].Width > 0.1).Select(s.Span).ToList();
+        var got = Lanes(ExteriorPlanner.SectionAt(a, 0));
+        return Lanes(a.Mouth).Any(l => !got.Any(g => (l.From + l.To) * 0.5 > g.From + 0.05 && (l.From + l.To) * 0.5 < g.To - 0.05));
     }
 
     /// <summary>A road joining an arm's street this far past its mouth (m, its crosswalk's reach) still joins the junction.</summary>
@@ -185,7 +205,8 @@ public static partial class TileRewriter
         Dictionary<TileId, List<(RoadAreaProp Band, List<Vec2> Ring)>> bridges, Dictionary<TileId, List<RoadJunctionPath>> pathsOf)
     {
         var net = result.Network;
-        var mine = plans.Where(p => written.Contains(p.Node)).ToList();
+        // in a fixed order, whichever block writes them (#818: a tile's records alike from every block, its nodes numbered apart)
+        var mine = plans.Where(p => written.Contains(p.Node)).OrderBy(p => p.Centre.X).ThenBy(p => p.Centre.Y).ToList();
         var touched = new HashSet<int>();
         var capOfPlan = new Dictionary<JunctionPlan, (TileId Home, RoadJunction Cap)>();
         // (a link the mouth passed whole has none left: it lies under the core)

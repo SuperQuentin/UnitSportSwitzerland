@@ -112,6 +112,8 @@ public sealed class JunctionPlan
     public required int Node { get; init; }
     public required Vec2 Centre { get; init; }
     public required bool Lights { get; init; }
+    /// <summary>Homed outside the block, planned for what it lays inside it (#818): left out of the block's numbers.</summary>
+    public bool Beyond { get; init; }
     public List<ArmPlan> Arms { get; } = new();
     /// <summary>Each arm's exterior (phase 4): its bars from the mouth out, poles and signs; in the order of <see cref="Arms"/>.</summary>
     public List<ArmExterior> Exterior { get; } = new();

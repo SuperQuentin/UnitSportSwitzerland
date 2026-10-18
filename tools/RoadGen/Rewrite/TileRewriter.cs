@@ -493,6 +493,8 @@ public static partial class TileRewriter
 
                 // Final plan of every ribbon, halo included: the halo's divided carriageways are
                 // the partners the block's ones take their direction from.
+                // the halo's streets the junction planner reads (#818): built as the block's, never written
+                var (bandLinks, nearJunctions) = options.NewJunctions && options.WriteJunctions ? Band(priority, result, block, wanted) : ([], []);
                 var plans = new List<(Source Source, List<Vec2> Plan, bool Write, int LinkId)>();
                 foreach (var ribbon in result.Ribbons)
                 {
@@ -511,6 +513,8 @@ public static partial class TileRewriter
                         // the terrain would measure the bridge, not the smoothing
                         audit.Add(plan, source, terrain);
                     }
+                    else if (bandLinks.Contains(link.Id) && terrain is not null && !source.Line.IsShifted && link.AllowSmoothing)
+                        ApplyCliffGuard(plan, source, terrain, options.MaxHeightShift);   // as its own block guards it
                     plans.Add((source, plan, write, link.Id));
                 }
 
@@ -570,6 +574,13 @@ public static partial class TileRewriter
                 var streetPieces = new Dictionary<RoadSegment, List<RoadSegment>>(ReferenceEqualityComparer.Instance);
                 var streets = new StreetPlanner(facades, field, obstacles, streetStats,
                     grids is null ? null : (e, n) => SampleGround(grids, e, n));
+                // the band's streets (#818): planned as their own block plans them, uncounted, kept apart from the block's
+                var bandOutput = new Dictionary<TileId, List<RoadSegment>>();
+                var bandSegmentOf = new Dictionary<int, (RoadSegment, TileId, RoadSegment)>();
+                var bandStation = new Dictionary<int, (double Station, bool Start, bool End)>();
+                var bandStreets = new StreetPlanner(facades, field, obstacles, new StreetPlanner.Stats(),
+                    grids is null ? null : (e, n) => SampleGround(grids, e, n));
+                var bandPaint = new List<RoadPaint>();
 
                 for (int k = 0; k < plans.Count; k++)
                 {
@@ -577,10 +588,13 @@ public static partial class TileRewriter
                     // rails inside a carriageway (#124); halo rails too, their track zone may reach into the block
                     var pieces = source.Segment.Class == RoadClass.Railway
                         ? rails.Split(plan, source.SampleHeight, source.Segment, count: write) : null;
-                    if (!write) continue;
-                    if (!output.TryGetValue(source.Tile, out var list))
-                        output[source.Tile] = list = new List<RoadSegment>();
-                    if (!paint.TryGetValue(source.Tile, out var painted)) paint[source.Tile] = painted = new List<RoadPaint>();
+                    bool band = !write && bandLinks.Contains(linkId);
+                    if (!write && !band) continue;
+                    var into = band ? bandOutput : output;
+                    if (!into.TryGetValue(source.Tile, out var list))
+                        into[source.Tile] = list = new List<RoadSegment>();
+                    var painted = bandPaint;
+                    if (!band && !paint.TryGetValue(source.Tile, out painted)) paint[source.Tile] = painted = new List<RoadPaint>();
                     if (pieces is not null)
                     {
                         foreach (var piece in pieces)
@@ -589,6 +603,7 @@ public static partial class TileRewriter
                             var flags = source.Segment.Attributes.Flags | (piece.Embedded ? RoadAttrFlags.Embedded : 0)
                                 | (bed ? RoadAttrFlags.PavedBed : 0);
                             list.Add(ToSegment(piece.Plan, source, source.Segment.Attributes with { Flags = flags }, piece.Height));
+                            if (band) continue;
                             written++;
                             if (piece.Embedded) rails.EmitGrooves(piece, source.Segment, source.Tile, painted);
                             else if (bed) rails.EmitGrooves(piece, source.Segment, source.Tile, painted, ownHeight: true);
@@ -600,6 +615,7 @@ public static partial class TileRewriter
                         var heights = plan.Select(source.SampleHeight).ToArray();
                         var bedAttributes = source.Segment.Attributes with { Flags = source.Segment.Attributes.Flags | RoadAttrFlags.PavedBed };
                         list.Add(ToSegment(plan, source, bedAttributes, heights));
+                        if (band) continue;
                         written++;
                         rails.EmitGrooves(new RailRoadOverlap.Piece(plan, heights, false), source.Segment, source.Tile, painted, ownHeight: true);
                         continue;
@@ -619,12 +635,12 @@ public static partial class TileRewriter
                     // across the cuts.
                     // separated bike paths (#120): a street that wants one, in its street's layout
                     bool wantsPath = source.Line.BikeWanted || attributes.Left.HasTrack || attributes.Right.HasTrack;
-                    var street = streets.Plan(segment, source.Tile, k, out bool urban, out bool track,
-                        new StreetPlanner.BikeRequest(wantsPath ? bikeLayouts.GetValueOrDefault(linkId) : 0, netStats.Bikes));
+                    var street = (band ? bandStreets : streets).Plan(segment, source.Tile, k, out bool urban, out bool track,
+                        new StreetPlanner.BikeRequest(wantsPath ? bikeLayouts.GetValueOrDefault(linkId) : 0, band ? null : netStats.Bikes));
                     if (mouths.Count > 0) street = street.Select(piece => RampShoulders(piece, source.Tile, mouths)).ToList();
                     list.Add(segment);
                     if (street.Count != 1 || !ReferenceEquals(street[0], segment)) streetPieces[segment] = street;
-                    written += street.Count;
+                    if (!band) written += street.Count;
 
                     var link = result.Network.Links[linkId];
                     bool startsAtJunction = EndsAtJunction(result.Network, link.StartNode), endsAtJunction = EndsAtJunction(result.Network, link.EndNode);
@@ -633,8 +649,14 @@ public static partial class TileRewriter
                     if (track)   // a street that got its paths has no painted lanes
                         paintAttributes = paintAttributes with { Left = NoLane(paintAttributes.Left), Right = NoLane(paintAttributes.Right) };
                     var paintOn = paintAttributes == attributes ? segment : ToSegment(plan, source, paintAttributes);
-                    segmentOf[linkId] = (segment, source.Tile, paintOn);   // turn lanes find the lines on paintOn (#325)
                     double station = source.Key is { } at ? at.FromM + source.AlongOf(plan[0]) : 0;
+                    if (band)
+                    {
+                        bandSegmentOf[linkId] = (segment, source.Tile, paintOn);
+                        bandStation[linkId] = (station, startsAtJunction, endsAtJunction);
+                        continue;
+                    }
+                    segmentOf[linkId] = (segment, source.Tile, paintOn);   // turn lanes find the lines on paintOn (#325)
                     PaintEmitter.Emit(paintOn, station, painted, startsAtJunction, endsAtJunction, bikeLanes: false);
                     paintStation[linkId] = (station, startsAtJunction, endsAtJunction);
                     if (paintAttributes.Left.HasLane || paintAttributes.Right.HasLane)   // on the final pieces (#120)
@@ -658,6 +680,14 @@ public static partial class TileRewriter
                     junctionCount++;
                 }
 
+                // what the junction planner reads and writes on (#818): the block's streets and the band's
+                var layoutSegmentOf = new Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)>(segmentOf);
+                foreach (var (link, so) in bandSegmentOf) layoutSegmentOf[link] = so;
+                var layoutOutput = new Dictionary<TileId, List<RoadSegment>>(output);
+                foreach (var (t, list) in bandOutput) layoutOutput[t] = list;
+                var layoutStation = new Dictionary<int, (double Station, bool Start, bool End)>(paintStation);
+                foreach (var (link, at) in bandStation) layoutStation[link] = at;
+
                 var bikeBetween = new List<(RoadSegment Segment, bool Right, (double From, double To) Along)>();
                 var stripOwners = new Dictionary<RoadAreaProp, RoadSegment>(ReferenceEqualityComparer.Instance);
                 // a street side at a link's end as its street was planned (#406: a corner beside a sidewalk or path)
@@ -672,7 +702,7 @@ public static partial class TileRewriter
                 // its end (a side cut for today's cap or a line close by), the first piece reaching EndStub out
                 RoadSide StreetSideOf(int linkId, LinkEnd end, bool right)
                 {
-                    if (!segmentOf.TryGetValue(linkId, out var so)) return default;
+                    if (!layoutSegmentOf.TryGetValue(linkId, out var so)) return default;
                     var ends = streetPieces.TryGetValue(so.Item1, out var cut) && cut.Count > 0 ? cut : [so.Item1];
                     double gone = 0;
                     for (int p = 0; p < ends.Count; p++)
@@ -700,11 +730,11 @@ public static partial class TileRewriter
                     return StreetSideAt(linkId, end, right);
                 }
                 var layouts = options.NewJunctions
-                    ? PlanAndMerge(priority, result, segmentOf, output, block, wanted, grids, buildings, StreetSideOf, overlay, restrictions, crossingNodes, netStats.Merge)
+                    ? PlanAndMerge(priority, result, layoutSegmentOf, layoutOutput, block, wanted, nearJunctions, grids, buildings, StreetSideOf, overlay, restrictions, crossingNodes, netStats.Merge)
                     : null;
-                if (layouts is not null) netStats.Layouts.AddRange(layouts);
+                if (layouts is not null) netStats.Layouts.AddRange(layouts.Where(p => !p.Beyond));
                 // the junctions the planner writes (#818 phase 3): the old passes lay out the others only
-                var writtenNodes = layouts is not null && options.WriteJunctions ? WritableLayouts(layouts, result, segmentOf, netStats.LayoutWrite) : [];
+                var writtenNodes = layouts is not null && options.WriteJunctions ? WritableLayouts(layouts, result, layoutSegmentOf, netStats.LayoutWrite) : [];
                 var oldPriority = WithoutWritten(priority, writtenNodes);
                 EmitPriority(oldPriority, result, block, wanted, grids, buildings, paint, signs, netStats.Priority);
                 var openings = new List<PocketOpening>();
@@ -776,10 +806,21 @@ public static partial class TileRewriter
                         list.InsertRange(i, final);
                     }
                 }
+                // ... and the band's, as far as the planner's junctions read them (no pocket of the old layout cuts them here)
+                foreach (var (link, so) in bandSegmentOf)
+                {
+                    var list = bandOutput[so.Item2];
+                    int i = list.FindIndex(x => ReferenceEquals(x, so.Item1));
+                    if (i < 0 || !streetPieces.TryGetValue(so.Item1, out var final)) continue;
+                    final = PathsToMouth(final, EndsAtJunction(result.Network, result.Network.Links[link].StartNode), EndsAtJunction(result.Network, result.Network.Links[link].EndNode));
+                    finalPieces[so.Item1] = final;
+                    list.RemoveAt(i);
+                    list.InsertRange(i, final);
+                }
 
                 // the junction planner's junctions written (#818 phase 3): cores, trims, transitions and their paint
                 if (layouts is not null && writtenNodes.Count > 0)
-                    WriteLayouts(layouts, writtenNodes, result, segmentOf, finalPieces, output, capOf, caps, writtenCaps, paint, paintStation,
+                    WriteLayouts(layouts, writtenNodes, result, layoutSegmentOf, finalPieces, layoutOutput, capOf, caps, writtenCaps, paint, layoutStation,
                         transitionsOf, islands, signs, signalRecords, approachRecords, cantons, netStats.Signals, netStats.LayoutWrite, coreCorners, pathEnds, bikeBridges, pathsOf);
 
                 // the paths' paint on their final pieces, and the crossings at the junctions (#120)

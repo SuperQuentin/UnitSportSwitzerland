@@ -20,52 +20,56 @@ public static partial class TileRewriter
     /// </summary>
     private static List<JunctionPlan> PlanAndMerge(PriorityResult priority, RoadGenResult result,
         Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf, Dictionary<TileId, List<RoadSegment>> output,
-        HashSet<TileId> block, HashSet<TileId> wanted, Dictionary<TileId, ChunkGrid>? grids, Footprints buildings,
+        HashSet<TileId> block, HashSet<TileId> wanted, HashSet<int> near, Dictionary<TileId, ChunkGrid>? grids, Footprints buildings,
         Func<int, LinkEnd, bool, RoadSide> streetSide, OsmOverlayReader? overlay, Restrictions? restrictions, CrossingNodes? crossings,
         MergeStats stats)
     {
-        var plans = PlanLayouts(priority, result, segmentOf, output, block, wanted, grids, buildings, streetSide, overlay, restrictions, null, crossings);
+        var plans = PlanLayouts(priority, result, segmentOf, output, block, wanted, near, grids, buildings, streetSide, overlay, restrictions, null, crossings);
         // overlapping cores are first laid apart, each mouth held at half the street between (turns tighter than their vehicle):
         // only a group where that fails a check merges (the user, Oct 17: two junctions across a grass strip at Sion
         // 2505653,1137735 are two, not one paved triangle)
         var groups = JunctionPlan.OverlapGroups(plans).Where(g => g.Any(p => p.CoresOverlap && p.CoreFails)).ToList();
-        stats.HeldApart += plans.Count(p => p.CoresOverlap && !p.CoreFails);
+        stats.HeldApart += plans.Count(p => !p.Beyond && p.CoresOverlap && !p.CoreFails);
+        var planned = plans.Select(p => p.Node).ToHashSet();
         if (groups.Count == 0) return plans;
         var merged = new PriorityResult();
         var gone = new HashSet<int>();
         foreach (var group in groups)
         {
             var nodes = group.Select(p => p.Node).ToHashSet();
-            if (Merge(priority, nodes, result.Network, block, wanted, out string? no) is { } m)
+            bool counted = group.Any(p => !p.Beyond);
+            if (Merge(priority, nodes, result.Network, planned, out string? no) is { } m)
             {
                 merged.Plans.Add(m);
                 gone.UnionWith(nodes);
-                stats.Merged++;
-                stats.Members += nodes.Count;
+                if (counted) { stats.Merged++; stats.Members += nodes.Count; }
             }
-            else stats.Why[no!] = stats.Why.GetValueOrDefault(no!) + 1;
+            else if (counted) stats.Why[no!] = stats.Why.GetValueOrDefault(no!) + 1;
         }
         if (merged.Plans.Count == 0) return plans;
         merged.Plans.InsertRange(0, priority.Plans.Where(p => !gone.Contains(p.Junction.NodeId)));
         foreach (var (k, v) in priority.Yield) merged.Yield[k] = v;
         merged.SignalsFromData.UnionWith(priority.SignalsFromData);
-        return PlanLayouts(merged, result, segmentOf, output, block, wanted, grids, buildings, streetSide, overlay, restrictions, null, crossings);
+        // (a merged junction homed beyond the block, near it, is planned as its members were)
+        var nearMerged = new HashSet<int>(near);
+        foreach (var (j, _) in merged.Plans.Where(p => p.Junction.Members is { } ms && ms.Any(near.Contains))) nearMerged.Add(j.NodeId);
+        return PlanLayouts(merged, result, segmentOf, output, block, wanted, nearMerged, grids, buildings, streetSide, overlay, restrictions, null, crossings);
     }
 
     /// <summary>
     /// One junction of <paramref name="nodes"/> with its priority plan: the members' arms but the streets between two members (each
     /// under <see cref="InternalLink"/>), their signs and give-way rows on those arms, lit where any member is. Null (and why)
-    /// where it cannot be: a member without its plan, outside the block, a roundabout, a longer street between two members,
+    /// where it cannot be: a member without its plan, not planned with the block, a roundabout, a longer street between two members,
     /// streets between members closing a loop (an island), or a centre outside every member's tile (the core's records go in
     /// one tile).
     /// </summary>
     private static (Junction Junction, PriorityPlanner.Plan Plan)? Merge(PriorityResult priority, HashSet<int> nodes, RoadNetwork net,
-        HashSet<TileId> block, HashSet<TileId> wanted, out string? no)
+        HashSet<int> planned, out string? no)
     {
         no = null;
         var members = priority.Plans.Where(p => nodes.Contains(p.Junction.NodeId)).ToList();
         if (members.Count != nodes.Count || members.Any(p => p.Plan.Arms.Count != p.Junction.Arms.Count)) { no = "a member without its plan"; return null; }
-        if (members.Any(p => !block.Contains(Home(p.Junction)) || !wanted.Contains(Home(p.Junction)))) { no = "a member beyond the block"; return null; }
+        if (members.Any(p => !planned.Contains(p.Junction.NodeId))) { no = "a member beyond the block"; return null; }
         if (members.Any(p => p.Plan.Kind == PriorityPlanner.Kind.Roundabout)) { no = "a roundabout"; return null; }
         var inner = new HashSet<int>();
         foreach (var (j, _) in members)

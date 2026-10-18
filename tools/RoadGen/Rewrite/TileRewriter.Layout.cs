@@ -35,7 +35,7 @@ public static partial class TileRewriter
 
     private static List<JunctionPlan> PlanLayouts(PriorityResult priority, RoadGenResult result,
         Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf, Dictionary<TileId, List<RoadSegment>> output,
-        HashSet<TileId> block, HashSet<TileId> wanted, Dictionary<TileId, ChunkGrid>? grids, Footprints buildings,
+        HashSet<TileId> block, HashSet<TileId> wanted, HashSet<int> near, Dictionary<TileId, ChunkGrid>? grids, Footprints buildings,
         Func<int, LinkEnd, bool, RoadSide> streetSide, OsmOverlayReader? overlay, Restrictions? restrictions, Action<string>? log,
         CrossingNodes? crossings = null)
     {
@@ -53,7 +53,9 @@ public static partial class TileRewriter
         foreach (var (junction, plan) in priority.Plans)
         {
             var home = TileId.FromLv95(junction.Centre.X, junction.Centre.Y);
-            if (!block.Contains(home) || !wanted.Contains(home) || junction.Arms.Count < 3 || plan.Arms.Count != junction.Arms.Count) continue;
+            // the block's junctions, and those near it (#818: they may reach into it)
+            bool beyond = !block.Contains(home) || !wanted.Contains(home);
+            if (beyond && !near.Contains(junction.NodeId) || junction.Arms.Count < 3 || plan.Arms.Count != junction.Arms.Count) continue;
             var rules = JunctionRules.Of(plan.Kind);
             bool lights = plan.Kind == PriorityPlanner.Kind.Signal;
             var main = Enumerable.Range(0, plan.Arms.Count).Where(k => plan.Arms[k].Role == PriorityPlanner.Role.Main).ToArray();
@@ -65,7 +67,7 @@ public static partial class TileRewriter
                     if (p.At.DistanceTo(q.At) > 1) oldSteepest = Math.Max(oldSteepest, Math.Abs(p.Height - q.Height) / p.At.DistanceTo(q.At));
             var jp = new JunctionPlan
             {
-                Node = junction.NodeId, Merged = junction.Members is null ? null : junction, Centre = junction.Centre, Lights = lights, MainArms = main, CentreLineThrough = plan.CentreLine is not null,
+                Node = junction.NodeId, Merged = junction.Members is null ? null : junction, Centre = junction.Centre, Lights = lights, Beyond = beyond, MainArms = main, CentreLineThrough = plan.CentreLine is not null,
                 EdgeGuides = plan.Guides.Count > 0, OldOutline = junction.Boundary.ToList(), OldArea = junction.Area, OldTight = oldTight, OldSteepest = oldSteepest,
             };
             var armsHere = ArmsOf(junction, net);
@@ -277,10 +279,10 @@ public static partial class TileRewriter
             t.Markings = TransitionPaint.Of(t, StreetPaint.Of(segmentOf[t.Arm.LinkId].Segment), planOf[t.Arm].Lights,
                 t.Far is { } f && planOf[f].Lights, StopOf(t.Arm), StopOf(t.Far));
         if (JunctionFailures is { } failures)
-            File.AppendAllText(failures, string.Concat(plans.Where(jp => jp.Core is { } c && !jp.CoresOverlap
+            File.AppendAllText(failures, string.Concat(plans.Where(jp => !jp.Beyond && jp.Core is { } c && !jp.CoresOverlap
                 && (c.KerbsNotTangent > 0 || c.ConnectorsOutside > 0 || !c.Simple)).Select(jp => jp.Describe() + "\n")));
         if (DebugJunction is { } dbg)
-            foreach (var jp in plans.Where(jp => Math.Abs(dbg.E - jp.Centre.X) < 30 && Math.Abs(dbg.N - jp.Centre.Y) < 30))
+            foreach (var jp in plans.Where(jp => !jp.Beyond && Math.Abs(dbg.E - jp.Centre.X) < 30 && Math.Abs(dbg.N - jp.Centre.Y) < 30))
             {
                 (log ?? Console.WriteLine)(jp.Describe());
                 if (JunctionSvg is { } svg)
@@ -311,6 +313,79 @@ public static partial class TileRewriter
 
     /// <summary>A transition runs on along its street at most this far past its own link (m).</summary>
     private const double StreetOnMost = 150;
+
+    /// <summary>
+    /// A junction homed outside the block but this near it (m, from its centre) is planned with it (#818: its core, transitions
+    /// and exterior may reach into the block); a transition shares its street with the junction beyond, planned too.
+    /// </summary>
+    private const double NearBlock = 400;
+
+    /// <summary>
+    /// The halo's links the junction planner reads (#818: a junction is laid out alike from every block it reaches, each writing its
+    /// share): the arms and the street on (<see cref="StreetOn"/>) of every junction of the block and of those
+    /// <see cref="NearBlock"/> or one street from it, and the lines beside them in their tiles (the room beside an arm). Built as
+    /// their own block builds them, never written. <c>Near</c>: those junctions homed outside the block.
+    /// </summary>
+    private static (HashSet<int> Links, HashSet<int> Near) Band(PriorityResult priority, RoadGenResult result, HashSet<TileId> block, HashSet<TileId> wanted)
+    {
+        var net = result.Network;
+        double minE = block.Min(t => t.MinE), maxE = block.Max(t => t.MinE) + 1000, minN = block.Min(t => t.MinN), maxN = block.Max(t => t.MaxN);
+        double Off(Vec2 p)
+        {
+            double dx = Math.Max(0, Math.Max(minE - p.X, p.X - maxE)), dy = Math.Max(0, Math.Max(minN - p.Y, p.Y - maxN));
+            return Math.Sqrt(dx * dx + dy * dy);
+        }
+        var planOf = new Dictionary<int, (Junction Junction, PriorityPlanner.Plan Plan)>();
+        foreach (var p in priority.Plans) planOf[p.Junction.NodeId] = p;
+        var near = new HashSet<int>();
+        var planned = new HashSet<int>();
+        foreach (var p in priority.Plans)
+        {
+            var home = Home(p.Junction);
+            if (block.Contains(home) && wanted.Contains(home)) planned.Add(p.Junction.NodeId);
+            else if (Off(p.Junction.Centre) <= NearBlock && near.Add(p.Junction.NodeId)) planned.Add(p.Junction.NodeId);
+        }
+        var links = new HashSet<int>();
+        void Arms(PriorityPlanner.Plan plan, bool onward)
+        {
+            foreach (var arm in plan.Arms)
+            {
+                links.Add(arm.LinkId);
+                var on = StreetOn(net, arm.LinkId, arm.End == LinkEnd.End).Links;
+                foreach (var (l, _) in on) links.Add(l);
+                if (!onward) continue;
+                // the junction where the street on ends: a transition may be shared with it
+                var (last, atEnd) = on.Count > 0 ? on[^1] : (arm.LinkId, arm.End == LinkEnd.End);
+                int node = atEnd ? net.Links[last].StartNode : net.Links[last].EndNode;
+                if (planOf.TryGetValue(node, out var far) && planned.Add(node))
+                {
+                    near.Add(node);
+                    Arms(far.Plan, false);
+                }
+            }
+        }
+        foreach (int node in planned.ToList()) Arms(planOf[node].Plan, true);
+
+        // the lines beside them in their own tiles: the room beside an arm is measured against those
+        var byTile = new Dictionary<TileId, List<int>>();
+        for (int l = 0; l < net.Links.Count; l++)
+            if (net.Links[l].Tag is Source s && !block.Contains(s.Tile) && net.Links[l].Centreline.Count > 0)
+                (byTile.TryGetValue(s.Tile, out var list) ? list : byTile[s.Tile] = []).Add(l);
+        static (double X0, double Y0, double X1, double Y1) Box(List<Vec2> line, double grow) =>
+            (line.Min(p => p.X) - grow, line.Min(p => p.Y) - grow, line.Max(p => p.X) + grow, line.Max(p => p.Y) + grow);
+        foreach (int l in links.ToList())
+        {
+            if (net.Links[l].Tag is not Source s || block.Contains(s.Tile) || !byTile.TryGetValue(s.Tile, out var others)) continue;
+            var box = Box(net.Links[l].Centreline, RoomReach + 5);
+            foreach (int o in others)
+            {
+                var b = Box(net.Links[o].Centreline, 0);
+                if (b.X1 >= box.X0 && b.X0 <= box.X1 && b.Y1 >= box.Y0 && b.Y0 <= box.Y1) links.Add(o);
+            }
+        }
+        links.RemoveWhere(l => net.Links[l].Tag is not Source s || block.Contains(s.Tile));
+        return (links, near);
+    }
 
     /// <summary>
     /// The links a street runs on past an arm's own link, junction side first (#818: a transition may run on there): on through
