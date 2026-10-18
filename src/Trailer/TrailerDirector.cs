@@ -69,6 +69,10 @@ public partial class TrailerDirector : Node
     private Texture2D? _photo;
     private bool _photoAsked;
     private float _sea = float.NaN;
+    /// <summary>The occasion the last shot started (<see cref="Shot.Occasion"/>), stopped when the next wants another.</summary>
+    private string? _occasion;
+    /// <summary>The shot's cues already played (<see cref="Shot.Cues"/>), by index.</summary>
+    private readonly HashSet<int> _cued = new();
     private FrameRecorder? _recorder;
     private int _framesWanted;
     private readonly Queue<(double T, string Path)> _stills = new();
@@ -249,6 +253,12 @@ public partial class TrailerDirector : Node
         float sea = shot.Sea ?? Shot.CalmSea;
         if (sea != _sea) RunCommand?.Invoke(string.Create(CultureInfo.InvariantCulture, $"/seastate {sea:F2}"));
         _sea = sea;
+        if (shot.Occasion != _occasion)
+        {
+            if (_occasion != null) RunCommand?.Invoke($"/occasion stop {_occasion}");
+            if (shot.Occasion != null) RunCommand?.Invoke($"/occasion start {shot.Occasion}");
+            _occasion = shot.Occasion;
+        }
         GameSettings.Current.TrafficCars = shot.Traffic ?? _defaultTraffic;
         World.Traffic.Current?.Forget();
         HoldClock(shot.Hour);
@@ -359,6 +369,19 @@ public partial class TrailerDirector : Node
             _props.Add(figure);
             return;
         }
+        if (prop.Piece is { } piece)
+        {
+            // a hammer's piece: its mesh and collision, standing on the ground, its face to the bearing
+            float pg = FloorAt(at) ?? at.Y;
+            var built = new StaticBody3D { Name = $"Prop{_props.Count}" };
+            built.AddChild(new MeshInstance3D { Mesh = UnitSport.Build.StructureMeshes.Mesh(piece, prop.Material), MaterialOverride = Items.ItemDefs.Material });
+            foreach (var (shape, shapeAt) in UnitSport.Build.StructureMeshes.Colliders(piece, prop.Material))
+                built.AddChild(new CollisionShape3D { Shape = shape, Transform = shapeAt });
+            AddChild(built);
+            built.GlobalTransform = new Transform3D(new Basis(Vector3.Up, Mathf.DegToRad(-bearing)), at with { Y = pg + prop.At.H });
+            _props.Add(built);
+            return;
+        }
         if (prop.Item != Items.ItemId.None)
         {
             // an item set down: its own mesh, its lowest point on the floor (a path's, a road's: the
@@ -451,6 +474,14 @@ public partial class TrailerDirector : Node
         for (int i = 0; i < shot.Cast.Count; i++)
             _actors.Add(new Actor(shot.Cast[i], i, this, _chunks, _origin, _routes, k => k >= 0 && k < _actors.Count ? _actors[k] : null) { SetPoint = SetPoint });
         foreach (var prop in shot.Props.Where(p => p.Actor < 0 && p.Route == null)) Build(prop);
+        if (shot.Zone is { } zone && PlaceSpot(zone.Centre) is { } centre)
+        {
+            // the Battle Royale's wall, standing on its circle with no match
+            var wall = new BattleRoyale.ZoneWall { Name = "Zone" };
+            AddChild(wall);
+            wall.Place(centre, zone.Radius);
+            _props.Add(wall);
+        }
         Enter(Phase.Place);
     }
 
@@ -528,6 +559,7 @@ public partial class TrailerDirector : Node
             _song.Play((float)shot.Start);
         }
         _captions.SetChat(shot.Chat);
+        _cued.Clear();
         _photo = null;
         _photoAsked = false;
         GD.Print(string.Create(CultureInfo.InvariantCulture, $"[trailer] shot {shot.Number}: rolling, {shot.Length:F2} s ({_framesWanted} frames)"));
@@ -567,6 +599,15 @@ public partial class TrailerDirector : Node
             _ = TakePhoto();
         }
         _captions.Show(shot, _t, _photo);
+        for (int i = 0; i < shot.Cues.Count; i++)
+        {
+            var cue = shot.Cues[i];
+            if (_t < cue.T || !_cued.Add(i)) continue;
+            if (cue.Actor < 0 || cue.Actor >= _actors.Count || _actors[cue.Actor].Body is not { } who || !IsInstanceValid(who)) continue;
+            // at the hand, as the item's owner would send it (offline: played here only)
+            var ahead = (-who.GlobalBasis.Z with { Y = 0 }).Normalized();
+            Items.ItemEvents.Instance?.Send(cue.Kind, Items.ItemEvents.MuzzleOf(who, ahead) + Vector3.Up * cue.Up, ahead);
+        }
     }
 
     private async System.Threading.Tasks.Task TakePhoto()

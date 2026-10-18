@@ -189,7 +189,8 @@ public sealed class Actor
 
         // an NPC body anchors its own ground and has no camera; one on foot only stands (on the ground,
         // under a deck: it never boards one), so a walker is not one, nor one aboard a machine
-        bool npc = Spec.Drive != Drive.Walk && Spec.Aboard < 0;
+        // a walker with scripted jumps and crouches is one too: an NPC reads them (FootActions), a player the keys
+        bool npc = (Spec.Drive != Drive.Walk || Spec.Actions != null) && Spec.Aboard < 0;
         // a figure's look is found by its rider index (Appearance.For): a player's is its peer's, the
         // same for every actor here, so an NPC is named as a race entrant of owner 0 (an index of its
         // own) and its look registered there; a walker registers its own, the one walking in its shot
@@ -251,6 +252,7 @@ public sealed class Actor
                     var ahead = (-b.Z with { Y = 0 }).Normalized();
                     return ((right * wish.X + ahead * wish.Y).LimitLength(1f), run);
                 };
+                if (Spec.Actions != null) body.FootActions = () => Spec.Actions(_moving);
                 break;
             case Drive.Stand when Spec.Ride != RideKind.OnFoot:
                 body.RideControls = () => new RideInput(0f, 0f, 0f, false, Handbrake: true);
@@ -331,6 +333,7 @@ public sealed class Actor
         if (_moving >= 0) _moving += dt;
         if (Ready && Body.HeldItemId != Spec.Item) Body.HeldItemId = Spec.Item;
         if (Ready && Spec.Use != null) Body.ItemAction = _moving >= 0 && Spec.Use(_moving) ? 2 : 0;
+        if (Ready && Spec.Fight != null) Body.FightPose = Spec.Fight(System.Math.Max(_moving, 0));
         if (Body.BackItemId != 0) Body.BackItemId = 0;
         var v = Body.IsFlying ? Body.Flight.Velocity : Body.Ride == RideKind.OnFoot ? Body.Velocity : Body.WorldVelocity;
         var flat = v with { Y = 0 };

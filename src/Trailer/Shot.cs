@@ -196,6 +196,18 @@ public sealed record Cast
     public Spot? Board { get; init; }
     /// <summary>A boat: how deep its body is put under the surface, m (the steamer floats at 1.6).</summary>
     public float Draught { get; init; } = 0.2f;
+    /// <summary>
+    /// A fist fight's stance or move over time (<see cref="FootPlayer.FightPose"/>: 1 stand, 2 guard,
+    /// 8 dazed, 9 victory; 16 + a <c>FightMove</c>: 17 jab, 18 kick, 21 jump kick, 22 uppercut), 0 = none.
+    /// A move plays once from when the value changes. Times as <see cref="Controls"/>.
+    /// </summary>
+    public Func<double, int>? Fight { get; init; }
+    /// <summary>
+    /// On foot (<see cref="Drive.Walk"/>): its jump and crouch held over time, as the keys would be
+    /// (a jump on the press, a slide on a crouch while running, a wall jump in the air at a wall).
+    /// Such a walker is an NPC body, which reads these instead of the keyboard.
+    /// </summary>
+    public Func<double, (bool Jump, bool Crouch)>? Actions { get; init; }
 }
 
 /// <summary>
@@ -217,7 +229,17 @@ public sealed record Prop(Spot At, float Bearing, Vector3 Size, Color Colour)
     public Vector3? InSet { get; init; }
     /// <summary>A character sitting there instead, the hip at the spot, facing <see cref="Bearing"/>: a still figure, as a passenger sits.</summary>
     public Character? Seated { get; init; }
+    /// <summary>A built piece instead (a hammer's wall, <see cref="Build.StructureMeshes"/>), in <see cref="Material"/>, solid, standing on the ground.</summary>
+    public Build.PieceKind? Piece { get; init; }
+    public Build.BuildMaterial Material { get; init; }
 }
+
+/// <summary>
+/// An item's effect at <paramref name="T"/> s into the shot (its roll, like a caption) at actor
+/// <paramref name="Actor"/>'s hand, <paramref name="Up"/> m higher: an alphorn's call
+/// (<see cref="Items.ItemEventKind.Horn"/>), a fondue's warmth, a flare, smoke, a cast.
+/// </summary>
+public sealed record Cue(double T, int Actor, Items.ItemEventKind Kind, float Up = 0f);
 
 /// <summary>
 /// One shot of the trailer: where and when, who is in it, how the camera moves, what it says.
@@ -284,4 +306,11 @@ public sealed record Shot
     /// <summary>The film's song, whose bars the shot is cut on.</summary>
     public Song Song { get; init; } = Song.VoxelRevolution;
     public double Length => End - Start;
+
+    /// <summary>An occasion on for the shot (<c>/occasion start halloween</c>), its decor drawn; null: none.</summary>
+    public string? Occasion { get; init; }
+    /// <summary>A Battle Royale zone's wall standing on this circle (centre, radius m), no match needed.</summary>
+    public (Spot Centre, float Radius)? Zone { get; init; }
+    /// <summary>Item effects on cue, <see cref="Cue"/>.</summary>
+    public IReadOnlyList<Cue> Cues { get; init; } = Array.Empty<Cue>();
 }
