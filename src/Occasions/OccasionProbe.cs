@@ -38,7 +38,13 @@ public static class OccasionProbe
         Expect("halloween closes", defaults, "2026-10-31", "halloween-2026");
         Expect("christmas opens", defaults, "2026-11-01", "christmas-2026");
         Expect("christmas closes", defaults, "2026-12-31", "christmas-2026");
-        Expect("new year", defaults, "2027-01-01");
+        Expect("new year", defaults, "2027-01-04");
+        // UFO sightings (#863): the first Friday of every month and the morning after
+        Expect("ufo: first friday", defaults, "2027-01-01", "ufo-2027");
+        Expect("ufo: with christmas", defaults, "2026-11-06", "christmas-2026", "ufo-2026");
+        Expect("ufo: morning after", defaults, "2026-11-07", "christmas-2026", "ufo-2026");
+        Expect("ufo: gone sunday", defaults, "2026-11-08", "christmas-2026");
+        Expect("ufo: second friday", defaults, "2026-11-13", "christmas-2026");
         Expect("summer", defaults, "2027-07-14");
 
         var wrap = new List<OccasionEntry>
@@ -79,7 +85,7 @@ public static class OccasionProbe
             new() { Id = "Halloween", Enabled = false },
             new() { Id = "community-day", Schedule = { new DateWindow("2026-10-03", "2026-10-03") } },
         });
-        Expect("merge: file disables", merged, "2026-10-03", "community-day-2026");
+        Expect("merge: file disables", merged, "2026-10-03", "community-day-2026", "ufo-2026");
         Expect("merge: default kept", merged, "2026-12-01", "christmas-2026");
 
         GD.Print(failures == 0 ? "[occasioncheck] all passed" : $"[occasioncheck] {failures} FAILED");

@@ -114,6 +114,10 @@ public partial class UfoSightings : Node3D, IOriginContainer
     /// <summary>The parked UFO's name standing in for a landed saucer.</summary>
     public static string ParkedName(int id) => $"ufo_sighting_{id}";
 
+    /// <summary>The same, made once a sighting (it is asked every frame).</summary>
+    private readonly Dictionary<int, NodePath> _names = new();
+    private NodePath NameOf(int id) => _names.TryGetValue(id, out var n) ? n : _names[id] = new NodePath(ParkedName(id));
+
     /// <summary>The world point of a craft's pose (origin of the saucer, its legs' feet).</summary>
     public Vector3 WorldOf(Sighting s, in CraftPose pose) => _origin.ToWorld(s.E, s.N, s.Ground) + pose.Offset;
 
@@ -180,7 +184,7 @@ public partial class UfoSightings : Node3D, IOriginContainer
     /// <summary>A craft not drawn now: a landed saucer that is a parked UFO, or one that was flown away.</summary>
     private bool Hidden(Sighting s, int craft, double now) =>
         s.Kind == SightingKind.Landing && craft == 0
-        && (_taken.Contains(s.Id) || SightingPath.Boardable(s, now) && VehicleManager.Instance?.GetNodeOrNull(ParkedName(s.Id)) != null);
+        && (_taken.Contains(s.Id) || SightingPath.Boardable(s, now) && VehicleManager.Instance?.GetNodeOrNull(NameOf(s.Id)) != null);
 
     // ---- the authority's planning ----------------------------------------------------------------
 
@@ -190,7 +194,7 @@ public partial class UfoSightings : Node3D, IOriginContainer
         // past ones forgotten on every peer
         _drop.Clear();
         foreach (var (id, s) in _plans) if (now > s.End + 5) _drop.Add(id);
-        foreach (var id in _drop) { _plans.Remove(id); _taken.Remove(id); }
+        foreach (var id in _drop) { _plans.Remove(id); _taken.Remove(id); _names.Remove(id); }
 
         if (!Authority) return;
         _checkIn -= delta;
