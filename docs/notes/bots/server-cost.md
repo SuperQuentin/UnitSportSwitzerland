@@ -27,3 +27,32 @@
   ~0.002 ms.
 - **Left**: the overlap scan's allocation (`SeparateFromPlayers`), and the road collision cells of a
   generated town, 47-83 ms each to commit, one piece each (`server-collision`).
+
+## 100 players: measured, Oct 2026 (#837)
+
+- **Tools**: `tools/botperf.sh N [seconds]` (free roam, `--bots N` round one spot, server `--serverstats
+  --botprofile`, a client with `--perflog`); `BRBOTS=100 BRPACE=1 tools/brbotwatch.sh` with
+  `SERVER_ARGS="--serverstats,<label> --botprofile"` for a whole match. `MaxBots` is 128.
+- **Server, free roam** (Apple M1 Pro, real tiles, all bots within 20 m of the client):
+
+  | bots | busy p50 steady | p99 | net out to the client |
+  |---|---|---|---|
+  | 20 | 3.9 ms | 8 ms | 76 KB/s |
+  | 50 | 8 ms | 15 ms | 180 KB/s |
+  | 100 | 15 ms | 23 ms | 377 KB/s |
+
+  About 0.15 ms per bot; the bodies are less than half (~0.065 ms, `--botprofile`), the rest is outside
+  every timed block (the physics step, replication). The first 30-60 s after 100 bots spawn are
+  50-150 ms frames, growing faster than the count (20: 6 ms, 50: 31 ms, 100: 150 ms), also outside the
+  timed blocks. Not found yet: it needs a profiler.
+- **Server, a 100-bot match** (full pace, generated town): busy p50 15-17 ms, after `AutoPilot.Drives` was
+  cached (it stepped a mount 180 times per vehicle per bot every 1.5 s: 25-40 ms and 24 s of GC, and one
+  runtime crash). Left: 5 s windows at 135-370 ms when many bots plan street routes at once. A failed
+  `RoadNetwork.Path` walks the whole graph on the main thread, retried every 10 s per bot.
+- **Client**: with every bot near and in view, 67 fps at 20, 21 fps at 50, 8.5 fps at 100. Each near,
+  visible remote figure is rebuilt every frame (`HoldRemoteFigure` holds only far or off-screen ones). In
+  the match, 10-90 fps depending on the crowd in view.
+- **Client memory**: the replay buffer kept a copy of every pulsing light (`WorldRecorder`, fixed on `main`):
+  75,000 orphan nodes and 128 GB. After the fix, orphans stay ~300, and Godot's own counters are flat
+  (static 826 MB, VRAM 870 MB, managed 1 GB). But the macOS footprint still grew from 4 GB to 10 GB in
+  13 minutes, outside Godot's allocator (the Metal/MoltenVK driver?). Not found yet.
