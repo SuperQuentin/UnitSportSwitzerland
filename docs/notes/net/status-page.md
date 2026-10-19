@@ -28,3 +28,4 @@
   redirects http to https and passes everything to Caddy `:80` on the host; UDP 7777/7778 are forwarded too. The tiles
   go through the same name (`TILES_URL=https://unitsport.infrack.ch/tiles/` in `tools/deploy.env`), since
   `unit-tiles.infrack.ch` stopped answering from outside. Caddy itself stays plain HTTP (`TILES_DOMAIN` empty).
+- **Live map** beside it (#896): `net/live-map` (`map.html`, `players.json`, `antennas-4g.json`), linked from the nav.

@@ -63,6 +63,27 @@ public sealed partial class Teleporter : Node
             GD.PushWarning("[teleport] nothing to move: no active camera or player");
             return false;
         }
+        // the phone out (#889): the jump waits until its screen covers the view
+        string where = label ?? $"{lv95E:F0}/{lv95N:F0}";
+        if (Curtain?.Invoke(where, () => Jump(lv95E, lv95N, label)) == true) return true;
+        return Jump(lv95E, lv95N, label);
+    }
+
+    /// <summary>
+    /// Something that can hide a jump (the phone's screen, #889): given where to and the jump, it
+    /// returns true when it will run the jump itself once the view is covered, false to let it go now.
+    /// </summary>
+    public static Func<string, Action, bool>? Curtain { get; set; }
+
+    /// <summary>Raised when a body or camera that was moved has been set down on streamed ground (or given up on).</summary>
+    public static event Action? Arrived;
+
+    internal static void RaiseArrived() => Arrived?.Invoke();
+
+    private bool Jump(double lv95E, double lv95N, string? label)
+    {
+        var target = ActiveTarget();
+        if (target is null) return false;
 
         // a teleport out of a house is a way out of it: drop the interior before moving
         if (target is Player.FootPlayer { Indoors: true } inside)

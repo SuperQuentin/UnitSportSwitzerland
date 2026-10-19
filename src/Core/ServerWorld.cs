@@ -34,11 +34,13 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Net.Arrival? _arrival;
     private Items.PalletService? _pallets;
     private Terrain.Construction.CraneService? _cranes;
+    private Concert.ConcertService? _concerts;
     private Build.Structures? _structures;
     private Occasions.OccasionManager? _occasions;
     private World.RaceNpcs? _npcs;
     private BattleRoyale.BrManager? _br;
     private Combat.FightManager? _fight;
+    private Combat.AuraManager? _aura;
     private InviteService? _invites;
     private Parties? _parties;
     private BattleRoyale.BrCrates? _brCrates;
@@ -244,6 +246,13 @@ public partial class ServerWorld : Node3D, IOriginContainer
         AddChild(_fight);
         _chat.Fight = _fight;
 
+        // aura battles (#907): World/Aura, the server owns every match and grades every press
+        _aura = Combat.AuraManager.CreateServer(_chat, _players);
+        _aura.Fights = _fight;
+        _fight.Aura = _aura;
+        AddChild(_aura);
+        _chat.Aura = _aura;
+
         // Battle Royale (#177): World/BattleRoyale; everyone in a running match sees everyone else in it
         _brCrates = BattleRoyale.BrCrates.Create(this, origin, server: true);
         var br = _br = BattleRoyale.BrManager.CreateServer(_chat, _players, places?.Places ?? new(), manifest.Tiles,
@@ -294,6 +303,10 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // cranes players work (#618): who works which, and where one was let go
         _cranes = Terrain.Construction.CraneService.Create(this, server: true);
         _cranes.Source = () => source;
+        // concerts (#885): who hosts which stadium's set, its cues, the operator's DMX relayed
+        _concerts = Concert.ConcertService.Create(this, server: true);
+        _concerts.Chat = _chat;
+        _chat.Concerts = _concerts;
         _chat.NameAssigned += bank.SendBalance;
         // selling farm produce (#494): load prices, specialty buyers, contracts; farm stands' crates and cash
         if (Systems.On(Systems.Farming))
@@ -388,7 +401,39 @@ public partial class ServerWorld : Node3D, IOriginContainer
             AddChild(new StatusFile(statusPath, () => new StatusFileData(
                 name, version, world, port, registry?.Players.Count ?? 0, NetworkManager.MaxClients,
                 registry is null ? [] : registry.Players.Select(p => p.Name).Order(StringComparer.OrdinalIgnoreCase).ToArray())));
+        // where everyone is, as a file the live map beside a deployed server reads (#896, docs/notes/net/live-map.md)
+        if (LiveMapFile.ParsePath() is { } mapPath)
+            AddChild(new LiveMapFile(mapPath, LiveMapPlayers));
         _parentPid = HostedServer.ParseParentPid();
+    }
+
+    private readonly List<LiveMapPlayer> _mapPlayers = new();
+
+    /// <summary>Every player and bot with a body, where it is now (race NPCs left out: they are scenery).</summary>
+    private IReadOnlyList<LiveMapPlayer> LiveMapPlayers()
+    {
+        _mapPlayers.Clear();
+        if (_players == null) return _mapPlayers;
+        for (int i = 0; i < _players.GetChildCount(); i++)
+        {
+            if (_players.GetChild(i) is not Player.FootPlayer p || p.Npc && !p.Bot || p.Stowed) continue;
+            var at = p.Global;
+            string name = p.Bot ? (p.BotName.Length > 0 ? p.BotName : "Bot") : _chat?.NameOfPeer(p.GetMultiplayerAuthority()) ?? p.Name;
+            _mapPlayers.Add(new LiveMapPlayer(name, Math.Round(at.E, 1), Math.Round(at.N, 1), Math.Round(at.Alt, 1),
+                RideLabel(p.RideKindId), p.Bot));
+        }
+        return _mapPlayers;
+    }
+
+    private static readonly Dictionary<int, string> RideLabels = new();
+
+    /// <summary>What a ride is called ("on foot", "Honda Africa Twin"), built once per kind: catalogue rides are numbers.</summary>
+    private static string RideLabel(int kind)
+    {
+        if (RideLabels.TryGetValue(kind, out var label)) return label;
+        var k = (Player.RideKind)kind;
+        label = k == Player.RideKind.OnFoot ? "on foot" : Player.Rideable.Create(k)?.Label ?? k.ToString();
+        return RideLabels[kind] = label;
     }
 
     /// <summary>The client that started this server from its menu, if any: the server goes when it does.</summary>
@@ -501,6 +546,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _sleepers?.SendTo(id);
         _pallets?.SendTo(id);
         _cranes?.SendTo(id);
+        _concerts?.SendTo(id);
         // the dormant slots woken anywhere (#689): a far one's car is not sent, its bay must be empty
         Vehicles.DormantVehicles.Instance?.SendTo(id);
         _structures?.SendTo(id);
@@ -523,9 +569,11 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _passengers?.PeerLeft(id);
         _br?.PeerLeft(id);
         _fight?.PeerLeft(id);
+        _aura?.PeerLeft(id);
         _invites?.PeerLeft(id);
         _parties?.PeerLeft(id);
         _cranes?.PeerLeft(id);
+        _concerts?.PeerLeft(id);
         _vehicles?.ForgetOwner(id);
         _radios?.ForgetOwner(id);
         _dropped?.ForgetOwner(id);

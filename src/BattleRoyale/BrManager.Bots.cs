@@ -36,6 +36,122 @@ public partial class BrManager
 
     private FootPlayer? BodyOf(long id) => _players?.GetNodeOrNull<FootPlayer>(PlayerReplication.NodeName(id));
 
+    /// <summary>An entrant's body on the server (a player's proxy or a bot), for the bots' brains.</summary>
+    public FootPlayer? BodyOfPeer(long id) => BodyOf(id);
+
+    /// <summary>A bot carrying no dogtag yet, in a team with a mate out and not yet recalled, while recalls are open.</summary>
+    private bool WantsTag(Bot bot) =>
+        RecallOpen && _state.Find(bot.Id) is { Team: not 0 } me && !bot.Inventory.Contains(Items.ItemId.Dogtag)
+        && _state.Entrants.Any(m => m.Team == me.Team && !m.Alive && !m.Recalled);
+
+    /// <summary>
+    /// The nearest Postauto stop to <paramref name="at"/> (world, on the stop's ground) worth a bot's walk with a
+    /// dogtag, while recalls are open: the walk there and on into the circle it must reach (at <see cref="StopWalk"/>
+    /// m/s, plus a margin), and any stretch past the current circle, cost it no more zone than it can take, keeping
+    /// <see cref="StopKeep"/> health (the time past the circle's closing at the zone's damage, 1.5 × for safety), as
+    /// a player runs for a stop through a little zone. A stop it could not afford sent it out and the zone sent it
+    /// back, to and fro; a stop only inside the next circle was usually none (the four are spread over the first).
+    /// Null when none can be had.
+    /// </summary>
+    public Vector3? NearestStop(Vector3 at, float health = 100f)
+    {
+        if (!RecallOpen || Origin == null) return null;
+        var (e, n) = Origin.ToLv95(at);
+        var here = new Vector2((float)(e - _state.AreaE), (float)(n - _state.AreaN));
+        var z = _state.Zone().At(Now - _state.Started);
+        var centre = z.Phase > 0 ? z.NextCentre : z.Centre;
+        float radius = (z.Phase > 0 ? z.NextRadius : z.Radius) * 0.8f;
+        // the time before the circle it must be in closes: the wait left, then about a minute of shrink
+        double left = z.Phase == 0 ? double.PositiveInfinity : z.Left + (z.Shrinking ? 0 : 60);
+        float dps = Math.Max(z.Dps, 3f) * 1.5f;
+        // the zone it would stand in: out past the circle now and back (a stop outside it), and whatever of
+        // the walk there and on into the circle it must reach runs past that circle's closing
+        double ZoneSeconds((Vector2 At, float Alt) s)
+        {
+            double past = Math.Max(0f, s.At.DistanceTo(z.Centre) - z.Radius) * 2 / StopWalk;
+            double walk = (s.At.DistanceTo(here) + Math.Max(0f, s.At.DistanceTo(centre) - radius)) / StopWalk + StopMargin;
+            return past + Math.Max(0.0, walk - left);
+        }
+        var stops = Stops().Where(s => health - ZoneSeconds(s) * dps > StopKeep).ToList();
+        if (stops.Count == 0) return null;
+        var stop = stops.OrderBy(s => s.At.DistanceTo(here)).First();
+        return Origin.ToWorld(_state.AreaE + stop.At.X, _state.AreaN + stop.At.Y, stop.Alt);
+    }
+
+    /// <summary>Why <see cref="NearestStop"/> has none (for <c>--botlog</c>): recalls, the zone, each stop's walk and the time left.</summary>
+    public string StopReport(Vector3 at)
+    {
+        if (Origin == null) return "no origin";
+        var (e, n) = Origin.ToLv95(at);
+        var here = new Vector2((float)(e - _state.AreaE), (float)(n - _state.AreaN));
+        var z = _state.Zone().At(Now - _state.Started);
+        var centre = z.Phase > 0 ? z.NextCentre : z.Centre;
+        float radius = (z.Phase > 0 ? z.NextRadius : z.Radius) * 0.8f;
+        double left = z.Phase == 0 ? double.PositiveInfinity : z.Left + (z.Shrinking ? 0 : 60);
+        return FormattableString.Invariant($"recall open {RecallOpen}, phase {z.Phase}, radius {z.Radius:F0}, left {left:F0} s, stops: ")
+            + string.Join("; ", Stops().Select(s => FormattableString.Invariant(
+                $"{s.At.DistanceTo(here):F0} m off, {Math.Max(0f, s.At.DistanceTo(z.Centre) - z.Radius):F0} m out, walk {(s.At.DistanceTo(here) + Math.Max(0f, s.At.DistanceTo(centre) - radius)) / StopWalk + StopMargin:F0} s")));
+    }
+
+    /// <summary>A bot's pace to and from a stop (it runs at 5.8 m/s; walls and detours on the way), and the margin, s.</summary>
+    private const float StopWalk = 4.5f, StopMargin = 20f;
+    /// <summary>The health a bot keeps when it walks through zone to a stop.</summary>
+    private const float StopKeep = 45f;
+
+    /// <summary>The last ping a human of <paramref name="team"/> made (world point, when, by whom), for the team's bots.</summary>
+    public (Vector3 At, double When, long From)? HumanPing(int team) => _humanPings.TryGetValue(team, out var p) ? p : null;
+    private readonly Dictionary<int, (Vector3 At, double When, long From)> _humanPings = new();
+
+    /// <summary>
+    /// GO, once teams are drawn (#837 phase 4): a squad's bots land as a group. A bot-only team flies to its
+    /// leader's spot (the lowest id), a few metres apart, the mates jumping one after another; a team with a
+    /// human jumps after the human and flies after them. Then every bot's moment is spaced again.
+    /// </summary>
+    private void PlanTeamDrops()
+    {
+        if (_state.TeamSize <= 1 || Director is not { } director || _state.Flight is not { } flight) return;
+        var all = new List<BrBrain>();
+        foreach (var team in _state.Entrants.Where(e => e.Team != 0).GroupBy(e => e.Team))
+        {
+            var bots = team.Where(e => e.Bot).OrderBy(e => -e.Peer).Select(e => director.Get(e.Peer)?.Brain as BrBrain)
+                .Where(b => b != null).Cast<BrBrain>().ToList();
+            if (bots.Count == 0) continue;
+            if (team.FirstOrDefault(e => !e.Bot) is { } human)
+            {
+                for (int k = 0; k < bots.Count; k++)
+                {
+                    bots[k].JumpWith = human.Peer;
+                    bots[k].JumpDelay = 0.8 * (k + 1);
+                }
+                continue;
+            }
+            var lead = bots[0];
+            for (int k = 1; k < bots.Count; k++)
+            {
+                double a = k * Math.Tau / Math.Max(1, bots.Count - 1);
+                if (lead.DropTarget is { } spot) bots[k].DropTarget = spot + new Vector3((float)Math.Cos(a), 0, (float)Math.Sin(a)) * 12f;
+                bots[k].JumpAt = lead.JumpAt + k * MinJumpGap;
+            }
+            all.AddRange(bots);
+        }
+        // every bot jumping on its own clock (not after a human): never two together, as at boarding
+        all.AddRange(_state.Entrants.Where(e => e.Bot && e.Team == 0).Select(e => director.Get(e.Peer)?.Brain as BrBrain).Where(b => b != null).Cast<BrBrain>());
+        Space(all, flight.OpensAt + 0.2, flight.ClosesAt - 0.2);
+    }
+
+    /// <summary>The moments in their order, at least <see cref="MinJumpGap"/> apart; spread over the window when they do not fit.</summary>
+    private static void Space(List<BrBrain> brains, double from, double to)
+    {
+        if (brains.Count * MinJumpGap > to - from) { SpreadJumps(brains, from, to); return; }
+        double last = double.NegativeInfinity;
+        foreach (var b in brains.OrderBy(b => b.JumpAt))
+        {
+            b.JumpAt = Math.Max(Math.Max(b.JumpAt, from), last + MinJumpGap);
+            last = b.JumpAt;
+        }
+        if (last > to) SpreadJumps(brains, from, to);
+    }
+
     /// <summary><c>/br bots [n|off] [easy|normal|hard]</c> (admin): the field bots top a match up to.</summary>
     private string BotsCommand(string[] words)
     {
@@ -70,6 +186,8 @@ public partial class BrManager
         FootPlayer.StayDown = p => BotEntrant(p) is { Alive: true };
         FootPlayer.Regenerates = p => BotEntrant(p) is not { Alive: true };
         FootPlayer.CanBeDowned = p => BotEntrant(p) is { Alive: true } e && _state.MateStanding(e.Peer);
+        // a fallen mate's dogtag, while it can still bring them back (#837 phase 4)
+        BotSkills.AlsoWants = (bot, s) => s.Id == Items.ItemId.Dogtag && WantsTag(bot);
         director.Died += OnBotDied;
         director.Downed += OnBotDowned;
     }
@@ -106,6 +224,7 @@ public partial class BrManager
         var taken = new HashSet<string>(_state.Entrants.Select(e => e.Name));
         var plane = PlaneFrame(flight, Now);
         var jumps = new List<double>();
+        var brains = new List<BrBrain>();
         for (int i = 0; i < count; i++)
         {
             double e = 0, n = 0;
@@ -135,14 +254,30 @@ public partial class BrManager
             jumpAt = FreeMoment(jumps, jumpAt, flight.OpensAt + 0.2, flight.ClosesAt - 0.2);
             jumps.Add(jumpAt);
             var target = Origin.ToWorld(e, n, (float)BrMapImage.Height(horizon, e, n));
-            bot.Brain = new BrBrain(this, _crates, _state.Seed ^ (i * 7919)) { DropTarget = target, JumpAt = jumpAt };
+            var brain = new BrBrain(this, _crates, _state.Seed ^ (i * 7919)) { DropTarget = target, JumpAt = jumpAt };
+            bot.Brain = brain;
+            brains.Add(brain);
             _state.Entrants.Add(new BrEntrant { Peer = id, Name = profile.Name, Bot = true });
         }
+        SpreadJumps(brains, flight.OpensAt + 0.2, flight.ClosesAt - 0.2);
         GD.Print($"[br] bots: {_state.Entrants.Count(x => x.Bot)} aboard ({_botLevel})");
     }
 
     /// <summary>Seconds between two bots leaving the ramp (55 m at cruise, more at a test pace).</summary>
     private const double MinJumpGap = 0.7;
+
+    /// <summary>
+    /// A field the doors cannot space <see cref="MinJumpGap"/> apart (99 bots into 48 s): FreeMoment gave a third of
+    /// them the moment they wanted, together, and 18 crashed into each other in the air. Then the bots leave in the
+    /// order they wanted, evenly over the doors' window (0.48 s apart for 99, 26 m at cruise, with the lateral spread).
+    /// </summary>
+    private static void SpreadJumps(List<BrBrain> brains, double from, double to)
+    {
+        if (brains.Count * MinJumpGap <= to - from) return;
+        double step = (to - from) / brains.Count;
+        int k = 0;
+        foreach (var brain in brains.OrderBy(b => b.JumpAt)) brain.JumpAt = from + (k++ + 0.5) * step;
+    }
 
     /// <summary>The moment nearest <paramref name="wanted"/> in [from, to] at least <see cref="MinJumpGap"/> from each taken one.</summary>
     private static double FreeMoment(List<double> taken, double wanted, double from, double to)
@@ -197,11 +332,14 @@ public partial class BrManager
         double now = Now;
         if (!pushed && !flight.DoorsOpen(now)) return false;
         var f = PlaneFrame(flight, now);
-        var side = new Basis(Vector3.Up, f.Yaw) * Vector3.Right * (float)(_rng.NextDouble() * 6 - 3);
-        var exit = f.At + new Basis(Vector3.Up, f.Yaw) * BrPlane.Ramp + Vector3.Down * 2f + side;
+        // one side of the ramp, then the other, drifting outwards: a bot slows in the wingsuit at once, and the
+        // next one out half a second later at plane speed caught it up from behind (air crashes in a 100 field)
+        _jumpSide = -_jumpSide;
+        var right = new Basis(Vector3.Up, f.Yaw) * Vector3.Right;
+        var exit = f.At + new Basis(Vector3.Up, f.Yaw) * BrPlane.Ramp + Vector3.Down * 2f + right * _jumpSide * (float)(4 + _rng.NextDouble() * 4);
         var forward = f.Velocity.LengthSquared() > 1f ? f.Velocity.Normalized() : new Basis(Vector3.Up, f.Yaw) * Vector3.Forward;
         _aboardBots.Remove(bot.Id);
-        bot.Body.Leap(exit, forward * Math.Min(flight.Speed, ExitSpeed) + Vector3.Down * 4f, RideKind.Wingsuit);
+        bot.Body.Leap(exit, forward * Math.Min(flight.Speed, ExitSpeed) + right * _jumpSide * 2f + Vector3.Down * 4f, RideKind.Wingsuit);
         if (_state.Find(bot.Id) is { } e) e.Jumped = true;
         _pushSoon = true;   // one state message for every bot that jumped this frame
         GD.Print($"[br] {bot.Body.Name} \"{bot.Profile.Name}\" {(pushed ? "pushed out" : "jumped")} {flight.ClosesAt - now:F0} s before the doors close");
@@ -209,6 +347,7 @@ public partial class BrManager
     }
 
     private bool _pushSoon;
+    private int _jumpSide = 1;
 
     /// <summary>ServerTick: the doors have closed, out with every bot still aboard; the jumps' state goes out once.</summary>
     private void BotPlane()

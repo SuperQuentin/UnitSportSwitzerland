@@ -10,9 +10,9 @@ namespace UnitSport.World;
 /// <summary>
 /// <c>--signalnetcheck [E,N] [--seconds N]</c> (#353, <c>tools/signalnetcheck.sh</c>): the traffic
 /// lights over the network. Traffic is local to each client; what every peer shares is the plan
-/// and the server clock, so this logs, every <see cref="Step"/> s of <c>ClockSync.ServerNow</c>,
+/// and the simulated clock (<c>SignalLamps.Clock</c>, #867), so this logs, every <see cref="Step"/> s of it,
 /// the aspect of every group of one junction as the lamps read it (<c>SignalPlan.State(group,
-/// ClockSync.ServerNow)</c>), with the system wall clock beside it (one machine: the script turns
+/// SignalLamps.Clock())</c>), with the system wall clock beside it (one machine: the script turns
 /// it into each client's clock error). The junction: the signal record nearest LV95 E,N in that
 /// tile of the chunk directory (<c>--chunks</c>; a client may run without terrain, the tile is
 /// read from disk), else a crossroads plan built in code (the same on every peer). A client
@@ -103,7 +103,7 @@ public partial class SignalNetProbe : Node
             if (double.IsNaN(_syncedAt)) _syncedAt = local;
             if (local - _syncedAt < Settle) return;
         }
-        double t = ClockSync.ServerNow;
+        double t = SignalLamps.Clock();
         long key = (long)Math.Floor(t / Step);
         if (key == _lastKey) return;
         bool first = _lastKey == long.MinValue;

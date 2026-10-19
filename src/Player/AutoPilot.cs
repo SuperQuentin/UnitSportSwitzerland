@@ -1284,6 +1284,12 @@ public sealed class AutoPilot
     private static float Wrap(float a) => Core.MathX.WrapAngle(a);
 
     /// <summary>Whether <see cref="For"/> has a pilot for this class (the server asks it before spawning an NPC in it).</summary>
-    public static bool Drives(RideKind kind) => kind == RideKind.OnFoot || CarCatalog.IsCar(kind)
-        || (Rideable.Create(kind) is { } ride && ride is not Flyer && MeasureLean(kind) != null);
+    public static bool Drives(RideKind kind) => DrivesCache.GetOrAdd(kind, k => k == RideKind.OnFoot || CarCatalog.IsCar(k)
+        || (Rideable.Create(k) is { } ride && ride is not Flyer && MeasureLean(k) != null));
+
+    /// <summary>
+    /// <see cref="Drives"/> per kind: a mount's answer is a fresh copy of it stepped 180 times, and a bot asks
+    /// it of every vehicle it might see every 1.5 s (#837): 100 bots spent 25-40 ms a frame and 24 s of GC on it.
+    /// </summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<RideKind, bool> DrivesCache = new();
 }

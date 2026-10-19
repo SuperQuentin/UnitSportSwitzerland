@@ -25,8 +25,8 @@ namespace UnitSport.Bots;
 public partial class BotDirector : Node
 {
     public const string NodeName = "Bots";
-    /// <summary>At most this many bots at once on a server.</summary>
-    public const int MaxBots = 64;
+    /// <summary>At most this many bots at once on a server (a 100-player match is the aim).</summary>
+    public const int MaxBots = 128;
     /// <summary>A human within this sees a bot act: its brain runs at its own rate. Further, at most <see cref="FarThink"/>.</summary>
     public const float WatchedRange = 300f;
     /// <summary>Seconds between thoughts for a bot no human is near.</summary>
@@ -120,7 +120,19 @@ public partial class BotDirector : Node
     public int Count => _bots.Count;
     public Bot? Get(long id) => _bots.GetValueOrDefault(id);
 
-    private static double Now => GameClock.Now;
+    /// <summary>
+    /// The bots' clock: the physics the server has actually run, in simulated seconds (the sum of each physics
+    /// step, which <c>/speed</c> scales). So a brain's timers (a revive's hold, a bandage, a reaction, a car
+    /// stuck for 6 s) keep pace with the bodies they time.
+    /// <list type="bullet">
+    /// <item><c>GameClock.Now</c> counts physics frames, which <c>/speed</c> lengthens rather than multiplies: at x4 a
+    /// 5 s revive hold took 20 simulated seconds, and every downed mate bled out first.</item>
+    /// <item><c>ClockSync.SimNow</c> runs on the wall clock: on a server dropping frames it ran ahead of the physics,
+    /// and a bot's car was "stuck for 6 s" before it had had 6 s to move (botcheck: drove 18 m).</item>
+    /// </list>
+    /// </summary>
+    public static double Clock { get; private set; }
+    private static double Now => Clock;
     private InterestService? Interest => GetParent()?.GetNodeOrNull<InterestService>(InterestService.NodeName);
 
     /// <summary>Spawns a bot at <paramref name="at"/> (it drops onto the ground once its collision is built); null when full.</summary>
@@ -133,10 +145,19 @@ public partial class BotDirector : Node
         long id = PlayerReplication.BotId(n);
         if (_spawner.Spawn(PlayerReplication.BotData(n, at, yaw, profile.Name)) is not FootPlayer body) return null;
 
+        // #880: the odd bot is an alien (by its number, so the same bot always is); the rest wear their id's seeded figure
+        if (Avatar.Aliens.IsAlienBot(n))
+        {
+            var alien = Avatar.Aliens.ForSeed(n);
+            body.AppearanceBits = alien.Looks.Pack();
+            body.OutfitBits = alien.Outfit.Bits;
+        }
         var bot = new Bot(id, n, body, profile) { NextThink = Now, World = _world ??= new BotWorld(_players) };
         // the body reads no keys: its walk, jump, crouch come from the brain's intent
         body.WalkControls = () => (bot.Intent.Wish, bot.Intent.Run);
         body.FootActions = () => (bot.Intent.Jump, bot.Intent.Crouch);
+        // in a car or on a bike: the pilot, else the handbrake (never the keys: a null RideControls reads them)
+        body.RideControls = () => BotDriving.Controls(bot, (float)body.GetPhysicsProcessDeltaTime());
         // in the air: the wingsuit follows where it faces (LookYaw/LookPitch), the canopy its stick; the
         // deploy or cut-away press only while the ride is not the one wanted (a held press toggles every step)
         body.FlyControls = () => new Player.FlightInput(bot.Intent.Steer, 0f, 0f, 0f, 0f,
@@ -170,6 +191,7 @@ public partial class BotDirector : Node
 
     public override void _PhysicsProcess(double delta)
     {
+        Clock += delta;
         if (_bots.Count == 0) return;
         long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
         using (BodyProfiler.Time(BodyProfiler.Slot.Brains, true)) RunBots();
@@ -189,6 +211,7 @@ public partial class BotDirector : Node
         foreach (var bot in _bots.Values)
         {
             if (!GodotObject.IsInstanceValid(bot.Body)) continue;
+            if (!bot.Body.Eliminated) BotSkills.Unembed(bot, bot.World.Space, now);
             if (now >= bot.NextThink)
             {
                 double wait = bot.Brain.Think(bot, now);
@@ -291,8 +314,18 @@ public partial class BotDirector : Node
                         fired++;
                 return $"{fired} bot(s) fired.";
             }
+            case "drive":
+            {
+                // /bot drive [metres]: every bot to a point that far ahead of the sender, by car or bike if one is in sight (#837)
+                if (bodyOf(sender) is not { } driver) return "'/bot drive' needs your body in the world.";
+                float metres = args.Length > 1 && float.TryParse(args[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float m) ? Math.Clamp(m, 50f, 3000f) : 400f;
+                var ahead = -driver.GlobalTransform.Basis.Z with { Y = 0 };
+                var goal = driver.GlobalPosition + (ahead.LengthSquared() > 0.01f ? ahead.Normalized() : Vector3.Forward) * metres;
+                foreach (var bot in _bots.Values) bot.Brain = new DriveBrain(goal);
+                return $"{_bots.Count} bot(s) off to a point {metres:F0} m ahead of you.";
+            }
             default:
-                return "Usage: /bot add [n] [easy|normal|hard] | arm <weapon> [rounds] | fire | clear | list";
+                return "Usage: /bot add [n] [easy|normal|hard] | arm <weapon> [rounds] | fire | drive [metres] | clear | list";
         }
     }
 }

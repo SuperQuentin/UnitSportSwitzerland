@@ -55,7 +55,7 @@ public partial class BotFilmProbe : ChatProbe
         if (br.State.Flight is not { } flight) { Fail("no flight"); return; }
 
         // the drop: follow the bot that jumps first, from the doors opening
-        await Until(() => Net.ClockSync.ServerNow >= flight.OpensAt - 1, 60);
+        await Until(() => Net.ClockSync.SimNow >= flight.OpensAt - 1, 60);
         Chat.Send("/clip start bots-drop 45 0");
         long first = 0;
         await Until(() => (first = br.State.Entrants.FirstOrDefault(e => e.Bot && e.Jumped)?.Peer ?? 0) != 0, 30);

@@ -85,6 +85,7 @@ public partial class UfoRig : Node3D
         _ramp.AddChild(new MeshInstance3D { Name = "Lights", Mesh = RampLightMesh, MaterialOverride = WarmLamp });
         _hull.AddChild(_ramp);
         _hull.AddChild(_hatch = new MeshInstance3D { Name = "HatchGlow", Mesh = HatchMesh, MaterialOverride = WarmLamp });
+        _hull.AddChild(new MeshInstance3D { Name = "Portholes", Mesh = PortholeMesh, MaterialOverride = PortholeLamp });
 
         _underMaterial = new StandardMaterial3D { ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded };
         _hull.AddChild(_under = new MeshInstance3D { Name = "UnderGlow", Mesh = UnderMesh, MaterialOverride = _underMaterial });
@@ -244,6 +245,15 @@ public partial class UfoRig : Node3D
     private static ArrayMesh HatchMesh => _hatchMesh ??= HatchGlow();
     private static ArrayMesh UnderMesh => _underMesh ??= UnderGlow();
     private static ArrayMesh LampMesh => _lampMesh ??= UfoMeshBuilder.Lamp();
+    private static ArrayMesh? _portholeMesh;
+    private static ArrayMesh PortholeMesh => _portholeMesh ??= UfoMeshBuilder.Portholes();
+    private static StandardMaterial3D? _porthole;
+    /// <summary>The portholes' light: a cabin glow, a little green.</summary>
+    private static StandardMaterial3D PortholeLamp => _porthole ??= new StandardMaterial3D
+    {
+        ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+        AlbedoColor = new Color(0.75f, 1f, 0.85f),
+    };
     private static ArrayMesh BeamMesh => _beamMesh ??= BeamCone();
     /// <summary>The beam cone every saucer shares (and the mothership, scaled up).</summary>
     public static ArrayMesh BeamMeshShared => BeamMesh;

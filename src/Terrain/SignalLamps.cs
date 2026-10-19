@@ -9,8 +9,8 @@ namespace UnitSport.Terrain;
 /// colour is its lamp, on or off. A junction's lenses are recoloured only when one of its groups
 /// changes aspect (<see cref="SignalPlan.UntilChange"/>), and on each half second while one of its
 /// flashers blinks; between changes a frame costs one comparison per junction. The aspect is a
-/// function of the server clock (<c>ClockSync.ServerNow</c>), so every peer shows the same lights
-/// and nothing is replicated. A child of the tile's <see cref="ChunkNode"/>, in its tile-local frame.
+/// function of simulated time (<c>ClockSync.SimNow</c>, so <c>/speed</c> slows the lights with the cars, #867),
+/// which every peer agrees on, so every peer shows the same lights and nothing is replicated. A child of the tile's <see cref="ChunkNode"/>, in its tile-local frame.
 /// </summary>
 public partial class SignalLamps : Node3D
 {
@@ -200,8 +200,11 @@ void fragment() {
     private int[] _haloSlot = [];
     private MultiMesh? _halos;
 
-    /// <summary>The time source: the server's clock; a probe may pin it.</summary>
-    public static Func<double> Clock { get; set; } = () => Net.ClockSync.ServerNow;
+    /// <summary>
+    /// The time source: simulated seconds, not environment ones (#867). A cycle is tens of seconds, a
+    /// gameplay beat, and env time runs 60x real at the default day. A probe may pin it.
+    /// </summary>
+    public static Func<double> Clock { get; set; } = () => Net.ClockSync.SimNow;
 
     public static SignalLamps Create(SignalBuilder.Lamps lamps)
     {

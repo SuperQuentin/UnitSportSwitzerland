@@ -10,7 +10,7 @@ namespace UnitSport.BattleRoyale;
 /// <c>--brprobe A|B</c> with <c>--connect</c> (driven by <c>tools/brcheck.sh</c>): one whole match over loopback
 /// against a server started with <c>--admin-password brcheck --brpace 0.13</c> (a match in under two minutes).
 /// <list type="bullet">
-/// <item>A logs in as admin, opens a lobby and starts the match once B has joined.</item>
+/// <item>A logs in as admin, opens a lobby and starts the match once B has joined; at <c>/speed 0.5</c> the countdown slows with it (#855).</item>
 /// <item>Both are dropped in the region with an empty pack, a knife and bandages; the travel menu is locked.</item>
 /// <item>B stands outside the zone until it hurts, then next to A.</item>
 /// <item>A, an admin, gets no fly camera, debug menu, catalogue or <c>/spawn</c> in the match (#425), and forces the zone to close (<c>/br zone</c>).</item>
@@ -67,6 +67,7 @@ public partial class BrProbe : ChatProbe
         }
         if (Br!.State.Entrants.Count < 2) { Fail("B never joined"); return; }
         Chat.Send("/br start");
+        await CountdownFollowsSpeed();
         if (!await Dropped()) return;
         await NoAdminTools(Me!);
 
@@ -119,6 +120,24 @@ public partial class BrProbe : ChatProbe
         Expect(await Until(() => b.Down != 0, 3), "B is down");
         await LootDeathBox(me);
         await Ended();
+    }
+
+    /// <summary>
+    /// The match runs on simulated time (#855): at <c>/speed 0.5</c> the countdown loses half a second
+    /// per second of the server's real clock, then normal speed again for the rest of the match.
+    /// </summary>
+    private async Task CountdownFollowsSpeed()
+    {
+        if (!await Until(() => Br!.State.Phase == BrPhase.Countdown, 10)) { Expect(false, "the countdown started"); return; }
+        Chat!.Send("/speed 0.5");
+        if (!await Until(() => SimClock.Scale == 0.5 && !SimClock.HasPending, 5)) { Expect(false, "the simulation went to x0.5"); return; }
+        double real0 = ClockSync.ServerNow, left0 = Br!.State.CountdownEnds - ClockSync.SimNow;
+        await Until(() => ClockSync.ServerNow - real0 >= 2.0, 5);
+        double real = ClockSync.ServerNow - real0, rate = (left0 - (Br.State.CountdownEnds - ClockSync.SimNow)) / real;
+        Expect(Br.State.Phase == BrPhase.Countdown && Math.Abs(rate - 0.5) < 0.1,
+            Fmt($"at /speed 0.5 the countdown runs at x{rate:F2} of real time ({left0:F1} s left, {real:F1} s later)"));
+        Chat.Send("/speed normal");
+        Expect(await Until(() => SimClock.Scale == 1.0 && !SimClock.HasPending, 5), "back to normal speed");
     }
 
     /// <summary>
@@ -202,9 +221,9 @@ public partial class BrProbe : ChatProbe
         var me = Me!;
         var br = Br!;
         if (br.State.Flight is not { } flight) { Fail("no flight in the match state"); return false; }
-        Expect(br.Aboard && me.Carrier != null, Fmt($"aboard the cargo plane at {flight.Altitude:F0} m, doors open in {flight.OpensAt - ClockSync.ServerNow:F0} s"));
+        Expect(br.Aboard && me.Carrier != null, Fmt($"aboard the cargo plane at {flight.Altitude:F0} m, doors open in {flight.OpensAt - ClockSync.SimNow:F0} s"));
         await Seconds(1.0);
-        var plane = br.PlaneFrame(flight, ClockSync.ServerNow).At;
+        var plane = br.PlaneFrame(flight, ClockSync.SimNow).At;
         Expect(me.GlobalPosition.DistanceTo(plane) < 8f + flight.Speed * 0.25f && !me.Visible,
             Fmt($"held in the hold, hidden ({me.GlobalPosition.DistanceTo(plane):F1} m from the plane)"));
         Shot($"{_role.ToLowerInvariant()}_plane");
@@ -212,9 +231,9 @@ public partial class BrProbe : ChatProbe
         var them = GetParent().GetNodeOrNull<FootPlayer>("Players/" + PeerOf(other));
         if (_role == "A")
         {
-            Expect(ClockSync.ServerNow >= flight.OpensAt || !br.JumpOut(), "E before the doors open is refused");
-            await Until(() => flight.DoorsOpen(ClockSync.ServerNow), 60);
-            var exit = flight.At(ClockSync.ServerNow);
+            Expect(ClockSync.SimNow >= flight.OpensAt || !br.JumpOut(), "E before the doors open is refused");
+            await Until(() => flight.DoorsOpen(ClockSync.SimNow), 60);
+            var exit = flight.At(ClockSync.SimNow);
             Expect(br.JumpOut() && me.Ride == RideKind.Wingsuit && !br.Aboard, "E with the doors open: out of the ramp in a wingsuit");
             var zone = br.State.Zone();
             Expect(exit.DistanceTo(zone.CentreOf(0)) <= zone.RadiusOf(0) + 5f,
@@ -249,8 +268,8 @@ public partial class BrProbe : ChatProbe
         else
         {
             bool pushed = await Until(() => !br.Aboard, 90);
-            Expect(pushed && ClockSync.ServerNow >= flight.ClosesAt - 0.5 && me.Ride == RideKind.Wingsuit,
-                Fmt($"pushed out in a wingsuit when the doors closed ({ClockSync.ServerNow - flight.ClosesAt:F1} s after)"));
+            Expect(pushed && ClockSync.SimNow >= flight.ClosesAt - 0.5 && me.Ride == RideKind.Wingsuit,
+                Fmt($"pushed out in a wingsuit when the doors closed ({ClockSync.SimNow - flight.ClosesAt:F1} s after)"));
             Expect(br.State.Find(PeerOf("A"))?.Jumped == true && them is { Visible: true }, "A jumped earlier and shows here");
             await Seconds(1.0);
             Shot("b_pushed");

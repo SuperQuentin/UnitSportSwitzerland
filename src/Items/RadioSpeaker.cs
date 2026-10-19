@@ -54,6 +54,10 @@ public partial class RadioSpeaker : AudioStreamPlayer3D, IMusicSpeaker
 
     /// <summary>The radio's own volume, 0..1, everyone's (#734): its gain and how far it reaches (<see cref="RadioLoudness"/>).</summary>
     public float Volume { get; set; } = RadioLoudness.Default;
+
+    /// <summary>A stadium's PA (#885): how far it carries and the size of its full-volume zone, instead of a boombox's.</summary>
+    public float? Reach { get; init; }
+    public float? Unit { get; init; }
     private float _rangeFor = float.NaN;
 
     /// <summary>The path the sound takes to this machine's ear: "open", "wall", "door", "walls". For the probes.</summary>
@@ -81,8 +85,8 @@ public partial class RadioSpeaker : AudioStreamPlayer3D, IMusicSpeaker
         SfxBus.Ensure();
         Bus = SfxBus.Music;
         // full volume within ~3 m, a quarter at 12 m, gone past 45 m: a boombox, not a stadium
-        UnitSize = 3f;
-        MaxDistance = 45f;
+        UnitSize = Unit ?? 3f;
+        MaxDistance = Reach ?? 45f;
         AttenuationModel = AttenuationModelEnum.InverseDistance;
         AttenuationFilterCutoffHz = 8000f;
         _hearing.Attach(this);
@@ -96,7 +100,7 @@ public partial class RadioSpeaker : AudioStreamPlayer3D, IMusicSpeaker
         // another radio louder at the ears: this one plays under it (#813)
         DuckDb = RadioFocus.Step(DuckDb, MusicFocus.Full(this), (float)delta);
         VolumeDb = SourceDb + DuckDb;
-        if (Volume != _rangeFor) { _rangeFor = Volume; MaxDistance = RadioLoudness.Radius(Volume); }
+        if (Volume != _rangeFor) { _rangeFor = Volume; MaxDistance = Reach ?? RadioLoudness.Radius(Volume); }
         _sinceSeek += delta;
         double want = WantedPosition;
         if (double.IsNaN(want) || want < 0 || want >= Length || CdId == 0)
