@@ -52,16 +52,14 @@ public static partial class TileRewriter
         stats.HeldApart += plans.Count(p => !p.Beyond && p.CoresOverlap && !p.CoreFails);
         var planned = plans.Select(p => p.Node).ToHashSet();
         if (groups.Count == 0) return plans;
-        var merged = new PriorityResult();
-        var gone = new HashSet<int>();
+        var sets = new List<HashSet<int>>();
         foreach (var group in groups)
         {
             var nodes = group.Select(p => p.Node).ToHashSet();
             bool counted = group.Any(p => !p.Beyond);
-            if (Merge(priority, nodes, result.Network, planned, out string? no) is { } m)
+            if (Merge(priority, nodes, result.Network, planned, out string? no) is not null)
             {
-                merged.Plans.Add(m);
-                gone.UnionWith(nodes);
+                sets.Add(nodes);
                 if (counted) { stats.Merged++; stats.Members += nodes.Count; }
             }
             else
@@ -72,16 +70,60 @@ public static partial class TileRewriter
                         Console.WriteLine(FormattableString.Invariant($"[overlap-group] {p.Centre.X:F0},{p.Centre.Y:F0} {group.Count} members: {no}"));
             }
         }
-        if (merged.Plans.Count == 0) return plans;
-        merged.Plans.InsertRange(0, priority.Plans.Where(p => !gone.Contains(p.Junction.NodeId)));
-        foreach (var (k, v) in priority.Yield) merged.Yield[k] = v;
-        merged.SignalsFromData.UnionWith(priority.SignalsFromData);
-        // (a merged junction homed beyond the block, near it, is planned as its members were)
-        var nearMerged = new HashSet<int>(near);
-        foreach (var (j, _) in merged.Plans.Where(p => p.Junction.Members is { } ms && ms.Any(near.Contains))) nearMerged.Add(j.NodeId);
-        var again = PlanLayouts(merged, result, segmentOf, output, block, wanted, nearMerged, grids, buildings, streetSide, overlay, restrictions, null, crossings, byNode);
+        if (sets.Count == 0) return plans;
+        var again = Replan(sets);
+        // the merged cores' mouths reach further than their members' did: a junction they now reach short of a mouth joins them
+        // too, and the block is planned again (#854)
+        for (int round = 0; round < 2; round++)
+        {
+            var byAnyNode = new Dictionary<int, JunctionPlan>();
+            foreach (var p in again) foreach (int n in p.Nodes) byAnyNode[n] = p;
+            var pairs = new List<(JunctionPlan, JunctionPlan)>();
+            foreach (var p in again)
+                if (p.Core is { } core)
+                    foreach (var a in p.Arms)
+                        if (a.Axis is not null && core.Mouths.FirstOrDefault(m => m.Arm == a.Arm) is { } mouth
+                            && NodeShortOfMouth(result.Network, a, mouth.Station) is int node && byAnyNode.TryGetValue(node, out var q) && q != p
+                            && p.Merged?.Ring is null && q.Merged?.Ring is null)
+                            pairs.Add((p, q));
+            if (pairs.Count == 0) break;
+            var grown = new List<HashSet<int>>(sets.Select(x => new HashSet<int>(x)));
+            bool changed = false;
+            foreach (var (p, q) in pairs)
+            {
+                var both = p.Nodes.Concat(q.Nodes).ToHashSet();
+                var touching = grown.Where(x => x.Overlaps(both)).ToList();
+                foreach (var x in touching) { both.UnionWith(x); grown.Remove(x); }
+                if (Merge(priority, both, result.Network, planned, out _) is not null) { grown.Add(both); changed = true; }
+                else grown.AddRange(touching);
+            }
+            if (!changed) break;
+            sets = grown;
+            stats.Regrown++;
+            again = Replan(sets);
+        }
         stats.ByMembers += again.Count(p => !p.Beyond && p.Core?.ByMembers == true);
         return again;
+
+        // the block planned again with each set of nodes one merged junction
+        List<JunctionPlan> Replan(List<HashSet<int>> nodeSets)
+        {
+            var merged = new PriorityResult();
+            var gone = new HashSet<int>();
+            foreach (var nodes in nodeSets)
+                if (Merge(priority, nodes, result.Network, planned, out _) is { } m)
+                {
+                    merged.Plans.Add(m);
+                    gone.UnionWith(nodes);
+                }
+            merged.Plans.InsertRange(0, priority.Plans.Where(p => !gone.Contains(p.Junction.NodeId)));
+            foreach (var (k, v) in priority.Yield) merged.Yield[k] = v;
+            merged.SignalsFromData.UnionWith(priority.SignalsFromData);
+            // (a merged junction homed beyond the block, near it, is planned as its members were)
+            var nearMerged = new HashSet<int>(near);
+            foreach (var (j, _) in merged.Plans.Where(p => p.Junction.Members is { } ms && ms.Any(near.Contains))) nearMerged.Add(j.NodeId);
+            return PlanLayouts(merged, result, segmentOf, output, block, wanted, nearMerged, grids, buildings, streetSide, overlay, restrictions, null, crossings, byNode);
+        }
     }
 
     /// <summary>
@@ -209,11 +251,11 @@ public static partial class TileRewriter
     /// <summary>The merges of a region (#818 phase 5c).</summary>
     public sealed class MergeStats
     {
-        public int Merged, Members, HeldApart, Rings, ByMembers;
+        public int Merged, Members, HeldApart, Rings, ByMembers, Regrown;
         public readonly Dictionary<string, int> Why = new();
 
         public string Summary() =>
-            $"    merged cores (#818 phase 5c): {Merged:N0} of {Members:N0} junctions ({ByMembers:N0} laid member by member, #854; {HeldApart:N0} overlapping ones laid apart, held at half the street between); tight roundabouts laid whole {Rings:N0} (#854)"
+            $"    merged cores (#818 phase 5c): {Merged:N0} of {Members:N0} junctions ({ByMembers:N0} laid member by member, #854; grown again {Regrown:N0} times where a merged core reached another junction; {HeldApart:N0} overlapping ones laid apart, held at half the street between); tight roundabouts laid whole {Rings:N0} (#854)"
             + (Why.Count > 0 ? $"; not merged: {string.Join(", ", Why.OrderBy(w => w.Key).Select(w => $"{w.Key} {w.Value:N0}"))}" : "");
     }
 }

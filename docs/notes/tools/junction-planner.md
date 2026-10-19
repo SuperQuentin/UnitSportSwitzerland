@@ -356,6 +356,10 @@ off, `--junctions new` plans and reports without writing.
   tighter than their vehicle). 168 real tiles: old layout 374 -> 295 ("cores overlap" 73 -> 39, "a check failed" 139 -> 97);
   turns under their vehicle's radius 491 -> 729, path ends off their lane 67 -> 73. `OVERLAPDBG=1` prints each "cores overlap"
   junction and why its group did not merge.
+- **Merges grown again; streets not run onto bridges** (#854): after the merged pass, a merged core whose mouths now reach another
+  junction short of a mouth takes it in, and the block is planned again (up to twice; `MergeStats.Regrown`). A transition's
+  street (`StreetOn`) stops before a bridge or tunnel. 168 real tiles: old layout 295 -> 285. `WHYDBG=1` prints every junction
+  left to the old layout, where and why.
 - **Comparing with reality**: SWISSIMAGE crops from `wms.geo.admin.ch` (`ch.swisstopo.swissimage`, EPSG:2056 bbox); in
   Geneva the marking cadastre on `ge.ch/terags/rest/services/DIRECTIVES_SIGNAL_CHANTIERS/MapServer` (37 lines, 38 kerbs,
   44 coloured surfaces, 48 road cover: carriageway, sidewalk, islands) as GeoJSON by bbox. Three panels (aerial, old, new)

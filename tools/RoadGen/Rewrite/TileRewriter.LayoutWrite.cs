@@ -123,6 +123,9 @@ public static partial class TileRewriter
                         else if ((so.Segment.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) != 0) no ??= "a bridge or tunnel";
             if (no is not null && jp.Merged?.Ring is not null) no = "a roundabout: " + no;
             if (no is not null) why[jp.Node] = no;
+            // (WHYDBG=1: every junction left to the old layout, where and why)
+            if (no is not null && !jp.Beyond && Environment.GetEnvironmentVariable("WHYDBG") is not null)
+                Console.WriteLine(FormattableString.Invariant($"[why] {jp.Centre.X:F0},{jp.Centre.Y:F0} {jp.Arms.Count} arms{(jp.Merged is { Ring: null } ? " merged" : "")}{(jp.Local ? " local" : "")}: {no}"));
             if (no is not null && DebugJunction is { } dbg && Math.Abs(dbg.E - jp.Centre.X) < 30 && Math.Abs(dbg.N - jp.Centre.Y) < 30)
                 Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"[junction] node {jp.Node} at {jp.Centre.X:F1},{jp.Centre.Y:F1} left to the old layout: {no}"
                     + $" (links {string.Join(" ", jp.Arms.SelectMany(a => a.StreetOn.Select(x => x.Link).Prepend(a.LinkId)).Select(l => segmentOf.ContainsKey(l) ? $"{l}" : $"{l}?"))})"));

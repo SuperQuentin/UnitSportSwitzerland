@@ -474,6 +474,8 @@ public static partial class TileRewriter
             var here = end ? LinkEnd.Start : LinkEnd.End;   // where this link meets the node
             var next = cars.FirstOrDefault(a => a.LinkId != link || a.End != here);
             if (next.LinkId == link || !seen.Add(next.LinkId)) break;
+            // (not onto a bridge or into a tunnel: a transition is written on the street at grade, #854)
+            if (net.Links[next.LinkId].Tag is Source { Segment: { } seg } && (seg.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) != 0) break;
             // the next link leaves this node: its junction side is the end at this node
             link = next.LinkId;
             end = next.End == LinkEnd.End;
