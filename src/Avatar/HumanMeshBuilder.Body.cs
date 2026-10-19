@@ -14,6 +14,8 @@ public enum BodyBuild
     Lean = 3,
     /// <summary>Masculine and heavy: thick waist and neck, big arms.</summary>
     Stocky = 4,
+    /// <summary>#880: a visitor from far away: thin limbs, narrow shoulders, a big domed head with a small pointed chin, no ears (<see cref="Aliens"/>).</summary>
+    Alien = 5,
 }
 
 /// <summary>Hair drawn over the head's crown (#394). Replicated in <see cref="Appearance"/>: append only.</summary>
@@ -54,7 +56,16 @@ public readonly record struct Appearance(BodyBuild Build, int Face, int Eyes, in
     public static readonly Color[] SkinTones =
     {
         new("f5dbc7"), new("edc7a8"), new("e6bd9e"), new("cc9970"), new("bd9466"), new("946647"), new("6b4730"), new("4d3324"),
+        // #880: the aliens' (Aliens): green, grey, violet, teal
+        new("8fd16a"), new("bcbab2"), new("ad8fe0"), new("5cc8bc"),
     };
+
+    /// <summary>What Settings → Character shows for each <see cref="SkinTones"/> entry (same order).</summary>
+    public static readonly string[] SkinNames =
+        { "Tone 1", "Tone 2", "Tone 3", "Tone 4", "Tone 5", "Tone 6", "Tone 7", "Tone 8", "Alien green", "Alien grey", "Alien violet", "Alien teal" };
+
+    /// <summary>The human tones and builds, the first of each table: what a seed draws from (<see cref="ForSeed"/>), so an added alien one changes nobody's seeded figure.</summary>
+    public const int HumanSkins = 8, HumanBuilds = 5;
 
     public static readonly Color[] EyeColours =
     {
@@ -81,17 +92,19 @@ public readonly record struct Appearance(BodyBuild Build, int Face, int Eyes, in
     public Color EyeColour => EyeColours[Mathf.PosMod(Eyes, EyeColours.Length)];
     public Color HairTint => HairColours[Mathf.PosMod(HairColour, HairColours.Length)];
 
-    // bit 30 marks a packed value as chosen: 0 (an int's default) is "nobody chose, use the seed"
-    private const int Set = 1 << 30;
-
-    /// <summary>Build 3 bits, face 4, eyes 3, skin 3, hair style 4, hair colour 4, and the chosen flag.</summary>
-    public int Pack() => Set | (int)Build | (Face & 15) << 3 | (Eyes & 7) << 7 | (Skin & 7) << 10
-        | ((int)Hair & 15) << 13 | (HairColour & 15) << 17;
+    /// <summary>The one int it is saved and replicated as (<see cref="AppearanceCode"/>: the bit layout, unit tested).</summary>
+    public int Pack() => new AppearanceCode((int)Build, Face, Eyes, Skin, (int)Hair, HairColour).Pack();
 
     /// <summary>A packed value back, or null when it was never set.</summary>
-    public static Appearance? Unpack(int bits) => (bits & Set) == 0 ? null : new(
-        (BodyBuild)Mathf.Clamp(bits & 7, 0, Builds - 1), bits >> 3 & 15, bits >> 7 & 7, bits >> 10 & 7,
-        (HairStyle)Mathf.Clamp(bits >> 13 & 15, 0, HairStyles - 1), bits >> 17 & 15);
+    public static Appearance? Unpack(int bits) => AppearanceCode.Unpack(bits) is not { } c ? null : new(
+        (BodyBuild)Mathf.Clamp(c.Build, 0, Builds - 1), c.Face, c.Eyes, c.Skin,
+        (HairStyle)Mathf.Clamp(c.Hair, 0, HairStyles - 1), c.HairColour);
+
+    /// <summary>An alien figure in one line (#880, <see cref="Aliens"/>): the alien build, bald, an alien skin and face.</summary>
+    public static Appearance Alien(int skin = Aliens.Green, int face = Aliens.VisitorFace, int eyes = 3) => Aliens.Look(skin, face, eyes);
+
+    /// <summary>An alien's skin (<see cref="SkinTones"/> past the human ones) or build.</summary>
+    public bool IsAlien => Build == BodyBuild.Alien || Mathf.PosMod(Skin, SkinTones.Length) >= HumanSkins;
 
     /// <summary>
     /// A figure for someone who never chose one (an NPC, a ghost runner, a player with default
@@ -101,7 +114,7 @@ public readonly record struct Appearance(BodyBuild Build, int Face, int Eyes, in
     {
         uint h = (uint)seed * 2654435761u;
         int Next(int n) { h = h * 1103515245u + 12345u; return (int)(h >> 16) % n; }
-        var build = (BodyBuild)Next(Builds);
+        var build = (BodyBuild)Next(HumanBuilds);
         bool masc = build >= BodyBuild.Broad;
         // the preset faces (FaceGenome), the #657 ones too; the draw advances the same whatever the count
         ReadOnlySpan<int> faces = masc ? [5, 6, 7, 1, 2, 9, 11, 15] : [0, 1, 2, 3, 4, 8, 9, 10, 12, 13, 14];
@@ -112,7 +125,7 @@ public readonly record struct Appearance(BodyBuild Build, int Face, int Eyes, in
         var hair = hairs[Next(hairs.Length)];
         // natural colours mostly, a dyed one now and then
         int hairColour = Next(10) < 8 ? Next(9) : 9 + Next(3);
-        return new Appearance(build, face, Next(EyeColours.Length), Next(SkinTones.Length), hair, hairColour);
+        return new Appearance(build, face, Next(EyeColours.Length), Next(HumanSkins), hair, hairColour);
     }
 
     public static readonly Appearance Default = new(BodyBuild.Slim, 1, 0, 2, HairStyle.Bob, 2);
@@ -145,10 +158,17 @@ public readonly record struct Physique(
     float Chest, float ChestFront, float ChestBack, float Shoulder, float Neck,
     float ThighTop, float ThighMid, float Knee, float Calf, float Ankle,
     float Deltoid, float UpperArm, float Elbow, float Forearm, float Wrist,
-    float Hand, float Head, float Jaw = 0f)
+    float Hand, float Head, float Jaw = 0f, float Dome = 0f)
 {
     public static Physique Of(BodyBuild build) => build switch
     {
+        // #880: slight and narrow, long hands, a big head (Dome: wide over the brow, a small pointed chin)
+        BodyBuild.Alien => new(
+            Crotch: 0.100f, Hip: 0.118f, HipBack: 0.082f, Waist: 0.094f, UnderBust: 0.102f,
+            Chest: 0.112f, ChestFront: 0.072f, ChestBack: 0.066f, Shoulder: 0.128f, Neck: 0.034f,
+            ThighTop: 0.068f, ThighMid: 0.058f, Knee: 0.041f, Calf: 0.043f, Ankle: 0.028f,
+            Deltoid: 0.043f, UpperArm: 0.037f, Elbow: 0.029f, Forearm: 0.032f, Wrist: 0.023f,
+            Hand: 1.06f, Head: 1.38f, Dome: 1f),
         BodyBuild.Lean => new(
             Crotch: 0.112f, Hip: 0.130f, HipBack: 0.084f, Waist: 0.118f, UnderBust: 0.132f,
             Chest: 0.146f, ChestFront: 0.084f, ChestBack: 0.080f, Shoulder: 0.172f, Neck: 0.052f,
@@ -296,7 +316,7 @@ public static partial class HumanMeshBuilder
             Shape = Physique.Of(build);
             Torso = new Torso(rig, Shape);
             Side = (rig.ShoulderR - rig.ShoulderL).Normalized();
-            Head = new Head(rig, Side, Shape.Head, Shape.Jaw);
+            Head = new Head(rig, Side, Shape.Head, Shape.Jaw, Shape.Dome);
         }
     }
 
@@ -453,7 +473,7 @@ public static partial class HumanMeshBuilder
         if (cover != HairCover.Head)
         {
             fit.Head.Face(s, look.Genome ?? FaceGenome.Preset(look.Face).WithSeed(FaceSeed(look)), look.Eyes);
-            fit.Head.Ears(s, look.Skin);
+            if (shape.Dome < 0.5f) fit.Head.Ears(s, look.Skin);
             fit.Head.Hair(s, look.HairStyle, look.Hair, look.Skin, cover);
         }
         return fit;
@@ -903,7 +923,7 @@ public static partial class HumanMeshBuilder
         public readonly Vector3 Side, UpAxis, Fwd;
         /// <summary>Metres of the head per metre of the profile tables below.</summary>
         public readonly float K;
-        private readonly float _jaw;
+        private readonly float _jaw, _dome;
         private const int Sides = 12;
 
         // (half width, front depth, back depth, forward offset) at each height, metres at scale 1
@@ -925,12 +945,22 @@ public static partial class HumanMeshBuilder
             new(0.076f, 0.068f, 0.090f, -0.010f), new(0.058f, 0.050f, 0.072f, -0.010f),
             new(0.030f, 0.026f, 0.040f, -0.010f),
         };
+        // #880, the aliens': a small pointed chin under a big dome, widest over the brow (Physique.Dome)
+        private static readonly Vector4[] Alien =
+        {
+            new(0.014f, 0.014f, 0.012f, 0.052f), new(0.034f, 0.034f, 0.024f, 0.036f),
+            new(0.052f, 0.054f, 0.046f, 0.020f), new(0.072f, 0.074f, 0.074f, 0.008f),
+            new(0.092f, 0.090f, 0.098f, 0f), new(0.104f, 0.096f, 0.112f, -0.006f),
+            new(0.102f, 0.090f, 0.110f, -0.010f), new(0.088f, 0.076f, 0.096f, -0.010f),
+            new(0.054f, 0.046f, 0.062f, -0.010f),
+        };
 
         /// <summary>The height of the top of the scalp, and of the hair cap over it (profile metres).</summary>
         public const float Crown = 0.250f, HairCrown = 0.276f;
 
-        public Head(Rig r, Vector3 shoulderSide, float scale, float jaw)
+        public Head(Rig r, Vector3 shoulderSide, float scale, float jaw, float dome = 0f)
         {
+            _dome = dome;
             var axis = r.HeadTop - r.HeadBase;
             UpAxis = axis.LengthSquared() > 1e-8f ? axis.Normalized() : Vector3.Up;
             Side = (shoulderSide - UpAxis * shoulderSide.Dot(UpAxis)).Normalized();
@@ -948,14 +978,15 @@ public static partial class HumanMeshBuilder
         /// <summary>(half width, front depth, back depth, forward offset) at height <paramref name="y"/>.</summary>
         public Vector4 Profile(float y)
         {
-            if (y <= Heights[0]) return Soft[0].Lerp(Square[0], _jaw);
+            if (y <= Heights[0]) return Soft[0].Lerp(Square[0], _jaw).Lerp(Alien[0], _dome);
             for (int i = 1; i < Heights.Length; i++)
                 if (y <= Heights[i])
                 {
                     float f = (y - Heights[i - 1]) / (Heights[i] - Heights[i - 1]);
-                    return Soft[i - 1].Lerp(Soft[i], f).Lerp(Square[i - 1].Lerp(Square[i], f), _jaw);
+                    var human = Soft[i - 1].Lerp(Soft[i], f).Lerp(Square[i - 1].Lerp(Square[i], f), _jaw);
+                    return _dome > 0f ? human.Lerp(Alien[i - 1].Lerp(Alien[i], f), _dome) : human;
                 }
-            return Soft[^1];
+            return Soft[^1].Lerp(Alien[^1], _dome);
         }
 
         private Vector3 Vertex(float y, int k, float inflate)
@@ -991,10 +1022,10 @@ public static partial class HumanMeshBuilder
         public Vector3 Seat(bool hair) => Centre(hair ? 0.192f : 0.184f) - Fwd * 0.008f * K;
 
         /// <summary>The hats' radii (authored for a band of about 0.11 m) on this head.</summary>
-        public float HatScale(bool hair) => K * (hair ? 1.06f : 1f);
+        public float HatScale(bool hair) => K * (hair ? 1.06f : 1f) * (1f + 0.12f * _dome);
 
         /// <summary>Half the head's width at its widest, with hair on or not.</summary>
-        public float HalfWidth(bool hair) => (0.086f + (hair ? 0.013f : 0f)) * K;
+        public float HalfWidth(bool hair) => (0.086f + 0.014f * _dome + (hair ? 0.013f : 0f)) * K;
 
         private Vector3[] Ring(RingPool pool, float y, float inflate)
         {

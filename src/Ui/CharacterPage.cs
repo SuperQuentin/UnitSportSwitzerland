@@ -67,7 +67,7 @@ public static class CharacterPage
         0 => Enum.GetNames<BodyBuild>(),
         1 => Enumerable.Range(0, FaceGenome.PresetCount).Select(i => Capital(FaceGenome.PresetName(i))).ToArray(),
         2 => Appearance.EyeNames,
-        3 => Enumerable.Range(1, Appearance.SkinTones.Length).Select(i => $"Tone {i}").ToArray(),
+        3 => Appearance.SkinNames,
         4 => Enum.GetNames<HairStyle>(),
         _ => Appearance.HairColourNames,
     };
