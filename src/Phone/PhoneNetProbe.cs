@@ -10,7 +10,7 @@ namespace UnitSport.Phone;
 /// <c>--phonenet A|B</c> with <c>--connect</c> (driven by <c>tools/phonenetcheck.sh</c>, #889): what
 /// another peer sees of a phone. A takes it out, opens it, puts it away; B checks A's copy each
 /// time: <see cref="FootPlayer.PhoneState"/>, both arms in the phone pose, the phone drawn in the
-/// hands, opened to its hinge's end, then gone with the arms back down. Windowed (<c>SHOTS=1</c>),
+/// hands, opened to its hinge's end, then gone with the arms off it. Windowed (<c>SHOTS=1</c>),
 /// B saves its view of A to <c>test_output/phonenet_B_*.png</c>.
 /// </summary>
 public partial class PhoneNetProbe : ChatProbe
@@ -74,9 +74,11 @@ public partial class PhoneNetProbe : ChatProbe
         Say("seen open");
 
         if (!await Heard("A", "away", 20)) { Fail("A never put it away"); return; }
-        Expect(await Until(() => Copy() is { PhoneState: FootPlayer.PhonePocketState, DrawnArmPose: Avatar.ItemArmPose.None }
-                                 && Copy()!.PhoneModel is not { Visible: true }, 4),
-            $"A's copy has put it away, arms down (arms {Copy()?.DrawnArmPose})");
+        // the arms go back to whatever the hotbar holds (Hold for an item, None for an empty hand)
+        Expect(await Until(() => Copy() is { PhoneState: FootPlayer.PhonePocketState } c
+                                 && c.DrawnArmPose is not (Avatar.ItemArmPose.Phone or Avatar.ItemArmPose.PhoneOpen)
+                                 && c.PhoneModel is not { Visible: true }, 4),
+            $"A's copy has put it away, its arms off the phone (arms {Copy()?.DrawnArmPose})");
         Say("seen away");
     }
 
