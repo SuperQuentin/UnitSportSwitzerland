@@ -103,7 +103,7 @@ public sealed class ChunkGrid
     ///
     /// <para>
     /// <c>TerrainMeshBuilder.BuildSurface</c> splits every quad into two FLAT-SHADED triangles
-    /// along the v10-v01 diagonal, not a smooth surface — so on any quad where the four corners
+    /// along the diagonal <see cref="SplitsNwSe"/> picks, not a smooth surface — so on any quad where the four corners
     /// are not coplanar, which is most of them in real terrain, bilinear disagrees with what is
     /// actually drawn. At 2 m spacing (full resolution) that disagreement is a few centimetres
     /// and nobody notices. At 20-40 m spacing, which is what most of a streamed world renders at
@@ -131,14 +131,30 @@ public sealed class ChunkGrid
         double h01 = ChunkFormat.Dequantize(Heights[(r0 + 1) * Size + c0]);
         double h11 = ChunkFormat.Dequantize(Heights[(r0 + 1) * Size + c0 + 1]);
 
-        // Same diagonal as BuildSurface: (v00,v10,v01) and (v10,v11,v01). fu+fv<=1 is the first
-        // triangle (near the NW corner), the rest is the second - each a flat plane through its
-        // three corners, not a bilinear blend of all four.
+        // Same diagonal as BuildSurface, each triangle a flat plane through its three corners, not
+        // a bilinear blend of all four. NW-SE: (v00,v10,v11) where fu >= fv, (v00,v11,v01) the rest.
+        if (SplitsNwSe(h00, h10, h01, h11))
+            return fu >= fv
+                ? h00 + (h10 - h00) * fu + (h11 - h10) * fv
+                : h00 + (h11 - h01) * fu + (h01 - h00) * fv;
+
+        // NE-SW: (v00,v10,v01) where fu+fv <= 1 (near the NW corner), (v10,v11,v01) the rest
         if (fu + fv <= 1.0)
             return h00 + (h10 - h00) * fu + (h01 - h00) * fv;
 
         return h10 * (1.0 - fv) + h11 * (fu + fv - 1.0) + h01 * (1.0 - fu);
     }
+
+    /// <summary>
+    /// Which diagonal a terrain quad is split along (#883), from its corners' heights as the grid
+    /// stores them (NW, NE, SW, SE): NW-SE when that diagonal climbs less than the other, else
+    /// NE-SW. A cliff's quads then fold along the wall instead of across it: one fixed diagonal
+    /// made every quad of a wall not aligned with it a pair of triangles facing apart, a fine
+    /// zig-zag of light and shade down the face. <c>TerrainMeshBuilder</c> and
+    /// <see cref="SampleMeshHeight"/> both decide here, so a height query matches the screen.
+    /// </summary>
+    public static bool SplitsNwSe(double h00, double h10, double h01, double h11) =>
+        Math.Abs(h00 - h11) < Math.Abs(h10 - h01);
 
     /// <summary>
     /// Keeps every <paramref name="stride"/>-th vertex and drops the rest.
