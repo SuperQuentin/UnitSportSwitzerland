@@ -51,6 +51,23 @@ public sealed class AuraMatch
     /// <summary>Spectators who cheered during this turn; the manager counts them.</summary>
     public int Crowd;
 
+    /// <summary>
+    /// The battle's beat (#914): seconds per beat, and a downbeat its bars count from, on the server
+    /// clock. 120 BPM from 0 unless the manager found music playing nearby.
+    /// </summary>
+    public double Beat = AuraRules.BeatSeconds, Anchor;
+
+    // ---- don't laugh first (#914) ----
+    /// <summary>When the waiting battler was tempted (a Perfect cut), or NaN when nothing tempts them now.</summary>
+    public double TemptAt = double.NaN;
+    /// <summary>The waiter cracked up this turn: the performer's verdict gets the bonus.</summary>
+    public bool Laughed;
+    public int LaughsA, LaughsB;
+    /// <summary>A tempt opened / the waiter laughed since the manager last looked (it tells the battlers).</summary>
+    public bool TemptOpened, JustLaughed;
+    /// <summary>The waiter's press arrives a round trip after the tempt reached them: room for it.</summary>
+    public const double TemptSlack = 0.3;
+
     public readonly List<AuraTurn> History = new(TurnCount);
 
     public AuraMatch(long a, long b, double now)
@@ -64,6 +81,8 @@ public sealed class AuraMatch
     public bool Has(long who) => who == A || who == B;
     public long Other(long who) => who == A ? B : A;
     public int Total(long who) => who == A ? TotalA : TotalB;
+    public long Waiter => Other(Performer);
+    public int Laughs(long who) => who == A ? LaughsA : LaughsB;
 
     /// <summary>Who performs turn <paramref name="turn"/>, given the totals before it.</summary>
     public long PerformerOf(int turn)
@@ -120,7 +139,7 @@ public sealed class AuraMatch
         Grades = new AuraGrade[accepted.Length];
         NextIndex = 0;
         Crowd = 0;
-        T0 = AuraRules.NextBar(now, CountdownLead);
+        T0 = AuraRules.NextBar(now, CountdownLead, Beat, Anchor);
         Phase = AuraPhase.Countdown;
         PhaseEnds = T0;
     }
@@ -135,13 +154,46 @@ public sealed class AuraMatch
         if (who != Performer || turn != Turn || index != NextIndex) return null;
         if (Phase != AuraPhase.Perform && Phase != AuraPhase.Countdown) return null;
         if (index < 0 || index >= Plan.Length) return null;
-        double cut = AuraRules.CutAt(Plan, index, T0);
-        if (ts < cut - AuraRules.BeatSeconds) return null;
+        double cut = AuraRules.CutAt(Plan, index, T0, Beat);
+        if (ts < cut - Beat) return null;
         if (ts > cut + AuraRules.LateLimit) return null; // Tick already called it frozen, or will
         var g = AuraRules.Grade(ts - cut, AuraRules.Def(Plan[index]).Difficulty);
         Grades[index] = g;
         NextIndex++;
+        // a clean cut is the performer's best shot at cracking the rival up
+        if (g == AuraGrade.Perfect && !Laughed && double.IsNaN(TemptAt))
+        {
+            TemptAt = ts;
+            TemptOpened = true;
+        }
         return g;
+    }
+
+    /// <summary>
+    /// The waiting battler keeps a straight face (#914): <c>aura_next</c> pressed at <paramref name="ts"/>.
+    /// True when it meets an open tempt; false when nothing tempted them (breaking character: they
+    /// laughed); null when it is not theirs to press, or they already laughed this turn.
+    /// </summary>
+    public bool? Compose(long who, int turn, double ts, double now)
+    {
+        if (who != Waiter || turn != Turn || Laughed) return null;
+        if (Phase != AuraPhase.Perform) return null;
+        if (!double.IsNaN(TemptAt) && ts >= TemptAt - 0.05 && ts <= TemptAt + AuraRules.TemptWindow)
+        {
+            TemptAt = double.NaN;
+            return true;
+        }
+        Laugh();
+        return false;
+    }
+
+    private void Laugh()
+    {
+        Laughed = true;
+        JustLaughed = true;
+        TemptAt = double.NaN;
+        if (Waiter == A) { LaughsA++; TotalA += AuraRules.LaughPenalty; }
+        else { LaughsB++; TotalB += AuraRules.LaughPenalty; }
     }
 
     /// <summary>
@@ -162,12 +214,18 @@ public sealed class AuraMatch
                 return true;
             case AuraPhase.Countdown when now >= T0:
                 Phase = AuraPhase.Perform;
-                PhaseEnds = AuraRules.CutAt(Plan, Plan.Length - 1, T0) + AuraRules.LateLimit;
+                PhaseEnds = AuraRules.CutAt(Plan, Plan.Length - 1, T0, Beat) + AuraRules.LateLimit;
                 return true;
             case AuraPhase.Perform:
             {
                 bool changed = false;
-                while (NextIndex < Plan.Length && now > AuraRules.CutAt(Plan, NextIndex, T0) + AuraRules.LateLimit)
+                // a tempt nobody answered: the waiter cracked up
+                if (!double.IsNaN(TemptAt) && now > TemptAt + AuraRules.TemptWindow + TemptSlack)
+                {
+                    Laugh();
+                    changed = true;
+                }
+                while (NextIndex < Plan.Length && now > AuraRules.CutAt(Plan, NextIndex, T0, Beat) + AuraRules.LateLimit)
                 {
                     Grades[NextIndex] = AuraGrade.Miss;
                     frozen?.Add(NextIndex);
@@ -221,6 +279,8 @@ public sealed class AuraMatch
         Grades = Array.Empty<AuraGrade>();
         NextIndex = 0;
         Crowd = 0;
+        TemptAt = double.NaN;
+        Laughed = false;
         Phase = AuraPhase.Plan;
         PhaseEnds = now + PlanSeconds;
     }
@@ -229,6 +289,8 @@ public sealed class AuraMatch
     {
         var ctx = ContextFor(Performer);
         ctx.Crowd = Crowd;
+        ctx.RivalLaughed = Laughed;
+        TemptAt = double.NaN;
         var score = AuraRules.Score(Plan, Grades, ctx);
         History.Add(new AuraTurn(Performer, Plan, (AuraGrade[])Grades.Clone(), score));
         if (Performer == A) TotalA += score.Total;
