@@ -24,9 +24,11 @@ public sealed class BotNav
     public double SteerUntil;
     /// <summary>The longest clear way the last scan found, m (for <c>--botlog</c>: near 0 = boxed in).</summary>
     public float LastOpen = -1;
-    /// <summary>Where it stood and since when, for <see cref="BotSkills.Unembed"/>.</summary>
+    /// <summary>Where it stood and since when, for <see cref="BotSkills.Unembed"/>; how many times it was put out lately, and when last.</summary>
     public Vector3 StillAt;
     public double StillSince;
+    public int Unembeds;
+    public double UnembedAt;
 }
 
 /// <summary>
@@ -218,7 +220,12 @@ public static class BotSkills
             return;
         }
         if (now - nav.StillSince < 1.5) return;
-        var to = OpenGroundNear(space, body, pos) ?? pos + Vector3.Up * 2f;
+        // caught again soon after: further out each time (seen: put back four times on the same spot, whose
+        // "open ground" was the trap itself)
+        if (now - nav.UnembedAt > 30) nav.Unembeds = 0;
+        nav.Unembeds++;
+        nav.UnembedAt = now;
+        var to = OpenGroundNear(space, body, pos, minRadius: Math.Min(6f + 10f * (nav.Unembeds - 1), 36f)) ?? pos + Vector3.Up * 2f;
         GD.Print($"[bots] {body.Name} \"{bot.Profile.Name}\" caught in the geometry at {body.Global} ({body.Velocity.Length():F0} m/s, still): out to {to}");
         body.DebugLaunch(to, Vector3.Zero);
         nav.StillAt = to;
@@ -237,10 +244,10 @@ public static class BotSkills
     /// a ray down from 40 m up hits the ground there first, not a roof. With <paramref name="toward"/>, only
     /// spots at least 4 m nearer it than <paramref name="pos"/>. Null when there is none.
     /// </summary>
-    private static Vector3? OpenGroundNear(PhysicsDirectSpaceState3D space, Player.FootPlayer body, Vector3 pos, Vector3? toward = null)
+    private static Vector3? OpenGroundNear(PhysicsDirectSpaceState3D space, Player.FootPlayer body, Vector3 pos, Vector3? toward = null, float minRadius = 6f)
     {
         float from = toward is { } t0 ? new Vector2(t0.X - pos.X, t0.Z - pos.Z).Length() : 0f;
-        for (float r = 6f; r <= 40f; r += 4f)
+        for (float r = minRadius; r <= 40f; r += 4f)
             for (int k = 0; k < 12; k++)
             {
                 float a = k * Mathf.Tau / 12f;

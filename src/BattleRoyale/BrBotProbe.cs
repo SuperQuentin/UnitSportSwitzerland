@@ -176,7 +176,14 @@ public partial class BrBotProbe : ChatProbe
         float ToPing(FootPlayer b) => new Vector2(b.GlobalPosition.X - pingWorld.X, b.GlobalPosition.Z - pingWorld.Z).Length();
         Expect(await Until(() => BodyOf(id) is { } b && ToPing(b) < 15f, 90), $"the mate went to the ping ({(BodyOf(id) is { } b2 ? ToPing(b2) : -1):F0} m off it)");
 
-        // down, not out (a mate stands): the mate revives A
+        // down, not out (a mate stands), 6 m from the mate: the mate revives A (a revive, not a race against the
+        // 30 s bleed: from 80 m the hold sometimes ended a second late, and 20 m off can be behind a wall)
+        if (BodyOf(id) is { } nearMate && me.Origin is { } o2)
+        {
+            var (ne, nn) = o2.ToLv95(nearMate.GlobalPosition);
+            br.Teleport(ne + 6, nn, "6 m from the mate");
+            await Until(() => me.IsOnFloor(), 20);
+        }
         me.TakeDamage(me.Health + 10f, 0, DamageCause.Other);
         Expect(await Until(() => me.Downed, 5), "A is down, not out");
         Expect(await Until(() => !me.Downed && br.MyEntry is { Alive: true, Downed: false }, 90), "the mate revived A");
