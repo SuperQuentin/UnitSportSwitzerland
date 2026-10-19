@@ -262,6 +262,12 @@ public partial class PhoneController : Node
     /// </summary>
     private void Grip()
     {
+        // VR (#920): the body walks on while you read, as with a real phone; the fingertip is the pointer
+        if (XR.XrSession.Active)
+        {
+            UiFocus.Set(this, false);
+            return;
+        }
         bool phone = _stage != Stage.Pocket && !(_stage is Stage.Open or Stage.Opening && _screens.Shown == PhoneScreens.Page.Camera);
         UiFocus.Set(this, _stage != Stage.Pocket);
         if (_blocked()) return;
@@ -273,7 +279,7 @@ public partial class PhoneController : Node
     {
         why = null;
         var p = _player();
-        if (p == null || _blocked() || XR.XrSession.Active) { why = "Not now"; return false; }
+        if (p == null || _blocked()) { why = "Not now"; return false; }
         if (p is not { Ride: RideKind.OnFoot, RidingAlong: false, IsSwimming: false, Ragdolled: false, Downed: false, Fighting: false })
         {
             why = "On foot only";
@@ -388,6 +394,12 @@ public partial class PhoneController : Node
     /// </summary>
     private void StepFinger(FootPlayer p, float dt)
     {
+        // VR: the real hand points, not the figure's (#920)
+        if (XR.XrSession.Active)
+        {
+            p.PhonePointTip = p.PhonePointDir = null;
+            return;
+        }
         bool hands = _stage is Stage.Folded or Stage.Open && _cover <= 0f && _camApp <= 0f;
         Vector2? uv = null;
         bool cover = _cursorOnCover;
@@ -609,8 +621,13 @@ public partial class PhoneController : Node
     /// <summary>On "Travelling…": once landed and settled there, the phone folds away and the camera shows the new place.</summary>
     private void StepTravel()
     {
-        // the jump runs once the world is black behind the phone
-        if (_pendingJump != null && _player() is { PhoneBackdropShown: >= 1f }) RunPendingJump();
+        // the jump runs once the world is black behind the phone; in VR, where the eye never moves, behind a blink
+        if (_pendingJump != null && XR.XrSession.Active && _stage == Stage.Open)
+        {
+            XR.XrSession.Rig?.Blink();
+            RunPendingJump();
+        }
+        else if (_pendingJump != null && _player() is { PhoneBackdropShown: >= 1f }) RunPendingJump();
         if (_travelSince < 0 || _pendingJump != null) return;
         var p = _player();
         if (_arrived && _landedAt < 0 && p != null && p.IsOnFloor()) _landedAt = RealClock.Now;
@@ -659,6 +676,11 @@ public partial class PhoneController : Node
             return;
         }
         if (_blocked()) return;   // a page over the phone (Activities menu) takes its own keys
+        if (XR.XrSession.Active)
+        {
+            VrButtons(e);
+            return;
+        }
 
         if (_stage is Stage.Open && _screens.Shown == PhoneScreens.Page.Camera)
         {
@@ -727,6 +749,89 @@ public partial class PhoneController : Node
             return;
         }
         _screens.Inner.PushInput(e, true);
+    }
+
+    /// <summary>
+    /// VR's buttons on the phone (#920): X (the pad's X, the holding hand's lower face button) opens and
+    /// folds it, B goes back, then folds, then puts it away. Everything else is the body's: the stick walks.
+    /// </summary>
+    private void VrButtons(InputEvent e)
+    {
+        if (e is not InputEventJoypadButton { Pressed: true } b) return;
+        if (b.ButtonIndex == JoyButton.X)
+        {
+            if (_stage is Stage.Open or Stage.Opening) Fold();
+            else Open();
+            GetViewport().SetInputAsHandled();
+        }
+        else if (b.ButtonIndex == JoyButton.B)
+        {
+            if (_stage is Stage.Open) Back();
+            else PutAway();
+            GetViewport().SetInputAsHandled();
+        }
+    }
+
+    private bool _vrDown, _vrDrag, _vrCover;
+    private Vector2 _vrFrom, _vrLast;
+
+    /// <summary>
+    /// The real fingertip on the glass (#920, from <c>XR.XrPhone</c>): <paramref name="uv"/> where it is
+    /// over a screen (null off it), <paramref name="down"/> while it touches. A touch and lift in place
+    /// is a click there (on the cover, it runs the quick action); a slide is a drag: up and down
+    /// scroll the list it started on, a sideways swipe picks on the cover and goes back on the inner
+    /// screen. Hovering moves the pointer over the inner screen and shows the ring.
+    /// </summary>
+    public void VrPointer(Vector2? uv, bool cover, bool down)
+    {
+        _screens.ShowRing(_stage == Stage.Pocket ? null : uv, cover, down);
+        if (uv is not { } at)
+        {
+            _vrDown = false;
+            return;
+        }
+        if (down && !_vrDown)
+        {
+            _vrDown = true;
+            _vrDrag = false;
+            _vrFrom = _vrLast = at;
+            _vrCover = cover;
+            return;
+        }
+        if (down)
+        {
+            // past about 8 mm across the glass, a slide
+            if (!_vrDrag && (at - _vrFrom).Length() > 0.05f) _vrDrag = true;
+            if (_vrDrag && !cover && _stage == Stage.Open && _screens.ScrollAt(ToPixels(_vrFrom)) is { } list)
+                list.ScrollVertical -= Mathf.RoundToInt((at.Y - _vrLast.Y) * _screens.Inner.Size.Y / _screens.InnerScale);
+            _vrLast = at;
+            return;
+        }
+        if (_vrDown)
+        {
+            _vrDown = false;
+            var moved = at - _vrFrom;
+            if (_vrDrag)
+            {
+                if (Mathf.Abs(moved.X) > Mathf.Abs(moved.Y) * 1.5f && Mathf.Abs(moved.X) > 0.15f)
+                {
+                    if (_stage == Stage.Folded) Pick(moved.X < 0 ? 1 : -1);
+                    else if (!_vrCover && moved.X > 0) Back();
+                }
+                return;
+            }
+            if (_vrCover && _stage == Stage.Folded) RunQuick();
+            else if (!_vrCover && _stage == Stage.Open && _vrFrom.X is >= 0f and <= 1f && _vrFrom.Y is >= 0f and <= 1f)
+            {
+                foreach (bool press in new[] { true, false })
+                    PushMouse(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = press }, _vrFrom);
+                Play(PhoneSounds.Tap);
+            }
+            return;
+        }
+        // hovering: the inner screen's buttons light under the finger
+        if (!cover && _stage == Stage.Open && at.X is >= 0f and <= 1f && at.Y is >= 0f and <= 1f)
+            PushMouse(new InputEventMouseMotion(), at);
     }
 
     /// <summary>A ui action pressed and released into the inner screen.</summary>

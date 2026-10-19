@@ -74,6 +74,11 @@ public partial class PhoneScreens : Node
     private Label _photoCaption = null!, _photosEmpty = null!;
     private string? _photoShown;
     private Control _coverContent = null!;
+    private Panel _coverRing = null!, _innerRing = null!;
+    private StyleBoxFlat _coverRingBox = null!, _innerRingBox = null!;
+
+    /// <summary>The inner screen's layout scale (laid out for 800 units high, drawn at its pixels).</summary>
+    public float InnerScale => _innerRoot.Scale.Y;
     // inner
     private Control _innerRoot = null!;
     private Label _statusClock = null!;
@@ -223,6 +228,31 @@ public partial class PhoneScreens : Node
         tip.Position = new Vector2(18, 16);
         _coverSelfie.AddChild(tip);
         root.AddChild(_coverSelfie);
+        (_coverRing, _coverRingBox) = Ring(28f);
+        root.AddChild(_coverRing);
+    }
+
+    /// <summary>The VR fingertip's ring (#920): where it would press, filled while it touches.</summary>
+    private static (Panel, StyleBoxFlat) Ring(float size)
+    {
+        var box = new StyleBoxFlat { BgColor = new Color(1, 1, 1, 0.12f), BorderColor = new Color(1, 1, 1, 0.85f), CornerDetail = 12 };
+        box.SetCornerRadiusAll((int)(size / 2));
+        box.SetBorderWidthAll(3);
+        var ring = new Panel { Size = new Vector2(size, size), Visible = false, MouseFilter = Control.MouseFilterEnum.Ignore };
+        ring.AddThemeStyleboxOverride("panel", box);
+        return (ring, box);
+    }
+
+    /// <summary>The fingertip's ring on the screen it is over (null hides both); filled while touching.</summary>
+    public void ShowRing(Vector2? uv, bool cover, bool down)
+    {
+        _coverRing.Visible = uv != null && cover;
+        _innerRing.Visible = uv != null && !cover;
+        if (uv is not { } at) return;
+        var (ring, box, size) = cover ? (_coverRing, _coverRingBox, new Vector2(CoverW, CoverH)) : (_innerRing, _innerRingBox, _innerRoot.Size);
+        ring.Position = at * size - ring.Size * 0.5f;
+        var fill = new Color(1, 1, 1, down ? 0.45f : 0.12f);
+        if (box.BgColor != fill) box.BgColor = fill;
     }
 
     /// <summary>A selfie: the cover shows the main camera's view (the controller turns the phone and sizes the lens).</summary>
@@ -301,6 +331,8 @@ public partial class PhoneScreens : Node
         _activities = Page_(BuildActivities());
         _photos = Page_(BuildPhotos());
         _photo = Page_(BuildPhoto());
+        (_innerRing, _innerRingBox) = Ring(40f);
+        _innerRoot.AddChild(_innerRing);
         _travel = Page_(BuildTravel());
     }
 

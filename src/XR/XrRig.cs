@@ -52,6 +52,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
     private XrTeleport _teleport = null!;
     private XrWatch _watch = null!;
     private XrMap _map = null!;
+    private XrPhone _phone = null!;
     private XrClimb _climb = null!;
 
     /// <summary>Opens or shuts the hand-held map (#439, the wrist menu's entry).</summary>
@@ -197,6 +198,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         _map = new XrMap(_right);
         _left.AddChild(_map);
         _climb = new XrClimb(_left, _right);
+        _phone = new XrPhone(_left, _right, _leftGrip, _rightGrip, _leftHand, _rightHand);
         ApplyHands();
         Notice = new XrNotice();
         AddChild(Notice);
@@ -308,6 +310,13 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         // climbing (#439) before the hands: a grip on rock is a hold, not a grab
         _climb.Update(player, dt);
         bool leftClaimed = _cab.LeftHeld || _climb.LeftHeld, rightClaimed = _cab.RightHeld || _climb.RightHeld;
+        // the phone (#920): out of the front pocket into the holding hand, whose grip then holds it
+        _phone.Update(player, _camera.GlobalTransform, _leftHanded, dt);
+        if (_phone.HoldingGripClaimed)
+        {
+            if (_leftHanded) rightClaimed = true;
+            else leftClaimed = true;
+        }
         _hands.Update(player, _camera.GlobalTransform, dt, leftClaimed, rightClaimed);
         UpdateRealHands(player, dt);
         _pad.LeftGripBusy = _hands.LeftBusy || leftClaimed;
