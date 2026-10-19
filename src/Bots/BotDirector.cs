@@ -133,6 +133,13 @@ public partial class BotDirector : Node
         long id = PlayerReplication.BotId(n);
         if (_spawner.Spawn(PlayerReplication.BotData(n, at, yaw, profile.Name)) is not FootPlayer body) return null;
 
+        // #880: the odd bot is an alien (by its number, so the same bot always is); the rest wear their id's seeded figure
+        if (Avatar.Aliens.IsAlienBot(n))
+        {
+            var alien = Avatar.Aliens.ForSeed(n);
+            body.AppearanceBits = alien.Looks.Pack();
+            body.OutfitBits = alien.Outfit.Bits;
+        }
         var bot = new Bot(id, n, body, profile) { NextThink = Now, World = _world ??= new BotWorld(_players) };
         // the body reads no keys: its walk, jump, crouch come from the brain's intent
         body.WalkControls = () => (bot.Intent.Wish, bot.Intent.Run);

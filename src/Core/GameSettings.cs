@@ -545,6 +545,9 @@ public sealed class GameSettings
                 case "--detail" when Enum.TryParse<DetailPreset>(v, true, out var d): Detail = d; break;
                 case "--data" when Enum.TryParse<DataPreset>(v, true, out var dp): Data = dp; break;
                 case "--builds" when int.TryParse(v, out int b): MaxConcurrentBuilds = b; break;
+                // #880: this run's figure, an alien preset by name (zorp, zib…) or packed bits, for a screenshot; not saved
+                case "--appearance" when Avatar.Aliens.Named(v) is { } alien: AppearanceBits = alien.Looks.Pack(); break;
+                case "--appearance" when int.TryParse(v, out int bits): AppearanceBits = bits; break;
                 case "--commit" when double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out double c):
                     CommitBudgetMs = c; break;
                 case "--profile" when Enum.TryParse<RideProfile>(v, true, out var rp): RideProfile = rp; break;
