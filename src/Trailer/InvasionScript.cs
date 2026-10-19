@@ -1155,7 +1155,7 @@ public static class InvasionScript
             PhotoFrom = new Key(0, Ground(Crew, 90, 5.2f, 1.5f), Ground(Crew, 0, 0, 1.15f), 28),
             Captions =
             [
-                new(1.2, 7.0, "UNITSPORT SWITZERLAND", "Invasion, Swiss Style.", Title: true),
+                new(1.2, 7.0, "UNITSPORT SWITZERLAND", "Invasion, Swiss Style.", Title: true) { SubId = "title_tagline" },
                 new(4.0, 4.6, "", Space1990.Credit),
             ],
         },
