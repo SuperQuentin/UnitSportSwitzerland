@@ -1,6 +1,6 @@
 # Raised doors, and the site office's upper containers (#827)
 
-Status: design, not started. Part of #605, split out of #822 (PR #824).
+Status: in progress (`feat/827-raised-doors`, PR #938). Part of #605, split out of #822 (PR #824).
 
 A door's sill can stand above the ground: an entrance on floor k of a plan, its sill at that
 floor's height on the facade. The site office uses it for its upper row of containers: an outside
@@ -43,7 +43,7 @@ The **inside** is pinned to the ground floor: the interior doorway is always at 
 | `ConstructionCheck.cs:134-135, 174-177, 186` | one door per ground container, one floor, inside at Y 0 | upper doors, two floors, `EntranceY` |
 | `InteriorProbe.cs:273, 302` | "standing on the ground floor" after walking in | the entered door's floor |
 | `SiteOfficeNetProbe.cs:194` | the room is looked up on `GroundFloor` | the door's floor |
-| `DoorIndex.cs:219` `MaxRise` 2.5 m | (not an assumption, a dependency) the ground and upper doors are 2.6 m apart, so from the gallery a ground door is out of reach and back | asserted in `--doorcheck` |
+| `DoorIndex.cs:219` `MaxRise` 2.5 m | (not an assumption, a dependency) the ground and upper doors are 2.6 m apart, so from the gallery a ground door is out of reach and back | not relied on (decided, below): the pick prefers the door at the player's level |
 
 Checked and unchanged: `DoorPortals` (frame-relative, `InView`, `KeepOutOfDoorways`, `OpenDoors`),
 `DoorwayGhosts`, `DoorLeaf`, `DoorLink.InOutsideDoorway`, `BeforeMove`/`AfterMove`/`Cross`
@@ -184,21 +184,24 @@ maps to its building plus its height, already right), `InteriorNode.Containing` 
   through the doorway, walks in and finds the stack gone. C joins late, finds the door open, walks in
   and out, and stands on the deck after. Plus the whole `tools/test.sh net`.
 
-## Open decisions (the recommendation first)
+## Decisions (taken with the user, Oct 20)
 
-1. **Gallery placement**: fit it after the site is planned, on a side that is free, so every yard
-   stays as it is (recommended), or grow the office zone in `ConstructionSites.Plan` so every site gets
-   one and every yard is laid out again once (toilets, heaps, machines, skips and the office's and
-   cabins' doors all move).
-2. **Stair layout**: along the end container's outer long face (recommended: fits a one-container
-   office), parallel to the door end past the row, or straight out from the door end.
-3. **Upper rooms**: over the office the site manager's office, over the mess room a drawing office
-   (plans tables, chairs, whiteboard), two appended `RoomType`s and existing furniture only
-   (recommended); or a second mess room. Coupled at the back like the ground pair (recommended).
-4. **Every site where it fits** (recommended), or a hashed share.
-5. **Protocol bump** (recommended) and **plan version bump** (required), accepting the loot reset.
-6. **Bots**: collision and waypoints now, no skill (recommended).
-7. **Tier 2**: a new `siteuppernetcheck` (recommended) rather than lengthening `siteofficenetcheck`.
+1. **Gallery placement**: fitted after the site is planned, on a free side, on every site where it
+   fits. Existing yards stay as they are; the coverage is measured and reported.
+2. **Stair**: along the end container's outer long face.
+3. **Upper rooms**: the site manager's office over the office, a drawing office over the mess room,
+   joined by a doorway at the back.
+4. **Both bumps**: `InteriorLayout.CurrentVersion` and `Handshake.Protocol`.
+5. **Bots**: collision and waypoints now, no skill; the capability-map row.
+6. **Tier 2**: a new `siteuppernetcheck`; `siteofficenetcheck` unchanged.
+7. Raised doors on ordinary buildings stay out of scope.
+8. **The door pick does not lean on `MaxRise`** (review): of the doors in reach, one whose sill is
+   within `DoorIndex.LevelBand` (1.3 m, half a storey) of the feet is taken before one that is not,
+   in `Nearest` and in `FacedEntrance` (faced first, then at the level, then the rest). A VR hand takes
+   only the doors whose opening it is in. `--doorcheck` asserts it with the upper sill at 2.6 m and
+   again at 2.0 m, inside `MaxRise`. One existing pick changes on purpose: on the Graubünden site the
+   office's doorstep with no look (or looking up) now takes the office door at the player's level, not
+   the cabin 2 m below; turned to the cabins, E still works a cabin's.
 
 ## Phases
 
@@ -216,8 +219,8 @@ maps to its building plus its height, already right), `InteriorNode.Containing` 
 
 ## Risks
 
-- **`MaxRise` 2.5 m against a 2.6 m storey**: 0.1 m keeps a ground door and the upper door above it
-  apart for E. Asserted; a taller reach or a lower container would merge them.
+- **`MaxRise` 2.5 m against a 2.6 m storey**: no longer what keeps a ground door and the upper door
+  above it apart for E (decision 8).
 - **The deck in the wrong body** drops a player through it in the doorway (above).
 - **Coverage**: sites where neither side fits keep a closed upper row. Measured in phase 2; if the
   share is low, decision 1 is revisited.
