@@ -90,6 +90,15 @@
   random, a third of them mossy. The ground is the solid's foot + 0.8 m (`FoundationDepth`, the
   preprocessor's: the median ground of the footprint), and they sink 0.15 m more, so on a slope some
   bury and some sit proud. Part of `RuinWalls`, so they collide as drawn: a player climbs the rubble.
+- **Footings** (every building, `BuildingMeshBuilder.Footings.cs`): a solid is seated on the median
+  ground of its footprint, so on a slope its downhill base stands in the air. At runtime, from the
+  tile's terrain (`ChunkGrid.SampleMeshHeight`, the drawn surface), each wall's bottom edge in pieces
+  of 4 m gets a footing down to the ground and 0.5 m into it (past the road blend's 0.35 m), in the
+  wall's colour darkened (UV2.y -1: plain, plaster in the realistic style), colliding like the wall.
+  A building whose base is anywhere more than 3 m up gets none (in the air: left as it is). Local
+  world, Oct 2026: of 308,759 buildings 57% sit in the ground, 28% stand up to 1 m above it, 14%
+  1-3 m (all now footed), 1% 3-10 m and 65 over 10 m (left). The 3-10 m ones are mostly real
+  buildings on steep slopes with a tall downhill facade (a block of flats on a cliff above Riddes).
 - **Geometry** (appended after the doors): a 0.9 m parapet on every open edge of a flat roof (an
   edge no other flat face shares, with nothing of the solid as high 0.4 m past it; each corner owned
   by one edge) with square merlons, Ticino's notched swallowtails, a ruin's broken ones (35% gone, the

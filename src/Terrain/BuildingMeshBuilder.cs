@@ -47,15 +47,16 @@ public static partial class BuildingMeshBuilder
     /// stay one surface and one draw call.
     /// </summary>
     /// <param name="detail">The visual style's mesh detail; only <see cref="Styles.MeshDetail.Low"/> exists so far.</param>
+    /// <param name="ground">The tile's terrain: given, a base standing a little above it gets a footing down to it.</param>
     public static MeshData? Build(BuildingTile tile, Interiors.DoorSpot[]? doors,
-        Styles.MeshDetail detail = Styles.MeshDetail.Low)
+        Styles.MeshDetail detail = Styles.MeshDetail.Low, ChunkGrid? ground = null)
     {
         Core.ShowcaseTrace.Mark();
         var data = Build(tile);
         if (data == null) return null;
         var types = BuildingTypes.For(tile);
         bool castles = types.HasCastles;
-        if ((doors == null || doors.Length == 0) && !castles) return data;
+        if ((doors == null || doors.Length == 0) && !castles && ground == null) return data;
 
         int capacity = (doors?.Length ?? 0) * 120;
         var v = new List<Vector3>(capacity);
@@ -67,6 +68,8 @@ public static partial class BuildingMeshBuilder
         // a castle's crenellations, oriels, flags and finials, and its ruins' broken walls (#859)
         var ruins = new FacadeSink();
         if (castles) AppendCastles(tile, types, v, c, f, ruins);
+        // a base a little above the ground carried down to it
+        AppendFootings(tile, types, ground, v, c, f);
 
         int n = data.Vertices.Length, r = ruins.V.Count;
         var vertices = new Vector3[n + v.Count + r];
@@ -595,11 +598,13 @@ public static partial class BuildingMeshBuilder
     }
 
     /// <summary>Flat triangle list for ConcavePolygonShape3D.</summary>
-    public static Vector3[] BuildCollisionFaces(BuildingTile tile)
+    public static Vector3[] BuildCollisionFaces(BuildingTile tile, ChunkGrid? ground = null)
     {
         // a ruin collides as its broken walls, open to the sky, as it is drawn (#859)
         var types = BuildingTypes.For(tile);
         var ruins = new List<Vector3>();
+        // and a footing like the wall above it
+        FootingCollision(tile, ground, ruins);
         var rebuilt = new bool[tile.Buildings.Count];
         for (int bi = 0; types.HasCastles && bi < tile.Buildings.Count; bi++)
             if (rebuilt[bi] = RebuiltRuin(tile, types, bi))

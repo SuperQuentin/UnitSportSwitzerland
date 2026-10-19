@@ -400,7 +400,8 @@ vec3 solar_field(vec3 col, inout vec3 n, inout float glass, vec2 q, vec2 ext, fl
     return mix(avg, p, near);
 }
 
-varying float garage_flag;  // UV2.y: 0 plain, 1 neon sign, 2 garage wall (storey_count = eave m),
+varying float garage_flag;  // UV2.y: -1 a footing (foundation masonry under a base, plaster in the
+                            // realistic style), 0 plain, 1 neon sign, 2 garage wall (storey_count = eave m),
                             // 3 a wall run too short for a window (bands and plinth only),
                             // 4-23 a castle wall (storey_count = the run's height m; +1 a level head,
                             // +2 its foot on the ground, +4 x its variant; wall_frame.z the run's length)
@@ -690,7 +691,7 @@ void fragment() {
     // in plan. Windows, signs and paint are drawn over it below.
     if (roof_kind > 0.5 && roof_kind < 1.5) {
         col = style_tinted(tex_roof, roof_uv / 2.5, col, 0.25); // a pitched roof: courses along its eave
-    } else if (n.y > 0.25 || facade.y < 0.0) {
+    } else if (n.y > 0.25 || facade.y < 0.0 && garage_flag > -0.5) {
         col = style_tinted(tex_roof, vec2(pattern_xz(world_pos).x + world_pos.y * 0.7, pattern_xz(world_pos).y) / 2.5, col, 0.25);
     } else if (garage_flag > 3.5) {
         col = style_tinted(tex_plaster, facade / 3.0, col, 0.15); // a castle wall: v is already metres
