@@ -359,7 +359,8 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                         loot.TakeAllAndClose();
                         Check(!loot.OpenContents().Any(), "take all empties it");
                         Check(CountItems() - _lootBefore == expected, $"the pack gained {CountItems() - _lootBefore} of {expected}");
-                        Check(!loot.IsOpen, "take all closes the emptied panel");
+                        // what did not fit (a full pack) keeps it open on what is left
+                        Check(loot.IsOpen == loot.OpenContents().Any(), "take all closes the panel exactly when it emptied it");
                         _lootPhase = 2;
                         return;
                     }
