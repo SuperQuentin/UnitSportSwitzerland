@@ -108,5 +108,5 @@ deck appears at least once across the three films, and each film covers most of 
 - [x] B UFO sightings (#863): PR #877
 - [x] C bubbles and subtitles (#862): PR #875 (online bubbles not checked over the network yet)
 - [ ] D The Stolen Fondue (#864)
-- [ ] E The Alien Tourist (#865)
+- [x] E The Alien Tourist (#865): PR #868, 59 shots, 4:00.6 on "Mighty Like Us"; rendered v2 (`test_output/trailer/tourist/v2` in the main checkout), five subtitle tracks
 - [ ] F Invasion, Swiss Style (#866)
