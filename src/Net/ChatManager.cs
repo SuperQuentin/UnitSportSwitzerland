@@ -81,6 +81,16 @@ public partial class ChatManager : Node
     /// <summary>Raised on the client for every line to display.</summary>
     public event Action<string, ChatKind>? LineReceived;
 
+    /// <summary>
+    /// Raised on the client when a player said something in the chat (not a command, not a system
+    /// line): who (their peer id; offline, <see cref="OfflineSelf"/>) and what, for the speech
+    /// bubble over their head (#862, <see cref="Ui.Bubbles.ChatBubbles"/>).
+    /// </summary>
+    public event Action<long, string>? Spoken;
+
+    /// <summary>The speaker of <see cref="Spoken"/> offline: oneself.</summary>
+    public const long OfflineSelf = -1;
+
     /// <summary>Raised on the client when the server closes the connection deliberately.</summary>
     public event Action<string>? Kicked;
 
@@ -362,6 +372,7 @@ public partial class ChatManager : Node
         if (!text.StartsWith('/'))
         {
             Show($"You: {Scrub(text)}", ChatKind.Say);
+            Spoken?.Invoke(OfflineSelf, Scrub(text));
             return;
         }
 
@@ -512,8 +523,26 @@ public partial class ChatManager : Node
         if (text.Length > MaxMessageLength) text = text[..MaxMessageLength];
 
         if (text.StartsWith('/')) HandleCommand(sender, text[1..]);
-        else Broadcast($"{NameOf(sender)}: {Scrub(text)}", ChatKind.Say);
+        else Say(sender, text);
     }
+
+    /// <summary>
+    /// Server: <paramref name="peer"/> says <paramref name="text"/> in the chat: the line to
+    /// everyone, and who said it, for the bubble over their head. A server-run player (a bot) talks
+    /// through here too.
+    /// </summary>
+    public void Say(long peer, string text)
+    {
+        text = text.Trim();
+        if (text.Length == 0) return;
+        if (text.Length > MaxMessageLength) text = text[..MaxMessageLength];
+        Broadcast($"{NameOf(peer)}: {Scrub(text)}", ChatKind.Say);
+        Rpc(MethodName.Said, peer, Scrub(text));
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Said(long peer, string text) => Spoken?.Invoke(peer, text);
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]

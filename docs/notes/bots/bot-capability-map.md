@@ -37,6 +37,7 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | fist fight | — | `FightManager` | — | — | gap: `FightPhysics` returns for an Npc, later |
 | aura battle (#914) | `AuraHoldBrain` (wish to its mark, `FaceYaw` at the rival) | `AuraManager.SubmitPlanFor` / `NextFor` / `ComposeFor` | the match's state, server-side | `SuggestPlan(ctx, skill, seed)`, cut error and straight-face odds by `BotDifficulty` | ok: `/aura <bot>` |
 | wingsuit, parachute (and the BR drop) | `FlyControls` from `Intent.Steer`/`Canopy` and the facing | the body | its height: the loaded ground, else the lattice (`BrManager.GroundAt`) | `BrBrain.Drop` | ok |
+| say something in the chat (a speech bubble over the head, #862) | — | `ChatManager.Say(peer, text)`: the line to everyone and the `Said` RPC that puts the bubble over that body | lines heard: `ChatManager.Spoken` on a client only | — | gap: no bot talks yet; one that does calls `Say` with its peer id and gets the bubble for free |
 
 ## Items
 

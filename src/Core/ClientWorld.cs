@@ -862,6 +862,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             PlayersWanted = _chat.RequestPlayerNames,
         });
         AddChild(_chatUi);
+        // what players near you say, in a bubble over their head (#862): online the server names the speaker, offline it is you
+        AddChild(new Ui.Bubbles.ChatBubbles(_chat, peer => peer == ChatManager.OfflineSelf ? LocalPlayer
+            : _players?.GetNodeOrNull<FootPlayer>(peer.ToString())));
         // the item catalogue types its commands into the chat, so the server checks them (#262)
         items.RunCommand = _chat.Send;
         _chat.CatalogueRequested += () => items.Catalogue.Open();
