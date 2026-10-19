@@ -48,4 +48,18 @@ public class FilmCoverageTests
         Assert.Equal(missing.OrderBy(t => t.E).ThenBy(t => t.N).ToList(), missing);
         Assert.StartsWith("2595-1198\n", FilmCoverage.TilesFile(missing));
     }
+
+    [Fact]
+    public void A_tile_abroad_is_allowed_and_counted_not_missing()
+    {
+        // a point by the border: tiles west of 2600 are "abroad" (no Swiss survey), none is built
+        var points = new[] { new FilmCoverage.Need(2_600_500, 1_200_500, double.NaN, Eye: true) };
+        var missing = FilmCoverage.Missing(points, (_, _) => false, (e, _) => e >= 2600, out var abroad);
+        Assert.All(missing, t => Assert.True(t.E >= 2600));
+        Assert.All(abroad, t => Assert.True(t.E < 2600));
+        Assert.Contains((2599, 1200), abroad);
+        Assert.Contains((2600, 1200), missing);
+        // without the country map every unbuilt tile is missing, as before
+        Assert.Equal(missing.Count + abroad.Count, FilmCoverage.Missing(points, (_, _) => false).Count);
+    }
 }
