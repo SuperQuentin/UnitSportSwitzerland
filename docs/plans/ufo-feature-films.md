@@ -109,4 +109,4 @@ deck appears at least once across the three films, and each film covers most of 
 - [x] C bubbles and subtitles (#862): PR #875 (online bubbles not checked over the network yet)
 - [ ] D The Stolen Fondue (#864)
 - [ ] E The Alien Tourist (#865)
-- [ ] F Invasion, Swiss Style (#866)
+- [x] F Invasion, Swiss Style (#866)

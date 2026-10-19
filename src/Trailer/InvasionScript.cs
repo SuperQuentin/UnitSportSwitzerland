@@ -298,12 +298,12 @@ public static class InvasionScript
             [
                 new() { Who = Yvonne, Ride = RideKind.A320, At = Spot.Alt(2646200, 1151600, 3700), Heading = 145, Drive = Drive.Fly, Launch = 90, Flight = _ => Stick(lever: 0.8f) },
             ],
-            // a saucer hanging off her course, ahead and to the left: she passes it half-way through
-            Craft = [new Craft(Spot.Alt(2646601, 1151234, 3720), 235)],
+            // a saucer hanging ahead on her course: the camera behind her tail looks at it past her
+            Craft = [new Craft(Spot.Alt(2646602, 1151027, 3730), 235)],
             Keys =
             [
-                new(0, Pt.On(0, -34f, 7f, 30f), Pt.On(0, 0f, -2f, -10f), 35),
-                new(2 * B, Pt.On(0, -28f, 5f, 24f), Pt.On(0, 0f, -2f, -10f), 35),
+                new(0, Pt.On(0, -8f, 5f, 45f), Spot.Alt(2646602, 1151027, 3725), 35),
+                new(2 * B, Pt.On(0, -6f, 4f, 38f), Spot.Alt(2646602, 1151027, 3725), 35),
             ],
             Smooth = 0.2f, Preroll = 1,
             Bubbles = [Say("yvonne_saucer", 1.6, 0, "Tower... is that a saucer?", BubbleShape.Whisper)],
