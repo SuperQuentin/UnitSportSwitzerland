@@ -209,10 +209,10 @@ public static class CorePlanner
 
         // 4. the corners: each the envelope of its connectors, the turns narrowed where it would start outside a mouth
         // or reach a building
-        var narrowed = Corners(arms, frames, core.Connectors, index, blocked, mouthCap: true);
+        var narrowed = Corners(arms, frames, core.Connectors, index, blocked, mouthCap: true, held: k => held[k]);
         // every kerb drawn again from the final connectors: narrowing a turn at one corner tightens its arc, which may cut
         // deeper into the corner at its other side
-        corners = Corners(arms, frames, core.Connectors, index, blocked, mouthCap: true, narrow: false);
+        corners = Corners(arms, frames, core.Connectors, index, blocked, mouthCap: true, narrow: false, held: k => held[k]);
         for (int k = 0; k < corners.Count; k++) corners[k].RoomClipped = narrowed[k].RoomClipped;
         // (pushed at most four times; the connectors and corners are then laid once more on the final mouths, a kerb still
         // starting outside its mouth failing the check: they ended at the mouths before the last push)
@@ -260,6 +260,9 @@ public static class CorePlanner
         Lines(jp, arms, index, core);
         return core;
     }
+
+    /// <summary>The least kerb rounding beside a held mouth (m, <see cref="CoreCorner.Floor"/>).</summary>
+    private const double MinFloor = 0.3;
 
     /// <summary>The most a kerb is pushed out to keep a connector paved (m): further, the core fails its check.</summary>
     private const double MostPave = 0.6;
@@ -509,7 +512,7 @@ public static class CorePlanner
     /// inside both mouths and keeps off the buildings, and each corner's kerb is drawn.
     /// </summary>
     private static List<CoreCorner> Corners(List<ArmPlan> arms, Frame[] frames, List<Connector> connectors, Dictionary<int, int> index,
-        Func<Vec2, bool>? blocked, bool mouthCap, bool narrow = true)
+        Func<Vec2, bool>? blocked, bool mouthCap, bool narrow = true, Func<int, bool>? held = null)
     {
         int n = arms.Count;
         var corners = new List<CoreCorner>(n);
@@ -572,6 +575,11 @@ public static class CorePlanner
             double half = alpha * 0.5;
             var bisector = (ui + uj).Normalized();
             corner.Floor = TightLeg * Math.Tan(half);
+            // beside a mouth held short (half the street to the next junction, the most out): the least rounding is what the mouths
+            // leave, and the turns past it may go under their vehicle's radius (#854: two cores held apart, the user, Oct 17)
+            bool heldHere = mouthCap && held is not null && (held(i) || held(j));
+            if (heldHere)
+                corner.Floor = Math.Max(MinFloor, Math.Min(corner.Floor, Math.Min(fi.Station - fi.StationOf(c), fj.Station - fj.StationOf(c)) * Math.Tan(half)));
             double r = Envelope(c, ui, uj, half, bisector, connectors, corner.Floor);
             if (mouthCap)
             {
@@ -583,7 +591,7 @@ public static class CorePlanner
                 if (narrow && r > Math.Min(cap, room) + 1e-3)
                 {
                     corner.RoomClipped = room < cap && r > room + 1e-3;
-                    Narrow(frames, index, connectors, c, ui, uj, half, bisector, corner.Floor, Math.Min(cap, room), lowest: corner.RoomClipped ? -1 : 0);
+                    Narrow(frames, index, connectors, c, ui, uj, half, bisector, corner.Floor, Math.Min(cap, room), lowest: corner.RoomClipped || heldHere ? -1 : 0);
                     r = Envelope(c, ui, uj, half, bisector, connectors, corner.Floor);
                 }
             }

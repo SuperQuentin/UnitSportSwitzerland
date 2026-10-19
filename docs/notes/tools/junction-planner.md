@@ -350,6 +350,12 @@ off, `--junctions new` plans and reports without writing.
   (driveways, parking aisles; `JunctionPlan.Apron`) the core is a flush apron: no sidewalk corner round it; such a junction is
   local too. 168 real tiles: old layout 485 -> 417 ("a check failed" 187 -> 139), 172 aprons (none in Geneva: its service roads
   find no OSM row in the overlay). `APRONDBG=1` prints the aprons written.
+- **Corners beside a held mouth** (#854): where a mouth is held short (half the street to a junction under 30 m, a local
+  crossroads' 12 m, the most out), a corner beside it takes as least rounding what the mouths leave (`CoreCorner.Floor`, at
+  least `MinFloor` 0.3 m) and its turns may go under their vehicle's radius (the user, Oct 17: two cores held apart have turns
+  tighter than their vehicle). 168 real tiles: old layout 374 -> 295 ("cores overlap" 73 -> 39, "a check failed" 139 -> 97);
+  turns under their vehicle's radius 491 -> 729, path ends off their lane 67 -> 73. `OVERLAPDBG=1` prints each "cores overlap"
+  junction and why its group did not merge.
 - **Comparing with reality**: SWISSIMAGE crops from `wms.geo.admin.ch` (`ch.swisstopo.swissimage`, EPSG:2056 bbox); in
   Geneva the marking cadastre on `ge.ch/terags/rest/services/DIRECTIVES_SIGNAL_CHANTIERS/MapServer` (37 lines, 38 kerbs,
   44 coloured surfaces, 48 road cover: carriageway, sidewalk, islands) as GeoJSON by bbox. Three panels (aerial, old, new)
