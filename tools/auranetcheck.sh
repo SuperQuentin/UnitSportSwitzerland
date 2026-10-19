@@ -26,7 +26,7 @@ grep -h "\[aura\]" $OUT/auranet_server.log
 code=0
 tc_ok 3 $OUT/auranet_A.log $OUT/auranet_B.log $OUT/auranet_C.log || code=1
 # the forgeries refused, a laugh, a bot battle: the server's own word
-for what in "refused [0-9]*'s press 0 for turn 1" "stamped .* s ahead" "refused [0-9]*'s plan of 9" "laughed first" "bot .* battles"; do
+for what in "refused [0-9]*'s press 0 for turn 1" "stamped .* s ahead" "refused [0-9]*'s plan of 9" "laughed first" "bot .* battles" "keeps the beat of"; do
   if ! grep -q "$what" $OUT/auranet_server.log; then echo "[auranetcheck] FAIL the server log lacks: $what"; code=1; fi
 done
 echo "[auranetcheck] RESULT: $([ $code = 0 ] && echo ok || echo FAILED)"

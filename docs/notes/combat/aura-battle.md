@@ -140,10 +140,11 @@ A plan holds 3-6 moves, at most 16 beats; a short one (time ran out) is padded w
 - **VR poses**: `AuraBody.Classify` reads `VrHands` (hands up, at the face, crossed, forward, out, low);
   striking the next move's pose (`AuraBody.GestureOf`, hands down for the last) in the cut's window
   presses Next; only the moment it is struck counts.
-- `tools/auranetcheck.sh` runs three clients (A, B, spectator C) and a bot battle.
+- `tools/auranetcheck.sh` runs three clients (A, B, spectator C) and a bot battle; C carries a radio
+  playing the server's default song (the chess type beat, burnt from the project's copy at start in dev
+  runs, 132.5 BPM) into the bot battle, which must keep its tempo and run on its beat grid.
 
 ## Not done
 
 - Spectators get the HUD but no sound; bots do not cheer in crowds; the music's beat is taken once
-  (a CD that ends or changes mid-battle leaves its grid); the music path is unit-tested, not driven in
-  a loopback check (no CD on the fixture server); VR poses were not tried on a headset.
+  (a CD that ends or changes mid-battle leaves its grid); VR poses were not tried on a headset.
