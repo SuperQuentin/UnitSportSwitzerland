@@ -177,6 +177,48 @@ public static class PisteStage
         return result;
     }
 
+    // ---- aerialways (#915) ----------------------------------------------------------------------
+
+    private static readonly HashSet<string> LiftTypes =
+        ["cable_car", "gondola", "mixed_lift", "chair_lift", "drag_lift", "t-bar", "j-bar", "platter", "rope_tow", "magic_carpet"];
+
+    /// <summary>OSM <c>aerialway:duration</c> in minutes: "6", "6 min", "6.5", or "hh:mm"; 0 when it does not parse.</summary>
+    public static float ParseMinutes(string? v)
+    {
+        if (string.IsNullOrWhiteSpace(v)) return 0;
+        v = v.Trim();
+        if (v.Contains(':'))
+        {
+            var parts = v.Split(':');
+            return parts.Length >= 2 && int.TryParse(parts[0], out int h) && int.TryParse(parts[1], out int m) ? h * 60 + m : 0;
+        }
+        var digits = new string(v.TakeWhile(c => char.IsDigit(c) || c == '.').ToArray());
+        return float.TryParse(digits, NumberStyles.Float, CultureInfo.InvariantCulture, out float min) && min is > 0 and < 120 ? min : 0;
+    }
+
+    /// <summary>The region's OSM aerialways, their two ends in LV95 and their tags.</summary>
+    public static List<RopewayInfo> LoadAerialways(string pbf, int jobs, (double Lat0, double Lat1, double Lon0, double Lon1) box)
+    {
+        var data = PbfReader.Read(pbf, jobs, new PbfReader.Filter
+        {
+            KeepNode = (lat, lon) => lat >= box.Lat0 && lat <= box.Lat1 && lon >= box.Lon0 && lon <= box.Lon1,
+            KeepWay = t => t.TryGetValue("aerialway", out var a) && LiftTypes.Contains(a),
+            WayTags = new HashSet<string> { "aerialway", "aerialway:duration", "aerialway:occupancy", "aerialway:detachable", "name" },
+        });
+        var result = new List<RopewayInfo>();
+        foreach (var w in data.Ways)
+        {
+            if (w.Refs.Length < 2 || !data.Nodes.TryGetValue(w.Refs[0], out var a) || !data.Nodes.TryGetValue(w.Refs[^1], out var b)) continue;
+            var (e0, n0) = SwissProjection.ToLv95(a.Lat, a.Lon);
+            var (e1, n1) = SwissProjection.ToLv95(b.Lat, b.Lon);
+            int seats = int.TryParse(w.Tags.GetValueOrDefault("aerialway:occupancy"), out int o) ? o : 0;
+            bool? detach = w.Tags.GetValueOrDefault("aerialway:detachable") switch { "yes" => true, "no" => false, _ => null };
+            result.Add(new RopewayInfo(Math.Round(e0, 1), Math.Round(n0, 1), Math.Round(e1, 1), Math.Round(n1, 1), w.Tags["aerialway"],
+                ParseMinutes(w.Tags.GetValueOrDefault("aerialway:duration")), seats, detach, w.Tags.GetValueOrDefault("name") ?? ""));
+        }
+        return result;
+    }
+
     // ---- rasterising -------------------------------------------------------------------------
 
     /// <summary>The best slope found so far at each grid vertex of one tile.</summary>
@@ -434,6 +476,11 @@ public static class PisteStage
         var slopes = Load(osmPbf, jobs, box);
         Console.WriteLine($"Pistes: {slopes.Count} slopes read from {Path.GetFileName(osmPbf)} in {clock.Elapsed.TotalSeconds:F1}s");
 
+        // the lifts' OSM details beside them (#915): the game matches them to the TLM lines
+        var lifts = LoadAerialways(osmPbf, jobs, box);
+        File.WriteAllText(Path.Combine(outDir, RopewayInfoIndex.FileName), new RopewayInfoIndex { Ropeways = lifts }.ToJson());
+        Console.WriteLine($"Pistes: {lifts.Count} aerialways written to {RopewayInfoIndex.FileName}");
+
         var byTile = new Dictionary<TileId, List<int>>();
         for (int s = 0; s < slopes.Count; s++)
         {
@@ -566,6 +613,10 @@ public static class PisteStage
         Check(fr != null && fr.AltLow < fr.AltHigh && Math.Abs(fr.AltLow - 2000) < 20 && Math.Abs(fr.AltHigh - 2000) < 20 && fr.Sun > 0.95f && Math.Abs(fr.SteepDeg - 45) < 1,
             $"terrain: alt {fr?.AltLow}-{fr?.AltHigh}, sun {fr?.Sun}, steep {fr?.SteepDeg}");
         Check(Math.Abs(AxisAngle([0, 0, 100, 0, 100, 10, 0, 10])) < 0.01f, "area axis");
+        Check(ParseMinutes("6") == 6 && ParseMinutes("6.5 min") == 6.5f && ParseMinutes("00:12") == 12 && ParseMinutes("fast") == 0, "aerialway duration");
+        var lifts = new RopewayInfoIndex { Ropeways = [new RopewayInfo(100, 100, 900, 600, "chair_lift", 7, 4, true, "Mont-Fort")] };
+        var liftsBack = RopewayInfoIndex.FromJson(lifts.ToJson());
+        Check(liftsBack.Match(905, 590, 110, 95)?.Name == "Mont-Fort" && liftsBack.Match(100, 100, 500, 500) == null, "aerialway match, either way round");
 
         foreach (var f in fails) Console.Error.WriteLine("FAIL " + f);
         Console.WriteLine(fails.Count == 0 ? "pistes-check: OK" : $"pistes-check: {fails.Count} failures");

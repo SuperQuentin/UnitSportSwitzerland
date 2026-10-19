@@ -135,6 +135,21 @@ public sealed class LocalChunkSource : IChunkSource
 
     public Task<LandingIndex?> LoadLandingsAsync(CancellationToken ct = default) => ReadLandingsAsync(_dir, ct);
 
+    public Task<RopewayInfoIndex?> LoadRopewayInfoAsync(CancellationToken ct = default) => ReadRopewayInfoAsync(_dir, ct);
+
+    /// <summary><c>ropeways.json</c> in a directory, or null; a file that does not parse is logged and skipped.</summary>
+    public static Task<RopewayInfoIndex?> ReadRopewayInfoAsync(string dir, CancellationToken ct = default) => Task.Run(() =>
+    {
+        string path = Path.Combine(dir, RopewayInfoIndex.FileName);
+        if (!File.Exists(path)) return (RopewayInfoIndex?)null;
+        try { return RopewayInfoIndex.FromJson(File.ReadAllText(path)); }
+        catch (System.Exception e)
+        {
+            Godot.GD.PushWarning($"[ropeways] {path} does not parse: {e.Message}");
+            return null;
+        }
+    }, ct);
+
     /// <summary><c>airports.json</c> (#422), or null; a file that does not parse is logged and skipped.</summary>
     public Task<AirportIndex?> LoadAirportsAsync(CancellationToken ct = default) => Task.Run(() =>
     {

@@ -129,6 +129,8 @@ public sealed class CachingChunkSource : IChunkSource
 
     public Task<LandingIndex?> LoadLandingsAsync(CancellationToken ct = default) => _inner.LoadLandingsAsync(ct);
 
+    public Task<RopewayInfoIndex?> LoadRopewayInfoAsync(CancellationToken ct = default) => _inner.LoadRopewayInfoAsync(ct);
+
     /// <summary>The tile's farm fields (#494), cached like the trees (rings: 4 bytes a coordinate).</summary>
     public Task<List<FieldPolygon>?> LoadFieldsAsync(TileId id, CancellationToken ct = default) =>
         GetAsync(AssetSlot.Fields, id, () => _inner.LoadFieldsAsync(id, ct),

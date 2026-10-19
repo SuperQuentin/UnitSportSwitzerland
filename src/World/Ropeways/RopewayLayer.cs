@@ -32,6 +32,7 @@ public partial class RopewayLayer : Node3D, IOriginShiftAware
     private readonly List<long> _gone = new();
     private readonly HashSet<long> _want = new();
     private double _sincePoll = double.MaxValue;
+    private int _rebuilt;
     private int _frame;
 
     private sealed class Drawn
@@ -39,6 +40,10 @@ public partial class RopewayLayer : Node3D, IOriginShiftAware
         public required RopewayLine Line;
         public required MultiMeshInstance3D Main;
         public MultiMeshInstance3D? Bar;
+        /// <summary>The two stations (#915), placed once: they do not move.</summary>
+        public required Node3D Stations;
+        /// <summary>The carrier's scale: a chair as wide as its seats, a cable car's big cabin.</summary>
+        public Vector3 Scale = Vector3.One;
         public bool Near;
     }
 
@@ -70,6 +75,13 @@ public partial class RopewayLayer : Node3D, IOriginShiftAware
     private void Poll(WorldOrigin origin, Vector3 camera)
     {
         var (e, n) = origin.ToLv95(camera);
+        // the OSM details arrived and the lines were built again: drop the old ones
+        if (_service.Rebuilt != _rebuilt)
+        {
+            _rebuilt = _service.Rebuilt;
+            foreach (var (_, old) in _drawn) Free(old);
+            _drawn.Clear();
+        }
         _want.Clear();
         foreach (var line in _service.Near(e, n))
         {
@@ -87,10 +99,16 @@ public partial class RopewayLayer : Node3D, IOriginShiftAware
             if (!_want.Contains(key)) _gone.Add(key);
         foreach (var key in _gone)
         {
-            _drawn[key].Main.QueueFree();
-            _drawn[key].Bar?.QueueFree();
+            Free(_drawn[key]);
             _drawn.Remove(key);
         }
+    }
+
+    private static void Free(Drawn d)
+    {
+        d.Main.QueueFree();
+        d.Bar?.QueueFree();
+        d.Stations.QueueFree();
     }
 
     private Drawn Make(RopewayLine line)
@@ -108,12 +126,51 @@ public partial class RopewayLayer : Node3D, IOriginShiftAware
         var main = Instance(line.Kind switch
         {
             RopewayKind.Chair => RopewayMeshBuilder.Part.Chair,
-            RopewayKind.Gondola => RopewayMeshBuilder.Part.Cabin,
+            RopewayKind.Gondola or RopewayKind.CableCar => RopewayMeshBuilder.Part.Cabin,
             RopewayKind.TBar => RopewayMeshBuilder.Part.Rod,
             _ => RopewayMeshBuilder.Part.Handle,
         });
         var bar = line.Kind == RopewayKind.TBar ? Instance(RopewayMeshBuilder.Part.Bar) : null;
-        return new Drawn { Line = line, Main = main, Bar = bar };
+        var scale = line.Kind switch
+        {
+            RopewayKind.Chair => new Vector3(Mathf.Clamp(line.Seats, 1, 8) / 4f, 1, 1),
+            // the cabin floor is 3.22 m below its grip: 1.4 high puts it at the cable car hang of 4.5 m
+            RopewayKind.CableCar => new Vector3(2.2f, 1.4f, 2.2f),
+            _ => Vector3.One,
+        };
+        var stations = new Node3D { Name = $"Stations_{line.Key}" };
+        AddChild(stations);
+        PlaceStations(line, stations);
+        return new Drawn { Line = line, Main = main, Bar = bar, Stations = stations, Scale = scale };
+    }
+
+    /// <summary>
+    /// An open shed at each end (#915): posts outside both tracks, a roof over the bull wheel
+    /// housing, the bottom one facing up the line and the top one down it. Drawn only: a skier
+    /// glides between the posts.
+    /// </summary>
+    private void PlaceStations(RopewayLine line, Node3D into)
+    {
+        if (_chunks.Origin is not { } origin) return;
+        bool drag = line.Kind is RopewayKind.TBar or RopewayKind.RopeTow;
+        float width = line.Side + (drag ? 3f : 5f);
+        float length = line.Kind == RopewayKind.CableCar ? 14f : drag ? 4f : 9f;
+        foreach (bool top in new[] { false, true })
+        {
+            var (e, n, alt, de, dn) = line.At(top ? line.Length : 0f);
+            // the side track runs to the left of the way up: the shed is centred between the two
+            double ce = e - dn * line.Side * 0.5, cn = n + de * line.Side * 0.5;
+            var at = origin.ToWorld(ce, cn, alt);
+            float ground = _chunks.TryGetHeight(at, out float g) ? g : alt - 4f;
+            float roof = Mathf.Max(alt + 1.2f, ground + 3f) - ground;
+            float yaw = Mathf.Atan2(top ? de : -de, top ? -dn : dn);
+            into.AddChild(new MeshInstance3D
+            {
+                Mesh = RopewayMeshBuilder.Station(width, length, roof),
+                MaterialOverride = _material,
+                Transform = new Transform3D(new Basis(Vector3.Up, yaw), at with { Y = ground }),
+            });
+        }
     }
 
     public void OnOriginShifted(OriginShift shift)
@@ -125,6 +182,9 @@ public partial class RopewayLayer : Node3D, IOriginShiftAware
             d.Main.Multimesh.CustomAabb = box;
             if (d.Bar != null) d.Bar.Multimesh.CustomAabb = box;
             d.Near = true;   // posed this frame, whatever its range
+            // the stations were placed in world space: place them again
+            foreach (var child in d.Stations.GetChildren()) child.QueueFree();
+            PlaceStations(d.Line, d.Stations);
         }
     }
 
@@ -144,9 +204,9 @@ public partial class RopewayLayer : Node3D, IOriginShiftAware
         int count = main.InstanceCount;
         for (int i = 0; i < count; i++)
         {
-            var (e, n, alt, de, dn, up) = RopewayMotion.Place(line, RopewayMotion.Loop(line, i, sim));
+            var (e, n, alt, de, dn, up) = RopewayMotion.Place(line, i, sim);
             var at = origin.ToWorld(e, n, alt);
-            var basis = new Basis(Vector3.Up, Mathf.Atan2(-de, dn));
+            var basis = new Basis(Vector3.Up, Mathf.Atan2(-de, dn)).Scaled(d.Scale);
             if (d.Bar is { } barNode)
             {
                 // a T-bar: the rod reaches down to the rider's hip on the way up, wound in on the way down

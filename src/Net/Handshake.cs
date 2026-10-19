@@ -62,8 +62,9 @@ public partial class Handshake : Node
     /// 34: World/Cranes (AskOperate, Send, AskRelease; Operated, Posed, Released, Carry, Snapshot) (#618).
     /// 35: bots (#837): NPC spawn data carries a driver kind and a name, BrEntrant.Bot/BotKills, BrState.Bots.
     /// 36: ski slopes (#887): AssetKind.Pistes 15, World/Snow (weather and slope wear).
+    /// 37: ski lifts part 2 (#915): AssetKind.Ropeways 16, FootPlayer LiftLine/LiftCarrier replicated.
     /// </summary>
-    public const int Protocol = 36;
+    public const int Protocol = 37;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

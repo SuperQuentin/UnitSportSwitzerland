@@ -88,6 +88,45 @@ public static class RopewayMeshBuilder
         return mesh;
     }
 
+    /// <summary>
+    /// A lift station (#915), its origin on the snow at the middle of the platform, facing -Z out
+    /// along the line: four posts at the corners, a roof <paramref name="height"/> up, and the bull
+    /// wheel housing under the back of the roof. Open on every side.
+    /// </summary>
+    public static ArrayMesh Station(float width, float length, float height)
+    {
+        var st = new SurfaceTool();
+        st.Begin(Godot.Mesh.PrimitiveType.Triangles);
+        var box = BoxWriter(st);
+        float hw = width / 2, hl = length / 2;
+        foreach (var (x, z) in new[] { (-hw, -hl), (hw, -hl), (-hw, hl), (hw, hl) })
+            box(new Vector3(x, height / 2, z), new Vector3(0.3f, height, 0.3f), Steel);
+        box(new Vector3(0, height + 0.15f, 0), new Vector3(width + 1f, 0.3f, length + 1f), Roof);
+        box(new Vector3(0, height - 0.6f, hl - 1.2f), new Vector3(Mathf.Min(width - 1f, 4f), 1.0f, 2f), Body);   // the bull wheel housing
+        box(new Vector3(0, 0.1f, 0), new Vector3(width - 0.6f, 0.2f, length - 0.6f), Roof);                       // the platform
+        st.GenerateNormals();
+        ShowcaseTrace.Mark();
+        return st.Commit();
+    }
+
+    /// <summary>A box writer into <paramref name="st"/>: centre, size, colour, wound for the front faces Godot draws.</summary>
+    private static Action<Vector3, Vector3, Color> BoxWriter(SurfaceTool st) => (centre, size, c) =>
+    {
+        var h = size * 0.5f;
+        st.SetColor(c with { A = 0 });
+        Vector3[] faces = [Vector3.Right, Vector3.Left, Vector3.Up, Vector3.Down, Vector3.Back, Vector3.Forward];
+        foreach (var f in faces)
+        {
+            var u = Mathf.Abs(f.Y) > 0.5f ? Vector3.Right : Vector3.Up;
+            var v = f.Cross(u);
+            var o = centre + f * h;
+            Vector3 Corner(float a, float b) => o + u * (a * Mathf.Abs(u.Dot(h))) + v * (b * Mathf.Abs(v.Dot(h)));
+            Vector3 p0 = Corner(-1, -1), p1 = Corner(1, -1), p2 = Corner(1, 1), p3 = Corner(-1, 1);
+            st.AddVertex(p0); st.AddVertex(p2); st.AddVertex(p1);
+            st.AddVertex(p0); st.AddVertex(p3); st.AddVertex(p2);
+        }
+    };
+
     [Showcase("World", "Ropeways")]
     private static IEnumerable<(string Name, Func<Node3D> Make)> Showcase()
     {
@@ -97,6 +136,7 @@ public static class RopewayMeshBuilder
             // hung from the cable: lifted so the viewer's ground does not swallow it
             yield return (p.ToString(), () => new MeshInstance3D { Mesh = Mesh(p), Position = new Vector3(0, 3.4f, 0), MaterialOverride = StyleKit.Material(MaterialRole.Prop) });
         }
+        yield return ("Station", () => new MeshInstance3D { Mesh = Station(7.5f, 9f, 4f), MaterialOverride = StyleKit.Material(MaterialRole.Prop) });
         yield return ("T-bar", () =>
         {
             var root = new Node3D { Position = new Vector3(0, 6f, 0) };

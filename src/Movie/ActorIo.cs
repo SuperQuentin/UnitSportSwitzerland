@@ -17,7 +17,7 @@ public static class ActorIo
     {
         "RideKindId", "CarSetupId", "TuningBits", "DoorsOpen", "TrailerCode", "RidingWith", "SeatIndex", "DeckOn",
         "DeckSection", "HeldItemId", "ItemAction", "PoseKind", "HeadwearId", "OutfitBits", "AppearanceBits", "DanceId",
-        "FightPose", "HeldRadio", "BackItemId", "CarRadio", "CarCd", "Down", "RadioVolume",
+        "FightPose", "HeldRadio", "BackItemId", "CarRadio", "CarCd", "Down", "RadioVolume", "LiftLine", "LiftCarrier",
     };
 
     public const int RideKind = 0, RidingWith = 5;
@@ -59,6 +59,7 @@ public static class ActorIo
         n[16] = p.FightPose; n[18] = p.BackItemId; n[19] = p.CarRadio; n[21] = p.Down;
         // per mille plus one: 0 is a clip recorded before radios had a volume, which plays at the default
         n[22] = (long)Math.Round(p.RadioVolume * 1000f) + 1;
+        n[23] = p.LiftLine; n[24] = p.LiftCarrier;
         s.Str[7] = p.DeckOn; s.Str[17] = p.HeldRadio; s.Str[20] = p.CarCd;
     }
 
@@ -76,6 +77,7 @@ public static class ActorIo
         p.OutfitBits = n[13]; p.AppearanceBits = (int)n[14]; p.DanceId = (int)n[15]; p.FightPose = (int)n[16];
         p.BackItemId = (int)n[18]; p.CarRadio = (int)n[19]; p.Down = (int)n[21];
         p.RadioVolume = n[22] == 0 ? Items.RadioLoudness.Default : (n[22] - 1) / 1000f;
+        p.LiftLine = (int)n[23]; p.LiftCarrier = (int)n[24];
         if (p.DeckOn != s.Str[7]) p.DeckOn = s.Str[7];
         if (p.HeldRadio != s.Str[17]) p.HeldRadio = s.Str[17];
         if (p.CarCd != s.Str[20]) p.CarCd = s.Str[20];

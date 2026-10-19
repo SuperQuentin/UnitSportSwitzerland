@@ -677,7 +677,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// The replicated properties sent only when they change (ride, seat, items, clothes, …). The movie
     /// recorder (#638) keeps the same set as events: <c>--moviecheck</c> fails if the two drift apart.
     /// </summary>
-    public static readonly string[] OnChangeProperties = { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DanceId", ".:FightPose", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down", ".:RadioVolume" };
+    public static readonly string[] OnChangeProperties = { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DanceId", ".:FightPose", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down", ".:RadioVolume", ".:LiftLine", ".:LiftCarrier" };
 
     // --- figure animation ---
     private MeshInstance3D? _walker;
@@ -1277,6 +1277,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // a passenger's host and seat (#158): drawn and moved from the host's copy on every peer
         replication.AddProperty(".:RidingWith");
         replication.AddProperty(".:SeatIndex");
+        // a ski lift's rider (#915): placed on its carrier from the clock on every peer
+        replication.AddProperty(".:LiftLine");
+        replication.AddProperty(".:LiftCarrier");
         replication.AddProperty(".:HeldItemId");
         replication.AddProperty(".:ItemAction");
         foreach (var prop in PoseProperties) replication.AddProperty(prop);
@@ -1672,6 +1675,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             NetYaw = Rotation.Y;
             NetTime = Time.GetTicksUsec() / 1e6;
             float dt = (float)delta;
+            UpdateLiftSeat();
             // an NPC or a bot reads no keys (#837): a server has no look actions at all
             if (!Npc) ApplyStickLook(dt);
             // walkable vehicles nearby: their decks where they are drawn, and this player with one it stands on
@@ -1788,9 +1792,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             }
             Rotation = new Vector3(0, yaw, 0);
         }
+        PlaceRemoteOnLift();
         RefreshVisual();
         AnimateRemote((float)delta);
         UpdateSeated();
+        UpdateLiftSeat();
     }
 
     /// <summary>
