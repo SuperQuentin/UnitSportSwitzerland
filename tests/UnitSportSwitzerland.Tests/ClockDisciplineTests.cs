@@ -129,13 +129,11 @@ public class ClockDisciplineTests
         ["src/World/Traffic.cs"] = "presentation: a car's age in the debug readout",
 
         // ---- calendar: the real date, on purpose ----
-        ["src/Farming/FarmField.cs"] = "calendar: the crop month is the real month (--month overrides)",
-        ["src/Farming/FarmSales.cs"] = "calendar: the farm stand's month is the real month",
         ["src/Birds/BirdLife.cs"] = "calendar: the birds of the real month",
-        ["src/Occasions/OccasionManager.cs"] = "calendar: today's occasions (Fasnacht, 1 August...) are on the real date",
+        ["src/Core/Calendar.cs"] = "calendar: the one reader of today's date for the occasions, the farm, the birds, fishing and shops; --date pins it (#924)",
         ["src/Occasions/OccasionAmbience.cs"] = "calendar: an occasion's ambience follows the real date",
         ["src/Loot/LootService.cs"] = "calendar: a building restocks once a real day (LootTables.RestockSeconds)",
-        ["src/Loot/ShopService.cs"] = "calendar: a shop restocks once a real day, and its seasonal goods follow the real month",
+        ["src/Loot/ShopService.cs"] = "calendar: a shop restocks once a real day",
     };
 
     /// <summary>The repo root, found by walking up to the directory holding project.godot.</summary>
