@@ -27,7 +27,7 @@ public partial class SlopeWalkProbe : Node
     private int _case = -1, _flips, _standFlips, _landings;
     private double _t, _wait;
     private bool _wasFloor, _ok = true, _searched;
-    private float _gapMin, _gapMax, _airTime;
+    private float _gapMin, _gapMax, _figureMax, _airTime;
     private Vector3 _from;
     private float _lastY;
 
@@ -107,6 +107,7 @@ public partial class SlopeWalkProbe : Node
             float gap = _player.GlobalPosition.Y - g;
             _gapMin = Mathf.Min(_gapMin, gap);
             _gapMax = Mathf.Max(_gapMax, gap);
+            if (Mathf.Abs(gap) < 0.6f) _figureMax = Mathf.Max(_figureMax, gap - _player.FootDrop);
         }
         if (CmdArgs.Has("--trace") && (int)(_t * 60) % 6 == 0)
         {
@@ -126,7 +127,7 @@ public partial class SlopeWalkProbe : Node
         _ok &= !bad;
         GD.Print($"[slopewalk] {c.Angle,2:0}° slope: {up,5:0.0} m along, climbed {moved.Y,5:+0.0;-0.0} m, "
             + $"floor lost/found {_flips}x ({_standFlips} lost on standable ground), air {_airTime:0.0} s, landings {_landings}, "
-            + $"feet {_gapMin:+0.00;-0.00}..{_gapMax:+0.00;-0.00} m off the drawn ground" + (bad ? "  BAD" : ""));
+            + $"feet {_gapMin:+0.00;-0.00}..{_gapMax:+0.00;-0.00} m off the drawn ground (figure at most {_figureMax:+0.00;-0.00})" + (bad ? "  BAD" : ""));
         Next();
     }
 
@@ -207,7 +208,7 @@ public partial class SlopeWalkProbe : Node
         _flips = _standFlips = _landings = 0;
         _airTime = 0;
         _gapMin = float.MaxValue;
-        _gapMax = float.MinValue;
+        _gapMax = _figureMax = float.MinValue;
         _wasFloor = true;
     }
 

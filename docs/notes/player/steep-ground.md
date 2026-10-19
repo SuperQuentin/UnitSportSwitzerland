@@ -29,5 +29,8 @@
   terrain for the real numbers; the quick tier runs it on the generated relief (`--systems
   terrain,generated`, ~40 s). Spots used: Dents du Midi `2563500,1112500`, Diablerets
   `2581500,1127500`, the Rhône wall `2578500,1113500`.
-- **Not fixed:** on a slope the capsule's rounded bottom stands the body up to ~0.2 m over the drawn
-  ground (more past 52°); the avatar has no foot drop yet.
+- **Feet on the slope:** the capsule's round bottom stands the body r(1/cos - 1) over a slope (0.13 m
+  at 40°, 0.2 m at 50°). `ApplyFootPose` lowers the drawn figure by that (`SlopeDrop`: the drawn
+  ground's slope over ±0.5 m, so every peer finds the same from the replicated position; only on the
+  terrain, standing or sliding, eased). `--slopewalk` reports the figure's gap: at most 0.08-0.15 m
+  on the Rhône wall's slopes where the body stood 0.3-0.4 m over them.

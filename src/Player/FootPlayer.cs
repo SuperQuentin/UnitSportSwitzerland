@@ -2266,6 +2266,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         // hit by a thrown thing (#261): rocked away from the blow, then a wobble home
         _walker.Transform *= FlinchPose(dt);
+        // stood on a slope, the capsule's round bottom holds the body r(1/cos - 1) over the ground under
+        // its origin (#883): the figure goes down by that, so its feet are on the slope, not over it
+        _footDrop = Mathf.Lerp(_footDrop, PoseKind is PoseStride or PoseTucked ? SlopeDrop() : 0f, MathX.Damp(12f, dt));
+        if (_footDrop > 0.002f) _walker.Position += Vector3.Down * _footDrop;
         PlaceHand(mounts);
         PlaceBack(mounts);
         if (!Net.NetworkManager.DedicatedServer) StepFace(dt);   // a face nobody sees (#842)
@@ -3914,6 +3918,30 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             && Terrain.TryGetHeight(p - new Vector3(0, 0, r), out float north))
             return new Vector3((west - east) / (2 * r), 1f, (north - south) / (2 * r)).Normalized().Y < SteepNormalY;
         return true;
+    }
+
+    private float _footDrop;
+    /// <summary>How far the drawn figure is lowered under the body on a slope (<see cref="SlopeDrop"/>).</summary>
+    public float FootDrop => _footDrop;
+    private const float MaxFootDrop = 0.3f;
+
+    /// <summary>
+    /// How far a body standing on the terrain floats over it by its capsule's round bottom: r(1/cos - 1)
+    /// for the drawn ground's slope across the feet (±0.5 m), so every peer finds the same from the
+    /// replicated position. Nothing off the terrain (a roof, a deck: the body well off the drawn ground).
+    /// </summary>
+    private float SlopeDrop()
+    {
+        if (Terrain == null || Net.NetworkManager.DedicatedServer) return 0f;
+        var p = GlobalPosition;
+        const float d = 0.5f;
+        if (!Terrain.TryGetHeight(p, out float g) || Mathf.Abs(p.Y - g) > 0.6f
+            || !Terrain.TryGetHeight(p + new Vector3(d, 0, 0), out float east)
+            || !Terrain.TryGetHeight(p - new Vector3(d, 0, 0), out float west)
+            || !Terrain.TryGetHeight(p + new Vector3(0, 0, d), out float south)
+            || !Terrain.TryGetHeight(p - new Vector3(0, 0, d), out float north)) return 0f;
+        float ny = new Vector3((west - east) / (2 * d), 1f, (north - south) / (2 * d)).Normalized().Y;
+        return Mathf.Min(BodyRadius * (1f / ny - 1f), MaxFootDrop);
     }
 
     private static readonly float SteepNormalY = Mathf.Cos(Mathf.DegToRad(StandMaxDeg));
