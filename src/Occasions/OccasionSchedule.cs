@@ -43,6 +43,20 @@ public static class OccasionSchedule
         return InstanceKey(e.Id, date.Year);
     }
 
+    /// <summary>
+    /// This viewer's preference for <paramref name="id"/> this session. An admin's
+    /// <c>/occasion start</c> is a session "Always": it shows the occasion's look even when the saved
+    /// choice is Off or a <c>--occasion</c> set leaves it out (#881: a started Christmas came with its
+    /// loot and no snow). Otherwise a <c>--occasion</c> set wins over the saved choice, both ways.
+    /// </summary>
+    public static OccasionPreference Preference(string id, ISet<string>? cliSet, ISet<string> started,
+        OccasionPreference saved)
+    {
+        if (started.Contains(id)) return OccasionPreference.Always;
+        if (cliSet != null) return cliSet.Contains(id) ? OccasionPreference.Always : OccasionPreference.Off;
+        return saved;
+    }
+
     public static bool Contains(DateWindow window, DateOnly date, out int startYear)
     {
         startYear = date.Year;

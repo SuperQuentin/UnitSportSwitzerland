@@ -176,9 +176,8 @@ public partial class OccasionManager : Node
 
     public OccasionPreference PreferenceFor(string id)
     {
-        // a command-line set wins over the saved choice for this session, in both directions
-        if (_cliSet != null) return _cliSet.Contains(id) ? OccasionPreference.Always : OccasionPreference.Off;
-        return GameSettings.Current.OccasionPreferences.TryGetValue(id, out var p) ? p : OccasionPreference.Auto;
+        var saved = GameSettings.Current.OccasionPreferences.TryGetValue(id, out var p) ? p : OccasionPreference.Auto;
+        return OccasionSchedule.Preference(id, _cliSet, _started, saved);
     }
 
     // ---- the authority -------------------------------------------------------------------------
