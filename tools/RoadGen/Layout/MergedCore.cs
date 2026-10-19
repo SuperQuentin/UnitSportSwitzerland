@@ -164,6 +164,17 @@ public static class MergedCore
         }
         CorePlanner.Dedupe(outline);
         Clean(outline);
+        // every kerb keeps every move paved (a move spliced or smoothed across members runs where no member's leg did)
+        var mouthEnds = arms.Select(a => ownerOf[a.Arm].MouthOf[a.Arm]).SelectMany(m => new[] { m.Left, m.Right }).ToHashSet();
+        var before = outline.ToList();
+        Envelope(outline, paved, mouthEnds);
+        Clean(outline);
+        // (a push that cut a mouth away is no core: the outline as walked, the check failing)
+        if (!mouthEnds.All(outline.Contains))
+        {
+            outline.Clear();
+            outline.AddRange(before);
+        }
         core.Outline.AddRange(outline);
 
         // the mouths and corners of its own arms, in the order the outline meets them
@@ -332,6 +343,49 @@ public static class MergedCore
             outline.Add(p + outward * (push > CorePlanner.OutsideTolerance ? push + 0.02 : 0));
         }
     }
+
+    /// <summary>
+    /// The outline pushed out wherever a connector's edge passes beyond it (<see cref="CorePlanner"/>'s envelope rule, as its kerb
+    /// between arms in line): drawn with points at most <see cref="EnvelopeStep"/> apart (the mouths kept straight), each but the
+    /// mouths' ends moved out, away from the core, as far as an edge point outside the outline lies beyond it there.
+    /// </summary>
+    private static void Envelope(List<Vec2> ring, List<Vec2> paved, HashSet<Vec2> mouthEnds)
+    {
+        var outside = paved.Where(q => CorePlanner.Outside(ring, q) > CorePlanner.OutsideTolerance).ToList();
+        if (outside.Count == 0) return;
+        var dense = new List<Vec2>();
+        for (int k = 0; k < ring.Count; k++)
+        {
+            Vec2 a = ring[k], b = ring[(k + 1) % ring.Count];
+            dense.Add(a);
+            if (mouthEnds.Contains(a) && mouthEnds.Contains(b)) continue;
+            int steps = (int)Math.Ceiling(a.DistanceTo(b) / EnvelopeStep);
+            for (int j = 1; j < steps; j++) dense.Add(Vec2.Lerp(a, b, (double)j / steps));
+        }
+        var moved = new List<Vec2>(dense.Count);
+        for (int k = 0; k < dense.Count; k++)
+        {
+            var p = dense[k];
+            // (a mouth's ends and its kerbs' first metres stay: the kerb leaves the mouth along its arm)
+            if (mouthEnds.Any(m => m.DistanceTo(p) < NearMouth)) { moved.Add(p); continue; }
+            var along = (dense[(k + 1) % dense.Count] - dense[(k - 1 + dense.Count) % dense.Count]).Normalized();
+            var outward = -along.Perp;
+            double push = 0;
+            foreach (var q in outside)
+            {
+                var d = q - p;
+                double o = d.Dot(outward);
+                if (Math.Abs(d.Dot(along)) <= EnvelopeStep * 0.75 && o > 0 && o <= MostPush) push = Math.Max(push, o);
+            }
+            moved.Add(push > 0 ? p + outward * (push + 0.05) : p);
+        }
+        ring.Clear();
+        ring.AddRange(moved);
+        CorePlanner.Dedupe(ring);
+    }
+
+    /// <summary>The outline's points apart where it is pushed out (m), and the farthest it is pushed (m).</summary>
+    private const double EnvelopeStep = 0.75, MostPush = 5, NearMouth = 0.5;
 
     /// <summary>
     /// The outline made simple: points where it turns back on itself dropped, and every loop where it crosses itself cut away (the
