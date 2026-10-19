@@ -46,14 +46,16 @@ public sealed class BuildingTypeMap
 {
     private readonly int[] _group;
     private readonly BuildingPart[] _part;
+    private readonly int[]? _castle;
 
     public PlanBox?[] Boxes { get; }
     public IReadOnlyList<BuildingGroup> Groups { get; }
 
-    internal BuildingTypeMap(PlanBox?[] boxes, List<BuildingGroup> groups)
+    internal BuildingTypeMap(PlanBox?[] boxes, List<BuildingGroup> groups, int[]? castles = null)
     {
         Boxes = boxes;
         Groups = groups;
+        _castle = castles;
         _group = Enumerable.Repeat(-1, boxes.Length).ToArray();
         _part = new BuildingPart[boxes.Length];
         for (int g = 0; g < groups.Count; g++)
@@ -70,6 +72,18 @@ public sealed class BuildingTypeMap
     public BuildingPart PartOf(int index) => index >= 0 && index < _part.Length ? _part[index] : BuildingPart.None;
 
     public BuildingType TypeOf(int index) => GroupOf(index)?.Type ?? BuildingType.None;
+
+    /// <summary>
+    /// The castle a solid is part of (#859), an index in <see cref="Castles.List"/>, or -1. Only
+    /// its dress: a castle is not a <see cref="BuildingGroup"/>, so interiors and stored plans are
+    /// what they were.
+    /// </summary>
+    public int CastleOf(int index) => _castle != null && index >= 0 && index < _castle.Length ? _castle[index] : -1;
+
+    public bool IsCastle(int index) => CastleOf(index) >= 0;
+
+    /// <summary>Whether any solid of the tile is a castle's.</summary>
+    public bool HasCastles => _castle != null;
 }
 
 /// <summary>
@@ -236,7 +250,7 @@ public static class BuildingTypes
         if (Landmarks.Match(tile, boxes) is { } hit && groups.All(g => !g.Members.Contains(hit.Index)))
             groups.Add(new BuildingGroup(hit.Store.Type, new[] { hit.Index }, new[] { BuildingPart.Store }));
 
-        return new BuildingTypeMap(boxes, groups);
+        return new BuildingTypeMap(boxes, groups, Castles.Match(tile));
     }
 
     private static bool IsTower(Building b, PlanBox box)
