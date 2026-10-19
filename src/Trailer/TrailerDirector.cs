@@ -235,7 +235,8 @@ public partial class TrailerDirector : Node
     {
         if (_moving >= 0) _moving += delta;
         foreach (var a in _actors) a.Step(delta, _shot?.Number ?? 0);
-        if (_phase == Phase.Place) Place();
+        // unpinned, as before #924: the go on whichever physics step of a frame found everyone ready
+        if (_phase == Phase.Place && Unpinned) Place();
     }
 
     public override void _Process(double delta)
@@ -249,7 +250,11 @@ public partial class TrailerDirector : Node
             case Phase.Next: Next(); break;
             case Phase.Stage: Stage(delta); break;
             case Phase.Place:
-                if (Wall() > PlaceTimeout) StartPreroll("placing timed out");
+                // pinned (#924): the go on a frame, never between two of its physics steps (two a
+                // frame at 30 fps): which of them found everyone ready shifted the actors by a step
+                // against the camera, render to render (28 cm on the Tremola, a saucer by 36 cm)
+                if (!Unpinned) Place();
+                if (_phase == Phase.Place && Wall() > PlaceTimeout) StartPreroll("placing timed out");
                 break;
             case Phase.Preroll: Preroll(delta); break;
             case Phase.Roll: Roll(delta); break;
