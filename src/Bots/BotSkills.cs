@@ -24,6 +24,9 @@ public sealed class BotNav
     public double SteerUntil;
     /// <summary>The longest clear way the last scan found, m (for <c>--botlog</c>: near 0 = boxed in).</summary>
     public float LastOpen = -1;
+    /// <summary>Where it stood and since when, for <see cref="BotSkills.Unembed"/>.</summary>
+    public Vector3 StillAt;
+    public double StillSince;
 }
 
 /// <summary>
@@ -195,6 +198,31 @@ public static class BotSkills
         }
         LastScanOpen = open;
         return best;
+    }
+
+    /// <summary>
+    /// A body caught in the geometry (#837): on foot, off the floor, "falling" faster than 20 m/s, and not 0.2 m
+    /// moved in 1.5 s. Out to the nearest open ground, still. Seen: a squad bot looting by a crate rose 1 m into a
+    /// gap and stayed there, its speed climbing to 2,400 m/s, the stuck count of its walks resetting with each
+    /// new goal, until the match ended (a fall from there would have killed it). Every mode's bots.
+    /// </summary>
+    public static void Unembed(Bot bot, PhysicsDirectSpaceState3D space, double now)
+    {
+        var body = bot.Body;
+        var nav = bot.Nav;
+        var pos = body.GlobalPosition;
+        if (body.Ride != Player.RideKind.OnFoot || body.IsOnFloor() || body.Velocity.Length() < 20f || pos.DistanceTo(nav.StillAt) > 0.2f)
+        {
+            nav.StillAt = pos;
+            nav.StillSince = now;
+            return;
+        }
+        if (now - nav.StillSince < 1.5) return;
+        var to = OpenGroundNear(space, body, pos) ?? pos + Vector3.Up * 2f;
+        GD.Print($"[bots] {body.Name} \"{bot.Profile.Name}\" caught in the geometry at {body.Global} ({body.Velocity.Length():F0} m/s, still): out to {to}");
+        body.DebugLaunch(to, Vector3.Zero);
+        nav.StillAt = to;
+        nav.StillSince = now;
     }
 
     /// <summary>Something solid over the head (a roof, a ceiling) within 30 m.</summary>

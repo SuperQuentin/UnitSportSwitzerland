@@ -110,6 +110,9 @@ public partial class BrBotProbe : ChatProbe
         var br = Br!;
         Chat!.Send("/login brbots");
         if (!await Until(() => Permissions.IsAdmin, 10)) { Fail("not logged in as admin"); return; }
+        // the whole simulation faster (--brwatchspeed n, /speed): the probe's waits are simulated seconds too
+        if (CmdArgs.Double("--brwatchspeed") is double speed && speed > 0)
+            Chat.Send(FormattableString.Invariant($"/speed {speed}"));
         Chat.Send("/br bots 2 normal");
         await Seconds(0.5);
         // here: A starts in a town with roads enough for the Postauto stops (tools/brsquadcheck.sh); a random
