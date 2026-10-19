@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -69,6 +70,17 @@ public partial class TrailerDirector : Node
     private Texture2D? _photo;
     private bool _photoAsked;
     private float _sea = float.NaN;
+    /// <summary>The occasions the shots asked for (<see cref="Shot.Occasion"/>), null while the calendar's run.</summary>
+    private string? _occasion;
+    /// <summary>The shot's item cues already played (<see cref="Shot.ItemCues"/>), by index.</summary>
+    private readonly HashSet<int> _cued = new();
+    /// <summary>The shot's UFO props (<see cref="Shot.Craft"/>), by index.</summary>
+    private readonly List<CraftProp> _craft = new();
+    /// <summary>Seconds since the actors were let go (the pre-roll included): the clock of their scripts and the craft's switches.</summary>
+    private double _moving = -1;
+    /// <summary>The game screen shown on cue (<see cref="Shot.Screens"/>), its layer, and which cue it is.</summary>
+    private CanvasLayer? _screenLayer;
+    private int _screenShown = -1;
     private FrameRecorder? _recorder;
     private int _framesWanted;
     private readonly Queue<(double T, string Path)> _stills = new();
@@ -125,6 +137,8 @@ public partial class TrailerDirector : Node
         "showcase" => TrailerScript.Shots,
         "drognens" => DrognensScript.Shots,
         "bubbles" => BubbleDemoScript.Shots,
+        "ufo" => UfoDemoScript.Shots,
+        "doors" => UfoDemoScript.Doors,
         _ => StoryScript.Shots,
     };
 
@@ -157,6 +171,7 @@ public partial class TrailerDirector : Node
             GD.PrintErr("[trailer] --trailer-record without --fixed-fps: frames follow the wall clock, the film will stutter");
         if (_recordDir == null && _stillsDir == null && CmdArgs.Value("--trailer-song") is { } songPath) LoadSong(songPath);
         RenderingServer.FramePostDraw += OnFrameDrawn;
+        Player.TractorBeams.Scripted += AddCraftBeams;
         // the cut as a whole, whichever shots this run films: no gap, no overlap, the song's length
         var problems = (Film.Count > 0 ? Film[0].Song : Song.VoxelRevolution).CutProblems(Film.Select(s => (s.Number, s.FromBar, s.Bars)).ToList())
             .Concat(Film.Where(s => s.Keys.Count == 0).Select(s => $"shot {s.Number} has no camera key"));
@@ -172,6 +187,7 @@ public partial class TrailerDirector : Node
     public override void _ExitTree()
     {
         RenderingServer.FramePostDraw -= OnFrameDrawn;
+        Player.TractorBeams.Scripted -= AddCraftBeams;
         _recorder?.Dispose();
         _recorder = null;
         if (_hud != null) GetTree().NodeAdded -= OnNodeAdded;
@@ -190,6 +206,7 @@ public partial class TrailerDirector : Node
 
     public override void _PhysicsProcess(double delta)
     {
+        if (_moving >= 0) _moving += delta;
         foreach (var a in _actors) a.Step(delta, _shot?.Number ?? 0);
         if (_phase == Phase.Place) Place();
     }
@@ -198,6 +215,8 @@ public partial class TrailerDirector : Node
     {
         HideHud();
         _camera.Current = true;
+        if (_moving >= 0)
+            foreach (var c in _craft) c.Show(_moving, (float)delta);
         switch (_phase)
         {
             case Phase.Next: Next(); break;
@@ -223,14 +242,20 @@ public partial class TrailerDirector : Node
 
     private void Next()
     {
+        if (!_terrainChecked && !CheckTerrain()) return;
         foreach (var a in _actors) a.Free();
         _actors.Clear();
         foreach (var p in _props) p.QueueFree();
         _props.Clear();
+        _craft.Clear();
+        _moving = -1;
+        ShowScreen(-1);
         Unstage();
         _index++;
         if (_index >= _shots.Count)
         {
+            // the calendar's occasions back, as the game runs
+            if (_occasion != null) RunCommand?.Invoke("/occasion auto");
             Enter(Phase.Finished);
             GD.Print(_failures == 0 ? "[trailer] RESULT: ok" : $"[trailer] RESULT: FAILED ({_failures} problem(s), above)");
             GetTree().Quit(_failures == 0 ? 0 : 1);
@@ -251,6 +276,7 @@ public partial class TrailerDirector : Node
         float sea = shot.Sea ?? Shot.CalmSea;
         if (sea != _sea) RunCommand?.Invoke(string.Create(CultureInfo.InvariantCulture, $"/seastate {sea:F2}"));
         _sea = sea;
+        SetOccasions(shot.Occasion);
         GameSettings.Current.TrafficCars = shot.Traffic ?? _defaultTraffic;
         World.Traffic.Current?.Forget();
         HoldClock(shot.Hour);
@@ -349,8 +375,21 @@ public partial class TrailerDirector : Node
         return at with { Y = g + s.H };
     }
 
-    /// <summary>A prop: a solid box on the ground, its face to <see cref="Prop.Bearing"/>.</summary>
+    /// <summary>A prop: a solid box on the ground, its face to <see cref="Prop.Bearing"/> (or what <see cref="Prop"/> asks for instead).</summary>
     private void Build(Prop prop)
+    {
+        int before = _props.Count;
+        BuildOne(prop);
+        // a beam over it lifts it (#882): the seam of #861 over what was just built
+        if (prop.Beamable && _props.Count > before && _props[^1] is { } built and not Vehicles.VehicleBody)
+        {
+            var lift = new BeamableProp(built);
+            AddChild(lift);
+            _props.Add(lift);
+        }
+    }
+
+    private void BuildOne(Prop prop)
     {
         var at = _origin.ToWorld(prop.At.E, prop.At.N, 0);
         float bearing = prop.Bearing;
@@ -374,8 +413,12 @@ public partial class TrailerDirector : Node
             if (SetPoint(local) is not { } inSet) return;
             at = inSet;
         }
+        // a spot on the ground: what the props below stand on (a set's point and an actor's are placed already)
+        bool onGround = prop.Actor < 0 && prop.Route == null && prop.InSet == null;
         if (prop.Seated is { } sitter)
         {
+            // on the ground under its spot, its hip H over it (the figure's origin was left at sea level, #882)
+            if (onGround) at.Y = (FloorAt(at) ?? at.Y) + prop.At.H;
             // someone sitting there, the hip at the spot: the passengers' figure, in the character's looks and clothes
             var palette = (Avatar.HumanPalette.Default with { Outfit = Avatar.Outfit.Of(sitter.Wears) }).With(sitter.Looks);
             var figure = new MeshInstance3D
@@ -387,6 +430,51 @@ public partial class TrailerDirector : Node
             AddChild(figure);
             figure.GlobalTransform = new Transform3D(new Basis(Vector3.Up, Mathf.DegToRad(-bearing)), at);
             _props.Add(figure);
+            return;
+        }
+        if (prop.Placed != Items.PlacedKind.None)
+        {
+            // a placed object's look only (a burning fire, a workbench, a camo net): never placed, so nothing is saved
+            float ground = FloorAt(at, terrain: prop.InSet == null) ?? at.Y;
+            var payload = prop.Placed == Items.PlacedKind.Campfire ? Crafting.CampfireClock.Lit(World.WorldClock.EnvNow) : "";
+            if (Items.PlacedObjects.VisualOf(new Items.PlacedObject(0, prop.Placed, "", 0, 0, 0, Quaternion.Identity, payload)) is not { } look)
+            {
+                GD.PrintErr($"[trailer] no look for placed {prop.Placed}");
+                return;
+            }
+            look.Name = $"Prop{_props.Count}";
+            AddChild(look);
+            look.GlobalTransform = new Transform3D(new Basis(Vector3.Up, Mathf.DegToRad(-bearing)), at with { Y = ground + prop.At.H });
+            _props.Add(look);
+            return;
+        }
+        if (prop.Piece is { } piece)
+        {
+            // a hammer's piece: its mesh and its collision, standing on the ground, its face to the bearing
+            float pg = FloorAt(at, terrain: prop.InSet == null) ?? at.Y;
+            var built = new StaticBody3D { Name = $"Prop{_props.Count}" };
+            built.AddChild(new MeshInstance3D { Mesh = UnitSport.Build.StructureMeshes.Mesh(piece, prop.Material), MaterialOverride = Items.ItemDefs.Material });
+            foreach (var (shape, shapeAt) in UnitSport.Build.StructureMeshes.Colliders(piece, prop.Material))
+                built.AddChild(new CollisionShape3D { Shape = shape, Transform = shapeAt });
+            AddChild(built);
+            built.GlobalTransform = new Transform3D(new Basis(Vector3.Up, Mathf.DegToRad(-bearing)), at with { Y = pg + prop.At.H });
+            _props.Add(built);
+            return;
+        }
+        if (prop.Vehicle != RideKind.OnFoot)
+        {
+            // a real parked vehicle (a beam lifts it), dropped onto the ground at its spot, taken away after the shot
+            if (Vehicles.VehicleManager.Instance is not { } vehicles || Rideable.Create(prop.Vehicle) is not { } ride) return;
+            var lv95 = _origin.ToGlobal(at with { Y = (FloorAt(at) ?? at.Y) + 0.6f });
+            string name = $"film_{_shot?.Number ?? 0}_{_props.Count}";
+            var state = new Vehicles.VehicleState(prop.Vehicle, lv95, Mathf.DegToRad(-bearing), Vector3.Zero, ride.MaxHealth,
+                EngineOn: false, Wrecked: false, Throttle: 0f, SpawnedAt: 0, Setup: prop.Setup);
+            if (vehicles.Place(state, name) == null || vehicles.GetNodeOrNull<Node3D>(name) is not { } parked)
+            {
+                GD.PrintErr($"[trailer] the parked {prop.Vehicle} was refused");
+                return;
+            }
+            _props.Add(parked);
             return;
         }
         if (prop.Item != Items.ItemId.None)
@@ -479,14 +567,29 @@ public partial class TrailerDirector : Node
         }
         GD.Print($"[trailer] shot {shot.Number}: ground in after {Wall():F1} s, placing {shot.Cast.Count} actor(s)");
         for (int i = 0; i < shot.Cast.Count; i++)
-            _actors.Add(new Actor(shot.Cast[i], i, this, _chunks, _origin, _routes, k => k >= 0 && k < _actors.Count ? _actors[k] : null) { SetPoint = SetPoint });
+            _actors.Add(new Actor(shot.Cast[i], i, this, _chunks, _origin, _routes, k => k >= 0 && k < _actors.Count ? _actors[k] : null)
+            {
+                SetPoint = SetPoint,
+                RampTop = RampTop,
+            });
+        foreach (var craft in shot.Craft) BuildCraft(craft);
         foreach (var prop in shot.Props.Where(p => p.Actor < 0 && p.Route == null)) Build(prop);
         foreach (var herd in shot.Herds) StageHerd(herd);
+        if (shot.Zone is { } zone && PlaceSpot(zone.Centre) is { } centre)
+        {
+            // the Battle Royale's wall standing on its circle, no match needed (its middle at the ground)
+            var wall = new BattleRoyale.ZoneWall { Name = "Zone" };
+            AddChild(wall);
+            wall.Place(centre, zone.Radius);
+            _props.Add(wall);
+        }
         Enter(Phase.Place);
     }
 
     private void Place()
     {
+        // the craft as they stand at the start (a ramp an actor comes down is open before it is placed)
+        foreach (var c in _craft) c.Show(0, 0f);
         foreach (var a in _actors) a.Prepare();
         if (_actors.Any(a => !a.Ready && a.Failed == null)) return;
         StartPreroll(null);
@@ -502,6 +605,7 @@ public partial class TrailerDirector : Node
         }
         foreach (var prop in shot.Props.Where(p => p.Actor >= 0 || p.Route != null)) Build(prop);
         foreach (var a in _actors) a.Go(Others);
+        _moving = 0;
         _preroll = 0;
         _shotCamera!.Reset();
         GD.Print($"[trailer] shot {shot.Number}: actors moving, {shot.Preroll:F1} s of pre-roll");
@@ -566,6 +670,7 @@ public partial class TrailerDirector : Node
             _song.Play((float)shot.Start);
         }
         _captions.SetChat(shot.Chat);
+        _cued.Clear();
         _captions.SetBubbles(shot.Bubbles, i => i >= 0 && i < shot.Cast.Count ? shot.Cast[i].Who?.Colour : null);
         _photo = null;
         _photoAsked = false;
@@ -607,6 +712,11 @@ public partial class TrailerDirector : Node
         }
         _captions.Show(shot, _t, _photo);
         _captions.ShowBubbles(_t, shot.Length, _headOnScreen ??= HeadOnScreen);
+        PlayCues(shot);
+        int screen = -1;
+        for (int i = 0; i < shot.Screens.Count; i++)
+            if (_t >= shot.Screens[i].T && _t < shot.Screens[i].T + shot.Screens[i].Seconds) screen = i;
+        ShowScreen(screen);
     }
 
     private System.Func<int, Vector2?>? _headOnScreen;
@@ -635,7 +745,8 @@ public partial class TrailerDirector : Node
             AddChild(eye);
             CameraFor(_shot with { Keys = [view with { T = 0 }], KeysFrom = 0, Smooth = 0, Shake = 0 }).Apply(eye, 0, 0);
         }
-        var image = await Items.PhotoCapture.Render(this, eye, eye.Fov);
+        // a screenshot of one of the game's own screens instead of a render (the map, the studio)
+        var image = _shot.PhotoFile is { } file && File.Exists(file) ? Image.LoadFromFile(file) : await Items.PhotoCapture.Render(this, eye, eye.Fov);
         if (eye != _camera) eye.QueueFree();
         _photo = ImageTexture.CreateFromImage(image);
     }
@@ -677,6 +788,258 @@ public partial class TrailerDirector : Node
         Enter(Phase.Next);
     }
 
+    // --- real terrain only (#882) --------------------------------------------------------------
+
+    private bool _terrainChecked;
+    private double _terrainWait;
+    private readonly bool _scouting = CmdArgs.Has("--trailer-scout");
+    private static readonly bool AllowGenerated = CmdArgs.Has("--trailer-allow-generated");
+
+    /// <summary>
+    /// Before the first shot, once the terrain's manifest is in: how many real tiles this run has
+    /// (none: the terrain drive is not there, and every shot would be the generated fill: the run
+    /// stops), then every shot's ground (<see cref="FilmCoverage"/>): each tile within 5 km of a
+    /// camera key's eye and of an actor's spot (8 km for an eye over 2,200 m) must be a real one,
+    /// unless it is abroad (no swissALTI3D tile: nothing to build from), which is allowed and counted.
+    /// A shot that is not is a failure of the run, its missing tiles listed and written to
+    /// <c>test_output/trailer/&lt;film&gt;/missing_tiles.txt</c> for <c>MapSetup --tiles-file</c>.
+    /// <c>--trailer-allow-generated</c> lets a deliberate test on generated or fixture ground pass.
+    /// False while the manifest is not in yet.
+    /// </summary>
+    private bool CheckTerrain()
+    {
+        _terrainWait += GetProcessDeltaTime();
+        if (_chunks.Source == null && _terrainWait < 60) return false;
+        _terrainChecked = true;
+        int real = _chunks.AvailableTileCount;
+        GD.Print($"[trailer] real tiles: {real} (chunks {CmdArgs.Value("--chunks") ?? TerrainPaths.FindChunkDir()})");
+        if (_scouting) return true;
+        if (real == 0 && !AllowGenerated)
+        {
+            GD.PrintErr("[trailer] no real tiles: the terrain is not there (is its drive mounted? terrain_location.json, CHUNKS); "
+                + "every shot would be the generated fill. --trailer-allow-generated to film it anyway");
+            Enter(Phase.Finished);
+            GD.Print("[trailer] RESULT: FAILED (no real terrain)");
+            GetTree().Quit(3);
+            return false;
+        }
+        var peaks = TilePeaks();
+        var all = new SortedSet<(int, int)>();
+        var abroad = new SortedSet<(int, int)>();
+        // a tile with no Swiss survey (abroad) cannot be built: allowed, only counted
+        var country = Country();
+        Func<int, int, bool>? swiss = country == null ? null : (e, n) => country.Covered(new Terrain.Format.TileId(e, n));
+        foreach (var shot in _shots)
+        {
+            var missing = FilmCoverage.Missing(Needs(shot, peaks), (e, n) => _chunks.AvailableTiles.Contains(new Terrain.Format.TileId(e, n)),
+                swiss, out var outside);
+            foreach (var t in outside) abroad.Add(t);
+            if (missing.Count == 0) continue;
+            foreach (var t in missing) all.Add(t);
+            GD.PrintErr($"[trailer] shot {shot.Number}: {missing.Count} tile(s) round its cameras and actors are not real "
+                + $"(the generated fill would show): {string.Join(" ", missing.Select(t => $"{t.E}-{t.N}"))}");
+            if (!AllowGenerated) _failures++;
+        }
+        if (all.Count > 0)
+        {
+            string film = CmdArgs.Value("--trailer-film") ?? "story";
+            string dir = ProjectSettings.GlobalizePath($"res://test_output/trailer/{film}");
+            Directory.CreateDirectory(dir);
+            string file = Path.Combine(dir, "missing_tiles.txt");
+            File.WriteAllText(file, FilmCoverage.TilesFile(all));
+            GD.PrintErr($"[trailer] {all.Count} missing tile(s) in {file} (MapSetup --tiles-file)"
+                + (AllowGenerated ? "; --trailer-allow-generated: filmed anyway" : ""));
+        }
+        else GD.Print("[trailer] every shot's ground is real");
+        if (abroad.Count > 0) GD.Print($"[trailer] {abroad.Count} tile(s) in view are abroad (no Swiss survey): the generated fill shows there, allowed");
+        return true;
+    }
+
+    /// <summary>The embedded Swiss country map (which tiles swissALTI3D covers), read once; null if unreadable.</summary>
+    private static UnitSport.Map.CountryData? Country()
+    {
+        if (_countryTried) return _country;
+        _countryTried = true;
+        try { _country = UnitSport.Map.CountryData.LoadEmbedded(); }
+        catch (System.Exception e) { GD.PrintErr($"[trailer] no country map, every missing tile counts as Swiss: {e.Message}"); }
+        return _country;
+    }
+    private static UnitSport.Map.CountryData? _country;
+    private static bool _countryTried;
+
+    /// <summary>Each tile's highest point, from the manifest (an eye's height over a tile it is put above); empty without one.</summary>
+    private static Dictionary<(int, int), float> TilePeaks()
+    {
+        var peaks = new Dictionary<(int, int), float>();
+        try
+        {
+            string path = Path.Combine(TerrainPaths.FindChunkDir(), "manifest.json");
+            if (!File.Exists(path)) return peaks;
+            foreach (var t in Terrain.Format.TerrainManifest.FromJson(File.ReadAllText(path)).Tiles) peaks[(t.E, t.N)] = t.Max;
+        }
+        catch (System.Exception e) { GD.PrintErr($"[trailer] manifest unreadable for the eyes' heights: {e.Message}"); }
+        return peaks;
+    }
+
+    /// <summary>The points a shot needs real ground round: its world camera eyes and looks, its actors' spots, its craft, saucers and herds.</summary>
+    private static IEnumerable<FilmCoverage.Need> Needs(Shot shot, Dictionary<(int, int), float> peaks)
+    {
+        // a set is far under the ground: its film shows no terrain
+        if (shot.Set != null) yield break;
+        FilmCoverage.Need At(Spot s, bool eye)
+        {
+            double alt = !s.Agl ? s.H
+                : peaks.TryGetValue(((int)System.Math.Floor(s.E / 1000), (int)System.Math.Floor(s.N / 1000)), out float top) ? top + s.H : double.NaN;
+            return new FilmCoverage.Need(s.E, s.N, alt, eye);
+        }
+        foreach (var k in shot.Keys)
+        {
+            if (k.Eye.World is { } eye) yield return At(eye, true);
+            else if (k.Eye.Actor >= 0 && k.Eye.Actor < shot.Cast.Count) yield return At(shot.Cast[k.Eye.Actor].At, true);
+        }
+        foreach (var c in shot.Cast)
+        {
+            yield return At(c.At, false);
+            if (c.Board is { } board) yield return At(board, false);
+        }
+        foreach (var c in shot.Craft) yield return At(c.At, false);
+        foreach (var u in shot.Ufos) yield return At(u.At, false);
+        foreach (var h in shot.Herds) yield return At(h.At, false);
+    }
+
+    // --- the film kit (#882) ------------------------------------------------------------------
+
+    /// <summary>
+    /// The occasions a shot asks for (<see cref="Shot.Occasion"/>): the calendar's back first, then
+    /// every known one not asked for stopped and those asked for started, so nothing carries over from
+    /// the shot before (Christmas's snow did, #881). Null leaves the calendar's.
+    /// </summary>
+    private void SetOccasions(string? wanted)
+    {
+        if (wanted == _occasion) return;
+        RunCommand?.Invoke("/occasion auto");
+        _occasion = wanted;
+        if (wanted == null || Occasions.OccasionManager.Instance is not { } occasions) return;
+        var ids = wanted == "none" ? new HashSet<string>()
+            : wanted.Split(',', System.StringSplitOptions.RemoveEmptyEntries | System.StringSplitOptions.TrimEntries).ToHashSet();
+        foreach (var e in occasions.Known)
+            RunCommand?.Invoke(ids.Contains(e.Id) ? $"/occasion start {e.Id}" : $"/occasion stop {e.Id}");
+    }
+
+    /// <summary>A UFO prop at its spot (<see cref="Shot.Craft"/>), on the ground under it or above.</summary>
+    private void BuildCraft(Craft craft)
+    {
+        var prop = new CraftProp(craft) { Name = $"Craft{_craft.Count}" };
+        AddChild(prop);
+        var at = _origin.ToWorld(craft.At.E, craft.At.N, 0);
+        float ground = _chunks.TryGetSurface(at, out float g) ? g : 0f;
+        prop.Put(at, ground);
+        _craft.Add(prop);
+        _props.Add(prop);
+    }
+
+    /// <summary>The craft's beams that are on, as real ones (<see cref="Player.TractorBeams.Scripted"/>): what is under them rises.</summary>
+    private void AddCraftBeams(List<Player.TractorBeams.Beam> beams)
+    {
+        foreach (var c in _craft)
+            if (IsInstanceValid(c) && c.BeamApex is { } apex) beams.Add(new Player.TractorBeams.Beam(null, apex, Vector3.Zero));
+    }
+
+    /// <summary>The boards under the ramps walked down this shot, by ramp.</summary>
+    private readonly Dictionary<RampOf, StaticBody3D> _ramps = new();
+
+    /// <summary>
+    /// The top of a landed saucer's open ramp (<see cref="Cast.DownRamp"/>), its board made solid
+    /// the first time: feet, compass bearing down it, the saucer's body when it is an actor's. Null
+    /// until the ramp is down.
+    /// </summary>
+    private (Vector3 Feet, float Bearing, PhysicsBody3D? Host)? RampTop(RampOf ramp)
+    {
+        Node3D frame;
+        PhysicsBody3D? host = null;
+        if (ramp.OfCraft)
+        {
+            if (ramp.Index < 0 || ramp.Index >= _craft.Count || !_craft[ramp.Index].RampDown) return null;
+            frame = _craft[ramp.Index];
+        }
+        else
+        {
+            if (ramp.Index < 0 || ramp.Index >= _actors.Count || _actors[ramp.Index] is not { Ready: true, Body: { } body }
+                || body.Saucer is not { } ufo || ufo.State.Ramp < 0.95f) return null;
+            frame = body.Visual as Node3D ?? body;
+            host = body;
+        }
+        if (!_ramps.TryGetValue(ramp, out var board) || !IsInstanceValid(board))
+        {
+            board = SaucerRamp.Board();
+            frame.AddChild(board);
+            _ramps[ramp] = board;
+            if (host != null) board.AddCollisionExceptionWith(host);
+        }
+        var xf = frame.GlobalTransform;
+        var down = xf.Basis * SaucerRamp.Down;
+        return (xf * SaucerRamp.At(0.5f), Mathf.RadToDeg(Mathf.Atan2(down.X, -down.Z)), host);
+    }
+
+    /// <summary>The shot's item cues due by now (<see cref="Shot.ItemCues"/>), each once, from its actor's hand.</summary>
+    private void PlayCues(Shot shot)
+    {
+        for (int i = 0; i < shot.ItemCues.Count; i++)
+        {
+            var cue = shot.ItemCues[i];
+            if (_t < cue.T || !_cued.Add(i)) continue;
+            if (cue.Actor < 0 || cue.Actor >= _actors.Count || _actors[cue.Actor].Body is not { } who || !IsInstanceValid(who)
+                || Items.ItemEvents.Instance is not { } events)
+            {
+                GD.PrintErr($"[trailer] shot {shot.Number}: cue {i} ({cue.Kind}) has no actor {cue.Actor}");
+                continue;
+            }
+            var ahead = (-who.GlobalBasis.Z with { Y = 0 }).Normalized();
+            var at = cue.At is { } spot ? PlaceSpot(spot) ?? _origin.ToWorld(spot.E, spot.N, who.GlobalPosition.Y)
+                : Items.ItemEvents.MuzzleOf(who, ahead) + Vector3.Up * cue.Up;
+            // a fishing line keeps no direction (a remote angler's float stays where it landed)
+            var dir = cue.Kind is Items.ItemEventKind.FishCast or Items.ItemEventKind.FishEnd ? Vector3.Zero : ahead;
+            events.PlayAs(who, cue.Kind, at, dir, cue.Extra);
+        }
+    }
+
+    /// <summary>Shows the shot's game screen <paramref name="index"/> over the frame (-1: none), under the captions.</summary>
+    private void ShowScreen(int index)
+    {
+        if (index == _screenShown) return;
+        _screenShown = index;
+        if (_screenLayer != null && IsInstanceValid(_screenLayer)) _screenLayer.QueueFree();
+        _screenLayer = null;
+        if (index < 0 || _shot == null || index >= _shot.Screens.Count) return;
+        var cue = _shot.Screens[index];
+        Control? page = cue.Kind switch
+        {
+            GameScreen.Map => Ui.MapScreen.Create(),
+            GameScreen.Landing => Ui.MapScreen.CreateLanding(cue.At is { } a ? (a.E, a.N) : (Core.SpawnPoint.DefaultLv95E, Core.SpawnPoint.DefaultLv95N), _ => { }),
+            GameScreen.Png when cue.Png != null && File.Exists(cue.Png) => new TextureRect
+            {
+                Texture = ImageTexture.CreateFromImage(Image.LoadFromFile(cue.Png)),
+                ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+                StretchMode = TextureRect.StretchModeEnum.KeepAspectCovered,
+            },
+            _ => null,
+        };
+        if (page == null)
+        {
+            GD.PrintErr($"[trailer] shot {_shot.Number}: screen {index} ({cue.Kind}) could not be shown");
+            return;
+        }
+        // its own layer, under the captions (120) and the bubbles; a dark backdrop, as behind the menus
+        _screenLayer = new CanvasLayer { Name = "FilmScreen", Layer = 90 };
+        var back = new ColorRect { Color = new Color(0.05f, 0.06f, 0.08f) };
+        back.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        _screenLayer.AddChild(back);
+        page.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        _screenLayer.AddChild(page);
+        AddChild(_screenLayer);
+        if (page is Ui.Screen screen) screen.OnShown();
+    }
+
     // --- the game's own layers off the picture ------------------------------------------------
 
     /// <summary>Every CanvasLayer but the captions hidden: walked once, then followed through NodeAdded.</summary>
@@ -686,7 +1049,7 @@ public partial class TrailerDirector : Node
         {
             _hud = new List<CanvasLayer>();
             foreach (var node in GetTree().Root.FindChildren("*", "CanvasLayer", true, false))
-                if (node is CanvasLayer layer && layer != _captions) _hud.Add(layer);
+                if (node is CanvasLayer layer && layer != _captions && layer != _screenLayer) _hud.Add(layer);
             GetTree().NodeAdded += OnNodeAdded;
         }
         _hud.RemoveAll(l => !IsInstanceValid(l));
@@ -695,6 +1058,6 @@ public partial class TrailerDirector : Node
 
     private void OnNodeAdded(Node node)
     {
-        if (node is CanvasLayer layer && layer != _captions) _hud!.Add(layer);
+        if (node is CanvasLayer layer && layer != _captions && layer != _screenLayer && !IsAncestorOf(layer)) _hud!.Add(layer);
     }
 }

@@ -130,6 +130,22 @@
   street's axis, a shore, a castle, a runway end. `--trailer-log` then times the actors.
 - **The cut** is checked at start (`CutProblems`): shot numbers ascending, each shot starting on the
   bar the one before ends, the last ending with the song; a problem fails the run's RESULT.
+- **Real terrain only** (#882): every scene shows real tiles, never the generated fill. Before the
+  first shot the run logs `[trailer] real tiles: N` and stops (`RESULT: FAILED`, exit 3) with none
+  (the terrain drive unmounted: runs fell back to the generated world for hours). Then each shot
+  (`FilmCoverage`, tier 0 `FilmCoverageTests`): every tile within 5 km of each camera key's eye and
+  of each actor, craft, sighting and herd spot (8 km for an eye over 2,200 m, its height read from the
+  manifest's tile tops) must be one the manifest lists, unless it is abroad (the embedded country map,
+  `CountryData.Covered`, has no swissALTI3D tile there: Italy, France, the French half of Lake
+  Geneva): nothing to build it from, so it is allowed and only counted in the log (decided
+  2026-10-19); a shot that fails is reported with its tiles
+  and fails the run, and all of them go to `test_output/trailer/<film>/missing_tiles.txt` (`E-N` a
+  line, for `MapSetup --tiles-file`). `--trailer-allow-generated` films it anyway (tests, the
+  fixture demo). Sets are skipped (far under the ground).
+- **The film kit** (#882, `film-kit` note): scripted jumps, fights, hats, swimmers, saucer actors and
+  UFO props (crashed, landed, the mothership) with real beams, walking down a ramp, beamable props,
+  parked vehicles, placed looks, built pieces, item cues (fishing lines), the game's screens on cue,
+  occasions per shot.
 - **The song** is not committed: `tools/trailer.sh` downloads it from incompetech.com (CC BY 4.0,
   credited on the end card, `Song.Credit`).
 - **Staging gotchas** (each cost a stills pass):
@@ -148,8 +164,8 @@
     several headings with `--trailer-log`), keep the steer small.
   - A road route's direction is the road's, not `Toward`'s: read it off the route dump before
     giving an actor a negative arc.
-  - A scripted body cannot swim: it is held at the water's surface, and swimming reads the
-    player's own keys, not `WalkControls`.
+  - A swimmer is `Cast.Swim` (a walker put in the water from a dry `Board`; it strokes with its
+    `Walk`), in water deeper than ~1.5 m: shallower, the game ends the swim and it wades.
   - A fixed camera beside a road sees whatever stands there (barns, bridge parapets): put it on the
     road, or high, or check it in a still.
   - Every actor runs under the one local peer, and a figure's look is found by its rider index
@@ -163,5 +179,9 @@
   - The steamer is real: 3 km/h after 10 s, 90 % of its speed after 71 s. A short pre-roll leaves it
     standing; it reads as at anchor from afar.
   - A walker out of a door on a slope vaults the bank in front of the step: stand it there instead.
-  - The director's warnings (an actor left out, placing timed out) go to stderr, not into
-    `stills.log`: read the run's whole output.
+  - The director's warnings (an actor left out, placing timed out) go to stderr; `stills` now
+    tees both into `stills.log`.
+  - A still from a run whose log has `ERROR: timeout waiting for fence` (Metal GPU timeouts: too many
+    Godot instances at once) can show garbage geometry (the "giant broken shapes over Riddes", #881):
+    take it again with the machine quieter. `tools/trailer.sh stills` and `preview` run at
+    `--fixed-fps 30` like `render`, so a slow frame no longer skips film time.
