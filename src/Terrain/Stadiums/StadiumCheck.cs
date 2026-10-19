@@ -72,7 +72,26 @@ public static class StadiumCheck
             Expect(stand.Count > 0 && stand.Where(h => h > -1f).DefaultIfEmpty(99).Min() is > 0.8f and < 3f,
                 $"{s.Name}: the north stand beside the gate rises from the pitch wall (surfaces at {Fmt(stand)})");
 
+            // a data building straddling the facade loses what is inside and keeps the rest; a far tile is untouched
             var owner = StadiumCatalog.Owner(s);
+            var (omin, _) = StadiumClip.Bounds(StadiumBuilder.Outline(s, owner));
+            float spotZ = (float)(owner.MaxN - s.N), x0 = omin.X + 5, x1 = omin.X + 15, o0 = omin.X - 60, o1 = omin.X - 50;
+            var slab = new Building
+            {
+                Kind = BuildingKind.Commercial, MinY = 0, MaxY = 10,
+                Triangles = new[]
+                {
+                    x0, 10, spotZ - 5, x1, 10, spotZ - 5, x1, 10, spotZ + 5, x0, 10, spotZ - 5, x1, 10, spotZ + 5, x0, 10, spotZ + 5,
+                    o0, 10, spotZ - 5, o1, 10, spotZ - 5, o1, 10, spotZ + 5, o0, 10, spotZ - 5, o1, 10, spotZ + 5, o0, 10, spotZ + 5,
+                },
+            };
+            var tile = new BuildingTile { Id = owner, Buildings = new() { slab } };
+            var clipped = StadiumClip.Clip(tile)!;
+            Expect(clipped.Buildings.Count == 1 && clipped.Buildings[0].TriangleCount == 2,
+                $"{s.Name}: a building reaching inside the facade keeps only its outside ({clipped.Buildings[0].TriangleCount} of 4 triangles)");
+            var far = new BuildingTile { Id = new TileId(owner.E + 5, owner.N), Buildings = tile.Buildings };
+            Expect(ReferenceEquals(StadiumClip.Clip(far), far), $"{s.Name}: a tile 5 km away is read as it was");
+
             var placed = StadiumBuilder.Build(owner, null, mesh: false, collision: true);
             Expect(placed is { Faces.Length: > 0 } && StadiumCatalog.OwnedBy(new TileId(owner.E + 1, owner.N)).All(o => o != s),
                 $"{s.Name}: built by tile {owner} and by no other");

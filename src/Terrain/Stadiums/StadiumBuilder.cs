@@ -53,7 +53,14 @@ public static class StadiumBuilder
         {
             g ??= new Geo(mesh, collision);
             float ground = grid != null ? (float)grid.SampleMeshHeight(s.E, s.N) : 0f;
-            capacity += Sweep(s, g, Frame(s, id, ground));
+            var frame = Frame(s, id, ground);
+            // the ground round the bowl, over the pitch: where a gate's passage has to start
+            Func<Vector2, float>? outside = grid == null ? null : uv =>
+            {
+                var p = frame(uv, 0);
+                return (float)grid.SampleMeshHeight(id.MinE + p.X, id.MaxN - p.Z) - ground;
+            };
+            capacity += Sweep(s, g, frame, outside);
         }
         return g == null ? null : new StadiumBuild(g.Data(), g.Faces.ToArray(), capacity);
     }
@@ -64,6 +71,13 @@ public static class StadiumBuilder
         var g = new Geo(mesh, collision);
         int capacity = Sweep(s, g, (uv, y) => new Vector3(uv.X, y, uv.Y));
         return new StadiumBuild(g.Data(), g.Faces.ToArray(), capacity);
+    }
+
+    /// <summary>The facade's outline in <paramref name="id"/>'s frame (x, z), round the bowl: what the stadium owns (<see cref="StadiumClip"/>).</summary>
+    public static Vector2[] Outline(StadiumSpec s, TileId id)
+    {
+        var frame = Frame(s, id, 0f);
+        return Stations(s).Select(st => { var p = frame(st.P + st.N * st.Depth, 0); return new Vector2(p.X, p.Z); }).ToArray();
     }
 
     /// <summary>The stadium frame (u across, v along the pitch, y up from it) into tile-local metres.</summary>
@@ -153,7 +167,8 @@ public static class StadiumBuilder
     // ---- the sweep ----------------------------------------------------------------------------
 
     /// <summary>Sweeps one stadium into <paramref name="g"/>; returns the seats it counted.</summary>
-    private static int Sweep(StadiumSpec s, Geo g, Func<Vector2, float, Vector3> at)
+    /// <param name="outside">The ground's height over the pitch at a point of the frame, or null for flat ground.</param>
+    private static int Sweep(StadiumSpec s, Geo g, Func<Vector2, float, Vector3> at, Func<Vector2, float>? outside = null)
     {
         var st = Stations(s);
         var c = new Palette(s);
@@ -163,16 +178,21 @@ public static class StadiumBuilder
             var a = st[i];
             var b = st[(i + 1) % st.Count];
             var q = new SegmentQuads(g, at, a, b);
-            capacity += Stand(s, q, a.Kind, c);
+            // a gate's headroom counts from the ground at its mouth: the street round a stadium
+            // often stands above the pitch, and the tunnel runs down under the stand to it
+            float gateTop = s.GateHeight;
+            if (a.Kind == Seg.Gate && outside != null)
+                gateTop += Math.Max(0f, Math.Max(outside(a.P + a.N * a.Depth), outside(b.P + b.N * b.Depth)));
+            capacity += Stand(s, q, a.Kind, c, gateTop);
             Roof(s, q, a.Kind, c);
-            Facade(s, q, a.Kind, c);
+            Facade(s, q, a.Kind, c, gateTop);
         }
         Pillars(s, g, at, st, c);
         return (int)capacity;
     }
 
     /// <summary>The tiers of one segment, the back wall over them; returns the seats it holds.</summary>
-    private static float Stand(StadiumSpec s, SegmentQuads q, Seg kind, Palette c)
+    private static float Stand(StadiumSpec s, SegmentQuads q, Seg kind, Palette c, float gateTop)
     {
         bool gate = kind == Seg.Gate, aisle = kind == Seg.Aisle;
         var tread = aisle ? c.Concrete : c.Seat;
@@ -184,12 +204,12 @@ public static class StadiumBuilder
             var tier = s.Tiers[t];
             if (tier.Gap > 0)
             {
-                if (!gate || h >= s.GateHeight) q.Flat(d, d + tier.Gap, h, c.Concrete, solid: true);
+                if (!gate || h >= gateTop) q.Flat(d, d + tier.Gap, h, c.Concrete, solid: true);
                 d += tier.Gap;
             }
             float top = h + tier.Step;
             float wallFrom = t == 0 ? -Skirt : h;
-            if (gate) wallFrom = Math.Max(wallFrom, s.GateHeight);
+            if (gate) wallFrom = Math.Max(wallFrom, gateTop);
             if (wallFrom < top) q.Wall(d, wallFrom, top, t == 0 ? c.Concrete : c.Glazing, solid: true);
             h = top;
 
@@ -197,7 +217,7 @@ public static class StadiumBuilder
             for (int r = 0; r < tier.Rows; r++)
             {
                 float hr = h + r * tier.Riser, d0 = d + r * tier.RowDepth, d1 = d0 + tier.RowDepth;
-                if (gate && hr < s.GateHeight + GateClearance) continue;
+                if (gate && hr < gateTop + GateClearance) continue;
                 if (float.IsNaN(firstD))
                 {
                     firstD = d0;
@@ -206,9 +226,9 @@ public static class StadiumBuilder
                     // lintel over its mouth, and that row's front down to the ceiling
                     if (!tunnelClosed)
                     {
-                        q.Flat(0, d0, s.GateHeight, c.ConcreteDark, solid: true);
-                        q.Wall(0, s.GateHeight, s.GateHeight + GateClearance, c.Concrete, solid: true);
-                        q.Wall(d0, s.GateHeight, hr, c.Concrete, solid: true);
+                        q.Flat(0, d0, gateTop, c.ConcreteDark, solid: true);
+                        q.Wall(0, gateTop, gateTop + GateClearance, c.Concrete, solid: true);
+                        q.Wall(d0, gateTop, hr, c.Concrete, solid: true);
                         tunnelClosed = true;
                     }
                 }
@@ -217,7 +237,15 @@ public static class StadiumBuilder
                 if (!aisle) seats += q.LengthAt(d0 + tier.RowDepth / 2) / s.SeatWidth;
             }
             float endD = d + tier.Rows * tier.RowDepth, endH = h + (tier.Rows - 1) * tier.Riser;
-            if (!float.IsNaN(firstD)) q.Ramp(firstD, firstH, endD, endH);
+            if (!float.IsNaN(firstD))
+            {
+                q.Ramp(firstD, firstH, endD, endH);
+                // the tier's concrete underside, seen from the concourse: a riser under the ramp,
+                // so under every step
+                float soffit = tier.Riser + 0.2f;
+                q.Quad(q.Pt(true, firstD, firstH - soffit), q.Pt(false, firstD, firstH - soffit),
+                    q.Pt(false, endD, endH - soffit), q.Pt(true, endD, endH - soffit), c.ConcreteDark, solid: false);
+            }
             d = endD;
             h = endH;
         }
@@ -263,9 +291,9 @@ public static class StadiumBuilder
     }
 
     /// <summary>The facade over one segment, from below ground to the roof's edge; a gate's passage left open.</summary>
-    private static void Facade(StadiumSpec s, SegmentQuads q, Seg kind, Palette c)
+    private static void Facade(StadiumSpec s, SegmentQuads q, Seg kind, Palette c, float gateTop)
     {
-        float da = q.A.Depth, db = q.B.Depth, plinth = s.GateHeight;
+        float da = q.A.Depth, db = q.B.Depth, plinth = kind == Seg.Gate ? gateTop : s.GateHeight;
         if (kind != Seg.Gate)
             q.Quad(q.Pt(true, da, -Skirt), q.Pt(false, db, -Skirt), q.Pt(false, db, plinth), q.Pt(true, da, plinth), c.Plinth, solid: true);
         else

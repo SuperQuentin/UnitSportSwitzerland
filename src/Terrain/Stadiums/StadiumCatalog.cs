@@ -44,6 +44,9 @@ public static class StadiumCatalog
 
     public static readonly StadiumSpec[] All = { Geneva };
 
+    /// <summary>How far past its own tile a data building may reach, m: tiles this far from a stadium's outline are clipped (<see cref="StadiumClip"/>).</summary>
+    public const float Reach = 300f;
+
     /// <summary>The tile that builds a stadium: the one holding its centre spot.</summary>
     public static TileId Owner(StadiumSpec s) => TileId.FromLv95(s.E, s.N);
 

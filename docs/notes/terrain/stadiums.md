@@ -31,10 +31,11 @@ sweep), `StadiumCheck` (`--stadiumcheck`). Plan and later phases (stage, lights,
    the rows until `--stadiumcheck`'s seat count is within 12 % of the real capacity.
 4. Find the name: the geo.admin search API
    (`api3.geo.admin.ch/rest/services/api/SearchServer?searchText=Stadion&type=locations&sr=2056`).
-5. If the data has a solid in the bowl, it must be hidden: **not built yet** (Geneva needs none). The
-   seam is `BuildingMeshBuilder.Drawn`, which is keyed on the `Building` alone; a stadium needs a
-   tile-aware test (a footprint inside the bowl's outline), and every consumer that tests
-   `UnderConstruction` directly (doors, perches, loot, interiors, BR, map) must use it too.
+5. Data buildings in the bowl are clipped by `StadiumClip` as their tile is decoded (`LocalChunkSource`,
+   `NetworkChunkSource`): every triangle whose centre is inside the facade outline goes, so mesh,
+   collision, doors, perches and interiors all see the clipped tile, on the server and every client.
+   Indices never change (a building wholly inside stays in the list with no triangles). At Geneva a
+   corner of the La Praille mall (#132 of `buildings_2498_1115`) stood in the north-west concourse.
 6. Add the row to `StadiumCheck.Rows` with the outline and capacity it is held to.
 
 ## How the builder works
@@ -48,7 +49,9 @@ sweep), `StadiumCheck` (`--stadiumcheck`). Plan and later phases (stage, lights,
   seat is modelled. The collision is one ramp per tier and segment on the nosings (30.7 degrees in
   Geneva, under the 52 degree floor angle), plus walkways, walls, back walls, facade, roof top.
 - A gate drops the rows under its headroom: a tunnel under the stand from the facade's opening to the
-  pitch, roofed at `GateHeight`. The space under the stands is open: the concourse.
+  pitch, roofed at `GateHeight` above the higher of the pitch and the ground at its mouth (the street
+  round Geneva stands 1-3 m over the pitch, which buried the first gates). Each tier has a concrete
+  soffit a riser under its ramp, so the concourse sees concrete, not the rows' backs. The space under the stands is open: the concourse.
 - One prop-material mesh (`StyleKit` `Prop`, vertex colours raw linear), joined to the tile's
   building-site mesh in `ChunkManager` and drawn with the buildings layer (ring 3: no far LOD yet); the
   collision joins the site faces in the both-sided road cells. Geneva: 12.4 k triangles, 2 k
