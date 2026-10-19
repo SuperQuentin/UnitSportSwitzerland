@@ -35,7 +35,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | ride_menu | R / Y with nothing near | ok: Y, wrist menu (#437) | keep |
 | car_door / gather | G / X (tap / hold) | ok: X; doors by grip | gather = **grip and pull** the resource |
 | emote_wheel | B / D-pad ↑ | ok: hold R stick ↑, aim with the right hand (#437) | keep |
-| phone (#889): out, quick action, open, back | ↑, ← → Enter, ↑, Esc ↓ / quick menu › Phone, D-pad A, D-pad ↑, B | **gap**: refused in VR (no camera may move) | the wrist menu's "Phone" puts the open phone in the **left hand**, poked with the right ray (`XrUi`); travel behind `XrRig.Blink` |
+| phone (#889): out, quick action, open, back | ↑, ← → Enter, ↑, Esc ↓ / quick menu › Phone, D-pad A, D-pad ↑, B | **gap**: refused in VR (no camera may move) | plan `docs/plans/phone-vr.md` (#920): out of the left front pocket by a grip, the real index tip on the glass (hand tracking or the inferred finger), unfolded by the other hand, the arm aims the camera, a selfie by turning it, travel behind the phone raised to the eyes (a blink otherwise) |
 | challenge / accept a fist fight (#495) | E / Y, looking at the player | ok: Y, or reach out and grip | keep |
 | fight step / jump / crouch (#495) | A D, W Space, S Ctrl / L stick, A | ok: L stick towards / away, A, crouch for real (`XrPad.RealCrouch`) | room-scale stepping |
 | fight_punch / fight_kick (#495) | LMB J, RMB K / X RB, Y LB | ok: R / L trigger | **punch and kick for real** (hand speed, R4) |
