@@ -49,6 +49,10 @@ public static class Aliens
     /// <summary>The named ones, for the model viewer and anyone choosing.</summary>
     public static readonly AlienLook[] Crew = [Visitor, Zorp, Zib, Gleeb, Blip];
 
+    /// <summary>The preset called <paramref name="name"/> (any case), or null.</summary>
+    public static AlienLook? Named(string name) =>
+        Array.Find(Crew, a => a.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+
     private static readonly ItemId[] AntennaeKinds = [ItemId.AlienAntennae, ItemId.SilverAntennae, ItemId.LongAntennae];
 
     /// <summary>
