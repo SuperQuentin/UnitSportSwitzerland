@@ -46,7 +46,7 @@ public partial class PhoneModel : Node3D
     public static readonly Vector3 LensPoint = new(IslandX + 0.015f, IslandY, -HalfThickness - 0.0045f);
 
     private static readonly Color Rim = new(0.80f, 0.80f, 0.82f), BackWhite = new(0.93f, 0.93f, 0.91f),
-        IslandWhite = new(0.86f, 0.86f, 0.85f), Black = new(0.03f, 0.03f, 0.035f), LensRing = new(0.42f, 0.43f, 0.46f),
+        IslandWhite = new(0.76f, 0.76f, 0.75f), Black = new(0.03f, 0.03f, 0.035f), LensRing = new(0.42f, 0.43f, 0.46f),
         LensGlass = new(0.04f, 0.05f, 0.08f), Flash = new(0.95f, 0.88f, 0.70f);
     private static ArrayMesh? _backMesh, _frontMesh, _coverMesh, _innerLeftMesh, _innerRightMesh, _innerFullMesh;
 
@@ -167,6 +167,7 @@ public partial class PhoneModel : Node3D
     }
 
     /// <summary>The cover screen, on the front half's outside (hinge frame).</summary>
+    [Core.Showcase("Parts", "Phone cover screen")]
     private static ArrayMesh CoverMesh()
     {
         var m = new Builder();
@@ -177,6 +178,7 @@ public partial class PhoneModel : Node3D
     }
 
     /// <summary>The open inner screen in one piece, its middle on the hinge line (node frame).</summary>
+    [Core.Showcase("Parts", "Phone inner screen")]
     private static ArrayMesh InnerFullMesh()
     {
         var m = new Builder();
@@ -185,6 +187,7 @@ public partial class PhoneModel : Node3D
     }
 
     /// <summary>The right part of the inner screen, on the back half (node frame), square at the fold.</summary>
+    [Core.Showcase("Parts", "Phone inner screen, right")]
     private static ArrayMesh InnerRightMesh()
     {
         var m = new Builder();
@@ -195,6 +198,7 @@ public partial class PhoneModel : Node3D
     }
 
     /// <summary>The left part, as it lies open, in the hinge's frame (x &lt; 0); its node turns it in.</summary>
+    [Core.Showcase("Parts", "Phone inner screen, left")]
     private static ArrayMesh InnerLeftMesh()
     {
         var m = new Builder();
