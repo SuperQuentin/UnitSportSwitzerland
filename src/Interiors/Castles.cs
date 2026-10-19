@@ -3,6 +3,34 @@ using UnitSport.Terrain.Format;
 namespace UnitSport.Interiors;
 
 /// <summary>
+/// What a castle is (#859), from OSM's <c>castle_type</c> and <c>ruins</c>, its name, or its
+/// solids' years: a medieval fortress, a stately home (a country seat, a bailiff's house), or a ruin.
+/// </summary>
+public enum CastleKind : byte { Fortress = 0, Manor = 1, Ruin = 2 }
+
+/// <summary>
+/// The building tradition a castle belongs to, from its canton: what its walls and roofs are made
+/// of and how they are dressed (docs/notes/terrain/castles.md has the sources).
+/// </summary>
+public enum CastleRegion : byte
+{
+    /// <summary>Vaud, Geneva, Fribourg: the Savoyard castles, grey-beige limestone rubble, brown tiles (Chillon, Grandson, Morges).</summary>
+    Savoy = 0,
+    /// <summary>Neuchâtel, Jura: the yellow Hauterive limestone of the Jura lakes.</summary>
+    Jura = 1,
+    /// <summary>The plateau, Bern to Zürich: whitewashed walls, sandstone corners and surrounds, red tiles (Thun, Lenzburg, the bailiffs' castles).</summary>
+    Plateau = 2,
+    /// <summary>Thurgau, St. Gallen, Schaffhausen, Appenzell, Glarus: rendered, a half-timbered top storey, red tiles.</summary>
+    East = 3,
+    /// <summary>Valais and central Switzerland: dark gneiss rubble under stone-slab (lauze) roofs (Valère, Tourbillon).</summary>
+    Alpine = 4,
+    /// <summary>Graubünden: whitewashed rubble under grey slab roofs (Tarasp).</summary>
+    Raetia = 5,
+    /// <summary>Ticino: grey granite rubble, gneiss slab (piode) roofs, swallowtail merlons (Bellinzona).</summary>
+    Ticino = 6,
+}
+
+/// <summary>
 /// Castles (#859): the solids <see cref="List"/> names, by a point inside each one's footprint.
 ///
 /// <para>
@@ -22,6 +50,20 @@ public static partial class Castles
     /// holding its centre, and a castle's footprint can reach well into the next one.
     /// </summary>
     public const float Reach = 300f;
+
+    /// <summary>A canton's building tradition. Across the border (no canton) a castle is Savoyard, as Geneva's neighbours are.</summary>
+    public static CastleRegion RegionOf(string canton) => canton switch
+    {
+        "NE" or "JU" => CastleRegion.Jura,
+        "BE" or "SO" or "AG" or "LU" or "ZH" or "ZG" or "BS" or "BL" => CastleRegion.Plateau,
+        "TG" or "SG" or "SH" or "AR" or "AI" or "GL" => CastleRegion.East,
+        "VS" or "UR" or "SZ" or "OW" or "NW" => CastleRegion.Alpine,
+        "GR" => CastleRegion.Raetia,
+        "TI" => CastleRegion.Ticino,
+        _ => CastleRegion.Savoy,
+    };
+
+    public static CastleRegion RegionOf(int castle) => RegionOf(List[castle].Canton);
 
     /// <summary>
     /// For each building of the tile, the index in <see cref="List"/> of the castle it belongs to,

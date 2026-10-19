@@ -43,7 +43,33 @@ public static class CastleStage
     /// <summary>How far from its first solid a castle's touching solids may reach.</summary>
     private const float GroupReach = 110f;
 
-    private sealed record Candidate(string Name, string Source, double E, double N, List<(double E, double N)>? Outline);
+    /// <summary>What a castle is, as the game's <c>CastleKind</c>: 0 a fortress, 1 a stately home or manor, 2 a ruin; -1 unknown yet.</summary>
+    private const int Unknown = -1, Fortress = 0, Manor = 1, Ruin = 2;
+    /// <summary>
+    /// A castle whose solids were mostly built from this year on is a stately home, not a fortress.
+    /// Late: the GWR year is often a rebuild's (Tarasp's says 1628), and Swiss OSM tags nearly every
+    /// "Schloss" <c>stately</c>, Thun's keep included, so the game dresses a keep-like solid of a
+    /// manor as a fortress anyway.
+    /// </summary>
+    public const int ManorFrom = 1650;
+
+    private static readonly Regex RuinName = new(@"ruine|rovine|diroccat|\bruin", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    private sealed record Candidate(string Name, string Source, double E, double N, List<(double E, double N)>? Outline, int Kind = Unknown);
+
+    /// <summary>
+    /// The kind OSM gives (castle_type, ruins) or the name says. "schloss" and "stately" are the
+    /// country seats and bailiffs' houses, "defensive", "burg", "castrum" the fortresses.
+    /// </summary>
+    private static int KindOf(Dictionary<string, string> tags, string name)
+    {
+        if (tags.GetValueOrDefault("ruins") == "yes" || RuinName.IsMatch(name)) return Ruin;
+        var type = tags.GetValueOrDefault("castle_type") ?? "";
+        if (type.Contains("ruin")) return Ruin;
+        if (type is "stately" or "manor" or "palace" or "schloss" or "chateau" or "château") return Manor;
+        if (type is "defensive" or "fortress" or "castrum" or "burg" or "citadel" or "kastell" or "fort") return Fortress;
+        return Unknown;
+    }
 
     public static int Run(string chunkDir, string gwrPath, string pbf, string outFile, int jobs)
     {
@@ -63,32 +89,48 @@ public static class CastleStage
             return tiles[id] = t;
         }
 
+        var canton = Cantons(gwrPath);
+
         // OSM first: its outlines are the better source, and its names are the common ones
         var claimed = new HashSet<(TileId, int)>();
-        var castles = new List<(string Name, List<(double E, double N)> Points)>();
+        var castles = new List<Castle>();
         int unresolved = 0;
         foreach (var c in candidates)
         {
             var solids = c.Outline != null ? InOutline(c, Tile) : AtPoint(c, Tile);
             var points = new List<(double E, double N)>();
+            var years = new List<int>();
             foreach (var (id, i) in solids)
             {
                 if (!claimed.Add((id, i))) continue;
-                if (InsidePoint(id, Tile(id)!.Buildings[i]) is { } p) points.Add(p);
+                var b = Tile(id)!.Buildings[i];
+                if (InsidePoint(id, b) is { } p) points.Add(p);
+                if (b.YearBuilt > 0) years.Add(b.YearBuilt);
             }
-            if (points.Count > 0) castles.Add((c.Name, points));
-            else if (solids.Count == 0) unresolved++;
+            if (points.Count == 0)
+            {
+                if (solids.Count == 0) unresolved++;
+                continue;
+            }
+            // no word from OSM or the name: the solids' own years decide, a fortress when unknown
+            int kind = c.Kind != Unknown ? c.Kind
+                : years.Count > 0 && years.Order().ElementAt(years.Count / 2) >= ManorFrom ? Manor : Fortress;
+            castles.Add(new Castle(c.Name, canton(points[0].E, points[0].N), kind, points));
         }
         castles.Sort((a, b) => a.Points[0].E != b.Points[0].E ? a.Points[0].E.CompareTo(b.Points[0].E) : a.Points[0].N.CompareTo(b.Points[0].N));
         Write(outFile, castles);
         Console.WriteLine($"castles: {castles.Count} castles, {castles.Sum(c => c.Points.Count)} solids; " +
                           $"{unresolved} candidates without a solid (ruins, unbuilt tiles) -> {outFile} ({sw.Elapsed.TotalSeconds:F0} s)");
+        Console.WriteLine("castles by kind: " + string.Join(", ", castles.GroupBy(c => c.Kind).OrderBy(g => g.Key)
+            .Select(g => $"{(g.Key == Fortress ? "fortress" : g.Key == Manor ? "manor" : "ruin")} {g.Count()}")));
+        Console.WriteLine("castles by canton: " + string.Join(", ", castles.GroupBy(c => c.Canton).OrderByDescending(g => g.Count())
+            .Select(g => $"{(g.Key == "" ? "?" : g.Key)} {g.Count()}")));
         return 0;
     }
 
     private static IEnumerable<Candidate> FromOsm(string pbf, int jobs)
     {
-        var keys = new HashSet<string> { "historic", "name", "castle_type" };
+        var keys = new HashSet<string> { "historic", "name", "castle_type", "ruins" };
         static bool IsCastle(Dictionary<string, string> t) => t.GetValueOrDefault("historic") == "castle";
         // pass 1: the castle ways and points; pass 2: the positions of the ways' nodes only
         var first = PbfReader.Read(pbf, jobs, new PbfReader.Filter
@@ -109,12 +151,12 @@ public static class CastleStage
             foreach (var r in w.Refs)
                 if (nodes.TryGetValue(r, out var ll)) ring.Add(SwissProjection.ToLv95(ll.Lat, ll.Lon));
             if (ring.Count < 4) continue;
-            yield return new Candidate(NameOf(w.Tags), $"way/{w.Id}", ring.Average(p => p.E), ring.Average(p => p.N), ring);
+            yield return new Candidate(NameOf(w.Tags), $"way/{w.Id}", ring.Average(p => p.E), ring.Average(p => p.N), ring, KindOf(w.Tags, NameOf(w.Tags)));
         }
         foreach (var n in first.TaggedNodes)
         {
             var (e, nn) = SwissProjection.ToLv95(n.Lat, n.Lon);
-            yield return new Candidate(NameOf(n.Tags), $"node/{n.Id}", e, nn, null);
+            yield return new Candidate(NameOf(n.Tags), $"node/{n.Id}", e, nn, null, KindOf(n.Tags, NameOf(n.Tags)));
         }
     }
 
@@ -142,8 +184,44 @@ public static class CastleStage
             if (year >= OldBefore || area < 120) continue;
             // a house or a barn named "Schloss" is the castle's farm unless it is medieval itself
             if (gklas is 1110 or 1121 or 1122 or 1242 or 1251 or 1271 or 1276 or 1277 or 1278 && (year == 0 || year >= 1600)) continue;
-            yield return new Candidate(name, $"egid/{r.GetValue(6)}", r.GetDouble(2), r.GetDouble(3), null);
+            int kind = RuinName.IsMatch(name) ? Ruin : year >= ManorFrom ? Manor : year > 0 ? Fortress : Unknown;
+            yield return new Candidate(name, $"egid/{r.GetValue(6)}", r.GetDouble(2), r.GetDouble(3), null, kind);
         }
+    }
+
+    private sealed record Castle(string Name, string Canton, int Kind, List<(double E, double N)> Points);
+
+    /// <summary>
+    /// The canton at a point: the one most GWR buildings of its kilometre cell are in, else of the
+    /// nearest cell around it that has any; "" where there is none (a castle across the border).
+    /// </summary>
+    private static Func<double, double, string> Cantons(string gwrPath)
+    {
+        var cells = new Dictionary<(int, int), Dictionary<string, int>>();
+        using (var conn = GeoPackageReader.Open(gwrPath))
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "select GDEKT, GKODE, GKODN from building where GDEKT is not null and GKODE is not null and GKODN is not null";
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                var cell = ((int)Math.Floor(r.GetDouble(1) / 1000), (int)Math.Floor(r.GetDouble(2) / 1000));
+                if (!cells.TryGetValue(cell, out var count)) cells[cell] = count = new Dictionary<string, int>();
+                var canton = r.GetString(0);
+                count[canton] = count.GetValueOrDefault(canton) + 1;
+            }
+        }
+        var best = cells.ToDictionary(kv => kv.Key, kv => kv.Value.OrderByDescending(c => c.Value).ThenBy(c => c.Key, StringComparer.Ordinal).First().Key);
+        return (e, n) =>
+        {
+            int ce = (int)Math.Floor(e / 1000), cn = (int)Math.Floor(n / 1000);
+            for (int ring = 0; ring <= 3; ring++)
+                for (int de = -ring; de <= ring; de++)
+                    for (int dn = -ring; dn <= ring; dn++)
+                        if (Math.Max(Math.Abs(de), Math.Abs(dn)) == ring && best.TryGetValue((ce + de, cn + dn), out var canton))
+                            return canton;
+            return "";
+        };
     }
 
     /// <summary>Whether a solid may be part of a castle: old, or of unknown year and not a home or a works.</summary>
@@ -283,7 +361,7 @@ public static class CastleStage
         return null;
     }
 
-    private static void Write(string path, List<(string Name, List<(double E, double N)> Points)> castles)
+    private static void Write(string path, List<Castle> castles)
     {
         var sb = new StringBuilder();
         sb.Append("""
@@ -296,14 +374,18 @@ public static class CastleStage
 
             public static partial class Castles
             {
-                /// <summary>Every castle: its name, then LV95 E, N pairs, one point inside each of its solids.</summary>
-                public static readonly (string Name, double[] Points)[] List =
+                /// <summary>
+                /// Every castle: its name, its canton (the GWR's two letters; "" across the border), what
+                /// it is, then LV95 E, N pairs, one point inside each of its solids.
+                /// </summary>
+                public static readonly (string Name, string Canton, CastleKind Kind, double[] Points)[] List =
                 {
 
             """);
-        foreach (var (name, points) in castles)
+        foreach (var (name, canton, kind, points) in castles)
         {
-            sb.Append("        (\"").Append(name.Replace("\\", "\\\\").Replace("\"", "\\\"")).Append("\", new[] { ");
+            sb.Append("        (\"").Append(name.Replace("\\", "\\\\").Replace("\"", "\\\"")).Append("\", \"").Append(canton)
+              .Append("\", CastleKind.").Append(kind == Manor ? "Manor" : kind == Ruin ? "Ruin" : "Fortress").Append(", new[] { ");
             sb.Append(string.Join(", ", points.Select(p =>
                 p.E.ToString("0.0", CultureInfo.InvariantCulture) + ", " + p.N.ToString("0.0", CultureInfo.InvariantCulture))));
             sb.Append(" }),\n");

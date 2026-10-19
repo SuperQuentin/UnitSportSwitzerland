@@ -188,33 +188,51 @@ public partial class PortalDemo : Node3D
         })));
 
     /// <summary>
-    /// A castle's keep (#859): a flat-topped tower standing on Chillon's first point in its own tile,
-    /// so <see cref="Castles"/> matches it as the game would: dressed stone, slits, corbels, the
-    /// parapet with its merlons and the flag.
+    /// Castles (#859), one of each dress: a keep for every building tradition (on a real fortress of
+    /// that region, Chillon for Savoy), a stately home and a ruin. Each solid stands on its castle's
+    /// first point in its own tile, so <see cref="Castles"/> matches it as the game would.
     /// </summary>
     [Showcase("Terrain", "Castle")]
-    private static IEnumerable<(string, Func<Node3D>)> ShowcaseCastle() => new[] { ("Keep", (Func<Node3D>)(() =>
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseCastle()
     {
-        var (_, points) = Castles.List.First(c => c.Name == "Château de Chillon");
-        var id = TileId.FromLv95(points[0], points[1]);
-        var at = new Vector2((float)(points[0] - id.MinE), (float)(id.MaxN - points[1]));
-        var tile = new BuildingTile
+        Node3D Build(int castle, Func<Vector2, float[]> shape, float height)
         {
-            Id = id,
-            Buildings = new List<Building>
+            var points = Castles.List[castle].Points;
+            var id = TileId.FromLv95(points[0], points[1]);
+            var at = new Vector2((float)(points[0] - id.MinE), (float)(id.MaxN - points[1]));
+            var tile = new BuildingTile
             {
-                // eave = ridge: the roof's two faces lie flat, a wall walk at 20 m
-                new() { Kind = BuildingKind.Annex, YearBuilt = 1150, MinY = 0, MaxY = 20f, Triangles = Solid(at, 12f, 12f, 20f, 20f) },
-            },
-        };
-        var node = new Node3D();
-        node.AddChild(new MeshInstance3D
+                Id = id,
+                Buildings = new List<Building>
+                {
+                    new() { Kind = BuildingKind.Annex, YearBuilt = 1250, MinY = 0, MaxY = height, Triangles = shape(at) },
+                },
+            };
+            var node = new Node3D();
+            node.AddChild(new MeshInstance3D
+            {
+                Mesh = ChunkNode.ToArrayMesh(BuildingMeshBuilder.Build(tile, Array.Empty<DoorSpot>())!, World(Styles.MaterialRole.Building)),
+                Position = new Vector3(-at.X, 0f, -at.Y),
+            });
+            return node;
+        }
+        int First(Func<(string Name, string Canton, CastleKind Kind, double[] Points), bool> match) =>
+            Array.FindIndex(Castles.List, c => match(c));
+
+        // eave = ridge: the roof's two faces lie flat, a wall walk at 20 m
+        float[] Keep(Vector2 at) => Solid(at, 12f, 12f, 20f, 20f);
+        foreach (var region in Enum.GetValues<CastleRegion>())
         {
-            Mesh = ChunkNode.ToArrayMesh(BuildingMeshBuilder.Build(tile, Array.Empty<DoorSpot>())!, World(Styles.MaterialRole.Building)),
-            Position = new Vector3(-at.X, 0f, -at.Y),
-        });
-        return node;
-    })) };
+            int castle = region == CastleRegion.Savoy
+                ? First(c => c.Name == "Château de Chillon")
+                : First(c => c.Kind == CastleKind.Fortress && Castles.RegionOf(c.Canton) == region);
+            if (castle >= 0) yield return ($"{region} keep", () => Build(castle, Keep, 20f));
+        }
+        int manor = First(c => c.Kind == CastleKind.Manor && Castles.RegionOf(c.Canton) == CastleRegion.Plateau);
+        if (manor >= 0) yield return ("Manor", () => Build(manor, at => Solid(at, 26f, 14f, 10.5f, 14.5f), 14.5f));
+        int ruin = First(c => c.Kind == CastleKind.Ruin);
+        if (ruin >= 0) yield return ("Ruin", () => Build(ruin, at => Solid(at, 10f, 10f, 14f, 14f), 14f));
+    }
 
     /// <summary>
     /// A block of flats' underground garage door (#558) with each road link: the pavement with its

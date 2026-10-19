@@ -70,6 +70,33 @@ public class CastleTests
     }
 
     [Fact]
+    public void Castles_know_their_canton_and_kind()
+    {
+        var chillon = Castles.List.First(c => c.Name == "Château de Chillon");
+        Assert.Equal("VD", chillon.Canton);
+        Assert.Equal(CastleKind.Fortress, chillon.Kind);
+        Assert.Equal(CastleRegion.Ticino, Castles.RegionOf(Castles.List.First(c => c.Name == "Castelgrande").Canton));
+        // ruins are named as such, or tagged
+        Assert.Contains(Castles.List, c => c.Kind == CastleKind.Ruin && c.Name.StartsWith("Ruine", StringComparison.Ordinal));
+        // every tradition has castles of its own
+        foreach (var region in Enum.GetValues<CastleRegion>())
+            Assert.Contains(Castles.List, c => Castles.RegionOf(c.Canton) == region);
+    }
+
+    [Theory]
+    [InlineData("VD", CastleRegion.Savoy)]
+    [InlineData("GE", CastleRegion.Savoy)]
+    [InlineData("", CastleRegion.Savoy)]
+    [InlineData("NE", CastleRegion.Jura)]
+    [InlineData("BE", CastleRegion.Plateau)]
+    [InlineData("TG", CastleRegion.East)]
+    [InlineData("VS", CastleRegion.Alpine)]
+    [InlineData("GR", CastleRegion.Raetia)]
+    [InlineData("TI", CastleRegion.Ticino)]
+    public void A_canton_has_its_building_tradition(string canton, CastleRegion region) =>
+        Assert.Equal(region, Castles.RegionOf(canton));
+
+    [Fact]
     public void A_tile_far_from_every_castle_has_none()
     {
         var tile = new BuildingTile { Id = new TileId(0, 0), Buildings = new() { Box(500, 500, 20, 20, 10) } };

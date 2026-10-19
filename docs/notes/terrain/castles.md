@@ -23,29 +23,72 @@
   Schloss Lenzburg 32.
 - **Regenerate** after a building rebuild (solid indices do not matter, points do: a re-seated or
   re-cut solid still covers its point unless its footprint changed).
-- **Dress** (`BuildingMeshBuilder.Castle.cs`, only solids of no church group), tuned on photos of
-  Chillon (Oct 2026): stone and roof each from a palette by castle name (grey-beige rubble, Chillon's
-  limestone, warm limestone, sandstone, lime-wash; red-brown, weathered brown-grey, slate tiles;
-  ordered so Chillon lands on its own), weathered at 40% of `ApplyAge`, no solar panels.
-- **Walls** carry UV2.y 4 to 7 (4, +1 a level head, +2 a foot within 1.5 m of the solid's base) with
-  v in metres above their **wall run's** foot and UV2.x the run's height (`WallRun.Bottom/Top/Level`),
-  so one solid with a 44 m keep and 15 m curtain walls gets each wall's openings right. Shader
-  `castle_wall`: rubble courses of uneven stones, noise patches and rain streaks, a damp dark-green
-  foot 2.6-3.8 m up (the run starts under the ground or the water), up to two rows of two-light
-  Gothic windows (pointed lancets, a mullion, a dressed frame; some lit at night) and small square
-  ones on the upper floors, arrow slits (some with a crossbow bar) below, and an **arched corbel
-  table** (corbels, round arches, the dark machicolation) under a level head. The per-wall hash seed
-  is rounded: the interpolated tangent jitters and the hash made speckle.
-- **Geometry** (appended after the doors): a 0.9 m parapet plus merlons on every open edge of a flat
-  roof (an edge no other flat face shares, with nothing of the solid as high 0.4 m past it; each
-  corner owned by one edge); **iron finials** on every roof peak (a vertex topping 2+ sloping faces
-  with no roof vertex as high within 6 m: tower cones and pyramids, not ridges); **wooden oriels**
-  (Chillon's latrines) 4.2 m under the head of long (14 m+), tall (12 m+) rectangular walls standing on
-  the ground, one per 22 m, 4 a solid at most; a 7 m pole with a Swiss flag on the apex of each
-  castle's tallest solid (12 m+). Visual only: no collision.
-- **Check:** model viewer `--models,test_output/models --modelsonly castle` (a keep on Chillon's
-  point); in game a `--shot-queue`, origin 2560000,1140000 (yaw grows counter-clockwise, 0 = north):
+- **Kind** (`CastleKind`, in the list): OSM `ruins=yes`, a `castle_type` or a name with
+  ruine/rovine/diroccato -> Ruin; `castle_type` stately/manor/palace/schloss -> Manor;
+  defensive/fortress/castrum/burg -> Fortress; else the solids' median year (from 1650 a manor),
+  else a fortress. Swiss mappers tag nearly every "Schloss" `stately` (Thun's keep too) and the GWR
+  year is often a rebuild's (Tarasp 1628), so the game dresses a **keep-like** solid of a manor (16 m+
+  and taller than 1.1 x its plan's short side) as a fortress anyway. Oct 2026: 142 fortresses, 371
+  manors, 195 ruins.
+- **Region** (`CastleRegion`, from the canton the stage writes: the canton most GWR buildings of the
+  castle's km cell are in). Researched Oct 2026, sources below:
+  - **Savoy** (VD, GE, FR, and across the border): the Savoyard castles, the "carré savoyard" with
+    round corner towers (Yverdon 1258-65, Grandson, Morges, Champvent), grey-beige limestone rubble,
+    brown tiles. Chillon is the reference (user photos).
+  - **Jura** (NE, JU): the yellow Hauterive limestone of the Jura lakes (Neuchâtel's château).
+  - **Plateau** (BE, SO, AG, LU, ZH, ZG, BS, BL): whitewashed render with dressed grey-green molasse
+    sandstone at the corners and windows (Bern's Ostermundigen/Gurten stone), red tiles; Thun's white
+    towers, Lenzburg, the Bernese bailiffs' castles (Aarberg 1608-10, Trachselwald 1624-30).
+  - **East** (TG, SG, SH, AR, AI, GL): rendered, a half-timbered top storey, red tiles.
+  - **Alpine** (VS and central Switzerland): dark gneiss rubble under stone-slab roofs (lauzes:
+    silvery-grey, bluish or greenish cleft stone; Valère, Tourbillon).
+  - **Raetia** (GR): whitewashed rubble (Tarasp) under grey slabs.
+  - **Ticino**: grey granite rubble, gneiss slab roofs (piode), swallowtail (Ghibelline) merlons
+    (Bellinzona; the merlon form is reported, not verified against the UNESCO dossier).
+- **Dress** (`BuildingMeshBuilder.Castle.cs`, `DressOf`, only solids of no church group): the
+  region's stone and roof palettes (two or three each, picked by castle name; Chillon draws index 1
+  of the Savoyard ones, its limestone and brown-grey tiles), weathered at 40% of `ApplyAge`, then the
+  kind: a ruin's stone 14% darker; a manor's render (cream, white, light ochre, pale grey; the Jura's
+  in its stone), a slate mansard on a quarter of Savoyard, Jura and plateau manors. No solar panels.
+- **Walls** carry UV2.y = 4 + level head + 2 x foot on the ground (within 1.5 m of the solid's base)
+  + 4 x the variant (4 to 23), v in metres above their **wall run's** foot, UV2.x the run's height,
+  CUSTOM0.z its length (`WallRun.Bottom/Top/Level/Length`), and the castle's shutter paint in the
+  wall colour's alpha. Shader `castle_wall` variants:
+  - 0 rubble (Savoy, Jura, Alpine, Ticino fortresses): uneven rubble courses, patches, rain streaks,
+    up to two rows of two-light Gothic windows and small square ones, slits below, an **arched corbel
+    table** under a level head.
+  - 1 rendered (Plateau, Raetia): lime render, long-and-short sandstone quoins, a dressed plinth,
+    cross-mullioned (Kreuzstock) windows, slits.
+  - 2 manor: render, quoins, a cornice, storeys of 3.5 m with sash windows 2.9 m apart symmetric about
+    the wall's middle (none by the quoins, none in a gable's top 30%), painted shutters (green,
+    grey-blue, ox-blood: one paint a castle).
+  - 3 ruin: rubble with moss patches, darker toward the head, empty openings, never lit.
+  - 4 timbered (East): render under a half-timbered top storey (posts 1.3 m apart, sill and head
+    rails, St Andrew's crosses, small windows).
+  All get a damp foot (green on stone, grey on render) 2.6-3.8 m up: the run starts under the ground
+  or the water. The per-wall hash seed is rounded (the interpolated tangent jitters into speckle).
+- **Geometry** (appended after the doors): a 0.9 m parapet on every open edge of a flat roof (an
+  edge no other flat face shares, with nothing of the solid as high 0.4 m past it; each corner owned
+  by one edge) with square merlons, Ticino's notched swallowtails, a ruin's broken ones (35% gone, the
+  rest worn), a manor's none; **iron finials** on roof peaks (a vertex topping 2+ sloping faces with no
+  roof vertex as high within 6 m), not on ruins; **wooden oriels** (Chillon's latrines) on Savoyard,
+  Jura and Alpine rubble fortresses' long (14 m+), tall (12 m+) rectangular walls on the ground; the
+  Swiss flag on each castle's tallest solid (12 m+) and its canton's, simplified to colour fields on
+  a 6 x 6 grid (`FlagCell`), on the next; none on ruins. Visual only: no collision.
+- **Sources** (Oct 2026): Savoyard square castles: swiss-spectator.ch (Champvent), en.wikipedia.org
+  Morges Castle, letemps.ch (Yverdon); Bellinzona: whc.unesco.org/en/list/884; Lake Thun castles:
+  interlaken.swiss, swiss-spectator.ch; Tarasp: en.wikipedia.org Tarasp Castle, hls-dhs-dss.ch;
+  Hauterive stone: hls-dhs-dss.ch article 002850, ne.ch facade brochure; Bern sandstone:
+  en.wikipedia.org Ostermundigen and Old City (Bern), per-storemyr.net; piode: rsi.ch; lauzes:
+  fr.vikidia.org Lauze, techniques-ingenieur.fr; bailiffs' castles: en.wikipedia.org Aarberg Castle,
+  hls-dhs-dss.ch, data.geo.admin.ch KGS sheets; Valère and Tourbillon: en.wikipedia.org, valais.ch.
+- **Check:** model viewer `--models,test_output/models --modelsonly castle` (a keep per region on a
+  real fortress of it, a manor, a ruin); in game a `--shot-queue`, origin 2560000,1140000 (yaw grows counter-clockwise, 0 = north):
   lake front `640,378,-370,6,322,6,<png>`, Montreux side `655,378,-500,8,215,6,<png>`, land side
   `770,381,-470,10,140,6,<png>` (the three photo viewpoints).
+- **In the local world** only the tiles in `manifest.json` render (6699 in western Switzerland in Oct
+  2026): Chillon, Gruyères, Vufflens, Prangins, La Bâtiaz, Grimisuat are in it; Thun, Neuchâtel,
+  Lenzburg, Bellinzona are not (their files exist, the world shows generated fill there).
 - **Not yet:** interiors (a castle is not a `BuildingGroup`; its interior is whatever its kind
-  plans), OSM multipolygon castles (relations are skipped), cantonal flags, ruins drawn as ruins.
+  plans), OSM multipolygon castles (relations are skipped), Vufflens's brick, ruins' broken wall
+  heads (the solids are whole), a Bernese bailiff castle's Krüppelwalm roof (the roofs are the data's).

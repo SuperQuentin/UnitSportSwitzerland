@@ -33,10 +33,11 @@ public static partial class BuildingMeshBuilder
     public const float SignFlag = 1f, GarageWallFlag = 2f, BlankWallFlag = 3f;
 
     /// <summary>
-    /// A castle's wall (#859): UV is (metres along, metres above the wall run's foot) and UV2.x the
-    /// run's height; UV2.y is <see cref="CastleWallFlag"/>, +1 when its head is level (not a gable:
-    /// it gets the corbel table), +2 when its foot is on the ground (within
-    /// <see cref="CastleFootReach"/> of the solid's base: it gets the damp foot), so 4 to 7.
+    /// A castle's wall (#859): UV is (metres along, metres above the wall run's foot), UV2.x the
+    /// run's height and CUSTOM0.z its length; UV2.y is <see cref="CastleWallFlag"/>, +1 when its head is
+    /// level (not a gable: it gets the corbel table), +2 when its foot is on the ground (within
+    /// <see cref="CastleFootReach"/> of the solid's base: it gets the damp foot), + 4 x its dress's
+    /// variant (<see cref="CastleRubble"/> to <see cref="CastleTimbered"/>), so 4 to 23.
     /// </summary>
     public const float CastleWallFlag = 4f, CastleFootReach = 1.5f;
 
@@ -218,8 +219,11 @@ public static partial class BuildingMeshBuilder
             // a castle's solid (#859), unless it is a church's nave or tower: dressed stone, no flats
             int castleOf = part == BuildingPart.None ? types.CastleOf(bi) : -1;
             bool castle = castleOf >= 0;
-            var wall = (castle ? CastleStone(castleOf, b.YearBuilt) : WallColor(kind, b.YearBuilt, type)).SrgbToLinear();
-            var roof = (castle ? CastleRoof(castleOf) : RoofColor(kind, type)).SrgbToLinear();
+            var dress = castle ? DressOf(castleOf, b, types.Boxes[bi]) : default;
+            var wall = (castle ? dress.Wall : WallColor(kind, b.YearBuilt, type)).SrgbToLinear();
+            // a castle's shutter paint rides in the wall colour's alpha, which nothing else reads
+            if (castle) wall.A = dress.Paint;
+            var roof = (castle ? dress.Roof : RoofColor(kind, type)).SrgbToLinear();
             var (storey, storeyCount) = part switch
             {
                 // facade v in metres; the slits, windows and corbels are the shader's, per wall run
@@ -372,17 +376,21 @@ public static partial class BuildingMeshBuilder
                     uvA = FacadeUv(a, run, baseY, storey);
                     uvB = FacadeUv(c, run, baseY, storey);
                     uvC = FacadeUv(d, run, baseY, storey);
-                    if (castle) triUv2 = new Vector2(run.Top - run.Bottom, CastleWallFlag
+                    if (castle) triUv2 = new Vector2(run.Top - run.Bottom, CastleWallFlag + 4f * dress.Variant
                         + (run.Level ? 1f : 0f) + (run.Bottom < b.MinY + CastleFootReach ? 2f : 0f));
                     // too short for one window: the wall's bands and plinth, no glass
                     else if (run.Scale == 0f && uv2.Y == 0f) triUv2 = new Vector2(uv2.X, BlankWallFlag);
                 }
+                // a castle wall's third frame float is its run's length in facade u (the corners the
+                // shader dresses with quoins), not a storey height: its v is metres already
+                float third = castle && !isRoof && storey > 0f
+                    ? runs[t].Length * (runs[t].Scale > 0f ? runs[t].Scale : 1f) : storey;
                 for (int k = 0; k < 3; k++)
                 {
                     int f = (v + k) * 4;
                     frames[f] = tangent.X;
                     frames[f + 1] = tangent.Z;
-                    frames[f + 2] = storey;
+                    frames[f + 2] = third;
                 }
 
                 vertices[v] = a; colors[v] = color; uvs[v] = uvA; uv2s[v++] = triUv2;
