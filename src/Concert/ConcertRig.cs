@@ -28,6 +28,32 @@ public partial class ConcertRig : Node3D
     /// <summary>Plays the show whatever the hour (<c>--concert</c>, the model viewer).</summary>
     public bool ForceLive { get; set; }
 
+    /// <summary>The rigs on stage now, by stadium: what the show input and the relay drive.</summary>
+    public static readonly Dictionary<string, ConcertRig> Live = new();
+
+    public LightDesk Desk => _desk;
+    public DmxPatch Patch => _plan.Patch;
+
+    /// <summary>
+    /// Universes from outside (an operator's Art-Net or sACN, here or relayed by the server): while a
+    /// frame came in the last <see cref="ExternalHold"/> seconds they are the rig's DMX and the desk
+    /// rests; then the desk takes over again.
+    /// </summary>
+    private byte[][] _external = Array.Empty<byte[]>();
+    private double _externalAt = double.NegativeInfinity;
+    public const double ExternalHold = 2.0;
+    public bool ExternalLive => Core.RealClock.Now - _externalAt < ExternalHold;
+
+    /// <summary>One universe from outside, the rig's own numbering (0 = the first patched).</summary>
+    public void TakeUniverse(int universe, ReadOnlySpan<byte> data)
+    {
+        if (_plan == null || universe < 0 || universe >= _plan.Patch.Universes.Count) return;
+        if (_external.Length != _plan.Patch.Universes.Count)
+            _external = Enumerable.Range(0, _plan.Patch.Universes.Count).Select(_ => new byte[DmxPatch.Channels]).ToArray();
+        data[..Math.Min(data.Length, DmxPatch.Channels)].CopyTo(_external[universe]);
+        _externalAt = Core.RealClock.Now;
+    }
+
     private StagePlan _plan = null!;
     private LightDesk _desk = null!;
     private Fixture[] _heads = Array.Empty<Fixture>(), _cells = Array.Empty<Fixture>(), _screens = Array.Empty<Fixture>();
@@ -58,6 +84,7 @@ public partial class ConcertRig : Node3D
         _cells = fx.Where(f => f.Type.Kind is FixtureKind.Blinder or FixtureKind.Strobe or FixtureKind.PixelBar).ToArray();
         _screens = fx.Where(f => f.Type.Kind == FixtureKind.Screen).ToArray();
         BuildRig();
+        Live[Event.Stadium.Name] = this;
         GD.Print($"[concert] {Event}: {fx.Count} fixtures, {_plan.Patch.Universes.Count} universes ({_plan.Patch.ChannelsUsed} channels)");
     }
 
@@ -195,10 +222,15 @@ public partial class ConcertRig : Node3D
         return new Basis(x, z.Cross(x), z);
     }
 
+    public override void _ExitTree()
+    {
+        if (Live.TryGetValue(Event.Stadium.Name, out var r) && r == this) Live.Remove(Event.Stadium.Name);
+    }
+
     // ---- every frame ------------------------------------------------------------------------------
 
     /// <summary>Whether the show is on at this hour (the stage stands all day; the rig plays in the evening).</summary>
-    private bool Live()
+    private bool ShowOn()
     {
         if (ForceLive) return true;
         double h = World.WorldClock.CurrentHour;
@@ -208,8 +240,11 @@ public partial class ConcertRig : Node3D
     public override void _Process(double delta)
     {
         double now = Net.ClockSync.ServerNow;
-        _desk.Write(Live() ? now % 86400.0 : -1.0);
         var p = _plan.Patch;
+        if (ExternalLive)
+            for (int u = 0; u < _external.Length; u++) _external[u].CopyTo(p.Universes[u], 0);
+        else _desk.Write(ShowOn() ? now % 86400.0 : -1.0);
+        float master = Math.Clamp(_desk.Master, 0f, 1f);
         float t = (float)(now % 3600.0);
 
         _haze = 0;
@@ -223,7 +258,7 @@ public partial class ConcertRig : Node3D
         {
             var f = _heads[i];
             var dir = Direction(f);
-            float dim = p.Get01(f, Attr.Dimmer) * Shutter(f, t);
+            float dim = p.Get01(f, Attr.Dimmer) * Shutter(f, t) * master;
             var col = ColorOf(f);
             float zoom = p.Get01(f, Attr.Zoom);
             float angle = Mathf.DegToRad(Mathf.Lerp(f.Type.BeamMin, f.Type.BeamMax, zoom));

@@ -71,3 +71,32 @@
   `--chunks <main>/terrain_chunks --at 2498751,1114890 --origin 2498751,1114890 --concert 13
   --shot-queue <file>` with `/time set 22:00` first (13: an EDM thrust, 3: in the round, 14: a rock side
   stage, 5: a pop end stage).
+
+## Show control from Chataigne, TouchDesigner or a console (#885)
+
+- **Protocols** (`Protocols/ShowProtocols.cs`, pure, `ShowProtocolsTests`): Art-Net 4 (UDP 6454:
+  ArtDmx, ArtPoll answered with ArtPollReply so the controller lists the game as a node), sACN E1.31
+  (UDP 5568, multicast 239.255.hi.lo per universe; terminated and preview streams skipped), OSC 1.0
+  (UDP 9000: messages and nested bundles, i f s T F N).
+- **Input** (`ShowInput`, the operator's game only, off by default): `/concert input artnet|sacn|osc|all
+  [on|off]`, `/concert input status`. Client-local commands (`ConcertService.RunLocal`, before the
+  line goes to the server). Numbering: the rig's universe i = Art-Net port-address i, sACN universe
+  i + 1. `/concert patch` writes `user://concert/patch_<seed>.csv`: id, group, type, footprint, universe,
+  Art-Net port-address, sACN universe, 1-based address, the channel layout — map it in the controller.
+- **Hosting** (`ConcertService` at `World/Concerts`, server + every client): `/concert host [seed]`
+  (admins; offline, always) or OSC `/concert/host <seed>`: the server keeps the seed and the operator,
+  tells every peer and every late joiner (`SendTo`), everyone rebuilds that stage and rig
+  (`ConcertDirector.Rebuild`); a hosted set plays at any hour. `/concert release`, or the operator
+  leaving (`PeerLeft`), gives tonight's back. `/concert status`.
+- **DMX live**: universes the input reads play at once on the operator's rig and go to the server at
+  most 30 Hz each, `UnreliableOrdered` on ENet channel 4 (2 is tiles, 3 the web radio); the server
+  takes them only from the operator and relays them to players within 1.5 km of the stadium. A rig
+  plays outside DMX for 2 s after the last frame (`ConcertRig.TakeUniverse`, `ExternalLive`), then its
+  desk again. About 0.5 Mbit/s per listener for a 4-universe rig at 30 Hz.
+- **OSC cues** drive the built-in desk when no DMX streams: `/concert/go` (next section), `/concert/section
+  <name|n|-1>`, `/concert/bpm <bpm>` (from a shared-clock instant: the beat counts on), `/concert/blackout
+  <0|1>`, `/concert/master <0..1>`. Reliable, kept by the server for late joiners.
+- Protocol 37. Check: `tools/concertnetcheck.sh` (server + two clients on the fixture world at the
+  stadium: A logs in, hosts set 7, turns its input on, plays a controller to its own ports; B gets the
+  set, the relayed universes byte for byte, the blackout cue, the release). Seen in the stadium:
+  a script reading the patch CSV and sending Art-Net turned every head, wash and screen red.

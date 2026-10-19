@@ -34,6 +34,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Net.Arrival? _arrival;
     private Items.PalletService? _pallets;
     private Terrain.Construction.CraneService? _cranes;
+    private Concert.ConcertService? _concerts;
     private Build.Structures? _structures;
     private Occasions.OccasionManager? _occasions;
     private World.RaceNpcs? _npcs;
@@ -285,6 +286,10 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // cranes players work (#618): who works which, and where one was let go
         _cranes = Terrain.Construction.CraneService.Create(this, server: true);
         _cranes.Source = () => source;
+        // concerts (#885): who hosts which stadium's set, its cues, the operator's DMX relayed
+        _concerts = Concert.ConcertService.Create(this, server: true);
+        _concerts.Chat = _chat;
+        _chat.Concerts = _concerts;
         _chat.NameAssigned += bank.SendBalance;
         // selling farm produce (#494): load prices, specialty buyers, contracts; farm stands' crates and cash
         if (Systems.On(Systems.Farming))
@@ -490,6 +495,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _sleepers?.SendTo(id);
         _pallets?.SendTo(id);
         _cranes?.SendTo(id);
+        _concerts?.SendTo(id);
         // the dormant slots woken anywhere (#689): a far one's car is not sent, its bay must be empty
         Vehicles.DormantVehicles.Instance?.SendTo(id);
         _structures?.SendTo(id);
@@ -515,6 +521,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _invites?.PeerLeft(id);
         _parties?.PeerLeft(id);
         _cranes?.PeerLeft(id);
+        _concerts?.PeerLeft(id);
         _vehicles?.ForgetOwner(id);
         _radios?.ForgetOwner(id);
         _dropped?.ForgetOwner(id);

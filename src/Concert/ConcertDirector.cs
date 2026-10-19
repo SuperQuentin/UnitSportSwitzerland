@@ -32,13 +32,21 @@ public partial class ConcertDirector : Node
         ? v == "off" ? -1 : int.TryParse(v, out int s) ? s : null
         : null;
 
-    /// <summary>Tonight's event in a stadium, or the one forced; null when concerts are off.</summary>
-    public static ConcertEvent? EventFor(StadiumSpec s) => ForcedSeed switch
-    {
-        -1 => null,
-        { } seed => ConcertPlanner.Plan(s, seed),
-        _ => ConcertPlanner.Tonight(s, DateTime.Now.Date),
-    };
+    /// <summary>
+    /// The event in a stadium: the set an operator hosts (<see cref="ConcertService"/>), else the one
+    /// forced on the command line, else tonight's; null when concerts are off.
+    /// </summary>
+    public static ConcertEvent? EventFor(StadiumSpec s, int index) =>
+        ConcertService.Instance?.SeedFor(index) is { } hosted ? ConcertPlanner.Plan(s, hosted)
+        : ForcedSeed switch
+        {
+            -1 => null,
+            { } seed => ConcertPlanner.Plan(s, seed),
+            _ => ConcertPlanner.Tonight(s, DateTime.Now.Date),
+        };
+
+    /// <summary>The tile nodes holding each stadium's rig, so a hosted set can replace it.</summary>
+    private readonly Dictionary<int, (TileId Id, ChunkNode Node)> _tiles = new();
 
     public override void _Ready()
     {
@@ -54,23 +62,49 @@ public partial class ConcertDirector : Node
         _chunks.TileUnfurnished -= OnUnfurnished;
     }
 
-    private static void OnUnfurnished(TileId id, ChunkNode node) => node.GetNodeOrNull(NodeName)?.QueueFree();
+    private void OnUnfurnished(TileId id, ChunkNode node)
+    {
+        node.GetNodeOrNull(NodeName)?.QueueFree();
+        foreach (var key in _tiles.Where(kv => kv.Value.Id == id).Select(kv => kv.Key).ToList()) _tiles.Remove(key);
+    }
+
+    /// <summary>A set hosted or released at a stadium: its rig goes, the new event's is hung in its place.</summary>
+    public void Rebuild(int index)
+    {
+        if (!_tiles.TryGetValue(index, out var t) || !IsInstanceValid(t.Node)) return;
+        if (t.Node.GetNodeOrNull(NodeName) is { } old)
+        {
+            old.Name = NodeName + "Old";
+            old.QueueFree();
+        }
+        Hang(t.Id, t.Node, index);
+    }
 
     private void OnFurnished(TileId id, ChunkNode node, Interiors.DoorSpot[] doors)
     {
-        foreach (var s in StadiumCatalog.OwnedBy(id))
-        {
-            // a rebuild of the tile (a detail change) furnishes it again: one show is enough
-            if (node.GetNodeOrNull(NodeName) != null) return;
-            if (EventFor(s) is not { } e) return;
-            var local = new Vector3((float)(s.E - id.MinE), 0, (float)(id.MaxN - s.N));
-            var world = node.ToGlobal(local);
-            if (!_chunks.TryGetSurface(world, out float ground)) continue;
-            local.Y = node.ToLocal(world with { Y = ground }).Y;
-            float a = Mathf.DegToRad(s.AzimuthDeg);
-            var basis = new Basis(new Vector3(MathF.Cos(a), 0, MathF.Sin(a)), Vector3.Up, new Vector3(-MathF.Sin(a), 0, MathF.Cos(a)));
-            var rig = new ConcertRig(e) { Name = NodeName, Transform = new Transform3D(basis, local), ForceLive = ForcedSeed is >= 0 };
-            node.AddChild(rig);
-        }
+        for (int i = 0; i < StadiumCatalog.All.Length; i++)
+            if (StadiumCatalog.Owner(StadiumCatalog.All[i]) == id)
+            {
+                _tiles[i] = (id, node);
+                // a rebuild of the tile (a detail change) furnishes it again: one show is enough
+                if (node.GetNodeOrNull(NodeName) == null) Hang(id, node, i);
+            }
+    }
+
+    private void Hang(TileId id, ChunkNode node, int index)
+    {
+        var s = StadiumCatalog.All[index];
+        if (EventFor(s, index) is not { } e) return;
+        var local = new Vector3((float)(s.E - id.MinE), 0, (float)(id.MaxN - s.N));
+        var world = node.ToGlobal(local);
+        if (!_chunks.TryGetSurface(world, out float ground)) return;
+        local.Y = node.ToLocal(world with { Y = ground }).Y;
+        float a = Mathf.DegToRad(s.AzimuthDeg);
+        var basis = new Basis(new Vector3(MathF.Cos(a), 0, MathF.Sin(a)), Vector3.Up, new Vector3(-MathF.Sin(a), 0, MathF.Cos(a)));
+        // a hosted set plays whatever the hour: its operator runs it
+        bool hosted = ConcertService.Instance?.SeedFor(index) != null;
+        var rig = new ConcertRig(e) { Name = NodeName, Transform = new Transform3D(basis, local), ForceLive = hosted || ForcedSeed is >= 0 };
+        node.AddChild(rig);
+        ConcertService.Instance?.ApplyCues(index, rig);
     }
 }

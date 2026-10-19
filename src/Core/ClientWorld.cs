@@ -809,6 +809,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Crafting.CampfireNetProbe.Role != null) AddChild(new Crafting.CampfireNetProbe(items));
         if (Player.SwimNetProbe.Role != null) AddChild(new Player.SwimNetProbe(items));
         if (Player.EmoteNetProbe.Role != null) AddChild(new Player.EmoteNetProbe(items));
+        if (Concert.ConcertNetProbe.Role != null) AddChild(new Concert.ConcertNetProbe(items));
         if (Player.FightNetProbe.Role != null) AddChild(new Player.FightNetProbe(items));
         if (Net.InviteProbe.Role != null) AddChild(new Net.InviteProbe(items));
         if (Items.SwissNetProbe.Role != null) AddChild(new Items.SwissNetProbe(items));
@@ -890,6 +891,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Items.PalletService.Create(this, origin, server: false).Source = () => _chunks?.Source;
         // cranes players work (#618): the server says who works which, offline this client does
         Terrain.Construction.CraneService.Create(this, server: false).Source = () => _chunks?.Source;
+        // concerts (#885): the hosted sets and their cues from the server, the operator's show input
+        Concert.ConcertService.Create(this, server: false).Local = () => LocalPlayer;
         // built structures (#274): the server owns them, offline this client does
         if (Systems.On(Systems.Build))
         {

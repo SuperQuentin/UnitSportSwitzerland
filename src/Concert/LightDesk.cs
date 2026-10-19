@@ -69,9 +69,35 @@ public sealed class LightDesk
     }
 
     /// <summary>The section playing at a moment of the show (seconds since it started; negative before).</summary>
+    /// <summary>
+    /// What an operator's cues set (OSC from Chataigne or TouchDesigner, <see cref="ShowCue"/>), the
+    /// same on every peer: a section held instead of the song's, a tempo from an instant of the shared
+    /// clock (the beat counts on from where it was), a blackout, a master fader.
+    /// </summary>
+    public ShowSection? HeldSection { get; set; }
+    public bool Blackout { get; set; }
+    public float Master { get; set; } = 1f;
+    private float? _bpm;
+    private double _bpmAt;
+    private float _beatAt;
+
+    /// <summary>A new tempo from a moment of the show on: the beat goes on from where it was then.</summary>
+    public void SetTempo(float bpm, double showSeconds)
+    {
+        _beatAt = BeatAt(showSeconds);
+        _bpmAt = showSeconds;
+        _bpm = bpm > 0 ? bpm : null;
+    }
+
+    private float BeatAt(double showSeconds) => _bpm is { } bpm
+        ? _beatAt + (float)((showSeconds - _bpmAt) * bpm / 60.0)
+        : (float)(showSeconds * _e.Bpm / 60.0);
+
     public ShowSection SectionAt(double showSeconds, out float beat)
     {
-        beat = (float)(showSeconds * _e.Bpm / 60.0);
+        beat = BeatAt(showSeconds);
+        if (Blackout) return ShowSection.Blackout;
+        if (HeldSection is { } held) return held;
         if (showSeconds < 0) return ShowSection.WalkIn;
         int bar = (int)MathF.Floor(beat / 4f);
         int songBars = SongForm.Length * BarsPerSection + 1;
