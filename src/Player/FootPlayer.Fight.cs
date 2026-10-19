@@ -395,6 +395,8 @@ public partial class FootPlayer
     {
         if (FightManager.Client is not { } fights || !NetLink.Online(this) || PointedFighter() is not { } p) return false;
         if (NetId(p.Name) is not { } peer || peer <= 0) return false;
+        // they challenged you to an aura battle (#914): E takes that; otherwise E is the fight's
+        if (AuraManager.Client?.AcceptFrom(peer) == true) return true;
         fights.Engage(peer);
         return true;
     }

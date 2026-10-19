@@ -64,6 +64,16 @@ public partial class AuraManager : Node
         public readonly HashSet<long> Cheered = new();
         public double CrowdScanAt;
         public bool Told;
+        /// <summary>The arena's centre in the server's world space (bots' marks, the music, spectators).</summary>
+        public Vector3 CentreWorld;
+        /// <summary>The CD the battle keeps the beat of (#914), or "" on the fixed 120.</summary>
+        public string Music = "";
+        /// <summary>Spectators (#914): who was sent the battle last, and when it was last sent.</summary>
+        public readonly HashSet<long> Watchers = new();
+        public double WatchAt;
+        public bool WatchDirty = true;
+        /// <summary>A bot battler's side (#914), null for a player.</summary>
+        public BotSide? BotA, BotB;
     }
 
     private readonly Dictionary<int, Match> _matches = new();
@@ -87,12 +97,24 @@ public partial class AuraManager : Node
 
     public override void _EnterTree()
     {
-        if (!_server) Client = this;
+        if (_server) return;
+        Client = this;
+        // a challenge is an invite (#840): E at the challenger reads them from there (#914)
+        Callable.From(() =>
+        {
+            if (InviteService.Client is { } invites && !_hooked)
+            {
+                invites.Changed += OnInvitesChanged;
+                _hooked = true;
+            }
+        }).CallDeferred();
     }
 
     public override void _ExitTree()
     {
         if (Client == this) Client = null;
+        if (_hooked && InviteService.Client is { } invites) invites.Changed -= OnInvitesChanged;
+        _hooked = false;
     }
 
     public override void _Process(double delta)
@@ -123,8 +145,11 @@ public partial class AuraManager : Node
                 SendState(m);
                 return "[aura] You walk away: the battle is forfeited.";
             default:
-                long peer = _chat?.PeerByName(rest.Trim()) ?? -1;
-                return peer <= 0 ? $"[aura] No player called '{rest.Trim()}'." : Challenge(sender, peer);
+                string name = rest.Trim();
+                long peer = _chat?.PeerByName(name) ?? -1;
+                // a bot (#914) is not a chat peer: found by its name
+                if (peer <= 0 && BotPeerByName(name) is { } bot) peer = bot;
+                return peer == 0 || peer == -1 ? $"[aura] No player called '{name}'." : Challenge(sender, peer);
         }
     }
 
@@ -134,6 +159,13 @@ public partial class AuraManager : Node
         if (Busy(from) is { } me) return me;
         if (Busy(to) is { } them) return them.Replace("You are", $"{Who(to)} is");
         if (Refusal(from, to) is { } why) return why;
+        // a bot takes any battle at once (#914): bots are never sent invites
+        if (PlayerReplication.IsBotId(to))
+        {
+            if (PlayerReplication.IsBotId(from)) return "[aura] Bots do not battle each other.";
+            Begin(from, to);
+            return $"[aura] {Who(to)} accepts at once. Aura battle!";
+        }
         if (_chat?.Invites is not { } invites) return "[aura] Invites are not running.";
         string reply = invites.Send(InviteId, from, to, $"{Who(from)} challenges you to an aura battle", "/aura accept, or accept the invite",
             out var sent);
@@ -201,7 +233,11 @@ public partial class AuraManager : Node
             BodyA = Body(a),
             BodyB = Body(b),
         };
+        match.CentreWorld = (match.BodyA!.GlobalPosition + match.BodyB!.GlobalPosition) * 0.5f;
+        // the beat of the music playing here (#914), or the fixed 120
+        PickBeat(match);
         _matches[match.Id] = match;
+        BotsEnter(match);
         _auraOf[a] = _auraOf[b] = match.Id;
         _chat?.Invites?.WithdrawInvolving(InviteId, a);
         _chat?.Invites?.WithdrawInvolving(InviteId, b);
@@ -217,7 +253,8 @@ public partial class AuraManager : Node
     {
         if (!Connected(to)) return;
         var r = m.Rules;
-        RpcId(to, MethodName.Begin, m.Id, r.A, r.B, Who(r.A), Who(r.B), m.Centre.E, m.Centre.N, m.Centre.Alt, m.Yaw);
+        RpcId(to, MethodName.Begin, m.Id, r.A, r.B, Who(r.A), Who(r.B), m.Centre.E, m.Centre.N, m.Centre.Alt, m.Yaw,
+            r.Beat, r.Anchor, m.Music);
     }
 
     private void ServerTick()
@@ -246,6 +283,11 @@ public partial class AuraManager : Node
             foreach (int i in _frozen) SendGraded(m, turnBefore, i, AuraGrade.Miss);
             if (before == AuraPhase.Plan && r.Phase == AuraPhase.Countdown) SendPerform(m);
             if (changed || r.Phase != m.SentPhase || r.Turn != m.SentTurn) SendState(m);
+            // don't laugh first (#914): the waiter is tempted; a laugh shows on both
+            if (r.TemptOpened) { r.TemptOpened = false; SendTempt(m); }
+            if (r.JustLaughed) { r.JustLaughed = false; SendLaughed(m); SendState(m); }
+            StepBots(m, now);
+            StepWatch(m, now);
             if (r.Expired(now)) _ended.Add(m.Id);
         }
         foreach (int id in _ended) EndMatch(id);
@@ -277,6 +319,8 @@ public partial class AuraManager : Node
     private void EndMatch(int id)
     {
         if (!_matches.Remove(id, out var m)) return;
+        BotsLeave(m);
+        WatchEnd(m);
         foreach (long who in new[] { m.Rules.A, m.Rules.B })
         {
             _auraOf.Remove(who);
@@ -295,7 +339,9 @@ public partial class AuraManager : Node
         while (m.SentHistory < r.History.Count) SendVerdict(m, m.SentHistory++);
         foreach (long who in Both(r))
             if (Connected(who))
-                RpcId(who, MethodName.State, m.Id, r.Turn, r.Performer, (int)r.Phase, r.PhaseEnds, r.TotalA, r.TotalB, r.Winner, r.Forfeited);
+                RpcId(who, MethodName.State, m.Id, r.Turn, r.Performer, (int)r.Phase, r.PhaseEnds, r.TotalA, r.TotalB, r.Winner, r.Forfeited,
+                    r.LaughsA, r.LaughsB);
+        m.WatchDirty = true;
         if (r.Phase == AuraPhase.Done && !m.Told)
         {
             m.Told = true;
@@ -320,6 +366,24 @@ public partial class AuraManager : Node
     {
         foreach (long who in Both(m.Rules))
             if (Connected(who)) RpcId(who, MethodName.Graded, m.Id, turn, index, (int)grade);
+        m.WatchDirty = true;
+    }
+
+    /// <summary>A Perfect cut tempts the waiter (#914): only they are told, with when it began.</summary>
+    private void SendTempt(Match m)
+    {
+        var r = m.Rules;
+        if (Connected(r.Waiter)) RpcId(r.Waiter, MethodName.Tempt, m.Id, r.Turn, r.TemptAt);
+    }
+
+    /// <summary>The waiter cracked up (#914): both battlers and the spectators see it.</summary>
+    private void SendLaughed(Match m)
+    {
+        var r = m.Rules;
+        foreach (long who in Both(r))
+            if (Connected(who)) RpcId(who, MethodName.Laughed, m.Id, r.Turn, r.Waiter);
+        BotLaughed(m, r.Waiter);
+        GD.Print($"[aura] #{m.Id} turn {r.Turn}: {Who(r.Waiter)} laughed first");
     }
 
     private void SendVerdict(Match m, int turn)
@@ -408,6 +472,26 @@ public partial class AuraManager : Node
         return grade;
     }
 
+    /// <summary>
+    /// Server: the waiting <paramref name="peer"/> keeps a straight face (#914), stamped like a Next
+    /// press. True: it met the tempt; false: nothing tempted them, so they broke character.
+    /// </summary>
+    public bool? ComposeFor(long peer, int id, int turn, double ts, double rtt)
+    {
+        if (!_matches.TryGetValue(id, out var m) || !m.Rules.Has(peer)) return null;
+        double arrival = ClockSync.ServerNow;
+        if (ts > arrival + FutureSlack)
+        {
+            GD.Print($"[aura] #{id} refused {peer}'s composure stamped {ts - arrival:F2} s ahead");
+            return null;
+        }
+        double heard = arrival - Math.Max(0, rtt) * 0.5;
+        if (Math.Abs(ts - heard) > StampSlack) ts = heard;
+        var held = m.Rules.Compose(peer, turn, ts, arrival);
+        if (held == null) GD.Print($"[aura] #{id} refused {peer}'s composure for turn {turn} ({m.Rules.Phase})");
+        return held;
+    }
+
     private static IEnumerable<long> Both(AuraMatch r)
     {
         yield return r.A;
@@ -418,7 +502,9 @@ public partial class AuraManager : Node
 
     private bool Connected(long peer) => Multiplayer.GetPeers().Contains((int)peer);
 
-    private string Who(long peer) => _chat?.NameOfPeer(peer) ?? $"#{peer}";
+    private string Who(long peer) =>
+        PlayerReplication.IsBotId(peer) ? Bots.BotDirector.Instance?.Get(peer)?.Profile.Name ?? "Bot"
+        : _chat?.NameOfPeer(peer) ?? $"#{peer}";
 
     private double RttOf(long peer)
     {
@@ -453,6 +539,14 @@ public partial class AuraManager : Node
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Compose(int id, int turn, double ts)
+    {
+        if (!_server) return;
+        long sender = Multiplayer.GetRemoteSenderId();
+        ComposeFor(sender, id, turn, ts, RttOf(sender));
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void RequestLeave()
     {
         if (!_server) return;
@@ -479,6 +573,15 @@ public partial class AuraManager : Node
         public int TotalA, TotalB;
         public long Winner;
         public bool Forfeited;
+        /// <summary>The battle's beat (#914): seconds per beat, a downbeat, and the CD it comes from ("" = the fixed 120).</summary>
+        public double Beat = AuraRules.BeatSeconds, Anchor;
+        public string Music = "";
+        /// <summary>Don't laugh first (#914): when the local waiter was tempted (NaN: not now), and each side's laughs.</summary>
+        public double TemptAt = double.NaN;
+        public int LaughsA, LaughsB;
+        /// <summary>When each battler last laughed, on the server clock, for the pose and the HUD.</summary>
+        public double LaughedAtA = double.NegativeInfinity, LaughedAtB = double.NegativeInfinity;
+        public bool Laughing(long who, double now) => now - (who == A ? LaughedAtA : LaughedAtB) < AuraBody.LaughSeconds;
 
         /// <summary>The combo being performed (from the countdown on), its first downbeat, and each press's grade so far.</summary>
         public AuraMove[] Plan = Array.Empty<AuraMove>();
@@ -498,6 +601,7 @@ public partial class AuraManager : Node
         public int MyTotal => IsA ? TotalA : TotalB;
         public int TheirTotal => IsA ? TotalB : TotalA;
         public int Round => Turn / 2 + 1;
+        public float Bpm => (float)(60.0 / Beat);
 
         /// <summary>Seconds left in the phase now.</summary>
         public float Left => (float)Math.Max(0, PhaseEnds - ClockSync.ServerNow);
@@ -530,6 +634,10 @@ public partial class AuraManager : Node
     /// <summary>A turn's verdict arrived.</summary>
     public event Action<AuraTurn>? VerdictEvent;
 
+    /// <summary>Don't laugh first (#914): the local waiter is tempted / a battler laughed (who).</summary>
+    public event Action? TemptEvent;
+    public event Action<long>? LaughEvent;
+
     private bool Online => NetLink.Online(this);
 
     public bool InBattle => Current != null;
@@ -558,9 +666,9 @@ public partial class AuraManager : Node
         if (!Online || Current is not { } v || !v.MyTurn) return null;
         if (v.Phase is not (AuraPhase.Perform or AuraPhase.Countdown) || v.NextIndex >= v.Plan.Length) return null;
         double now = ClockSync.ServerNow;
-        double cut = AuraRules.CutAt(v.Plan, v.NextIndex, v.T0);
+        double cut = AuraRules.CutAt(v.Plan, v.NextIndex, v.T0, v.Beat);
         // a beat or more early is a double tap: not sent, as the server would ignore it
-        if (now < cut - AuraRules.BeatSeconds) return null;
+        if (now < cut - v.Beat) return null;
         var grade = AuraRules.Grade(now - cut, AuraRules.Def(v.Plan[v.NextIndex]).Difficulty);
         RpcId(1, MethodName.Next, v.Id, v.Turn, v.NextIndex, now);
         if (v.NextIndex < v.Grades.Length && v.Grades[v.NextIndex] == AuraGrade.Pending) v.Grades[v.NextIndex] = grade;
@@ -568,27 +676,79 @@ public partial class AuraManager : Node
         return grade;
     }
 
+    /// <summary>
+    /// The local waiter keeps a straight face (#914): pressed while the rival performs. True when a
+    /// tempt is open (it is met); false when nothing tempts them, which the server takes as a laugh.
+    /// </summary>
+    public bool? PressCompose()
+    {
+        if (!Online || Current is not { } v || v.MyTurn || v.Phase != AuraPhase.Perform) return null;
+        if (v.Laughing(v.Me, ClockSync.ServerNow)) return null;
+        double now = ClockSync.ServerNow;
+        RpcId(1, MethodName.Compose, v.Id, v.Turn, now);
+        bool met = !double.IsNaN(v.TemptAt) && now <= v.TemptAt + AuraRules.TemptWindow;
+        v.TemptAt = double.NaN;
+        return met;
+    }
+
     public void Leave()
     {
         if (Online && Current != null) RpcId(1, MethodName.RequestLeave);
     }
 
+    // ---- E at a player who challenged you (#914) ----------------------------------------
+
+    /// <summary>Aura challenges to the local player: challenger to its deadline (local game time), from the invites.</summary>
+    public readonly Dictionary<long, double> Pending = new();
+    private readonly Dictionary<long, string> _names = new();
+    private bool _hooked;
+
+    private void OnInvitesChanged()
+    {
+        Pending.Clear();
+        if (InviteService.Client is not { } invites) return;
+        foreach (var v in invites.Incoming)
+        {
+            if (v.Kind != InviteId) continue;
+            Pending[v.Peer] = v.Until;
+            _names[v.Peer] = v.PeerName;
+        }
+    }
+
+    /// <summary>Whether <paramref name="peer"/> has an aura challenge out to the local player.</summary>
+    public bool ChallengedBy(long peer) => Pending.TryGetValue(peer, out double until) && GameClock.Now < until;
+
+    /// <summary>The prompt for E at a player who challenged the local player.</summary>
+    public string Prompt(long peer) => _names.TryGetValue(peer, out var n) ? $"Accept {n}'s aura battle" : "Accept the aura battle";
+
+    /// <summary>E at <paramref name="peer"/>: take its aura challenge. False when there is none (E stays the fight's).</summary>
+    public bool AcceptFrom(long peer)
+    {
+        if (!Online || Current != null || !ChallengedBy(peer)) return false;
+        if (InviteService.Client?.From(peer, InviteId) is not { } invite) return false;
+        InviteService.Client.Accept(invite.Id);
+        return true;
+    }
+
     // ---- RPCs: server to client ----------------------------------------------------------
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Begin(int id, long a, long b, string nameA, string nameB, double e, double n, double alt, float yaw)
+    private void Begin(int id, long a, long b, string nameA, string nameB, double e, double n, double alt, float yaw,
+        double beat, double anchor, string music)
     {
+        Pending.Clear();
         Current = new View
         {
             Id = id, A = a, B = b, NameA = nameA, NameB = nameB, Centre = new GlobalPos(e, n, alt), Yaw = yaw,
-            Me = Multiplayer.GetUniqueId(), Performer = a,
+            Me = Multiplayer.GetUniqueId(), Performer = a, Beat = beat > 0.05 ? beat : AuraRules.BeatSeconds, Anchor = anchor, Music = music,
         };
-        GD.Print($"[aura] #{id} begins: {nameA} vs {nameB}");
+        GD.Print($"[aura] #{id} begins: {nameA} vs {nameB} at {60.0 / Current.Beat:0} BPM{(music.Length > 0 ? $" ({music})" : "")}");
         PhaseChanged?.Invoke(AuraPhase.Intro);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void State(int id, int turn, long performer, int phase, double phaseEnds, int totalA, int totalB, long winner, bool forfeited)
+    private void State(int id, int turn, long performer, int phase, double phaseEnds, int totalA, int totalB, long winner, bool forfeited,
+        int laughsA, int laughsB)
     {
         if (Current is not { } v || v.Id != id) return;
         bool changed = v.Phase != (AuraPhase)phase || v.Turn != turn;
@@ -600,6 +760,8 @@ public partial class AuraManager : Node
         }
         v.Turn = turn; v.Performer = performer; v.Phase = (AuraPhase)phase; v.PhaseEnds = phaseEnds;
         v.TotalA = totalA; v.TotalB = totalB; v.Winner = winner; v.Forfeited = forfeited;
+        v.LaughsA = laughsA; v.LaughsB = laughsB;
+        if (v.Phase != AuraPhase.Perform) v.TemptAt = double.NaN;
         if (!changed) return;
         GD.Print($"[aura] #{id} turn {turn} {v.Phase}: {v.NameOf(performer)}, {totalA}-{totalB}");
         PhaseChanged?.Invoke(v.Phase);
@@ -643,6 +805,25 @@ public partial class AuraManager : Node
         if (v.History.Count == turn) v.History.Add(t);
         GD.Print($"[aura] #{id} verdict turn {turn}: {v.NameOf(performer)} {t.Score.Total}");
         VerdictEvent?.Invoke(t);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Tempt(int id, int turn, double temptAt)
+    {
+        if (Current is not { } v || v.Id != id || turn != v.Turn || v.MyTurn) return;
+        v.TemptAt = temptAt;
+        TemptEvent?.Invoke();
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Laughed(int id, int turn, long who)
+    {
+        if (Current is not { } v || v.Id != id) return;
+        if (who == v.A) v.LaughedAtA = ClockSync.ServerNow;
+        else v.LaughedAtB = ClockSync.ServerNow;
+        if (who == v.Me) v.TemptAt = double.NaN;
+        GD.Print($"[aura] #{id} turn {turn}: {v.NameOf(who)} laughed first");
+        LaughEvent?.Invoke(who);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
