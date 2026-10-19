@@ -126,6 +126,11 @@ public partial class PhoneProbe : Node
         Shot("phone_9_selfie.png");
         await Key(Godot.Key.Enter, 1.5);
         Check(phone.LastPhoto != null && phone.LastPhoto != first, $"Enter takes the selfie ({phone.LastPhoto})");
+        if (phone.LastPhoto is { } selfie && Items.PhotoStore.Meta(selfie)?.Source is { Length: > 0 } src && Image.LoadFromFile(src) is { } taken)
+        {
+            float shot = (float)taken.GetWidth() / taken.GetHeight(), cover = PhoneModel.CoverSize.X / PhoneModel.CoverSize.Y;
+            Check(Mathf.Abs(shot - cover) < 0.03f, $"the selfie is cropped to what the cover showed ({taken.GetWidth()}x{taken.GetHeight()}, {shot:F2} against {cover:F2})");
+        }
         Save(phone.Screens.Cover, "phone_9_selfie_cover.png");
         await Key(Godot.Key.F, 0.8);
         Check(me.PhoneState == FootPlayer.PhoneCameraState, "F turns it back");

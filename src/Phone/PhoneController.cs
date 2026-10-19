@@ -463,6 +463,10 @@ public partial class PhoneController : Node
             Play(PhoneSounds.Shutter);
             float fov = _screens.Lens.Fov;
             var image = await Items.PhotoCapture.Render(this, _screens.Lens, fov);
+            // what the screen showed, no more: the lens's frame cropped to the viewfinder's shape (the tall
+            // cover for a selfie, the inner screen otherwise), the same height of view
+            var finder = _screens.Finder.Size;
+            image = CropTo(image, (float)finder.X / finder.Y);
             // beside the album's prints (--photo-dir moves both, for the checks)
             string dir = System.IO.Path.GetDirectoryName(Items.PhotoStore.LocalDir)!;
             System.IO.Directory.CreateDirectory(dir);
@@ -484,6 +488,17 @@ public partial class PhoneController : Node
         {
             _shooting = false;
         }
+    }
+
+    /// <summary>The middle of <paramref name="image"/> at <paramref name="aspect"/> (width over height), as a screen covered by it shows.</summary>
+    internal static Image CropTo(Image image, float aspect)
+    {
+        int w = image.GetWidth(), h = image.GetHeight();
+        if (w <= 0 || h <= 0 || aspect <= 0f) return image;
+        var region = (float)w / h > aspect
+            ? new Rect2I((w - Mathf.RoundToInt(h * aspect)) / 2, 0, Mathf.RoundToInt(h * aspect), h)
+            : new Rect2I(0, (h - Mathf.RoundToInt(w / aspect)) / 2, w, Mathf.RoundToInt(w / aspect));
+        return region.Size == new Vector2I(w, h) ? image : image.GetRegion(region);
     }
 
     /// <summary>

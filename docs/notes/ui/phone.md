@@ -131,4 +131,8 @@
   right at arm's length, the left arm loose, the head tipped toward it. The face looks into the lens and
   goes through Happy, Joy, Wink, Love, 2.5 s each, off `ClockSync.ServerNow` (`FootPlayer.SelfieFace`), so
   every peer shows the same one. The lens turns onto the head (a phone's face tracking), the phone's up kept.
+- **What you see is what is taken**: a shot is `PhotoCapture.Render`'s window-sized frame cropped to the
+  viewfinder's shape (`PhoneController.CropTo`: the cover's 0.68 for a selfie, the inner screen's 1.4
+  otherwise), the same height of view: the saved photo is exactly the preview (`--phonecheck` checks the
+  selfie's shape).
 
