@@ -12,6 +12,7 @@ tc_server 420 120 $OUT/sightingnet_server.log --server --port $PORT $WORLD --occ
 tc_client 380 $OUT/sightingnet_A.log --connect 127.0.0.1:$PORT --name SpotterA $WORLD --sightingnet A &
 A=$!
 WIN=; [ -n "${SHOTS:-}" ] && WIN="--windowed --windowed-shots --time 22 --style cartoon"
+mkdir -p "$OUT/userdata_sightingnet_B"
 ( tc_userdata "$OUT/userdata_sightingnet_B"; tc_client 380 $OUT/sightingnet_B.log $WIN --connect 127.0.0.1:$PORT --name SpotterB $WORLD --view third --nocapture --sightingnet B )
 wait $A
 tc_stop

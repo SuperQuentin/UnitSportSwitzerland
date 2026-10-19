@@ -105,7 +105,7 @@ deck appears at least once across the three films, and each film covers most of 
 ## Status
 
 - [x] A UFO (#861): PR #871. Built differently: the beam also wakes dormant vehicles; pallets and props are not beamable (not bodies).
-- [ ] B UFO sightings (#863)
+- [x] B UFO sightings (#863): PR #877
 - [x] C bubbles and subtitles (#862): PR #875 (online bubbles not checked over the network yet)
 - [ ] D The Stolen Fondue (#864)
 - [ ] E The Alien Tourist (#865)

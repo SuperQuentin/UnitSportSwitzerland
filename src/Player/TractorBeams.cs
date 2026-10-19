@@ -111,7 +111,7 @@ public partial class TractorBeams : Node
         float bestDepth = float.MaxValue;
         foreach (var b in Active(tree))
         {
-            if (b.Pilot == except || !TractorBeamMath.InCone(b.Apex, point)) continue;
+            if (except != null && b.Pilot == except || !TractorBeamMath.InCone(b.Apex, point)) continue;
             float depth = b.Apex.Y - point.Y;
             if (depth < bestDepth) { bestDepth = depth; best = b; }
         }
