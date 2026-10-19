@@ -46,7 +46,7 @@ public partial class PhoneController : Node
     private const float Hover = 0.016f, Touching = 0.002f;
     /// <summary>The main camera's field of view for a selfie, up the tall cover screen.</summary>
     private const float SelfieFov = 80f;
-    /// <summary>In VR, a travel waits this long (real seconds) for the phone raised to the eyes, then blinks.</summary>
+    /// <summary>In VR, a travel waits this long (game seconds, <see cref="GameClock"/>) for the phone raised to the eyes, then blinks.</summary>
     private const double VrRaiseSeconds = 3.0;
     /// <summary>A mouse drag longer than this (window pixels) is a swipe, not a click.</summary>
     private const float SwipePixels = 14f;
@@ -70,6 +70,7 @@ public partial class PhoneController : Node
     /// <summary>Travelling: since when (real clock), and when the body landed there (−1: not yet).</summary>
     private double _travelSince = -1, _landedAt = -1;
     private bool _arrived;
+    private double _vrTravelAsked;
     /// <summary>Folds and goes back in the pocket once closed (put away while open, or opened by a teleport).</summary>
     private bool _stowWhenFolded;
     private bool _shooting;
@@ -627,6 +628,7 @@ public partial class PhoneController : Node
         GD.Print($"[phone] travel behind the phone to {where}");
         _pendingJump = jump;
         _travelSince = RealClock.Now;
+        _vrTravelAsked = GameClock.Now;
         _landedAt = -1;
         _arrived = false;
         // it goes away again once there, as a call answered from the cover does
@@ -666,7 +668,7 @@ public partial class PhoneController : Node
                 GD.Print("[phone] travel behind the phone at the eyes");
                 RunPendingJump();
             }
-            else if (RealClock.Now - _travelSince > VrRaiseSeconds)
+            else if (GameClock.Now - _vrTravelAsked > VrRaiseSeconds)
             {
                 XR.XrSession.Rig?.Blink();
                 RunPendingJump();
