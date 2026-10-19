@@ -6,14 +6,15 @@
 A feature tour with a story, 4:09.6, staged and filmed by the trailer director
 (`src/Trailer/FondueScript.cs`, `FILM=fondue tools/trailer.sh preview|stills|render`). The plan:
 `docs/plans/ufo-feature-films.md` (piece D). Every shot is in **Cartoon** (never PS1, never the
-Realistic styles) and on **real terrain** (the built tiles: Zermatt, the Bernese Oberland, Lausanne
-and Lavaux, Chillon, Nyon, Geneva, Riddes, the Furka and the Gotthard, Bern, Zürich).
+Realistic styles) and on **real terrain**: every Swiss tile within 5 km of a camera or a spot (8 km
+for an eye over 2,200 m) is a built one, the kit's check (#882) says so before each shot.
 
-**Marks used below**: **[UFO]** a beat that needs the flyable UFO (#861); until stage 2 a stand-in
-flies it (the light plane on the move, the helicopter where it hovers), commented
-`// UFO (#861) in stage 2` in the code. **[BUBBLE]** a line of dialogue; until #862 lands it shows
-in the group chat, then as a comic speech bubble over the speaker. Line ids (`f02a`, ...) and card ids
-(`s01`, `t06`, ...) are the keys of `docs/trailer/fondue.subtitles.json` (en, fr, de, it, rm).
+Built with the film kit (#882, `docs/notes/trailer/film-kit.md`): **the UFO** is #861's saucer, an
+actor where it flies, a `Craft` where it hovers or stands, its beam lifting what is under it (the
+caquelon, a cow, a fish, a car); its pilot ZORP is #880's alien. **The dialogue** is comic speech
+bubbles (#862), each with an id (`f02a`, ...), as the titles (`t06`, ...): the keys of
+`docs/trailer/fondue.subtitles.json`, every line in en, fr, de, it and rm, muxed as five subtitle
+tracks into the film. Place and hour cards are not subtitled.
 
 ## The idea
 
@@ -34,11 +35,11 @@ a race), a lake (boats), a trap (the building site, a hammer, a campfire), the p
 | Character | Who | Look | Their ways |
 |---|---|---|---|
 | **LÉA** | The organiser, never gives up | Green polo, ponytail | Paraglider, on foot (sprint and slide), road bike, IKEA, the bait |
-| **MARCO** | The petrolhead | White T-shirt, shades, quiff | Skis, "all of them" (every car of the garage), the race, the crash, the jetski |
+| **MARCO** | The petrolhead | White T-shirt, shades, quiff | Skis, "all of them" (every car of the garage), the race, the crash, a swim, the jetski |
 | **NINA** | The pilot | Navy polo, glasses, bun | Helicopter, light plane, speedboat, the A320, the drop plane |
 | **JONAS** | The builder | Beanie, striped long sleeve | Base jump, wingsuit, parachute, tractor, fishing, the excavator, the hammer |
 | **THE PIGEON** | Bern's witness, the fifth guest | A pigeon | Flies, talks (once) |
-| **ZORP** | The UFO's pilot, a gourmet | [UFO] stage 2: the pilot #861 gives the saucer | The UFO |
+| **ZORP** | The UFO's pilot, a gourmet | #880's alien (`Aliens.Zorp`) | The UFO, down its ramp |
 | *The racer* | A stranger on the Furka | Mohawk, black vest | The grid |
 
 The four are the friends of "Meet You at the Top" (`StoryScript.Lea`, `Marco`, `Nina`, `Jonas`):
@@ -61,162 +62,143 @@ Bar map: cold open 1-11 · act one (the mountain) 12-26 · act two (the clues) 2
 
 ## Shot list
 
-Times are `start-end` in the film. Places in LV95. Lenses full-frame mm.
+Times are `start-end` in the film. Places in LV95. Lenses full-frame mm. Lines are bubbles (shout,
+whisper, think where marked); the id is the subtitle key.
 
 ### Cold open: the fondue (bars 1-11)
 
 | # | Bars | Time | Place | What happens | Camera | Feature | Lines |
 |---|---|---|---|---|---|---|---|
-| 1 | 1-3 | 0:00.0-0:09.6 | Gornergrat, 2627300/1092800 → the Matterhorn | Sunset on the Matterhorn, fade up | Slow drone push along the ridge, 50 | Real terrain, sunset | Card `s01` GORNERGRAT · 3135 M · 17:40 |
-| 2 | 4-5 | 0:09.6-0:15.0 | Gornergrat, the flat by the Kulmhotel 2626790/1092478 | The four round the pot, the radio on its rock; Jonas holds the bread | Orbit at chest height, 28 | Characters, items (pot, radio, bread) | [BUBBLE] `f02a` LÉA "Fondue's ready!" · `f02b` MARCO "Finally. I'm starving." |
-| 3 | 6 | 0:15.0-0:17.6 | Same | A light in the sky, coming in from the north-east | Low behind them, looking up at it, 28 | [UFO] arrival | [BUBBLE] `f03` JONAS "Uh... guys?" |
-| 4 | 7-8 | 0:17.6-0:23.0 | Same | The saucer hovers over them; its beam lifts the caquelon; Léa waves her arms | Wide and low from the south, tilting up, 24 | [UFO] tractor beam | [BUBBLE] `f04` LÉA "HEY! That's OUR fondue!" (shout) |
-| 5 | 9 | 0:23.0-0:25.6 | Same | It shoots off toward the Matterhorn with the pot | Panning with it from the ridge, 35 | [UFO] flight, boost | — |
-| 6 | 10-11 | 0:25.6-0:31.0 | Same | Fists up: the chase is on. Title | Low hero orbit, 24 | Emotes; the title | [BUBBLE] `f06` MARCO "AFTER IT!" (shout) · title `t06` THE STOLEN FONDUE, `t06b` |
+| 1 | 1-3 | 0:00.0-0:09.6 | Gornergrat, 2627300/1092800 → the Matterhorn | Sunset on the Matterhorn, fade up | Slow drone push along the ridge, 50 | Real terrain, sunset | card GORNERGRAT · 3135 M · 17:40 |
+| 2 | 4-5 | 0:09.6-0:15.0 | Gornergrat, the flat by the Kulmhotel 2626790/1092478 | The four round the pot, the radio on its rock; Jonas holds the bread | Orbit at chest height, 28 | Characters, items | `f02a` LÉA "Fondue's ready!" · `f02b` MARCO "Finally. I'm starving." |
+| 3 | 6 | 0:15.0-0:17.6 | Same | The saucer comes in from the north-east, lamps lit | By the hotel behind them, looking up at it, 28 | The UFO | `f03` JONAS "Uh... guys?" |
+| 4 | 7-8 | 0:17.6-0:23.0 | Same | It hovers 14 m over the pot; the beam lifts the caquelon; the four stepped back out of the cone | Wide from the east, tilting up with the pot, 24 | The tractor beam | `f04` LÉA "HEY! That's OUR fondue!" (shout) |
+| 5 | 9 | 0:23.0-0:25.6 | Same | It boosts away toward the Matterhorn | Panning with it, 35 | The UFO's flight | — |
+| 6 | 10-11 | 0:25.6-0:31.0 | Same | The four in a row, fists up. Title | Low hero orbit, 24 | Emotes; the title | `f06` MARCO "AFTER IT!" (shout) · title `t06`, `t06b` |
 
 ### Act one: down the mountain, into the sky (bars 12-26)
 
 | # | Bars | Time | Place | What happens | Camera | Feature | Lines |
 |---|---|---|---|---|---|---|---|
-| 7 | 12 | 0:31.0-0:33.6 | Gornergrat south edge (≈2626800/1092460 → 160°) | Jonas sprints off the ridge, jumps, jumps again: the wingsuit opens | Chasing behind his shoulder, 24 | On foot: run, base jump into the wingsuit | — |
-| 8 | 13-14 | 0:33.6-0:39.0 | Over the Gorner glacier, 2626400/1091900 at 3000 m | Wingsuit flight; the saucer ahead, low over the ice | Close chase, 24, handheld drift | Wingsuit; [UFO] | [BUBBLE] `f08` JONAS "Stop, thief! Bring back the cheese!" |
-| 9 | 15 | 0:39.0-0:41.6 | Over Riffelalp, 2624900/1093900 at 2500 m | The canopy opens | Swinging round him, 35 | Parachute | — |
-| 10 | 16 | 0:41.6-0:44.3 | Theodul glacier, 2621770/1089700 | Marco in a full tuck, flat out | Low ahead, he passes, 24 | Skis | [BUBBLE] `f10` MARCO "Wait for meeee!" |
-| 11 | 17-18 | 0:44.3-0:49.6 | Gornergrat ridge, 2626800/1092385 | Nina's helicopter lifts off the ridge | From the ridge, 35 | Helicopter | [BUBBLE] `f11` NINA "I'll take the chopper." |
-| 12 | 19-20 | 0:49.6-0:55.0 | Over the Aletsch, 2646200/1151600 at 3150 m | Nina in the light plane, the saucer ahead over the ice | Wing-man position, 35 | Light plane; [UFO] | [BUBBLE] `f12` NINA "Got it! It's over the glacier!" |
+| 7 | 12 | 0:31.0-0:33.6 | Gornergrat south edge, 51 m from the pot at 167° | Jonas leaps off the edge in his wingsuit | Behind his shoulder, 24 | Base jump into the wingsuit | — |
+| 8 | 13-14 | 0:33.6-0:39.0 | Over the Gornergrat's west flank, 2626300/1093000 at 3000 m | Wingsuit flight; the saucer ahead | Close chase, 24, handheld drift | Wingsuit; the UFO | `f08` JONAS "Stop, thief! Bring back the cheese!" (shout) |
+| 9 | 15 | 0:39.0-0:41.6 | Over Zermatt, 2624600/1094800 at 2700 m | The canopy opens | Swinging round him, 35 | Parachute | — |
+| 10 | 16 | 0:41.6-0:44.3 | The Gornergrat's west slope, 220 m from the pot at 250° | Marco in a full tuck | Low ahead, he passes, 24 | Skis | `f10` MARCO "Wait for meeee!" (shout) |
+| 11 | 17-18 | 0:44.3-0:49.6 | Gornergrat ridge, 2626800/1092385 | Nina's helicopter lifts off | From the ridge, 35 | Helicopter | `f11` NINA "I'll take the chopper." |
+| 12 | 19-20 | 0:49.6-0:55.0 | Over the Aletsch, 2646200/1151600 at 3150 m | Nina in the light plane, the saucer ahead over the ice | Wing-man position, 35 | Light plane; the UFO | `f12` NINA "Got it! It's over the glacier!" (shout) |
 | 13 | 21 | 0:55.0-0:57.6 | Interlaken, 2632479/1170652, 380 m up | Léa under her paraglider | Orbit round the canopy, 35 | Paraglider | — |
-| 14 | 22-23 | 0:57.6-1:03.0 | Lauterbrunnen valley, 2635900/1159300 | The helicopter up the valley, waterfalls, the village | Alongside, 35 | Real valleys and villages | [BUBBLE] `f14` NINA "Lost it. Where did it go?" |
-| 15 | 24 | 1:03.0-1:05.6 | The Bernese Oberland from 9 km up | The map: where could it be? | Straight down (stand-in for the map screen) | **The map** (needs a director addition, below) | [BUBBLE] `f15` LÉA "Everyone split up. Find clues." |
-| 16 | 25-26 | 1:05.6-1:11.0 | Lausanne from above Lutry, 2542900/1151150 | Time-lapse: the sun into the lake, the windows light up | Locked off, slow push, 35 | Day and night | Card `s16` LAUSANNE · 21:00 |
+| 14 | 22-23 | 0:57.6-1:03.0 | Lauterbrunnen valley, 2635900/1159300 | The helicopter up the valley, cliffs and the village | Alongside, 35 | Real valleys and villages | `f14` NINA "Lost it. Where did it go?" |
+| 15 | 24 | 1:03.0-1:05.6 | The game's map | Where could it be? | The map screen over the frame | The in-game map (the terrain download screen) | `f15` LÉA, voice off: "Everyone split up. Find clues." |
+| 16 | 25-26 | 1:05.6-1:11.0 | Lausanne from above Lutry, 2542900/1151150 | Time-lapse: the sun goes, the windows light up | Locked off, slow push, 35 | Day and night | card LAUSANNE · 21:00 |
 
 ### Act two: the clues (bars 27-64)
 
 | # | Bars | Time | Place | What happens | Camera | Feature | Lines |
 |---|---|---|---|---|---|---|---|
-| 17 | 27-28 | 1:11.0-1:16.3 | Bern, Kramgasse, 2601080/1199661 → the Zytglogge | Night: the pigeon glides down the street | Chasing it, 24 | Play as a pigeon; a real old town at night | Card `s17` BERN · 23:10 |
-| 18 | 29 | 1:16.3-1:19.0 | Kramgasse, 2600980/1199658 | Léa sprints after it and slides | Tracking beside her, 28 | On foot: sprint, slide | [BUBBLE] `f18` LÉA "Pigeon! Wait!" |
-| 19 | 30-31 | 1:19.0-1:24.3 | Kramgasse, 2600850/1199656 | The pigeon on the cobbles talks to Léa | Low, between them, 28 | Birds | [BUBBLE] `f19a` PIGEON "Coo. Big plate. Went south. Coo." · `f19b` LÉA "...Thanks?" |
-| 20 | 32-33 | 1:24.3-1:29.6 | Geneva airport apron, 2497250/1121000 | Marco walks between a row of 12 cars and a row of 10 motorbikes | Backing ahead of him, 28 | The 30 cars, the 74 motorbikes | Card `s20` GENÈVE · 07:00 · [BUBBLE] `f20a` MARCO "Which one...?" · `f20b` "All of them." |
-| 21 | 34-35 | 1:29.6-1:35.0 | Gotthard, the old road, 2686600/1154120 | A Duro, a Trakker and a coach climb the hairpins | Across the valley, 50 | Trucks, buses, the army | Card `s21` GOTTHARD · 07:30 |
-| 22 | 36-37 | 1:35.0-1:40.3 | Tremola, 2686790/1156030 | Marco's AE86 down the cobbled hairpins; the saucer hovers below | Outside the hairpin, panning, 50 | Cars on a real pass; [UFO] | [BUBBLE] `f22` MARCO "There you are!" |
-| 23 | 38 | 1:40.3-1:43.0 | Furka, 2672150/1157560 | From the Supra's seat: the wheel, the dash, the saucer up the pass | Over the driver's shoulder, 28 | Cockpit view; [UFO] | — |
-| 24 | 39 | 1:43.0-1:45.6 | Furka | Six cars on a grid; a stranger wants in | Low beside the grid, 50 | Races with AI drivers | [BUBBLE] `f24` RACER "Race you to the saucer!" |
+| 17 | 27-28 | 1:11.0-1:16.3 | Bern, Kramgasse, 2601080/1199661 → the Zytglogge | Night: the pigeon glides down the street | Chasing it, 24 | Play as a pigeon; a real old town at night | card BERN · 23:10 |
+| 18 | 29 | 1:16.3-1:19.0 | Kramgasse, 2600980/1199658 | Léa sprints after it and slides | Behind her, low, 28 | On foot: sprint, slide | `f18` LÉA "Pigeon! Wait!" (shout) |
+| 19 | 30-31 | 1:19.0-1:24.3 | Kramgasse, 2600850/1199656 | The pigeon on the cobbles talks to Léa | Low, both in frame, 28 | Birds | `f19a` PIGEON "Coo. Big plate. Went south. Coo." · `f19b` LÉA "...Thanks?" |
+| 20 | 32-33 | 1:24.3-1:29.6 | The Pully meadow, 2542935/1152276 | Marco walks between 12 cars and 10 motorbikes in rows | Behind and above him, down the rows, 24 | The cars, the motorbikes | card PULLY · 07:00 · `f20a` MARCO "Which one...?" (think) · `f20b` "All of them." |
+| 21 | 34-35 | 1:29.6-1:35.0 | Gotthard, 2686600/1154120 | A Duro, a Trakker and a coach climb the hairpins | Across the valley, 50 | Trucks, buses, the army | card GOTTHARD · 07:30 |
+| 22 | 36-37 | 1:35.0-1:40.3 | Tremola, 2686790/1156030 | The AE86 down the cobbled hairpins, the saucer hovering up the road behind | Outside the hairpin, 50 | Cars on a real pass; the UFO | `f22` MARCO "There you are!" (shout) |
+| 23 | 38 | 1:40.3-1:43.0 | The Lavaux corniche, 2547020/1149060 | From the Supra's seat: the wheel, the dash, the saucer over the lake ahead | Over the driver's shoulder, 28 | Cockpit view; the UFO | — |
+| 24 | 39 | 1:43.0-1:45.6 | Furka, 2672150/1157560 | Six cars on a grid; a stranger wants in | Low beside the grid, 50 | Races with AI drivers | `f24` RACER "Race you to the saucer!" (shout) |
 | 25 | 40-41 | 1:45.6-1:51.0 | Furka, the bend over the young Rhône | The pack through the bend | Top-down, 80 m up, 35 | Racecraft | — |
-| 26 | 42 | 1:51.0-1:53.6 | Furka | A motorbike leans past a GT-R | Low alongside, 35 | Motorbikes | — |
-| 27 | 43 | 1:53.6-1:56.3 | Tremola | Léa down the hairpins on the road bike | Chase, 35 | Road bike | [BUBBLE] `f27` LÉA "Legs... don't... fail me now!" |
-| 28 | 44 | 1:56.3-1:59.0 | Riddes straight, 2583100/1113236 | Marco, looking up at the sky, into a wall: out through the windscreen | Beside the road, 35 | The crash, the ragdoll | [BUBBLE] `f28` MARCO "I'm fine!" |
-| 29 | 45-46 | 1:59.0-2:04.3 | Riddes fields, 2584199/1113836 | Jonas on the tractor with a plough, a combine behind; the saucer beams up a bale | Alongside, 28 | Farming: tractor, combine, fields; [UFO] | Card `s29` RIDDES · 11:00 · [BUBBLE] `f29` JONAS "It's taking the hay too?!" |
-| 30 | 47-48 | 2:04.3-2:09.6 | IKEA Riddes, 2582265/1112638 | Léa out of the door with a new caquelon, Nina with a shark | In front of them, 28 | IKEA, shops, items | [BUBBLE] `f30` LÉA "Plan B: a new caquelon." |
-| 31 | 49-50 | 2:09.6-2:15.0 | Lavaux, off 2546900/1148660 | The paddle steamer heads east; the saucer skims the lake ahead of it | High on the terraces, 35 | The CGN steamer; [UFO] | Card `s31` LAVAUX · 13:00 |
-| 32 | 51-52 | 2:15.0-2:20.3 | Off Chillon, 2560693/1140362 | Marco on a jetski, Nina in a speedboat, after it | Low on the water, 35 | Jetski, speedboat | [BUBBLE] `f32` MARCO "Faster! It's getting away!" |
-| 33 | 53 | 2:20.3-2:23.0 | Nyon, the quay by the pier, 2508061/1137475 | Jonas fishing; the beam takes his fish | Beside him, 28 | Fishing; [UFO] | [BUBBLE] `f33` JONAS "Not my fish too!" |
-| 34 | 54-55 | 2:23.0-2:28.3 | Pully building site, 2542905/1152292 | Excavator, loader and roller at work, the tower cranes slewing: the trap | Rising crane move, 35 | Building sites, works machines, tower cranes | Card `s34` PULLY · 16:00 · [BUBBLE] `f34` JONAS "Okay. We build a trap." |
-| 35 | 56 | 2:28.3-2:31.0 | Same, the meadow, 2542915/1152282 | Jonas with his hammer at a crate | Over his shoulder, 28 | Building with a hammer | — |
-| 36 | 57 | 2:31.0-2:33.6 | Same, 2542900/1152270 | The bait: the new pot on a campfire, the radio playing, Léa with the cheese | Low on the fire, 28 | Cooking, the campfire, the radio | [BUBBLE] `f36` LÉA "Bait: one fondue, extra garlic." |
-| 37 | 58-59 | 2:33.6-2:39.0 | Same, 2542907/1152264 | Marco and Jonas fight for the first dip: jab, uppercut, kick; Jonas down, Marco wins | Side on, 28 | Fist fights | [BUBBLE] `f37a` MARCO "First dip is mine!" · `f37b` JONAS "No way!" |
-| 38 | 60 | 2:39.0-2:41.6 | Same, night | Léa alone by the pot. A shrug | Wide and low, 28 | Night, emotes | Card `s38` DAY 12 · [BUBBLE] `f38` LÉA "..." |
-| 39 | 61-62 | 2:41.6-2:47.0 | Lauterbrunnen main street, 2635922/1160430 | Still looking, in witch hats and pumpkin heads; jack-o'-lanterns at the doors | Down the street, 28 | Halloween | Card `s39` 31 OCTOBER · [BUBBLE] `f39` MARCO "Still no fondue." |
-| 40 | 63-64 | 2:47.0-2:52.3 | Same frame | Snow, Santa hats and antlers, the town's fir | Same, 28 | Christmas | Card `s40` 24 DECEMBER · [BUBBLE] `f40` NINA "Wait. Radar ping!" |
+| 26 | 42 | 1:51.0-1:53.6 | The Lavaux corniche | A motorbike leans past a GT-R | Low alongside, 35 | Motorbikes | — |
+| 27 | 43 | 1:53.6-1:56.3 | Tremola | Léa down the hairpins on the road bike | Outside the hairpin, 50 | Road bike | `f27` LÉA "Legs... don't... fail me now!" |
+| 28 | 44 | 1:56.3-1:59.0 | Riddes straight, 2583100/1113236 | Marco into a wall: out through the windscreen | Beside the road, 35 | The crash, the ragdoll | `f28` MARCO "I'm fine!" |
+| 29 | 45-46 | 1:59.0-2:04.3 | Riddes fields, 2584199/1113836 | Jonas on the tractor, plough down, a combine behind; the saucer beams up a cow from a herd | High behind them, 28 | Farming; cows; the beam | card RIDDES · 11:00 · `f29` JONAS "It's taking the cows too?!" (shout) |
+| 30 | 47-48 | 2:04.3-2:09.6 | IKEA Riddes, 2582253/1112644 | Léa out of the door with a new caquelon, Nina with a shark | In front of them, 28 | IKEA, shops, items | `f30` LÉA "Plan B: a new caquelon." |
+| 31 | 49 | 2:09.6-2:12.3 | Lavaux, off 2546900/1148660 | The paddle steamer heads east, the saucer low over the lake by it | High on the terraces, 35 | The CGN steamer; the UFO | card LAVAUX · 13:00 |
+| 32 | 50 | 2:12.3-2:15.0 | Off Lavaux, 2546905/1148760 | Marco swims after the steamer | Over the water beside him, 28 | Swimming | `f31` MARCO "Wait! I have a ticket!" (shout) |
+| 33 | 51-52 | 2:15.0-2:20.3 | Off Chillon, 2560693/1140362 | Marco on a jetski, Nina in a speedboat, after it | Chasing the jetski, 28 | Jetski, speedboat | `f32` MARCO "Faster! It's getting away!" (shout) |
+| 34 | 53 | 2:20.3-2:23.0 | Nyon, the quay north of the pier, 2508077/1137494 | Jonas fishing, his line out; the saucer beams up his catch beside him | Side on, the steamer at the pier behind, 28 | Fishing; the beam | `f33` JONAS "Not my fish too!" (shout) |
+| 35 | 54-55 | 2:23.0-2:28.3 | Pully building site, 2542905/1152292 | Excavator, loader and roller at work, the tower cranes slewing: the trap | Rising crane move, 35 | Building sites, works machines, tower cranes | card PULLY · 16:00 · `f34` JONAS "Okay. We build a trap." |
+| 36 | 56 | 2:28.3-2:31.0 | The meadow by it, 2542915/1152282 | Jonas with his hammer at a crate | Over his shoulder, 28 | Building with a hammer | — |
+| 37 | 57 | 2:31.0-2:33.6 | Same, 2542900/1152270 | The bait: the new pot by a burning campfire, the radio, Léa with the cheese | Low on the fire, 28 | Cooking, the campfire, the radio | `f36` LÉA "Bait: one fondue, extra garlic." |
+| 38 | 58-59 | 2:33.6-2:39.0 | Same, 2542907/1152264 | Marco and Jonas fight for the first dip: jab, uppercut, kick; Jonas down, Marco wins | Side on, 28 | Fist fights | `f37a` MARCO "First dip is mine!" · `f37b` JONAS "No way!" (shouts) |
+| 39 | 60 | 2:39.0-2:41.6 | Same, night | Léa alone by the pot. A shrug | Wide and low, 28 | Night, emotes | card DAY 12 · `f38` LÉA "..." (think) |
+| 40 | 61-62 | 2:41.6-2:47.0 | Lauterbrunnen main street, 2635922/1160430 | Still looking, in witch hats and pumpkin heads; jack-o'-lanterns at the doors | Down the street, 35 | Halloween | card 31 OCTOBER · `f39` MARCO "Still no fondue." |
+| 41 | 63-64 | 2:47.0-2:52.3 | Same frame | Snow, Santa hats and antlers | Same, 35 | Christmas | card 24 DECEMBER · `f40` NINA "Wait. Radar ping!" |
 
 ### Act three: the air and the drop (bars 65-77)
 
 | # | Bars | Time | Place | What happens | Camera | Feature | Lines |
 |---|---|---|---|---|---|---|---|
-| 41 | 65-66 | 2:52.3-2:57.6 | Geneva, runway 23, 2496388/1120293 | Nina's A320 climbs out over our heads | On the centreline, tilting up, 28 | The A320 | Card `s41` GENÈVE · 26 DECEMBER · [BUBBLE] `f41` NINA "Everyone aboard. It's over the Alps!" |
-| 42 | 67-68 | 2:57.6-3:03.0 | Nyon, off the shore | The AN-124 low over the lake | From the water, 35 | The AN-124 | — |
-| 43 | 69 | 3:03.0-3:05.6 | Over the Bernese Oberland, 2638000/1163000 at 3100 m | The military freighter, ramp open | Formation flight, 35 | Battle Royale: the cargo plane | — |
-| 44 | 70 | 3:05.6-3:08.3 | Same | Léa, Marco and Jonas jump | Above the tail, 35 | Battle Royale: the drop | — |
-| 45 | 71 | 3:08.3-3:11.0 | Lauterbrunnen | Three wingsuits streak past | Static in the air, 24 | Wingsuits | — |
-| 46 | 72 | 3:11.0-3:13.6 | Lauterbrunnen meadow, 2635930/1159420 | Jonas and Marco run for the zone, its wall glowing behind | Behind them, 28 | Battle Royale: the zone | [BUBBLE] `f46` JONAS "The zone is closing!" |
-| 47 | 73 | 3:13.6-3:16.3 | Same | Marco holds up his loot: a cheese | Low, 24 | Battle Royale: loot | [BUBBLE] `f47` MARCO "Cheese! ...Wrong cheese." |
-| 48 | 74-75 | 3:16.3-3:21.6 | Zürich, 2683480/1246900 | Evening gridlock; the saucer over the crossroads | High, long lens, 50 | A real city, traffic; [UFO] | Card `s48` ZÜRICH · 18:20 |
-| 49 | 76-77 | 3:21.6-3:27.0 | Bern, Kramgasse at night | Marco's Yaris down the arcades, headlights on | Low in the street, 28 | Night, headlights | [BUBBLE] `f49` MARCO "It's heading back to the mountain!" |
+| 42 | 65-66 | 2:52.3-2:57.6 | Geneva, runway 23, 2496388/1120293 | Nina's A320 climbs out over our heads | On the centreline, tilting up, 28 | The A320 | card GENÈVE · 26 DECEMBER · `f41` NINA "Everyone aboard. It's over the Alps!" |
+| 43 | 67-68 | 2:57.6-3:03.0 | Nyon, off the shore | The AN-124 low over the lake | From the water, 35 | The AN-124 | — |
+| 44 | 69 | 3:03.0-3:05.6 | Over the Bernese Oberland, 2638000/1163000 at 3100 m | The military freighter, ramp open | Formation flight, 35 | Battle Royale: the cargo plane | — |
+| 45 | 70 | 3:05.6-3:08.3 | Same | Léa, Marco and Jonas jump | Above the tail, 35 | Battle Royale: the drop | — |
+| 46 | 71 | 3:08.3-3:11.0 | Lauterbrunnen | Three wingsuits streak past | Static in the air, 24 | Wingsuits | — |
+| 47 | 72 | 3:11.0-3:13.6 | Lauterbrunnen, the west slope, 2635930/1159420 | Jonas and Marco run from the zone's wall | In front of them, the wall behind, 24 | Battle Royale: the zone | `f46` JONAS "The zone is closing!" (shout) |
+| 48 | 73 | 3:13.6-3:16.3 | Same | Marco holds up his loot: a cheese | Beside him, 24 | Battle Royale: loot | `f47` MARCO "Cheese! ...Wrong cheese." |
+| 49 | 74-75 | 3:16.3-3:21.6 | Zürich, 2683480/1246900 | Evening traffic; the saucer over the crossroads beams up a parked car | High, long lens, 50 | A real city, traffic; the beam | card ZÜRICH · 18:20 |
+| 50 | 76-77 | 3:21.6-3:27.0 | Bern, Kramgasse at night | Marco's Yaris down the old town, headlights on | Low in the street, 28 | Night, headlights | `f49` MARCO "It's heading back to the mountain!" (shout) |
 
 ### The end: the thief comes back (bars 78-93)
 
 | # | Bars | Time | Place | What happens | Camera | Feature | Lines |
 |---|---|---|---|---|---|---|---|
-| 50 | 78-79 | 3:27.0-3:32.3 | Gornergrat | The bait set where it all began, the four hiding behind | Low by the pot, 35 | Items, a real summit | Card `s50` GORNERGRAT · 17:30 · [BUBBLE] `f50` LÉA "Shh. Here it comes." |
-| 51 | 80-81 | 3:32.3-3:37.6 | Same | The saucer lands on its legs; the ramp opens | From the ridge, 35 | [UFO] landing legs, the ramp | — |
-| 52 | 82 | 3:37.6-3:40.3 | Same | Zorp on the ramp, the old caquelon in its hands; Léa, arms crossed | Over her shoulder, 35 | [UFO] its pilot | [BUBBLE] `f52a` ZORP "Fondue... please?" · `f52b` LÉA "...You could have asked." |
-| 53 | 83-84 | 3:40.3-3:45.6 | Same | Five round the pot | Orbit, 28 | Multiplayer: together | System line `y53` ZORP joined the game · [BUBBLE] `f53` LÉA "Okay. But you bring the bread." |
-| 54 | 85-86 | 3:45.6-3:51.0 | Same | The party: Charleston, griddy, robot, moonwalk (and Zorp's dance) | Orbit, 28 | Emotes and dances | — |
-| 55 | 87-88 | 3:51.0-3:56.3 | Same | The saucer leaves into the sunset with a doggy bag; they wave | From the pot, 28 | [UFO] lift-off | [BUBBLE] `f55` ZORP "Same time next year?" |
-| 56 | 89-90 | 3:56.3-4:01.6 | Same | The four in a row (Zorp with them), the pigeon by the pot | A slow pull-out, 28 | The camera item | [BUBBLE] `f56` LÉA "Everyone say... FONDUE!" |
-| 57 | 91-93 | 4:01.6-4:09.6 | Same | The flash, the polaroid, the title, the credit, fade | The pull-out goes on, 28 | The photo | Title `t06`, the music credit |
+| 51 | 78-79 | 3:27.0-3:32.3 | Gornergrat | The bait where it all began; the four hide by the hotel, Marco's radio playing | Low by the pot, 35 | Items, the radio | card GORNERGRAT · 17:30 · `f50` LÉA "Shh. Here it comes." (whisper) |
+| 52 | 80-81 | 3:32.3-3:37.6 | Same, the path's flat 18 m from the pot | The saucer comes down on its legs | From the ridge, 35 | The UFO: landing legs | — |
+| 53 | 82 | 3:37.6-3:40.3 | Same | Zorp down the ramp with the old caquelon; Léa waiting | Over her shoulder, 35 | The UFO's ramp, its pilot | `f52a` ZORP "Fondue... please?" · `f52b` LÉA "...You could have asked." |
+| 54 | 83-84 | 3:40.3-3:45.6 | Same | Five round the pot, Zorp with the bread | Orbit, 28 | Multiplayer: together | chat `y53` ZORP joined the game · `f53` LÉA "Okay. But you bring the bread." |
+| 55 | 85-86 | 3:45.6-3:51.0 | Same | The party: Charleston, griddy, robot, moonwalk, and Zorp's floss | Orbit, 28 | Emotes and dances | — |
+| 56 | 87-88 | 3:51.0-3:56.3 | Same | The saucer lifts off its legs and goes into the sunset; they wave | From the pot, 28 | The UFO: lift-off | `f55` ZORP "Same time next year?" |
+| 57 | 89-90 | 3:56.3-4:01.6 | Same | The four in a row, the pigeon by the pot | A slow pull-out, 28 | The camera item | `f56` LÉA "Everyone say... FONDUE!" (shout) |
+| 58 | 91-93 | 4:01.6-4:09.6 | Same | The flash, the polaroid, the title, the credit, fade | The pull-out goes on, 28 | The photo | title `t06`, `t56b`, the credit |
 
-57 shots, 93 bars, 249.62 s.
+58 shots, 93 bars, 249.62 s.
 
 ## Feature coverage
 
 | Feature | Shots |
 |---|---|
-| Real terrain, towns, roads, buildings | 1, 14, 16, 17, 21, 22, 39, 48 (every shot is on real tiles) |
-| Building sites, tower cranes, works machines | 34, 35 |
-| The in-game map, the terrain download screen | 15 (stand-in; needs the screen addition below) · the download screen: not shown (same addition) |
-| On foot: run, slide, wall jump, swim | 7 (run), 18 (sprint, slide), 20 (walk) · wall jump: `Cast.Actions` can do it, not framed yet · swim: not possible (below) |
+| Real terrain, towns, roads, buildings | 1, 14, 16, 17, 21, 22, 40, 49 (every shot on real tiles) |
+| Building sites, tower cranes, works machines | 35, 36 |
+| The in-game map, the terrain download screen | 15 (the game's own map screen) |
+| On foot: run, slide, swim | 18 (sprint, slide), 20 (walk), 32 (swim), 47 (run) · wall jump: not framed |
 | Base jump into the wingsuit, parachute | 7, 9 |
-| Character looks, emotes and dances | 2, 6, 38, 54 (every shot: fixed characters) |
-| The 30 cars | 20 (12 in a row), 22, 23, 24, 25, 28, 49 |
+| Character looks, emotes and dances | 2, 6, 39, 55 (every shot: fixed characters) |
+| The cars | 20 (12 in a row), 22, 23, 24, 25, 28, 50 |
 | Races with AI drivers | 24, 25 |
 | Cockpit view | 23 |
 | Crash through the windscreen | 28 |
-| Car radio, CDs | not shown (below); the picnic radio in 2, 36, 50 |
-| 74 motorbikes | 20 (10 in a row), 26 |
+| Radio, CDs | 2, 37 (the radio), 51 (Marco's radio playing a CD) · the car radio: not shown |
+| The motorbikes | 20 (10 in a row), 26 |
 | Road bike | 27 |
 | Skis | 10 |
 | Trucks, buses, army vehicles | 21 |
-| Jetski, speedboat, the CGN steamer | 31, 32 |
-| Fishing | 33 (rod held; the float and the line need an addition) |
-| A320, AN-124, military freighter | 41, 42, 43 |
+| Jetski, speedboat, the CGN steamer | 31, 33 |
+| Fishing | 34 (the cast line) |
+| A320, AN-124, military freighter | 42, 43, 44 |
 | Light plane, helicopter, paraglider | 12, 11 and 14, 13 |
-| Play as a pigeon, birds | 17, 19, 56 |
-| Day and night | 1 (sunset), 16 (time-lapse), 17-19 and 38 and 49 (night), 21 (morning) |
+| Play as a pigeon, birds | 17, 19, 57 |
+| Cows | 29 |
+| Day and night | 1 (sunset), 16 (time-lapse), 17-19, 39, 50 (night), 21 (morning) |
 | Visual styles (Cartoon) | the whole film |
-| Halloween, Christmas | 39, 40 |
-| Multiplayer together | 2, 53 (the system line), 56 |
-| Fist fights | 37 |
-| Battle Royale: cargo plane, drop, zone, loot, bots | 43, 44, 45, 46, 47 · bots: not shown (below) |
-| Items, loot, shops, IKEA | 2, 30, 36, 47 · vending machines: not shown (below) |
-| Crafting, cooking, building with a hammer | 35, 36 |
-| Farming: tractor, combine, fields | 29 |
-| Sound, radio | 2, 36 (the radio; the film's song is "on" it) |
-| GPX replay, movie studio, VR | not shown (below) |
-| **UFO (#861)** | 3, 4, 5, 8, 12, 22, 23, 29, 31, 33, 48, 51, 52, 53, 54, 55 |
+| Halloween, Christmas | 40, 41 |
+| Multiplayer together | 54 (the system line), 57 |
+| Fist fights | 38 |
+| Battle Royale: cargo plane, drop, zone, loot | 44, 45, 46, 47, 48 · bots and crates: not shown (only in a match) |
+| Items, shops, IKEA | 2, 30, 37, 48 · vending machines: not shown (inside interiors) |
+| Crafting, cooking, building with a hammer | 36, 37 |
+| Farming: tractor, plough, combine, fields | 29 |
+| The UFO: flight, beam, legs, ramp, pilot | 3, 4, 5, 8, 12, 22, 23, 29, 31, 34, 49, 52, 53, 54, 55, 56 |
+| GPX replay, movie studio, VR | not shown (the director can only show them as a screenshot, `GameScreen.Png`; none taken) |
 
-## What the director needed, and what it still cannot film
+## How it was made
 
-Added for this film (`Shot.cs`, `Actor.cs`, `TrailerDirector.cs`):
+`FondueScript.cs` is this script as shots, built with the film kit (#882): saucer actors
+(`RideKind.Ufo`, `Drive.Fly`, the `Saucer` helper), `Craft` props hovering or landed, beamable props, a
+herd, a parked car, Zorp down a ramp (`DownRamp`), a fishing line (`ItemCues`), the map
+(`Screens`), a burning campfire (`Prop.Placed`), Marco's radio (`Cast.Radio`), the swim (`Cast.Swim`),
+the plough (`Cast.Lowered`), fists (`Cast.Fight`), hats (`Cast.Headwear`), the zone's wall
+(`Shot.Zone`), each shot's occasion (`Shot.Occasion`: `none` but in 40 and 41, since the calendar
+dresses September to December for Halloween and Christmas).
 
-- `Cast.Actions`: a walker's jump and crouch (`FootPlayer.FootActions`; a body given them reads no
-  keys): the sprint-and-slide (18), the base jump into the wingsuit (7, flown by `Cast.Flight`).
-- `Cast.Fight`: the fist-fight pose over time (37).
-- `Cast.Headwear`: an occasion's hat (39, 40).
-- `Shot.Occasion`: `halloween`, `christmas` or `none` whatever the calendar says (this film runs
-  every shot with `none` but 39 and 40: in September-December the calendar would dress every shot).
-- `Shot.Zone`: the Battle Royale zone's wall on a circle (46, 47).
-
-Not filmable yet, with the smallest addition that would do it:
-
-- **Game screens** (the map, the terrain download screen, the movie studio, the GPX picker): the
-  director hides every `CanvasLayer`. A `Shot.Screen` naming one layer or `Screen` to open and leave
-  visible (the map at a given place and zoom) would film them; shot 15 would become the map.
-- **GPX replay**: the ribbon and the runners exist only inside a GPX session; a `Shot.Gpx` (a file and a
-  start time) that starts the replay in the shot would do.
-- **VR**: only inside a VR session; skipped.
-- **Swimming**: an NPC body floats limp (`StepSwim`), a walker swims on the player's keys; letting
-  `StepSwim` read `WalkControls` would do.
-- **Car radio and CDs**: no cast field; a `Cast.Radio` (station or CD) setting `CarRadio`/`CarCd`, and
-  `Dance = 1` near a `RadioBody`, would show them; the film's song covers the sound anyway.
-- **Fishing**: the rod is held, but the float and the line come from `FishingVisuals.OnCast`, which the
-  director does not call.
-- **A burning campfire**: a prop is only the item's mesh; a placed `PlacedKind.Campfire` would burn.
-- **Bots, loot crates, vending machines, shop interiors**: only in a Battle Royale match, or inside
-  interiors the director cannot enter (it films only its own sets).
-- **A hammer swing**: no swing pose (`ItemAction` 2 draws Hold).
-
-## Stage 2
-
-Merge #861 and #862, then: the saucer in every [UFO] shot (the beam lifting the pot in 4, a bale
-in 29, the fish in 33; the legs and the ramp in 51; Zorp in 52-56), the lines as bubbles, the
-subtitle tracks from `fondue.subtitles.json`, stills, the render.
+Places moved for the real-terrain rule: the skis from the Theodul (Italy within 8 km) to the
+Gornergrat's own slope, the garage from Geneva's apron (France within 5 km) to the Pully meadow, the
+cockpit and the lean from the Furka to the Lavaux corniche, the road bike filmed from the hairpin's
+outside. The base jump (7) leaps off already in the wingsuit: the Gornergrat's south slope is too
+gentle for a jump out of a run to open it (12 m clear under him while falling).
