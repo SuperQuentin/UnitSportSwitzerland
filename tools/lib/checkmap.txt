@@ -551,6 +551,11 @@ shaders/body/face        quick  --outfitcheck
 src/Combat/Fight         net    tools/fightnetcheck.sh
 src/Player/FootPlayer.Fight net tools/fightnetcheck.sh
 src/Avatar/HumanMeshBuilder.Fight net tools/fightnetcheck.sh
+# aura battles (#907): plan, cut on the beat, the server grades
+src/Combat/Aura          net    tools/auranetcheck.sh
+src/Player/FootPlayer.Aura net  tools/auranetcheck.sh
+src/Player/AuraNetProbe  net    tools/auranetcheck.sh
+src/Avatar/HumanMeshBuilder.Aura net tools/auranetcheck.sh
 src/Player/FootPlayer.Hold net   tools/holdnetcheck.sh
 src/Player/HoldNetProbe  net    tools/holdnetcheck.sh
 src/Vehicles/VehicleBody.Hold net tools/holdnetcheck.sh

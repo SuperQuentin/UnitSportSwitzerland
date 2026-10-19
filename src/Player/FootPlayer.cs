@@ -691,7 +691,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// The replicated properties sent only when they change (ride, seat, items, clothes, …). The movie
     /// recorder (#638) keeps the same set as events: <c>--moviecheck</c> fails if the two drift apart.
     /// </summary>
-    public static readonly string[] OnChangeProperties = { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DanceId", ".:FightPose", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down", ".:RadioVolume", ".:PhoneState" };
+    public static readonly string[] OnChangeProperties = { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DanceId", ".:FightPose", ".:AuraPose", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down", ".:RadioVolume", ".:PhoneState" };
 
     // --- figure animation ---
     private MeshInstance3D? _walker;
@@ -1299,6 +1299,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         replication.AddProperty(".:AppearanceBits");
         replication.AddProperty(".:DanceId");
         replication.AddProperty(".:FightPose");
+        replication.AddProperty(".:AuraPose");
         replication.AddProperty(".:HeldRadio");
         replication.AddProperty(".:BackItemId");
         replication.AddProperty(".:Down");
@@ -1726,6 +1727,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             StepThrowView(dt);
             // a fist fight (#495): its own side-on view
             if (FightView(dt)) return;
+            // an aura battle (#907): the phone-filmed view over the waiting battler's shoulder
+            if (AuraView(dt)) return;
 
             // Render rate, not physics rate: the look has to answer the mouse the frame it
             // moves, the way rotating the body directly always did.
@@ -2026,7 +2029,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
 
         // a fighter (#495) is drawn by the dance layer, which lays over the stride only, in the air too
-        PoseKind = Fighting ? PoseStride : _sliding ? PoseTucked : _airTime > 0.12f ? PoseAir : PoseStride;
+        PoseKind = InDuel ? PoseStride : _sliding ? PoseTucked : _airTime > 0.12f ? PoseAir : PoseStride;
         if (PoseKind == PoseStride) _stridePhase = Avatar.HumanMeshBuilder.AdvancePhase(_stridePhase, speed, dt);
         Anim = new Vector4(speed, _stridePhase, 0f, 0f);
 
@@ -2055,7 +2058,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             && (!Indoors || Audio.Cd.CdLibrary.IsRatBeat(music.CdId)));
 
     /// <summary>On foot and free to move the body: what an emote (#404), or any dance, needs.</summary>
-    public bool CanEmote => Ride == RideKind.OnFoot && !KnockedOut && !Downed && !_sliding && !_swimming && !_carried && _deadTimer <= 0 && !Fighting;
+    public bool CanEmote => Ride == RideKind.OnFoot && !KnockedOut && !Downed && !_sliding && !_swimming && !_carried && _deadTimer <= 0 && !InDuel;
 
     /// <summary>Indoors, the chess type beat heard here (#370): E dances, as outdoors to any music.</summary>
     public bool RatBeatHere(bool heard) =>
@@ -2233,7 +2236,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         StepArmPose(dt);
         var danced = StepDance(dt);
         // a fighter's pose (#495) over any dance, which eases out underneath
-        var dance = DrawnDance = StepFightPose(dt) ?? danced;
+        var dance = DrawnDance = StepFightPose(dt) ?? StepAuraPose(dt) ?? danced;
         var arm = _itemArmCur;
         float blend = _itemArmBlend;
         // dancing, the hands are the dance's, unless the item is actually being aimed or used
@@ -2642,8 +2645,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         // limp after a crash, or downed (#475): nothing to do, and no picker either
         if (Ragdolled || Downed) return true;
-        // in a fist fight (#495) the hands are busy
-        if (Fighting) return true;
+        // in a fist fight (#495) or an aura battle (#907) the hands are busy
+        if (InDuel) return true;
         // on a crane's ladder nothing; at its controls, let go of them (#618)
         if (_craneAt != CraneSeat.None) return TryCrane() || true;
         // a walkable vehicle's passenger stands up into the aisle; any other gets out
@@ -3695,6 +3698,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (SwimPhysics(dt, onFloor)) return;
         // in a fist fight (#495, FootPlayer.Fight.cs)
         if (FightPhysics(dt, onFloor)) return;
+        // in an aura battle (#907, FootPlayer.Aura.cs)
+        if (AuraPhysics(dt, onFloor)) return;
 
         if (Npc && WalkControls == null)
         {

@@ -85,6 +85,15 @@ public partial class ControlsHelp : CanvasLayer
             new("String: punch, punch, kick", Keys: "{fight_punch} {fight_punch} {fight_kick}", Pad: "{fight_punch} {fight_punch} {fight_kick}"),
             new("Finish them: down, down + kick", Keys: "{move_back} {move_back} + {fight_kick}", Pad: "{move_back} {move_back} + {fight_kick}"),
         }),
+        ("Aura battle (#907, /aura <player>)", new Row[]
+        {
+            new("Planner: add the move picked", Keys: "click, or arrows + {ui_accept}", Pad: "{ui_accept}"),
+            new("Planner: take back the last move", PlayerInput.AuraRemove),
+            new("Planner: suggest a combo", PlayerInput.AuraSuggest),
+            new("Planner: lock in", PlayerInput.AuraLock),
+            new("Next move, on the downbeat (the timing scores)", PlayerInput.AuraNext),
+            new("Cheer a battle you watch (emote wheel: Cheer, Clap, Fist pump)", PlayerInput.EmoteWheel),
+        }),
         ("Building (hammer in hand)", new Row[]
         {
             new("Build the piece shown", PlayerInput.UseItem),

@@ -105,4 +105,12 @@ public static partial class HumanMeshBuilder
             .Select(s => ($"Stance - {s}", (Func<Node3D>)(() => Figure(Danced(FightMoves + (int)s, (int)s, 0.5f)))))
             .Concat(Enum.GetValues<FightMove>().Where(m => m != FightMove.None)
                 .Select(m => ($"Move - {m}", (Func<Node3D>)(() => Figure(Danced(FightMoves + FightRules.PoseOf(m), (int)m, 0.4f))))));
+
+    // the aura battle (#907): its stances, then each move most of the way through (the pose held)
+    [Showcase("Aura")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseAura() =>
+        Enum.GetValues<AuraStance>().Where(s => s is not AuraStance.None and < AuraStance.MoveBase)
+            .Select(s => ($"Stance - {s}", (Func<Node3D>)(() => Figure(Danced(AuraMoves + (int)s, (int)s, 0.5f)))))
+            .Concat(AuraRules.Moves
+                .Select(m => ($"Move - {AuraRules.Name(m)}", (Func<Node3D>)(() => Figure(Danced(AuraMoves + AuraRules.PoseOf(m), (int)m, 0.7f))))));
 }

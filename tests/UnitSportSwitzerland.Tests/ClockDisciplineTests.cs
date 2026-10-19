@@ -94,6 +94,10 @@ public class ClockDisciplineTests
         // ---- presentation: the player is not slowed even when their character is ----
         // music plays in real time, so a CD's position, its beat and everything dancing to it do too
         ["src/Items/RadioManager.cs"] = "presentation: a radio's CD position is server real time, as its audio plays",
+        // an aura battle (#907) is a rhythm game two peers play on one beat: a player's press keeps the player's time
+        ["src/Combat/AuraManager.cs"] = "presentation: an aura battle's beat, its downbeats and every press graded on them, shared by both battlers",
+        ["src/Combat/AuraHud.cs"] = "presentation: the aura battle's beat ring and countdown, on the battle's shared beat",
+        ["src/Player/FootPlayer.Aura.cs"] = "presentation: which move of the combo the shared beat is on, and the Griddy's beat",
         ["src/Items/RadioBody.cs"] = "presentation: a placed radio's CD position and groove",
         ["src/Concert/ConcertService.cs"] = "presentation: an operator's cue is stamped with the shared clock, so every peer's light show keeps the same beat",
         ["src/Concert/ConcertBeatDebug.cs"] = "presentation: the beat debug window scrolls its own history in real time",

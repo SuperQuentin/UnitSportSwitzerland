@@ -819,6 +819,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Concert.ConcertNetProbe.Role != null) AddChild(new Concert.ConcertNetProbe(items));
         if (Phone.PhoneNetProbe.Role != null) AddChild(new Phone.PhoneNetProbe(items));
         if (Player.FightNetProbe.Role != null) AddChild(new Player.FightNetProbe(items));
+        if (Player.AuraNetProbe.Role != null) AddChild(new Player.AuraNetProbe(items));
         if (Net.InviteProbe.Role != null) AddChild(new Net.InviteProbe(items));
         if (Items.SwissNetProbe.Role != null) AddChild(new Items.SwissNetProbe(items));
         if (Items.Fishing.FishNetProbe.Role != null) AddChild(new Items.Fishing.FishNetProbe(items));
@@ -1460,6 +1461,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // World/Fight on both sides (#495): the challenge, the match state, and its screen
         AddChild(Combat.FightManager.CreateClient());
         AddChild(new Combat.FightHud());
+        AddChild(Combat.AuraManager.CreateClient());
+        AddChild(new Combat.AuraHud());
+        AddChild(new Combat.AuraPlanner());
 
         // World/BattleRoyale (#177): the match HUD, the zone, the drop and the way back
         var br = BattleRoyale.BrManager.CreateClient(_worldOrigin!);
@@ -1804,6 +1808,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 yield return (PlayerInput.FightPunch, "Punch");
                 yield return (PlayerInput.FightKick, "Kick");
                 yield return (PlayerInput.FightBlock, "Block (hold)");
+            }
+            else if (p.InAura)
+            {
+                // an aura battle (#907): the one timed key; the planner shows its own
+                if (Combat.AuraManager.Client?.Current is { MyTurn: true, Phase: Combat.AuraPhase.Perform or Combat.AuraPhase.Countdown })
+                    yield return (PlayerInput.AuraNext, "Next move (on the beat)");
             }
             else if (Items.ItemController.Instance is { Inventory.HeldId: Items.ItemId.FishingRod } rodHand && rodHand.UsablePlayer != null)
             {
