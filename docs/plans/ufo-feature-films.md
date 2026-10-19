@@ -107,6 +107,6 @@ deck appears at least once across the three films, and each film covers most of 
 - [x] A UFO (#861): PR #871. Built differently: the beam also wakes dormant vehicles; pallets and props are not beamable (not bodies).
 - [x] B UFO sightings (#863): PR #877
 - [x] C bubbles and subtitles (#862): PR #875 (online bubbles not checked over the network yet)
-- [ ] D The Stolen Fondue (#864)
+- [x] D The Stolen Fondue (#864): 58 shots on "Hep Cats", 4:09.6, rendered v1 (five subtitle tracks)
 - [x] E The Alien Tourist (#865): PR #868, 59 shots, 4:00.6 on "Mighty Like Us"; rendered v2 (`test_output/trailer/tourist/v2` in the main checkout), five subtitle tracks
 - [ ] F Invasion, Swiss Style (#866)

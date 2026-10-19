@@ -36,8 +36,12 @@ uniform float toon_rim = 0.22;    // rim strength on the lit side
 void light() {
     float ndl = dot(NORMAL, LIGHT);
     // A face nearly edge-on to the sun self-shadows in stripes (acne), which the hard band
-    // turns into hatching: near the terminator, N.L alone shades it.
-    float shadow = mix(1.0, smoothstep(0.3, 0.6, ATTENUATION), smoothstep(0.1, 0.35, ndl));
+    // turns into hatching: near the terminator, N.L alone shades it. Only the sun: a lamp's
+    // ATTENUATION is its range and cone too, and ground far beyond a lamp's reach sees it edge-on,
+    // so skipping it there lit the whole district with a concert's stage lights (#885).
+    float shadow = LIGHT_IS_DIRECTIONAL
+        ? mix(1.0, smoothstep(0.3, 0.6, ATTENUATION), smoothstep(0.1, 0.35, ndl))
+        : ATTENUATION;
     float lit = smoothstep(0.0, toon_edge, ndl) * shadow;
     DIFFUSE_LIGHT += lit * LIGHT_COLOR / PI;
     float rim = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 4.0);

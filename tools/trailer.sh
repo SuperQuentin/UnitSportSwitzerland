@@ -2,7 +2,9 @@
 # The trailer (#706): preview its shots, frame them, or film the whole thing and cut it on its
 # song. One game launch per run; the director stages each shot. The films: FILM=story (default,
 # docs/trailer/script.md, StoryScript.cs), FILM=showcase (docs/trailer/storyboard.md,
-# TrailerScript.cs) and FILM=drognens (the music clip, docs/trailer/drognens.md, DrognensScript.cs).
+# TrailerScript.cs), FILM=drognens (the music clip, docs/trailer/drognens.md, DrognensScript.cs) and
+# FILM=fondue ("The Stolen Fondue", docs/trailer/fondue.md, FondueScript.cs, #864),
+# FILM=tourist ("The Alien Tourist", docs/trailer/tourist.md, TouristScript.cs, #865).
 #
 #   tools/trailer.sh preview [shots]   play in a window, each shot with its part of the song
 #   tools/trailer.sh stills  [shots]   first, middle and last frame of each shot as PNGs (at --fixed-fps 30, as render)
@@ -35,7 +37,7 @@
 # SIZE (default 1920x1080), LOG=1 prints every actor twice a second,
 # TRAILERS (where the versions go), VERSION (which one `cut` cuts; default the newest).
 # The film's song (incompetech.com, CC BY 4.0: "Voxel Revolution" for the trailers, "I Got a Stick
-# Feat James Gavins" for the clip) is downloaded once into <trailers>/ (not committed). Needs ffmpeg
+# Feat James Gavins" for the clip, "Hep Cats" for the fondue film) is downloaded once into <trailers>/ (not committed). Needs ffmpeg
 # on PATH (or bin/).
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -52,6 +54,7 @@ scratch=test_output/trailer/$FILM
 mkdir -p "$films" "$scratch"
 case $FILM in
   drognens) title="I Got a Stick Feat James Gavins" ;;
+  fondue) title="Hep Cats" ;;
   tourist) title="Mighty Like Us" ;;
   *) title="Voxel Revolution" ;;
 esac
@@ -227,7 +230,7 @@ case $mode in
     cut_film "$films/v$version"
     ;;
   *)
-    echo "usage: [FILM=story|showcase|drognens|bubbles|ufo] tools/trailer.sh preview|stills|render [shots] | cut | lines" >&2
+    echo "usage: [FILM=story|showcase|drognens|fondue|tourist|bubbles|ufo] tools/trailer.sh preview|stills|render [shots] | cut | lines" >&2
     exit 2
     ;;
 esac
