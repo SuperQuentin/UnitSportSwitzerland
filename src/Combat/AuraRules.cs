@@ -222,6 +222,9 @@ public static class AuraRules
 
     public static string Name(AuraMove m) => Def(m).Name;
 
+    /// <summary>A move that is one of the dances (the Griddy, the Moonwalk...): drawn on the bar's beat, not its own progress.</summary>
+    public static bool IsDance(AuraMove m) => m is AuraMove.Griddy or AuraMove.Moonwalk or AuraMove.Floss or AuraMove.Robot or AuraMove.Dab;
+
     /// <summary>The replicated pose of a move.</summary>
     public static int PoseOf(AuraMove m) => (int)AuraStance.MoveBase + (int)m;
 
