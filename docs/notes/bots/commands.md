@@ -17,6 +17,8 @@
   - `--brbots N`: the BR field size (default 20, 0 = off).
   - `--brbotsharmless`: BR bots play the match but never strike (`tools/brbotcheck.sh`: the match's
     plumbing with bots, not a knife duel's luck; bots fighting back are `botcheck` and `brbotwatch`).
+  - `--brseed N`: every match's seed is N (checks: the same region, zone, plane line and bots each run;
+    the region also hangs on the tile set and the anti-repeat history, fresh in a check).
   - `--brbotspread M`: every bot's landing spot within M m of the first circle's centre (checks: the
     bots meet at once).
 - **Checks** (net tier, `tools/lib/checkmap.txt`):
@@ -25,14 +27,25 @@
       server takes the hits), then sees it stand up again (free roam knocks out).
     - A arms the bots and `/bot fire`: A's health drops.
     - B sees the same bot go down and hears a bot's shot.
-  - `tools/brbotcheck.sh`: server + A, one whole match at pace 0.13.
+  - `tools/brbotcheck.sh`: server + A, one whole match at the real short pace, seed fixed (`--brseed`, #873).
+    - Not a test pace: the bots take 80-140 s from the ramp to the ground (about 2 min of it under the
+      canopy, opened at up to 550 m over the spot), and at `--brpace 0.3` (zone at 0.12 of the timetable)
+      the circles were in phase 3-4 by then: the zone finished the first bot before the knife ("0 kills",
+      "✕ zone (fleeing BRBA)"), or A, waiting at the first circle's centre. At the short pace the first
+      shrink ends 216 s after the doors close and its circle holds every landing spot.
+    - The probe logs `zone <t> s: phase, HP/s, m inside` at the jump, the landing and each bot.
+    - `BRSEED=0` draws a seed (the lobby line names it), `BRPACE`, `BOTLOG=1`, `SERVER_ARGS`.
     - `/br bots 3` gives 2 bots; A jumps and knifes both.
     - Death box, the feed's `[bot]`, "1 kill (1 bot)".
     - A wins with "2 kills (2 bots)" in the record and on `/br top`; the bots are gone after.
+  - `tools/brsquadcheck.sh` (#837 phase 4): server + A, a duos match of A and one bot (`squads`).
   - `tools/brbotwatch.sh` (full tier, not in the map: minutes long): a whole match played by bots
     (`/br bots 9`), watched to the end. It must end, and bots must have dealt damage and killed.
     `BRPACE` (0.13 by default: too fast for a runner to keep up with the zone), `SPREAD=80` to land
-    them together, `BOTLOG=1`, `SERVER_ARGS="--serverstats"`.
+    them together, `BOTLOG=1`, `SERVER_ARGS="--serverstats"`, `BRBOTS=100` (the field), `BRMODE=trios`
+    (a team match, `--brwatchmode`), `SPEED=4` (`/speed 4` at the start: the match follows it, so a full-pace
+    match keeps its proportions in a quarter of the time). The client fails on a node leak (5,000 orphan nodes
+    or more).
   - `tools/botfilm.sh` (by hand, windowed): films bots playing a BR match. The client opens it, leaves
     at once and spectates (`BrManager.Watch`), following the first bot out of the plane, then whichever
     bot stands nearest another on foot. It writes `test_output/clips/bots-drop` and `bots-fight`

@@ -138,6 +138,8 @@ public static partial class Preprocessor
         // airports (#422): stands and runways from swissTLM3D and OpenStreetMap (--osm <pbf>) over the built tiles
         bool airportsOnly = false;
         string? airportsFile = null, airportsOsm = null;
+        // castles (#859): which solids of the built tiles are castles, into a C# list the game compiles in
+        string? castlesFile = null;
         var pngCrops = new List<(double E, double N, int Size)>();
         bool force = false, fresh = false, hashOnly = false;
         string? franceBox = null;
@@ -184,6 +186,7 @@ public static partial class Preprocessor
                 case "--landings-file": landingsFile = args[++i]; break;
                 case "--airports": airportsOnly = true; break;
                 case "--airports-file": airportsFile = args[++i]; break;
+                case "--castles": castlesFile = args[++i]; break;
                 case "--osm": airportsOsm = args[++i]; break;
                 case "--bathy": bathyDir = args[++i]; break;
                 case "--png-crop":
@@ -246,6 +249,17 @@ public static partial class Preprocessor
                 : new HashSet<TileId>();
             SetStage("fields");
             return FieldStage.Run(fieldsDir, osmFieldsPbf, gwrPath, outDir, region, jobs);
+        }
+
+        // ---- castles (#859): OSM historic=castle and GWR names resolved to solids --------------------
+        if (castlesFile != null)
+        {
+            if (outDir == null || gwrPath == null || airportsOsm == null)
+            {
+                Console.Error.WriteLine("--castles <file.cs> requires --out <chunk dir>, --gwr <gwr data.sqlite> and --osm <switzerland .osm.pbf>");
+                return 2;
+            }
+            return CastleStage.Run(outDir, gwrPath, airportsOsm, castlesFile, jobs);
         }
 
         // ---- airports: stands and runways (#422) ---------------------------------------------------

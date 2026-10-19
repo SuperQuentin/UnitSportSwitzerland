@@ -7,7 +7,7 @@ namespace UnitSport.Core;
 
 /// <summary>
 /// The date the game's calendar is read at (#924): the occasions (Halloween, Christmas, the UFO
-/// Friday), the farm month, the birds of the month, the fishing season, a shop's seasonal goods. The
+/// Friday), the farm month, the birds of the month, the fishing season, a shop's seasonal goods, tonight's concert. The
 /// real date in normal play; <c>--date YYYY-MM-DD</c> pins it, and a trailer render always runs on
 /// its film's own date (<see cref="Trailer.TrailerDirector.FilmDate"/>), so the calendar is never
 /// read during a render. The one reader of the real date for these (the clock-discipline guard).

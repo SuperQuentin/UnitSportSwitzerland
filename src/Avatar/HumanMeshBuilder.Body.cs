@@ -460,7 +460,10 @@ public static partial class HumanMeshBuilder
                 LimbLoft(s, shoulder, elbow, wrist, arm, armZones, fit.Side);
                 var palm = look.Gloves ?? look.Skin;
                 var fingers = look.Gloves is { } gloves && !look.Fingerless ? gloves : look.Skin;
-                Hand(s, elbow, wrist, side, shape.Hand, palm, fingers);
+                // pointing (#889), the hand bends at the wrist along its own way: it is drawn as from an
+                // elbow straight behind it on that line
+                bool point = !left && r.PointDirR != Vector3.Zero;
+                Hand(s, point ? wrist - r.PointDirR : elbow, wrist, side, shape.Hand, palm, fingers, point);
             }
         }
         if (!head) return fit;
@@ -654,9 +657,10 @@ public static partial class HumanMeshBuilder
 
     /// <summary>
     /// A hand: palm, four fingers curled a little toward the palm, and a thumb on the side facing
-    /// forward when the arm hangs. The palm faces the body.
+    /// forward when the arm hangs. The palm faces the body. <paramref name="point"/>: the index
+    /// straight on along the hand, the others curled into the palm (a finger on a screen, #889).
     /// </summary>
-    private static void Hand(MeshScratch s, Vector3 elbow, Vector3 wrist, float side, float scale, Color palm, Color fingers)
+    private static void Hand(MeshScratch s, Vector3 elbow, Vector3 wrist, float side, float scale, Color palm, Color fingers, bool point = false)
     {
         var h = HandFrameOf(elbow, wrist, side, scale);
         var (dir, thumbSide, n, k) = (h.Along, h.Thumb, h.Inward, scale);
@@ -664,15 +668,25 @@ public static partial class HumanMeshBuilder
         s.Box(h.Palm, new Vector3(0.068f, 0.072f, 0.028f) * k, palm, basis);
 
         // fingers from the knuckle line, the index on the thumb side
-        var curl = (dir * Mathf.Cos(0.35f) + n * Mathf.Sin(0.35f)).Normalized();
-        var fingerBasis = new Basis(thumbSide, curl, thumbSide.Cross(curl));
         var knuckles = h.Palm + dir * 0.036f * k;
         ReadOnlySpan<float> lengths = [0.066f, 0.072f, 0.068f, 0.054f];
         for (int i = 0; i < 4; i++)
         {
+            // pointing: the index straight, the rest folded into the palm
+            float bend = !point ? 0.35f : i == 0 ? 0.04f : 1.45f;
+            var curl = (dir * Mathf.Cos(bend) + n * Mathf.Sin(bend)).Normalized();
+            var fingerBasis = new Basis(thumbSide, curl, thumbSide.Cross(curl));
             float across = (1.5f - i) * 0.0168f * k;
-            float len = lengths[i] * k;
-            s.Box(knuckles + thumbSide * across + curl * len * 0.5f, new Vector3(0.0145f, len, 0.019f) * k, fingers, fingerBasis);
+            float len = lengths[i] * k * (point && i > 0 ? 0.6f : 1f);
+            if (point && i == 0)
+            {
+                // the pointing index down the hand's middle, ending exactly where ApplyPoint aimed it,
+                // whatever this figure's hand size
+                across = 0f;
+                len = Mathf.Max(0.03f, FingerReach - (0.042f + 0.036f) * k);
+            }
+            var size = point && i == 0 ? new Vector3(0.0145f * k, len, 0.019f * k) : new Vector3(0.0145f, len, 0.019f) * k;
+            s.Box(knuckles + thumbSide * across + curl * len * 0.5f, size, fingers, fingerBasis);
         }
 
         var thumbRoot = wrist + dir * 0.022f * k + thumbSide * 0.028f * k;

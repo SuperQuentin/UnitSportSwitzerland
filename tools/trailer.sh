@@ -2,7 +2,10 @@
 # The trailer (#706): preview its shots, frame them, or film the whole thing and cut it on its
 # song. One game launch per run; the director stages each shot. The films: FILM=story (default,
 # docs/trailer/script.md, StoryScript.cs), FILM=showcase (docs/trailer/storyboard.md,
-# TrailerScript.cs) and FILM=drognens (the music clip, docs/trailer/drognens.md, DrognensScript.cs).
+# TrailerScript.cs), FILM=drognens (the music clip, docs/trailer/drognens.md, DrognensScript.cs),
+# FILM=fondue ("The Stolen Fondue", docs/trailer/fondue.md, FondueScript.cs, #864),
+# FILM=tourist ("The Alien Tourist", docs/trailer/tourist.md, TouristScript.cs, #865) and
+# FILM=invasion ("Invasion, Swiss Style", docs/trailer/invasion.md, InvasionScript.cs, #866).
 #
 #   tools/trailer.sh preview [shots]   play in a window, each shot with its part of the song
 #   tools/trailer.sh stills  [shots]   first, middle and last frame of each shot as PNGs (at --fixed-fps 30, as render)
@@ -45,7 +48,7 @@
 # run (they change no pixel). Each shot writes shotNN.pins.json beside it, and version.txt carries the
 # run's pins: commit (+dirty), Godot, GPU, terrain fingerprint, date, occasions, styles, song, settings.
 # The film's song (incompetech.com, CC BY 4.0: "Voxel Revolution" for the trailers, "I Got a Stick
-# Feat James Gavins" for the clip) is downloaded once into <trailers>/ (not committed). Needs ffmpeg
+# Feat James Gavins" for the clip, "Hep Cats" for the fondue film) is downloaded once into <trailers>/ (not committed). Needs ffmpeg
 # on PATH (or bin/).
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -62,6 +65,9 @@ scratch=test_output/trailer/$FILM
 mkdir -p "$films" "$scratch"
 case $FILM in
   drognens) title="I Got a Stick Feat James Gavins" ;;
+  fondue) title="Hep Cats" ;;
+  tourist) title="Mighty Like Us" ;;
+  invasion) title="Space 1990" ;;
   *) title="Voxel Revolution" ;;
 esac
 song=$TRAILERS/$(echo "$title" | tr 'A-Z ' 'a-z_').mp3
@@ -281,7 +287,7 @@ case $mode in
     cut_film "$films/v$version"
     ;;
   *)
-    echo "usage: [FILM=story|showcase|drognens|bubbles|ufo] tools/trailer.sh preview|stills|render [shots] | cut | lines" >&2
+    echo "usage: [FILM=story|showcase|drognens|fondue|tourist|invasion|bubbles|ufo] tools/trailer.sh preview|stills|render [shots] | cut | lines" >&2
     exit 2
     ;;
 esac

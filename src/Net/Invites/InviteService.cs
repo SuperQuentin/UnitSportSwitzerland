@@ -173,7 +173,7 @@ public partial class InviteService : Node
         {
             var to = _book.To(sender).ToList();
             var from = _book.From(sender).ToList();
-            if (to.Count == 0 && from.Count == 0) return "No invites open. /tpa, /party invite, /br invite, /race duel and /fight send one.";
+            if (to.Count == 0 && from.Count == 0) return "No invites open. /tpa, /party invite, /br invite, /race duel, /fight and /aura send one.";
             var lines = to.Select(i => $"#{i.Id} {i.Title}{(i.Detail.Length > 0 ? $" ({i.Detail})" : "")}, {i.Expires - Now:0} s — /accept {i.Kind} or /decline {i.Kind}")
                 .Concat(from.Select(i => $"#{i.Id} you → {(i.ToEveryone ? "everyone" : Who(i.To))}: {i.Title}, {i.Expires - Now:0} s"));
             return "Invites:\n" + string.Join("\n", lines);

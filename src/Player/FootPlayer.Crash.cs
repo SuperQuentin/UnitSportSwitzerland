@@ -65,17 +65,8 @@ public partial class FootPlayer
         var joints = SeatedJoints();
         var state = CaptureVehicle(wrecked: false) with { Velocity = Vector3.Zero };
         Vehicles?.Park(state);
-        if (Npc)
-        {
-            // an NPC has nobody watching it fall: thrown clear, as it always was
-            Announced?.Invoke("THROWN OFF!", false);
-            ApplyRide(RideKind.OnFoot, fwd * hit * 0.25f + Vector3.Up * 4f);
-            GlobalPosition += Vector3.Up * 1.2f;
-            _stunTimer = 1.2f;
-            TakeDamage((hit - 8f) * 3f, 0, DamageCause.Crash);
-            return;
-        }
-
+        // an NPC or a bot goes limp too (#916): the other players, the trailer's and the movie's
+        // cameras watch it fall; it has no camera, so it gets no crash camera
         Announced?.Invoke(car ? "THROUGH THE WINDSCREEN!" : loopOut ? "LOOPED OUT!" : "THROWN OFF!", false);
         // on at most of the speed it hit at, and up: over a low wall, into a tree; off the back of
         // a looped wheelie, on with the bike's speed and only a little up
@@ -351,6 +342,9 @@ public partial class FootPlayer
         RagdollSplash();
         if (IsMultiplayerAuthority() && RagdollIntoWater(dt)) return false;
 
+        if (IsMultiplayerAuthority() && _ragdoll.Resting && _ragdollInWater <= 0f) { EndRagdoll(); return true; }
+        // the dedicated server draws nothing (#842): a bot it runs falls without a mesh rebuilt every frame
+        if (Net.NetworkManager.DedicatedServer) return true;
         var pelvis = _ragdoll.Pelvis;
         var points = _ragdoll.Points;
         Span<Vector3> local = stackalloc Vector3[HumanMeshBuilder.JointCount];
@@ -359,8 +353,6 @@ public partial class FootPlayer
         _ragdollMesh.Mesh = HumanMeshBuilder.BuildJoints(FigurePalette(RiderIndex()), local, Hat);
         _ragdollMesh.GlobalTransform = new Transform3D(Basis.Identity, pelvis);
         if (_walker != null) _walker.Visible = false;
-
-        if (IsMultiplayerAuthority() && _ragdoll.Resting && _ragdollInWater <= 0f) EndRagdoll();
         return true;
     }
 
