@@ -77,7 +77,7 @@ part the scale would distort.
 | Check | x1 | x4 |
 |---|---|---|
 | `fightnetcheck` | 36 s | 20-21 s (3 runs ok) |
-| `brbotcheck` (x4 until the bots land, then x1 for the knife) | 235 s | 154 s |
+| `brbotcheck` (x4 until the bots land, then x1 for the knife) | 235 s | 140-154 s (2 runs ok) |
 
 - **Survey of the 72 net/full scripts (estimates, Oct 2026).** Most spend their time on boot, tile
   loading, `sleep`s and chat handshakes, which leaves `/speed` little to save.
