@@ -18,3 +18,4 @@ touches its topic; search with `grep -ril <word> docs/notes/occasions`.
 
 - `new-color-has-alpha-1` — `new Color(r, g, b)` has alpha 1, and `ps1_prop` reads vertex alpha as "this is a light"
 - `headless-runs-cannot-read-multimesh` — Headless runs cannot read MultiMesh transforms back
+- `live-start-stop` — `/occasion start` shows the look whatever the preference; stop tears down; GPU fence timeouts, not occasions, made the broken shapes (#881)
