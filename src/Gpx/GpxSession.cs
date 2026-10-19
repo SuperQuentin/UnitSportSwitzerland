@@ -328,7 +328,8 @@ public partial class GpxSession : Node
             var profile = Cinema.TrackAnalyser.Analyse(track, _origin, corridor);
 
             // seeded from the track, so the same run always cuts the same way
-            ulong seed = (ulong)track.Name.GetHashCode() ^ (ulong)track.Points.Count;
+            // (FNV-1a: string.GetHashCode is randomised per process, so every run cut differently, #924)
+            ulong seed = (ulong)(uint)Core.Fnv.Hash(track.Name) ^ (ulong)track.Points.Count;
             _camera.SetCinemaPlan(profile.Events, seed);
 
             GD.Print($"[cinema] {track.Name}: {profile.Events.Count} events, "

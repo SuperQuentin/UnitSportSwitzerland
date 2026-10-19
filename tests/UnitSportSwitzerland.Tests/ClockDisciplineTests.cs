@@ -129,7 +129,6 @@ public class ClockDisciplineTests
         ["src/World/Traffic.cs"] = "presentation: a car's age in the debug readout",
 
         // ---- calendar: the real date, on purpose ----
-        ["src/Birds/BirdLife.cs"] = "calendar: the birds of the real month",
         ["src/Core/Calendar.cs"] = "calendar: the one reader of today's date for the occasions, the farm, the birds, fishing and shops; --date pins it (#924)",
         ["src/Occasions/OccasionAmbience.cs"] = "calendar: an occasion's ambience follows the real date",
         ["src/Loot/LootService.cs"] = "calendar: a building restocks once a real day (LootTables.RestockSeconds)",
