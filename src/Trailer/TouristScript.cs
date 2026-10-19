@@ -371,8 +371,8 @@ public static class TouristScript
             ],
             Keys =
             [
-                new(0, Ground(IkeaDoor, 340, 20, 1.8f), Pt.On(0, 0f, 1.5f), 28),
-                new(5.3, Ground(IkeaDoor, 338, 20, 1.8f), Pt.On(0, 0f, 1.5f), 28),
+                new(0, Ground(IkeaDoor, 340, 20, 1.8f), Pt.On(0, 0f, 1.5f), 50),
+                new(5.3, Ground(IkeaDoor, 338, 20, 1.8f), Pt.On(0, 0f, 1.5f), 50),
             ],
             Smooth = 0.3f, Preroll = 0.5,
             Bubbles = [Say(2.0, 1, "s15_shark")],
