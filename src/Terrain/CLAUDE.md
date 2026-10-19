@@ -66,7 +66,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 - `collision-build-load-road-tile` — Any collision or near-field build must load the road tile even when the roads are already drawn (or the ground swallows them after flying away and back, or on the #553 street-level cell switch, #603)
 - `road-s-collision-core-takes` — A road's collision core takes the height at the cell's perpendicular foot on the centreline, nearest segment wins
 - `concavepolygonshape3d-one-sided-collision-unless` — `ConcavePolygonShape3D` is one-sided for collision unless told otherwise, and geometry that "looks right" can still...
-- `cliff-shading` — cliffs drew as vertical stripes (#883): per-vertex normals smoothed over ±3 m, blended in on steep ground; each quad split along its shorter diagonal (`ChunkGrid.SplitsNwSe`); a terrain-material mesh must carry normals (up = keep the facet)
+- `cliff-shading` — cliffs drew as vertical stripes (#883): per-vertex normals smoothed over ±3 m, blended in on steep ground; a terrain-material mesh must carry normals (up = keep the facet); the quads keep the fixed diagonal Jolt's height field uses
 - `flat-shaded-quad-mesh-bilinear` — A flat-shaded quad mesh is NOT a bilinear surface, and a height query must match whichever one is actually on screen
 - `window-rows-crop-unless-storeys` — Window rows crop unless storeys divide the wall exactly
 - `never-derive-surface-tangent-from` — Never derive a surface tangent from the screen-space normal

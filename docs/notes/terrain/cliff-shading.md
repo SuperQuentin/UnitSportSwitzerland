@@ -1,4 +1,4 @@
-# Cliffs: lit by a smoothed normal, quads split along their shorter diagonal (#883)
+# Cliffs: lit by a smoothed normal (#883)
 
 - **Symptom:** every rock wall (Dents du Midi, Diablerets, the Rhône walls) drew as vertical
   "organ pipe" stripes in all styles: a comb of light and dark slivers, not a wall in the sun.
@@ -14,10 +14,11 @@
   Straight-up normals mean "keep the facet": cut walls, horizon blocks, and any mesh on the terrain
   material must carry them (a mesh with no normal array reads (0,0,1) as a south-facing cliff;
   `PortalDemo`'s ground sets `Vector3.Up`).
-- **Cause 2:** one fixed diagonal (v10-v01) for every quad: on a wall not aligned with it the two
-  triangles face apart, a fine zig-zag. **Fix 2:** `ChunkGrid.SplitsNwSe` picks the diagonal that
-  climbs less, from the grid's own heights (not the road-blended ones, so `PatchSurface` can keep the
-  core's indices); `SampleMeshHeight` decides there too, so height queries still match the screen.
-  Alone it removes the fine comb, not the streaks.
+- **Not done: a per-quad diagonal.** Splitting each quad along its shorter diagonal took out a fine
+  zig-zag on walls, but Jolt's height field (the ground collision) splits every cell along the same
+  fixed diagonal as the mesh always did (v10-v01: a headless ray at the centre of a quad with its NE
+  corner raised reads half its height). Flipping only the drawn one put the ground you see and the
+  ground you stand on apart on every flipped quad, so the mesh keeps the fixed split.
+- **Walking on that ground** is `player/steep-ground`.
 - **Check:** `--origin 2563500,1112500 --shot-queue` with `0,2500,-1600,-12,180,25,out.png` (the
   north face) in `--style ps1|cartoon|real-`; compare with a `main` build.

@@ -90,21 +90,10 @@ public static partial class TerrainMeshBuilder
                 int v10 = v00 + 1;
                 int v01 = v00 + m;
                 int v11 = v01 + 1;
-                // clockwise seen from above (Godot front face), along the diagonal the grid's own
-                // heights pick (not the road-blended ones: PatchSurface keeps these indices, and
-                // ChunkGrid.SampleMeshHeight reads the same heights)
-                int fc = c * stride, fr = r * stride;
-                if (ChunkGrid.SplitsNwSe(grid.HeightMetersAt(fc, fr), grid.HeightMetersAt(fc + stride, fr),
-                        grid.HeightMetersAt(fc, fr + stride), grid.HeightMetersAt(fc + stride, fr + stride)))
-                {
-                    indices[ii++] = v00; indices[ii++] = v10; indices[ii++] = v11;
-                    indices[ii++] = v00; indices[ii++] = v11; indices[ii++] = v01;
-                }
-                else
-                {
-                    indices[ii++] = v00; indices[ii++] = v10; indices[ii++] = v01;
-                    indices[ii++] = v10; indices[ii++] = v11; indices[ii++] = v01;
-                }
+                // clockwise seen from above (Godot front face), along the one diagonal Jolt's
+                // height field splits its cells by too: the ground drawn is the ground stood on (#883)
+                indices[ii++] = v00; indices[ii++] = v10; indices[ii++] = v01;
+                indices[ii++] = v10; indices[ii++] = v11; indices[ii++] = v01;
             }
 
         for (int r = 0; r < m; r++)
