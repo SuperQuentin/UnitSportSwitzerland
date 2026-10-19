@@ -315,6 +315,7 @@ public static class ItemDefs
             GarmentStyle.Special => $" Rare: a {Garments.FinishName(g.Finish)} finish that moves.",
             _ when g.Finish == Finish.Camo => " The army's TAZ 90 camouflage.",
             GarmentStyle.Workwear => " Building-site workwear.",
+            GarmentStyle.Alien => " From another world.",
             _ => "",
         };
         string covers = g.CoversBottom ? " One piece: it takes the bottom slot too." : "";

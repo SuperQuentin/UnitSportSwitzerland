@@ -77,7 +77,44 @@ public sealed record Pt
 public sealed record Key(double T, Pt Eye, Pt Look, float Lens = 35f, float Roll = 0f);
 
 /// <summary>A line of text over the picture from <paramref name="T"/> for <paramref name="Seconds"/>.</summary>
-public sealed record Caption(double T, double Seconds, string Text, string? Sub = null, bool Title = false);
+public sealed record Caption(double T, double Seconds, string Text, string? Sub = null, bool Title = false)
+{
+    /// <summary>The subtitles' id of <see cref="Text"/> (and of <see cref="Sub"/>, <see cref="SubId"/>); null: the slug of its English (<see cref="SubtitleTrack.Slug"/>).</summary>
+    public string? Id { get; init; }
+    public string? SubId { get; init; }
+}
+
+/// <summary>
+/// A comic speech bubble (#862): actor <paramref name="Who"/> of the shot says
+/// <paramref name="Text"/> from <paramref name="T"/> s into the shot, its tail on that actor's head
+/// (projected through the shot's camera every frame), the text typing in. It stays
+/// <see cref="Seconds"/>, by default long enough to read (<see cref="Ui.Bubbles.BubbleGeometry.ReadingTime"/>),
+/// never past the shot's end. Bubbles on screen together never overlap.
+/// <code>
+/// Bubbles =
+/// [
+///     new(0.5, 0, "Who took the fondue?!", BubbleShape.Shout),
+///     new(2.0, 1, "Not me...", BubbleShape.Whisper) { Seconds = 2 },
+///     new(3.0, 2, "Mmm. Cheese.", BubbleShape.Think),
+///     new(3.5, -1, "Hello?") { At = new(0.92f, 0.3f) },   // a voice off: the tail to a point of the frame
+/// ],
+/// </code>
+/// </summary>
+public sealed record Bubble(double T, int Who, string Text, Ui.Bubbles.BubbleShape Shape = Ui.Bubbles.BubbleShape.Say)
+{
+    /// <summary>Seconds on screen; NaN: long enough to type and read it.</summary>
+    public double Seconds { get; init; } = double.NaN;
+    /// <summary>A point of the frame the tail goes to instead of an actor's head (0..1 across, 0..1 down): a voice off, a radio.</summary>
+    public Vector2? At { get; init; }
+    /// <summary>A tint washed into the white; null: the speaker's character colour (<see cref="Character.Colour"/>), white for nobody in particular.</summary>
+    public Color? Colour { get; init; }
+    /// <summary>The subtitles' id; null: the slug of its English (<see cref="SubtitleTrack.Slug"/>).</summary>
+    public string? Id { get; init; }
+
+    /// <summary>When it goes, shot time: its <see cref="Seconds"/> or its reading time, at most the shot's end.</summary>
+    public double Until(double shotLength) =>
+        Math.Min(shotLength, T + (double.IsNaN(Seconds) ? Ui.Bubbles.BubbleGeometry.ReadingTime(Text.Length, Shape) : Seconds));
+}
 
 /// <summary>
 /// A person in a story: the name the chat shows in <paramref name="Colour"/>, a face and build
@@ -94,7 +131,11 @@ public sealed record Character(string Name, Color Colour, Avatar.Appearance Look
 /// A line of the in-game chat as dialogue, typed in at <paramref name="T"/>; a null speaker is the
 /// game's own system line ("PIGEON joined the game"). Lines stay up to the end of their shot.
 /// </summary>
-public sealed record Line(double T, Character? Who, string Text);
+public sealed record Line(double T, Character? Who, string Text)
+{
+    /// <summary>The subtitles' id; null: the slug of its English (<see cref="SubtitleTrack.Slug"/>).</summary>
+    public string? Id { get; init; }
+}
 
 /// <summary>A documentary place and time card ("AIROLO · 08:15"), top left, from <paramref name="T"/> for <paramref name="Seconds"/>.</summary>
 public sealed record Super(double T, double Seconds, string Text);
@@ -197,19 +238,40 @@ public sealed record Cast
     /// <summary>A boat: how deep its body is put under the surface, m (the steamer floats at 1.6).</summary>
     public float Draught { get; init; } = 0.2f;
 
-    /// <summary>A fist fight's pose by time (<see cref="FootPlayer.FightPose"/>: a stance, or 16 + a move), 0 = none.</summary>
-    public Func<double, int>? Fight { get; init; }
-    /// <summary>What it wears on its head (<see cref="FootPlayer.HeadwearId"/>: 1 witch hat, 2 pumpkin head, 3 Santa hat, 4 antlers).</summary>
-    public int Hat { get; init; }
-    /// <summary>A farm machine's implement or header let down (<c>Truck.Lowered</c>): the plough in the ground, the combine's header.</summary>
-    public bool Lowered { get; init; }
+    // ---- the film kit (#882) ---------------------------------------------------------------------
+
     /// <summary>
-    /// On foot: jump and crouch held by time (<see cref="FootPlayer.FootActions"/>; a jump is a press,
-    /// false then true): a slide (crouch at a run), a wall jump, a base jump. A walker with these is an NPC body.
+    /// On foot (<see cref="Drive.Walk"/>): jump and crouch held over time, as the keys would be
+    /// (<see cref="FootPlayer.FootActions"/>; a jump is a press, false then true): a slide is a crouch
+    /// at a run, a wall jump a jump in the air at a wall, a second jump falling high up opens the
+    /// wingsuit, then flown by <see cref="Flight"/>. Such a walker is an NPC body (it reads these, not the keys).
     /// </summary>
     public Func<double, (bool Jump, bool Crouch)>? Actions { get; init; }
-    /// <summary>A radio in its hand plays (<see cref="FootPlayer.HeldRadio"/>): it sparkles and bounces to the beat.</summary>
-    public bool Radio { get; init; }
+    /// <summary>
+    /// A fist fight's stance or move over time (<see cref="FootPlayer.FightPose"/>: 1 stand, 2 guard,
+    /// 8 dazed, 9 victory; 16 + a <c>FightMove</c>: 17 jab, 18 kick, 21 jump kick, 22 uppercut), 0 = none.
+    /// A move plays once from when the value changes.
+    /// </summary>
+    public Func<double, int>? Fight { get; init; }
+    /// <summary>What it wears on its head (<see cref="FootPlayer.HeadwearId"/>, <see cref="Avatar.Headwear"/>: 1 witch hat, 2 pumpkin head, 3 Santa hat, 4 antlers), 0 = bare.</summary>
+    public int Headwear { get; init; }
+    /// <summary>A farm machine's implement or header let down (<c>Truck.Lowered</c>): the plough in the ground, the combine's header.</summary>
+    public bool Lowered { get; init; }
+    /// <summary>The radio in its hand plays this CD (<see cref="FootPlayer.HeldRadio"/>, 1 = the first bundled one): it sparkles and bounces to the beat. 0 = off. Hold <c>Item = Radio</c>.</summary>
+    public int Radio { get; init; }
+    /// <summary>
+    /// Swims at <see cref="At"/> (water), stroking with <see cref="Walk"/>: put down on the dry
+    /// <see cref="Board"/> spot (or beside the water when there is none), then at the surface at its spot.
+    /// </summary>
+    public bool Swim { get; init; }
+    /// <summary>A saucer actor (<c>Ride = RideKind.Ufo</c>): its beam, lamps, ramp and legs over time (<see cref="UfoSwitches"/>).</summary>
+    public Func<double, UfoSwitches>? Ufo { get; init; }
+    /// <summary>
+    /// Walks down the ramp of a landed saucer: an actor's (<see cref="RampOf.Actor"/>) or one of the
+    /// shot's <see cref="Shot.Craft"/> (<see cref="RampOf.Craft"/>). Put at the hatch, facing down the
+    /// ramp, which is solid under it for the shot; give it a <see cref="Walk"/> (ahead) to come down.
+    /// </summary>
+    public RampOf? DownRamp { get; init; }
 }
 
 /// <summary>
@@ -231,9 +293,41 @@ public sealed record Prop(Spot At, float Bearing, Vector3 Size, Color Colour)
     public Vector3? InSet { get; init; }
     /// <summary>A character sitting there instead, the hip at the spot, facing <see cref="Bearing"/>: a still figure, as a passenger sits.</summary>
     public Character? Seated { get; init; }
-    /// <summary>A placed object's look instead (<see cref="Items.PlacedKind"/>: a burning campfire, a workbench, a gadget), drawn only, never placed.</summary>
+    /// <summary>A placed object's look instead (<see cref="Items.PlacedKind"/>: a burning campfire, a workbench, a camo net), drawn only, never placed or saved.</summary>
     public Items.PlacedKind Placed { get; init; }
+    /// <summary>A built piece instead (a hammer's wall or floor, <see cref="Build.StructureMeshes"/>) in <see cref="Material"/>, solid, standing on the ground.</summary>
+    public Build.PieceKind? Piece { get; init; }
+    public Build.BuildMaterial Material { get; init; }
+    /// <summary>
+    /// A real parked vehicle of this kind instead (<see cref="Vehicles.VehicleManager.Place"/>, taken
+    /// away after the shot): a tractor beam lifts it (12 m long at most). <see cref="Setup"/> picks a car's preset.
+    /// </summary>
+    public RideKind Vehicle { get; init; }
+    public int Setup { get; init; }
+    /// <summary>A tractor beam over it lifts it (an item, a box, a seated figure, a placed look): the beam is its cue.</summary>
+    public bool Beamable { get; init; }
 }
+
+/// <summary>
+/// A UFO sighting staged in a shot (#863): saucers of the game's own sightings
+/// (<see cref="Occasions.UfoSightings.Stage"/>), flying their scripted path
+/// (<see cref="Occasions.SightingPath"/>) about <paramref name="At"/>: the point a flyover crosses,
+/// the hover point of an abduction (put a <see cref="Cows"/> herd there: the beam lifts what is under
+/// it), the landing spot, the point under the mothership (its <see cref="Spot.H"/> raises the whole
+/// path). <paramref name="Heading"/> is the compass bearing they come in on, degrees.
+/// <paramref name="From"/> is where the sighting's own clock stands when the camera rolls, s: 0
+/// starts it with the roll, 24 rolls on an abduction's beam coming on, 30 on a landed saucer with
+/// its ramp down, negative starts it that much later (the timings are
+/// <see cref="Occasions.SightingPath"/>'s constants).
+/// </summary>
+public sealed record Saucers(Occasions.SightingKind Kind, Spot At, float Heading = 0f, int Count = 1, double From = 0, uint Seed = 1);
+
+/// <summary>
+/// A herd staged in a shot (#863): <paramref name="Count"/> cows of <paramref name="Breed"/> grazing
+/// within <paramref name="Radius"/> m of <paramref name="At"/> (<see cref="Farming.Herds.Stage"/>),
+/// from the shot's staging on, as the pasture herds do (a beam lifts them too).
+/// </summary>
+public sealed record Cows(Spot At, int Count = 8, Farming.CowBreed Breed = Farming.CowBreed.Brown, float Radius = 18f);
 
 /// <summary>
 /// One shot of the trailer: where and when, who is in it, how the camera moves, what it says.
@@ -261,6 +355,10 @@ public sealed record Shot
 
     public IReadOnlyList<Cast> Cast { get; init; } = Array.Empty<Cast>();
     public IReadOnlyList<Prop> Props { get; init; } = Array.Empty<Prop>();
+    /// <summary>UFO sightings in the shot (#863), on the sightings' own clock from the roll.</summary>
+    public IReadOnlyList<Saucers> Ufos { get; init; } = Array.Empty<Saucers>();
+    /// <summary>Herds of cows in the shot (#863), grazing from the staging on.</summary>
+    public IReadOnlyList<Cows> Herds { get; init; } = Array.Empty<Cows>();
     public required IReadOnlyList<Key> Keys { get; init; }
     /// <summary>Key time at the shot's first frame: shots that carry one move on each start further along it.</summary>
     public double KeysFrom { get; init; }
@@ -273,6 +371,8 @@ public sealed record Shot
 
     public IReadOnlyList<Caption> Captions { get; init; } = Array.Empty<Caption>();
     public IReadOnlyList<Line> Chat { get; init; } = Array.Empty<Line>();
+    /// <summary>Comic speech bubbles over the actors' heads (#862), the films' dialogue.</summary>
+    public IReadOnlyList<Bubble> Bubbles { get; init; } = Array.Empty<Bubble>();
     public IReadOnlyList<Super> Supers { get; init; } = Array.Empty<Super>();
     /// <summary>
     /// A film set built for the shot (the dormitory, <see cref="DormSet.Build"/>): put far under
@@ -291,15 +391,27 @@ public sealed record Shot
     public double? Photo { get; init; }
     /// <summary>Where the photo is taken from (the photographer's view, the film's camera elsewhere); null: the film's frame.</summary>
     public Key? PhotoFrom { get; init; }
-    /// <summary>The photo's picture from this PNG instead of a render (a screenshot of the game's own screens: the map, the studio).</summary>
+    /// <summary>The photo's picture from this PNG instead of a render (a screenshot of one of the game's screens).</summary>
     public string? PhotoFile { get; init; }
+
+    // ---- the film kit (#882) ---------------------------------------------------------------------
+
     /// <summary>
-    /// The occasion over the world for the shot: <c>halloween</c> or <c>christmas</c> (pumpkins, snow),
-    /// <c>none</c> (neither, whatever the calendar says), null (the calendar's, as the game runs).
+    /// The occasions over the world for the shot: <c>halloween</c>, <c>christmas</c>, <c>ufo</c> or
+    /// several (<c>"christmas,ufo"</c>), exactly those whatever the calendar says; <c>none</c>: no
+    /// occasion at all; null: the calendar's, as the game runs (Halloween runs all of September and
+    /// October). The run ends with the calendar's.
     /// </summary>
     public string? Occasion { get; init; }
-    /// <summary>A Battle Royale zone's wall (<see cref="BattleRoyale.ZoneWall"/>) round this spot, this many metres out.</summary>
+    /// <summary>A Battle Royale zone's wall (<see cref="BattleRoyale.ZoneWall"/>) standing on this circle (centre, radius m), no match needed.</summary>
     public (Spot Centre, float Radius)? Zone { get; init; }
+    /// <summary>Item effects on cue at an actor's hand (<see cref="ItemCue"/>): an alphorn's call, a fondue, a flare, smoke, a fishing cast.</summary>
+    public IReadOnlyList<ItemCue> ItemCues { get; init; } = Array.Empty<ItemCue>();
+    /// <summary>One of the game's own screens over the frame on cue (<see cref="ScreenCue"/>): the map, the landing picker, a PNG of another.</summary>
+    public IReadOnlyList<ScreenCue> Screens { get; init; } = Array.Empty<ScreenCue>();
+    /// <summary>UFO props (<see cref="Trailer.Craft"/>): a saucer landed, crashed or hovering, the mothership; their beams lift what is under them.</summary>
+    public IReadOnlyList<Craft> Craft { get; init; } = Array.Empty<Craft>();
+
     /// <summary>Seconds of fade from black at the start and to black at the end.</summary>
     public double FadeIn { get; init; }
     public double FadeOut { get; init; }

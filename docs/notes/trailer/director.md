@@ -44,15 +44,6 @@
   `Board` spot, then `PlaceBoat` on the water. `Dance`, `Item` (held), `Doors` (the freighter's
   ramp is bit 3), `Trailer`, `Lights`, `Seed` (looks). `StopAt` stops a `Follow` driver at an arc
   (3 m/s² of braking).
-- **More on an actor or a shot** (#865): `Cast.Fight` (a fist fight's pose by time, `FightPose`:
-  stance or 16 + move), `Cast.Hat` (`HeadwearId`), `Cast.Lowered` (a farm machine's implement or
-  header down), `Cast.Actions` (jump and crouch by time: a slide, a wall jump; the walker becomes an
-  NPC body, which walks on `WalkControls` since #837), `Cast.Radio` (a held radio plays: sparkles);
-  `Prop.Placed` (a placed object's look only, never placed or saved: a burning campfire, a
-  workbench, a gadget), `Shot.Zone` (the Battle Royale's zone wall round a spot), `Shot.Occasion`
-  (`halloween`, `christmas`, `none` or null = the calendar's: Halloween runs all of September and
-  October, so a film that wants none says so; the run ends with `/occasion auto`), `Shot.PhotoFile`
-  (the polaroid shows a PNG, a screenshot of one of the game's screens, instead of a render).
 - **Characters** (`Character`: a name, a chat colour, an `Appearance` and the clothes worn): a
   `Cast.Who` has the same face and clothes in every shot. `FromDoor` puts one on the step of the
   front door nearest its spot, the door opened (`InteriorManager.OpenDoorForCamera`). `Aboard` puts
@@ -68,9 +59,52 @@
   several shots carry one move on (the three style shots).
 - **On top** (`Captions`, the one layer left): `Captions` (low line or middle title), `Chat`
   (the friends' group chat bottom left, names in their colours, typed in; a null `Who` is a
-  system line), `Supers` (place and hour, top left), `Photo` (at that second a view is rendered once
+  system line), `Bubbles` (below), `Supers` (place and hour, top left), `Photo` (at that second a view is rendered once
   with `PhotoCapture`: the film's camera, or `PhotoFrom`'s key, a photographer's of its own; a
   white flash, then a polaroid settling on screen, the title under it and a low line over it), fades.
+- **Speech bubbles** (`Shot.Bubbles`, #862: the films' dialogue, in place of `Chat`, which still
+  works): `new Bubble(T, actorIndex, "Text", BubbleShape.Say|Shout|Whisper|Think)`, optional
+  `Seconds` (default: long enough to type and read, `BubbleGeometry.ReadingTime`, never past the
+  shot), `At` (a point of the frame, 0..1, for a voice off; the actor index is then ignored),
+  `Colour` (a tint washed into the white; default the actor's `Character.Colour`), `Id`
+  (subtitles). The tail ends on the actor's `FootPlayer.HeadTop`, projected through the film's
+  camera every frame (behind the camera: mirrored under the frame); the bubble is kept on screen,
+  leans away from the near edge, sits against the top with a shorter tail, beside or under the
+  head when there is no room over it; bubbles never overlap (`BubbleLayout`: a later one climbs
+  over an earlier one, else goes beside or under it, never over a speaker's head), and one pushed
+  far from its speaker goes under the others (its long tail too). Comic look (`Ui/Bubbles/SpeechBubble`):
+  white body, black ink twice as wide as it shows (the fills cover its inner half and the joint
+  of tail and body), a soft offset shadow, capitals in the system's comic face (Comic Sans MS on
+  macOS and Windows, Comic Neue where installed; a plain bold elsewhere), a shout spiky with a
+  zigzag tail and 18 % larger, a whisper dashed and in small letters, a thought a cloud with three
+  circles to the head (none for a thinker off the frame). Lettering 3.2 % of the frame's height;
+  typed in at 32 letters a second (45 shouted, 24 whispered), a pop from 60 % through 108 % in
+  0.3 s from the tail's root, faded out over 0.2 s unless it lasts to the cut. Demo and check:
+  `FILM=bubbles tools/trailer.sh stills` (`BubbleDemoScript`, the four friends on the Gornergrat,
+  every shape at once, then speakers at both edges and a voice off; not a film to show).
+- **Subtitles** (#862): every English line (caption text and sub, bubble, chat line) has an id,
+  its `Id` or else the slug of its English (`SubtitleTrack.Slug`: "Who stole the fondue?!" →
+  `who-stole-the-fondue`, at most 48 letters): retiming or moving a line keeps it, rewording the
+  English makes a new line (its translations then show as missing, never silently stale). Supers
+  (place names and hours) are not subtitled. Each filmed shot gets `shotNN.cues.json` beside its
+  MP4 (`{"shot", "fps", "frames", "cues": [{"id", "kind", "en", "from", "to"}]}`, frames from the
+  shot's first, `to` excluded), so a cut of shots from several versions adds them up frame-exactly.
+  Translations: `docs/trailer/<film>.subtitles.json`, `{"id": {"en": "...", "fr": "...", "de": "...",
+  "it": "...", "rm": "..."}}` (`rm` Rumantsch Grischun); `tools/trailer.sh lines` adds the film's
+  lines to it (translations kept, reworded and unused ids listed). `tools/trailer.sh cut` (and
+  `render`) runs Godot headless (`--trailer-subtitles DIR`) to write `<film>.<lang>.srt` into
+  the version folder for English and every language the file has (a missing translation is the
+  English, with a warning), lines on together merged into one subtitle each stretch (`mov_text`
+  cannot overlap; two speakers each on a dashed line), then muxes them into `trailer.mp4` and
+  `trailer_share.mp4` (`-c:s mov_text`, `language=eng|fra|deu|ita|roh`, `title` and
+  `handler_name` = the language's own name, which players list; none on by default: the bubbles are
+  burnt in, in English). ffmpeg's mp4 muxer always enables the first track of a kind when none is
+  default (QuickTime would then show English), so `subtitles_off` clears the `tkhd` enabled flag
+  of the text tracks with a few lines of python3 (`ffprobe` then reads `default=0` on all five).
+  With four speakers in a tight frame a late bubble can still end up over a face (every spot
+  clear of heads taken): frame wider or let a line go before the next comes. A version filmed before #862 has no cues: its
+  cut has no subtitles. Checked on the demo (`FILM=bubbles tools/trailer.sh render`, 12 s,
+  360 frames, five tracks of 13 cues, `rm` falling back once). Check a cut: `ffprobe -v error -show_entries stream=index,codec_name:stream_tags=language,title trailer.mp4`.
 - **Picture**: the root renders at `--trailer-size` (1920x1080) whatever the window
   (`ContentScaleMode.Viewport`), every `CanvasLayer` but the captions hidden (walked once, then
   `NodeAdded`), `Captions` sized from the frame's height, fades as a black veil.
@@ -83,7 +117,8 @@
   ~15 min on this machine, the 38 of the story ~25; either film is exactly 3810 frames, 127.000 s.
 - **Versions**: every render is a new folder, never written over: `test_output/trailer/<film>/v1`,
   `v2`, ... in the **main checkout** (`TRAILERS=` elsewhere), so a film outlives the worktree it
-  was made in. Each holds `trailer.mp4`, `trailer_share.mp4` (CRF 23, to send), `shots/`,
+  was made in. Each holds `trailer.mp4`, `trailer_share.mp4` (CRF 23, to send), `<film>.<lang>.srt`,
+  `shots/` (with each shot's `.start` and `.cues.json`),
   `render.log` and `version.txt` (when, the commit and whether there were local changes, which
   shots were filmed and from which version the others came). `VERSION=2 tools/trailer.sh cut`
   re-cuts an older one. Stills stay scratch, in the checkout's `test_output/trailer/<film>/stills`.
@@ -95,6 +130,19 @@
   street's axis, a shore, a castle, a runway end. `--trailer-log` then times the actors.
 - **The cut** is checked at start (`CutProblems`): shot numbers ascending, each shot starting on the
   bar the one before ends, the last ending with the song; a problem fails the run's RESULT.
+- **Real terrain only** (#882): every scene shows real tiles, never the generated fill. Before the
+  first shot the run logs `[trailer] real tiles: N` and stops (`RESULT: FAILED`, exit 3) with none
+  (the terrain drive unmounted: runs fell back to the generated world for hours). Then each shot
+  (`FilmCoverage`, tier 0 `FilmCoverageTests`): every tile within 5 km of each camera key's eye and
+  of each actor, craft, sighting and herd spot (8 km for an eye over 2,200 m, its height read from the
+  manifest's tile tops) must be one the manifest lists; a shot that fails is reported with its tiles
+  and fails the run, and all of them go to `test_output/trailer/<film>/missing_tiles.txt` (`E-N` a
+  line, for `MapSetup --tiles-file`). `--trailer-allow-generated` films it anyway (tests, the
+  fixture demo). Sets are skipped (far under the ground).
+- **The film kit** (#882, `film-kit` note): scripted jumps, fights, hats, swimmers, saucer actors and
+  UFO props (crashed, landed, the mothership) with real beams, walking down a ramp, beamable props,
+  parked vehicles, placed looks, built pieces, item cues (fishing lines), the game's screens on cue,
+  occasions per shot.
 - **The song** is not committed: `tools/trailer.sh` downloads it from incompetech.com (CC BY 4.0,
   credited on the end card, `Song.Credit`).
 - **Staging gotchas** (each cost a stills pass):
@@ -113,8 +161,8 @@
     several headings with `--trailer-log`), keep the steer small.
   - A road route's direction is the road's, not `Toward`'s: read it off the route dump before
     giving an actor a negative arc.
-  - A scripted body cannot swim: it is held at the water's surface, and swimming reads the
-    player's own keys, not `WalkControls`.
+  - A swimmer is `Cast.Swim` (a walker put in the water from a dry `Board`; it strokes with its
+    `Walk`), in water deeper than ~1.5 m: shallower, the game ends the swim and it wades.
   - A fixed camera beside a road sees whatever stands there (barns, bridge parapets): put it on the
     road, or high, or check it in a still.
   - Every actor runs under the one local peer, and a figure's look is found by its rider index
@@ -128,5 +176,9 @@
   - The steamer is real: 3 km/h after 10 s, 90 % of its speed after 71 s. A short pre-roll leaves it
     standing; it reads as at anchor from afar.
   - A walker out of a door on a slope vaults the bank in front of the step: stand it there instead.
-  - The director's warnings (an actor left out, placing timed out) go to stderr, not into
-    `stills.log`: read the run's whole output.
+  - The director's warnings (an actor left out, placing timed out) go to stderr; `stills` now
+    tees both into `stills.log`.
+  - A still from a run whose log has `ERROR: timeout waiting for fence` (Metal GPU timeouts: too many
+    Godot instances at once) can show garbage geometry (the "giant broken shapes over Riddes", #881):
+    take it again with the machine quieter. `tools/trailer.sh stills` and `preview` run at
+    `--fixed-fps 30` like `render`, so a slow frame no longer skips film time.

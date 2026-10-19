@@ -68,7 +68,7 @@ public partial class BrHud : CanvasLayer
             float w = Size.X;
             var me = br.LocalPlayer();
             var mine = br.MyEntry;
-            double now = ClockSync.ServerNow;
+            double now = ClockSync.SimNow;
 
             // ---- the top line --------------------------------------------------------------
             string top, sub = "";

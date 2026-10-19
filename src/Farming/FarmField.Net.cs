@@ -84,6 +84,7 @@ public partial class FarmField
         if (t.Subs.Count > 0 || t.Waiting.Count > 0) return;
         t.Cts.Cancel();
         _tiles.Remove(t.Id);
+        RaiseTileGone(t.Id);
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]

@@ -902,7 +902,7 @@ public static class TouristScript
                 new() { Who = Lea, At = Yard.Toward(90, 3.0f), Heading = 270, Dance = Chicken },
                 new() { Who = Marco, At = Yard.Toward(180, 3.0f), Heading = 0, Dance = Griddy },
                 new() { Who = Nina, At = Yard.Toward(270, 3.0f), Heading = 90, Dance = Macarena },
-                new() { Who = Jonas, At = Yard.Toward(225, 4.2f), Heading = 45, Item = (int)ItemId.Radio, Radio = true, Dance = 1 },
+                new() { Who = Jonas, At = Yard.Toward(225, 4.2f), Heading = 45, Item = (int)ItemId.Radio, Radio = 1, Dance = 1 },
             ],
             Props =
             [
@@ -919,8 +919,8 @@ public static class TouristScript
             Feature = "Halloween",
             Cast =
             [
-                new() { Who = Blip, At = KramgasseWest.Toward(90, 60), Heading = 90, Hat = 2, Dance = Cheer },
-                new() { Who = Lea, At = KramgasseWest.Toward(90, 60).Toward(180, 1.6f), Heading = 90, Hat = 1, Dance = Wave },
+                new() { Who = Blip, At = KramgasseWest.Toward(90, 60), Heading = 90, Headwear = 2, Dance = Cheer },
+                new() { Who = Lea, At = KramgasseWest.Toward(90, 60).Toward(180, 1.6f), Heading = 90, Headwear = 1, Dance = Wave },
             ],
             Keys =
             [
@@ -936,8 +936,8 @@ public static class TouristScript
             Feature = "Christmas",
             Cast =
             [
-                new() { Who = Blip, At = Lauter, Heading = 180, Hat = 3, Dance = ArmWave },
-                new() { Who = Marco, At = Lauter.Toward(90, 1.5f), Heading = 180, Hat = 4, Dance = Wave },
+                new() { Who = Blip, At = Lauter, Heading = 180, Headwear = 3, Dance = ArmWave },
+                new() { Who = Marco, At = Lauter.Toward(90, 1.5f), Heading = 180, Headwear = 4, Dance = Wave },
             ],
             Keys =
             [
