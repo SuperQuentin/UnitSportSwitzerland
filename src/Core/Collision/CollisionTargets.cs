@@ -80,6 +80,26 @@ public static class CollisionTargets
         yield return new("Doors", "Garage roll-up", (_, at) => Interiors.DoorLeaf.CreateRollUp("collide", at, 2.6f, 2.3f, doorMaterial));
         yield return new("Doors", "Roll-up from inside", (_, at) => Interiors.DoorLeaf.CreateShutter("collide", at, 2.6f, 2.3f, Interiors.DoorHang.RollUp, Terrain.Format.BuildingKind.House, doorMaterial));
         yield return new("Doors", "Barn pair from inside", (_, at) => Interiors.DoorLeaf.CreateShutter("collide", at, 3.2f, 3.2f, Interiors.DoorHang.OutwardPair, Terrain.Format.BuildingKind.Agricultural, doorMaterial));
+
+        // castles (#859): each dress as drawn and collided from its tile; a ruin is its broken
+        // walls, open to the sky, for the drawing and for the collision alike
+        foreach (var (name, castle, size) in Interiors.PortalDemo.CastleSamples())
+            yield return new("Castles", name, (_, at) => Castle(castle, size, at));
+    }
+
+    /// <summary>A castle sample's solid as a tile draws and collides it, its matched point at <paramref name="at"/>.</summary>
+    private static Node3D Castle(int castle, Vector4 size, Transform3D at)
+    {
+        var tile = Interiors.PortalDemo.CastleTile(castle, size, out var point);
+        var shift = new Vector3(-point.X, 0f, -point.Y);
+        var body = new StaticBody3D { Name = $"castle_{castle}", Transform = at };
+        body.AddChild(new MeshInstance3D
+        {
+            Name = "Mesh", Position = shift, MaterialOverride = new StandardMaterial3D(),
+            Mesh = Terrain.ChunkNode.ToArrayMesh(Terrain.BuildingMeshBuilder.Build(tile, Array.Empty<Interiors.DoorSpot>())!, new StandardMaterial3D()),
+        });
+        body.AddChild(new CollisionShape3D { Position = shift, Shape = Terrain.ChunkNode.BuildingShape(Terrain.BuildingMeshBuilder.BuildCollisionFaces(tile)) });
+        return body;
     }
 
     /// <summary>

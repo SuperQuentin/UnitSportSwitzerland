@@ -53,6 +53,8 @@
   - "Spectating X";
   - results table.
 - **Server flags**: `--brpace f` scales every match's timing (the loopback check runs at 0.13, short: 0.104; its 2-player zone runs at half the timetable).
+  `--brseed n` gives every match the seed n (checks, #873). A test pace races the zone against the drop: the
+  bots take 80-140 s from the ramp to the ground, so a check with bots runs at the real pace (`bots/commands`).
   `user://br/history.json` holds the last 5 region centres.
 - **Careers** (#479, `BrStats`, plain C#, unit-tested): at `End` the server folds every entrant into
   `user://br/stats.json` (by display name, any case: matches, wins, top 5s, kills, damage, best place,

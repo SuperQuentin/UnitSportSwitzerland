@@ -442,4 +442,67 @@ public class TerrainFormatTests
         bytes[LaneTag(bytes) + 12] = 0;
         Assert.Empty(RoundTrip(s => s.Write(bytes), RoadCodec.Decode).Approaches);
     }
+
+    /// <summary>A sidewalk prop of <paramref name="quads"/> separate 1 m squares, two triangles each.</summary>
+    private static RoadAreaProp Squares(int quads)
+    {
+        var v = new List<float>();
+        var idx = new List<ushort>();
+        for (int q = 0; q < quads; q++)
+        {
+            int at = v.Count / 3;
+            float x = q % 900 * 1.1f, z = q / 900 * 1.1f;
+            v.AddRange([x, 0, z, x + 1, 0, z, x + 1, 0, z + 1, x, 0, z + 1]);
+            idx.AddRange([(ushort)at, (ushort)(at + 1), (ushort)(at + 2), (ushort)at, (ushort)(at + 2), (ushort)(at + 3)]);
+        }
+        return new RoadAreaProp
+        {
+            Type = AreaPropType.Sidewalk, Variant = 2, Flags = PropFlags.Solid, Height = 0.12f,
+            Vertices = v.ToArray(), Indices = idx.ToArray(),
+        };
+    }
+
+    /// <summary>Edges only one triangle of the prop uses: what the game draws kerb faces along.</summary>
+    private static int OutlineEdges(RoadAreaProp p)
+    {
+        var uses = new Dictionary<(float, float, float, float), int>();
+        for (int t = 0; t < p.Indices.Length; t += 3)
+            for (int k = 0; k < 3; k++)
+            {
+                int a = p.Indices[t + k], b = p.Indices[t + (k + 1) % 3];
+                var pa = (p.Vertices[a * 3], p.Vertices[a * 3 + 2]);
+                var pb = (p.Vertices[b * 3], p.Vertices[b * 3 + 2]);
+                var key = pa.CompareTo(pb) < 0 ? (pa.Item1, pa.Item2, pb.Item1, pb.Item2) : (pb.Item1, pb.Item2, pa.Item1, pa.Item2);
+                uses[key] = uses.GetValueOrDefault(key) + 1;
+            }
+        return uses.Values.Count(n => n == 1);
+    }
+
+    [Fact]
+    public void AreaProp_over_the_u16_counts_is_split_into_whole_pieces() // #850
+    {
+        var big = Squares(12000);   // 24 000 triangles, 72 000 indices: over a u16
+        var tile = new RoadTile { Id = Id, Segments = [], Flags = RoadTileFlags.Network, AreaProps = [big] };
+        var back = RoundTrip(s => RoadCodec.Encode(tile, s), RoadCodec.Decode).AreaProps;
+
+        Assert.True(back.Count > 1);
+        Assert.All(back, p =>
+        {
+            Assert.True(p.Indices.Length <= ushort.MaxValue && p.Indices.Length % 3 == 0);
+            Assert.Equal((big.Type, big.Variant, big.Flags, big.Height), (p.Type, p.Variant, p.Flags, p.Height));
+            Assert.All(p.Indices, i => Assert.True(i < p.Vertices.Length / 3));
+        });
+        Assert.Equal(big.Indices.Length, back.Sum(p => p.Indices.Length));
+        Assert.Equal(OutlineEdges(big), back.Sum(OutlineEdges));   // no kerb along a cut
+    }
+
+    [Fact]
+    public void AreaProp_that_fits_is_written_unchanged() // #850
+    {
+        var small = Squares(300);
+        var tile = new RoadTile { Id = Id, Segments = [], Flags = RoadTileFlags.Network, AreaProps = [small] };
+        var back = Assert.Single(RoundTrip(s => RoadCodec.Encode(tile, s), RoadCodec.Decode).AreaProps);
+        Assert.Equal(small.Vertices, back.Vertices);
+        Assert.Equal(small.Indices, back.Indices);
+    }
 }
