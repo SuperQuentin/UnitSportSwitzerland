@@ -53,3 +53,28 @@
 - **Check**: `--phonecheck --world fixture [--view third]` (quick tier): out, quick pick, open, travel
   while open and while folded (held until covered), Down puts it away; windowed it writes
   `test_output/phone_*.png` and the cover screen's own picture.
+
+## Since the iPhone Duo pass
+
+- **Model**: after the iPhone Duo: halves 8.4 x 12.2 cm, open 16.8 x 12.2 (inner screen 1.4 : 1), rounded
+  outer corners, square hinge corners (no notch at the fold), silver rim, white back with a pill camera
+  island (two lenses, flash), cover screen edge to edge with a punch hole (drawn in its UI). Built with
+  `SurfaceTool` rounded-rect extrusions (`PhoneModel.Builder`), not `MeshScratch` boxes. Fully open, the
+  inner screen is **one mesh** (`InnerFull`), so there is no seam; the two half screens show only while it moves.
+- **Open = still a thing in the hands**: no 2D overlay any more. The lens stops where the whole phone fits
+  with 10 % room (`PhoneScreenView`), a dark sheet on the lens just beyond the phone hides the world
+  (`PhoneBackdrop`, eased; a held teleport runs only once `PhoneBackdropShown` is 1). The mouse goes to
+  the screen through a ray onto the 3D screen (`FootPlayer.PhoneScreenPoint`).
+- **Sway**: the lens follows a smoothed copy of the phone (`_phoneSeen`), so steps and turns show as the
+  phone moving; the owner's phone breathes a little and leans up to ~3° toward the cursor.
+- **Walking**: folded, the body walks and looks (no `UiFocus`); the quick actions are on the arrows,
+  Enter and the mouse buttons. Open on an app, `UiFocus` and a visible cursor.
+- **Camera app** (`Page.Camera`, `PhoneState` 3): the arms lift the open phone before the face
+  (`ItemArmPose.PhoneRaised`, blend 1..2 over the open pose, `HumanMeshBuilder.ApplyArms`), the backdrop
+  goes, the mouse looks (the phone tips with the pitch), the screen shows the back lens (`PhoneScreens.Lens`
+  in its own `SubViewport`, drawn only while the app is open, 1× 2× 5×). Click / Enter / RT shoots through
+  `PhotoCapture.Render` into the photo album (`PhotoStore.Save`, the PNG beside it; `--photo-dir` keeps a
+  check's shots out of the real album).
+- **Gotcha**: the main viewport's visible rect is in the stretched canvas's units (1280 x 696 here), not
+  pixels: size render targets from `GetWindow().Size`. The inner screen is laid out on an 800-unit-high
+  canvas scaled to its pixels.

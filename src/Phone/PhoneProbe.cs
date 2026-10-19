@@ -74,7 +74,18 @@ public partial class PhoneProbe : Node
         Check(me.PhoneState == FootPlayer.PhoneOpenState, $"open on the wire (state {me.PhoneState})");
         Shot("phone_5_open.png");
 
-        // travel while open: runs at once, behind the screen, and the phone folds away there
+        // the camera app: raised before the face, the lens out of its back; Enter shoots into the album
+        phone.Open(PhoneScreens.Page.Camera);
+        await Wait(1.0);
+        Check(me.PhoneState == FootPlayer.PhoneCameraState, $"the camera app raises it (state {me.PhoneState}, arms {me.DrawnArmPose})");
+        Shot("phone_8_camera.png");
+        await Key(Godot.Key.Enter, 1.5);
+        Check(phone.LastPhoto != null && Items.PhotoStore.Has(phone.LastPhoto), $"Enter takes a photo into the album ({phone.LastPhoto})");
+        Save(phone.Screens.Inner, "phone_8_camera_screen.png");
+        await Key(Godot.Key.Escape, 0.8);
+        Check(me.PhoneState == FootPlayer.PhoneOpenState, "Esc goes back to the home screen");
+
+        // travel while open: behind the phone once the world is dark, and the phone folds away there
         var from = me.GlobalPosition;
         var at = me.Global;
         Teleporter.Instance?.TeleportTo(at.E + 300, at.N + 40, "probe east");

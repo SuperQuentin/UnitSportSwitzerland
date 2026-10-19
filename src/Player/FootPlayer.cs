@@ -1913,7 +1913,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (ItemAction == 3) return Avatar.ItemArmPose.ThrowWindup;
         if (ItemAction == 4) return Avatar.ItemArmPose.ThrowRelease;
         // the phone (#889) is in both hands whatever the hotbar holds
-        if (PhoneState != 0) return PhoneState == PhoneOpenState ? Avatar.ItemArmPose.PhoneOpen : Avatar.ItemArmPose.Phone;
+        if (PhoneState != 0) return PhoneState switch
+        {
+            PhoneCameraState => Avatar.ItemArmPose.PhoneRaised,
+            PhoneOpenState => Avatar.ItemArmPose.PhoneOpen,
+            _ => Avatar.ItemArmPose.Phone,
+        };
         var def = Items.ItemDefs.Get((Items.ItemId)HeldItemId);
         if (def == null) return Avatar.ItemArmPose.None;
         bool aim = ItemAction == 1, use = ItemAction == 2;
@@ -1946,9 +1951,16 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         // the release whips straight out of the wind-up: no easing out of one into the other
         if (want == Avatar.ItemArmPose.ThrowRelease && _itemArmCur == Avatar.ItemArmPose.ThrowWindup) _itemArmCur = want;
-        // the phone opening or closing keeps it in the hands: the other hand only slides across
-        if (want is Avatar.ItemArmPose.Phone or Avatar.ItemArmPose.PhoneOpen
-            && _itemArmCur is Avatar.ItemArmPose.Phone or Avatar.ItemArmPose.PhoneOpen) _itemArmCur = want;
+        // the phone opening or closing keeps it in the hands: the other hand only slides across. Raised
+        // as a camera, it is the open phone lifted: the blend runs on from 1 to 2 (HumanMeshBuilder.ApplyArms)
+        if (IsPhonePose(want) && IsPhonePose(_itemArmCur))
+        {
+            float goal = want == Avatar.ItemArmPose.PhoneRaised ? 2f : 1f;
+            if (want == Avatar.ItemArmPose.PhoneRaised) _itemArmCur = want;
+            _itemArmBlend = Mathf.MoveToward(_itemArmBlend, goal, dt / (goal > 1f || _itemArmBlend > 1f ? 0.35f : 0.18f));
+            if (want != Avatar.ItemArmPose.PhoneRaised && _itemArmBlend <= 1f) _itemArmCur = want;
+            return;
+        }
         if (want != _itemArmCur && _itemArmBlend > 0.02f) target = 0f;   // leave the old pose first
         else if (want != _itemArmCur) _itemArmCur = want;
         _itemArmBlend = Mathf.MoveToward(_itemArmBlend, target, dt / 0.18f);

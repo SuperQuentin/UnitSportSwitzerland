@@ -58,6 +58,8 @@ public enum ItemArmPose
     Phone,
     /// <summary>The phone unfolded (#889): the other hand holds the half that swung open, further across.</summary>
     PhoneOpen,
+    /// <summary>The open phone raised to eye height as a camera (#889): both hands at its ends, before the face.</summary>
+    PhoneRaised,
 }
 
 /// <summary>Colours for one figure. Kept separate so riders can be told apart at distance.</summary>
@@ -273,7 +275,13 @@ public static partial class HumanMeshBuilder
     /// (the figure's right once the mesh is turned to face -Z). Targets hang off chest, neck and head
     /// so they follow the torso lean; none depends on view pitch (only yaw is replicated).
     /// </summary>
-    private static Rig ApplyArms(Rig rig, ItemArmPose arm, float blend)
+    private static Rig ApplyArms(Rig rig, ItemArmPose arm, float blend) =>
+        // the raised phone (#889) is the open phone lifted: its blend runs 0..1 into the open pose, 1..2 up to the face
+        arm == ItemArmPose.PhoneRaised
+            ? ApplyArmsOnce(ApplyArmsOnce(rig, ItemArmPose.PhoneOpen, Mathf.Min(blend, 1f)), ItemArmPose.PhoneRaised, blend - 1f)
+            : ApplyArmsOnce(rig, arm, blend);
+
+    private static Rig ApplyArmsOnce(Rig rig, ItemArmPose arm, float blend)
     {
         blend = Mathf.Clamp(blend, 0f, 1f);
         if (arm == ItemArmPose.None || blend <= 0.001f) return rig;
@@ -312,12 +320,17 @@ public static partial class HumanMeshBuilder
             case ItemArmPose.Phone:
             case ItemArmPose.PhoneOpen:
                 // the right hand grips the phone's right edge in front of the chest, the left its other
-                // edge: a hand's width across folded, two once it has opened (#889)
+                // edge: a hand's width across folded, the open phone's 17 cm once it has opened (#889)
                 item = new(s * 0.07f, rig.Chest.Y - 0.06f, rig.Chest.Z + 0.27f);
                 // folded, the left hand cups it from below, its thumb clear of the cover screen
                 support = arm == ItemArmPose.Phone ? new(-s * 0.01f, rig.Chest.Y - 0.15f, rig.Chest.Z + 0.22f)
-                    : new(-s * 0.07f, rig.Chest.Y - 0.07f, rig.Chest.Z + 0.27f);
+                    : new(-s * 0.09f, rig.Chest.Y - 0.07f, rig.Chest.Z + 0.27f);
                 dir = new Vector3(0f, 0.75f, 0.65f); break;
+            case ItemArmPose.PhoneRaised:
+                // held up before the face to take a picture, both ends gripped
+                item = new(s * 0.08f, rig.HeadBase.Y - 0.05f, rig.HeadBase.Z + 0.34f);
+                support = new(-s * 0.09f, rig.HeadBase.Y - 0.05f, rig.HeadBase.Z + 0.34f);
+                dir = new Vector3(0f, 1f, 0.1f); break;
             default:   // Hold
                 item = new(s * 0.19f, rig.Waist.Y + 0.05f, rig.Waist.Z + 0.30f);
                 support = Reduce(rig.WristR, rest);

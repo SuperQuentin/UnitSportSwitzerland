@@ -8,25 +8,36 @@ using UnitSport.Ui;
 namespace UnitSport.Phone;
 
 /// <summary>
-/// What the phone's two screens show (#889), each a <see cref="SubViewport"/>: the narrow cover
-/// screen (clock, the newest call, one quick action at a time) and the square inner screen (home,
-/// Map, Contacts, Travelling). The inner screen's content sits in a centred band of the game
-/// window's shape, with wallpaper above and below: the band is what fills the view once the camera
-/// is on the screen, so the full-screen picture is this same texture, cropped the same way.
+/// What the phone's two screens show (#889), each a <see cref="SubViewport"/> drawn on the 3D
+/// phone: the cover screen (clock, the newest call, one quick action at a time, the punch-hole
+/// camera) and the inner screen, its shape the open phone's (home, Map, Contacts, Camera,
+/// Travelling). The inner screen takes the input the controller pushes into it, the mouse mapped
+/// onto it through the 3D screen (<c>FootPlayer.PhoneScreenPoint</c>).
 /// </summary>
 public partial class PhoneScreens : Node
 {
-    public enum Page { Home, Map, Contacts, Travel }
+    public enum Page { Home, Map, Contacts, Camera, Travel }
 
     /// <summary>One quick action on the cover: its label and, when it is a call, who and what.</summary>
     public readonly record struct Quick(string Label, string? Detail = null, Color? Tint = null);
 
-    private const int CoverW = 330, CoverH = 700;
-    private static readonly Color Ink = new(0.95f, 0.96f, 0.98f), InkDim = new(0.80f, 0.84f, 0.90f, 0.85f);
+    private const int CoverW = 330;
+    private static readonly int CoverH = Mathf.RoundToInt(CoverW * PhoneModel.CoverSize.Y / PhoneModel.CoverSize.X);
+    private static readonly Color Ink = new(0.97f, 0.97f, 0.98f), InkDim = new(0.90f, 0.92f, 0.95f, 0.85f);
+    /// <summary>The camera app's zoom steps, as a phone offers them (× the main lens).</summary>
+    private static readonly float[] Zooms = { 1f, 2f, 5f };
+    /// <summary>The main lens's vertical field of view at 1×.</summary>
+    public const float LensFov = 58f;
 
     public SubViewport Cover { get; private set; } = null!;
     public SubViewport Inner { get; private set; } = null!;
+    /// <summary>The camera app's view through the back lens; drawn only while the app is open.</summary>
+    public SubViewport Finder { get; private set; } = null!;
+    /// <summary>The back lens, placed every frame by the controller.</summary>
+    public Camera3D Lens { get; private set; } = null!;
     public Page Shown { get; private set; } = Page.Home;
+    public float Zoom => Zooms[_zoom];
+    public float LensFovNow => Mathf.RadToDeg(2f * Mathf.Atan(Mathf.Tan(Mathf.DegToRad(LensFov) * 0.5f) / Zoom));
 
     /// <summary>A place picked in the Map app.</summary>
     public event Action<Place>? TravelPicked;
@@ -36,24 +47,30 @@ public partial class PhoneScreens : Node
     public event Action<int, bool>? CallAnswered;
     /// <summary>The Activities app: the existing screen opens over the phone.</summary>
     public event Action? ActivitiesPicked;
+    /// <summary>The camera app's shutter.</summary>
+    public event Action? ShutterPressed;
+    /// <summary>A page changed (the controller hands the mouse over for the camera).</summary>
+    public event Action<Page>? PageShown;
 
     private readonly Func<PlaceSearchUi?> _places;
     private readonly Func<ChatManager?> _chat;
 
     // cover
     private Label _coverClock = null!, _coverDate = null!, _coverCall = null!, _coverAction = null!, _coverDots = null!;
-    private PanelContainer _coverCard = null!;
     private StyleBoxFlat _coverCardBox = null!;
     // inner
-    private Control _band = null!, _innerRoot = null!;
+    private Control _innerRoot = null!;
     private Label _statusClock = null!;
-    private Control _home = null!, _map = null!, _contacts = null!, _travel = null!;
-    private Label _homeClock = null!, _homeDate = null!, _travelTitle = null!, _travelDots = null!;
+    private Control _home = null!, _map = null!, _contacts = null!, _camera = null!, _travel = null!;
+    private Label _homeClock = null!, _homeDate = null!, _travelTitle = null!, _travelDots = null!, _zoomLabel = null!;
     private LineEdit _query = null!;
     private VBoxContainer _results = null!, _people = null!, _calls = null!;
     private Label _mapHint = null!;
+    private TextureRect _lastShot = null!;
+    private ColorRect _flash = null!;
     private readonly List<Button> _homeTiles = new();
     private string _clockShown = "";
+    private int _zoom;
     private readonly StringBuilder _sb = new();
 
     public PhoneScreens(Func<PlaceSearchUi?> places, Func<ChatManager?> chat)
@@ -74,9 +91,18 @@ public partial class PhoneScreens : Node
         };
         AddChild(Cover);
         BuildCover();
+        // the back lens: shares the world it is in (no World3D of its own), as the Polaroid's capture does
+        Finder = new SubViewport
+        {
+            Name = "Finder", Size = new Vector2I(640, 460), RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled,
+            HandleInputLocally = false, GuiDisableInput = true,
+        };
+        Lens = new Camera3D { Name = "Lens", Fov = LensFov, Near = 0.03f, Far = 4000f };
+        Finder.AddChild(Lens);
+        AddChild(Finder);
         Inner = new SubViewport
         {
-            Name = "Inner", Size = new Vector2I(1024, 1024), TransparentBg = false, Disable3D = true,
+            Name = "Inner", Size = new Vector2I(1120, 802), TransparentBg = false, Disable3D = true,
             RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled, HandleInputLocally = true,
         };
         AddChild(Inner);
@@ -84,28 +110,33 @@ public partial class PhoneScreens : Node
         ShowPage(Page.Home);
     }
 
-    /// <summary>Draws the screens only while the phone is out.</summary>
+    /// <summary>Draws the screens only while the phone is out; the lens only while the camera app is.</summary>
     public void SetActive(bool on)
     {
         var mode = on ? SubViewport.UpdateMode.Always : SubViewport.UpdateMode.Disabled;
         if (Cover.RenderTargetUpdateMode != mode) Cover.RenderTargetUpdateMode = mode;
         if (Inner.RenderTargetUpdateMode != mode) Inner.RenderTargetUpdateMode = mode;
+        var lens = on && Shown == Page.Camera ? SubViewport.UpdateMode.Always : SubViewport.UpdateMode.Disabled;
+        if (Finder.RenderTargetUpdateMode != lens) Finder.RenderTargetUpdateMode = lens;
     }
 
     /// <summary>
-    /// Sizes the inner screen for a window of <paramref name="window"/> pixels: as wide as the window
-    /// (so the full-screen picture is drawn 1:1), and the band the window's shape.
+    /// Sizes the inner screen for a window <paramref name="window"/> pixels high (the window's real
+    /// pixels, not the stretched canvas's units): about as many pixels as it covers there, so the
+    /// open phone's text is sharp.
     /// </summary>
     public void Fit(Vector2 window)
     {
-        if (window.X <= 0 || window.Y <= 0) return;
-        float aspect = window.X / window.Y;
-        int n = Mathf.Clamp(Mathf.RoundToInt(Mathf.Max(window.X, window.Y) / 8f) * 8, 768, 2560);
-        if (Inner.Size.X != n) Inner.Size = new Vector2I(n, n);
-        _innerRoot.Size = new Vector2(n, n);
-        var band = new Vector2(n * Mathf.Min(1f, aspect), n / Mathf.Max(1f, aspect));
-        _band.Size = band;
-        _band.Position = (new Vector2(n, n) - band) * 0.5f;
+        if (window.Y <= 0) return;
+        int h = Mathf.Clamp(Mathf.RoundToInt(window.Y * 0.8f / 8f) * 8, 560, 1600);
+        var size = new Vector2I(Mathf.RoundToInt(h * PhoneModel.InnerW / PhoneModel.InnerH), h);
+        if (Inner.Size == size) return;
+        Inner.Size = size;
+        // laid out for a screen 800 units high, drawn at the pixels it covers
+        float k = h / 800f;
+        _innerRoot.Scale = new Vector2(k, k);
+        _innerRoot.Size = (Vector2)size / k;
+        Finder.Size = size * 3 / 5;
     }
 
     // ---------------------------------------------------------------- cover
@@ -115,33 +146,41 @@ public partial class PhoneScreens : Node
         // sized by hand, not anchored to the viewport: anchored, it took the window's content scale (2x)
         var root = new Control { Theme = UiTheme.Get(), Size = new Vector2(CoverW, CoverH) };
         Cover.AddChild(root);
-        root.AddChild(WallpaperRect());
+        root.AddChild(WallpaperRect(Wallpaper.Cover));
+        // the front camera's punch hole, top right
+        var hole = new Panel { Position = new Vector2(CoverW - 46, 16), Size = new Vector2(22, 22), MouseFilter = Control.MouseFilterEnum.Ignore };
+        var dot = new StyleBoxFlat { BgColor = new Color(0.01f, 0.01f, 0.015f) };
+        dot.SetCornerRadiusAll(11);
+        hole.AddThemeStyleboxOverride("panel", dot);
+        root.AddChild(hole);
 
-        var col = UiKit.VBox(10);
-        col.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        col.OffsetLeft = 18; col.OffsetRight = -18; col.OffsetTop = 40; col.OffsetBottom = -34;
+        var col = UiKit.VBox(8);
+        col.Position = new Vector2(18, 44);
+        col.Size = new Vector2(CoverW - 36, CoverH - 44 - 26);
         root.AddChild(col);
-        _coverClock = Big("12:00", 92);
-        col.AddChild(_coverClock);
-        _coverDate = Big("", 24, InkDim);
+        _coverDate = Big("", 22, InkDim);
         col.AddChild(_coverDate);
+        _coverClock = Big("12:00", 96);
+        col.AddChild(_coverClock);
         col.AddChild(UiKit.Spacer(expand: true));
 
         _coverCardBox = new StyleBoxFlat { BgColor = new Color(0, 0, 0, 0.35f), CornerDetail = 8 };
         _coverCardBox.SetCornerRadiusAll(28);
-        _coverCardBox.SetContentMarginAll(16);
-        _coverCard = new PanelContainer();
-        _coverCard.AddThemeStyleboxOverride("panel", _coverCardBox);
-        var card = UiKit.VBox(6);
-        _coverCall = Big("", 22, InkDim);
+        _coverCardBox.SetContentMarginAll(14);
+        var cardPanel = new PanelContainer();
+        cardPanel.AddThemeStyleboxOverride("panel", _coverCardBox);
+        var card = UiKit.VBox(4);
+        _coverCall = Big("", 20, InkDim);
         _coverCall.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         card.AddChild(_coverCall);
-        _coverAction = Big("", 44);
+        _coverAction = Big("", 38);
+        _coverAction.HorizontalAlignment = HorizontalAlignment.Center;
         card.AddChild(_coverAction);
-        _coverDots = Big("", 26, InkDim);
+        _coverDots = Big("", 22, InkDim);
+        _coverDots.HorizontalAlignment = HorizontalAlignment.Center;
         card.AddChild(_coverDots);
-        _coverCard.AddChild(card);
-        col.AddChild(_coverCard);
+        cardPanel.AddChild(card);
+        col.AddChild(cardPanel);
     }
 
     /// <summary>The cover's picture: the clock, and the quick action <paramref name="index"/> of <paramref name="quick"/>.</summary>
@@ -162,21 +201,23 @@ public partial class PhoneScreens : Node
 
     private void BuildInner()
     {
-        var root = _innerRoot = new Control { Theme = UiTheme.Get(), Size = new Vector2(1024, 1024) };
-        Inner.AddChild(root);
-        root.AddChild(WallpaperRect());
-        _band = new Control { Name = "Band" };
-        root.AddChild(_band);
+        _innerRoot = new Control { Theme = UiTheme.Get(), Size = Inner.Size };
+        Inner.AddChild(_innerRoot);
+        _innerRoot.AddChild(WallpaperRect(Wallpaper.Inner));
 
-        // a status bar along the top of the band, as on any phone
+        // the camera's page lies under the status bar, edge to edge
+        _camera = BuildCamera();
+        _innerRoot.AddChild(_camera);
+
+        // a status bar along the top, as on any phone
         var status = UiKit.HBox(12);
         status.SetAnchorsPreset(Control.LayoutPreset.TopWide);
-        status.OffsetLeft = 40; status.OffsetRight = -40; status.OffsetTop = 14; status.OffsetBottom = 50;
+        status.OffsetLeft = 40; status.OffsetRight = -40; status.OffsetTop = 12; status.OffsetBottom = 46;
         _statusClock = Big("12:00", 22);
         status.AddChild(_statusClock);
         status.AddChild(UiKit.Spacer(expand: true));
         status.AddChild(Big("Swisscom 5G   ▮▮▮▯   87 %", 20, InkDim));
-        _band.AddChild(status);
+        _innerRoot.AddChild(status);
 
         _home = Page_(BuildHome());
         _map = Page_(BuildMap());
@@ -186,15 +227,15 @@ public partial class PhoneScreens : Node
 
     private Control Page_(Control content)
     {
-        var margin = UiKit.Margin(content, 64, 64, 64, 40);
+        var margin = UiKit.Margin(content, 56, 56, 56, 32);
         margin.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        _band.AddChild(margin);
+        _innerRoot.AddChild(margin);
         return margin;
     }
 
     private Control BuildHome()
     {
-        var col = UiKit.VBox(14);
+        var col = UiKit.VBox(10);
         _homeClock = Big("12:00", 120);
         _homeClock.HorizontalAlignment = HorizontalAlignment.Center;
         col.AddChild(_homeClock);
@@ -202,10 +243,11 @@ public partial class PhoneScreens : Node
         _homeDate.HorizontalAlignment = HorizontalAlignment.Center;
         col.AddChild(_homeDate);
         col.AddChild(UiKit.Spacer(expand: true));
-        var row = UiKit.HBox(40);
+        var row = UiKit.HBox(30);
         row.Alignment = BoxContainer.AlignmentMode.Center;
         row.AddChild(Tile("Map", "Find a place, go there", new Color(0.18f, 0.55f, 0.36f), () => ShowPage(Page.Map)));
         row.AddChild(Tile("Contacts", "Call people: go to them, bring them, team up", new Color(0.20f, 0.42f, 0.80f), () => ShowPage(Page.Contacts)));
+        row.AddChild(Tile("Camera", "Take photos into your album", new Color(0.22f, 0.24f, 0.28f), () => ShowPage(Page.Camera)));
         row.AddChild(Tile("Activities", "Battle Royale, races", new Color(0.82f, 0.38f, 0.16f), () => ActivitiesPicked?.Invoke()));
         col.AddChild(row);
         col.AddChild(UiKit.Spacer(expand: true));
@@ -215,17 +257,14 @@ public partial class PhoneScreens : Node
 
     private Button Tile(string name, string tip, Color colour, Action pressed)
     {
-        var b = new Button { Text = name, CustomMinimumSize = new Vector2(250, 250), TooltipText = tip, FocusMode = Control.FocusModeEnum.All };
-        b.AddThemeFontSizeOverride("font_size", 34);
-        b.AddThemeColorOverride("font_color", Ink);
-        b.AddThemeColorOverride("font_hover_color", Ink);
-        b.AddThemeColorOverride("font_focus_color", Ink);
-        b.AddThemeColorOverride("font_pressed_color", Ink);
+        var b = new Button { Text = name, CustomMinimumSize = new Vector2(200, 200), TooltipText = tip, FocusMode = Control.FocusModeEnum.All };
+        b.AddThemeFontSizeOverride("font_size", 30);
+        foreach (var c in new[] { "font_color", "font_hover_color", "font_focus_color", "font_pressed_color" }) b.AddThemeColorOverride(c, Ink);
         foreach (var (state, c, border) in new[] { ("normal", colour, 0), ("hover", colour.Lightened(0.15f), 0),
                      ("pressed", colour.Darkened(0.2f), 0), ("focus", colour.Lightened(0.1f), 6) })
         {
             var box = new StyleBoxFlat { BgColor = c, CornerDetail = 10, BorderColor = Ink };
-            box.SetCornerRadiusAll(56);
+            box.SetCornerRadiusAll(48);
             box.SetBorderWidthAll(border);
             if (state == "focus") box.DrawCenter = false;
             b.AddThemeStyleboxOverride(state, box);
@@ -343,6 +382,70 @@ public partial class PhoneScreens : Node
         }
     }
 
+    /// <summary>The camera app: the back lens edge to edge, the shutter on the right, zoom above it, the last shot below.</summary>
+    private Control BuildCamera()
+    {
+        var page = new Control { Name = "CameraPage", MouseFilter = Control.MouseFilterEnum.Ignore };
+        page.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        var finder = new TextureRect
+        {
+            Texture = Finder.GetTexture(), ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCovered, MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        finder.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        page.AddChild(finder);
+
+        var side = new VBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        side.AddThemeConstantOverride("separation", 26);
+        side.SetAnchorsPreset(Control.LayoutPreset.RightWide);
+        side.OffsetLeft = -150; side.OffsetRight = -30;
+        page.AddChild(side);
+        _zoomLabel = Big("1×", 30);
+        _zoomLabel.HorizontalAlignment = HorizontalAlignment.Center;
+        side.AddChild(_zoomLabel);
+        var shutter = new Button { CustomMinimumSize = new Vector2(120, 120), FocusMode = Control.FocusModeEnum.None, TooltipText = "Take a photo" };
+        foreach (var (state, c) in new[] { ("normal", Ink), ("hover", Ink), ("pressed", new Color(0.8f, 0.8f, 0.82f)), ("focus", Ink) })
+        {
+            var ring = new StyleBoxFlat { BgColor = c, BorderColor = new Color(1, 1, 1, 0.45f), CornerDetail = 16 };
+            ring.SetCornerRadiusAll(60);
+            ring.SetBorderWidthAll(8);
+            shutter.AddThemeStyleboxOverride(state, ring);
+        }
+        shutter.Pressed += () => ShutterPressed?.Invoke();
+        side.AddChild(shutter);
+        _lastShot = new TextureRect
+        {
+            CustomMinimumSize = new Vector2(84, 100), ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered, MouseFilter = Control.MouseFilterEnum.Ignore,
+            SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter,
+        };
+        side.AddChild(_lastShot);
+
+        var hint = Big(InputHints.Pad ? "RT  shoot      LB RB  zoom      B  back" : "Click / Enter  shoot      Wheel  zoom      Esc  back", 22, Ink);
+        hint.SetAnchorsPreset(Control.LayoutPreset.BottomWide);
+        hint.OffsetTop = -54; hint.OffsetBottom = -20; hint.OffsetLeft = 40;
+        page.AddChild(hint);
+
+        _flash = new ColorRect { Color = new Color(1, 1, 1, 0), MouseFilter = Control.MouseFilterEnum.Ignore };
+        _flash.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        page.AddChild(_flash);
+        return page;
+    }
+
+    /// <summary>Steps the zoom by <paramref name="step"/> (1×, 2×, 5×).</summary>
+    public void StepZoom(int step)
+    {
+        _zoom = Mathf.Clamp(_zoom + step, 0, Zooms.Length - 1);
+        SetText(_zoomLabel, $"{Zoom:0.#}×");
+    }
+
+    /// <summary>The shutter went: the screen flashes white, and the shot lands in the corner.</summary>
+    public void Shot(Texture2D? print)
+    {
+        _flash.Color = new Color(1, 1, 1, 0.9f);
+        if (print != null) _lastShot.Texture = print;
+    }
+
     private Control BuildTravel()
     {
         var col = UiKit.VBox(16);
@@ -371,6 +474,7 @@ public partial class PhoneScreens : Node
         _home.Visible = page == Page.Home;
         _map.Visible = page == Page.Map;
         _contacts.Visible = page == Page.Contacts;
+        _camera.Visible = page == Page.Camera;
         _travel.Visible = page == Page.Travel;
         switch (page)
         {
@@ -387,11 +491,15 @@ public partial class PhoneScreens : Node
                 FillContacts();
                 Callable.From(() => FocusFirst(_contacts)).CallDeferred();
                 break;
+            case Page.Camera:
+                Inner.GuiReleaseFocus();
+                break;
         }
+        PageShown?.Invoke(page);
     }
 
-    /// <summary>The time on both screens and the travelling dots, set only when they change.</summary>
-    public void Tick(string clock, string date)
+    /// <summary>The time on both screens, the travelling dots and the shutter's flash, set only when they change.</summary>
+    public void Tick(string clock, string date, float dt)
     {
         if (clock != _clockShown)
         {
@@ -403,15 +511,16 @@ public partial class PhoneScreens : Node
             _homeDate.Text = date;
         }
         if (Shown == Page.Travel) SetText(_travelDots, ((int)(RealClock.Now * 3) % 3) switch { 0 => "●  ○  ○", 1 => "○  ●  ○", _ => "○  ○  ●" });
+        if (_flash.Color.A > 0f) _flash.Color = new Color(1, 1, 1, Mathf.MoveToward(_flash.Color.A, 0f, dt / 0.35f));
     }
 
     // ---------------------------------------------------------------- bits
 
-    private static TextureRect WallpaperRect()
+    private static TextureRect WallpaperRect(Texture2D texture)
     {
         var wall = new TextureRect
         {
-            Texture = Wallpaper.Inner, ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            Texture = texture, ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
             StretchMode = TextureRect.StretchModeEnum.Scale, MouseFilter = Control.MouseFilterEnum.Ignore,
             TextureFilter = CanvasItem.TextureFilterEnum.Linear,
         };
@@ -424,7 +533,7 @@ public partial class PhoneScreens : Node
         var l = new Label { Text = text };
         l.AddThemeFontSizeOverride("font_size", size);
         l.AddThemeColorOverride("font_color", colour ?? Ink);
-        l.AddThemeColorOverride("font_shadow_color", new Color(0, 0, 0, 0.35f));
+        l.AddThemeColorOverride("font_shadow_color", new Color(0, 0, 0, 0.45f));
         l.AddThemeConstantOverride("shadow_offset_y", 2);
         return l;
     }

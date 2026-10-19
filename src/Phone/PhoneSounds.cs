@@ -9,7 +9,7 @@ namespace UnitSport.Phone;
 /// </summary>
 public static class PhoneSounds
 {
-    private static AudioStreamWav? _draw, _hinge, _tap, _buzz;
+    private static AudioStreamWav? _draw, _hinge, _tap, _buzz, _shutter;
 
     /// <summary>Out of the pocket: a short cloth rustle.</summary>
     public static AudioStreamWav Draw => _draw ??= Dsp.OneShot(0.28f, 8891, (rng, n) =>
@@ -53,6 +53,21 @@ public static class PhoneSounds
             float t = i / (float)Dsp.Rate;
             s[i] = Mathf.Sin(Mathf.Tau * 1800f * t) * Mathf.Exp(-t * 140f) * 0.35f;
         }
+        return s;
+    });
+
+    /// <summary>The camera app's shutter: a phone's synthetic click, two quick ticks with a breath of air.</summary>
+    public static AudioStreamWav Shutter => _shutter ??= Dsp.OneShot(0.16f, 8903, (rng, n) =>
+    {
+        var s = new float[n];
+        float lp = 0f;
+        foreach (float at in new[] { 0f, 0.055f })
+            for (int i = (int)(at * Dsp.Rate); i < n; i++)
+            {
+                float t = i / (float)Dsp.Rate - at;
+                lp += ((float)rng.NextDouble() * 2f - 1f - lp) * 0.5f;
+                s[i] += (lp * 0.6f + Mathf.Sin(Mathf.Tau * 2600f * t) * 0.4f) * Mathf.Exp(-t * 120f) * 0.45f;
+            }
         return s;
     });
 

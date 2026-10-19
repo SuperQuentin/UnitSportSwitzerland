@@ -7,17 +7,21 @@ using UnitSport.Ui;
 namespace UnitSport.Phone;
 
 /// <summary>
-/// The local player's phone (#889): taken out, used folded from its cover screen, opened onto the
-/// inner screen, put away. It drives <see cref="FootPlayer.PhoneState"/> (replicated) and the
-/// owner's phone camera (<see cref="FootPlayer.PhoneLook"/>, <see cref="FootPlayer.PhoneCover"/>);
-/// once the camera is on the open screen, that screen's picture is shown full screen and takes the
-/// input. A teleport asked while the phone is out waits until the screen covers the view
+/// The local player's phone (#889): taken out, used folded from its cover screen while walking,
+/// opened in front of the face, put away. It drives <see cref="FootPlayer.PhoneState"/> (replicated)
+/// and the owner's phone camera (<see cref="FootPlayer.PhoneLook"/>, <see cref="FootPlayer.PhoneCover"/>,
+/// <see cref="FootPlayer.PhoneBackdrop"/>). Open, the phone stays a thing in the hands, its rim in
+/// view and the world dimmed behind it; its screen takes the keys and the mouse (mapped onto the 3D
+/// screen). A teleport asked while the phone is out waits until the world is hidden
 /// (<see cref="Teleporter.Curtain"/>), then the phone stays on "Travelling…" until the ground there
 /// has streamed in, and folds away at the new place. Docs: <c>docs/notes/ui/phone.md</c>.
 /// <list type="bullet">
-/// <item>Keyboard: Up arrow takes it out, Up again opens it; Left / Right pick a quick action, Enter
-/// / Space / click runs it; Down or Esc puts it away (open: Esc goes back, then closes).</item>
+/// <item>Keyboard: Up takes it out, Up again opens it; folded, Left / Right pick a quick action,
+/// Enter / click runs it, Down or Esc puts it away (open: Esc goes back, then closes). Folded, the
+/// body still walks.</item>
 /// <item>Pad: hold Back → Phone in the quick menu; D-pad and A / B inside, D-pad up opens it.</item>
+/// <item>Camera app: the phone is raised before the face; the mouse aims, click / Enter / RT
+/// shoots, the wheel / LB RB zoom, Esc goes back.</item>
 /// <item>VR: not yet (a gap in <c>xr/vr-action-map</c>): no camera moves in VR.</item>
 /// </list>
 /// </summary>
@@ -25,7 +29,7 @@ public partial class PhoneController : Node
 {
     private enum Stage { Pocket, Drawing, Folded, Opening, Open, Closing, Stowing }
 
-    /// <summary>Seconds for the camera to come over the shoulder, and onto the screen.</summary>
+    /// <summary>Seconds for the camera to come over the shoulder, and onto the open phone.</summary>
     private const float LookSeconds = 0.5f, CoverSeconds = 0.6f;
     /// <summary>After landing at a travel's end: this long on "Travelling…" so the place is built before it is seen.</summary>
     private const double SettleSeconds = 0.9;
@@ -36,8 +40,6 @@ public partial class PhoneController : Node
     private readonly Func<FootPlayer?> _player;
     private readonly Func<bool> _blocked;
     private PhoneScreens _screens = null!;
-    private CanvasLayer _overlay = null!;
-    private TextureRect _full = null!;
     private Label _hint = null!;
     private AudioStreamPlayer _sound = null!;
     private readonly Random _rng = new();
@@ -47,23 +49,27 @@ public partial class PhoneController : Node
     private int _quick;
     private readonly List<PhoneScreens.Quick> _quicks = new();
     private readonly List<Action> _quickActions = new();
-    /// <summary>The page to open on once open (a quick action that needs the big screen).</summary>
-    private PhoneScreens.Page _openOn = PhoneScreens.Page.Home;
-    /// <summary>A teleport held back until the screen covers the view.</summary>
+    /// <summary>A teleport held back until the world is hidden.</summary>
     private Action? _pendingJump;
     /// <summary>Travelling: since when (real clock), and when the body landed there (−1: not yet).</summary>
     private double _travelSince = -1, _landedAt = -1;
     private bool _arrived;
-    /// <summary>Opened by a teleport (not by the player): it folds away by itself once there.</summary>
+    /// <summary>Folds and goes back in the pocket once closed (put away while open, or opened by a teleport).</summary>
     private bool _stowWhenFolded;
+    private bool _shooting;
     private string _hintShown = "";
     private InviteService? _invites;
+
+    /// <summary>The id of the last photo the camera app took, for the checks.</summary>
+    public string? LastPhoto { get; private set; }
 
     /// <summary>The two screens, for the checks.</summary>
     internal PhoneScreens Screens => _screens;
 
     public bool IsOut => _stage != Stage.Pocket;
+    /// <summary>Open and in front of the face, the world hidden behind it (or the camera app up).</summary>
     public bool IsCovering => _stage == Stage.Open;
+    public bool CameraApp => _stage is Stage.Open or Stage.Opening && _screens.Shown == PhoneScreens.Page.Camera;
 
     /// <param name="player">The local body, on foot; null when there is none.</param>
     /// <param name="blocked">A menu or the loading screen owns the screen.</param>
@@ -105,23 +111,17 @@ public partial class PhoneController : Node
         };
         _screens.CallAnswered += Answer;
         _screens.ActivitiesPicked += () => ActivitiesScreen.Open(ActivitiesScreen.Tab.BattleRoyale);
+        _screens.ShutterPressed += () => _ = TakePhoto();
+        _screens.PageShown += _ => Grip();
 
-        // over the HUD and the chat line, under the shell's pages (40) that open over the phone
-        _overlay = new CanvasLayer { Name = "PhoneOverlay", Layer = 30 };
-        AddChild(_overlay);
-        _full = new TextureRect
-        {
-            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.KeepAspectCovered,
-            MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false,
-        };
-        _full.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        _overlay.AddChild(_full);
+        var hud = new CanvasLayer { Name = "PhoneHints", Layer = 5 };
+        AddChild(hud);
         _hint = new Label { Visible = false, HorizontalAlignment = HorizontalAlignment.Center, Theme = UiTheme.Get() };
         _hint.AddThemeColorOverride("font_shadow_color", new Color(0, 0, 0, 0.7f));
         _hint.AddThemeConstantOverride("shadow_offset_y", 2);
         _hint.SetAnchorsPreset(Control.LayoutPreset.BottomWide);
         _hint.OffsetTop = -64; _hint.OffsetBottom = -36;
-        _overlay.AddChild(_hint);
+        hud.AddChild(_hint);
         _sound = new AudioStreamPlayer { Name = "PhoneSound", Bus = Audio.SfxBus.Name, VolumeDb = -8f };
         AddChild(_sound);
     }
@@ -136,7 +136,6 @@ public partial class PhoneController : Node
         _stage = Stage.Drawing;
         _quick = 0;
         _screens.ShowPage(PhoneScreens.Page.Home);
-        UiFocus.Set(this, true);
         Play(PhoneSounds.Draw);
         return true;
     }
@@ -145,19 +144,18 @@ public partial class PhoneController : Node
     public void Open(PhoneScreens.Page page = PhoneScreens.Page.Home)
     {
         if (_stage == Stage.Pocket && !TakeOut()) return;
-        _openOn = page;
-        if (_stage == Stage.Open) { _screens.ShowPage(page); return; }
-        if (_stage is Stage.Opening) return;
+        if (_stage is Stage.Open or Stage.Opening) { _screens.ShowPage(page); return; }
         GD.Print($"[phone] open {page}");
         _stage = Stage.Opening;
         _screens.ShowPage(page);
+        Grip();
         Play(PhoneSounds.Hinge);
     }
 
     /// <summary>Back from an app to home; from home, folds the phone.</summary>
     private void Back()
     {
-        if (_screens.Shown is PhoneScreens.Page.Map or PhoneScreens.Page.Contacts)
+        if (_screens.Shown is PhoneScreens.Page.Map or PhoneScreens.Page.Contacts or PhoneScreens.Page.Camera)
         {
             _screens.ShowPage(PhoneScreens.Page.Home);
             Play(PhoneSounds.Tap);
@@ -173,7 +171,8 @@ public partial class PhoneController : Node
         if (_stage is not (Stage.Open or Stage.Opening)) return;
         GD.Print("[phone] fold");
         _stage = Stage.Closing;
-        ShowFull(false);
+        if (_screens.Shown == PhoneScreens.Page.Camera) _screens.ShowPage(PhoneScreens.Page.Home);
+        Grip();
         Play(PhoneSounds.Hinge);
     }
 
@@ -184,7 +183,7 @@ public partial class PhoneController : Node
         GD.Print("[phone] away");
         if (_stage is Stage.Open or Stage.Opening or Stage.Closing)
         {
-            _stowWhenFolded = true;   // the closing hands over to stowing
+            _stowWhenFolded = true;
             Fold();
             return;
         }
@@ -200,10 +199,23 @@ public partial class PhoneController : Node
         _pendingJump = null;
         _travelSince = -1;
         _stowWhenFolded = false;
-        ShowFull(false);
-        UiFocus.Set(this, false);
         _screens.SetActive(false);
         _hint.Visible = false;
+        Grip();
+    }
+
+    /// <summary>
+    /// Who has the keys and the mouse: open on an app, the phone (the body stands, the cursor shows);
+    /// folded or in the camera app, the body (it walks; the mouse looks).
+    /// </summary>
+    private void Grip()
+    {
+        bool open = _stage is Stage.Open or Stage.Opening;
+        bool screen = open && _screens.Shown != PhoneScreens.Page.Camera;
+        UiFocus.Set(this, screen);
+        if (_blocked()) return;
+        if (screen) Input.MouseMode = Input.MouseModeEnum.Visible;
+        else MouseCapture.Capture();
     }
 
     private bool CanUse(out string? why)
@@ -244,7 +256,7 @@ public partial class PhoneController : Node
         float coverTo = _stage is Stage.Opening or Stage.Open ? 1f : 0f;
         _look = Mathf.MoveToward(_look, lookTo, dt / LookSeconds);
         _fold = Mathf.MoveToward(_fold, coverTo, dt / PhoneModel.UnfoldSeconds);
-        // the lens leaves for the screen once the hinge is a third open, and is off it before it shuts
+        // the lens leaves for the open phone once the hinge is a third open, and is off it before it shuts
         float coverWant = coverTo > 0f ? (_fold > 0.3f ? 1f : _cover) : 0f;
         _cover = Mathf.MoveToward(_cover, coverWant, dt / CoverSeconds);
 
@@ -255,11 +267,10 @@ public partial class PhoneController : Node
                 break;
             case Stage.Opening when _cover >= 1f && _fold >= 1f:
                 _stage = Stage.Open;
-                ShowFull(true);
-                if (_pendingJump != null) Callable.From(RunPendingJump).CallDeferred();
                 break;
             case Stage.Closing when _cover <= 0f && _fold <= 0.05f:
                 _stage = Stage.Folded;
+                Grip();
                 if (_stowWhenFolded) { _stowWhenFolded = false; _stage = Stage.Stowing; }
                 break;
             case Stage.Stowing when _look <= 0f:
@@ -269,41 +280,33 @@ public partial class PhoneController : Node
                 return;
         }
 
-        p.PhoneState = _stage switch
-        {
-            Stage.Opening or Stage.Open => FootPlayer.PhoneOpenState,
-            _ => FootPlayer.PhoneFoldedState,
-        };
+        bool open = _stage is Stage.Opening or Stage.Open;
+        p.PhoneState = !open ? FootPlayer.PhoneFoldedState
+            : _screens.Shown == PhoneScreens.Page.Camera ? FootPlayer.PhoneCameraState : FootPlayer.PhoneOpenState;
         p.PhoneLook = _look;
         p.PhoneCover = _cover;
         p.PhoneFold = _fold;
+        // the world goes dark behind the open phone, but not behind its camera: you aim at it
+        p.PhoneBackdrop = open && _screens.Shown != PhoneScreens.Page.Camera ? 1f : 0f;
+        if (!open || _screens.Shown == PhoneScreens.Page.Camera) p.PhoneTilt = Vector2.Zero;
 
         _screens.SetActive(true);
-        _screens.Fit(GetViewport().GetVisibleRect().Size);
+        // the window's pixels: the viewport's visible rect is in the stretched canvas's units
+        _screens.Fit(GetWindow().Size);
         if (p.PhoneModel is { HasLiveScreens: false } model) model.SetScreens(_screens.Cover.GetTexture(), _screens.Inner.GetTexture());
-        _screens.Tick(ClockText(), DateText());
+        if (_screens.Shown == PhoneScreens.Page.Camera) AimLens(p);
+        _screens.Tick(ClockText(), DateText(), dt);
         RefreshQuick();
         _screens.ShowCover(_quicks, _quick);
         StepTravel();
-        // the full-screen picture fades in over the same picture on the 3D screen: any colour step
-        // between the two (the world's tonemap) is a fade, not a jump
-        if (_full.Visible && _full.Modulate.A < 1f) _full.Modulate = new Color(1, 1, 1, Mathf.MoveToward(_full.Modulate.A, 1f, dt / 0.15f));
         ShowHint();
     }
 
     private static void Release(FootPlayer p)
     {
         p.PhoneState = FootPlayer.PhonePocketState;
-        p.PhoneLook = p.PhoneCover = p.PhoneFold = 0f;
-    }
-
-    private void ShowFull(bool on)
-    {
-        _full.Texture = _screens.Inner.GetTexture();
-        _full.Visible = on;
-        _full.Modulate = new Color(1, 1, 1, on ? 0f : 1f);
-        if (on) Input.MouseMode = Input.MouseModeEnum.Visible;
-        else if (!_blocked()) MouseCapture.Capture();
+        p.PhoneLook = p.PhoneCover = p.PhoneFold = p.PhoneBackdrop = 0f;
+        p.PhoneTilt = Vector2.Zero;
     }
 
     private void ShowHint()
@@ -314,6 +317,54 @@ public partial class PhoneController : Node
             : "";
         _hint.Visible = text.Length > 0 && !_blocked();
         if (text != _hintShown) _hint.Text = _hintShown = text;
+    }
+
+    // ------------------------------------------------------------------ the camera app
+
+    /// <summary>The back lens where the phone's is, looking out of its back, at the app's zoom.</summary>
+    private void AimLens(FootPlayer p)
+    {
+        if (p.PhoneModel is not { Visible: true } phone || p.CameraOrNull is not { } eye) return;
+        var lens = _screens.Lens;
+        lens.GlobalTransform = phone.GlobalTransform.Orthonormalized() * new Transform3D(Basis.Identity, PhoneModel.LensPoint);
+        lens.Fov = _screens.LensFovNow;
+        // what the eye sees, less the HUD-ish layers and the dark sheet behind the phone
+        lens.CullMask = eye.CullMask & ~Items.HeldItemVisual.ViewmodelLayer;
+        if (lens.Environment != eye.Environment) lens.Environment = eye.Environment;
+        if (lens.Attributes != eye.Attributes) lens.Attributes = eye.Attributes;
+    }
+
+    /// <summary>The shutter: one frame through the back lens, into the photo album (as the Polaroid's shots go).</summary>
+    private async Task TakePhoto()
+    {
+        if (_shooting || _player() is not { } p || _screens.Shown != PhoneScreens.Page.Camera) return;
+        _shooting = true;
+        try
+        {
+            Play(PhoneSounds.Shutter);
+            float fov = _screens.LensFovNow;
+            var image = await Items.PhotoCapture.Render(this, _screens.Lens, fov);
+            // beside the album's prints (--photo-dir moves both, for the checks)
+            string dir = System.IO.Path.GetDirectoryName(Items.PhotoStore.LocalDir)!;
+            System.IO.Directory.CreateDirectory(dir);
+            string path = System.IO.Path.Combine(dir, $"phone_{DateTime.Now:yyyyMMdd_HHmmss_fff}.png");
+            image.SavePng(path);
+            var at = p.Global;
+            float focal = 12f / Mathf.Tan(Mathf.DegToRad(fov) * 0.5f);
+            string id = Items.PhotoStore.Save(image, at.E, at.N, at.Alt, focal, path);
+            GD.Print($"[phone] photo {id} ({_screens.Zoom:0.#}×, {path})");
+            LastPhoto = id;
+            _screens.Shot(Items.PhotoStore.Texture(id));
+            InviteToasts.Instance?.Flash("Photo saved to your album");
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"[phone] the photo failed: {e.Message}");
+        }
+        finally
+        {
+            _shooting = false;
+        }
     }
 
     // ------------------------------------------------------------------ quick actions
@@ -328,6 +379,7 @@ public partial class PhoneController : Node
             Add(new("Answer", $"{call.PeerName}: {call.Title}", new Color(0.16f, 0.55f, 0.28f, 0.85f)), () => Answer(id, true));
             Add(new("Decline", $"{call.PeerName}: {call.Title}", new Color(0.62f, 0.18f, 0.16f, 0.85f)), () => Answer(id, false));
         }
+        Add(new("Camera"), () => Open(PhoneScreens.Page.Camera));
         Add(new("Map"), () => Open(PhoneScreens.Page.Map));
         Add(new("Contacts"), () => Open(PhoneScreens.Page.Contacts));
         if (Permissions.Online) Add(new("Activities"), () => { Open(); ActivitiesScreen.Open(ActivitiesScreen.Tab.BattleRoyale); });
@@ -355,7 +407,7 @@ public partial class PhoneController : Node
 
     // ------------------------------------------------------------------ travel
 
-    /// <summary>The Map app's pick: a teleport, run behind the screen.</summary>
+    /// <summary>The Map app's pick: a teleport, run behind the phone.</summary>
     private void Travel(double e, double n, string label)
     {
         if (!Permissions.CanTeleport)
@@ -367,25 +419,25 @@ public partial class PhoneController : Node
     }
 
     /// <summary>
-    /// <see cref="Teleporter.Curtain"/>: with the phone out, a jump waits for the screen to cover the
-    /// view (and runs at once if it already does). In the pocket, the jump goes as it always did.
+    /// <see cref="Teleporter.Curtain"/>: with the phone out, a jump waits for the phone to be open
+    /// in front of the face with the world dimmed behind it (and runs at once if it already is). In
+    /// the pocket, the jump goes as it always did.
     /// </summary>
     private bool Curtain(string where, Action jump)
     {
         if (_stage == Stage.Pocket || _player() is null) return false;
-        GD.Print($"[phone] travel behind the screen to {where}");
+        GD.Print($"[phone] travel behind the phone to {where}");
         _pendingJump = jump;
         _travelSince = RealClock.Now;
         _landedAt = -1;
         _arrived = false;
-        // opened by the jump itself (a call answered from the cover): it goes away again once there
-        if (_stage is Stage.Drawing or Stage.Folded or Stage.Closing or Stage.Stowing) _stowWhenFolded = true;
-        if (_stage == Stage.Open) _stowWhenFolded = true;
+        // it goes away again once there, as a call answered from the cover does
+        _stowWhenFolded = true;
         _screens.ShowTravel(where);
-        if (_stage == Stage.Open) RunPendingJump();
-        else
+        Grip();
+        // the jump itself runs from StepTravel, once the world is dark behind the open phone
+        if (_stage != Stage.Open)
         {
-            if (_stage == Stage.Stowing) _stage = Stage.Folded;
             _stage = Stage.Opening;
             Play(PhoneSounds.Hinge);
         }
@@ -408,6 +460,8 @@ public partial class PhoneController : Node
     /// <summary>On "Travelling…": once landed and settled there, the phone folds away and the camera shows the new place.</summary>
     private void StepTravel()
     {
+        // open on Travel, the jump runs once the backdrop has darkened the world all the way
+        if (_pendingJump != null && _stage == Stage.Open && _player() is { PhoneBackdropShown: >= 1f }) RunPendingJump();
         if (_travelSince < 0 || _pendingJump != null) return;
         var p = _player();
         if (_arrived && _landedAt < 0 && p != null && p.IsOnFloor()) _landedAt = RealClock.Now;
@@ -436,6 +490,11 @@ public partial class PhoneController : Node
         }
         if (_blocked()) return;   // a page over the phone (Activities) takes its own keys
 
+        if (_stage is Stage.Open && _screens.Shown == PhoneScreens.Page.Camera)
+        {
+            CameraInput(e);
+            return;
+        }
         if (_stage is Stage.Open)
         {
             if (e.IsActionPressed("ui_cancel") && !e.IsEcho()) Back();
@@ -445,22 +504,50 @@ public partial class PhoneController : Node
         }
         if (_stage is Stage.Opening or Stage.Closing or Stage.Stowing)
         {
-            // nothing reaches the body while the phone moves; a mouse move would turn the view under it
+            // nothing reaches the body while the phone moves but the look
             if (e is not InputEventMouseMotion) GetViewport().SetInputAsHandled();
             return;
         }
 
-        // folded (or coming out): the cover's quick actions
+        // folded (or coming out): the cover's quick actions; the body walks and looks on
+        if (!e.IsPressed() || e.IsEcho()) return;
         bool handled = true;
-        if (!e.IsPressed() || e.IsEcho()) handled = e is InputEventKey or InputEventJoypadButton;
-        else if (e.IsActionPressed(PlayerInput.Phone) || e.IsActionPressed("ui_up")) Open();
-        else if (e.IsActionPressed("ui_down") || e.IsActionPressed("ui_cancel") || e.IsActionPressed(PlayerInput.Menu)) PutAway();
-        else if (e.IsActionPressed("ui_left") || e is InputEventMouseButton { ButtonIndex: MouseButton.WheelUp }) Pick(-1);
-        else if (e.IsActionPressed("ui_right") || e is InputEventMouseButton { ButtonIndex: MouseButton.WheelDown }) Pick(1);
-        else if (e.IsActionPressed("ui_accept") || e is InputEventKey { PhysicalKeycode: Key.Space }
+        if (e.IsActionPressed(PlayerInput.Phone) || e is InputEventJoypadButton && e.IsActionPressed("ui_up")) Open();
+        else if (e.IsActionPressed("ui_cancel") || e.IsActionPressed(PlayerInput.Menu)
+                 || e is InputEventKey { PhysicalKeycode: Key.Down } || e is InputEventJoypadButton && e.IsActionPressed("ui_down")) PutAway();
+        else if (e is InputEventKey { PhysicalKeycode: Key.Left } || e is InputEventJoypadButton && e.IsActionPressed("ui_left")
+                 || e is InputEventMouseButton { ButtonIndex: MouseButton.WheelUp }) Pick(-1);
+        else if (e is InputEventKey { PhysicalKeycode: Key.Right } || e is InputEventJoypadButton && e.IsActionPressed("ui_right")
+                 || e is InputEventMouseButton { ButtonIndex: MouseButton.WheelDown }) Pick(1);
+        else if (e is InputEventKey { PhysicalKeycode: Key.Enter or Key.KpEnter } || e is InputEventJoypadButton && e.IsActionPressed("ui_accept")
                  || e is InputEventMouseButton { ButtonIndex: MouseButton.Left }) RunQuick();
         else handled = false;
         if (handled) GetViewport().SetInputAsHandled();
+    }
+
+    /// <summary>The camera app's keys; the mouse's moves go on to the body, which looks with them.</summary>
+    private void CameraInput(InputEvent e)
+    {
+        if (e is InputEventMouseMotion) return;
+        if (!e.IsPressed() || e.IsEcho())
+        {
+            if (e is InputEventMouseButton) GetViewport().SetInputAsHandled();
+            return;
+        }
+        bool handled = true;
+        if (e.IsActionPressed("ui_cancel") || e.IsActionPressed(PlayerInput.Menu)) Back();
+        else if (e is InputEventMouseButton { ButtonIndex: MouseButton.Left } || e is InputEventKey { PhysicalKeycode: Key.Enter or Key.KpEnter }
+                 || e.IsActionPressed(PlayerInput.TriggerRight) || e is InputEventJoypadButton && e.IsActionPressed("ui_accept")) _ = TakePhoto();
+        else if (e is InputEventMouseButton { ButtonIndex: MouseButton.WheelUp } || e is InputEventJoypadButton { ButtonIndex: JoyButton.RightShoulder }) Zoom(1);
+        else if (e is InputEventMouseButton { ButtonIndex: MouseButton.WheelDown } || e is InputEventJoypadButton { ButtonIndex: JoyButton.LeftShoulder }) Zoom(-1);
+        else handled = false;
+        if (handled) GetViewport().SetInputAsHandled();
+    }
+
+    private void Zoom(int step)
+    {
+        _screens.StepZoom(step);
+        Play(PhoneSounds.Tap);
     }
 
     private void Pick(int step)
@@ -478,28 +565,25 @@ public partial class PhoneController : Node
         _quickActions[_quick]();
     }
 
-    /// <summary>The full-screen picture's input, into the inner screen: a mouse event mapped to its pixels.</summary>
+    /// <summary>
+    /// Into the inner screen: keys and pad as they are, the mouse where its ray meets the 3D screen
+    /// (off the screen, a click does nothing). The phone leans a little toward the cursor.
+    /// </summary>
     private void Forward(InputEvent e)
     {
         if (e is InputEventMouse mouse)
         {
+            var p = _player();
+            var size = GetViewport().GetVisibleRect().Size;
+            if (p != null && size.X > 0) p.PhoneTilt = (mouse.Position / size - new Vector2(0.5f, 0.5f)) * 2f;
+            if (p?.PhoneScreenPoint(mouse.Position) is not { } uv) return;
             var copy = (InputEventMouse)mouse.Duplicate();
-            copy.Position = ToScreen(mouse.Position);
+            copy.Position = uv * (Vector2)_screens.Inner.Size;
             copy.GlobalPosition = copy.Position;
             _screens.Inner.PushInput(copy, true);
             return;
         }
         _screens.Inner.PushInput(e, true);
-    }
-
-    /// <summary>A window point into the inner screen's pixels, through the "cover" fit of <see cref="_full"/>.</summary>
-    private Vector2 ToScreen(Vector2 window)
-    {
-        var size = _full.Size;
-        float n = _screens.Inner.Size.X;
-        float scale = Mathf.Max(size.X / n, size.Y / n);
-        var offset = (size - new Vector2(n, n) * scale) * 0.5f;
-        return (window - _full.GlobalPosition - offset) / scale;
     }
 
     // ------------------------------------------------------------------ bits

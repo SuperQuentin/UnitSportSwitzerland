@@ -48,9 +48,9 @@ src/Core/TouchControls   quick  --touchcheck --mobile --world fixture
 src/Core/PlayerInput.cs  quick  --touchcheck --mobile --world fixture
 src/Core/Platform.cs     quick  --touchcheck --mobile --world fixture
 src/Player/FootPlayer.cs quick  --emotewheelcheck --world fixture
-src/Phone/               quick  --phonecheck --world fixture
-src/Player/FootPlayer    quick  --phonecheck --world fixture
-src/Core/Teleporter      quick  --phonecheck --world fixture
+src/Phone/               quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
+src/Player/FootPlayer    quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
+src/Core/Teleporter      quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
 src/Avatar/              quick  --cockpitcheck
 src/Core/Chat            quick  --chatcheck
 src/World/TimeCommand    quick  --chatcheck
