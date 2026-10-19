@@ -134,6 +134,7 @@ public partial class PhoneModel : Node3D
         s.Box(new Vector3(-centre.X, centre.Y, -centre.Z), size, colour);
 
     /// <summary>The back half: shell, frame, the inner screen's black glass, the camera bump on the back.</summary>
+    [Core.Showcase("Parts", "Phone back half")]
     private static ArrayMesh BackMesh()
     {
         var s = new MeshScratch();
@@ -151,6 +152,7 @@ public partial class PhoneModel : Node3D
     }
 
     /// <summary>The front half, in its own frame (centred, its inner face at z = 0): shell, frame, the cover glass.</summary>
+    [Core.Showcase("Parts", "Phone front half")]
     private static ArrayMesh FrontMesh()
     {
         var s = new MeshScratch();
@@ -167,7 +169,7 @@ public partial class PhoneModel : Node3D
     private static IEnumerable<(string Name, Func<Node3D> Make)> Showcase()
     {
         foreach (var (name, fold) in new[] { ("folded", 0f), ("half open", 0.5f), ("open", 1f) })
-            yield return (name, () => new PhoneModel { Fold = fold, Scale = Vector3.One * 6f });
+            yield return (name, () => new PhoneModel { Fold = fold });
     }
 }
 
