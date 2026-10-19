@@ -97,6 +97,7 @@ public partial class VehicleIntroCard : CanvasLayer
         Motorbike => VehicleIntroKind.Motorbike,
         Bicycle => VehicleIntroKind.RoadBike,
         Skis => VehicleIntroKind.Skis,
+        Snowboard => VehicleIntroKind.Snowboard,
         Forklift => VehicleIntroKind.Forklift,
         Excavator { Mini: true } => VehicleIntroKind.MiniExcavator,
         Excavator => VehicleIntroKind.Excavator,

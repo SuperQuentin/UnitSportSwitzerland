@@ -29,6 +29,12 @@ public enum HumanPose
 
     /// <summary>The other half of a climbing step: right hand and knee up.</summary>
     ClimbRight,
+
+    /// <summary>
+    /// On a snowboard (#922): feet shoulder-wide across the board, knees bent and out, the chest to
+    /// the toe edge (+Z), arms out along the board for balance. The board runs along X.
+    /// </summary>
+    Boarding,
 }
 
 /// <summary>
@@ -1094,6 +1100,21 @@ public static partial class HumanMeshBuilder
         // knee on the same side raised to the next foothold (#359); bone lengths as the standing rig's
         HumanPose.ClimbLeft => Climb(1f),
         HumanPose.ClimbRight => Climb(-1f),
+
+        // bone lengths within a centimetre or two of the tucked rig's
+        HumanPose.Boarding => new Rig(
+            HeadTop: new(0, 1.500f, 0.170f), HeadBase: new(0, 1.310f, 0.150f),
+            Neck: new(0, 1.240f, 0.120f), Chest: new(0, 1.090f, 0.070f),
+            Waist: new(0, 0.920f, 0.000f), Hip: new(0, 0.780f, -0.060f),
+            ShoulderL: new(-0.175f, 1.170f, 0.100f), ElbowL: new(-0.420f, 1.020f, 0.160f),
+            WristL: new(-0.620f, 0.890f, 0.250f),
+            ShoulderR: new(0.175f, 1.170f, 0.100f), ElbowR: new(0.410f, 1.000f, 0.130f),
+            WristR: new(0.600f, 0.860f, 0.200f),
+            HipL: new(-0.090f, 0.780f, -0.060f), KneeL: new(-0.240f, 0.470f, 0.200f),
+            AnkleL: new(-0.270f, 0.100f, 0.000f), ToeL: new(-0.270f, 0.090f, 0.140f),
+            HipR: new(0.090f, 0.780f, -0.060f), KneeR: new(0.240f, 0.470f, 0.200f),
+            AnkleR: new(0.270f, 0.100f, 0.000f), ToeR: new(0.270f, 0.090f, 0.140f),
+            TorsoLean: 0f),
 
         _ => new Rig(
             HeadTop: new(0, 1.780f, 0), HeadBase: new(0, 1.590f, 0),
