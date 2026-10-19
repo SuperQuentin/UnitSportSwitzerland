@@ -26,7 +26,8 @@ public partial class TitleScreen : Screen
 
         var column = UiKit.VBox(6);
         column.SetAnchorsPreset(LayoutPreset.LeftWide);
-        column.OffsetLeft = 72; column.OffsetRight = 72 + 380; column.OffsetTop = 0; column.OffsetBottom = 0;
+        // centred above the footer, so a shown "Update to" entry does not push Quit onto it
+        column.OffsetLeft = 72; column.OffsetRight = 72 + 380; column.OffsetTop = 0; column.OffsetBottom = -50;
         column.Alignment = BoxContainer.AlignmentMode.Center;
         AddChild(column);
 
