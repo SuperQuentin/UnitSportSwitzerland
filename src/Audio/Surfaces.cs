@@ -88,6 +88,8 @@ public static class Surfaces
         if (known && cover == CoverClass.Water) return Surface.Water;
 
         if (RoadUnder(chunks, feet) is { } road) return road;
+        // the white above the permanent snow line, and an occasion's snow, are snow underfoot (#899)
+        if (feet.Y > CoverPalette.SnowLine + 125f || World.DayNight.OccasionSnow > 0.5f) return Surface.Snow;
         return known ? FromCover(cover) : Surface.Grass;
     }
 

@@ -59,6 +59,7 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | parked car, motorbike, bike: get in, drive, get out | `RideControls` (`BotDriving.Controls`: `AutoPilot`) | `VehicleManager.ServerClaim`, `FootPlayer.TakeVehicle`, `ExitVehicle` with the server's `Park` | in sight within 150 m (`BotDriving.Spot`) | `BotDriving`; `BrBrain` for trips over 300 m | ok (`vehicles`) |
 | mounts from the ride menu | — | `RideUi` (refused in a match anyway) | — | — | n/a in BR |
 | ski a slope (#887): its snow, its wear | `RideControls` on skis (`AutoPilot` already drives them for races) | the body's ride physics; `SnowService` counts a bot's metres on a slope like a player's | `SnowService.TryAt` / `PisteIndex.At` on the server | — | gap: no brain skis yet (the slopes and their state are ready for one) |
+| skis: stride on the flat and off snow, skid stop (#899) | `RideControls` throttle pulses (`AutoPilot` presses ~4 times a second while it wants speed on skis) | the body's ride physics (`SkiDynamics`) | — | `AutoPilot` (races) | ok for race NPCs; gap: no brain skis yet |
 
 ## Battle Royale
 

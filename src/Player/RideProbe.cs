@@ -197,7 +197,13 @@ public partial class RideProbe : Node
             // (the brake, held at a standstill, would reverse: let go once stopped)
             _player.RideControls = () =>
             {
-                if (_elapsed < brakeAt) return new RideInput(steer != 0f && _player.RideSpeed > 5f ? 0f : 1f, 0f, steer, false);
+                if (_elapsed < brakeAt)
+                {
+                    float throttle = steer != 0f && _player.RideSpeed > 5f ? 0f : 1f;
+                    // skis stride on a press (#899): pressed six times a second, as a player taps W
+                    if (_kind == RideKind.Skis) throttle *= _elapsed % (1.0 / 6) < 1.0 / 12 ? 1f : 0f;
+                    return new RideInput(throttle, 0f, steer, false);
+                }
                 _stopped |= Mathf.Abs(_player.RideSpeed) < 0.3f;
                 return new RideInput(0f, _stopped ? 0f : 1f, 0f, false, Handbrake: _stopped);
             };
