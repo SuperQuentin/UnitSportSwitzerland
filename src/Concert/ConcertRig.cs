@@ -66,6 +66,7 @@ public partial class ConcertRig : Node3D
     private OmniLight3D? _crowdLight;
     private float _haze;
     private ConcertCrowd? _crowd;
+    private ConcertSfx _sfx = null!;
     private float _energy;
 
     private const float BeamLength = 70f;
@@ -88,6 +89,9 @@ public partial class ConcertRig : Node3D
         _cells = fx.Where(f => f.Type.Kind is FixtureKind.Blinder or FixtureKind.Strobe or FixtureKind.PixelBar).ToArray();
         _screens = fx.Where(f => f.Type.Kind == FixtureKind.Screen).ToArray();
         BuildRig();
+        // pyro, CO2, confetti, fog: fixtures of the rig like the rest
+        _sfx = new ConcertSfx(_plan.Patch, Event);
+        AddChild(_sfx);
         // the audience, during the show
         if (WithCrowd)
         {
@@ -255,6 +259,7 @@ public partial class ConcertRig : Node3D
             for (int u = 0; u < _external.Length; u++) _external[u].CopyTo(p.Universes[u], 0);
         else _desk.Write(ShowOn() ? now % 86400.0 : -1.0);
         float master = Math.Clamp(_desk.Master, 0f, 1f);
+        _sfx.Step(now);
         float t = (float)(now % 3600.0);
 
         _haze = 0;

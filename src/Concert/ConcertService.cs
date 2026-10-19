@@ -10,7 +10,7 @@ using UnitSport.Terrain.Stadiums;
 namespace UnitSport.Concert;
 
 /// <summary>What an operator's cue does to the desk on every peer.</summary>
-public enum CueKind : byte { Go = 0, Section = 1, Bpm = 2, Blackout = 3, Master = 4 }
+public enum CueKind : byte { Go = 0, Section = 1, Bpm = 2, Blackout = 3, Master = 4, Fx = 5 }
 
 /// <summary>
 /// Hosting a set and running it live (#885), at <c>World/Concerts</c> on the server and every client.
@@ -149,6 +149,29 @@ public partial class ConcertService : Node
                 return ServeHost(sender, stadium, seed, admin);
             case "release":
                 return ServeRelease(sender, stadium, admin);
+            case "cue":
+                // the operator's cues by hand: what OSC and the desk screen send
+                if (!_hosted.TryGetValue(stadium, out var hc) || hc.Seed < 0) return "Host a set first ('/concert host [seed]').";
+                if (hc.Operator != sender) return "Only the show's operator cues it.";
+                double when = ClockSync.ServerNow % 86400.0;
+                string what = parts.Length > 1 ? parts[1] : "";
+                float arg = parts.Length > 2 && float.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float x) ? x : 1f;
+                switch (what)
+                {
+                    case "go": ServeCue(stadium, (int)CueKind.Go, 0, when); return "GO.";
+                    case "bpm": ServeCue(stadium, (int)CueKind.Bpm, arg, when); return $"Tempo {arg:F0}.";
+                    case "blackout": ServeCue(stadium, (int)CueKind.Blackout, parts.Length > 2 ? arg : (hc.Blackout ? 0 : 1), when); return "Blackout.";
+                    case "master": ServeCue(stadium, (int)CueKind.Master, arg, when); return $"Master {arg:F2}.";
+                    case "release": ServeCue(stadium, (int)CueKind.Section, -1, when); return "The song runs the sections again.";
+                    case "flames": ServeCue(stadium, (int)CueKind.Fx, (int)RigGroup.Flames, when); return "Flames!";
+                    case "co2": ServeCue(stadium, (int)CueKind.Fx, (int)RigGroup.Co2, when); return "CO2!";
+                    case "confetti": ServeCue(stadium, (int)CueKind.Fx, (int)RigGroup.Confetti, when); return "Confetti!";
+                    case "gerbs": ServeCue(stadium, (int)CueKind.Fx, (int)RigGroup.Gerbs, when); return "Gerbs!";
+                    case "pyro": ServeCue(stadium, (int)CueKind.Fx, (int)RigGroup.Airbursts, when); return "Airbursts!";
+                    default:
+                        if (Enum.TryParse<ShowSection>(what, true, out var sec)) { ServeCue(stadium, (int)CueKind.Section, (int)sec, when); return $"Held: {sec}."; }
+                        return "/concert cue go | calm|groove|chorus|peak|blackout | release | bpm <n> | master <0..1> | flames|co2|confetti|gerbs|pyro";
+                }
             case "status":
                 return _hosted.TryGetValue(stadium, out var h) && h.Seed >= 0
                     ? $"{name}: set {h.Seed} ({ConcertPlanner.Plan(StadiumCatalog.All[stadium], h.Seed).Artist}), operator {h.Operator}"
@@ -237,6 +260,11 @@ public partial class ConcertService : Node
             case CueKind.Bpm: h.Bpm = value; h.BpmAt = at; break;
             case CueKind.Blackout: h.Blackout = value > 0.5f; break;
             case CueKind.Master: h.Master = Math.Clamp(value, 0f, 1f); break;
+            case CueKind.Fx:
+                // a shot of an effect: not state, a moment; every peer fires it at that instant
+                foreach (int peer in Peers()) RpcId(peer, MethodName.Fired, stadium, (int)value, at);
+                if (!Online) Fired(stadium, (int)value, at);
+                return;
         }
         Announce(stadium);
     }
@@ -277,6 +305,12 @@ public partial class ConcertService : Node
             GetParent()?.GetNodeOrNull<ConcertDirector>(nameof(ConcertDirector))?.Rebuild(stadium);
         }
         if (RigOf(stadium) is { } rig) ApplyCues(stadium, rig);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Fired(int stadium, int group, double at)
+    {
+        if (group >= 0 && group < Enum.GetValues<RigGroup>().Length) RigOf(stadium)?.Desk.FireNow((RigGroup)group, at);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.UnreliableOrdered, TransferChannel = Channel)]
@@ -383,6 +417,11 @@ public partial class ConcertService : Node
             case "/concert/bpm": SendCue(stadium, CueKind.Bpm, m.Float(0), at); return;
             case "/concert/blackout": SendCue(stadium, CueKind.Blackout, m.Float(0, 1), at); return;
             case "/concert/master": SendCue(stadium, CueKind.Master, m.Float(0, 1), at); return;
+            case "/concert/fx/flames": SendCue(stadium, CueKind.Fx, (int)RigGroup.Flames, at); return;
+            case "/concert/fx/co2": SendCue(stadium, CueKind.Fx, (int)RigGroup.Co2, at); return;
+            case "/concert/fx/confetti": SendCue(stadium, CueKind.Fx, (int)RigGroup.Confetti, at); return;
+            case "/concert/fx/gerbs": SendCue(stadium, CueKind.Fx, (int)RigGroup.Gerbs, at); return;
+            case "/concert/fx/pyro": SendCue(stadium, CueKind.Fx, (int)RigGroup.Airbursts, at); return;
         }
     }
 

@@ -58,6 +58,13 @@ public sealed record ConcertEvent
     public required int Strobes { get; init; }
     public required int PixelBars { get; init; }
 
+    // the effects: flame projectors, CO2 jets, confetti cannons, gerbs, airbursts
+    public int Flames { get; init; }
+    public int Co2Jets { get; init; }
+    public int ConfettiCannons { get; init; }
+    public int Gerbs { get; init; }
+    public int Airbursts { get; init; }
+
     /// <summary>The game hours the show plays, [start, end); the stage stands all day.</summary>
     public float StartHour { get; init; } = 20.5f;
     public float EndHour { get; init; } = 23.5f;
@@ -187,6 +194,12 @@ public static class ConcertPlanner
             Blinders = N(genre is Genre.Rock or Genre.Pop ? 10 : 6),
             Strobes = N(genre == Genre.Electronic ? 12 : 6),
             PixelBars = N(genre is Genre.Electronic or Genre.Pop ? 12 : 6),
+            // a rock or EDM show burns, a ballad sparkles and rains confetti
+            Flames = genre is Genre.Rock or Genre.Electronic or Genre.HipHop ? N(8) : 0,
+            Co2Jets = genre is Genre.Ballad ? 0 : N(4),
+            ConfettiCannons = 2 + 2 * rng.Next(2),
+            Gerbs = genre is Genre.Ballad or Genre.Pop or Genre.Rock ? N(8) : N(4),
+            Airbursts = 3,
         };
     }
 }

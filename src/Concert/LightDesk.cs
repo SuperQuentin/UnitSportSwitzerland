@@ -33,6 +33,9 @@ public sealed class LightDesk
 
     public ShowSection Section { get; private set; }
     public float Beat { get; private set; }
+    /// <summary>Bars since the section began, and whether it is the song's last section: what the effects key on.</summary>
+    public int SectionBar { get; private set; }
+    public bool LastSection { get; private set; }
 
     // the moment being written, for the delegates below
     private int _beatN;
@@ -96,13 +99,17 @@ public sealed class LightDesk
     public ShowSection SectionAt(double showSeconds, out float beat)
     {
         beat = BeatAt(showSeconds);
+        int bar = (int)MathF.Floor(beat / 4f);
+        SectionBar = bar;
+        LastSection = false;
         if (Blackout) return ShowSection.Blackout;
         if (HeldSection is { } held) return held;
         if (showSeconds < 0) return ShowSection.WalkIn;
-        int bar = (int)MathF.Floor(beat / 4f);
         int songBars = SongForm.Length * BarsPerSection + 1;
         int inSong = bar % songBars;
         if (inSong == songBars - 1) return ShowSection.Blackout;
+        SectionBar = inSong % BarsPerSection;
+        LastSection = inSong / BarsPerSection == SongForm.Length - 1;
         // each song shuffles its form a little, from the seed
         int song = bar / songBars;
         int k = inSong / BarsPerSection;
@@ -113,6 +120,7 @@ public sealed class LightDesk
     /// <summary>Writes every channel for this moment of the show.</summary>
     public void Write(double showSeconds)
     {
+        _now = showSeconds;
         Section = SectionAt(showSeconds, out float beat);
         Beat = beat;
         float ph = beat - MathF.Floor(beat);           // within the beat
@@ -188,7 +196,78 @@ public sealed class LightDesk
                 Screens(clip: 4, speed: _e.Bpm / 60f, Colors.White, _pal[1], 1f);
                 break;
         }
+        Effects(beat);
     }
+
+    /// <summary>
+    /// The special effects, cued by the song: CO2 on the first downbeats of a chorus, flames every two
+    /// bars in it and on every beat (left, right) at a peak, gerbs as a peak begins, confetti as the
+    /// song's last chorus begins, airbursts in the blackout that ends it, low fog through calm verses.
+    /// Armed for the whole show.
+    /// </summary>
+    private void Effects(float beat)
+    {
+        var p = _plan.Patch;
+        float ph = beat - MathF.Floor(beat), barPh = beat / 4f - MathF.Floor(beat / 4f);
+        int beatN = (int)MathF.Floor(beat);
+        bool live = Section is not (ShowSection.WalkIn);
+        bool chorus = Section == ShowSection.Chorus, peak = Section == ShowSection.Peak;
+        void Fire(RigGroup g, Func<int, bool> on)
+        {
+            var f = G(g);
+            bool hand = Manual(g);
+            for (int i = 0; i < f.Length; i++)
+            {
+                p.Set01(f[i], Attr.Arm, live || hand ? 1f : 0f);
+                p.Set01(f[i], Attr.Fire, hand || live && on(i) ? 1f : 0f);
+            }
+        }
+        _fx.Beat = beatN; _fx.BeatPh = ph; _fx.BarPh = barPh; _fx.Bar = SectionBar; _fx.Chorus = chorus; _fx.Peak = peak;
+        _fx.Last = LastSection; _fx.Blackout = Section == ShowSection.Blackout;
+        Fire(RigGroup.Co2, _fx.Co2);
+        Fire(RigGroup.Flames, _fx.Flames);
+        Fire(RigGroup.Gerbs, _fx.Gerbs);
+        Fire(RigGroup.Confetti, _fx.Confetti);
+        Fire(RigGroup.Airbursts, _fx.Airbursts);
+        foreach (var f in G(RigGroup.LowFog))
+        {
+            p.Set01(f, Attr.Pump, Section == ShowSection.Calm ? 0.8f : 0f);
+            p.Set01(f, Attr.Fan, 0.6f);
+        }
+    }
+
+    /// <summary>The moment, for the effects' cues (made once: nothing per frame allocates).</summary>
+    private sealed class FxMoment
+    {
+        public int Beat, Bar;
+        public float BeatPh, BarPh;
+        public bool Chorus, Peak, Last, Blackout;
+        public readonly Func<int, bool> Co2, Flames, Gerbs, Confetti, Airbursts;
+
+        public FxMoment()
+        {
+            Co2 = i => Chorus && Bar < 2 && BarPh < 0.12f;
+            Flames = i => (Chorus && Bar % 2 == 0 && BarPh < 0.1f) || (Peak && BeatPh < 0.35f && (Beat + i) % 2 == 0);
+            Gerbs = i => Peak && Bar == 0;
+            Confetti = i => Chorus && Last && Bar == 0;
+            Airbursts = i => Blackout;
+        }
+    }
+
+    private readonly FxMoment _fx = new();
+
+    /// <summary>Effects fired by hand (a cue from the operator), each until a moment of the show.</summary>
+    private readonly double[] _manual = new double[Enum.GetValues<RigGroup>().Length];
+    private double _now;
+
+    /// <summary>Fires an effect group by hand from a moment of the show: a held shot for the flames and CO2, one shot for the rest.</summary>
+    public void FireNow(RigGroup group, double showSeconds)
+    {
+        double hold = group is RigGroup.Flames or RigGroup.Co2 ? 0.8 : 0.3;
+        _manual[(int)group] = showSeconds + hold;
+    }
+
+    private bool Manual(RigGroup g) => _now < _manual[(int)g];
 
     // ---- palettes and effects, written as DMX ------------------------------------------------------
 

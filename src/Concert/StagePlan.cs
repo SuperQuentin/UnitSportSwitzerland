@@ -231,6 +231,22 @@ public sealed class StagePlan
                     Patch.Add(FixtureType.Beam, RigGroup.Floor, At(x, h - 0.3f, z), toward, Vector3.Up);
         Patch.Add(FixtureType.Hazer, RigGroup.Haze, At(-hw + 2f, h, -d + 2f), toward, Vector3.Up);
         Patch.Add(FixtureType.Hazer, RigGroup.Haze, At(hw - 2f, h, -d + 2f), toward, Vector3.Up);
+
+        // the effects, on the deck's front edge; the airbursts launch from it and burst over the
+        // open middle of the bowl (the roof of a stadium like Geneva's forbids anything under it)
+        Row(e.Flames, FixtureType.Flame, RigGroup.Flames, -0.6f, h, span * 0.85f, Vector3.Up, Vector3.Up);
+        Row(e.Gerbs, FixtureType.Gerb, RigGroup.Gerbs, -0.3f, h, span * 0.95f, Vector3.Up, Vector3.Up);
+        Row(e.Co2Jets, FixtureType.Co2, RigGroup.Co2, -1.2f, h, span * 0.6f, Vector3.Up, Dir(0, 1, 0.25f));
+        Row(e.ConfettiCannons, FixtureType.Confetti, RigGroup.Confetti, -1.5f, h, span, Vector3.Up, Dir(0, 1, 0.6f));
+        for (int i = 0; i < e.Airbursts; i++)
+        {
+            float x = (i - (e.Airbursts - 1) / 2f) * 14f;
+            // home: the burst's point, as a direction and distance from the launcher
+            var from = At(x, h, -0.5f);
+            Patch.Add(FixtureType.Airburst, RigGroup.Airbursts, from, At(x * 1.5f, 24f, 20f + catwalk * 0.5f) - from, Vector3.Up);
+        }
+        Patch.Add(FixtureType.LowFog, RigGroup.LowFog, At(-hw * 0.5f, h, -d + 1f), toward, Vector3.Up);
+        Patch.Add(FixtureType.LowFog, RigGroup.LowFog, At(hw * 0.5f, h, -d + 1f), toward, Vector3.Up);
     }
 
     // ---- in the round ------------------------------------------------------------------------------
@@ -291,5 +307,28 @@ public sealed class StagePlan
         }
         Patch.Add(FixtureType.Hazer, RigGroup.Haze, At(-hw + 1f, h, 0), Dir(0, 0, 1), Vector3.Up);
         Patch.Add(FixtureType.Hazer, RigGroup.Haze, At(hw - 1f, h, 0), Dir(0, 0, -1), Vector3.Up);
+
+        // the effects round the deck's edge, a share to each side; airbursts over the four quarters
+        foreach (var n in new[] { new Vector2(0, 1), new Vector2(0, -1), new Vector2(1, 0), new Vector2(-1, 0) })
+        {
+            var along = new Vector2(-n.Y, n.X);
+            void Edge(int count, FixtureType t, RigGroup grp, Vector3 home)
+            {
+                int per = count / 4;
+                for (int i = 0; i < per; i++)
+                {
+                    float a = per == 1 ? 0 : -hw + 1.5f + (2 * hw - 3f) * i / (per - 1);
+                    var p = n * (hw - 0.5f) + along * a;
+                    Patch.Add(t, grp, At(p.X, h, p.Y), home, Vector3.Up);
+                }
+            }
+            Edge(e.Flames, FixtureType.Flame, RigGroup.Flames, Vector3.Up);
+            Edge(e.Gerbs, FixtureType.Gerb, RigGroup.Gerbs, Vector3.Up);
+            Edge(Math.Max(4, e.Co2Jets), FixtureType.Co2, RigGroup.Co2, Vector3.Up);
+            var from = At(n.X * hw, h, n.Y * hw);
+            Patch.Add(FixtureType.Airburst, RigGroup.Airbursts, from, At(n.X * 30f, 24f, n.Y * 30f) - from, Vector3.Up);
+        }
+        Patch.Add(FixtureType.Confetti, RigGroup.Confetti, At(-hw, h, -hw), Dir(-0.4f, 1, -0.4f), Vector3.Up);
+        Patch.Add(FixtureType.Confetti, RigGroup.Confetti, At(hw, h, hw), Dir(0.4f, 1, 0.4f), Vector3.Up);
     }
 }

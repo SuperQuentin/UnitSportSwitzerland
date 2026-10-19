@@ -16,10 +16,12 @@ public enum Attr : byte
     Clip, ClipSpeed, Red2, Green2, Blue2,
     // atmospherics
     Pump, Fan,
+    // special effects: a safety arm and a fire, as an SFX controller lays them out
+    Arm, Fire,
 }
 
 /// <summary>How a fixture looks and moves; each has its own real channel layout.</summary>
-public enum FixtureKind : byte { Spot, Beam, Wash, Blinder, Strobe, PixelBar, Screen, Hazer }
+public enum FixtureKind : byte { Spot, Beam, Wash, Blinder, Strobe, PixelBar, Screen, Hazer, Flame, Co2, Confetti, Gerb, Airburst, LowFog }
 
 /// <summary>
 /// A fixture type, as its manufacturer's manual lays out its DMX channels in one mode: modelled on
@@ -70,6 +72,17 @@ public sealed record FixtureType(string Name, FixtureKind Kind, Attr[] Channels,
 
     public static readonly FixtureType Hazer = new("Hazer 2ch", FixtureKind.Hazer, new[] { Attr.Pump, Attr.Fan }, PanRange: 0, TiltRange: 0);
 
+    // special effects (#885): a channel to arm and one to fire, both over half to go, as on a real
+    // SFX controller; nothing fires disarmed. Flames and CO2 fire for as long as they are held,
+    // confetti, gerbs and airbursts once per rising edge.
+    private static FixtureType Sfx(string name, FixtureKind kind) => new(name, kind, new[] { Attr.Arm, Attr.Fire }, PanRange: 0, TiltRange: 0);
+    public static readonly FixtureType Flame = Sfx("Flame projector 2ch", FixtureKind.Flame);
+    public static readonly FixtureType Co2 = Sfx("CO2 jet 2ch", FixtureKind.Co2);
+    public static readonly FixtureType Confetti = Sfx("Confetti cannon 2ch", FixtureKind.Confetti);
+    public static readonly FixtureType Gerb = Sfx("Pyro gerb 2ch", FixtureKind.Gerb);
+    public static readonly FixtureType Airburst = Sfx("Pyro airburst 2ch", FixtureKind.Airburst);
+    public static readonly FixtureType LowFog = new("Low fog 2ch", FixtureKind.LowFog, new[] { Attr.Pump, Attr.Fan }, PanRange: 0, TiltRange: 0);
+
     /// <summary>A spot's or a beam's colour wheel, slot by slot (each slot is 8 DMX values wide).</summary>
     public static readonly Color[] Wheel =
     {
@@ -91,7 +104,7 @@ public sealed record FixtureType(string Name, FixtureKind Kind, Attr[] Channels,
 }
 
 /// <summary>Where a fixture hangs: which position of the rig it belongs to (a console's group).</summary>
-public enum RigGroup : byte { FrontTruss, MidTruss, BackTruss, Floor, Towers, Blinders, Strobes, PixelBars, Screens, Haze }
+public enum RigGroup : byte { FrontTruss, MidTruss, BackTruss, Floor, Towers, Blinders, Strobes, PixelBars, Screens, Haze, Flames, Co2, Confetti, Gerbs, Airbursts, LowFog }
 
 /// <summary>
 /// One fixture of the rig: its type, its group, where it hangs (stadium frame, metres over the pitch)
