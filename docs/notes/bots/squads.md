@@ -24,25 +24,42 @@ Bots play duos, trios and squads, in bot-only teams and as team-mates of humans.
   - a mate in a fight: a bot whose goal is Fight or Finish, or a player shot at in the last 5 s;
   - the nearest standing mate.
 - **Goals** (`BrTactics`, unit-tested):
-  - Revive 75 (a downed mate within 150 m, no enemy within 40 m for 4 s, not hurt);
-  - Recall 66 (a dogtag and a stop: before loot);
+  - Recall 90 (a dogtag and a stop worth it, see below; 102 with stickiness, so on through a hurting zone);
+  - Loot 80 for a fallen mate's box with their dogtag, known within 400 m whether seen or not (`CrateHasTag`);
+  - Revive 75 (a downed mate within 120 m, no enemy within 40 m of the bot or of the mate, not hurt). A downed
+    player bleeds out in 30 s: ~20 s of running and the 5 s hold. Waiting until no enemy at all had been seen
+    for 4 s let every downed mate of a 30-bot match bleed out; now a revive loses only to an enemy at the
+    mate's side (most downs happen mid-brawl);
   - Assist 60+ (a mate's fight within 200 m);
   - Ping 55 (a human's ping, for 60 s or until reached);
   - Regroup 50-58 (past 60 m from the leader).
   - The zone and a fight in reach come first.
 - **Following:** a follower with nothing better to do walks back to its leader from 25 m.
+- **Pings:** a human's ping is reached within 6 m, then looked round for 8 s.
+- **Streets:** a street route over 2.5 × the straight distance (+100 m) is a detour; the bot walks straight
+  (seen: 197 points away from a ping 100 m off).
 - **Revive:** the bot goes to within 2.2 m, faces the mate and holds still `ReviveSeconds` (5 s), then calls
   `ServerRevive`. Moving off or a change of goal restarts the hold.
-- **Dogtags:** `BotSkills.AlsoWants` (a mode's wants) takes a mate's dogtag while it can bring them back. The
-  bot then walks to the nearest Postauto stop **inside the circle it must reach** (`NearestStop`, 85 % of the
-  radius). Seen: with the nearest stop outside the next circle, the Recall and Zone goals swapped every few
-  seconds until the zone closed.
+- **Dogtags:** `BotSkills.AlsoWants` (a mode's wants) makes a mate's dogtag wanted while it can bring them
+  back, taken first from the box (`TakeOne`). `NearestStop(at, health)` offers the nearest Postauto stop whose walk
+  there and on into the circle it must reach (4.5 m/s, a 20 s margin), and any stretch past the current circle,
+  costs no more zone than it can spare, keeping 45 health (the zone's damage, 1.5 ×).
+  - Seen: stops outside the next circle sent bots to and fro between Recall and Zone.
+  - Stops only inside the next circle were usually none: the four are spread over the first circle.
+  - So a recall is a looting-phase errand. Later, the stops are deep in the zone and the bot rightly keeps
+    the tag; `StopReport` logs why every 10 s.
 - **Pings for humans:** a bot with a human mate pings an enemy it sees within 250 m (one every 10 s, each enemy
   at most every 30 s).
 - **Down:** a downed bot crawls (1.1 m/s, the body's own speed) to its nearest standing mate.
 - **Checks:**
-  - `tools/brsquadcheck.sh` (`--brsquadcheck`, net): a duos match of A and one bot, alone on its side, at full
-    pace. The mate jumps after A and lands near, regroups, goes to A's ping, revives A, and takes A's dogtag to
-    a stop: A is recalled.
-  - `BRMODE=trios tools/brbotwatch.sh` (`--brwatchmode`): a whole team match of bots.
+  - `tools/brsquadcheck.sh` (`--brsquadcheck`, net, about 10 min): a duos match of A and one bot, alone on its
+    side.
+    - Zürich on the generated world, which has the roads for the Postauto stops: a random region or the default
+      spawn may have none, and so may a run with the terrain drive asleep (`terrain_location.json ... does not
+      exist; falling back`).
+    - Pace 4: the recall must fall in the looting phase, after the mate's minutes of flight to A.
+    - The mate jumps after A and lands near, takes A's dogtag to a stop (A recalled), regroups, goes to A's ping,
+      and revives A.
+  - `SPEED=4 BRMODE=trios BRBOTS=30 tools/brbotwatch.sh`: a whole team match of bots at full pace, 4 × faster
+    (`/speed`, which the match follows since #856), about 7 min. Measured: 20 downs, revives tried, 16 kills.
 - **Not yet:** pinging loot for a human; sharing sightings between bot mates beyond Assist.
