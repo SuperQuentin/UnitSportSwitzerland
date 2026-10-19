@@ -1042,6 +1042,8 @@
 344	Terrain / Road prop - TicketBarrier 0
 520	Terrain / Road prop - TicketKiosk
 1872	Terrain / Road prop - YieldSign
+6366.5	Terrain / Traffic light - Bike right on red
+6289.6	Terrain / Traffic light - Bike right on red, no bike head
 7003.4	Terrain / Traffic light - Geneva
 6512.5	Terrain / Traffic light - Vaud
 42281.1	Trailer / Drognens dormitory

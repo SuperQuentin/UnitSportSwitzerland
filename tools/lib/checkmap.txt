@@ -16,6 +16,8 @@
 
 src/Net/                 quick  --interestcheck
 src/Player/FootPlayer.cs  quick  --vrposecheck
+src/Player/FootPlayer.cs  quick  --slopewalk --at 2563500,1112500 --systems terrain,generated
+src/Player/SlopeWalkProbe quick  --slopewalk --at 2563500,1112500 --systems terrain,generated
 # #833: first person keeps your figure for the shadow and the mirrors
 src/Player/FootPlayer.cs  quick  --ownbodycheck --world flat
 src/Player/FootPlayer.Fight quick --ownbodycheck --world flat
@@ -660,6 +662,8 @@ src/Items/PlacedObjects  quick  --collidecheck --world flat --targets placed/
 src/Items/PalletNode     quick  --collidecheck --world flat --targets props/
 src/Crafting/StationVisuals quick --collidecheck --world flat --targets placed/
 src/Interiors/DoorLeaf   quick  --collidecheck --world flat --targets doors/
+src/Terrain/BuildingMeshBuilder quick --collidecheck --world flat --targets castles/
+src/Interiors/Castles   quick  --collidecheck --world flat --targets castles/
 
 # the playtest suite (#751): scenarios well-formed, MCP over HTTP, the ledger; then every flat-course scenario set up
 src/Playtest/            quick  --playtestcheck

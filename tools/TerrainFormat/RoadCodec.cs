@@ -123,8 +123,9 @@ public static class RoadCodec
         if (tile.AreaProps.Count > 0)
             sections.Add((TagAreaProps, Section(s =>
             {
-                s.Write((uint)tile.AreaProps.Count);
-                foreach (var p in tile.AreaProps)
+                var areas = tile.AreaProps.SelectMany(FitAreaProp).ToList();
+                s.Write((uint)areas.Count);
+                foreach (var p in areas)
                 {
                     s.Write((byte)p.Type);
                     s.Write(p.Variant);
@@ -353,6 +354,96 @@ public static class RoadCodec
         s.Write((ushort)RoadAttributes.RecordSize);
         s.Write((ushort)0);
         foreach (var seg in tile.Segments) WriteAttributes(s, seg.Attributes);
+    }
+
+    /// <summary>The most triangles one area prop can carry: its index count is a <c>u16</c>.</summary>
+    private const int MaxAreaTriangles = ushort.MaxValue / 3;
+
+    /// <summary>
+    /// An area prop as the format can hold it (#850): itself when its vertex and index counts fit their
+    /// <c>u16</c>s, else parts of at most <see cref="MaxAreaTriangles"/> whole triangles each, every
+    /// part with only the vertices it uses, re-indexed, and the prop's type, variant, flags and height.
+    /// A town's sidewalks can be one prop of 100 000 indices. The game finds a prop's outline (its kerb
+    /// faces, the terrain blend) as the edges only one of its triangles uses, so a part is made of whole
+    /// pieces (triangles joined by shared edges) and no cut adds an outline; only a single piece too big
+    /// for one prop is cut, in triangle order.
+    /// </summary>
+    internal static IEnumerable<RoadAreaProp> FitAreaProp(RoadAreaProp p)
+    {
+        if (p.Vertices.Length / 3 <= ushort.MaxValue && p.Indices.Length <= ushort.MaxValue)
+        {
+            yield return p;
+            yield break;
+        }
+        int triangles = p.Indices.Length / 3;
+        // pieces: triangles joined by a shared edge
+        var parent = new int[triangles];
+        for (int t = 0; t < triangles; t++) parent[t] = t;
+        int Find(int t)
+        {
+            while (parent[t] != t) t = parent[t] = parent[parent[t]];
+            return t;
+        }
+        var edgeOwner = new Dictionary<uint, int>();
+        for (int t = 0; t < triangles; t++)
+            for (int k = 0; k < 3; k++)
+            {
+                ushort a = p.Indices[t * 3 + k], b = p.Indices[t * 3 + (k + 1) % 3];
+                uint edge = a < b ? (uint)a << 16 | b : (uint)b << 16 | a;
+                if (edgeOwner.TryGetValue(edge, out int other)) parent[Find(t)] = Find(other);
+                else edgeOwner.Add(edge, t);
+            }
+        // pieces in the order of their first triangle, packed into parts
+        var pieces = new Dictionary<int, List<int>>();
+        var order = new List<List<int>>();
+        for (int t = 0; t < triangles; t++)
+        {
+            int root = Find(t);
+            if (!pieces.TryGetValue(root, out var piece)) { pieces.Add(root, piece = new List<int>()); order.Add(piece); }
+            piece.Add(t);
+        }
+        var part = new List<int>();
+        foreach (var piece in order)
+        {
+            if (part.Count + piece.Count > MaxAreaTriangles && part.Count > 0)
+            {
+                yield return AreaPart(p, part);
+                part.Clear();
+            }
+            for (int i = 0; i < piece.Count; i += MaxAreaTriangles)
+            {
+                int n = Math.Min(MaxAreaTriangles, piece.Count - i);
+                part.AddRange(piece.GetRange(i, n));
+                if (part.Count == MaxAreaTriangles) { yield return AreaPart(p, part); part.Clear(); }
+            }
+        }
+        if (part.Count > 0) yield return AreaPart(p, part);
+    }
+
+    /// <summary>The triangles <paramref name="triangles"/> of <paramref name="p"/> as a prop of their own.</summary>
+    private static RoadAreaProp AreaPart(RoadAreaProp p, List<int> triangles)
+    {
+        var remap = new Dictionary<ushort, ushort>();
+        var vertices = new List<float>();
+        var indices = new ushort[triangles.Count * 3];
+        for (int k = 0; k < indices.Length; k++)
+        {
+            ushort old = p.Indices[triangles[k / 3] * 3 + k % 3];
+            if (!remap.TryGetValue(old, out ushort now))
+            {
+                now = (ushort)remap.Count;
+                remap.Add(old, now);
+                vertices.Add(p.Vertices[old * 3]);
+                vertices.Add(p.Vertices[old * 3 + 1]);
+                vertices.Add(p.Vertices[old * 3 + 2]);
+            }
+            indices[k] = now;
+        }
+        return new RoadAreaProp
+        {
+            Type = p.Type, Variant = p.Variant, Flags = p.Flags, Height = p.Height,
+            Vertices = vertices.ToArray(), Indices = indices,
+        };
     }
 
     private static void WriteLegacyPaint(BinaryWriter s, RoadTile tile)
