@@ -33,6 +33,7 @@ public static class ConstructionCheck
             GD.Print($"[constructioncheck] {(ok ? "ok  " : "FAIL")} {what}");
         }
 
+        SiteDigest.Clear();
         string dir = ProjectSettings.GlobalizePath("res://test_output/construction");
         System.IO.Directory.CreateDirectory(dir);
         double e0 = SpawnPoint.DefaultLv95E, n0 = SpawnPoint.DefaultLv95N;
@@ -117,6 +118,7 @@ public static class ConstructionCheck
         string svg = System.IO.Path.Combine(dir, "generated.svg");
         System.IO.File.WriteAllText(svg, SitePlanSvg.Draw(drawn));
         GD.Print($"[constructioncheck] plan views: {svg}");
+        failures += DoorCheck.Baseline("constructioncheck", SiteBaselinePath, SiteDigest);
         GD.Print($"[constructioncheck] RESULT: {(failures == 0 ? "ok" : $"FAILED ({failures})")}");
         return failures == 0 ? 0 : 1;
     }
@@ -168,6 +170,7 @@ public static class ConstructionCheck
         }
 
         var plan = InteriorGenerator.Generate(tile, index, roads, grid);
+        foreach (var spot in doors) SiteDigest.Add(DoorCheck.DoorLine(site.Key, tile.Id, spot, plan));
         if (plan == null) { expect(false, $"{what}: no interior plan behind the office"); return; }
         var problems = InteriorValidator.Validate(plan);
         expect(problems.Count == 0, $"{what}: the office's plan is valid{(problems.Count > 0 ? ": " + string.Join("; ", problems.Take(3)) : "")}");
@@ -205,6 +208,15 @@ public static class ConstructionCheck
         var again = InteriorGenerator.Generate(tile, index, roads, grid);
         expect(again != null && again.ToJson() == plan.ToJson(), $"{what}: the office is planned the same twice");
     }
+
+    /// <summary>
+    /// The site doors' golden digest (#827): every ground container's and toilet cabin's door of the
+    /// sites checked, its spot and its entrance, opening and frames (<see cref="DoorCheck.DoorLine"/>).
+    /// Not the plan's hash: the office's plan changes when its upper floor comes, its ground doors do not.
+    /// </summary>
+    private const string SiteBaselinePath = "res://tests/site-door-baseline.txt";
+
+    private static readonly List<string> SiteDigest = new();
 
     /// <summary>Every point a site puts something on: hoarding ends and middles, zone and machine corners, crane bases outside.</summary>
     private static IEnumerable<Vector2> Points(ConstructionSite s)

@@ -67,6 +67,8 @@ public static class DoorCheck
             Buildings = Boxes.Select((b, i) => Solid(b, 150f * i + 60f)).ToList(),
         };
         var doors = BuildingFootprint.ComputeDoors(tile, null, null);
+        Digest.Clear();
+        Note("boxes", tile, null);
 
         var names = new HashSet<string>();
         foreach (var d in doors)
@@ -212,6 +214,7 @@ public static class DoorCheck
 
         failures += Garages();
         failures += FacedDoors();
+        failures += Baseline("doorcheck", BaselinePath, Digest);
 
         GD.Print($"[doorcheck] RESULT: {(failures == 0 ? "ok" : $"FAILED ({failures})")}");
         return failures == 0 ? 0 : 1;
@@ -311,6 +314,7 @@ public static class DoorCheck
                 }).ToList(),
             };
             var doors = BuildingFootprint.ComputeDoors(tile, roads, null);
+            Note($"garages {cls} {gap:F0}", tile, roads);
             var garages = doors.Where(d => d.Link.Any).ToList();
             if (want == LinkKind.None)
             {
@@ -374,6 +378,7 @@ public static class DoorCheck
                 }).ToList(),
             };
             var doors = BuildingFootprint.ComputeDoors(tile, roads, null);
+            Note("mixed", tile, roads);
             var types = BuildingTypes.For(tile);
             var garages = doors.Where(d => d.Link.Any).ToList();
             Expect(garages.Count > 0 && garages.Count < mixedCopies, $"mixed blocks: {garages.Count} of {mixedCopies} roll a garage door (about seven in ten, shops under flats only)");
@@ -407,6 +412,7 @@ public static class DoorCheck
                 }).ToList(),
             };
             var doors = BuildingFootprint.ComputeDoors(tile, roads, null);
+            Note("shallow", tile, roads);
             var garages = doors.Where(d => d.Link.Any).ToList();
             Expect(garages.Count > 0 && garages.All(g => g.Ramp == GarageRule.RampKind.Along), $"along the facade: {garages.Count} of {alongCopies} shallow blocks roll a garage door, all with the ramp along the facade");
             foreach (var g in garages)
@@ -431,6 +437,92 @@ public static class DoorCheck
             }
         }
         return failures;
+    }
+
+    /// <summary>
+    /// The ground doors' golden digest (#827): every door of every building this check plans, as
+    /// the footprint places it and as its plan's entrance, opening and <see cref="DoorLink"/> frames
+    /// read it, with a hash of the plan less its version. Written once on <c>main</c>'s door code
+    /// (<c>--doorcheck --door-baseline write</c>) and compared on every run, so a change to the door
+    /// system that moves any existing door by a hundredth of a millimetre, or changes any byte of a
+    /// plan but its version, fails here.
+    /// </summary>
+    private const string BaselinePath = "res://tests/door-baseline.txt";
+
+    private static readonly List<string> Digest = new();
+
+    private static string F(float v) => v.ToString("F4", System.Globalization.CultureInfo.InvariantCulture);
+    private static string V(Vector3 v) => $"{F(v.X)},{F(v.Y)},{F(v.Z)}";
+
+    /// <summary>A plan's hash, its version left out: a bump alone regenerates the same plan.</summary>
+    public static string PlanHash(InteriorLayout l)
+    {
+        int version = l.Version;
+        l.Version = 0;
+        var bytes = System.Text.Encoding.UTF8.GetBytes(l.ToJson());
+        l.Version = version;
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes))[..16];
+    }
+
+    /// <summary>One door as the digest reads it: the spot, and its entrance, opening and frames.</summary>
+    public static string DoorLine(string label, TileId tile, DoorSpot d, InteriorLayout? layout)
+    {
+        string key = d.KeyIn(tile).ToString();
+        var line = $"{label} door {key} at {V(d.Position)} out {V(d.Outward)} {F(d.Width)}x{F(d.Height)} {d.Hang} vehicle {d.Vehicle} "
+            + $"{d.Kind} link {d.Link.Kind} ramp {d.Ramp}/{d.RampDir} bank {d.Bank} shop {d.Shop}";
+        var e = layout?.EntranceOf(key);
+        if (layout == null || e == null) return line + " | locked";
+        var (w, top) = layout.OpeningOf(e);
+        var origin = new Core.WorldOrigin(tile.MinE + 500, tile.MaxN - 500);
+        var link = DoorLink.Create(layout, e, origin, d.Width, d.Height);
+        return line + $" | in {F(e.X)},{F(e.Z)} dir {F(e.InX)},{F(e.InZ)} w {F(e.Width)} door {F(e.DoorX)},{F(e.DoorY)},{F(e.DoorZ)} "
+            + $"h {F(e.DoorHeight)} {e.Hang} {e.Vehicle} opening {F(w)}x{F(top)} inside {V(link.Inside.Origin)} facing {V(link.Inside.Basis.Z)} "
+            + $"outside {V(link.Outside.Origin)} pass {F(link.HalfPass)}x{F(link.PassHeight)} swing {F(link.SwingSeconds)}";
+    }
+
+    /// <summary>Every door of a tile's buildings into <see cref="Digest"/>, with each building's plan hash.</summary>
+    private static void Note(string label, BuildingTile tile, RoadTile? roads)
+    {
+        var doors = BuildingFootprint.ComputeDoors(tile, roads, null);
+        foreach (var group in doors.Where(d => d.Width > 0).GroupBy(d => d.Index))
+        {
+            var layout = InteriorGenerator.Generate(tile, group.Key, roads, null);
+            Digest.Add($"{label} building {group.Key} {layout?.Kind} plan {(layout == null ? "none" : PlanHash(layout))}");
+            foreach (var d in group.OrderBy(d => d.Slot)) Digest.Add(DoorLine(label, tile.Id, d, layout));
+        }
+    }
+
+    /// <summary>
+    /// Compares <paramref name="lines"/> with the committed baseline at <paramref name="res"/>, or
+    /// writes it with <c>--door-baseline write</c>. The number of lines that differ (each printed,
+    /// the first twenty), a missing file counting as one.
+    /// </summary>
+    public static int Baseline(string tag, string res, IReadOnlyList<string> lines)
+    {
+        string path = ProjectSettings.GlobalizePath(res);
+        var args = OS.GetCmdlineUserArgs();
+        int at = Array.IndexOf(args, "--door-baseline");
+        if (at >= 0 && at + 1 < args.Length && args[at + 1] == "write")
+        {
+            System.IO.File.WriteAllLines(path, lines);
+            GD.Print($"[{tag}] wrote the door baseline: {lines.Count} line(s) to {path}");
+            return 0;
+        }
+        if (!System.IO.File.Exists(path))
+        {
+            GD.Print($"[{tag}] FAIL no door baseline at {path}");
+            return 1;
+        }
+        var want = System.IO.File.ReadAllLines(path);
+        int diffs = 0;
+        for (int i = 0; i < Math.Max(want.Length, lines.Count); i++)
+        {
+            string? a = i < want.Length ? want[i] : null, b = i < lines.Count ? lines[i] : null;
+            if (a == b) continue;
+            if (++diffs <= 20) GD.Print($"[{tag}] FAIL door baseline line {i + 1}: was {a ?? "(none)"} / now {b ?? "(none)"}");
+        }
+        GD.Print($"[{tag}] {(diffs == 0 ? "ok  " : "FAIL")} every existing door as the baseline has it ({lines.Count} line(s), {diffs} differ)");
+        return diffs;
     }
 
     /// <summary>
