@@ -15,6 +15,14 @@
   them: `map.html#4g=Swisscom,Salt`. Each outdoor 4G site is a soft disc of its simulated 2-bar reach by power
   class (600 m / 2 / 3.8 / 4.6 km: 122 + 36·log10(km) path loss from the class's ERP, no terrain), drawn on one
   Leaflet canvas renderer.
+- **Your provider:** a picker of 31 brands, grouped by the network whose antennas they use; picking one shows only that
+  network's 4G layer and says "Wingo uses Swisscom's antennas (a Swisscom brand)". The mapping is `PROVIDERS` in
+  `tools/deploy/antennas.py`, carried in `antennas-4g.json` (October 2026, from handyabo.com, dschungelkompass.ch,
+  internet-offer.ch and Aldi's own listings; sources disagree on Lycamobile and Ortel Mobile: the majority's).
+  Swisscom: own Swisscom, Wingo; rented by M-Budget, Coop Mobile, Mucho. Sunrise: own Sunrise, yallo, UPC; rented by
+  Lebara, Aldi Suisse Mobile, Digital Republic, Galaxus Mobile, Quickline, Teleboy, TalkTalk, swype, ok.- mobile, Ortel,
+  CHmobile, SAK, Thurcom, TalkEasy. Salt: own Salt, GoMo, Das Abo; rented by Lidl Connect, Post Mobile, spusu,
+  Lycamobile, iWay, VTX. Re-check it now and then: brands move networks (UPC went Salt, Swisscom, then Sunrise).
 - **Antennas:** `tools/deploy/antennas.py [out]` downloads OFCOM's "Locations of mobile phone base stations"
   (`ch.bakom.standorte-mobilfunkanlagen`, data.geo.admin.ch, 27 MB GeoJSON, opendata.swiss terms: attribution,
   credited on the map) and writes `antennas-4g.json` (~350 KB: outdoor sites with 4G, `[lat, lon, power class]`

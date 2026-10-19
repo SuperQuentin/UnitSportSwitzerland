@@ -44,6 +44,11 @@ h2 { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: v
 .toggle .n { margin-left: auto; font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
 .toggle:focus-visible, .who:focus-visible { outline: 2px solid var(--glow2); outline-offset: 2px; }
 .players { display: grid; gap: 4px; }
+select { width: 100%; margin: 0 0 8px; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--line); background: rgba(18, 12, 20, .9);
+  color: var(--text); font: inherit; }
+select:focus-visible { outline: 2px solid var(--glow2); outline-offset: 2px; }
+.via { color: var(--muted); font-size: 13px; margin: 0 0 8px; }
+.via b { color: var(--text); font-weight: 600; }
 .who { display: flex; align-items: baseline; gap: 8px; padding: 6px 8px; border-radius: 10px; border: 0; background: transparent; color: var(--text);
   font: inherit; text-align: left; cursor: pointer; width: 100%; }
 .who:hover { background: rgba(255, 255, 255, .06); }
@@ -66,6 +71,8 @@ h2 { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: v
   <div class="status" id="status"><b></b><span>Connecting…</span></div>
   <section>
     <h2>4G coverage</h2>
+    <select id="provider" aria-label="Your mobile provider"><option value="">Pick your provider…</option></select>
+    <p class="via" id="via" hidden></p>
     <div id="toggles"></div>
     <p class="note" id="antnote">Simulated from each outdoor 4G site's power class (2 bars and up, open terrain, no hills).</p>
   </section>
@@ -124,12 +131,36 @@ h2 { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: v
       document.getElementById("n-" + name).textContent = sites.length.toLocaleString("en-US") + " sites";
       setShown(name, !!shown[name]);
     }
+    providers(data.providers || {});
     document.getElementById("antnote").textContent =
       `Simulated from each outdoor 4G site's power class (2 bars and up, open terrain, no hills). OFCOM data of ${data.fetched}.`;
   }).catch(() => {
     document.getElementById("antnote").textContent = "The antenna data is not on this server yet (tools/deploy/antennas.py).";
     for (const [name] of OPS) { document.getElementById("op-" + name).disabled = true; document.getElementById("n-" + name).textContent = "—"; }
   });
+
+  // ---------- your provider: the brand you pay, the antennas it uses ----------
+  function providers(byNetwork) {
+    const sel = document.getElementById("provider"), via = document.getElementById("via");
+    const hostOf = {};
+    for (const [network, { own = [], rent = [] }] of Object.entries(byNetwork)) {
+      const g = document.createElement("optgroup"); g.label = `${network}'s antennas`;
+      for (const name of [...own, ...rent]) { g.append(new Option(name, name)); hostOf[name] = { network, own: own.includes(name) }; }
+      sel.append(g);
+    }
+    if (!Object.keys(hostOf).length) { sel.hidden = true; return; }
+    sel.addEventListener("change", () => {
+      const pick = hostOf[sel.value];
+      via.hidden = !pick;
+      if (!pick) return;
+      // only the network it rides on
+      for (const [name] of OPS) setShown(name, name === pick.network);
+      via.textContent = "";
+      const b = document.createElement("b");
+      b.textContent = sel.value === pick.network ? "owns its antennas" : `uses ${pick.network}'s antennas`;
+      via.append(`${sel.value} `, b, pick.own && sel.value !== pick.network ? ` (a ${pick.network} brand).` : ".");
+    });
+  }
 
   // ---------- players, every 2 s ----------
   // LV95 to WGS84, swisstopo's approximate formulas (about a metre off)

@@ -20,6 +20,18 @@ URL = ("https://data.geo.admin.ch/ch.bakom.standorte-mobilfunkanlagen/standorte-
        "standorte-mobilfunkanlagen_2056.json")
 OPERATORS = ("Swisscom", "Sunrise", "Salt")
 
+# The brands people buy (October 2026) and whose antennas they use: only the three operators own any.
+# "own" = the network's own brand. Sources disagree on a few (Lycamobile, Ortel Mobile): the majority's.
+# Checked against handyabo.com, dschungelkompass.ch and internet-offer.ch; see docs/notes/net/live-map.md.
+PROVIDERS = {
+    "Swisscom": {"own": ["Swisscom", "Wingo"], "rent": ["M-Budget Mobile", "Coop Mobile", "Mucho Mobile"]},
+    "Sunrise": {"own": ["Sunrise", "yallo", "UPC"],
+                "rent": ["Lebara", "Aldi Suisse Mobile", "Digital Republic", "Galaxus Mobile", "Quickline", "Teleboy",
+                         "TalkTalk", "swype", "ok.- mobile", "Ortel Mobile", "CHmobile", "SAK", "Thurcom", "TalkEasy"]},
+    "Salt": {"own": ["Salt", "GoMo", "Das Abo"],
+             "rent": ["Lidl Connect", "Post Mobile", "spusu", "Lycamobile", "iWay", "VTX"]},
+}
+
 
 def wgs84(e, n):
     """LV95 to WGS84, swisstopo's approximate formulas (about a metre off: plenty for a map)."""
@@ -63,6 +75,7 @@ def main():
         "source": "Federal Office of Communications OFCOM, locations of mobile phone base stations (opendata.swiss)",
         "fetched": time.strftime("%Y-%m-%d"),
         "sites": sites,
+        "providers": PROVIDERS,
     }
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     with open(out + ".tmp", "w", encoding="utf-8") as fh:
