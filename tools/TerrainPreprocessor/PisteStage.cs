@@ -184,7 +184,7 @@ public static class PisteStage
     {
         public readonly int[] Slope = new int[PisteFormat.Size * PisteFormat.Size]; // index into the slope list + 1
         public readonly float[] Inside = new float[PisteFormat.Size * PisteFormat.Size]; // metres inside the edge
-        public readonly float[] Angle = new float[PisteFormat.Size * PisteFormat.Size];
+        public readonly float[] Offset = new float[PisteFormat.Size * PisteFormat.Size]; // across the run, m
         public readonly bool[] FromLine = new bool[PisteFormat.Size * PisteFormat.Size];
     }
 
@@ -210,14 +210,14 @@ public static class PisteStage
     /// (up to the edge ramp, beyond which all are equal), then a line over an area (lines carry the
     /// run's name and difficulty), then the first one.
     /// </summary>
-    private static void Offer(TileBuf b, int i, int slope, float inside, float angle, bool line)
+    private static void Offer(TileBuf b, int i, int slope, float inside, float offset, bool line)
     {
         float ramp = PisteFormat.EdgeRampM;
         float have = Math.Min(b.Inside[i], ramp), want = Math.Min(inside, ramp);
         bool better = b.Slope[i] == 0 || want > have + 1e-3f || (Math.Abs(want - have) <= 1e-3f && line && !b.FromLine[i]);
         if (b.Slope[i] != 0 && b.Slope[i] == slope + 1) better = inside > b.Inside[i];
         if (!better) return;
-        b.Slope[i] = slope + 1; b.Inside[i] = inside; b.Angle[i] = angle; b.FromLine[i] = line;
+        b.Slope[i] = slope + 1; b.Inside[i] = inside; b.Offset[i] = offset; b.FromLine[i] = line;
     }
 
     private static void RasteriseLine(TileId tile, TileBuf b, int index, Slope s)
@@ -229,7 +229,7 @@ public static class PisteStage
         {
             double ax = pts[k], ay = pts[k + 1], bx = pts[k + 2], by = pts[k + 3];
             double dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
-            float angle = (float)Math.Atan2(dy, dx);
+            double len = Math.Sqrt(len2);
             int c0 = Math.Max(0, (int)Math.Floor(Math.Min(ax, bx) - half - tile.MinE));
             int c1 = Math.Min(size - 1, (int)Math.Ceiling(Math.Max(ax, bx) + half - tile.MinE));
             int r0 = Math.Max(0, (int)Math.Floor(tile.MaxN - (Math.Max(ay, by) + half)));
@@ -244,13 +244,22 @@ public static class PisteStage
                     double ex = x - (ax + t * dx), ey = y - (ay + t * dy);
                     double d = Math.Sqrt(ex * ex + ey * ey);
                     if (d > half) continue;
-                    Offer(b, row * size + col, index, (float)(half - d), angle, true);
+                    // signed distance from the centreline's own line: the corduroy follows the run
+                    double across = len > 0 ? ((x - ax) * -dy + (y - ay) * dx) / len : 0;
+                    Offer(b, row * size + col, index, (float)(half - d), (float)across, true);
                 }
             }
         }
     }
 
     private static void RasteriseArea(TileId tile, TileBuf b, int index, Slope s, float angle)
+    {
+        // the offset across the long axis, from a point fixed to the ground so tiles agree
+        double nx = -Math.Sin(angle), ny = Math.Cos(angle);
+        RasteriseArea(tile, b, index, s, (x, y) => (float)(x * nx + y * ny));
+    }
+
+    private static void RasteriseArea(TileId tile, TileBuf b, int index, Slope s, Func<double, double, float> offsetAt)
     {
         int size = PisteFormat.Size;
         var rings = s.Rings!;
@@ -308,7 +317,8 @@ public static class PisteStage
                     }
             }
         }
-        foreach (var (i, d) in depth) Offer(b, i, index, d, angle, false);
+        foreach (var (i, d) in depth)
+            Offer(b, i, index, d, offsetAt(tile.MinE + i % size - 2_500_000, tile.MaxN - i / size - 1_100_000), false);
     }
 
     /// <summary>An area's groom direction: its long axis (principal axis of the outline's points).</summary>
@@ -369,7 +379,7 @@ public static class PisteStage
         {
             if (b.Slope[i] == 0 || !local.TryGetValue(b.Slope[i] - 1, out byte l)) continue;
             slot[i] = l;
-            aux[i] = PisteFormat.PackAux(Math.Min(1f, b.Inside[i] / PisteFormat.EdgeRampM), b.Angle[i]);
+            aux[i] = PisteFormat.PackAux(Math.Min(1f, b.Inside[i] / PisteFormat.EdgeRampM), b.Offset[i]);
         }
         return new PisteTile(tile, records, slot, aux);
     }
@@ -522,9 +532,13 @@ public static class PisteStage
             Check(built.At(e0 + 50, n0 + 500) == null, "raster: past the line's end");
             int mid = built.IndexAt(e0 + 300, n0 + 500), edge = built.IndexAt(e0 + 300, n0 + 514);
             Check(PisteFormat.MaskOf(built.Aux[mid]) > 0.99f && PisteFormat.MaskOf(built.Aux[edge]) is > 0.2f and < 0.5f, "raster: edge mask ramps");
-            Check(Math.Abs(PisteFormat.AngleOf(built.Aux[mid])) < 0.02f || Math.Abs(PisteFormat.AngleOf(built.Aux[mid]) - MathF.PI) < 0.02f, "raster: east-west groom direction");
+            // the east-going line: north of it is +across; 2 m further north is 2 m further on in phase
+            float p0 = PisteFormat.PhaseOf(built.Aux[mid]), p1 = PisteFormat.PhaseOf(built.Aux[built.IndexAt(e0 + 300, n0 + 502)]);
+            float pe = PisteFormat.PhaseOf(built.Aux[built.IndexAt(e0 + 360, n0 + 500)]);
+            Check((p0 < 0.2f || p0 > 39.8f) && Math.Abs(p1 - 2f) < 0.2f && (pe < 0.2f || pe > 39.8f), $"raster: groom phase across the run ({p0}, {p1}, along it {pe})");
             int black = built.IndexAt(e0 + 500, n0 + 300);
-            Check(Math.Abs(PisteFormat.AngleOf(built.Aux[black]) - MathF.PI / 2) < 0.02f, "raster: north-south groom direction");
+            // the south-going line: east of it is +across (x·-dy with dy < 0)
+            Check(Math.Abs(PisteFormat.PhaseOf(built.Aux[built.IndexAt(e0 + 502, n0 + 300)]) - 2f) < 0.2f, "raster: groom phase on the north-south line");
             Check(built.At(e0 + 500, n0 + 300)?.Id == 2, "raster: the black line");
             Check(built.At(e0 + 700, n0 + 200)?.Id == (3UL | 1UL << 63), "raster: inside the area");
             Check(built.At(e0 + 700, n0 + 310) == null, "raster: outside the area");

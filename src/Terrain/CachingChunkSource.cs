@@ -84,9 +84,28 @@ public sealed class CachingChunkSource : IChunkSource
         GetAsync(AssetSlot.Water, id, () => _inner.LoadWaterAsync(id, ct),
             w => 64 + w.Level.LongLength * 4 + (w.FetchM?.LongLength ?? 0) * 4);
 
+    /// <summary>
+    /// The tile's trees, less those standing on a ski slope (#887): runs are cleared through the
+    /// forest. Done here, at the top of every peer's chain, so the drawn trees, their colliders,
+    /// gathering and the birds all agree.
+    /// </summary>
     public Task<List<TreeInstance>?> LoadTreesAsync(TileId id, CancellationToken ct = default) =>
-        GetAsync(AssetSlot.Trees, id, () => _inner.LoadTreesAsync(id, ct),
+        GetAsync(AssetSlot.Trees, id, async () =>
+            {
+                var trees = await _inner.LoadTreesAsync(id, ct).ConfigureAwait(false);
+                if (trees is not { Count: > 0 } || await LoadPistesAsync(id, ct).ConfigureAwait(false) is not { } pistes) return trees;
+                return trees.FindAll(t => !OnSlope(pistes, t));
+            },
             t => 64 + t.Count * 17L);
+
+    /// <summary>Inside a slope, not on its outer metre: trees still line the run.</summary>
+    private static bool OnSlope(PisteTile pistes, TreeInstance t)
+    {
+        int col = (int)MathF.Round(t.X), row = (int)MathF.Round(t.Z);
+        if ((uint)col >= PisteFormat.Size || (uint)row >= PisteFormat.Size) return false;
+        int i = row * PisteFormat.Size + col;
+        return pistes.Slot[i] != 0 && PisteFormat.MaskOf(pistes.Aux[i]) > 0.3f;
+    }
 
     // One object for the whole region, read once at boot: nothing to cache.
     /// <summary>

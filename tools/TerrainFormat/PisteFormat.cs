@@ -39,7 +39,8 @@ public sealed record PisteRecord(ulong Id, PisteType Type, PisteDifficulty Diffi
 /// <summary>A decoded piste tile: the records and the rasters on the terrain grid.</summary>
 /// <param name="Slot">Per grid vertex (row 0 = north edge, as <see cref="CoverFormat"/>): record index + 1, 0 = no slope.</param>
 /// <param name="Aux">Per grid vertex: edge mask in the high byte (255 = at least <see cref="PisteFormat.EdgeRampM"/> inside),
-/// groom direction in the low byte (angle from east toward north, modulo π, 256 steps).</param>
+/// groom phase in the low byte: the point's offset across the run, modulo <see cref="PisteFormat.PhaseM"/>, 256 steps
+/// (the signed distance from a line slope's centreline, or across an area's long axis), so corduroy runs along the slope.</param>
 public sealed record PisteTile(TileId Id, IReadOnlyList<PisteRecord> Records, byte[] Slot, ushort[] Aux)
 {
     /// <summary>The grid vertex nearest an LV95 point inside this tile, or -1.</summary>
@@ -78,17 +79,24 @@ public static class PisteFormat
 
     public static string FileName(TileId id) => $"pistes_{id.E}_{id.N}.pst";
 
-    public static ushort PackAux(float mask, float angle)
+    /// <summary>
+    /// The groom phase repeats over this many metres: a whole number of corduroy ribs (1.25 m) and
+    /// groomer lanes (5 m), and long enough that the phase turns only 18° between two 2 m texels.
+    /// </summary>
+    public const float PhaseM = 40f;
+
+    public static ushort PackAux(float mask, double offsetM)
     {
         int m = Math.Clamp((int)MathF.Round(mask * 255f), 0, 255);
-        float a = angle % MathF.PI;
-        if (a < 0) a += MathF.PI;
-        int d = (int)MathF.Round(a / MathF.PI * 256f) & 255;
+        double p = offsetM % PhaseM;
+        if (p < 0) p += PhaseM;
+        int d = (int)Math.Round(p / PhaseM * 256) & 255;
         return (ushort)(m << 8 | d);
     }
 
     public static float MaskOf(ushort aux) => (aux >> 8) / 255f;
-    public static float AngleOf(ushort aux) => (aux & 255) / 256f * MathF.PI;
+    /// <summary>The groom phase in metres, 0 to <see cref="PhaseM"/>.</summary>
+    public static float PhaseOf(ushort aux) => (aux & 255) / 256f * PhaseM;
 
     public static void Encode(PisteTile tile, Stream output)
     {

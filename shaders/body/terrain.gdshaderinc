@@ -8,6 +8,7 @@
 #include "res://shaders/door_light.gdshaderinc"
 #include "res://shaders/portal_clip.gdshaderinc"
 #include "res://shaders/world_origin.gdshaderinc"
+#include "res://shaders/body/piste_snow.gdshaderinc"
 
 // PS1-style terrain: clip-space vertex snapping, flat shading from screen derivatives,
 // altitude/slope palette bands, quantized sun, Bayer-dithered posterization, distance fog.
@@ -57,9 +58,12 @@ varying vec2 tile_uv;
 #endif
 
 varying vec3 world_pos;
+// the tile's own frame (NW corner, x east, z south, y altitude): the ski slopes' map is in it
+varying vec3 local_vertex;
 
 void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+    local_vertex = VERTEX;
 #ifdef STYLE_REAL
     // a tile's mesh runs from its NW corner, x east and z south, 1000 m each: the photo's frame
     tile_uv = clamp(VERTEX.xz / 1000.0, vec2(0.0), vec2(1.0));
@@ -175,6 +179,14 @@ void fragment() {
     col = mix(col, vec3(0.30, 0.28, 0.26), rockiness * 0.75);
 #endif
 
+    // ski slopes (#887): their snow, by the hour's state, over whatever the cover was
+#ifdef STYLE_REAL
+    float rough = 0.92;
+#else
+    float rough = 1.0;
+#endif
+    col = piste_snow(col, local_vertex.xz, local_vertex.y, n, normalize(world_sun_dir), rough);
+
 #ifdef STYLE_LIT
     // valley mist of a running occasion; a no-op on an ordinary day
     col = occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX));
@@ -186,11 +198,7 @@ void fragment() {
 #endif
     ALBEDO = col;
     NORMAL = style_view_normal(VIEW_MATRIX, n);
-#ifdef STYLE_REAL
-    ROUGHNESS = 0.92;
-#else
-    ROUGHNESS = 1.0;
-#endif
+    ROUGHNESS = rough;
     EMISSION = col * door_light(world_pos, n);
 #else
     float ndl = clamp(dot(n, normalize(world_sun_dir)), 0.0, 1.0);

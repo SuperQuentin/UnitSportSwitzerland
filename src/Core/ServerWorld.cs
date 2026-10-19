@@ -36,6 +36,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Terrain.Construction.CraneService? _cranes;
     private Build.Structures? _structures;
     private Occasions.OccasionManager? _occasions;
+    private World.Snow.SnowService? _snow;
     private World.RaceNpcs? _npcs;
     private BattleRoyale.BrManager? _br;
     private Combat.FightManager? _fight;
@@ -196,6 +197,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
 
         // occasions run on the server's calendar and are replicated, so every player shares one
         _occasions = Occasions.OccasionManager.Create(this);
+        // the ski slopes' weather and the wear real skiers put on them (#887)
+        if (Systems.On(Systems.Snow)) _snow = World.Snow.SnowService.Create(this, _chunks!);
 
         // The server owns the place index too, so /city and /tpall resolve against the same
         // data the client's Tab search uses and a client cannot ask to be moved anywhere else.
@@ -485,6 +488,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _churchRadios?.SendTo(id);
         _passengers?.SendTo(id);
         _occasions?.SendTo(id);
+        _snow?.SendTo(id);
         _placed?.SendTo(id);
         _farmStands?.SendTo(id);
         _sleepers?.SendTo(id);

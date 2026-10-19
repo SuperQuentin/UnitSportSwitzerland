@@ -150,3 +150,43 @@ public class SnowModelTests
         Assert.Equal(SnowCondition.Moguls, bumps.Condition);
     }
 }
+
+/// <summary><c>/weather</c> (#887): words to an override, and back to the generated day.</summary>
+public class WeatherCommandTests
+{
+    [Fact]
+    public void Words_set_parts_of_todays_weather_and_auto_clears_it()
+    {
+        var ov = WeatherCommand.Apply(null, 5, "snow 30", out var error);
+        Assert.Null(error);
+        Assert.Equal(30f, ov!.NewSnowCm);
+        Assert.Equal(5L, ov.Day);
+        ov = WeatherCommand.Apply(ov, 5, "temp -4", out error);
+        Assert.Equal(30f, ov!.NewSnowCm);
+        Assert.Equal(-4f, ov.TMax2000);
+        Assert.True(WeatherCommand.Apply(ov, 5, "hold", out _)!.Sticky);
+        Assert.Null(WeatherCommand.Apply(ov, 5, "auto", out error));
+        Assert.Null(error);
+        // yesterday's change is forgotten unless held
+        Assert.Null(WeatherCommand.Apply(ov, 6, "clear", out _)!.NewSnowCm);
+    }
+
+    [Fact]
+    public void Bad_words_keep_the_current_override_and_say_why()
+    {
+        var ov = new WeatherOverride(NewSnowCm: 10, Day: 5);
+        Assert.Same(ov, WeatherCommand.Apply(ov, 5, "snow lots", out var error));
+        Assert.NotNull(error);
+        Assert.Same(ov, WeatherCommand.Apply(ov, 5, "rain", out error));
+        Assert.Equal(WeatherCommand.Usage, error);
+    }
+
+    [Fact]
+    public void The_description_names_the_snow_and_the_temperatures()
+    {
+        var text = WeatherCommand.Describe(new DayWeather(1, 25, 0, 0, 0, -8, -2, 0.1f), 10, null);
+        Assert.Contains("25 cm fell overnight", text);
+        Assert.Contains("-8 to -2", text);
+        Assert.Contains("clear", text);
+    }
+}
