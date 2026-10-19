@@ -579,8 +579,8 @@ public static class StadiumBuilder
         public float LengthAt(float d) => (a.P + a.N * d).DistanceTo(b.P + b.N * d);
     }
 
-    /// <summary>The mesh lists and collision triangles being built.</summary>
-    private sealed class Geo(bool mesh, bool collision)
+    /// <summary>The mesh lists and collision triangles being built; the concert stage (#885) builds with it too.</summary>
+    internal sealed class Geo(bool mesh, bool collision)
     {
         public readonly List<Vector3> Vertices = new();
         public readonly List<Color> Colors = new();
@@ -617,6 +617,19 @@ public static class StadiumBuilder
             if (!collision) return;
             Faces.Add(a); Faces.Add(b); Faces.Add(c);
             Faces.Add(a); Faces.Add(c); Faces.Add(d);
+        }
+
+        /// <summary>A box round <paramref name="centre"/>, turned by <paramref name="basis"/>: six quads.</summary>
+        public void Box(Vector3 centre, Vector3 size, Basis basis, Color col, bool solid)
+        {
+            var h = size / 2;
+            Vector3 P(float x, float y, float z) => centre + basis * new Vector3(x * h.X, y * h.Y, z * h.Z);
+            Quad(P(-1, 1, -1), P(1, 1, -1), P(1, 1, 1), P(-1, 1, 1), col, solid);
+            Quad(P(-1, -1, 1), P(1, -1, 1), P(1, -1, -1), P(-1, -1, -1), col, solid);
+            Quad(P(-1, -1, 1), P(-1, 1, 1), P(1, 1, 1), P(1, -1, 1), col, solid);
+            Quad(P(1, -1, -1), P(1, 1, -1), P(-1, 1, -1), P(-1, -1, -1), col, solid);
+            Quad(P(1, -1, 1), P(1, 1, 1), P(1, 1, -1), P(1, -1, -1), col, solid);
+            Quad(P(-1, -1, -1), P(-1, 1, -1), P(-1, 1, 1), P(-1, -1, 1), col, solid);
         }
 
         /// <summary>A square-section member from <paramref name="a"/> to <paramref name="b"/>, <paramref name="w"/> wide along <paramref name="side"/>.</summary>

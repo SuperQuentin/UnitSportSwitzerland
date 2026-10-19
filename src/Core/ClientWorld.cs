@@ -116,6 +116,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Interiors.ShapedCheck.Requested, Interiors.ShapedCheck.Run),
         (() => Terrain.Construction.ConstructionCheck.Requested, Terrain.Construction.ConstructionCheck.Run),
         (() => Terrain.Stadiums.StadiumCheck.Requested, Terrain.Stadiums.StadiumCheck.Run),
+        (() => Concert.ConcertCheck.Requested, Concert.ConcertCheck.Run),
         (() => Items.InventoryCheck.Requested, Items.InventoryCheck.Run),
         (() => ChatCheck.Requested, () => ChatCheck.Run(this)),
         (() => StyleKit.ReportRequested, StyleKit.Report),
@@ -480,6 +481,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.BankSigns(_chunks));
         // the IKEA totem out by the road (#501), the same tile hook as the door signs
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.IkeaPylon(_chunks));
+        // tonight's concert in each stadium (#885)
+        AddChild(new Concert.ConcertDirector(_chunks));
 
         // the clock: sun, light colour, sky and night for every shader and the environment.
         // Off (--systems without sky): no clock, the style's fixed sun and the background colour.

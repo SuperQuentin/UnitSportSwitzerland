@@ -62,6 +62,8 @@ src/Terrain/ProceduralWorld quick --constructioncheck --systems ui
 src/Terrain/Construction/ quick --constructioncheck --systems ui
 # #885: every catalogued stadium against its real outline and capacity, walkable stands, a gate tunnel
 src/Terrain/Stadiums/     quick --stadiumcheck --systems ui
+# #885: concerts: the generator's events, rigs, patches and stages, and the desk's DMX
+src/Concert/             quick --concertcheck --systems ui
 # #608: a body walks every storey of hand-made sites' shells, on their real collision
 src/Terrain/Construction/ quick --shellwalkcheck --world flat
 src/Terrain/BuildingMeshBuilder quick --shellwalkcheck --world flat
