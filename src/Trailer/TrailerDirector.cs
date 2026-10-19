@@ -810,7 +810,7 @@ public partial class TrailerDirector : Node
         if (_chunks.Source == null && _terrainWait < 60) return false;
         _terrainChecked = true;
         int real = _chunks.AvailableTileCount;
-        GD.Print($"[trailer] real tiles: {real} (chunks {TerrainPaths.FindChunkDir()})");
+        GD.Print($"[trailer] real tiles: {real} (chunks {CmdArgs.Value("--chunks") ?? TerrainPaths.FindChunkDir()})");
         if (_scouting) return true;
         if (real == 0 && !AllowGenerated)
         {

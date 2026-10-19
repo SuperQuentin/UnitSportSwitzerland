@@ -14,6 +14,7 @@ public partial class BeamableProp : Node3D
 {
     private readonly Node3D _target;
     private readonly float _restY;
+    private bool _lifted;
 
     public BeamableProp(Node3D target)
     {
@@ -46,6 +47,11 @@ public partial class BeamableProp : Node3D
         {
             if (!Alive) return;
             var t = _p._target;
+            if (!_p._lifted)
+            {
+                _p._lifted = true;
+                GD.Print($"[trailer] {t.Name} taken by a beam");
+            }
             var at = t.GlobalPosition + velocity * dt;
             // never under where it stood: the beam lowers it onto the ground it was put on
             if (at.Y < _p._restY) at.Y = _p._restY;
