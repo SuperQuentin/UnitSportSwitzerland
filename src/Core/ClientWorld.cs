@@ -643,13 +643,19 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 var inv = System.Globalization.CultureInfo.InvariantCulture;
                 return new ShotRunner(_spectator!,
                     new Vector3(float.Parse(shot[0], inv), float.Parse(shot[1], inv), float.Parse(shot[2], inv)),
-                    float.Parse(shot[3], inv), float.Parse(shot[4], inv), double.Parse(shot[5], inv), shot[6]) { Origin = _worldOrigin };
+                    float.Parse(shot[3], inv), float.Parse(shot[4], inv), double.Parse(shot[5], inv), shot[6])
+                {
+                    Origin = _worldOrigin,
+                    // settled on the tiles, not a fixed time (#924), as the trailer director stages
+                    TilesComplete = at => chunks.SettledNear(at, 3) && chunks.CompleteNear(at, 3),
+                };
             }),
             new(() => ShotRunner.ParseQueueArg() != null, ToolAnchor.Own, _ =>
             {
                 FreeSpectator();
                 var runner = ShotRunner.ForQueue(_spectator!, ShotRunner.ParseQueueArg()!, _worldOrigin);
                 runner.GroundHeight = at => chunks.TryGetSurface(at, out float h) ? h : null;
+                runner.TilesComplete = at => chunks.SettledNear(at, 3) && chunks.CompleteNear(at, 3);
                 runner.RunCommand = line => _chat?.Send(line);
                 return runner;
             }),
