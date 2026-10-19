@@ -111,6 +111,25 @@ public partial class ConcertDeskUi : CanvasLayer
         _master.DragEnded += changed => { if (changed) Run(FormattableString.Invariant($"/concert cue master {_master.Value:F2}")); };
         tempo.AddChild(_master);
 
+        Section(col, "Cameras");
+        var cams = Row(col);
+        Btn(cams, "Auto", () => Run("/concert cue camera auto"));
+        for (int i = 0; i < ConcertCameras.Names.Length; i++)
+        {
+            int n = i + 1;
+            Btn(cams, n.ToString(CultureInfo.InvariantCulture), () => Run($"/concert cue camera {n}")).TooltipText = ConcertCameras.Names[i];
+        }
+        Btn(cams, "Program view", () => Run("/concert view"));
+        var crew = Row(col);
+        Text(crew, "Operate", UiTheme.FontSmall, UiTheme.TextDim);
+        var pick = new OptionButton { FocusMode = Control.FocusModeEnum.All };
+        for (int i = 0; i < ConcertCameras.Names.Length; i++) pick.AddItem($"{i + 1} {ConcertCameras.Names[i]}", i);
+        crew.AddChild(pick);
+        Btn(crew, "Take", () => { Close(); Run($"/concert camera take {pick.Selected + 1}"); });
+        Btn(crew, "Leave", () => Run("/concert camera leave"));
+        Btn(cams, "NDI out", () => Run("/concert ndi"));
+        Btn(cams, "Beat debug", () => Run("/concert debug"));
+
         Section(col, "Effects");
         var fx = Row(col);
         foreach (var (label, cmd) in new[] { ("Flames", "flames"), ("CO2", "co2"), ("Confetti", "confetti"), ("Gerbs", "gerbs"), ("Pyro", "pyro") })

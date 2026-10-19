@@ -121,6 +121,9 @@ public partial class ControlsHelp : CanvasLayer
         {
             new("On a stand's row: sit down; again, or walk off, to stand up", PlayerInput.InteractMount),
             new("At a concert's front-of-house console: the light desk (cues, effects, show input)", PlayerInput.InteractMount),
+            new("Running a concert camera (/concert camera take N): zoom in", PlayerInput.CamZoomIn),
+            new("Running a concert camera: zoom out", PlayerInput.CamZoomOut),
+            new("Running a concert camera: cut to it (on air); Esc leaves it", PlayerInput.CamCut),
         }),
         ("Passengers (online)", new Row[]
         {

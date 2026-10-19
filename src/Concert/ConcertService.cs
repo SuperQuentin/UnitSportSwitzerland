@@ -10,7 +10,7 @@ using UnitSport.Terrain.Stadiums;
 namespace UnitSport.Concert;
 
 /// <summary>What an operator's cue does to the desk on every peer.</summary>
-public enum CueKind : byte { Go = 0, Section = 1, Bpm = 2, Blackout = 3, Master = 4, Fx = 5 }
+public enum CueKind : byte { Go = 0, Section = 1, Bpm = 2, Blackout = 3, Master = 4, Fx = 5, Camera = 6 }
 
 /// <summary>
 /// Hosting a set and running it live (#885), at <c>World/Concerts</c> on the server and every client.
@@ -63,10 +63,13 @@ public partial class ConcertService : Node
         public int Held = -1;
         public bool Blackout;
         public float Master = 1f, Bpm;
+        public int Camera = -1;
         public double BpmAt;
     }
 
     private readonly Dictionary<int, Hosted> _hosted = new();
+    /// <summary>Who operates which camera, by stadium and camera: the server's, mirrored on every client.</summary>
+    private readonly Dictionary<(int Stadium, int Cam), long> _crew = new();
 
     /// <summary>Universes received from the server so far (a check reads it).</summary>
     public long FramesReceived { get; private set; }
@@ -111,6 +114,7 @@ public partial class ConcertService : Node
         d.HeldSection = h.Held >= 0 ? (ShowSection)h.Held : null;
         d.Blackout = h.Blackout;
         d.Master = h.Master;
+        d.Camera = h.Camera;
         if (h.Bpm > 0) d.SetTempo(h.Bpm, h.BpmAt % 86400.0);
     }
 
@@ -163,6 +167,10 @@ public partial class ConcertService : Node
                     case "blackout": ServeCue(stadium, (int)CueKind.Blackout, parts.Length > 2 ? arg : (hc.Blackout ? 0 : 1), when); return "Blackout.";
                     case "master": ServeCue(stadium, (int)CueKind.Master, arg, when); return $"Master {arg:F2}.";
                     case "release": ServeCue(stadium, (int)CueKind.Section, -1, when); return "The song runs the sections again.";
+                    case "camera":
+                        int cam = parts.Length > 2 && int.TryParse(parts[2], out int n) ? n - 1 : -1;
+                        ServeCue(stadium, (int)CueKind.Camera, cam, when);
+                        return cam < 0 ? "Cameras: the auto-director cuts." : $"On air: camera {cam + 1}, {ConcertCameras.Names[Math.Clamp(cam, 0, ConcertCameras.Names.Length - 1)]}.";
                     case "flames": ServeCue(stadium, (int)CueKind.Fx, (int)RigGroup.Flames, when); return "Flames!";
                     case "co2": ServeCue(stadium, (int)CueKind.Fx, (int)RigGroup.Co2, when); return "CO2!";
                     case "confetti": ServeCue(stadium, (int)CueKind.Fx, (int)RigGroup.Confetti, when); return "Confetti!";
@@ -170,7 +178,7 @@ public partial class ConcertService : Node
                     case "pyro": ServeCue(stadium, (int)CueKind.Fx, (int)RigGroup.Airbursts, when); return "Airbursts!";
                     default:
                         if (Enum.TryParse<ShowSection>(what, true, out var sec)) { ServeCue(stadium, (int)CueKind.Section, (int)sec, when); return $"Held: {sec}."; }
-                        return "/concert cue go | calm|groove|chorus|peak|blackout | release | bpm <n> | master <0..1> | flames|co2|confetti|gerbs|pyro";
+                        return "/concert cue go | calm|groove|chorus|peak|blackout | release | bpm <n> | master <0..1> | flames|co2|confetti|gerbs|pyro | camera <1..8|auto>";
                 }
             case "status":
                 return _hosted.TryGetValue(stadium, out var h) && h.Seed >= 0
@@ -211,18 +219,93 @@ public partial class ConcertService : Node
     private void SendState(long peer, int stadium)
     {
         var h = _hosted.GetValueOrDefault(stadium) ?? new Hosted();
-        RpcId(peer, MethodName.State, stadium, h.Seed, h.Operator, h.Held, h.Blackout, h.Master, h.Bpm, h.BpmAt);
+        RpcId(peer, MethodName.State, stadium, h.Seed, h.Operator, h.Held, h.Blackout, h.Master, h.Bpm, h.BpmAt, h.Camera);
     }
 
     /// <summary>Server: what a joining player must know (<c>ServerWorld.OnPeerAccepted</c>).</summary>
     public void SendTo(long peer)
     {
         foreach (int stadium in _hosted.Keys) SendState(peer, stadium);
+        foreach (var ((stadium, cam), op) in _crew) RpcId(peer, MethodName.Operated, stadium, cam, op);
     }
+
+    // ---- the camera crew -------------------------------------------------------------------------------
+
+    /// <summary>Client: asks to operate a camera (or, -1, to leave the one operated).</summary>
+    public void AskCamera(int stadium, int cam)
+    {
+        if (Online) RpcId(1, MethodName.AskOperate, stadium, cam);
+        else ServeOperate(1, stadium, cam);
+    }
+
+    /// <summary>Client: the operated camera's state, at most 20 times a second.</summary>
+    public void SendCamera(int stadium, int cam, float[] state)
+    {
+        if (Online) RpcId(1, MethodName.CamState, stadium, cam, state);
+    }
+
+    /// <summary>Client: the operator cuts a camera to air (the show's operator only, as every cue).</summary>
+    public void CutTo(int stadium, int cam) => SendCue(stadium, CueKind.Camera, cam, ClockSync.ServerNow % 86400.0);
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void AskOperate(int stadium, int cam)
+    {
+        if (_server) ServeOperate(Multiplayer.GetRemoteSenderId(), stadium, cam);
+    }
+
+    private void ServeOperate(long peer, int stadium, int cam)
+    {
+        // a player works one camera: leaving it, or taking another, frees the last
+        foreach (var key in _crew.Where(kv => kv.Value == peer && kv.Key.Stadium == stadium).Select(kv => kv.Key).ToList())
+            Crew(key.Stadium, key.Cam, 0);
+        if (cam < 0 || cam >= CameraRig.Names.Length) return;
+        if (_crew.TryGetValue((stadium, cam), out long other) && other != 0 && other != peer)
+        {
+            Chat?.Tell(peer, $"Camera {cam + 1} ({CameraRig.Names[cam]}) is operated by someone else.", ChatKind.Error);
+            return;
+        }
+        Crew(stadium, cam, peer);
+    }
+
+    /// <summary>Server (and offline): a camera's operator changed, told to everyone.</summary>
+    private void Crew(int stadium, int cam, long peer)
+    {
+        if (peer == 0) _crew.Remove((stadium, cam));
+        else _crew[(stadium, cam)] = peer;
+        foreach (int p in Peers()) RpcId(p, MethodName.Operated, stadium, cam, peer);
+        if (!Online) Operated(stadium, cam, peer);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Operated(int stadium, int cam, long peer)
+    {
+        if (peer == 0) _crew.Remove((stadium, cam));
+        else _crew[(stadium, cam)] = peer;
+        RigOf(stadium)?.Cameras.SetOperator(cam, peer);
+        ConcertBroadcast.Instance?.Operating(stadium, cam, peer == Me ? true : null);
+        if (peer == 0) ConcertBroadcast.Instance?.Operating(stadium, cam, false);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.UnreliableOrdered, TransferChannel = Channel)]
+    private void CamState(int stadium, int cam, float[] state)
+    {
+        if (!_server || state.Length > 16 || stadium < 0 || stadium >= StadiumCatalog.All.Length) return;
+        long sender = Multiplayer.GetRemoteSenderId();
+        if (!_crew.TryGetValue((stadium, cam), out long op) || op != sender) return;
+        var s = StadiumCatalog.All[stadium];
+        var here = new GlobalPos(s.E, s.N, 0);
+        foreach (int peer in Multiplayer.GetPeers())
+            if (peer != sender && GetNodeOrNull<FootPlayer>("../Players/" + peer) is { } body && body.Global.HorizontalDistanceTo(here) < RelayRange)
+                RpcId(peer, MethodName.CamPosed, stadium, cam, state);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.UnreliableOrdered, TransferChannel = Channel)]
+    private void CamPosed(int stadium, int cam, float[] state) => RigOf(stadium)?.Cameras.SetState(cam, state);
 
     /// <summary>Server: an operator who leaves gives the show back.</summary>
     public void PeerLeft(long peer)
     {
+        foreach (var key in _crew.Where(kv => kv.Value == peer).Select(kv => kv.Key).ToList()) Crew(key.Stadium, key.Cam, 0);
         foreach (var stadium in _hosted.Where(kv => kv.Value.Operator == peer).Select(kv => kv.Key).ToList())
         {
             _hosted.Remove(stadium);
@@ -260,6 +343,7 @@ public partial class ConcertService : Node
             case CueKind.Bpm: h.Bpm = value; h.BpmAt = at; break;
             case CueKind.Blackout: h.Blackout = value > 0.5f; break;
             case CueKind.Master: h.Master = Math.Clamp(value, 0f, 1f); break;
+            case CueKind.Camera: h.Camera = value < 0 ? -1 : Math.Clamp((int)value, 0, ConcertCameras.Names.Length - 1); break;
             case CueKind.Fx:
                 // a shot of an effect: not state, a moment; every peer fires it at that instant
                 foreach (int peer in Peers()) RpcId(peer, MethodName.Fired, stadium, (int)value, at);
@@ -288,10 +372,10 @@ public partial class ConcertService : Node
     // ---- the clients ------------------------------------------------------------------------------
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void State(int stadium, int seed, long op, int held, bool blackout, float master, float bpm, double bpmAt)
+    private void State(int stadium, int seed, long op, int held, bool blackout, float master, float bpm, double bpmAt, int camera)
     {
         if (seed < 0) _hosted.Remove(stadium);
-        else _hosted[stadium] = new Hosted { Seed = seed, Operator = op, Held = held, Blackout = blackout, Master = master, Bpm = bpm, BpmAt = bpmAt };
+        else _hosted[stadium] = new Hosted { Seed = seed, Operator = op, Held = held, Blackout = blackout, Master = master, Bpm = bpm, BpmAt = bpmAt, Camera = camera };
         ApplyState(stadium);
     }
 
@@ -304,7 +388,13 @@ public partial class ConcertService : Node
             _built[stadium] = seed;
             GetParent()?.GetNodeOrNull<ConcertDirector>(nameof(ConcertDirector))?.Rebuild(stadium);
         }
-        if (RigOf(stadium) is { } rig) ApplyCues(stadium, rig);
+        if (RigOf(stadium) is { } rig)
+        {
+            ApplyCues(stadium, rig);
+            // a rig built again keeps its crew
+            foreach (var ((st, cam), op) in _crew)
+                if (st == stadium) rig.Cameras.SetOperator(cam, op);
+        }
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -333,6 +423,8 @@ public partial class ConcertService : Node
         {
             "input" => svc.InputCommand(parts.Skip(2).ToArray()),
             "patch" => svc.ExportPatch(),
+            "view" or "ndi" or "snap" or "camera" => ConcertBroadcast.Instance?.Command(parts.Skip(1).ToArray()) ?? "The broadcast is not running here.",
+            "debug" => ConcertBeatDebug.Instance?.Command(parts.Skip(1).ToArray()) ?? "The beat debug window is not here.",
             _ => null,   // host, release, status: the server's
         };
     }
@@ -417,6 +509,7 @@ public partial class ConcertService : Node
             case "/concert/bpm": SendCue(stadium, CueKind.Bpm, m.Float(0), at); return;
             case "/concert/blackout": SendCue(stadium, CueKind.Blackout, m.Float(0, 1), at); return;
             case "/concert/master": SendCue(stadium, CueKind.Master, m.Float(0, 1), at); return;
+            case "/concert/camera": SendCue(stadium, CueKind.Camera, m.Int(0, 0) - 1, at); return;
             case "/concert/fx/flames": SendCue(stadium, CueKind.Fx, (int)RigGroup.Flames, at); return;
             case "/concert/fx/co2": SendCue(stadium, CueKind.Fx, (int)RigGroup.Co2, at); return;
             case "/concert/fx/confetti": SendCue(stadium, CueKind.Fx, (int)RigGroup.Confetti, at); return;

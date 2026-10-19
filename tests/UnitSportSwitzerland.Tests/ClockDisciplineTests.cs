@@ -96,6 +96,7 @@ public class ClockDisciplineTests
         ["src/Items/RadioManager.cs"] = "presentation: a radio's CD position is server real time, as its audio plays",
         ["src/Items/RadioBody.cs"] = "presentation: a placed radio's CD position and groove",
         ["src/Concert/ConcertService.cs"] = "presentation: an operator's cue is stamped with the shared clock, so every peer's light show keeps the same beat",
+        ["src/Concert/ConcertBeatDebug.cs"] = "presentation: the beat debug window scrolls its own history in real time",
         ["src/Concert/ConcertRig.cs"] = "presentation: a concert's light show runs in real time with the music it lights, the same frame on every peer",
         ["src/Items/RadioTap.cs"] = "presentation: the tap on a playing CD's samples",
         ["src/Items/BeatField.cs"] = "presentation: the beat of the music nearby",

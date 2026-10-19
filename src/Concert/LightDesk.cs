@@ -45,6 +45,30 @@ public sealed class LightDesk
     private readonly Func<int, Color> _walkInWash, _walkInPixels, _calmWash, _calmPixels, _grooveWash, _groovePixels,
         _chorusWash, _chorusPixels, _peakWash, _peakPixels;
     private readonly Func<int, float> _grooveChase, _full, _floorGroove;
+    private readonly Func<int, Color> _buildPixels;
+    /// <summary>The pixel bars' level now: the hats sparkle them (1 without the song's bands).</summary>
+    private float _pixelGain = 1f, _buildFill;
+    private bool _finale;
+
+    /// <summary>
+    /// How the heads of a group play together through a phrase (two bars), picked from the seed: all in
+    /// sync, a wave across them, mirrored from the centre, odd against even, one in three, or two alone.
+    /// The chorus's first bars, a build and a drop always sync everything up.
+    /// </summary>
+    public enum Phrase { Sync, Stagger, Mirror, Alternate, Sparse, Solo, Cycle, PingPong }
+    private Phrase _phrase;
+
+    /// <summary>The phrase playing (for the debug window), and how hard the dimmers pump.</summary>
+    public Phrase PhraseNow => _phrase;
+    public float PumpNow => _pump;
+    private uint _phraseHash;
+
+    /// <summary>
+    /// How hard the dimmers pump with the rhythm (0 steady .. 1 dark between the hits) and the song's
+    /// kick now: each head flashes on its beat and decays, on its own lag in a staggered phrase, on the
+    /// song's kick drum when the rig plays in sync.
+    /// </summary>
+    private float _pump, _kick;
 
     public LightDesk(StagePlan plan)
     {
@@ -69,6 +93,7 @@ public sealed class LightDesk
         _grooveChase = i => Chase(i, _n, Beat, 0.35f);
         _full = i => 1f;
         _floorGroove = i => 0.8f;
+        _buildPixels = i => (i % 8) < _buildFill * 8f ? Colors.White : _pal[0] * 0.1f;
     }
 
     /// <summary>The section playing at a moment of the show (seconds since it started; negative before).</summary>
@@ -78,6 +103,8 @@ public sealed class LightDesk
     /// clock (the beat counts on from where it was), a blackout, a master fader.
     /// </summary>
     public ShowSection? HeldSection { get; set; }
+    /// <summary>The camera the operator holds on air, or -1 for the auto-director (<see cref="ConcertCameras"/>).</summary>
+    public int Camera { get; set; } = -1;
     /// <summary>The song playing (<see cref="ConcertMusic"/>), or null: the desk then makes its songs up.</summary>
     public MusicMoment? Music { get; set; }
     public bool Blackout { get; set; }
@@ -104,6 +131,7 @@ public sealed class LightDesk
         {
             // the music decides: its sections, its beat grid; a held section or a blackout still wins
             beat = m.Beat;
+            _finale = m.Finale;
             SectionBar = m.SectionBar;
             LastSection = m.LastSection;
             if (Blackout) return ShowSection.Blackout;
@@ -118,6 +146,7 @@ public sealed class LightDesk
         if (showSeconds < 0) return ShowSection.WalkIn;
         int songBars = SongForm.Length * BarsPerSection + 1;
         int inSong = bar % songBars;
+        _finale = (bar / songBars) % 4 == 3;
         if (inSong == songBars - 1) return ShowSection.Blackout;
         SectionBar = inSong % BarsPerSection;
         LastSection = inSong / BarsPerSection == SongForm.Length - 1;
@@ -140,6 +169,20 @@ public sealed class LightDesk
         float kick = Music is { } song ? Math.Max(song.Kick, 0.25f * MathF.Exp(-ph * 5f)) : MathF.Exp(-ph * 5f);
         int beatN = _beatN = (int)MathF.Floor(beat);
         _n = G(RigGroup.MidTruss).Length;
+        // the song's finer bands (CdAnalysis v2): the bass under the washes, the brightness lifting the beams
+        var bands = Music is { HasBands: true } mb ? mb : (MusicMoment?)null;
+        float bass = bands?.Bass ?? 0.5f, lift = ((bands?.Bright ?? 0.5f) - 0.5f) * 20f;
+        _pixelGain = bands is { } hb ? 0.45f + 1.1f * hb.Hat : 1f;
+        uint ph32 = (uint)(_e.Seed * 7919 + (SectionBar / 2) * 104729 + (int)Section * 15485863 + (int)MathF.Floor(beat / 64f) * 32452843);
+        ph32 ^= ph32 >> 13; ph32 *= 0x5bd1e995; ph32 ^= ph32 >> 15;
+        _phraseHash = ph32;
+        bool syncUp = Section == ShowSection.Chorus && SectionBar < 2 || Music is { Build: > 0f } || Music is { SinceDrop: < 4f };
+        _phrase = syncUp || Section == ShowSection.Calm ? Phrase.Sync : (Phrase)(ph32 % 8);
+        _kick = kick;
+        _pump = Section switch
+        {
+            ShowSection.Calm => 0.2f, ShowSection.Groove => 0.65f, ShowSection.Chorus => 0.4f, ShowSection.Peak => 0.8f, _ => 0f,
+        };
         var p = _plan.Patch;
 
         // the haze is always on during a show: it is what makes beams visible
@@ -152,7 +195,7 @@ public sealed class LightDesk
         switch (Section)
         {
             case ShowSection.WalkIn:
-                Washes(0.35f, _walkInWash, tilt: 25f, sway: 6f, speed: 0.05f, beat);
+                Washes(0.35f, _walkInWash, tilt: 25f, sway: 6f, speed: 0.125f, beat);
                 Off(RigGroup.FrontTruss); Off(RigGroup.MidTruss); Off(RigGroup.Floor);
                 Off(RigGroup.Blinders); Off(RigGroup.Strobes);
                 Pixels(_walkInPixels);
@@ -164,7 +207,7 @@ public sealed class LightDesk
                 break;
 
             case ShowSection.Calm:
-                Washes(0.55f, _calmWash, tilt: 20f, sway: 10f, speed: 0.125f, beat);
+                Washes(0.55f, _calmWash, tilt: 20f, sway: 12f, speed: 0.5f, beat);
                 // the spots pick out the artist: aimed at the stage's centre, warm
                 Spots(0.8f, new Color(1f, 0.85f, 0.65f), aimCentre: true, beat, zoom: 0.25f);
                 Off(RigGroup.MidTruss); Off(RigGroup.Floor); Off(RigGroup.Blinders); Off(RigGroup.Strobes);
@@ -173,22 +216,26 @@ public sealed class LightDesk
                 break;
 
             case ShowSection.Groove:
-                Washes(0.6f + 0.4f * kick, _grooveWash, tilt: 30f, sway: 15f, speed: 0.25f, beat);
-                Spots(0.7f, _pal[2], aimCentre: false, beat, zoom: 0.4f);
+                Washes(0.45f + 0.25f * bass + 0.3f * kick, _grooveWash, tilt: 30f, sway: 15f, speed: 1f, beat);
+                // some phrases a group sits out: the spots, or the floor
+                if ((_phraseHash >> 8) % 4 == 0) Off(RigGroup.FrontTruss);
+                else Spots(0.7f, _pal[2], aimCentre: false, beat, zoom: 0.4f);
                 // the beams: a fan that breathes with the bar, a chase over it on every beat
-                Beams(RigGroup.MidTruss, _grooveChase, _pal[1],
-                    fan: 35f, tilt: 25f + 15f * MathF.Sin(bar * MathF.Tau / 4f), open: true);
-                Beams(RigGroup.Floor, _floorGroove, _pal[0], fan: 20f, tilt: 20f + 10f * MathF.Sin(beat * MathF.PI / 2f), open: true);
+                Beams(RigGroup.MidTruss, _phrase == Phrase.Sync ? _grooveChase : _full, _pal[1],
+                    fan: 35f + 15f * MathF.Sin(bar * MathF.Tau), tilt: 25f + lift + 15f * MathF.Sin(beat * MathF.PI / 2f), open: true);
+                if ((_phraseHash >> 12) % 3 == 0) Off(RigGroup.Floor);
+                else Beams(RigGroup.Floor, _floorGroove, _pal[0], fan: 20f, tilt: 20f + 10f * MathF.Sin(beat * MathF.PI / 2f), open: true);
                 Off(RigGroup.Blinders); Off(RigGroup.Strobes);
                 Pixels(_groovePixels);
                 Screens(clip: 2, speed: _e.Bpm / 240f, _pal[0], _pal[1], 1f);
                 break;
 
             case ShowSection.Chorus:
-                Washes(1f, _chorusWash, tilt: 35f, sway: 20f, speed: 0.25f, beat);
+                Washes(1f, _chorusWash, tilt: 35f, sway: 20f, speed: 1f, beat);
                 Spots(1f, Colors.White, aimCentre: false, beat, zoom: 0.6f);
-                Beams(RigGroup.MidTruss, _full, _pal[(beatN / 4) % 2 == 0 ? 0 : 2], fan: 55f, tilt: 40f, open: true);
-                Beams(RigGroup.Floor, _full, Colors.White, fan: 40f, tilt: 10f + 25f * barPh, open: true);
+                Beams(RigGroup.MidTruss, _full, _pal[(beatN / 4) % 2 == 0 ? 0 : 2], fan: 55f, tilt: 40f + lift, open: true);
+                if (_phrase != Phrase.Sync && (_phraseHash >> 12) % 3 == 0) Off(RigGroup.Floor);
+                else Beams(RigGroup.Floor, _full, Colors.White, fan: 40f, tilt: 10f + 25f * barPh, open: true);
                 // the blinders hit the crowd on every downbeat
                 Blinders(barPh < 0.25f ? MathF.Exp(-barPh * 12f) : 0f);
                 Off(RigGroup.Strobes);
@@ -197,18 +244,69 @@ public sealed class LightDesk
                 break;
 
             case ShowSection.Peak:
-                Washes(kick, _peakWash, tilt: 40f, sway: 30f, speed: 0.5f, beat);
+                Washes(kick, _peakWash, tilt: 40f, sway: 30f, speed: 2f, beat);
                 Spots(1f, _pal[2], aimCentre: false, beat, zoom: 0.8f);
                 // a ballyhoo: every beat each beam jumps somewhere new, strobing
                 Ballyhoo(RigGroup.MidTruss, beatN, _pal[1]);
                 Ballyhoo(RigGroup.Floor, beatN + 7, Colors.White);
                 Blinders((beatN & 3) == 0 ? kick : 0f);
-                Strobes(1f, rate: 0.6f);
+                Strobes(0.7f, rate: 0.15f);
                 Pixels(_peakPixels);
                 Screens(clip: 4, speed: _e.Bpm / 60f, Colors.White, _pal[1], 1f);
                 break;
         }
+        if (bands is { } m && Section is not (ShowSection.Blackout or ShowSection.WalkIn)) Accents(m, beat);
+        StrobeBursts();
         Effects(beat);
+    }
+
+    /// <summary>
+    /// What the song's finer analysis adds over the section's look: a snare hit pops the strobes, a
+    /// build into a drop sinks the washes, lifts the beams to the sky and closes them, speeds the
+    /// strobes up and fills the pixel bars; the drop hits the crowd with the blinders (and fires the
+    /// CO2, the flames and the gerbs, <see cref="Effects"/>).
+    /// </summary>
+    private void Accents(MusicMoment m, float beat)
+    {
+        if (m.Build > 0f)
+        {
+            float b = m.Build;
+            Washes(0.5f * (1f - b) + 0.05f, _grooveWash, tilt: 30f, sway: 15f * (1f - b), speed: 1f + b, beat);
+            Beams(RigGroup.MidTruss, _full, Colors.White, fan: 30f * (1f - b) + 3f, tilt: 20f + 60f * b, open: true);
+            Beams(RigGroup.Floor, _full, _pal[1], fan: 20f * (1f - b) + 2f, tilt: 10f + 70f * b, open: true);
+            Strobes(b, rate: 0.15f + 0.85f * b);
+            _buildFill = b;
+            Pixels(_buildPixels);
+            Off(RigGroup.Blinders);
+        }
+        else if (Section != ShowSection.Peak && m.Snare > 0.45f)
+            Strobes(m.Snare, rate: 1f);
+        if (m.SinceDrop < 2.5f)
+            Blinders(MathF.Exp(-m.SinceDrop * 1.5f));
+    }
+
+    /// <summary>Whether the rig is in a strobe burst now (the debug window shows it).</summary>
+    public bool Strobing { get; private set; }
+
+    /// <summary>A strobe burst's rate: 12 flashes a second (1 + 24 x rate), the heads' shutters as close as their scale allows.</summary>
+    private const float BurstRate = 11f / 24f;
+    private const byte BurstShutter = 83;
+
+    /// <summary>
+    /// Strobe bursts, where the music pushes hardest: the last quarter of a build, the drop's first
+    /// moments, one bar in four at a peak. The strobes flash at 12 Hz and the moving heads' shutters
+    /// with them; the screens sink and flash (the rig), the dancers jump pose on each flash.
+    /// </summary>
+    private void StrobeBursts()
+    {
+        bool live = Section is not (ShowSection.Blackout or ShowSection.WalkIn);
+        Strobing = live && (Music is { Build: > 0.75f } || Music is { SinceDrop: < 0.8f } || Section == ShowSection.Peak && SectionBar % 4 == 3);
+        if (!Strobing) return;
+        Strobes(1f, rate: BurstRate);
+        var p = _plan.Patch;
+        foreach (var grp in new[] { RigGroup.FrontTruss, RigGroup.MidTruss, RigGroup.Floor })
+            foreach (var f in G(grp))
+                if (f.Type.Offset(Attr.Shutter) is int o and >= 0 && p.Get01(f, Attr.Dimmer) > 0.05f) p.Set(f, o, BurstShutter);
     }
 
     /// <summary>
@@ -235,7 +333,8 @@ public sealed class LightDesk
             }
         }
         _fx.Beat = beatN; _fx.BeatPh = ph; _fx.BarPh = barPh; _fx.Bar = SectionBar; _fx.Chorus = chorus; _fx.Peak = peak;
-        _fx.Last = LastSection; _fx.Blackout = Section == ShowSection.Blackout;
+        _fx.Last = LastSection; _fx.Blackout = Section == ShowSection.Blackout; _fx.Finale = _finale;
+        _fx.Drop = live && Music is { SinceDrop: < 0.6f };
         Fire(RigGroup.Co2, _fx.Co2);
         Fire(RigGroup.Flames, _fx.Flames);
         Fire(RigGroup.Gerbs, _fx.Gerbs);
@@ -253,16 +352,19 @@ public sealed class LightDesk
     {
         public int Beat, Bar;
         public float BeatPh, BarPh;
-        public bool Chorus, Peak, Last, Blackout;
+        public bool Chorus, Peak, Last, Blackout, Drop, Finale;
         public readonly Func<int, bool> Co2, Flames, Gerbs, Confetti, Airbursts;
 
         public FxMoment()
         {
-            Co2 = i => Chorus && Bar < 2 && BarPh < 0.12f;
-            Flames = i => (Chorus && Bar % 2 == 0 && BarPh < 0.1f) || (Peak && BeatPh < 0.35f && (Beat + i) % 2 == 0);
-            Gerbs = i => Peak && Bar == 0;
+            // kept for the moments: a drop fires the CO2, the flames and the gerbs together; a chorus opens on
+            // one CO2 shot and a flame every four bars; a peak, one flame a bar, left then right; the set's
+            // last song ends on the fireworks
+            Co2 = i => Drop || Chorus && Bar == 0 && BarPh < 0.06f;
+            Flames = i => Drop && BeatPh < 0.3f || (Chorus && Bar % 4 == 0 && BarPh < 0.06f) || (Peak && BarPh < 0.06f && (Bar + i) % 2 == 0);
+            Gerbs = i => Drop || Chorus && Last && Bar == 0 && BarPh < 0.1f;
             Confetti = i => Chorus && Last && Bar == 0;
-            Airbursts = i => Blackout;
+            Airbursts = i => Blackout && Finale;
         }
     }
 
@@ -289,7 +391,8 @@ public sealed class LightDesk
     private static float Chase(int i, int n, float beat, float width)
     {
         if (n <= 1) return 1f;
-        float pos = (beat % n) / n, me = (float)i / n;
+        // the wave crosses the whole group in two beats: a 28-head rig as fast as a 6-head one
+        float pos = beat * 0.5f - MathF.Floor(beat * 0.5f), me = (float)i / n;
         float d = MathF.Abs(pos - me);
         d = MathF.Min(d, 1f - d);
         return MathF.Max(0f, 1f - d / width);
@@ -353,10 +456,11 @@ public sealed class LightDesk
         var g = G(RigGroup.BackTruss);
         for (int i = 0; i < g.Length; i++)
         {
-            float a = beat * speed * MathF.Tau + i * 0.6f;
-            Aim(g[i], MathF.Sin(a) * sway, tilt + MathF.Cos(a) * sway * 0.5f);
+            float a = (beat - Lag(i, g.Length)) * speed * MathF.Tau;
+            Aim(g[i], MathF.Sin(a) * sway * Mirror(i, g.Length), tilt + MathF.Cos(a) * sway * 0.5f);
             Paint(g[i], color(i));
-            Open(g[i], dim, zoom: 0.7f);
+            // the washes never go fully dark with a pattern: they light the stage
+            Open(g[i], dim * (0.35f + 0.65f * Mask(i, g.Length)) * Rhythm(i, g.Length, 0.5f), zoom: 0.7f);
         }
     }
 
@@ -368,9 +472,13 @@ public sealed class LightDesk
             float off = g.Length <= 1 ? 0 : (i / (float)(g.Length - 1) - 0.5f);
             // a hung head over the deck's front: tilting back aims onto the stage
             if (aimCentre) Aim(g[i], -off * 50f, -30f);
-            else Aim(g[i], off * 60f + MathF.Sin(beat * MathF.PI / 4f + i) * 10f, 30f + MathF.Cos(beat * MathF.PI / 8f + i) * 15f);
+            else
+            {
+                float w = (beat - Lag(i, g.Length)) * MathF.PI / 2f;
+                Aim(g[i], off * 60f + MathF.Sin(w) * 14f * Mirror(i, g.Length), 30f + MathF.Cos(w * 0.5f) * 15f);
+            }
             Paint(g[i], color);
-            Open(g[i], dim, zoom);
+            Open(g[i], aimCentre ? dim : dim * Mask(i, g.Length) * Rhythm(i, g.Length, 0.8f), zoom);
         }
     }
 
@@ -380,11 +488,64 @@ public sealed class LightDesk
         for (int i = 0; i < g.Length; i++)
         {
             float off = g.Length <= 1 ? 0 : (i / (float)(g.Length - 1) - 0.5f);
-            Aim(g[i], off * fan * 2f, tilt);
+            // each head swings on its own lag: a wave, a mirror, or all together
+            float w = (Beat - Lag(i, g.Length)) * MathF.PI / 2f;
+            float wave = _phrase == Phrase.Sync ? 6f : 12f;
+            Aim(g[i], off * fan * 2f + MathF.Sin(w * 0.5f) * wave * Mirror(i, g.Length), tilt + MathF.Sin(w) * wave * 0.6f);
             Paint(g[i], color);
-            Open(g[i], open ? dim(i) : 0f, zoom: 0.2f);
+            Open(g[i], open ? dim(i) * Mask(i, g.Length) * Rhythm(i, g.Length, 1f) : 0f, zoom: 0.2f);
         }
     }
+
+    /// <summary>How far behind the beat head <paramref name="i"/> of <paramref name="n"/> moves in this phrase, in beats.</summary>
+    private float Lag(int i, int n) => n <= 1 ? 0f : _phrase switch
+    {
+        Phrase.Sync => 0f,
+        Phrase.Stagger => 2f * i / n,
+        Phrase.Mirror => 2f * MathF.Abs(i - (n - 1) / 2f) / n,
+        Phrase.Cycle or Phrase.PingPong => 0f,
+        _ => (i & 1) * 1f,
+    };
+
+    /// <summary>
+    /// Head <paramref name="i"/>'s dimmer against the rhythm, 0..1: a flash on its beat (behind it by its
+    /// lag) decaying to the next, or the song's kick when in sync; <paramref name="depth"/> of the
+    /// section's pump (washes less than beams).
+    /// </summary>
+    private float Rhythm(int i, int n, float depth)
+    {
+        float d = _pump * depth;
+        if (d <= 0f) return 1f;
+        float env;
+        if (_phrase == Phrase.Sync) env = _kick;
+        else
+        {
+            float b = Beat - Lag(i, n);
+            env = MathF.Exp(-(b - MathF.Floor(b)) * 3.5f);
+        }
+        return 1f - d + d * env;
+    }
+
+    private static int PingPong(int step, int n)
+    {
+        int k = step % (2 * n - 2);
+        return k < n ? k : 2 * n - 2 - k;
+    }
+
+    /// <summary>The left half turns the other way in a mirrored phrase.</summary>
+    private float Mirror(int i, int n) => _phrase == Phrase.Mirror && i < n / 2 ? -1f : 1f;
+
+    /// <summary>Whether head <paramref name="i"/> of <paramref name="n"/> is lit in this phrase, on this beat.</summary>
+    private float Mask(int i, int n) => n <= 1 ? 1f : _phrase switch
+    {
+        Phrase.Alternate => ((i + _beatN) & 1) == 0 ? 1f : 0f,
+        Phrase.Sparse => i % 3 == ((_beatN % 3) + 3) % 3 ? 1f : 0f,
+        Phrase.Solo => i == (int)(_phraseHash % (uint)n) || i == n - 1 - (int)(_phraseHash % (uint)n) ? 1f : 0f,
+        // one head at a time round the row, a step every sixteenth (an eighth on a short row)
+        Phrase.Cycle => i == (int)MathF.Floor(Beat * (n > 8 ? 4f : 2f)) % n ? 1f : 0f,
+        Phrase.PingPong => i == PingPong((int)MathF.Floor(Beat * (n > 8 ? 4f : 2f)), n) ? 1f : 0f,
+        _ => 1f,
+    };
 
     private void Ballyhoo(RigGroup grp, int beatN, Color color)
     {
@@ -420,12 +581,15 @@ public sealed class LightDesk
         foreach (var f in G(RigGroup.PixelBars))
             for (int c = 0; c < 8; c++)
             {
-                var col = cell(c + f.Id);
+                var col = cell(c + f.Id) * _pixelGain;
                 _plan.Patch.Set(f, c * 3, (byte)(Math.Clamp(col.R, 0, 1) * 255));
                 _plan.Patch.Set(f, c * 3 + 1, (byte)(Math.Clamp(col.G, 0, 1) * 255));
                 _plan.Patch.Set(f, c * 3 + 2, (byte)(Math.Clamp(col.B, 0, 1) * 255));
             }
     }
+
+    /// <summary>The media-server clip that shows the program camera (IMAG).</summary>
+    public const int CameraClip = 5;
 
     private void Screens(int clip, float speed, Color a, Color b, float dim)
     {
@@ -433,7 +597,10 @@ public sealed class LightDesk
         foreach (var f in G(RigGroup.Screens))
         {
             p.Set01(f, Attr.Dimmer, dim);
-            p.Set(f, f.Type.Offset(Attr.Clip), (byte)(clip * 32 + 4));
+            // the side screens show the cameras (IMAG) through verse, groove and chorus; the centre wall in a calm verse
+            bool side = f.ScreenSize.X < 15f;
+            bool imag = Section is ShowSection.Calm || side && Section is ShowSection.Groove or ShowSection.Chorus;
+            p.Set(f, f.Type.Offset(Attr.Clip), (byte)((imag ? CameraClip : clip) * 32 + 4));
             p.Set01(f, Attr.ClipSpeed, Math.Clamp(speed / 4f, 0f, 1f));
             p.Set01(f, Attr.Red, a.R); p.Set01(f, Attr.Green, a.G); p.Set01(f, Attr.Blue, a.B);
             p.Set01(f, Attr.Red2, b.R); p.Set01(f, Attr.Green2, b.G); p.Set01(f, Attr.Blue2, b.B);

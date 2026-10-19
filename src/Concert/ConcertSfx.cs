@@ -114,6 +114,21 @@ public partial class ConcertSfx : Node3D
         DisableFog = true,
     };
 
+    private static StandardMaterial3D Fog()
+    {
+        var m = Mat(additive: false);
+        m.BillboardMode = BaseMaterial3D.BillboardModeEnum.FixedY;
+        return m;
+    }
+
+    private static StandardMaterial3D Paper() => new()
+    {
+        ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+        VertexColorUseAsAlbedo = true,
+        CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+        DisableFog = true,
+    };
+
     private static Gradient Ramp(params Color[] c) => new() { Colors = c, Offsets = Enumerable.Range(0, c.Length).Select(i => i / (float)(c.Length - 1)).ToArray() };
 
     public override void _Ready()
@@ -133,32 +148,34 @@ public partial class ConcertSfx : Node3D
             {
                 FixtureKind.Flame => new CpuParticles3D
                 {
-                    Amount = 50, Lifetime = 0.8f, Direction = Vector3.Up, Spread = 5f, InitialVelocityMin = 11f, InitialVelocityMax = 15f,
-                    Gravity = new Vector3(0, 2f, 0), ScaleAmountMin = 1.6f, ScaleAmountMax = 3.2f,
+                    // fewer, bigger puffs: a particle on the deck can fill the screen of whoever stands there
+                    Amount = 24, Lifetime = 0.8f, Direction = Vector3.Up, Spread = 5f, InitialVelocityMin = 11f, InitialVelocityMax = 15f,
+                    Gravity = new Vector3(0, 2f, 0), ScaleAmountMin = 2f, ScaleAmountMax = 3.6f,
                     ColorRamp = Ramp(new Color(1f, 0.95f, 0.6f, 1f), new Color(1f, 0.5f, 0.1f, 0.9f), new Color(0.6f, 0.1f, 0.02f, 0f)),
                     Mesh = new QuadMesh { Size = Vector2.One, Material = Mat(additive: true) },
                 },
                 FixtureKind.Co2 => new CpuParticles3D
                 {
-                    Amount = 60, Lifetime = 1.2f, Direction = f.Home, Spread = 9f, InitialVelocityMin = 14f, InitialVelocityMax = 18f,
-                    DampingMin = 6f, DampingMax = 9f, Gravity = Vector3.Zero, ScaleAmountMin = 1.5f, ScaleAmountMax = 3.5f,
+                    Amount = 30, Lifetime = 1.2f, Direction = f.Home, Spread = 9f, InitialVelocityMin = 14f, InitialVelocityMax = 18f,
+                    DampingMin = 6f, DampingMax = 9f, Gravity = Vector3.Zero, ScaleAmountMin = 2f, ScaleAmountMax = 4.2f,
                     ColorRamp = Ramp(new Color(1f, 1f, 1f, 0.75f), new Color(0.9f, 0.92f, 0.95f, 0f)),
                     Mesh = new QuadMesh { Size = Vector2.One, Material = Mat(additive: false) },
                 },
                 FixtureKind.Gerb => new CpuParticles3D
                 {
-                    Amount = 140, Lifetime = 1.1f, Direction = Vector3.Up, Spread = 12f, InitialVelocityMin = 6f, InitialVelocityMax = 9f,
-                    Gravity = new Vector3(0, -9.8f, 0), ScaleAmountMin = 0.12f, ScaleAmountMax = 0.25f,
+                    Amount = 60, Lifetime = 1.1f, Direction = Vector3.Up, Spread = 12f, InitialVelocityMin = 6f, InitialVelocityMax = 9f,
+                    Gravity = new Vector3(0, -9.8f, 0), ScaleAmountMin = 0.18f, ScaleAmountMax = 0.32f,
                     ColorRamp = Ramp(new Color(1f, 1f, 0.85f, 1f), new Color(1f, 0.75f, 0.3f, 1f), new Color(1f, 0.5f, 0.1f, 0f)),
                     Mesh = new QuadMesh { Size = Vector2.One, Material = Mat(additive: true) },
                 },
                 FixtureKind.Confetti => new CpuParticles3D
                 {
-                    Amount = 360, Lifetime = 10f, OneShot = true, Explosiveness = 0.85f, Direction = f.Home, Spread = 22f,
+                    Amount = 160, Lifetime = 10f, OneShot = true, Explosiveness = 0.85f, Direction = f.Home, Spread = 22f,
                     InitialVelocityMin = 14f, InitialVelocityMax = 20f, Gravity = new Vector3(0, -1.4f, 0), DampingMin = 0.6f, DampingMax = 1.2f,
                     AngularVelocityMin = -360f, AngularVelocityMax = 360f, ParticleFlagRotateY = true,
                     ColorInitialRamp = Ramp(pal[0], pal[1 % pal.Length], Colors.White, pal[2 % pal.Length], new Color(1f, 0.85f, 0.2f)),
-                    Mesh = new QuadMesh { Size = new Vector2(0.28f, 0.18f), Material = Mat(additive: false, billboard: false) },
+                    // paper is opaque: depth-tested and never blended, the cheapest a pixel gets
+                    Mesh = new QuadMesh { Size = new Vector2(0.32f, 0.2f), Material = Paper() },
                 },
                 FixtureKind.Airburst => new CpuParticles3D
                 {
@@ -171,11 +188,12 @@ public partial class ConcertSfx : Node3D
                 _ => new CpuParticles3D
                 {
                     // low fog: heavy, rolling out over the deck's edge
-                    Amount = 36, Lifetime = 9f, Direction = f.Home with { Y = 0 }, Spread = 30f, InitialVelocityMin = 0.6f, InitialVelocityMax = 1.4f,
-                    Gravity = new Vector3(0, -0.05f, 0), ScaleAmountMin = 4f, ScaleAmountMax = 7f,
+                    Amount = 16, Lifetime = 9f, Direction = f.Home with { Y = 0 }, Spread = 30f, InitialVelocityMin = 0.6f, InitialVelocityMax = 1.4f,
+                    Gravity = new Vector3(0, -0.05f, 0), ScaleAmountMin = 5f, ScaleAmountMax = 8f,
                     EmissionShape = CpuParticles3D.EmissionShapeEnum.Box, EmissionBoxExtents = new Vector3(4f, 0.2f, 1f),
                     ColorRamp = Ramp(new Color(0.85f, 0.87f, 0.9f, 0f), new Color(0.85f, 0.87f, 0.9f, 0.3f), new Color(0.85f, 0.87f, 0.9f, 0f)),
-                    Mesh = new QuadMesh { Size = Vector2.One, Material = Mat(additive: false) },
+                    // a low sheet turning only about the vertical: up close it fills a band at the deck, not the screen
+                    Mesh = new QuadMesh { Size = new Vector2(1f, 0.28f), CenterOffset = new Vector3(0, 0.14f, 0), Material = Fog() },
                 },
             };
             p.Name = $"{f.Type.Kind}{f.Id}";
@@ -191,7 +209,7 @@ public partial class ConcertSfx : Node3D
                 var b = new CpuParticles3D
                 {
                     Name = $"Burst{f.Id}", Position = f.Position + f.Home * rise,
-                    Amount = 240, Lifetime = 2.6f, OneShot = true, Explosiveness = 1f, Direction = Vector3.Up, Spread = 180f,
+                    Amount = 120, Lifetime = 2.6f, OneShot = true, Explosiveness = 1f, Direction = Vector3.Up, Spread = 180f,
                     InitialVelocityMin = 9f, InitialVelocityMax = 12f, Gravity = new Vector3(0, -2.5f, 0), DampingMin = 1f, DampingMax = 1.6f,
                     ScaleAmountMin = 0.25f, ScaleAmountMax = 0.45f,
                     ColorInitialRamp = Ramp(pal[0], pal[1 % pal.Length], Colors.White),
@@ -237,7 +255,7 @@ public partial class ConcertSfx : Node3D
                 case FixtureKind.Gerb:
                     if (rising)
                     {
-                        _until[i] = now + 4.0;
+                        _until[i] = now + 2.5;
                         Sound(f.Position, CrackleBank, 0f);
                     }
                     bool on = now < _until[i];

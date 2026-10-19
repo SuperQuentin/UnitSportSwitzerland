@@ -132,6 +132,10 @@ public partial class PlayerInput : Node
     public const string InteractMount = "interact_mount";
     public const string EngineToggle = "engine_toggle";
     public const string CameraToggle = "camera_toggle";
+    /// <summary>Operating a concert's camera (#885): zoom in and out, and cut this camera to air.</summary>
+    public const string CamZoomIn = "cam_zoom_in";
+    public const string CamZoomOut = "cam_zoom_out";
+    public const string CamCut = "cam_cut";
     /// <summary>On foot: the camera over the other shoulder (#460). A pad swaps with R3 while aiming a gun.</summary>
     public const string SwapShoulder = "swap_shoulder";
     public const string ToggleMode = "toggle_mode";
@@ -640,6 +644,11 @@ public partial class PlayerInput : Node
         Bind(RideMenu, Keys(Key.R));
         Bind(EngineToggle, Keys(Key.Z), Button(JoyButton.DpadUp));
         Bind(CameraToggle, Keys(Key.V), Button(JoyButton.RightStick));
+        // a concert's camera (#885): the operator's zoom on the wheel and the shoulders (nothing else
+        // is held while a camera is driven), the cut on Enter / X
+        Bind(CamZoomIn, Keys(Key.Equal), Mouse(MouseButton.WheelUp), Button(JoyButton.RightShoulder));
+        Bind(CamZoomOut, Keys(Key.Minus), Mouse(MouseButton.WheelDown), Button(JoyButton.LeftShoulder));
+        Bind(CamCut, Keys(Key.Enter), Button(JoyButton.X));
         // H only couples or sounds a horn in a vehicle; on foot it is the other shoulder (#460)
         Bind(SwapShoulder, Keys(Key.H), Mouse(MouseButton.Middle));
         Bind(ToggleMode, Keys(Key.T), Button(JoyButton.DpadDown));
