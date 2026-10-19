@@ -541,4 +541,19 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
             if (Directory.Exists(dir + "_temp")) Directory.Delete(dir + "_temp", recursive: true);
         }
     }
+
+    [Fact]
+    public void A_merged_core_outline_drops_its_spikes_and_cuts_the_loop_where_two_members_kerbs_cross()
+    {
+        // a 20 x 10 m core whose east side runs on 2 m past a point and back (an inner street's side over a kerb), and whose
+        // north side crosses itself in a small twist (two members' kerbs overlapping)
+        var ring = new List<UnitSport.Tools.RoadGen.Geometry.Vec2>
+        {
+            new(0, 0), new(20, 0), new(20, 6), new(20, 8), new(20, 5), new(20, 10), new(12, 10), new(9, 11), new(10, 9.5), new(7, 10), new(0, 10),
+        };
+        MergedCore.Clean(ring);
+        Assert.True(CorePlanner.Simple(ring));
+        Assert.InRange(CorePlanner.SignedArea(ring), 199, 202);
+        Assert.DoesNotContain(new UnitSport.Tools.RoadGen.Geometry.Vec2(20, 8), ring);
+    }
 }

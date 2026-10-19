@@ -66,12 +66,13 @@ public static class CorePlanner
     /// would lay under its radius falls back to a car's, nothing in between, and the core is laid again. Without
     /// <paramref name="trucks"/> every turn is a car's.
     /// </summary>
-    public static JunctionCore Plan(JunctionPlan jp, Func<Vec2, bool>? blocked = null, bool trucks = true)
+    /// <param name="given">The connectors to lay in place of every allowed move's (a merged core's member, #854: its legs).</param>
+    public static JunctionCore Plan(JunctionPlan jp, Func<Vec2, bool>? blocked = null, bool trucks = true, Func<List<Connector>>? given = null)
     {
         var asCar = new HashSet<(int From, int To)>();
         for (int round = 0; ; round++)
         {
-            var core = Lay(jp, blocked, (a, b) => trucks && a.Major && b.Major && !asCar.Contains((a.Arm, b.Arm)));
+            var core = Lay(jp, blocked, (a, b) => trucks && a.Major && b.Major && !asCar.Contains((a.Arm, b.Arm)), given);
             bool fellBack = false;
             foreach (var c in core.Connectors)
                 if (c.Truck && (c.Fill < 0 || c.UnderRadius)) fellBack |= asCar.Add((c.FromArm, c.ToArm));
@@ -83,7 +84,7 @@ public static class CorePlanner
         }
     }
 
-    private static JunctionCore Lay(JunctionPlan jp, Func<Vec2, bool>? blocked, Func<ArmPlan, ArmPlan, bool> truck)
+    private static JunctionCore Lay(JunctionPlan jp, Func<Vec2, bool>? blocked, Func<ArmPlan, ArmPlan, bool> truck, Func<List<Connector>>? given)
     {
         var core = new JunctionCore();
         var arms = jp.Arms.Where(a => a.Axis is not null).OrderBy(a => Angles.Normalize(a.RingHeading)).ToList();
@@ -91,7 +92,7 @@ public static class CorePlanner
         if (n < 2) return core;
         var index = new Dictionary<int, int>();
         for (int k = 0; k < n; k++) index[arms[k].Arm] = k;
-        core.Connectors.AddRange(Connectors(arms, index, truck));
+        core.Connectors.AddRange(given?.Invoke() ?? Connectors(arms, index, truck));
 
         // 2. the mouths: pushed out until every turn's arc at its least radius and both kerbs start inside them
         var m = new double[n];
@@ -232,7 +233,7 @@ public static class CorePlanner
 
     // ------------------------------------------------------------------ connectors: which lanes join
 
-    private static List<Connector> Connectors(List<ArmPlan> arms, Dictionary<int, int> index, Func<ArmPlan, ArmPlan, bool> truck)
+    internal static List<Connector> Connectors(List<ArmPlan> arms, Dictionary<int, int> index, Func<ArmPlan, ArmPlan, bool> truck)
     {
         var list = new List<Connector>();
         foreach (var a in arms)
@@ -410,7 +411,7 @@ public static class CorePlanner
     /// A connector's centre line and its edges: its lane's width along the straight run in (<paramref name="runIn"/> m), the
     /// exit lane's along the run out, easing from one to the other along the curve between.
     /// </summary>
-    private static void Set(Connector c, List<Vec2> centre, double runIn, double runOut)
+    internal static void Set(Connector c, List<Vec2> centre, double runIn, double runOut)
     {
         c.Centre = centre;
         // its width eases from its lane's to the exit lane's along its length
@@ -703,7 +704,7 @@ public static class CorePlanner
     /// left-turn guide (the left turn's inner edge) toward an exit island or beside a left-turn bike lane, the line between
     /// the two; same-turn pairs kept apart; the through guide past an exit island no left-turn guide leads into.
     /// </summary>
-    private static void Lines(JunctionPlan jp, List<ArmPlan> arms, Dictionary<int, int> index, JunctionCore core)
+    internal static void Lines(JunctionPlan jp, List<ArmPlan> arms, Dictionary<int, int> index, JunctionCore core)
     {
         var rules = jp.Lights ? JunctionRules.Lights : JunctionRules.NoLights;
         var cars = core.Connectors.Where(c => c.Kind == ConnectorKind.Car).ToList();
@@ -794,7 +795,7 @@ public static class CorePlanner
 
     // ------------------------------------------------------------------ polygons
 
-    private static void Dedupe(List<Vec2> ring)
+    internal static void Dedupe(List<Vec2> ring)
     {
         for (int k = ring.Count - 1; k > 0; k--)
             if (ring[k].DistanceTo(ring[k - 1]) < 1e-4) ring.RemoveAt(k);

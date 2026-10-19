@@ -309,6 +309,19 @@ off, `--junctions new` plans and reports without writing.
   the members form a tree (a pair, a chain); a loop of them encloses a real island (Sion 2505369,1136761) and the members
   stay as they are. 168 real tiles: 489 groups merged, 16 enclosing left alone, 2,655 cores written (188 merged); kerb
   check 30, 52 path ends off their lane.
+- **Merged cores member by member** (#854, `MergedCore`, `docs/plans/merged-cores.md`): a merged junction laid as one node
+  fails its checks on elongated groups and parallel arms (connectors looping round, kerbs paving a block). There each member is
+  laid alone by `CorePlanner` (its own arms with the merged plan's sections, plus its inner arms on their street's normal
+  section, unheld), every move a chain of legs onto the inner street's lane and off it (`CorePlanner.Plan`'s `given`), the legs
+  spliced where they run along the lane (halfway where both are on it; where their curves overlap, one cubic from mouth to
+  mouth). A through move across members is one S from mouth to mouth. The outline is walked round the tree (an inner street's
+  two sides join the two members' kerbs, pushed out where a connector passes beyond them), spikes dropped and loops cut where
+  kerbs cross (`MergedCore.Clean`). Used only where one node's core fails and this one passes (`MergedOrWhole`): where both
+  pass, one node's runs its through lanes straight (test region, a north and a north-east road 14 m apart off a main road at
+  `ForkE`: member by member the main road's lanes narrowed onto the inner street's and the corner between the two side roads
+  came out uneven). On a street shorter than both members' curves (the 8 m pair) the members' cores are one corner: that
+  version fails and one node's is kept. `MERGEDDBG=1` prints both versions' checks per group, `MERGEDFORCE=1` keeps the
+  member-by-member one (for renders).
 - **Comparing with reality**: SWISSIMAGE crops from `wms.geo.admin.ch` (`ch.swisstopo.swissimage`, EPSG:2056 bbox); in
   Geneva the marking cadastre on `ge.ch/terags/rest/services/DIRECTIVES_SIGNAL_CHANTIERS/MapServer` (37 lines, 38 kerbs,
   44 coloured surfaces, 48 road cover: carriageway, sidewalk, islands) as GeoJSON by bbox. Three panels (aerial, old, new)

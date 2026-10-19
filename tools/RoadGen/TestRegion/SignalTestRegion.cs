@@ -53,6 +53,11 @@ public static class SignalTestRegion
     /// <see cref="RingE"/> and a mini one (radius 5 m, three arms) at <see cref="MiniRingE"/>; both tight, laid whole.
     /// </summary>
     public const double RingN = 1321850, RingE = 2911100, MiniRingE = 2913000;
+    /// <summary>
+    /// Merged cores laid member by member (#854), LV95 E on <see cref="RingN"/>: a 10 m main road with two 6 m side roads north
+    /// 12 m apart (parallel arms: their turns overlap), and 300 m east one north and one north-east 14 m apart.
+    /// </summary>
+    public const double ForkE = 2915000;
     /// <summary>The ground, metres (as the fixture courses).</summary>
     public const double Ground = 500;
     /// <summary>Region centre: the manifest's suggested origin.</summary>
@@ -279,6 +284,20 @@ public static class SignalTestRegion
         }
         Ring("RB", RingE, RingN, 8, [0, 90, 180, 270], "6m Strasse");
         Ring("RM", MiniRingE, RingN, 5, [30, 150, 270], "4m Strasse");
+
+        // 13. merged cores laid member by member (#854): two side roads north 12 m apart off a main road, their turns overlapping;
+        // 300 m east one north and one north-east 14 m apart
+        {
+            const double nb = RingN, e = ForkE;
+            double[] at = [e - 200, e, e + 12, e + 300, e + 314, e + 450];
+            string[] ids = ["FKW", "FKA", "FKM", "FKB", "FKE"];
+            for (int i = 0; i < ids.Length; i++)
+                lines.Add(new Line(ids[i], "10m Strasse", "Durchgangsstrasse", "Kanton", [(at[i], nb), (at[i + 1], nb)], "secondary", "yes"));
+            lines.Add(new Line("FKN1", "6m Strasse", "Verbindungsstrasse", "Gemeinde", [(e, nb), (e, nb + 200)], "secondary", "yes"));
+            lines.Add(new Line("FKN2", "6m Strasse", "Verbindungsstrasse", "Gemeinde", [(e + 12, nb), (e + 12, nb + 200)], "secondary", "yes"));
+            lines.Add(new Line("FKN3", "6m Strasse", "Verbindungsstrasse", "Gemeinde", [(e + 300, nb), (e + 300, nb + 200)], "secondary", "yes"));
+            lines.Add(new Line("FKN4", "6m Strasse", "Verbindungsstrasse", "Gemeinde", [(e + 314, nb), (e + 314 + 140, nb + 140)], "secondary", "yes"));
+        }
 
         junctions.Add(new Junction("J9-stagger-west", StaggerE + 300, TwinRowN, "staggered T's 24 m apart, both lit: the west one", Arms(null, null, null, null)));
         junctions.Add(new Junction("J9-stagger-east", StaggerE + 324, TwinRowN, "staggered T's 24 m apart, both lit: the east one", Arms(null, null, null, null)));

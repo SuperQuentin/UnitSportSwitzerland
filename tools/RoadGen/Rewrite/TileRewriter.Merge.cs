@@ -73,7 +73,9 @@ public static partial class TileRewriter
         // (a merged junction homed beyond the block, near it, is planned as its members were)
         var nearMerged = new HashSet<int>(near);
         foreach (var (j, _) in merged.Plans.Where(p => p.Junction.Members is { } ms && ms.Any(near.Contains))) nearMerged.Add(j.NodeId);
-        return PlanLayouts(merged, result, segmentOf, output, block, wanted, nearMerged, grids, buildings, streetSide, overlay, restrictions, null, crossings);
+        var again = PlanLayouts(merged, result, segmentOf, output, block, wanted, nearMerged, grids, buildings, streetSide, overlay, restrictions, null, crossings, byNode);
+        stats.ByMembers += again.Count(p => !p.Beyond && p.Core?.ByMembers == true);
+        return again;
     }
 
     /// <summary>
@@ -201,11 +203,11 @@ public static partial class TileRewriter
     /// <summary>The merges of a region (#818 phase 5c).</summary>
     public sealed class MergeStats
     {
-        public int Merged, Members, HeldApart, Rings;
+        public int Merged, Members, HeldApart, Rings, ByMembers;
         public readonly Dictionary<string, int> Why = new();
 
         public string Summary() =>
-            $"    merged cores (#818 phase 5c): {Merged:N0} of {Members:N0} junctions ({HeldApart:N0} overlapping ones laid apart, held at half the street between); tight roundabouts laid whole {Rings:N0} (#854)"
+            $"    merged cores (#818 phase 5c): {Merged:N0} of {Members:N0} junctions ({ByMembers:N0} laid member by member, #854; {HeldApart:N0} overlapping ones laid apart, held at half the street between); tight roundabouts laid whole {Rings:N0} (#854)"
             + (Why.Count > 0 ? $"; not merged: {string.Join(", ", Why.OrderBy(w => w.Key).Select(w => $"{w.Key} {w.Value:N0}"))}" : "");
     }
 }

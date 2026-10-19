@@ -37,7 +37,7 @@ public static partial class TileRewriter
         Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf, Dictionary<TileId, List<RoadSegment>> output,
         HashSet<TileId> block, HashSet<TileId> wanted, HashSet<int> near, Dictionary<TileId, ChunkGrid>? grids, Footprints buildings,
         Func<int, LinkEnd, bool, RoadSide> streetSide, OsmOverlayReader? overlay, Restrictions? restrictions, Action<string>? log,
-        CrossingNodes? crossings = null)
+        CrossingNodes? crossings = null, IReadOnlyDictionary<int, JunctionPlan>? alone = null)
     {
         var net = result.Network;
         // a merged junction's members are all lit where it is (#818 phase 5c)
@@ -225,7 +225,7 @@ public static partial class TileRewriter
                 }
                 if (jp.Lights) BikeStops(jp);
                 // 6. the core between the mouths (step 2): connectors, kerb corners, the outline
-                jp.Core = jp.Merged?.Ring is { } circle ? RoundaboutCore.Plan(jp, circle) : CorePlanner.Plan(jp, buildings.Contains);
+                jp.Core = jp.Merged?.Ring is { } circle ? RoundaboutCore.Plan(jp, circle) : MergedOrWhole(jp, alone, buildings.Contains);
             // its surface on the arms' heights at the mouths
             CorePlanner.Lift(jp.Core, m => net.Links[jp.Arms.First(a => a.Arm == m.Arm).LinkId].Tag is Source source
                 ? source.SampleHeight((m.Left + m.Right) * 0.5) : 0);
@@ -302,6 +302,22 @@ public static partial class TileRewriter
                     File.WriteAllText(svg, PlanSvg.Draw(jp, FormattableString.Invariant($"junction plan at LV95 {jp.Centre.X:F0},{jp.Centre.Y:F0}{(jp.Lights ? ", lights" : "")} (#818)")));
             }
         return plans;
+    }
+
+    /// <summary>
+    /// A core as <see cref="CorePlanner"/> lays it; a merged junction's laid as one node fails its checks (elongated groups,
+    /// parallel arms): member by member (<see cref="MergedCore"/>, #854) from its members' plans alone (<paramref name="alone"/>,
+    /// by node) where that passes them. Where both pass, one node's is kept: its through lanes run straight from mouth to mouth.
+    /// </summary>
+    private static JunctionCore MergedOrWhole(JunctionPlan jp, IReadOnlyDictionary<int, JunctionPlan>? alone, Func<Vec2, bool> blocked)
+    {
+        var whole = CorePlanner.Plan(jp, blocked);
+        if (alone is null || jp.Merged is null || MergedCore.Plan(jp, alone, blocked) is not { } byMembers) return whole;
+        static bool Fails(JunctionCore c) => !c.Simple || c.KerbsNotTangent > 0 || c.ConnectorsOutside > 0;
+        if (Environment.GetEnvironmentVariable("MERGEDDBG") is not null)
+            Console.WriteLine(FormattableString.Invariant($"[merged] {jp.Centre.X:F0},{jp.Centre.Y:F0} {jp.Merged.Members?.Count} members: by members simple {byMembers.Simple} kerbs {byMembers.KerbsNotTangent} outside {byMembers.ConnectorsOutside} (most {byMembers.Connectors.Select(c => c.Outside).DefaultIfEmpty(0).Max():F2} m) area {byMembers.Area:F0}; whole simple {whole.Simple} kerbs {whole.KerbsNotTangent} outside {whole.ConnectorsOutside} area {whole.Area:F0}"));
+        if (Environment.GetEnvironmentVariable("MERGEDFORCE") is not null) return byMembers;
+        return Fails(whole) && !Fails(byMembers) ? byMembers : whole;
     }
 
     /// <summary>Two mouths sharing a street keep at least this much of it between them (m).</summary>
