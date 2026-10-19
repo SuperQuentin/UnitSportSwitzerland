@@ -499,8 +499,9 @@ public static class MergedCore
             }
         double best = double.MaxValue;
         int bi = line.Count - 1, bj = 0;
+        // (the move's last point kept whatever comes closest)
         for (int i = 0; i < line.Count; i++)
-            for (int j = 0; j < next.Count; j++)
+            for (int j = 0; j + 1 < next.Count; j++)
                 if (line[i].DistanceSquaredTo(next[j]) < best) (best, bi, bj) = (line[i].DistanceSquaredTo(next[j]), i, j);
         line.RemoveRange(bi + 1, line.Count - bi - 1);
         line.AddRange(next.Skip(bj + 1));
@@ -514,7 +515,8 @@ public static class MergedCore
     /// </summary>
     private static void Splice(List<Vec2> centre, List<Vec2> next, ArmAxis axis, double offset)
     {
-        double Station(Vec2 p) => axis.StationOf(p);
+        // (run on past the street's far end: a leg going on straight into the far member's arm)
+        double Station(Vec2 p) => axis.StationPast(p);
         bool On(Vec2 p) { double s = Station(p); return Math.Abs((p - axis.PointAt(s)).Dot(axis.RightAt(s)) - offset) < OnLane; }
         int ia = centre.Count - 1;
         while (ia > 0 && On(centre[ia - 1])) ia--;
@@ -540,12 +542,12 @@ public static class MergedCore
         }
         double t = (lo + hi) * 0.5;
         int keep = centre.Count;
-        for (int k = ia; k < centre.Count; k++)
+        for (int k = Math.Max(ia, 1); k < centre.Count; k++)
             if (Station(centre[k]) >= t) { keep = k; break; }
         centre.RemoveRange(keep, centre.Count - keep);
         centre.Add(axis.At(t, offset));
         int from = 0;
-        for (int k = ib; k >= 0; k--)
+        for (int k = Math.Min(ib, next.Count - 2); k >= 0; k--)
             if (Station(next[k]) <= t) { from = k + 1; break; }
         centre.AddRange(next.Skip(from));
         CorePlanner.Dedupe(centre);

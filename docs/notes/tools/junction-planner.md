@@ -318,8 +318,10 @@ off, `--junctions new` plans and reports without writing.
   two sides join the two members' kerbs, pushed out where a connector passes beyond them), spikes dropped and loops cut where
   kerbs cross (`MergedCore.Clean`), then pushed out wherever a composed move passes beyond it (`Envelope`: points every
   0.75 m, the mouths' ends and their first half metre kept; a push that cuts a mouth away is undone). 168 real tiles: 45
-  groups laid member by member, the old layout's share 658 -> 616 ("a check failed" 208 -> 176; Geneva 2495251,1118174 was
-  a 38,000 m2 core, now 428 m2). Used only where one node's core fails and this one passes (`MergedOrWhole`): where both
+  groups laid member by member, the old layout's share 658 -> 618 ("a check failed" 208 -> 177; Geneva 2495251,1118174 was
+  a 38,000 m2 core, now 428 m2), path ends off their lane unchanged (51). Pitfall: a leg running straight on into the far
+  member's arm projects past the inner street's end; stations are taken with `StationPast` and a move's first and last
+  points are never spliced away (a path ended 27 m short of its lane). Used only where one node's core fails and this one passes (`MergedOrWhole`): where both
   pass, one node's runs its through lanes straight (test region, a north and a north-east road 14 m apart off a main road at
   `ForkE`: member by member the main road's lanes narrowed onto the inner street's and the corner between the two side roads
   came out uneven). On a street shorter than both members' curves (the 8 m pair) the members' cores are one corner: that
