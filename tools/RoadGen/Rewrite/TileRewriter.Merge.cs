@@ -45,7 +45,7 @@ public static partial class TileRewriter
             if (p.Core is { } core)
                 foreach (var a in p.Arms)
                     if (a.Axis is not null && core.Mouths.FirstOrDefault(m => m.Arm == a.Arm) is { } mouth
-                        && NodeShortOfMouth(result.Network, a, mouth.Station) is int node && byNode.TryGetValue(node, out var q) && q != p)
+                        && NodeShortOfMouth(result, a, mouth.Station) is int node && byNode.TryGetValue(node, out var q) && q != p)
                         joins.Add((p, q));
         var joined = joins.SelectMany(j => new[] { j.Item1, j.Item2 }).ToHashSet();
         var groups = JunctionPlan.OverlapGroups(plans, joins).Where(g => g.Any(p => p.CoresOverlap && p.CoreFails || joined.Contains(p))).ToList();
@@ -83,7 +83,7 @@ public static partial class TileRewriter
                 if (p.Core is { } core)
                     foreach (var a in p.Arms)
                         if (a.Axis is not null && core.Mouths.FirstOrDefault(m => m.Arm == a.Arm) is { } mouth
-                            && NodeShortOfMouth(result.Network, a, mouth.Station) is int node && byAnyNode.TryGetValue(node, out var q) && q != p
+                            && NodeShortOfMouth(result, a, mouth.Station) is int node && byAnyNode.TryGetValue(node, out var q) && q != p
                             && p.Merged?.Ring is null && q.Merged?.Ring is null)
                             pairs.Add((p, q));
             if (pairs.Count == 0) break;

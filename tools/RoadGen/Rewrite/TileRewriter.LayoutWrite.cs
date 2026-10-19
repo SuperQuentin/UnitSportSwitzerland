@@ -100,15 +100,17 @@ public static partial class TileRewriter
                 no = jp.Arms.Any(a => a.Internal) ? "a check failed next to a junction under 30 m" : "a check failed";
             // (a path meeting a roundabout's node is its crossing's: no arm of it, #854)
             else if ((jp.Merged ?? junctions.GetValueOrDefault(jp.Node)) is not { } j
-                || (j.Ring is null ? j.Arms.Count : j.Arms.Count(x => InfoOf(result.Network.Links[x.LinkId]) is { } i && Junctions.PriorityPlanner.IsCarRoad(i.Class))) != jp.Arms.Count)
+                || (j.Ring is null ? Directions(j.Arms.Where(x => !Degenerate(result.Network.Links[x.LinkId])).Select(x => x.OutwardHeading))
+                    : j.Arms.Count(x => InfoOf(result.Network.Links[x.LinkId]) is { } i && Junctions.PriorityPlanner.IsCarRoad(i.Class)))
+                    != (j.Ring is null ? Directions(jp.Arms.Select(x => x.Heading)) : jp.Arms.Count))
                 no = "a path or track joins";
             else if (jp.Arms.Any(a => a.Axis is null || !core.Mouths.Any(m => m.Arm == a.Arm))) no = "an arm without a mouth";
-            else if (jp.Arms.Any(a => RoadJoinsShortOfMouth(result.Network, a, core.Mouths.First(m => m.Arm == a.Arm).Station)))
+            else if (jp.Arms.Any(a => RoadJoinsShortOfMouth(result, a, core.Mouths.First(m => m.Arm == a.Arm).Station)))
             {
                 no = "a road joins short of a mouth";
                 if (Environment.GetEnvironmentVariable("JOINDBG") is not null && !jp.Beyond)
                     foreach (var a in jp.Arms)
-                        if (NodeShortOfMouth(result.Network, a, core.Mouths.First(m => m.Arm == a.Arm).Station) is int node)
+                        if (NodeShortOfMouth(result, a, core.Mouths.First(m => m.Arm == a.Arm).Station) is int node)
                         {
                             var n = result.Network.Nodes[node];
                             var kinds = n.Approaches.Select(x => InfoOf(result.Network.Links[x.LinkId]) is { } i ? (Junctions.PriorityPlanner.IsCarRoad(i.Class) ? "car" : i.Class.ToString()) : "?");
@@ -168,18 +170,22 @@ public static partial class TileRewriter
     /// <see cref="JoinMargin"/> past the mouth where anything else meets it (a road dividing, a link, a track). The junction spans
     /// several nodes: the old layout keeps it until phase 5 plans such cores whole.
     /// </summary>
-    private static bool RoadJoinsShortOfMouth(RoadNetwork net, ArmPlan a, double mouth) => NodeShortOfMouth(net, a, mouth) is not null;
+    private static bool RoadJoinsShortOfMouth(RoadGenResult result, ArmPlan a, double mouth) => NodeShortOfMouth(result, a, mouth) is not null;
 
     /// <summary>The node <see cref="RoadJoinsShortOfMouth"/> finds: the first along the arm's street where anything else joins.</summary>
-    private static int? NodeShortOfMouth(RoadNetwork net, ArmPlan a, double mouth)
+    private static int? NodeShortOfMouth(RoadGenResult result, ArmPlan a, double mouth)
     {
+        var net = result.Network;
         var l0 = net.Links[a.LinkId];
-        var nodes = new List<int> { a.AtEnd ? l0.StartNode : l0.EndNode };
-        foreach (var (link, atEnd) in a.StreetOn) { var l = net.Links[link]; nodes.Add(atEnd ? l.StartNode : l.EndNode); }
-        foreach (int node in nodes)
+        var nodes = new List<(int Link, int Node)> { (a.LinkId, a.AtEnd ? l0.StartNode : l0.EndNode) };
+        foreach (var (link, atEnd) in a.StreetOn) { var l = net.Links[link]; nodes.Add((link, atEnd ? l.StartNode : l.EndNode)); }
+        // (a street looping back to the junction's own node is no road joining it)
+        int self = a.AtEnd ? l0.EndNode : l0.StartNode;
+        foreach (var (link, node) in nodes)
         {
             if (node < 0 || node >= net.Nodes.Count) break;
-            if (a.Axis!.StationPast(net.Nodes[node].Position) > mouth + JoinMargin) break;
+            if (node == self) continue;
+            if (a.Axis!.StationPast(net.Nodes[node].Position) > mouth + JoinMarginAt(result, link, node)) break;
             if (net.Nodes[node].Degree > 2) return node;
         }
         return null;
@@ -198,8 +204,41 @@ public static partial class TileRewriter
         return Lanes(a.Mouth).Any(l => !got.Any(g => (l.From + l.To) * 0.5 > g.From + 0.05 && (l.From + l.To) * 0.5 < g.To - 0.05));
     }
 
+    /// <summary>A link from a node back to itself under a metre long (a stitch left on a tile's border): no arm.</summary>
+    private static bool Degenerate(RoadLink l) => l.StartNode == l.EndNode && PolylineLength(l.Centreline) < 1;
+
+    /// <summary>How many directions a junction's arms leave in (within 2 degrees one).</summary>
+    private static int Directions(IEnumerable<double> headings)
+    {
+        var kept = new List<double>();
+        foreach (double h in headings)
+            if (!kept.Any(k => Math.Abs(Angles.Normalize(h - k)) < 2 * Math.PI / 180)) kept.Add(h);
+        return kept.Count;
+    }
+
     /// <summary>A road joining an arm's street this far past its mouth (m, its crosswalk's reach) still joins the junction.</summary>
     private const double JoinMargin = 4.0;
+
+    /// <summary>A slip lane (TLM's Verbindung) is its own roadway: one leaving or joining this far past a mouth (m) is outside it (#854).</summary>
+    private const double SlipMargin = 1.0;
+
+    /// <summary>
+    /// The join margin at a node the street reaches along <paramref name="link"/>: where only slip lanes join it there,
+    /// <see cref="SlipMargin"/> or the node's own cap's trim on the street (its lanes stop there), else <see cref="JoinMargin"/>.
+    /// </summary>
+    private static double JoinMarginAt(RoadGenResult result, int link, int node)
+    {
+        var net = result.Network;
+        bool slip = net.Nodes[node].Approaches.All(x => InfoOf(net.Links[x.LinkId]) is { } i && (Junctions.PriorityPlanner.IsCarRoad(i.Class) || i.Class == RoadClass.Link))
+            && net.Nodes[node].Approaches.Count(x => InfoOf(net.Links[x.LinkId]) is { } i && Junctions.PriorityPlanner.IsCarRoad(i.Class)) <= 2;
+        if (!slip) return JoinMargin;
+        var caps = CapsOf.GetValue(result, r => r.Junctions.GroupBy(j => j.NodeId).ToDictionary(g => g.Key, g => g.First()));
+        double trim = caps.TryGetValue(node, out var cap) ? cap.Arms.Where(x => x.LinkId == link).Select(x => x.Trim).DefaultIfEmpty(0).Max() : 0;
+        return Math.Max(SlipMargin, trim + 0.5);
+    }
+
+    /// <summary>Today's caps by node, per result (<see cref="JoinMarginAt"/>).</summary>
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RoadGenResult, Dictionary<int, Junctions.Junction>> CapsOf = new();
 
     /// <summary>A tile's transitions whose segment it still holds (a check: any other is counted and left out, its piece drawn plain).</summary>
     private static List<RoadTransition> Placed(TileId id, List<RoadTransition>? transitions, List<RoadSegment> segments, LayoutWriteStats stats)
