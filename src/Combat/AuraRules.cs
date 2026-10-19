@@ -251,6 +251,22 @@ public static class AuraRules
     public static double StartAt(IReadOnlyList<AuraMove> plan, int index, double t0) =>
         index <= 0 ? t0 : CutAt(plan, index - 1, t0);
 
+    /// <summary>
+    /// Which move the schedule is in at <paramref name="now"/>: -1 before the first downbeat, the
+    /// last one held once it has run out (its cut not yet pressed).
+    /// </summary>
+    public static int MoveAt(IReadOnlyList<AuraMove> plan, double t0, double now)
+    {
+        if (plan.Count == 0 || now < t0) return -1;
+        double cut = t0;
+        for (int i = 0; i < plan.Count; i++)
+        {
+            cut += Def(plan[i]).Beats * BeatSeconds;
+            if (now < cut) return i;
+        }
+        return plan.Count - 1;
+    }
+
     /// <summary>The first bar line at least <paramref name="lead"/> after <paramref name="now"/>, on the shared clock.</summary>
     public static double NextBar(double now, double lead)
     {

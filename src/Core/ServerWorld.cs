@@ -39,6 +39,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private World.RaceNpcs? _npcs;
     private BattleRoyale.BrManager? _br;
     private Combat.FightManager? _fight;
+    private Combat.AuraManager? _aura;
     private InviteService? _invites;
     private Parties? _parties;
     private BattleRoyale.BrCrates? _brCrates;
@@ -234,6 +235,13 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _fight = Combat.FightManager.CreateServer(_chat, _players);
         AddChild(_fight);
         _chat.Fight = _fight;
+
+        // aura battles (#907): World/Aura, the server owns every match and grades every press
+        _aura = Combat.AuraManager.CreateServer(_chat, _players);
+        _aura.Fights = _fight;
+        _fight.Aura = _aura;
+        AddChild(_aura);
+        _chat.Aura = _aura;
 
         // Battle Royale (#177): World/BattleRoyale; everyone in a running match sees everyone else in it
         _brCrates = BattleRoyale.BrCrates.Create(this, origin, server: true);
@@ -512,6 +520,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _passengers?.PeerLeft(id);
         _br?.PeerLeft(id);
         _fight?.PeerLeft(id);
+        _aura?.PeerLeft(id);
         _invites?.PeerLeft(id);
         _parties?.PeerLeft(id);
         _cranes?.PeerLeft(id);

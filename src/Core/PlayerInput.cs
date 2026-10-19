@@ -200,6 +200,15 @@ public partial class PlayerInput : Node
     public const string FightKick = "fight_kick";
     /// <summary>Held: the guard (high standing, low crouching).</summary>
     public const string FightBlock = "fight_block";
+    /// <summary>
+    /// In an aura battle only (#907): its own context like the fight, the walk and the items are off.
+    /// Next cuts to the following move of the combo being performed (timed on the downbeat); the
+    /// planner's lock in, take back the last move, and suggest.
+    /// </summary>
+    public const string AuraNext = "aura_next";
+    public const string AuraLock = "aura_lock";
+    public const string AuraRemove = "aura_remove";
+    public const string AuraSuggest = "aura_suggest";
     /// <summary>Drops one of the item in hand on the ground; with Ctrl, the whole stack (#206).</summary>
     public const string DropItem = "drop_item";
     public const string NextItem = "next_item";
@@ -683,6 +692,13 @@ public partial class PlayerInput : Node
         Bind(FightPunch, Mouse(MouseButton.Left), Keys(Key.J), Button(JoyButton.X), Button(JoyButton.RightShoulder));
         Bind(FightKick, Mouse(MouseButton.Right), Keys(Key.K), Button(JoyButton.Y), Button(JoyButton.LeftShoulder));
         Bind(FightBlock, Keys(Key.Shift, Key.L), Button(JoyButton.B));
+        // an aura battle (#907): its own context too, the walk locked and the items off, so Next is
+        // the jump's Space / A, or the left click, or RB (which VR's right trigger sends on foot); the
+        // planner's lock in, take back and suggest are F / Y, Backspace / X, G / R3 (VR: the same buttons)
+        Bind(AuraNext, Mouse(MouseButton.Left), Keys(Key.Space), Button(JoyButton.A), Button(JoyButton.RightShoulder));
+        Bind(AuraLock, Keys(Key.F), Button(JoyButton.Y));
+        Bind(AuraRemove, Keys(Key.Backspace), Button(JoyButton.X));
+        Bind(AuraSuggest, Keys(Key.G), Button(JoyButton.RightStick));
         // Minecraft's key: Q only means "down" in the fly camera and in the air, never on foot
         Bind(DropItem, Keys(Key.Q));
         // pad X is tuck/sprint only when mounted, so on foot it is free, as RB/LB are for items

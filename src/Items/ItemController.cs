@@ -196,7 +196,7 @@ public partial class ItemController : Node
         {
             var p = CurrentPlayer();
             // downed (#475): no items until a team-mate picks you up; in a fist fight (#495) the hands are fists
-            return p is { IsViewing: true, RidingAlong: false, IsSwimming: false, Downed: false, Fighting: false } && p.Ride == RideKind.OnFoot ? p : null;
+            return p is { IsViewing: true, RidingAlong: false, IsSwimming: false, Downed: false, InDuel: false } && p.Ride == RideKind.OnFoot ? p : null;
         }
     }
 

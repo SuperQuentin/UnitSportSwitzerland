@@ -44,6 +44,20 @@ public class AuraRulesTests
     private static AuraMove[] All2(AuraMove m, int n) => Enumerable.Repeat(m, n).ToArray();
 
     [Fact]
+    public void The_schedule_says_which_move_is_on()
+    {
+        // stare down 4 beats, slow walk 4, Siuuu 4: 2 s each at 120 BPM, from t0 = 10
+        Assert.Equal(-1, AuraRules.MoveAt(Opening, 10, 9.9));
+        Assert.Equal(0, AuraRules.MoveAt(Opening, 10, 10));
+        Assert.Equal(1, AuraRules.MoveAt(Opening, 10, 12.0));
+        Assert.Equal(2, AuraRules.MoveAt(Opening, 10, 15.9));
+        Assert.Equal(2, AuraRules.MoveAt(Opening, 10, 30));
+        Assert.Equal(12, AuraRules.CutAt(Opening, 0, 10), 6);
+        Assert.Equal(12, AuraRules.StartAt(Opening, 1, 10), 6);
+        Assert.Equal(8, AuraRules.NextBar(5.5, 2), 6);
+    }
+
+    [Fact]
     public void A_short_plan_is_padded_and_a_bad_one_refused()
     {
         Assert.Equal(All2(AuraMove.StandTall, 3), AuraRules.Accept(null));
