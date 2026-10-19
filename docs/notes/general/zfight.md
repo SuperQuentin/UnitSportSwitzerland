@@ -15,6 +15,12 @@ Flickering faces have two causes, and each test catches what the other cannot.
   Glass (blended / alpha materials) hides nothing. Faces inside a closed body never flicker.
 - `src/Core/ZFightScan.cs` reads the triangles of every visible `MeshInstance3D` /
   `MultiMeshInstance3D` under a node (headless works: the dummy renderer keeps the arrays).
+  **But not a MultiMesh's instance transforms**: headless, every instance reads as identity, so a
+  model's instanced parts stack at its origin and fight each other there (a traffic light's
+  `SignalLamps/@MultiMeshInstance3D... / ...` pairs, 0 mm apart near (0, 0, 0): ~5100 of its
+  ~6400 cm²). The baseline is headless, so those lines are in it; windowed, the same lights score
+  ~53 000 cm², mostly the lenses' bloom quads over the housings. The `NEW` / `WORSE` verdict is
+  printed after a model's last place line, so it reads as if it belonged to that pair.
 - **`--zfightcheck`** (quick tier, ~75 s): every model viewer entry against
   `tests/zfight-baseline.txt` (cm² per model). A model over its line, or a new model that fights,
   fails. `--zfightcheck update` rewrites the baseline: do it after fixing faces, and commit it.

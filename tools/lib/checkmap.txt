@@ -657,6 +657,8 @@ src/Items/PlacedObjects  quick  --collidecheck --world flat --targets placed/
 src/Items/PalletNode     quick  --collidecheck --world flat --targets props/
 src/Crafting/StationVisuals quick --collidecheck --world flat --targets placed/
 src/Interiors/DoorLeaf   quick  --collidecheck --world flat --targets doors/
+src/Terrain/BuildingMeshBuilder quick --collidecheck --world flat --targets castles/
+src/Interiors/Castles   quick  --collidecheck --world flat --targets castles/
 
 # the playtest suite (#751): scenarios well-formed, MCP over HTTP, the ledger; then every flat-course scenario set up
 src/Playtest/            quick  --playtestcheck
