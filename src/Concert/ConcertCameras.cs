@@ -331,7 +331,12 @@ public partial class ConcertPerformers : Node3D
     }
 
     /// <summary>One frame: each artist's move, on the beat; still between songs.</summary>
-    public void Step()
+    /// <summary>
+    /// One frame: each artist's move, on the beat; still between songs. Under a fast strobe
+    /// (<paramref name="strobeHz"/>, on the rig's clock <paramref name="strobeT"/>) each flash shows a
+    /// new pose, a move's hit picked at random, held until the next: the freeze-frame dance of a strobe.
+    /// </summary>
+    public void Step(float strobeHz = 0f, float strobeT = 0f)
     {
         float beat = _desk.Beat, phase = beat - MathF.Floor(beat);
         int bar = (int)MathF.Floor(beat / 4f);
@@ -340,6 +345,15 @@ public partial class ConcertPerformers : Node3D
         int moves = HumanMeshBuilder.MoveCount(_style);
         // the frame within the move's two bars, snapped
         int frame = (int)MathF.Floor(((bar & 1) * 4f + barPhase * 4f) * PerBeat) % (8 * PerBeat);
+        uint flashHash = 0;
+        if (dancing && strobeHz > 0f)
+        {
+            // a flash's pose: one of each move's eight hits (on the beats), so few poses to build
+            flashHash = (uint)(int)MathF.Floor(strobeT * strobeHz) * 2654435761u;
+            flashHash ^= flashHash >> 15;
+            frame = (int)(flashHash % 8u) * PerBeat;
+            bar = (int)(flashHash >> 8);
+        }
         float fBeats = (frame + 0.5f) / PerBeat;
         int fBar = (int)(fBeats / 4f);
         float fBarPhase = fBeats / 4f - fBar, fPhase = fBeats - MathF.Floor(fBeats);
@@ -348,6 +362,7 @@ public partial class ConcertPerformers : Node3D
         {
             var (node, palette, offset) = _people[p];
             int move = dancing ? ((bar / 2) + offset) % moves : -1;
+            if (flashHash != 0) move = (int)((flashHash >> 4) + (uint)offset * 7u) % moves;
             long key = ((long)p << 40) | ((long)(move + 1) << 20) | (long)(dancing ? frame : 0);
             if (!_poses.TryGetValue(key, out var mesh))
             {

@@ -137,6 +137,13 @@
   with the playhead, and the desk's section, bar, phrase, pump and what fires. Explainer of the
   analysis: CdAnalysis v2 in `docs/notes/audio/cd-beat.md`.
 
+- **Strobe bursts** (`LightDesk.StrobeBursts`, `Strobing`): the last quarter of a build, 0.8 s after a
+  drop, one bar in four at a peak. The strobes at 12 Hz (rate 11/24), the lit heads' shutters with them
+  (83, 12.07 Hz). The rig (`_strobeHz` from the strobes' channels) sinks the LED walls toward black between
+  flashes and burns them white on each, the IMAG feeds too; the artists jump to a new pose on each flash
+  (one of a move's eight hits, `ConcertPerformers.Step(strobeHz, t)`), the crowd's beat freezes between
+  flashes. A peak's own strobes run slower (rate 0.15) outside a burst.
+
 ## The PA (`ConcertPa`, `shaders/concert/pa.gdshader`)
 
 - `StagePlan.Pa`: line arrays flown off the wings (a J of ~0.55 m boxes, about 25° over the hang),
@@ -147,7 +154,18 @@
 - Not a MultiMesh on purpose: headless, the z-fight scan reads every instance at the origin, and 180
   stacked instances made `--zfightcheck` take over 10 minutes.
 
-## Performance (measured Oct 2026, Geneva, concert 13, from the floor)
+## Performance (measured Oct 2026, Geneva, concert 13)
+
+- On the deck, without effects the concert costs little over the bare world (13 against 12.3 ms); what
+  spiked it was fill: the effects' particles (CO2, flames, gerbs, confetti: 24..37 fps) and the low fog
+  (5..8 m billboards facing a camera standing in them). Now fewer, bigger particles, confetti opaque,
+  the fog a low sheet turning about Y only; beams draw their cones' far side only (half the fill), three
+  real lamps instead of six. The stadium has an occluder (`Terrain/Stadiums/StadiumOccluder`, hung by
+  `ConcertDirector` on every stadium's tile, show or not): the facade ring and the roof's solid part,
+  so the city behind the stands is culled. Absolute times vary a lot with what else the machine runs:
+  compare within one run (`--shot-queue` with `/concert host 13`, `/concert cue <section|fx>` lines).
+
+### From the floor
 
 - Before: 14 ms a frame against 8.4 ms with no concert. The IMAG SubViewport rendered the whole world
   again out to 3 km (21.7 M primitives against 10.9 M), and the artists' meshes were rebuilt every frame

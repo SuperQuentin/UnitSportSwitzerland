@@ -145,7 +145,7 @@ public partial class ConcertBeatDebug : CanvasLayer
             : FormattableString.Invariant($"{song.Title}  {song.Bpm:F1} bpm  {(int)t / 60}:{(int)t % 60:D2} / {(int)song.Duration / 60}:{(int)song.Duration % 60:D2}  analysis v{song.Analysis?.Version ?? 0}");
         int beatN = (int)MathF.Floor(d.Beat);
         _text[1] = FormattableString.Invariant(
-            $"section {d.Section}{(d.HeldSection != null ? " (held)" : "")}  bar {d.SectionBar}{(d.LastSection ? " (last)" : "")}  beat {((beatN % 4) + 4) % 4 + 1}/4  phrase {d.PhraseNow}  pump {d.PumpNow:F2}");
+            $"section {d.Section}{(d.HeldSection != null ? " (held)" : "")}  bar {d.SectionBar}{(d.LastSection ? " (last)" : "")}  beat {((beatN % 4) + 4) % 4 + 1}/4  phrase {d.PhraseNow}  pump {d.PumpNow:F2}{(d.Strobing ? "  STROBE" : "")}");
         _text[2] = m is { } mm
             ? FormattableString.Invariant($"build {(mm.Build > 0 ? FormattableString.Invariant($"{mm.Build * 100:F0}%") : "-")}  since drop {(float.IsInfinity(mm.SinceDrop) ? "-" : FormattableString.Invariant($"{mm.SinceDrop:F1} s"))}  burst {mm.Burst:F2}{(mm.HasBands ? "" : "  (no bands: an older analysis)")}")
             : "no music: made-up songs, the beat grid only";

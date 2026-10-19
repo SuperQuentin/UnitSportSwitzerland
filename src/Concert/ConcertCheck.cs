@@ -132,6 +132,18 @@ public static class ConcertCheck
         Expect((!hasBlinders || blind1 > blind0 + 0.5f) && (!hasCo2 || co2 > 0.5f),
             $"the drop hits the blinders ({blind0:F2} -> {blind1:F2}) and fires the CO2 ({co2:F2})");
         Expect(!hasStrobes || snare > strobe0 + 0.5f, $"a snare hit pops the strobes ({strobe0:F2} -> {snare:F2})");
+
+        // a strobe burst at the end of a build: the strobes at 12 Hz, the heads' shutters strobing with them
+        desk.Music = groove with { Build = 0.9f };
+        desk.Write(100);
+        float rate = Mean(RigGroup.Strobes, f => pl.Patch.Get01(f, Attr.Rate));
+        var beam = Of(RigGroup.MidTruss).FirstOrDefault(f => f.Type.Offset(Attr.Shutter) >= 0 && pl.Patch.Get01(f, Attr.Dimmer) > 0.05f);
+        int shutter = beam != null ? pl.Patch.Get(beam, beam.Type.Offset(Attr.Shutter)) : -1;
+        Expect(desk.Strobing && (!hasStrobes || MathF.Abs(1f + 24f * rate - 12f) < 0.3f) && (beam == null || shutter is > 16 and < 132),
+            $"a build's last quarter strobes: 12 Hz ({1f + 24f * rate:F1} Hz), the heads' shutters too ({shutter})");
+        desk.Music = groove;
+        desk.Write(100);
+        Expect(!desk.Strobing, $"and a plain groove does not");
         desk.Music = null;
 
         GD.Print(failures == 0 ? "[concertcheck] RESULT: ok" : $"[concertcheck] RESULT: FAILED ({failures})");

@@ -77,3 +77,7 @@ sweep), `StadiumCheck` (`--stadiumcheck`). Plan and later phases (stage, lights,
 - Model viewer: `--models --modelsonly stadium`. In the world:
   `--chunks <main>/terrain_chunks --at 2498751,1114890 --origin 2498751,1114890 --shot-queue <file>`
   (world 0,0 is then the centre spot, x east, z south).
+- **Occluder** (`StadiumOccluder.Make`, #885): the facade as a ring of walls 0.8 m inside it (corners rounder
+  than the real ones) up to the roof's underside, and the roof's solid part up to its translucent ring;
+  both windings. `ConcertDirector` hangs it on the owning tile in the stadium frame. Occlusion culling is on
+  with the building cells (`ChunkManager.ApplyOcclusion`).

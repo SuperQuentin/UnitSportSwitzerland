@@ -86,24 +86,40 @@ public partial class ConcertDirector : Node
             if (StadiumCatalog.Owner(StadiumCatalog.All[i]) == id)
             {
                 _tiles[i] = (id, node);
+                // the bowl hides the city round it (occlusion culling), show or no show
+                if (node.GetNodeOrNull(OccluderName) == null && Frame(id, node, StadiumCatalog.All[i]) is { } frame)
+                {
+                    var occ = StadiumOccluder.Make(StadiumCatalog.All[i]);
+                    occ.Name = OccluderName;
+                    occ.Transform = frame;
+                    node.AddChild(occ);
+                }
                 // a rebuild of the tile (a detail change) furnishes it again: one show is enough
                 if (node.GetNodeOrNull(NodeName) == null) Hang(id, node, i);
             }
     }
 
-    private void Hang(TileId id, ChunkNode node, int index)
+    /// <summary>The stadium frame on the tile's node: the centre spot on the ground, turned to the pitch's azimuth (u, y, v).</summary>
+    private Transform3D? Frame(TileId id, ChunkNode node, StadiumSpec s)
     {
-        var s = StadiumCatalog.All[index];
-        if (EventFor(s, index) is not { } e) return;
         var local = new Vector3((float)(s.E - id.MinE), 0, (float)(id.MaxN - s.N));
         var world = node.ToGlobal(local);
-        if (!_chunks.TryGetSurface(world, out float ground)) return;
+        if (!_chunks.TryGetSurface(world, out float ground)) return null;
         local.Y = node.ToLocal(world with { Y = ground }).Y;
         float a = Mathf.DegToRad(s.AzimuthDeg);
         var basis = new Basis(new Vector3(MathF.Cos(a), 0, MathF.Sin(a)), Vector3.Up, new Vector3(-MathF.Sin(a), 0, MathF.Cos(a)));
+        return new Transform3D(basis, local);
+    }
+
+    private const string OccluderName = "StadiumOccluder";
+
+    private void Hang(TileId id, ChunkNode node, int index)
+    {
+        var s = StadiumCatalog.All[index];
+        if (EventFor(s, index) is not { } e || Frame(id, node, s) is not { } frame) return;
         // a hosted set plays whatever the hour: its operator runs it
         bool hosted = ConcertService.Instance?.SeedFor(index) != null;
-        var rig = new ConcertRig(e) { Name = NodeName, Transform = new Transform3D(basis, local), ForceLive = hosted || ForcedSeed is >= 0 };
+        var rig = new ConcertRig(e) { Name = NodeName, Transform = frame, ForceLive = hosted || ForcedSeed is >= 0 };
         node.AddChild(rig);
         ConcertService.Instance?.ApplyCues(index, rig);
     }

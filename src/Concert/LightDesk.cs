@@ -250,12 +250,13 @@ public sealed class LightDesk
                 Ballyhoo(RigGroup.MidTruss, beatN, _pal[1]);
                 Ballyhoo(RigGroup.Floor, beatN + 7, Colors.White);
                 Blinders((beatN & 3) == 0 ? kick : 0f);
-                Strobes(1f, rate: 0.6f);
+                Strobes(0.7f, rate: 0.15f);
                 Pixels(_peakPixels);
                 Screens(clip: 4, speed: _e.Bpm / 60f, Colors.White, _pal[1], 1f);
                 break;
         }
         if (bands is { } m && Section is not (ShowSection.Blackout or ShowSection.WalkIn)) Accents(m, beat);
+        StrobeBursts();
         Effects(beat);
     }
 
@@ -282,6 +283,30 @@ public sealed class LightDesk
             Strobes(m.Snare, rate: 1f);
         if (m.SinceDrop < 2.5f)
             Blinders(MathF.Exp(-m.SinceDrop * 1.5f));
+    }
+
+    /// <summary>Whether the rig is in a strobe burst now (the debug window shows it).</summary>
+    public bool Strobing { get; private set; }
+
+    /// <summary>A strobe burst's rate: 12 flashes a second (1 + 24 x rate), the heads' shutters as close as their scale allows.</summary>
+    private const float BurstRate = 11f / 24f;
+    private const byte BurstShutter = 83;
+
+    /// <summary>
+    /// Strobe bursts, where the music pushes hardest: the last quarter of a build, the drop's first
+    /// moments, one bar in four at a peak. The strobes flash at 12 Hz and the moving heads' shutters
+    /// with them; the screens sink and flash (the rig), the dancers jump pose on each flash.
+    /// </summary>
+    private void StrobeBursts()
+    {
+        bool live = Section is not (ShowSection.Blackout or ShowSection.WalkIn);
+        Strobing = live && (Music is { Build: > 0.75f } || Music is { SinceDrop: < 0.8f } || Section == ShowSection.Peak && SectionBar % 4 == 3);
+        if (!Strobing) return;
+        Strobes(1f, rate: BurstRate);
+        var p = _plan.Patch;
+        foreach (var grp in new[] { RigGroup.FrontTruss, RigGroup.MidTruss, RigGroup.Floor })
+            foreach (var f in G(grp))
+                if (f.Type.Offset(Attr.Shutter) is int o and >= 0 && p.Get01(f, Attr.Dimmer) > 0.05f) p.Set(f, o, BurstShutter);
     }
 
     /// <summary>

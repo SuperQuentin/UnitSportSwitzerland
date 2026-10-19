@@ -120,6 +120,15 @@ public sealed class StagePlan
     private void Box(float x0, float x1, float y0, float y1, float z0, float z1, Color c, bool solid = true) =>
         Boxes.Add(new StageBox(At((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2), new Vector3(x1 - x0, y1 - y0, z1 - z0), Yaw, c, solid));
 
+    private const float SideScreenW = 11f;
+
+    /// <summary>How far out a side screen stands: beside the wings, but never into the stands (the run-off is what is left).</summary>
+    private static float SideScreenX(ConcertEvent e)
+    {
+        float room = (e.Layout is StageLayout.SideEast or StageLayout.SideWest ? e.Stadium.FrontHalfV : e.Stadium.FrontHalfU) - 6.5f;
+        return Math.Min(e.Width / 2 + 10f, room);
+    }
+
     /// <summary>A PA cabinet in the stage frame, facing (<paramref name="fx"/>, <paramref name="fz"/>).</summary>
     private void Cab(float x0, float x1, float y0, float y1, float z0, float z1, float fx, float fz, bool sub)
     {
@@ -174,11 +183,18 @@ public sealed class StagePlan
         {
             float x0 = side * hw, x1 = side * (hw + 8f);
             Box(Math.Min(x0, x1), Math.Max(x0, x1), 0, r - 2f, -d, -d + 1f, Scrim);
-            // the flown PA: a line array hung off the wing, its subs stacked under the deck's edge
-            float px = side * (hw + 3f);
+            // the flown PA: a line array hung off the wing, its subs stacked under the deck's edge; with
+            // side screens, beside the screen's inner edge (or past its outer one), never through it
+            float hang = hw + 3f;
+            if (e.HasSideScreens)
+            {
+                float inner = SideScreenX(e) - SideScreenW / 2 - 0.3f;
+                hang = inner - 1.2f >= hw + 1.2f ? Math.Min(hang, inner - 1.2f) : SideScreenX(e) + SideScreenW / 2 + 1.5f;
+            }
+            float px = side * hang, sub = side * (hw + 3f);
             Cab(px - 0.6f, px + 0.6f, r - 12f, r - 1.5f, -1.7f, -1.05f, 0, 1, sub: false);
             PaHangs.Add(At(px, r - 7f, -1.3f));
-            Cab(px - 1.2f, px + 1.2f, 0.012f, 1.2f, -2f, 0f, 0, 1, sub: true);
+            Cab(sub - 1.2f, sub + 1.2f, 0.012f, 1.2f, -2f, 0f, 0, 1, sub: true);
         }
 
         // video
@@ -193,8 +209,7 @@ public sealed class StagePlan
             foreach (float side in new[] { -1f, 1f })
             {
                 // beside the wings, but never into the stands: the run-off is what is left
-                float room = (e.Layout is StageLayout.SideEast or StageLayout.SideWest ? e.Stadium.FrontHalfV : e.Stadium.FrontHalfU) - 6.5f;
-                float sx = side * Math.Min(hw + 10f, room), sw = 11f, sh = 6.5f, bottom = r - 13f;
+                float sx = side * SideScreenX(e), sw = SideScreenW, sh = 6.5f, bottom = r - 13f;
                 Box(sx - sw / 2 - 0.3f, sx + sw / 2 + 0.3f, bottom - 0.3f, bottom + sh + 0.3f, -1.2f, -0.9f, Frame, solid: false);
                 // its legs behind the ground subs, never through them
                 Tower(sx - sw / 2 - 0.6f, -2.6f, bottom + sh);
