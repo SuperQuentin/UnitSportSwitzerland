@@ -530,6 +530,8 @@ src/Vehicles/VehicleState quick --holdcheck --world fixture --traffic 0
 src/Vehicles/CargoFit    quick  --holdcheck --world fixture --traffic 0
 src/Avatar/VehicleDeck   quick  --holdcheck --world fixture --traffic 0
 src/Player/Pigeon        net    tools/pigeonnetcheck.sh
+src/Player/Ufo           net    tools/ufonetcheck.sh
+src/Player/TractorBeams  net    tools/ufonetcheck.sh
 src/Player/FootPlayer.Pi net    tools/pigeonnetcheck.sh
 src/Birds/BirdNet        net    tools/pigeonnetcheck.sh
 src/Birds/PigeonNet      net    tools/pigeonnetcheck.sh

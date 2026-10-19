@@ -45,7 +45,7 @@ public static class UfoMeshBuilder
     /// <summary>The foot of the open ramp, authored: where one walks out and gets in.</summary>
     public static Vector3 RampFoot => new(0, 0, RampHingeZ + RampLength * Mathf.Cos(RampOpenAngle) + 0.6f);
 
-    private static readonly Color Silver = new(0.74f, 0.77f, 0.82f);
+    private static readonly Color Silver = new(0.66f, 0.70f, 0.77f);
     private static readonly Color Steel = new(0.46f, 0.49f, 0.55f);
     private static readonly Color Dark = new(0.22f, 0.24f, 0.29f);
     private static readonly Color Seat = new(0.35f, 0.12f, 0.45f);
@@ -123,6 +123,9 @@ public static class UfoMeshBuilder
             s.Tube(new Vector3(x - 0.28f, DomeBase + 1.40f, -0.22f), new Vector3(x + 0.28f, DomeBase + 1.40f, -0.22f), 0.035f, Dark, 6);
         }
         s.Tube(new Vector3(-0.55f, DomeBase + 1.62f, -0.22f), new Vector3(0.55f, DomeBase + 1.62f, -0.22f), 0.03f, Steel, 5);
+        // panel seams round the upper shell: lines the cel light catches, so it reads as metal plates
+        foreach (var (r, y) in new[] { (3.62f, 3.285f), (2.45f, 3.555f) })
+            s.Ring(new Vector3(0, y, 0), Vector3.Up, r - 0.05f, r + 0.05f, 0.05f, Steel.Darkened(0.35f), 40);
         // the dome glass: a hemisphere of panes (the glass surface)
         Dome(s, new Vector3(0, DomeBase + 0.04f, 0), DomeRadius, 16, 6, DomeGlass);
         // an antenna ball on the dome's crown
@@ -203,6 +206,23 @@ public static class UfoMeshBuilder
     {
         var s = new MeshScratch();
         s.Ring(new Vector3(0, Belly - 0.02f, 0), Vector3.Up, 2.0f, 3.1f, 0.04f, Colors.White, 32);
+        return s.Build();
+    }
+
+    /// <summary>The portholes round the upper shell, lit from inside: one mesh, unshaded.</summary>
+    [Core.Showcase("Parts", "UFO portholes")]
+    public static ArrayMesh Portholes()
+    {
+        var s = new MeshScratch();
+        // on the slope between the rim's crown (4.3 m, 3.08) and the shell (3.0 m, 3.45), facing out and up
+        float slope = Mathf.Atan2(3.45f - 3.08f, 4.3f - 3.0f);
+        for (int i = 0; i < 12; i++)
+        {
+            float a = Mathf.Tau * (i + 0.5f) / 12;
+            float r = 3.95f, y = 3.08f + (4.3f - r) / 1.3f * 0.37f + 0.02f;
+            var basis = new Basis(Vector3.Up, a) * new Basis(Vector3.Right, -(Mathf.Pi / 2 - slope));
+            s.Box(new Vector3(Mathf.Sin(a) * r, y, Mathf.Cos(a) * r), new Vector3(0.38f, 0.38f, 0.05f), Colors.White, basis);
+        }
         return s.Build();
     }
 
