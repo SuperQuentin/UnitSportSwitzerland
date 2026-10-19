@@ -136,4 +136,6 @@ public sealed class JunctionCore
     public int MouthsAtReach { get; set; }
     /// <summary>The arms whose mouth was held at half their street (another junction at its far end): there the two cores would overlap.</summary>
     public HashSet<int> ArmsAtReach { get; } = new();
+    /// <summary>How far out each arm's mouth would go unheld (its turns and kerbs, before its reach held it; #854).</summary>
+    public Dictionary<int, double> Needs { get; } = new();
 }

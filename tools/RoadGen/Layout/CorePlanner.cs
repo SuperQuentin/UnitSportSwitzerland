@@ -103,6 +103,7 @@ public static class CorePlanner
         // shorter street joins two nodes of one junction: phase 5's multi-node cores)
         double Most(int k) => Math.Min(MostMouth, arms[k].Reach);
         var held = new bool[n];
+        var needs = new double[n];
         for (int round = 0; round < 8; round++)
         {
             frames = Frames(arms, m);
@@ -131,6 +132,7 @@ public static class CorePlanner
             bool settled = true;
             for (int k = 0; k < n; k++)
             {
+                needs[k] = need[k];
                 held[k] = need[k] > Most(k) + 1e-6;
                 // on a curved arm the kerb's direction moves with the mouth: past the first rounds a mouth only moves out (settles)
                 double at = Math.Min(round < 2 ? need[k] : Math.Max(m[k], need[k]), Math.Max(0.5, Most(k)));
@@ -139,6 +141,7 @@ public static class CorePlanner
             }
             if (settled) break;
         }
+        for (int k = 0; k < n; k++) core.Needs[arms[k].Arm] = needs[k];
         core.MouthsAtMost = Enumerable.Range(0, n).Count(k => held[k] && Most(k) >= MostMouth);
         core.MouthsAtReach = Enumerable.Range(0, n).Count(k => held[k] && Most(k) < MostMouth);
         for (int k = 0; k < n; k++)

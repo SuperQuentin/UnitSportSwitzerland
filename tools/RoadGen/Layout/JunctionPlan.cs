@@ -88,7 +88,7 @@ public sealed class ArmPlan
     /// <summary>Where the arm lies round its core: <see cref="Ring"/>, else its heading.</summary>
     public double RingHeading => Ring ?? Heading;
     /// <summary>How far out its mouth may go: the street's length, half of it where a junction stands at its other end (m).</summary>
-    public double Reach { get; init; } = double.MaxValue;
+    public double Reach { get; set; } = double.MaxValue;
     /// <summary>A Major road (or bigger): a turn between two of them is laid for a truck (<see cref="CorePlanner.TruckInner"/>) where it fits untouched.</summary>
     public bool Major { get; init; }
     /// <summary>Its transition from the mouth out (step 4), shared with the arm at the street's far end where both are one; null where nothing changes.</summary>

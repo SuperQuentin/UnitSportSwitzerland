@@ -152,6 +152,7 @@ public static partial class TileRewriter
             foreach (var a in jp.Arms) byEnd[(a.LinkId, a.AtEnd)] = a;
         ArmPlan? Far(ArmPlan a) => byEnd.GetValueOrDefault((a.LinkId, !a.AtEnd));
         foreach (var a in plans.SelectMany(p => p.Arms)) a.Keep();
+        var planOf0 = plans.SelectMany(p => p.Arms.Select(a => (a, p))).ToDictionary(x => x.a, x => x.p);
         // the arms are planned twice: from today's trims, then from the cores' mouths: a transition has the street between its
         // mouth and the far junction's (lengths, room), mouth first
         for (int pass = 0; pass < 2; pass++)
@@ -238,6 +239,16 @@ public static partial class TileRewriter
                         if (pass == 0) a.MouthShift = m.Station - a.OldTrim;
                         else a.MouthDrift = m.Station - a.OldTrim - a.MouthShift;
                     }
+            // a street between two junctions held each mouth at half of it: where both need less than all of it, each may take what
+            // the other leaves (#854: one side's big turns beside the other's small T), the planning pass after laid with it
+            if (pass == 0)
+                foreach (var a in plans.SelectMany(p => p.Arms))
+                    if (a.Reach < 1e9 && Far(a) is { } f && f.Reach < 1e9 && planOf0.TryGetValue(a, out var pa) && planOf0.TryGetValue(f, out var pf)
+                        && pa.Core!.Needs.TryGetValue(a.Arm, out double na) && pf.Core!.Needs.TryGetValue(f.Arm, out double nf))
+                    {
+                        double street = a.Reach * 2;
+                        if (na + nf + StreetSpare <= street) a.Reach = Math.Max(a.Reach, street - nf - StreetSpare * 0.5);
+                    }
         }
         // 7. each arm's transition from its mouth out (step 4), one for both ends where the street between is too short for two;
         // the street runs on past nodes where only two car roads meet
@@ -292,6 +303,9 @@ public static partial class TileRewriter
             }
         return plans;
     }
+
+    /// <summary>Two mouths sharing a street keep at least this much of it between them (m).</summary>
+    private const double StreetSpare = 1;
 
     /// <summary>A street shorter than this between two junction nodes makes them one core (the plan: phase 5's multi-node cores).</summary>
     private const double InternalLink = 30;
