@@ -297,9 +297,9 @@ public static class InvasionScript
             Cast =
             [
                 new() { Who = Yvonne, Ride = RideKind.A320, At = Spot.Alt(2646200, 1151600, 3700), Heading = 145, Drive = Drive.Fly, Launch = 90, Flight = _ => Stick(lever: 0.8f) },
+                // a saucer keeping pace with her, off her left wing
+                Ufo(Spot.Alt(2646200, 1151600, 3730).Toward(55, 70).Toward(145, 60), 145, 90f),
             ],
-            // a saucer hanging in the sky ahead of her, left of her course
-            Craft = [new Craft(Spot.Alt(2646840, 1150949, 3760), 235)],
             Keys =
             [
                 new(0, Pt.On(0, -34f, 7f, 30f), Pt.On(0, 0f, -2f, -10f), 35),
