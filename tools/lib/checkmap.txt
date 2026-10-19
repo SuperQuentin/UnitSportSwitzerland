@@ -16,6 +16,8 @@
 
 src/Net/                 quick  --interestcheck
 src/Player/FootPlayer.cs  quick  --vrposecheck
+src/Player/FootPlayer.cs  quick  --slopewalk --at 2563500,1112500 --systems terrain,generated
+src/Player/SlopeWalkProbe quick  --slopewalk --at 2563500,1112500 --systems terrain,generated
 # #833: first person keeps your figure for the shadow and the mirrors
 src/Player/FootPlayer.cs  quick  --ownbodycheck --world flat
 src/Player/FootPlayer.Fight quick --ownbodycheck --world flat
