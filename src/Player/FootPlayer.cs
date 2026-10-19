@@ -1538,8 +1538,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         // an NPC keeps its colours whoever simulates it: they come from the client that asked for it
         int rider = RiderIndex();
-        // the figure a player chose, found by every ride drawn from this index (#394)
-        if (!Npc) Avatar.Appearance.Register(rider, AppearanceBits);
+        // the figure a player chose, found by every ride drawn from this index (#394); an NPC's only
+        // when it was given one (#880: an alien bot): unset, it keeps what a trailer actor registered
+        if (!Npc || AppearanceBits != 0) Avatar.Appearance.Register(rider, AppearanceBits);
 
         if (kind == RideKind.OnFoot)
         {
