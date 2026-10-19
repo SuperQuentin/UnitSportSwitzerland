@@ -116,6 +116,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Interiors.ShapedCheck.Requested, Interiors.ShapedCheck.Run),
         (() => Terrain.Construction.ConstructionCheck.Requested, Terrain.Construction.ConstructionCheck.Run),
         (() => Terrain.Stadiums.StadiumCheck.Requested, Terrain.Stadiums.StadiumCheck.Run),
+        (() => Concert.ConcertCheck.Requested, Concert.ConcertCheck.Run),
         (() => Items.InventoryCheck.Requested, Items.InventoryCheck.Run),
         (() => ChatCheck.Requested, () => ChatCheck.Run(this)),
         (() => StyleKit.ReportRequested, StyleKit.Report),
@@ -480,6 +481,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.BankSigns(_chunks));
         // the IKEA totem out by the road (#501), the same tile hook as the door signs
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.IkeaPylon(_chunks));
+        // tonight's concert in each stadium (#885)
+        AddChild(new Concert.ConcertDirector(_chunks));
 
         // the clock: sun, light colour, sky and night for every shader and the environment.
         // Off (--systems without sky): no clock, the style's fixed sun and the background colour.
@@ -710,6 +713,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.RadioPanelProbe.Requested) AddChild(new Items.RadioPanelProbe(() => LocalPlayer));
         if (Player.EmoteWheelProbe.Requested) AddChild(new Player.EmoteWheelProbe(() => LocalPlayer));
         if (Player.SitProbe.Requested) AddChild(new Player.SitProbe(() => LocalPlayer));
+        if (Concert.ConcertDeskProbe.Requested) AddChild(new Concert.ConcertDeskProbe(() => LocalPlayer));
         if (Phone.PhoneProbe.Requested) AddChild(new Phone.PhoneProbe(() => LocalPlayer));
         if (Items.SparkleProbe.Requested) AddChild(new Items.SparkleProbe(() => LocalPlayer));
         if (Items.RadioFocusProbe.Requested) AddChild(new Items.RadioFocusProbe(() => LocalPlayer));
@@ -811,6 +815,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Crafting.CampfireNetProbe.Role != null) AddChild(new Crafting.CampfireNetProbe(items));
         if (Player.SwimNetProbe.Role != null) AddChild(new Player.SwimNetProbe(items));
         if (Player.EmoteNetProbe.Role != null) AddChild(new Player.EmoteNetProbe(items));
+        if (Concert.ConcertNetProbe.Role != null) AddChild(new Concert.ConcertNetProbe(items));
         if (Phone.PhoneNetProbe.Role != null) AddChild(new Phone.PhoneNetProbe(items));
         if (Player.FightNetProbe.Role != null) AddChild(new Player.FightNetProbe(items));
         if (Net.InviteProbe.Role != null) AddChild(new Net.InviteProbe(items));
@@ -893,6 +898,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Items.PalletService.Create(this, origin, server: false).Source = () => _chunks?.Source;
         // cranes players work (#618): the server says who works which, offline this client does
         Terrain.Construction.CraneService.Create(this, server: false).Source = () => _chunks?.Source;
+        // concerts (#885): the hosted sets and their cues from the server, the operator's show input
+        Concert.ConcertService.Create(this, server: false).Local = () => LocalPlayer;
         // built structures (#274): the server owns them, offline this client does
         if (Systems.On(Systems.Build))
         {
@@ -925,6 +932,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         // the radio's panel: CDs to play, burn a new one, pick it up (opened from FootPlayer.TryInteract)
         _radioUi = Items.RadioUi.Create(() => LocalPlayer, items.Inventory);
+        // a concert's light desk (#885), opened at its front-of-house console
+        AddChild(Concert.ConcertDeskUi.Create(() => LocalPlayer, () => GetNodeOrNull<ChatManager>(ChatManager.NodeName)));
         _radioUi.Give = items.Give;
         AddChild(_radioUi);
         if (Items.CarCdCheck.Create(() => LocalPlayer, () => _players, items.Inventory, networked: false) is { } carCdShots) AddChild(carCdShots);
@@ -1846,8 +1855,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
             }
             else
             {
+                // a concert's light desk (#885), at its console
+                if (Concert.ConcertDeskUi.At(p) != null) yield return (PlayerInput.InteractMount, "Light desk");
                 // a stand's seat (#885), before the dance: E sits there first
-                if (p.Sitting) yield return (PlayerInput.InteractMount, "Stand up");
+                else if (p.Sitting) yield return (PlayerInput.InteractMount, "Stand up");
                 else if (p.SeatInReach() != null) yield return (PlayerInput.InteractMount, "Sit down");
                 else if (Interiors.InteriorManager.Instance?.OutsideDoorInReach(p) == null
                     && Items.RadioManager.Instance?.NearestMusic(p.GlobalPosition, Items.RadioManager.DanceRadius, heard: p.DanceId == 0) != null)

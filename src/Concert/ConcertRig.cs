@@ -1,0 +1,478 @@
+using Godot;
+using UnitSport.Core;
+using UnitSport.Styles;
+using UnitSport.Terrain;
+using UnitSport.Terrain.Stadiums;
+
+namespace UnitSport.Concert;
+
+/// <summary>
+/// A concert on stage (#885): the stage built from its <see cref="StagePlan"/> (one prop mesh, its
+/// collision), and the rig drawn every frame from the DMX the <see cref="LightDesk"/> writes, decoded
+/// fixture by fixture as the real heads would read it: 16-bit pan and tilt turn the head and its
+/// beam, dimmer and shutter (strobing) its intensity, RGBW, CMY or the colour wheel its colour, zoom
+/// its cone; blinders, strobes and pixel bars light their cells; each screen's media-server layer
+/// plays its clip on a grid of pixels. Beams are additive cones and lens flares (no volumetrics in
+/// the mobile renderer); the haze decides how much of a beam shows. A few real spot lights carry the
+/// rig's colour onto the stage and the people in front of it.
+///
+/// <para>
+/// The node sits at the stadium's centre spot, turned to its frame: children are in stadium
+/// coordinates (x = u across the pitch, z = v along it, y over the pitch). Nothing per frame
+/// allocates: the arrays are made once, the multimeshes are written in place.
+/// </para>
+/// </summary>
+public partial class ConcertRig : Node3D
+{
+    public ConcertEvent Event { get; }
+    /// <summary>Plays the show whatever the hour (<c>--concert</c>, the model viewer).</summary>
+    public bool ForceLive { get; set; }
+    /// <summary>Fills the stadium with its audience (not in the model viewer).</summary>
+    public bool WithCrowd { get; set; } = true;
+
+    /// <summary>The rigs on stage now, by stadium: what the show input and the relay drive.</summary>
+    public static readonly Dictionary<string, ConcertRig> Live = new();
+
+    public LightDesk Desk => _desk;
+    public StagePlan? Plan => _plan;
+    public DmxPatch Patch => _plan.Patch;
+
+    /// <summary>
+    /// Universes from outside (an operator's Art-Net or sACN, here or relayed by the server): while a
+    /// frame came in the last <see cref="ExternalHold"/> seconds they are the rig's DMX and the desk
+    /// rests; then the desk takes over again.
+    /// </summary>
+    private byte[][] _external = Array.Empty<byte[]>();
+    private double _externalAt = double.NegativeInfinity;
+    public const double ExternalHold = 2.0;
+    public bool ExternalLive => Core.RealClock.Now - _externalAt < ExternalHold;
+
+    /// <summary>One universe from outside, the rig's own numbering (0 = the first patched).</summary>
+    public void TakeUniverse(int universe, ReadOnlySpan<byte> data)
+    {
+        if (_plan == null || universe < 0 || universe >= _plan.Patch.Universes.Count) return;
+        if (_external.Length != _plan.Patch.Universes.Count)
+            _external = Enumerable.Range(0, _plan.Patch.Universes.Count).Select(_ => new byte[DmxPatch.Channels]).ToArray();
+        data[..Math.Min(data.Length, DmxPatch.Channels)].CopyTo(_external[universe]);
+        _externalAt = Core.RealClock.Now;
+    }
+
+    private StagePlan _plan = null!;
+    private LightDesk _desk = null!;
+    private Fixture[] _heads = Array.Empty<Fixture>(), _cells = Array.Empty<Fixture>(), _screens = Array.Empty<Fixture>();
+    private MultiMesh _bodies = null!, _beams = null!, _glows = null!;
+    private MultiMesh[] _pixels = Array.Empty<MultiMesh>();
+    private int _glowCount;
+    private readonly List<SpotLight3D> _lamps = new();
+    private OmniLight3D? _crowdLight;
+    private float _haze;
+    private ConcertCrowd? _crowd;
+    private ConcertSfx _sfx = null!;
+    private ConcertMusic _music = null!;
+    public ConcertMusic Music => _music;
+    private float _energy;
+
+    private const float BeamLength = 70f;
+
+    public ConcertRig(ConcertEvent e)
+    {
+        Event = e;
+        Name = "Concert";
+    }
+
+    public ConcertRig() : this(ConcertPlanner.Plan(StadiumCatalog.Geneva, 1)) { }
+
+    public override void _Ready()
+    {
+        _plan = new StagePlan(Event);
+        _desk = new LightDesk(_plan);
+        BuildStage();
+        var fx = _plan.Patch.Fixtures;
+        _heads = fx.Where(f => f.Type.Kind is FixtureKind.Spot or FixtureKind.Beam or FixtureKind.Wash).ToArray();
+        _cells = fx.Where(f => f.Type.Kind is FixtureKind.Blinder or FixtureKind.Strobe or FixtureKind.PixelBar).ToArray();
+        _screens = fx.Where(f => f.Type.Kind == FixtureKind.Screen).ToArray();
+        BuildRig();
+        // the music from the PA: the setlist on the shared clock, read for the desk
+        _music = new ConcertMusic(Event, _plan.PaHangs.ToArray());
+        AddChild(_music);
+        // pyro, CO2, confetti, fog: fixtures of the rig like the rest
+        _sfx = new ConcertSfx(_plan.Patch, Event);
+        AddChild(_sfx);
+        // the audience, during the show
+        if (WithCrowd)
+        {
+            _crowd = new ConcertCrowd(_plan) { Visible = false };
+            AddChild(_crowd);
+        }
+        Live[Event.Stadium.Name] = this;
+        GD.Print($"[concert] {Event}: {fx.Count} fixtures, {_plan.Patch.Universes.Count} universes ({_plan.Patch.ChannelsUsed} channels)");
+    }
+
+    // ---- the stage ----------------------------------------------------------------------------------
+
+    private void BuildStage()
+    {
+        var g = new StadiumBuilder.Geo(mesh: true, collision: true);
+        foreach (var b in _plan.Boxes)
+            g.Box(b.Centre, b.Size, new Basis(Vector3.Up, b.Yaw), b.Color.SrgbToLinear() with { A = 0f }, b.Solid);
+        foreach (var r in _plan.Ramps) g.Solid(r.A, r.B, r.C, r.D);
+        if (g.Data() is { } data)
+            AddChild(new MeshInstance3D { Name = "Stage", Mesh = ChunkNode.ToPropMesh(data, StyleKit.Material(MaterialRole.Prop)) });
+        if (g.Faces.Count > 0)
+        {
+            var body = new StaticBody3D { Name = "StageBody" };
+            body.AddChild(new CollisionShape3D { Shape = new ConcavePolygonShape3D { Data = g.Faces.ToArray(), BackfaceCollision = true } });
+            AddChild(body);
+        }
+    }
+
+    // ---- the rig ------------------------------------------------------------------------------------
+
+    private static StandardMaterial3D Additive(Texture2D? texture = null, bool billboard = false) => new()
+    {
+        ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+        VertexColorUseAsAlbedo = true,
+        Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+        BlendMode = BaseMaterial3D.BlendModeEnum.Add,
+        CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+        AlbedoTexture = texture,
+        BillboardMode = billboard ? BaseMaterial3D.BillboardModeEnum.Enabled : BaseMaterial3D.BillboardModeEnum.Disabled,
+        BillboardKeepScale = true,
+        NoDepthTest = false,
+        DisableFog = true,
+    };
+
+    private MultiMeshInstance3D Multi(string name, Mesh mesh, int count, Material material, out MultiMesh mm)
+    {
+        mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, Mesh = mesh, InstanceCount = count };
+        var mi = new MultiMeshInstance3D { Name = name, Multimesh = mm, MaterialOverride = material, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
+        AddChild(mi);
+        return mi;
+    }
+
+    /// <summary>A cone, apex at the origin, its open base a unit circle one metre down −Y; bright at the apex, gone at the base.</summary>
+    [Showcase("Concert", "Beam cone")]
+    private static ArrayMesh Cone()
+    {
+        const int N = 12;
+        var v = new List<Vector3>();
+        var c = new List<Color>();
+        for (int i = 0; i < N; i++)
+        {
+            float a0 = i * Mathf.Tau / N, a1 = (i + 1) * Mathf.Tau / N;
+            v.Add(Vector3.Zero); c.Add(new Color(1, 1, 1, 1));
+            v.Add(new Vector3(MathF.Cos(a0), -1, MathF.Sin(a0))); c.Add(new Color(1, 1, 1, 0));
+            v.Add(new Vector3(MathF.Cos(a1), -1, MathF.Sin(a1))); c.Add(new Color(1, 1, 1, 0));
+        }
+        using var arrays = new Godot.Collections.Array();
+        arrays.Resize((int)Mesh.ArrayType.Max);
+        arrays[(int)Mesh.ArrayType.Vertex] = v.ToArray();
+        arrays[(int)Mesh.ArrayType.Color] = c.ToArray();
+        var mesh = new ArrayMesh();
+        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+        return mesh;
+    }
+
+    private static Texture2D Flare() => new GradientTexture2D
+    {
+        Width = 64, Height = 64, Fill = GradientTexture2D.FillEnum.Radial,
+        FillFrom = new Vector2(0.5f, 0.5f), FillTo = new Vector2(1f, 0.5f),
+        Gradient = new Gradient { Colors = new[] { new Color(1, 1, 1, 1), new Color(1, 1, 1, 0.25f), new Color(1, 1, 1, 0) }, Offsets = new[] { 0f, 0.25f, 1f } },
+    };
+
+    private void BuildRig()
+    {
+        var body = new StandardMaterial3D { AlbedoColor = new Color(0.08f, 0.08f, 0.09f), Roughness = 0.6f };
+        Multi("Heads", new BoxMesh { Size = new Vector3(0.45f, 0.55f, 0.45f) }, _heads.Length + _cells.Length, body, out _bodies);
+        Multi("Beams", Cone(), _heads.Length, Additive(), out _beams);
+        _glowCount = _heads.Length;
+        foreach (var f in _cells) _glowCount += CellsOf(f);
+        Multi("Flares", new QuadMesh { Size = Vector2.One }, _glowCount, Additive(Flare(), billboard: true), out _glows);
+
+        // the cells' bodies stand still: placed once
+        for (int i = 0; i < _cells.Length; i++)
+        {
+            var f = _cells[i];
+            var size = f.Type.Kind == FixtureKind.PixelBar ? new Vector3(2.4f, 0.25f, 0.25f) : new Vector3(1f, 0.5f, 0.3f);
+            var basis = Facing(f.Home) * Basis.FromScale(size / new Vector3(0.45f, 0.55f, 0.45f));
+            _bodies.SetInstanceTransform(_heads.Length + i, new Transform3D(basis, f.Position));
+            _bodies.SetInstanceColor(_heads.Length + i, Colors.White);
+        }
+
+        // the screens: a grid of pixels each, facing out
+        _pixels = new MultiMesh[_screens.Length];
+        var screenMat = new StandardMaterial3D { ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, VertexColorUseAsAlbedo = true, DisableFog = true };
+        for (int s = 0; s < _screens.Length; s++)
+        {
+            var f = _screens[s];
+            float pw = f.ScreenSize.X / f.PixelsX, ph = f.ScreenSize.Y / f.PixelsY;
+            var mi = Multi($"Screen{s}", new QuadMesh { Size = new Vector2(pw * 0.92f, ph * 0.92f) }, f.PixelsX * f.PixelsY, screenMat, out _pixels[s]);
+            mi.Position = f.Position;
+            // a quad shows its +Z side: the screen's +Z looks at the audience
+            mi.Basis = Facing(-f.Home);
+            for (int y = 0; y < f.PixelsY; y++)
+                for (int x = 0; x < f.PixelsX; x++)
+                    _pixels[s].SetInstanceTransform(y * f.PixelsX + x, new Transform3D(Basis.Identity,
+                        new Vector3((x + 0.5f) * pw - f.ScreenSize.X / 2, (y + 0.5f) * ph - f.ScreenSize.Y / 2, 0)));
+        }
+
+        // a few real lights: front-truss spots onto the stage, and one over the crowd
+        var front = _plan.Patch.Fixtures.Where(f => f.Group == RigGroup.FrontTruss).ToArray();
+        for (int i = 0; i < 6 && front.Length > 0; i++)
+        {
+            var f = front[(int)((i + 0.5f) / 6 * front.Length)];
+            var lamp = new SpotLight3D { Position = f.Position, SpotRange = 45f, SpotAngle = 28f, LightEnergy = 0f, ShadowEnabled = false };
+            AddChild(lamp);
+            lamp.LookAt(ToGlobal(f.Position + Vector3.Down * 10f - f.Home * 6f), Vector3.Forward);
+            _lamps.Add(lamp);
+        }
+        _crowdLight = new OmniLight3D { Position = _plan.Patch.Fixtures.FirstOrDefault()?.Position + Vector3.Down * 4f ?? Vector3.Up * 10f, OmniRange = 40f, LightEnergy = 0f, ShadowEnabled = false };
+        AddChild(_crowdLight);
+    }
+
+    private static int CellsOf(Fixture f) => f.Type.Kind switch { FixtureKind.Blinder => 4, FixtureKind.PixelBar => 8, _ => 1 };
+
+    /// <summary>A basis whose −Z looks along <paramref name="dir"/> (what a screen or a cell faces).</summary>
+    private static Basis Facing(Vector3 dir)
+    {
+        var z = -dir.Normalized();
+        var x = Vector3.Up.Cross(z);
+        if (x.LengthSquared() < 1e-6f) x = Vector3.Right;
+        x = x.Normalized();
+        return new Basis(x, z.Cross(x), z);
+    }
+
+    /// <summary>
+    /// The concert playing round a point, for the dances (<see cref="Items.RadioManager.NearestMusic"/>):
+    /// anyone in the bowl dances to it, on its beat.
+    /// </summary>
+    public static Items.RadioManager.Music? MusicNear(Vector3 point, float within = 160f)
+    {
+        foreach (var rig in Live.Values)
+        {
+            if (!IsInstanceValid(rig) || rig._music?.Song is not { } song) continue;
+            if (rig.GlobalPosition.DistanceTo(point) > within) continue;
+            var speaker = rig._music.GetChildOrNull<Items.RadioSpeaker>(0);
+            if (speaker == null) continue;
+            return new Items.RadioManager.Music(speaker, song.Id, rig._music.SongStartedAt);
+        }
+        return null;
+    }
+
+    public override void _ExitTree()
+    {
+        if (Live.TryGetValue(Event.Stadium.Name, out var r) && r == this) Live.Remove(Event.Stadium.Name);
+    }
+
+    // ---- every frame ------------------------------------------------------------------------------
+
+    /// <summary>Whether the show is on at this hour (the stage stands all day; the rig plays in the evening).</summary>
+    private bool ShowOn()
+    {
+        if (ForceLive) return true;
+        double h = World.WorldClock.CurrentHour;
+        return h >= Event.StartHour && h < Event.EndHour;
+    }
+
+    public override void _Process(double delta)
+    {
+        double now = Net.ClockSync.ServerNow;
+        var p = _plan.Patch;
+        _desk.Music = _music.Step(now, ShowOn());
+        if (ExternalLive)
+            for (int u = 0; u < _external.Length; u++) _external[u].CopyTo(p.Universes[u], 0);
+        else _desk.Write(ShowOn() ? now % 86400.0 : -1.0);
+        // the song's loudness rides the master: a quiet bridge dims the rig a little
+        float master = Math.Clamp(_desk.Master, 0f, 1f) * (_desk.Music is { } song ? 0.6f + 0.4f * song.Level : 1f);
+        _sfx.Step(now);
+        float t = (float)(now % 3600.0);
+
+        _haze = 0;
+        foreach (var f in p.Fixtures)
+            if (f.Type.Kind == FixtureKind.Hazer) _haze = MathF.Max(_haze, p.Get01(f, Attr.Pump));
+        float haze = 0.25f + 0.75f * _haze;
+
+        int glow = 0;
+        Color washSum = default, beamSum = default;
+        for (int i = 0; i < _heads.Length; i++)
+        {
+            var f = _heads[i];
+            var dir = Direction(f);
+            float dim = p.Get01(f, Attr.Dimmer) * Shutter(f, t) * master;
+            var col = ColorOf(f);
+            float zoom = p.Get01(f, Attr.Zoom);
+            float angle = Mathf.DegToRad(Mathf.Lerp(f.Type.BeamMin, f.Type.BeamMax, zoom));
+            float len = f.Type.Kind == FixtureKind.Wash ? BeamLength * 0.55f : BeamLength;
+            float radius = len * MathF.Tan(angle / 2);
+            // the head turns with its beam
+            _bodies.SetInstanceTransform(i, new Transform3D(Facing(dir), f.Position));
+            _bodies.SetInstanceColor(i, Colors.White);
+            // the cone: Y down the beam, X and Z its radius
+            var side = dir.Cross(Mathf.Abs(dir.Y) > 0.95f ? Vector3.Right : Vector3.Up).Normalized();
+            var other = side.Cross(dir).Normalized();
+            _beams.SetInstanceTransform(i, new Transform3D(new Basis(side * radius, -dir * len, other * radius), f.Position));
+            float strength = f.Type.Kind switch { FixtureKind.Beam => 0.4f, FixtureKind.Spot => 0.18f, _ => 0.07f };
+            _beams.SetInstanceColor(i, (col * (dim * strength * haze)) with { A = 1f });
+            _glows.SetInstanceTransform(glow, new Transform3D(Basis.FromScale(Vector3.One * (f.Type.Kind == FixtureKind.Wash ? 1.4f : 0.9f)), f.Position + dir * 0.35f));
+            _glows.SetInstanceColor(glow++, (col * dim) with { A = 1f });
+            if (f.Type.Kind == FixtureKind.Wash) washSum += col * dim;
+            else beamSum += col * dim;
+        }
+        for (int i = 0; i < _cells.Length; i++)
+        {
+            var f = _cells[i];
+            int n = CellsOf(f);
+            var basis = Facing(f.Home);
+            for (int c = 0; c < n; c++)
+            {
+                Color col;
+                float size;
+                if (f.Type.Kind == FixtureKind.PixelBar)
+                {
+                    col = new Color(p.Get(f, c * 3) / 255f, p.Get(f, c * 3 + 1) / 255f, p.Get(f, c * 3 + 2) / 255f);
+                    size = 0.5f;
+                }
+                else if (f.Type.Kind == FixtureKind.Blinder)
+                {
+                    col = new Color(1f, 0.78f, 0.45f) * (p.Get(f, c) / 255f);   // tungsten
+                    size = 1.3f;
+                }
+                else
+                {
+                    float rate = 1f + 24f * p.Get01(f, Attr.Rate), duty = 0.05f + 0.3f * p.Get01(f, Attr.Duration);
+                    float on = (t * rate) % 1f < duty ? 1f : 0f;
+                    col = Colors.White * (p.Get01(f, Attr.Dimmer) * on);
+                    size = 2.2f;
+                }
+                float along = n == 1 ? 0 : (c - (n - 1) / 2f) * (f.Type.Kind == FixtureKind.PixelBar ? 0.3f : 0.24f);
+                _glows.SetInstanceTransform(glow, new Transform3D(Basis.FromScale(Vector3.One * size), f.Position + basis.X * along - basis.Z * 0.2f));
+                _glows.SetInstanceColor(glow++, col with { A = 1f });
+                beamSum += col * 0.3f;
+            }
+        }
+        for (int s = 0; s < _screens.Length; s++) PaintScreen(_screens[s], _pixels[s], t);
+
+        // the real lights follow the rig as a whole
+        float washN = Math.Max(1, _heads.Length / 3);
+        var wash = washSum / washN;
+        foreach (var lamp in _lamps)
+        {
+            lamp.LightColor = new Color(Math.Min(1f, wash.R), Math.Min(1f, wash.G), Math.Min(1f, wash.B));
+            lamp.LightEnergy = 2f * Math.Min(1f, (wash.R + wash.G + wash.B) / 2f);
+        }
+        if (_crowdLight != null)
+        {
+            var b = beamSum / Math.Max(1, _heads.Length);
+            _crowdLight.LightColor = new Color(Math.Min(1f, b.R * 2f), Math.Min(1f, b.G * 2f), Math.Min(1f, b.B * 2f));
+            _crowdLight.LightEnergy = 0.6f * Math.Min(1f, b.R + b.G + b.B);
+        }
+        DriveCrowd(washSum + beamSum);
+    }
+
+    /// <summary>The audience follows the show: how hard it dances by section, the rig's colour on it.</summary>
+    private void DriveCrowd(Color light)
+    {
+        if (_crowd == null) return;
+        bool on = ShowOn() || ExternalLive;
+        if (_crowd.Visible != on) _crowd.Visible = on;
+        if (!on) return;
+        float want = ExternalLive ? 0.6f : _desk.Section switch
+        {
+            ShowSection.Calm => 0.12f, ShowSection.Groove => 0.55f, ShowSection.Chorus => 0.9f,
+            ShowSection.Peak => 1f, ShowSection.Blackout => 0.3f, _ => 0.05f,
+        };
+        _energy = Mathf.Lerp(_energy, want, 0.05f);
+        float n = Math.Max(1, _heads.Length);
+        var tint = new Color(Math.Min(0.6f, light.R / n * 0.9f), Math.Min(0.6f, light.G / n * 0.9f), Math.Min(0.6f, light.B / n * 0.9f));
+        _crowd.Drive(_desk.Beat, _energy, tint, _desk.Section == ShowSection.Chorus ? 1f : 0f);
+    }
+
+    /// <summary>The beam's direction from 16-bit pan and tilt: tilt tips it from the yoke's axis towards the fixture's home side, pan turns that about the axis.</summary>
+    private Vector3 Direction(Fixture f)
+    {
+        var p = _plan.Patch;
+        float pan = Mathf.DegToRad((p.Get16(f, Attr.Pan, Attr.PanFine) - 0.5f) * f.Type.PanRange);
+        float tilt = Mathf.DegToRad((p.Get16(f, Attr.Tilt, Attr.TiltFine) - 0.5f) * f.Type.TiltRange);
+        var up = f.Up;
+        var fwd = (f.Home - up * f.Home.Dot(up));
+        fwd = fwd.LengthSquared() < 1e-6f ? up.Cross(Vector3.Right).Normalized() : fwd.Normalized();
+        var right = up.Cross(fwd);
+        return (up * MathF.Cos(tilt) + (fwd * MathF.Cos(pan) + right * MathF.Sin(pan)) * MathF.Sin(tilt)).Normalized();
+    }
+
+    /// <summary>The shutter: 0..7 closed, 8..15 open, 16..131 strobing 1..20 Hz, above open.</summary>
+    private float Shutter(Fixture f, float t)
+    {
+        int o = f.Type.Offset(Attr.Shutter);
+        if (o < 0) return 1f;
+        int v = _plan.Patch.Get(f, o);
+        if (v < 8) return 0f;
+        if (v < 16 || v > 131) return 1f;
+        float hz = 1f + 19f * (v - 16) / 115f;
+        return (t * hz) % 1f < 0.35f ? 1f : 0f;
+    }
+
+    private Color ColorOf(Fixture f)
+    {
+        var p = _plan.Patch;
+        switch (f.Type.Kind)
+        {
+            case FixtureKind.Wash:
+                float w = p.Get01(f, Attr.White);
+                return new Color(p.Get01(f, Attr.Red) + w, p.Get01(f, Attr.Green) + w, p.Get01(f, Attr.Blue) + w);
+            case FixtureKind.Spot:
+                var cmy = new Color(1f - p.Get01(f, Attr.Cyan), 1f - p.Get01(f, Attr.Magenta), 1f - p.Get01(f, Attr.Yellow));
+                int slot = p.Get(f, f.Type.Offset(Attr.ColorWheel)) / 8;
+                return slot > 0 && slot < FixtureType.Wheel.Length ? cmy * FixtureType.Wheel[slot] : cmy;
+            default:
+                int s = p.Get(f, f.Type.Offset(Attr.ColorWheel)) / 8;
+                return FixtureType.Wheel[Math.Clamp(s, 0, FixtureType.Wheel.Length - 1)];
+        }
+    }
+
+    /// <summary>A screen's media-server layer: clip 0 a drifting gradient, 1 slow waves, 2 bars on the beat, 3 a pulse from the centre, 4 flashing noise.</summary>
+    private void PaintScreen(Fixture f, MultiMesh mm, float t)
+    {
+        var p = _plan.Patch;
+        float dim = p.Get01(f, Attr.Dimmer);
+        int clip = p.Get(f, f.Type.Offset(Attr.Clip)) / 32;
+        float speed = p.Get01(f, Attr.ClipSpeed) * 4f;
+        var a = new Color(p.Get01(f, Attr.Red), p.Get01(f, Attr.Green), p.Get01(f, Attr.Blue));
+        var b = new Color(p.Get01(f, Attr.Red2), p.Get01(f, Attr.Green2), p.Get01(f, Attr.Blue2));
+        float beat = _desk.Beat, ph = beat - MathF.Floor(beat);
+        int nx = f.PixelsX, ny = f.PixelsY;
+        for (int y = 0; y < ny; y++)
+            for (int x = 0; x < nx; x++)
+            {
+                float u = (float)x / nx, v = (float)y / ny, k;
+                switch (clip)
+                {
+                    case 0: k = 0.5f + 0.5f * MathF.Sin((u + t * speed * 0.1f) * MathF.Tau); break;
+                    case 1: k = 0.5f + 0.5f * MathF.Sin(u * 6f + v * 3f + t * speed); break;
+                    case 2: k = ((int)(u * 8f) + (int)MathF.Floor(beat)) % 2 == 0 ? 1f - ph : 0.1f; break;
+                    case 3:
+                        float r = MathF.Sqrt((u - 0.5f) * (u - 0.5f) + (v - 0.5f) * (v - 0.5f) * 0.3f);
+                        k = MathF.Max(0f, 1f - MathF.Abs(r - ph * 0.7f) * 6f);
+                        break;
+                    default:
+                        uint h = (uint)(x * 73856093 ^ y * 19349663 ^ (int)(beat * 2f) * 83492791);
+                        k = (h % 7 == 0 ? 1f : 0.05f) * (1f - ph);
+                        break;
+                }
+                mm.SetInstanceColor(y * nx + x, a.Lerp(b, k) * dim);
+            }
+    }
+
+    [Showcase("Concert", "Stage")]
+    private static IEnumerable<(string, Func<Node3D>)> Showcase()
+    {
+        // one of each layout, from seeds that give them
+        var seen = new HashSet<StageLayout>();
+        for (int seed = 1; seen.Count < Enum.GetValues<StageLayout>().Length && seed < 500; seed++)
+        {
+            var e = ConcertPlanner.Plan(StadiumCatalog.Geneva, seed);
+            if (!seen.Add(e.Layout)) continue;
+            yield return ($"{e.Layout}: {e.Artist} ({e.Genre}, screens {e.Screens})", () => new ConcertRig(e) { ForceLive = true, WithCrowd = false });
+        }
+    }
+}

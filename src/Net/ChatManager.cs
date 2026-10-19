@@ -153,6 +153,12 @@ public partial class ChatManager : Node
             LineReceived?.Invoke(style, ChatKind.Private);
             return;
         }
+        // a concert operator's show input and patch (#885): this machine's ports and files
+        if (Concert.ConcertService.RunLocal(text.Trim()) is { } show)
+        {
+            LineReceived?.Invoke(show, ChatKind.Private);
+            return;
+        }
         // a feature clip films this screen (#487)
         if (Core.ClipRecorder.Run(text.Trim(), line => LineReceived?.Invoke(line, ChatKind.Private)) is { } clip)
         {
@@ -458,6 +464,10 @@ public partial class ChatManager : Node
                         Show(line, ChatKind.Private);
                 return;
 
+            case "concert":
+                Show(Concert.ConcertService.Instance?.LocalCommand(string.Join(' ', parts[1..])) ?? "Concerts are not running.", ChatKind.Private);
+                return;
+
             case "name" or "login" or "stream" or "race" or "fight" or "say" or "admin" or "tp" or "bring" or "tpall" or "kick" or "pvp" or "br" or "update"
                 or "invites" or "accept" or "decline" or "tpa" or "tphere" or "party":
                 Show($"'/{verb}' needs a multiplayer game.", ChatKind.Error);
@@ -599,6 +609,9 @@ public partial class ChatManager : Node
     /// <summary>Races (<c>/race</c>), wired by ServerWorld.</summary>
     public World.RaceManager? Race { get; set; }
 
+    /// <summary>Concerts (<c>/concert</c>, #885), wired by ServerWorld.</summary>
+    public Concert.ConcertService? Concerts { get; set; }
+
     /// <summary>Fist fights (<c>/fight</c>, #495), wired by ServerWorld.</summary>
     public Combat.FightManager? Fight { get; set; }
 
@@ -722,6 +735,11 @@ public partial class ChatManager : Node
                 if (Race == null) ReplyTo(sender, "Races are not available on this server.", ChatKind.Error);
                 else if (sender == ConsolePeerId && !rest.StartsWith("cancel") && !rest.StartsWith("list")) ReplyTo(sender, "'/race' needs a player.", ChatKind.Error);
                 else ReplyTo(sender, Race.Command(sender, rest), ChatKind.Private);
+                return;
+            case "concert":
+                if (Concerts == null) ReplyTo(sender, "Concerts are not available on this server.", ChatKind.Error);
+                else ReplyTo(sender, Concerts.Command(sender, rest, IsAdmin(sender),
+                    GetNodeOrNull<Player.FootPlayer>("../Players/" + sender)?.Global), ChatKind.Private);
                 return;
             case "fight":
                 if (Fight == null) ReplyTo(sender, "Fights are not available on this server.", ChatKind.Error);

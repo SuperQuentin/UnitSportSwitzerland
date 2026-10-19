@@ -63,7 +63,8 @@ public partial class Handshake : Node
     /// 35: bots (#837): NPC spawn data carries a driver kind and a name, BrEntrant.Bot/BotKills, BrState.Bots.
     /// 36: seated on a stadium stand (#885): FootPlayer.PoseKind 6 (PoseSit), Anim.X the feet's drop, BodyPose the hip.
     /// </summary>
-    public const int Protocol = 36;
+    /// 37: World/Concerts (AskHost, AskCue, Frame on channel 4; State, Framed) (#885).
+    public const int Protocol = 37;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

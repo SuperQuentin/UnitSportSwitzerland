@@ -3,7 +3,9 @@
 
 # Stadium concert: Stade de Genève, a DMX light rig driven by the music, pyro, smoke and confetti
 
-Tracking: #885. Status: **phase 1 (the stadium) in PR #886**; phases 2-7 planned (Oct 2026).
+Tracking: #885. Status: **phase 1 (the stadium, its interior, seats) in PR #886; phases 2-7 (random events, stages, DMX rig, show control in Art-Net/sACN/OSC, the music driving the desk, effects, the desk screen, the crowd) on `feat/885-stage-lights`, PR #897**; Art-Net/sACN *output* to real fixtures and bots attending remain (Oct 2026).
+
+Asked along the way (Oct 2026): **random artist events**, each with its own stage layout (end, side, thrust, in the round) and screens (none, centre, sides, a cube), not one fixed show (`concert/concerts`).
 
 A real stadium, built to its real shape where the world already stands, hosting a concert: a stage on
 the pitch, a light rig patched like a real one (fixtures on DMX universes), a virtual light desk that

@@ -145,6 +145,42 @@ public static class StadiumBuilder
         return null;
     }
 
+    /// <summary>
+    /// Every seat place of the bowl, a spacing apart along each row (1 = every seat), in the stadium
+    /// frame: the hip's point (y the tread's height over the pitch) and the way it faces. Seat blocks,
+    /// corners and stairs' segments; not the aisles, gates or vomitories. The crowd sits here.
+    /// </summary>
+    public static IEnumerable<(Vector3 Pos, Vector2 Facing)> Seats(StadiumSpec s, int spacing = 1)
+    {
+        var st = Stations(s);
+        for (int i = 0; i < st.Count; i++)
+        {
+            var a = st[i];
+            if (a.Kind is not (Seg.Seat or Seg.Corner or Seg.Stair)) continue;
+            var b = st[(i + 1) % st.Count];
+            var n = (a.N + b.N).Normalized();
+            float d = 0, h = 0;
+            foreach (var tier in s.Tiers)
+            {
+                d += tier.Gap;
+                h += tier.Step;
+                for (int r = 0; r < tier.Rows; r++)
+                {
+                    float dHip = d + r * tier.RowDepth + HipBack, hr = h + r * tier.Riser;
+                    Vector2 ha = a.P + a.N * dHip, hb = b.P + b.N * dHip;
+                    int places = (int)(ha.DistanceTo(hb) / s.SeatWidth);
+                    for (int k = (r % 2) * (spacing / 2); k < places; k += Math.Max(1, spacing))
+                    {
+                        var p = ha.Lerp(hb, (k + 0.5f) / places);
+                        yield return (new Vector3(p.X, hr, p.Y), -n);
+                    }
+                }
+                d += tier.Rows * tier.RowDepth;
+                h += (tier.Rows - 1) * tier.Riser;
+            }
+        }
+    }
+
     /// <summary>The stadium frame (u across, v along the pitch, y up from it) into tile-local metres.</summary>
     private static Func<Vector2, float, Vector3> Frame(StadiumSpec s, TileId id, float ground)
     {
@@ -579,8 +615,8 @@ public static class StadiumBuilder
         public float LengthAt(float d) => (a.P + a.N * d).DistanceTo(b.P + b.N * d);
     }
 
-    /// <summary>The mesh lists and collision triangles being built.</summary>
-    private sealed class Geo(bool mesh, bool collision)
+    /// <summary>The mesh lists and collision triangles being built; the concert stage (#885) builds with it too.</summary>
+    internal sealed class Geo(bool mesh, bool collision)
     {
         public readonly List<Vector3> Vertices = new();
         public readonly List<Color> Colors = new();
@@ -617,6 +653,19 @@ public static class StadiumBuilder
             if (!collision) return;
             Faces.Add(a); Faces.Add(b); Faces.Add(c);
             Faces.Add(a); Faces.Add(c); Faces.Add(d);
+        }
+
+        /// <summary>A box round <paramref name="centre"/>, turned by <paramref name="basis"/>: six quads.</summary>
+        public void Box(Vector3 centre, Vector3 size, Basis basis, Color col, bool solid)
+        {
+            var h = size / 2;
+            Vector3 P(float x, float y, float z) => centre + basis * new Vector3(x * h.X, y * h.Y, z * h.Z);
+            Quad(P(-1, 1, -1), P(1, 1, -1), P(1, 1, 1), P(-1, 1, 1), col, solid);
+            Quad(P(-1, -1, 1), P(1, -1, 1), P(1, -1, -1), P(-1, -1, -1), col, solid);
+            Quad(P(-1, -1, 1), P(-1, 1, 1), P(1, 1, 1), P(1, -1, 1), col, solid);
+            Quad(P(1, -1, -1), P(1, 1, -1), P(-1, 1, -1), P(-1, -1, -1), col, solid);
+            Quad(P(1, -1, 1), P(1, 1, 1), P(1, 1, -1), P(1, -1, -1), col, solid);
+            Quad(P(-1, -1, -1), P(-1, 1, -1), P(-1, 1, 1), P(-1, -1, 1), col, solid);
         }
 
         /// <summary>A square-section member from <paramref name="a"/> to <paramref name="b"/>, <paramref name="w"/> wide along <paramref name="side"/>.</summary>

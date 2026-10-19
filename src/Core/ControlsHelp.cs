@@ -120,6 +120,7 @@ public partial class ControlsHelp : CanvasLayer
         ("Stadiums", new Row[]
         {
             new("On a stand's row: sit down; again, or walk off, to stand up", PlayerInput.InteractMount),
+            new("At a concert's front-of-house console: the light desk (cues, effects, show input)", PlayerInput.InteractMount),
         }),
         ("Passengers (online)", new Row[]
         {
