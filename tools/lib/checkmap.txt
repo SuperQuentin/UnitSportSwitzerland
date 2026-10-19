@@ -532,6 +532,8 @@ src/World/Wa             full   tools/waterparity.sh
 shaders/common/waves     full   tools/waterparity.sh
 shaders/body/water       full   tools/waterparity.sh
 src/Player/Emote         net    tools/emotenetcheck.sh
+src/Phone/               net    tools/phonenetcheck.sh
+src/Player/FootPlayer.Phone net  tools/phonenetcheck.sh
 # the Swiss match items (#478): fondue, smoke and alphorn between two clients
 src/Items/SwissItems     net    tools/swisscheck.sh
 src/Items/SwissNetProbe  net    tools/swisscheck.sh
