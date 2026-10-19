@@ -5,7 +5,7 @@
 # TrailerScript.cs) and FILM=drognens (the music clip, docs/trailer/drognens.md, DrognensScript.cs).
 #
 #   tools/trailer.sh preview [shots]   play in a window, each shot with its part of the song
-#   tools/trailer.sh stills  [shots]   first, middle and last frame of each shot as PNGs
+#   tools/trailer.sh stills  [shots]   first, middle and last frame of each shot as PNGs (at --fixed-fps 30, as render)
 #   tools/trailer.sh render  [shots]   film the shots (1920x1080, 30 fps, frame-exact) and cut them
 #                                      on the song, as the film's next version; a few shots are
 #                                      filmed again and cut with the last version's others
@@ -29,8 +29,10 @@
 # test_output/trailer/<film>/stills.
 #
 # shots: all (default), 5, 5-9 or 5,7,12 (shot numbers of the film).
-# Env: GODOT (default godot), CHUNKS (terrain; default ./terrain_chunks, or the main checkout's
-# from a worktree), SIZE (default 1920x1080), LOG=1 prints every actor twice a second,
+# Env: GODOT (default godot), CHUNKS (terrain; default ./terrain_chunks, else where this checkout's
+# or the main checkout's terrain_location.json points, else the main checkout's terrain_chunks; a
+# fixture course as fixture:lake), ARGS (more game arguments, e.g. "--at E,N --trailer-allow-generated"),
+# SIZE (default 1920x1080), LOG=1 prints every actor twice a second,
 # TRAILERS (where the versions go), VERSION (which one `cut` cuts; default the newest).
 # The film's song (incompetech.com, CC BY 4.0: "Voxel Revolution" for the trailers, "I Got a Stick
 # Feat James Gavins" for the clip) is downloaded once into <trailers>/ (not committed). Needs ffmpeg
@@ -54,11 +56,21 @@ case $FILM in
 esac
 song=$TRAILERS/$(echo "$title" | tr 'A-Z ' 'a-z_').mp3
 
+# the chunks a terrain_location.json points at ({"chunks": "..."}), empty without one
+located() {
+  [ -f "$1" ] && sed -n 's/.*"chunks"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$1" | head -1
+}
 if [ -z "${CHUNKS:-}" ]; then
   if [ -f terrain_chunks/manifest.json ]; then CHUNKS=terrain_chunks
+  elif [ -n "$(located terrain_location.json)" ]; then CHUNKS=$(located terrain_location.json)
+  elif [ -n "$(located "$main/terrain_location.json")" ]; then CHUNKS=$(located "$main/terrain_location.json")
   else CHUNKS="$main/terrain_chunks"
   fi
 fi
+case $CHUNKS in
+  fixture:*) ;;
+  *) [ -f "$CHUNKS/manifest.json" ] || echo "warning: no manifest.json in $CHUNKS: the director will find no real tiles" >&2 ;;
+esac
 
 # the song only for what plays or cuts it
 if [ "$mode" != stills ] && [ "$mode" != lines ] && [ ! -f "$song" ]; then
@@ -67,7 +79,10 @@ fi
 
 log=()
 [ "${LOG:-}" = 1 ] && log=(--trailer-log)
-game=(--chunks "$CHUNKS" --title "trailer $mode $shots" --trailer "$shots" --trailer-film "$FILM" --trailer-size "$SIZE" ${log[@]+"${log[@]}"})
+# ARGS: more game arguments, split on spaces (ARGS="--at 2600000,1200000 --trailer-allow-generated")
+extra=()
+[ -n "${ARGS:-}" ] && read -r -a extra <<< "$ARGS"
+game=(--chunks "$CHUNKS" --title "trailer $mode $shots" --trailer "$shots" --trailer-film "$FILM" --trailer-size "$SIZE" ${log[@]+"${log[@]}"} ${extra[@]+"${extra[@]}"})
 
 # the newest version's number, 0 when there is none yet
 newest() {
@@ -165,11 +180,13 @@ subtitle_tracks() {
 
 case $mode in
   preview)
-    "$GODOT" --path . --resolution 1280x720 -- "${game[@]}" --trailer-song "$song"
+    # --fixed-fps as the render: under load the actors keep the film's time, not the wall clock's
+    "$GODOT" --path . --resolution 1280x720 --fixed-fps 30 -- "${game[@]}" --trailer-song "$song"
     ;;
   stills)
     rm -rf "$scratch/stills"
-    "$GODOT" --path . --resolution 1280x720 -- "${game[@]}" --trailer-stills "$scratch/stills" | tee "$scratch/stills.log" | grep '\[trailer\]'
+    # --fixed-fps as the render: a still is the frame at its film time, never one skipped under load
+    "$GODOT" --path . --resolution 1280x720 --fixed-fps 30 -- "${game[@]}" --trailer-stills "$scratch/stills" 2>&1 | tee "$scratch/stills.log" | grep '\[trailer\]'
     echo "stills in $scratch/stills"
     ;;
   render)
@@ -209,7 +226,7 @@ case $mode in
     cut_film "$films/v$version"
     ;;
   *)
-    echo "usage: [FILM=story|showcase|drognens|bubbles] tools/trailer.sh preview|stills|render [shots] | cut | lines" >&2
+    echo "usage: [FILM=story|showcase|drognens|bubbles|ufo] tools/trailer.sh preview|stills|render [shots] | cut | lines" >&2
     exit 2
     ;;
 esac

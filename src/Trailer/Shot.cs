@@ -237,6 +237,41 @@ public sealed record Cast
     public Spot? Board { get; init; }
     /// <summary>A boat: how deep its body is put under the surface, m (the steamer floats at 1.6).</summary>
     public float Draught { get; init; } = 0.2f;
+
+    // ---- the film kit (#882) ---------------------------------------------------------------------
+
+    /// <summary>
+    /// On foot (<see cref="Drive.Walk"/>): jump and crouch held over time, as the keys would be
+    /// (<see cref="FootPlayer.FootActions"/>; a jump is a press, false then true): a slide is a crouch
+    /// at a run, a wall jump a jump in the air at a wall, a second jump falling high up opens the
+    /// wingsuit, then flown by <see cref="Flight"/>. Such a walker is an NPC body (it reads these, not the keys).
+    /// </summary>
+    public Func<double, (bool Jump, bool Crouch)>? Actions { get; init; }
+    /// <summary>
+    /// A fist fight's stance or move over time (<see cref="FootPlayer.FightPose"/>: 1 stand, 2 guard,
+    /// 8 dazed, 9 victory; 16 + a <c>FightMove</c>: 17 jab, 18 kick, 21 jump kick, 22 uppercut), 0 = none.
+    /// A move plays once from when the value changes.
+    /// </summary>
+    public Func<double, int>? Fight { get; init; }
+    /// <summary>What it wears on its head (<see cref="FootPlayer.HeadwearId"/>, <see cref="Avatar.Headwear"/>: 1 witch hat, 2 pumpkin head, 3 Santa hat, 4 antlers), 0 = bare.</summary>
+    public int Headwear { get; init; }
+    /// <summary>A farm machine's implement or header let down (<c>Truck.Lowered</c>): the plough in the ground, the combine's header.</summary>
+    public bool Lowered { get; init; }
+    /// <summary>The radio in its hand plays this CD (<see cref="FootPlayer.HeldRadio"/>, 1 = the first bundled one): it sparkles and bounces to the beat. 0 = off. Hold <c>Item = Radio</c>.</summary>
+    public int Radio { get; init; }
+    /// <summary>
+    /// Swims at <see cref="At"/> (water), stroking with <see cref="Walk"/>: put down on the dry
+    /// <see cref="Board"/> spot (or beside the water when there is none), then at the surface at its spot.
+    /// </summary>
+    public bool Swim { get; init; }
+    /// <summary>A saucer actor (<c>Ride = RideKind.Ufo</c>): its beam, lamps, ramp and legs over time (<see cref="UfoSwitches"/>).</summary>
+    public Func<double, UfoSwitches>? Ufo { get; init; }
+    /// <summary>
+    /// Walks down the ramp of a landed saucer: an actor's (<see cref="RampOf.Actor"/>) or one of the
+    /// shot's <see cref="Shot.Craft"/> (<see cref="RampOf.Craft"/>). Put at the hatch, facing down the
+    /// ramp, which is solid under it for the shot; give it a <see cref="Walk"/> (ahead) to come down.
+    /// </summary>
+    public RampOf? DownRamp { get; init; }
 }
 
 /// <summary>
@@ -258,6 +293,19 @@ public sealed record Prop(Spot At, float Bearing, Vector3 Size, Color Colour)
     public Vector3? InSet { get; init; }
     /// <summary>A character sitting there instead, the hip at the spot, facing <see cref="Bearing"/>: a still figure, as a passenger sits.</summary>
     public Character? Seated { get; init; }
+    /// <summary>A placed object's look instead (<see cref="Items.PlacedKind"/>: a burning campfire, a workbench, a camo net), drawn only, never placed or saved.</summary>
+    public Items.PlacedKind Placed { get; init; }
+    /// <summary>A built piece instead (a hammer's wall or floor, <see cref="Build.StructureMeshes"/>) in <see cref="Material"/>, solid, standing on the ground.</summary>
+    public Build.PieceKind? Piece { get; init; }
+    public Build.BuildMaterial Material { get; init; }
+    /// <summary>
+    /// A real parked vehicle of this kind instead (<see cref="Vehicles.VehicleManager.Place"/>, taken
+    /// away after the shot): a tractor beam lifts it (12 m long at most). <see cref="Setup"/> picks a car's preset.
+    /// </summary>
+    public RideKind Vehicle { get; init; }
+    public int Setup { get; init; }
+    /// <summary>A tractor beam over it lifts it (an item, a box, a seated figure, a placed look): the beam is its cue.</summary>
+    public bool Beamable { get; init; }
 }
 
 /// <summary>
@@ -343,6 +391,27 @@ public sealed record Shot
     public double? Photo { get; init; }
     /// <summary>Where the photo is taken from (the photographer's view, the film's camera elsewhere); null: the film's frame.</summary>
     public Key? PhotoFrom { get; init; }
+    /// <summary>The photo's picture from this PNG instead of a render (a screenshot of one of the game's screens).</summary>
+    public string? PhotoFile { get; init; }
+
+    // ---- the film kit (#882) ---------------------------------------------------------------------
+
+    /// <summary>
+    /// The occasions over the world for the shot: <c>halloween</c>, <c>christmas</c>, <c>ufo</c> or
+    /// several (<c>"christmas,ufo"</c>), exactly those whatever the calendar says; <c>none</c>: no
+    /// occasion at all; null: the calendar's, as the game runs (Halloween runs all of September and
+    /// October). The run ends with the calendar's.
+    /// </summary>
+    public string? Occasion { get; init; }
+    /// <summary>A Battle Royale zone's wall (<see cref="BattleRoyale.ZoneWall"/>) standing on this circle (centre, radius m), no match needed.</summary>
+    public (Spot Centre, float Radius)? Zone { get; init; }
+    /// <summary>Item effects on cue at an actor's hand (<see cref="ItemCue"/>): an alphorn's call, a fondue, a flare, smoke, a fishing cast.</summary>
+    public IReadOnlyList<ItemCue> ItemCues { get; init; } = Array.Empty<ItemCue>();
+    /// <summary>One of the game's own screens over the frame on cue (<see cref="ScreenCue"/>): the map, the landing picker, a PNG of another.</summary>
+    public IReadOnlyList<ScreenCue> Screens { get; init; } = Array.Empty<ScreenCue>();
+    /// <summary>UFO props (<see cref="Trailer.Craft"/>): a saucer landed, crashed or hovering, the mothership; their beams lift what is under them.</summary>
+    public IReadOnlyList<Craft> Craft { get; init; } = Array.Empty<Craft>();
+
     /// <summary>Seconds of fade from black at the start and to black at the end.</summary>
     public double FadeIn { get; init; }
     public double FadeOut { get; init; }
