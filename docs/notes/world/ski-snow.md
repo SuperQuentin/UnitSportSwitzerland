@@ -71,4 +71,11 @@
   - Drawn only, no collision: one MultiMesh per colour and side per tile.
 - **HUD**: `SlopeHud`, top left on skis: the slope's ref and name in the Swiss colour (blue, red,
   black, yellow itinerary) and its condition. Rebuilt on change only.
+- **Ski map** (`SlopeMap`, in `SlopeHud`): top right, below the fps readout, while on skis. It
+  shows the slopes within 1.2 km, north up, in their colours (nordic cyan, sled purple), edges a
+  shade darker, and your arrow. The 200² picture is sampled from the loaded `.pst` rasters into one
+  reused buffer, only after 30 m of travel (or once a second while a tile is still loading). It is
+  the only in-game map outside a Battle Royale match, so slopes are shown here, not on the
+  terrain-download map screen.
+  - The HUD follows the local player on skis, else a non-bot skier this peer drives (a `--ride` probe's own rider).
 - **Opt-in**: `Systems.Snow` ("snow").

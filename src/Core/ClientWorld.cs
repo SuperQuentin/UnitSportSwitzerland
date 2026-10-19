@@ -487,7 +487,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 AddChild(_pistes);
             }
             AddChild(new World.Snow.SlopeMarkers(_chunks, snow));
-            AddChild(new World.Snow.SlopeHud(() => LocalPlayer));
+            AddChild(new World.Snow.SlopeHud(() => LocalPlayer, _chunks));
         }
         // a sign over every bank door (#213)
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.BankSigns(_chunks));

@@ -7,8 +7,9 @@ namespace UnitSport.World.Snow;
 
 /// <summary>
 /// While the local player skis a slope (#887): its name or number in its colour and what the snow
-/// is like there, top left. The text is rebuilt only when the slope or its snow changes
-/// (perf-no-per-frame-allocations), looked at twice a second.
+/// is like there, top left; and the ski map, top right (<see cref="SlopeMap"/>). The text is
+/// rebuilt only when the slope or its snow changes (perf-no-per-frame-allocations), looked at
+/// twice a second.
 /// </summary>
 public partial class SlopeHud : CanvasLayer
 {
@@ -18,7 +19,13 @@ public partial class SlopeHud : CanvasLayer
     private ulong _slope;
     private SnowCondition _condition = (SnowCondition)255;
 
-    public SlopeHud(Func<FootPlayer?> player)
+    /// <summary>
+    /// The skier this HUD follows: the local player on skis, else a body this peer drives on skis
+    /// (a probe's own rider); looked up twice a second.
+    /// </summary>
+    public FootPlayer? Skier { get; private set; }
+
+    public SlopeHud(Func<FootPlayer?> player, Terrain.ChunkManager chunks)
     {
         _player = player;
         Layer = 5;
@@ -28,6 +35,7 @@ public partial class SlopeHud : CanvasLayer
         _label.AddThemeConstantOverride("outline_size", 6);
         _label.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.75f));
         AddChild(_label);
+        AddChild(new SlopeMap(() => Skier, chunks));
     }
 
     public override void _Process(double delta)
@@ -35,8 +43,9 @@ public partial class SlopeHud : CanvasLayer
         _since += delta;
         if (_since < 0.5) return;
         _since = 0;
-        var p = _player();
-        var slope = p != null && IsInstanceValid(p) ? p.Slope : null;
+        Skier = FindSkier();
+        var p = Skier;
+        var slope = p?.Slope;
         if (slope == null)
         {
             _label.Visible = false;
@@ -50,6 +59,15 @@ public partial class SlopeHud : CanvasLayer
         _condition = condition;
         _label.Text = Describe(slope, condition);
         _label.AddThemeColorOverride("font_color", ColourOf(slope.Difficulty));
+    }
+
+    private FootPlayer? FindSkier()
+    {
+        if (_player() is { } local && IsInstanceValid(local) && local.RideKindId == (int)RideKind.Skis) return local;
+        foreach (var node in GetTree().GetNodesInGroup(FootPlayer.Group))
+            if (node is FootPlayer p && !p.Bot && p.RideKindId == (int)RideKind.Skis && p.IsMultiplayerAuthority())
+                return p;
+        return null;
     }
 
     public static string Describe(PisteRecord slope, SnowCondition condition)

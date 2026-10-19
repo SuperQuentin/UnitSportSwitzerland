@@ -143,6 +143,7 @@ snow coverage and ski tracks.
   - The groom direction became a stored groom phase (`notes/world/ski-snow`).
   - The records carry their altitude range, sun exposure and steepness.
 - **Not built yet**:
-  - slopes on the map screen (step 2). Edge markers and snow over roads under a slope came later in the PR;
+  - Edge markers, snow over roads under a slope, and a ski map came later in the PR. The ski map
+    is a minimap on skis, because outside a Battle Royale match there is no in-game map screen.
   - a `--pistecheck` probe: the model is covered by unit tests, the look and the ride by
     screenshots and `--ride` runs.
