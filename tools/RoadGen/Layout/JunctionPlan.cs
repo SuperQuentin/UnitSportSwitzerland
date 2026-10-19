@@ -112,6 +112,16 @@ public sealed class JunctionPlan
     public required int Node { get; init; }
     public required Vec2 Centre { get; init; }
     public required bool Lights { get; init; }
+    /// <summary>
+    /// A local crossroads: right before left, no signs, no main road (#854, the user, Oct 19: its turns are tight, taken at walking
+    /// pace): its mouths stay within <see cref="CorePlanner.LocalMostMouth"/> where its core then passes its checks.
+    /// </summary>
+    public bool Local { get; init; }
+    /// <summary>
+    /// Every car arm a service road in OSM (a driveway, a parking aisle, a garage ramp; #854, the user, Oct 19: such a junction is
+    /// a paved apron): its core is flush, no kerb or sidewalk corner round it, and it is <see cref="Local"/>.
+    /// </summary>
+    public bool Apron { get; init; }
     /// <summary>Homed outside the block, planned for what it lays inside it (#818): left out of the block's numbers.</summary>
     public bool Beyond { get; init; }
     public List<ArmPlan> Arms { get; } = new();

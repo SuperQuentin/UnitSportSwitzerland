@@ -67,9 +67,13 @@ public static partial class TileRewriter
             foreach (var p in capAnchors)
                 foreach (var q in capAnchors)
                     if (p.At.DistanceTo(q.At) > 1) oldSteepest = Math.Max(oldSteepest, Math.Abs(p.Height - q.Height) / p.At.DistanceTo(q.At));
+            // every car arm a service road in OSM: a paved apron (#854)
+            bool apron = overlay is not null && plan.Arms.Where(x => InfoOf(net.Links[x.LinkId]) is { } i && PriorityPlanner.IsCarRoad(i.Class))
+                .Select(x => ApproachHighway(overlay, net.Links[x.LinkId], x.End)).ToList() is { Count: > 0 } kinds && kinds.All(k => k == "service");
             var jp = new JunctionPlan
             {
                 Node = junction.NodeId, Merged = junction.Members is null ? null : junction, Centre = junction.Centre, Lights = lights, Beyond = beyond, MainArms = main, CentreLineThrough = plan.CentreLine is not null,
+                Local = plan.Kind == PriorityPlanner.Kind.RightBeforeLeft || apron, Apron = apron,
                 EdgeGuides = plan.Guides.Count > 0, OldOutline = junction.Boundary.ToList(), OldArea = junction.Area, OldTight = oldTight, OldSteepest = oldSteepest,
             };
             var armsHere = ArmsOf(junction, net);

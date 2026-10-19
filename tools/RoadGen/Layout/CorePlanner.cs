@@ -32,6 +32,12 @@ public static class CorePlanner
     public static readonly double TightLeg = new JunctionOptions().TightKerb;
     /// <summary>A mouth is never pushed further out than this from the node (m); past it the turn is laid tighter than its vehicle wants.</summary>
     public const double MostMouth = 40;
+    /// <summary>
+    /// A local crossroads' mouths (<see cref="JunctionPlan.Local"/>) go no further (m) where its core then passes its checks: its
+    /// turns are laid as tight as fits within, a gore's nose further out is not followed (#854, the user, Oct 19, at a garage
+    /// ramp's fork in Geneva). Where it fails them, it is laid as any junction.
+    /// </summary>
+    public const double LocalMostMouth = 12;
     /// <summary>Arms closer than this merge their carriageways (a gore); arms within this of a straight line meet with a straight kerb.</summary>
     public static readonly double GoreAngle = 20 * Math.PI / 180;
     /// <summary>
@@ -69,10 +75,18 @@ public static class CorePlanner
     /// <param name="given">The connectors to lay in place of every allowed move's (a merged core's member, #854: its legs).</param>
     public static JunctionCore Plan(JunctionPlan jp, Func<Vec2, bool>? blocked = null, bool trucks = true, Func<List<Connector>>? given = null)
     {
+        // a local crossroads within LocalMostMouth where that passes its checks, else as any junction
+        if (jp.Local && given is null && PlanWithin(jp, blocked, trucks, null, LocalMostMouth) is var tight
+            && tight.Simple && tight.KerbsNotTangent == 0 && tight.ConnectorsOutside == 0) return tight;
+        return PlanWithin(jp, blocked, trucks, given, MostMouth);
+    }
+
+    private static JunctionCore PlanWithin(JunctionPlan jp, Func<Vec2, bool>? blocked, bool trucks, Func<List<Connector>>? given, double most)
+    {
         var asCar = new HashSet<(int From, int To)>();
         for (int round = 0; ; round++)
         {
-            var core = Lay(jp, blocked, (a, b) => trucks && a.Major && b.Major && !asCar.Contains((a.Arm, b.Arm)), given);
+            var core = Lay(jp, blocked, (a, b) => trucks && a.Major && b.Major && !asCar.Contains((a.Arm, b.Arm)), given, most);
             bool fellBack = false;
             foreach (var c in core.Connectors)
                 if (c.Truck && (c.Fill < 0 || c.UnderRadius)) fellBack |= asCar.Add((c.FromArm, c.ToArm));
@@ -84,7 +98,7 @@ public static class CorePlanner
         }
     }
 
-    private static JunctionCore Lay(JunctionPlan jp, Func<Vec2, bool>? blocked, Func<ArmPlan, ArmPlan, bool> truck, Func<List<Connector>>? given)
+    private static JunctionCore Lay(JunctionPlan jp, Func<Vec2, bool>? blocked, Func<ArmPlan, ArmPlan, bool> truck, Func<List<Connector>>? given, double most)
     {
         var core = new JunctionCore();
         var arms = jp.Arms.Where(a => a.Axis is not null).OrderBy(a => Angles.Normalize(a.RingHeading)).ToList();
@@ -102,7 +116,8 @@ public static class CorePlanner
             c.Turns = Math.Acos(Math.Clamp(-frames[index[c.FromArm]].U.Dot(frames[index[c.ToArm]].U), -1, 1)) >= TurnAngle;
         // a mouth stays on its street: at most MostMouth out, half the street where a junction stands at its other end (a
         // shorter street joins two nodes of one junction: phase 5's multi-node cores)
-        double Most(int k) => Math.Min(MostMouth, arms[k].Reach);
+        double cap = most;
+        double Most(int k) => Math.Min(cap, arms[k].Reach);
         var held = new bool[n];
         var needs = new double[n];
         for (int round = 0; round < 8; round++)
@@ -143,10 +158,15 @@ public static class CorePlanner
             if (settled) break;
         }
         for (int k = 0; k < n; k++) core.Needs[arms[k].Arm] = needs[k];
-        core.MouthsAtMost = Enumerable.Range(0, n).Count(k => held[k] && Most(k) >= MostMouth);
-        core.MouthsAtReach = Enumerable.Range(0, n).Count(k => held[k] && Most(k) < MostMouth);
+        core.MouthsAtMost = Enumerable.Range(0, n).Count(k => held[k] && Most(k) >= cap);
+        core.MouthsAtReach = Enumerable.Range(0, n).Count(k => held[k] && Most(k) < cap);
         for (int k = 0; k < n; k++)
-            if (held[k] && Most(k) < MostMouth) core.ArmsAtReach.Add(arms[k].Arm);
+            if (held[k] && Most(k) < cap) core.ArmsAtReach.Add(arms[k].Arm);
+
+        // two arms leaving within a gore of each other at their mouths (a garage ramp beside its street, #854, the user, Oct 19):
+        // a move between them turns back round the gore's nose, a U-turn no one makes
+        frames = Frames(arms, m);
+        core.Connectors.RemoveAll(c => frames[index[c.FromArm]].U.Dot(frames[index[c.ToArm]].U) > Math.Cos(GoreAngle));
 
         // 3 and 4, until every kerb starts inside its mouth: a corner the final connectors round further (a bend through the
         // mouths did not reckon with) pushes its mouths out, and all again

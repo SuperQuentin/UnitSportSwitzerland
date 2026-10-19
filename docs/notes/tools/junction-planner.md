@@ -342,6 +342,14 @@ off, `--junctions new` plans and reports without writing.
   it in up to 8 rounds (4 before). Old layout 506 -> 493. A bend through (turning under `TurnAngle`) whose lanes' lines meet
   next to a mouth (arms nearly in line, offset) is a smooth S between the mouths, never an arc tighter than a car's (a 1.5 m
   kink left the outline): 485.
+- **Local crossroads and aprons** (#854, the user, Oct 19, at a garage ramp's fork in Geneva 2495786,1119007): a right-before-left
+  junction (`JunctionPlan.Local`: no signs, no main road, taken at walking pace) is laid with its mouths within
+  `CorePlanner.LocalMostMouth` 12 m first (turns as tight as fits, a gore's nose further out not followed) and as any junction
+  only where that fails its checks (a hard 12 m cap failed 78 more cores). Two arms leaving within `GoreAngle` of each other at
+  their mouths get no move between them (a U-turn round the gore's nose). Where OSM maps every car arm `highway=service`
+  (driveways, parking aisles; `JunctionPlan.Apron`) the core is a flush apron: no sidewalk corner round it; such a junction is
+  local too. 168 real tiles: old layout 485 -> 417 ("a check failed" 187 -> 139), 172 aprons (none in Geneva: its service roads
+  find no OSM row in the overlay). `APRONDBG=1` prints the aprons written.
 - **Comparing with reality**: SWISSIMAGE crops from `wms.geo.admin.ch` (`ch.swisstopo.swissimage`, EPSG:2056 bbox); in
   Geneva the marking cadastre on `ge.ch/terags/rest/services/DIRECTIVES_SIGNAL_CHANTIERS/MapServer` (37 lines, 38 kerbs,
   44 coloured surfaces, 48 road cover: carriageway, sidewalk, islands) as GeoJSON by bbox. Three panels (aerial, old, new)

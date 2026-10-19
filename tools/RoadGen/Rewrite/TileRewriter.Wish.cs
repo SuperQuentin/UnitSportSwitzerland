@@ -38,6 +38,15 @@ public static partial class TileRewriter
         return overlay.AtEnd(key.Uuid, key.Part, m, atEnd)?.MaxSpeed(atEnd) ?? 0;
     }
 
+    /// <summary>The highway type OSM maps at the junction end of a link (<c>service</c>, <c>residential</c>, ...), null where none.</summary>
+    private static string? ApproachHighway(OsmOverlayReader? overlay, RoadLink link, LinkEnd end)
+    {
+        if (overlay is null || link.Tag is not Source { Key: { } key } source || source.Plan.Length < 2) return null;
+        bool atEnd = end == LinkEnd.End;
+        double m = key.FromM + source.AlongOf(atEnd ? source.Plan[^1] : source.Plan[0]);
+        return overlay.AtEnd(key.Uuid, key.Part, m, atEnd)?.Highway;
+    }
+
     private static SignalMoves[]? WishedLanes(OsmOverlayReader? overlay, RoadLink link, LinkEnd end, SignalMoves allowed)
     {
         if (overlay is null || link.Tag is not Source { Key: { } key } source || source.Plan.Length < 2) return null;
