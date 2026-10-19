@@ -107,16 +107,22 @@ public partial class SightingShots : Node
         }
         var sightings = UfoSightings.Instance!;
         var herds = Farming.Herds.Instance!;
-        var start = Me?.GlobalPosition ?? GetViewport().GetCamera3D()!.GlobalPosition;
-        await Until(() => _chunks == null || _chunks.TryGetSurface(start, out _), 60);
-        var home = start with { Y = Ground(start) };
+        // the spawn moves the camera (and the floating origin with it) while the world loads: let it
+        // settle, then keep the place in LV95, never as a world point across frames
+        await Seconds(8);
+        Vector3 Spot() => Me?.GlobalPosition ?? GetViewport().GetCamera3D()!.GlobalPosition;
+        await Until(() => _chunks == null || _chunks.TryGetSurface(Spot(), out _), 60);
+        var (pe, pn) = _origin.ToLv95(Spot());
+        Vector3 Home() { var w = _origin.ToWorld(pe, pn, 0); return w with { Y = Ground(w) }; }
         await Seconds(3);
-        var (pe, pn) = _origin.ToLv95(home);
 
         // ---- the abduction, over the nearest cow ----
         (double E, double N, float Ground)? cow = null;
-        await Until(() => (cow = herds.CowNear(pe, pn, 600f, UfoSightings.Now + 4)) != null, 30);
-        Expect(cow != null, "a cow within 600 m to beam up");
+        await Until(() => (cow = herds.CowNear(pe, pn, 1500f, UfoSightings.Now + 4)) != null, 60);
+        Expect(cow != null, "a cow within 1.5 km to beam up");
+        if (cow == null)
+            foreach (var h in herds.All)
+                GD.Print(FormattableString.Invariant($"[sightingshots] herd {h.Tile}/{h.Index} at {h.E - pe:F0}/{h.N - pn:F0} m, {h.Count} cows, ground {Ground(_origin.ToWorld(h.E, h.N, 0)):F1}"));
         if (cow is { } c)
         {
             float heading = 1.1f;
@@ -147,7 +153,7 @@ public partial class SightingShots : Node
 
         // ---- a landing, on open ground 40 m from the player ----
         {
-            var at = home + new Vector3(40f, 0f, -10f);
+            var at = Home() + new Vector3(40f, 0f, -10f);
             at.Y = Ground(at);
             var (le, ln) = _origin.ToLv95(at);
             float heading = 4.0f;
@@ -171,7 +177,7 @@ public partial class SightingShots : Node
 
         // ---- a flyover and the mothership, from the player ----
         {
-            var at = home;
+            var at = Home();
             var (fe, fn) = _origin.ToLv95(at);
             float g = Ground(at);
             int fly = sightings.Stage(SightingKind.Flyover, fe, fn, g, 0.6f, 3, -26, 5);

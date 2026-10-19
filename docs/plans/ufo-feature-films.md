@@ -105,7 +105,7 @@ deck appears at least once across the three films, and each film covers most of 
 ## Status
 
 - [ ] A UFO (#861)
-- [ ] B UFO sightings (#863)
+- [x] B UFO sightings (#863): PR #877
 - [ ] C bubbles and subtitles (#862)
 - [ ] D The Stolen Fondue (#864)
 - [ ] E The Alien Tourist (#865)
