@@ -1,0 +1,331 @@
+{
+  "f02a": {
+    "en": "Fondue's ready!",
+    "fr": "La fondue est prête !",
+    "de": "Das Fondue ist fertig!",
+    "it": "La fonduta è pronta!",
+    "rm": "La fondue è pronta!"
+  },
+  "f02b": {
+    "en": "Finally. I'm starving.",
+    "fr": "Enfin. Je meurs de faim.",
+    "de": "Endlich. Ich verhungere.",
+    "it": "Finalmente. Muoio di fame.",
+    "rm": "Finalmain. Jau mor da fom."
+  },
+  "f03": {
+    "en": "Uh... guys?",
+    "fr": "Euh... les gars ?",
+    "de": "Äh... Leute?",
+    "it": "Ehm... ragazzi?",
+    "rm": "Ehm... amis?"
+  },
+  "f04": {
+    "en": "HEY! That's OUR fondue!",
+    "fr": "HÉ ! C'est NOTRE fondue !",
+    "de": "HEY! Das ist UNSER Fondue!",
+    "it": "EHI! È la NOSTRA fonduta!",
+    "rm": "HEI! Quai è NOSSA fondue!"
+  },
+  "t06": {
+    "en": "THE STOLEN FONDUE",
+    "fr": "LA FONDUE VOLÉE",
+    "de": "DAS GESTOHLENE FONDUE",
+    "it": "LA FONDUTA RUBATA",
+    "rm": "LA FONDUE INVOLADA"
+  },
+  "t06b": {
+    "en": "a UnitSport Switzerland film",
+    "fr": "un film UnitSport Switzerland",
+    "de": "ein Film von UnitSport Switzerland",
+    "it": "un film di UnitSport Switzerland",
+    "rm": "in film da UnitSport Switzerland"
+  },
+  "f06": {
+    "en": "AFTER IT!",
+    "fr": "À SA POURSUITE !",
+    "de": "HINTERHER!",
+    "it": "INSEGUIAMOLO!",
+    "rm": "SUENTER!"
+  },
+  "f08": {
+    "en": "Stop, thief! Bring back the cheese!",
+    "fr": "Au voleur ! Rends le fromage !",
+    "de": "Haltet den Dieb! Her mit dem Käse!",
+    "it": "Al ladro! Ridacci il formaggio!",
+    "rm": "Lader! Dà enavos il chaschiel!"
+  },
+  "f10": {
+    "en": "Wait for meeee!",
+    "fr": "Attendez-moiiii !",
+    "de": "Wartet auf miiich!",
+    "it": "Aspettatemiii!",
+    "rm": "Spetgai sin maaai!"
+  },
+  "f11": {
+    "en": "I'll take the chopper.",
+    "fr": "Je prends l'hélico.",
+    "de": "Ich nehme den Heli.",
+    "it": "Prendo l'elicottero.",
+    "rm": "Jau prend l'helicopter."
+  },
+  "f12": {
+    "en": "Got it! It's over the glacier!",
+    "fr": "Je l'ai ! Il survole le glacier !",
+    "de": "Hab ihn! Er ist über dem Gletscher!",
+    "it": "Preso! È sopra il ghiacciaio!",
+    "rm": "Al hai! El è sur il glatscher!"
+  },
+  "f14": {
+    "en": "Lost it. Where did it go?",
+    "fr": "Perdu. Il est passé où ?",
+    "de": "Weg. Wo ist er hin?",
+    "it": "Perso. Dov'è finito?",
+    "rm": "Pers. Nua è el ì?"
+  },
+  "f15": {
+    "en": "Everyone split up. Find clues.",
+    "fr": "On se sépare. Cherchez des indices.",
+    "de": "Wir teilen uns auf. Sucht Hinweise.",
+    "it": "Dividiamoci. Cercate indizi.",
+    "rm": "Ans separain. Tschertgai indizis."
+  },
+  "f18": {
+    "en": "Pigeon! Wait!",
+    "fr": "Pigeon ! Attends !",
+    "de": "Taube! Warte!",
+    "it": "Piccione! Aspetta!",
+    "rm": "Columba! Spetga!"
+  },
+  "f19a": {
+    "en": "Coo. Big plate. Went south. Coo.",
+    "fr": "Rou. Grosse assiette. Partie au sud. Rou.",
+    "de": "Gurr. Grosser Teller. Nach Süden. Gurr.",
+    "it": "Tru. Piattone. Andato a sud. Tru.",
+    "rm": "Gru. Grond plat. Ì vers sid. Gru."
+  },
+  "f19b": {
+    "en": "...Thanks?",
+    "fr": "...Merci ?",
+    "de": "...Danke?",
+    "it": "...Grazie?",
+    "rm": "...Grazia?"
+  },
+  "f20a": {
+    "en": "Which one...?",
+    "fr": "Laquelle... ?",
+    "de": "Welches...?",
+    "it": "Quale...?",
+    "rm": "Tgenin...?"
+  },
+  "f20b": {
+    "en": "All of them.",
+    "fr": "Toutes.",
+    "de": "Alle.",
+    "it": "Tutte.",
+    "rm": "Tuts."
+  },
+  "f22": {
+    "en": "There you are!",
+    "fr": "Te voilà !",
+    "de": "Da bist du ja!",
+    "it": "Eccoti!",
+    "rm": "Qua es ti!"
+  },
+  "f24": {
+    "en": "Race you to the saucer!",
+    "fr": "Course jusqu'à la soucoupe !",
+    "de": "Wer zuerst bei der Untertasse ist!",
+    "it": "Gara fino al disco volante!",
+    "rm": "Cursa fin tar il disc sgulant!"
+  },
+  "f27": {
+    "en": "Legs... don't... fail me now!",
+    "fr": "Jambes... ne me lâchez pas !",
+    "de": "Beine... lasst mich... nicht hängen!",
+    "it": "Gambe... non... mollatemi ora!",
+    "rm": "Chommas... tegnai... ora!"
+  },
+  "f28": {
+    "en": "I'm fine!",
+    "fr": "Ça va !",
+    "de": "Alles gut!",
+    "it": "Tutto a posto!",
+    "rm": "Tut en urden!"
+  },
+  "f29": {
+    "en": "It's taking the cows too?!",
+    "fr": "Il prend aussi les vaches ?!",
+    "de": "Der nimmt auch die Kühe?!",
+    "it": "Si prende anche le mucche?!",
+    "rm": "El prenda er las vatgas?!"
+  },
+  "f30": {
+    "en": "Plan B: a new caquelon.",
+    "fr": "Plan B : un nouveau caquelon.",
+    "de": "Plan B: ein neues Caquelon.",
+    "it": "Piano B: un caquelon nuovo.",
+    "rm": "Plan B: in nov caquelon."
+  },
+  "f31": {
+    "en": "Wait! I have a ticket!",
+    "fr": "Attendez ! J'ai un billet !",
+    "de": "Wartet! Ich habe ein Billett!",
+    "it": "Aspettate! Ho il biglietto!",
+    "rm": "Spetgai! Jau hai in bigliet!"
+  },
+  "f32": {
+    "en": "Faster! It's getting away!",
+    "fr": "Plus vite ! Il s'échappe !",
+    "de": "Schneller! Er haut ab!",
+    "it": "Più veloce! Sta scappando!",
+    "rm": "Pli svelt! El fugia!"
+  },
+  "f33": {
+    "en": "Not my fish too!",
+    "fr": "Pas mon poisson aussi !",
+    "de": "Nicht auch noch mein Fisch!",
+    "it": "Anche il mio pesce no!",
+    "rm": "Betg er mes pesch!"
+  },
+  "f34": {
+    "en": "Okay. We build a trap.",
+    "fr": "Bon. On construit un piège.",
+    "de": "Okay. Wir bauen eine Falle.",
+    "it": "Ok. Costruiamo una trappola.",
+    "rm": "Bun. Nus construin ina trappla."
+  },
+  "f36": {
+    "en": "Bait: one fondue, extra garlic.",
+    "fr": "Appât : une fondue, double ail.",
+    "de": "Köder: ein Fondue, extra Knoblauch.",
+    "it": "Esca: una fonduta, aglio extra.",
+    "rm": "Esca: ina fondue, extra agl."
+  },
+  "f37a": {
+    "en": "First dip is mine!",
+    "fr": "La première bouchée est à moi !",
+    "de": "Der erste Bissen gehört mir!",
+    "it": "Il primo boccone è mio!",
+    "rm": "L'emprim bucun è mes!"
+  },
+  "f37b": {
+    "en": "No way!",
+    "fr": "Pas question !",
+    "de": "Vergiss es!",
+    "it": "Neanche per sogno!",
+    "rm": "Gnanc en siemi!"
+  },
+  "f38": {
+    "en": "...",
+    "fr": "...",
+    "de": "...",
+    "it": "...",
+    "rm": "..."
+  },
+  "f39": {
+    "en": "Still no fondue.",
+    "fr": "Toujours pas de fondue.",
+    "de": "Immer noch kein Fondue.",
+    "it": "Ancora niente fonduta.",
+    "rm": "Anc adina nagina fondue."
+  },
+  "f40": {
+    "en": "Wait. Radar ping!",
+    "fr": "Attendez. Écho radar !",
+    "de": "Moment. Radarsignal!",
+    "it": "Aspettate. Segnale radar!",
+    "rm": "Spetgai. Signal da radar!"
+  },
+  "f41": {
+    "en": "Everyone aboard. It's over the Alps!",
+    "fr": "Tous à bord. Il survole les Alpes !",
+    "de": "Alle an Bord. Er ist über den Alpen!",
+    "it": "Tutti a bordo. È sopra le Alpi!",
+    "rm": "Tuts a bord. El è sur las Alps!"
+  },
+  "f46": {
+    "en": "The zone is closing!",
+    "fr": "La zone se referme !",
+    "de": "Die Zone schliesst sich!",
+    "it": "La zona si sta chiudendo!",
+    "rm": "La zona sa serra!"
+  },
+  "f47": {
+    "en": "Cheese! ...Wrong cheese.",
+    "fr": "Du fromage ! ...Pas le bon.",
+    "de": "Käse! ...Der falsche Käse.",
+    "it": "Formaggio! ...Quello sbagliato.",
+    "rm": "Chaschiel! ...Il fallà."
+  },
+  "f49": {
+    "en": "It's heading back to the mountain!",
+    "fr": "Il retourne vers la montagne !",
+    "de": "Er fliegt zurück zum Berg!",
+    "it": "Torna verso la montagna!",
+    "rm": "El turna vers la muntogna!"
+  },
+  "f50": {
+    "en": "Shh. Here it comes.",
+    "fr": "Chut. Le voilà.",
+    "de": "Pst. Da kommt er.",
+    "it": "Sst. Eccolo che arriva.",
+    "rm": "Pst. Qua vegn el."
+  },
+  "f52a": {
+    "en": "Fondue... please?",
+    "fr": "Fondue... s'il vous plaît ?",
+    "de": "Fondue... bitte?",
+    "it": "Fonduta... per favore?",
+    "rm": "Fondue... per plaschair?"
+  },
+  "f52b": {
+    "en": "...You could have asked.",
+    "fr": "...Tu aurais pu demander.",
+    "de": "...Du hättest fragen können.",
+    "it": "...Potevi chiedere.",
+    "rm": "...Ti avessas pudì dumandar."
+  },
+  "f53": {
+    "en": "Okay. But you bring the bread.",
+    "fr": "D'accord. Mais tu apportes le pain.",
+    "de": "Okay. Aber du bringst das Brot.",
+    "it": "Va bene. Ma il pane lo porti tu.",
+    "rm": "D'accord. Ma ti portas il paun."
+  },
+  "y53": {
+    "en": "ZORP joined the game",
+    "fr": "ZORP a rejoint la partie",
+    "de": "ZORP ist dem Spiel beigetreten",
+    "it": "ZORP si è unito alla partita",
+    "rm": "ZORP è sa participà al gieu"
+  },
+  "f55": {
+    "en": "Same time next year?",
+    "fr": "Même heure l'an prochain ?",
+    "de": "Gleiche Zeit nächstes Jahr?",
+    "it": "Stessa ora l'anno prossimo?",
+    "rm": "Medem temp l'onn proxim?"
+  },
+  "f56": {
+    "en": "Everyone say... FONDUE!",
+    "fr": "Tout le monde dit... FONDUE !",
+    "de": "Alle sagen... FONDUE!",
+    "it": "Tutti insieme... FONDUTA!",
+    "rm": "Tuts din... FONDUE!"
+  },
+  "t56b": {
+    "en": "UnitSport Switzerland",
+    "fr": "UnitSport Switzerland",
+    "de": "UnitSport Switzerland",
+    "it": "UnitSport Switzerland",
+    "rm": "UnitSport Switzerland"
+  },
+  "credit": {
+    "en": "\"Hep Cats\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0",
+    "fr": "\"Hep Cats\" Kevin MacLeod (incompetech.com)\nSous licence Creative Commons : Attribution 4.0",
+    "de": "\"Hep Cats\" Kevin MacLeod (incompetech.com)\nLizenziert unter Creative Commons: Namensnennung 4.0",
+    "it": "\"Hep Cats\" Kevin MacLeod (incompetech.com)\nRilasciato sotto licenza Creative Commons: Attribuzione 4.0",
+    "rm": "\"Hep Cats\" Kevin MacLeod (incompetech.com)\nLicenza Creative Commons: Attribuziun 4.0"
+  }
+}
