@@ -3,7 +3,7 @@
 
 # Stadium concert: Stade de Genève, a DMX light rig driven by the music, pyro, smoke and confetti
 
-Tracking: #885. Status: **planned** (Oct 2026).
+Tracking: #885. Status: **phase 1 (the stadium) in PR #886**; phases 2-7 planned (Oct 2026).
 
 A real stadium, built to its real shape where the world already stands, hosting a concert: a stage on
 the pitch, a light rig patched like a real one (fixtures on DMX universes), a virtual light desk that
@@ -161,7 +161,7 @@ Out of scope for the first phases: empty seats, or simple instanced silhouettes 
 
 | Phase | What | Test |
 |---|---|---|
-| 1 | Stadium landmark from the data footprint, bowl, roof, pitch; showcase entry | model viewer, `--at 2498755,1114882` shot, quick tier |
+| 1 | Stadium from a catalog row (the data has no bowl at La Praille), bowl, roof, gates, clip of data buildings; showcase entry. **Done, PR #886** (`terrain/stadiums`) | `--stadiumcheck`, model viewer, `--at 2498751,1114890` shots |
 | 2 | Stage, fixtures as data, patch, DMX universes, rendering of beams; static looks | model viewer, a night shot |
 | 3 | Light desk: internal show from `CdAnalysis` on the shared clock; show start replicated | quick + net tier (both clients see the same cue) |
 | 4 | Pyro, CO2, haze, confetti on cues; sounds in the sound player | `--sounds,check`, net tier |

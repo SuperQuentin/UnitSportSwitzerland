@@ -1915,7 +1915,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private void PlaceHand(Avatar.HumanMeshBuilder.GaitMounts mounts)
     {
-        if (_walker == null) { HandLocal = null; return; }
+        // seated on a stand (#885): the hands rest in the lap, holding nothing
+        if (_walker == null || PoseKind == PoseSit) { HandLocal = null; return; }
         // mounts are already turned to face -Z, where the figure's right is +X
         var hand = mounts.HandL.X > mounts.HandR.X ? mounts.HandL : mounts.HandR;
         HandLocal = _walker.Transform * new Transform3D(mounts.HandBasis, hand);
@@ -2010,6 +2011,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // The owner decides when the dance is over: out of earshot, or doing anything else.
         // Remotes only ease out on what they receive.
         if (DanceId != 0 && !DanceAllowed()) DanceId = 0;
+        if (Sitting) { DanceId = 0; PublishSitPose(); return; }
         if (_swimming) { PublishSwimPose(dt); return; }
         _airTime = IsOnFloor() ? 0f : _airTime + dt;
         float speed = MathX.FlatLength(Velocity);
@@ -2276,6 +2278,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 PoseTucked => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Tucked, arm, blend),
                 PoseAir => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Running, arm, blend),
                 PoseHang or PoseClimb => Avatar.HumanMeshBuilder.MountsForPose(CarriedFigure(), arm, blend),
+                PoseSit => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Standing, arm, blend),
                 _ => Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase, arm, blend, dance, vr),
             };
         }
@@ -2293,6 +2296,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 PoseAir => armed ? Avatar.HumanMeshBuilder.BuildPosed(palette, Avatar.HumanPose.Running, arm, blend, Hat, _poseMesh ??= new ArrayMesh())
                     : _airPose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Running, hat: Hat),
                 PoseHang or PoseClimb => Avatar.HumanMeshBuilder.BuildPosed(palette, CarriedFigure(), arm, blend, Hat, _poseMesh ??= new ArrayMesh()),
+                // seated on a stand (#885): the figure round its hip, which BodyPose lifts
+                PoseSit => SeatedWalker(palette),
                 _ => Avatar.HumanMeshBuilder.BuildStride(palette, Anim.X, _stridePhase, hat: Hat, arm: arm, armBlend: blend,
                     dance: dance, into: _poseMesh ??= new ArrayMesh(), vr: vr, point: point),
             };
@@ -2495,7 +2500,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // A throw pulls the lens in close over the right shoulder (#206); lent from first person,
         // the arm grows out of the eye instead of shrinking from the chase distance.
         float tb = _throwBlend;
-        float height = Mathf.Lerp(_borrowedThird ? EyeHeight : Mathf.Lerp(ShoulderHeight, 0.95f, _slideBlend), ThrowCamHeight, tb);
+        float height = Mathf.Lerp(_borrowedThird ? EyeHeight : Sitting ? _sitDrop + 0.55f : Mathf.Lerp(ShoulderHeight, 0.95f, _slideBlend), ThrowCamHeight, tb);
         float pivotTarget = GlobalPosition.Y + height;
         _pivotY = float.IsNaN(_pivotY) || Mathf.Abs(pivotTarget - _pivotY) > 6f
             ? pivotTarget
@@ -2648,6 +2653,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             ExitVehicle();
             return true;
         }
+        // seated on a stand (#885): stand up
+        if (Sitting)
+        {
+            StandUpFromSeat();
+            return true;
+        }
         // a Battle Royale crate at your feet (#194), indoors or out: a death box falls where its owner did
         if (_ride == null && !_mantling && _deadTimer <= 0 && BattleRoyale.BrCrates.Instance?.TryOpen(this) == true) return true;
         // a zipline's top post, a ladder's foot, a launch pad (#275)
@@ -2720,6 +2731,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (IsOnFloor() && Interiors.InteriorManager.Instance?.TryDoor(this) == true) return true;
         // another player looked at, on foot: challenge them to a fist fight, or take their challenge (#495)
         if (TryEngageFighter()) return true;
+        // a stand's row (#885): sit down, by hand too (a VR grip), before music's dance
+        if (TrySit()) return true;
         if (byHand) return false;
         // music heard here: E starts the dance; stopping works for as long as it lasts
         if (Items.RadioManager.Instance?.NearestMusic(GlobalPosition, Items.RadioManager.DanceRadius, heard: DanceId == 0) != null)
@@ -3626,6 +3639,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         // a passenger is carried by the vehicle it sits in (#158)
         if (RidingWith != 0) { RideAlong(); return; }
+        // seated on a stand (#885): the body stays put until it stands up
+        if (SitPhysics()) return;
         // aboard a walkable vehicle, or about to be (#162)
         using (Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Deck, Bot))
             if (_ride == null && DeckPhysics((float)delta)) return;
@@ -5132,7 +5147,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // a slide banks the view into the turn — the only cue that you are steering rather
         // than being carried, since the input no longer changes your speed
         float lean = _slideBlend * -SteerInput() * 0.10f;
-        float eye = Mathf.Lerp(EyeHeight, SlideEyeHeight, _slideBlend);
+        float eye = Sitting ? _sitDrop + SitEyeOverHip : Mathf.Lerp(EyeHeight, SlideEyeHeight, _slideBlend);
 
         // third person places its own camera in _Process; the bob, dip and FOV here still run
         // for it, because the body squash and the FOV kick read them
