@@ -82,3 +82,13 @@ become lifts. Follows the slopes (#887), the ski physics (#899) and slope races 
 OSM aerialway details (the true type, so a cable car shuttles; speed from `aerialway:duration`;
 capacity), a seated figure on chairs, stations as buildings, opening hours, the remote rider drawn
 exactly on the chair.
+
+## Status (on the branch, Oct 19 2026)
+
+- **Built**: steps 1-4.
+- **Built differently**:
+  - No `Ropeways.TryBoard` static: the call is `FootPlayer.TryLift` on whoever simulates the body.
+  - The chase camera follows a carried skier and sits above the cable on a chair or in a cabin.
+  - The layer is pinned at the origin, and each line has its own culling box (`world/ski-lifts`).
+- **Found**: TLM draws some gondolas as two parallel cables, so they show as two lines. Follow-up,
+  with the OSM details.
