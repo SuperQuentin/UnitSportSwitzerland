@@ -79,7 +79,7 @@ public static class SitePallets
         float first = (front.From + front.To) / 2 - (places - 1) * Pitch / 2;
         var doors = front.Doors;
 
-        ulong yh = DormantSlots.Hash(DormantSlots.Key((long)(yard.X * 100), (long)(yard.Z * 100)), 0xBA11E7);
+        ulong yh = DormantSlots.Hash(DormantSlots.Key(DormantSlots.Cm(yard.X), DormantSlots.Cm(yard.Z)), 0xBA11E7);
         // a works' stock is at one end of its front, which end the site's own roll
         bool fromLeft = (yh & 1) == 0;
         // v is out from the yard's middle; the facade is the yard's near edge less the apron
@@ -102,7 +102,7 @@ public static class SitePallets
             // the place's own roll, off its position, so a neighbour never changes it
             float x = yard.X + u * cos - v * sin;
             float z = yard.Z - u * sin - v * cos;
-            ulong h = DormantSlots.Hash(DormantSlots.Key((long)(x * 100), (long)(z * 100)), 0x9A11E7);
+            ulong h = DormantSlots.Hash(DormantSlots.Key(DormantSlots.Cm(x), DormantSlots.Cm(z)), 0x9A11E7);
             if ((h & 0xFFFF) / 65535.0 > fill) continue;
 
             // what is on it, and whether it is the square deck of an aisle (one in five)
