@@ -384,6 +384,14 @@ src/Trailer/             full   tools/trailer.sh stills 2,5,12
 tools/lib/               quick  tools/lib/guard_selftest.sh
 src/Player/Pigeon        quick  --flycheck pigeon --world flat
 src/Player/FlightCheck   quick  --flycheck pigeon --world flat
+src/Player/Ufo           quick  --flycheck ufo --world flat
+src/Player/FootPlayer.Ufo quick  --flycheck ufo --world flat
+src/Player/FlightCheck   quick  --flycheck ufo --world flat
+src/Player/TractorBeam   quick  --beamcheck --world flat
+src/Player/BeamCheck     quick  --beamcheck --world flat
+src/Player/FootPlayer.Ufo quick  --beamcheck --world flat
+src/Items/DroppedItem.Beam quick --beamcheck --world flat
+src/Vehicles/VehicleBody.Beam quick --beamcheck --world flat
 src/Player/Pigeon        quick  --flycheck pigeoncrash --systems birds
 src/Birds/BirdLife       quick  --flycheck pigeoncrash --systems birds
 src/Player/FlightCheck   quick  --flycheck a320 --world flat
@@ -533,6 +541,8 @@ src/Vehicles/VehicleState quick --holdcheck --world fixture --traffic 0
 src/Vehicles/CargoFit    quick  --holdcheck --world fixture --traffic 0
 src/Avatar/VehicleDeck   quick  --holdcheck --world fixture --traffic 0
 src/Player/Pigeon        net    tools/pigeonnetcheck.sh
+src/Player/Ufo           net    tools/ufonetcheck.sh
+src/Player/TractorBeams  net    tools/ufonetcheck.sh
 src/Player/FootPlayer.Pi net    tools/pigeonnetcheck.sh
 src/Birds/BirdNet        net    tools/pigeonnetcheck.sh
 src/Birds/PigeonNet      net    tools/pigeonnetcheck.sh

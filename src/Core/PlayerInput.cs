@@ -77,6 +77,8 @@ public partial class PlayerInput : Node
     public const string Couple = "couple";
     /// <summary>A steamer's whistle (#303), held: it blows as long as it is held. H, like coupling a truck.</summary>
     public const string Horn = "horn";
+    /// <summary>A UFO's tractor beam on or off (#861). H, like coupling a truck: "take hold of it".</summary>
+    public const string TractorBeam = "tractor_beam";
     /// <summary>A passenger moves into the free driver's seat (#158).</summary>
     public const string TakeWheel = "take_wheel";
     /// <summary>A bus kneels (lowers its door side) or rises.</summary>
@@ -600,6 +602,8 @@ public partial class PlayerInput : Node
         Bind(Couple, Keys(Key.H), Button(JoyButton.DpadLeft));
         // a steamer has nothing to couple: its whistle takes the same key
         Bind(Horn, Keys(Key.H), Button(JoyButton.DpadLeft));
+        // and a UFO's tractor beam (#861): it takes hold of what is under it
+        Bind(TractorBeam, Keys(Key.H), Button(JoyButton.DpadLeft));
         // a passenger never does tricks: the trick keys are free in a seat
         Bind(TakeWheel, Keys(Key.F), Button(JoyButton.RightShoulder));
         // L3 means nothing in a cab: a bus kneels and a farm machine lowers its implement or header (#494)

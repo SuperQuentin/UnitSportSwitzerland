@@ -148,6 +148,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _radios.PlayerPositions = _vehicles.PlayerPositions;
         // items dropped and thrown on the ground (#206), the same spawn-and-claim pattern
         _dropped = Items.DroppedItems.Create(this, origin);
+        // the UFOs' tractor beams (#861): what each peer simulates, moved when a beam holds it
+        Player.TractorBeams.Create(this);
         _dropped.PlayerPositions = _vehicles.PlayerPositions;
         // which peer has which of those (#689): only what it could see from where it stands; before
         // anything is spawned, every entity's synchronizers ask it
