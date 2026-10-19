@@ -188,6 +188,69 @@ public partial class PortalDemo : Node3D
         })));
 
     /// <summary>
+    /// Castles (#859), one of each dress: a keep for every building tradition (on a real fortress of
+    /// that region, Chillon for Savoy), Vufflens's brick, a stately home and a ruin (its broken walls). Each solid stands on its castle's
+    /// first point in its own tile, so <see cref="Castles"/> matches it as the game would.
+    /// </summary>
+    [Showcase("Terrain", "Castle")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseCastle() =>
+        CastleSamples().Select(s => (s.Name, (Func<Node3D>)(() =>
+        {
+            var tile = CastleTile(s.Castle, s.Size, out var at);
+            var node = new Node3D();
+            node.AddChild(new MeshInstance3D
+            {
+                Mesh = ChunkNode.ToArrayMesh(BuildingMeshBuilder.Build(tile, Array.Empty<DoorSpot>())!, World(Styles.MaterialRole.Building)),
+                Position = new Vector3(-at.X, 0f, -at.Y),
+            });
+            return node;
+        })));
+
+    /// <summary>
+    /// One castle solid of each dress (#859), for the model viewer and the collision matrix: the
+    /// castle it stands on (index in <see cref="Castles.List"/>) and its size (width, depth, eave,
+    /// ridge; eave = ridge is a flat top, a wall walk).
+    /// </summary>
+    public static IEnumerable<(string Name, int Castle, Vector4 Size)> CastleSamples()
+    {
+        int First(Func<(string Name, string Canton, CastleKind Kind, double[] Points), bool> match) =>
+            Array.FindIndex(Castles.List, c => match(c));
+        var keep = new Vector4(12f, 12f, 20f, 20f);
+        foreach (var region in Enum.GetValues<CastleRegion>())
+        {
+            int castle = region == CastleRegion.Savoy
+                ? First(c => c.Name == "Château de Chillon")
+                : First(c => c.Kind == CastleKind.Fortress && Castles.RegionOf(c.Canton) == region);
+            if (castle >= 0) yield return ($"{region} keep", castle, keep);
+        }
+        int brick = First(c => c.Name == "Château de Vufflens");
+        if (brick >= 0) yield return ("Brick keep", brick, keep);
+        int manor = First(c => c.Kind == CastleKind.Manor && Castles.RegionOf(c.Canton) == CastleRegion.Plateau);
+        if (manor >= 0) yield return ("Manor", manor, new Vector4(26f, 14f, 10.5f, 14.5f));
+        int ruin = First(c => c.Kind == CastleKind.Ruin);
+        if (ruin >= 0) yield return ("Ruin", ruin, new Vector4(10f, 10f, 14f, 14f));
+    }
+
+    /// <summary>
+    /// A tile holding one solid of <paramref name="size"/> on the castle's first point, so
+    /// <see cref="Castles"/> matches it as the game would; <paramref name="at"/> is that point in the tile.
+    /// </summary>
+    public static BuildingTile CastleTile(int castle, Vector4 size, out Vector2 at)
+    {
+        var points = Castles.List[castle].Points;
+        var id = TileId.FromLv95(points[0], points[1]);
+        at = new Vector2((float)(points[0] - id.MinE), (float)(id.MaxN - points[1]));
+        return new BuildingTile
+        {
+            Id = id,
+            Buildings = new List<Building>
+            {
+                new() { Kind = BuildingKind.Annex, YearBuilt = 1250, MinY = 0, MaxY = size.W, Triangles = Solid(at, size.X, size.Y, size.Z, size.W) },
+            },
+        };
+    }
+
+    /// <summary>
     /// A block of flats' underground garage door (#558) with each road link: the pavement with its
     /// bollards and dropped kerb, the access road flaring into a T. A road's own surface is not
     /// drawn here as the game draws it; a dark strip stands in for the road the link meets.
@@ -506,6 +569,7 @@ public partial class PortalDemo : Node3D
             foreach (var (x, z) in new[] { (x0, z0), (x1, z0), (x1, z1), (x0, z0), (x1, z1), (x0, z1) })
             {
                 st.SetColor(c);
+                st.SetNormal(Vector3.Up);   // the terrain body lights steep ground by it (#883)
                 st.AddVertex(new Vector3(x, y, z));
             }
         }

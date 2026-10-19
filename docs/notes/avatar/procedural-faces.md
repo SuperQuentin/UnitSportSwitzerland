@@ -10,9 +10,10 @@ Replaced the #394 face atlas (16×16 pixel faces drawn from text). Plan: `docs/p
   varying. Decode with `int(round(x))`, **never `int(x + 0.5)`**: at 8 million a float32 steps by 1,
   so `x + 0.5` rounds up a whole number and every face draws from its neighbour's bits (that bug
   made every eye a slit).
-- **Presets** = `Appearance.Face` (4 bits, saved and replicated, **append only**): 0-7 the #394
+- **Presets** = `Appearance.Face` (5 bits since #880, saved and replicated, **append only**): 0-7 the #394
   faces' names (anime, calm, sharp, cute, freckles, stern, grin, stubble), 8-15 new (sparkle,
-  sleepy, button, gloomy, cheeky, startled, dreamy, bold). `FaceGenome.ForSeed` makes faces up for
+  sleepy, button, gloomy, cheeky, startled, dreamy, bold), 16-18 the aliens' (visitor, gazer,
+  giggler: `EyeShape.Alien`, whose 4th bit is the genome's high bit 16; see `aliens`). `FaceGenome.ForSeed` makes faces up for
   creatures and crowds (#658); `BodyLook.Genome` overrides the preset. The blink seed comes from the
   look's colours (`HumanMeshBuilder.FaceSeed`), so passengers baked into one mesh blink apart.
 - **Shader** `shaders/body/face.gdshaderinc` (included by `avatar.gdshaderinc`, finish 11): face

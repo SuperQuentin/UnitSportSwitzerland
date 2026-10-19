@@ -329,6 +329,7 @@ public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity
 
     public override void _ExitTree()
     {
+        TractorBeams.Unregister(this);
         SetAnchored(false);
         Unhook();
     }
@@ -416,6 +417,8 @@ public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity
         ReleaseIgnored();
         // airstairs in the way of an aircraft taxiing off are shoved clear, asleep or not (#417)
         if (Ride is Airstairs) PushAirstairs(dt);
+        // in a UFO's tractor beam (#861, VehicleBody.Beam.cs): the beam moves it
+        if (BeamHolding(dt)) return;
         if (_asleep || _inHold) return;
 
         // Parked in a garage or a barn: down where the interiors are, on a floor that is only there

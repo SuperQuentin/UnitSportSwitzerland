@@ -63,13 +63,20 @@ public enum GarmentShape
     ArmWarmers, StripedWarmers, Fingerless, Paws, Gloves,
     // #822: a building site's workwear (head, top)
     HardHat, HiVisVest,
+    // #880: the aliens' (head, head, top: one piece to the ankles)
+    Antennae, LongAntennae, SpaceSuit,
 }
 
 /// <summary>The pixel face printed on a <see cref="GarmentShape.Mask"/>.</summary>
 public enum MaskFace { Plain, Uwu, SwirlA, SwirlW, Fang, Tongue, Skull, CatMouth }
 
 /// <summary>Which look a garment belongs to, for the blurb and the loot pools.</summary>
-public enum GarmentStyle { Basic, Gothic, Kawaii, Special, Workwear }
+public enum GarmentStyle
+{
+    Basic, Gothic, Kawaii, Special, Workwear,
+    /// <summary>#880: from another world (antennae, a silver suit): uncommon in a wardrobe, worn by the films' aliens (<see cref="Aliens"/>).</summary>
+    Alien,
+}
 
 /// <summary>
 /// One wearable look: the item it is, where it goes, how it is drawn and in which colours.
@@ -81,7 +88,10 @@ public sealed record Garment(
     Color A, Color B, Color C, Finish Finish = Finish.None, MaskFace Face = MaskFace.Plain)
 {
     /// <summary>A robe or dress: one piece from shoulders to hem, so nothing goes in the bottom slot with it.</summary>
-    public bool CoversBottom => Shape is GarmentShape.Robe or GarmentShape.Dress;
+    public bool CoversBottom => Shape is GarmentShape.Robe or GarmentShape.Dress or GarmentShape.SpaceSuit;
+
+    /// <summary>A robe or dress: its lower half is draped cloth that blows in the wind (a suit's legs are not).</summary>
+    public bool Draped => Shape is GarmentShape.Robe or GarmentShape.Dress;
 
     /// <summary>A rare one with a shader finish (patterns like tartan are not).</summary>
     public bool IsSpecial => Style == GarmentStyle.Special;
@@ -258,6 +268,13 @@ public static class Garments
         new(ItemId.HardHat, "Hard hat", WearSlot.Head, 12, GarmentShape.HardHat, GarmentStyle.Workwear, new("f2c21a"), new("3a3a3e"), new("d8a810")),
         // the fluorescent yellow vest, its silver reflective bands, over a grey work T-shirt
         new(ItemId.HiVisVest, "Hi-vis vest", WearSlot.Top, 25, GarmentShape.HiVisVest, GarmentStyle.Workwear, new("d6f01e"), new("c8ccd2"), new("6a6e74")),
+
+        // ---- #880: the aliens' (Aliens). Antennae: the stalks, the headband, the glowing bobbles (neon) ----
+        new(ItemId.AlienAntennae, "Alien antennae", WearSlot.Head, 13, GarmentShape.Antennae, GarmentStyle.Alien, new("7ed957"), new("4a8a34"), new("e8ff5a")),
+        new(ItemId.SilverAntennae, "Silver antennae", WearSlot.Head, 14, GarmentShape.Antennae, GarmentStyle.Alien, Silver, new("6a6e78"), new("ff5ad0")),
+        new(ItemId.LongAntennae, "Tall antennae", WearSlot.Head, 15, GarmentShape.LongAntennae, GarmentStyle.Alien, new("b48cf0"), new("5a3a8a"), new("5af0ff")),
+        // the suit, its collar, belt and cuffs, the badge on the chest (neon)
+        new(ItemId.SilverSuit, "Silver space suit", WearSlot.Top, 26, GarmentShape.SpaceSuit, GarmentStyle.Alien, new("a9bcd6"), new("34426a"), new("5af0ff")),
     };
 
     private static readonly Dictionary<ItemId, Garment> ById = All.ToDictionary(g => g.Item);

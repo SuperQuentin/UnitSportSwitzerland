@@ -70,12 +70,25 @@ public partial class BrManager : Node
         return m;
     }
 
-    private static double Now => ClockSync.ServerNow;
+    /// <summary>
+    /// The match timeline: simulated seconds, so <c>/speed</c> paces the countdown, the plane, the zone
+    /// and the drops with everything else (#855). Every stamp in <see cref="BrState"/> is in these units.
+    /// </summary>
+    private static double Now => ClockSync.SimNow;
+
+    /// <summary>Real server seconds, for the rate limits on what a client may ask for (flares, pings).</summary>
+    private static double RealNow => ClockSync.ServerNow;
 
     /// <summary>"--brpace f" on the server: every match's timings times f (the loopback check runs a match in a minute).</summary>
     private static readonly float PaceScale = ParsePace();
 
     private static float ParsePace() => CmdArgs.Float("--brpace") is float f && f > 0 ? f : 1f;
+
+    /// <summary>
+    /// "--brseed n" on the server (checks, #873): every match's seed is n, so a check plays the same region, zone,
+    /// plane line and bots on every run (the region also hangs on the tiles and the anti-repeat history, fresh in a check).
+    /// </summary>
+    private static readonly int? FixedSeed = CmdArgs.Int("--brseed") is int s && s > 0 ? s : null;
 
     /// <summary>
     /// <c>/br ...</c> from <paramref name="sender"/>. Returns the private reply; public news goes
@@ -196,7 +209,7 @@ public partial class BrManager : Node
         }
 
         pace *= PaceScale;
-        int seed = _rng.Next(1, int.MaxValue);
+        int seed = FixedSeed ?? _rng.Next(1, int.MaxValue);
         // the side follows the field, which is not known yet: sized for the players online now
         // ... and for the bots that will top it up (#837)
         float size = side ?? BrRegion.SideFor(Math.Max(Multiplayer.GetPeers().Length, _botTarget));
@@ -226,7 +239,7 @@ public partial class BrManager : Node
         };
         double minutes = new ZoneSchedule(seed, area.Side, pace).Duration / 60.0;
         _horizon ??= _source?.LoadHorizonAsync();   // for the plane's altitude at GO
-        GD.Print(FormattableString.Invariant($"[br] lobby open: {area.Name} at {area.E:F0}/{area.N:F0}, {area.Side:F0} m, pace {pace}, zone {minutes:F0} min"));
+        GD.Print(FormattableString.Invariant($"[br] lobby open: {area.Name} at {area.E:F0}/{area.N:F0}, {area.Side:F0} m, pace {pace}, zone {minutes:F0} min, seed {seed}"));
         string mode = team switch { 2 => ", duos", 3 => ", trios", 4 => ", squads", _ => "" };
         Broadcast($"Battle Royale lobby open: {area.Name} ({area.Side / 1000:F0} × {area.Side / 1000:F0} km{mode}, about {minutes + 2:F0} min). Type /br join to play!");
         Push();
@@ -375,6 +388,8 @@ public partial class BrManager : Node
         // the bots board too, once the line is known (#837), and are in the teams
         BoardBots(bots);
         _state.AssignTeams();
+        PlanTeamDrops();
+        _humanPings.Clear();
         _sidesAtGo = _state.TeamsAlive;
         _pushedOut = false;
         Combat.PvpRules.Override = Allowed;
@@ -387,9 +402,12 @@ public partial class BrManager : Node
         int botCount = _state.Entrants.Count(e => e.Bot);
         Broadcast($"GO! {_state.Entrants.Count - botCount} players"
             + (botCount > 0 ? $" and {botCount} bots" : "") + $" aboard the plane to {_state.AreaName}. Jump once the doors open over the zone "
-            + $"(in {flight.OpensAt - Now:F0} s); the zone ({zone.RadiusOf(0) * 2 / 1000:F1} km across) shows {ZoneSchedule.LootSeconds * zone.Scale / 60:F0} min after they close.");
+            + $"(in {flight.OpensAt - Now:F0} s); the zone ({zone.RadiusOf(0) * 2 / 1000:F1} km across) shows {LootTime(ZoneSchedule.LootSeconds * zone.Scale)} after they close.");
         GD.Print(FormattableString.Invariant($"[br] go: {_state.Entrants.Count} players, plane at {flight.Altitude:F0} m, doors {flight.OpensAt - Now:F0}-{flight.ClosesAt - Now:F0} s"));
     }
+
+    /// <summary>"29 s", "4 min": the loot time in the GO line (a test pace's 29 s read "0 min", #873).</summary>
+    private static string LootTime(double seconds) => seconds < 90 ? $"{seconds:F0} s" : $"{seconds / 60:F0} min";
 
     private bool _pushedOut;
     private Task<HorizonIndex?>? _horizon;
@@ -515,14 +533,19 @@ public partial class BrManager : Node
 
     /// <summary>Server: a standing team-mate held Interact over a downed one for long enough.</summary>
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RequestRevive(long target)
+    private void RequestRevive(long target) => ServerRevive(Multiplayer.GetRemoteSenderId(), target);
+
+    /// <summary>
+    /// Server: <paramref name="peer"/> stood <paramref name="target"/> up, a player's request or a bot's (#837):
+    /// a standing team-mate within reach of a downed one. False when refused.
+    /// </summary>
+    public bool ServerRevive(long peer, long target)
     {
-        if (!_server || _state.Phase != BrPhase.Playing) return;
-        long peer = Multiplayer.GetRemoteSenderId();
+        if (!_server || _state.Phase != BrPhase.Playing) return false;
         if (_state.Find(peer) is not { Alive: true, Downed: false, Team: not 0 } r
-            || _state.Find(target) is not { Alive: true, Downed: true } t || t.Team != r.Team) return;
+            || _state.Find(target) is not { Alive: true, Downed: true } t || t.Team != r.Team) return false;
         if (BodyOf(peer) is not { } a || BodyOf(target) is not { } b
-            || a.GlobalPosition.DistanceTo(b.GlobalPosition) > ServerReviveReach) return;
+            || a.GlobalPosition.DistanceTo(b.GlobalPosition) > ServerReviveReach) return false;
         t.Downed = false;
         t.DownedBy = 0;
         GD.Print($"[br] revived: {t.Name}, by {r.Name}");
@@ -530,6 +553,7 @@ public partial class BrManager : Node
         else RpcId(target, MethodName.Revived);
         Rpc(MethodName.DownNews, target, peer, true);
         Push();
+        return true;
     }
 
     // ------------------------------------------------------------------------------------
@@ -668,8 +692,8 @@ public partial class BrManager : Node
         if (!_server || _state.Phase != BrPhase.Playing || _crates == null || Origin == null) return;
         long peer = Multiplayer.GetRemoteSenderId();
         if (_state.Find(peer) is not { Alive: true } e || _players?.GetNodeOrNull<Node3D>(peer.ToString()) is not { } body) return;
-        if (_lastFlare.TryGetValue(peer, out double last) && Now - last < 20) return;
-        _lastFlare[peer] = Now;
+        if (_lastFlare.TryGetValue(peer, out double last) && RealNow - last < 20) return;
+        _lastFlare[peer] = RealNow;
         var (pe, pn) = Origin.ToLv95(body.GlobalPosition);
         var rng = new Random(_state.Seed ^ (int)peer ^ (int)Now);
         float a = (float)(rng.NextDouble() * Math.Tau), r = 20f + (float)rng.NextDouble() * 30f;
@@ -697,18 +721,31 @@ public partial class BrManager : Node
     /// to the sender; at most one every <see cref="PingEvery"/> s.
     /// </summary>
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RequestPing(double e, double n, double alt)
+    private void RequestPing(double e, double n, double alt) => ServerPing(Multiplayer.GetRemoteSenderId(), e, n, alt);
+
+    /// <summary>
+    /// Server: <paramref name="peer"/> marks a point for their team, a player's request or a bot's (#837). Sent to the
+    /// team's players (never RpcId a bot) and told to the server's own listeners (<see cref="TeamPinged"/>: the
+    /// team's bots). False when refused (too soon, too far, no team).
+    /// </summary>
+    public bool ServerPing(long peer, double e, double n, double alt)
     {
-        if (!_server || _state.Phase != BrPhase.Playing || Origin == null || !double.IsFinite(e) || !double.IsFinite(n)) return;
-        long peer = Multiplayer.GetRemoteSenderId();
-        if (_state.Find(peer) is not { Alive: true, Team: not 0 } me || _players?.GetNodeOrNull<Node3D>(peer.ToString()) is not { } body) return;
-        if (_lastPing.TryGetValue(peer, out double last) && Now - last < PingEvery) return;
+        if (!_server || _state.Phase != BrPhase.Playing || Origin == null || !double.IsFinite(e) || !double.IsFinite(n)) return false;
+        if (_state.Find(peer) is not { Alive: true, Team: not 0 } me || BodyOf(peer) is not { } body) return false;
+        if (_lastPing.TryGetValue(peer, out double last) && RealNow - last < PingEvery) return false;
         var (be, bn) = Origin.ToLv95(body.GlobalPosition);
-        if (Math.Sqrt((e - be) * (e - be) + (n - bn) * (n - bn)) > PingReach) return;
-        _lastPing[peer] = Now;
+        if (Math.Sqrt((e - be) * (e - be) + (n - bn) * (n - bn)) > PingReach) return false;
+        _lastPing[peer] = RealNow;
         foreach (var x in _state.Entrants.Where(x => x.Team == me.Team))
-            if (Multiplayer.GetPeers().Contains((int)x.Peer)) RpcId(x.Peer, MethodName.Pinged, peer, e, n, alt);
+            if (!x.Bot && Multiplayer.GetPeers().Contains((int)x.Peer)) RpcId(x.Peer, MethodName.Pinged, peer, e, n, alt);
+        TeamPinged?.Invoke(me.Team, peer, e, n, alt);
+        // a human's ping is for the team's bots to follow (#837 phase 4); a map ping has no height: the pinger's
+        if (!me.Bot) _humanPings[me.Team] = (Origin.ToWorld(e, n, double.IsFinite(alt) ? alt : body.GlobalPosition.Y), Now, peer);
+        return true;
     }
+
+    /// <summary>Server: a ping went out to a team (team, from, LV95 e, n, alt): the team's bots read it.</summary>
+    public event Action<int, long, double, double, double>? TeamPinged;
 
     private readonly Dictionary<long, double> _lastPing = new();
 

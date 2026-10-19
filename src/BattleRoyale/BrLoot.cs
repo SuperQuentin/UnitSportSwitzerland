@@ -112,7 +112,9 @@ public static class BrLoot
         var parkable = roads.Where(r => r.Class is RoadClass.Road or RoadClass.Minor or RoadClass.Major).ToList();
         if (parkable.Count == 0) parkable = roads;
         var bikes = MotorbikeCatalog.All.Select(b => b.Kind).ToArray();
-        int count = (int)(area.Side * area.Side / 1e6f * VehiclesPerKm2), placed = 0;
+        // --brvehicles n (checks): n a square kilometre, so a watched match shows bots taking them
+        float density = Core.CmdArgs.Float("--brvehicles") is float d && d > 0 ? d : VehiclesPerKm2;
+        int count = (int)(area.Side * area.Side / 1e6f * density), placed = 0;
         for (int i = 0; i < count; i++)
         {
             var r = parkable[rng.Next(parkable.Count)];

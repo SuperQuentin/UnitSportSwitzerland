@@ -16,6 +16,8 @@
 
 src/Net/                 quick  --interestcheck
 src/Player/FootPlayer.cs  quick  --vrposecheck
+src/Player/FootPlayer.cs  quick  --slopewalk --at 2563500,1112500 --systems terrain,generated
+src/Player/SlopeWalkProbe quick  --slopewalk --at 2563500,1112500 --systems terrain,generated
 # #833: first person keeps your figure for the shadow and the mirrors
 src/Player/FootPlayer.cs  quick  --ownbodycheck --world flat
 src/Player/FootPlayer.Fight quick --ownbodycheck --world flat
@@ -27,6 +29,7 @@ src/Items/HeldItemVisual quick  --ownbodycheck --world flat
 src/Items/ItemEvents     quick  --ownbodycheck --world flat
 src/Interiors/WallMirror quick  --ownbodycheck --world flat
 src/Interiors/DoorPortals quick --ownbodycheck --world flat
+src/Interiors/DoorwayGhosts quick --ownbodycheck --world flat
 src/XR/                  quick  --vrposecheck
 src/Audio/Cd/            quick  --beatcheck
 src/Audio/               quick  --earscheck --world fixture --view third
@@ -48,6 +51,9 @@ src/Core/TouchControls   quick  --touchcheck --mobile --world fixture
 src/Core/PlayerInput.cs  quick  --touchcheck --mobile --world fixture
 src/Core/Platform.cs     quick  --touchcheck --mobile --world fixture
 src/Player/FootPlayer.cs quick  --emotewheelcheck --world fixture
+src/Phone/               quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
+src/Player/FootPlayer    quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
+src/Core/Teleporter      quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
 src/Avatar/              quick  --cockpitcheck
 src/Core/Chat            quick  --chatcheck
 src/World/TimeCommand    quick  --chatcheck
@@ -60,6 +66,11 @@ src/Terrain/ProceduralWorld quick --shapedcheck --systems ui
 # #607: the generated world's building sites (#605) through the site planner, plan views in test_output/construction/
 src/Terrain/ProceduralWorld quick --constructioncheck --systems ui
 src/Terrain/Construction/ quick --constructioncheck --systems ui
+# #885: every catalogued stadium against its real outline and capacity, walkable stands, a gate tunnel
+src/Terrain/Stadiums/     quick --stadiumcheck --systems ui
+# #885: concerts: the generator's events, rigs, patches and stages, and the desk's DMX
+src/Concert/             quick --concertcheck --systems ui
+src/Concert/             net   tools/concertnetcheck.sh
 # #608: a body walks every storey of hand-made sites' shells, on their real collision
 src/Terrain/Construction/ quick --shellwalkcheck --world flat
 src/Terrain/BuildingMeshBuilder quick --shellwalkcheck --world flat
@@ -373,6 +384,14 @@ src/Trailer/             full   tools/trailer.sh stills 2,5,12
 tools/lib/               quick  tools/lib/guard_selftest.sh
 src/Player/Pigeon        quick  --flycheck pigeon --world flat
 src/Player/FlightCheck   quick  --flycheck pigeon --world flat
+src/Player/Ufo           quick  --flycheck ufo --world flat
+src/Player/FootPlayer.Ufo quick  --flycheck ufo --world flat
+src/Player/FlightCheck   quick  --flycheck ufo --world flat
+src/Player/TractorBeam   quick  --beamcheck --world flat
+src/Player/BeamCheck     quick  --beamcheck --world flat
+src/Player/FootPlayer.Ufo quick  --beamcheck --world flat
+src/Items/DroppedItem.Beam quick --beamcheck --world flat
+src/Vehicles/VehicleBody.Beam quick --beamcheck --world flat
 src/Player/Pigeon        quick  --flycheck pigeoncrash --systems birds
 src/Birds/BirdLife       quick  --flycheck pigeoncrash --systems birds
 src/Player/FlightCheck   quick  --flycheck a320 --world flat
@@ -522,6 +541,8 @@ src/Vehicles/VehicleState quick --holdcheck --world fixture --traffic 0
 src/Vehicles/CargoFit    quick  --holdcheck --world fixture --traffic 0
 src/Avatar/VehicleDeck   quick  --holdcheck --world fixture --traffic 0
 src/Player/Pigeon        net    tools/pigeonnetcheck.sh
+src/Player/Ufo           net    tools/ufonetcheck.sh
+src/Player/TractorBeams  net    tools/ufonetcheck.sh
 src/Player/FootPlayer.Pi net    tools/pigeonnetcheck.sh
 src/Birds/BirdNet        net    tools/pigeonnetcheck.sh
 src/Birds/PigeonNet      net    tools/pigeonnetcheck.sh
@@ -529,6 +550,8 @@ src/World/Wa             full   tools/waterparity.sh
 shaders/common/waves     full   tools/waterparity.sh
 shaders/body/water       full   tools/waterparity.sh
 src/Player/Emote         net    tools/emotenetcheck.sh
+src/Phone/               net    tools/phonenetcheck.sh
+src/Player/FootPlayer.Phone net  tools/phonenetcheck.sh
 # the Swiss match items (#478): fondue, smoke and alphorn between two clients
 src/Items/SwissItems     net    tools/swisscheck.sh
 src/Items/SwissNetProbe  net    tools/swisscheck.sh
@@ -539,6 +562,11 @@ shaders/body/face        quick  --outfitcheck
 src/Combat/Fight         net    tools/fightnetcheck.sh
 src/Player/FootPlayer.Fight net tools/fightnetcheck.sh
 src/Avatar/HumanMeshBuilder.Fight net tools/fightnetcheck.sh
+# aura battles (#907): plan, cut on the beat, the server grades
+src/Combat/Aura          net    tools/auranetcheck.sh
+src/Player/FootPlayer.Aura net  tools/auranetcheck.sh
+src/Player/AuraNetProbe  net    tools/auranetcheck.sh
+src/Avatar/HumanMeshBuilder.Aura net tools/auranetcheck.sh
 src/Player/FootPlayer.Hold net   tools/holdnetcheck.sh
 src/Player/HoldNetProbe  net    tools/holdnetcheck.sh
 src/Vehicles/VehicleBody.Hold net tools/holdnetcheck.sh
@@ -655,6 +683,8 @@ src/Items/PlacedObjects  quick  --collidecheck --world flat --targets placed/
 src/Items/PalletNode     quick  --collidecheck --world flat --targets props/
 src/Crafting/StationVisuals quick --collidecheck --world flat --targets placed/
 src/Interiors/DoorLeaf   quick  --collidecheck --world flat --targets doors/
+src/Terrain/BuildingMeshBuilder quick --collidecheck --world flat --targets castles/
+src/Interiors/Castles   quick  --collidecheck --world flat --targets castles/
 
 # the playtest suite (#751): scenarios well-formed, MCP over HTTP, the ledger; then every flat-course scenario set up
 src/Playtest/            quick  --playtestcheck
@@ -690,6 +720,9 @@ src/BattleRoyale/BrState   net  tools/brbotcheck.sh
 src/BattleRoyale/BrStats   net  tools/brbotcheck.sh
 src/BattleRoyale/BrBotProbe net tools/brbotcheck.sh
 src/Bots/                  net  tools/brbotcheck.sh
+src/Bots/                  net  tools/brsquadcheck.sh
+src/BattleRoyale/BrManager net  tools/brsquadcheck.sh
+src/BattleRoyale/BrBotProbe net tools/brsquadcheck.sh
 # invites, parties, the quick menu and the Activities screen between two clients (#840)
 src/Net/Invites/         net    tools/invitecheck.sh
 src/Net/ChatManager.Invites net tools/invitecheck.sh
@@ -699,3 +732,11 @@ src/Ui/InviteToasts      net    tools/invitecheck.sh
 src/Combat/FightManager  net    tools/invitecheck.sh
 src/World/RaceManager    net    tools/invitecheck.sh
 src/BattleRoyale/BrManager.cs net tools/invitecheck.sh
+# #863: UFO sightings and the cows they beam up, two clients seeing the same plans and the same cow
+src/Occasions/UfoSighting   net    tools/sightingnetcheck.sh
+src/Occasions/SightingNet   net    tools/sightingnetcheck.sh
+src/Farming/Herds           net    tools/sightingnetcheck.sh
+src/Farming/CowMotion       net    tools/sightingnetcheck.sh
+src/Player/TractorBeams     net    tools/sightingnetcheck.sh
+src/Net/LiveMapFile      net    tools/livemapcheck.sh
+tools/deploy/web/map     net    tools/livemapcheck.sh
