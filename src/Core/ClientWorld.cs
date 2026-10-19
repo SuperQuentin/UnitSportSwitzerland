@@ -115,6 +115,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Interiors.FlatCheck.Requested, Interiors.FlatCheck.Run),
         (() => Interiors.ShapedCheck.Requested, Interiors.ShapedCheck.Run),
         (() => Terrain.Construction.ConstructionCheck.Requested, Terrain.Construction.ConstructionCheck.Run),
+        (() => Terrain.Stadiums.StadiumCheck.Requested, Terrain.Stadiums.StadiumCheck.Run),
         (() => Items.InventoryCheck.Requested, Items.InventoryCheck.Run),
         (() => ChatCheck.Requested, () => ChatCheck.Run(this)),
         (() => StyleKit.ReportRequested, StyleKit.Report),

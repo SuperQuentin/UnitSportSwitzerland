@@ -35,7 +35,7 @@ public static class StadiumCatalog
         {
             new StadiumTier(Rows: 17, RowDepth: 0.8f, Riser: 0.38f, Gap: 0f, Step: 1.2f),
             // the boxes' and clubs' glazing under the upper tier
-            new StadiumTier(Rows: 18, RowDepth: 0.8f, Riser: 0.5f, Gap: 2f, Step: 3.4f),
+            new StadiumTier(Rows: 17, RowDepth: 0.8f, Riser: 0.5f, Gap: 2f, Step: 3.4f),
         },
         DepthNorth = 41f, DepthEast = 32.5f, DepthSouth = 39f, DepthWest = 38.3f,
         RoofOuter = 34f, RoofInner = 30f, RoofInset = 2.5f, RoofRing = 9f, Solar = true,
