@@ -11,7 +11,8 @@ namespace UnitSport.BattleRoyale;
 
 /// <summary>
 /// <c>--brbotcheck</c> with <c>--connect</c> (driven by <c>tools/brbotcheck.sh</c>, #837): one player against
-/// bots in a whole match, on a server started with <c>--admin-password brbots --brpace 0.13</c>. The player
+/// bots in a whole match, on a server started with <c>--admin-password brbots --brseed n</c> at the real pace (#873: a test
+/// pace let the zone finish the bots while they still hung under their canopies). The player
 /// opens a match topped up to 3 (<c>/br bots 3</c>), alone in the lobby: the countdown starts anyway, and
 /// GO adds two bots (entrants with negative ids, marked "[bot]", on the ground in the first circle,
 /// their bodies here). The player jumps, then goes to each bot and knifes it: the server eliminates it,
@@ -117,6 +118,7 @@ public partial class BrBotProbe : ChatProbe
         await Until(() => flight.DoorsOpen(ClockSync.SimNow), 90);
         Expect(br.JumpOut(), "jumped");
         var me = Me!;
+        GD.Print($"{Log} jumped: {ZoneLine(me)}");
         await Seconds(0.5);
         me.Leap(me.GlobalPosition, Vector3.Zero, RideKind.OnFoot);   // out of the wingsuit first: a teleport in one is a SPLAT
         // down at the first circle's centre, where the check lands the bots (--brbotspread)
@@ -128,19 +130,24 @@ public partial class BrBotProbe : ChatProbe
         bool landed = await Until(() => bots.All(b => br.State.Find(b.Peer) is { Jumped: true }
             && BodyOf(b.Peer) is { } body && body.Ride == RideKind.OnFoot && body.Visible), 240);
         Expect(landed, "both bots jumped, flew and landed on foot");
+        GD.Print($"{Log} landed: {ZoneLine(me)}");
         int knife = SlotOf(ItemId.Knife);
         _items.Inventory.Select(knife);
         for (int i = 0; i < bots.Count; i++)
         {
             var bot = bots[i];
             int before = br.MyEntry?.Kills ?? 0;
+            GD.Print($"{Log} after {bot.Name}: {ZoneLine(me, bot.Peer)}");
             if (!await Knife(me, bot.Peer)) return;
+            GD.Print($"{Log} {bot.Name} out: {ZoneLine(me)}");
             var mine = br.MyEntry;
             Expect(br.State.Find(bot.Peer)?.Alive == false, $"{bot.Name} is out");
             // the second one may go out another way first (the zone, a fall): a match as it happens
             bool mineKill = (mine?.Kills ?? 0) > before;
             if (i > 0 && !mineKill) { GD.Print($"{Log} {bot.Name} went out before I got to it: fine"); continue; }
-            Expect(mineKill && mine!.Kills == mine.BotKills, $"my kills: {BrHud.Kills(mine?.Kills ?? 0, mine?.BotKills ?? 0)}");
+            // not mine: say how it went out and where the zone stood (#873: the zone used to finish the first bot)
+            Expect(mineKill && mine!.Kills == mine.BotKills, $"my kills: {BrHud.Kills(mine?.Kills ?? 0, mine?.BotKills ?? 0)}"
+                + (mineKill ? "" : $" ({br.Feed.LastOrDefault().Text}; {ZoneLine(me)})"));
             Expect(br.Feed.Any(f => f.Text.Contains($"{bot.Name} [bot]")), $"the feed marks the bot ({br.Feed.LastOrDefault().Text})");
             if (i == 0)
             {
@@ -176,6 +183,22 @@ public partial class BrBotProbe : ChatProbe
     }
 
     private static float Flat(Vector3 v) => new Vector2(v.X, v.Z).Length();
+
+    /// <summary>
+    /// "zone 41 s: phase 1, 2 HP/s, me 512 m inside, Beat 498 m inside (health 100)": where the match's clock
+    /// stands against the circles, for the log (#873: the zone used to finish the bots before the knife did).
+    /// </summary>
+    private string ZoneLine(FootPlayer me, long bot = 0)
+    {
+        var br = Br!;
+        double t = ClockSync.SimNow - br.State.Started;
+        var z = br.State.Zone().At(t);
+        string line = FormattableString.Invariant($"zone {t:F0} s: phase {z.Phase}{(z.Shrinking ? " shrinking" : "")}, {z.Dps:F0} HP/s, ")
+            + FormattableString.Invariant($"me {z.DistanceToEdge(br.ZonePoint(me.GlobalPosition)):F0} m inside (health {me.Health:F0})");
+        if (bot != 0 && BodyOf(bot) is { } body)
+            line += FormattableString.Invariant($", {br.State.Find(bot)?.Name} {z.DistanceToEdge(br.ZonePoint(body.GlobalPosition)):F0} m inside");
+        return line;
+    }
 
     /// <summary>Next to the bot, stabbing, until the server has it out (a bot walks: stand by it again before each stab).</summary>
     private async Task<bool> Knife(FootPlayer me, long id)
