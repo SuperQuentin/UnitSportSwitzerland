@@ -39,6 +39,16 @@ public sealed class Bicycle : Rideable
     /// <summary>Steady effort, W. Roughly a fit rider's endurance power.</summary>
     public float RiderWatts { get; set; } = 180f;
 
+    /// <summary>
+    /// Whether <see cref="RiderWatts"/> is a measurement (a trainer's or a power meter's) rather
+    /// than what the keys give. Set by the trainer link (#901); the hidden FTP test (#902) counts
+    /// only measured watts.
+    /// </summary>
+    public bool PowerMeasured { get; set; }
+
+    /// <summary>The watts the last <see cref="Step"/> put through the pedals (0 coasting).</summary>
+    public float LastWatts { get; private set; }
+
     /// <summary>Shift. Not sustainable, but nothing here is asking it to be.</summary>
     public float SprintWatts { get; set; } = 520f;
 
@@ -116,6 +126,14 @@ public sealed class Bicycle : Rideable
             arcade ? ArcadeMaxLean : MaxLean, arcade ? ArcadeMaxYawRate : MaxYawRate,
             arcade ? ArcadeBankResponse : BankResponse, WalkingPace, dt);
 
+        // --- the power equation -----------------------------------------------------
+        // Sim keeps RiderWatts, which is what a home trainer writes into; Game ignores it
+        float watts = input.Throttle * (arcade
+            ? (input.Effort ? ArcadeSprintWatts : ArcadeWatts)
+            : (input.Effort ? SprintWatts : RiderWatts));
+        // the legs still turn in the air off a lip: a trainer keeps measuring
+        LastWatts = watts;
+
         if (!ground.OnFloor)
         {
             // airborne off a lip: no thrust, no rolling resistance, just air
@@ -124,11 +142,6 @@ public sealed class Bicycle : Rideable
             return;
         }
 
-        // --- the power equation -----------------------------------------------------
-        // Sim keeps RiderWatts, which is what a home trainer writes into; Game ignores it
-        float watts = input.Throttle * (arcade
-            ? (input.Effort ? ArcadeSprintWatts : ArcadeWatts)
-            : (input.Effort ? SprintWatts : RiderWatts));
         float thrust = watts > 0 ? Mathf.Min(watts / Mathf.Max(v, 0.5f), arcade ? ArcadeMaxThrust : MaxThrust) : 0f;
 
         float drag = 0.5f * AirDensity * DragArea * v * v;

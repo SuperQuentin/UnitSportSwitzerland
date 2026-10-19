@@ -1238,6 +1238,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     public override void _ExitTree()
     {
+        // leaving the game on the bike ends the ride too (#902)
+        if (_ride is Bicycle && FtpRider) Trainer.FtpWatch.RideEnded();
         Terrain?.RemoveAnchor(this);
         Explosion.Blast -= OnBlast;
         if (!NetProxy && !Puppet && !Net.NetLink.Dropped(this) && !IsMultiplayerAuthority())
@@ -3254,8 +3256,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     /// <param name="tuning">Garage parts, for a car taken back from the world; 0 (stock) for a new one.</param>
     /// <param name="setup">A car's preset (<see cref="CarSetups"/>), likewise.</param>
+    /// <summary>The local human rider, whose bike rides the hidden FTP test watches (#902): no NPC, bot or copy.</summary>
+    private bool FtpRider => IsMultiplayerAuthority() && !Npc && !Bot && !Puppet && !NetProxy;
+
     private void ApplyRide(RideKind kind, Vector3 velocity, long tuning = 0, int setup = 0)
     {
+        // off the bike: that ride is over, and the hidden FTP test reads it (#902)
+        if (_ride is Bicycle && kind != RideKind.RoadBike && FtpRider) Trainer.FtpWatch.RideEnded();
         // back on foot: the vehicle it had got into is behind it (parked, wrecked, left), its name with it
         if (kind == RideKind.OnFoot) _rideName = "";
         // anything mounted ends a ragdoll (#214): the body is in the saddle now, not on the road
@@ -4392,6 +4399,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_ride is Truck driving) PrepareTruck(driving);
         else if (_ride is Car shifting) PrepareCar(shifting);
         _ride!.Step(input, new RideGround(onFloor, grade, surface, Draft), dt, ref _motion);
+        // the hidden FTP test (#902) listens to the local rider's pedals
+        if (_ride is Bicycle pedalled && FtpRider) Trainer.FtpWatch.Sample(pedalled.LastWatts, pedalled.PowerMeasured, dt);
         // a wheelie taken over the top (#410): the bike goes on its back, the rider off it
         if (_ride is Motorbike { LoopedOut: true })
         {

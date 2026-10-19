@@ -820,6 +820,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(soloDrop);
         Vehicles.VehicleManager.Refused += Toast;
         Movie.MovieSession.Said += Toast;
+        Trainer.FtpWatch.Said += Toast;
         Vehicles.PassengerService.Said += Toast;
         Terrain.Construction.CraneService.Said += Toast;
 
@@ -1342,6 +1343,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         StyleKit.Chosen -= OnStyleChosen;
         NearTrees.Forget();
         Vehicles.VehicleManager.Refused -= Toast;
+        Trainer.FtpWatch.Said -= Toast;
         Movie.MovieSession.Said -= Toast;
         Vehicles.PassengerService.Said -= Toast;
         Terrain.Construction.CraneService.Said -= Toast;
