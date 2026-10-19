@@ -645,6 +645,9 @@ public partial class TrailerDirector : Node
         Pin(shot, "/go");
         if (!Unpinned)
             foreach (int h in _stagedHerds) Farming.Herds.Instance?.Rewind(h);
+        // the dump from the go: the pre-roll's frames are negative (where a drift starts)
+        _tracks?.Dispose();
+        _tracks = _tracksDir != null ? TrackDump.Start(_tracksDir, shot.Number) : null;
         foreach (var a in _actors) a.Go(Others);
         _moving = 0;
         _preroll = 0;
@@ -665,6 +668,7 @@ public partial class TrailerDirector : Node
     {
         var shot = _shot!;
         _preroll += delta;
+        if (_tracks != null) DumpTracks(_preroll - shot.Preroll);
         _shotCamera!.Apply(_camera, 0, delta);
         if (_preroll < shot.Preroll) return;
         // the camera has to be placeable (its actors there) before the film starts
@@ -700,8 +704,6 @@ public partial class TrailerDirector : Node
             }
         }
         WritePins(shot);
-        _tracks?.Dispose();
-        _tracks = _tracksDir != null ? TrackDump.Start(_tracksDir, shot.Number) : null;
         _stills.Clear();
         if (_stillsDir != null)
         {
@@ -747,7 +749,7 @@ public partial class TrailerDirector : Node
     {
         var shot = _shot!;
         _shotCamera!.Apply(_camera, _t, delta);
-        if (_tracks != null) DumpTracks();
+        if (_tracks != null) DumpTracks(_t);
         // the photo's picture is rendered a few frames before its flash, from the camera alone
         // (PhotoCapture: no captions, no flash in it)
         if (shot.Photo is { } at && !_photoAsked && _t >= at - 0.15)
@@ -1189,17 +1191,20 @@ public partial class TrailerDirector : Node
         }
     }
 
-    /// <summary>This frame of the roll into the track dump: the camera, every actor, prop, craft, staged cow and saucer, and the vehicles near.</summary>
-    private void DumpTracks()
+    /// <summary>
+    /// This frame into the track dump, at film time <paramref name="t"/> (negative in the pre-roll): the
+    /// camera, every actor, prop, craft, staged cow and saucer, and the vehicles near.
+    /// </summary>
+    private void DumpTracks(double t)
     {
         var dump = _tracks!;
-        int frame = (int)System.Math.Round(_t * _fps);
+        int frame = (int)System.Math.Round(t * _fps);
         void Row(string id, string kind, Vector3 at, Basis basis, float speed, string pose, string ride, bool beam)
         {
             var g = _origin.ToGlobal(at);
             var fwd = -basis.Z;
             double yaw = Mathf.RadToDeg(Mathf.Atan2(fwd.X, -fwd.Z));
-            dump.Row(frame, _t, id, kind, g.E, g.N, g.Alt, yaw, speed, pose, ride, beam);
+            dump.Row(frame, t, id, kind, g.E, g.N, g.Alt, yaw, speed, pose, ride, beam);
         }
         Row("camera", "camera", _camera.GlobalPosition, _camera.GlobalBasis, 0f, "-", "-", false);
         for (int i = 0; i < _actors.Count; i++)
@@ -1231,7 +1236,7 @@ public partial class TrailerDirector : Node
                     // a cow on its ground has no altitude of its own (its ground's); one with one is beamed or set down by a beam
                     bool moved = !float.IsNaN(alt);
                     float y = moved ? alt : _chunks.TryGetSurface(_origin.ToWorld(e, n, 0), out float g) ? g : 0f;
-                    dump.Row(frame, _t, $"h{k}.{c++}", "cow", e, n, y, Mathf.RadToDeg(yaw), 0, "-", "-", moved);
+                    dump.Row(frame, t, $"h{k}.{c++}", "cow", e, n, y, Mathf.RadToDeg(yaw), 0, "-", "-", moved);
                 }
             }
         if (Occasions.UfoSightings.Instance is { } sightings && _shot is { } shot)

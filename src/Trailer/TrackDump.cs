@@ -6,8 +6,9 @@ using System.Text;
 namespace UnitSport.Trailer;
 
 /// <summary>
-/// <c>--trailer-tracks DIR</c> (#924): every actor and staged object of a rolling shot, every frame
-/// of the film (its frame rate), to <c>DIR/shotNN.tracks.csv</c>: the drift measurement's input
+/// <c>--trailer-tracks DIR</c> (#924): every actor and staged object of a shot from its actors' go,
+/// every frame (the film's frame rate; the pre-roll's frames negative, the roll's from 0), to
+/// <c>DIR/shotNN.tracks.csv</c>: the drift measurement's input
 /// (<c>tools/trailer-drift.py</c> compares two dumps of the same shot). One row per object a frame:
 /// <c>frame,t,id,kind,e,n,alt,yaw,speed,pose,ride,beam</c>: LV95 metres, compass yaw in degrees, m/s;
 /// <c>pose</c> the body's pose kind (or a state word), <c>ride</c> what it rides, <c>beam</c> 1 while
