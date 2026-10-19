@@ -202,3 +202,15 @@ Gornergrat's own slope, the garage from Geneva's apron (France within 5 km) to t
 cockpit and the lean from the Furka to the Lavaux corniche, the road bike filmed from the hairpin's
 outside. The base jump (7) leaps off already in the wingsuit: the Gornergrat's south slope is too
 gentle for a jump out of a run to open it (12 m clear under him while falling).
+
+## Rendered
+
+v1 (commit 78b67697): `test_output/trailer/fondue/v1/trailer.mp4` in the main checkout, 249.63 s,
+1920x1080 at 30 fps, the song under it, five subtitle tracks (`mov_text`: eng, fra, deu, ita, roh,
+none on by default) from `fondue.subtitles.json`; `trailer_share.mp4` to send. The run's checks:
+`[trailer] RESULT: ok`, 2,698 real tiles, no Swiss tile missing round any shot (30 tiles abroad in
+view, Italy and France, allowed), `[subtitles] RESULT: ok`.
+
+Left as it is: the Zürich saucer's glow tints the whole crossroads green at dusk (49); the saucer is
+small or out of frame in 3, 22 and 31; Zorp is only half way down the ramp at the cut in 53; the
+tractor at Riddes (29) is hidden behind a gravel heap, the cow beam is the point of the shot.
