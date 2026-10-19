@@ -16,7 +16,8 @@ namespace UnitSport.Phone;
 /// the game's camera never moves.</item>
 /// <item>Phase 2: the camera app's lens points where the hand does, tilted with it; the holding hand's
 /// trigger shoots (windowed); the phone's back turned to the face is a selfie, turned back it ends; the
-/// free hand swings the front half shut and open again about the hinge.</item>
+/// free hand swings the front half shut and open again about the hinge; the right trigger, its ray off
+/// the phone, steps the zoom; the ray and the trigger press a tile from 40 cm off.</item>
 /// <item>Phase 3: a teleport waits for the phone at the eyes and goes behind it (no blink), or behind a
 /// blink when it does not come; a call is answered with the phone at the ear; let go away from the
 /// pocket it hangs, then flies home; let go at the pocket it goes in. The VR layout has three apps a row.</item>
@@ -107,6 +108,17 @@ public partial class PhoneVrProbe : Node
         await Wait(0.7);
         Check(!phone.Selfie && me.PhoneState == FootPlayer.PhoneCameraState, $"turned back, the selfie ends (state {me.PhoneState})");
 
+        // the right trigger, its ray off the phone, steps the lens: 2x, 5x, round to 1x
+        XrPhone.SimRay = Head * new Transform3D(Basis.Identity, new Vector3(0.25f, -0.3f, -0.2f));
+        var zooms = new List<float>();
+        for (int i = 0; i < 3; i++)
+        {
+            await Trigger();
+            zooms.Add(phone.Screens.Zoom);
+        }
+        XrPhone.SimRay = null;
+        Check(zooms is [2f, 5f, 1f], $"the right trigger off the phone steps the zoom ({string.Join(", ", zooms)})");
+
         await Button(JoyButton.B, 0.6);
         Check(me.PhoneState == FootPlayer.PhoneOpenState && phone.Screens.Shown == PhoneScreens.Page.Home, "B goes back to the home screen");
         Check(phone.Screens.HomeColumns == 3, $"the VR layout: three apps a row ({phone.Screens.HomeColumns})");
@@ -136,6 +148,21 @@ public partial class PhoneVrProbe : Node
         Shot("phonevr_5_map.png");
         float drift = me.CameraOrNull?.GlobalTransform is { } now && lens is { } then ? now.Origin.DistanceTo(then.Origin) : -1f;
         Check(drift is >= 0f and < 0.05f, $"the game's camera never moved (the eye is the head's; {drift:F2} m)");
+
+        // the ray: from 40 cm off, the right hand points at a tile and pulls the trigger
+        await Button(JoyButton.B, 0.6);
+        await Wait(0.3);
+        if (phone.Screens.FocusUv() is { } far && me.PhoneModel is { } held2 && me.PhoneScreenToWorld(far, cover: false, 0f) is { } on)
+        {
+            var normal = held2.GlobalBasis.Orthonormalized().Z;
+            var from = on + normal * 0.4f + Vector3.Right * 0.1f;
+            XrPhone.SimRay = new Transform3D(Basis.LookingAt(on - from, Vector3.Up), from);
+            await Wait(0.2);
+            await Trigger();
+            XrPhone.SimRay = null;
+            await Wait(0.4);
+        }
+        Check(phone.Screens.Shown == PhoneScreens.Page.Map, $"the ray and the trigger press a tile from afar ({phone.Screens.Shown})");
 
         // ---- phase 3: travel behind the phone at the eyes, or a blink ----
         var at = me.Global;
@@ -205,6 +232,15 @@ public partial class PhoneVrProbe : Node
         XrPhone.SimTip = null;
         Log(_failed == 0 ? "RESULT: ok" : $"RESULT: FAIL {_failed}");
         GetTree().Quit(_failed == 0 ? 0 : 1);
+    }
+
+    /// <summary>The pointing hand's trigger pulled and let go.</summary>
+    private async Task Trigger()
+    {
+        XrPhone.SimRayTrigger = true;
+        await Wait(0.15);
+        XrPhone.SimRayTrigger = false;
+        await Wait(0.2);
     }
 
     /// <summary>A grip closing at the left front pocket.</summary>

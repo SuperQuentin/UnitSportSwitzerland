@@ -771,9 +771,9 @@ public partial class PhoneScreens : Node
     }
 
     /// <summary>Steps the zoom by <paramref name="step"/> (1×, 2×, 5×).</summary>
-    public void StepZoom(int step)
+    public void StepZoom(int step, bool wrap = false)
     {
-        _zoom = Mathf.Clamp(_zoom + step, 0, Zooms.Length - 1);
+        _zoom = wrap ? (_zoom + step + Zooms.Length) % Zooms.Length : Mathf.Clamp(_zoom + step, 0, Zooms.Length - 1);
         SetText(_zoomLabel, $"{Zoom:0.#}×");
     }
 

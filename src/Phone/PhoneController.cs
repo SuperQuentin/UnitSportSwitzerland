@@ -397,7 +397,7 @@ public partial class PhoneController : Node
     private void ShowHint()
     {
         string text = _stage is Stage.Folded or Stage.Drawing
-            ? XR.XrSession.Active ? "X  open     swipe  choose     tap  select     B  put away"
+            ? XR.XrSession.Active ? "X  open     swipe  choose     tap, or point and trigger  select     B  put away"
             : InputHints.Pad ? "D-pad ↑ open     ← →  choose     A  select     B  put away"
                 : "W  open     A D  choose     Enter  select     S  put away     ·     mouse: click, swipe"
             : "";
@@ -858,6 +858,14 @@ public partial class PhoneController : Node
     public void VrShutter()
     {
         if (CameraApp) _ = TakePhoto();
+    }
+
+    /// <summary>VR: the pointing hand's trigger, its ray off the phone, in the camera app: the next lens (1x, 2x, 5x, round again).</summary>
+    public void VrZoom()
+    {
+        if (!CameraApp) return;
+        _screens.StepZoom(1, wrap: true);
+        Play(PhoneSounds.Tap);
     }
 
     /// <summary>VR, phase 2: the phone's back turned to the face (or away again) in the camera app.</summary>

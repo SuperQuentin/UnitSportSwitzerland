@@ -45,12 +45,16 @@ internal sealed class XrPhone
     private const float EyesReach = 0.14f, EarReach = 0.10f;
     /// <summary>The phone's back this square to the face (cosine), this long, is a selfie; back past <see cref="SelfieOff"/>, it ends.</summary>
     private const float SelfieOn = 0.5f, SelfieOff = 0.2f, SelfieHold = 0.3f;
+    /// <summary>The aim ray reaches the screen this far, m.</summary>
+    private const float RayReach = 1.5f;
     /// <summary>Let go away from the pocket: it hangs this long, then flies home in <see cref="HomeFlight"/>, s.</summary>
     private const float HomeWait = 0.5f, HomeFlight = 0.3f;
 
     private readonly XRController3D _left, _right, _leftGrip, _rightGrip;
     private readonly XrHand _leftHand, _rightHand;
     private readonly AudioStreamPlayer3D _sound;
+    private readonly MeshInstance3D _beam;
+    private bool _rayDown, _rayTrigger;
     private bool _gripClosed, _freeClosed, _heldByGrip, _touching, _hinge, _triggerDown;
     private float _turned;
     /// <summary>Flying home: seconds since let go (−1: not), and the pose it was let go at.</summary>
@@ -74,6 +78,23 @@ internal sealed class XrPhone
         _rightHand = rightHand;
         _sound = new AudioStreamPlayer3D { Name = "PhoneVrSound", Bus = Audio.SfxBus.Name, UnitSize = 2f, VolumeDb = -4f };
         parent.AddChild(_sound);
+        // the menus' pointer look (XrUi): a faint white beam; the screen's ring is the reticle
+        _beam = new MeshInstance3D
+        {
+            Name = "PhoneRay",
+            Mesh = new CylinderMesh { TopRadius = 0.0015f, BottomRadius = 0.0025f, Height = 1f, RadialSegments = 6, Rings = 1 },
+            MaterialOverride = new StandardMaterial3D
+            {
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                DisableFog = true,
+                Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                AlbedoColor = new Color(Ui.UiTheme.Text, 0.35f),
+            },
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            Visible = false,
+            Layers = XrSession.HeadsetOnlyLayer,
+        };
+        parent.AddChild(_beam);
     }
 
     // ---- a scripted hand for --xrsim checks (no tracked controllers there) ----------------------
@@ -90,6 +111,10 @@ internal sealed class XrPhone
     public static Vector3? SimFree { get; set; }
     /// <summary>The free hand's grip squeezed, for a check.</summary>
     public static bool SimFreeGrip { get; set; }
+    /// <summary>The pointing hand's aim pose (world, the ray along -Z), for a check; null: the controller's.</summary>
+    public static Transform3D? SimRay { get; set; }
+    /// <summary>The pointing hand's trigger pulled, for a check.</summary>
+    public static bool SimRayTrigger { get; set; }
 
     /// <summary>Where a check found it last frame: raised to the eyes, at an ear.</summary>
     public static bool AtEyesNow { get; private set; }
@@ -115,6 +140,7 @@ internal sealed class XrPhone
         if (freeClosing) _freeClosed = true;
         if (freeOpening) _freeClosed = false;
         AtEyesNow = false;
+        _beam.Visible = false;
 
         if (phone == null || player == null)
         {
@@ -194,32 +220,90 @@ internal sealed class XrPhone
         Camera(phone, frame, head, tracked && !simulated ? _left.GetFloat("trigger") : SimTrigger ? 1f : 0f, dt);
         Near(phone, frame, model.Fold, head);
 
-        // the pointing fingertip on the glass (not while that hand holds the hinge)
-        Vector3? tip = XrSession.Simulated && SimTip != null ? SimTip : pointing.Visible ? pointing.IndexTip : null;
-        if (_hinge || tip is not { } t)
+        // the pointing fingertip on the glass (not while that hand holds the hinge); off it, the ray
+        if (_hinge)
         {
             Off(phone);
             return;
         }
         bool cover = model.Fold < 0.01f;
-        if (!cover && model.Fold < 0.99f) { Release(phone); return; }
+        if (!cover && model.Fold < 0.99f) { Off(phone); return; }
         var (centre, size) = cover
             ? (PhoneModel.CoverScreenCentre, PhoneModel.CoverSize)
             : (PhoneModel.InnerScreenCentre, new Vector2(PhoneModel.InnerW, PhoneModel.InnerH));
-        var local = frame.AffineInverse() * t - centre;
-        var uv = new Vector2(local.X / size.X + 0.5f, 0.5f - local.Y / size.Y);
-        bool over = uv.X is > -0.08f and < 1.08f && uv.Y is > -0.08f and < 1.08f;
-        float depth = local.Z;   // + in front of the glass, toward the eyes
-        if (!over || depth > HoverReach || depth < -Behind)
+        Vector3? tip = XrSession.Simulated && SimTip != null ? SimTip : pointing.Visible ? pointing.IndexTip : null;
+        if (tip is { } t)
         {
-            Release(phone);
+            var local = frame.AffineInverse() * t - centre;
+            var uv = new Vector2(local.X / size.X + 0.5f, 0.5f - local.Y / size.Y);
+            bool over = uv.X is > -0.08f and < 1.08f && uv.Y is > -0.08f and < 1.08f;
+            float depth = local.Z;   // + in front of the glass, toward the eyes
+            if (over && depth <= HoverReach && depth >= -Behind)
+            {
+                _rayDown = _rayTrigger = false;
+                bool was = _touching;
+                _touching = _touching ? depth < Rearm : depth < TouchReach;
+                if (_touching != was) Tick(holding: false, _touching ? 0.25f : 0.12f, both: true);
+                phone.VrPointer(uv, cover, _touching);
+                return;
+            }
+        }
+        Release(phone);
+        Ray(phone, frame, centre, size, cover);
+    }
+
+    /// <summary>
+    /// The ray (#920): when the fingertip is not at the glass, the pointing hand's aim ray onto the
+    /// screen is the pointer (the screen's ring is its reticle) and its trigger the press, as
+    /// <see cref="XrUi"/>'s ray on the panel. Off the phone, in the camera app, a pull of that trigger
+    /// steps the zoom (1x, 2x, 5x, round again).
+    /// </summary>
+    private void Ray(PhoneController phone, Transform3D frame, Vector3 centre, Vector2 size, bool cover)
+    {
+        bool simulated = XrSession.Simulated && SimRay != null;
+        bool tracked = simulated || _right.GetHasTrackingData();
+        float trigger = simulated ? (SimRayTrigger ? 1f : 0f) : tracked ? _right.GetFloat("trigger") : 0f;
+        bool pulled = _rayTrigger ? trigger > 0.3f : trigger > 0.7f;
+        bool pull = pulled && !_rayTrigger;
+        _rayTrigger = pulled;
+        Vector2? uv = null;
+        Vector3 from = default, hit = default;
+        if (tracked)
+        {
+            var aim = simulated ? SimRay!.Value : _right.GlobalTransform;
+            from = aim.Origin;
+            var dir = -aim.Basis.Z;
+            var normal = frame.Basis.Z;
+            var plane = new Godot.Plane(normal, frame * centre);
+            if (dir.Dot(normal) < -0.05f && plane.IntersectsRay(from, dir) is { } at && at.DistanceTo(from) < RayReach)
+            {
+                var local = frame.AffineInverse() * at - centre;
+                var u = new Vector2(local.X / size.X + 0.5f, 0.5f - local.Y / size.Y);
+                if (u.X is >= 0f and <= 1f && u.Y is >= 0f and <= 1f)
+                {
+                    uv = u;
+                    hit = at;
+                }
+            }
+        }
+        if (uv is not { } on)
+        {
+            // a press that slides off the screen lets go
+            _rayDown = false;
             phone.VrPointer(null, cover, false);
+            if (pull && phone.CameraApp) phone.VrZoom();
             return;
         }
-        bool was = _touching;
-        _touching = _touching ? depth < Rearm : depth < TouchReach;
-        if (_touching != was) Tick(holding: false, _touching ? 0.25f : 0.12f, both: true);
-        phone.VrPointer(uv, cover, _touching);
+        bool down = _rayDown ? pulled : pull;
+        if (down != _rayDown) Tick(holding: false, down ? 0.2f : 0.1f);
+        _rayDown = down;
+        phone.VrPointer(on, cover, down);
+        float length = from.DistanceTo(hit);
+        var way = (hit - from) / Mathf.Max(length, 0.001f);
+        _beam.Visible = true;
+        _beam.GlobalTransform = new Transform3D(
+            Basis.LookingAt(way, Mathf.Abs(way.Y) > 0.99f ? Vector3.Forward : Vector3.Up) * new Basis(Vector3.Right, -Mathf.Pi / 2f) * Basis.FromScale(new Vector3(1f, length, 1f)),
+            from + way * length * 0.5f);
     }
 
     /// <summary>

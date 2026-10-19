@@ -9,10 +9,10 @@
   | | Keyboard | Pad | VR |
   |---|---|---|---|
   | take out | `phone` = Up arrow (free on foot; the excavator's boom in a cab) | quick menu (hold Back) › Phone | grip at the left front pocket; wrist menu › Phone |
-  | folded: pick / run | ← → or the wheel / Enter, Space, click | D-pad, stick / A | swipe the fingertip across the cover / tap it |
+  | folded: pick / run | ← → or the wheel / Enter, Space, click | D-pad, stick / A | swipe the fingertip across the cover / tap it, or point the right hand's ray and pull its trigger |
   | open | Up | D-pad ↑ | the free hand swings the front half open by its loose edge; X (fold again: X) |
   | back / put away | Esc (open: back, then fold), ↓ folded | B | B, or a swipe right; let go at the pocket (anywhere else it flies home) |
-  | camera app: shoot / selfie | click, Enter / F | RT / Y | the holding hand's trigger / turn the phone's back to your face |
+  | camera app: shoot / selfie / zoom | click, Enter / F / wheel | RT / Y / LB RB | the holding hand's trigger / turn the phone's back to your face / the right trigger with its ray off the phone (1×, 2×, 5×, round) |
   | travel / answer a call | automatic / cover › Answer | same | raise the phone to your eyes (a blink after 3 s) / to your ear |
 
   No pad button is free on foot (D-pad ↑ is the emote wheel), so the pad takes it out from the quick
@@ -27,7 +27,9 @@
   eyes, else blinks after 3 s; a call buzzes the holding hand twice and rings at the pocket, the cover
   within 10 cm of an ear answers. Let go away from the pocket it hangs 0.5 s and flies home. The
   inner screen is laid out for 640 units (3 × 2 home tiles). No camera moves in VR (#186: `PhoneLook`
-  must not raise the throw view there). Check: `--phonevrcheck --xrsim --world fixture` (scripted
+  must not raise the throw view there). Away from the glass, the right hand's aim ray (the menus'
+  faint beam, the screen's ring as its reticle) with its trigger is the pointer; off the phone, in
+  the camera app, that trigger steps the zoom (items are off while the phone is out, so it is free). Check: `--phonevrcheck --xrsim --world fixture` (scripted
   hands: `XrPhone.Sim*`, a ringing call: `PhoneController.SimCall`).
 - **Wire**: one byte, `FootPlayer.PhoneState` (0 pocket, 1 folded, 2 open), on change, in
   `OnChangeProperties` and the movie recorder (`ActorIo`, index 23). Every peer derives the arm pose
