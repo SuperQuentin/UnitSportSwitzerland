@@ -107,7 +107,10 @@ public static class RoundaboutCore
             bool twoWay = a.Mouth.CarLanes(StripWay.In).Any() && a.Mouth.CarLanes(StripWay.Out).Any();
             if (atTip && twoWay && !mini && arm.Mouth - 1 - ringAt >= IslandLeast) (arm.Apex, arm.Base) = (arm.Mouth - 1, ringAt);
             // (an arm TLM draws as one line still gets its splitter island on a compact ring: its mouth out past it, #854)
-            else if (!atTip && twoWay && !mini) (arm.Base, arm.Apex, arm.Mouth) = (ringAt, ringAt + IslandLength, ringAt + IslandLength + 1);
+            // (shorter, down to IslandLeast, where a road joins the arm or the next junction stands nearer: its mouth within the
+            // arm's reach; none shorter)
+            else if (!atTip && twoWay && !mini && Math.Min(IslandLength, a.Reach - 1 - ringAt) is var length && length >= IslandLeast)
+                (arm.Base, arm.Apex, arm.Mouth) = (ringAt, ringAt + length, ringAt + length + 1);
         }
 
         // the kerbs: each arm's right kerb and the next arm's left kerb, as straight lines down from the mouth (flared past a splitter
