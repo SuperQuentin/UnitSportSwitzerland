@@ -41,7 +41,8 @@ public partial class InteriorManager
     /// <summary>The cabin's floor list, once it has been opened (for probes).</summary>
     public FloorPicker? Picker => _picker;
 
-    private static double Clock => ClockSync.ServerNow;
+    /// <summary>Simulated seconds, so a cabin slows with its riders under <c>/speed</c> (#867).</summary>
+    private static double Clock => ClockSync.SimNow;
 
     /// <summary>The state of one elevator: idle on the ground floor until anybody calls it.</summary>
     public LiftRide LiftOf(InteriorLayout l, int lift) =>

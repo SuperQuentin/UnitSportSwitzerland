@@ -32,18 +32,23 @@ public static class SitePlans
     {
         var sites = new List<ConstructionSite>();
         if (!HasSite(tile)) return sites;
-        var map = BuildingTypes.For(tile);
         for (int i = 0; i < tile.Buildings.Count; i++)
-        {
-            var b = tile.Buildings[i];
-            if (b.Kind != BuildingKind.UnderConstruction || map.Boxes[i] is not { } box) continue;
-            var key = new BuildingKey(tile.Id.E, tile.Id.N, i).ToString();
-            var street = BuildingFootprint.StreetNear(roads, box.Center);
-            var obstacles = new SiteObstacles(map.Boxes, i, roads, Clearance);
-            var site = ConstructionSites.Plan(key, b, box, street, obstacles.Blocked, obstacles.Undiggable);
-            if (site != null) sites.Add(site);
-        }
+            if (Of(tile, roads, i) is { } site) sites.Add(site);
         return sites;
+    }
+
+    /// <summary>The building site of one building of the tile, as <see cref="For"/> plans it; null if it is none.</summary>
+    public static ConstructionSite? Of(BuildingTile tile, RoadTile? roads, int index)
+    {
+        if (index < 0 || index >= tile.Buildings.Count) return null;
+        var b = tile.Buildings[index];
+        var map = BuildingTypes.For(tile);
+        if (b.Kind != BuildingKind.UnderConstruction || map.Boxes[index] is not { } box) return null;
+        var key = new BuildingKey(tile.Id.E, tile.Id.N, index).ToString();
+        var street = BuildingFootprint.StreetNear(roads, box.Center);
+        var obstacles = new SiteObstacles(map.Boxes, index, roads, Clearance);
+        // a pit (#619) keeps off a road's sidewalks too, the yard off its carriageway
+        return ConstructionSites.Plan(key, b, box, street, obstacles.Blocked, obstacles.Undiggable);
     }
 
     /// <summary>

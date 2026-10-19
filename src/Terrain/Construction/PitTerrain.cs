@@ -48,7 +48,7 @@ public static class PitTerrain
     public static HashSet<int> Holes(IReadOnlyList<PitCut> pits)
     {
         var holes = new HashSet<int>();
-        var square = new List<(Vector3, Color)>(4);
+        var square = new List<Corner>(4);
         foreach (var pit in pits)
         {
             var (x0, z0, x1, z1) = Bounds(pit.Rect);
@@ -56,10 +56,10 @@ public static class PitTerrain
                 for (int c = Math.Max(0, (int)MathF.Floor(x0)); c <= Math.Min(QuadsPerSide - 1, (int)MathF.Floor(x1)); c++)
                 {
                     square.Clear();
-                    square.Add((new Vector3(c, 0, r), default));
-                    square.Add((new Vector3(c + 1, 0, r), default));
-                    square.Add((new Vector3(c + 1, 0, r + 1), default));
-                    square.Add((new Vector3(c, 0, r + 1), default));
+                    square.Add(new Corner(new Vector3(c, 0, r), default, Vector3.Up));
+                    square.Add(new Corner(new Vector3(c + 1, 0, r), default, Vector3.Up));
+                    square.Add(new Corner(new Vector3(c + 1, 0, r + 1), default, Vector3.Up));
+                    square.Add(new Corner(new Vector3(c, 0, r + 1), default, Vector3.Up));
                     if (Area(Inside(square, pit.Rect)) > 1e-4f) holes.Add(r * QuadsPerSide + c);
                 }
         }
@@ -84,7 +84,7 @@ public static class PitTerrain
                 for (int dc = -1; dc <= 0; dc++)
                     if (c + dc >= 0 && r + dr >= 0) dropped.Add((r + dr) * QuadsPerSide + c + dc);
         }
-        var tri = new List<(Vector3, Color)>(3);
+        var tri = new List<Corner>(3);
         foreach (int q in dropped)
         {
             int c = q % QuadsPerSide, r = q / QuadsPerSide;
@@ -95,11 +95,11 @@ public static class PitTerrain
             foreach (var (a, b, d) in new[] { (v00, v10, v01), (v10, v11, v01) })
             {
                 tri.Clear();
-                tri.Add((a, default)); tri.Add((b, default)); tri.Add((d, default));
+                tri.Add(new Corner(a, default, Vector3.Up)); tri.Add(new Corner(b, default, Vector3.Up)); tri.Add(new Corner(d, default, Vector3.Up));
                 foreach (var piece in OutsideAll(tri, pits))
                     for (int k = 1; k + 1 < piece.Count; k++)
                     {
-                        faces.Add(piece[0].Item1); faces.Add(piece[k].Item1); faces.Add(piece[k + 1].Item1);
+                        faces.Add(piece[0].P); faces.Add(piece[k].P); faces.Add(piece[k + 1].P);
                     }
             }
         }
@@ -111,14 +111,15 @@ public static class PitTerrain
 
     /// <summary>
     /// A ground mesh with the pits cut out and lined: the grid triangles that reach into a pit
-    /// dropped and their outside put back (colours interpolated), then each pit's walls, floor and
-    /// ramp. <paramref name="m"/> vertices per side at <paramref name="quad"/> m: the grid is the
-    /// first m² vertices, laid out row by row; anything after it (the skirts) is left alone.
+    /// dropped and their outside put back (colours and normals interpolated), then each pit's walls,
+    /// floor and ramp, their normals straight up (the terrain body's "keep the facet light", #883).
+    /// <paramref name="m"/> vertices per side at <paramref name="quad"/> m: the grid is the first m²
+    /// vertices, laid out row by row; anything after it (the skirts) is left alone.
     /// </summary>
-    public static (Vector3[] Vertices, Color[] Colors, int[] Indices) Cut(Vector3[] vertices, Color[] colors, int[] indices,
-        int m, float quad, IReadOnlyList<PitCut> pits)
+    public static (Vector3[] Vertices, Color[] Colors, Vector3[] Normals, int[] Indices) Cut(Vector3[] vertices, Color[] colors,
+        Vector3[] normals, int[] indices, int m, float quad, IReadOnlyList<PitCut> pits)
     {
-        if (pits.Count == 0) return (vertices, colors, indices);
+        if (pits.Count == 0) return (vertices, colors, normals, indices);
         var bounds = pits.Select(p => Bounds(p.Rect)).ToArray();
         // the lattice rows any pit reaches, so most triangles are passed over with one division
         int rowLo = int.MaxValue, rowHi = int.MinValue;
@@ -129,12 +130,13 @@ public static class PitTerrain
         }
         var verts = new List<Vector3>();
         var cols = new List<Color>();
+        var norms = new List<Vector3>();
         var idx = new List<int>();
         // the triangles kept as they were, in runs copied whole
         var kept = new int[indices.Length];
         int keptCount = 0;
         int grid = m * m;
-        var tri = new List<(Vector3, Color)>(3);
+        var tri = new List<Corner>(3);
         for (int t = 0; t + 2 < indices.Length; t += 3)
         {
             int i0 = indices[t], i1 = indices[t + 1], i2 = indices[t + 2];
@@ -154,7 +156,9 @@ public static class PitTerrain
                 continue;
             }
             tri.Clear();
-            tri.Add((vertices[i0], colors[i0])); tri.Add((vertices[i1], colors[i1])); tri.Add((vertices[i2], colors[i2]));
+            tri.Add(new Corner(vertices[i0], colors[i0], normals[i0]));
+            tri.Add(new Corner(vertices[i1], colors[i1], normals[i1]));
+            tri.Add(new Corner(vertices[i2], colors[i2], normals[i2]));
             bool touches = false;
             foreach (var pit in pits)
                 if (Area(Inside(tri, pit.Rect)) > 1e-5f) { touches = true; break; }
@@ -168,7 +172,7 @@ public static class PitTerrain
             foreach (var piece in OutsideAll(tri, pits))
             {
                 int first = vertices.Length + verts.Count;
-                foreach (var (p, col) in piece) { verts.Add(p); cols.Add(col); }
+                foreach (var (p, col, n) in piece) { verts.Add(p); cols.Add(col); norms.Add(n); }
                 for (int k = 1; k + 1 < piece.Count; k++) { idx.Add(first); idx.Add(first + k); idx.Add(first + k + 1); }
             }
         }
@@ -181,18 +185,22 @@ public static class PitTerrain
                 int first = vertices.Length + verts.Count;
                 verts.Add(a); verts.Add(b); verts.Add(d);
                 cols.Add(col); cols.Add(col); cols.Add(col);
+                norms.Add(Vector3.Up); norms.Add(Vector3.Up); norms.Add(Vector3.Up);
                 idx.Add(first); idx.Add(first + 1); idx.Add(first + 2);
             });
         var outV = new Vector3[vertices.Length + verts.Count];
         var outC = new Color[outV.Length];
+        var outN = new Vector3[outV.Length];
         Array.Copy(vertices, outV, vertices.Length);
         Array.Copy(colors, outC, colors.Length);
+        Array.Copy(normals, outN, normals.Length);
         verts.CopyTo(outV, vertices.Length);
         cols.CopyTo(outC, colors.Length);
+        norms.CopyTo(outN, normals.Length);
         var outI = new int[keptCount + idx.Count];
         Array.Copy(kept, outI, keptCount);
         idx.CopyTo(outI, keptCount);
-        return (outV, outC, outI);
+        return (outV, outC, outN, outI);
     }
 
     /// <summary>
@@ -332,28 +340,32 @@ public static class PitTerrain
         (r.AxisV, r.AxisV.Dot(r.Center) + r.Depth / 2), (-r.AxisV, -r.AxisV.Dot(r.Center) + r.Depth / 2),
     ];
 
-    /// <summary>A convex polygon's part on one side of a line (Sutherland-Hodgman), positions and colours interpolated.</summary>
-    private static List<(Vector3, Color)> Clip(List<(Vector3 P, Color C)> poly, Vector2 n, float d, bool outside)
+    /// <summary>A polygon's corner: where it is, its colour, its normal (the terrain's smoothed one, #883).</summary>
+    public readonly record struct Corner(Vector3 P, Color C, Vector3 N);
+
+    /// <summary>A convex polygon's part on one side of a line (Sutherland-Hodgman), positions, colours and normals interpolated.</summary>
+    private static List<Corner> Clip(List<Corner> poly, Vector2 n, float d, bool outside)
     {
-        var res = new List<(Vector3, Color)>(poly.Count + 2);
+        var res = new List<Corner>(poly.Count + 2);
         float S(Vector3 p) => (outside ? 1 : -1) * (n.X * p.X + n.Y * p.Z - d);
         for (int i = 0; i < poly.Count; i++)
         {
-            var (p, pc) = poly[i];
-            var (q, qc) = poly[(i + 1) % poly.Count];
-            float sp = S(p), sq = S(q);
-            if (sp >= 0) res.Add((p, pc));
+            var a = poly[i];
+            var b = poly[(i + 1) % poly.Count];
+            float sp = S(a.P), sq = S(b.P);
+            if (sp >= 0) res.Add(a);
             if (sp >= 0 != sq >= 0)
             {
                 float t = sp / (sp - sq);
-                res.Add((p.Lerp(q, t), pc.Lerp(qc, t)));
+                var nt = a.N.Lerp(b.N, t);
+                res.Add(new Corner(a.P.Lerp(b.P, t), a.C.Lerp(b.C, t), nt.LengthSquared() > 1e-8f ? nt.Normalized() : Vector3.Up));
             }
         }
         return res;
     }
 
     /// <summary>The part of a convex polygon inside the rectangle.</summary>
-    private static List<(Vector3, Color)> Inside(List<(Vector3, Color)> poly, SiteRect r)
+    private static List<Corner> Inside(List<Corner> poly, SiteRect r)
     {
         var rest = poly;
         foreach (var (n, d) in Sides(r))
@@ -365,9 +377,9 @@ public static class PitTerrain
     }
 
     /// <summary>A convex polygon less a rectangle, as convex pieces: outside the first side, then inside it and outside the next...</summary>
-    private static List<List<(Vector3, Color)>> Outside(List<(Vector3, Color)> poly, SiteRect r)
+    private static List<List<Corner>> Outside(List<Corner> poly, SiteRect r)
     {
-        var pieces = new List<List<(Vector3, Color)>>();
+        var pieces = new List<List<Corner>>();
         var rest = poly;
         foreach (var (n, d) in Sides(r))
         {
@@ -380,12 +392,12 @@ public static class PitTerrain
     }
 
     /// <summary>A convex polygon less every pit.</summary>
-    private static List<List<(Vector3, Color)>> OutsideAll(List<(Vector3, Color)> poly, IReadOnlyList<PitCut> pits)
+    private static List<List<Corner>> OutsideAll(List<Corner> poly, IReadOnlyList<PitCut> pits)
     {
-        var pieces = new List<List<(Vector3, Color)>> { poly };
+        var pieces = new List<List<Corner>> { poly };
         foreach (var pit in pits)
         {
-            var next = new List<List<(Vector3, Color)>>();
+            var next = new List<List<Corner>>();
             foreach (var p in pieces) next.AddRange(Outside(p, pit.Rect));
             pieces = next;
         }
@@ -393,13 +405,13 @@ public static class PitTerrain
     }
 
     /// <summary>A polygon's area in plan.</summary>
-    public static float Area(List<(Vector3, Color)> poly)
+    public static float Area(List<Corner> poly)
     {
         float a = 0;
         for (int i = 0; i < poly.Count; i++)
         {
-            var p = poly[i].Item1;
-            var q = poly[(i + 1) % poly.Count].Item1;
+            var p = poly[i].P;
+            var q = poly[(i + 1) % poly.Count].P;
             a += p.X * q.Z - q.X * p.Z;
         }
         return MathF.Abs(a) / 2;

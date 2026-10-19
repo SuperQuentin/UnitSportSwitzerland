@@ -42,6 +42,8 @@ public partial class RaceManager : Node, IOriginShiftAware
     /// <summary>The mount value for "everyone keeps what they have".</summary>
     public const int Open = -1;
     private const double EntryWindow = 15.0, Countdown = 5.0;
+    /// <summary>The invite kind (#840): a duel challenge, or an open race to everyone; keyed by the race id.</summary>
+    public const string InviteId = "race";
 
     private static bool IsAirMount(int k) => k is (int)RideKind.Plane or (int)RideKind.Helicopter
         or (int)RideKind.Paraglider or (int)RideKind.Wingsuit;
@@ -108,6 +110,8 @@ public partial class RaceManager : Node, IOriginShiftAware
         public readonly List<(long Owner, int Count, int Mount, bool Duel)> PendingNpcs = new();
         /// <summary>Where it was opened: "near the race" before any entrant is placed.</summary>
         public Vector3 Spot;
+        /// <summary>Its length once the course is known, km (for the list and the invites).</summary>
+        public float Km;
         public string What => $"{(Air ? "air " : "")}{MountName(Mount)}{(Class >= 0 ? $" {CarSetups.Slug(CarSetups.For(Class))}" : "")} {(Invited != 0 ? "duel" : "race")}";
     }
 
@@ -141,10 +145,22 @@ public partial class RaceManager : Node, IOriginShiftAware
         return true;
     }
 
-    public static RaceManager CreateServer(ChatManager chat, Node3D players, IChunkSource source) => new()
+    public static RaceManager CreateServer(ChatManager chat, Node3D players, IChunkSource source)
     {
-        Name = NodeName, _server = true, _chat = chat, _players = players, _source = source,
-    };
+        var m = new RaceManager { Name = NodeName, _server = true, _chat = chat, _players = players, _source = source };
+        // a duel challenge and an open race are invites (#840); accepting is /race join <id>
+        chat.Invites?.Register(new InviteKind
+        {
+            Id = InviteId, Label = "race", Seconds = EntryWindow, TellAccepted = false,
+            Accept = (peer, invite) => "[race] " + m.Join(peer, (int)invite.Key),
+            Declined = (peer, invite) =>
+            {
+                if (m._races.GetValueOrDefault((int)invite.Key) is { Invited: var asked } duel && asked == peer && duel.Phase != Phase.Running)
+                    m.End(duel, $"{m.Who(peer)} declined the duel", ChatKind.System);
+            },
+        });
+        return m;
+    }
 
     public static RaceManager CreateClient(WorldOrigin origin) => new() { Name = NodeName, _origin = origin };
 
@@ -279,17 +295,23 @@ public partial class RaceManager : Node, IOriginShiftAware
         race.PendingNpcs.Clear();
         race.Phase = Phase.Entry;
         race.EntryEnds = _clock + EntryWindow;
-        float km = (race.Air ? course!.Length : Mathf.Min(race.Metres, RaceCourse.MaxLength(route!, MinEntrants))) / 1000f;
+        float km = race.Km = (race.Air ? course!.Length : Mathf.Min(race.Metres, RaceCourse.MaxLength(route!, MinEntrants))) / 1000f;
         if (race.Invited < 0)
             _chat?.Tell(race.Host, $"[race] #{id} {km:0.0} km {race.What} against {Who(race.Invited)}", ChatKind.System);
         else if (race.Invited != 0)
         {
             _chat?.Tell(race.Invited, $"[race] #{id} {Who(race.Host)} challenges you to a {km:0.0} km {race.What} — /race join {id} within {EntryWindow:0} s", ChatKind.System);
             _chat?.Tell(race.Host, $"[race] #{id} waiting for {Who(race.Invited)} to accept", ChatKind.System);
+            _chat?.Invites?.Send(InviteId, race.Host, race.Invited, $"{Who(race.Host)} challenges you to a race",
+                $"{km:0.0} km {race.What}", out _, key: id, seconds: EntryWindow);
         }
         else
+        {
             _chat?.Broadcast($"[race] #{id} {Who(race.Host)} opens a {km:0.0} km {race.What} — /race join {id} within {EntryWindow:0} s",
                 ChatKind.System);
+            _chat?.Invites?.Send(InviteId, race.Host, Invite.Everyone, $"{Who(race.Host)} opens a race",
+                $"{km:0.0} km {race.What}", out _, key: id, seconds: EntryWindow);
+        }
     }
 
     private string Join(long sender, int? id)
@@ -303,6 +325,7 @@ public partial class RaceManager : Node, IOriginShiftAware
         if (race.Invited != 0 && race.Invited != sender) return $"Race #{race.Id} is a duel between {Who(race.Host)} and {Who(race.Invited)}.";
         if (race.Entrants.Count >= MaxEntrants) return $"Race #{race.Id} is full.";
         Enter(race, sender);
+        _chat?.Invites?.Dismiss(InviteId, race.Id, sender);
         _chat?.Broadcast($"[race] #{race.Id} {Who(sender)} joins ({race.Entrants.Count} in)", ChatKind.System);
         return $"#{race.Id} you are in{(race.Mount == Open ? "" : $" — {MountName(race.Mount)}")}.";
     }
@@ -604,6 +627,8 @@ public partial class RaceManager : Node, IOriginShiftAware
 
     private void Go(Race race)
     {
+        // entry is closed: nobody else is asked in (#840)
+        _chat?.Invites?.Withdraw(InviteId, race.Id);
         int count = race.Entrants.Count;
         if (count < MinEntrants) { End(race, $"not enough racers ({MinEntrants} needed)", ChatKind.System); return; }
         Vector3[] centre = System.Array.Empty<Vector3>(), gates = System.Array.Empty<Vector3>();
@@ -718,6 +743,7 @@ public partial class RaceManager : Node, IOriginShiftAware
     /// <summary>Frees the race and tells every client still holding a racer in it.</summary>
     private void End(Race race, string? why, ChatKind kind)
     {
+        _chat?.Invites?.Withdraw(InviteId, race.Id);
         if (why != null) _chat?.Broadcast($"[race] #{race.Id} {why}", kind);
         foreach (long e in race.Entrants)
         {

@@ -38,6 +38,8 @@ public partial class BrHud : CanvasLayer
     public override void _Process(double delta) => _view.QueueRedraw();
 
     public static string Kills(int n) => n == 1 ? "1 kill" : $"{n} kills";
+    /// <summary>"10 kills (3 bots)" (#837): kills of bots count, and show.</summary>
+    public static string Kills(int n, int bots) => BrStats.KillText(n, bots);
 
     private static string Clock(double s)
     {
@@ -52,6 +54,8 @@ public partial class BrHud : CanvasLayer
         private float Y0 => Hud._br.InMatch && Hud._br.State.Running && BrPrefs.Current.Compass ? BrCompass.Top + BrCompass.Height + 50 : 0;
         private static readonly Color Panel = new(0.05f, 0.05f, 0.08f, 0.62f);
         private static readonly Color Gold = new(1f, 0.82f, 0.25f);
+        /// <summary>A bot's name in the results (#837): marked, and a shade quieter than a player's.</summary>
+        private static readonly Color BotGrey = new(0.72f, 0.74f, 0.78f);
         private static readonly Color Danger = new(1f, 0.25f, 0.2f);
         private static readonly Color Zone = new(0.72f, 0.5f, 1f);
 
@@ -64,7 +68,7 @@ public partial class BrHud : CanvasLayer
             float w = Size.X;
             var me = br.LocalPlayer();
             var mine = br.MyEntry;
-            double now = ClockSync.ServerNow;
+            double now = ClockSync.SimNow;
 
             // ---- the top line --------------------------------------------------------------
             string top, sub = "";
@@ -72,11 +76,13 @@ public partial class BrHud : CanvasLayer
             {
                 case BrPhase.Lobby:
                     top = $"BATTLE ROYALE · {s.AreaName} · {s.Entrants.Count} joined";
-                    sub = mine == null ? "Type /br join to play" : $"Waiting for players ({BrManager.MinPlayers} to start)";
+                    sub = mine == null ? Core.InputHints.Format("Hold {quick_menu} › Activities to join, or /br join")
+                        : s.Bots >= BrManager.MinPlayers ? $"Bots fill the field to {s.Bots} at GO"
+                        : $"Waiting for players ({BrManager.MinPlayers} to start)";
                     break;
                 case BrPhase.Countdown:
                     top = $"BATTLE ROYALE · {s.AreaName} · starts in {Clock(s.CountdownEnds - now)}";
-                    sub = mine == null ? $"{s.Entrants.Count} players · /br join" : $"{s.Entrants.Count} players";
+                    sub = mine == null ? Core.InputHints.Format($"{s.Entrants.Count} players · hold {{quick_menu}} › Activities to join") : $"{s.Entrants.Count} players";
                     break;
                 case BrPhase.Playing when br.Aboard && s.Flight is { } plane:
                     // in the cargo plane's hold (#207)
@@ -92,15 +98,15 @@ public partial class BrHud : CanvasLayer
                         : z.Shrinking ? $"Zone closing · {Clock(z.Left)}"
                         : $"Zone {z.Phase}/{ZoneSchedule.Phases} shrinks in {Clock(z.Left)}";
                     top = $"{zone}   ·   {s.AliveCount} alive" + (s.TeamSize > 1 ? $" ({s.TeamsAlive} teams)" : "")
-                        + (mine != null ? $"   ·   {Kills(mine.Kills)}" : "");
+                        + (mine != null ? $"   ·   {Kills(mine.Kills, mine.BotKills)}" : "");
                     sub = mine is { Team: not 0 }
-                        ? $"{s.AreaName} · team {mine.Team}: " + string.Join(", ", s.MatesOf(br.Me).Select(m => m.Alive ? m.Name : $"{m.Name} (out)"))
+                        ? $"{s.AreaName} · team {mine.Team}: " + string.Join(", ", s.MatesOf(br.Me).Select(m => m.Alive ? m.Shown : $"{m.Shown} (out)"))
                         : s.AreaName;
                     break;
                 case BrPhase.Ended:
                     top = s.WinnerTeam != 0
-                        ? $"Team {s.WinnerTeam} wins in {s.AreaName}: {string.Join(", ", s.Entrants.Where(e => e.Team == s.WinnerTeam).Select(e => e.Name))}"
-                        : $"{s.Entrants.FirstOrDefault(e => e.Peer == s.Winner)?.Name ?? "Nobody"} wins in {s.AreaName}";
+                        ? $"Team {s.WinnerTeam} wins in {s.AreaName}: {string.Join(", ", s.Entrants.Where(e => e.Team == s.WinnerTeam).Select(e => e.Shown))}"
+                        : $"{s.Entrants.FirstOrDefault(e => e.Peer == s.Winner)?.Shown ?? "Nobody"} wins in {s.AreaName}";
                     break;
                 default:
                     top = "BATTLE ROYALE";
@@ -199,7 +205,9 @@ public partial class BrHud : CanvasLayer
         private void Results(Font font, BrState s)
         {
             var rows = s.Entrants.OrderBy(e => e.Place == 0 ? 999 : e.Place).Take(12).ToList();
-            float rw = 560, rh = 70 + rows.Count * 24;
+            // a field topped up with bots (#837) can push you off the first twelve: your row always shows
+            if (s.Find(Hud._br.Me) is { } you && !rows.Contains(you)) rows.Add(you);
+            float rw = 700, rh = 70 + rows.Count * 24;
             var r = new Rect2((Size.X - rw) * 0.5f, Size.Y * 0.5f - rh * 0.5f, rw, rh);
             DrawRect(r, Panel);
             Text(font, new Vector2(Size.X * 0.5f, r.Position.Y + 30), "RESULTS", 20, Gold, HorizontalAlignment.Center);
@@ -208,9 +216,10 @@ public partial class BrHud : CanvasLayer
             {
                 var col = e.Peer == Hud._br.Me ? Gold : Colors.White;
                 Text(font, new Vector2(r.Position.X + 24, y), $"#{e.Place}", 15, col, HorizontalAlignment.Left);
-                Text(font, new Vector2(r.Position.X + 80, y), e.Name, 15, col, HorizontalAlignment.Left);
-                Text(font, new Vector2(r.Position.X + 330, y), Kills(e.Kills), 15, col, HorizontalAlignment.Left);
-                Text(font, new Vector2(r.Position.X + 420, y), $"{e.Damage:F0} dmg", 15, col, HorizontalAlignment.Left);
+                Text(font, new Vector2(r.Position.X + 80, y), e.Shown, 15, e.Bot && e.Peer != Hud._br.Me ? BotGrey : col, HorizontalAlignment.Left);
+                // "10 kills (3 bots)" (#837)
+                Text(font, new Vector2(r.Position.X + 330, y), Kills(e.Kills, e.BotKills), 15, col, HorizontalAlignment.Left);
+                Text(font, new Vector2(r.Position.X + 510, y), $"{e.Damage:F0} dmg", 15, col, HorizontalAlignment.Left);
                 Text(font, new Vector2(r.End.X - 20, y), Clock(e.Survived), 15, col, HorizontalAlignment.Right);
                 y += 24;
             }

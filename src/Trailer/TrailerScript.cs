@@ -374,9 +374,11 @@ public static class TrailerScript
             Captions = [new(0.25, 3.5, "Together.")],
             Preroll = 1,
         },
-        StyleShot(20, 37, "ps1", "PS1", 0),
-        StyleShot(21, 38, "cartoon", "Cartoon", 1),
-        StyleShot(22, 39, "real-", "Realistic", 2),
+        // one drone move up the valley, cut on three bars (once the styles sequence; the film is
+        // all in Cartoon now: PS1 and the Realistic styles are not shown)
+        ValleyShot(20, 37, "One country.", 0),
+        ValleyShot(21, 38, "Every valley.", 1),
+        ValleyShot(22, 39, "Yours to explore.", 2),
         new()
         {
             Number = 23, Name = "The drop plane", FromBar = 40, Bars = 1, Feature = "Battle Royale plane",
@@ -508,12 +510,14 @@ public static class TrailerScript
             Hour = 18.6,
             Cast =
             [
-                new() { Ride = RideKind.An124, At = Spot.Alt(2508144, 1137170, 440), Heading = 222, Drive = Drive.Fly, Launch = 80, Flight = _ => Stick(lever: 0.7f) },
+                // its spot is over the lake: it mounts in the park by the shore, then is launched
+                new() { Ride = RideKind.An124, At = Spot.Alt(2508144, 1137170, 440), Heading = 222, Drive = Drive.Fly, Board = new Spot(2507810, 1137290), Launch = 80, Flight = _ => Stick(lever: 0.7f) },
             ],
             Keys =
             [
-                new(0, Pt.Alt(2507835, 1137200, 374.8f), Pt.On(0, 0f, 0f), 35),
-                new(3.9, Pt.Alt(2507835, 1137200, 374.8f), Pt.On(0, 0f, 0f), 35),
+                // on the lake off the shore: the jetty of the generated world is a slope on the real one
+                new(0, Pt.Alt(2507780, 1137080, 375.5f), Pt.On(0, 0f, 0f), 35),
+                new(3.9, Pt.Alt(2507780, 1137080, 375.5f), Pt.On(0, 0f, 0f), 35),
             ],
             Smooth = 0.06f, Preroll = 0.3,
         },
@@ -594,7 +598,8 @@ public static class TrailerScript
                 new(9.8, 5.6, "", Song.VoxelRevolution.Credit),
             ],
         },
-    };
+    // filmed in Cartoon: PS1 and the Realistic styles are not shown
+    }.Select(s => s with { Style = "cartoon" }).ToList();
 
     /// <summary>Dancers in a ring round <paramref name="c"/>, facing in, each with its own move.</summary>
     internal static Cast[] Circle(Spot c, float r, int[] dances, int seed) =>
@@ -613,13 +618,13 @@ public static class TrailerScript
         }).ToArray();
 
     /// <summary>
-    /// Shots 20-22: one drone move up the Lauterbrunnen valley, cut into three bars, each in another
-    /// visual style; each starts its keys where the previous one stopped.
+    /// Shots 20-22: one drone move up the Lauterbrunnen valley, cut into three bars, a caption each;
+    /// each starts its keys where the previous one stopped.
     /// </summary>
-    private static Shot StyleShot(int number, int bar, string style, string label, int part) => new()
+    private static Shot ValleyShot(int number, int bar, string label, int part) => new()
     {
-        Number = number, Name = label, FromBar = bar, Bars = 1, Feature = "visual styles",
-        Hour = 11.5, Style = style,
+        Number = number, Name = label, FromBar = bar, Bars = 1, Feature = "the Lauterbrunnen valley",
+        Hour = 11.5,
         Keys =
         [
             new(0, Pt.Alt(2635980, 1158700, 1080), Pt.Alt(2635950, 1160600, 860), 35),

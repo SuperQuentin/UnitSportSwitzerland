@@ -359,7 +359,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
                 return true;
             }
         }
-        else door = OutsideDoorInReach(player.GlobalPosition);
+        else door = OutsideDoorInReach(player);
         if (door == null) return false;
         if (_requestingDoor != null) return true;
         AskDoor(door, !_doors.ContainsKey(door));
@@ -855,8 +855,15 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         return false;
     }
 
-    /// <summary>The door E works for someone outside at <paramref name="at"/>, if any.</summary>
+    /// <summary>The door nearest someone outside at <paramref name="at"/> that E could work, if any.</summary>
     public string? OutsideDoorInReach(Vector3 at) => DoorIndex.NearestEntrance(at, DoorReach, OpenReachOutside)?.Key.ToString();
+
+    /// <summary>
+    /// The door E works for <paramref name="player"/> outside, if any: of the doors in reach, the
+    /// one they look at the facade of before a nearer one at their back.
+    /// </summary>
+    public string? OutsideDoorInReach(FootPlayer player) =>
+        DoorIndex.FacedEntrance(player.GlobalPosition, -player.Camera.GlobalBasis.Z, DoorReach, OpenReachOutside)?.Key.ToString();
 
     /// <summary>Extra reach in front of a door from outside: an open barn pair's leaves stand out there.</summary>
     private float OpenReachOutside(DoorIndex.Entry e) =>
@@ -1068,7 +1075,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
                 door = ExitAt(p)?.Door;
                 if (door == null) text = InsidePrompt(p) ?? ChurchRadios.PromptFor(p) ?? Loot.LootService.Instance?.PromptFor(p);
             }
-            else if (!p.Indoors) door = OutsideDoorInReach(p.GlobalPosition);
+            else if (!p.Indoors) door = OutsideDoorInReach(p);
             // outdoors: a farm stand at hand, a specialty buyer's yard (#494)
             if (door == null && !p.Indoors) text = Farming.FarmSales.PromptFor(p);
             if (door != null)

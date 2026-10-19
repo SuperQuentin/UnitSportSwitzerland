@@ -202,6 +202,138 @@ public sealed class RoadNetwork
         _adjacency[from].Add((to, cost));
     }
 
+    /// <summary>
+    /// The way along the roads from one point to another (LV95), as the points to walk through: from the
+    /// nearest road vertex to <paramref name="fromE"/>/<paramref name="fromN"/> to the nearest one to the
+    /// goal (both within <paramref name="snap"/> m), along the shortest chain of road vertices. Null when
+    /// either end has no road near it or no route shorter than <paramref name="limit"/> joins them. A bot
+    /// crossing a town walks its streets this way (#837): steering straight across it ran into every
+    /// courtyard. Its own graph (<see cref="BuildWalkGraph"/>), built on the first call.
+    /// </summary>
+    public List<(double E, double N)>? Path(double fromE, double fromN, double toE, double toN, double snap = 150, double limit = 8000)
+    {
+        BuildWalkGraph();
+        int start = NearestVertex(fromE, fromN, snap), goal = NearestVertex(toE, toN, snap);
+        if (start < 0 || goal < 0) return null;
+        if (start == goal) return new() { _walkPos[start] };
+        var (ge, gn) = _walkPos[goal];
+        var dist = new Dictionary<int, double> { [start] = 0 };
+        var prev = new Dictionary<int, int>();
+        var queue = new PriorityQueue<int, double>();
+        queue.Enqueue(start, Heuristic(start, ge, gn));
+        while (queue.TryDequeue(out int node, out _))
+        {
+            if (node == goal) break;
+            double cost = dist[node];
+            if (cost > limit) continue;
+            foreach (var (to, step) in _walkAdj[node])
+            {
+                double through = cost + step;
+                if (through >= dist.GetValueOrDefault(to, double.PositiveInfinity)) continue;
+                dist[to] = through;
+                prev[to] = node;
+                queue.Enqueue(to, through + Heuristic(to, ge, gn));   // A*: the straight line never overestimates
+            }
+        }
+        if (!prev.ContainsKey(goal)) return null;
+        var path = new List<(double E, double N)>();
+        for (int node = goal; ; node = prev[node])
+        {
+            path.Add(_walkPos[node]);
+            if (node == start) break;
+        }
+        path.Reverse();
+        return path;
+    }
+
+    private double Heuristic(int node, double e, double n)
+    {
+        var (x, y) = _walkPos[node];
+        return Math.Sqrt((x - e) * (x - e) + (y - n) * (y - n));
+    }
+
+    // the walking graph: a node at every road vertex (snapped to the half-metre lattice, so tile seams join),
+    // edges along each road, and every dead end tied to the nearest vertex of another road within reach
+    private readonly Dictionary<long, int> _walkIds = new();
+    private readonly List<(double E, double N)> _walkPos = new();
+    private readonly List<List<(int To, double Cost)>> _walkAdj = new();
+    private bool _walkBuilt;
+    /// <summary>A road ending this close to another road's vertex joins it (a T-junction, ended mid-street).</summary>
+    private const double StitchReach = 4.0;
+
+    /// <summary>Builds the walking graph now (off the main thread, before <see cref="Path"/> is asked).</summary>
+    public void BuildWalkGraph()
+    {
+        if (_walkBuilt) return;
+        _walkBuilt = true;
+        foreach (var g in _edges)
+            for (int v = 0; v < g.E.Length; v++)
+            {
+                int id = WalkNode(g.E[v], g.N[v]);
+                if (v == 0) continue;
+                int back = WalkNode(g.E[v - 1], g.N[v - 1]);
+                if (back == id) continue;
+                double step = g.Cumulative[v] - g.Cumulative[v - 1];
+                _walkAdj[back].Add((id, step));
+                _walkAdj[id].Add((back, step));
+            }
+        // dead ends: a road that stops at another road's side, not at one of its ends
+        for (int id = 0; id < _walkAdj.Count; id++)
+        {
+            if (_walkAdj[id].Count != 1) continue;
+            var (e, n) = _walkPos[id];
+            int best = -1;
+            double bestD = StitchReach;
+            foreach (var hit in Near(e, n, StitchReach, 4))
+            {
+                var g = _edges[hit.Edge];
+                for (int v = 0; v < g.E.Length; v++)
+                {
+                    double d = Math.Sqrt((g.E[v] - e) * (g.E[v] - e) + (g.N[v] - n) * (g.N[v] - n));
+                    int other = WalkNode(g.E[v], g.N[v]);
+                    if (other == id || d >= bestD || _walkAdj[id].Exists(x => x.To == other)) continue;
+                    best = other;
+                    bestD = d;
+                }
+            }
+            if (best < 0) continue;
+            _walkAdj[id].Add((best, bestD));
+            _walkAdj[best].Add((id, bestD));
+        }
+    }
+
+    private int WalkNode(double e, double n)
+    {
+        long key = Key(Math.Round(e / NodeSnap), Math.Round(n / NodeSnap));
+        if (_walkIds.TryGetValue(key, out int id)) return id;
+        id = _walkPos.Count;
+        _walkIds[key] = id;
+        _walkPos.Add((e, n));
+        _walkAdj.Add(new List<(int, double)>());
+        return id;
+    }
+
+    /// <summary>The walking graph's node nearest a point within <paramref name="radius"/>, or -1.</summary>
+    private int NearestVertex(double e, double n, double radius)
+    {
+        int best = -1;
+        double bestD = double.PositiveInfinity;
+        foreach (var hit in Near(e, n, radius, 3))
+        {
+            var g = _edges[hit.Edge];
+            for (int v = 0; v < g.E.Length; v++)
+            {
+                double d = (g.E[v] - e) * (g.E[v] - e) + (g.N[v] - n) * (g.N[v] - n);
+                if (d < bestD && _walkIds.TryGetValue(Key(Math.Round(g.E[v] / NodeSnap), Math.Round(g.N[v] / NodeSnap)), out int id))
+                {
+                    bestD = d;
+                    best = id;
+                }
+            }
+        }
+        return best;
+    }
+
     private void Index(int edge, int vertex)
     {
         var g = _edges[edge];

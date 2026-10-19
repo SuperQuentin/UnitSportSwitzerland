@@ -35,7 +35,8 @@
 - **Hits** (`src/Items/PlayerHits.cs`): the shooter traces each pellet against the other real
   players' bodies as it draws them. A body is a vertical cylinder, r 0.42 m, 1.85 m tall from the
   feet; a hit at 1.5 m or higher is a head shot. Hits are blocked by any non-player collider. Skipped:
-  NPCs, `Down != 0`.
+  race NPCs, `Down != 0`. Bots are targets (#837): the server applies a hit on one itself and bots fire
+  back through `Bots/BotHands` (`bots/hits`).
   - One `ItemEventKind.Hit` (3) is sent per victim. Its Extra is `victim|damage|weapon|head`.
 - **Server** (`ItemEvents.RelayHit`): it drops the hit unless all of these hold:
   - PvP is on (`Combat.PvpRules.Enabled`).

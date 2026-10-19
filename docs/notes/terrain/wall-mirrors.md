@@ -10,8 +10,8 @@
 - Cost: only the nearest mirror within 5 m that the viewer stands in front of renders, every other
   frame; the others keep their last picture. A mirror's viewport is made the first time it is the
   one. Never on a headless run.
-- It sees the world and figures, the VR player's own body included (`XrSession.SpectatorOnlyLayer`),
-  so in VR it is where you see yourself and your real hands (`avatar/item-arm-poses`); not the
-  held-item viewmodel nor the door portals' quads.
+- It sees the world and figures, your own first-person body included (`Avatar.OwnBody.Layer`,
+  `avatar/own-body-from-eye`), so it is where you see yourself, in VR with your real hands
+  (`avatar/item-arm-poses`); not the held-item viewmodel nor the door portals' quads.
 - Mirrors are in the `WallMirror.Group` group. Check: `--portaldemo,test_output/pd.png` writes
   `pd_mirror.png` (house B has a basin).

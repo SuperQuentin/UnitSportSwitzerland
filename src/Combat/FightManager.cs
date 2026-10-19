@@ -9,9 +9,10 @@ namespace UnitSport.Combat;
 /// Fist fights between two players (#495), Tekken / Mortal Kombat style. <c>World/Fight</c> on the
 /// server and every client, like <c>World/Race</c>, so the RPCs route by path.
 /// <list type="bullet">
-/// <item>Challenge: E aimed at another player on foot, or <c>/fight &lt;player&gt;</c>. The other
-/// accepts with E aimed back at the challenger, or <c>/fight accept</c>; it lapses after
-/// <see cref="FightRules.ChallengeSeconds"/>.</item>
+/// <item>Challenge: E aimed at another player on foot, or <c>/fight &lt;player&gt;</c>: an invite of kind
+/// <c>fight</c> (#840, <see cref="InviteService"/>). The other accepts with E aimed back at the
+/// challenger, <c>/fight accept</c>, or as any invite (the toast, the quick menu); it lapses after
+/// <see cref="FightRules.ChallengeSeconds"/>. Two challenges crossing are an accept.</item>
 /// <item>The server owns each match (<see cref="FightMatch"/>: HP, rounds, the timer). An attacker's
 /// client reports a strike when its move's active frames reach its view of the opponent; the server
 /// takes it only inside the match's rules (round live, move rate), within reach of its own copies of
@@ -33,6 +34,12 @@ public partial class FightManager : Node
     private Node3D? _players;
     private double _clock;
 
+    /// <summary>Server: the aura battles (#907), so nobody is in a fight and a battle at once.</summary>
+    public AuraManager? Aura { get; set; }
+
+    /// <summary>Server: whether <paramref name="peer"/> is in a fight.</summary>
+    public bool InMatch(long peer) => _fightOf.ContainsKey(peer);
+
     // ---- server --------------------------------------------------------------------------
 
     private sealed class Match
@@ -47,27 +54,43 @@ public partial class FightManager : Node
         public bool Told;
     }
 
-    /// <summary>Open challenges: challenger to (challenged, deadline).</summary>
-    private readonly Dictionary<long, (long Target, double Until)> _challenges = new();
+    /// <summary>The invite kind of a challenge (#840).</summary>
+    public const string InviteId = "fight";
+
     private readonly Dictionary<int, Match> _matches = new();
     private readonly Dictionary<long, int> _fightOf = new();
     private readonly List<long> _scratch = new();
     private readonly List<int> _ended = new();
     private int _nextId = 1;
 
-    public static FightManager CreateServer(ChatManager chat, Node3D players) =>
-        new() { Name = NodeName, _server = true, _chat = chat, _players = players };
+    public static FightManager CreateServer(ChatManager chat, Node3D players)
+    {
+        var m = new FightManager { Name = NodeName, _server = true, _chat = chat, _players = players };
+        chat.Invites?.Register(new InviteKind
+        {
+            Id = InviteId, Label = "fight", Seconds = FightRules.ChallengeSeconds, Mutual = true, TellAccepted = false,
+            Accept = (peer, invite) => m.Accepted(peer, invite.From),
+        });
+        return m;
+    }
 
     public static FightManager CreateClient() => new() { Name = NodeName };
 
     public override void _EnterTree()
     {
-        if (!_server) Client = this;
+        if (_server) return;
+        Client = this;
+        // a challenge is an invite (#840): the prompts and the HUD read them from there
+        Callable.From(() =>
+        {
+            if (InviteService.Client is { } invites) invites.Changed += OnInvitesChanged;
+        }).CallDeferred();
     }
 
     public override void _ExitTree()
     {
         if (Client == this) Client = null;
+        if (InviteService.Client is { } invites) invites.Changed -= OnInvitesChanged;
     }
 
     public override void _Process(double delta)
@@ -101,35 +124,35 @@ public partial class FightManager : Node
         }
     }
 
+    /// <summary>A challenge: an invite to <paramref name="to"/>, or the answer to theirs when they challenged first.</summary>
     private string Challenge(long from, long to)
     {
         if (from == to) return "[fight] You cannot fight yourself.";
         if (_fightOf.ContainsKey(from)) return "[fight] You are already in a fight.";
         if (_fightOf.ContainsKey(to)) return $"[fight] {Who(to)} is already in a fight.";
         if (Refusal(from, to) is { } why) return why;
-        // they challenged us first: that is an answer, not a second challenge
-        if (_challenges.TryGetValue(to, out var theirs) && theirs.Target == from) return Accept(from, to);
-        _challenges[from] = (to, _clock + FightRules.ChallengeSeconds);
-        RpcId(to, MethodName.Challenged, from, Who(from), FightRules.ChallengeSeconds);
-        _chat?.Tell(to, $"[fight] {Who(from)} challenges you to a fight! Look at them and press interact, or /fight accept, within {FightRules.ChallengeSeconds:0} s.", ChatKind.System);
+        if (_chat?.Invites is not { } invites) return "[fight] Invites are not running.";
+        string reply = invites.Send(InviteId, from, to, $"{Who(from)} challenges you to a fist fight", "Look at them and press interact",
+            out var sent);
+        if (sent == null) return reply.StartsWith('[') ? reply : $"[fight] {reply}";
+        _chat.Tell(to, $"[fight] {Who(from)} challenges you to a fight! Look at them and press interact, or /fight accept, within {FightRules.ChallengeSeconds:0} s.", ChatKind.System);
         GD.Print($"[fight] {from} challenges {to}");
         return $"[fight] You challenge {Who(to)}. Waiting for an answer...";
     }
 
+    /// <summary><c>/fight accept [player]</c>: the newest challenge to the sender, or the named one's.</summary>
     private string Accept(long sender, long challenger)
     {
-        if (_fightOf.ContainsKey(sender)) return "[fight] You are already in a fight.";
-        if (challenger <= 0)
-        {
-            // the newest challenge to the sender
-            double best = double.NegativeInfinity;
-            foreach (var (from, c) in _challenges)
-                if (c.Target == sender && c.Until > best) { best = c.Until; challenger = from; }
-        }
-        if (challenger <= 0 || !_challenges.TryGetValue(challenger, out var ch) || ch.Target != sender)
+        if (challenger < 0) return "[fight] No such player.";
+        if (_chat?.Invites is not { } invites || invites.Find(sender, InviteId, challenger) is not { } invite)
             return "[fight] Nobody has challenged you.";
-        _challenges.Remove(challenger);
-        RpcId(sender, MethodName.ChallengeOver, challenger);
+        return invites.Answer(sender, invite, accept: true);
+    }
+
+    /// <summary>The invite was accepted: the fight begins if both can still fight.</summary>
+    private string Accepted(long sender, long challenger)
+    {
+        if (_fightOf.ContainsKey(sender)) return "[fight] You are already in a fight.";
         if (_fightOf.ContainsKey(challenger)) return $"[fight] {Who(challenger)} is already in a fight.";
         if (Refusal(challenger, sender) is { } why) return why;
         Begin(challenger, sender);
@@ -138,23 +161,16 @@ public partial class FightManager : Node
 
     private string Decline(long sender)
     {
-        bool any = false;
-        _scratch.Clear();
-        foreach (var (from, c) in _challenges)
-            if (c.Target == sender) _scratch.Add(from);
-        foreach (long from in _scratch)
-        {
-            _challenges.Remove(from);
-            RpcId(sender, MethodName.ChallengeOver, from);
-            _chat?.Tell(from, $"[fight] {Who(sender)} declines your challenge.", ChatKind.System);
-            any = true;
-        }
-        return any ? "[fight] Challenge declined." : "[fight] Nobody has challenged you.";
+        if (_chat?.Invites is not { } invites) return "[fight] Nobody has challenged you.";
+        var all = invites.FindAll(sender, InviteId);
+        foreach (var invite in all) invites.Answer(sender, invite, accept: false);
+        return all.Count > 0 ? "[fight] Challenge declined." : "[fight] Nobody has challenged you.";
     }
 
     /// <summary>Why these two cannot fight now, or null: both on foot, up, and close.</summary>
     private string? Refusal(long a, long b)
     {
+        if (Aura?.InMatch(a) == true || Aura?.InMatch(b) == true) return "[fight] Not during an aura battle.";
         var pa = Body(a);
         var pb = Body(b);
         if (pa == null || pb == null) return "[fight] That player is not here.";
@@ -181,9 +197,9 @@ public partial class FightManager : Node
         };
         _matches[match.Id] = match;
         _fightOf[a] = _fightOf[b] = match.Id;
-        // a challenge either of them still had out is void now
-        _challenges.Remove(a);
-        _challenges.Remove(b);
+        // a challenge either of them still had out, or was sent, is void now
+        _chat?.Invites?.WithdrawInvolving(InviteId, a);
+        _chat?.Invites?.WithdrawInvolving(InviteId, b);
         foreach (long peer in new[] { a, b })
             RpcId(peer, MethodName.Begin, match.Id, a, b, Who(a), Who(b), match.Centre.E, match.Centre.N, match.Centre.Alt, yaw);
         SendState(match);
@@ -193,16 +209,6 @@ public partial class FightManager : Node
     private void ServerTick(double delta)
     {
         _clock += delta;
-        _scratch.Clear();
-        foreach (var (from, c) in _challenges)
-            if (_clock > c.Until) _scratch.Add(from);
-        foreach (long from in _scratch)
-        {
-            long to = _challenges[from].Target;
-            _challenges.Remove(from);
-            RpcId(to, MethodName.ChallengeOver, from);
-            _chat?.Tell(from, $"[fight] {Who(to)} did not answer your challenge.", ChatKind.System);
-        }
 
         _ended.Clear();
         foreach (var m in _matches.Values)
@@ -253,15 +259,10 @@ public partial class FightManager : Node
     private string Summary(FightMatch r) => r.Winner == 0 ? "[fight] A draw."
         : $"[fight] {Who(r.Winner)} wins {Math.Max(r.WinsA, r.WinsB)}-{Math.Min(r.WinsA, r.WinsB)}{(r.LastEnd == FightEnd.Fatality ? " — FATALITY" : r.LastEnd == FightEnd.Forfeit ? " (forfeit)" : "")}.";
 
-    /// <summary>Server: a peer left; its fight is forfeited and its challenges dropped.</summary>
+    /// <summary>Server: a peer left; its fight is forfeited (its challenges go with its invites).</summary>
     public void PeerLeft(long id)
     {
         if (!_server) return;
-        _challenges.Remove(id);
-        _scratch.Clear();
-        foreach (var (from, c) in _challenges)
-            if (c.Target == id) _scratch.Add(from);
-        foreach (long from in _scratch) _challenges.Remove(from);
         if (_fightOf.TryGetValue(id, out int fid) && _matches.TryGetValue(fid, out var m))
         {
             m.Rules.Forfeit(id, _clock);
@@ -283,14 +284,6 @@ public partial class FightManager : Node
         if (!_server) return;
         long sender = Multiplayer.GetRemoteSenderId();
         _chat?.Tell(sender, Challenge(sender, target), ChatKind.Private);
-    }
-
-    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RequestAccept(long challenger)
-    {
-        if (!_server) return;
-        long sender = Multiplayer.GetRemoteSenderId();
-        _chat?.Tell(sender, Accept(sender, challenger), ChatKind.Private);
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -359,7 +352,7 @@ public partial class FightManager : Node
 
     public View? Current { get; private set; }
 
-    /// <summary>Challenges to the local player: challenger to its deadline (local game time).</summary>
+    /// <summary>Challenges to the local player: challenger to its deadline (local game time). Kept from the invites (#840).</summary>
     public readonly Dictionary<long, double> Pending = new();
 
     /// <summary>Who the local player last challenged, and until when, so the prompt can say "waiting".</summary>
@@ -380,6 +373,19 @@ public partial class FightManager : Node
 
     public string? NameOf(long peer) => _names.TryGetValue(peer, out var n) ? n : null;
 
+    /// <summary>The invites changed: the challenges to this player are the open <c>fight</c> ones.</summary>
+    private void OnInvitesChanged()
+    {
+        Pending.Clear();
+        if (InviteService.Client is not { } invites) return;
+        foreach (var v in invites.Incoming)
+        {
+            if (v.Kind != InviteId) continue;
+            Pending[v.Peer] = v.Until;
+            _names[v.Peer] = v.PeerName;
+        }
+    }
+
     /// <summary>The prompt for E at <paramref name="peer"/>: accept, wait, or challenge.</summary>
     public string Prompt(long peer) =>
         ChallengedBy(peer) ? NameOf(peer) is { } n ? $"Accept {n}'s fight" : "Accept the fight"
@@ -394,7 +400,7 @@ public partial class FightManager : Node
     public void Engage(long peer)
     {
         if (!Online || Current != null) return;
-        if (ChallengedBy(peer)) RpcId(1, MethodName.RequestAccept, peer);
+        if (ChallengedBy(peer) && InviteService.Client?.From(peer, InviteId) is { } invite) InviteService.Client.Accept(invite.Id);
         else
         {
             Outgoing = (peer, GameClock.Now + FightRules.ChallengeSeconds);
@@ -422,17 +428,6 @@ public partial class FightManager : Node
     }
 
     // ---- RPCs: server to client ----------------------------------------------------------
-
-    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Challenged(long from, string name, float seconds)
-    {
-        Pending[from] = GameClock.Now + seconds;
-        _names[from] = name;
-        GD.Print($"[fight] challenged by {name} ({from})");
-    }
-
-    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void ChallengeOver(long from) => Pending.Remove(from);
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void Begin(int id, long a, long b, string nameA, string nameB, double e, double n, double alt, float yaw)

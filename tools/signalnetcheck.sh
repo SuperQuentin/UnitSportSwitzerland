@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Traffic lights over loopback (#353): a headless dedicated server and two headless clients that
-# each log, every 0.5 s of the server clock (ClockSync.ServerNow), the aspect of every group of one
+# each log, every 0.5 s of the simulated clock (SignalLamps.Clock, #867), the aspect of every group of one
 # signalised junction, as the lamps and the traffic read it (SignalPlan.State). Traffic itself is
 # local to each client: only the signal state is compared. Every peer must log the same plan, the
 # same aspects per instant (a sample may differ only next to an aspect change, within the gap the

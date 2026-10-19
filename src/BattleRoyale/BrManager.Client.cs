@@ -95,7 +95,7 @@ public partial class BrManager
     public bool MeAlive => MyEntry is { Alive: true };
 
     /// <summary>The zone right now, or null outside a running match.</summary>
-    public ZoneState? ZoneNow => _zone != null && _state.Running ? _zone.At(ClockSync.ServerNow - _state.Started) : null;
+    public ZoneState? ZoneNow => _zone != null && _state.Running ? _zone.At(ClockSync.SimNow - _state.Started) : null;
     public ZoneSchedule? Zone => _zone;
 
     /// <summary>A world position as metres east/north of the region centre.</summary>
@@ -114,7 +114,7 @@ public partial class BrManager
     {
         if (Origin == null) yield break;
         foreach (var m in _state.MatesOf(Me))
-            if (m.Alive && GetNodeOrNull<FootPlayer>("../Players/" + m.Peer) is { } body)
+            if (m.Alive && GetNodeOrNull<FootPlayer>("../Players/" + PlayerReplication.NodeName(m.Peer)) is { } body)
                 yield return (m.Downed ? $"{m.Name} (down)" : m.Name, ZonePoint(body.GlobalPosition), new Vector2(-Mathf.Sin(body.NetYaw), Mathf.Cos(body.NetYaw)));
     }
 
@@ -248,7 +248,7 @@ public partial class BrManager
         foreach (var e in _state.Entrants)
         {
             if (!e.Alive || e.Peer == Me || mates.Contains(e.Peer)) continue;
-            if (GetNodeOrNull<FootPlayer>("../Players/" + e.Peer) is not { } body) continue;
+            if (GetNodeOrNull<FootPlayer>("../Players/" + PlayerReplication.NodeName(e.Peer)) is not { } body) continue;
             var d = body.GlobalPosition - me.GlobalPosition;
             if (new Vector2(d.X, d.Z).Length() > range) continue;
             if (!horn && (Build.Gadgets.Hidden(body.GlobalPosition) || Items.SwissItems.InSmoke(body.Global))) continue;
@@ -291,6 +291,14 @@ public partial class BrManager
 
     /// <summary>Spectating: the player watched, else 0.</summary>
     public long Watching => _spectator is { Current: true } ? _watching : 0;
+
+    /// <summary>Out of the match: follow this living entrant (a probe filming bots, #842); false when it is not one.</summary>
+    public bool Watch(long id)
+    {
+        if (_state.Find(id) is not { Alive: true }) return false;
+        _watching = id;
+        return true;
+    }
 
     // ------------------------------------------------------------------------------------
     // RPCs from the server
@@ -389,7 +397,7 @@ public partial class BrManager
         if (InMatch && MeAlive && me is { Downed: false } && _state.Phase == BrPhase.Playing
             && (ForceInteract || PlayerInput.Held(PlayerInput.InteractMount)))
             foreach (var m in _state.MatesOf(Me))
-                if (m is { Alive: true, Downed: true } && GetNodeOrNull<FootPlayer>("../Players/" + m.Peer) is { } body
+                if (m is { Alive: true, Downed: true } && GetNodeOrNull<FootPlayer>("../Players/" + PlayerReplication.NodeName(m.Peer)) is { } body
                     && body.GlobalPosition.DistanceTo(me.GlobalPosition) <= ReviveReach)
                 {
                     target = m.Peer;
@@ -439,7 +447,7 @@ public partial class BrManager
     private void DownNews(long victim, long other, bool revived)
     {
         if (_server) return;
-        string v = _state.Find(victim)?.Name ?? "?", o = _state.Find(other)?.Name ?? "";
+        string v = _state.Find(victim)?.Shown ?? "?", o = _state.Find(other)?.Shown ?? "";
         string text = revived ? $"{o} revived {v}" : o.Length > 0 ? $"{o} downed {v}" : $"{v} is down";
         _feed.Add(new FeedLine(text, victim == Me || other == Me, Time.GetTicksMsec() / 1000.0));
         if (_feed.Count > 8) _feed.RemoveAt(0);
@@ -451,7 +459,7 @@ public partial class BrManager
     private void Eliminated(long victim, long killer, int cause, int place)
     {
         if (_server) return;
-        string v = _state.Find(victim)?.Name ?? "?", k = _state.Find(killer)?.Name ?? "";
+        string v = _state.Find(victim)?.Shown ?? "?", k = _state.Find(killer)?.Shown ?? "";
         string text = (BrOut)cause switch
         {
             BrOut.Zone => k.Length > 0 ? $"{v} ✕ zone (fleeing {k})" : $"{v} ✕ zone",
@@ -548,7 +556,7 @@ public partial class BrManager
     public (Vector2 Position, Vector2 Heading)? ViewPoint()
     {
         if (Origin == null) return null;
-        if (Watching != 0 && GetNodeOrNull<FootPlayer>("../Players/" + Watching) is { } other)
+        if (Watching != 0 && GetNodeOrNull<FootPlayer>("../Players/" + PlayerReplication.NodeName(Watching)) is { } other)
             return (ZonePoint(other.GlobalPosition), new Vector2(-Mathf.Sin(other.NetYaw), Mathf.Cos(other.NetYaw)));
         if (LocalPlayer() is not { } me) return null;
         var fwd = GetViewport().GetCamera3D() is { } cam ? -cam.GlobalTransform.Basis.Z : -me.GlobalTransform.Basis.Z;
@@ -666,7 +674,7 @@ public partial class BrManager
             _watchIndex = ((_watchIndex % alive.Count) + alive.Count) % alive.Count;
             _watching = alive[_watchIndex];
         }
-        var target = GetNodeOrNull<FootPlayer>("../Players/" + _watching);
+        var target = GetNodeOrNull<FootPlayer>("../Players/" + PlayerReplication.NodeName(_watching));
         if (_spectator == null)
         {
             _spectator = new Camera3D { Name = "Spectator", Fov = 70, Far = 20000 };

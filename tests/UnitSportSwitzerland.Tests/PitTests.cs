@@ -310,6 +310,8 @@ public class PitTests
         return new PitCut(rect, floor, outer, inner, -u, 18f);
     }
 
+    private static Vector3[] Up(int n) => Enumerable.Repeat(Vector3.Up, n).ToArray();
+
     private static float PlanArea(Vector3 a, Vector3 b, Vector3 c) =>
         MathF.Abs((b.X - a.X) * (c.Z - a.Z) - (c.X - a.X) * (b.Z - a.Z)) / 2;
 
@@ -326,7 +328,7 @@ public class PitTests
         Func<float, float, float> slope = (x, z) => 500f + 0.07f * x - 0.04f * z;
         var (v, c, i) = Grid(m, quad, slope);
         var pit = Cut(turn);
-        var (cv, _, ci) = PitTerrain.Cut(v, c, i, m, quad, new[] { pit });
+        var (cv, _, _, ci) = PitTerrain.Cut(v, c, Up(v.Length), i, m, quad, new[] { pit });
         float ground = 0, floorArea = 0;
         for (int t = 0; t < ci.Length; t += 3)
         {
@@ -354,7 +356,8 @@ public class PitTests
     public void The_cut_keeps_the_triangles_away_from_the_pit_as_they_were()
     {
         var (v, c, i) = Grid(51, 2, (_, _) => 500f);
-        var (cv, cc, ci) = PitTerrain.Cut(v, c, i, 51, 2, new[] { Cut(0.3f) });
+        var (cv, cc, cn, ci) = PitTerrain.Cut(v, c, Up(v.Length), i, 51, 2, new[] { Cut(0.3f) });
+        Assert.Equal(cv.Length, cn.Length);
         // the grid's own vertices are kept, and the first rows of triangles too
         for (int k = 0; k < v.Length; k++) Assert.Equal(v[k], cv[k]);
         for (int k = 0; k < 6 * 10; k++) Assert.Equal(i[k], ci[k]);

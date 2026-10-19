@@ -9,6 +9,7 @@ touches its topic; search with `grep -ril <word> docs/notes/net`.
 
 - `multiplayer` — Multiplayer: client-authoritative transforms, MultiplayerSpawner + Synchronizer, ENet port 7777. Server runs...
 - `terrain-streaming` — Terrain streaming: (`Net/ChunkStreamer`, `Terrain/NetworkChunkSource`): the server serves generated files to clients...
+- `invites` — One invite system (#840): `InviteBook`/`PartyBook` (pure, unit-tested), `InviteService` at World/Invites (kinds register an accept), `Parties` at World/Parties; kinds br/tp/tphere/party/fight/race, `/invites /accept /decline /tpa /tphere /party`, toasts, F2 / Shift+F2, `tools/invitecheck.sh`
 - `chat-commands` — Chat and commands: (`Net/ChatManager`, `Core/ChatUi`): one class runs on both sides at `World/Chat` — the path must...
 - `admin` — Admin: (`Net/PlayerRegistry`): identity is the ENet peer id, which a client cannot forge; the display name is a...
 - `vision-interest` — Vision-based interest: the server decides who sees whom (size at render resolution, sky, line of sight, race); out of view = despawned
@@ -22,6 +23,7 @@ touches its topic; search with `grep -ril <word> docs/notes/net`.
 - `lan-discovery` — mDNS browse for `_unitsport._udp` (avahi on the server); the Multiplayer screen lists LAN servers, legacy unicast queries, `--discovercheck`
 - `server-query` — UDP status query on port + 1 (`USQ1`/`USR1` + JSON): LAN broadcast list, saved servers' players and ping, `--server-name`, `--query-bind`
 - `status-page` — `--status-file` JSON (players, names, version) + `tools/deploy/web/index.html` (clips from `tools/web-media.sh`) served by the deploy's Caddy at `/`, downloads from the latest GitHub release (#740)
+- `live-map` — `--livemap-file`: `players.json` every 2 s (`Net/LiveMapFile`), `tools/deploy/web/map.html` (Leaflet, swisstopo grey map, players live, 4G coverage per operator from OFCOM's sites via `tools/deploy/antennas.py`), Caddy paths, `tools/livemapcheck.sh` (#896)
 - `udp-receive-loop` — every UDP reader goes through `Udp.ReceiveLoop(udp, token, handler)`; never hand-write a ReceiveAsync loop
 - `http-tiles` — tiles from a static HTTP mirror (`--tiles-url`, `AssetKind.HttpBase`, `HttpAssetSource`): probe, 404 final, ENet fallback, 8 failures drop it; Caddy on the deploy host (#651)
 - `region-file-sync` — region-wide files a client pulls once (horizon, places) go through `ClientTerrainSync.SyncFileAsync`

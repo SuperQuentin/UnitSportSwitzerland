@@ -81,6 +81,16 @@ public partial class ChatManager : Node
     /// <summary>Raised on the client for every line to display.</summary>
     public event Action<string, ChatKind>? LineReceived;
 
+    /// <summary>
+    /// Raised on the client when a player said something in the chat (not a command, not a system
+    /// line): who (their peer id; offline, <see cref="OfflineSelf"/>) and what, for the speech
+    /// bubble over their head (#862, <see cref="Ui.Bubbles.ChatBubbles"/>).
+    /// </summary>
+    public event Action<long, string>? Spoken;
+
+    /// <summary>The speaker of <see cref="Spoken"/> offline: oneself.</summary>
+    public const long OfflineSelf = -1;
+
     /// <summary>Raised on the client when the server closes the connection deliberately.</summary>
     public event Action<string>? Kicked;
 
@@ -153,6 +163,12 @@ public partial class ChatManager : Node
             LineReceived?.Invoke(style, ChatKind.Private);
             return;
         }
+        // a concert operator's show input and patch (#885): this machine's ports and files
+        if (Concert.ConcertService.RunLocal(text.Trim()) is { } show)
+        {
+            LineReceived?.Invoke(show, ChatKind.Private);
+            return;
+        }
         // a feature clip films this screen (#487)
         if (Core.ClipRecorder.Run(text.Trim(), line => LineReceived?.Invoke(line, ChatKind.Private)) is { } clip)
         {
@@ -175,6 +191,15 @@ public partial class ChatManager : Node
             else DebugRequested();
             return;
         }
+#if PLAYTEST
+        // a playtest note (#844): stamped on this screen, never sent
+        if (text.Trim() is var noteLine && (noteLine.Equals("/note", StringComparison.OrdinalIgnoreCase) || noteLine.StartsWith("/note ", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (NoteRequested is null) LineReceived?.Invoke("Notes need a recorded playtest (--playtest-record).", ChatKind.Error);
+            else NoteRequested(noteLine[5..].Trim());
+            return;
+        }
+#endif
         if (IsLocal)
         {
             text = text.Trim();
@@ -236,6 +261,10 @@ public partial class ChatManager : Node
 
     /// <summary>Client: <c>/debug</c> was typed by someone allowed it (alone, or an admin); the debug menu opens.</summary>
     public event Action? DebugRequested;
+#if PLAYTEST
+    /// <summary>Client: <c>/note &lt;text&gt;</c>, a playtest note (#844), for the recorder to stamp.</summary>
+    public event Action<string>? NoteRequested;
+#endif
 
     /// <summary>Client: the catalogue is offered alone, or to an admin. The server re-checks every <c>/spawn</c> it sends.</summary>
     public bool CanUseCatalogue => !Permissions.InMatch && (IsLocal || Permissions.IsAdmin);
@@ -343,6 +372,7 @@ public partial class ChatManager : Node
         if (!text.StartsWith('/'))
         {
             Show($"You: {Scrub(text)}", ChatKind.Say);
+            Spoken?.Invoke(OfflineSelf, Scrub(text));
             return;
         }
 
@@ -445,7 +475,12 @@ public partial class ChatManager : Node
                         Show(line, ChatKind.Private);
                 return;
 
-            case "name" or "login" or "stream" or "race" or "fight" or "say" or "admin" or "tp" or "bring" or "tpall" or "kick" or "pvp" or "br" or "update":
+            case "concert":
+                Show(Concert.ConcertService.Instance?.LocalCommand(string.Join(' ', parts[1..])) ?? "Concerts are not running.", ChatKind.Private);
+                return;
+
+            case "name" or "login" or "stream" or "race" or "fight" or "aura" or "say" or "admin" or "tp" or "bring" or "tpall" or "kick" or "pvp" or "br" or "update"
+                or "invites" or "accept" or "decline" or "tpa" or "tphere" or "party":
                 Show($"'/{verb}' needs a multiplayer game.", ChatKind.Error);
                 return;
 
@@ -488,8 +523,26 @@ public partial class ChatManager : Node
         if (text.Length > MaxMessageLength) text = text[..MaxMessageLength];
 
         if (text.StartsWith('/')) HandleCommand(sender, text[1..]);
-        else Broadcast($"{NameOf(sender)}: {Scrub(text)}", ChatKind.Say);
+        else Say(sender, text);
     }
+
+    /// <summary>
+    /// Server: <paramref name="peer"/> says <paramref name="text"/> in the chat: the line to
+    /// everyone, and who said it, for the bubble over their head. A server-run player (a bot) talks
+    /// through here too.
+    /// </summary>
+    public void Say(long peer, string text)
+    {
+        text = text.Trim();
+        if (text.Length == 0) return;
+        if (text.Length > MaxMessageLength) text = text[..MaxMessageLength];
+        Broadcast($"{NameOf(peer)}: {Scrub(text)}", ChatKind.Say);
+        Rpc(MethodName.Said, peer, Scrub(text));
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Said(long peer, string text) => Spoken?.Invoke(peer, text);
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -585,8 +638,14 @@ public partial class ChatManager : Node
     /// <summary>Races (<c>/race</c>), wired by ServerWorld.</summary>
     public World.RaceManager? Race { get; set; }
 
+    /// <summary>Concerts (<c>/concert</c>, #885), wired by ServerWorld.</summary>
+    public Concert.ConcertService? Concerts { get; set; }
+
     /// <summary>Fist fights (<c>/fight</c>, #495), wired by ServerWorld.</summary>
     public Combat.FightManager? Fight { get; set; }
+
+    /// <summary>Aura battles (<c>/aura</c>, #907), wired by ServerWorld.</summary>
+    public Combat.AuraManager? Aura { get; set; }
 
     /// <summary>Server: the Battle Royale mode, for /br (#177).</summary>
     public BattleRoyale.BrManager? BattleRoyale { get; set; }
@@ -659,6 +718,8 @@ public partial class ChatManager : Node
         switch (verb)
         {
             case "help": SendHelp(sender); return;
+            // invites (#840): answering them, teleport requests anyone may send, parties
+            case "invites" or "accept" or "decline" or "tpa" or "tphere" or "party": InviteCommand(sender, verb, rest); return;
             case "stream": ReportStreaming(sender); return;
             case "who": SendWho(sender); return;
             case "name": if (RequiresAvatar(sender, verb)) CommandName(sender, rest); return;
@@ -697,15 +758,31 @@ public partial class ChatManager : Node
                 if (BattleRoyale == null) ReplyTo(sender, "Battle Royale is not available on this server.", ChatKind.Error);
                 else ReplyTo(sender, BattleRoyale.Command(sender, rest, IsAdmin(sender)), ChatKind.Private);
                 return;
+            case "bot" or "bots":
+                if (Bots.BotDirector.Instance is not { } bots) ReplyTo(sender, "Bots are not available on this server.", ChatKind.Error);
+                else ReplyTo(sender, bots.Command(sender, rest, IsAdmin(sender),
+                    id => _players?.GetNodeOrNull<Player.FootPlayer>(id.ToString())), ChatKind.Private);
+                return;
             case "race":
                 if (Race == null) ReplyTo(sender, "Races are not available on this server.", ChatKind.Error);
                 else if (sender == ConsolePeerId && !rest.StartsWith("cancel") && !rest.StartsWith("list")) ReplyTo(sender, "'/race' needs a player.", ChatKind.Error);
                 else ReplyTo(sender, Race.Command(sender, rest), ChatKind.Private);
                 return;
+            case "concert":
+                if (Concerts == null) ReplyTo(sender, "Concerts are not available on this server.", ChatKind.Error);
+                else ReplyTo(sender, Concerts.Command(sender, rest, IsAdmin(sender),
+                    GetNodeOrNull<Player.FootPlayer>("../Players/" + sender)?.Global), ChatKind.Private);
+                return;
             case "fight":
                 if (Fight == null) ReplyTo(sender, "Fights are not available on this server.", ChatKind.Error);
                 else if (sender == ConsolePeerId) ReplyTo(sender, "'/fight' needs a player.", ChatKind.Error);
                 else ReplyTo(sender, Fight.Command(sender, rest), ChatKind.Private);
+                return;
+
+            case "aura":
+                if (Aura == null) ReplyTo(sender, "Aura battles are not available on this server.", ChatKind.Error);
+                else if (sender == ConsolePeerId) ReplyTo(sender, "'/aura' needs a player.", ChatKind.Error);
+                else ReplyTo(sender, Aura.Command(sender, rest), ChatKind.Private);
                 return;
         }
 
@@ -772,7 +849,7 @@ public partial class ChatManager : Node
 
     private void SendHelp(long sender)
     {
-        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /race start|duel|join|leave|list|npc  /fight <player>|accept|decline|leave  /br join|leave|status  /occasion  /time  /speed  /seastate  /clear  /transfer me <player>", ChatKind.Private);
+        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /race start|duel|join|leave|list|npc  /fight <player>|accept|decline|leave  /aura <player>|accept|decline|leave  /br join|leave|team|invite|status  /tpa <player>  /tphere <player>  /party [invite|leave|kick]  /invites  /accept  /decline  /occasion  /time  /speed  /seastate  /clear  /transfer me <player>", ChatKind.Private);
 
         if (_registry?.LoginEnabled == true && !IsAdmin(sender))
             ReplyTo(sender, "/login <password>  — become an operator", ChatKind.Private);
@@ -782,7 +859,7 @@ public partial class ChatManager : Node
                 "admin: /say <text>  /tp <player>  /bring <player>  /tpall <town>  "
                 + "/kick <player> [reason]  /update  /admin list|add <name>|remove <name>  "
                 + "/occasion start|stop <id>|auto  /spawn <item> [count]  /catalogue  /debug  "
-                + "/give <player> <item> [count]  /clear [player]  /transfer <from> <to>  /money <amount> [player]  "
+                + "/give <player> <item> [count]  /clear [player]  /transfer <from> <to>  /money <amount> [player]  /bot add [n] [easy|normal|hard]|arm <weapon>|fire|clear|list  "
                 + "/bank <player> [set|add|take <amount>]  "
                 + "/time set <hh:mm|noon|night...>|add <h>|speed <min>  /speed <0.05..8|normal>  "
                 + "/seastate <0..1|calm|chop|storm|gamey>  — Tab completes",

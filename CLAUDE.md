@@ -9,7 +9,7 @@ on foot, mounted, driving or flying, over ENet multiplayer.
 Knowledge lives in ~180 micro notes, `docs/notes/<area>/<name>.md`, one topic each. Each code
 directory's `CLAUDE.md` (auto-loaded when you touch files there) is only an **index**: one line per
 note. Read a note only when the task needs it; find one with `grep -ril <word> docs/notes`.
-Areas: tools, terrain, net, player, vehicles, avatar, audio, gpx, movie, world, combat, br, birds, items, crafting, build, loot, trailer,
+Areas: tools, terrain, net, player, vehicles, avatar, audio, gpx, movie, world, combat, br, bots, birds, items, crafting, build, loot, trailer, concert,
 occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new or existing note plus one index line — never in this file.
 
 `docs/notes/general/`: `subagents` (model choice, fan-out limits), `never-lookat-data-driven`,
@@ -27,11 +27,14 @@ occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new o
 `perf-no-per-frame-allocations` (static `StringName`, no LINQ/strings/lists per frame, UI text and shader params only on change),
 `perf-221-migration` (**read before merging main into a branch started before Oct 2026**: every #221 rule note and the rebase order),
 `new-action-three-devices` (every new key or interaction: keyboard, gamepad and VR decided together),
+`new-feature-bots` (every new action, item, mount or interactable decided for server-run bots: intent seams, a server path, senses, server collision, a row in `bots/bot-capability-map`; #837),
 `plans-on-main` (up-front plans commit on `main`; their status updates ride the feature branch),
 `uid-files` (commit a script's `.uid` with it; never `git add -A` after an import),
 `dotnet-sdk-pin` (`global.json` pins SDK 9: C# 14 binds `array.Reverse()` to the void Span overload),
 `zfight` (`--zfightcheck` baseline, viewer `--zfight`/`--flicker`, F9 z-fight overlay and flicker shot),
-`playtest` (`tools/playtest.sh`: scenarios a person judges in one game, Claude live through the in-game MCP server, committed ledger in `tests/playtests/`),
+`playtest` (`tools/playtest.sh`: scenarios a person judges in one game, in batches or with Claude live through the in-game MCP server, committed ledger in `tests/playtests/`),
+`playtest-recorder` (`--playtest-record`: a session's bundle in `test_output/playtest/sessions/`, `report.md` first; F12 notes),
+`topview` (a recorded session from above: `tools/playtest.sh topview`, Shift+F12 live, server-vs-client offsets),
 `collision-matrix` (`--collidecheck` rams every vehicle, prop, piece and door with a car and a walker; `--collidesandbox` to drive into them; the known-gaps table).
 
 ## Rules
@@ -62,6 +65,10 @@ occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new o
   coding a new key, decide its pad button and its VR way (grip the thing, or the pad through
   `XrPad`), show it with `InputHints`, and add its row to `xr/vr-action-map`
   (`docs/notes/general/new-action-three-devices.md`).
+- **Every new thing a player can do, use or meet is decided for bots too** (server-run players, #837):
+  gameplay acts on an intent (`WalkControls`, `RideControls`, an item entry taking the player), never a
+  raw `Input` read, every client RPC action has a server method a bot can call, and its row goes in
+  `bots/bot-capability-map`; the PR says what a bot would need (`docs/notes/general/new-feature-bots.md`).
 - **Every new procedural model is in the model viewer**: tag its builder `[Showcase("Category")]`,
   or extend the set that already covers it (a new enum value or catalog row usually shows by
   itself), and check it with `--models,test_output/models` (`docs/notes/avatar/model-viewer.md`).

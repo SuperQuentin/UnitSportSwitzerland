@@ -60,8 +60,8 @@ public partial class DoorLeaf : Node3D
     /// </summary>
     public bool Shutter { get; private init; }
 
-    /// <summary>Whether a door is an outward pair: a barn's, swinging onto the yard.</summary>
-    public static bool SwingsOut(DoorHang hang) => hang == DoorHang.OutwardPair;
+    /// <summary>Whether a door swings out onto the yard: a barn's pair, or a toilet cabin's single leaf (#822).</summary>
+    public static bool SwingsOut(DoorHang hang) => hang is DoorHang.OutwardPair or DoorHang.Outward;
 
     /// <summary>Whether a door rolls up into its lintel: a garage's, or a loading bay.</summary>
     public static bool RollsUp(DoorHang hang) => hang == DoorHang.RollUp;
@@ -81,10 +81,11 @@ public partial class DoorLeaf : Node3D
     public static DoorLeaf CreateOnFacade(string door, Transform3D doorway, float width, float height,
         DoorHang hang, BuildingKind kind, Material material) =>
         RollsUp(hang) ? CreateRollUp(door, doorway, width, height, material)
+            : hang == DoorHang.Outward ? CreateOutwardSingle(door, doorway, width, height, kind, material)
             : CreateOutward(door, doorway, width, height, kind, material);
 
     /// <summary>A leaf's width: a pair splits the opening, any other door is one leaf.</summary>
-    public static float LeafWidth(DoorHang hang, float doorWidth) => SwingsOut(hang) ? doorWidth / 2 : doorWidth;
+    public static float LeafWidth(DoorHang hang, float doorWidth) => hang == DoorHang.OutwardPair ? doorWidth / 2 : doorWidth;
 
     /// <summary>
     /// How much deeper than usual an open door is in reach, on the side its leaves stand: a big
@@ -151,6 +152,24 @@ public partial class DoorLeaf : Node3D
     }
 
     /// <summary>
+    /// A toilet cabin's door (#822, <see cref="DoorHang.Outward"/>), in world space on the facade
+    /// doorway frame like a barn's pair: one leaf hinged on the -X jamb, swinging out. A cabin has
+    /// no doorstep or jambs standing out, so the leaf hangs just in front of the portal mouth, its
+    /// back face a centimetre clear of it. Never solid: shut, the cabin's wall behind it is.
+    /// </summary>
+    public static DoorLeaf CreateOutwardSingle(string door, Transform3D doorway, float width, float height, BuildingKind kind, Material material)
+    {
+        var leaf = new DoorLeaf { Name = "Leaf_" + door, TopLevel = true, Transform = doorway, Outward = true, _angle = OutwardAngle };
+        float z = DoorLink.OutsideQuadOffset + 0.01f + Thickness, hinge = width / 2 + 0.03f;
+        leaf.AddHinge(new Vector3(-hinge, 0, z), -1,
+            InteriorMeshBuilder.Leaf(width + 0.05f, height, Thickness, kind, bottom: SingleBottom), Thickness, material);
+        return leaf;
+    }
+
+    /// <summary>A cabin's leaf stands this far over its sill: the drawn door's own foot.</summary>
+    private const float SingleBottom = 0.1f;
+
+    /// <summary>
     /// A garage's roll-up door, in world space on the facade doorway frame <paramref name="doorway"/>:
     /// slats across the opening, hung from the lintel and rolled up into it. Never solid, like a
     /// barn's pair: shut, the facade behind it is.
@@ -176,6 +195,9 @@ public partial class DoorLeaf : Node3D
         if (RollsUp(hang))
             // a garage's roll-up door: its slats, the same as outside
             leaf.AddHinge(new Vector3(0, height, 0), 0, InteriorMeshBuilder.RollUpLeaf(width, height, z - Thickness, z), 0, material);
+        else if (hang == DoorHang.Outward)
+            // a cabin's single leaf (#822)
+            leaf.AddHinge(new Vector3(-half, 0, z), 0, InteriorMeshBuilder.Leaf(width, height, Thickness, kind), 0, material);
         else
         {
             leaf.AddHinge(new Vector3(-half, 0, z), 0, InteriorMeshBuilder.Leaf(half, height, Thickness, kind), 0, material);

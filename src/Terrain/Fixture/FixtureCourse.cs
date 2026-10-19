@@ -94,8 +94,8 @@ public sealed class FixtureCourse
     public List<(uint Id, CropKind Crop, (double X, double Y)[] Outline)> Fields { get; } = new();
 
     /// <summary>
-    /// The flat course's three fields, clear of the spawn and inside its tiles: a wheat field east
-    /// (18 x 18 cells), a potato field north of it, a meadow west. Further east, clear of all three
+    /// The flat course's four fields, clear of the spawn and inside its tiles: a wheat field east
+    /// (18 x 18 cells), a potato field north of it, a meadow west, a pasture with a herd south-west. Further east, clear of all three
     /// (#494, <c>--tractorcheck</c>): a 12 m strip of paving running north-south
     /// (<see cref="PavedFrom"/>), then a ridge across the whole tile (<see cref="RidgeHeight"/>):
     /// up at <see cref="RidgeGrade"/>, a plateau, down again.
@@ -113,6 +113,8 @@ public sealed class FixtureCourse
         c.Fields.Add((0xF1E1D001, CropKind.Wheat, Box(24, -36, 96, 36)));
         c.Fields.Add((0xF1E1D002, CropKind.Potato, Box(24, 44, 72, 92)));
         c.Fields.Add((0xF1E1D003, CropKind.Meadow, Box(-96, -36, -24, 36)));
+        // a pasture south-west, where a herd grazes (#863: cows, the UFO sightings' abductions)
+        c.Fields.Add((0xF1E1D004, CropKind.Pasture, Box(-96, -150, -10, -60)));
         return c;
 
         static (double, double)[] Box(double x0, double y0, double x1, double y1) => [(x0, y0), (x1, y0), (x1, y1), (x0, y1)];

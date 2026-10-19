@@ -1,17 +1,37 @@
-# Playtest suite: scenarios a person judges, with Claude live in the game (#751)
+# Playtest suite: scenarios a person judges, in batches or with Claude live (#751, #844)
 
 Some things only a person playing can judge: how a crash looks, how a bus turns, whether a dance
-loops cleanly. The playtest suite runs such **scenarios** one after another in **one** game, lets the
-player talk to a **Claude Code session** that changes the running game, and records each **verdict**
-in a committed ledger that knows when the verdict has gone stale.
+loops cleanly. The playtest suite runs such **scenarios** one after another in **one** game and
+records each **verdict** in a committed ledger that knows when the verdict has gone stale. Two ways
+to use it:
+
+- **Batch** (default, #844): the player goes through many scenarios (or free play) alone, noting
+  what is wrong with F12; the whole session is recorded (`playtest-recorder`); Claude reads the
+  bundle afterwards, reproduces and fixes offline; the player then retests only what is due.
+- **Live** (#751): the player talks to a Claude Code session that changes the running game
+  (one-off tuning: a knob, a tunable, a node property).
 
 ## Run it
 
 ```
-tools/playtest.sh [course]       # builds, starts the game on fixture:<course> (flat) with --playtest
-claude                           # in the same checkout; /mcp lists unitsport-playtest; then /playtest
-tools/playtest.sh pending        # what is due: never played, or the covered code changed since
+tools/playtest.sh [batch] [course]   # builds, plays fixture:<course> (flat) with --playtest --playtest-batch --playtest-record
+tools/playtest.sh retest [course]    # the same with only the scenarios due (failed, stale, never played)
+tools/playtest.sh live [course]      # the live loop: then `claude` in this checkout, /mcp lists unitsport-playtest, /playtest
+tools/playtest.sh pending            # what is due: never played, or the covered code changed since
+tools/playtest.sh last | report [dir] | topview [dir] ...   # the newest session; its report again; its top view
 ```
+
+### The batch loop
+
+1. **Play**: Validate or Fail each scenario (Fail's text, or the next line, is a note); the next
+   one due starts by itself. F12 notes anything, anywhere ("What's wrong?", stamped with the time,
+   the place, a screenshot and a top view). Free play records without a scenario. **End session**
+   (panel) writes `test_output/playtest/sessions/<time>/report.md`.
+2. **Fix**: in Claude Code, "read the report and fix what I noted" (`/playtest`, the skill's batch
+   section): it reads the report, the notes' pictures, `--topview` windows, `events.jsonl`, writes a
+   headless repro when it can, fixes, and lists what to retest.
+3. **Retest**: `tools/playtest.sh retest`. A fix changes the covered files' hash, so its scenario
+   turns stale and is due again; a FAILED one stays due until validated.
 
 - Debug builds only: `src/Playtest/**` and the `PLAYTEST` symbol exist only in the `Debug`
   configuration (the csproj), so exports never carry the server. It starts only with
@@ -19,18 +39,22 @@ tools/playtest.sh pending        # what is due: never played, or the covered cod
 - **Panel**: F10, a pad's L3 + R3 together, VR the same through XrPad (no typing in VR yet). The
   panel holds the scenario list (✔ validated, ✖ failed, ↻ stale, ● pending), the instructions and
   checklist, Validate / Fail / Reset, and the chat with Claude. Closed, a card top right keeps the
-  checklist and Claude's last line. Fail takes the text in the box as the reason.
+  checklist and Claude's last line. Fail takes the text in the box as the reason. Recorded, a row of
+  Note / Top view / Free play / End session (a pad's way to note and see the top view); in batch
+  mode the chat is hidden and the box takes notes.
+- **Keys** (recorded): F12 note, Shift+F12 top view, Ctrl+F12 stop and scrub it (`topview`).
 - Scenarios needing another fixture course relaunch the game on it when picked (same panel, same chat).
 
 ## What Claude can do (MCP tools, `PlaytestDirector.Tools`)
 
+`session_report`, `topview` and `note` when the session is recorded (#844);
 `wait_for_player` (long-poll: the player's messages and verdicts), `say`, `status`,
 `start_scenario` / `reset_scenario`, `set_param` (scenario knobs), `list_tunables` / `set_tunable`
 (`[Tunable]` statics, `Core/TunableAttribute`), `node_get` / `node_set` (any Godot property of any
 node; `player`, `scenario:N`), `run_command` (chat commands), `screenshot`, `log_tail`, and
 `restart(rebuild)`: saves the scenario and chat to `user://playtest_resume.json`, quits, and
 `tools/playtest.sh relaunch` rebuilds (`test_output/playtest/build.log`) and starts the game again
-with `--playtest-resume`, which reopens both. Running C# sent over the wire (Roslyn, Harmony
+with `--playtest-resume`, which reopens both (and `--playtest-record` the same bundle). Running C# sent over the wire (Roslyn, Harmony
 hot-patching) is not built: it needs the user's explicit go-ahead, being remote code execution.
 
 ## Write a scenario

@@ -103,6 +103,7 @@ public static class ConstructionCheck
             // the pallets of bricks and cement a machine with tines can lift (#615): not a failure when none fit
             int pallets = SiteShellBuilder.Dressing(t.Tile, site, null).Pallets.Count;
             GD.Print($"[constructioncheck]      {what}: {pallets} pallet(s) of materials, {(ConstructionSites.MaterialsWayIn(site) ? "a way in for a machine" : "no way in for a machine")}");
+            Office(t.Tile, t.Roads, t.Sites, site, index, world.BuildGrid(id, 1), what, Expect);
             foreach (var corner in site.Box.Corners())
                 if (site.Cranes.Count > 0 && !site.Cranes.Any(k => k.Base.DistanceTo(corner) <= k.JibLength))
                     Expect(false, $"{what}: no crane reaches the corner at {corner}");
@@ -144,6 +145,91 @@ public static class ConstructionCheck
         GD.Print($"[constructioncheck] plan views: {svg}");
         GD.Print($"[constructioncheck] RESULT: {(failures == 0 ? "ok" : $"FAILED ({failures})")}");
         return failures == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// The site office (#822): a door per ground-floor container among the tile's doors, on the
+    /// container's door; an interior plan behind them that is valid, has an entrance at every door
+    /// lined up with it, holds something to search, and is planned the same twice.
+    /// </summary>
+    private static void Office(BuildingTile tile, RoadTile? roads, List<ConstructionSite> sites, ConstructionSite site, int index,
+        ChunkGrid grid, string what, Action<bool, string> expect)
+    {
+        var office = SiteShellBuilder.Office(tile, site, grid);
+        if (office == null) { expect(false, $"{what}: no office to enter"); return; }
+        var doors = BuildingFootprint.ComputeDoors(tile, roads, grid, sites).Where(d => d.Index == index && d.Width > 0).ToList();
+        expect(doors.Count == office.Doors.Count && doors.Select(d => d.Slot).SequenceEqual(Enumerable.Range(0, doors.Count)),
+            $"{what}: {doors.Count} door(s) among the tile's doors, one per ground-floor container ({office.ContainerDoors}) and toilet cabin ({office.Toilets.Count})");
+        expect(doors.All(d => d.Kind == BuildingKind.UnderConstruction && !d.Vehicle
+                && d.Hang == (d.Slot < office.ContainerDoors ? DoorHang.Inward : DoorHang.Outward)),
+            $"{what}: a building site's plain doors, the containers' swinging in and the cabins' out");
+        // the tile's doors without the planned sites handed in: the same doors
+        var alone = BuildingFootprint.ComputeDoors(tile, roads, grid).Where(d => d.Index == index && d.Width > 0).ToList();
+        expect(alone.SequenceEqual(doors), $"{what}: the doors are the same planned with the tile or on their own");
+        for (int i = 0; i < Math.Min(doors.Count, office.Doors.Count); i++)
+        {
+            var spot = doors[i];
+            var sill = SiteShellBuilder.ToTile(site, office.Doors[i].Sill);
+            expect(Math.Abs(spot.Position.Y - office.Doors[i].Sill.Y) < 0.001f
+                && new Vector2(spot.Position.X - spot.Outward.X * 0.03f - sill.X, spot.Position.Z - spot.Outward.Z * 0.03f - sill.Z).Length() < 0.001f,
+                $"{what}: door {i} on its {(i < office.ContainerDoors ? "container" : "cabin")}'s door, its sill at {spot.Position.Y:F2} m (its ground {office.Doors[i].Sill.Y:F2}), "
+                + $"--at {tile.Id.MinE + spot.Position.X:F1},{tile.Id.MaxN - spot.Position.Z:F1} facing E {spot.Outward.X:F2} N {-spot.Outward.Z:F2}");
+        }
+
+        // a way in: nothing of the yard stands in the 0.6 m in front of a door
+        var yard = SiteShellBuilder.Dressing(tile, site, grid);
+        for (int i = 0; i < office.Doors.Count; i++)
+        {
+            var d = office.Doors[i];
+            var o = new Vector3(d.Outward.X, 0, d.Outward.Y);
+            var across = new Vector3(-d.Outward.Y, 0, d.Outward.X);
+            bool clear = true;
+            foreach (float step in new[] { 0.1f, 0.35f, 0.6f })
+                foreach (float side in new[] { -d.Width / 2 + 0.1f, 0f, d.Width / 2 - 0.1f })
+                {
+                    var p = d.Sill + o * step + across * side + Vector3.Up * 1f;
+                    clear &= !yard.Boxes.Any(b => b.Solid && p.X > b.Min.X && p.X < b.Max.X && p.Y > b.Min.Y && p.Y < b.Max.Y && p.Z > b.Min.Z && p.Z < b.Max.Z);
+                }
+            expect(clear, $"{what}: nothing of the yard stands in front of door {i}");
+        }
+
+        var plan = InteriorGenerator.Generate(tile, index, roads, grid);
+        if (plan == null) { expect(false, $"{what}: no interior plan behind the office"); return; }
+        var problems = InteriorValidator.Validate(plan);
+        expect(problems.Count == 0, $"{what}: the office's plan is valid{(problems.Count > 0 ? ": " + string.Join("; ", problems.Take(3)) : "")}");
+        expect(plan.Kind == BuildingKind.UnderConstruction && plan.Floors.Count == 1
+            && plan.GroundFloor.Rooms.Count == office.Rooms.Count + office.Toilets.Count && plan.GroundFloor.Rooms[0].Type == RoomType.SiteOffice
+            && plan.GroundFloor.Rooms.Skip(office.Rooms.Count).All(r => r.Type == RoomType.WC && r.Openings.Count(o => o.Kind == OpeningKind.Entry) == 1 && r.Openings.Count == 1),
+            $"{what}: {plan.GroundFloor.Rooms.Count} room(s): {string.Join(", ", plan.GroundFloor.Rooms.Select(r => r.Type))}");
+        var placement = new Transform3D(new Basis(Vector3.Up, plan.Yaw), new Vector3(plan.CenterX, 0, plan.CenterZ));
+        foreach (var spot in doors)
+        {
+            var key = spot.KeyIn(tile.Id).ToString();
+            var e = plan.EntranceOf(key);
+            if (e == null) { expect(false, $"{what}: no entrance behind door {key}"); continue; }
+            // the doorway inside is where the door is: the facade plane (3 cm in from the spot) is the
+            // trim's face, 2 cm in front of the container's end, which is the plan box's front wall
+            var inside = placement * new Vector3(e.X, 0, e.Z);
+            var plane = new Vector2(spot.Position.X, spot.Position.Z) - new Vector2(spot.Outward.X, spot.Outward.Z) * (0.03f + SiteOffices.Trim);
+            var outward = placement.Basis * new Vector3(-e.InX, 0, -e.InZ);
+            expect(new Vector2(inside.X, inside.Z).DistanceTo(plane) < 0.01f && outward.Dot(spot.Outward) > 0.999f
+                && Math.Abs(e.DoorX - spot.Position.X) < 0.001f && Math.Abs(e.DoorY - spot.Position.Y) < 0.001f && Math.Abs(e.DoorZ - spot.Position.Z) < 0.001f,
+                $"{what}: door {key}'s doorway inside lines up with it ({new Vector2(inside.X, inside.Z).DistanceTo(plane) * 100:F1} cm)");
+            var (w, top) = plan.OpeningOf(e);
+            expect(Math.Abs(w - spot.Width) < 0.01f && Math.Abs(top - spot.Height) < 0.01f, $"{what}: door {key} opens on a {w:F2} x {top:F2} m doorway ({spot.Width:F2} x {spot.Height:F2} outside)");
+        }
+        // a cabin holds its seat, urinal, paper, mirror and hook
+        foreach (var cabin in plan.GroundFloor.Rooms.Where(r => r.Type == RoomType.WC))
+        {
+            var inside = plan.Furniture.Where(f => f.X > cabin.X0 && f.X < cabin.X1 && f.Z > cabin.Z0 && f.Z < cabin.Z1).Select(f => f.Type).ToList();
+            expect(new[] { FurnitureType.Toilet, FurnitureType.Urinal, FurnitureType.PaperRoll, FurnitureType.Mirror, FurnitureType.CoatHook }.All(inside.Contains),
+                $"{what}: a toilet cabin holds {string.Join(", ", inside)}");
+        }
+        int lootable = plan.Furniture.Count(f => Loot.LootTables.IsLootable(f.Type));
+        expect(lootable > 0 && plan.Furniture.All(f => f.Floor == 0),
+            $"{what}: {plan.Furniture.Count} piece(s), {lootable} to search: {string.Join(", ", plan.Furniture.Select(f => f.Type))}");
+        var again = InteriorGenerator.Generate(tile, index, roads, grid);
+        expect(again != null && again.ToJson() == plan.ToJson(), $"{what}: the office is planned the same twice");
     }
 
     /// <summary>Every point a site puts something on: hoarding ends and middles, zone and machine corners, crane bases outside.</summary>

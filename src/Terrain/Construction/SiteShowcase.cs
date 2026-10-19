@@ -116,7 +116,8 @@ public static class SiteShowcase
         {
             Rect = p.Rect with { Center = p.Rect.Center - origin }, TopOuter = p.TopOuter - origin, TopInner = p.TopInner - origin,
         }).ToList();
-        var (cv, cc, ci) = PitTerrain.Cut(v, c, idx.ToArray(), m, quad, local);
+        var up = Enumerable.Repeat(Vector3.Up, v.Length).ToArray();
+        var (cv, cc, _, ci) = PitTerrain.Cut(v, c, up, idx.ToArray(), m, quad, local);
         var verts = cv.Select(p => p + new Vector3(origin.X, 0, origin.Y)).ToList();
         var cols = cc.ToList();
         var tris = ci.ToList();

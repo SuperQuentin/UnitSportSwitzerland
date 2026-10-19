@@ -129,10 +129,10 @@ that all three phases are built. It writes the plan views (`SitePlanSvg`) to
 ## The half-built shell (#608)
 
 A site's solid is no longer drawn, collided, given a door or an interior: `BuildingMeshBuilder.Drawn`
-is false for `UnderConstruction`, and `BuildingOcclusion.Occluders` (an open shell hides nothing),
-`BuildingFootprint.ComputeDoors` (an empty door spot, so no `DoorIndex` entry and no portal),
-`InteriorGenerator.Generate` (null) and `TownPerches` (no bird on a roof that is not there) all
-skip it. In its place:
+is false for `UnderConstruction`, and `BuildingOcclusion.Occluders` (an open shell hides nothing)
+and `TownPerches` (no bird on a roof that is not there) skip it. Its doors and interior are its site
+office's since #822 (`BuildingFootprint.ComputeDoors`, `InteriorGenerator.Generate`: "The site
+office" below). In its place:
 
 - **`ShellPlans.Plan`** (pure, `ShellPlan.cs`, tier 0): boxes and ramps in the site frame (x along
   the plan box's `AxisU`, z along `AxisV`, y the tile's height). It follows the building's wings
@@ -186,10 +186,6 @@ skip it. In its place:
 
 ### Not done
 
-- `SmartBinocularsHud` labels a building "Building site" through its door (`DoorIndex`), and a site
-  has none now, so the label is gone until the binoculars read the site itself.
-- The `UnderConstruction` loot pools (`LootTables`) have no container left: #609 puts them in the
-  site office.
 - `BrStructures` still stands a BR scaffolding prefab beside every site, which #609's hoarding and
   yard will meet.
 
@@ -220,10 +216,116 @@ foundations, the office two high, determinism. Pictures: `--shot-queue` on the g
 
 ### Not done
 
-- **Loot.** A site's loot was in its `Storage` interior; with no interior there is no container
-  left. A container outside an interior needs its own identity (#627; loot is keyed by an interior plan's
-  furniture index) and server ownership: its own issue.
-- The office has no stair to its upper containers; the lamps do not blink at night.
+- Loot: the materials and the skips are searched outdoors (#627, `loot/yard-loot`); the office's
+  and the cabins' is ordinary interior loot (#822).
+- The office has no stair to its upper containers: raised doors are #827. The lamps do not blink
+  at night.
+
+## The site office (#822)
+
+The office containers and the yard's toilet cabins are the site building's doors and interior, so
+they are entered like any other building: a door that opens, a portal, an interior to walk round
+and search.
+
+- **`SiteOffices.Plan`** (pure, `SiteOffice.cs`, tier 0) lays out the office zone's containers
+  (what `SiteDressings` used to draw itself, box for box) and returns a `SiteOffice`: one door per
+  ground-floor container (`SiteOfficeDoor`, slot = its place across the row), the interior frame
+  (the ground row's middle, `Outward` = the containers' door end, `Across` = interior +X so that +Z
+  is into them), one room per container (two side by side meet in the middle of the 0.3 m gap) and
+  the windows' Z. `SiteDressings.Plan` calls it and keeps its boxes in `SiteDressingPlan.OfficeBoxes`.
+- **The toilets** (`SiteOffices.Toilets`, same file): the blue and the green cabin of #609, each
+  with a door (0.8 x 2.0 m, a blue panel 3 cm proud, the doorway plane 2 cm out) in its long face
+  towards the office zone (towards the gate on a site with none). Their doors are the site's next
+  slots after the containers' (`SiteOffice.Toilets`, `ContainerDoors`); their boxes are
+  `SiteDressingPlan.ToiletBoxes`, and collide with the buildings like the containers'.
+- **Doors.** `BuildingFootprint.ComputeDoors` gives an `UnderConstruction` building its office's
+  doors (`OfficeDoors`, through `SiteShellBuilder.Office` and `OfficeDoors`): slot 0 the office,
+  slot 1 the mess room where there are two containers, then the two cabins; plain pedestrian doors
+  swinging in, 0.9 x 2.1 m (a cabin's 0.8 x 2.0), on the ground the containers (the cabins) are
+  drawn on. The site is planned from the same tile and roads (`SitePlans.Of`, or the
+  `sites` `ChunkManager` already planned, so they are not planned twice). The interior key is the
+  site's ordinary building key, so `InteriorManager`, `DoorIndex`, `DoorLeaf`, `DoorLink`, loot and
+  sync are unchanged; `BuildingMeshBuilder` bakes no facade door for it (`Drawn`): the containers
+  have theirs. **The doorway plane is the container trim's face** (2 cm proud of the skin): the
+  portal quad, 2 cm further out, stands in front of the drawn door panel (3 cm proud) and covers it
+  while the door is open, so the outside mesh is unchanged. The leaf is the container's blue
+  (`DoorLeafColorFor`).
+- **Interior** (`InteriorGenerator.SiteOffice.cs`): every room stands in the plan where its
+  container or cabin stands in the yard, in the containers' frame (the yard is square to the site,
+  so a cabin is square to it too); the plan box is the bounding box of them all, not the building's.
+  So each doorway is where its door is and every `DoorLink` is a plain drop (0.0 cm off in
+  `--constructioncheck`). **A door's link does not need its room at the plan box's edge**:
+  `DoorLink.Create` maps the facade frame to the entrance's own point and inward direction
+  (`EntrancePlan.X/Z/InX/InZ`), any room of the ground floor, so rooms standing apart in the yard
+  are rooms of one plan, each reached only through its own door. A 2.6 m storey, one
+  floor. The office (`RoomType.SiteOffice`, new): desk, plans table, locker, the hard-hat and
+  hi-vis rail, coffee machine, heater, tool chest, whiteboard, chair, extinguisher. A cabin (`RoomType.WC`, 2.2 m
+  clear) is furnished by hand (`FurnishCabin`: a metre square leaves no room for the furnisher's
+  clearances): the seat and a urinal against the back wall, the paper beside the seat, a mirror
+  (a `WallMirror` on it) and a coat hook on the other wall. The mess room
+  (`BreakRoom`, with the site's own piece list `SiteMess`) is the changing room too: lockers first,
+  table, bench, fridge, counter, coffee, rail, heater. A doorway between the two at the back,
+  windows where the containers have theirs. New furniture `CoffeeMachine` and `Heater` (appended;
+  in the model viewer by themselves), and for the cabins `Urinal`, `PaperRoll`, `Mirror`, `CoatHook`.
+  A site office's rooms are never a core (`Furnish`). **Plan version 27.** A stored office plan is
+  matched to the building's solid only (`InteriorLayout.Matches`), not to the site plan or the
+  roads: a change to the planner's office or toilet zones or to `SiteOffices` must bump
+  `InteriorLayout.CurrentVersion`, or stored plans keep their old doors (a plan stored before the
+  cabins had no entrance for them, and their doors read as locked: that is what 27 is for).
+  **A cabin's leaf swings out** (`DoorHang.Outward`, appended for the cabins only: one leaf on the
+  facade, hinged on the -X jamb, like one half of a barn's pair, `DoorLeaf.CreateOutwardSingle`;
+  from inside a shutter like a barn's). Swinging in it filled the metre-square room. Every other
+  door and every kind's default hang is unchanged (`DoorBudgetTests`).
+- **Collision.** The office's solid boxes go into the tile's **building** body (both windings: it
+  is one-sided), not the road cells (`SiteBuild.OfficeFaces`), so `InteriorManager.BeforeMove`
+  lets a body standing in an open office doorway through them like any facade.
+- **Loot** is ordinary interior loot. The `UnderConstruction` kind factor no longer zeroes all but
+  minerals and scrap (minerals x2, scrap x1.5, food x0.8, the rest x1); room pools for the
+  office's desk (petty cash, gadgets, tools), locker and tool chest (tools, work clothes, first
+  aid) and the mess room's lockers (clothes, a snack).
+- **Workwear** (#822): a **hard hat** (head) and a **hi-vis vest** over a grey work T-shirt (top),
+  garments of a new `GarmentStyle.Workwear` (`avatar/clothing`). Kept out of every wardrobe
+  (`LootTables.Clothes` skips them); the `Workwear` pool is the hard-hat rail's (now a container:
+  a works hall's rail gives them too) and part of the site office's and mess room's lockers.
+  Worn, they replicate in `OutfitBits` like every garment.
+- **The binoculars** label the site "Building site" again: its door is in `DoorIndex` with its kind.
+- Found on the way: #497's wall pieces (locker, hat rail, safety sign, time clock, whiteboard,
+  banner, desk counter, tool chest) faced the wall they stand against; `InteriorMeshBuilder` mirrors them.
+
+### Checks
+
+- `SiteOfficeTests` (tier 0, 23): a door per ground-floor container, standing on the door drawn in
+  its end (its sill on the containers' ground, its plane the trim's face, the portal in front of
+  the panel and of every rail), facing out of it, every door on the plan box's front wall in its
+  own room, the rooms filling the row, two containers on a big site and one on a house plot,
+  determinism, and the dressing drawing the office it plans; the cabins (12 more): a door each
+  after the containers', on the panel drawn in its face and facing out of it, towards the office,
+  square to the office's frame and clear of its rooms. Sites turned and fronting each way, on
+  sloping ground.
+- `--constructioncheck`: for every built site, the office doors among the tile's doors (the same
+  with the sites handed in or planned alone), each on its container's door, the plan valid, one
+  room per container, every door's doorway lined up with it (distance and facing) and the opening
+  the door's size, nothing of the yard in the 0.6 m in front of any door, each cabin a room with
+  its one doorway holding its seat, urinal, paper, mirror and hook, something to search, the plan
+  the same twice. Logs each door's `--at` and facing.
+- `--interiorcheck --doorkind UnderConstruction --generated on --at 2586561,1115543` (quick,
+  headless): walks into the generated office, searches its desk, walks out, shuts the door from
+  inside and walks out as it swings, and the door shuts by itself.
+- `tools/siteofficenetcheck.sh` (net): a server on the generated world and three clients. A opens
+  the office door and takes a stack; B, waiting outside, sees the door open, walks in and finds the
+  stack gone; C joins after the take and finds the door open and the stack gone, then walks into a
+  toilet cabin by its own door. A puts on the hard hat and hi-vis vest off the office's rail, and
+  B and C see A wearing them (`OutfitBits`).
+- Pictures: `--shot-queue` with `i1.6` shots (through a door) at that site. Take the doors' world
+  positions from a probe's log: `--constructioncheck`'s `--at` is its own world's, a few metres off
+  the live one.
+
+### Not done
+
+- **The upper containers** stay closed: the outside stair, the walkway and a door each are #827
+  (raised doors). A door whose sill is above the ground needs the door system to know an
+  entrance's floor (`EntrancePlan` is ground floor only: `DoorLink.Create`, `InsideDoorAt`, the
+  leaf, `OpeningOf`, `FitEntry` and the validator's reachability all assume it).
 
 ## The cranes (#610)
 

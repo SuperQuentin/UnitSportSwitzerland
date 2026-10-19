@@ -36,6 +36,13 @@ public sealed class BrEntrant
     public bool Recalled { get; set; }
     /// <summary>Server clock when they went out: a recall brings back the latest.</summary>
     public double OutAt { get; set; }
+    /// <summary>A bot the server runs (#837): marked on the HUD, kept out of careers. Its <see cref="Peer"/> is its negative id.</summary>
+    public bool Bot { get; set; }
+    /// <summary>How many of <see cref="Kills"/> were bots (#837): shown as "10 kills (3 bots)".</summary>
+    public int BotKills { get; set; }
+
+    /// <summary>The name as the HUD and the feed show it: a bot is marked (#837).</summary>
+    [JsonIgnore] public string Shown => Bot ? $"{Name} [bot]" : Name;
 
     /// <summary>A group name as typed, made comparable: trimmed, lower case, letters and digits, at most 16.</summary>
     public static string PartyName(string typed) =>
@@ -83,9 +90,21 @@ public sealed class BrState
     public List<string> Leaders { get; set; } = new();
     /// <summary>The winning team, 0 in solo or with no winner.</summary>
     public int WinnerTeam { get; set; }
+    /// <summary>
+    /// The field bots top the match up to at GO (#837, <c>/br bots</c>): 0 = no bots. Shown in the
+    /// lobby; the bots themselves are entrants like anyone (<see cref="BrEntrant.Bot"/>).
+    /// </summary>
+    public int Bots { get; set; }
+    /// <summary>How well those bots play (<c>Bots.BotDifficulty</c> as an int: 0 easy, 1 normal, 2 hard), for the Activities screen (#840).</summary>
+    public int BotLevel { get; set; } = 1;
     public List<BrEntrant> Entrants { get; set; } = new();
 
     [JsonIgnore] public int AliveCount => Entrants.Count(e => e.Alive);
+    /// <summary>Living players, bots left out (#837): a match with none left has nobody to play it for.</summary>
+    [JsonIgnore] public int HumansAlive => Entrants.Count(e => e.Alive && !e.Bot);
+
+    /// <summary>How many bots GO adds to a field of <paramref name="humans"/> to reach <paramref name="target"/> (#837).</summary>
+    public static int BotsToAdd(int humans, int target) => Math.Max(0, target - humans);
     /// <summary>
     /// Sides still in it: each team with someone standing once, each living solo player once. A team
     /// whose living are all down is not (#475): nobody is left to pick them up.
@@ -95,7 +114,10 @@ public sealed class BrState
     /// <summary>Whether <paramref name="peer"/> going down would leave a team-mate standing to revive them (#475).</summary>
     public bool MateStanding(long peer) => MatesOf(peer).Any(m => m.Alive && !m.Downed);
 
-    /// <summary>A player's side: their team, or (solo) themselves.</summary>
+    /// <summary>
+    /// A player's side: their team, or (solo) themselves. A solo bot's side is positive (its peer id is
+    /// negative, #837), never a team number: teams exist only when every entrant has one.
+    /// </summary>
     public static long SideOf(BrEntrant e) => e.Team != 0 ? e.Team : -e.Peer;
 
     /// <summary>Two entrants who may hurt each other: different sides.</summary>

@@ -67,7 +67,7 @@ public static class CharacterPage
         0 => Enum.GetNames<BodyBuild>(),
         1 => Enumerable.Range(0, FaceGenome.PresetCount).Select(i => Capital(FaceGenome.PresetName(i))).ToArray(),
         2 => Appearance.EyeNames,
-        3 => Enumerable.Range(1, Appearance.SkinTones.Length).Select(i => $"Tone {i}").ToArray(),
+        3 => Appearance.SkinNames,
         4 => Enum.GetNames<HairStyle>(),
         _ => Appearance.HairColourNames,
     };
@@ -155,7 +155,8 @@ public partial class FigurePreview : SubViewportContainer
             },
         });
         _viewport.AddChild(new DirectionalLight3D { Rotation = new Vector3(Mathf.DegToRad(-35), Mathf.DegToRad(-30), 0), LightEnergy = 1.1f });
-        var camera = new Camera3D { Position = new Vector3(0, 1.05f, 3.4f), Fov = 36, Current = true };
+        // room over the head for an alien's dome and antennae (#880)
+        var camera = new Camera3D { Position = new Vector3(0, 1.12f, 3.9f), Fov = 36, Current = true };
         _viewport.AddChild(camera);
         camera.RotationDegrees = new Vector3(-4, 0, 0);
         _figure = new MeshInstance3D { MaterialOverride = HumanMeshBuilder.FigureMaterial(), Rotation = new Vector3(0, Mathf.Pi, 0) };

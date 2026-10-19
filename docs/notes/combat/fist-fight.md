@@ -9,6 +9,8 @@ Two players on foot fight a best-of-three; real health, armour and items are unt
   `PlayerSnapshot`), press interact. Prompt bar: `Challenge to a fight` / `Accept <name>'s fight` /
   `Challenge sent...` (`FightManager.Prompt`). Chat: `/fight <player>`, `/fight accept [player]`,
   `/fight decline`, `/fight leave` (forfeit). A challenge to someone who already challenged you is an accept.
+  A challenge is an invite of kind `fight` (#840, `net/invites`): it also shows as a toast, F2 accepts it,
+  and the Activities screen's Invites tab sends one; `FightManager.Pending` mirrors the open `fight` invites.
 - **Waiting**: the challenged player gets a System chat line and a box on `FightHud` (name, how to answer,
   seconds left). It lapses after `FightRules.ChallengeSeconds` (30 s).
 - **Refused** unless both are on foot, up (`Down == 0`), within 12 m (`ChallengeRange`), not already fighting.
@@ -24,8 +26,8 @@ Two players on foot fight a best-of-three; real health, armour and items are unt
   A time-out goes to the healthier, a draw is a round for both (Tekken), two draws a drawn match.
 - Forfeit: `/fight leave`, disconnecting (`ServerWorld.OnPeerDisconnected` → `PeerLeft`), getting into
   anything, or being 18 m from the centre (a teleport).
-- RPCs: client → server `RequestChallenge`, `RequestAccept`, `Strike(fightId, move)`, `RequestLeave`;
-  server → the two fighters `Challenged`, `ChallengeOver`, `Begin`, `State`, `Struck`, `Ended`.
+- RPCs: client → server `RequestChallenge`, `Strike(fightId, move)`, `RequestLeave` (accepting goes through
+  `InviteService`); server → the two fighters `Begin`, `State`, `Struck`, `Ended`.
 
 ## Strikes: who decides what
 

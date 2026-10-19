@@ -338,6 +338,19 @@ public static class BrCheck
         var back = BrState.FromJson(s.ToJson());
         Expect(back is { Phase: BrPhase.Playing, Seed: 42, AliveCount: 1 } && back.Find(7)?.Kills == 2 && back.Area.Name == "Riddes",
             "the match state survives JSON");
+
+        // bots (#837): their flag, a player's bot kills and the field target survive; a solo bot is its own
+        // side, hostile to everyone; a match with no player standing is over for the players
+        s.Bots = 4;
+        s.Find(7)!.BotKills = 1;
+        s.Entrants.Add(new BrEntrant { Peer = -1001, Name = "Urs", Bot = true });
+        s.Entrants.Add(new BrEntrant { Peer = -1002, Name = "Reto", Bot = true });
+        back = BrState.FromJson(s.ToJson());
+        Expect(back is { Bots: 4 } && back.Find(-1001) is { Bot: true, Shown: "Urs [bot]" } && back.Find(7)?.BotKills == 1,
+            "bots survive JSON: the flag, the mark, bot kills, the field target");
+        Expect(BrState.Hostile(back.Find(-1001)!, back.Find(-1002)!) && BrState.Hostile(back.Find(7)!, back.Find(-1001)!)
+            && back.TeamsAlive == 3 && back.HumansAlive == 1, "solo bots: each its own side, hostile to all; one player standing");
+        Expect(BrState.BotsToAdd(3, 20) == 17 && BrState.BotsToAdd(25, 20) == 0, "bots top a field up to its target, never past it");
     }
 
     private static void Loot()

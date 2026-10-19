@@ -162,6 +162,17 @@ public partial class OccasionManager : Node
         return false;
     }
 
+    /// <summary>
+    /// Whether this world runs <paramref name="id"/> with <paramref name="facet"/>, whatever this
+    /// viewer's own preference: what the authority's world events (the UFO sightings, #863) go by.
+    /// </summary>
+    public bool WorldRuns(string id, OccasionFacets facet = OccasionFacets.None)
+    {
+        foreach (var w in _authority)
+            if (string.Equals(w.Id, id, StringComparison.OrdinalIgnoreCase) && ((OccasionFacets)w.Facets & facet) == facet) return true;
+        return false;
+    }
+
     /// <summary>The sky and sun of the highest-priority running occasion that has one.</summary>
     public (Occasion Owner, OccasionAtmosphere Atmosphere)? Atmosphere
     {
@@ -176,9 +187,8 @@ public partial class OccasionManager : Node
 
     public OccasionPreference PreferenceFor(string id)
     {
-        // a command-line set wins over the saved choice for this session, in both directions
-        if (_cliSet != null) return _cliSet.Contains(id) ? OccasionPreference.Always : OccasionPreference.Off;
-        return GameSettings.Current.OccasionPreferences.TryGetValue(id, out var p) ? p : OccasionPreference.Auto;
+        var saved = GameSettings.Current.OccasionPreferences.TryGetValue(id, out var p) ? p : OccasionPreference.Auto;
+        return OccasionSchedule.Preference(id, _cliSet, _started, saved);
     }
 
     // ---- the authority -------------------------------------------------------------------------
