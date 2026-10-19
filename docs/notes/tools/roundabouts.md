@@ -50,6 +50,15 @@
   No riders' crossing through the ring (the paths are carried round its corners). A ring with an arm turned more than 50
   degrees from its radius (a bypass, a slip) stays on the old layout; so does one failing its checks. Large rings (as T's on
   the one-way ring) are not built: none in the real tiles.
+- **Mini-roundabouts drawn small** (#854, the user, Oct 19, Geneva 2495028,1118214 and 2495546,1119942: 22-24 m across with a
+  striped traversable centre, TLM draws them as 2-3 m loops): a ring fitted under `MinRadius` but from `DrawnSmall` 1 m is laid
+  at `MiniOuter` 11 m outer radius about the same centre, with a flush centre of `MiniCentre` 2.4 m (8.6 m wide, so a mini and
+  tight: laid whole). Each arm runs on along its own course from `ArmCourse` 6 m outside the ring until it meets it (else is
+  cut where its line crosses it), and the ring's nodes move to where the arms land (the ring's lines rebuilt between those
+  angles: arms landing on its flank turned its links into loops, which the merge refuses). The builder pushes its kerbs out to
+  pave a lane a few decimetres past them (`CorePlanner.Pave`, as cores). 168 real tiles: 20 enlarged, rings written whole
+  45 -> 61, the old layout 417 -> 374 ("cores overlap" 105 -> 73). Left: on the first Geneva ring the 4 m arms' paths end
+  0.4 m off their lane, TLM's street bending 12 degrees just past a mouth.
 - **Checks**: `RINGDBG=1` prints where a ring's connector leaves its outline (and an arm running past it); the test region
   has a compact ring (`SignalTestRegion.RingE`, radius 8 m, four arms) and a mini one (`MiniRingE`, 5 m, three arms, on a
   tile's edge). 168 real tiles: 81 rings laid whole, 43 written (the others fail a check, or a road joins an arm short of its mouth), 661 junctions left to the old layout in all (760 before).

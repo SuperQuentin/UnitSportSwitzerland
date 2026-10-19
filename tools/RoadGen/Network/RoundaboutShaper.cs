@@ -23,11 +23,11 @@ public static class RoundaboutShaper
 {
     public sealed class Stats
     {
-        public int Groups, Rounded, Mini, NotClosed, NotRound, BadRadius, Lines, ArmEnds, Islands;
+        public int Groups, Rounded, Mini, NotClosed, NotRound, BadRadius, Lines, ArmEnds, Islands, Enlarged;
         public double MaxShift, SumRadius;
 
         public string Format() => string.Create(CultureInfo.InvariantCulture, $"""
-              roundabouts (#122): ring groups {Groups:N0} (by attribute), rounded {Rounded:N0} (mini {Mini:N0}), left as drawn: not closed {NotClosed:N0}, not round {NotRound:N0}, radius out of range {BadRadius:N0}
+              roundabouts (#122): ring groups {Groups:N0} (by attribute), rounded {Rounded:N0} (mini {Mini:N0}, drawn small and laid at a mini-roundabout's size {Enlarged:N0}), left as drawn: not closed {NotClosed:N0}, not round {NotRound:N0}, radius out of range {BadRadius:N0}
                 ring lines rebuilt {Lines:N0}, arm ends moved onto the ring {ArmEnds:N0}, largest shift {MaxShift:F2} m, mean ring radius {(Rounded > 0 ? SumRadius / Rounded : 0):F1} m; islands written {Islands:N0}
             """);
     }
@@ -57,6 +57,16 @@ public static class RoundaboutShaper
     public const double MinRadius = 4, MaxRadius = 60;
 
     /// <summary>
+    /// A ring drawn smaller than <see cref="MinRadius"/> but at least this (m): a mini-roundabout TLM draws as a 2-3 m loop (#854,
+    /// Geneva 2495028,1118214 and 2495546,1119942: 22-24 m across in reality), laid at <see cref="MiniOuter"/> round its fitted
+    /// centre with a flush centre of <see cref="MiniCentre"/> (the user, Oct 19).
+    /// </summary>
+    public const double DrawnSmall = 1;
+    public const double MiniOuter = 11, MiniCentre = 2.4;
+    /// <summary>An enlarged ring's arm keeps its course from this far outside it (m), run on straight to the ring.</summary>
+    private const double ArmCourse = 6;
+
+    /// <summary>
     /// Below this island radius it is a mini-roundabout: a flush painted centre that a lorry may
     /// drive over, no raised island. TLM's rings in Riddes and Sion run 4.7-8.4 m about their
     /// centre, 3.3 m wide, so their islands are 3-7 m across the radius.
@@ -81,16 +91,40 @@ public static class RoundaboutShaper
             stats.Groups++;
             var pts = group.SelectMany(l => l.Shifted).ToList();
             var (centre, radius, rms) = FitCircle(pts);
-            if (!(radius >= MinRadius && radius <= MaxRadius)) { stats.BadRadius++; continue; }
+            bool small = radius >= DrawnSmall && radius < MinRadius;
+            if (!(radius >= MinRadius && radius <= MaxRadius) && !small) { stats.BadRadius++; continue; }
             if (rms > Math.Max(0.4, 0.06 * radius)) { stats.NotRound++; continue; }
             if (!Closed(group, centre, radius)) { stats.NotClosed++; continue; }
+            // a loop drawn small: the ring laid at a mini-roundabout's size about the same centre, its arms' ends moved out onto it
+            double drawn = radius;
+            if (small) radius = (MiniOuter + MiniCentre) * 0.5;
+
+            // an enlarged ring: each of its nodes where its arm lands on it, running on along its course (Course)
+            var landed = new List<(Vec2 Node, double Angle)>();
+            if (small)
+            {
+                var ringEnds = group.SelectMany(l => new[] { l.Shifted[0], l.Shifted[^1] }).ToList();
+                foreach (var l in lines)
+                {
+                    if (group.Contains(l) || l.Shifted.Length < 2) continue;
+                    foreach (bool start in (ReadOnlySpan<bool>)[true, false])
+                    {
+                        var end = start ? l.Shifted[0] : l.Shifted[^1];
+                        if (Math.Abs(end.DistanceTo(centre) - drawn) > 2.5) continue;
+                        var near = ringEnds.Where(p => p.DistanceTo(end) <= 2.5).OrderBy(p => p.DistanceTo(end)).FirstOrDefault();
+                        if (near == default || Course(Inward(l.Shifted, start), centre, radius) is not { } c) continue;
+                        landed.Add((near, Math.Atan2(c.At.Y - centre.Y, c.At.X - centre.X)));
+                    }
+                }
+            }
 
             // one angle per node, so the lines meeting there still meet
             var nodes = new List<(Vec2 At, double Angle)>();
             double NodeAngle(Vec2 p)
             {
                 foreach (var (at, a) in nodes) if (at.DistanceTo(p) <= JoinM) return a;
-                double angle = Math.Atan2(p.Y - centre.Y, p.X - centre.X);
+                var mine = landed.Where(x => x.Node.DistanceTo(p) <= JoinM).Select(x => x.Angle).ToList();
+                double angle = mine.Count > 0 ? Math.Atan2(mine.Sum(Math.Sin), mine.Sum(Math.Cos)) : Math.Atan2(p.Y - centre.Y, p.X - centre.X);
                 nodes.Add((p, angle));
                 return angle;
             }
@@ -133,24 +167,72 @@ public static class RoundaboutShaper
                 foreach (bool start in (ReadOnlySpan<bool>)[true, false])
                 {
                     var end = start ? l.Shifted[0] : l.Shifted[^1];
-                    if (Math.Abs(end.DistanceTo(centre) - radius) > 2.5) continue;
+                    if (Math.Abs(end.DistanceTo(centre) - drawn) > 2.5) continue;
                     var node = nodes.Where(n => n.At.DistanceTo(end) <= 2.5).OrderBy(n => n.At.DistanceTo(end)).FirstOrDefault();
                     if (node.At == default) continue;
-                    var moved = l.Shifted.ToArray();
-                    moved[start ? 0 : moved.Length - 1] = new Vec2(centre.X + radius * Math.Cos(node.Angle), centre.Y + radius * Math.Sin(node.Angle));
-                    l.Shifted = moved;
+                    var moved = Inward(l.Shifted, start);
+                    // (an enlarged ring: the arm on its course to where it lands, the ring's node moved there; else onto the ring at
+                    // its node's angle)
+                    if (small && Course(moved, centre, radius) is { } c)
+                    {
+                        moved.RemoveRange(0, c.Keep);
+                        moved.Insert(0, new Vec2(centre.X + radius * Math.Cos(node.Angle), centre.Y + radius * Math.Sin(node.Angle)));
+                    }
+                    else moved[0] = new Vec2(centre.X + radius * Math.Cos(node.Angle), centre.Y + radius * Math.Sin(node.Angle));
+                    if (!start) moved.Reverse();
+                    l.Shifted = moved.ToArray();
                     stats.ArmEnds++;
                 }
             }
 
-            float width = group.Max(l => l.Width > 0 ? l.Width : l.Segment.Width);
+            float width = small ? (float)(MiniOuter - MiniCentre) : group.Max(l => l.Width > 0 ? l.Width : l.Segment.Width);
             var ring = new Ring(centre, radius, width, heights);
             rings.Add(ring);
             stats.Rounded++;
             stats.SumRadius += radius;
             if (ring.Mini) stats.Mini++;
+            if (small) stats.Enlarged++;
         }
         return rings;
+    }
+
+    /// <summary>A line's points from its end at the ring outward (its start, or its end reversed).</summary>
+    private static List<Vec2> Inward(Vec2[] line, bool start)
+    {
+        var list = line.ToList();
+        if (!start) list.Reverse();
+        return list;
+    }
+
+    /// <summary>
+    /// Where an arm (its points from the ring outward) lands on an enlarged ring running on straight along its own course from
+    /// <see cref="ArmCourse"/> outside it (the bend TLM drew toward the small loop's node dropped), and how many of its points go.
+    /// </summary>
+    private static (Vec2 At, int Keep)? Course(List<Vec2> arm, Vec2 centre, double radius)
+    {
+        int k = arm.FindIndex(p => p.DistanceTo(centre) >= radius + ArmCourse);
+        if (k >= 0 && k + 1 < arm.Count)
+        {
+            var p = arm[k];
+            var d = (p - arm[k + 1]).Normalized();
+            if (Across(p, p + d * (2 * (radius + ArmCourse) + p.DistanceTo(centre)), centre, radius) is { } x) return (x, k);
+        }
+        // (an arm too short to have a course that far out: cut where its line first crosses the ring, coming in from its far end)
+        for (int j = arm.Count - 1; j > 0; j--)
+            if (arm[j].DistanceTo(centre) >= radius && arm[j - 1].DistanceTo(centre) < radius && Across(arm[j], arm[j - 1], centre, radius) is { } y)
+                return (y, j);
+        return null;
+    }
+
+    /// <summary>Where the segment from <paramref name="outside"/> to <paramref name="inside"/> crosses the circle, if it does.</summary>
+    private static Vec2? Across(Vec2 outside, Vec2 inside, Vec2 centre, double radius)
+    {
+        var d = inside - outside;
+        var f = outside - centre;
+        double a = d.Dot(d), b = 2 * f.Dot(d), c = f.Dot(f) - radius * radius, disc = b * b - 4 * a * c;
+        if (a < 1e-12 || disc < 0) return null;
+        double t = (-b - Math.Sqrt(disc)) / (2 * a);
+        return t is >= 0 and <= 1 ? outside + d * t : null;
     }
 
     /// <summary>

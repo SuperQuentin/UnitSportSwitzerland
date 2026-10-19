@@ -312,6 +312,16 @@ public static class RoundaboutCore
                     core.Connectors.Add(c);
                 }
         }
+        // the kerbs pushed out where a lane passes beyond them by a few decimetres (as CorePlanner's), the checks again
+        if (core.ConnectorsOutside > 0 && CorePlanner.Pave(core, core.Mouths.Count))
+        {
+            core.Area = Math.Abs(CorePlanner.SignedArea(core.Outline));
+            core.Simple = CorePlanner.Simple(core.Outline);
+            core.Triangles.Clear();
+            core.Triangles.AddRange(EarClip.Triangulate(core.Outline));
+            foreach (var c in core.Connectors) c.Outside = c.Left.Concat(c.Right).Select(p => CorePlanner.Outside(core.Outline, p)).DefaultIfEmpty(0).Max();
+            core.ConnectorsOutside = core.Connectors.Count(c => c.Outside > CorePlanner.OutsideTolerance);
+        }
         return core;
 
         // a lane's path: in along its arm (flared round the splitter island), onto the ring lane on a circular fillet tangent to

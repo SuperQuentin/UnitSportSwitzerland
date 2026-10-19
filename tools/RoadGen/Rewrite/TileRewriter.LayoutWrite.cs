@@ -90,7 +90,12 @@ public static partial class TileRewriter
             // two junctions under InternalLink apart stay two cores where both fit on the link between (the user, Oct 15), held at
             // half of it where they wanted more (Oct 17); a group where that fails a check was merged (TileRewriter.Merge), or
             // could not be: "cores overlap"
-            else if (jp.CoresOverlap && jp.CoreFails) no = "cores overlap";
+            else if (jp.CoresOverlap && jp.CoreFails)
+            {
+                no = "cores overlap";
+                if (Environment.GetEnvironmentVariable("OVERLAPDBG") is not null && !jp.Beyond)
+                    Console.WriteLine(FormattableString.Invariant($"[overlap] {jp.Centre.X:F0},{jp.Centre.Y:F0} merged {jp.Merged is not null} local {jp.Local} arms {jp.Arms.Count} kerbs {core.KerbsNotTangent} outside {core.ConnectorsOutside} simple {core.Simple}"));
+            }
             else if (!core.Simple || core.KerbsNotTangent > 0 || core.ConnectorsOutside > 0)
                 no = jp.Arms.Any(a => a.Internal) ? "a check failed next to a junction under 30 m" : "a check failed";
             // (a path meeting a roundabout's node is its crossing's: no arm of it, #854)

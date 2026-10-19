@@ -267,18 +267,18 @@ public static class CorePlanner
     /// <summary>
     /// The kerbs pushed out wherever a connector's edge passes beyond them by up to <see cref="MostPave"/> (#854: cores failing
     /// their check by a few decimetres, a turn's mitred edge past its arc), the mouths kept; each corner's kerb taken again from
-    /// the outline (the sidewalk corners follow it).
+    /// the outline (the sidewalk corners follow it). Whether it moved them.
     /// </summary>
-    private static void Pave(JunctionCore core, int n)
+    internal static bool Pave(JunctionCore core, int n)
     {
         var paved = core.Connectors.SelectMany(c => c.Left.Concat(c.Right)).ToList();
-        if (!paved.Any(p => Outside(core.Outline, p) is > OutsideTolerance and <= MostPave)) return;
+        if (!paved.Any(p => Outside(core.Outline, p) is > OutsideTolerance and <= MostPave)) return false;
         var ends = core.Mouths.SelectMany(m => new[] { m.Left, m.Right }).ToHashSet();
         var ring = core.Outline.ToList();
         MergedCore.Envelope(ring, paved, ends, MostPave);
         // (each mouth's two ends kept in order: the kerbs between them taken again)
         var at = core.Mouths.Select(m => (L: ring.IndexOf(m.Left), R: ring.IndexOf(m.Right))).ToList();
-        if (at.Any(x => x.L < 0 || x.R < 0) || !Simple(ring)) return;
+        if (at.Any(x => x.L < 0 || x.R < 0) || !Simple(ring)) return false;
         for (int k = 0; k < n; k++)
         {
             var kerb = core.Corners[k].Kerb;
@@ -288,6 +288,7 @@ public static class CorePlanner
         }
         core.Outline.Clear();
         core.Outline.AddRange(ring);
+        return true;
     }
 
     // ------------------------------------------------------------------ connectors: which lanes join

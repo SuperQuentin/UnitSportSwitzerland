@@ -64,7 +64,13 @@ public static partial class TileRewriter
                 gone.UnionWith(nodes);
                 if (counted) { stats.Merged++; stats.Members += nodes.Count; }
             }
-            else if (counted) stats.Why[no!] = stats.Why.GetValueOrDefault(no!) + 1;
+            else
+            {
+                if (counted) stats.Why[no!] = stats.Why.GetValueOrDefault(no!) + 1;
+                if (counted && Environment.GetEnvironmentVariable("OVERLAPDBG") is not null)
+                    foreach (var p in group.Where(p => !p.Beyond))
+                        Console.WriteLine(FormattableString.Invariant($"[overlap-group] {p.Centre.X:F0},{p.Centre.Y:F0} {group.Count} members: {no}"));
+            }
         }
         if (merged.Plans.Count == 0) return plans;
         merged.Plans.InsertRange(0, priority.Plans.Where(p => !gone.Contains(p.Junction.NodeId)));
