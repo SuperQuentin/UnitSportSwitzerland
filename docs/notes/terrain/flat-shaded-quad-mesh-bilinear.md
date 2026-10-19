@@ -2,8 +2,8 @@
 
 - **A flat-shaded quad mesh is NOT a bilinear surface, and a height query must match whichever one
   is actually on screen.** `ChunkGrid.SampleHeight` blends all four corners of a quad smoothly;
-  `TerrainMeshBuilder.BuildSurface` splits every quad into two FLAT triangles along a fixed
-  diagonal. At full resolution (2 m spacing) the two agree to a few centimetres and nobody
+  `TerrainMeshBuilder.BuildSurface` splits every quad into two FLAT triangles along its
+  shorter diagonal (`ChunkGrid.SplitsNwSe`, #883; a fixed one before). At full resolution (2 m spacing) the two agree to a few centimetres and nobody
   notices. At the coarse LOD strides most of a streamed world renders at beyond ring 4 (20-40 m
   spacing), they diverge by up to **1.4 m on real terrain here** (measured: stride-10 tile,
   400 random samples, max 1.44 m, mean 5 cm) - enough that a GPX ribbon's 0.28 m tread lift was
