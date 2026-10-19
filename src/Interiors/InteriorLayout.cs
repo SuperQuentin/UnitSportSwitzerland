@@ -358,7 +358,7 @@ public sealed class EntrancePlan
 {
     /// <summary>Key of the door this is (<see cref="DoorKey"/> text, what <see cref="DoorIndex"/> hands out).</summary>
     public string Door { get; set; } = "";
-    /// <summary>Middle of the doorway on the inside wall line, interior-local, ground floor.</summary>
+    /// <summary>Middle of the doorway on the inside wall line, interior-local, on its floor (<see cref="Level"/>).</summary>
     public float X { get; set; }
     public float Z { get; set; }
     /// <summary>Unit direction into the room, interior-local.</summary>
@@ -380,6 +380,16 @@ public sealed class EntrancePlan
 
     /// <summary>Whether a ground vehicle is driven through it (<see cref="DoorSpot.Vehicle"/>).</summary>
     public bool Vehicle { get; set; }
+
+    /// <summary>
+    /// Storeys above the ground floor its doorway is on (#827): a raised door, its sill at that
+    /// floor's height on the facade, as a site office's upper containers have off their walkway.
+    /// 0 is the ground floor in every plan, cellar or not (the plan floor is
+    /// <see cref="InteriorLayout.Below"/> + this). Not written when 0, so a ground entrance's JSON is
+    /// byte for byte what it was, and a plan stored before reads as 0.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public int Level { get; set; }
 }
 
 /// <summary>
@@ -456,8 +466,28 @@ public sealed class InteriorLayout
     /// <summary>Height of a floor's surface in the interior frame: the ground floor is 0, a cellar below it.</summary>
     public float FloorY(int floor) => (floor - Below) * StoreyHeight;
 
-    /// <summary>The floor the entrances are on.</summary>
+    /// <summary>The ground floor: the one the entrances are on, but for a raised one (<see cref="EntrancePlan.Level"/>).</summary>
     public FloorPlan GroundFloor => Floors[Math.Min(Below, Floors.Count - 1)];
+
+    /// <summary>The plan floor an entrance's doorway is on (#827): the ground floor plus its <see cref="EntrancePlan.Level"/>.</summary>
+    public int EntranceFloor(EntrancePlan e) => Below + e.Level;
+
+    /// <summary>
+    /// The height of an entrance's sill in the interior frame (#827): its floor's, 0 on the ground
+    /// floor (exactly the 0 every ground doorway has always stood at).
+    /// </summary>
+    public float EntranceY(EntrancePlan e) => e.Level == 0 ? 0f : FloorY(EntranceFloor(e));
+
+    /// <summary>The rooms of an entrance's floor, or none when the plan has no such floor.</summary>
+    public IReadOnlyList<RoomPlan> EntranceRooms(EntrancePlan e)
+    {
+        int f = EntranceFloor(e);
+        if (e.Level == 0) return Floors.Count == 0 ? Array.Empty<RoomPlan>() : GroundFloor.Rooms;
+        return f >= 0 && f < Floors.Count ? Floors[f].Rooms : Array.Empty<RoomPlan>();
+    }
+
+    /// <summary>Whether any entrance is raised above the ground floor (#827).</summary>
+    public bool HasRaisedEntrance() => Entrances.Any(e => e.Level != 0);
 
     public bool IsBank => Type == BuildingType.Bank;
 
@@ -488,8 +518,9 @@ public sealed class InteriorLayout
     public EntrancePlan EntranceFor(string door) => EntranceOf(door) ?? AllEntrances()[0];
 
     /// <summary>
-    /// Width and head height of the doorway an entrance arrives at: the ground-floor entry cut
-    /// nearest to it. The door leaf and the door portal are sized from it.
+    /// Width and head height of the doorway an entrance arrives at: the entry cut nearest to it on
+    /// its floor (the ground floor but for a raised door, #827). The door leaf and the door portal
+    /// are sized from it.
     /// </summary>
     public (float Width, float Top) OpeningOf(EntrancePlan e)
     {
@@ -497,7 +528,7 @@ public sealed class InteriorLayout
         (float Width, float Top) best = (e.Width, 2.1f);
         float bestD = float.MaxValue;
         if (Floors.Count == 0) return best;
-        foreach (var r in GroundFloor.Rooms)
+        foreach (var r in EntranceRooms(e))
             foreach (var o in r.Openings)
             {
                 if (o.Kind != OpeningKind.Entry) continue;

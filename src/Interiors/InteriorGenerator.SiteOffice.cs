@@ -176,7 +176,7 @@ public static partial class InteriorGenerator
             X = line.X, Z = line.Y, InX = -fx, InZ = -fz, Width = spot.Width,
             DoorX = spot.Position.X, DoorY = spot.Position.Y, DoorZ = spot.Position.Z,
             DoorOutX = spot.Outward.X, DoorOutZ = spot.Outward.Z,
-            DoorWidth = spot.Width, DoorHeight = top, Hang = spot.Hang, Vehicle = false,
+            DoorWidth = spot.Width, DoorHeight = top, Hang = spot.Hang, Vehicle = false, Level = spot.Level,
         };
     }
 
