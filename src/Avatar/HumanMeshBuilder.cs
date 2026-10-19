@@ -166,7 +166,7 @@ public static partial class HumanMeshBuilder
         Vector3 ShoulderR, Vector3 ElbowR, Vector3 WristR,
         Vector3 HipL, Vector3 KneeL, Vector3 AnkleL, Vector3 ToeL,
         Vector3 HipR, Vector3 KneeR, Vector3 AnkleR, Vector3 ToeR,
-        float TorsoLean, Vector3 HandDir = default);
+        float TorsoLean, Vector3 HandDir = default, Vector3 PointDirR = default);
 
     /// <param name="into">A mesh to rebuild in place (a figure redrawn while it moves keeps one), or null for a new one.</param>
     public static ArrayMesh Build(HumanPalette palette, HumanPose pose = HumanPose.Standing,
@@ -203,14 +203,38 @@ public static partial class HumanMeshBuilder
     public static ArrayMesh BuildStride(HumanPalette palette, float speed, float phase,
         bool helmet = false, Headwear hat = Headwear.None,
         ItemArmPose arm = ItemArmPose.None, float armBlend = 0f, DanceParams? dance = null, ArrayMesh? into = null,
-        VrArms? vr = null)
+        VrArms? vr = null, Pointing? point = null)
     {
         var scratch = ScratchFor(into);
         // a skirt with no measured wind still feels the stride's own (#251)
         if (palette.Wind == Vector3.Zero && speed > 0.05f && Flutters(palette.Outfit))
             palette = palette with { Wind = new Vector3(0, 0, -speed) };
-        AppendRig(scratch, palette, ApplyVr(ApplyArms(GaitWithDance(speed, phase, dance), arm, armBlend), vr), includeLegs: true, helmet, hat);
+        AppendRig(scratch, palette, ApplyPoint(ApplyVr(ApplyArms(GaitWithDance(speed, phase, dance), arm, armBlend), vr), point),
+            includeLegs: true, helmet, hat);
         return into == null ? scratch.Build() : scratch.BuildInto(into);
+    }
+
+    /// <summary>From the wrist to the tip of a straight index finger, at the hand's own size.</summary>
+    private const float FingerReach = 0.14f;
+
+    /// <summary>A fingertip and the way the finger goes to it, in the built mesh's frame (facing -Z).</summary>
+    public readonly record struct Pointing(Vector3 Tip, Vector3 Dir);
+
+    /// <summary>
+    /// The free hand (the figure's left) points its index finger at the tip, along the given way, the
+    /// other fingers curled (#889: a finger on the phone's screen). The wrist is put back from the tip
+    /// along that way and the hand bends at it, so the finger comes in from in front of the screen
+    /// rather than along the forearm from the shoulder, behind it.
+    /// </summary>
+    private static Rig ApplyPoint(Rig rig, Pointing? point)
+    {
+        if (point is not { } p || p.Dir.LengthSquared() < 1e-6f) return rig;
+        var tip = Author(p.Tip);
+        var along = Author(p.Dir).Normalized();
+        float reach = (UpperArmLength + ForearmLength) * 0.98f;
+        var wrist = Reach(rig.ShoulderR, tip - along * FingerReach, reach);
+        var elbow = Limb.Solve(rig.ShoulderR, wrist, UpperArmLength, ForearmLength, new Vector3(0.6f, -0.6f, -0.2f));
+        return rig with { ElbowR = elbow, WristR = wrist, PointDirR = along };
     }
 
     /// <summary>

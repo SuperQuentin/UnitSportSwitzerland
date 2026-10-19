@@ -4,6 +4,8 @@ using UnitSport.Core;
 using UnitSport.Net;
 using UnitSport.Terrain.Format;
 using UnitSport.Ui;
+using UnitSport.BattleRoyale;
+using UnitSport.World;
 
 namespace UnitSport.Phone;
 
@@ -16,7 +18,7 @@ namespace UnitSport.Phone;
 /// </summary>
 public partial class PhoneScreens : Node
 {
-    public enum Page { Home, Map, Contacts, Camera, Travel }
+    public enum Page { Home, Map, Contacts, Camera, Activities, Travel }
 
     /// <summary>One quick action on the cover: its label and, when it is a call, who and what.</summary>
     public readonly record struct Quick(string Label, string? Detail = null, Color? Tint = null);
@@ -45,7 +47,7 @@ public partial class PhoneScreens : Node
     public event Action<string>? CommandPicked;
     /// <summary>An incoming call answered (true) or declined (false) in Contacts.</summary>
     public event Action<int, bool>? CallAnswered;
-    /// <summary>The Activities app: the existing screen opens over the phone.</summary>
+    /// <summary>The Menu app: the full Activities screen opens over the phone.</summary>
     public event Action? ActivitiesPicked;
     /// <summary>The camera app's shutter.</summary>
     public event Action? ShutterPressed;
@@ -61,7 +63,12 @@ public partial class PhoneScreens : Node
     // inner
     private Control _innerRoot = null!;
     private Label _statusClock = null!;
-    private Control _home = null!, _map = null!, _contacts = null!, _camera = null!, _travel = null!;
+    private Control _home = null!, _map = null!, _contacts = null!, _camera = null!, _activities = null!, _travel = null!;
+    private VBoxContainer _actBr = null!, _actRaces = null!;
+    private Label _actBrTitle = null!, _actBrSub = null!;
+    private string _actShown = "";
+    private double _actRefreshAt;
+    private RaceManager? _races;
     private Label _homeClock = null!, _homeDate = null!, _travelTitle = null!, _travelDots = null!, _zoomLabel = null!;
     private LineEdit _query = null!;
     private VBoxContainer _results = null!, _people = null!, _calls = null!;
@@ -222,6 +229,7 @@ public partial class PhoneScreens : Node
         _home = Page_(BuildHome());
         _map = Page_(BuildMap());
         _contacts = Page_(BuildContacts());
+        _activities = Page_(BuildActivities());
         _travel = Page_(BuildTravel());
     }
 
@@ -243,12 +251,13 @@ public partial class PhoneScreens : Node
         _homeDate.HorizontalAlignment = HorizontalAlignment.Center;
         col.AddChild(_homeDate);
         col.AddChild(UiKit.Spacer(expand: true));
-        var row = UiKit.HBox(30);
+        var row = UiKit.HBox(22);
         row.Alignment = BoxContainer.AlignmentMode.Center;
         row.AddChild(Tile("Map", "Find a place, go there", new Color(0.18f, 0.55f, 0.36f), () => ShowPage(Page.Map)));
         row.AddChild(Tile("Contacts", "Call people: go to them, bring them, team up", new Color(0.20f, 0.42f, 0.80f), () => ShowPage(Page.Contacts)));
         row.AddChild(Tile("Camera", "Take photos into your album", new Color(0.22f, 0.24f, 0.28f), () => ShowPage(Page.Camera)));
-        row.AddChild(Tile("Activities", "Battle Royale, races", new Color(0.82f, 0.38f, 0.16f), () => ActivitiesPicked?.Invoke()));
+        row.AddChild(Tile("Activities", "Join a Battle Royale or a race", new Color(0.82f, 0.38f, 0.16f), () => ShowPage(Page.Activities)));
+        row.AddChild(Tile("Menu", "The full Activities menu: set up a race, a Battle Royale", new Color(0.50f, 0.30f, 0.62f), () => ActivitiesPicked?.Invoke()));
         col.AddChild(row);
         col.AddChild(UiKit.Spacer(expand: true));
         col.AddChild(Hint("open", "put the phone away"));
@@ -257,14 +266,14 @@ public partial class PhoneScreens : Node
 
     private Button Tile(string name, string tip, Color colour, Action pressed)
     {
-        var b = new Button { Text = name, CustomMinimumSize = new Vector2(200, 200), TooltipText = tip, FocusMode = Control.FocusModeEnum.All };
-        b.AddThemeFontSizeOverride("font_size", 30);
+        var b = new Button { Text = name, CustomMinimumSize = new Vector2(176, 176), TooltipText = tip, FocusMode = Control.FocusModeEnum.All };
+        b.AddThemeFontSizeOverride("font_size", 27);
         foreach (var c in new[] { "font_color", "font_hover_color", "font_focus_color", "font_pressed_color" }) b.AddThemeColorOverride(c, Ink);
         foreach (var (state, c, border) in new[] { ("normal", colour, 0), ("hover", colour.Lightened(0.15f), 0),
                      ("pressed", colour.Darkened(0.2f), 0), ("focus", colour.Lightened(0.1f), 6) })
         {
             var box = new StyleBoxFlat { BgColor = c, CornerDetail = 10, BorderColor = Ink };
-            box.SetCornerRadiusAll(48);
+            box.SetCornerRadiusAll(42);
             box.SetBorderWidthAll(border);
             if (state == "focus") box.DrawCenter = false;
             b.AddThemeStyleboxOverride(state, box);
@@ -382,6 +391,119 @@ public partial class PhoneScreens : Node
         }
     }
 
+    /// <summary>The Activities app: the Battle Royale lobby and the races on the server, joined from the phone.</summary>
+    private Control BuildActivities()
+    {
+        var col = UiKit.VBox(10);
+        col.AddChild(Title("Activities"));
+        var scroll = new ScrollContainer { SizeFlagsVertical = Control.SizeFlags.ExpandFill, HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
+        var list = UiKit.VBox(12);
+        list.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        list.AddChild(Big("Battle Royale", 26, InkDim));
+        _actBrTitle = Big("", 30);
+        list.AddChild(_actBrTitle);
+        _actBrSub = Big("", 22, InkDim);
+        _actBrSub.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        list.AddChild(_actBrSub);
+        _actBr = UiKit.VBox(6);
+        list.AddChild(_actBr);
+        list.AddChild(UiKit.Spacer(6));
+        list.AddChild(Big("Races", 26, InkDim));
+        _actRaces = UiKit.VBox(6);
+        list.AddChild(_actRaces);
+        scroll.AddChild(list);
+        col.AddChild(scroll);
+        col.AddChild(Hint("join", "back"));
+        return col;
+    }
+
+    /// <summary>The Activities app's lists, rebuilt only when what they show changes; the race list asked for once a second.</summary>
+    private void RefreshActivities(bool force)
+    {
+        if (!Permissions.Online)
+        {
+            if (_actShown == "offline" && !force) return;
+            _actShown = "offline";
+            SetText(_actBrTitle, "Not in this game");
+            SetText(_actBrSub, "Battle Royale and races are played online: join a server to see them here.");
+            Clear(_actBr); Clear(_actRaces);
+            return;
+        }
+        _races ??= GameShell.Instance?.World?.GetNodeOrNull<RaceManager>(RaceManager.NodeName);
+        if (RealClock.Now >= _actRefreshAt)
+        {
+            _actRefreshAt = RealClock.Now + 1.0;
+            _races?.RequestRows();
+        }
+        var br = BrManager.Instance;
+        var s = br?.State ?? new BrState();
+        var mine = s.Find(br?.Me ?? 0);
+        var rows = _races?.Rows ?? [];
+        string shape = $"{s.Phase}|{s.Entrants.Count}|{mine != null}|{mine?.Alive}|{s.AreaName}|"
+            + string.Join(",", rows.Select(r => $"{r.Id}:{r.Entrants}:{r.Running}:{r.Mine}:{r.Joinable}"));
+        if (shape == _actShown && !force) return;
+        _actShown = shape;
+
+        (string title, string sub) = s.Phase switch
+        {
+            BrPhase.Lobby => ($"Lobby open · {s.AreaName}", $"{s.Entrants.Count} joined. It starts once {BrManager.MinPlayers} are in."),
+            BrPhase.Countdown => ($"Starting · {s.AreaName}", $"{s.Entrants.Count} in the match."),
+            BrPhase.Playing => ($"Match on · {s.AreaName}", $"{s.AliveCount} of {s.Entrants.Count} alive" + (mine != null ? mine.Alive ? ", you among them." : $", you placed #{mine.Place}." : ".")),
+            _ => ("No match open", "An admin opens a lobby from the Menu app; you are invited when it opens."),
+        };
+        SetText(_actBrTitle, title);
+        SetText(_actBrSub, sub);
+        Clear(_actBr);
+        if (s.Phase is BrPhase.Lobby or BrPhase.Countdown)
+            _actBr.AddChild(Small(mine == null ? "Join the match" : "Leave the lobby", mine == null ? new Color(0.82f, 0.38f, 0.16f) : new Color(0.45f, 0.45f, 0.5f),
+                () => CommandPicked?.Invoke(mine == null ? "/br join" : "/br leave")));
+
+        Clear(_actRaces);
+        foreach (var r in rows)
+        {
+            var row = UiKit.HBox(10);
+            string state = r.Running ? "racing" : $"{Mathf.CeilToInt(r.SecondsLeft)} s to join";
+            var what = Big($"{r.Host}'s {(r.Km > 0 ? $"{r.Km:0.0} km " : "")}{r.What} · {r.Entrants} in · {state}", 24);
+            what.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+            what.ClipText = true;
+            row.AddChild(what);
+            int id = r.Id;
+            if (r.Mine) row.AddChild(Small("Leave", new Color(0.45f, 0.45f, 0.5f), () => CommandPicked?.Invoke("/race leave")));
+            else if (r.Joinable) row.AddChild(Small("Join", new Color(0.18f, 0.55f, 0.36f), () => CommandPicked?.Invoke($"/race join {id}")));
+            _actRaces.AddChild(row);
+        }
+        if (rows.Count == 0) _actRaces.AddChild(Big("No race right now.", 24, InkDim));
+        _actRaces.AddChild(Small("Start a 2 km race here", new Color(0.20f, 0.42f, 0.80f), () => CommandPicked?.Invoke("/race start 2000 open")));
+        if (Inner.GuiGetFocusOwner() == null || !_activities.IsAncestorOf(Inner.GuiGetFocusOwner())) Callable.From(() => FocusFirst(_activities)).CallDeferred();
+    }
+
+    private static void Clear(Node n)
+    {
+        foreach (var c in n.GetChildren()) { n.RemoveChild(c); c.QueueFree(); }
+    }
+
+    /// <summary>The list a swipe at <paramref name="at"/> (the inner screen's pixels) scrolls, or null.</summary>
+    public ScrollContainer? ScrollAt(Vector2 at)
+    {
+        foreach (var page in new[] { _map, _contacts, _activities })
+        {
+            if (!page.Visible) continue;
+            var found = FindScroll(page, at);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    private static ScrollContainer? FindScroll(Node under, Vector2 at)
+    {
+        foreach (var child in under.GetChildren())
+        {
+            if (child is ScrollContainer { Visible: true } sc && sc.GetGlobalRect().HasPoint(at)) return sc;
+            if (FindScroll(child, at) is { } deeper) return deeper;
+        }
+        return null;
+    }
+
     /// <summary>The camera app: the back lens edge to edge, the shutter on the right, zoom above it, the last shot below.</summary>
     private Control BuildCamera()
     {
@@ -475,6 +597,7 @@ public partial class PhoneScreens : Node
         _map.Visible = page == Page.Map;
         _contacts.Visible = page == Page.Contacts;
         _camera.Visible = page == Page.Camera;
+        _activities.Visible = page == Page.Activities;
         _travel.Visible = page == Page.Travel;
         switch (page)
         {
@@ -494,6 +617,11 @@ public partial class PhoneScreens : Node
             case Page.Camera:
                 Inner.GuiReleaseFocus();
                 break;
+            case Page.Activities:
+                _actShown = "";
+                _actRefreshAt = 0;
+                RefreshActivities(force: true);
+                break;
         }
         PageShown?.Invoke(page);
     }
@@ -510,6 +638,7 @@ public partial class PhoneScreens : Node
             _coverDate.Text = date;
             _homeDate.Text = date;
         }
+        if (Shown == Page.Activities) RefreshActivities(force: false);
         if (Shown == Page.Travel) SetText(_travelDots, ((int)(RealClock.Now * 3) % 3) switch { 0 => "●  ○  ○", 1 => "○  ●  ○", _ => "○  ○  ●" });
         if (_flash.Color.A > 0f) _flash.Color = new Color(1, 1, 1, Mathf.MoveToward(_flash.Color.A, 0f, dt / 0.35f));
     }

@@ -2228,7 +2228,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // VR hands (#439) keyed to 2 cm, so a hand held still does not rebuild the figure
         var vr = PoseKind == PoseStride && dance == null ? VrHands : null;
         if (vr is { } v) vr = new Avatar.HumanMeshBuilder.VrArms(SnapHand(v.Right), SnapHand(v.Left));
-        var key = new FootPoseKey(_walker, PoseKind, Mathf.Round(Anim.X * 100f), _stridePhase, arm, blend, dance, Hat, palette, smooth, vr);
+        // a finger on the phone's screen (#889): the owner's own, keyed to 4 mm
+        Avatar.HumanMeshBuilder.Pointing? point = PoseKind == PoseStride && dance == null && PhonePointTip is { } tip && PhonePointDir is { } way
+            ? new((_walker.ToLocal(tip) / 0.004f).Round() * 0.004f,
+                (((_walker.GlobalBasis.Inverse() * way).Normalized()) / 0.05f).Round() * 0.05f)
+            : null;
+        var key = new FootPoseKey(_walker, PoseKind, Mathf.Round(Anim.X * 100f), _stridePhase, arm, blend, dance, Hat, palette, smooth, vr, point);
         // the hand is placed from fresh mounts every time the pose changes, even while a throttled
         // mesh waits: what carries or aims an item stays exact (cheap: joint math, no mesh)
         if (key != _mountsKey)
@@ -2257,7 +2262,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                     : _airPose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Running, hat: Hat),
                 PoseHang or PoseClimb => Avatar.HumanMeshBuilder.BuildPosed(palette, CarriedFigure(), arm, blend, Hat, _poseMesh ??= new ArrayMesh()),
                 _ => Avatar.HumanMeshBuilder.BuildStride(palette, Anim.X, _stridePhase, hat: Hat, arm: arm, armBlend: blend,
-                    dance: dance, into: _poseMesh ??= new ArrayMesh(), vr: vr),
+                    dance: dance, into: _poseMesh ??= new ArrayMesh(), vr: vr, point: point),
             };
         }
         var mounts = _poseMounts;
@@ -2279,7 +2284,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>What the figure was last built from: the same key, the same mesh (#221).</summary>
     private readonly record struct FootPoseKey(MeshInstance3D Walker, int Kind, float Speed, float Phase,
         Avatar.ItemArmPose Arm, float Blend, Avatar.DanceParams? Dance, Avatar.Headwear Hat, Avatar.HumanPalette Palette,
-        bool Smooth, Avatar.HumanMeshBuilder.VrArms? Vr = null);
+        bool Smooth, Avatar.HumanMeshBuilder.VrArms? Vr = null, Avatar.HumanMeshBuilder.Pointing? Point = null);
 
     /// <summary>A VR hand to the 2 cm the figure is keyed on (#439).</summary>
     private static Vector3 SnapHand(Vector3 p) => (p / 0.02f).Round() * 0.02f;

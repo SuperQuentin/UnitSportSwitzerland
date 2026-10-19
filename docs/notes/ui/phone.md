@@ -78,3 +78,33 @@
 - **Gotcha**: the main viewport's visible rect is in the stretched canvas's units (1280 x 696 here), not
   pixels: size render targets from `GetWindow().Size`. The inner screen is laid out on an 800-unit-high
   canvas scaled to its pixels.
+
+## Hands on the phone (the second playtest pass)
+
+- **The body stands while the phone is out**: `UiFocus` from taking it out to putting it away, the
+  cursor shows. Every key is the phone's: folded, W / Up open, A D / Left Right pick, Enter / Space / E
+  run, S / Down / Esc put away; open, WASD and the arrows are `ui_*` into the screen (typed as letters
+  while a `LineEdit` has the keys), Enter / Space / E press, Esc goes back. The camera app turns the
+  view itself from the mouse (`LookYaw` / `LookPitch`, the game's 0.0022 rate over the zoom): the body's
+  own look is off under `UiFocus`.
+- **The mouse swipes**: a press and release in place is a click on the screen under it; a drag past 14
+  px is a swipe: up and down scroll the list under its start (`PhoneScreens.ScrollAt`), a swipe right
+  goes back, on the cover left and right pick. `PhoneScreenPoint(window, out cover)` hits the cover
+  folded and the inner screen open, unclamped ("a bit around" the screen).
+- **The finger**: the free hand (the figure's left, rig R) points its index at the cursor's point,
+  1.6 cm off the glass, down to 2 mm on a press (`FootPlayer.PhonePointTip` / `PhonePointDir`, owner only,
+  never sent). `HumanMeshBuilder.ApplyPoint` puts the wrist back from the tip along the way the finger
+  comes in (into the screen, up it and to the right: from in front, not along the forearm from the
+  shoulder, which is behind the screen) and the hand bends there (`Rig.PointDirR`); `Hand(point)` draws
+  the index straight down the hand's middle to exactly that tip, the others curled. WASD plays a 0.24 s
+  swipe of the finger across the screen. Keyed to 4 mm in `FootPoseKey.Point`.
+- **Views**: folded, high over the shoulder; open on an app, the same a third closer onto the open
+  phone, the hand working it in view; **only the map** (and Travelling) goes square on: the lens closes
+  in first (`PhoneCover`), then the world fades to black behind it over 0.4 s (`PhoneBackdrop` set only
+  once the cover is 1); a held teleport waits for the black. The **camera app** puts the lens behind the
+  raised phone at the eyes (`PhoneCameraApp`, FOV 52°), the phone held upright, level with the horizon
+  (its facing flattened, then the view's pitch), the world round it.
+- **Activities app** (`Page.Activities`): the Battle Royale lobby with Join / Leave and the races on the
+  server with Join / Leave (`RaceManager.RequestRows` once a second, rebuilt on change), "Start a 2 km
+  race here"; the **Menu** app still opens the full Activities screen.
+

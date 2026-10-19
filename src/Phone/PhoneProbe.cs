@@ -62,7 +62,10 @@ public partial class PhoneProbe : Node
         Check(me.DrawnArmPose == Avatar.ItemArmPose.Phone, $"arms in the phone pose ({me.DrawnArmPose})");
         Check(me.PhoneLook >= 1f, $"the camera has come over the shoulder ({me.PhoneLook:F2})");
         Shot("phone_2_folded.png");
-        await Press("ui_right", 0.3);
+        // the body stands while the phone is out: D is the phone's (it picks the next quick action)
+        var stood = me.GlobalPosition;
+        await Key(Godot.Key.D, 0.4);
+        Check(me.GlobalPosition.DistanceTo(stood) < 0.05f, $"D picks a quick action, the body does not walk ({me.GlobalPosition.DistanceTo(stood):F2} m)");
         Shot("phone_3_quick.png");
         Save(phone.Screens.Cover, "phone_3_cover.png");
 
@@ -72,12 +75,45 @@ public partial class PhoneProbe : Node
         await Wait(1.0);
         Check(phone.IsCovering, "Up again opens it and the screen covers the view");
         Check(me.PhoneState == FootPlayer.PhoneOpenState, $"open on the wire (state {me.PhoneState})");
+        Check(me.PhoneCover == 0f, "home is seen in the hands, not square on");
+        // the cursor over the screen: the free hand's index finger comes to point at it
+        var mid = me.CameraOrNull is { } eye && me.PhoneModel is { } pm
+            ? eye.UnprojectPosition(pm.GlobalTransform * PhoneModel.InnerScreenCentre) : GetViewport().GetVisibleRect().Size / 2f;
+        // a parsed event is in the window's pixels: the stretched canvas's units scaled up
+        var atWindow = GetViewport().GetScreenTransform() * mid;
+        Input.ParseInputEvent(new InputEventMouseMotion { Position = atWindow, GlobalPosition = atWindow });
+        await Wait(0.4);
+        Check(me.PhonePointTip != null, $"the cursor on the screen: the index finger points at it (cursor at {phone.CursorUv?.ToString() ?? "none"}, mouse {mid})");
+        Log($"finger: tip {me.PhonePointTip}, built {me.DrawnPoint}, body {me.GlobalPosition}, phone {me.PhoneModel?.GlobalPosition}");
         Shot("phone_5_open.png");
+        await Key(Godot.Key.S, 0.4);
+        Shot("phone_5b_swipe.png");
+
+        // the Activities app, its own page on the phone
+        phone.Open(PhoneScreens.Page.Activities);
+        await Wait(0.6);
+        Check(phone.Screens.Shown == PhoneScreens.Page.Activities, "the Activities app opens on the phone");
+        Shot("phone_5c_activities.png");
+        await Key(Godot.Key.Escape, 0.4);
+
+        // the map: closer first, then the world fades to black behind the phone
+        phone.Open(PhoneScreens.Page.Map);
+        await Wait(0.3);
+        Check(me.PhoneBackdropShown < 0.5f, $"on the way in, the world still shows ({me.PhoneBackdropShown:F2})");
+        await Wait(1.2);
+        Check(me.PhoneCover >= 1f && me.PhoneBackdropShown >= 1f, $"the map square on, the world black behind ({me.PhoneCover:F2}, {me.PhoneBackdropShown:F2})");
+        Shot("phone_5d_map.png");
+        await Key(Godot.Key.Escape, 1.0);
 
         // the camera app: raised before the face, the lens out of its back; Enter shoots into the album
         phone.Open(PhoneScreens.Page.Camera);
         await Wait(1.0);
         Check(me.PhoneState == FootPlayer.PhoneCameraState, $"the camera app raises it (state {me.PhoneState}, arms {me.DrawnArmPose})");
+        if (me.PhoneModel is { } raised)
+        {
+            float tilt = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(raised.GlobalBasis.Z.Normalized().Y, -1f, 1f)));
+            Check(Mathf.Abs(tilt - Mathf.RadToDeg(me.LookPitch)) < 12f, $"raised level with the view, the horizon level ({tilt:F0}° against a {Mathf.RadToDeg(me.LookPitch):F0}° pitch)");
+        }
         Shot("phone_8_camera.png");
         await Key(Godot.Key.Enter, 1.5);
         Check(phone.LastPhoto != null && Items.PhotoStore.Has(phone.LastPhoto), $"Enter takes a photo into the album ({phone.LastPhoto})");
