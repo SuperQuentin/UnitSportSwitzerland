@@ -3,7 +3,8 @@
 # song. One game launch per run; the director stages each shot. The films: FILM=story (default,
 # docs/trailer/script.md, StoryScript.cs), FILM=showcase (docs/trailer/storyboard.md,
 # TrailerScript.cs), FILM=drognens (the music clip, docs/trailer/drognens.md, DrognensScript.cs) and
-# FILM=fondue ("The Stolen Fondue", docs/trailer/fondue.md, FondueScript.cs, #864).
+# FILM=fondue ("The Stolen Fondue", docs/trailer/fondue.md, FondueScript.cs, #864),
+# FILM=tourist ("The Alien Tourist", docs/trailer/tourist.md, TouristScript.cs, #865).
 #
 #   tools/trailer.sh preview [shots]   play in a window, each shot with its part of the song
 #   tools/trailer.sh stills  [shots]   first, middle and last frame of each shot as PNGs (at --fixed-fps 30, as render)
@@ -54,6 +55,7 @@ mkdir -p "$films" "$scratch"
 case $FILM in
   drognens) title="I Got a Stick Feat James Gavins" ;;
   fondue) title="Hep Cats" ;;
+  tourist) title="Mighty Like Us" ;;
   *) title="Voxel Revolution" ;;
 esac
 song=$TRAILERS/$(echo "$title" | tr 'A-Z ' 'a-z_').mp3
@@ -228,7 +230,7 @@ case $mode in
     cut_film "$films/v$version"
     ;;
   *)
-    echo "usage: [FILM=story|showcase|drognens|bubbles|ufo] tools/trailer.sh preview|stills|render [shots] | cut | lines" >&2
+    echo "usage: [FILM=story|showcase|drognens|fondue|tourist|bubbles|ufo] tools/trailer.sh preview|stills|render [shots] | cut | lines" >&2
     exit 2
     ;;
 esac

@@ -131,7 +131,8 @@ public partial class TrailerDirector : Node
     /// Which film: <c>--trailer-film story</c> (the default, "Meet You at the Top",
     /// <see cref="StoryScript"/>), <c>showcase</c> (the first cut, <see cref="TrailerScript"/>) or
     /// <c>drognens</c> (the music clip at the barracks, <see cref="DrognensScript"/>, #717),
-    /// <c>fondue</c> ("The Stolen Fondue", <see cref="FondueScript"/>, #864).
+    /// <c>fondue</c> ("The Stolen Fondue", <see cref="FondueScript"/>, #864) or
+    /// <c>tourist</c> ("The Alien Tourist", <see cref="TouristScript"/>, #865).
     /// </summary>
     public static IReadOnlyList<Shot> Film => CmdArgs.Value("--trailer-film") switch
     {
@@ -141,6 +142,7 @@ public partial class TrailerDirector : Node
         "ufo" => UfoDemoScript.Shots,
         "doors" => UfoDemoScript.Doors,
         "fondue" => FondueScript.Shots,
+        "tourist" => TouristScript.Shots,
         _ => StoryScript.Shots,
     };
 
