@@ -136,7 +136,10 @@ public partial class AuraNetProbe : ChatProbe
     private async Task<bool> Turn(AuraManager.View v, int turn, AuraMove[] plan, bool skipLast)
     {
         if (!Expect2(await Until(() => v.Turn == turn && v.Phase == AuraPhase.Plan && v.MyTurn, 45), $"turn {turn + 1}: my plan")) return false;
-        await Seconds(0.5);
+        await Seconds(1.0);
+        // windowed (SHOTS=1): the planner as it opens, then the performance with its beat ring
+        bool windowed = DisplayServer.GetName() != "headless";
+        if (windowed) GD.Print($"{Log} shot {Shot($"{_role}_plan{turn + 1}")}");
         Auras!.SendPlan(plan);
         if (!Expect2(await Until(() => v.Plan.Length == plan.Length && v.Turn == turn, 10), $"turn {turn + 1}: the plan is taken")) return false;
         int presses = skipLast ? plan.Length - 1 : plan.Length;
@@ -145,6 +148,7 @@ public partial class AuraNetProbe : ChatProbe
             double cut = AuraRules.CutAt(v.Plan, i, v.T0);
             // a frame before the downbeat, so the press lands within a frame of it
             await Until(() => ClockSync.ServerNow >= cut - 0.008, 30);
+            if (windowed && i == 1) GD.Print($"{Log} shot {Shot($"{_role}_perform{turn + 1}")}");
             Input.ActionPress(PlayerInput.AuraNext);
             await Until(() => v.NextIndex > i, 1);
             Input.ActionRelease(PlayerInput.AuraNext);

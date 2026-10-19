@@ -6,6 +6,24 @@
 154.7	Aircraft / Antonov AN-124 (parked)
 365.3	Aircraft / Military cargo plane
 365.3	Aircraft / Military cargo plane (parked)
+782	Aura / Move - Arms crossed
+367.8	Aura / Move - Cut the rope
+782	Aura / Move - Griddy
+782	Aura / Move - Lasso
+754.4	Aura / Move - Mewing
+298.8	Aura / Move - Point to sky
+367.8	Aura / Move - Siuuu
+298.8	Aura / Move - Six seven
+298.8	Aura / Move - Slow walk
+298.8	Aura / Move - Stand tall
+282.7	Aura / Move - Stare down
+367.8	Aura / Move - Sunglasses
+754.4	Aura / Move - Yawn
+367.8	Aura / Stance - Defeat
+782	Aura / Stance - Planning
+298.8	Aura / Stance - Stumble
+282.7	Aura / Stance - Victory
+298.8	Aura / Stance - Waiting
 112	Battle royale / Military
 2088	Battle royale / Postauto stop
 5568.2	Battle royale / Prefab - army checkpoint
