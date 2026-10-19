@@ -115,6 +115,27 @@ public static class ConstructionCheck
         foreach (var phase in new[] { SitePhase.Foundations, SitePhase.Shell, SitePhase.ToppedOut })
             Expect(seen.Contains(phase), $"a {phase} site is built round the spawn");
 
+        // the gallery (#827): on how many of the sites round the spawn the planner found room for it
+        int all = 0, galleries = 0;
+        foreach (var p in planned)
+        {
+            var id = TileId.FromLv95(p.E, p.N);
+            if (!tiles.TryGetValue(id, out var t))
+            {
+                var bt = world.BuildBuildings(id);
+                var roads = world.BuildRoads(id);
+                t = (bt, roads, bt == null ? new() : SitePlans.For(bt, roads));
+                tiles[id] = t;
+            }
+            var at = new Vector2((float)(p.E - id.MinE), (float)(id.MaxN - p.N));
+            if (t.Sites.FirstOrDefault(s => s.Box.Center.DistanceTo(at) < 1f) is not { } s1 || !s1.Zones.Any(z => z.Kind == SiteZoneKind.Office)) continue;
+            all++;
+            if (s1.GallerySide != 0) galleries++;
+        }
+        GD.Print($"[constructioncheck] the office gallery (#827): {galleries} of {all} generated site(s) with an office have one");
+        Expect(galleries > 0, "at least one generated site round the spawn has its office gallery");
+        if (GalleryScanDir() is { } scan) failures += GalleryScan(scan);
+
         string svg = System.IO.Path.Combine(dir, "generated.svg");
         System.IO.File.WriteAllText(svg, SitePlanSvg.Draw(drawn));
         GD.Print($"[constructioncheck] plan views: {svg}");
@@ -123,10 +144,75 @@ public static class ConstructionCheck
         return failures == 0 ? 0 : 1;
     }
 
+    /// <summary><c>--galleryscan &lt;dir&gt;</c>: real tiles to measure the office gallery's coverage on (#827), or null.</summary>
+    private static string? GalleryScanDir()
+    {
+        var args = OS.GetCmdlineUserArgs();
+        int at = Array.IndexOf(args, "--galleryscan");
+        return at >= 0 && at + 1 < args.Length ? args[at + 1] : null;
+    }
+
+    /// <summary>
+    /// Every building site on the real tiles of <paramref name="dir"/> (#827): how many have an
+    /// office, how many its gallery, and on each gallery that nothing solid of the yard stands in its
+    /// solid boxes (the planner tested rectangles; this tests what is drawn and collided). The
+    /// ground is the building's base, as with no grid. The number of overlaps, as failures.
+    /// </summary>
+    private static int GalleryScan(string dir)
+    {
+        var source = new LocalChunkSource(dir);
+        int tiles = 0, sites = 0, offices = 0, galleries = 0, overlaps = 0;
+        var sides = new int[3];
+        foreach (var file in System.IO.Directory.EnumerateFiles(dir, "buildings_*.bldg").OrderBy(f => f, StringComparer.Ordinal))
+        {
+            var parts = System.IO.Path.GetFileNameWithoutExtension(file).Split('_');
+            if (parts.Length != 3 || !int.TryParse(parts[1], out int e) || !int.TryParse(parts[2], out int n)) continue;
+            var id = new TileId(e, n);
+            var bt = source.LoadBuildingsAsync(id).GetAwaiter().GetResult();
+            if (bt == null || !SitePlans.HasSite(bt)) continue;
+            tiles++;
+            var roads = source.LoadRoadsAsync(id).GetAwaiter().GetResult();
+            foreach (var site in SitePlans.For(bt, roads))
+            {
+                sites++;
+                if (!site.Zones.Any(z => z.Kind == SiteZoneKind.Office)) continue;
+                offices++;
+                sides[site.GallerySide + 1]++;
+                if (site.GallerySide == 0) continue;
+                galleries++;
+                var yard = SiteShellBuilder.Dressing(bt, site, null);
+                var (g0, gn) = yard.GalleryBoxes;
+                for (int i = g0; i < g0 + gn; i++)
+                {
+                    var a = yard.Boxes[i];
+                    if (!a.Solid) continue;
+                    for (int k = 0; k < g0; k++)
+                    {
+                        var b = yard.Boxes[k];
+                        if (!b.Solid || b.Part == ShellPart.Container) continue;
+                        if (a.Min.X < b.Max.X - 0.01f && b.Min.X < a.Max.X - 0.01f && a.Min.Y < b.Max.Y - 0.01f && b.Min.Y < a.Max.Y - 0.01f
+                            && a.Min.Z < b.Max.Z - 0.01f && b.Min.Z < a.Max.Z - 0.01f)
+                        {
+                            if (++overlaps <= 10)
+                                GD.Print($"[constructioncheck] FAIL {site.Key}: the gallery's {a.Part} stands in the yard's {b.Part}");
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        float share = offices == 0 ? 0 : 100f * galleries / offices;
+        GD.Print($"[constructioncheck] gallery scan of {dir}: {tiles} tile(s) with sites, {sites} site(s), {offices} with an office, "
+            + $"{galleries} with its gallery ({share:F0} %: {sides[0]} on the low side, {sides[2]} on the high side), {overlaps} overlap(s)");
+        return overlaps;
+    }
+
     /// <summary>
     /// The site office (#822): a door per ground-floor container among the tile's doors, on the
     /// container's door; an interior plan behind them that is valid, has an entrance at every door
-    /// lined up with it, holds something to search, and is planned the same twice.
+    /// lined up with it, holds something to search, and is planned the same twice. Where it has its
+    /// gallery (#827), a door per upper container on the walkway's deck and a room behind each on the
+    /// plan's floor 1, reached through it.
     /// </summary>
     private static void Office(BuildingTile tile, RoadTile? roads, List<ConstructionSite> sites, ConstructionSite site, int index,
         ChunkGrid grid, string what, Action<bool, string> expect)
@@ -135,10 +221,13 @@ public static class ConstructionCheck
         if (office == null) { expect(false, $"{what}: no office to enter"); return; }
         var doors = BuildingFootprint.ComputeDoors(tile, roads, grid, sites).Where(d => d.Index == index && d.Width > 0).ToList();
         expect(doors.Count == office.Doors.Count && doors.Select(d => d.Slot).SequenceEqual(Enumerable.Range(0, doors.Count)),
-            $"{what}: {doors.Count} door(s) among the tile's doors, one per ground-floor container ({office.ContainerDoors}) and toilet cabin ({office.Toilets.Count})");
+            $"{what}: {doors.Count} door(s) among the tile's doors, one per ground-floor container ({office.ContainerDoors}), toilet cabin ({office.Toilets.Count}) and upper container off the gallery ({office.UpperDoors})");
         expect(doors.All(d => d.Kind == BuildingKind.UnderConstruction && !d.Vehicle
-                && d.Hang == (d.Slot < office.ContainerDoors ? DoorHang.Inward : DoorHang.Outward)),
-            $"{what}: a building site's plain doors, the containers' swinging in and the cabins' out");
+                && d.Hang == (office.IsCabin(d.Slot) ? DoorHang.Outward : DoorHang.Inward)
+                && d.Level == (d.Slot >= office.Doors.Count - office.UpperDoors ? 1 : 0)),
+            $"{what}: a building site's plain doors, the containers' swinging in and the cabins' out, the upper ones raised");
+        expect((office.Gallery != null) == (site.GallerySide != 0) && office.UpperDoors == (office.Gallery != null ? office.ContainerDoors : 0),
+            $"{what}: {(office.Gallery != null ? $"the office gallery on side {site.GallerySide}, {office.UpperDoors} upper door(s)" : "no room for the office gallery")}");
         // the tile's doors without the planned sites handed in: the same doors
         var alone = BuildingFootprint.ComputeDoors(tile, roads, grid).Where(d => d.Index == index && d.Width > 0).ToList();
         expect(alone.SequenceEqual(doors), $"{what}: the doors are the same planned with the tile or on their own");
@@ -148,7 +237,7 @@ public static class ConstructionCheck
             var sill = SiteShellBuilder.ToTile(site, office.Doors[i].Sill);
             expect(Math.Abs(spot.Position.Y - office.Doors[i].Sill.Y) < 0.001f
                 && new Vector2(spot.Position.X - spot.Outward.X * 0.03f - sill.X, spot.Position.Z - spot.Outward.Z * 0.03f - sill.Z).Length() < 0.001f,
-                $"{what}: door {i} on its {(i < office.ContainerDoors ? "container" : "cabin")}'s door, its sill at {spot.Position.Y:F2} m (its ground {office.Doors[i].Sill.Y:F2}), "
+                $"{what}: door {i} on its {(office.IsCabin(i) ? "cabin" : office.Doors[i].Level > 0 ? "upper container" : "container")}'s door, its sill at {spot.Position.Y:F2} m (its ground {office.Doors[i].Sill.Y:F2}), "
                 + $"--at {tile.Id.MinE + spot.Position.X:F1},{tile.Id.MaxN - spot.Position.Z:F1} facing E {spot.Outward.X:F2} N {-spot.Outward.Z:F2}");
         }
 
@@ -168,16 +257,50 @@ public static class ConstructionCheck
                 }
             expect(clear, $"{what}: nothing of the yard stands in front of door {i}");
         }
+        if (office.Gallery is { } gallery)
+        {
+            // the deck's top is every upper door's sill, and nothing solid of the yard stands in the gallery
+            var deck = gallery.Boxes.FirstOrDefault(b => b.Part == ShellPart.Grating && b.Solid);
+            expect(office.Doors.Where(x => x.Level == 1).All(x => Math.Abs(x.Sill.Y - deck.Max.Y) < 0.001f),
+                $"{what}: the gallery's deck at {deck.Max.Y:F2} m is every upper door's sill (0 cm)");
+            var (g0, gn) = yard.GalleryBoxes;
+            int inside = 0;
+            for (int i = g0; i < g0 + gn; i++)
+            {
+                var a = yard.Boxes[i];
+                if (!a.Solid) continue;
+                for (int k = 0; k < g0; k++)
+                {
+                    var b = yard.Boxes[k];
+                    if (b.Solid && a.Min.X < b.Max.X - 0.01f && b.Min.X < a.Max.X - 0.01f && a.Min.Y < b.Max.Y - 0.01f && b.Min.Y < a.Max.Y - 0.01f
+                        && a.Min.Z < b.Max.Z - 0.01f && b.Min.Z < a.Max.Z - 0.01f)
+                    {
+                        inside++;
+                        GD.Print($"[constructioncheck]      {what}: the gallery's {a.Part} stands in the yard's {b.Part}");
+                    }
+                }
+            }
+            expect(inside == 0 && yard.Ramps.Count == 1, $"{what}: the gallery ({gallery.Steps} steps, {yard.Ramps.Count} ramp) stands clear of the yard ({inside} overlap(s))");
+            var foot = SiteShellBuilder.ToTile(site, gallery.Foot);
+            GD.Print($"[constructioncheck]      {what}: the gallery's stair foot --at {tile.Id.MinE + foot.X:F1},{tile.Id.MaxN - foot.Z:F1}");
+        }
 
         var plan = InteriorGenerator.Generate(tile, index, roads, grid);
-        foreach (var spot in doors) SiteDigest.Add(DoorCheck.DoorLine(site.Key, tile.Id, spot, plan));
+        foreach (var spot in doors.Where(d => d.Level == 0)) SiteDigest.Add(DoorCheck.DoorLine(site.Key, tile.Id, spot, plan));
         if (plan == null) { expect(false, $"{what}: no interior plan behind the office"); return; }
         var problems = InteriorValidator.Validate(plan);
         expect(problems.Count == 0, $"{what}: the office's plan is valid{(problems.Count > 0 ? ": " + string.Join("; ", problems.Take(3)) : "")}");
-        expect(plan.Kind == BuildingKind.UnderConstruction && plan.Floors.Count == 1
+        expect(plan.Kind == BuildingKind.UnderConstruction && plan.Floors.Count == (office.UpperDoors > 0 ? 2 : 1)
             && plan.GroundFloor.Rooms.Count == office.Rooms.Count + office.Toilets.Count && plan.GroundFloor.Rooms[0].Type == RoomType.SiteOffice
             && plan.GroundFloor.Rooms.Skip(office.Rooms.Count).All(r => r.Type == RoomType.WC && r.Openings.Count(o => o.Kind == OpeningKind.Entry) == 1 && r.Openings.Count == 1),
             $"{what}: {plan.GroundFloor.Rooms.Count} room(s): {string.Join(", ", plan.GroundFloor.Rooms.Select(r => r.Type))}");
+        if (office.UpperDoors > 0)
+        {
+            var up = plan.Floors[1].Rooms;
+            expect(up.Count == office.Rooms.Count && up[0].Type == RoomType.SiteManager && up.Skip(1).All(r => r.Type == RoomType.DrawingOffice)
+                && up.All(r => r.Openings.Count(o => o.Kind == OpeningKind.Entry) == 1),
+                $"{what}: upstairs {up.Count} room(s), a door each: {string.Join(", ", up.Select(r => r.Type))}");
+        }
         var placement = new Transform3D(new Basis(Vector3.Up, plan.Yaw), new Vector3(plan.CenterX, 0, plan.CenterZ));
         foreach (var spot in doors)
         {
@@ -186,12 +309,18 @@ public static class ConstructionCheck
             if (e == null) { expect(false, $"{what}: no entrance behind door {key}"); continue; }
             // the doorway inside is where the door is: the facade plane (3 cm in from the spot) is the
             // trim's face, 2 cm in front of the container's end, which is the plan box's front wall
-            var inside = placement * new Vector3(e.X, 0, e.Z);
+            var inside = placement * new Vector3(e.X, plan.EntranceY(e), e.Z);
             var plane = new Vector2(spot.Position.X, spot.Position.Z) - new Vector2(spot.Outward.X, spot.Outward.Z) * (0.03f + SiteOffices.Trim);
             var outward = placement.Basis * new Vector3(-e.InX, 0, -e.InZ);
             expect(new Vector2(inside.X, inside.Z).DistanceTo(plane) < 0.01f && outward.Dot(spot.Outward) > 0.999f
                 && Math.Abs(e.DoorX - spot.Position.X) < 0.001f && Math.Abs(e.DoorY - spot.Position.Y) < 0.001f && Math.Abs(e.DoorZ - spot.Position.Z) < 0.001f,
                 $"{what}: door {key}'s doorway inside lines up with it ({new Vector2(inside.X, inside.Z).DistanceTo(plane) * 100:F1} cm)");
+            // a raised one's sill as far up inside as outside: the link is the ground doors' plain drop
+            float drop = spot.Position.Y - inside.Y;
+            var od = office.Doors[spot.Slot];
+            float ground = od.Sill.Y - od.Level * SiteOffices.ContainerHeight;
+            expect(e.Level == spot.Level && Math.Abs(drop - ground) < 0.01f,
+                $"{what}: door {key} (level {e.Level}) drops {drop:F2} m to its doorway, its ground's {ground:F2} m ({(drop - ground) * 100:F1} cm)");
             var (w, top) = plan.OpeningOf(e);
             expect(Math.Abs(w - spot.Width) < 0.01f && Math.Abs(top - spot.Height) < 0.01f, $"{what}: door {key} opens on a {w:F2} x {top:F2} m doorway ({spot.Width:F2} x {spot.Height:F2} outside)");
         }
@@ -203,7 +332,8 @@ public static class ConstructionCheck
                 $"{what}: a toilet cabin holds {string.Join(", ", inside)}");
         }
         int lootable = plan.Furniture.Count(f => Loot.LootTables.IsLootable(f.Type));
-        expect(lootable > 0 && plan.Furniture.All(f => f.Floor == 0),
+        expect(lootable > 0 && plan.Furniture.All(f => f.Floor <= (office.UpperDoors > 0 ? 1 : 0))
+                && (office.UpperDoors == 0 || plan.Furniture.Count(f => f.Floor == 1 && Loot.LootTables.IsLootable(f.Type)) > 0),
             $"{what}: {plan.Furniture.Count} piece(s), {lootable} to search: {string.Join(", ", plan.Furniture.Select(f => f.Type))}");
         var again = InteriorGenerator.Generate(tile, index, roads, grid);
         expect(again != null && again.ToJson() == plan.ToJson(), $"{what}: the office is planned the same twice");
