@@ -62,6 +62,7 @@ public partial class ControlsHelp : CanvasLayer
         ("Quick menu and invites (#840)", new Row[]
         {
             new("Quick menu: activities, invites, inventory, vehicles, map, emotes (hold, aim, let go)", PlayerInput.QuickMenu, Pad: "{quick_menu} (hold)"),
+            new("Phone: take it out, again to open it; out, WASD and the mouse work it (click, swipe), Enter selects, S / Esc puts it away", PlayerInput.Phone, Pad: "{quick_menu} (hold) › Phone"),
             new("Accept the invite on screen", PlayerInput.QuickMenu, Keys: "{quick_menu} (tap)", Pad: "{menu}, then A"),
             new("Decline the invite on screen", PlayerInput.InviteDecline, Pad: "{quick_menu} (hold) › Invites"),
         }),
@@ -127,6 +128,14 @@ public partial class ControlsHelp : CanvasLayer
             new("At a car door: open it, then get in", PlayerInput.InteractMount),
             new("Open / shut the car door you are at", PlayerInput.CarDoor),
             new("Get out", PlayerInput.InteractMount),
+        }),
+        ("Stadiums", new Row[]
+        {
+            new("On a stand's row: sit down; again, or walk off, to stand up", PlayerInput.InteractMount),
+            new("At a concert's front-of-house console: the light desk (cues, effects, show input)", PlayerInput.InteractMount),
+            new("Running a concert camera (/concert camera take N): zoom in", PlayerInput.CamZoomIn),
+            new("Running a concert camera: zoom out", PlayerInput.CamZoomOut),
+            new("Running a concert camera: cut to it (on air); Esc leaves it", PlayerInput.CamCut),
         }),
         ("Passengers (online)", new Row[]
         {

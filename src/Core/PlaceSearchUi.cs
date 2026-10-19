@@ -185,7 +185,7 @@ public partial class PlaceSearchUi : CanvasLayer
     /// different things that make one worth picking out of a list. Labelling a mountain
     /// "0 buildings" would be true and useless.
     /// </summary>
-    private static string Describe(Place p) => p.Kind switch
+    internal static string Describe(Place p) => p.Kind switch
     {
         PlaceKind.Summit => $"{p.Name}   ▲ {p.Elevation} m",
         PlaceKind.Pass => $"{p.Name}   ⌒ pass, {p.Elevation} m",

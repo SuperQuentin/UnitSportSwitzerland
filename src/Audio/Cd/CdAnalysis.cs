@@ -14,7 +14,7 @@ public enum SectionKind { Calm = 0, Groove = 1, Peak = 2, Chorus = 3 }
 public sealed class CdAnalysis
 {
     /// <summary>Bump when the analyser changes what it stores: older CDs are re-analysed at start.</summary>
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
 
     /// <summary>Envelope frames per second.</summary>
     public const int EnvRate = 20;
@@ -28,6 +28,19 @@ public sealed class CdAnalysis
     /// </summary>
     [JsonPropertyName("env")] public string Env { get; init; } = "";
 
+    /// <summary>
+    /// Base64 of <see cref="EnvRate"/> Hz frames, 4 bytes each (v2, #885): the snare band's onsets
+    /// (1.5..5 kHz), the hi-hats' (above 6 kHz), the bass level (&lt;150 Hz), all three normalised per
+    /// track, then the brightness (spectral centroid on a log scale, 200 Hz = 0 .. 5 kHz = 255).
+    /// </summary>
+    [JsonPropertyName("bands")] public string Bands { get; init; } = "";
+
+    /// <summary>Seconds into the file of each drop (v2): a bar where the bass and the loudness come back hard after a break.</summary>
+    [JsonPropertyName("drops")] public float[] Drops { get; init; } = Array.Empty<float>();
+
+    /// <summary>Where the build into each drop starts, s, same length as <see cref="Drops"/>.</summary>
+    [JsonPropertyName("builds")] public float[] BuildStarts { get; init; } = Array.Empty<float>();
+
     /// <summary>0..3: the beat of the grid (counted from beat 0 at <see cref="CdInfo.BeatOffset"/>) that starts a 4/4 bar.</summary>
     [JsonPropertyName("downbeat")] public int Downbeat { get; init; }
 
@@ -37,7 +50,7 @@ public sealed class CdAnalysis
     /// <summary><see cref="SectionKind"/> of each section, as ints, same length as <see cref="SectionStarts"/>.</summary>
     [JsonPropertyName("kinds")] public int[] SectionKinds { get; init; } = Array.Empty<int>();
 
-    private byte[]? _env;
+    private byte[]? _env, _bands;
 
     /// <summary>The decoded envelope, decoded once and kept (no allocation after the first call).</summary>
     public byte[] EnvBytes()
@@ -48,6 +61,15 @@ public sealed class CdAnalysis
         return _env;
     }
 
+    /// <summary>The decoded <see cref="Bands"/>, decoded once and kept.</summary>
+    public byte[] BandBytes()
+    {
+        if (_bands != null) return _bands;
+        try { _bands = Convert.FromBase64String(Bands); }
+        catch (FormatException) { _bands = Array.Empty<byte>(); }
+        return _bands;
+    }
+
     /// <summary>Whether this CD needs (re-)analysing: no block, or one from an older analyser.</summary>
     public static bool IsStale(CdInfo cd) => cd.Analysis is not { } a || a.Version < CurrentVersion;
 
@@ -55,6 +77,7 @@ public sealed class CdAnalysis
     public Godot.Collections.Dictionary ToDict() => new()
     {
         ["av"] = Version, ["env"] = Env, ["down"] = Downbeat, ["ss"] = SectionStarts, ["sk"] = SectionKinds,
+        ["bands"] = Bands, ["drops"] = Drops, ["builds"] = BuildStarts,
     };
 
     /// <summary>Tolerates missing keys (an older or newer server).</summary>
@@ -65,6 +88,9 @@ public sealed class CdAnalysis
         Downbeat = d.TryGetValue("down", out var b) ? b.AsInt32() : 0,
         SectionStarts = d.TryGetValue("ss", out var s) ? s.AsFloat32Array() : Array.Empty<float>(),
         SectionKinds = d.TryGetValue("sk", out var k) ? k.AsInt32Array() : Array.Empty<int>(),
+        Bands = d.TryGetValue("bands", out var bd) ? bd.AsString() : "",
+        Drops = d.TryGetValue("drops", out var dr) ? dr.AsFloat32Array() : Array.Empty<float>(),
+        BuildStarts = d.TryGetValue("builds", out var bu) ? bu.AsFloat32Array() : Array.Empty<float>(),
     };
 }
 
@@ -102,6 +128,47 @@ public static class CdAnalysisRuntime
         float prev = i > 0 ? e[2 * i - 1] / 255f * (1f - fr) : 0f;
         kick = Math.Max(cur, prev);
         return true;
+    }
+
+    /// <summary>
+    /// The finer bands at <paramref name="t"/> seconds into the file, 0..1 (v2): snare and hi-hat
+    /// onsets (held a frame and fading over the next, as the kick), the bass level and the brightness
+    /// (interpolated). False when the CD has no bands (an older analysis); past either end all are 0.
+    /// </summary>
+    public static bool SampleBands(CdInfo cd, double t, out float snare, out float hat, out float bass, out float bright)
+    {
+        snare = hat = bass = bright = 0f;
+        if (cd.Analysis is not { } a) return false;
+        byte[] e = a.BandBytes();
+        int n = e.Length / 4;
+        if (n == 0) return false;
+        double x = t * CdAnalysis.EnvRate;
+        if (x < 0 || x >= n) return true;
+        int i = (int)x, j = Math.Min(i + 1, n - 1);
+        float fr = (float)(x - i);
+        snare = Math.Max(e[4 * i] / 255f, i > 0 ? e[4 * i - 4] / 255f * (1f - fr) : 0f);
+        hat = Math.Max(e[4 * i + 1] / 255f, i > 0 ? e[4 * i - 3] / 255f * (1f - fr) : 0f);
+        bass = (e[4 * i + 2] * (1f - fr) + e[4 * j + 2] * fr) / 255f;
+        bright = (e[4 * i + 3] * (1f - fr) + e[4 * j + 3] * fr) / 255f;
+        return true;
+    }
+
+    /// <summary>
+    /// Where <paramref name="t"/> is against the song's drops: seconds since the last one (infinity
+    /// before the first) and 0..1 through the build into the next (0 outside a build).
+    /// </summary>
+    public static void DropAt(CdInfo cd, double t, out float sinceDrop, out float build)
+    {
+        sinceDrop = float.PositiveInfinity;
+        build = 0f;
+        if (cd.Analysis is not { Drops: { Length: > 0 } drops } a) return;
+        for (int i = 0; i < drops.Length; i++)
+        {
+            if (t >= drops[i]) { sinceDrop = (float)(t - drops[i]); continue; }
+            float b0 = i < a.BuildStarts.Length ? a.BuildStarts[i] : drops[i];
+            if (t >= b0 && drops[i] > b0) build = (float)((t - b0) / (drops[i] - b0));
+            break;
+        }
     }
 
     /// <summary>The section playing at <paramref name="t"/> seconds into the file; Groove and index 0 when unknown.</summary>

@@ -38,10 +38,14 @@
     - `/br bots 3` gives 2 bots; A jumps and knifes both.
     - Death box, the feed's `[bot]`, "1 kill (1 bot)".
     - A wins with "2 kills (2 bots)" in the record and on `/br top`; the bots are gone after.
+  - `tools/brsquadcheck.sh` (#837 phase 4): server + A, a duos match of A and one bot (`squads`).
   - `tools/brbotwatch.sh` (full tier, not in the map: minutes long): a whole match played by bots
     (`/br bots 9`), watched to the end. It must end, and bots must have dealt damage and killed.
     `BRPACE` (0.13 by default: too fast for a runner to keep up with the zone), `SPREAD=80` to land
-    them together, `BOTLOG=1`, `SERVER_ARGS="--serverstats"`.
+    them together, `BOTLOG=1`, `SERVER_ARGS="--serverstats"`, `BRBOTS=100` (the field), `BRMODE=trios`
+    (a team match, `--brwatchmode`), `SPEED=4` (`/speed 4` at the start: the match follows it, so a full-pace
+    match keeps its proportions in a quarter of the time). The client fails on a node leak (5,000 orphan nodes
+    or more).
   - `tools/botfilm.sh` (by hand, windowed): films bots playing a BR match. The client opens it, leaves
     at once and spectates (`BrManager.Watch`), following the first bot out of the plane, then whichever
     bot stands nearest another on foot. It writes `test_output/clips/bots-drop` and `bots-fight`

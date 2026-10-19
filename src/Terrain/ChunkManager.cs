@@ -2268,6 +2268,20 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         }
                     }
 
+                    // a stadium (#885) is built by the tile holding its centre spot, drawn and
+                    // collided like a site's shell: one more prop mesh, both-sided faces
+                    bool stadiumMeshWanted = wantBuildings && pierMaterial != null;
+                    if (Stadiums.StadiumBuilder.Build(id, grid, stadiumMeshWanted, wantCollision) is { } stadium)
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        if (stadium.Mesh is { } stadiumData)
+                        {
+                            if (siteMesh == null) siteMesh = ChunkNode.ToPropMesh(stadiumData, pierMaterial!);
+                            else ChunkNode.WithPiers(siteMesh, stadiumData, pierMaterial!);
+                        }
+                        siteFaces = siteFaces is { Length: > 0 } ? [.. siteFaces, .. stadium.Faces] : stadium.Faces;
+                    }
+
                     if (wantBuildings && bTile != null && buildingMaterial != null)
                     {
                         // Doors face the street, so they need the road tile even when the roads
@@ -2276,7 +2290,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         var doorRoads = roadTile ?? await source.LoadRoadsAsync(id, ct);
                         ct.ThrowIfCancellationRequested();
                         doors = Interiors.BuildingFootprint.ComputeDoors(bTile, doorRoads, grid.Stride == 1 ? grid : null, sites);
-                        if (BuildingMeshBuilder.Build(bTile, doors, detail) is { } buildingData)
+                        if (BuildingMeshBuilder.Build(bTile, doors, detail, grid) is { } buildingData)
                         {
                             ct.ThrowIfCancellationRequested();
                             if (cells)
@@ -2302,7 +2316,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                             linkDoors = Interiors.BuildingFootprint.ComputeDoors(bTile, linkRoads, grid.Stride == 1 ? grid : null, sites);
                         }
                         buildingFaces = ChunkNode.SplitByCell(bTile != null
-                            ? [.. BuildingMeshBuilder.BuildCollisionFaces(bTile), .. BuildingMeshBuilder.LinkFaces(linkDoors), .. officeFaces ?? []] : []);
+                            ? [.. BuildingMeshBuilder.BuildCollisionFaces(bTile, grid), .. BuildingMeshBuilder.LinkFaces(linkDoors), .. officeFaces ?? []] : []);
                     }
                     Lap(StBldgMesh, stageMs, clock);
                 }

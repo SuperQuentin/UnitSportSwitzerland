@@ -27,6 +27,9 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | swim | `WalkControls` overrides the stroke | the body | — | `MoveTo` | gap: dive and climb-out read keys (`FootPlayer.Swim`, `limp` for an Npc); landings avoid water (a follow-up) |
 | knocked out, down, revived, out | — | `TakeDamage`, `TryGoDown`, `ReviveInPlace`, `FinishDowned` on the server | — | — | ok |
 | run over by a vehicle | — | `KnockedByVehicle` | — | — | gap: skipped for an Npc (`FootPlayer.Crash`), and players' proxies have no physics body on the server: a knock from `PlayerSnapshot` positions, a follow-up (`vehicles`) |
+| sit on a stand's seat, stand up (#885) | `WalkControls`: a wish over 0.3, once let go, stands up | `FootPlayer.TrySit` / `StandUpFromSeat` on its body (owner-written pose, no RPC) | `StadiumSeats.At(E, N)` (pure, the catalog) | none yet: `MoveTo` a row, then `TrySit` (concert spectators, plan phase 7) | gap: no brain sits; the seams are there |
+| run a concert camera (#885) | — | `ConcertService.AskCamera` / `SendCamera` / `CutTo` (`AskOperate`, `CamState` RPCs) | `ConcertRig.Live`, `CameraRig.For` | none | n/a: the auto director runs every camera nobody operates |
+| run a concert's light desk, host a set (#885) | — | `ConcertService.Command` (`/concert host|cue|release`), the desk's buttons are those commands | `ConcertRig.Live` | none | n/a: an operator's job; a server could host a set from the console (`/concert` from the console peer) |
 | get down from a roof | — | the body (a jump off it) | its height over the ground | `MoveTo` | gap: a bot landed on a roof walks along it and never comes down (seen in `tools/botfilm.sh`); landing spots should avoid roofs, or `MoveTo` should drop off a low edge (#842) |
 | fall damage | — | the landing in `UpdateCameraFeel` (an early branch for a body with no camera) | — | — | ok |
 | caught in a blast | — | `Explosion.Blast` | — | — | gap: subscribed only by a body with a camera (a follow-up) |
@@ -65,11 +68,12 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | Capability | Seam | Server path | Sense | Skill | Status |
 |---|---|---|---|---|---|
 | join the field | — | `BrManager.BoardBots` at GO | — | — | ok (aboard the plane) |
+| the phone (#889): calls, travel, activities from its apps | — | none of its own: its apps send the same invites, teleport requests and activity commands | — | — | n/a |
 | invites, parties, teleport requests (#840) | — | none: never offered (`InviteService` skips negative ids); a bot joins through `BoardBots` | — | — | n/a |
 | board the plane, jump | — | `BrManager.BoardBots`, `BotJump`, `BotPlane` (push-out) | its landing spot and jump time, chosen at GO | `BrBrain.Drop` | ok |
 | the zone's damage, and running from it | — | `BrManager.BotZone` | the zone (state, as a player's HUD) | `BrBrain` zone (`BrTactics.ZoneRunNeeded`) | ok |
 | eliminated, kill credit, careers | — | `OnBotDied`, `Eliminate`, `BotKills`, no career | — | — | ok |
 | downed, revived by a player, finished | — | `Downed`, `RequestRevive` (bot target), `OutIfAllDown` | — | — | ok |
-| revive a team-mate | — | `RequestRevive` (RPC by sender) | mates' state | `Revive` | gap: phase 4 |
-| pings | — | `RequestPing` (RPC by sender) | team pings | `Follow` | gap: phase 4 |
-| recall with a dogtag | — | `RequestRecall` (RPC by sender) | — | — | gap: phase 4 |
+| revive a team-mate | — | `ServerRevive(peer, target)` (`RequestRevive` calls it) | `TeamView` (mates' state) | `BrBrain.Revive` (5 s hold) | ok (`brsquadcheck`) |
+| pings | — | `ServerPing(peer, e, n, alt)` (`RequestPing` calls it) | `HumanPing(team)` | Ping goal; pings enemies for a human mate | ok (`brsquadcheck`); loot pings: gap |
+| recall with a dogtag | — | `ServerRecall(peer)`; a bot target by `RecallBot` | `NearestStop` (inside the circle) | `AlsoWants` the tag, Recall goal | ok (`brsquadcheck`) |

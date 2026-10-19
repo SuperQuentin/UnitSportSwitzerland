@@ -619,6 +619,10 @@
 244.2	Figures / Helmet
 282.7	Figures / Holding - Hold
 298.8	Figures / Holding - Mouth
+298.8	Figures / Holding - Phone
+782	Figures / Holding - PhoneOpen
+367.8	Figures / Holding - PhoneRaised
+754.4	Figures / Holding - PhoneSelfie
 282.7	Figures / Holding - Plant
 272.8	Figures / Holding - ShoulderAim
 754.4	Figures / Holding - ThrowRelease
@@ -810,6 +814,10 @@
 5.9	Items / PeaSeed
 3.9	Items / Peas
 10.9	Items / PerchFillets
+217.8	Items / Phone - back
+217.8	Items / Phone - folded
+252.3	Items / Phone - half open
+162.3	Items / Phone - open
 3.1	Items / PinkBow
 3	Items / PinkCropTop
 7.5	Items / PinkPleated
@@ -1018,6 +1026,7 @@
 97	Parts / Mini dumper roller
 138.6	Parts / Mini excavator boom
 14.2	Parts / Mini excavator bucket
+7.9	Parts / Phone back half
 83.3	Parts / Telehandler boom
 29.3	Parts / Wheel loader bucket
 575.5	Rides / Airstairs
