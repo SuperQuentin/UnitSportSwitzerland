@@ -241,7 +241,7 @@ public partial class PlayerFeel : Node3D
         var (calm, fast) = ride switch
         {
             RideKind.RoadBike => (9f, 18f),    // 32 → 65 km/h
-            RideKind.Skis => (9f, 22f),        // 32 → 80 km/h
+            RideKind.Skis or RideKind.Snowboard => (9f, 22f),        // 32 → 80 km/h
             _ when CarCatalog.IsCar(ride) => (15f, 40f),   // 54 → 144 km/h
             _ when MotorbikeCatalog.IsMotorbike(ride) => (15f, 45f),   // 54 → 162 km/h
             _ when Boat.IsBoat(ride) => (9f, 20f),   // 32 → 72 km/h: fast on the water
@@ -307,7 +307,7 @@ public partial class PlayerFeel : Node3D
         }
 
         // skis: a glide hiss with speed, and the edge biting as the carve deepens
-        bool skis = ride == RideKind.Skis;
+        bool skis = SnowRide.Is(ride);
         float edge = Mathf.Abs(motion.Bank);
         float hiss = skis && grounded
             ? Mathf.Clamp(speed / 20f, 0f, 1f) * 0.3f + edge * Mathf.Clamp(speed / 10f, 0f, 1f) * 0.7f
@@ -513,7 +513,7 @@ public partial class PlayerFeel : Node3D
         // is undone on its own
         if (_player.Camera is { } cam) cam.Fov -= 6f * hard;
 
-        if (fall > 4f) Puff(_player.Ride == RideKind.Skis ? Snow : Dirt, (int)(10 + 30 * hard));
+        if (fall > 4f) Puff(SnowRide.Is(_player.Ride) ? Snow : Dirt, (int)(10 + 30 * hard));
     }
 
     private void UpdateAir(float dt, bool grounded)
@@ -579,7 +579,7 @@ public partial class PlayerFeel : Node3D
         // snow thrown off the edges: a little from any glide, a sheet from a hard carve,
         // sprayed to the outside of the turn and back
         float edge = Mathf.Abs(motion.Bank);
-        bool spray = ride == RideKind.Skis && grounded && speed > 3f;
+        bool spray = SnowRide.Is(ride) && grounded && speed > 3f;
         _spray.Emitting = spray;
         if (spray)
         {
@@ -1032,7 +1032,7 @@ public partial class PlayerFeel : Node3D
         UpdateHint(dt, ride);
 
         // the boost meter, only where boost exists: mounted, Game profile
-        _boostBar.Visible = ride is RideKind.RoadBike or RideKind.Skis && Rideable.Arcade;
+        _boostBar.Visible = ride is RideKind.RoadBike or RideKind.Skis or RideKind.Snowboard && Rideable.Arcade;
         _boostBar.Value = _player.BoostMeter;
         _boostBar.Modulate = _player.Boosting ? new Color(1.6f, 1.6f, 1.6f) : Colors.White;
 

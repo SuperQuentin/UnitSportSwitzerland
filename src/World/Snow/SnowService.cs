@@ -150,7 +150,7 @@ public partial class SnowService : Node
         if (_index == null) return;
         foreach (var node in GetTree().GetNodesInGroup(FootPlayer.Group))
         {
-            if (node is not FootPlayer p || p.RideKindId != (int)RideKind.Skis) continue;
+            if (node is not FootPlayer p || !SnowRide.Is(p.RideKindId)) continue;
             ulong key = p.GetInstanceId();
             var at = p.GlobalPosition;
             var slope = _index.At(at, out _);

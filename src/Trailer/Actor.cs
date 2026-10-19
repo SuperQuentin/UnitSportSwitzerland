@@ -285,7 +285,7 @@ public sealed class Actor
         var want = to.Normalized();
         float angle = Mathf.Atan2(fwd.Cross(want).Y, fwd.Dot(want));   // + = to the left
         float steer;
-        if (body.Vehicle is Motorbike or Bicycle or Skis)
+        if (body.Vehicle is Motorbike or Bicycle or SnowRide)
         {
             float kappa = 2f * Mathf.Sin(angle) / Mathf.Max(to.Length(), 1f);
             float bank = Mathf.Atan(Mathf.Max(speed, 2f) * Mathf.Max(speed, 2f) * kappa / Rideable.Gravity);

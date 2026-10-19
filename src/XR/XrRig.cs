@@ -582,7 +582,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         _prevLeft = leftPos;
         _prevRight = rightPos;
 
-        if (player == null || player.Ride != RideKind.Skis || player.RidingWith != 0 || !_calibrated)
+        if (player == null || !Player.SnowRide.Is(player.Ride) || player.RidingWith != 0 || !_calibrated)
         {
             XrSession.SkiSteer = 0f;
             XrSession.SkiPole = 0f;

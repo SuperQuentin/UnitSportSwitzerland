@@ -63,9 +63,9 @@ public partial class SlopeHud : CanvasLayer
 
     private FootPlayer? FindSkier()
     {
-        if (_player() is { } local && IsInstanceValid(local) && local.RideKindId == (int)RideKind.Skis) return local;
+        if (_player() is { } local && IsInstanceValid(local) && SnowRide.Is(local.RideKindId)) return local;
         foreach (var node in GetTree().GetNodesInGroup(FootPlayer.Group))
-            if (node is FootPlayer p && !p.Bot && p.RideKindId == (int)RideKind.Skis && p.IsMultiplayerAuthority())
+            if (node is FootPlayer p && !p.Bot && SnowRide.Is(p.RideKindId) && p.IsMultiplayerAuthority())
                 return p;
         return null;
     }

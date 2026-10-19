@@ -1546,7 +1546,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         else
         {
             _walker = null;
-            _visual = (_ride ?? CarSetups.Ride(kind, CarSetupId, TuningBits))?.BuildVisual(rider, new Avatar.Outfit(OutfitBits));
+            var drawn = _ride ?? CarSetups.Ride(kind, CarSetupId, TuningBits);
+            // a board's stance and switch (#922) come in the bits
+            if (drawn is Snowboard board) board.Bits = TuningBits;
+            _visual = drawn?.BuildVisual(rider, new Avatar.Outfit(OutfitBits));
         }
 
         if (_visual != null)
@@ -3282,7 +3285,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         CarCd = "";
         // the parts and the doors belong to one car: changing car (the picker), getting out or a
         // wreck leaves them with that car
-        TuningBits = _ride is Car car ? car.Tuning.Pack() : 0;
+        // a board's stance (#922) rides in the same bits: the owner's setting, a remote copy's from its owner
+        if (_ride is Snowboard board) board.Bits = IsMultiplayerAuthority() && !Npc && !Bot ? (Core.GameSettings.Current.Goofy ? 1 : 0) : tuning;
+        TuningBits = _ride is Car car ? car.Tuning.Pack() : _ride is Snowboard stance ? stance.Bits : 0;
         CarSetupId = _ride is Car withSetup ? withSetup.Spec.SetupId : 0;
         DoorsOpen = 0;
         _shutDriverIn = 0f;
@@ -4340,11 +4345,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var input = RideInputNow();
 
         // skiing with the body in VR (#186): lean, pole and tuck on top of the sticks
-        if (_ride is Skis && XR.XrSession.Active && RideControls == null)
+        // on a board (#922) the lean and the crouch; it has no poles to push with
+        if (_ride is SnowRide && XR.XrSession.Active && RideControls == null)
             input = input with
             {
                 Steer = Mathf.Clamp(input.Steer + XR.XrSession.SkiSteer, -1f, 1f),
-                Throttle = Mathf.Max(input.Throttle, XR.XrSession.SkiPole),
+                Throttle = _ride is Skis ? Mathf.Max(input.Throttle, XR.XrSession.SkiPole) : input.Throttle,
                 Effort = input.Effort || XR.XrSession.SkiTuck,
             };
         // VR hands on the steering wheel (#243): the wheel's angle, as a real wheel's (#68)
@@ -4405,7 +4411,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_ride is Truck driving) PrepareTruck(driving);
         else if (_ride is Car shifting) PrepareCar(shifting);
         var ground = new RideGround(onFloor, grade, surface, Draft);
-        if (_ride is Skis)
+        if (_ride is SnowRide)
         {
             LookAtSnow(onFloor);
             // gravity down the fall line, along and across the skis (#899)
@@ -4414,6 +4420,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         else Slope = null;
         _ride!.Step(input, ground, dt, ref _motion);
+        // riding switch turns the rider round on every screen (#922)
+        if (_ride is Snowboard ridden && TuningBits != ridden.Bits) TuningBits = ridden.Bits;
         // a wheelie taken over the top (#410): the bike goes on its back, the rider off it
         if (_ride is Motorbike { LoopedOut: true })
         {
@@ -4555,7 +4563,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 PlayerInput.Rumble(0.3f, Mathf.Clamp((_rideFall - 1.5f) / 6f, 0.1f, 1f), 0.15f);
             }
             if (_rideAir > 0.3f) GradeLanding();
-            if (_ride is Skis && _bailTimer <= 0f && _rideAir > 0.2f) LandSkis();
+            if (_ride is SnowRide && _bailTimer <= 0f && _rideAir > 0.2f) LandSkis();
             _rideFall = 0f;
             _rideAir = 0f;
             _airPitch = _airSpin = 0f;

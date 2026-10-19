@@ -39,7 +39,7 @@ public partial class FootPlayer
     public RopewayLine? LiftInReach()
     {
         if (_lift != null || Carrier != null || RidingWith != 0 || !IsOnFloor()) return null;
-        if (_ride != null && _ride is not Skis) return null;
+        if (_ride != null && _ride is not SnowRide) return null;
         return RopewayService.Instance?.StationNear(GlobalPosition);
     }
 
@@ -153,7 +153,7 @@ public partial class FootPlayer
         }
         if (chair)
         {
-            bool skis = RideKindId == (int)RideKind.Skis;
+            bool skis = SnowRide.Is(RideKindId);
             var want = (LiftLine, _lift!.Seats, skis, AppearanceBits ^ OutfitBits.GetHashCode());
             if (_liftSeat == null || !IsInstanceValid(_liftSeat) || _liftSeatFor != want)
             {
@@ -235,7 +235,7 @@ public partial class FootPlayer
         at.Y = Terrain.TryGetHeight(at, out float g) ? g + 0.1f : alt;
         var on = new Vector3(de, 0, -dn) * 2f;
         ClearLift();
-        if (_ride is Skis) ReleaseRiding(at, on, Yaw(de, dn));
+        if (_ride is SnowRide) ReleaseRiding(at, on, Yaw(de, dn));
         else Release(at, Vector3.Zero);
     }
 
@@ -245,7 +245,7 @@ public partial class FootPlayer
         if (_lift is not { } line) return;
         var fwd = -GlobalTransform.Basis.Z with { Y = 0 };
         ClearLift();
-        if (_ride is Skis) ReleaseRiding(GlobalPosition, fwd.Normalized() * line.Speed, Rotation.Y);
+        if (_ride is SnowRide) ReleaseRiding(GlobalPosition, fwd.Normalized() * line.Speed, Rotation.Y);
         else Release(GlobalPosition, Vector3.Zero);
     }
 

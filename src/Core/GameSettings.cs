@@ -248,6 +248,12 @@ public sealed class GameSettings
     /// </summary>
     public bool TailFirstPigeon { get; set; }
 
+    /// <summary>
+    /// Ride a snowboard goofy, right foot forward (#922); off is regular. The owner's choice, sent to
+    /// the other peers in <c>FootPlayer.TuningBits</c> so they draw the rider facing the same way.
+    /// </summary>
+    public bool Goofy { get; set; }
+
     // --- network ---
     /// <summary>List the dedicated servers found on the LAN over mDNS in the main menu (<see cref="Net.LanDiscovery"/>).</summary>
     public bool LanDiscovery { get; set; } = true;
@@ -591,6 +597,8 @@ public sealed class GameSettings
                 // left | right: the on-foot camera's shoulder (#460)
                 case "--shoulder": LeftShoulder = v is "left" or "l"; break;
                 case "--tailfirstpigeon": TailFirstPigeon = v is "on" or "1" or "true"; break;
+                // regular | goofy: the snowboard's stance (#922)
+                case "--stance": Goofy = v is "goofy" or "g"; break;
                 case "--mirrors": CockpitMirrors = v is "on" or "1" or "true"; break;
                 // what the monitor shows in VR (#186): off | first | eyes | third
                 case "--vrmonitor":

@@ -55,7 +55,9 @@ public enum RideKind
     WheelLoaderForks = 199,
     /// <summary>A tracked mini dumper (#614): a <see cref="Player.MiniDumper"/>, a skip that tips forward.</summary>
     MiniDumper = 200,
-    // The next other mount is 201.
+    /// <summary>A snowboard (#922): a <see cref="Player.Snowboard"/>, on the ski model like the skis.</summary>
+    Snowboard = 201,
+    // The next other mount is 202.
 }
 
 /// <summary>
@@ -487,7 +489,7 @@ public abstract class Rideable
     /// Twin) folds open on its own page like the cars.
     /// </remarks>
     public static readonly Rideable[] All =
-        { new Bicycle(), new Skis(), new Canopy(paraglider: true), new Helicopter(), new Plane(), new Pigeon() };
+        { new Bicycle(), new Skis(), new Snowboard(), new Canopy(paraglider: true), new Helicopter(), new Plane(), new Pigeon() };
 
     /// <summary>
     /// A fresh instance for one rider.
@@ -502,6 +504,7 @@ public abstract class Rideable
     {
         RideKind.RoadBike => new Bicycle(),
         RideKind.Skis => new Skis(),
+        RideKind.Snowboard => new Snowboard(),
         RideKind.Wingsuit => new Wingsuit(),
         RideKind.Parachute => new Canopy(paraglider: false),
         RideKind.Paraglider => new Canopy(paraglider: true),

@@ -105,6 +105,7 @@ public partial class RideProbe : Node
         {
             "bike" or "roadbike" => RideKind.RoadBike,
             "skis" or "ski" => RideKind.Skis,
+            "snowboard" or "board" => RideKind.Snowboard,
             "r1" => (RideKind)MotorbikeCatalog.First,
             // the aircraft (#421): parked, on their brakes
             "a320" => RideKind.A320,
@@ -205,7 +206,7 @@ public partial class RideProbe : Node
                 {
                     float throttle = steer != 0f && _player.RideSpeed > 5f ? 0f : 1f;
                     // skis stride on a press (#899): pressed six times a second, as a player taps W
-                    if (_kind == RideKind.Skis) throttle *= _elapsed % (1.0 / 6) < 1.0 / 12 ? 1f : 0f;
+                    if (SnowRide.Is(_kind)) throttle *= _elapsed % (1.0 / 6) < 1.0 / 12 ? 1f : 0f;
                     return new RideInput(throttle, 0f, steer, false);
                 }
                 _stopped |= Mathf.Abs(_player.RideSpeed) < 0.3f;
