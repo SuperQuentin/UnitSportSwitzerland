@@ -135,7 +135,10 @@
   (the terrain drive unmounted: runs fell back to the generated world for hours). Then each shot
   (`FilmCoverage`, tier 0 `FilmCoverageTests`): every tile within 5 km of each camera key's eye and
   of each actor, craft, sighting and herd spot (8 km for an eye over 2,200 m, its height read from the
-  manifest's tile tops) must be one the manifest lists; a shot that fails is reported with its tiles
+  manifest's tile tops) must be one the manifest lists, unless it is abroad (the embedded country map,
+  `CountryData.Covered`, has no swissALTI3D tile there: Italy, France, the French half of Lake
+  Geneva): nothing to build it from, so it is allowed and only counted in the log (decided
+  2026-10-19); a shot that fails is reported with its tiles
   and fails the run, and all of them go to `test_output/trailer/<film>/missing_tiles.txt` (`E-N` a
   line, for `MapSetup --tiles-file`). `--trailer-allow-generated` films it anyway (tests, the
   fixture demo). Sets are skipped (far under the ground).
