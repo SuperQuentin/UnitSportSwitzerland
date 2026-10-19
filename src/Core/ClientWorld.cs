@@ -487,6 +487,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 AddChild(_pistes);
             }
             AddChild(new World.Snow.SlopeMarkers(_chunks, snow));
+        }
+        // the ski lifts (#912): the lines from the road tiles, the carriers on the shared clock
+        if (Systems.On(Systems.Lifts))
+        {
+            var lifts = World.Ropeways.RopewayService.Create(this, () => _chunks?.Source, _chunks);
+            AddChild(new World.Ropeways.RopewayLayer(lifts, _chunks));
             AddChild(new World.Snow.SlopeHud(() => LocalPlayer, _chunks));
         }
         // a sign over every bank door (#213)

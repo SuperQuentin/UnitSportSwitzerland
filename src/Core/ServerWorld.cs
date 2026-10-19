@@ -199,6 +199,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _occasions = Occasions.OccasionManager.Create(this);
         // the ski slopes' weather and the wear real skiers put on them (#887)
         if (Systems.On(Systems.Snow)) _snow = World.Snow.SnowService.Create(this, _chunks!);
+        // the ski lifts (#912): the same lines, for bots that ride them
+        if (Systems.On(Systems.Lifts)) World.Ropeways.RopewayService.Create(this, () => source, _chunks!);
 
         // The server owns the place index too, so /city and /tpall resolve against the same
         // data the client's Tab search uses and a client cannot ask to be moved anywhere else.

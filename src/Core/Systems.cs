@@ -28,10 +28,12 @@ public static class Systems
         // vehicles and dropped items far from everyone saved per tile and brought back (#689)
         Containers = "containers",
         // the ski slopes' snow: the virtual weather, the wear and the slopes drawn on the terrain (#887)
-        Snow = "snow";
+        Snow = "snow",
+        // the ski lifts: their carriers on the shared clock, boarding at a station (#912)
+        Lifts = "lifts";
 
     public static readonly string[] All =
-        { Terrain, Generated, Traffic, Trains, Npcs, Birds, Physics, Audio, Network, Sky, Interiors, Loot, Occasions, Ui, Build, Dormant, Airports, Farming, Containers, Snow };
+        { Terrain, Generated, Traffic, Trains, Npcs, Birds, Physics, Audio, Network, Sky, Interiors, Loot, Occasions, Ui, Build, Dormant, Airports, Farming, Containers, Snow, Lifts };
 
     public enum WorldKind { Real, Fixture, Flat }
 

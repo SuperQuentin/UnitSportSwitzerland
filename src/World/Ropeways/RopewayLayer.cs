@@ -1,0 +1,161 @@
+using System;
+using System.Collections.Generic;
+using Godot;
+using UnitSport.Core;
+using UnitSport.Styles;
+using UnitSport.Terrain;
+
+namespace UnitSport.World.Ropeways;
+
+/// <summary>
+/// The lifts' carriers round the camera (#912): the lines within <see cref="DrawRange"/> m, one
+/// MultiMesh per part per line, each carrier where <see cref="RopewayMotion"/> puts it on the shared
+/// clock. Lines within <see cref="NearRange"/> m are posed every frame, the others every tenth.
+/// Nothing is allocated per frame: the instance transforms are written in place.
+///
+/// <para>
+/// The carriers are placed in world space from LV95 every pose, so the layer itself stays at the
+/// origin: the floating origin moves every node under the world by each shift (#185), which would
+/// count it twice. Each line's culling box is redone on a shift.
+/// </para>
+/// </summary>
+public partial class RopewayLayer : Node3D, IOriginShiftAware
+{
+    private const float DrawRange = 3000f, NearRange = 1200f;
+    /// <summary>A T-bar's bar sits this high above the snow while it pulls (it is at the rider's hip).</summary>
+    private const float BarFloor = 0f;
+
+    private readonly RopewayService _service;
+    private readonly ChunkManager _chunks;
+    private readonly ShaderMaterial _material;
+    private readonly Dictionary<long, Drawn> _drawn = new();
+    private readonly List<long> _gone = new();
+    private readonly HashSet<long> _want = new();
+    private double _sincePoll = double.MaxValue;
+    private int _frame;
+
+    private sealed class Drawn
+    {
+        public required RopewayLine Line;
+        public required MultiMeshInstance3D Main;
+        public MultiMeshInstance3D? Bar;
+        public bool Near;
+    }
+
+    public RopewayLayer(RopewayService service, ChunkManager chunks)
+    {
+        Name = "RopewayLayer";
+        _service = service;
+        _chunks = chunks;
+        _material = StyleKit.Material(MaterialRole.Prop);
+        _material.SetShaderParameter("flicker", 0f);
+    }
+
+    public override void _Process(double delta)
+    {
+        if (_chunks.Origin is not { } origin || GetViewport()?.GetCamera3D() is not { } cam) return;
+        _sincePoll += delta;
+        if (_sincePoll >= 1.0)
+        {
+            _sincePoll = 0;
+            Poll(origin, cam.GlobalPosition);
+        }
+        _frame++;
+        Position = Vector3.Zero;
+        double sim = RopewayService.Sim;
+        foreach (var (_, d) in _drawn)
+            if (d.Near || _frame % 10 == 0) Pose(d, origin, sim);
+    }
+
+    private void Poll(WorldOrigin origin, Vector3 camera)
+    {
+        var (e, n) = origin.ToLv95(camera);
+        _want.Clear();
+        foreach (var line in _service.Near(e, n))
+        {
+            double nearest = double.MaxValue;
+            for (int i = 0; i < line.E.Length; i++)
+                nearest = Math.Min(nearest, (line.E[i] - e) * (line.E[i] - e) + (line.N[i] - n) * (line.N[i] - n));
+            // between vertices a line may pass closer: a vertex within range plus the longest span is enough
+            if (nearest > (DrawRange + 500) * (DrawRange + 500)) continue;
+            _want.Add(line.Key);
+            if (!_drawn.TryGetValue(line.Key, out var d)) _drawn[line.Key] = d = Make(line);
+            d.Near = nearest < NearRange * NearRange;
+        }
+        _gone.Clear();
+        foreach (var (key, d) in _drawn)
+            if (!_want.Contains(key)) _gone.Add(key);
+        foreach (var key in _gone)
+        {
+            _drawn[key].Main.QueueFree();
+            _drawn[key].Bar?.QueueFree();
+            _drawn.Remove(key);
+        }
+    }
+
+    private Drawn Make(RopewayLine line)
+    {
+        int count = RopewayMotion.Count(line);
+        MultiMeshInstance3D Instance(RopewayMeshBuilder.Part part)
+        {
+            var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, Mesh = RopewayMeshBuilder.Mesh(part), InstanceCount = count };
+            // the carriers move every frame: a box round the whole line, or the renderer culls by the stale one
+            mm.CustomAabb = Bounds(line);
+            var node = new MultiMeshInstance3D { Multimesh = mm, MaterialOverride = _material, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
+            AddChild(node);
+            return node;
+        }
+        var main = Instance(line.Kind switch
+        {
+            RopewayKind.Chair => RopewayMeshBuilder.Part.Chair,
+            RopewayKind.Gondola => RopewayMeshBuilder.Part.Cabin,
+            RopewayKind.TBar => RopewayMeshBuilder.Part.Rod,
+            _ => RopewayMeshBuilder.Part.Handle,
+        });
+        var bar = line.Kind == RopewayKind.TBar ? Instance(RopewayMeshBuilder.Part.Bar) : null;
+        return new Drawn { Line = line, Main = main, Bar = bar };
+    }
+
+    public void OnOriginShifted(OriginShift shift)
+    {
+        Position = Vector3.Zero;
+        foreach (var (_, d) in _drawn)
+        {
+            var box = Bounds(d.Line);
+            d.Main.Multimesh.CustomAabb = box;
+            if (d.Bar != null) d.Bar.Multimesh.CustomAabb = box;
+            d.Near = true;   // posed this frame, whatever its range
+        }
+    }
+
+    /// <summary>The line's box in world space, generous: the carriers hang below it and the down side runs beside it.</summary>
+    private Aabb Bounds(RopewayLine line)
+    {
+        var origin = _chunks.Origin!;
+        var box = new Aabb(origin.ToWorld(line.E[0], line.N[0], line.Alt[0]), Vector3.Zero);
+        for (int i = 1; i < line.E.Length; i++) box = box.Expand(origin.ToWorld(line.E[i], line.N[i], line.Alt[i]));
+        return box.Grow(15f);
+    }
+
+    private void Pose(Drawn d, WorldOrigin origin, double sim)
+    {
+        var line = d.Line;
+        var main = d.Main.Multimesh;
+        int count = main.InstanceCount;
+        for (int i = 0; i < count; i++)
+        {
+            var (e, n, alt, de, dn, up) = RopewayMotion.Place(line, RopewayMotion.Loop(line, i, sim));
+            var at = origin.ToWorld(e, n, alt);
+            var basis = new Basis(Vector3.Up, Mathf.Atan2(-de, dn));
+            if (d.Bar is { } barNode)
+            {
+                // a T-bar: the rod reaches down to the rider's hip on the way up, wound in on the way down
+                float ground = _chunks.TryGetHeight(at, out float h) ? h : at.Y - 6f;
+                float reach = up ? Mathf.Max(0.5f, at.Y - (ground + BarFloor) - 0.75f) : 0.8f;
+                main.SetInstanceTransform(i, new Transform3D(basis.Scaled(new Vector3(1, reach, 1)), at));
+                barNode.Multimesh.SetInstanceTransform(i, new Transform3D(basis, at - new Vector3(0, reach + 0.75f, 0)));
+            }
+            else main.SetInstanceTransform(i, new Transform3D(basis, at));
+        }
+    }
+}
