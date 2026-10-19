@@ -3,6 +3,7 @@
 # clients (--tiles-url). The site is TILES_DOMAIN: a domain gets HTTPS (Let's Encrypt) and HTTP/2, or ":80" for plain HTTP.
 # Everything else is the status page (#740): WEB_DIR holds index.html (uploaded by the deploy) and the
 # status.json the game server keeps up to date (--status-file), media/ the clips and pictures (tools/web-media.sh).
+# The live map (#896): map.html, players.json (--livemap-file, every 2 s) and antennas-4g.json (tools/deploy/antennas.py).
 @TILES_SITE@ {
 	handle_path /tiles/* {
 		root * @CHUNKS_DIR@
@@ -14,9 +15,11 @@
 	}
 	handle {
 		root * @WEB_DIR@
-		@hidden not path / /index.html /status.json /media/*
+		@hidden not path / /index.html /status.json /media/* /map.html /players.json /antennas-4g.json
 		respond @hidden 404
 		header /status.json Cache-Control "no-store"
+		header /players.json Cache-Control "no-store"
+		header /antennas-4g.json Cache-Control "public, max-age=86400"
 		header /media/* Cache-Control "public, max-age=86400"
 		encode gzip
 		file_server

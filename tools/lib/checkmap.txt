@@ -708,3 +708,5 @@ src/Ui/InviteToasts      net    tools/invitecheck.sh
 src/Combat/FightManager  net    tools/invitecheck.sh
 src/World/RaceManager    net    tools/invitecheck.sh
 src/BattleRoyale/BrManager.cs net tools/invitecheck.sh
+src/Net/LiveMapFile      net    tools/livemapcheck.sh
+tools/deploy/web/map     net    tools/livemapcheck.sh
