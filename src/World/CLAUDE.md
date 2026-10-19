@@ -23,3 +23,4 @@ touches its topic; search with `grep -ril <word> docs/notes/world`.
 - `perf-racenpc-server-physics` — `RaceNpc` has no physics step on the dedicated server (a data proxy, never the simulator) (#221)
 - `perf-race-tick` — `RaceManager.ServerTick` per frame: no LINQ/`GetNodeOrNull`; node lookups on the 1 s review pass (#221)
 - `perf-player-snapshot` (player) — `Traffic` obstacles come from the tick's `PlayerSnapshot` into reused lists, never a group scan + `ToList` per tick (#221)
+- `ski-snow` — Ski slopes' snow (#887): ski day 06:00-06:00 and the reset, deterministic `SnowWeather`, `SnowModel` (corduroy, loose, ice, slush, moguls), wear = crowd + real skiers (server, replicated), `/weather` and `--weather`, `PisteLayer` + `piste_snow` shader, trees cleared, `Surfaces` snow/ice, skis friction, `SlopeHud`

@@ -129,3 +129,21 @@ Outputs, each 0-1:
 Rideable lifts (TLM lines + OSM aerialway details: type, duration, capacity, stations), the ski force
 model (heading vs velocity, carve/skid, snow-dependent friction off slopes), the snowboard, off-slope
 snow coverage and ski tracks.
+
+## Status (on the branch, Oct 19 2026)
+
+- **Built**:
+  - step 1, data: `.pst`, MapSetup `pistes`, streamed;
+  - step 3, weather and state: `/weather`, `--weather`, wear replicated, HUD, `Surfaces`, skis friction;
+  - from step 2: slopes drawn by state in every style, trees cleared off runs.
+- **Built differently**:
+  - The terrain mesh is untouched. Slopes come from a per-tile texture, as `PhotoLayer` does,
+    instead of a CUSTOM0 channel, so every LOD has per-pixel edges and a state change never
+    rebuilds a mesh.
+  - The groom direction became a stored groom phase (`notes/world/ski-snow`).
+  - The records carry their altitude range, sun exposure and steepness.
+- **Not built yet**:
+  - edge markers, and slopes on the map screen (step 2);
+  - forest roads under a slope are still drawn on top of the snow (in winter they are the run);
+  - a `--pistecheck` probe: the model is covered by unit tests, the look and the ride by
+    screenshots and `--ride` runs.
