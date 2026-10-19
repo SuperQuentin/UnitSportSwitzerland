@@ -107,7 +107,7 @@ public static class FondueScript
         ["s01"] = "GORNERGRAT · 3135 M · 17:40",
         ["s16"] = "LAUSANNE · 21:00",
         ["s17"] = "BERN · 23:10",
-        ["s20"] = "GENÈVE · 07:00",
+        ["s20"] = "PULLY · 07:00",
         ["s21"] = "GOTTHARD · 07:30",
         ["s29"] = "RIDDES · 11:00",
         ["s31"] = "LAVAUX · 13:00",
@@ -158,16 +158,18 @@ public static class FondueScript
     private static readonly Spot RiddesIkea = new(2582265, 1112638);
     private static readonly Spot RiddesCow = new Spot(2584199, 1113836).Toward(59, 60).Toward(329, 22);
     private static readonly Spot RiddesField = new(2584199, 1113836), RiddesFieldEnd = new(2584426, 1113972);
-    /// <summary>Geneva airport's apron by the freighter's stand: flat, wide, a car park for the garage.</summary>
-    private static readonly Spot Apron = new(2497250, 1121000);
+    /// <summary>The meadow by the Pully building site: flat and open, the garage's car park (Geneva's apron is next to France).</summary>
+    private static readonly Spot Apron = new(2542935, 1152276);
     /// <summary>The Nyon pier and the park the party danced in.</summary>
     private static readonly Spot NyonPier = new(2508077, 1137494), NyonPark = new(2507810, 1137290);
     /// <summary>Lauterbrunnen's main street, the Staubbach behind.</summary>
     private static readonly Spot Lauterbrunnen = new(2635922, 1160430);
     private static readonly Spot PullySite = new(2542905, 1152292);
     private static readonly Spot ZurichCam = new(2683480, 1246900);
-    /// <summary>The theodul slope, falling west toward the Matterhorn (as in the story).</summary>
-    private static readonly Spot Slope = new(2621770, 1089700);
+    /// <summary>The Lavaux corniche road above the steamer's lake (the story's road-bike spot).</summary>
+    private static readonly Spot Corniche = new(2547020, 1149060);
+    /// <summary>The Gornergrat's slope west of the hotel, down toward Riffelberg.</summary>
+    private static readonly Spot Slope = Crew.Toward(250, 220);
     /// <summary>The Riddes straight, west end and east end (the showcase's crash).</summary>
     private static readonly Spot RiddesWest = new(2583100, 1113236), RiddesEast = new(2583390, 1113236);
 
@@ -231,8 +233,9 @@ public static class FondueScript
             Props = Pot(Crew),
             Keys =
             [
-                new(0, Ground(Crew, 115, 4.5f, 0.7f), Pt.On(4, 0f, 0f), 28),
-                new(B, Ground(Crew, 112, 4.3f, 0.7f), Pt.On(4, 0f, 0f), 28),
+                // by the hotel behind them, looking up past them at it coming in
+                new(0, Ground(Crew, 250, 6f, 1.5f), Pt.On(4, 0f, 0f), 28),
+                new(B, Ground(Crew, 252, 5.6f, 1.4f), Pt.On(4, 0f, 0f), 28),
             ],
             Smooth = 0.2f, Preroll = 0.3,
             Bubbles = [Say("f03", 0.4, 3)],
@@ -247,8 +250,8 @@ public static class FondueScript
             Craft = [new Craft(Crew.Up(14f), 250) { Switches = UfoSwitches.BeamBetween(0.8, 99) }],
             Keys =
             [
-                new(0, Ground(Crew, 112, 13, 1.4f), Ground(Crew, 0, 0, 2f), 24),
-                new(2 * B, Ground(Crew, 116, 12, 1.2f), Ground(Crew, 0, 0, 8f), 24),
+                new(0, Ground(Crew, 110, 15, 3.5f), Ground(Crew, 0, 0, 1.5f), 24),
+                new(2 * B, Ground(Crew, 114, 14, 3.2f), Ground(Crew, 0, 0, 7f), 24),
             ],
             Preroll = 0.5,
             Bubbles = [Say("f04", 0.6, 0, BubbleShape.Shout)],
@@ -290,25 +293,24 @@ public static class FondueScript
         // ==== act one: down the mountain, into the sky (bars 12-26) ================================
         new()
         {
-            Number = 0, FromBar = 0, Bars = 1, Name = "Over the edge", Feature = "on foot: run, base jump into the wingsuit",
+            Number = 0, FromBar = 0, Bars = 1, Name = "Over the edge", Feature = "base jump into the wingsuit",
             Hour = 17.8,
+            // off the Gornergrat's edge in his wingsuit: the slope below is too gentle for a jump out of a run
+            // to open it (12 m under him while falling), so he leaps off already in it
             Cast =
             [
                 new()
                 {
-                    Who = Jonas, At = GornerEdge, Heading = 165, Drive = Drive.Walk,
-                    Walk = _ => (new Vector2(0f, 1f), true),
-                    // jump, jump: a hop at the edge, then the wingsuit once he falls
-                    Actions = t => (t > 1.0 && (int)(t * 6) % 2 == 0, false),
-                    Flight = _ => Stick(0f, -0.3f),
+                    Who = Jonas, Ride = RideKind.Wingsuit, At = GornerEdge.Up(1.2f), Heading = 167, Drive = Drive.Fly,
+                    Launch = 9, Climb = 28, Flight = t => Stick(0f, t < 0.8 ? 0f : -0.35f),
                 },
             ],
             Keys =
             [
-                new(0, Pt.On(0, 0.4f, 1.8f, 3.6f), Pt.On(0, 0f, 0.2f, -8f), 24),
-                new(B, Pt.On(0, 0.2f, 2.6f, 4.6f), Pt.On(0, 0f, -2f, -10f), 24),
+                new(0, Pt.On(0, 0.6f, 1.4f, 4.0f), Pt.On(0, 0f, 0f, -8f), 24),
+                new(B, Pt.On(0, 0.3f, 2.0f, 5.0f), Pt.On(0, 0f, -2f, -10f), 24),
             ],
-            Smooth = 0.08f, Preroll = 0.8,
+            Smooth = 0.06f, Preroll = 0.15,
         },
         new()
         {
@@ -316,9 +318,9 @@ public static class FondueScript
             Hour = 17.8,
             Cast =
             [
-                new() { Who = Jonas, Ride = RideKind.Wingsuit, At = Spot.Alt(2626400, 1091900, 3000), Heading = 245, Drive = Drive.Fly, Launch = 45, Climb = -15, Flight = _ => Stick(0f, -0.15f) },
+                new() { Who = Jonas, Ride = RideKind.Wingsuit, At = Spot.Alt(2626300, 1093000, 3000), Heading = 245, Drive = Drive.Fly, Launch = 45, Climb = -15, Flight = _ => Stick(0f, -0.15f) },
                 // the saucer ahead, low over the glacier
-                Saucer(Spot.Alt(2626150, 1091780, 2960), 245, _ => Ahead(false, -0.2f), launch: 40),
+                Saucer(Spot.Alt(2626050, 1092880, 2960), 245, _ => Ahead(false, -0.2f), launch: 40),
             ],
             Keys =
             [
@@ -410,8 +412,9 @@ public static class FondueScript
             Hour = 13,
             Keys =
             [
-                new(0, Pt.At(2636000, 1162000, 9000), Pt.At(2636000, 1162000.5, 0), 24),
-                new(B, Pt.At(2636000, 1162000, 7500), Pt.At(2636000, 1162000.5, 0), 24),
+                // under the map screen, Lauterbrunnen's street (an eye high up would need the world 8 km round)
+                new(0, Pt.At(2635927, 1160423, 1.6f), Pt.At(2635922, 1160480, 3f), 35),
+                new(B, Pt.At(2635927, 1160424, 1.6f), Pt.At(2635922, 1160480, 3f), 35),
             ],
             Preroll = 0.2,
             Bubbles = [Say("f15", 0.3, -1)],
@@ -489,12 +492,12 @@ public static class FondueScript
             [
                 new()
                 {
-                    Who = Marco, At = Apron.Toward(316, 4), Heading = 136, Drive = Drive.Walk,
+                    Who = Marco, At = Apron.Toward(90, 4), Heading = 270, Drive = Drive.Walk,
                     Walk = _ => (new Vector2(0f, 0.7f), false),
                 },
                 // cars in a row on his right, bikes on his left, all facing him
-                .. Enumerable.Range(0, 12).Select(i => new Cast { Ride = Car(i * 2 + 1), At = Apron.Toward(136, i * 3.4f).Toward(46, 4.5f), Heading = 226, Seed = 120 + i }),
-                .. Enumerable.Range(0, 10).Select(i => new Cast { Ride = Moto(i * 7), At = Apron.Toward(136, i * 3.4f + 1.5f).Toward(226, 3.5f), Heading = 46, Seed = 140 + i }),
+                .. Enumerable.Range(0, 12).Select(i => new Cast { Ride = Car(i * 2 + 1), At = Apron.Toward(270, i * 3.4f).Toward(0, 4.5f), Heading = 180, Seed = 120 + i }),
+                .. Enumerable.Range(0, 10).Select(i => new Cast { Ride = Moto(i * 7), At = Apron.Toward(270, i * 3.4f + 1.5f).Toward(180, 3.5f), Heading = 0, Seed = 140 + i }),
             ],
             Keys =
             [
@@ -547,9 +550,9 @@ public static class FondueScript
             Hour = 9, Traffic = 0,
             Cast =
             [
-                new() { Who = Marco, Ride = Car(Supra), At = Furka, Toward = FurkaTop, Drive = Drive.Road, Route = "cockpit", Arc = 900, Skill = 1.05f, FirstPerson = true },
-                // the saucer ahead up the pass
-                Saucer(Spot.Alt(2672600, 1157800, 2500), 70, _ => Ahead(false), launch: 30),
+                new() { Who = Marco, Ride = Car(Supra), At = Corniche, Heading = 290, Drive = Drive.Road, Route = "cockpit", Arc = 0, Skill = 1.0f, FirstPerson = true },
+                // the saucer ahead along the shore, over the lake
+                Saucer(Corniche.Toward(285, 260).Toward(195, 80).Up(45f), 285, _ => Ahead(false), launch: 22),
             ],
             Keys =
             [
@@ -589,8 +592,8 @@ public static class FondueScript
             Hour = 9.2, Traffic = 0,
             Cast =
             [
-                new() { Ride = Car(Bnr32), At = Furka, Toward = FurkaTop, Drive = Drive.Follow, Route = "lean", Arc = 460, Speed = 20 },
-                new() { Ride = Moto(Monster), At = Furka, Toward = FurkaTop, Drive = Drive.Follow, Route = "lean", Arc = 430, Speed = 23, Seed = 15 },
+                new() { Ride = Car(Bnr32), At = Corniche, Heading = 290, Drive = Drive.Follow, Route = "lean", Arc = 90, Speed = 15 },
+                new() { Ride = Moto(Monster), At = Corniche, Heading = 290, Drive = Drive.Follow, Route = "lean", Arc = 60, Speed = 17, Seed = 15 },
             ],
             Keys =
             [
@@ -603,11 +606,12 @@ public static class FondueScript
         {
             Number = 0, FromBar = 0, Bars = 1, Name = "Road bike", Feature = "road bike",
             Hour = 9.5, Traffic = 0,
-            Cast = [new() { Who = Lea, Ride = RideKind.RoadBike, At = Tremola, Toward = TremolaFoot, Drive = Drive.Road, Route = "tremola", Arc = 120 }],
+            Cast = [new() { Who = Lea, Ride = RideKind.RoadBike, At = Tremola, Toward = TremolaFoot, Drive = Drive.Road, Route = "tremola", Arc = 330 }],
             Keys =
             [
-                new(0, Pt.On(0, 0.6f, 1.7f, 4.5f), Pt.On(0, 0f, 0.9f, -10f), 35),
-                new(B, Pt.On(0, -0.6f, 1.6f, 4.2f), Pt.On(0, 0f, 0.9f, -10f), 35),
+                // on the outside of the hairpin, as for the AE86: an eye on the actor would need the world 8 km round
+                new(0, Pt.Road("tremola", 378, -6f, 1.6f), Pt.On(0, 0f, 1.0f), 50),
+                new(B, Pt.Road("tremola", 378, -6f, 1.6f), Pt.On(0, 0f, 1.0f), 50),
             ],
             Smooth = 0.15f, Preroll = 4,
             Bubbles = [Say("f27", 0.2, 0)],
