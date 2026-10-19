@@ -35,7 +35,8 @@ public readonly record struct BrSituation(
     float MateFightDistance = float.PositiveInfinity,
     bool CarriesTag = false,
     float StopDistance = float.PositiveInfinity,
-    float PingDistance = float.PositiveInfinity);
+    float PingDistance = float.PositiveInfinity,
+    bool CrateHasTag = false);
 
 /// <summary>
 /// The Battle Royale bot's choices as scores (#837): the highest goal wins. Pure and unit-tested
@@ -48,7 +49,8 @@ public readonly record struct BrSituation(
 /// <item>loot when unarmed (62) or short of rounds (45), else as greedy as it is;</item>
 /// <item>a shot heard draws the bold (30 to 55); else roam towards the zone (10).</item>
 /// <item>squads: a downed mate revived when no enemy is close (75), a mate's fight joined (60 up), a human's
-/// ping followed (55), a dogtag taken to a stop (66: before loot), the leader rejoined when far (50 to 58).</item>
+/// ping followed (55), a dogtag taken to a stop (90: before loot and an early run for the circle, offered only
+/// while the zone on the way costs less than the health it can spare), the leader rejoined when far (50 to 58).</item>
 /// </list>
 /// </summary>
 public static class BrTactics
@@ -73,6 +75,8 @@ public static class BrTactics
     public const float ReviveDraw = 150f;
     /// <summary>No enemy in sight this close (and none for <see cref="SafeAfter"/> s) before it kneels to revive.</summary>
     public const float ReviveClear = 40f;
+    /// <summary>A fallen mate's box with their dogtag draws from this far (the team knows where they fell).</summary>
+    public const float TagDraw = 400f;
     /// <summary>A mate's fight this close is joined.</summary>
     public const float AssistDraw = 200f;
 
@@ -105,7 +109,8 @@ public static class BrTactics
         if (safe && s.Meds > 0 && s.Health < 60f) Offer(BrGoal.Heal, 65f + (60f - s.Health) * 0.3f);
         if (safe && s.HasVest && s.Armor < 1f) Offer(BrGoal.Vest, 60f);
 
-        // loot: a gun first, then rounds, then whatever greed says
+        // loot: a fallen mate's dogtag first (squads), a gun, then rounds, then whatever greed says
+        if (s.CrateHasTag && s.CrateDistance <= TagDraw) Offer(BrGoal.Loot, 80f);
         if (s.CrateDistance <= CrateDraw)
         {
             if (!s.HasGun) Offer(BrGoal.Loot, 62f);
@@ -123,8 +128,10 @@ public static class BrTactics
         if (s.MateFightDistance <= AssistDraw && (s.HasGun || s.MateFightDistance <= KnifeRush * 2f))
             Offer(BrGoal.Assist, 60f + 10f * s.Boldness);
         if (s.PingDistance < float.PositiveInfinity) Offer(BrGoal.Ping, 55f);
-        // a mate's life before loot: above an unarmed bot's crate (62), below healing when badly hurt
-        if (s.CarriesTag && s.StopDistance < float.PositiveInfinity) Offer(BrGoal.Recall, 66f);
+        // a mate's life before loot and before running early for the circle: a stop is only offered when there is
+        // time to get there and back inside (BrManager.NearestStop); only a zone that hurts comes first
+        // (90, and 102 with stickiness: on through a zone that hurts, until the stop costs too much health)
+        if (s.CarriesTag && s.StopDistance < float.PositiveInfinity) Offer(BrGoal.Recall, 90f);
         if (s.LeaderDistance > RegroupFrom && s.LeaderDistance < float.PositiveInfinity)
             Offer(BrGoal.Regroup, s.LeaderDistance > RegroupFrom * 2.5f ? 58f : 50f);
         return best;

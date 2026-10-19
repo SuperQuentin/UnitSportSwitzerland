@@ -45,23 +45,58 @@ public partial class BrManager
         && _state.Entrants.Any(m => m.Team == me.Team && !m.Alive && !m.Recalled);
 
     /// <summary>
-    /// The nearest Postauto stop to <paramref name="at"/> (world, on the stop's ground) inside the circle a bot must
-    /// reach (85 % of its radius), while recalls are open: a bot carrying a dogtag goes there. A stop outside it
-    /// sent the bot out of the circle and the zone sent it back, to and fro until it closed. Null when none is in.
+    /// The nearest Postauto stop to <paramref name="at"/> (world, on the stop's ground) worth a bot's walk with a
+    /// dogtag, while recalls are open: the walk there and on into the circle it must reach (at <see cref="StopWalk"/>
+    /// m/s, plus a margin), and any stretch past the current circle, cost it no more zone than it can take, keeping
+    /// <see cref="StopKeep"/> health (the time past the circle's closing at the zone's damage, 1.5 × for safety), as
+    /// a player runs for a stop through a little zone. A stop it could not afford sent it out and the zone sent it
+    /// back, to and fro; a stop only inside the next circle was usually none (the four are spread over the first).
+    /// Null when none can be had.
     /// </summary>
-    public Vector3? NearestStop(Vector3 at)
+    public Vector3? NearestStop(Vector3 at, float health = 100f)
     {
         if (!RecallOpen || Origin == null) return null;
         var (e, n) = Origin.ToLv95(at);
         var here = new Vector2((float)(e - _state.AreaE), (float)(n - _state.AreaN));
         var z = _state.Zone().At(Now - _state.Started);
         var centre = z.Phase > 0 ? z.NextCentre : z.Centre;
-        float radius = (z.Phase > 0 ? z.NextRadius : z.Radius) * 0.85f;
-        var stops = Stops().Where(s => s.At.DistanceTo(centre) < radius).ToList();
+        float radius = (z.Phase > 0 ? z.NextRadius : z.Radius) * 0.8f;
+        // the time before the circle it must be in closes: the wait left, then about a minute of shrink
+        double left = z.Phase == 0 ? double.PositiveInfinity : z.Left + (z.Shrinking ? 0 : 60);
+        float dps = Math.Max(z.Dps, 3f) * 1.5f;
+        // the zone it would stand in: out past the circle now and back (a stop outside it), and whatever of
+        // the walk there and on into the circle it must reach runs past that circle's closing
+        double ZoneSeconds((Vector2 At, float Alt) s)
+        {
+            double past = Math.Max(0f, s.At.DistanceTo(z.Centre) - z.Radius) * 2 / StopWalk;
+            double walk = (s.At.DistanceTo(here) + Math.Max(0f, s.At.DistanceTo(centre) - radius)) / StopWalk + StopMargin;
+            return past + Math.Max(0.0, walk - left);
+        }
+        var stops = Stops().Where(s => health - ZoneSeconds(s) * dps > StopKeep).ToList();
         if (stops.Count == 0) return null;
         var stop = stops.OrderBy(s => s.At.DistanceTo(here)).First();
         return Origin.ToWorld(_state.AreaE + stop.At.X, _state.AreaN + stop.At.Y, stop.Alt);
     }
+
+    /// <summary>Why <see cref="NearestStop"/> has none (for <c>--botlog</c>): recalls, the zone, each stop's walk and the time left.</summary>
+    public string StopReport(Vector3 at)
+    {
+        if (Origin == null) return "no origin";
+        var (e, n) = Origin.ToLv95(at);
+        var here = new Vector2((float)(e - _state.AreaE), (float)(n - _state.AreaN));
+        var z = _state.Zone().At(Now - _state.Started);
+        var centre = z.Phase > 0 ? z.NextCentre : z.Centre;
+        float radius = (z.Phase > 0 ? z.NextRadius : z.Radius) * 0.8f;
+        double left = z.Phase == 0 ? double.PositiveInfinity : z.Left + (z.Shrinking ? 0 : 60);
+        return FormattableString.Invariant($"recall open {RecallOpen}, phase {z.Phase}, radius {z.Radius:F0}, left {left:F0} s, stops: ")
+            + string.Join("; ", Stops().Select(s => FormattableString.Invariant(
+                $"{s.At.DistanceTo(here):F0} m off, {Math.Max(0f, s.At.DistanceTo(z.Centre) - z.Radius):F0} m out, walk {(s.At.DistanceTo(here) + Math.Max(0f, s.At.DistanceTo(centre) - radius)) / StopWalk + StopMargin:F0} s")));
+    }
+
+    /// <summary>A bot's pace to and from a stop (it runs at 5.8 m/s; walls and detours on the way), and the margin, s.</summary>
+    private const float StopWalk = 4.5f, StopMargin = 20f;
+    /// <summary>The health a bot keeps when it walks through zone to a stop.</summary>
+    private const float StopKeep = 45f;
 
     /// <summary>The last ping a human of <paramref name="team"/> made (world point, when, by whom), for the team's bots.</summary>
     public (Vector3 At, double When, long From)? HumanPing(int team) => _humanPings.TryGetValue(team, out var p) ? p : null;

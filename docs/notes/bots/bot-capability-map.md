@@ -69,6 +69,6 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | the zone's damage, and running from it | — | `BrManager.BotZone` | the zone (state, as a player's HUD) | `BrBrain` zone (`BrTactics.ZoneRunNeeded`) | ok |
 | eliminated, kill credit, careers | — | `OnBotDied`, `Eliminate`, `BotKills`, no career | — | — | ok |
 | downed, revived by a player, finished | — | `Downed`, `RequestRevive` (bot target), `OutIfAllDown` | — | — | ok |
-| revive a team-mate | — | `RequestRevive` (RPC by sender) | mates' state | `Revive` | gap: phase 4 |
-| pings | — | `RequestPing` (RPC by sender) | team pings | `Follow` | gap: phase 4 |
-| recall with a dogtag | — | `RequestRecall` (RPC by sender) | — | — | gap: phase 4 |
+| revive a team-mate | — | `ServerRevive(peer, target)` (`RequestRevive` calls it) | `TeamView` (mates' state) | `BrBrain.Revive` (5 s hold) | ok (`brsquadcheck`) |
+| pings | — | `ServerPing(peer, e, n, alt)` (`RequestPing` calls it) | `HumanPing(team)` | Ping goal; pings enemies for a human mate | ok (`brsquadcheck`); loot pings: gap |
+| recall with a dogtag | — | `ServerRecall(peer)`; a bot target by `RecallBot` | `NearestStop` (inside the circle) | `AlsoWants` the tag, Recall goal | ok (`brsquadcheck`) |

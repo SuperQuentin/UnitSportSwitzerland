@@ -124,6 +124,17 @@ public class BrTacticsTests
     }
 
     [Fact]
+    public void A_dogtag_goes_to_the_stop_before_an_early_run_but_not_through_a_hurting_zone()
+    {
+        Assert.Equal(BrGoal.Recall, BrTactics.Choose(Calm() with { CarriesTag = true, StopDistance = 300, ZoneRunNeeded = 200 }));
+        Assert.Equal(BrGoal.Zone, BrTactics.Choose(Calm() with { CarriesTag = true, StopDistance = 300, OutsideBy = 20 }));
+    }
+
+    [Fact]
+    public void A_fallen_mates_dogtag_is_fetched_from_afar_even_armed() =>
+        Assert.Equal(BrGoal.Loot, BrTactics.Choose(Calm() with { CrateHasTag = true, CrateDistance = 300, LeaderDistance = 90 }));
+
+    [Fact]
     public void A_dogtag_goes_to_the_stop_before_more_loot() =>
         Assert.Equal(BrGoal.Recall, BrTactics.Choose(Calm(gun: false) with { CarriesTag = true, StopDistance = 600, CrateDistance = 30 }));
 

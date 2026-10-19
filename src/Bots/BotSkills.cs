@@ -270,7 +270,8 @@ public static class BotSkills
     public static bool TakeOne(Bot bot, BattleRoyale.BrCrates crates, BattleRoyale.Crate crate)
     {
         var stacks = crate.Stacks();
-        for (int i = 0; i < stacks.Count; i++)
+        // what the mode wants most first (a fallen mate's dogtag), then the crate's order
+        foreach (int i in Enumerable.Range(0, stacks.Count).OrderBy(i => AlsoWants?.Invoke(bot, stacks[i]) == true ? 0 : 1))
         {
             var s = stacks[i];
             if (!Wants(bot, s) || bot.Inventory.Room(s.Id) < s.Count) continue;

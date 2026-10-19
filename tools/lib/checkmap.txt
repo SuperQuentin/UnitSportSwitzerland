@@ -690,6 +690,9 @@ src/BattleRoyale/BrState   net  tools/brbotcheck.sh
 src/BattleRoyale/BrStats   net  tools/brbotcheck.sh
 src/BattleRoyale/BrBotProbe net tools/brbotcheck.sh
 src/Bots/                  net  tools/brbotcheck.sh
+src/Bots/                  net  tools/brsquadcheck.sh
+src/BattleRoyale/BrManager net  tools/brsquadcheck.sh
+src/BattleRoyale/BrBotProbe net tools/brsquadcheck.sh
 # invites, parties, the quick menu and the Activities screen between two clients (#840)
 src/Net/Invites/         net    tools/invitecheck.sh
 src/Net/ChatManager.Invites net tools/invitecheck.sh

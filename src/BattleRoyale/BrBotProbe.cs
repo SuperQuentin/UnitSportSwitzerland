@@ -94,8 +94,10 @@ public partial class BrBotProbe : ChatProbe
 
     /// <summary>
     /// <c>--brsquadcheck</c> (#837 phase 4): a duos match of A and one bot, alone on its side (no enemy to chase).
-    /// The mate jumps after A and lands near, regroups when A moves off, goes to A's ping, revives A when A is
-    /// down, and takes A's dogtag to a Postauto stop when A is out: A is recalled.
+    /// The mate jumps after A and lands near, regroups when A moves off, takes A's dogtag to a Postauto stop when
+    /// A is out (in the looting phase: the stops are spread over the first circle, and once circles close the bot
+    /// rightly finds them too far through the zone): A is recalled; then it regroups when A moves off, goes to A's
+    /// ping and revives A when A is down.
     /// </summary>
     private static bool SquadCheck => CmdArgs.Has("--brsquadcheck");
 
@@ -106,7 +108,10 @@ public partial class BrBotProbe : ChatProbe
         if (!await Until(() => Permissions.IsAdmin, 10)) { Fail("not logged in as admin"); return; }
         Chat.Send("/br bots 2 normal");
         await Seconds(0.5);
-        Chat.Send("/br open 5 short duos");
+        // here: A starts in a town with roads enough for the Postauto stops (tools/brsquadcheck.sh); a random
+        // region may have none
+        // long: the looting phase lasts, when no circle is shown yet and any stop is worth the walk
+        Chat.Send("/br open here 5 long duos");
         if (!await Until(() => br.State.Phase == BrPhase.Lobby, 20)) { Fail("no lobby"); return; }
         Chat.Send("/br join");
         await Until(() => br.State.Phase == BrPhase.Countdown, 10);
@@ -132,9 +137,27 @@ public partial class BrBotProbe : ChatProbe
         bool near = await Until(() => BodyOf(id) is { Ride: RideKind.OnFoot, Visible: true } b && ToMe(b) < 150f, 240);
         Expect(near, $"the mate flew after A and landed near ({(BodyOf(id) is { } b0 ? ToMe(b0) : -1):F0} m)");
         if (!near) return;
+        await Seconds(5);   // its ride as this client sees it can say on foot a moment before the server's body lands
+
+        // out: the mate takes A's dogtag to a Postauto stop and A is back
+        if (br.State.RecallPoints is not { Length: > 0 }) { Fail("no Postauto stops in this region: the recall is not tested"); return; }
+        me.TakeDamage(me.Health + 10f, 0, DamageCause.Other);
+        Expect(await Until(() => me.Downed, 5), "A is down, not out (a mate stands)");
+        for (int i = 0; i < 20 && br.MyEntry is { Alive: true }; i++) { me.TakeDamage(500f, 0, DamageCause.Other); await Seconds(0.5); }
+        Expect(await Until(() => br.MyEntry is { Alive: false }, 30), "A is out");
+        Expect(await Until(() => br.MyEntry is { Alive: true, Recalled: true }, 400), "the mate took A's dogtag to a stop: A is recalled");
+        // back over the stop in the wingsuit: down on foot, near the mate again for what follows
+        me.Leap(me.GlobalPosition, Vector3.Zero, RideKind.OnFoot);
+        if (BodyOf(id) is { } mateBody && me.Origin is { } o)
+        {
+            var (me2, mn2) = o.ToLv95(mateBody.GlobalPosition);
+            br.Teleport(me2 + 10, mn2, "beside the mate");
+        }
+        await Until(() => me.IsOnFloor(), 20);
 
         // A moves off: the mate comes back to within 60 m
-        br.Teleport(br.State.AreaE + c0.X + 110, br.State.AreaN + c0.Y, "110 m east");
+        var (ae, an) = me.Origin!.ToLv95(me.GlobalPosition);
+        br.Teleport(ae + 110, an, "110 m east");
         await Until(() => me.IsOnFloor(), 20);
         Expect(await Until(() => BodyOf(id) is { } b && ToMe(b) < 60f, 90), $"the mate regrouped ({(BodyOf(id) is { } b1 ? ToMe(b1) : -1):F0} m)");
 
@@ -150,14 +173,6 @@ public partial class BrBotProbe : ChatProbe
         me.TakeDamage(me.Health + 10f, 0, DamageCause.Other);
         Expect(await Until(() => me.Downed, 5), "A is down, not out");
         Expect(await Until(() => !me.Downed && br.MyEntry is { Alive: true, Downed: false }, 90), "the mate revived A");
-
-        // out: the mate takes A's dogtag to a Postauto stop and A is back
-        if (br.State.RecallPoints is not { Length: > 0 }) { Fail("no Postauto stops in this region: the recall is not tested"); return; }
-        me.TakeDamage(me.Health + 10f, 0, DamageCause.Other);
-        await Until(() => me.Downed, 5);
-        for (int i = 0; i < 20 && br.MyEntry is { Alive: true }; i++) { me.TakeDamage(500f, 0, DamageCause.Other); await Seconds(0.5); }
-        Expect(await Until(() => br.MyEntry is { Alive: false }, 30), "A is out");
-        Expect(await Until(() => br.MyEntry is { Alive: true, Recalled: true }, 400), "the mate took A's dogtag to a stop: A is recalled");
     }
 
     private async Task Run()

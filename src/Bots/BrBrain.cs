@@ -156,9 +156,14 @@ public sealed class BrBrain : IBotBrain
                 Revive(bot, hurt, who.Peer, space, now);
                 return 0.2;
             case BrGoal.Ping when _pingAt is { } ping:
-                if (GoTo(bot, ping, run: true, 10f, space, now)) _pingAt = null;
+                // there: a look round for a few seconds (the human pointed at something), then back to the team
+                if (GoTo(bot, ping, run: true, 6f, space, now))
+                {
+                    if (_pingHereUntil == 0) _pingHereUntil = now + PingLinger;
+                    else if (now >= _pingHereUntil) { _pingAt = null; _pingHereUntil = 0; }
+                }
                 return 0.3;
-            case BrGoal.Recall when _br.NearestStop(body.GlobalPosition) is { } stop:
+            case BrGoal.Recall when _br.NearestStop(body.GlobalPosition, body.Health) is { } stop:
                 if (GoTo(bot, stop, run: true, 3.5f, space, now) && _br.ServerRecall(bot.Id))
                     GD.Print($"[bots] {body.Name} \"{bot.Profile.Name}\" used a dogtag at a Postauto stop");
                 return 0.3;
@@ -215,6 +220,10 @@ public sealed class BrBrain : IBotBrain
     private long _reviveWho;
     private double _reviveFrom;
     private double _pingOutAt;
+    private double _stopReportAt;
+    private double _pingHereUntil;
+    /// <summary>Seconds a bot stays at a human's ping once there.</summary>
+    private const double PingLinger = 8;
     private readonly Dictionary<long, double> _pingedEnemy = new();
     /// <summary>A human's ping is followed this long, unless reached.</summary>
     private const double PingFollow = 60;
@@ -228,6 +237,7 @@ public sealed class BrBrain : IBotBrain
         {
             _pingSeen = ping.When;
             _pingAt = ping.At;
+            _pingHereUntil = 0;
         }
         if (_pingAt != null && SimNow - _pingSeen > PingFollow) _pingAt = null;
         // for a human mate: an enemy seen for the first time in a while, at most one ping every 10 s
@@ -243,13 +253,18 @@ public sealed class BrBrain : IBotBrain
             }
         }
         float Dist(Vector3? p) => p is { } v ? v.DistanceTo(pos) : float.PositiveInfinity;
+        if (bot.Inventory.Contains(ItemId.Dogtag) && _br.NearestStop(pos, bot.Body.Health) == null && now >= _stopReportAt)
+        {
+            _stopReportAt = now + 10;
+            GD.Print($"[bots] {bot.Body.Name} carries a dogtag, no stop: {_br.StopReport(pos)}");
+        }
         return s with
         {
             LeaderDistance = team.LeaderBody is { } l ? l.GlobalPosition.DistanceTo(pos) : float.PositiveInfinity,
             MateDownedDistance = team.DownedBody is { } d ? d.GlobalPosition.DistanceTo(pos) : float.PositiveInfinity,
             MateFightDistance = Dist(team.Fight),
             CarriesTag = bot.Inventory.Contains(ItemId.Dogtag),
-            StopDistance = Dist(_br.NearestStop(pos)),
+            StopDistance = Dist(_br.NearestStop(pos, bot.Body.Health)),
             PingDistance = Dist(_pingAt),
         };
     }
@@ -388,6 +403,7 @@ public sealed class BrBrain : IBotBrain
         // solid between its eyes and the crate (the nearest few are tested, a ray each)
         crate = null;
         float crateDistance = float.PositiveInfinity;
+        bool crateHasTag = false;
         if (_crates != null)
         {
             _near.Clear();
@@ -398,9 +414,20 @@ public sealed class BrBrain : IBotBrain
                 if (d <= BrTactics.CrateDraw) _near.Add((c, at, d));
             }
             _near.Sort((x, y) => x.D.CompareTo(y.D));
+            // a fallen mate's box with their dogtag (squads, #837 phase 4): the team knows where they fell
+            if (BotSkills.AlsoWants?.Invoke(bot, new ItemStack(ItemId.Dogtag, 1)) == true)
+                foreach (var c in _crates.All)
+                    if (c.Style == CrateStyle.DeathBox && !_emptied.Contains(c.Id) && c.Stacks().Any(st => st.Id == ItemId.Dogtag)
+                        && _crates.WorldOf(c, body.GlobalPosition.Y) is { } tagAt && Flat(tagAt - body.GlobalPosition) is var td && td <= BrTactics.TagDraw
+                        && td < crateDistance)
+                    {
+                        crate = c;
+                        crateDistance = td;
+                        crateHasTag = true;
+                    }
             // the crate it is already walking to stays its crate, seen or not, until it is emptied
             foreach (var (c, _, d) in _near)
-                if (c.Id == _lootCrate) { crate = c; crateDistance = d; }
+                if (crate == null && c.Id == _lootCrate) { crate = c; crateDistance = d; }
             for (int i = 0; crate == null && i < Math.Min(_near.Count, 3); i++)
             {
                 var (c, at, d) = _near[i];
@@ -418,7 +445,7 @@ public sealed class BrBrain : IBotBrain
             EnemyDistance: enemy?.Distance ?? float.PositiveInfinity, DownedEnemyDistance: downed?.Distance ?? float.PositiveInfinity,
             HeardDistance: heard, HurtRecently: Core.GameClock.Now - body.LastAttackedAt < 3 && Hostile(body.LastAttacker),
             SecondsSinceEnemy: (float)(now - _lastEnemyAt), OutsideBy: outsideBy, ZoneRunNeeded: runNeeded,
-            CrateDistance: crateDistance, Boldness: bot.Profile.Boldness, LootGreed: bot.Profile.LootGreed);
+            CrateDistance: crateDistance, Boldness: bot.Profile.Boldness, LootGreed: bot.Profile.LootGreed, CrateHasTag: crateHasTag);
     }
 
     /// <summary>A crate this close is noticed whatever stands between (it walked past it, it heard it).</summary>
@@ -509,9 +536,11 @@ public sealed class BrBrain : IBotBrain
         if (_crates!.WorldOf(c, bot.Body.GlobalPosition.Y) is not { } at) { _emptied.Add(c.Id); return; }
         if (!_crates.Reachable(c, bot.Body.GlobalPosition))
         {
-            GoTo(bot, at, run: true, 1.2f, space, now);
-            // a crate it cannot get to (on a roof, behind a fence) is given up after a while
-            if (bot.Nav.Stuck >= 4) { _emptied.Add(c.Id); bot.Nav.Stuck = 0; }
+            bool there = GoTo(bot, at, run: true, 1.2f, space, now);
+            // a crate it cannot get to (on a roof, behind a fence) is given up after a while; and one it stands
+            // under or over and still cannot reach (another floor) at once: seen, a bot squad mate stood 1 m from
+            // such a crate for the rest of a match, never stuck since it had arrived
+            if (there || bot.Nav.Stuck >= 4) { _emptied.Add(c.Id); bot.Nav.Stuck = 0; }
             return;
         }
         bot.Intent.Wish = Vector3.Zero;
@@ -655,6 +684,13 @@ public sealed class BrBrain : IBotBrain
                 var (te, tn) = origin.ToLv95(target);
                 _route = roads.Path(fe, fn, te, tn)?.Select(p => origin.ToWorld(p.E, p.N, pos.Y)).ToList();
                 _routeNext = 0;
+                // a detour, not a way: streets that do not go there (seen: 197 points away from a ping 100 m
+                // off, until it was given up). Straight it is, round the walls as ever
+                if (_route is { Count: > 1 } r && RouteLength(pos, r) > Flat(target - pos) * DetourFactor + 100f)
+                {
+                    GD.Print(FormattableString.Invariant($"[bots] {bot.Body.Name} street route {RouteLength(pos, r):F0} m for {Flat(target - pos):F0} m: straight instead"));
+                    _route = null;
+                }
                 if (_route == null && _routeFails++ < 3)
                     GD.Print(FormattableString.Invariant($"[bots] {bot.Body.Name} no street route {fe:F0}/{fn:F0} -> {te:F0}/{tn:F0}: {roads.Near(fe, fn, 150, 3).Count} roads near it, {roads.Near(te, tn, 150, 3).Count} near the goal"));
             }
@@ -671,6 +707,16 @@ public sealed class BrBrain : IBotBrain
     }
 
     private static float Flat(Vector3 v) => new Vector2(v.X, v.Z).Length();
+
+    /// <summary>A street route this many times the straight distance (plus 100 m) is a detour: walk straight.</summary>
+    private const float DetourFactor = 2.5f;
+
+    private static float RouteLength(Vector3 from, List<Vector3> route)
+    {
+        float len = Flat(route[0] - from);
+        for (int i = 1; i < route.Count; i++) len += Flat(route[i] - route[i - 1]);
+        return len;
+    }
 
     private void Roam(Bot bot, ZoneView zone, PhysicsDirectSpaceState3D space, double now)
     {
