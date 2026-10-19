@@ -1,5 +1,6 @@
 using System;
 using Godot;
+using UnitSport.Avatar;
 
 namespace UnitSport.Trailer;
 
@@ -85,17 +86,20 @@ public sealed record Craft(Spot At, float Heading = 0f)
     public float Nose { get; init; }
     /// <summary>Degrees it rolls onto its right side, negative: its left.</summary>
     public float Bank { get; init; }
-    /// <summary>Metres it is dug into the ground (a crash).</summary>
+    /// <summary>Metres it is put lower than standing on its legs' feet (a crash with its legs up: <see cref="UfoMeshBuilder.Belly"/> puts the belly on the ground).</summary>
     public float Sink { get; init; }
     /// <summary>Dark smoke rising from it (a crash).</summary>
     public bool Smoke { get; init; }
     /// <summary>Its switches over the shot's time (as an actor's script: from the actors' go, the pre-roll included); null: lamps lit, beam off, ramp shut.</summary>
     public Func<double, UfoSwitches>? Switches { get; init; }
 
-    /// <summary>A crashed saucer: nose down 14°, rolled 9°, 0.6 m into the ground, smoking, legs up, lamps flickering off.</summary>
+    /// <summary>
+    /// A crashed saucer: legs up, its belly (2.2 m over its feet) 0.5 m into the ground, nose down 12°,
+    /// rolled 8°, smoking, its lamps flickering. Give the shot 3 s of pre-roll for the smoke to rise.
+    /// </summary>
     public static Craft Crashed(Spot at, float heading) => new(at, heading)
     {
-        Nose = 14f, Bank = 9f, Sink = 0.6f, Smoke = true,
+        Nose = 12f, Bank = 8f, Sink = UfoMeshBuilder.Belly + 0.5f, Smoke = true,
         Switches = t => new UfoSwitches(Lights: Mathf.PosMod((float)t, 2.7f) > 0.35f, Ramp: false, Legs: false),
     };
 }

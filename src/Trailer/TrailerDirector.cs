@@ -137,6 +137,7 @@ public partial class TrailerDirector : Node
         "drognens" => DrognensScript.Shots,
         "bubbles" => BubbleDemoScript.Shots,
         "ufo" => UfoDemoScript.Shots,
+        "doors" => UfoDemoScript.Doors,
         _ => StoryScript.Shots,
     };
 

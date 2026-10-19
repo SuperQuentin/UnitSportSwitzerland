@@ -11,11 +11,11 @@ namespace UnitSport.Trailer;
 /// one shot each, on the fixture lake (no map needed):
 /// <c>CHUNKS=fixture:lake ARGS="--at 2600000,1200000 --trailer-allow-generated" FILM=ufo tools/trailer.sh stills</c>.
 /// The beach of the fixture is at <see cref="Beach"/>, the water east of it, open land west.
-/// Its own silent "song" of 120 BPM, eight shots of four bars.
+/// Its own silent "song" of 120 BPM, nine shots of four bars.
 /// </summary>
 public static class UfoDemoScript
 {
-    private static readonly Song Silence = new("UFO kit demo", 120.0, 0.0, 64.0, "", "");
+    private static readonly Song Silence = new("UFO kit demo", 120.0, 0.0, 72.0, "", "");
 
     /// <summary>The fixture's start: a gravel beach, the lake from 40 m east.</summary>
     public static readonly Spot Beach = new(2_600_000, 1_200_000);
@@ -31,7 +31,7 @@ public static class UfoDemoScript
     [
         new()
         {
-            Number = 1, Name = "Crashed", FromBar = 1, Bars = 4, Hour = 17, Style = "cartoon", Song = Silence,
+            Number = 1, Name = "Crashed", FromBar = 1, Bars = 4, Hour = 17, Style = "cartoon", Song = Silence, Preroll = 3,
             Feature = "Craft.Crashed: tilted, dug in, smoking, its lamps flickering",
             Craft = [Craft.Crashed(Wreck, 135)],
             Keys =
@@ -39,7 +39,6 @@ public static class UfoDemoScript
                 new(0, Wreck.Toward(200, 24).Up(3f), Wreck.Up(1.5f), 28),
                 new(8, Wreck.Toward(230, 20).Up(2.5f), Wreck.Up(1.5f), 28),
             ],
-            Preroll = 0.5,
         },
         new()
         {
@@ -104,25 +103,21 @@ public static class UfoDemoScript
         },
         new()
         {
-            Number = 6, Name = "Swim and fish", FromBar = 21, Bars = 4, Hour = 17, Style = "cartoon", Song = Silence,
-            Feature = "Cast.Swim from a dry Board spot; a fishing line from an actor's rod (ItemCues FishCast, FishEnd)",
+            Number = 6, Name = "Swim", FromBar = 21, Bars = 4, Hour = 17, Style = "cartoon", Song = Silence,
+            Feature = "Cast.Swim: put on a dry Board spot, then swimming at its spot, stroking with its Walk",
             Cast =
             [
-                new() { Who = Nina, At = Beach.Toward(90, 75), Board = Beach.Toward(90, 12), Swim = true, Heading = 70, Drive = Drive.Walk,
-                    Walk = t => (new Vector2(0, 0.6f), false) },
-                new() { Who = Lea, At = Beach.Toward(90, 30).Toward(0, 6), Heading = 100, Item = (int)ItemId.FishingRod },
-            ],
-            ItemCues =
-            [
-                new(0.4, 1, ItemEventKind.FishCast) { At = Beach.Toward(90, 52).Toward(0, 9) },
-                new(6.0, 1, ItemEventKind.FishEnd) { Extra = ((int)ItemId.BrownTrout).ToString() },
+                new() { Who = Nina, At = Beach.Toward(90, 230).Toward(180, 12), Board = Beach.Toward(90, 12), Swim = true, Heading = 0,
+                    Drive = Drive.Walk, Walk = t => (new Vector2(0, 0.8f), true) },
             ],
             Keys =
             [
-                new(0, Beach.Toward(90, 22).Toward(180, 6).Up(2.2f), Beach.Toward(90, 55).Up(0.5f), 28),
-                new(8, Beach.Toward(90, 20).Toward(180, 8).Up(2.4f), Beach.Toward(90, 70).Up(0.5f), 28),
+                new(0, Pt.On(0, 3.5f, 2.2f, 4.5f), Pt.On(0, 0f, 0.2f, -1f), 28),
+                new(8, Pt.On(0, 4.5f, 2.4f, 4.0f), Pt.On(0, 0f, 0.2f, -1f), 28),
             ],
-            Preroll = 1.0,
+            Smooth = 0.4f,
+            // the swimmer is put in the water while placed; two seconds to take its stroke
+            Preroll = 2.0,
         },
         new()
         {
@@ -157,5 +152,47 @@ public static class UfoDemoScript
             ],
             Preroll = 0.5,
         },
+        new()
+        {
+            Number = 9, Name = "Fish", FromBar = 33, Bars = 4, Hour = 17, Style = "cartoon", Song = Silence,
+            Feature = "Shot.ItemCues: a fishing line from an actor's rod (FishCast at a spot on the water, FishEnd landing a trout)",
+            Cast = [new() { Who = Lea, At = Beach.Toward(90, 34).Toward(0, 3), Heading = 90, Item = (int)ItemId.FishingRod }],
+            ItemCues =
+            [
+                new(0.3, 0, ItemEventKind.FishCast) { At = Beach.Toward(90, 47).Toward(0, 4) },
+                new(6.5, 0, ItemEventKind.FishEnd) { Extra = ((int)ItemId.BrownTrout).ToString() },
+            ],
+            Keys =
+            [
+                new(0, Beach.Toward(90, 31).Toward(200, 4.5f).Up(1.8f), Beach.Toward(90, 41).Toward(0, 3).Up(0.6f), 28),
+                new(8, Beach.Toward(90, 31).Toward(210, 4.5f).Up(1.8f), Beach.Toward(90, 41).Toward(0, 3).Up(0.6f), 28),
+            ],
+            Preroll = 0.5,
+        },
     ];
+
+    private static readonly Song DoorSilence = new("Door demo", 120.0, 0.0, 12.0, "", "");
+
+    /// <summary>
+    /// <c>FILM=doors</c>: <see cref="Cast.FromDoor"/> on the real map at the two doors the tourist film's
+    /// search missed (#865): the Riddes farmhouse seen from its yard, and IKEA Riddes.
+    /// </summary>
+    public static readonly IReadOnlyList<Shot> Doors =
+    [
+        new()
+        {
+            Number = 1, Name = "Farmhouse door", FromBar = 1, Bars = 3, Hour = 12, Style = "cartoon", Song = DoorSilence,
+            Cast = [new() { Who = Jonas, At = new Spot(2583392, 1113007), FromDoor = true, Item = (int)ItemId.Torch }],
+            Keys = [new(0, Pt.On(0, 1.2f, 1.6f, -5f), Pt.On(0, 0f, 1.3f), 28), new(6, Pt.On(0, 1.0f, 1.6f, -4.5f), Pt.On(0, 0f, 1.3f), 28)],
+            Preroll = 0.5,
+        },
+        new()
+        {
+            Number = 2, Name = "IKEA door", FromBar = 4, Bars = 3, Hour = 12, Style = "cartoon", Song = DoorSilence,
+            Cast = [new() { Who = Marco, At = new Spot(2582250, 1112640), FromDoor = true }],
+            Keys = [new(0, Pt.On(0, 2f, 1.7f, -7f), Pt.On(0, 0f, 1.3f), 28), new(6, Pt.On(0, 1.5f, 1.7f, -6f), Pt.On(0, 0f, 1.3f), 28)],
+            Preroll = 0.5,
+        },
+    ];
+
 }
