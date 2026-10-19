@@ -79,6 +79,17 @@ public partial class ConcertRig : Node3D
 
     private const float BeamLength = 70f;
 
+    /// <summary>
+    /// How far each beam reaches before it meets something solid (the roof, a stand, the pitch): a beam
+    /// stops there instead of shining on through the stadium's walls. One ray, reused, checks a quarter
+    /// of the beams a frame (each about 15 times a second); the stage's own body is not in its way, so
+    /// beams still climb through the grid into the sky.
+    /// </summary>
+    private float[] _reach = Array.Empty<float>();
+    private RayCast3D? _ray;
+    private int _rayNext;
+    private StaticBody3D? _stageBody;
+
     public ConcertRig(ConcertEvent e)
     {
         Event = e;
@@ -94,6 +105,10 @@ public partial class ConcertRig : Node3D
         BuildStage();
         var fx = _plan.Patch.Fixtures;
         _heads = fx.Where(f => f.Type.Kind is FixtureKind.Spot or FixtureKind.Beam or FixtureKind.Wash).ToArray();
+        _reach = _heads.Select(f => f.Type.Kind == FixtureKind.Wash ? BeamLength * 0.55f : BeamLength).ToArray();
+        _ray = new RayCast3D { Name = "BeamRay", Enabled = false, HitBackFaces = true, HitFromInside = false };
+        AddChild(_ray);
+        if (_stageBody != null) _ray.AddException(_stageBody);
         _cells = fx.Where(f => f.Type.Kind is FixtureKind.Blinder or FixtureKind.Strobe or FixtureKind.PixelBar).ToArray();
         _screens = fx.Where(f => f.Type.Kind == FixtureKind.Screen).ToArray();
         BuildRig();
@@ -130,7 +145,7 @@ public partial class ConcertRig : Node3D
             AddChild(new MeshInstance3D { Name = "Stage", Mesh = ChunkNode.ToPropMesh(data, StyleKit.Material(MaterialRole.Prop)) });
         if (g.Faces.Count > 0)
         {
-            var body = new StaticBody3D { Name = "StageBody" };
+            var body = _stageBody = new StaticBody3D { Name = "StageBody" };
             body.AddChild(new CollisionShape3D { Shape = new ConcavePolygonShape3D { Data = g.Faces.ToArray(), BackfaceCollision = true } });
             AddChild(body);
         }
@@ -316,6 +331,21 @@ public partial class ConcertRig : Node3D
             if (f.Type.Kind == FixtureKind.Hazer) _haze = MathF.Max(_haze, p.Get01(f, Attr.Pump));
         float haze = 0.25f + 0.75f * _haze;
 
+        // a quarter of the beams find what they hit this frame
+        int rays = (_heads.Length + 3) / 4;
+        for (int k = 0; k < rays && _ray != null && _heads.Length > 0; k++)
+        {
+            int i = _rayNext++ % _heads.Length;
+            var f = _heads[i];
+            float max = f.Type.Kind == FixtureKind.Wash ? BeamLength * 0.55f : BeamLength;
+            var dir = Direction(f);
+            _ray.Position = f.Position + dir * 0.4f;
+            _ray.TargetPosition = _ray.Basis.Inverse() * (dir * max);
+            _ray.ForceRaycastUpdate();
+            float reach = _ray.IsColliding() ? _ray.GlobalPosition.DistanceTo(_ray.GetCollisionPoint()) / Scale.X + 0.4f : max;
+            _reach[i] = Mathf.Lerp(_reach[i], reach, 0.6f);
+        }
+
         int glow = 0;
         Color washSum = default, beamSum = default;
         for (int i = 0; i < _heads.Length; i++)
@@ -326,7 +356,7 @@ public partial class ConcertRig : Node3D
             var col = ColorOf(f);
             float zoom = p.Get01(f, Attr.Zoom);
             float angle = Mathf.DegToRad(Mathf.Lerp(f.Type.BeamMin, f.Type.BeamMax, zoom));
-            float len = f.Type.Kind == FixtureKind.Wash ? BeamLength * 0.55f : BeamLength;
+            float len = _reach[i];
             float radius = len * MathF.Tan(angle / 2);
             // the head turns with its beam
             _bodies.SetInstanceTransform(i, new Transform3D(Facing(dir), f.Position));

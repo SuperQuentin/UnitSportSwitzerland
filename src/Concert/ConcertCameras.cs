@@ -4,41 +4,47 @@ using UnitSport.Avatar;
 namespace UnitSport.Concert;
 
 /// <summary>
-/// A concert's broadcast cameras (#885): eight positions as a crew places them — a long lens from front
-/// of house, both sides of the stage, the crowd from the stage, a cable cam over the pitch, a jib along
-/// the barrier, a wide from the far stand, a drone over the roof — and the program: the one camera on
-/// air, cut by an auto-director on the music (long shots in a calm verse, a cut a bar at a peak; the
-/// same cut on every peer, from the shared beat) or held by the operator (<see cref="LightDesk.Camera"/>).
+/// A concert's broadcast cameras (#885): the rigs a crew rigs (<see cref="CameraRig"/>: a long lens at
+/// front of house, a dolly on rails in the pit, a track down the side of the pitch, a wire cam on four
+/// cables from the roof, a jib, a Steadicam on stage, a crowd camera, two wides, a drone, the artist's
+/// point of view), each drawn as its kit (the rails, the cables, the arm, the rotors) and moving on its
+/// own from the clock until a player operates it. The program is the camera on air: held by the show's
+/// operator (<see cref="LightDesk.Camera"/>) or cut by the auto-director on the music, the same cut on
+/// every peer, favouring a camera somebody operates.
 ///
 /// <para>
-/// Two renders of the program, each only while something shows it: a small one (256 x 144, nearest
-/// filtering) for the LED screens' camera clip (IMAG: the pixels are the screen's own), and a big one
-/// (1280 x 720) for the program view on this screen and the NDI output (<see cref="ConcertNdi"/>).
-/// Both are SubViewports sharing the world, as the wall mirrors are.
+/// Renders, each only while something shows it: a small one (256 x 144, nearest) for the screens'
+/// camera clip (IMAG), the program (1280 x 720) for the program view and NDI, and this player's
+/// viewfinder while operating a camera. SubViewports sharing the world, as the wall mirrors are.
 /// </para>
 /// </summary>
 public partial class ConcertCameras : Node3D
 {
-    public static readonly string[] Names = { "FOH long lens", "Stage left", "Stage right", "Crowd", "Cable cam", "Jib", "Wide", "Drone" };
+    public static string[] Names => CameraRig.Names;
 
     private readonly StagePlan _plan;
     private readonly LightDesk _desk;
-    private SubViewport _imag = null!, _program = null!;
-    private Camera3D _imagCam = null!, _programCam = null!;
-    private Vector3 _artist;
-    private float _h, _hw, _d;
+    private List<CameraRig> _rigs = new();
+    private SubViewport _imag = null!, _program = null!, _finder = null!;
+    private Camera3D _imagCam = null!, _programCam = null!, _finderCam = null!;
+    private Node3D[] _bodies = Array.Empty<Node3D>();
+    private MeshInstance3D[][] _cables = Array.Empty<MeshInstance3D[]>();
+    private MeshInstance3D[] _arms = Array.Empty<MeshInstance3D>();
+    private StandardMaterial3D _kit = null!;
 
-    /// <summary>The camera on air now, and why (the operator's, or the auto-director's).</summary>
+    public IReadOnlyList<CameraRig> Rigs => _rigs;
+    /// <summary>The camera on air now, and whether the operator holds it there.</summary>
     public int OnAir { get; private set; }
     public bool Manual => _desk.Camera >= 0;
+    /// <summary>The camera this player operates, or -1.</summary>
+    public int Operating { get; set; } = -1;
 
-    /// <summary>Asked for this frame by the screens; asked for by the program view or NDI (a count of who wants it).</summary>
     public bool ImagWanted { get; set; }
     public static int ProgramWanted;
 
     public Texture2D ImagTexture => _imag.GetTexture();
     public Texture2D ProgramTexture => _program.GetTexture();
-    public SubViewport ProgramPort => _program;
+    public Texture2D FinderTexture => _finder.GetTexture();
 
     public ConcertCameras(StagePlan plan, LightDesk desk)
     {
@@ -51,13 +57,11 @@ public partial class ConcertCameras : Node3D
 
     public override void _Ready()
     {
-        var e = _plan.Event;
-        _h = e.DeckHeight;
-        _hw = e.Width / 2;
-        _d = _plan.Round ? 0 : e.Depth;
-        _artist = _plan.StagePoint(0, _h + 1.5f, _plan.Round ? 0 : -_d * 0.35f);
+        _rigs = CameraRig.For(_plan);
         (_imag, _imagCam) = Port("Imag", new Vector2I(256, 144));
         (_program, _programCam) = Port("Program", new Vector2I(1280, 720));
+        (_finder, _finderCam) = Port("Viewfinder", new Vector2I(1280, 720));
+        BuildKit();
     }
 
     private (SubViewport, Camera3D) Port(string name, Vector2I size)
@@ -74,72 +78,187 @@ public partial class ConcertCameras : Node3D
         return (port, cam);
     }
 
-    /// <summary>Where camera <paramref name="i"/> is and looks at a moment (s), the stadium frame, and its field of view.</summary>
-    public (Vector3 At, Vector3 Look, float Fov) Shot(int i, double t)
+    // ---- the kit you see -----------------------------------------------------------------------------
+
+    private MeshInstance3D Box(Node parent, Vector3 size)
     {
-        float s(double rate, float phase = 0) => MathF.Sin((float)(t * rate) + phase);
-        var stagey = _plan.StagePoint(0, _h + 1.3f, _plan.Round ? 0 : -_d * 0.4f);
-        float far = _plan.Round ? 60f : 75f;
-        return i switch
-        {
-            0 => (_plan.Desk + new Vector3(0, 2.8f, 0), _artist, 14f + 3f * s(0.1)),
-            1 => (_plan.StagePoint(-_hw + 2.5f, _h + 1.7f, -1.2f), stagey, 48f),
-            2 => (_plan.StagePoint(_hw - 2.5f, _h + 1.7f, -1.2f), stagey, 48f),
-            3 => (_plan.StagePoint(0, _h + 4f, 0.5f), _plan.StagePoint(0, 1.5f, 25f), 70f),
-            4 => (_plan.StagePoint(12f * s(0.13), 16f + 2f * s(0.07), 22f + 10f * s(0.09)), _artist, 55f),
-            5 => (_plan.StagePoint(14f * s(0.25), 4f + 3f * s(0.4, 1f), 6f), _artist, 40f),
-            6 => (_plan.StagePoint(0, 22f, far), _plan.StagePoint(0, _h + 3f, -_d * 0.5f), 45f),
-            _ => (new Vector3(120f * MathF.Cos((float)(t * 0.05)), 70f, 120f * MathF.Sin((float)(t * 0.05))), new Vector3(0, 5f, 0), 55f),
-        };
+        var m = new MeshInstance3D { Mesh = new BoxMesh { Size = size }, MaterialOverride = _kit, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
+        parent.AddChild(m);
+        return m;
     }
 
-    /// <summary>The auto-director: how many bars a shot holds, by how hard the music goes.</summary>
+    private void BuildKit()
+    {
+        _kit = new StandardMaterial3D { AlbedoColor = new Color(0.09f, 0.09f, 0.1f), Roughness = 0.5f };
+        _bodies = new Node3D[_rigs.Count];
+        _cables = new MeshInstance3D[_rigs.Count][];
+        _arms = new MeshInstance3D[_rigs.Count];
+        for (int i = 0; i < _rigs.Count; i++)
+        {
+            var r = _rigs[i];
+            var body = new Node3D { Name = $"Cam{i + 1}" };
+            AddChild(body);
+            // the camera itself: a body and a lens hood, -Z forward
+            Box(body, new Vector3(0.32f, 0.34f, 0.55f));
+            Box(body, new Vector3(0.22f, 0.22f, 0.3f)).Position = new Vector3(0, 0, -0.4f);
+            if (r.Kind == RigKind.Drone)
+                foreach (var (x, z) in new[] { (-0.45f, -0.45f), (0.45f, -0.45f), (-0.45f, 0.45f), (0.45f, 0.45f) })
+                    Box(body, new Vector3(0.45f, 0.03f, 0.45f)).Position = new Vector3(x, 0.25f, z);
+            _bodies[i] = body;
+            switch (r.Kind)
+            {
+                case RigKind.Rail:
+                    // two rails on sleepers along the track, and the dolly's deck
+                    var along = r.B - r.A;
+                    float len = along.Length();
+                    var mid = ((r.A + r.B) / 2) with { Y = r.A.Y - 1.45f };
+                    var basis = Basis.LookingAt(along.Normalized(), Vector3.Up);
+                    foreach (float off in new[] { -0.35f, 0.35f })
+                    {
+                        var rail = Box(this, new Vector3(0.06f, 0.06f, len));
+                        rail.Transform = new Transform3D(basis, mid + basis.X * off);
+                    }
+                    Box(body, new Vector3(1.0f, 0.12f, 1.2f)).Position = new Vector3(0, -1.35f, 0);
+                    Box(body, new Vector3(0.1f, 1.3f, 0.1f)).Position = new Vector3(0, -0.7f, 0);
+                    break;
+                case RigKind.Wire:
+                    _cables[i] = new MeshInstance3D[4];
+                    for (int c = 0; c < 4; c++) _cables[i][c] = Box(this, new Vector3(0.03f, 0.03f, 1f));
+                    break;
+                case RigKind.Jib:
+                    // its foot a hair above the deck or the pitch: never coplanar (zfight)
+                    Box(this, new Vector3(0.6f, 1.8f, 0.6f)).Position = r.A + new Vector3(0, 0.915f, 0);
+                    _arms[i] = Box(this, new Vector3(0.18f, 0.18f, 1f));
+                    break;
+                case RigKind.Fixed when r.A.Y > 2f:
+                    // a tripod on its platform
+                    Box(body, new Vector3(0.08f, 1.2f, 0.08f)).Position = new Vector3(0, -0.75f, 0);
+                    break;
+            }
+        }
+    }
+
+    /// <summary>The wire cam's four cables run to the roof's inner corners.</summary>
+    private Vector3[] Anchors()
+    {
+        var s = _plan.Event.Stadium;
+        float u = s.FrontHalfU + s.RoofInset, v = s.FrontHalfV + s.RoofInset, y = s.RoofInner - 1f;
+        return new[] { new Vector3(-u, y, -v), new Vector3(u, y, -v), new Vector3(u, y, v), new Vector3(-u, y, v) };
+    }
+
+    private Vector3[]? _anchors;
+
+    private void PlaceKit()
+    {
+        _anchors ??= Anchors();
+        for (int i = 0; i < _rigs.Count; i++)
+        {
+            var r = _rigs[i];
+            var at = r.Position;
+            // a fixed camera on a stand keeps its stand upright: only its head turns
+            _bodies[i].Transform = new Transform3D(r.Basis, at);
+            if (_cables[i] is { } cables)
+                for (int c = 0; c < 4; c++)
+                {
+                    var a = _anchors[c];
+                    var d = at - a;
+                    cables[c].Transform = new Transform3D(Basis.LookingAt(d.Normalized(), Mathf.Abs(d.Normalized().Y) > 0.99f ? Vector3.Forward : Vector3.Up)
+                        .Scaled(new Vector3(1, 1, d.Length())), a + d / 2);
+                }
+            if (_arms[i] is { } arm)
+            {
+                var pivot = r.A + new Vector3(0, 1.8f, 0);
+                var d = at - pivot;
+                // the arm runs on past the pivot as its counterweight
+                arm.Transform = new Transform3D(Basis.LookingAt(d.Normalized(), Vector3.Up).Scaled(new Vector3(1, 1, d.Length() * 1.3f)), pivot + d * 0.35f);
+            }
+        }
+    }
+
+    // ---- who is on air -------------------------------------------------------------------------------
+
     private static int BarsPerCut(ShowSection s) => s switch
     {
         ShowSection.Calm => 8, ShowSection.Groove => 4, ShowSection.Chorus => 2, ShowSection.Peak => 1, _ => 8,
     };
 
-    /// <summary>Which camera the auto-director has on air at a beat of the show: the same on every peer.</summary>
+    /// <summary>The auto-director's camera at a beat: the same on every peer; an operated camera gets every other cut.</summary>
     private int AutoCamera(float beat, ShowSection section)
     {
         int bars = BarsPerCut(section);
         int cut = (int)MathF.Floor(beat / 4f / bars);
-        uint h = (uint)(cut * 2654435761u ^ (uint)_plan.Event.Seed);
-        h ^= h >> 15;
-        int cam = (int)(h % (uint)Names.Length);
-        // never the same shot twice in a row
-        uint p = (uint)((cut - 1) * 2654435761u ^ (uint)_plan.Event.Seed);
-        p ^= p >> 15;
-        if (cam == (int)(p % (uint)Names.Length)) cam = (cam + 1) % Names.Length;
-        // the drone and the wide only in a calm verse or a walk-in
-        if (cam >= 6 && section is ShowSection.Chorus or ShowSection.Peak) cam = cam - 6;
+        uint Hash(int c)
+        {
+            uint h = (uint)(c * 2654435761u ^ (uint)_plan.Event.Seed);
+            return h ^ (h >> 15);
+        }
+        int n = _rigs.Count;
+        int cam = (int)(Hash(cut) % (uint)n);
+        if (cam == (int)(Hash(cut - 1) % (uint)n)) cam = (cam + 1) % n;
+        // the wides and the drone breathe in a calm verse, not at a peak
+        if (section is ShowSection.Chorus or ShowSection.Peak && (cam is 7 or 8 or 9)) cam = (cam + 4) % n;
+        // the crew's shots: every other cut goes to a camera somebody operates
+        if ((cut & 1) == 0)
+        {
+            int operated = 0;
+            foreach (var r in _rigs) if (r.Operator != 0) operated++;
+            if (operated > 0)
+            {
+                int pick = (int)(Hash(cut + 7919) % (uint)operated);
+                for (int i = 0; i < n; i++)
+                    if (_rigs[i].Operator != 0 && pick-- == 0) return i;
+            }
+        }
         return cam;
     }
 
-    /// <summary>One frame: the program camera chosen, placed, and the renders that something shows switched on.</summary>
+    /// <summary>A player took or left a camera (<see cref="ConcertService"/>).</summary>
+    public void SetOperator(int cam, long peer)
+    {
+        if (cam >= 0 && cam < _rigs.Count) _rigs[cam].Operator = peer;
+    }
+
+    /// <summary>An operated camera's state from its operator, relayed.</summary>
+    public void SetState(int cam, float[] state)
+    {
+        if (cam >= 0 && cam < _rigs.Count && cam != Operating) _rigs[cam].Unpack(state);
+    }
+
+    /// <summary>One frame: the rigs that nobody operates move on their own, the program is chosen and the renders asked for switched on.</summary>
     public void Step(double t)
     {
-        OnAir = _desk.Camera >= 0 ? Math.Min(_desk.Camera, Names.Length - 1) : AutoCamera(_desk.Beat, _desk.Section);
-        var (at, look, fov) = Shot(OnAir, t);
-        var g = GlobalTransform;
-        var from = g * at;
-        var to = g * look;
-        var pose = Transform3D.Identity.Translated(from).LookingAt(to, Vector3.Up);
-        bool imag = ImagWanted, program = ProgramWanted > 0;
-        if (imag)
+        foreach (var r in _rigs)
+            if (r.Operator == 0) r.Auto(t);
+        PlaceKit();
+        OnAir = _desk.Camera >= 0 ? Math.Min(_desk.Camera, _rigs.Count - 1) : AutoCamera(_desk.Beat, _desk.Section);
+        var program = Pose(_rigs[OnAir]);
+        bool imag = ImagWanted, prog = ProgramWanted > 0, finder = Operating >= 0;
+        if (imag) Aim(_imagCam, program, _rigs[OnAir].Fov);
+        if (prog) Aim(_programCam, program, _rigs[OnAir].Fov);
+        if (finder) Aim(_finderCam, Pose(_rigs[Operating]), _rigs[Operating].Fov);
+        Mode(_imag, imag);
+        Mode(_program, prog);
+        Mode(_finder, finder);
+        // an operator's own camera hides its body from its own lens
+        for (int i = 0; i < _bodies.Length; i++)
         {
-            _imagCam.GlobalTransform = pose;
-            _imagCam.Fov = fov;
+            bool hide = i == Operating || i == OnAir && prog;
+            if (_bodies[i].Visible == hide) _bodies[i].Visible = !hide;
         }
-        if (program)
-        {
-            _programCam.GlobalTransform = pose;
-            _programCam.Fov = fov;
-        }
-        var wantImag = imag ? SubViewport.UpdateMode.Always : SubViewport.UpdateMode.Disabled;
-        var wantProgram = program ? SubViewport.UpdateMode.Always : SubViewport.UpdateMode.Disabled;
-        if (_imag.RenderTargetUpdateMode != wantImag) _imag.RenderTargetUpdateMode = wantImag;
-        if (_program.RenderTargetUpdateMode != wantProgram) _program.RenderTargetUpdateMode = wantProgram;
+    }
+
+    private Transform3D Pose(CameraRig r) => GlobalTransform * new Transform3D(r.Basis, r.Position);
+
+    private static void Aim(Camera3D cam, Transform3D pose, float fov)
+    {
+        cam.GlobalTransform = pose;
+        cam.Fov = fov;
+    }
+
+    private static void Mode(SubViewport port, bool on)
+    {
+        var want = on ? SubViewport.UpdateMode.Always : SubViewport.UpdateMode.Disabled;
+        if (port.RenderTargetUpdateMode != want) port.RenderTargetUpdateMode = want;
     }
 }
 

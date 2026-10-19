@@ -68,6 +68,8 @@ public partial class ConcertService : Node
     }
 
     private readonly Dictionary<int, Hosted> _hosted = new();
+    /// <summary>Who operates which camera, by stadium and camera: the server's, mirrored on every client.</summary>
+    private readonly Dictionary<(int Stadium, int Cam), long> _crew = new();
 
     /// <summary>Universes received from the server so far (a check reads it).</summary>
     public long FramesReceived { get; private set; }
@@ -224,11 +226,86 @@ public partial class ConcertService : Node
     public void SendTo(long peer)
     {
         foreach (int stadium in _hosted.Keys) SendState(peer, stadium);
+        foreach (var ((stadium, cam), op) in _crew) RpcId(peer, MethodName.Operated, stadium, cam, op);
     }
+
+    // ---- the camera crew -------------------------------------------------------------------------------
+
+    /// <summary>Client: asks to operate a camera (or, -1, to leave the one operated).</summary>
+    public void AskCamera(int stadium, int cam)
+    {
+        if (Online) RpcId(1, MethodName.AskOperate, stadium, cam);
+        else ServeOperate(1, stadium, cam);
+    }
+
+    /// <summary>Client: the operated camera's state, at most 20 times a second.</summary>
+    public void SendCamera(int stadium, int cam, float[] state)
+    {
+        if (Online) RpcId(1, MethodName.CamState, stadium, cam, state);
+    }
+
+    /// <summary>Client: the operator cuts a camera to air (the show's operator only, as every cue).</summary>
+    public void CutTo(int stadium, int cam) => SendCue(stadium, CueKind.Camera, cam, ClockSync.ServerNow % 86400.0);
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void AskOperate(int stadium, int cam)
+    {
+        if (_server) ServeOperate(Multiplayer.GetRemoteSenderId(), stadium, cam);
+    }
+
+    private void ServeOperate(long peer, int stadium, int cam)
+    {
+        // a player works one camera: leaving it, or taking another, frees the last
+        foreach (var key in _crew.Where(kv => kv.Value == peer && kv.Key.Stadium == stadium).Select(kv => kv.Key).ToList())
+            Crew(key.Stadium, key.Cam, 0);
+        if (cam < 0 || cam >= CameraRig.Names.Length) return;
+        if (_crew.TryGetValue((stadium, cam), out long other) && other != 0 && other != peer)
+        {
+            Chat?.Tell(peer, $"Camera {cam + 1} ({CameraRig.Names[cam]}) is operated by someone else.", ChatKind.Error);
+            return;
+        }
+        Crew(stadium, cam, peer);
+    }
+
+    /// <summary>Server (and offline): a camera's operator changed, told to everyone.</summary>
+    private void Crew(int stadium, int cam, long peer)
+    {
+        if (peer == 0) _crew.Remove((stadium, cam));
+        else _crew[(stadium, cam)] = peer;
+        foreach (int p in Peers()) RpcId(p, MethodName.Operated, stadium, cam, peer);
+        if (!Online) Operated(stadium, cam, peer);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Operated(int stadium, int cam, long peer)
+    {
+        if (peer == 0) _crew.Remove((stadium, cam));
+        else _crew[(stadium, cam)] = peer;
+        RigOf(stadium)?.Cameras.SetOperator(cam, peer);
+        ConcertBroadcast.Instance?.Operating(stadium, cam, peer == Me ? true : null);
+        if (peer == 0) ConcertBroadcast.Instance?.Operating(stadium, cam, false);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.UnreliableOrdered, TransferChannel = Channel)]
+    private void CamState(int stadium, int cam, float[] state)
+    {
+        if (!_server || state.Length > 16 || stadium < 0 || stadium >= StadiumCatalog.All.Length) return;
+        long sender = Multiplayer.GetRemoteSenderId();
+        if (!_crew.TryGetValue((stadium, cam), out long op) || op != sender) return;
+        var s = StadiumCatalog.All[stadium];
+        var here = new GlobalPos(s.E, s.N, 0);
+        foreach (int peer in Multiplayer.GetPeers())
+            if (peer != sender && GetNodeOrNull<FootPlayer>("../Players/" + peer) is { } body && body.Global.HorizontalDistanceTo(here) < RelayRange)
+                RpcId(peer, MethodName.CamPosed, stadium, cam, state);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.UnreliableOrdered, TransferChannel = Channel)]
+    private void CamPosed(int stadium, int cam, float[] state) => RigOf(stadium)?.Cameras.SetState(cam, state);
 
     /// <summary>Server: an operator who leaves gives the show back.</summary>
     public void PeerLeft(long peer)
     {
+        foreach (var key in _crew.Where(kv => kv.Value == peer).Select(kv => kv.Key).ToList()) Crew(key.Stadium, key.Cam, 0);
         foreach (var stadium in _hosted.Where(kv => kv.Value.Operator == peer).Select(kv => kv.Key).ToList())
         {
             _hosted.Remove(stadium);
@@ -311,7 +388,13 @@ public partial class ConcertService : Node
             _built[stadium] = seed;
             GetParent()?.GetNodeOrNull<ConcertDirector>(nameof(ConcertDirector))?.Rebuild(stadium);
         }
-        if (RigOf(stadium) is { } rig) ApplyCues(stadium, rig);
+        if (RigOf(stadium) is { } rig)
+        {
+            ApplyCues(stadium, rig);
+            // a rig built again keeps its crew
+            foreach (var ((st, cam), op) in _crew)
+                if (st == stadium) rig.Cameras.SetOperator(cam, op);
+        }
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -340,7 +423,7 @@ public partial class ConcertService : Node
         {
             "input" => svc.InputCommand(parts.Skip(2).ToArray()),
             "patch" => svc.ExportPatch(),
-            "view" or "ndi" or "snap" => ConcertBroadcast.Instance?.Command(parts.Skip(1).ToArray()) ?? "The broadcast is not running here.",
+            "view" or "ndi" or "snap" or "camera" => ConcertBroadcast.Instance?.Command(parts.Skip(1).ToArray()) ?? "The broadcast is not running here.",
             _ => null,   // host, release, status: the server's
         };
     }

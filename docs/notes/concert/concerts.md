@@ -151,3 +151,29 @@
 - Check: `--concertdeskcheck` on the real tiles (`--chunks <main>/terrain_chunks --at 2498751,1114890
   --concert 11 --time 22`, windowed for `test_output/concert/desk_*.png`).
 
+
+## Cameras (`CameraRigs`, `ConcertCameras`, `ConcertBroadcast`, `ConcertNdi`)
+
+- The rigs, placed from the stage (`CameraRig.For`): FOH long lens, pit dolly and side track (ground
+  rails), wire cam (a box under the roof, four cables to its inner corners), jib, steadicam, crowd,
+  wide FOH, wide far stand, drone, artist POV. Each moves on its own when nobody runs it (`Auto`).
+- Three SubViewports sharing the world: IMAG (256x144, on the LED screens when the screen clip is
+  `LightDesk.CameraClip`), program (1280x720) and the operator's viewfinder. They render only when
+  wanted and near (900 m).
+- The auto director cuts on the music's bars (calm 8, groove 4, chorus 2, peak 1). Every other cut
+  goes to a camera someone runs. `/concert cue ... camera <n|auto>` and OSC `/concert/camera` pick one.
+- Crew: `/concert camera take <n>|leave|list` (and the desk's Operate row). The server keeps who runs
+  what (`ConcertService` `_crew`, one operator per camera, freed when they leave); the operator's
+  pose goes 20 times a second on channel 4, relayed within `RelayRange`. While operating, the
+  viewfinder is full screen with the mouse captured: move along the rails / in the box (WASD, the
+  left stick), rise (fly up/down), look (mouse, right stick), zoom (`cam_zoom_in/out`: = / -, the
+  wheel, the shoulders), cut to it (`cam_cut`: Enter, pad X), Esc leaves.
+- Out: `/concert view` shows the program, `/concert ndi on|off|check` sends it over NDI
+  (`Processing.NDI.Lib.x64.dll` from `NDI_RUNTIME_DIR_V6` or the NDI Tools folder; OBS, vMix,
+  Resolume see "UnitSport <stadium> PGM"), `/concert snap` writes `user://concert/program_N_camK.png`.
+- Beams stop where they hit something (`ConcertRig._reach`: one `RayCast3D` checks a quarter of the
+  heads a frame, the stage's own body excepted), so only beams through the roof opening reach the sky.
+  The cartoon `light()` (`shaders/common/style.gdshaderinc`) skips `ATTENUATION` near the terminator
+  for the sun only: for a lamp it is the range, and skipping it lit the whole district.
+- Check: `--concertcamcheck` (same tiles as the desk check, `--concert 13`, windowed for
+  `test_output/concert/crew_*.png`): takes the dolly, runs it, zooms, takes the wire cam, climbs, Esc.

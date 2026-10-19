@@ -30,6 +30,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | crouch_slide | Ctrl, C / B | ok: B, or crouch for real (#437) | keep |
 | interact_mount | E / Y | ok: Y; grip a door, an item, a radio, or reach out and grip what E would act on (#437) | keep |
 | sit on a stand's seat / stand up (#885) | E / Y on a stadium row; again, or walk off | ok: Y, or reach out and grip (`TryInteract(byHand)` sits before the dance); the stick stands up | keep |
+| run a concert camera (#885) | `/concert camera take <n>` or the desk's Operate row; WASD / left stick along the rails, fly up/down rises, mouse / right stick looks, = - wheel / shoulders zoom, Enter / X cuts to it, Esc leaves | ok: the sticks and shoulders through `XrPad`; the viewfinder is a CanvasLayer, on the VR panel (`XrUi`) | new: a hand-held steadicam, gripped and aimed by the hand |
 | a concert's light desk (#885) | E / Y at the front-of-house console | ok: Y, or reach out and grip (`TryInteract(byHand)`); the screen is a CanvasLayer, on the VR panel (`XrUi`), the ray clicks | keep |
 | radio on / off (#725) | tap E (pointed) or tap Use (held) / tap Y or the Use button; hold either for the panel | ok: poke the radio's red key with a controller tip (`XrHands.PokeRadio`); grip still opens the panel | keep |
 | elevator call / floor list (#557) | E / Y at the call button or in the cabin | ok: Y, or grip the call button or the cabin's panel; the list is a pointable panel (`XrUi`) | keep |

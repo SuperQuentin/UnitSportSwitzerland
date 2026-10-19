@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Godot;
+using UnitSport.Core;
 
 namespace UnitSport.Concert;
 
@@ -340,6 +341,8 @@ public partial class ConcertBroadcast : CanvasLayer
                 _ndi = sender;
                 if (sender != null) ConcertCameras.ProgramWanted++;
                 return message;
+            case "camera" when args.Length > 1:
+                return CameraCommand(args[1..]);
             case "snap":
                 // a still of the program, as NDI and the program view get it
                 if (Rig?.Cameras is not { } cams) return "No concert here.";
@@ -353,6 +356,86 @@ public partial class ConcertBroadcast : CanvasLayer
             default:
                 return null;
         }
+    }
+
+    // ---- operating a camera ----------------------------------------------------------------------------
+
+    private int _stadium = -1, _cam = -1;
+    private Vector2 _mouse;
+    private float _wheel;
+    private double _sentState;
+
+    private static int StadiumIndex(ConcertRig rig) => Array.IndexOf(Terrain.Stadiums.StadiumCatalog.All, rig.Event.Stadium);
+
+    private string CameraCommand(string[] a)
+    {
+        if (Rig is not { } rig || ConcertService.Instance is not { } svc) return "No concert here.";
+        int stadium = StadiumIndex(rig);
+        switch (a[0])
+        {
+            case "take":
+                if (a.Length < 2 || !int.TryParse(a[1], out int n) || n < 1 || n > ConcertCameras.Names.Length)
+                    return $"/concert camera take <1..{ConcertCameras.Names.Length}>: " + string.Join(", ", ConcertCameras.Names.Select((x, i) => $"{i + 1} {x}"));
+                svc.AskCamera(stadium, n - 1);
+                return $"Asking for camera {n} ({ConcertCameras.Names[n - 1]})...";
+            case "leave":
+                svc.AskCamera(stadium, -1);
+                return "Leaving the camera.";
+            default:
+                return string.Join(", ", rig.Cameras.Rigs.Select((r, i) => $"{i + 1} {r.Name}{(r.Operator != 0 ? " (operated)" : "")}"));
+        }
+    }
+
+    /// <summary>The service says this player took a camera (true), or a camera was left (false).</summary>
+    public void Operating(int stadium, int cam, bool? mine)
+    {
+        if (mine == true)
+        {
+            _stadium = stadium;
+            _cam = cam;
+            if (Rig?.Cameras is { } c) c.Operating = cam;
+            UiFocus.Set(this, true);
+            Input.MouseMode = Input.MouseModeEnum.Captured;
+            _view.Texture = Rig?.Cameras.FinderTexture;
+        }
+        else if (mine == false && cam == _cam && stadium == _stadium)
+        {
+            if (Rig?.Cameras is { } c) c.Operating = -1;
+            _cam = -1;
+            UiFocus.Set(this, false);
+            if (_viewing && Rig?.Cameras is { } cc) _view.Texture = cc.ProgramTexture;
+        }
+    }
+
+    private void Operate(ConcertCameras cams, double dt)
+    {
+        if (_cam < 0 || _cam >= cams.Rigs.Count) return;
+        var rig = cams.Rigs[_cam];
+        if (cams.Operating != _cam) cams.Operating = _cam;
+        var move = Input.GetVector(PlayerInput.MoveLeft, PlayerInput.MoveRight, PlayerInput.MoveBack, PlayerInput.MoveForward);
+        float rise = Input.GetActionStrength(PlayerInput.FlyUp) - Input.GetActionStrength(PlayerInput.FlyDown);
+        var stick = Input.GetVector(PlayerInput.LookLeft, PlayerInput.LookRight, PlayerInput.LookUp, PlayerInput.LookDown) * 1.6f * (float)dt;
+        // a tight lens turns slower, as a real head does
+        float slow = Mathf.Clamp(rig.Fov / 45f, 0.15f, 1.2f);
+        var look = (_mouse * 0.0025f + stick) * slow;
+        _mouse = Vector2.Zero;
+        float zoom = Input.GetActionStrength(PlayerInput.CamZoomIn) - Input.GetActionStrength(PlayerInput.CamZoomOut) + _wheel * 8f;
+        _wheel = 0;
+        rig.Drive(move, rise, look, zoom, (float)dt);
+        if (Core.RealClock.Now - _sentState > 0.05)
+        {
+            _sentState = Core.RealClock.Now;
+            ConcertService.Instance?.SendCamera(_stadium, _cam, rig.Pack());
+        }
+        if (Input.IsActionJustPressed(PlayerInput.CamCut)) ConcertService.Instance?.CutTo(_stadium, _cam);
+    }
+
+    public override void _Input(InputEvent ev)
+    {
+        if (_cam < 0) return;
+        if (ev is InputEventMouseMotion motion) _mouse += motion.Relative;
+        else if (ev is InputEventMouseButton { Pressed: true } b && b.ButtonIndex is MouseButton.WheelUp or MouseButton.WheelDown)
+            _wheel += b.ButtonIndex == MouseButton.WheelUp ? 1 : -1;
     }
 
     private bool _snapping;
@@ -375,16 +458,22 @@ public partial class ConcertBroadcast : CanvasLayer
     {
         var rig = Rig;
         var cams = rig?.Cameras;
-        bool show = _viewing && cams != null;
+        bool operating = _cam >= 0 && cams != null;
+        if (operating) Operate(cams!, delta);
+        bool show = (_viewing || operating) && cams != null;
         if (_view.Visible != show)
         {
             _view.Visible = show;
             _caption.Visible = show;
-            if (show) _view.Texture = cams!.ProgramTexture;
         }
         if (show)
         {
-            string caption = $"{rig!.Event.Artist} · CAM {cams!.OnAir + 1} {ConcertCameras.Names[cams.OnAir]}{(cams.Manual ? "" : " · auto")}";
+            var want = operating ? cams!.FinderTexture : cams!.ProgramTexture;
+            if (_view.Texture != want) _view.Texture = want;
+            string caption = operating
+                ? $"CAM {_cam + 1} {ConcertCameras.Names[_cam]} · {(cams.OnAir == _cam ? "ON AIR" : "off air")} · zoom {cams.Rigs[_cam].Fov:F0}°\n"
+                  + InputHints.Format("{move_forward} move · {fly_up}/{fly_down} up/down · mouse, right stick: aim · {cam_zoom_in}/{cam_zoom_out} zoom · {cam_cut} cut to air · {ui_cancel} leave")
+                : $"{rig!.Event.Artist} · CAM {cams.OnAir + 1} {ConcertCameras.Names[cams.OnAir]}{(cams.Manual ? "" : " · auto")}";
             if (_caption.Text != caption) _caption.Text = caption;
         }
         if (_snapping && cams != null && Core.RealClock.Now >= _snapAt) Snap(cams);
@@ -398,7 +487,12 @@ public partial class ConcertBroadcast : CanvasLayer
 
     public override void _UnhandledInput(InputEvent ev)
     {
-        if (_viewing && ev.IsActionPressed("ui_cancel"))
+        if (_cam >= 0 && ev.IsActionPressed("ui_cancel"))
+        {
+            ConcertService.Instance?.AskCamera(_stadium, -1);
+            GetViewport().SetInputAsHandled();
+        }
+        else if (_viewing && ev.IsActionPressed("ui_cancel"))
         {
             Command(new[] { "view" });
             GetViewport().SetInputAsHandled();

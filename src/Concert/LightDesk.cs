@@ -154,7 +154,7 @@ public sealed class LightDesk
         switch (Section)
         {
             case ShowSection.WalkIn:
-                Washes(0.35f, _walkInWash, tilt: 25f, sway: 6f, speed: 0.05f, beat);
+                Washes(0.35f, _walkInWash, tilt: 25f, sway: 6f, speed: 0.125f, beat);
                 Off(RigGroup.FrontTruss); Off(RigGroup.MidTruss); Off(RigGroup.Floor);
                 Off(RigGroup.Blinders); Off(RigGroup.Strobes);
                 Pixels(_walkInPixels);
@@ -166,7 +166,7 @@ public sealed class LightDesk
                 break;
 
             case ShowSection.Calm:
-                Washes(0.55f, _calmWash, tilt: 20f, sway: 10f, speed: 0.125f, beat);
+                Washes(0.55f, _calmWash, tilt: 20f, sway: 12f, speed: 0.5f, beat);
                 // the spots pick out the artist: aimed at the stage's centre, warm
                 Spots(0.8f, new Color(1f, 0.85f, 0.65f), aimCentre: true, beat, zoom: 0.25f);
                 Off(RigGroup.MidTruss); Off(RigGroup.Floor); Off(RigGroup.Blinders); Off(RigGroup.Strobes);
@@ -175,11 +175,11 @@ public sealed class LightDesk
                 break;
 
             case ShowSection.Groove:
-                Washes(0.6f + 0.4f * kick, _grooveWash, tilt: 30f, sway: 15f, speed: 0.25f, beat);
+                Washes(0.6f + 0.4f * kick, _grooveWash, tilt: 30f, sway: 15f, speed: 1f, beat);
                 Spots(0.7f, _pal[2], aimCentre: false, beat, zoom: 0.4f);
                 // the beams: a fan that breathes with the bar, a chase over it on every beat
                 Beams(RigGroup.MidTruss, _grooveChase, _pal[1],
-                    fan: 35f, tilt: 25f + 15f * MathF.Sin(bar * MathF.Tau / 4f), open: true);
+                    fan: 35f + 15f * MathF.Sin(bar * MathF.Tau), tilt: 25f + 15f * MathF.Sin(beat * MathF.PI / 2f), open: true);
                 Beams(RigGroup.Floor, _floorGroove, _pal[0], fan: 20f, tilt: 20f + 10f * MathF.Sin(beat * MathF.PI / 2f), open: true);
                 Off(RigGroup.Blinders); Off(RigGroup.Strobes);
                 Pixels(_groovePixels);
@@ -187,7 +187,7 @@ public sealed class LightDesk
                 break;
 
             case ShowSection.Chorus:
-                Washes(1f, _chorusWash, tilt: 35f, sway: 20f, speed: 0.25f, beat);
+                Washes(1f, _chorusWash, tilt: 35f, sway: 20f, speed: 1f, beat);
                 Spots(1f, Colors.White, aimCentre: false, beat, zoom: 0.6f);
                 Beams(RigGroup.MidTruss, _full, _pal[(beatN / 4) % 2 == 0 ? 0 : 2], fan: 55f, tilt: 40f, open: true);
                 Beams(RigGroup.Floor, _full, Colors.White, fan: 40f, tilt: 10f + 25f * barPh, open: true);
@@ -199,7 +199,7 @@ public sealed class LightDesk
                 break;
 
             case ShowSection.Peak:
-                Washes(kick, _peakWash, tilt: 40f, sway: 30f, speed: 0.5f, beat);
+                Washes(kick, _peakWash, tilt: 40f, sway: 30f, speed: 2f, beat);
                 Spots(1f, _pal[2], aimCentre: false, beat, zoom: 0.8f);
                 // a ballyhoo: every beat each beam jumps somewhere new, strobing
                 Ballyhoo(RigGroup.MidTruss, beatN, _pal[1]);
@@ -291,7 +291,8 @@ public sealed class LightDesk
     private static float Chase(int i, int n, float beat, float width)
     {
         if (n <= 1) return 1f;
-        float pos = (beat % n) / n, me = (float)i / n;
+        // the wave crosses the whole group in two beats: a 28-head rig as fast as a 6-head one
+        float pos = beat * 0.5f - MathF.Floor(beat * 0.5f), me = (float)i / n;
         float d = MathF.Abs(pos - me);
         d = MathF.Min(d, 1f - d);
         return MathF.Max(0f, 1f - d / width);
@@ -370,7 +371,7 @@ public sealed class LightDesk
             float off = g.Length <= 1 ? 0 : (i / (float)(g.Length - 1) - 0.5f);
             // a hung head over the deck's front: tilting back aims onto the stage
             if (aimCentre) Aim(g[i], -off * 50f, -30f);
-            else Aim(g[i], off * 60f + MathF.Sin(beat * MathF.PI / 4f + i) * 10f, 30f + MathF.Cos(beat * MathF.PI / 8f + i) * 15f);
+            else Aim(g[i], off * 60f + MathF.Sin(beat * MathF.PI / 2f + i) * 14f, 30f + MathF.Cos(beat * MathF.PI / 4f + i) * 15f);
             Paint(g[i], color);
             Open(g[i], dim, zoom);
         }

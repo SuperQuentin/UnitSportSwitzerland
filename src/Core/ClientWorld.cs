@@ -713,6 +713,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.EmoteWheelProbe.Requested) AddChild(new Player.EmoteWheelProbe(() => LocalPlayer));
         if (Player.SitProbe.Requested) AddChild(new Player.SitProbe(() => LocalPlayer));
         if (Concert.ConcertDeskProbe.Requested) AddChild(new Concert.ConcertDeskProbe(() => LocalPlayer));
+        if (Concert.ConcertCamProbe.Requested) AddChild(new Concert.ConcertCamProbe(() => LocalPlayer, () => GetNodeOrNull<ChatManager>(ChatManager.NodeName)));
         if (Items.SparkleProbe.Requested) AddChild(new Items.SparkleProbe(() => LocalPlayer));
         if (Items.RadioFocusProbe.Requested) AddChild(new Items.RadioFocusProbe(() => LocalPlayer));
         if (Items.BeatFieldProbe.Requested) AddChild(new Items.BeatFieldProbe(() => LocalPlayer));
