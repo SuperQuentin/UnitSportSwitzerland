@@ -32,5 +32,7 @@
   - MapSetup: `--layers pistes` (never part of `all`, ODbL: `osm-odbl-licence`).
 - **Measured on western Valais** (6,699 tiles): 3,921 slopes, 976 tiles with a file, 4,443 ha,
   30.5 MB, 13 s.
+- **Lifts**: the same `--pistes` run writes `ropeways.json`, the region's OSM aerialways with their
+  ends, type, duration, occupancy, detachable flag and name (`RopewayInfoIndex`, `world/ski-lifts`).
 - **Game**: `IChunkSource.LoadPistesAsync` in every source; streamed as `AssetKind.Pistes` 15.
   A missing file means no slopes there.
