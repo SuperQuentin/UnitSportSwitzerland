@@ -4,6 +4,7 @@ using System.Linq;
 using Godot;
 using UnitSport.BattleRoyale;
 using UnitSport.Items;
+using UnitSport.Player;
 using UnitSport.Vehicles;
 
 namespace UnitSport.Bots;
@@ -41,7 +42,14 @@ public sealed class BrBrain : IBotBrain
     /// <summary><c>--brbotsharmless</c> on a server: bots play the match but never strike (checks only).</summary>
     private static readonly bool Harmless = Core.CmdArgs.Has("--brbotsharmless");
     /// <summary>Where it means to land (world), chosen when it boarded.</summary>
-    public Vector3? DropTarget { get; init; }
+    public Vector3? DropTarget { get; set; }
+    /// <summary>
+    /// A squad's human (#837 phase 4): this bot jumps <see cref="JumpDelay"/> s after they do and flies after
+    /// them, instead of at <see cref="JumpAt"/> to <see cref="DropTarget"/>. 0: none.
+    /// </summary>
+    public long JumpWith { get; set; }
+    public double JumpDelay { get; set; }
+    private double _withJumpedAt;
     /// <summary>The server clock at which it jumps: the plane's nearest pass to <see cref="DropTarget"/>.</summary>
     public double JumpAt { get; set; }
 
@@ -71,6 +79,12 @@ public sealed class BrBrain : IBotBrain
         if (body.Eliminated || body.Down != 0)
         {
             bot.Intent = BotIntent.Stand;
+            // down in a squad (#837 phase 4): crawl to the nearest standing mate, who can pick it up
+            if (body.Downed && _br.State.Find(bot.Id) is { Team: not 0 } downedMe && TeamView(bot, downedMe).Nearest is { } helper)
+            {
+                BotSkills.MoveTo(bot, helper.GlobalPosition, run: false, 2.5f, bot.World.Space, now);
+                return 0.3;
+            }
             return 0.5;
         }
         // the drop first: the hold, then the wingsuit and the canopy (#837 phase 2)
@@ -91,12 +105,15 @@ public sealed class BrBrain : IBotBrain
                 _knownCar = seen;
         }
         var s = Situation(bot, now, out var enemy, out var downed, out var crate, out var zone);
+        var team = _br.State.Find(bot.Id) is { Team: not 0 } myEntry ? TeamView(bot, myEntry) : default;
+        if (team.Squad) s = Squad(bot, s, team, enemy, now);
         _status = FormattableString.Invariant($"goal {Goal} inside {zone.Inside:F2} out {s.OutsideBy:F0} run {s.ZoneRunNeeded:F0} enemy {s.EnemyDistance:F0} crate {s.CrateDistance:F0} stuck {bot.Nav.Stuck} open {bot.Nav.LastOpen:F1} route {(_route == null ? "-" : $"{_routeNext}/{_route.Count}")} roads {(_br.Roads != null)} follow {bot.Nav.Following} car {(_car != null && GodotObject.IsInstanceValid(_car) ? _car.Name : "-")}");
         var goal = BrTactics.Choose(s, Goal);
         if (goal != Goal) GD.Print($"[bots] {body.Name} \"{bot.Profile.Name}\" {Goal} -> {goal}");
         Goal = goal;
         if (goal is not (BrGoal.Fight or BrGoal.Finish)) bot.Intent.FaceYaw = null;
         if (goal != BrGoal.Zone) _zoneGoal = null;
+        if (goal != BrGoal.Revive) _reviveWho = 0;
 
         switch (goal)
         {
@@ -129,10 +146,158 @@ public sealed class BrBrain : IBotBrain
             case BrGoal.Investigate when bot.Senses.Heard is { } heard:
                 if (GoTo(bot, heard.At, run: false, 6f, space, now)) bot.Senses.Heard = null;
                 return 0.3;
+            case BrGoal.Regroup when team.LeaderBody is { } leader:
+                GoTo(bot, leader.GlobalPosition, run: true, 12f, space, now);
+                return 0.3;
+            case BrGoal.Assist when team.Fight is { } fight:
+                GoTo(bot, fight, run: true, 20f, space, now);
+                return 0.25;
+            case BrGoal.Revive when team.DownedBody is { } hurt && team.Downed is { } who:
+                Revive(bot, hurt, who.Peer, space, now);
+                return 0.2;
+            case BrGoal.Ping when _pingAt is { } ping:
+                // there: a look round for a few seconds (the human pointed at something), then back to the team
+                if (GoTo(bot, ping, run: true, 6f, space, now))
+                {
+                    if (_pingHereUntil == 0) _pingHereUntil = now + PingLinger;
+                    else if (now >= _pingHereUntil) { _pingAt = null; _pingHereUntil = 0; }
+                }
+                return 0.3;
+            case BrGoal.Recall when _br.NearestStop(body.GlobalPosition, body.Health) is { } stop:
+                if (GoTo(bot, stop, run: true, 3.5f, space, now) && _br.ServerRecall(bot.Id))
+                    GD.Print($"[bots] {body.Name} \"{bot.Profile.Name}\" used a dogtag at a Postauto stop");
+                return 0.3;
             default:
-                Roam(bot, zone, space, now);
+                // a follower keeps near its leader, loot and fights aside: a short walk back from 25 m
+                if (team.LeaderBody is { } lead && lead.GlobalPosition.DistanceTo(body.GlobalPosition) > 25f)
+                    GoTo(bot, lead.GlobalPosition, run: false, 10f, space, now);
+                else Roam(bot, zone, space, now);
                 return 0.4;
         }
+    }
+
+    // ---- squads (#837 phase 4) ---------------------------------------------------------------------
+
+    /// <summary>
+    /// What a squad bot knows of its team: the leader (the standing human first, else the standing bot with the
+    /// lowest number; never itself), the nearest downed mate, a mate in a fight (a bot fighting, a player
+    /// shot at in the last 5 s), the nearest standing mate, and whether a human is in it.
+    /// </summary>
+    private readonly record struct TeamSight(bool Squad, FootPlayer? LeaderBody, BrEntrant? Downed, FootPlayer? DownedBody,
+        Vector3? Fight, FootPlayer? Nearest, bool HasHuman);
+
+    private TeamSight TeamView(Bot bot, BrEntrant me)
+    {
+        var pos = bot.Body.GlobalPosition;
+        BrEntrant? leader = null;
+        BrEntrant? downed = null;
+        FootPlayer? downedBody = null, nearest = null, leaderBody = null;
+        Vector3? fight = null;
+        float downedD = float.MaxValue, nearestD = float.MaxValue, fightD = float.MaxValue;
+        bool human = false;
+        foreach (var m in _br.State.Entrants)
+        {
+            if (m.Team != me.Team || !m.Alive) continue;
+            if (!m.Bot) human = true;
+            // the leader among the standing, itself included: a human, else the lowest-numbered bot (the id nearest 0)
+            if (!m.Downed && (leader == null || (!m.Bot && leader.Bot) || (m.Bot == leader.Bot && (m.Bot ? m.Peer > leader.Peer : m.Peer < leader.Peer))))
+                leader = m;
+            if (m.Peer == me.Peer || _br.BodyOfPeer(m.Peer) is not { } b) continue;
+            float d = b.GlobalPosition.DistanceTo(pos);
+            if (m.Downed) { if (d < downedD) (downed, downedBody, downedD) = (m, b, d); continue; }
+            if (d < nearestD) (nearest, nearestD) = (b, d);
+            bool fighting = m.Bot
+                ? BotDirector.Instance?.Get(m.Peer)?.Brain is BrBrain { Goal: BrGoal.Fight or BrGoal.Finish }
+                : Core.GameClock.Now - b.LastAttackedAt < 5;
+            if (fighting && d < fightD) (fight, fightD) = (b.GlobalPosition, d);
+        }
+        if (leader != null && leader.Peer != me.Peer) leaderBody = _br.BodyOfPeer(leader.Peer);
+        return new TeamSight(true, leaderBody, downed, downedBody, fight, nearest, human);
+    }
+
+    private Vector3? _pingAt;
+    private double _pingSeen;
+    private long _reviveWho;
+    private double _reviveFrom;
+    private double _pingOutAt;
+    private double _stopReportAt;
+    private double _downReportAt;
+    private double _pingHereUntil;
+    /// <summary>Seconds a bot stays at a human's ping once there.</summary>
+    private const double PingLinger = 8;
+    private readonly Dictionary<long, double> _pingedEnemy = new();
+    /// <summary>A human's ping is followed this long, unless reached.</summary>
+    private const double PingFollow = 60;
+
+    /// <summary>The squad's part of what it knows; and, with a human in the team, it pings an enemy it sees for them.</summary>
+    private BrSituation Squad(Bot bot, BrSituation s, TeamSight team, Sighting? enemy, double now)
+    {
+        var pos = bot.Body.GlobalPosition;
+        // a human's new ping: go and look
+        if (_br.State.Find(bot.Id) is { } me && _br.HumanPing(me.Team) is { } ping && ping.When > _pingSeen)
+        {
+            _pingSeen = ping.When;
+            _pingAt = ping.At;
+            _pingHereUntil = 0;
+        }
+        if (_pingAt != null && SimNow - _pingSeen > PingFollow) _pingAt = null;
+        // for a human mate: an enemy seen for the first time in a while, at most one ping every 10 s
+        if (team.HasHuman && enemy is { } e && e.Distance < 250f && now - _pingOutAt > 10
+            && (!_pingedEnemy.TryGetValue(e.Id, out double at) || now - at > 30) && bot.Body.Origin is { } origin)
+        {
+            var (pe, pn) = origin.ToLv95(e.At);
+            if (_br.ServerPing(bot.Id, pe, pn, e.At.Y))
+            {
+                _pingOutAt = now;
+                _pingedEnemy[e.Id] = now;
+                GD.Print($"[bots] {bot.Body.Name} \"{bot.Profile.Name}\" pinged an enemy {e.Distance:F0} m off");
+            }
+        }
+        float Dist(Vector3? p) => p is { } v ? v.DistanceTo(pos) : float.PositiveInfinity;
+        if (team.Downed is { } dm && team.DownedBody is { } db && now >= _downReportAt)
+        {
+            _downReportAt = now + 10;
+            GD.Print(FormattableString.Invariant($"[bots] {bot.Body.Name} mate {dm.Name} down {db.GlobalPosition.DistanceTo(pos):F0} m off; enemy {s.EnemyDistance:F0} m, {s.SecondsSinceEnemy:F0} s since one, hurt {s.HurtRecently}, goal {Goal}"));
+        }
+        if (bot.Inventory.Contains(ItemId.Dogtag) && _br.NearestStop(pos, bot.Body.Health) == null && now >= _stopReportAt)
+        {
+            _stopReportAt = now + 10;
+            GD.Print($"[bots] {bot.Body.Name} carries a dogtag, no stop: {_br.StopReport(pos)}");
+        }
+        return s with
+        {
+            LeaderDistance = team.LeaderBody is { } l ? l.GlobalPosition.DistanceTo(pos) : float.PositiveInfinity,
+            MateDownedDistance = team.DownedBody is { } d ? d.GlobalPosition.DistanceTo(pos) : float.PositiveInfinity,
+            MateFightDistance = Dist(team.Fight),
+            EnemyNearMate = team.DownedBody is { } down ? EnemyNear(bot, down.GlobalPosition) : float.PositiveInfinity,
+            CarriesTag = bot.Inventory.Contains(ItemId.Dogtag),
+            StopDistance = Dist(_br.NearestStop(pos, bot.Body.Health)),
+            PingDistance = Dist(_pingAt),
+        };
+    }
+
+    /// <summary>The nearest standing enemy it sees to <paramref name="at"/>, m.</summary>
+    private float EnemyNear(Bot bot, Vector3 at)
+    {
+        var state = _br.State;
+        var me = state.Find(bot.Id);
+        float best = float.PositiveInfinity;
+        foreach (var x in bot.Senses.Seen)
+            if (!x.Downed && me != null && state.Find(x.Id) is { Alive: true } e && BrState.Hostile(me, e))
+                best = Math.Min(best, x.At.DistanceTo(at));
+        return best;
+    }
+
+    /// <summary>To the downed mate, then the hold: <see cref="BrManager.ReviveSeconds"/> beside them, still, and the server stands them up.</summary>
+    private void Revive(Bot bot, FootPlayer hurt, long who, PhysicsDirectSpaceState3D space, double now)
+    {
+        if (!GoTo(bot, hurt.GlobalPosition, run: true, 2.2f, space, now)) { _reviveWho = 0; return; }
+        bot.Intent.Wish = Vector3.Zero;
+        bot.Intent.FaceYaw = Mathf.Atan2(-(hurt.GlobalPosition.X - bot.Body.GlobalPosition.X), -(hurt.GlobalPosition.Z - bot.Body.GlobalPosition.Z));
+        if (_reviveWho != who) { _reviveWho = who; _reviveFrom = now; }
+        if (now - _reviveFrom < BrManager.ReviveSeconds) return;
+        _reviveWho = 0;
+        if (_br.ServerRevive(bot.Id, who)) GD.Print($"[bots] {bot.Body.Name} \"{bot.Profile.Name}\" revived a mate");
     }
 
     // ---- the drop ---------------------------------------------------------------------------------
@@ -149,7 +314,13 @@ public sealed class BrBrain : IBotBrain
         if (me is { Jumped: false })
         {
             bot.Intent = BotIntent.Stand;
-            if (SimNow >= JumpAt) _br.BotJump(bot);
+            if (JumpWith != 0)
+            {
+                // after its human, a beat apart from the other mates (pushed out at the doors if they never go)
+                if (_withJumpedAt == 0 && _br.State.Find(JumpWith) is { Jumped: true }) _withJumpedAt = SimNow;
+                if (_withJumpedAt > 0 && SimNow >= _withJumpedAt + JumpDelay) _br.BotJump(bot);
+            }
+            else if (SimNow >= JumpAt) _br.BotJump(bot);
             return true;
         }
         var ride = body.Ride;
@@ -157,6 +328,9 @@ public sealed class BrBrain : IBotBrain
         bot.Intent.Wish = Vector3.Zero;
         bot.Intent.FireAt = null;
         var pos = body.GlobalPosition;
+        // after its human: where they are now, a few metres to the side (they choose where the team lands)
+        if (JumpWith != 0 && _br.BodyOfPeer(JumpWith) is { } human && _br.State.Find(JumpWith) is { Alive: true })
+            DropTarget = human.GlobalPosition + new Vector3(Mathf.Cos((float)JumpDelay * 2.1f), 0, Mathf.Sin((float)JumpDelay * 2.1f)) * 10f;
         var spot = DropTarget ?? pos;
         var to = new Vector3(spot.X - pos.X, 0, spot.Z - pos.Z);
         float dist = to.Length();
@@ -248,6 +422,7 @@ public sealed class BrBrain : IBotBrain
         // solid between its eyes and the crate (the nearest few are tested, a ray each)
         crate = null;
         float crateDistance = float.PositiveInfinity;
+        bool crateHasTag = false;
         if (_crates != null)
         {
             _near.Clear();
@@ -258,9 +433,20 @@ public sealed class BrBrain : IBotBrain
                 if (d <= BrTactics.CrateDraw) _near.Add((c, at, d));
             }
             _near.Sort((x, y) => x.D.CompareTo(y.D));
+            // a fallen mate's box with their dogtag (squads, #837 phase 4): the team knows where they fell
+            if (BotSkills.AlsoWants?.Invoke(bot, new ItemStack(ItemId.Dogtag, 1)) == true)
+                foreach (var c in _crates.All)
+                    if (c.Style == CrateStyle.DeathBox && !_emptied.Contains(c.Id) && c.Stacks().Any(st => st.Id == ItemId.Dogtag)
+                        && _crates.WorldOf(c, body.GlobalPosition.Y) is { } tagAt && Flat(tagAt - body.GlobalPosition) is var td && td <= BrTactics.TagDraw
+                        && td < crateDistance)
+                    {
+                        crate = c;
+                        crateDistance = td;
+                        crateHasTag = true;
+                    }
             // the crate it is already walking to stays its crate, seen or not, until it is emptied
             foreach (var (c, _, d) in _near)
-                if (c.Id == _lootCrate) { crate = c; crateDistance = d; }
+                if (crate == null && c.Id == _lootCrate) { crate = c; crateDistance = d; }
             for (int i = 0; crate == null && i < Math.Min(_near.Count, 3); i++)
             {
                 var (c, at, d) = _near[i];
@@ -278,7 +464,7 @@ public sealed class BrBrain : IBotBrain
             EnemyDistance: enemy?.Distance ?? float.PositiveInfinity, DownedEnemyDistance: downed?.Distance ?? float.PositiveInfinity,
             HeardDistance: heard, HurtRecently: Core.GameClock.Now - body.LastAttackedAt < 3 && Hostile(body.LastAttacker),
             SecondsSinceEnemy: (float)(now - _lastEnemyAt), OutsideBy: outsideBy, ZoneRunNeeded: runNeeded,
-            CrateDistance: crateDistance, Boldness: bot.Profile.Boldness, LootGreed: bot.Profile.LootGreed);
+            CrateDistance: crateDistance, Boldness: bot.Profile.Boldness, LootGreed: bot.Profile.LootGreed, CrateHasTag: crateHasTag);
     }
 
     /// <summary>A crate this close is noticed whatever stands between (it walked past it, it heard it).</summary>
@@ -369,9 +555,11 @@ public sealed class BrBrain : IBotBrain
         if (_crates!.WorldOf(c, bot.Body.GlobalPosition.Y) is not { } at) { _emptied.Add(c.Id); return; }
         if (!_crates.Reachable(c, bot.Body.GlobalPosition))
         {
-            GoTo(bot, at, run: true, 1.2f, space, now);
-            // a crate it cannot get to (on a roof, behind a fence) is given up after a while
-            if (bot.Nav.Stuck >= 4) { _emptied.Add(c.Id); bot.Nav.Stuck = 0; }
+            bool there = GoTo(bot, at, run: true, 1.2f, space, now);
+            // a crate it cannot get to (on a roof, behind a fence) is given up after a while; and one it stands
+            // under or over and still cannot reach (another floor) at once: seen, a bot squad mate stood 1 m from
+            // such a crate for the rest of a match, never stuck since it had arrived
+            if (there || bot.Nav.Stuck >= 4) { _emptied.Add(c.Id); bot.Nav.Stuck = 0; }
             return;
         }
         bot.Intent.Wish = Vector3.Zero;
@@ -515,6 +703,13 @@ public sealed class BrBrain : IBotBrain
                 var (te, tn) = origin.ToLv95(target);
                 _route = roads.Path(fe, fn, te, tn)?.Select(p => origin.ToWorld(p.E, p.N, pos.Y)).ToList();
                 _routeNext = 0;
+                // a detour, not a way: streets that do not go there (seen: 197 points away from a ping 100 m
+                // off, until it was given up). Straight it is, round the walls as ever
+                if (_route is { Count: > 1 } r && RouteLength(pos, r) > Flat(target - pos) * DetourFactor + 100f)
+                {
+                    GD.Print(FormattableString.Invariant($"[bots] {bot.Body.Name} street route {RouteLength(pos, r):F0} m for {Flat(target - pos):F0} m: straight instead"));
+                    _route = null;
+                }
                 if (_route == null && _routeFails++ < 3)
                     GD.Print(FormattableString.Invariant($"[bots] {bot.Body.Name} no street route {fe:F0}/{fn:F0} -> {te:F0}/{tn:F0}: {roads.Near(fe, fn, 150, 3).Count} roads near it, {roads.Near(te, tn, 150, 3).Count} near the goal"));
             }
@@ -531,6 +726,16 @@ public sealed class BrBrain : IBotBrain
     }
 
     private static float Flat(Vector3 v) => new Vector2(v.X, v.Z).Length();
+
+    /// <summary>A street route this many times the straight distance (plus 100 m) is a detour: walk straight.</summary>
+    private const float DetourFactor = 2.5f;
+
+    private static float RouteLength(Vector3 from, List<Vector3> route)
+    {
+        float len = Flat(route[0] - from);
+        for (int i = 1; i < route.Count; i++) len += Flat(route[i] - route[i - 1]);
+        return len;
+    }
 
     private void Roam(Bot bot, ZoneView zone, PhysicsDirectSpaceState3D space, double now)
     {
