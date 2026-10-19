@@ -355,11 +355,11 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                         GD.Print($"[interior] it holds: {(contents.Count == 0 ? "nothing" : string.Join(", ", contents.Select(c => $"{c.Stack.Id} x{c.Stack.Count}")))}");
                         if (_shot != null)
                             GetViewport().GetTexture().GetImage().SavePng(_shot.Replace(".png", "_loot.png"));
-                        loot.TakeAll();
+                        // the panel's button (#929): offline every grant comes back inside the loop
+                        loot.TakeAllAndClose();
                         Check(!loot.OpenContents().Any(), "take all empties it");
                         Check(CountItems() - _lootBefore == expected, $"the pack gained {CountItems() - _lootBefore} of {expected}");
-                        loot.Close();
-                        Check(!loot.IsOpen, "the panel closes");
+                        Check(!loot.IsOpen, "take all closes the emptied panel");
                         _lootPhase = 2;
                         return;
                     }
