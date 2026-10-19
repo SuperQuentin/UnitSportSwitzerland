@@ -349,7 +349,7 @@ public static class MergedCore
     /// between arms in line): drawn with points at most <see cref="EnvelopeStep"/> apart (the mouths kept straight), each but the
     /// mouths' ends moved out, away from the core, as far as an edge point outside the outline lies beyond it there.
     /// </summary>
-    private static void Envelope(List<Vec2> ring, List<Vec2> paved, HashSet<Vec2> mouthEnds)
+    internal static void Envelope(List<Vec2> ring, List<Vec2> paved, HashSet<Vec2> mouthEnds, double most = MostPush)
     {
         var outside = paved.Where(q => CorePlanner.Outside(ring, q) > CorePlanner.OutsideTolerance).ToList();
         if (outside.Count == 0) return;
@@ -375,7 +375,7 @@ public static class MergedCore
             {
                 var d = q - p;
                 double o = d.Dot(outward);
-                if (Math.Abs(d.Dot(along)) <= EnvelopeStep * 0.75 && o > 0 && o <= MostPush) push = Math.Max(push, o);
+                if (Math.Abs(d.Dot(along)) <= EnvelopeStep * 0.75 && o > 0 && o <= most) push = Math.Max(push, o);
             }
             moved.Add(push > 0 ? p + outward * (push + 0.05) : p);
         }

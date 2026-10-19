@@ -336,6 +336,10 @@ off, `--junctions new` plans and reports without writing.
   it ends at the carriageway's edge instead of keeping its crossing node short of a mouth. 168 real tiles: "a road joins short
   of a mouth" 175 -> 50, the old layout 618 -> 506 (25 more cores now fail a check, held short); 8 more path ends 0.5-0.6 m
   off their lane (59). `JOINDBG=1` prints what joins each street short of its mouth.
+- **Cores failing by decimetres** (#854): of 260 failing cores on the 168 real tiles, 116 failed by under 0.6 m. `CorePlanner`
+  now pushes its kerbs out where a connector's edge passes beyond them by up to `MostPave` 0.6 m (the mouths kept, each
+  corner's kerb taken again from the outline: the sidewalk corners follow) and pushes a mouth out for a kerb starting past
+  it in up to 8 rounds (4 before). Old layout 506 -> 493; the gross failures (connectors 1.5 m or more outside) remain.
 - **Comparing with reality**: SWISSIMAGE crops from `wms.geo.admin.ch` (`ch.swisstopo.swissimage`, EPSG:2056 bbox); in
   Geneva the marking cadastre on `ge.ch/terags/rest/services/DIRECTIVES_SIGNAL_CHANTIERS/MapServer` (37 lines, 38 kerbs,
   44 coloured surfaces, 48 road cover: carriageway, sidewalk, islands) as GeoJSON by bbox. Three panels (aerial, old, new)

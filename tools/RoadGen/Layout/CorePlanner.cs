@@ -188,7 +188,7 @@ public static class CorePlanner
         // (pushed at most four times; the connectors and corners are then laid once more on the final mouths, a kerb still
         // starting outside its mouth failing the check: they ended at the mouths before the last push)
         bool pushed = false;
-        if (round < 4)
+        if (round < 8)
             foreach (var corner in corners.Where(c => c.Shape == CornerShape.Arc))
                 foreach (var (k, at) in (ReadOnlySpan<(int, double)>)[(index[corner.ArmA], corner.StationA), (index[corner.ArmB], corner.StationB)])
                     if (at > m[k] + 0.02 && m[k] < Most(k) - 0.02)
@@ -217,6 +217,7 @@ public static class CorePlanner
             core.Outline.AddRange(corners[k].Kerb);
         }
         Dedupe(core.Outline);
+        Pave(core, n);
         core.Area = Math.Abs(SignedArea(core.Outline));
         // the surface: the outline triangulated (as today's cap); an outline crossing itself is reported
         core.Simple = Simple(core.Outline);
@@ -229,6 +230,35 @@ public static class CorePlanner
 
         Lines(jp, arms, index, core);
         return core;
+    }
+
+    /// <summary>The most a kerb is pushed out to keep a connector paved (m): further, the core fails its check.</summary>
+    private const double MostPave = 0.6;
+
+    /// <summary>
+    /// The kerbs pushed out wherever a connector's edge passes beyond them by up to <see cref="MostPave"/> (#854: cores failing
+    /// their check by a few decimetres, a turn's mitred edge past its arc), the mouths kept; each corner's kerb taken again from
+    /// the outline (the sidewalk corners follow it).
+    /// </summary>
+    private static void Pave(JunctionCore core, int n)
+    {
+        var paved = core.Connectors.SelectMany(c => c.Left.Concat(c.Right)).ToList();
+        if (!paved.Any(p => Outside(core.Outline, p) is > OutsideTolerance and <= MostPave)) return;
+        var ends = core.Mouths.SelectMany(m => new[] { m.Left, m.Right }).ToHashSet();
+        var ring = core.Outline.ToList();
+        MergedCore.Envelope(ring, paved, ends, MostPave);
+        // (each mouth's two ends kept in order: the kerbs between them taken again)
+        var at = core.Mouths.Select(m => (L: ring.IndexOf(m.Left), R: ring.IndexOf(m.Right))).ToList();
+        if (at.Any(x => x.L < 0 || x.R < 0) || !Simple(ring)) return;
+        for (int k = 0; k < n; k++)
+        {
+            var kerb = core.Corners[k].Kerb;
+            if (core.Corners[k].Shape == CornerShape.Gore) continue;
+            kerb.Clear();
+            for (int p = (at[k].R + 1) % ring.Count; p != at[(k + 1) % n].L; p = (p + 1) % ring.Count) kerb.Add(ring[p]);
+        }
+        core.Outline.Clear();
+        core.Outline.AddRange(ring);
     }
 
     // ------------------------------------------------------------------ connectors: which lanes join
