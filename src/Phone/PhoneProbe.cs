@@ -10,7 +10,8 @@ namespace UnitSport.Phone;
 /// events. Up takes it out (the hands and the camera come to it), Right picks a quick action, Up
 /// opens it until the screen covers the view and is shown full screen; a teleport then runs behind
 /// it, and the phone folds away at the new place. Taken out folded, a teleport waits for the screen
-/// first. Windowed, it saves <c>test_output/phone_*.png</c>. Read the <c>[phonecheck]</c> lines.
+/// first. Windowed, it saves <c>test_output/phone_*.png</c> and checks the camera's shots (headless draws no
+/// frame to shoot, so those are skipped there). Read the <c>[phonecheck]</c> lines.
 /// </summary>
 public partial class PhoneProbe : Node
 {
@@ -116,7 +117,7 @@ public partial class PhoneProbe : Node
         }
         Shot("phone_8_camera.png");
         await Key(Godot.Key.Enter, 1.5);
-        Check(phone.LastPhoto != null && Items.PhotoStore.Has(phone.LastPhoto), $"Enter takes a photo into the album ({phone.LastPhoto})");
+        Shoots(phone.LastPhoto != null && Items.PhotoStore.Has(phone.LastPhoto), $"Enter takes a photo into the album ({phone.LastPhoto})");
         Save(phone.Screens.Inner, "phone_8_camera_screen.png");
 
         // a selfie, the foldable's way: F turns the open phone round, the main camera films the player, the cover shows it
@@ -125,7 +126,7 @@ public partial class PhoneProbe : Node
         Check(me.PhoneState == FootPlayer.PhoneSelfieState, $"F turns the phone round for a selfie (state {me.PhoneState})");
         Shot("phone_9_selfie.png");
         await Key(Godot.Key.Enter, 1.5);
-        Check(phone.LastPhoto != null && phone.LastPhoto != first, $"Enter takes the selfie ({phone.LastPhoto})");
+        Shoots(phone.LastPhoto != null && phone.LastPhoto != first, $"Enter takes the selfie ({phone.LastPhoto})");
         if (phone.LastPhoto is { } selfie && Items.PhotoStore.Meta(selfie)?.Source is { Length: > 0 } src && Image.LoadFromFile(src) is { } taken)
         {
             float shot = (float)taken.GetWidth() / taken.GetHeight(), cover = PhoneModel.CoverSize.X / PhoneModel.CoverSize.Y;
@@ -142,13 +143,17 @@ public partial class PhoneProbe : Node
         await Wait(0.6);
         Check(phone.Screens.Shown == PhoneScreens.Page.Photos, "the Photos app opens");
         Shot("phone_10_photos.png");
-        await Key(Godot.Key.Enter, 0.5);
-        Check(phone.Screens.Shown == PhoneScreens.Page.Photo, "Enter opens the newest photo");
-        await Key(Godot.Key.D, 0.3);
-        Shot("phone_11_photo.png");
-        await Key(Godot.Key.Enter, 0.5);
-        Check(phone.Wallpapers.Home == phone.LastPhoto, $"set as the home screen ({phone.Wallpapers.Home})");
-        await Key(Godot.Key.Escape, 0.4);
+        if (Rendered)
+        {
+            await Key(Godot.Key.Enter, 0.5);
+            Check(phone.Screens.Shown == PhoneScreens.Page.Photo, "Enter opens the newest photo");
+            await Key(Godot.Key.D, 0.3);
+            Shot("phone_11_photo.png");
+            await Key(Godot.Key.Enter, 0.5);
+            Check(phone.Wallpapers.Home == phone.LastPhoto, $"set as the home screen ({phone.Wallpapers.Home})");
+            await Key(Godot.Key.Escape, 0.4);
+        }
+        else Log("skip (headless: no shot to open or set as a wallpaper)");
         await Key(Godot.Key.Escape, 0.6);
         Shot("phone_12_home_wallpaper.png");
 
@@ -187,6 +192,15 @@ public partial class PhoneProbe : Node
 
         Log(_failed == 0 ? "RESULT: ok" : $"RESULT: FAIL {_failed}");
         GetTree().Quit(_failed == 0 ? 0 : 1);
+    }
+
+    /// <summary>Headless draws no frame, so the camera has nothing to shoot: its checks run windowed only (as the Polaroid's).</summary>
+    private static bool Rendered => DisplayServer.GetName() != "headless";
+
+    private void Shoots(bool ok, string what)
+    {
+        if (Rendered) Check(ok, what);
+        else Log($"skip (headless: no frame to shoot): {what}");
     }
 
     private async Task Press(string action, double after)
