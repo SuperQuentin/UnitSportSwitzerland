@@ -26,7 +26,7 @@ public readonly record struct Suggestion(string Label, string Text, string Detai
 /// </summary>
 public sealed class ChatCompleter
 {
-    private const int MaxSuggestions = 12;
+    private const int MaxSuggestions = 14;
 
     /// <summary>Towns matching a typed query, best first (<see cref="PlaceSearchUi.Search"/>).</summary>
     public Func<string, int, IEnumerable<string>> Places { get; init; } = (_, _) => [];
