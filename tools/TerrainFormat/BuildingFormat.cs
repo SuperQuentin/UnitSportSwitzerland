@@ -35,6 +35,27 @@ public sealed class Building
     public required float[] Triangles { get; init; } // 9 floats per triangle
 
     public int TriangleCount => Triangles.Length / 9;
+
+    /// <summary>
+    /// Whether the plan point (tile-local X east, Z south) lies on the solid's real footprint, not
+    /// just its box: inside one of its roof or floor triangles seen from above (walls are lines in
+    /// plan and are skipped). Two solids never share a footprint, so at most one covers a point.
+    /// </summary>
+    public bool Covers(float x, float z)
+    {
+        var t = Triangles;
+        for (int i = 0; i + 8 < t.Length; i += 9)
+        {
+            float ax = t[i], az = t[i + 2], bx = t[i + 3], bz = t[i + 5], cx = t[i + 6], cz = t[i + 8];
+            float area = (bx - ax) * (cz - az) - (bz - az) * (cx - ax);
+            if (MathF.Abs(area) < 0.01f) continue; // a wall, edge-on from above
+            float d0 = (bx - ax) * (z - az) - (bz - az) * (x - ax);
+            float d1 = (cx - bx) * (z - bz) - (cz - bz) * (x - bx);
+            float d2 = (ax - cx) * (z - cz) - (az - cz) * (x - cx);
+            if (area > 0 ? d0 >= 0 && d1 >= 0 && d2 >= 0 : d0 <= 0 && d1 <= 0 && d2 <= 0) return true;
+        }
+        return false;
+    }
 }
 
 public sealed class BuildingTile
