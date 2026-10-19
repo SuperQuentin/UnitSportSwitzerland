@@ -29,6 +29,7 @@ src/Items/HeldItemVisual quick  --ownbodycheck --world flat
 src/Items/ItemEvents     quick  --ownbodycheck --world flat
 src/Interiors/WallMirror quick  --ownbodycheck --world flat
 src/Interiors/DoorPortals quick --ownbodycheck --world flat
+src/Interiors/DoorwayGhosts quick --ownbodycheck --world flat
 src/XR/                  quick  --vrposecheck
 src/Audio/Cd/            quick  --beatcheck
 src/Audio/               quick  --earscheck --world fixture --view third
