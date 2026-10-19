@@ -4,6 +4,7 @@ using Godot;
 using UnitSport.Avatar;
 using UnitSport.Items;
 using UnitSport.Player;
+using UnitSport.Ui.Bubbles;
 using static UnitSport.Trailer.StoryScript;
 using static UnitSport.Trailer.TrailerScript;
 
@@ -17,10 +18,10 @@ namespace UnitSport.Trailer;
 /// where they are the same, read off overhead stills (<c>--trailer-scout</c>) where they are new.
 ///
 /// <para>
-/// Stage 1: the UFO is not built yet (#861): its shots fly a stand-in (the light plane on the move,
-/// the helicopter where it hovers), marked <c>// UFO (#861) in stage 2</c>. The dialogue (the
-/// <see cref="Lines"/>, ids shared with <c>docs/trailer/fondue.subtitles.json</c>) shows in the chat
-/// until the speech bubbles (#862) replace it.
+/// The saucer is #861's: an actor (<see cref="RideKind.Ufo"/>, <see cref="Drive.Fly"/>) where it
+/// flies, a <see cref="Craft"/> where it hovers or stands, its beam lifting <see cref="Prop.Beamable"/>
+/// props (the caquelon). The dialogue is speech bubbles (#862), the <see cref="Lines"/> by id, as in
+/// <c>docs/trailer/fondue.subtitles.json</c>.
 /// </para>
 /// </summary>
 public static class FondueScript
@@ -43,8 +44,8 @@ public static class FondueScript
     private static readonly Character Pigeon = new("PIGEON", new Color("c8c8d2"), Appearance.Default, []);
     private static readonly Character Racer = new("RACER", new Color("ffe14d"),
         new Appearance(BodyBuild.Lean, 9, 6, 2, HairStyle.Mohawk, 5), [ItemId.BlackMarcel, ItemId.Jeans, ItemId.BlackShades]);
-    /// <summary>The UFO's pilot: on screen in stage 2, when #861 gives the saucer a pilot.</summary>
-    private static readonly Character Zorp = new("ZORP", new Color("8cff5a"), Appearance.Default, []);
+    /// <summary>The UFO's pilot, #880's alien.</summary>
+    private static readonly Character Zorp = new("ZORP", new Color("8cff5a"), Aliens.Zorp.Looks, Aliens.Zorp.Wears);
 
     // emotes past TrailerScript's: DanceId = 2 + the table's index
     private const int Shrug = 5, Moonwalk = 19, Charleston = 33;
@@ -76,8 +77,9 @@ public static class FondueScript
         ["f24"] = "Race you to the saucer!",
         ["f27"] = "Legs... don't... fail me now!",
         ["f28"] = "I'm fine!",
-        ["f29"] = "It's taking the hay too?!",
+        ["f29"] = "It's taking the cows too?!",
         ["f30"] = "Plan B: a new caquelon.",
+        ["f31"] = "Wait! I have a ticket!",
         ["f32"] = "Faster! It's getting away!",
         ["f33"] = "Not my fish too!",
         ["f34"] = "Okay. We build a trap.",
@@ -123,15 +125,38 @@ public static class FondueScript
 
     private static string Card(string id) => Cards[id];
 
-    /// <summary>Line <paramref name="id"/>, said at <paramref name="t"/> by <paramref name="who"/>.</summary>
-    private static Line Say(string id, double t, Character? who) => new(t, who, Lines[id]);
+    /// <summary>Line <paramref name="id"/> as a bubble at <paramref name="t"/>, over actor <paramref name="who"/> (−1: a voice off, the tail to the frame's right).</summary>
+    private static Bubble Say(string id, double t, int who, BubbleShape shape = BubbleShape.Say) =>
+        new(t, who, Lines[id], shape) { Id = id, At = who < 0 ? new Vector2(0.94f, 0.55f) : null };
+
+    // ---- the saucer ------------------------------------------------------------------------------
+
+    /// <summary>Letting go: a saucer hovers where it is, on its heading.</summary>
+    private static FlightInput Hover(double t) => new(Vector2.Zero, 0f, 0f, 0f, 0f, false, false, 0f);
+
+    /// <summary>Ahead on its heading (boosting), climbing (+) or sinking (−).</summary>
+    private static FlightInput Ahead(bool boost = true, float climb = 0f) =>
+        new(new Vector2(0f, -1f), Mathf.Max(0f, climb), Mathf.Max(0f, -climb), 0f, 0f, false, boost, 0f);
+
+    /// <summary>A saucer actor at <paramref name="at"/>, flown by <paramref name="flight"/> (hovering if none), its switches over time.</summary>
+    private static Cast Saucer(Spot at, float heading, System.Func<double, FlightInput>? flight = null, float launch = 0f,
+        System.Func<double, UfoSwitches>? ufo = null, Spot? board = null) => new()
+    {
+        Ride = RideKind.Ufo, Drive = Drive.Fly, At = at, Heading = heading, Flight = flight ?? Hover, Launch = launch,
+        Ufo = ufo, Board = board, Who = Zorp,
+    };
 
     // ---- places ---------------------------------------------------------------------------------
 
     /// <summary>The Gornergrat ridge's south edge, where it drops to the Gorner glacier (to frame).</summary>
+    /// <summary>Where the saucer comes down on the Gornergrat, on the flat east of the pot.</summary>
+    private static readonly Spot LandSpot = Crew.Toward(100, 13);
+    /// <summary>The saucer's heading on the ground there: its ramp toward the pot.</summary>
+    private const float LandHeading = 280;
     private static readonly Spot GornerEdge = Crew.Toward(167, 51);
     /// <summary>The Riddes plain (VS): IKEA, the fields along the Rhône.</summary>
     private static readonly Spot RiddesIkea = new(2582265, 1112638);
+    private static readonly Spot RiddesCow = new Spot(2584199, 1113836).Toward(59, 60).Toward(329, 22);
     private static readonly Spot RiddesField = new(2584199, 1113836), RiddesFieldEnd = new(2584426, 1113972);
     /// <summary>Geneva airport's apron by the freighter's stand: flat, wide, a car park for the garage.</summary>
     private static readonly Spot Apron = new(2497250, 1121000);
@@ -151,12 +176,12 @@ public static class FondueScript
     private static FlightInput Chute(double t, double at) => new(Vector2.Zero, 0f, 0f, 0f, 0f, t >= at && t < at + 0.25, false, 0f);
 
     /// <summary>The four round the pot: Léa west, Marco north, Nina east, Jonas south.</summary>
-    private static Cast[] Ring(Spot c, int lea, int marco, int nina, int jonas, int jonasHolds = (int)ItemId.Bread) =>
+    private static Cast[] Ring(Spot c, int lea, int marco, int nina, int jonas, int jonasHolds = (int)ItemId.Bread, float r = 1.6f) =>
     [
-        new() { Who = Lea, At = c.Toward(270, 1.6f), Heading = 90, Dance = lea },
-        new() { Who = Marco, At = c.Toward(0, 1.6f), Heading = 180, Dance = marco },
-        new() { Who = Nina, At = c.Toward(90, 1.6f), Heading = 270, Dance = nina },
-        new() { Who = Jonas, At = c.Toward(180, 1.6f), Heading = 0, Dance = jonas, Item = jonasHolds },
+        new() { Who = Lea, At = c.Toward(270, r), Heading = 90, Dance = lea },
+        new() { Who = Marco, At = c.Toward(0, r), Heading = 180, Dance = marco },
+        new() { Who = Nina, At = c.Toward(90, r), Heading = 270, Dance = nina },
+        new() { Who = Jonas, At = c.Toward(180, r), Heading = 0, Dance = jonas, Item = jonasHolds },
     ];
 
     private static Prop[] Pot(Spot c) =>
@@ -191,17 +216,17 @@ public static class FondueScript
             Props = Pot(Crew),
             Keys = Orbit(Crew, 6.0f, 5.2f, 1.5f, 1.7f, 150f, 120f, 2 * B, 28, lookUp: 0.9f),
             Preroll = 0.5,
-            Chat = [Say("f02a", 0.3, Lea), Say("f02b", 2.6, Marco)],
+            Bubbles = [Say("f02a", 0.3, 0), Say("f02b", 2.6, 1)],
         },
         new()
         {
-            Number = 0, FromBar = 0, Bars = 1, Name = "A light in the sky", Feature = "UFO (#861)",
+            Number = 0, FromBar = 0, Bars = 1, Name = "A light in the sky", Feature = "the UFO",
             Hour = 17.75,
             Cast =
             [
                 .. Ring(Crew, 0, 0, 0, 0),
-                // UFO (#861) in stage 2: a light coming in from the north-east, high over them
-                new() { Ride = RideKind.Plane, At = Spot.Alt(Crew.E + 600, Crew.N + 500, 3450), Heading = 230, Drive = Drive.Fly, Launch = 45, Flight = _ => Stick(lever: 0.4f), Seed = 99 },
+                // the saucer coming in from the north-east, lamps lit, high over them
+                Saucer(Spot.Alt(Crew.E + 420, Crew.N + 360, 3300), 230, _ => Ahead(false, -0.3f), launch: 18),
             ],
             Props = Pot(Crew),
             Keys =
@@ -210,35 +235,32 @@ public static class FondueScript
                 new(B, Ground(Crew, 112, 4.3f, 0.7f), Pt.On(4, 0f, 0f), 28),
             ],
             Smooth = 0.2f, Preroll = 0.3,
-            Chat = [Say("f03", 0.4, Jonas)],
+            Bubbles = [Say("f03", 0.4, 3)],
         },
         new()
         {
-            Number = 0, FromBar = 0, Bars = 2, Name = "The beam", Feature = "UFO (#861): the tractor beam",
+            Number = 0, FromBar = 0, Bars = 2, Name = "The beam", Feature = "the UFO's tractor beam lifts the caquelon",
             Hour = 17.75,
-            Cast =
-            [
-                .. Ring(Crew, ArmWave, Shrug, Shrug, Shrug),
-                // UFO (#861) in stage 2: hovering 20 m over the pot, the beam pulling it up
-                new() { Ride = RideKind.Helicopter, At = Spot.Alt(Crew.E, Crew.N, 3160), Heading = 250, Drive = Drive.Fly, Launch = 0, Flight = _ => Stick(up: 0.55f), Seed = 99 },
-            ],
-            Props = Pot(Crew),
+            // the four stepped back out of the cone (6.5 m wide down here): a person standing still in it rises too
+            Cast = Ring(Crew.Up(0f), ArmWave, Shrug, Shrug, Shrug, 0, 8f),
+            Props = [Pot(Crew)[0] with { Beamable = true }, Pot(Crew)[1]],
+            Craft = [new Craft(Crew.Up(14f), 250) { Switches = UfoSwitches.BeamBetween(0.8, 99) }],
             Keys =
             [
-                new(0, Ground(Crew, 100, 7, 1.4f), Ground(Crew, 0, 0, 0.8f), 24),
-                new(2 * B, Ground(Crew, 104, 6.5f, 1.2f), Ground(Crew, 0, 0, 4f), 24),
+                new(0, Ground(Crew, 112, 13, 1.4f), Ground(Crew, 0, 0, 2f), 24),
+                new(2 * B, Ground(Crew, 116, 12, 1.2f), Ground(Crew, 0, 0, 8f), 24),
             ],
             Preroll = 0.5,
-            Chat = [Say("f04", 0.6, Lea)],
+            Bubbles = [Say("f04", 0.6, 0, BubbleShape.Shout)],
         },
         new()
         {
-            Number = 0, FromBar = 0, Bars = 1, Name = "Gone", Feature = "UFO (#861)",
+            Number = 0, FromBar = 0, Bars = 1, Name = "Gone", Feature = "the UFO",
             Hour = 17.75,
             Cast =
             [
-                // UFO (#861) in stage 2: away toward the Matterhorn, then north
-                new() { Ride = RideKind.Plane, At = Spot.Alt(Crew.E - 40, Crew.N, 3170), Heading = 255, Drive = Drive.Fly, Launch = 70, Flight = _ => Stick(0f, 0.3f, lever: 1f), Seed = 99 },
+                // the saucer away toward the Matterhorn, boosting, the pot aboard
+                Saucer(Crew.Up(18f), 255, _ => Ahead(true, 0.3f), launch: 12),
             ],
             Keys =
             [
@@ -261,8 +283,8 @@ public static class FondueScript
             Props = [Pot(Crew)[1]],
             Keys = Orbit(Crew, 4.6f, 4.2f, 0.6f, 0.7f, 78f, 100f, 2 * B, 24, lookUp: 1.3f),
             Preroll = 0.5,
-            Chat = [Say("f06", 0.2, Marco)],
-            Captions = [new(1.8, 3.4, Card("t06"), Card("t06b"), Title: true)],
+            Bubbles = [Say("f06", 0.2, 0, BubbleShape.Shout)],
+            Captions = [new(1.8, 3.4, Card("t06"), Card("t06b"), Title: true) { Id = "t06", SubId = "t06b" }],
         },
 
         // ==== act one: down the mountain, into the sky (bars 12-26) ================================
@@ -290,13 +312,13 @@ public static class FondueScript
         },
         new()
         {
-            Number = 0, FromBar = 0, Bars = 2, Name = "Wingsuit", Feature = "wingsuit; UFO (#861) ahead",
+            Number = 0, FromBar = 0, Bars = 2, Name = "Wingsuit", Feature = "wingsuit; the UFO ahead",
             Hour = 17.8,
             Cast =
             [
                 new() { Who = Jonas, Ride = RideKind.Wingsuit, At = Spot.Alt(2626400, 1091900, 3000), Heading = 245, Drive = Drive.Fly, Launch = 45, Climb = -15, Flight = _ => Stick(0f, -0.15f) },
-                // UFO (#861) in stage 2: far ahead, low over the glacier
-                new() { Ride = RideKind.Plane, At = Spot.Alt(2625900, 1091650, 2900), Heading = 245, Drive = Drive.Fly, Launch = 50, Flight = _ => Stick(lever: 0.5f), Seed = 99 },
+                // the saucer ahead, low over the glacier
+                Saucer(Spot.Alt(2626150, 1091780, 2960), 245, _ => Ahead(false, -0.2f), launch: 40),
             ],
             Keys =
             [
@@ -304,7 +326,7 @@ public static class FondueScript
                 new(2 * B, Pt.On(0, -0.9f, 1.5f, 4.0f), Pt.On(0, 0f, -1f, -20f), 24),
             ],
             Smooth = 0.03f, Shake = 0.4f, Preroll = 1.0,
-            Chat = [Say("f08", 0.5, Jonas)],
+            Bubbles = [Say("f08", 0.5, 0, BubbleShape.Shout)],
         },
         new()
         {
@@ -325,7 +347,7 @@ public static class FondueScript
                 new(B, Pt.On(0, 1.4f, 0.6f, -2f), Pt.On(0, 0f, 0.6f), 24),
             ],
             Smooth = 0.05f, Preroll = 3,
-            Chat = [Say("f10", 0.3, Marco)],
+            Bubbles = [Say("f10", 0.3, 0, BubbleShape.Shout)],
         },
         new()
         {
@@ -338,17 +360,17 @@ public static class FondueScript
                 new(2 * B, Ground(Crew, 175, 20, 1.8f), Pt.On(0, 0f, 0f), 35),
             ],
             Smooth = 0.1f, Preroll = 1,
-            Chat = [Say("f11", 0.4, Nina)],
+            Bubbles = [Say("f11", 0.4, 0)],
         },
         new()
         {
-            Number = 0, FromBar = 0, Bars = 2, Name = "The Aletsch", Feature = "light plane; UFO (#861) ahead",
+            Number = 0, FromBar = 0, Bars = 2, Name = "The Aletsch", Feature = "light plane; the UFO ahead",
             Hour = 17.5,
             Cast =
             [
                 new() { Who = Nina, Ride = RideKind.Plane, At = Spot.Alt(2646200, 1151600, 3150), Heading = 145, Drive = Drive.Fly, Launch = 55, Flight = _ => Stick(lever: 1f) },
-                // UFO (#861) in stage 2: ahead over the ice
-                new() { Ride = RideKind.Plane, At = Spot.Alt(2646200, 1151600, 3150).Toward(145, 160), Heading = 145, Drive = Drive.Fly, Launch = 58, Flight = _ => Stick(lever: 1f), Seed = 99 },
+                // the saucer ahead over the ice
+                Saucer(Spot.Alt(2646200, 1151600, 3150).Toward(145, 120), 145, _ => Ahead(true), launch: 55),
             ],
             Keys =
             [
@@ -356,7 +378,7 @@ public static class FondueScript
                 new(2 * B, Pt.On(0, -10f, 2f, 10f), Pt.On(0, 0f, -2f, -25f), 35),
             ],
             Smooth = 0.15f, Preroll = 1,
-            Chat = [Say("f12", 0.6, Nina)],
+            Bubbles = [Say("f12", 0.6, 0, BubbleShape.Shout)],
         },
         new()
         {
@@ -377,13 +399,14 @@ public static class FondueScript
                 new(2 * B, Pt.On(0, 18f, 4f, 16f), Pt.On(0, 0f, 0f, -12f), 35),
             ],
             Smooth = 0.4f, Preroll = 2,
-            Chat = [Say("f14", 1.0, Nina)],
+            Bubbles = [Say("f14", 1.0, 0)],
         },
         new()
         {
             // the map screen (#map) is the game's own UI, which the director hides: until it can film a
             // screen, the map is the country seen straight down from high above, where the map's relief comes from
-            Number = 0, FromBar = 0, Bars = 1, Name = "The map", Feature = "the map (director addition: a UI screen)",
+            Number = 0, FromBar = 0, Bars = 1, Name = "The map", Feature = "the in-game map (the terrain download screen)",
+            Screens = [new ScreenCue(0.0, B, GameScreen.Map)],
             Hour = 13,
             Keys =
             [
@@ -391,7 +414,7 @@ public static class FondueScript
                 new(B, Pt.At(2636000, 1162000, 7500), Pt.At(2636000, 1162000.5, 0), 24),
             ],
             Preroll = 0.2,
-            Chat = [Say("f15", 0.3, Lea)],
+            Bubbles = [Say("f15", 0.3, -1)],
         },
         new()
         {
@@ -439,7 +462,7 @@ public static class FondueScript
                 new(B, Pt.On(0, 0.9f, 0.6f, 3.0f), Pt.On(0, 0f, 0.4f, -3f), 28),
             ],
             Smooth = 0.1f, Preroll = 1.0,
-            Chat = [Say("f18", 0.2, Lea)],
+            Bubbles = [Say("f18", 0.2, 0, BubbleShape.Shout)],
         },
         new()
         {
@@ -456,7 +479,7 @@ public static class FondueScript
                 new(2 * B, Pt.At(2600851.2, 1199651.9, 0.9f), Pt.At(2600850.8, 1199656, 0.8f), 28),
             ],
             Preroll = 0.5,
-            Chat = [Say("f19a", 0.3, Pigeon), Say("f19b", 3.3, Lea)],
+            Bubbles = [Say("f19a", 0.3, 1), Say("f19b", 3.3, 0)],
         },
         new()
         {
@@ -480,7 +503,7 @@ public static class FondueScript
             ],
             Smooth = 0.2f, Preroll = 0.3,
             Supers = [new(0.2, 2.6, Card("s20"))],
-            Chat = [Say("f20a", 0.8, Marco), Say("f20b", 3.4, Marco)],
+            Bubbles = [Say("f20a", 0.8, 0, BubbleShape.Think), Say("f20b", 3.4, 0)],
         },
         new()
         {
@@ -502,31 +525,31 @@ public static class FondueScript
         },
         new()
         {
-            Number = 0, FromBar = 0, Bars = 2, Name = "Tremola", Feature = "cars on a real pass; UFO (#861) over it",
+            Number = 0, FromBar = 0, Bars = 2, Name = "Tremola", Feature = "cars on a real pass; the UFO over it",
             Hour = 8.5, Traffic = 0,
             Cast =
             [
                 new() { Who = Marco, Ride = Car(Ae86), At = Tremola, Toward = TremolaFoot, Drive = Drive.Road, Route = "tremola", Arc = 280, Skill = 1.1f },
-                // UFO (#861) in stage 2: hovering over the hairpins below
-                new() { Ride = RideKind.Helicopter, At = new Spot(2686760, 1155800, 60), Heading = 180, Drive = Drive.Fly, Launch = 0, Flight = _ => Stick(up: 0.55f), Seed = 99 },
             ],
+            // the saucer hovering over the hairpins below
+            Craft = [new Craft(new Spot(2686760, 1155800, 35), 180)],
             Keys =
             [
                 new(0, Pt.Road("tremola", 378, -9f, 2.3f), Pt.On(0, 0f, 0.7f), 50),
                 new(2 * B, Pt.Road("tremola", 378, -9f, 2.3f), Pt.On(0, 0f, 0.7f), 50),
             ],
             Smooth = 0.1f, Preroll = 5.8,
-            Chat = [Say("f22", 1.0, Marco)],
+            Bubbles = [Say("f22", 1.0, 0, BubbleShape.Shout)],
         },
         new()
         {
-            Number = 0, FromBar = 0, Bars = 1, Name = "Cockpit", Feature = "cockpit view; UFO (#861) through the windscreen",
+            Number = 0, FromBar = 0, Bars = 1, Name = "Cockpit", Feature = "cockpit view; the UFO through the windscreen",
             Hour = 9, Traffic = 0,
             Cast =
             [
                 new() { Who = Marco, Ride = Car(Supra), At = Furka, Toward = FurkaTop, Drive = Drive.Road, Route = "cockpit", Arc = 900, Skill = 1.05f, FirstPerson = true },
-                // UFO (#861) in stage 2: ahead up the pass
-                new() { Ride = RideKind.Plane, At = Spot.Alt(2672600, 1157800, 2500), Heading = 70, Drive = Drive.Fly, Launch = 40, Flight = _ => Stick(lever: 0.4f), Seed = 99 },
+                // the saucer ahead up the pass
+                Saucer(Spot.Alt(2672600, 1157800, 2500), 70, _ => Ahead(false), launch: 30),
             ],
             Keys =
             [
@@ -546,7 +569,7 @@ public static class FondueScript
                 new(B, Pt.Road("grid", 1363, -3.2f, 1.0f), Pt.On(1, 0f, 0.8f), 50),
             ],
             Preroll = 1,
-            Chat = [Say("f24", 0.2, Racer)],
+            Bubbles = [Say("f24", 0.2, 0, BubbleShape.Shout)],
         },
         new()
         {
@@ -587,7 +610,7 @@ public static class FondueScript
                 new(B, Pt.On(0, -0.6f, 1.6f, 4.2f), Pt.On(0, 0f, 0.9f, -10f), 35),
             ],
             Smooth = 0.15f, Preroll = 4,
-            Chat = [Say("f27", 0.2, Lea)],
+            Bubbles = [Say("f27", 0.2, 0)],
         },
         new()
         {
@@ -597,27 +620,29 @@ public static class FondueScript
             Props = [new(default, 0, new Vector3(12f, 3f, 0.8f), new Color(0.62f, 0.6f, 0.56f)) { Route = "riddes", Arc = 150 }],
             Keys = [new(0, Pt.Road("riddes", 125, -3.5f, 1.3f), Pt.Road("riddes", 151, 0f, 1.0f), 35)],
             Preroll = 4.7,
-            Chat = [Say("f28", 2.0, Marco)],
+            Bubbles = [Say("f28", 2.0, 0)],
         },
         new()
         {
-            Number = 0, FromBar = 0, Bars = 2, Name = "Harvest", Feature = "farming: tractor, combine, fields; UFO (#861)",
+            Number = 0, FromBar = 0, Bars = 2, Name = "Harvest", Feature = "farming: tractor and plough, combine, fields; the UFO beams up a cow",
             Hour = 11, Traffic = 0,
             Cast =
             [
-                new() { Who = Jonas, Ride = Heavy(6), Trailer = 6, At = RiddesField, Toward = RiddesFieldEnd, Drive = Drive.Follow, Route = "field", Arc = 0, Speed = 7 },
+                new() { Who = Jonas, Ride = Heavy(6), Trailer = 6, Lowered = true, At = RiddesField, Toward = RiddesFieldEnd, Drive = Drive.Follow, Route = "field", Arc = 0, Speed = 7 },
                 new() { Ride = Heavy(7), At = RiddesField, Toward = RiddesFieldEnd, Drive = Drive.Follow, Route = "field", Arc = -30, Speed = 6, Seed = 33 },
-                // UFO (#861) in stage 2: over the field, beaming up a bale
-                new() { Ride = RideKind.Helicopter, At = RiddesField.Toward(30, 80).Up(30), Heading = 200, Drive = Drive.Fly, Launch = 0, Flight = _ => Stick(up: 0.55f), Seed = 99 },
             ],
+            // the saucer over the field ahead, beaming up a cow
+            Craft = [new Craft(RiddesCow.Up(16f), 200) { Switches = UfoSwitches.BeamBetween(2.5, 99) }],
+            Herds = [new Cows(RiddesCow, Count: 1, Radius: 1.2f), new Cows(RiddesCow.Toward(300, 30), Count: 5, Radius: 12f)],
             Keys =
             [
-                new(0, Pt.On(0, 8f, 5f, -12f), Pt.On(0, 0f, 2f, 12f), 28),
-                new(2 * B, Pt.On(0, 9f, 5.5f, -8f), Pt.On(0, 0f, 2f, 12f), 28),
+                // behind the tractor on its left, the saucer over the field ahead
+                new(0, Pt.On(0, -7f, 3.5f, 12f), Pt.On(0, -10f, 7f, -50f), 28),
+                new(2 * B, Pt.On(0, -6f, 3.5f, 10f), Pt.On(0, -12f, 9f, -50f), 28),
             ],
             Smooth = 0.3f, Preroll = 3,
             Supers = [new(0.3, 3.0, Card("s29"))],
-            Chat = [Say("f29", 2.0, Jonas)],
+            Bubbles = [Say("f29", 2.0, 0, BubbleShape.Shout)],
         },
         new()
         {
@@ -635,11 +660,11 @@ public static class FondueScript
                 new(2 * B, Pt.On(0, 2.2f, 1.6f, -6.0f), Pt.On(0, -0.8f, 1.5f), 28),
             ],
             Smooth = 0.3f, Preroll = 0.4,
-            Chat = [Say("f30", 0.5, Lea)],
+            Bubbles = [Say("f30", 0.5, 0)],
         },
         new()
         {
-            Number = 0, FromBar = 0, Bars = 2, Name = "The steamer", Feature = "the CGN paddle steamer; UFO (#861)",
+            Number = 0, FromBar = 0, Bars = 1, Name = "The steamer", Feature = "the CGN paddle steamer; the UFO",
             Hour = 13,
             Cast =
             [
@@ -648,16 +673,34 @@ public static class FondueScript
                     Ride = RideKind.Steamer, At = new Spot(2546900, 1148660), Heading = 298, Board = new Spot(2546900, 1148950),
                     Draught = 1.6f, Launch = 5f, Drive = Drive.Controls, Controls = _ => Pedal(1f), Seed = 70,
                 },
-                // UFO (#861) in stage 2: low over the lake ahead of the steamer
-                new() { Ride = RideKind.Plane, At = Spot.Alt(2546700, 1148760, 420), Board = new Spot(2546900, 1148950), Heading = 290, Drive = Drive.Fly, Launch = 40, Flight = _ => Stick(lever: 0.4f), Seed = 99 },
             ],
+            // the saucer low over the lake ahead of the steamer
+            Craft = [new Craft(Spot.Alt(2546820, 1148700, 395), 290)],
             Keys =
             [
                 new(0, Pt.At(2547020, 1149060, 26), Pt.On(0, 0f, 3f, 25f), 35),
-                new(2 * B, Pt.At(2547060, 1149045, 26), Pt.On(0, 0f, 3f, 25f), 35),
+                new(B, Pt.At(2547040, 1149052, 26), Pt.On(0, 0f, 3f, 25f), 35),
             ],
             Smooth = 0.4f, Preroll = 4,
-            Supers = [new(0.3, 3.0, Card("s31"))],
+            Supers = [new(0.3, 2.3, Card("s31"))],
+        },
+        new()
+        {
+            Number = 0, FromBar = 0, Bars = 1, Name = "Swim", Feature = "on foot: swimming",
+            Hour = 13,
+            // after the steamer, crawl: in from the dry shore, then at the surface, deep enough to swim
+            Cast =
+            [
+                new() { Who = Marco, At = new Spot(2546905, 1148760), Board = new Spot(2546900, 1148950), Swim = true, Heading = 205,
+                    Drive = Drive.Walk, Walk = _ => (new Vector2(0f, 0.9f), true) },
+            ],
+            Keys =
+            [
+                new(0, Pt.On(0, 3.5f, 2.2f, 4.5f), Pt.On(0, 0f, 0.2f, -2f), 28),
+                new(B, Pt.On(0, 3.0f, 2.2f, 3.5f), Pt.On(0, 0f, 0.2f, -2f), 28),
+            ],
+            Smooth = 0.4f, Preroll = 2.0,
+            Bubbles = [Say("f31", 0.3, 0, BubbleShape.Shout)],
         },
         new()
         {
@@ -674,20 +717,24 @@ public static class FondueScript
                 new(2 * B, Pt.On(0, -5f, 1.6f, -6f), Pt.On(0, 0f, 0.6f, 4f), 28),
             ],
             Smooth = 0.2f, Preroll = 2.0,
-            Chat = [Say("f32", 1.0, Marco)],
+            Bubbles = [Say("f32", 1.0, 0, BubbleShape.Shout)],
         },
         new()
         {
-            Number = 0, FromBar = 0, Bars = 1, Name = "Fishing", Feature = "fishing; UFO (#861) takes the fish",
+            Number = 0, FromBar = 0, Bars = 1, Name = "Fishing", Feature = "fishing; the UFO beams up the catch",
             Hour = 15,
             Cast = [new() { Who = Jonas, At = NyonPier, Heading = 125, Item = (int)ItemId.FishingRod }],
+            // his line out on the lake; his catch on the quay beside him, beamed up from under his nose
+            ItemCues = [new ItemCue(0.0, 0, Items.ItemEventKind.FishCast) { At = NyonPier.Toward(125, 11) }],
+            Props = [new(NyonPier.Toward(215, 6f), 30, default, default) { Item = ItemId.BrownTrout, Scale = 2.2f, Beamable = true }],
+            Craft = [new Craft(NyonPier.Toward(215, 6f).Up(8f), 125) { Switches = UfoSwitches.BeamBetween(0.5, 99) }],
             Keys =
             [
                 new(0, Pt.On(0, -3.4f, 1.3f, 0.6f), Pt.On(0, 0.4f, 1.2f, -1.6f), 28),
                 new(B, Pt.On(0, -3.2f, 1.3f, 0.4f), Pt.On(0, 0.4f, 1.3f, -1.6f), 28),
             ],
             Preroll = 0.5,
-            Chat = [Say("f33", 1.0, Jonas)],
+            Bubbles = [Say("f33", 1.0, 0, BubbleShape.Shout)],
         },
         new()
         {
@@ -706,7 +753,7 @@ public static class FondueScript
             ],
             Preroll = 2,
             Supers = [new(0.3, 3.0, Card("s34"))],
-            Chat = [Say("f34", 1.2, Jonas)],
+            Bubbles = [Say("f34", 1.2, 0)],
         },
         new()
         {
@@ -731,7 +778,7 @@ public static class FondueScript
             Cast = [new() { Who = Lea, At = new Spot(2542900, 1152270).Toward(250, 1.4f), Heading = 70, Item = (int)ItemId.Cheese }],
             Props =
             [
-                new(new Spot(2542900, 1152270), 0, default, default) { Item = ItemId.Campfire, Scale = 4f },
+                new(new Spot(2542900, 1152270), 0, default, default) { Placed = PlacedKind.Campfire },
                 new(new Spot(2542900, 1152270).Up(0.35f), 0, default, default) { Item = ItemId.FonduePot, Scale = 1.4f },
                 new(new Spot(2542900, 1152270).Toward(120, 1.6f), 300, default, default) { Item = ItemId.Radio, Scale = 1.4f },
             ],
@@ -741,7 +788,7 @@ public static class FondueScript
                 new(B, Ground(new Spot(2542900, 1152270), 160, 2.3f, 0.7f), Ground(new Spot(2542900, 1152270), 0, 0, 0.5f), 28),
             ],
             Preroll = 0.5,
-            Chat = [Say("f36", 0.2, Lea)],
+            Bubbles = [Say("f36", 0.2, 0)],
         },
         new()
         {
@@ -752,14 +799,14 @@ public static class FondueScript
                 new() { Who = Marco, At = new Spot(2542906, 1152264), Heading = 90, Fight = t => t < 1.6 ? GuardHigh : t < 2.0 ? Jab : t < 3.4 ? GuardHigh : t < 3.9 ? Kick : t < 5.0 ? GuardHigh : Victory },
                 new() { Who = Jonas, At = new Spot(2542908, 1152264), Heading = 270, Fight = t => t < 2.4 ? GuardHigh : t < 2.9 ? Uppercut : t < 4.0 ? GuardHigh : Down },
             ],
-            Props = [new(new Spot(2542900, 1152270), 0, default, default) { Item = ItemId.Campfire, Scale = 4f }],
+            Props = [new(new Spot(2542900, 1152270), 0, default, default) { Placed = PlacedKind.Campfire }],
             Keys =
             [
                 new(0, Ground(new Spot(2542907, 1152264), 180, 5.0f, 1.2f), Ground(new Spot(2542907, 1152264), 0, 0, 1.1f), 28),
                 new(2 * B, Ground(new Spot(2542907, 1152264), 200, 4.5f, 1.1f), Ground(new Spot(2542907, 1152264), 0, 0, 1.0f), 28),
             ],
             Preroll = 1.0,
-            Chat = [Say("f37a", 0.2, Marco), Say("f37b", 1.4, Jonas)],
+            Bubbles = [Say("f37a", 0.2, 0, BubbleShape.Shout), Say("f37b", 1.4, 1, BubbleShape.Shout)],
         },
         new()
         {
@@ -774,10 +821,10 @@ public static class FondueScript
             ],
             Preroll = 0.5,
             Supers = [new(0.2, 2.2, Card("s38"))],
-            Chat = [Say("f38", 0.9, Lea)],
+            Bubbles = [Say("f38", 0.9, 0, BubbleShape.Think)],
         },
-        Season(2, "Halloween", "halloween", 17.6, Card("s39"), (int)Headwear.WitchHat, (int)Headwear.PumpkinHead, "f39", Marco),
-        Season(2, "Christmas", "christmas", 16.4, Card("s40"), (int)Headwear.SantaHat, (int)Headwear.ReindeerAntlers, "f40", Nina),
+        Season(2, "Halloween", "halloween", 17.6, Card("s39"), (int)Headwear.WitchHat, (int)Headwear.PumpkinHead, "f39", 1),
+        Season(2, "Christmas", "christmas", 16.4, Card("s40"), (int)Headwear.SantaHat, (int)Headwear.ReindeerAntlers, "f40", 2),
 
         // ==== act three: the air and the drop (bars 65-77) ==========================================
         new()
@@ -792,7 +839,7 @@ public static class FondueScript
             ],
             Smooth = 0.06f, Preroll = 0.4,
             Supers = [new(0.3, 3.0, Card("s41"))],
-            Chat = [Say("f41", 0.5, Nina)],
+            Bubbles = [Say("f41", 0.5, 0)],
         },
         new()
         {
@@ -871,7 +918,7 @@ public static class FondueScript
                 new(B, Pt.On(0, -1.5f, 1.5f, -5.5f), Pt.On(0, -0.5f, 1.4f, 4f), 24),
             ],
             Smooth = 0.15f, Preroll = 0.8,
-            Chat = [Say("f46", 0.3, Jonas)],
+            Bubbles = [Say("f46", 0.3, 0, BubbleShape.Shout)],
         },
         new()
         {
@@ -885,17 +932,15 @@ public static class FondueScript
                 new(B, Pt.On(0, 0.6f, 0.9f, -2.4f), Pt.On(0, 0f, 1.6f), 24),
             ],
             Preroll = 0.5,
-            Chat = [Say("f47", 0.3, Marco)],
+            Bubbles = [Say("f47", 0.3, 0)],
         },
         new()
         {
-            Number = 0, FromBar = 0, Bars = 2, Name = "The city", Feature = "a real city, traffic; UFO (#861) over it",
+            Number = 0, FromBar = 0, Bars = 2, Name = "The city", Feature = "a real city, traffic; the UFO takes a car",
             Hour = 18.3, Traffic = 80,
-            Cast =
-            [
-                // UFO (#861) in stage 2: over the crossroads
-                new() { Ride = RideKind.Helicopter, At = new Spot(2683580, 1246800, 45), Heading = 300, Drive = Drive.Fly, Launch = 0, Flight = _ => Stick(up: 0.55f), Seed = 99 },
-            ],
+            // the saucer over the crossroads, beaming up a parked car
+            Craft = [new Craft(new Spot(2683580, 1246800, 18), 300) { Switches = UfoSwitches.BeamBetween(1.0, 99) }],
+            Props = [new(new Spot(2683580, 1246800), 30, default, default) { Vehicle = Car(Yaris) }],
             Keys =
             [
                 new(0, Pt.At(ZurichCam.E, ZurichCam.N, 32), Pt.At(2683570, 1246790, 1), 50),
@@ -915,7 +960,7 @@ public static class FondueScript
                 new(2 * B, Pt.At(2600900, 1199647, 2.6f), Pt.On(0, 0f, 0.8f), 28),
             ],
             Smooth = 0.2f, Preroll = 4,
-            Chat = [Say("f49", 0.6, Marco)],
+            Bubbles = [Say("f49", 0.6, 0, BubbleShape.Shout)],
         },
 
         // ==== the end: the thief comes back (bars 78-93) ============================================
@@ -926,7 +971,7 @@ public static class FondueScript
             Cast =
             [
                 new() { Who = Lea, At = Crew.Toward(300, 9), Heading = 120, Dance = Shrug },
-                new() { Who = Marco, At = Crew.Toward(310, 10), Heading = 130 },
+                new() { Who = Marco, At = Crew.Toward(310, 10), Heading = 130, Item = (int)ItemId.Radio, Radio = 1 },
                 new() { Who = Nina, At = Crew.Toward(290, 10), Heading = 110 },
                 new() { Who = Jonas, At = Crew.Toward(300, 11), Heading = 120, Item = (int)ItemId.Blahaj },
             ],
@@ -938,16 +983,16 @@ public static class FondueScript
             ],
             Preroll = 0.5,
             Supers = [new(0.3, 3.0, Card("s50"))],
-            Chat = [Say("f50", 1.0, Lea)],
+            Bubbles = [Say("f50", 1.0, 0, BubbleShape.Whisper)],
         },
         new()
         {
-            Number = 0, FromBar = 0, Bars = 2, Name = "Landing", Feature = "UFO (#861): landing legs, the ramp",
+            Number = 0, FromBar = 0, Bars = 2, Name = "Landing", Feature = "the UFO: landing legs, the ramp",
             Hour = 17.65,
             Cast =
             [
-                // UFO (#861) in stage 2: settling by the pot on its legs, the ramp opening
-                new() { Ride = RideKind.Helicopter, At = Spot.Alt(2626800, 1092385, 3150), Heading = 352, Drive = Drive.Fly, Launch = 0, Flight = _ => Stick(up: 0.3f), Seed = 99 },
+                // the saucer settling by the pot on its legs, the ramp opening by itself once down
+                Saucer(LandSpot.Up(14f), LandHeading, t => t < 0.3 ? Hover(t) : Ahead(false, -0.8f) with { Stick = Vector2.Zero }),
             ],
             Props = Pot(Crew),
             Keys =
@@ -959,10 +1004,19 @@ public static class FondueScript
         },
         new()
         {
-            Number = 0, FromBar = 0, Bars = 1, Name = "Face to face", Feature = "UFO (#861): its pilot",
+            Number = 0, FromBar = 0, Bars = 1, Name = "Face to face", Feature = "the UFO's pilot down its ramp",
             Hour = 17.7,
-            // the pilot (#861) in stage 2, on the ramp facing her
-            Cast = [new() { Who = Lea, At = Crew.Toward(270, 2.2f), Heading = 90 }],
+            Craft = [new Craft(LandSpot, LandHeading) { Switches = _ => new UfoSwitches(Ramp: true) }],
+            Cast =
+            [
+                new() { Who = Lea, At = Crew.Toward(100, 4f), Heading = 100 },
+                // down the ramp, the old caquelon in its hands
+                new()
+                {
+                    Who = Zorp, At = LandSpot, Drive = Drive.Walk, DownRamp = RampOf.Craft(0), Item = (int)ItemId.FonduePot,
+                    Walk = t => (t > 0.3 && t < 2.6 ? new Vector2(0, 0.45f) : Vector2.Zero, false),
+                },
+            ],
             Props = Pot(Crew),
             Keys =
             [
@@ -970,38 +1024,40 @@ public static class FondueScript
                 new(B, Pt.On(0, 0.8f, 1.6f, 1.4f), Pt.On(0, 0f, 1.5f, -3f), 35),
             ],
             Preroll = 0.5,
-            Chat = [Say("f52a", 0.2, Zorp), Say("f52b", 1.4, Lea)],
+            Bubbles = [Say("f52a", 0.2, 1), Say("f52b", 1.4, 0)],
         },
         new()
         {
             Number = 0, FromBar = 0, Bars = 2, Name = "Sharing", Feature = "multiplayer: together",
             Hour = 17.7,
-            // the pilot (#861) in stage 2, the fifth at the pot
-            Cast = Ring(Crew, Wave, Clap, Cheer, 0),
+            Cast = [.. Ring(Crew, Wave, Clap, Cheer, 0), new() { Who = Zorp, At = Crew.Toward(45, 1.8f), Heading = 225, Item = (int)ItemId.Bread }],
+            Craft = [new Craft(LandSpot, LandHeading) { Switches = _ => new UfoSwitches(Ramp: true) }],
             Props = Pot(Crew),
             Keys = Orbit(Crew, 6.5f, 6f, 1.6f, 1.8f, 120f, 70f, 2 * B, 28, lookUp: 1.0f),
             Preroll = 0.5,
-            Chat = [new(0.2, null, Card("y53")), Say("f53", 1.6, Lea)],
+            Chat = [new(0.2, null, Card("y53")) { Id = "y53" }],
+            Bubbles = [Say("f53", 1.6, 0)],
         },
         new()
         {
             Number = 0, FromBar = 0, Bars = 2, Name = "The party", Feature = "emotes and dances",
             Hour = 17.75,
-            // the pilot (#861) in stage 2, dancing too
-            Cast = Ring(Crew, Charleston, Griddy, Robot, Moonwalk),
+            Cast = [.. Ring(Crew, Charleston, Griddy, Robot, Moonwalk), new() { Who = Zorp, At = Crew.Toward(45, 1.8f), Heading = 225, Dance = Floss }],
+            Craft = [new Craft(LandSpot, LandHeading) { Switches = _ => new UfoSwitches(Ramp: true) }],
             Props = Pot(Crew),
             Keys = Orbit(Crew, 5.5f, 6f, 1.3f, 1.5f, 220f, 290f, 2 * B, 28, lookUp: 1.0f),
             Preroll = 0.5,
         },
         new()
         {
-            Number = 0, FromBar = 0, Bars = 2, Name = "Lift-off", Feature = "UFO (#861): leaving",
+            Number = 0, FromBar = 0, Bars = 2, Name = "Lift-off", Feature = "the UFO: lift-off",
             Hour = 17.8,
             Cast =
             [
                 .. Ring(Crew, Wave, Wave, ArmWave, Wave),
-                // UFO (#861) in stage 2: away into the sunset with a doggy bag
-                new() { Ride = RideKind.Helicopter, At = Spot.Alt(2626770, 1092470, 3160), Heading = 250, Drive = Drive.Fly, Launch = 0, Flight = _ => Stick(0f, -0.3f, up: 1f), Seed = 99 },
+                // the saucer up off its legs and away into the sunset, a doggy bag aboard
+                Saucer(LandSpot, LandHeading, t => t < 0.8 ? Hover(t) : t < 2.6 ? Ahead(false, 1f) with { Stick = Vector2.Zero } : Ahead(true, 0.6f) with { ViewYaw = -Mathf.DegToRad(250) },
+                    ufo: t => new UfoSwitches(Ramp: false)),
             ],
             Props = Pot(Crew),
             Keys =
@@ -1010,7 +1066,7 @@ public static class FondueScript
                 new(2 * B, Ground(Crew, 70, 7, 1.0f), Pt.On(4, 0f, 0f), 28),
             ],
             Smooth = 0.2f, Preroll = 0.5,
-            Chat = [Say("f55", 0.6, Zorp)],
+            Bubbles = [Say("f55", 0.6, 4)],
         },
         Ending(2, 0),
         Ending(3, 2 * B),
@@ -1020,7 +1076,7 @@ public static class FondueScript
     /// Shots 39-40: Lauterbrunnen's main street on two days months apart, the same frame: the four
     /// still looking, dressed for the occasion, which the street is dressed for too.
     /// </summary>
-    private static Shot Season(int bars, string name, string occasion, double hour, string card, int hatA, int hatB, string line, Character who) => new()
+    private static Shot Season(int bars, string name, string occasion, double hour, string card, int hatA, int hatB, string line, int who) => new()
     {
         Number = 0, FromBar = 0, Bars = bars, Name = name, Feature = $"occasions: {name}",
         Hour = hour, Occasion = occasion, Traffic = 0,
@@ -1038,7 +1094,7 @@ public static class FondueScript
         ],
         Preroll = 0.5,
         Supers = [new(0.2, 3.0, card)],
-        Chat = [Say(line, 1.2, who)],
+        Bubbles = [Say(line, 1.2, who)],
     };
 
     /// <summary>
@@ -1074,13 +1130,13 @@ public static class FondueScript
         FadeOut = from == 0 ? 0 : 2.2,
         Photo = from == 0 ? null : 0.3,
         PhotoFrom = from == 0 ? null : new Key(0, Ground(Crew, 90, 4.6f, 1.5f), Ground(Crew, 0, 0, 1.15f), 28),
-        Chat = from == 0 ? [Say("f56", 0.6, Lea)] : [],
+        Bubbles = from == 0 ? [Say("f56", 0.6, 0, BubbleShape.Shout)] : [],
         Captions = from == 0
             ? []
             :
             [
-                new(1.0, 5.6, Card("t06"), "UnitSport Switzerland", Title: true),
-                new(3.2, 4.6, "", HepCats.Credit),
+                new(1.0, 5.6, Card("t06"), "UnitSport Switzerland", Title: true) { Id = "t06", SubId = "t56b" },
+                new(3.2, 4.6, "", HepCats.Credit) { SubId = "credit" },
             ],
     };
 
