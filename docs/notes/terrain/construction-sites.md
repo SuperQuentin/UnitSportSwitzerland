@@ -381,6 +381,139 @@ The sound of a site (#617): hammering, a vibrator, a grinder, a beeper, a radio 
 
 The machines on a site (#616): its excavator and wheel loader stand as dormant vehicles and wake when aimed at. The crew's van stands as a car. The rest wait for #613 and #614: `vehicles/dormant-vehicles` (the fourth provider), `tools/sitemachinenetcheck.sh`.
 
-In the model viewer (`--models`): `Construction/SiteShowcase`, "Terrain / Building site", one hand-made site per phase (foundations, shell, a topped-out house and block), planned, shelled, dressed and craned by the game's own builders on flat ground, the cranes slewing by the clocks.
+In the model viewer (`--models`): `Construction/SiteShowcase`, "Terrain / Building site", one hand-made site per phase (foundations of a block and of a house, a shell, a topped-out house and block), planned, shelled, dressed and craned by the game's own builders, the cranes slewing by the clocks. They stand 8 m up on a block of ground of their own with their pits (#619) cut in it by `PitTerrain.Cut`: the viewer's floor is a plane at 0, which would close a pit.
 
 The yard's skips and materials are loot containers outdoors (#627): `loot/yard-loot`.
+
+## The pit (#619)
+
+Sites at their foundations, and shells up to `PitOpenUpTo` (2) storeys, are dug into a pit. Past
+that the trench round the basement counts as backfilled and the shell starts on the ground as before;
+a topped-out site has none.
+
+### The plan (`ConstructionSites.Plan`, pure, tier 0)
+
+- **`SitePit`** in the site frame: `Area` is the plan box and `PitMargin` (1.5 m, the scaffolding's
+  `Scaffold`) round it, plus the ramp's `Lane` (4.6 m, 3.4 m on a house plot) along one wall. The
+  `TopEnd` of the lane is where the ramp comes up; `Side` is the lane's wall's outward normal.
+- **Basements** are hashed (GWR has no count): a house 1, a block 1 or 2 (40 %), a big block (over
+  1500 m² or 6 storeys) 2.
+- **Which wall the lane is along**: the street side first. Where a road or a neighbour stands on
+  that ground, or the lane is too short for the nominal depth (basements x 3 m) at `MaxGrade`, then
+  the side toward the gate (the ramp comes up at its street end, into the yard), the other side, the
+  back; failing a long enough lane, the longest free one. Along the front or the back the ramp
+  comes up at the end nearer the gate.
+- **No pit** where the area comes within `PitSeam` (3 m) of the tile's edge (the next tile does not
+  plan this one's sites, so it could not cut its share), or where every lane's ground is taken: by
+  another building, or a road with its sidewalks, verges and paths (`SiteObstacles.Undiggable`, the
+  carriageway alone would leave a sidewalk slab over the pit; the yard keeps `Blocked`). The
+  ring round the building is scanned at a metre or less, both edges included (a first version
+  stopped short of the far edge and missed a path along it).
+- **The yard**: the site grows by the lane on its wall's side; a lane along the front or back makes
+  the sides at least `PitSide` (8 m, 5.5 m on a house plot) wide, so a 9.5 m excavator can come round
+  and turn into the ramp; the pit and an `Apron` (6 m past the ramp's top) are kept clear of zones,
+  machines and cranes. On a 24 x 15 m block the outside crane's spot is now in the pit, so its crane
+  stands inside, on the slab.
+- **The materials' way in**: a telehandler came at the pallets (#615) over the scaffolding's ground,
+  which the pit has taken. The materials are placed with a way in kept clear on the side their pallets
+  face, away from the building (`MaterialsApproach`, 8 m, `Placer.PlaceWithWay`: over the gate's lane
+  or the apron is fine, never the pit or the scaffolding, never past the hoarding), where the yard
+  the machines left has room; failing that where they stood before. **Decided with the user: the
+  machines keep their room first; and every site gets the way, pit or not**, since the dressing
+  turns every site's pallets to the yard (a topped-out site's materials used to face the hoarding a
+  metre off, with the rebar between them and the building). `MaterialsWayIn` checks the hoarding
+  line and the scaffolding too. Measured over the 159 real
+  pits (`MaterialsWayIn`): machines first then materials anywhere left 28 of 532 machines without
+  room, 19 sites without materials and 21 with materials no machine can come at; this order, 28, 19
+  and 17; materials first with their way, 54 machines (42 sites), 4 and 14. `tools/sitepalletnetcheck.sh`
+  moved from the foundations site it used (its pallets now against its pit, no way in) to the
+  topped-out one at 2582832,1102441 whose pallets have one (`--constructioncheck` prints which do;
+  in the generated world only it and the shell at 2577592,1102821). Its probe no longer comes at a
+  pallet over a pit (`InPit`: the pit is clear at a telehandler's height, and empty under it), leaves
+  its own body out of the side rays, moves B out of the yard first (both spawn at the site), and
+  brakes each machine to a stop at the pallet (`BrakeToStop`): at a quarter throttle a telehandler
+  rolls 1.3 m/s and coasted its tines 1.25 m past the pallet, into its face.
+
+### The pit's dressing (`PitPlans`, pure, tier 0)
+
+- **The floor** (`FloorOf`): the ground floor's slab top less a storey per basement, and at least
+  `MinWall` (1.2 m) under the lowest ground round the pit, so on a slope it goes deeper (the real
+  tiles reach 10 m). `Blinding` (2 cm) under the lowest slab, so a machine rolls onto the slab.
+- **The ramp**: 1 in 4 (`RampGrade`) with `FootRoom` (3 m) flat at its foot; steeper where the lane is
+  short, up to `MaxGrade` (36 %), giving up the room at the foot before the grade. Past that the
+  slope took the pit too deep for its lane: **no ramp**, the pit railed all round (`HasRamp`).
+- **Sheet piles** round the edge in a pan profile, every pan in front of the dug face (the lining is
+  at the edge itself: a pan flush with it z-fought), 0.3 m proud of the ground, cut to the ground under
+  a footbridge; one or two **walers**; a **guard rail** on the pile line, solid as a sheet like the
+  scaffolding's, open at the ramp's mouth and the bridges.
+- **Footbridges** over a shell's trench, one at a side's middle bay (where `WallBay` puts its
+  doorway, which the shell forces open on the ground floor), never on the lane's side, with a
+  collision ramp from the ground onto the deck.
+- **The shell over its pit** (`ShellPlans.Plan(..., pitFloor)`): `Levels` starts with the basements'
+  slabs (`Basements` of them under the ground floor), their walls blank concrete with a door in some,
+  a flight up each storey; the scaffolding's lifts start over the ground floor; the rolls of the
+  storeys over the ground keep their names, so a shell keeps the walls it had. A storey a slope made
+  taller than 3 m gets its flights' mid landing at half its height.
+- `SiteShellBuilder.Dig` works out the floor from the ground round the pit and returns the shell and
+  the pit; a crane in the building stands on the pit's floor, its mast as much taller.
+
+### The ground (`PitTerrain`, pure, tier 0)
+
+The pit is turned with its building, so it never lines up with the 1 m lattice, and it has vertical
+walls a heightfield cannot hold. The ground is cut from its own lattice and heights
+(`anything-meet-terrain-has-built`):
+
+- **The mesh** (`Cut`, `TerrainMeshBuilder.CutPits`, at any stride): every ground triangle reaching
+  into a pit is dropped and its part outside put back, clipped to the pit's straight edges
+  (Sutherland-Hodgman against each side, colours interpolated): the ground meets the pit on a
+  straight line at its own heights, nothing in the pit, no gap. Done after the road blend's
+  `PatchSurface` (which moves the grid's own vertices) and before `FinishSurface`.
+- **The lining is the ground's, not the site's**: walls from the ground's edge down to the floor
+  (following the ground's breaks: lattice lines and quad diagonals, `Sampler.Profile`), the floor,
+  the ramp down from the ground's profile across its mouth, and its open side. A tile past the
+  building ring sheds its site mesh (#553) without rebuilding its ground, so a pit lined by the site
+  would show a hole into the void.
+- **The collision**: `Holes` (every full-res quad reaching in) go NaN in the height map; Jolt drops
+  the four quads round each NaN, and `CollisionFaces` puts their part outside the pit back as faces
+  (from `GroundHeights` with the road blend), with the lining, in the tile's road cells.
+- **`ChunkManager`**: the pits come from `SiteShellBuilder.Build` with the buildings, are kept per
+  tile (`ChunkState.Pits`), cut the interim surface when already known (a new LOD), the tail's surface
+  and collision, and filter the trees out of them. The interim collision is left whole: its holes
+  without the lining (which comes with the tail's road cells) would be a hole. The server cuts its
+  collision too.
+- **`ChunkManager.InPit`**: the height queries answer the ground at a pit's top, so the void rescue,
+  the vehicle safety net and getting out of a vehicle treat a pit as they treat a tunnel bore.
+
+### Checks
+
+- `PitTests` (tier 0, 30): which sites dig, the area and the lane, basements, seams, roads and sidewalks, the
+  side fallback, nothing of the yard in the pit or on the apron, the ramp in its lane, no ramp past
+  36 %, the shell's basements and its doors at the bridges; the ground cut at strides 1 to 20 leaves
+  exactly the tile less the pit as ground and the pit as floor, and the collision puts back every
+  dropped quad less the pit. A mutation leaving one side of the collar out fails 7 of them.
+- `--pitcheck --chunks fixture:site --traffic 0` (`PitCheck`, quick; course `site`: a block at its
+  foundations, a shell over its basement, a house plot turned 25°): rays down every metre of each pit
+  and round it meet something, never below the floor; capsules dropped into it rest in it; an
+  **excavator** mounted on the ramp's top drives down a 6 m pit's 24 m ramp and along the floor
+  beside the slab, then **backs up** and out of the mouth (a 9.5 m machine does not turn in a 4.6 m
+  lane, and the slab's edges carry wall formwork); a body walks the shell up from its basement slab
+  to its top slab, and over a footbridge onto its ground floor. `--pitcheck shots` (windowed):
+  `test_output/pit/`.
+- `--constructioncheck`: every foundations site and low shell digs, nothing of the yard in it, the
+  ramp in its lane, the ground cut; the plan views draw the pit, the lane and the apron.
+- `--pitsurvey --chunks <terrain_chunks>` (`PitSurvey`, real data, in no tier): over the 626 local
+  tiles, **248 sites want a pit, 159 dig one** (front lane 94, side 53, back 12; 71 stopped by a road,
+  its sidewalk or a neighbour, 18 by a seam); 134 with one basement, 25 with two; depth 1.2-9.3 m
+  (mean 3.2); ramps 25-36 %, 14 pits without one. Counting sidewalks took 22 pits away (they would
+  have cut under one). Cost per pit: plan and lining ~1 ms (worst 26), holes ~1.6 ms, collision faces
+  ~3.7 ms (worst 18); the stride-1 ground mesh cut ~62 ms a tile (worst 116), on the worker, on 1-2 %
+  of tiles (it was 120 ms before it passed over the rows no pit reaches). The yards: 28 of 532 machines
+  without room (20 sites), 19 sites without materials, 17 with materials no machine can reach.
+
+### Not done
+
+- The ramp's top edge follows the ground's profile, its foot a straight line: on a cross-slope the
+  grade across the lane varies a little.
+- A machine cannot drive onto the slab: its edges carry the next walls' formwork. Earthworks are #620.
+- The fixture course is flat; the real tiles' slopes are covered by the survey and the unit tests'
+  sloped ground, not by a drive.

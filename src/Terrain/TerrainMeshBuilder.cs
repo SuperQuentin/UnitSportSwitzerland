@@ -134,6 +134,21 @@ public static partial class TerrainMeshBuilder
         return new Vector3(-dx, 1f, -dz).Normalized();
     }
 
+    /// <summary>
+    /// A surface core with building sites' pits dug into it (#619): every triangle reaching into a
+    /// pit clipped to outside it, and the pit lined with walls, floor and ramp
+    /// (<see cref="Construction.PitTerrain"/>). After <see cref="PatchSurface"/>, which moves the grid's
+    /// own vertices only, and before <see cref="FinishSurface"/>.
+    /// </summary>
+    public static MeshData CutPits(MeshData core, int stride, IReadOnlyList<Construction.PitCut> pits)
+    {
+        if (pits.Count == 0) return core;
+        int m = (ChunkFormat.GridSize - 1) / stride + 1;
+        var (v, c, n, i) = Construction.PitTerrain.Cut(core.Vertices, core.Colors, core.Normals, core.Indices, m,
+            (float)(stride * ChunkFormat.SpacingM), pits);
+        return new MeshData(v, c, n, i);
+    }
+
     /// <summary>Adds the walls lining any carved tunnel opening to a surface core.</summary>
     public static MeshData FinishSurface(MeshData core, ChunkGrid grid, int stride,
         IReadOnlySet<int>? holes, IReadOnlyList<RoadMeshBuilder.TunnelPortal>? portals)
