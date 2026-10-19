@@ -226,6 +226,7 @@ public partial class SnowService : Node
         try
         {
             SetOverride(json.Length == 0 ? null : JsonSerializer.Deserialize<WeatherOverride>(json));
+            GD.Print($"[snow] the server's weather: {WeatherCommand.Describe(Today, Hour, _override)}");
         }
         catch (JsonException e)
         {
