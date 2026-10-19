@@ -70,7 +70,14 @@ public partial class BrManager : Node
         return m;
     }
 
-    private static double Now => ClockSync.ServerNow;
+    /// <summary>
+    /// The match timeline: simulated seconds, so <c>/speed</c> paces the countdown, the plane, the zone
+    /// and the drops with everything else (#855). Every stamp in <see cref="BrState"/> is in these units.
+    /// </summary>
+    private static double Now => ClockSync.SimNow;
+
+    /// <summary>Real server seconds, for the rate limits on what a client may ask for (flares, pings).</summary>
+    private static double RealNow => ClockSync.ServerNow;
 
     /// <summary>"--brpace f" on the server: every match's timings times f (the loopback check runs a match in a minute).</summary>
     private static readonly float PaceScale = ParsePace();
@@ -668,8 +675,8 @@ public partial class BrManager : Node
         if (!_server || _state.Phase != BrPhase.Playing || _crates == null || Origin == null) return;
         long peer = Multiplayer.GetRemoteSenderId();
         if (_state.Find(peer) is not { Alive: true } e || _players?.GetNodeOrNull<Node3D>(peer.ToString()) is not { } body) return;
-        if (_lastFlare.TryGetValue(peer, out double last) && Now - last < 20) return;
-        _lastFlare[peer] = Now;
+        if (_lastFlare.TryGetValue(peer, out double last) && RealNow - last < 20) return;
+        _lastFlare[peer] = RealNow;
         var (pe, pn) = Origin.ToLv95(body.GlobalPosition);
         var rng = new Random(_state.Seed ^ (int)peer ^ (int)Now);
         float a = (float)(rng.NextDouble() * Math.Tau), r = 20f + (float)rng.NextDouble() * 30f;
@@ -702,10 +709,10 @@ public partial class BrManager : Node
         if (!_server || _state.Phase != BrPhase.Playing || Origin == null || !double.IsFinite(e) || !double.IsFinite(n)) return;
         long peer = Multiplayer.GetRemoteSenderId();
         if (_state.Find(peer) is not { Alive: true, Team: not 0 } me || _players?.GetNodeOrNull<Node3D>(peer.ToString()) is not { } body) return;
-        if (_lastPing.TryGetValue(peer, out double last) && Now - last < PingEvery) return;
+        if (_lastPing.TryGetValue(peer, out double last) && RealNow - last < PingEvery) return;
         var (be, bn) = Origin.ToLv95(body.GlobalPosition);
         if (Math.Sqrt((e - be) * (e - be) + (n - bn) * (n - bn)) > PingReach) return;
-        _lastPing[peer] = Now;
+        _lastPing[peer] = RealNow;
         foreach (var x in _state.Entrants.Where(x => x.Team == me.Team))
             if (Multiplayer.GetPeers().Contains((int)x.Peer)) RpcId(x.Peer, MethodName.Pinged, peer, e, n, alt);
     }

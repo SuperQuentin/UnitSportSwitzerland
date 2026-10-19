@@ -1,11 +1,14 @@
+using System;
 using System.Collections.Generic;
 using Godot;
+using UnitSport.Ui.Bubbles;
 
 namespace UnitSport.Trailer;
 
 /// <summary>
 /// The trailer's own layer over the picture: captions low in the frame, title cards in the middle,
-/// the friends' chat bottom left (the story's dialogue, typed in), place and time cards top left,
+/// the friends' chat bottom left (the story's dialogue, typed in), comic speech bubbles over the
+/// actors' heads (#862, the films' dialogue), place and time cards top left,
 /// a photo's flash and the polaroid it leaves, and a black veil for fades. Sizes follow the
 /// frame's height, so a 720p preview and a 1080p film frame alike. The only layer left visible
 /// while the director hides the game's HUD.
@@ -20,6 +23,14 @@ public partial class Captions : CanvasLayer
     private readonly Panel _photoCard;
     private readonly TextureRect _photoImage;
     private readonly List<(Line Line, RichTextLabel Label)> _lines = new();
+
+    /// <summary>The shot's speech bubbles, oldest first, each with its view; at most <see cref="MaxBubbles"/> at once.</summary>
+    private readonly Control _bubbleLayer;
+    private readonly List<(Bubble Bubble, SpeechBubble View)> _bubbles = new();
+    private const int MaxBubbles = 8;
+    private readonly BubbleWant[] _wants = new BubbleWant[MaxBubbles];
+    private readonly BubblePlaced[] _placed = new BubblePlaced[MaxBubbles];
+    private readonly int[] _on = new int[MaxBubbles];
 
     private static readonly SystemFont Heavy = new()
     {
@@ -65,6 +76,11 @@ public partial class Captions : CanvasLayer
             StretchMode = TextureRect.StretchModeEnum.KeepAspectCovered,
         };
         _photoCard.AddChild(_photoImage);
+
+        // the bubbles under the fades and the captions
+        _bubbleLayer = new Control { MouseFilter = Control.MouseFilterEnum.Ignore };
+        _bubbleLayer.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        AddChild(_bubbleLayer);
 
         _veil = new ColorRect { Color = Colors.Black, MouseFilter = Control.MouseFilterEnum.Ignore };
         _veil.SetAnchorsPreset(Control.LayoutPreset.FullRect);
@@ -162,6 +178,66 @@ public partial class Captions : CanvasLayer
     }
 
     private static string Escape(string text) => text.Replace("[", "[lb]");
+
+    /// <summary>
+    /// A shot's speech bubbles, built once as it starts (lettering sized from the frame's height),
+    /// hidden until their time; <paramref name="colourOf"/> gives an actor's character colour.
+    /// </summary>
+    public void SetBubbles(IReadOnlyList<Bubble> bubbles, Func<int, Color?> colourOf)
+    {
+        foreach (var (_, view) in _bubbles) view.QueueFree();
+        _bubbles.Clear();
+        float h = GetViewport().GetVisibleRect().Size.Y;
+        var ordered = new List<Bubble>(bubbles);
+        ordered.Sort(static (a, b) => a.T.CompareTo(b.T));
+        for (int i = 0; i < ordered.Count; i++)
+        {
+            var b = ordered[i];
+            var view = new SpeechBubble { Visible = false };
+            _bubbleLayer.AddChild(view);
+            view.Set(b.Text, b.Shape, h * 0.032f, b.Colour ?? (b.At == null ? colourOf(b.Who) : null), seed: i + 1);
+            _bubbles.Add((b, view));
+        }
+    }
+
+    /// <summary>
+    /// The bubbles at shot time <paramref name="t"/>: each over its speaker's head on screen
+    /// (<paramref name="head"/>: actor index → its head projected on the frame, null when it is not
+    /// there), placed so none covers another, typing in, popping on.
+    /// </summary>
+    public void ShowBubbles(double t, double length, Func<int, Vector2?> head)
+    {
+        var frame = GetViewport().GetVisibleRect();
+        float w = frame.Size.X, h = frame.Size.Y;
+        int n = 0;
+        for (int i = 0; i < _bubbles.Count; i++)
+        {
+            var (b, view) = _bubbles[i];
+            bool on = t >= b.T && t < b.Until(length) && n < MaxBubbles;
+            Vector2? at = !on ? null : b.At is { } fixedAt ? new Vector2(fixedAt.X * w, fixedAt.Y * h) : head(b.Who);
+            view.Visible = at != null;
+            if (at == null) continue;
+            _on[n] = i;
+            _wants[n] = new BubbleWant(at.Value, view.Size);
+            n++;
+        }
+        if (n == 0) return;
+        BubbleLayout.Place(_wants.AsSpan(0, n), new Rect2(Vector2.Zero, frame.Size), h * 0.03f, h * 0.014f, h * 0.07f, _placed);
+        for (int k = 0; k < n; k++)
+        {
+            var (b, view) = _bubbles[_on[k]];
+            var place = _placed[k];
+            view.Position = place.Body.Position;
+            view.Point(place.Tip - place.Body.Position, place.Off);
+            // a long tail (a bubble pushed away from its speaker) goes under the others' bodies
+            int z = -Mathf.Min(1000, (int)(place.Reach / 4f));
+            if (view.ZIndex != z) view.ZIndex = z;
+            double age = t - b.T, until = b.Until(length);
+            // the text starts as the pop settles; a bubble up to the cut does not fade before it
+            view.Reveal(BubbleGeometry.Typed(view.Letters, age - 0.12, b.Shape));
+            view.Pop(BubbleGeometry.Pop(age), BubbleGeometry.Fade(age, until >= length - 1e-6 ? double.MaxValue : until - b.T));
+        }
+    }
 
     /// <summary>
     /// The layer at shot time <paramref name="t"/> of a shot <paramref name="length"/> s long:
@@ -293,5 +369,6 @@ public partial class Captions : CanvasLayer
         _flash.Color = new Color(1, 1, 1, 0);
         _veil.Color = new Color(0, 0, 0, black ? 1f : 0f);
         SetChat([]);
+        SetBubbles([], _ => null);
     }
 }

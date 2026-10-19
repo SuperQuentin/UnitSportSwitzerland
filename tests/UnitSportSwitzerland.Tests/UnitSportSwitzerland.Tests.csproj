@@ -56,6 +56,7 @@
     <Compile Include="..\..\src\Farming\FieldCells.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\FieldTile.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\Face\FaceGenome.cs" Link="Game\Face\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Avatar\AppearanceCode.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\Face\FaceState.cs" Link="Game\Face\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\Face\DanceFace.cs" Link="Game\Face\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\HitGuard.cs" Link="Game\%(Filename)%(Extension)" />
@@ -113,6 +114,14 @@
     <Compile Include="..\..\src\Player\Wading.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\CmdArgs.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\PigeonFlight.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- the flying saucer (#861): its hover flight and the tractor beam, Godot maths only -->
+    <Compile Include="..\..\src\Player\UfoFlight.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Player\TractorBeamMath.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- UFO sightings and the herds they beam up (#863): schedule, herds, cows, paths; pure -->
+    <Compile Include="..\..\src\Occasions\OccasionWeekdays.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\UfoSighting.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\HerdPlan.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\CowMotion.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\CruiseControl.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\AirlinerCatalog.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Audio\TurbopropTone.cs" Link="Game\%(Filename)%(Extension)" />
@@ -184,6 +193,9 @@
     <Compile Include="..\..\src\Avatar\ForkliftLayout.cs;..\..\src\Items\Pallets.cs;..\..\src\Items\SitePallets.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the trailer (#706): its song's bar clock and the cut check -->
     <Compile Include="..\..\src\Trailer\Song.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Trailer\FilmCoverage.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- speech bubbles and subtitle tracks (#862): bubble geometry and placement, cues to SRT -->
+    <Compile Include="..\..\src\Ui\Bubbles\BubbleGeometry.cs;..\..\src\Ui\Bubbles\BubbleLayout.cs;..\..\src\Trailer\SubtitleTrack.cs" Link="Game\%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

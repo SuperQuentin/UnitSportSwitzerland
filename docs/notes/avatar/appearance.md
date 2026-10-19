@@ -3,7 +3,9 @@
 - `Avatar.Appearance` = build, face, eyes, skin tone, hair style, hair colour. Indices into
   `SkinTones`, `EyeColours`, `HairColours` and the `BodyBuild` / `HairStyle` enums: **append
   only**, a packed value must mean the same figure on every peer.
-- `Pack()` puts it in one int with bit 30 set ("chosen"); `Unpack(0)` is null = nobody chose.
+- `Pack()` puts it in one int with bit 30 set ("chosen"); `Unpack(0)` is null = nobody chose. The
+  layout is `AppearanceCode` (plain C#, unit tested): build 0-2, face 3-6, eyes 7-9, skin 10-12, hair
+  13-16, colour 17-20, then face bit 21 and skin bits 22-23 (#880, the aliens: `aliens`).
 - The player picks it in **Settings → Character** (#806, `Ui/CharacterPage`: one option row per
   part beside a turning preview, an own-world SubViewport built only while the tab is on screen;
   it was the inventory's Body row before, whose ‹ › saved without telling anyone). A change sets

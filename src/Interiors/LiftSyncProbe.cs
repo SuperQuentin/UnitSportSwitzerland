@@ -121,7 +121,7 @@ public partial class LiftSyncProbe : ChatProbe
             && o.GlobalPosition.DistanceTo(me.GlobalPosition) < 3f), 8);
         Expect(seen, $"{_role} sees {other} in the cabin on the top floor");
         var ride = interiors.LiftOf(plan, 0);
-        Expect(ride.At(ClockSync.ServerNow) == topFloor, $"the cabin is at {InteriorManager.FloorName(plan, topFloor)} for {_role}");
+        Expect(ride.At(ClockSync.SimNow) == topFloor, $"the cabin is at {InteriorManager.FloorName(plan, topFloor)} for {_role}");
         await Seconds(1.0);
         Shot("arrived");
 
