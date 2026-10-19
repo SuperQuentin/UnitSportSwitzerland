@@ -131,6 +131,8 @@ public static class TouristScript
     /// <summary>Nyon: the park by the shore (where the AN-124 boards); its shore and the way out to the lake (south-east), for the fishing.</summary>
     private static readonly Spot NyonPark = new(2507810, 1137290), NyonShore = new(2507850, 1137230);
     private const float NyonLake = 150f;
+    /// <summary>Geneva's runway 05/23, 400 m up it from where the A320 lifts off: clear of the aprons' buildings.</summary>
+    private static readonly Spot Runway = new(2496676, 1120571);
 
     private const float Moonlight = 1.2f;
     private const int Shrug = 5;
@@ -139,6 +141,8 @@ public static class TouristScript
     private const int Guard = 2, HitStun = 6, Down = 7, Victory = 9, Jab = 17, Kick = 18, Uppercut = 22;
     /// <summary>The saucer's front (where its ramp goes down): toward the farm, north-west.</summary>
     private const float SaucerFront = 315f;
+    /// <summary>Up the Rhône valley from the field, where the mothership comes from and goes.</summary>
+    private const float Upvalley = 60f;
 
     /// <summary>
     /// BLIP's saucer in the field, the night of the crash: down on its legs but nosed in and tipped,
@@ -153,8 +157,8 @@ public static class TouristScript
     /// <summary>The saucer mended, standing in the field, lamps lit; its ramp down or not.</summary>
     private static Craft Mended(bool ramp) => new(Crash, SaucerFront) { Switches = _ => new UfoSwitches(Ramp: ramp) };
 
-    /// <summary>The mothership over the mountains south-east of Riddes, high in the night.</summary>
-    private static Craft Mothership(float bearing = 135f, float metres = 1100f, float alt = 1500f)
+    /// <summary>The mothership up the Rhône valley north-east of Riddes, high in the night (the slopes south-east are too close and too steep).</summary>
+    private static Craft Mothership(float bearing = Upvalley, float metres = 1500f, float alt = 1100f)
     {
         var at = Crash.Toward(bearing, metres);
         return new Craft(Spot.Alt(at.E, at.N, alt), 300f) { Mothership = true };
@@ -179,14 +183,14 @@ public static class TouristScript
                 // the saucer streaks in from the north-east, diving at the field, lamps lit, legs up
                 new()
                 {
-                    Ride = RideKind.Ufo, At = Crash.Toward(55, 1100).Up(320), Heading = 235, Drive = Drive.Fly, Launch = 70, Climb = -14,
+                    Ride = RideKind.Ufo, At = Crash.Toward(55, 650).Up(170), Heading = 235, Drive = Drive.Fly, Launch = 55, Climb = -12,
                     Flight = _ => Stick(0f, -1f, effort: true) with { Down = 0.6f }, Ufo = _ => new UfoSwitches(Legs: false),
                 },
             ],
             Keys =
             [
-                new(0, Pt.At(Yard.E, Yard.N, 2.5f), Pt.On(0, 0f, 0f), 35),
-                new(8.6, Pt.At(Yard.E, Yard.N, 2.5f), Pt.On(0, 0f, 0f), 28),
+                new(0, Pt.At(Yard.E, Yard.N, 2.5f), Pt.On(0, 0f, 0f), 85),
+                new(8.6, Pt.At(Yard.E, Yard.N, 2.5f), Pt.On(0, 0f, 0f), 50),
             ],
             Smooth = 0.4f, Preroll = 0.5,
             Supers = [new(2.2, 4.0, "RIDDES (VS) · 23:40")],
@@ -621,9 +625,9 @@ public static class TouristScript
             Feature = "the Battle Royale plane",
             Cast =
             [
-                new() { Who = Nina, At = new Spot(2497250, 1121000).Toward(46, 24).Toward(316, 5), Heading = 226 },
-                new() { Who = Blip, At = new Spot(2497250, 1121000).Toward(46, 24).Toward(316, 3.6f), Heading = 226 },
-                new() { Ride = RideKind.Freighter, At = new Spot(2497250, 1121000), Heading = 226, Drive = Drive.Stand, Doors = 1 << 3, Seed = 330 },
+                new() { Who = Nina, At = Runway.Toward(46, 24).Toward(316, 5), Heading = 226 },
+                new() { Who = Blip, At = Runway.Toward(46, 24).Toward(316, 3.6f), Heading = 226 },
+                new() { Ride = RideKind.Freighter, At = Runway, Heading = 226, Drive = Drive.Stand, Doors = 1 << 3, Seed = 330 },
             ],
             Keys =
             [
@@ -674,21 +678,21 @@ public static class TouristScript
         new()
         {
             Number = 33, Name = "Canopy", FromBar = 51, Bars = 1, Song = S, Hour = 17.45,
-            Feature = "wingsuit to parachute",
+            Feature = "the parachute",
             Cast =
             [
                 new()
                 {
-                    Who = Blip, Ride = RideKind.Wingsuit, At = Meadow.Up(160), Heading = 180, Drive = Drive.Fly, Launch = 40, Climb = -10,
-                    Flight = t => Stick(0f, -0.2f) with { Action = t is > 0.9 and < 1.0 },
+                    Who = Blip, Ride = RideKind.Parachute, At = Meadow.Up(90), Heading = 180, Drive = Drive.Fly, Launch = 8,
+                    Flight = _ => Stick(0f, -0.2f),
                 },
             ],
             Keys =
             [
-                new(0, Pt.On(0, 4f, 0.5f, 7f), Pt.On(0, 0f, 2f), 28),
-                new(2.67, Pt.On(0, 5f, -1f, 7f), Pt.On(0, 0f, 3.5f), 28),
+                new(0, Pt.On(0, 6f, 1f, 9f), Pt.On(0, 0f, 3f), 28),
+                new(2.67, Pt.On(0, 7f, 0f, 8f), Pt.On(0, 0f, 3.5f), 28),
             ],
-            Smooth = 0.2f, Preroll = 1.4,
+            Smooth = 0.2f, Preroll = 1,
         },
         new()
         {
@@ -913,8 +917,8 @@ public static class TouristScript
             Props = [new(Crash.Toward(220, 8f), 150, default, default) { Placed = PlacedKind.FieldWorkbench }],
             Keys =
             [
-                new(0, Pt.On(0, 2.4f, 1.5f, 3.6f), Pt.On(0, 0f, 1.6f, -3f), 28),
-                new(2.67, Pt.On(0, 2.0f, 1.4f, 3.2f), Pt.On(0, 0f, 1.6f, -3f), 28),
+                new(0, Ground(Crash, 200, 12, 1.6f), Pt.On(0, 0f, 1.3f), 28),
+                new(2.67, Ground(Crash, 205, 11, 1.6f), Pt.On(0, 0f, 1.3f), 28),
             ],
             Preroll = 0.5,
         },
@@ -1009,12 +1013,12 @@ public static class TouristScript
         {
             Number = 54, Name = "Your ride", FromBar = 79, Bars = 2, Song = S, Hour = 22.5, Moon = Moonlight,
             Feature = "the mothership",
-            Cast = Row(Crash.Toward(SaucerFront, 11), 135, (Lea, 0), (Blip, 0), (Nina, 0), (Jonas, 0)),
+            Cast = Row(Crash.Toward(SaucerFront, 11), Upvalley, (Lea, 0), (Blip, 0), (Nina, 0), (Jonas, 0)),
             Craft = [Mended(ramp: true), Mothership()],
             Keys =
             [
-                new(0, Ground(Crash.Toward(SaucerFront, 11), SaucerFront, 5f, 1.0f), Pt.Dir(135, 14), 24),
-                new(5.3, Ground(Crash.Toward(SaucerFront, 11), SaucerFront, 6f, 0.8f), Pt.Dir(135, 26), 24),
+                new(0, Ground(Crash.Toward(SaucerFront, 11), Upvalley + 180, 5f, 1.0f), Pt.Dir(Upvalley, 10), 24),
+                new(5.3, Ground(Crash.Toward(SaucerFront, 11), Upvalley + 180, 6f, 0.8f), Pt.Dir(Upvalley, 20), 24),
             ],
             Preroll = 0.5,
             Bubbles = [Say(2.4, 2, "s54_ride")],
@@ -1040,13 +1044,20 @@ public static class TouristScript
             Number = 56, Name = "Alphorn", FromBar = 83, Bars = 1, Song = S, Hour = 22.6, Moon = Moonlight,
             Feature = "the alphorn, the UFO's ramp",
             // at the top of the ramp, facing down it to the friends, the alphorn's call
-            Cast = [new() { Who = Blip, At = Crash, DownRamp = RampOf.Craft(0), Item = (int)ItemId.Alphorn, Use = _ => true }],
+            Cast =
+            [
+                new()
+                {
+                    Who = Blip, At = Crash, DownRamp = RampOf.Craft(0), Item = (int)ItemId.Alphorn, Use = t => t > 1.6,
+                    Drive = Drive.Walk, Walk = t => (t < 1.4 ? new Vector2(0f, 0.45f) : Vector2.Zero, false),
+                },
+            ],
             Craft = [Mended(ramp: true)],
-            ItemCues = [new ItemCue(0.4, 0, ItemEventKind.Horn)],
+            ItemCues = [new ItemCue(1.2, 0, ItemEventKind.Horn)],
             Keys =
             [
-                new(0, Ground(Crash, SaucerFront, 11, 1.0f), Pt.On(0, 0f, 1.6f), 35),
-                new(2.67, Ground(Crash, SaucerFront, 10, 0.9f), Pt.On(0, 0f, 1.7f), 35),
+                new(0, Ground(Crash, SaucerFront, 9, 1.7f), Pt.On(0, 0f, 1.5f), 35),
+                new(2.67, Ground(Crash, SaucerFront, 8.5f, 1.6f), Pt.On(0, 0f, 1.6f), 35),
             ],
             Preroll = 0.5,
         },
@@ -1082,15 +1093,15 @@ public static class TouristScript
             [
                 new()
                 {
-                    Ride = RideKind.Ufo, Who = Blip, At = Crash.Toward(135, 120).Up(70), Heading = 135, Drive = Drive.Fly, Launch = 20, Climb = 25,
+                    Ride = RideKind.Ufo, Who = Blip, At = Crash.Toward(Upvalley, 50).Up(25), Heading = Upvalley, Drive = Drive.Fly, Launch = 18, Climb = 25,
                     Flight = _ => Stick(0f, -1f, up: 1f, effort: true), Ufo = _ => new UfoSwitches(Legs: false),
                 },
             ],
             Craft = [Mothership()],
             Keys =
             [
-                new(0, Pt.At(Crash.E, Crash.N, 2), Pt.On(0, 0f, 0f), 28),
-                new(2.67, Pt.At(Crash.E, Crash.N, 2), Pt.On(0, 0f, 0f), 28),
+                new(0, Pt.At(Crash.E, Crash.N, 2), Pt.On(0, 0f, 0f), 35),
+                new(2.67, Pt.At(Crash.E, Crash.N, 2), Pt.On(0, 0f, 0f), 50),
             ],
             Smooth = 0.3f, Preroll = 0.5,
         },
@@ -1098,12 +1109,12 @@ public static class TouristScript
         {
             Number = 59, Name = "The end", FromBar = 87, Bars = 4, Song = S, Hour = 22.75, Moon = Moonlight, FadeOut = 2.4,
             Feature = "friends together",
-            Cast = Row(Crash.Toward(SaucerFront, 11), 135, (Lea, Wave), (Marco, 0), (Nina, Wave), (Jonas, Wave)),
-            Craft = [Mothership(metres: 2600f, alt: 2600f)],
+            Cast = Row(Crash.Toward(SaucerFront, 11), Upvalley, (Lea, Wave), (Marco, 0), (Nina, Wave), (Jonas, Wave)),
+            Craft = [Mothership(metres: 3000f, alt: 1900f)],
             Keys =
             [
-                new(0, Ground(Crash.Toward(SaucerFront, 11), SaucerFront, 4.5f, 1.6f), Ground(Crash.Toward(SaucerFront, 11), 0, 0, 1.4f), 28),
-                new(10.6, Ground(Crash.Toward(SaucerFront, 11), SaucerFront, 14f, 9f), Pt.Dir(135, 20), 28),
+                new(0, Ground(Crash.Toward(SaucerFront, 11), Upvalley + 180, 4.5f, 1.6f), Ground(Crash.Toward(SaucerFront, 11), 0, 0, 1.4f), 28),
+                new(10.6, Ground(Crash.Toward(SaucerFront, 11), Upvalley + 180, 14f, 9f), Pt.Dir(Upvalley, 14), 28),
             ],
             Preroll = 0.5,
             Captions =
