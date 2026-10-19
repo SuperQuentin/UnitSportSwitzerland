@@ -1202,6 +1202,10 @@ public static partial class HumanMeshBuilder
         FightStand, FightGuardHigh, FightCrouch, FightGuardLow, FightAir, FightHit, FightDazed, FightVictory,
         FightBlockStun, FightJab, FightKick, FightLowJab, FightSweep, FightJumpKick, FightUppercut,
         FightStringKick, FightFinisher,
+        // #907: aura battles (HumanMeshBuilder.Aura.cs); past FightStand, so no groove either
+        AuraWaiting, AuraPlanning, AuraStumble, AuraVictory, AuraDefeat, AuraStandTall, AuraArmsCrossed,
+        AuraPointToSky, AuraStareDown, AuraSunglasses, AuraYawn, AuraSlowWalk, AuraSiuuu, AuraMewing,
+        AuraSixSeven, AuraLasso, AuraCutTheRope,
     }
 
     /// <summary>
@@ -1332,6 +1336,7 @@ public static partial class HumanMeshBuilder
     {
         if (index == GroupPogo) return DanceMove.Pogo;
         if (index == GroupJump) return DanceMove.JumpTogether;
+        if (index >= AuraMoves) return AuraResolve(index - AuraMoves);
         if (index >= BreakMoves) return BreakResolve(index);
         if (index >= FightMoves) return FightResolve(index - FightMoves);
         if (index >= EmoteMoves) return EmoteMove(index - EmoteMoves);
@@ -1755,6 +1760,7 @@ public static partial class HumanMeshBuilder
             // a floor move's channels (only asked for when walking, or mixing): its toprock
             case DanceMove.Toprock or DanceMove.BreakDown or DanceMove.BreakWindmill or DanceMove.BreakHeadspin:
                 Toprock(ref ch, t, mv); break;
+            case >= DanceMove.AuraWaiting: EvalAura(move, t, mv, ref ch); break;
             case >= DanceMove.FightStand: EvalFight(move, t, mv, ref ch); break;
         }
     }
