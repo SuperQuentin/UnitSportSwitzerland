@@ -34,6 +34,12 @@ public partial class TrailerDirector : Node
 {
     public static bool Requested => CmdArgs.Has("--trailer") || CmdArgs.Has("--trailer-scout");
 
+    /// <summary>
+    /// <c>--trailer-unpinned</c>: a render as before #924, for a baseline: no seeds pinned per shot,
+    /// the calendar's real date, the herds' clock left as it runs. Never for a film to keep.
+    /// </summary>
+    public static readonly bool Unpinned = CmdArgs.Has("--trailer-unpinned");
+
     /// <summary>Runs a chat line (<c>/style cartoon</c>); the client world sends it to its chat.</summary>
     public System.Action<string>? RunCommand { get; set; }
 
@@ -46,6 +52,9 @@ public partial class TrailerDirector : Node
     private readonly string? _recordDir = CmdArgs.Value("--trailer-record");
     private readonly string? _stillsDir = CmdArgs.Value("--trailer-stills");
     private readonly int _fps = CmdArgs.Int("--trailer-fps") ?? 30;
+    /// <summary><c>--trailer-tracks DIR</c>: every actor and staged object each frame of the roll (#924, <see cref="TrackDump"/>).</summary>
+    private readonly string? _tracksDir = CmdArgs.Value("--trailer-tracks");
+    private TrackDump? _tracks;
     private readonly Vector2I _size;
     private Captions _captions = null!;
     private AudioStreamPlayer? _song;
@@ -142,6 +151,21 @@ public partial class TrailerDirector : Node
         _ => StoryScript.Shots,
     };
 
+    /// <summary>The film's name as <c>--trailer-film</c> gives it (story by default).</summary>
+    public static string FilmName => CmdArgs.Value("--trailer-film") ?? "story";
+
+    /// <summary>
+    /// The date a film is set on (#924): the calendar reads it for the whole render
+    /// (<see cref="Core.Calendar"/>: a shot with no <see cref="Shot.Occasion"/> gets that day's, the
+    /// birds and crops of that month), never the day it is rendered on. Mid-July by default: no
+    /// occasion runs (Halloween is September-October, Christmas November-December, the UFO nights
+    /// the first Friday of a month and the morning after), and the Alps are green.
+    /// </summary>
+    public static DateOnly FilmDate => FilmName switch
+    {
+        _ => new DateOnly(2026, 7, 15),
+    };
+
     /// <summary>"all", "5", "5-9" or "5,7,12" (shot numbers).</summary>
     private static List<Shot> Select(string arg)
     {
@@ -190,6 +214,9 @@ public partial class TrailerDirector : Node
         Player.TractorBeams.Scripted -= AddCraftBeams;
         _recorder?.Dispose();
         _recorder = null;
+        _tracks?.Dispose();
+        _tracks = null;
+        RunSeeds.End();
         if (_hud != null) GetTree().NodeAdded -= OnNodeAdded;
         GameSettings.Current.TrafficCars = _defaultTraffic;
     }
@@ -256,12 +283,14 @@ public partial class TrailerDirector : Node
         {
             // the calendar's occasions back, as the game runs
             if (_occasion != null) RunCommand?.Invoke("/occasion auto");
+            RunSeeds.End();
             Enter(Phase.Finished);
             GD.Print(_failures == 0 ? "[trailer] RESULT: ok" : $"[trailer] RESULT: FAILED ({_failures} problem(s), above)");
             GetTree().Quit(_failures == 0 ? 0 : 1);
             return;
         }
         var shot = _shot = _shots[_index];
+        Pin(shot, "");
         _routes = new RouteBook(shot.Number);
         GD.Print(string.Create(CultureInfo.InvariantCulture,
             $"[trailer] shot {shot.Number} \"{shot.Name}\" (bars {shot.FromBar}-{shot.FromBar + shot.Bars - 1}, {shot.Start:F2}-{shot.End:F2} s, {shot.Length:F2} s): staging"));
@@ -347,7 +376,9 @@ public partial class TrailerDirector : Node
     private void StageHerd(Cows c)
     {
         if (Farming.Herds.Instance is not { } herds) { GD.PrintErr("[trailer] no herds in this world: the cows are left out"); return; }
-        _stagedHerds.Add(herds.Stage(c.At.E, c.At.N, c.Count, c.Breed, c.Radius));
+        // its cows from the shot's seed, not the run's staging count (#924)
+        _stagedHerds.Add(herds.Stage(c.At.E, c.At.N, c.Count, c.Breed, c.Radius,
+            Unpinned ? null : (uint)RunSeeds.Of($"herd/{_stagedHerds.Count}")));
     }
 
     /// <summary>A shot's sighting, its clock at <see cref="Saucers.From"/> as the camera rolls.</summary>
@@ -604,6 +635,11 @@ public partial class TrailerDirector : Node
             _failures++;
         }
         foreach (var prop in shot.Props.Where(p => p.Actor >= 0 || p.Route != null)) Build(prop);
+        // from the go on, what moves by chance moves the same every render (#924): the birds and the
+        // traffic start again from the shot's seed, the herds' walk from its start
+        Pin(shot, "/go");
+        if (!Unpinned)
+            foreach (int h in _stagedHerds) Farming.Herds.Instance?.Rewind(h);
         foreach (var a in _actors) a.Go(Others);
         _moving = 0;
         _preroll = 0;
@@ -658,6 +694,9 @@ public partial class TrailerDirector : Node
                     new CueFile(shot.Number, _fps, _framesWanted, ShotCues.Of(shot, _fps)), SubtitleTrack.Json));
             }
         }
+        WritePins(shot);
+        _tracks?.Dispose();
+        _tracks = _tracksDir != null ? TrackDump.Start(_tracksDir, shot.Number) : null;
         _stills.Clear();
         if (_stillsDir != null)
         {
@@ -703,6 +742,7 @@ public partial class TrailerDirector : Node
     {
         var shot = _shot!;
         _shotCamera!.Apply(_camera, _t, delta);
+        if (_tracks != null) DumpTracks();
         // the photo's picture is rendered a few frames before its flash, from the camera alone
         // (PhotoCapture: no captions, no flash in it)
         if (shot.Photo is { } at && !_photoAsked && _t >= at - 0.15)
@@ -784,6 +824,12 @@ public partial class TrailerDirector : Node
             if (broken) _failures++;
         }
         _song?.Stop();
+        if (_tracks != null)
+        {
+            _tracks.Dispose();
+            GD.Print($"[trailer] shot {shot.Number}: tracks in {_tracks.Path}");
+            _tracks = null;
+        }
         GD.Print($"[trailer] shot {shot.Number}: done");
         Enter(Phase.Next);
     }
@@ -823,7 +869,8 @@ public partial class TrailerDirector : Node
             GetTree().Quit(3);
             return false;
         }
-        var peaks = TilePeaks();
+        var peaks = RenderPins.Manifest.Peaks;
+        PrintFilmPins(FilmCoverage.Tiles(_shots.SelectMany(s => Needs(s, peaks))));
         var all = new SortedSet<(int, int)>();
         var abroad = new SortedSet<(int, int)>();
         // a tile with no Swiss survey (abroad) cannot be built: allowed, only counted
@@ -866,20 +913,6 @@ public partial class TrailerDirector : Node
     }
     private static UnitSport.Map.CountryData? _country;
     private static bool _countryTried;
-
-    /// <summary>Each tile's highest point, from the manifest (an eye's height over a tile it is put above); empty without one.</summary>
-    private static Dictionary<(int, int), float> TilePeaks()
-    {
-        var peaks = new Dictionary<(int, int), float>();
-        try
-        {
-            string path = Path.Combine(TerrainPaths.FindChunkDir(), "manifest.json");
-            if (!File.Exists(path)) return peaks;
-            foreach (var t in Terrain.Format.TerrainManifest.FromJson(File.ReadAllText(path)).Tiles) peaks[(t.E, t.N)] = t.Max;
-        }
-        catch (System.Exception e) { GD.PrintErr($"[trailer] manifest unreadable for the eyes' heights: {e.Message}"); }
-        return peaks;
-    }
 
     /// <summary>The points a shot needs real ground round: its world camera eyes and looks, its actors' spots, its craft, saucers and herds.</summary>
     private static IEnumerable<FilmCoverage.Need> Needs(Shot shot, Dictionary<(int, int), float> peaks)
@@ -1040,6 +1073,169 @@ public partial class TrailerDirector : Node
         if (page is Ui.Screen screen) screen.OnShown();
     }
 
+    // --- reproducible renders (#924) ----------------------------------------------------------
+
+    /// <summary>
+    /// Pins the seeds of <paramref name="shot"/> (<see cref="RunSeeds"/>): at its start (<c>""</c>) and
+    /// at its actors' go (<c>"/go"</c>), each from (film, shot) only, and Godot's own generator with them
+    /// (<c>GD.Randf</c>: the occasions' creatures, droppings). Not with <c>--trailer-unpinned</c>.
+    /// </summary>
+    private static void Pin(Shot shot, string phase)
+    {
+        if (Unpinned) return;
+        RunSeeds.Begin($"{FilmName}/{shot.Number}{phase}");
+        GD.Seed((ulong)(uint)RunSeeds.Of("gd"));
+    }
+
+    /// <summary>
+    /// A particle system that enters the tree while a shot is pinned draws from a fixed seed: its
+    /// parent's and its own name (the numbers of an engine-made name dropped), so the same smoke
+    /// column puffs the same way every render, whatever order the tiles brought their own in.
+    /// </summary>
+    private static void SeedParticles(Node node)
+    {
+        static string Stable(string name) => name.StartsWith('@') ? name.TrimEnd('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '@') : name;
+        uint seed = (uint)RunSeeds.Of($"particles/{Stable(node.GetParent()?.Name ?? "")}/{Stable(node.Name)}");
+        if (node is GpuParticles3D gpu) { gpu.UseFixedSeed = true; gpu.Seed = seed; }
+        else if (node is CpuParticles3D cpu) { cpu.UseFixedSeed = true; cpu.Seed = seed; }
+    }
+
+    private bool _filmPinned;
+
+    /// <summary>
+    /// What the whole run is made with, as <c>[trailer] pin:</c> lines (once, after the terrain check):
+    /// <c>tools/trailer.sh</c> copies them into the version's <c>version.txt</c>.
+    /// </summary>
+    private void PrintFilmPins(SortedSet<(int, int)> tiles)
+    {
+        if (_filmPinned) return;
+        _filmPinned = true;
+        var m = RenderPins.Manifest;
+        string fp = RenderPins.Fingerprint(tiles, out int unhashed);
+        var machine = RenderPins.Machine();
+        void Pin(string key, string value) => GD.Print($"[trailer] pin: {key}: {value}");
+        Pin("commit", RenderPins.Commit);
+        Pin("godot", machine["godot"]!.ToString());
+        Pin("gpu", $"{machine["adapter"]} ({machine["vendor"]}, {machine["renderer"]}, {machine["api"]})");
+        Pin("os", $"{machine["os"]}, {machine["cpu"]}");
+        Pin("terrain", $"{fp} ({tiles.Count} tiles round the shots, {unhashed} without a hash; manifest v{m.Version} {m.Algorithm ?? "unhashed"}, {m.Dir})");
+        if (m.Shared != null) Pin("terrain shared", string.Join(" ", m.Shared.Select(kv => $"{kv.Key}={kv.Value}")));
+        Pin("date", $"{Core.Calendar.Today:yyyy-MM-dd} ({(Core.Calendar.Pinned != null ? "pinned" : "the real date: --trailer-unpinned")})");
+        Pin("occasions", string.Join(" ", _shots.Select(s => $"{s.Number}={s.Occasion ?? "calendar"}")));
+        Pin("styles", string.Join(" ", _shots.Select(s => s.Style).Distinct()));
+        string? song = CmdArgs.Value("--trailer-song");
+        Pin("song", song == null ? "none given" : $"{Path.GetFileName(song)} sha256 {RenderPins.Sha256(song) ?? "missing"}");
+        var s = GameSettings.Current;
+        Pin("settings", string.Create(CultureInfo.InvariantCulture,
+            $"rings {s.RenderDistanceRings}, detail {s.Detail}, horizon {s.HorizonKm} km, fog {s.Fog}, generated fill {s.GeneratedFill}, traffic {s.TrafficCars}, vsync {s.VSync}"));
+        Pin("user", OS.GetUserDataDir());
+        Pin("seeds", Unpinned ? "unpinned (--trailer-unpinned)" : $"per shot: {FilmName}/<shot>, then {FilmName}/<shot>/go");
+    }
+
+    /// <summary>
+    /// <c>shotNN.pins.json</c> beside the shot's film (or stills, or track dump) as it starts rolling:
+    /// everything the shot was made with, its own terrain fingerprint included.
+    /// </summary>
+    private void WritePins(Shot shot)
+    {
+        string? dir = _recordDir ?? _stillsDir ?? _tracksDir;
+        if (dir == null) return;
+        try
+        {
+            Directory.CreateDirectory(dir);
+            var tiles = FilmCoverage.Tiles(Needs(shot, RenderPins.Manifest.Peaks));
+            string fp = RenderPins.Fingerprint(tiles, out int unhashed);
+            var pins = new System.Text.Json.Nodes.JsonObject
+            {
+                ["film"] = FilmName,
+                ["shot"] = shot.Number,
+                ["name"] = shot.Name,
+                ["commit"] = RenderPins.Commit,
+                ["machine"] = RenderPins.Machine(),
+                ["terrain"] = new System.Text.Json.Nodes.JsonObject
+                {
+                    ["fingerprint"] = fp,
+                    ["tiles"] = tiles.Count,
+                    ["unhashed"] = unhashed,
+                    ["manifestVersion"] = RenderPins.Manifest.Version,
+                    ["chunks"] = RenderPins.Manifest.Dir,
+                },
+                ["date"] = Core.Calendar.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                ["datePinned"] = Core.Calendar.Pinned != null,
+                ["occasion"] = shot.Occasion ?? "calendar",
+                ["occasionsRunning"] = new System.Text.Json.Nodes.JsonArray((Occasions.OccasionManager.Instance?.Active ?? [])
+                    .Select(a => (System.Text.Json.Nodes.JsonNode?)a.Id).ToArray()),
+                ["style"] = shot.Style,
+                ["hour"] = shot.Hour,
+                ["sea"] = shot.Sea ?? Shot.CalmSea,
+                ["fps"] = _fps,
+                ["frames"] = _framesWanted,
+                ["size"] = $"{_size.X}x{_size.Y}",
+                ["song"] = RenderPins.Sha256(CmdArgs.Value("--trailer-song")),
+                ["seeds"] = Unpinned ? null : $"{FilmName}/{shot.Number}/go",
+                ["user"] = OS.GetUserDataDir(),
+                ["settings"] = RenderPins.Settings(),
+            };
+            File.WriteAllText(Path.Combine(dir, $"shot{shot.Number:00}.pins.json"), pins.ToJsonString(RenderPins.Json));
+        }
+        catch (System.Exception e)
+        {
+            GD.PrintErr($"[trailer] shot {shot.Number}: pins not written: {e.Message}");
+        }
+    }
+
+    /// <summary>This frame of the roll into the track dump: the camera, every actor, prop, craft, staged cow and saucer, and the vehicles near.</summary>
+    private void DumpTracks()
+    {
+        var dump = _tracks!;
+        int frame = (int)System.Math.Round(_t * _fps);
+        void Row(string id, string kind, Vector3 at, Basis basis, float speed, string pose, string ride, bool beam)
+        {
+            var g = _origin.ToGlobal(at);
+            var fwd = -basis.Z;
+            double yaw = Mathf.RadToDeg(Mathf.Atan2(fwd.X, -fwd.Z));
+            dump.Row(frame, _t, id, kind, g.E, g.N, g.Alt, yaw, speed, pose, ride, beam);
+        }
+        Row("camera", "camera", _camera.GlobalPosition, _camera.GlobalBasis, 0f, "-", "-", false);
+        for (int i = 0; i < _actors.Count; i++)
+        {
+            if (_actors[i].Body is not { } b || !IsInstanceValid(b)) continue;
+            var v = b.IsFlying ? b.Flight.Velocity : b.Ride == RideKind.OnFoot ? b.Velocity : b.WorldVelocity;
+            string pose = b.Ragdolled ? "ragdoll" : b.IsSwimming ? "swim" : b.IsFlying ? "fly" : $"p{b.PoseKind}";
+            if (b.FightPose != 0) pose += $"f{b.FightPose}";
+            bool beam = (b.Saucer?.State.Beam ?? false) || b.InBeam;
+            Row($"a{i}", "actor", b.GlobalPosition, b.GlobalBasis, v.Length(), pose, b.Ride.ToString(), beam);
+            if (b.Ragdolled && b.RagdollPelvis is { } pelvis) Row($"a{i}.pelvis", "ragdoll", pelvis, b.GlobalBasis, 0f, "ragdoll", "-", false);
+        }
+        for (int k = 0; k < _props.Count; k++)
+        {
+            if (_props[k] is not { } p || !IsInstanceValid(p) || p is BeamableProp or Light3D or BattleRoyale.ZoneWall || p == _set) continue;
+            float speed = p is RigidBody3D rb ? rb.LinearVelocity.Length() : p is Vehicles.VehicleBody vb ? vb.Velocity.Length() : 0f;
+            Row($"p{k}", p.GetType().Name, p.GlobalPosition, p.GlobalBasis, speed, "-", "-", p is CraftProp c && c.BeamApex != null);
+        }
+        if (Vehicles.VehicleManager.Instance is { } vehicles)
+            foreach (var child in vehicles.GetChildren())
+                if (child is Vehicles.VehicleBody vb && !_props.Contains(vb) && vb.GlobalPosition.DistanceSquaredTo(_camera.GlobalPosition) < 600f * 600f)
+                    Row($"v:{vb.Name}", "vehicle", vb.GlobalPosition, vb.GlobalBasis, vb.Velocity.Length(), "-", "-", false);
+        if (Farming.Herds.Instance is { } herds)
+            for (int k = 0; k < _stagedHerds.Count; k++)
+            {
+                int c = 0;
+                foreach (var (e, n, alt, yaw) in herds.StagedCows(_stagedHerds[k]))
+                {
+                    // a cow on its ground has no altitude of its own (its ground's); one with one is beamed or set down by a beam
+                    bool moved = !float.IsNaN(alt);
+                    float y = moved ? alt : _chunks.TryGetSurface(_origin.ToWorld(e, n, 0), out float g) ? g : 0f;
+                    dump.Row(frame, _t, $"h{k}.{c++}", "cow", e, n, y, Mathf.RadToDeg(yaw), 0, "-", "-", moved);
+                }
+            }
+        if (Occasions.UfoSightings.Instance is { } sightings && _shot is { } shot)
+            for (int k = 0; k < _stagedUfos.Count && k < shot.Ufos.Count; k++)
+                for (int c = 0; c < System.Math.Max(1, shot.Ufos[k].Count); c++)
+                    if (sightings.GetNodeOrNull<Node3D>($"Sighting{_stagedUfos[k]}_{c}") is { } rig)
+                        Row($"u{k}.{c}", "saucer", rig.GlobalPosition, rig.GlobalBasis, 0f, "-", "-", false);
+    }
+
     // --- the game's own layers off the picture ------------------------------------------------
 
     /// <summary>Every CanvasLayer but the captions hidden: walked once, then followed through NodeAdded.</summary>
@@ -1059,5 +1255,6 @@ public partial class TrailerDirector : Node
     private void OnNodeAdded(Node node)
     {
         if (node is CanvasLayer layer && layer != _captions && layer != _screenLayer && !IsAncestorOf(layer)) _hud!.Add(layer);
+        else if (RunSeeds.Pinned && node is GpuParticles3D or CpuParticles3D) SeedParticles(node);
     }
 }

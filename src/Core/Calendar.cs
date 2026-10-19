@@ -8,7 +8,9 @@ namespace UnitSport.Core;
 /// <summary>
 /// The date the game's calendar is read at (#924): the occasions (Halloween, Christmas, the UFO
 /// Friday), the farm month, the birds of the month, the fishing season, a shop's seasonal goods. The
-/// real date in normal play; <c>--date YYYY-MM-DD</c> pins it. The one reader of the real date for these (the clock-discipline guard).
+/// real date in normal play; <c>--date YYYY-MM-DD</c> pins it, and a trailer render always runs on
+/// its film's own date (<see cref="Trailer.TrailerDirector.FilmDate"/>), so the calendar is never
+/// read during a render. The one reader of the real date for these (the clock-discipline guard).
 /// Audio cues on the wall clock (church bells, a carol on the hour) are not the calendar.
 /// </summary>
 public static class Calendar
@@ -24,9 +26,9 @@ public static class Calendar
 
 #if GODOT
     private static readonly Lazy<DateOnly?> PinnedDate = new(() =>
-        DateFrom(CmdArgs.All));
+        DateFrom(CmdArgs.All) ?? (Trailer.TrailerDirector.Requested && !Trailer.TrailerDirector.Unpinned ? Trailer.TrailerDirector.FilmDate : null));
 
-    /// <summary>The date pinned for this process (<c>--date</c>), null in normal play.</summary>
+    /// <summary>The date pinned for this process (<c>--date</c>, or a film's), null in normal play.</summary>
     public static DateOnly? Pinned => PinnedDate.Value;
 
     /// <summary>Today, as the calendar reads it.</summary>
