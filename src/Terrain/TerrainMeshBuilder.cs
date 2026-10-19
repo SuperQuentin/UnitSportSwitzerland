@@ -10,7 +10,18 @@ namespace UnitSport.Terrain;
 /// </summary>
 public static partial class TerrainMeshBuilder
 {
-    public sealed record MeshData(Vector3[] Vertices, Color[] Colors, int[] Indices);
+    /// <param name="Normals">Per vertex, smoothed over a few metres of the drawn heights
+    /// (<see cref="SmoothNormal"/>): what the terrain body lights steep ground by, where the facets
+    /// are the height data's noise (#883). Straight up where there is nothing to smooth (cut walls,
+    /// the far horizon): the body then keeps its facet light. Skirts copy their rim.</param>
+    public sealed record MeshData(Vector3[] Vertices, Color[] Colors, Vector3[] Normals, int[] Indices);
+
+    /// <summary>
+    /// How far either side of a vertex its normal is smoothed: the 1-2 m facets of a cliff tilt
+    /// every which way with the height data's noise, and a wall only reads as one at a few metres.
+    /// At strides of 4 m and up, the vertex's own neighbours are already that far.
+    /// </summary>
+    private const float NormalReachM = 3f;
 
     /// <summary>
     /// Indexed grid mesh at the given stride with skirts on all four edges (skirts hide
@@ -50,6 +61,7 @@ public static partial class TerrainMeshBuilder
 
         var vertices = new Vector3[m * m + 4 * m];
         var colors = new Color[m * m + 4 * m];
+        var normals = new Vector3[m * m + 4 * m];
         var indices = new int[(m - 1) * (m - 1) * 6 + 4 * (m - 1) * 6];
 
         for (int r = 0; r < m; r++)
@@ -78,24 +90,48 @@ public static partial class TerrainMeshBuilder
                 int v10 = v00 + 1;
                 int v01 = v00 + m;
                 int v11 = v01 + 1;
-                // clockwise seen from above (Godot front face)
+                // clockwise seen from above (Godot front face), along the one diagonal Jolt's
+                // height field splits its cells by too: the ground drawn is the ground stood on (#883)
                 indices[ii++] = v00; indices[ii++] = v10; indices[ii++] = v01;
                 indices[ii++] = v10; indices[ii++] = v11; indices[ii++] = v01;
             }
 
+        for (int r = 0; r < m; r++)
+            for (int c = 0; c < m; c++)
+                normals[r * m + c] = SmoothNormal(vertices, m, quad, c, r);
+
         // skirts: rim vertices duplicated and dropped, quads between rim and dropped rim
         int sv = m * m;
-        ii = AddSkirt(vertices, colors, indices, ii, ref sv, Enumerable.Range(0, m).Select(c => c).ToArray(), m, skirtDepth);                       // north row r=0
-        ii = AddSkirt(vertices, colors, indices, ii, ref sv, Enumerable.Range(0, m).Select(c => (m - 1) * m + c).ToArray(), m, skirtDepth);         // south row
-        ii = AddSkirt(vertices, colors, indices, ii, ref sv, Enumerable.Range(0, m).Select(r => r * m).ToArray(), m, skirtDepth);                   // west col
-        ii = AddSkirt(vertices, colors, indices, ii, ref sv, Enumerable.Range(0, m).Select(r => r * m + (m - 1)).ToArray(), m, skirtDepth);         // east col
+        ii = AddSkirt(vertices, colors, normals, indices, ii, ref sv, Enumerable.Range(0, m).Select(c => c).ToArray(), m, skirtDepth);                       // north row r=0
+        ii = AddSkirt(vertices, colors, normals, indices, ii, ref sv, Enumerable.Range(0, m).Select(c => (m - 1) * m + c).ToArray(), m, skirtDepth);         // south row
+        ii = AddSkirt(vertices, colors, normals, indices, ii, ref sv, Enumerable.Range(0, m).Select(r => r * m).ToArray(), m, skirtDepth);                   // west col
+        ii = AddSkirt(vertices, colors, normals, indices, ii, ref sv, Enumerable.Range(0, m).Select(r => r * m + (m - 1)).ToArray(), m, skirtDepth);         // east col
 
         // carved quads leave unused slots at the tail; trim so they don't render as
         // degenerate triangles fanning out from vertex 0
         if (ii != indices.Length)
             Array.Resize(ref indices, ii);
 
-        return new MeshData(vertices, colors, indices);
+        return new MeshData(vertices, colors, normals, indices);
+    }
+
+    /// <summary>
+    /// The normal at grid vertex (c, r), from the height differences across ±<see cref="NormalReachM"/>
+    /// on three rows (columns) through it: a box of slopes, so one noisy sample does not tilt it.
+    /// Clamped at the tile's edges, one-sided there.
+    /// </summary>
+    private static Vector3 SmoothNormal(Vector3[] vertices, int m, float quad, int c, int r)
+    {
+        int k = Math.Max(1, (int)MathF.Ceiling(NormalReachM / quad));
+        int c0 = Math.Max(c - k, 0), c1 = Math.Min(c + k, m - 1);
+        int r0 = Math.Max(r - k, 0), r1 = Math.Min(r + k, m - 1);
+        float dx = 0, dz = 0;
+        ReadOnlySpan<int> rows = [r0, r, r1], cols = [c0, c, c1];
+        foreach (int rr in rows) dx += vertices[rr * m + c1].Y - vertices[rr * m + c0].Y;
+        foreach (int cc in cols) dz += vertices[r1 * m + cc].Y - vertices[r0 * m + cc].Y;
+        dx /= 3f * (c1 - c0) * quad;
+        dz /= 3f * (r1 - r0) * quad;
+        return new Vector3(-dx, 1f, -dz).Normalized();
     }
 
     /// <summary>Adds the walls lining any carved tunnel opening to a surface core.</summary>
@@ -119,8 +155,11 @@ public static partial class TerrainMeshBuilder
         int n = ChunkFormat.GridSize, last = n - 1;
         int m = last / stride + 1;
         float skirtDepth = 2f * (float)(stride * ChunkFormat.SpacingM);
+        float quad = (float)(stride * ChunkFormat.SpacingM);
         var vertices = (Vector3[])core.Vertices.Clone();
         var colors = (Color[])core.Colors.Clone();
+        var normals = (Vector3[])core.Normals.Clone();
+        var moved = new List<int>();
 
         for (int k = 0; k < blend.Cells.Length; k++)
         {
@@ -131,10 +170,24 @@ public static partial class TerrainMeshBuilder
             float alt = BlendedHeight((float)grid.HeightMetersAt(fc, fr), blend, k, clearance);
             int vi = fr / stride * m + fc / stride;
             vertices[vi].Y = alt;
+            moved.Add(vi);
             colors[vi] = (cover == null
                 ? CoverPalette.ColorFor(CoverClass.Open, alt, CoverPalette.Hash(fc, fr))
                 : BoundaryBlendedColor(cover, fc, fr, alt, stride, last)).SrgbToLinear();
         }
+
+        // every normal whose box of slopes reaches a moved vertex
+        int reach = Math.Max(1, (int)MathF.Ceiling(NormalReachM / quad));
+        var stale = new bool[m * m];
+        foreach (int vi in moved)
+        {
+            int r = vi / m, c = vi - r * m;
+            for (int rr = Math.Max(r - reach, 0); rr <= Math.Min(r + reach, m - 1); rr++)
+                for (int cc = Math.Max(c - reach, 0); cc <= Math.Min(c + reach, m - 1); cc++)
+                    stale[rr * m + cc] = true;
+        }
+        for (int i = 0; i < stale.Length; i++)
+            if (stale[i]) normals[i] = SmoothNormal(vertices, m, quad, i % m, i / m);
 
         // skirts, in the order BuildSurfaceCore laid them out: north, south, west, east
         int sv = m * m;
@@ -150,9 +203,10 @@ public static partial class TerrainMeshBuilder
                 };
                 vertices[sv] = vertices[rim] with { Y = vertices[rim].Y - skirtDepth };
                 colors[sv] = colors[rim];
+                normals[sv] = normals[rim];
             }
 
-        return new MeshData(vertices, colors, core.Indices);
+        return new MeshData(vertices, colors, normals, core.Indices);
     }
 
     /// <summary>Tiles per side of one horizon block (10 x 10 km).</summary>
@@ -214,7 +268,10 @@ public static partial class TerrainMeshBuilder
         if (ii == 0) return null;
         if (ii != indices.Length) Array.Resize(ref indices, ii);
 
-        return new MeshData(vertices, colors, indices);
+        // 100 m facets are relief, not noise: lit as they are
+        var normals = new Vector3[vertices.Length];
+        Array.Fill(normals, Vector3.Up);
+        return new MeshData(vertices, colors, normals, indices);
     }
 
     /// <summary>
@@ -289,6 +346,7 @@ public static partial class TerrainMeshBuilder
 
         var verts = new List<Vector3>(mesh.Vertices);
         var cols = new List<Color>(mesh.Colors);
+        int surface = verts.Count;
         var idx = new List<int>(mesh.Indices);
         var linear = CutWallColor.SrgbToLinear();
 
@@ -300,7 +358,11 @@ public static partial class TerrainMeshBuilder
             foreach (var portal in portals)
                 AppendPortalWall(portal, grid, floor, verts, cols, idx);
 
-        return new MeshData(verts.ToArray(), cols.ToArray(), idx.ToArray());
+        // the portal blocks keep their facet light
+        var normals = new Vector3[verts.Count];
+        Array.Copy(mesh.Normals, normals, surface);
+        Array.Fill(normals, Vector3.Up, surface, verts.Count - surface);
+        return new MeshData(verts.ToArray(), cols.ToArray(), normals, idx.ToArray());
     }
 
     /// <summary>
@@ -428,7 +490,7 @@ public static partial class TerrainMeshBuilder
         return true;
     }
 
-    private static int AddSkirt(Vector3[] vertices, Color[] colors, int[] indices, int ii, ref int sv,
+    private static int AddSkirt(Vector3[] vertices, Color[] colors, Vector3[] normals, int[] indices, int ii, ref int sv,
         int[] rim, int m, float skirtDepth)
     {
         int first = sv;
@@ -436,6 +498,7 @@ public static partial class TerrainMeshBuilder
         {
             var v = vertices[rim[i]];
             colors[sv] = colors[rim[i]];
+            normals[sv] = normals[rim[i]];
             vertices[sv++] = new Vector3(v.X, v.Y - skirtDepth, v.Z);
         }
         for (int i = 0; i < m - 1; i++)

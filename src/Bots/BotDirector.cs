@@ -120,7 +120,19 @@ public partial class BotDirector : Node
     public int Count => _bots.Count;
     public Bot? Get(long id) => _bots.GetValueOrDefault(id);
 
-    private static double Now => GameClock.Now;
+    /// <summary>
+    /// The bots' clock: the physics the server has actually run, in simulated seconds (the sum of each physics
+    /// step, which <c>/speed</c> scales). So a brain's timers (a revive's hold, a bandage, a reaction, a car
+    /// stuck for 6 s) keep pace with the bodies they time.
+    /// <list type="bullet">
+    /// <item><c>GameClock.Now</c> counts physics frames, which <c>/speed</c> lengthens rather than multiplies: at x4 a
+    /// 5 s revive hold took 20 simulated seconds, and every downed mate bled out first.</item>
+    /// <item><c>ClockSync.SimNow</c> runs on the wall clock: on a server dropping frames it ran ahead of the physics,
+    /// and a bot's car was "stuck for 6 s" before it had had 6 s to move (botcheck: drove 18 m).</item>
+    /// </list>
+    /// </summary>
+    public static double Clock { get; private set; }
+    private static double Now => Clock;
     private InterestService? Interest => GetParent()?.GetNodeOrNull<InterestService>(InterestService.NodeName);
 
     /// <summary>Spawns a bot at <paramref name="at"/> (it drops onto the ground once its collision is built); null when full.</summary>
@@ -179,6 +191,7 @@ public partial class BotDirector : Node
 
     public override void _PhysicsProcess(double delta)
     {
+        Clock += delta;
         if (_bots.Count == 0) return;
         long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
         using (BodyProfiler.Time(BodyProfiler.Slot.Brains, true)) RunBots();
@@ -198,6 +211,7 @@ public partial class BotDirector : Node
         foreach (var bot in _bots.Values)
         {
             if (!GodotObject.IsInstanceValid(bot.Body)) continue;
+            if (!bot.Body.Eliminated) BotSkills.Unembed(bot, bot.World.Space, now);
             if (now >= bot.NextThink)
             {
                 double wait = bot.Brain.Think(bot, now);
