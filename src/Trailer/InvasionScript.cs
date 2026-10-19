@@ -297,9 +297,9 @@ public static class InvasionScript
             Cast =
             [
                 new() { Who = Yvonne, Ride = RideKind.A320, At = Spot.Alt(2646200, 1151600, 3700), Heading = 145, Drive = Drive.Fly, Launch = 90, Flight = _ => Stick(lever: 0.8f) },
-                // a saucer keeping pace with her, off her left wing
-                Ufo(Spot.Alt(2646200, 1151600, 3730).Toward(55, 70).Toward(145, 60), 145, 90f),
             ],
+            // a saucer hanging off her course, ahead and to the left: she passes it half-way through
+            Craft = [new Craft(Spot.Alt(2646601, 1151234, 3720), 235)],
             Keys =
             [
                 new(0, Pt.On(0, -34f, 7f, 30f), Pt.On(0, 0f, -2f, -10f), 35),
@@ -463,7 +463,7 @@ public static class InvasionScript
             Number = 20, Name = "The pointy one", FromBar = 39, Bars = 2, Feature = "the mothership over the Matterhorn",
             Hour = 15.8,
             // the mothership parked over the summit, its beam on the peak
-            Craft = [new Craft(Spot.Alt(2622030, 1092220, 4250), 0) { Mothership = true, Switches = UfoSwitches.BeamBetween(1.0, 99) }],
+            Craft = [new Craft(Spot.Alt(2623500, 1092390, 4000), 0) { Mothership = true, Switches = UfoSwitches.BeamBetween(1.0, 99) }],
             Keys =
             [
                 new(0, Pt.Alt(2627300, 1092800, 3330), Pt.Alt(Matterhorn.E, Matterhorn.N, 4600), 85),

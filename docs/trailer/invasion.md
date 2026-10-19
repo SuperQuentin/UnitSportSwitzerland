@@ -84,7 +84,7 @@ Places are LV95. "Agl" is metres above the ground. Lenses are full-frame mm.
 | 8 | 14 | 0:28.1 | Furka road (2672150, 1157560) | In the AE86's cockpit over Luca's shoulder: the wheel, the dash, the road | cockpit view, car radio | **[BUB]** LUCA: Radio on. Perfect day. |
 | 9 | 15-16 | 0:30.3 | Gotthard road (2686600, 1154120) | Rochat's convoy (Duro, G-Class, Trakker) climbs the pass; a long lens from the slope. Super: **GOTTHARD · 11:00** | army vehicles, trucks | **[BUB]** ROCHAT: Routine exercise. Nothing to report. |
 | 10 | 17-18 | 0:34.6 | Genève airport, runway 23 end (2496200, 1120110) | Yvonne's A320 climbs out over our heads, 28 mm. Super: **GENÈVE · 11:05** | airliners | — |
-| 11 | 19-20 | 0:38.9 | Over the Aletsch, 3700 m (2646200, 1151600) | Wingman shot on the A320; **[UFO]** a saucer keeps pace off her left wing | flight, the Alps from above | **[BUB]** YVONNE: Tower... is that a saucer? |
+| 11 | 19-20 | 0:38.9 | Over the Aletsch, 3700 m (2646200, 1151600) | Wingman shot on the A320; **[UFO]** a saucer hangs off her course; she flies past it | flight, the Alps from above | **[BUB]** YVONNE: Tower... is that a saucer? |
 
 ### Act two: they arrive (bars 21-52)
 
