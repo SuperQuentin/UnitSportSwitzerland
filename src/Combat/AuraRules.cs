@@ -22,6 +22,14 @@ public enum AuraMove : byte
     SixSeven = 11,
     Lasso = 12,
     CutTheRope = 13,
+    // #914: more moves
+    Moonwalk = 14,
+    Floss = 15,
+    Robot = 16,
+    Dab = 17,
+    LeadRival = 18,
+    Shush = 19,
+    Bow = 20,
 }
 
 /// <summary>The kind of a move, as the real battles mix them: variety and chains read it.</summary>
@@ -59,6 +67,8 @@ public enum AuraStance : byte
     Stumble = 3,
     Victory = 4,
     Defeat = 5,
+    /// <summary>Cracked up while the rival performed (#914): "don't laugh first" lost.</summary>
+    Laugh = 6,
     MoveBase = 16,
 }
 
@@ -73,30 +83,31 @@ public sealed record AuraMoveDef(
 /// <summary>A turn's score, part by part, so the verdict can count it up.</summary>
 public struct AuraScore
 {
-    public float Base, Variety, Chain, Opener, Finisher, Answer, Streak, TryHard, Stumble, Repeat, Crowd;
+    public float Base, Variety, Chain, Opener, Finisher, Answer, Streak, TryHard, Stumble, Repeat, Crowd, Composure;
 
     /// <summary>The parts in wire order (<see cref="FromParts"/> reads them back).</summary>
-    public const int PartCount = 11;
+    public const int PartCount = 12;
 
-    public readonly float Raw => Base + Variety + Chain + Opener + Finisher + Answer + Streak + TryHard + Stumble + Repeat + Crowd;
+    public readonly float Raw => Base + Variety + Chain + Opener + Finisher + Answer + Streak + TryHard + Stumble + Repeat + Crowd + Composure;
 
     public readonly int Total => Math.Max(0, (int)MathF.Round(Raw, MidpointRounding.AwayFromZero));
 
     public readonly float Part(int i) => i switch
     {
         0 => Base, 1 => Variety, 2 => Chain, 3 => Opener, 4 => Finisher, 5 => Answer,
-        6 => Streak, 7 => TryHard, 8 => Stumble, 9 => Repeat, _ => Crowd,
+        6 => Streak, 7 => TryHard, 8 => Stumble, 9 => Repeat, 10 => Crowd, _ => Composure,
     };
 
     public static readonly string[] PartNames =
-        { "Base", "Variety", "Chain", "Opener", "Finisher", "Answer", "Streak", "Try-hard", "Stumble", "Repeat", "Crowd" };
+        { "Base", "Variety", "Chain", "Opener", "Finisher", "Answer", "Streak", "Try-hard", "Stumble", "Repeat", "Crowd", "Made them laugh" };
 
     public static AuraScore FromParts(float[] p)
     {
         var s = new AuraScore();
-        if (p == null || p.Length < PartCount) return s;
+        if (p == null || p.Length < PartCount - 1) return s;
         s.Base = p[0]; s.Variety = p[1]; s.Chain = p[2]; s.Opener = p[3]; s.Finisher = p[4]; s.Answer = p[5];
         s.Streak = p[6]; s.TryHard = p[7]; s.Stumble = p[8]; s.Repeat = p[9]; s.Crowd = p[10];
+        if (p.Length > 11) s.Composure = p[11];
         return s;
     }
 
@@ -121,6 +132,8 @@ public sealed class AuraContext
     public AuraMove[] RivalLast = Array.Empty<AuraMove>();
     /// <summary>Spectators who cheered during the turn.</summary>
     public int Crowd;
+    /// <summary>The waiting rival laughed first during the turn (#914).</summary>
+    public bool RivalLaughed;
 }
 
 /// <summary>
@@ -151,6 +164,13 @@ public static class AuraRules
     /// <summary>No press this long after the downbeat: the move ran on, a Miss ("frozen").</summary>
     public const double LateLimit = 0.25;
 
+    /// <summary>A battle's tempo is folded into this range (a radio's 70 BPM plays at 140, its 174 at 87).</summary>
+    public const float MinBpm = 80f, MaxBpm = 160f;
+
+    // "don't laugh first" (#914): a Perfect cut tempts the waiting battler for this long
+    public const double TemptWindow = 1.0;
+    public const int LaughPenalty = -5, LaughBonus = 3;
+
     private static readonly AuraMove[] None = Array.Empty<AuraMove>();
 
     private static readonly AuraMoveDef[] Table =
@@ -173,7 +193,17 @@ public static class AuraRules
         new(AuraMove.SixSeven,    "Six seven",     AuraFamily.Meme,  2, 10, 2, AuraTag.Hype, None),
         new(AuraMove.Lasso,       "Lasso",         AuraFamily.Mime,  4, 13, 3, AuraTag.Attack | AuraTag.Opener, None),
         new(AuraMove.CutTheRope,  "Cut the rope",  AuraFamily.Mime,  2, 11, 2, AuraTag.Surprise,
-            new[] { AuraMove.Lasso }),
+            new[] { AuraMove.Lasso, AuraMove.LeadRival }),
+        // #914
+        new(AuraMove.Moonwalk,    "Moonwalk",      AuraFamily.Walk,  4, 12, 3, AuraTag.Surprise,
+            new[] { AuraMove.SlowWalk }),
+        new(AuraMove.Floss,       "Floss",         AuraFamily.Dance, 2, 8,  2, AuraTag.Hype, None),
+        new(AuraMove.Robot,       "Robot",         AuraFamily.Dance, 4, 10, 2, AuraTag.Surprise, None),
+        new(AuraMove.Dab,         "Dab",           AuraFamily.Dance, 2, 7,  1, AuraTag.Hype | AuraTag.Finisher, None),
+        new(AuraMove.LeadRival,   "Lead the rival", AuraFamily.Mime, 2, 9,  2, AuraTag.Attack, None),
+        new(AuraMove.Shush,       "Shush",         AuraFamily.Stare, 2, 9,  2, AuraTag.Cool,
+            new[] { AuraMove.SixSeven, AuraMove.Floss }),
+        new(AuraMove.Bow,         "Bow",           AuraFamily.Pose,  2, 8,  1, AuraTag.Calm | AuraTag.Finisher, None),
     };
 
     /// <summary>The moves a planner offers, in catalog order.</summary>
@@ -191,6 +221,9 @@ public static class AuraRules
     public static AuraMoveDef Def(AuraMove m) => IsMove(m) ? Table[(int)m] : Table[0];
 
     public static string Name(AuraMove m) => Def(m).Name;
+
+    /// <summary>A move that is one of the dances (the Griddy, the Moonwalk...): drawn on the bar's beat, not its own progress.</summary>
+    public static bool IsDance(AuraMove m) => m is AuraMove.Griddy or AuraMove.Moonwalk or AuraMove.Floss or AuraMove.Robot or AuraMove.Dab;
 
     /// <summary>The replicated pose of a move.</summary>
     public static int PoseOf(AuraMove m) => (int)AuraStance.MoveBase + (int)m;
@@ -239,39 +272,55 @@ public static class AuraRules
         return ValidatePlan(moves) ? moves.ToArray() : null;
     }
 
-    /// <summary>The downbeat that ends move <paramref name="index"/>: when its Next press should land.</summary>
-    public static double CutAt(IReadOnlyList<AuraMove> plan, int index, double t0)
+    /// <summary>
+    /// The downbeat that ends move <paramref name="index"/>: when its Next press should land.
+    /// <paramref name="beat"/> = the battle's seconds per beat (0.5 at 120 BPM).
+    /// </summary>
+    public static double CutAt(IReadOnlyList<AuraMove> plan, int index, double t0, double beat = BeatSeconds)
     {
         int beats = 0;
         for (int i = 0; i <= index && i < plan.Count; i++) beats += Def(plan[i]).Beats;
-        return t0 + beats * BeatSeconds;
+        return t0 + beats * beat;
     }
 
     /// <summary>When move <paramref name="index"/> starts.</summary>
-    public static double StartAt(IReadOnlyList<AuraMove> plan, int index, double t0) =>
-        index <= 0 ? t0 : CutAt(plan, index - 1, t0);
+    public static double StartAt(IReadOnlyList<AuraMove> plan, int index, double t0, double beat = BeatSeconds) =>
+        index <= 0 ? t0 : CutAt(plan, index - 1, t0, beat);
 
     /// <summary>
     /// Which move the schedule is in at <paramref name="now"/>: -1 before the first downbeat, the
     /// last one held once it has run out (its cut not yet pressed).
     /// </summary>
-    public static int MoveAt(IReadOnlyList<AuraMove> plan, double t0, double now)
+    public static int MoveAt(IReadOnlyList<AuraMove> plan, double t0, double now, double beat = BeatSeconds)
     {
         if (plan.Count == 0 || now < t0) return -1;
         double cut = t0;
         for (int i = 0; i < plan.Count; i++)
         {
-            cut += Def(plan[i]).Beats * BeatSeconds;
+            cut += Def(plan[i]).Beats * beat;
             if (now < cut) return i;
         }
         return plan.Count - 1;
     }
 
-    /// <summary>The first bar line at least <paramref name="lead"/> after <paramref name="now"/>, on the shared clock.</summary>
-    public static double NextBar(double now, double lead)
+    /// <summary>
+    /// The first bar line at least <paramref name="lead"/> after <paramref name="now"/>, on the shared
+    /// clock: bars of <paramref name="beat"/> x 4 counted from <paramref name="anchor"/>, a downbeat
+    /// (the music's, or 0 for the fixed beat).
+    /// </summary>
+    public static double NextBar(double now, double lead, double beat = BeatSeconds, double anchor = 0)
     {
-        double bar = BeatsPerBar * BeatSeconds;
-        return Math.Ceiling((now + lead) / bar) * bar;
+        double bar = BeatsPerBar * beat;
+        return anchor + Math.Ceiling((now + lead - anchor) / bar) * bar;
+    }
+
+    /// <summary>A tempo folded by octaves into <see cref="MinBpm"/>..<see cref="MaxBpm"/>; 120 when unknown.</summary>
+    public static float FoldBpm(float bpm)
+    {
+        if (!(bpm > 1f) || float.IsInfinity(bpm)) return Bpm;
+        while (bpm > MaxBpm) bpm *= 0.5f;
+        while (bpm < MinBpm) bpm *= 2f;
+        return bpm;
     }
 
     /// <summary>
@@ -315,6 +364,14 @@ public static class AuraRules
         (AuraFamily.Stare, AuraFamily.Pose) => 2,
         (AuraFamily.Meme, AuraFamily.Pose) => 2,
         (AuraFamily.Stare, AuraFamily.Walk) => 2,
+        _ => 0,
+    };
+
+    /// <summary>A pair that belongs together beyond its families: the lasso, then leading the rival off.</summary>
+    public static int PairBonus(AuraMove a, AuraMove b) => (a, b) switch
+    {
+        (AuraMove.Lasso, AuraMove.LeadRival) => 5,
+        (AuraMove.Moonwalk, AuraMove.Bow) => 2,
         _ => 0,
     };
 
@@ -365,7 +422,7 @@ public static class AuraRules
                 bool seen = false;
                 for (int j = 0; j < i; j++) if (Landed(j) && Def(plan[j]).Family == def.Family) seen = true;
                 if (!seen) families++;
-                if (i > 0 && Landed(i - 1)) s.Chain += ChainBonus(Def(plan[i - 1]).Family, def.Family);
+                if (i > 0 && Landed(i - 1)) s.Chain += ChainBonus(Def(plan[i - 1]).Family, def.Family) + PairBonus(plan[i - 1], plan[i]);
             }
 
             if (G(i) == AuraGrade.Perfect) run++;
@@ -399,7 +456,9 @@ public static class AuraRules
 
         s.TryHard = TryHardStep * Math.Max(0, difficulty - TryHardFrom) + CringeStep * Math.Max(0, memes - CringeFrom);
 
-        float rest = s.Raw;
+        if (ctx.RivalLaughed) s.Composure = LaughBonus;
+
+        float rest = s.Raw - s.Composure;
         s.Crowd = Math.Max(0, Math.Min(Math.Min(CrowdStep * ctx.Crowd, CrowdCap), MathF.Floor(CrowdShare * Math.Max(0, rest))));
         return s;
     }
@@ -413,22 +472,35 @@ public static class AuraRules
     /// A strong plan for <paramref name="ctx"/>, greedily: add the move that raises the estimate
     /// most until no move does (at least 3, at most 6, within 16 beats). The planner's Suggest and bots.
     /// </summary>
-    public static AuraMove[] SuggestPlan(AuraContext? ctx = null)
+    public static AuraMove[] SuggestPlan(AuraContext? ctx = null) => SuggestPlan(ctx, 1f, 0);
+
+    /// <summary>
+    /// <see cref="SuggestPlan(AuraContext?)"/> for a bot of <paramref name="skill"/> (0..1): at each
+    /// slot, with chance 1 - skill, any move that fits instead of the best. Seeded, so a run repeats.
+    /// </summary>
+    public static AuraMove[] SuggestPlan(AuraContext? ctx, float skill, int seed)
     {
+        var rng = new Random(seed);
         var plan = new List<AuraMove>(MaxMoves);
         float best = float.MinValue;
         while (plan.Count < MaxMoves)
         {
             AuraMove pick = AuraMove.None;
             float pickScore = float.MinValue;
+            bool blunder = rng.NextDouble() > skill;
+            int fits = 0;
             foreach (var m in Moves)
             {
                 if (Beats(plan) + Def(m).Beats > MaxBeats) continue;
                 plan.Add(m);
                 float v = Estimate(plan, ctx).Raw;
                 plan.RemoveAt(plan.Count - 1);
+                // a blunder: any move that fits, picked uniformly
+                if (blunder) { if (rng.Next(++fits) == 0) { pick = m; pickScore = v; } continue; }
                 if (v > pickScore) { pickScore = v; pick = m; }
             }
+            // a blunder is kept while the plan is short of three; past that it may end the plan
+            if (blunder && pick != AuraMove.None && plan.Count < MinMoves) { plan.Add(pick); best = pickScore; continue; }
             if (pick == AuraMove.None) break;
             if (plan.Count >= MinMoves && pickScore <= best) break;
             plan.Add(pick);

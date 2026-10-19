@@ -35,7 +35,15 @@ public static partial class HumanMeshBuilder
                 AuraMove.Mewing => DanceMove.AuraMewing,
                 AuraMove.SixSeven => DanceMove.AuraSixSeven,
                 AuraMove.Lasso => DanceMove.AuraLasso,
-                _ => DanceMove.AuraCutTheRope,
+                AuraMove.CutTheRope => DanceMove.AuraCutTheRope,
+                // #914: the dances are the dances; the rest are new
+                AuraMove.Moonwalk => DanceMove.Moonwalk,
+                AuraMove.Floss => DanceMove.Floss,
+                AuraMove.Robot => DanceMove.Robot,
+                AuraMove.Dab => DanceMove.Dab,
+                AuraMove.LeadRival => DanceMove.AuraLeadRival,
+                AuraMove.Shush => DanceMove.AuraShush,
+                _ => DanceMove.AuraBow,
             };
         return (AuraStance)pose switch
         {
@@ -43,6 +51,7 @@ public static partial class HumanMeshBuilder
             AuraStance.Stumble => DanceMove.AuraStumble,
             AuraStance.Victory => DanceMove.AuraVictory,
             AuraStance.Defeat => DanceMove.AuraDefeat,
+            AuraStance.Laugh => DanceMove.AuraLaugh,
             _ => DanceMove.AuraWaiting,
         };
     }
@@ -69,6 +78,10 @@ public static partial class HumanMeshBuilder
             case DanceMove.AuraSixSeven: AuraSixSeven(ref ch, p); break;
             case DanceMove.AuraLasso: AuraLasso(ref ch, p); break;
             case DanceMove.AuraCutTheRope: AuraCutTheRope(ref ch, p); break;
+            case DanceMove.AuraLeadRival: AuraLeadRival(ref ch, p); break;
+            case DanceMove.AuraShush: AuraShush(ref ch, p); break;
+            case DanceMove.AuraBow: AuraBow(ref ch, p); break;
+            case DanceMove.AuraLaugh: AuraLaugh(ref ch, p); break;
         }
         if (mv) MovingScale(ref ch, 0.6f, 1f);
     }
@@ -311,5 +324,57 @@ public static partial class HumanMeshBuilder
         ch.ThN = -0.10f - 0.10f * up;
         float fall = DSm((p - 0.75f) * 4f);
         ch.ShL = ch.ShR = -0.03f * fall;
+    }
+
+    // ---- #914 ----
+
+    /// <summary>Lead the rival: the lassoed rope over the shoulder, towed off with big slow steps.</summary>
+    private static void AuraLeadRival(ref DanceCh ch, float p)
+    {
+        float c = p * 4f, sw = DSin(c * 0.5f), lift = Mathf.Max(0f, DSin(c));
+        ch.Theta = 0.16f;
+        ch.Psi = -0.25f;
+        ch.Py = -0.03f * Mathf.Abs(DSin(c));
+        // both fists at the right shoulder, hauling the rope over it
+        Aim(ref ch, 1f, -0.02f, 0.10f, 0.06f + 0.04f * sw, Elbow(1f));
+        Aim(ref ch, -1f, -0.24f, 0.04f, 0.12f + 0.04f * sw, Elbow(-1f));
+        Foot(ref ch, -1f, -0.11f, AnkleHeight + 0.08f * Mathf.Max(0f, -sw) * lift, 0.16f * sw, 0.15f, 0.4f);
+        Foot(ref ch, 1f, 0.11f, AnkleHeight + 0.08f * Mathf.Max(0f, sw) * lift, -0.16f * sw, 0.15f, 0.4f);
+    }
+
+    /// <summary>Shush: a finger to the lips, a slow lean in, the other hand flat out, palm down: hush.</summary>
+    private static void AuraShush(ref DanceCh ch, float p)
+    {
+        AuraTall(ref ch);
+        float up = DSm(p * 3f), lean = DSm((p - 0.3f) * 3f) * (1f - DSm((p - 0.85f) * 6f));
+        Aim(ref ch, 1f, Mathf.Lerp(0.06f, -0.16f, up), Mathf.Lerp(-0.40f, 0.10f, up), Mathf.Lerp(0.05f, 0.24f, up), Elbow(1f));
+        Aim(ref ch, -1f, 0.16f, Mathf.Lerp(-0.40f, -0.08f, up), Mathf.Lerp(0.05f, 0.34f, up), HOut(-1f));
+        ch.Theta = 0.18f * lean;
+        ch.ThN = 0.06f * lean;
+    }
+
+    /// <summary>The bow: one arm across the waist, the other swept out, a deep bow from the hips and back up.</summary>
+    private static void AuraBow(ref DanceCh ch, float p)
+    {
+        Planted(ref ch, 0.12f, 0.2f);
+        float down = DSm(p * 2.5f) * (1f - DSm((p - 0.7f) * 3.5f));
+        ch.Theta = 0.55f * down;
+        ch.ThN = 0.25f * down;
+        Aim(ref ch, 1f, -0.18f, -0.30f, 0.20f, Elbow(1f));
+        Aim(ref ch, -1f, Mathf.Lerp(0.08f, 0.38f, down), Mathf.Lerp(-0.46f, -0.20f, down), Mathf.Lerp(0.04f, -0.10f, down), HOut(-1f));
+        Foot(ref ch, -1f, -0.12f, AnkleHeight, -0.12f * down, 0.2f, 0f);
+    }
+
+    /// <summary>Cracked up: head thrown back, a hand on the belly, the other slapping the thigh, shoulders shaking.</summary>
+    private static void AuraLaugh(ref DanceCh ch, float p)
+    {
+        Planted(ref ch, 0.14f, 0.2f);
+        float shake = DSin(p * 12f), bend = 0.5f + 0.5f * DSin(p * 2f);
+        ch.Theta = 0.25f * bend - 0.15f * (1f - bend);
+        ch.ThN = -0.35f * (1f - bend) + 0.2f * bend;
+        ch.ShL = ch.ShR = 0.03f * shake;
+        ch.Py = -0.04f * bend;
+        Aim(ref ch, 1f, -0.08f, -0.30f + 0.02f * shake, 0.20f, Elbow(1f));
+        Aim(ref ch, -1f, 0.10f, -0.48f + 0.06f * Mathf.Abs(shake), 0.08f, HLow(-1f));
     }
 }

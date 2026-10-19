@@ -92,6 +92,9 @@ public partial class ControlsHelp : CanvasLayer
             new("Planner: suggest a combo", PlayerInput.AuraSuggest),
             new("Planner: lock in", PlayerInput.AuraLock),
             new("Next move, on the downbeat (the timing scores)", PlayerInput.AuraNext),
+            new("Rival performing: keep a straight face when tempted (only then!)", PlayerInput.AuraNext),
+            new("Accept a player's aura challenge: look at them", PlayerInput.InteractMount),
+            new("Battle a bot: /aura <bot's name>", Keys: "/aura", Pad: "/aura"),
             new("Cheer a battle you watch (emote wheel: Cheer, Clap, Fist pump)", PlayerInput.EmoteWheel),
         }),
         ("Building (hammer in hand)", new Row[]

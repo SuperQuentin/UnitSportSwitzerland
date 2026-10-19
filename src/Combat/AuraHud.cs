@@ -34,6 +34,7 @@ public partial class AuraHud : CanvasLayer
             {
                 auras.GradedEvent += _view.OnGraded;
                 auras.VerdictEvent += _view.OnVerdict;
+                auras.LaughEvent += _view.OnLaugh;
             }
         }).CallDeferred();
     }
@@ -52,7 +53,10 @@ public partial class AuraHud : CanvasLayer
     {
         private AuraManager.View? _v;
         private int _lastId;
-        private string _me = "", _them = "", _meTotal = "", _themTotal = "", _round = "", _clock = "";
+        private string _me = "", _them = "", _meTotal = "", _themTotal = "", _round = "", _clock = "", _music = "";
+        // don't laugh first (#914): who laughed last, for the banner; the prompt's key
+        private string _laughWho = "", _composeHint = "";
+        private double _laughAt = double.NegativeInfinity;
         private int _shownMine = -1, _shownTheirs = -1, _shownRound = -1, _shownSecs = -1;
         private (AuraPhase, int, long) _bannerKey = ((AuraPhase)255, -1, -1);
         private string? _big, _small;
@@ -77,6 +81,14 @@ public partial class AuraHud : CanvasLayer
         private static readonly Color Red = new(0.9f, 0.25f, 0.2f);
         private static readonly Color Green = new(0.45f, 0.95f, 0.5f);
         private static readonly Color Shadow = new(0, 0, 0, 0.7f);
+
+        public void OnLaugh(long who)
+        {
+            if (_v is not { } v) return;
+            _laughWho = (who == v.Me ? "YOU LAUGHED FIRST" : $"{v.NameOf(who).ToUpperInvariant()} LAUGHED FIRST")
+                + $"  -{-AuraRules.LaughPenalty * 100}";
+            _laughAt = GameClock.Now;
+        }
 
         public void OnGraded(int turn, int index, AuraGrade grade)
         {
@@ -116,6 +128,7 @@ public partial class AuraHud : CanvasLayer
             {
                 _lastId = v.Id;
                 _me = (v.IsA ? v.NameA : v.NameB).ToUpperInvariant();
+                _music = v.Music.Length > 0 ? $"on the beat of {v.Music}  ·  {v.Bpm:0} BPM" : "";
                 _them = v.OpponentName.ToUpperInvariant();
                 _shownMine = _shownTheirs = _shownRound = -1;
                 _verdict.Clear();
@@ -129,11 +142,12 @@ public partial class AuraHud : CanvasLayer
             {
                 _hintsAt = GameClock.Now;
                 _pressHint = InputHints.Format("{aura_next} on the beat to cut to the next move");
+                _composeHint = InputHints.Format("DON'T LAUGH!  {aura_next} to keep a straight face");
                 _bannerKey = ((AuraPhase)255, -1, -1);
             }
 
             // the move on now, and the one after it, while performing
-            int moveIdx = v.Phase == AuraPhase.Perform ? AuraRules.MoveAt(v.Plan, v.T0, ClockSync.ServerNow) : -1;
+            int moveIdx = v.Phase == AuraPhase.Perform ? AuraRules.MoveAt(v.Plan, v.T0, ClockSync.ServerNow, v.Beat) : -1;
             if (moveIdx != _shownMove)
             {
                 _shownMove = moveIdx;
@@ -212,8 +226,15 @@ public partial class AuraHud : CanvasLayer
             if (_small != null)
                 Text(_small, new Vector2(0, size.Y * 0.26f + 36f), UiTheme.FontHeading, UiTheme.Text, HorizontalAlignment.Center, size.X);
 
+            if (_music.Length > 0)
+                Text(_music, new Vector2(0, top + 50f), UiTheme.FontSmall, Violet, HorizontalAlignment.Center, size.X);
             if (v.Phase == AuraPhase.Countdown) DrawCountdown(v, size);
             if (v.Phase == AuraPhase.Perform) DrawPerform(v, size);
+            if (v.Phase == AuraPhase.Perform && !v.MyTurn) DrawTempt(v, size);
+            float laughed = (float)(GameClock.Now - _laughAt);
+            if (laughed < 1.6f)
+                Text(_laughWho, new Vector2(0, size.Y * 0.40f), 34, Red,
+                    HorizontalAlignment.Center, size.X, bold: true);
             if (v.Phase == AuraPhase.Verdict) DrawVerdict(size);
             if (v.Phase == AuraPhase.Done)
             {
@@ -237,7 +258,7 @@ public partial class AuraHud : CanvasLayer
         {
             if (v.T0 <= 0) return;
             double left = v.T0 - ClockSync.ServerNow;
-            int beats = Mathf.CeilToInt((float)(left / AuraRules.BeatSeconds));
+            int beats = Mathf.CeilToInt((float)(left / v.Beat));
             if (beats is < 1 or > 4) return;
             Text(beats.ToString(), new Vector2(0, size.Y * 0.46f), 72, Gold, HorizontalAlignment.Center, size.X, bold: true);
         }
@@ -264,8 +285,8 @@ public partial class AuraHud : CanvasLayer
 
             // the ring closes on the cut: full at a beat out, on the target circle at the downbeat
             double now = ClockSync.ServerNow;
-            double cut = AuraRules.CutAt(v.Plan, v.NextIndex, v.T0);
-            float toCut = (float)((cut - now) / AuraRules.BeatSeconds);
+            double cut = AuraRules.CutAt(v.Plan, v.NextIndex, v.T0, v.Beat);
+            float toCut = (float)((cut - now) / v.Beat);
             const float target = 34f;
             DrawArc(centre, target, 0f, Mathf.Tau, 48, Gold, 4f, true);
             if (toCut is > -0.3f and < 2f)
@@ -275,9 +296,24 @@ public partial class AuraHud : CanvasLayer
                 DrawArc(centre, r, 0f, Mathf.Tau, 64, c, 3f, true);
             }
             // the beat itself: a dot pulsing on every beat of the shared clock
-            float beat = (float)(now / AuraRules.BeatSeconds % 1.0);
+            float beat = (float)(now / v.Beat % 1.0);
             DrawCircle(centre, 8f + 6f * (1f - beat), Violet);
             Text(_pressHint, new Vector2(0, centre.Y + 108f), UiTheme.FontSmall, UiTheme.TextDim, HorizontalAlignment.Center, size.X);
+        }
+
+        /// <summary>
+        /// The rival's clean cut tempts the waiter (#914): a red prompt with the key and a bar running
+        /// out over the window. Pressing with nothing shown breaks character: a laugh.
+        /// </summary>
+        private void DrawTempt(AuraManager.View v, Vector2 size)
+        {
+            if (double.IsNaN(v.TemptAt)) return;
+            float left = 1f - (float)((ClockSync.ServerNow - v.TemptAt) / AuraRules.TemptWindow);
+            if (left <= 0f) return;
+            var box = new Rect2(size.X * 0.5f - 230f, size.Y * 0.36f, 460f, 58f);
+            DrawRect(box, UiTheme.Glass);
+            DrawRect(new Rect2(box.Position + new Vector2(0, box.Size.Y - 6f), new Vector2(box.Size.X * left, 6f)), Red);
+            Text(_composeHint, box.Position + new Vector2(0, 36f), UiTheme.FontHeading, Red, HorizontalAlignment.Center, box.Size.X, bold: true);
         }
 
         /// <summary>The verdict: the parts one by one, then the total.</summary>

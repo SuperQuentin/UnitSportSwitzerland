@@ -67,7 +67,7 @@ public partial class AuraPlanner : CanvasLayer
         {
             var move = m;
             var card = UiKit.Button(AuraRules.Name(m));
-            card.CustomMinimumSize = new Vector2(196, 64);
+            card.CustomMinimumSize = new Vector2(196, 52);
             card.Pressed += () => Add(move);
             grid.AddChild(card);
             _cards.Add(card);

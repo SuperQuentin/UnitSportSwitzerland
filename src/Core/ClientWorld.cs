@@ -1464,6 +1464,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(Combat.AuraManager.CreateClient());
         AddChild(new Combat.AuraHud());
         AddChild(new Combat.AuraPlanner());
+        AddChild(new Combat.AuraWatchHud());
 
         // World/BattleRoyale (#177): the match HUD, the zone, the drop and the way back
         var br = BattleRoyale.BrManager.CreateClient(_worldOrigin!);
@@ -1814,6 +1815,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 // an aura battle (#907): the one timed key; the planner shows its own
                 if (Combat.AuraManager.Client?.Current is { MyTurn: true, Phase: Combat.AuraPhase.Perform or Combat.AuraPhase.Countdown })
                     yield return (PlayerInput.AuraNext, "Next move (on the beat)");
+                // the rival performs (#914): the same key keeps a straight face, but only when tempted
+                else if (Combat.AuraManager.Client?.Current is { MyTurn: false, Phase: Combat.AuraPhase.Perform })
+                    yield return (PlayerInput.AuraNext, "Keep a straight face (only when tempted)");
             }
             else if (Items.ItemController.Instance is { Inventory.HeldId: Items.ItemId.FishingRod } rodHand && rodHand.UsablePlayer != null)
             {
@@ -1857,8 +1861,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
             }
             else if (Vehicles.VehicleReach.Current == null && Combat.FightManager.Client is { } fights
                      && NetLink.Online(this) && p.PointedFighter() is { } rival && FootPlayer.NetId(rival.Name) is { } rivalId)
-                // another player looked at (#495): E challenges, or takes their challenge
-                yield return (PlayerInput.InteractMount, fights.Prompt(rivalId));
+                // another player looked at (#495): E challenges, or takes their challenge; an aura
+                // challenge from them comes first (#914)
+                yield return (PlayerInput.InteractMount, Combat.AuraManager.Client?.ChallengedBy(rivalId) == true
+                    ? Combat.AuraManager.Client.Prompt(rivalId) : fights.Prompt(rivalId));
             else if (p.Indoors)
             {
                 // the chess type beat in a church (#370): dance to it, away from its radio and the door

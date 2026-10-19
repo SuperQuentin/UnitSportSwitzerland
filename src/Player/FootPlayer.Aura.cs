@@ -37,7 +37,7 @@ public partial class FootPlayer
 
     private int _auraId;
     private FootPlayer? _auraRival;
-    private bool _auraNextHeld;
+    private bool _auraNextHeld, _auraStruck;
     private bool _auraWasVisible;
     private Vector3 _auraCamPos;
     private bool _auraCamSet;
@@ -70,9 +70,16 @@ public partial class FootPlayer
         var mark = centre + axis * (mySide * AuraRules.StartGap * 0.5f);
         double now = ClockSync.ServerNow;
 
-        // ---- Next: the one timed key --------------------------------------------------------
+        // ---- Next: the one timed key; in VR, striking the next move's pose for real (#914) ----
         bool next = PlayerInput.Held(PlayerInput.AuraNext);
-        if (next && !_auraNextHeld && v.MyTurn && auras.PressNext() is { } grade)
+        bool struck = v.MyTurn && StruckNextPose(v, now);
+        // the rival performs: the same key keeps a straight face against a tempt (#914)
+        if (next && !_auraNextHeld && !v.MyTurn && auras.PressCompose() is { } held)
+        {
+            PlayAt(GlobalPosition + Vector3.Up, held ? Audio.SfxSynth.TickBank : Audio.SfxSynth.OofBank, held ? -10f : -6f);
+            if (!held) PlayerInput.Rumble(0.4f, 0.4f, 0.15f);
+        }
+        if ((next && !_auraNextHeld || struck) && v.MyTurn && auras.PressNext() is { } grade)
         {
             switch (grade)
             {
@@ -92,7 +99,8 @@ public partial class FootPlayer
         _auraNextHeld = next;
 
         // ---- the body: on the mark, facing the rival; the slow walk steps in and back ---------
-        var pose = AuraPoseNow(v, now, out float stepIn);
+        int won = v.Phase != AuraPhase.Done || v.Winner == 0 ? 0 : v.Winner == v.Me ? 1 : -1;
+        var pose = AuraBody.PoseFor(v.Phase, v.MyTurn, won, v.Plan, v.T0, v.Beat, v.Grades, now, v.Laughing(v.Me, now), out float stepIn);
         var at = mark + toRival * (stepIn * AuraWalkReach);
         var rel = at - GlobalPosition;
         rel.Y = 0;
@@ -120,38 +128,24 @@ public partial class FootPlayer
     }
 
     /// <summary>
-    /// The pose the battle's state puts the local battler in now, and how far (0..1) the slow walk
-    /// has stepped towards the rival.
+    /// VR (#914): the hands strike the pose of the move after the one on now (or drop the last
+    /// pose: hands down) inside the cut's window, a beat before its downbeat to the end of Ok. Only
+    /// the moment the pose is struck counts, so a pose already held must be dropped and struck again.
     /// </summary>
-    private static int AuraPoseNow(AuraManager.View v, double now, out float stepIn)
+    private bool StruckNextPose(AuraManager.View v, double now)
     {
-        stepIn = 0f;
-        switch (v.Phase)
+        if (!XR.XrSession.Active || VrHands is not { } hands || v.Phase != AuraPhase.Perform || v.NextIndex >= v.Plan.Length)
         {
-            case AuraPhase.Done:
-                return (int)(v.Winner == 0 ? AuraStance.Waiting : v.Winner == v.Me ? AuraStance.Victory : AuraStance.Defeat);
-            case AuraPhase.Plan when v.MyTurn:
-                return (int)AuraStance.Planning;
-            case AuraPhase.Perform when v.MyTurn && v.Plan.Length > 0:
-            {
-                int i = AuraRules.MoveAt(v.Plan, v.T0, now);
-                if (i < 0) return (int)AuraStance.Waiting;
-                var move = v.Plan[i];
-                double start = AuraRules.StartAt(v.Plan, i, v.T0);
-                // the cut into this move was missed: a stagger over its first beat
-                if (i > 0 && v.Grades[i - 1] == AuraGrade.Miss && now - start < AuraRules.BeatSeconds)
-                    return (int)AuraStance.Stumble;
-                if (move == AuraMove.SlowWalk)
-                {
-                    double len = AuraRules.Def(move).Beats * AuraRules.BeatSeconds;
-                    float p = (float)Math.Clamp((now - start) / len, 0, 1);
-                    stepIn = Mathf.Sin(p * Mathf.Pi);
-                }
-                return AuraRules.PoseOf(move);
-            }
-            default:
-                return (int)AuraStance.Waiting;
+            _auraStruck = false;
+            return false;
         }
+        double cut = AuraRules.CutAt(v.Plan, v.NextIndex, v.T0, v.Beat);
+        var next = v.NextIndex + 1 < v.Plan.Length ? v.Plan[v.NextIndex + 1] : AuraMove.None;
+        var g = AuraBody.Classify(hands.Right.X, hands.Right.Y, hands.Right.Z, hands.Left.X, hands.Left.Y, hands.Left.Z);
+        bool on = AuraBody.Strikes(next, g);
+        bool rising = on && !_auraStruck;
+        _auraStruck = on;
+        return rising && now >= cut - v.Beat && now <= cut + AuraRules.OkWindow;
     }
 
     private void EnterAura(AuraManager.View v)
@@ -240,16 +234,21 @@ public partial class FootPlayer
         }
         float el = (float)(now - _auraSince);
         var move = AuraRules.MoveOf(_auraDrawn);
+        // the battle's beat (#914): the music's when it keeps one, as this peer knows it
+        double beatLen = AuraManager.Client?.BeatHere ?? AuraRules.BeatSeconds;
         float phase = move != AuraMove.None
-            ? Mathf.Clamp(el / (float)(AuraRules.Def(move).Beats * AuraRules.BeatSeconds), 0f, 0.999f)
+            ? AuraRules.IsDance(move)
+                // a dance is drawn on the bar, as it is danced to music
+                ? (float)(el / (4 * beatLen) % 1.0)
+                : Mathf.Clamp(el / (float)(AuraRules.Def(move).Beats * beatLen), 0f, 0.999f)
             : (AuraStance)_auraDrawn == AuraStance.Stumble
-                ? Mathf.Clamp(el / (float)AuraRules.BeatSeconds, 0f, 0.999f)
+                ? Mathf.Clamp(el / (float)beatLen, 0f, 0.999f)
                 : (el / 2.4f) % 1f;
-        float beat = (float)(ClockSync.ServerNow / AuraRules.BeatSeconds % 1.0);
+        float beat = (float)(ClockSync.ServerNow / beatLen % 1.0);
         float blend = Mathf.Clamp(el / 0.08f, 0f, 1f);
         int prev = _auraPrev > 0 ? Avatar.HumanMeshBuilder.AuraMoves + _auraPrev : -1;
         // a move the dances already have (the Griddy) runs on the shared beat; the rest on its progress
         return new Avatar.DanceParams(Audio.Cd.MusicStyle.HipHop, Avatar.HumanMeshBuilder.AuraMoves + _auraDrawn,
-            beat, phase, (int)(el / (4 * AuraRules.BeatSeconds)), _auraWeight, prev, blend);
+            beat, phase, (int)(el / (4 * beatLen)), _auraWeight, prev, blend);
     }
 }

@@ -1266,6 +1266,8 @@ public static partial class HumanMeshBuilder
         AuraWaiting, AuraPlanning, AuraStumble, AuraVictory, AuraDefeat, AuraStandTall, AuraArmsCrossed,
         AuraPointToSky, AuraStareDown, AuraSunglasses, AuraYawn, AuraSlowWalk, AuraSiuuu, AuraMewing,
         AuraSixSeven, AuraLasso, AuraCutTheRope,
+        // #914
+        AuraLeadRival, AuraShush, AuraBow, AuraLaugh,
     }
 
     /// <summary>

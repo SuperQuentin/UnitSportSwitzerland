@@ -16,7 +16,8 @@ public class AuraRulesTests
         Assert.Equal(1, (int)AuraMove.StandTall);
         Assert.Equal(9, (int)AuraMove.Siuuu);
         Assert.Equal(13, (int)AuraMove.CutTheRope);
-        Assert.Equal(13, AuraRules.Moves.Length);
+        Assert.Equal(20, (int)AuraMove.Bow);
+        Assert.Equal(20, AuraRules.Moves.Length);
         foreach (var m in AuraRules.Moves)
         {
             var def = AuraRules.Def(m);
@@ -295,5 +296,114 @@ public class AuraRulesTests
         Assert.Equal(B, m.Winner);
         Assert.True(m.Forfeited);
         Assert.False(m.SubmitPlan(A, 0, Opening, 5));
+    }
+
+    // --- #914 ---
+
+    [Theory]
+    [InlineData(70f, 140f)]
+    [InlineData(174f, 87f)]
+    [InlineData(128f, 128f)]
+    [InlineData(0f, 120f)]
+    [InlineData(float.NaN, 120f)]
+    public void A_radio_tempo_is_folded_into_range(float bpm, float expected) =>
+        Assert.Equal(expected, AuraRules.FoldBpm(bpm), 3);
+
+    [Fact]
+    public void Bars_count_from_the_music_downbeat()
+    {
+        // 150 BPM: 0.4 s a beat, 1.6 s a bar, a downbeat at 0.3
+        Assert.Equal(13.1, AuraRules.NextBar(10, 2, 0.4, 0.3), 6);
+        var plan = new[] { AuraMove.StareDown, AuraMove.Floss };
+        Assert.Equal(13.1 + 1.6, AuraRules.CutAt(plan, 0, 13.1, 0.4), 6);
+        Assert.Equal(1, AuraRules.MoveAt(plan, 13.1, 14.8, 0.4));
+    }
+
+    [Fact]
+    public void The_new_moves_answer_and_chain()
+    {
+        var lasso = new[] { AuraMove.Lasso, AuraMove.LeadRival, AuraMove.ArmsCrossed };
+        Assert.Equal(8, AuraRules.Score(lasso, All(AuraGrade.Good, 3)).Chain);   // the pair +5, mime into the pose +3
+        Assert.True(AuraRules.Counters(AuraMove.CutTheRope, AuraMove.LeadRival));
+        Assert.True(AuraRules.Counters(AuraMove.Moonwalk, AuraMove.SlowWalk));
+        Assert.True(AuraRules.Counters(AuraMove.Shush, AuraMove.SixSeven));
+    }
+
+    [Fact]
+    public void A_bot_plans_worse_the_less_skilled()
+    {
+        Assert.Equal(AuraRules.SuggestPlan(), AuraRules.SuggestPlan(null, 1f, 7));
+        float sum = 0;
+        for (int seed = 0; seed < 20; seed++)
+        {
+            var clumsy = AuraRules.SuggestPlan(null, 0f, seed);
+            Assert.True(AuraRules.ValidatePlan(clumsy), $"seed {seed}: {string.Join(",", clumsy)}");
+            sum += AuraRules.Estimate(clumsy).Raw;
+        }
+        // greedy is not optimal, so one lucky draw may beat it; on average a clumsy bot plans worse
+        Assert.True(sum / 20 < AuraRules.Estimate(AuraRules.SuggestPlan()).Raw);
+    }
+
+    /// <summary>A's turn 1 up to the perform phase, 0.5 s beats from 0.</summary>
+    private static AuraMatch Performing()
+    {
+        var m = new AuraMatch(A, B, 0);
+        m.Tick(AuraMatch.IntroSeconds);
+        Assert.True(m.SubmitPlan(A, 0, Opening, 4));
+        m.Tick(m.T0);
+        return m;
+    }
+
+    [Fact]
+    public void A_perfect_cut_tempts_the_waiter_who_keeps_a_straight_face()
+    {
+        var m = Performing();
+        Assert.Equal(AuraGrade.Perfect, m.Next(A, 0, 0, 8.0));
+        Assert.True(m.TemptOpened);
+        Assert.Equal(8.0, m.TemptAt, 6);
+        Assert.Null(m.Compose(A, 0, 8.3, 8.3));   // the performer has nothing to hold in
+        Assert.Equal(true, m.Compose(B, 0, 8.4, 8.5));
+        Assert.True(double.IsNaN(m.TemptAt));
+        m.Tick(9.9);
+        Assert.False(m.Laughed);
+    }
+
+    [Fact]
+    public void An_unanswered_tempt_is_a_laugh()
+    {
+        var m = Performing();
+        m.Next(A, 0, 0, 8.0);
+        m.Tick(8.0 + AuraRules.TemptWindow + AuraMatch.TemptSlack + 0.01);
+        Assert.True(m.Laughed);
+        Assert.Equal(1, m.LaughsB);
+        Assert.Equal(AuraRules.LaughPenalty, m.TotalB);
+        // the performer's verdict holds the bonus
+        m.Next(A, 0, 1, 10.0);
+        m.Next(A, 0, 2, 12.0);
+        m.Tick(12.01);
+        Assert.Equal(AuraPhase.Verdict, m.Phase);
+        Assert.Equal(AuraRules.LaughBonus, m.LastTurn!.Score.Composure);
+    }
+
+    [Fact]
+    public void Pressing_with_nothing_to_hold_in_breaks_character()
+    {
+        var m = Performing();
+        Assert.Equal(false, m.Compose(B, 0, 7.0, 7.0));
+        Assert.True(m.Laughed);
+        Assert.Null(m.Compose(B, 0, 7.5, 7.5));   // once a turn
+        m.Next(A, 0, 0, 8.0);
+        Assert.False(m.TemptOpened);              // nothing left to tempt
+    }
+
+    [Fact]
+    public void The_match_keeps_the_music_beat()
+    {
+        var m = new AuraMatch(A, B, 0) { Beat = 0.4, Anchor = 0.3 };
+        m.Tick(AuraMatch.IntroSeconds);
+        Assert.True(m.SubmitPlan(A, 0, Opening, 10));
+        Assert.Equal(13.1, m.T0, 6);
+        m.Tick(m.T0);
+        Assert.Equal(AuraGrade.Perfect, m.Next(A, 0, 0, 13.1 + 1.6));
     }
 }

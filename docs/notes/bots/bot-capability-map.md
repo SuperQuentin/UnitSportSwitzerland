@@ -35,6 +35,7 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | caught in a blast | — | `Explosion.Blast` | — | — | gap: subscribed only by a body with a camera (a follow-up) |
 | hit by aircraft guns | — | `CombatManager.Hit` | — | — | gap: the server flies no rounds; damage only on the authority, later |
 | fist fight | — | `FightManager` | — | — | gap: `FightPhysics` returns for an Npc, later |
+| aura battle (#914) | `AuraHoldBrain` (wish to its mark, `FaceYaw` at the rival) | `AuraManager.SubmitPlanFor` / `NextFor` / `ComposeFor` | the match's state, server-side | `SuggestPlan(ctx, skill, seed)`, cut error and straight-face odds by `BotDifficulty` | ok: `/aura <bot>` |
 | wingsuit, parachute (and the BR drop) | `FlyControls` from `Intent.Steer`/`Canopy` and the facing | the body | its height: the loaded ground, else the lattice (`BrManager.GroundAt`) | `BrBrain.Drop` | ok |
 
 ## Items
