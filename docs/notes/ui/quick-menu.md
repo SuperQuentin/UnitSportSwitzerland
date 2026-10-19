@@ -4,8 +4,8 @@
 # Quick menu: a ring of the ways into everything (#840)
 
 - **What**: `Ui/QuickMenu`, a `CanvasLayer` (layer 6) made by `ClientWorld` beside the emote wheel.
-  Eight wedges, top first, clockwise: **Activities**, **Invites** ("n waiting", an amber dot),
-  **Inventory**, **Vehicles**, **Map**, **Emotes**, **Bird journal**, **Controls**. Each shows its key
+  Nine wedges, top first, clockwise: **Activities**, **Invites** ("n waiting", an amber dot),
+  **Inventory**, **Vehicles**, **Map**, **Phone** (#889, the pad's way to take it out), **Emotes**, **Bird journal**, **Controls**. Each shows its key
   under it (keyboard only). A wedge that cannot be used now is faint and the middle says why when it is
   aimed (Activities offline, Vehicles in a match or not on foot, Emotes when the body may not emote); a
   pick of one flashes the reason (`InviteToasts.Flash`).

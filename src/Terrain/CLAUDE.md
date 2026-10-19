@@ -17,6 +17,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 - `windows` — Windows: `BuildingMeshBuilder` bakes facade UVs (metres along the wall, storey index) from the *triangle* normal;... fake rooms behind the glass, occupancy cues
 - `facade-relief` — Recessed windows, sills, shutters, string courses, plinth; roof tile courses (roof frame in CUSTOM0.w) and solar panels with wear on large flat roofs, all shader-drawn
 - `building-types` — Building types: `BuildingTypes` groups a tile's solids (a church's nave + bell tower) at runtime; one church interior, every...
+- `castles` — #859: castles named offline (`--castles`: OSM historic=castle + GWR names -> committed `Castles.List.cs`: name, canton, kind, a point per solid), matched by footprint at runtime; dressed by region (Savoy, Jura, Plateau, East, Alpine, Raetia, Ticino: researched stones, roofs, merlons) and kind (fortress, manor, ruin); finials, oriels, Swiss and cantonal flags
 - `ikea` — the nine IKEA stores named by position (#501): strict containment, not proximity (St. Gallen's point is 0.4 m from a tile edge); the blue box, the pylon, bins of Blåhajs; `--ikeacheck`
 - `building-triangles` — read building triangles with `b.Tri(t)`; wall/roof split is `BuildingTriangles.RoofNormalY`, never a local copy
 - `industrial-sites` — Industrial sites (#497, #496 phase 1): `BuildingTypes.SiteFor` invents warehouse/works/depot/body shop/dealership from the building alone; `InteriorGenerator.Industrial.cs` plans a full-height hall + a low service block (`RoomPlan.Clear`), aisles/lines/bays/plinths laid out by the hall itself, 25 new pieces, flat `SiteAbundance` loot, high-bay `RoomLights`, plan v13, `--sitecheck`
@@ -66,6 +67,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 - `collision-build-load-road-tile` — Any collision or near-field build must load the road tile even when the roads are already drawn (or the ground swallows them after flying away and back, or on the #553 street-level cell switch, #603)
 - `road-s-collision-core-takes` — A road's collision core takes the height at the cell's perpendicular foot on the centreline, nearest segment wins
 - `concavepolygonshape3d-one-sided-collision-unless` — `ConcavePolygonShape3D` is one-sided for collision unless told otherwise, and geometry that "looks right" can still...
+- `cliff-shading` — cliffs drew as vertical stripes (#883): per-vertex normals smoothed over ±3 m, blended in on steep ground; a terrain-material mesh must carry normals (up = keep the facet); the quads keep the fixed diagonal Jolt's height field uses
 - `flat-shaded-quad-mesh-bilinear` — A flat-shaded quad mesh is NOT a bilinear surface, and a height query must match whichever one is actually on screen
 - `window-rows-crop-unless-storeys` — Window rows crop unless storeys divide the wall exactly
 - `never-derive-surface-tangent-from` — Never derive a surface tangent from the screen-space normal

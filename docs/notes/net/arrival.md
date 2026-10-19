@@ -11,6 +11,12 @@
   `SpawnPoint` (or teleports, if already on foot); 45 s without it fails the join. A client `--at`
   ignores the server's spawn, so every probe keeps its spot. A returning sleeper gets `Rules` first,
   then `Sleepers.WakeAt` moves it on.
+- **Mid-air spawns**: `WakeAt` lands one round trip after `Rules`, before any terrain. Its
+  `Teleporter.TeleportTo` frees every `SpawnPoint` (`_spawn` too) and adds its own. So `SpawnPending`
+  counts every live `SpawnPoint` child, not only `_spawn`, and the body also waits for
+  `GroundUnderCamera`, because a spawn point that gave up after 15 s leaves the camera at 4800 m.
+  Without both, `EnterFootMode` put the body at camera height (`ground = pos.Y`), and the placement
+  pass only ever lifts (`Max`): the body froze about 4.8 km up, then fell.
 - **Teleport rule**: `Permissions.ServerTeleport` / `CanTeleport` (`!Online || IsAdmin || ServerTeleport`).
   Off: `PlaceSearchUi.Go` and `XrMap` refuse, `ChatManager.CommandCity` refuses non-admins, and
   `ClientWorld.ToggleMode` returns from the fly camera with `EnterFootMode(inPlace)` +
