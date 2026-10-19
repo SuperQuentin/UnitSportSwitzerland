@@ -564,6 +564,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             new(HitboxProbe.Requested, ToolAnchor.Own, _ => new HitboxProbe(chunks, origin)),
             new(SyncProbe.Requested, ToolAnchor.AtTarget, _ => new SyncProbe(chunks, origin)),
             new(MantleProbe.Requested, ToolAnchor.AtTarget, _ => new MantleProbe(chunks, origin)),
+            new(SlopeWalkProbe.Requested, ToolAnchor.AtTarget, _ => new SlopeWalkProbe(chunks, origin)),
             new(VoidProbe.Requested, ToolAnchor.AtTarget, _ => new VoidProbe(chunks, origin)),
             new(() => RoadPerfProbe.ParseArgs() != null, ToolAnchor.Own, _ =>
             {
