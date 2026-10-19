@@ -36,3 +36,22 @@
 - **Not done**: geometric detection of unflagged rings, splitter islands, the 2.41.1 sign
   (`PointPropType.RoundaboutSign` is reserved), a wider ring carriageway (#117's 3.3 m is narrow
   for a real ring), no mini-roundabout in the test region to look at.
+- **Laid whole by the junction planner (#854, `docs/plans/roundabout-core.md`)**: a tight ring (outer radius up to
+  `RoundaboutCore.TightOuter`, 20 m: every ring of the real tiles, 5-15 m) is one junction: its nodes and the tips where
+  TLM's entry and exit lines of an arm meet are the members of a merged junction (`TileRewriter.Rings`), its links (split
+  by a tile's edge or not) its inner streets. `Layout/RoundaboutCore` lays its core instead of `CorePlanner`: the ring at
+  least `LeastRing` (6 m) wide on the shaper's circle (TLM's line is one 3.3 m lane), each two-way arm of a compact ring a
+  splitter island (raised, 2.5 m wide at the ring, from 1 m in from the mouth to 1 m out from the ring; 8 m long where TLM
+  draws no tip) with the entry and exit flaring round it, the kerbs filleted into the ring's outer circle (0.4 of its outer
+  radius plus 2 m) between arms, meeting at a point where two arms are too close for fillets (or crossing before the ring),
+  grass between an entry line and an exit line drawn close; the give-way row at the ring's edge (in the core: `Teeth`), every
+  lane joined to every other arm's departing lane on circular fillets onto the ring lane (its centreline), counter-clockwise,
+  its width easing from its lane's to the exit lane's round the ring. The central island is laid again for the wider ring.
+  No riders' crossing through the ring (the paths are carried round its corners). A ring with an arm turned more than 50
+  degrees from its radius (a bypass, a slip) stays on the old layout; so does one failing its checks. Large rings (as T's on
+  the one-way ring) are not built: none in the real tiles.
+- **Checks**: `RINGDBG=1` prints where a ring's connector leaves its outline (and an arm running past it); the test region
+  has a compact ring (`SignalTestRegion.RingE`, radius 8 m, four arms) and a mini one (`MiniRingE`, 5 m, three arms, on a
+  tile's edge). 168 real tiles: 81 rings laid whole, 43 written (the others fail a check, or a road joins an arm short of its mouth), 661 junctions left to the old layout in all (760 before).
+- **Open**: path crossings set back on each arm (the carried paths stop at the arms); a mini ring on a tile's edge gets its
+  sidewalk corners in its home tile only (any core on a tile's edge); small notches where two fillets meet at the ring.
