@@ -170,6 +170,8 @@
     <!-- update check (#532): version compare, asset pick, GitHub's JSON, delta updates -->
     <Compile Include="..\..\src\Core\UpdateInfo.cs;..\..\src\Core\BinaryDelta.cs;..\..\src\Core\UpdatePackage.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\Landmarks.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Castles.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Castles.List.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the farm machines' tanks, codes and draft (#494) -->
     <Compile Include="..\..\src\Farming\MachineLoad.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- selling (#494): prices, specialty buyers, contracts, the farm stand -->

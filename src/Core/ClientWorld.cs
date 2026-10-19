@@ -568,6 +568,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             new(HitboxProbe.Requested, ToolAnchor.Own, _ => new HitboxProbe(chunks, origin)),
             new(SyncProbe.Requested, ToolAnchor.AtTarget, _ => new SyncProbe(chunks, origin)),
             new(MantleProbe.Requested, ToolAnchor.AtTarget, _ => new MantleProbe(chunks, origin)),
+            new(SlopeWalkProbe.Requested, ToolAnchor.AtTarget, _ => new SlopeWalkProbe(chunks, origin)),
             new(VoidProbe.Requested, ToolAnchor.AtTarget, _ => new VoidProbe(chunks, origin)),
             new(() => RoadPerfProbe.ParseArgs() != null, ToolAnchor.Own, _ =>
             {
@@ -713,6 +714,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.EmoteWheelProbe.Requested) AddChild(new Player.EmoteWheelProbe(() => LocalPlayer));
         if (Player.SitProbe.Requested) AddChild(new Player.SitProbe(() => LocalPlayer));
         if (Concert.ConcertDeskProbe.Requested) AddChild(new Concert.ConcertDeskProbe(() => LocalPlayer));
+        if (Phone.PhoneProbe.Requested) AddChild(new Phone.PhoneProbe(() => LocalPlayer));
         if (Items.SparkleProbe.Requested) AddChild(new Items.SparkleProbe(() => LocalPlayer));
         if (Items.RadioFocusProbe.Requested) AddChild(new Items.RadioFocusProbe(() => LocalPlayer));
         if (Items.BeatFieldProbe.Requested) AddChild(new Items.BeatFieldProbe(() => LocalPlayer));
@@ -764,6 +766,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(new Ui.QuickMenu(() => MenuOpen?.Invoke() == true, () => _onFoot && LocalPlayer is { Ride: Player.RideKind.OnFoot, RidingWith: 0 },
             () => emotes));
         AddChild(new Ui.InviteToasts());
+        // the phone (#889): Up on foot, or the quick menu's Phone
+        AddChild(new Phone.PhoneController(() => _onFoot ? LocalPlayer : null, () => MenuOpen?.Invoke() == true || _places is { IsOpen: true },
+            () => _places, () => GetNodeOrNull<Net.ChatManager>(Net.ChatManager.NodeName)));
         if (Items.InventoryUiProbe.Requested) AddChild(new Items.InventoryUiProbe(items));
         if (Loot.LootSyncProbe.Role != null) AddChild(new Loot.LootSyncProbe(items, origin));
         if (Interiors.SiteOfficeNetProbe.Role != null) AddChild(new Interiors.SiteOfficeNetProbe(items, origin));
@@ -811,6 +816,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.SwimNetProbe.Role != null) AddChild(new Player.SwimNetProbe(items));
         if (Player.EmoteNetProbe.Role != null) AddChild(new Player.EmoteNetProbe(items));
         if (Concert.ConcertNetProbe.Role != null) AddChild(new Concert.ConcertNetProbe(items));
+        if (Phone.PhoneNetProbe.Role != null) AddChild(new Phone.PhoneNetProbe(items));
         if (Player.FightNetProbe.Role != null) AddChild(new Player.FightNetProbe(items));
         if (Net.InviteProbe.Role != null) AddChild(new Net.InviteProbe(items));
         if (Items.SwissNetProbe.Role != null) AddChild(new Items.SwissNetProbe(items));
@@ -1884,7 +1890,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         TrackLoading(delta);
         if ((_appearanceIn -= delta) <= 0) { _appearanceIn = 0.25; PublishAppearance(); }
         if (GameClock.Fixed) GameClock.Pace(Stage != LoadStage.Ready || _chunks is { Settled: false });
-        if (_pendingFoot != null && !SpawnPending)
+        if (_pendingFoot != null && !SpawnPending && GroundUnderCamera)
         {
             var player = _pendingFoot;
             _pendingFoot = null;
@@ -1971,7 +1977,27 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private SeatStart? _seatStart;
     private bool _seatAsked;
 
-    private bool SpawnPending => _awaitingServerSpawn || _spawn != null && IsInstanceValid(_spawn) && _spawn.IsInsideTree();
+    /// <summary>
+    /// Any spawn point still settling, not only <see cref="_spawn"/>: a teleport replaces it with
+    /// its own (a returning player's sleeper wakes one round trip after the server's start point),
+    /// and the gate must hold through that one too, or the body steps off the fly camera at 4.8 km.
+    /// </summary>
+    private bool SpawnPending
+    {
+        get
+        {
+            if (_awaitingServerSpawn) return true;
+            foreach (var node in GetChildren())
+                if (node is SpawnPoint s && !s.IsQueuedForDeletion()) return true;
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// The ground under the fly camera is known. A spawn point that gave up (no tile after 15 s, a
+    /// slow first join) leaves the camera at its preload altitude: the body waits for the ground then.
+    /// </summary>
+    private bool GroundUnderCamera => _chunks != null && _spectator != null && _chunks.TryGetSurface(_spectator.GlobalPosition, out _);
 
     /// <summary>Online, before the server's <c>Net/Arrival</c> has said where this player starts (#799).</summary>
     private bool _awaitingServerSpawn;
@@ -2001,7 +2027,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
     /// </summary>
     private void EnterFootWhenGrounded(FootPlayer player)
     {
-        if (SpawnPending) { _pendingFoot = player; return; }
+        if (SpawnPending || !GroundUnderCamera) { _pendingFoot = player; return; }
         EnterFootMode(player);
     }
 
