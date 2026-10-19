@@ -57,6 +57,7 @@ public partial class PhoneController : Node
     /// <summary>Opened by a teleport (not by the player): it folds away by itself once there.</summary>
     private bool _stowWhenFolded;
     private string _hintShown = "";
+    private InviteService? _invites;
 
     /// <summary>The two screens, for the checks.</summary>
     internal PhoneScreens Screens => _screens;
@@ -88,7 +89,7 @@ public partial class PhoneController : Node
         if (Instance == this) Instance = null;
         if (Teleporter.Curtain == Curtain) Teleporter.Curtain = null;
         Teleporter.Arrived -= OnArrived;
-        if (InviteService.Client is { } inv) inv.Arrived -= OnCall;
+        if (_invites != null) _invites.Arrived -= OnCall;
         UiFocus.Set(this, false);
     }
 
@@ -123,7 +124,6 @@ public partial class PhoneController : Node
         _overlay.AddChild(_hint);
         _sound = new AudioStreamPlayer { Name = "PhoneSound", Bus = Audio.SfxBus.Name, VolumeDb = -8f };
         AddChild(_sound);
-        Callable.From(() => { if (InviteService.Client is { } inv) inv.Arrived += OnCall; }).CallDeferred();
     }
 
     // ------------------------------------------------------------------ states
@@ -222,6 +222,13 @@ public partial class PhoneController : Node
     public override void _Process(double delta)
     {
         float dt = (float)delta;
+        // the client's invite service comes with the connection, after this node: follow whichever is current
+        if (InviteService.Client != _invites)
+        {
+            if (_invites != null) _invites.Arrived -= OnCall;
+            _invites = InviteService.Client;
+            if (_invites != null) _invites.Arrived += OnCall;
+        }
         var p = _player();
         if (_stage != Stage.Pocket && (p == null || !CanUse(out _) && !_blocked()))
         {

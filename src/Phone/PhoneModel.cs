@@ -30,8 +30,8 @@ public partial class PhoneModel : Node3D
     /// <summary>The middle of the cover screen while folded, in this node's frame.</summary>
     public static readonly Vector3 CoverScreenCentre = new(0f, 0f, HalfThickness + 0.0004f);
 
-    private static readonly Color Shell = new(0.10f, 0.11f, 0.13f), Frame = new(0.32f, 0.33f, 0.36f),
-        Glass = new(0.02f, 0.02f, 0.03f), Lens = new(0.05f, 0.06f, 0.09f);
+    private static readonly Color Shell = new(0.16f, 0.17f, 0.20f), Frame = new(0.32f, 0.33f, 0.36f),
+        Lens = new(0.05f, 0.06f, 0.09f);
     private static ArrayMesh? _backMesh, _frontMesh;
 
     private Node3D _hinge = null!;
@@ -133,34 +133,30 @@ public partial class PhoneModel : Node3D
     private static void Box(MeshScratch s, Vector3 centre, Vector3 size, Color colour) =>
         s.Box(new Vector3(-centre.X, centre.Y, -centre.Z), size, colour);
 
-    /// <summary>The back half: shell, frame, the inner screen's black glass, the camera bump on the back.</summary>
+    /// <summary>
+    /// The back half: one satin shell (its face under the inner screen), the camera island on the
+    /// back. No frame or glass laid over the shell: millimetres apart, they would fight it (#788).
+    /// </summary>
     [Core.Showcase("Parts", "Phone back half")]
     private static ArrayMesh BackMesh()
     {
         var s = new MeshScratch();
         float t = HalfThickness;
         Box(s, new Vector3(0f, 0f, -t * 0.5f), new Vector3(HalfWidth, Height, t), Shell);
-        Box(s, new Vector3(0f, 0f, -t * 0.5f), new Vector3(HalfWidth + 0.0012f, Height + 0.0012f, t * 0.6f), Frame);
-        Box(s, new Vector3(0f, 0f, 0.0001f), new Vector3(HalfWidth - 0.002f, Height - 0.003f, 0.0004f), Glass);
-        // the camera island at the top of the back, three lenses
-        Box(s, new Vector3(0.008f, 0.052f, -t - 0.0012f), new Vector3(0.05f, 0.032f, 0.0024f), Frame);
+        // the camera island at the top of the back, three lenses standing proud of it
+        Box(s, new Vector3(0.008f, 0.052f, -t - 0.0015f), new Vector3(0.05f, 0.032f, 0.003f), Frame);
         foreach (float x in new[] { -0.008f, 0.006f, 0.020f })
-            Box(s, new Vector3(x, 0.052f, -t - 0.0026f), new Vector3(0.011f, 0.011f, 0.0012f), Lens);
-        // the hinge's spine down the left edge
-        Box(s, new Vector3(-HalfWidth * 0.5f, 0f, -t * 0.5f), new Vector3(0.004f, Height - 0.004f, t + 0.002f), Frame);
+            Box(s, new Vector3(x, 0.052f, -t - 0.0035f), new Vector3(0.011f, 0.011f, 0.001f), Lens);
         return s.Build();
     }
 
-    /// <summary>The front half, in its own frame (centred, its inner face at z = 0): shell, frame, the cover glass.</summary>
+    /// <summary>The front half, in its own frame (centred, its inner face at z = 0): one shell; the screens are quads.</summary>
     [Core.Showcase("Parts", "Phone front half")]
     private static ArrayMesh FrontMesh()
     {
         var s = new MeshScratch();
         float t = HalfThickness;
         Box(s, new Vector3(0f, 0f, t * 0.5f), new Vector3(HalfWidth, Height, t), Shell);
-        Box(s, new Vector3(0f, 0f, t * 0.5f), new Vector3(HalfWidth + 0.0012f, Height + 0.0012f, t * 0.6f), Frame);
-        Box(s, new Vector3(0f, 0f, t + 0.0001f), new Vector3(CoverSize.X + 0.003f, CoverSize.Y + 0.004f, 0.0004f), Glass);
-        Box(s, new Vector3(0f, 0f, -0.0001f), new Vector3(HalfWidth - 0.002f, Height - 0.003f, 0.0004f), Glass);
         return s.Build();
     }
 

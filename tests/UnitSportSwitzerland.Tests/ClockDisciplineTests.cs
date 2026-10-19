@@ -56,6 +56,7 @@ public class ClockDisciplineTests
         ["src/Core/GameClock.cs"] = "clock: Pace holds the frames to real time while the world loads",
         ["src/Net/ClockSync.cs"] = "clock: LocalNow's fallback off --fixed-fps, and the server's Unix offset",
         ["src/Core/DebugMenu.cs"] = "clock: a speed change is scheduled at a server instant (SimClock.Schedule)",
+        ["src/Phone/PhoneController.cs"] = "calendar: the phone's lock screen shows today's date, as a phone does",
         ["src/World/WorldClock.cs"] = "clock: Hour reads the sky at a server instant, through SimClock",
         ["src/Net/ChatManager.cs"] = "clock: /speed is scheduled at a server instant; plumbing: the rate limit on asking the server for player names",
 
