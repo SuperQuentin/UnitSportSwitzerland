@@ -15,10 +15,7 @@ public static class CollisionReach
     public const double RadiusM = 300;
     /// <summary>A tile keeps its collision until every body is this far: no load/free loop on a border.</summary>
     public const double ReleaseM = 400;
-    /// <summary>
-    /// How far ahead along the velocity a moving body asks for ground, in real seconds: the time a tile's
-    /// collision has to build on its thread, which <c>/speed</c> does not hurry (#931).
-    /// </summary>
+    /// <summary>How far ahead along the velocity a moving body asks for ground.</summary>
     public const double LookAheadSeconds = 10;
     /// <summary>The look-ahead never reaches further than this (a fast car, a falling body).</summary>
     public const double LookAheadMaxM = 600;
@@ -37,14 +34,11 @@ public static class CollisionReach
 
     /// <summary>
     /// The look-ahead point: where the body will be in <see cref="LookAheadSeconds"/> at this
-    /// velocity (LV95 east, north, up), clamped to <see cref="LookAheadMaxM"/> horizontally. At a simulation
-    /// <paramref name="scale"/> of n the body covers n times the ground in those real seconds: at x4 a bot under
-    /// its canopy reached the ground before its tile's collision was built, and fell through the world.
+    /// velocity (LV95 east, north, up), clamped to <see cref="LookAheadMaxM"/> horizontally.
     /// </summary>
-    public static (double E, double N, double Alt) Ahead(double e, double n, double alt, double ve, double vn, double vUp, double scale = 1)
+    public static (double E, double N, double Alt) Ahead(double e, double n, double alt, double ve, double vn, double vUp)
     {
-        double t = LookAheadSeconds * scale;
-        double de = ve * t, dn = vn * t, du = vUp * t;
+        double de = ve * LookAheadSeconds, dn = vn * LookAheadSeconds, du = vUp * LookAheadSeconds;
         double flat = Math.Sqrt(de * de + dn * dn);
         if (flat > LookAheadMaxM)
         {

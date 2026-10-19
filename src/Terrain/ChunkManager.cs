@@ -961,7 +961,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         var pos = anchor.GlobalPosition;
         var (e, n) = _origin!.ToLv95(pos);
         var v = anchor is CharacterBody3D body ? body.Velocity : Vector3.Zero;
-        var ahead = CollisionReach.Ahead(e, n, pos.Y, v.X, -v.Z, v.Y, SimClock.Scale);
+        var ahead = CollisionReach.Ahead(e, n, pos.Y, v.X, -v.Z, v.Y);
         bool airborne = TryGetHeight(pos, out float ground)
             && pos.Y - ground > CollisionReach.AirGapM && ahead.Alt - ground > CollisionReach.AirGapM;
         return (e, n, ahead.E, ahead.N, airborne);
