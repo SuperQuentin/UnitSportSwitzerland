@@ -50,3 +50,4 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 - `windows-launch-focus` — Windows: game windows may open but never in front or on top; no --always-on-top / no_focus, no editor play while the user works
 - `perf-no-per-frame-allocations` (general) — `PlayerInput` reads use static `StringName`s (`ActionName`); `InputHints.Label`/`Format` are memoised, anything changing the `InputMap` calls `InputHints.Invalidate()`
 - `perf-no-tree-walk-per-frame` — never `FindChildren` over the tree per frame (it visits every tile node): walk once, follow `SceneTree.NodeAdded` (`ShotRunner.HideHud`)
+- `instance-uniform-buffer` — `instance uniform` shaders (terrain photo_slot, the face, interiors) take 16 vec4s a node; the buffer is 262 144 (the default 65 536 overflowed in spectator flight: "Too many instances using shader instance variables")

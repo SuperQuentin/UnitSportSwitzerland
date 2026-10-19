@@ -69,6 +69,7 @@ public sealed class ChatCompleter
         ("race", false, false, "start | duel <player> | join | leave | list | npc | cancel"),
         ("fight", false, false, "<player> | accept | decline | leave"),
         ("aura", false, false, "<player> | accept | decline | leave"),
+        ("concert", false, true, "host [seed] | release | status | input artnet|sacn|osc|all [on|off] | patch"),
         ("br", false, false, "open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] | join | leave | team [name] | invite <player> | start | bots [n|off] [easy|normal|hard] | cancel | status"),
         // invites (#840)
         ("invites", false, false, ""),
