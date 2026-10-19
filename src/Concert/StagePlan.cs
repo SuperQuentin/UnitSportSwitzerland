@@ -25,6 +25,26 @@ public sealed class StagePlan
     // stage frame -> stadium frame
     private Vector2 _origin, _forward, _right;
 
+    /// <summary>The deck's front edge's middle and the way the stage faces (the round's: the centre, north).</summary>
+    public Vector2 Origin => _origin;
+    public Vector2 Forward => _forward;
+    public bool Round => Event.Layout == StageLayout.Center;
+
+    /// <summary>Whether a point of the pitch (u, v) is under any part of the stage, give or take <paramref name="margin"/>.</summary>
+    public bool Blocked(Vector2 uv, float margin)
+    {
+        foreach (var b in Boxes)
+        {
+            if (b.Size.X * b.Size.Z < 0.5f) continue;   // a pole
+            var d = uv - new Vector2(b.Centre.X, b.Centre.Z);
+            float c = MathF.Cos(b.Yaw), s = MathF.Sin(b.Yaw);
+            // into the box's own axes (x along its yaw)
+            float lx = d.X * c - d.Y * s, lz = d.X * s + d.Y * c;
+            if (MathF.Abs(lx) < b.Size.X / 2 + margin && MathF.Abs(lz) < b.Size.Z / 2 + margin) return true;
+        }
+        return false;
+    }
+
     // colours, sRGB
     private static readonly Color Deck = new(0.12f, 0.12f, 0.13f), Skirt = new(0.05f, 0.05f, 0.06f),
         Truss = new(0.62f, 0.63f, 0.66f), Canopy = new(0.2f, 0.2f, 0.22f), Speaker = new(0.07f, 0.07f, 0.08f),
