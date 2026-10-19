@@ -8,14 +8,11 @@ A 4-minute film of the whole game, with a story and a UFO. It is staged and film
 `docs/plans/ufo-feature-films.md`; the sibling films are "The Stolen Fondue" (#864) and "Invasion,
 Swiss Style" (#866).
 
-**Status: stage 1 of 2.** The story, the script, the places and every shot are in. Two kinds of shot are not finished:
-
-- **UFO beats** (marked 🛸 below) have a grey stand-in box where the saucer will be. They wait
-  for the flyable UFO (#861).
-- **Dialogue** (marked 💬) shows in the group chat for now. It waits for the comic speech
-  bubbles (#862).
-
-Stage 2 merges those branches, stages the saucer and the bubbles, and renders.
+The film uses the film kit (#882, `docs/notes/trailer/film-kit.md`). The UFO is #861's: a
+crashed and a mended `Craft` in the field, BLIP walking down its ramp, the saucer as an actor
+whose beam takes Marco's car, and the mothership. BLIP is #880's teal alien. The dialogue is
+#862's speech bubbles, each with the id of its subtitles in `tourist.subtitles.json` (synced with
+`tools/trailer.sh lines`).
 
 ## Logline
 
@@ -96,31 +93,31 @@ dialogue, symbols are BLIP's speech; the `sNN_*` ids are the line ids in
 
 | # | Bars | Time | Place | What happens | Camera | Feature | Dialogue |
 |---|---|---|---|---|---|---|---|
-| 1 | 1-3 | 0:00-0:08.6 | Riddes, over the field, 2583300/1112700 | 🛸 Fade in on stars over the Rhône valley. A light streaks across and dives toward the field. Super: "RIDDES (VS) · 23:40" | 40 m up, tilting down from the sky to the field, 28 mm | Night, the real valley | |
-| 2 | 4-5 | 0:08.6-0:13.9 | The field, 2583470/1112930 | 🛸 The saucer wobbles in low, smoking, and skids to a stop in the crop | Low across the field, a jolt, 35 mm | The UFO | |
-| 3 | 6-7 | 0:13.9-0:19.3 | The farmyard, 2583405/1112990 | JONAS comes out into the yard with a torch | Low, in front of him, 28 mm | Real buildings, the torch | 💬 JONAS: WHAT WAS THAT?! |
-| 4 | 8-9 | 0:19.3-0:24.6 | Across the field | The four walk toward the glow, torches up | Behind NINA, 28 mm | On foot, together | 💬 LÉA: call the police? MARCO: call the TV! |
-| 5 | 10-11 | 0:24.6-0:29.9 | By the saucer | 🛸 The hatch opens and the ramp comes down. BLIP walks down it and steps toward them | Low from the friends' side, pushing in, 35→50 mm | The alien, the UFO | 💬 BLIP: ◉ ◉ ... BLIP? |
-| 6 | 12 | 0:29.9-0:32.6 | The four in a row | Frozen. MARCO waves, slowly | In front of them, 35 mm | Emotes | 💬 MARCO: ...hi? |
-| 7 | 13-14 | 0:32.6-0:37.9 | By the saucer | 🛸 BLIP explains with its arms: the ship, broken; the sky; two moons | Over NINA's shoulder, 35 mm | Emotes | 💬 BLIP: BLOOP ▲✦◆ ☾☾ ↑ · NINA: it's broken. its mothership comes tomorrow night. |
-| 8 | 15 | 0:37.9-0:40.6 | The friends | MARCO stares at NINA, who shrugs | In front of the pair, 35 mm | | 💬 MARCO: you speak alien?? · NINA: i fly to milan a lot |
-| 9 | 16 | 0:40.6-0:43.3 | By the saucer | JONAS offers the tour; BLIP jumps for joy | Over JONAS's shoulder, 35 mm | | 💬 JONAS: so... want the tour? · BLIP: ✦✦✦ !!! |
-| 10 | 17-18 | 0:43.3-0:48.6 | The field at dawn | 🛸 The saucer hides under a camouflage net as the sun comes up (time-lapse). Title **THE ALIEN TOURIST**. Super "RIDDES · 06:10" | 30 m off, 6 m up, 35 mm | Dawn, the camo net gadget | |
+| 1 | 1-3 | 0:00-0:08.6 | The farmyard, looking north-east | Fade in on the night over the Rhône valley. The saucer streaks in, lamps lit, and dives toward the field. Super: "RIDDES (VS) · 23:40" | From the yard, panning with the saucer, 35→28 mm | Night, the real valley | |
+| 2 | 4-5 | 0:08.6-0:13.9 | The field, 2583470/1112930 | The saucer lies in the crop, nosed in and tipped, smoking, its lamps flickering | Low across the field, a jolt, 35 mm | The UFO | |
+| 3 | 6-7 | 0:13.9-0:19.3 | The farmhouse, 2583392/1113007 | JONAS steps out of the door with a torch | Low, in front of him, 28 mm | Real buildings and their doors, the torch | JONAS: WHAT WAS THAT?! |
+| 4 | 8-9 | 0:19.3-0:24.6 | Across the field | The four walk toward the glow, torches up | Behind NINA, 28 mm | On foot, together | LÉA: call the police? MARCO: call the TV! |
+| 5 | 10-11 | 0:24.6-0:29.9 | By the saucer | The hatch opens and the ramp comes down. BLIP walks down it and steps toward them | Low from the friends' side, pushing in, 35→50 mm | The alien, the UFO | BLIP: ◉ ◉ ... BLIP? |
+| 6 | 12 | 0:29.9-0:32.6 | The four in a row | Frozen. MARCO waves, slowly | In front of them, 35 mm | Emotes | MARCO: ...hi? |
+| 7 | 13-14 | 0:32.6-0:37.9 | By the saucer | BLIP explains with its arms: the ship, broken; the sky; two moons | Over NINA's shoulder, 35 mm | Emotes | BLIP: BLOOP ▲✦◆ ☾☾ ↑ · NINA: it's broken. its mothership comes tomorrow night. |
+| 8 | 15 | 0:37.9-0:40.6 | The friends | MARCO stares at NINA, who shrugs | In front of the pair, 35 mm | | MARCO: you speak alien?? · NINA: i fly to milan a lot |
+| 9 | 16 | 0:40.6-0:43.3 | By the saucer | JONAS offers the tour; BLIP jumps for joy | Over JONAS's shoulder, 35 mm | | JONAS: so... want the tour? · BLIP: ✦✦✦ !!! |
+| 10 | 17-18 | 0:43.3-0:48.6 | The field at dawn | The saucer hides under a camouflage net as the sun comes up (time-lapse). Title **THE ALIEN TOURIST**. Super "RIDDES · 06:10" | 30 m off, 6 m up, 35 mm | Dawn, the camo net gadget | |
 
 ### Act two: the morning, first tries, bars 19-34
 
 | # | Bars | Time | Place | What happens | Camera | Feature | Dialogue |
 |---|---|---|---|---|---|---|---|
-| 11 | 19 | 0:48.6-0:51.3 | The farmyard, 2583405/1112990 | BLIP in a witch's robe | The same frame for 11-13, 35 mm | Character looks and clothes | 💬 LÉA: no. |
-| 12 | 20 | 0:51.3-0:54.0 | Same | Hard hat and hi-vis vest | Same | Clothes | 💬 LÉA: still no. |
-| 13 | 21 | 0:54.0-0:56.6 | Same | The army's TAZ; BLIP salutes | Same | Clothes | 💬 MARCO: perfect. nobody will notice. |
-| 14 | 22-23 | 0:56.6-1:02.0 | The farmyard | LÉA shows BLIP where they are: the polaroid is the game's terrain-download map | Over LÉA's shoulder, 28 mm | The in-game map, the terrain download screen | 💬 LÉA: we're here. · BLIP: ◉ ◉ ✦ |
-| 15 | 24-25 | 1:02.0-1:07.3 | IKEA Riddes, 2582250/1112640 | BLIP walks out of IKEA hugging a Blåhaj shark, MARCO beside it | In front of them in the car park, 28 mm | Shops, IKEA, items | 💬 MARCO: it bought a shark. |
-| 16 | 26-27 | 1:07.3-1:12.6 | The Riddes straight | The driving lesson: from BLIP's seat in Marco's AE86 | Cockpit, over the shoulder, 28 mm | Cars, the cockpit view | 💬 MARCO: right pedal go. left pedal STOP. · BLIP: BLIP ✓ |
-| 17 | 28-29 | 1:12.6-1:17.9 | Same | BLIP floors it into a wall and goes through the windscreen | Across the road before the wall, 35 mm | The crash through the windscreen | 💬 BLIP: AGAIN! · MARCO: no. |
-| 18 | 30 | 1:17.9-1:20.6 | Lauterbrunnen main street | BLIP wobbles along on a road bike, LÉA behind it | Low at the kerb, 28 mm | The road bike, villages | 💬 LÉA: pedal!! PEDAL! |
+| 11 | 19 | 0:48.6-0:51.3 | The farmyard, 2583405/1112990 | BLIP in a witch's robe | The same frame for 11-13, 35 mm | Character looks and clothes | LÉA: no. |
+| 12 | 20 | 0:51.3-0:54.0 | Same | Hard hat and hi-vis vest | Same | Clothes | LÉA: still no. |
+| 13 | 21 | 0:54.0-0:56.6 | Same | The army's TAZ; BLIP salutes | Same | Clothes | MARCO: perfect. nobody will notice. |
+| 14 | 22-23 | 0:56.6-1:02.0 | The farmyard | LÉA shows BLIP where they are: the game's own "where do you want to start?" map over the frame, its marker on the farm | Over LÉA's shoulder, 28 mm | The in-game map | LÉA: we're here. · BLIP: ◉ ◉ ✦ |
+| 15 | 24-25 | 1:02.0-1:07.3 | IKEA Riddes, 2582250/1112640 | BLIP walks out of IKEA hugging a Blåhaj shark, MARCO beside it | In front of them in the car park, 28 mm | Shops, IKEA, items | MARCO: it bought a shark. |
+| 16 | 26-27 | 1:07.3-1:12.6 | The Riddes straight | The driving lesson: from BLIP's seat in Marco's AE86 | Cockpit, over the shoulder, 28 mm | Cars, the cockpit view | MARCO: right pedal go. left pedal STOP. · BLIP: BLIP ✓ |
+| 17 | 28-29 | 1:12.6-1:17.9 | Same | BLIP floors it into a wall and goes through the windscreen | Across the road before the wall, 35 mm | The crash through the windscreen | BLIP: AGAIN! · MARCO: no. |
+| 18 | 30 | 1:17.9-1:20.6 | Lauterbrunnen main street | BLIP wobbles along on a road bike, LÉA behind it | Low at the kerb, 28 mm | The road bike, villages | LÉA: pedal!! PEDAL! |
 | 19 | 31 | 1:20.6-1:23.3 | The Theodul slope, Zermatt | BLIP skis, zigzagging wildly | Chase, 28 mm | Skis | |
-| 20 | 32-33 | 1:23.3-1:28.6 | The Riddes straight | Eight motorbikes in a row, BLIP on one; MARCO presents them | Trucking along the row, 28 mm | 74 motorbikes | 💬 MARCO: 74 bikes. pick one. · BLIP: ALL ✦ |
+| 20 | 32-33 | 1:23.3-1:28.6 | The Riddes straight | Eight motorbikes in a row, BLIP on one; MARCO presents them | Trucking along the row, 28 mm | 74 motorbikes | MARCO: 74 bikes. pick one. · BLIP: ALL ✦ |
 | 21 | 34 | 1:28.6-1:31.3 | The Furka sweepers | BLIP on the Ducati Monster leans after MARCO's Skyline | Tracking low beside the bike, 35 mm | Motorbikes, a real pass | |
 
 ### Act two b: the afternoon, water and air, bars 35-48
@@ -129,13 +126,13 @@ dialogue, symbols are BLIP's speech; the `sNN_*` ids are the line ids in
 |---|---|---|---|---|---|---|---|
 | 22 | 35-36 | 1:31.3-1:36.6 | Off Chillon castle | BLIP on a jetski and LÉA in a speedboat cross in front of the castle | Water level, 35 mm | Jetski, speedboat | |
 | 23 | 37 | 1:36.6-1:39.3 | Lavaux | The CGN paddle steamer under the vineyards | High on the terraces, 35 mm | The paddle steamer, vineyards | |
-| 24 | 38-39 | 1:39.3-1:44.6 | The shore at Chillon | NINA fishes. BLIP swims up with a pike | From the shore, 28 mm | Fishing, swimming | 💬 NINA: beginner's luck. |
-| 25 | 40-41 | 1:44.6-1:49.9 | Over Interlaken | BLIP's paraglider between the two lakes | Orbiting the canopy, 35 mm | The paraglider | 💬 BLIP: ♪ ♪ ♪ |
-| 26 | 42 | 1:49.9-1:52.6 | Over the Aletsch glacier | BLIP flies the light plane | Wing-man, 35 mm | The light plane | 💬 NINA: it's a natural. |
+| 24 | 38-39 | 1:39.3-1:44.6 | The shore at Nyon | NINA casts (float and line) and lands a perch. BLIP swims up with a pike | Beside NINA, 28 mm | Fishing, swimming | NINA: beginner's luck. |
+| 25 | 40-41 | 1:44.6-1:49.9 | Over Interlaken | BLIP's paraglider between the two lakes | Orbiting the canopy, 35 mm | The paraglider | BLIP: ♪ ♪ ♪ |
+| 26 | 42 | 1:49.9-1:52.6 | Over the Aletsch glacier | BLIP flies the light plane | Wing-man, 35 mm | The light plane | NINA: it's a natural. |
 | 27 | 43 | 1:52.6-1:55.3 | Bern, the Kramgasse | A pigeon swoops down the street toward the Zytglogge; town birds | Chase behind the pigeon, 24 mm | Play as a pigeon, birds | |
-| 28 | 44-45 | 1:55.3-2:00.6 | Above Lutry | BLIP and LÉA sit on the slope above the lake. BLIP is homesick | Behind them, the lake beyond, 35 mm | Lavaux, the lake | 💬 BLIP: ☾ ... ◯ ♥ · LÉA: homesick? |
-| 29 | 46-47 | 2:00.6-2:05.9 | Gornergrat, 3135 m | BLIP takes a photo of the Matterhorn with NINA waving; the polaroid settles | Behind them toward the peak, 35 mm | The real Alps, the camera item and its photo | 💬 BLIP: ◉ ◉ ✦ !!! |
-| 30 | 48 | 2:05.9-2:08.6 | Geneva airport, the military apron | The cargo plane waits with its ramp open, on the riser | Beside the wing, 35 mm | The Battle Royale plane | 💬 NINA: last stop: battle royale. |
+| 28 | 44-45 | 1:55.3-2:00.6 | Above Lutry | BLIP and LÉA on the slope above the lake, their backs to us. BLIP is homesick (a thought bubble) | Behind them, the lake beyond, 35 mm | Lavaux, the lake | BLIP: ☾ ... ◯ ♥ · LÉA: homesick? |
+| 29 | 46-47 | 2:00.6-2:05.9 | Gornergrat, 3135 m | A selfie: BLIP and NINA with the Matterhorn behind them; the polaroid settles | From behind them toward the peak, then onto them, 35 mm | The real Alps, the camera item and its photo | BLIP: ◉ ◉ ✦ !!! |
+| 30 | 48 | 2:05.9-2:08.6 | Geneva airport, the military apron | The cargo plane waits with its ramp open, on the riser | Beside the wing, 35 mm | The Battle Royale plane | NINA: last stop: battle royale. |
 
 ### Act three: Battle Royale and the race (the drop), bars 49-63
 
@@ -144,14 +141,14 @@ dialogue, symbols are BLIP's speech; the `sNN_*` ids are the line ids in
 | 31 | 49 | 2:08.6-2:11.3 | Over the Bernese Alps | On the drop, BLIP leaves the ramp first, the friends after it, in wingsuits | Above the tail, 35 mm | The BR drop, wingsuits | |
 | 32 | 50 | 2:11.3-2:13.9 | Over Lauterbrunnen | Three wingsuits streak past | Static in the air, whip pan, 24 mm | Wingsuit | |
 | 33 | 51 | 2:13.9-2:16.6 | Over the meadow | BLIP pops its parachute | Beside it, 28 mm | Wingsuit to parachute | |
-| 34 | 52 | 2:16.6-2:19.3 | The meadow, 2635900/1159700 | BLIP lands among loot: a vest, a med kit, a shotgun, ammo. It aims a pistol | Low, in front, 28 mm | Loot, items | 💬 BLIP: SHINY ✦ |
+| 34 | 52 | 2:16.6-2:19.3 | The meadow, 2635900/1159700 | BLIP lands among loot: a vest, a med kit, a shotgun, ammo. It aims a pistol | Low, in front, 28 mm | Loot, items | BLIP: SHINY ✦ |
 | 35 | 53-54 | 2:19.3-2:24.6 | Lauterbrunnen street | A fist fight with a bot: guard, jab, kick, uppercut, and the bot goes down | Slow orbit, 28 mm | Fist fights, bots | |
-| 36 | 55-56 | 2:24.6-2:29.9 | Same | The zone's wall closes in. BLIP, LÉA and JONAS run | In front of them, running back, 24 mm | The BR zone, running | 💬 LÉA: the zone! RUN! |
+| 36 | 55-56 | 2:24.6-2:29.9 | Same | The zone's wall closes in. BLIP, LÉA and JONAS run | In front of them, running back, 24 mm | The BR zone, running | LÉA: the zone! RUN! |
 | 37 | 57 | 2:29.9-2:32.6 | Same | BLIP slides at full run | Low beside, 24 mm | The slide | |
-| 38 | 58 | 2:32.6-2:35.3 | Same | Victory pose; MARCO claps, LÉA cheers | Low hero angle, 24 mm | A BR win, emotes | 💬 MARCO: its first game. it WON. |
+| 38 | 58 | 2:32.6-2:35.3 | Same | Victory pose; MARCO claps, LÉA cheers | Low hero angle, 24 mm | A BR win, emotes | MARCO: its first game. it WON. |
 | 39 | 59 | 2:35.3-2:38.0 | The Furka | A race grid of six Initial D cars: MARCO's AE86, BLIP's FD3S, four AI drivers | Low beside the front row, 50 mm | Races, AI drivers, the 30 cars | |
-| 40 | 60-61 | 2:38.0-2:43.3 | The Furka sweepers | From BLIP's seat, the radio on | Cockpit, 28 mm | The cockpit, the car radio | 💬 BLIP: ♪ BLIP ♪ BLOOP ♪ |
-| 41 | 62-63 | 2:43.3-2:48.6 | Over the Rhône bend | From straight above, BLIP dives past MARCO up the inside | Top-down, 80 m, 35 mm | Racecraft | 💬 MARCO: WHO TAUGHT IT THAT?! |
+| 40 | 60-61 | 2:38.0-2:43.3 | The Furka sweepers | From BLIP's seat, the radio on | Cockpit, 28 mm | The cockpit, the car radio | BLIP: ♪ BLIP ♪ BLOOP ♪ |
+| 41 | 62-63 | 2:43.3-2:48.6 | Over the Rhône bend | From straight above, BLIP dives past MARCO up the inside | Top-down, 80 m, 35 mm | Racecraft | MARCO: WHO TAUGHT IT THAT?! |
 
 ### Act four: everything else that moves, bars 64-72
 
@@ -159,26 +156,26 @@ dialogue, symbols are BLIP's speech; the `sNN_*` ids are the line ids in
 |---|---|---|---|---|---|---|---|
 | 42 | 64 | 2:48.6-2:51.3 | The Gotthard pass road | BLIP's Scania leads a PostAuto coach and an army Duro up to a hairpin | High inside the hairpin, 50 mm | Trucks, buses, army vehicles | |
 | 43 | 65 | 2:51.3-2:54.0 | Lauterbrunnen valley | BLIP flies a helicopter up the valley | Chase, 35 mm | The helicopter | |
-| 44 | 66 | 2:54.0-2:56.6 | Geneva runway 23 | BLIP's A320 climbs straight over the camera | On the centreline, 28 mm | Airliners | 💬 BLIP: too slow ◇ |
+| 44 | 66 | 2:54.0-2:56.6 | Geneva runway 23 | BLIP's A320 climbs straight over the camera | On the centreline, 28 mm | Airliners | BLIP: too slow ◇ |
 | 45 | 67 | 2:56.6-2:59.3 | Nyon | NINA's AN-124 low along the shore at sunset | From the lake, 35 mm | The AN-124 | |
 | 46 | 68 | 2:59.3-3:02.0 | The Pully building site | BLIP works the excavator, JONAS the wheel loader, under the tower cranes | Rising from the grass, 35 mm | Building sites, works machines, tower cranes | |
-| 47 | 69-70 | 3:02.0-3:07.3 | The farm's field | BLIP drives the combine, header down; JONAS ploughs with the tractor | Beside them, 35 mm | Farming: tractor, plough, combine | 💬 JONAS: dad will love this. |
-| 48 | 71 | 3:07.3-3:09.9 | By the saucer | 🛸 BLIP mends the saucer with a hammer, a field workbench beside it | Low, beside BLIP, 28 mm | Building with the hammer, crafting | |
+| 47 | 69-70 | 3:02.0-3:07.3 | The farm's field | BLIP drives the combine, header down; JONAS ploughs with the tractor | Beside them, 35 mm | Farming: tractor, plough, combine | JONAS: dad will love this. |
+| 48 | 71 | 3:07.3-3:09.9 | By the saucer | BLIP mends the saucer with a hammer, a field workbench beside it | Low, beside BLIP, 28 mm | Building with the hammer, crafting | |
 | 49 | 72 | 3:09.9-3:12.6 | Lausanne from above Lutry | The sun goes down and the town lights up (time-lapse) | Locked off, 35 mm | Day and night, lit windows | |
 
 ### Act five: the night, the party and the goodbye, bars 73-90
 
 | # | Bars | Time | Place | What happens | Camera | Feature | Dialogue |
 |---|---|---|---|---|---|---|---|
-| 50 | 73-74 | 3:12.6-3:17.9 | The farmyard | Fondue round the campfire. Everyone dances (robot, chicken, griddy, Macarena); JONAS's radio sparkles | Slow orbit, 28 mm | Campfire and cooking, dances, the radio and its CDs, friends together | 💬 BLIP: ♪ ✦ ♪ ✦ ♪ |
-| 51 | 75 | 3:17.9-3:20.6 | Bern, the Kramgasse | Halloween: jack-o'-lanterns at the doors. BLIP wears a pumpkin head, LÉA a witch hat | In front of them, 28 mm | Halloween | 💬 BLIP: MORE HOLIDAYS ✦ |
+| 50 | 73-74 | 3:12.6-3:17.9 | The farmyard | Fondue round the campfire. Everyone dances (robot, chicken, griddy, Macarena); JONAS's radio sparkles | Slow orbit, 28 mm | Campfire and cooking, dances, the radio and its CDs, friends together | BLIP: ♪ ✦ ♪ ✦ ♪ |
+| 51 | 75 | 3:17.9-3:20.6 | Bern, the Kramgasse | Halloween: jack-o'-lanterns at the doors. BLIP wears a pumpkin head, LÉA a witch hat | In front of them, 28 mm | Halloween | BLIP: MORE HOLIDAYS ✦ |
 | 52 | 76 | 3:20.6-3:23.3 | Lauterbrunnen | Christmas: snow on the roofs. BLIP in a Santa hat, MARCO in antlers | In front of them, 28 mm | Christmas | |
-| 53 | 77-78 | 3:23.3-3:28.6 | The farmyard | LÉA shows the day she filmed: the polaroid is the movie studio | Over LÉA's shoulder, 28 mm | The movie studio | 💬 LÉA: we filmed everything. |
-| 54 | 79-80 | 3:28.6-3:33.9 | The field | 🛸 The mothership slides over the mountains, lights chasing round its rim. All look up | Low behind them, tilting up, 24 mm | The mothership | 💬 NINA: your ride. |
-| 55 | 81-82 | 3:33.9-3:39.3 | By the saucer | The souvenirs: LÉA's Swiss flag, MARCO's fondue pot, JONAS's alphorn. BLIP hugs its shark | Slow orbit, 28 mm | Items | 💬 BLIP: merci. danke. grazie. grazia. ✦ |
-| 56 | 83 | 3:39.3-3:42.0 | The ramp | 🛸 BLIP blows the alphorn at the top of the ramp | Low, in front, 28 mm | The alphorn | |
-| 57 | 84-85 | 3:42.0-3:47.3 | The farmyard | 🛸 The saucer lifts off. Its tractor beam takes MARCO's AE86 | From across the yard, tilting up, 28 mm | The UFO's tractor beam | 💬 MARCO: HEY! MY CAR! |
-| 58 | 86 | 3:47.3-3:49.9 | The sky | 🛸 The saucer rises into the mothership, which leaves, a light among the stars | From the field, straight up, 35 mm | The mothership | |
+| 53 | 77-78 | 3:23.3-3:28.6 | The farmyard | LÉA shows the day she filmed: the movie studio's screen over the frame | Over LÉA's shoulder, 28 mm | The movie studio | LÉA: we filmed everything. |
+| 54 | 79-80 | 3:28.6-3:33.9 | The field | The mothership slides over the mountains, lights chasing round its rim. All look up | Low behind them, tilting up, 24 mm | The mothership | NINA: your ride. |
+| 55 | 81-82 | 3:33.9-3:39.3 | By the saucer | The souvenirs: LÉA's Swiss flag, MARCO's fondue pot, JONAS's alphorn. BLIP hugs its shark | Slow orbit, 28 mm | Items | BLIP: merci. danke. grazie. grazia. ✦ |
+| 56 | 83 | 3:39.3-3:42.0 | The ramp | BLIP blows the alphorn at the top of the ramp | Low, in front, 28 mm | The alphorn | |
+| 57 | 84-85 | 3:42.0-3:47.3 | The farmyard | BLIP's saucer hovers over the yard. Its tractor beam takes MARCO's AE86 up | From across the yard, tilting up, 28 mm | The UFO's tractor beam | MARCO: HEY! MY CAR! |
+| 58 | 86 | 3:47.3-3:49.9 | The sky | The saucer rises into the mothership, which leaves, a light among the stars | From the field, straight up, 35 mm | The mothership | |
 | 59 | 87-90 | 3:49.9-4:00.6 | The field | The four in a row looking up and waving; the camera pulls out and up to the stars. Title **UNITSPORT SWITZERLAND** / *The Alien Tourist*, the music credit, fade to black | One long pull-out, 28 mm | Friends together | |
 
 59 shots, 90 bars, 4:00.6.
@@ -189,7 +186,7 @@ dialogue, symbols are BLIP's speech; the `sNN_*` ids are the line ids in
 |---|---|
 | The real Switzerland: terrain, towns, roads, buildings | Every shot. Riddes 1-17, 20, 47-48; Lauterbrunnen 18, 35-38, 43, 52; Zermatt and the Gornergrat 19, 29; Chillon 22, 24; Lavaux 23, 28, 49; Bern 27, 51; Interlaken 25; Aletsch 26; Furka 21, 39-41; Gotthard 42; Geneva 30, 44; Nyon 45; Pully 46 |
 | Building sites, tower cranes, works machines | 46 |
-| The in-game map, the terrain download screen | 14 (screenshot polaroid) |
+| The in-game map | 14 (the game's landing map over the frame) |
 | On foot: walk, run, slide | 4, 5, 15, 36, 37 |
 | Swimming | 24 |
 | Wingsuit, parachute | 31-33 |
@@ -222,61 +219,44 @@ dialogue, symbols are BLIP's speech; the `sNN_*` ids are the line ids in
 | Vending machines | Not staged (see below) |
 | Crafting, cooking, building with the hammer | 48 (hammer, workbench), 50 (campfire, fondue) |
 | Gadgets | 10 (camouflage net) |
-| Farming: tractor, combine, fields | 47 (the machines; see below for the crops) |
+| Farming: tractor, combine, fields, cows | 47 (the machines and a herd; see below for the crops) |
 | Sound, radio, CDs | 50 (held radio playing a CD), 40 |
 | GPX replay | Not staged (see below) |
-| Movie studio | 53 (screenshot polaroid) |
+| Movie studio | 53 (its screen over the frame, a screenshot) |
 | VR | Not staged (see below) |
-| The UFO | 1, 2, 5, 7, 10, 48, 54, 56-58 (stage 2) |
+| The UFO, the mothership, cows | 1, 2, 4, 5, 7, 9, 10, 48, 54-58; cows 10, 47 |
 
 ## What the director needed, and what is still missing
 
-Added for this film (`docs/notes/trailer/director.md`, "More on an actor or a shot"):
+Everything the film stages beyond the director's first shots is the film kit (#882): fights,
+headwear, lowered implements, foot actions, a held radio, swimming, saucer actors and `Craft`,
+`DownRamp`, placed looks, a parked vehicle the beam lifts, herds, the zone, occasions, item cues
+(the fishing line, the alphorn), and the game's own screens over the frame.
 
-- `Cast.Fight` (35, 38)
-- `Cast.Hat` (51, 52)
-- `Cast.Lowered` (47)
-- `Cast.Actions`: the slide (37), and walkers that keep their looks (4, 5, 15, 36)
-- `Cast.Radio` (50)
-- `Prop.Placed`: the campfire, the workbench, the camo net (10, 48, 50, 53)
-- `Shot.Zone` (36, 37)
-- `Shot.Occasion` (51, 52). Its `none` (`/occasion stop halloween`, `/occasion stop christmas`)
-  left giant broken shapes over Riddes in the first stills, so the other shots keep the
-  calendar's occasion. Halloween runs all of September and October, so a render in those months
-  shows its pumpkins everywhere. The stop needs a look in stage 2.
-- `Shot.PhotoFile`: the map and studio screenshots (14, 53)
+Not staged, each with the smallest addition that would do it:
 
-Not staged yet, each with the smallest addition that would do it:
-
-- **A door**: `FromDoor` found no entrance within 40 m of the Riddes farmhouse, so JONAS comes
-  out into the yard instead (shot 3).
 - **Wall jump, base jump from foot**: `Cast.Actions` can press jump, but a wall jump needs a
   run at a wall timed by stills, and a base jump needs a cliff edge. Both are possible with what
-  exists; they were left out of stage 1.
+  exists; they were left out.
 - **Vending machines, shop interiors**: the director cannot film inside. Port
   `ShotRunner.GoInside` to a `Shot.Interior` / `Pt.Inside`.
-- **Fishing's float and line**: `FishingVisuals` finds anglers under `Players`, and actors are not
-  there. The rod pose and the fish are staged.
 - **The car radio**: it has no visual. The film says it with a bubble.
 - **Farm crops**: the built tiles have no `fields_*.fld` (no LWB or OSM field data on the drive),
   so the combine works a plain meadow. Riddes (VS) is in the free LWB cantons, so building
   `--layers fields` for its tiles would show the ripe wheat being cut (`--farmmonth 7`).
-- **GPX replay**: a game mode of its own (`--gpx`), not a world the director films. Its frame
-  could join the film as a screenshot polaroid (`Shot.PhotoFile`), like the map.
+- **GPX replay**: a game mode of its own (`--gpx`), not a world the director films. A screenshot
+  of it could join the film as a screen over the frame (`GameScreen.Png`), like the studio.
 - **VR**: nothing of it shows from outside but tracked hands (`FootPlayer.VrHands`). A
   `Cast.Hands` script would show a player reaching with tracked hands.
 
-## The screenshots (shots 14 and 53)
+## The studio screenshot (shot 53)
 
-The polaroids of shots 14 and 53 are PNGs of the game's own screens. They are made before
-rendering, in the worktree (scratch, not committed):
+The director cannot open the movie studio, so shot 53 shows a PNG of it, made before rendering in
+the worktree (scratch, not committed):
 
 ```
-godot --path . -- --map --uishot test_output/trailer/tourist/screens/map.png 4
 godot --path . -- --world fixture --flycheck plane --moviestudio 13 9 --uishot test_output/trailer/tourist/screens/studio.png 17
 ```
-
-Without them, the polaroid shows the film's own frame.
 
 ## Making it
 
