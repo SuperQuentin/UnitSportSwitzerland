@@ -677,7 +677,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// The replicated properties sent only when they change (ride, seat, items, clothes, …). The movie
     /// recorder (#638) keeps the same set as events: <c>--moviecheck</c> fails if the two drift apart.
     /// </summary>
-    public static readonly string[] OnChangeProperties = { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DanceId", ".:FightPose", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down", ".:RadioVolume" };
+    public static readonly string[] OnChangeProperties = { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DanceId", ".:FightPose", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down", ".:RadioVolume", ".:PhoneState" };
 
     // --- figure animation ---
     private MeshInstance3D? _walker;
@@ -1291,6 +1291,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         replication.AddProperty(".:CarRadio");
         replication.AddProperty(".:CarCd");
         replication.AddProperty(".:RadioVolume");
+        replication.AddProperty(".:PhoneState");
         if (Npc)
         {
             // spawn-only: a peer spawning this NPC after a handoff must learn who simulates it now
@@ -1739,6 +1740,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 UpdateThirdPersonCamera(dt);
             }
             BlendOutCrashCamera(dt);
+            PhoneCamera(dt);
             return;
         }
 
@@ -1791,6 +1793,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         RefreshVisual();
         AnimateRemote((float)delta);
         UpdateSeated();
+        StepPhone((float)delta);
     }
 
     /// <summary>
@@ -1909,6 +1912,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // a throw (#206): wound up with anything, and the follow-through once it has left the hand
         if (ItemAction == 3) return Avatar.ItemArmPose.ThrowWindup;
         if (ItemAction == 4) return Avatar.ItemArmPose.ThrowRelease;
+        // the phone (#889) is in both hands whatever the hotbar holds
+        if (PhoneState != 0) return PhoneState == PhoneOpenState ? Avatar.ItemArmPose.PhoneOpen : Avatar.ItemArmPose.Phone;
         var def = Items.ItemDefs.Get((Items.ItemId)HeldItemId);
         if (def == null) return Avatar.ItemArmPose.None;
         bool aim = ItemAction == 1, use = ItemAction == 2;
@@ -1941,6 +1946,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         // the release whips straight out of the wind-up: no easing out of one into the other
         if (want == Avatar.ItemArmPose.ThrowRelease && _itemArmCur == Avatar.ItemArmPose.ThrowWindup) _itemArmCur = want;
+        // the phone opening or closing keeps it in the hands: the other hand only slides across
+        if (want is Avatar.ItemArmPose.Phone or Avatar.ItemArmPose.PhoneOpen
+            && _itemArmCur is Avatar.ItemArmPose.Phone or Avatar.ItemArmPose.PhoneOpen) _itemArmCur = want;
         if (want != _itemArmCur && _itemArmBlend > 0.02f) target = 0f;   // leave the old pose first
         else if (want != _itemArmCur) _itemArmCur = want;
         _itemArmBlend = Mathf.MoveToward(_itemArmBlend, target, dt / 0.18f);
@@ -2311,7 +2319,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private void StepThrowView(float dt)
     {
-        float want = ScopeView ? 0f : GunAim ? 1f : Mathf.Clamp(ThrowAim, 0f, 1f);
+        // the phone (#889) lends third person too: its camera is laid over this one (PhoneCamera)
+        float want = ScopeView ? 0f : GunAim ? 1f : Mathf.Max(Mathf.Clamp(ThrowAim, 0f, 1f), PhoneLook > 0f ? 1f : 0f);
         float side = Core.GameSettings.Current.LeftShoulder ? -1f : 1f;
         _shoulderSide = Mathf.MoveToward(_shoulderSide, side, dt * 8f);
         _throwBlend = Mathf.Lerp(_throwBlend, want, MathX.Damp(want > _throwBlend ? 9f : 7f, dt));

@@ -58,6 +58,8 @@ public partial class QuickMenu : CanvasLayer
             new("Vehicles", () => !onFoot() ? "On foot only" : Permissions.InMatch ? "Not in a match" : null,
                 () => Press(PlayerInput.RideMenu), () => Key(PlayerInput.RideMenu)),
             new("Map", () => null, () => Press(PlayerInput.Teleport), () => Key(PlayerInput.Teleport)),
+            new("Phone", () => onFoot() ? null : "On foot only", () => Callable.From(() => Phone.PhoneController.Instance?.TakeOut()).CallDeferred(),
+                () => Key(PlayerInput.Phone)),
             new("Emotes", () => emotes() is { CanOpen: true } ? null : "Not now",
                 () => emotes()?.Open(latched: true), () => Key(PlayerInput.EmoteWheel)),
             new("Bird journal", () => null, () => Press(PlayerInput.BirdJournal), () => Key(PlayerInput.BirdJournal)),

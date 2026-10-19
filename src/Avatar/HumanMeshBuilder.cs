@@ -54,6 +54,10 @@ public enum ItemArmPose
     ThrowWindup,
     /// <summary>A throw let go: the item arm whipped through, forward and down, the other arm swung back.</summary>
     ThrowRelease,
+    /// <summary>The folded phone (#889) held up at the chest in both hands, read from the head.</summary>
+    Phone,
+    /// <summary>The phone unfolded (#889): the other hand holds the half that swung open, further across.</summary>
+    PhoneOpen,
 }
 
 /// <summary>Colours for one figure. Kept separate so riders can be told apart at distance.</summary>
@@ -305,6 +309,13 @@ public static partial class HumanMeshBuilder
                 item = new(s * 0.02f, rig.Waist.Y + 0.12f, rig.Chest.Z + 0.52f);
                 support = new(-s * 0.26f, rig.Hip.Y + 0.02f, rig.Hip.Z - 0.14f);
                 dir = new Vector3(0f, -0.4f, 1f); break;
+            case ItemArmPose.Phone:
+            case ItemArmPose.PhoneOpen:
+                // the right hand grips the phone's right edge in front of the chest, the left its other
+                // edge: a hand's width across folded, two once it has opened (#889)
+                item = new(s * 0.07f, rig.Chest.Y - 0.06f, rig.Chest.Z + 0.27f);
+                support = new(-s * (arm == ItemArmPose.Phone ? 0.0f : 0.07f), rig.Chest.Y - 0.07f, rig.Chest.Z + 0.27f);
+                dir = new Vector3(0f, 0.75f, 0.65f); break;
             default:   // Hold
                 item = new(s * 0.19f, rig.Waist.Y + 0.05f, rig.Waist.Z + 0.30f);
                 support = Reduce(rig.WristR, rest);

@@ -758,6 +758,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(new Ui.QuickMenu(() => MenuOpen?.Invoke() == true, () => _onFoot && LocalPlayer is { Ride: Player.RideKind.OnFoot, RidingWith: 0 },
             () => emotes));
         AddChild(new Ui.InviteToasts());
+        // the phone (#889): Up on foot, or the quick menu's Phone
+        AddChild(new Phone.PhoneController(() => _onFoot ? LocalPlayer : null, () => MenuOpen?.Invoke() == true || _places is { IsOpen: true },
+            () => _places, () => GetNodeOrNull<Net.ChatManager>(Net.ChatManager.NodeName)));
         if (Items.InventoryUiProbe.Requested) AddChild(new Items.InventoryUiProbe(items));
         if (Loot.LootSyncProbe.Role != null) AddChild(new Loot.LootSyncProbe(items, origin));
         if (Interiors.SiteOfficeNetProbe.Role != null) AddChild(new Interiors.SiteOfficeNetProbe(items, origin));
