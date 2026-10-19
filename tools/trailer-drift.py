@@ -3,8 +3,10 @@
 
 Compares two track dumps of the trailer director (`TRACKS=DIR tools/trailer.sh ...`, one
 `shotNN.tracks.csv` per shot: every actor and staged object each frame, LV95 metres) and reports,
-per shot and object: the first frame that differs, the largest and the mean position difference,
-the largest yaw difference, how many frames disagree on pose, ride or beam, and a verdict:
+per shot and object: the first frame that differs (the pre-roll's frames are negative: the dump
+starts at the actors' go), then over the roll only (frame 0 on, what the film shows) the largest and
+the mean position difference, the largest yaw difference, how many frames disagree on pose, ride or
+beam, and a verdict (also the roll's):
 
     identical   every row the same to the millimetre and the hundredth of a degree
     sub-cm      positions within 1 cm
@@ -64,7 +66,7 @@ def compare(a_path, b_path, kinds_wanted=None):
             continue
         frames = sorted(set(a[oid]) & set(b[oid]))
         missing = len(set(a[oid]) ^ set(b[oid]))
-        first, total, max_d, max_yaw, states, identical = None, 0.0, 0.0, 0.0, 0, missing == 0
+        first, total, max_d, max_yaw, states, identical, rolled = None, 0.0, 0.0, 0.0, 0, True, 0
         for fr in frames:
             ra, rb = a[oid][fr], b[oid][fr]
             d = math.dist((float(ra["e"]), float(ra["n"]), float(ra["alt"])),
@@ -72,17 +74,21 @@ def compare(a_path, b_path, kinds_wanted=None):
             dy = abs((float(ra["yaw"]) - float(rb["yaw"]) + 180.0) % 360.0 - 180.0)
             state = ra["pose"] != rb["pose"] or ra["ride"] != rb["ride"] or ra["beam"] != rb["beam"]
             same = d == 0.0 and dy == 0.0 and not state and ra["speed"] == rb["speed"]
-            if not same:
-                identical = False
-                if first is None:
-                    first = fr
+            if not same and first is None:
+                first = fr
+            if fr < 0:
+                continue
+            rolled += 1
+            identical &= same
             total += d
             max_d = max(max_d, d)
             max_yaw = max(max_yaw, dy)
             states += state
-        out.append(dict(id=oid, kind=kind, frames=len(frames), first=first, max=max_d,
-                        mean=total / max(1, len(frames)), yaw=max_yaw, states=states, missing=missing,
-                        verdict=verdict(identical, max_d)))
+        roll_missing = len({f for f in set(a[oid]) ^ set(b[oid]) if f >= 0})
+        out.append(dict(id=oid, kind=kind, frames=rolled, first=first, max=max_d if rolled else None,
+                        mean=total / rolled if rolled else None, yaw=max_yaw if rolled else None,
+                        states=states if rolled else None, missing=missing,
+                        verdict=verdict(identical and roll_missing == 0, max_d) if rolled else "pre-roll only"))
     return out
 
 
@@ -121,7 +127,7 @@ def main(argv):
         common = [s for s in common if s in want_shots]
     for s in sorted(set(sa) ^ set(sb)):
         print(f"{s}: only in {'A' if s in sa else 'B'}")
-    head = ["shot", "object", "kind", "frames", "first differing frame", "max", "mean", "max yaw", "state frames", "verdict"]
+    head = ["shot", "object", "kind", "roll frames", "first differing frame", "max", "mean", "max yaw", "state frames", "verdict"]
     if markdown:
         print("| " + " | ".join(head) + " |")
         print("|" + "---|" * len(head))
