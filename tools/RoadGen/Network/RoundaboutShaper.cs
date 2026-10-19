@@ -63,6 +63,8 @@ public static class RoundaboutShaper
     /// </summary>
     public const double DrawnSmall = 1;
     public const double MiniOuter = 11, MiniCentre = 2.4;
+    /// <summary>A closed ring group is taken as a roundabout while its points stray from the fitted circle by at most this share of its radius (RMS).</summary>
+    private const double OvalShare = 0.25;
     /// <summary>An enlarged ring's arm keeps its course from this far outside it (m), run on straight to the ring.</summary>
     private const double ArmCourse = 6;
 
@@ -93,7 +95,8 @@ public static class RoundaboutShaper
             var (centre, radius, rms) = FitCircle(pts);
             bool small = radius >= DrawnSmall && radius < MinRadius;
             if (!(radius >= MinRadius && radius <= MaxRadius) && !small) { stats.BadRadius++; continue; }
-            if (rms > Math.Max(0.4, 0.06 * radius)) { stats.NotRound++; continue; }
+            // (an oval TLM draws for a small roundabout, Sion 2501877,1136672, is one: laid round, #854)
+            if (rms > Math.Max(0.4, OvalShare * radius)) { stats.NotRound++; continue; }
             if (!Closed(group, centre, radius)) { stats.NotClosed++; continue; }
             // a loop drawn small: the ring laid at a mini-roundabout's size about the same centre, its arms' ends moved out onto it
             double drawn = radius;

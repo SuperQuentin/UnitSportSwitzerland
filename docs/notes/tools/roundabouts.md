@@ -59,6 +59,9 @@
   pave a lane a few decimetres past them (`CorePlanner.Pave`, as cores). 168 real tiles: 20 enlarged, rings written whole
   45 -> 61, the old layout 417 -> 374 ("cores overlap" 105 -> 73). Left: on the first Geneva ring the 4 m arms' paths end
   0.4 m off their lane, TLM's street bending 12 degrees just past a mouth.
+- **Ovals** (#854, Sion 2501877,1136672): a closed ring group whose points stray from the fitted circle by up to `OvalShare` a
+  quarter of its radius (RMS) is a roundabout, laid round (TLM draws some small ones as ovals; before: under 6 % of the radius).
+  168 real tiles: old layout 231 -> 229.
 - **Checks**: `RINGDBG=1` prints where a ring's connector leaves its outline (and an arm running past it); the test region
   has a compact ring (`SignalTestRegion.RingE`, radius 8 m, four arms) and a mini one (`MiniRingE`, 5 m, three arms, on a
   tile's edge). 168 real tiles: 81 rings laid whole, 43 written (the others fail a check, or a road joins an arm short of its mouth), 661 junctions left to the old layout in all (760 before).
