@@ -51,6 +51,10 @@ public partial class BrBotProbe : ChatProbe
         var br = Br!;
         Chat!.Send("/login brbots");
         if (!await Until(() => Permissions.IsAdmin, 10)) { Fail("not logged in as admin"); return; }
+        // --brwatchspeed n: the whole simulation n times faster (/speed; the match follows it since #856), so a
+        // full-pace match, in proportion (no zone outrunning the runners), takes a fraction of the wall clock
+        if (CmdArgs.Double("--brwatchspeed") is double speed && speed > 0)
+            Chat.Send(FormattableString.Invariant($"/speed {speed}"));
         Chat.Send($"/br bots {CmdArgs.Int("--brbotwatch") ?? 9} normal");
         await Seconds(0.5);
         // --brwatchmode duos|trios|squads (#837 phase 4): bots in teams

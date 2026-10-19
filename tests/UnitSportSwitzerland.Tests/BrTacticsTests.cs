@@ -104,7 +104,14 @@ public class BrTacticsTests
     public void An_enemy_close_comes_before_a_revive()
     {
         Assert.Equal(BrGoal.Fight, BrTactics.Choose(Calm() with { MateDownedDistance = 30, EnemyDistance = 25, SecondsSinceEnemy = 0 }));
-        Assert.NotEqual(BrGoal.Revive, BrTactics.Choose(Calm() with { MateDownedDistance = 30, SecondsSinceEnemy = 1 }));
+        Assert.NotEqual(BrGoal.Revive, BrTactics.Choose(Calm() with { MateDownedDistance = 60, EnemyNearMate = 15, EnemyDistance = 70, SecondsSinceEnemy = 0 }));
+    }
+
+    [Fact]
+    public void A_far_enemy_does_not_stop_a_revive_but_a_far_mate_is_out_of_reach()
+    {
+        Assert.Equal(BrGoal.Revive, BrTactics.Choose(Calm() with { MateDownedDistance = 90, EnemyDistance = 140, EnemyNearMate = 160, SecondsSinceEnemy = 0 }));
+        Assert.NotEqual(BrGoal.Revive, BrTactics.Choose(Calm() with { MateDownedDistance = 140 }));
     }
 
     [Fact]

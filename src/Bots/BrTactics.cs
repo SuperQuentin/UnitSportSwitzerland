@@ -36,7 +36,8 @@ public readonly record struct BrSituation(
     bool CarriesTag = false,
     float StopDistance = float.PositiveInfinity,
     float PingDistance = float.PositiveInfinity,
-    bool CrateHasTag = false);
+    bool CrateHasTag = false,
+    float EnemyNearMate = float.PositiveInfinity);
 
 /// <summary>
 /// The Battle Royale bot's choices as scores (#837): the highest goal wins. Pure and unit-tested
@@ -48,7 +49,7 @@ public readonly record struct BrSituation(
 /// <item>healing when hurt and no enemy for a few seconds (65 up), a vest when it has none on (60);</item>
 /// <item>loot when unarmed (62) or short of rounds (45), else as greedy as it is;</item>
 /// <item>a shot heard draws the bold (30 to 55); else roam towards the zone (10).</item>
-/// <item>squads: a downed mate revived when no enemy is close (75), a mate's fight joined (60 up), a human's
+/// <item>squads: a downed mate within 120 m revived when no enemy is within 40 m of either (75), a mate's fight joined (60 up), a human's
 /// ping followed (55), a dogtag taken to a stop (90: before loot and an early run for the circle, offered only
 /// while the zone on the way costs less than the health it can spare), the leader rejoined when far (50 to 58).</item>
 /// </list>
@@ -71,9 +72,16 @@ public static class BrTactics
     public const float Stickiness = 12f;
     /// <summary>Further than this from its team's leader, a squad bot goes back.</summary>
     public const float RegroupFrom = 60f;
-    /// <summary>A downed mate this close is worth the walk.</summary>
-    public const float ReviveDraw = 150f;
-    /// <summary>No enemy in sight this close (and none for <see cref="SafeAfter"/> s) before it kneels to revive.</summary>
+    /// <summary>
+    /// A downed mate this close is worth the walk: a downed player bleeds out in 30 s, which is about 20 s of
+    /// running (120 m) and the 5 s hold.
+    /// </summary>
+    public const float ReviveDraw = 120f;
+    /// <summary>
+    /// No enemy in sight this close to the bot or to the downed mate before it goes to revive. Only close ones:
+    /// waiting until no enemy at all had been seen for a few seconds (one 140 m off kept it waiting) let every
+    /// downed mate of a match bleed out (18 downs, no revive).
+    /// </summary>
     public const float ReviveClear = 40f;
     /// <summary>A fallen mate's box with their dogtag draws from this far (the team knows where they fell).</summary>
     public const float TagDraw = 400f;
@@ -123,7 +131,7 @@ public static class BrTactics
 
         // squads: a downed mate first (once nobody is close), a mate's fight, a human's ping, a dogtag to a stop,
         // and back to the leader when far
-        if (s.MateDownedDistance <= ReviveDraw && s.EnemyDistance > ReviveClear && s.SecondsSinceEnemy >= SafeAfter && !s.HurtRecently)
+        if (s.MateDownedDistance <= ReviveDraw && s.EnemyDistance > ReviveClear && s.EnemyNearMate > ReviveClear && !s.HurtRecently)
             Offer(BrGoal.Revive, 75f);
         if (s.MateFightDistance <= AssistDraw && (s.HasGun || s.MateFightDistance <= KnifeRush * 2f))
             Offer(BrGoal.Assist, 60f + 10f * s.Boldness);

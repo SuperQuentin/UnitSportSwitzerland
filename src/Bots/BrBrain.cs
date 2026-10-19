@@ -221,6 +221,7 @@ public sealed class BrBrain : IBotBrain
     private double _reviveFrom;
     private double _pingOutAt;
     private double _stopReportAt;
+    private double _downReportAt;
     private double _pingHereUntil;
     /// <summary>Seconds a bot stays at a human's ping once there.</summary>
     private const double PingLinger = 8;
@@ -253,6 +254,11 @@ public sealed class BrBrain : IBotBrain
             }
         }
         float Dist(Vector3? p) => p is { } v ? v.DistanceTo(pos) : float.PositiveInfinity;
+        if (team.Downed is { } dm && team.DownedBody is { } db && now >= _downReportAt)
+        {
+            _downReportAt = now + 10;
+            GD.Print(FormattableString.Invariant($"[bots] {bot.Body.Name} mate {dm.Name} down {db.GlobalPosition.DistanceTo(pos):F0} m off; enemy {s.EnemyDistance:F0} m, {s.SecondsSinceEnemy:F0} s since one, hurt {s.HurtRecently}, goal {Goal}"));
+        }
         if (bot.Inventory.Contains(ItemId.Dogtag) && _br.NearestStop(pos, bot.Body.Health) == null && now >= _stopReportAt)
         {
             _stopReportAt = now + 10;
@@ -263,10 +269,23 @@ public sealed class BrBrain : IBotBrain
             LeaderDistance = team.LeaderBody is { } l ? l.GlobalPosition.DistanceTo(pos) : float.PositiveInfinity,
             MateDownedDistance = team.DownedBody is { } d ? d.GlobalPosition.DistanceTo(pos) : float.PositiveInfinity,
             MateFightDistance = Dist(team.Fight),
+            EnemyNearMate = team.DownedBody is { } down ? EnemyNear(bot, down.GlobalPosition) : float.PositiveInfinity,
             CarriesTag = bot.Inventory.Contains(ItemId.Dogtag),
             StopDistance = Dist(_br.NearestStop(pos, bot.Body.Health)),
             PingDistance = Dist(_pingAt),
         };
+    }
+
+    /// <summary>The nearest standing enemy it sees to <paramref name="at"/>, m.</summary>
+    private float EnemyNear(Bot bot, Vector3 at)
+    {
+        var state = _br.State;
+        var me = state.Find(bot.Id);
+        float best = float.PositiveInfinity;
+        foreach (var x in bot.Senses.Seen)
+            if (!x.Downed && me != null && state.Find(x.Id) is { Alive: true } e && BrState.Hostile(me, e))
+                best = Math.Min(best, x.At.DistanceTo(at));
+        return best;
     }
 
     /// <summary>To the downed mate, then the hold: <see cref="BrManager.ReviveSeconds"/> beside them, still, and the server stands them up.</summary>
