@@ -53,6 +53,21 @@ public class CollisionReachTests
     }
 
     [Fact]
+    public void At_speed_4_the_look_ahead_covers_four_times_the_ground()
+    {
+        // a canopy sinking 5.9 m/s, 300 m over the ground (#931): 10 real s are 59 m at x1, 236 m at x4, so at x4
+        // its look-ahead is already near the ground (the build runs in real time) while at x1 it is still in the air
+        var x1 = CollisionReach.Ahead(2600500, 1200500, 300, 0, 0, -5.9);
+        var x4 = CollisionReach.Ahead(2600500, 1200500, 300, 0, 0, -5.9, scale: 4);
+        Assert.Equal(241, x1.Alt, 3);
+        Assert.Equal(64, x4.Alt, 3);
+        Assert.True(x1.Alt > CollisionReach.AirGapM);
+        Assert.True(x4.Alt < CollisionReach.AirGapM);
+        // the horizontal clamp holds at any scale
+        Assert.Equal(CollisionReach.LookAheadMaxM, CollisionReach.Ahead(0, 0, 0, 30, 0, 0, scale: 8).E, 3);
+    }
+
+    [Fact]
     public void Nothing_is_wanted_high_in_the_air()
     {
         Assert.False(CollisionReach.Wants(Here, 2600500, 1200500, 2600500, 1200500, airborne: true));
