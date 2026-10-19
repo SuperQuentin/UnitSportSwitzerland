@@ -9,13 +9,18 @@
   a `--occasion halloween` session ran with its loot and hunt only: `active: christmas (..., Gameplay)`.
 - `/occasion stop` tears everything down the same frame: `OccasionDecor` frees each tile's props
   (a tile furnished again, or dropped by a terrain replace, now frees the props it had too),
-  `OccasionCreatures` drops its flocks, `DayNight` writes the globals back to zero. Checked by
-  shots through a `--shot-queue` (lines starting with `/` are chat commands): halloween at boot,
-  stop, start christmas (snow), stop (green again), start halloween (patches back).
+  `OccasionCreatures` drops its flocks, `DayNight` writes the globals back to zero. Checked on the
+  real tiles at Riddes (1980 real tiles, Cartoon) by shots through a `--shot-queue` (lines starting
+  with `/` are chat commands): Halloween at boot, stop + start Christmas (snow, falling snow), stop
+  (green, nothing left over); and on the generated world the same with the commands a shot apart.
 - The "giant broken shapes over Riddes and an upside-down town" seen in the film stills were not the
-  occasion: that run logged 94 `ERROR: timeout waiting for fence` (Metal GPU timeouts with too many
+  occasion. That run logged 94 `ERROR: timeout waiting for fence` (Metal GPU timeouts with too many
   Godot instances on the machine); the same shot with no fence timeout is clean, with or without a
-  stop. A still with that error in its log is not evidence of anything.
+  stop. A still with that error in its log is not evidence of anything. A second suspect, found on
+  the way and independent of occasions (it happens with `--occasion none`): a still camera over
+  Riddes in Cartoon starts logging `Too many instances using shader instance variables` after about
+  40 s, then every frame, and slows to a crawl; when that buffer is full, instances read the wrong
+  instance data. Not fixed here.
 - A shot-queue run whose window is hidden or occluded on macOS writes stale frames (every shot's
   `fps=`/`prims=` line identical): rerun it rather than reading the PNGs.
 - The snow that "carried over" was the director keeping the last shot's occasion when the next shot
