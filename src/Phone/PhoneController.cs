@@ -58,6 +58,9 @@ public partial class PhoneController : Node
     private bool _stowWhenFolded;
     private string _hintShown = "";
 
+    /// <summary>The two screens, for the checks.</summary>
+    internal PhoneScreens Screens => _screens;
+
     public bool IsOut => _stage != Stage.Pocket;
     public bool IsCovering => _stage == Stage.Open;
 
@@ -102,7 +105,8 @@ public partial class PhoneController : Node
         _screens.CallAnswered += Answer;
         _screens.ActivitiesPicked += () => ActivitiesScreen.Open(ActivitiesScreen.Tab.BattleRoyale);
 
-        _overlay = new CanvasLayer { Name = "PhoneOverlay", Layer = 5 };
+        // over the HUD and the chat line, under the shell's pages (40) that open over the phone
+        _overlay = new CanvasLayer { Name = "PhoneOverlay", Layer = 30 };
         AddChild(_overlay);
         _full = new TextureRect
         {
@@ -298,7 +302,8 @@ public partial class PhoneController : Node
     private void ShowHint()
     {
         string text = _stage is Stage.Folded or Stage.Drawing
-            ? InputHints.Format("{phone} open   ‹ › {ui_accept} quick action   {ui_down} put away")
+            ? InputHints.Pad ? "D-pad ↑ open     ← →  choose     A  select     B  put away"
+                : "↑ open     ← →  choose     Enter  select     ↓  put away"
             : "";
         _hint.Visible = text.Length > 0 && !_blocked();
         if (text != _hintShown) _hint.Text = _hintShown = text;

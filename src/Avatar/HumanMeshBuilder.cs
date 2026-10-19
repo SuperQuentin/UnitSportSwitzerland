@@ -314,7 +314,9 @@ public static partial class HumanMeshBuilder
                 // the right hand grips the phone's right edge in front of the chest, the left its other
                 // edge: a hand's width across folded, two once it has opened (#889)
                 item = new(s * 0.07f, rig.Chest.Y - 0.06f, rig.Chest.Z + 0.27f);
-                support = new(-s * (arm == ItemArmPose.Phone ? 0.0f : 0.07f), rig.Chest.Y - 0.07f, rig.Chest.Z + 0.27f);
+                // folded, the left hand cups it from below, its thumb clear of the cover screen
+                support = arm == ItemArmPose.Phone ? new(-s * 0.01f, rig.Chest.Y - 0.15f, rig.Chest.Z + 0.22f)
+                    : new(-s * 0.07f, rig.Chest.Y - 0.07f, rig.Chest.Z + 0.27f);
                 dir = new Vector3(0f, 0.75f, 0.65f); break;
             default:   // Hold
                 item = new(s * 0.19f, rig.Waist.Y + 0.05f, rig.Waist.Z + 0.30f);

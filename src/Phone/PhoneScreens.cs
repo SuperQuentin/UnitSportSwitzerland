@@ -45,7 +45,7 @@ public partial class PhoneScreens : Node
     private PanelContainer _coverCard = null!;
     private StyleBoxFlat _coverCardBox = null!;
     // inner
-    private Control _band = null!;
+    private Control _band = null!, _innerRoot = null!;
     private Label _statusClock = null!;
     private Control _home = null!, _map = null!, _contacts = null!, _travel = null!;
     private Label _homeClock = null!, _homeDate = null!, _travelTitle = null!, _travelDots = null!;
@@ -102,6 +102,7 @@ public partial class PhoneScreens : Node
         float aspect = window.X / window.Y;
         int n = Mathf.Clamp(Mathf.RoundToInt(Mathf.Max(window.X, window.Y) / 8f) * 8, 768, 2560);
         if (Inner.Size.X != n) Inner.Size = new Vector2I(n, n);
+        _innerRoot.Size = new Vector2(n, n);
         var band = new Vector2(n * Mathf.Min(1f, aspect), n / Mathf.Max(1f, aspect));
         _band.Size = band;
         _band.Position = (new Vector2(n, n) - band) * 0.5f;
@@ -111,9 +112,8 @@ public partial class PhoneScreens : Node
 
     private void BuildCover()
     {
-        var root = new Control { Theme = UiTheme.Get() };
-        root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        root.Size = new Vector2(CoverW, CoverH);
+        // sized by hand, not anchored to the viewport: anchored, it took the window's content scale (2x)
+        var root = new Control { Theme = UiTheme.Get(), Size = new Vector2(CoverW, CoverH) };
         Cover.AddChild(root);
         root.AddChild(WallpaperRect());
 
@@ -162,8 +162,7 @@ public partial class PhoneScreens : Node
 
     private void BuildInner()
     {
-        var root = new Control { Theme = UiTheme.Get() };
-        root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        var root = _innerRoot = new Control { Theme = UiTheme.Get(), Size = new Vector2(1024, 1024) };
         Inner.AddChild(root);
         root.AddChild(WallpaperRect());
         _band = new Control { Name = "Band" };
@@ -210,7 +209,7 @@ public partial class PhoneScreens : Node
         row.AddChild(Tile("Activities", "Battle Royale, races", new Color(0.82f, 0.38f, 0.16f), () => ActivitiesPicked?.Invoke()));
         col.AddChild(row);
         col.AddChild(UiKit.Spacer(expand: true));
-        col.AddChild(Hint("{ui_accept} open   {ui_cancel} put the phone away"));
+        col.AddChild(Hint("open", "put the phone away"));
         return col;
     }
 
@@ -252,7 +251,7 @@ public partial class PhoneScreens : Node
         _results.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         scroll.AddChild(_results);
         col.AddChild(scroll);
-        col.AddChild(Hint("{ui_accept} travel there   {ui_cancel} back"));
+        col.AddChild(Hint("travel there", "back"));
         return col;
     }
 
@@ -294,7 +293,7 @@ public partial class PhoneScreens : Node
         list.AddChild(_people);
         scroll.AddChild(list);
         col.AddChild(scroll);
-        col.AddChild(Hint("{ui_accept} call   {ui_cancel} back"));
+        col.AddChild(Hint("call", "back"));
         return col;
     }
 
@@ -432,9 +431,10 @@ public partial class PhoneScreens : Node
 
     private static Label Title(string text) => Big(text, 54);
 
-    private static Label Hint(string format)
+    /// <summary>The page's two keys, named for the device in hand (a menu's accept and back, not the game's actions).</summary>
+    private static Label Hint(string accept, string back)
     {
-        var l = Big(InputHints.Format(format), 22, InkDim);
+        var l = Big(InputHints.Pad ? $"A  {accept}      B  {back}" : $"Enter  {accept}      Esc  {back}", 22, InkDim);
         l.HorizontalAlignment = HorizontalAlignment.Center;
         return l;
     }
