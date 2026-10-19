@@ -691,7 +691,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// The replicated properties sent only when they change (ride, seat, items, clothes, …). The movie
     /// recorder (#638) keeps the same set as events: <c>--moviecheck</c> fails if the two drift apart.
     /// </summary>
-    public static readonly string[] OnChangeProperties = { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DanceId", ".:FightPose", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down", ".:RadioVolume" };
+    public static readonly string[] OnChangeProperties = { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DanceId", ".:FightPose", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down", ".:RadioVolume", ".:PhoneState" };
 
     // --- figure animation ---
     private MeshInstance3D? _walker;
@@ -1305,6 +1305,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         replication.AddProperty(".:CarRadio");
         replication.AddProperty(".:CarCd");
         replication.AddProperty(".:RadioVolume");
+        replication.AddProperty(".:PhoneState");
         if (Npc)
         {
             // spawn-only: a peer spawning this NPC after a handoff must learn who simulates it now
@@ -1754,6 +1755,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 UpdateThirdPersonCamera(dt);
             }
             BlendOutCrashCamera(dt);
+            PhoneCamera(dt);
             return;
         }
 
@@ -1806,6 +1808,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         RefreshVisual();
         AnimateRemote((float)delta);
         UpdateSeated();
+        StepPhone((float)delta);
     }
 
     /// <summary>
@@ -1924,6 +1927,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // a throw (#206): wound up with anything, and the follow-through once it has left the hand
         if (ItemAction == 3) return Avatar.ItemArmPose.ThrowWindup;
         if (ItemAction == 4) return Avatar.ItemArmPose.ThrowRelease;
+        // the phone (#889) is in both hands whatever the hotbar holds
+        if (PhoneState != 0) return PhoneState switch
+        {
+            PhoneCameraState => Avatar.ItemArmPose.PhoneRaised,
+            PhoneSelfieState => Avatar.ItemArmPose.PhoneSelfie,
+            PhoneOpenState => Avatar.ItemArmPose.PhoneOpen,
+            _ => Avatar.ItemArmPose.Phone,
+        };
         var def = Items.ItemDefs.Get((Items.ItemId)HeldItemId);
         if (def == null) return Avatar.ItemArmPose.None;
         bool aim = ItemAction == 1, use = ItemAction == 2;
@@ -1956,6 +1967,32 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         // the release whips straight out of the wind-up: no easing out of one into the other
         if (want == Avatar.ItemArmPose.ThrowRelease && _itemArmCur == Avatar.ItemArmPose.ThrowWindup) _itemArmCur = want;
+        // the phone opening or closing keeps it in the hands: the other hand only slides across. Raised
+        // as a camera, it is the open phone lifted: the blend runs on from 1 to 2 (HumanMeshBuilder.ApplyArms)
+        if (IsPhonePose(want) && IsPhonePose(_itemArmCur))
+        {
+            // the lifted poses (raised as a camera, a selfie) sit on the open one: from one to the other
+            // the phone comes back down to it first
+            static bool Lifted(Avatar.ItemArmPose p) => p is Avatar.ItemArmPose.PhoneRaised or Avatar.ItemArmPose.PhoneSelfie;
+            float goal;
+            if (Lifted(want) && Lifted(_itemArmCur) && want != _itemArmCur)
+            {
+                goal = 1f;
+                if (_itemArmBlend <= 1f) _itemArmCur = want;
+            }
+            else if (Lifted(want))
+            {
+                _itemArmCur = want;
+                goal = 2f;
+            }
+            else
+            {
+                goal = 1f;
+                if (_itemArmBlend <= 1f) _itemArmCur = want;
+            }
+            _itemArmBlend = Mathf.MoveToward(_itemArmBlend, goal, dt / (goal > 1f || _itemArmBlend > 1f ? 0.35f : 0.18f));
+            return;
+        }
         if (want != _itemArmCur && _itemArmBlend > 0.02f) target = 0f;   // leave the old pose first
         else if (want != _itemArmCur) _itemArmCur = want;
         _itemArmBlend = Mathf.MoveToward(_itemArmBlend, target, dt / 0.18f);
@@ -2223,7 +2260,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // VR hands (#439) keyed to 2 cm, so a hand held still does not rebuild the figure
         var vr = PoseKind == PoseStride && dance == null ? VrHands : null;
         if (vr is { } v) vr = new Avatar.HumanMeshBuilder.VrArms(SnapHand(v.Right), SnapHand(v.Left));
-        var key = new FootPoseKey(_walker, PoseKind, Mathf.Round(Anim.X * 100f), _stridePhase, arm, blend, dance, Hat, palette, smooth, vr);
+        // a finger on the phone's screen (#889): the owner's own, keyed to 4 mm
+        Avatar.HumanMeshBuilder.Pointing? point = PoseKind == PoseStride && dance == null && PhonePointTip is { } tip && PhonePointDir is { } way
+            ? new((_walker.ToLocal(tip) / 0.004f).Round() * 0.004f,
+                (((_walker.GlobalBasis.Inverse() * way).Normalized()) / 0.05f).Round() * 0.05f)
+            : null;
+        var key = new FootPoseKey(_walker, PoseKind, Mathf.Round(Anim.X * 100f), _stridePhase, arm, blend, dance, Hat, palette, smooth, vr, point);
         // the hand is placed from fresh mounts every time the pose changes, even while a throttled
         // mesh waits: what carries or aims an item stays exact (cheap: joint math, no mesh)
         if (key != _mountsKey)
@@ -2252,7 +2294,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                     : _airPose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Running, hat: Hat),
                 PoseHang or PoseClimb => Avatar.HumanMeshBuilder.BuildPosed(palette, CarriedFigure(), arm, blend, Hat, _poseMesh ??= new ArrayMesh()),
                 _ => Avatar.HumanMeshBuilder.BuildStride(palette, Anim.X, _stridePhase, hat: Hat, arm: arm, armBlend: blend,
-                    dance: dance, into: _poseMesh ??= new ArrayMesh(), vr: vr),
+                    dance: dance, into: _poseMesh ??= new ArrayMesh(), vr: vr, point: point),
             };
         }
         var mounts = _poseMounts;
@@ -2278,7 +2320,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>What the figure was last built from: the same key, the same mesh (#221).</summary>
     private readonly record struct FootPoseKey(MeshInstance3D Walker, int Kind, float Speed, float Phase,
         Avatar.ItemArmPose Arm, float Blend, Avatar.DanceParams? Dance, Avatar.Headwear Hat, Avatar.HumanPalette Palette,
-        bool Smooth, Avatar.HumanMeshBuilder.VrArms? Vr = null);
+        bool Smooth, Avatar.HumanMeshBuilder.VrArms? Vr = null, Avatar.HumanMeshBuilder.Pointing? Point = null);
 
     /// <summary>A VR hand to the 2 cm the figure is keyed on (#439).</summary>
     private static Vector3 SnapHand(Vector3 p) => (p / 0.02f).Round() * 0.02f;
@@ -2330,7 +2372,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private void StepThrowView(float dt)
     {
-        float want = ScopeView ? 0f : GunAim ? 1f : Mathf.Clamp(ThrowAim, 0f, 1f);
+        // the phone (#889) lends third person too: its camera is laid over this one (PhoneCamera)
+        float want = ScopeView ? 0f : GunAim ? 1f : Mathf.Max(Mathf.Clamp(ThrowAim, 0f, 1f), PhoneLook > 0f ? 1f : 0f);
         float side = Core.GameSettings.Current.LeftShoulder ? -1f : 1f;
         _shoulderSide = Mathf.MoveToward(_shoulderSide, side, dt * 8f);
         _throwBlend = Mathf.Lerp(_throwBlend, want, MathX.Damp(want > _throwBlend ? 9f : 7f, dt));
