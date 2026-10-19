@@ -3,7 +3,7 @@
 
 # One scene format: options
 
-**Status:** exploration (2026-10-19), no code yet. Nicolas asked for "a unified format for rendering
+**Status:** decided 2026-10-19 (see "Decisions" below); phase 1 started (#924). Nicolas asked for "a unified format for rendering
 scenes, defining locations, actions, objects, etc., in order for it to be reproducible without
 being huge". This compares the ways to get there, from what the repo already has.
 
@@ -175,7 +175,18 @@ then zstd. Its header carries the pins it was made with.
    - the playtest recorder and GPX replay write takes;
    - `--shot-queue` becomes a one-shot scene.
 
-## Open questions for Nicolas
+## Decisions (2026-10-19)
+
+- **Option D**: films stay C# scripts (the scene); the director adds takes. A data scene file (A/C)
+  can come later.
+- **The movie studio becomes the editor eventually** (phase 4).
+- **Pins and a measurement first**: phase 1 only, then render a few shots twice (an autopilot car,
+  a scripted saucer, a crash ragdoll, a beam lift; same machine, then another OS if possible) and
+  compare actor tracks. Where takes live (NicoDrive with an index in the repo, NicoDrive only, or
+  Git LFS) is decided from those numbers: a take is exact only on the terrain it was made on, and the
+  terrain is not in the repo, so takes are worth sharing only if re-simulation drifts visibly.
+
+## Open questions (before the decisions)
 
 - Is exact re-rendering (takes) worth a few MB per film, or is "close" (A alone) enough?
 - Should scenes live in the repo (`docs/trailer/*.scene.json`, takes in LFS) or only under `test_output`?
