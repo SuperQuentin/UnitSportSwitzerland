@@ -4391,7 +4391,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             ? RideGround.DraftBehind(GlobalPosition, heading.Rotated(Vector3.Up, _motion.Slip), OtherVehicles()) : 0f;
         if (_ride is Truck driving) PrepareTruck(driving);
         else if (_ride is Car shifting) PrepareCar(shifting);
-        _ride!.Step(input, new RideGround(onFloor, grade, surface, Draft), dt, ref _motion);
+        if (_ride is Skis) LookAtSnow(onFloor);
+        else Slope = null;
+        _ride!.Step(input, new RideGround(onFloor, grade, surface, Draft, _ride is Skis ? _snowFriction : 1f), dt, ref _motion);
         // a wheelie taken over the top (#410): the bike goes on its back, the rider off it
         if (_ride is Motorbike { LoopedOut: true })
         {

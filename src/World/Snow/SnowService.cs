@@ -64,7 +64,17 @@ public partial class SnowService : Node
         if (Instance == this) Instance = null;
     }
 
-    public override void _Ready() => Tick();
+    public override void _Ready()
+    {
+        Tick();
+        // --weather "snow 30" (offline, or a server's starting weather): the /weather words, held
+        if (Deciding && Core.CmdArgs.Value("--weather") is { } words)
+        {
+            string reply = Command(words, mayChange: true, out bool set);
+            if (set) Command("hold", mayChange: true, out _);
+            GD.Print($"[snow] {reply}");
+        }
+    }
 
     private bool Deciding => !NetLink.Online(this) || Multiplayer.IsServer();
 

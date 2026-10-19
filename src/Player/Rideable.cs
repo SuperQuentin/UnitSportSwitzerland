@@ -107,7 +107,9 @@ public readonly record struct RideInput(float Throttle, float Brake, float Steer
 /// Share of the air drag taken away by a vehicle close ahead (slipstream, 0..<see cref="MaxDraft"/>);
 /// the cars and motorbikes read it. <see cref="DraftBehind"/> works it out.
 /// </param>
-public readonly record struct RideGround(bool OnFloor, float Grade, Audio.Surface Surface = Audio.Surface.Asphalt, float Draft = 0f)
+/// <param name="SnowFriction">Skis: the slope's snow against a groomed run's friction (#887), 1 off a slope.</param>
+public readonly record struct RideGround(bool OnFloor, float Grade, Audio.Surface Surface = Audio.Surface.Asphalt, float Draft = 0f,
+    float SnowFriction = 1f)
 {
     /// <summary>Drag taken away right behind another vehicle (2 m): a car in a tow loses 30-45%.</summary>
     public const float MaxDraft = 0.45f;
