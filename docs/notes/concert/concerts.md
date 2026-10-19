@@ -100,3 +100,54 @@
   stadium: A logs in, hosts set 7, turns its input on, plays a controller to its own ports; B gets the
   set, the relayed universes byte for byte, the blackout cue, the release). Seen in the stadium:
   a script reading the patch CSV and sending Art-Net turned every head, wash and screen red.
+
+## The music (`ConcertMusic`)
+
+- A setlist of up to 12 of the server's CDs (`CdLibrary`, positive ids, not the rat beat, over 30 s),
+  shuffled by the event's seed, played back to back with a 6 s gap from the PA hangs
+  (`StagePlan.PaHangs`): `RadioSpeaker`s with a stadium's `Reach` (650 m) and `Unit` (40 m), fetched and
+  kept in sync as a radio's are. The setlist loops on the shared clock (`ServerNow % cycle`): every
+  peer on the same song and second, nothing sent.
+- The desk reads the song (`MusicMoment`): its analysed section (calm, groove, peak, chorus) cues the
+  look, its beat grid clocks the effects, its kick (`RadioGroove`) hits the dimmers, its loudness rides
+  the master (0.6 + 0.4 level); the gap is a blackout. A held section or a blackout from the operator
+  still wins. No CDs: the desk makes its songs up as before.
+- Anyone within 160 m of the stadium dances to it (E): `ConcertRig.MusicNear` in `RadioManager.NearestMusic`.
+
+## The effects (`ConcertSfx`)
+
+- Fixtures with an arm and a fire channel (`Attr.Arm`, `Attr.Fire`): flame projectors and CO2 jets
+  fire while held, confetti cannons, gerbs (4 s fountains) and airbursts once per rising edge; low fog
+  while its pump runs. Counts by genre (`ConcertEvent.Flames` ...). Airbursts burst at 24 m over the
+  open pitch (Geneva's roof forbids pyro under it).
+- The desk cues them from the song (`LightDesk.Effects`): CO2 on a chorus's first two downbeats,
+  flames every two bars in a chorus and on alternate beats at a peak, gerbs as a peak begins, confetti
+  as the song's last section begins, airbursts in the blackout after it, fog in calm verses. By hand:
+  `/concert cue flames|co2|confetti|gerbs|pyro`, OSC `/concert/fx/...`, the desk's buttons: a `Fx` cue
+  stamped with the shared clock, `Fired` on every peer (`LightDesk.FireNow`).
+- CPU particles (unshaded billboards), one shared flame light, synthesised `FlameBank`, `Co2Bank`,
+  `PopBank`, `CrackleBank` (the sound player lists them), the boom and the whoosh for airbursts.
+- Not done: a flame does not hurt someone standing in it (health is the owner's; a client-side zone
+  tick like the BR zone would do it).
+
+## The crowd (`ConcertCrowd`, `shaders/concert/crowd.gdshader`)
+
+- One 36-triangle figure (jeans, shirt, head) instanced in 4 multimeshes: a person every 2 seats, 80 %
+  taken, none behind an end or side stage (`StadiumBuilder.Seats`), and standing on the pitch from the
+  barrier back, densest at the front, never under the stage (`StagePlan.Blocked`). Geneva about 15 k.
+- The shader: a shirt colour each (`INSTANCE_CUSTOM.yzw`), a hop on the beat as hard as the section
+  (`energy`), hands up in a chorus, the rig's light as `tint`. A frame sets 4 uniforms; only during the
+  show; `VisibilityRangeEnd` 700 m. Not in the model viewer (`ConcertRig.WithCrowd = false`).
+
+## The desk screen (`ConcertDeskUi`)
+
+- At the front-of-house console (`StagePlan.Desk`, within 4.5 m): E / Y / VR grip opens it (before the
+  seats and the dance in `TryInteract`), prompt "Light desk", F1 row. Shows the artist, song, section,
+  beat, who runs it, an external feed; buttons: host this set / a new one / release, GO, the sections,
+  follow the song, blackout, tap tempo, the master fader, the effects, Art-Net / sACN / OSC, export
+  the patch. Every button is a `/concert` command through the chat, so the server decides who may.
+  A CanvasLayer (VR shows it on its panel), pad focus on its buttons, Esc closes, 7 m walks away;
+  follows the rig when hosting builds it again.
+- Check: `--concertdeskcheck` on the real tiles (`--chunks <main>/terrain_chunks --at 2498751,1114890
+  --concert 11 --time 22`, windowed for `test_output/concert/desk_*.png`).
+

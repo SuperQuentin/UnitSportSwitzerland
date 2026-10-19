@@ -34,6 +34,7 @@ public partial class ConcertRig : Node3D
     public static readonly Dictionary<string, ConcertRig> Live = new();
 
     public LightDesk Desk => _desk;
+    public StagePlan? Plan => _plan;
     public DmxPatch Patch => _plan.Patch;
 
     /// <summary>

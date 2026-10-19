@@ -22,6 +22,8 @@ public sealed class StagePlan
     public readonly DmxPatch Patch = new();
     /// <summary>Where the PA hangs, stadium frame: where the music comes from.</summary>
     public readonly List<Vector3> PaHangs = new();
+    /// <summary>The lighting desk on the front-of-house riser, stadium frame: where its screen opens.</summary>
+    public Vector3 Desk { get; private set; }
     public readonly ConcertEvent Event;
 
     // stage frame -> stadium frame
@@ -192,6 +194,9 @@ public sealed class StagePlan
         float foh = Math.Max(42f, catwalk + 22f);
         Box(-5f, 5f, 0, 1.2f, foh, foh + 6f, Tent);
         Box(-5f, 5f, 3.6f, 3.8f, foh, foh + 6f, Tent, solid: false);
+        // the consoles, facing the stage
+        Box(-2.5f, 2.5f, 1.2f, 2.15f, foh + 1.2f, foh + 2.2f, Speaker);
+        Desk = At(0, 1.2f, foh + 2.8f);
         foreach (float x in new[] { -4.8f, 4.8f })
             foreach (float z in new[] { foh + 0.2f, foh + 5.8f })
                 Box(x - 0.1f, x + 0.1f, 1.2f, 3.6f, z - 0.1f, z + 0.1f, Truss, solid: false);
@@ -275,6 +280,13 @@ public sealed class StagePlan
         Box(g - 0.3f, g + 0.3f, r, r + TrussSize, -g, g, Truss, solid: false);
         Stairs(0, -hw - 0.2f, -hw - 0.2f - h * 1.6f, h);
         Stairs(0, hw + 0.2f, hw + 0.2f + h * 1.6f, h);
+        // front of house, out on the floor towards the main stand
+        var tent = new Color(0.86f, 0.86f, 0.84f);
+        float foh = hw + 22f;
+        Box(-5f, 5f, 0, 1.2f, foh, foh + 6f, tent);
+        Box(-5f, 5f, 3.6f, 3.8f, foh, foh + 6f, tent, solid: false);
+        Box(-2.5f, 2.5f, 1.2f, 2.15f, foh + 1.2f, foh + 2.2f, Speaker);
+        Desk = At(0, 1.2f, foh + 2.8f);
 
         // the video cube hung over the middle, a face to each quarter
         if (e.HasCenterScreen)

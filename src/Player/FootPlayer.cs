@@ -2669,6 +2669,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (IsOnFloor() && Interiors.InteriorManager.Instance?.TryDoor(this) == true) return true;
         // another player looked at, on foot: challenge them to a fist fight, or take their challenge (#495)
         if (TryEngageFighter()) return true;
+        // a concert's light desk (#885): its screen, at the front-of-house console, by hand too
+        if (IsOnFloor() && Concert.ConcertDeskUi.TryOpen(this)) return true;
         // a stand's row (#885): sit down, by hand too (a VR grip), before music's dance
         if (TrySit()) return true;
         if (byHand) return false;
