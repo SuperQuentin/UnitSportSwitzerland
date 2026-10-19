@@ -124,6 +124,7 @@ public partial class TrailerDirector : Node
     {
         "showcase" => TrailerScript.Shots,
         "drognens" => DrognensScript.Shots,
+        "bubbles" => BubbleDemoScript.Shots,
         _ => StoryScript.Shots,
     };
 
@@ -544,8 +545,14 @@ public partial class TrailerDirector : Node
             string path = Path.Combine(_recordDir, $"shot{shot.Number:00}.mp4");
             _recorder = FrameRecorder.Start(path, _size.X, _size.Y, _fps);
             if (_recorder == null) { _failures++; GD.PrintErr($"[trailer] shot {shot.Number}: no recorder, not filmed"); }
-            // where in the song it starts, for tools/trailer.sh to lay the music under a cut of any shots
-            else File.WriteAllText(Path.ChangeExtension(path, ".start"), shot.Start.ToString("F3", CultureInfo.InvariantCulture));
+            else
+            {
+                // where in the song it starts, for tools/trailer.sh to lay the music under a cut of any shots
+                File.WriteAllText(Path.ChangeExtension(path, ".start"), shot.Start.ToString("F3", CultureInfo.InvariantCulture));
+                // its English lines and the frames they show on, for the cut's subtitle tracks (#862)
+                File.WriteAllText(Path.ChangeExtension(path, ".cues.json"), System.Text.Json.JsonSerializer.Serialize(
+                    new CueFile(shot.Number, _fps, _framesWanted, ShotCues.Of(shot, _fps)), SubtitleTrack.Json));
+            }
         }
         _stills.Clear();
         if (_stillsDir != null)
@@ -559,6 +566,7 @@ public partial class TrailerDirector : Node
             _song.Play((float)shot.Start);
         }
         _captions.SetChat(shot.Chat);
+        _captions.SetBubbles(shot.Bubbles, i => i >= 0 && i < shot.Cast.Count ? shot.Cast[i].Who?.Colour : null);
         _photo = null;
         _photoAsked = false;
         GD.Print(string.Create(CultureInfo.InvariantCulture, $"[trailer] shot {shot.Number}: rolling, {shot.Length:F2} s ({_framesWanted} frames)"));
@@ -598,6 +606,23 @@ public partial class TrailerDirector : Node
             _ = TakePhoto();
         }
         _captions.Show(shot, _t, _photo);
+        _captions.ShowBubbles(_t, shot.Length, _headOnScreen ??= HeadOnScreen);
+    }
+
+    private System.Func<int, Vector2?>? _headOnScreen;
+
+    /// <summary>
+    /// Actor <paramref name="i"/>'s head on the frame, through the film's camera; behind the camera
+    /// it is mirrored to under the frame, so the tail points down and out toward the speaker.
+    /// </summary>
+    private Vector2? HeadOnScreen(int i)
+    {
+        if (i < 0 || i >= _actors.Count || _actors[i].Body is not { } body || !IsInstanceValid(body)) return null;
+        var head = body.HeadTop;
+        var at = _camera.UnprojectPosition(head);
+        if (!_camera.IsPositionBehind(head)) return at;
+        var size = GetViewport().GetVisibleRect().Size;
+        return new Vector2(size.X - at.X, size.Y * 2f);
     }
 
     private async System.Threading.Tasks.Task TakePhoto()

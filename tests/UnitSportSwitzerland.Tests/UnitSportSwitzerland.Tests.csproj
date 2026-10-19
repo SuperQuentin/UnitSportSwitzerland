@@ -192,6 +192,8 @@
     <Compile Include="..\..\src\Avatar\ForkliftLayout.cs;..\..\src\Items\Pallets.cs;..\..\src\Items\SitePallets.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the trailer (#706): its song's bar clock and the cut check -->
     <Compile Include="..\..\src\Trailer\Song.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- speech bubbles and subtitle tracks (#862): bubble geometry and placement, cues to SRT -->
+    <Compile Include="..\..\src\Ui\Bubbles\BubbleGeometry.cs;..\..\src\Ui\Bubbles\BubbleLayout.cs;..\..\src\Trailer\SubtitleTrack.cs" Link="Game\%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

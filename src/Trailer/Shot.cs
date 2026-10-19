@@ -77,7 +77,44 @@ public sealed record Pt
 public sealed record Key(double T, Pt Eye, Pt Look, float Lens = 35f, float Roll = 0f);
 
 /// <summary>A line of text over the picture from <paramref name="T"/> for <paramref name="Seconds"/>.</summary>
-public sealed record Caption(double T, double Seconds, string Text, string? Sub = null, bool Title = false);
+public sealed record Caption(double T, double Seconds, string Text, string? Sub = null, bool Title = false)
+{
+    /// <summary>The subtitles' id of <see cref="Text"/> (and of <see cref="Sub"/>, <see cref="SubId"/>); null: the slug of its English (<see cref="SubtitleTrack.Slug"/>).</summary>
+    public string? Id { get; init; }
+    public string? SubId { get; init; }
+}
+
+/// <summary>
+/// A comic speech bubble (#862): actor <paramref name="Who"/> of the shot says
+/// <paramref name="Text"/> from <paramref name="T"/> s into the shot, its tail on that actor's head
+/// (projected through the shot's camera every frame), the text typing in. It stays
+/// <see cref="Seconds"/>, by default long enough to read (<see cref="Ui.Bubbles.BubbleGeometry.ReadingTime"/>),
+/// never past the shot's end. Bubbles on screen together never overlap.
+/// <code>
+/// Bubbles =
+/// [
+///     new(0.5, 0, "Who took the fondue?!", BubbleShape.Shout),
+///     new(2.0, 1, "Not me...", BubbleShape.Whisper) { Seconds = 2 },
+///     new(3.0, 2, "Mmm. Cheese.", BubbleShape.Think),
+///     new(3.5, -1, "Hello?") { At = new(0.92f, 0.3f) },   // a voice off: the tail to a point of the frame
+/// ],
+/// </code>
+/// </summary>
+public sealed record Bubble(double T, int Who, string Text, Ui.Bubbles.BubbleShape Shape = Ui.Bubbles.BubbleShape.Say)
+{
+    /// <summary>Seconds on screen; NaN: long enough to type and read it.</summary>
+    public double Seconds { get; init; } = double.NaN;
+    /// <summary>A point of the frame the tail goes to instead of an actor's head (0..1 across, 0..1 down): a voice off, a radio.</summary>
+    public Vector2? At { get; init; }
+    /// <summary>A tint washed into the white; null: the speaker's character colour (<see cref="Character.Colour"/>), white for nobody in particular.</summary>
+    public Color? Colour { get; init; }
+    /// <summary>The subtitles' id; null: the slug of its English (<see cref="SubtitleTrack.Slug"/>).</summary>
+    public string? Id { get; init; }
+
+    /// <summary>When it goes, shot time: its <see cref="Seconds"/> or its reading time, at most the shot's end.</summary>
+    public double Until(double shotLength) =>
+        Math.Min(shotLength, T + (double.IsNaN(Seconds) ? Ui.Bubbles.BubbleGeometry.ReadingTime(Text.Length, Shape) : Seconds));
+}
 
 /// <summary>
 /// A person in a story: the name the chat shows in <paramref name="Colour"/>, a face and build
@@ -94,7 +131,11 @@ public sealed record Character(string Name, Color Colour, Avatar.Appearance Look
 /// A line of the in-game chat as dialogue, typed in at <paramref name="T"/>; a null speaker is the
 /// game's own system line ("PIGEON joined the game"). Lines stay up to the end of their shot.
 /// </summary>
-public sealed record Line(double T, Character? Who, string Text);
+public sealed record Line(double T, Character? Who, string Text)
+{
+    /// <summary>The subtitles' id; null: the slug of its English (<see cref="SubtitleTrack.Slug"/>).</summary>
+    public string? Id { get; init; }
+}
 
 /// <summary>A documentary place and time card ("AIROLO · 08:15"), top left, from <paramref name="T"/> for <paramref name="Seconds"/>.</summary>
 public sealed record Super(double T, double Seconds, string Text);
@@ -282,6 +323,8 @@ public sealed record Shot
 
     public IReadOnlyList<Caption> Captions { get; init; } = Array.Empty<Caption>();
     public IReadOnlyList<Line> Chat { get; init; } = Array.Empty<Line>();
+    /// <summary>Comic speech bubbles over the actors' heads (#862), the films' dialogue.</summary>
+    public IReadOnlyList<Bubble> Bubbles { get; init; } = Array.Empty<Bubble>();
     public IReadOnlyList<Super> Supers { get; init; } = Array.Empty<Super>();
     /// <summary>
     /// A film set built for the shot (the dormitory, <see cref="DormSet.Build"/>): put far under
