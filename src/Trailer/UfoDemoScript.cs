@@ -11,11 +11,11 @@ namespace UnitSport.Trailer;
 /// one shot each, on the fixture lake (no map needed):
 /// <c>CHUNKS=fixture:lake ARGS="--at 2600000,1200000 --trailer-allow-generated" FILM=ufo tools/trailer.sh stills</c>.
 /// The beach of the fixture is at <see cref="Beach"/>, the water east of it, open land west.
-/// Its own silent "song" of 120 BPM, nine shots of four bars.
+/// Its own silent "song" of 120 BPM, ten shots of four bars.
 /// </summary>
 public static class UfoDemoScript
 {
-    private static readonly Song Silence = new("UFO kit demo", 120.0, 0.0, 72.0, "", "");
+    private static readonly Song Silence = new("UFO kit demo", 120.0, 0.0, 80.0, "", "");
 
     /// <summary>The fixture's start: a gravel beach, the lake from 40 m east.</summary>
     public static readonly Spot Beach = new(2_600_000, 1_200_000);
@@ -166,6 +166,26 @@ public static class UfoDemoScript
             [
                 new(0, Beach.Toward(90, 31).Toward(200, 4.5f).Up(1.8f), Beach.Toward(90, 41).Toward(0, 3).Up(0.6f), 28),
                 new(8, Beach.Toward(90, 31).Toward(210, 4.5f).Up(1.8f), Beach.Toward(90, 41).Toward(0, 3).Up(0.6f), 28),
+            ],
+            Preroll = 0.5,
+        },
+        new()
+        {
+            Number = 10, Name = "Out of a saucer actor", FromBar = 37, Bars = 4, Hour = 17, Style = "cartoon", Song = Silence,
+            Feature = "Cast.DownRamp = RampOf.Actor: a pilot walks down the ramp of a saucer actor that has landed",
+            Cast =
+            [
+                new() { Ride = RideKind.Ufo, Drive = Drive.Fly, At = Landed.Toward(0, 40), Heading = 90, Flight = Hover },
+                new()
+                {
+                    Who = Zorp, At = Landed.Toward(0, 40), Drive = Drive.Walk, DownRamp = RampOf.Actor(0),
+                    Walk = t => (t > 0.8 && t < 6.5 ? new Vector2(0, 0.45f) : Vector2.Zero, false),
+                },
+            ],
+            Keys =
+            [
+                new(0, Landed.Toward(0, 40).Toward(130, 13).Up(1.7f), Landed.Toward(0, 40).Toward(90, 3).Up(1.6f), 30),
+                new(8, Landed.Toward(0, 40).Toward(120, 12).Up(1.6f), Landed.Toward(0, 40).Toward(90, 6).Up(1.4f), 30),
             ],
             Preroll = 0.5,
         },
