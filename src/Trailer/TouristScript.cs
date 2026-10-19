@@ -371,8 +371,8 @@ public static class TouristScript
             ],
             Keys =
             [
-                new(0, Ground(IkeaDoor, 20, 24, 2.6f), Pt.On(0, -3f, 3f), 24),
-                new(5.3, Ground(IkeaDoor, 22, 25, 2.8f), Pt.On(0, -3f, 3.2f), 24),
+                new(0, Ground(IkeaDoor, 340, 20, 1.8f), Pt.On(0, 0f, 1.5f), 28),
+                new(5.3, Ground(IkeaDoor, 338, 20, 1.8f), Pt.On(0, 0f, 1.5f), 28),
             ],
             Smooth = 0.3f, Preroll = 0.5,
             Bubbles = [Say(2.0, 1, "s15_shark")],
@@ -1048,18 +1048,18 @@ public static class TouristScript
             [
                 new()
                 {
-                    Who = Blip, At = Crash, DownRamp = RampOf.Craft(0), Item = (int)ItemId.Alphorn, Use = t => t > 1.6,
-                    Drive = Drive.Walk, Walk = t => (t < 1.4 ? new Vector2(0f, 0.45f) : Vector2.Zero, false),
+                    Who = Blip, At = Crash, DownRamp = RampOf.Craft(0), Item = (int)ItemId.Alphorn, Use = t => t > 3.4,
+                    Drive = Drive.Walk, Walk = t => (t < 3.2 ? new Vector2(0f, 0.45f) : Vector2.Zero, false),
                 },
             ],
             Craft = [Mended(ramp: true)],
-            ItemCues = [new ItemCue(1.2, 0, ItemEventKind.Horn)],
+            ItemCues = [new ItemCue(0.6, 0, ItemEventKind.Horn)],
             Keys =
             [
                 new(0, Ground(Crash, SaucerFront, 9, 1.7f), Pt.On(0, 0f, 1.5f), 35),
                 new(2.67, Ground(Crash, SaucerFront, 8.5f, 1.6f), Pt.On(0, 0f, 1.6f), 35),
             ],
-            Preroll = 0.5,
+            Preroll = 3,
         },
         new()
         {
