@@ -114,6 +114,13 @@
   still wins. No CDs: the desk makes its songs up as before.
 - Anyone within 160 m of the stadium dances to it (E): `ConcertRig.MusicNear` in `RadioManager.NearestMusic`.
 
+- The song's finer bands (`MusicMoment.Snare/Hat/Bass/Bright/Build/SinceDrop`, CD analysis v2,
+  `docs/notes/audio/cd-beat.md`) ride over the section's look (`LightDesk.Accents`): a snare pops the
+  strobes, the hats sparkle the pixel bars, the bass holds the groove washes up, brightness lifts the
+  beams; a build sinks the washes, closes the beams and lifts them to the sky, speeds the strobes and
+  fills the pixel bars; the drop hits the blinders and fires CO2, flames and gerbs on its first beat.
+  Looks move per beat and bar (wash sway 0.5..2 cycles a beat, beam fans per bar, chases over two beats).
+
 ## The effects (`ConcertSfx`)
 
 - Fixtures with an arm and a fire channel (`Attr.Arm`, `Attr.Fire`): flame projectors and CO2 jets

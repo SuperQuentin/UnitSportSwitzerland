@@ -45,6 +45,9 @@ public sealed class LightDesk
     private readonly Func<int, Color> _walkInWash, _walkInPixels, _calmWash, _calmPixels, _grooveWash, _groovePixels,
         _chorusWash, _chorusPixels, _peakWash, _peakPixels;
     private readonly Func<int, float> _grooveChase, _full, _floorGroove;
+    private readonly Func<int, Color> _buildPixels;
+    /// <summary>The pixel bars' level now: the hats sparkle them (1 without the song's bands).</summary>
+    private float _pixelGain = 1f, _buildFill;
 
     public LightDesk(StagePlan plan)
     {
@@ -69,6 +72,7 @@ public sealed class LightDesk
         _grooveChase = i => Chase(i, _n, Beat, 0.35f);
         _full = i => 1f;
         _floorGroove = i => 0.8f;
+        _buildPixels = i => (i % 8) < _buildFill * 8f ? Colors.White : _pal[0] * 0.1f;
     }
 
     /// <summary>The section playing at a moment of the show (seconds since it started; negative before).</summary>
@@ -142,6 +146,10 @@ public sealed class LightDesk
         float kick = Music is { } song ? Math.Max(song.Kick, 0.25f * MathF.Exp(-ph * 5f)) : MathF.Exp(-ph * 5f);
         int beatN = _beatN = (int)MathF.Floor(beat);
         _n = G(RigGroup.MidTruss).Length;
+        // the song's finer bands (CdAnalysis v2): the bass under the washes, the brightness lifting the beams
+        var bands = Music is { HasBands: true } mb ? mb : (MusicMoment?)null;
+        float bass = bands?.Bass ?? 0.5f, lift = ((bands?.Bright ?? 0.5f) - 0.5f) * 20f;
+        _pixelGain = bands is { } hb ? 0.45f + 1.1f * hb.Hat : 1f;
         var p = _plan.Patch;
 
         // the haze is always on during a show: it is what makes beams visible
@@ -175,11 +183,11 @@ public sealed class LightDesk
                 break;
 
             case ShowSection.Groove:
-                Washes(0.6f + 0.4f * kick, _grooveWash, tilt: 30f, sway: 15f, speed: 1f, beat);
+                Washes(0.45f + 0.25f * bass + 0.3f * kick, _grooveWash, tilt: 30f, sway: 15f, speed: 1f, beat);
                 Spots(0.7f, _pal[2], aimCentre: false, beat, zoom: 0.4f);
                 // the beams: a fan that breathes with the bar, a chase over it on every beat
                 Beams(RigGroup.MidTruss, _grooveChase, _pal[1],
-                    fan: 35f + 15f * MathF.Sin(bar * MathF.Tau), tilt: 25f + 15f * MathF.Sin(beat * MathF.PI / 2f), open: true);
+                    fan: 35f + 15f * MathF.Sin(bar * MathF.Tau), tilt: 25f + lift + 15f * MathF.Sin(beat * MathF.PI / 2f), open: true);
                 Beams(RigGroup.Floor, _floorGroove, _pal[0], fan: 20f, tilt: 20f + 10f * MathF.Sin(beat * MathF.PI / 2f), open: true);
                 Off(RigGroup.Blinders); Off(RigGroup.Strobes);
                 Pixels(_groovePixels);
@@ -189,7 +197,7 @@ public sealed class LightDesk
             case ShowSection.Chorus:
                 Washes(1f, _chorusWash, tilt: 35f, sway: 20f, speed: 1f, beat);
                 Spots(1f, Colors.White, aimCentre: false, beat, zoom: 0.6f);
-                Beams(RigGroup.MidTruss, _full, _pal[(beatN / 4) % 2 == 0 ? 0 : 2], fan: 55f, tilt: 40f, open: true);
+                Beams(RigGroup.MidTruss, _full, _pal[(beatN / 4) % 2 == 0 ? 0 : 2], fan: 55f, tilt: 40f + lift, open: true);
                 Beams(RigGroup.Floor, _full, Colors.White, fan: 40f, tilt: 10f + 25f * barPh, open: true);
                 // the blinders hit the crowd on every downbeat
                 Blinders(barPh < 0.25f ? MathF.Exp(-barPh * 12f) : 0f);
@@ -210,7 +218,33 @@ public sealed class LightDesk
                 Screens(clip: 4, speed: _e.Bpm / 60f, Colors.White, _pal[1], 1f);
                 break;
         }
+        if (bands is { } m && Section is not (ShowSection.Blackout or ShowSection.WalkIn)) Accents(m, beat);
         Effects(beat);
+    }
+
+    /// <summary>
+    /// What the song's finer analysis adds over the section's look: a snare hit pops the strobes, a
+    /// build into a drop sinks the washes, lifts the beams to the sky and closes them, speeds the
+    /// strobes up and fills the pixel bars; the drop hits the crowd with the blinders (and fires the
+    /// CO2, the flames and the gerbs, <see cref="Effects"/>).
+    /// </summary>
+    private void Accents(MusicMoment m, float beat)
+    {
+        if (m.Build > 0f)
+        {
+            float b = m.Build;
+            Washes(0.5f * (1f - b) + 0.05f, _grooveWash, tilt: 30f, sway: 15f * (1f - b), speed: 1f + b, beat);
+            Beams(RigGroup.MidTruss, _full, Colors.White, fan: 30f * (1f - b) + 3f, tilt: 20f + 60f * b, open: true);
+            Beams(RigGroup.Floor, _full, _pal[1], fan: 20f * (1f - b) + 2f, tilt: 10f + 70f * b, open: true);
+            Strobes(b, rate: 0.15f + 0.85f * b);
+            _buildFill = b;
+            Pixels(_buildPixels);
+            Off(RigGroup.Blinders);
+        }
+        else if (Section != ShowSection.Peak && m.Snare > 0.45f)
+            Strobes(m.Snare, rate: 1f);
+        if (m.SinceDrop < 2.5f)
+            Blinders(MathF.Exp(-m.SinceDrop * 1.5f));
     }
 
     /// <summary>
@@ -238,6 +272,7 @@ public sealed class LightDesk
         }
         _fx.Beat = beatN; _fx.BeatPh = ph; _fx.BarPh = barPh; _fx.Bar = SectionBar; _fx.Chorus = chorus; _fx.Peak = peak;
         _fx.Last = LastSection; _fx.Blackout = Section == ShowSection.Blackout;
+        _fx.Drop = live && Music is { SinceDrop: < 0.6f };
         Fire(RigGroup.Co2, _fx.Co2);
         Fire(RigGroup.Flames, _fx.Flames);
         Fire(RigGroup.Gerbs, _fx.Gerbs);
@@ -255,14 +290,15 @@ public sealed class LightDesk
     {
         public int Beat, Bar;
         public float BeatPh, BarPh;
-        public bool Chorus, Peak, Last, Blackout;
+        public bool Chorus, Peak, Last, Blackout, Drop;
         public readonly Func<int, bool> Co2, Flames, Gerbs, Confetti, Airbursts;
 
         public FxMoment()
         {
-            Co2 = i => Chorus && Bar < 2 && BarPh < 0.12f;
-            Flames = i => (Chorus && Bar % 2 == 0 && BarPh < 0.1f) || (Peak && BeatPh < 0.35f && (Beat + i) % 2 == 0);
-            Gerbs = i => Peak && Bar == 0;
+            // a drop fires the CO2, the flames and the gerbs together, on its first beat
+            Co2 = i => Drop || Chorus && Bar < 2 && BarPh < 0.12f;
+            Flames = i => Drop || (Chorus && Bar % 2 == 0 && BarPh < 0.1f) || (Peak && BeatPh < 0.35f && (Beat + i) % 2 == 0);
+            Gerbs = i => Drop || Peak && Bar == 0;
             Confetti = i => Chorus && Last && Bar == 0;
             Airbursts = i => Blackout;
         }
@@ -423,7 +459,7 @@ public sealed class LightDesk
         foreach (var f in G(RigGroup.PixelBars))
             for (int c = 0; c < 8; c++)
             {
-                var col = cell(c + f.Id);
+                var col = cell(c + f.Id) * _pixelGain;
                 _plan.Patch.Set(f, c * 3, (byte)(Math.Clamp(col.R, 0, 1) * 255));
                 _plan.Patch.Set(f, c * 3 + 1, (byte)(Math.Clamp(col.G, 0, 1) * 255));
                 _plan.Patch.Set(f, c * 3 + 2, (byte)(Math.Clamp(col.B, 0, 1) * 255));
