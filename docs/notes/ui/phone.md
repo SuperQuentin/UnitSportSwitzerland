@@ -108,3 +108,22 @@
   server with Join / Leave (`RaceManager.RequestRows` once a second, rebuilt on change), "Start a 2 km
   race here"; the **Menu** app still opens the full Activities screen.
 
+## Photos, wallpapers, selfies (the third pass)
+
+- **Keys lead the finger**: WASD / the arrows no longer swipe: the finger hovers over what is selected
+  (the inner screen's focus, `PhoneScreens.FocusUv`; folded, the quick-action card, `CoverCardUv`) and taps
+  it on Enter. A mouse move hands the finger back to the cursor.
+- **Photos app** (`Page.Photos` grid of the album's newest 60, `Page.Photo` one big): "Set as lock screen"
+  (the cover) and "Set as home screen" (inside). `PhoneWallpaper`: the choice in `photos/phone.json`
+  beside the album (`--photo-dir` moves it); a shot is shown whole from its source frame when the PNG is
+  still there, else the print's picture without its border (an `AtlasTexture` on `PhotoStore.ImageRect`).
+  A light shade lies over a photo wallpaper so the clock reads.
+- **Zoom glides**: the lens's FOV eases to the step picked (`Damp(7)`), the shot taken at the FOV shown.
+- **Selfie, the foldable's way**: in the camera app F / right click / pad Y / the Selfie button turns the
+  open phone half round about its middle (`PhoneState` 4, `_phoneTurn` eased on every peer, held 10 cm
+  further out): the camera island and the cover screen, which faces the same way once open, face the
+  player. The cover stays lit open (`PhoneModel.CoverWhenOpen`) and shows the main camera's view (the
+  finder resized to the cover's shape, 80° up it); the lens sees the owner's body (`OwnBody.Layer` added to
+  its cull mask). The game camera sits by the face looking at the cover (`PhoneSelfieView`). Shots go to
+  the album as any.
+

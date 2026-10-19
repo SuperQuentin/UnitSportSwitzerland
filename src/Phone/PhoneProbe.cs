@@ -118,8 +118,34 @@ public partial class PhoneProbe : Node
         await Key(Godot.Key.Enter, 1.5);
         Check(phone.LastPhoto != null && Items.PhotoStore.Has(phone.LastPhoto), $"Enter takes a photo into the album ({phone.LastPhoto})");
         Save(phone.Screens.Inner, "phone_8_camera_screen.png");
+
+        // a selfie, the foldable's way: F turns the open phone round, the main camera films the player, the cover shows it
+        string? first = phone.LastPhoto;
+        await Key(Godot.Key.F, 1.0);
+        Check(me.PhoneState == FootPlayer.PhoneSelfieState, $"F turns the phone round for a selfie (state {me.PhoneState})");
+        Shot("phone_9_selfie.png");
+        await Key(Godot.Key.Enter, 1.5);
+        Check(phone.LastPhoto != null && phone.LastPhoto != first, $"Enter takes the selfie ({phone.LastPhoto})");
+        Save(phone.Screens.Cover, "phone_9_selfie_cover.png");
+        await Key(Godot.Key.F, 0.8);
+        Check(me.PhoneState == FootPlayer.PhoneCameraState, "F turns it back");
         await Key(Godot.Key.Escape, 0.8);
         Check(me.PhoneState == FootPlayer.PhoneOpenState, "Esc goes back to the home screen");
+
+        // the Photos app: the shots, one opened, set as the home screen with the keys
+        phone.Open(PhoneScreens.Page.Photos);
+        await Wait(0.6);
+        Check(phone.Screens.Shown == PhoneScreens.Page.Photos, "the Photos app opens");
+        Shot("phone_10_photos.png");
+        await Key(Godot.Key.Enter, 0.5);
+        Check(phone.Screens.Shown == PhoneScreens.Page.Photo, "Enter opens the newest photo");
+        await Key(Godot.Key.D, 0.3);
+        Shot("phone_11_photo.png");
+        await Key(Godot.Key.Enter, 0.5);
+        Check(phone.Wallpapers.Home == phone.LastPhoto, $"set as the home screen ({phone.Wallpapers.Home})");
+        await Key(Godot.Key.Escape, 0.4);
+        await Key(Godot.Key.Escape, 0.6);
+        Shot("phone_12_home_wallpaper.png");
 
         // travel while open: behind the phone once the world is dark, and the phone folds away there
         var from = me.GlobalPosition;

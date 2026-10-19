@@ -41,6 +41,8 @@ public partial class PhoneController : Node
     private const double TravelTimeout = 20.0;
     /// <summary>The fingertip above the glass while it hovers, and on it while it touches (metres).</summary>
     private const float Hover = 0.016f, Touching = 0.002f;
+    /// <summary>The main camera's field of view for a selfie, up the tall cover screen.</summary>
+    private const float SelfieFov = 80f;
     /// <summary>A mouse drag longer than this (window pixels) is a swipe, not a click.</summary>
     private const float SwipePixels = 14f;
 
@@ -69,11 +71,14 @@ public partial class PhoneController : Node
     private string _hintShown = "";
     private InviteService? _invites;
 
-    // the finger: where the cursor points on the screen in view, the touch, a WASD swipe
+    // the finger: where the cursor points on the screen in view, or (led by the keys) over what is selected
     private Vector2? _cursorUv;
-    private bool _cursorOnCover;
-    private float _touch, _swipeT = -1f;
-    private Vector2 _swipeFrom, _swipeDir;
+    private bool _cursorOnCover, _keysLead;
+    private float _touch;
+    private double _tapUntil;
+    /// <summary>The camera app turned round: the main camera films you, the cover shows you.</summary>
+    private bool _selfie;
+    private PhoneWallpaper.Choice _walls = new();
     // a mouse press waiting to be a click or a swipe
     private bool _pressed, _dragging;
     private Vector2 _pressAt, _lastAt;
@@ -135,7 +140,15 @@ public partial class PhoneController : Node
         _screens.CallAnswered += Answer;
         _screens.ActivitiesPicked += () => ActivitiesScreen.Open(ActivitiesScreen.Tab.BattleRoyale);
         _screens.ShutterPressed += () => _ = TakePhoto();
-        _screens.PageShown += _ => Grip();
+        _screens.SelfiePressed += () => SetSelfie(!_selfie);
+        _screens.WallpaperPicked += SetWallpaper;
+        _screens.PageShown += page =>
+        {
+            if (page != PhoneScreens.Page.Camera && _selfie) SetSelfie(false);
+            Grip();
+        };
+        _walls = PhoneWallpaper.Load();
+        Callable.From(ApplyWallpapers).CallDeferred();
 
         var hud = new CanvasLayer { Name = "PhoneHints", Layer = 5 };
         AddChild(hud);
@@ -179,7 +192,19 @@ public partial class PhoneController : Node
     /// <summary>Back from an app to home; from home, folds the phone.</summary>
     private void Back()
     {
-        if (_screens.Shown is PhoneScreens.Page.Map or PhoneScreens.Page.Contacts or PhoneScreens.Page.Camera or PhoneScreens.Page.Activities)
+        if (_screens.Shown == PhoneScreens.Page.Photo)
+        {
+            _screens.ShowPage(PhoneScreens.Page.Photos);
+            Play(PhoneSounds.Tap);
+            return;
+        }
+        if (_selfie)
+        {
+            SetSelfie(false);
+            return;
+        }
+        if (_screens.Shown is PhoneScreens.Page.Map or PhoneScreens.Page.Contacts or PhoneScreens.Page.Camera or PhoneScreens.Page.Activities
+            or PhoneScreens.Page.Photos)
         {
             _screens.ShowPage(PhoneScreens.Page.Home);
             Play(PhoneSounds.Tap);
@@ -225,6 +250,7 @@ public partial class PhoneController : Node
         _stowWhenFolded = false;
         _cursorUv = null;
         _pressed = _dragging = false;
+        if (_selfie) SetSelfie(false);
         _screens.SetActive(false);
         _hint.Visible = false;
         Grip();
@@ -310,7 +336,8 @@ public partial class PhoneController : Node
         }
 
         p.PhoneState = !open ? FootPlayer.PhoneFoldedState
-            : _screens.Shown == PhoneScreens.Page.Camera ? FootPlayer.PhoneCameraState : FootPlayer.PhoneOpenState;
+            : _screens.Shown == PhoneScreens.Page.Camera ? _selfie ? FootPlayer.PhoneSelfieState : FootPlayer.PhoneCameraState
+            : FootPlayer.PhoneOpenState;
         p.PhoneLook = _look;
         p.PhoneCover = _cover;
         p.PhoneFold = _fold;
@@ -324,7 +351,7 @@ public partial class PhoneController : Node
         _screens.SetActive(true);
         _screens.Fit(GetWindow().Size);
         if (p.PhoneModel is { HasLiveScreens: false } model) model.SetScreens(_screens.Cover.GetTexture(), _screens.Inner.GetTexture());
-        if (_screens.Shown == PhoneScreens.Page.Camera) AimLens(p);
+        if (_screens.Shown == PhoneScreens.Page.Camera) AimLens(p, dt);
         _screens.Tick(ClockText(), DateText(), dt);
         RefreshQuick();
         _screens.ShowCover(_quicks, _quick);
@@ -364,40 +391,57 @@ public partial class PhoneController : Node
         bool hands = _stage is Stage.Folded or Stage.Open && _cover <= 0f && _camApp <= 0f;
         Vector2? uv = null;
         bool cover = _cursorOnCover;
-        if (_swipeT >= 0f)
+        if (_keysLead)
         {
-            _swipeT += dt / 0.24f;
-            float t = Mathf.Clamp(_swipeT, 0f, 1f);
-            uv = _swipeFrom + _swipeDir * (Mathf.SmoothStep(0f, 1f, t) * 0.32f);
+            // led by the keys: over what is selected (the cover's quick action; the inner screen's focus)
             cover = _stage == Stage.Folded;
-            if (_swipeT >= 1f) _swipeT = -1f;
+            uv = cover ? _screens.CoverCardUv() : _screens.FocusUv();
         }
         else if (_cursorUv is { } c && c.X is > -0.2f and < 1.2f && c.Y is > -0.2f and < 1.2f) uv = c;
-        bool down = _swipeT >= 0f && _swipeT is > 0.15f and < 0.85f || _pressed;
+        bool down = _pressed || RealClock.Now < _tapUntil;
         _touch = Mathf.MoveToward(_touch, down ? 1f : 0f, dt / 0.08f);
         p.PhonePointTip = hands && uv is { } at ? p.PhoneScreenToWorld(at, cover, Mathf.Lerp(Hover, Touching, _touch)) : null;
         p.PhonePointDir = p.PhonePointTip != null ? p.PhoneFingerWay() : null;
     }
 
-    /// <summary>A WASD swipe: the finger runs across the screen from the middle (or the cursor) along <paramref name="dir"/>.</summary>
-    private void Swipe(Vector2 dir)
+    /// <summary>A key pressed what is selected: the finger taps it.</summary>
+    private void Tap() => _tapUntil = RealClock.Now + 0.16;
+
+    // ------------------------------------------------------------------ photos and wallpapers
+
+    private void SetWallpaper(string id, bool lockScreen)
     {
-        _swipeFrom = (_cursorUv is { } c && c.X is >= 0f and <= 1f && c.Y is >= 0f and <= 1f ? c : new Vector2(0.5f, 0.5f)) - dir * 0.16f;
-        _swipeDir = dir;
-        _swipeT = 0f;
+        _walls = lockScreen ? _walls with { Lock = id } : _walls with { Home = id };
+        PhoneWallpaper.Save(_walls);
+        ApplyWallpapers();
+        Play(PhoneSounds.Tap);
+        InviteToasts.Instance?.Flash(lockScreen ? "Set as the lock screen" : "Set as the home screen");
+        GD.Print($"[phone] wallpaper {(lockScreen ? "lock" : "home")} = {id}");
     }
+
+    private void ApplyWallpapers() => _screens.SetWallpapers(
+        _walls.Lock is { } l ? PhoneWallpaper.FullOf(l) : null,
+        _walls.Home is { } h ? PhoneWallpaper.FullOf(h) : null);
+
+    /// <summary>The wallpapers chosen now, for the checks.</summary>
+    internal PhoneWallpaper.Choice Wallpapers => _walls;
 
     // ------------------------------------------------------------------ the camera app
 
-    /// <summary>The back lens where the phone's is, looking out of its back, at the app's zoom.</summary>
-    private void AimLens(FootPlayer p)
+    /// <summary>
+    /// The back lens where the phone's is, looking out of its back, its zoom gliding to the step picked.
+    /// Turned for a selfie it films its owner, whose body the eye's camera leaves out (drawn from the eye).
+    /// </summary>
+    private void AimLens(FootPlayer p, float dt)
     {
         if (p.PhoneModel is not { Visible: true } phone || p.CameraOrNull is not { } eye) return;
         var lens = _screens.Lens;
         lens.GlobalTransform = phone.GlobalTransform.Orthonormalized() * new Transform3D(Basis.Identity, PhoneModel.LensPoint);
-        lens.Fov = _screens.LensFovNow;
-        // what the eye sees, less the viewmodel layer
-        lens.CullMask = eye.CullMask & ~Items.HeldItemVisual.ViewmodelLayer;
+        // a zoom eases in, as a phone's does between its lenses
+        // a selfie wide, at arm's length the face and what is behind it; a zoom eases in, as a phone's does between its lenses
+        lens.Fov = Mathf.Lerp(lens.Fov, _selfie ? SelfieFov : _screens.LensFovNow, MathX.Damp(7f, dt));
+        // what the eye sees, less the viewmodel layer; a selfie also sees the body the eye leaves out
+        lens.CullMask = (eye.CullMask | (_selfie ? Avatar.OwnBody.Layer : 0u)) & ~Items.HeldItemVisual.ViewmodelLayer;
         if (lens.Environment != eye.Environment) lens.Environment = eye.Environment;
         if (lens.Attributes != eye.Attributes) lens.Attributes = eye.Attributes;
     }
@@ -410,7 +454,7 @@ public partial class PhoneController : Node
         try
         {
             Play(PhoneSounds.Shutter);
-            float fov = _screens.LensFovNow;
+            float fov = _screens.Lens.Fov;
             var image = await Items.PhotoCapture.Render(this, _screens.Lens, fov);
             // beside the album's prints (--photo-dir moves both, for the checks)
             string dir = System.IO.Path.GetDirectoryName(Items.PhotoStore.LocalDir)!;
@@ -420,7 +464,7 @@ public partial class PhoneController : Node
             var at = p.Global;
             float focal = 12f / Mathf.Tan(Mathf.DegToRad(fov) * 0.5f);
             string id = Items.PhotoStore.Save(image, at.E, at.N, at.Alt, focal, path);
-            GD.Print($"[phone] photo {id} ({_screens.Zoom:0.#}×, {path})");
+            GD.Print($"[phone] {(_selfie ? "selfie" : "photo")} {id} ({_screens.Zoom:0.#}×, {path})");
             LastPhoto = id;
             _screens.Shot(Items.PhotoStore.Texture(id));
             InviteToasts.Instance?.Flash("Photo saved to your album");
@@ -433,6 +477,21 @@ public partial class PhoneController : Node
         {
             _shooting = false;
         }
+    }
+
+    /// <summary>
+    /// A selfie, the foldable's way: the open phone turned round so its main camera and its cover screen
+    /// face you; the cover shows the main camera's view (the lens resized to the cover's shape).
+    /// </summary>
+    private void SetSelfie(bool on)
+    {
+        if (on && _screens.Shown != PhoneScreens.Page.Camera) return;
+        _selfie = on;
+        _screens.SetSelfie(on);
+        var size = on ? new Vector2I(496, 734) : (Vector2I)((Vector2)_screens.Inner.Size * 0.6f);
+        if (_screens.Finder.Size != size) _screens.Finder.Size = size;
+        Play(PhoneSounds.Hinge);
+        GD.Print($"[phone] selfie {(on ? "on" : "off")}");
     }
 
     // ------------------------------------------------------------------ quick actions
@@ -448,6 +507,7 @@ public partial class PhoneController : Node
             Add(new("Decline", $"{call.PeerName}: {call.Title}", new Color(0.62f, 0.18f, 0.16f, 0.85f)), () => Answer(id, false));
         }
         Add(new("Camera"), () => Open(PhoneScreens.Page.Camera));
+        Add(new("Photos"), () => Open(PhoneScreens.Page.Photos));
         Add(new("Map"), () => Open(PhoneScreens.Page.Map));
         Add(new("Contacts"), () => Open(PhoneScreens.Page.Contacts));
         Add(new("Activities"), () => Open(PhoneScreens.Page.Activities));
@@ -608,12 +668,16 @@ public partial class PhoneController : Node
             else if (dir == Vector2.Down) PutAway();
             else
             {
-                Swipe(dir);
+                _keysLead = true;
                 Pick(dir.X < 0 ? -1 : 1);
             }
             return;
         }
-        if (IsSelect(e)) RunQuick();
+        if (IsSelect(e))
+        {
+            _keysLead = true;
+            RunQuick();
+        }
     }
 
     /// <summary>Open: WASD and the arrows move on the screen (typing letters while a text box has the keys), Enter presses, Esc goes back.</summary>
@@ -628,14 +692,15 @@ public partial class PhoneController : Node
         if (!typing && Direction(e) is { } dir && e is InputEventKey or InputEventJoypadButton or InputEventJoypadMotion or InputEventAction)
         {
             if (!e.IsPressed()) return;
-            Swipe(dir);
+            _keysLead = true;
             Push(dir == Vector2.Up ? "ui_up" : dir == Vector2.Down ? "ui_down" : dir == Vector2.Left ? "ui_left" : "ui_right");
             return;
         }
         if (!typing && IsSelect(e))
         {
             if (!e.IsPressed() || e.IsEcho()) return;
-            _touch = 1f;
+            _keysLead = true;
+            Tap();
             Push("ui_accept");
             return;
         }
@@ -660,6 +725,7 @@ public partial class PhoneController : Node
         var p = _player();
         if (p == null) return;
         _cursorUv = p.PhoneScreenPoint(m.Position, out _cursorOnCover);
+        _keysLead = false;
         bool inner = _stage == Stage.Open && !_cursorOnCover;
 
         if (m is InputEventMouseButton { ButtonIndex: MouseButton.WheelUp or MouseButton.WheelDown } wheel)
@@ -758,6 +824,8 @@ public partial class PhoneController : Node
         }
         if (!e.IsPressed() || e.IsEcho()) return;
         if (e.IsActionPressed("ui_cancel") || e.IsActionPressed(PlayerInput.Menu) || e is InputEventKey { PhysicalKeycode: Key.Escape }) Back();
+        else if (e is InputEventMouseButton { ButtonIndex: MouseButton.Right } || e is InputEventKey { PhysicalKeycode: Key.F or Key.Tab }
+                 || e is InputEventJoypadButton { ButtonIndex: JoyButton.Y }) SetSelfie(!_selfie);
         else if (e is InputEventMouseButton { ButtonIndex: MouseButton.Left } || IsSelect(e) || e.IsActionPressed(PlayerInput.TriggerRight)) _ = TakePhoto();
         else if (e is InputEventMouseButton { ButtonIndex: MouseButton.WheelUp } || e is InputEventJoypadButton { ButtonIndex: JoyButton.RightShoulder }
                  || e is InputEventKey { PhysicalKeycode: Key.W or Key.Up }) Zoom(1);
@@ -775,6 +843,7 @@ public partial class PhoneController : Node
     {
         if (_quicks.Count == 0) return;
         _quick = (_quick + step + _quicks.Count) % _quicks.Count;
+        if (_keysLead) Tap();
         Play(PhoneSounds.Tap);
     }
 
@@ -782,7 +851,7 @@ public partial class PhoneController : Node
     {
         if (_quick < 0 || _quick >= _quickActions.Count) return;
         GD.Print($"[phone] quick {_quicks[_quick].Label}");
-        _touch = 1f;
+        Tap();
         Play(PhoneSounds.Tap);
         _quickActions[_quick]();
     }

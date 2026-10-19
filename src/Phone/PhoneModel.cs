@@ -40,6 +40,8 @@ public partial class PhoneModel : Node3D
 
     /// <summary>The middle of the open inner screen, in this node's frame: on the hinge line.</summary>
     public static readonly Vector3 InnerScreenCentre = new(-HalfWidth * 0.5f, 0f, ScreenLift);
+    /// <summary>The middle of the cover screen while open flat, in this node's frame: it faces −Z, the camera island's way.</summary>
+    public static readonly Vector3 CoverOpenCentre = new(-HalfWidth, 0f, -(HalfThickness + ScreenLift));
     /// <summary>The middle of the cover screen while folded, in this node's frame.</summary>
     public static readonly Vector3 CoverScreenCentre = new(0f, 0f, HalfThickness + ScreenLift);
     /// <summary>The back camera's main lens, in this node's frame: it looks out along −Z.</summary>
@@ -67,6 +69,22 @@ public partial class PhoneModel : Node3D
             if (_hinge != null) Turn();
         }
     }
+
+    /// <summary>
+    /// The cover screen lit while open: turned round for a selfie, it faces the holder with the main
+    /// camera and shows its view. Otherwise it goes dark once the phone opens.
+    /// </summary>
+    public bool CoverWhenOpen
+    {
+        get => _coverWhenOpen;
+        set
+        {
+            if (value == _coverWhenOpen) return;
+            _coverWhenOpen = value;
+            if (_hinge != null) Turn();
+        }
+    }
+    private bool _coverWhenOpen;
 
     /// <summary>True once live screens are set (the owner's); a remote copy shows the wallpaper.</summary>
     public bool HasLiveScreens { get; private set; }
@@ -118,7 +136,7 @@ public partial class PhoneModel : Node3D
         bool flat = _fold >= 0.999f;
         _innerFull.Visible = flat;
         _innerLeft.Visible = _innerRight.Visible = !flat && f > 0.02f;
-        _cover.Visible = f < 0.6f;
+        _cover.Visible = f < 0.6f || _coverWhenOpen;
     }
 
     private static MeshInstance3D Screen(string name, ArrayMesh mesh, StandardMaterial3D material) => new()

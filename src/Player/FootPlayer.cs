@@ -1915,7 +1915,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // the phone (#889) is in both hands whatever the hotbar holds
         if (PhoneState != 0) return PhoneState switch
         {
-            PhoneCameraState => Avatar.ItemArmPose.PhoneRaised,
+            PhoneCameraState or PhoneSelfieState => Avatar.ItemArmPose.PhoneRaised,
             PhoneOpenState => Avatar.ItemArmPose.PhoneOpen,
             _ => Avatar.ItemArmPose.Phone,
         };

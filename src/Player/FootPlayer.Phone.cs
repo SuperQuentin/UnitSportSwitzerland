@@ -13,9 +13,12 @@ namespace UnitSport.Player;
 /// </summary>
 public partial class FootPlayer
 {
-    public const int PhonePocketState = 0, PhoneFoldedState = 1, PhoneOpenState = 2, PhoneCameraState = 3;
+    public const int PhonePocketState = 0, PhoneFoldedState = 1, PhoneOpenState = 2, PhoneCameraState = 3, PhoneSelfieState = 4;
 
-    /// <summary>0 in the pocket, 1 out folded, 2 open, 3 open and raised as a camera: replicated on change.</summary>
+    /// <summary>
+    /// 0 in the pocket, 1 out folded, 2 open, 3 open and raised as a camera, 4 the same turned round for a
+    /// selfie (the main camera and the cover screen toward the face): replicated on change.
+    /// </summary>
     [Export] public int PhoneState { get; set; }
 
     /// <summary>0..1: the owner's camera over the shoulder onto the phone (set every frame by the controller, linear).</summary>
@@ -71,6 +74,8 @@ public partial class FootPlayer
     /// <summary>The smoothed phone the lens follows (global); NaN origin = take the next as it is.</summary>
     private Transform3D _phoneSeen = new(Basis.Identity, new Vector3(float.NaN, 0, 0));
     private Vector2 _phoneTiltShown;
+    /// <summary>0..1: the open phone turned round for a selfie, eased on every peer.</summary>
+    private float _phoneTurn;
     private float _backdropShown;
     private MeshInstance3D? _backdrop;
     private StandardMaterial3D? _backdropMat;
@@ -93,7 +98,9 @@ public partial class FootPlayer
             AddChild(_phoneModel);
         }
         _phoneModel.Fold = PhoneFold;
+        _phoneModel.CoverWhenOpen = PhoneState == PhoneSelfieState;
         _phoneTiltShown = _phoneTiltShown.Lerp(PhoneTilt, MathX.Damp(6f, dt));
+        _phoneTurn = Mathf.MoveToward(_phoneTurn, PhoneState == PhoneSelfieState ? 1f : 0f, dt / 0.45f);
         _phoneModel.Transform = PhoneInHands();
         _phoneModel.Visible = true;
     }
@@ -112,7 +119,8 @@ public partial class FootPlayer
         var eye = _walker!.Transform * new Vector3(0f, EyeHeight - 0.08f, -0.09f);
         var z = (eye - hand).Normalized();
         // raised as a camera, the owner holds it upright, level with the horizon; the view's pitch tips it below
-        if (PhoneState == PhoneCameraState && IsMultiplayerAuthority() && !Npc && MathX.Flat(z).LengthSquared() > 1e-4f) z = MathX.Flat(z).Normalized();
+        bool raised = PhoneState is PhoneCameraState or PhoneSelfieState;
+        if (raised && IsMultiplayerAuthority() && !Npc && MathX.Flat(z).LengthSquared() > 1e-4f) z = MathX.Flat(z).Normalized();
         var y = (Vector3.Up - z * z.Dot(Vector3.Up)).Normalized();
         var x = y.Cross(z);
         var basis = new Basis(x, y, z);
@@ -122,11 +130,19 @@ public partial class FootPlayer
             // a held thing is never still: a slow breath, a slower drift
             var breathe = new Vector3(0.010f * Mathf.Sin(t * 1.3f), 0.012f * Mathf.Sin(t * 0.8f + 1f), 0.006f * Mathf.Sin(t * 0.6f + 2f));
             basis = basis * Basis.FromEuler(breathe + new Vector3(-_phoneTiltShown.Y * 0.05f, _phoneTiltShown.X * 0.05f, 0f));
-            if (PhoneState == PhoneCameraState) basis = basis * new Basis(Vector3.Right, Mathf.Clamp(_pitch + _punch, -1.2f, 1.2f));
+            if (raised) basis = basis * new Basis(Vector3.Right, Mathf.Clamp(_pitch + _punch, -1.2f, 1.2f));
         }
         // the hand at the right edge, a little below the middle: the phone's centre is up and across from it,
         // in front of the fingers, which hold it from behind and at the edges
-        return new Transform3D(basis, hand - x * 0.034f + y * 0.02f + z * 0.075f);
+        var held = new Transform3D(basis, hand - x * 0.034f + y * 0.02f + z * 0.075f);
+        if (_phoneTurn <= 0f) return held;
+        // a selfie (#889): turned half round about the open phone's middle, the camera island and the cover
+        // screen to the face, and held a little further out, at arm's length
+        float turn = Mathf.SmoothStep(0f, 1f, _phoneTurn);
+        var centre = Phone.PhoneModel.InnerScreenCentre;
+        var spin = new Transform3D(Basis.Identity, centre) * new Transform3D(new Basis(Vector3.Up, Mathf.Pi * turn), Vector3.Zero)
+                   * new Transform3D(Basis.Identity, -centre);
+        return new Transform3D(held.Basis, held.Origin - held.Basis.Z * (0.1f * turn)) * spin;
     }
 
     /// <summary>
@@ -165,7 +181,13 @@ public partial class FootPlayer
         // onto it, close, for the map
         float camApp = Mathf.SmoothStep(0f, 1f, PhoneCameraApp);
         var target = PhoneShoulderView(_phoneSeen);
-        if (camApp > 0f) target = target.InterpolateWith(PhoneCameraAppView(_phoneSeen), camApp);
+        if (camApp > 0f)
+        {
+            float selfie = Mathf.SmoothStep(0f, 1f, _phoneTurn);
+            var app = PhoneCameraAppView(_phoneSeen);
+            if (selfie > 0f) app = app.InterpolateWith(PhoneSelfieView(_phoneSeen), selfie);
+            target = target.InterpolateWith(app, camApp);
+        }
         if (cover > 0f) target = target.InterpolateWith(PhoneScreenView(_phoneSeen), cover);
         _camera.GlobalTransform = _camera.GlobalTransform.InterpolateWith(target, look);
         // the screen ends up a few centimetres from the lens
@@ -224,6 +246,19 @@ public partial class FootPlayer
     {
         var centre = phone * Phone.PhoneModel.InnerScreenCentre;
         return new Transform3D(phone.Basis, centre + phone.Basis.Z * 0.3f + phone.Basis.Y * 0.045f);
+    }
+
+    /// <summary>
+    /// A selfie: from the face, looking at the turned phone's cover screen, which shows the main camera's
+    /// view of that face; the phone in the middle of the picture, the world behind it.
+    /// </summary>
+    private Transform3D PhoneSelfieView(Transform3D phone)
+    {
+        // turned, the phone's -Z (the cover's and the camera island's way) points at the player
+        var cover = phone * Phone.PhoneModel.CoverOpenCentre;
+        var toPlayer = -phone.Basis.Z;
+        var basis = new Basis(-phone.Basis.X, phone.Basis.Y, -phone.Basis.Z);
+        return new Transform3D(basis, cover + toPlayer * 0.3f + phone.Basis.Y * 0.03f);
     }
 
     /// <summary>A point of a screen (0..1 across and down) in world space, <paramref name="lift"/> metres off the glass.</summary>
