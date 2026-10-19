@@ -198,7 +198,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         _map = new XrMap(_right);
         _left.AddChild(_map);
         _climb = new XrClimb(_left, _right);
-        _phone = new XrPhone(_left, _right, _leftGrip, _rightGrip, _leftHand, _rightHand);
+        _phone = new XrPhone(this, _left, _right, _leftGrip, _rightGrip, _leftHand, _rightHand);
         ApplyHands();
         Notice = new XrNotice();
         AddChild(Notice);
@@ -312,11 +312,9 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         bool leftClaimed = _cab.LeftHeld || _climb.LeftHeld, rightClaimed = _cab.RightHeld || _climb.RightHeld;
         // the phone (#920): out of the front pocket into the holding hand, whose grip then holds it
         _phone.Update(player, _camera.GlobalTransform, _leftHanded, dt);
-        if (_phone.HoldingGripClaimed)
-        {
-            if (_leftHanded) rightClaimed = true;
-            else leftClaimed = true;
-        }
+        // the aim nodes are already swapped for left-handed play: the holding hand is always _left's
+        leftClaimed |= _phone.HoldingGripClaimed;
+        rightClaimed |= _phone.FreeGripClaimed;
         _hands.Update(player, _camera.GlobalTransform, dt, leftClaimed, rightClaimed);
         UpdateRealHands(player, dt);
         _pad.LeftGripBusy = _hands.LeftBusy || leftClaimed;
@@ -684,6 +682,15 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
     }
 
     /// <summary>One pulse on one or both hands; strength 0..1.</summary>
+    /// <summary>A pulse on the moving hand (the phone's holding hand, <paramref name="moving"/>) or the using hand, or both.</summary>
+    public void RumbleHand(bool moving, float strength, float seconds, bool both)
+    {
+        if (!Core.GameSettings.Current.Vibration || strength <= 0f) return;
+        double a = Mathf.Clamp(strength, 0f, 1f);
+        if (moving || both) _left.TriggerHapticPulse("haptic", 0.0, a, seconds, 0.0);
+        if (!moving || both) _right.TriggerHapticPulse("haptic", 0.0, a, seconds, 0.0);
+    }
+
     public void Rumble(float strength, float seconds, bool both)
     {
         if (!Core.GameSettings.Current.Vibration || strength <= 0f) return;

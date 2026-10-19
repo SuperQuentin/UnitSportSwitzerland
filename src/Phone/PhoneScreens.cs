@@ -77,8 +77,12 @@ public partial class PhoneScreens : Node
     private Panel _coverRing = null!, _innerRing = null!;
     private StyleBoxFlat _coverRingBox = null!, _innerRingBox = null!;
 
-    /// <summary>The inner screen's layout scale (laid out for 800 units high, drawn at its pixels).</summary>
+    /// <summary>The inner screen's layout scale (laid out for 800 units high, 640 in VR; drawn at its pixels).</summary>
     public float InnerScale => _innerRoot.Scale.Y;
+    private GridContainer _homeGrid = null!;
+    private readonly List<(Label Label, string Accept, string Back)> _hints = new();
+    private bool _vr;
+    private Vector2 _fitWindow;
     // inner
     private Control _innerRoot = null!;
     private Label _statusClock = null!;
@@ -88,7 +92,7 @@ public partial class PhoneScreens : Node
     private string _actShown = "";
     private double _actRefreshAt;
     private RaceManager? _races;
-    private Label _homeClock = null!, _homeDate = null!, _travelTitle = null!, _travelDots = null!, _zoomLabel = null!;
+    private Label _homeClock = null!, _homeDate = null!, _travelTitle = null!, _travelDots = null!, _travelNote = null!, _zoomLabel = null!;
     private LineEdit _query = null!;
     private VBoxContainer _results = null!, _people = null!, _calls = null!;
     private Label _mapHint = null!;
@@ -154,15 +158,43 @@ public partial class PhoneScreens : Node
     public void Fit(Vector2 window)
     {
         if (window.Y <= 0) return;
+        _fitWindow = window;
         int h = Mathf.Clamp(Mathf.RoundToInt(window.Y * 0.8f / 8f) * 8, 560, 1600);
         var size = new Vector2I(Mathf.RoundToInt(h * PhoneModel.InnerW / PhoneModel.InnerH), h);
-        if (Inner.Size == size) return;
+        // laid out for a screen 800 units high, drawn at the pixels it covers; in VR for 640, so every
+        // target is a quarter bigger at arm's length (#920)
+        float k = h / (_vr ? VrUnits : 800f);
+        if (Inner.Size == size && Mathf.IsEqualApprox(_innerRoot.Scale.Y, k)) return;
         Inner.Size = size;
-        // laid out for a screen 800 units high, drawn at the pixels it covers
-        float k = h / 800f;
         _innerRoot.Scale = new Vector2(k, k);
         _innerRoot.Size = (Vector2)size / k;
         Finder.Size = size * 3 / 5;
+    }
+
+    private const float VrUnits = 640f;
+
+    /// <summary>The home screen's apps per row (6; 3 in VR), for the checks.</summary>
+    internal int HomeColumns => _homeGrid.Columns;
+
+    /// <summary>
+    /// The VR layout (#920): seen at arm's length the screen is about 23° wide, so it is laid out a
+    /// quarter bigger, the home screen's six apps in two rows of three (each about 1.6× the desktop's
+    /// size), and the footers name the fingertip and B.
+    /// </summary>
+    public void SetVr(bool vr)
+    {
+        if (vr == _vr) return;
+        _vr = vr;
+        _homeGrid.Columns = vr ? 3 : 6;
+        foreach (var tile in _homeTiles)
+        {
+            tile.CustomMinimumSize = vr ? new Vector2(196, 196) : new Vector2(152, 152);
+            tile.AddThemeFontSizeOverride("font_size", vr ? 30 : 24);
+        }
+        _homeClock.AddThemeFontSizeOverride("font_size", vr ? 72 : 120);
+        _grid.Columns = vr ? 4 : 6;
+        foreach (var (label, accept, back) in _hints) label.Text = HintText(accept, back);
+        if (_fitWindow.Y > 0) Fit(_fitWindow);
     }
 
     // ---------------------------------------------------------------- cover
@@ -354,8 +386,9 @@ public partial class PhoneScreens : Node
         _homeDate.HorizontalAlignment = HorizontalAlignment.Center;
         col.AddChild(_homeDate);
         col.AddChild(UiKit.Spacer(expand: true));
-        var row = UiKit.HBox(16);
-        row.Alignment = BoxContainer.AlignmentMode.Center;
+        var row = _homeGrid = new GridContainer { Columns = 6, SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter };
+        row.AddThemeConstantOverride("h_separation", 16);
+        row.AddThemeConstantOverride("v_separation", 16);
         row.AddChild(Tile("Map", "Find a place, go there", new Color(0.18f, 0.55f, 0.36f), () => ShowPage(Page.Map)));
         row.AddChild(Tile("Contacts", "Call people: go to them, bring them, team up", new Color(0.20f, 0.42f, 0.80f), () => ShowPage(Page.Contacts)));
         row.AddChild(Tile("Camera", "Take photos and selfies into your album", new Color(0.22f, 0.24f, 0.28f), () => ShowPage(Page.Camera)));
@@ -762,14 +795,19 @@ public partial class PhoneScreens : Node
         _travelDots = Big("", 60, InkDim);
         _travelDots.HorizontalAlignment = HorizontalAlignment.Center;
         col.AddChild(_travelDots);
+        _travelNote = Big("", 30, InkDim);
+        _travelNote.HorizontalAlignment = HorizontalAlignment.Center;
+        _travelNote.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        col.AddChild(_travelNote);
         col.AddChild(UiKit.Spacer(expand: true));
         return col;
     }
 
     /// <summary>The travelling page: where to, and dots that go round while the ground there streams in.</summary>
-    public void ShowTravel(string where)
+    public void ShowTravel(string where, string note = "")
     {
         SetText(_travelTitle, $"Travelling to {where}");
+        SetText(_travelNote, note);
         ShowPage(Page.Travel);
     }
 
@@ -862,12 +900,17 @@ public partial class PhoneScreens : Node
     private static Label Title(string text) => Big(text, 54);
 
     /// <summary>The page's two keys, named for the device in hand (a menu's accept and back, not the game's actions).</summary>
-    private static Label Hint(string accept, string back)
+    private Label Hint(string accept, string back)
     {
-        var l = Big(InputHints.Pad ? $"A  {accept}      B  {back}" : $"Enter  {accept}      Esc  {back}", 22, InkDim);
+        var l = Big(HintText(accept, back), 22, InkDim);
         l.HorizontalAlignment = HorizontalAlignment.Center;
+        _hints.Add((l, accept, back));
         return l;
     }
+
+    private string HintText(string accept, string back) =>
+        _vr ? $"tap  {accept}      swipe right or B  {back}"
+        : InputHints.Pad ? $"A  {accept}      B  {back}" : $"Enter  {accept}      Esc  {back}";
 
     private static Button Row(string text)
     {

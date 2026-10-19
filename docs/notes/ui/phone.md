@@ -10,16 +10,25 @@
   |---|---|---|---|
   | take out | `phone` = Up arrow (free on foot; the excavator's boom in a cab) | quick menu (hold Back) › Phone | grip at the left front pocket; wrist menu › Phone |
   | folded: pick / run | ← → or the wheel / Enter, Space, click | D-pad, stick / A | swipe the fingertip across the cover / tap it |
-  | open | Up | D-pad ↑ | X (fold again: X) |
-  | back / put away | Esc (open: back, then fold), ↓ folded | B | B (open: back; folded: away); open the grip |
+  | open | Up | D-pad ↑ | the free hand swings the front half open by its loose edge; X (fold again: X) |
+  | back / put away | Esc (open: back, then fold), ↓ folded | B | B, or a swipe right; let go at the pocket (anywhere else it flies home) |
+  | camera app: shoot / selfie | click, Enter / F | RT / Y | the holding hand's trigger / turn the phone's back to your face |
+  | travel / answer a call | automatic / cover › Answer | same | raise the phone to your eyes (a blink after 3 s) / to your ear |
 
   No pad button is free on foot (D-pad ↑ is the emote wheel), so the pad takes it out from the quick
   menu. While out it holds `UiFocus`: the body does not walk, items do not fire (`ItemController.UsablePlayer`
-  is null, `HeldItemId` reads 0). VR (#920 phase 1, `XR/XrPhone`, plan `docs/plans/phone-vr.md`): held in
-  the real left hand (right when left-handed), the other index tip is the pointer (ring within 3 cm,
-  touch at 6 mm, release past 12 mm; a tick at both), the body still walks, travel goes behind
-  `XrRig.Blink`; no camera moves in VR (#186: `PhoneLook` must not raise the throw view there).
-  Check: `--phonevrcheck --xrsim --world fixture` (scripted hand: `XrPhone.SimHold/SimGrip/SimTip`).
+  is null, `HeldItemId` reads 0). VR (#920, `XR/XrPhone`, plan `docs/plans/phone-vr.md`): held in the real
+  left hand (right when left-handed; the aim nodes are already swapped, so the holding controller is
+  always `_left`, the grip poses are the real hands), the other index tip is the pointer (ring within
+  3 cm, touch at 6 mm, release past 12 mm; a tick at both), the body still walks. The free hand on the
+  front half's loose edge drives `PhoneController.VrHinge` (the fold is the hand's angle about the
+  hinge, through the inverse smoothstep). The camera app's lens is the phone's, not levelled; the
+  phone's back to the face for 0.3 s is a selfie. A travel waits for the screen within 14 cm of the
+  eyes, else blinks after 3 s; a call buzzes the holding hand twice and rings at the pocket, the cover
+  within 10 cm of an ear answers. Let go away from the pocket it hangs 0.5 s and flies home. The
+  inner screen is laid out for 640 units (3 × 2 home tiles). No camera moves in VR (#186: `PhoneLook`
+  must not raise the throw view there). Check: `--phonevrcheck --xrsim --world fixture` (scripted
+  hands: `XrPhone.Sim*`, a ringing call: `PhoneController.SimCall`).
 - **Wire**: one byte, `FootPlayer.PhoneState` (0 pocket, 1 folded, 2 open), on change, in
   `OnChangeProperties` and the movie recorder (`ActorIo`, index 23). Every peer derives the arm pose
   (`ItemArmPose.Phone` / `PhoneOpen`, both hands; switching between the two does not ease out first)
