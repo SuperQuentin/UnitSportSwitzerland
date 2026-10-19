@@ -5,7 +5,7 @@ namespace UnitSport.Bots;
 // Plain C#, no Godot: linked into the unit tests (BrTacticsTests).
 
 /// <summary>What a Battle Royale bot chooses to do next (#837): one goal at a time, re-chosen every thought.</summary>
-public enum BrGoal { Roam, Loot, Fight, Finish, Heal, Vest, Zone, Investigate }
+public enum BrGoal { Roam, Loot, Fight, Finish, Heal, Vest, Zone, Investigate, Regroup, Revive, Recall, Ping, Assist }
 
 /// <summary>
 /// What a bot knows when it chooses (#837), filled by <c>BrBrain</c> from its senses, its pack and the
@@ -28,7 +28,14 @@ public readonly record struct BrSituation(
     float ZoneRunNeeded,
     float CrateDistance,
     float Boldness,
-    float LootGreed);
+    float LootGreed,
+    // squads (#837 phase 4); the defaults are solo
+    float LeaderDistance = float.PositiveInfinity,
+    float MateDownedDistance = float.PositiveInfinity,
+    float MateFightDistance = float.PositiveInfinity,
+    bool CarriesTag = false,
+    float StopDistance = float.PositiveInfinity,
+    float PingDistance = float.PositiveInfinity);
 
 /// <summary>
 /// The Battle Royale bot's choices as scores (#837): the highest goal wins. Pure and unit-tested
@@ -40,6 +47,8 @@ public readonly record struct BrSituation(
 /// <item>healing when hurt and no enemy for a few seconds (65 up), a vest when it has none on (60);</item>
 /// <item>loot when unarmed (62) or short of rounds (45), else as greedy as it is;</item>
 /// <item>a shot heard draws the bold (30 to 55); else roam towards the zone (10).</item>
+/// <item>squads: a downed mate revived when no enemy is close (75), a mate's fight joined (60 up), a human's
+/// ping followed (55), a dogtag taken to a stop (66: before loot), the leader rejoined when far (50 to 58).</item>
 /// </list>
 /// </summary>
 public static class BrTactics
@@ -58,6 +67,14 @@ public static class BrTactics
     /// came in and out of sight, zone and loot as a margin flickered, and the bot ran nowhere).
     /// </summary>
     public const float Stickiness = 12f;
+    /// <summary>Further than this from its team's leader, a squad bot goes back.</summary>
+    public const float RegroupFrom = 60f;
+    /// <summary>A downed mate this close is worth the walk.</summary>
+    public const float ReviveDraw = 150f;
+    /// <summary>No enemy in sight this close (and none for <see cref="SafeAfter"/> s) before it kneels to revive.</summary>
+    public const float ReviveClear = 40f;
+    /// <summary>A mate's fight this close is joined.</summary>
+    public const float AssistDraw = 200f;
 
     /// <param name="current">The goal it is pursuing now (it keeps it unless another beats it by <see cref="Stickiness"/>).</param>
     public static BrGoal Choose(in BrSituation s, BrGoal? current = null)
@@ -98,6 +115,18 @@ public static class BrTactics
 
         // a shot heard: the bold go and look
         if (s.HasGun && s.HeardDistance <= EarDraw) Offer(BrGoal.Investigate, 30f + 25f * s.Boldness);
+
+        // squads: a downed mate first (once nobody is close), a mate's fight, a human's ping, a dogtag to a stop,
+        // and back to the leader when far
+        if (s.MateDownedDistance <= ReviveDraw && s.EnemyDistance > ReviveClear && s.SecondsSinceEnemy >= SafeAfter && !s.HurtRecently)
+            Offer(BrGoal.Revive, 75f);
+        if (s.MateFightDistance <= AssistDraw && (s.HasGun || s.MateFightDistance <= KnifeRush * 2f))
+            Offer(BrGoal.Assist, 60f + 10f * s.Boldness);
+        if (s.PingDistance < float.PositiveInfinity) Offer(BrGoal.Ping, 55f);
+        // a mate's life before loot: above an unarmed bot's crate (62), below healing when badly hurt
+        if (s.CarriesTag && s.StopDistance < float.PositiveInfinity) Offer(BrGoal.Recall, 66f);
+        if (s.LeaderDistance > RegroupFrom && s.LeaderDistance < float.PositiveInfinity)
+            Offer(BrGoal.Regroup, s.LeaderDistance > RegroupFrom * 2.5f ? 58f : 50f);
         return best;
     }
 

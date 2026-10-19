@@ -243,6 +243,8 @@ public static class BotSkills
     /// </summary>
     public static bool Wants(Bot bot, ItemStack stack)
     {
+        // what the mode adds (#837 phase 4: a squad mate's dogtag in a Battle Royale)
+        if (AlsoWants?.Invoke(bot, stack) == true) return true;
         var inv = bot.Inventory;
         if (Weapons.Get(stack.Id) is { } w)
         {
@@ -262,6 +264,9 @@ public static class BotSkills
     /// checks). A gun goes on the hotbar. True when it took something; false when nothing there is
     /// wanted any more (the crate is done for this bot).
     /// </summary>
+    /// <summary>A mode's own wants on top of <see cref="Wants"/> (a Battle Royale: a fallen mate's dogtag).</summary>
+    public static Func<Bot, ItemStack, bool>? AlsoWants;
+
     public static bool TakeOne(Bot bot, BattleRoyale.BrCrates crates, BattleRoyale.Crate crate)
     {
         var stacks = crate.Stacks();

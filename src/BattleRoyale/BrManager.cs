@@ -383,6 +383,7 @@ public partial class BrManager : Node
         BoardBots(bots);
         _state.AssignTeams();
         PlanTeamDrops();
+        _humanPings.Clear();
         _sidesAtGo = _state.TeamsAlive;
         _pushedOut = false;
         Combat.PvpRules.Override = Allowed;
@@ -729,6 +730,8 @@ public partial class BrManager : Node
         foreach (var x in _state.Entrants.Where(x => x.Team == me.Team))
             if (!x.Bot && Multiplayer.GetPeers().Contains((int)x.Peer)) RpcId(x.Peer, MethodName.Pinged, peer, e, n, alt);
         TeamPinged?.Invoke(me.Team, peer, e, n, alt);
+        // a human's ping is for the team's bots to follow (#837 phase 4); a map ping has no height: the pinger's
+        if (!me.Bot) _humanPings[me.Team] = (Origin.ToWorld(e, n, double.IsFinite(alt) ? alt : body.GlobalPosition.Y), Now, peer);
         return true;
     }
 

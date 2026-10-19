@@ -21,7 +21,7 @@ namespace UnitSport.BattleRoyale;
 /// </summary>
 public partial class BrBotProbe : ChatProbe
 {
-    public static bool Requested => CmdArgs.Has("--brbotcheck") || CmdArgs.Has("--brbotwatch");
+    public static bool Requested => CmdArgs.Has("--brbotcheck") || CmdArgs.Has("--brbotwatch") || CmdArgs.Has("--brsquadcheck");
 
     public BrBotProbe(ItemController items) : base(items, "brbots", "BB", "brbots_") { }
     public BrBotProbe() : this(null!) { }
@@ -39,7 +39,7 @@ public partial class BrBotProbe : ChatProbe
     {
         if (!await Joined(150, () => Br != null)) return;
         await Seconds(2.0);
-        if (Watch) await RunWatch(); else await Run();
+        if (Watch) await RunWatch(); else if (SquadCheck) await RunSquad(); else await Run();
         await Finish(1.0);
     }
 
@@ -53,7 +53,8 @@ public partial class BrBotProbe : ChatProbe
         if (!await Until(() => Permissions.IsAdmin, 10)) { Fail("not logged in as admin"); return; }
         Chat.Send($"/br bots {CmdArgs.Int("--brbotwatch") ?? 9} normal");
         await Seconds(0.5);
-        Chat.Send("/br open 5 short");
+        // --brwatchmode duos|trios|squads (#837 phase 4): bots in teams
+        Chat.Send($"/br open 5 short {CmdArgs.Value("--brwatchmode") ?? "solo"}");
         if (!await Until(() => br.State.Phase == BrPhase.Lobby, 20)) { Fail("no lobby"); return; }
         Chat.Send("/br join");
         await Until(() => br.State.Phase == BrPhase.Countdown, 10);
@@ -90,6 +91,74 @@ public partial class BrBotProbe : ChatProbe
     }
 
     private FootPlayer? BodyOf(long id) => GetParent().GetNodeOrNull<FootPlayer>("Players/" + PlayerReplication.NodeName(id));
+
+    /// <summary>
+    /// <c>--brsquadcheck</c> (#837 phase 4): a duos match of A and one bot, alone on its side (no enemy to chase).
+    /// The mate jumps after A and lands near, regroups when A moves off, goes to A's ping, revives A when A is
+    /// down, and takes A's dogtag to a Postauto stop when A is out: A is recalled.
+    /// </summary>
+    private static bool SquadCheck => CmdArgs.Has("--brsquadcheck");
+
+    private async Task RunSquad()
+    {
+        var br = Br!;
+        Chat!.Send("/login brbots");
+        if (!await Until(() => Permissions.IsAdmin, 10)) { Fail("not logged in as admin"); return; }
+        Chat.Send("/br bots 2 normal");
+        await Seconds(0.5);
+        Chat.Send("/br open 5 short duos");
+        if (!await Until(() => br.State.Phase == BrPhase.Lobby, 20)) { Fail("no lobby"); return; }
+        Chat.Send("/br join");
+        await Until(() => br.State.Phase == BrPhase.Countdown, 10);
+        Chat.Send("/br start");
+        if (!await Until(() => br.InMatch && br.State.Phase == BrPhase.Playing, 60)) { Fail("never dropped"); return; }
+        var mine = br.MyEntry;
+        var mate = br.State.Entrants.FirstOrDefault(e => e.Bot && mine != null && e.Team == mine.Team);
+        Expect(mine is { Team: not 0 } && mate != null, $"A and a bot in one duo (team {mine?.Team}, mate {mate?.Name})");
+        if (mate == null || br.State.Flight is not { } flight) return;
+        long id = mate.Peer;
+        var me = Me!;
+        float ToMe(FootPlayer b) => new Vector2(b.GlobalPosition.X - me.GlobalPosition.X, b.GlobalPosition.Z - me.GlobalPosition.Z).Length();
+
+        // the jump: the mate goes after A, then lands near A
+        await Until(() => flight.DoorsOpen(ClockSync.SimNow), 90);
+        Expect(br.JumpOut(), "A jumped");
+        Expect(await Until(() => br.State.Find(id) is { Jumped: true }, 8), "the mate jumped after A");
+        await Seconds(0.5);
+        me.Leap(me.GlobalPosition, Vector3.Zero, RideKind.OnFoot);
+        var c0 = br.State.Zone().CentreOf(0);
+        br.Teleport(br.State.AreaE + c0.X, br.State.AreaN + c0.Y, "the circle's centre");
+        await Until(() => me.IsOnFloor(), 30);
+        bool near = await Until(() => BodyOf(id) is { Ride: RideKind.OnFoot, Visible: true } b && ToMe(b) < 150f, 240);
+        Expect(near, $"the mate flew after A and landed near ({(BodyOf(id) is { } b0 ? ToMe(b0) : -1):F0} m)");
+        if (!near) return;
+
+        // A moves off: the mate comes back to within 60 m
+        br.Teleport(br.State.AreaE + c0.X + 110, br.State.AreaN + c0.Y, "110 m east");
+        await Until(() => me.IsOnFloor(), 20);
+        Expect(await Until(() => BodyOf(id) is { } b && ToMe(b) < 60f, 90), $"the mate regrouped ({(BodyOf(id) is { } b1 ? ToMe(b1) : -1):F0} m)");
+
+        // a ping 70 m off: the mate goes there
+        var (pe, pn) = me.Origin!.ToLv95(me.GlobalPosition);
+        var ping = new Vector2((float)(pe - br.State.AreaE), (float)(pn - br.State.AreaN + 70));
+        Expect(br.PingMap(ping), "A pinged a spot 70 m north");
+        var pingWorld = me.Origin.ToWorld(br.State.AreaE + ping.X, br.State.AreaN + ping.Y, me.GlobalPosition.Y);
+        float ToPing(FootPlayer b) => new Vector2(b.GlobalPosition.X - pingWorld.X, b.GlobalPosition.Z - pingWorld.Z).Length();
+        Expect(await Until(() => BodyOf(id) is { } b && ToPing(b) < 15f, 90), $"the mate went to the ping ({(BodyOf(id) is { } b2 ? ToPing(b2) : -1):F0} m off it)");
+
+        // down, not out (a mate stands): the mate revives A
+        me.TakeDamage(me.Health + 10f, 0, DamageCause.Other);
+        Expect(await Until(() => me.Downed, 5), "A is down, not out");
+        Expect(await Until(() => !me.Downed && br.MyEntry is { Alive: true, Downed: false }, 90), "the mate revived A");
+
+        // out: the mate takes A's dogtag to a Postauto stop and A is back
+        if (br.State.RecallPoints is not { Length: > 0 }) { Fail("no Postauto stops in this region: the recall is not tested"); return; }
+        me.TakeDamage(me.Health + 10f, 0, DamageCause.Other);
+        await Until(() => me.Downed, 5);
+        for (int i = 0; i < 20 && br.MyEntry is { Alive: true }; i++) { me.TakeDamage(500f, 0, DamageCause.Other); await Seconds(0.5); }
+        Expect(await Until(() => br.MyEntry is { Alive: false }, 30), "A is out");
+        Expect(await Until(() => br.MyEntry is { Alive: true, Recalled: true }, 400), "the mate took A's dogtag to a stop: A is recalled");
+    }
 
     private async Task Run()
     {

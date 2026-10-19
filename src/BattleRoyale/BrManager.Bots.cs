@@ -39,6 +39,34 @@ public partial class BrManager
     /// <summary>An entrant's body on the server (a player's proxy or a bot), for the bots' brains.</summary>
     public FootPlayer? BodyOfPeer(long id) => BodyOf(id);
 
+    /// <summary>A bot carrying no dogtag yet, in a team with a mate out and not yet recalled, while recalls are open.</summary>
+    private bool WantsTag(Bot bot) =>
+        RecallOpen && _state.Find(bot.Id) is { Team: not 0 } me && !bot.Inventory.Contains(Items.ItemId.Dogtag)
+        && _state.Entrants.Any(m => m.Team == me.Team && !m.Alive && !m.Recalled);
+
+    /// <summary>
+    /// The nearest Postauto stop to <paramref name="at"/> (world, on the stop's ground) inside the circle a bot must
+    /// reach (85 % of its radius), while recalls are open: a bot carrying a dogtag goes there. A stop outside it
+    /// sent the bot out of the circle and the zone sent it back, to and fro until it closed. Null when none is in.
+    /// </summary>
+    public Vector3? NearestStop(Vector3 at)
+    {
+        if (!RecallOpen || Origin == null) return null;
+        var (e, n) = Origin.ToLv95(at);
+        var here = new Vector2((float)(e - _state.AreaE), (float)(n - _state.AreaN));
+        var z = _state.Zone().At(Now - _state.Started);
+        var centre = z.Phase > 0 ? z.NextCentre : z.Centre;
+        float radius = (z.Phase > 0 ? z.NextRadius : z.Radius) * 0.85f;
+        var stops = Stops().Where(s => s.At.DistanceTo(centre) < radius).ToList();
+        if (stops.Count == 0) return null;
+        var stop = stops.OrderBy(s => s.At.DistanceTo(here)).First();
+        return Origin.ToWorld(_state.AreaE + stop.At.X, _state.AreaN + stop.At.Y, stop.Alt);
+    }
+
+    /// <summary>The last ping a human of <paramref name="team"/> made (world point, when, by whom), for the team's bots.</summary>
+    public (Vector3 At, double When, long From)? HumanPing(int team) => _humanPings.TryGetValue(team, out var p) ? p : null;
+    private readonly Dictionary<int, (Vector3 At, double When, long From)> _humanPings = new();
+
     /// <summary>
     /// GO, once teams are drawn (#837 phase 4): a squad's bots land as a group. A bot-only team flies to its
     /// leader's spot (the lowest id), a few metres apart, the mates jumping one after another; a team with a
@@ -123,6 +151,8 @@ public partial class BrManager
         FootPlayer.StayDown = p => BotEntrant(p) is { Alive: true };
         FootPlayer.Regenerates = p => BotEntrant(p) is not { Alive: true };
         FootPlayer.CanBeDowned = p => BotEntrant(p) is { Alive: true } e && _state.MateStanding(e.Peer);
+        // a fallen mate's dogtag, while it can still bring them back (#837 phase 4)
+        BotSkills.AlsoWants = (bot, s) => s.Id == Items.ItemId.Dogtag && WantsTag(bot);
         director.Died += OnBotDied;
         director.Downed += OnBotDowned;
     }

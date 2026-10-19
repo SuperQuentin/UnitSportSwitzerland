@@ -93,4 +93,45 @@ public class BrTacticsTests
         Assert.Equal(0f, BrTactics.ZoneRunNeeded(100, 200));
         Assert.Equal(400f, BrTactics.ZoneRunNeeded(400, 100));
     }
+
+    // ---- squads (#837 phase 4) ----
+
+    [Fact]
+    public void A_downed_mate_is_revived_once_no_enemy_is_close() =>
+        Assert.Equal(BrGoal.Revive, BrTactics.Choose(Calm() with { MateDownedDistance = 80, CrateDistance = 20, LeaderDistance = 100 }));
+
+    [Fact]
+    public void An_enemy_close_comes_before_a_revive()
+    {
+        Assert.Equal(BrGoal.Fight, BrTactics.Choose(Calm() with { MateDownedDistance = 30, EnemyDistance = 25, SecondsSinceEnemy = 0 }));
+        Assert.NotEqual(BrGoal.Revive, BrTactics.Choose(Calm() with { MateDownedDistance = 30, SecondsSinceEnemy = 1 }));
+    }
+
+    [Fact]
+    public void A_mates_fight_is_joined_over_loot() =>
+        Assert.Equal(BrGoal.Assist, BrTactics.Choose(Calm() with { MateFightDistance = 120, CrateDistance = 30 }));
+
+    [Fact]
+    public void The_zone_comes_before_the_team() =>
+        Assert.Equal(BrGoal.Zone, BrTactics.Choose(Calm() with { ZoneRunNeeded = 300, MateDownedDistance = 50, PingDistance = 200 }));
+
+    [Fact]
+    public void A_humans_ping_and_a_dogtag_beat_roaming()
+    {
+        Assert.Equal(BrGoal.Ping, BrTactics.Choose(Calm() with { PingDistance = 150 }));
+        Assert.Equal(BrGoal.Recall, BrTactics.Choose(Calm() with { CarriesTag = true, StopDistance = 400 }));
+        Assert.Equal(BrGoal.Roam, BrTactics.Choose(Calm() with { CarriesTag = true }));   // no stop known
+    }
+
+    [Fact]
+    public void A_dogtag_goes_to_the_stop_before_more_loot() =>
+        Assert.Equal(BrGoal.Recall, BrTactics.Choose(Calm(gun: false) with { CarriesTag = true, StopDistance = 600, CrateDistance = 30 }));
+
+    [Fact]
+    public void Far_from_its_leader_it_goes_back_but_a_greedy_crate_close_by_still_wins()
+    {
+        Assert.Equal(BrGoal.Regroup, BrTactics.Choose(Calm() with { LeaderDistance = 90 }));
+        Assert.Equal(BrGoal.Roam, BrTactics.Choose(Calm() with { LeaderDistance = 30 }));
+        Assert.Equal(BrGoal.Loot, BrTactics.Choose(Calm(gun: false) with { LeaderDistance = 90, CrateDistance = 40 }));
+    }
 }
