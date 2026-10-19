@@ -42,8 +42,8 @@ public static partial class BuildingMeshBuilder
     // limestone rubble (Chillon), the Jura lakes' yellow Hauterive limestone, the plateau's grey-green
     // molasse sandstone, the Alps' dark gneiss and granite; brown and red clay tiles, and the grey
     // stone slabs (lauzes, piode) of Valais, Graubünden and Ticino. Kept off pure white: the lit
-    // styles blow a white wall out and its detail with it. Chillon draws index 1 of the Savoyard
-    // stones and roofs: its limestone and its brown-grey tiles.
+    // styles blow a white wall out and its detail with it. Chillon's name draws Savoyard stone 1
+    // and roof 0: its limestone and its brown-grey tiles.
     private static readonly Color[][] RegionStones =
     {
         new Color[] { new(0.64f, 0.63f, 0.59f), new(0.72f, 0.69f, 0.61f), new(0.76f, 0.70f, 0.58f) }, // Savoy
@@ -56,7 +56,7 @@ public static partial class BuildingMeshBuilder
     };
     private static readonly Color[][] RegionRoofs =
     {
-        new Color[] { new(0.53f, 0.34f, 0.26f), new(0.50f, 0.42f, 0.35f) }, // Savoy: old red-brown, brown-grey
+        new Color[] { new(0.50f, 0.42f, 0.35f), new(0.53f, 0.34f, 0.26f) }, // Savoy: brown-grey, old red-brown
         new Color[] { new(0.50f, 0.36f, 0.28f), new(0.48f, 0.40f, 0.33f) }, // Jura: brown tiles
         new Color[] { new(0.56f, 0.28f, 0.20f), new(0.53f, 0.32f, 0.24f) }, // Plateau: red tiles
         new Color[] { new(0.56f, 0.28f, 0.20f), new(0.53f, 0.32f, 0.24f) }, // East: red tiles

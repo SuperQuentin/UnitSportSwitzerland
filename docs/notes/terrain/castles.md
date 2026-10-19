@@ -46,8 +46,8 @@
   - **Ticino**: grey granite rubble, gneiss slab roofs (piode), swallowtail (Ghibelline) merlons
     (Bellinzona; the merlon form is reported, not verified against the UNESCO dossier).
 - **Dress** (`BuildingMeshBuilder.Castle.cs`, `DressOf`, only solids of no church group): the
-  region's stone and roof palettes (two or three each, picked by castle name; Chillon draws index 1
-  of the Savoyard ones, its limestone and brown-grey tiles), weathered at 40% of `ApplyAge`, then the
+  region's stone and roof palettes (two or three each, picked by castle name; Chillon draws Savoyard
+  stone 1 and roof 0, its limestone and brown-grey tiles), weathered at 40% of `ApplyAge`, then the
   kind: a ruin's stone 14% darker; a manor's render (cream, white, light ochre, pale grey; the Jura's
   in its stone), a slate mansard on a quarter of Savoyard, Jura and plateau manors. No solar panels.
 - **Walls** carry UV2.y = 4 + level head + 2 x foot on the ground (within 1.5 m of the solid's base)
