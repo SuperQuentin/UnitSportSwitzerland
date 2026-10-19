@@ -149,10 +149,10 @@ public static class FondueScript
     // ---- places ---------------------------------------------------------------------------------
 
     /// <summary>The Gornergrat ridge's south edge, where it drops to the Gorner glacier (to frame).</summary>
-    /// <summary>Where the saucer comes down on the Gornergrat, on the flat east of the pot.</summary>
-    private static readonly Spot LandSpot = Crew.Toward(100, 13);
+    /// <summary>Where the saucer comes down on the Gornergrat: on the path's flat toward the hotel (east of the pot the snow humps).</summary>
+    private static readonly Spot LandSpot = Crew.Toward(300, 18);
     /// <summary>The saucer's heading on the ground there: its ramp toward the pot.</summary>
-    private const float LandHeading = 280;
+    private const float LandHeading = 120;
     private static readonly Spot GornerEdge = Crew.Toward(167, 51);
     /// <summary>The Riddes plain (VS): IKEA, the fields along the Rhône.</summary>
     private static readonly Spot RiddesIkea = new(2582265, 1112638);
@@ -534,8 +534,8 @@ public static class FondueScript
             [
                 new() { Who = Marco, Ride = Car(Ae86), At = Tremola, Toward = TremolaFoot, Drive = Drive.Road, Route = "tremola", Arc = 280, Skill = 1.1f },
             ],
-            // the saucer hovering over the hairpins below
-            Craft = [new Craft(new Spot(2686760, 1155800, 35), 180)],
+            // the saucer hovering over the hairpins up the road, behind him as he comes down
+            Craft = [new Craft(new Spot(2686676, 1156005, 10), 180)],
             Keys =
             [
                 new(0, Pt.Road("tremola", 378, -9f, 2.3f), Pt.On(0, 0f, 0.7f), 50),
@@ -641,8 +641,8 @@ public static class FondueScript
             Keys =
             [
                 // behind the tractor on its left, the saucer over the field ahead
-                new(0, Pt.On(0, -7f, 3.5f, 12f), Pt.On(0, -10f, 7f, -50f), 28),
-                new(2 * B, Pt.On(0, -6f, 3.5f, 10f), Pt.On(0, -12f, 9f, -50f), 28),
+                new(0, Pt.On(0, -3f, 9f, 14f), Pt.On(0, -10f, 5f, -45f), 28),
+                new(2 * B, Pt.On(0, -3f, 9.5f, 12f), Pt.On(0, -12f, 7f, -45f), 28),
             ],
             Smooth = 0.3f, Preroll = 3,
             Supers = [new(0.3, 3.0, Card("s29"))],
@@ -929,11 +929,11 @@ public static class FondueScript
             Number = 0, FromBar = 0, Bars = 1, Name = "Loot", Feature = "Battle Royale: loot",
             Hour = 11.3,
             Zone = (new Spot(2635900, 1159600), 190f),
-            Cast = [new() { Who = Marco, At = new Spot(2635932, 1159436), Heading = 180, Item = (int)ItemId.Cheese, Dance = Cheer }],
+            Cast = [new() { Who = Marco, At = new Spot(2635938, 1159428), Heading = 200, Item = (int)ItemId.Cheese, Dance = Cheer }],
             Keys =
             [
-                new(0, Pt.On(0, 0.8f, 1.0f, -2.8f), Pt.On(0, 0f, 1.5f), 24),
-                new(B, Pt.On(0, 0.6f, 0.9f, -2.4f), Pt.On(0, 0f, 1.6f), 24),
+                new(0, Pt.On(0, 2.8f, 1.1f, -1.8f), Pt.On(0, 0f, 1.5f), 24),
+                new(B, Pt.On(0, 2.6f, 1.0f, -1.5f), Pt.On(0, 0f, 1.6f), 24),
             ],
             Preroll = 0.5,
             Bubbles = [Say("f47", 0.3, 0)],
@@ -1013,7 +1013,7 @@ public static class FondueScript
             Craft = [new Craft(LandSpot, LandHeading) { Switches = _ => new UfoSwitches(Ramp: true) }],
             Cast =
             [
-                new() { Who = Lea, At = Crew.Toward(100, 4f), Heading = 100 },
+                new() { Who = Lea, At = Crew.Toward(300, 5f), Heading = 300 },
                 // down the ramp, the old caquelon in its hands
                 new()
                 {
