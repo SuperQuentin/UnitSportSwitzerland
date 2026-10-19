@@ -468,6 +468,17 @@ public static partial class Planner
             },
         });
 
+        // last: every preprocessor pass refreshes the tiles' content hashes itself, but RoadGen's
+        // rewrite runs on its own; incremental (a file is read again only when its size or time
+        // changed), so a run that changed nothing only lists the tiles (#924)
+        steps.Add(new Step
+        {
+            Title = "Fingerprint tiles",
+            Detail = "each tile's content hash into manifest.json (what a film was rendered on)",
+            Seconds = 3 + toBuild.Count * 0.03 + featureTiles.Count * 0.02,
+            Run = r => r.Tool("TerrainPreprocessor", ["--out", p.Chunks, "--temp", p.Temp, "--manifest-hash"], LineProgress.None),
+        });
+
         // the C# tools are built once, just before the first step that needs them
         int firstTool = steps.FindIndex(st => st.Title == "Build terrain");
         bool anyTool = steps.Skip(firstTool).Any(st => st.Skip == null);
