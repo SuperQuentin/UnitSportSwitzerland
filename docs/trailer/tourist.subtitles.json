@@ -76,6 +76,20 @@
     "it": "✦✦✦ !!!",
     "rm": "✦✦✦ !!!"
   },
+  "c10_title": {
+    "en": "THE ALIEN TOURIST",
+    "fr": "THE ALIEN TOURIST",
+    "de": "THE ALIEN TOURIST",
+    "it": "THE ALIEN TOURIST",
+    "rm": "THE ALIEN TOURIST"
+  },
+  "c10_title_sub": {
+    "en": "a UnitSport Switzerland film",
+    "fr": "un film UnitSport Switzerland",
+    "de": "ein UnitSport-Switzerland-Film",
+    "it": "un film UnitSport Switzerland",
+    "rm": "in film UnitSport Switzerland"
+  },
   "s11_no": {
     "en": "no.",
     "fr": "non.",
@@ -118,19 +132,19 @@
     "it": "ha comprato uno squalo.",
     "rm": "el ha cumprà in squagl."
   },
-  "s16_beep": {
-    "en": "BLIP ✓",
-    "fr": "BLIP ✓",
-    "de": "BLIP ✓",
-    "it": "BLIP ✓",
-    "rm": "BLIP ✓"
-  },
   "s16_pedals": {
     "en": "right pedal go. left pedal STOP.",
     "fr": "pédale droite : go. gauche : STOP.",
     "de": "rechts: gas. links: STOPP.",
     "it": "destra: vai. sinistra: STOP.",
     "rm": "dretg: gas. sanester: STOP."
+  },
+  "s16_beep": {
+    "en": "BLIP ✓",
+    "fr": "BLIP ✓",
+    "de": "BLIP ✓",
+    "it": "BLIP ✓",
+    "rm": "BLIP ✓"
   },
   "s17_again": {
     "en": "AGAIN!",
@@ -153,19 +167,19 @@
     "it": "pedala!! PEDALA!",
     "rm": "pedalescha!! PEDALESCHA!"
   },
-  "s20_all": {
-    "en": "ALL ✦",
-    "fr": "TOUTES ✦",
-    "de": "ALLE ✦",
-    "it": "TUTTE ✦",
-    "rm": "TUTTAS ✦"
-  },
   "s20_pick": {
     "en": "74 bikes. pick one.",
     "fr": "74 motos. choisis-en une.",
     "de": "74 töffs. such dir einen aus.",
     "it": "74 moto. scegline una.",
     "rm": "74 motos. tscherna ina."
+  },
+  "s20_all": {
+    "en": "ALL ✦",
+    "fr": "TOUTES ✦",
+    "de": "ALLE ✦",
+    "it": "TUTTE ✦",
+    "rm": "TUTTAS ✦"
   },
   "s24_luck": {
     "en": "beginner's luck.",
@@ -307,40 +321,12 @@
     "it": "EHI! LA MIA MACCHINA!",
     "rm": "HE! MES AUTO!"
   },
-  "c01_place": {
-    "en": "RIDDES (VS) · 23:40",
-    "fr": "RIDDES (VS) · 23:40",
-    "de": "RIDDES (VS) · 23:40",
-    "it": "RIDDES (VS) · 23:40",
-    "rm": "RIDDES (VS) · 23:40"
-  },
-  "c10_title": {
-    "en": "THE ALIEN TOURIST",
-    "fr": "THE ALIEN TOURIST",
-    "de": "THE ALIEN TOURIST",
-    "it": "THE ALIEN TOURIST",
-    "rm": "THE ALIEN TOURIST"
-  },
-  "c10_title_sub": {
-    "en": "a UnitSport Switzerland film",
-    "fr": "un film UnitSport Switzerland",
-    "de": "ein UnitSport-Switzerland-Film",
-    "it": "un film UnitSport Switzerland",
-    "rm": "in film UnitSport Switzerland"
-  },
-  "c10_place": {
-    "en": "RIDDES · 06:10",
-    "fr": "RIDDES · 06:10",
-    "de": "RIDDES · 06:10",
-    "it": "RIDDES · 06:10",
-    "rm": "RIDDES · 06:10"
-  },
-  "c29_place": {
-    "en": "GORNERGRAT · 3135 M",
-    "fr": "GORNERGRAT · 3135 M",
-    "de": "GORNERGRAT · 3135 M",
-    "it": "GORNERGRAT · 3135 M",
-    "rm": "GORNERGRAT · 3135 M"
+  "c59_title": {
+    "en": "UNITSPORT SWITZERLAND",
+    "fr": "UNITSPORT SWITZERLAND",
+    "de": "UNITSPORT SWITZERLAND",
+    "it": "UNITSPORT SWITZERLAND",
+    "rm": "UNITSPORT SWITZERLAND"
   },
   "c59_end_sub": {
     "en": "The Alien Tourist",
@@ -348,5 +334,12 @@
     "de": "Der Alien-Tourist",
     "it": "Il turista alieno",
     "rm": "Il turist extraterrester"
+  },
+  "mighty-like-us-kevin-macleod-incompetech-com": {
+    "en": "\"Mighty Like Us\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0",
+    "fr": "\"Mighty Like Us\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0",
+    "de": "\"Mighty Like Us\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0",
+    "it": "\"Mighty Like Us\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0",
+    "rm": "\"Mighty Like Us\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0"
   }
 }
