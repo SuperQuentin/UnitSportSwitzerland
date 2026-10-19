@@ -73,4 +73,10 @@ public interface IChunkSource
     /// it like the cover (<c>AssetKind.Fields</c>).
     /// </summary>
     Task<List<FieldPolygon>?> LoadFieldsAsync(TileId id, CancellationToken ct = default) => Task.FromResult<List<FieldPolygon>?>(null);
+    /// <summary>
+    /// The tile's ski slopes (#887, <c>pistes_E_N.pst</c>, <see cref="PisteFormat"/>); null when no slope
+    /// touches the tile or the source has no slope layer. Decorators forward it; a network client
+    /// streams it (<c>AssetKind.Pistes</c>).
+    /// </summary>
+    Task<PisteTile?> LoadPistesAsync(TileId id, CancellationToken ct = default) => Task.FromResult<PisteTile?>(null);
 }

@@ -176,6 +176,16 @@ public sealed class NetworkChunkSource : IChunkSource
             .ConfigureAwait(false);
     }
 
+    /// <summary>The ski slopes (#887): shipped, cached, else streamed. An older server answers "missing".</summary>
+    public async Task<PisteTile?> LoadPistesAsync(TileId id, CancellationToken ct = default)
+    {
+        if (await _local.LoadPistesAsync(id, ct).ConfigureAwait(false) is { } local) return local;
+
+        return await ObtainAsync(AssetKind.Pistes, id, ct,
+            bytes => { using var ms = new MemoryStream(bytes); return PisteFormat.Decode(ms); })
+            .ConfigureAwait(false);
+    }
+
     /// <summary>
     /// Shipped copy first, else the one <see cref="ClientTerrainSync"/> pulled into the cache
     /// during sync. Not fetched on demand here: it is a single region-wide file, and the sync

@@ -43,7 +43,7 @@ public sealed class CachingChunkSource : IChunkSource
 
     public double HitRate => Hits + Misses == 0 ? 0 : (double)Hits / (Hits + Misses);
 
-    private enum AssetSlot { Chunk, Coarse, Roads, Holes, Buildings, Cover, Trees, Water, Fields }
+    private enum AssetSlot { Chunk, Coarse, Roads, Holes, Buildings, Cover, Trees, Water, Fields, Pistes }
 
     private sealed class Entry
     {
@@ -114,6 +114,11 @@ public sealed class CachingChunkSource : IChunkSource
     public Task<List<FieldPolygon>?> LoadFieldsAsync(TileId id, CancellationToken ct = default) =>
         GetAsync(AssetSlot.Fields, id, () => _inner.LoadFieldsAsync(id, ct),
             f => 64 + f.Sum(p => 48 + p.Rings.Sum(r => r.LongLength * 4 + 24)));
+
+    /// <summary>The tile's ski slopes (#887): the two rasters (3 bytes a vertex) and the paths.</summary>
+    public Task<PisteTile?> LoadPistesAsync(TileId id, CancellationToken ct = default) =>
+        GetAsync(AssetSlot.Pistes, id, () => _inner.LoadPistesAsync(id, ct),
+            t => 64 + t.Slot.LongLength * 3 + t.Records.Sum(r => 64 + r.Path.LongLength * 4));
 
     private static long Weigh(ChunkGrid g) => g.Heights.LongLength * 2 + 64;
     private static long Weigh(RoadTile t)

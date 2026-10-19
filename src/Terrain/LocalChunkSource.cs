@@ -159,6 +159,18 @@ public sealed class LocalChunkSource : IChunkSource
         }, ct);
     }
 
+    /// <summary>The preprocessor's <c>pistes_E_N.pst</c> (#887); null where no slope touches the tile.</summary>
+    public Task<PisteTile?> LoadPistesAsync(TileId id, CancellationToken ct = default)
+    {
+        return Task.Run(() =>
+        {
+            string path = Path.Combine(_dir, PisteFormat.FileName(id));
+            if (!File.Exists(path)) return (PisteTile?)null;
+            using var fs = File.OpenRead(path);
+            return PisteFormat.Decode(fs);
+        }, ct);
+    }
+
     /// <summary><c>landings.json</c> in a directory, or null; a file that does not parse is logged and skipped.</summary>
     public static Task<LandingIndex?> ReadLandingsAsync(string dir, CancellationToken ct = default)
     {
