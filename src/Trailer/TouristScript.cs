@@ -158,7 +158,7 @@ public static class TouristScript
     private static Craft Mended(bool ramp) => new(Crash, SaucerFront) { Switches = _ => new UfoSwitches(Ramp: ramp) };
 
     /// <summary>The mothership up the Rhône valley north-east of Riddes, high in the night (the slopes south-east are too close and too steep).</summary>
-    private static Craft Mothership(float bearing = Upvalley, float metres = 1500f, float alt = 1100f)
+    private static Craft Mothership(float bearing = Upvalley, float metres = 900f, float alt = 950f)
     {
         var at = Crash.Toward(bearing, metres);
         return new Craft(Spot.Alt(at.E, at.N, alt), 300f) { Mothership = true };
@@ -371,8 +371,8 @@ public static class TouristScript
             ],
             Keys =
             [
-                new(0, Ground(IkeaDoor, 300, 24, 2.6f), Pt.On(0, 3f, 3f), 24),
-                new(5.3, Ground(IkeaDoor, 298, 25, 2.8f), Pt.On(0, 3f, 3.2f), 24),
+                new(0, Ground(IkeaDoor, 20, 24, 2.6f), Pt.On(0, -3f, 3f), 24),
+                new(5.3, Ground(IkeaDoor, 22, 25, 2.8f), Pt.On(0, -3f, 3.2f), 24),
             ],
             Smooth = 0.3f, Preroll = 0.5,
             Bubbles = [Say(2.0, 1, "s15_shark")],
@@ -735,7 +735,7 @@ public static class TouristScript
             [
                 Walker(Blip, Lauter.Toward(180, 30), 0, new Vector2(0f, 1f), run: true),
                 Walker(Lea, Lauter.Toward(180, 33).Toward(90, 1.8f), 0, new Vector2(0f, 1f), run: true),
-                Walker(Jonas, Lauter.Toward(180, 36).Toward(270, 1.5f), 0, new Vector2(0f, 1f), run: true),
+                Walker(Jonas, Lauter.Toward(180, 37), 0, new Vector2(0f, 1f), run: true),
             ],
             Keys =
             [
@@ -1017,8 +1017,8 @@ public static class TouristScript
             Craft = [Mended(ramp: true), Mothership()],
             Keys =
             [
-                new(0, Ground(Crash.Toward(SaucerFront, 11), Upvalley + 180, 5f, 1.0f), Pt.Dir(Upvalley, 10), 24),
-                new(5.3, Ground(Crash.Toward(SaucerFront, 11), Upvalley + 180, 6f, 0.8f), Pt.Dir(Upvalley, 20), 24),
+                new(0, Ground(Crash.Toward(SaucerFront, 11), Upvalley + 180, 5f, 1.0f), Pt.Dir(Upvalley, 20), 24),
+                new(5.3, Ground(Crash.Toward(SaucerFront, 11), Upvalley + 180, 6f, 0.8f), Pt.Dir(Upvalley, 28), 24),
             ],
             Preroll = 0.5,
             Bubbles = [Say(2.4, 2, "s54_ride")],
@@ -1110,7 +1110,7 @@ public static class TouristScript
             Number = 59, Name = "The end", FromBar = 87, Bars = 4, Song = S, Hour = 22.75, Moon = Moonlight, FadeOut = 2.4,
             Feature = "friends together",
             Cast = Row(Crash.Toward(SaucerFront, 11), Upvalley, (Lea, Wave), (Marco, 0), (Nina, Wave), (Jonas, Wave)),
-            Craft = [Mothership(metres: 3000f, alt: 1900f)],
+            Craft = [Mothership(metres: 1100f, alt: 1500f)],
             Keys =
             [
                 new(0, Ground(Crash.Toward(SaucerFront, 11), Upvalley + 180, 4.5f, 1.6f), Ground(Crash.Toward(SaucerFront, 11), 0, 0, 1.4f), 28),
