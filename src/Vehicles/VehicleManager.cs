@@ -130,7 +130,38 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
             AddChild(VehicleBody.Create(state with { SpawnedAt = VehicleState.Now }, Terrain, Origin));
             return;
         }
+        // the server parking for a body it runs (a bot, #837): straight into the world, itself the authority.
+        // An RPC to itself never arrives, and the car a bot left, wrecked or was thrown from vanished.
+        if (Multiplayer.IsServer())
+        {
+            if (_spawner == null) return;
+            Spawn(state with { Owner = 0, Name = Kept(state.Name) ?? $"veh_srv_{++_counter}", SpawnedAt = VehicleState.Now });
+            return;
+        }
         RpcId(1, MethodName.RequestPark, state.ToDict());
+    }
+
+    /// <summary>
+    /// The name a parked vehicle keeps: a Battle Royale match's (<c>br_v…</c>, #837), so the match still clears
+    /// it at the end and the containers never keep it for good. Renamed <c>veh_…</c>, a match car a player
+    /// had driven outlived the match as a permanent world car. Null for any other, or one already taken.
+    /// </summary>
+    private string? Kept(string name) =>
+        name.StartsWith(BattleRoyale.BrLoot.VehiclePrefix) && GetNodeOrNull(name) == null ? name : null;
+
+    /// <summary>
+    /// Server: a vehicle for a body the server runs (a bot, #837), with the claim's checks and none of its
+    /// RPC: still there, not burnt out, nobody else getting in. Its state for the bot's
+    /// <c>FootPlayer.TakeVehicle</c>, or null.
+    /// </summary>
+    public VehicleState? ServerClaim(VehicleBody vehicle)
+    {
+        if (!Multiplayer.IsServer() || !Enterable(vehicle) || !_claimed.Add(vehicle.Name)) return null;
+        var state = vehicle.Capture();
+        Removing?.Invoke(vehicle);
+        vehicle.QueueFree();   // the spawner removes it on every client
+        _claimed.Remove(vehicle.Name);
+        return state;
     }
 
     /// <summary>
@@ -291,7 +322,7 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
         var state = parked with
         {
             Owner = sender,
-            Name = $"veh_{sender}_{++_counter}",
+            Name = Kept(parked.Name) ?? $"veh_{sender}_{++_counter}",
             SpawnedAt = VehicleState.Now,
         };
         Spawn(state);

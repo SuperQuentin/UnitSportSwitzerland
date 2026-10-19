@@ -76,6 +76,20 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>Ground speed is scaled down on steep ground — this is alpine terrain.</summary>
     private const float MaxClimbSlowdown = 0.45f;
 
+    // --- steep ground (#883) ---
+    /// <summary>
+    /// A facet up to this counts as floor to the physics. The terrain's 1 m facets tilt with the
+    /// height data's noise: a 40° hillside is full of 53-60° ones, and at a 52° limit each stood
+    /// in the way as a wall (Godot stops a grounded body dead at one) or popped the body into the
+    /// air. Whether the ground can be stood on is <see cref="StandMaxDeg"/>'s, over a few metres.
+    /// </summary>
+    private const float FacetFloorDeg = 66f;
+    /// <summary>Ground steeper than this, averaged over ±<see cref="SteepReachM"/>, cannot be stood on: it carries you down.</summary>
+    private const float StandMaxDeg = 52f;
+    private const float SteepReachM = 2f;
+    /// <summary>The fastest steep ground carries you down: a scramble down scree, slow enough for floor snapping to keep you on bumpy ground (at 9 m/s every crest launched you).</summary>
+    private const float SteepSlideMax = 4.5f;
+
     // --- body dimensions ---
     private const float StandHeight = 1.78f;
     private const float SlideHeight = 0.90f;
@@ -677,7 +691,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// The replicated properties sent only when they change (ride, seat, items, clothes, …). The movie
     /// recorder (#638) keeps the same set as events: <c>--moviecheck</c> fails if the two drift apart.
     /// </summary>
-    public static readonly string[] OnChangeProperties = { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DanceId", ".:FightPose", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down", ".:RadioVolume" };
+    public static readonly string[] OnChangeProperties = { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DanceId", ".:FightPose", ".:AuraPose", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down", ".:RadioVolume", ".:PhoneState" };
 
     // --- figure animation ---
     private MeshInstance3D? _walker;
@@ -1285,12 +1299,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         replication.AddProperty(".:AppearanceBits");
         replication.AddProperty(".:DanceId");
         replication.AddProperty(".:FightPose");
+        replication.AddProperty(".:AuraPose");
         replication.AddProperty(".:HeldRadio");
         replication.AddProperty(".:BackItemId");
         replication.AddProperty(".:Down");
         replication.AddProperty(".:CarRadio");
         replication.AddProperty(".:CarCd");
         replication.AddProperty(".:RadioVolume");
+        replication.AddProperty(".:PhoneState");
         if (Npc)
         {
             // spawn-only: a peer spawning this NPC after a handoff must learn who simulates it now
@@ -1411,11 +1427,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         };
         AddChild(_body);
 
-        // alpine slopes are steep; without this you slide off anything interesting.
-        // Floor snapping keeps contact when walking downhill instead of hopping.
-        FloorMaxAngle = Mathf.DegToRad(52f);
+        // alpine slopes are steep; without this you slide off anything interesting. The facets
+        // pass, the ground's own slope decides (TooSteep). Floor snapping keeps contact when
+        // walking downhill instead of hopping.
+        FloorMaxAngle = Mathf.DegToRad(FacetFloorDeg);
         FloorSnapLength = 0.5f;
-        FloorBlockOnWall = false;
+        FloorBlockOnWall = true;
         SlideOnCeiling = true;
 
         if (IsMultiplayerAuthority() && Npc)
@@ -1521,8 +1538,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         // an NPC keeps its colours whoever simulates it: they come from the client that asked for it
         int rider = RiderIndex();
-        // the figure a player chose, found by every ride drawn from this index (#394)
-        if (!Npc) Avatar.Appearance.Register(rider, AppearanceBits);
+        // the figure a player chose, found by every ride drawn from this index (#394); an NPC's only
+        // when it was given one (#880: an alien bot): unset, it keeps what a trailer actor registered
+        if (!Npc || AppearanceBits != 0) Avatar.Appearance.Register(rider, AppearanceBits);
 
         if (kind == RideKind.OnFoot)
         {
@@ -1710,6 +1728,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             StepThrowView(dt);
             // a fist fight (#495): its own side-on view
             if (FightView(dt)) return;
+            // an aura battle (#907): the phone-filmed view over the waiting battler's shoulder
+            if (AuraView(dt)) return;
 
             // Render rate, not physics rate: the look has to answer the mouse the frame it
             // moves, the way rotating the body directly always did.
@@ -1739,6 +1759,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 UpdateThirdPersonCamera(dt);
             }
             BlendOutCrashCamera(dt);
+            PhoneCamera(dt);
             return;
         }
 
@@ -1791,6 +1812,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         RefreshVisual();
         AnimateRemote((float)delta);
         UpdateSeated();
+        StepPhone((float)delta);
     }
 
     /// <summary>
@@ -1897,7 +1919,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private void PlaceHand(Avatar.HumanMeshBuilder.GaitMounts mounts)
     {
-        if (_walker == null) { HandLocal = null; return; }
+        // seated on a stand (#885): the hands rest in the lap, holding nothing
+        if (_walker == null || PoseKind == PoseSit) { HandLocal = null; return; }
         // mounts are already turned to face -Z, where the figure's right is +X
         var hand = mounts.HandL.X > mounts.HandR.X ? mounts.HandL : mounts.HandR;
         HandLocal = _walker.Transform * new Transform3D(mounts.HandBasis, hand);
@@ -1909,6 +1932,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // a throw (#206): wound up with anything, and the follow-through once it has left the hand
         if (ItemAction == 3) return Avatar.ItemArmPose.ThrowWindup;
         if (ItemAction == 4) return Avatar.ItemArmPose.ThrowRelease;
+        // the phone (#889) is in both hands whatever the hotbar holds
+        if (PhoneState != 0) return PhoneState switch
+        {
+            PhoneCameraState => Avatar.ItemArmPose.PhoneRaised,
+            PhoneSelfieState => Avatar.ItemArmPose.PhoneSelfie,
+            PhoneOpenState => Avatar.ItemArmPose.PhoneOpen,
+            _ => Avatar.ItemArmPose.Phone,
+        };
         var def = Items.ItemDefs.Get((Items.ItemId)HeldItemId);
         if (def == null) return Avatar.ItemArmPose.None;
         bool aim = ItemAction == 1, use = ItemAction == 2;
@@ -1941,6 +1972,32 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         // the release whips straight out of the wind-up: no easing out of one into the other
         if (want == Avatar.ItemArmPose.ThrowRelease && _itemArmCur == Avatar.ItemArmPose.ThrowWindup) _itemArmCur = want;
+        // the phone opening or closing keeps it in the hands: the other hand only slides across. Raised
+        // as a camera, it is the open phone lifted: the blend runs on from 1 to 2 (HumanMeshBuilder.ApplyArms)
+        if (IsPhonePose(want) && IsPhonePose(_itemArmCur))
+        {
+            // the lifted poses (raised as a camera, a selfie) sit on the open one: from one to the other
+            // the phone comes back down to it first
+            static bool Lifted(Avatar.ItemArmPose p) => p is Avatar.ItemArmPose.PhoneRaised or Avatar.ItemArmPose.PhoneSelfie;
+            float goal;
+            if (Lifted(want) && Lifted(_itemArmCur) && want != _itemArmCur)
+            {
+                goal = 1f;
+                if (_itemArmBlend <= 1f) _itemArmCur = want;
+            }
+            else if (Lifted(want))
+            {
+                _itemArmCur = want;
+                goal = 2f;
+            }
+            else
+            {
+                goal = 1f;
+                if (_itemArmBlend <= 1f) _itemArmCur = want;
+            }
+            _itemArmBlend = Mathf.MoveToward(_itemArmBlend, goal, dt / (goal > 1f || _itemArmBlend > 1f ? 0.35f : 0.18f));
+            return;
+        }
         if (want != _itemArmCur && _itemArmBlend > 0.02f) target = 0f;   // leave the old pose first
         else if (want != _itemArmCur) _itemArmCur = want;
         _itemArmBlend = Mathf.MoveToward(_itemArmBlend, target, dt / 0.18f);
@@ -1958,6 +2015,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // The owner decides when the dance is over: out of earshot, or doing anything else.
         // Remotes only ease out on what they receive.
         if (DanceId != 0 && !DanceAllowed()) DanceId = 0;
+        if (Sitting) { DanceId = 0; PublishSitPose(); return; }
         if (_swimming) { PublishSwimPose(dt); return; }
         _airTime = IsOnFloor() ? 0f : _airTime + dt;
         float speed = MathX.FlatLength(Velocity);
@@ -1972,7 +2030,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
 
         // a fighter (#495) is drawn by the dance layer, which lays over the stride only, in the air too
-        PoseKind = Fighting ? PoseStride : _sliding ? PoseTucked : _airTime > 0.12f ? PoseAir : PoseStride;
+        PoseKind = InDuel ? PoseStride : _sliding ? PoseTucked : _airTime > 0.12f ? PoseAir : PoseStride;
         if (PoseKind == PoseStride) _stridePhase = Avatar.HumanMeshBuilder.AdvancePhase(_stridePhase, speed, dt);
         Anim = new Vector4(speed, _stridePhase, 0f, 0f);
 
@@ -2001,7 +2059,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             && (!Indoors || Audio.Cd.CdLibrary.IsRatBeat(music.CdId)));
 
     /// <summary>On foot and free to move the body: what an emote (#404), or any dance, needs.</summary>
-    public bool CanEmote => Ride == RideKind.OnFoot && !KnockedOut && !Downed && !_sliding && !_swimming && !_carried && _deadTimer <= 0 && !Fighting;
+    public bool CanEmote => Ride == RideKind.OnFoot && !KnockedOut && !Downed && !_sliding && !_swimming && !_carried && _deadTimer <= 0 && !InDuel;
 
     /// <summary>Indoors, the chess type beat heard here (#370): E dances, as outdoors to any music.</summary>
     public bool RatBeatHere(bool heard) =>
@@ -2179,7 +2237,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         StepArmPose(dt);
         var danced = StepDance(dt);
         // a fighter's pose (#495) over any dance, which eases out underneath
-        var dance = DrawnDance = StepFightPose(dt) ?? danced;
+        var dance = DrawnDance = StepFightPose(dt) ?? StepAuraPose(dt) ?? danced;
         var arm = _itemArmCur;
         float blend = _itemArmBlend;
         // dancing, the hands are the dance's, unless the item is actually being aimed or used
@@ -2208,7 +2266,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // VR hands (#439) keyed to 2 cm, so a hand held still does not rebuild the figure
         var vr = PoseKind == PoseStride && dance == null ? VrHands : null;
         if (vr is { } v) vr = new Avatar.HumanMeshBuilder.VrArms(SnapHand(v.Right), SnapHand(v.Left));
-        var key = new FootPoseKey(_walker, PoseKind, Mathf.Round(Anim.X * 100f), _stridePhase, arm, blend, dance, Hat, palette, smooth, vr);
+        // a finger on the phone's screen (#889): the owner's own, keyed to 4 mm
+        Avatar.HumanMeshBuilder.Pointing? point = PoseKind == PoseStride && dance == null && PhonePointTip is { } tip && PhonePointDir is { } way
+            ? new((_walker.ToLocal(tip) / 0.004f).Round() * 0.004f,
+                (((_walker.GlobalBasis.Inverse() * way).Normalized()) / 0.05f).Round() * 0.05f)
+            : null;
+        var key = new FootPoseKey(_walker, PoseKind, Mathf.Round(Anim.X * 100f), _stridePhase, arm, blend, dance, Hat, palette, smooth, vr, point);
         // the hand is placed from fresh mounts every time the pose changes, even while a throttled
         // mesh waits: what carries or aims an item stays exact (cheap: joint math, no mesh)
         if (key != _mountsKey)
@@ -2219,6 +2282,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 PoseTucked => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Tucked, arm, blend),
                 PoseAir => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Running, arm, blend),
                 PoseHang or PoseClimb => Avatar.HumanMeshBuilder.MountsForPose(CarriedFigure(), arm, blend),
+                PoseSit => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Standing, arm, blend),
                 _ => Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase, arm, blend, dance, vr),
             };
         }
@@ -2236,8 +2300,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 PoseAir => armed ? Avatar.HumanMeshBuilder.BuildPosed(palette, Avatar.HumanPose.Running, arm, blend, Hat, _poseMesh ??= new ArrayMesh())
                     : _airPose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Running, hat: Hat),
                 PoseHang or PoseClimb => Avatar.HumanMeshBuilder.BuildPosed(palette, CarriedFigure(), arm, blend, Hat, _poseMesh ??= new ArrayMesh()),
+                // seated on a stand (#885): the figure round its hip, which BodyPose lifts
+                PoseSit => SeatedWalker(palette),
                 _ => Avatar.HumanMeshBuilder.BuildStride(palette, Anim.X, _stridePhase, hat: Hat, arm: arm, armBlend: blend,
-                    dance: dance, into: _poseMesh ??= new ArrayMesh(), vr: vr),
+                    dance: dance, into: _poseMesh ??= new ArrayMesh(), vr: vr, point: point),
             };
         }
         var mounts = _poseMounts;
@@ -2251,6 +2317,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         // hit by a thrown thing (#261): rocked away from the blow, then a wobble home
         _walker.Transform *= FlinchPose(dt);
+        // stood on a slope, the capsule's round bottom holds the body r(1/cos - 1) over the ground under
+        // its origin (#883): the figure goes down by that, so its feet are on the slope, not over it
+        _footDrop = Mathf.Lerp(_footDrop, PoseKind is PoseStride or PoseTucked ? SlopeDrop() : 0f, MathX.Damp(12f, dt));
+        if (_footDrop > 0.002f) _walker.Position += Vector3.Down * _footDrop;
         PlaceHand(mounts);
         PlaceBack(mounts);
         if (!Net.NetworkManager.DedicatedServer) StepFace(dt);   // a face nobody sees (#842)
@@ -2259,7 +2329,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>What the figure was last built from: the same key, the same mesh (#221).</summary>
     private readonly record struct FootPoseKey(MeshInstance3D Walker, int Kind, float Speed, float Phase,
         Avatar.ItemArmPose Arm, float Blend, Avatar.DanceParams? Dance, Avatar.Headwear Hat, Avatar.HumanPalette Palette,
-        bool Smooth, Avatar.HumanMeshBuilder.VrArms? Vr = null);
+        bool Smooth, Avatar.HumanMeshBuilder.VrArms? Vr = null, Avatar.HumanMeshBuilder.Pointing? Point = null);
 
     /// <summary>A VR hand to the 2 cm the figure is keyed on (#439).</summary>
     private static Vector3 SnapHand(Vector3 p) => (p / 0.02f).Round() * 0.02f;
@@ -2311,7 +2381,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private void StepThrowView(float dt)
     {
-        float want = ScopeView ? 0f : GunAim ? 1f : Mathf.Clamp(ThrowAim, 0f, 1f);
+        // the phone (#889) lends third person too: its camera is laid over this one (PhoneCamera)
+        float want = ScopeView ? 0f : GunAim ? 1f : Mathf.Max(Mathf.Clamp(ThrowAim, 0f, 1f), PhoneLook > 0f ? 1f : 0f);
         float side = Core.GameSettings.Current.LeftShoulder ? -1f : 1f;
         _shoulderSide = Mathf.MoveToward(_shoulderSide, side, dt * 8f);
         _throwBlend = Mathf.Lerp(_throwBlend, want, MathX.Damp(want > _throwBlend ? 9f : 7f, dt));
@@ -2433,7 +2504,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // A throw pulls the lens in close over the right shoulder (#206); lent from first person,
         // the arm grows out of the eye instead of shrinking from the chase distance.
         float tb = _throwBlend;
-        float height = Mathf.Lerp(_borrowedThird ? EyeHeight : Mathf.Lerp(ShoulderHeight, 0.95f, _slideBlend), ThrowCamHeight, tb);
+        float height = Mathf.Lerp(_borrowedThird ? EyeHeight : Sitting ? _sitDrop + 0.55f : Mathf.Lerp(ShoulderHeight, 0.95f, _slideBlend), ThrowCamHeight, tb);
         float pivotTarget = GlobalPosition.Y + height;
         _pivotY = float.IsNaN(_pivotY) || Mathf.Abs(pivotTarget - _pivotY) > 6f
             ? pivotTarget
@@ -2575,8 +2646,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         // limp after a crash, or downed (#475): nothing to do, and no picker either
         if (Ragdolled || Downed) return true;
-        // in a fist fight (#495) the hands are busy
-        if (Fighting) return true;
+        // in a fist fight (#495) or an aura battle (#907) the hands are busy
+        if (InDuel) return true;
         // on a crane's ladder nothing; at its controls, let go of them (#618)
         if (_craneAt != CraneSeat.None) return TryCrane() || true;
         // a walkable vehicle's passenger stands up into the aisle; any other gets out
@@ -2584,6 +2655,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_ride is { IsVehicle: true })
         {
             ExitVehicle();
+            return true;
+        }
+        // seated on a stand (#885): stand up
+        if (Sitting)
+        {
+            StandUpFromSeat();
             return true;
         }
         // a Battle Royale crate at your feet (#194), indoors or out: a death box falls where its owner did
@@ -2658,6 +2735,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (IsOnFloor() && Interiors.InteriorManager.Instance?.TryDoor(this) == true) return true;
         // another player looked at, on foot: challenge them to a fist fight, or take their challenge (#495)
         if (TryEngageFighter()) return true;
+        // a concert's light desk (#885): its screen, at the front-of-house console, by hand too
+        if (IsOnFloor() && Concert.ConcertDeskUi.TryOpen(this)) return true;
+        // a stand's row (#885): sit down, by hand too (a VR grip), before music's dance
+        if (TrySit()) return true;
         if (byHand) return false;
         // music heard here: E starts the dance; stopping works for as long as it lasts
         if (Items.RadioManager.Instance?.NearestMusic(GlobalPosition, Items.RadioManager.DanceRadius, heard: DanceId == 0) != null)
@@ -2701,8 +2782,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     }
 
     /// <summary>Takes over a vehicle from the world: its position, heading, momentum and damage.</summary>
+    /// <summary>The name of the vehicle got into (#837): it is parked under it again (a Battle Royale match's car stays the match's).</summary>
+    private string _rideName = "";
+
     private void EnterVehicle(VehicleState state)
     {
+        _rideName = state.Name;
         if (_sliding) EndSlide();
         // off the bus's deck and out of every deck now, not in the next _Process: a physics step in
         // between stood the bus just got into on its own parked deck, 0.7 m up, then on its roof (#323)
@@ -2807,7 +2892,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 : _ride is Airliner { State.OnGround: false } aloft ? aloft.State.Attitude.Orthonormalized().GetEuler() : default,
             Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : _ride is Ufo uf ? uf.PackFlags() : _ride is Airliner af ? af.PackFlags() : _ride is Airstairs sf ? sf.PackFlags() : _ride is Forklift lf ? lf.PackFlags() : _ride is Excavator ef ? ef.PackFlags() : _ride is WheelLoader wf ? wf.PackFlags() : _ride is CompactRoller rf ? rf.PackFlags() : _ride is MiniDumper df ? df.PackFlags() : _ride is Telehandler hf ? hf.PackFlags() : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
             Radio: wrecked ? 0 : CarRadio, Cd: wrecked ? "" : CarCd,
-            Carrier: wrecked ? "" : hold.Key, CarrierSection: hold.Section, CarrierPos: hold.Pos, CarrierYaw: hold.Yaw);
+            Carrier: wrecked ? "" : hold.Key, CarrierSection: hold.Section, CarrierPos: hold.Pos, CarrierYaw: hold.Yaw,
+            Name: _rideName);
     }
 
     /// <summary>
@@ -3255,6 +3341,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <param name="setup">A car's preset (<see cref="CarSetups"/>), likewise.</param>
     private void ApplyRide(RideKind kind, Vector3 velocity, long tuning = 0, int setup = 0)
     {
+        // back on foot: the vehicle it had got into is behind it (parked, wrecked, left), its name with it
+        if (kind == RideKind.OnFoot) _rideName = "";
         // anything mounted ends a ragdoll (#214): the body is in the saddle now, not on the road
         if (kind != RideKind.OnFoot) EndRagdoll();
         // and the decks walked about on go at once, not at the next frame (#303): a steamer taken
@@ -3560,11 +3648,15 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             if (Terrain == null || !Terrain.TryGetSurface(GlobalPosition, out float g)
                 || !Terrain.HasCollisionAt(GlobalPosition))
                 return;
-            GlobalPosition = new Vector3(GlobalPosition.X, Mathf.Max(GlobalPosition.Y, g + 1f), GlobalPosition.Z);
+            // the lowest ground under the footprint: a body falling down a cliff, put down again when
+            // the terrain changes, went back up on top of it from the wall's 1 m quad (#883)
+            GlobalPosition = new Vector3(GlobalPosition.X, Mathf.Max(GlobalPosition.Y, LowestGroundUnder(g) + 1f), GlobalPosition.Z);
             _placed = true;
         }
         // a passenger is carried by the vehicle it sits in (#158)
         if (RidingWith != 0) { RideAlong(); return; }
+        // seated on a stand (#885): the body stays put until it stands up
+        if (SitPhysics()) return;
         // aboard a walkable vehicle, or about to be (#162)
         using (Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Deck, Bot))
             if (_ride == null && DeckPhysics((float)delta)) return;
@@ -3619,6 +3711,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (FightPhysics(dt, onFloor)) return;
         // in a UFO's tractor beam (#861, FootPlayer.Ufo.cs)
         if (BeamPhysics(dt, onFloor)) return;
+        // in an aura battle (#907, FootPlayer.Aura.cs)
+        if (AuraPhysics(dt, onFloor)) return;
 
         if (Npc && WalkControls == null)
         {
@@ -3761,6 +3855,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             }
         }
 
+        // too steep to stand on: no jumping up it, and it carries you down (below)
+        var steepDown = Vector3.Zero;
+        bool steep = onFloor && !_sliding && TooSteep(out steepDown);
+
         // --- gravity and the ordinary jump -------------------------------------------
         if (!onFloor)
         {
@@ -3792,7 +3890,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         {
             _wallJumps = 0;
             _lastWallNormal = Vector3.Zero;
-            if (!_sliding && spaceDown)
+            if (!_sliding && spaceDown && !steep)
             {
                 velocity.Y = JumpVelocity;
                 _groundCoyote = 0;
@@ -3820,7 +3918,17 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             var flat = new Vector3(velocity.X, 0, velocity.Z);
             float sp = flat.Length();
 
-            if (!onFloor && sp > RunSpeed * 1.05f)
+            if (steep)
+            {
+                // it carries you down; the input only steers across it, never up
+                var across = new Vector3(-steepDown.Z, 0, steepDown.X).Normalized();
+                float steer = direction.Dot(across) * moveAmount;
+                flat += (steepDown * Gravity + across * steer * SlideSteer) * dt;
+                if (flat.Length() > SteepSlideMax) flat = flat.Normalized() * SteepSlideMax;
+                velocity.X = flat.X;
+                velocity.Z = flat.Z;
+            }
+            else if (!onFloor && sp > RunSpeed * 1.05f)
             {
                 // Airborne above running pace means a slide launch or a wall jump is in
                 // flight. Steering it must not brake it, or every launch dies in the first
@@ -3850,6 +3958,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         MoveAndSlide();
         interiors?.AfterMove(this, before);
 
+        // wedged in the air between steep faces (a crevice in the 1 m ground, #883): held where it
+        // is, so no fall builds up, and none is owed as a landing on the way out
+        if (!IsOnFloor() && Velocity.Y < -1f && GetSlideCollisionCount() > 1 && GlobalPosition.Y > before.Y - 0.005f)
+        {
+            Velocity = Velocity with { Y = 0f };
+            _fallSpeed = 0f;
+        }
+
         // a slide that ran into a wall has no speed left to give
         if (_sliding && MathX.FlatLength(Velocity) < SlideMinSpeed * 0.5f)
             EndSlide();
@@ -3857,6 +3973,56 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_thirdPerson) FaceTravel(dt, direction);
         UpdateCameraFeel(dt, running, onFloor);
     }
+
+    /// <summary>
+    /// Whether the floor under the feet is too steep to stand on (#883), and which way is down it:
+    /// the horizontal part of the facet's normal, the sine of its slope long. Both the facet and,
+    /// on the terrain, the ground's slope over ±<see cref="SteepReachM"/> must be past
+    /// <see cref="StandMaxDeg"/>: one steep facet in a hillside does not slide you, and neither does
+    /// a cliff beside flat ground (the average alone carried a body off a cliff's top edge). Anywhere
+    /// else (a roof, a rock, a prop: the feet well off the drawn ground) the facet alone.
+    /// </summary>
+    private bool TooSteep(out Vector3 downhill)
+    {
+        var n = GetFloorNormal();
+        downhill = new Vector3(n.X, 0, n.Z);
+        if (n.Y >= SteepNormalY) return false;
+        var p = GlobalPosition;
+        float r = SteepReachM;
+        if (Terrain != null && Terrain.TryGetHeight(p, out float g) && Mathf.Abs(p.Y - g) < 0.6f
+            && Terrain.TryGetHeight(p + new Vector3(r, 0, 0), out float east)
+            && Terrain.TryGetHeight(p - new Vector3(r, 0, 0), out float west)
+            && Terrain.TryGetHeight(p + new Vector3(0, 0, r), out float south)
+            && Terrain.TryGetHeight(p - new Vector3(0, 0, r), out float north))
+            return new Vector3((west - east) / (2 * r), 1f, (north - south) / (2 * r)).Normalized().Y < SteepNormalY;
+        return true;
+    }
+
+    private float _footDrop;
+    /// <summary>How far the drawn figure is lowered under the body on a slope (<see cref="SlopeDrop"/>).</summary>
+    public float FootDrop => _footDrop;
+    private const float MaxFootDrop = 0.3f;
+
+    /// <summary>
+    /// How far a body standing on the terrain floats over it by its capsule's round bottom: r(1/cos - 1)
+    /// for the drawn ground's slope across the feet (±0.5 m), so every peer finds the same from the
+    /// replicated position. Nothing off the terrain (a roof, a deck: the body well off the drawn ground).
+    /// </summary>
+    private float SlopeDrop()
+    {
+        if (Terrain == null || Net.NetworkManager.DedicatedServer) return 0f;
+        var p = GlobalPosition;
+        const float d = 0.5f;
+        if (!Terrain.TryGetHeight(p, out float g) || Mathf.Abs(p.Y - g) > 0.6f
+            || !Terrain.TryGetHeight(p + new Vector3(d, 0, 0), out float east)
+            || !Terrain.TryGetHeight(p - new Vector3(d, 0, 0), out float west)
+            || !Terrain.TryGetHeight(p + new Vector3(0, 0, d), out float south)
+            || !Terrain.TryGetHeight(p - new Vector3(0, 0, d), out float north)) return 0f;
+        float ny = new Vector3((west - east) / (2 * d), 1f, (north - south) / (2 * d)).Normalized().Y;
+        return Mathf.Min(BodyRadius * (1f / ny - 1f), MaxFootDrop);
+    }
+
+    private static readonly float SteepNormalY = Mathf.Cos(Mathf.DegToRad(StandMaxDeg));
 
     /// <summary>
     /// Looks for a ledge in front: open air above it at reach height, a walkable top between
@@ -4031,7 +4197,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         else if (Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float ground))
         {
-            if (GlobalPosition.Y >= ground - 2f || Terrain.InTunnel(GlobalPosition)
+            if (GlobalPosition.Y >= ground - 2f || GlobalPosition.Y >= LowestGroundUnder(ground) - 2f || Terrain.InTunnel(GlobalPosition)
                 || Terrain.FloorBelow(this, GlobalPosition, GetRid())) return false;
             // back up on the ground, or on the water where there is some: never on a lake bed (#299)
             to = GlobalPosition with { Y = (Terrain.TryGetSurface(GlobalPosition, out float surface) ? surface : ground) + 1f };
@@ -4054,6 +4220,24 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // indoors the placement pass stands down: this is where the player stays
         if (Indoors) _placed = true;
         return true;
+    }
+
+    /// <summary>
+    /// The lowest drawn ground under the body's footprint (#883). At the foot of a cliff the capsule's
+    /// side rests on the ground while its centre stands over the wall's 1 m quad, metres above the
+    /// feet: read there alone, the ground called a body standing on it fallen through the world and
+    /// put it on top of the cliff. (<see cref="ChunkManager.FloorBelow"/> misses it too: its ray
+    /// starts inside the wall.)
+    /// </summary>
+    private float LowestGroundUnder(float atCentre)
+    {
+        const float r = BodyRadius + 0.2f;
+        float low = atCentre;
+        var p = GlobalPosition;
+        ReadOnlySpan<Vector3> around = [new(r, 0, 0), new(-r, 0, 0), new(0, 0, r), new(0, 0, -r)];
+        foreach (var d in around)
+            if (Terrain!.TryGetHeight(p + d, out float g)) low = Mathf.Min(low, g);
+        return low;
     }
 
     /// <summary>
@@ -4151,7 +4335,16 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 if (real.Length() <= _flight.Velocity.Length() + 0.5f) _flight.Velocity = real;
                 Velocity = _flight.Velocity;
             }
-            else if (impact > flyer.CrashSpeed) ev = FlightEvent.Crashed;
+            else if (impact > flyer.CrashSpeed)
+            {
+                ev = FlightEvent.Crashed;
+                // what a bot's craft met (#837: bots crashing in the air during a big drop)
+                if (Bot)
+                {
+                    var hit = GetSlideCollisionCount() > 0 && GetSlideCollision(0).GetCollider() is Node n ? $"{n.Name} ({n.GetClass()})" : "nothing";
+                    GD.Print(FormattableString.Invariant($"[bots] {Name} crashed into {hit} at {impact:F1} m/s, {GlobalPosition.Y:F0} m, floor {IsOnFloor()}"));
+                }
+            }
             else
             {
                 // knocks below a crash still dent a vehicle, and enough of them finish it
@@ -4979,7 +5172,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // a slide banks the view into the turn — the only cue that you are steering rather
         // than being carried, since the input no longer changes your speed
         float lean = _slideBlend * -SteerInput() * 0.10f;
-        float eye = Mathf.Lerp(EyeHeight, SlideEyeHeight, _slideBlend);
+        float eye = Sitting ? _sitDrop + SitEyeOverHip : Mathf.Lerp(EyeHeight, SlideEyeHeight, _slideBlend);
 
         // third person places its own camera in _Process; the bob, dip and FOV here still run
         // for it, because the body squash and the FOV kick read them

@@ -65,6 +65,37 @@ public static partial class HumanMeshBuilder
             Figure(BuildBody(BodyLook.Of(Appearance.ForSeed(i) with { Hair = HairStyle.None })
                 with { Genome = Face.FaceGenome.ForSeed((uint)i * 7919u + 13u) })))));
 
+    // #880: the aliens, the named presets dressed, dancing, waving, and their faces' moods
+    private static HumanPalette Dressed(AlienLook alien, int rider) =>
+        HumanPalette.ForRider(rider).With(alien.Looks) with { Outfit = alien.Outfit };
+
+    [Showcase("Aliens")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseAliens()
+    {
+        for (int i = 0; i < Aliens.Crew.Length; i++)
+        {
+            var alien = Aliens.Crew[i];
+            int rider = i;
+            yield return (alien.Name, () => Figure(Build(Dressed(alien, rider))));
+        }
+        yield return ("Zorp doing the robot", () => Figure(BuildStride(Dressed(Aliens.Zorp, 1), 0f, 0f,
+            dance: new DanceParams(Audio.Cd.MusicStyle.Pop, EmoteMoves + 16, 0.25f, 0.25f, 0, 1f))));
+        yield return ("Zib waving", () => Figure(BuildStride(Dressed(Aliens.Zib, 2), 0f, 0f,
+            dance: new DanceParams(Audio.Cd.MusicStyle.Pop, EmoteMoves, 0.25f, 0.25f, 0, 1f))));
+        foreach (var e in new[] { Face.FaceExpression.Happy, Face.FaceExpression.Surprised, Face.FaceExpression.Sad })
+            yield return ($"Gleeb {e}", () =>
+            {
+                var node = Figure(Build(Dressed(Aliens.Gleeb, 3)));
+                Face.FaceAnimator.Apply(node, Face.FaceExpressions.Of(e));
+                return node;
+            });
+        for (int skin = Appearance.HumanSkins; skin < Appearance.SkinTones.Length; skin++)
+        {
+            var bare = new AlienLook(Appearance.SkinNames[skin], Aliens.Look(skin), []);
+            yield return (bare.Name, () => Figure(Build(HumanPalette.ForRider(0).With(bare.Looks))));
+        }
+    }
+
     [Showcase("Figures")]
     private static IEnumerable<(string, Func<Node3D>)> ShowcaseMisc()
     {
@@ -105,4 +136,12 @@ public static partial class HumanMeshBuilder
             .Select(s => ($"Stance - {s}", (Func<Node3D>)(() => Figure(Danced(FightMoves + (int)s, (int)s, 0.5f)))))
             .Concat(Enum.GetValues<FightMove>().Where(m => m != FightMove.None)
                 .Select(m => ($"Move - {m}", (Func<Node3D>)(() => Figure(Danced(FightMoves + FightRules.PoseOf(m), (int)m, 0.4f))))));
+
+    // the aura battle (#907): its stances, then each move most of the way through (the pose held)
+    [Showcase("Aura")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseAura() =>
+        Enum.GetValues<AuraStance>().Where(s => s is not AuraStance.None and < AuraStance.MoveBase)
+            .Select(s => ($"Stance - {s}", (Func<Node3D>)(() => Figure(Danced(AuraMoves + (int)s, (int)s, 0.5f)))))
+            .Concat(AuraRules.Moves
+                .Select(m => ($"Move - {AuraRules.Name(m)}", (Func<Node3D>)(() => Figure(Danced(AuraMoves + AuraRules.PoseOf(m), (int)m, 0.7f))))));
 }

@@ -200,6 +200,8 @@ public enum ItemId
     TazJacket = 354, TazTrousers = 355, ArmyTee = 356,
     /// <summary>Garments (#822): a building site's workwear, found in its office: a hard hat and a hi-vis vest.</summary>
     HardHat = 357, HiVisVest = 358,
+    /// <summary>Garments (#880, Avatar.Aliens): antennae on a headband (green, silver, a tall pair) and a silver suit.</summary>
+    AlienAntennae = 359, SilverAntennae = 360, LongAntennae = 361, SilverSuit = 362,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>

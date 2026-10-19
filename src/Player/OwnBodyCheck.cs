@@ -90,6 +90,9 @@ public partial class OwnBodyCheck : Node3D
                 break;
             }
             case 6:
+                // the cockpit with your body first, whatever the saved setting says (it is restored at the end)
+                _savedCockpitBody = GameSettings.Current.CockpitBody;
+                GameSettings.Current.CockpitBody = true;
                 Check(_player!.SetRide((RideKind)CarCatalog.First), "mounted a car, in its cockpit with your body");
                 _wait = Settle;
                 break;
@@ -152,6 +155,11 @@ public partial class OwnBodyCheck : Node3D
         Check(p.BodyFromEye && body.Layers == Avatar.OwnBody.Layer, $"the figure is on the own-body layer only (layers {body.Layers:X})");
         // Godot casts no shadow from a layer the camera culls: a shadow-only twin on the world's layer does
         Check(TwinCasts(body), "a shadow-only twin of the figure, on the world's layer, casts its shadow");
+        // by a doorway the figure is copied across (DoorwayGhosts); a copy of the twin is drawn, and the portal showed the head
+        var ghosted = new List<MeshInstance3D>();
+        Interiors.DoorwayGhosts.Collect(p, ghosted);
+        Check(ghosted.Contains(body) && !ghosted.Any(m => m.CastShadow == GeometryInstance3D.ShadowCastingSetting.ShadowsOnly),
+            "a doorway's ghost copies the figure, never its shadow-only twin");
         Check((p.Camera.CullMask & Avatar.OwnBody.Layer) == 0, "the eye's camera leaves the own-body layer out");
         Check((Interiors.WallMirror.Cull & Avatar.OwnBody.Layer) != 0, "a wall mirror draws the own-body layer");
         Check(p.HandLocal != null, "the figure is posed: its hand is placed");
@@ -204,8 +212,11 @@ public partial class OwnBodyCheck : Node3D
         GD.Print(image.SavePng(path) == Error.Ok ? $"[ownbody] wrote {path}" : $"[ownbody] FAILED to write {path}");
     }
 
+    private bool? _savedCockpitBody;
+
     private void Finish()
     {
+        if (_savedCockpitBody is { } saved) GameSettings.Current.CockpitBody = saved;
         GD.Print(_failures == 0 ? "[ownbody] RESULT: ok" : $"[ownbody] RESULT: FAILED ({_failures})");
         GetTree().Quit(_failures == 0 ? 0 : 1);
     }

@@ -11,7 +11,7 @@
     shrink). `BrState.Started` moves back by what was left (`ZoneSchedule.NextShrinkAt`), so every client
     follows from the state message. Refused before the plane's doors close, while shrinking, once over.
   - `/pvp on|off` is separate (free roam).
-- Server: `--brpace f` (timing multiplier, for tests). Client: `--br` joins every lobby by itself (#231).
+- Server: `--brpace f` (timing multiplier, for tests), `--brseed n` (every match's seed, checks). Client: `--br` joins every lobby by itself (#231).
 - `<godot> --headless --path . -- [--chunks <dir>] --brcheck`: zone determinism/nesting, round
   lengths (30-45 min target), 200 real region picks against the hard rules, no repeat within 8 km,
   state JSON round trip, inventory lend round trip, and a real region's map rendered to `test_output/br_map_check.png`.

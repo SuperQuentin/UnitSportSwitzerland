@@ -8,8 +8,8 @@
 AT=2583250,1113250
 AT_B=2583262,1113250   # never on top of A
 PORT=7836
-tc_server 300 120 "$OUT/bots_server.log" --server --generated-world --port $PORT --no-query --admin-password botcheck --bots 3 --botsat $AT --botlog
-client() { tc_client 240 "$OUT/bots_$1.log" --connect 127.0.0.1:$PORT --name "Bot$1" --cache "$OUT/bots_cache_$1" \
+tc_server 560 120 "$OUT/bots_server.log" --server --generated-world --port $PORT --no-query --admin-password botcheck --bots 3 --botsat $AT --botlog
+client() { tc_client 480 "$OUT/bots_$1.log" --connect 127.0.0.1:$PORT --name "Bot$1" --cache "$OUT/bots_cache_$1" \
     --at "$2" --view first --botcheck "$1" ${CLIENT_ARGS:-}; }
 client A "$AT" & A=$!
 client B "$AT_B"

@@ -82,6 +82,21 @@ public static class OccasionProbe
         Expect("merge: file disables", merged, "2026-10-03", "community-day-2026");
         Expect("merge: default kept", merged, "2026-12-01", "christmas-2026");
 
+        // a session's /occasion start shows the look whatever the saved choice or --occasion set (#881)
+        void Pref(string label, string id, string[]? cli, string[] started, OccasionPreference saved, OccasionPreference expected)
+        {
+            var got = OccasionSchedule.Preference(id, cli?.ToHashSet(StringComparer.OrdinalIgnoreCase),
+                started.ToHashSet(StringComparer.OrdinalIgnoreCase), saved);
+            bool ok = got == expected;
+            if (!ok) failures++;
+            GD.Print($"[occasioncheck] {(ok ? "ok  " : "FAIL")} {label,-28} -> {got}" + (ok ? "" : $"   expected {expected}"));
+        }
+        Pref("pref: saved", "halloween", null, [], OccasionPreference.Off, OccasionPreference.Off);
+        Pref("pref: started over saved", "christmas", null, ["christmas"], OccasionPreference.Off, OccasionPreference.Always);
+        Pref("pref: --occasion leaves out", "christmas", ["halloween"], [], OccasionPreference.Auto, OccasionPreference.Off);
+        Pref("pref: started over --occ", "christmas", ["halloween"], ["christmas"], OccasionPreference.Auto, OccasionPreference.Always);
+        Pref("pref: --occasion names it", "halloween", ["halloween"], [], OccasionPreference.Off, OccasionPreference.Always);
+
         GD.Print(failures == 0 ? "[occasioncheck] all passed" : $"[occasioncheck] {failures} FAILED");
         return failures == 0 ? 0 : 1;
     }
