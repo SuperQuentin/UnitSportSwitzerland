@@ -93,6 +93,7 @@ public class ClockDisciplineTests
         // music plays in real time, so a CD's position, its beat and everything dancing to it do too
         ["src/Items/RadioManager.cs"] = "presentation: a radio's CD position is server real time, as its audio plays",
         ["src/Items/RadioBody.cs"] = "presentation: a placed radio's CD position and groove",
+        ["src/Concert/ConcertRig.cs"] = "presentation: a concert's light show runs in real time with the music it lights, the same frame on every peer",
         ["src/Items/RadioTap.cs"] = "presentation: the tap on a playing CD's samples",
         ["src/Items/BeatField.cs"] = "presentation: the beat of the music nearby",
         ["src/Items/HeldItemVisual.cs"] = "presentation: a held radio's sparkles on the beat",
@@ -130,6 +131,7 @@ public class ClockDisciplineTests
         // ---- calendar: the real date, on purpose ----
         ["src/Farming/FarmField.cs"] = "calendar: the crop month is the real month (--month overrides)",
         ["src/Farming/FarmSales.cs"] = "calendar: the farm stand's month is the real month",
+        ["src/Concert/ConcertDirector.cs"] = "calendar: tonight's concert is the real date's, a new artist every day",
         ["src/Birds/BirdLife.cs"] = "calendar: the birds of the real month",
         ["src/Occasions/OccasionManager.cs"] = "calendar: today's occasions (Fasnacht, 1 August...) are on the real date",
         ["src/Occasions/OccasionAmbience.cs"] = "calendar: an occasion's ambience follows the real date",
