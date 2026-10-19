@@ -457,7 +457,7 @@ public static class InvasionScript
             Number = 20, Name = "The pointy one", FromBar = 39, Bars = 2, Feature = "the mothership over the Matterhorn",
             Hour = 15.8,
             // the mothership parked over the summit, its beam on the peak
-            Craft = [new Craft(Spot.Alt(Matterhorn.E, Matterhorn.N, 4800), 0) { Mothership = true, Switches = UfoSwitches.BeamBetween(1.0, 99) }],
+            Craft = [new Craft(Spot.Alt(2622030, 1092220, 4250), 0) { Mothership = true, Switches = UfoSwitches.BeamBetween(1.0, 99) }],
             Keys =
             [
                 new(0, Pt.Alt(2627300, 1092800, 3330), Pt.Alt(Matterhorn.E, Matterhorn.N, 4600), 85),
@@ -539,8 +539,8 @@ public static class InvasionScript
             ItemCues = [new(0.3, 0, ItemEventKind.Horn)],
             Keys =
             [
-                new(0, Pt.On(0, 1.4f, 1.2f, 3.5f), Pt.On(0, 0f, 6f, -60f), 28),
-                new(2 * B, Pt.On(0, 3f, 6f, 16f), Pt.On(0, 0f, 30f, -200f), 28),
+                new(0, Pt.On(0, 1.2f, 1.1f, -3.6f), Pt.On(0, 0f, 1.6f), 28),
+                new(2 * B, Pt.On(0, 3f, 7f, -16f), Pt.On(0, 0f, 2f), 28),
             ],
             Smooth = 0.4f, Preroll = 0.5,
         },
@@ -664,8 +664,8 @@ public static class InvasionScript
             ],
             Keys =
             [
-                new(0, Pt.Road("riddes", 150, -6f, 1.2f), Pt.On(0, 0f, 1.5f), 35),
-                new(2 * B, Pt.Road("riddes", 150, -6f, 1.2f), Pt.On(2, 0f, 1.5f), 35),
+                new(0, Pt.Road("riddes", 165, 3.5f, 1.3f), Pt.On(0, 0f, 1.5f), 35),
+                new(2 * B, Pt.Road("riddes", 165, 3.5f, 1.3f), Pt.On(2, 0f, 1.5f), 35),
             ],
             Smooth = 0.2f, Preroll = 2,
             Supers = [new(0.2, 3.0, "RIDDES · 07:00")],
@@ -714,8 +714,8 @@ public static class InvasionScript
             ],
             Keys =
             [
-                new(0, Pt.Road("garage", 20, -5f, 1.4f), Pt.Road("garage", 40, 0f, 0.8f), 28),
-                new(2 * B, Pt.Road("garage", 120, -5f, 1.6f), Pt.Road("garage", 140, 0f, 1.2f), 28),
+                new(0, Pt.Road("garage", 15, 0f, 4.5f), Pt.Road("garage", 45, 0f, 0.6f), 28),
+                new(2 * B, Pt.Road("garage", 105, 0f, 3.5f), Pt.Road("garage", 136, 0f, 1.2f), 28),
             ],
             Smooth = 0.3f, Preroll = 0.5,
             Bubbles = [Say("luca_pick", 2.4, 0, "Pick a car. Any car.")],
@@ -821,11 +821,11 @@ public static class InvasionScript
                 new(Meadow.Toward(150, 3.0f), 10, default, default) { Item = ItemId.FirstAidKit, Scale = 1.6f },
                 new(Meadow.Toward(195, 3.4f), 60, default, default) { Item = ItemId.FonduePot, Scale = 1.4f },
             ],
-            Zone = (Meadow.Toward(250, 200), 230f),
+            Zone = (Meadow.Toward(250, 150), 110f),
             Keys =
             [
-                new(0, Pt.On(0, 0.8f, 1.6f, -4.0f), Pt.On(0, 0f, 0.8f, 1.5f), 28),
-                new(2 * B, Pt.On(0, 1.4f, 1.9f, -4.6f), Pt.On(0, 0f, 1.2f), 28),
+                new(0, Pt.On(0, 0.8f, 2.4f, -4.5f), Pt.On(0, 0f, 0.4f, 1.0f), 28),
+                new(2 * B, Pt.On(0, 1.4f, 2.2f, -4.8f), Pt.On(0, 0f, 1.2f), 28),
             ],
             Smooth = 0.3f, Preroll = 0.5,
             Bubbles = [Say("luca_blahaj", 0.8, 0, "Who packed the Blåhaj?")],
@@ -836,15 +836,15 @@ public static class InvasionScript
             Hour = 15.05,
             Cast =
             [
-                .. Enumerable.Range(0, 6).Select(i => Runner(Meadow.Toward(220 + i * 9, 40 + i * 6), 250, seed: 50 + i)),
+                .. Enumerable.Range(0, 6).Select(i => Runner(Meadow.Toward(250, 150).Toward(55 + i * 6, 45 + i % 3 * 6), 240 + i * 6, seed: 50 + i)),
             ],
             // the saucer landed in the middle of the zone, its ramp down
-            Craft = [new Craft(Meadow.Toward(250, 200), 60) { Switches = _ => new UfoSwitches(Ramp: true) }],
-            Zone = (Meadow.Toward(250, 200), 230f),
+            Craft = [new Craft(Meadow.Toward(250, 150), 70) { Switches = _ => new UfoSwitches(Ramp: true) }],
+            Zone = (Meadow.Toward(250, 150), 110f),
             Keys =
             [
-                new(0, Ground(Meadow, 70, 60, 40f), Ground(Meadow, 250, 200, 0f), 28),
-                new(2 * B, Ground(Meadow, 70, 40, 55f), Ground(Meadow, 250, 240, 0f), 28),
+                new(0, Pt.At(Meadow.Toward(250, 150).Toward(70, 85).E, Meadow.Toward(250, 150).Toward(70, 85).N, 22f), Pt.At(Meadow.Toward(250, 150).E, Meadow.Toward(250, 150).N, 3f), 28),
+                new(2 * B, Pt.At(Meadow.Toward(250, 150).Toward(70, 70).E, Meadow.Toward(250, 150).Toward(70, 70).N, 28f), Pt.At(Meadow.Toward(250, 150).E, Meadow.Toward(250, 150).N, 2f), 28),
             ],
             Smooth = 0.4f, Preroll = 1,
         },
@@ -856,9 +856,9 @@ public static class InvasionScript
             [
                 new() { Who = Luca, Ride = Car(Fd3s), At = Tremola, Toward = TremolaFoot, Drive = Drive.Road, Route = "tremola", Arc = 505, Skill = 1.1f },
                 new() { Ride = Car(Bnr32), At = Tremola, Toward = TremolaFoot, Drive = Drive.Road, Route = "tremola", Arc = 490, Skill = 1.15f, Aggression = 0.8f, Seed = 47 },
-                // the saucer flees down the hairpins ahead of them
-                Ufo(Tremola.Up(30), 180, 20f),
             ],
+            // the saucer they chase, low over the hairpins ahead of them (the road at arc 650)
+            Craft = [new Craft(new Spot(2686600, 1155903, 12), 180)],
             Keys =
             [
                 new(0, Pt.On(1, 3.2f, 1.0f, 1.5f), Pt.On(1, -0.5f, 0.8f, -6f), 35),
@@ -969,7 +969,7 @@ public static class InvasionScript
                 new() { Who = Tourist, Ride = RideKind.Speedboat, At = new Spot(2560689, 1140349), Heading = 315, Board = ChillonBoard, Launch = 14, Drive = Drive.Controls, Controls = _ => Pedal(1f, 0.15f) },
             ],
             // the saucer skimming the water, the boats circling it
-            Craft = [new Craft(Spot.Alt(2560740, 1140420, 382), 0)],
+            Craft = [new Craft(Spot.Alt(2560690, 1140395, 380), 0)],
             Keys =
             [
                 new(0, Pt.Alt(2560628, 1140350, 373.4f), Pt.At(2560720, 1140445, 9), 35),
@@ -1009,13 +1009,13 @@ public static class InvasionScript
             Cast =
             [
                 new() { Who = Heidi, At = NyonMole, Heading = 95, Item = (int)ItemId.FishingRod, Use = t => t > 0.3 },
-                new() { Who = Zib, At = NyonMole.Toward(95, 24), Board = NyonMole.Toward(0, 6), Swim = true, Heading = 275, Drive = Drive.Walk, Walk = _ => (new Vector2(0f, 0.5f), false) },
+                new() { Who = Zib, At = NyonMole.Toward(95, 15), Board = NyonMole.Toward(0, 6), Swim = true, Heading = 275, Drive = Drive.Walk, Walk = _ => (new Vector2(0f, 0.4f), false) },
             ],
-            ItemCues = [new(0.4, 0, ItemEventKind.FishCast)],
+            ItemCues = [new(0.4, 0, ItemEventKind.FishCast) { At = NyonMole.Toward(95, 13) }],
             Keys =
             [
-                new(0, Pt.On(0, -2.2f, 1.6f, 3.4f), Pt.On(0, 0f, 0.2f, -8f), 28),
-                new(2 * B, Pt.On(0, -2.6f, 1.7f, 3.8f), Pt.On(1, 0f, 0.3f), 28),
+                new(0, Pt.On(0, -2.2f, 1.6f, 3.4f), Pt.On(0, 0f, 0.2f, -10f), 35),
+                new(2 * B, Pt.On(0, -2.0f, 1.7f, 3.0f), Pt.On(1, 0f, 0.3f), 45),
             ],
             Smooth = 0.3f, Preroll = 2.0,
             Supers = [new(0.2, 3.0, "NYON · 16:00")],
@@ -1031,8 +1031,8 @@ public static class InvasionScript
             Props = [new(default, 0, new Vector3(6f, 1.6f, 0.8f), new Color(0.75f, 0.76f, 0.8f)) { Route = "riddes", Arc = 150 }],
             Keys =
             [
-                new(0, Pt.Road("riddes", 125, -3.5f, 1.3f), Pt.Road("riddes", 151, 0f, 1.0f), 35),
-                new(2 * B, Pt.Road("riddes", 128, -4.5f, 1.5f), Pt.Road("riddes", 160, 0f, 0.6f), 35),
+                new(0, Pt.Road("riddes", 125, 3.5f, 1.3f), Pt.Road("riddes", 151, 0f, 1.0f), 35),
+                new(2 * B, Pt.Road("riddes", 128, 4.5f, 1.5f), Pt.Road("riddes", 160, 0f, 0.6f), 35),
             ],
             Preroll = 4.7,
             Bubbles = [Say("luca_ok", 2.6, 0, "I'm OK!", BubbleShape.Shout)],
@@ -1100,8 +1100,8 @@ public static class InvasionScript
             ItemCues = [new(0.1, 0, ItemEventKind.Fondue)],
             Keys =
             [
-                new(0, Ground(Crew, 180, 3.4f, 1.5f), Ground(Crew, 0, 0, 1.0f), 35),
-                new(2 * B, Ground(Crew, 175, 2.8f, 1.4f), Ground(Crew, 0, 0, 1.1f), 35),
+                new(0, Ground(Crew, 180, 5.6f, 1.6f), Ground(Crew, 0, 0, 1.2f), 35),
+                new(2 * B, Ground(Crew, 175, 4.8f, 1.6f), Ground(Crew, 0, 0, 1.3f), 35),
             ],
             Smooth = 0.3f, Preroll = 0.5,
             Bubbles =
