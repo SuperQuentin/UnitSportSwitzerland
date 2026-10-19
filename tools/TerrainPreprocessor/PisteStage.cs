@@ -327,8 +327,12 @@ public static class PisteStage
         return (float)(0.5 * Math.Atan2(2 * sxy, sxx - syy));
     }
 
-    /// <summary>Rasterises every slope touching <paramref name="tile"/>; null when none covers a vertex of it.</summary>
-    public static PisteTile? BuildTile(TileId tile, IReadOnlyList<Slope> slopes, IReadOnlyList<int> touching, out int dropped)
+    /// <summary>
+    /// Rasterises every slope touching <paramref name="tile"/>; null when none covers a vertex of it.
+    /// With the tile's heights, each record gets its altitude range, sun exposure and steepness.
+    /// </summary>
+    public static PisteTile? BuildTile(TileId tile, IReadOnlyList<Slope> slopes, IReadOnlyList<int> touching, out int dropped,
+        ChunkGrid? heights = null)
     {
         dropped = 0;
         var b = new TileBuf();
@@ -345,6 +349,7 @@ public static class PisteStage
         if (used.Count == 0) return null;
         var order = used.Keys.OrderByDescending(k => used[k]).Take(PisteFormat.MaxRecords).OrderBy(k => slopes[k].Id).ThenBy(k => k).ToList();
         dropped = used.Count - order.Count;
+        var terrain = heights != null && heights.Stride == 1 ? Terrain(b, heights) : null;
         var local = new Dictionary<int, byte>();
         var records = new List<PisteRecord>(order.Count);
         foreach (int k in order)
@@ -354,7 +359,9 @@ public static class PisteStage
             var rel = new float[path.Length];
             for (int i = 0; i < path.Length; i += 2) { rel[i] = (float)(path[i] - tile.MinE); rel[i + 1] = (float)(path[i + 1] - tile.MinN); }
             local[k] = (byte)(records.Count + 1);
-            records.Add(new PisteRecord(s.Id, s.Type, s.Difficulty, s.Grooming, s.IsArea, s.WidthM, s.Name, s.Ref, rel));
+            var t = terrain != null && terrain.TryGetValue(k, out var tv) ? tv : (2000f, 2000f, 0.5f, 15f);
+            records.Add(new PisteRecord(s.Id, s.Type, s.Difficulty, s.Grooming, s.IsArea, s.WidthM, s.Name, s.Ref, rel,
+                t.Item1, t.Item2, t.Item3, t.Item4));
         }
         var slot = new byte[b.Slope.Length];
         var aux = new ushort[b.Slope.Length];
@@ -365,6 +372,38 @@ public static class PisteStage
             aux[i] = PisteFormat.PackAux(Math.Min(1f, b.Inside[i] / PisteFormat.EdgeRampM), b.Angle[i]);
         }
         return new PisteTile(tile, records, slot, aux);
+    }
+
+    /// <summary>Per slope: altitude 10th and 90th percentiles, sun exposure and mean steepness, from every 4th vertex it owns.</summary>
+    private static Dictionary<int, (float, float, float, float)> Terrain(TileBuf b, ChunkGrid g)
+    {
+        int size = PisteFormat.Size;
+        var alts = new Dictionary<int, List<float>>();
+        var sums = new Dictionary<int, (double Sun, double Steep, int N)>();
+        for (int row = 1; row < size - 1; row += 4)
+            for (int col = 1; col < size - 1; col += 4)
+            {
+                int s = b.Slope[row * size + col] - 1;
+                if (s < 0) continue;
+                if (!alts.TryGetValue(s, out var list)) alts[s] = list = new List<float>();
+                list.Add((float)g.HeightMetersAt(col, row));
+                // gradient: east is +col, north is -row; 1 m spacing
+                double ge = (g.HeightMetersAt(col + 1, row) - g.HeightMetersAt(col - 1, row)) / 2;
+                double gn = (g.HeightMetersAt(col, row - 1) - g.HeightMetersAt(col, row + 1)) / 2;
+                double norm = Math.Sqrt(1 + ge * ge + gn * gn);
+                // higher to the north = the ground faces south, toward the sun
+                var have = sums.GetValueOrDefault(s);
+                sums[s] = (have.Sun + gn / norm, have.Steep + Math.Atan(Math.Sqrt(ge * ge + gn * gn)) * 180 / Math.PI, have.N + 1);
+            }
+        var result = new Dictionary<int, (float, float, float, float)>();
+        foreach (var (s, list) in alts)
+        {
+            list.Sort();
+            var (sun, steep, n) = sums[s];
+            result[s] = (list[(int)(list.Count * 0.1)], list[Math.Min(list.Count - 1, (int)(list.Count * 0.9))],
+                (float)Math.Clamp(0.5 + sun / n, 0, 1), (float)(steep / n));
+        }
+        return result;
     }
 
     // ---- the stage ---------------------------------------------------------------------------
@@ -406,7 +445,10 @@ public static class PisteStage
         var areaByDiff = new Dictionary<PisteDifficulty, long>();
         Parallel.ForEach(byTile, new ParallelOptions { MaxDegreeOfParallelism = jobs }, kv =>
         {
-            var tile = BuildTile(kv.Key, slopes, kv.Value, out int drop);
+            ChunkGrid? heights = null;
+            string terr = Path.Combine(outDir, ChunkFormat.ChunkFileName(kv.Key));
+            if (File.Exists(terr)) { using var fs = File.OpenRead(terr); heights = ChunkCodec.Decode(fs); }
+            var tile = BuildTile(kv.Key, slopes, kv.Value, out int drop, heights);
             if (tile == null) return;
             using var ms = new MemoryStream();
             PisteFormat.Encode(tile, ms);
@@ -500,6 +542,15 @@ public static class PisteStage
             Check(ms.Length < 100_000, $"codec: {ms.Length} bytes for three slopes");
         }
         Check(BuildTile(new TileId(2590, 1100), slopes, [0], out _) == null, "raster: a tile the slope does not reach");
+        // a face falling 1 m per metre southward (45 degrees, facing south): 2500 m at the north edge
+        var hs = new ushort[PisteFormat.Size * PisteFormat.Size];
+        for (int row = 0; row < PisteFormat.Size; row++)
+            for (int col = 0; col < PisteFormat.Size; col++)
+                hs[row * PisteFormat.Size + col] = (ushort)Math.Round((2500 - row) / ChunkFormat.HeightScale);
+        var face = BuildTile(tile, slopes, [0], out _, new ChunkGrid(tile, hs, 1500, 2500));
+        var fr = face?.Records[0];
+        Check(fr != null && fr.AltLow < fr.AltHigh && Math.Abs(fr.AltLow - 2000) < 20 && Math.Abs(fr.AltHigh - 2000) < 20 && fr.Sun > 0.95f && Math.Abs(fr.SteepDeg - 45) < 1,
+            $"terrain: alt {fr?.AltLow}-{fr?.AltHigh}, sun {fr?.Sun}, steep {fr?.SteepDeg}");
         Check(Math.Abs(AxisAngle([0, 0, 100, 0, 100, 10, 0, 10])) < 0.01f, "area axis");
 
         foreach (var f in fails) Console.Error.WriteLine("FAIL " + f);

@@ -23,8 +23,13 @@ public enum PisteGrooming : byte { Unknown = 0, Classic = 1, Skating = 2, Mogul 
 /// can be laid without seams. <see cref="Id"/> is the OSM id (top bit set for a relation), the same
 /// in every tile the slope touches.
 /// </summary>
+/// <param name="AltLow">The slope's ground in this tile, 10th percentile of altitude (m).</param>
+/// <param name="AltHigh">90th percentile of altitude (m): the snow state is evaluated at both and blended by height.</param>
+/// <param name="Sun">Sun exposure from the mean aspect: 0 a steep north face, 0.5 flat, 1 a steep south face.</param>
+/// <param name="SteepDeg">Mean slope angle (degrees), for the moguls.</param>
 public sealed record PisteRecord(ulong Id, PisteType Type, PisteDifficulty Difficulty, PisteGrooming Grooming,
-    bool IsArea, float WidthM, string Name, string Ref, float[] Path)
+    bool IsArea, float WidthM, string Name, string Ref, float[] Path,
+    float AltLow = 2000, float AltHigh = 2000, float Sun = 0.5f, float SteepDeg = 15)
 {
     /// <summary>Groomed unless OSM says moguls or backcountry: what the 06:00 reset applies to.</summary>
     public bool Groomed => Grooming is not (PisteGrooming.Mogul or PisteGrooming.Backcountry)
@@ -96,6 +101,7 @@ public static class PisteFormat
             w.Write(r.Id);
             w.Write((byte)r.Type); w.Write((byte)r.Difficulty); w.Write((byte)r.Grooming); w.Write((byte)(r.IsArea ? 1 : 0));
             w.Write(r.WidthM);
+            w.Write(r.AltLow); w.Write(r.AltHigh); w.Write(r.Sun); w.Write(r.SteepDeg);
             w.Write(r.Name); w.Write(r.Ref);
             w.Write(r.Path.Length / 2);
             foreach (float v in r.Path) w.Write(v);
@@ -122,10 +128,11 @@ public static class PisteFormat
                 var groom = (PisteGrooming)r.ReadByte();
                 bool area = r.ReadByte() != 0;
                 float width = r.ReadSingle();
+                float altLow = r.ReadSingle(), altHigh = r.ReadSingle(), sun = r.ReadSingle(), steep = r.ReadSingle();
                 string name = r.ReadString(), reference = r.ReadString();
                 var path = new float[r.ReadInt32() * 2];
                 for (int k = 0; k < path.Length; k++) path[k] = r.ReadSingle();
-                records.Add(new PisteRecord(id, type, diff, groom, area, width, name, reference, path));
+                records.Add(new PisteRecord(id, type, diff, groom, area, width, name, reference, path, altLow, altHigh, sun, steep));
             }
         var slot = new byte[Size * Size];
         var auxBytes = new byte[Size * Size * 2];
