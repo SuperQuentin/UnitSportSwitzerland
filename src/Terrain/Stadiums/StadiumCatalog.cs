@@ -40,6 +40,10 @@ public static class StadiumCatalog
         DepthNorth = 41f, DepthEast = 32.5f, DepthSouth = 39f, DepthWest = 38.3f,
         RoofOuter = 34f, RoofInner = 30f, RoofInset = 2.5f, RoofRing = 9f, Solar = true,
         Columns = 48, ColumnTop = 39f,
+        // a gate in every side, the players' tunnel in the main (west) stand; a vomitory into each
+        // seat block of both tiers, the upper ones from the club level behind the boxes
+        Gates = new[] { StadiumSide.North, StadiumSide.East, StadiumSide.South, StadiumSide.West },
+        VomitoryRows = new[] { 6, 3 },
     };
 
     public static readonly StadiumSpec[] All = { Geneva };

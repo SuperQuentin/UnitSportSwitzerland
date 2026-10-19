@@ -162,7 +162,7 @@ public sealed class NetworkChunkSource : IChunkSource
         if (await _local.LoadTreesAsync(id, ct).ConfigureAwait(false) is { } local) return local;
 
         return await ObtainAsync(AssetKind.Trees, id, ct,
-            bytes => { using var ms = new MemoryStream(bytes); return TreeFormat.Decode(ms); })
+            bytes => { using var ms = new MemoryStream(bytes); return Stadiums.StadiumClip.Trees(id, TreeFormat.Decode(ms)); })
             .ConfigureAwait(false);
     }
 

@@ -78,6 +78,23 @@ public sealed record StadiumSpec
     public float GateWidth { get; init; } = 7f;
     public float GateHeight { get; init; } = 4.2f;
 
+    /// <summary>
+    /// Per tier, the row a vomitory comes out at in the middle of each seat block, or -1 for none: a
+    /// tunnel climbing from the concourse under the tier (the ground for the first tier, the club
+    /// level behind the boxes for the others) into the rows.
+    /// </summary>
+    public int[] VomitoryRows { get; init; } = Array.Empty<int>();
+    public float VomitoryWidth { get; init; } = 2.4f;
+    /// <summary>Headroom kept over a vomitory's floor and a stair's flight.</summary>
+    public float Headroom { get; init; } = 2.3f;
+    /// <summary>
+    /// Stairs from the ground concourse up to the club level (the floor behind the second tier's
+    /// front wall, at its walkway's height), two a side, each with a door in the facade at its foot.
+    /// </summary>
+    public float StairWidth { get; init; } = 3f;
+    /// <summary>Kiosks against the facade inside, in the ground concourse.</summary>
+    public bool Kiosks { get; init; } = true;
+
     /// <summary>Seat blocks are about this long, with an aisle of stairs between two.</summary>
     public float BlockLength { get; init; } = 14f;
     public float AisleWidth { get; init; } = 1.2f;

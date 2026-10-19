@@ -38,7 +38,12 @@ public static class StadiumBuilder
     /// <summary>A gate tunnel keeps this much headroom under the first row it leaves standing.</summary>
     private const float GateClearance = 0.6f;
 
-    private enum Seg : byte { Seat, Aisle, Gate, Corner }
+    private enum Seg : byte { Seat, Aisle, Gate, Corner, Vomitory, Stair }
+
+    /// <summary>A vomitory's floor and a stair's flight climb at most this steeply (tan 35° and 33°).</summary>
+    private const float VomitorySlope = 0.7f, StairSlope = 0.65f;
+    /// <summary>A stair's step, m.</summary>
+    private const float StairRise = 0.3f;
 
     /// <summary>A point of the seating front, its outward normal, the facade's distance out there, and what the segment starting here is.</summary>
     private readonly record struct Station(Vector2 P, Vector2 N, float Depth, Seg Kind, StadiumSide Side);
@@ -116,13 +121,24 @@ public static class StadiumBuilder
             return s.DepthNorth * Sq(-n.Y) + s.DepthEast * Sq(n.X) + s.DepthSouth * Sq(n.Y) + s.DepthWest * Sq(-n.X);
         }
         void Add(Vector2 p, Vector2 n, Seg kind, StadiumSide side) => list.Add(new Station(p, n, DepthAt(n), kind, side));
-        void Blocks(StadiumSide side, Vector2 start, Vector2 dir, Vector2 n, float from, float len)
+        // a block holds a vomitory in its middle, or the side's stair (stairBlock, -1 the last)
+        void Blocks(StadiumSide side, Vector2 start, Vector2 dir, Vector2 n, float from, float len, int stairBlock)
         {
             int k = Math.Max(1, (int)MathF.Round((len + s.AisleWidth) / (s.BlockLength + s.AisleWidth)));
             float block = (len - (k - 1) * s.AisleWidth) / k, at = from;
+            if (stairBlock < 0) stairBlock = k - 1;
             for (int b = 0; b < k; b++)
             {
-                Add(start + dir * at, n, Seg.Seat, side);
+                bool stair = b == stairBlock && s.Tiers.Length > 1;
+                float inner = stair ? s.StairWidth : s.VomitoryRows.Length > 0 ? s.VomitoryWidth : 0f;
+                if (inner > 0 && block > inner + 4f)
+                {
+                    float half = (block - inner) / 2;
+                    Add(start + dir * at, n, Seg.Seat, side);
+                    Add(start + dir * (at + half), n, stair ? Seg.Stair : Seg.Vomitory, side);
+                    Add(start + dir * (at + half + inner), n, Seg.Seat, side);
+                }
+                else Add(start + dir * at, n, Seg.Seat, side);
                 at += block;
                 if (b < k - 1)
                 {
@@ -136,11 +152,12 @@ public static class StadiumBuilder
             if (Array.IndexOf(s.Gates, side) >= 0 && len > s.GateWidth + s.BlockLength)
             {
                 float half = (len - s.GateWidth) / 2;
-                Blocks(side, start, dir, n, 0, half);
+                // the stairs beside the gate, one each way
+                Blocks(side, start, dir, n, 0, half, stairBlock: -1);
                 Add(start + dir * half, n, Seg.Gate, side);
-                Blocks(side, start, dir, n, half + s.GateWidth, half);
+                Blocks(side, start, dir, n, half + s.GateWidth, half, stairBlock: 0);
             }
-            else Blocks(side, start, dir, n, 0, len);
+            else Blocks(side, start, dir, n, 0, len, stairBlock: (int)MathF.Round(len / (s.BlockLength + s.AisleWidth)) / 2);
         }
         void Corner(StadiumSide side, Vector2 c, float a0)
         {
@@ -183,29 +200,61 @@ public static class StadiumBuilder
             float gateTop = s.GateHeight;
             if (a.Kind == Seg.Gate && outside != null)
                 gateTop += Math.Max(0f, Math.Max(outside(a.P + a.N * a.Depth), outside(b.P + b.N * b.Depth)));
-            capacity += Stand(s, q, a.Kind, c, gateTop);
+            // the ground under the segment, d out from the seating front, over the pitch
+            var mid = (a.P + b.P) / 2;
+            var midN = (a.N + b.N).Normalized();
+            float Ground(float d) => outside == null ? 0f : Math.Max(0f, outside(mid + midN * d));
+            capacity += Stand(s, q, a.Kind, c, gateTop, Ground);
             Roof(s, q, a.Kind, c);
-            Facade(s, q, a.Kind, c, gateTop);
+            Facade(s, q, a.Kind, c, gateTop, Ground);
+            // the concourse's concrete floor, a hair over the ground it follows (the ground is the walk)
+            if (g.Mesh)
+            {
+                const int Strips = 6;
+                const float Lift = 0.12f;
+                float GroundAt(Station st, float d) => outside == null ? 0f : Math.Max(0f, outside(st.P + st.N * d));
+                float far = Math.Min(a.Depth, b.Depth) - 0.1f;
+                for (int k = 0; k < Strips; k++)
+                {
+                    float d0 = far * k / Strips + 0.2f, d1 = far * (k + 1) / Strips;
+                    q.Quad(q.Pt(true, d0, GroundAt(a, d0) + Lift), q.Pt(false, d0, GroundAt(b, d0) + Lift),
+                        q.Pt(false, d1, GroundAt(b, d1) + Lift), q.Pt(true, d1, GroundAt(a, d1) + Lift), c.Floor, solid: false);
+                }
+            }
+            if (s.Kiosks && a.Kind == Seg.Seat && b.Kind == Seg.Vomitory && (i & 2) == 0) Kiosk(q, c, Ground);
         }
         Pillars(s, g, at, st, c);
         return (int)capacity;
     }
 
-    /// <summary>The tiers of one segment, the back wall over them; returns the seats it holds.</summary>
-    private static float Stand(StadiumSpec s, SegmentQuads q, Seg kind, Palette c, float gateTop)
+    /// <summary>
+    /// The tiers of one segment, the back wall over them, and what a segment of its kind holds
+    /// besides: a gate's tunnel to the pitch, a vomitory climbing into each tier, a stair from the
+    /// ground to the club level. The club level is a floor behind the second tier's front wall, at
+    /// its walkway's height, out to the facade. Returns the seats it holds.
+    /// </summary>
+    /// <param name="ground">The ground's height over the pitch, <c>d</c> out from the seating front.</param>
+    private static float Stand(StadiumSpec s, SegmentQuads q, Seg kind, Palette c, float gateTop, Func<float, float> ground)
     {
-        bool gate = kind == Seg.Gate, aisle = kind == Seg.Aisle;
+        bool gate = kind == Seg.Gate, aisle = kind == Seg.Aisle, vom = kind == Seg.Vomitory, stair = kind == Seg.Stair;
         var tread = aisle ? c.Concrete : c.Seat;
         var riser = aisle ? c.ConcreteDark : c.SeatAlt;
         float seats = 0, d = 0, h = 0;
         bool tunnelClosed = !gate;
+        float slabH = float.NaN, slabFrom = 0;
         for (int t = 0; t < s.Tiers.Length; t++)
         {
             var tier = s.Tiers[t];
+            float walkH = h;
             if (tier.Gap > 0)
             {
                 if (!gate || h >= gateTop) q.Flat(d, d + tier.Gap, h, c.Concrete, solid: true);
                 d += tier.Gap;
+            }
+            if (t > 0 && float.IsNaN(slabH))
+            {
+                slabH = walkH;
+                slabFrom = d;
             }
             float top = h + tier.Step;
             float wallFrom = t == 0 ? -Skirt : h;
@@ -213,46 +262,125 @@ public static class StadiumBuilder
             if (wallFrom < top) q.Wall(d, wallFrom, top, t == 0 ? c.Concrete : c.Glazing, solid: true);
             h = top;
 
-            float firstD = float.NaN, firstH = 0;
+            // this tier's vomitory: its floor from the mouth at row k down and out to the floor
+            // under the tier (the ground, or the club level), the rows over it left out
+            int k = vom && t < s.VomitoryRows.Length && s.VomitoryRows[t] >= 0 && s.VomitoryRows[t] < tier.Rows ? s.VomitoryRows[t] : -1;
+            float kd = d + k * tier.RowDepth, kh = h + k * tier.Riser;
+            float under = t == 0 ? ground(d + tier.Rows * tier.RowDepth) : slabH;
+            float backD = k >= 0 ? kd + Math.Max(0f, kh - under) / VomitorySlope : 0f;
+            float Floor(float x) => x <= kd ? kh : x >= backD ? under : kh + (under - kh) * (x - kd) / Math.Max(1e-3f, backD - kd);
+            float tierD = d, tierH = h;
+            float RampAt(float x) => tierH + (x - tierD) / (tier.Rows * tier.RowDepth) * (tier.Rows - 1) * tier.Riser;
+            float soffit = tier.Riser + 0.2f;
+
+            // the rows, in runs between holes: each run walked as one ramp, with a soffit under it
+            float runD = float.NaN, runH = 0, lastD = 0, lastH = 0;
+            void CloseRun()
+            {
+                if (float.IsNaN(runD)) return;
+                q.Ramp(runD, runH, lastD, lastH);
+                q.Quad(q.Pt(true, runD, runH - soffit), q.Pt(false, runD, runH - soffit),
+                    q.Pt(false, lastD, lastH - soffit), q.Pt(true, lastD, lastH - soffit), c.ConcreteDark, solid: false);
+                runD = float.NaN;
+            }
+            bool holed = false;
             for (int r = 0; r < tier.Rows; r++)
             {
                 float hr = h + r * tier.Riser, d0 = d + r * tier.RowDepth, d1 = d0 + tier.RowDepth;
                 if (gate && hr < gateTop + GateClearance) continue;
-                if (float.IsNaN(firstD))
+                if (k >= 0 && r >= k && hr < Floor(d0) + s.Headroom)
                 {
-                    firstD = d0;
-                    firstH = hr;
-                    // the tunnel: its ceiling from the pitch to the first row left standing, a
-                    // lintel over its mouth, and that row's front down to the ceiling
-                    if (!tunnelClosed)
-                    {
-                        q.Flat(0, d0, gateTop, c.ConcreteDark, solid: true);
-                        q.Wall(0, gateTop, gateTop + GateClearance, c.Concrete, solid: true);
-                        q.Wall(d0, gateTop, hr, c.Concrete, solid: true);
-                        tunnelClosed = true;
-                    }
+                    CloseRun();
+                    holed = true;
+                    continue;
                 }
+                if (!tunnelClosed)
+                {
+                    // the gate's tunnel: its ceiling from the pitch to the first row left standing, a
+                    // lintel over its mouth, and that row's front down to the ceiling
+                    q.Flat(0, d0, gateTop, c.ConcreteDark, solid: true);
+                    q.Wall(0, gateTop, gateTop + GateClearance, c.Concrete, solid: true);
+                    q.Wall(d0, gateTop, hr, c.Concrete, solid: true);
+                    tunnelClosed = true;
+                }
+                if (holed)
+                {
+                    // the vomitory's lintel: the first row past the hole, down to its soffit
+                    q.Wall(d0, hr - soffit, hr, c.Concrete, solid: true);
+                    holed = false;
+                }
+                if (float.IsNaN(runD))
+                {
+                    runD = d0;
+                    runH = hr;
+                }
+                lastD = d1;
+                lastH = hr;
                 q.Flat(d0, d1, hr, (r & 1) == 0 ? tread : tread.Darkened(0.04f), solid: false);
                 if (r < tier.Rows - 1) q.Wall(d1, hr, hr + tier.Riser, riser, solid: false);
                 if (!aisle) seats += q.LengthAt(d0 + tier.RowDepth / 2) / s.SeatWidth;
             }
-            float endD = d + tier.Rows * tier.RowDepth, endH = h + (tier.Rows - 1) * tier.Riser;
-            if (!float.IsNaN(firstD))
+            CloseRun();
+
+            if (k >= 0)
             {
-                q.Ramp(firstD, firstH, endD, endH);
-                // the tier's concrete underside, seen from the concourse: a riser under the ramp,
-                // so under every step
-                float soffit = tier.Riser + 0.2f;
-                q.Quad(q.Pt(true, firstD, firstH - soffit), q.Pt(false, firstD, firstH - soffit),
-                    q.Pt(false, endD, endH - soffit), q.Pt(true, endD, endH - soffit), c.ConcreteDark, solid: false);
+                // the vomitory's floor, and its two side walls up to the stand
+                q.Quad(q.Pt(true, kd, kh), q.Pt(false, kd, kh), q.Pt(false, backD, under), q.Pt(true, backD, under), c.Concrete, solid: true);
+                foreach (bool atA in Sides)
+                    q.Quad(q.Pt(atA, kd, kh), q.Pt(atA, backD, under), q.Pt(atA, backD, RampAt(backD)), q.Pt(atA, kd, RampAt(kd)), c.ConcreteDark, solid: true);
             }
-            d = endD;
-            h = endH;
+            d += tier.Rows * tier.RowDepth;
+            h += (tier.Rows - 1) * tier.Riser;
         }
         // the back of the top row, up to the roof's underside
-        float under = RoofTop(s, d, q.A.Depth) - s.RoofThickness, underB = RoofTop(s, d, q.B.Depth) - s.RoofThickness;
-        q.Quad(q.Pt(true, d, h), q.Pt(false, d, h), q.Pt(false, d, underB), q.Pt(true, d, under), c.Concrete, solid: true);
+        float roofA = RoofTop(s, d, q.A.Depth) - s.RoofThickness, roofB = RoofTop(s, d, q.B.Depth) - s.RoofThickness;
+        q.Quad(q.Pt(true, d, h), q.Pt(false, d, h), q.Pt(false, d, roofB), q.Pt(true, d, roofA), c.Concrete, solid: true);
+
+        if (!float.IsNaN(slabH))
+        {
+            // the club level, out to the facade; a stair's segment has its flight instead of the outer part
+            float endA = q.A.Depth - 0.3f, endB = q.B.Depth - 0.3f;
+            if (stair)
+            {
+                float foot = Math.Min(q.A.Depth, q.B.Depth) - 1.2f, footH = ground(foot);
+                float land = foot - Math.Max(0f, slabH - footH) / StairSlope;
+                int steps = Math.Max(1, (int)MathF.Ceiling((slabH - footH) / StairRise));
+                float run = (foot - land) / steps, rise = (slabH - footH) / steps;
+                for (int i = 0; i < steps; i++)
+                {
+                    // from the landing outwards and down: step i's tread, and the riser below its outer edge
+                    float x0 = land + i * run, y = slabH - i * rise;
+                    q.Flat(x0, x0 + run, y, (i & 1) == 0 ? c.Concrete : c.ConcreteDark, solid: false);
+                    q.Wall(x0 + run, y - rise, y, c.ConcreteDark, solid: false);
+                }
+                q.Ramp(land, slabH, foot, footH);
+                endA = endB = land;
+            }
+            q.Quad(q.Pt(true, slabFrom, slabH), q.Pt(false, slabFrom, slabH), q.Pt(false, endB, slabH), q.Pt(true, endA, slabH), c.Floor, solid: true);
+            q.Quad(q.Pt(true, slabFrom, slabH - 0.4f), q.Pt(false, slabFrom, slabH - 0.4f),
+                q.Pt(false, endB, slabH - 0.4f), q.Pt(true, endA, slabH - 0.4f), c.ConcreteDark, solid: false);
+        }
         return seats;
+    }
+
+    private static readonly bool[] Sides = { true, false };
+
+    /// <summary>A kiosk against the facade inside, in the ground concourse: a white box, a garnet band, a dark hatch facing in.</summary>
+    private static void Kiosk(SegmentQuads q, Palette c, Func<float, float> ground)
+    {
+        float depth = Math.Min(q.A.Depth, q.B.Depth);
+        float back = depth - 0.3f, front = depth - 2.6f, y0 = ground(front) - 0.2f, y1 = ground(front) + 3f;
+        // a point along the segment (0 at A, 1 at B), d out, at height y
+        Vector3 P(float along, float d, float y) => q.Pt(true, d, y).Lerp(q.Pt(false, d, y), along);
+        const float A0 = 0.1f, A1 = 0.9f;
+        q.Quad(P(A0, front, y0), P(A1, front, y0), P(A1, front, y1), P(A0, front, y1), c.Kiosk, solid: true);
+        q.Quad(P(A0, back, y0), P(A0, front, y0), P(A0, front, y1), P(A0, back, y1), c.Kiosk, solid: true);
+        q.Quad(P(A1, front, y0), P(A1, back, y0), P(A1, back, y1), P(A1, front, y1), c.Kiosk, solid: true);
+        q.Quad(P(A0, back, y1), P(A0, front, y1), P(A1, front, y1), P(A1, back, y1), c.Kiosk, solid: true);
+        // the band and the hatch, a hair in front of the face
+        float f = front - 0.03f;
+        q.Quad(P(A0, f, y1 - 0.7f), P(A1, f, y1 - 0.7f), P(A1, f, y1), P(A0, f, y1), c.Seat, solid: false);
+        q.Quad(P(A0 + 0.1f, f, y0 + 1.2f), P(A1 - 0.1f, f, y0 + 1.2f), P(A1 - 0.1f, f, y1 - 0.9f), P(A0 + 0.1f, f, y1 - 0.9f), c.Glazing, solid: false);
     }
 
     /// <summary>The roof's top at <paramref name="d"/> out from the seating front, where the facade is <paramref name="depth"/> out.</summary>
@@ -291,10 +419,13 @@ public static class StadiumBuilder
     }
 
     /// <summary>The facade over one segment, from below ground to the roof's edge; a gate's passage left open.</summary>
-    private static void Facade(StadiumSpec s, SegmentQuads q, Seg kind, Palette c, float gateTop)
+    private static void Facade(StadiumSpec s, SegmentQuads q, Seg kind, Palette c, float gateTop, Func<float, float> ground)
     {
-        float da = q.A.Depth, db = q.B.Depth, plinth = kind == Seg.Gate ? gateTop : s.GateHeight;
-        if (kind != Seg.Gate)
+        float da = q.A.Depth, db = q.B.Depth;
+        // a gate's passage, or the door at a stair's foot, 3 m over the ground there
+        bool open = kind is Seg.Gate or Seg.Stair;
+        float plinth = kind == Seg.Gate ? gateTop : kind == Seg.Stair ? ground(Math.Min(da, db)) + 3f : s.GateHeight;
+        if (!open)
             q.Quad(q.Pt(true, da, -Skirt), q.Pt(false, db, -Skirt), q.Pt(false, db, plinth), q.Pt(true, da, plinth), c.Plinth, solid: true);
         else
         {
@@ -353,7 +484,7 @@ public static class StadiumBuilder
     {
         private static Color L(Color x, float shade = 1f) => new Color(x.R * shade, x.G * shade, x.B * shade).SrgbToLinear() with { A = 0f };
         public readonly Color Seat = L(s.Seat), SeatAlt = L(s.SeatAlt), Concrete = L(s.Concrete), ConcreteDark = L(s.Concrete, 0.8f),
-            Glazing = L(s.Glazing), Roof = L(s.Roof), RoofUnder = L(s.Roof, 0.78f), RoofRing = L(s.RoofRingColor),
+            Glazing = L(s.Glazing), Floor = L(s.Concrete, 0.9f), Kiosk = L(new Color(0.9f, 0.9f, 0.88f)), Roof = L(s.Roof), RoofUnder = L(s.Roof, 0.78f), RoofRing = L(s.RoofRingColor),
             RoofRingUnder = L(s.RoofRingColor, 1.08f), Steel = L(s.Steel), Facade = L(s.Facade), Plinth = L(s.Plinth), Solar = L(s.SolarColor);
     }
 

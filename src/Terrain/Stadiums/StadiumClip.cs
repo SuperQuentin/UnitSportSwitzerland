@@ -76,6 +76,39 @@ public static class StadiumClip
         };
     }
 
+    /// <summary>Every stadium's facade outline in LV95 (east, north), worked out once.</summary>
+    private static readonly (Vector2[] Poly, Vector2 Min, Vector2 Max, double E0, double N0)[] Lv95 = StadiumCatalog.All.Select(s =>
+    {
+        // relative to the centre spot, so a float keeps centimetres
+        var owner = StadiumCatalog.Owner(s);
+        var poly = StadiumBuilder.Outline(s, owner)
+            .Select(p => new Vector2((float)(owner.MinE + p.X - s.E), (float)(owner.MaxN - p.Y - s.N))).ToArray();
+        var (min, max) = Bounds(poly);
+        return (poly, min, max, s.E, s.N);
+    }).ToArray();
+
+    /// <summary>Whether an LV95 point is inside any stadium's facade: no parked vehicle, tree or prop stands there.</summary>
+    public static bool InsideAny(double e, double n)
+    {
+        foreach (var (poly, min, max, e0, n0) in Lv95)
+        {
+            var p = new Vector2((float)(e - e0), (float)(n - n0));
+            if (p.X >= min.X && p.X <= max.X && p.Y >= min.Y && p.Y <= max.Y && Inside(poly, p)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>The tile's trees without those inside a stadium (the bowl stands on mapped ground); the same list when none is.</summary>
+    public static List<TreeInstance>? Trees(TileId id, List<TreeInstance>? trees)
+    {
+        if (trees == null || !Lv95.Any(o => Near(id, o.E0 + o.Min.X, o.N0 + o.Min.Y, o.E0 + o.Max.X, o.N0 + o.Max.Y))) return trees;
+        trees.RemoveAll(t => InsideAny(id.MinE + t.X, id.MaxN - t.Z));
+        return trees;
+    }
+
+    private static bool Near(TileId id, double e0, double n0, double e1, double n1) =>
+        e1 >= id.MinE && e0 <= id.MinE + ChunkFormat.TileSizeM && n1 >= id.MinN && n0 <= id.MaxN;
+
     /// <summary>Even-odd test of a point against a closed polygon (x, z).</summary>
     public static bool Inside(Vector2[] poly, Vector2 p)
     {
