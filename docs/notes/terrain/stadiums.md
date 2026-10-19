@@ -57,6 +57,19 @@ sweep), `StadiumCheck` (`--stadiumcheck`). Plan and later phases (stage, lights,
   collision joins the site faces in the both-sided road cells. Geneva: 12.4 k triangles, 2 k
   collision faces.
 
+## The interior (simple, swept like the rest)
+
+- **Ground concourse**: the space under the stands, with a concrete floor following the ground (visual;
+  the ground is the walk), kiosks against the facade, entered by the gates and the doors at each
+  stair's foot.
+- **Vomitories** (`VomitoryRows`, per tier): one in the middle of every seat block, 2.4 m wide; its
+  floor climbs at 35° from the floor under the tier (the ground, or the club level) to the mouth row,
+  the rows over it left out to `Headroom`, side walls up to the stand, a lintel at the first row past it.
+- **Club level**: a floor behind the second tier's front wall (the boxes' glazing), at the walkway's
+  height, out to the facade; two stairs a side (`StairWidth`, 33°) climb to it from the ground.
+- Sitting on the rows: `player/sitting`. Parked vehicles and trees inside the outline are dropped
+  where they are read (`StadiumClip.InsideAny`, `StadiumClip.Trees`): the bowl stands on mapped car parks.
+
 ## Checking
 
 - `--stadiumcheck --systems ui` (quick tier): outline against the aerial, seats against the capacity,

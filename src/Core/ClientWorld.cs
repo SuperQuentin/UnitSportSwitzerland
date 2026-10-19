@@ -708,6 +708,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Audio.EarsProbe.Requested) AddChild(new Audio.EarsProbe(() => LocalPlayer));
         if (Items.RadioPanelProbe.Requested) AddChild(new Items.RadioPanelProbe(() => LocalPlayer));
         if (Player.EmoteWheelProbe.Requested) AddChild(new Player.EmoteWheelProbe(() => LocalPlayer));
+        if (Player.SitProbe.Requested) AddChild(new Player.SitProbe(() => LocalPlayer));
         if (Items.SparkleProbe.Requested) AddChild(new Items.SparkleProbe(() => LocalPlayer));
         if (Items.RadioFocusProbe.Requested) AddChild(new Items.RadioFocusProbe(() => LocalPlayer));
         if (Items.BeatFieldProbe.Requested) AddChild(new Items.BeatFieldProbe(() => LocalPlayer));
@@ -1839,7 +1840,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
             }
             else
             {
-                if (Interiors.InteriorManager.Instance?.OutsideDoorInReach(p) == null
+                // a stand's seat (#885), before the dance: E sits there first
+                if (p.Sitting) yield return (PlayerInput.InteractMount, "Stand up");
+                else if (p.SeatInReach() != null) yield return (PlayerInput.InteractMount, "Sit down");
+                else if (Interiors.InteriorManager.Instance?.OutsideDoorInReach(p) == null
                     && Items.RadioManager.Instance?.NearestMusic(p.GlobalPosition, Items.RadioManager.DanceRadius, heard: p.DanceId == 0) != null)
                     yield return (PlayerInput.InteractMount, p.DanceId == 0 ? "Dance" : "Stop dancing");
                 if (Vehicles.VehicleReach.Current is { } at)

@@ -85,6 +85,66 @@ public static class StadiumBuilder
         return Stations(s).Select(st => { var p = frame(st.P + st.N * st.Depth, 0); return new Vector2(p.X, p.Z); }).ToArray();
     }
 
+    /// <summary>A seat found in the stadium frame: the hip's place, the way it faces, and heights (<see cref="StadiumSeats"/>).</summary>
+    public readonly record struct SeatHit(Vector2 Hip, Vector2 Facing, int Tier, int Row, int Place, float HipOverRamp, float Drop);
+
+    /// <summary>The hip sits this far behind its row's nosing, and this far over its tread.</summary>
+    private const float HipBack = 0.3f, HipLift = 0.05f;
+
+    /// <summary>
+    /// The seat at a point of the stadium frame: the segment it is in (a seat block, a corner or a
+    /// stair's), the row under it by its distance out from the seating front, the place along the row
+    /// snapped to a seat's width. The tier walk mirrors <see cref="Stand"/>.
+    /// </summary>
+    public static SeatHit? SeatAt(StadiumSpec s, Vector2 uv)
+    {
+        var st = Stations(s);
+        for (int i = 0; i < st.Count; i++)
+        {
+            var a = st[i];
+            if (a.Kind is not (Seg.Seat or Seg.Corner or Seg.Stair)) continue;
+            var b = st[(i + 1) % st.Count];
+            var n = (a.N + b.N).Normalized();
+            float d = (uv - (a.P + b.P) / 2).Dot(n);
+            if (d < 0 || d > Math.Min(a.Depth, b.Depth)) continue;
+            Vector2 pa = a.P + a.N * d, pb = b.P + b.N * d, along = pb - pa;
+            float len = along.Length();
+            if (len < 0.1f) continue;
+            float t = (uv - pa).Dot(along) / (len * len);
+            if (t < 0 || t > 1) continue;
+            // off the segment's line sideways (a corner's chord), it is not this segment
+            if (Math.Abs((uv - pa).Dot(n)) > 1.5f) continue;
+
+            float td = 0, th = 0;
+            for (int k = 0; k < s.Tiers.Length; k++)
+            {
+                var tier = s.Tiers[k];
+                td += tier.Gap;
+                th += tier.Step;
+                float end = td + tier.Rows * tier.RowDepth;
+                if (d >= td && d < end)
+                {
+                    int r = (int)((d - td) / tier.RowDepth);
+                    if (r < 1) return null;
+                    float hr = th + r * tier.Riser, dHip = td + r * tier.RowDepth + HipBack;
+                    float ramp = th + (d - td) / (tier.Rows * tier.RowDepth) * (tier.Rows - 1) * tier.Riser;
+                    // the place along the row, at the hip's distance out
+                    Vector2 ha = a.P + a.N * dHip, hb = b.P + b.N * dHip;
+                    float rowLen = ha.DistanceTo(hb);
+                    int places = Math.Max(1, (int)(rowLen / s.SeatWidth));
+                    int place = Math.Clamp((int)(t * places), 0, places - 1);
+                    var hip = ha.Lerp(hb, (place + 0.5f) / places);
+                    if (hip.DistanceTo(pa.Lerp(pb, t) + n * (dHip - d)) > StadiumSeats.Reach) return null;
+                    return new SeatHit(hip, -n, k, r, place, hr + HipLift - ramp, tier.Riser + HipLift);
+                }
+                th += (tier.Rows - 1) * tier.Riser;
+                td = end;
+            }
+            return null;
+        }
+        return null;
+    }
+
     /// <summary>The stadium frame (u across, v along the pitch, y up from it) into tile-local metres.</summary>
     private static Func<Vector2, float, Vector3> Frame(StadiumSpec s, TileId id, float ground)
     {
@@ -110,7 +170,12 @@ public static class StadiumBuilder
     /// of the north side: each side cut into seat blocks with an aisle between two and a gate in
     /// its middle when it has one, each corner into <see cref="CornerSegments"/> arcs.
     /// </summary>
-    private static List<Station> Stations(StadiumSpec s)
+    private static List<Station> Stations(StadiumSpec s) => StationCache.GetValue(s, MakeStations);
+
+    /// <summary>The stations of each spec, made once: the seat query asks for them every frame.</summary>
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<StadiumSpec, List<Station>> StationCache = new();
+
+    private static List<Station> MakeStations(StadiumSpec s)
     {
         var list = new List<Station>();
         float hu = s.FrontHalfU, hv = s.FrontHalfV, rc = s.FrontCorner;

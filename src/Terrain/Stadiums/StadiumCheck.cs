@@ -72,6 +72,19 @@ public static class StadiumCheck
             Expect(stand.Count > 0 && stand.Where(h => h > -1f).DefaultIfEmpty(99).Min() is > 0.8f and < 3f,
                 $"{s.Name}: the north stand beside the gate rises from the pitch wall (surfaces at {Fmt(stand)})");
 
+            // a seat: on a seat block's row, facing the pitch; none on a tier's first row or in a gate
+            float a = Mathf.DegToRad(s.AzimuthDeg);
+            (double E, double N) Lv95(float u, float v) => (s.E + u * MathF.Cos(a) - v * MathF.Sin(a), s.N - (u * MathF.Sin(a) + v * MathF.Cos(a)));
+            float row8 = s.FrontHalfU + 8.5f * s.Tiers[0].RowDepth;
+            var (we, wn) = Lv95(-row8, 30f);
+            var seat = StadiumSeats.At(we, wn);
+            Expect(seat is { Tier: 0, Row: 8 } st && Math.Abs(Mathf.AngleDifference(st.Yaw, Mathf.DegToRad(-90f - s.AzimuthDeg))) < 0.05f
+                && Math.Abs(st.Drop - (s.Tiers[0].Riser + 0.05f)) < 0.01f,
+                $"{s.Name}: a seat on the west stand's row 8, facing east ({seat})");
+            var (fe, fn) = Lv95(-(s.FrontHalfU + 0.3f), 30f);
+            var (ge, gn) = Lv95(-row8, 0f);
+            Expect(StadiumSeats.At(fe, fn) == null && StadiumSeats.At(ge, gn) == null, $"{s.Name}: no seat on the first row, nor in the west gate");
+
             // a data building straddling the facade loses what is inside and keeps the rest; a far tile is untouched
             var owner = StadiumCatalog.Owner(s);
             var (omin, _) = StadiumClip.Bounds(StadiumBuilder.Outline(s, owner));

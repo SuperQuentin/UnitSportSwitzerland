@@ -116,6 +116,10 @@ public partial class ControlsHelp : CanvasLayer
             new("Open / shut the car door you are at", PlayerInput.CarDoor),
             new("Get out", PlayerInput.InteractMount),
         }),
+        ("Stadiums", new Row[]
+        {
+            new("On a stand's row: sit down; again, or walk off, to stand up", PlayerInput.InteractMount),
+        }),
         ("Passengers (online)", new Row[]
         {
             new("Get into a seat of a car someone drives / get out", PlayerInput.InteractMount),

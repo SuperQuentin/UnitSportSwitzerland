@@ -27,6 +27,7 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | swim | `WalkControls` overrides the stroke | the body | — | `MoveTo` | gap: dive and climb-out read keys (`FootPlayer.Swim`, `limp` for an Npc); landings avoid water (a follow-up) |
 | knocked out, down, revived, out | — | `TakeDamage`, `TryGoDown`, `ReviveInPlace`, `FinishDowned` on the server | — | — | ok |
 | run over by a vehicle | — | `KnockedByVehicle` | — | — | gap: skipped for an Npc (`FootPlayer.Crash`), and players' proxies have no physics body on the server: a knock from `PlayerSnapshot` positions, a follow-up (`vehicles`) |
+| sit on a stand's seat, stand up (#885) | `WalkControls`: a wish over 0.3, once let go, stands up | `FootPlayer.TrySit` / `StandUpFromSeat` on its body (owner-written pose, no RPC) | `StadiumSeats.At(E, N)` (pure, the catalog) | none yet: `MoveTo` a row, then `TrySit` (concert spectators, plan phase 7) | gap: no brain sits; the seams are there |
 | get down from a roof | — | the body (a jump off it) | its height over the ground | `MoveTo` | gap: a bot landed on a roof walks along it and never comes down (seen in `tools/botfilm.sh`); landing spots should avoid roofs, or `MoveTo` should drop off a low edge (#842) |
 | fall damage | — | the landing in `UpdateCameraFeel` (an early branch for a body with no camera) | — | — | ok |
 | caught in a blast | — | `Explosion.Blast` | — | — | gap: subscribed only by a body with a camera (a follow-up) |
