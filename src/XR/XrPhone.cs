@@ -142,7 +142,7 @@ internal sealed class XrPhone
     /// The phone in the holding hand's grip frame (open fingers along −Y, the left palm facing +X): its
     /// back in the palm, its top toward the fingertips, its screens away from the palm.
     /// </summary>
-    private static Transform3D InPalm(bool leftHanded)
+    internal static Transform3D InPalm(bool leftHanded)
     {
         float m = leftHanded ? -1f : 1f;   // the left palm faces +X, the right −X
         var z = new Vector3(m, 0f, 0f);

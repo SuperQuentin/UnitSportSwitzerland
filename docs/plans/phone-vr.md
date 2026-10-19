@@ -1,11 +1,11 @@
 # The phone in VR (#920)
 
-Status: **planned**. Follows the desktop phone (#889, `ui/phone`), which VR refuses today (a gap in
+Status: **phase 1 done** (PR #921); phases 2 and 3 planned. Follows the desktop phone (#889, `ui/phone`), which VR refuses today (a gap in
 `xr/vr-action-map`).
 
 | Phase | State | What |
 |---|---|---|
-| 1 In the hand, the finger on the glass | planned | `XR/XrPhone`: out of a pocket with a grip, held in the off hand; the real index taps, drags and hovers; haptics; the cover's quick actions |
+| 1 In the hand, the finger on the glass | done (#921; no ray fallback yet, the wrist menu stands in) | `XR/XrPhone`: out of a pocket with a grip, held in the off hand; the real index taps, drags and hovers; haptics; the cover's quick actions |
 | 2 Two hands and the arm | planned | Unfold by swinging the free half open; the camera app aimed by the arm; a selfie by turning the phone round |
 | 3 The body as the curtain | planned | Travel by raising the phone to the eyes (a blink otherwise); a call answered at the ear; the phone home to its pocket on release; a VR-sized layout |
 

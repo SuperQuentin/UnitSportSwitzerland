@@ -377,7 +377,8 @@ public partial class PhoneController : Node
     private void ShowHint()
     {
         string text = _stage is Stage.Folded or Stage.Drawing
-            ? InputHints.Pad ? "D-pad ↑ open     ← →  choose     A  select     B  put away"
+            ? XR.XrSession.Active ? "X  open     swipe  choose     tap  select     B  put away"
+            : InputHints.Pad ? "D-pad ↑ open     ← →  choose     A  select     B  put away"
                 : "W  open     A D  choose     Enter  select     S  put away     ·     mouse: click, swipe"
             : "";
         _hint.Visible = text.Length > 0 && !_blocked();

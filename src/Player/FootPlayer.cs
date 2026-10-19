@@ -2372,8 +2372,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private void StepThrowView(float dt)
     {
-        // the phone (#889) lends third person too: its camera is laid over this one (PhoneCamera)
-        float want = ScopeView ? 0f : GunAim ? 1f : Mathf.Max(Mathf.Clamp(ThrowAim, 0f, 1f), PhoneLook > 0f ? 1f : 0f);
+        // the phone (#889) lends third person too: its camera is laid over this one (PhoneCamera); not in VR (#920)
+        float want = ScopeView ? 0f : GunAim ? 1f : Mathf.Max(Mathf.Clamp(ThrowAim, 0f, 1f), PhoneLook > 0f && !XR.XrSession.Active ? 1f : 0f);
         float side = Core.GameSettings.Current.LeftShoulder ? -1f : 1f;
         _shoulderSide = Mathf.MoveToward(_shoulderSide, side, dt * 8f);
         _throwBlend = Mathf.Lerp(_throwBlend, want, MathX.Damp(want > _throwBlend ? 9f : 7f, dt));
