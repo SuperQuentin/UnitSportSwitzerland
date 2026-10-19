@@ -461,11 +461,26 @@ int manor_window(vec2 q, float w, float h) {
 // Variants (BuildingMeshBuilder.CastleRubble..CastleTimbered): 0 coursed rubble, Gothic windows and
 // an arched corbel table; 1 whitewashed render, sandstone quoins, cross-mullioned windows; 2 a
 // stately home: render, quoins, a cornice, symmetric rows of shuttered windows; 3 a ruin: mossy
-// rubble, empty openings; 4 render under a half-timbered top storey (eastern Switzerland).
+// rubble, empty openings; 4 render under a half-timbered top storey (eastern Switzerland); 5 brick
+// (Vufflens): stretcher bond, cross windows framed in pale stone, a deep machicolated corbel table.
 vec3 castle_wall(vec3 col, vec2 q, float h, float len, bool level, bool foot, int variant, vec2 seed,
                  float paint_pick, float px, inout vec3 glow) {
     bool rendered = variant == 1 || variant == 2 || variant == 4;
-    if (rendered) {
+    bool brick = variant == 5;
+    if (brick) {
+        // stretcher bond: 0.30 x 0.085 m bricks, every course offset by half, light lime joints,
+        // each brick its own firing (some dark, burnt); gone into an even red under a few pixels
+        float row = floor(q.y / 0.085);
+        float bx = q.x / 0.30 + 0.5 * mod(row, 2.0);
+        vec2 ib = vec2(fract(bx) * 0.30, fract(q.y / 0.085) * 0.085);
+        float joint = min(min(ib.x, 0.30 - ib.x), min(ib.y, 0.085 - ib.y));
+        float fired = hash(vec2(floor(bx), row) + seed);
+        col *= mix(1.0, (fired < 0.12 ? 0.62 : 0.86 + 0.26 * fired), fine_detail(0.085, px));
+        col = mix(col, vec3(0.42, 0.38, 0.32), step(joint, 0.009) * fine_detail(0.02, px));
+        col *= mix(0.88, 1.06, castle_noise(q * vec2(0.22, 0.3) + seed));
+        float streak = castle_noise(vec2(q.x * 1.4, q.y * 0.07) + seed * 3.0);
+        col *= 1.0 - 0.10 * smoothstep(0.55, 0.92, streak) * smoothstep(0.0, 6.0, q.y);
+    } else if (rendered) {
         // lime render: soft patches, faint streaks; dressed stone at the corners and the plinth
         col *= mix(0.94, 1.04, castle_noise(q * vec2(0.3, 0.4) + seed));
         float streak = castle_noise(vec2(q.x * 1.4, q.y * 0.07) + seed * 3.0);
@@ -596,7 +611,10 @@ vec3 castle_wall(vec3 col, vec2 q, float h, float len, bool level, bool foot, in
 
     if (open == 1) {
         // the frame: dressed stone round a rubble wall's glass, sandstone round a rendered one's
-        col = rendered ? mix(col, castle_dressing * 1.1, fine_detail(0.1, px)) : mix(col, col * 1.16, fine_detail(0.1, px));
+        // (brick windows are framed in pale molasse, as at Vufflens)
+        col = rendered ? mix(col, castle_dressing * 1.1, fine_detail(0.1, px))
+            : brick ? mix(col, vec3(0.45, 0.43, 0.37), fine_detail(0.1, px))
+            : mix(col, col * 1.16, fine_detail(0.1, px));
     } else if (open == 4) {
         // shutters, one paint a castle (green, grey-blue, ox-blood: COLOR.a), slats across them
         float pick = paint_pick;
@@ -616,18 +634,20 @@ vec3 castle_wall(vec3 col, vec2 q, float h, float len, bool level, bool foot, in
 
     // under a level head: a rubble fortress's arched corbel table (corbels, round arches, the dark
     // machicolation behind them, the parapet proud above); a stately home's moulded cornice
-    if (level && h > 6.0 && variant == 0) {
+    if (level && h > 6.0 && (variant == 0 || variant == 5)) {
         float fb = fine_detail(0.2, px);
-        float yb = q.y - (h - 1.25);
-        if (yb > 0.0 && yb < 0.8) {
+        // Vufflens's machicolations are deeper: taller arches over longer corbels
+        float bh = variant == 5 ? 1.3 : 0.8;
+        float yb = q.y - (h - 0.45 - bh);
+        if (yb > 0.0 && yb < bh) {
             float k = fract(q.x / 0.85) * 0.85;
-            float a = 0.3, cx = 0.25 + a, spring = 0.8 - a - 0.06;
+            float a = 0.3, cx = 0.25 + a, spring = bh - a - 0.06;
             bool corbel = k < 0.25;
             bool hole = !corbel && (yb < spring || length(vec2(k - cx, yb - spring)) < a);
             col *= corbel ? mix(1.0, 1.08, fb) : hole ? mix(1.0, 0.32, fb) : mix(1.0, 1.02, fb);
         } else if (yb <= 0.0 && yb > -0.16) {
             col *= mix(1.0, 0.76, fb); // the corbels' shadow on the wall
-        } else if (yb >= 0.8) {
+        } else if (yb >= bh) {
             col *= mix(1.0, 1.05, fb);
         }
     } else if (level && variant == 2) {

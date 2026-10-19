@@ -65,8 +65,25 @@
   - 3 ruin: rubble with moss patches, darker toward the head, empty openings, never lit.
   - 4 timbered (East): render under a half-timbered top storey (posts 1.3 m apart, sill and head
     rails, St Andrew's crosses, small windows).
+  - 5 brick (`Castles.Brick`, by name: OSM records almost no castle material, six in Switzerland and
+    none brick): Vufflens, c. 1415, brick and Piedmontese, "unique to this region". Tuned on a photo
+    of it in the sun (user, Oct 2026): a warm tan-orange brick, not red; stretcher bond 0.30 x 0.085 m
+    with lime joints, some bricks burnt dark; cross windows framed in pale stone; a deep machicolated
+    corbel table (1.3 m, against 0.8 m on rubble) under every level head; orange-brown tiles. Every
+    solid of the castle, palace and keep alike. Its slim turrets' slate spires are vertical
+    cylinders in the data, so they are drawn as brick.
   All get a damp foot (green on stone, grey on render) 2.6-3.8 m up: the run starts under the ground
   or the water. The per-wall hash seed is rounded (the interpolated tangent jitters into speckle).
+- **Ruins** (`BuildingMeshBuilder.Ruins.cs`): a ruin's solid is a closed box with a lid in the data,
+  so it is not drawn; each of its wall runs (1 m+ long, 1.5 m+ tall) becomes a slab a castle wall
+  thick (22% of the plan's short side, 0.6-1.4 m) in 0.8 m columns, broken at a height that a smooth
+  noise along the wall and a column jitter set (up to 85% gone, half as much at the ends: the corners
+  stand), each column with its outer and inner face dressed as the ruin variant (the openings break
+  off with it), a moss-green cap, bare darker steps; the run ends 2 cm in so a corner hides them. Open
+  to the sky: the ground shows inside. It **collides** as it is drawn (`BuildCollisionFaces`, both
+  windings), so nobody stands on the missing lid; server and clients build the same. Nor is it an
+  occluder (`BuildingOcclusion`, like a building site's open shell). A ruin with no
+  wall run to rebuild keeps its solid and its broken merlons.
 - **Geometry** (appended after the doors): a 0.9 m parapet on every open edge of a flat roof (an
   edge no other flat face shares, with nothing of the solid as high 0.4 m past it; each corner owned
   by one edge) with square merlons, Ticino's notched swallowtails, a ruin's broken ones (35% gone, the
@@ -83,12 +100,14 @@
   fr.vikidia.org Lauze, techniques-ingenieur.fr; bailiffs' castles: en.wikipedia.org Aarberg Castle,
   hls-dhs-dss.ch, data.geo.admin.ch KGS sheets; Valère and Tourbillon: en.wikipedia.org, valais.ch.
 - **Check:** model viewer `--models,test_output/models --modelsonly castle` (a keep per region on a
-  real fortress of it, a manor, a ruin); in game a `--shot-queue`, origin 2560000,1140000 (yaw grows counter-clockwise, 0 = north):
+  real fortress of it, Vufflens's brick, a manor, a ruin); `--collidecheck --world flat --targets
+  castles/` (drawn against collided, 120 runs, all right Oct 2026); in game a `--shot-queue`, origin 2560000,1140000 (yaw grows counter-clockwise, 0 = north):
   lake front `640,378,-370,6,322,6,<png>`, Montreux side `655,378,-500,8,215,6,<png>`, land side
   `770,381,-470,10,140,6,<png>` (the three photo viewpoints).
 - **In the local world** only the tiles in `manifest.json` render (6699 in western Switzerland in Oct
   2026): Chillon, Gruyères, Vufflens, Prangins, La Bâtiaz, Grimisuat are in it; Thun, Neuchâtel,
-  Lenzburg, Bellinzona are not (their files exist, the world shows generated fill there).
+  Lenzburg, Bellinzona are not (their files exist, the world shows generated fill there). Ruins in
+  it: Château de la Soie, Montorge, la Tour, Morestel (VS), Bossonnens, Montsalvens (FR).
 - **Not yet:** interiors (a castle is not a `BuildingGroup`; its interior is whatever its kind
-  plans), OSM multipolygon castles (relations are skipped), Vufflens's brick, ruins' broken wall
-  heads (the solids are whole), a Bernese bailiff castle's Krüppelwalm roof (the roofs are the data's).
+  plans), OSM multipolygon castles (relations are skipped), a Bernese bailiff castle's Krüppelwalm
+  roof (the roofs are the data's), a ruin's fallen stones at its foot.

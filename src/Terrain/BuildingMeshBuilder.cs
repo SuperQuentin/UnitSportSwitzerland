@@ -64,15 +64,16 @@ public static partial class BuildingMeshBuilder
         foreach (var d in doors ?? Array.Empty<Interiors.DoorSpot>())
             // a building site's doors are its office's (#822), drawn with the containers
             if (d.Width > 0 && Drawn(tile.Buildings[d.Index])) AppendDoor(v, c, f, d, KindOf(tile.Buildings[d.Index], types.TypeOf(d.Index)));
-        // a castle's crenellations and flag (#859)
-        if (castles) AppendCastles(tile, types, v, c, f);
+        // a castle's crenellations, oriels, flags and finials, and its ruins' broken walls (#859)
+        var ruins = new FacadeSink();
+        if (castles) AppendCastles(tile, types, v, c, f, ruins);
 
-        int n = data.Vertices.Length;
-        var vertices = new Vector3[n + v.Count];
-        var colors = new Color[n + v.Count];
-        var uvs = new Vector2[n + v.Count];
-        var uv2s = new Vector2[n + v.Count];
-        var frames = new float[(n + v.Count) * 4];
+        int n = data.Vertices.Length, r = ruins.V.Count;
+        var vertices = new Vector3[n + v.Count + r];
+        var colors = new Color[n + v.Count + r];
+        var uvs = new Vector2[n + v.Count + r];
+        var uv2s = new Vector2[n + v.Count + r];
+        var frames = new float[(n + v.Count + r) * 4];
         Array.Copy(data.Vertices, vertices, n);
         Array.Copy(data.Colors, colors, n);
         Array.Copy(data.Uvs, uvs, n);
@@ -85,6 +86,13 @@ public static partial class BuildingMeshBuilder
             uvs[n + i] = new Vector2(0f, -1f);
             uv2s[n + i] = new Vector2(0f, f[i]);
         }
+        // the ruins' walls last, with their own facade frames
+        int at = n + v.Count;
+        ruins.V.CopyTo(vertices, at);
+        ruins.C.CopyTo(colors, at);
+        ruins.Uv.CopyTo(uvs, at);
+        ruins.Uv2.CopyTo(uv2s, at);
+        ruins.Frames.CopyTo(frames, at * 4);
         return new MeshData(vertices, colors, uvs, uv2s, frames);
     }
 
@@ -191,11 +199,17 @@ public static partial class BuildingMeshBuilder
 
     public static MeshData? Build(BuildingTile tile)
     {
-        int triangles = 0;
-        foreach (var b in tile.Buildings) if (Drawn(b)) triangles += b.TriangleCount;
-        if (triangles == 0) return null;
-
         var types = BuildingTypes.For(tile);
+        // a ruin is drawn as its broken walls (AppendRuin), not as its surveyed solid
+        var rebuilt = new bool[tile.Buildings.Count];
+        bool anyRuin = false;
+        for (int bi = 0; types.HasCastles && bi < tile.Buildings.Count; bi++)
+            anyRuin |= rebuilt[bi] = RebuiltRuin(tile, types, bi);
+        int triangles = 0;
+        for (int bi = 0; bi < tile.Buildings.Count; bi++)
+            if (Drawn(tile.Buildings[bi]) && !rebuilt[bi]) triangles += tile.Buildings[bi].TriangleCount;
+        if (triangles == 0 && !anyRuin) return null;
+
         var vertices = new Vector3[triangles * 3];
         var colors = new Color[triangles * 3];
         // uv.x = metres along the facade, uv.y = storey coordinate (<0 disables windows)
@@ -212,7 +226,7 @@ public static partial class BuildingMeshBuilder
         for (int bi = 0; bi < tile.Buildings.Count; bi++)
         {
             var b = tile.Buildings[bi];
-            if (!Drawn(b)) continue;
+            if (!Drawn(b) || rebuilt[bi]) continue;
             var part = types.PartOf(bi);
             var type = types.TypeOf(bi);
             var kind = KindOf(b, type);
@@ -583,16 +597,28 @@ public static partial class BuildingMeshBuilder
     /// <summary>Flat triangle list for ConcavePolygonShape3D.</summary>
     public static Vector3[] BuildCollisionFaces(BuildingTile tile)
     {
+        // a ruin collides as its broken walls, open to the sky, as it is drawn (#859)
+        var types = BuildingTypes.For(tile);
+        var ruins = new List<Vector3>();
+        var rebuilt = new bool[tile.Buildings.Count];
+        for (int bi = 0; types.HasCastles && bi < tile.Buildings.Count; bi++)
+            if (rebuilt[bi] = RebuiltRuin(tile, types, bi))
+                RuinCollision(tile.Buildings[bi], bi, types.Boxes[bi], ruins);
         int triangles = 0;
-        foreach (var b in tile.Buildings) if (Drawn(b)) triangles += b.TriangleCount;
-        var faces = new Vector3[triangles * 3];
+        for (int bi = 0; bi < tile.Buildings.Count; bi++)
+            if (Drawn(tile.Buildings[bi]) && !rebuilt[bi]) triangles += tile.Buildings[bi].TriangleCount;
+        var faces = new Vector3[triangles * 3 + ruins.Count];
         int v = 0;
-        foreach (var b in tile.Buildings)
-            for (int t = 0; Drawn(b) && t < b.TriangleCount; t++)
+        for (int bi = 0; bi < tile.Buildings.Count; bi++)
+        {
+            var b = tile.Buildings[bi];
+            for (int t = 0; Drawn(b) && !rebuilt[bi] && t < b.TriangleCount; t++)
             {
                 var (a, c, d) = b.Tri(t);
                 faces[v++] = a; faces[v++] = c; faces[v++] = d;
             }
+        }
+        ruins.CopyTo(faces, v);
         return faces;
     }
 

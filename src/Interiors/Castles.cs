@@ -66,6 +66,16 @@ public static partial class Castles
     public static CastleRegion RegionOf(int castle) => RegionOf(List[castle].Canton);
 
     /// <summary>
+    /// Castles built of brick, against the stone of their region. OSM records almost no castle's
+    /// material (six in Switzerland, none of them brick), so they are named here. Vufflens (c. 1415,
+    /// Henri de Colombier, back from the Duke of Savoy's wars in Italy) is brick and Piedmontese,
+    /// "unique to this region" (en.wikipedia.org/wiki/Vufflens_Castle, hls-dhs-dss.ch 002458).
+    /// </summary>
+    public static readonly HashSet<string> Brick = new(StringComparer.Ordinal) { "Château de Vufflens" };
+
+    public static bool IsBrick(int castle) => Brick.Contains(List[castle].Name);
+
+    /// <summary>
     /// For each building of the tile, the index in <see cref="List"/> of the castle it belongs to,
     /// or -1. Null when the tile holds no castle (nearly all of them).
     /// </summary>

@@ -10,8 +10,9 @@ namespace UnitSport.Terrain;
 /// besides its walls (whose stone, render, openings and corbels the building shader draws from
 /// <see cref="CastleWallFlag"/>): crenellations on the open edges of its flat roofs, iron finials on
 /// its peaks, wooden oriels on a Savoyard or Alpine fortress's long walls, the Swiss flag on each
-/// castle's tallest solid and its canton's on the next. Appended after the facades like the doors, so
-/// a tile's buildings stay one surface and one draw call. Visual only: collision is the surveyed solid.
+/// castle's tallest solid and its canton's on the next, a ruin's broken walls
+/// (BuildingMeshBuilder.Ruins.cs). Appended after the facades like the doors, so a tile's buildings stay
+/// one surface and one draw call. Visual only, but for the ruins: they collide as they are drawn.
 /// Sources and rules: docs/notes/terrain/castles.md.
 /// </summary>
 public static partial class BuildingMeshBuilder
@@ -28,9 +29,15 @@ public static partial class BuildingMeshBuilder
     /// this: coursed rubble with Gothic windows and an arched corbel table; whitewashed render with
     /// dressed sandstone corners and cross-mullioned windows; a stately home's render, regular windows
     /// and painted shutters; a ruin's mossy rubble and empty openings; render under a half-timbered
-    /// top storey.
+    /// top storey; brick (Vufflens) with pale stone-framed cross windows and a deep machicolated corbel table.
     /// </summary>
-    public const int CastleRubble = 0, CastleRendered = 1, CastleManor = 2, CastleRuin = 3, CastleTimbered = 4;
+    public const int CastleRubble = 0, CastleRendered = 1, CastleManor = 2, CastleRuin = 3, CastleTimbered = 4, CastleBrick = 5;
+
+    /// <summary>
+    /// Vufflens's brick and tiles, off a photo of it in the sun (the user's, Oct 2026): a warm tan-orange
+    /// the shader varies brick by brick, under orange-brown tiles.
+    /// </summary>
+    private static readonly Color BrickWall = new(0.77f, 0.61f, 0.44f), BrickRoof = new(0.64f, 0.40f, 0.27f);
 
     /// <summary>
     /// How one castle solid is dressed: the shader variant, its wall and roof colours, and its shutters'
@@ -96,6 +103,9 @@ public static partial class BuildingMeshBuilder
 
         if (kind == CastleKind.Ruin)
             return new CastleDress(CastleRuin, Aged(stone) * 0.86f, roof, region, kind);
+        // a brick castle is brick all over, its palace as much as its keep
+        if (Castles.IsBrick(castle))
+            return new CastleDress(CastleBrick, Aged(BrickWall), BrickRoof, region, kind);
         if (kind == CastleKind.Manor && !KeepLike(b, box))
         {
             // a country seat: rendered (the Jura's in its yellow stone), a mansard in slate now and then
@@ -118,7 +128,8 @@ public static partial class BuildingMeshBuilder
     /// The crenellations, oriels, flags and finials of a tile's castles, in the door lists' layout:
     /// vertices, colours and the UV2.y flag (always 0: plain, no windows).
     /// </summary>
-    private static void AppendCastles(BuildingTile tile, BuildingTypeMap types, List<Vector3> v, List<Color> c, List<float> f)
+    private static void AppendCastles(BuildingTile tile, BuildingTypeMap types, List<Vector3> v, List<Color> c, List<float> f,
+        FacadeSink ruins)
     {
         var heights = new Dictionary<int, List<int>>(); // castle -> its solids in this tile
         for (int bi = 0; bi < tile.Buildings.Count; bi++)
@@ -127,9 +138,15 @@ public static partial class BuildingMeshBuilder
             int castle = types.PartOf(bi) == BuildingPart.None ? types.CastleOf(bi) : -1;
             if (castle < 0 || !Drawn(b)) continue;
             var dress = DressOf(castle, b, types.Boxes[bi]);
+            // a ruin: its walls broken down, no lid, so no parapet either
+            if (RebuiltRuin(tile, types, bi))
+            {
+                AppendRuin(b, bi, types.Boxes[bi], dress, ruins, v, c, f);
+                continue;
+            }
             var stone = dress.Wall.SrgbToLinear() * 0.94f;
             AppendParapets(b, stone, dress, bi, v, c, f);
-            if (dress.Variant == CastleRubble && dress.Region is CastleRegion.Savoy or CastleRegion.Jura or CastleRegion.Alpine)
+            if (dress.Variant is CastleRubble or CastleBrick && dress.Region is CastleRegion.Savoy or CastleRegion.Jura or CastleRegion.Alpine)
                 AppendOriels(b, bi, dress.Roof.SrgbToLinear(), v, c, f);
             if (dress.Kind == CastleKind.Ruin) continue; // no flag, no finials on a ruin
             if (!heights.TryGetValue(castle, out var list)) heights[castle] = list = new List<int>();
@@ -323,6 +340,7 @@ public static partial class BuildingMeshBuilder
                 float s = ParapetDepth + i * pitch + (pitch - w) * 0.5f, top = y + ParapetHeight + MerlonHeight;
                 if (dress.Variant == CastleRuin)
                 {
+                    // a ruin that could not be rebuilt as broken walls: its merlons broken instead
                     double roll = Core.Fnv.Unit(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{index}|{p.X:F1}|{p.Z:F1}|{i}|merlon"));
                     if (roll < 0.35) continue;
                     top = y + ParapetHeight + MerlonHeight * (float)(0.25 + roll * 0.75);
