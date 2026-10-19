@@ -24,6 +24,11 @@ public sealed class BotNav
     public double SteerUntil;
     /// <summary>The longest clear way the last scan found, m (for <c>--botlog</c>: near 0 = boxed in).</summary>
     public float LastOpen = -1;
+    /// <summary>Where it stood and since when, for <see cref="BotSkills.Unembed"/>; how many times it was put out lately, and when last.</summary>
+    public Vector3 StillAt;
+    public double StillSince;
+    public int Unembeds;
+    public double UnembedAt;
 }
 
 /// <summary>
@@ -197,6 +202,36 @@ public static class BotSkills
         return best;
     }
 
+    /// <summary>
+    /// A body caught in the geometry (#837): on foot, off the floor, "falling" faster than 20 m/s, and not 0.2 m
+    /// moved in 1.5 s. Out to the nearest open ground, still. Seen: a squad bot looting by a crate rose 1 m into a
+    /// gap and stayed there, its speed climbing to 2,400 m/s, the stuck count of its walks resetting with each
+    /// new goal, until the match ended (a fall from there would have killed it). Every mode's bots.
+    /// </summary>
+    public static void Unembed(Bot bot, PhysicsDirectSpaceState3D space, double now)
+    {
+        var body = bot.Body;
+        var nav = bot.Nav;
+        var pos = body.GlobalPosition;
+        if (body.Ride != Player.RideKind.OnFoot || body.IsOnFloor() || body.Velocity.Length() < 20f || pos.DistanceTo(nav.StillAt) > 0.2f)
+        {
+            nav.StillAt = pos;
+            nav.StillSince = now;
+            return;
+        }
+        if (now - nav.StillSince < 1.5) return;
+        // caught again soon after: further out each time (seen: put back four times on the same spot, whose
+        // "open ground" was the trap itself)
+        if (now - nav.UnembedAt > 30) nav.Unembeds = 0;
+        nav.Unembeds++;
+        nav.UnembedAt = now;
+        var to = OpenGroundNear(space, body, pos, minRadius: Math.Min(6f + 10f * (nav.Unembeds - 1), 36f)) ?? pos + Vector3.Up * 2f;
+        GD.Print($"[bots] {body.Name} \"{bot.Profile.Name}\" caught in the geometry at {body.Global} ({body.Velocity.Length():F0} m/s, still): out to {to}");
+        body.DebugLaunch(to, Vector3.Zero);
+        nav.StillAt = to;
+        nav.StillSince = now;
+    }
+
     /// <summary>Something solid over the head (a roof, a ceiling) within 30 m.</summary>
     private static bool Roofed(PhysicsDirectSpaceState3D space, Player.FootPlayer body, Vector3 pos)
     {
@@ -209,10 +244,10 @@ public static class BotSkills
     /// a ray down from 40 m up hits the ground there first, not a roof. With <paramref name="toward"/>, only
     /// spots at least 4 m nearer it than <paramref name="pos"/>. Null when there is none.
     /// </summary>
-    private static Vector3? OpenGroundNear(PhysicsDirectSpaceState3D space, Player.FootPlayer body, Vector3 pos, Vector3? toward = null)
+    private static Vector3? OpenGroundNear(PhysicsDirectSpaceState3D space, Player.FootPlayer body, Vector3 pos, Vector3? toward = null, float minRadius = 6f)
     {
         float from = toward is { } t0 ? new Vector2(t0.X - pos.X, t0.Z - pos.Z).Length() : 0f;
-        for (float r = 6f; r <= 40f; r += 4f)
+        for (float r = minRadius; r <= 40f; r += 4f)
             for (int k = 0; k < 12; k++)
             {
                 float a = k * Mathf.Tau / 12f;
@@ -243,6 +278,8 @@ public static class BotSkills
     /// </summary>
     public static bool Wants(Bot bot, ItemStack stack)
     {
+        // what the mode adds (#837 phase 4: a squad mate's dogtag in a Battle Royale)
+        if (AlsoWants?.Invoke(bot, stack) == true) return true;
         var inv = bot.Inventory;
         if (Weapons.Get(stack.Id) is { } w)
         {
@@ -262,10 +299,14 @@ public static class BotSkills
     /// checks). A gun goes on the hotbar. True when it took something; false when nothing there is
     /// wanted any more (the crate is done for this bot).
     /// </summary>
+    /// <summary>A mode's own wants on top of <see cref="Wants"/> (a Battle Royale: a fallen mate's dogtag).</summary>
+    public static Func<Bot, ItemStack, bool>? AlsoWants;
+
     public static bool TakeOne(Bot bot, BattleRoyale.BrCrates crates, BattleRoyale.Crate crate)
     {
         var stacks = crate.Stacks();
-        for (int i = 0; i < stacks.Count; i++)
+        // what the mode wants most first (a fallen mate's dogtag), then the crate's order
+        foreach (int i in Enumerable.Range(0, stacks.Count).OrderBy(i => AlsoWants?.Invoke(bot, stacks[i]) == true ? 0 : 1))
         {
             var s = stacks[i];
             if (!Wants(bot, s) || bot.Inventory.Room(s.Id) < s.Count) continue;

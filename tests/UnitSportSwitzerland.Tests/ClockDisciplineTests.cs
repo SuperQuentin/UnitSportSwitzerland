@@ -56,6 +56,7 @@ public class ClockDisciplineTests
         ["src/Core/GameClock.cs"] = "clock: Pace holds the frames to real time while the world loads",
         ["src/Net/ClockSync.cs"] = "clock: LocalNow's fallback off --fixed-fps, and the server's Unix offset",
         ["src/Core/DebugMenu.cs"] = "clock: a speed change is scheduled at a server instant (SimClock.Schedule)",
+        ["src/Phone/PhoneController.cs"] = "calendar: the phone's lock screen shows today's date, as a phone does",
         ["src/World/WorldClock.cs"] = "clock: Hour reads the sky at a server instant, through SimClock",
         ["src/Net/ChatManager.cs"] = "clock: /speed is scheduled at a server instant; plumbing: the rate limit on asking the server for player names",
 
@@ -64,6 +65,7 @@ public class ClockDisciplineTests
         ["src/Net/ServerStats.cs"] = "plumbing: the stats sampling window",
         ["src/Net/Swarm.cs"] = "plumbing: a load tool that measures frame times, so it wants the engine's own delta",
         ["src/Net/StatusFile.cs"] = "plumbing: Unix stamps a web page compares with its own clock",
+        ["src/Net/LiveMapFile.cs"] = "plumbing: Unix stamps the live map page compares with its own clock",
         ["src/Core/SteeringWheel.Force.cs"] = "plumbing: force feedback goes to hardware on the wall clock",
         ["src/Items/RadioSpeaker.cs"] = "plumbing: the backoff before retrying a failed network stream, and where the CD should be playing now",
         ["src/Occasions/OccasionHunt.cs"] = "plumbing: a probe's wall-clock timeout on a tile load (#522)",
@@ -92,7 +94,17 @@ public class ClockDisciplineTests
         // ---- presentation: the player is not slowed even when their character is ----
         // music plays in real time, so a CD's position, its beat and everything dancing to it do too
         ["src/Items/RadioManager.cs"] = "presentation: a radio's CD position is server real time, as its audio plays",
+        // an aura battle (#907) is a rhythm game two peers play on one beat: a player's press keeps the player's time
+        ["src/Combat/AuraManager.cs"] = "presentation: an aura battle's beat, its downbeats and every press graded on them, shared by both battlers",
+        ["src/Combat/AuraHud.cs"] = "presentation: the aura battle's beat ring and countdown, on the battle's shared beat",
+        ["src/Player/FootPlayer.Aura.cs"] = "presentation: which move of the combo the shared beat is on, and the Griddy's beat",
+        ["src/Combat/AuraManager.Bots.cs"] = "presentation: a bot battler's laugh on the aura battle's shared beat (#914)",
+        ["src/Combat/AuraManager.Music.cs"] = "presentation: a radio's CD position, which an aura battle takes its beat from (#914)",
+        ["src/Combat/AuraWatchHud.cs"] = "presentation: the move a watched aura battle is on, on its shared beat (#914)",
         ["src/Items/RadioBody.cs"] = "presentation: a placed radio's CD position and groove",
+        ["src/Concert/ConcertService.cs"] = "presentation: an operator's cue is stamped with the shared clock, so every peer's light show keeps the same beat",
+        ["src/Concert/ConcertBeatDebug.cs"] = "presentation: the beat debug window scrolls its own history in real time",
+        ["src/Concert/ConcertRig.cs"] = "presentation: a concert's light show runs in real time with the music it lights, the same frame on every peer",
         ["src/Items/RadioTap.cs"] = "presentation: the tap on a playing CD's samples",
         ["src/Items/BeatField.cs"] = "presentation: the beat of the music nearby",
         ["src/Items/HeldItemVisual.cs"] = "presentation: a held radio's sparkles on the beat",
@@ -131,6 +143,7 @@ public class ClockDisciplineTests
         // ---- calendar: the real date, on purpose ----
         ["src/Farming/FarmField.cs"] = "calendar: the crop month is the real month (--month overrides)",
         ["src/Farming/FarmSales.cs"] = "calendar: the farm stand's month is the real month",
+        ["src/Concert/ConcertDirector.cs"] = "calendar: tonight's concert is the real date's, a new artist every day",
         ["src/Birds/BirdLife.cs"] = "calendar: the birds of the real month",
         ["src/Occasions/OccasionManager.cs"] = "calendar: today's occasions (Fasnacht, 1 August...) are on the real date",
         ["src/Occasions/OccasionAmbience.cs"] = "calendar: an occasion's ambience follows the real date",

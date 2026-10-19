@@ -21,7 +21,7 @@ done
 [ $NOCHUNKS = 1 ] && S_CHUNKS=0
 
 # --- config: tools/deploy.env, but variables already set in the environment win ---
-VARS="DEPLOY_HOST DEPLOY_PORT_SSH DEPLOY_DIR DEPLOY_CHUNKS_DIR GAME_PORT WEB_PORTS MDNS_NAME SERVER_ARGS SPACE_MARGIN_MB CHUNKS_SRC GODOT TILES TILES_DOMAIN TILES_URL TILES_PRECOMPRESS WEB_MEDIA"
+VARS="DEPLOY_HOST DEPLOY_PORT_SSH DEPLOY_DIR DEPLOY_CHUNKS_DIR GAME_PORT WEB_PORTS MDNS_NAME SERVER_ARGS SPACE_MARGIN_MB CHUNKS_SRC GODOT TILES TILES_DOMAIN TILES_URL TILES_PRECOMPRESS WEB_MEDIA WEB_ANTENNAS"
 for v in $VARS; do [ -n "${!v+x}" ] && eval "_keep_$v=\${$v}"; done
 [ -f tools/deploy.env ] && . tools/deploy.env
 for v in $VARS; do k="_keep_$v"; [ -n "${!k+x}" ] && eval "$v=\${$k}"; done
@@ -35,6 +35,7 @@ if [ "$TILES" != 1 ]; then TILES_URL=
 elif [ -z "${TILES_URL:-}" ]; then TILES_URL=$([ -n "$TILES_DOMAIN" ] && echo "https://$TILES_DOMAIN/tiles/" || echo "http://${DEPLOY_HOST#*@}/tiles/"); fi
 WEB=$([ "$TILES" = 1 ] && echo "$DEPLOY_DIR/web" || true)   # the status page (#740) needs the tiles' Caddy
 WEB_MEDIA=${WEB_MEDIA:-test_output/web-media}                # its clips and pictures, made by tools/web-media.sh
+WEB_ANTENNAS=${WEB_ANTENNAS:-test_output/web-antennas/antennas-4g.json}   # the live map's 4G sites (#896), tools/deploy/antennas.py
 GODOT=${GODOT:-'/c/ProgramData/chocolatey/lib/godot-mono/tools/godot_v4.7.2-stable_mono_win64/godot_v4.7.2-stable_mono_win64_console.exe'}
 OUT=test_output/deploy; mkdir -p "$OUT"
 BUILD=build/linux; BIN=UnitSportSwitzerland.x86_64
@@ -153,10 +154,18 @@ fi
 stopped=0
 install_start() { # start-server.sh with this config baked in; cron and every restart run it
   sed -e "s|@DEPLOY_DIR@|$DEPLOY_DIR|; s|@CHUNKS_DIR@|$CHUNKS_DIR|; s|@GAME_PORT@|$GAME_PORT|" tools/deploy/start-server.sh \
-    | awk -v a="$SERVER_ARGS${TILES_URL:+ --tiles-url $TILES_URL}${WEB:+ --status-file $WEB/status.json}" '{gsub(/@SERVER_ARGS@/, a)} 1' > "$OUT/start-server.sh"
+    | awk -v a="$SERVER_ARGS${TILES_URL:+ --tiles-url $TILES_URL}${WEB:+ --status-file $WEB/status.json --livemap-file $WEB/players.json}" '{gsub(/@SERVER_ARGS@/, a)} 1' > "$OUT/start-server.sh"
   [ $DRY = 1 ] && return
   # the status page (#740), served by the same Caddy as the tiles; the server keeps status.json beside it
   [ -n "$WEB" ] && rq "mkdir -p $(qd "$WEB") && cat > $(qd "$WEB/index.html")" < tools/deploy/web/index.html
+  # the live map (#896): the page, and OFCOM's 4G sites, fetched again when a week old
+  if [ -n "$WEB" ]; then
+    rq "cat > $(qd "$WEB/map.html")" < tools/deploy/web/map.html
+    if [ ! -f "$WEB_ANTENNAS" ] || [ -n "$(find "$WEB_ANTENNAS" -mtime +7 2>/dev/null)" ]; then
+      python tools/deploy/antennas.py "$WEB_ANTENNAS" || echo "  antennas: download failed, the map shows no coverage until the next deploy"
+    fi
+    [ -f "$WEB_ANTENNAS" ] && rq "cat > $(qd "$WEB/antennas-4g.json")" < "$WEB_ANTENNAS"
+  fi
   if [ -n "$WEB" ] && [ -d "$WEB_MEDIA" ]; then  # sent only when the listing (name, size, mtime) differs: the trailer alone is ~35 MB
     list='find . -maxdepth 1 -type f -printf "%P %s %Ts\n" | LC_ALL=C sort'
     here=$(cd "$WEB_MEDIA" && eval "$list")

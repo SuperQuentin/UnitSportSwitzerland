@@ -134,6 +134,10 @@ public partial class PlayerInput : Node
     public const string InteractMount = "interact_mount";
     public const string EngineToggle = "engine_toggle";
     public const string CameraToggle = "camera_toggle";
+    /// <summary>Operating a concert's camera (#885): zoom in and out, and cut this camera to air.</summary>
+    public const string CamZoomIn = "cam_zoom_in";
+    public const string CamZoomOut = "cam_zoom_out";
+    public const string CamCut = "cam_cut";
     /// <summary>On foot: the camera over the other shoulder (#460). A pad swaps with R3 while aiming a gun.</summary>
     public const string SwapShoulder = "swap_shoulder";
     public const string ToggleMode = "toggle_mode";
@@ -184,6 +188,11 @@ public partial class PlayerInput : Node
     public const string QuickMenu = "quick_menu";
     /// <summary>Shift+F2 (#840): declines the newest invite. A pad declines from the quick menu's Invites or the Start menu.</summary>
     public const string InviteDecline = "invite_decline";
+    /// <summary>
+    /// The phone (#889): on foot, takes it out, and again opens it (<see cref="UnitSport.Phone.PhoneController"/>).
+    /// Up arrow, free on foot (only the excavator's boom in a cab); a pad reaches it from the quick menu.
+    /// </summary>
+    public const string Phone = "phone";
     /// <summary>Hold on foot for the emote wheel (<see cref="Player.EmoteWheel"/>, #404): dances and gestures, any time.</summary>
     public const string EmoteWheel = "emote_wheel";
     /// <summary>
@@ -202,6 +211,15 @@ public partial class PlayerInput : Node
     public const string FightKick = "fight_kick";
     /// <summary>Held: the guard (high standing, low crouching).</summary>
     public const string FightBlock = "fight_block";
+    /// <summary>
+    /// In an aura battle only (#907): its own context like the fight, the walk and the items are off.
+    /// Next cuts to the following move of the combo being performed (timed on the downbeat); the
+    /// planner's lock in, take back the last move, and suggest.
+    /// </summary>
+    public const string AuraNext = "aura_next";
+    public const string AuraLock = "aura_lock";
+    public const string AuraRemove = "aura_remove";
+    public const string AuraSuggest = "aura_suggest";
     /// <summary>Drops one of the item in hand on the ground; with Ctrl, the whole stack (#206).</summary>
     public const string DropItem = "drop_item";
     public const string NextItem = "next_item";
@@ -639,6 +657,11 @@ public partial class PlayerInput : Node
         Bind(RideMenu, Keys(Key.R));
         Bind(EngineToggle, Keys(Key.Z), Button(JoyButton.DpadUp));
         Bind(CameraToggle, Keys(Key.V), Button(JoyButton.RightStick));
+        // a concert's camera (#885): the operator's zoom on the wheel and the shoulders (nothing else
+        // is held while a camera is driven), the cut on Enter / X
+        Bind(CamZoomIn, Keys(Key.Equal), Mouse(MouseButton.WheelUp), Button(JoyButton.RightShoulder));
+        Bind(CamZoomOut, Keys(Key.Minus), Mouse(MouseButton.WheelDown), Button(JoyButton.LeftShoulder));
+        Bind(CamCut, Keys(Key.Enter), Button(JoyButton.X));
         // H only couples or sounds a horn in a vehicle; on foot it is the other shoulder (#460)
         Bind(SwapShoulder, Keys(Key.H), Mouse(MouseButton.Middle));
         Bind(ToggleMode, Keys(Key.T), Button(JoyButton.DpadDown));
@@ -677,6 +700,9 @@ public partial class PlayerInput : Node
         // B only looks behind when mounted; D-pad up is the engine in a vehicle and turns the
         // hammer's piece, so the emote wheel does not open with the hammer in hand
         Bind(EmoteWheel, Keys(Key.B), Button(JoyButton.DpadUp));
+        // the phone (#889): Up, as in the games players know it from; no pad button is free on foot
+        // (D-pad up is the emote wheel), so the pad takes it out from the quick menu
+        Bind(Phone, Keys(Key.Up));
         // F2 is free everywhere (F1 help, F3 F4 the perf tools); a pad has no free button, so the
         // quick menu is a hold of Back, whose tap stays the inventory (Ui/QuickMenu tells them apart)
         Bind(QuickMenu, Keys(Key.F2), Button(JoyButton.Back));
@@ -687,6 +713,13 @@ public partial class PlayerInput : Node
         Bind(FightPunch, Mouse(MouseButton.Left), Keys(Key.J), Button(JoyButton.X), Button(JoyButton.RightShoulder));
         Bind(FightKick, Mouse(MouseButton.Right), Keys(Key.K), Button(JoyButton.Y), Button(JoyButton.LeftShoulder));
         Bind(FightBlock, Keys(Key.Shift, Key.L), Button(JoyButton.B));
+        // an aura battle (#907): its own context too, the walk locked and the items off, so Next is
+        // the jump's Space / A, or the left click, or RB (which VR's right trigger sends on foot); the
+        // planner's lock in, take back and suggest are F / Y, Backspace / X, G / R3 (VR: the same buttons)
+        Bind(AuraNext, Mouse(MouseButton.Left), Keys(Key.Space), Button(JoyButton.A), Button(JoyButton.RightShoulder));
+        Bind(AuraLock, Keys(Key.F), Button(JoyButton.Y));
+        Bind(AuraRemove, Keys(Key.Backspace), Button(JoyButton.X));
+        Bind(AuraSuggest, Keys(Key.G), Button(JoyButton.RightStick));
         // Minecraft's key: Q only means "down" in the fly camera and in the air, never on foot
         Bind(DropItem, Keys(Key.Q));
         // pad X is tuck/sprint only when mounted, so on foot it is free, as RB/LB are for items
