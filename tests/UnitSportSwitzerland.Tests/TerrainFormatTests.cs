@@ -155,6 +155,31 @@ public class TerrainFormatTests
     }
 
     [Fact]
+    public void Mesh_height_splits_a_quad_along_its_shorter_diagonal()
+    {
+        int n = ChunkFormat.GridSize;
+        var h = new ushort[n * n];
+        // the NE corner high: NW-SE (v00-v11) climbs less than NE-SW, so the quad folds along it
+        h[1] = 1000;
+        var grid = new ChunkGrid(Id, h, 0, 100);
+        double top = ChunkFormat.Dequantize(1000);
+        double sp = ChunkFormat.SpacingM;
+        Assert.True(ChunkGrid.SplitsNwSe(0, top, 0, 0));
+        Assert.False(ChunkGrid.SplitsNwSe(0, 0, 0, top));
+
+        // the centre lies on the low diagonal (a fixed NE-SW split read top / 2 there)
+        Assert.Equal(0, grid.SampleMeshHeight(Id.MinE + sp / 2, Id.MaxN - sp / 2), 9);
+        // every corner exact, and the NE triangle a plane through it: halfway along its two edges
+        Assert.Equal(top, grid.SampleMeshHeight(Id.MinE + sp, Id.MaxN), 9);
+        Assert.Equal(0, grid.SampleMeshHeight(Id.MinE + sp, Id.MaxN - sp), 9);
+        Assert.Equal(0, grid.SampleMeshHeight(Id.MinE, Id.MaxN - sp), 9);
+        Assert.Equal(top / 2, grid.SampleMeshHeight(Id.MinE + sp / 2, Id.MaxN), 9);
+        Assert.Equal(top / 2, grid.SampleMeshHeight(Id.MinE + sp, Id.MaxN - sp / 2), 9);
+        // the SW triangle is flat at 0
+        Assert.Equal(0, grid.SampleMeshHeight(Id.MinE + sp * 0.2, Id.MaxN - sp * 0.7), 9);
+    }
+
+    [Fact]
     public void ChunkGrid_rejects_a_stride_that_does_not_divide_the_tile()
     {
         Assert.Throws<ArgumentException>(() => new ChunkGrid(Id, new ushort[4], 0, 1, 3));
