@@ -161,7 +161,7 @@ public static class TouristScript
             Feature = "night, the real Rhône valley",
             Keys =
             [
-                new(0, Pt.At(2583300, 1112700, 40), Pt.Dir(60, 22), 28),
+                new(0, Pt.At(2583300, 1112700, 40), Pt.Dir(250, 16), 28),
                 new(8.6, Pt.At(2583330, 1112730, 30), Pt.At(Crash.E, Crash.N, 2), 28),
             ],
             Preroll = 0.5,
@@ -345,8 +345,8 @@ public static class TouristScript
             ],
             Keys =
             [
-                new(0, Ground(IkeaDoor, 320, 14, 1.4f), Pt.On(0, 0f, 1.2f), 28),
-                new(5.3, Ground(IkeaDoor, 318, 15, 1.5f), Pt.On(0, 0f, 1.3f), 28),
+                new(0, Ground(IkeaDoor, 300, 24, 2.6f), Pt.On(0, 3f, 3f), 24),
+                new(5.3, Ground(IkeaDoor, 298, 25, 2.8f), Pt.On(0, 3f, 3.2f), 24),
             ],
             Smooth = 0.3f, Preroll = 0.5,
             Chat = [Say(2.0, Marco, "s15_shark")],
