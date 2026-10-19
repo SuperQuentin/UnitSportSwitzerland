@@ -169,7 +169,7 @@ public static class FondueScript
     /// <summary>The Lavaux corniche road above the steamer's lake (the story's road-bike spot).</summary>
     private static readonly Spot Corniche = new(2547020, 1149060);
     /// <summary>The Gornergrat's slope west of the hotel, down toward Riffelberg.</summary>
-    private static readonly Spot Slope = Crew.Toward(250, 220);
+    private static readonly Spot Slope = Crew.Toward(235, 160);
     /// <summary>The Riddes straight, west end and east end (the showcase's crash).</summary>
     private static readonly Spot RiddesWest = new(2583100, 1113236), RiddesEast = new(2583390, 1113236);
 
@@ -342,7 +342,7 @@ public static class FondueScript
         {
             Number = 0, FromBar = 0, Bars = 1, Name = "Skis", Feature = "skis",
             Hour = 17.8,
-            Cast = [new() { Who = Marco, Ride = RideKind.Skis, At = Slope, Heading = 290, Drive = Drive.Controls, Controls = _ => new RideInput(0f, 0f, 0f, true) }],
+            Cast = [new() { Who = Marco, Ride = RideKind.Skis, At = Slope, Heading = 220, Drive = Drive.Controls, Controls = _ => new RideInput(0f, 0f, 0f, true) }],
             Keys =
             [
                 new(0, Pt.On(0, 1.2f, 0.6f, -7f), Pt.On(0, 0f, 0.6f), 24),
@@ -641,8 +641,9 @@ public static class FondueScript
             Keys =
             [
                 // behind the tractor on its left, the saucer over the field ahead
-                new(0, Pt.On(0, -3f, 9f, 14f), Pt.On(0, -10f, 5f, -45f), 28),
-                new(2 * B, Pt.On(0, -3f, 9.5f, 12f), Pt.On(0, -12f, 7f, -45f), 28),
+                // beside the farm road ahead: the tractor passes between the camera and the saucer over the herd
+                new(0, RiddesField.Toward(59, 48).Toward(149, 9).Up(6f), RiddesCow.Up(5f), 28),
+                new(2 * B, RiddesField.Toward(59, 46).Toward(149, 9).Up(6.2f), RiddesCow.Up(9f), 28),
             ],
             Smooth = 0.3f, Preroll = 3,
             Supers = [new(0.3, 3.0, Card("s29"))],
