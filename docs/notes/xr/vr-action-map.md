@@ -39,7 +39,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | fight step / jump / crouch (#495) | A D, W Space, S Ctrl / L stick, A | ok: L stick towards / away, A, crouch for real (`XrPad.RealCrouch`) | room-scale stepping |
 | fight_punch / fight_kick (#495) | LMB J, RMB K / X RB, Y LB | ok: R / L trigger | **punch and kick for real** (hand speed, R4) |
 | fight_block (#495, hold) | Shift L / B | ok: B (`XrPad.RightB`, not the crouch's B) | forearms raised in front of the face |
-| aura_next (#907, timed on the downbeat) | Space, LMB / A, RB | ok: R trigger (sends RB on foot) | **strike the pose for real** (R4) |
+| aura_next (#907, timed on the downbeat; #914 the waiter's straight face) | Space, LMB / A, RB | ok: R trigger (sends RB on foot), or **strike the next move's pose for real** (`AuraBody.Classify` on `VrHands`, #914) | keep |
 | aura planner: add / aura_remove / aura_lock / aura_suggest (#907) | click, arrows Enter / Backspace / F / G; A / X / Y / R3 | ok: stick + A / X / Y / R stick click | point at the cards with the laser |
 | toggle_mode | T / D-pad ↓ | ok: wrist menu (#437) | keep |
 | climb ladder | W / S on a ladder | ok: stick; rock faces and walls hand over hand (#439, stamina) | keep |

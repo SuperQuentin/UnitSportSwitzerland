@@ -7,11 +7,18 @@
 365.3	Aircraft / Military cargo plane
 365.3	Aircraft / Military cargo plane (parked)
 782	Aura / Move - Arms crossed
+261.5	Aura / Move - Bow
 367.8	Aura / Move - Cut the rope
+321.9	Aura / Move - Dab
+367.8	Aura / Move - Floss
 782	Aura / Move - Griddy
 782	Aura / Move - Lasso
+314.6	Aura / Move - Lead the rival
 754.4	Aura / Move - Mewing
+282.7	Aura / Move - Moonwalk
 298.8	Aura / Move - Point to sky
+274	Aura / Move - Robot
+367.8	Aura / Move - Shush
 367.8	Aura / Move - Siuuu
 298.8	Aura / Move - Six seven
 298.8	Aura / Move - Slow walk
@@ -20,6 +27,7 @@
 367.8	Aura / Move - Sunglasses
 754.4	Aura / Move - Yawn
 367.8	Aura / Stance - Defeat
+754.4	Aura / Stance - Laugh
 782	Aura / Stance - Planning
 298.8	Aura / Stance - Stumble
 282.7	Aura / Stance - Victory

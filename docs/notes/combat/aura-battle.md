@@ -115,9 +115,35 @@ A plan holds 3-6 moves, at most 16 beats; a short one (time ran out) is padded w
   answers (answer ≥ 10) and leaves a cut frozen; the server refuses A's press in B's turn, a stamp
   5 s ahead and a nine-move plan; A forfeits. `SHOTS=1` windows B.
 
+## Follow-ups (#914)
+
+- **Don't laugh first**: each Perfect cut opens a tempt on the waiter (`AuraMatch.TemptAt`, 1 s, sent by
+  `Tempt` to them only, a red prompt). `aura_next` inside it keeps a straight face (`Compose`); no press
+  by the window's end + 0.3 s, or a press with nothing to hold in (breaking character), is a laugh:
+  −5 to the waiter's total, +3 "Made them laugh" in the performer's verdict (`AuraScore.Composure`),
+  once a turn; `Laughed` to both, `AuraStance.Laugh` on the body for 1.6 s.
+- **Spectators**: `AuraManager.Watch.cs` sends `Watch` (names, aura, turn, phase, the combo and its
+  grades, the last verdict, the music) to every non-bot peer within 35 m, at 2 Hz and on change;
+  `Unwatch` when they leave or the battle ends. `AuraWatchHud` draws it, with the cheer hint.
+- **Music's beat**: `AuraManager.Music.cs` takes the radio nearest the arena within 20 m (placed or
+  church via `NearestMusic(heard: false)`, carried ones by `HeldRadio`), its CD's BPM folded into 80-160
+  (`AuraRules.FoldBpm`) and its downbeat as the bars' anchor (`AuraMatch.Beat`, `Anchor`); sent in
+  `Begin`. Every schedule function takes the beat (`CutAt`, `MoveAt`, `NextBar`).
+- **Bots**: `/aura <bot's name>` (bots are no chat peers: `BotPeerByName`); a bot takes it at once.
+  `AuraManager.Bots.cs` swaps its brain for `AuraHoldBrain` and plays through the server doors.
+  Easy/Normal/Hard: plan skill 0.4/0.7/0.95, cut error σ 0.11/0.06/0.03 s, straight face 55/80/95 %.
+- **More moves**: Moonwalk (Walk, answers Slow walk), Floss, Robot, Dab (the dances, drawn on the bar),
+  Lead the rival (Mime; Lasso → Lead +5), Shush (Stare, answers Six seven and Floss), Bow (Pose,
+  finisher); Cut the rope also answers Lead the rival. 20 moves.
+- **E accepts**: `AuraManager.Pending` from the invites; E at a player who challenged you takes the
+  aura battle (`AcceptFrom`) before the fist fight's challenge; the prompt says which.
+- **VR poses**: `AuraBody.Classify` reads `VrHands` (hands up, at the face, crossed, forward, out, low);
+  striking the next move's pose (`AuraBody.GestureOf`, hands down for the last) in the cut's window
+  presses Next; only the moment it is struck counts.
+- `tools/auranetcheck.sh` runs three clients (A, B, spectator C) and a bot battle.
+
 ## Not done
 
-- Composure ("don't laugh first") for the waiting battler; spectators get no HUD (the fight's gap
-  too); the beat is a fixed 120 BPM, not the nearest radio's; no bot brain on `SuggestPlan`;
-  E-at-the-player does not accept an aura challenge (E stays the fist fight's); VR cues by striking
-  the pose for real (R4).
+- Spectators get the HUD but no sound; bots do not cheer in crowds; the music's beat is taken once
+  (a CD that ends or changes mid-battle leaves its grid); the music path is unit-tested, not driven in
+  a loopback check (no CD on the fixture server); VR poses were not tried on a headset.
