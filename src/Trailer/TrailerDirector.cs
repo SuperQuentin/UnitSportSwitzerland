@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -800,7 +801,8 @@ public partial class TrailerDirector : Node
     /// Before the first shot, once the terrain's manifest is in: how many real tiles this run has
     /// (none: the terrain drive is not there, and every shot would be the generated fill: the run
     /// stops), then every shot's ground (<see cref="FilmCoverage"/>): each tile within 5 km of a
-    /// camera key's eye and of an actor's spot (8 km for an eye over 2,200 m) must be a real one.
+    /// camera key's eye and of an actor's spot (8 km for an eye over 2,200 m) must be a real one,
+    /// unless it is abroad (no swissALTI3D tile: nothing to build from), which is allowed and counted.
     /// A shot that is not is a failure of the run, its missing tiles listed and written to
     /// <c>test_output/trailer/&lt;film&gt;/missing_tiles.txt</c> for <c>MapSetup --tiles-file</c>.
     /// <c>--trailer-allow-generated</c> lets a deliberate test on generated or fixture ground pass.
@@ -825,9 +827,15 @@ public partial class TrailerDirector : Node
         }
         var peaks = TilePeaks();
         var all = new SortedSet<(int, int)>();
+        var abroad = new SortedSet<(int, int)>();
+        // a tile with no Swiss survey (abroad) cannot be built: allowed, only counted
+        var country = Country();
+        Func<int, int, bool>? swiss = country == null ? null : (e, n) => country.Covered(new Terrain.Format.TileId(e, n));
         foreach (var shot in _shots)
         {
-            var missing = FilmCoverage.Missing(Needs(shot, peaks), (e, n) => _chunks.AvailableTiles.Contains(new Terrain.Format.TileId(e, n)));
+            var missing = FilmCoverage.Missing(Needs(shot, peaks), (e, n) => _chunks.AvailableTiles.Contains(new Terrain.Format.TileId(e, n)),
+                swiss, out var outside);
+            foreach (var t in outside) abroad.Add(t);
             if (missing.Count == 0) continue;
             foreach (var t in missing) all.Add(t);
             GD.PrintErr($"[trailer] shot {shot.Number}: {missing.Count} tile(s) round its cameras and actors are not real "
@@ -845,8 +853,21 @@ public partial class TrailerDirector : Node
                 + (AllowGenerated ? "; --trailer-allow-generated: filmed anyway" : ""));
         }
         else GD.Print("[trailer] every shot's ground is real");
+        if (abroad.Count > 0) GD.Print($"[trailer] {abroad.Count} tile(s) in view are abroad (no Swiss survey): the generated fill shows there, allowed");
         return true;
     }
+
+    /// <summary>The embedded Swiss country map (which tiles swissALTI3D covers), read once; null if unreadable.</summary>
+    private static UnitSport.Map.CountryData? Country()
+    {
+        if (_countryTried) return _country;
+        _countryTried = true;
+        try { _country = UnitSport.Map.CountryData.LoadEmbedded(); }
+        catch (System.Exception e) { GD.PrintErr($"[trailer] no country map, every missing tile counts as Swiss: {e.Message}"); }
+        return _country;
+    }
+    private static UnitSport.Map.CountryData? _country;
+    private static bool _countryTried;
 
     /// <summary>Each tile's highest point, from the manifest (an eye's height over a tile it is put above); empty without one.</summary>
     private static Dictionary<(int, int), float> TilePeaks()
