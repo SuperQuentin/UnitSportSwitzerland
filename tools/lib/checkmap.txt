@@ -732,5 +732,11 @@ src/Ui/InviteToasts      net    tools/invitecheck.sh
 src/Combat/FightManager  net    tools/invitecheck.sh
 src/World/RaceManager    net    tools/invitecheck.sh
 src/BattleRoyale/BrManager.cs net tools/invitecheck.sh
+# #863: UFO sightings and the cows they beam up, two clients seeing the same plans and the same cow
+src/Occasions/UfoSighting   net    tools/sightingnetcheck.sh
+src/Occasions/SightingNet   net    tools/sightingnetcheck.sh
+src/Farming/Herds           net    tools/sightingnetcheck.sh
+src/Farming/CowMotion       net    tools/sightingnetcheck.sh
+src/Player/TractorBeams     net    tools/sightingnetcheck.sh
 src/Net/LiveMapFile      net    tools/livemapcheck.sh
 tools/deploy/web/map     net    tools/livemapcheck.sh

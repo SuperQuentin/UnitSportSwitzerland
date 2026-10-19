@@ -220,6 +220,27 @@ public sealed record Prop(Spot At, float Bearing, Vector3 Size, Color Colour)
 }
 
 /// <summary>
+/// A UFO sighting staged in a shot (#863): saucers of the game's own sightings
+/// (<see cref="Occasions.UfoSightings.Stage"/>), flying their scripted path
+/// (<see cref="Occasions.SightingPath"/>) about <paramref name="At"/>: the point a flyover crosses,
+/// the hover point of an abduction (put a <see cref="Cows"/> herd there: the beam lifts what is under
+/// it), the landing spot, the point under the mothership (its <see cref="Spot.H"/> raises the whole
+/// path). <paramref name="Heading"/> is the compass bearing they come in on, degrees.
+/// <paramref name="From"/> is where the sighting's own clock stands when the camera rolls, s: 0
+/// starts it with the roll, 24 rolls on an abduction's beam coming on, 30 on a landed saucer with
+/// its ramp down, negative starts it that much later (the timings are
+/// <see cref="Occasions.SightingPath"/>'s constants).
+/// </summary>
+public sealed record Saucers(Occasions.SightingKind Kind, Spot At, float Heading = 0f, int Count = 1, double From = 0, uint Seed = 1);
+
+/// <summary>
+/// A herd staged in a shot (#863): <paramref name="Count"/> cows of <paramref name="Breed"/> grazing
+/// within <paramref name="Radius"/> m of <paramref name="At"/> (<see cref="Farming.Herds.Stage"/>),
+/// from the shot's staging on, as the pasture herds do (a beam lifts them too).
+/// </summary>
+public sealed record Cows(Spot At, int Count = 8, Farming.CowBreed Breed = Farming.CowBreed.Brown, float Radius = 18f);
+
+/// <summary>
 /// One shot of the trailer: where and when, who is in it, how the camera moves, what it says.
 /// It runs from the start of bar <see cref="FromBar"/> for <see cref="Bars"/> bars of the song.
 /// </summary>
@@ -245,6 +266,10 @@ public sealed record Shot
 
     public IReadOnlyList<Cast> Cast { get; init; } = Array.Empty<Cast>();
     public IReadOnlyList<Prop> Props { get; init; } = Array.Empty<Prop>();
+    /// <summary>UFO sightings in the shot (#863), on the sightings' own clock from the roll.</summary>
+    public IReadOnlyList<Saucers> Ufos { get; init; } = Array.Empty<Saucers>();
+    /// <summary>Herds of cows in the shot (#863), grazing from the staging on.</summary>
+    public IReadOnlyList<Cows> Herds { get; init; } = Array.Empty<Cows>();
     public required IReadOnlyList<Key> Keys { get; init; }
     /// <summary>Key time at the shot's first frame: shots that carry one move on each start further along it.</summary>
     public double KeysFrom { get; init; }

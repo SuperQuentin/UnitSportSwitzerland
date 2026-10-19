@@ -121,6 +121,11 @@
     <!-- the flying saucer (#861): its hover flight and the tractor beam, Godot maths only -->
     <Compile Include="..\..\src\Player\UfoFlight.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\TractorBeamMath.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- UFO sightings and the herds they beam up (#863): schedule, herds, cows, paths; pure -->
+    <Compile Include="..\..\src\Occasions\OccasionWeekdays.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\UfoSighting.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\HerdPlan.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\CowMotion.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\CruiseControl.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\AirlinerCatalog.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Audio\TurbopropTone.cs" Link="Game\%(Filename)%(Extension)" />

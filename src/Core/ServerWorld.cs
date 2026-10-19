@@ -196,10 +196,17 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // shops and vending machines (#273): the server keeps what was sold and charges the card
         Loot.ShopService.Create(this);
         // farm fields (#494): the server keeps the worked cells (user://farm) and checks the work
-        if (Systems.On(Systems.Farming)) Farming.FarmField.Create(this, source, origin, _chunks, dedicated: true);
+        if (Systems.On(Systems.Farming))
+        {
+            Farming.FarmField.Create(this, source, origin, _chunks, dedicated: true);
+            // the herds on those fields (#863): the server's, so a tractor beam lifts the same cow for everyone
+            Farming.Herds.Create(this, _chunks, origin, dedicated: true);
+        }
 
         // occasions run on the server's calendar and are replicated, so every player shares one
         _occasions = Occasions.OccasionManager.Create(this);
+        // the UFO sightings (#863): planned here, played back by every peer from the shared clock
+        Occasions.UfoSightings.Create(this, _chunks, origin, dedicated: true);
 
         // The server owns the place index too, so /city and /tpall resolve against the same
         // data the client's Tab search uses and a client cannot ask to be moved anywhere else.
@@ -532,6 +539,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _churchRadios?.SendTo(id);
         _passengers?.SendTo(id);
         _occasions?.SendTo(id);
+        Farming.Herds.Instance?.SendTo(id);
+        Occasions.UfoSightings.Instance?.SendTo(id);
         _placed?.SendTo(id);
         _farmStands?.SendTo(id);
         _sleepers?.SendTo(id);

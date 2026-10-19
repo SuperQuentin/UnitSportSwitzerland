@@ -478,6 +478,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Occasions.OccasionAmbience(_chunks, origin, EarNode));
             // …and snow falling round the camera, except indoors
             AddChild(new Occasions.OccasionPrecip());
+            // the UFO sightings (#863): the server's plans played back here, their beams, their landings
+            Occasions.UfoSightings.Create(this, _chunks, origin, dedicated: false);
+            if (Occasions.SightingShots.Dir != null) AddChild(new Occasions.SightingShots(_chunks, origin, () => LocalPlayer));
         }
         // a sign over every bank door (#213)
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.BankSigns(_chunks));
@@ -819,6 +822,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Crafting.CampfireNetProbe.Role != null) AddChild(new Crafting.CampfireNetProbe(items));
         if (Player.SwimNetProbe.Role != null) AddChild(new Player.SwimNetProbe(items));
         if (Player.EmoteNetProbe.Role != null) AddChild(new Player.EmoteNetProbe(items));
+        if (Occasions.SightingNetProbe.Role != null) AddChild(new Occasions.SightingNetProbe(items));
         if (Concert.ConcertNetProbe.Role != null) AddChild(new Concert.ConcertNetProbe(items));
         if (Phone.PhoneNetProbe.Role != null) AddChild(new Phone.PhoneNetProbe(items));
         if (Player.FightNetProbe.Role != null) AddChild(new Player.FightNetProbe(items));
@@ -955,6 +959,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Systems.On(Systems.Farming))
         {
             Farming.FarmField.Create(this, _chunks?.Source, origin, _chunks, dedicated: false);
+            // the herds on the pastures (#863): worked out here from the fields, drawn, beamed up by the server
+            Farming.Herds.Create(this, _chunks, origin, dedicated: false);
             AddChild(new Farming.HandFarming(items, origin));
             if (Farming.FarmProbe.Requested) AddChild(new Farming.FarmProbe(items, origin));
             if (Farming.HandFarmCheck.Requested) AddChild(new Farming.HandFarmCheck(items, origin));

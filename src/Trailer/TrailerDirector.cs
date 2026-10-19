@@ -226,6 +226,7 @@ public partial class TrailerDirector : Node
         _actors.Clear();
         foreach (var p in _props) p.QueueFree();
         _props.Clear();
+        Unstage();
         _index++;
         if (_index >= _shots.Count)
         {
@@ -309,6 +310,34 @@ public partial class TrailerDirector : Node
         if (shot.Cast.Count > 0) return shot.Cast[0].At;
         foreach (var k in shot.Keys) if (k.Look.World is { } s) return s;
         return new Spot(2600000, 1200000, 500);
+    }
+
+    // ---- UFO sightings and herds (#863) ------------------------------------------------------
+
+    private readonly List<int> _stagedUfos = new(), _stagedHerds = new();
+
+    /// <summary>A shot's herd, grazing round its spot until the next shot.</summary>
+    private void StageHerd(Cows c)
+    {
+        if (Farming.Herds.Instance is not { } herds) { GD.PrintErr("[trailer] no herds in this world: the cows are left out"); return; }
+        _stagedHerds.Add(herds.Stage(c.At.E, c.At.N, c.Count, c.Breed, c.Radius));
+    }
+
+    /// <summary>A shot's sighting, its clock at <see cref="Saucers.From"/> as the camera rolls.</summary>
+    private void StageUfo(Saucers u)
+    {
+        if (Occasions.UfoSightings.Instance is not { } sightings) { GD.PrintErr("[trailer] no UFO sightings in this world: left out"); return; }
+        float ground = _chunks.TryGetSurface(_origin.ToWorld(u.At.E, u.At.N, 0), out float g) ? g : 0f;
+        float anchor = u.At.Agl ? ground + u.At.H : u.At.H;
+        _stagedUfos.Add(sightings.Stage(u.Kind, u.At.E, u.At.N, anchor, Mathf.DegToRad(u.Heading), u.Count, -u.From, u.Seed));
+    }
+
+    private void Unstage()
+    {
+        foreach (int id in _stagedUfos) Occasions.UfoSightings.Instance?.Unstage(id);
+        foreach (int h in _stagedHerds) Farming.Herds.Instance?.Unstage(h);
+        _stagedUfos.Clear();
+        _stagedHerds.Clear();
     }
 
     private Vector3? PlaceSpot(Spot s)
@@ -451,6 +480,7 @@ public partial class TrailerDirector : Node
         for (int i = 0; i < shot.Cast.Count; i++)
             _actors.Add(new Actor(shot.Cast[i], i, this, _chunks, _origin, _routes, k => k >= 0 && k < _actors.Count ? _actors[k] : null) { SetPoint = SetPoint });
         foreach (var prop in shot.Props.Where(p => p.Actor < 0 && p.Route == null)) Build(prop);
+        foreach (var herd in shot.Herds) StageHerd(herd);
         Enter(Phase.Place);
     }
 
@@ -500,6 +530,7 @@ public partial class TrailerDirector : Node
     {
         var shot = _shot!;
         _t = 0;
+        foreach (var ufo in shot.Ufos) StageUfo(ufo);
         _shotCamera!.Reset();
         if (World.DayNight.Instance is { } clock)
         {

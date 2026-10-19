@@ -114,6 +114,8 @@ public sealed class BrBrain : IBotBrain
         if (goal is not (BrGoal.Fight or BrGoal.Finish)) bot.Intent.FaceYaw = null;
         if (goal != BrGoal.Zone) _zoneGoal = null;
         if (goal != BrGoal.Revive) _reviveWho = 0;
+        // a UFO sighting (#863) when nothing presses: look up and wave, or run out from under a beam
+        if (goal is BrGoal.Roam or BrGoal.Loot or BrGoal.Investigate && BotUfo.React(bot, now)) return 0.25;
 
         switch (goal)
         {
