@@ -327,6 +327,15 @@ off, `--junctions new` plans and reports without writing.
   came out uneven). On a street shorter than both members' curves (the 8 m pair) the members' cores are one corner: that
   version fails and one node's is kept. `MERGEDDBG=1` prints both versions' checks per group, `MERGEDFORCE=1` keeps the
   member-by-member one (for renders).
+- **Slip lanes and paths short of a mouth** (#854, the user, Oct 19, against SWISSIMAGE in Geneva): TLM's Verbindung (class
+  `Link`, not a car road for the planner) is mostly a free right-turn slip lane round an island, or a link between a divided
+  road's carriageways. A slip lane is its own roadway outside the core: an arm's mouth is held short of the first node where
+  a road that is no car road joins its street (`JoinHold`: `JoinMargin` or that node's own cap's trim, whichever cuts further,
+  and half a metre; not under `LeastHold` 4 m, nearer it is the junction's own). A footpath or track crossing the street
+  within 15 m of a junction of car roads (`NetworkBuilder.CrossingJunctionReach`) is kept apart like any footpath end there:
+  it ends at the carriageway's edge instead of keeping its crossing node short of a mouth. 168 real tiles: "a road joins short
+  of a mouth" 175 -> 50, the old layout 618 -> 506 (25 more cores now fail a check, held short); 8 more path ends 0.5-0.6 m
+  off their lane (59). `JOINDBG=1` prints what joins each street short of its mouth.
 - **Comparing with reality**: SWISSIMAGE crops from `wms.geo.admin.ch` (`ch.swisstopo.swissimage`, EPSG:2056 bbox); in
   Geneva the marking cadastre on `ge.ch/terags/rest/services/DIRECTIVES_SIGNAL_CHANTIERS/MapServer` (37 lines, 38 kerbs,
   44 coloured surfaces, 48 road cover: carriageway, sidewalk, islands) as GeoJSON by bbox. Three panels (aerial, old, new)

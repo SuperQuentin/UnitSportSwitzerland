@@ -48,6 +48,8 @@ public static partial class TileRewriter
             indexes.TryGetValue(t, out var l) ? l : indexes[t] = new EmbankmentPlanner.LineIndex(output[t]);
         var scratchLanes = new LaneStats();
         var plans = new List<JunctionPlan>();
+        // today's caps by node: a road joining an arm's street keeps its own (JoinHold)
+        var capOf = result.Junctions.GroupBy(j => j.NodeId).ToDictionary(g => g.Key, g => g.First());
 
         // 1. what the data wants at every mouth of the block
         foreach (var (junction, plan) in priority.Plans)
@@ -103,7 +105,8 @@ public static partial class TileRewriter
                     Arm = i, LinkId = arm.LinkId, AtEnd = atEnd, Heading = junction.Arms[i].OutwardHeading, Normal = normal, Wants = wants,
                     Wanted = wantedSection, Mouth = wantedSection, Length = SegmentLength(so.Segment), StreetLength = SegmentLength(so.Segment), Exit = need?.Exit ?? -1,
                     Major = info.Class <= RoadClass.Major, Axis = AxisOf(net.Links[arm.LinkId], atEnd), OldTrim = junction.Arms[i].Trim,
-                    Reach = ReachOf(net, net.Links[arm.LinkId], atEnd, out bool inner), Internal = inner, StreetOn = StreetOn(net, arm.LinkId, atEnd).Links,
+                    Reach = Math.Min(ReachOf(net, net.Links[arm.LinkId], atEnd, out bool inner), JoinHold(net, AxisOf(net.Links[arm.LinkId], atEnd), arm.LinkId, atEnd, capOf)),
+                    Internal = inner, StreetOn = StreetOn(net, arm.LinkId, atEnd).Links,
                     InsideLights = Internal(net.Links[arm.LinkId], junction, signalNodes),
                     // round a merged core the arms lie in the order of where they leave it, not of their headings (#818 phase 5c)
                     Ring = junction.Members is null ? null : RingOf(junction, junction.Arms[i]),
@@ -319,6 +322,35 @@ public static partial class TileRewriter
         if (Environment.GetEnvironmentVariable("MERGEDFORCE") is not null) return byMembers;
         return Fails(whole) && !Fails(byMembers) ? byMembers : whole;
     }
+
+    /// <summary>
+    /// How far out an arm's mouth may go before a road that is no car road joins its street (#854, the user, Oct 19: a slip lane,
+    /// TLM's Verbindung, is its own roadway outside the core, leaving and joining the arm past its mouth; a footpath crossing too):
+    /// <see cref="JoinMargin"/> (or today's cap there, whichever cuts the street further back) and half a metre short of the first such node along the street (on past nodes where only two
+    /// car roads meet), unbounded where none comes before a junction of car roads or that leaves under <see cref="LeastHold"/>.
+    /// </summary>
+    private static double JoinHold(RoadNetwork net, ArmAxis axis, int linkId, bool atEnd, IReadOnlyDictionary<int, Junction> capOf)
+    {
+        var (links, _) = StreetOn(net, linkId, atEnd);
+        foreach (var (link, end) in links.Prepend((linkId, atEnd)))
+        {
+            var l = net.Links[link];
+            int node = end ? l.StartNode : l.EndNode;
+            if (node < 0 || node >= net.Nodes.Count) break;
+            var n = net.Nodes[node];
+            if (n.Approaches.Count(a => InfoOf(net.Links[a.LinkId]) is { } i && PriorityPlanner.IsCarRoad(i.Class)) >= 3) break;
+            // (nearer, it is the junction's own: a link between a divided road's carriageways at the node, no core held short of it)
+            if (n.Degree <= 2) continue;
+            // short of today's cap there too, which the street's lanes stop at (its arm's trim on this link)
+            double trim = capOf.TryGetValue(node, out var cap) ? cap.Arms.Where(x => x.LinkId == link).Select(x => x.Trim).DefaultIfEmpty(0).Max() : 0;
+            double hold = axis.StationPast(n.Position) - Math.Max(JoinMargin, trim + 0.5) - 0.5;
+            return hold >= LeastHold ? hold : double.MaxValue;
+        }
+        return double.MaxValue;
+    }
+
+    /// <summary>The least a mouth is held at short of a road joining its street (m, <see cref="JoinHold"/>).</summary>
+    private const double LeastHold = 4;
 
     /// <summary>Two mouths sharing a street keep at least this much of it between them (m).</summary>
     private const double StreetSpare = 1;

@@ -98,7 +98,18 @@ public static partial class TileRewriter
                 || (j.Ring is null ? j.Arms.Count : j.Arms.Count(x => InfoOf(result.Network.Links[x.LinkId]) is { } i && Junctions.PriorityPlanner.IsCarRoad(i.Class))) != jp.Arms.Count)
                 no = "a path or track joins";
             else if (jp.Arms.Any(a => a.Axis is null || !core.Mouths.Any(m => m.Arm == a.Arm))) no = "an arm without a mouth";
-            else if (jp.Arms.Any(a => RoadJoinsShortOfMouth(result.Network, a, core.Mouths.First(m => m.Arm == a.Arm).Station))) no = "a road joins short of a mouth";
+            else if (jp.Arms.Any(a => RoadJoinsShortOfMouth(result.Network, a, core.Mouths.First(m => m.Arm == a.Arm).Station)))
+            {
+                no = "a road joins short of a mouth";
+                if (Environment.GetEnvironmentVariable("JOINDBG") is not null && !jp.Beyond)
+                    foreach (var a in jp.Arms)
+                        if (NodeShortOfMouth(result.Network, a, core.Mouths.First(m => m.Arm == a.Arm).Station) is int node)
+                        {
+                            var n = result.Network.Nodes[node];
+                            var kinds = n.Approaches.Select(x => InfoOf(result.Network.Links[x.LinkId]) is { } i ? (Junctions.PriorityPlanner.IsCarRoad(i.Class) ? "car" : i.Class.ToString()) : "?");
+                            Console.WriteLine(FormattableString.Invariant($"[join] {jp.Centre.X:F0},{jp.Centre.Y:F0} merged {jp.Merged is not null} node {n.Position.X:F0},{n.Position.Y:F0} at {a.Axis!.StationPast(n.Position):F1} of mouth {core.Mouths.First(m => m.Arm == a.Arm).Station:F1}: {string.Join(" ", kinds)} planned {plans.Any(p => p.Nodes.Contains(node))}"));
+                        }
+            }
             else if (jp.Arms.Any(MissesMouth)) no = "a transition misses its mouth";
             else
                 foreach (var a in jp.Arms)
