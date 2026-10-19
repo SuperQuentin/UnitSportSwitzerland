@@ -1060,7 +1060,9 @@ public static class TouristScript
         },
     // Cartoon throughout (no PS1, no Realistic). The occasion is the calendar's but where a shot names
     // one: "none" (/occasion stop) left broken giant shapes over Riddes in the first stills
-    }.Select(s => s with { Style = "cartoon" }).ToList();
+    // after the Christmas shot (52) the snow stayed on Riddes: the shots after it ask for the calendar's
+    // Halloween back (unchecked yet; stage 2 settles the director's occasions)
+    }.Select(s => s with { Style = "cartoon", Occasion = s.Number > 52 ? "halloween" : s.Occasion }).ToList();
 
     /// <summary>Shots 11-13: BLIP's disguises, the same frame each time, a friend's verdict.</summary>
     private static Shot Disguise(int number, int bar, Character look, Character judge, string line) => new()
