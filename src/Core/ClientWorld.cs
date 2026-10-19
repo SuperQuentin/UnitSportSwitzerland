@@ -1755,6 +1755,16 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         else if (viewer is { } p && IsInstanceValid(p))
         {
+            // a ski lift (#912): its station, the wait, the ride
+            if (p.Lift is { } lift)
+            {
+                bool drag = lift.Kind is World.Ropeways.RopewayKind.TBar or World.Ropeways.RopewayKind.RopeTow;
+                string name = World.Ropeways.RopewayService.KindName(lift.Kind);
+                if (p.LiftWait > 0) yield return (PlayerInput.InteractMount, $"Waiting for the {name}: {p.LiftWait:0} s");
+                else if (drag) yield return (PlayerInput.InteractMount, $"Let go of the {name}");
+            }
+            else if (p.LiftInReach() is { } station)
+                yield return (PlayerInput.InteractMount, $"Take the {World.Ropeways.RopewayService.KindName(station.Kind)}");
             // a bus door's button in reach, inside or out (#162)
             if (p.Vehicle == null && p.ButtonInReach() is { } button)
                 yield return (PlayerInput.InteractMount, button.Open ? "Shut the door" : "Open the door");

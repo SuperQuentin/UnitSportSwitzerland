@@ -34,6 +34,10 @@ public partial class RideProbe : Node
     private readonly double _seconds;
     private readonly string? _shot;
     private Camera3D? _closeCam;
+    private readonly bool _liftMode = CmdArgs.Has("--lift");
+    private bool _liftBoarded, _liftArrived;
+    private string _liftKind = "";
+    private float _liftStartAlt;
 
     private FootPlayer? _player;
     private double _elapsed;
@@ -210,6 +214,25 @@ public partial class RideProbe : Node
             return;
         }
 
+        // --lift (#912): stand still at a lift's bottom station, board it, ride it to the top
+        if (_liftMode)
+        {
+            _player.RideControls = () => new RideInput(0f, 0f, 0f, false);
+            if (!_liftBoarded && _player.TryLift())
+            {
+                _liftBoarded = true;
+                _liftKind = _player.Lift?.Kind.ToString() ?? "?";
+                _liftStartAlt = _player.GlobalPosition.Y;
+                GD.Print($"[lift] boarded the {_liftKind} {_player.Lift?.Key}, {_player.Lift?.Length:F0} m, waiting {_player.LiftWait:F1} s");
+            }
+            if (_liftBoarded && !_liftArrived && _player.Lift == null)
+            {
+                _liftArrived = true;
+                GD.Print($"[lift] off at the top after {_elapsed:F1} s, climbed {_player.GlobalPosition.Y - _liftStartAlt:F0} m, "
+                    + $"riding {_player.Ride}, {_player.RideSpeed:F1} m/s");
+            }
+        }
+
         _elapsed += delta;
         _topSpeed = Mathf.Max(_topSpeed, _player.RideSpeed);
         foreach (float kmh in new[] { 80f, 100f, 200f })
@@ -277,6 +300,14 @@ public partial class RideProbe : Node
 
         if (_elapsed < _seconds) return;
         _done = true;
+        if (_liftMode)
+        {
+            bool ok = _liftBoarded && _liftArrived && _player.Ride == _kind;
+            GD.Print(ok ? $"[lift] RESULT: ok, the {_liftKind} carried the rider up and set it down on {_player.Ride}"
+                : $"[lift] RESULT: FAILED (boarded {_liftBoarded}, arrived {_liftArrived}, riding {_player.Ride})");
+            GetTree().Quit(ok ? 0 : 1);
+            return;
+        }
 
         var end = _player.GlobalPosition;
         float travelled = (float)_origin.ToGlobal(end).HorizontalDistanceTo(_start);
