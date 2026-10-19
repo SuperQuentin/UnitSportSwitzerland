@@ -131,6 +131,7 @@ public class ClockDisciplineTests
         ["src/Farming/FarmField.cs"] = "calendar: the crop month is the real month (--month overrides)",
         ["src/Farming/FarmSales.cs"] = "calendar: the farm stand's month is the real month",
         ["src/Birds/BirdLife.cs"] = "calendar: the birds of the real month",
+        ["src/Trainer/FtpWatch.cs"] = "calendar: the real date stamped on a detected FTP in rider.json (#902)",
         ["src/Occasions/OccasionManager.cs"] = "calendar: today's occasions (Fasnacht, 1 August...) are on the real date",
         ["src/Occasions/OccasionAmbience.cs"] = "calendar: an occasion's ambience follows the real date",
         ["src/Loot/LootService.cs"] = "calendar: a building restocks once a real day (LootTables.RestockSeconds)",
