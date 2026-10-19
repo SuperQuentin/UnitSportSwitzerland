@@ -86,6 +86,26 @@ public static class ConcertCheck
         Expect(lit.ContainsKey(ShowSection.WalkIn) && lit.ContainsKey(ShowSection.Peak) && lit.ContainsKey(ShowSection.Groove),
             $"walk-in, groove and peak all play");
 
+        // the music: a setlist from the library (no personal CD), and a song's sections drive the desk
+        var lib = new[]
+        {
+            new Audio.Cd.CdInfo(3, "a", 200f, 120f, 0.1f, Audio.Cd.MusicStyle.Pop, 0.5f),
+            new Audio.Cd.CdInfo(-5, "personal", 200f, 120f, 0.1f, Audio.Cd.MusicStyle.Pop, 0.5f),
+            new Audio.Cd.CdInfo(4, "too short", 12f, 120f, 0.1f, Audio.Cd.MusicStyle.Pop, 0.5f),
+            new Audio.Cd.CdInfo(9, "b", 180f, 95f, 0.2f, Audio.Cd.MusicStyle.Rock, 0.5f),
+        };
+        var set = ConcertMusic.SetlistOf(ev, lib);
+        Expect(set.Length == 2 && set.All(c => c.Id is 3 or 9), $"the setlist takes the library's songs, not a personal or a 12 s one ({string.Join(",", set.Select(c => c.Id))})");
+        desk.Music = new MusicMoment(ShowSection.Peak, 37.5f, 0.9f, 0.8f, 3, true, 0f);
+        desk.Write(100);
+        Expect(desk.Section == ShowSection.Peak && MathF.Abs(desk.Beat - 37.5f) < 1e-4f && desk.SectionBar == 3 && desk.LastSection,
+            $"a song's section and beat drive the desk ({desk.Section}, beat {desk.Beat})");
+        desk.HeldSection = ShowSection.Calm;
+        desk.Write(100);
+        Expect(desk.Section == ShowSection.Calm, $"and an operator's held section wins over the song");
+        desk.HeldSection = null;
+        desk.Music = null;
+
         GD.Print(failures == 0 ? "[concertcheck] RESULT: ok" : $"[concertcheck] RESULT: FAILED ({failures})");
         return failures == 0 ? 0 : 1;
     }

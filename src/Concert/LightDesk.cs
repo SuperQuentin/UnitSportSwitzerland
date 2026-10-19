@@ -78,6 +78,8 @@ public sealed class LightDesk
     /// clock (the beat counts on from where it was), a blackout, a master fader.
     /// </summary>
     public ShowSection? HeldSection { get; set; }
+    /// <summary>The song playing (<see cref="ConcertMusic"/>), or null: the desk then makes its songs up.</summary>
+    public MusicMoment? Music { get; set; }
     public bool Blackout { get; set; }
     public float Master { get; set; } = 1f;
     private float? _bpm;
@@ -98,6 +100,15 @@ public sealed class LightDesk
 
     public ShowSection SectionAt(double showSeconds, out float beat)
     {
+        if (Music is { } m && showSeconds >= 0)
+        {
+            // the music decides: its sections, its beat grid; a held section or a blackout still wins
+            beat = m.Beat;
+            SectionBar = m.SectionBar;
+            LastSection = m.LastSection;
+            if (Blackout) return ShowSection.Blackout;
+            return HeldSection ?? m.Section;
+        }
         beat = BeatAt(showSeconds);
         int bar = (int)MathF.Floor(beat / 4f);
         SectionBar = bar;
@@ -125,7 +136,8 @@ public sealed class LightDesk
         Beat = beat;
         float ph = beat - MathF.Floor(beat);           // within the beat
         float bar = beat / 4f, barPh = bar - MathF.Floor(bar);
-        float kick = MathF.Exp(-ph * 5f);              // a hit on every beat, decaying
+        // a hit on every beat, decaying; the song's own kick drum when it plays
+        float kick = Music is { } song ? Math.Max(song.Kick, 0.25f * MathF.Exp(-ph * 5f)) : MathF.Exp(-ph * 5f);
         int beatN = _beatN = (int)MathF.Floor(beat);
         _n = G(RigGroup.MidTruss).Length;
         var p = _plan.Patch;

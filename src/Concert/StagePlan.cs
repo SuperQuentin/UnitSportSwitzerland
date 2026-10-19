@@ -20,6 +20,8 @@ public sealed class StagePlan
     public readonly List<StageBox> Boxes = new();
     public readonly List<StageRamp> Ramps = new();
     public readonly DmxPatch Patch = new();
+    /// <summary>Where the PA hangs, stadium frame: where the music comes from.</summary>
+    public readonly List<Vector3> PaHangs = new();
     public readonly ConcertEvent Event;
 
     // stage frame -> stadium frame
@@ -151,6 +153,7 @@ public sealed class StagePlan
             // the flown PA: a line array hung off the wing, its subs stacked under the deck's edge
             float px = side * (hw + 3f);
             Box(px - 0.7f, px + 0.7f, r - 12f, r - 1.5f, -2f, -0.6f, Speaker, solid: false);
+            PaHangs.Add(At(px, r - 7f, -1.3f));
             Box(px - 1.2f, px + 1.2f, 0, 1.2f, -2f, 0f, Speaker);
         }
 
@@ -262,6 +265,7 @@ public sealed class StagePlan
                 Tower(sx * (hw + 2f), sz * (hw + 2f), r + 1f);
                 // a flown PA hang at each corner, turned out to its quarter
                 Box(sx * (hw + 3.2f) - 0.7f, sx * (hw + 3.2f) + 0.7f, r - 11f, r - 1.5f, sz * (hw + 3.2f) - 0.7f, sz * (hw + 3.2f) + 0.7f, Speaker, solid: false);
+                PaHangs.Add(At(sx * (hw + 3.2f), r - 6f, sz * (hw + 3.2f)));
             }
         // the square grid on the four towers
         float g = hw + 2f;

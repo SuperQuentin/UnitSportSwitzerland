@@ -67,6 +67,8 @@ public partial class ConcertRig : Node3D
     private float _haze;
     private ConcertCrowd? _crowd;
     private ConcertSfx _sfx = null!;
+    private ConcertMusic _music = null!;
+    public ConcertMusic Music => _music;
     private float _energy;
 
     private const float BeamLength = 70f;
@@ -89,6 +91,9 @@ public partial class ConcertRig : Node3D
         _cells = fx.Where(f => f.Type.Kind is FixtureKind.Blinder or FixtureKind.Strobe or FixtureKind.PixelBar).ToArray();
         _screens = fx.Where(f => f.Type.Kind == FixtureKind.Screen).ToArray();
         BuildRig();
+        // the music from the PA: the setlist on the shared clock, read for the desk
+        _music = new ConcertMusic(Event, _plan.PaHangs.ToArray());
+        AddChild(_music);
         // pyro, CO2, confetti, fog: fixtures of the rig like the rest
         _sfx = new ConcertSfx(_plan.Patch, Event);
         AddChild(_sfx);
@@ -236,6 +241,23 @@ public partial class ConcertRig : Node3D
         return new Basis(x, z.Cross(x), z);
     }
 
+    /// <summary>
+    /// The concert playing round a point, for the dances (<see cref="Items.RadioManager.NearestMusic"/>):
+    /// anyone in the bowl dances to it, on its beat.
+    /// </summary>
+    public static Items.RadioManager.Music? MusicNear(Vector3 point, float within = 160f)
+    {
+        foreach (var rig in Live.Values)
+        {
+            if (!IsInstanceValid(rig) || rig._music?.Song is not { } song) continue;
+            if (rig.GlobalPosition.DistanceTo(point) > within) continue;
+            var speaker = rig._music.GetChildOrNull<Items.RadioSpeaker>(0);
+            if (speaker == null) continue;
+            return new Items.RadioManager.Music(speaker, song.Id, rig._music.SongStartedAt);
+        }
+        return null;
+    }
+
     public override void _ExitTree()
     {
         if (Live.TryGetValue(Event.Stadium.Name, out var r) && r == this) Live.Remove(Event.Stadium.Name);
@@ -255,10 +277,12 @@ public partial class ConcertRig : Node3D
     {
         double now = Net.ClockSync.ServerNow;
         var p = _plan.Patch;
+        _desk.Music = _music.Step(now, ShowOn());
         if (ExternalLive)
             for (int u = 0; u < _external.Length; u++) _external[u].CopyTo(p.Universes[u], 0);
         else _desk.Write(ShowOn() ? now % 86400.0 : -1.0);
-        float master = Math.Clamp(_desk.Master, 0f, 1f);
+        // the song's loudness rides the master: a quiet bridge dims the rig a little
+        float master = Math.Clamp(_desk.Master, 0f, 1f) * (_desk.Music is { } song ? 0.6f + 0.4f * song.Level : 1f);
         _sfx.Step(now);
         float t = (float)(now % 3600.0);
 
