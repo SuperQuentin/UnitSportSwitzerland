@@ -60,6 +60,8 @@ public enum ItemArmPose
     PhoneOpen,
     /// <summary>The open phone raised to eye height as a camera (#889): both hands at its ends, before the face.</summary>
     PhoneRaised,
+    /// <summary>A selfie (#889): the phone held up and out at arm's length in the right hand, the left arm loose, the head tipped toward it.</summary>
+    PhoneSelfie,
 }
 
 /// <summary>Colours for one figure. Kept separate so riders can be told apart at distance.</summary>
@@ -301,8 +303,8 @@ public static partial class HumanMeshBuilder
     /// </summary>
     private static Rig ApplyArms(Rig rig, ItemArmPose arm, float blend) =>
         // the raised phone (#889) is the open phone lifted: its blend runs 0..1 into the open pose, 1..2 up to the face
-        arm == ItemArmPose.PhoneRaised
-            ? ApplyArmsOnce(ApplyArmsOnce(rig, ItemArmPose.PhoneOpen, Mathf.Min(blend, 1f)), ItemArmPose.PhoneRaised, blend - 1f)
+        arm is ItemArmPose.PhoneRaised or ItemArmPose.PhoneSelfie
+            ? ApplyArmsOnce(ApplyArmsOnce(rig, ItemArmPose.PhoneOpen, Mathf.Min(blend, 1f)), arm, blend - 1f)
             : ApplyArmsOnce(rig, arm, blend);
 
     private static Rig ApplyArmsOnce(Rig rig, ItemArmPose arm, float blend)
@@ -355,6 +357,12 @@ public static partial class HumanMeshBuilder
                 item = new(s * 0.08f, rig.HeadBase.Y - 0.05f, rig.HeadBase.Z + 0.34f);
                 support = new(-s * 0.09f, rig.HeadBase.Y - 0.05f, rig.HeadBase.Z + 0.34f);
                 dir = new Vector3(0f, 1f, 0.1f); break;
+            case ItemArmPose.PhoneSelfie:
+                // a selfie: the phone up and out to the right at arm's length, looking down at the face;
+                // the other hand loose at the side
+                item = new(s * 0.30f, rig.HeadBase.Y + 0.10f, rig.Chest.Z + 0.42f);
+                support = Reduce(rig.WristR, rest);
+                dir = new Vector3(s * 0.3f, 1f, 0.2f); break;
             default:   // Hold
                 item = new(s * 0.19f, rig.Waist.Y + 0.05f, rig.Waist.Z + 0.30f);
                 support = Reduce(rig.WristR, rest);
@@ -368,8 +376,10 @@ public static partial class HumanMeshBuilder
         var elbowR = Limb.Solve(rig.ShoulderR, wristR, UpperArmLength, ForearmLength, new Vector3(0.6f, -0.6f, -0.2f));
         // the item points along the forearm swinging in the gait, along the pose's own direction once blended
         var fore = (rig.WristL - rig.ElbowL).Normalized();
-        // head down onto the stock: the crown tips forward a little
-        var headTop = arm == ItemArmPose.ShoulderAim ? rig.HeadTop + new Vector3(0, -0.012f, 0.04f) * blend : rig.HeadTop;
+        // head down onto the stock: the crown tips forward a little; in a selfie it leans toward the phone
+        var headTop = arm == ItemArmPose.ShoulderAim ? rig.HeadTop + new Vector3(0, -0.012f, 0.04f) * blend
+            : arm == ItemArmPose.PhoneSelfie ? rig.HeadTop + new Vector3(s * 0.05f, -0.012f, 0.01f) * blend
+            : rig.HeadTop;
         return rig with
         {
             HeadTop = headTop,

@@ -126,4 +126,9 @@
   finder resized to the cover's shape, 80° up it); the lens sees the owner's body (`OwnBody.Layer` added to
   its cull mask). The game camera sits by the face looking at the cover (`PhoneSelfieView`). Shots go to
   the album as any.
+- **The selfie pose and face**: `ItemArmPose.PhoneSelfie` (blend 1..2 over the open pose, as the raised one;
+  between the two lifted poses the phone comes down to the open pose first): the phone up and out to the
+  right at arm's length, the left arm loose, the head tipped toward it. The face looks into the lens and
+  goes through Happy, Joy, Wink, Love, 2.5 s each, off `ClockSync.ServerNow` (`FootPlayer.SelfieFace`), so
+  every peer shows the same one. The lens turns onto the head (a phone's face tracking), the phone's up kept.
 

@@ -1915,7 +1915,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // the phone (#889) is in both hands whatever the hotbar holds
         if (PhoneState != 0) return PhoneState switch
         {
-            PhoneCameraState or PhoneSelfieState => Avatar.ItemArmPose.PhoneRaised,
+            PhoneCameraState => Avatar.ItemArmPose.PhoneRaised,
+            PhoneSelfieState => Avatar.ItemArmPose.PhoneSelfie,
             PhoneOpenState => Avatar.ItemArmPose.PhoneOpen,
             _ => Avatar.ItemArmPose.Phone,
         };
@@ -1955,10 +1956,26 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // as a camera, it is the open phone lifted: the blend runs on from 1 to 2 (HumanMeshBuilder.ApplyArms)
         if (IsPhonePose(want) && IsPhonePose(_itemArmCur))
         {
-            float goal = want == Avatar.ItemArmPose.PhoneRaised ? 2f : 1f;
-            if (want == Avatar.ItemArmPose.PhoneRaised) _itemArmCur = want;
+            // the lifted poses (raised as a camera, a selfie) sit on the open one: from one to the other
+            // the phone comes back down to it first
+            static bool Lifted(Avatar.ItemArmPose p) => p is Avatar.ItemArmPose.PhoneRaised or Avatar.ItemArmPose.PhoneSelfie;
+            float goal;
+            if (Lifted(want) && Lifted(_itemArmCur) && want != _itemArmCur)
+            {
+                goal = 1f;
+                if (_itemArmBlend <= 1f) _itemArmCur = want;
+            }
+            else if (Lifted(want))
+            {
+                _itemArmCur = want;
+                goal = 2f;
+            }
+            else
+            {
+                goal = 1f;
+                if (_itemArmBlend <= 1f) _itemArmCur = want;
+            }
             _itemArmBlend = Mathf.MoveToward(_itemArmBlend, goal, dt / (goal > 1f || _itemArmBlend > 1f ? 0.35f : 0.18f));
-            if (want != Avatar.ItemArmPose.PhoneRaised && _itemArmBlend <= 1f) _itemArmCur = want;
             return;
         }
         if (want != _itemArmCur && _itemArmBlend > 0.02f) target = 0f;   // leave the old pose first

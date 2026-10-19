@@ -106,7 +106,7 @@ public partial class FootPlayer
     }
 
     private static bool IsPhonePose(Avatar.ItemArmPose pose) =>
-        pose is Avatar.ItemArmPose.Phone or Avatar.ItemArmPose.PhoneOpen or Avatar.ItemArmPose.PhoneRaised;
+        pose is Avatar.ItemArmPose.Phone or Avatar.ItemArmPose.PhoneOpen or Avatar.ItemArmPose.PhoneRaised or Avatar.ItemArmPose.PhoneSelfie;
 
     /// <summary>
     /// The phone in this body's frame: gripped by its right edge in the item hand, its screens turned
@@ -137,12 +137,12 @@ public partial class FootPlayer
         var held = new Transform3D(basis, hand - x * 0.034f + y * 0.02f + z * 0.075f);
         if (_phoneTurn <= 0f) return held;
         // a selfie (#889): turned half round about the open phone's middle, the camera island and the cover
-        // screen to the face, and held a little further out, at arm's length
+        // screen to the face (the arm already holds it up and out)
         float turn = Mathf.SmoothStep(0f, 1f, _phoneTurn);
         var centre = Phone.PhoneModel.InnerScreenCentre;
         var spin = new Transform3D(Basis.Identity, centre) * new Transform3D(new Basis(Vector3.Up, Mathf.Pi * turn), Vector3.Zero)
                    * new Transform3D(Basis.Identity, -centre);
-        return new Transform3D(held.Basis, held.Origin - held.Basis.Z * (0.1f * turn)) * spin;
+        return held * spin;
     }
 
     /// <summary>

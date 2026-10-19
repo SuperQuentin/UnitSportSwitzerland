@@ -596,6 +596,7 @@
 298.8	Figures / Holding - Phone
 782	Figures / Holding - PhoneOpen
 367.8	Figures / Holding - PhoneRaised
+754.4	Figures / Holding - PhoneSelfie
 282.7	Figures / Holding - Plant
 272.8	Figures / Holding - ShoulderAim
 754.4	Figures / Holding - ThrowRelease

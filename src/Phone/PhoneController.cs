@@ -437,6 +437,13 @@ public partial class PhoneController : Node
         if (p.PhoneModel is not { Visible: true } phone || p.CameraOrNull is not { } eye) return;
         var lens = _screens.Lens;
         lens.GlobalTransform = phone.GlobalTransform.Orthonormalized() * new Transform3D(Basis.Identity, PhoneModel.LensPoint);
+        // a selfie frames the face, as a phone's face tracking does: the lens turned onto the head, the phone's up kept
+        if (_selfie)
+        {
+            var face = p.GlobalPosition + Vector3.Up * 1.58f;
+            var at = lens.GlobalPosition;
+            if (at.DistanceSquaredTo(face) > 0.01f) lens.GlobalTransform = new Transform3D(Basis.LookingAt(face - at, phone.GlobalBasis.Y), at);
+        }
         // a zoom eases in, as a phone's does between its lenses
         // a selfie wide, at arm's length the face and what is behind it; a zoom eases in, as a phone's does between its lenses
         lens.Fov = Mathf.Lerp(lens.Fov, _selfie ? SelfieFov : _screens.LensFovNow, MathX.Damp(7f, dt));
