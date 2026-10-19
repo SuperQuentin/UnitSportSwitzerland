@@ -75,7 +75,7 @@ public static class RopewayMeshBuilder
                 break;
             case Part.Bar:
                 Box(new Vector3(0, 0.75f, 0), new Vector3(1.0f, 0.06f, 0.06f), Yellow);           // the T, at hip height
-                Box(new Vector3(0, 0.9f, 0), new Vector3(0.06f, 0.3f, 0.06f), Yellow);
+                Box(new Vector3(0, 0.9f, 0), new Vector3(0.09f, 0.3f, 0.09f), Yellow);          // a sleeve round the rod, clear of its faces
                 break;
             default:
                 Box(new Vector3(0, -0.15f, 0), new Vector3(0.12f, 0.3f, 0.12f), Yellow);
