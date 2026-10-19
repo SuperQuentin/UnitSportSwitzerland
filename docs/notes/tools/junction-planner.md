@@ -371,6 +371,12 @@ off, `--junctions new` plans and reports without writing.
   (or that node's own cap's trim, where its lanes stop) instead of `JoinMargin` 4 m; a street looping back to its junction's
   own node is no road joining it; a link from a node back to itself under a metre (a stitch on a tile's border) is no arm.
   168 real tiles: old layout 250 -> 231, path ends off their lane 75 -> 73.
+- **Tried and reverted** (#854, Oct 20): a slip lane's node (two car roads and a Verbindung) planned only to merge into a junction
+  whose mouth reaches it, the slip lane an arm of the merged core: "a road joins short of a mouth" 52 -> 25 and the old layout
+  229 -> 219, but 18 more path ends 0.6-1 m off their lane (most of those slip lanes are TLM stubs of 0 m between carriageways,
+  their arm's lane matching no written road); without the stubs under 2 m the gain went (235). Also reverted: every Verbindung
+  meeting a junction's node as an arm (every slip node became a junction: 313 left, path ends off their lane 175); the two cores
+  held apart on a street with no room between them counted as two (a 0 m street between them, bike paths ending on no lane).
 - **Comparing with reality**: SWISSIMAGE crops from `wms.geo.admin.ch` (`ch.swisstopo.swissimage`, EPSG:2056 bbox); in
   Geneva the marking cadastre on `ge.ch/terags/rest/services/DIRECTIVES_SIGNAL_CHANTIERS/MapServer` (37 lines, 38 kerbs,
   44 coloured surfaces, 48 road cover: carriageway, sidewalk, islands) as GeoJSON by bbox. Three panels (aerial, old, new)
