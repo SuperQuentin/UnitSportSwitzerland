@@ -25,14 +25,17 @@ public partial class SightingShots : Node
     private bool _own;
     private int _failures;
 
-    public SightingShots(Terrain.ChunkManager? chunks, WorldOrigin origin)
+    private readonly Func<FootPlayer?> _player;
+
+    public SightingShots(Terrain.ChunkManager? chunks, WorldOrigin origin, Func<FootPlayer?> player)
     {
         Name = "SightingShots";
+        _player = player;
         _chunks = chunks;
         _origin = origin;
     }
 
-    public SightingShots() : this(null, WorldOrigin.SwissDefault()) { }
+    public SightingShots() : this(null, WorldOrigin.SwissDefault(), () => null) { }
 
     public override async void _Ready()
     {
@@ -70,7 +73,7 @@ public partial class SightingShots : Node
         return true;
     }
 
-    private FootPlayer? Me => GetTree().GetFirstNodeInGroup(FootPlayer.Group) as FootPlayer;
+    private FootPlayer? Me => _player();
 
     private float Ground(Vector3 at) => _chunks != null && _chunks.TryGetSurface(at, out float g) ? g : at.Y;
 
@@ -97,7 +100,7 @@ public partial class SightingShots : Node
     {
         if (!await Until(() => Me != null && UfoSightings.Instance != null && Farming.Herds.Instance != null, 120))
         {
-            Expect(false, "a player, sightings and herds");
+            Expect(false, $"a player ({Me != null}), sightings ({UfoSightings.Instance != null}) and herds ({Farming.Herds.Instance != null})");
             return;
         }
         var sightings = UfoSightings.Instance!;
