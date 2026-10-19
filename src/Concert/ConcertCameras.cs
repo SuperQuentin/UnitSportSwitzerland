@@ -286,8 +286,15 @@ public partial class ConcertPerformers : Node3D
     /// <see cref="PerBeat"/> frames a beat over the move's 8 counts. At most one new pose a frame; until
     /// it is built the artist holds the one before.
     /// </summary>
-    private readonly Dictionary<long, ArrayMesh> _poses = new();
+    private readonly Dictionary<long, (Godot.Collections.Array Arrays, Mesh.ArrayFormat Format)[]> _poses = new();
     private const int PerBeat = 8, MaxPoses = 1200;
+    /// <summary>
+    /// The pose each artist shows. Its mesh is never swapped: the figure material's face parameters
+    /// are per instance, and Godot registers them again on every new mesh without freeing the old
+    /// (the buffer overflowed, an error a swap); a pose is copied into the artist's own mesh instead.
+    /// </summary>
+    private readonly List<long> _showing = new();
+    private ArrayMesh? _scratch;
     private Audio.Cd.MusicStyle _style;
 
     public ConcertPerformers(StagePlan plan, LightDesk desk)
@@ -327,6 +334,7 @@ public partial class ConcertPerformers : Node3D
             };
             AddChild(node);
             _people.Add((node, HumanPalette.ForRider(e.Seed + i * 7), i * 3));
+            _showing.Add(long.MinValue);
         }
     }
 
@@ -364,16 +372,25 @@ public partial class ConcertPerformers : Node3D
             int move = dancing ? ((bar / 2) + offset) % moves : -1;
             if (flashHash != 0) move = (int)((flashHash >> 4) + (uint)offset * 7u) % moves;
             long key = ((long)p << 40) | ((long)(move + 1) << 20) | (long)(dancing ? frame : 0);
-            if (!_poses.TryGetValue(key, out var mesh))
+            if (_showing[p] == key) continue;
+            if (!_poses.TryGetValue(key, out var surfaces))
             {
                 if (built) continue;
                 if (_poses.Count >= MaxPoses) _poses.Clear();
                 var dance = dancing ? new DanceParams(_style, move, fPhase, fBarPhase, fBar, 1f) : (DanceParams?)null;
-                mesh = HumanMeshBuilder.BuildStride(palette, 0f, 0f, dance: dance);
-                _poses[key] = mesh;
+                _scratch ??= new ArrayMesh();
+                HumanMeshBuilder.BuildStride(palette, 0f, 0f, dance: dance, into: _scratch);
+                // the format too: the figure's custom channels are packed bytes only it can read back
+                surfaces = new (Godot.Collections.Array, Mesh.ArrayFormat)[_scratch.GetSurfaceCount()];
+                for (int k = 0; k < surfaces.Length; k++) surfaces[k] = (_scratch.SurfaceGetArrays(k), _scratch.SurfaceGetFormat(k));
+                _poses[key] = surfaces;
                 built = true;
             }
-            if (node.Mesh != mesh) node.Mesh = mesh;
+            var target = (ArrayMesh)node.Mesh;
+            target.ClearSurfaces();
+            foreach (var (arrays, format) in surfaces)
+                target.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays, null, null, format);
+            _showing[p] = key;
         }
     }
 }

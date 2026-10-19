@@ -172,6 +172,11 @@
   (3 ms of CPU for one figure).
 - Now ~10.3 ms: the IMAG camera's `Far` is 450 m and it renders every other frame; the artists' poses
   are cached (`ConcertPerformers._poses`, 8 a beat over a move's two bars, at most one new pose a frame).
+  A pose is cached as surface arrays (with their format: the figure's custom channels) and copied into
+  the artist's own mesh, never swapped in as another mesh: the figure material's face parameters are
+  `instance uniform`s, and Godot registers them again for every new mesh on an instance without
+  freeing the old, until "Too many instances using shader instance variables" floods the log (13 840
+  errors in one play session, worst in busy, fast sections).
   The rest of the rig is under 0.5 ms (desk, effects, rays, heads, screens).
 
 ## The effects (`ConcertSfx`)
