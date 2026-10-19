@@ -98,7 +98,8 @@
   A building whose base is anywhere more than 3 m up gets none (in the air: left as it is). Local
   world, Oct 2026: of 308,759 buildings 57% sit in the ground, 28% stand up to 1 m above it, 14%
   1-3 m (all now footed), 1% 3-10 m and 65 over 10 m (left). The 3-10 m ones are mostly real
-  buildings on steep slopes with a tall downhill facade (a block of flats on a cliff above Riddes).
+  buildings on steep slopes with a tall downhill facade (a block of flats on a cliff at
+  2589335/1098231, 9 m; a terraced complex by Riddes at 2580506/1113399, 27 m).
 - **Geometry** (appended after the doors): a 0.9 m parapet on every open edge of a flat roof (an
   edge no other flat face shares, with nothing of the solid as high 0.4 m past it; each corner owned
   by one edge) with square merlons, Ticino's notched swallowtails, a ruin's broken ones (35% gone, the
