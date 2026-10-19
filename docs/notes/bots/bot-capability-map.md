@@ -58,6 +58,7 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | dropped items | — | `DroppedItems.RequestPickUp` (RPC, replies `RpcId`) | — | `Loot` | gap: a server claim that returns the stack (a follow-up) |
 | parked car, motorbike, bike: get in, drive, get out | `RideControls` (`BotDriving.Controls`: `AutoPilot`) | `VehicleManager.ServerClaim`, `FootPlayer.TakeVehicle`, `ExitVehicle` with the server's `Park` | in sight within 150 m (`BotDriving.Spot`) | `BotDriving`; `BrBrain` for trips over 300 m | ok (`vehicles`) |
 | mounts from the ride menu | — | `RideUi` (refused in a match anyway) | — | — | n/a in BR |
+| hidden FTP test (#902) | — | none: client-side, the local rider's own numbers (`Trainer/FtpWatch`) | — | — | n/a (a bot has no measured watts and no FTP) |
 
 ## Battle Royale
 
