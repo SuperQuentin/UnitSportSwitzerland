@@ -8,7 +8,10 @@ watts move the bike. Nobody steers: the bike follows the road. At each junction 
 take another branch. Decided with the owner (Oct 19 2026):
 
 - **Power**: a Bluetooth **FTMS** smart trainer on Windows (watts and cadence in, grade sent back
-  as resistance). Keyboard/pad watts stay as the fallback, which is also how checks ride.
+  as resistance). Keyboard/pad watts stay as the fallback.
+- **The connection is RideLink** (`../RideLink`, the owner's library, brought in as `tools/RideLink/`), not new code in the game.
+- **SIM by default**: the trainer feels the road's grade. **ERG is off by default.** A button
+  switches it on and holds a target wattage; the same button switches back to SIM.
 - **Off the GPX**: keep riding the road network. The straight-most branch is the default and
   arrows show at each junction. A **Rejoin** option leads back to the GPX.
 - **Solo first.** Group rides (other trainer riders, ghosts on the same course) come later.
@@ -25,10 +28,24 @@ take another branch. Decided with the owner (Oct 19 2026):
   LV95 with surveyed **heights** (bridges, tunnels), node adjacency, `Near`, `Path` (Dijkstra).
   `TrackRibbon` draws a course draped on the terrain.
 - `World/LaneGraph`: lanes, widths, one-way, approaches at junctions (traffic and `RaceRoute`).
+- **`../RideLink`** (the owner's trainer library, not a git repo, outside this one):
+  - `RideLinkEngine` → `CapabilityRouter`: `IObservable` power, cadence, heart rate, speed,
+    merged across devices by `SourcePriorityPolicy` (a power meter outranks the trainer);
+  - `PrimaryTrainer: IControllableResistance` with **SIM** (`SetSimulationAsync`: grade, wind,
+    Crr, Cw), **ERG** (target watts, clamped to the device's range) and **Resistance**
+    (`Capabilities.SupportsErg` is known before any write);
+  - the FTMS handshake (Request Control, Reset, indications, re-arm after a lost control);
+  - transports: `WindowsBleTransport` (WinRT, `net8.0-windows10.0.19041.0`), ANT+ FE-C behind
+    `IAntChannelHost` (no USB adapter yet), and **`SimulatedTransport`** (a virtual trainer,
+    strap and power meter that send real GATT payloads);
+  - **`QueuedDispatcher`**: callbacks queue up and `Drain()` runs once a frame on the main
+    thread, which is how a Godot host uses it;
+  - 108 tests. Its WinRT path has never been run against a real trainer.
 
 What is missing:
 - `TrackMatcher` returns matched **points**, not the **edge sequence** a route needs.
-- There is no "on rails" ride mode, no junction choice and no trainer link.
+- There is no "on rails" ride mode and no junction choice.
+- RideLink is not in the game's build.
 
 ## Design
 
@@ -76,33 +93,54 @@ What is missing:
   reusing `GpxSession`'s dialog, then a pairing screen (skippable) and the start at the GPX's
   first point. Headless: `--trainer <gpx>`.
 
-### 3. RideLink: the trainer (`src/Trainer/`)
+### 3. The trainer through RideLink (`src/Trainer/`)
 
-- `IRideLink { bool Connected; float Watts; float? Cadence; float? Speed; float? HeartRate;
-  void SetGrade(float grade); }`.
-  - `KeysLink`: the throttle holds a target power, and +/− steps it by 10 W (starts at 150 W).
-    Without a trainer, the keys drive the ride.
-  - `FtmsLink`: a Bluetooth smart trainer.
-- **FTMS** (Fitness Machine Service `0x1826`):
-  - **Indoor Bike Data** `0x2AD2` (notify) gives instantaneous speed, cadence and power. A flags
-    word says which fields are present.
-  - **Control Point** `0x2AD9`: Request Control `0x00`, Start `0x07`, then
-    **Set Indoor Bike Simulation Parameters** `0x11` (wind m/s ×1000, grade % ×100, Crr ×10000,
-    Cw kg/m ×100). Every write is acknowledged with `0x80` indications.
-  - Fallbacks for trainers or power meters without FTMS: Cycling Power `0x1818`/`0x2A63`
-    (watts) and CSC `0x1816` (cadence), read-only. Heart rate `0x180D` comes from a second device
-    if one is paired.
-- **Grade sent**: the road's grade averaged over the next ~10 m, scaled by a **trainer difficulty**
-  setting (default 50%, as in Zwift), with descents halved again. It is sent at most once a
-  second, and only when it changes by ≥ 0.2%. The rider's real mass comes from settings.
-- **Windows BLE**: WinRT `Windows.Devices.Bluetooth` needs the TFM
-  `net9.0-windows10.0.19041.0`. It is set **conditionally** in the csproj (Windows only), and the
-  link code sits under `#if WINDOWS`. The Linux server and the Android client keep `net9.0` and
-  see only `KeysLink`. **This is a spike first** (phase 2a): confirm that the editor build, the
-  Windows export and `tools/release.sh` accept the windows TFM. If they do not, the fallback is a
-  small bridge exe that talks to the game over localhost UDP.
-- **Pairing UI**: scan → list (name, signal strength, FTMS / power / HR) → connect. The device
-  is remembered in settings and reconnects on start. The connection state shows in the HUD.
+- **RideLink comes into the repo** as `tools/RideLink/` (its `src/` and `tests/`, plus the
+  console demo). `tools/**` is already outside the game's wildcard compile, and the game
+  references it as a `ProjectReference`, the way it references `TerrainFormat` and `MapCore`. A
+  sibling folder outside the repo would break worktrees, CI and the release build. From then on,
+  the copy in the repo is the one that gets edited. Its own `Directory.Build.props` (C# 12,
+  warnings as errors, invariant globalisation) keeps applying to it.
+- **`TrainerLink`** (a game node, the only code that touches RideLink):
+  - owns a `RideLinkEngine` with a `QueuedDispatcher` and calls `Drain()` in `_Process`, so every
+    sample arrives on the main thread;
+  - the transports are `WindowsBleTransport` on Windows and `SimulatedTransport` under
+    `--trainer-sim` (checks, and riding without hardware);
+  - from `Router.Power` / `Cadence` / `HeartRate` it exposes `Watts`, `Cadence`, `HeartRate`,
+    `Connected` and the active source names (`ActiveSourceChanges`);
+  - `Watts` goes into `Bicycle.RiderWatts`. Speed **always** comes from the game's power
+    equation, never from the trainer's speed field. The game's road is the one that counts.
+- **Without a trainer**, `KeysLink` replaces it: the throttle holds a target power, which
+  `ride_power_up/down` change by 10 W (it starts at 150 W).
+- **Modes**:
+  - **SIM (the default)**: `SetSimulationAsync(new SimulationParameters(grade))`. The grade is
+    the road's, averaged over the next ~10 m and scaled by a **trainer difficulty** setting
+    (default 50%, as in Zwift), with descents halved again. It is sent at most once a second and
+    only when it changes by ≥ 0.2%. Crr and Cw come from `Bicycle`'s constants, so the trainer
+    and the game agree on the road.
+  - **ERG (off by default; a button switches it on)**: the button switches from SIM to ERG at
+    the current target (the last 10 W step above the rider's 3 s average power).
+    `ride_power_up/down` then move the target by 10 W. The game still reads the measured watts,
+    so the bike slows on a climb while the effort stays the same, as in Zwift. Pressing the
+    button again goes back to SIM and sends the current grade at once.
+  - The button is greyed out, with the reason shown, when no trainer is paired or when
+    `Capabilities.SupportsErg` is false. Each `ControlResult` that fails, or that RideLink
+    clamped ("2000 W clamped to 400 W"), shows as a HUD toast.
+  - The mode is not remembered: every ride starts in SIM.
+- **Windows build**: `RideLink.Bluetooth.Windows` targets `net8.0-windows10.0.19041.0`. When
+  `$(GodotTargetPlatform)` is `windows`, the game's TFM becomes the same windows TFM and gets a
+  `TRAINER_BLE` define, the way Android already switches to net9.0. The Linux server and Android
+  keep their own TFM, without the BLE transport: they ride with keys or the simulator.
+  **Spike first** (phase 2a): check that the editor build, the Windows export and
+  `tools/release.sh` all accept the windows TFM.
+- **Pairing UI**:
+  - scan (filtered on the FTMS, Cycling Power, CSC and heart-rate services) → list (name, RSSI,
+    what it offers) → connect;
+  - several devices at once (trainer, strap, power meter), as RideLink's router expects;
+  - devices are remembered in settings and reconnect on start, with RideLink's backoff;
+  - the connection state shows in the HUD.
+- **ANT+** stays out until there is a USB stick and the ANT managed library (RideLink's
+  `IAntChannelHost` gap).
 
 ### 4. HUD
 
@@ -120,7 +158,8 @@ What is missing:
 | Take left / right branch | `move_left` / `move_right` (A/D; steering already means this) | left stick or D-pad ←/→ | right stick ←/→ (`XrPad` D-pad when mounted) |
 | Turn around | new `ride_uturn` (U) | D-pad ↓ | right stick ↓ |
 | Rejoin GPX | new `ride_rejoin` (J) | D-pad ↑ | right stick ↑ |
-| Fallback power ±10 W | new `ride_power_up/down` (+/−) | LB / RB | grip + right stick? decide in phase 1 |
+| Target power ±10 W (keys fallback, ERG) | new `ride_power_up/down` (+/−) | LB / RB | decide in phase 1 (left stick ↑/↓?) |
+| ERG on / off | new `ride_erg` (key decided in phase 2, `PlayerInput` free list) | D-pad hold or a free button, decided in phase 2 | the HUD button by poke, plus a pad button through `XrPad` |
 | Pedal (fallback) | `throttle` | RT | trigger |
 
 Each control gets a row in `xr/vr-action-map`, appears through `InputHints`, and is listed in
@@ -140,8 +179,10 @@ Each control gets a row in `xr/vr-action-map`, appears through `InputHints`, and
      straight-most default, U-turn, Rejoin;
    - `KeysLink`, a minimal HUD with arrows, `--trainer <gpx>`.
 2. **Trainer**:
-   - 2a: spike on the Windows TFM;
-   - 2b: `FtmsLink` (data in, grade out), CP/CSC/HR fallbacks, pairing UI, difficulty setting.
+   - 2a: RideLink into `tools/RideLink/`, its 108 tests running in `tools/test.sh unit`, the
+     spike on the Windows TFM;
+   - 2b: `TrainerLink` (watts in, SIM grade out), the pairing UI and the difficulty setting;
+   - 2c: the ERG button with a target power, greyed-out states and the control-result toasts.
 3. **Ride polish**:
    - elevation profile, ride summary (time, average and normalised power, ascent);
    - save the ridden track as GPX (Strava upload later, through its connector or a file).
@@ -153,16 +194,20 @@ Each control gets a row in `xr/vr-action-map`, appears through `InputHints`, and
 - **Unit** (`tools/test.sh unit`):
   - `RideCourse` branch ordering and defaults (route, straight-most, dead end), Turn held across
     the junction, Rejoin target ahead and never behind;
-  - FTMS Indoor Bike Data parsing over every flags combination, and Control Point encoding,
-    from captured byte frames.
+  - RideLink's own 108 tests (parsers, the FTMS handshake, the router), added to the unit tier;
+  - the grade smoothing and rate limit, and the ERG start target.
 - **Quick** (`--trainercheck`, `--world fixture`): ride a fixture GPX with fixed watts. Assert
   that the rider stays within 1 m of its lane, the distance matches the power equation, a forced
   left at the fixture junction leaves the route, and Rejoin brings it back.
-- **On the owner's trainer** (by hand): pairing, watts and cadence in the HUD, resistance felt
-  changing on a climb. A playtest scenario in `tests/playtests/`.
+- **Quick** (`--trainercheck --trainer-sim`): the same ride on RideLink's virtual trainer, through
+  real GATT payloads. It checks that the watts reach `RiderWatts`, the grade sent follows the
+  climb (SIM), and that ERG on, +10 W and ERG off land on the trainer as the right commands.
+- **On the owner's trainer** (by hand): pairing, watts and cadence in the HUD, the resistance
+  felt changing on a climb, ERG holding its target. This is the first run of RideLink's WinRT
+  path on real FTMS hardware. A playtest scenario in `tests/playtests/`.
 
 ## Open questions (decide while building)
 
 - VR way for ±10 W fallback power (probably moot with a trainer paired).
 - Whether a lane change (overtaking) is worth having on rails, or always keep right.
-- Erg mode (hold a set wattage for workouts): likely after phase 3.
+- Structured ERG workouts (intervals from a file): after phase 3; the ERG button is the base.
