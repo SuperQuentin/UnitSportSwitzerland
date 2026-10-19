@@ -17,6 +17,8 @@ public enum ShellPart : byte
     Brick = 19, Cement = 20, Fence = 21, Banner = 22, Lamp = 23, Window = 24, SignBoard = 25,
     // the cranes (#610)
     CraneYellow = 26, Cab = 27, HookBlock = 28, Rope = 29, LampRed = 30,
+    // the site office's gallery (#827): its walkway's deck and its stair's treads
+    Grating = 31,
 }
 
 /// <summary>

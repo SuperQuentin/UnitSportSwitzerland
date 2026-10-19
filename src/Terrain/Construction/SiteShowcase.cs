@@ -27,7 +27,38 @@ public static class SiteShowcase
     [Showcase("Terrain", "Building site")]
     private static IEnumerable<(string, Func<Node3D>)> Sites() =>
         Buildings.Select(b => (b.Name, (Func<Node3D>)(() => Site(b.W, b.D, b.H, b.Floors))))
-            .Append(("a pallet on a crane's hook (#618)", HookedPallet));
+            .Append(("a pallet on a crane's hook (#618)", HookedPallet))
+            .Append(("a site office with its gallery, one stack (#827)", () => OfficeGallery(14f, 11f, 6.3f, 2)))
+            .Append(("a site office with its gallery, two stacks (#827)", () => OfficeGallery(52f, 30f, 18.4f, 6)));
+
+    /// <summary>
+    /// A site office close up (#827): its containers, its toilet cabins and the gallery up to the
+    /// upper row, the outside stair and the walkway, from a site the planner fits one on (the first
+    /// street direction round the plot that leaves room for it). The yard's own boxes, as the world draws them.
+    /// </summary>
+    private static Node3D OfficeGallery(float w, float d, float h, byte floors)
+    {
+        var root = new Node3D { Name = "OfficeGallery" };
+        var centre = new Vector2(80f, 80f);
+        var b = Prism(centre, w, d, h, floors);
+        var box = PlanBox.Of(b)!.Value;
+        ConstructionSite? site = null;
+        for (int k = 0; k < 16 * 32 && site?.GallerySide is null or 0; k++)
+            site = ConstructionSites.Plan($"2600_1200_{k / 16}", b, box, centre + Vector2.FromAngle(k % 16 * Mathf.Tau / 16) * (d + 14f), _ => false);
+        if (site == null || site.GallerySide == 0) return root;
+        var yard = SiteDressings.Plan(site, (_, _) => 0f);
+        var boxes = new List<ShellBox>();
+        boxes.AddRange(yard.Boxes.Skip(yard.OfficeBoxes.Start).Take(yard.OfficeBoxes.Count));
+        boxes.AddRange(yard.Boxes.Skip(yard.ToiletBoxes.Start).Take(yard.ToiletBoxes.Count));
+        boxes.AddRange(yard.Boxes.Skip(yard.GalleryBoxes.Start).Take(yard.GalleryBoxes.Count));
+        var middle = yard.Office!.Center;
+        var mesh = SiteShellBuilder.MeshOf(boxes.Select(x => x with
+        {
+            Min = x.Min - new Vector3(middle.X, 0, middle.Y), Max = x.Max - new Vector3(middle.X, 0, middle.Y),
+        }));
+        root.AddChild(new MeshInstance3D { Name = "Office", Mesh = ChunkNode.ToPropMesh(mesh, StyleKit.Material(MaterialRole.Prop)) });
+        return root;
+    }
 
     /// <summary>A crane's hook block with a pallet of bricks in its four slings, as a worked crane carries one (#618).</summary>
     private static Node3D HookedPallet()
