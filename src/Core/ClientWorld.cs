@@ -928,6 +928,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _radioUi = Items.RadioUi.Create(() => LocalPlayer, items.Inventory);
         // a concert's light desk (#885), opened at its front-of-house console
         AddChild(Concert.ConcertDeskUi.Create(() => LocalPlayer, () => GetNodeOrNull<ChatManager>(ChatManager.NodeName)));
+        // its cameras on this screen (program view) and out over NDI
+        AddChild(new Concert.ConcertBroadcast());
         _radioUi.Give = items.Give;
         AddChild(_radioUi);
         if (Items.CarCdCheck.Create(() => LocalPlayer, () => _players, items.Inventory, networked: false) is { } carCdShots) AddChild(carCdShots);

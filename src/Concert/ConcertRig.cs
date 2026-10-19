@@ -69,6 +69,11 @@ public partial class ConcertRig : Node3D
     private ConcertCrowd? _crowd;
     private ConcertSfx _sfx = null!;
     private ConcertMusic _music = null!;
+    private ConcertCameras _cameras = null!;
+    private ConcertPerformers _performers = null!;
+    private MeshInstance3D[] _feeds = Array.Empty<MeshInstance3D>();
+    private MultiMeshInstance3D[] _pixelNodes = Array.Empty<MultiMeshInstance3D>();
+    public ConcertCameras Cameras => _cameras;
     public ConcertMusic Music => _music;
     private float _energy;
 
@@ -92,6 +97,11 @@ public partial class ConcertRig : Node3D
         _cells = fx.Where(f => f.Type.Kind is FixtureKind.Blinder or FixtureKind.Strobe or FixtureKind.PixelBar).ToArray();
         _screens = fx.Where(f => f.Type.Kind == FixtureKind.Screen).ToArray();
         BuildRig();
+        // the artists, and the cameras that film them for the screens, this screen and NDI
+        _performers = new ConcertPerformers(_plan, _desk);
+        AddChild(_performers);
+        _cameras = new ConcertCameras(_plan, _desk);
+        AddChild(_cameras);
         // the music from the PA: the setlist on the shared clock, read for the desk
         _music = new ConcertMusic(Event, _plan.PaHangs.ToArray());
         AddChild(_music);
@@ -201,6 +211,8 @@ public partial class ConcertRig : Node3D
 
         // the screens: a grid of pixels each, facing out
         _pixels = new MultiMesh[_screens.Length];
+        _pixelNodes = new MultiMeshInstance3D[_screens.Length];
+        _feeds = new MeshInstance3D[_screens.Length];
         var screenMat = new StandardMaterial3D { ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, VertexColorUseAsAlbedo = true, DisableFog = true };
         for (int s = 0; s < _screens.Length; s++)
         {
@@ -210,6 +222,18 @@ public partial class ConcertRig : Node3D
             mi.Position = f.Position;
             // a quad shows its +Z side: the screen's +Z looks at the audience
             mi.Basis = Facing(-f.Home);
+            _pixelNodes[s] = mi;
+            // the camera clip: the program's low render on the screen, its pixels the LED's own
+            var feed = new StandardMaterial3D
+            {
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest, DisableFog = true,
+            };
+            _feeds[s] = new MeshInstance3D
+            {
+                Name = $"Feed{s}", Position = f.Position, Basis = Facing(-f.Home), Visible = false,
+                Mesh = new QuadMesh { Size = new Vector2(f.ScreenSize.X, f.ScreenSize.Y) }, MaterialOverride = feed,
+            };
+            AddChild(_feeds[s]);
             for (int y = 0; y < f.PixelsY; y++)
                 for (int x = 0; x < f.PixelsX; x++)
                     _pixels[s].SetInstanceTransform(y * f.PixelsX + x, new Transform3D(Basis.Identity,
@@ -350,7 +374,24 @@ public partial class ConcertRig : Node3D
                 beamSum += col * 0.3f;
             }
         }
-        for (int s = 0; s < _screens.Length; s++) PaintScreen(_screens[s], _pixels[s], t);
+        bool imag = false;
+        for (int s = 0; s < _screens.Length; s++)
+        {
+            bool camera = p.Get(_screens[s], _screens[s].Type.Offset(Attr.Clip)) / 32 == LightDesk.CameraClip && p.Get01(_screens[s], Attr.Dimmer) > 0.05f;
+            if (_feeds[s].Visible != camera)
+            {
+                _feeds[s].Visible = camera;
+                _pixelNodes[s].Visible = !camera;
+                if (camera && _feeds[s].MaterialOverride is StandardMaterial3D m) m.AlbedoTexture = _cameras.ImagTexture;
+            }
+            imag |= camera;
+            if (!camera) PaintScreen(_screens[s], _pixels[s], t);
+        }
+        // the artists dance and the cameras film only while someone can see it
+        bool near = GetViewport()?.GetCamera3D() is { } eye && eye.GlobalPosition.DistanceTo(GlobalPosition) < 900f;
+        if (near && (ShowOn() || ExternalLive)) _performers.Step();
+        _cameras.ImagWanted = imag && near;
+        _cameras.Step(now % 86400.0);
 
         // the real lights follow the rig as a whole
         float washN = Math.Max(1, _heads.Length / 3);

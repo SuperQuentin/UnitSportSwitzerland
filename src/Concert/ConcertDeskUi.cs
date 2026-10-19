@@ -111,6 +111,17 @@ public partial class ConcertDeskUi : CanvasLayer
         _master.DragEnded += changed => { if (changed) Run(FormattableString.Invariant($"/concert cue master {_master.Value:F2}")); };
         tempo.AddChild(_master);
 
+        Section(col, "Cameras");
+        var cams = Row(col);
+        Btn(cams, "Auto", () => Run("/concert cue camera auto"));
+        for (int i = 0; i < ConcertCameras.Names.Length; i++)
+        {
+            int n = i + 1;
+            Btn(cams, n.ToString(CultureInfo.InvariantCulture), () => Run($"/concert cue camera {n}")).TooltipText = ConcertCameras.Names[i];
+        }
+        Btn(cams, "Program view", () => Run("/concert view"));
+        Btn(cams, "NDI out", () => Run("/concert ndi"));
+
         Section(col, "Effects");
         var fx = Row(col);
         foreach (var (label, cmd) in new[] { ("Flames", "flames"), ("CO2", "co2"), ("Confetti", "confetti"), ("Gerbs", "gerbs"), ("Pyro", "pyro") })

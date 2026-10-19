@@ -96,6 +96,9 @@ public sealed class StagePlan
         return new Vector3(p.X, y, p.Y);
     }
 
+    /// <summary>A point of the stage's own frame (x across, y up, z towards the audience) in the stadium frame: for framing a shot.</summary>
+    public Vector3 StagePoint(float x, float y, float z) => At(x, y, z);
+
     /// <summary>A direction of the stage frame in the stadium frame.</summary>
     private Vector3 Dir(float x, float y, float z)
     {

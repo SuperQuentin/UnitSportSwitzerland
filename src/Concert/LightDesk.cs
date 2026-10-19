@@ -78,6 +78,8 @@ public sealed class LightDesk
     /// clock (the beat counts on from where it was), a blackout, a master fader.
     /// </summary>
     public ShowSection? HeldSection { get; set; }
+    /// <summary>The camera the operator holds on air, or -1 for the auto-director (<see cref="ConcertCameras"/>).</summary>
+    public int Camera { get; set; } = -1;
     /// <summary>The song playing (<see cref="ConcertMusic"/>), or null: the desk then makes its songs up.</summary>
     public MusicMoment? Music { get; set; }
     public bool Blackout { get; set; }
@@ -427,13 +429,19 @@ public sealed class LightDesk
             }
     }
 
+    /// <summary>The media-server clip that shows the program camera (IMAG).</summary>
+    public const int CameraClip = 5;
+
     private void Screens(int clip, float speed, Color a, Color b, float dim)
     {
         var p = _plan.Patch;
         foreach (var f in G(RigGroup.Screens))
         {
             p.Set01(f, Attr.Dimmer, dim);
-            p.Set(f, f.Type.Offset(Attr.Clip), (byte)(clip * 32 + 4));
+            // the side screens show the cameras (IMAG) through verse, groove and chorus; the centre wall in a calm verse
+            bool side = f.ScreenSize.X < 15f;
+            bool imag = Section is ShowSection.Calm || side && Section is ShowSection.Groove or ShowSection.Chorus;
+            p.Set(f, f.Type.Offset(Attr.Clip), (byte)((imag ? CameraClip : clip) * 32 + 4));
             p.Set01(f, Attr.ClipSpeed, Math.Clamp(speed / 4f, 0f, 1f));
             p.Set01(f, Attr.Red, a.R); p.Set01(f, Attr.Green, a.G); p.Set01(f, Attr.Blue, a.B);
             p.Set01(f, Attr.Red2, b.R); p.Set01(f, Attr.Green2, b.G); p.Set01(f, Attr.Blue2, b.B);
