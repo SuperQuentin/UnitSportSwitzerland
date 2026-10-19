@@ -36,7 +36,7 @@
 - **What**: the first time the player **drives** each kind (`VehicleIntroKind`: road bike, skis,
   car, motorbike, truck or bus, boat, paddle steamer, helicopter, plane, paraglider or parachute,
   wingsuit, pigeon, airliner, and the site machines (#684): forklift, excavator, mini excavator,
-  wheel loader, compact roller, telehandler), `Core/VehicleIntroCard` shows its 3-4 essential controls in the same
+  wheel loader, compact roller, telehandler, and the UFO (#861)), `Core/VehicleIntroCard` shows its 3-4 essential controls in the same
   corner, "New ride". Each row ticks (○ → green ✓) once any of its actions is held
   (`Input.IsActionPressed`; keys already held in the first 0.6 s do not count, so W from walking up
   to a car does not tick "Accelerate"); all ticked, the title goes green, 1.2 s later it is gone and

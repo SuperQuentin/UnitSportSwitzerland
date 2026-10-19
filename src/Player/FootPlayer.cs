@@ -1521,8 +1521,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         // an NPC keeps its colours whoever simulates it: they come from the client that asked for it
         int rider = RiderIndex();
-        // the figure a player chose, found by every ride drawn from this index (#394)
-        if (!Npc) Avatar.Appearance.Register(rider, AppearanceBits);
+        // the figure a player chose, found by every ride drawn from this index (#394); an NPC's only
+        // when it was given one (#880: an alien bot): unset, it keeps what a trailer actor registered
+        if (!Npc || AppearanceBits != 0) Avatar.Appearance.Register(rider, AppearanceBits);
 
         if (kind == RideKind.OnFoot)
         {
@@ -2701,8 +2702,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     }
 
     /// <summary>Takes over a vehicle from the world: its position, heading, momentum and damage.</summary>
+    /// <summary>The name of the vehicle got into (#837): it is parked under it again (a Battle Royale match's car stays the match's).</summary>
+    private string _rideName = "";
+
     private void EnterVehicle(VehicleState state)
     {
+        _rideName = state.Name;
         if (_sliding) EndSlide();
         // off the bus's deck and out of every deck now, not in the next _Process: a physics step in
         // between stood the bus just got into on its own parked deck, 0.7 m up, then on its roof (#323)
@@ -2764,6 +2769,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_ride is CompactRoller parkedRoller) parkedRoller.UnpackFlags(state.Flags);
         if (_ride is MiniDumper parkedDumper) parkedDumper.UnpackFlags(state.Flags);
         if (_ride is Telehandler parkedBoom) parkedBoom.UnpackFlags(state.Flags);
+        // a saucer's ramp and lamps as they were left (#861)
+        if (_ride is Ufo parkedUfo) parkedUfo.UnpackFlags(state.Flags);
         // the steamer's gangways as they were left (#303)
         if (_ride is Steamer berthed) berthed.DoorsOpen = (byte)(state.DoorsOpen & 3);
         EngineOn = true;
@@ -2803,9 +2810,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // an airliner left in the air (stood up from its seat): its attitude, or it is put down level (#456)
             Angles: _ride is Truck ta ? ta.Angles : _ride is Boat tilted ? new Basis(tilted.State.Attitude).GetEuler()
                 : _ride is Airliner { State.OnGround: false } aloft ? aloft.State.Attitude.Orthonormalized().GetEuler() : default,
-            Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : _ride is Airliner af ? af.PackFlags() : _ride is Airstairs sf ? sf.PackFlags() : _ride is Forklift lf ? lf.PackFlags() : _ride is Excavator ef ? ef.PackFlags() : _ride is WheelLoader wf ? wf.PackFlags() : _ride is CompactRoller rf ? rf.PackFlags() : _ride is MiniDumper df ? df.PackFlags() : _ride is Telehandler hf ? hf.PackFlags() : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
+            Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : _ride is Ufo uf ? uf.PackFlags() : _ride is Airliner af ? af.PackFlags() : _ride is Airstairs sf ? sf.PackFlags() : _ride is Forklift lf ? lf.PackFlags() : _ride is Excavator ef ? ef.PackFlags() : _ride is WheelLoader wf ? wf.PackFlags() : _ride is CompactRoller rf ? rf.PackFlags() : _ride is MiniDumper df ? df.PackFlags() : _ride is Telehandler hf ? hf.PackFlags() : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
             Radio: wrecked ? 0 : CarRadio, Cd: wrecked ? "" : CarCd,
-            Carrier: wrecked ? "" : hold.Key, CarrierSection: hold.Section, CarrierPos: hold.Pos, CarrierYaw: hold.Yaw);
+            Carrier: wrecked ? "" : hold.Key, CarrierSection: hold.Section, CarrierPos: hold.Pos, CarrierYaw: hold.Yaw,
+            Name: _rideName);
     }
 
     /// <summary>
@@ -2910,6 +2918,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         ApplyRide(RideKind.OnFoot, state.Velocity + right * 2f);
         if (aisle is { } spot) StandIn(spot, state.Velocity, (door, right, side, frame, vehicle));
+        // down the ramp of a landed saucer (#861): at its foot, if that is clear
+        else if (grounded && vehicle.ExitSpot is { } foot && ClearStandAt(frame * foot) is { } stand) GlobalPosition = stand;
         else GlobalPosition = FindExit(door, right, side, frame, vehicle, grounded);
         // over the side of a boat: onto a pier or jetty alongside (#377), else into the water beside
         // it, swimming (#302, #301)
@@ -3251,6 +3261,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <param name="setup">A car's preset (<see cref="CarSetups"/>), likewise.</param>
     private void ApplyRide(RideKind kind, Vector3 velocity, long tuning = 0, int setup = 0)
     {
+        // back on foot: the vehicle it had got into is behind it (parked, wrecked, left), its name with it
+        if (kind == RideKind.OnFoot) _rideName = "";
         // anything mounted ends a ragdoll (#214): the body is in the saddle now, not on the road
         if (kind != RideKind.OnFoot) EndRagdoll();
         // and the decks walked about on go at once, not at the next frame (#303): a steamer taken
@@ -3368,6 +3380,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         {
             EngineOn = !EngineOn;
             EngineToggled?.Invoke(EngineOn);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (_ride is Ufo && SeatIndex == 0 && HandleUfoInput(@event))
+        {
             GetViewport().SetInputAsHandled();
             return;
         }
@@ -3607,6 +3625,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (SwimPhysics(dt, onFloor)) return;
         // in a fist fight (#495, FootPlayer.Fight.cs)
         if (FightPhysics(dt, onFloor)) return;
+        // in a UFO's tractor beam (#861, FootPlayer.Ufo.cs)
+        if (BeamPhysics(dt, onFloor)) return;
 
         if (Npc && WalkControls == null)
         {
@@ -4085,7 +4105,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             ViewYaw: _viewYaw,
             Engine: EngineOn || !flyer.HasEngine,
             ViewPitch: _pitch,
-            Brake: jumpDown ? 1f : 0f);
+            Brake: jumpDown ? 1f : 0f,
+            Boost: keys && (PlayerInput.Held(PlayerInput.Sprint) || PlayerInput.Held(PlayerInput.Boost)),
+            Hatch: TakeUfoPress(UfoPressHatch),
+            Beam: TakeUfoPress(UfoPressBeam),
+            Lights: TakeUfoPress(UfoPressLights));
 
         Clearance = Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float ground)
             ? GlobalPosition.Y - ground : 999f;
@@ -4093,6 +4117,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         float altitude = Origin is { } here ? (float)here.ToGlobal(GlobalPosition).Alt : GlobalPosition.Y;
 
         if (flyer is Pigeon) PigeonStep(input, dt);
+        if (flyer is Ufo saucer) UfoStep(saucer);
         if (flyer is Airliner trimmed)
             trimmed.TrimHeld = typing || !keys ? 0f : PlayerInput.Strength(PlayerInput.TrimNoseUp) - PlayerInput.Strength(PlayerInput.TrimNoseDown);
         if (flyer is Airliner padded) AirlinerPadHold(dt, padded);
@@ -4134,7 +4159,16 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 if (real.Length() <= _flight.Velocity.Length() + 0.5f) _flight.Velocity = real;
                 Velocity = _flight.Velocity;
             }
-            else if (impact > flyer.CrashSpeed) ev = FlightEvent.Crashed;
+            else if (impact > flyer.CrashSpeed)
+            {
+                ev = FlightEvent.Crashed;
+                // what a bot's craft met (#837: bots crashing in the air during a big drop)
+                if (Bot)
+                {
+                    var hit = GetSlideCollisionCount() > 0 && GetSlideCollision(0).GetCollider() is Node n ? $"{n.Name} ({n.GetClass()})" : "nothing";
+                    GD.Print(FormattableString.Invariant($"[bots] {Name} crashed into {hit} at {impact:F1} m/s, {GlobalPosition.Y:F0} m, floor {IsOnFloor()}"));
+                }
+            }
             else
             {
                 // knocks below a crash still dent a vehicle, and enough of them finish it

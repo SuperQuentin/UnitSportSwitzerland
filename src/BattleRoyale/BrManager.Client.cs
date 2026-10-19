@@ -95,7 +95,7 @@ public partial class BrManager
     public bool MeAlive => MyEntry is { Alive: true };
 
     /// <summary>The zone right now, or null outside a running match.</summary>
-    public ZoneState? ZoneNow => _zone != null && _state.Running ? _zone.At(ClockSync.ServerNow - _state.Started) : null;
+    public ZoneState? ZoneNow => _zone != null && _state.Running ? _zone.At(ClockSync.SimNow - _state.Started) : null;
     public ZoneSchedule? Zone => _zone;
 
     /// <summary>A world position as metres east/north of the region centre.</summary>

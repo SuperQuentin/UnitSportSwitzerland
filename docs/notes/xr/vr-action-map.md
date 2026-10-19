@@ -101,6 +101,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | farm: take a sack from a tank or trailer, on foot (#494) | E (hold / with Shift: 10) / Y (hold: 10) | ok: Y, hold for ten | **grip a sack** off the heap |
 | farm: open a farm stand (stock, take back, collect / buy) (#494) | E / Y | ok: Y, or reach out and grip the stand (`TryInteract(byHand)`); the panel by laser + trigger | **grip the honesty box** to open it |
 | farm: sell sacks on foot at a sugar factory or mill (#494) | E / Y | ok: Y, or reach out and grip (`TryInteract(byHand)`) | keep |
+| board a landed UFO sighting's saucer (#863) | E / Y ("Get in the ufo" at the ramp's foot) | ok: Y, or reach out and grip (`TryInteract(byHand)`): it is a parked vehicle | keep |
 | farm: set up / pack up a farm stand (#494) | LMB / RB with the stand in hand, empty hand to pack up | ok: R trigger (`use_item`) | keep |
 | mini dumper: tip the skip (#614; the destination action, stopped) | N / — | ok: the **skip's button** on the console right of the wheel (`XrCabControls` "minidumper", `Kind.Poke`) | keep |
 | tipper: tip the body / mixer: discharge (#613; the destination action, stopped) | N / — | ok: the destination dash poke (`XrCabControls` "-work") | grip a tipping valve lever |
@@ -120,6 +121,11 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | autopilot / trim | Y Home End / hold D-pad → (AP, #421), trim — | ok: AP poke or hold R stick →, trim wheel by hand (#438) | gap: trim on a pad |
 | wingsuit / canopy | stick, Space | ok: stick, A; arms roll the suit, hands pull the brakes (#438) | keep |
 | pigeon flap / dive | Space Ctrl / A B | ok: A B, flap the arms (#438) | keep |
+| UFO up / down, move, turn (#861) | Space Ctrl, WASD, mouse / RT LT, L stick, R stick | ok: R / L trigger, L stick; turns like the helicopter | keep |
+| UFO boost (#861) | Shift or Q / L3 or LB | ok: L stick click, or the left grip | keep |
+| UFO tractor beam (#861) | H / D-pad ← (`tractor_beam`) | ok: R stick ← | gap: a beam switch to grip on the dome's console (`XrCabControls` "ufo") |
+| UFO ramp (landed) / legs (flying) (#861) | G / X (`car_door`) | ok: X | gap: a lever on the console, as the airliner's gear |
+| UFO rim lights (#861) | L / D-pad → | ok: R stick → | keep |
 
 ## World, UI, others
 

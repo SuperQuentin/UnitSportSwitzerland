@@ -4,6 +4,7 @@ using Godot;
 using UnitSport.Avatar;
 using UnitSport.Items;
 using UnitSport.Player;
+using UnitSport.Ui.Bubbles;
 using static UnitSport.Trailer.TrailerScript;
 
 namespace UnitSport.Trailer;
@@ -12,9 +13,9 @@ namespace UnitSport.Trailer;
 /// "Invasion, Swiss Style" (#866): a UFO fleet invades Switzerland, the Swiss answer with everything
 /// they have, and it ends with the aliens dancing at the party. The script
 /// <c>docs/trailer/invasion.md</c> as shots, cut on "Space 1990"; every shot in Cartoon, on real
-/// terrain. Stage 1: the UFOs, the mothership and the cows (#861, #863) are stand-ins (a light plane
-/// or a helicopter, marked <c>UFO (#861) in stage 2</c>) and the dialogue runs as chat lines until the
-/// speech bubbles (#862) come; each line has the id it carries in <c>docs/trailer/invasion.subtitles.json</c>.
+/// terrain, with the film kit (#882): saucers flown as actors or set as <see cref="Craft"/>, a sighting's
+/// flyover, the mothership, herds under the beam, the speech bubbles (each with the id it carries in
+/// <c>docs/trailer/invasion.subtitles.json</c>) and the game's map screen.
 /// </summary>
 public static class InvasionScript
 {
@@ -44,11 +45,9 @@ public static class InvasionScript
     internal static readonly Character Yvonne = new("YVONNE", new Color("6ec8ff"),
         new Appearance(BodyBuild.Curvy, 8, 1, 0, HairStyle.Bun, 1),
         [ItemId.NavyPolo, ItemId.CargoPants, ItemId.RoundGlasses, ItemId.WhiteSneakers]);
-    /// <summary>The aliens' commander: a stand-in look (galaxy hoodie, holo mask, neon headset) until #861 gives the aliens one of their own.</summary>
-    internal static readonly Character Zorp = new("ZORP", new Color("7dff6a"),
-        new Appearance(BodyBuild.Slim, 7, 3, 0, HairStyle.None, 9),
-        [ItemId.GalaxyHoodie, ItemId.HoloSkirt, ItemId.NeonGloves, ItemId.HoloMask, ItemId.NeonHeadset]);
-    internal static readonly Character Zib = Zorp with { Name = "ZIB", Looks = new Appearance(BodyBuild.Stocky, 3, 3, 0, HairStyle.None, 9) };
+    /// <summary>The aliens' commander and his crewmate (#880's looks).</summary>
+    internal static readonly Character Zorp = new("ZORP", new Color("7dff6a"), Aliens.Zorp.Looks, Aliens.Zorp.Wears);
+    internal static readonly Character Zib = new("ZIB", new Color("b8ff6a"), Aliens.Zib.Looks, Aliens.Zib.Wears);
     internal static readonly Character Tourist = new("TOURIST", new Color("e8e2cf"),
         new Appearance(BodyBuild.Stocky, 4, 1, 0, HairStyle.Short, 7), [ItemId.RainbowTee, ItemId.JoggingShorts, ItemId.HeartShades]);
     internal static readonly Character Skier = new("SKIER", new Color("e8e2cf"),
@@ -68,11 +67,16 @@ public static class InvasionScript
         new("V7", default, new Appearance(BodyBuild.Slim, 1, 6, 1, HairStyle.Spiky, 9), [ItemId.GlitchTee, ItemId.BlackShorts, ItemId.StarGlasses, ItemId.PawGloves]),
     ];
 
-    /// <summary>A line of dialogue: a speech bubble once #862 lands, the group chat until then. <paramref name="id"/> is its subtitles key.</summary>
-    private static Line Say(string id, double t, Character? who, string text) => new(t, who, text);
+    /// <summary>A speech bubble over actor <paramref name="who"/>'s head; <paramref name="id"/> is its subtitles key.</summary>
+    private static Bubble Say(string id, double t, int who, string text, BubbleShape shape = BubbleShape.Say) => new(t, who, text, shape) { Id = id };
+
+    /// <summary>A voice off: the bubble's tail to a point of the frame (0..1 across, 0..1 down), in the speaker's colour.</summary>
+    private static Bubble Off(string id, double t, Character who, string text, Vector2 at) => new(t, -1, text) { Id = id, At = at, Colour = who.Colour };
 
     // ---- moves --------------------------------------------------------------------------------
 
+    /// <summary>Headwear (Cast.Headwear): the pumpkin head, the Santa hat.</summary>
+    private const int PumpkinHead = 2, SantaHat = 3;
     private const int Shrug = 5, Dab = 7, Moonwalk = 19, DiscoPoint = 27;
     // fist-fight poses (FootPlayer.FightPose): stances, and 16 + a FightMove
     private const int Guard = 2, HitStun = 6, Dazed = 8, Victory = 9, Jab = 17, JumpKick = 21, Uppercut = 22;
@@ -95,17 +99,21 @@ public static class InvasionScript
     private static readonly Spot Slope = new(2621770, 1089700);
     private static readonly Spot GotthardOn = new(2686150, 1154560);
 
-    // ---- the stand-ins ------------------------------------------------------------------------
+    // ---- the saucers ---------------------------------------------------------------------------
 
     /// <summary>
-    /// UFO (#861) in stage 2: a stand-in, a light plane in flight (<paramref name="speed"/> over 20 m/s)
-    /// or a helicopter hovering, where a saucer will be. A flyer mounts on the floor at its spot (or on <paramref name="board"/>: over water, over a steep face) before it is launched.
-    private static Cast Ufo(Spot at, float heading, float speed = 0f, int seed = 300, Spot? board = null) => speed > 20f
-        ? new() { Ride = RideKind.Plane, At = at, Heading = heading, Drive = Drive.Fly, Launch = speed, Flight = _ => Stick(lever: 0.8f), Seed = seed, Board = board }
-        : new() { Ride = RideKind.Helicopter, At = at, Heading = heading, Drive = Drive.Fly, Launch = speed, Flight = _ => Stick(up: 0.55f), Seed = seed, Board = board };
+    /// A saucer in flight (#861): launched at <paramref name="speed"/> m/s along <paramref name="heading"/>,
+    /// then flown flat out ahead (<paramref name="speed"/> 0: hovering, letting go holds its height).
+    /// A flyer mounts on the floor at its spot (or on <paramref name="board"/>: over water, a steep face) before it is launched.
+    /// </summary>
+    private static Cast Ufo(Spot at, float heading, float speed = 0f, Spot? board = null, System.Func<double, UfoSwitches>? switches = null) => new()
+    {
+        Ride = RideKind.Ufo, At = at, Heading = heading, Drive = Drive.Fly, Launch = speed, Board = board, Ufo = switches,
+        Flight = speed > 0f ? _ => new FlightInput(new Vector2(0f, -1f), 0f, 0f, 0f, 0f, false, speed > 30f, 0f) : _ => default,
+    };
 
-    /// <summary>A hay bale (a straw-coloured box) until a real one is beamed up.</summary>
-    private static Prop HayBale(Spot at) => new(at, 0, new Vector3(1.4f, 1.2f, 1.2f), new Color(0.86f, 0.74f, 0.38f));
+    /// <summary>A crate the beam lifts (there are no hay bales in the game).</summary>
+    private static Prop Crate(Spot at) => new(at, 20, new Vector3(1.2f, 1.0f, 1.2f), new Color(0.62f, 0.45f, 0.26f)) { Beamable = true };
 
     /// <summary>A walker on foot that stays an NPC body (its own looks, no keyboard), walking or running ahead from <paramref name="from"/> s.</summary>
     private static Cast Runner(Spot at, float heading, Character? who = null, int seed = 0, bool run = true, double from = 0) => new()
@@ -168,9 +176,9 @@ public static class InvasionScript
             Hour = 9.2,
             Cast =
             [
-                new() { Who = Heidi, Ride = Heavy(6), Trailer = 8, At = Meadow, Heading = 200, Drive = Drive.Controls, Controls = _ => Pedal(0.35f) },
-                // COWS (#863) in stage 2: the herd grazing round her
+                new() { Who = Heidi, Ride = Heavy(6), Trailer = 8, Lowered = true, At = Meadow, Heading = 200, Drive = Drive.Controls, Controls = _ => Pedal(0.35f) },
             ],
+            Herds = [new Cows(Meadow.Toward(250, 35), Count: 7, Radius: 15f)],
             Keys =
             [
                 new(0, Pt.On(0, 9f, 2.2f, -8f), Pt.On(0, 0f, 1.6f), 35),
@@ -178,7 +186,7 @@ public static class InvasionScript
             ],
             Smooth = 0.3f, Preroll = 1.5,
             Supers = [new(0.2, 3.0, "LAUTERBRUNNEN · 09:10")],
-            Chat = [Say("heidi_nothing", 1.4, Heidi, "Nothing ever happens here.")],
+            Bubbles = [Say("heidi_nothing", 1.4, 0, "Nothing ever happens here.", BubbleShape.Think)],
         },
         new()
         {
@@ -248,7 +256,7 @@ public static class InvasionScript
                 new(B, Pt.Cockpit(0, -0.7f, 0.12f), Pt.Cockpit(0, 30f, -1.5f), 28),
             ],
             Preroll = 5,
-            Chat = [Say("luca_radio", 0.2, Luca, "Radio on. Perfect day.")],
+            Bubbles = [Say("luca_radio", 0.2, 0, "Radio on. Perfect day.")],
         },
         new()
         {
@@ -267,7 +275,7 @@ public static class InvasionScript
             ],
             Smooth = 0.3f, Preroll = 12,
             Supers = [new(0.3, 3.2, "GOTTHARD · 11:00")],
-            Chat = [Say("rochat_routine", 1.2, Rochat, "Routine exercise. Nothing to report.")],
+            Bubbles = [Say("rochat_routine", 1.2, 0, "Routine exercise. Nothing to report.")],
         },
         new()
         {
@@ -289,7 +297,7 @@ public static class InvasionScript
             Cast =
             [
                 new() { Who = Yvonne, Ride = RideKind.A320, At = Spot.Alt(2646200, 1151600, 3700), Heading = 145, Drive = Drive.Fly, Launch = 90, Flight = _ => Stick(lever: 0.8f) },
-                // UFO (#861) in stage 2: a saucer flashes past ahead of her, left to right
+                // a saucer flashes past ahead of her, left to right
                 Ufo(Spot.Alt(2646400, 1151150, 3740), 60, 60f),
             ],
             Keys =
@@ -298,7 +306,7 @@ public static class InvasionScript
                 new(2 * B, Pt.On(0, -28f, 5f, 24f), Pt.On(0, 0f, -2f, -10f), 35),
             ],
             Smooth = 0.2f, Preroll = 1,
-            Chat = [Say("yvonne_saucer", 1.6, Yvonne, "Tower... is that a saucer?")],
+            Bubbles = [Say("yvonne_saucer", 1.6, 0, "Tower... is that a saucer?", BubbleShape.Whisper)],
         },
 
         // ==== ACT TWO: THEY ARRIVE (bars 21-52, the groove) =======================================
@@ -306,17 +314,14 @@ public static class InvasionScript
         {
             Number = 12, Name = "The fleet", FromBar = 21, Bars = 3, Feature = "UFOs: the fleet and the mothership",
             Hour = 12.8,
-            Cast =
-            [
-                // UFO (#861) in stage 2: saucers in a V out of the Matterhorn's sky, the mothership above them
-                Ufo(Spot.Alt(2619600, 1091900, 3950), 70, 45f, 301, Crew),
-                Ufo(Spot.Alt(2619540, 1091960, 3960), 70, 45f, 302, Crew.Toward(0, 30)),
-                Ufo(Spot.Alt(2619540, 1091840, 3960), 70, 45f, 303, Crew.Toward(180, 30)),
-            ],
+            // four saucers in formation out of the Matterhorn's sky (a sighting's flyover, half-way across
+            // as the camera rolls), the mothership hanging over the peak behind them
+            Ufos = [new Saucers(Occasions.SightingKind.Flyover, new Spot(2623500, 1092100, 350), 75, Count: 4, From: 27)],
+            Craft = [new Craft(Spot.Alt(2618200, 1091800, 4900), 0) { Mothership = true }],
             Keys =
             [
-                new(0, Pt.Alt(2626950, 1092720, 3372), Pt.Alt(Matterhorn.E, Matterhorn.N, 4150), 35),
-                new(3 * B, Pt.Alt(2626900, 1092700, 3376), Pt.On(0, 0f, 0f), 35),
+                new(0, Pt.Alt(2626950, 1092720, 3372), Pt.Alt(Matterhorn.E, Matterhorn.N, 4250), 35),
+                new(3 * B, Pt.Alt(2626900, 1092700, 3376), Pt.Alt(2624000, 1092150, 3300), 28),
             ],
             Smooth = 0.4f, Preroll = 0.5,
             Supers = [new(0.4, 3.0, "12:48")],
@@ -325,40 +330,43 @@ public static class InvasionScript
         {
             Number = 13, Name = "Over Zürich", FromBar = 24, Bars = 2, Feature = "city traffic; the mothership's shadow",
             Hour = 13.0, Traffic = 80,
-            // MOTHERSHIP (#861) in stage 2: its shadow slides over the gridlock, then its rim fills the top of the frame
+            // over the gridlock, the camera tilts up to the mothership hanging over the city
+            Craft = [new Craft(new Spot(2683700, 1246650, 260), 0) { Mothership = true }],
             Keys =
             [
-                new(0, Pt.At(2683480, 1246900, 32), Pt.At(2683570, 1246790, 1), 50),
-                new(2 * B, Pt.At(2683470, 1246895, 32), Pt.At(2683590, 1246800, 1), 50),
+                new(0, Pt.At(2683480, 1246900, 32), Pt.At(2683570, 1246790, 1), 35),
+                new(2 * B, Pt.At(2683470, 1246895, 30), Pt.At(2683700, 1246650, 240), 28),
             ],
             Preroll = 4,
             Supers = [new(0.3, 3.2, "ZÜRICH · 13:00")],
         },
         new()
         {
-            Number = 14, Name = "My cows", FromBar = 26, Bars = 3, Feature = "the tractor beam: cows and a hay bale (#861, #863)",
+            Number = 14, Name = "My cows", FromBar = 26, Bars = 3, Feature = "the tractor beam lifts a cow and a crate; the herd",
             Hour = 13.3,
             Cast =
             [
                 Runner(Meadow.Toward(90, 30), 270, Heidi),
-                // UFO (#861) in stage 2: a saucer over the meadow, its beam lifting a cow, then the bale
-                Ufo(Meadow.Toward(250, 30).Up(28), 70, 0f, 304),
             ],
-            Props = [HayBale(Meadow.Toward(250, 22))],
+            // a saucer over the meadow, its beam lifting a cow and a crate; the herd grazes round it
+            Craft = [new Craft(Meadow.Toward(250, 22).Up(16f), 70) { Switches = UfoSwitches.BeamBetween(0.6, 99) }],
+            Herds = [new Cows(Meadow.Toward(250, 22), Count: 1, Radius: 1.2f), new Cows(Meadow.Toward(235, 45), Count: 6, Radius: 14f)],
+            Props = [Crate(Meadow.Toward(250, 22).Toward(330, 2.2f))],
             Keys =
             [
                 new(0, Ground(Meadow, 80, 40, 1.6f), Ground(Meadow, 250, 20, 8f), 28),
                 new(3 * B, Ground(Meadow, 82, 37, 1.5f), Ground(Meadow, 250, 25, 18f), 28),
             ],
             Smooth = 0.2f, Preroll = 0.5,
-            Chat = [Say("heidi_cows", 2.0, Heidi, "HEY! Those are MY cows!")],
+            Bubbles = [Say("heidi_cows", 2.0, 0, "HEY! Those are MY cows!", BubbleShape.Shout)],
         },
         new()
         {
-            Number = 15, Name = "Click and collect", FromBar = 29, Bars = 2, Feature = "parked cars at IKEA Riddes; the beam takes one (#861)",
+            Number = 15, Name = "Click and collect", FromBar = 29, Bars = 2, Feature = "parked cars at IKEA Riddes; the beam takes one",
             Hour = 14.5,
-            // UFO (#861) in stage 2: a parked car rises out of its bay into the beam
-            Cast = [Ufo(IkeaPark.Up(25), 40, 0f, 305)],
+            // a saucer over the car park: a parked car rises out of its bay into the beam
+            Craft = [new Craft(IkeaPark.Up(17f), 40) { Switches = UfoSwitches.BeamBetween(0.5, 99) }],
+            Props = [new(IkeaPark, 30, default, default) { Vehicle = Car(Yaris) }],
             Keys =
             [
                 // from the far side of the car park, clear of the IKEA pylon, the blue facade beyond
@@ -380,35 +388,35 @@ public static class InvasionScript
                     Draught = 1.6f, Drive = Drive.Controls, Controls = _ => Pedal(1f), Seed = 71,
                 },
                 new() { Who = Tourist, Ride = RideKind.Jetski, At = new Spot(2560700, 1140360), Heading = 250, Board = ChillonBoard, Launch = 15, Drive = Drive.Controls, Controls = _ => Pedal(1f) },
-                // UFO (#861) in stage 2: a saucer hangs over the steamer's funnel
-                Ufo(Spot.Alt(2560650, 1140450, 410), 300, 0f, 306, ChillonBoard),
             ],
+            // a saucer hangs over the steamer
+            Craft = [new Craft(Spot.Alt(2560650, 1140450, 405), 300)],
             Keys =
             [
                 new(0, Pt.Alt(2560560, 1140300, 373.6f), Pt.Alt(2560662, 1140440, 382), 35),
                 new(2 * B, Pt.Alt(2560575, 1140296, 373.8f), Pt.Alt(2560672, 1140442, 386), 35),
             ],
             Smooth = 0.3f, Preroll = 1.5,
-            Chat = [Say("tourist_cruise", 1.0, Tourist, "Is this part of the cruise?")],
+            Bubbles = [Say("tourist_cruise", 1.0, 1, "Is this part of the cruise?")],
         },
         new()
         {
-            Number = 17, Name = "Not the AE86", FromBar = 33, Bars = 2, Feature = "the beam takes a car (#861)",
+            Number = 17, Name = "Not the AE86", FromBar = 33, Bars = 2, Feature = "the beam takes a car",
             Hour = 15.0, Traffic = 0,
             Cast =
             [
-                new() { Ride = Car(Ae86), At = Tremola, Toward = TremolaFoot, Route = "tremola", Arc = 380, Drive = Drive.Stand, Seed = 35 },
-                new() { Who = Luca, At = Tremola, Toward = TremolaFoot, Route = "tremola", Arc = 387, Drive = Drive.Stand, Fight = _ => Dazed },
-                // UFO (#861) in stage 2: the beam lifts the AE86 off the cobbles
-                Ufo(Tremola.Up(30), 0, 0f, 307),
+                new() { Who = Luca, At = Tremola, Toward = TremolaFoot, Route = "tremola", Arc = 7, Drive = Drive.Stand, Fight = _ => Dazed },
             ],
+            // the beam lifts the parked AE86 off the cobbles
+            Props = [new(default, 0, default, default) { Vehicle = Car(Ae86), Route = "tremola", Arc = 0 }],
+            Craft = [new Craft(Tremola.Up(16f), 0) { Switches = UfoSwitches.BeamBetween(0.3, 99) }],
             Keys =
             [
-                new(0, Pt.On(1, 2.5f, 1.2f, -5f), Pt.On(0, 0f, 1.0f), 28),
-                new(2 * B, Pt.On(1, 3.0f, 0.9f, -6f), Pt.On(0, 0f, 4.0f), 28),
+                new(0, Pt.On(0, 2.5f, 1.2f, -5f), Tremola.Up(1.5f), 28),
+                new(2 * B, Pt.On(0, 3.0f, 0.9f, -6f), Tremola.Up(7f), 28),
             ],
             Smooth = 0.3f, Preroll = 1,
-            Chat = [Say("luca_ae86", 0.8, Luca, "NOT THE AE86!")],
+            Bubbles = [Say("luca_ae86", 0.8, 0, "NOT THE AE86!", BubbleShape.Shout)],
         },
         new()
         {
@@ -417,8 +425,8 @@ public static class InvasionScript
             Cast =
             [
                 new() { Ride = RideKind.Pigeon, At = KramgasseEast.Up(12), Heading = 268, Drive = Drive.Fly, Launch = 15, Flight = t => Stick(0f, -0.4f, up: t % 0.8 < 0.3 ? 1f : 0f) },
-                // UFO (#861) in stage 2: a small saucer right behind it down the Kramgasse
-                Ufo(KramgasseEast.Toward(90, 60).Up(35), 268, 26f, 308),
+                // a saucer right behind it down the Kramgasse
+                Ufo(KramgasseEast.Toward(90, 40).Up(16), 268, 16f),
             ],
             Keys =
             [
@@ -442,20 +450,21 @@ public static class InvasionScript
                 new(2 * B, Pt.On(1, 0.5f, 1.3f, -2.6f), Pt.On(1, 0f, 1.75f), 35),
             ],
             Smooth = 0.3f, Preroll = 0.5,
-            Chat = [Say("rochat_not_routine", 0.6, Rochat, "This is NOT routine.")],
+            Bubbles = [Say("rochat_not_routine", 0.6, 1, "This is NOT routine.", BubbleShape.Shout)],
         },
         new()
         {
             Number = 20, Name = "The pointy one", FromBar = 39, Bars = 2, Feature = "the mothership over the Matterhorn",
             Hour = 15.8,
-            // MOTHERSHIP (#861) in stage 2: parked over the summit, its rim lights chasing
+            // the mothership parked over the summit, its beam on the peak
+            Craft = [new Craft(Spot.Alt(Matterhorn.E, Matterhorn.N, 4800), 0) { Mothership = true, Switches = UfoSwitches.BeamBetween(1.0, 99) }],
             Keys =
             [
-                new(0, Pt.Alt(2627300, 1092800, 3330), Pt.Alt(Matterhorn.E, Matterhorn.N, 4560), 85),
-                new(2 * B, Pt.Alt(2627300, 1092800, 3330), Pt.Alt(Matterhorn.E, Matterhorn.N, 4620), 70),
+                new(0, Pt.Alt(2627300, 1092800, 3330), Pt.Alt(Matterhorn.E, Matterhorn.N, 4600), 85),
+                new(2 * B, Pt.Alt(2627300, 1092800, 3330), Pt.Alt(Matterhorn.E, Matterhorn.N, 4700), 60),
             ],
             Smooth = 0.4f, Preroll = 0.5,
-            Chat = [Say("zorp_pointy", 0.8, Zorp, "We take the pointy mountain.")],
+            Bubbles = [Off("zorp_pointy", 0.8, Zorp, "We take the pointy mountain.", new Vector2(0.62f, 0.12f))],
         },
         new()
         {
@@ -475,7 +484,7 @@ public static class InvasionScript
             ],
             Smooth = 0.3f, Preroll = 0.5,
             Supers = [new(0.3, 3.0, "LAUSANNE · 16:00")],
-            Chat = [Say("passer_chocolate", 2.2, Passer, "I'm finishing my chocolate first.")],
+            Bubbles = [Say("passer_chocolate", 2.2, 3, "I'm finishing my chocolate first.")],
         },
         new()
         {
@@ -484,8 +493,8 @@ public static class InvasionScript
             Cast =
             [
                 new() { Who = Yvonne, Ride = RideKind.A320, At = Spot.Alt(2646200, 1151600, 3700), Heading = 145, Drive = Drive.Fly, Launch = 90, Flight = t => Stick(t > 1.5 && t < 3.5 ? 0.8f : 0f, lever: 0.8f) },
-                // UFO (#861) in stage 2: a saucer cuts across her nose
-                Ufo(Spot.Alt(2646150, 1151250, 3720), 80, 60f, 309),
+                // a saucer cuts across her nose
+                Ufo(Spot.Alt(2646150, 1151250, 3720), 80, 60f),
             ],
             Keys =
             [
@@ -493,21 +502,21 @@ public static class InvasionScript
                 new(2 * B, Pt.On(0, 22f, 3f, 26f), Pt.On(0, 0f, 0f, -20f), 35),
             ],
             Smooth = 0.25f, Preroll = 1,
-            Chat = [Say("yvonne_dodge", 1.0, Yvonne, "Ladies and gentlemen, hold on.")],
+            Bubbles = [Say("yvonne_dodge", 1.0, 0, "Ladies and gentlemen, hold on.")],
         },
         new()
         {
-            Number = 23, Name = "The map", FromBar = 45, Bars = 2, Feature = "the map (the in-game map screen in stage 2)",
+            Number = 23, Name = "The map", FromBar = 45, Bars = 2, Feature = "the game's map and download screen",
             Hour = 16.4,
-            // the in-game map with the saucers' markers needs the director to show a UI screen (a
-            // Shot.Ui, stage 2); until then the valley from straight above, like a map
+            // the game's own map screen (what is downloaded) over the valley seen from straight above
+            Screens = [new(0.0, 2 * B, GameScreen.Map)],
             Keys =
             [
                 new(0, Pt.At(2635900, 1160000, 2200), Pt.At(2635900, 1160000, 0), 24),
                 new(2 * B, Pt.At(2635900, 1160000, 1500), Pt.At(2635900, 1160001, 0), 24),
             ],
             Preroll = 0.5,
-            Chat = [Say("rochat_everywhere", 0.6, Rochat, "They're everywhere. All 26 cantons.")],
+            Bubbles = [Off("rochat_everywhere", 0.6, Rochat, "They're everywhere. All 26 cantons.", new Vector2(0.9f, 0.85f))],
         },
         new()
         {
@@ -520,14 +529,14 @@ public static class InvasionScript
                 new(2 * B, Pt.On(0, 0.5f, 1.5f, -2.6f), Pt.On(0, 0f, 1.55f), 35),
             ],
             Smooth = 0.3f, Preroll = 0.5,
-            Chat = [Say("heidi_horn", 0.5, Heidi, "Right. Time for the horn.")],
+            Bubbles = [Say("heidi_horn", 0.5, 0, "Right. Time for the horn.")],
         },
         new()
         {
             Number = 25, Name = "The call", FromBar = 49, Bars = 2, Feature = "the alphorn's call, heard 1.5 km off; sound",
             Hour = 16.8,
             Cast = [new() { Who = Heidi, At = Meadow, Heading = 250, Item = (int)ItemId.Alphorn, Use = _ => true }],
-            Cues = [new(0.3, 0, ItemEventKind.Horn)],
+            ItemCues = [new(0.3, 0, ItemEventKind.Horn)],
             Keys =
             [
                 new(0, Pt.On(0, 1.4f, 1.2f, 3.5f), Pt.On(0, 0f, 6f, -60f), 28),
@@ -553,7 +562,7 @@ public static class InvasionScript
                 new(2 * B, Pt.On(0, 3.0f, 1.4f, 2f), Pt.On(0, 0f, 1.0f), 28),
             ],
             Smooth = 0.1f, Preroll = 1.5,
-            Chat = [Say("skier_horn", 2.6, Skier, "Was that... an alphorn?")],
+            Bubbles = [Say("skier_horn", 2.6, 0, "Was that... an alphorn?", BubbleShape.Think)],
         },
 
         // ==== THE COUNCIL (bars 53-61, the breakdown) =============================================
@@ -566,12 +575,12 @@ public static class InvasionScript
             Keys = Orbit(Crew, 6.5f, 6f, 1.6f, 1.8f, 120f, 75f, 3 * B, 28, lookUp: 1.0f),
             Preroll = 0.5,
             Supers = [new(0.2, 2.6, "GORNERGRAT · 18:10")],
-            Chat =
+            Bubbles =
             [
-                Say("rochat_options", 0.5, Rochat, "Options?"),
-                Say("luca_cars", 1.9, Luca, "Fast cars."),
-                Say("yvonne_planes", 3.3, Yvonne, "Big planes."),
-                Say("heidi_fondue", 4.7, Heidi, "Fondue first."),
+                Say("rochat_options", 0.5, 3, "Options?"),
+                Say("luca_cars", 1.9, 1, "Fast cars."),
+                Say("yvonne_planes", 3.3, 2, "Big planes."),
+                Say("heidi_fondue", 4.7, 0, "Fondue first."),
             ],
         },
         new()
@@ -580,14 +589,14 @@ public static class InvasionScript
             Hour = 18.3,
             Cast = Council((int)ItemId.Fondue, t => t > 1.0 && t % 1.4 < 0.8),
             Props = Pot,
-            Cues = [new(0.2, 0, ItemEventKind.Fondue)],
+            ItemCues = [new(0.2, 0, ItemEventKind.Fondue)],
             Keys =
             [
                 new(0, Ground(Crew, 315, 4.6f, 1.9f), Ground(Crew, 0, 0, 0.5f), 35),
                 new(2 * B, Ground(Crew, 320, 4.2f, 2.0f), Pt.On(1, 0f, 1.4f), 35),
             ],
             Smooth = 0.3f, Preroll = 0.5,
-            Chat = [Say("luca_better", 2.4, Luca, "Ah. Much better.")],
+            Bubbles = [Say("luca_better", 2.4, 1, "Ah. Much better.")],
         },
         new()
         {
@@ -606,22 +615,22 @@ public static class InvasionScript
                 new(2 * B, Pt.On(0, -4.6f, 1.9f, 0.5f), Pt.On(0, 0f, 1.3f, -2.5f), 28),
             ],
             Smooth = 0.3f, Preroll = 0.5,
-            Chat = [Say("rochat_barricade", 0.6, Rochat, "Swiss-made barricade. Very neutral.")],
+            Bubbles = [Say("rochat_barricade", 0.6, 0, "Swiss-made barricade. Very neutral.")],
         },
         new()
         {
             Number = 30, Name = "IKEA", FromBar = 60, Bars = 2, Feature = "IKEA and the shops; items: the Blåhaj",
             Hour = 17.2,
             // from the blue facade toward the car park
-            Cast = [Runner(IkeaPark.Toward(135, 15), 315, Luca, run: false, from: 0.4) with { Item = (int)ItemId.Blahaj }],
+            Cast = [new() { Who = Luca, At = new Spot(2582250, 1112640), FromDoor = true, Drive = Drive.Walk, Walk = t => (new Vector2(0f, t > 0.6 ? 0.6f : 0f), false), Item = (int)ItemId.Blahaj }],
             Keys =
             [
-                new(0, Pt.On(0, 1.2f, 1.5f, -7f), Pt.On(0, 0f, 1.3f), 35),
-                new(2 * B, Pt.On(0, 1.0f, 1.5f, -5.5f), Pt.On(0, 0f, 1.3f), 35),
+                new(0, Pt.On(0, 2f, 1.7f, -7f), Pt.On(0, 0f, 1.3f), 28),
+                new(2 * B, Pt.On(0, 1.5f, 1.7f, -5.5f), Pt.On(0, 0f, 1.3f), 28),
             ],
             Smooth = 0.3f, Preroll = 0.4,
             Supers = [new(0.2, 3.0, "IKEA RIDDES · 17:10")],
-            Chat = [Say("luca_ikea", 1.0, Luca, "IKEA has everything.")],
+            Bubbles = [Say("luca_ikea", 1.0, 0, "IKEA has everything.")],
         },
 
         // ==== MOBILISATION (bars 62-73, the build) ================================================
@@ -677,7 +686,7 @@ public static class InvasionScript
                 new(2 * B, Pt.On(0, -3.0f, 2.4f, -8f), Pt.On(0, 0f, 2.2f), 28),
             ],
             Smooth = 0.3f, Preroll = 3,
-            Chat = [Say("heidi_farmers", 0.6, Heidi, "Farmers! With me!")],
+            Bubbles = [Say("heidi_farmers", 0.6, 0, "Farmers! With me!", BubbleShape.Shout)],
         },
         new()
         {
@@ -709,7 +718,7 @@ public static class InvasionScript
                 new(2 * B, Pt.Road("garage", 120, -5f, 1.6f), Pt.Road("garage", 140, 0f, 1.2f), 28),
             ],
             Smooth = 0.3f, Preroll = 0.5,
-            Chat = [Say("luca_pick", 2.4, Luca, "Pick a car. Any car.")],
+            Bubbles = [Say("luca_pick", 2.4, 0, "Pick a car. Any car.")],
         },
         new()
         {
@@ -745,7 +754,7 @@ public static class InvasionScript
             ],
             Preroll = 0.5,
             Supers = [new(0.2, 3.0, "GENÈVE · 13:30")],
-            Chat = [Say("yvonne_board", 0.8, Yvonne, "Everybody in. Next stop: the saucer.")],
+            Bubbles = [Say("yvonne_board", 0.8, 0, "Everybody in. Next stop: the saucer.")],
         },
         new()
         {
@@ -778,7 +787,7 @@ public static class InvasionScript
                 new(2 * B, Pt.On(0, 6f, 4f, 26f), Pt.On(3, 0f, 0f), 35),
             ],
             Smooth = 0.05f, Preroll = 0.05,
-            Chat = [Say("rochat_go", 0.3, Rochat, "GO GO GO!")],
+            Bubbles = [Say("rochat_go", 0.3, 1, "GO GO GO!", BubbleShape.Shout)],
         },
         new()
         {
@@ -819,7 +828,7 @@ public static class InvasionScript
                 new(2 * B, Pt.On(0, 1.4f, 1.9f, -4.6f), Pt.On(0, 0f, 1.2f), 28),
             ],
             Smooth = 0.3f, Preroll = 0.5,
-            Chat = [Say("luca_blahaj", 0.8, Luca, "Who packed the Blåhaj?")],
+            Bubbles = [Say("luca_blahaj", 0.8, 0, "Who packed the Blåhaj?")],
         },
         new()
         {
@@ -828,9 +837,9 @@ public static class InvasionScript
             Cast =
             [
                 .. Enumerable.Range(0, 6).Select(i => Runner(Meadow.Toward(220 + i * 9, 40 + i * 6), 250, seed: 50 + i)),
-                // UFO (#861) in stage 2: the saucer landed in the middle of the zone
-                new() { Ride = RideKind.Helicopter, At = Meadow.Toward(250, 200), Heading = 0, Seed = 310 },
             ],
+            // the saucer landed in the middle of the zone, its ramp down
+            Craft = [new Craft(Meadow.Toward(250, 200), 60) { Switches = _ => new UfoSwitches(Ramp: true) }],
             Zone = (Meadow.Toward(250, 200), 230f),
             Keys =
             [
@@ -847,8 +856,8 @@ public static class InvasionScript
             [
                 new() { Who = Luca, Ride = Car(Fd3s), At = Tremola, Toward = TremolaFoot, Drive = Drive.Road, Route = "tremola", Arc = 505, Skill = 1.1f },
                 new() { Ride = Car(Bnr32), At = Tremola, Toward = TremolaFoot, Drive = Drive.Road, Route = "tremola", Arc = 490, Skill = 1.15f, Aggression = 0.8f, Seed = 47 },
-                // UFO (#861) in stage 2: the saucer flees down the hairpins ahead of them
-                Ufo(Tremola.Up(40), 180, 25f, 311),
+                // the saucer flees down the hairpins ahead of them
+                Ufo(Tremola.Up(30), 180, 20f),
             ],
             Keys =
             [
@@ -904,8 +913,8 @@ public static class InvasionScript
             Cast =
             [
                 new() { Who = Yvonne, Ride = RideKind.Helicopter, At = new Spot(2635900, 1159300, 120), Heading = 355, Drive = Drive.Fly, Launch = 30, Flight = _ => Stick(0f, -1f, up: 0.2f, effort: true) },
-                // UFO (#861) in stage 2: the saucer just ahead of the helicopter
-                Ufo(new Spot(2635900, 1159420, 135), 355, 32f, 312),
+                // the saucer just ahead of the helicopter
+                Ufo(new Spot(2635900, 1159420, 135), 355, 32f),
             ],
             Keys =
             [
@@ -922,9 +931,9 @@ public static class InvasionScript
             [
                 new() { Who = Volunteers[5], Ride = RideKind.Paraglider, At = new Spot(2632479, 1170652, 380), Heading = 250, Drive = Drive.Fly, Launch = 10, Flight = _ => Stick(0.12f) },
                 new() { Who = Volunteers[0], Ride = RideKind.Plane, At = new Spot(2632600, 1170900, 430), Heading = 200, Drive = Drive.Fly, Launch = 50, Flight = _ => Stick(lever: 1f) },
-                // UFO (#861) in stage 2: the saucer they circle
-                Ufo(new Spot(2632400, 1170500, 420), 90, 0f, 313),
             ],
+            // the saucer they circle
+            Craft = [new Craft(new Spot(2632440, 1170600, 390), 90)],
             Keys = Around(0, 26f, 4f, 120f, 30f, 2 * B, 35, lookUp: 3f),
             Smooth = 0.3f, Preroll = 2,
             Supers = [new(0.2, 3.0, "INTERLAKEN · 15:30")],
@@ -940,9 +949,9 @@ public static class InvasionScript
                     Ride = RideKind.Pigeon, At = KramgasseEast.Toward(0, (i - 2) * 2.5f).Toward(90, i % 2 * 3f).Up(18 + i % 3), Heading = 268, Seed = 95 + i,
                     Drive = Drive.Fly, Launch = 14, Flight = t => Stick(0f, -0.3f, up: (t + i * 0.17) % 0.9 < 0.3 ? 1f : 0f),
                 }),
-                // UFO (#861) in stage 2: the saucer over the Zytglogge they dive on
-                Ufo(KramgasseWest.Up(45), 90, 0f, 314),
             ],
+            // the saucer over the Kramgasse they dive on
+            Craft = [new Craft(KramgasseEast.Toward(270, 90).Up(28f), 90)],
             Keys =
             [
                 new(0, Pt.On(2, 0.6f, 1.0f, 5f), Pt.On(2, 0f, 0f, -12f), 24),
@@ -958,9 +967,9 @@ public static class InvasionScript
             [
                 new() { Ride = RideKind.Jetski, At = new Spot(2560693, 1140362), Heading = 315, Board = ChillonBoard, Launch = 15, Drive = Drive.Controls, Controls = t => Pedal(1f, 0.25f * Mathf.Sin((float)t * 1.4f)), Seed = 8 },
                 new() { Who = Tourist, Ride = RideKind.Speedboat, At = new Spot(2560689, 1140349), Heading = 315, Board = ChillonBoard, Launch = 14, Drive = Drive.Controls, Controls = _ => Pedal(1f, 0.15f) },
-                // UFO (#861) in stage 2: the saucer skimming the water, the boats circling it
-                Ufo(Spot.Alt(2560740, 1140420, 385), 0, 0f, 315, ChillonBoard),
             ],
+            // the saucer skimming the water, the boats circling it
+            Craft = [new Craft(Spot.Alt(2560740, 1140420, 382), 0)],
             Keys =
             [
                 new(0, Pt.Alt(2560628, 1140350, 373.4f), Pt.At(2560720, 1140445, 9), 35),
@@ -991,7 +1000,7 @@ public static class InvasionScript
                 new(2 * B, Pt.On(0, 3.0f, 1.1f, -1.4f), Pt.On(0, 0f, 1.2f, -0.9f), 28),
             ],
             Smooth = 0.25f, Preroll = 0.5,
-            Chat = [Say("rochat_fist", 3.0, Rochat, "Swiss army. Swiss fist.")],
+            Bubbles = [Say("rochat_fist", 3.0, 0, "Swiss army. Swiss fist.")],
         },
         new()
         {
@@ -1000,32 +1009,33 @@ public static class InvasionScript
             Cast =
             [
                 new() { Who = Heidi, At = NyonMole, Heading = 95, Item = (int)ItemId.FishingRod, Use = t => t > 0.3 },
-                new() { Who = Zib, At = NyonMole.Toward(95, 9), Board = NyonMole.Toward(0, 6), Swim = true, Heading = 275, Drive = Drive.Walk, Walk = _ => (new Vector2(0f, 0.5f), false) },
+                new() { Who = Zib, At = NyonMole.Toward(95, 24), Board = NyonMole.Toward(0, 6), Swim = true, Heading = 275, Drive = Drive.Walk, Walk = _ => (new Vector2(0f, 0.5f), false) },
             ],
-            Cues = [new(0.4, 0, ItemEventKind.FishCast)],
+            ItemCues = [new(0.4, 0, ItemEventKind.FishCast)],
             Keys =
             [
                 new(0, Pt.On(0, -2.2f, 1.6f, 3.4f), Pt.On(0, 0f, 0.2f, -8f), 28),
                 new(2 * B, Pt.On(0, -2.6f, 1.7f, 3.8f), Pt.On(1, 0f, 0.3f), 28),
             ],
-            Smooth = 0.3f, Preroll = 0.5,
+            Smooth = 0.3f, Preroll = 2.0,
             Supers = [new(0.2, 3.0, "NYON · 16:00")],
-            Chat = [Say("heidi_catch", 2.2, Heidi, "Biggest catch of the year.")],
+            Bubbles = [Say("heidi_catch", 2.2, 0, "Biggest catch of the year.")],
         },
         new()
         {
             Number = 53, Name = "I'm OK", FromBar = 104, Bars = 2, Feature = "the crash: thrown through the windscreen",
             Hour = 16.1, Traffic = 0,
             Cast = [new() { Who = Luca, Ride = Car(Gc8), At = RiddesW, Toward = RiddesE, Drive = Drive.Follow, Route = "riddes", Arc = 60, Speed = 24 }],
-            // UFO (#861) in stage 2: the landed saucer across the road; a wall stands in for it
-            Props = [new(default, 0, new Vector3(12f, 3f, 0.8f), new Color(0.62f, 0.6f, 0.56f)) { Route = "riddes", Arc = 150 }],
+            // the saucer landed across the road (a wall under its hull stops the car)
+            Craft = [new Craft(new Spot(2583250, 1113236), 0)],
+            Props = [new(default, 0, new Vector3(6f, 1.6f, 0.8f), new Color(0.75f, 0.76f, 0.8f)) { Route = "riddes", Arc = 150 }],
             Keys =
             [
                 new(0, Pt.Road("riddes", 125, -3.5f, 1.3f), Pt.Road("riddes", 151, 0f, 1.0f), 35),
                 new(2 * B, Pt.Road("riddes", 128, -4.5f, 1.5f), Pt.Road("riddes", 160, 0f, 0.6f), 35),
             ],
             Preroll = 4.7,
-            Chat = [Say("luca_ok", 2.6, Luca, "I'm OK!")],
+            Bubbles = [Say("luca_ok", 2.6, 0, "I'm OK!", BubbleShape.Shout)],
         },
         new()
         {
@@ -1065,7 +1075,7 @@ public static class InvasionScript
             Hour = 21.5, Moon = 1.0f, Occasion = "halloween",
             Cast =
             [
-                new() { Who = Heidi, At = MainStreet, Heading = 0, Headwear = (int)ItemId.PumpkinHead, Dance = Cheer },
+                new() { Who = Heidi, At = MainStreet, Heading = 0, Headwear = PumpkinHead, Dance = Cheer },
                 Runner(MainStreet.Toward(0, 6), 0, Zorp, from: 0.8),
             ],
             Keys =
@@ -1075,7 +1085,7 @@ public static class InvasionScript
             ],
             Smooth = 0.3f, Preroll = 0.5,
             Supers = [new(0.2, 3.0, "LAUTERBRUNNEN · 21:30")],
-            Chat = [Say("zorp_pumpkin", 0.9, Zorp, "AAAH! A giant orange head!")],
+            Bubbles = [Say("zorp_pumpkin", 0.9, 1, "AAAH! A giant orange head!", BubbleShape.Shout)],
         },
         new()
         {
@@ -1087,17 +1097,17 @@ public static class InvasionScript
                 new() { Who = Zorp, At = Crew.Toward(90, 1.4f), Heading = 270 },
             ],
             Props = Pot,
-            Cues = [new(0.1, 0, ItemEventKind.Fondue)],
+            ItemCues = [new(0.1, 0, ItemEventKind.Fondue)],
             Keys =
             [
                 new(0, Ground(Crew, 180, 3.4f, 1.5f), Ground(Crew, 0, 0, 1.0f), 35),
                 new(2 * B, Ground(Crew, 175, 2.8f, 1.4f), Ground(Crew, 0, 0, 1.1f), 35),
             ],
             Smooth = 0.3f, Preroll = 0.5,
-            Chat =
+            Bubbles =
             [
-                Say("zorp_smell", 0.4, Zorp, "What... is that smell?"),
-                Say("heidi_want", 2.4, Heidi, "Fondue. Want some?"),
+                Say("zorp_smell", 0.4, 1, "What... is that smell?"),
+                Say("heidi_want", 2.4, 0, "Fondue. Want some?"),
             ],
         },
 
@@ -1107,17 +1117,17 @@ public static class InvasionScript
             Number = 58, Name = "Christmas on the Gornergrat", FromBar = 114, Bars = 4, Feature = "the Christmas occasion; dances; the radio; together",
             Hour = 17.2, Occasion = "christmas",
             Cast = Circle(Crew, 3.2f, [Chicken, Griddy, Robot, Ymca, Moonwalk, Floss, Macarena], 0)
-                .Zip(new[] { Heidi, Luca, Yvonne, Rochat, Zorp, Zib, Volunteers[1] }, (c, who) => c with { Who = who, Headwear = (int)ItemId.SantaHat })
+                .Zip(new[] { Heidi, Luca, Yvonne, Rochat, Zorp, Zib, Volunteers[1] }, (c, who) => c with { Who = who, Headwear = SantaHat })
                 .ToArray(),
             Props = [.. Pot, new(Crew.Toward(45, 1.2f).Up(0.3f), 220, default, default) { Item = ItemId.Radio, Scale = 1.4f }],
             Keys = Orbit(Crew, 7f, 6.2f, 1.6f, 1.9f, 200f, 270f, 4 * B, 28, lookUp: 1.1f),
             Preroll = 0.5,
-            // MOTHERSHIP (#861) in stage 2: lit up over the Matterhorn behind them
+            Craft = [new Craft(Spot.Alt(2620500, 1092000, 4300), 0) { Mothership = true }],
             Supers = [new(0.3, 3.4, "GORNERGRAT · DECEMBER")],
-            Chat =
+            Bubbles =
             [
-                Say("heidi_monday", 1.4, Heidi, "Cows back by Monday."),
-                Say("zorp_deal", 3.4, Zorp, "Deal. Same time next year?"),
+                Say("heidi_monday", 1.4, 0, "Cows back by Monday."),
+                Say("zorp_deal", 3.4, 4, "Deal. Same time next year?"),
             ],
         },
         new()
@@ -1126,11 +1136,11 @@ public static class InvasionScript
             Hour = 17.25, Occasion = "christmas",
             Cast =
             [
-                new() { Who = Heidi, At = Crew.Toward(0, 0.6f), Heading = 90, Item = (int)ItemId.Camera, Headwear = (int)ItemId.SantaHat },
+                new() { Who = Heidi, At = Crew.Toward(0, 0.6f), Heading = 90, Item = (int)ItemId.Camera, Headwear = SantaHat },
                 new() { Who = Zorp, At = Crew.Toward(0, 1.8f), Heading = 90, Dance = Cheer },
-                new() { Who = Luca, At = Crew.Toward(0, 3.0f), Heading = 90, Dance = Wave, Headwear = (int)ItemId.SantaHat },
-                new() { Who = Yvonne, At = Crew.Toward(180, 0.6f), Heading = 90, Dance = FistPump, Headwear = (int)ItemId.SantaHat },
-                new() { Who = Rochat, At = Crew.Toward(180, 1.8f), Heading = 90, Dance = Salute, Headwear = (int)ItemId.SantaHat },
+                new() { Who = Luca, At = Crew.Toward(0, 3.0f), Heading = 90, Dance = Wave, Headwear = SantaHat },
+                new() { Who = Yvonne, At = Crew.Toward(180, 0.6f), Heading = 90, Dance = FistPump, Headwear = SantaHat },
+                new() { Who = Rochat, At = Crew.Toward(180, 1.8f), Heading = 90, Dance = Salute, Headwear = SantaHat },
                 new() { Who = Zib, At = Crew.Toward(180, 3.0f), Heading = 90, Dance = Clap },
                 new() { Ride = RideKind.Pigeon, At = Crew.Toward(80, 2.6f), Heading = 110, Seed = 90 },
             ],
@@ -1149,6 +1159,6 @@ public static class InvasionScript
                 new(4.0, 4.6, "", Space1990.Credit),
             ],
         },
-    // every shot in Cartoon, on the film's song
-    }.Select(s => s with { Style = "cartoon", Song = Space1990 }).ToList();
+    // every shot in Cartoon, on the film's song, no occasion but the ones asked for (null is the calendar's)
+    }.Select(s => s with { Style = "cartoon", Song = Space1990, Occasion = s.Occasion ?? "none" }).ToList();
 }

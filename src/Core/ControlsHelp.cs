@@ -239,6 +239,16 @@ public partial class ControlsHelp : CanvasLayer
             new("Cockpit view, without your body, chase camera", PlayerInput.CameraToggle),
             new("Light sim: pitch trim nose down / up (AN-124, military freighter)", Keys: "{trim_nose_down} / {trim_nose_up}", Pad: "—"),
         }),
+        ("UFO", new Row[]
+        {
+            new("Fly where you look (strafe sideways)", Keys: Wasd, Pad: "{move_forward}"),
+            new("Up / down (let go: it hovers)", Keys: "{jump} / {crouch_slide}", Pad: "{throttle} / {brake}"),
+            new("Boost", Keys: "{sprint} / {boost}", Pad: "{sprint} / {boost}"),
+            new("Tractor beam on / off", PlayerInput.TractorBeam),
+            new("Ramp (landed) / legs (flying)", PlayerInput.CarDoor),
+            new("Rim lights", PlayerInput.LightsToggle),
+            new("Get out (down the ramp when landed)", PlayerInput.InteractMount),
+        }),
         ("Flying", new Row[]
         {
             new("Pitch and roll", Keys: Wasd, Pad: "{move_forward}"),
@@ -339,7 +349,7 @@ public partial class ControlsHelp : CanvasLayer
     }
 
     /// <summary>The groups whose controls are used mounted: their VR names are the mounted ones.</summary>
-    private static readonly string[] Mounted = { "Riding and driving", "Trucks and buses", "Paddle steamer", "Airliners", "Flying" };
+    private static readonly string[] Mounted = { "Riding and driving", "Trucks and buses", "Paddle steamer", "Airliners", "UFO", "Flying" };
 
     private static readonly Color KeyColor = new(1f, 0.84f, 0.42f);
     private static readonly Color PadColor = new(0.6f, 0.8f, 1f);

@@ -27,3 +27,41 @@
   ~0.002 ms.
 - **Left**: the overlap scan's allocation (`SeparateFromPlayers`), and the road collision cells of a
   generated town, 47-83 ms each to commit, one piece each (`server-collision`).
+
+## 100 players: measured, Oct 2026 (#837)
+
+- **Tools**: `tools/botperf.sh N [seconds]` (free roam, `--bots N` round one spot, server `--serverstats
+  --botprofile`, a client with `--perflog`); `BRBOTS=100 BRPACE=1 tools/brbotwatch.sh` with
+  `SERVER_ARGS="--serverstats,<label> --botprofile"` for a whole match. `MaxBots` is 128.
+- **Server, free roam** (Apple M1 Pro, real tiles, all bots within 20 m of the client):
+
+  | bots | busy p50 steady | p99 | net out to the client |
+  |---|---|---|---|
+  | 20 | 3.9 ms | 8 ms | 76 KB/s |
+  | 50 | 8 ms | 15 ms | 180 KB/s |
+  | 100 | 15 ms | 23 ms | 377 KB/s |
+
+  About 0.15 ms per bot; the bodies are less than half (~0.065 ms, `--botprofile`), the rest is outside
+  every timed block (the physics step, replication). The first 30-60 s after 100 bots spawn are
+  50-150 ms frames, growing faster than the count (20: 6 ms, 50: 31 ms, 100: 150 ms), also outside the
+  timed blocks. Not found yet: it needs a profiler.
+- **Server, a 100-bot match** (full pace, generated town): busy p50 15-17 ms, after `AutoPilot.Drives` was
+  cached (it stepped a mount 180 times per vehicle per bot every 1.5 s: 25-40 ms and 24 s of GC, and one
+  runtime crash). Left: 5 s windows at 135-370 ms when many bots plan street routes at once. A failed
+  `RoadNetwork.Path` walks the whole graph on the main thread, retried every 10 s per bot.
+- **Client**: with every bot near and in view, 67 fps at 20, 21 fps at 50, 8.5 fps at 100. Each near,
+  visible remote figure is rebuilt every frame (`HoldRemoteFigure` holds only far or off-screen ones). In
+  the match, 10-90 fps depending on the crowd in view.
+- **Client memory**, two bugs on `main`, both fixed there:
+  - the replay buffer kept a copy of every pulsing light (`WorldRecorder`): 75,000 orphan nodes, 128 GB;
+  - the chat's trim loop spun forever once the log passed 80 lines (`ChatUi.Append`, `QueueFree` with the
+    child still counted): a frozen client growing ~100 MB/s, at about 35 alive in a 100-player match, when
+    the kill feed passes 80 lines.
+  The second was found with a footprint sampler every 5 s (`top`) and, at the jump, `sample <pid> 5` with
+  `DOTNET_PerfMapEnabled=1`: `/tmp/perf-<pid>.map` names the C# frames the stack sample shows as unknown
+  addresses (Godot's own frames stay `???`, the binary is stripped). Malloc sat under `Node.QueueFree`
+  from `ChatUi.Append`. Godot's own counters (static, VRAM, managed) stayed flat throughout: a growth they do
+  not see is native, so look at `footprint <pid>` (here `MALLOC_TINY`).
+- **After both fixes**, a whole 100-bot match (22 min, windowed client): it ends, with 70 bot kills; the client stays
+  at 3.7-3.9 GB with ~700 orphan nodes; 32 fps on average (p50 20 ms, p99 140 ms). The server's busy p50 is 16 ms
+  over the match, its 5 s windows have a median of 18 ms and a 90th percentile of 47 ms; 9 s of GC pauses in all.

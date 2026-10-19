@@ -160,7 +160,7 @@ public partial class ActivitiesScreen
         var s = br?.State ?? new BrState();
         long me = br?.Me ?? 0;
         var mine = s.Find(me);
-        double now = ClockSync.ServerNow;
+        double now = ClockSync.SimNow;
 
         // the header ticks every second; the lists only when the state's shape changes
         string mode = s.TeamSize switch { 2 => "duos", 3 => "trios", 4 => "squads", _ => "solo" };
