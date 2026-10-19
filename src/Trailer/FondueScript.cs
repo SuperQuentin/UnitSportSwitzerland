@@ -129,7 +129,7 @@ public static class FondueScript
     // ---- places ---------------------------------------------------------------------------------
 
     /// <summary>The Gornergrat ridge's south edge, where it drops to the Gorner glacier (to frame).</summary>
-    private static readonly Spot GornerEdge = Crew.Toward(167, 46);
+    private static readonly Spot GornerEdge = Crew.Toward(167, 51);
     /// <summary>The Riddes plain (VS): IKEA, the fields along the Rhône.</summary>
     private static readonly Spot RiddesIkea = new(2582265, 1112638);
     private static readonly Spot RiddesField = new(2584199, 1113836), RiddesFieldEnd = new(2584426, 1113972);
