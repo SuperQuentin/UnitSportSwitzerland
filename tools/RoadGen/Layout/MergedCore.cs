@@ -162,13 +162,14 @@ public static class MergedCore
             Arm(outline, root, id, paved);
             outline.AddRange(root.KerbAfter[id]);
         }
-        CorePlanner.Dedupe(outline);
-        Clean(outline);
-        // every kerb keeps every move paved (a move spliced or smoothed across members runs where no member's leg did)
+        // (the mouths' ends kept through every clean-up: a member's kerb ending on one, its duplicate goes)
         var mouthEnds = arms.Select(a => ownerOf[a.Arm].MouthOf[a.Arm]).SelectMany(m => new[] { m.Left, m.Right }).ToHashSet();
+        Dedupe(outline, mouthEnds);
+        Clean(outline, mouthEnds);
+        // every kerb keeps every move paved (a move spliced or smoothed across members runs where no member's leg did)
         var before = outline.ToList();
         Envelope(outline, paved, mouthEnds);
-        Clean(outline);
+        Clean(outline, mouthEnds);
         // (a push that cut a mouth away is no core: the outline as walked, the check failing)
         if (!mouthEnds.All(outline.Contains))
         {
@@ -381,7 +382,7 @@ public static class MergedCore
         }
         ring.Clear();
         ring.AddRange(moved);
-        CorePlanner.Dedupe(ring);
+        Dedupe(ring, mouthEnds);
     }
 
     /// <summary>The outline's points apart where it is pushed out (m), and the farthest it is pushed (m).</summary>
@@ -391,23 +392,34 @@ public static class MergedCore
     /// The outline made simple: points where it turns back on itself dropped, and every loop where it crosses itself cut away (the
     /// part of the larger counter-clockwise area kept: where two members' kerbs overlap, they meet where they cross).
     /// </summary>
-    public static void Clean(List<Vec2> ring)
+    public static void Clean(List<Vec2> ring, IReadOnlySet<Vec2>? keep = null)
     {
         for (int round = 0; round < 200; round++)
         {
-            Spikes(ring);
+            Spikes(ring, keep);
             if (FirstCrossing(ring) is not { } x) return;
             var (i, j, at) = x;
             var loop = ring.Skip(i + 1).Take(j - i).Append(at).ToList();
             var rest = ring.Take(i + 1).Append(at).Concat(ring.Skip(j + 1)).ToList();
+            // (the part holding more of the points kept, the mouths' ends; else the larger counter-clockwise one)
+            int inLoop = keep is null ? 0 : loop.Count(keep.Contains), inRest = keep is null ? 0 : rest.Count(keep.Contains);
+            bool takeLoop = inLoop != inRest ? inLoop > inRest : CorePlanner.SignedArea(loop) > CorePlanner.SignedArea(rest);
             ring.Clear();
-            ring.AddRange(CorePlanner.SignedArea(loop) > CorePlanner.SignedArea(rest) ? loop : rest);
-            CorePlanner.Dedupe(ring);
+            ring.AddRange(takeLoop ? loop : rest);
+            Dedupe(ring, keep);
         }
     }
 
+    /// <summary>Points within a tenth of a millimetre of the one before dropped, never a kept one (the other of the two goes).</summary>
+    private static void Dedupe(List<Vec2> ring, IReadOnlySet<Vec2>? keep)
+    {
+        for (int k = ring.Count - 1; k > 0; k--)
+            if (ring[k].DistanceTo(ring[k - 1]) < 1e-4) ring.RemoveAt(keep?.Contains(ring[k]) == true ? k - 1 : k);
+        if (ring.Count > 1 && ring[0].DistanceTo(ring[^1]) < 1e-4) ring.RemoveAt(keep?.Contains(ring[^1]) == true ? 0 : ring.Count - 1);
+    }
+
     /// <summary>Drops the points where the ring turns back along itself (an inner street's side running back over a kerb).</summary>
-    private static void Spikes(List<Vec2> ring)
+    private static void Spikes(List<Vec2> ring, IReadOnlySet<Vec2>? keep = null)
     {
         for (bool again = true; again && ring.Count > 3;)
         {
@@ -416,6 +428,7 @@ public static class MergedCore
             {
                 Vec2 a = ring[(k - 1 + ring.Count) % ring.Count], b = ring[k], c = ring[(k + 1) % ring.Count];
                 Vec2 u = b - a, v = c - b;
+                if (keep?.Contains(b) == true) continue;
                 if (u.Length < 1e-4 || v.Length < 1e-4 || Math.Abs(u.Cross(v)) < 1e-3 * u.Length * v.Length && u.Dot(v) < 0)
                 {
                     ring.RemoveAt(k);

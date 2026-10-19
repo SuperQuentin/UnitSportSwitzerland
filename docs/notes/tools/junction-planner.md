@@ -360,6 +360,10 @@ off, `--junctions new` plans and reports without writing.
   junction short of a mouth takes it in, and the block is planned again (up to twice; `MergeStats.Regrown`). A transition's
   street (`StreetOn`) stops before a bridge or tunnel. 168 real tiles: old layout 295 -> 285. `WHYDBG=1` prints every junction
   left to the old layout, where and why.
+- **Bridges at a mouth; merged outlines keep their mouths** (#854): a transition over a bridge or tunnel is not written yet, but
+  an arm keeping its normal section has none: only a link a transition covers refuses the junction (bridges and tunnels at
+  junctions 17 -> 0). A merged core's outline keeps its mouths' ends through every clean-up (a member's kerb ending on one made
+  the duplicate pass drop the mouth's end, and the push was undone). 168 real tiles: old layout 285 -> 265.
 - **Comparing with reality**: SWISSIMAGE crops from `wms.geo.admin.ch` (`ch.swisstopo.swissimage`, EPSG:2056 bbox); in
   Geneva the marking cadastre on `ge.ch/terags/rest/services/DIRECTIVES_SIGNAL_CHANTIERS/MapServer` (37 lines, 38 kerbs,
   44 coloured surfaces, 48 road cover: carriageway, sidewalk, islands) as GeoJSON by bbox. Three panels (aerial, old, new)
