@@ -6,6 +6,7 @@
 - **Chat** (admin):
   - `/bot add [n] [easy|normal|hard]`: n bots (at most 16 a call) 6-16 m round you, in free roam.
   - `/bot arm <weapon> [rounds]`: every bot takes the weapon.
+  - `/bot drive [metres]`: every bot to a point that far ahead of you, by car or bike if one is in sight (`vehicles`).
   - `/bot fire`: every bot in its weapon's reach shoots once at your chest.
   - `/bot clear`, and `/bot list` (anyone).
   - `/br bots [n|off] [easy|normal|hard]`: the BR field size (`battle-royale`).
@@ -16,6 +17,8 @@
   - `--brbots N`: the BR field size (default 20, 0 = off).
   - `--brbotsharmless`: BR bots play the match but never strike (`tools/brbotcheck.sh`: the match's
     plumbing with bots, not a knife duel's luck; bots fighting back are `botcheck` and `brbotwatch`).
+  - `--brseed N`: every match's seed is N (checks: the same region, zone, plane line and bots each run;
+    the region also hangs on the tile set and the anti-repeat history, fresh in a check).
   - `--brbotspread M`: every bot's landing spot within M m of the first circle's centre (checks: the
     bots meet at once).
 - **Checks** (net tier, `tools/lib/checkmap.txt`):
@@ -24,7 +27,14 @@
       server takes the hits), then sees it stand up again (free roam knocks out).
     - A arms the bots and `/bot fire`: A's health drops.
     - B sees the same bot go down and hears a bot's shot.
-  - `tools/brbotcheck.sh`: server + A, one whole match at pace 0.13.
+  - `tools/brbotcheck.sh`: server + A, one whole match at the real short pace, seed fixed (`--brseed`, #873).
+    - Not a test pace: the bots take 80-140 s from the ramp to the ground (about 2 min of it under the
+      canopy, opened at up to 550 m over the spot), and at `--brpace 0.3` (zone at 0.12 of the timetable)
+      the circles were in phase 3-4 by then: the zone finished the first bot before the knife ("0 kills",
+      "✕ zone (fleeing BRBA)"), or A, waiting at the first circle's centre. At the short pace the first
+      shrink ends 216 s after the doors close and its circle holds every landing spot.
+    - The probe logs `zone <t> s: phase, HP/s, m inside` at the jump, the landing and each bot.
+    - `BRSEED=0` draws a seed (the lobby line names it), `BRPACE`, `BOTLOG=1`, `SERVER_ARGS`.
     - `/br bots 3` gives 2 bots; A jumps and knifes both.
     - Death box, the feed's `[bot]`, "1 kill (1 bot)".
     - A wins with "2 kills (2 bots)" in the record and on `/br top`; the bots are gone after.

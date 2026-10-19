@@ -42,8 +42,8 @@ one bar per shot after the drop, then one long pull-out.
 
 Captions are white, centred low, on the beat; never more than five words.
 
-The film is in the Cartoon style, all but the style sequence (shots 20-22), which shows PS1, Cartoon
-and Realistic in turn (`TrailerScript.Shots`).
+The whole film is in the Cartoon style (`TrailerScript.Shots`): PS1 and the Realistic styles are
+not shown. Shots 20-22 were once the styles sequence; they are now one drone move up the valley.
 
 ## Shot list
 
@@ -87,9 +87,9 @@ Times are song time. Lens in mm (full-frame equivalent; the director converts to
 | 17 | 31-32 | 0:58.7-1:02.6 | **Sunset.** Lausanne and the lake from above Lutry; time-lapse, the sun goes down and the town lights up. *"Day and night."* | Locked off, very slow push, 35 mm | Day/night, lit windows |
 | 18 | 33-34 | 1:02.6-1:06.5 | **Night town.** A car rolls down Bern's Kramgasse at night, every window lit. | Low on the pavement, pans with the headlights, 35 mm | Night lighting, headlights |
 | 19 | 35-36 | 1:06.5-1:10.4 | **Party.** Friends dance in the park by the lake at Nyon at dusk (YMCA, the cabbage patch, the chicken, the Macarena, the griddy, Gangnam style). *"Together."* | Slow orbit at chest height, 28 mm | Emotes, dances, multiplayer |
-| 20 | 37 | 1:10.4-1:12.4 | **PS1.** The Lauterbrunnen valley from the air. *"PS1"* | One continuous drone move across shots 20-22, 35 mm | Visual styles |
-| 21 | 38 | 1:12.4-1:14.3 | **Cartoon.** The same move goes on, Cartoon style. *"Cartoon"* | (continues) | |
-| 22 | 39 | 1:14.3-1:16.3 | **Realistic.** The same move goes on, Realistic style. *"Realistic"* | (continues) | |
+| 20 | 37 | 1:10.4-1:12.4 | **The valley.** The Lauterbrunnen valley from the air. *"One country."* | One continuous drone move across shots 20-22, 35 mm | The Lauterbrunnen valley |
+| 21 | 38 | 1:12.4-1:14.3 | **The valley.** The same move goes on. *"Every valley."* | (continues) | |
+| 22 | 39 | 1:14.3-1:16.3 | **The valley.** The same move goes on. *"Yours to explore."* | (continues) | |
 | 23 | 40 | 1:16.3-1:18.2 | **The drop plane.** The military freighter over the Bernese Alps at golden hour, its ramp open, on the riser. *"Drop in."* | Formation flight beside it, 35 mm | Battle Royale plane |
 
 ### Act IV: everything at once (drop, bars 41-57)

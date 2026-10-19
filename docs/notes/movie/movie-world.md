@@ -23,6 +23,8 @@
   - Looks (mesh + materials, `WorldLook`) are shared by index: a thousand frames of a car hold one mesh.
   - A light or emitter's look is a detached copy of the node (`WorldLook.Template`, `Duplicate(0)`), a new one when
     what shows changes (energy, colour, range, emitting); a ghost duplicates it and replaces it on a change.
+    Energy is keyed to 0.25 and range to 0.5 m: a light whose energy pulses every frame (an airdrop's beacon)
+    made a new copy at every walk, kept for good (75,000 orphan lights and 128 GB in a 100-player match, #837).
   - `WorldRing`: the events of the last `ReplayMinutes`; older ones fold into the starting state, like
     `ReplayRing`'s change-only properties. `Slice` on a grab gives a `WorldTrack`.
 - **Playback:** a clip on the timeline's World row (`Clip.World`, `MovieProject.Worlds`). `WorldGhosts` under the

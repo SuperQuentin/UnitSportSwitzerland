@@ -22,7 +22,7 @@
   leaves under everything outdoors. `ReverbZones.Enclosure`
   (0 open .. 1 indoors) also scales the PS1 voice's built-in SPU tail. `Ambience` (volume setting): cowbells on pasture
   700-2450 m, a Farnell bubble brook near watercourses, per-forest bird species seeded by tile,
-  church bells on the hour at towns < 1.5 km (local clock — the game has none), alpine rockfall.
+  church bells on the hour at towns < 1.5 km (the machine's real local clock, on purpose, not `WorldClock`: #867), alpine rockfall.
   Check: `<godot> --headless --path . -- --soundcheck test_output/soundcheck` writes every bank variant and a 7 s
   rev sweep per voice × profile as WAV, `[soundcheck] RESULT: ok`, FAILED on NaN or clipping.
 - **The water's sounds (#380)**, rendered as the game plays them into `water_*.wav` (with

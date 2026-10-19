@@ -73,7 +73,10 @@
     in the first shrink at every pace: the edge closes faster than anyone runs (26 m/s at pace 0.5).
   - **jump time**: the plane's nearest pass to the spot, ± 1 s, at least 0.7 s from every other bot's.
     Bots leaving as one hit each other at plane speed and crash in the air (seen: a bot dead 1 s
-    after the ramp).
+    after the ramp). A field the doors cannot space 0.7 s apart (99 bots into 48 s) leaves in the order
+    it wanted, evenly over the window (`SpreadJumps`, 0.48 s for 99), on alternate sides of the ramp,
+    4-8 m out and drifting outwards: before, a third left together and 18 crashed; since, 0-7 a drop.
+    A bot's crash logs what it hit (`crashed into`).
   - **the jump**: `BotJump` gives the player's `JumpOut` exit (ramp, a 3 m lateral spread, the plane's
     speed capped at 55 m/s) into the wingsuit. `BotPlane` pushes out any bot still aboard when the
     doors close and sends one state message for all of them.
@@ -82,7 +85,7 @@
     spot. Its height is the lower of the loaded ground and the horizon lattice
     (`BrManager.GroundAt`), since far tiles are not loaded on the server.
   - **canopy**: `Intent.Steer.x` turns towards the spot (positive turns right, lowering the yaw), it
-    brakes the last 15 m, and it drops slowly over the spot. The body lands on foot by itself.
+    brakes the last 30 m, and it drops slowly over the spot. The body lands on foot by itself.
   - **flight controls**: `body.FlyControls` builds the `FlightInput` from `Intent.Steer`, `LookYaw` and
     `LookPitch`. The deploy or cut-away press (`Action`) is true only while the ride is not the one
     wanted (`Intent.Canopy`): a held press toggles canopy and wingsuit every physics step.

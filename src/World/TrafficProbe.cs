@@ -243,14 +243,14 @@ public partial class TrafficProbe : Node
     /// within <see cref="CaptureNear"/> m of the point with a car group (its main head or a
     /// pocket's arrow) that is red with at least <see cref="CaptureQueue"/> cars standing in it
     /// (<see cref="Traffic.Queue"/>, the most of any) and turns green in 3-6 s
-    /// (<c>SignalPlan.State</c> on <c>ClockSync.ServerNow</c>, as the cars read it), frames that
+    /// (<c>SignalPlan.State</c> on <c>SignalLamps.Clock</c>, as the cars read it), frames that
     /// approach from above and saves <c>&lt;png&gt;_1_red.png</c> 2.5 s before the green (still red, before the red and yellow), then
     /// <c>_2_green2s</c>, <c>_3_green4s</c>, <c>_4_green6s</c>, each with the lane's state in the log.
     /// </summary>
     private void Capture()
     {
         if (_captured >= CaptureAt.Length || _traffic.Roads is not { } roads) return;
-        double now = Net.ClockSync.ServerNow;
+        double now = SignalLamps.Clock();
         if (_capture is null)
         {
             int best = CaptureQueue - 1;

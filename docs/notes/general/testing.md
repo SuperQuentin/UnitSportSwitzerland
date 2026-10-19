@@ -138,6 +138,11 @@ row uses `--car 4` (BNR32, grip). `narrow` puts the AE86 out against the trunks 
   background; stop the watchdog with `kill $w`. **Every Godot, server, client, bot or preprocessor run
   goes through `guard_run` or under `guard_watch`.** Exit 137 means "rerun later with more free RAM",
   never "raise the floor".
+- **Memory cap per run**: `guard_run` also sums its own run's memory every `GUARD_MAX_EVERY` (10) s and
+  kills it over `GUARD_MAX_MB` (10240). On macOS that is the footprint (`top`'s MEM, compressed and
+  swapped pages too). Free pages alone hid a leak there: compression and swap kept them above the floor
+  while a Battle Royale client grew to 128 GB (#837). A 137 with `[guard] PID … uses … MB` is a leak to
+  find, not a cap to raise.
 - Process trees on Windows: `taskkill /T` follows Windows parentage only, and a process that Git
   Bash forked is not the Windows child of its bash. So the kill walks the Git Bash tree (`ps -ef`
   pid/ppid) and runs `taskkill /T` on each process, which also takes the real Godot under its

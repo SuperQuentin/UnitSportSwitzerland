@@ -59,7 +59,7 @@ public sealed class Actor
     public System.Func<Vector3, Vector3?> SetPoint { get; init; } = _ => null;
 
     private bool OnRoad => Spec.Drive is Drive.Road or Drive.Follow || Spec.Route != null;
-    private bool Boat => Spec.Board != null;
+    private bool Boat => Spec.Board != null && Spec.Drive != Drive.Fly;
 
     /// <summary>A spot on the surface, in this frame's world space (null: the ground is not in yet).</summary>
     private Vector3? Ground(Spot spot)
@@ -184,7 +184,7 @@ public sealed class Actor
             at.Y = rg;
             _arc = s;
         }
-        else if (Ground(Boat ? Spec.Board!.Value : Spec.At) is { } g) at = g;
+        else if (Ground(Spec.Board ?? Spec.At) is { } g) at = g;
         else return;
 
         // an NPC body anchors its own ground and has no camera; one on foot only stands (on the ground,

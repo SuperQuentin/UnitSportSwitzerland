@@ -90,6 +90,9 @@ public partial class OwnBodyCheck : Node3D
                 break;
             }
             case 6:
+                // the cockpit with your body first, whatever the saved setting says (it is restored at the end)
+                _savedCockpitBody = GameSettings.Current.CockpitBody;
+                GameSettings.Current.CockpitBody = true;
                 Check(_player!.SetRide((RideKind)CarCatalog.First), "mounted a car, in its cockpit with your body");
                 _wait = Settle;
                 break;
@@ -204,8 +207,11 @@ public partial class OwnBodyCheck : Node3D
         GD.Print(image.SavePng(path) == Error.Ok ? $"[ownbody] wrote {path}" : $"[ownbody] FAILED to write {path}");
     }
 
+    private bool? _savedCockpitBody;
+
     private void Finish()
     {
+        if (_savedCockpitBody is { } saved) GameSettings.Current.CockpitBody = saved;
         GD.Print(_failures == 0 ? "[ownbody] RESULT: ok" : $"[ownbody] RESULT: FAILED ({_failures})");
         GetTree().Quit(_failures == 0 ? 0 : 1);
     }
