@@ -84,6 +84,12 @@
   windings), so nobody stands on the missing lid; server and clients build the same. Nor is it an
   occluder (`BuildingOcclusion`, like a building site's open shell). A ruin with no
   wall run to rebuild keeps its solid and its broken merlons.
+- **Fallen stones** (`FallenStones`): under a wall standing on the ground, each column drops one block
+  per 2.5 m it lost (a chance for the rest, 4 at most), seven in ten outward, the rest into the
+  courtyard, rolled up to 2.5 m (further the higher the fall), 0.25-0.8 m, turned and tipped at
+  random, a third of them mossy. The ground is the solid's foot + 0.8 m (`FoundationDepth`, the
+  preprocessor's: the median ground of the footprint), and they sink 0.15 m more, so on a slope some
+  bury and some sit proud. Part of `RuinWalls`, so they collide as drawn: a player climbs the rubble.
 - **Geometry** (appended after the doors): a 0.9 m parapet on every open edge of a flat roof (an
   edge no other flat face shares, with nothing of the solid as high 0.4 m past it; each corner owned
   by one edge) with square merlons, Ticino's notched swallowtails, a ruin's broken ones (35% gone, the
@@ -110,4 +116,4 @@
   it: Château de la Soie, Montorge, la Tour, Morestel (VS), Bossonnens, Montsalvens (FR).
 - **Not yet:** interiors (a castle is not a `BuildingGroup`; its interior is whatever its kind
   plans), OSM multipolygon castles (relations are skipped), a Bernese bailiff castle's Krüppelwalm
-  roof (the roofs are the data's), a ruin's fallen stones at its foot.
+  roof (the roofs are the data's), stones that follow the terrain's own slope.

@@ -9,8 +9,9 @@ namespace UnitSport.Terrain;
 /// ruin as a roofed tower. It is drawn and collided instead as its walls broken down: each wall run
 /// of the solid becomes a slab as thick as a castle wall, cut into 0.8 m columns whose tops follow a
 /// broken line (the corners standing taller than the middles, as they do), capped with mossy stone,
-/// open to the sky inside, so the ground shows within the walls. A pure function of the tile like the
-/// rest of the castle dress: server and clients build the same broken walls and the same collision.
+/// open to the sky inside, so the ground shows within the walls, and what fell off them lies at their
+/// foot as tumbled blocks. A pure function of the tile like the rest of the castle dress: server and
+/// clients build the same broken walls, the same stones and the same collision.
 /// </summary>
 public static partial class BuildingMeshBuilder
 {
@@ -19,10 +20,22 @@ public static partial class BuildingMeshBuilder
     /// <summary>A wall run shorter or lower than this is a step in the TIN, not a wall to rebuild.</summary>
     private const float RuinMinLength = 1.0f, RuinMinHeight = 1.5f;
 
-    private enum RuinFace : byte { Outer, Inner, Cap, Step }
+    /// <summary>
+    /// Mirror of <c>BuildingExtractor.FoundationDepth</c> (tools/TerrainPreprocessor): a solid's base is
+    /// set this far under the median ground of its footprint, so its foot plus this is the ground.
+    /// </summary>
+    private const float FoundationDepth = 0.8f;
+    /// <summary>One fallen block per this many metres a column lost, at most <see cref="StonesPerColumn"/>.</summary>
+    private const float StoneEvery = 2.5f;
+    private const int StonesPerColumn = 4;
 
-    /// <summary>One quad of a rebuilt ruin: its corners wound outward, which face it is, its wall run.</summary>
-    private readonly record struct RuinQuad(Vector3 A, Vector3 B, Vector3 C, Vector3 D, RuinFace Face, WallRun Run);
+    private enum RuinFace : byte { Outer, Inner, Cap, Step, Rubble }
+
+    /// <summary>
+    /// One quad of a rebuilt ruin: its corners wound outward, which face it is, its wall run, and for a
+    /// fallen block its tone (its stone's own shade, moss under 0).
+    /// </summary>
+    private readonly record struct RuinQuad(Vector3 A, Vector3 B, Vector3 C, Vector3 D, RuinFace Face, WallRun Run, float Tone = 1f);
 
     /// <summary>The facade vertices of rebuilt ruins, which the shader dresses as castle walls.</summary>
     private sealed class FacadeSink
@@ -46,6 +59,7 @@ public static partial class BuildingMeshBuilder
     /// to a broken height (a smooth noise along the wall plus a stone-to-stone jitter, dropping up to
     /// 85% of the wall, half as much at its ends), each with its outer face, its inner face a wall's
     /// thickness in, its cap, and the steps between columns; the run's two ends closed (2 cm in, so a corner hides them).
+    /// Under a wall standing on the ground, what each column lost lies at its foot (<see cref="FallenStones"/>).
     /// </summary>
     private static List<RuinQuad> RuinWalls(Building b, int index, PlanBox? box)
     {
@@ -99,9 +113,49 @@ public static partial class BuildingMeshBuilder
                 float prev = k > 0 ? tops[k - 1] : run.Bottom, us = k > 0 ? u0 : u0 + 0.02f;
                 if (y > prev + 0.01f)
                     quads.Add(new RuinQuad(P(us, prev, -thick), P(us, prev, 0f), P(us, y, 0f), P(us, y, -thick), RuinFace.Step, run));
+                // what this column lost, fallen at its foot; a wall high on the solid drops onto a roof
+                // that is gone, so only a wall on the ground keeps its stones
+                if (run.Bottom < b.MinY + CastleFootReach)
+                    FallenStones(quads, run, key + "|s" + k, b.MinY + FoundationDepth, run.Top - y, u0, w, thick, P);
             }
         }
         return quads;
+    }
+
+    /// <summary>
+    /// The blocks a broken column dropped: one per <see cref="StoneEvery"/> metres it lost (a stone-to-
+    /// stone chance for the rest), at most <see cref="StonesPerColumn"/>; seven in ten fell outward,
+    /// the rest into the courtyard; the higher the fall the further they rolled (up to 2.5 m); each
+    /// 0.25-0.8 m, squarish, turned and tipped at random and half sunk in the ground, which the
+    /// solid's foot only knows to its footprint's median.
+    /// </summary>
+    private static void FallenStones(List<RuinQuad> quads, WallRun run, string key, float ground, float lost,
+        float u0, float w, float thick, Func<float, float, float, Vector3> at)
+    {
+        float H(int stone, int i) => (float)Core.Fnv.Unit(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{key}|{stone}|{i}"));
+        int count = Mathf.Min(StonesPerColumn, Mathf.FloorToInt(lost / StoneEvery + H(-1, 0)));
+        var along = run.Tangent;
+        for (int s = 0; s < count; s++)
+        {
+            bool inside = H(s, 1) < 0.3f;
+            float size = 0.25f + 0.55f * H(s, 2) * H(s, 2);
+            var half = new Vector3(size * (0.8f + 0.5f * H(s, 3)), size * (0.45f + 0.35f * H(s, 4)), size * (0.7f + 0.5f * H(s, 5))) * 0.5f;
+            float dist = 0.1f + H(s, 6) * Mathf.Min(2.5f, 0.4f + lost * 0.25f) + half.Z;
+            float out_ = inside ? -thick - dist : dist;
+            // sunk: its bottom 30% of its height under the ground, and as much again on a slope
+            var centre = at(u0 + w * H(s, 7), ground + half.Y * 0.4f - 0.15f, out_);
+            var basis = new Basis(Vector3.Up, H(s, 8) * Mathf.Tau) * new Basis(Vector3.Right, (H(s, 9) - 0.5f) * 0.7f)
+                * new Basis(Vector3.Forward, (H(s, 10) - 0.5f) * 0.5f);
+            // a stone's shade, a mossy one now and then (a negative tone)
+            float tone = (0.72f + 0.38f * H(s, 11)) * (H(s, 12) < 0.35f ? -1f : 1f);
+            Vector3 C(float x, float y, float z) => centre + basis * new Vector3(x * half.X, y * half.Y, z * half.Z);
+            // five faces: the bottom is in the ground
+            quads.Add(new RuinQuad(C(-1, 1, -1), C(1, 1, -1), C(1, 1, 1), C(-1, 1, 1), RuinFace.Rubble, run, tone));
+            quads.Add(new RuinQuad(C(-1, -1, 1), C(1, -1, 1), C(1, 1, 1), C(-1, 1, 1), RuinFace.Rubble, run, tone * 0.9f));
+            quads.Add(new RuinQuad(C(1, -1, -1), C(-1, -1, -1), C(-1, 1, -1), C(1, 1, -1), RuinFace.Rubble, run, tone * 0.9f));
+            quads.Add(new RuinQuad(C(1, -1, 1), C(1, -1, -1), C(1, 1, -1), C(1, 1, 1), RuinFace.Rubble, run, tone * 0.82f));
+            quads.Add(new RuinQuad(C(-1, -1, -1), C(-1, -1, 1), C(-1, 1, 1), C(-1, 1, -1), RuinFace.Rubble, run, tone * 0.82f));
+        }
     }
 
     /// <summary>
@@ -115,8 +169,17 @@ public static partial class BuildingMeshBuilder
         var wall = dress.Wall.SrgbToLinear();
         var cap = (dress.Wall * new Color(0.78f, 0.86f, 0.70f)).SrgbToLinear();
         var broken = (dress.Wall * 0.8f).SrgbToLinear();
+        var moss = new Color(0.62f, 0.74f, 0.52f);
         foreach (var q in RuinWalls(b, index, box))
         {
+            // a fallen block: the wall's stone in its own shade, some of them grown over
+            if (q.Face == RuinFace.Rubble)
+            {
+                var stone = q.Tone < 0f ? dress.Wall * moss * -q.Tone : dress.Wall * q.Tone;
+                stone.A = 1f;
+                Quad(v, c, f, q.A, q.B, q.C, q.D, stone.SrgbToLinear());
+                continue;
+            }
             // the tops gone green with moss; the broken faces between them bare, darker stone
             if (q.Face is RuinFace.Cap or RuinFace.Step)
             {
