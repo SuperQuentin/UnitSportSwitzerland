@@ -1,0 +1,224 @@
+<!doctype html>
+<!-- Served at /map.html by Caddy on a deployed server (#896, docs/notes/net/live-map.md). Reads players.json, which the
+     game server rewrites every 2 s (--livemap-file), and antennas-4g.json, made by tools/deploy/antennas.py at deploy. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Live Map · UnitSport Switzerland</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<style>
+/* the status page's alpenglow palette (index.html), over a darkened swisstopo map */
+:root {
+  --bg: #120c14; --text: #fbf4ee; --muted: #c2b3b0; --dim: #8d7e80;
+  --glow: #ff7a45; --glow2: #ffb36b; --rose: #e0567a; --ok: #4fe08a; --off: #8d7e80;
+  --glass: rgba(26, 16, 26, .82); --line: rgba(255, 220, 200, .14);
+  --swisscom: #3987e5; --sunrise: #ff5a5f; --salt: #2fc28a;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+#map { position: fixed; inset: 0; background: #0e0a10; }
+/* swisstopo's grey map, turned to night: the coverage and the players are what glows */
+.leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.78) contrast(.92) saturate(.6); }
+.leaflet-control-attribution { background: rgba(18, 12, 20, .7) !important; color: var(--dim) !important; }
+.leaflet-control-attribution a { color: var(--muted) !important; }
+.leaflet-bar a { background: var(--glass) !important; color: var(--text) !important; border-color: var(--line) !important; }
+
+.panel { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: 12px; z-index: 1000; width: min(320px, calc(100vw - 24px));
+  max-height: calc(100% - 24px); overflow: auto; background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--line); border-radius: 18px; padding: 16px; display: grid; gap: 14px; }
+.top { display: flex; align-items: center; gap: 10px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: .02em; text-decoration: none; color: inherit; }
+.brand i { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg, var(--glow), var(--rose)); display: grid; place-items: center; }
+.top a.back { margin-left: auto; color: var(--muted); font-size: 13px; }
+.status { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+.status b { width: 9px; height: 9px; border-radius: 50%; background: var(--off); }
+.status.on b { background: var(--ok); box-shadow: 0 0 10px var(--ok); }
+h2 { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); margin: 0 0 6px; font-weight: 700; }
+.toggle { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; margin: 0 0 6px; border-radius: 12px;
+  border: 1px solid var(--line); background: transparent; color: var(--muted); font: inherit; cursor: pointer; text-align: left; }
+.toggle:hover { color: var(--text); }
+.toggle[aria-pressed="true"] { color: var(--text); background: rgba(255, 255, 255, .06); border-color: rgba(255, 220, 200, .32); }
+.toggle .sw { width: 12px; height: 12px; border-radius: 4px; flex: none; }
+.toggle .n { margin-left: auto; font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.toggle:focus-visible, .who:focus-visible { outline: 2px solid var(--glow2); outline-offset: 2px; }
+.players { display: grid; gap: 4px; }
+select { width: 100%; margin: 0 0 8px; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--line); background: rgba(18, 12, 20, .9);
+  color: var(--text); font: inherit; }
+select:focus-visible { outline: 2px solid var(--glow2); outline-offset: 2px; }
+.via { color: var(--muted); font-size: 13px; margin: 0 0 8px; }
+.via b { color: var(--text); font-weight: 600; }
+.who { display: flex; align-items: baseline; gap: 8px; padding: 6px 8px; border-radius: 10px; border: 0; background: transparent; color: var(--text);
+  font: inherit; text-align: left; cursor: pointer; width: 100%; }
+.who:hover { background: rgba(255, 255, 255, .06); }
+.who .ride { margin-left: auto; color: var(--dim); font-size: 12px; white-space: nowrap; }
+.who.bot { color: var(--muted); }
+.empty, .note { color: var(--dim); font-size: 13px; margin: 0; }
+.tag { background: rgba(18, 12, 20, .85) !important; color: var(--text) !important; border: 1px solid var(--line) !important;
+  border-radius: 8px !important; font: 600 12px system-ui, sans-serif !important; padding: 2px 7px !important; box-shadow: none !important; }
+.tag::before { display: none; }
+@media (prefers-reduced-motion: reduce) { .leaflet-zoom-anim .leaflet-zoom-animated { transition: none !important; } }
+</style>
+</head>
+<body>
+<div id="map" role="application" aria-label="Live map of Switzerland"></div>
+<aside class="panel">
+  <div class="top">
+    <a class="brand" href="./"><i><svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true"><path d="M13 4h6v9h9v6h-9v9h-6v-9H4v-6h9z" fill="#fff"/></svg></i>Live map</a>
+    <a class="back" href="./">Server page</a>
+  </div>
+  <div class="status" id="status"><b></b><span>Connecting…</span></div>
+  <section>
+    <h2>4G coverage</h2>
+    <select id="provider" aria-label="Your mobile provider"><option value="">Pick your provider…</option></select>
+    <p class="via" id="via" hidden></p>
+    <div id="toggles"></div>
+    <p class="note" id="antnote">Simulated from each outdoor 4G site's power class (2 bars and up, open terrain, no hills).</p>
+  </section>
+  <section>
+    <h2>Players</h2>
+    <div class="players" id="players"><p class="empty">Nobody yet.</p></div>
+  </section>
+</aside>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+(() => {
+  // ---------- the map: swisstopo's grey national map, Web Mercator tiles ----------
+  const map = L.map("map", { zoomControl: false, minZoom: 7, maxZoom: 18, maxBounds: [[45.4, 5.4], [48.3, 11.1]], maxBoundsViscosity: 0.8 })
+    .fitBounds([[45.82, 5.96], [47.81, 10.49]]);
+  L.control.zoom({ position: "bottomright" }).addTo(map);
+  L.tileLayer("https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-grau/default/current/3857/{z}/{x}/{y}.jpeg", {
+    maxZoom: 18, attribution: '&copy; <a href="https://www.swisstopo.admin.ch/">swisstopo</a> · antennas &copy; <a href="https://www.bakom.admin.ch/">OFCOM</a>',
+  }).addTo(map);
+  const canvas = L.canvas({ padding: 0.3 });
+
+  // ---------- 4G coverage, one layer per operator ----------
+  // 2-bar reach of a 4G site by its power class (up to 6 W, 500 W, 5,000 W, over 5,000 W ERP): log-distance
+  // path loss 122 + 36·log10(km) from the class's power, the same model as the coverage simulator
+  const REACH_M = [600, 2000, 3800, 4600];
+  const OPS = [["Swisscom", "--swisscom"], ["Sunrise", "--sunrise"], ["Salt", "--salt"]];
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const layers = {};
+  let shown = {};
+  try { shown = JSON.parse(localStorage.getItem("livemap-ops") || "{}"); } catch (_) {}
+  // a shared link names the layers: map.html#4g=Swisscom,Salt
+  const named = /(?:^#|&)4g=([^&]*)/.exec(location.hash);
+  if (named) { shown = {}; for (const op of decodeURIComponent(named[1]).split(",")) shown[op.trim()] = true; }
+  const toggles = document.getElementById("toggles");
+  for (const [name, token] of OPS) {
+    const b = document.createElement("button");
+    b.className = "toggle"; b.type = "button"; b.id = "op-" + name;
+    b.innerHTML = `<span class="sw" style="background:var(${token})"></span>${name}<span class="n" id="n-${name}">…</span>`;
+    b.setAttribute("aria-pressed", "false");
+    b.addEventListener("click", () => setShown(name, !shown[name]));
+    toggles.appendChild(b);
+  }
+  function setShown(name, on) {
+    shown[name] = on;
+    document.getElementById("op-" + name).setAttribute("aria-pressed", String(on));
+    const layer = layers[name];
+    if (layer) on ? layer.addTo(map) : layer.remove();
+    try { localStorage.setItem("livemap-ops", JSON.stringify(shown)); } catch (_) {}
+  }
+  fetch("antennas-4g.json").then(r => r.ok ? r.json() : Promise.reject(r.status)).then(data => {
+    for (const [name, token] of OPS) {
+      const colour = css(token), sites = data.sites[name] || [];
+      layers[name] = L.layerGroup(sites.map(([lat, lon, p]) => L.circle([lat, lon], {
+        renderer: canvas, radius: REACH_M[p] ?? 2000, stroke: false, fillColor: colour, fillOpacity: 0.11, interactive: false,
+      })));
+      document.getElementById("n-" + name).textContent = sites.length.toLocaleString("en-US") + " sites";
+      setShown(name, !!shown[name]);
+    }
+    providers(data.providers || {});
+    document.getElementById("antnote").textContent =
+      `Simulated from each outdoor 4G site's power class (2 bars and up, open terrain, no hills). OFCOM data of ${data.fetched}.`;
+  }).catch(() => {
+    document.getElementById("antnote").textContent = "The antenna data is not on this server yet (tools/deploy/antennas.py).";
+    for (const [name] of OPS) { document.getElementById("op-" + name).disabled = true; document.getElementById("n-" + name).textContent = "—"; }
+  });
+
+  // ---------- your provider: the brand you pay, the antennas it uses ----------
+  function providers(byNetwork) {
+    const sel = document.getElementById("provider"), via = document.getElementById("via");
+    const hostOf = {};
+    for (const [network, { own = [], rent = [] }] of Object.entries(byNetwork)) {
+      const g = document.createElement("optgroup"); g.label = `${network}'s antennas`;
+      for (const name of [...own, ...rent]) { g.append(new Option(name, name)); hostOf[name] = { network, own: own.includes(name) }; }
+      sel.append(g);
+    }
+    if (!Object.keys(hostOf).length) { sel.hidden = true; return; }
+    sel.addEventListener("change", () => {
+      const pick = hostOf[sel.value];
+      via.hidden = !pick;
+      if (!pick) return;
+      // only the network it rides on
+      for (const [name] of OPS) setShown(name, name === pick.network);
+      via.textContent = "";
+      const b = document.createElement("b");
+      b.textContent = sel.value === pick.network ? "owns its antennas" : `uses ${pick.network}'s antennas`;
+      via.append(`${sel.value} `, b, pick.own && sel.value !== pick.network ? ` (a ${pick.network} brand).` : ".");
+    });
+  }
+
+  // ---------- players, every 2 s ----------
+  // LV95 to WGS84, swisstopo's approximate formulas (about a metre off)
+  function wgs84(e, n) {
+    const y = (e - 2600000) / 1e6, x = (n - 1200000) / 1e6;
+    const lon = 2.6779094 + 4.728982 * y + 0.791484 * y * x + 0.1306 * y * x * x - 0.0436 * y ** 3;
+    const lat = 16.9023892 + 3.238272 * x - 0.270978 * y * y - 0.002528 * x * x - 0.0447 * y * y * x - 0.0140 * x ** 3;
+    return [lat * 100 / 36, lon * 100 / 36];
+  }
+  const ride = r => String(r || "on foot");
+  const markers = new Map();
+  const status = document.getElementById("status"), list = document.getElementById("players");
+  let fitted = false;
+
+  function show(data) {
+    const age = data ? Date.now() / 1000 - data.updated : Infinity;
+    const online = !!data && data.online && age < 60;
+    status.className = "status" + (online ? " on" : "");
+    const players = online ? data.players : [];
+    const humans = players.filter(p => !p.bot).length, bots = players.length - humans;
+    status.querySelector("span").textContent = !data ? "No live data on this server"
+      : !online ? "Server offline"
+      : `${humans} player${humans === 1 ? "" : "s"}${bots ? ` · ${bots} bot${bots === 1 ? "" : "s"}` : ""} · live`;
+
+    const seen = new Set();
+    for (const p of players) {
+      const key = (p.bot ? "bot:" : "") + p.name;
+      seen.add(key);
+      const at = wgs84(p.e, p.n);
+      let m = markers.get(key);
+      if (!m) {
+        m = L.circleMarker(at, { radius: p.bot ? 5 : 7, color: "#fff", weight: 2, fillColor: p.bot ? css("--dim") : css("--glow"), fillOpacity: 1 })
+          .bindTooltip(p.name, { permanent: true, direction: "top", offset: [0, -8], className: "tag" }).addTo(map);
+        markers.set(key, m);
+      } else m.setLatLng(at);
+      m.player = p;
+    }
+    for (const [key, m] of markers) if (!seen.has(key)) { m.remove(); markers.delete(key); }
+    if (!fitted && players.length) { fitted = true; if (players.length === 1) map.setView(wgs84(players[0].e, players[0].n), 12); }
+
+    list.innerHTML = "";
+    if (!players.length) { list.innerHTML = `<p class="empty">${online ? "Nobody on the server." : "Nobody yet."}</p>`; return; }
+    for (const p of [...players].sort((a, b) => a.bot - b.bot || a.name.localeCompare(b.name))) {
+      const b = document.createElement("button");
+      b.className = "who" + (p.bot ? " bot" : ""); b.type = "button";
+      b.innerHTML = `<span></span><span class="ride"></span>`;
+      b.firstChild.textContent = p.bot ? `${p.name} (bot)` : p.name;
+      b.lastChild.textContent = `${ride(p.ride)} · ${Math.round(p.alt)} m`;
+      b.addEventListener("click", () => map.flyTo(wgs84(p.e, p.n), Math.max(map.getZoom(), 14)));
+      list.appendChild(b);
+    }
+  }
+  async function poll() {
+    try { const r = await fetch("players.json", { cache: "no-store" }); show(r.ok ? await r.json() : null); }
+    catch (_) { show(null); }
+  }
+  poll(); setInterval(poll, 2000);
+})();
+</script>
+</body>
+</html>

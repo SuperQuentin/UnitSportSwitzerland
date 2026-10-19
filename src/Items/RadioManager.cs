@@ -220,6 +220,10 @@ public partial class RadioManager : Node3D, Core.IOriginContainer
             best = church;
             bestDist = church.Source.GlobalPosition.DistanceTo(point);
         }
+        // a stadium's concert (#885): the whole bowl dances to it
+        if (best == null && Concert.ConcertRig.MusicNear(point) is { } concert
+            && (!heard || concert.Source is RadioSpeaker { Playing: true }))
+            best = concert;
         if (Players == null) return best;
         double now = ClockSync.ServerNow;
         foreach (var p in Players())

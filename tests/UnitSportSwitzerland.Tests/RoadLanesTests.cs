@@ -151,8 +151,9 @@ public class RoadLanesTests
     public void The_row_at_a_line_end_is_the_short_way_there_not_the_one_covering_the_line()
     {
         string path = Path.Combine(Path.GetTempPath(), "overlay-700-" + Guid.NewGuid().ToString("N") + ".tsv");
+        // invariant, as the tools write the overlay: on a French machine "300,0" was skipped by the reader
         static string Row(double from, double to, string lanesFwd, string turnFwd) =>
-            $"{{u}}\t0\t{from:F1}\t{to:F1}\t1\t+\tsecondary\t\t\t{lanesFwd}\t\t\t\t\t\t\t{turnFwd}\t\t0\t0";
+            FormattableString.Invariant($"{{u}}\t0\t{from:F1}\t{to:F1}\t1\t+\tsecondary\t\t\t{lanesFwd}\t\t\t\t\t\t\t{turnFwd}\t\t0\t0");
         File.WriteAllLines(path, ["uuid\tpart", Row(0, 300, "", ""), Row(300, 450, "3", "left|left|through;right")]);
         try
         {

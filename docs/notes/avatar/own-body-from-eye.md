@@ -15,6 +15,9 @@
   bit 15 cast nothing, on layer 1 a full shadow). So `OwnBody.See` also keeps a `Shadow` child: a
   `ShadowsOnly` twin on layer 1 sharing the figure's mesh (synced each call, so call it after the
   pose sets the mesh). No camera draws a `ShadowsOnly` instance; the twin only casts.
+- The twin is never ghosted: `DoorwayGhosts.Collect` skips `ShadowsOnly` meshes. Its ghost (which
+  casts nothing) drew it as a plain mesh on layer 1, so by an open door the portal showed your own
+  head a second time.
 - What hangs on the figure (the radio on the back) follows its layer; the item in the hand
   (`HeldItemVisual._inHand`) goes on the layer too outside VR, the eye having the viewmodel. A shot
   from first person still leaves from the eye (`ItemEvents.MuzzleOf` ignores the hand while
