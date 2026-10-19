@@ -50,7 +50,7 @@ public partial class BrManager
 
     /// <summary>Whether recalls are still open now (before zone <see cref="RecallBefore"/>, in a squad match).</summary>
     private bool RecallOpen => _state.Phase == BrPhase.Playing && _state.TeamSize > 1 && _state.RecallPoints != null
-                               && _state.Zone().At(ClockSync.ServerNow - _state.Started).Phase < RecallBefore;
+                               && _state.Zone().At(ClockSync.SimNow - _state.Started).Phase < RecallBefore;
 
     // ---- server ---------------------------------------------------------------------------------
 

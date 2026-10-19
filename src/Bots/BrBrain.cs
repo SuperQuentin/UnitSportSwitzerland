@@ -4,6 +4,7 @@ using System.Linq;
 using Godot;
 using UnitSport.BattleRoyale;
 using UnitSport.Items;
+using UnitSport.Vehicles;
 
 namespace UnitSport.Bots;
 
@@ -42,12 +43,16 @@ public sealed class BrBrain : IBotBrain
     /// <summary>Where it means to land (world), chosen when it boarded.</summary>
     public Vector3? DropTarget { get; init; }
     /// <summary>The server clock at which it jumps: the plane's nearest pass to <see cref="DropTarget"/>.</summary>
-    public double JumpAt { get; init; }
+    public double JumpAt { get; set; }
 
     /// <summary>The canopy opens this high over the ground (it takes a second or two to slow), or lower once over the spot.</summary>
     private const float OpenAt = 300f, OpenOverSpot = 180f;
-    /// <summary>The last metres under the canopy are flown on the brakes: a soft touchdown.</summary>
-    private const float FlareAt = 15f;
+    /// <summary>
+    /// The last metres under the canopy are flown on the brakes: a soft touchdown (5 m/s, under the
+    /// canopy's 9 m/s crash speed). From 30 m: the height it reads is the coarse ground or the 100 m
+    /// lattice far from its collision, metres off (seen: a bot landing at 9.4 m/s, flared too late).
+    /// </summary>
+    private const float FlareAt = 30f;
 
     public BrBrain(BrManager br, BrCrates? crates, int seed)
     {
@@ -56,7 +61,8 @@ public sealed class BrBrain : IBotBrain
         _rng = new Random(seed);
     }
 
-    private static double ServerNow => Net.ClockSync.ServerNow;
+    /// <summary>The match timeline, simulated seconds like every stamp in the match state (#855).</summary>
+    private static double SimNow => Net.ClockSync.SimNow;
 
     public double Think(Bot bot, double now)
     {
@@ -73,19 +79,35 @@ public sealed class BrBrain : IBotBrain
         bot.Intent.Steer = Vector2.Zero;
         var space = bot.World.Space;
         bot.Senses.Look(bot, bot.World.Bodies(), space, now);
+        // at the wheel (#837 phase 3): drive on, or brake and get out (arrived, stuck, or an enemy close)
+        if (BotDriving.Mounted(bot)) return Driving(bot, now);
+        // a car or a bike seen on the way is remembered, as a player remembers where one stood
+        if (now >= _lookCarAt)
+        {
+            _lookCarAt = now + 1.5;
+            if (BotDriving.Spot(bot, BotSenses.SightRange) is { } seen
+                && (_knownCar is not { } known || !GodotObject.IsInstanceValid(known)
+                    || seen.GlobalPosition.DistanceTo(bot.Body.GlobalPosition) < known.GlobalPosition.DistanceTo(bot.Body.GlobalPosition)))
+                _knownCar = seen;
+        }
         var s = Situation(bot, now, out var enemy, out var downed, out var crate, out var zone);
-        _status = FormattableString.Invariant($"goal {Goal} inside {zone.Inside:F2} out {s.OutsideBy:F0} run {s.ZoneRunNeeded:F0} enemy {s.EnemyDistance:F0} crate {s.CrateDistance:F0} stuck {bot.Nav.Stuck} open {bot.Nav.LastOpen:F1} route {(_route == null ? "-" : $"{_routeNext}/{_route.Count}")} roads {(_br.Roads != null)} follow {bot.Nav.Following}");
+        _status = FormattableString.Invariant($"goal {Goal} inside {zone.Inside:F2} out {s.OutsideBy:F0} run {s.ZoneRunNeeded:F0} enemy {s.EnemyDistance:F0} crate {s.CrateDistance:F0} stuck {bot.Nav.Stuck} open {bot.Nav.LastOpen:F1} route {(_route == null ? "-" : $"{_routeNext}/{_route.Count}")} roads {(_br.Roads != null)} follow {bot.Nav.Following} car {(_car != null && GodotObject.IsInstanceValid(_car) ? _car.Name : "-")}");
         var goal = BrTactics.Choose(s, Goal);
         if (goal != Goal) GD.Print($"[bots] {body.Name} \"{bot.Profile.Name}\" {Goal} -> {goal}");
         Goal = goal;
         if (goal is not (BrGoal.Fight or BrGoal.Finish)) bot.Intent.FaceYaw = null;
+        if (goal != BrGoal.Zone) _zoneGoal = null;
         // a UFO sighting (#863) when nothing presses: look up and wave, or run out from under a beam
         if (goal is BrGoal.Roam or BrGoal.Loot or BrGoal.Investigate && BotUfo.React(bot, now)) return 0.25;
 
         switch (goal)
         {
             case BrGoal.Zone:
-                GoTo(bot, zone.Safe, run: true, 4f, space, now);
+                // a steady goal: Safe follows the bot (the nearest spot well inside), and a goal that moves
+                // every thought restarted MoveTo's headway clock, so a bot circling in a courtyard was never
+                // found stuck (seen: three bots running round 5-10 m patches until the zone killed them)
+                if (_zoneGoal is not { } zg || Flat(zg - zone.Safe) > 40f) _zoneGoal = zone.Safe;
+                GoTo(bot, _zoneGoal.Value, run: true, 4f, space, now);
                 return 0.3;
             case BrGoal.Fight:
                 Fight(bot, enemy, s, space, now);
@@ -129,7 +151,7 @@ public sealed class BrBrain : IBotBrain
         if (me is { Jumped: false })
         {
             bot.Intent = BotIntent.Stand;
-            if (ServerNow >= JumpAt) _br.BotJump(bot);
+            if (SimNow >= JumpAt) _br.BotJump(bot);
             return true;
         }
         var ride = body.Ride;
@@ -203,7 +225,7 @@ public sealed class BrBrain : IBotBrain
         float outsideBy = 0f, runNeeded = 0f;
         if (body.Origin is { } origin && state.Phase == BrPhase.Playing)
         {
-            var z = state.Zone().At(ServerNow - state.Started);
+            var z = state.Zone().At(SimNow - state.Started);
             var (pe, pn) = origin.ToLv95(body.GlobalPosition);
             var at = new Vector2((float)(pe - state.AreaE), (float)(pn - state.AreaN));
             // the circle it must be in: the next one once shown, else the current one
@@ -233,7 +255,7 @@ public sealed class BrBrain : IBotBrain
             _near.Clear();
             foreach (var c in _crates.All)
             {
-                if (_emptied.Contains(c.Id) || c.Locked || ServerNow < c.LandsAt || _crates.WorldOf(c, body.GlobalPosition.Y) is not { } at) continue;
+                if (_emptied.Contains(c.Id) || c.Locked || SimNow < c.LandsAt || _crates.WorldOf(c, body.GlobalPosition.Y) is not { } at) continue;
                 float d = new Vector2(at.X - body.GlobalPosition.X, at.Z - body.GlobalPosition.Z).Length();
                 if (d <= BrTactics.CrateDraw) _near.Add((c, at, d));
             }
@@ -358,6 +380,69 @@ public sealed class BrBrain : IBotBrain
         if (!BotSkills.TakeOne(bot, _crates, c)) _emptied.Add(c.Id);
     }
 
+    // ---- vehicles (#837 phase 3) ---------------------------------------------------------------------
+
+    /// <summary>
+    /// A trip longer than this is worth a car or a bike, when one is in sight within <see cref="CarSpot"/>
+    /// (a match has a car or two a square kilometre: at 70 m no bot ever saw one at the right moment).
+    /// </summary>
+    private const float DriveFrom = 300f, CarSpot = 150f;
+    /// <summary>An enemy this close and it gets out to fight (nobody shoots from the wheel).</summary>
+    private const float BailFrom = 80f;
+    private VehicleBody? _car;
+    private double _carSince;
+    /// <summary>Seconds it goes after a car before it gives up on it, plus one per 4 m it was off.</summary>
+    private const double CarPatience = 25;
+    private double _carPatience;
+    /// <summary>A car further off than this share of the trip is no shortcut.</summary>
+    private const float CarShare = 0.4f;
+    private Vector3? _travel;
+    /// <summary>Where it runs to while the zone is the goal, kept until <c>ZoneView.Safe</c> is 40 m off it.</summary>
+    private Vector3? _zoneGoal;
+    private double _noCarUntil;
+    /// <summary>The nearest car or bike it has seen (<see cref="BotDriving.Spot"/> every 1.5 s on foot).</summary>
+    private VehicleBody? _knownCar;
+    private double _lookCarAt;
+    /// <summary>A remembered car is worth this walk, and not the wrong way.</summary>
+    private const float CarDetour = 300f;
+
+    /// <summary>The remembered car, when it is still there, within <see cref="CarDetour"/> and not behind it on the way to <paramref name="target"/>.</summary>
+    private VehicleBody? Remembered(Bot bot, Vector3 target)
+    {
+        if (_knownCar is not { } car || !GodotObject.IsInstanceValid(car) || VehicleManager.Instance?.Enterable(car) != true) return _knownCar = null;
+        var pos = bot.Body.GlobalPosition;
+        var toCar = (car.GlobalPosition - pos) with { Y = 0 };
+        var toGoal = (target - pos) with { Y = 0 };
+        if (toCar.Length() > CarDetour) return null;
+        return toCar.Length() < 40f || toCar.Normalized().Dot(toGoal.Normalized()) > -0.2f ? car : null;
+    }
+
+    /// <summary>In a vehicle: towards where it was going; out on arrival, when stuck, or with an enemy close.</summary>
+    private double Driving(Bot bot, double now)
+    {
+        var state = _br.State;
+        var me = state.Find(bot.Id);
+        bool enemyClose = false;
+        foreach (var x in bot.Senses.Seen)
+            if (!x.Downed && x.Distance < BailFrom && me != null && state.Find(x.Id) is { Alive: true } e && BrState.Hostile(me, e)) enemyClose = true;
+        bot.Intent.FaceYaw = null;
+        bot.Intent.FireAt = null;
+        if (_travel is not { } goal || enemyClose || bot.Drive.Stopping)
+        {
+            if (BotDriving.GetOut(bot)) _travel = null;
+            _status = $"goal Drive out{(enemyClose ? " (enemy)" : "")}";
+            return 0.15;
+        }
+        var progress = BotDriving.Towards(bot, goal, now);
+        if (progress is BotDriving.Progress.Arrived or BotDriving.Progress.Failed)
+        {
+            bot.Drive.Stopping = true;
+            if (progress == BotDriving.Progress.Failed) _noCarUntil = now + 30;   // walk for a while
+        }
+        _status = $"goal Drive {progress} speed {bot.Body.RideSpeed:F0}";
+        return 0.15;
+    }
+
     // ---- the streets --------------------------------------------------------------------------------
 
     /// <summary>Further than this, a bot walks the streets (<see cref="BrManager.Roads"/>) rather than straight.</summary>
@@ -377,7 +462,51 @@ public sealed class BrBrain : IBotBrain
     {
         var pos = bot.Body.GlobalPosition;
         float straight = new Vector2(target.X - pos.X, target.Z - pos.Z).Length();
-        if (straight > StreetsFrom && _br.Roads is { } roads && bot.Body.Origin is { } origin)
+        // far, and a car or a bike in sight or remembered not far off the way: go and take it, then drive there
+        if (straight > DriveFrom && now >= _noCarUntil)
+        {
+            if (_car == null || !GodotObject.IsInstanceValid(_car))
+            {
+                _car = BotDriving.Spot(bot, CarSpot) ?? Remembered(bot, target);
+                // a car not much nearer than the goal is no shortcut
+                if (_car != null && _car.GlobalPosition.DistanceTo(pos) > straight * CarShare) _car = null;
+                _carSince = now;
+                // patience for the walk there too: a remembered car can be 100 m off along the streets
+                if (_car != null) _carPatience = CarPatience + _car.GlobalPosition.DistanceTo(pos) / 4f;
+                if (_car != null) GD.Print(FormattableString.Invariant($"[bots] {bot.Body.Name} \"{bot.Profile.Name}\" goes for {_car.Name} ({_car.Kind}) {_car.GlobalPosition.DistanceTo(pos):F0} m off, {straight:F0} m to go"));
+            }
+            // a car it cannot get to (behind a fence, across a river) is given up, and it walks a while:
+            // without this, bots stood against a wall going for a car while the zone closed on them
+            if (_car != null && (now - _carSince > _carPatience || bot.Nav.Stuck >= 3))
+            {
+                GD.Print($"[bots] {bot.Body.Name} \"{bot.Profile.Name}\" gives up {_car.Name} (stuck {bot.Nav.Stuck})");
+                if (_knownCar == _car) _knownCar = null;
+                _car = null;
+                _noCarUntil = now + 60;
+                bot.Nav.Stuck = 0;
+            }
+            if (_car != null)
+            {
+                var carAt = _car.GlobalPosition;
+                // far from it: along the streets (GoTo's own), close: to its door and in
+                bool walked = new Vector2(carAt.X - pos.X, carAt.Z - pos.Z).Length() > 30f && Streets(bot, carAt, space, now);
+                if (!walked && BotDriving.GetIn(bot, _car, space, now)) { _travel = target; _car = null; }
+                // at its door and still not in: someone was quicker, or it cannot be claimed; walk
+                else if (!walked && bot.Intent.Wish == Vector3.Zero) { _car = null; _noCarUntil = now + 10; }
+                if (_car != null && (!GodotObject.IsInstanceValid(_car) || VehicleManager.Instance?.Enterable(_car) != true)) _car = null;
+                return false;
+            }
+        }
+        else _car = null;   // a short trip now (the goal changed, or it came close): no car needed
+        if (straight > StreetsFrom && Streets(bot, target, space, now, run)) return false;
+        return BotSkills.MoveTo(bot, target, run, arrive, space, now);
+    }
+
+    /// <summary>One step along the streets to <paramref name="target"/>; false when there is no street route (walk straight).</summary>
+    private bool Streets(Bot bot, Vector3 target, PhysicsDirectSpaceState3D space, double now, bool run = true)
+    {
+        var pos = bot.Body.GlobalPosition;
+        if (_br.Roads is { } roads && bot.Body.Origin is { } origin)
         {
             // a new goal, or a stale route: plan again (at most every 10 s for the same goal)
             if (_routeGoal is not { } g || g.DistanceTo(target) > 40f || (_route == null && now - _routeAt > 10))
@@ -397,10 +526,10 @@ public sealed class BrBrain : IBotBrain
                 for (int k = route.Count - 1; k > _routeNext; k--)
                     if (Flat(route[k] - pos) < Flat(route[_routeNext] - pos) && Flat(route[k] - pos) < 25f) { _routeNext = k; break; }
                 if (BotSkills.MoveTo(bot, route[_routeNext], run, 4f, space, now)) _routeNext++;
-                return false;
+                return true;
             }
         }
-        return BotSkills.MoveTo(bot, target, run, arrive, space, now);
+        return false;
     }
 
     private static float Flat(Vector3 v) => new Vector2(v.X, v.Z).Length();
