@@ -118,6 +118,7 @@ public class ClockDisciplineTests
         ["src/Items/Fishing/FishingVisuals.cs"] = "presentation: float and line animation",
         ["src/Items/InventoryUi.cs"] = "presentation: panel timeouts and the drag halo's pulse",
         ["src/Items/ItemController.cs"] = "presentation: the held item's idle breath sway",
+        ["src/Trailer/Actor.cs"] = "presentation: a film actor's held radio starts its CD on the server's real clock, as a player's does (RadioUi)",
         ["src/Items/RadioUi.cs"] = "presentation: how long a status line stays on the radio's display, and a CD's start on the server's real clock",
         ["src/Items/SmartBinocularsHud.cs"] = "presentation: the HUD's sweep",
         ["src/Items/ThrowAim.cs"] = "presentation: the charge hum's pitch and the full-power flash",
