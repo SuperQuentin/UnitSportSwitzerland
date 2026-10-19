@@ -6,7 +6,7 @@ namespace UnitSport.Ui;
 
 /// <summary>
 /// The quick menu (#840): a ring, drawn as the emote wheel is (<see cref="Radial"/>), with the ways
-/// into everything that is not walking about: Activities, Invites, Inventory, Vehicles, Map, Emotes,
+/// into everything that is not walking about: Activities, Invites, Inventory, Vehicles, Map, Phone, Emotes,
 /// Bird journal, Controls. Docs: <c>docs/notes/ui/quick-menu.md</c>.
 /// <list type="bullet">
 /// <item>Keyboard: hold F2, aim with the mouse, let go (a click picks too). A tap opens it until a
