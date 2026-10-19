@@ -103,6 +103,62 @@ public sealed class RaceRoute
         return route;
     }
 
+    /// <summary>
+    /// A ski race down the slopes from <paramref name="at"/> (#909, <see cref="World.Snow.PisteCourse"/>):
+    /// the slope tiles and heights within 4 km, the nearest run and on down. Null when no run comes
+    /// within 300 m (or the region has no slope layer): the caller falls back to the road.
+    /// </summary>
+    public static async Task<RaceRoute?> BuildPisteAsync(IChunkSource source, OriginFrame frame, Vector3 at, float metres,
+        CancellationToken ct = default)
+    {
+        var (e, n) = frame.ToLv95(at);
+        var here = TileId.FromLv95(e, n);
+        var tiles = new List<PisteTile>();
+        for (int de = -4; de <= 4; de++)
+            for (int dn = -4; dn <= 4; dn++)
+            {
+                try { if (await source.LoadPistesAsync(new TileId(here.E + de, here.N + dn), ct) is { } t) tiles.Add(t); }
+                catch (System.Exception) { /* no slopes there */ }
+            }
+        if (tiles.Count == 0) return null;
+        var runs = World.Snow.PisteCourse.Runs(tiles);
+
+        // heights, loaded as the course reaches each tile: full where there is one, else the coarse one
+        var grids = new Dictionary<TileId, ChunkGrid?>();
+        float Altitude(double pe, double pn)
+        {
+            var id = TileId.FromLv95(pe, pn);
+            if (!grids.TryGetValue(id, out var g))
+            {
+                try { g = source.LoadChunkAsync(id, ct).GetAwaiter().GetResult() ?? source.LoadCoarseChunkAsync(id, ct).GetAwaiter().GetResult(); }
+                catch (System.Exception) { g = null; }
+                grids[id] = g;
+            }
+            if (g == null) return 0f;
+            int col = Mathf.Clamp((int)System.Math.Round(pe - id.MinE), 0, ChunkFormat.GridSize - 1);
+            int row = Mathf.Clamp((int)System.Math.Round(id.MaxN - pn), 0, ChunkFormat.GridSize - 1);
+            return (float)g.HeightMetersAt(col, row);
+        }
+
+        var course = World.Snow.PisteCourse.Chain(runs, e, n, Altitude, metres);
+        if (course == null || course.Count < 2) return null;
+        var centre = new List<Vector3>(course.Count);
+        var width = new List<float>(course.Count);
+        foreach (var (pe, pn, w) in course)
+        {
+            centre.Add(frame.ToWorld(pe, pn, Altitude(pe, pn)));
+            width.Add(w);
+        }
+        var route = FromPoints(centre, width, RoadClass.Minor, frame);
+        // the slope above the start, where race NPCs come down from (World/NpcArrival)
+        foreach (var (pe, pn, w) in World.Snow.PisteCourse.Above(runs, course[0].E, course[0].N, Altitude, 600f))
+        {
+            route.Behind.Add(frame.ToWorld(pe, pn, Altitude(pe, pn)));
+            route.BehindWidth.Add(w);
+        }
+        return route;
+    }
+
     /// <summary>A route from a centreline already known (sent by the race server, say), in <paramref name="frame"/>.</summary>
     public static RaceRoute FromPoints(IReadOnlyList<Vector3> centre, IReadOnlyList<float> width, RoadClass cls = RoadClass.Road,
         OriginFrame? frame = null)

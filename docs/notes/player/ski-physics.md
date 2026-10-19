@@ -35,5 +35,6 @@
 - **Hints**: "Tap to skate" under 4 m/s; "Brake + turn: skid to a stop" faster.
 - **AutoPilot**: `MeasureLean` measures skis on snow and accepts their slip; it returned null
   for any slipping mount, which would have stopped skis being a lean mount.
-- **Races on skis need snow**: off snow a ski race is a walk. `tools/racecheck.sh skis` must be
-  given a start on a slope.
+- **Races on skis need snow**: off snow a ski race is a walk, so ski courses follow the slopes
+  (#909, `world/races`). `tools/racecheck.sh skis` must be given a start on a slope, e.g.
+  `2580350,1100050 600`.
