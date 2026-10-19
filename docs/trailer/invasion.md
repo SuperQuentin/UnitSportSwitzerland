@@ -92,7 +92,7 @@ Places are LV95. "Agl" is metres above the ground. Lenses are full-frame mm.
 |---|---|---|---|---|---|---|
 | 12 | 21-23 | 0:43.3 | Gornergrat → Matterhorn | On the big hit, **[UFO]** a V of saucers drops out of the sky past the Matterhorn; **[MS]** the mothership above them; the camera tilts onto the lead saucer. Super: **12:48** | UFOs, the mothership | — |
 | 13 | 24-25 | 0:49.8 | Zürich, gridlock (2683480, 1246900, 32 m agl) | Rush-hour traffic from above; **[MS]** the mothership's shadow slides over it, then its rim fills the top of the frame. Super: **ZÜRICH · 13:00** | city traffic | — |
-| 14 | 26-28 | 0:54.1 | Heidi's meadow | **[UFO][BEAM][COWS]** A saucer hovers over the pasture and beams up a cow, then a hay bale (a straw-coloured box stands in for the bale). Heidi runs in shaking her fist | the tractor beam | **[BUB]** HEIDI: HEY! Those are MY cows! |
+| 14 | 26-28 | 0:54.1 | Heidi's meadow | **[UFO][BEAM][COWS]** A saucer hovers over the pasture and beams up a cow and a crate (the game has no hay bales). Heidi runs in shaking her fist | the tractor beam | **[BUB]** HEIDI: HEY! Those are MY cows! |
 | 15 | 29-30 | 1:00.6 | IKEA Riddes car park (2582300, 1112690) | **[UFO][BEAM]** A parked car rises out of its bay into the beam. Super: **RIDDES · 14:30** | parked cars, IKEA | — |
 | 16 | 31-32 | 1:04.9 | Off Chillon (2560620, 1140420) | The steamer off the castle, a jetski crossing; **[UFO]** a saucer hangs over the funnel. Low on the water, 35 mm | the steamer, jetski, castle | **[BUB]** TOURIST: Is this part of the cruise? |
 | 17 | 33-34 | 1:09.2 | Tremola | **[UFO][BEAM]** The AE86 lifts off the cobbles; Luca stands dazed beside it, and the camera tilts up with the car | the beam takes a car | **[BUB]** LUCA: NOT THE AE86! |

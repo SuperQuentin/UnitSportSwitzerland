@@ -178,7 +178,7 @@ public static class InvasionScript
             [
                 new() { Who = Heidi, Ride = Heavy(6), Trailer = 8, Lowered = true, At = Meadow, Heading = 200, Drive = Drive.Controls, Controls = _ => Pedal(0.35f) },
             ],
-            Herds = [new Cows(Meadow.Toward(250, 35), Count: 7, Radius: 15f)],
+            Herds = [new Cows(Meadow.Toward(40, 22), Count: 7, Radius: 10f)],
             Keys =
             [
                 new(0, Pt.On(0, 9f, 2.2f, -8f), Pt.On(0, 0f, 1.6f), 35),
@@ -270,8 +270,8 @@ public static class InvasionScript
             ],
             Keys =
             [
-                new(0, Pt.Road("gotthard", 745, -45f, 22f), Pt.On(0, 0f, 2f, 4f), 50),
-                new(2 * B, Pt.Road("gotthard", 745, -45f, 22f), Pt.On(0, 0f, 2f, 4f), 50),
+                new(0, Pt.Road("gotthard", 745, -45f, 22f), Pt.On(0, 0f, 2f, 4f), 85),
+                new(2 * B, Pt.Road("gotthard", 745, -45f, 22f), Pt.On(0, 0f, 2f, 4f), 85),
             ],
             Smooth = 0.3f, Preroll = 12,
             Supers = [new(0.3, 3.2, "GOTTHARD · 11:00")],
@@ -298,7 +298,7 @@ public static class InvasionScript
             [
                 new() { Who = Yvonne, Ride = RideKind.A320, At = Spot.Alt(2646200, 1151600, 3700), Heading = 145, Drive = Drive.Fly, Launch = 90, Flight = _ => Stick(lever: 0.8f) },
                 // a saucer flashes past ahead of her, left to right
-                Ufo(Spot.Alt(2646400, 1151150, 3740), 60, 60f),
+                Ufo(Spot.Alt(2646502, 1151482, 3710), 235, 60f),
             ],
             Keys =
             [
@@ -316,12 +316,12 @@ public static class InvasionScript
             Hour = 12.8,
             // four saucers in formation out of the Matterhorn's sky (a sighting's flyover, half-way across
             // as the camera rolls), the mothership hanging over the peak behind them
-            Ufos = [new Saucers(Occasions.SightingKind.Flyover, new Spot(2623500, 1092100, 350), 75, Count: 4, From: 27)],
-            Craft = [new Craft(Spot.Alt(2618200, 1091800, 4900), 0) { Mothership = true }],
+            Ufos = [new Saucers(Occasions.SightingKind.Flyover, new Spot(2625600, 1092450, 300), 75, Count: 4, From: 28)],
+            Craft = [new Craft(Spot.Alt(2624600, 1092300, 3750), 0) { Mothership = true }],
             Keys =
             [
                 new(0, Pt.Alt(2626950, 1092720, 3372), Pt.Alt(Matterhorn.E, Matterhorn.N, 4250), 35),
-                new(3 * B, Pt.Alt(2626900, 1092700, 3376), Pt.Alt(2624000, 1092150, 3300), 28),
+                new(3 * B, Pt.Alt(2626900, 1092700, 3376), Pt.Alt(2625600, 1092450, 3380), 35),
             ],
             Smooth = 0.4f, Preroll = 0.5,
             Supers = [new(0.4, 3.0, "12:48")],
@@ -335,7 +335,7 @@ public static class InvasionScript
             Keys =
             [
                 new(0, Pt.At(2683480, 1246900, 32), Pt.At(2683570, 1246790, 1), 35),
-                new(2 * B, Pt.At(2683470, 1246895, 30), Pt.At(2683700, 1246650, 240), 28),
+                new(2 * B, Pt.At(2683470, 1246895, 30), Pt.At(2683680, 1246680, 150), 24),
             ],
             Preroll = 4,
             Supers = [new(0.3, 3.2, "ZÜRICH · 13:00")],
@@ -390,7 +390,7 @@ public static class InvasionScript
                 new() { Who = Tourist, Ride = RideKind.Jetski, At = new Spot(2560700, 1140360), Heading = 250, Board = ChillonBoard, Launch = 15, Drive = Drive.Controls, Controls = _ => Pedal(1f) },
             ],
             // a saucer hangs over the steamer
-            Craft = [new Craft(Spot.Alt(2560650, 1140450, 405), 300)],
+            Craft = [new Craft(Spot.Alt(2560630, 1140410, 392), 300)],
             Keys =
             [
                 new(0, Pt.Alt(2560560, 1140300, 373.6f), Pt.Alt(2560662, 1140440, 382), 35),
