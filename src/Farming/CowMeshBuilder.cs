@@ -35,49 +35,46 @@ public static class CowMeshBuilder
     /// <summary>A breed's head, its pivot at <see cref="Neck"/> (the mesh's origin).</summary>
     public static ArrayMesh Head(CowBreed breed) => Heads[(int)breed] ??= BuildHead(breed);
 
+    /// <summary>A rounded box, low-poly (the PS1 and Cartoon looks both want facets, not a sphere).</summary>
+    private static void Lump(MeshScratch s, Vector3 centre, Vector3 size, Color c, Basis? turn = null) =>
+        s.RoundedBox(centre, size, c, turn, 5, 8);
+
     private static ArrayMesh BuildBody(CowBreed breed)
     {
         var s = new MeshScratch();
         bool sim = breed == CowBreed.Simmental;
-        Color coat = sim ? White : BrownCoat, back = sim ? Red : BrownDark, leg = sim ? White : BrownCoat;
-
-        // the barrel: shoulders, belly, rump, slightly deeper at the chest
-        s.Box(new Vector3(0, 1.02f, -0.55f), new Vector3(0.78f, 0.68f, 0.70f), sim ? Red : coat);
-        s.Box(new Vector3(0, 0.98f, 0.05f), new Vector3(0.82f, 0.66f, 0.60f), coat);
-        s.Box(new Vector3(0, 1.04f, 0.62f), new Vector3(0.76f, 0.62f, 0.62f), sim ? Red : coat);
-        // the back line, the hips and the withers a little above the barrel
-        s.Box(new Vector3(0, 1.36f, -0.10f), new Vector3(0.50f, 0.10f, 1.60f), back);
-        s.Box(new Vector3(0, 1.38f, 0.78f), new Vector3(0.66f, 0.12f, 0.26f), back);
-        if (sim)
+        Color coat = sim ? White : BrownCoat, patch = sim ? Red : BrownCoat, leg = sim ? White : BrownCoat;
+        using (s.Smoothing(true))
         {
-            // white patches breaking the red over the flanks
-            s.Box(new Vector3(0.41f, 0.96f, -0.42f), new Vector3(0.02f, 0.34f, 0.30f), White);
-            s.Box(new Vector3(-0.41f, 1.02f, 0.66f), new Vector3(0.02f, 0.30f, 0.36f), White);
-            s.Box(new Vector3(0, 0.66f, -0.55f), new Vector3(0.70f, 0.04f, 0.60f), White);   // the belly white
+            // the barrel in three overlapping lumps: shoulders, belly, rump (a Simmental's red patches
+            // fore and aft, its middle white), the withers and the hip bones standing a little proud
+            Lump(s, new Vector3(0, 1.04f, -0.55f), new Vector3(0.78f, 0.74f, 0.86f), patch);
+            Lump(s, new Vector3(0, 0.98f, 0.04f), new Vector3(0.84f, 0.76f, 0.80f), coat);
+            Lump(s, new Vector3(0, 1.05f, 0.58f), new Vector3(0.78f, 0.70f, 0.78f), patch);
+            Lump(s, new Vector3(0, 1.26f, -0.60f), new Vector3(0.46f, 0.30f, 0.50f), patch);
+            Lump(s, new Vector3(0, 1.30f, 0.74f), new Vector3(0.66f, 0.26f, 0.34f), patch);
+            if (sim) Lump(s, new Vector3(0, 0.70f, -0.1f), new Vector3(0.56f, 0.16f, 1.30f), White);   // the white belly
+            // the neck, rising forward to the head's joint, and the dewlap under it
+            Lump(s, new Vector3(0, 1.14f, -0.98f), new Vector3(0.44f, 0.56f, 0.52f), sim ? White : coat, new Basis(Vector3.Right, 0.45f));
+            Lump(s, new Vector3(0, 0.84f, -0.98f), new Vector3(0.16f, 0.30f, 0.34f), sim ? White : coat);
+            // udder
+            Lump(s, new Vector3(0, 0.64f, 0.42f), new Vector3(0.36f, 0.24f, 0.36f), Udder);
+            // the cowbell on its broad leather strap
+            Lump(s, new Vector3(0, 1.02f, -1.12f), new Vector3(0.48f, 0.10f, 0.12f), Strap, new Basis(Vector3.Right, 0.45f));
         }
-        // the neck, from the shoulders up to the head's joint
-        s.Box(new Vector3(0, 1.16f, -0.92f), new Vector3(0.46f, 0.48f, 0.34f), sim ? White : coat, new Basis(Vector3.Right, 0.35f));
-        // dewlap
-        s.Box(new Vector3(0, 0.86f, -0.92f), new Vector3(0.16f, 0.26f, 0.28f), sim ? White : coat);
-
-        // the legs, tapering to dark hooves
-        foreach (var (x, z) in new[] { (-0.26f, -0.70f), (0.26f, -0.70f), (-0.26f, 0.72f), (0.26f, 0.72f) })
+        // the legs, tapering to dark hooves, the hind ones angled back a little
+        foreach (var (x, z, back) in new[] { (-0.24f, -0.66f, 0f), (0.24f, -0.66f, 0f), (-0.24f, 0.70f, 0.06f), (0.24f, 0.70f, 0.06f) })
         {
-            s.Tube(new Vector3(x, 0.78f, z), new Vector3(x, 0.10f, z), 0.10f, 0.07f, leg, 5);
-            s.Box(new Vector3(x, 0.05f, z - 0.02f), new Vector3(0.15f, 0.10f, 0.18f), Hoof);
+            s.Tube(new Vector3(x, 0.84f, z), new Vector3(x, 0.10f, z + back), 0.11f, 0.065f, leg, 6);
+            s.Box(new Vector3(x, 0.05f, z + back - 0.02f), new Vector3(0.15f, 0.10f, 0.18f), Hoof);
         }
-        // udder and teats
-        s.Box(new Vector3(0, 0.62f, 0.42f), new Vector3(0.36f, 0.20f, 0.34f), Udder);
         foreach (var (x, z) in new[] { (-0.09f, 0.34f), (0.09f, 0.34f), (-0.09f, 0.50f), (0.09f, 0.50f) })
-            s.Tube(new Vector3(x, 0.53f, z), new Vector3(x, 0.45f, z), 0.025f, 0.02f, Udder, 4);
-        // the tail, from the tail head down to a dark switch
-        s.Tube(new Vector3(0, 1.34f, 0.94f), new Vector3(0, 0.62f, 1.00f), 0.04f, 0.03f, sim ? White : coat, 4);
-        s.Box(new Vector3(0, 0.52f, 1.00f), new Vector3(0.09f, 0.18f, 0.09f), sim ? White : BrownDark);
-
-        // the cowbell on its broad strap round the neck
-        s.Box(new Vector3(0, 1.05f, -1.06f), new Vector3(0.50f, 0.08f, 0.06f), Strap, new Basis(Vector3.Right, 0.35f));
-        s.Tube(new Vector3(0, 0.84f, -1.12f), new Vector3(0, 0.62f, -1.14f), 0.08f, 0.13f, Brass, 6);
-        s.Box(new Vector3(0, 0.88f, -1.12f), new Vector3(0.10f, 0.06f, 0.06f), Strap);
+            s.Tube(new Vector3(x, 0.55f, z), new Vector3(x, 0.45f, z), 0.028f, 0.022f, Udder, 4);
+        // the tail from the tail head down to its dark switch
+        s.Tube(new Vector3(0, 1.32f, 0.96f), new Vector3(0, 0.62f, 1.02f), 0.045f, 0.03f, sim ? White : coat, 5);
+        s.Box(new Vector3(0, 0.52f, 1.02f), new Vector3(0.10f, 0.20f, 0.10f), sim ? White : BrownDark);
+        // the bell itself: a brass bell under the throat, wider at the mouth
+        s.Tube(new Vector3(0, 0.86f, -1.20f), new Vector3(0, 0.62f, -1.22f), 0.08f, 0.14f, Brass, 7);
         return s.Build();
     }
 
@@ -85,20 +82,30 @@ public static class CowMeshBuilder
     {
         var s = new MeshScratch();
         bool sim = breed == CowBreed.Simmental;
-        Color face = sim ? White : BrownCoat, muzzle = sim ? M(0.92f, 0.80f, 0.74f) : BrownMuzzle;
-        // built at the joint: forward and down from it, the forehead flat, the muzzle broad
-        s.Box(new Vector3(0, 0.06f, -0.22f), new Vector3(0.34f, 0.36f, 0.30f), face);
-        s.Box(new Vector3(0, -0.06f, -0.46f), new Vector3(0.28f, 0.28f, 0.26f), face, new Basis(Vector3.Right, 0.25f));
-        s.Box(new Vector3(0, -0.14f, -0.62f), new Vector3(0.26f, 0.20f, 0.12f), muzzle);
-        s.Box(new Vector3(0, -0.14f, -0.685f), new Vector3(0.20f, 0.12f, 0.02f), Nose);
-        // ears out to the side, small horns curving up
-        s.Box(new Vector3(-0.27f, 0.12f, -0.16f), new Vector3(0.20f, 0.06f, 0.12f), sim ? Red : BrownDark, new Basis(Vector3.Forward, -0.25f));
-        s.Box(new Vector3(0.27f, 0.12f, -0.16f), new Vector3(0.20f, 0.06f, 0.12f), sim ? Red : BrownDark, new Basis(Vector3.Forward, 0.25f));
-        s.Tube(new Vector3(-0.14f, 0.24f, -0.20f), new Vector3(-0.24f, 0.36f, -0.24f), 0.035f, 0.015f, Horn, 4);
-        s.Tube(new Vector3(0.14f, 0.24f, -0.20f), new Vector3(0.24f, 0.36f, -0.24f), 0.035f, 0.015f, Horn, 4);
+        Color face = sim ? White : BrownCoat, muzzle = sim ? M(0.92f, 0.78f, 0.72f) : BrownMuzzle;
+        Color ear = sim ? Red : BrownDark;
+        using (s.Smoothing(true))
+        {
+            // built at the joint: the poll and broad forehead, the long face sloping down to the muzzle
+            Lump(s, new Vector3(0, 0.08f, -0.18f), new Vector3(0.38f, 0.34f, 0.34f), face);
+            Lump(s, new Vector3(0, -0.06f, -0.42f), new Vector3(0.30f, 0.30f, 0.36f), face, new Basis(Vector3.Right, 0.35f));
+            Lump(s, new Vector3(0, -0.18f, -0.60f), new Vector3(0.30f, 0.22f, 0.20f), muzzle);
+            if (sim)   // a Simmental's red round the eyes
+            {
+                Lump(s, new Vector3(-0.15f, 0.08f, -0.27f), new Vector3(0.10f, 0.14f, 0.16f), Red);
+                Lump(s, new Vector3(0.15f, 0.08f, -0.27f), new Vector3(0.10f, 0.14f, 0.16f), Red);
+            }
+            // ears out to the side
+            Lump(s, new Vector3(-0.29f, 0.10f, -0.14f), new Vector3(0.22f, 0.07f, 0.13f), ear, new Basis(Vector3.Forward, -0.3f));
+            Lump(s, new Vector3(0.29f, 0.10f, -0.14f), new Vector3(0.22f, 0.07f, 0.13f), ear, new Basis(Vector3.Forward, 0.3f));
+        }
+        s.Box(new Vector3(0, -0.19f, -0.70f), new Vector3(0.20f, 0.11f, 0.02f), Nose);
+        // short horns curving up and out
+        s.Tube(new Vector3(-0.14f, 0.22f, -0.16f), new Vector3(-0.26f, 0.36f, -0.22f), 0.04f, 0.015f, Horn, 5);
+        s.Tube(new Vector3(0.14f, 0.22f, -0.16f), new Vector3(0.26f, 0.36f, -0.22f), 0.04f, 0.015f, Horn, 5);
         // eyes
-        s.Box(new Vector3(-0.17f, 0.07f, -0.30f), new Vector3(0.02f, 0.05f, 0.05f), Nose);
-        s.Box(new Vector3(0.17f, 0.07f, -0.30f), new Vector3(0.02f, 0.05f, 0.05f), Nose);
+        s.Box(new Vector3(-0.185f, 0.06f, -0.30f), new Vector3(0.03f, 0.06f, 0.06f), Nose);
+        s.Box(new Vector3(0.185f, 0.06f, -0.30f), new Vector3(0.03f, 0.06f, 0.06f), Nose);
         return s.Build();
     }
 

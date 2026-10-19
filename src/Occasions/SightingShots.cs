@@ -95,14 +95,18 @@ public partial class SightingShots : Node
 
     private async Task Run(string dir)
     {
-        if (!await Until(() => Me is { } p && p.IsOnFloor() && UfoSightings.Instance != null && Farming.Herds.Instance != null, 120))
+        if (!await Until(() => Me != null && UfoSightings.Instance != null && Farming.Herds.Instance != null, 120))
         {
-            Expect(false, "a player on the ground, sightings and herds");
+            Expect(false, "a player, sightings and herds");
             return;
         }
         var sightings = UfoSightings.Instance!;
         var herds = Farming.Herds.Instance!;
         var me = Me!;
+        // the spawn drops the camera 220 m up: stand the player on the ground where it is
+        await Until(() => _chunks == null || _chunks.TryGetSurface(me.GlobalPosition, out _), 60);
+        me.PlaceAt(me.GlobalPosition with { Y = Ground(me.GlobalPosition) + 0.1f }, 0f);
+        await Until(() => me.IsOnFloor(), 20);
         await Seconds(3);
         var (pe, pn) = _origin.ToLv95(me.GlobalPosition);
 
