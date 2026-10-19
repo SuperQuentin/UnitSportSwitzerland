@@ -67,6 +67,7 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | Capability | Seam | Server path | Sense | Skill | Status |
 |---|---|---|---|---|---|
 | join the field | — | `BrManager.BoardBots` at GO | — | — | ok (aboard the plane) |
+| the phone (#889): calls, travel, activities from its apps | — | none of its own: its apps send the same invites, teleport requests and activity commands | — | — | n/a |
 | invites, parties, teleport requests (#840) | — | none: never offered (`InviteService` skips negative ids); a bot joins through `BoardBots` | — | — | n/a |
 | board the plane, jump | — | `BrManager.BoardBots`, `BotJump`, `BotPlane` (push-out) | its landing spot and jump time, chosen at GO | `BrBrain.Drop` | ok |
 | the zone's damage, and running from it | — | `BrManager.BotZone` | the zone (state, as a player's HUD) | `BrBrain` zone (`BrTactics.ZoneRunNeeded`) | ok |

@@ -186,6 +186,11 @@ public partial class PlayerInput : Node
     public const string QuickMenu = "quick_menu";
     /// <summary>Shift+F2 (#840): declines the newest invite. A pad declines from the quick menu's Invites or the Start menu.</summary>
     public const string InviteDecline = "invite_decline";
+    /// <summary>
+    /// The phone (#889): on foot, takes it out, and again opens it (<see cref="UnitSport.Phone.PhoneController"/>).
+    /// Up arrow, free on foot (only the excavator's boom in a cab); a pad reaches it from the quick menu.
+    /// </summary>
+    public const string Phone = "phone";
     /// <summary>Hold on foot for the emote wheel (<see cref="Player.EmoteWheel"/>, #404): dances and gestures, any time.</summary>
     public const string EmoteWheel = "emote_wheel";
     /// <summary>
@@ -682,6 +687,9 @@ public partial class PlayerInput : Node
         // B only looks behind when mounted; D-pad up is the engine in a vehicle and turns the
         // hammer's piece, so the emote wheel does not open with the hammer in hand
         Bind(EmoteWheel, Keys(Key.B), Button(JoyButton.DpadUp));
+        // the phone (#889): Up, as in the games players know it from; no pad button is free on foot
+        // (D-pad up is the emote wheel), so the pad takes it out from the quick menu
+        Bind(Phone, Keys(Key.Up));
         // F2 is free everywhere (F1 help, F3 F4 the perf tools); a pad has no free button, so the
         // quick menu is a hold of Back, whose tap stays the inventory (Ui/QuickMenu tells them apart)
         Bind(QuickMenu, Keys(Key.F2), Button(JoyButton.Back));
