@@ -76,10 +76,19 @@ public static class CorePlanner
     public static JunctionCore Plan(JunctionPlan jp, Func<Vec2, bool>? blocked = null, bool trucks = true, Func<List<Connector>>? given = null)
     {
         // a local crossroads within LocalMostMouth where that passes its checks, else as any junction
-        if (jp.Local && given is null && PlanWithin(jp, blocked, trucks, null, LocalMostMouth) is var tight
-            && tight.Simple && tight.KerbsNotTangent == 0 && tight.ConnectorsOutside == 0) return tight;
-        return PlanWithin(jp, blocked, trucks, given, MostMouth);
+        static bool Passes(JunctionCore c) => c.Simple && c.KerbsNotTangent == 0 && c.ConnectorsOutside == 0;
+        if (jp.Local && given is null && PlanWithin(jp, blocked, trucks, null, LocalMostMouth) is var tight && Passes(tight)) return tight;
+        var core = PlanWithin(jp, blocked, trucks, given, MostMouth);
+        if (Passes(core) || given is not null) return core;
+        // failing its checks with its mouths out to MostMouth (a fork whose gore's nose lies far out, turns pushed past a building):
+        // laid again with them held nearer, the first that passes kept (#854)
+        foreach (double most in (ReadOnlySpan<double>)[RetryMostMouth, LocalMostMouth])
+            if (PlanWithin(jp, blocked, trucks, null, most) is var held && Passes(held)) return held;
+        return core;
     }
+
+    /// <summary>A core failing its checks is laid again with its mouths within this, then <see cref="LocalMostMouth"/> (m).</summary>
+    public const double RetryMostMouth = 20;
 
     private static JunctionCore PlanWithin(JunctionPlan jp, Func<Vec2, bool>? blocked, bool trucks, Func<List<Connector>>? given, double most)
     {

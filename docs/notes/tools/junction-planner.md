@@ -364,6 +364,9 @@ off, `--junctions new` plans and reports without writing.
   an arm keeping its normal section has none: only a link a transition covers refuses the junction (bridges and tunnels at
   junctions 17 -> 0). A merged core's outline keeps its mouths' ends through every clean-up (a member's kerb ending on one made
   the duplicate pass drop the mouth's end, and the push was undone). 168 real tiles: old layout 285 -> 265.
+- **A failing core retried nearer** (#854): a core failing its checks with its mouths out to `MostMouth` (a fork whose gore's
+  nose lies far out, turns pushed past a building) is laid again within `RetryMostMouth` 20 m, then `LocalMostMouth` 12 m, the
+  first that passes kept. 168 real tiles: old layout 265 -> 255.
 - **Comparing with reality**: SWISSIMAGE crops from `wms.geo.admin.ch` (`ch.swisstopo.swissimage`, EPSG:2056 bbox); in
   Geneva the marking cadastre on `ge.ch/terags/rest/services/DIRECTIVES_SIGNAL_CHANTIERS/MapServer` (37 lines, 38 kerbs,
   44 coloured surfaces, 48 road cover: carriageway, sidewalk, islands) as GeoJSON by bbox. Three panels (aerial, old, new)
