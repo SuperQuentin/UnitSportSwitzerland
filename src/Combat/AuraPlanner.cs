@@ -40,14 +40,17 @@ public partial class AuraPlanner : CanvasLayer
 
     public override void _Ready()
     {
-        _panel = new PanelContainer { Visible = false, Theme = UiTheme.Get() };
+        // the bottom middle of the screen, whatever its size: a full-screen column, the panel centred at its foot
+        var root = new VBoxContainer { Theme = UiTheme.Get(), MouseFilter = Control.MouseFilterEnum.Ignore };
+        root.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        root.OffsetBottom = -96;   // clear of the prompt corner (bottom right)
+        AddChild(root);
+        root.AddChild(new Control { SizeFlagsVertical = Control.SizeFlags.ExpandFill, MouseFilter = Control.MouseFilterEnum.Ignore });
+        var centre = new CenterContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+        root.AddChild(centre);
+        _panel = new PanelContainer { Visible = false };
         _panel.AddThemeStyleboxOverride("panel", UiTheme.GlassPanel());
-        _panel.SetAnchorsPreset(Control.LayoutPreset.CenterBottom);
-        _panel.GrowHorizontal = Control.GrowDirection.Both;
-        _panel.GrowVertical = Control.GrowDirection.Begin;
-        _panel.Position = new Vector2(-480, -40);
-        _panel.CustomMinimumSize = new Vector2(960, 0);
-        AddChild(_panel);
+        centre.AddChild(_panel);
 
         var box = UiKit.VBox(8);
         _panel.AddChild(box);
@@ -64,8 +67,7 @@ public partial class AuraPlanner : CanvasLayer
         {
             var move = m;
             var card = UiKit.Button(AuraRules.Name(m));
-            card.CustomMinimumSize = new Vector2(180, 64);
-            card.ClipText = true;
+            card.CustomMinimumSize = new Vector2(196, 64);
             card.Pressed += () => Add(move);
             grid.AddChild(card);
             _cards.Add(card);
@@ -196,7 +198,7 @@ public partial class AuraPlanner : CanvasLayer
             var d = AuraRules.Def(m);
             var sb = new StringBuilder();
             sb.Append(d.Name).Append('\n').Append(d.Family).Append(" · ").Append(d.Beats).Append(" beats · ")
-                .Append(new string('*', d.Difficulty)).Append(" · ").Append(d.Base);
+                .Append(new string('*', d.Difficulty)).Append(" · +").Append(d.Base);
             string badge = "";
             foreach (var theirs in _ctx.RivalLast)
                 if (AuraRules.Counters(m, theirs)) { badge = $"ANSWERS {AuraRules.Name(theirs)}"; break; }

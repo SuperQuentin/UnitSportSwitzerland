@@ -154,7 +154,8 @@ public partial class AuraHud : CanvasLayer
                     small = $"{v.NameA} vs {v.NameB}: plan a combo, cut it on the beat";
                     break;
                 case AuraPhase.Plan:
-                    big = v.MyTurn ? "PLAN YOUR COMBO" : $"{performer.ToUpperInvariant()} IS PLANNING...";
+                    // the planner has its own title over the cards
+                    big = v.MyTurn ? null : $"{performer.ToUpperInvariant()} IS PLANNING...";
                     small = v.MyTurn ? null : "their combo stays secret until they perform";
                     colour = Violet;
                     break;
