@@ -98,8 +98,10 @@ largest yaw difference and a verdict: identical, sub-cm, small (< 5 cm), visible
   from a fraction of a second after the go. Their contacts with the terrain's and the roads'
   collision differ from run to run: the tiles stream in on threads, so the collision bodies reach
   Jolt in another order and through another history of origin shifts. Building one tile at a time
-  (`--builds 1` in `RENDER`) took the field machines to identical in the measurement, but not the
-  Tremola car. Scripted flight, walkers, standing actors, craft, sightings and herds are identical.
+  (`--builds 1` in `RENDER`) does not remove it. Measured on one Mac (the plan's "Measurement"):
+  the Tremola autopilot 8-20 cm, the six-car pack 13 cm-2 m, the field machines identical, 13 cm or
+  1.6 m. Scripted flight, walkers, standing actors, craft, beams, herds and a crash's ragdoll are
+  identical. Phase 2's takes are for those vehicles.
 - Not pinned, not in the picture: impact and swim sounds (`Random.Shared`, a static stream).
 - Recorded, not pinned: the Godot build, the GPU and driver, the song file (downloaded from
   incompetech: a different file shows as another checksum).
