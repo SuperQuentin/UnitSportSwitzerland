@@ -13,8 +13,8 @@ and Rumantsch (`invasion.subtitles.json`).
 - **Shots**: `src/Trailer/InvasionScript.cs`, `FILM=invasion tools/trailer.sh stills|preview|render`.
 - **Look**: every shot is in **Cartoon**. There is no PS1 or Realistic shot; the styles feature is
   shown by the Cartoon look itself. Every shot is on **real terrain** (the built tiles).
-- **Status**: stage 1 is done (the story, the places, the non-UFO shots framed). Stage 2 merges the
-  UFO (#861), the bubbles (#862) and the cows (#863), then stages their beats and renders.
+- **Status**: staged on the film kit (#882): the real saucers, the mothership, the beam, the cows,
+  the aliens' looks and the speech bubbles; rendered with `tools/trailer.sh render`.
 
 ## The song
 
@@ -50,22 +50,21 @@ it. The sibling films use other songs.
 | **ROCHAT** | Adjudant, Swiss Army | TAZ camouflage, short grey hair | "Routine exercise." Then it isn't. He builds the barricade, leads the drop, and wins the fist fight |
 | **LUCA** | Petrolhead from Ticino | Band tee, jeans, black shades, quiff | His AE86 is abducted. He arms himself at IKEA (a Blåhaj), races the saucers, and flies through a windscreen ("I'm OK!") |
 | **YVONNE** | Airline pilot, Geneva | Navy polo, round glasses, bun | Sees the first saucer, flies the freighter for the drop, then the helicopter |
-| **ZORP** | The aliens' commander | Galaxy hoodie, holo mask, neon headset (a stand-in until #861 gives the aliens a look) | Wants the "pointy mountain", loses a fist fight, flees a pumpkin, smells the fondue, and stays for Christmas |
-| **ZIB** | Zorp's crewmate | as Zorp, stockier | Fished out of Lake Geneva |
+| **ZORP** | The aliens' commander | #880's alien look (`Aliens.Zorp`) | Wants the "pointy mountain", loses a fist fight, flees a pumpkin, smells the fondue, and stays for Christmas |
+| **ZIB** | Zorp's crewmate | #880's `Aliens.Zib` | Fished out of Lake Geneva |
 | *Tourist, skier, passer-by, seven volunteers* | Bystanders | each their own look | One bubble each, or a pose in the volunteers' line-up |
 
-## Markers
+## Tags
 
-In the shot list, these tags mark the beats that wait for another piece. Until then the director
-plays a stand-in.
+In the shot list, these tags mark what the film kit (#882) stages, and how.
 
-| Tag | Waits for | Stand-in until then |
+| Tag | What | In the script |
 |---|---|---|
-| **[UFO]** | The saucer, #861 | A light plane in flight, or a helicopter hovering (`Ufo(...)` in the script) |
-| **[BEAM]** | The tractor beam lifting things, #861: the beam service is not there yet | Nothing |
-| **[MS]** | The 120 m mothership, #861 (`UfoMeshBuilder.Mothership()`) | Nothing |
-| **[COWS]** | Cows on the pastures, #863 | Nothing |
-| **[BUB]** | A speech bubble, #862 | The line shows in the group chat (`Say(id, ...)`; the id is the subtitles key) |
+| **[UFO]** | A saucer (#861) | Flown as an actor (`Ufo(...)`: `RideKind.Ufo`, `Drive.Fly`), set as a `Craft` (hovering or landed), or a sighting's flyover (`Shot.Ufos`) |
+| **[BEAM]** | The tractor beam lifting something | A `Craft` with `UfoSwitches.BeamBetween`, over a parked `Prop.Vehicle`, a cow or a `Beamable` crate |
+| **[MS]** | The 121 m mothership | `new Craft(...) { Mothership = true }` |
+| **[COWS]** | Cows (#863) | `Shot.Herds` (`Cows(spot, Count: 1, Radius: 1.2f)` is one cow under a beam) |
+| **[BUB]** | A speech bubble (#862) | `Say(id, t, actor, text, shape)`, `Off(...)` for a voice off; the id is the subtitles key |
 
 ## Shot list
 
@@ -174,7 +173,7 @@ gap, and the last shot ends with the song.
 |---|---|
 | The real Switzerland: terrain, towns, roads, buildings | 1, 2, 5, 6, 7, 13, 21, 27, every super |
 | Building sites, tower cranes, works machines | 6 |
-| The in-game map, the terrain download screen | 23: a top view as a stand-in; the screens need a director addition |
+| The in-game map, the terrain download screen | 23 (`Shot.Screens`: the game's map screen) |
 | On foot: run | 21, 42, 55 |
 | On foot: slide, jump | 55 (scripted jump and crouch, `Cast.Actions`) |
 | Swim | 52 (`Cast.Swim`) |
@@ -211,28 +210,17 @@ gap, and the last shot ends with the song.
 | GPX replay | — (needs a director addition, see below) |
 | Movie studio | — (an editor screen: nothing in the world to film) |
 | VR | — (nothing shows in third person) |
-| UFOs, mothership, beam, cows | 11-18, 20, 22, 42, 43, 47-50, 53, 58 (stage 2) |
+| UFOs, mothership, beam, cows | 3, 11-18, 20, 22, 42, 43, 47-50, 53, 58 |
 
 ## What the director needed
 
-Stage 1 added these to the director. Two sibling films added overlapping features; stage 2 keeps
-one implementation.
+Stage 1 added fist-fight poses, scripted jumps, headwear, swimming, occasions, the zone wall, hammer
+pieces and item cues to the director; the two sibling films added overlapping ones. The film kit
+(#882, `docs/notes/trailer/film-kit.md`) replaced all three sets with one, and this film was ported
+onto it: `Cast.Fight`, `Actions`, `Headwear`, `Swim`, `Lowered`; `Shot.Occasion` (`"none"` for none),
+`Zone`, `ItemCues`, `Screens`, `Craft`, `Ufos`, `Herds`; `Prop.Piece`, `Vehicle`, `Beamable`.
 
-| Addition | API | Used in |
-|---|---|---|
-| Fist-fight poses | `Cast.Fight` (`Func<double,int>` → `FootPlayer.FightPose`) | 17, 51 |
-| Scripted jump and crouch for walkers | `Cast.Actions` (the walker becomes an NPC body reading `FootActions`) | 55; every `Runner` (its own looks) |
-| Occasions | `Shot.Occasion` (`/occasion start <id>`, stopped when the next shot wants another) | 56, 58, 59 |
-| The Battle Royale wall | `Shot.Zone` (centre, radius) → `BattleRoyale.ZoneWall` | 41, 42 |
-| Hammer pieces | `Prop.Piece`, `Prop.Material` → `Build.StructureMeshes` | 29 |
-| Item effects on cue | `Shot.Cues` (`Cue(T, Actor, ItemEventKind)` → `ItemEvents.Send`) | 25, 28, 52, 57 |
-| Headwear | `Cast.Headwear` → `FootPlayer.HeadwearId` | 56, 58, 59 |
-| Swimming | `Cast.Swim` (in from a dry `Board`, then `StartSwimmingAtSurface`) | 52 |
+Not staged:
 
-Proposed for stage 2, and not built:
-
-- **`Shot.Ui`**: let a named screen (the map, the terrain download, the character page) stay
-  visible for a shot, for shot 23.
-- **`Shot.Gpx`**: lay a `Gpx/TrackRibbon` on the terrain, for example the saucers' flight path in
-  shot 23.
-- **Shots inside an interior**: an actor `EnterInterior` at a real door, for the vending machines.
+- **GPX replay, the movie studio**: they would come in as a `GameScreen.Png` screenshot.
+- **Vending machines**: interior furniture; a shot inside an interior.
