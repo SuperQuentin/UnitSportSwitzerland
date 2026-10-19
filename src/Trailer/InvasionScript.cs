@@ -297,9 +297,9 @@ public static class InvasionScript
             Cast =
             [
                 new() { Who = Yvonne, Ride = RideKind.A320, At = Spot.Alt(2646200, 1151600, 3700), Heading = 145, Drive = Drive.Fly, Launch = 90, Flight = _ => Stick(lever: 0.8f) },
-                // a saucer flashes past ahead of her, left to right
-                Ufo(Spot.Alt(2646502, 1151482, 3710), 235, 60f),
             ],
+            // a saucer hanging in the sky ahead of her, left of her course
+            Craft = [new Craft(Spot.Alt(2646840, 1150949, 3760), 235)],
             Keys =
             [
                 new(0, Pt.On(0, -34f, 7f, 30f), Pt.On(0, 0f, -2f, -10f), 35),
@@ -314,14 +314,20 @@ public static class InvasionScript
         {
             Number = 12, Name = "The fleet", FromBar = 21, Bars = 3, Feature = "UFOs: the fleet and the mothership",
             Hour = 12.8,
-            // four saucers in formation out of the Matterhorn's sky (a sighting's flyover, half-way across
-            // as the camera rolls), the mothership hanging over the peak behind them
-            Ufos = [new Saucers(Occasions.SightingKind.Flyover, new Spot(2625600, 1092450, 300), 75, Count: 4, From: 28)],
+            // four saucers in formation out of the Matterhorn's sky, past the camera; the mothership behind them
+            Cast =
+            [
+                Ufo(Spot.Alt(2626774, 1092571, 3400), 75, 40f, board: Crew),
+                Ufo(Spot.Alt(2626774, 1092571, 3400).Toward(255, 18).Toward(345, 14), 75, 40f, board: Crew.Toward(0, 25)),
+                Ufo(Spot.Alt(2626774, 1092571, 3400).Toward(255, 18).Toward(165, 14), 75, 40f, board: Crew.Toward(180, 25)),
+                Ufo(Spot.Alt(2626774, 1092571, 3400).Toward(255, 36), 75, 40f, board: Crew.Toward(90, 25)),
+            ],
             Craft = [new Craft(Spot.Alt(2624600, 1092300, 3750), 0) { Mothership = true }],
             Keys =
             [
                 new(0, Pt.Alt(2626950, 1092720, 3372), Pt.Alt(Matterhorn.E, Matterhorn.N, 4250), 35),
-                new(3 * B, Pt.Alt(2626900, 1092700, 3376), Pt.Alt(2625600, 1092450, 3380), 35),
+                new(1.5, Pt.Alt(2626930, 1092712, 3373), Pt.On(0, 0f, 0f, 20f), 35),
+                new(3 * B, Pt.Alt(2626900, 1092700, 3376), Pt.On(0, 0f, 0f, 10f), 35),
             ],
             Smooth = 0.4f, Preroll = 0.5,
             Supers = [new(0.4, 3.0, "12:48")],
@@ -664,8 +670,8 @@ public static class InvasionScript
             ],
             Keys =
             [
-                new(0, Pt.Road("riddes", 165, 3.5f, 1.3f), Pt.On(0, 0f, 1.5f), 35),
-                new(2 * B, Pt.Road("riddes", 165, 3.5f, 1.3f), Pt.On(2, 0f, 1.5f), 35),
+                new(0, Pt.Road("riddes", 125, 3.5f, 1.3f), Pt.On(0, 0f, 1.5f), 35),
+                new(2 * B, Pt.Road("riddes", 125, 3.5f, 1.3f), Pt.On(2, 0f, 1.5f), 35),
             ],
             Smooth = 0.2f, Preroll = 2,
             Supers = [new(0.2, 3.0, "RIDDES · 07:00")],
@@ -821,7 +827,7 @@ public static class InvasionScript
                 new(Meadow.Toward(150, 3.0f), 10, default, default) { Item = ItemId.FirstAidKit, Scale = 1.6f },
                 new(Meadow.Toward(195, 3.4f), 60, default, default) { Item = ItemId.FonduePot, Scale = 1.4f },
             ],
-            Zone = (Meadow.Toward(250, 150), 110f),
+            Zone = (Meadow.Toward(250, 30), 60f),
             Keys =
             [
                 new(0, Pt.On(0, 0.8f, 2.4f, -4.5f), Pt.On(0, 0f, 0.4f, 1.0f), 28),
@@ -836,15 +842,15 @@ public static class InvasionScript
             Hour = 15.05,
             Cast =
             [
-                .. Enumerable.Range(0, 6).Select(i => Runner(Meadow.Toward(250, 150).Toward(55 + i * 6, 45 + i % 3 * 6), 240 + i * 6, seed: 50 + i)),
+                .. Enumerable.Range(0, 6).Select(i => Runner(Meadow.Toward(250, 30).Toward(40 + i * 12, 30 + i % 3 * 4), 220 + i * 12, seed: 50 + i)),
             ],
             // the saucer landed in the middle of the zone, its ramp down
-            Craft = [new Craft(Meadow.Toward(250, 150), 70) { Switches = _ => new UfoSwitches(Ramp: true) }],
-            Zone = (Meadow.Toward(250, 150), 110f),
+            Craft = [new Craft(Meadow.Toward(250, 30), 70) { Switches = _ => new UfoSwitches(Ramp: true) }],
+            Zone = (Meadow.Toward(250, 30), 60f),
             Keys =
             [
-                new(0, Pt.At(Meadow.Toward(250, 150).Toward(70, 85).E, Meadow.Toward(250, 150).Toward(70, 85).N, 22f), Pt.At(Meadow.Toward(250, 150).E, Meadow.Toward(250, 150).N, 3f), 28),
-                new(2 * B, Pt.At(Meadow.Toward(250, 150).Toward(70, 70).E, Meadow.Toward(250, 150).Toward(70, 70).N, 28f), Pt.At(Meadow.Toward(250, 150).E, Meadow.Toward(250, 150).N, 2f), 28),
+                new(0, Pt.At(Meadow.Toward(250, 30).Toward(70, 48).E, Meadow.Toward(250, 30).Toward(70, 48).N, 14f), Pt.At(Meadow.Toward(250, 30).E, Meadow.Toward(250, 30).N, 3f), 28),
+                new(2 * B, Pt.At(Meadow.Toward(250, 30).Toward(70, 40).E, Meadow.Toward(250, 30).Toward(70, 40).N, 18f), Pt.At(Meadow.Toward(250, 30).E, Meadow.Toward(250, 30).N, 2f), 28),
             ],
             Smooth = 0.4f, Preroll = 1,
         },
@@ -862,7 +868,7 @@ public static class InvasionScript
             Keys =
             [
                 new(0, Pt.On(1, 3.2f, 1.0f, 1.5f), Pt.On(1, -0.5f, 0.8f, -6f), 35),
-                new(2 * B, Pt.On(1, 3.0f, 1.1f, -1.0f), Pt.On(1, -0.5f, 0.8f, -8f), 35),
+                new(2 * B, Pt.On(1, 3.0f, 1.4f, -1.0f), new Spot(2686600, 1155903, 12), 35),
             ],
             Smooth = 0.15f, Preroll = 3,
         },
@@ -1009,9 +1015,9 @@ public static class InvasionScript
             Cast =
             [
                 new() { Who = Heidi, At = NyonMole, Heading = 95, Item = (int)ItemId.FishingRod, Use = t => t > 0.3 },
-                new() { Who = Zib, At = NyonMole.Toward(95, 15), Board = NyonMole.Toward(0, 6), Swim = true, Heading = 275, Drive = Drive.Walk, Walk = _ => (new Vector2(0f, 0.4f), false) },
+                new() { Who = Zib, At = NyonMole.Toward(95, 21), Board = NyonMole.Toward(0, 6), Swim = true, Heading = 275, Drive = Drive.Walk, Walk = _ => (new Vector2(0f, 0.4f), false) },
             ],
-            ItemCues = [new(0.4, 0, ItemEventKind.FishCast) { At = NyonMole.Toward(95, 13) }],
+            ItemCues = [new(0.4, 0, ItemEventKind.FishCast) { At = NyonMole.Toward(95, 18) }],
             Keys =
             [
                 new(0, Pt.On(0, -2.2f, 1.6f, 3.4f), Pt.On(0, 0f, 0.2f, -10f), 35),
