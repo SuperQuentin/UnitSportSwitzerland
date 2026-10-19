@@ -169,6 +169,15 @@ public static class CorePlanner
                 continue;
             }
             double wide = Math.Max(0, Math.Min(meet.In, meet.Out)) / Math.Tan(meet.Half);
+            // a bend through whose lanes' lines meet next to a mouth (arms nearly in line, offset): a smooth S between the
+            // mouths, not an arc tighter than a car's (#854: a 1.5 m kink left the outline)
+            if (!c.Turns && wide < CarInner + c.Width * 0.5)
+            {
+                c.MinRadius = c.WideRadius = c.Radius = 0;
+                Hold(arms, frames, a, b, c);
+                LaySmooth(frames, a, b, c);
+                continue;
+            }
             // a turn the held mouths leave no room for at its vehicle's radius: as tight as it fits
             if (c.Turns && wide < c.MinRadius - 0.01) (c.UnderRadius, c.MinRadius) = (true, Math.Max(wide, c.Width * 0.5 + 0.5));
             // a bend through: as wide as fits, narrowed (where its kerb would start outside a mouth) at most to a car's radius
