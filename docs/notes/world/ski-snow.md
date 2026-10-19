@@ -58,6 +58,17 @@
   - The full force model is the ski physics issue.
 - **Trees**: `CachingChunkSource.LoadTreesAsync` drops trees more than 1 m inside a slope. It is the
   top of every peer's chain, so the drawn trees, colliders, gathering and birds agree.
+- **Roads under a slope**: the road shader runs `piste_snow` too, with the same layer on the tile's
+  road mesh (`ChunkManager.RoadsAt`, `PisteLayer` tags both). Signal props (styles 7 and 8) are left
+  alone. In PS1 the covered road takes the terrain's stepped sun term (`piste_cover`), or it shows as
+  a brighter ribbon. In Realistic it is a smoother, slightly lighter strip: no snow texture on roads.
+- **Markers** (`SlopeMarkers`, model viewer "Ski"): poles on the furnished tiles near the camera.
+  - One every 30 m on both edges of downhill, connection and snow-park slopes, 0.4 m inside the edge
+    so the trees lining the run do not hide them; round an area's outline.
+  - Coloured blue, red, black, or yellow for an itinerary. The right-hand pole going down (the lower
+    end of the path) has an orange top.
+  - None in the middle of another slope.
+  - Drawn only, no collision: one MultiMesh per colour and side per tile.
 - **HUD**: `SlopeHud`, top left on skis: the slope's ref and name in the Swiss colour (blue, red,
   black, yellow itinerary) and its condition. Rebuilt on change only.
 - **Opt-in**: `Systems.Snow` ("snow").

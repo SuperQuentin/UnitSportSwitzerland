@@ -483,9 +483,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
             var snow = World.Snow.SnowService.Create(this, _chunks);
             if (_worldMaterials.Length > 0)
             {
-                _pistes = new World.Snow.PisteLayer(_chunks, origin, _worldMaterials[0], snow);
+                _pistes = new World.Snow.PisteLayer(_chunks, origin, _worldMaterials[0], _worldMaterials.Length > 1 ? _worldMaterials[1] : null, snow);
                 AddChild(_pistes);
             }
+            AddChild(new World.Snow.SlopeMarkers(_chunks, snow));
             AddChild(new World.Snow.SlopeHud(() => LocalPlayer));
         }
         // a sign over every bank door (#213)

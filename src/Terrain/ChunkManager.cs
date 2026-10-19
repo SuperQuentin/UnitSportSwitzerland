@@ -589,6 +589,10 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     public MeshInstance3D? GroundAt(TileId id) =>
         _chunks.TryGetValue(id, out var state) ? state.Node?.Ground : null;
 
+    /// <summary>A loaded tile's road mesh, for per-tile shader parameters (the ski slopes, #887).</summary>
+    public MeshInstance3D? RoadsAt(TileId id) =>
+        _chunks.TryGetValue(id, out var state) ? state.Node?.RoadMesh : null;
+
     /// <summary>
     /// The buildings with players inside, for the facade shader's occupancy cues (more lit
     /// windows, figures behind the glass). Each box is (world x, world z, half width along the

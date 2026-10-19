@@ -26,6 +26,14 @@ float piste_noise(vec2 p) {
                mix(piste_hash(i + vec2(0.0, 1.0)), piste_hash(i + vec2(1.0, 1.0)), f.x), f.y);
 }
 
+// How much of a slope covers a tile-local point (its edge mask), 0 off one.
+float piste_cover(vec2 local_xz) {
+    if (!use_pistes || piste_layer < 0) {
+        return 0.0;
+    }
+    return texture(piste_map, vec3((local_xz * 0.5 + 0.5) / 512.0, float(piste_layer))).g;
+}
+
 // The slope's snow over `col` at a tile-local point (x east, z south, metres) and its altitude.
 // `rough` comes back lower on ice and slush for the lit styles. `sun` is the light direction.
 vec3 piste_snow(vec3 col, vec2 local_xz, float altitude, vec3 n, vec3 sun, inout float rough) {

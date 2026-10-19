@@ -13,7 +13,8 @@ namespace UnitSport.World.Snow;
 /// Draws the ski slopes near the camera (#887): each tile with slopes within <see cref="Radius"/>
 /// gets a layer of a <see cref="Texture2DArray"/> (2 m a texel: the slope, the edge mask and the
 /// groom phase), told to its ground mesh through the instance uniform <c>piste_layer</c>, as
-/// <c>Terrain/PhotoLayer</c> does the photos; and the slopes' snow sits in a small state texture
+/// <c>Terrain/PhotoLayer</c> does the photos, and to its road mesh, so a forest road under a slope
+/// is snowed over too; and the slopes' snow sits in a small state texture
 /// that is rewritten only when the snow has moved on (<see cref="StateSeconds"/>), never per
 /// frame. The terrain material stays the one every tile shares. shaders/body/piste_snow.gdshaderinc.
 /// </summary>
@@ -29,12 +30,13 @@ public partial class PisteLayer : Node
     private readonly ChunkManager _chunks;
     private readonly WorldOrigin _origin;
     private readonly ShaderMaterial _terrain;
+    private readonly ShaderMaterial? _roads;
     private readonly SnowService _snow;
     private readonly Texture2DArray _map = new();
     private readonly Image _stateImage;
     private readonly ImageTexture _stateTexture;
     private readonly byte[] _state = new byte[SlotsPerLayer * Capacity * 3 * 4];
-    private readonly Dictionary<TileId, (int Layer, ulong Ground, PisteTile Tile)> _shown = new();
+    private readonly Dictionary<TileId, (int Layer, ulong Ground, ulong Roads, PisteTile Tile)> _shown = new();
     private readonly HashSet<TileId> _building = new();
     private readonly Stack<int> _free = new();
     private readonly ConcurrentQueue<(TileId Id, PisteTile Tile, Image Image)> _ready = new();
@@ -50,12 +52,13 @@ public partial class PisteLayer : Node
     private double _stateHour = -1;
     private bool _stateDirty;
 
-    public PisteLayer(ChunkManager chunks, WorldOrigin origin, ShaderMaterial terrain, SnowService snow)
+    public PisteLayer(ChunkManager chunks, WorldOrigin origin, ShaderMaterial terrain, ShaderMaterial? roads, SnowService snow)
     {
         Name = "PisteLayer";
         _chunks = chunks;
         _origin = origin;
         _terrain = terrain;
+        _roads = roads;
         _snow = snow;
         var blank = Image.CreateEmpty(Size, Size, false, Image.Format.Rgba8);
         var layers = new Godot.Collections.Array<Image>();
@@ -70,16 +73,19 @@ public partial class PisteLayer : Node
     /// <summary>Puts the textures on the terrain material (again after a restyle).</summary>
     public void Apply()
     {
-        _terrain.SetShaderParameter(PisteMap, _map);
-        _terrain.SetShaderParameter(PisteState, _stateTexture);
-        _terrain.SetShaderParameter(UsePistes, true);
+        foreach (var m in new[] { _terrain, _roads })
+        {
+            m?.SetShaderParameter(PisteMap, _map);
+            m?.SetShaderParameter(PisteState, _stateTexture);
+            m?.SetShaderParameter(UsePistes, true);
+        }
     }
 
     public override void _ExitTree()
     {
         _terrain.SetShaderParameter(UsePistes, false);
-        foreach (var (id, _) in _shown)
-            if (_chunks.GroundAt(id) is { } ground) ground.SetInstanceShaderParameter(PisteLayerParam, -1);
+        _roads?.SetShaderParameter(UsePistes, false);
+        foreach (var (id, _) in _shown) Tag(id, -1);
     }
 
     public override void _Process(double delta)
@@ -90,7 +96,7 @@ public partial class PisteLayer : Node
             if (_free.Count == 0) continue;
             int layer = _free.Pop();
             _map.UpdateLayer(r.Image, layer);
-            _shown[r.Id] = (layer, 0, r.Tile);
+            _shown[r.Id] = (layer, 0, 0, r.Tile);
             _stateDirty = true;
         }
 
@@ -113,6 +119,12 @@ public partial class PisteLayer : Node
         }
     }
 
+    private void Tag(TileId id, int layer)
+    {
+        _chunks.GroundAt(id)?.SetInstanceShaderParameter(PisteLayerParam, layer);
+        _chunks.RoadsAt(id)?.SetInstanceShaderParameter(PisteLayerParam, layer);
+    }
+
     private void Poll(TileId centre)
     {
         _gone.Clear();
@@ -120,7 +132,7 @@ public partial class PisteLayer : Node
             if (LodPolicy.Distance(id, centre) > Radius) _gone.Add(id);
         foreach (var id in _gone)
         {
-            if (_chunks.GroundAt(id) is { } ground) ground.SetInstanceShaderParameter(PisteLayerParam, -1);
+            Tag(id, -1);
             _free.Push(_shown[id].Layer);
             _shown.Remove(id);
         }
@@ -133,11 +145,16 @@ public partial class PisteLayer : Node
                     var id = new TileId(centre.E + de, centre.N + dn);
                     if (_shown.TryGetValue(id, out var shown))
                     {
-                        // a tile rebuilt or reloaded has a new ground node: tell it its layer again
+                        // a tile rebuilt or reloaded has new ground or road nodes: tell them its layer again
                         if (_chunks.GroundAt(id) is { } ground && ground.GetInstanceId() != shown.Ground)
                         {
                             ground.SetInstanceShaderParameter(PisteLayerParam, shown.Layer);
-                            _shown[id] = shown with { Ground = ground.GetInstanceId() };
+                            _shown[id] = shown = shown with { Ground = ground.GetInstanceId() };
+                        }
+                        if (_chunks.RoadsAt(id) is { } roads && roads.GetInstanceId() != shown.Roads)
+                        {
+                            roads.SetInstanceShaderParameter(PisteLayerParam, shown.Layer);
+                            _shown[id] = shown with { Roads = roads.GetInstanceId() };
                         }
                         continue;
                     }

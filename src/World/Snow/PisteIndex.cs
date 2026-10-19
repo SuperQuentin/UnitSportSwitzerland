@@ -52,6 +52,13 @@ public sealed class PisteIndex
         return null;
     }
 
+    /// <summary>True once a tile's load has finished; <paramref name="tile"/> is null when it has no slopes. Starts the load. Main thread.</summary>
+    public bool Loaded(TileId id, out PisteTile? tile)
+    {
+        tile = Tile(id);
+        return tile != null || _tiles.ContainsKey(id);
+    }
+
     /// <summary>Drops tiles nobody asked for in the last <paramref name="frames"/> calls. Main thread.</summary>
     public void Trim(ulong frames)
     {
