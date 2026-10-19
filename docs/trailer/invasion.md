@@ -60,7 +60,7 @@ In the shot list, these tags mark what the film kit (#882) stages, and how.
 
 | Tag | What | In the script |
 |---|---|---|
-| **[UFO]** | A saucer (#861) | Flown as an actor (`Ufo(...)`: `RideKind.Ufo`, `Drive.Fly`), set as a `Craft` (hovering or landed), or a sighting's flyover (`Shot.Ufos`) |
+| **[UFO]** | A saucer (#861) | Flown as an actor (`Ufo(...)`: `RideKind.Ufo`, `Drive.Fly`), or set as a `Craft` (hovering or landed) |
 | **[BEAM]** | The tractor beam lifting something | A `Craft` with `UfoSwitches.BeamBetween`, over a parked `Prop.Vehicle`, a cow or a `Beamable` crate |
 | **[MS]** | The 121 m mothership | `new Craft(...) { Mothership = true }` |
 | **[COWS]** | Cows (#863) | `Shot.Herds` (`Cows(spot, Count: 1, Radius: 1.2f)` is one cow under a beam) |
@@ -84,13 +84,13 @@ Places are LV95. "Agl" is metres above the ground. Lenses are full-frame mm.
 | 8 | 14 | 0:28.1 | Furka road (2672150, 1157560) | In the AE86's cockpit over Luca's shoulder: the wheel, the dash, the road | cockpit view, car radio | **[BUB]** LUCA: Radio on. Perfect day. |
 | 9 | 15-16 | 0:30.3 | Gotthard road (2686600, 1154120) | Rochat's convoy (Duro, G-Class, Trakker) climbs the pass; a long lens from the slope. Super: **GOTTHARD · 11:00** | army vehicles, trucks | **[BUB]** ROCHAT: Routine exercise. Nothing to report. |
 | 10 | 17-18 | 0:34.6 | Genève airport, runway 23 end (2496200, 1120110) | Yvonne's A320 climbs out over our heads, 28 mm. Super: **GENÈVE · 11:05** | airliners | — |
-| 11 | 19-20 | 0:38.9 | Over the Aletsch, 3700 m (2646200, 1151600) | Wingman shot on the A320; **[UFO]** a saucer flashes past ahead | flight, the Alps from above | **[BUB]** YVONNE: Tower... is that a saucer? |
+| 11 | 19-20 | 0:38.9 | Over the Aletsch, 3700 m (2646200, 1151600) | Wingman shot on the A320; **[UFO]** a saucer keeps pace off her left wing | flight, the Alps from above | **[BUB]** YVONNE: Tower... is that a saucer? |
 
 ### Act two: they arrive (bars 21-52)
 
 | # | Bars | Time | Place | What happens · camera | Feature | Bubbles |
 |---|---|---|---|---|---|---|
-| 12 | 21-23 | 0:43.3 | Gornergrat → Matterhorn | On the big hit, **[UFO]** a V of saucers drops out of the sky past the Matterhorn; **[MS]** the mothership above them; the camera tilts onto the lead saucer. Super: **12:48** | UFOs, the mothership | — |
+| 12 | 21-23 | 0:43.3 | Gornergrat → Matterhorn | On the big hit, **[UFO]** four saucers in formation fly out of the Matterhorn's sky and past the camera; **[MS]** the mothership hangs behind them; the camera tilts onto the lead saucer. Super: **12:48** | UFOs, the mothership | — |
 | 13 | 24-25 | 0:49.8 | Zürich, gridlock (2683480, 1246900, 32 m agl) | Rush-hour traffic from above; **[MS]** the mothership's shadow slides over it, then its rim fills the top of the frame. Super: **ZÜRICH · 13:00** | city traffic | — |
 | 14 | 26-28 | 0:54.1 | Heidi's meadow | **[UFO][BEAM][COWS]** A saucer hovers over the pasture and beams up a cow and a crate (the game has no hay bales). Heidi runs in shaking her fist | the tractor beam | **[BUB]** HEIDI: HEY! Those are MY cows! |
 | 15 | 29-30 | 1:00.6 | IKEA Riddes car park (2582300, 1112690) | **[UFO][BEAM]** A parked car rises out of its bay into the beam. Super: **RIDDES · 14:30** | parked cars, IKEA | — |
@@ -140,7 +140,7 @@ Places are LV95. "Agl" is metres above the ground. Lenses are full-frame mm.
 | # | Bars | Time | Place | What happens · camera | Feature | Bubbles |
 |---|---|---|---|---|---|---|
 | 41 | 82-83 | 2:55.2 | Heidi's meadow, Lauterbrunnen | Landed among the loot (shotgun, smoke, flare gun, first-aid kit, fondue pot); Luca holds up a Blåhaj and shrugs; the zone's wall glows beyond | BR loot, the zone | **[BUB]** LUCA: Who packed the Blåhaj? |
-| 42 | 84-85 | 2:59.5 | Over Heidi's meadow, 40 m up | The zone's wall round **[UFO]** a landed saucer, six players running in | the BR zone, bots | — |
+| 42 | 84-85 | 2:59.5 | Over Heidi's meadow, 15 m up | The zone's wall round **[UFO]** a landed saucer, six players running in | the BR zone, bots | — |
 | 43 | 86-87 | 3:03.8 | Tremola | Luca's FD3S and a GT-R chase **[UFO]** a saucer down the hairpins; door to door | racing | — |
 | 44 | 88-89 | 3:08.1 | Furka, from 80 m straight up | The pack of six through a bend | races with AI drivers | — |
 | 45 | 90 | 3:12.5 | Furka | A Monster leans past a GT-R | motorbikes | — |
@@ -218,7 +218,7 @@ Stage 1 added fist-fight poses, scripted jumps, headwear, swimming, occasions, t
 pieces and item cues to the director; the two sibling films added overlapping ones. The film kit
 (#882, `docs/notes/trailer/film-kit.md`) replaced all three sets with one, and this film was ported
 onto it: `Cast.Fight`, `Actions`, `Headwear`, `Swim`, `Lowered`; `Shot.Occasion` (`"none"` for none),
-`Zone`, `ItemCues`, `Screens`, `Craft`, `Ufos`, `Herds`; `Prop.Piece`, `Vehicle`, `Beamable`.
+`Zone`, `ItemCues`, `Screens`, `Craft`, `Herds`; `Prop.Piece`, `Vehicle`, `Beamable`.
 
 Not staged:
 
