@@ -121,15 +121,52 @@
   fills the pixel bars; the drop hits the blinders and fires CO2, flames and gerbs on its first beat.
   Looks move per beat and bar (wash sway 0.5..2 cycles a beat, beam fans per bar, chases over two beats).
 
+- **Phrases** (`LightDesk.Phrase`, every 2 bars from the seed): Sync, Stagger (a wave), Mirror (from
+  the centre), Alternate (odd/even), Sparse (one in three), Solo (two heads), Cycle (one at a time round
+  the row, a sixteenth each), PingPong. Each head moves on its own lag (`Lag`), lit or not by `Mask`;
+  a chorus's first bars, a build and 4 s after a drop sync everything; calm verses stay in sync. Groups
+  sit out phrases (spots, floor beams).
+- **Rhythm pump** (`Rhythm`): each head's dimmer flashes on its beat (behind it by its lag) and decays,
+  or follows the song's kick in sync; depth by section (calm 0.2, chorus 0.4, groove 0.65, peak 0.8),
+  washes half as deep.
+- **Motors** (`ConcertRig.Motor`): the DMX pan/tilt is a target; each head's steppers chase it at a top
+  speed and acceleration (beam 300°/s, 1800°/s²; spot 220, 1100; wash 160, 700; tilt 0.9 of pan) and
+  brake to stop on it, so a jump on the desk is a sweep on the rig, as on real fixtures.
+- **Beat debug** (`ConcertBeatDebug`, `/concert debug`, the desk's Beat debug button): 8 s of loudness,
+  kick, snare, hats, bass, brightness with beats and bars ruled, the song's sections, builds and drops
+  with the playhead, and the desk's section, bar, phrase, pump and what fires. Explainer of the
+  analysis: CdAnalysis v2 in `docs/notes/audio/cd-beat.md`.
+
+## The PA (`ConcertPa`, `shaders/concert/pa.gdshader`)
+
+- `StagePlan.Pa`: line arrays flown off the wings (a J of ~0.55 m boxes, about 25° over the hang),
+  subs under the deck's edge (a hidden `StageBox` keeps their collision), delay hangs on the FOH towers,
+  the round's four corner hangs turned out. One mesh, built once; every vertex carries its box's pivot
+  and facing (CUSTOM0/1), and the shader swells the boxes and pushes the woofers on the `kick` uniform
+  (subs harder, with `bass`): one draw, two uniforms a frame.
+- Not a MultiMesh on purpose: headless, the z-fight scan reads every instance at the origin, and 180
+  stacked instances made `--zfightcheck` take over 10 minutes.
+
+## Performance (measured Oct 2026, Geneva, concert 13, from the floor)
+
+- Before: 14 ms a frame against 8.4 ms with no concert. The IMAG SubViewport rendered the whole world
+  again out to 3 km (21.7 M primitives against 10.9 M), and the artists' meshes were rebuilt every frame
+  (3 ms of CPU for one figure).
+- Now ~10.3 ms: the IMAG camera's `Far` is 450 m and it renders every other frame; the artists' poses
+  are cached (`ConcertPerformers._poses`, 8 a beat over a move's two bars, at most one new pose a frame).
+  The rest of the rig is under 0.5 ms (desk, effects, rays, heads, screens).
+
 ## The effects (`ConcertSfx`)
 
 - Fixtures with an arm and a fire channel (`Attr.Arm`, `Attr.Fire`): flame projectors and CO2 jets
-  fire while held, confetti cannons, gerbs (4 s fountains) and airbursts once per rising edge; low fog
+  fire while held, confetti cannons, gerbs (2.5 s fountains) and airbursts once per rising edge; low fog
   while its pump runs. Counts by genre (`ConcertEvent.Flames` ...). Airbursts burst at 24 m over the
   open pitch (Geneva's roof forbids pyro under it).
-- The desk cues them from the song (`LightDesk.Effects`): CO2 on a chorus's first two downbeats,
-  flames every two bars in a chorus and on alternate beats at a peak, gerbs as a peak begins, confetti
-  as the song's last section begins, airbursts in the blackout after it, fog in calm verses. By hand:
+- The desk cues them from the song (`LightDesk.Effects`), kept for the moments (players found it too
+  much): a drop fires CO2, flames and gerbs on its first beat; a chorus opens on one CO2 shot and a flame
+  every four bars; a peak, one flame a bar, left then right; gerbs and confetti as the last chorus
+  begins; airbursts only after the set's last song (`MusicMoment.Finale`; every fourth made-up song
+  without music); fog in calm verses. By hand:
   `/concert cue flames|co2|confetti|gerbs|pyro`, OSC `/concert/fx/...`, the desk's buttons: a `Fx` cue
   stamped with the shared clock, `Fired` on every peer (`LightDesk.FireNow`).
 - CPU particles (unshaded billboards), one shared flame light, synthesised `FlameBank`, `Co2Bank`,

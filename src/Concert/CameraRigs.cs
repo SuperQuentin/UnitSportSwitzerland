@@ -40,6 +40,9 @@ public sealed class CameraRig
     public float Arm { get; init; }
     /// <summary>Where it looks when nobody aims it.</summary>
     public required Func<double, Vector3> Target { get; init; }
+    /// <summary>Nothing of it shows (a head-cam).</summary>
+    public bool Hidden { get; init; }
+
     /// <summary>Its lens: the widest and the tightest field of view, and the one it rests at.</summary>
     public float FovWide { get; init; } = 70f;
     public float FovTight { get; init; } = 8f;
@@ -101,7 +104,7 @@ public sealed class CameraRig
                     Mathf.Lerp(BoxMin.Z, BoxMax.Z, 0.5f + 0.45f * s(0.09, 1f)));
                 break;
             case RigKind.Steadicam:
-                P = A + new Vector3(BoxMax.X * s(0.2), 0, BoxMax.X * 0.5f * (1f + s(0.13, 1f)));
+                P = A + new Vector3(BoxMax.X * s(0.2), 0, BoxMax.X * 0.8f * s(0.13, 1f));
                 break;
             case RigKind.Drone:
                 float a = (float)(t * 0.05);
@@ -190,8 +193,9 @@ public sealed class CameraRig
                 BoxMin = new Vector3(-hu, 7f, -hv), BoxMax = new Vector3(hu, 26f, hv), Target = onArtist, FovRest = 55f,
             },
             new() { Name = "Jib", Kind = RigKind.Jib, A = Sp(hw * 0.55f, 0f, 7f), B = Sp(0, 0, -1f) - Sp(hw * 0.55f, 0f, 7f), Arm = 9f, Target = onArtist, FovRest = 42f },
-            new() { Name = "Steadicam", Kind = RigKind.Steadicam, A = Sp(0, h + 1.6f, plan.Round ? 0 : -d * 0.2f), BoxMax = new Vector3(Math.Min(6f, hw - 2f), 0, 0), Target = onArtist, FovRest = 60f },
-            new() { Name = "Crowd", Kind = RigKind.Fixed, A = Sp(0, h + 4f, 0.5f), Target = _ => Sp(0, 1.5f, 25f), FovRest = 70f },
+            // the steadicam works the deck's front corner, the crowd camera on the other: never between the artist and the crowd
+            new() { Name = "Steadicam", Kind = RigKind.Steadicam, A = Sp(hw * 0.72f, h + 1.6f, plan.Round ? hw * 0.6f : -3f), BoxMax = new Vector3(Math.Min(2.5f, hw * 0.25f), 0, 0), Target = onArtist, FovRest = 60f },
+            new() { Name = "Crowd", Kind = RigKind.Fixed, A = Sp(-(hw - 1.2f), h + 2.2f, plan.Round ? hw - 1.2f : -0.8f), Target = _ => Sp(0, 1.5f, 25f), FovRest = 70f },
             new() { Name = "Wide FOH", Kind = RigKind.Fixed, A = plan.Desk + new Vector3(0, 6f, 2f), Target = _ => Sp(0, h + 4f, -d * 0.5f), FovRest = 50f },
             new() { Name = "Wide far stand", Kind = RigKind.Fixed, A = Sp(0, 22f, plan.Round ? 60f : 75f), Target = _ => Sp(0, h + 3f, -d * 0.5f), FovRest = 45f },
             new()
@@ -199,7 +203,8 @@ public sealed class CameraRig
                 Name = "Drone", Kind = RigKind.Drone, A = Vector3.Zero, P = new Vector3(120f, 70f, 0),
                 BoxMax = new Vector3(120f, 45f, 110f), Target = _ => new Vector3(0, 5f, 0), FovRest = 55f,
             },
-            new() { Name = "Artist POV", Kind = RigKind.Fixed, A = artist + Sp(0, 0, 0.4f) - Sp(0, 0, 0), Target = _ => Sp(0, 2f, 30f), FovRest = 75f },
+            // the artist's own head-cam: nothing to see of it
+            new() { Name = "Artist POV", Kind = RigKind.Fixed, A = artist + Sp(0, 0, 0.4f) - Sp(0, 0, 0), Target = _ => Sp(0, 2f, 30f), FovRest = 75f, Hidden = true },
         };
         foreach (var r in list)
         {

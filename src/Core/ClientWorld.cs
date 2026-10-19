@@ -931,6 +931,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(Concert.ConcertDeskUi.Create(() => LocalPlayer, () => GetNodeOrNull<ChatManager>(ChatManager.NodeName)));
         // its cameras on this screen (program view) and out over NDI
         AddChild(new Concert.ConcertBroadcast());
+        AddChild(new Concert.ConcertBeatDebug());
         _radioUi.Give = items.Give;
         AddChild(_radioUi);
         if (Items.CarCdCheck.Create(() => LocalPlayer, () => _players, items.Inventory, networked: false) is { } carCdShots) AddChild(carCdShots);

@@ -40,6 +40,7 @@ public partial class ConcertCameras : Node3D
     public int Operating { get; set; } = -1;
 
     public bool ImagWanted { get; set; }
+    private int _tick;
     public static int ProgramWanted;
 
     public Texture2D ImagTexture => _imag.GetTexture();
@@ -59,6 +60,8 @@ public partial class ConcertCameras : Node3D
     {
         _rigs = CameraRig.For(_plan);
         (_imag, _imagCam) = Port("Imag", new Vector2I(256, 144));
+        // the screens' feed sees the bowl, not the country: a second render of the whole world cost as much as the concert
+        _imagCam.Far = 450f;
         (_program, _programCam) = Port("Program", new Vector2I(1280, 720));
         (_finder, _finderCam) = Port("Viewfinder", new Vector2I(1280, 720));
         BuildKit();
@@ -99,6 +102,8 @@ public partial class ConcertCameras : Node3D
             var body = new Node3D { Name = $"Cam{i + 1}" };
             AddChild(body);
             // the camera itself: a body and a lens hood, -Z forward
+            _bodies[i] = body;
+            if (r.Hidden) continue;
             Box(body, new Vector3(0.32f, 0.34f, 0.55f));
             Box(body, new Vector3(0.22f, 0.22f, 0.3f)).Position = new Vector3(0, 0, -0.4f);
             if (r.Kind == RigKind.Drone)
@@ -236,7 +241,10 @@ public partial class ConcertCameras : Node3D
         if (imag) Aim(_imagCam, program, _rigs[OnAir].Fov);
         if (prog) Aim(_programCam, program, _rigs[OnAir].Fov);
         if (finder) Aim(_finderCam, Pose(_rigs[Operating]), _rigs[Operating].Fov);
-        Mode(_imag, imag);
+        // the screens' feed at half the frame rate: 256x144 on an LED wall does not need more
+        _tick++;
+        var imagMode = !imag ? SubViewport.UpdateMode.Disabled : (_tick & 1) == 0 ? SubViewport.UpdateMode.Once : _imag.RenderTargetUpdateMode;
+        if (_imag.RenderTargetUpdateMode != imagMode) _imag.RenderTargetUpdateMode = imagMode;
         Mode(_program, prog);
         Mode(_finder, finder);
         // an operator's own camera hides its body from its own lens
@@ -272,6 +280,14 @@ public partial class ConcertPerformers : Node3D
     private readonly StagePlan _plan;
     private readonly LightDesk _desk;
     private readonly List<(MeshInstance3D Node, HumanPalette Palette, int Offset)> _people = new();
+
+    /// <summary>
+    /// Poses built once and kept (a figure costs milliseconds to build): per artist, move and frame,
+    /// <see cref="PerBeat"/> frames a beat over the move's 8 counts. At most one new pose a frame; until
+    /// it is built the artist holds the one before.
+    /// </summary>
+    private readonly Dictionary<long, ArrayMesh> _poses = new();
+    private const int PerBeat = 8, MaxPoses = 1200;
     private Audio.Cd.MusicStyle _style;
 
     public ConcertPerformers(StagePlan plan, LightDesk desk)
@@ -322,10 +338,27 @@ public partial class ConcertPerformers : Node3D
         float barPhase = beat / 4f - bar;
         bool dancing = _desk.Section is not (ShowSection.Blackout or ShowSection.WalkIn);
         int moves = HumanMeshBuilder.MoveCount(_style);
-        foreach (var (node, palette, offset) in _people)
+        // the frame within the move's two bars, snapped
+        int frame = (int)MathF.Floor(((bar & 1) * 4f + barPhase * 4f) * PerBeat) % (8 * PerBeat);
+        float fBeats = (frame + 0.5f) / PerBeat;
+        int fBar = (int)(fBeats / 4f);
+        float fBarPhase = fBeats / 4f - fBar, fPhase = fBeats - MathF.Floor(fBeats);
+        bool built = false;
+        for (int p = 0; p < _people.Count; p++)
         {
-            var dance = dancing ? new DanceParams(_style, ((bar / 2) + offset) % moves, phase, barPhase, bar, 1f) : (DanceParams?)null;
-            HumanMeshBuilder.BuildStride(palette, 0f, 0f, dance: dance, into: (ArrayMesh)node.Mesh);
+            var (node, palette, offset) = _people[p];
+            int move = dancing ? ((bar / 2) + offset) % moves : -1;
+            long key = ((long)p << 40) | ((long)(move + 1) << 20) | (long)(dancing ? frame : 0);
+            if (!_poses.TryGetValue(key, out var mesh))
+            {
+                if (built) continue;
+                if (_poses.Count >= MaxPoses) _poses.Clear();
+                var dance = dancing ? new DanceParams(_style, move, fPhase, fBarPhase, fBar, 1f) : (DanceParams?)null;
+                mesh = HumanMeshBuilder.BuildStride(palette, 0f, 0f, dance: dance);
+                _poses[key] = mesh;
+                built = true;
+            }
+            if (node.Mesh != mesh) node.Mesh = mesh;
         }
     }
 }

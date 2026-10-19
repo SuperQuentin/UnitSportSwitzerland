@@ -128,6 +128,7 @@ public partial class ConcertDeskUi : CanvasLayer
         Btn(crew, "Take", () => { Close(); Run($"/concert camera take {pick.Selected + 1}"); });
         Btn(crew, "Leave", () => Run("/concert camera leave"));
         Btn(cams, "NDI out", () => Run("/concert ndi"));
+        Btn(cams, "Beat debug", () => Run("/concert debug"));
 
         Section(col, "Effects");
         var fx = Row(col);

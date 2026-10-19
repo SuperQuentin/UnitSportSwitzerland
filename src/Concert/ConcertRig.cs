@@ -69,6 +69,7 @@ public partial class ConcertRig : Node3D
     private ConcertCrowd? _crowd;
     private ConcertSfx _sfx = null!;
     private ConcertMusic _music = null!;
+    private ConcertPa _pa = null!;
     private ConcertCameras _cameras = null!;
     private ConcertPerformers _performers = null!;
     private MeshInstance3D[] _feeds = Array.Empty<MeshInstance3D>();
@@ -86,6 +87,14 @@ public partial class ConcertRig : Node3D
     /// beams still climb through the grid into the sky.
     /// </summary>
     private float[] _reach = Array.Empty<float>();
+
+    /// <summary>
+    /// Each head's motors: where its pan and tilt really are (degrees) and how fast they turn. The DMX is
+    /// only the target, as on a real fixture: the steppers chase it at their top speed and acceleration
+    /// (<see cref="Motor"/>), so a jump on the desk is a sweep on the rig.
+    /// </summary>
+    private float[] _pan = Array.Empty<float>(), _tilt = Array.Empty<float>(), _panV = Array.Empty<float>(), _tiltV = Array.Empty<float>();
+    private bool _motorsSet;
     private RayCast3D? _ray;
     private int _rayNext;
     private StaticBody3D? _stageBody;
@@ -106,6 +115,8 @@ public partial class ConcertRig : Node3D
         var fx = _plan.Patch.Fixtures;
         _heads = fx.Where(f => f.Type.Kind is FixtureKind.Spot or FixtureKind.Beam or FixtureKind.Wash).ToArray();
         _reach = _heads.Select(f => f.Type.Kind == FixtureKind.Wash ? BeamLength * 0.55f : BeamLength).ToArray();
+        _pan = new float[_heads.Length]; _tilt = new float[_heads.Length];
+        _panV = new float[_heads.Length]; _tiltV = new float[_heads.Length];
         _ray = new RayCast3D { Name = "BeamRay", Enabled = false, HitBackFaces = true, HitFromInside = false };
         AddChild(_ray);
         if (_stageBody != null) _ray.AddException(_stageBody);
@@ -120,6 +131,8 @@ public partial class ConcertRig : Node3D
         // the music from the PA: the setlist on the shared clock, read for the desk
         _music = new ConcertMusic(Event, _plan.PaHangs.ToArray());
         AddChild(_music);
+        _pa = new ConcertPa(_plan);
+        AddChild(_pa);
         // pyro, CO2, confetti, fog: fixtures of the rig like the rest
         _sfx = new ConcertSfx(_plan.Patch, Event);
         AddChild(_sfx);
@@ -138,8 +151,10 @@ public partial class ConcertRig : Node3D
     private void BuildStage()
     {
         var g = new StadiumBuilder.Geo(mesh: true, collision: true);
+        var unseen = new StadiumBuilder.Geo(mesh: false, collision: true);
         foreach (var b in _plan.Boxes)
-            g.Box(b.Centre, b.Size, new Basis(Vector3.Up, b.Yaw), b.Color.SrgbToLinear() with { A = 0f }, b.Solid);
+            (b.Hidden ? unseen : g).Box(b.Centre, b.Size, new Basis(Vector3.Up, b.Yaw), b.Color.SrgbToLinear() with { A = 0f }, b.Solid);
+        g.Faces.AddRange(unseen.Faces);
         foreach (var r in _plan.Ramps) g.Solid(r.A, r.B, r.C, r.D);
         if (g.Data() is { } data)
             AddChild(new MeshInstance3D { Name = "Stage", Mesh = ChunkNode.ToPropMesh(data, StyleKit.Material(MaterialRole.Prop)) });
@@ -331,6 +346,21 @@ public partial class ConcertRig : Node3D
             if (f.Type.Kind == FixtureKind.Hazer) _haze = MathF.Max(_haze, p.Get01(f, Attr.Pump));
         float haze = 0.25f + 0.75f * _haze;
 
+        // the motors follow the DMX
+        float dt = Math.Min((float)delta, 0.1f);
+        for (int i = 0; i < _heads.Length; i++)
+        {
+            var f = _heads[i];
+            float wantPan = (p.Get16(f, Attr.Pan, Attr.PanFine) - 0.5f) * f.Type.PanRange;
+            float wantTilt = (p.Get16(f, Attr.Tilt, Attr.TiltFine) - 0.5f) * f.Type.TiltRange;
+            if (!_motorsSet) { _pan[i] = wantPan; _tilt[i] = wantTilt; continue; }
+            // degrees a second, and a second squared: a beam head is quick, a wash a heavier yoke
+            (float v, float a) = f.Type.Kind switch { FixtureKind.Beam => (300f, 1800f), FixtureKind.Spot => (220f, 1100f), _ => (160f, 700f) };
+            Motor(ref _pan[i], ref _panV[i], wantPan, v, a, dt);
+            Motor(ref _tilt[i], ref _tiltV[i], wantTilt, v * 0.9f, a * 0.9f, dt);
+        }
+        _motorsSet = true;
+
         // a quarter of the beams find what they hit this frame
         int rays = (_heads.Length + 3) / 4;
         for (int k = 0; k < rays && _ray != null && _heads.Length > 0; k++)
@@ -338,7 +368,7 @@ public partial class ConcertRig : Node3D
             int i = _rayNext++ % _heads.Length;
             var f = _heads[i];
             float max = f.Type.Kind == FixtureKind.Wash ? BeamLength * 0.55f : BeamLength;
-            var dir = Direction(f);
+            var dir = Direction(i);
             _ray.Position = f.Position + dir * 0.4f;
             _ray.TargetPosition = _ray.Basis.Inverse() * (dir * max);
             _ray.ForceRaycastUpdate();
@@ -351,7 +381,7 @@ public partial class ConcertRig : Node3D
         for (int i = 0; i < _heads.Length; i++)
         {
             var f = _heads[i];
-            var dir = Direction(f);
+            var dir = Direction(i);
             float dim = p.Get01(f, Attr.Dimmer) * Shutter(f, t) * master;
             var col = ColorOf(f);
             float zoom = p.Get01(f, Attr.Zoom);
@@ -422,6 +452,14 @@ public partial class ConcertRig : Node3D
         if (near && (ShowOn() || ExternalLive)) _performers.Step();
         _cameras.ImagWanted = imag && near;
         _cameras.Step(now % 86400.0);
+        // the PA bounces on the kick
+        if (near)
+        {
+            bool live = (ShowOn() || ExternalLive) && _desk.Section is not (ShowSection.Blackout or ShowSection.WalkIn);
+            float beatPh = _desk.Beat - MathF.Floor(_desk.Beat);
+            float kick = !live ? 0f : _desk.Music is { } mu ? mu.Kick : MathF.Exp(-beatPh * 6f);
+            _pa.Pump(kick, _desk.Music is { HasBands: true } mb ? mb.Bass : 0.6f);
+        }
 
         // the real lights follow the rig as a whole
         float washN = Math.Max(1, _heads.Length / 3);
@@ -459,16 +497,32 @@ public partial class ConcertRig : Node3D
     }
 
     /// <summary>The beam's direction from 16-bit pan and tilt: tilt tips it from the yoke's axis towards the fixture's home side, pan turns that about the axis.</summary>
-    private Vector3 Direction(Fixture f)
+    private Vector3 Direction(int i)
     {
-        var p = _plan.Patch;
-        float pan = Mathf.DegToRad((p.Get16(f, Attr.Pan, Attr.PanFine) - 0.5f) * f.Type.PanRange);
-        float tilt = Mathf.DegToRad((p.Get16(f, Attr.Tilt, Attr.TiltFine) - 0.5f) * f.Type.TiltRange);
+        var f = _heads[i];
+        float pan = Mathf.DegToRad(_pan[i]), tilt = Mathf.DegToRad(_tilt[i]);
         var up = f.Up;
         var fwd = (f.Home - up * f.Home.Dot(up));
         fwd = fwd.LengthSquared() < 1e-6f ? up.Cross(Vector3.Right).Normalized() : fwd.Normalized();
         var right = up.Cross(fwd);
         return (up * MathF.Cos(tilt) + (fwd * MathF.Cos(pan) + right * MathF.Sin(pan)) * MathF.Sin(tilt)).Normalized();
+    }
+
+    /// <summary>
+    /// One axis of a moving head's stepper: toward <paramref name="target"/> no faster than
+    /// <paramref name="vmax"/>, speeding up and braking at <paramref name="amax"/>, braking in time to stop
+    /// on it.
+    /// </summary>
+    public static void Motor(ref float pos, ref float vel, float target, float vmax, float amax, float dt)
+    {
+        float d = target - pos;
+        float stop = MathF.Sign(d) * MathF.Sqrt(2f * amax * MathF.Abs(d));
+        float want = Math.Clamp(stop, -vmax, vmax);
+        vel += Math.Clamp(want - vel, -amax * dt, amax * dt);
+        float step = vel * dt;
+        // never past the target in one step
+        if (MathF.Abs(step) >= MathF.Abs(d) && MathF.Sign(step) == MathF.Sign(d)) { pos = target; vel = 0f; }
+        else pos += step;
     }
 
     /// <summary>The shutter: 0..7 closed, 8..15 open, 16..131 strobing 1..20 Hz, above open.</summary>

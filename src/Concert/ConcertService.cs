@@ -424,6 +424,7 @@ public partial class ConcertService : Node
             "input" => svc.InputCommand(parts.Skip(2).ToArray()),
             "patch" => svc.ExportPatch(),
             "view" or "ndi" or "snap" or "camera" => ConcertBroadcast.Instance?.Command(parts.Skip(1).ToArray()) ?? "The broadcast is not running here.",
+            "debug" => ConcertBeatDebug.Instance?.Command(parts.Skip(1).ToArray()) ?? "The beat debug window is not here.",
             _ => null,   // host, release, status: the server's
         };
     }

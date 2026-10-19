@@ -3,7 +3,13 @@ using Godot;
 namespace UnitSport.Concert;
 
 /// <summary>A box of the stage, in the stadium frame (u, y over the pitch, v); <see cref="Yaw"/> turns it about +Y.</summary>
-public readonly record struct StageBox(Vector3 Centre, Vector3 Size, float Yaw, Color Color, bool Solid);
+public readonly record struct StageBox(Vector3 Centre, Vector3 Size, float Yaw, Color Color, bool Solid, bool Hidden = false);
+
+/// <summary>
+/// A PA cabinet (<see cref="ConcertPa"/> draws it and makes it bounce): a line array (stacked into
+/// elements) or a sub stack, stadium frame; <see cref="Size"/> is across its face, its height, its depth.
+/// </summary>
+public readonly record struct PaCab(Vector3 Centre, Vector3 Size, Vector3 Facing, bool Sub);
 
 /// <summary>A walkable slope (stairs up to a deck), four corners in the stadium frame.</summary>
 public readonly record struct StageRamp(Vector3 A, Vector3 B, Vector3 C, Vector3 D);
@@ -22,6 +28,9 @@ public sealed class StagePlan
     public readonly DmxPatch Patch = new();
     /// <summary>Where the PA hangs, stadium frame: where the music comes from.</summary>
     public readonly List<Vector3> PaHangs = new();
+
+    /// <summary>The PA's cabinets, drawn and pumped by <see cref="ConcertPa"/> (a sub stack also stands in <see cref="Boxes"/>, unseen, for its collision).</summary>
+    public readonly List<PaCab> Pa = new();
     /// <summary>The lighting desk on the front-of-house riser, stadium frame: where its screen opens.</summary>
     public Vector3 Desk { get; private set; }
     public readonly ConcertEvent Event;
@@ -111,6 +120,16 @@ public sealed class StagePlan
     private void Box(float x0, float x1, float y0, float y1, float z0, float z1, Color c, bool solid = true) =>
         Boxes.Add(new StageBox(At((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2), new Vector3(x1 - x0, y1 - y0, z1 - z0), Yaw, c, solid));
 
+    /// <summary>A PA cabinet in the stage frame, facing (<paramref name="fx"/>, <paramref name="fz"/>).</summary>
+    private void Cab(float x0, float x1, float y0, float y1, float z0, float z1, float fx, float fz, bool sub)
+    {
+        bool alongX = MathF.Abs(fx) > MathF.Abs(fz);
+        float w = alongX ? z1 - z0 : x1 - x0, depth = alongX ? x1 - x0 : z1 - z0;
+        Pa.Add(new PaCab(At((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2), new Vector3(w, y1 - y0, depth), Dir(fx, 0, fz), sub));
+        if (sub)
+            Boxes.Add(new StageBox(At((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2), new Vector3(x1 - x0, y1 - y0, z1 - z0), Yaw, Speaker, true, Hidden: true));
+    }
+
     /// <summary>A vertical truss tower, its top at <paramref name="top"/>.</summary>
     private void Tower(float x, float z, float top) => Box(x - TrussSize / 2, x + TrussSize / 2, 0.012f, top, z - TrussSize / 2, z + TrussSize / 2, Truss);   // its foot a hair up: never coplanar with a deck's underside
 
@@ -157,9 +176,9 @@ public sealed class StagePlan
             Box(Math.Min(x0, x1), Math.Max(x0, x1), 0, r - 2f, -d, -d + 1f, Scrim);
             // the flown PA: a line array hung off the wing, its subs stacked under the deck's edge
             float px = side * (hw + 3f);
-            Box(px - 0.7f, px + 0.7f, r - 12f, r - 1.5f, -2f, -0.6f, Speaker, solid: false);
+            Cab(px - 0.6f, px + 0.6f, r - 12f, r - 1.5f, -1.7f, -1.05f, 0, 1, sub: false);
             PaHangs.Add(At(px, r - 7f, -1.3f));
-            Box(px - 1.2f, px + 1.2f, 0, 1.2f, -2f, 0f, Speaker);
+            Cab(px - 1.2f, px + 1.2f, 0.012f, 1.2f, -2f, 0f, 0, 1, sub: true);
         }
 
         // video
@@ -208,7 +227,7 @@ public sealed class StagePlan
         {
             float dx = side * 18f;
             Tower(dx, foh - 6f, 12f);
-            Box(dx - 0.6f, dx + 0.6f, 6f, 11.5f, foh - 7.2f, foh - 6.4f, Speaker, solid: false);
+            Cab(dx - 0.6f, dx + 0.6f, 6f, 11.5f, foh - 7.1f, foh - 6.5f, 0, 1, sub: false);
         }
         // the barrier along the stage front, a pit for security behind it
         if (catwalk > 0)
@@ -279,7 +298,7 @@ public sealed class StagePlan
             {
                 Tower(sx * (hw + 2f), sz * (hw + 2f), r + 1f);
                 // a flown PA hang at each corner, turned out to its quarter
-                Box(sx * (hw + 3.2f) - 0.7f, sx * (hw + 3.2f) + 0.7f, r - 11f, r - 1.5f, sz * (hw + 3.2f) - 0.7f, sz * (hw + 3.2f) + 0.7f, Speaker, solid: false);
+                Cab(sx * (hw + 3.2f) - 0.5f, sx * (hw + 3.2f) + 0.5f, r - 11f, r - 1.5f, sz * (hw + 3.2f) - 0.5f, sz * (hw + 3.2f) + 0.5f, sx, sz, sub: false);
                 PaHangs.Add(At(sx * (hw + 3.2f), r - 6f, sz * (hw + 3.2f)));
             }
         // the square grid on the four towers

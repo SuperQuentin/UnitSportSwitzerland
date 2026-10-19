@@ -237,7 +237,7 @@ public partial class ConcertSfx : Node3D
                 case FixtureKind.Gerb:
                     if (rising)
                     {
-                        _until[i] = now + 4.0;
+                        _until[i] = now + 2.5;
                         Sound(f.Position, CrackleBank, 0f);
                     }
                     bool on = now < _until[i];

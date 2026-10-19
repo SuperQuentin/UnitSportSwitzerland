@@ -11,7 +11,7 @@ namespace UnitSport.Concert;
 /// </summary>
 public readonly record struct MusicMoment(ShowSection Section, float Beat, float Kick, float Level, int SectionBar, bool LastSection, float Burst,
     float Snare = 0f, float Hat = 0f, float Bass = 0.5f, float Bright = 0.5f, float Build = 0f, float SinceDrop = float.PositiveInfinity,
-    bool HasBands = false);
+    bool HasBands = false, bool Finale = false);
 
 /// <summary>
 /// A concert's music (#885): a setlist of the server's CDs (<see cref="CdLibrary"/>), chosen and
@@ -98,10 +98,12 @@ public partial class ConcertMusic : Node3D
         foreach (var c in _setlist) cycle += c.Duration + Gap;
         double pos = serverNow % cycle, start = serverNow - pos;
         CdInfo? song = null;
-        foreach (var c in _setlist)
+        bool finale = false;
+        for (int i = 0; i < _setlist.Length; i++)
         {
+            var c = _setlist[i];
             if (pos < c.Duration) { song = c; break; }
-            if (pos < c.Duration + Gap) break;   // the gap after it
+            if (pos < c.Duration + Gap) { finale = i == _setlist.Length - 1; break; }   // the gap after it
             pos -= c.Duration + Gap;
             start += c.Duration + Gap;
         }
@@ -109,7 +111,8 @@ public partial class ConcertMusic : Node3D
         {
             Song = null;
             foreach (var s in _speakers) s.On = false;
-            return new MusicMoment(ShowSection.Blackout, 0f, 0f, 0f, 0, false, 0f);
+            // the gap after the set's last song: the finale's fireworks
+            return new MusicMoment(ShowSection.Blackout, 0f, 0f, 0f, 0, false, 0f, Finale: finale);
         }
         if (Song?.Id != song.Id || Math.Abs(SongStartedAt - start) > 0.5)
             GD.Print($"[concert] {_e.Artist} plays \"{song.Title}\" ({song.Bpm:F0} bpm, {song.Analysis?.Drops.Length ?? 0} drops, {_setlist.Length} songs in the set)");
