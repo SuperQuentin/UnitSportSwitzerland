@@ -121,6 +121,11 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | autopilot / trim | Y Home End / hold D-pad → (AP, #421), trim — | ok: AP poke or hold R stick →, trim wheel by hand (#438) | gap: trim on a pad |
 | wingsuit / canopy | stick, Space | ok: stick, A; arms roll the suit, hands pull the brakes (#438) | keep |
 | pigeon flap / dive | Space Ctrl / A B | ok: A B, flap the arms (#438) | keep |
+| UFO up / down, move, turn (#861) | Space Ctrl, WASD, mouse / RT LT, L stick, R stick | ok: R / L trigger, L stick; turns like the helicopter | keep |
+| UFO boost (#861) | Shift or Q / L3 or LB | ok: L stick click, or the left grip | keep |
+| UFO tractor beam (#861) | H / D-pad ← (`tractor_beam`) | ok: R stick ← | gap: a beam switch to grip on the dome's console (`XrCabControls` "ufo") |
+| UFO ramp (landed) / legs (flying) (#861) | G / X (`car_door`) | ok: X | gap: a lever on the console, as the airliner's gear |
+| UFO rim lights (#861) | L / D-pad → | ok: R stick → | keep |
 
 ## World, UI, others
 
