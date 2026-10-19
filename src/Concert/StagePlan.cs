@@ -109,7 +109,7 @@ public sealed class StagePlan
         Boxes.Add(new StageBox(At((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2), new Vector3(x1 - x0, y1 - y0, z1 - z0), Yaw, c, solid));
 
     /// <summary>A vertical truss tower, its top at <paramref name="top"/>.</summary>
-    private void Tower(float x, float z, float top) => Box(x - TrussSize / 2, x + TrussSize / 2, 0, top, z - TrussSize / 2, z + TrussSize / 2, Truss);
+    private void Tower(float x, float z, float top) => Box(x - TrussSize / 2, x + TrussSize / 2, 0.012f, top, z - TrussSize / 2, z + TrussSize / 2, Truss);   // its foot a hair up: never coplanar with a deck's underside
 
     /// <summary>Stairs up to a deck, beside it: a ramp a body walks up, stepped for the eye.</summary>
     private void Stairs(float x, float zTop, float zFoot, float height, float width = 1.6f)
@@ -131,7 +131,7 @@ public sealed class StagePlan
 
         // the deck, its black skirt, and stairs up at the back corners
         Box(-hw, hw, 0, h, -d, 0, Deck);
-        Box(-hw, hw, 0, h - 0.05f, -0.02f, 0.02f, Skirt, solid: false);
+        Box(-hw, hw, 0.012f, h - 0.05f, 0.005f, 0.03f, Skirt, solid: false);
         Stairs(-hw - 1f, -d + 4f, -d + 4f + h * 1.6f, h);
         Stairs(hw + 1f, -d + 4f, -d + 4f + h * 1.6f, h);
 
@@ -174,8 +174,9 @@ public sealed class StagePlan
                 float room = (e.Layout is StageLayout.SideEast or StageLayout.SideWest ? e.Stadium.FrontHalfV : e.Stadium.FrontHalfU) - 6.5f;
                 float sx = side * Math.Min(hw + 10f, room), sw = 11f, sh = 6.5f, bottom = r - 13f;
                 Box(sx - sw / 2 - 0.3f, sx + sw / 2 + 0.3f, bottom - 0.3f, bottom + sh + 0.3f, -1.2f, -0.9f, Frame, solid: false);
-                Tower(sx - sw / 2 - 0.6f, -1f, bottom + sh);
-                Tower(sx + sw / 2 + 0.6f, -1f, bottom + sh);
+                // its legs behind the ground subs, never through them
+                Tower(sx - sw / 2 - 0.6f, -2.6f, bottom + sh);
+                Tower(sx + sw / 2 + 0.6f, -2.6f, bottom + sh);
                 Patch.AddScreen(At(sx, bottom + sh / 2, -0.85f), Dir(0, 0, 1), new Vector3(sw, sh, 0), 24, 14);
             }
 
@@ -207,7 +208,13 @@ public sealed class StagePlan
             Box(dx - 0.6f, dx + 0.6f, 6f, 11.5f, foh - 7.2f, foh - 6.4f, Speaker, solid: false);
         }
         // the barrier along the stage front, a pit for security behind it
-        Box(-hw, hw, 0, 1.2f, 2.4f, 2.6f, Barrier);
+        if (catwalk > 0)
+        {
+            // open where the catwalk runs out through it
+            Box(-hw, -2.05f, 0, 1.2f, 2.4f, 2.6f, Barrier);
+            Box(2.05f, hw, 0, 1.2f, 2.4f, 2.6f, Barrier);
+        }
+        else Box(-hw, hw, 0, 1.2f, 2.4f, 2.6f, Barrier);
 
         Rig(e, hw, d, h, r, catwalk);
     }
