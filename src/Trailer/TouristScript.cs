@@ -399,8 +399,8 @@ public static class TouristScript
             Props = [new(default, 0, new Vector3(12f, 3f, 0.8f), new Color(0.62f, 0.6f, 0.56f)) { Route = "riddes", Arc = 150 }],
             Keys =
             [
-                new(0, Pt.Road("riddes", 125, -3.5f, 1.3f), Pt.Road("riddes", 151, 0f, 1.0f), 35),
-                new(5.3, Pt.Road("riddes", 127, -3.5f, 1.3f), Pt.Road("riddes", 156, 0f, 0.6f), 35),
+                new(0, Pt.Road("riddes", 137, -3.0f, 1.3f), Pt.Road("riddes", 151, 0f, 1.0f), 35),
+                new(5.3, Pt.Road("riddes", 139, -3.0f, 1.3f), Pt.Road("riddes", 155, 0f, 0.6f), 35),
             ],
             Preroll = 4.7,
             // MARCO running up from behind the camera
@@ -417,8 +417,8 @@ public static class TouristScript
             ],
             Keys =
             [
-                new(0, Pt.On(0, 1.6f, 1.5f, -6f), Pt.On(0, 0f, 1.1f), 28),
-                new(2.67, Pt.On(0, 1.4f, 1.5f, -5f), Pt.On(0, 0f, 1.1f), 28),
+                new(0, Pt.On(0, -1.4f, 1.5f, -6f), Pt.On(0, 0f, 1.1f), 28),
+                new(2.67, Pt.On(0, -1.2f, 1.5f, -5f), Pt.On(0, 0f, 1.1f), 28),
             ],
             Smooth = 0.15f, Preroll = 4.6,
             Bubbles = [Say(0.4, 1, "s18_pedal", Shape.Shout)],

@@ -132,7 +132,7 @@ dialogue, symbols are BLIP's speech; the `sNN_*` ids are the line ids in
 | 27 | 43 | 1:52.6-1:55.3 | Bern, the Kramgasse | A pigeon swoops down the street toward the Zytglogge; town birds | Chase behind the pigeon, 24 mm | Play as a pigeon, birds | |
 | 28 | 44-45 | 1:55.3-2:00.6 | Above Lutry | BLIP and LÉA on the slope above the lake, their backs to us. BLIP is homesick (a thought bubble) | Behind them, the lake beyond, 35 mm | Lavaux, the lake | BLIP: ☾ ... ◯ ♥ · LÉA: homesick? |
 | 29 | 46-47 | 2:00.6-2:05.9 | Gornergrat, 3135 m | A selfie: BLIP and NINA with the Matterhorn behind them; the polaroid settles | From behind them toward the peak, then onto them, 35 mm | The real Alps, the camera item and its photo | BLIP: ◉ ◉ ✦ !!! |
-| 30 | 48 | 2:05.9-2:08.6 | Geneva airport, the military apron | The cargo plane waits with its ramp open, on the riser | Beside the wing, 35 mm | The Battle Royale plane | NINA: last stop: battle royale. |
+| 30 | 48 | 2:05.9-2:08.6 | Geneva airport, runway 23 | The cargo plane waits on the runway with its ramp open, on the riser | Beside the wing, 35 mm | The Battle Royale plane | NINA: last stop: battle royale. |
 
 ### Act three: Battle Royale and the race (the drop), bars 49-63
 
@@ -140,7 +140,7 @@ dialogue, symbols are BLIP's speech; the `sNN_*` ids are the line ids in
 |---|---|---|---|---|---|---|---|
 | 31 | 49 | 2:08.6-2:11.3 | Over the Bernese Alps | On the drop, BLIP leaves the ramp first, the friends after it, in wingsuits | Above the tail, 35 mm | The BR drop, wingsuits | |
 | 32 | 50 | 2:11.3-2:13.9 | Over Lauterbrunnen | Three wingsuits streak past | Static in the air, whip pan, 24 mm | Wingsuit | |
-| 33 | 51 | 2:13.9-2:16.6 | Over the meadow | BLIP pops its parachute | Beside it, 28 mm | Wingsuit to parachute | |
+| 33 | 51 | 2:13.9-2:16.6 | Over the meadow | BLIP comes down under its parachute | Beside it, 28 mm | The parachute | |
 | 34 | 52 | 2:16.6-2:19.3 | The meadow, 2635900/1159700 | BLIP lands among loot: a vest, a med kit, a shotgun, ammo. It aims a pistol | Low, in front, 28 mm | Loot, items | BLIP: SHINY ✦ |
 | 35 | 53-54 | 2:19.3-2:24.6 | Lauterbrunnen street | A fist fight with a bot: guard, jab, kick, uppercut, and the bot goes down | Slow orbit, 28 mm | Fist fights, bots | |
 | 36 | 55-56 | 2:24.6-2:29.9 | Same | The zone's wall closes in. BLIP, LÉA and JONAS run | In front of them, running back, 24 mm | The BR zone, running | LÉA: the zone! RUN! |
@@ -171,11 +171,11 @@ dialogue, symbols are BLIP's speech; the `sNN_*` ids are the line ids in
 | 51 | 75 | 3:17.9-3:20.6 | Bern, the Kramgasse | Halloween: jack-o'-lanterns at the doors. BLIP wears a pumpkin head, LÉA a witch hat | In front of them, 28 mm | Halloween | BLIP: MORE HOLIDAYS ✦ |
 | 52 | 76 | 3:20.6-3:23.3 | Lauterbrunnen | Christmas: snow on the roofs. BLIP in a Santa hat, MARCO in antlers | In front of them, 28 mm | Christmas | |
 | 53 | 77-78 | 3:23.3-3:28.6 | The farmyard | LÉA shows the day she filmed: the movie studio's screen over the frame | Over LÉA's shoulder, 28 mm | The movie studio | LÉA: we filmed everything. |
-| 54 | 79-80 | 3:28.6-3:33.9 | The field | The mothership slides over the mountains, lights chasing round its rim. All look up | Low behind them, tilting up, 24 mm | The mothership | NINA: your ride. |
+| 54 | 79-80 | 3:28.6-3:33.9 | The field | The mothership hangs up the valley, lights chasing round its rim. All look up | Low behind them, tilting up, 24 mm | The mothership | NINA: your ride. |
 | 55 | 81-82 | 3:33.9-3:39.3 | By the saucer | The souvenirs: LÉA's Swiss flag, MARCO's fondue pot, JONAS's alphorn. BLIP hugs its shark | Slow orbit, 28 mm | Items | BLIP: merci. danke. grazie. grazia. ✦ |
-| 56 | 83 | 3:39.3-3:42.0 | The ramp | BLIP blows the alphorn at the top of the ramp | Low, in front, 28 mm | The alphorn | |
+| 56 | 83 | 3:39.3-3:42.0 | The ramp | BLIP comes down the ramp and blows the alphorn | Low, in front, 35 mm | The alphorn | |
 | 57 | 84-85 | 3:42.0-3:47.3 | The farmyard | BLIP's saucer hovers over the yard. Its tractor beam takes MARCO's AE86 up | From across the yard, tilting up, 28 mm | The UFO's tractor beam | MARCO: HEY! MY CAR! |
-| 58 | 86 | 3:47.3-3:49.9 | The sky | The saucer rises into the mothership, which leaves, a light among the stars | From the field, straight up, 35 mm | The mothership | |
+| 58 | 86 | 3:47.3-3:49.9 | The sky | The saucer climbs away up the valley toward the mothership | From the field, panning up with it, 35→50 mm | The mothership | |
 | 59 | 87-90 | 3:49.9-4:00.6 | The field | The four in a row looking up and waving; the camera pulls out and up to the stars. Title **UNITSPORT SWITZERLAND** / *The Alien Tourist*, the music credit, fade to black | One long pull-out, 28 mm | Friends together | |
 
 59 shots, 90 bars, 4:00.6.
