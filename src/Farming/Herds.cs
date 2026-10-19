@@ -433,6 +433,18 @@ public partial class Herds : Node3D, IOriginContainer
         return best;
     }
 
+    /// <summary>Probes: the cow nearest a world point as the beam sees it, and whether this peer moves it.</summary>
+    public string Describe(Vector3 near)
+    {
+        Cow? best = null;
+        float d = float.MaxValue;
+        foreach (var h in _all)
+            foreach (var c in h.Cows)
+                if (c.BeamPosition.DistanceTo(near) is var dd && dd < d) { d = dd; best = c; }
+        return best == null ? "no cow" : FormattableString.Invariant(
+            $"cow at {best.BeamPosition} ({d:F1} m off), movable {best.BeamMovable}, authority {Authority}, herds {_all.Count}");
+    }
+
     /// <summary>The highest a cow is above its ground on this peer, m (0 if none is up).</summary>
     public float HighestLift()
     {

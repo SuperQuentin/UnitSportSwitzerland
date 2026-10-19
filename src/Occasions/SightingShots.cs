@@ -91,6 +91,7 @@ public partial class SightingShots : Node
     private async Task Shot(string dir, string name)
     {
         await Seconds(0.3);
+        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
         string path = System.IO.Path.Combine(dir, $"sighting_{name}.png");
         GetViewport().GetTexture().GetImage().SavePng(path);
         GD.Print($"[sightingshots] shot {path}");
@@ -98,20 +99,19 @@ public partial class SightingShots : Node
 
     private async Task Run(string dir)
     {
-        if (!await Until(() => Me != null && UfoSightings.Instance != null && Farming.Herds.Instance != null, 120))
+        // the player if there is one, else the command line's fly camera: the place it stands over
+        if (!await Until(() => (Me != null || GetViewport().GetCamera3D() != null) && UfoSightings.Instance != null && Farming.Herds.Instance != null, 120))
         {
-            Expect(false, $"a player ({Me != null}), sightings ({UfoSightings.Instance != null}) and herds ({Farming.Herds.Instance != null})");
+            Expect(false, $"a player or a camera, sightings ({UfoSightings.Instance != null}) and herds ({Farming.Herds.Instance != null})");
             return;
         }
         var sightings = UfoSightings.Instance!;
         var herds = Farming.Herds.Instance!;
-        var me = Me!;
-        // the spawn drops the camera 220 m up: stand the player on the ground where it is
-        await Until(() => _chunks == null || _chunks.TryGetSurface(me.GlobalPosition, out _), 60);
-        me.PlaceAt(me.GlobalPosition with { Y = Ground(me.GlobalPosition) + 0.1f }, 0f);
-        await Until(() => me.IsOnFloor(), 20);
+        var start = Me?.GlobalPosition ?? GetViewport().GetCamera3D()!.GlobalPosition;
+        await Until(() => _chunks == null || _chunks.TryGetSurface(start, out _), 60);
+        var home = start with { Y = Ground(start) };
         await Seconds(3);
-        var (pe, pn) = _origin.ToLv95(me.GlobalPosition);
+        var (pe, pn) = _origin.ToLv95(home);
 
         // ---- the abduction, over the nearest cow ----
         (double E, double N, float Ground)? cow = null;
@@ -133,6 +133,9 @@ public partial class SightingShots : Node
                 await Seconds(1);
                 if (herds.Lifted() is { } l) best = Mathf.Max(best, l.Lift);
                 if (i == 5) await Shot(dir, "abduction_rising");
+                if (i % 4 == 1)
+                    foreach (var b in TractorBeams.Active(GetTree()))
+                        GD.Print($"[sightingshots] beam apex {b.Apex}: {herds.Describe(b.Apex)}");
             }
             Expect(best > 6f, $"the cow rose in the beam ({best:F1} m)");
             Frame(anchor, side, 26f, 2f, anchor + Vector3.Up * 16f);
@@ -144,7 +147,7 @@ public partial class SightingShots : Node
 
         // ---- a landing, on open ground 40 m from the player ----
         {
-            var at = me.GlobalPosition + new Vector3(40f, 0f, -10f);
+            var at = home + new Vector3(40f, 0f, -10f);
             at.Y = Ground(at);
             var (le, ln) = _origin.ToLv95(at);
             float heading = 4.0f;
@@ -152,12 +155,14 @@ public partial class SightingShots : Node
             Frame(at, heading + 2.4f, 30f, 2.5f, at + Vector3.Up * 8f);
             await Seconds(4);
             await Shot(dir, "landing_down");
-            await Seconds(SightingPath.LandRampOpen - 16 + 2);
+            await Seconds(SightingPath.LandRampOpen - 16 + 4);
             Frame(at, heading + 0.3f, 17f, 2.2f, at + Vector3.Up * 2.5f);
             await Shot(dir, "landing_ramp");
             string name = UfoSightings.ParkedName(id);
             bool parked = await Until(() => Vehicles.VehicleManager.Instance?.GetNodeOrNull(name) != null, 10);
             Expect(parked, "the landed saucer is a parked UFO to board");
+            if (!parked && Vehicles.VehicleManager.Instance is { } vm)
+                GD.Print($"[sightingshots] vehicles: {string.Join(", ", vm.GetChildren().Select(c => c.Name.ToString()))}; taken {sightings.IsTaken(id)}; drawn {sightings.DrawnSaucers}");
             await Seconds(1);
             await Shot(dir, "landing_parked");
             sightings.Unstage(id);
@@ -166,7 +171,7 @@ public partial class SightingShots : Node
 
         // ---- a flyover and the mothership, from the player ----
         {
-            var at = me.GlobalPosition;
+            var at = home;
             var (fe, fn) = _origin.ToLv95(at);
             float g = Ground(at);
             int fly = sightings.Stage(SightingKind.Flyover, fe, fn, g, 0.6f, 3, -26, 5);
