@@ -61,5 +61,7 @@ Bots play duos, trios and squads, in bot-only teams and as team-mates of humans.
     - The mate jumps after A and lands near, takes A's dogtag to a stop (A recalled), regroups, goes to A's ping,
       and revives A.
   - `SPEED=4 BRMODE=trios BRBOTS=30 tools/brbotwatch.sh`: a whole team match of bots at full pace, 4 × faster
-    (`/speed`, which the match follows since #856), about 7 min. Measured: 20 downs, revives tried, 16 kills.
+    (`/speed`, which the match follows since #856), about 7 min. Measured with the bots' own clock
+    (`architecture`): 23 downs, 12 revive goals, 3 revives, 6 dogtags taken, 1 recall, 25 kills, 3 zone deaths.
+    Before that clock, at x4 every revive's hold ran 4 × too long: 0 revives.
 - **Not yet:** pinging loot for a human; sharing sightings between bot mates beyond Assist.
