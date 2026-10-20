@@ -403,6 +403,12 @@ off, `--junctions new` plans and reports without writing.
   arm running past it) is laid as any junction (`CorePlanner.Plan`, a fallback where that fails). 168 real tiles: 3,841
   junctions as cores, 0 left to the old layout (118 plain cores, 24 rings or merged cores as laid, 35 today's caps); JPTH path
   ends off their lane 128 (51 on #820's base), points off their core 25; format and priority checks pass.
+- **Known seam in the generated world** (#854, Oct 20, left as is by the user's choice): `BlendCheck --generated-roads` fails on
+  tile 2587,1117 (it passed before e9eab4c1). A served tile is rewritten as a block of one (`FallbackChunkSource`, `Halo: 1`) with
+  its neighbours from the cache already rewritten, their streets cut at their junctions: a junction just across the border sees
+  dead ends (degree-1 nodes 5.6 and 8.7 m out) where the big block sees through streets, so the residue steps (a fallback held
+  short of a join, today's caps, cores written as laid) decide differently and the junction at 2588004,1117604 is written two
+  ways. The proper fix serves neighbours uncut (raw roads) to the rewrite, as the big block sees them.
 - **Tried and reverted** (#854, Oct 20): a slip lane's node (two car roads and a Verbindung) planned only to merge into a junction
   whose mouth reaches it, the slip lane an arm of the merged core: "a road joins short of a mouth" 52 -> 25 and the old layout
   229 -> 219, but 18 more path ends 0.6-1 m off their lane (most of those slip lanes are TLM stubs of 0 m between carriageways,
