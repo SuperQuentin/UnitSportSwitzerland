@@ -85,6 +85,8 @@ public sealed class ArmExterior
 public static class ExteriorPlanner
 {
     public const double CrosswalkFromMouth = 0.5, CrosswalkDepth = 3.0, StopBehindCrosswalk = 2.0, StopFromMouth = 0.5;
+    /// <summary>A lit arm's poles stand this far out past its crosswalk, on its near side (m; the old layout's, #711).</summary>
+    public const double PoleBehindCrosswalk = 0.4;
     public const double RidersBehindCrosswalk = 0.5, RidersLineWidth = 0.3, AdvancedLine = 3.0, BikeBoxDepth = 4.0;
     public const double PocketBarFromMouth = 0.1;
     /// <summary>A give-way row stands this far out past the mouth (or what lies before it) and keeps this far off the lane edges.</summary>
@@ -246,12 +248,15 @@ public static class ExteriorPlanner
                 double l = Math.Max(near.Left, far.Left) + RefugeMargin, r = Math.Min(near.Right, far.Right) - RefugeMargin;
                 if (r - l >= RefugeMinWidth) ex.Refuge = new Refuge(IslandFromMouth, carFront + width + IslandPastStop, l, r);
             }
-            // the poles beside the cars' line: the main one at the right kerb, the second at the left one or on the refuge
+            // the poles: the main one at the right kerb, the second at the left one or on the refuge; beside a crosswalk on its near
+            // side, past every line (the old layout's rule, #711; #1000: at the cars' line they stood behind the riders' line and
+            // box), else beside the cars' line
+            double poleAt = crosswalkAt is not null ? s + PoleBehindCrosswalk : carFront + width * 0.5;
             bool second = a.HasLeft || a.HasRight || here.CarLanes(StripWay.In).Count() > 1;
             // pedestrian heads only where the arm has a crosswalk (#711; where OSM maps its crossings on other arms, none here)
             var walk = crosswalkAt is not null ? SignalPoleFlags.Pedestrian : 0;
-            ex.Poles.Add(new PoleSpot(carFront + width * 0.5, RightKerb: true, OnRefuge: false, SignalPoleFlags.Main | walk));
-            ex.Poles.Add(new PoleSpot(ex.Refuge is { } rf ? (rf.From + rf.To) * 0.5 : carFront + width * 0.5, RightKerb: false, OnRefuge: ex.Refuge is not null,
+            ex.Poles.Add(new PoleSpot(poleAt, RightKerb: true, OnRefuge: false, SignalPoleFlags.Main | walk));
+            ex.Poles.Add(new PoleSpot(ex.Refuge is { } rf ? (rf.From + rf.To) * 0.5 : poleAt, RightKerb: false, OnRefuge: ex.Refuge is not null,
                 (second ? SignalPoleFlags.Second : 0) | walk));
             return ex;
         }

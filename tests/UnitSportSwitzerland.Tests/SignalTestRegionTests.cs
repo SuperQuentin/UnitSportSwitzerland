@@ -163,6 +163,27 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
     }
 
     [Fact]
+    public void J2s_poles_stand_by_the_crosswalk_past_every_stop_line()
+    {
+        // #1000, the user: the junction planner put the poles at the cars' line, behind the riders' line and box; beside a
+        // crosswalk they stand on its near side, nearer the junction than every line (#711)
+        var j = region.Junction("J2");
+        var signal = region.Tile(j.E, j.N).Signals.Single();
+        int checkedPoles = 0;
+        foreach (var pole in signal.Poles)
+        {
+            int k = pole.Arm;
+            if (float.IsNaN(signal.Stops[k * 3])) continue;
+            var (sx, sz) = (signal.Stops[k * 3] - signal.X, signal.Stops[k * 3 + 2] - signal.Z);
+            float len = MathF.Sqrt(sx * sx + sz * sz);
+            float stopAlong = len, poleAlong = ((pole.X - signal.X) * sx + (pole.Z - signal.Z) * sz) / len;
+            Assert.True(poleAlong < stopAlong - 0.3f, $"arm {k}'s pole {poleAlong:F1} m out, its cars' line {stopAlong:F1} m");
+            checkedPoles++;
+        }
+        Assert.True(checkedPoles >= 4);
+    }
+
+    [Fact]
     public void Region_builds_with_the_designed_lanes_and_valid_plans()
     {
         Assert.True(region.Code == 0, string.Join("\n", region.Log.Where(l => l.StartsWith("J", StringComparison.Ordinal) || l.Contains("RESULT"))));
