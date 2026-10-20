@@ -33,7 +33,7 @@ public partial class FarmSales : Node
     public static double Now => ClockOverride?.Invoke() ?? World.WorldClock.EnvNow;
 
     /// <summary>The month prices follow: the one the fields show (the server's, once it said), else <c>--farmmonth</c> / today.</summary>
-    public static int Month => FarmField.Instance?.Month ?? FarmRules.MonthFromArgs(OS.GetCmdlineUserArgs(), DateTime.Now);
+    public static int Month => FarmField.Instance?.Month ?? FarmRules.MonthFromArgs(OS.GetCmdlineUserArgs(), Core.Calendar.Now);
 
     public static long Week => FarmCalendar.Week(Now);
 

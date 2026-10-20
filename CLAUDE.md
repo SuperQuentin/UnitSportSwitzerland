@@ -9,7 +9,7 @@ on foot, mounted, driving or flying, over ENet multiplayer.
 Knowledge lives in ~180 micro notes, `docs/notes/<area>/<name>.md`, one topic each. Each code
 directory's `CLAUDE.md` (auto-loaded when you touch files there) is only an **index**: one line per
 note. Read a note only when the task needs it; find one with `grep -ril <word> docs/notes`.
-Areas: tools, terrain, net, player, vehicles, avatar, audio, gpx, movie, world, combat, br, bots, birds, items, crafting, build, loot, trailer,
+Areas: tools, terrain, net, player, vehicles, avatar, audio, gpx, movie, world, combat, br, bots, birds, items, crafting, build, loot, trailer, concert,
 occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new or existing note plus one index line — never in this file.
 
 `docs/notes/general/`: `subagents` (model choice, fan-out limits), `never-lookat-data-driven`,
@@ -21,7 +21,7 @@ occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new o
 `linux-deploy` (`tools/deploy-linux.sh` builds and deploys the Linux server over SSH),
 `twoclient-checks` (server + two-client `tools/*check.sh` go through `tools/lib/twoclient.sh`),
 `testing` (test tiers, `tools/test.sh unit|quick|net|full`, path-to-check map, resource guard),
-`fast-checks` (the quick tier runs `--fixed-fps 60`: time waits with `GameClock.Now`, wait for threads on the wall clock),
+`fast-checks` (the quick tier runs `--fixed-fps 60`: time waits with `GameClock.Now`, wait for threads on the wall clock; net checks at `/speed` with `--checkspeed`),
 `dead-code-and-shared-helpers` (use `Terrain.Format.SwissProjection`, `TileId.ReadList`; prove a member unused before deleting it),
 `test-systems-optin` (every probe declares `--world flat|fixture` / `--systems`, the lightest that works; driving checks run on fixture courses),
 `perf-no-per-frame-allocations` (static `StringName`, no LINQ/strings/lists per frame, UI text and shader params only on change),

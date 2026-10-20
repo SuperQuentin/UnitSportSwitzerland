@@ -61,10 +61,14 @@ public partial class Handshake : Node
     /// 33: World/Arrival (Rules: the server's spawn point and teleport rule) (#799).
     /// 34: World/Cranes (AskOperate, Send, AskRelease; Operated, Posed, Released, Carry, Snapshot) (#618).
     /// 35: bots (#837): NPC spawn data carries a driver kind and a name, BrEntrant.Bot/BotKills, BrState.Bots.
-    /// 36: ski slopes (#887): AssetKind.Pistes 15, World/Snow (weather and slope wear).
-    /// 37: ski lifts part 2 (#915): AssetKind.Ropeways 16, FootPlayer LiftLine/LiftCarrier replicated.
+    /// 36: seated on a stadium stand (#885): FootPlayer.PoseKind 6 (PoseSit), Anim.X the feet's drop, BodyPose the hip.
     /// </summary>
-    public const int Protocol = 37;
+    /// 37: World/Concerts (AskHost, AskCue, Frame on channel 4; State, Framed) (#885).
+    /// 38: an interior plan's entrance may be raised (EntrancePlan.Level, #827): an old peer would put its doorway on the ground floor.
+    /// 39: ski slopes (#887): AssetKind.Pistes, World/Snow (weather and slope wear).
+    /// 40: ski lifts part 2 (#915): AssetKind.Ropeways 16, FootPlayer LiftLine/LiftCarrier replicated.
+    /// 41: the snowboard (#922): RideKind.Snowboard 202, its stance and switch in FootPlayer.TuningBits.
+    public const int Protocol = 41;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

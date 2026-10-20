@@ -19,9 +19,13 @@ namespace UnitSport.Player;
 /// <param name="ViewPitch">Where the camera looks up (+) or down (−), radians, for craft that
 /// follow the look in pitch too (the wingsuit). Null: no look pitch to follow (scripted pilots).</param>
 /// <param name="Brake">Wheel brakes held, 0..1 (Jump / A): an airliner's (#414).</param>
+/// <param name="Boost">Shift / L3, or Q / LB: the UFO's fast setting (#861; its pad X is the ramp).</param>
+/// <param name="Hatch">Pressed this step (edge), G / X: the UFO's ramp on the ground, its legs in the air (#861).</param>
+/// <param name="Beam">Pressed this step (edge), H / D-pad ←: the UFO's tractor beam on or off (#861).</param>
+/// <param name="Lights">Pressed this step (edge), L / D-pad →: a craft's lights on or off (the UFO's rim lamps, #861).</param>
 public readonly record struct FlightInput(Vector2 Stick, float Up, float Down, float LeverUp,
     float LeverDown, bool Action, bool Effort, float ViewYaw, bool Engine = true, bool Piloted = true,
-    float? ViewPitch = null, float Brake = 0f);
+    float? ViewPitch = null, float Brake = 0f, bool Boost = false, bool Hatch = false, bool Beam = false, bool Lights = false);
 
 /// <param name="OnFloor">Touching walkable ground.</param>
 /// <param name="Clearance">Height above the terrain surface, m (buildings not counted).</param>

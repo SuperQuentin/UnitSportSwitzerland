@@ -271,6 +271,13 @@ public static class LootTables
         [(FurnitureType.ToolChest, RoomType.SiteOffice)] = new(0.15f, 2, 4, new[] { P(Hardware, 60), P(Parts, 15), P(Scrap, 20), P(Minerals, 5) }),
         // its mess container is the changing room: spare clothes, a snack, a tool left in a pocket
         [(FurnitureType.Locker, RoomType.BreakRoom)] = new(0.30f, 1, 2, new[] { P(Cloth, 35), P(Workwear, 20), P(Sweets, 20), P(Hardware, 20), P(Medical, 10), P(Games, 6), P(Purses, 4) }, 0.25f, 2, 20),
+        // #827: up the stair, the site manager's desk keeps the cash box and the good radio; the
+        // drawing office's desk and shelf the pens, the laser measure, the plan rolls' tape
+        [(FurnitureType.Desk, RoomType.SiteManager)] = new(0.30f, 1, 2, new[] { P(Gadgets, 40), P(Wire, 15), P(Hardware, 15), P(Medical, 10), P(Optics, 3) }, 0.55f, 10, 80),
+        [(FurnitureType.Locker, RoomType.SiteManager)] = new(0.30f, 1, 2, new[] { P(Cloth, 30), P(Workwear, 25), P(Hardware, 20), P(Medical, 15), P(Purses, 5) }, 0.20f, 2, 20),
+        [(FurnitureType.Shelf, RoomType.SiteManager)] = new(0.40f, 1, 2, new[] { P(Gadgets, 30), P(Wire, 30), P(Hardware, 25), P(Optics, 3) }),
+        [(FurnitureType.Desk, RoomType.DrawingOffice)] = new(0.35f, 1, 2, new[] { P(Gadgets, 40), P(Wire, 25), P(Hardware, 20), P(Optics, 4) }, 0.25f, 2, 20),
+        [(FurnitureType.Shelf, RoomType.DrawingOffice)] = new(0.40f, 1, 2, new[] { P(Gadgets, 30), P(Wire, 25), P(Hardware, 30), P(Scrap, 15) }),
         [(FurnitureType.Desk, RoomType.ControlRoom)] = new(0.35f, 1, 2, new[] { P(Gadgets, 45), P(Wire, 30), P(Scrap, 25), P(Optics, 3) }, 0.35f, 5, 50),
     };
 

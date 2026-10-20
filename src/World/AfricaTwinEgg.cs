@@ -82,11 +82,13 @@ public partial class AfricaTwinEgg : Node
             var free = _slots.Where(s => !vehicles.GetChildren().OfType<VehicleBody>().Any(v =>
                     v.GlobalPosition.DistanceTo(origin.ToWorld(s.E, s.N, s.Height)) < 3f)).ToList();
             if (free.Count == 0) return;
-            var slot = free[Random.Shared.Next(free.Count)];
-            var kind = AfricaTwins[Random.Shared.Next(AfricaTwins.Length)];
+            // a film's shot picks the same bay every render (#924); a player, any
+            var rng = Core.RunSeeds.Pinned ? Core.RunSeeds.Rng("africa-twin") : Random.Shared;
+            var slot = free[rng.Next(free.Count)];
+            var kind = AfricaTwins[rng.Next(AfricaTwins.Length)];
             var ride = Rideable.Create(kind)!;
             // nose in or backed in, as the cars beside it would be
-            float yaw = slot.Yaw + (Random.Shared.Next(2) == 0 ? 0f : Mathf.Pi);
+            float yaw = slot.Yaw + (rng.Next(2) == 0 ? 0f : Mathf.Pi);
             var state = new VehicleState(kind, new GlobalPos(slot.E, slot.N, slot.Height), yaw,
                 Vector3.Zero, ride.MaxHealth, EngineOn: false, Wrecked: false, Throttle: 0f, SpawnedAt: 0);
             if (vehicles.Place(state, EggName) != null)

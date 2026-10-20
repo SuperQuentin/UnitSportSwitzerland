@@ -105,6 +105,7 @@ public partial class SpawnPoint : Node
             _settled = true;
             GD.Print($"[spawn] settled at ground {ground:F0} m + {_arrivalHeight:F0} m");
             QueueFree();
+            Teleporter.RaiseArrived();
         }
         else if (_waited > 15.0)
         {
@@ -114,6 +115,7 @@ public partial class SpawnPoint : Node
                            "is it outside the imported tiles?");
             _settled = true;
             QueueFree();
+            Teleporter.RaiseArrived();
         }
     }
 }

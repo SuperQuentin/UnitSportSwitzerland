@@ -500,7 +500,7 @@ public static partial class InteriorGenerator
             {
                 Door = e.Door, X = x, Z = z, InX = ix, InZ = iz, Width = e.Width,
                 DoorX = e.DoorX, DoorY = e.DoorY, DoorZ = e.DoorZ, DoorOutX = e.DoorOutX, DoorOutZ = e.DoorOutZ,
-                DoorWidth = e.DoorWidth, DoorHeight = e.DoorHeight, Hang = e.Hang, Vehicle = e.Vehicle,
+                DoorWidth = e.DoorWidth, DoorHeight = e.DoorHeight, Hang = e.Hang, Vehicle = e.Vehicle, Level = e.Level,
             });
         }
     }

@@ -60,6 +60,14 @@ public enum ItemArmPose
     ThrowWindup,
     /// <summary>A throw let go: the item arm whipped through, forward and down, the other arm swung back.</summary>
     ThrowRelease,
+    /// <summary>The folded phone (#889) held up at the chest in both hands, read from the head.</summary>
+    Phone,
+    /// <summary>The phone unfolded (#889): the other hand holds the half that swung open, further across.</summary>
+    PhoneOpen,
+    /// <summary>The open phone raised to eye height as a camera (#889): both hands at its ends, before the face.</summary>
+    PhoneRaised,
+    /// <summary>A selfie (#889): the phone held up and out at arm's length in the right hand, the left arm loose, the head tipped toward it.</summary>
+    PhoneSelfie,
 }
 
 /// <summary>Colours for one figure. Kept separate so riders can be told apart at distance.</summary>
@@ -166,7 +174,7 @@ public static partial class HumanMeshBuilder
         Vector3 ShoulderR, Vector3 ElbowR, Vector3 WristR,
         Vector3 HipL, Vector3 KneeL, Vector3 AnkleL, Vector3 ToeL,
         Vector3 HipR, Vector3 KneeR, Vector3 AnkleR, Vector3 ToeR,
-        float TorsoLean, Vector3 HandDir = default);
+        float TorsoLean, Vector3 HandDir = default, Vector3 PointDirR = default);
 
     /// <param name="into">A mesh to rebuild in place (a figure redrawn while it moves keeps one), or null for a new one.</param>
     public static ArrayMesh Build(HumanPalette palette, HumanPose pose = HumanPose.Standing,
@@ -203,14 +211,38 @@ public static partial class HumanMeshBuilder
     public static ArrayMesh BuildStride(HumanPalette palette, float speed, float phase,
         bool helmet = false, Headwear hat = Headwear.None,
         ItemArmPose arm = ItemArmPose.None, float armBlend = 0f, DanceParams? dance = null, ArrayMesh? into = null,
-        VrArms? vr = null)
+        VrArms? vr = null, Pointing? point = null)
     {
         var scratch = ScratchFor(into);
         // a skirt with no measured wind still feels the stride's own (#251)
         if (palette.Wind == Vector3.Zero && speed > 0.05f && Flutters(palette.Outfit))
             palette = palette with { Wind = new Vector3(0, 0, -speed) };
-        AppendRig(scratch, palette, ApplyVr(ApplyArms(GaitWithDance(speed, phase, dance), arm, armBlend), vr), includeLegs: true, helmet, hat);
+        AppendRig(scratch, palette, ApplyPoint(ApplyVr(ApplyArms(GaitWithDance(speed, phase, dance), arm, armBlend), vr), point),
+            includeLegs: true, helmet, hat);
         return into == null ? scratch.Build() : scratch.BuildInto(into);
+    }
+
+    /// <summary>From the wrist to the tip of a straight index finger, at the hand's own size.</summary>
+    private const float FingerReach = 0.14f;
+
+    /// <summary>A fingertip and the way the finger goes to it, in the built mesh's frame (facing -Z).</summary>
+    public readonly record struct Pointing(Vector3 Tip, Vector3 Dir);
+
+    /// <summary>
+    /// The free hand (the figure's left) points its index finger at the tip, along the given way, the
+    /// other fingers curled (#889: a finger on the phone's screen). The wrist is put back from the tip
+    /// along that way and the hand bends at it, so the finger comes in from in front of the screen
+    /// rather than along the forearm from the shoulder, behind it.
+    /// </summary>
+    private static Rig ApplyPoint(Rig rig, Pointing? point)
+    {
+        if (point is not { } p || p.Dir.LengthSquared() < 1e-6f) return rig;
+        var tip = Author(p.Tip);
+        var along = Author(p.Dir).Normalized();
+        float reach = (UpperArmLength + ForearmLength) * 0.98f;
+        var wrist = Reach(rig.ShoulderR, tip - along * FingerReach, reach);
+        var elbow = Limb.Solve(rig.ShoulderR, wrist, UpperArmLength, ForearmLength, new Vector3(0.6f, -0.6f, -0.2f));
+        return rig with { ElbowR = elbow, WristR = wrist, PointDirR = along };
     }
 
     /// <summary>
@@ -275,7 +307,13 @@ public static partial class HumanMeshBuilder
     /// (the figure's right once the mesh is turned to face -Z). Targets hang off chest, neck and head
     /// so they follow the torso lean; none depends on view pitch (only yaw is replicated).
     /// </summary>
-    private static Rig ApplyArms(Rig rig, ItemArmPose arm, float blend)
+    private static Rig ApplyArms(Rig rig, ItemArmPose arm, float blend) =>
+        // the raised phone (#889) is the open phone lifted: its blend runs 0..1 into the open pose, 1..2 up to the face
+        arm is ItemArmPose.PhoneRaised or ItemArmPose.PhoneSelfie
+            ? ApplyArmsOnce(ApplyArmsOnce(rig, ItemArmPose.PhoneOpen, Mathf.Min(blend, 1f)), arm, blend - 1f)
+            : ApplyArmsOnce(rig, arm, blend);
+
+    private static Rig ApplyArmsOnce(Rig rig, ItemArmPose arm, float blend)
     {
         blend = Mathf.Clamp(blend, 0f, 1f);
         if (arm == ItemArmPose.None || blend <= 0.001f) return rig;
@@ -311,6 +349,26 @@ public static partial class HumanMeshBuilder
                 item = new(s * 0.02f, rig.Waist.Y + 0.12f, rig.Chest.Z + 0.52f);
                 support = new(-s * 0.26f, rig.Hip.Y + 0.02f, rig.Hip.Z - 0.14f);
                 dir = new Vector3(0f, -0.4f, 1f); break;
+            case ItemArmPose.Phone:
+            case ItemArmPose.PhoneOpen:
+                // the right hand grips the phone's right edge in front of the chest, the left its other
+                // edge: a hand's width across folded, the open phone's 17 cm once it has opened (#889)
+                item = new(s * 0.07f, rig.Chest.Y - 0.06f, rig.Chest.Z + 0.27f);
+                // folded, the left hand cups it from below, its thumb clear of the cover screen
+                support = arm == ItemArmPose.Phone ? new(-s * 0.01f, rig.Chest.Y - 0.15f, rig.Chest.Z + 0.22f)
+                    : new(-s * 0.09f, rig.Chest.Y - 0.07f, rig.Chest.Z + 0.27f);
+                dir = new Vector3(0f, 0.75f, 0.65f); break;
+            case ItemArmPose.PhoneRaised:
+                // held up before the face to take a picture, both ends gripped
+                item = new(s * 0.08f, rig.HeadBase.Y - 0.05f, rig.HeadBase.Z + 0.34f);
+                support = new(-s * 0.09f, rig.HeadBase.Y - 0.05f, rig.HeadBase.Z + 0.34f);
+                dir = new Vector3(0f, 1f, 0.1f); break;
+            case ItemArmPose.PhoneSelfie:
+                // a selfie: the phone up and out to the right at arm's length, looking down at the face;
+                // the other hand loose at the side
+                item = new(s * 0.30f, rig.HeadBase.Y + 0.10f, rig.Chest.Z + 0.42f);
+                support = Reduce(rig.WristR, rest);
+                dir = new Vector3(s * 0.3f, 1f, 0.2f); break;
             default:   // Hold
                 item = new(s * 0.19f, rig.Waist.Y + 0.05f, rig.Waist.Z + 0.30f);
                 support = Reduce(rig.WristR, rest);
@@ -324,8 +382,10 @@ public static partial class HumanMeshBuilder
         var elbowR = Limb.Solve(rig.ShoulderR, wristR, UpperArmLength, ForearmLength, new Vector3(0.6f, -0.6f, -0.2f));
         // the item points along the forearm swinging in the gait, along the pose's own direction once blended
         var fore = (rig.WristL - rig.ElbowL).Normalized();
-        // head down onto the stock: the crown tips forward a little
-        var headTop = arm == ItemArmPose.ShoulderAim ? rig.HeadTop + new Vector3(0, -0.012f, 0.04f) * blend : rig.HeadTop;
+        // head down onto the stock: the crown tips forward a little; in a selfie it leans toward the phone
+        var headTop = arm == ItemArmPose.ShoulderAim ? rig.HeadTop + new Vector3(0, -0.012f, 0.04f) * blend
+            : arm == ItemArmPose.PhoneSelfie ? rig.HeadTop + new Vector3(s * 0.05f, -0.012f, 0.01f) * blend
+            : rig.HeadTop;
         return rig with
         {
             HeadTop = headTop,
@@ -1234,6 +1294,12 @@ public static partial class HumanMeshBuilder
         FightStand, FightGuardHigh, FightCrouch, FightGuardLow, FightAir, FightHit, FightDazed, FightVictory,
         FightBlockStun, FightJab, FightKick, FightLowJab, FightSweep, FightJumpKick, FightUppercut,
         FightStringKick, FightFinisher,
+        // #907: aura battles (HumanMeshBuilder.Aura.cs); past FightStand, so no groove either
+        AuraWaiting, AuraPlanning, AuraStumble, AuraVictory, AuraDefeat, AuraStandTall, AuraArmsCrossed,
+        AuraPointToSky, AuraStareDown, AuraSunglasses, AuraYawn, AuraSlowWalk, AuraSiuuu, AuraMewing,
+        AuraSixSeven, AuraLasso, AuraCutTheRope,
+        // #914
+        AuraLeadRival, AuraShush, AuraBow, AuraLaugh,
     }
 
     /// <summary>
@@ -1364,6 +1430,7 @@ public static partial class HumanMeshBuilder
     {
         if (index == GroupPogo) return DanceMove.Pogo;
         if (index == GroupJump) return DanceMove.JumpTogether;
+        if (index >= AuraMoves) return AuraResolve(index - AuraMoves);
         if (index >= BreakMoves) return BreakResolve(index);
         if (index >= FightMoves) return FightResolve(index - FightMoves);
         if (index >= EmoteMoves) return EmoteMove(index - EmoteMoves);
@@ -1787,6 +1854,7 @@ public static partial class HumanMeshBuilder
             // a floor move's channels (only asked for when walking, or mixing): its toprock
             case DanceMove.Toprock or DanceMove.BreakDown or DanceMove.BreakWindmill or DanceMove.BreakHeadspin:
                 Toprock(ref ch, t, mv); break;
+            case >= DanceMove.AuraWaiting: EvalAura(move, t, mv, ref ch); break;
             case >= DanceMove.FightStand: EvalFight(move, t, mv, ref ch); break;
         }
     }
