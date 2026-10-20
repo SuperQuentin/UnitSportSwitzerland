@@ -3,7 +3,7 @@ using System.Globalization;
 namespace UnitSport.Net;
 
 /// <summary>
-/// Parsing for the money admin commands (<c>/money</c>, <c>/bank</c>, #262). Pure, no Godot, so the
+/// Parsing for the money admin commands (<c>/money</c>, <c>/bank</c>, #262) and <c>/tp</c>'s coordinates. Pure, no Godot, so the
 /// unit tests cover it and the offline chat and the server share one reading.
 /// </summary>
 public static class AdminArgs
@@ -51,4 +51,20 @@ public static class AdminArgs
     }
 
     private static bool IsBankVerb(string word) => word.ToLowerInvariant() is "set" or "add" or "take";
+
+    /// <summary>
+    /// <c>/tp &lt;E&gt; &lt;N&gt;</c> (#994): an LV95 point, "2600000 1200000" or "2600000,1200000" (what
+    /// the F3 overlay and map.geo.admin.ch show, apostrophes allowed). Only points round Switzerland,
+    /// so a player name made of digits or a swapped pair is not a jump into nowhere.
+    /// </summary>
+    public static bool TryLv95(string text, out double e, out double n)
+    {
+        e = n = 0;
+        string[] words = text.Replace("'", "").Split([' ', ','], StringSplitOptions.RemoveEmptyEntries);
+        return words.Length == 2
+            && double.TryParse(words[0], NumberStyles.Float, CultureInfo.InvariantCulture, out e)
+            && double.TryParse(words[1], NumberStyles.Float, CultureInfo.InvariantCulture, out n)
+            && e is >= 2_400_000 and <= 2_900_000
+            && n is >= 1_000_000 and <= 1_350_000;
+    }
 }

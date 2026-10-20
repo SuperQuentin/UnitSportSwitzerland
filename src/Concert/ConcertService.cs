@@ -110,6 +110,16 @@ public partial class ConcertService : Node
     /// <summary>The seed hosted at a stadium, or null for tonight's.</summary>
     public int? SeedFor(int stadium) => _hosted.TryGetValue(stadium, out var h) && h.Seed >= 0 ? h.Seed : null;
 
+    /// <summary>What plays at a venue today, for <c>/stadium</c> (#994): a hosted set, or tonight's show and its hours.</summary>
+    public static string ShowAt(StadiumSpec venue)
+    {
+        if (Instance?.SeedFor(Array.IndexOf(StadiumCatalog.All, venue)) is { } seed)
+            return $"set {seed} hosted now, {ConcertPlanner.Plan(venue, seed).Artist}";
+        var e = ConcertPlanner.Tonight(venue, Core.Calendar.Now.Date);
+        static string Clock(float hour) => $"{(int)hour:00}:{(int)Math.Round(hour % 1 * 60):00}";
+        return $"tonight {Clock(e.StartHour)}-{Clock(e.EndHour)}, {e.Artist} ({e.Genre})";
+    }
+
     /// <summary>The cues in force at a stadium, if a set is hosted there.</summary>
     public (int Held, bool Blackout, float Master)? CuesOf(int stadium) =>
         _hosted.TryGetValue(stadium, out var h) ? (h.Held, h.Blackout, h.Master) : null;
