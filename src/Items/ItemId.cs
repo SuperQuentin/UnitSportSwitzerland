@@ -198,6 +198,9 @@ public enum ItemId
     Gamelle = 353,
     /// <summary>Garments (Avatar.Garments): the Swiss camouflage TAZ 90, and an olive army T-shirt.</summary>
     TazJacket = 354, TazTrousers = 355, ArmyTee = 356,
+
+    /// <summary>An admin's traffic tool (#971): places, edits and removes traffic generators (<see cref="ItemUse.TrafficTool"/>); from the debug menu only.</summary>
+    TrafficTool = 380,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>
@@ -251,4 +254,6 @@ public enum ItemUse
     Fish,
     /// <summary>Use works the field cell ahead (#494, <c>Farming.HandFarming</c>): a hoe tills, a seed sows, fertiliser feeds a sown crop.</summary>
     Farm,
+    /// <summary>Use places a traffic generator on the road aimed at, or opens the one aimed at (<see cref="TrafficTool"/>, #971).</summary>
+    TrafficTool,
 }

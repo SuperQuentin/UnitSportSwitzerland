@@ -12,6 +12,8 @@
   Dijkstra over the lane graph as `NextRoad` lets a car go, cached per generator; `Vehicle.Planned`, `NextRoad` takes its next
   leg) or a direction along the generator's road (`AlongHeading` 0, `AgainstHeading` -1: at random from there). None: all
   along its heading. Endpoints snap to the nearest road edge within 30 m (`OnRoad`), again when the graph is rebuilt.
+- **Placing** (the user): the traffic tool, an admin's held item from the debug menu (`items/traffic-tool`): a ghost where it
+  goes, its settings window on Use, the placed ones shown while it is in hand.
 - **Shared** (the user): the server keeps the list (not saved, a session's); an admin asks `AskSet` / `AskRemove` (0 = all),
   checked with `ChatManager.IsAdminPeer`; the server sends `Set` / `Remove` to every peer and a `Snapshot` to joiners
   (protocol 35). Every client runs them on its own traffic (traffic stays local and cosmetic). Offline the client serves

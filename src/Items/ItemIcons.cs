@@ -1149,6 +1149,27 @@ public static class ItemIcons
             "................",
         };
 
+        // the traffic tool (#971): a traffic cone, orange with a white band
+        d[ItemId.TrafficTool] = new[]
+        {
+            "................",
+            ".......kk.......",
+            "......koOk......",
+            "......koOk......",
+            ".....koooOk.....",
+            ".....kwwwak.....",
+            ".....kwwwak.....",
+            "....kooooOOk....",
+            "....kooooOOk....",
+            "...koooooOOOk...",
+            "...koooooOOOk...",
+            "..kkkkkkkkkkkk..",
+            ".kdddddddddddGk.",
+            ".kkkkkkkkkkkkkk.",
+            "................",
+            "................",
+        };
+
         d[ItemId.Ammo9mm] = new[]
         {
             "................",
