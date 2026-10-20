@@ -119,15 +119,17 @@ public static class StadiumBuilder
             for (int k = 0; k < s.Tiers.Length; k++)
             {
                 var tier = s.Tiers[k];
+                int rows = RowsHere(tier, td + tier.Gap, a.Depth, b.Depth);
+                if (rows == 0) return null;
                 td += tier.Gap;
                 th += tier.Step;
-                float end = td + tier.Rows * tier.RowDepth;
+                float end = td + rows * tier.RowDepth;
                 if (d >= td && d < end)
                 {
                     int r = (int)((d - td) / tier.RowDepth);
                     if (r < 1) return null;
                     float hr = th + r * tier.Riser, dHip = td + r * tier.RowDepth + HipBack;
-                    float ramp = th + (d - td) / (tier.Rows * tier.RowDepth) * (tier.Rows - 1) * tier.Riser;
+                    float ramp = th + (d - td) / (rows * tier.RowDepth) * (rows - 1) * tier.Riser;
                     // the place along the row, at the hip's distance out
                     Vector2 ha = a.P + a.N * dHip, hb = b.P + b.N * dHip;
                     float rowLen = ha.DistanceTo(hb);
@@ -137,7 +139,7 @@ public static class StadiumBuilder
                     if (hip.DistanceTo(pa.Lerp(pb, t) + n * (dHip - d)) > StadiumSeats.Reach) return null;
                     return new SeatHit(hip, -n, k, r, place, hr + HipLift - ramp, tier.Riser + HipLift);
                 }
-                th += (tier.Rows - 1) * tier.Riser;
+                th += (rows - 1) * tier.Riser;
                 td = end;
             }
             return null;
@@ -162,9 +164,11 @@ public static class StadiumBuilder
             float d = 0, h = 0;
             foreach (var tier in s.Tiers)
             {
+                int rows = RowsHere(tier, d + tier.Gap, a.Depth, b.Depth);
+                if (rows == 0) break;
                 d += tier.Gap;
                 h += tier.Step;
-                for (int r = 0; r < tier.Rows; r++)
+                for (int r = 0; r < rows; r++)
                 {
                     float dHip = d + r * tier.RowDepth + HipBack, hr = h + r * tier.Riser;
                     Vector2 ha = a.P + a.N * dHip, hb = b.P + b.N * dHip;
@@ -175,8 +179,8 @@ public static class StadiumBuilder
                         yield return (new Vector3(p.X, hr, p.Y), -n);
                     }
                 }
-                d += tier.Rows * tier.RowDepth;
-                h += (tier.Rows - 1) * tier.Riser;
+                d += rows * tier.RowDepth;
+                h += (rows - 1) * tier.Riser;
             }
         }
     }
@@ -390,6 +394,8 @@ public static class StadiumBuilder
         for (int t = 0; t < s.Tiers.Length; t++)
         {
             var tier = s.Tiers[t];
+            int rows = RowsHere(tier, d + tier.Gap, q.A.Depth, q.B.Depth);
+            if (rows == 0) break;
             float walkH = h;
             if (tier.Gap > 0)
             {
@@ -409,13 +415,15 @@ public static class StadiumBuilder
 
             // this tier's vomitory: its floor from the mouth at row k down and out to the floor
             // under the tier (the ground, or the club level), the rows over it left out
-            int k = vom && t < s.VomitoryRows.Length && s.VomitoryRows[t] >= 0 && s.VomitoryRows[t] < tier.Rows ? s.VomitoryRows[t] : -1;
+            int k = vom && t < s.VomitoryRows.Length && s.VomitoryRows[t] >= 0 && s.VomitoryRows[t] < rows ? s.VomitoryRows[t] : -1;
             float kd = d + k * tier.RowDepth, kh = h + k * tier.Riser;
-            float under = t == 0 ? ground(d + tier.Rows * tier.RowDepth) : slabH;
+            float under = t == 0 ? ground(d + rows * tier.RowDepth) : slabH;
+            // a vomitory too steep to climb inside the facade is not dug: the tier is reached from its walkway
+            if (k >= 0 && kd + Math.Max(0f, kh - under) / VomitorySlope > Math.Min(q.A.Depth, q.B.Depth) - 0.5f) k = -1;
             float backD = k >= 0 ? kd + Math.Max(0f, kh - under) / VomitorySlope : 0f;
             float Floor(float x) => x <= kd ? kh : x >= backD ? under : kh + (under - kh) * (x - kd) / Math.Max(1e-3f, backD - kd);
             float tierD = d, tierH = h;
-            float RampAt(float x) => tierH + (x - tierD) / (tier.Rows * tier.RowDepth) * (tier.Rows - 1) * tier.Riser;
+            float RampAt(float x) => tierH + (x - tierD) / (rows * tier.RowDepth) * (rows - 1) * tier.Riser;
             float soffit = tier.Riser + 0.2f;
 
             // the rows, in runs between holes: each run walked as one ramp, with a soffit under it
@@ -429,7 +437,7 @@ public static class StadiumBuilder
                 runD = float.NaN;
             }
             bool holed = false;
-            for (int r = 0; r < tier.Rows; r++)
+            for (int r = 0; r < rows; r++)
             {
                 float hr = h + r * tier.Riser, d0 = d + r * tier.RowDepth, d1 = d0 + tier.RowDepth;
                 if (gate && hr < gateTop + GateClearance) continue;
@@ -462,7 +470,7 @@ public static class StadiumBuilder
                 lastD = d1;
                 lastH = hr;
                 q.Flat(d0, d1, hr, (r & 1) == 0 ? tread : tread.Darkened(0.04f), solid: false);
-                if (r < tier.Rows - 1) q.Wall(d1, hr, hr + tier.Riser, riser, solid: false);
+                if (r < rows - 1) q.Wall(d1, hr, hr + tier.Riser, riser, solid: false);
                 if (!aisle) seats += q.LengthAt(d0 + tier.RowDepth / 2) / s.SeatWidth;
             }
             CloseRun();
@@ -474,8 +482,8 @@ public static class StadiumBuilder
                 foreach (bool atA in Sides)
                     q.Quad(q.Pt(atA, kd, kh), q.Pt(atA, backD, under), q.Pt(atA, backD, RampAt(backD)), q.Pt(atA, kd, RampAt(kd)), c.ConcreteDark, solid: true);
             }
-            d += tier.Rows * tier.RowDepth;
-            h += (tier.Rows - 1) * tier.Riser;
+            d += rows * tier.RowDepth;
+            h += (rows - 1) * tier.Riser;
         }
         // the back of the top row, up to the roof's underside
         float roofA = RoofTop(s, d, q.A.Depth) - s.RoofThickness, roofB = RoofTop(s, d, q.B.Depth) - s.RoofThickness;
@@ -526,6 +534,20 @@ public static class StadiumBuilder
         float f = front - 0.03f;
         q.Quad(P(A0, f, y1 - 0.7f), P(A1, f, y1 - 0.7f), P(A1, f, y1), P(A0, f, y1), c.Seat, solid: false);
         q.Quad(P(A0 + 0.1f, f, y0 + 1.2f), P(A1 - 0.1f, f, y0 + 1.2f), P(A1 - 0.1f, f, y1 - 0.9f), P(A0 + 0.1f, f, y1 - 0.9f), c.Glazing, solid: false);
+    }
+
+    /// <summary>Room kept behind a segment's top row, for its back wall and the concourse.</summary>
+    private const float BackRoom = 1.5f;
+
+    /// <summary>
+    /// How many of a tier's rows a segment holds, its first row <paramref name="d"/> out: the ends of an
+    /// arena are shallower than its sides, and their tiers stop where the facade comes (#948). Under
+    /// two, the tier is not built there. <see cref="Stand"/>, <see cref="SeatAt"/> and <see cref="Seats"/> agree.
+    /// </summary>
+    private static int RowsHere(StadiumTier tier, float d, float depthA, float depthB)
+    {
+        int rows = Math.Clamp((int)((Math.Min(depthA, depthB) - BackRoom - d) / tier.RowDepth), 0, tier.Rows);
+        return rows < 2 ? 0 : rows;
     }
 
     /// <summary>The roof's top at <paramref name="d"/> out from the seating front, where the facade is <paramref name="depth"/> out.</summary>

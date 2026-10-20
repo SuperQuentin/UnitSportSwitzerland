@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Terrain.Stadiums;
 
 namespace UnitSport.Concert;
 
@@ -179,21 +180,27 @@ public sealed class StagePlan
         Box(-hw - 1f, hw + 1f, r + 2.5f, r + 2.8f, -d - 0.5f, 0.5f, Canopy);           // the canopy, pitched over the grid
         // the back: a black scrim from the deck to the roof, and the wings beside the stage
         Box(-hw, hw, h, r, -d - 0.1f, -d + 0.1f, Scrim, solid: false);
+        // the room beside the stage, to the seating front (#948: an arena's floor is narrow)
+        bool sideways = e.Layout is StageLayout.SideEast or StageLayout.SideWest;
+        float room = (sideways ? e.Stadium.FrontHalfV : e.Stadium.FrontHalfU) - hw - 0.5f;
+        float wing = Math.Min(8f, room);
+        // a line array no longer than the stage's roof allows
+        float array = Math.Min(10.5f, r - 3.5f);
         foreach (float side in new[] { -1f, 1f })
         {
-            float x0 = side * hw, x1 = side * (hw + 8f);
-            Box(Math.Min(x0, x1), Math.Max(x0, x1), 0, r - 2f, -d, -d + 1f, Scrim);
+            float x0 = side * hw, x1 = side * (hw + wing);
+            if (wing >= 1f) Box(Math.Min(x0, x1), Math.Max(x0, x1), 0, Math.Max(h + 1f, r - 2f), -d, -d + 1f, Scrim);
             // the flown PA: a line array hung off the wing, its subs stacked under the deck's edge; with
             // side screens, beside the screen's inner edge (or past its outer one), never through it
-            float hang = hw + 3f;
+            float hang = hw + Math.Clamp(room - 0.8f, 0.7f, 3f);
             if (e.HasSideScreens)
             {
                 float inner = SideScreenX(e) - SideScreenW / 2 - 0.3f;
                 hang = inner - 1.2f >= hw + 1.2f ? Math.Min(hang, inner - 1.2f) : SideScreenX(e) + SideScreenW / 2 + 1.5f;
             }
-            float px = side * hang, sub = side * (hw + 3f);
-            Cab(px - 0.6f, px + 0.6f, r - 12f, r - 1.5f, -1.7f, -1.05f, 0, 1, sub: false);
-            PaHangs.Add(At(px, r - 7f, -1.3f));
+            float px = side * hang, sub = side * (hw + Math.Clamp(room - 1.3f, 1.2f, 3f));
+            Cab(px - 0.6f, px + 0.6f, r - 1.5f - array, r - 1.5f, -1.7f, -1.05f, 0, 1, sub: false);
+            PaHangs.Add(At(px, r - 1.5f - array / 2, -1.3f));
             Cab(sub - 1.2f, sub + 1.2f, 0.012f, 1.2f, -2f, 0f, 0, 1, sub: true);
         }
 
@@ -201,6 +208,12 @@ public sealed class StagePlan
         if (e.HasCenterScreen)
         {
             float sw = Math.Min(w * 0.62f, 34f), sh = sw * 0.42f;
+            // under the stage's roof: a low hall's wall is shorter, and narrower with it
+            if (sh > r - h - 2.5f)
+            {
+                sh = Math.Max(2f, r - h - 2.5f);
+                sw = sh / 0.42f;
+            }
             var centre = At(0, h + 1.2f + sh / 2, -d + 0.5f);
             Box(-sw / 2 - 0.3f, sw / 2 + 0.3f, h + 0.9f, h + 1.5f + sh, -d + 0.3f, -d + 0.45f, Frame, solid: false);
             Patch.AddScreen(centre, Dir(0, 0, 1), new Vector3(sw, sh, 0), (int)(sw / 0.55f), (int)(sh / 0.55f));
@@ -245,8 +258,10 @@ public sealed class StagePlan
         foreach (float side in new[] { -1f, 1f })
         {
             float dx = side * Math.Min(18f, (across ? e.Stadium.FrontHalfV : e.Stadium.FrontHalfU) * 0.7f);
-            Tower(dx, foh - 6f, 12f);
-            Cab(dx - 0.6f, dx + 0.6f, 6f, 11.5f, foh - 7.1f, foh - 6.5f, 0, 1, sub: false);
+            // a delay tower under an arena's ceiling
+            float tower = e.Stadium.Kind == VenueKind.Arena ? Math.Min(12f, e.Stadium.RoofInner - e.Stadium.RoofThickness - 1.5f) : 12f;
+            Tower(dx, foh - 6f, tower);
+            Cab(dx - 0.6f, dx + 0.6f, tower * 0.5f, tower - 0.5f, foh - 7.1f, foh - 6.5f, 0, 1, sub: false);
         }
         // the barrier along the stage front, a pit for security behind it
         if (catwalk > 0)
