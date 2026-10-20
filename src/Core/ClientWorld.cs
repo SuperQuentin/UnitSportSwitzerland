@@ -44,6 +44,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private ShaderMaterial? _treeMaterial;
     private NearTrees? _nearTrees;
     private PhotoLayer? _photos;
+    private World.Snow.PisteLayer? _pistes;
 
     /// <summary>The session this world is built for: the title screen's choice, or the command line's.</summary>
     public WorldLaunch Launch { get; init; } = WorldLaunch.FromArgs();
@@ -482,6 +483,19 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // the UFO sightings (#863): the server's plans played back here, their beams, their landings
             Occasions.UfoSightings.Create(this, _chunks, origin, dedicated: false);
             if (Occasions.SightingShots.Dir != null) AddChild(new Occasions.SightingShots(_chunks, origin, () => LocalPlayer));
+        }
+        // the ski slopes' snow (#887): the weather alone offline, plus the server's word online;
+        // the slopes drawn on the terrain material near the camera
+        if (Systems.On(Systems.Snow))
+        {
+            var snow = World.Snow.SnowService.Create(this, _chunks);
+            if (_worldMaterials.Length > 0)
+            {
+                _pistes = new World.Snow.PisteLayer(_chunks, origin, _worldMaterials[0], _worldMaterials.Length > 1 ? _worldMaterials[1] : null, snow);
+                AddChild(_pistes);
+            }
+            AddChild(new World.Snow.SlopeMarkers(_chunks, snow));
+            AddChild(new World.Snow.SlopeHud(() => LocalPlayer, _chunks));
         }
         // a sign over every bank door (#213)
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.BankSigns(_chunks));
@@ -1296,6 +1310,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         ApplySun();
         ApplyNearTrees();
         ApplyPhotos();
+        _pistes?.Apply();
     }
 
     /// <summary>

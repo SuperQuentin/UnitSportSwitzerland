@@ -117,7 +117,8 @@ public sealed class Skis : Rideable
         }
 
         float drag = 0.5f * AirDensity * dragArea * v * v;
-        float friction = (arcade ? ArcadeSnowFriction : SnowFriction) * Mass * Gravity;
+        // the slope's snow (#887): corduroy and ice glide, powder and slush drag
+        float friction = (arcade ? ArcadeSnowFriction : SnowFriction) * ground.SnowFriction * Mass * Gravity;
 
         // poling: capped hard, and it does nothing once gravity is already doing the work
         float thrust = 0f;

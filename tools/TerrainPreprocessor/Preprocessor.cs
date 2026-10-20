@@ -153,6 +153,8 @@ public static partial class Preprocessor
         // real farm fields (#494): federal LWB land use per canton from <dir>, OSM fallback for the gated cantons
         string? fieldsDir = null, osmFieldsPbf = null;
         bool fieldsCheck = false;
+        // ski slopes (#887): OSM piste:type from --osm-pbf, pistes_E_N.pst per manifest tile
+        bool pistes = false, pistesCheck = false;
         int jobs = Environment.ProcessorCount;
         int ioJobs = 4;
 
@@ -213,6 +215,8 @@ public static partial class Preprocessor
                 case "--fields": fieldsDir = args[++i]; break;
                 case "--osm-pbf": osmFieldsPbf = args[++i]; break;
                 case "--fields-check": fieldsCheck = true; break;
+                case "--pistes": pistes = true; break;
+                case "--pistes-check": pistesCheck = true; break;
                 case "--jobs": jobs = int.Parse(args[++i]); break;
                 case "--io-jobs": ioJobs = int.Parse(args[++i]); break;
                 case "--force": force = true; break;
@@ -241,6 +245,23 @@ public static partial class Preprocessor
             return ManifestHashStage.Run(outDir, tempDir ?? outDir.TrimEnd('/', '\\') + "_temp", ioJobs, ct);
         }
         if (fieldsCheck) return FieldStage.SelfCheck();
+        if (pistesCheck) return PisteStage.SelfCheck();
+
+        // ---- ski slopes (#887): pistes_E_N.pst per manifest tile, standalone -------------------------
+        if (pistes)
+        {
+            if (outDir == null || osmFieldsPbf == null)
+            {
+                Console.Error.WriteLine("--pistes requires --out <chunk dir> --osm-pbf <switzerland.osm.pbf> [--tiles-file f]");
+                return 2;
+            }
+            var manifestPath = Path.Combine(outDir, "manifest.json");
+            var region = tilesFile != null ? TileId.ReadList(tilesFile).ToHashSet()
+                : File.Exists(manifestPath) ? TerrainManifest.FromJson(File.ReadAllText(manifestPath)).Tiles.Select(t => t.Id).ToHashSet()
+                : new HashSet<TileId>();
+            SetStage("pistes");
+            return PisteStage.Run(osmFieldsPbf, outDir, region, jobs);
+        }
 
         // ---- farm fields (#494): fields_E_N.fld per manifest tile, standalone -------------------------
         // --gwr (the GWR data.sqlite) tells which OSM fields lie in the cantons without freely published data

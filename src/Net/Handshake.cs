@@ -65,7 +65,8 @@ public partial class Handshake : Node
     /// </summary>
     /// 37: World/Concerts (AskHost, AskCue, Frame on channel 4; State, Framed) (#885).
     /// 38: an interior plan's entrance may be raised (EntrancePlan.Level, #827): an old peer would put its doorway on the ground floor.
-    public const int Protocol = 38;
+    /// 39: ski slopes (#887): AssetKind.Pistes, World/Snow (weather and slope wear).
+    public const int Protocol = 39;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

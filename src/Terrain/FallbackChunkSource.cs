@@ -332,6 +332,9 @@ public sealed partial class FallbackChunkSource : IChunkSource
     public Task<List<FieldPolygon>?> LoadFieldsAsync(TileId id, CancellationToken ct = default) =>
         Covers(id) ? Task.FromResult<List<FieldPolygon>?>(null) : _inner.LoadFieldsAsync(id, ct);
 
+    public Task<PisteTile?> LoadPistesAsync(TileId id, CancellationToken ct = default) =>
+        Covers(id) ? Task.FromResult<PisteTile?>(null) : _inner.LoadPistesAsync(id, ct);
+
     public async Task<HorizonIndex?> LoadHorizonAsync(CancellationToken ct = default)
     {
         var real = await _inner.LoadHorizonAsync(ct).ConfigureAwait(false);
