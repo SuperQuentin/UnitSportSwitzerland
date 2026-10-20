@@ -272,6 +272,100 @@ public static class CorePlanner
         return core;
     }
 
+    /// <summary>
+    /// A plain core where the planned one fails its checks (#854, the user, Oct 20: so the old layout can go): its mouths and
+    /// connectors, and between each mouth and the next a straight kerb, eased where the arms do not line up and pushed out wherever
+    /// a connector passes beyond it (<see cref="InLineKerb"/>); where the kerbs cross, the loops cut away, the mouths kept. No check
+    /// holds it back; <see cref="JunctionCore.IsFallback"/> counts it.
+    /// </summary>
+    public static JunctionCore Fallback(JunctionPlan jp, JunctionCore failed)
+    {
+        var core = new JunctionCore { IsFallback = true };
+        core.Mouths.AddRange(failed.Mouths);
+        core.Connectors.AddRange(failed.Connectors);
+        // each move laid again as one smooth curve from its lane at its mouth to its lane at the exit's (the failed core's may stray)
+        var stationOf = core.Mouths.ToDictionary(m => m.Arm, m => m.Station);
+        foreach (var c in core.Connectors)
+        {
+            var from = jp.Arms.FirstOrDefault(a => a.Arm == c.FromArm);
+            var to = jp.Arms.FirstOrDefault(a => a.Arm == c.ToArm);
+            if (from?.Axis is null || to?.Axis is null || !stationOf.TryGetValue(c.FromArm, out double sf) || !stationOf.TryGetValue(c.ToArm, out double st)) continue;
+            Vec2 p = from.Axis.At(sf, c.FromOffset), q = to.Axis.At(st, c.ToOffset), din = -from.Axis.DirAt(sf), dout = to.Axis.DirAt(st);
+            double turn = Math.Min(Math.Acos(Math.Clamp(din.Dot(dout), -1, 1)), 170 * Math.PI / 180);
+            double handle = p.DistanceTo(q) * (turn < 1e-6 ? 1.0 / 3 : 2.0 / 3 * Math.Tan(turn / 4) / Math.Sin(turn / 2));
+            Vec2 c1 = p + din * handle, c2 = q - dout * handle;
+            int steps = Math.Max(8, (int)Math.Ceiling(p.DistanceTo(q) / Chord));
+            var pts = new List<Vec2>(steps + 1);
+            for (int k = 0; k <= steps; k++)
+            {
+                double t = (double)k / steps, mt = 1 - t;
+                pts.Add(p * (mt * mt * mt) + c1 * (3 * mt * mt * t) + c2 * (3 * mt * t * t) + q * (t * t * t));
+            }
+            c.Radius = 0;
+            Set(c, pts, 0, 0);
+        }
+        core.Lines.AddRange(failed.Lines);
+        int n = core.Mouths.Count;
+        foreach (var (k, needs) in failed.Needs) core.Needs[k] = needs;
+        core.ArmsAtReach.UnionWith(failed.ArmsAtReach);
+        Vec2 U(CoreMouth m) => jp.Arms.First(a => a.Arm == m.Arm).Axis!.DirAt(m.Station);
+        var ends = core.Mouths.SelectMany(m => new[] { m.Left, m.Right }).ToHashSet();
+        var paved = core.Connectors.SelectMany(c => c.Left.Concat(c.Right)).ToList();
+        List<Vec2> Build(bool star)
+        {
+            // (star: the mouths in their order round their centre, straight between: simple where the kerbs cross)
+            if (star)
+            {
+                var centre = new Vec2(core.Mouths.Average(m => (m.Left.X + m.Right.X) * 0.5), core.Mouths.Average(m => (m.Left.Y + m.Right.Y) * 0.5));
+                var order = core.Mouths.OrderBy(m => ((m.Left + m.Right) * 0.5 - centre).Heading).ToList();
+                core.Mouths.Clear();
+                core.Mouths.AddRange(order);
+            }
+            var outline = new List<Vec2>();
+            for (int k = 0; k < n; k++)
+            {
+                CoreMouth a = core.Mouths[k], b = core.Mouths[(k + 1) % n];
+                outline.Add(a.Left);
+                outline.Add(a.Right);
+                if (!star) outline.AddRange(InLineKerb(a.Right, -U(a), b.Left, U(b), core.Connectors));
+            }
+            MergedCore.Clean(outline, ends);
+            if (SignedArea(outline) < 0) outline.Reverse();
+            // (every connector paved: the outline pushed out where one still passes beyond it, the loops cut again)
+            MergedCore.Envelope(outline, paved, core.Mouths, FallbackPush);
+            MergedCore.Clean(outline, ends);
+            return outline;
+        }
+        var outline = Build(star: false);
+        bool starred = false;
+        if (!Simple(outline) || !ends.All(outline.Contains)) { outline = Build(star: true); starred = true; }
+        core.Outline.AddRange(outline);
+        if (Environment.GetEnvironmentVariable("FALLBACKDBG") is not null)
+            Console.WriteLine(FormattableString.Invariant($"[fallback] {jp.Centre.X:F0},{jp.Centre.Y:F0} star {starred} simple {Simple(outline)} mouths {ends.Count(outline.Contains)}/{ends.Count} centre points out {core.Connectors.Sum(c => c.Centre.Count(p => Outside(outline, p) > 0.05))} (most {core.Connectors.SelectMany(c => c.Centre).Select(p => Outside(outline, p)).DefaultIfEmpty(0).Max():F2})"));
+        var at = core.Mouths.Select(m => (L: outline.IndexOf(m.Left), R: outline.IndexOf(m.Right))).ToList();
+        for (int k = 0; k < n; k++)
+        {
+            var corner = new CoreCorner { ArmA = core.Mouths[k].Arm, ArmB = core.Mouths[(k + 1) % n].Arm, Shape = CornerShape.Chord,
+                StationA = double.NaN, StationB = double.NaN };
+            if (at[k].R >= 0 && at[(k + 1) % n].L >= 0)
+                for (int p = (at[k].R + 1) % outline.Count; p != at[(k + 1) % n].L; p = (p + 1) % outline.Count) corner.Kerb.Add(outline[p]);
+            core.Corners.Add(corner);
+        }
+        // (a mouth cut away by the clean-up: its arm ends inside the paved core, a fallback's residue)
+        core.Simple = Simple(core.Outline);
+        core.Area = Math.Abs(SignedArea(core.Outline));
+        core.Triangles.AddRange(EarClip.Triangulate(core.Outline));
+        foreach (var c in core.Connectors)
+        {
+            c.Outside = c.Left.Concat(c.Right).Select(p => Outside(core.Outline, p)).DefaultIfEmpty(0).Max();
+            if (c.Outside > OutsideTolerance) core.ConnectorsOutside++;
+        }
+        return core;
+    }
+
+    /// <summary>The most a fallback core's outline is pushed out to pave a connector (m).</summary>
+    private const double FallbackPush = 20;
+
     /// <summary>The least kerb rounding beside a held mouth (m, <see cref="CoreCorner.Floor"/>).</summary>
     private const double MinFloor = 0.3;
 
@@ -289,7 +383,7 @@ public static class CorePlanner
         if (!paved.Any(p => Outside(core.Outline, p) is > OutsideTolerance and <= MostPave)) return false;
         var ends = core.Mouths.SelectMany(m => new[] { m.Left, m.Right }).ToHashSet();
         var ring = core.Outline.ToList();
-        MergedCore.Envelope(ring, paved, ends, MostPave);
+        MergedCore.Envelope(ring, paved, core.Mouths, MostPave);
         // (each mouth's two ends kept in order: the kerbs between them taken again)
         var at = core.Mouths.Select(m => (L: ring.IndexOf(m.Left), R: ring.IndexOf(m.Right))).ToList();
         if (at.Any(x => x.L < 0 || x.R < 0) || !Simple(ring)) return false;

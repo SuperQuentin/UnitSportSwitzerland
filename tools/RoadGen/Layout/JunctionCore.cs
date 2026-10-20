@@ -136,6 +136,13 @@ public sealed class JunctionCore
     public int MouthsAtReach { get; set; }
     /// <summary>The arms whose mouth was held at half their street (another junction at its far end): there the two cores would overlap.</summary>
     public HashSet<int> ArmsAtReach { get; } = new();
+    /// <summary>
+    /// The plain core written where the planned one failed its checks (#854, the user, Oct 20): the same mouths and connectors,
+    /// straight kerbs between the mouths pushed out to pave the connectors (<see cref="CorePlanner.Fallback"/>).
+    /// </summary>
+    public bool IsFallback { get; set; }
+    /// <summary>Written as laid though it fails a check (a roundabout's core, #854): its checks no longer hold it back.</summary>
+    public bool AsLaid { get; set; }
     /// <summary>A merged junction's core laid member by member (<see cref="MergedCore"/>, #854), not as one node's.</summary>
     public bool ByMembers { get; set; }
     /// <summary>How far out each arm's mouth would go unheld (its turns and kerbs, before its reach held it; #854).</summary>

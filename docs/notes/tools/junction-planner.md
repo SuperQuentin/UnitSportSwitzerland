@@ -378,6 +378,15 @@ off, `--junctions new` plans and reports without writing.
   (pushing the mouth out widens the turns and the arc with it: the push chased it); an arc whose kerb would start more than a
   metre past both mouths (a corner near a straight line, radii of 100-180 m against mouths at 40) is a straight kerb between the
   mouths instead (`InLineKerb`, pushed out where a connector passes beyond it). 168 real tiles: old layout 210 -> 191.
+- **Fallback cores** (#854, the user, Oct 20: "a simple fallback core" so the old layout can go): a core still failing its checks
+  when the block is written (`WritableLayouts`) is swapped for `CorePlanner.Fallback`: its mouths (its transitions planned from
+  them), each move laid again as one smooth curve from its lane at its mouth to its lane at the exit's, a straight kerb between
+  each mouth and the next (`InLineKerb`), else, where those cross, the mouths joined in their order round their centre; the
+  outline pushed out (`MergedCore.Envelope`, up to `FallbackPush` 20 m; only a mouth's own line is never pushed) and its loops
+  cut (a mouth may be cut away: its arm then ends inside the paved core). Only an outline crossing itself holds it back
+  (`JunctionPlan.CoreFails`). A ring failing its checks is written as laid (`JunctionCore.AsLaid`: its island, its teeth).
+  `FALLBACKDBG=1` prints each. 168 real tiles: 88 plain cores, 6 rings as laid; old layout 191 -> 128 (no check failure nor
+  overlap left); JPTH points off their core 0 -> 24 (fallback cores, within 0.6 m near a mouth).
 - **Tried and reverted** (#854, Oct 20): a slip lane's node (two car roads and a Verbindung) planned only to merge into a junction
   whose mouth reaches it, the slip lane an arm of the merged core: "a road joins short of a mouth" 52 -> 25 and the old layout
   229 -> 219, but 18 more path ends 0.6-1 m off their lane (most of those slip lanes are TLM stubs of 0 m between carriageways,

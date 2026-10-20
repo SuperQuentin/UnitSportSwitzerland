@@ -145,7 +145,7 @@ public sealed class JunctionPlan
     public bool CoresOverlap => Core is { } c && Arms.Any(a => a.Internal && c.ArmsAtReach.Contains(a.Arm));
 
     /// <summary>Its core fails a check: not simple, a kerb starting outside its mouth, a connector outside the outline.</summary>
-    public bool CoreFails => Core is { } c && (!c.Simple || c.KerbsNotTangent > 0 || c.ConnectorsOutside > 0);
+    public bool CoreFails => Core is { } c && !c.AsLaid && (!c.Simple || !c.IsFallback && (c.KerbsNotTangent > 0 || c.ConnectorsOutside > 0));
 
     /// <summary>
     /// The junctions whose cores overlap, in groups to merge (phase 5c): each joined to the one past an inner street where a mouth

@@ -168,7 +168,7 @@ public static class MergedCore
         Clean(outline, mouthEnds);
         // every kerb keeps every move paved (a move spliced or smoothed across members runs where no member's leg did)
         var before = outline.ToList();
-        Envelope(outline, paved, mouthEnds);
+        Envelope(outline, paved, arms.Select(a => ownerOf[a.Arm].MouthOf[a.Arm]).ToList());
         Clean(outline, mouthEnds);
         // (a push that cut a mouth away is no core: the outline as walked, the check failing)
         if (!mouthEnds.All(outline.Contains))
@@ -350,8 +350,10 @@ public static class MergedCore
     /// between arms in line): drawn with points at most <see cref="EnvelopeStep"/> apart (the mouths kept straight), each but the
     /// mouths' ends moved out, away from the core, as far as an edge point outside the outline lies beyond it there.
     /// </summary>
-    internal static void Envelope(List<Vec2> ring, List<Vec2> paved, HashSet<Vec2> mouthEnds, double most = MostPush)
+    internal static void Envelope(List<Vec2> ring, List<Vec2> paved, IReadOnlyList<CoreMouth> mouths, double most = MostPush)
     {
+        var mouthEnds = mouths.SelectMany(m => new[] { m.Left, m.Right }).ToHashSet();
+        bool MouthLine(Vec2 a, Vec2 b) => mouths.Any(m => m.Left == a && m.Right == b || m.Left == b && m.Right == a);
         var outside = paved.Where(q => CorePlanner.Outside(ring, q) > CorePlanner.OutsideTolerance).ToList();
         if (outside.Count == 0) return;
         var dense = new List<Vec2>();
@@ -359,7 +361,7 @@ public static class MergedCore
         {
             Vec2 a = ring[k], b = ring[(k + 1) % ring.Count];
             dense.Add(a);
-            if (mouthEnds.Contains(a) && mouthEnds.Contains(b)) continue;
+            if (MouthLine(a, b)) continue;
             int steps = (int)Math.Ceiling(a.DistanceTo(b) / EnvelopeStep);
             for (int j = 1; j < steps; j++) dense.Add(Vec2.Lerp(a, b, (double)j / steps));
         }
