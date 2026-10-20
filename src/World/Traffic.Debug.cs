@@ -390,6 +390,28 @@ public partial class Traffic
         }
     }
 
+    /// <summary>
+    /// Whether arm <paramref name="arm"/>'s crossing has walkers on it at plan time <paramref name="u"/>: from its green until the
+    /// last to step off as it ended has crossed (the longest of its walkers' lines at their clearing speed).
+    /// </summary>
+    private static bool Crossing(SignalPlan plan, List<Stream> streams, int arm, double u)
+    {
+        int g = plan.Groups.FindIndex(x => x.Kind == SignalGroupKind.Pedestrian && x.Arm == arm);
+        if (g < 0) return false;
+        double walk = 0;
+        foreach (var s in streams)
+            if (s.Group == g) walk = Math.Max(walk, s.Length / s.Clear);
+        if (walk <= 0) walk = plan.Arms[arm].CrossingM / 1.2;
+        var v = plan.Groups[g].Intervals;
+        for (int i = 0; i < v.Count; i++)
+        {
+            if (v[i].Aspect != SignalAspect.Green || (v[i].From < 1e-3f && v[^1].Aspect == SignalAspect.Green)) continue;
+            double end = v[i].To >= plan.Cycle - 1e-3f && v[0].Aspect == SignalAspect.Green ? plan.Cycle + v[0].To : v[i].To;
+            if (Moving(u, plan.Cycle, v[i].From, end - v[i].From + walk) is not null) return true;
+        }
+        return false;
+    }
+
     /// <summary>How long a group's amber after its green lasts (s); none where its green ends in red.</summary>
     private static float AmberAfterGreen(SignalPlan plan, int group)
     {
@@ -421,7 +443,10 @@ public partial class Traffic
             int from = plan.Groups[s.Group].Arm;
             int to = s.Who == ConflictMover.Walker || from < 0 || from >= plan.Arms.Count ? -1 : Enumerable.Range(0, plan.Arms.Count)
                 .FirstOrDefault(k => k != from && plan.Arms[k].Out && SignalPlan.Turn(plan.Arms, from, k) == s.Turn, -1);
-            bool yields = aspect == SignalAspect.Green && to >= 0 && plan.YieldsAt(from, to, s.Turn, s.Group, now);
+            // (and, turning into an arm across its crossing, for as long as its walkers' trail is on it: their yellow and the red
+            // after it too, the user)
+            bool yields = aspect == SignalAspect.Green && to >= 0 && (plan.YieldsAt(from, to, s.Turn, s.Group, now)
+                || s.Turn != SignalMoves.Through && (s.Who == ConflictMover.Car || s.Turn == SignalMoves.Right) && Crossing(plan, streams, to, u));
             var colour = aspect switch
             {
                 SignalAspect.Green => Colors.LimeGreen,

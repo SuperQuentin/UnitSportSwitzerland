@@ -62,6 +62,7 @@
   green at its entering speed, closed behind its last mover from its amber's end at its clearing speed, in its group's light
   now (green, yellow on amber, red), so a trail whose green ends before it reaches its exit turns yellow then red as it is; no
   movers, lines or rings (a red-amber shows nothing), see-through over the cars, dashed on green where it must yield as the
-  green paths (`SignalPlan.YieldsAt`, its turn read off the line's first and last stretches). A line seen in one role only
+  green paths (`SignalPlan.YieldsAt`, its turn read off the line's first and last stretches), and a turn across an exit's
+  crossing for as long as walkers are on it (its green to its last walker across, through its yellow and red). A line seen in one role only
   takes the timing's defaults for the other. The debug lines' material is alpha-blended.
 - **Z-fighting** overlay (`zfight`) and **Flicker shot** button (`--debugview flicker`): `general/zfight` (#788).
