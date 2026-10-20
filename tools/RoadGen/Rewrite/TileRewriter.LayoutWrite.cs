@@ -164,6 +164,13 @@ public static partial class TileRewriter
                 if (!jp.Beyond) stats.Caps++;
                 no = null;
             }
+            // (a ring a road joins right at: written as laid, the joining node's own cap meeting its mouth, as today's caps' do)
+            if (no == "a road joins short of a mouth" && jp.Merged?.Ring is not null && jp.Core is { } ringCore)
+            {
+                ringCore.AsLaid = true;
+                if (!jp.Beyond) stats.RingsAsLaid++;
+                no = null;
+            }
             if (no is not null && jp.Merged?.Ring is not null) no = "a roundabout: " + no;
             if (no is not null) why[jp.Node] = no;
             // (WHYDBG=1: every junction left to the old layout, where and why)
