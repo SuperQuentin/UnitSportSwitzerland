@@ -205,7 +205,7 @@ public static class ConcertMvrTool
         if (x.MdnsError != null) sb.Append(" (no mDNS)");
         sb.Append($": {(joined.Length == 0 ? "no station joined" : string.Join(", ", joined))}");
         if (groups.Length > 0) sb.Append($"; other groups on the LAN: {string.Join(", ", groups)}");
-        sb.Append($"; we offer {x.Ours().Length} file(s); offered: {(offers.Length == 0 ? "none" : "")}");
+        sb.Append($"; we offer {x.Ours().Length} file(s), {offers.Length} offered to us{(offers.Length > 0 && maxOffers > 0 ? ":" : ".")}");
         for (int i = 0; i < offers.Length && i < maxOffers; i++) sb.Append($"\n {i + 1}. {OfferLabel(offers[i])}");
         return sb.ToString();
     }
