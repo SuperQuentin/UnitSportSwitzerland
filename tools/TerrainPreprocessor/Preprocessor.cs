@@ -96,6 +96,7 @@ public static partial class Preprocessor
                 case "--temp" when i + 1 < args.Count: t = args[++i]; break;
                 case "--io-jobs" when i + 1 < args.Count && int.TryParse(args[i + 1], out int n): ioJobs = n; i++; break;
                 case "--no-hash" or "--manifest-hash" or "--osm-check" or "--fields-check" or "--export-route-keys"
+                    or "--dem-check" or "--rgealti-check" or "--dem-probe"
                     or "--osm-overlay" or "--landings-file" or "--airports-file":
                     return false;
             }
@@ -148,7 +149,7 @@ public static partial class Preprocessor
         var demArgs = new List<string>();
         string? rgeAltiDir = null, demBox = null;
         double rgeAltiDz = 0;
-        bool demCheck = false;
+        bool demCheck = false, demReparse = false;
         var demProbes = new List<(double E, double N)>();
         // optional OpenStreetMap overlay (#118): a region-wide intermediate for the road network stage
         string? osmPbf = null;
@@ -214,6 +215,9 @@ public static partial class Preprocessor
                 case "--dem-box": case "--rgealti-box": demBox = args[++i]; break;
                 case "--rgealti-dz": rgeAltiDz = double.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break;
                 case "--dem-check": case "--rgealti-check": demCheck = true; break;
+                // swissALTI3D tiles with foreign data under them are parsed again, so their -9999 gaps
+                // (0 m pits before #936) are filled from it; their old .edge files are set aside
+                case "--dem-reparse": demReparse = true; break;
                 case "--dem-probe":
                 {
                     var p = args[++i].Split(',');
@@ -569,6 +573,26 @@ public static partial class Preprocessor
                 var mine = dem.TilesIn(b[0], b[1], b[2], b[3], swiss);
                 Console.WriteLine($"DEM {dem.Name}: {mine.Count} LV95 tiles with its data and no swissALTI3D");
                 tiles.UnionWith(mine);
+            }
+            if (demReparse)
+            {
+                var sourceIds = sources.Where(t => t.Path != ForeignDem.SourcePath).Select(t => t.Id).ToHashSet();
+                var notSwiss = new HashSet<TileId>();
+                for (int n = b[1]; n < b[3]; n++)
+                    for (int e = b[0]; e < b[2]; e++)
+                        if (!sourceIds.Contains(new TileId(e, n))) notSwiss.Add(new TileId(e, n));
+                string aside = Path.Combine(tempDir, "edges_before_dem");
+                Directory.CreateDirectory(aside);
+                int moved = 0;
+                foreach (var dem in foreign)
+                    foreach (var id in dem.TilesIn(b[0], b[1], b[2], b[3], notSwiss))
+                    {
+                        string edge = EdgeStrips.PathFor(tempDir, id);
+                        if (!File.Exists(edge)) continue;
+                        File.Move(edge, Path.Combine(aside, Path.GetFileName(edge)), overwrite: true);
+                        moved++;
+                    }
+                Console.WriteLine($"--dem-reparse: {moved} swissALTI3D tiles with foreign data under them parsed again (old edges in {aside})");
             }
             Directory.CreateDirectory(tempDir);
             File.WriteAllLines(listPath, previous.Union(tiles).OrderBy(t => t.N).ThenBy(t => t.E).Select(t => $"{t.E}_{t.N}"));
