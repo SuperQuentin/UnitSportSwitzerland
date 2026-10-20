@@ -98,9 +98,13 @@ public partial class RecorderCheck : Node
         string png = Path.Combine(PlaytestDirector.Root, "test_output", "playtest", "recordcheck_top.png");
         try
         {
-            GD.Print("[recordcheck] " + TopViewCli.Draw(dir, 0, 20, 8, null, null, null, png, 900, html: false));
-            Expect(File.Exists(png), $"--topview draws the session ({png})");
-            TopViewCli.Draw(dir, 0, 20, null, null, null, null, png, 600, html: true);
+            // the ground found again from the session's start event (#851), as --topview finds it
+            var ground = TopViewImage.SourceOf(dir, null);
+            Expect(ground != null, "the session says what ground it ran on");
+            string drawn = TopViewCli.Draw(dir, 0, 20, 8, null, null, null, png, 900, html: false, ground);
+            GD.Print("[recordcheck] " + drawn);
+            Expect(File.Exists(png) && drawn.Contains("ground from", StringComparison.Ordinal), $"--topview draws the session over its ground ({png})");
+            TopViewCli.Draw(dir, 0, 20, null, null, null, null, png, 600, html: true, ground);
             Expect(File.Exists(Path.ChangeExtension(png, ".html")), "--topview --html writes the slider page");
         }
         catch (Exception e) { Expect(false, $"--topview: {e.Message}"); }

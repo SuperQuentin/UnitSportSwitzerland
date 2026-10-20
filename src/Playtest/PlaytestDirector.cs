@@ -554,12 +554,12 @@ public partial class PlaytestDirector : Node
             McpTool.Schema(("from", "number", "window start, s"), ("to", "number", "window end, s"), ("at", "number", "the instant the boxes stand at (default: the end)"),
                 ("e", "number", "centre LV95 E (with n and radius)"), ("n", "number", "centre LV95 N"), ("radius", "number", "half the square's side, m"),
                 ("size", "number", "px, default 800")),
-            (args, _) => Sync(() =>
+            (args, _) => OnMain(async () =>
             {
                 if (PlaytestRecorder.Instance is not { } rec) return McpToolResult.Error("not recording (--playtest-record)");
                 double to = args.Num("to") ?? rec.Now, from = args.Num("from") ?? to - 20;
                 EN? around = args.Num("e") is { } e && args.Num("n") is { } n ? new EN(e, n) : null;
-                var png = rec.TopView(from, to, args.Num("at"), around, args.Num("radius"), (int)Math.Clamp(args.Num("size") ?? 800, 200, 2000));
+                var png = await rec.TopView(from, to, args.Num("at"), around, args.Num("radius"), (int)Math.Clamp(args.Num("size") ?? 800, 200, 2000));
                 return png == null ? McpToolResult.Error("could not draw it") : McpToolResult.Image(png, $"top view {from:0.0}-{to:0.0} s");
             })),
         new("note", "Adds a note to the recording, as the player's F12 does (with a screenshot), e.g. to mark what you just changed.",

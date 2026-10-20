@@ -85,6 +85,7 @@
     <Compile Include="..\..\src\Playtest\Recording\SessionReport.cs" Link="Game\Playtest\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Playtest\TopView\TopViewScene.cs" Link="Game\Playtest\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Playtest\TopView\TopViewSvg.cs" Link="Game\Playtest\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Playtest\TopView\TopViewGround.cs" Link="Game\Playtest\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Loot\ShopTables.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\DoorBudget.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\GarageRule.cs" Link="Game\%(Filename)%(Extension)" />
