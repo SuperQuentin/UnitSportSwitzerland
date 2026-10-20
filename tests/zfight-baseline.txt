@@ -1075,7 +1075,7 @@
 133.8	Rides / Road bike
 3.5	Rides / Road bike (parked)
 884.3	Rides / Skis
-298.2	Rides / Snowboard
+379.3	Rides / Snowboard
 424.8	Rides / Telehandler
 208.3	Rides / Telehandler (parked)
 740.4	Rides / Wheel loader
