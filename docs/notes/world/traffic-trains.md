@@ -12,7 +12,7 @@
   the `[traffic]` line ends with a one-way fingerprint to compare two peers. A `Route` grows legs at junctions and trims behind: a car is one unit on it,
   a train a locomotive + carriages at fixed offsets, which keeps a train on one line through points
   (trains only take legs that carry straight on). Cars keep right on undivided roads, slow for
-  bends (2.5 m/s² lateral) and for the car or player ahead. Density: Settings → Time of day (`TrafficCars`,
+  bends (3 m/s² lateral, `Terrain.Format.TurnSpeed`, the same the lights are timed for, #979) and for the car or player ahead. Density: Settings → Time of day (`TrafficCars`,
   35, ~half at night; `Trains`); `--traffic N`. Check: `<godot> --path . -- --trafficcheck[,out.png]
   [--time h]` — 40 s over the nearest motorway, chases a car then a train, fails if nothing moved.
 - **Junction ends joined** (`LaneGraph.JoinTrimmedEnds`, #85): the road generator trims roads back from

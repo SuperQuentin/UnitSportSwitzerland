@@ -571,10 +571,10 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         float cruise = CruiseSpeed(edge.Class);
         float target = cruise;
 
-        // slow for the bend ahead: lateral acceleration kept to ~2.5 m/s²
+        // slow for the bend ahead: its radius ~ 18 m over the turn, at the sideways acceleration the lights are timed for (#979)
         var (_, aheadDir) = car.Route.At(-18f);
         float turn = Mathf.Acos(Mathf.Clamp(dir.Dot(aheadDir), -1f, 1f));
-        if (turn > 0.05f) target = Mathf.Min(target, Mathf.Sqrt(2.5f * 18f / turn));
+        if (turn > 0.05f) target = Mathf.Min(target, (float)Terrain.Format.TurnSpeed.Of(18f / turn));
 
         // keep a gap to the car ahead in its lane, going its way. Measured from the centreline, a car
         // coming the other way in the other lane (1.5 m over) counted as "in the lane": two met nose to
@@ -1078,7 +1078,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         // the red), else it stops if it can (#971: 8 more crossed on red)
         var (_, bendDir) = car.Route.At(-18f);
         float bend = Mathf.Acos(Mathf.Clamp(car.Route.At(0).Dir.Dot(bendDir), -1f, 1f));
-        float reaching = bend > 0.05f ? Mathf.Min(car.Speed, Mathf.Sqrt(2.5f * 18f / bend)) : car.Speed;
+        float reaching = bend > 0.05f ? Mathf.Min(car.Speed, (float)Terrain.Format.TurnSpeed.Of(18f / bend)) : car.Speed;
         bool inTime = aspect == SignalAspect.Amber && reaching > 0.5f
             && (toLine - CarFront) / reaching <= site.Plan.UntilChange(car.Group, Net.ClockSync.ServerNow) - 0.5;
         if (car.ClearingAmber && cannotStop || firstSight && cannotStop

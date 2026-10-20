@@ -21,12 +21,8 @@ public static class ConflictTimes
     public const double CarClear = 10, CarEnter = 40 / 3.6, BikeClear = 4, BikeEnter = 30 / 3.6, WalkClear = 1.2, WalkEnter = 1.5;
     public const double CarLength = 6, BikeLength = 2, WalkLength = 0;
 
-    /// <summary>
-    /// A turning car at most the speed its path's radius allows with this sideways acceleration (m/s²), and never over
-    /// <see cref="TurnMost"/> (the user, Oct 20 2026: livelier than traffic's comfortable 2.5, nearer SN 640 838's flat 10 m/s in
-    /// turns and 7 on tight radii: ~6.3 m/s at r = 10 m, ~9 at r = 20).
-    /// </summary>
-    public const double Lateral = 4, TurnMost = 10;
+    /// <summary>A turning car at most the speed its path's radius allows as traffic drives it (<see cref="TurnSpeed"/>), never over this (m/s).</summary>
+    public const double TurnMost = 10;
 
     /// <summary>Lines are walked in steps of this (m) to find where they meet.</summary>
     private const double Step = 0.5;
@@ -166,7 +162,7 @@ public static class ConflictTimes
             double limit = plan.Arms[jp.Arms.IndexOf(a)].SpeedKmh / 3.6;
             if (car)
             {
-                double turn = Math.Min(TurnMost, Math.Sqrt(Lateral * LeastRadius(centre)));
+                double turn = Math.Min(TurnMost, TurnSpeed.Of(LeastRadius(centre)));
                 lines.Add(new Line(g, Mover.Car, points, c.Width, Min(CarClear, limit, turn), Min(CarEnter, limit, turn), CarLength, plan.PassingTime(g)));
             }
             else lines.Add(new Line(g, Mover.Bike, points, c.Width, BikeClear, BikeEnter, BikeLength, plan.PassingTime(g)));

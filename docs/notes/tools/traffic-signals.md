@@ -68,8 +68,9 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   later and leaves it sooner; a vehicle keeps clear of the whole zebra). Speeds: clearing car 10 m/s,
   bike 4, walker 1.2; entering car 11.1, bike 8.3 (30 km/h: it depends on
   the cyclist, the first may be a fast e-bike, the user), walker 1.5; lengths 6 / 2 / 0 m; capped by the arm's limit, a turning car
-  at `sqrt(4 · r)`, at most 10 m/s (the user: livelier than traffic's 2.5 m/s², nearer SN 640 838's flat 10 m/s turning, 7 on
-  tight radii; ~6.3 m/s at r = 10 m). Amber: the cars' by speed, the riders' 2 s, walkers none (the last steps off as their green ends: their yellow, or red on 2-lens heads, is the clearance for those already on the zebra, SN 640 837; the user, Oct 20 2026). `SignalPlan.Retime(table)` keeps the phases
+  at `sqrt(3 · r)`, at most 10 m/s: `Terrain.Format.TurnSpeed`, the same the traffic cars slow to for a bend, so the lights are
+  timed for the cars that drive them (the user: the more realistic, and both the same; ~5.5 m/s round a 10 m right turn, ~7.7
+  round a 20 m left; SN 640 838 times turns at a flat 10 m/s, 7 on tight radii). Amber: the cars' by speed, the riders' 2 s, walkers none (the last steps off as their green ends: their yellow, or red on 2-lens heads, is the clearance for those already on the zebra, SN 640 837; the user, Oct 20 2026). `SignalPlan.Retime(table)` keeps the phases
   and starts each group as soon as its own conflicts allow; walkers' and riders' greens end early enough that their
   clearing fits in the gap the cars set (never under 4 s of green; an early end held back by it is limited and the plan
   timed again). Riders following the cars' lights whose clearing would lengthen a car group's times by over 2 s get a bike
@@ -77,7 +78,7 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   pole). The bike lead (Vorgrün) only where a car group turning across the riders goes green with them. A plan so timed
   carries `ConflictTimed` (flags bit 2): `Validate` then holds conflicting groups never green together (a green may begin
   in another's amber) and `KeepsTimes` every time. Layout (b)'s bike lane (`SignalArm.BikeBetween`, arm bit 7) no longer
-  conflicts with its arm's right arrow. Test region: J1 74 -> 73 s, J2 86 -> 86 (bikes entering at 30 km/h, turning cars at 4 m/s²; walkers on the bike paths' squares: a riders' left turn holds the next walkers ~15 s), J5a/b 83/84 -> 74/75, J10 70 -> 71, the
+  conflicts with its arm's right arrow. Test region: J1 74 -> 73 s, J2 86 -> 85 (bikes entering at 30 km/h, turning cars at 3 m/s²; walkers on the bike paths' squares: a riders' left turn holds the next walkers ~15 s), J5a/b 83/84 -> 74/75, J10 70 -> 71, the
   rest at their scheme's target (the time saved goes to green). 168 real tiles: 16 of 19 timed from conflict times (3 keep
   today's: their times not kept), 0 invalid. Debugging: `CTDBG=E,N` prints a junction's times over 4 s with the worst pair
   of lines, `CTDBG2=1` with it each phase change's wait and the pair that sets it; `CTTABLE=E,N,file.json` writes the junction's table, groups,
