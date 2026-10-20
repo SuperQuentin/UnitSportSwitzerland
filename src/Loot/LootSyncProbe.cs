@@ -106,7 +106,6 @@ public partial class LootSyncProbe : ChatProbe
         }
         if (!both) { Fail($"{other} never opened it"); return; }
         Say("open");
-        await Seconds(1.5);
 
         if (_role == "A")
         {
@@ -133,7 +132,7 @@ public partial class LootSyncProbe : ChatProbe
             if (!await Heard("A", "took", 60)) { Fail("A never took"); return; }
             string took = _heard.Last(l => l.Contains("LS A took"));
             int gone = int.Parse(took[(took.LastIndexOf(' ') + 1)..]);
-            await Seconds(1.0);
+            await Until(() => !loot.OpenContents().Any(c => c.Index == gone), 5);
             Expect(!loot.OpenContents().Any(c => c.Index == gone),
                 "B's open panel lost the stack A took, without B doing anything");
 

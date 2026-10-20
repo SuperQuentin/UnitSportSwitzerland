@@ -42,7 +42,7 @@ public partial class PlantProbe : ChatProbe
         for (int tries = 0; tries < 60 && !_heard.Any(l => l.Contains("PL B ready")); tries++)
         {
             Say(pos);
-            await Seconds(2.5);
+            if (await Until(() => _heard.Any(l => l.Contains("PL B ready")), 2.5)) break;
         }
         if (!_heard.Any(l => l.Contains("PL B ready"))) { Fail("B never joined"); return; }
         await Seconds(1.0);
@@ -61,12 +61,12 @@ public partial class PlantProbe : ChatProbe
         GetParent().AddChild(wall);
         me.LookPitch = -0.35f;
         wall.GlobalPosition = me.Camera.GlobalPosition + new Vector3(0, -0.5f, -3.2f);
-        await Seconds(0.4);
+        await Until(() => ghost.Showing && ghost.Last.Kind == FlagAimKind.Plant && !ghost.Last.Valid, 3);
         Expect(ghost.Showing && ghost.Last.Kind == FlagAimKind.Plant && !ghost.Last.Valid, $"ghost red on a wall ({ghost.Last.Kind}, {ghost.Last.Reason})");
         Shot("a_ghost_invalid");
         wall.QueueFree();
         me.LookPitch = -0.75f;
-        await Seconds(0.4);
+        await Until(() => ghost.Showing && ghost.Last.Kind == FlagAimKind.Plant && ghost.Last.Valid, 3);
 
         // plant through the real path, mid-stroke shots
         Say("go");
@@ -74,16 +74,16 @@ public partial class PlantProbe : ChatProbe
         int flags = CountOf(ItemId.SwissFlag);
         var mine = placed.All.Keys.ToHashSet();
         _items.UseSlot(me, slot);
-        await Seconds(0.35);
+        if (DisplayServer.GetName() != "headless") await Seconds(0.35);
         Shot("a_raise");
-        await Seconds(0.25);
+        if (DisplayServer.GetName() != "headless") await Seconds(0.25);
         Shot("a_stab");
         Expect(await Until(() => placed.All.Values.Any(o => !mine.Contains(o.Id) && o.Kind == PlacedKind.Flag), 5), "the flag was planted");
         Expect(CountOf(ItemId.SwissFlag) == flags - 1, "the flag left the pack");
         Expect(FlagFx.Spawns == 1, $"one spawn effect here ({FlagFx.Spawns})");
-        await Seconds(0.15);
+        if (DisplayServer.GetName() != "headless") await Seconds(0.15);
         Shot("a_planted");
-        await Seconds(1.2);
+        await Until(() => ghost.Last.Kind == FlagAimKind.PickUp, 4);
         Expect(ghost.Last.Kind == FlagAimKind.PickUp, "the planted flag is the pick-up target");
         Shot("a_pickup_highlight");
         await Seconds(1.0);
@@ -92,7 +92,7 @@ public partial class PlantProbe : ChatProbe
 
         // pull it up again
         _items.UseSlot(me, slot);
-        await Seconds(0.25);
+        if (DisplayServer.GetName() != "headless") await Seconds(0.25);
         Shot("a_pull");
         Expect(await Until(() => CountOf(ItemId.SwissFlag) == flags, 5), "the flag came back to the pack");
         Expect(placed.All.Values.All(o => mine.Contains(o.Id)), "the planted flag is gone");
@@ -116,7 +116,7 @@ public partial class PlantProbe : ChatProbe
         for (int tries = 0; tries < 30 && !_heard.Any(l => l.Contains("PL A go")); tries++)
         {
             Say("ready");
-            await Seconds(1.0);
+            if (await Until(() => _heard.Any(l => l.Contains("PL A go")), 1.0)) break;
         }
         for (int i = 0; i < 20; i++)
         {

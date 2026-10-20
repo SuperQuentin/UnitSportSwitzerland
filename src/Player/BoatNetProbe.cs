@@ -119,8 +119,7 @@ public partial class BoatNetProbe : ChatProbe
 
     private async Task RunA(FootPlayer me)
     {
-        Chat?.Send("/login test");
-        await Seconds(1.5);
+        if (!await LogIn("test")) return;
         bool ready = false;
         for (int i = 0; i < 40 && !ready; i++)
         {
@@ -159,7 +158,6 @@ public partial class BoatNetProbe : ChatProbe
         await Until(() => me.BoatMotion.Velocity.Length() < 0.5f, 20);
         me.RideControls = null;
         me.ExitVehicle();
-        await Seconds(2);
         VehicleBody? Parked()
         {
             if (VehicleManager.Instance is not { } vehicles) return null;
@@ -167,6 +165,7 @@ public partial class BoatNetProbe : ChatProbe
                 if (node is VehicleBody { Kind: RideKind.Speedboat } v && v.IsMultiplayerAuthority()) return v;
             return null;
         }
+        await Until(() => me.Ride == RideKind.OnFoot && Parked() != null, 5);
         Expect(Parked() != null, "A left the boat floating (an admin may park it)");
         if (Parked() is { } left)
             GD.Print($"{Log} over the side: swimming {me.IsSwimming}, {MathX.FlatDistance(me.GlobalPosition, left.GlobalPosition):F1} m from the boat, " +

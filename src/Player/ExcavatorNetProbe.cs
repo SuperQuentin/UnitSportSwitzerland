@@ -73,8 +73,7 @@ public partial class ExcavatorNetProbe : ChatProbe
 
     private async Task RunA(FootPlayer me)
     {
-        Chat?.Send("/login test");
-        await Seconds(1.5);
+        if (!await LogIn("test")) return;
         bool ready = false;
         for (int i = 0; i < 40 && !ready; i++)
         {
@@ -220,7 +219,7 @@ public partial class ExcavatorNetProbe : ChatProbe
         XrPad.Press(PlayerInput.Destination, true);
         await Seconds(0.1);
         XrPad.Press(PlayerInput.Destination, false);
-        await Seconds(3.5);
+        await Until(() => tipper.Tipped, 6);
         Expect(tipper.Tipped, "A's tipper has its body up");
         Say("tipper tipped");
         if (!await Heard("B", "tipper seen", 30)) { Fail("B never saw the tipper"); return; }
@@ -235,14 +234,14 @@ public partial class ExcavatorNetProbe : ChatProbe
         XrPad.Press(PlayerInput.Destination, true);
         await Seconds(0.1);
         XrPad.Press(PlayerInput.Destination, false);
-        await Seconds(2.5);
+        await Until(() => mixer.Discharging, 5);
         Expect(mixer.Discharging, "A's mixer discharges");
         Say("mixer discharging");
         if (!await Heard("B", "mixer seen", 30)) { Fail("B never saw the mixer discharge"); return; }
         XrPad.Press(PlayerInput.EngineToggle, true);
         await Seconds(0.1);
         XrPad.Press(PlayerInput.EngineToggle, false);
-        await Seconds(1.0);
+        await Until(() => !me.EngineOn, 3);
         Expect(!me.EngineOn, "A's engine is off");
         Say("mixer off");
         if (!await Heard("B", "mixer off seen", 30)) { Fail("B never saw the drum stop"); return; }
@@ -260,7 +259,7 @@ public partial class ExcavatorNetProbe : ChatProbe
         XrPad.Press(PlayerInput.Destination, true);
         await Seconds(0.1);
         XrPad.Press(PlayerInput.Destination, false);
-        await Seconds(3.5);
+        await Until(() => dumper.Tipped, 6);
         Expect(dumper.Tipped, "A's mini dumper has its skip up");
         Say("dumper tipped");
         if (!await Heard("B", "dumper seen", 30)) { Fail("B never saw the skip"); return; }
