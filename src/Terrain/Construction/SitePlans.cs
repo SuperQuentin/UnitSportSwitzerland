@@ -47,7 +47,8 @@ public static class SitePlans
         var key = new BuildingKey(tile.Id.E, tile.Id.N, index).ToString();
         var street = BuildingFootprint.StreetNear(roads, box.Center);
         var obstacles = new SiteObstacles(map.Boxes, index, roads, Clearance);
-        return ConstructionSites.Plan(key, b, box, street, obstacles.Blocked);
+        // a pit (#619) keeps off a road's sidewalks too, the yard off its carriageway
+        return ConstructionSites.Plan(key, b, box, street, obstacles.Blocked, obstacles.Undiggable);
     }
 
     /// <summary>
