@@ -61,5 +61,7 @@
   `trails` (#979) draws only the trails, one per movement of those pairs through each of its greens: grown from its line at
   green at its entering speed, closed behind its last mover from its amber's end at its clearing speed, in its group's light
   now (green, yellow on amber, red), so a trail whose green ends before it reaches its exit turns yellow then red as it is; no
-  movers, lines or rings (a red-amber shows nothing). A line seen in one role only takes the timing's defaults for the other.
+  movers, lines or rings (a red-amber shows nothing), see-through over the cars, dashed on green where it must yield as the
+  green paths (`SignalPlan.YieldsAt`, its turn read off the line's first and last stretches). A line seen in one role only
+  takes the timing's defaults for the other. The debug lines' material is alpha-blended.
 - **Z-fighting** overlay (`zfight`) and **Flicker shot** button (`--debugview flicker`): `general/zfight` (#788).

@@ -80,6 +80,8 @@ public partial class Traffic
                 {
                     ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, VertexColorUseAsAlbedo = true, NoDepthTest = true,
                     CullMode = BaseMaterial3D.CullModeEnum.Disabled, RenderPriority = 10,
+                    // (the trails see-through, the cars under them visible, the user)
+                    Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
                 },
             };
             AddChild(_debugLines);
@@ -333,8 +335,26 @@ public partial class Traffic
         return n;
     }
 
-    /// <summary>A movement of the timing's pairs: its line, group, who moves, its clearing and entering speeds and its amber.</summary>
-    private sealed record Stream(Vector3[] Line, int Group, ConflictMover Who, float Clear, float Enter, float Amber, float Length);
+    /// <summary>A movement of the timing's pairs: its line, group, who moves, its clearing and entering speeds, its amber, its turn.</summary>
+    private sealed record Stream(Vector3[] Line, int Group, ConflictMover Who, float Clear, float Enter, float Amber, float Length)
+    {
+        public SignalMoves Turn { get; } = TurnOf(Line);
+    }
+
+    /// <summary>Which way a line turns, from its first and last stretches: under 30 degrees straight on.</summary>
+    private static SignalMoves TurnOf(Vector3[] line)
+    {
+        Vector3 first = Vector3.Zero, last = Vector3.Zero;
+        for (int i = 0; i + 1 < line.Length && first == Vector3.Zero; i++)
+            if (line[i].DistanceTo(line[i + 1]) > 0.3f) first = (line[i + 1] - line[i]) with { Y = 0 };
+        for (int i = line.Length - 1; i > 0 && last == Vector3.Zero; i--)
+            if (line[i].DistanceTo(line[i - 1]) > 0.3f) last = (line[i] - line[i - 1]) with { Y = 0 };
+        if (first == Vector3.Zero || last == Vector3.Zero) return SignalMoves.Through;
+        // (y of the cross: below 0 a turn right, north to east is -Z to +X)
+        float cross = first.Z * last.X - first.X * last.Z;
+        return Mathf.Abs(Mathf.Atan2(Mathf.Abs(cross), first.Dot(last))) < Mathf.DegToRad(30) ? SignalMoves.Through
+            : cross < 0 ? SignalMoves.Right : SignalMoves.Left;
+    }
 
     private readonly System.Runtime.CompilerServices.ConditionalWeakTable<SignalSite, List<Stream>> _streams = new();
 
@@ -396,7 +416,13 @@ public partial class Traffic
         foreach (var s in streams)
         {
             var v = plan.Groups[s.Group].Intervals;
-            var colour = plan.State(s.Group, now) switch
+            var aspect = plan.State(s.Group, now);
+            // dashed where it must yield, as the green paths (the user: a riders' right turn across a green crossing, a flasher)
+            int from = plan.Groups[s.Group].Arm;
+            int to = s.Who == ConflictMover.Walker || from < 0 || from >= plan.Arms.Count ? -1 : Enumerable.Range(0, plan.Arms.Count)
+                .FirstOrDefault(k => k != from && plan.Arms[k].Out && SignalPlan.Turn(plan.Arms, from, k) == s.Turn, -1);
+            bool yields = aspect == SignalAspect.Green && to >= 0 && plan.YieldsAt(from, to, s.Turn, s.Group, now);
+            var colour = aspect switch
             {
                 SignalAspect.Green => Colors.LimeGreen,
                 SignalAspect.Amber or SignalAspect.RedAmber or SignalAspect.FlashingAmber => Colors.Yellow,
@@ -413,7 +439,14 @@ public partial class Traffic
                 if (Moving(u, plan.Cycle, start, span) is not { } t) continue;
                 float head = (float)((t - start) * s.Enter), tail = (float)((t - crosses) * s.Clear) - Size(s.Who).Length;
                 foreach (bool back in s.Who == ConflictMover.Walker ? Both : One)
-                    Trail(mesh, s.Line, Mathf.Max(0, tail), head, TrailWidth(s.Who), colour with { A = 0.75f }, back);
+                {
+                    float a = Mathf.Max(0, tail), b = Mathf.Min(head, s.Length);
+                    if (!yields) Trail(mesh, s.Line, a, b, TrailWidth(s.Who), colour with { A = 0.45f }, back);
+                    // 1.5 m drawn, 1.5 m left out, the dashes fixed along the line as its ends move
+                    else for (float d = Mathf.Floor(a / 3f) * 3f; d < b; d += 3f)
+                        if (Mathf.Min(d + 1.5f, b) > Mathf.Max(d, a))
+                            Trail(mesh, s.Line, Mathf.Max(d, a), Mathf.Min(d + 1.5f, b), TrailWidth(s.Who), colour with { A = 0.45f }, back);
+                }
                 n++;
             }
         }
