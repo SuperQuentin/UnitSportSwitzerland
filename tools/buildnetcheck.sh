@@ -18,6 +18,7 @@ cleanup() { [ -n "$SERVER" ] && _guard_kill_tree "$SERVER"; [ -n "${GUARD_LOCK_H
 trap cleanup EXIT
 # under tools/test.sh the runner already holds the lock (GUARD_LOCK_HELD): taking it again would wait forever
 [ -n "${GUARD_LOCK_HELD:-}" ] || guard_lock 1800 900 || exit 1
+PORT=$(( PORT + ${GUARD_SLOT:-0} * 1000 ))   # its slot's ports, as twoclient.sh moves them (#1008)
 guard_wait_ram 4 600 || exit 1
 # the flat test world (#992): building needs no real or generated ground; REAL=1 boots the generated world as before
 SW=(--world fixture); CW=(--world fixture)

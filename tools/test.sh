@@ -119,7 +119,7 @@ grep -aE "^(Passed|Failed)!" "$OUT/unit.log" | tail -1
 
 # --- Godot tiers ------------------------------------------------------------------------------
 netsmoke() { # headless dedicated server on the flat fixture world + a headless client joining and leaving it
-  local port=${TEST_PORT:-7821} slog=$OUT/netsmoke_server.log
+  local port=$(( ${TEST_PORT:-7821} + ${GUARD_SLOT:-0} * 1000 )) slog=$OUT/netsmoke_server.log
   "$GODOT" --headless --path . -- --server --port "$port" --world fixture > "$slog" 2>&1 < /dev/null &
   SERVER=$!
   for _ in $(seq 1 600); do
@@ -133,6 +133,85 @@ netsmoke() { # headless dedicated server on the flat fixture world + a headless 
   wait "$SERVER" 2>/dev/null
   SERVER=
   return $code
+}
+
+# the whole check in the log's name: one flag runs in several worlds
+log_of() { local name=${1//[^A-Za-z0-9]/_}; name=${name#"${name%%[!_]*}"}; echo "$OUT/$name.log"; }
+
+run_one() { # tier check log: runs one check, its exit code
+  local tier=$1 check=$2 log=$3 eng=
+  # shellcheck disable=SC2086  # the map's check is split into words on purpose
+  case $check in
+    @netsmoke) netsmoke "$log" ;;
+    tools/*) guard_run "$TIMEOUT" "$log" bash $check ;;
+    @realtime\ *) guard_run "$TIMEOUT" "$log" "$GODOT" --headless --path . -- ${check#@realtime } ;;
+    *) [ "$tier" = quick ] && eng=$FAST
+       guard_run "$TIMEOUT" "$log" "$GODOT" --headless $eng --path . -- $check ;;
+  esac
+}
+
+# --- the net and full tiers side by side (#1008) ----------------------------------------------
+# Up to TEST_JOBS checks at once (default: the heavy lock's slot count, GUARD_SLOTS), each in its own slot,
+# so its ports are moved by GUARD_SLOT * 1000 (tools/lib/twoclient.sh). Two scripts that write the same
+# logs (one execs the other) never run together, and the load test and the trailer run alone.
+JOBS=${TEST_JOBS:-$GUARD_SLOTS}
+
+group_of() { # the twoclient name a script logs under (rampalong execs rampnet: both "rampnet"), or the check
+  local f=${1%% *} n t
+  if [ -f "$f" ]; then
+    n=$(grep -o 'twoclient.sh" [A-Za-z0-9_]*' "$f" | head -1 | awk '{ print $2 }')
+    t=$(grep -o 'exec "$(dirname "$0")/[A-Za-z0-9_]*\.sh"' "$f" | grep -o '[A-Za-z0-9_]*\.sh' | head -1)
+    [ -z "$n" ] && [ -n "$t" ] && n=$(grep -o 'twoclient.sh" [A-Za-z0-9_]*' "tools/$t" | head -1 | awk '{ print $2 }')
+  fi
+  echo "${n:-$1}"
+}
+alone() { case $1 in tools/loadtest.sh* | tools/trailer.sh*) return 0 ;; esac; return 1; }
+
+heavy_job() { # index tier check: one check in a slot of its own, its row in $OUT/.row.<index>
+  local i=$1 tier=$2 check=$3 log t0 res v=
+  trap guard_unlock EXIT
+  log=$(log_of "$check")
+  if ! guard_lock; then res="$(printf '%-30s %-8s %6s  %s' "$check" FAIL 0 "(lock)")"
+  elif ! guard_wait_ram "${TEST_HEAVY_RAM_GB:-6}"; then res="$(printf '%-30s %-8s %6s  %s' "$check" FAIL 0 "(not enough RAM)")"
+  else
+    export GUARD_LOCK_HELD=1
+    t0=$SECONDS
+    run_one "$tier" "$check" "$log"
+    v=$(verdict $? "$log")
+    res="$(printf '%-30s %-8s %6s  %s' "$check" "$v" $((SECONDS - t0)) "$log")"
+    echo "[test] $check: $v ($((SECONDS - t0))s, slot $GUARD_SLOT)"
+  fi
+  printf '%s\n%s\n' "${v:-FAIL}" "$res" > "$OUT/.row.$i"   # verdict, then the table row
+}
+
+run_heavy() {
+  local i n=${#HEAVY[@]} pids=() groups=() k busy entry tier check g t0=$SECONDS
+  echo "[test] ${n} net/full checks, up to $JOBS at once"
+  rm -f "$OUT"/.row.*
+  for (( i = 0; i < n; i++ )); do
+    entry=${HEAVY[$i]}; tier=${entry%% *}; check=${entry#* }; g=$(group_of "$check")
+    # wait for a free job, for the job of the same group, and for every job before one that runs alone
+    while :; do
+      busy=0
+      for k in ${!pids[@]}; do
+        if kill -0 "${pids[$k]}" 2>/dev/null; then
+          if alone "$check" || [ "${groups[$k]}" = "$g" ] || alone "${groups[$k]}"; then busy=$JOBS; fi
+          busy=$(( busy + 1 ))
+        else unset 'pids[k]' 'groups[k]'; fi
+      done
+      [ "$busy" -lt "$JOBS" ] && break
+      guard_nap 0.5
+    done
+    heavy_job "$i" "$tier" "$check" &
+    pids+=($!); groups+=("$(alone "$check" && echo "$check" || echo "$g")")
+  done
+  wait
+  for (( i = 0; i < n; i++ )); do
+    if [ -f "$OUT/.row.$i" ]; then ROWS+=("$(sed -n 2p "$OUT/.row.$i")"); [ "$(sed -n 1p "$OUT/.row.$i")" = PASS ] || FAILED=1
+    else ROWS+=("$(printf '%-30s %-8s %6s  %s' "${HEAVY[$i]#* }" FAIL 0 "(no result)")"); FAILED=1; fi
+  done
+  rm -f "$OUT"/.row.*
+  echo "[test] the net/full checks took $((SECONDS - t0))s side by side"
 }
 
 if [ ${#CHECKS[@]} -gt 0 ]; then
@@ -151,31 +230,25 @@ if [ ${#CHECKS[@]} -gt 0 ]; then
     record "build" "$(verdict $code "$OUT/build.log")" $((SECONDS - t0)) "$OUT/build.log"
     if [ $code = 0 ]; then
       locked=0
+      HEAVY=()
       for entry in "${CHECKS[@]}"; do
         tier=${entry%% *}
         check=${entry#* }
-        # the whole check in the log's name: one flag runs in several worlds
-        name=${check//[^A-Za-z0-9]/_}
-        name=${name#"${name%%[!_]*}"}
-        log=$OUT/$name.log
+        log=$(log_of "$check")
         if [ "$tier" = quick ]; then
           guard_wait_ram "${TEST_RAM_GB:-3}" || { record "$check" FAIL 0 "(not enough RAM)"; continue; }
+        elif [ "$JOBS" -gt 1 ]; then
+          HEAVY+=("$entry"); continue   # side by side below
         else
-          # tier 2/3: one at a time on the machine, and only with room to spare
+          # tier 2/3, TEST_JOBS=1: one at a time, in one slot held for the whole run
           [ $locked = 1 ] || { guard_lock && locked=1 && export GUARD_LOCK_HELD=1; } || { record "$check" FAIL 0 "(lock)"; continue; }
           guard_wait_ram "${TEST_HEAVY_RAM_GB:-6}" || { record "$check" FAIL 0 "(not enough RAM)"; continue; }
         fi
         t0=$SECONDS
-        # shellcheck disable=SC2086  # the map's check is split into words on purpose
-        case $check in
-          @netsmoke) netsmoke "$log" ;;
-          tools/*) guard_run "$TIMEOUT" "$log" bash $check ;;
-          @realtime\ *) guard_run "$TIMEOUT" "$log" "$GODOT" --headless --path . -- ${check#@realtime } ;;
-          *) [ "$tier" = quick ] && eng=$FAST || eng=
-             guard_run "$TIMEOUT" "$log" "$GODOT" --headless $eng --path . -- $check ;;
-        esac
+        run_one "$tier" "$check" "$log"
         record "$check" "$(verdict $? "$log")" $((SECONDS - t0)) "$log"
       done
+      [ ${#HEAVY[@]} -gt 0 ] && run_heavy
     fi
   fi
 elif [ "$TIER" != unit ]; then
