@@ -20,10 +20,10 @@ tc_server 480 120 "$OUT/siteuppernet_server.log" --server --port $PORT --generat
 tc_client 420 "$OUT/siteuppernet_A.log" --connect 127.0.0.1:$PORT --name UpperA $WORLD --siteuppernet A & A=$!
 tc_client 420 "$OUT/siteuppernet_B.log" --connect 127.0.0.1:$PORT --name UpperB $WORLD --siteuppernet B & B=$!
 # C joins late: once A has taken its stack
-for i in $(seq 1 1800); do
+for i in $(seq 1 720); do
   grep -q "\[siteupper A\] took" "$OUT/siteuppernet_A.log" 2>/dev/null && break
   kill -0 $A 2>/dev/null || break
-  sleep 0.2
+  guard_nap 0.5
 done
 tc_client 360 "$OUT/siteuppernet_C.log" --connect 127.0.0.1:$PORT --name UpperC $WORLD --siteuppernet C & C=$!
 wait $A $B $C

@@ -16,7 +16,7 @@ WINDOW=; [ -n "${SHOTS:-}" ] && WINDOW=--windowed
 tc_client 540 $OUT/steamernet_A.log $WINDOW --connect 127.0.0.1:$PORT --name SkipperA $WORLD --nocapture --time 14 ${STYLE:+--style $STYLE} --steamernet A &
 A=$!
 tc_client 480 $OUT/steamernet_B.log --connect 127.0.0.1:$PORT --name PassengerB $WORLD --steamernet B
-for _ in $(seq 1 200); do kill -0 "$A" 2>/dev/null || break; sleep 0.2; done
+for _ in $(seq 1 200); do kill -0 "$A" 2>/dev/null || break; guard_nap 0.2; done
 grep -h "\[steamernet" $OUT/steamernet_A.log $OUT/steamernet_B.log
 code=0
 grep -q "\[steamernet A\] RESULT: ok" $OUT/steamernet_A.log || code=1

@@ -197,6 +197,20 @@ _guard_kill_tree() {
   fi
 }
 
+# guard_nap <seconds>: a short sleep with no fork, for polls (#992). `sleep` forks a process, ~70 ms each on Git
+# Bash, and a 0.2 s poll forked five a second per run (once a fork there hung 300 s: "WFSO timed out"). A read on
+# a FIFO nobody writes waits out its timeout instead. Plain sleep on bash 3.2 (macOS) or without a FIFO.
+guard_nap() {
+  if [ -z "${_guard_nap_fd:-}" ]; then
+    _guard_nap_fd=none
+    if [ "${BASH_VERSINFO[0]}" -ge 4 ]; then
+      local f; f=$(mktemp -u "${TMPDIR:-/tmp}/guard_nap.XXXXXX")
+      if mkfifo "$f" 2>/dev/null; then exec {_guard_nap_fd}<>"$f"; rm -f "$f"; fi
+    fi
+  fi
+  if [ "$_guard_nap_fd" = none ]; then sleep "$1"; else read -rt "$1" -u "$_guard_nap_fd" || :; fi
+}
+
 guard_run() {
   local timeout_s=$1 log=$2 pid elapsed=0 free
   shift 2
@@ -235,7 +249,7 @@ guard_run() {
     fi
     # a second in fifths: the end of a run is seen within 0.2 s, not 1 s, for every client a script waits
     # on (#992); elapsed still counts whole seconds for the timeout and the memory checks
-    for _ in 1 2 3 4 5; do kill -0 "$pid" 2>/dev/null || break; sleep 0.2; done
+    for _ in 1 2 3 4 5; do kill -0 "$pid" 2>/dev/null || break; guard_nap 0.2; done
     elapsed=$(( elapsed + 1 ))
   done
   wait "$pid"

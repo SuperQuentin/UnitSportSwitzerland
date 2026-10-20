@@ -22,7 +22,7 @@ CLI=(--connect 127.0.0.1:$PORT --chunks $COURSE --traffic 0)
 tc_server 300 90 $OUT/containernet_server1.log "${SRV[@]}" || { echo "[containernetcheck] RESULT: FAILED (server 1 did not start)"; exit 1; }
 tc_client 240 $OUT/containernet_A.log "${CLI[@]}" --name ContA --containernet A --containernet-go "$(win "$GO")" &
 A=$!
-for _ in $(seq 1 750); do grep -q "ready: waiting for the go" $OUT/containernet_A.log 2>/dev/null && break; kill -0 $A 2>/dev/null || break; sleep 0.2; done
+for _ in $(seq 1 300); do grep -q "ready: waiting for the go" $OUT/containernet_A.log 2>/dev/null && break; kill -0 $A 2>/dev/null || break; guard_nap 0.5; done
 tc_client 180 $OUT/containernet_B.log "${CLI[@]}" --name ContB --containernet B
 touch "$GO"
 wait $A

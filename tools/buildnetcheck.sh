@@ -29,12 +29,12 @@ guard_watch $SERVER > /dev/null
 for _ in $(seq 1 600); do
   grep -q "server listening" $OUT/buildnet_server.log 2>/dev/null && break
   kill -0 "$SERVER" 2>/dev/null || break
-  sleep 0.2
+  guard_nap 0.2
 done
 guard_run 300 $OUT/buildnet_A.log "$GODOT" --headless --path . -- --connect 127.0.0.1:$PORT ${CW[@]+"${CW[@]}"} --name BuilderA --buildnet A --traffic 0 ${ORIGINSTRESS:+--originstress $ORIGINSTRESS} &
 A=$!
 # B joins only once A has built: what it sees comes from the join snapshot
-for _ in $(seq 1 1000); do grep -q "say built" $OUT/buildnet_A.log 2>/dev/null && break; kill -0 $A 2>/dev/null || break; sleep 0.2; done
+for _ in $(seq 1 400); do grep -q "say built" $OUT/buildnet_A.log 2>/dev/null && break; kill -0 $A 2>/dev/null || break; guard_nap 0.5; done
 guard_run 240 $OUT/buildnet_B.log "$GODOT" --headless --path . -- --connect 127.0.0.1:$PORT ${CW[@]+"${CW[@]}"} --name WatcherB --buildnet B --traffic 0 ${ORIGINSTRESS:+--originstress $ORIGINSTRESS}
 wait $A
 code=0

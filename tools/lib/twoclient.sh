@@ -93,7 +93,7 @@ tc_server() {
   for i in $(seq 1 $(( wait_s * 5 ))); do
     grep -q "server listening" "$log" 2>/dev/null && return 0
     kill -0 "$SERVER" 2>/dev/null || return 1
-    sleep 0.2
+    guard_nap 0.2
   done
   echo "[$_tc_name] the server did not listen within ${wait_s}s ($log)" >&2
   return 1

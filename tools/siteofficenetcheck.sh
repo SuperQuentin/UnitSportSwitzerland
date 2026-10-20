@@ -20,10 +20,10 @@ tc_server 420 120 "$OUT/siteofficenet_server.log" --server --port $PORT --genera
 tc_client 360 "$OUT/siteofficenet_A.log" --connect 127.0.0.1:$PORT --name OfficeA $WORLD --siteofficenet A & A=$!
 tc_client 360 "$OUT/siteofficenet_B.log" --connect 127.0.0.1:$PORT --name OfficeB $WORLD --siteofficenet B & B=$!
 # C joins late: once A has taken its stack
-for i in $(seq 1 1500); do
+for i in $(seq 1 600); do
   grep -q "\[siteoffice A\] took" "$OUT/siteofficenet_A.log" 2>/dev/null && break
   kill -0 $A 2>/dev/null || break
-  sleep 0.2
+  guard_nap 0.5
 done
 tc_client 300 "$OUT/siteofficenet_C.log" --connect 127.0.0.1:$PORT --name OfficeC $WORLD --siteofficenet C & C=$!
 wait $A $B $C

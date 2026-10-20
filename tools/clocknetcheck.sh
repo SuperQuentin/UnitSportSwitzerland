@@ -11,7 +11,7 @@ tc_server 300 120 "$OUT/clocknet_server.log" --server --port $PORT $WORLD --admi
 tc_client 240 "$OUT/clocknet_A.log" --connect 127.0.0.1:$PORT --name ClockA $WORLD --clocknet A & A=$!
 # B joins later, once A is in and its sky follows the world clock: before #452 it would have kept its own,
 # later, day. (A fixed 15 s before #992.)
-for _ in $(seq 1 750); do grep -q "the sky follows the world clock" "$OUT/clocknet_A.log" 2>/dev/null && break; kill -0 $A 2>/dev/null || break; sleep 0.2; done
+for _ in $(seq 1 300); do grep -q "the sky follows the world clock" "$OUT/clocknet_A.log" 2>/dev/null && break; kill -0 $A 2>/dev/null || break; guard_nap 0.5; done
 tc_client 220 "$OUT/clocknet_B.log" --connect 127.0.0.1:$PORT --name ClockB $WORLD --time 3 --clocknet B & B=$!
 wait $A $B
 tc_stop

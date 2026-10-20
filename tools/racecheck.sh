@@ -31,11 +31,11 @@ client() {   # client <log> <args...>
 }
 
 wait_results() {   # wait_results <count> <seconds>
-    for _ in $(seq 1 $(( $2 * 5 ))); do
+    for _ in $(seq 1 $(( $2 * 2 ))); do
         [ "$(grep -c "\[race\] #[0-9]* .* results:" $OUT/racecheck_server.log)" -ge "$1" ] && return 0
         # nobody drives: this class has no autopilot yet, nothing to wait for
         [ "$(grep -l "no autopilot" $OUT/racecheck_a.log $OUT/racecheck_b.log 2>/dev/null | wc -l)" -ge 2 ] && return 1
-        sleep 0.2
+        guard_nap 0.5
     done
     return 1
 }

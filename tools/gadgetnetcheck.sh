@@ -14,7 +14,7 @@ tc_server 1800 120 $OUT/gadgetnet_server.log --server --port $PORT "${SW[@]}"
 tc_client 300 $OUT/gadgetnet_A.log --connect 127.0.0.1:$PORT ${CW[@]+"${CW[@]}"} --name GadgetA --gadgetnet A --traffic 0 ${ORIGINSTRESS:+--originstress $ORIGINSTRESS} &
 A=$!
 # B joins only once A has built: what it sees comes from the join snapshot
-for _ in $(seq 1 1000); do grep -q "say placed" $OUT/gadgetnet_A.log 2>/dev/null && break; kill -0 $A 2>/dev/null || break; sleep 0.2; done
+for _ in $(seq 1 400); do grep -q "say placed" $OUT/gadgetnet_A.log 2>/dev/null && break; kill -0 $A 2>/dev/null || break; guard_nap 0.5; done
 tc_client 240 $OUT/gadgetnet_B.log --connect 127.0.0.1:$PORT ${CW[@]+"${CW[@]}"} --name GadgetB --gadgetnet B --traffic 0 ${ORIGINSTRESS:+--originstress $ORIGINSTRESS}
 wait $A
 code=0

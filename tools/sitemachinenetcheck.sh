@@ -15,7 +15,7 @@ WORLD="--generated-world ${NOTERRAIN[*]} --traffic 0 --at $AT --parkingkind site
 tc_server 420 120 "$OUT/sitemachinenet_server.log" --server --port $PORT --generated-world "${NOTERRAIN[@]}"
 tc_client 240 "$OUT/sitemachinenet_A.log" --connect 127.0.0.1:$PORT --name SiteA $WORLD --parkingnet A & A=$!
 # B joins only once A has woken one: what it sees must come from the server, not from its own guess
-for _ in $(seq 1 1000); do grep -q "is a real" "$OUT/sitemachinenet_A.log" 2>/dev/null && break; kill -0 $A 2>/dev/null || break; sleep 0.2; done
+for _ in $(seq 1 400); do grep -q "is a real" "$OUT/sitemachinenet_A.log" 2>/dev/null && break; kill -0 $A 2>/dev/null || break; guard_nap 0.5; done
 tc_client 240 "$OUT/sitemachinenet_B.log" --connect 127.0.0.1:$PORT --name SiteB $WORLD --parkingnet B
 wait $A
 tc_stop
