@@ -85,10 +85,6 @@ public partial class Traffic
             foreach (var car in _cars) lines += DrawWay(mesh, car);
         if (ShowEndpoints)
             foreach (var s in _endpoints.Values) lines += DrawEndpoint(mesh, s);
-        if (ShowMovers && _roads is not null && Focus?.Invoke() is { } here)
-            foreach (var site in _roads.Signals)
-                if (site.Pairs.Count > 0 && new Vector2(site.Pairs[0].Starting[0].X - here.X, site.Pairs[0].Starting[0].Z - here.Z).Length() < LightsDrawn)
-                    lines += DrawMovers(mesh, site);
         if (ShowLights && _roads is not null && Focus?.Invoke() is { } focus)
         {
             foreach (var e in _roads.Edges)
@@ -122,6 +118,11 @@ public partial class Traffic
                 }
             }
         }
+        // the movers last: drawn over the lit paths
+        if (ShowMovers && _roads is not null && Focus?.Invoke() is { } here)
+            foreach (var site in _roads.Signals)
+                if (site.Pairs.Count > 0 && new Vector2(site.Pairs[0].Starting[0].X - here.X, site.Pairs[0].Starting[0].Z - here.Z).Length() < LightsDrawn)
+                    lines += DrawMovers(mesh, site);
         if (lines == 0)
         {
             // an empty surface is an error: one invisible line
@@ -259,7 +260,7 @@ public partial class Traffic
         return n;
     }
 
-    private static readonly Color EndingMover = new(1f, 0.42f, 0.18f), StartingMover = new(0.2f, 0.72f, 1f);
+    private static readonly Color EndingMover = new(0.95f, 0.1f, 0.1f), StartingMover = new(0.05f, 0.42f, 0.12f);
 
     /// <summary>The movers of each pair whose phase change is under way at a junction (see <see cref="ShowMovers"/>).</summary>
     private int DrawMovers(ImmediateMesh mesh, SignalSite site)
@@ -299,22 +300,33 @@ public partial class Traffic
                     Ribbon(mesh, meet + up + new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a)) * 2.2f, meet + up + new Vector3(Mathf.Cos(b), 0, Mathf.Sin(b)) * 2.2f, Colors.White, 0.25f);
                 }
                 // the last one: at its clearing speed from its line, through the cycle's moment
-                Mover(mesh, ending, (float)((at - crosses) * pair.ClearSpeed), pair.EndingMover, EndingMover);
+                Mover(mesh, ending, (float)((at - crosses) * pair.ClearSpeed), pair.EndingMover, EndingMover, false);
                 // the first one: waiting at its line until green
-                Mover(mesh, starting, (float)(Math.Max(0, at - start) * pair.EnterSpeed), pair.StartingMover, StartingMover);
+                Mover(mesh, starting, (float)(Math.Max(0, at - start) * pair.EnterSpeed), pair.StartingMover, StartingMover, false);
+                // a crossing has no way: its walkers leave both kerbs at once, the pair's the one the time was worked out for
+                if (pair.EndingMover == ConflictMover.Walker)
+                    Mover(mesh, ending, (float)((at - crosses) * pair.ClearSpeed), pair.EndingMover, EndingMover, true);
+                if (pair.StartingMover == ConflictMover.Walker)
+                    Mover(mesh, starting, (float)(Math.Max(0, at - start) * pair.EnterSpeed), pair.StartingMover, StartingMover, true);
                 n += 3;
             }
         }
         return n;
     }
 
-    /// <summary>A mover drawn as its footprint, its front <paramref name="along"/> m along <paramref name="line"/> (before its start: on back along the first stretch).</summary>
-    private static void Mover(ImmediateMesh mesh, Vector3[] line, float along, ConflictMover who, Color colour)
+    /// <summary>
+    /// A mover drawn as its footprint, its front <paramref name="along"/> m along <paramref name="line"/> (before its start: on back
+    /// along the first stretch), or along it from its far end when <paramref name="back"/> (a crossing's other kerb).
+    /// </summary>
+    private static void Mover(ImmediateMesh mesh, Vector3[] line, float along, ConflictMover who, Color colour, bool back)
     {
         var (length, width) = who switch { ConflictMover.Bike => (1.8f, 0.7f), ConflictMover.Walker => (0.7f, 0.7f), _ => (4.5f, 1.9f) };
-        var (front, dir) = Along(line, along);
+        var (front, dir) = back && line.Length == 2 ? Along([line[1], line[0]], along) : Along(line, along);
         var rear = front - dir * length;
-        Ribbon(mesh, rear + Vector3.Up * (DrawLift + 0.05f), front + Vector3.Up * (DrawLift + 0.05f), colour, width);
+        var up = Vector3.Up * (DrawLift + 0.05f);
+        // a white rim, to stand out on the lit paths and the asphalt
+        Ribbon(mesh, rear - dir * 0.15f + up, front + dir * 0.15f + up, Colors.White, width + 0.3f);
+        Ribbon(mesh, rear + up, front + up, colour, width);
     }
 
     /// <summary>The point <paramref name="s"/> m along a polyline and its direction there; before its start or past its end, on along its end stretch.</summary>
