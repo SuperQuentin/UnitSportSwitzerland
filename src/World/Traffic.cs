@@ -27,6 +27,13 @@ public sealed class Route
     /// <summary>Position and direction <paramref name="back"/> m behind the head (negative: ahead, over the legs already chosen).</summary>
     public (Vector3 Pos, Vector3 Dir) At(float back)
     {
+        var (p, d, _) = AtLeg(back);
+        return (p, d);
+    }
+
+    /// <summary><see cref="At"/>, with the leg the point lies on.</summary>
+    public (Vector3 Pos, Vector3 Dir, int Leg) AtLeg(float back)
+    {
         int i = Leg;
         float s = Arc - back;
         while (s < 0 && i > 0) { i--; s += Legs[i].Edge.Length; }
@@ -34,7 +41,7 @@ public sealed class Route
         s = Mathf.Max(0f, s);
         var (edge, fwd) = Legs[i];
         var (p, t) = edge.Sample(fwd ? s : edge.Length - s);
-        return (p, fwd ? t : -t);
+        return (p, fwd ? t : -t, i);
     }
 
     /// <summary>Moves the head on, choosing the next leg with <paramref name="next"/> at each junction.</summary>
@@ -391,7 +398,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     };
 
     /// <summary>Busier roads get more of the cars, as they do.</summary>
-    private static float CarWeight(LaneEdge e) => e.Class switch
+    // (never on a junction path: a car out of thin air inside a junction cuts across those with a green light, #854)
+    private static float CarWeight(LaneEdge e) => e.Connector ? 0f : e.Class switch
     {
         RoadClass.Motorway or RoadClass.Expressway => 1f, RoadClass.Major => 0.9f,
         RoadClass.Road => 0.7f, RoadClass.Ramp => 0.5f, RoadClass.Minor => 0.35f, _ => 0.12f,
@@ -1507,18 +1515,49 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             for (int i = 0; i < Units.Length; i++)
             {
                 float half = i == 0 && Units.Length == 1 ? 1.4f : 8f;
-                var (front, _) = Route.At(Offsets[i] - half);
-                var (rear, _) = Route.At(Offsets[i] + half);
+                // each end on its own leg's line, at the offset that line has there: a junction path's line starts and ends on a
+                // lane, the road's is its centre, so across the join the offset changes by that lane's (#854: a car leaving a
+                // path turned across the exit while its front was on the road and its rear still on the path)
+                var (front, frontDir, frontLeg) = Route.AtLeg(Offsets[i] - half);
+                var (rear, rearDir, rearLeg) = Route.AtLeg(Offsets[i] + half);
+                front += Side(frontDir) * OffsetOn(frontLeg, lateral);
+                rear += Side(rearDir) * OffsetOn(rearLeg, lateral);
                 var dir = front - rear;
                 if (dir.LengthSquared() < 1e-4f) (_, dir) = Route.At(Offsets[i]);
                 dir = dir.Normalized();
-                var side = new Vector3(-dir.Z, 0, dir.X).Normalized();
-                var at = (front + rear) * 0.5f + side * lateral + Vector3.Up * Lift;
+                var at = (front + rear) * 0.5f + Vector3.Up * Lift;
                 // MeshScratch turns the meshes to face -Z, the node's forward: point -Z along travel
                 var basis = Player.Flyer.Orient(dir, Vector3.Up, Vector3.Forward);
                 Units[i].GlobalTransform = new Transform3D(basis, at);
                 if (i == 0) Head = at;
             }
+        }
+
+        private static Vector3 Side(Vector3 dir) => new Vector3(-dir.Z, 0, dir.X).Normalized();
+
+        /// <summary>
+        /// The car's offset (<paramref name="lateral"/>, from the current leg's line) on leg <paramref name="leg"/>, next to it: a path
+        /// starts <see cref="JunctionPathInfo.FromOffset"/> right of the road's line arriving, and ends on the exit at
+        /// -<see cref="JunctionPathInfo.ToOffset"/> right of a driver leaving.
+        /// </summary>
+        private float OffsetOn(int leg, float lateral)
+        {
+            if (leg == Route.Leg) return lateral;
+            var here = Route.Legs[Route.Leg].Edge;
+            var there = Route.Legs[leg].Edge;
+            if (leg < Route.Leg)
+            {
+                // behind: the road before a path, or the path before a road
+                if (here.Path is { } onto && there.Path is null) return lateral + onto.FromOffset;
+                if (there.Path is { } off && here.Path is null) return lateral + off.ToOffset;
+            }
+            else
+            {
+                // ahead: the path after a road, or the road after a path
+                if (there.Path is { } onto && here.Path is null) return lateral - onto.FromOffset;
+                if (here.Path is { } off && there.Path is null) return lateral - off.ToOffset;
+            }
+            return lateral;
         }
 
         public void Free()
