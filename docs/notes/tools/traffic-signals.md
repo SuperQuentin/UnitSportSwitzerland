@@ -67,7 +67,7 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   plus half its own (a vehicle: its lane; a walker: 0.5 m, not the zebra, so it enters a lane in the middle of the crossing
   later and leaves it sooner; a vehicle keeps clear of the whole zebra). Speeds: clearing car 10 m/s,
   bike 4, walker 1.2; entering car 11.1, bike 5, walker 1.5; lengths 6 / 2 / 0 m; capped by the arm's limit, a turning car
-  at `sqrt(2.5 · r)`. Amber: the cars' by speed, the riders' 2 s, walkers none. `SignalPlan.Retime(table)` keeps the phases
+  at `sqrt(2.5 · r)`. Amber: the cars' by speed, the riders' 2 s, walkers none (the last steps off as their green ends: their yellow, or red on 2-lens heads, is the clearance for those already on the zebra, SN 640 837; the user, Oct 20 2026). `SignalPlan.Retime(table)` keeps the phases
   and starts each group as soon as its own conflicts allow; walkers' and riders' greens end early enough that their
   clearing fits in the gap the cars set (never under 4 s of green; an early end held back by it is limited and the plan
   timed again). Riders following the cars' lights whose clearing would lengthen a car group's times by over 2 s get a bike
