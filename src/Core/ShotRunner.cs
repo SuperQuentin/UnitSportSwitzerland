@@ -30,6 +30,11 @@ namespace UnitSport.Core;
 /// the renderer (SDFGI relights, <c>docs/notes/core/floating-origin.md</c>). Shots before and
 /// after it with a settle of 0 picture the very next frames.
 /// Each shot logs the frame time averaged over its last second of settling.
+/// A shot's seconds are its least settle (#924): after them it waits, as the trailer director does,
+/// until <see cref="TilesComplete"/> has held for <see cref="CompleteHold"/> s (every tile within 3
+/// rings at its wanted detail, with its roads, buildings and collision), at most
+/// <see cref="CompleteTimeout"/> wall seconds (then it is taken as it is, with a warning). A shot with
+/// a settle of 0 is taken at once, as before (the "shift" measurements).
 /// </summary>
 public partial class ShotRunner : Node
 {
@@ -49,6 +54,16 @@ public partial class ShotRunner : Node
 
     /// <summary>Runs a queued chat line ("/style cartoon"); the client world sends it to its chat.</summary>
     public System.Action<string>? RunCommand { get; set; }
+
+    /// <summary>
+    /// Whether the ground round a point is complete (the director's <c>ChunkManager.CompleteNear</c>,
+    /// 3 rings); null: settle on the seconds alone (no terrain).
+    /// </summary>
+    public System.Func<Vector3, bool>? TilesComplete { get; set; }
+
+    /// <summary>How long the ground must have stayed complete, s; how long to wait for it at most, wall s.</summary>
+    public const double CompleteHold = 1.0, CompleteTimeout = 150;
+    private double _completeFor, _settleWall = -1;
 
     /// <summary>The ground height under a point, once loaded; for the "g" heights of queued shots.</summary>
     public System.Func<Vector3, float?>? GroundHeight { get; set; }
@@ -148,10 +163,24 @@ public partial class ShotRunner : Node
         _hudLayers = null;
     }
 
+    /// <summary>After a shot's seconds: whether its ground has been complete long enough (or waited for too long).</summary>
+    private bool GroundComplete(double delta)
+    {
+        if (TilesComplete == null || _shot!.Value.SettleSeconds <= 0) return true;
+        if (_settleWall < 0) _settleWall = RealClock.Now;
+        _completeFor = TilesComplete(_camera.GlobalPosition) ? _completeFor + delta : 0;
+        if (_completeFor >= CompleteHold) return true;
+        if (RealClock.Now - _settleWall < CompleteTimeout) return false;
+        GD.PrintErr($"[shot] {_shot.Value.OutPath}: the ground round the camera was not complete after {CompleteTimeout:F0} s; taken as it is");
+        return true;
+    }
+
     private void Aim(Shot shot)
     {
         _shot = shot;
         _elapsed = 0;
+        _completeFor = 0;
+        _settleWall = -1;
         _camera.Position = _origin != null && _start != null ? _origin.Since(_start).Point(shot.Position) : shot.Position;
         _camera.Rotation = new Vector3(Mathf.DegToRad(shot.PitchDeg), Mathf.DegToRad(shot.YawDeg), 0);
     }
@@ -182,6 +211,7 @@ public partial class ShotRunner : Node
         if (_shot.Value.AboveGround is { } above && GroundHeight?.Invoke(_camera.Position) is { } ground)
             _camera.Position = _camera.Position with { Y = ground + above };
         if (_elapsed < _shot.Value.SettleSeconds) return;
+        if (!GroundComplete(delta)) return;
 
         bool ok = Save(_shot.Value.OutPath);
         _failed |= !ok;

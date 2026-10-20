@@ -55,9 +55,11 @@ public enum RideKind
     WheelLoaderForks = 199,
     /// <summary>A tracked mini dumper (#614): a <see cref="Player.MiniDumper"/>, a skip that tips forward.</summary>
     MiniDumper = 200,
+    /// <summary>The flying saucer (#861): a <see cref="Player.Ufo"/>, hover flight, landing legs, a ramp and a tractor beam.</summary>
+    Ufo = 201,
     /// <summary>A snowboard (#922): a <see cref="Player.Snowboard"/>, on the ski model like the skis.</summary>
-    Snowboard = 201,
-    // The next other mount is 202.
+    Snowboard = 202,
+    // The next other mount is 203.
 }
 
 /// <summary>
@@ -299,6 +301,12 @@ public abstract class Rideable
     /// <summary>The driver climbs out on the left (a left-hand-drive cab), not the right.</summary>
     public virtual bool ExitLeft => false;
 
+    /// <summary>
+    /// Where the driver stands after getting out on the ground, in the visual's frame, when that spot
+    /// is clear (the foot of a UFO's ramp, #861); null: beside the door (<see cref="EntryPoint"/>).
+    /// </summary>
+    public virtual Vector3? ExitSpot => null;
+
     // ---- passengers (#158) ----------------------------------------------------------------
     /// <summary>
     /// The seats players can take, the driver's first; empty for a ride one person uses. Read
@@ -489,7 +497,7 @@ public abstract class Rideable
     /// Twin) folds open on its own page like the cars.
     /// </remarks>
     public static readonly Rideable[] All =
-        { new Bicycle(), new Skis(), new Snowboard(), new Canopy(paraglider: true), new Helicopter(), new Plane(), new Pigeon() };
+        { new Bicycle(), new Skis(), new Snowboard(), new Canopy(paraglider: true), new Helicopter(), new Plane(), new Pigeon(), new Ufo() };
 
     /// <summary>
     /// A fresh instance for one rider.
@@ -511,6 +519,7 @@ public abstract class Rideable
         RideKind.Helicopter => new Helicopter(),
         RideKind.Plane => new Plane(),
         RideKind.Pigeon => new Pigeon(),
+        RideKind.Ufo => new Ufo(),
         RideKind.Airstairs => new Airstairs(),
         RideKind.Forklift => new Forklift(),
         RideKind.Excavator => new Excavator(),
@@ -544,7 +553,7 @@ public abstract class Rideable
                 Motorbike => "Motorbikes",
                 Truck => "Trucks and buses",
                 Boat => "Boats",
-                Airliner or Helicopter or Plane => "Aircraft",
+                Airliner or Helicopter or Plane or Ufo => "Aircraft",
                 _ => "Rides",
             };
             int rider = k;

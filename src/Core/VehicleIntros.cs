@@ -8,6 +8,8 @@ public enum VehicleIntroKind
     Forklift, Excavator, MiniExcavator, WheelLoader, CompactRoller, Telehandler,
     /// <summary>Not driven: shown on walking up to a lone trailer, and done from a truck.</summary>
     Trailer,
+    /// <summary>The flying saucer (#861).</summary>
+    Ufo,
     Snowboard,
 }
 
@@ -118,6 +120,15 @@ public static class VehicleIntros
             new("Climb: hold {jump}", new[] { "jump", "trigger_right" }, Pad: "Climb: hold {throttle}"),
             new("Descend: hold {crouch_slide}", new[] { "crouch_slide", "trigger_left" }, Pad: "Descend: hold {brake}"),
         }, "Let go and it holds its height · {interact_mount} gets out on the ground"),
+
+        new(VehicleIntroKind.Ufo, "UFO", new IntroRow[]
+        {
+            new("Fly where you look with " + Wasd + ", {sprint} boosts", Stick, Pad: "Fly where you look with {move_forward}, {sprint} boosts"),
+            new("Climb: hold {jump} · descend: hold {crouch_slide}", new[] { "jump", "trigger_right", "crouch_slide", "trigger_left" },
+                Pad: "Climb: hold {throttle} · descend: hold {brake}"),
+            new("Tractor beam on / off: {tractor_beam}", new[] { "tractor_beam" }),
+            new("Ramp (landed) / legs (flying): {car_door}", new[] { "car_door" }),
+        }, "Let go and it hovers · {lights_toggle} lights · {interact_mount} gets out down the ramp"),
 
         new(VehicleIntroKind.Plane, "Plane", new IntroRow[]
         {

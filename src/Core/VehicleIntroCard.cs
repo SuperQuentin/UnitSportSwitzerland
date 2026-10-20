@@ -85,6 +85,7 @@ public partial class VehicleIntroCard : CanvasLayer
     public static VehicleIntroKind? KindOf(Rideable ride) => ride switch
     {
         Airliner => VehicleIntroKind.Airliner,
+        Ufo => VehicleIntroKind.Ufo,
         Helicopter => VehicleIntroKind.Helicopter,
         Player.Plane => VehicleIntroKind.Plane,
         Pigeon => VehicleIntroKind.Pigeon,

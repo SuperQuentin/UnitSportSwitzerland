@@ -29,6 +29,21 @@ public partial class FootPlayer
     }
 
     /// <summary>
+    /// Just over the top of the head, world space: where a speech bubble's tail points (#862). A
+    /// passenger's is over its seat's host, a rider's over its machine at the seat's eye height
+    /// (a remote copy has no ride object: a walker's).
+    /// </summary>
+    public Vector3 HeadTop
+    {
+        get
+        {
+            var body = RidingWith != 0 && Host is { } host && IsInstanceValid(host) ? host : this;
+            float eye = _ride?.EyeHeight ?? (IsSliding ? SlideEyeHeight : EyeHeight);
+            return body.GlobalPosition + Vector3.Up * (eye + 0.32f);
+        }
+    }
+
+    /// <summary>
     /// The body whose closed cabin these ears sit in (#375): oneself at the wheel of a car, truck,
     /// bus, helicopter or plane, its driver when riding along in one; null on foot or on an open
     /// machine. A speaker hung on that body (its car stereo) plays in the cabin; the rest of the

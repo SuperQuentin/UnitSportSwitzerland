@@ -624,8 +624,8 @@ public partial class BrCrates : Node3D, IOriginContainer
         return _canopy = s.Build();
     }
 
-    /// <summary>A column of coloured smoke you can see from far off.</summary>
-    private static Node3D Smoke(Color colour) => new CpuParticles3D
+    /// <summary>A column of coloured smoke you can see from far off (and a crashed saucer's in a film, #882).</summary>
+    internal static Node3D Smoke(Color colour) => new CpuParticles3D
     {
         Name = "Smoke",
         Amount = 60,
