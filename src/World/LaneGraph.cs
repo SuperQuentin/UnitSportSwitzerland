@@ -177,6 +177,19 @@ public sealed class SignalSite
 {
     public required SignalPlan Plan { get; init; }
     public required Vector3[] Out { get; init; }
+
+    /// <summary>The riders' paths through it (#971, the debug drawing; riders are not traffic): their line (world) and group.</summary>
+    public List<(Vector3[] Points, int Group)> Rides { get; } = new();
+
+    /// <summary>Its crossings (#971, the debug drawing): kerb to kerb between the arm's pedestrian heads (world), and the arm.</summary>
+    public List<(Vector3 From, Vector3 To, int Arm)> Walks { get; } = new();
+
+    public void Shift(OriginShift shift)
+    {
+        foreach (var (points, _) in Rides)
+            for (int i = 0; i < points.Length; i++) points[i] = shift.Point(points[i]);
+        for (int i = 0; i < Walks.Count; i++) Walks[i] = (shift.Point(Walks[i].From), shift.Point(Walks[i].To), Walks[i].Arm);
+    }
 }
 
 /// <summary>
@@ -414,11 +427,47 @@ public sealed class LaneGraph
                 var outs = new Vector3[plan.Arms.Count];
                 for (int a = 0; a < outs.Length; a++) outs[a] = OutOf(plan.Arms[a].Heading);
                 g.Signals.Add(sites[k] = new SignalSite { Plan = plan, Out = outs });
+                // its crossings (the debug drawing, #971): kerb to kerb between each arm's two pedestrian heads, moved along the arm
+                // onto the zebra, which RoadGen paints 0.3 m on from the cars' stop line and 3 m deep (TileRewriter.Crossings)
+                var sg = tile.Signals[k];
+                foreach (var arm in sg.Poles.Where(p => (p.Flags & SignalPoleFlags.Pedestrian) != 0).GroupBy(p => p.Arm))
+                {
+                    var heads = arm.Select(p => origin.ToWorld(tile.Id.MinE + p.X, tile.Id.MaxN - p.Z, p.Y)).ToList();
+                    if (heads.Count < 2 || arm.Key * 3 + 2 >= sg.Stops.Length || float.IsNaN(sg.Stops[arm.Key * 3])) continue;
+                    var (a0, b0) = heads.SelectMany(x => heads, (x, y) => (x, y)).MaxBy(xy => xy.x.DistanceSquaredTo(xy.y));
+                    var stop = origin.ToWorld(tile.Id.MinE + sg.Stops[arm.Key * 3], tile.Id.MaxN - sg.Stops[arm.Key * 3 + 2], sg.Stops[arm.Key * 3 + 1]);
+                    var u = outs[arm.Key];
+                    // the zebra's own bars where the tile has them: the yellow paint across the arm nearest the stop line
+                    var zebra = stop - u * 1.8f;
+                    float best = 8f;
+                    foreach (var paint in tile.Paint)
+                    {
+                        if (paint.Type != PaintType.YellowSolid || paint.Shape != PaintShape.Triangles || paint.Vertices.Length < 9) continue;
+                        var c = Vector3.Zero;
+                        int nv = paint.Vertices.Length / 3;
+                        for (int v = 0; v < nv; v++)
+                            c += new Vector3(paint.Vertices[v * 3], paint.Vertices[v * 3 + 1], paint.Vertices[v * 3 + 2]);
+                        c /= nv;
+                        var at = origin.ToWorld(tile.Id.MinE + c.X, tile.Id.MaxN - c.Z, c.Y);
+                        var d = at - stop;
+                        float along = d.Dot(u), across = (d - u * along).Length();
+                        if (along < 0.5f && -along < best && across < 15f) { best = -along; zebra = at; }
+                    }
+                    sites[k].Walks.Add((a0 + u * (zebra - a0).Dot(u), b0 + u * (zebra - b0).Dot(u), arm.Key));
+                }
             }
             // the junction paths (#818 phase 5): each a one-way edge from the road end at its arm's mouth to the exit's; their ends meet
             // those roads, so JoinTrimmedEnds leaves the junction to them. Cars only (riders are not traffic)
             foreach (var jpath in tile.JunctionPaths)
             {
+                // a riders' path at the lights: kept for the debug drawing only (#971)
+                if (jpath.Kind == JunctionPathKind.Bike && jpath.PointCount >= 2 && jpath.Signal >= 0 && jpath.Signal < sites.Length)
+                {
+                    var ride = new Vector3[jpath.PointCount];
+                    for (int i = 0; i < ride.Length; i++)
+                        ride[i] = origin.ToWorld(tile.Id.MinE + jpath.Points[i * 3], tile.Id.MaxN - jpath.Points[i * 3 + 2], jpath.Points[i * 3 + 1]);
+                    sites[jpath.Signal].Rides.Add((ride, jpath.Group));
+                }
                 if (jpath.Kind != JunctionPathKind.Car || jpath.PointCount < 2) continue;
                 int n = jpath.PointCount;
                 var pts = new Vector3[n];
@@ -582,6 +631,7 @@ public sealed class LaneGraph
         foreach (var e in Edges)
             if (done.Add(e)) e.Shift(shift);
         foreach (var a in Approaches) a.Stop = shift.Point(a.Stop);
+        foreach (var s in Signals) s.Shift(shift);
         Frame = now;
     }
 

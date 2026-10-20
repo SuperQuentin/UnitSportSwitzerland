@@ -389,8 +389,8 @@ public partial class DebugMenu : CanvasLayer
             "Each car's way ahead: a generated car's way to its destination in that destination's colour,\n"
             + "any other's next legs in grey.");
         Switch(grid, "lights", "Green paths", false, on => { if (World.Traffic.Current is { } t) t.ShowLights = on; },
-            "The paths through lit junctions that may go now: green on green, yellow on amber;\n"
-            + "on red none (#971).");
+            "The paths through lit junctions that may go now: green on green (dashed where they must give way),\n"
+            + "yellow on amber, none on red; the riders' paths thin and the crossings wide, by their own lights (#971).");
         Switch(grid, "endpoints", "Traffic endpoints", false, on => { if (World.Traffic.Current is { } t) t.ShowEndpoints = on; },
             "Generators (green), destinations (red), both (yellow): a post with an arrow along its heading,\n"
             + "a destination's ring in the colour its cars' ways are drawn in.");

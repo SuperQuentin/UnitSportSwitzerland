@@ -72,9 +72,32 @@ public partial class Traffic
         if (ShowEndpoints)
             foreach (var s in _endpoints.Values) lines += DrawEndpoint(mesh, s);
         if (ShowLights && _roads is not null && Focus?.Invoke() is { } focus)
+        {
             foreach (var e in _roads.Edges)
                 if (e.Path is { Site: { } site } path && new Vector2(e.Points[0].X - focus.X, e.Points[0].Z - focus.Z).Length() < LightsDrawn)
                     lines += DrawLit(mesh, e, site, path);
+            // the riders' paths (thin) and the crossings (wide), by their own groups (the user, #971)
+            foreach (var site in _roads.Signals)
+            {
+                if (site.Walks.Count + site.Rides.Count == 0) continue;
+                var near = site.Walks.Count > 0 ? site.Walks[0].From : site.Rides[0].Points[0];
+                if (new Vector2(near.X - focus.X, near.Z - focus.Z).Length() > LightsDrawn) continue;
+                double now = Net.ClockSync.ServerNow;
+                foreach (var (points, group) in site.Rides)
+                    if (group < site.Plan.Groups.Count && LitColour(site.Plan.State(group, now)) is { } c)
+                        for (int i = 0; i + 1 < points.Length; i++, lines++) Ribbon(mesh, points[i] + Vector3.Up * 1.2f, points[i + 1] + Vector3.Up * 1.2f, c, 0.35f);
+                foreach (var (from, to, arm) in site.Walks)
+                {
+                    int group = Enumerable.Range(0, site.Plan.Groups.Count)
+                        .FirstOrDefault(g => site.Plan.Groups[g].Kind == SignalGroupKind.Pedestrian && site.Plan.Groups[g].Arm == arm, -1);
+                    if (group >= 0 && LitColour(site.Plan.State(group, now)) is { } c)
+                    {
+                        Ribbon(mesh, from + Vector3.Up * 0.8f, to + Vector3.Up * 0.8f, c, 2.5f);
+                        lines++;
+                    }
+                }
+            }
+        }
         if (lines == 0)
         {
             // an empty surface is an error: one invisible line
@@ -211,6 +234,14 @@ public partial class Traffic
         }
         return n;
     }
+
+    /// <summary>A lit path's colour for an aspect: green, yellow on amber, none on red or off.</summary>
+    private static Color? LitColour(SignalAspect aspect) => aspect switch
+    {
+        SignalAspect.Green => new Color(0.1f, 0.9f, 0.2f),
+        SignalAspect.Amber or SignalAspect.RedAmber or SignalAspect.FlashingAmber => new Color(1f, 0.85f, 0.1f),
+        _ => null,
+    };
 
     /// <summary>The plan arm a path leaves from: its approach's (the road arriving at its start, or the short piece before that).</summary>
     private int ArmInto(LaneEdge e, SignalSite site)
