@@ -40,6 +40,8 @@ public static class TerrainBuild
         public bool Fresh;
         /// <summary>Read every written tile back and compare, then check all seams.</summary>
         public bool Verify;
+        /// <summary>RGE ALTI, for the French sources <see cref="RgeAlti.Sources"/> made (#936).</summary>
+        public RgeAlti? France;
     }
 
     private static readonly Regex NameRe = new(
@@ -204,18 +206,28 @@ public static class TerrainBuild
                 if (!scratchPool.TryTake(out var sc)) sc = new Scratch();
                 try
                 {
-                    long t0 = Stopwatch.GetTimestamp();
-                    // a legacy pass-1 cache file is the parsed grid already: 8 MB read, no inflate
-                    string legacy = Path.Combine(cacheDir, $"{src.Id.E}_{src.Id.N}.raw");
-                    string readPath = !o.Force && new FileInfo(legacy) is { Exists: true, Length: XyzParser.RawFileBytes } li
-                        && li.LastWriteTimeUtc.Ticks >= src.Ticks ? legacy : src.Path;
-                    byte[] data;
-                    ioGate.Wait();
-                    try { data = File.ReadAllBytes(readPath); }
-                    finally { ioGate.Release(); }
-                    long t1 = Stopwatch.GetTimestamp();
+                    long t0 = Stopwatch.GetTimestamp(), t1 = t0;
+                    if (src.Path == RgeAlti.SourcePath)
+                    {
+                        // a French tile (#936): resampled from RGE ALTI, which reads its own files
+                        var france = o.France ?? throw new InvalidOperationException("RGE ALTI tile without --rgealti");
+                        if (france.Fill(src.Id, sc.Cells) < sc.Cells.LongLength) XyzParser.FillMissing(sc.Cells);
+                    }
+                    else
+                    {
+                        // a legacy pass-1 cache file is the parsed grid already: 8 MB read, no inflate
+                        string legacy = Path.Combine(cacheDir, $"{src.Id.E}_{src.Id.N}.raw");
+                        string readPath = !o.Force && new FileInfo(legacy) is { Exists: true, Length: XyzParser.RawFileBytes } li
+                            && li.LastWriteTimeUtc.Ticks >= src.Ticks ? legacy : src.Path;
+                        byte[] data;
+                        ioGate.Wait();
+                        try { data = File.ReadAllBytes(readPath); }
+                        finally { ioGate.Release(); }
+                        t1 = Stopwatch.GetTimestamp();
+                        Interlocked.Add(ref bytesIn, data.Length);
 
-                    XyzParser.Parse(data, readPath, src.Id, sc.Cells, sc.Text);
+                        XyzParser.Parse(data, readPath, src.Id, sc.Cells, sc.Text);
+                    }
                     long t2 = Stopwatch.GetTimestamp();
 
                     var heights = new ushort[n * n];
@@ -227,7 +239,6 @@ public static class TerrainBuild
                     Interlocked.Add(ref tRead, t1 - t0);
                     Interlocked.Add(ref tParse, t2 - t1);
                     Interlocked.Add(ref tReduce, t3 - t2);
-                    Interlocked.Add(ref bytesIn, data.Length);
 
                     interiors[src.Id] = heights;
                     edgesOf[src.Id] = edges;

@@ -105,6 +105,10 @@ public static partial class Preprocessor
         var pngCrops = new List<(double E, double N, int Size)>();
         bool force = false, fresh = false;
         string? franceBox = null;
+        // French terrain (#936): RGE ALTI 1 m GeoTIFFs for the LV95 tiles swissALTI3D lacks, in a box (km)
+        string? rgeAltiDir = null, rgeAltiBox = null;
+        double rgeAltiDz = 0;
+        bool rgeAltiCheck = false;
         // optional OpenStreetMap overlay (#118): a region-wide intermediate for the road network stage
         string? osmPbf = null;
         bool osmCheck = false;
@@ -162,6 +166,10 @@ public static partial class Preprocessor
                 case "--photos": photosOnly = true; break;
                 case "--verify": verify = true; break;
                 case "--france": franceBox = args[++i]; break;
+                case "--rgealti": rgeAltiDir = args[++i]; break;
+                case "--rgealti-box": rgeAltiBox = args[++i]; break;
+                case "--rgealti-dz": rgeAltiDz = double.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break;
+                case "--rgealti-check": rgeAltiCheck = true; break;
                 case "--osm-overlay": osmPbf = args[++i]; break;
                 case "--osm-check": osmCheck = true; break;
                 case "--fields": fieldsDir = args[++i]; break;
@@ -393,7 +401,7 @@ public static partial class Preprocessor
             return await FranceStage.RunAsync(outDir, box.MinLon, box.MinLat, box.MaxLon, box.MaxLat);
         }
 
-        if (outDir == null || (inDirs.Count == 0 && !roadsOnly && !featuresOnly))
+        if (outDir == null || (inDirs.Count == 0 && rgeAltiDir == null && !roadsOnly && !featuresOnly))
         {
             Console.Error.WriteLine("Required: --in <source dir> --out <chunk dir>");
             Console.Error.WriteLine("  (--in is not needed with --roads-only / --features-only)");
@@ -416,6 +424,32 @@ public static partial class Preprocessor
         // ---- terrain: sources -> .terr + .terrc, parsed and finished in one parallel pass -------
         var sw = Stopwatch.StartNew();
         var sources = TerrainBuild.Discover(inDirs);
+        RgeAlti? france = null;
+        if (rgeAltiDir != null)
+        {
+            var b = (rgeAltiBox ?? "").Split(',').Select(v => int.Parse(v.Trim(), System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+            if (b.Length != 4)
+            {
+                Console.Error.WriteLine("--rgealti <dir> needs --rgealti-box minE,minN,maxE,maxN (LV95 km, e.g. 2495,1100,2565,1145)");
+                return 2;
+            }
+            france = new RgeAlti(rgeAltiDir) { OffsetZ = rgeAltiDz };
+            if (rgeAltiCheck) return RgeAltiCheck.Run(france, outDir, b[0], b[1], b[2], b[3], jobs);
+
+            // every tile already real stays Swiss; the French list of the last run is ours to rebuild
+            string frenchList = Path.Combine(tempDir, "rgealti_tiles.txt");
+            var previous = File.Exists(frenchList) ? TileId.ReadList(frenchList).ToHashSet() : new HashSet<TileId>();
+            var swiss = sources.Select(t => t.Id).ToHashSet();
+            string mPath = Path.Combine(outDir, "manifest.json");
+            if (File.Exists(mPath))
+                foreach (var t in TerrainManifest.FromJson(File.ReadAllText(mPath)).Tiles)
+                    if (!previous.Contains(t.Id)) swiss.Add(t.Id);
+            var french = france.Sources(b[0], b[1], b[2], b[3], swiss);
+            Directory.CreateDirectory(tempDir);
+            File.WriteAllLines(frenchList, french.Select(t => $"{t.Id.E}_{t.Id.N}"));
+            Console.WriteLine($"RGE ALTI: {france.FileCount} French files, {french.Count} LV95 tiles to fill (dz {rgeAltiDz:+0.00;-0.00} m)");
+            sources.AddRange(french);
+        }
         if (sources.Count == 0)
         {
             Console.Error.WriteLine($"No swissalti3d 0.5 m *.xyz(.zip) files found under {string.Join(", ", inDirs)}");
@@ -427,7 +461,7 @@ public static partial class Preprocessor
         SetStage("terrain");
         var manifest = TerrainBuild.Run(sources, outDir, tempDir, new TerrainBuild.Options
         {
-            Jobs = jobs, IoJobs = ioJobs, Force = force, Fresh = fresh, Verify = verify,
+            Jobs = jobs, IoJobs = ioJobs, Force = force, Fresh = fresh, Verify = verify, France = france,
         }, ct);
         if (manifest == null) return 1;
         File.WriteAllText(Path.Combine(outDir, "manifest.json"), manifest.ToJson());

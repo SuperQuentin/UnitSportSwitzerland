@@ -169,7 +169,7 @@ public static class XyzParser
     }
 
     /// <summary>Fills missing cells from the nearest valid cell in the same row, else same column.</summary>
-    private static void FillMissing(ushort[] grid)
+    public static void FillMissing(ushort[] grid)
     {
         for (int r = 0; r < CellsPerSide; r++)
         {
