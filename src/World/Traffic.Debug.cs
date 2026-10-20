@@ -282,37 +282,60 @@ public partial class Traffic
                 double start = green.From;
                 double end = ends.Select(e => start - (((start - e) % plan.Cycle + plan.Cycle) % plan.Cycle)).Max();
                 double crosses = end + pair.Amber;                          // the last one at its line
-                double meets = start + pair.Enter / Math.Max(0.1, pair.EnterSpeed);   // the first one at the conflict
-                // the window: from a moment before the last one crosses to a moment after the first one is through, round the cycle
-                double from = Math.Min(crosses, start) - 2, to = meets + 2;
-                double at = u;
-                while (at < from) at += plan.Cycle;
-                while (at - plan.Cycle >= from) at -= plan.Cycle;
-                if (at > to) continue;
+                // each one shown, and its line, only while it moves: the last one from a moment before its line (it comes on at its
+                // clearing speed) until it has left its line's end, the first one from its line at green until it has left its end;
+                // each window on its own, round the cycle, so neither is cut off mid-move by the other's
+                double? last = Moving(u, plan.Cycle, crosses - Lead, Lead + (Length(ending) + Size(pair.EndingMover).Length) / Math.Max(0.1, pair.ClearSpeed));
+                double? first = Moving(u, plan.Cycle, start, (Length(starting) + Size(pair.StartingMover).Length) / Math.Max(0.1, pair.EnterSpeed));
+                if (last is null && first is null) continue;
                 var up = Vector3.Up * DrawLift;
-                // the two lines faintly, the conflict area ringed
-                for (int i = 0; i + 1 < ending.Length; i++) Ribbon(mesh, ending[i] + up, ending[i + 1] + up, EndingMover with { A = 0.35f }, 0.25f);
-                for (int i = 0; i + 1 < starting.Length; i++) Ribbon(mesh, starting[i] + up, starting[i + 1] + up, StartingMover with { A = 0.35f }, 0.25f);
+                if (last is { } tl)
+                {
+                    for (int i = 0; i + 1 < ending.Length; i++) Ribbon(mesh, ending[i] + up, ending[i + 1] + up, EndingMover with { A = 0.35f }, 0.25f);
+                    Mover(mesh, ending, (float)((tl - crosses) * pair.ClearSpeed), pair.EndingMover, EndingMover, false);
+                    // a crossing has no way: its walkers leave both kerbs at once, the pair's the one the time was worked out for
+                    if (pair.EndingMover == ConflictMover.Walker)
+                        Mover(mesh, ending, (float)((tl - crosses) * pair.ClearSpeed), pair.EndingMover, EndingMover, true);
+                }
+                if (first is { } tf)
+                {
+                    for (int i = 0; i + 1 < starting.Length; i++) Ribbon(mesh, starting[i] + up, starting[i + 1] + up, StartingMover with { A = 0.35f }, 0.25f);
+                    Mover(mesh, starting, (float)((tf - start) * pair.EnterSpeed), pair.StartingMover, StartingMover, false);
+                    if (pair.StartingMover == ConflictMover.Walker)
+                        Mover(mesh, starting, (float)((tf - start) * pair.EnterSpeed), pair.StartingMover, StartingMover, true);
+                }
+                // the conflict area ringed while either moves
                 var (meet, _) = Along(starting, pair.Enter);
                 for (int k = 0; k < 16; k++)
                 {
                     float a = k * Mathf.Tau / 16, b = (k + 1) * Mathf.Tau / 16;
                     Ribbon(mesh, meet + up + new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a)) * 2.2f, meet + up + new Vector3(Mathf.Cos(b), 0, Mathf.Sin(b)) * 2.2f, Colors.White, 0.25f);
                 }
-                // the last one: at its clearing speed from its line, through the cycle's moment
-                Mover(mesh, ending, (float)((at - crosses) * pair.ClearSpeed), pair.EndingMover, EndingMover, false);
-                // the first one: waiting at its line until green
-                Mover(mesh, starting, (float)(Math.Max(0, at - start) * pair.EnterSpeed), pair.StartingMover, StartingMover, false);
-                // a crossing has no way: its walkers leave both kerbs at once, the pair's the one the time was worked out for
-                if (pair.EndingMover == ConflictMover.Walker)
-                    Mover(mesh, ending, (float)((at - crosses) * pair.ClearSpeed), pair.EndingMover, EndingMover, true);
-                if (pair.StartingMover == ConflictMover.Walker)
-                    Mover(mesh, starting, (float)(Math.Max(0, at - start) * pair.EnterSpeed), pair.StartingMover, StartingMover, true);
                 n += 3;
             }
         }
         return n;
     }
+
+    /// <summary>The last mover comes on this long (s) before its line, so it is seen arriving at its clearing speed.</summary>
+    private const double Lead = 1.5;
+
+    /// <summary>The plan time in [<paramref name="from"/>, <paramref name="from"/> + <paramref name="span"/>] that is <paramref name="u"/> round the cycle; null outside.</summary>
+    private static double? Moving(double u, double cycle, double from, double span)
+    {
+        double into = ((u - from) % cycle + cycle) % cycle;
+        return into <= span ? from + into : null;
+    }
+
+    private static float Length(Vector3[] line)
+    {
+        float l = 0;
+        for (int i = 0; i + 1 < line.Length; i++) l += line[i].DistanceTo(line[i + 1]);
+        return l;
+    }
+
+    private static (float Length, float Width) Size(ConflictMover who) =>
+        who switch { ConflictMover.Bike => (1.8f, 0.7f), ConflictMover.Walker => (0.7f, 0.7f), _ => (4.5f, 1.9f) };
 
     /// <summary>
     /// A mover drawn as its footprint, its front <paramref name="along"/> m along <paramref name="line"/> (before its start: on back
@@ -320,7 +343,7 @@ public partial class Traffic
     /// </summary>
     private static void Mover(ImmediateMesh mesh, Vector3[] line, float along, ConflictMover who, Color colour, bool back)
     {
-        var (length, width) = who switch { ConflictMover.Bike => (1.8f, 0.7f), ConflictMover.Walker => (0.7f, 0.7f), _ => (4.5f, 1.9f) };
+        var (length, width) = Size(who);
         var (front, dir) = back && line.Length == 2 ? Along([line[1], line[0]], along) : Along(line, along);
         var rear = front - dir * length;
         var up = Vector3.Up * (DrawLift + 0.05f);

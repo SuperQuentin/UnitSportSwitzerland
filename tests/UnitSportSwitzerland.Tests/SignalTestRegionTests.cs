@@ -117,6 +117,41 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
         }
     }
 
+    [Theory]
+    [InlineData("J1")]
+    [InlineData("J2")]
+    public void The_riders_timed_ride_their_written_paths(string id)
+    {
+        // #979, the user: the riders' left turns' ghosts went their lane's connector, not the way written onto the exit's path;
+        // every riders' line of a pair, past its stop line, lies on one of the tile's riders' paths
+        var j = region.Junction(id);
+        var tile = region.Tile(j.E, j.N);
+        var rides = tile.JunctionPaths.Where(p => p.Kind != JunctionPathKind.Car).ToList();
+        int checkedLines = 0;
+        foreach (var pair in tile.Signals.Single().ConflictPairs)
+            foreach (var (who, line) in new[] { (pair.EndingMover, pair.EndingLine), (pair.StartingMover, pair.StartingLine) })
+            {
+                if (who != ConflictMover.Bike) continue;
+                checkedLines++;
+                var on = rides.FirstOrDefault(r => Enumerable.Range(1, line.Length / 3 - 1).All(i => Off(r, line[i * 3], line[i * 3 + 2]) < 0.3));
+                Assert.True(on is not null, $"a riders' line of groups {pair.Ending} -> {pair.Starting} on none of the riders' paths");
+            }
+        Assert.True(checkedLines > 0);
+
+        static double Off(RoadJunctionPath r, float x, float z)
+        {
+            double best = double.MaxValue;
+            for (int i = 0; i + 1 < r.PointCount; i++)
+            {
+                double ax = r.Points[i * 3], az = r.Points[i * 3 + 2], bx = r.Points[i * 3 + 3], bz = r.Points[i * 3 + 5];
+                double dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz;
+                double t = l2 < 1e-9 ? 0 : Math.Clamp(((x - ax) * dx + (z - az) * dz) / l2, 0, 1);
+                best = Math.Min(best, Math.Sqrt(Math.Pow(ax + dx * t - x, 2) + Math.Pow(az + dz * t - z, 2)));
+            }
+            return best;
+        }
+    }
+
     [Fact]
     public void Region_builds_with_the_designed_lanes_and_valid_plans()
     {

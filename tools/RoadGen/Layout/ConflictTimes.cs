@@ -30,18 +30,33 @@ public static class ConflictTimes
     /// <summary>Who moves along a line.</summary>
     public enum Mover : byte { Car, Bike, Walker }
 
-    /// <summary>A movement as a line from its stop line (LV95), with its group, who moves, its width, speeds, length and amber.</summary>
-    public sealed record Line(int Group, Mover Mover, List<Vec2> Points, double Width, double Clear, double Enter, double Length, double Amber);
+    /// <summary>A walker's own width (m): one walker takes this much of the zebra, not all of it.</summary>
+    public const double WalkBody = 0.5;
+
+    /// <summary>
+    /// A movement as a line from its stop line (LV95), with its group, who moves, its width (the band its movers may take: a lane,
+    /// the whole zebra), speeds, length and amber.
+    /// </summary>
+    public sealed record Line(int Group, Mover Mover, List<Vec2> Points, double Width, double Clear, double Enter, double Length, double Amber)
+    {
+        /// <summary>
+        /// The width one mover takes about its own line, for when it enters or leaves another's band: a vehicle its lane's (as laid,
+        /// it may be anywhere on it), a walker only its own (#979, the user: walkers enter the middle of the crossing later and
+        /// leave it sooner than its sides; the zebra's width is where the others may be, not where this one is).
+        /// </summary>
+        public double Body => Mover == Mover.Walker ? WalkBody : Width;
+    }
 
     /// <summary>
     /// The table for <paramref name="plan"/> at <paramref name="jp"/>: its car and riders' connectors (<see cref="JunctionCore.Connectors"/>
-    /// and <paramref name="rides"/>), each in the group <paramref name="groupOf"/> gives it (as its junction path is written), and
-    /// each arm's crossing in its pedestrian group. <c>[ending, starting]</c>, NaN where no lines of the two meet.
+    /// and <paramref name="rides"/>), each in the group <paramref name="groupOf"/> gives it and on the way <paramref name="laid"/>
+    /// gives it where it is written other than its centre (riders carried onto an exit's path), as its junction path is written,
+    /// and each arm's crossing in its pedestrian group. <c>[ending, starting]</c>, NaN where no lines of the two meet.
     /// </summary>
     public static float[,] Of(JunctionPlan jp, SignalPlan plan, IEnumerable<Connector> rides, Func<Connector, int> groupOf,
-        Func<Line, bool>? keep = null)
+        Func<Line, bool>? keep = null, Func<Connector, List<Vec2>?>? laid = null)
     {
-        var lines = Lines(jp, plan, rides, groupOf).Where(l => keep?.Invoke(l) ?? true).ToList();
+        var lines = Lines(jp, plan, rides, groupOf, laid).Where(l => keep?.Invoke(l) ?? true).ToList();
         int n = plan.Groups.Count;
         var table = new float[n, n];
         for (int i = 0; i < n; i++)
@@ -64,30 +79,41 @@ public static class ConflictTimes
     /// <summary>The time for line <paramref name="ending"/>'s last vehicle against <paramref name="starting"/>'s first; null where they never meet.</summary>
     public static double? Time(Line ending, Line starting)
     {
-        if (Meet(ending.Points, starting.Points, (ending.Width + starting.Width) * 0.5) is not var (clear, enter)) return null;
+        if (Meet(ending, starting) is not var (clear, enter)) return null;
         return ending.Amber + (clear + ending.Length) / ending.Clear - enter / starting.Enter;
     }
 
     /// <summary>
-    /// Where two lines meet, each within <paramref name="reach"/> of the other: how far along <paramref name="a"/> it has left the
-    /// first stretch where they touch (a merge: <see cref="MergeLength"/> past its start at most), and how far along
-    /// <paramref name="b"/> it first touches; null where they never do.
+    /// Where two movements meet, each at its own conflict point: along <paramref name="a"/> until its mover has left
+    /// <paramref name="b"/>'s band, along <paramref name="b"/> until its mover reaches <paramref name="a"/>'s (each with its own
+    /// <see cref="Line.Body"/>: a walker clears a lane where it is, not the zebra's far edge).
     /// </summary>
-    public static (double Clear, double Enter)? Meet(List<Vec2> a, List<Vec2> b, double reach)
+    public static (double Clear, double Enter)? Meet(Line a, Line b) =>
+        Meet(a.Points, b.Points, (b.Width + a.Body) * 0.5, (a.Width + b.Body) * 0.5);
+
+    /// <summary>Where two lines meet, each within <paramref name="reach"/> of the other (see the next).</summary>
+    public static (double Clear, double Enter)? Meet(List<Vec2> a, List<Vec2> b, double reach) => Meet(a, b, reach, reach);
+
+    /// <summary>
+    /// Where two lines meet: how far along <paramref name="a"/> it has left the first stretch where it is within
+    /// <paramref name="reachA"/> of <paramref name="b"/> (a merge: <see cref="MergeLength"/> past its start at most), and how far
+    /// along <paramref name="b"/> it first comes within <paramref name="reachB"/> of <paramref name="a"/>; null where they never do.
+    /// </summary>
+    public static (double Clear, double Enter)? Meet(List<Vec2> a, List<Vec2> b, double reachA, double reachB)
     {
         var sa = Sample(a);
         var sb = Sample(b);
         double? from = null, clear = null;
         foreach (var (p, s) in sa)
         {
-            bool touch = Near(p, b, reach);
+            bool touch = Near(p, b, reachA);
             if (touch && from is null) from = s;
             if (from is not null && (!touch || s - from >= MergeLength)) { clear = s; break; }
         }
         if (from is null) return null;
         clear ??= sa[^1].Along;
         foreach (var (p, s) in sb)
-            if (Near(p, a, reach)) return (clear.Value, s);
+            if (Near(p, a, reachB)) return (clear.Value, s);
         return null;
     }
 
@@ -118,7 +144,8 @@ public static class ConflictTimes
     }
 
     /// <summary>The movements of a lit junction as lines from their stop lines (see <see cref="Of"/>).</summary>
-    public static List<Line> Lines(JunctionPlan jp, SignalPlan plan, IEnumerable<Connector> rides, Func<Connector, int> groupOf)
+    public static List<Line> Lines(JunctionPlan jp, SignalPlan plan, IEnumerable<Connector> rides, Func<Connector, int> groupOf,
+        Func<Connector, List<Vec2>?>? laid = null)
     {
         var core = jp.Core!;
         var lines = new List<Line>();
@@ -131,11 +158,12 @@ public static class ConflictTimes
             bool car = c.Kind == ConnectorKind.Car;
             double stop = (car ? ex?.CarStop : ex?.RiderStop ?? ex?.CarStop) ?? 0;
             var points = new List<Vec2> { axis.At(mouth.Station + stop, c.FromOffset) };
-            points.AddRange(c.Centre);
+            var centre = laid?.Invoke(c) ?? c.Centre;
+            points.AddRange(centre);
             double limit = plan.Arms[jp.Arms.IndexOf(a)].SpeedKmh / 3.6;
             if (car)
             {
-                double turn = Math.Sqrt(Lateral * LeastRadius(c.Centre));
+                double turn = Math.Sqrt(Lateral * LeastRadius(centre));
                 lines.Add(new Line(g, Mover.Car, points, c.Width, Min(CarClear, limit, turn), Min(CarEnter, limit, turn), CarLength, plan.PassingTime(g)));
             }
             else lines.Add(new Line(g, Mover.Bike, points, c.Width, BikeClear, BikeEnter, BikeLength, plan.PassingTime(g)));

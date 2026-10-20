@@ -401,39 +401,10 @@ public static partial class TileRewriter
                 var p = a.Axis!.PointAt(core.Mouths.First(m => m.Arm == arm).Station);
                 return new JunctionPathEnd((float)(p.X - home.MinE), CapHeightAt(cap, home, p), (float)(home.MaxN - p.Y), (float)offset);
             }
-            // riders on a bike lane into an exit with no bike lane but a separated path (#971, the user: a left turn ended at the kerb
-            // edge of the exit's outer lane): carried on from their end into the path's middle a few metres out along the exit
-            (List<Vec2> Way, double Offset)? OntoPath(Connector c)
-            {
-                if (c.Kind != ConnectorKind.Bike || jp.Arms.FirstOrDefault(x => x.Arm == c.ToArm) is not { Axis: { } axis } b
-                    || b.Mouth.Strips.Any(x => x.Kind == StripKind.BikeLane && x.Way == StripWay.Out)
-                    || PathBand(ExteriorPlanner.SectionAt(b, 0), right: false) is not var (centreB, _)) return null;
-                // one turn from its lane to the path, wide enough to arrive along the exit (the user: not a bend on at its end)
-                var mb = core.Mouths.First(m => m.Arm == b.Arm);
-                var start = c.Centre[0];
-                var inward = (c.Centre[1] - start) / Math.Max(c.Centre[1].DistanceTo(start), 1e-9);
-                var target = axis.At(mb.Station + PathJoin, centreB);
-                var outward = axis.DirAt(mb.Station);
-                // straight on along its lane as far as the cars making the same turn from the arm go before they bend (the user:
-                // the arc starts as late as the car's), then the turn
-                double lead = core.Connectors.Where(x => x.Kind == ConnectorKind.Car && x.FromArm == c.FromArm && x.Move == c.Move && x.Centre.Count > 2)
-                    .Select(x => StraightLead(x.Centre)).DefaultIfEmpty(0).Max();
-                lead = Math.Min(lead, Math.Max(0, (target - start).Dot(inward) - 2));
-                var way = new List<Vec2> { start };
-                start += inward * lead;
-                // the legs of a quarter circle's Bezier through the corner the two lines make, else a third of the chord
-                double chord = start.DistanceTo(target), l = chord * 0.45;
-                for (int k = lead > 0 ? 0 : 1; k <= 32; k++)
-                {
-                    double t = k / 32.0, mt = 1 - t;
-                    way.Add(start * (mt * mt * mt) + (start + inward * l) * (3 * mt * mt * t) + (target - outward * l) * (3 * mt * t * t) + target * (t * t * t));
-                }
-                return (way, centreB);
-            }
             foreach (var c in connectors)
             {
                 if (c.Centre.Count < 2) { stats.PathsLeftOut++; continue; }
-                var onto = OntoPath(c);
+                var onto = OntoPath(jp, c);
                 var points = RoadPaintGeometry.Simplify(Local(home, onto?.Way ?? c.Centre, p => CapHeightAt(cap, home, p), 0f));
                 var from = EndOf(c.FromArm, c.FromOffset);
                 var to = EndOf(c.ToArm, onto?.Offset ?? c.ToOffset);
@@ -818,7 +789,7 @@ public static partial class TileRewriter
             // the lights timed from the conflict times between their movements, now that every way through is laid (#979)
             if (plan is not null && jp.Core is not null)
             {
-                var table = ConflictTimes.Of(jp, plan, rides, c => PathGroup(plan, jp.Arms.FindIndex(x => x.Arm == c.FromArm), c.Move, c.Kind));
+                var table = ConflictTimes.Of(jp, plan, rides, c => PathGroup(plan, jp.Arms.FindIndex(x => x.Arm == c.FromArm), c.Move, c.Kind), laid: c => OntoPath(jp, c)?.Way);
                 bool dbgHere = Environment.GetEnvironmentVariable("CTDBG") is { } dbgAt && dbgAt.Split(',') is [var de, var dn]
                     && Math.Abs(jp.Centre.X - double.Parse(de, System.Globalization.CultureInfo.InvariantCulture)) < 20
                     && Math.Abs(jp.Centre.Y - double.Parse(dn, System.Globalization.CultureInfo.InvariantCulture)) < 20;
@@ -826,7 +797,7 @@ public static partial class TileRewriter
                 if (dbgHere && Environment.GetEnvironmentVariable("CTDBG2") is null)
                 {
                     string Name(int g) => $"{plan.Groups[g].Kind}/{plan.Groups[g].Moves}/a{plan.Groups[g].Arm}";
-                    var lines = ConflictTimes.Lines(jp, plan, rides, c => PathGroup(plan, jp.Arms.FindIndex(x => x.Arm == c.FromArm), c.Move, c.Kind));
+                    var lines = ConflictTimes.Lines(jp, plan, rides, c => PathGroup(plan, jp.Arms.FindIndex(x => x.Arm == c.FromArm), c.Move, c.Kind), c => OntoPath(jp, c)?.Way);
                     for (int g = 0; g < plan.Groups.Count; g++)
                         for (int h = 0; h < plan.Groups.Count; h++)
                             if (!float.IsNaN(table[g, h]) && table[g, h] > 4)
@@ -834,7 +805,7 @@ public static partial class TileRewriter
                                 // the worst pair of lines
                                 var worst = lines.Where(l => l.Group == g).SelectMany(a => lines.Where(l => l.Group == h).Select(b => (a, b, t: ConflictTimes.Time(a, b))))
                                     .Where(x => x.t is not null).MaxBy(x => x.t!.Value);
-                                var m = ConflictTimes.Meet(worst.a.Points, worst.b.Points, (worst.a.Width + worst.b.Width) / 2);
+                                var m = ConflictTimes.Meet(worst.a, worst.b);
                                 Console.WriteLine($"[ct] {Name(g)} -> {Name(h)}: {table[g, h]:F1} s (amber {worst.a.Amber:F1}, clear {m?.Clear:F1} m at {worst.a.Clear:F1} m/s, enter {m?.Enter:F1} m at {worst.b.Enter:F1} m/s, {worst.a.Mover} vs {worst.b.Mover})");
                             }
                 }
@@ -846,7 +817,7 @@ public static partial class TileRewriter
                 {
                     var record = Get(signals, hc.Home)[signalIndex];
                     record.ConflictPairs.AddRange(BindingPairs(plan, table,
-                        ConflictTimes.Lines(jp, plan, rides, c => PathGroup(plan, jp.Arms.FindIndex(x => x.Arm == c.FromArm), c.Move, c.Kind)),
+                        ConflictTimes.Lines(jp, plan, rides, c => PathGroup(plan, jp.Arms.FindIndex(x => x.Arm == c.FromArm), c.Move, c.Kind), c => OntoPath(jp, c)?.Way),
                         hc.Home, capHere));
                     stats.ConflictPairs += record.ConflictPairs.Count;
                 }
@@ -975,7 +946,7 @@ public static partial class TileRewriter
                 if (best < 0 || !seen.Add((best, h))) continue;
                 var worst = lines.Where(l => l.Group == best).SelectMany(a => lines.Where(l => l.Group == h).Select(b => (a, b, t: ConflictTimes.Time(a, b))))
                     .Where(x => x.t is not null).DefaultIfEmpty().MaxBy(x => x.t ?? double.MinValue);
-                if (worst.a is null || ConflictTimes.Meet(worst.a.Points, worst.b.Points, (worst.a.Width + worst.b.Width) * 0.5) is not var (clear, enter))
+                if (worst.a is null || ConflictTimes.Meet(worst.a, worst.b) is not var (clear, enter))
                     continue;
                 pairs.Add(new RoadConflictPair
                 {
@@ -999,6 +970,40 @@ public static partial class TileRewriter
             }
             return f;
         }
+    }
+
+    /// <summary>
+    /// Riders on a bike lane into an exit with no bike lane but a separated path (#971, the user: a left turn ended at the kerb edge
+    /// of the exit's outer lane): carried on from their end into the path's middle a few metres out along the exit, as written and
+    /// as timed (#979: the ghosts and the conflict times on it, not on the connector); null for any other connector.
+    /// </summary>
+    private static (List<Vec2> Way, double Offset)? OntoPath(JunctionPlan jp, Connector c)
+    {
+        var core = jp.Core!;
+        if (c.Kind != ConnectorKind.Bike || jp.Arms.FirstOrDefault(x => x.Arm == c.ToArm) is not { Axis: { } axis } b
+            || b.Mouth.Strips.Any(x => x.Kind == StripKind.BikeLane && x.Way == StripWay.Out)
+            || PathBand(ExteriorPlanner.SectionAt(b, 0), right: false) is not var (centreB, _)) return null;
+        // one turn from its lane to the path, wide enough to arrive along the exit (the user: not a bend on at its end)
+        var mb = core.Mouths.First(m => m.Arm == b.Arm);
+        var start = c.Centre[0];
+        var inward = (c.Centre[1] - start) / Math.Max(c.Centre[1].DistanceTo(start), 1e-9);
+        var target = axis.At(mb.Station + PathJoin, centreB);
+        var outward = axis.DirAt(mb.Station);
+        // straight on along its lane as far as the cars making the same turn from the arm go before they bend (the user:
+        // the arc starts as late as the car's), then the turn
+        double lead = core.Connectors.Where(x => x.Kind == ConnectorKind.Car && x.FromArm == c.FromArm && x.Move == c.Move && x.Centre.Count > 2)
+            .Select(x => StraightLead(x.Centre)).DefaultIfEmpty(0).Max();
+        lead = Math.Min(lead, Math.Max(0, (target - start).Dot(inward) - 2));
+        var way = new List<Vec2> { start };
+        start += inward * lead;
+        // the legs of a quarter circle's Bezier through the corner the two lines make, else a third of the chord
+        double chord = start.DistanceTo(target), l = chord * 0.45;
+        for (int k = lead > 0 ? 0 : 1; k <= 32; k++)
+        {
+            double t = k / 32.0, mt = 1 - t;
+            way.Add(start * (mt * mt * mt) + (start + inward * l) * (3 * mt * mt * t) + (target - outward * l) * (3 * mt * t * t) + target * (t * t * t));
+        }
+        return (way, centreB);
     }
 
     /// <summary>How far a connector runs on straight from its start before it bends by more than a few degrees (m).</summary>

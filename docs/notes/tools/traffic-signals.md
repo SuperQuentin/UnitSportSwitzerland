@@ -59,7 +59,10 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   between its movements (`Layout/ConflictTimes`), not a fixed all-red. A pair's time is from the end of the ending group's
   green to the start of the next one's: `amber + (clearing + length) / v_clear − entering / v_enter` (the next red-amber not
   counted, negative where the geometry allows; the timing clamps at 0), with the movements as laid: car and riders' junction
-  paths and riders' ways from their stop line, the walkers along the zebra from either kerb. Speeds: clearing car 10 m/s,
+  paths and riders' ways from their stop line (riders carried onto an exit's path on that way, as written), the walkers along
+  the zebra from either kerb. Each pair at its own conflict point: a mover is in another's band within half that band's width
+  plus half its own (a vehicle: its lane; a walker: 0.5 m, not the zebra, so it enters a lane in the middle of the crossing
+  later and leaves it sooner; a vehicle keeps clear of the whole zebra). Speeds: clearing car 10 m/s,
   bike 4, walker 1.2; entering car 11.1, bike 5, walker 1.5; lengths 6 / 2 / 0 m; capped by the arm's limit, a turning car
   at `sqrt(2.5 · r)`. Amber: the cars' by speed, the riders' 2 s, walkers none. `SignalPlan.Retime(table)` keeps the phases
   and starts each group as soon as its own conflicts allow; walkers' and riders' greens end early enough that their
@@ -69,7 +72,7 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   pole). The bike lead (Vorgrün) only where a car group turning across the riders goes green with them. A plan so timed
   carries `ConflictTimed` (flags bit 2): `Validate` then holds conflicting groups never green together (a green may begin
   in another's amber) and `KeepsTimes` every time. Layout (b)'s bike lane (`SignalArm.BikeBetween`, arm bit 7) no longer
-  conflicts with its arm's right arrow. Test region: J1 74 -> 71 s, J2 86 -> 77, J5a/b 83/84 -> 74/75, J10 70 -> 71, the
+  conflicts with its arm's right arrow. Test region: J1 74 -> 71 s, J2 86 -> 72, J5a/b 83/84 -> 74/75, J10 70 -> 71, the
   rest at their scheme's target (the time saved goes to green). 168 real tiles: 16 of 19 timed from conflict times (3 keep
   today's: their times not kept), 0 invalid. Debugging: `CTDBG=E,N` prints a junction's times over 4 s with the worst pair
   of lines, `CTDBG2=1` with it each phase change's wait and the pair that sets it; `CTTABLE=E,N,file.json` writes the junction's table, groups,

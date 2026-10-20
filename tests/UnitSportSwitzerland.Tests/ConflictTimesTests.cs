@@ -41,6 +41,24 @@ public class ConflictTimesTests
     }
 
     [Fact]
+    public void A_walker_enters_and_clears_each_lane_where_it_is_not_at_the_zebras_edges()
+    {
+        // #979, the user: the middle of the crossing is entered later and left sooner by the walkers. A 4 m wide zebra 14 m long,
+        // a car's 3 m lane across it at 7 m: a walker is in that lane from 7 - (3 + 0.5) / 2 to 7 + (3 + 0.5) / 2, not over the
+        // zebra's whole width
+        var walker = new ConflictTimes.Line(0, ConflictTimes.Mover.Walker, [new Vec2(0, 0), new Vec2(14, 0)], 4,
+            ConflictTimes.WalkClear, ConflictTimes.WalkEnter, ConflictTimes.WalkLength, 0);
+        var car = Car(1, new Vec2(7, -10), new Vec2(7, 10));
+        var (clear, _) = ConflictTimes.Meet(walker, car)!.Value;
+        Assert.InRange(clear, 8.75, 8.75 + 0.5);   // (walked in 0.5 m steps)
+        var (_, enter) = ConflictTimes.Meet(car, walker)!.Value;
+        Assert.InRange(enter, 5.25 - 0.01, 5.25 + 0.5);
+        // the car still keeps clear of the whole zebra: it is in it from 10 - (4 + 3) / 2 m along its line
+        var (_, carEnters) = ConflictTimes.Meet(walker, car)!.Value;
+        Assert.InRange(carEnters, 6.5 - 0.01, 6.5 + 0.5);
+    }
+
+    [Fact]
     public void Lines_that_never_meet_have_no_time()
     {
         Assert.Null(ConflictTimes.Time(Car(0, new Vec2(0, 0), new Vec2(0, 20)), Car(1, new Vec2(10, 0), new Vec2(10, 20))));
