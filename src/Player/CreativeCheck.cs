@@ -124,6 +124,33 @@ public partial class CreativeCheck : Node3D
             _me.LookPitch = -1.5f;
             Expect(_me.LookPitch > -1.3f, $"on the ground, third person, the pitch is held again ({_me.LookPitch:F2})");
             _me.LookPitch = 0f;
+            // a switch's keys (#1002): Shift of Shift+T held into the spectator camera must not sink it
+            Input.ActionPress(PlayerInput.Sprint);
+            Input.ActionPress(PlayerInput.MoveForward);
+            await Wait(0.05);
+            PlayerInput.HoldOff();
+            bool off = !PlayerInput.Held(PlayerInput.Sprint) && PlayerInput.Strength(PlayerInput.Sprint) == 0f && PlayerInput.Move == Vector2.Zero;
+            await Wait(0.2);
+            bool stillOff = !PlayerInput.Held(PlayerInput.Sprint) && PlayerInput.Move == Vector2.Zero;
+            Input.ActionRelease(PlayerInput.Sprint);
+            Input.ActionRelease(PlayerInput.MoveForward);
+            await Wait(0.05);
+            Input.ActionPress(PlayerInput.Sprint);
+            Input.ActionPress(PlayerInput.MoveForward);
+            await Wait(0.05);
+            bool back = PlayerInput.Held(PlayerInput.Sprint) && PlayerInput.Move.Y < -0.9f;
+            Input.ActionRelease(PlayerInput.Sprint);
+            Input.ActionRelease(PlayerInput.MoveForward);
+            Expect(off && stillOff && back, $"keys held through a switch read as let go until pressed again (off {off}, held on {stillOff}, again {back})");
+            if (OS.GetName() == "Windows")
+            {
+                // the stuck-key check goes by scan code: every layout puts the 26 letters on 26 letter keys
+                var letters = new System.Collections.Generic.HashSet<int>();
+                for (var k = Key.A; k <= Key.Z; k++)
+                    if (PlayerInput.VirtualKey(k) is >= 'A' and <= 'Z' and var vk) letters.Add(vk);
+                Expect(letters.Count == 26 && PlayerInput.VirtualKey(Key.Shift) == 0x10,
+                    $"physical keys map to this layout's virtual keys ({letters.Count} letters, W is {(char)PlayerInput.VirtualKey(Key.W)})");
+            }
             string spectator = InputHints.Label(PlayerInput.Spectator, InputDevice.KeyboardMouse);
             Expect(spectator == "Shift+T", $"the spectator key reads as a chord ({spectator})");
 

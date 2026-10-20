@@ -765,6 +765,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Concert.ConcertDeskProbe.Requested) AddChild(new Concert.ConcertDeskProbe(() => LocalPlayer));
         if (Concert.ConcertCamProbe.Requested) AddChild(new Concert.ConcertCamProbe(() => LocalPlayer, () => GetNodeOrNull<ChatManager>(ChatManager.NodeName)));
         if (Phone.PhoneProbe.Requested) AddChild(new Phone.PhoneProbe(() => LocalPlayer));
+        if (SpectatorSwitchCheck.Requested) AddChild(new SpectatorSwitchCheck(() => LocalPlayer, () => _spectator));
         if (Phone.PhoneVrProbe.Requested) AddChild(new Phone.PhoneVrProbe(() => LocalPlayer));
         if (Items.SparkleProbe.Requested) AddChild(new Items.SparkleProbe(() => LocalPlayer));
         if (Items.RadioFocusProbe.Requested) AddChild(new Items.RadioFocusProbe(() => LocalPlayer));
@@ -795,7 +796,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.UfoNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.ExcavatorNetProbe.Role != null || Items.SitePalletNetProbe.Role != null || Loot.YardLootNetProbe.Role != null || Terrain.Construction.CraneNetProbe.Role != null || Items.BedNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || Bots.BotProbe.Role != null || BattleRoyale.BrBotProbe.Requested || Bots.BotFilmProbe.Requested || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
-            || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
+            || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || SpectatorSwitchCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
             || World.ContainerNetProbe.Role != null
             || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null
             || Player.TractorNetProbe.Role != null || Farming.FarmProbe.Requested || Farming.HandFarmCheck.Requested || Farming.FarmNetProbe.Role != null || Farming.SellNetProbe.Role != null || Farming.CoopNetProbe.Role != null
@@ -2098,6 +2099,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
     public void ToggleMode()
     {
         if (_chunks == null || _spectator == null) return;
+        // the keys of the switch (Shift of Shift+T) must not sink the camera or sprint the body (#1002)
+        PlayerInput.HoldOff();
 
         // Replay owns the camera and has deliberately taken the exploring anchor off the
         // streamer; swapping underneath it would both steal the view and put a second
