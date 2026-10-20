@@ -50,6 +50,18 @@ public sealed class SignalTestRegionFixture : IDisposable
 public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixture<SignalTestRegionFixture>
 {
     [Fact]
+    public void Riders_turning_left_go_with_the_left_arrow()
+    {
+        // #971, the user: a riders' left turn from the left-turn bike lane follows the left arrow, never the through green
+        var j = region.Junction("J1");
+        var tile = region.Tile(j.E, j.N);
+        var plan = tile.Signals.Single().Plan;
+        var lefts = tile.JunctionPaths.Where(p => p.Kind == JunctionPathKind.Bike && p.Move == SignalMoves.Left && p.Signal == 0).ToList();
+        Assert.NotEmpty(lefts);
+        Assert.All(lefts, p => Assert.Equal(SignalGroupKind.LeftArrow, plan.Groups[p.Group].Kind));
+    }
+
+    [Fact]
     public void J2s_riders_go_from_path_to_path_straight_on_and_right_and_flash_turning_across_a_crossing()
     {
         // #971, the user: the separated paths' riders straight on over the next arm's bike crossing and right round the corner, on
