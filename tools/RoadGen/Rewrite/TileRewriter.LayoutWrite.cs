@@ -414,17 +414,40 @@ public static partial class TileRewriter
                 var p = a.Axis!.PointAt(core.Mouths.First(m => m.Arm == arm).Station);
                 return new JunctionPathEnd((float)(p.X - home.MinE), CapHeightAt(cap, home, p), (float)(home.MaxN - p.Y), (float)offset);
             }
+            // riders on a bike lane into an exit with no bike lane but a separated path (#971, the user: a left turn ended at the kerb
+            // edge of the exit's outer lane): carried on from their end into the path's middle a few metres out along the exit
+            (List<Vec2> Way, double Offset)? OntoPath(Connector c)
+            {
+                if (c.Kind != ConnectorKind.Bike || jp.Arms.FirstOrDefault(x => x.Arm == c.ToArm) is not { Axis: { } axis } b
+                    || b.Mouth.Strips.Any(x => x.Kind == StripKind.BikeLane && x.Way == StripWay.Out)
+                    || PathBand(ExteriorPlanner.SectionAt(b, 0), right: false) is not var (centreB, _)) return null;
+                var mb = core.Mouths.First(m => m.Arm == b.Arm);
+                var end = c.Centre[^1];
+                var along = (end - c.Centre[^2]) / Math.Max(end.DistanceTo(c.Centre[^2]), 1e-9);
+                var target = axis.At(mb.Station + PathJoin, centreB);
+                var outward = axis.DirAt(mb.Station);
+                double l = end.DistanceTo(target) / 3;
+                var way = new List<Vec2>(c.Centre);
+                for (int k = 1; k <= 12; k++)
+                {
+                    double t = k / 12.0, mt = 1 - t;
+                    way.Add(end * (mt * mt * mt) + (end + along * l) * (3 * mt * mt * t) + (target - outward * l) * (3 * mt * t * t) + target * (t * t * t));
+                }
+                return (way, centreB);
+            }
             foreach (var c in connectors)
             {
                 if (c.Centre.Count < 2) { stats.PathsLeftOut++; continue; }
-                var points = RoadPaintGeometry.Simplify(Local(home, c.Centre, p => CapHeightAt(cap, home, p), 0f));
+                var onto = OntoPath(c);
+                var points = RoadPaintGeometry.Simplify(Local(home, onto?.Way ?? c.Centre, p => CapHeightAt(cap, home, p), 0f));
                 var from = EndOf(c.FromArm, c.FromOffset);
-                var to = EndOf(c.ToArm, c.ToOffset);
+                var to = EndOf(c.ToArm, onto?.Offset ?? c.ToOffset);
                 int g = GroupOf(c.FromArm, c.Move, c.Kind);
                 Get(pathsOf, home).Add(new RoadJunctionPath
                 {
                     Junction = cap, From = from, To = to, Move = c.Move,
-                    Kind = c.Kind switch { ConnectorKind.Bike => JunctionPathKind.Bike, ConnectorKind.Path => JunctionPathKind.Path, _ => JunctionPathKind.Car },
+                    // (carried onto a separated path it is a riders' way to a path: off the core, its end on no lane)
+                    Kind = c.Kind == ConnectorKind.Path || onto is not null ? JunctionPathKind.Path : c.Kind == ConnectorKind.Bike ? JunctionPathKind.Bike : JunctionPathKind.Car,
                     Signal = g >= 0 ? signalIndex : (short)-1, Group = (byte)Math.Max(0, g), Width = (float)c.Width, ToWidth = (float)c.ToWidth, Points = points,
                 });
                 stats.Paths++;
@@ -858,6 +881,9 @@ public static partial class TileRewriter
     /// <summary>A cap's outline may leave its kerb by this much in plan and in height (as the sides' vertices, <c>RoadStreetBuilder</c>).</summary>
     /// <summary>A crosswalk lowers the kerbs either side this far past its bars each way (#711).</summary>
     private const double RampMargin = 0.6;
+
+    /// <summary>How far out along the exit a riders' turn from a bike lane joins the exit's separated path (m, #971).</summary>
+    private const double PathJoin = 6;
 
     private const double CapPlanTolerance = 0.015, CapHeightTolerance = 0.01;
 

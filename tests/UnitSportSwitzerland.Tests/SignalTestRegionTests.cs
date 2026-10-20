@@ -72,6 +72,8 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
         var rides = tile.JunctionPaths.Where(p => p.Kind == JunctionPathKind.Path).ToList();
         foreach (var move in new[] { SignalMoves.Through, SignalMoves.Right })
             Assert.Equal(4, rides.Count(p => p.Move == move && p.Signal == 0 && plan.Groups[p.Group].Kind == SignalGroupKind.Bike));
+        // the left turns from the left-turn bike lane carried on onto the exit's path, on the left arrow
+        Assert.Equal(4, rides.Count(p => p.Move == SignalMoves.Left && p.Signal == 0 && plan.Groups[p.Group].Kind == SignalGroupKind.LeftArrow));
         Assert.Contains(plan.Groups, g => g.Kind == SignalGroupKind.Flasher && plan.Groups[g.Qualifies].Kind == SignalGroupKind.Bike);
         // and it flashes while their green is on: the bike head's own yellow, flashing beside the green
         int flasher = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Flasher && plan.Groups[g.Qualifies].Kind == SignalGroupKind.Bike);
