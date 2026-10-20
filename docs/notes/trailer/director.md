@@ -120,8 +120,14 @@
   was made in. Each holds `trailer.mp4`, `trailer_share.mp4` (CRF 23, to send), `<film>.<lang>.srt`,
   `shots/` (with each shot's `.start` and `.cues.json`),
   `render.log` and `version.txt` (when, the commit and whether there were local changes, which
-  shots were filmed and from which version the others came). `VERSION=2 tools/trailer.sh cut`
+  shots were filmed and from which version the others came, and since #924 the run's pins: Godot,
+  GPU, terrain fingerprint, date, occasions, song, settings; each shot's in `shotNN.pins.json`).
+  Every run plays in a fresh `user://` with the render settings and the film's own date, every
+  shot's chance seeded from (film, shot): `render-pins`. `VERSION=2 tools/trailer.sh cut`
   re-cuts an older one. Stills stay scratch, in the checkout's `test_output/trailer/<film>/stills`.
+- **Measuring a shot's drift** (#924): `TRACKS=DIR tools/trailer.sh stills 5` dumps every actor
+  and staged object each frame from the go (`--trailer-tracks`), `tools/trailer-drift.py A B`
+  compares two dumps (`render-pins`).
 - **Framing a shot**: `tools/trailer.sh stills 5` (first, middle, last frame) with `LOG=1`
   (`--trailer-log`): every actor's LV95, speed and arc twice a second, and each road dumped every
   5 m to `test_output/trailer/routes/shotNN_<road>.csv`, to put a camera where a car will be.

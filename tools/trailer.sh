@@ -35,8 +35,18 @@
 # Env: GODOT (default godot), CHUNKS (terrain; default ./terrain_chunks, else where this checkout's
 # or the main checkout's terrain_location.json points, else the main checkout's terrain_chunks; a
 # fixture course as fixture:lake), ARGS (more game arguments, e.g. "--at E,N --trailer-allow-generated"),
-# SIZE (default 1920x1080), LOG=1 prints every actor twice a second,
-# TRAILERS (where the versions go), VERSION (which one `cut` cuts; default the newest).
+# GODOT_ARGS (engine arguments, e.g. "--screen 1"), SIZE (default 1920x1080), LOG=1 prints every actor twice a second,
+# TRAILERS (where the versions go), VERSION (which one `cut` cuts; default the newest),
+# TRACKS=DIR every actor and staged object each frame of each shot to DIR/shotNN.tracks.csv
+# (tools/trailer-drift.py compares two such dumps), RENDER (the render settings, below),
+# PINS=0 a run as before #924 (the user's own user://, the real date, no seeds pinned: a baseline only).
+#
+# Pinned renders (#924): every run plays in a fresh user:// of its own (test_output/trailer/<film>/profile:
+# no settings, placed objects, structures, chunk cache or occasions.json of the player's), with the
+# default settings and RENDER's on top; the film's date is the calendar (TrailerDirector.FilmDate),
+# every shot's chance from (film, shot) seeds. Only the compiled shader caches are kept from run to
+# run (they change no pixel). Each shot writes shotNN.pins.json beside it, and version.txt carries the
+# run's pins: commit (+dirty), Godot, GPU, terrain fingerprint, date, occasions, styles, song, settings.
 # The film's song (incompetech.com, CC BY 4.0: "Voxel Revolution" for the trailers, "I Got a Stick
 # Feat James Gavins" for the clip, "Hep Cats" for the fondue film) is downloaded once into <trailers>/ (not committed). Needs ffmpeg
 # on PATH (or bin/).
@@ -85,10 +95,48 @@ fi
 
 log=()
 [ "${LOG:-}" = 1 ] && log=(--trailer-log)
+[ -n "${TRACKS:-}" ] && { mkdir -p "$TRACKS"; log+=(--trailer-tracks "$(cd "$TRACKS" && pwd)"); }
+
+# the render profile (#924): a fresh user:// (see the top), RENDER's settings, the commit
+PINS=${PINS:-1}
+RENDER=${RENDER:---rings 6 --detail high --horizon 150 --fog off --vsync off --render-scale 1 --aa fxaa}
+dirty=$(git status --porcelain -- src tools | grep -q . && echo +dirty || true)
+pins=(--trailer-commit "$(git rev-parse --short HEAD)$dirty" --trailer-song "$song")
+envrun=()
+if [ "$PINS" = 1 ]; then
+  read -r -a render <<< "$RENDER"
+  pins+=(${render[@]+"${render[@]}"})
+  profile=$scratch/profile
+  caches=$scratch/profile_caches
+  rm -rf "$profile"
+  mkdir -p "$profile" "$caches"
+  profile=$(cd "$profile" && pwd)
+  # where Godot puts user:// under that profile: APPDATA on Windows, XDG_DATA_HOME on Linux, HOME on macOS
+  case "$(uname -s)" in
+    Darwin) envrun=(env HOME="$profile"); userdir="$profile/Library/Application Support/Godot/app_userdata/UnitSportSwitzerland" ;;
+    MINGW*|MSYS*|CYGWIN*) envrun=(env APPDATA="$(cygpath -w "$profile")"); userdir="$profile/Godot/app_userdata/UnitSportSwitzerland" ;;
+    *) envrun=(env XDG_DATA_HOME="$profile"); userdir="$profile/godot/app_userdata/UnitSportSwitzerland" ;;
+  esac
+  mkdir -p "$userdir"
+  for c in shader_cache vulkan; do [ -d "$caches/$c" ] && cp -R "$caches/$c" "$userdir/"; done
+else
+  pins+=(--trailer-unpinned)
+fi
+# after a pinned run: its compiled shaders kept for the next one
+keep_caches() {
+  [ "$PINS" = 1 ] || return 0
+  for c in shader_cache vulkan; do
+    [ -d "$userdir/$c" ] && { rm -rf "${caches:?}/$c"; cp -R "$userdir/$c" "$caches/"; }
+  done
+  return 0
+}
 # ARGS: more game arguments, split on spaces (ARGS="--at 2600000,1200000 --trailer-allow-generated")
 extra=()
 [ -n "${ARGS:-}" ] && read -r -a extra <<< "$ARGS"
-game=(--chunks "$CHUNKS" --title "trailer $mode $shots" --trailer "$shots" --trailer-film "$FILM" --trailer-size "$SIZE" ${log[@]+"${log[@]}"} ${extra[@]+"${extra[@]}"})
+# GODOT_ARGS: engine arguments, before the "--" (GODOT_ARGS="--screen 1")
+engine=()
+[ -n "${GODOT_ARGS:-}" ] && read -r -a engine <<< "$GODOT_ARGS"
+game=(--chunks "$CHUNKS" --title "trailer $mode $shots" --trailer "$shots" --trailer-film "$FILM" --trailer-size "$SIZE" "${pins[@]}" ${log[@]+"${log[@]}"} ${extra[@]+"${extra[@]}"})
 
 # the newest version's number, 0 when there is none yet
 newest() {
@@ -187,12 +235,14 @@ subtitle_tracks() {
 case $mode in
   preview)
     # --fixed-fps as the render: under load the actors keep the film's time, not the wall clock's
-    "$GODOT" --path . --resolution 1280x720 --fixed-fps 30 -- "${game[@]}" --trailer-song "$song"
+    ${envrun[@]+"${envrun[@]}"} "$GODOT" --path . --resolution 1280x720 --fixed-fps 30 ${engine[@]+"${engine[@]}"} -- "${game[@]}"
+    keep_caches
     ;;
   stills)
     rm -rf "$scratch/stills"
     # --fixed-fps as the render: a still is the frame at its film time, never one skipped under load
-    "$GODOT" --path . --resolution 1280x720 --fixed-fps 30 -- "${game[@]}" --trailer-stills "$scratch/stills" 2>&1 | tee "$scratch/stills.log" | grep '\[trailer\]'
+    ${envrun[@]+"${envrun[@]}"} "$GODOT" --path . --resolution 1280x720 --fixed-fps 30 ${engine[@]+"${engine[@]}"} -- "${game[@]}" --trailer-stills "$scratch/stills" 2>&1 | tee "$scratch/stills.log" | grep '\[trailer\]'
+    keep_caches
     echo "stills in $scratch/stills"
     ;;
   render)
@@ -211,8 +261,9 @@ case $mode in
       filmed="$shots (the others from v$last)"
     fi
     # --fixed-fps: one frame is one 30th of game time, however slowly a frame renders
-    "$GODOT" --path . --resolution 1280x720 --fixed-fps 30 -- "${game[@]}" --trailer-record "$out/shots" \
+    ${envrun[@]+"${envrun[@]}"} "$GODOT" --path . --resolution 1280x720 --fixed-fps 30 ${engine[@]+"${engine[@]}"} -- "${game[@]}" --trailer-record "$out/shots" \
       | tee "$out/render.log" | grep '\[trailer\]' || true
+    keep_caches
     changed=$(git status --porcelain -- src tools | grep -q . && echo ", with local changes" || true)
     {
       echo "film: $FILM"
@@ -220,6 +271,10 @@ case $mode in
       echo "made: $(date '+%Y-%m-%d %H:%M')"
       echo "commit: $(git rev-parse --short HEAD) on $(git branch --show-current)$changed"
       echo "filmed: $filmed"
+      echo "godot binary: $("$GODOT" --version 2>/dev/null | tail -1)"
+      echo "profile: $([ "$PINS" = 1 ] && echo "fresh user:// ($RENDER)" || echo "the user's own (PINS=0)")"
+      # the run's pins, as the director printed them (shotNN.pins.json has each shot's)
+      grep '\[trailer\] pin: ' "$out/render.log" | sed 's/^\[trailer\] pin: /pin /' || true
     } > "$out/version.txt"
     cut_film "$out"
     ;;

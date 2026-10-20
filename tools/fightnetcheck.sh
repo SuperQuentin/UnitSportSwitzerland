@@ -5,11 +5,13 @@
 # rate budget, then A forfeits and both must see the match end.
 #   tools/fightnetcheck.sh            (GODOT = the editor executable, docs/notes/general/godot-exe.md)
 #   SHOTS=1 tools/fightnetcheck.sh    (B windowed, for a look at the fight camera and the HUD)
+# At /speed 4 (A's --checkspeed, #931): the rounds and their phases run on the server's scaled delta, the
+# probe's waits are simulated seconds. SPEED=1 runs it at normal speed.
 . "$(dirname "$0")/lib/twoclient.sh" fightnet
 PORT=${FIGHT_PORT:-7853}
 WORLD="--world fixture"
-tc_server 260 120 $OUT/fightnet_server.log --server --port $PORT $WORLD
-tc_client 220 $OUT/fightnet_A.log --connect 127.0.0.1:$PORT --name FighterA $WORLD --fightnet A &
+tc_server 260 120 $OUT/fightnet_server.log --server --port $PORT $WORLD --admin-password fightnet
+tc_client 220 $OUT/fightnet_A.log --connect 127.0.0.1:$PORT --name FighterA $WORLD --fightnet A --checkspeed ${SPEED:-4} &
 A=$!
 WIN=; [ -n "${SHOTS:-}" ] && WIN=--windowed
 tc_client 220 $OUT/fightnet_B.log $WIN --connect 127.0.0.1:$PORT --name FighterB $WORLD --nocapture --fightnet B

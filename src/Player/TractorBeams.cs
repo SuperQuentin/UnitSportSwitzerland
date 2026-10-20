@@ -77,8 +77,28 @@ public partial class TractorBeams : Node
         return beams;
     }
 
-    public override void _EnterTree() => Instance = this;
-    public override void _ExitTree() { if (Instance == this) Instance = null; }
+    public override void _EnterTree()
+    {
+        Instance = this;
+        Core.RunSeeds.Reseeded += OnReseeded;
+    }
+
+    public override void _ExitTree()
+    {
+        if (Instance == this) Instance = null;
+        Core.RunSeeds.Reseeded -= OnReseeded;
+    }
+
+    /// <summary>
+    /// A film's shot pinned its seeds (#924): the hold's bob starts again from its start, so a thing
+    /// in the beam rises the same way every render, whatever ran before (it was a run-long clock: the
+    /// fondue pot came out 37 cm apart).
+    /// </summary>
+    private void OnReseeded()
+    {
+        _time = 0f;
+        _wakeIn = 0f;
+    }
 
     /// <summary>A beamable thing entered the world.</summary>
     public static void Register(IBeamable thing) { if (!Things.Contains(thing)) Things.Add(thing); }

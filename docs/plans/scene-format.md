@@ -3,7 +3,8 @@
 
 # One scene format: options
 
-**Status:** decided 2026-10-19 (see "Decisions" below); phase 1 started (#924). Nicolas asked for "a unified format for rendering
+**Status:** decided 2026-10-19 (see "Decisions" below); phase 1 built and measured (#924, see
+"Measurement" below): the pins are in, takes are needed for vehicle shots. Nicolas asked for "a unified format for rendering
 scenes, defining locations, actions, objects, etc., in order for it to be reproducible without
 being huge". This compares the ways to get there, from what the repo already has.
 
@@ -185,6 +186,73 @@ then zstd. Its header carries the pins it was made with.
   compare actor tracks. Where takes live (NicoDrive with an index in the repo, NicoDrive only, or
   Git LFS) is decided from those numbers: a take is exact only on the terrain it was made on, and the
   terrain is not in the repo, so takes are worth sharing only if re-simulation drifts visibly.
+
+## Measurement (phase 1, #924, 2026-10-20)
+
+Every shot below was rendered twice on this machine (Apple M1 Pro, macOS 15.8.1, Godot 4.7.1, the
+2,698 real tiles on NicoDrive) as stills runs at `--fixed-fps 30`, with the track dump on
+(`TRACKS=`), and compared with `tools/trailer-drift.py` (`trailer/render-pins`). Numbers are the
+largest position difference of an object over the roll (what the film shows); "identical" is every
+frame equal to the millimetre and the hundredth of a degree. **Unpinned** is `PINS=0` (the user's
+profile, the real date, no seeds), which already had the macOS clock fix below; **before fixes** is
+the first pinned build, before the measurement found the go, beam and clock problems.
+
+| Shot | What moves | Unpinned | Before fixes | Pinned |
+|---|---|---|---|---|
+| fondue 3 "A light in the sky" | saucer actor (`Drive.Fly` + `Cast.Ufo`), four walkers | identical* | saucer 36 cm | identical (3 pairs) |
+| fondue 5 "Gone" | saucer actor boosting away | identical | identical | identical (3 pairs) |
+| fondue 4 "The beam" | a craft's beam lifting the caquelon | pot 36 cm | pot 9-37 cm | identical (2 pairs) |
+| fondue 29 "Harvest" | herds; a cow beamed up | cows up to 13.9 m, beamed cow 9 cm | cows 26 cm | cows and beamed cow identical |
+| fondue 29 "Harvest" | tractor and combine (`Drive.Follow`) | identical* | 4-5 cm | 13 cm, 1.6 m (twice), identical (4 pairs) |
+| fondue 22 / showcase 5 "Tremola" | the AE86 on the race autopilot, 5.8 s pre-roll | 12 cm | 13-28 cm | 8-20 cm (6 pairs), identical once |
+| showcase 28 "Pack" | six AI cars racing and touching, 6 s pre-roll | 35 cm-1.05 m | | 13-66 cm; with `--builds 1` 0.1-2.0 m |
+| showcase 26 / fondue 28 "Crash" | a car into a wall, the driver thrown | identical | identical | identical |
+| the same with #918's NPC ragdoll | the driver through the windscreen as a ragdoll | pelvis 2.5 cm, or identical; the stay-in/go-through coin differed in 1 of 3 runs | | ragdoll, car and wreck identical (2 shots) |
+
+\* by chance: unpinned, the go fell on the same physics step of the frame in both runs.
+
+- **Scripted motion re-simulates exactly once pinned**: flight on a scripted stick, walkers,
+  craft, beams, herds, a crash and its ragdoll (sightings were not in the shots measured). The camera follows exactly (its keys on
+  roads and world points are identical; its yaw follows a drifting car by up to 1°).
+- **What the pins fixed, found by the dump** (each a commit of #924): the actors' go landed on
+  either of a frame's two physics steps (the saucer's 36 cm); the tractor beam's bob ran on a
+  run-long clock (the pot's 37 cm); a staged herd's seed was the run's staging count and its walk read
+  the absolute clock; on macOS `GameClock.Fixed` was always false, so `ClockSync` (herds, sightings,
+  signals) ran on the wall clock in every `--fixed-fps` run; the crash's stay-or-go coin and the
+  Africa Twin egg (15-68 m apart) were unseeded.
+- **What still drifts: ground vehicles under a controller** (autopilot, follow), by 8 cm to 2 m,
+  from 0.2-0.5 s after the go (the dump's pre-roll frames show the first difference within a
+  dozen frames). Their wheels' contacts with the terrain's and roads' collision differ run to run:
+  tiles stream in on threads, so the collision bodies reach Jolt in another order and after another
+  history of origin shifts. Building one tile at a time (`--builds 1`) did not remove it (pack up to
+  2 m, Harvest 1.6 m). It is bimodal for the field machines (identical, 13 cm or 1.6 m): a small
+  difference sometimes tips a discrete event.
+- **A second OS** was not available to this run (one Mac); the cross-platform numbers are still to
+  be taken. Jolt is not cross-platform deterministic in Godot's build, so expect at least the
+  vehicle drift there, likely more.
+- **Size**: the track dump of the six-car pack (7 objects, 297 frames, position and yaw only) is
+  156 KB of CSV, 37 KB gzipped: ~32 KB per object-minute, inside the 20-40 KB estimated above for a
+  quantized take.
+
+### Recommendation: where takes live
+
+Takes are worth having for every shot with a car, truck, bike or race in it: re-simulation on the
+same machine, same commit and same terrain already moves them by a car's width. Scripted shots
+(flight, walkers, craft, beams, herds, crashes) need none: pinned, they re-render exactly.
+
+- **Takes on NicoDrive, an index in the repo.** A take is exact only on the terrain fingerprint and
+  commit it was made with, and the terrain is not in the repo (10 GB), so a take in Git LFS is of
+  no use to anyone without the drive. Keep the takes beside the film versions on the drive
+  (`<trailers>/<film>/takes/shotNN.take`), and commit a small index per film
+  (`docs/trailer/<film>.takes.json`: shot, take hash, size, the pins it was made with: commit,
+  terrain fingerprint, date, Godot, GPU), so anyone can see which take a cut used and whether their
+  map matches. Not NicoDrive alone: without the index nobody knows a take exists or what it was made on.
+- **Take only what drifts**: the actors driven by a controller (autopilot, follow, scripted ride
+  input), plus anything they touch; scripted actors, craft, herds and props re-simulate. That keeps
+  a 4-min film's takes well under 1 MB.
+- **Phase 2** records a take from the director's actor stream (the track dump is the prototype:
+  add the pose and ride state, `ActorIo`), replays it, and re-runs this measurement expecting
+  "identical" on every row.
 
 ## Open questions (before the decisions)
 

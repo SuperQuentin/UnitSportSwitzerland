@@ -651,13 +651,19 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 var inv = System.Globalization.CultureInfo.InvariantCulture;
                 return new ShotRunner(_spectator!,
                     new Vector3(float.Parse(shot[0], inv), float.Parse(shot[1], inv), float.Parse(shot[2], inv)),
-                    float.Parse(shot[3], inv), float.Parse(shot[4], inv), double.Parse(shot[5], inv), shot[6]) { Origin = _worldOrigin };
+                    float.Parse(shot[3], inv), float.Parse(shot[4], inv), double.Parse(shot[5], inv), shot[6])
+                {
+                    Origin = _worldOrigin,
+                    // settled on the tiles, not a fixed time (#924), as the trailer director stages
+                    TilesComplete = at => chunks.SettledNear(at, 3) && chunks.CompleteNear(at, 3),
+                };
             }),
             new(() => ShotRunner.ParseQueueArg() != null, ToolAnchor.Own, _ =>
             {
                 FreeSpectator();
                 var runner = ShotRunner.ForQueue(_spectator!, ShotRunner.ParseQueueArg()!, _worldOrigin);
                 runner.GroundHeight = at => chunks.TryGetSurface(at, out float h) ? h : null;
+                runner.TilesComplete = at => chunks.SettledNear(at, 3) && chunks.CompleteNear(at, 3);
                 runner.RunCommand = line => _chat?.Send(line);
                 return runner;
             }),
@@ -744,8 +750,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (World.AirportCheck.Requested) AddChild(new World.AirportCheck(() => LocalPlayer));
 
         // The inventory is this machine's, not the player node's: it outlives a respawn or a
-        // reconnect, and the player it acts on is resolved per frame like the picker's.
-        var inventory = Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
+        // reconnect, and the player it acts on is resolved per frame like the picker's. A check gets
+        // a scratch one, the starter kit never saved: the player's user://inventory.json is neither
+        // changed by it nor fills up and fails it with "No room" (#932). Every verification tool
+        // (placedByTool) does; the probes started further down are listed.
+        var inventory = placedByTool || Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
+            || Net.TransferProbe.Role != null || Items.SwissNetProbe.Role != null || Player.AuraNetProbe.Role != null || Items.BeatFieldProbe.Requested || Player.TractorCheck.Role != null
             || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Interiors.LiftSyncProbe.Role != null || Interiors.HallCarProbe.Role != null || Loot.BankProbe.Role != null
             || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.UfoNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.ExcavatorNetProbe.Role != null || Items.SitePalletNetProbe.Role != null || Loot.YardLootNetProbe.Role != null || Terrain.Construction.CraneNetProbe.Role != null || Items.BedNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested

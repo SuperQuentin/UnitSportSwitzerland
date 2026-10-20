@@ -125,6 +125,12 @@ public static class WaterStage
         public string? TempDir;
         /// <summary>Extra 1 m/px crops for the PNG check: LV95 centre E,N and side in metres.</summary>
         public List<(double E, double N, int Size)> Crops = new();
+        /// <summary>
+        /// Rewrite only these tiles (<c>--tiles-file</c>): bodies are still found country-wide, so a
+        /// lake's area and depth are the same, but phase C — and its memory, three columns of input,
+        /// over 4 GB on Léman's — stays in the region whose terrain changed (#936).
+        /// </summary>
+        public IReadOnlySet<TileId>? Only;
     }
 
     /// <summary>
@@ -304,7 +310,8 @@ public static class WaterStage
         TileData? Input(TileId id) => labelBase.TryGetValue(id, out int lb)
             ? held.GetOrAdd(id, k => new Lazy<TileData>(() => ReadCache(cacheDir, k, lb))).Value
             : null;
-        foreach (var column in ordered.GroupBy(t => t.E))
+        var toWrite = o.Only == null ? ordered : ordered.Where(o.Only.Contains).ToList();
+        foreach (var column in toWrite.GroupBy(t => t.E))
         {
             foreach (var key in held.Keys)
                 if (key.E < column.Key - 1) held.TryRemove(key, out _);
@@ -341,7 +348,7 @@ public static class WaterStage
                     }
                 }
                 int k = Interlocked.Increment(ref done);
-                if (k % 25 == 0) Console.WriteLine($"  [{k}/{ordered.Count}] {clock.Elapsed.TotalSeconds:F0}s");
+                if (k % 25 == 0) Console.WriteLine($"  [{k}/{toWrite.Count}] {clock.Elapsed.TotalSeconds:F0}s");
             });
         }
         held.Clear();

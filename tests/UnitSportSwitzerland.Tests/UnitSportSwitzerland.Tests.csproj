@@ -69,6 +69,8 @@
     <Compile Include="..\..\src\Bots\BotProfile.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Bots\BrTactics.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Fnv.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\RunSeeds.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\Calendar.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Playtest\McpProtocol.cs" Link="Game\Playtest\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Playtest\LoopbackHttp.cs" Link="Game\Playtest\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Playtest\PlaytestLedger.cs" Link="Game\Playtest\%(Filename)%(Extension)" />

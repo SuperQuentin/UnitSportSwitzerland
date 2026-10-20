@@ -52,10 +52,9 @@ public partial class BrBotProbe : ChatProbe
         var br = Br!;
         Chat!.Send("/login brbots");
         if (!await Until(() => Permissions.IsAdmin, 10)) { Fail("not logged in as admin"); return; }
-        // --brwatchspeed n: the whole simulation n times faster (/speed; the match follows it since #856), so a
+        // --checkspeed n: the whole simulation n times faster (/speed; the match follows it since #856), so a
         // full-pace match, in proportion (no zone outrunning the runners), takes a fraction of the wall clock
-        if (CmdArgs.Double("--brwatchspeed") is double speed && speed > 0)
-            Chat.Send(FormattableString.Invariant($"/speed {speed}"));
+        if (!await SpeedUp("brbots")) return;
         Chat.Send($"/br bots {CmdArgs.Int("--brbotwatch") ?? 9} normal");
         await Seconds(0.5);
         // --brwatchmode duos|trios|squads (#837 phase 4): bots in teams
@@ -111,9 +110,8 @@ public partial class BrBotProbe : ChatProbe
         var br = Br!;
         Chat!.Send("/login brbots");
         if (!await Until(() => Permissions.IsAdmin, 10)) { Fail("not logged in as admin"); return; }
-        // the whole simulation faster (--brwatchspeed n, /speed): the probe's waits are simulated seconds too
-        if (CmdArgs.Double("--brwatchspeed") is double speed && speed > 0)
-            Chat.Send(FormattableString.Invariant($"/speed {speed}"));
+        // the whole simulation faster (--checkspeed n, /speed): the probe's waits are simulated seconds too
+        if (!await SpeedUp("brbots")) return;
         Chat.Send("/br bots 2 normal");
         await Seconds(0.5);
         // here: A starts in a town with roads enough for the Postauto stops (tools/brsquadcheck.sh); a random
@@ -195,6 +193,9 @@ public partial class BrBotProbe : ChatProbe
         var br = Br!;
         Chat!.Send("/login brbots");
         if (!await Until(() => Permissions.IsAdmin, 10)) { Fail("not logged in as admin"); return; }
+        // --checkspeed 4 (tools/brbotcheck.sh, #931): the minutes of falling and floating in a quarter of the wall
+        // clock, the zone keeping its proportion
+        if (!await SpeedUp("brbots")) return;
         Chat.Send("/br bots 3 easy");   // easy: slower to react, so the knife duels go A's way
         await Seconds(0.5);
         Chat.Send("/br open 5 short");
@@ -228,6 +229,9 @@ public partial class BrBotProbe : ChatProbe
         bool landed = await Until(() => bots.All(b => br.State.Find(b.Peer) is { Jumped: true }
             && BodyOf(b.Peer) is { } body && body.Ride == RideKind.OnFoot && body.Visible), 240);
         Expect(landed, "both bots jumped, flew and landed on foot");
+        // the knife duels at normal speed: at x4 a walking bot is 4 times as far along on the server as its copy
+        // here, and stabs at 1.6 m missed it for 20 tries
+        if (!await SpeedBack()) return;
         GD.Print($"{Log} landed: {ZoneLine(me)}");
         int knife = SlotOf(ItemId.Knife);
         _items.Inventory.Select(knife);
