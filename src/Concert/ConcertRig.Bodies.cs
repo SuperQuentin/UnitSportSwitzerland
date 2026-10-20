@@ -12,7 +12,7 @@ namespace UnitSport.Concert;
 /// base, yoke or head; types sharing a part share it), the generic box hidden for them. The base is
 /// placed once; each frame the yoke turns with the head's pan about its pivot and the head with its
 /// tilt (<see cref="GdtfBody.Pose"/>), written in place like the rest of the rig, and the beam and its
-/// flare leave from the head's beam point.
+/// flare leave from the head's beam point. Faces' colours and textures as the scene objects' (#973).
 /// </summary>
 public partial class ConcertRig
 {
@@ -51,20 +51,16 @@ public partial class ConcertRig
             if (BodyOf(f) is { } b)
                 foreach (int m in new[] { b.Base, b.Yoke, b.Head })
                     if (m >= 0) uses[m]++;
-        var material = StyleKit.Material(MaterialRole.Prop);
         var root = new Node3D { Name = "Bodies" };
         var multi = new MultiMesh?[rig.Bodies.Count];
         for (int m = 0; m < multi.Length; m++)
         {
             if (uses[m] == 0) continue;
-            var row = rig.Bodies[m];
-            var pos = RigData.Positions(row);
-            var cols = new Color[pos.Length];
-            Array.Fill(cols, RigData.ColorOf(row).SrgbToLinear() with { A = 0f });
+            // its faces' colours and textures, as the scene objects' (#973)
             multi[m] = new MultiMesh
             {
                 TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
-                Mesh = ChunkNode.ToPropMesh(new PierMeshBuilder.MeshData(pos, cols, RigData.Indices(row)), material),
+                Mesh = RowMesh(Looked.Of(rig.Bodies[m])),
                 InstanceCount = uses[m],
             };
             root.AddChild(new MultiMeshInstance3D { Name = $"Body{m}", Multimesh = multi[m], CastShadow = GeometryInstance3D.ShadowCastingSetting.Off });
@@ -145,7 +141,7 @@ public partial class ConcertRig
         {
             if (mesh == null) continue;
             var cols = new Color[mesh.Positions.Length];
-            Array.Fill(cols, mesh.Color.SrgbToLinear() with { A = 0f });
+            for (int v = 0; v < cols.Length; v++) cols[v] = mesh.ColorAt(v).SrgbToLinear() with { A = 0f };
             node.AddChild(new MeshInstance3D { Mesh = ChunkNode.ToPropMesh(new PierMeshBuilder.MeshData(mesh.Positions, cols, mesh.Indices), material), Transform = xf });
         }
         return node;

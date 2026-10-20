@@ -14,7 +14,8 @@ namespace UnitSport.Concert.Mvr;
 /// beam leaves the head. Each node's <c>Model</c> is its 3D file (glTF preferred over 3DS, the file's
 /// box scaled to the model's Length, Width, Height about its origin, as GDTF says) or its primitive
 /// (a box, a cylinder, a sphere, or boxes and cylinders shaped like a base, a yoke, a head, a par);
-/// the parts simplified to <see cref="MaxPartTriangles"/> each (a body is small on screen). Pure.
+/// the parts simplified to <see cref="MaxPartTriangles"/> each (a body is small on screen). Each file's
+/// faces keep their colours and textures (#973). Pure.
 /// </summary>
 public sealed record GdtfBody(MvrMesh? Base, MvrMesh? Yoke, MvrMesh? Head, Vector3 YokePivot, Vector3 HeadPivot, Vector3 BeamAt)
 {
@@ -85,8 +86,49 @@ public sealed record GdtfBody(MvrMesh? Base, MvrMesh? Yoke, MvrMesh? Head, Vecto
     private sealed class Part
     {
         public readonly List<Vector3> Positions = new();
+        public readonly List<Color> Colors = new();
+        public readonly List<Vector2> Uvs = new();
         public readonly List<int> Indices = new();
+        public readonly List<int> TriangleImages = new();
+        public readonly List<MvrImage> Images = new();
         public readonly Dictionary<Color, int> Colours = new();
+
+        /// <summary>A model's mesh placed in the part, its looks and all.</summary>
+        public void Add(MvrMesh mesh, Transform3D xf)
+        {
+            int at = Positions.Count;
+            for (int v = 0; v < mesh.Positions.Length; v++)
+            {
+                Positions.Add(xf * mesh.Positions[v]);
+                Colors.Add(mesh.ColorAt(v));
+                Uvs.Add(mesh.Uvs?[v] ?? Vector2.Zero);
+            }
+            foreach (int i in mesh.Indices) Indices.Add(at + i);
+            // its images once each (a model drawn twice shares them)
+            var images = mesh.Images ?? Array.Empty<MvrImage>();
+            var index = new int[images.Length];
+            for (int k = 0; k < images.Length; k++)
+            {
+                index[k] = Images.IndexOf(images[k]);
+                if (index[k] < 0) { index[k] = Images.Count; Images.Add(images[k]); }
+            }
+            for (int t = 0; t < mesh.Triangles; t++)
+            {
+                int img = mesh.ImageOf(t);
+                TriangleImages.Add(img >= 0 && img < index.Length ? index[img] : -1);
+            }
+            Colours[mesh.Color] = Colours.GetValueOrDefault(mesh.Color) + mesh.Triangles;
+        }
+
+        public MvrMesh? Merge()
+        {
+            if (Indices.Count == 0) return null;
+            var colour = Colours.OrderByDescending(kv => kv.Value).First().Key;
+            var mesh = new MvrMesh(Positions.ToArray(), Indices.ToArray(), colour);
+            if (Colors.Any(c => c != colour)) mesh = mesh with { Colors = Colors.ToArray() };
+            if (TriangleImages.Any(i => i >= 0)) mesh = mesh with { Uvs = Uvs.ToArray(), TriangleImages = TriangleImages.ToArray(), Images = Images.ToArray() };
+            return MvrFile.Decimate(mesh, MaxPartTriangles);
+        }
     }
 
     private static GdtfBody? Build(XElement ft, string? modeGeometry, string? panGeometry, string? tiltGeometry, Func<string, byte[]?> files)
@@ -141,11 +183,7 @@ public sealed record GdtfBody(MvrMesh? Base, MvrMesh? Yoke, MvrMesh? Head, Vecto
             if (model != null && models.TryGetValue(model, out var mx) && MeshOf(model, mx) is { } mesh && triangles + mesh.Triangles <= MaxTriangles)
             {
                 triangles += mesh.Triangles;
-                var p = parts[part];
-                int at = p.Positions.Count;
-                foreach (var v in mesh.Positions) p.Positions.Add(xf * v);
-                foreach (int i in mesh.Indices) p.Indices.Add(at + i);
-                p.Colours[mesh.Color] = p.Colours.GetValueOrDefault(mesh.Color) + mesh.Triangles;
+                parts[part].Add(mesh, xf);
             }
             foreach (var c in g.Elements()) Walk(c, xf, part, depth + 1, null);
         }
@@ -156,14 +194,7 @@ public sealed record GdtfBody(MvrMesh? Base, MvrMesh? Yoke, MvrMesh? Head, Vecto
             return meshes[name] = ModelMesh(model, files);
         }
 
-        MvrMesh? Merge(Part p)
-        {
-            if (p.Indices.Count == 0) return null;
-            var colour = p.Colours.OrderByDescending(kv => kv.Value).First().Key;
-            return MvrFile.Decimate(new MvrMesh(p.Positions.ToArray(), p.Indices.ToArray(), colour), MaxPartTriangles);
-        }
-
-        var body = new GdtfBody(Merge(parts[0]), Merge(parts[1]), Merge(parts[2]), yokePivot, sawHead ? headPivot : yokePivot,
+        var body = new GdtfBody(parts[0].Merge(), parts[1].Merge(), parts[2].Merge(), yokePivot, sawHead ? headPivot : yokePivot,
             headBeam ?? beam ?? (sawHead ? headPivot : sawYoke ? yokePivot : Vector3.Zero));
         if (body.Base == null && body.Yoke == null && body.Head == null) return null;
         // a head that only tilts: its pivot is the pan's too (no pan turns it)
@@ -212,12 +243,15 @@ public sealed record GdtfBody(MvrMesh? Base, MvrMesh? Yoke, MvrMesh? Head, Vecto
         return Primitive((string?)model.Attribute("PrimitiveType") ?? "Undefined", size);
     }
 
-    /// <summary>A model file in the archive: models/gltf first (glb, gltf), then models/3ds, by its name without extension.</summary>
+    /// <summary>
+    /// A model file in the archive: models/gltf first (glb, gltf), then models/3ds, by its name without
+    /// extension; its buffers and textures beside it (or at the archive's root).
+    /// </summary>
     private static MvrMesh? FileMesh(string file, Func<string, byte[]?> files)
     {
         string stem = Path.HasExtension(file) && Path.GetExtension(file).ToLowerInvariant() is ".glb" or ".gltf" or ".3ds" ? Path.ChangeExtension(file, null)! : file;
-        foreach (var (path, name) in new[] { ($"models/gltf/{stem}.glb", ".glb"), ($"models/gltf/{stem}.gltf", ".gltf"), ($"models/3ds/{stem}.3ds", ".3ds") })
-            if (files(path) is { } bytes && MvrGeometry.Read(name, bytes, uri => files("models/gltf/" + uri), out _) is { } mesh) return mesh;
+        foreach (var (dir, name) in new[] { ("models/gltf/", ".glb"), ("models/gltf/", ".gltf"), ("models/3ds/", ".3ds") })
+            if (files(dir + stem + name) is { } bytes && MvrGeometry.Read(name, bytes, uri => files(dir + uri) ?? files(uri), out _) is { } mesh) return mesh;
         return null;
     }
 
