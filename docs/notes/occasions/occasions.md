@@ -1,7 +1,7 @@
 # Occasions
 
 - **Occasions** (`src/Occasions/`, #18): time-limited themes and events — Halloween (1 Sep–31
-  Oct) and Christmas (1 Nov–31 Dec) so far, built to carry an Olympics or a community event.
+  Oct), Christmas (1 Nov–31 Dec) and UFO sightings (first Friday nights, `ufo-sightings`) so far, built to carry an Olympics or a community event.
   *Policy* (schedule, facets, priority, `allowClientOptOut`) is `OccasionEntry`, built-in defaults
   merged under `user://occasions.json` by id; *content* is an `Occasion` subclass with the same
   id (an id with no class runs as a contentless `GenericOccasion`). Schedules are `MM-DD`

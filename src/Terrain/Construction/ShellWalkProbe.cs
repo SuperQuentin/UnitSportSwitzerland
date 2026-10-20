@@ -14,6 +14,12 @@ namespace UnitSport.Terrain.Construction;
 /// storey, to the top slab. It fails if a body is stuck on a waypoint, arrives at the wrong
 /// height (fell through a slab, or stands on something it should not), or ends anywhere but on
 /// the top slab. The unit tests check the boxes; this checks the body.
+/// <para>
+/// And the site office's gallery (#827), on a one-stack and a two-stack office the planner fits
+/// one on: from the stair's foot up onto the landing, along the walkway to every upper door's
+/// doorstep, and back down to the foot, the containers' walls colliding too. This is the climb a
+/// server-run bot makes on the same collision the server builds round it.
+/// </para>
 /// </summary>
 public partial class ShellWalkProbe : Node3D
 {
@@ -48,7 +54,7 @@ public partial class ShellWalkProbe : Node3D
     }
 
     private readonly List<Walker> _walkers = new();
-    private int _failures;
+    private int _failures, _expected;
 
     private void Check(bool ok, string what)
     {
@@ -96,6 +102,48 @@ public partial class ShellWalkProbe : Node3D
             AddChild(walker);
             _walkers.Add(new Walker { Name = name, Body = walker, Route = route });
         }
+        _expected = Specs.Length;
+        // the office galleries (#827): a small plot (one stack) and a big block (two)
+        foreach (var (w, d, h, floors, at) in new[] { (14f, 11f, 6.3f, (byte)2, new Vector2(150, 450)), (52f, 30f, 18.4f, (byte)6, new Vector2(450, 450)) })
+        {
+            _expected++;
+            var b = Prism(at, w, d, h, floors, 0.3f);
+            var box = Interiors.PlanBox.Of(b)!.Value;
+            ConstructionSite? site = null;
+            // the first street direction round the plot that leaves the planner room for the gallery
+            for (int k = 0; k < 16 * 32 && site?.GallerySide is null or 0; k++)
+                site = ConstructionSites.Plan($"{2600 + k / 16}_1200_0", b, box, at + Vector2.FromAngle(k % 16 * Mathf.Tau / 16) * (d + 14f), _ => false);
+            string name = $"the gallery of a {w:F0}x{d:F0} m site's office";
+            if (site == null || site.GallerySide == 0) { Check(false, $"{name}: no street direction gives it room"); continue; }
+            var tile = new BuildingTile { Id = id, Buildings = new List<Building> { b } };
+            if (SiteShellBuilder.Build(tile, new[] { site }, null, mesh: true, collision: true) is not { } built
+                || SiteShellBuilder.Office(tile, site, null)?.Gallery is not { } gallery)
+            {
+                Check(false, $"{name}: built");
+                continue;
+            }
+            var body = new StaticBody3D { Name = $"Gallery{_expected}" };
+            body.AddChild(new CollisionShape3D { Shape = new ConcavePolygonShape3D { Data = [.. built.Faces, .. built.OfficeFaces], BackfaceCollision = true } });
+            AddChild(body);
+            if (built.Mesh is { } data)
+                AddChild(new MeshInstance3D { Mesh = ChunkNode.ToPropMesh(data, Styles.StyleKit.Material(Styles.MaterialRole.Prop)) });
+            var route = new List<Vector3> { gallery.Foot, gallery.Top };
+            route.AddRange(gallery.Doorsteps);
+            route.Add(gallery.Top);
+            route.Add(gallery.Foot);
+            var tilePoints = route.Select(p => SiteShellBuilder.ToTile(site, p)).ToList();
+            Check(true, $"{name}: side {site.GallerySide}, {gallery.Steps} steps, {gallery.Doorsteps.Count} upper door(s), a route of {tilePoints.Count} points");
+            var walker = new CharacterBody3D
+            {
+                Name = $"GalleryWalker{_expected}",
+                FloorMaxAngle = Mathf.DegToRad(52f),
+                FloorSnapLength = 0.4f,
+                Position = tilePoints[0] + Vector3.Up * (Tall / 2 + 0.05f),
+            };
+            walker.AddChild(new CollisionShape3D { Shape = new CapsuleShape3D { Radius = Radius, Height = Tall } });
+            AddChild(walker);
+            _walkers.Add(new Walker { Name = name, Body = walker, Route = tilePoints });
+        }
         if (_walkers.Count == 0) Finish();
     }
 
@@ -123,7 +171,7 @@ public partial class ShellWalkProbe : Node3D
                 if (w.Next == w.Route.Count)
                 {
                     w.Done = true;
-                    Check(true, $"{w.Name}: walked to the top slab, feet at {feet:F2} m (top {target.Y:F2} m)");
+                    Check(true, $"{w.Name}: walked {(w.Name.StartsWith("the gallery") ? "up, to every upper door and back down" : "to the top slab")}, feet at {feet:F2} m (last waypoint {target.Y:F2} m)");
                 }
                 continue;
             }
@@ -147,7 +195,7 @@ public partial class ShellWalkProbe : Node3D
 
     private void Finish()
     {
-        GD.Print($"[shellwalk] RESULT: {(_failures == 0 && _walkers.Count == Specs.Length ? "ok" : $"FAILED ({_failures})")}");
+        GD.Print($"[shellwalk] RESULT: {(_failures == 0 && _walkers.Count == _expected ? "ok" : $"FAILED ({_failures})")}");
         GetTree().Quit(_failures == 0 ? 0 : 1);
         _walkers.Clear();
     }

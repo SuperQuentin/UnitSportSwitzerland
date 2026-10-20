@@ -41,5 +41,6 @@
 - **In water (#380)**: buoyancy and drag per point from the water's surface and motion
   (`Ragdoll.WaterProbe`); in deep water the body floats limp, then the owner comes round swimming
   (`swimming`). Probe: `FootPlayer.DebugThrow(at, launch)` throws a player on foot as a crash does.
-- Not done: the car's windscreen mesh stays whole (only shard particles fly); NPC drivers keep the old flat throw; the VR blink is untested on a real headset (`--xrsim` does not draw it).
+- **NPCs and bots (#916)** go limp the same way (they used to be thrown clear, standing: the trailer's crash shot and every watcher saw no ragdoll); no camera, so no crash camera; the dedicated server steps a bot's ragdoll but builds no mesh.
+- Not done: the car's windscreen mesh stays whole (only shard particles fly); the VR blink is untested on a real headset (`--xrsim` does not draw it).
 - Checks: `--ride car,19,out.png --wall 70 --crashshots 0.4,1.6,4` (see `commands`), `tools/crashnetcheck.sh`.

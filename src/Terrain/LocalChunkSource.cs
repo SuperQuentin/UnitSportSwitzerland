@@ -84,7 +84,7 @@ public sealed class LocalChunkSource : IChunkSource
             string path = Path.Combine(_dir, BuildingFormat.FileName(id));
             if (!File.Exists(path)) return (BuildingTile?)null;
             using var fs = File.OpenRead(path);
-            return BuildingCodec.Decode(fs);
+            return Stadiums.StadiumClip.Clip(BuildingCodec.Decode(fs));
         }, ct);
     }
 
@@ -118,7 +118,7 @@ public sealed class LocalChunkSource : IChunkSource
             string path = Path.Combine(_dir, TreeFormat.FileName(id));
             if (!File.Exists(path)) return (List<TreeInstance>?)null;
             using var fs = File.OpenRead(path);
-            return TreeFormat.Decode(fs);
+            return Stadiums.StadiumClip.Trees(id, TreeFormat.Decode(fs));
         }, ct);
     }
 

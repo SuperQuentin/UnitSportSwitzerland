@@ -6,6 +6,8 @@ using UnitSport.Tools.Preprocessor;
 //       [--temp <cache dir>] [--jobs N] [--io-jobs N] [--force] [--fresh] [--verify] [--dump-png <dir>]
 //   ... --out terrain_chunks --photos [--tiles-file f] [--io-jobs N] [--force]   (SWISSIMAGE, PhotoStage)
 //   ... --out terrain_chunks --fields ressources/data/lwb [--osm-pbf f] [--gwr data.sqlite] [--tiles-file f]   (farm fields, FieldStage)
+//   ... --out terrain_chunks --manifest-hash   (each tile's content hash into manifest.json, ManifestHashStage; reads the
+//       tiles only. Every pass that writes tiles ends with it, incremental; --no-hash skips that)
 // --in is searched recursively and may be repeated (sources can live on any drive); the build is
 // incremental — see TerrainBuild.
 //

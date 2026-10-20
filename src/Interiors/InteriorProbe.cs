@@ -42,6 +42,10 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
     private string _churchKey = "";
     private DoorIndex.Entry _churchIn, _churchOut;
     private bool _viewed;
+    /// <summary>A raised door's pictures (#827): the gallery seen from the yard taken, and which upper room is being pictured.</summary>
+    private bool _yardViewed, _yardPlaced;
+    private int _yardShots;
+    private int _roomShot;
 
     /// <summary>Connected to a server: the probe drives this client's own networked player.</summary>
     private bool Online => NetLink.Online(this);
@@ -70,8 +74,21 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
         return null;
     }
 
+    /// <summary>
+    /// <c>--doorlevel 1</c> (#827): a raised door, that many storeys up its building (a site office's
+    /// upper container, off its walkway), of the <c>--doorkind</c> (a building site's by default).
+    /// </summary>
+    public static int? DoorLevelArg()
+    {
+        var args = CmdArgs.All;
+        for (int i = 0; i < args.Length - 1; i++)
+            if (args[i] == "--doorlevel" && int.TryParse(args[i + 1], out int level))
+                return level;
+        return null;
+    }
+
     /// <summary>The door the check uses, and the door watch watches.</summary>
-    public static DoorIndex.Entry? ChooseDoor(Vector3 at) => DoorSearch.Nearest(at, DoorKindArg());
+    public static DoorIndex.Entry? ChooseDoor(Vector3 at) => DoorSearch.Nearest(at, DoorKindArg(), level: DoorLevelArg());
 
     private void Check(bool condition, string what)
     {
@@ -252,6 +269,32 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                 break;
             }
             case 1:
+                if (_shot != null && DoorLevelArg() != null && !_yardViewed)
+                {
+                    // a raised door (#827): first the gallery from the yard, a few metres off, from either side
+                    int side = _yardShots == 0 ? 1 : -1;
+                    if (!_yardPlaced)
+                    {
+                        var across = new Vector3(-_door.Outward.Z, 0, _door.Outward.X);
+                        var from = _door.World + _door.Outward * 7f + across * 6f * side;
+                        if (_chunks.TryGetHeight(from, out float gy)) from.Y = gy + 0.3f;
+                        var look = (_door.World - from) with { Y = 0 };
+                        _player!.LeaveInterior(from, Mathf.Atan2(-look.X, -look.Z));
+                        _player.Velocity = Vector3.Zero;
+                        _yardPlaced = true;
+                        _t = 0;
+                    }
+                    if (_t < 4.0) return;
+                    string yard = _shot.Replace(".png", side > 0 ? "_yard_a.png" : "_yard_b.png");
+                    GetViewport().GetTexture().GetImage().SavePng(yard);
+                    GD.Print($"[interior] wrote {yard}");
+                    _yardPlaced = false;
+                    if (++_yardShots < 2) return;
+                    _yardViewed = true;
+                    StandOutside(_door);
+                    _t = 0;
+                    return;
+                }
                 if (_t < 1.0 || !_player!.IsOnFloor()) { if (_t > 20) { Check(false, "stood at the door"); Finish(); } return; }
                 Check(!interiors.IsOpen(_door.Key.ToString()), "the door starts shut");
                 Next();
@@ -269,8 +312,13 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                 if (_t < 1.5) return;
                 // online the server says so: a round trip after the step over the sill
                 Check(interiors.SpaceOf(Me) == interiors.Current?.Key, "the player's space is the building walked into");
-                Check(_player!.GlobalPosition.Y < InteriorManager.InteriorBaseY + 5f && _player.GlobalPosition.Y > InteriorManager.InteriorBaseY - 1f,
-                    $"standing on the ground floor (y {_player.GlobalPosition.Y:F1})");
+                {
+                    // on the floor of the door walked in by: the ground floor, or a raised door's (#827)
+                    var cur = interiors.Current!;
+                    float floorY = InteriorManager.InteriorBaseY + cur.EntranceY(cur.EntranceFor(_door.Key.ToString()));
+                    Check(_player!.GlobalPosition.Y < floorY + 2f && _player.GlobalPosition.Y > floorY - 0.5f,
+                        $"standing on the floor of its door, floor {cur.EntranceFloor(cur.EntranceFor(_door.Key.ToString()))} (y {_player.GlobalPosition.Y:F1}, its floor {floorY:F1})");
+                }
                 Check(_player.IsOnFloor(), "on a floor, not falling");
                 if (_shot != null)
                 {
@@ -292,8 +340,34 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                 if (_t < 1.0) return;
                 Input.ActionRelease(PlayerInput.MoveForward);
                 Check(_player!.GlobalPosition.Y > InteriorManager.InteriorBaseY - 1f, "walked without falling through");
+                if (_shot != null && DoorLevelArg() != null) { _step = 50; _t = 0; _roomShot = 0; break; }
                 Next();
                 break;
+
+            case 50:
+            {
+                // a raised door (#827): a picture of every room of its floor, from its front looking in
+                var l50 = interiors.Current!;
+                var n50 = interiors.CurrentNode!;
+                int fl = l50.EntranceFloor(l50.EntranceFor(_door.Key.ToString()));
+                var rooms = l50.Floors[fl].Rooms;
+                if (_roomShot >= rooms.Count) { _step = 5; _t = 0; break; }
+                var r = rooms[_roomShot];
+                if (_t < 0.1)
+                {
+                    var at = n50.GlobalTransform * new Vector3((r.X0 + r.X1) / 2, l50.FloorY(fl) + 0.1f, r.Z0 + 0.6f);
+                    var face = n50.GlobalTransform.Basis * new Vector3(0, 0, 1);
+                    _player!.EnterInterior(l50.Key, at, Mathf.Atan2(-face.X, -face.Z));
+                    _player.Velocity = Vector3.Zero;
+                }
+                if (_t < 2.0) return;
+                string path = _shot.Replace(".png", $"_room{_roomShot}_{r.Type}.png");
+                GetViewport().GetTexture().GetImage().SavePng(path);
+                GD.Print($"[interior] wrote {path}");
+                _roomShot++;
+                _t = 0;
+                break;
+            }
 
             case 5: // stand in front of something with loot in it, facing it, and press E
             {
@@ -301,7 +375,8 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                 var ni = interiors.CurrentNode!;
                 // the ground floor is Below, not 0: in a house with a cellar, floor 0 is the cellar,
                 // and the player was put a storey above the piece it was told to face (#213)
-                _lootIndex = li.Furniture.FindIndex(f => f.Floor == li.Below && Loot.LootTables.IsLootable(f.Type) && !Loot.LootTables.IsLocked(f.Type));
+                int doorFloor = li.EntranceFloor(li.EntranceFor(_door.Key.ToString()));
+                _lootIndex = li.Furniture.FindIndex(f => f.Floor == doorFloor && Loot.LootTables.IsLootable(f.Type) && !Loot.LootTables.IsLocked(f.Type));
                 if (Online)
                 {
                     GD.Print("[interior] (online: loot not tested here)");
@@ -310,7 +385,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                 }
                 if (_lootIndex < 0 || Loot.LootService.Instance == null)
                 {
-                    GD.Print("[interior] (no lootable furniture on the ground floor: loot not tested)");
+                    GD.Print("[interior] (no lootable furniture on the door's floor: loot not tested)");
                     _step = 7;
                     return;
                 }
@@ -355,21 +430,43 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                         GD.Print($"[interior] it holds: {(contents.Count == 0 ? "nothing" : string.Join(", ", contents.Select(c => $"{c.Stack.Id} x{c.Stack.Count}")))}");
                         if (_shot != null)
                             GetViewport().GetTexture().GetImage().SavePng(_shot.Replace(".png", "_loot.png"));
-                        loot.TakeAll();
+                        if (!_lootKeyTried && contents.Count > 0)
+                        {
+                            // E with a slot focused (the panel focuses the first one), then searched again (#929)
+                            _lootKeyTried = true;
+                            Input.ParseInputEvent(new InputEventKey { Keycode = Key.E, PhysicalKeycode = Key.E, Pressed = true });
+                            _lootPhase = 10;
+                            return;
+                        }
+                        // the panel's button (#929): offline every grant comes back inside the loop
+                        loot.TakeAllAndClose();
                         Check(!loot.OpenContents().Any(), "take all empties it");
                         Check(CountItems() - _lootBefore == expected, $"the pack gained {CountItems() - _lootBefore} of {expected}");
-                        loot.Close();
-                        Check(!loot.IsOpen, "the panel closes");
+                        // what did not fit (a full pack) keeps it open on what is left
+                        Check(loot.IsOpen == loot.OpenContents().Any(), "take all closes the panel exactly when it emptied it");
                         _lootPhase = 2;
                         return;
                     }
+                    case 10:
+                        Input.ParseInputEvent(new InputEventKey { Keycode = Key.E, PhysicalKeycode = Key.E, Pressed = false });
+                        Check(!loot.IsOpen, "E closes a panel with things in it");
+                        Check(_player!.TryInteract() && loot.IsOpen, "E opens it again");
+                        _lootPhase = 1;
+                        return;
                     case 2:
                         Check(_player!.TryInteract() && loot.IsOpen, "searching again opens it");
                         _lootPhase = 3;
                         return;
-                    default:
+                    case 3:
                         if (loot.Waiting && _t < 8) return;
                         Check(!loot.OpenContents().Any(), "a second search finds it empty");
+                        // the key that opened it closes it (#929): a real key, as the world reads E too
+                        Input.ParseInputEvent(new InputEventKey { Keycode = Key.E, PhysicalKeycode = Key.E, Pressed = true });
+                        _lootPhase = 4;
+                        return;
+                    default:
+                        Input.ParseInputEvent(new InputEventKey { Keycode = Key.E, PhysicalKeycode = Key.E, Pressed = false });
+                        Check(!loot.IsOpen, "E closes the emptied panel");
                         loot.Close();
                         break;
                 }
@@ -792,13 +889,13 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
         GD.Print($"[interior] side by side: {_same.A?.Key} / {_same.B?.Key}; facing: {_facing.A?.Key} / {_facing.B?.Key}");
     }
 
-    /// <summary>Puts the player on the street 1.2 m out from a door, facing it.</summary>
+    /// <summary>Puts the player on the street 1.2 m out from a door, facing it (on a raised door's walkway, 0.5 m out, #827).</summary>
     private void StandOutside(DoorIndex.Entry d)
     {
         // out of the interior the manager knows about, not just the body moved
         if (_player!.Indoors) InteriorManager.Instance?.Leave(_player);
         var face = -d.Outward;
-        _player!.LeaveInterior(d.World + d.Outward * 1.2f + Vector3.Up * 0.3f, Mathf.Atan2(-face.X, -face.Z));
+        _player!.LeaveInterior(d.World + d.Outward * (d.Level > 0 ? 0.5f : 1.2f) + Vector3.Up * 0.3f, Mathf.Atan2(-face.X, -face.Z));
         _player.Velocity = Vector3.Zero;
     }
 
@@ -808,7 +905,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
         var l = interiors.Current!;
         var node = interiors.CurrentNode!;
         var way = l.EntranceFor(door);
-        var at = node.GlobalTransform * new Vector3(way.X + way.InX * 1.3f, 0.1f, way.Z + way.InZ * 1.3f);
+        var at = node.GlobalTransform * new Vector3(way.X + way.InX * 1.3f, l.EntranceY(way) + 0.1f, way.Z + way.InZ * 1.3f);
         var face = node.GlobalTransform.Basis * new Vector3(-way.InX, 0, -way.InZ);
         _player!.EnterInterior(l.Key, at, Mathf.Atan2(-face.X, -face.Z));
         _player.Velocity = Vector3.Zero;
@@ -848,7 +945,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                 var l = interiors.Current!;
                 var node = interiors.CurrentNode!;
                 var way = l.EntranceFor(door);
-                var at = node.GlobalTransform * new Vector3(way.X + way.InX * 1.5f, 0.1f, way.Z + way.InZ * 1.5f);
+                var at = node.GlobalTransform * new Vector3(way.X + way.InX * 1.5f, l.EntranceY(way) + 0.1f, way.Z + way.InZ * 1.5f);
                 var face = node.GlobalTransform.Basis * new Vector3(-way.InX, 0, -way.InZ);
                 _player!.EnterInterior(l.Key, at, Mathf.Atan2(-face.X, -face.Z));
                 _player.Velocity = Vector3.Zero;
@@ -902,7 +999,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                 var l = interiors.Current!;
                 var node = interiors.CurrentNode!;
                 var way = l.EntranceFor(door);
-                var at = node.GlobalTransform * new Vector3(way.X + way.InX * 0.5f, 0.1f, way.Z + way.InZ * 0.5f);
+                var at = node.GlobalTransform * new Vector3(way.X + way.InX * 0.5f, l.EntranceY(way) + 0.1f, way.Z + way.InZ * 0.5f);
                 var face = node.GlobalTransform.Basis * new Vector3(-way.InX, 0, -way.InZ);
                 _player!.EnterInterior(l.Key, at, Mathf.Atan2(-face.X, -face.Z));
                 _player.Velocity = Vector3.Zero;
@@ -1082,6 +1179,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
     }
 
     private int _lootIndex = -1, _lootBefore, _lootPhase;
+    private bool _lootKeyTried;
 
     private static int CountItems()
     {

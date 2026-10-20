@@ -18,6 +18,24 @@ public sealed class TerrainManifest
     public Lv95Bounds BoundsLv95 { get; set; } = new();
     public List<ManifestTile> Tiles { get; set; } = new();
 
+    /// <summary>
+    /// The manifest's own layout (not the tiles' <see cref="FormatVersion"/>): 1 before #924 (absent
+    /// in the file), 2 once the tiles carry a content <see cref="ManifestTile.Hash"/>. Old readers skip
+    /// the new fields, and a version-1 file reads with no hashes.
+    /// </summary>
+    public int ManifestVersion { get; set; } = 1;
+
+    /// <summary>How <see cref="ManifestTile.Hash"/> was computed (<see cref="TileFingerprint.Algorithm"/>); null: no hashes.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? HashAlgorithm { get; set; }
+
+    /// <summary>The region-wide files' hashes (<see cref="TileFingerprint.SharedFiles"/>, those present); null: none.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public SortedDictionary<string, string>? Shared { get; set; }
+
+    /// <summary>The version a manifest with tile hashes has.</summary>
+    public const int HashedVersion = 2;
+
     public static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -37,6 +55,13 @@ public sealed class ManifestTile
     public int N { get; set; }
     public float Min { get; set; }
     public float Max { get; set; }
+
+    /// <summary>
+    /// The tile's content hash (<see cref="TileFingerprint.OfTile"/> over all its files), null in a
+    /// manifest from before #924 or one written by a build that does not hash.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Hash { get; set; }
 
     [JsonIgnore]
     public TileId Id => new(E, N);

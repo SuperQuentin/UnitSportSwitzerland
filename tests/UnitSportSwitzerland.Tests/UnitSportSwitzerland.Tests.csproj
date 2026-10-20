@@ -27,6 +27,7 @@
     <Compile Include="..\..\src\World\Snow\SnowWeather.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\Snow\SnowModel.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\Snow\WeatherCommand.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Concert\Protocols\ShowProtocols.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\CollisionReach.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\SimClock.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\DancePick.cs" Link="Game\%(Filename)%(Extension)" />
@@ -59,14 +60,20 @@
     <Compile Include="..\..\src\Farming\FieldCells.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\FieldTile.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\Face\FaceGenome.cs" Link="Game\Face\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Avatar\AppearanceCode.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\Face\FaceState.cs" Link="Game\Face\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\Face\DanceFace.cs" Link="Game\Face\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\HitGuard.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\FightRules.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Combat\AuraRules.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Combat\AuraMatch.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Combat\AuraBody.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\BattleRoyale\BrStats.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Bots\BotProfile.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Bots\BrTactics.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Fnv.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\RunSeeds.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\Calendar.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Playtest\McpProtocol.cs" Link="Game\Playtest\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Playtest\LoopbackHttp.cs" Link="Game\Playtest\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Playtest\PlaytestLedger.cs" Link="Game\Playtest\%(Filename)%(Extension)" />
@@ -116,6 +123,14 @@
     <Compile Include="..\..\src\Player\Wading.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\CmdArgs.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\PigeonFlight.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- the flying saucer (#861): its hover flight and the tractor beam, Godot maths only -->
+    <Compile Include="..\..\src\Player\UfoFlight.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Player\TractorBeamMath.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- UFO sightings and the herds they beam up (#863): schedule, herds, cows, paths; pure -->
+    <Compile Include="..\..\src\Occasions\OccasionWeekdays.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\UfoSighting.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\HerdPlan.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\CowMotion.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\CruiseControl.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\AirlinerCatalog.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Audio\TurbopropTone.cs" Link="Game\%(Filename)%(Extension)" />
@@ -140,6 +155,9 @@
     <Compile Include="..\..\src\Terrain\Construction\CraneMotion.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Construction\CraneControl.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Construction\CranePlan.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- the pit (#619): its lining and the ground's cut, Godot maths only -->
+    <Compile Include="..\..\src\Terrain\Construction\PitPlan.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Construction\PitTerrain.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the sound of a site (#617): the scheduler and the synthesis, Godot maths only -->
     <Compile Include="..\..\src\Terrain\Construction\SiteSoundPlan.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Audio\SiteSfx.cs" Link="Game\%(Filename)%(Extension)" />
@@ -172,6 +190,8 @@
     <!-- update check (#532): version compare, asset pick, GitHub's JSON, delta updates -->
     <Compile Include="..\..\src\Core\UpdateInfo.cs;..\..\src\Core\BinaryDelta.cs;..\..\src\Core\UpdatePackage.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\Landmarks.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Castles.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Castles.List.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the farm machines' tanks, codes and draft (#494) -->
     <Compile Include="..\..\src\Farming\MachineLoad.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- selling (#494): prices, specialty buyers, contracts, the farm stand -->
@@ -187,6 +207,9 @@
     <Compile Include="..\..\src\Avatar\ForkliftLayout.cs;..\..\src\Items\Pallets.cs;..\..\src\Items\SitePallets.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the trailer (#706): its song's bar clock and the cut check -->
     <Compile Include="..\..\src\Trailer\Song.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Trailer\FilmCoverage.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- speech bubbles and subtitle tracks (#862): bubble geometry and placement, cues to SRT -->
+    <Compile Include="..\..\src\Ui\Bubbles\BubbleGeometry.cs;..\..\src\Ui\Bubbles\BubbleLayout.cs;..\..\src\Trailer\SubtitleTrack.cs" Link="Game\%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

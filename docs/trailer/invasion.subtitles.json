@@ -1,0 +1,261 @@
+{
+  "heidi_nothing": {
+    "en": "Nothing ever happens here.",
+    "fr": "Il ne se passe jamais rien ici.",
+    "de": "Hier passiert nie etwas.",
+    "it": "Qui non succede mai niente.",
+    "rm": "Qua na capita mai nagut."
+  },
+  "luca_radio": {
+    "en": "Radio on. Perfect day.",
+    "fr": "Radio allumée. Journée parfaite.",
+    "de": "Radio an. Perfekter Tag.",
+    "it": "Radio accesa. Giornata perfetta.",
+    "rm": "Radio en. In di perfetg."
+  },
+  "rochat_routine": {
+    "en": "Routine exercise. Nothing to report.",
+    "fr": "Exercice de routine. Rien à signaler.",
+    "de": "Routineübung. Keine besonderen Vorkommnisse.",
+    "it": "Esercizio di routine. Niente da segnalare.",
+    "rm": "Exercizi da rutina. Nagut da rapportar."
+  },
+  "yvonne_saucer": {
+    "en": "Tower... is that a saucer?",
+    "fr": "Tour de contrôle... c'est une soucoupe ?",
+    "de": "Tower... ist das eine Untertasse?",
+    "it": "Torre... è un disco volante?",
+    "rm": "Tur da controlla... è quai in disc sgulant?"
+  },
+  "heidi_cows": {
+    "en": "HEY! Those are MY cows!",
+    "fr": "HÉ ! Ce sont MES vaches !",
+    "de": "HEY! Das sind MEINE Kühe!",
+    "it": "EHI! Sono le MIE mucche!",
+    "rm": "HE! Quai èn MIAS vatgas!"
+  },
+  "tourist_cruise": {
+    "en": "Is this part of the cruise?",
+    "fr": "Ça fait partie de la croisière ?",
+    "de": "Gehört das zur Rundfahrt?",
+    "it": "Fa parte della crociera?",
+    "rm": "Fa quai part da la crusiera?"
+  },
+  "luca_ae86": {
+    "en": "NOT THE AE86!",
+    "fr": "PAS L'AE86 !",
+    "de": "NICHT DER AE86!",
+    "it": "NON LA AE86!",
+    "rm": "BETG L'AE86!"
+  },
+  "rochat_not_routine": {
+    "en": "This is NOT routine.",
+    "fr": "Ça, ce n'est PAS de la routine.",
+    "de": "Das ist KEINE Routine.",
+    "it": "Questa NON è routine.",
+    "rm": "Quai n'è BETG rutina."
+  },
+  "zorp_pointy": {
+    "en": "We take the pointy mountain.",
+    "fr": "On prend la montagne pointue.",
+    "de": "Wir nehmen den spitzen Berg.",
+    "it": "Prendiamo la montagna a punta.",
+    "rm": "Nus pigliain la muntogna aguzza."
+  },
+  "passer_chocolate": {
+    "en": "I'm finishing my chocolate first.",
+    "fr": "Je finis d'abord mon chocolat.",
+    "de": "Ich esse zuerst meine Schokolade fertig.",
+    "it": "Prima finisco il mio cioccolato.",
+    "rm": "Jau fin l'emprim mia tschigulatta."
+  },
+  "yvonne_dodge": {
+    "en": "Ladies and gentlemen, hold on.",
+    "fr": "Mesdames et messieurs, accrochez-vous.",
+    "de": "Meine Damen und Herren, festhalten.",
+    "it": "Signore e signori, tenetevi forte.",
+    "rm": "Dunnas e signurs, tegnai ferm."
+  },
+  "rochat_everywhere": {
+    "en": "They're everywhere. All 26 cantons.",
+    "fr": "Ils sont partout. Les 26 cantons.",
+    "de": "Sie sind überall. Alle 26 Kantone.",
+    "it": "Sono ovunque. Tutti i 26 cantoni.",
+    "rm": "Els èn dapertut. Tut ils 26 chantuns."
+  },
+  "heidi_horn": {
+    "en": "Right. Time for the horn.",
+    "fr": "Bon. C'est l'heure du cor.",
+    "de": "Gut. Zeit fürs Alphorn.",
+    "it": "Bene. È l'ora del corno.",
+    "rm": "Bun. Ura per il corn."
+  },
+  "skier_horn": {
+    "en": "Was that... an alphorn?",
+    "fr": "C'était... un cor des Alpes ?",
+    "de": "War das... ein Alphorn?",
+    "it": "Era... un corno delle Alpi?",
+    "rm": "Era quai... in corn d'alp?"
+  },
+  "rochat_options": {
+    "en": "Options?",
+    "fr": "Des idées ?",
+    "de": "Optionen?",
+    "it": "Opzioni?",
+    "rm": "Opziuns?"
+  },
+  "luca_cars": {
+    "en": "Fast cars.",
+    "fr": "Des voitures rapides.",
+    "de": "Schnelle Autos.",
+    "it": "Auto veloci.",
+    "rm": "Autos svelts."
+  },
+  "yvonne_planes": {
+    "en": "Big planes.",
+    "fr": "De gros avions.",
+    "de": "Grosse Flugzeuge.",
+    "it": "Aerei grandi.",
+    "rm": "Aviuns gronds."
+  },
+  "heidi_fondue": {
+    "en": "Fondue first.",
+    "fr": "D'abord la fondue.",
+    "de": "Zuerst Fondue.",
+    "it": "Prima la fonduta.",
+    "rm": "L'emprim fondue."
+  },
+  "luca_better": {
+    "en": "Ah. Much better.",
+    "fr": "Ah. Bien mieux.",
+    "de": "Ah. Viel besser.",
+    "it": "Ah. Molto meglio.",
+    "rm": "Ah. Bler meglier."
+  },
+  "rochat_barricade": {
+    "en": "Swiss-made barricade. Very neutral.",
+    "fr": "Barricade suisse. Très neutre.",
+    "de": "Schweizer Barrikade. Sehr neutral.",
+    "it": "Barricata svizzera. Molto neutrale.",
+    "rm": "Barricada svizra. Fitg neutrala."
+  },
+  "luca_ikea": {
+    "en": "IKEA has everything.",
+    "fr": "IKEA a tout.",
+    "de": "IKEA hat alles.",
+    "it": "IKEA ha tutto.",
+    "rm": "IKEA ha tut."
+  },
+  "heidi_farmers": {
+    "en": "Farmers! With me!",
+    "fr": "Paysans ! Avec moi !",
+    "de": "Bauern! Mir nach!",
+    "it": "Contadini! Con me!",
+    "rm": "Purs! Cun mai!"
+  },
+  "luca_pick": {
+    "en": "Pick a car. Any car.",
+    "fr": "Choisis une voiture. N'importe laquelle.",
+    "de": "Nimm ein Auto. Irgendeins.",
+    "it": "Scegli un'auto. Una qualsiasi.",
+    "rm": "Tscherna in auto. Insatge."
+  },
+  "yvonne_board": {
+    "en": "Everybody in. Next stop: the saucer.",
+    "fr": "Tout le monde à bord. Prochain arrêt : la soucoupe.",
+    "de": "Alle einsteigen. Nächster Halt: die Untertasse.",
+    "it": "Tutti a bordo. Prossima fermata: il disco.",
+    "rm": "Tuts a bord. Proxima fermada: il disc."
+  },
+  "rochat_go": {
+    "en": "GO GO GO!",
+    "fr": "ALLEZ ALLEZ ALLEZ !",
+    "de": "LOS LOS LOS!",
+    "it": "VIA VIA VIA!",
+    "rm": "VIA VIA VIA!"
+  },
+  "luca_blahaj": {
+    "en": "Who packed the Blåhaj?",
+    "fr": "Qui a emporté le Blåhaj ?",
+    "de": "Wer hat den Blåhaj eingepackt?",
+    "it": "Chi ha portato il Blåhaj?",
+    "rm": "Tgi ha pachetà il Blåhaj?"
+  },
+  "rochat_fist": {
+    "en": "Swiss army. Swiss fist.",
+    "fr": "Armée suisse. Poing suisse.",
+    "de": "Schweizer Armee. Schweizer Faust.",
+    "it": "Esercito svizzero. Pugno svizzero.",
+    "rm": "Armada svizra. Pugn svizzer."
+  },
+  "heidi_catch": {
+    "en": "Biggest catch of the year.",
+    "fr": "La plus grosse prise de l'année.",
+    "de": "Der grösste Fang des Jahres.",
+    "it": "La pesca più grossa dell'anno.",
+    "rm": "La pli gronda pestga da l'onn."
+  },
+  "luca_ok": {
+    "en": "I'm OK!",
+    "fr": "Ça va !",
+    "de": "Alles gut!",
+    "it": "Sto bene!",
+    "rm": "Jau stun bain!"
+  },
+  "zorp_pumpkin": {
+    "en": "AAAH! A giant orange head!",
+    "fr": "AAAH ! Une tête orange géante !",
+    "de": "AAAH! Ein riesiger oranger Kopf!",
+    "it": "AAAH! Una testa arancione gigante!",
+    "rm": "AAAH! In chau oransch gigantic!"
+  },
+  "zorp_smell": {
+    "en": "What... is that smell?",
+    "fr": "Quelle... est cette odeur ?",
+    "de": "Was... riecht hier so?",
+    "it": "Cos'è... questo odore?",
+    "rm": "Tge... è quest odur?"
+  },
+  "heidi_want": {
+    "en": "Fondue. Want some?",
+    "fr": "De la fondue. Tu en veux ?",
+    "de": "Fondue. Willst du auch?",
+    "it": "Fonduta. Ne vuoi?",
+    "rm": "Fondue. Vuls er?"
+  },
+  "heidi_monday": {
+    "en": "Cows back by Monday.",
+    "fr": "Les vaches rendues d'ici lundi.",
+    "de": "Die Kühe bis Montag zurück.",
+    "it": "Le mucche indietro entro lunedì.",
+    "rm": "Las vatgas enavos fin glindesdi."
+  },
+  "zorp_deal": {
+    "en": "Deal. Same time next year?",
+    "fr": "Marché conclu. Même heure l'an prochain ?",
+    "de": "Abgemacht. Gleiche Zeit nächstes Jahr?",
+    "it": "Affare fatto. Stessa ora l'anno prossimo?",
+    "rm": "D'accord. Medem temp l'onn proxim?"
+  },
+  "unitsport-switzerland": {
+    "en": "UNITSPORT SWITZERLAND",
+    "fr": "UNITSPORT SWITZERLAND",
+    "de": "UNITSPORT SWITZERLAND",
+    "it": "UNITSPORT SWITZERLAND",
+    "rm": "UNITSPORT SWITZERLAND"
+  },
+  "space-1990-kevin-macleod-incompetech-com": {
+    "en": "\"Space 1990\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0",
+    "fr": "\"Space 1990\" Kevin MacLeod (incompetech.com)\nSous licence Creative Commons : Attribution 4.0",
+    "de": "\"Space 1990\" Kevin MacLeod (incompetech.com)\nLizenziert unter Creative Commons: Namensnennung 4.0",
+    "it": "\"Space 1990\" Kevin MacLeod (incompetech.com)\nCon licenza Creative Commons: Attribuzione 4.0",
+    "rm": "\"Space 1990\" Kevin MacLeod (incompetech.com)\nLicenza Creative Commons: Attribuziun 4.0"
+  },
+  "title_tagline": {
+    "en": "Invasion, Swiss Style.",
+    "fr": "Invasion à la suisse.",
+    "de": "Invasion auf Schweizer Art.",
+    "it": "Invasione alla svizzera.",
+    "rm": "Invasiun a la moda svizra."
+  }
+}

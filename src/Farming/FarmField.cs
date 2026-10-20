@@ -27,6 +27,23 @@ public partial class FarmField : Node
 
     public static FarmField? Instance { get; private set; }
 
+    /// <summary>A tile's field data arrived on this peer (main thread): the herds on its pastures are put there (#863).</summary>
+    public static event Action<FieldTile>? TileReady;
+
+    /// <summary>A tile's field data came back empty on this peer (no farm layer there): the herds go on its open land instead.</summary>
+    public static event Action<TileId>? TileNoFields;
+
+    /// <summary>A tile's field data was dropped on this peer: its herds go with it.</summary>
+    public static event Action<TileId>? TileGone;
+
+    private static void RaiseTileGone(TileId id) => TileGone?.Invoke(id);
+
+    /// <summary>The field data of every tile this peer holds now.</summary>
+    public IEnumerable<FieldTile> LoadedData
+    {
+        get { foreach (var t in _tiles.Values) if (t.Data != null) yield return t.Data; }
+    }
+
     /// <summary>Seconds added to the farm clock (the debug fast-forward, <c>--farmcheck</c>). Authority only matters.</summary>
     public static double ClockSkew { get; set; }
 
@@ -114,7 +131,7 @@ public partial class FarmField : Node
         _storeDir = dirAt >= 0 && dirAt + 1 < args.Length ? Path.GetFullPath(args[dirAt + 1]) : ProjectSettings.GlobalizePath("user://farm");
         // --farmfresh (checks, with --farmdir): start from untouched fields
         if (dirAt >= 0 && Array.IndexOf(args, "--farmfresh") >= 0 && Directory.Exists(_storeDir)) Directory.Delete(_storeDir, true);
-        _month = FarmRules.MonthFromArgs(OS.GetCmdlineUserArgs(), DateTime.Now);
+        _month = FarmRules.MonthFromArgs(OS.GetCmdlineUserArgs(), Core.Calendar.Now);
         Multiplayer.PeerDisconnected += OnPeerGone;
         if (!_dedicated) ReadyDraw();
         GD.Print($"[farm] {(_dedicated ? "server" : "client")} ready, month {_month}");
@@ -142,6 +159,8 @@ public partial class FarmField : Node
             t.Loading = false;
             t.Loaded = true;
             if (_dedicated) DrainWaiting(t);
+            if (t.Data != null) TileReady?.Invoke(t.Data);
+            else TileNoFields?.Invoke(t.Id);
         }
 
         if (_dedicated)
@@ -157,7 +176,7 @@ public partial class FarmField : Node
             if (_wasOnline != null) ResetTiles();
             _wasOnline = online;
             _monthFromServer = false;
-            if (!online) _month = FarmRules.MonthFromArgs(OS.GetCmdlineUserArgs(), DateTime.Now);
+            if (!online) _month = FarmRules.MonthFromArgs(OS.GetCmdlineUserArgs(), Core.Calendar.Now);
         }
 
         _wantTimer -= delta;
@@ -249,6 +268,7 @@ public partial class FarmField : Node
     {
         if (!_tiles.Remove(id, out var t)) return;
         t.Cts.Cancel();
+        TileGone?.Invoke(id);
         FreeDraw(t);
         if (online && !_dedicated) RpcId(1, MethodName.Unsubscribe, id.E, id.N);
     }
@@ -257,7 +277,7 @@ public partial class FarmField : Node
     private void ResetTiles()
     {
         _generation++;
-        foreach (var t in _tiles.Values) { t.Cts.Cancel(); FreeDraw(t); }
+        foreach (var t in _tiles.Values) { t.Cts.Cancel(); FreeDraw(t); TileGone?.Invoke(t.Id); }
         _tiles.Clear();
         _outbox.Clear();
         _store.Clear();

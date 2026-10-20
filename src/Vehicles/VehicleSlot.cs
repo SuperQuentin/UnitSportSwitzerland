@@ -349,6 +349,13 @@ public static class DormantSlots
         return a < 0 ? a + tau : a;
     }
 
+    /// <summary>
+    /// A position to the nearest centimetre, for <see cref="Key"/>. Rounded, not truncated: a place laid out
+    /// on a whole centimetre (a round-sized box, a 1.7 m pitch) comes out of the float maths a hair either side
+    /// of it, and truncation then turns 3.4 m into 339 cm on one machine and 340 on another (#876).
+    /// </summary>
+    internal static long Cm(float metres) => (long)MathF.Round(metres * 100f);
+
     /// <summary>FNV-1a over two longs. Never <see cref="string.GetHashCode()"/>: that is randomised per process.</summary>
     internal static ulong Key(long a, long b)
     {

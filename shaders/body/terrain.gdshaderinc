@@ -60,10 +60,13 @@ varying vec2 tile_uv;
 varying vec3 world_pos;
 // the tile's own frame (NW corner, x east, z south, y altitude): the ski slopes' map is in it
 varying vec3 local_vertex;
+// the mesh's normal, smoothed over a few metres (TerrainMeshBuilder.SmoothNormal), world space
+varying vec3 smooth_n;
 
 void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     local_vertex = VERTEX;
+    smooth_n = (MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz;
 #ifdef STYLE_REAL
     // a tile's mesh runs from its NW corner, x east and z south, 1000 m each: the photo's frame
     tile_uv = clamp(VERTEX.xz / 1000.0, vec2(0.0), vec2(1.0));
@@ -86,6 +89,11 @@ void fragment() {
     if (n.y < 0.0) {
         n = -n;
     }
+    // Steep ground is lit by the smoothed normal (#883): a cliff's 1-2 m facets tilt with the
+    // height data's noise, and lit one by one they read as vertical stripes, not as a wall.
+    // Gentle ground keeps its facets.
+    vec3 sn = normalize(smooth_n);
+    n = normalize(mix(n, sn, smoothstep(0.8, 0.55, sn.y)));
 
     vec3 col = COLOR.rgb;
 
