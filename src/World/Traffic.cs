@@ -257,6 +257,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         foreach (var v in _trains) v.Free();
         _byBody.Clear();
         _cars.Clear();
+        _generatedLive = 0;
         _trains.Clear();
         _roads = _rails = null;
         _builtAround = null;
@@ -336,9 +337,11 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             _spawnTimer = 0.25;
             // first fill anywhere out of arm's reach; after that only out of sight range
             bool filling = _cars.Count < wantCars / 2;
-            if (_cars.Count < wantCars) SpawnCar(focus, filling ? CarNear : CarSpawnMin, Obstacles?.Invoke());
+            if (!GeneratorsOnly && _cars.Count < wantCars) SpawnCar(focus, filling ? CarNear : CarSpawnMin, Obstacles?.Invoke());
             if (_trains.Count < wantTrains) SpawnTrain(focus);
         }
+
+        StepEndpoints(dt);
 
         // one list for the traffic's life, refilled each tick (#221)
         var obstacles = _obstacles;
@@ -355,7 +358,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         _tickCars += _cars.Count;
         _tickUs[_ticks++ % _tickUs.Length] = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - tick) * 1e6 / System.Diagnostics.Stopwatch.Frequency);
 
-        Cull(_cars, focus, CarDespawn, wantCars);
+        Cull(_cars, focus, CarDespawn, GeneratorsOnly ? int.MaxValue : wantCars);
         Cull(_trains, focus, TrainDespawn, wantTrains);
     }
 
@@ -386,6 +389,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             if (d > range || v.Stuck > 20f || (list.Count > want && d > range * 0.6f))
             {
                 foreach (var u in v.Units) _byBody.Remove(u.GetInstanceId());
+                if (v.FromEndpoint) _generatedLive--;
                 v.Free();
                 list.RemoveAt(i);
             }
@@ -530,6 +534,9 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     /// <summary>How far ahead a car looks for the one it follows (m): 40 was under the 37 m it takes to stop from 75 km/h (#854).</summary>
     private const float FollowLook = 70f;
 
+    /// <summary>How far apart cars stand in a queue, middle to middle (m).</summary>
+    private const float QueueSpacing = 7.5f;
+
     /// <summary>A car further than this sideways from the line ahead is not in the way (m): a body's width and a little.</summary>
     private const float AheadWidth = 2.0f;
 
@@ -598,10 +605,11 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             if (along < 1f || along > FollowLook || Mathf.Abs(d.Y) > 3f
                 || Mathf.Abs(across) > AheadWidth && Mathf.Abs(across - toward) > AheadWidth) continue;
             if (other.Route.At(0).Dir.Dot(dir) < 0.3f) continue;
-            target = Mathf.Min(target, Mathf.Max(0f, other.Speed + (along - 9f) * 0.6f));
+            // standing 7.5 m apart, middle to middle: about 2.5 m between bumpers, as a queue stands (#971: 9 m left 4.5 m)
+            target = Mathf.Min(target, Mathf.Max(0f, other.Speed + (along - QueueSpacing) * 0.6f));
             // and no faster than it can still shed before the gap (4 m/s², under the 6 it brakes at): the line above alone
             // let one come at a queue at 50 km/h from 40 m, too late to stop (#854)
-            target = Mathf.Min(target, Mathf.Sqrt(other.Speed * other.Speed + 2f * 4f * Mathf.Max(0f, along - 8f)));
+            target = Mathf.Min(target, Mathf.Sqrt(other.Speed * other.Speed + 2f * 4f * Mathf.Max(0f, along - QueueSpacing + 1f)));
         }
 
         float half = edge.Width * 0.5f, keep = KeepRight(edge, car.Route.Forward, car.Habit);
@@ -1316,6 +1324,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             if (roads.Count > 0) options = roads;
         }
         else if (options.Any(o => o.Edge.Path is not null)) options = options.Where(o => o.Edge.Path is not null).ToList();
+        // a generated car on its way to a destination (#971): the next leg of it, where it may go there
+        if (car is not null && PlannedAfter(car, leg) is { } planned && options.Contains(planned)) return planned;
         if (options.Count == 0)
         {
             // a dead end — a real cul-de-sac, or the edge of what is loaded: turn round
@@ -1498,6 +1508,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         foreach (var v in _cars.Concat(_trains)) v.Free();
         _byBody.Clear();
         _cars.Clear();
+        _generatedLive = 0;
         _trains.Clear();
         _builtAround = null;
     }
@@ -1509,6 +1520,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         {
             if (MathX.Flat(_cars[i].Head - at).Length() >= radius) continue;
             foreach (var u in _cars[i].Units) _byBody.Remove(u.GetInstanceId());
+            if (_cars[i].FromEndpoint) _generatedLive--;
             _cars[i].Free();
             _cars.RemoveAt(i);
         }
@@ -1560,6 +1572,11 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         public float Lane, LaneWanted;
         /// <summary>The lane it is heading for at the line, from its usual line (#854): <see cref="LaneWanted"/> before it eases over.</summary>
         public float LaneAim;
+        /// <summary>A generated car's way to its destination (#971): the legs it takes, in order; null picks at random.</summary>
+        public List<(LaneEdge, bool)>? Planned;
+        /// <summary>Made by a traffic endpoint (#971): counted against <see cref="Traffic.MaxGenerated"/>.</summary>
+        public bool FromEndpoint;
+        public int FromId;
         /// <summary>A fed car's move at one approach (#854, <c>--feed-turns</c>): the path it takes there; none, as the traffic picks.</summary>
         public (LaneApproach At, SignalMoves Move)? Wants;
         /// <summary>Placed on its lane at its first step.</summary>

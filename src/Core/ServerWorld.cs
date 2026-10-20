@@ -29,6 +29,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Interiors.InteriorManager? _interiors;
     private WorldOrigin? _origin;
     private Items.PlacedObjects? _placed;
+    private World.TrafficGenerators? _trafficEndpoints;
     private Farming.FarmStands? _farmStands;
     private Net.Sleepers? _sleepers;
     private Net.Arrival? _arrival;
@@ -250,6 +251,9 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Items.PhotoTransfer.Create(this, server: true);
         _placed = Items.PlacedObjects.Create(this, origin, server: true);
         _placed.NameOf = _chat.NameOfPeer;
+        // traffic endpoints (#971): admins set them, every client runs them on its own traffic
+        _trafficEndpoints = World.TrafficGenerators.Create(this, server: true);
+        _trafficEndpoints.IsAdmin = _chat.IsAdminPeer;
         // where a new player starts, and whether players may teleport (#799): the server's call
         _arrival = Net.Arrival.CreateServer(this);
         _chat.Arrival = _arrival;
@@ -463,6 +467,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _passengers?.SendTo(id);
         _occasions?.SendTo(id);
         _placed?.SendTo(id);
+        _trafficEndpoints?.SendTo(id);
         _farmStands?.SendTo(id);
         _sleepers?.SendTo(id);
         _pallets?.SendTo(id);
