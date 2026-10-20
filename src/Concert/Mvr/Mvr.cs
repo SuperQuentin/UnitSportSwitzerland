@@ -189,6 +189,7 @@ public static partial class MvrFile
             var layerXf = ParseMatrix((string?)layer.Element("Matrix")?.Value);
             Walk(layer.Element("ChildList"), layerXf, layerName);
         }
+        ReadObjects(root, files, rig, notes, ours != null);   // trusses, scene objects, symbols (#958)
 
         void Walk(XElement? list, Transform3D parent, string layerName)
         {

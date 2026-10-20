@@ -167,6 +167,6 @@ public sealed partial class RigData
             if (V(f.Up).LengthSquared() < 0.25f) return $"{f.Name}: no yoke axis";
             if (f.Screen != null && (f.PixelsX is < 1 or > 128 || f.PixelsY is < 1 or > 128)) return $"{f.Name}: screen pixels";
         }
-        return null;
+        return CheckObjects();
     }
 }

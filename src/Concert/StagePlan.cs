@@ -185,6 +185,7 @@ public sealed class StagePlan
             f.Home = Mvr.RigData.V(D(Mvr.RigData.V(f.Home)));
             f.Up = Mvr.RigData.V(D(Mvr.RigData.V(f.Up)));
         }
+        rig.MoveObjects(new Transform3D(At(1, 0, 0) - o, At(0, 1, 0) - o, At(0, 0, 1) - o, o));   // its trusses and scene objects too (#958)
     }
 
     /// <summary>
