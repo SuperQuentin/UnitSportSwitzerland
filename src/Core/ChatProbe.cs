@@ -136,9 +136,10 @@ public abstract partial class ChatProbe : Node
         if (!ok) _failures++;
     }
 
-    /// <summary>Logs the failure and quits with 1.</summary>
+    /// <summary>Logs the failure and quits with 1. Counted: a <see cref="Finish"/> after it no longer prints "RESULT: ok" last (#1006).</summary>
     protected virtual void Fail(string why)
     {
+        _failures++;
         GD.Print($"{Log} RESULT: FAILED {Dash} {why}");
         GetTree().Quit(1);
     }

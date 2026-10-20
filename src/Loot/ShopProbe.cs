@@ -41,6 +41,13 @@ public partial class ShopProbe : ChatProbe
 
     private static ShopService Shops => ShopService.Instance!;
 
+    /// <summary>The failure, told to the other client too: A waits for B's answer for minutes otherwise (#1006).</summary>
+    protected override void Fail(string why)
+    {
+        base.Fail(why);
+        Say("failed");
+    }
+
     // ---- A: buys a slot empty, pays by card, sells back -----------------------------------------
 
     private async Task RunA()
@@ -131,13 +138,13 @@ public partial class ShopProbe : ChatProbe
         var (e, n) = _origin.ToLv95(d.World);
         string news = string.Create(System.Globalization.CultureInfo.InvariantCulture,
             $"soldout {layout.Key} {counter} {line.Slot} {e:F1} {n:F1}");
-        bool seen = false;
-        for (int i = 0; i < 150 && !seen; i++)
+        bool seen = false, failed = false;
+        for (int i = 0; i < 150 && !seen && !failed; i++)
         {
             Say(news);
-            seen = await Heard("B", "seen", 2);
+            await Until(() => (seen = _heard.Any(l => l.Contains("SH B seen"))) || (failed = _heard.Any(l => l.Contains("SH B failed"))), 2);
         }
-        Expect(seen, "B saw it");
+        Expect(seen, failed ? "B saw it (B failed on the way)" : "B saw it");
         if (seen) Expect(_heard.Any(l => l.Contains("SH B seen ok")), "B saw the slot sold out");
     }
 
