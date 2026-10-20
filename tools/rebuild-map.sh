@@ -24,6 +24,8 @@
 # else terrain_chunks/ and ressources/data/; UNITSPORT_CHUNKS and UNITSPORT_DATA override both.
 # An area rebuilds its own tiles only: a seam to a tile outside it keeps the old far side.
 # Not rebuilt: SWISSIMAGE photos (--photos), French features (--france), the cycle route keys.
+# Every preprocessor pass ends by refreshing the tiles' content hashes in manifest.json (#924,
+# --manifest-hash; incremental), so the map's fingerprint follows what was rebuilt.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

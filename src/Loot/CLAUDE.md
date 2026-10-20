@@ -21,4 +21,4 @@ touches its topic; search with `grep -ril <word> docs/notes/loot`.
 
 ## Gotchas
 
-- `offline-take-all-needs-sync-layout` — Offline "take all" needs `InteriorManager.GetOrCreate` to answer synchronously on a known plan
+- `offline-take-all-needs-sync-layout` — Offline "take all" needs `InteriorManager.GetOrCreate` to answer synchronously on a known plan; the panel's Take all closes it once empty (`TakeAllAndClose`, #929)

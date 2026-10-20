@@ -78,6 +78,14 @@ Flickering faces have two causes, and each test catches what the other cannot.
 - The visibility rays start just past the nearer face of the pair (#755): a cover 1 cm over a
   fight hides it; started further out, a ray could begin inside a part a few mm off and call a
   visible fight hidden (the Setra's door leaves).
+- **A new viewer model brings its baseline line in the same PR** (#942: the aliens #880, the UFO
+  #861 and the Simmental cow #863 merged without theirs, and main went red with "31 new models").
+  `--zfightcheck <name> --zfightplaces 40` lists its places. A figure's own face and hair, a
+  garment's trims and the 3 cm² of a garment item are accepted kinds (every Figures / Clothes /
+  Items row holds them); a part's own coplanar faces get fixed (the UFO ramp's rails ended flush
+  with its plate; the Simmental's red eye patches lay 3-7 mm under its eyes). Add only your own
+  lines: a whole `update` also rewrites other people's rows (some drift within the 10 % slack between runs and machines).
+  Which models are new: names in the run that the baseline lacks, `NEW` after their last place.
 
 Lift an overlay ~1 cm proud (`meshscratch-boxes-render-inside-out`), merge coplanar parts, or
 give one face the other's colour; rerun `--zfightcheck`, then `--zfightcheck update`.

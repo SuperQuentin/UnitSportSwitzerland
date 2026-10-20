@@ -9,7 +9,11 @@
   non-admin vehicle refused, `/login` flips the flag, admin vehicle spawned, cash
   deposit refused outside a bank (#213); `/money` `/give` refused, then as admin `/money`,
   `/give me`, `/bank set` (restored after), `/clear` (#262); the counter itself: `tools/bankcheck.sh` (loot `banks` note).
-- `--invuicheck`/`--econcheck` use a scratch inventory (`Inventory.Scratch`, `Persist = false`).
+- Checks never touch the player's `user://inventory.json` (#932): every verification tool (`placedByTool`, the
+  `tools` table of `ClientWorld._Ready`: `--interiorcheck`, `--birdcheck`, `--gathercheck`...) and the probes in the
+  OR list next to it (`--invuicheck`, `--econcheck`, the net probes) start on a scratch inventory (`Inventory.Scratch`:
+  the starter kit, `Persist = false`). On the real save a check fills it up, then fails on "No room". A new probe
+  that is not a tool and moves items goes in that OR list.
 - `GODOT=<exe> tools/useanimcheck.sh`: loopback server + A (first person: drink, beer (#716), eat, GPS, hat, clothes) + B (remote: sees Mouth arm pose, hat, OutfitBits); screenshots in `test_output/useanim_*.png`.
 - `<godot> --headless --path . -- --iconsheet`: renders every item icon to `test_output/iconsheet.png` (see `pixel-icons`).
 - `tools/radiocheck.sh` (`CHUNKS=<terrain_chunks dir>` from a worktree): dedicated server with `--cdfixture <wav>` (repeatable),

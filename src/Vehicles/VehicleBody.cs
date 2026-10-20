@@ -329,6 +329,7 @@ public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity
 
     public override void _ExitTree()
     {
+        TractorBeams.Unregister(this);
         SetAnchored(false);
         Unhook();
     }
@@ -416,6 +417,8 @@ public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity
         ReleaseIgnored();
         // airstairs in the way of an aircraft taxiing off are shoved clear, asleep or not (#417)
         if (Ride is Airstairs) PushAirstairs(dt);
+        // in a UFO's tractor beam (#861, VehicleBody.Beam.cs): the beam moves it
+        if (BeamHolding(dt)) return;
         if (_asleep || _inHold) return;
 
         // Parked in a garage or a barn: down where the interiors are, on a floor that is only there
@@ -430,7 +433,7 @@ public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity
 
         // the player's safety net, for vehicles: never under the terrain surface
         if (!inside && Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float ground) && GlobalPosition.Y < ground - 1f
-            && !Terrain.InTunnel(GlobalPosition) && !Terrain.FloorBelow(this, GlobalPosition, GetRid()))
+            && !Terrain.InTunnel(GlobalPosition) && !Terrain.InPit(GlobalPosition) && !Terrain.FloorBelow(this, GlobalPosition, GetRid()))
         {
             GlobalPosition = GlobalPosition with { Y = ground + 0.2f };
             Velocity = Velocity with { Y = 0f };

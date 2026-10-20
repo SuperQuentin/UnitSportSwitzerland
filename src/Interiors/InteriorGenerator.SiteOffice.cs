@@ -18,8 +18,14 @@ namespace UnitSport.Interiors;
 /// and beside it the mess room, which is the changing room too (<see cref="RoomType.BreakRoom"/>
 /// with the site's own pieces, <see cref="SiteMess"/>), joined by a doorway at the back. Each cabin
 /// is a <see cref="RoomType.WC"/> reached only through its own door: a seat, a urinal, paper, a
-/// mirror and a hook. The upper containers are not inside yet: they have no stair (see the
-/// construction-sites note).
+/// mirror and a hook.
+/// </para>
+/// <para>
+/// Where the office has its gallery (#827), the upper containers are floor 1: a room over each
+/// ground one, the site manager's office (<see cref="RoomType.SiteManager"/>) over the office and
+/// the drawing office (<see cref="RoomType.DrawingOffice"/>) over the mess room, joined at the
+/// back like the pair below. No stair inside: each is reached by its own raised door off the
+/// walkway (<see cref="EntrancePlan.Level"/> 1), its doorway over the ground door's.
 /// </para>
 /// </summary>
 public static partial class InteriorGenerator
@@ -163,6 +169,44 @@ public static partial class InteriorGenerator
             layout.Entrances.Add(Entrance(spot, tile, line, side, top));
             FurnishCabin(layout, room, side, (int)(StableHash($"{key}|cabin{i}") & 1) == 0);
         }
+
+        // the upper containers (#827), last, so every room and piece below keeps its place and number
+        if (office.UpperDoors > 0)
+        {
+            var upper = new FloorPlan();
+            for (int i = 0; i < office.Rooms.Count; i++)
+            {
+                var below = floor.Rooms[i];
+                var room = new RoomPlan
+                {
+                    X0 = below.X0, Z0 = below.Z0, X1 = below.X1, Z1 = below.Z1,
+                    Type = i % 2 == 0 ? RoomType.SiteManager : RoomType.DrawingOffice,
+                };
+                // the same windows as the container under it
+                foreach (var o in below.Openings.Where(o => o.Kind == OpeningKind.Window))
+                    room.Openings.Add(new OpeningPlan { Side = o.Side, Center = o.Center, Width = o.Width, Bottom = o.Bottom, Top = o.Top, Kind = OpeningKind.Window });
+                upper.Rooms.Add(room);
+            }
+            for (int i = 0; i + 1 < upper.Rooms.Count; i++)
+            {
+                var (a, c) = upper.Rooms[i].X1 <= upper.Rooms[i + 1].X0 + 0.01f ? (i, i + 1) : (i + 1, i);
+                float z = hd - 1.0f - sz;
+                upper.Rooms[a].Openings.Add(new OpeningPlan { Side = Side.Right, Center = z, Width = InnerDoor, Bottom = 0, Top = 2.0f, Kind = OpeningKind.Door, Other = c });
+                upper.Rooms[c].Openings.Add(new OpeningPlan { Side = Side.Left, Center = z, Width = InnerDoor, Bottom = 0, Top = 2.0f, Kind = OpeningKind.Door, Other = a });
+            }
+            int first = office.Doors.Count - office.UpperDoors;
+            for (int i = 0; i < office.UpperDoors; i++)
+            {
+                var spot = spots[first + i];
+                float x = DoorAt(office.Doors[first + i]).X;
+                var room = upper.Rooms.FirstOrDefault(r => x > r.X0 && x < r.X1) ?? upper.Rooms[Math.Min(i, upper.Rooms.Count - 1)];
+                float top = Math.Min(spot.Height, OfficeStorey - Slab - 0.15f);
+                room.Openings.Add(new OpeningPlan { Side = Side.Front, Center = x, Width = spot.Width, Bottom = 0, Top = top, Kind = OpeningKind.Entry });
+                layout.Entrances.Add(Entrance(spot, tile, new Vector2(x, room.Z0), Side.Front, top));
+            }
+            layout.Floors.Add(upper);
+            Furnish(layout, new Random(StableHash($"{key}|upper")), fromFloor: 1);
+        }
         return layout;
     }
 
@@ -176,7 +220,7 @@ public static partial class InteriorGenerator
             X = line.X, Z = line.Y, InX = -fx, InZ = -fz, Width = spot.Width,
             DoorX = spot.Position.X, DoorY = spot.Position.Y, DoorZ = spot.Position.Z,
             DoorOutX = spot.Outward.X, DoorOutZ = spot.Outward.Z,
-            DoorWidth = spot.Width, DoorHeight = top, Hang = spot.Hang, Vehicle = false,
+            DoorWidth = spot.Width, DoorHeight = top, Hang = spot.Hang, Vehicle = false, Level = spot.Level,
         };
     }
 

@@ -250,6 +250,7 @@ public partial class DroppedItem : RigidBody3D, IOriginShiftAware, IInterestEnti
 
     public override void _ExitTree()
     {
+        Player.TractorBeams.Unregister(this);
         if (Visual != null) DropFloat.Remove(this);
     }
 

@@ -41,6 +41,8 @@ public partial class FightNetProbe : ChatProbe
 
     private async Task RunA(FootPlayer me)
     {
+        // --checkspeed 4 (tools/fightnetcheck.sh, #931): the rounds and phases run on the server's scaled delta
+        if (!await SpeedUp("fightnet")) return;
         bool ready = false;
         for (int i = 0; i < 40 && !ready; i++)
         {
