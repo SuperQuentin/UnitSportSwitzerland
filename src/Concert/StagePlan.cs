@@ -219,17 +219,21 @@ public sealed class StagePlan
 
         // the thrust: a catwalk down the pitch to a B-stage
         float catwalk = 0;
+        // the floor ahead of the stage's front, as far as the far seating front (#948: arenas are short)
+        bool across = e.Layout is StageLayout.SideEast or StageLayout.SideWest;
+        float ahead = 2 * (across ? e.Stadium.FrontHalfU : e.Stadium.FrontHalfV) - 1.5f - d;
+        float bStage = Math.Min(12f, ahead * 0.12f);
         if (e.Layout == StageLayout.Thrust)
         {
-            catwalk = 30f;
+            catwalk = Math.Min(30f, ahead * 0.32f);
             float ch = h - 0.6f;
             Box(-2f, 2f, 0, ch, 0, catwalk, Deck);
-            Box(-6f, 6f, 0, ch, catwalk, catwalk + 12f, Deck);
+            Box(-6f, 6f, 0, ch, catwalk, catwalk + bStage, Deck);
             Stairs(6.8f, catwalk + 4f, catwalk + 4f + ch * 1.6f, ch);
         }
 
         // front of house and the delay towers, out on the pitch
-        float foh = Math.Max(42f, catwalk + 22f);
+        float foh = Math.Min(Math.Max(42f, catwalk + 22f), Math.Max(catwalk + bStage + 6f, ahead - 12f));
         Box(-5f, 5f, 0, 1.2f, foh, foh + 6f, Tent);
         Box(-5f, 5f, 3.6f, 3.8f, foh, foh + 6f, Tent, solid: false);
         // the consoles, facing the stage
@@ -240,7 +244,7 @@ public sealed class StagePlan
                 Box(x - 0.1f, x + 0.1f, 1.2f, 3.6f, z - 0.1f, z + 0.1f, Truss, solid: false);
         foreach (float side in new[] { -1f, 1f })
         {
-            float dx = side * 18f;
+            float dx = side * Math.Min(18f, (across ? e.Stadium.FrontHalfV : e.Stadium.FrontHalfU) * 0.7f);
             Tower(dx, foh - 6f, 12f);
             Cab(dx - 0.6f, dx + 0.6f, 6f, 11.5f, foh - 7.1f, foh - 6.5f, 0, 1, sub: false);
         }
@@ -326,7 +330,7 @@ public sealed class StagePlan
         Stairs(0, hw + 0.2f, hw + 0.2f + h * 1.6f, h);
         // front of house, out on the floor towards the main stand
         var tent = new Color(0.86f, 0.86f, 0.84f);
-        float foh = hw + 22f;
+        float foh = Math.Min(hw + 22f, Math.Max(hw + 8f, Math.Min(e.Stadium.FrontHalfU, e.Stadium.FrontHalfV) - 8f));   // inside a small arena's floor too (#948)
         Box(-5f, 5f, 0, 1.2f, foh, foh + 6f, tent);
         Box(-5f, 5f, 3.6f, 3.8f, foh, foh + 6f, tent, solid: false);
         Box(-2.5f, 2.5f, 1.2f, 2.15f, foh + 1.2f, foh + 2.2f, Speaker);

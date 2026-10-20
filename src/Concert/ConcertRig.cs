@@ -110,6 +110,9 @@ public partial class ConcertRig : Node3D
 
     public ConcertRig() : this(ConcertPlanner.Plan(StadiumCatalog.Geneva, 1)) { }
 
+    /// <summary>The ground's height at a point of the venue's frame (an open air's slope, an arena's floor), set by the director (#948).</summary>
+    public Func<Vector2, float>? Ground { get; init; }
+
     public override void _Ready()
     {
         _plan = new StagePlan(Event);
@@ -142,7 +145,7 @@ public partial class ConcertRig : Node3D
         // the audience, during the show
         if (WithCrowd)
         {
-            _crowd = new ConcertCrowd(_plan) { Visible = false };
+            _crowd = new ConcertCrowd(_plan) { Visible = false, Ground = Ground };
             AddChild(_crowd);
         }
         Live[Event.Stadium.Name] = this;

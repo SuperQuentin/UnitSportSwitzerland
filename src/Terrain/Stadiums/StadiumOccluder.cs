@@ -15,14 +15,16 @@ public static class StadiumOccluder
     /// <summary>The walls stand this far inside the facade: an occluder must never hide what really shows.</summary>
     private const float Inset = 0.8f;
 
-    public static OccluderInstance3D Make(StadiumSpec s)
+    public static OccluderInstance3D? Make(StadiumSpec s)
     {
+        if (s.Kind == VenueKind.OpenAir) return null;   // a fence hides nothing
         float top = s.RoofOuter - s.RoofThickness - 0.5f;
         float maxDepth = Math.Max(Math.Max(s.DepthNorth, s.DepthSouth), Math.Max(s.DepthEast, s.DepthWest));
         // a corner radius at least the deepest side's: rounder than the real facade, so inside it
         var outer = Ring(-(s.FrontHalfU + s.DepthWest) + Inset, s.FrontHalfU + s.DepthEast - Inset,
             -(s.FrontHalfV + s.DepthNorth) + Inset, s.FrontHalfV + s.DepthSouth - Inset, s.FrontCorner + maxDepth);
-        float hole = s.RoofInset + s.RoofRing + 0.5f;
+        // an arena's roof is closed: the "opening" ring shrinks to nothing round the centre
+        float hole = s.Kind == VenueKind.Arena ? -Math.Min(s.FrontHalfU, s.FrontHalfV) + 0.5f : s.RoofInset + s.RoofRing + 0.5f;
         var inner = Ring(-(s.FrontHalfU + hole), s.FrontHalfU + hole, -(s.FrontHalfV + hole), s.FrontHalfV + hole, s.FrontCorner + hole);
 
         var v = new List<Vector3>();
@@ -41,7 +43,7 @@ public static class StadiumOccluder
             var b = outer[(i + 1) % n];
             Quad(new Vector3(a.X, -2f, a.Y), new Vector3(b.X, -2f, b.Y), new Vector3(b.X, top, b.Y), new Vector3(a.X, top, a.Y));
             // the roof, from the facade in to where its translucent ring begins
-            if (s.RoofInset + s.RoofRing < maxDepth)
+            if (s.Kind == VenueKind.Arena || s.RoofInset + s.RoofRing < maxDepth)
             {
                 var ia = inner[i];
                 var ib = inner[(i + 1) % n];
@@ -56,7 +58,7 @@ public static class StadiumOccluder
     /// <summary>A rounded rectangle, clockwise from above, the same number of points for any size (so two rings pair up).</summary>
     private static List<Vector2> Ring(float u0, float u1, float v0, float v1, float r)
     {
-        r = Math.Min(r, Math.Min((u1 - u0) / 2, (v1 - v0) / 2) - 0.01f);
+        r = Math.Clamp(r, 0.05f, Math.Max(0.05f, Math.Min((u1 - u0) / 2, (v1 - v0) / 2) - 0.01f));
         var pts = new List<Vector2>();
         (Vector2 C, float A)[] corners =
         {

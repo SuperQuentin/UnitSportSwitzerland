@@ -291,6 +291,11 @@ public static class StadiumBuilder
         var st = Stations(s);
         var c = new Palette(s);
         float capacity = 0;
+        if (s.Kind == VenueKind.OpenAir)
+        {
+            OpenAirFence(s, g, at, st, c, outside);
+            return s.ConcertCapacity;
+        }
         for (int i = 0; i < st.Count; i++)
         {
             var a = st[i];
@@ -325,7 +330,46 @@ public static class StadiumBuilder
             if (s.Kiosks && a.Kind == Seg.Seat && b.Kind == Seg.Vomitory && (i & 2) == 0) Kiosk(q, c, Ground);
         }
         Pillars(s, g, at, st, c);
+        if (s.Kind == VenueKind.Arena) ArenaLidAndFloor(s, g, at, c);
         return (int)capacity;
+    }
+
+    /// <summary>
+    /// An arena (#948): the roof closed over the opening (a lid inside the roof's thickness, so where it
+    /// overlaps the roof at the corners it hides inside it), its ceiling, and the floor over the pitch,
+    /// walked on (concrete over the ice for a concert).
+    /// </summary>
+    private static void ArenaLidAndFloor(StadiumSpec s, Geo g, Func<Vector2, float, Vector3> at, Palette c)
+    {
+        float x = s.FrontHalfU + s.RoofInset + s.RoofRing + 0.5f, z = s.FrontHalfV + s.RoofInset + s.RoofRing + 0.5f;
+        float lid = s.RoofInner - s.RoofThickness * 0.5f, ceiling = s.RoofInner - s.RoofThickness + 0.02f;
+        Vector3 P(float u, float v, float y) => at(new Vector2(u, v), y);
+        g.Quad(P(-x, -z, lid), P(x, -z, lid), P(x, z, lid), P(-x, z, lid), c.Roof, solid: true);
+        g.Quad(P(-x, z, ceiling), P(x, z, ceiling), P(x, -z, ceiling), P(-x, -z, ceiling), c.RoofUnder, solid: false);
+        float fx = s.FrontHalfU, fz = s.FrontHalfV;
+        g.Quad(P(-fx, -fz, FloorLift), P(fx, -fz, FloorLift), P(fx, fz, FloorLift), P(-fx, fz, FloorLift), c.ArenaFloor, solid: true);
+    }
+
+    /// <summary>How far an arena's floor stands over the pitch level: over the ground's own small rises under it.</summary>
+    public const float FloorLift = 0.1f;
+
+    /// <summary>
+    /// An open-air ground (#948): no bowl, a 2.2 m fence round the seating front following the ground
+    /// as it lies (Gurten and the Sittertobel are on slopes), left open where the row has its gates.
+    /// </summary>
+    private static void OpenAirFence(StadiumSpec s, Geo g, Func<Vector2, float, Vector3> at, List<Station> st, Palette c, Func<Vector2, float>? outside)
+    {
+        const float Height = 2.2f;
+        float Gr(Vector2 p) => outside?.Invoke(p) ?? 0f;
+        for (int i = 0; i < st.Count; i++)
+        {
+            var a = st[i];
+            var b = st[(i + 1) % st.Count];
+            if (a.Kind == Seg.Gate) continue;
+            float ga = Gr(a.P), gb = Gr(b.P);
+            g.Quad(at(a.P, ga - 0.3f), at(b.P, gb - 0.3f), at(b.P, gb + Height), at(a.P, ga + Height), c.Fence, solid: true);
+            g.Quad(at(a.P, ga + Height), at(b.P, gb + Height), at(b.P, gb - 0.3f), at(a.P, ga - 0.3f), c.Fence, solid: false);
+        }
     }
 
     /// <summary>
@@ -586,7 +630,8 @@ public static class StadiumBuilder
         private static Color L(Color x, float shade = 1f) => new Color(x.R * shade, x.G * shade, x.B * shade).SrgbToLinear() with { A = 0f };
         public readonly Color Seat = L(s.Seat), SeatAlt = L(s.SeatAlt), Concrete = L(s.Concrete), ConcreteDark = L(s.Concrete, 0.8f),
             Glazing = L(s.Glazing), Floor = L(s.Concrete, 0.9f), Kiosk = L(new Color(0.9f, 0.9f, 0.88f)), Roof = L(s.Roof), RoofUnder = L(s.Roof, 0.78f), RoofRing = L(s.RoofRingColor),
-            RoofRingUnder = L(s.RoofRingColor, 1.08f), Steel = L(s.Steel), Facade = L(s.Facade), Plinth = L(s.Plinth), Solar = L(s.SolarColor);
+            RoofRingUnder = L(s.RoofRingColor, 1.08f), Steel = L(s.Steel), Facade = L(s.Facade), Plinth = L(s.Plinth), Solar = L(s.SolarColor),
+            ArenaFloor = L(s.ArenaFloor), Fence = L(s.Fence);
     }
 
     /// <summary>Quads between two stations, by distance out from the seating front and height.</summary>
