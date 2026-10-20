@@ -93,7 +93,7 @@ public static partial class TileRewriter
             {
                 var secX = ExteriorPlanner.SectionAt(exit, 0);
                 bool laneThere = secX.Strips.Take(Math.Max(0, secX.FirstCarriageway + 1)).Any(x => x is { Kind: StripKind.BikeLane, Way: StripWay.Out });
-                if (!laneThere && PathBand(secX, right: false) is { } pb)
+                if (!laneThere && secX.PathBand(right: false) is { } pb)
                 {
                     // at the path's centre where it starts (left of a driver arriving on the exit): the marking ends at the kerb
                     // line, cut to the core, right where the path begins
@@ -139,7 +139,7 @@ public static partial class TileRewriter
             // the path on the arriving traffic's right of A, and on the same side of B (its left, seen arriving there)
             var secA = ExteriorPlanner.SectionAt(a, 0);
             var secB = ExteriorPlanner.SectionAt(b, 0);
-            if (PathBand(secA, right: true) is null || PathBand(secB, right: false) is null) continue;
+            if (secA.PathBand(right: true) is null || secB.PathBand(right: false) is null) continue;
             if (net.Links[a.LinkId].Tag is not Source srcA || net.Links[b.LinkId].Tag is not Source srcB) continue;
             var sideA = SideOfArm(a, right: true);
             var sideB = SideOfArm(b, right: false);
@@ -208,8 +208,8 @@ public static partial class TileRewriter
             Line(OffsetLine(run, -(width * 0.5 - lw * 0.5)), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
             stats.PathCrossings++;
             // the riders' way straight on (the user, #971): from A's path at its mouth over this crossing to B's
-            var (centreA, _) = PathBand(secA, right: true)!.Value;
-            var (centreB, _) = PathBand(secB, right: false)!.Value;
+            var (centreA, _) = secA.PathBand(right: true)!.Value;
+            var (centreB, _) = secB.PathBand(right: false)!.Value;
             var way = new List<Vec2> { a.Axis.At(ma.Station, centreA) };
             way.AddRange(run);
             way.Add(b.Axis.At(mb.Station, centreB));
@@ -227,7 +227,7 @@ public static partial class TileRewriter
             if (ma is null || mc is null || a.Axis is null || c.Axis is null) continue;
             var secA = ExteriorPlanner.SectionAt(a, 0);
             var secC = ExteriorPlanner.SectionAt(c, 0);
-            if (PathBand(secA, right: true) is not var (centreA, widthA) || PathBand(secC, right: false) is not var (centreC, widthC)) continue;
+            if (secA.PathBand(right: true) is not var (centreA, widthA) || secC.PathBand(right: false) is not var (centreC, widthC)) continue;
             if (core.Corners.FirstOrDefault(k => k.ArmA == a.Arm && k.ArmB == c.Arm) is not { Shape: not CornerShape.Gore } corner) continue;
             var kerb = KerbAlong(ma.Right, corner.Kerb, mc.Left);
             var way = OffsetAlong(kerb, centreA - secA.CarriagewayRight, secC.CarriagewayLeft - centreC, a.Axis.RightAt(ma.Station), -c.Axis.RightAt(mc.Station));
@@ -253,20 +253,6 @@ public static partial class TileRewriter
             FromArm = from, FromId = -1, ToArm = to, ToId = -1, Move = move, Kind = ConnectorKind.Path, Width = width, ToWidth = toWidth,
             FromOffset = fromOffset, ToOffset = toOffset, Centre = way,
         };
-
-    /// <summary>A path band beside a section's carriageway on one side: its centre's offset and its width; null without one.</summary>
-    private static (double Centre, double Width)? PathBand(Section s, bool right)
-    {
-        double at = right ? s.CarriagewayRight : s.CarriagewayLeft;
-        var bands = right ? s.Strips.Skip(s.LastCarriageway + 1) : s.Strips.Take(Math.Max(0, s.FirstCarriageway)).Reverse();
-        foreach (var b in bands)
-        {
-            if (b.Kind == StripKind.Path) return (right ? at + b.Width * 0.5 : at - b.Width * 0.5, b.Width);
-            if (b.Kind == StripKind.Sidewalk) return null;
-            at += right ? b.Width : -b.Width;
-        }
-        return null;
-    }
 
     /// <summary>Whether outward heading <paramref name="h"/> lies counter-clockwise from <paramref name="from"/> before <paramref name="to"/>: an arm on the right of traffic arriving by the first and going on by the second.</summary>
     private static bool Between(double from, double to, double h)

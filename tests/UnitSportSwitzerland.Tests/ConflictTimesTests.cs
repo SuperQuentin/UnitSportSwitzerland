@@ -13,10 +13,11 @@ public class ConflictTimesTests
     [Fact]
     public void Two_straight_crossings_by_hand()
     {
-        // north from 20 m south of the crossing, east from 20 m west; 3 m wide each: they touch within 3 m of the crossing point
+        // north from 20 m south of the crossing, east from 20 m west; 3 m wide each: they share the square within 3 m of the crossing
+        // point, where north's trail closes latest at its far side and east's opens soonest at its near side
         var north = Car(0, new Vec2(0, -20), new Vec2(0, 20));
         var east = Car(1, new Vec2(-20, 0), new Vec2(20, 0));
-        var meet = ConflictTimes.Meet(north.Points, east.Points, 3);
+        var meet = ConflictTimes.Meet(north, east);
         Assert.NotNull(meet);
         // (walked in 0.5 m steps: within a step of the band's edges)
         Assert.InRange(meet!.Value.Clear, 22.9, 23.6);   // out of the other's band 3 m past the crossing point
@@ -56,6 +57,24 @@ public class ConflictTimesTests
         // the car still keeps clear of the whole zebra: it is in it from 10 - (4 + 3) / 2 m along its line
         var (_, carEnters) = ConflictTimes.Meet(walker, car)!.Value;
         Assert.InRange(carEnters, 6.5 - 0.01, 6.5 + 0.5);
+    }
+
+    [Fact]
+    public void Trails_crossing_at_a_slant_bind_at_one_point_not_at_the_far_and_near_edges()
+    {
+        // #979, the user: a green movement is a trail from its first mover to its last; at a slant the shared patch is long and
+        // thin, and the far end of it along the ending line is not where the starting line first comes in. The binding point is one
+        // point of the patch: its ending s and starting u are the same place, and the time is below the edges' combination
+        var north = Car(0, new Vec2(0, -30), new Vec2(0, 30));
+        var slant = Car(1, new Vec2(-30, -10.92), new Vec2(30, 10.92));   // 20 degrees off east-west
+        var (clear, enter) = ConflictTimes.Meet(north, slant)!.Value;
+        var p = new Vec2(0, -30 + clear - 0.5);
+        var q = new Vec2(-30, -10.92) + (new Vec2(30, 10.92) - new Vec2(-30, -10.92)) * (enter / new Vec2(60, 21.84).Length);
+        Assert.True(p.DistanceTo(q) < 12, $"{p.DistanceTo(q):F1} m apart");
+        // the edges: north out of the slant's band, the slant into north's
+        double far = 30 + 1.5 / Math.Sin(20 * Math.PI / 180) + 1.5 / Math.Tan(20 * Math.PI / 180);
+        double edges = 3 + (Math.Min(far, clear + 8) + ConflictTimes.CarLength) / ConflictTimes.CarClear - (31.9 - 3 / Math.Sin(20 * Math.PI / 180)) / ConflictTimes.CarEnter;
+        Assert.True(ConflictTimes.Time(north, slant)!.Value < edges, $"{ConflictTimes.Time(north, slant):F1} s, edges {edges:F1} s");
     }
 
     [Fact]

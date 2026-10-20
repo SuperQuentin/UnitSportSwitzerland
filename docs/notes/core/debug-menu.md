@@ -53,9 +53,9 @@
   green across it; straight on keeps its priority), yellow on amber; none on red. The riders' paths (`JPTH` of kind Bike, thin)
   and the crossings (wide, kerb to kerb between the arm's pedestrian heads, on the zebra's yellow paint) by their own groups
   (`SignalSite.Rides`, `Walks`). Separated bike paths have no riders' paths yet (the core planner lays them from painted lanes).
-  `movers` (#979) shows, at each phase change of the lights within 400 m, the pair that set each green's start on the plan's
-  clock, each shown with its line only while it moves: the ending group's last car / bike / walker (red, crossing its stop line
-  as its amber ends, at its clearing speed, until it has left its line's end), the starting group's first (dark green, from
-  its line at green at its entering speed to its line's end; a crossing's walkers from both kerbs at once), their lines faint
+  `movers` (#979) shows, at each phase change of the lights within 400 m, the tightest pair of each green's start and of each
+  green's end on the plan's clock, as trails, each shown with its line only while it moves: the ending group's last car / bike / walker (red, crossing its stop line
+  as its amber ends, at its clearing speed, until it has left its line's end, its trail held ahead of it), the starting group's first (dark green,
+  from its line at green at its entering speed to its line's end, its trail behind it back to its line; a crossing's walkers from both kerbs at once), their lines faint
   and the conflict area ringed in white: the green one reaches the ring just as the red one has left it (`SignalSite.Pairs`, from `CPAR`).
 - **Z-fighting** overlay (`zfight`) and **Flicker shot** button (`--debugview flicker`): `general/zfight` (#788).

@@ -31,7 +31,7 @@ public static partial class TileRewriter
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
             $"    junction planner written (#818 phase 3): {Junctions:N0} junctions as cores ({Aprons:N0} flush aprons of service roads; {Fallbacks:N0} plain cores where the planned one failed its checks, {RingsAsLaid:N0} rings written as laid, {Caps:N0} today's caps), {Skipped:N0} left to the old layout ({string.Join(", ", Why.Select(kv => $"{kv.Key} {kv.Value}"))}); ")
-            + string.Create(CultureInfo.InvariantCulture, $"{Transitions:N0} transitions over {Pieces:N0} pieces, {Lines:N0} lines and {Marks:N0} marks; arms trimmed to their mouth {Trimmed:N0}, run on to it {Extended:N0}; pieces lost by a later cut {Orphaned:N0}{(OrphanedAt.Count > 0 ? " (at " + string.Join("; ", OrphanedAt.Take(6).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")}; cap vertices {CapVertices:N0} of the cores' {CoreVertices:N0}; exterior: {Bars:N0} bars, {Refuges:N0} refuges, {Signs:N0} signs, {Ramps:N0} crosswalks with lowered kerbs; lights {Signals:N0} ({SignalsInvalid:N0} plans invalid, {SignalsRetimed:N0} timed from conflict times, {SignalsNotRetimed:N0} not, {RiderGroups:N0} with riders given a group of their own, {ConflictPairs:N0} pairs setting a green start), {Poles:N0} poles, {CoreLines:N0} lines through the cores, {BikeCrossings:N0} bike lanes through them, {PathCrossings:N0} path crossings ({PathsCarried:N0} ends carried to the kerb, {PathsCrossingInCorner:N0} of them crossing another in a corner: left to it), {PathsThrough:N0} paths carried along a kerb, {CornersLanded:N0} corners a path crossing ends on; paths for traffic (JPTH) {Paths:N0} ({PathRides:N0} riders' ways from path to path), left out {PathsLeftOut:N0}; merged cores written {MergedAt.Count:N0} (of {MergedAt.Sum(m => m.Nodes):N0} nodes{(MergedAt.Count > 0 ? "; at " + string.Join(" ", MergedAt.GroupBy(m => m.Nodes).OrderBy(g => g.Key).SelectMany(g => g.OrderBy(m => m.At.X).Take(4)).Select(m => string.Create(CultureInfo.InvariantCulture, $"{m.At.X:F0},{m.At.Y:F0}x{m.Nodes}"))) : "")}), streets under them {InnerEmptied:N0}; roundabouts written whole {RingsAt.Count:N0}{(RingsAt.Count > 0 ? " (at " + string.Join(" ", RingsAt.OrderBy(v => v.X).Take(8).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")} (#854)")
+            + string.Create(CultureInfo.InvariantCulture, $"{Transitions:N0} transitions over {Pieces:N0} pieces, {Lines:N0} lines and {Marks:N0} marks; arms trimmed to their mouth {Trimmed:N0}, run on to it {Extended:N0}; pieces lost by a later cut {Orphaned:N0}{(OrphanedAt.Count > 0 ? " (at " + string.Join("; ", OrphanedAt.Take(6).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")}; cap vertices {CapVertices:N0} of the cores' {CoreVertices:N0}; exterior: {Bars:N0} bars, {Refuges:N0} refuges, {Signs:N0} signs, {Ramps:N0} crosswalks with lowered kerbs; lights {Signals:N0} ({SignalsInvalid:N0} plans invalid, {SignalsRetimed:N0} timed from conflict times, {SignalsNotRetimed:N0} not, {RiderGroups:N0} with riders given a group of their own, {ConflictPairs:N0} pairs for the debug movers (each green start's and end's tightest)), {Poles:N0} poles, {CoreLines:N0} lines through the cores, {BikeCrossings:N0} bike lanes through them, {PathCrossings:N0} path crossings ({PathsCarried:N0} ends carried to the kerb, {PathsCrossingInCorner:N0} of them crossing another in a corner: left to it), {PathsThrough:N0} paths carried along a kerb, {CornersLanded:N0} corners a path crossing ends on; paths for traffic (JPTH) {Paths:N0} ({PathRides:N0} riders' ways from path to path), left out {PathsLeftOut:N0}; merged cores written {MergedAt.Count:N0} (of {MergedAt.Sum(m => m.Nodes):N0} nodes{(MergedAt.Count > 0 ? "; at " + string.Join(" ", MergedAt.GroupBy(m => m.Nodes).OrderBy(g => g.Key).SelectMany(g => g.OrderBy(m => m.At.X).Take(4)).Select(m => string.Create(CultureInfo.InvariantCulture, $"{m.At.X:F0},{m.At.Y:F0}x{m.Nodes}"))) : "")}), streets under them {InnerEmptied:N0}; roundabouts written whole {RingsAt.Count:N0}{(RingsAt.Count > 0 ? " (at " + string.Join(" ", RingsAt.OrderBy(v => v.X).Take(8).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")} (#854)")
             + (WithTransitions.Count > 0 ? "\n      with transitions at " + string.Join("; ", WithTransitions.Take(12).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) : "");
     }
 
@@ -915,8 +915,10 @@ public static partial class TileRewriter
 
     /// <summary>
     /// The pairs that set the plan's green starts (#979): for each green of each group, the group ending before it it conflicts
-    /// with that leaves it the least slack against its conflict time, and the pair of their lines that gives that time; each
-    /// pair once. Lines tile-local in <paramref name="home"/>, on the cap where there is one.
+    /// with that leaves it the least slack against its conflict time; and for each green end, the group starting after it that
+    /// it leaves the least (the user: every ending stream shown closing, the walkers' too, whose early end seldom binds); each
+    /// with the pair of their lines that gives that time, each pair once. Lines tile-local in <paramref name="home"/>, on the cap
+    /// where there is one.
     /// </summary>
     private static List<RoadConflictPair> BindingPairs(SignalPlan plan, float[,] table, List<ConflictTimes.Line> lines, TileId home, RoadJunction? cap)
     {
@@ -925,39 +927,42 @@ public static partial class TileRewriter
         var seen = new HashSet<(int, int)>();
         float cycle = plan.Cycle;
         List<SignalInterval> Greens(int g) => plan.Groups[g].Intervals.Where(v => v.Aspect == SignalAspect.Green).ToList();
+        // the slack of g's green end before h's green start round the cycle, against their time (MaxValue where they have none)
+        float Slack(int g, float end, int h, float start) =>
+            g == h || conflicts[g, h] != SignalPlan.Conflict.Hard || float.IsNaN(table[g, h]) ? float.MaxValue
+                : ((start - end) % cycle + cycle) % cycle - Math.Max(0f, table[g, h]);
+        // a green over the cycle's seam: its piece from 0 is the end of the one up to the cycle's end
+        bool Seam(int g, SignalInterval v) => v.From < 1e-3f && plan.Groups[g].Intervals[^1].Aspect == SignalAspect.Green;
         for (int h = 0; h < plan.Groups.Count; h++)
-        {
-            var greens = Greens(h);
-            foreach (var green in greens)
+            foreach (var green in Greens(h).Where(v => !Seam(h, v)))
             {
-                // a green over the cycle's seam starts at its earlier piece
-                if (green.From < 1e-3f && plan.Groups[h].Intervals[^1].Aspect == SignalAspect.Green) continue;
-                int best = -1;
-                float slack = float.MaxValue;
-                for (int g = 0; g < plan.Groups.Count; g++)
-                {
-                    if (g == h || conflicts[g, h] != SignalPlan.Conflict.Hard || float.IsNaN(table[g, h])) continue;
-                    var ends = Greens(g).Select(v => v.To).ToList();
-                    if (ends.Count == 0) continue;
-                    float since = ends.Select(e => ((green.From - e) % cycle + cycle) % cycle).Min();
-                    float s = since - Math.Max(0f, table[g, h]);
-                    if (s < slack) (slack, best) = (s, g);
-                }
-                if (best < 0 || !seen.Add((best, h))) continue;
-                var worst = lines.Where(l => l.Group == best).SelectMany(a => lines.Where(l => l.Group == h).Select(b => (a, b, t: ConflictTimes.Time(a, b))))
-                    .Where(x => x.t is not null).DefaultIfEmpty().MaxBy(x => x.t ?? double.MinValue);
-                if (worst.a is null || ConflictTimes.Meet(worst.a, worst.b) is not var (clear, enter))
-                    continue;
-                pairs.Add(new RoadConflictPair
-                {
-                    Ending = (byte)best, Starting = (byte)h, EndingMover = (ConflictMover)worst.a.Mover, StartingMover = (ConflictMover)worst.b.Mover,
-                    Clear = (float)clear, Enter = (float)enter, ClearSpeed = (float)worst.a.Clear, EnterSpeed = (float)worst.b.Enter,
-                    Length = (float)worst.a.Length, Amber = (float)worst.a.Amber, Time = table[best, h],
-                    EndingLine = Local3(worst.a.Points), StartingLine = Local3(worst.b.Points),
-                });
+                var (slack, best) = Enumerable.Range(0, plan.Groups.Count)
+                    .Select(g => (Greens(g).Select(v => Slack(g, v.To, h, green.From)).DefaultIfEmpty(float.MaxValue).Min(), g)).Min();
+                if (slack < float.MaxValue) Add(best, h);
             }
-        }
+        for (int g = 0; g < plan.Groups.Count; g++)
+            foreach (var green in Greens(g).Where(v => plan.Groups[g].Intervals.Count == 1 || v.To < cycle - 1e-3f || !Seam(g, plan.Groups[g].Intervals[0])))
+            {
+                var (slack, best) = Enumerable.Range(0, plan.Groups.Count)
+                    .Select(h => (Greens(h).Where(v => !Seam(h, v)).Select(v => Slack(g, green.To, h, v.From)).DefaultIfEmpty(float.MaxValue).Min(), h)).Min();
+                if (slack < float.MaxValue) Add(g, best);
+            }
         return pairs;
+
+        void Add(int g, int h)
+        {
+            if (!seen.Add((g, h))) return;
+            var worst = lines.Where(l => l.Group == g).SelectMany(a => lines.Where(l => l.Group == h).Select(b => (a, b, t: ConflictTimes.Time(a, b))))
+                .Where(x => x.t is not null).DefaultIfEmpty().MaxBy(x => x.t ?? double.MinValue);
+            if (worst.a is null || ConflictTimes.Meet(worst.a, worst.b) is not var (clear, enter)) return;
+            pairs.Add(new RoadConflictPair
+            {
+                Ending = (byte)g, Starting = (byte)h, EndingMover = (ConflictMover)worst.a.Mover, StartingMover = (ConflictMover)worst.b.Mover,
+                Clear = (float)clear, Enter = (float)enter, ClearSpeed = (float)worst.a.Clear, EnterSpeed = (float)worst.b.Enter,
+                Length = (float)worst.a.Length, Amber = (float)worst.a.Amber, Time = table[g, h],
+                EndingLine = Local3(worst.a.Points), StartingLine = Local3(worst.b.Points),
+            });
+        }
 
         float[] Local3(List<Vec2> points)
         {
@@ -982,7 +987,7 @@ public static partial class TileRewriter
         var core = jp.Core!;
         if (c.Kind != ConnectorKind.Bike || jp.Arms.FirstOrDefault(x => x.Arm == c.ToArm) is not { Axis: { } axis } b
             || b.Mouth.Strips.Any(x => x.Kind == StripKind.BikeLane && x.Way == StripWay.Out)
-            || PathBand(ExteriorPlanner.SectionAt(b, 0), right: false) is not var (centreB, _)) return null;
+            || ExteriorPlanner.SectionAt(b, 0).PathBand(right: false) is not var (centreB, _)) return null;
         // one turn from its lane to the path, wide enough to arrive along the exit (the user: not a bend on at its end)
         var mb = core.Mouths.First(m => m.Arm == b.Arm);
         var start = c.Centre[0];

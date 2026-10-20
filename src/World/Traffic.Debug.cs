@@ -289,23 +289,30 @@ public partial class Traffic
                 double? first = Moving(u, plan.Cycle, start, (Length(starting) + Size(pair.StartingMover).Length) / Math.Max(0.1, pair.EnterSpeed));
                 if (last is null && first is null) continue;
                 var up = Vector3.Up * DrawLift;
+                // each green a trail (the user): the ending one's held ahead of its last mover to its line's end, the starting one's
+                // from its line to its first mover; a crossing has no way, its walkers leave both kerbs at once
                 if (last is { } tl)
                 {
                     for (int i = 0; i + 1 < ending.Length; i++) Ribbon(mesh, ending[i] + up, ending[i + 1] + up, EndingMover with { A = 0.35f }, 0.25f);
-                    Mover(mesh, ending, (float)((tl - crosses) * pair.ClearSpeed), pair.EndingMover, EndingMover, false);
-                    // a crossing has no way: its walkers leave both kerbs at once, the pair's the one the time was worked out for
-                    if (pair.EndingMover == ConflictMover.Walker)
-                        Mover(mesh, ending, (float)((tl - crosses) * pair.ClearSpeed), pair.EndingMover, EndingMover, true);
+                    float front = (float)((tl - crosses) * pair.ClearSpeed);
+                    foreach (bool back in pair.EndingMover == ConflictMover.Walker ? Both : One)
+                    {
+                        Trail(mesh, ending, front - Size(pair.EndingMover).Length, float.MaxValue, Size(pair.EndingMover).Width, EndingMover with { A = 0.45f }, back);
+                        Mover(mesh, ending, front, pair.EndingMover, EndingMover, back);
+                    }
                 }
                 if (first is { } tf)
                 {
                     for (int i = 0; i + 1 < starting.Length; i++) Ribbon(mesh, starting[i] + up, starting[i + 1] + up, StartingMover with { A = 0.35f }, 0.25f);
-                    Mover(mesh, starting, (float)((tf - start) * pair.EnterSpeed), pair.StartingMover, StartingMover, false);
-                    if (pair.StartingMover == ConflictMover.Walker)
-                        Mover(mesh, starting, (float)((tf - start) * pair.EnterSpeed), pair.StartingMover, StartingMover, true);
+                    float front = (float)((tf - start) * pair.EnterSpeed);
+                    foreach (bool back in pair.StartingMover == ConflictMover.Walker ? Both : One)
+                    {
+                        Trail(mesh, starting, 0, front, Size(pair.StartingMover).Width, StartingMover with { A = 0.45f }, back);
+                        Mover(mesh, starting, front, pair.StartingMover, StartingMover, back);
+                    }
                 }
-                // the conflict area ringed while either moves
-                var (meet, _) = Along(starting, pair.Enter);
+                // the binding point ringed while either moves: where the starting trail's head meets the ending one's tail
+                var meet = (Along(starting, pair.Enter).Point + Along(ending, pair.Clear - 0.5f).Point) * 0.5f;
                 for (int k = 0; k < 16; k++)
                 {
                     float a = k * Mathf.Tau / 16, b = (k + 1) * Mathf.Tau / 16;
@@ -315,6 +322,23 @@ public partial class Traffic
             }
         }
         return n;
+    }
+
+    private static readonly bool[] One = [false], Both = [false, true];
+
+    /// <summary>A trail along <paramref name="line"/> from <paramref name="from"/> to <paramref name="to"/> m (clamped to the line), from its far end when <paramref name="back"/>.</summary>
+    private static void Trail(ImmediateMesh mesh, Vector3[] line, float from, float to, float width, Color colour, bool back)
+    {
+        float along = 0;
+        var up = Vector3.Up * (DrawLift + 0.02f);
+        for (int k = 0; k + 1 < line.Length; k++)
+        {
+            var (a, b) = back ? (line[line.Length - 1 - k], line[line.Length - 2 - k]) : (line[k], line[k + 1]);
+            float len = a.DistanceTo(b);
+            float s0 = Mathf.Max(from, along), s1 = Mathf.Min(to, along + len);
+            if (s1 > s0 && len > 1e-4f) Ribbon(mesh, a.Lerp(b, (s0 - along) / len) + up, a.Lerp(b, (s1 - along) / len) + up, colour, width);
+            along += len;
+        }
     }
 
     /// <summary>The last mover comes on this long (s) before its line, so it is seen arriving at its clearing speed.</summary>

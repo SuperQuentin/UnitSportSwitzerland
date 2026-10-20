@@ -77,6 +77,23 @@ public sealed class Section
 
     public double CarriagewayRight => CarriagewayLeft + CarriagewayWidth;
 
+    /// <summary>
+    /// A path band beside the carriageway on one side, before any sidewalk (a verge between allowed): its centre's offset and its
+    /// width; null without one.
+    /// </summary>
+    public (double Centre, double Width)? PathBand(bool right)
+    {
+        double at = right ? CarriagewayRight : CarriagewayLeft;
+        var bands = right ? Strips.Skip(LastCarriageway + 1) : Strips.Take(Math.Max(0, FirstCarriageway)).Reverse();
+        foreach (var b in bands)
+        {
+            if (b.Kind == StripKind.Path) return (right ? at + b.Width * 0.5 : at - b.Width * 0.5, b.Width);
+            if (b.Kind == StripKind.Sidewalk) return null;
+            at += right ? b.Width : -b.Width;
+        }
+        return null;
+    }
+
     /// <summary>Where strip <paramref name="index"/> lies across the arm: its left and right offsets from the axis.</summary>
     public (double From, double To) Span(int index)
     {

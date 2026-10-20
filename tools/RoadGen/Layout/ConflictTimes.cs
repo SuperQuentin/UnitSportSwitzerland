@@ -6,9 +6,10 @@ using UnitSport.Tools.RoadGen.Geometry;
 /// <summary>
 /// The conflict times between a lit junction's signal groups (#979, the user's rule; as SN 640 837 / RiLSA's intergreen times):
 /// for two conflicting movements, the shortest time from the end of the ending one's green to the start of the starting one's
-/// green that lets the last vehicle entering before red (it crosses its line as its amber ends) clear the conflict before the
-/// first one entering at green reaches it: <c>amber + (clearing distance + length) / clearing speed − entering distance /
-/// entering speed</c>, the next group's red-amber not counted; negative where the geometry allows. Each movement is a line from
+/// green that keeps their trails apart (the user): a green movement holds its path from when its first mover reaches a point to
+/// when its last has left it, the last entering before red (it crosses its line as its amber ends). At each point the two share,
+/// <c>amber + (clearing distance + length) / clearing speed − entering distance / entering speed</c>, the worst point binding
+/// (<see cref="Meet"/>); the next group's red-amber not counted; negative where the geometry allows. Each movement is a line from
 /// its own stop line: the cars' and the riders' junction paths, the riders' ways from path to path, the walkers along the zebra
 /// both ways. A group pair's time is the most of its lines' pairs; NaN where their lines never meet.
 /// </summary>
@@ -76,7 +77,7 @@ public static class ConflictTimes
         return table;
     }
 
-    /// <summary>The time for line <paramref name="ending"/>'s last vehicle against <paramref name="starting"/>'s first; null where they never meet.</summary>
+    /// <summary>The time for line <paramref name="ending"/>'s trail against <paramref name="starting"/>'s, at the point where they meet worst (<see cref="Meet"/>); null where they never meet.</summary>
     public static double? Time(Line ending, Line starting)
     {
         if (Meet(ending, starting) is not var (clear, enter)) return null;
@@ -84,63 +85,59 @@ public static class ConflictTimes
     }
 
     /// <summary>
-    /// Where two movements meet, each at its own conflict point: along <paramref name="a"/> until its mover has left
-    /// <paramref name="b"/>'s band, along <paramref name="b"/> until its mover reaches <paramref name="a"/>'s (each with its own
-    /// <see cref="Line.Body"/>: a walker clears a lane where it is, not the zebra's far edge).
+    /// Where two movements' trails meet worst (#979, the user): a green movement is a stream, its path held from when its first
+    /// mover reaches a point to when its last has left it, however many enter between. For every point the two trails share
+    /// (<paramref name="a"/>'s mover <c>s</c> m along its line in <paramref name="b"/>'s band while <paramref name="b"/>'s,
+    /// <c>u</c> m along, is in <paramref name="a"/>'s, each with its own <see cref="Line.Body"/>: a walker holds where it walks, not
+    /// the whole zebra), the ending trail closes at <c>amber + (s + length) / v_clear</c> after its green and the starting one opens
+    /// at <c>u / v_enter</c> after its own: the point where the first is latest against the second binds. Its <c>s</c> (to past
+    /// it) and <c>u</c>; null where the trails never share a point. A merge counts its first <see cref="MergeLength"/> m only.
     /// </summary>
-    public static (double Clear, double Enter)? Meet(Line a, Line b) =>
-        Meet(a.Points, b.Points, (b.Width + a.Body) * 0.5, (a.Width + b.Body) * 0.5);
-
-    /// <summary>Where two lines meet, each within <paramref name="reach"/> of the other (see the next).</summary>
-    public static (double Clear, double Enter)? Meet(List<Vec2> a, List<Vec2> b, double reach) => Meet(a, b, reach, reach);
-
-    /// <summary>
-    /// Where two lines meet: how far along <paramref name="a"/> it has left the first stretch where it is within
-    /// <paramref name="reachA"/> of <paramref name="b"/> (a merge: <see cref="MergeLength"/> past its start at most), and how far
-    /// along <paramref name="b"/> it first comes within <paramref name="reachB"/> of <paramref name="a"/>; null where they never do.
-    /// </summary>
-    public static (double Clear, double Enter)? Meet(List<Vec2> a, List<Vec2> b, double reachA, double reachB)
+    public static (double Clear, double Enter)? Meet(Line a, Line b)
     {
-        var sa = Sample(a);
-        var sb = Sample(b);
-        double? from = null, clear = null;
-        foreach (var (p, s) in sa)
+        double ra = (b.Width + a.Body) * 0.5, rb = (a.Width + b.Body) * 0.5, near = 2 * (ra + rb);
+        var sa = Sample(a.Points);
+        var sb = Sample(b.Points);
+        var shared = new List<(double S, double U)>();
+        double firstS = double.MaxValue, firstU = double.MaxValue;
+        foreach (var (p, s, ta) in sa)
+            foreach (var (q, u, tb) in sb)
+            {
+                var d = q - p;
+                // b's mover in a's band and a's in b's, each across the other's line where they are
+                if (d.LengthSquared > near * near || Math.Abs(ta.Cross(d)) >= rb || Math.Abs(tb.Cross(d)) >= ra) continue;
+                shared.Add((s, u));
+                firstS = Math.Min(firstS, s);
+                firstU = Math.Min(firstU, u);
+            }
+        (double Clear, double Enter)? worst = null;
+        double most = double.NegativeInfinity;
+        foreach (var (s, u) in shared)
         {
-            bool touch = Near(p, b, reachA);
-            if (touch && from is null) from = s;
-            if (from is not null && (!touch || s - from >= MergeLength)) { clear = s; break; }
+            if (s > firstS + MergeLength || u > firstU + MergeLength) continue;
+            // (cleared when past the next step: within a step, on the safe side)
+            double t = (s + Step + a.Length) / a.Clear - u / b.Enter;
+            if (t > most) (most, worst) = (t, (s + Step, u));
         }
-        if (from is null) return null;
-        clear ??= sa[^1].Along;
-        foreach (var (p, s) in sb)
-            if (Near(p, a, reachB)) return (clear.Value, s);
-        return null;
+        return worst;
     }
 
-    private static List<(Vec2 Point, double Along)> Sample(List<Vec2> line)
+    /// <summary>A line every <see cref="Step"/> m: each point, how far along, and its direction there.</summary>
+    private static List<(Vec2 Point, double Along, Vec2 Dir)> Sample(List<Vec2> line)
     {
-        var list = new List<(Vec2, double)> { (line[0], 0) };
+        var list = new List<(Vec2, double, Vec2)>();
         double along = 0;
         for (int i = 1; i < line.Count; i++)
         {
             double len = line[i].DistanceTo(line[i - 1]);
-            for (double s = Step; s < len; s += Step) list.Add((line[i - 1] + (line[i] - line[i - 1]) * (s / len), along + s));
+            if (len < 1e-9) continue;
+            var dir = (line[i] - line[i - 1]) * (1 / len);
+            if (list.Count == 0) list.Add((line[i - 1], 0, dir));
+            for (double s = Step; s < len; s += Step) list.Add((line[i - 1] + dir * s, along + s, dir));
             along += len;
-            list.Add((line[i], along));
+            list.Add((line[i], along, dir));
         }
         return list;
-    }
-
-    private static bool Near(Vec2 p, List<Vec2> line, double reach)
-    {
-        for (int i = 1; i < line.Count; i++)
-        {
-            var ab = line[i] - line[i - 1];
-            double len2 = ab.Dot(ab);
-            double t = len2 < 1e-12 ? 0 : Math.Clamp((p - line[i - 1]).Dot(ab) / len2, 0, 1);
-            if ((line[i - 1] + ab * t).DistanceTo(p) < reach) return true;
-        }
-        return false;
     }
 
     /// <summary>The movements of a lit junction as lines from their stop lines (see <see cref="Of"/>).</summary>
@@ -168,7 +165,8 @@ public static class ConflictTimes
             }
             else lines.Add(new Line(g, Mover.Bike, points, c.Width, BikeClear, BikeEnter, BikeLength, plan.PassingTime(g)));
         }
-        // the walkers: along the middle of each arm's zebra, from either kerb
+        // the walkers: along the middle of each arm's zebra, from either side: past the kerb across a separated path beside it, as
+        // the zebra is painted (the user: the riders on it cross the walkers too)
         for (int k = 0; k < jp.Arms.Count; k++)
         {
             var a = jp.Arms[k];
@@ -176,8 +174,11 @@ public static class ConflictTimes
             if (g < 0 || a.Axis is null || jp.Exterior.FirstOrDefault(x => x.Arm == a)?.Bars.FirstOrDefault(b => b.Kind == BarKind.Crosswalk) is not { } bar)
                 continue;
             var mouth = core.Mouths.First(m => m.Arm == a.Arm);
-            var left = a.Axis.At(mouth.Station + bar.Middle, bar.Left);
-            var right = a.Axis.At(mouth.Station + bar.Middle, bar.Right);
+            var section = ExteriorPlanner.SectionAt(a, 0);
+            double from = section.PathBand(right: false) is var (cl, wl) ? Math.Min(bar.Left, cl - wl * 0.5) : bar.Left;
+            double to = section.PathBand(right: true) is var (cr, wr) ? Math.Max(bar.Right, cr + wr * 0.5) : bar.Right;
+            var left = a.Axis.At(mouth.Station + bar.Middle, from);
+            var right = a.Axis.At(mouth.Station + bar.Middle, to);
             lines.Add(new Line(g, Mover.Walker, [left, right], bar.To - bar.From, WalkClear, WalkEnter, WalkLength, plan.PassingTime(g)));
             lines.Add(new Line(g, Mover.Walker, [right, left], bar.To - bar.From, WalkClear, WalkEnter, WalkLength, plan.PassingTime(g)));
         }
