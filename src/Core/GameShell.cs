@@ -48,6 +48,8 @@ public partial class GameShell : Node
     private WorldChoice? _hostedWorld;
     /// <summary>A join to start again once the world is torn down: the server plays another world (#999).</summary>
     private WorldLaunch? _rejoin;
+    /// <summary>Counts Host calls, so a build finishing after a cancel and a new Host starts nothing (#999).</summary>
+    private int _hostCalls;
     private ServerQuery? _hostProbe;
     private double _hostWait, _sinceHostProbe;
     private string? _error;
@@ -93,7 +95,7 @@ public partial class GameShell : Node
             "--menu", "--fakeversion", "--updatefeed", "--updateaccept", "--settings", "--licenses", "--controls", "--tutorial",
             "--multiplayer", "--solo", "--map", "--landing", "--uishot", "--menucheck", "--mapcheck", "--leavecheck",
             "--leave-restart", "--mobile", "--autostart", "--wheellock", "--fakewheel", "--ffblog", "--vr", "--xrsim", "--vrmonitor", "--xrheadshot", "--xrwrist", "--xrprofile", "--xrcab", "--xrhands",
-            "--bubblecheck",
+            "--bubblecheck", "--worldpickcheck",
         };
         foreach (string a in args)
             if (a.StartsWith("--") && Array.IndexOf(harmless, a) < 0) return false;
@@ -179,6 +181,7 @@ public partial class GameShell : Node
         if (MenuCheck.Requested()) AddChild(new MenuCheck(this));
         if (Ui.MapCheck.Requested()) AddChild(new Ui.MapCheck(this));
         if (LeaveCheck.Requested()) AddChild(new LeaveCheck(this));
+        if (WorldPickCheck.Requested()) AddChild(new WorldPickCheck(this));
     }
 
     public override void _ExitTree()
@@ -465,18 +468,54 @@ public partial class GameShell : Node
     public void Host(string name, int port, bool lanVisible, (double E, double N)? spawn = null, bool teleport = true, WorldChoice? world = null)
     {
         if (_state != State.Title) return;
-        _hosted = new HostedServer(name, port);
         _hostedWorld = world is { IsOpen: false } ? world : null;
+        if (_hostedWorld is { Prepared: false } unbuilt)
+        {
+            // the traffic lights region is built here first (#999): the server would spend its start on it
+            _returnTo = "multiplayer";
+            _state = State.Starting;
+            ClearStack();
+            _loading.Begin($"Hosting {name}");
+            _loading.Report("Starting your server", 0.01f, WorldChoice.PreparingDetail);
+            PrepareThenHost(unbuilt, ++_hostCalls, name, port, lanVisible, spawn, teleport);
+            return;
+        }
+        _hosted = new HostedServer(name, port);
         if (_hosted.Start(lanVisible, spawn, teleport, _hostedWorld) is { } err)
         {
             _hosted = null;
             Modal.Inform(_menuRoot, "Could not host", err);
             return;
         }
+        WaitForHosted(name);
+    }
+
+    private async void PrepareThenHost(WorldChoice world, int call, string name, int port, bool lanVisible, (double E, double N)? spawn, bool teleport)
+    {
+        string? err = await System.Threading.Tasks.Task.Run(world.Prepare);
+        if (call != _hostCalls || _state != State.Starting || _hosted != null) return;   // cancelled while it built
+        if (err == null)
+        {
+            _hosted = new HostedServer(name, port);
+            if ((err = _hosted.Start(lanVisible, spawn, teleport, world)) == null)
+            {
+                WaitForHosted(name);
+                return;
+            }
+        }
+        ReturnWithError(err);
+    }
+
+    /// <summary>The server process runs: the loading screen waits until it answers (<see cref="PollHost"/>).</summary>
+    private void WaitForHosted(string name)
+    {
         _returnTo = "multiplayer";
-        _state = State.Starting;
-        ClearStack();
-        _loading.Begin($"Hosting {name}");
+        if (_state != State.Starting)
+        {
+            _state = State.Starting;
+            ClearStack();
+            _loading.Begin($"Hosting {name}");
+        }
         _loading.Report("Starting your server", 0.02f, "");
         _hostProbe = new ServerQuery();
         _hostProbe.Start();

@@ -228,9 +228,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
 
         // a test world whose tiles are built on this machine (the traffic lights region, #999)
-        if (WorldChoice.Active is { } testWorld)
+        if (WorldChoice.Active is { Prepared: false } testWorld)
         {
-            Report(LoadStage.ReadingMap, 0.02f, testWorld.Title);
+            Report(LoadStage.ReadingMap, 0.02f, WorldChoice.PreparingDetail);
             if (await Task.Run(testWorld.Prepare) is { } why)
             {
                 Fail(why);

@@ -109,6 +109,30 @@ public sealed record WorldChoice(string Id, string Title, string Blurb, string? 
 
     private static string SignalsStamp => System.IO.Path.Combine(SignalsDir, "built_by.txt");
 
+    private static string RoadGenStamp => typeof(SignalTestRegion).Assembly.ManifestModule.ModuleVersionId.ToString();
+
+    /// <summary>
+    /// Nothing to build before this world loads: a fixture course, or the region already built by
+    /// this RoadGen. When false, <see cref="Prepare"/> takes a while (~15 s in a release build, close to
+    /// a minute in the editor's debug build): the loading screen says so.
+    /// </summary>
+    public bool Prepared
+    {
+        get
+        {
+            if (Id != SignalsId) return true;
+            try
+            {
+                return System.IO.File.Exists(SignalsStamp) && System.IO.File.ReadAllText(SignalsStamp).Trim() == RoadGenStamp
+                    && System.IO.File.Exists(System.IO.Path.Combine(SignalsDir, "manifest.json"));
+            }
+            catch (System.IO.IOException) { return false; }
+        }
+    }
+
+    /// <summary>What the loading screen says while <see cref="Prepare"/> builds.</summary>
+    public const string PreparingDetail = "Building the traffic lights region: up to a minute, the first time";
+
     /// <summary>
     /// Makes sure this world's tiles exist; run on a worker. A fixture course is built in code as
     /// it streams, so only the traffic lights region has anything to do: the game runs RoadGen's
@@ -117,13 +141,10 @@ public sealed record WorldChoice(string Id, string Title, string Blurb, string? 
     /// </summary>
     public string? Prepare()
     {
-        if (Id != SignalsId) return null;
-        string stamp = typeof(SignalTestRegion).Assembly.ManifestModule.ModuleVersionId.ToString();
+        if (Prepared) return null;
+        string stamp = RoadGenStamp;
         try
         {
-            if (System.IO.File.Exists(SignalsStamp) && System.IO.File.ReadAllText(SignalsStamp).Trim() == stamp
-                && System.IO.File.Exists(System.IO.Path.Combine(SignalsDir, "manifest.json")))
-                return null;
             var clock = System.Diagnostics.Stopwatch.StartNew();
             System.IO.Directory.CreateDirectory(SignalsDir);
             // its verdict on the junctions is a check's; the tiles are written either way
