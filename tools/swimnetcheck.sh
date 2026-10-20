@@ -15,7 +15,7 @@ A=$!
 WINDOW=; [ -n "${SHOTS:-}" ] && WINDOW=--windowed
 STYLEARG=; [ -n "${STYLE:-}" ] && STYLEARG="--style $STYLE"
 tc_client 300 $OUT/swimnet_B.log $WINDOW --connect 127.0.0.1:$PORT --name WatcherB $WORLD --view first --nocapture --time 14 $STYLEARG --swimnet B
-for _ in $(seq 1 150); do kill -0 "$A" 2>/dev/null || break; guard_nap 0.2; done
+for _ in $(seq 1 60); do kill -0 "$A" 2>/dev/null || break; guard_nap 0.5; done
 grep -h "\[swimnet" $OUT/swimnet_A.log $OUT/swimnet_B.log
 code=0
 grep -q "\[swimnet A\] RESULT: ok" $OUT/swimnet_A.log || code=1
