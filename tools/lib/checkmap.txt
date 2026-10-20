@@ -54,6 +54,8 @@ src/Player/FootPlayer.cs quick  --emotewheelcheck --world fixture
 src/Phone/               quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
 src/Player/FootPlayer    quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
 src/Core/Teleporter      quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
+src/Phone/               quick  --phonevrcheck --xrsim --world fixture
+src/XR/XrPhone           quick  --phonevrcheck --xrsim --world fixture
 src/Avatar/              quick  --cockpitcheck
 src/Core/Chat            quick  --chatcheck
 src/World/TimeCommand    quick  --chatcheck
