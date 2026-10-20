@@ -86,6 +86,10 @@ public partial class ConcertNetProbe : ChatProbe
             import.Rig.AddBody(headType, new Mvr.GdtfBody(Mvr.GdtfBody.Primitive("Base", new Vector3(0.3f, 0.3f, 0.13f)),
                 Mvr.GdtfBody.Primitive("Yoke", new Vector3(0.35f, 0.12f, 0.3f)), Mvr.GdtfBody.Primitive("Head", new Vector3(0.22f, 0.19f, 0.24f)),
                 new Vector3(0, 0, -0.28f), new Vector3(0, 0, -0.38f), new Vector3(0, 0, -0.51f)));
+            // and its screens' video sources (#975): an NDI source on one, a cached file's hash on another
+            var screens = import.Rig.Fixtures.Where(f => f.Screen != null).ToArray();
+            if (screens.Length > 0) { screens[0].VideoSource = (int)Mvr.VideoSource.Ndi; screens[0].VideoName = "netcheck NDI"; }
+            if (screens.Length > 1) { screens[1].VideoSource = (int)Mvr.VideoSource.File; screens[1].VideoName = "clip.ogv"; screens[1].VideoHash = new string('A', 64); }
             Svc?.SendRig(0, import.Rig.Pack());
             Say($"rig {import.Rig.Fixtures.Count}");
             if (!await Heard("B", "rig ok", 30)) Fail("B never got the rig");
@@ -164,6 +168,10 @@ public partial class ConcertNetProbe : ChatProbe
             Expect(Svc?.RigFor(0) is { Bodies.Count: 3 } rb && rb.Types.Count(t => t.Body != null) == 1, $"with a type's GDTF body ({Svc?.RigFor(0)?.Bodies.Count} meshes of 3)");
             if (ConcertRig.Live.Count > 0)
                 Expect(await Until(() => ConcertRig.Live.Values.Any(r => r.BodiesDrawn > 0), 20), "and the rig draws its heads with it");
+            var got = Svc?.RigFor(0)?.Fixtures.Where(f => f.Screen != null).ToArray() ?? Array.Empty<Mvr.RigData.FixtureRow>();
+            Expect(got.Length == 0 || got[0] is { VideoSource: (int)Mvr.VideoSource.Ndi, VideoName: "netcheck NDI" },
+                $"with its screens' video sources ({string.Join(", ", got.Take(2).Select(f => $"{(Mvr.VideoSource)f.VideoSource} {f.VideoName}"))})");
+            Expect(got.Length < 2 || got[1] is { VideoSource: (int)Mvr.VideoSource.File, VideoName: "clip.ogv" } && got[1].VideoHash == new string('A', 64), "and a file's hash");
             Say("rig ok");
             Expect(await Until(() => Svc?.RigFor(0) == null, 20), "and goes when A gives the set its own rig back");
             Say("own ok");
