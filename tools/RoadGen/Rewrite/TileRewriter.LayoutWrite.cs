@@ -399,6 +399,11 @@ public static partial class TileRewriter
                 int a = PlanArm(arm);
                 bool bike = kind is ConnectorKind.Bike or ConnectorKind.Path;
                 int g = plan.Groups.FindIndex(x => x.Arm == a && (bike ? x.Kind == SignalGroupKind.Bike : x.Kind is SignalGroupKind.Car or SignalGroupKind.LeftArrow or SignalGroupKind.RightArrow) && (x.Moves & move) != 0);
+                // riders with no group of their own for the move go with the cars making it: a left turn with the left arrow (the
+                // user, #971: it went with the through green, across the oncoming traffic), else with the approach's main group
+                if (g < 0 && bike && move == SignalMoves.Left)
+                    g = plan.Groups.FindIndex(x => x.Arm == a && x.Kind is SignalGroupKind.LeftArrow or SignalGroupKind.Car && (x.Moves & SignalMoves.Left) != 0
+                        && (x.Kind == SignalGroupKind.LeftArrow || !plan.Groups.Any(y => y.Arm == a && y.Kind == SignalGroupKind.LeftArrow)));
                 if (g < 0 && bike) g = plan.Groups.FindIndex(x => x.Arm == a && x.Kind == SignalGroupKind.Car && (x.Moves & SignalMoves.Through) != 0);
                 return g;
             }
