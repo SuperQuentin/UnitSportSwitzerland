@@ -65,9 +65,15 @@ public sealed record ConcertEvent
     public int Gerbs { get; init; }
     public int Airbursts { get; init; }
 
-    /// <summary>The game hours the show plays, [start, end); the stage stands all day.</summary>
+    /// <summary>The game hours the show plays, [start, end); the stage stands from <see cref="BuildHour"/>.</summary>
     public float StartHour { get; init; } = 20.5f;
     public float EndHour { get; init; } = 23.5f;
+
+    /// <summary>When the stage is up by in the morning (#956): built for the day, struck at <see cref="EndHour"/>.</summary>
+    public const float BuildHour = 8f;
+
+    /// <summary>Whether the stage stands at this hour: from the morning's build to the show's end; else the stadium is empty.</summary>
+    public bool Standing(double hour) => hour >= BuildHour && hour < EndHour;
 
     public bool HasCenterScreen => Screens is ScreenSet.Center or ScreenSet.CenterAndSides;
     public bool HasSideScreens => Screens is ScreenSet.Sides or ScreenSet.CenterAndSides;

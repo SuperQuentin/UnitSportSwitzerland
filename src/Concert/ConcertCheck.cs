@@ -85,6 +85,26 @@ public static class ConcertCheck
             }
             Expect(bad == null, $"{venue.Name}: 60 stages fit {(venue.Kind == VenueKind.Arena ? "under its roof and " : "")}on its floor{(bad != null ? ": " + bad : "")}");
         }
+        // #956: a stadium's pitch boarded for the crowd, its stage on the grass; arenas and open airs keep their own ground
+        foreach (var venue in StadiumCatalog.All)
+        {
+            string? bad = null;
+            for (int seed = 1; seed <= 60 && bad == null; seed++)
+            {
+                var plan = new StagePlan(ConcertPlanner.Plan(venue, seed));
+                var g = new StadiumBuilder.Geo(mesh: true, collision: true);
+                ConcertFloor.Build(plan, 0.1f, g);
+                var deck = plan.Boxes[0].Centre;
+                if (venue.Kind != VenueKind.Stadium) { if (g.Vertices.Count > 0) bad = $"seed {seed}: a floor laid"; }
+                else if (g.Vertices.Count == 0 || g.Faces.Count == 0) bad = $"seed {seed}: no floor";
+                else if (!plan.OnGrass(new Vector2(deck.X, deck.Z))) bad = $"seed {seed} ({plan.Event.Layout}): the deck is off the grass";
+                else if (plan.OnGrass(new Vector2(plan.Desk.X, plan.Desk.Z))) bad = $"seed {seed} ({plan.Event.Layout}): the front of house is on the grass";
+            }
+            Expect(bad == null, $"{venue.Name}: {(venue.Kind == VenueKind.Stadium ? "boards for the crowd, grass under the stage" : "no protection floor")}{(bad != null ? ": " + bad : "")}");
+        }
+        var day = ConcertPlanner.Plan(s, 7);
+        Expect(!day.Standing(3) && day.Standing(ConcertEvent.BuildHour) && day.Standing(day.StartHour) && !day.Standing(day.EndHour),
+            $"the stage is built by {ConcertEvent.BuildHour}h and struck at the show's end ({day.EndHour}h)");
         Expect(layouts.Count == Enum.GetValues<StageLayout>().Length, $"300 seeds reach every layout ({layouts.Count})");
         Expect(screens.Count == Enum.GetValues<ScreenSet>().Length, $"and every screen set ({screens.Count})");
         Expect(genres.Count == Enum.GetValues<Genre>().Length, $"and every genre ({genres.Count})");

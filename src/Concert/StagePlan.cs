@@ -59,6 +59,21 @@ public sealed class StagePlan
         return false;
     }
 
+    /// <summary>
+    /// Where the stage stands on the grass (#956): a rectangle of the stage's own frame (x across, z
+    /// towards the audience), the deck, its wings and its back to the stand. The pitch's protection
+    /// floor is laid everywhere else.
+    /// </summary>
+    public (float X0, float X1, float Z0, float Z1) Grass { get; private set; }
+
+    /// <summary>Whether a point of the pitch (u, v) is in the stage's <see cref="Grass"/>.</summary>
+    public bool OnGrass(Vector2 uv)
+    {
+        var d = uv - _origin;
+        float x = d.Dot(_right), z = d.Dot(_forward);
+        return x > Grass.X0 && x < Grass.X1 && z > Grass.Z0 && z < Grass.Z1;
+    }
+
     // colours, sRGB
     private static readonly Color Deck = new(0.12f, 0.12f, 0.13f), Skirt = new(0.05f, 0.05f, 0.06f),
         Truss = new(0.62f, 0.63f, 0.66f), Canopy = new(0.2f, 0.2f, 0.22f), Speaker = new(0.07f, 0.07f, 0.08f),
@@ -186,6 +201,8 @@ public sealed class StagePlan
     private void BuildEnd(ConcertEvent e)
     {
         float w = e.Width, d = e.Depth, h = e.DeckHeight, r = e.RoofHeight, hw = w / 2;
+        // the deck and its wings (8 m at most) on the grass, back to the stand behind it
+        Grass = (-hw - 9f, hw + 9f, -d - 4f, 0.5f);
 
         // the deck, its black skirt, and stairs up at the back corners
         Box(-hw, hw, 0, h, -d, 0, Deck);
@@ -352,6 +369,8 @@ public sealed class StagePlan
     {
         Place(Vector2.Zero, new Vector2(0, -1));
         float w = e.Width, hw = w / 2, h = e.DeckHeight, r = e.RoofHeight;
+        // the deck and its four towers on the grass
+        Grass = (-hw - 3f, hw + 3f, -hw - 3f, hw + 3f);
         Box(-hw, hw, 0, h, -hw, hw, Deck);
         foreach (float sx in new[] { -1f, 1f })
             foreach (float sz in new[] { -1f, 1f })
