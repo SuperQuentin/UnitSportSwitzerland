@@ -421,17 +421,19 @@ public static partial class TileRewriter
                 if (c.Kind != ConnectorKind.Bike || jp.Arms.FirstOrDefault(x => x.Arm == c.ToArm) is not { Axis: { } axis } b
                     || b.Mouth.Strips.Any(x => x.Kind == StripKind.BikeLane && x.Way == StripWay.Out)
                     || PathBand(ExteriorPlanner.SectionAt(b, 0), right: false) is not var (centreB, _)) return null;
+                // one turn from its lane to the path, wide enough to arrive along the exit (the user: not a bend on at its end)
                 var mb = core.Mouths.First(m => m.Arm == b.Arm);
-                var end = c.Centre[^1];
-                var along = (end - c.Centre[^2]) / Math.Max(end.DistanceTo(c.Centre[^2]), 1e-9);
+                var start = c.Centre[0];
+                var inward = (c.Centre[1] - start) / Math.Max(c.Centre[1].DistanceTo(start), 1e-9);
                 var target = axis.At(mb.Station + PathJoin, centreB);
                 var outward = axis.DirAt(mb.Station);
-                double l = end.DistanceTo(target) / 3;
-                var way = new List<Vec2>(c.Centre);
-                for (int k = 1; k <= 12; k++)
+                // the legs of a quarter circle's Bezier through the corner the two lines make, else a third of the chord
+                double chord = start.DistanceTo(target), l = chord * 0.45;
+                var way = new List<Vec2>();
+                for (int k = 0; k <= 32; k++)
                 {
-                    double t = k / 12.0, mt = 1 - t;
-                    way.Add(end * (mt * mt * mt) + (end + along * l) * (3 * mt * mt * t) + (target - outward * l) * (3 * mt * t * t) + target * (t * t * t));
+                    double t = k / 32.0, mt = 1 - t;
+                    way.Add(start * (mt * mt * mt) + (start + inward * l) * (3 * mt * mt * t) + (target - outward * l) * (3 * mt * t * t) + target * (t * t * t));
                 }
                 return (way, centreB);
             }
