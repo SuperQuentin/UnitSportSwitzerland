@@ -15,8 +15,16 @@
   sides, both; the round gets the hung cube or nothing), an artist name and tour, a palette by genre,
   a tempo, the stage's size and the rig's counts (an EDM rig is beams and strobes, a ballad's spots
   and washes).
-- The stage stands all day; the show plays `StartHour`..`EndHour` of the game clock (20:30 to 23:30),
-  a walk-in look otherwise. `--concert N` plays seed N at any hour, `--concert off` puts on none.
+- The stage stands from `ConcertEvent.BuildHour` (08:00) to the show's end (#956); the show plays
+  `StartHour`..`EndHour` of the game clock (20:30 to 23:30), a walk-in look before. At the end the
+  director strikes the rig (stage, floor, crowd) and the stadium stands empty until the next day's
+  build (`ConcertDirector._Process`, every 2 s). `--concert N` plays seed N at any hour and a hosted
+  set stands whatever the hour; `--concert off` puts on none.
+- A stadium's pitch (not an arena's floor or an open air's field) is boarded for the crowd
+  (`ConcertFloor`, #956): 2 m protection panels inside the seating front's rounded corners, grass
+  left under the stage (`StagePlan.Grass`, the deck, its wings and its back). The terrain under a
+  pitch is not flat, so the director lays the floor 8 cm over its highest point (sampled every 4 m,
+  3 m off the stands, 1.2 m at most); one collision quad, and the crowd stands on it.
 
 ## The stage and the rig (`StagePlan`)
 

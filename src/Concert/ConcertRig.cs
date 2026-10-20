@@ -113,6 +113,9 @@ public partial class ConcertRig : Node3D
     /// <summary>The ground's height at a point of the venue's frame (an open air's slope, an arena's floor), set by the director (#948).</summary>
     public Func<Vector2, float>? Ground { get; init; }
 
+    /// <summary>A stadium's protection floor's top over the centre spot (#956): over the terrain's bumps, set by the director.</summary>
+    public float FloorTop { get; init; } = 0.06f;
+
     public override void _Ready()
     {
         _plan = new StagePlan(Event);
@@ -146,7 +149,9 @@ public partial class ConcertRig : Node3D
         // the audience, during the show
         if (WithCrowd)
         {
-            _crowd = new ConcertCrowd(_plan) { Visible = false, Ground = Ground };
+            // a stadium's crowd on the protection floor
+            var floor = FloorTop;
+            _crowd = new ConcertCrowd(_plan) { Visible = false, Ground = Ground ?? (Event.Stadium.Kind == VenueKind.Stadium ? _ => floor : null) };
             AddChild(_crowd);
         }
         Live[Event.Stadium.Name] = this;
@@ -163,6 +168,7 @@ public partial class ConcertRig : Node3D
             (b.Hidden ? unseen : g).Box(b.Centre, b.Size, new Basis(Vector3.Up, b.Yaw), b.Color.SrgbToLinear() with { A = 0f }, b.Solid);
         g.Faces.AddRange(unseen.Faces);
         foreach (var r in _plan.Ramps) g.Solid(r.A, r.B, r.C, r.D);
+        ConcertFloor.Build(_plan, FloorTop, g);
         if (g.Data() is { } data)
             AddChild(new MeshInstance3D { Name = "Stage", Mesh = ChunkNode.ToPropMesh(data, StyleKit.Material(MaterialRole.Prop)) });
         if (g.Faces.Count > 0)
