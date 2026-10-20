@@ -77,7 +77,7 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   pole). The bike lead (Vorgrün) only where a car group turning across the riders goes green with them. A plan so timed
   carries `ConflictTimed` (flags bit 2): `Validate` then holds conflicting groups never green together (a green may begin
   in another's amber) and `KeepsTimes` every time. Layout (b)'s bike lane (`SignalArm.BikeBetween`, arm bit 7) no longer
-  conflicts with its arm's right arrow. Test region: J1 74 -> 73 s, J2 86 -> 84 (bikes entering at 30 km/h; walkers on the bike paths' squares: a riders' left turn holds the next walkers ~15 s), J5a/b 83/84 -> 74/75, J10 70 -> 71, the
+  conflicts with its arm's right arrow. Test region: J1 74 -> 73 s, J2 86 -> 86 (bikes entering at 30 km/h, turning cars at 4 m/s²; walkers on the bike paths' squares: a riders' left turn holds the next walkers ~15 s), J5a/b 83/84 -> 74/75, J10 70 -> 71, the
   rest at their scheme's target (the time saved goes to green). 168 real tiles: 16 of 19 timed from conflict times (3 keep
   today's: their times not kept), 0 invalid. Debugging: `CTDBG=E,N` prints a junction's times over 4 s with the worst pair
   of lines, `CTDBG2=1` with it each phase change's wait and the pair that sets it; `CTTABLE=E,N,file.json` writes the junction's table, groups,
