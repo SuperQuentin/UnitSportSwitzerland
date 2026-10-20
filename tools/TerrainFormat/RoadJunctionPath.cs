@@ -1,7 +1,10 @@
 namespace UnitSport.Terrain.Format;
 
-/// <summary>Who drives a junction path (#818, #709): cars (and trucks), or riders on a bike lane.</summary>
-public enum JunctionPathKind : byte { Car = 0, Bike = 1 }
+/// <summary>
+/// Who drives a junction path (#818, #709): cars (and trucks), riders on a bike lane, or riders from a separated path to another
+/// (#971: round the core, over the next arm's bike crossing or round the corner; its ends on the paths, not on a lane).
+/// </summary>
+public enum JunctionPathKind : byte { Car = 0, Bike = 1, Path = 2 }
 
 /// <summary>
 /// One end of a junction path (#818, #709): where its road meets the core's mouth, a point on the road's centreline (tile-local

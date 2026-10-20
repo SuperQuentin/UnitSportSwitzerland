@@ -237,6 +237,8 @@ public sealed class SignalPlan
             var a = moves[i];
             var b = moves[k];
             if (a.Group == b.Group || a.From == b.From) continue;
+            // riders turning right keep to their own way round the corner: no car's (#971; the walkers across the exit below)
+            if (RidesRight(a, Groups[a.Group]) || RidesRight(b, Groups[b.Group])) continue;
             bool merge = a.To == b.To;
             bool cross = Crosses(Entry(a.From), Exit(a.To), Entry(b.From), Exit(b.To));
             if (!merge && !cross) continue;
@@ -269,7 +271,8 @@ public sealed class SignalPlan
             {
                 if (m.From != arm && m.To != arm) continue;
                 var g = Groups[m.Group];
-                bool turnsIn = m.To == arm && m.Turn != SignalMoves.Through && g.Kind == SignalGroupKind.Car;
+                // a car turning in, or riders turning right onto the path across this crossing (#971): they give way, by the flasher
+                bool turnsIn = m.To == arm && m.Turn != SignalMoves.Through && g.Kind == SignalGroupKind.Car || m.To == arm && RidesRight(m, g);
                 Set(p, m.Group, turnsIn ? Conflict.Permissive : Conflict.Hard);
             }
         }
@@ -277,6 +280,9 @@ public sealed class SignalPlan
     }
 
     private static bool Turning(Movement m, SignalGroup g) => m.Turn != SignalMoves.Through && g.Kind == SignalGroupKind.Car;
+
+    /// <summary>Riders turning right (#971): on their own way round the corner, across only the exit's crossing.</summary>
+    private static bool RidesRight(Movement m, SignalGroup g) => g.Kind == SignalGroupKind.Bike && m.Turn == SignalMoves.Right;
 
     /// <summary>Whether chord (a1, a2) crosses chord (b1, b2) on a circle: their ends interleave.</summary>
     private static bool Crosses(double a1, double a2, double b1, double b2)
@@ -324,7 +330,8 @@ public sealed class SignalPlan
             if ((moves & pockets & SignalMoves.Left) != 0 && main != moves) left[a] = plan.Add(SignalGroupKind.LeftArrow, a, SignalMoves.Left);
             if ((moves & pockets & SignalMoves.Right) != 0 && main != moves) right[a] = plan.Add(SignalGroupKind.RightArrow, a, SignalMoves.Right);
             if (main != SignalMoves.None) car[a] = plan.Add(SignalGroupKind.Car, a, main);
-            if (arms[a].BikeSignal && (moves & SignalMoves.Through) != 0) plan.Add(SignalGroupKind.Bike, a, SignalMoves.Through);
+            // the riders go straight on, and turn right beside the cars on their own way (#971: from a path onto the next arm's)
+            if (arms[a].BikeSignal && (moves & SignalMoves.Through) != 0) plan.Add(SignalGroupKind.Bike, a, SignalMoves.Through | (moves & SignalMoves.Right));
         }
         for (int a = 0; a < arms.Count; a++)
             if (arms[a].Pedestrians) plan.Add(SignalGroupKind.Pedestrian, a, SignalMoves.None);
@@ -364,11 +371,12 @@ public sealed class SignalPlan
             Expand(plan, phases, conflicts);
         }
 
-        // flashers: beside a group whose turn shares a green with a pedestrian or bike group
+        // flashers: beside a group whose turn shares a green with a pedestrian or bike group; the riders' too, turning right
+        // across a crossing that is green with them (#971, the user)
         int count = plan.Groups.Count;
         for (int g = 0; g < count; g++)
         {
-            if (plan.Groups[g].Kind != SignalGroupKind.Car) continue;
+            if (plan.Groups[g].Kind is not (SignalGroupKind.Car or SignalGroupKind.Bike)) continue;
             bool flashes = false;
             for (int h = 0; h < count && !flashes; h++)
                 flashes = conflicts[g, h] == Conflict.Permissive
@@ -491,8 +499,9 @@ public sealed class SignalPlan
                     // a bike goes with its own approach's main lane
                     if (kind == SignalGroupKind.Bike && !phase.Green.Any(h => plan.Groups[h].Kind == SignalGroupKind.Car && plan.Groups[h].Arm == plan.Groups[g].Arm))
                         continue;
+                    // (riders turning right share a green with the crossing they cross, giving way by the flasher, #971)
                     if (phase.Green.All(h => conflicts[g, h] == Conflict.None || (!protectedOnly && conflicts[g, h] == Conflict.Permissive
-                            && plan.Groups[h].Kind == SignalGroupKind.Car)))
+                            && (plan.Groups[h].Kind == SignalGroupKind.Car || kind == SignalGroupKind.Bike && plan.Groups[h].Kind == SignalGroupKind.Pedestrian))))
                         phase.Green.Add(g);
                 }
         }

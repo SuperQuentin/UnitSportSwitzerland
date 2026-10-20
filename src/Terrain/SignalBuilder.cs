@@ -73,7 +73,9 @@ public static class SignalBuilder
     public enum Role : byte { Red, Amber, Green, Flash }
 
     /// <summary>One lens: its instanced shape and transform (tile-local, +Z toward the viewer), which junction and group light it, and as what.</summary>
-    public readonly record struct Lens(Shape Shape, Transform3D Transform, int Junction, int Group, Role Role);
+    /// <param name="Flash">A yellow lens that also flashes with this flasher group (#971: a bike head's, its riders turning right
+    /// across a crossing green with them), -1 none.</param>
+    public readonly record struct Lens(Shape Shape, Transform3D Transform, int Junction, int Group, Role Role, int Flash = -1);
 
     /// <summary>A tile's lenses and the plans that light them.</summary>
     public sealed class Lamps
@@ -276,7 +278,9 @@ public static class SignalBuilder
                         // top down: red, (yellow), green
                         var role = h.Lenses == 2 ? (k == 0 ? Role.Red : Role.Green) : (Role)k;
                         var at = h.Centre + Vector3.Up * (half - pitch * (k + 0.5f)) + face;
-                        lamps.Lenses.Add(new Lens(h.Shape, new Transform3D(basis, at), j, h.Group, role));
+                        // a bike head's own yellow flashes during its green where its riders turn right across a crossing green with them (#971, the user)
+                        int flash = h.Shape == Shape.Bike && role == Role.Amber ? Flasher(signal.Plan, h.Group) : -1;
+                        lamps.Lenses.Add(new Lens(h.Shape, new Transform3D(basis, at), j, h.Group, role, flash));
                     }
                     if (h.Flasher && Flasher(signal.Plan, h.Group) is int f and >= 0)
                     {

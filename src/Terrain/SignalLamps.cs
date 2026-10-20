@@ -290,6 +290,13 @@ void fragment() {
             var aspect = plan.State(lens.Group, now);
             if (aspect == SignalAspect.FlashingAmber) blinking = true;
             var colour = Colour(lens.Role, aspect, blinkOn);
+            // a yellow lens that also flashes with a flasher (#971: a bike head's during its green)
+            if (lens.Flash >= 0 && plan.State(lens.Flash, now) == SignalAspect.FlashingAmber)
+            {
+                blinking = true;
+                if (blinkOn) colour = AmberOn;
+                until = Math.Min(until, plan.UntilChange(lens.Flash, now));
+            }
             _multi[(int)_icon[i]]!.SetInstanceColor(_slot[i], colour);
             if (_haloSlot[i] >= 0) _halos!.SetInstanceColor(_haloSlot[i], colour);   // dark lenses do not bloom
             until = Math.Min(until, plan.UntilChange(lens.Group, now));

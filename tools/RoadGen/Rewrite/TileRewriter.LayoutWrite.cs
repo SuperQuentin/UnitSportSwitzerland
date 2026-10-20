@@ -19,7 +19,7 @@ public static partial class TileRewriter
     /// <summary>What the planner wrote, for the region report.</summary>
     public sealed class LayoutWriteStats
     {
-        public int Junctions, Skipped, Transitions, Pieces, Lines, Marks, Trimmed, Extended, Orphaned, CoreVertices, CapVertices, Bars, Refuges, Signs, Ramps, Signals, SignalsInvalid, Poles, CoreLines, BikeCrossings, PathCrossings, PathsCarried, PathsThrough, PathsCrossingInCorner, CornersLanded, Paths, PathsLeftOut, InnerEmptied, Aprons, Fallbacks, RingsAsLaid, Caps;
+        public int Junctions, Skipped, Transitions, Pieces, Lines, Marks, Trimmed, Extended, Orphaned, CoreVertices, CapVertices, Bars, Refuges, Signs, Ramps, Signals, SignalsInvalid, Poles, CoreLines, BikeCrossings, PathCrossings, PathsCarried, PathsThrough, PathsCrossingInCorner, CornersLanded, Paths, PathsLeftOut, PathRides, InnerEmptied, Aprons, Fallbacks, RingsAsLaid, Caps;
         /// <summary>Written junctions with a transition (LV95), for the seam check and pictures.</summary>
         public readonly List<Vec2> WithTransitions = new();
         public readonly List<Vec2> OrphanedAt = new();
@@ -31,7 +31,7 @@ public static partial class TileRewriter
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
             $"    junction planner written (#818 phase 3): {Junctions:N0} junctions as cores ({Aprons:N0} flush aprons of service roads; {Fallbacks:N0} plain cores where the planned one failed its checks, {RingsAsLaid:N0} rings written as laid, {Caps:N0} today's caps), {Skipped:N0} left to the old layout ({string.Join(", ", Why.Select(kv => $"{kv.Key} {kv.Value}"))}); ")
-            + string.Create(CultureInfo.InvariantCulture, $"{Transitions:N0} transitions over {Pieces:N0} pieces, {Lines:N0} lines and {Marks:N0} marks; arms trimmed to their mouth {Trimmed:N0}, run on to it {Extended:N0}; pieces lost by a later cut {Orphaned:N0}{(OrphanedAt.Count > 0 ? " (at " + string.Join("; ", OrphanedAt.Take(6).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")}; cap vertices {CapVertices:N0} of the cores' {CoreVertices:N0}; exterior: {Bars:N0} bars, {Refuges:N0} refuges, {Signs:N0} signs, {Ramps:N0} crosswalks with lowered kerbs; lights {Signals:N0} ({SignalsInvalid:N0} plans invalid), {Poles:N0} poles, {CoreLines:N0} lines through the cores, {BikeCrossings:N0} bike lanes through them, {PathCrossings:N0} path crossings ({PathsCarried:N0} ends carried to the kerb, {PathsCrossingInCorner:N0} of them crossing another in a corner: left to it), {PathsThrough:N0} paths carried along a kerb, {CornersLanded:N0} corners a path crossing ends on; paths for traffic (JPTH) {Paths:N0}, left out {PathsLeftOut:N0}; merged cores written {MergedAt.Count:N0} (of {MergedAt.Sum(m => m.Nodes):N0} nodes{(MergedAt.Count > 0 ? "; at " + string.Join(" ", MergedAt.GroupBy(m => m.Nodes).OrderBy(g => g.Key).SelectMany(g => g.OrderBy(m => m.At.X).Take(4)).Select(m => string.Create(CultureInfo.InvariantCulture, $"{m.At.X:F0},{m.At.Y:F0}x{m.Nodes}"))) : "")}), streets under them {InnerEmptied:N0}; roundabouts written whole {RingsAt.Count:N0}{(RingsAt.Count > 0 ? " (at " + string.Join(" ", RingsAt.OrderBy(v => v.X).Take(8).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")} (#854)")
+            + string.Create(CultureInfo.InvariantCulture, $"{Transitions:N0} transitions over {Pieces:N0} pieces, {Lines:N0} lines and {Marks:N0} marks; arms trimmed to their mouth {Trimmed:N0}, run on to it {Extended:N0}; pieces lost by a later cut {Orphaned:N0}{(OrphanedAt.Count > 0 ? " (at " + string.Join("; ", OrphanedAt.Take(6).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")}; cap vertices {CapVertices:N0} of the cores' {CoreVertices:N0}; exterior: {Bars:N0} bars, {Refuges:N0} refuges, {Signs:N0} signs, {Ramps:N0} crosswalks with lowered kerbs; lights {Signals:N0} ({SignalsInvalid:N0} plans invalid), {Poles:N0} poles, {CoreLines:N0} lines through the cores, {BikeCrossings:N0} bike lanes through them, {PathCrossings:N0} path crossings ({PathsCarried:N0} ends carried to the kerb, {PathsCrossingInCorner:N0} of them crossing another in a corner: left to it), {PathsThrough:N0} paths carried along a kerb, {CornersLanded:N0} corners a path crossing ends on; paths for traffic (JPTH) {Paths:N0} ({PathRides:N0} riders' ways from path to path), left out {PathsLeftOut:N0}; merged cores written {MergedAt.Count:N0} (of {MergedAt.Sum(m => m.Nodes):N0} nodes{(MergedAt.Count > 0 ? "; at " + string.Join(" ", MergedAt.GroupBy(m => m.Nodes).OrderBy(g => g.Key).SelectMany(g => g.OrderBy(m => m.At.X).Take(4)).Select(m => string.Create(CultureInfo.InvariantCulture, $"{m.At.X:F0},{m.At.Y:F0}x{m.Nodes}"))) : "")}), streets under them {InnerEmptied:N0}; roundabouts written whole {RingsAt.Count:N0}{(RingsAt.Count > 0 ? " (at " + string.Join(" ", RingsAt.OrderBy(v => v.X).Take(8).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")} (#854)")
             + (WithTransitions.Count > 0 ? "\n      with transitions at " + string.Join("; ", WithTransitions.Take(12).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) : "");
     }
 
@@ -389,7 +389,7 @@ public static partial class TileRewriter
 
         // (phase 5, #709) every connector of a written core as a path for traffic (JPTH): from its lane at its arm's mouth to the exit's,
         // each end named by the arm's piece at the mouth and the lane's offset there, its points on the cap's surface
-        void WritePaths(JunctionPlan jp, TileId home, RoadJunction cap, SignalPlan? plan, short signalIndex)
+        void WritePaths(JunctionPlan jp, TileId home, RoadJunction cap, SignalPlan? plan, short signalIndex, IEnumerable<Connector> connectors)
         {
             var core = jp.Core!;
             int PlanArm(int arm) => jp.Arms.FindIndex(x => x.Arm == arm);
@@ -397,7 +397,7 @@ public static partial class TileRewriter
             {
                 if (plan is null) return -1;
                 int a = PlanArm(arm);
-                bool bike = kind == ConnectorKind.Bike;
+                bool bike = kind is ConnectorKind.Bike or ConnectorKind.Path;
                 int g = plan.Groups.FindIndex(x => x.Arm == a && (bike ? x.Kind == SignalGroupKind.Bike : x.Kind is SignalGroupKind.Car or SignalGroupKind.LeftArrow or SignalGroupKind.RightArrow) && (x.Moves & move) != 0);
                 if (g < 0 && bike) g = plan.Groups.FindIndex(x => x.Arm == a && x.Kind == SignalGroupKind.Car && (x.Moves & SignalMoves.Through) != 0);
                 return g;
@@ -409,7 +409,7 @@ public static partial class TileRewriter
                 var p = a.Axis!.PointAt(core.Mouths.First(m => m.Arm == arm).Station);
                 return new JunctionPathEnd((float)(p.X - home.MinE), CapHeightAt(cap, home, p), (float)(home.MaxN - p.Y), (float)offset);
             }
-            foreach (var c in core.Connectors)
+            foreach (var c in connectors)
             {
                 if (c.Centre.Count < 2) { stats.PathsLeftOut++; continue; }
                 var points = RoadPaintGeometry.Simplify(Local(home, c.Centre, p => CapHeightAt(cap, home, p), 0f));
@@ -418,7 +418,8 @@ public static partial class TileRewriter
                 int g = GroupOf(c.FromArm, c.Move, c.Kind);
                 Get(pathsOf, home).Add(new RoadJunctionPath
                 {
-                    Junction = cap, From = from, To = to, Move = c.Move, Kind = c.Kind == ConnectorKind.Bike ? JunctionPathKind.Bike : JunctionPathKind.Car,
+                    Junction = cap, From = from, To = to, Move = c.Move,
+                    Kind = c.Kind switch { ConnectorKind.Bike => JunctionPathKind.Bike, ConnectorKind.Path => JunctionPathKind.Path, _ => JunctionPathKind.Car },
                     Signal = g >= 0 ? signalIndex : (short)-1, Group = (byte)Math.Max(0, g), Width = (float)c.Width, ToWidth = (float)c.ToWidth, Points = points,
                 });
                 stats.Paths++;
@@ -779,10 +780,18 @@ public static partial class TileRewriter
             var capHere = capOfPlan.TryGetValue(jp, out var hc2) ? hc2.Cap : null;
             WriteCoreLines(jp, result, capHere, paint, stats);
             var plan = jp.Lights ? WriteSignals(jp, result, signals, approaches, cantons, signalStats, stats) : null;
+            short signalIndex = plan is null || !capOfPlan.TryGetValue(jp, out var hs) ? (short)-1 : (short)(Get(signals, hs.Home).Count - 1);
             if (capHere is not null && capOfPlan.TryGetValue(jp, out var hp))
-                WritePaths(jp, hp.Home, capHere, plan, plan is null ? (short)-1 : (short)(Get(signals, hp.Home).Count - 1));
+                WritePaths(jp, hp.Home, capHere, plan, signalIndex, jp.Core!.Connectors);
             var landings = new List<Vec2>();
-            WriteBikeCrossings(jp, result, segmentOf, finalPieces, plan, capHere, paint, bridges, pathEnds, stats, landings);
+            var rides = new List<Connector>();
+            WriteBikeCrossings(jp, result, segmentOf, finalPieces, plan, capHere, paint, bridges, pathEnds, stats, landings, rides);
+            // the riders' ways from path to path (#971), as junction paths beside the core's
+            if (capHere is not null && capOfPlan.TryGetValue(jp, out var hr) && rides.Count > 0)
+            {
+                WritePaths(jp, hr.Home, capHere, plan, signalIndex, rides);
+                stats.PathRides += rides.Count;
+            }
             // a corner a path crossing ends on is laid as beside a crosswalk (the user, Oct 14 2026)
             if (landings.Count == 0 || !capOfPlan.TryGetValue(jp, out var hc3) || !coreCorners.TryGetValue(hc3.Home, out var byCap3)
                 || !byCap3.TryGetValue(hc3.Cap, out var inputs)) continue;

@@ -4,7 +4,8 @@ using UnitSport.Terrain.Format;
 using UnitSport.Tools.RoadGen.Geometry;
 
 /// <summary>Who drives a connector: cars (and trucks), or riders on a bike lane.</summary>
-public enum ConnectorKind : byte { Car, Bike }
+/// <summary>Cars, riders on a bike lane (through the core), or riders from a separated path to another (round it, #971).</summary>
+public enum ConnectorKind : byte { Car, Bike, Path }
 
 /// <summary>
 /// A lane-to-lane path through a junction core (#818, step 2): from an arriving lane's centre at its arm's mouth, along the
