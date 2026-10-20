@@ -27,6 +27,12 @@ public partial class Traffic
     /// </summary>
     public bool ShowMovers { get; set; }
 
+    /// <summary>
+    /// <see cref="ShowMovers"/>' trails alone (#979, the user: simpler): each in its own group's light, the starting one green, the
+    /// ending one yellow on amber and red after; no movers, lines or rings.
+    /// </summary>
+    public bool ShowTrails { get; set; }
+
     /// <summary>How far from the camera the lit paths are drawn (m).</summary>
     private const float LightsDrawn = 400f;
 
@@ -54,7 +60,7 @@ public partial class Traffic
 
     private void StepDebugDraw(double dt)
     {
-        if (!ShowPaths && !ShowEndpoints && !ShowLights && !ShowMovers)
+        if (!ShowPaths && !ShowEndpoints && !ShowLights && !ShowMovers && !ShowTrails)
         {
             if (_debugLines is not null) _debugLines.Visible = false;
             return;
@@ -119,10 +125,10 @@ public partial class Traffic
             }
         }
         // the movers last: drawn over the lit paths
-        if (ShowMovers && _roads is not null && Focus?.Invoke() is { } here)
+        if ((ShowMovers || ShowTrails) && _roads is not null && Focus?.Invoke() is { } here)
             foreach (var site in _roads.Signals)
                 if (site.Pairs.Count > 0 && new Vector2(site.Pairs[0].Starting[0].X - here.X, site.Pairs[0].Starting[0].Z - here.Z).Length() < LightsDrawn)
-                    lines += DrawMovers(mesh, site);
+                    lines += DrawMovers(mesh, site, trailsOnly: !ShowMovers);
         if (lines == 0)
         {
             // an empty surface is an error: one invisible line
@@ -262,12 +268,13 @@ public partial class Traffic
 
     private static readonly Color EndingMover = new(0.95f, 0.1f, 0.1f), StartingMover = new(0.05f, 0.42f, 0.12f);
 
-    /// <summary>The movers of each pair whose phase change is under way at a junction (see <see cref="ShowMovers"/>).</summary>
-    private int DrawMovers(ImmediateMesh mesh, SignalSite site)
+    /// <summary>The movers of each pair whose phase change is under way at a junction (see <see cref="ShowMovers"/>, <see cref="ShowTrails"/>).</summary>
+    private int DrawMovers(ImmediateMesh mesh, SignalSite site, bool trailsOnly)
     {
         var plan = site.Plan;
         if (plan.Cycle <= 0) return 0;
-        double u = ((Net.ClockSync.ServerNow + plan.Offset) % plan.Cycle + plan.Cycle) % plan.Cycle;
+        double now = Net.ClockSync.ServerNow;
+        double u = ((now + plan.Offset) % plan.Cycle + plan.Cycle) % plan.Cycle;
         int n = 0;
         foreach (var (pair, ending, starting) in site.Pairs)
         {
@@ -285,12 +292,27 @@ public partial class Traffic
                 // each one shown, and its line, only while it moves: the last one from a moment before its line (it comes on at its
                 // clearing speed) until it has left its line's end, the first one from its line at green until it has left its end;
                 // each window on its own, round the cycle, so neither is cut off mid-move by the other's
-                double? last = Moving(u, plan.Cycle, crosses - Lead, Lead + (Length(ending) + Size(pair.EndingMover).Length) / Math.Max(0.1, pair.ClearSpeed));
+                // (the trails alone: the ending one from its green's end, whole through its amber)
+                double from = trailsOnly ? Math.Min(end, crosses - Lead) : crosses - Lead;
+                double? last = Moving(u, plan.Cycle, from, crosses - from + (Length(ending) + Size(pair.EndingMover).Length) / Math.Max(0.1, pair.ClearSpeed));
                 double? first = Moving(u, plan.Cycle, start, (Length(starting) + Size(pair.StartingMover).Length) / Math.Max(0.1, pair.EnterSpeed));
                 if (last is null && first is null) continue;
                 var up = Vector3.Up * DrawLift;
                 // each green a trail (the user): the ending one's held ahead of its last mover to its line's end, the starting one's
                 // from its line to its first mover; a crossing has no way, its walkers leave both kerbs at once
+                if (trailsOnly)
+                {
+                    var closing = plan.State(pair.Ending, now) == SignalAspect.Amber ? Colors.Yellow : EndingMover;
+                    if (last is { } tl2)
+                        foreach (bool back in pair.EndingMover == ConflictMover.Walker ? Both : One)
+                            Trail(mesh, ending, (float)((tl2 - crosses) * pair.ClearSpeed) - Size(pair.EndingMover).Length, float.MaxValue,
+                                TrailWidth(pair.EndingMover), closing with { A = 0.75f }, back);
+                    if (first is { } tf2)
+                        foreach (bool back in pair.StartingMover == ConflictMover.Walker ? Both : One)
+                            Trail(mesh, starting, 0, (float)((tf2 - start) * pair.EnterSpeed), TrailWidth(pair.StartingMover), Colors.LimeGreen with { A = 0.75f }, back);
+                    n += 2;
+                    continue;
+                }
                 if (last is { } tl)
                 {
                     for (int i = 0; i + 1 < ending.Length; i++) Ribbon(mesh, ending[i] + up, ending[i + 1] + up, EndingMover with { A = 0.35f }, 0.25f);
@@ -325,6 +347,9 @@ public partial class Traffic
     }
 
     private static readonly bool[] One = [false], Both = [false, true];
+
+    /// <summary>A trail drawn alone a little wider than its mover, a walkers' one wide enough to see.</summary>
+    private static float TrailWidth(ConflictMover who) => who == ConflictMover.Walker ? 1.2f : Size(who).Width + 0.4f;
 
     /// <summary>A trail along <paramref name="line"/> from <paramref name="from"/> to <paramref name="to"/> m (clamped to the line), from its far end when <paramref name="back"/>.</summary>
     private static void Trail(ImmediateMesh mesh, Vector3[] line, float from, float to, float width, Color colour, bool back)

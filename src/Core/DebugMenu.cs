@@ -364,7 +364,7 @@ public partial class DebugMenu : CanvasLayer
         if (_timeScaled) _askSpeed(SimClock.Normal);
         _timeScaled = false;
         _timePicker.Selected = Array.IndexOf(TimeScales, 1.0);
-        if (World.Traffic.Current is { } traffic) traffic.ShowPaths = traffic.ShowEndpoints = traffic.ShowLights = traffic.ShowMovers = false;
+        if (World.Traffic.Current is { } traffic) traffic.ShowPaths = traffic.ShowEndpoints = traffic.ShowLights = traffic.ShowMovers = traffic.ShowTrails = false;
     }
 
     // ------------------------------------------------------------------------------------
@@ -395,6 +395,9 @@ public partial class DebugMenu : CanvasLayer
             "At each phase change of the lights, the movers its timing was worked out for: the ending group's last one\n"
             + "(red, past its line as its amber ends) and the starting group's first (dark green, from its line at green),\n"
             + "meeting at the ringed conflict area just as the last one has left it (#979).");
+        Switch(grid, "trails", "Timing trails", false, on => { if (World.Traffic.Current is { } t) t.ShowTrails = on; },
+            "The timing movers' trails alone, in their lights' colours: the starting stream green from its line to its first one,\n"
+            + "the ending one yellow on amber, then red, ahead of its last one; they never overlap (#979).");
         Switch(grid, "endpoints", "Traffic endpoints", false, on => { if (World.Traffic.Current is { } t) t.ShowEndpoints = on; },
             "Generators (green), destinations (red), both (yellow): a post with an arrow along its heading,\n"
             + "a destination's ring in the colour its cars' ways are drawn in.");
