@@ -867,7 +867,25 @@ public static partial class InteriorGenerator
 
     /// <summary>A room's pieces: what any room of its type has, then what its building kind adds (<see cref="KindExtras"/>).</summary>
     private static IEnumerable<Piece> Pieces(RoomType t, RoomPlan r, Random rng, BuildingKind kind, bool vending = false) =>
-        BasePieces(t, r, rng).Concat(KindExtras(t, kind)).Concat(vending && VendingRoom(t, kind) ? new[] { VendingPiece } : Array.Empty<Piece>());
+        (t == RoomType.BreakRoom && kind == BuildingKind.UnderConstruction ? SiteMess : BasePieces(t, r, rng)).Concat(KindExtras(t, kind)).Concat(vending && VendingRoom(t, kind) ? new[] { VendingPiece } : Array.Empty<Piece>());
+
+    /// <summary>
+    /// A building site's mess container (#822), which is its changing room too: the crew's lockers
+    /// first, the table and a bench to eat at and pull boots on, the kitchenette, the coffee, the
+    /// hard hats and vests on their pegs, the heater. In a container's 2.3 m, what does not fit is left out.
+    /// </summary>
+    private static readonly Piece[] SiteMess =
+    {
+        new(FurnitureType.Locker, 1.2f, 0.45f, 1.9f, true),
+        new(FurnitureType.Table, 1.4f, 0.8f, 0.75f, true),
+        new(FurnitureType.Bench, 1.4f, 0.4f, 0.45f, true),
+        new(FurnitureType.Fridge, 0.6f, 0.65f, 1.8f, true),
+        new(FurnitureType.Counter, 1.2f, 0.6f, 0.9f, true),
+        new(FurnitureType.CoffeeMachine, 0.5f, 0.45f, 1.25f, true),
+        new(FurnitureType.HardHatRack, 1.0f, 0.3f, 1.8f, true),
+        new(FurnitureType.Heater, 0.7f, 0.25f, 0.6f, true),
+        new(FurnitureType.Chair, 0.5f, 0.5f, 0.9f, false),
+    };
 
     private static readonly Piece VendingPiece = new(FurnitureType.VendingMachine, 0.9f, 0.8f, 1.85f, true);
 
@@ -1167,6 +1185,47 @@ public static partial class InteriorGenerator
             new Piece(FurnitureType.Shelf, 1.0f, 0.4f, 1.9f, true),
             new Piece(FurnitureType.SafetySign, 0.5f, 0.06f, 0.7f, true),
         },
+        // #822: a building site's office container: the foreman's desk and the plans table, the
+        // tools locked away, the crew's hats and vests by the door, coffee, a heater for the winter
+        RoomType.SiteOffice => new[]
+        {
+            new Piece(FurnitureType.Desk, 1.4f, 0.7f, 0.75f, true),
+            new Piece(FurnitureType.Table, 1.6f, 0.8f, 0.9f, true),
+            new Piece(FurnitureType.Locker, 0.8f, 0.45f, 1.9f, true),
+            new Piece(FurnitureType.HardHatRack, 1.0f, 0.3f, 1.8f, true),
+            new Piece(FurnitureType.CoffeeMachine, 0.5f, 0.45f, 1.25f, true),
+            new Piece(FurnitureType.Heater, 0.7f, 0.25f, 0.6f, true),
+            new Piece(FurnitureType.ToolChest, 0.9f, 0.5f, 1.0f, true),
+            new Piece(FurnitureType.Whiteboard, 1.2f, 0.08f, 0.9f, true),
+            new Piece(FurnitureType.Chair, 0.5f, 0.5f, 0.9f, false),
+            new Piece(FurnitureType.FireExtinguisher, 0.25f, 0.25f, 0.7f, true),
+        },
+        // #827: up the site office's stair, over the office: the site manager's own desk, the
+        // folders of the job on the shelf, a locker, the programme on the whiteboard
+        RoomType.SiteManager => new[]
+        {
+            new Piece(FurnitureType.Desk, 1.4f, 0.7f, 0.75f, true),
+            new Piece(FurnitureType.Chair, 0.5f, 0.5f, 0.9f, false),
+            new Piece(FurnitureType.Shelf, 1.0f, 0.4f, 1.9f, true),
+            new Piece(FurnitureType.Locker, 0.8f, 0.45f, 1.9f, true),
+            new Piece(FurnitureType.Whiteboard, 1.2f, 0.08f, 0.9f, true),
+            new Piece(FurnitureType.Heater, 0.7f, 0.25f, 0.6f, true),
+            new Piece(FurnitureType.Chair, 0.5f, 0.5f, 0.9f, false),
+            new Piece(FurnitureType.Plant, 0.4f, 0.4f, 1.1f, true),
+        },
+        // and over the mess room the drawing office: the plans spread on two tables, a drafting
+        // desk, the plan rolls on the shelf
+        RoomType.DrawingOffice => new[]
+        {
+            new Piece(FurnitureType.Table, 1.6f, 0.8f, 0.9f, true),
+            new Piece(FurnitureType.Table, 1.6f, 0.8f, 0.9f, true),
+            new Piece(FurnitureType.Desk, 1.2f, 0.7f, 0.75f, true),
+            new Piece(FurnitureType.Chair, 0.5f, 0.5f, 0.9f, false),
+            new Piece(FurnitureType.Chair, 0.5f, 0.5f, 0.9f, false),
+            new Piece(FurnitureType.Shelf, 1.0f, 0.4f, 1.9f, true),
+            new Piece(FurnitureType.Whiteboard, 1.2f, 0.08f, 0.9f, true),
+            new Piece(FurnitureType.Heater, 0.7f, 0.25f, 0.6f, true),
+        },
         RoomType.BankHall => new[]
         {
             new Piece(FurnitureType.TellerDesk, Math.Clamp(Math.Max(r.Width, r.Depth) * 0.45f, 2.0f, 3.6f), 0.8f, 1.15f, true),
@@ -1179,13 +1238,20 @@ public static partial class InteriorGenerator
         _ => Array.Empty<Piece>(),
     };
 
-    private static void Furnish(InteriorLayout l, Random rng)
+    private static void Furnish(InteriorLayout l, Random rng) => Furnish(l, rng, 0);
+
+    /// <summary>
+    /// Furnishes the plan's floors from <paramref name="fromFloor"/> up: a floor added after the rest
+    /// was furnished (a site office's upper containers, #827) is furnished without touching the
+    /// pieces already placed below it.
+    /// </summary>
+    private static void Furnish(InteriorLayout l, Random rng, int fromFloor)
     {
         // a vending machine is the building's own dice roll, so it moves nothing else in the plan
         bool vending = !l.IsBank && Core.Fnv.Unit(l.Key + "|vending") < VendingChance(l.Kind);
         bool apt = l.Type is BuildingType.Apartments or BuildingType.MixedUse;
         var rooms = new List<(int Floor, RoomPlan Room, List<RectPlan> Placed, List<RectPlan> Blocked)>();
-        for (int f = 0; f < l.Floors.Count; f++)
+        for (int f = fromFloor; f < l.Floors.Count; f++)
         {
             var floor = l.Floors[f];
             for (int ri = 0; ri < floor.Rooms.Count; ri++)
@@ -1216,7 +1282,9 @@ public static partial class InteriorGenerator
                 // the stairwell is not somewhere to put a sofa. A site hall (#497) or a shop
                 // floor (#501) is room 0 and holds no stair, so it is not one: the strip the core
                 // keeps clear just inside the door would have blocked its whole front bay.
-                bool isCore = ri == 0 && floor.Rooms.Count > 1 && !LaysItselfOut(r.Type) && !apt;
+                // a site office's rooms (#822) are containers side by side, none of them a core
+                bool isCore = ri == 0 && floor.Rooms.Count > 1 && !LaysItselfOut(r.Type) && !apt
+                    && l.Kind != BuildingKind.UnderConstruction;
                 // a block of flats has a stair in every stairwell (#557): each flight and a landing's
                 // depth at both ends of it stays clear, wherever it stands
                 if (apt)

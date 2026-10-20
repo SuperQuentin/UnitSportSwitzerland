@@ -67,6 +67,8 @@ public static class DoorCheck
             Buildings = Boxes.Select((b, i) => Solid(b, 150f * i + 60f)).ToList(),
         };
         var doors = BuildingFootprint.ComputeDoors(tile, null, null);
+        Digest.Clear();
+        Note("boxes", tile, null);
 
         var names = new HashSet<string>();
         foreach (var d in doors)
@@ -211,9 +213,192 @@ public static class DoorCheck
         }
 
         failures += Garages();
+        failures += FacedDoors();
+        failures += RaisedDoors();
+        failures += StackedDoors();
+        failures += Baseline("doorcheck", BaselinePath, Digest);
 
         GD.Print($"[doorcheck] RESULT: {(failures == 0 ? "ok" : $"FAILED ({failures})")}");
         return failures == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// E works the door the player faces (#822): a real building site in Graubünden (LV95
+    /// 2742681/1254064) has its toilet cabins 1.4 m in front of the office door, their doors facing
+    /// it, 2 m lower down the slope. Standing at the office door, a cabin's door is the nearer one,
+    /// so the nearest-door pick opened the toilet and the office could never be entered. The three
+    /// doors and the doorstep as that site's probe logged them, in a stand-in tile.
+    /// </summary>
+    private static int FacedDoors()
+    {
+        int failures = 0;
+        void Expect(bool ok, string what)
+        {
+            if (!ok) failures++;
+            GD.Print($"[doorcheck] {(ok ? "ok  " : "FAIL")} {what}");
+        }
+
+        var tile = new TileId(-2, -2);
+        var outOffice = new Vector3(-0.48452148f, 0, -0.87477934f);
+        DoorSpot Spot(int slot, Vector3 at, Vector3 outward, float width) =>
+            new(0, at, outward, width, 2.0f) { Slot = slot, Kind = BuildingKind.UnderConstruction };
+        DoorIndex.SetTile(tile, Vector3.Zero,
+        [
+            Spot(0, new Vector3(681.026f, 651.8086f, -63.925232f), outOffice, 0.9f),
+            Spot(1, new Vector3(680.8676f, 649.7846f, -65.346436f), -outOffice, 0.8f),
+            Spot(2, new Vector3(679.7741f, 649.7846f, -64.74078f), -outOffice, 0.8f),
+        ]);
+        var player = new Vector3(680.4446f, 652.0358f, -64.97497f);
+        const float reach = 1.6f;
+        string? Slot(DoorIndex.Entry? e) => e?.Key.Slot.ToString();
+        try
+        {
+            var plain = DoorIndex.Candidates(player, null).FirstOrDefault(c => c.Rejected == null && c.Distance < reach);
+            Expect(plain.Door.Key.Slot != 0 && plain.Door.Key.Tile == tile,
+                $"by plain distance the nearest door to the office's doorstep is a cabin's (slot {plain.Door.Key.Slot}): the case still bites");
+            // the cabins' sills are 2 m under the doorstep, the office's at it: the door at the
+            // player's level is taken first (#827), so with no look at all E works the office
+            Expect(Slot(DoorIndex.NearestEntrance(player, reach)) == "0",
+                $"the nearest door at the player's level is the office's (slot {Slot(DoorIndex.NearestEntrance(player, reach))}), not a cabin's 2 m below");
+            Expect(Slot(DoorIndex.FacedEntrance(player, -outOffice, reach)) == "0",
+                $"looking at the office, E works the office door (slot {Slot(DoorIndex.FacedEntrance(player, -outOffice, reach))})");
+            Expect(Slot(DoorIndex.FacedEntrance(player, outOffice, reach)) is "1" or "2",
+                $"turned round to the cabins, E works a cabin's (slot {Slot(DoorIndex.FacedEntrance(player, outOffice, reach))})");
+            Expect(Slot(DoorIndex.FacedEntrance(player, Vector3.Up, reach)) == "0",
+                "looking straight up, the nearest door at the player's level (#827): the office's");
+        }
+        finally { DoorIndex.ClearTile(tile); }
+        return failures;
+    }
+
+    /// <summary>
+    /// A raised door (#827) through the real door code: a hand-made two-storey plan, a room on each
+    /// floor, a ground door and a door one storey up the same facade (the site office's upper
+    /// container over the lower one). The upper doorway stands on floor 1 inside, its link is the
+    /// same drop as the ground door's, its opening is floor 1's cut, the plan validates with no
+    /// stair up (the upper floor has its own way in) and fails without that door, and a ground
+    /// entrance's JSON carries no <c>Level</c>.
+    /// </summary>
+    private static int RaisedDoors()
+    {
+        int failures = 0;
+        void Expect(bool ok, string what)
+        {
+            if (!ok) failures++;
+            GD.Print($"[doorcheck] {(ok ? "ok  " : "FAIL")} raised door: {what}");
+        }
+
+        const float storey = 2.6f, ground = 10f;
+        var key = new BuildingKey(2583, 1113, 900);
+        InteriorLayout Plan(bool upperDoor, int upperLevel = 1)
+        {
+            RoomPlan Room(float width, float top) => new()
+            {
+                X0 = -3, Z0 = -3, X1 = 3, Z1 = 3, Type = RoomType.Office,
+                Openings = { new OpeningPlan { Side = Side.Front, Center = 0, Width = width, Bottom = 0, Top = top, Kind = OpeningKind.Entry } },
+            };
+            EntrancePlan Way(int slot, int level, float width) => new()
+            {
+                Door = new DoorKey(key, slot).ToString(), X = 0, Z = -3, InX = 0, InZ = 1, Width = width,
+                DoorX = 500, DoorY = ground + level * storey, DoorZ = 997 - 0.03f, DoorOutX = 0, DoorOutZ = -1,
+                DoorWidth = width, DoorHeight = 2.1f, Hang = DoorHang.Inward, Level = level,
+            };
+            var l = new InteriorLayout
+            {
+                Key = key.ToString(), Kind = BuildingKind.Commercial, CenterX = 500, CenterZ = 1000, Yaw = 0,
+                Width = 6, Depth = 6, StoreyHeight = storey, DoorX = 500, DoorY = ground, DoorZ = 997 - 0.03f,
+                DoorOutX = 0, DoorOutZ = -1, DoorWidth = 0.9f, DoorHeight = 2.1f, EntryX = 0, EntryWidth = 0.9f,
+            };
+            l.Floors.Add(new FloorPlan { Rooms = { Room(0.9f, 2.1f) } });
+            l.Floors.Add(new FloorPlan { Rooms = { Room(0.8f, 2.0f) } });
+            l.Entrances.Add(Way(0, 0, 0.9f));
+            if (upperDoor) l.Entrances.Add(Way(1, upperLevel, 0.8f));
+            return l;
+        }
+
+        var plan = Plan(true);
+        var problems = InteriorValidator.Validate(plan);
+        Expect(problems.Count == 0, $"a plan whose upper floor has its own door and no stair validates{(problems.Count > 0 ? ": " + string.Join("; ", problems.Take(3)) : "")}");
+        var noDoor = InteriorValidator.Validate(Plan(false));
+        Expect(noDoor.Any(p => p.Contains("no stairs from floor 0")) && noDoor.Any(p => p.Contains("unreachable")),
+            $"without the upper door it does not: {string.Join("; ", noDoor.Take(3))}");
+        var tooHigh = InteriorValidator.Validate(Plan(true, 2));
+        Expect(tooHigh.Any(p => p.Contains("which the plan has not got")), $"a door on a floor the plan has not got is refused: {string.Join("; ", tooHigh.Take(2))}");
+
+        var low = plan.Entrances[0];
+        var high = plan.Entrances[1];
+        Expect(plan.EntranceY(low) == 0f && Math.Abs(plan.EntranceY(high) - storey) < 1e-5f && plan.EntranceFloor(high) == 1,
+            $"its sill inside is a storey up: {plan.EntranceY(high):F2} m on floor {plan.EntranceFloor(high)} (the ground door's {plan.EntranceY(low):F2} m)");
+        Expect(plan.OpeningOf(low) == (0.9f, 2.1f) && plan.OpeningOf(high) == (0.8f, 2.0f),
+            $"each opens on its own floor's cut: {plan.OpeningOf(low)} and {plan.OpeningOf(high)}");
+
+        var origin = new Core.WorldOrigin(2583500, 1113500);
+        var a = DoorLink.Create(plan, low, origin, 0.9f, 2.1f);
+        var b = DoorLink.Create(plan, high, origin, 0.8f, 2.1f);
+        Expect(Math.Abs(b.Outside.Origin.Y - a.Outside.Origin.Y - storey) < 1e-3f && Math.Abs(b.Inside.Origin.Y - a.Inside.Origin.Y - storey) < 1e-3f,
+            $"both doorways of the upper door are a storey over the ground door's (outside {b.Outside.Origin.Y - a.Outside.Origin.Y:F3} m, inside {b.Inside.Origin.Y - a.Inside.Origin.Y:F3} m)");
+        Expect(a.ToInside.IsEqualApprox(b.ToInside),
+            $"its link is the same drop as the ground door's ({b.ToInside.Origin} against {a.ToInside.Origin})");
+        Expect((b.ToInside * b.Outside.Origin).IsEqualApprox(b.Inside.Origin), "its facade sill maps onto its doorway inside");
+
+        string json = plan.ToJson();
+        var back = InteriorLayout.FromJson(json);
+        Expect(!System.Text.RegularExpressions.Regex.IsMatch(Plan(false).ToJson(), "\"Level\""),
+            "a ground entrance's JSON has no Level field, as before");
+        Expect(back != null && back.Entrances[0].Level == 0 && back.Entrances[1].Level == 1, "a stored plan keeps the door's level");
+        return failures;
+    }
+
+    /// <summary>
+    /// E at a door stacked over another (#827): two doors of one building on the same facade, one
+    /// a storey over the other, as a site office's upper container is over the lower one. The pick
+    /// takes the door at the player's floor, from the ground and from the walkway, looking at the
+    /// facade or not, and a VR hand the door whose opening it is in. Asserted with the upper sill
+    /// at the containers' 2.6 m, and again at 2.0 m, inside <see cref="DoorIndex.MaxRise"/>: the
+    /// pick must not owe it to the reach band being shorter than the storey.
+    /// </summary>
+    private static int StackedDoors()
+    {
+        int failures = 0;
+        void Expect(bool ok, string what)
+        {
+            if (!ok) failures++;
+            GD.Print($"[doorcheck] {(ok ? "ok  " : "FAIL")} stacked doors: {what}");
+        }
+
+        var tile = new TileId(-3, -3);
+        var outward = new Vector3(0, 0, -1);
+        const float sill = 400f;
+        string? Slot(DoorIndex.Entry? e) => e?.Key.Slot.ToString();
+        foreach (float rise in new[] { 2.6f, 2.0f })
+        {
+            Expect(rise > DoorIndex.LevelBand && (rise == 2.6f || rise < DoorIndex.MaxRise),
+                $"the upper sill {rise:F1} m up {(rise < DoorIndex.MaxRise ? "is inside" : "is past")} the {DoorIndex.MaxRise:F1} m reach band");
+            DoorIndex.SetTile(tile, Vector3.Zero,
+            [
+                new DoorSpot(0, new Vector3(100, sill, 100), outward, 0.9f, 2.1f) { Slot = 0, Kind = BuildingKind.UnderConstruction },
+                new DoorSpot(0, new Vector3(100, sill + rise, 100), outward, 0.9f, 2.1f) { Slot = 1, Kind = BuildingKind.UnderConstruction, Level = 1 },
+            ]);
+            try
+            {
+                // in front of the doors, on the ground and on the walkway, 0.8 m out
+                var below = new Vector3(100.1f, sill, 99.2f);
+                var above = new Vector3(100.1f, sill + rise, 99.2f);
+                var look = -outward;
+                foreach (var (feet, want, where) in new[] { (below, "0", "the ground"), (above, "1", "the walkway") })
+                {
+                    Expect(Slot(DoorIndex.NearestEntrance(feet, 1.6f)) == want, $"{rise:F1} m: from {where}, the nearest door is slot {want} ({Slot(DoorIndex.NearestEntrance(feet, 1.6f))})");
+                    Expect(Slot(DoorIndex.FacedEntrance(feet, look, 1.6f)) == want, $"{rise:F1} m: from {where} looking at the facade, E works slot {want} ({Slot(DoorIndex.FacedEntrance(feet, look, 1.6f))})");
+                    Expect(Slot(DoorIndex.FacedEntrance(feet, -look, 1.6f)) == want, $"{rise:F1} m: from {where} turned away, E works slot {want} ({Slot(DoorIndex.FacedEntrance(feet, -look, 1.6f))})");
+                    // a VR hand at the handle, 1.1 m over the feet, reaching into the doorway
+                    var hand = feet + new Vector3(0, 1.1f, 0.6f);
+                    var held = DoorIndex.NearestEntrance(hand, 0.7f, null, d => hand.Y > d.World.Y + 0.3f && hand.Y < d.World.Y + d.Height + 0.3f);
+                    Expect(Slot(held) == want, $"{rise:F1} m: from {where}, a hand at the handle takes slot {want} ({Slot(held)})");
+                }
+            }
+            finally { DoorIndex.ClearTile(tile); }
+        }
+        return failures;
     }
 
     /// <summary>
@@ -266,6 +451,7 @@ public static class DoorCheck
                 }).ToList(),
             };
             var doors = BuildingFootprint.ComputeDoors(tile, roads, null);
+            Note($"garages {cls} {gap:F0}", tile, roads);
             var garages = doors.Where(d => d.Link.Any).ToList();
             if (want == LinkKind.None)
             {
@@ -329,6 +515,7 @@ public static class DoorCheck
                 }).ToList(),
             };
             var doors = BuildingFootprint.ComputeDoors(tile, roads, null);
+            Note("mixed", tile, roads);
             var types = BuildingTypes.For(tile);
             var garages = doors.Where(d => d.Link.Any).ToList();
             Expect(garages.Count > 0 && garages.Count < mixedCopies, $"mixed blocks: {garages.Count} of {mixedCopies} roll a garage door (about seven in ten, shops under flats only)");
@@ -362,6 +549,7 @@ public static class DoorCheck
                 }).ToList(),
             };
             var doors = BuildingFootprint.ComputeDoors(tile, roads, null);
+            Note("shallow", tile, roads);
             var garages = doors.Where(d => d.Link.Any).ToList();
             Expect(garages.Count > 0 && garages.All(g => g.Ramp == GarageRule.RampKind.Along), $"along the facade: {garages.Count} of {alongCopies} shallow blocks roll a garage door, all with the ramp along the facade");
             foreach (var g in garages)
@@ -389,6 +577,92 @@ public static class DoorCheck
     }
 
     /// <summary>
+    /// The ground doors' golden digest (#827): every door of every building this check plans, as
+    /// the footprint places it and as its plan's entrance, opening and <see cref="DoorLink"/> frames
+    /// read it, with a hash of the plan less its version. Written once on <c>main</c>'s door code
+    /// (<c>--doorcheck --door-baseline write</c>) and compared on every run, so a change to the door
+    /// system that moves any existing door by a hundredth of a millimetre, or changes any byte of a
+    /// plan but its version, fails here.
+    /// </summary>
+    private const string BaselinePath = "res://tests/door-baseline.txt";
+
+    private static readonly List<string> Digest = new();
+
+    private static string F(float v) => v.ToString("F4", System.Globalization.CultureInfo.InvariantCulture);
+    private static string V(Vector3 v) => $"{F(v.X)},{F(v.Y)},{F(v.Z)}";
+
+    /// <summary>A plan's hash, its version left out: a bump alone regenerates the same plan.</summary>
+    public static string PlanHash(InteriorLayout l)
+    {
+        int version = l.Version;
+        l.Version = 0;
+        var bytes = System.Text.Encoding.UTF8.GetBytes(l.ToJson());
+        l.Version = version;
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes))[..16];
+    }
+
+    /// <summary>One door as the digest reads it: the spot, and its entrance, opening and frames.</summary>
+    public static string DoorLine(string label, TileId tile, DoorSpot d, InteriorLayout? layout)
+    {
+        string key = d.KeyIn(tile).ToString();
+        var line = $"{label} door {key} at {V(d.Position)} out {V(d.Outward)} {F(d.Width)}x{F(d.Height)} {d.Hang} vehicle {d.Vehicle} "
+            + $"{d.Kind} link {d.Link.Kind} ramp {d.Ramp}/{d.RampDir} bank {d.Bank} shop {d.Shop}";
+        var e = layout?.EntranceOf(key);
+        if (layout == null || e == null) return line + " | locked";
+        var (w, top) = layout.OpeningOf(e);
+        var origin = new Core.WorldOrigin(tile.MinE + 500, tile.MaxN - 500);
+        var link = DoorLink.Create(layout, e, origin, d.Width, d.Height);
+        return line + $" | in {F(e.X)},{F(e.Z)} dir {F(e.InX)},{F(e.InZ)} w {F(e.Width)} door {F(e.DoorX)},{F(e.DoorY)},{F(e.DoorZ)} "
+            + $"h {F(e.DoorHeight)} {e.Hang} {e.Vehicle} opening {F(w)}x{F(top)} inside {V(link.Inside.Origin)} facing {V(link.Inside.Basis.Z)} "
+            + $"outside {V(link.Outside.Origin)} pass {F(link.HalfPass)}x{F(link.PassHeight)} swing {F(link.SwingSeconds)}";
+    }
+
+    /// <summary>Every door of a tile's buildings into <see cref="Digest"/>, with each building's plan hash.</summary>
+    private static void Note(string label, BuildingTile tile, RoadTile? roads)
+    {
+        var doors = BuildingFootprint.ComputeDoors(tile, roads, null);
+        foreach (var group in doors.Where(d => d.Width > 0).GroupBy(d => d.Index))
+        {
+            var layout = InteriorGenerator.Generate(tile, group.Key, roads, null);
+            Digest.Add($"{label} building {group.Key} {layout?.Kind} plan {(layout == null ? "none" : PlanHash(layout))}");
+            foreach (var d in group.OrderBy(d => d.Slot)) Digest.Add(DoorLine(label, tile.Id, d, layout));
+        }
+    }
+
+    /// <summary>
+    /// Compares <paramref name="lines"/> with the committed baseline at <paramref name="res"/>, or
+    /// writes it with <c>--door-baseline write</c>. The number of lines that differ (each printed,
+    /// the first twenty), a missing file counting as one.
+    /// </summary>
+    public static int Baseline(string tag, string res, IReadOnlyList<string> lines)
+    {
+        string path = ProjectSettings.GlobalizePath(res);
+        var args = OS.GetCmdlineUserArgs();
+        int at = Array.IndexOf(args, "--door-baseline");
+        if (at >= 0 && at + 1 < args.Length && args[at + 1] == "write")
+        {
+            System.IO.File.WriteAllText(path, string.Join('\n', lines) + '\n');
+            GD.Print($"[{tag}] wrote the door baseline: {lines.Count} line(s) to {path}");
+            return 0;
+        }
+        if (!System.IO.File.Exists(path))
+        {
+            GD.Print($"[{tag}] FAIL no door baseline at {path}");
+            return 1;
+        }
+        var want = System.IO.File.ReadAllLines(path);
+        int diffs = 0;
+        for (int i = 0; i < Math.Max(want.Length, lines.Count); i++)
+        {
+            string? a = i < want.Length ? want[i] : null, b = i < lines.Count ? lines[i] : null;
+            if (a == b) continue;
+            if (++diffs <= 20) GD.Print($"[{tag}] FAIL door baseline line {i + 1}: was {a ?? "(none)"} / now {b ?? "(none)"}");
+        }
+        GD.Print($"[{tag}] {(diffs == 0 ? "ok  " : "FAIL")} every existing door as the baseline has it ({lines.Count} line(s), {diffs} differ)");
+        return diffs;
+    }
+
+    /// <summary>
     /// Headroom in the room an entrance arrives at: the ceiling the plan cut its doorway under,
     /// which is the room's own and not the storey's. Mirrors how <see cref="InteriorLayout.OpeningOf"/>
     /// picks the opening — nearest ground-floor entry — so the two agree on which room is meant.
@@ -398,7 +672,7 @@ public static class DoorCheck
         var at = new Vector2(e.X, e.Z);
         float clear = l.StoreyHeight - InteriorGenerator.Slab;
         float best = float.MaxValue;
-        foreach (var r in l.GroundFloor.Rooms)
+        foreach (var r in l.EntranceRooms(e))
             foreach (var o in r.Openings)
             {
                 if (o.Kind != OpeningKind.Entry) continue;

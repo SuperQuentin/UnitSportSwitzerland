@@ -1,0 +1,29 @@
+{
+  "id": "collide-headon-truck",
+  "title": "Car head-on into a truck",
+  "verdict": "failed",
+  "by": "Quentin Aellen",
+  "date": "2026-10-20T17:08Z",
+  "commit": "e6b105f8",
+  "coverHash": "46d84034e5b1822f",
+  "covers": [
+    "src/Vehicles/VehicleBody*.cs",
+    "src/Vehicles/VehicleManager.cs",
+    "src/Vehicles/Explosion.cs",
+    "src/Player/FootPlayer.Crash.cs",
+    "src/Player/Rideable.cs",
+    "!**/*Check.cs",
+    "!**/*Probe.cs",
+    "src/Player/Car.cs",
+    "src/Player/CarCatalog.cs",
+    "src/Player/Truck*.cs"
+  ],
+  "notes": [
+    {
+      "date": "2026-10-20T17:08Z",
+      "by": "Quentin Aellen",
+      "verdict": "failed",
+      "text": "the truck move a bit slowlly and the car didn\u0027t crumple"
+    }
+  ]
+}

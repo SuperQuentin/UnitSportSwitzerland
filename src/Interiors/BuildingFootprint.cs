@@ -43,6 +43,12 @@ public readonly record struct DoorSpot(int Index, Vector3 Position, Vector3 Outw
     /// <summary>What it sells, if it is a shop (#273, <see cref="BuildingFootprint.ShopOf"/>): a sign over the door, a counter inside.</summary>
     public Loot.ShopType Shop { get; init; }
 
+    /// <summary>
+    /// Storeys above its building's ground floor the door opens onto (#827): a site office's upper
+    /// container, off its walkway. 0, the ground floor, on every other door. Not part of its key.
+    /// </summary>
+    public int Level { get; init; }
+
     public DoorKey KeyIn(TileId tile) => new(tile.E, tile.N, Index, Slot);
 }
 
@@ -212,6 +218,7 @@ public static class BuildingFootprint
         BuildingKind.Industrial => new Color(0.46f, 0.50f, 0.54f),
         BuildingKind.Apartment or BuildingKind.Commercial or BuildingKind.Civic => new Color(0.22f, 0.26f, 0.30f),
         BuildingKind.Sacral => new Color(0.30f, 0.18f, 0.10f), // old oak
+        BuildingKind.UnderConstruction => new Color(0.16f, 0.30f, 0.52f), // a site office's blue door (#822)
         _ => new Color(0.40f, 0.25f, 0.15f),
     }).SrgbToLinear();
 
@@ -225,8 +232,14 @@ public static class BuildingFootprint
     /// Every door of every building of a tile, in building order and, within a building, main door
     /// first (#498). A building with no wall to hang one on still contributes its empty door spot,
     /// so nothing downstream has to tell "no doors" from "not computed".
+    /// <para>
+    /// A building site's doors are its site office's (#822): one per ground-floor container, the
+    /// first its slot 0, worked out from the site the planner lays out from the same tile and roads
+    /// (<paramref name="sites"/> when the caller has already planned them, so they are not planned twice).
+    /// </para>
     /// </summary>
-    public static DoorSpot[] ComputeDoors(BuildingTile tile, RoadTile? roads, ChunkGrid? grid)
+    public static DoorSpot[] ComputeDoors(BuildingTile tile, RoadTile? roads, ChunkGrid? grid,
+        IReadOnlyList<Terrain.Construction.ConstructionSite>? sites = null)
     {
         var roadIndex = (RoadPoints.Build(roads), RoadPoints.Build(roads, paths: true));
         bool rural = Loot.ShopTables.IsRural(tile.Buildings.Count);
@@ -235,8 +248,16 @@ public static class BuildingFootprint
         for (int i = 0; i < tile.Buildings.Count; i++)
         {
             var kind = tile.Buildings[i].Kind;
-            // a building site has no door: its shell is walked into in the world (#608)
-            var fp = kind == BuildingKind.UnderConstruction ? null : Compute(tile, i, roadIndex, grid);
+            // a building site's shell is walked into in the world (#608); its doors are the site
+            // office's (#822)
+            if (kind == BuildingKind.UnderConstruction)
+            {
+                var office = OfficeDoors(tile, i, roads, grid, sites);
+                if (office.Length > 0) doors.AddRange(office);
+                else doors.Add(new DoorSpot(i, Vector3.Zero, Vector3.Forward, 0f, 0f) { Kind = kind });
+                continue;
+            }
+            var fp = Compute(tile, i, roadIndex, grid);
             // a landmark's shop is given by where it is, not by the key's hash (#501), and the main
             // door carries it so the sign over it reads IKEA rather than whatever the roll said
             var shop = types.TypeOf(i) == BuildingType.Ikea ? Loot.ShopType.Ikea
@@ -253,6 +274,25 @@ public static class BuildingFootprint
             foreach (var extra in fp.Extra) doors.Add(extra with { Kind = kind });
         }
         return doors.ToArray();
+    }
+
+    /// <summary>
+    /// A building site's doors (#822): its office's, slot 0 first, on the ground the containers are
+    /// drawn on. Empty when the planner found no room for an office.
+    /// </summary>
+    public static DoorSpot[] OfficeDoors(BuildingTile tile, int index, RoadTile? roads, ChunkGrid? grid,
+        IReadOnlyList<Terrain.Construction.ConstructionSite>? sites = null)
+    {
+        string key = new BuildingKey(tile.Id.E, tile.Id.N, index).ToString();
+        Terrain.Construction.ConstructionSite? site = null;
+        if (sites != null)
+        {
+            foreach (var s in sites)
+                if (s.Key == key) { site = s; break; }
+        }
+        else site = Terrain.Construction.SitePlans.Of(tile, roads, index);
+        if (site == null || Terrain.Construction.SiteShellBuilder.Office(tile, site, grid) is not { } office) return [];
+        return Terrain.Construction.SiteShellBuilder.OfficeDoors(office, site, index);
     }
 
     public static Footprint? Compute(BuildingTile tile, int index, RoadTile? roads, ChunkGrid? grid) =>

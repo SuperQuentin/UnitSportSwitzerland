@@ -135,7 +135,8 @@ public partial class FishingVisuals : Node3D
 
     private FootPlayer? Angler(long peer, bool local) => local
         ? ItemController.Instance?.UsablePlayer
-        : _events.GetNodeOrNull<FootPlayer>("../Players/" + peer);
+        // a film's actor fishing (#882) has no peer under Players: the director's events name it
+        : ItemEvents.StagedBody(peer) ?? _events.GetNodeOrNull<FootPlayer>("../Players/" + peer);
 
     public override void _Process(double delta)
     {

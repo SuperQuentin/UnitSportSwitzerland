@@ -11,16 +11,16 @@
 PORT=${PORT:-7893}
 # the generated Foundations site --constructioncheck lists by the spawn
 AT=${AT:-2588796,1118441}
-WORLD="--generated-world --traffic 0 --at $AT"
-tc_server 480 120 "$OUT/yardlootnet_server.log" --server --port $PORT --generated-world
+# the generated world wherever it runs: no real tiles, even where terrain_location.json has some (#943)
+WORLD="--generated-world ${NOTERRAIN[*]} --traffic 0 --at $AT"
+tc_server 480 120 "$OUT/yardlootnet_server.log" --server --port $PORT --generated-world "${NOTERRAIN[@]}"
 tc_client 360 "$OUT/yardlootnet_A.log" --connect 127.0.0.1:$PORT --name YardA $WORLD --yardlootnet A & A=$!
 tc_client 240 "$OUT/yardlootnet_B.log" --connect 127.0.0.1:$PORT --name YardB $WORLD --yardlootnet B & B=$!
 wait $B
 # the late joiner: B has gone, A is still there and tells it which skip. Its own user:// (a
 # player of its own: with B's identity key it would wake at B's sleeper)
 rm -rf "$OUT/userdata_yardlootnet_C"; mkdir -p "$OUT/userdata_yardlootnet_C"
-C_UD="$PWD/$OUT/userdata_yardlootnet_C"
-( if _guard_windows; then export APPDATA="$(cygpath -w "$C_UD")"; else export XDG_DATA_HOME="$C_UD"; fi
+( tc_userdata "$OUT/userdata_yardlootnet_C"
   WINDOWED= tc_client 240 "$OUT/yardlootnet_C.log" --connect 127.0.0.1:$PORT --name YardC $WORLD --yardlootnet C ) & C=$!
 wait $A $C
 tc_stop

@@ -113,8 +113,12 @@ public partial class SettingsScreen : Screen
                 i => GameSettings.Current.RideProfile = (RideProfile)i);
             UiKit.ToggleRow(rows, "Third-person view", s.ThirdPerson, on => GameSettings.Current.ThirdPerson = on,
                 "Over the shoulder on foot, chase view mounted (V in game)");
+            UiKit.ToggleRow(rows, "Speech bubbles", s.ChatBubbles, on => GameSettings.Current.ChatBubbles = on,
+                "What players near you say in the chat, in a comic bubble over their head");
             UiKit.SliderRow(rows, "Camera shake", 0, 1, 0.05, s.ScreenShake,
                 v => GameSettings.Current.ScreenShake = (float)v, Percent);
+            UiKit.OptionRow(rows, "Snowboard stance", new[] { "Regular (left foot forward)", "Goofy (right foot forward)" }, s.Goofy ? 1 : 0,
+                i => GameSettings.Current.Goofy = i == 1, "Which foot leads on the board; riding switch swaps them for a while");
             UiKit.ToggleRow(rows, "Pigeon flies tail first", s.TailFirstPigeon, on => GameSettings.Current.TailFirstPigeon = on,
                 "The backwards bird of old, kept as an option; drawing only, every pigeon on your screen");
             UiKit.SliderRow(rows, "Replay buffer", 0, 15, 1, s.ReplayMinutes, v => GameSettings.Current.ReplayMinutes = (int)v,

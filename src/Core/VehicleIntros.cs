@@ -8,6 +8,9 @@ public enum VehicleIntroKind
     Forklift, Excavator, MiniExcavator, WheelLoader, CompactRoller, Telehandler,
     /// <summary>Not driven: shown on walking up to a lone trailer, and done from a truck.</summary>
     Trailer,
+    /// <summary>The flying saucer (#861).</summary>
+    Ufo,
+    Snowboard,
 }
 
 /// <summary>
@@ -58,9 +61,18 @@ public static class VehicleIntros
             new("Push with the poles: {throttle}", Throttle),
             new("Turn with {move_left} {move_right}: turning across the slope is how you slow down", Steer,
                 Pad: "Turn with {move_forward}: turning across the slope is how you slow down"),
-            new("Tuck for speed: hold {tuck_boost}", new[] { "tuck_boost" }),
-            new("Jump with {jump}", new[] { "jump" }),
+            new("Snowplough to slow down: {brake}", Brake),
+            new("Schuss: hold {tuck_boost} · jump with {jump}", new[] { "tuck_boost", "jump" }),
         }, "{ride_menu} takes them off when you stand still"),
+
+        new(VehicleIntroKind.Snowboard, "Snowboard", new IntroRow[]
+        {
+            new("Push with the free foot: tap {throttle}", Throttle),
+            new("Lean onto the toe or heel edge with {move_left} {move_right}", Steer,
+                Pad: "Lean onto the toe or heel edge with {move_forward}"),
+            new("Skid to a stop on the heel edge: {brake}", Brake),
+            new("Ollie with {jump}; land backwards and you ride switch", new[] { "jump" }),
+        }, "{ride_menu} takes it off when you stand still"),
 
         new(VehicleIntroKind.Car, "Car", new IntroRow[]
         {
@@ -108,6 +120,15 @@ public static class VehicleIntros
             new("Climb: hold {jump}", new[] { "jump", "trigger_right" }, Pad: "Climb: hold {throttle}"),
             new("Descend: hold {crouch_slide}", new[] { "crouch_slide", "trigger_left" }, Pad: "Descend: hold {brake}"),
         }, "Let go and it holds its height · {interact_mount} gets out on the ground"),
+
+        new(VehicleIntroKind.Ufo, "UFO", new IntroRow[]
+        {
+            new("Fly where you look with " + Wasd + ", {sprint} boosts", Stick, Pad: "Fly where you look with {move_forward}, {sprint} boosts"),
+            new("Climb: hold {jump} · descend: hold {crouch_slide}", new[] { "jump", "trigger_right", "crouch_slide", "trigger_left" },
+                Pad: "Climb: hold {throttle} · descend: hold {brake}"),
+            new("Tractor beam on / off: {tractor_beam}", new[] { "tractor_beam" }),
+            new("Ramp (landed) / legs (flying): {car_door}", new[] { "car_door" }),
+        }, "Let go and it hovers · {lights_toggle} lights · {interact_mount} gets out down the ramp"),
 
         new(VehicleIntroKind.Plane, "Plane", new IntroRow[]
         {

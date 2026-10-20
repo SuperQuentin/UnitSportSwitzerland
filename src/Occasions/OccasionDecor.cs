@@ -141,6 +141,9 @@ public partial class OccasionDecor : Node
             return;
         }
 
+        // a tile furnished again before its roads came back, or on a new node: the props drawn for
+        // the old entry go now, or nothing would ever take them off (a /occasion stop left them, #881)
+        if (existing != null) Drop(existing);
         var tile = new Tile { Node = node, Doors = doors };
         _tiles[id] = tile;
         int epoch = _epoch;
@@ -163,8 +166,13 @@ public partial class OccasionDecor : Node
     /// <summary>The tile shed its buildings (#553): the decorations at their doors go, back with the next furnishing.</summary>
     private void OnUnfurnished(TileId id, ChunkNode node)
     {
-        if (!_tiles.Remove(id, out var tile)) return;
+        if (_tiles.Remove(id, out var tile)) Drop(tile);
+    }
+
+    private static void Drop(Tile tile)
+    {
         if (tile.Decor != null && IsInstanceValid(tile.Decor)) tile.Decor.QueueFree();
+        tile.Decor = null;
     }
 
     private void OnReplaced(Func<TileId, bool>? affected)
@@ -173,13 +181,15 @@ public partial class OccasionDecor : Node
         if (affected == null)
         {
             _epoch++;
+            foreach (var tile in _tiles.Values) Drop(tile);
             _tiles.Clear();
             return;
         }
         // real tiles merged into the generated fill: only the tiles whose ground changed were
         // unloaded (TileUnloaded has dropped them already); a decoration still waiting for one
         // finds its entry gone and gives up, the rest carry on
-        foreach (var id in _tiles.Keys.Where(affected).ToList()) _tiles.Remove(id);
+        foreach (var id in _tiles.Keys.Where(affected).ToList())
+            if (_tiles.Remove(id, out var tile)) Drop(tile);
     }
 
     private void RedecorateAll()
@@ -219,7 +229,8 @@ public partial class OccasionDecor : Node
             Id = id,
             Origin = tileOrigin,
             World = _origin,
-            Doors = tile.Doors,
+            // doorsteps on the ground only: a lantern or a gift at a raised door (#827) stood on the walkway
+            Doors = Array.FindAll(tile.Doors, d => d.Level == 0),
             Roads = tile.Roads,
             HeightAtWorld = p => _chunks.TryGetSurface(p, out float h) ? h : null,
             CoverAtWorld = p => _chunks.TryGetCover(p, out var c) ? c : null,

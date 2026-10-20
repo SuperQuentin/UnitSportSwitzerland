@@ -9,7 +9,8 @@
     running race who have not finished.
   - **Commands**: `/race start [metres] [mount|open]`, `/race start air <place|metres> [mount]`,
     `/race duel <player> [same args]` (a private challenge; the race starts the moment it is accepted
-    with `/race join`), `/race join [id]` (no id: the duel you were challenged to, else the newest open
+    with `/race join`; it is an invite of kind `race`, #840, `net/invites`: a toast, F2, and a decline
+    ends the duel; an open race invites everyone the same way, and joining dismisses the invite), `/race join [id]` (no id: the duel you were challenged to, else the newest open
     race), `/race leave`, `/race cancel [id]` (host or console), `/race list`, `/race npc [n] [metres] [mount]`, `/race duel npc` (NPC opponents, below). Mounts: `foot bike skis
     car <car name> moto|r1 monster plane heli paraglider wingsuit`, or `open` (everyone keeps theirs).
     Default: the AE86 on the ground, the plane in the air. A class whose `Rideable.Create` is null (the
@@ -46,7 +47,18 @@
     NPC #1 0:40.2, NPC #2 0:40.6, solid on B throughout, removed at the results; a duel vs one NPC with A
     killed mid-race: the NPC removed on the server and B at once.
   - **Courses** (`RaceCourse`): ordered checkpoints + a line for progress. Ground (foot, bike, skis,
-    car, moto): `RaceRoute` from the host, a checkpoint every 200 m. Air: a straight line of gates to a
+    car, moto): `RaceRoute` from the host, a checkpoint every 200 m.
+    - **Skis race down the slopes** (#909, `RaceRoute.BuildPisteAsync`, `World/Snow/PisteCourse`):
+      - The course starts at the line slope nearest the host (within 300 m), runs down it, then down
+        the run continuing from its bottom (a point within 40 m that goes on down at least 5 m, the
+        one turning least, never a run taken already).
+      - It is cut at the race length + 200 m, every 2 m, at the terrain's heights, with the slope's width.
+      - `Behind` is 600 m of the same run uphill. On skis every NPC arrives from behind
+        (`ArrivalStyle.Behind`): skis cannot climb back to a slot from ahead.
+      - No slope near: "no slope here, racing the road". Off snow skis barely move (#899), so a
+        ski race on a road is a walk.
+      - Measured: `CHUNKS=... tools/racecheck.sh skis 2580350,1100050 600` (La Pasay-FIS, Bruson):
+        A 0:25.52, B 0:26.07, 2031 → 1883 m, up to 87 km/h. Air: a straight line of gates to a
     `places.json` place (the same `PlaceIndex.Search` as `/city`) or that far along the host's heading,
     one every 400 m, each a 40 m sphere tested against the whole frame's step (a slow frame must not
     let a plane jump a gate). Plane/heli gates: the highest terrain within 150 m + 60 m. Gliders: grid

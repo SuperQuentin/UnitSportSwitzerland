@@ -12,14 +12,16 @@ public sealed class BrRecord
     public int Wins { get; set; }
     public int TopFive { get; set; }
     public int Kills { get; set; }
+    /// <summary>How many of <see cref="Kills"/> were bots (#837).</summary>
+    public int BotKills { get; set; }
     public float Damage { get; set; }
     /// <summary>Best placing ever, 1 = a win; 0 before the first match.</summary>
     public int BestPlace { get; set; }
     public double Survived { get; set; }
 
-    /// <summary>"12 matches · 3 wins · 41 kills · best #1": the record in one line.</summary>
+    /// <summary>"12 matches · 3 wins · 41 kills (3 bots) · best #1": the record in one line.</summary>
     public string Line() => FormattableString.Invariant(
-        $"{Matches} {(Matches == 1 ? "match" : "matches")} · {Wins} {(Wins == 1 ? "win" : "wins")} · {Kills} {(Kills == 1 ? "kill" : "kills")} · top 5 ×{TopFive} · best #{BestPlace}");
+        $"{Matches} {(Matches == 1 ? "match" : "matches")} · {Wins} {(Wins == 1 ? "win" : "wins")} · {BrStats.KillText(Kills, BotKills)} · top 5 ×{TopFive} · best #{BestPlace}");
 }
 
 /// <summary>
@@ -35,10 +37,18 @@ public sealed class BrStats
 
     public BrRecord? Find(string name) => Players.GetValueOrDefault(Key(name));
 
+    /// <summary>"1 kill", "10 kills", "10 kills (3 bots)", "1 kill (1 bot)" (#837): kills of bots count, and show.</summary>
+    public static string KillText(int kills, int botKills) => string.Create(CultureInfo.InvariantCulture,
+        $"{kills} {(kills == 1 ? "kill" : "kills")}{(botKills > 0 ? $" ({botKills} {(botKills == 1 ? "bot" : "bots")})" : "")}");
+
     /// <summary>One finished match, entrant by entrant: name, final place (1 = won), kills, damage dealt, seconds survived.</summary>
-    public void Add(IEnumerable<(string Name, int Place, int Kills, float Damage, double Survived)> entrants)
+    public void Add(IEnumerable<(string Name, int Place, int Kills, float Damage, double Survived)> entrants) =>
+        Add(entrants.Select(e => (e.Name, e.Place, e.Kills, 0, e.Damage, e.Survived)));
+
+    /// <summary>The same, with how many of each entrant's kills were bots (#837). Bots themselves are never added.</summary>
+    public void Add(IEnumerable<(string Name, int Place, int Kills, int BotKills, float Damage, double Survived)> entrants)
     {
-        foreach (var (name, place, kills, damage, survived) in entrants)
+        foreach (var (name, place, kills, botKills, damage, survived) in entrants)
         {
             if (string.IsNullOrWhiteSpace(name)) continue;
             string key = Key(name);
@@ -49,6 +59,7 @@ public sealed class BrStats
             if (place is >= 1 and <= 5) r.TopFive++;
             if (place >= 1 && (r.BestPlace == 0 || place < r.BestPlace)) r.BestPlace = place;
             r.Kills += Math.Max(0, kills);
+            r.BotKills += Math.Clamp(botKills, 0, Math.Max(0, kills));
             r.Damage += Math.Max(0f, damage);
             r.Survived += Math.Max(0, survived);
         }
@@ -59,7 +70,7 @@ public sealed class BrStats
         .OrderByDescending(r => r.Wins).ThenByDescending(r => r.Kills).ThenBy(r => r.Matches)
         .ThenBy(r => r.Name, StringComparer.OrdinalIgnoreCase).Take(n);
 
-    /// <summary>"1. Anna — 3 wins, 41 kills": the leaderboard as lines.</summary>
+    /// <summary>"1. Anna — 3 wins, 41 kills (3 bots)": the leaderboard as lines.</summary>
     public IEnumerable<string> Board(int n) => Top(n).Select((r, i) => string.Create(CultureInfo.InvariantCulture,
-        $"{i + 1}. {r.Name} — {r.Wins} {(r.Wins == 1 ? "win" : "wins")}, {r.Kills} {(r.Kills == 1 ? "kill" : "kills")}"));
+        $"{i + 1}. {r.Name} — {r.Wins} {(r.Wins == 1 ? "win" : "wins")}, {KillText(r.Kills, r.BotKills)}"));
 }

@@ -135,12 +135,34 @@ public partial class ItemEvents : Node
         RpcId(1, MethodName.Relay, (int)kind, at.E, at.N, at.Alt, direction, extra);
     }
 
+    // ---- a film's actors (the trailer director, #882) ---------------------------------------------
+
+    private static readonly Dictionary<long, FootPlayer> Staged = new();
+
+    /// <summary>
+    /// A film's event, as if <paramref name="body"/> (one of the director's actors, no peer of its own)
+    /// had sent it: played on this machine only, never relayed, under a peer id of its own so a
+    /// fishing line runs from that body's rod (<see cref="StagedBody"/>).
+    /// </summary>
+    public void PlayAs(FootPlayer body, ItemEventKind kind, Vector3 position, Vector3 direction, string extra = "")
+    {
+        long peer = -1L - (long)(body.GetInstanceId() & 0x7FFFFFFF);
+        Staged[peer] = body;
+        Run(new ItemEvent(peer, kind, position, direction, extra, Local: false));
+    }
+
+    /// <summary>The actor a film's event came from (<see cref="PlayAs"/>), or null for a real peer.</summary>
+    public static FootPlayer? StagedBody(long peer) =>
+        peer < 0 && Staged.TryGetValue(peer, out var b) && IsInstanceValid(b) ? b : null;
+
     /// <summary>Where a held item's business end is: the hand plus <paramref name="reach"/> along the aim, else in front of the camera.</summary>
     public static Vector3 MuzzleOf(FootPlayer player, Vector3 direction, float reach = 0.55f)
     {
-        if (player.HandLocal is { } hand)
+        // a first-person shot leaves from the eye it was aimed with, not the unseen figure's hand (#833)
+        if (player.HandLocal is { } hand && (!player.BodyFromEye || XR.XrSession.Active))
             return (player.GlobalTransform * hand).Origin + direction * reach;
-        var cam = player.Camera;
+        // a body with no camera (a bot, a remote copy with no hand yet, #837): from the eye
+        if (player.CameraOrNull is not { } cam) return player.EyePosition + direction * reach;
         return cam.GlobalPosition + direction * (reach + 0.2f) - cam.GlobalTransform.Basis.Y * 0.15f;
     }
 
@@ -164,10 +186,44 @@ public partial class ItemEvents : Node
         // a sound somewhere the sender is not is not an item it is holding
         if (GetNodeOrNull<FootPlayer>("../Players/" + sender) is { } body && !(body.Global.DistanceTo(at) <= MaxOffset))
             return;
+        ServerHeard?.Invoke(sender, (ItemEventKind)kind, at);
         var interest = GetNodeOrNull<Net.InterestService>("../" + Net.InterestService.NodeName);
         foreach (int peer in Multiplayer.GetPeers())
             if (peer != sender && interest?.ServerSees(peer, sender) != false)
                 RpcId(peer, MethodName.Deliver, sender, kind, e, n, alt, direction, extra);
+    }
+
+    // ---- server: a body the server runs fires (a bot, #837) ----------------------------------------
+
+    /// <summary>
+    /// Server: an item event happened (who, what, where in LV95): a player's relayed one or a bot's own.
+    /// What bots hear (#837, <c>Bots/BotSenses</c>): a shot within its weapon's earshot, a horn.
+    /// </summary>
+    public static event Action<long, ItemEventKind, Core.GlobalPos>? ServerHeard;
+
+    /// <summary>
+    /// Server: <paramref name="shooter"/> (a bot's id) fired: every peer that sees it hears and sees the
+    /// shot, as a player's own shot is relayed (<see cref="Relay"/>). World space, this server's origin.
+    /// </summary>
+    public void ServerSend(long shooter, ItemEventKind kind, Vector3 position, Vector3 direction, string extra = "")
+    {
+        if (!_server) return;
+        var at = _origin.ToGlobal(position);
+        ServerHeard?.Invoke(shooter, kind, at);
+        var interest = GetNodeOrNull<Net.InterestService>("../" + Net.InterestService.NodeName);
+        foreach (int peer in Multiplayer.GetPeers())
+            if (interest?.ServerSees(peer, shooter) != false)
+                RpcId(peer, MethodName.Deliver, shooter, (int)kind, at.E, at.N, at.Alt, direction, extra);
+    }
+
+    /// <summary>
+    /// Server: a bot hit someone (<c>PlayerHits.Shoot</c>'s sink). The same checks as a player's hit
+    /// (PvP or the mode's say, the weapon's reach and damage, the ground, its rate of fire), then to the
+    /// victim: a player's machine, or a bot's body here.
+    /// </summary>
+    public void ServerHit(long shooter, Vector3 at, Vector3 direction, PlayerHits.Hit hit)
+    {
+        if (_server) RelayHit(shooter, _origin.ToGlobal(at), direction, hit.Pack());
     }
 
     /// <summary>Server: the fire-rate budgets of every shooter (#468).</summary>
@@ -184,15 +240,18 @@ public partial class ItemEvents : Node
         if (PlayerHits.Hit.Parse(extra) is not { } hit || hit.Victim == sender) return;
         if (!Combat.PvpRules.Allows(sender, hit.Victim)) return;
         if (Weapons.Get(hit.Weapon) is not { } weapon || hit.Damage > weapon.MaxHit + 0.5f) return;
-        var shooter = GetNodeOrNull<FootPlayer>("../Players/" + sender);
-        var victim = GetNodeOrNull<FootPlayer>("../Players/" + hit.Victim);
+        var shooter = GetNodeOrNull<FootPlayer>("../Players/" + Net.PlayerReplication.NodeName(sender));
+        // a bot's body is npc_1_n (#837), a player's its peer id
+        var victim = GetNodeOrNull<FootPlayer>("../Players/" + Net.PlayerReplication.NodeName(hit.Victim));
         if (shooter == null || victim == null || victim.Down == 1 || shooter.Down != 0) return;   // a downed victim (2) can be finished, #475
+        bool bot = victim.Bot && victim.IsMultiplayerAuthority();
         // the bodies are where their owners last said (in LV95, #185): allow for a quarter second of
         // running at both ends
         const float Slack = 8f;
         if (!(shooter.Global.DistanceTo(victim.Global) <= weapon.Range + Slack)) return;
         if (!(victim.Global.DistanceTo(position) <= Slack)) return;
-        if (!Multiplayer.GetPeers().Contains((int)hit.Victim)) return;
+        // never RpcId a bot's negative id: Godot reads it as "everyone but"
+        if (!bot && !Multiplayer.GetPeers().Contains((int)hit.Victim)) return;
         var eye = shooter.Global;
         if (!weapon.Melee && GetNodeOrNull<Net.InterestService>("../" + Net.InterestService.NodeName)?.Ground is { } ground
             && !Combat.HitGuard.TerrainClear((eye.E, eye.N, eye.Alt + 1.6), (position.E, position.N, position.Alt),
@@ -208,7 +267,9 @@ public partial class ItemEvents : Node
             return;
         }
         GD.Print(FormattableString.Invariant($"[pvp] peer {sender} hit peer {hit.Victim} for {hit.Damage:F1} ({hit.Weapon})"));
-        RpcId(hit.Victim, MethodName.Deliver, sender, (int)ItemEventKind.Hit, position.E, position.N, position.Alt, direction, extra);
+        // a bot is run here: the server is its victim side (armour, kill credit, down or out, #837)
+        if (bot) victim.ShotHit(hit.Damage, sender);
+        else RpcId(hit.Victim, MethodName.Deliver, sender, (int)ItemEventKind.Hit, position.E, position.N, position.Alt, direction, extra);
         Combat.PvpRules.RaiseHit(sender, hit.Victim, hit.Damage);
     }
 
@@ -240,7 +301,7 @@ public partial class ItemEvents : Node
     {
         var position = _origin.ToWorld(e, n, alt);
         // on the owner's body as this peer shows it, when it is here
-        if (kind is not ((int)ItemEventKind.Hit or (int)ItemEventKind.Bonk) && GetNodeOrNull<FootPlayer>("../Players/" + sender) is { } body && direction.LengthSquared() > 1e-6f)
+        if (kind is not ((int)ItemEventKind.Hit or (int)ItemEventKind.Bonk) && GetNodeOrNull<FootPlayer>("../Players/" + Net.PlayerReplication.NodeName(sender)) is { } body && direction.LengthSquared() > 1e-6f)
             position = MuzzleOf(body, direction.Normalized(), kind == (int)ItemEventKind.Shot ? 0.55f : 0.1f);
         GD.Print(FormattableString.Invariant($"[items] event {(ItemEventKind)kind} from peer {sender} at {position.X:F1},{position.Y:F1},{position.Z:F1}"));
         Run(new ItemEvent(sender, (ItemEventKind)kind, position, direction, extra, Local: false));
@@ -273,7 +334,7 @@ public partial class ItemEvents : Node
         // follow one cycle later. The owner's own viewmodel was already driven by ItemController.
         var shooter = e.Local
             ? GetViewport().GetCamera3D()?.GetParent() as Player.FootPlayer
-            : GetNodeOrNull<Player.FootPlayer>("../Players/" + e.Peer);
+            : GetNodeOrNull<Player.FootPlayer>("../Players/" + Net.PlayerReplication.NodeName(e.Peer));
         if (shooter != null)
         {
             shooter.BodyJolt();

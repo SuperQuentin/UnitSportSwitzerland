@@ -26,8 +26,11 @@ public static class InteriorValidator
             var named = new HashSet<string>();
             foreach (var e in l.Entrances)
             {
-                if (!l.GroundFloor.Rooms.Any(r => r.Openings.Any(o => o.Kind == OpeningKind.Entry && OnWall(r, o, e.X, e.Z))))
-                    errors.Add($"entrance for {e.Door} has no doorway at {e.X:F1},{e.Z:F1}");
+                // on its own floor: the ground floor, or a raised door's (#827)
+                if (e.Level != 0 && (l.EntranceFloor(e) < 0 || l.EntranceFloor(e) >= l.Floors.Count))
+                    errors.Add($"entrance for {e.Door} is on floor {l.EntranceFloor(e)}, which the plan has not got");
+                else if (!l.EntranceRooms(e).Any(r => r.Openings.Any(o => o.Kind == OpeningKind.Entry && OnWall(r, o, e.X, e.Z))))
+                    errors.Add($"entrance for {e.Door} has no doorway at {e.X:F1},{e.Z:F1}{(e.Level != 0 ? $" on floor {l.EntranceFloor(e)}" : "")}");
                 // two entrances for one door would give it two portals and two leaves (#498)
                 if (!named.Add(e.Door)) errors.Add($"two entrances for door {e.Door}");
             }
@@ -69,7 +72,10 @@ public static class InteriorValidator
 
             if (f < l.Floors.Count - 1)
             {
-                if (!Stairs(l.Floors[f]).Any()) errors.Add($"no stairs from floor {f}");
+                // a floor with a way in of its own (a raised door, #827) needs no stair up to it:
+                // reachability below still asks that every room of it is reached
+                bool ownWay = l.Entrances.Any(e => e.Level != 0 && l.EntranceFloor(e) == f + 1);
+                if (!ownWay && !Stairs(l.Floors[f]).Any()) errors.Add($"no stairs from floor {f}");
                 foreach (var fl in l.Floors[f].AllFlights())
                 {
                     var area = fl.Area();
@@ -110,6 +116,15 @@ public static class InteriorValidator
         var groundRooms = l.GroundFloor.Rooms;
         for (int i = 0; i < groundRooms.Count; i++)
             if (groundRooms[i].Openings.Any(o => o.Kind == OpeningKind.Entry)) Reach(l.Below, i);
+        // a raised door (#827) is a way in to the room its doorway is cut in, on its floor
+        foreach (var e in l.Entrances)
+        {
+            int ef = l.EntranceFloor(e);
+            if (e.Level == 0 || ef < 0 || ef >= l.Floors.Count) continue;
+            var rooms = l.Floors[ef].Rooms;
+            for (int i = 0; i < rooms.Count; i++)
+                if (rooms[i].Openings.Any(o => o.Kind == OpeningKind.Entry && OnWall(rooms[i], o, e.X, e.Z))) Reach(ef, i);
+        }
         if (reached.Count == 0) Reach(l.Below, 0);
         while (queue.Count > 0)
         {

@@ -5,7 +5,8 @@ namespace UnitSport.Ui;
 
 /// <summary>
 /// The first screen: the name, the running occasion, and the ways in — Play solo, Multiplayer, Map,
-/// Settings, Controls, Quit. The 3D valley (<see cref="TitleDiorama"/>) turns behind it; a dark
+/// Settings, Controls, Quit, and "Update to vX.Y.Z" once the update check finds a newer release
+/// (<see cref="UpdatePrompt"/>). The 3D valley (<see cref="TitleDiorama"/>) turns behind it; a dark
 /// gradient on the left keeps the text readable over it. Esc does nothing here (there is nothing
 /// behind it), but it is still consumed.
 /// </summary>
@@ -15,6 +16,7 @@ public partial class TitleScreen : Screen
     private static readonly HashSet<string> Jingled = new();
     private Button _first = null!;
     private UpdatePrompt? _update;
+    private Button _updateEntry = null!;
 
     public static TitleScreen Create() => new() { Name = "Title" };
 
@@ -24,7 +26,8 @@ public partial class TitleScreen : Screen
 
         var column = UiKit.VBox(6);
         column.SetAnchorsPreset(LayoutPreset.LeftWide);
-        column.OffsetLeft = 72; column.OffsetRight = 72 + 380; column.OffsetTop = 0; column.OffsetBottom = 0;
+        // centred above the footer, so a shown "Update to" entry does not push Quit onto it
+        column.OffsetLeft = 72; column.OffsetRight = 72 + 380; column.OffsetTop = 0; column.OffsetBottom = -50;
         column.Alignment = BoxContainer.AlignmentMode.Center;
         AddChild(column);
 
@@ -44,6 +47,10 @@ public partial class TitleScreen : Screen
             column.AddChild(UiKit.Spacer(16));
         }
 
+        // hidden until the update check finds a newer release (#845); one press updates, no questions
+        _updateEntry = Entry(column, "", PressUpdate);
+        _updateEntry.AddThemeColorOverride("font_color", UiTheme.Amber);
+        _updateEntry.Visible = false;
         _first = Entry(column, "Play solo", () => Shell.Push(SoloScreen.Create()));
         Entry(column, "Multiplayer", () => Shell.Push(MultiplayerScreen.Create()));
         // The map of Switzerland: what terrain is downloaded, and how to get more (#515)
@@ -71,6 +78,24 @@ public partial class TitleScreen : Screen
         AddChild(_jingle);
         PlayJingle();
         _update = UpdatePrompt.Attach(this);
+        if (_update != null) _update.Stopped += () => _updateEntry.Disabled = false;
+        if (UpdatePrompt.Available is { } tag) ShowUpdate(tag);
+    }
+
+    public override void _EnterTree() => UpdatePrompt.Found += ShowUpdate;
+    public override void _ExitTree() => UpdatePrompt.Found -= ShowUpdate;
+
+    private void ShowUpdate(string tag)
+    {
+        if (_update == null) return; // a build that never updates (headless, development, phone)
+        _updateEntry.Text = $"Update to {tag}";
+        _updateEntry.Visible = true;
+    }
+
+    private void PressUpdate()
+    {
+        if (_update == null) return;
+        _updateEntry.Disabled = _update.UpdateNow();
     }
 
     private static Button Entry(Container into, string text, Action pressed, bool dim = false)
@@ -85,7 +110,6 @@ public partial class TitleScreen : Screen
     public override void OnShown()
     {
         _first.CallDeferred(Control.MethodName.GrabFocus);
-        _update?.OnTitleShown();
     }
 
     /// <summary>Nothing behind the title: Esc stays here.</summary>

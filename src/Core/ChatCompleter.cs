@@ -26,7 +26,7 @@ public readonly record struct Suggestion(string Label, string Text, string Detai
 /// </summary>
 public sealed class ChatCompleter
 {
-    private const int MaxSuggestions = 12;
+    private const int MaxSuggestions = 14;
 
     /// <summary>Towns matching a typed query, best first (<see cref="PlaceSearchUi.Search"/>).</summary>
     public Func<string, int, IEnumerable<string>> Places { get; init; } = (_, _) => [];
@@ -50,12 +50,16 @@ public sealed class ChatCompleter
         ("time", false, true, "[query] | set <hh:mm | noon | night ...> | add <hours> | speed <minutes>"),
         ("speed", false, true, "[<0.05 .. 8> | normal]"),
         ("seastate", false, true, "[0..1 | calm | chop | storm | gamey]"),
+        ("weather", false, true, "[snow <cm> | fall <cm> | temp <°C> | clear | cloudy | reroll | hold | auto]"),
         ("water", false, true, "[E N]"),
         ("style", false, true, "[ps1 | cartoon | real- | real+ | rebuild]"),
         ("clip", false, true, "start <name> [seconds] [delay] | stop"),
         ("spawn", true, true, "<item> [count]"),
         ("catalogue", true, true, ""),
         ("debug", true, true, ""),
+#if PLAYTEST
+        ("note", false, true, "<what's wrong>"),
+#endif
         ("clear", false, true, "[player]"),
         ("money", true, true, "<amount> [player]"),
         ("bank", true, true, "[player] [set | add | take <amount>]"),
@@ -65,7 +69,17 @@ public sealed class ChatCompleter
         ("stream", false, false, ""),
         ("race", false, false, "start | duel <player> | join | leave | list | npc | cancel"),
         ("fight", false, false, "<player> | accept | decline | leave"),
-        ("br", false, false, "open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] | join | leave | start | cancel | status"),
+        ("aura", false, false, "<player> | accept | decline | leave"),
+        ("concert", false, true, "host [seed] | release | status | input artnet|sacn|osc|all [on|off] | patch"),
+        ("br", false, false, "open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] | join | leave | team [name] | invite <player> | start | bots [n|off] [easy|normal|hard] | cancel | status"),
+        // invites (#840)
+        ("invites", false, false, ""),
+        ("accept", false, false, "[player | kind | #id]"),
+        ("decline", false, false, "[player | kind | #id]"),
+        ("tpa", false, false, "<player>"),
+        ("tphere", false, false, "<player>"),
+        ("party", false, false, "[list] | invite <player> | leave | kick <player>"),
+        ("bot", true, false, "add [n] [easy|normal|hard] | arm <weapon> [rounds] | fire | clear | list"),
         ("say", true, false, "<message>"),
         ("admin", true, false, "list | add <player> | remove <player>"),
         ("tp", true, false, "<player>"),
@@ -145,7 +159,7 @@ public sealed class ChatCompleter
                 options = ItemLookup.Names();
                 break;
 
-            case "tp" or "bring":
+            case "tp" or "bring" or "tpa" or "tphere" or "accept" or "decline":
                 if (argIndex != 0) return [];
                 options = PlayerNames();
                 break;
@@ -202,8 +216,10 @@ public sealed class ChatCompleter
                 bool admin = Permissions.IsAdmin;
                 options = argIndex switch
                 {
-                    0 => admin ? ["join", "leave", "status", "open", "start", "zone", "cancel"] : ["join", "leave", "status"],
+                    0 => admin ? ["join", "leave", "team", "invite", "status", "open", "start", "zone", "bots", "cancel"] : ["join", "leave", "team", "invite", "status"],
+                    1 when words[1].ToLowerInvariant() == "invite" => PlayerNames(),
                     _ when admin && words[1].ToLowerInvariant() == "open" => ["here", "short", "normal", "long", "5", "6", "7"],
+                    _ when admin && words[1].ToLowerInvariant() == "bots" => ["off", "10", "20", "easy", "normal", "hard"],
                     _ => [],
                 };
                 break;
@@ -212,7 +228,26 @@ public sealed class ChatCompleter
                 options = argIndex == 0 ? ["on", "off"] : [];
                 break;
 
-            case "fight":
+            case "bot" or "bots":   // #837
+                options = argIndex switch
+                {
+                    0 => ["add", "arm", "fire", "clear", "list"],
+                    _ when words[1].ToLowerInvariant() == "add" => ["easy", "normal", "hard"],
+                    _ when words[1].ToLowerInvariant() == "arm" => ["pistol", "rifle", "huntingrifle", "shotgun", "knife"],
+                    _ => [],
+                };
+                break;
+
+            case "party":
+                options = argIndex switch
+                {
+                    0 => ["list", "invite", "leave", "kick"],
+                    1 when words[1].ToLowerInvariant() is "invite" or "kick" => PlayerNames(),
+                    _ => [],
+                };
+                break;
+
+            case "fight" or "aura":
                 options = argIndex == 0 ? [.. PlayerNames(), "accept", "decline", "leave"] : [];
                 break;
 
@@ -246,6 +281,11 @@ public sealed class ChatCompleter
             case "seastate":
                 options = argIndex == 0 && (!Permissions.Online || Permissions.IsAdmin)
                     ? World.SeaStateCommand.Named.Select(n => n.Name) : [];
+                break;
+
+            case "weather":
+                options = argIndex == 0 && (!Permissions.Online || Permissions.IsAdmin)
+                    ? ["snow", "fall", "temp", "clear", "cloudy", "reroll", "hold", "auto"] : [];
                 break;
 
             case "occasion":

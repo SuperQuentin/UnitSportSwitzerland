@@ -32,7 +32,12 @@ public static class XyzParser
     };
 
     /// <summary>Parses <paramref name="data"/> (the file's bytes) into <paramref name="grid"/>.</summary>
-    public static void Parse(byte[] data, string sourcePath, TileId tile, ushort[] grid, byte[] textBuffer)
+    /// <param name="gaps">
+    /// Fills missing cells before the row-neighbour fallback and returns how many it filled: RGE ALTI
+    /// on the French side (#936), where a border tile is half swisstopo's <c>-9999</c>.
+    /// </param>
+    public static void Parse(byte[] data, string sourcePath, TileId tile, ushort[] grid, byte[] textBuffer,
+        Func<TileId, ushort[], long>? gaps = null)
     {
         if (sourcePath.EndsWith(".raw", StringComparison.OrdinalIgnoreCase))
         {
@@ -61,6 +66,12 @@ public static class XyzParser
         }
 
         long missing = grid.LongLength - filled;
+        if (missing > 0 && gaps != null)
+        {
+            long fromGaps = gaps(tile, grid);
+            if (fromGaps > 0) Console.WriteLine($"  [info] {tile}: {fromGaps} of {missing} missing cells filled from the gap source");
+            missing -= fromGaps;
+        }
         if (missing > 0)
         {
             Console.WriteLine($"  [warn] {tile}: {missing} missing cells, filling from row neighbors");
@@ -125,6 +136,9 @@ public static class XyzParser
             if ((uint)col >= CellsPerSide || (uint)row >= CellsPerSide)
                 throw new InvalidDataException($"Point ({x}, {y}) outside tile in {sourceName}");
 
+            // swisstopo's no-data (-9999, past the border) is a missing cell, not a 0 m pit
+            if (z < -1000) continue;
+
             int idx = row * CellsPerSide + col;
             if (grid[idx] == MissingCell) filled++;
             grid[idx] = ChunkFormat.Quantize(z);
@@ -169,7 +183,7 @@ public static class XyzParser
     }
 
     /// <summary>Fills missing cells from the nearest valid cell in the same row, else same column.</summary>
-    private static void FillMissing(ushort[] grid)
+    public static void FillMissing(ushort[] grid)
     {
         for (int r = 0; r < CellsPerSide; r++)
         {
@@ -188,19 +202,21 @@ public static class XyzParser
                 else if (carry != MissingCell) grid[rowStart + c] = carry;
             }
         }
-        // any rows that were entirely missing: copy from vertical neighbors
+        // any rows that were entirely missing: copy the nearest filled row, above or below. (The old
+        // search went down first and, past the bottom, up from the same distance: a tile empty at its
+        // foot kept MissingCell rows, 4700 m walls, #965.)
+        var filled = new List<int>();
         for (int r = 0; r < CellsPerSide; r++)
+            if (grid[r * CellsPerSide] != MissingCell) filled.Add(r);
+        if (filled.Count == 0) return;
+        for (int r = 0, k = 0; r < CellsPerSide; r++)
         {
+            while (k + 1 < filled.Count && filled[k + 1] <= r) k++;
             if (grid[r * CellsPerSide] != MissingCell) continue;
-            for (int rr = 1; rr < CellsPerSide; rr++)
-            {
-                int src = (r + rr < CellsPerSide ? r + rr : r - rr);
-                if ((uint)src < CellsPerSide && grid[src * CellsPerSide] != MissingCell)
-                {
-                    Array.Copy(grid, src * CellsPerSide, grid, r * CellsPerSide, CellsPerSide);
-                    break;
-                }
-            }
+            int up = filled[k] <= r ? filled[k] : -1;
+            int down = filled[k] > r ? filled[k] : k + 1 < filled.Count ? filled[k + 1] : -1;
+            int src = up < 0 ? down : down < 0 ? up : (r - up <= down - r ? up : down);
+            Array.Copy(grid, src * CellsPerSide, grid, r * CellsPerSide, CellsPerSide);
         }
     }
 }

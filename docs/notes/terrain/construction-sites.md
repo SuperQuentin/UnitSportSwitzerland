@@ -117,22 +117,35 @@ village, `SiteBeyondEnd` (45 m) past the end the works is not at, its front wall
 
 `--constructioncheck --systems ui` (`ConstructionCheck`, a quick check like `--shapedcheck`, no
 world): plans the villages round the default spawn (13 sites within 12 km: 5 foundations, 3
-shells, 5 topped out), builds the tiles of up to three per phase and runs each through
-`SitePlans.For` with the tile's own roads. It asserts the phase (one further on is allowed where the
+shells, 5 topped out), and checks up to three per phase on the tiles **the game serves**:
+`FallbackChunkSource.GeneratedOnly` (the fill over no terrain under its cache, as a fresh clone
+and a `--generated-world` server read it) through `SitePlans.OfTile`, the server's own way in. It asserts the phase (one further on is allowed where the
 ground falls over 1 m), the storeys to come, the front facing `StreetNear`, nothing on a road or in
 a building (`SiteObstacles`), the hoarding, the office, at least one machine and crane reach, and
 that all three phases are built. It writes the plan views (`SitePlanSvg`) to
 `test_output/construction/generated.svg`. The issues after it extend it with what they draw.
+
+**Never the generator's raw tiles (#943).** It used to build `ProceduralWorld.BuildBuildings` /
+`BuildRoads` itself: the same buildings, but raw roads (3 segments on 2586_1115 where the served
+tile, through RoadGen's stage, `generated-roads-roadgen`, has 26), so `StreetNear` moved up to 12 m
+and every one of the 13 sites was laid out otherwise than in a game: the siteofficenetcheck site
+had "no room" for the gallery a game gives it. The check prints that difference (`planned otherwise
+on the generator's raw tiles`) and asserts that the sites `tools/siteofficenetcheck.sh` and
+`tools/siteuppernetcheck.sh` walk (`NetSites`) are planned as those scripts need (phase, containers,
+a cabin, the gallery). The site door baseline moved with it: rewritten on `main`'s code reading the
+served chain, identical on the branch. A new check of the generated world reads it through
+`GeneratedOnly` (or `FallbackChunkSource.Cached()` over its own inner source), never `ProceduralWorld`'s
+`Build*` directly, unless the raw tile is what it tests.
 `SitePlanSvg` turns into a PNG with headless Edge:
 `msedge --headless=new --screenshot=out.png --window-size=1560,1560 file:///.../generated.svg`.
 
 ## The half-built shell (#608)
 
 A site's solid is no longer drawn, collided, given a door or an interior: `BuildingMeshBuilder.Drawn`
-is false for `UnderConstruction`, and `BuildingOcclusion.Occluders` (an open shell hides nothing),
-`BuildingFootprint.ComputeDoors` (an empty door spot, so no `DoorIndex` entry and no portal),
-`InteriorGenerator.Generate` (null) and `TownPerches` (no bird on a roof that is not there) all
-skip it. In its place:
+is false for `UnderConstruction`, and `BuildingOcclusion.Occluders` (an open shell hides nothing)
+and `TownPerches` (no bird on a roof that is not there) skip it. Its doors and interior are its site
+office's since #822 (`BuildingFootprint.ComputeDoors`, `InteriorGenerator.Generate`: "The site
+office" below). In its place:
 
 - **`ShellPlans.Plan`** (pure, `ShellPlan.cs`, tier 0): boxes and ramps in the site frame (x along
   the plan box's `AxisU`, z along `AxisV`, y the tile's height). It follows the building's wings
@@ -186,10 +199,6 @@ skip it. In its place:
 
 ### Not done
 
-- `SmartBinocularsHud` labels a building "Building site" through its door (`DoorIndex`), and a site
-  has none now, so the label is gone until the binoculars read the site itself.
-- The `UnderConstruction` loot pools (`LootTables`) have no container left: #609 puts them in the
-  site office.
 - `BrStructures` still stands a BR scaffolding prefab beside every site, which #609's hoarding and
   yard will meet.
 
@@ -220,10 +229,153 @@ foundations, the office two high, determinism. Pictures: `--shot-queue` on the g
 
 ### Not done
 
-- **Loot.** A site's loot was in its `Storage` interior; with no interior there is no container
-  left. A container outside an interior needs its own identity (#627; loot is keyed by an interior plan's
-  furniture index) and server ownership: its own issue.
-- The office has no stair to its upper containers; the lamps do not blink at night.
+- Loot: the materials and the skips are searched outdoors (#627, `loot/yard-loot`); the office's
+  and the cabins' is ordinary interior loot (#822).
+- The office's upper containers are entered off its gallery where the yard has room for one
+  (#827, "The gallery" below). The lamps do not blink at night.
+
+## The site office (#822)
+
+The office containers and the yard's toilet cabins are the site building's doors and interior, so
+they are entered like any other building: a door that opens, a portal, an interior to walk round
+and search.
+
+- **`SiteOffices.Plan`** (pure, `SiteOffice.cs`, tier 0) lays out the office zone's containers
+  (what `SiteDressings` used to draw itself, box for box) and returns a `SiteOffice`: one door per
+  ground-floor container (`SiteOfficeDoor`, slot = its place across the row), the interior frame
+  (the ground row's middle, `Outward` = the containers' door end, `Across` = interior +X so that +Z
+  is into them), one room per container (two side by side meet in the middle of the 0.3 m gap) and
+  the windows' Z. `SiteDressings.Plan` calls it and keeps its boxes in `SiteDressingPlan.OfficeBoxes`.
+- **The toilets** (`SiteOffices.Toilets`, same file): the blue and the green cabin of #609, each
+  with a door (0.8 x 2.0 m, a blue panel 3 cm proud, the doorway plane 2 cm out) in its long face
+  towards the office zone (towards the gate on a site with none). Their doors are the site's next
+  slots after the containers' (`SiteOffice.Toilets`, `ContainerDoors`); their boxes are
+  `SiteDressingPlan.ToiletBoxes`, and collide with the buildings like the containers'.
+- **Doors.** `BuildingFootprint.ComputeDoors` gives an `UnderConstruction` building its office's
+  doors (`OfficeDoors`, through `SiteShellBuilder.Office` and `OfficeDoors`): slot 0 the office,
+  slot 1 the mess room where there are two containers, then the two cabins; plain pedestrian doors
+  swinging in, 0.9 x 2.1 m (a cabin's 0.8 x 2.0), on the ground the containers (the cabins) are
+  drawn on. The site is planned from the same tile and roads (`SitePlans.Of`, or the
+  `sites` `ChunkManager` already planned, so they are not planned twice). The interior key is the
+  site's ordinary building key, so `InteriorManager`, `DoorIndex`, `DoorLeaf`, `DoorLink`, loot and
+  sync are unchanged; `BuildingMeshBuilder` bakes no facade door for it (`Drawn`): the containers
+  have theirs. **The doorway plane is the container trim's face** (2 cm proud of the skin): the
+  portal quad, 2 cm further out, stands in front of the drawn door panel (3 cm proud) and covers it
+  while the door is open, so the outside mesh is unchanged. The leaf is the container's blue
+  (`DoorLeafColorFor`).
+- **Interior** (`InteriorGenerator.SiteOffice.cs`): every room stands in the plan where its
+  container or cabin stands in the yard, in the containers' frame (the yard is square to the site,
+  so a cabin is square to it too); the plan box is the bounding box of them all, not the building's.
+  So each doorway is where its door is and every `DoorLink` is a plain drop (0.0 cm off in
+  `--constructioncheck`). **A door's link does not need its room at the plan box's edge**:
+  `DoorLink.Create` maps the facade frame to the entrance's own point and inward direction
+  (`EntrancePlan.X/Z/InX/InZ`), any room of the ground floor, so rooms standing apart in the yard
+  are rooms of one plan, each reached only through its own door. A 2.6 m storey, one
+  floor. The office (`RoomType.SiteOffice`, new): desk, plans table, locker, the hard-hat and
+  hi-vis rail, coffee machine, heater, tool chest, whiteboard, chair, extinguisher. A cabin (`RoomType.WC`, 2.2 m
+  clear) is furnished by hand (`FurnishCabin`: a metre square leaves no room for the furnisher's
+  clearances): the seat and a urinal against the back wall, the paper beside the seat, a mirror
+  (a `WallMirror` on it) and a coat hook on the other wall. The mess room
+  (`BreakRoom`, with the site's own piece list `SiteMess`) is the changing room too: lockers first,
+  table, bench, fridge, counter, coffee, rail, heater. A doorway between the two at the back,
+  windows where the containers have theirs. New furniture `CoffeeMachine` and `Heater` (appended;
+  in the model viewer by themselves), and for the cabins `Urinal`, `PaperRoll`, `Mirror`, `CoatHook`.
+  A site office's rooms are never a core (`Furnish`). **Plan version 27.** A stored office plan is
+  matched to the building's solid only (`InteriorLayout.Matches`), not to the site plan or the
+  roads: a change to the planner's office or toilet zones or to `SiteOffices` must bump
+  `InteriorLayout.CurrentVersion`, or stored plans keep their old doors (a plan stored before the
+  cabins had no entrance for them, and their doors read as locked: that is what 27 is for).
+  **A cabin's leaf swings out** (`DoorHang.Outward`, appended for the cabins only: one leaf on the
+  facade, hinged on the -X jamb, like one half of a barn's pair, `DoorLeaf.CreateOutwardSingle`;
+  from inside a shutter like a barn's). Swinging in it filled the metre-square room. Every other
+  door and every kind's default hang is unchanged (`DoorBudgetTests`).
+- **Collision.** The office's solid boxes go into the tile's **building** body (both windings: it
+  is one-sided), not the road cells (`SiteBuild.OfficeFaces`), so `InteriorManager.BeforeMove`
+  lets a body standing in an open office doorway through them like any facade.
+- **Loot** is ordinary interior loot. The `UnderConstruction` kind factor no longer zeroes all but
+  minerals and scrap (minerals x2, scrap x1.5, food x0.8, the rest x1); room pools for the
+  office's desk (petty cash, gadgets, tools), locker and tool chest (tools, work clothes, first
+  aid) and the mess room's lockers (clothes, a snack).
+- **Workwear** (#822): a **hard hat** (head) and a **hi-vis vest** over a grey work T-shirt (top),
+  garments of a new `GarmentStyle.Workwear` (`avatar/clothing`). Kept out of every wardrobe
+  (`LootTables.Clothes` skips them); the `Workwear` pool is the hard-hat rail's (now a container:
+  a works hall's rail gives them too) and part of the site office's and mess room's lockers.
+  Worn, they replicate in `OutfitBits` like every garment.
+- **The binoculars** label the site "Building site" again: its door is in `DoorIndex` with its kind.
+- Found on the way: #497's wall pieces (locker, hat rail, safety sign, time clock, whiteboard,
+  banner, desk counter, tool chest) faced the wall they stand against; `InteriorMeshBuilder` mirrors them.
+
+### Checks
+
+- `SiteOfficeTests` (tier 0, 23): a door per ground-floor container, standing on the door drawn in
+  its end (its sill on the containers' ground, its plane the trim's face, the portal in front of
+  the panel and of every rail), facing out of it, every door on the plan box's front wall in its
+  own room, the rooms filling the row, two containers on a big site and one on a house plot,
+  determinism, and the dressing drawing the office it plans; the cabins (12 more): a door each
+  after the containers', on the panel drawn in its face and facing out of it, towards the office,
+  square to the office's frame and clear of its rooms. Sites turned and fronting each way, on
+  sloping ground.
+- `--constructioncheck`: for every built site, the office doors among the tile's doors (the same
+  with the sites handed in or planned alone), each on its container's door, the plan valid, one
+  room per container, every door's doorway lined up with it (distance and facing) and the opening
+  the door's size, nothing of the yard in the 0.6 m in front of any door, each cabin a room with
+  its one doorway holding its seat, urinal, paper, mirror and hook, something to search, the plan
+  the same twice. Logs each door's `--at` and facing.
+- `--interiorcheck --doorkind UnderConstruction --generated on --at 2586561,1115543` (quick,
+  headless): walks into the generated office, searches its desk, walks out, shuts the door from
+  inside and walks out as it swings, and the door shuts by itself.
+- `tools/siteofficenetcheck.sh` (net): a server on the generated world and three clients. A opens
+  the office door and takes a stack; B, waiting outside, sees the door open, walks in and finds the
+  stack gone; C joins after the take and finds the door open and the stack gone, then walks into a
+  toilet cabin by its own door. A puts on the hard hat and hi-vis vest off the office's rail, and
+  B and C see A wearing them (`OutfitBits`).
+- Pictures: `--shot-queue` with `i1.6` shots (through a door) at that site. Take the doors' world
+  positions from `--constructioncheck`'s log (the served world's since #943; before, they were a few
+  metres off the live ones) or from a probe's.
+
+## The gallery: the office's upper containers (#827)
+
+- **Fitted after the yard.** `ConstructionSites.Plan` lays the site out as before, then tries the
+  gallery on the office row's end nearer the gate, then the other (`SiteOffices.GalleryStrips`: the
+  stair's strip beside the end container and the walkway's along the door end). A side is taken when
+  both are clear of the building's scaffold (or pit), the gate lane, every zone, machine and crane
+  (`Placer.Clear`, no walking gap: it is part of the office), the builder's board (`SiteDressings.BoardRect`,
+  stood by the dressing later), roads and other buildings, the stair 0.15 m and the walkway 0.05 m
+  inside the hoarding line. `ConstructionSite.GallerySide` (−1, +1, 0). Nothing placed before moves.
+  **Coverage: 240 of the 566 real offices (42 %), 7 of the 13 generated ones round the spawn** (after
+  #619's pits; 45 % before). Where none fits the upper row stays closed. The generated 7 are those
+  of the served tiles since #943 (2573_1107, 2575_1109, 2580_1112, 2586_1115, 2591_1117, 2592_1118,
+  2571_1104); the raw tiles the check read before also gave 7, but only three of the same sites.
+- **What it is** (`SiteOffices.Gallery`, site frame): a galvanised grating deck (`ShellPart.Grating`)
+  0.8 m clear along the upper row's door end, its top the upper containers' floor and their doors'
+  sill (ground + 2.6 m), 0.4 m over the ground doors' heads, on brackets out of the containers; a
+  railing (posts, top and mid rail, toe board 1 cm inside the strip so no post face lies in it, one
+  `Invisible` solid slab) round its open sides. The stair along the end container's outer long face,
+  11 to 16 steps of at most 0.2 m (13 on flat ground, 41°), treads and stepped stringers drawn over
+  one ramp to stand on (`SiteDressingPlan.Ramps`, as a shell's flights), a handrail (drawn) and an
+  invisible solid stop per step on its open side, a plinth where the ground falls under the first step.
+  `Foot`, `Top` and each upper door's `Doorsteps` are the walking points (a bot's waypoints).
+- **Yard boxes, never the building body.** The gallery's boxes go after every other yard box
+  (`SiteDressingPlan.GalleryBoxes`) into the road cells' collision. In the building body, the
+  collision exception `BeforeMove` takes for a body in an open office doorway would drop it through
+  the deck at the upper door. The server builds them round a bot like every yard box.
+- **The upper doors**: one per upper container after the cabins' slots (`c + t + i`), the ground
+  door's panel and doorway one container up, `DoorSpot.Level` 1, swinging in. The drawn panels are
+  among the gallery's boxes, so an office is drawn box for box as before.
+- **Upstairs** (`InteriorGenerator.SiteOffice`): floor 1, a room over each container, the site
+  manager's office (`RoomType.SiteManager`: desk, chairs, shelf, locker, whiteboard, heater, plant)
+  over the office and the drawing office (`RoomType.DrawingOffice`: two plans tables, a drafting
+  desk, chairs, shelf, whiteboard, heater) over the mess room, joined at the back, no inner stair:
+  each is reached by its own raised door (`docs/notes/terrain/raised-doors.md`). Furnished after the
+  cabins, so no piece below moves. Loot pools for their desks, shelves and the manager's locker.
+  Plan version 28.
+- **Checks**: tier 0 `SiteGalleryTests` (the yard and the office's boxes and ground doors exactly the
+  gallery-less ones, the upper doors on their containers at the deck's top, the stair's risers and
+  slope, the strips clear of everything); `--constructioncheck` (and `--galleryscan`);
+  `--shellwalkcheck` walks each stair; `--interiorcheck --doorlevel 1 --generated on --at
+  2591104,1117808`; `tools/siteuppernetcheck.sh`. Model viewer: "Building site - a site office with
+  its gallery".
+- **Seen**: the Halloween occasion stands its pumpkin at the upper door too, on the deck.
 
 ## The cranes (#610)
 
@@ -279,6 +431,139 @@ The sound of a site (#617): hammering, a vibrator, a grinder, a beeper, a radio 
 
 The machines on a site (#616): its excavator and wheel loader stand as dormant vehicles and wake when aimed at. The crew's van stands as a car. The rest wait for #613 and #614: `vehicles/dormant-vehicles` (the fourth provider), `tools/sitemachinenetcheck.sh`.
 
-In the model viewer (`--models`): `Construction/SiteShowcase`, "Terrain / Building site", one hand-made site per phase (foundations, shell, a topped-out house and block), planned, shelled, dressed and craned by the game's own builders on flat ground, the cranes slewing by the clocks.
+In the model viewer (`--models`): `Construction/SiteShowcase`, "Terrain / Building site", one hand-made site per phase (foundations of a block and of a house, a shell, a topped-out house and block), planned, shelled, dressed and craned by the game's own builders, the cranes slewing by the clocks. They stand 8 m up on a block of ground of their own with their pits (#619) cut in it by `PitTerrain.Cut`: the viewer's floor is a plane at 0, which would close a pit.
 
 The yard's skips and materials are loot containers outdoors (#627): `loot/yard-loot`.
+
+## The pit (#619)
+
+Sites at their foundations, and shells up to `PitOpenUpTo` (2) storeys, are dug into a pit. Past
+that the trench round the basement counts as backfilled and the shell starts on the ground as before;
+a topped-out site has none.
+
+### The plan (`ConstructionSites.Plan`, pure, tier 0)
+
+- **`SitePit`** in the site frame: `Area` is the plan box and `PitMargin` (1.5 m, the scaffolding's
+  `Scaffold`) round it, plus the ramp's `Lane` (4.6 m, 3.4 m on a house plot) along one wall. The
+  `TopEnd` of the lane is where the ramp comes up; `Side` is the lane's wall's outward normal.
+- **Basements** are hashed (GWR has no count): a house 1, a block 1 or 2 (40 %), a big block (over
+  1500 m² or 6 storeys) 2.
+- **Which wall the lane is along**: the street side first. Where a road or a neighbour stands on
+  that ground, or the lane is too short for the nominal depth (basements x 3 m) at `MaxGrade`, then
+  the side toward the gate (the ramp comes up at its street end, into the yard), the other side, the
+  back; failing a long enough lane, the longest free one. Along the front or the back the ramp
+  comes up at the end nearer the gate.
+- **No pit** where the area comes within `PitSeam` (3 m) of the tile's edge (the next tile does not
+  plan this one's sites, so it could not cut its share), or where every lane's ground is taken: by
+  another building, or a road with its sidewalks, verges and paths (`SiteObstacles.Undiggable`, the
+  carriageway alone would leave a sidewalk slab over the pit; the yard keeps `Blocked`). The
+  ring round the building is scanned at a metre or less, both edges included (a first version
+  stopped short of the far edge and missed a path along it).
+- **The yard**: the site grows by the lane on its wall's side; a lane along the front or back makes
+  the sides at least `PitSide` (8 m, 5.5 m on a house plot) wide, so a 9.5 m excavator can come round
+  and turn into the ramp; the pit and an `Apron` (6 m past the ramp's top) are kept clear of zones,
+  machines and cranes. On a 24 x 15 m block the outside crane's spot is now in the pit, so its crane
+  stands inside, on the slab.
+- **The materials' way in**: a telehandler came at the pallets (#615) over the scaffolding's ground,
+  which the pit has taken. The materials are placed with a way in kept clear on the side their pallets
+  face, away from the building (`MaterialsApproach`, 8 m, `Placer.PlaceWithWay`: over the gate's lane
+  or the apron is fine, never the pit or the scaffolding, never past the hoarding), where the yard
+  the machines left has room; failing that where they stood before. **Decided with the user: the
+  machines keep their room first; and every site gets the way, pit or not**, since the dressing
+  turns every site's pallets to the yard (a topped-out site's materials used to face the hoarding a
+  metre off, with the rebar between them and the building). `MaterialsWayIn` checks the hoarding
+  line and the scaffolding too. Measured over the 159 real
+  pits (`MaterialsWayIn`): machines first then materials anywhere left 28 of 532 machines without
+  room, 19 sites without materials and 21 with materials no machine can come at; this order, 28, 19
+  and 17; materials first with their way, 54 machines (42 sites), 4 and 14. `tools/sitepalletnetcheck.sh`
+  moved from the foundations site it used (its pallets now against its pit, no way in) to the
+  topped-out one at 2582832,1102441 whose pallets have one (`--constructioncheck` prints which do;
+  in the generated world only it and the shell at 2577592,1102821). Its probe no longer comes at a
+  pallet over a pit (`InPit`: the pit is clear at a telehandler's height, and empty under it), leaves
+  its own body out of the side rays, moves B out of the yard first (both spawn at the site), and
+  brakes each machine to a stop at the pallet (`BrakeToStop`): at a quarter throttle a telehandler
+  rolls 1.3 m/s and coasted its tines 1.25 m past the pallet, into its face.
+
+### The pit's dressing (`PitPlans`, pure, tier 0)
+
+- **The floor** (`FloorOf`): the ground floor's slab top less a storey per basement, and at least
+  `MinWall` (1.2 m) under the lowest ground round the pit, so on a slope it goes deeper (the real
+  tiles reach 10 m). `Blinding` (2 cm) under the lowest slab, so a machine rolls onto the slab.
+- **The ramp**: 1 in 4 (`RampGrade`) with `FootRoom` (3 m) flat at its foot; steeper where the lane is
+  short, up to `MaxGrade` (36 %), giving up the room at the foot before the grade. Past that the
+  slope took the pit too deep for its lane: **no ramp**, the pit railed all round (`HasRamp`).
+- **Sheet piles** round the edge in a pan profile, every pan in front of the dug face (the lining is
+  at the edge itself: a pan flush with it z-fought), 0.3 m proud of the ground, cut to the ground under
+  a footbridge; one or two **walers**; a **guard rail** on the pile line, solid as a sheet like the
+  scaffolding's, open at the ramp's mouth and the bridges.
+- **Footbridges** over a shell's trench, one at a side's middle bay (where `WallBay` puts its
+  doorway, which the shell forces open on the ground floor), never on the lane's side, with a
+  collision ramp from the ground onto the deck.
+- **The shell over its pit** (`ShellPlans.Plan(..., pitFloor)`): `Levels` starts with the basements'
+  slabs (`Basements` of them under the ground floor), their walls blank concrete with a door in some,
+  a flight up each storey; the scaffolding's lifts start over the ground floor; the rolls of the
+  storeys over the ground keep their names, so a shell keeps the walls it had. A storey a slope made
+  taller than 3 m gets its flights' mid landing at half its height.
+- `SiteShellBuilder.Dig` works out the floor from the ground round the pit and returns the shell and
+  the pit; a crane in the building stands on the pit's floor, its mast as much taller.
+
+### The ground (`PitTerrain`, pure, tier 0)
+
+The pit is turned with its building, so it never lines up with the 1 m lattice, and it has vertical
+walls a heightfield cannot hold. The ground is cut from its own lattice and heights
+(`anything-meet-terrain-has-built`):
+
+- **The mesh** (`Cut`, `TerrainMeshBuilder.CutPits`, at any stride): every ground triangle reaching
+  into a pit is dropped and its part outside put back, clipped to the pit's straight edges
+  (Sutherland-Hodgman against each side, colours interpolated): the ground meets the pit on a
+  straight line at its own heights, nothing in the pit, no gap. Done after the road blend's
+  `PatchSurface` (which moves the grid's own vertices) and before `FinishSurface`.
+- **The lining is the ground's, not the site's**: walls from the ground's edge down to the floor
+  (following the ground's breaks: lattice lines and quad diagonals, `Sampler.Profile`), the floor,
+  the ramp down from the ground's profile across its mouth, and its open side. A tile past the
+  building ring sheds its site mesh (#553) without rebuilding its ground, so a pit lined by the site
+  would show a hole into the void.
+- **The collision**: `Holes` (every full-res quad reaching in) go NaN in the height map; Jolt drops
+  the four quads round each NaN, and `CollisionFaces` puts their part outside the pit back as faces
+  (from `GroundHeights` with the road blend), with the lining, in the tile's road cells.
+- **`ChunkManager`**: the pits come from `SiteShellBuilder.Build` with the buildings, are kept per
+  tile (`ChunkState.Pits`), cut the interim surface when already known (a new LOD), the tail's surface
+  and collision, and filter the trees out of them. The interim collision is left whole: its holes
+  without the lining (which comes with the tail's road cells) would be a hole. The server cuts its
+  collision too.
+- **`ChunkManager.InPit`**: the height queries answer the ground at a pit's top, so the void rescue,
+  the vehicle safety net and getting out of a vehicle treat a pit as they treat a tunnel bore.
+
+### Checks
+
+- `PitTests` (tier 0, 30): which sites dig, the area and the lane, basements, seams, roads and sidewalks, the
+  side fallback, nothing of the yard in the pit or on the apron, the ramp in its lane, no ramp past
+  36 %, the shell's basements and its doors at the bridges; the ground cut at strides 1 to 20 leaves
+  exactly the tile less the pit as ground and the pit as floor, and the collision puts back every
+  dropped quad less the pit. A mutation leaving one side of the collar out fails 7 of them.
+- `--pitcheck --chunks fixture:site --traffic 0` (`PitCheck`, quick; course `site`: a block at its
+  foundations, a shell over its basement, a house plot turned 25°): rays down every metre of each pit
+  and round it meet something, never below the floor; capsules dropped into it rest in it; an
+  **excavator** mounted on the ramp's top drives down a 6 m pit's 24 m ramp and along the floor
+  beside the slab, then **backs up** and out of the mouth (a 9.5 m machine does not turn in a 4.6 m
+  lane, and the slab's edges carry wall formwork); a body walks the shell up from its basement slab
+  to its top slab, and over a footbridge onto its ground floor. `--pitcheck shots` (windowed):
+  `test_output/pit/`.
+- `--constructioncheck`: every foundations site and low shell digs, nothing of the yard in it, the
+  ramp in its lane, the ground cut; the plan views draw the pit, the lane and the apron.
+- `--pitsurvey --chunks <terrain_chunks>` (`PitSurvey`, real data, in no tier): over the 626 local
+  tiles, **248 sites want a pit, 159 dig one** (front lane 94, side 53, back 12; 71 stopped by a road,
+  its sidewalk or a neighbour, 18 by a seam); 134 with one basement, 25 with two; depth 1.2-9.3 m
+  (mean 3.2); ramps 25-36 %, 14 pits without one. Counting sidewalks took 22 pits away (they would
+  have cut under one). Cost per pit: plan and lining ~1 ms (worst 26), holes ~1.6 ms, collision faces
+  ~3.7 ms (worst 18); the stride-1 ground mesh cut ~62 ms a tile (worst 116), on the worker, on 1-2 %
+  of tiles (it was 120 ms before it passed over the rows no pit reaches). The yards: 28 of 532 machines
+  without room (20 sites), 19 sites without materials, 17 with materials no machine can reach.
+
+### Not done
+
+- The ramp's top edge follows the ground's profile, its foot a straight line: on a cross-slope the
+  grade across the lane varies a little.
+- A machine cannot drive onto the slab: its edges carry the next walls' formwork. Earthworks are #620.
+- The fixture course is flat; the real tiles' slopes are covered by the survey and the unit tests'
+  sloped ground, not by a drive.

@@ -38,7 +38,9 @@ public sealed class Actor
     private string RouteKey => Spec.Route ?? $"#{Index}";
     private double _moving = -1, _logged;
     private Vector3 _ahead = Vector3.Forward;
-    private bool _launched, _afloat;
+    private bool _launched, _afloat, _onRamp;
+    private double _swimWait;
+    private int _fightShown = -1;
     private float _arc = float.NaN;
 
     /// <summary>The shot's other actors by index, for one that boards another's machine.</summary>
@@ -59,7 +61,14 @@ public sealed class Actor
     public System.Func<Vector3, Vector3?> SetPoint { get; init; } = _ => null;
 
     private bool OnRoad => Spec.Drive is Drive.Road or Drive.Follow || Spec.Route != null;
-    private bool Boat => Spec.Board != null;
+    private bool Boat => Spec.Board != null && Spec.Drive != Drive.Fly && !Spec.Swim;
+
+    /// <summary>
+    /// The top of a landed saucer's open ramp for <see cref="Cast.DownRamp"/> (the director's: a
+    /// craft's or an actor's, its board made solid): the feet there, the compass bearing down it, and
+    /// the saucer's body to pass through (an actor's); null until the ramp is down.
+    /// </summary>
+    public System.Func<RampOf, (Vector3 Feet, float Bearing, PhysicsBody3D? Host)?> RampTop { get; init; } = _ => null;
 
     /// <summary>A spot on the surface, in this frame's world space (null: the ground is not in yet).</summary>
     private Vector3? Ground(Spot spot)
@@ -90,6 +99,27 @@ public sealed class Actor
             return;
         }
 
+        if (Spec.Swim && !_afloat)
+        {
+            // stood on the shore (or the shallows): now at the surface at its spot. The water is asked at
+            // the surface's height, and a body not yet down on its floor is put in all the same after a
+            // second: a walker dropped on a wet spot floats and never stands (it timed out placing, #882)
+            var into = _origin.ToWorld(Spec.At.E, Spec.At.N, Body.GlobalPosition.Y);
+            _swimWait += Body.GetPhysicsProcessDeltaTime();
+            if (!Body.IsOnFloor() && !Body.IsSwimming && _swimWait < 1.0) return;
+            if (!World.WaterField.TryLevelAt(into, out float surface))
+            {
+                if (_swimWait > 20.0) Failed = "no water at its spot";
+                return;
+            }
+            if (!Body.StartSwimmingAtSurface(into with { Y = surface }))
+            {
+                if (_swimWait > 20.0) Failed = "it could not start swimming there";
+                return;
+            }
+            Body.Rotation = new Vector3(0, -Mathf.DegToRad(Spec.Heading), 0);
+            _afloat = true;
+        }
         if (!Body.IsOnFloor() && !_launched && !_afloat) return;
         // a boat is mounted and put on the water in one step: a steamer left mounted on its dry spot
         // for a frame stands in whatever is there (Chillon's castle and railway), and is wrecked
@@ -131,11 +161,44 @@ public sealed class Actor
             // zigzag would stop at the leg before, metres away, and drive that one
             _pilot.D.Near = _route.Line.IndexAt(_arc);
         }
+        if (Spec.Lowered && Body.Vehicle is Truck farm) farm.Lowered = true;
         Body.DanceId = Spec.Dance;
         Body.HeldItemId = Spec.Item;
+        Body.HeadwearId = Spec.Headwear;
+        if (Spec.Radio > 0) Body.HeldRadio = new Items.RadioPlay(Spec.Radio, Net.ClockSync.ServerNow, 36000f).Encode();
         if (Spec.FirstPerson) Body.ViewForCheck(thirdPerson: false);
         Ready = true;
     }
+
+    /// <summary>
+    /// The door <see cref="Cast.FromDoor"/> comes out of: the nearest one to the spot, a person's door
+    /// before a vehicle's, within 60 m flat, whichever side of the house the spot is and whatever the
+    /// storey's height. The game's own search (<see cref="Interiors.DoorIndex.NearestEntrance"/>) asks
+    /// what a player standing there could open, and ruled out a farmhouse's door from its yard (behind
+    /// its wall) and IKEA's (raised); the director only wants the house's door (#882). Null (and the
+    /// doors near it in the log) when none is drawn.
+    /// </summary>
+    private Interiors.DoorIndex.Entry? DoorFor(Vector3 near)
+    {
+        Interiors.DoorIndex.Entry? best = null;
+        float bestScore = 60f;
+        foreach (var e in Interiors.DoorIndex.All())
+        {
+            float d = MathX.Flat(e.World - near).Length();
+            float score = d + (e.Vehicle ? 15f : 0f) + (e.Key.Slot == 0 ? 0f : 5f);
+            if (score < bestScore) { bestScore = score; best = e; }
+        }
+        if (best == null && !_doorLogged)
+        {
+            _doorLogged = true;
+            var nearest = Interiors.DoorIndex.All().OrderBy(e => MathX.Flat(e.World - near).Length()).Take(3)
+                .Select(e => $"{MathX.Flat(e.World - near).Length():F0} m ({e.Kind})");
+            GD.PrintErr($"[trailer] actor {Index}: no door within 60 m of its spot; nearest: {string.Join(", ", nearest)}");
+        }
+        return best;
+    }
+
+    private bool _doorLogged;
 
     /// <summary>A flat unit vector along a compass bearing (0 north = −Z, 90 east = +X).</summary>
     private static Vector3 Forward(float bearing) =>
@@ -162,12 +225,21 @@ public sealed class Actor
             if (SetPoint(local) is not { } inSet) return;
             at = inSet;
         }
+        else if (Spec.DownRamp is { } ramp)
+        {
+            // at the top of a landed saucer's open ramp, facing down it, its board solid under the feet
+            if (RampTop(ramp) is not { } top) return;
+            at = top.Feet;
+            bearing = top.Bearing;
+            carrier = top.Host as FootPlayer;
+            _onRamp = true;
+        }
         else if (Spec.FromDoor)
         {
-            // on the step of the nearest front door, facing out, the door asked open
+            // on the step of the door nearest its spot, facing out, the door asked open
             var near = _origin.ToWorld(Spec.At.E, Spec.At.N, 0);
             if (!_chunks.TryGetSurface(near, out float ng)) return;
-            if (Interiors.DoorIndex.NearestEntrance(near with { Y = ng }, 40f) is not { } door) return;
+            if (DoorFor(near with { Y = ng }) is not { } door) return;
             var outward = (door.Outward with { Y = 0 }).Normalized();
             at = door.World + outward * 0.8f;
             if (_chunks.TryGetSurface(at, out float dg)) at.Y = dg;
@@ -184,12 +256,14 @@ public sealed class Actor
             at.Y = rg;
             _arc = s;
         }
-        else if (Ground(Boat ? Spec.Board!.Value : Spec.At) is { } g) at = g;
+        else if (Ground(Spec.Board ?? Spec.At) is { } g) at = g;
         else return;
 
         // an NPC body anchors its own ground and has no camera; one on foot only stands (on the ground,
         // under a deck: it never boards one), so a walker is not one, nor one aboard a machine
-        bool npc = Spec.Drive != Drive.Walk && Spec.Aboard < 0;
+        // a walker with scripted jumps and crouches is one too: an NPC reads them (FootActions), a player the keys;
+        // and a swimmer is not (it strokes with its walk)
+        bool npc = (Spec.Drive != Drive.Walk || Spec.Actions != null) && Spec.Aboard < 0 && !Spec.Swim && Spec.DownRamp == null;
         // a figure's look is found by its rider index (Appearance.For): a player's is its peer's, the
         // same for every actor here, so an NPC is named as a race entrant of owner 0 (an index of its
         // own) and its look registered there; a walker registers its own, the one walking in its shot
@@ -214,7 +288,7 @@ public sealed class Actor
         }
         // in a set, far under the ground: inside, as in an interior, so nothing measures it against the terrain
         else if (Spec.InSet != null) body.EnterInterior("trailer-set", at + Vector3.Up * 0.95f, -Mathf.DegToRad(bearing));
-        else body.GlobalPosition = at + Vector3.Up * (Spec.FromDoor ? 0.95f : 1.2f);
+        else body.GlobalPosition = at + Vector3.Up * (Spec.FromDoor || _onRamp ? 0.95f : 1.2f);
         _ahead = Forward(bearing);
         Body = body;
     }
@@ -251,12 +325,20 @@ public sealed class Actor
                     var ahead = (-b.Z with { Y = 0 }).Normalized();
                     return ((right * wish.X + ahead * wish.Y).LimitLength(1f), run);
                 };
+                // jumps and crouches scripted (a slide, a wall jump, a base jump), the wingsuit flown after
+                if (Spec.Actions != null) body.FootActions = () => Spec.Actions(_moving);
+                if (Spec.Flight != null) body.FlyControls = () => Spec.Flight(_moving);
+                break;
+            case Drive.Stand when Body.Vehicle is Flyer:
+                // a flyer left standing (a landed saucer): no stick, so it sits on its legs, or hovers where it is
+                body.FlyControls = () => new FlightInput(Vector2.Zero, 0f, 0f, 0f, 0f, false, false, 0f);
                 break;
             case Drive.Stand when Spec.Ride != RideKind.OnFoot:
                 body.RideControls = () => new RideInput(0f, 0f, 0f, false, Handbrake: true);
                 break;
-            case Drive.Stand when Spec.Aboard >= 0:
-                // a walking body (see Spawn) standing on the deck: no keys of the player's moving it
+            case Drive.Stand when Spec.Aboard >= 0 || !body.Npc:
+                // a walking body (see Spawn) standing on the deck, a swimmer treading water, one at the top
+                // of a ramp: no keys of the player's moving it
                 body.WalkControls = () => (Vector3.Zero, false);
                 break;
         }
@@ -285,7 +367,7 @@ public sealed class Actor
         var want = to.Normalized();
         float angle = Mathf.Atan2(fwd.Cross(want).Y, fwd.Dot(want));   // + = to the left
         float steer;
-        if (body.Vehicle is Motorbike or Bicycle or Skis)
+        if (body.Vehicle is Motorbike or Bicycle or SnowRide)
         {
             float kappa = 2f * Mathf.Sin(angle) / Mathf.Max(to.Length(), 1f);
             float bank = Mathf.Atan(Mathf.Max(speed, 2f) * Mathf.Max(speed, 2f) * kappa / Rideable.Gravity);
@@ -331,6 +413,19 @@ public sealed class Actor
         if (_moving >= 0) _moving += dt;
         if (Ready && Body.HeldItemId != Spec.Item) Body.HeldItemId = Spec.Item;
         if (Ready && Spec.Use != null) Body.ItemAction = _moving >= 0 && Spec.Use(_moving) ? 2 : 0;
+        if (Ready && Spec.Fight != null)
+        {
+            int pose = Spec.Fight(System.Math.Max(_moving, 0));
+            if (pose != _fightShown) Body.FightPose = _fightShown = pose;
+        }
+        if (Ready && Spec.Ufo != null && Body.Saucer is { } saucer)
+        {
+            var sw = Spec.Ufo(System.Math.Max(_moving, 0));
+            saucer.SetBeam(sw.Beam);
+            saucer.SetLights(sw.Lights);
+            saucer.SetRamp(sw.Ramp);
+            saucer.SetLegs(sw.Legs);
+        }
         if (Body.BackItemId != 0) Body.BackItemId = 0;
         var v = Body.IsFlying ? Body.Flight.Velocity : Body.Ride == RideKind.OnFoot ? Body.Velocity : Body.WorldVelocity;
         var flat = v with { Y = 0 };

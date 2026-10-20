@@ -8,10 +8,14 @@
 #   GODOT=<exe> [PORT=] [AT=E,N] tools/sitepalletnetcheck.sh      output in test_output/sitepalletnet_*.log
 . "$(dirname "$0")/lib/twoclient.sh" sitepalletnet
 PORT=${PORT:-7887}
-# a generated Foundations site with pallets of materials (--constructioncheck lists each site's)
-AT=${AT:-2588796,1118441}
-WORLD="--generated-world --traffic 0 --at $AT"
-tc_server 420 120 "$OUT/sitepalletnet_server.log" --server --port $PORT --generated-world --admin-password test
+# a generated site whose pallets a machine can come at (--constructioncheck lists each site's pallets
+# and whether they have a way in): the foundations site it used, 2588796,1118441, has its pit (#619)
+# where a telehandler came from, and its yard no room left for another way in; this topped-out one keeps
+# its materials an 8 m way in on the side their pallets face
+AT=${AT:-2582832,1102441}
+# the generated world wherever it runs: no real tiles, even where terrain_location.json has some (#943)
+WORLD="--generated-world ${NOTERRAIN[*]} --traffic 0 --at $AT"
+tc_server 420 120 "$OUT/sitepalletnet_server.log" --server --port $PORT --generated-world "${NOTERRAIN[@]}" --admin-password test
 tc_client 300 "$OUT/sitepalletnet_A.log" --connect 127.0.0.1:$PORT --name SiteA $WORLD --sitepalletnet A & A=$!
 tc_client 300 "$OUT/sitepalletnet_B.log" --connect 127.0.0.1:$PORT --name SiteB $WORLD --sitepalletnet B & B=$!
 wait $A $B

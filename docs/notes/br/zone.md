@@ -1,7 +1,7 @@
 # Battle Royale zone (`src/BattleRoyale/ZoneSchedule.cs`, `ZoneWall.cs`)
 
 - **Deterministic from (seed, side, pace, field)**: every client builds the same `ZoneSchedule` from the
-  state message and reads it at `ClockSync.ServerNow - Started`. Nothing about the zone is ever sent
+  state message and reads it at `ClockSync.SimNow - Started` (simulated time: `/speed` slows the zone too, #855). Nothing about the zone is ever sent
   while it moves. Coordinates are metres east/north of the region centre (`BrManager.ZonePoint` /
   `WorldPoint` convert).
 - **Circle 0 follows the field** (#447): `BrState.Field` is the entrant count at GO (0 before: the

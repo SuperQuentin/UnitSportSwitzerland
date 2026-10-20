@@ -454,7 +454,7 @@ public partial class FootPlayer
     /// <summary>A bike or skis ridden into water deeper than the chest: off, swimming. False otherwise.</summary>
     private bool RideIntoWater()
     {
-        if (_ride is not (Bicycle or Skis) || !WaterField.TryLevelAt(GlobalPosition, out float level)) return false;
+        if (_ride is not (Bicycle or SnowRide) || !WaterField.TryLevelAt(GlobalPosition, out float level)) return false;
         if (level - GlobalPosition.Y <= SwimEnter) return false;
         var velocity = Velocity;
         ApplyRide(RideKind.OnFoot, velocity);

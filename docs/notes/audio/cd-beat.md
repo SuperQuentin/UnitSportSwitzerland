@@ -69,6 +69,12 @@
   peaks >= 4 bars apart, snapped to bars; `SectionKind` Calm/Groove/Peak by loudness vs the track's
   bars, Chorus = loud sections alike). RPC dict: `env` as string, `ss`/`sk` packed arrays, keys
   optional. The chess type beat is analysed on its hand-set grid (`CdBurner.Grid`).
+- **v2 (#885, for the concert desk)**: `bands` base64 of 20 Hz frames x 4 bytes (snare-band onset
+  1.5..5 kHz, hi-hat onset >6 kHz, bass level <150 Hz, each per track; brightness = centroid on a
+  log scale 200 Hz..5 kHz), `drops` (a bar whose bass is back >= 1.8x the two before, louder, held,
+  >= the median bass; 8 bars apart) and `builds` (where the bass went out before each, 2..16 bars).
+  `SampleBands(cd, t, ...)`, `DropAt(cd, t, out sinceDrop, out build)`. `--beatcheck` case 8: a
+  synthetic build and drop, snares told from kicks, hats in the build.
 - **Backfill**: at start the library queues its CDs (shared where it owns them, and personal) whose
   block is missing or older than `CurrentVersion`, one at a time on a worker: ffmpeg decodes the Ogg
   (`CdBurner.ReanalyseAsync`, stored grid), `.json` + `library.json` rewritten, the server re-sends
@@ -76,6 +82,6 @@
   so a `--cdfixture` never waits. Bump `CurrentVersion` when the analyser changes.
 - **Runtime** (`CdAnalysisRuntime`, allocation free, env decoded once per block): `Sample(cd, t, out
   level, out kick)` (t = seconds into the file; kick holds the previous frame fading),
-  `SectionAt(cd, t, out index)`, `BeatInBar(cd, beatIndex)` (0 = bar start).
+  `SectionAt(cd, t, out index)`, `BeatInBar(cd, beatIndex)` (0 = bar start), `SampleBands`, `DropAt` (v2).
 - **Playback at runtime**: `AudioStreamOggVorbis.LoadFromFile` on the main thread (header only), on an
   `AudioStreamPlayer3D` in `RadioBody` — the first audio file the game plays; everything else is synthesised.

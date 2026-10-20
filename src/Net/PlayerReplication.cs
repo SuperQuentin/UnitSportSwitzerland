@@ -50,6 +50,24 @@ public static class PlayerReplication
     public static Godot.Collections.Array NpcData(long owner, int n, int rideKind, GlobalPos at, float yaw, int setup = 0) =>
         new() { owner, n, rideKind, at.E, at.N, at.Alt, yaw, setup };
 
+    // ---- bots (#837) ----
+
+    /// <summary>The owner of every bot: the server, which runs them itself (authority 1).</summary>
+    public const long BotOwner = 1;
+
+    /// <summary>A bot's id: an NPC id of the server, -(1000 + n).</summary>
+    public static long BotId(int n) => NpcId(BotOwner, n);
+
+    /// <summary>Whether an entrant id is a bot's (an NPC of the server; race NPCs belong to clients).</summary>
+    public static bool IsBotId(long id) => id < 0 && NpcOwner(id) == BotOwner;
+
+    /// <summary>Driver kinds at index 8 of the NPC spawn data: a race NPC (the default) or a bot.</summary>
+    private const int DriverRace = 0, DriverBot = 1;
+
+    /// <summary>A bot's spawn data: the NPC layout, then the driver kind and its display name.</summary>
+    public static Godot.Collections.Array BotData(int n, GlobalPos at, float yaw, string name) =>
+        new() { BotOwner, n, (int)RideKind.OnFoot, at.E, at.N, at.Alt, yaw, 0, DriverBot, name };
+
     public static FootPlayer CreateNpc(Godot.Collections.Array d, WorldOrigin origin)
     {
         long owner = d[0].AsInt64();
@@ -63,6 +81,13 @@ public static class PlayerReplication
             Rotation = new Vector3(0, d[6].AsSingle(), 0),
         };
         npc.SetMultiplayerAuthority((int)owner);
+        if (d.Count > 8 && d[8].AsInt32() == DriverBot)
+        {
+            // a bot (#837): run by the server, driven there by Bots.BotDirector through the body's seams
+            npc.Bot = true;
+            npc.BotName = d.Count > 9 ? d[9].AsString() : "";
+            return npc;
+        }
         // the driver: on every peer, active only on its current simulator (which can change, #50)
         npc.AddChild(new World.RaceNpc
         {

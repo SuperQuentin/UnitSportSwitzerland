@@ -25,6 +25,8 @@ public partial class ChunkNode : Node3D
 
     /// <summary>The tile's ground mesh, once built.</summary>
     public MeshInstance3D? Ground => _meshInstance;
+    /// <summary>The tile's road mesh, for per-tile shader parameters (the ski slopes' layer, #887).</summary>
+    public MeshInstance3D? RoadMesh => _roadInstance;
     private MeshInstance3D? _roadInstance;
     private StaticBody3D? _body;
 
@@ -70,6 +72,7 @@ public partial class ChunkNode : Node3D
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = data.Vertices;
         arrays[(int)Mesh.ArrayType.Color] = data.Colors;
+        arrays[(int)Mesh.ArrayType.Normal] = data.Normals;
         arrays[(int)Mesh.ArrayType.Index] = data.Indices;
         return Finish(arrays, material);
     }

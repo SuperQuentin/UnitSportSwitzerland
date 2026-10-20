@@ -84,7 +84,7 @@ public sealed class LocalChunkSource : IChunkSource
             string path = Path.Combine(_dir, BuildingFormat.FileName(id));
             if (!File.Exists(path)) return (BuildingTile?)null;
             using var fs = File.OpenRead(path);
-            return BuildingCodec.Decode(fs);
+            return Stadiums.StadiumClip.Clip(BuildingCodec.Decode(fs));
         }, ct);
     }
 
@@ -118,7 +118,7 @@ public sealed class LocalChunkSource : IChunkSource
             string path = Path.Combine(_dir, TreeFormat.FileName(id));
             if (!File.Exists(path)) return (List<TreeInstance>?)null;
             using var fs = File.OpenRead(path);
-            return TreeFormat.Decode(fs);
+            return Stadiums.StadiumClip.Trees(id, TreeFormat.Decode(fs));
         }, ct);
     }
 
@@ -134,6 +134,21 @@ public sealed class LocalChunkSource : IChunkSource
     }
 
     public Task<LandingIndex?> LoadLandingsAsync(CancellationToken ct = default) => ReadLandingsAsync(_dir, ct);
+
+    public Task<RopewayInfoIndex?> LoadRopewayInfoAsync(CancellationToken ct = default) => ReadRopewayInfoAsync(_dir, ct);
+
+    /// <summary><c>ropeways.json</c> in a directory, or null; a file that does not parse is logged and skipped.</summary>
+    public static Task<RopewayInfoIndex?> ReadRopewayInfoAsync(string dir, CancellationToken ct = default) => Task.Run(() =>
+    {
+        string path = Path.Combine(dir, RopewayInfoIndex.FileName);
+        if (!File.Exists(path)) return (RopewayInfoIndex?)null;
+        try { return RopewayInfoIndex.FromJson(File.ReadAllText(path)); }
+        catch (System.Exception e)
+        {
+            Godot.GD.PushWarning($"[ropeways] {path} does not parse: {e.Message}");
+            return null;
+        }
+    }, ct);
 
     /// <summary><c>airports.json</c> (#422), or null; a file that does not parse is logged and skipped.</summary>
     public Task<AirportIndex?> LoadAirportsAsync(CancellationToken ct = default) => Task.Run(() =>
@@ -156,6 +171,18 @@ public sealed class LocalChunkSource : IChunkSource
             if (!File.Exists(path)) return (List<FieldPolygon>?)null;
             using var fs = File.OpenRead(path);
             return FieldFormat.Decode(fs);
+        }, ct);
+    }
+
+    /// <summary>The preprocessor's <c>pistes_E_N.pst</c> (#887); null where no slope touches the tile.</summary>
+    public Task<PisteTile?> LoadPistesAsync(TileId id, CancellationToken ct = default)
+    {
+        return Task.Run(() =>
+        {
+            string path = Path.Combine(_dir, PisteFormat.FileName(id));
+            if (!File.Exists(path)) return (PisteTile?)null;
+            using var fs = File.OpenRead(path);
+            return PisteFormat.Decode(fs);
         }, ct);
     }
 

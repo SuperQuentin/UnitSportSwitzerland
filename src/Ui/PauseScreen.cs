@@ -11,6 +11,7 @@ namespace UnitSport.Ui;
 public partial class PauseScreen : Screen
 {
     private Button _resume = null!;
+    private Button? _accept;
 
     public static PauseScreen Create() => new() { Name = "Pause" };
 
@@ -31,7 +32,18 @@ public partial class PauseScreen : Screen
         column.AddChild(UiKit.Text(Shell.SessionLine(), UiTheme.FontSmall, UiTheme.Amber));
         column.AddChild(UiKit.Spacer(26));
 
+        // an invite waiting (#840): answering it is the first thing here, so a pad does it with Start, A
+        if (Net.InviteService.Client?.Newest is { } invite)
+        {
+            int id = invite.Id;
+            _accept = Entry(column, $"Accept: {invite.Title}", () => { Net.InviteService.Client?.Accept(id); Shell.Back(); });
+            _accept.ClipText = true;
+            _accept.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
+        }
         _resume = Entry(column, "Resume", () => Shell.Back());
+        // launch, configure and join (#840): what the console does, as a page
+        if (Permissions.Online) Entry(column, "Activities", () => Shell.Push(ActivitiesScreen.Create(
+            Net.InviteService.Client is { IncomingCount: > 0 } ? ActivitiesScreen.Tab.Invites : ActivitiesScreen.Tab.BattleRoyale)));
         // the movie studio (#638): what a pad or VR player has instead of F5, and the way in
         if (Shell.World is { } world && Movie.ReplayRecorder.Instance != null)
         {
@@ -75,5 +87,5 @@ public partial class PauseScreen : Screen
         return b;
     }
 
-    public override void OnShown() => _resume.CallDeferred(Control.MethodName.GrabFocus);
+    public override void OnShown() => (_accept ?? _resume).CallDeferred(Control.MethodName.GrabFocus);
 }

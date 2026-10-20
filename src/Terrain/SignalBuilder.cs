@@ -212,13 +212,14 @@ public static class SignalBuilder
         var centre = red + head.Right * (edge + s) + head.Front * 0.006f;
         RoundedPlate(vertices, colors, uvs, uv2s, indices, Housing.SrgbToLinear(), centre, head.Right, s, s, 0f);
         var yellow = SignYellow.SrgbToLinear();
+        // the bike and arrow 1 cm proud of the plate: 3 mm in front of it, they fought it (#876, zfight note)
         void Draw(List<Vector2[]> polygons, Vector2 at, float size)
         {
             foreach (var polygon in polygons)
             {
                 var ring = new Vector3[polygon.Length];
                 for (int i = 0; i < polygon.Length; i++)
-                    ring[i] = centre + head.Front * 0.003f + head.Right * ((at.X + polygon[i].X * size) * s) + Vector3.Up * ((at.Y + polygon[i].Y * size) * s);
+                    ring[i] = centre + head.Front * 0.01f + head.Right * ((at.X + polygon[i].X * size) * s) + Vector3.Up * ((at.Y + polygon[i].Y * size) * s);
                 Polygon(vertices, colors, uvs, uv2s, indices, yellow, ring);
             }
         }

@@ -134,7 +134,7 @@ public sealed class NetworkChunkSource : IChunkSource
         if (await _local.LoadBuildingsAsync(id, ct).ConfigureAwait(false) is { } local) return local;
 
         return await ObtainAsync(AssetKind.Buildings, id, ct,
-            bytes => { using var ms = new MemoryStream(bytes); return BuildingCodec.Decode(ms); })
+            bytes => { using var ms = new MemoryStream(bytes); return Stadiums.StadiumClip.Clip(BuildingCodec.Decode(ms)); })
             .ConfigureAwait(false);
     }
 
@@ -162,7 +162,7 @@ public sealed class NetworkChunkSource : IChunkSource
         if (await _local.LoadTreesAsync(id, ct).ConfigureAwait(false) is { } local) return local;
 
         return await ObtainAsync(AssetKind.Trees, id, ct,
-            bytes => { using var ms = new MemoryStream(bytes); return TreeFormat.Decode(ms); })
+            bytes => { using var ms = new MemoryStream(bytes); return Stadiums.StadiumClip.Trees(id, TreeFormat.Decode(ms)); })
             .ConfigureAwait(false);
     }
 
@@ -173,6 +173,16 @@ public sealed class NetworkChunkSource : IChunkSource
 
         return await ObtainAsync(AssetKind.Fields, id, ct,
             bytes => { using var ms = new MemoryStream(bytes); return FieldFormat.Decode(ms); })
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>The ski slopes (#887): shipped, cached, else streamed. An older server answers "missing".</summary>
+    public async Task<PisteTile?> LoadPistesAsync(TileId id, CancellationToken ct = default)
+    {
+        if (await _local.LoadPistesAsync(id, ct).ConfigureAwait(false) is { } local) return local;
+
+        return await ObtainAsync(AssetKind.Pistes, id, ct,
+            bytes => { using var ms = new MemoryStream(bytes); return PisteFormat.Decode(ms); })
             .ConfigureAwait(false);
     }
 
@@ -196,6 +206,11 @@ public sealed class NetworkChunkSource : IChunkSource
 
     /// <summary>The shipped landings first, else the server's, pulled into the cache during sync (#377).</summary>
     public Task<AirportIndex?> LoadAirportsAsync(CancellationToken ct = default) => _local.LoadAirportsAsync(ct);
+
+    /// <summary>The lifts' OSM details (#915): shipped, else the copy <see cref="ClientTerrainSync"/> pulled into the cache.</summary>
+    public async Task<RopewayInfoIndex?> LoadRopewayInfoAsync(CancellationToken ct = default) =>
+        await _local.LoadRopewayInfoAsync(ct).ConfigureAwait(false)
+        ?? await LocalChunkSource.ReadRopewayInfoAsync(_cacheDirectory, ct).ConfigureAwait(false);
 
     public async Task<LandingIndex?> LoadLandingsAsync(CancellationToken ct = default) =>
         await _local.LoadLandingsAsync(ct).ConfigureAwait(false)

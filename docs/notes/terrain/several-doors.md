@@ -34,7 +34,7 @@ deserves, and each of them is a real door: it opens, it has a portal, you walk t
   that is already pedestrian (a long shop front gets more 1.8 m shop doors), else
   `DoorBudget.ServiceWidth` x `ServiceHeight` (1.0 x 2.1 m) — a barn's side door, a works' fire exit.
   It is guaranteed under the eave; a **main** door is not (see the `--doorcheck` note about low sheds).
-- **The leaf is a fact about the door, not about its kind.** `DoorHang { Inward, OutwardPair, RollUp }`
+- **The leaf is a fact about the door, not about its kind.** `DoorHang { Inward, OutwardPair, RollUp, Outward }` (`Outward`, one facade leaf swinging out, is a site toilet cabin's, #822)
   plus `bool Vehicle` on `DoorSpot`, `EntrancePlan`, `DoorLink` and `DoorIndex.Entry`;
   `DoorBudget.HangFor(kind)` / `VehicleFor(kind)` are the defaults a door starts from.
   `DoorLeaf.SwingsOut/RollsUp/OnFacade/LeafWidth/OpenReach` take the hang, and `CreateOnFacade`
@@ -43,6 +43,8 @@ deserves, and each of them is a real door: it opens, it has a portal, you walk t
   the door, not the building; and driving out of an interior no longer gates on the kind at all.
   **A loading bay is then one line** — `Hang = RollUp, Vehicle = true` on an Industrial `DoorSpot` —
   which is what #496/#497 phase 2 needs.
+- **A raised door** (#827, `raised-doors`): `DoorSpot.Level` / `EntrancePlan.Level`, its doorway on
+  that floor; only a site office's upper containers have one.
 - **Inside, a doorway each** (`InteriorGenerator.Entrances`, run just before `Furnish`). Every
   facade door gets an `EntrancePlan`, the main one first, and an `OpeningKind.Entry` cut in the
   ground-floor room nearest it, on the wall facing the same way, clamped into the plan box.

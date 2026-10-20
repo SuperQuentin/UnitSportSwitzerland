@@ -25,6 +25,11 @@ public enum RoomType
     Stairwell,
     // #558: the ramp down to an apartment block's car park, behind its garage door
     Ramp,
+    // #822: a building site's office container (its mess room next door is a BreakRoom)
+    SiteOffice,
+    // #827: the site office's upper containers, off the gallery: the site manager's office over the
+    // office, the drawing office over the mess room
+    SiteManager, DrawingOffice,
 }
 
 public enum OpeningKind { Door, Window, Entry, Arch }
@@ -217,6 +222,8 @@ public enum FurnitureType
     BlahajBin = 83,
     // #557: apartment blocks
     Pillar, StorageCage, Mailboxes, BikeRack,
+    // #822: a building site's office and mess room, and its toilet cabins
+    CoffeeMachine, Heater, Urinal, PaperRoll, Mirror, CoatHook,
 }
 
 public sealed class FurniturePlan
@@ -354,7 +361,7 @@ public sealed class EntrancePlan
 {
     /// <summary>Key of the door this is (<see cref="DoorKey"/> text, what <see cref="DoorIndex"/> hands out).</summary>
     public string Door { get; set; } = "";
-    /// <summary>Middle of the doorway on the inside wall line, interior-local, ground floor.</summary>
+    /// <summary>Middle of the doorway on the inside wall line, interior-local, on its floor (<see cref="Level"/>).</summary>
     public float X { get; set; }
     public float Z { get; set; }
     /// <summary>Unit direction into the room, interior-local.</summary>
@@ -376,6 +383,16 @@ public sealed class EntrancePlan
 
     /// <summary>Whether a ground vehicle is driven through it (<see cref="DoorSpot.Vehicle"/>).</summary>
     public bool Vehicle { get; set; }
+
+    /// <summary>
+    /// Storeys above the ground floor its doorway is on (#827): a raised door, its sill at that
+    /// floor's height on the facade, as a site office's upper containers have off their walkway.
+    /// 0 is the ground floor in every plan, cellar or not (the plan floor is
+    /// <see cref="InteriorLayout.Below"/> + this). Not written when 0, so a ground entrance's JSON is
+    /// byte for byte what it was, and a plan stored before reads as 0.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public int Level { get; set; }
 }
 
 /// <summary>
@@ -389,7 +406,7 @@ public sealed class InteriorLayout
     // one number, so whichever of #497/#498 rebases onto the other takes the NEXT one, never a
     // lower one: a version going backwards regenerates the plans saved under the higher one and
     // then collides when it is reissued.
-    public const int CurrentVersion = 26; // 26: open stairwells with a railing, TVs facing the sofa, furniture that leaves a way through (#680); 25: a studio under 5.7 m deep keeps its kitchenette at least 1.2 m (#694); 24: ramp-first garages, a ramp square to the front wall or along the facade beside a single stairwell (#694); 23: a block of flats' underground garage has its ramp down to the car park (#558); 22: a hall's forklift is the size of the real, drivable machine (#630); 21: apartment blocks follow the building's outline, wing by wing (#577); 20: a bedroom, bathroom or WC has one door, wider corridors (#576); 19: a door driven through keeps its full width inside, so a loading bay is not a 1.8 m hole (#531); 18: flats' living rooms and bedrooms on a facade, stairwells with half landings (#571); 17: apartment blocks, a stairwell and elevator per entrance, flats, a shared basement (#557); 16: IKEA stores at their nine real locations, with bins of Blåhajs (#501); 15: every main door kept under its own eave, and the opening inside it the same hole (#509); 14: a doorway per facade door, so big buildings have several (#498); 13: industrial sites — warehouses, works, depots, body shops and dealerships (#497); 12: the church radio by the rat (#370); 11: shops (a counter guaranteed, garages' too) and PAUSA vending machines (#273); 10: the rat's congregation in the front pews; 9: the pastor rat by every altar (#241); 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
+    public const int CurrentVersion = 28; // 28: a site office's upper containers through raised doors off its gallery (#827); 27: a building site's interior is its site office and its toilet cabins (#822); 26: open stairwells with a railing, TVs facing the sofa, furniture that leaves a way through (#680); 25: a studio under 5.7 m deep keeps its kitchenette at least 1.2 m (#694); 24: ramp-first garages, a ramp square to the front wall or along the facade beside a single stairwell (#694); 23: a block of flats' underground garage has its ramp down to the car park (#558); 22: a hall's forklift is the size of the real, drivable machine (#630); 21: apartment blocks follow the building's outline, wing by wing (#577); 20: a bedroom, bathroom or WC has one door, wider corridors (#576); 19: a door driven through keeps its full width inside, so a loading bay is not a 1.8 m hole (#531); 18: flats' living rooms and bedrooms on a facade, stairwells with half landings (#571); 17: apartment blocks, a stairwell and elevator per entrance, flats, a shared basement (#557); 16: IKEA stores at their nine real locations, with bins of Blåhajs (#501); 15: every main door kept under its own eave, and the opening inside it the same hole (#509); 14: a doorway per facade door, so big buildings have several (#498); 13: industrial sites — warehouses, works, depots, body shops and dealerships (#497); 12: the church radio by the rat (#370); 11: shops (a counter guaranteed, garages' too) and PAUSA vending machines (#273); 10: the rat's congregation in the front pews; 9: the pastor rat by every altar (#241); 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
 
     public int Version { get; set; } = CurrentVersion;
     public string Key { get; set; } = "";
@@ -452,8 +469,28 @@ public sealed class InteriorLayout
     /// <summary>Height of a floor's surface in the interior frame: the ground floor is 0, a cellar below it.</summary>
     public float FloorY(int floor) => (floor - Below) * StoreyHeight;
 
-    /// <summary>The floor the entrances are on.</summary>
+    /// <summary>The ground floor: the one the entrances are on, but for a raised one (<see cref="EntrancePlan.Level"/>).</summary>
     public FloorPlan GroundFloor => Floors[Math.Min(Below, Floors.Count - 1)];
+
+    /// <summary>The plan floor an entrance's doorway is on (#827): the ground floor plus its <see cref="EntrancePlan.Level"/>.</summary>
+    public int EntranceFloor(EntrancePlan e) => Below + e.Level;
+
+    /// <summary>
+    /// The height of an entrance's sill in the interior frame (#827): its floor's, 0 on the ground
+    /// floor (exactly the 0 every ground doorway has always stood at).
+    /// </summary>
+    public float EntranceY(EntrancePlan e) => e.Level == 0 ? 0f : FloorY(EntranceFloor(e));
+
+    /// <summary>The rooms of an entrance's floor, or none when the plan has no such floor.</summary>
+    public IReadOnlyList<RoomPlan> EntranceRooms(EntrancePlan e)
+    {
+        int f = EntranceFloor(e);
+        if (e.Level == 0) return Floors.Count == 0 ? Array.Empty<RoomPlan>() : GroundFloor.Rooms;
+        return f >= 0 && f < Floors.Count ? Floors[f].Rooms : Array.Empty<RoomPlan>();
+    }
+
+    /// <summary>Whether any entrance is raised above the ground floor (#827).</summary>
+    public bool HasRaisedEntrance() => Entrances.Any(e => e.Level != 0);
 
     public bool IsBank => Type == BuildingType.Bank;
 
@@ -484,8 +521,9 @@ public sealed class InteriorLayout
     public EntrancePlan EntranceFor(string door) => EntranceOf(door) ?? AllEntrances()[0];
 
     /// <summary>
-    /// Width and head height of the doorway an entrance arrives at: the ground-floor entry cut
-    /// nearest to it. The door leaf and the door portal are sized from it.
+    /// Width and head height of the doorway an entrance arrives at: the entry cut nearest to it on
+    /// its floor (the ground floor but for a raised door, #827). The door leaf and the door portal
+    /// are sized from it.
     /// </summary>
     public (float Width, float Top) OpeningOf(EntrancePlan e)
     {
@@ -493,7 +531,7 @@ public sealed class InteriorLayout
         (float Width, float Top) best = (e.Width, 2.1f);
         float bestD = float.MaxValue;
         if (Floors.Count == 0) return best;
-        foreach (var r in GroundFloor.Rooms)
+        foreach (var r in EntranceRooms(e))
             foreach (var o in r.Openings)
             {
                 if (o.Kind != OpeningKind.Entry) continue;

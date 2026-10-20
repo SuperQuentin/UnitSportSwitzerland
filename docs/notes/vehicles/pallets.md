@@ -72,6 +72,11 @@ Plan: `docs/plans/forklift-and-pallets.md`. The machine is `forklift`; this is w
   depot 0.3, a body shop and a dealership none. Ids `"<building>:y<slot>"`, the slot a place
   along the row counted before anything is skipped, so a door or a dropped one leaves a gap and
   never renumbers the rest (pinned).
+- **A place's roll keys on its position rounded to the centimetre** (`DormantSlots.Cm`, #876), never
+  truncated: places laid out on whole centimetres (a round box, the 1.7 m pitch) come out of the
+  float maths a hair either side, and `(long)(x * 100)` gave 509 cm on macOS where another machine
+  got 510. `--sitecheck`'s depot (four free places at 0.3) had none on the Mac from day one. The
+  dormant fleets in `VehicleSlot.cs` still truncate (their keys unchanged so no fleet moves).
 - **`SiteFront`** (`Vehicles/VehicleSlot.cs`): the yard plus the facade's real span and the doors on
   it, in the yard's u, from `SiteYards.Fronts`. **The yard is centred on the main door, not on the
   facade**: deriving the facade from the yard's width put pallets past one corner and short of the

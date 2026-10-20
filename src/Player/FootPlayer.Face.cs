@@ -27,7 +27,15 @@ public partial class FootPlayer
         : Downed ? FaceExpression.Pain
         : Emote >= 0 ? FaceExpressions.ForEmote(Emote)
         : DanceId != 0 ? FaceExpression.Happy
+        : PhoneState == PhoneSelfieState ? SelfieFace()
         : FaceExpression.Neutral;
+
+    /// <summary>A selfie's faces (#889), one after the other, a few seconds each.</summary>
+    private static readonly FaceExpression[] SelfieFaces = { FaceExpression.Happy, FaceExpression.Joy, FaceExpression.Wink, FaceExpression.Love };
+
+    /// <summary>The selfie face now: off the shared clock, so every peer shows the same one at the same moment.</summary>
+    private static FaceExpression SelfieFace() =>
+        SelfieFaces[(int)(Math.Max(0.0, Net.ClockSync.ServerNow) / 2.5) % SelfieFaces.Length];
 
     private void StepFace(float dt)
     {
@@ -39,6 +47,9 @@ public partial class FootPlayer
             if (dist > FaceDrawDistance) return;
             if (dist < FaceLookDistance) look = cam.GlobalPosition;
         }
+        // a selfie: into the phone's lens
+        if (PhoneState == PhoneSelfieState && _phoneModel is { Visible: true } phone)
+            look = phone.GlobalTransform * Phone.PhoneModel.LensPoint;
         if (DanceFaceNow() is { } face) _face.Step(walker, face, look, dt);
         else _face.Step(walker, FaceMood, look, dt);
     }

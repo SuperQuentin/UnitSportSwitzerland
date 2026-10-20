@@ -42,6 +42,8 @@ public partial class RaceManager : Node, IOriginShiftAware
     /// <summary>The mount value for "everyone keeps what they have".</summary>
     public const int Open = -1;
     private const double EntryWindow = 15.0, Countdown = 5.0;
+    /// <summary>The invite kind (#840): a duel challenge, or an open race to everyone; keyed by the race id.</summary>
+    public const string InviteId = "race";
 
     private static bool IsAirMount(int k) => k is (int)RideKind.Plane or (int)RideKind.Helicopter
         or (int)RideKind.Paraglider or (int)RideKind.Wingsuit;
@@ -108,6 +110,8 @@ public partial class RaceManager : Node, IOriginShiftAware
         public readonly List<(long Owner, int Count, int Mount, bool Duel)> PendingNpcs = new();
         /// <summary>Where it was opened: "near the race" before any entrant is placed.</summary>
         public Vector3 Spot;
+        /// <summary>Its length once the course is known, km (for the list and the invites).</summary>
+        public float Km;
         public string What => $"{(Air ? "air " : "")}{MountName(Mount)}{(Class >= 0 ? $" {CarSetups.Slug(CarSetups.For(Class))}" : "")} {(Invited != 0 ? "duel" : "race")}";
     }
 
@@ -141,10 +145,22 @@ public partial class RaceManager : Node, IOriginShiftAware
         return true;
     }
 
-    public static RaceManager CreateServer(ChatManager chat, Node3D players, IChunkSource source) => new()
+    public static RaceManager CreateServer(ChatManager chat, Node3D players, IChunkSource source)
     {
-        Name = NodeName, _server = true, _chat = chat, _players = players, _source = source,
-    };
+        var m = new RaceManager { Name = NodeName, _server = true, _chat = chat, _players = players, _source = source };
+        // a duel challenge and an open race are invites (#840); accepting is /race join <id>
+        chat.Invites?.Register(new InviteKind
+        {
+            Id = InviteId, Label = "race", Seconds = EntryWindow, TellAccepted = false,
+            Accept = (peer, invite) => "[race] " + m.Join(peer, (int)invite.Key),
+            Declined = (peer, invite) =>
+            {
+                if (m._races.GetValueOrDefault((int)invite.Key) is { Invited: var asked } duel && asked == peer && duel.Phase != Phase.Running)
+                    m.End(duel, $"{m.Who(peer)} declined the duel", ChatKind.System);
+            },
+        });
+        return m;
+    }
 
     public static RaceManager CreateClient(WorldOrigin origin) => new() { Name = NodeName, _origin = origin };
 
@@ -246,7 +262,11 @@ public partial class RaceManager : Node, IOriginShiftAware
             }
             else
             {
-                var route = await RaceRoute.BuildAsync(source, frame, at);
+                // skis race down the slopes (#909): off snow they barely move (#899); the road only where there is no slope
+                RaceRoute? route = Player.SnowRide.Is(mount) ? await RaceRoute.BuildPisteAsync(source, frame, at, race.Metres + 200f) : null;
+                if (Player.SnowRide.Is(mount) && route == null)
+                    Callable.From(() => _chat?.Tell(sender, $"[race] #{raceId} no slope here, racing the road", ChatKind.System)).CallDeferred();
+                route ??= await RaceRoute.BuildAsync(source, frame, at);
                 Callable.From(() => Opened(raceId, route, null, "")).CallDeferred();
             }
         });
@@ -279,17 +299,23 @@ public partial class RaceManager : Node, IOriginShiftAware
         race.PendingNpcs.Clear();
         race.Phase = Phase.Entry;
         race.EntryEnds = _clock + EntryWindow;
-        float km = (race.Air ? course!.Length : Mathf.Min(race.Metres, RaceCourse.MaxLength(route!, MinEntrants))) / 1000f;
+        float km = race.Km = (race.Air ? course!.Length : Mathf.Min(race.Metres, RaceCourse.MaxLength(route!, MinEntrants))) / 1000f;
         if (race.Invited < 0)
             _chat?.Tell(race.Host, $"[race] #{id} {km:0.0} km {race.What} against {Who(race.Invited)}", ChatKind.System);
         else if (race.Invited != 0)
         {
             _chat?.Tell(race.Invited, $"[race] #{id} {Who(race.Host)} challenges you to a {km:0.0} km {race.What} — /race join {id} within {EntryWindow:0} s", ChatKind.System);
             _chat?.Tell(race.Host, $"[race] #{id} waiting for {Who(race.Invited)} to accept", ChatKind.System);
+            _chat?.Invites?.Send(InviteId, race.Host, race.Invited, $"{Who(race.Host)} challenges you to a race",
+                $"{km:0.0} km {race.What}", out _, key: id, seconds: EntryWindow);
         }
         else
+        {
             _chat?.Broadcast($"[race] #{id} {Who(race.Host)} opens a {km:0.0} km {race.What} — /race join {id} within {EntryWindow:0} s",
                 ChatKind.System);
+            _chat?.Invites?.Send(InviteId, race.Host, Invite.Everyone, $"{Who(race.Host)} opens a race",
+                $"{km:0.0} km {race.What}", out _, key: id, seconds: EntryWindow);
+        }
     }
 
     private string Join(long sender, int? id)
@@ -303,6 +329,7 @@ public partial class RaceManager : Node, IOriginShiftAware
         if (race.Invited != 0 && race.Invited != sender) return $"Race #{race.Id} is a duel between {Who(race.Host)} and {Who(race.Invited)}.";
         if (race.Entrants.Count >= MaxEntrants) return $"Race #{race.Id} is full.";
         Enter(race, sender);
+        _chat?.Invites?.Dismiss(InviteId, race.Id, sender);
         _chat?.Broadcast($"[race] #{race.Id} {Who(sender)} joins ({race.Entrants.Count} in)", ChatKind.System);
         return $"#{race.Id} you are in{(race.Mount == Open ? "" : $" — {MountName(race.Mount)}")}.";
     }
@@ -387,7 +414,9 @@ public partial class RaceManager : Node, IOriginShiftAware
             var all = _players.GetChildren().OfType<FootPlayer>().ToList();
             plan = NpcArrival.Plan(road, lane.Zero, race.Entrants.Count, count, race.Entrants.Count + count,
                 all.Where(p => !p.Npc).Select(p => race.Frame.ToWorld(p.Global)).ToList(), all.Select(p => race.Frame.ToWorld(p.Global)).ToList(),
-                race.Id * 7919 + (int)(owner % 100000) * 31 + race.Entrants.Count);
+                race.Id * 7919 + (int)(owner % 100000) * 31 + race.Entrants.Count,
+                // skis cannot climb back to a slot from ahead: they all come down from above (#909)
+                Player.SnowRide.Is(mount) ? ArrivalStyle.Behind : null);
         }
         var ids = npcs.Spawn(owner, count, (RideKind)mount, host.Global, host.Rotation.Y,
             plan == null ? null : i => (race.Frame.ToGlobal(plan[i].At), plan[i].Yaw), race.Class >= 0 ? race.Class : race.NpcSetup);
@@ -604,6 +633,8 @@ public partial class RaceManager : Node, IOriginShiftAware
 
     private void Go(Race race)
     {
+        // entry is closed: nobody else is asked in (#840)
+        _chat?.Invites?.Withdraw(InviteId, race.Id);
         int count = race.Entrants.Count;
         if (count < MinEntrants) { End(race, $"not enough racers ({MinEntrants} needed)", ChatKind.System); return; }
         Vector3[] centre = System.Array.Empty<Vector3>(), gates = System.Array.Empty<Vector3>();
@@ -694,7 +725,7 @@ public partial class RaceManager : Node, IOriginShiftAware
 
     private static float SlowPace(int mount) => mount switch
     {
-        (int)RideKind.OnFoot or (int)RideKind.Skis or Open => 2f,
+        (int)RideKind.OnFoot or (int)RideKind.Skis or (int)RideKind.Snowboard or Open => 2f,
         (int)RideKind.RoadBike or (int)RideKind.Paraglider => 4f,
         (int)RideKind.Plane => 25f,
         (int)RideKind.Helicopter or (int)RideKind.Wingsuit => 15f,
@@ -718,6 +749,7 @@ public partial class RaceManager : Node, IOriginShiftAware
     /// <summary>Frees the race and tells every client still holding a racer in it.</summary>
     private void End(Race race, string? why, ChatKind kind)
     {
+        _chat?.Invites?.Withdraw(InviteId, race.Id);
         if (why != null) _chat?.Broadcast($"[race] #{race.Id} {why}", kind);
         foreach (long e in race.Entrants)
         {
@@ -791,7 +823,7 @@ public partial class RaceManager : Node, IOriginShiftAware
     private static float MaxPace(int mount) => (RideKind)mount switch
     {
         RideKind.OnFoot => 14f,
-        RideKind.RoadBike or RideKind.Skis => 45f,
+        RideKind.RoadBike or RideKind.Skis or RideKind.Snowboard => 45f,
         RideKind.Paraglider or RideKind.Wingsuit or RideKind.Parachute => 70f,
         RideKind.Helicopter or RideKind.Plane => 120f,
         _ => 125f,   // cars and motorbikes: 450 km/h
@@ -880,6 +912,7 @@ public partial class RaceManager : Node, IOriginShiftAware
             case "foot" or "run": return (int)RideKind.OnFoot;
             case "bike": return (int)RideKind.RoadBike;
             case "skis" or "ski": return (int)RideKind.Skis;
+            case "snowboard" or "board": return (int)RideKind.Snowboard;
             case "car": return (int)CarCatalog.All[0].Kind;
             case "moto" or "r1" or "motorbike": return 64;   // the motorbikes (#38): 64 and 65
             case "monster": return 65;

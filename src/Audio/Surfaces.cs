@@ -78,12 +78,18 @@ public static class Surfaces
         // standing in water (World/WaterField, #299): a lake's shallows over a gravel bed are water
         if (chunks.TryGetWaterLevel(feet, out float still) && still - feet.Y > 0.05f) return Surface.Water;
 
+        // a ski slope (#887): snow all year, ice where its state says so
+        if (World.Snow.SnowService.Instance is { } snow && snow.Index?.At(feet, out float mask) is { } slope && mask > 0.3f)
+            return snow.StateAt(slope, feet.Y).Ice > 0.5f ? Surface.Ice : Surface.Snow;
+
         bool known = chunks.TryGetCover(feet, out var cover);
 
         // water is water even where a road is mapped across it: the raster says the lake is here
         if (known && cover == CoverClass.Water) return Surface.Water;
 
         if (RoadUnder(chunks, feet) is { } road) return road;
+        // the white above the permanent snow line, and an occasion's snow, are snow underfoot (#899)
+        if (feet.Y > CoverPalette.SnowLine + 125f || World.DayNight.OccasionSnow > 0.5f) return Surface.Snow;
         return known ? FromCover(cover) : Surface.Grass;
     }
 

@@ -32,8 +32,9 @@ public static partial class InteriorGenerator
     /// <summary>Plans any building: a church from all its solids, anything else from its own footprint.</summary>
     public static InteriorLayout? Generate(BuildingTile tile, int index, RoadTile? roads, ChunkGrid? grid)
     {
-        // a building site has no interior: its half-built shell stands in the world (#608)
-        if (tile.Buildings[index].Kind == BuildingKind.UnderConstruction) return null;
+        // a building site's half-built shell stands in the world (#608); its interior is the site
+        // office by the gate (#822)
+        if (tile.Buildings[index].Kind == BuildingKind.UnderConstruction) return SiteOffice(tile, index, roads, grid);
         var group = BuildingTypes.For(tile).GroupOf(index);
         var layout = group?.Type == BuildingType.Church ? Church(tile, group, roads, grid) : null;
         if (layout == null)

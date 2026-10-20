@@ -157,7 +157,11 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         Current = this;
         Movie.ReplayWatch.Container(this);   // recorded for the movie studio (#775)
     }
-    public override void _ExitTree() { if (Current == this) Current = null; }
+    public override void _ExitTree()
+    {
+        if (Current == this) Current = null;
+        Core.RunSeeds.Reseeded -= OnReseeded;
+    }
 
     /// <summary>
     /// A car as a race pilot sees it: where it is, how it moves, where its lane takes it over the next
@@ -186,7 +190,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     private LaneGraph? _roads, _rails;
     private TileId? _builtAround;
     private bool _building;
-    private readonly Random _rng = new(20260929);
+    private Random _rng = new(20260929);
     private readonly List<Vehicle> _cars = new(), _trains = new();
     private double _spawnTimer;
     private Material? _bodyMaterial, _lampMaterial;
@@ -209,6 +213,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
 
     public override void _Ready()
     {
+        Core.RunSeeds.Reseeded += OnReseeded;
         _bodyMaterial = HumanMeshBuilder.Material();
         _lampMaterial = TrafficMeshBuilder.LampMaterial();
     }
@@ -263,6 +268,26 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         _builtAround = null;
         _building = false;
     }
+
+    /// <summary>
+    /// A film's shot pinned its seeds (#924): every car and train goes, the lane graphs stay, and the
+    /// cars come again from the shot's own stream, so its traffic never depends on the shots filmed
+    /// before it or on how long its ground took to stream in (<see cref="Forget"/> alone did neither).
+    /// </summary>
+    private void OnReseeded()
+    {
+        foreach (var v in _cars) v.Free();
+        foreach (var v in _trains) v.Free();
+        _byBody.Clear();
+        _cars.Clear();
+        _trains.Clear();
+        _rng = Core.RunSeeds.Rng("traffic");
+        _spawnTimer = 0;
+        _refill = true;
+    }
+
+    /// <summary>After a reseed: the next tick fills the roads at once, as a shot starts (not four cars a second).</summary>
+    private bool _refill;
 
     private void RebuildIfMoved(Vector3 focus)
     {
@@ -331,6 +356,11 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         int wantCars = Mathf.RoundToInt(s.TrafficCars * Mathf.Lerp(1f, 0.45f, night));
         int wantTrains = s.Trains ? 3 : 0;
 
+        if (_refill)
+        {
+            _refill = false;
+            for (int i = 0; i < wantCars && _cars.Count < wantCars; i++) SpawnCar(focus, CarNear, Obstacles?.Invoke());
+        }
         _spawnTimer -= dt;
         if (_spawnTimer <= 0)
         {
@@ -1059,7 +1089,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             return float.MaxValue;
         }
         if (toLine > SignalLookAhead || toLine < -0.5f) return float.MaxValue;
-        var aspect = site.Plan.State(car.Group, Terrain.SignalLamps.Clock());
+        var aspect = site.Plan.State(car.Group, SignalLamps.Clock());
         // crossing the line on red, unless it was already clearing a yellow it could not stop for
         if (crossed)
         {

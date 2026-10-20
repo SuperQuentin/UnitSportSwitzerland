@@ -22,6 +22,8 @@ namespace UnitSport.BattleRoyale;
 public partial class BrManager : Node
 {
     public const string NodeName = "BattleRoyale";
+    /// <summary>The invite kind (#840): to a lobby, keyed by its seed.</summary>
+    public const string InviteId = "br";
     public const int MinPlayers = 2;
     /// <summary>The lobby's countdown once <see cref="MinPlayers"/> have joined; <c>/br start</c> shortens it.</summary>
     public const double LobbyWait = 60, StartWait = 10;
@@ -58,15 +60,35 @@ public partial class BrManager : Node
         // the living may loot, the winner during the results too
         if (crates != null) crates.MayLoot = peer => m._state.Running && m._state.Find(peer) is { Alive: true };
         Combat.PvpRules.HitRelayed += m.OnHit;
+        // invites (#840): an open lobby invites everyone, an entrant a friend; accepting is /br join
+        chat.Invites?.Register(new InviteKind
+        {
+            Id = InviteId, Label = "Battle Royale", Seconds = 120, TellAccepted = false,
+            Accept = (peer, invite) => invite.Key == m._state.Seed && m._state.Phase is BrPhase.Lobby or BrPhase.Countdown
+                ? m.Join(peer) : "That Battle Royale lobby has closed.",
+        });
         return m;
     }
 
-    private static double Now => ClockSync.ServerNow;
+    /// <summary>
+    /// The match timeline: simulated seconds, so <c>/speed</c> paces the countdown, the plane, the zone
+    /// and the drops with everything else (#855). Every stamp in <see cref="BrState"/> is in these units.
+    /// </summary>
+    private static double Now => ClockSync.SimNow;
+
+    /// <summary>Real server seconds, for the rate limits on what a client may ask for (flares, pings).</summary>
+    private static double RealNow => ClockSync.ServerNow;
 
     /// <summary>"--brpace f" on the server: every match's timings times f (the loopback check runs a match in a minute).</summary>
     private static readonly float PaceScale = ParsePace();
 
     private static float ParsePace() => CmdArgs.Float("--brpace") is float f && f > 0 ? f : 1f;
+
+    /// <summary>
+    /// "--brseed n" on the server (checks, #873): every match's seed is n, so a check plays the same region, zone,
+    /// plane line and bots on every run (the region also hangs on the tiles and the anti-repeat history, fresh in a check).
+    /// </summary>
+    private static readonly int? FixedSeed = CmdArgs.Int("--brseed") is int s && s > 0 ? s : null;
 
     /// <summary>
     /// <c>/br ...</c> from <paramref name="sender"/>. Returns the private reply; public news goes
@@ -100,6 +122,9 @@ public partial class BrManager : Node
             case "team":
                 if (!player) return "'/br team' needs a player.";
                 return Party(sender, string.Join(' ', words[1..]));
+            case "invite":
+                if (!player) return "'/br invite' needs a player.";
+                return InviteFriend(sender, string.Join(' ', words[1..]), admin);
         }
         if (!admin) return $"'/br {verb}' is an admin command.";
         switch (verb)
@@ -119,8 +144,9 @@ public partial class BrManager : Node
                 Finish();
                 return "Cancelled.";
             case "zone": return ForceShrink();
+            case "bots": return BotsCommand(words[1..]);
             default:
-                return "Usage: /br open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] · join · leave · team [name] · start · zone · cancel · status · stats [name] · top";
+                return "Usage: /br open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] · join · leave · team [name] · invite <player> · start · zone · bots [n|off] [easy|normal|hard] · cancel · status · stats [name] · top";
         }
     }
 
@@ -133,7 +159,8 @@ public partial class BrManager : Node
             BrPhase.Lobby or BrPhase.Countdown =>
                 $"Lobby: {s.AreaName}, {s.Side / 1000:F0} × {s.Side / 1000:F0} km. {s.Entrants.Count} joined: "
                 + string.Join(", ", s.Entrants.Select(e => e.Party.Length > 0 ? $"{e.Name} [{e.Party}]" : e.Name)) + ". /br join to play"
-                + (s.TeamSize > 1 ? ", /br team <name> to play with friends." : "."),
+                + (s.TeamSize > 1 ? ", /br team <name> to play with friends." : ".")
+                + (s.Bots > s.Entrants.Count ? $" Bots fill the field to {s.Bots} at GO." : ""),
             _ => $"Match in {s.AreaName}: {s.AliveCount} of {s.Entrants.Count} alive.",
         };
     }
@@ -182,9 +209,10 @@ public partial class BrManager : Node
         }
 
         pace *= PaceScale;
-        int seed = _rng.Next(1, int.MaxValue);
+        int seed = FixedSeed ?? _rng.Next(1, int.MaxValue);
         // the side follows the field, which is not known yet: sized for the players online now
-        float size = side ?? BrRegion.SideFor(Multiplayer.GetPeers().Length);
+        // ... and for the bots that will top it up (#837)
+        float size = side ?? BrRegion.SideFor(Math.Max(Multiplayer.GetPeers().Length, _botTarget));
         BrArea area;
         string query = string.Join(' ', place);
         if (query.Equals("here", StringComparison.OrdinalIgnoreCase))
@@ -205,14 +233,18 @@ public partial class BrManager : Node
         {
             Phase = BrPhase.Lobby, AreaE = area.E, AreaN = area.N, Side = area.Side, AreaName = area.Name, Seed = seed, Pace = pace,
             TeamSize = team,
+            Bots = _botTarget,   // #837
+            BotLevel = (int)_botLevel,
             Leaders = Stats.Board(3).ToList(),   // shown in the lobby (#479)
         };
         double minutes = new ZoneSchedule(seed, area.Side, pace).Duration / 60.0;
         _horizon ??= _source?.LoadHorizonAsync();   // for the plane's altitude at GO
-        GD.Print(FormattableString.Invariant($"[br] lobby open: {area.Name} at {area.E:F0}/{area.N:F0}, {area.Side:F0} m, pace {pace}, zone {minutes:F0} min"));
+        GD.Print(FormattableString.Invariant($"[br] lobby open: {area.Name} at {area.E:F0}/{area.N:F0}, {area.Side:F0} m, pace {pace}, zone {minutes:F0} min, seed {seed}"));
         string mode = team switch { 2 => ", duos", 3 => ", trios", 4 => ", squads", _ => "" };
         Broadcast($"Battle Royale lobby open: {area.Name} ({area.Side / 1000:F0} × {area.Side / 1000:F0} km{mode}, about {minutes + 2:F0} min). Type /br join to play!");
         Push();
+        _chat?.Invites?.Send(InviteId, sender, Invite.Everyone, $"{(sender == ChatManager.ConsolePeerId ? "The server" : _chat.NameOfPeer(sender))} opens a Battle Royale",
+            LobbyLine(), out _, key: seed, seconds: InviteBook.MaxSeconds);
         return "Lobby open.";
     }
 
@@ -226,9 +258,12 @@ public partial class BrManager : Node
     {
         if (_state.Phase is not (BrPhase.Lobby or BrPhase.Countdown)) return _state.Running ? "A match is running; wait for the next lobby." : "No lobby is open.";
         if (_state.Find(peer) != null) return "You are already in.";
-        _state.Entrants.Add(new BrEntrant { Peer = peer, Name = _chat?.NameOfPeer(peer) ?? peer.ToString() });
+        // a party plays as a team unless its members pick one with /br team (#840)
+        _state.Entrants.Add(new BrEntrant { Peer = peer, Name = _chat?.NameOfPeer(peer) ?? peer.ToString(), Party = Parties.Server?.Of(peer)?.TeamName ?? "" });
+        _chat?.Invites?.Dismiss(InviteId, _state.Seed, peer);
         Broadcast($"{_chat?.NameOfPeer(peer)} joined the Battle Royale ({_state.Entrants.Count}).");
-        if (_state.Phase == BrPhase.Lobby && _state.Entrants.Count >= MinPlayers)
+        // with bots to fill the field (#837), one player is enough to start the countdown
+        if (_state.Phase == BrPhase.Lobby && (_state.Entrants.Count >= MinPlayers || _state.Bots >= MinPlayers))
         {
             _state.Phase = BrPhase.Countdown;
             _state.CountdownEnds = Now + LobbyWait;
@@ -258,6 +293,27 @@ public partial class BrManager : Node
             : $"Team '{party}': with {mates}" + (with.Count + 1 > _state.TeamSize ? $" (more than {_state.TeamSize}: split at GO)" : "") + ".";
     }
 
+    /// <summary><c>/br invite &lt;player&gt;</c> (#840): an entrant (or an admin) asks a friend into the lobby.</summary>
+    private string InviteFriend(long sender, string name, bool admin)
+    {
+        if (_state.Phase is not (BrPhase.Lobby or BrPhase.Countdown)) return "No lobby is open.";
+        if (_state.Find(sender) == null && !admin) return "Join first: /br join";
+        if (_chat == null) return "No chat here.";
+        long peer = _chat.PeerByName(name);
+        if (peer <= 0) return $"No player matching '{name}'.";
+        if (_state.Find(peer) != null) return $"{_chat.NameOfPeer(peer)} is already in.";
+        return _chat.Invites?.Send(InviteId, sender, peer, $"{_chat.NameOfPeer(sender)} invites you to a Battle Royale", LobbyLine(),
+            out _, key: _state.Seed) ?? "Invites are not running.";
+    }
+
+    /// <summary>"Zug · 6 × 6 km · duos · 3 joined": what an invite to the lobby says under its title.</summary>
+    private string LobbyLine()
+    {
+        var s = _state;
+        string mode = s.TeamSize switch { 2 => " · duos", 3 => " · trios", 4 => " · squads", _ => "" };
+        return $"{s.AreaName} · {s.Side / 1000:F0} × {s.Side / 1000:F0} km{mode} · {s.Entrants.Count} joined";
+    }
+
     private string Leave(long peer)
     {
         if (_state.Find(peer) is not { } e) return "You are not in the match.";
@@ -273,11 +329,11 @@ public partial class BrManager : Node
 
     public override void _Process(double delta)
     {
-        if (_server) ServerTick();
+        if (_server) ServerTick(delta);
         else ClientTick(delta);
     }
 
-    private void ServerTick()
+    private void ServerTick(double delta)
     {
         switch (_state.Phase)
         {
@@ -295,9 +351,11 @@ public partial class BrManager : Node
                     Push();
                 }
                 // the zone has closed and someone is still standing (a draw cannot linger)
+                BotPlane();
                 var zone = _state.Zone();
                 Airdrops(zone);
-                if (_state.TeamsAlive <= LastSides || Now - _state.Started > zone.Duration + 120) End();
+                BotZone(zone, delta);
+                if (_state.TeamsAlive <= LastSides || NoPlayerLeft || Now - _state.Started > zone.Duration + 120) End();
                 break;
             case BrPhase.Ended when Now - _endedAt >= ResultsSeconds:
                 Finish();
@@ -316,27 +374,40 @@ public partial class BrManager : Node
             return;
         }
         _state.Phase = BrPhase.Playing;
-        // the first circle is sized for who actually boards (docs/notes/br/zone.md)
-        _state.Field = _state.Entrants.Count;
+        _chat?.Invites?.Withdraw(InviteId, _state.Seed);
+        // the first circle is sized for who actually boards (docs/notes/br/zone.md), and the bots that
+        // top the field up (#837), put inside it once it is drawn
+        int bots = BotsAtGo();
+        _state.Field = _state.Entrants.Count + bots;
         _state.ZoneCentres = GroundCentres();
-        _state.AssignTeams();
-        _sidesAtGo = _state.TeamsAlive;
         // everyone boards the cargo plane (#207); the zone's clock starts when its doors close
         _state.FlightStart = Now;
         _state.FlightAlt = PlaneAltitude();
         var flight = new BrFlight(_state);
         _state.Started = flight.ClosesAt;
+        // the bots board too, once the line is known (#837), and are in the teams
+        BoardBots(bots);
+        _state.AssignTeams();
+        PlanTeamDrops();
+        _humanPings.Clear();
+        _sidesAtGo = _state.TeamsAlive;
         _pushedOut = false;
         Combat.PvpRules.Override = Allowed;
         SetMatchLoot(_state);
         SpawnLoot(_state.Area, _state.Seed);
         var zone = _state.Zone();
         Push();
-        foreach (var e in _state.Entrants) RpcId(e.Peer, MethodName.Board);
-        Broadcast($"GO! {_state.Entrants.Count} players aboard the plane to {_state.AreaName}. Jump once the doors open over the zone "
-            + $"(in {flight.OpensAt - Now:F0} s); the zone ({zone.RadiusOf(0) * 2 / 1000:F1} km across) shows {ZoneSchedule.LootSeconds * zone.Scale / 60:F0} min after they close.");
+        // never RpcId a bot's negative id: Godot reads it as "everyone but" (#837)
+        foreach (var e in _state.Entrants.Where(e => !e.Bot)) RpcId(e.Peer, MethodName.Board);
+        int botCount = _state.Entrants.Count(e => e.Bot);
+        Broadcast($"GO! {_state.Entrants.Count - botCount} players"
+            + (botCount > 0 ? $" and {botCount} bots" : "") + $" aboard the plane to {_state.AreaName}. Jump once the doors open over the zone "
+            + $"(in {flight.OpensAt - Now:F0} s); the zone ({zone.RadiusOf(0) * 2 / 1000:F1} km across) shows {LootTime(ZoneSchedule.LootSeconds * zone.Scale)} after they close.");
         GD.Print(FormattableString.Invariant($"[br] go: {_state.Entrants.Count} players, plane at {flight.Altitude:F0} m, doors {flight.OpensAt - Now:F0}-{flight.ClosesAt - Now:F0} s"));
     }
+
+    /// <summary>"29 s", "4 min": the loot time in the GO line (a test pace's 29 s read "0 min", #873).</summary>
+    private static string LootTime(double seconds) => seconds < 90 ? $"{seconds:F0} s" : $"{seconds / 60:F0} min";
 
     private bool _pushedOut;
     private Task<HorizonIndex?>? _horizon;
@@ -429,11 +500,17 @@ public partial class BrManager : Node
         if (!_server || _state.Phase != BrPhase.Playing) return;
         long peer = Multiplayer.GetRemoteSenderId();
         if (_state.Find(peer) is not { Alive: true, Downed: false } e) return;
+        Downed(e, attacker);
+    }
+
+    /// <summary>Down, not out: a player's report, or a bot's body here (#837).</summary>
+    private void Downed(BrEntrant e, long attacker)
+    {
         e.Downed = true;
         e.DownedBy = attacker;
         var k = _state.Find(attacker);
         GD.Print($"[br] down: {e.Name}, by {k?.Name ?? "-"}");
-        Rpc(MethodName.DownNews, peer, attacker, false);
+        Rpc(MethodName.DownNews, e.Peer, attacker, false);
         Push();
         OutIfAllDown(e);
     }
@@ -448,25 +525,35 @@ public partial class BrManager : Node
         var living = _state.Entrants.Where(m => m.Team == who.Team && m.Alive).ToList();
         if (living.Count == 0 || living.Any(m => !m.Downed)) return;
         GD.Print($"[br] team {who.Team} is all down: out");
-        foreach (var m in living) RpcId(m.Peer, MethodName.OutNow);
+        // a bot is run here: its body bleeds out now, and its death is reported like any (#837)
+        foreach (var m in living)
+            if (m.Bot) BodyOf(m.Peer)?.FinishDowned();
+            else RpcId(m.Peer, MethodName.OutNow);
     }
 
     /// <summary>Server: a standing team-mate held Interact over a downed one for long enough.</summary>
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RequestRevive(long target)
+    private void RequestRevive(long target) => ServerRevive(Multiplayer.GetRemoteSenderId(), target);
+
+    /// <summary>
+    /// Server: <paramref name="peer"/> stood <paramref name="target"/> up, a player's request or a bot's (#837):
+    /// a standing team-mate within reach of a downed one. False when refused.
+    /// </summary>
+    public bool ServerRevive(long peer, long target)
     {
-        if (!_server || _state.Phase != BrPhase.Playing) return;
-        long peer = Multiplayer.GetRemoteSenderId();
+        if (!_server || _state.Phase != BrPhase.Playing) return false;
         if (_state.Find(peer) is not { Alive: true, Downed: false, Team: not 0 } r
-            || _state.Find(target) is not { Alive: true, Downed: true } t || t.Team != r.Team) return;
-        if (_players?.GetNodeOrNull<Node3D>(peer.ToString()) is not { } a || _players.GetNodeOrNull<Node3D>(target.ToString()) is not { } b
-            || a.GlobalPosition.DistanceTo(b.GlobalPosition) > ServerReviveReach) return;
+            || _state.Find(target) is not { Alive: true, Downed: true } t || t.Team != r.Team) return false;
+        if (BodyOf(peer) is not { } a || BodyOf(target) is not { } b
+            || a.GlobalPosition.DistanceTo(b.GlobalPosition) > ServerReviveReach) return false;
         t.Downed = false;
         t.DownedBy = 0;
         GD.Print($"[br] revived: {t.Name}, by {r.Name}");
-        RpcId(target, MethodName.Revived);
+        if (t.Bot) b.ReviveInPlace();   // a bot is run here (#837)
+        else RpcId(target, MethodName.Revived);
         Rpc(MethodName.DownNews, target, peer, true);
         Push();
+        return true;
     }
 
     // ------------------------------------------------------------------------------------
@@ -605,8 +692,8 @@ public partial class BrManager : Node
         if (!_server || _state.Phase != BrPhase.Playing || _crates == null || Origin == null) return;
         long peer = Multiplayer.GetRemoteSenderId();
         if (_state.Find(peer) is not { Alive: true } e || _players?.GetNodeOrNull<Node3D>(peer.ToString()) is not { } body) return;
-        if (_lastFlare.TryGetValue(peer, out double last) && Now - last < 20) return;
-        _lastFlare[peer] = Now;
+        if (_lastFlare.TryGetValue(peer, out double last) && RealNow - last < 20) return;
+        _lastFlare[peer] = RealNow;
         var (pe, pn) = Origin.ToLv95(body.GlobalPosition);
         var rng = new Random(_state.Seed ^ (int)peer ^ (int)Now);
         float a = (float)(rng.NextDouble() * Math.Tau), r = 20f + (float)rng.NextDouble() * 30f;
@@ -634,18 +721,31 @@ public partial class BrManager : Node
     /// to the sender; at most one every <see cref="PingEvery"/> s.
     /// </summary>
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RequestPing(double e, double n, double alt)
+    private void RequestPing(double e, double n, double alt) => ServerPing(Multiplayer.GetRemoteSenderId(), e, n, alt);
+
+    /// <summary>
+    /// Server: <paramref name="peer"/> marks a point for their team, a player's request or a bot's (#837). Sent to the
+    /// team's players (never RpcId a bot) and told to the server's own listeners (<see cref="TeamPinged"/>: the
+    /// team's bots). False when refused (too soon, too far, no team).
+    /// </summary>
+    public bool ServerPing(long peer, double e, double n, double alt)
     {
-        if (!_server || _state.Phase != BrPhase.Playing || Origin == null || !double.IsFinite(e) || !double.IsFinite(n)) return;
-        long peer = Multiplayer.GetRemoteSenderId();
-        if (_state.Find(peer) is not { Alive: true, Team: not 0 } me || _players?.GetNodeOrNull<Node3D>(peer.ToString()) is not { } body) return;
-        if (_lastPing.TryGetValue(peer, out double last) && Now - last < PingEvery) return;
+        if (!_server || _state.Phase != BrPhase.Playing || Origin == null || !double.IsFinite(e) || !double.IsFinite(n)) return false;
+        if (_state.Find(peer) is not { Alive: true, Team: not 0 } me || BodyOf(peer) is not { } body) return false;
+        if (_lastPing.TryGetValue(peer, out double last) && RealNow - last < PingEvery) return false;
         var (be, bn) = Origin.ToLv95(body.GlobalPosition);
-        if (Math.Sqrt((e - be) * (e - be) + (n - bn) * (n - bn)) > PingReach) return;
-        _lastPing[peer] = Now;
+        if (Math.Sqrt((e - be) * (e - be) + (n - bn) * (n - bn)) > PingReach) return false;
+        _lastPing[peer] = RealNow;
         foreach (var x in _state.Entrants.Where(x => x.Team == me.Team))
-            if (Multiplayer.GetPeers().Contains((int)x.Peer)) RpcId(x.Peer, MethodName.Pinged, peer, e, n, alt);
+            if (!x.Bot && Multiplayer.GetPeers().Contains((int)x.Peer)) RpcId(x.Peer, MethodName.Pinged, peer, e, n, alt);
+        TeamPinged?.Invoke(me.Team, peer, e, n, alt);
+        // a human's ping is for the team's bots to follow (#837 phase 4); a map ping has no height: the pinger's
+        if (!me.Bot) _humanPings[me.Team] = (Origin.ToWorld(e, n, double.IsFinite(alt) ? alt : body.GlobalPosition.Y), Now, peer);
+        return true;
     }
+
+    /// <summary>Server: a ping went out to a team (team, from, LV95 e, n, alt): the team's bots read it.</summary>
+    public event Action<int, long, double, double, double>? TeamPinged;
 
     private readonly Dictionary<long, double> _lastPing = new();
 
@@ -668,7 +768,7 @@ public partial class BrManager : Node
     /// <summary>Everything the player carried, in a box where they fell.</summary>
     private void DeathBox(BrEntrant e, int[] ids, int[] counts)
     {
-        if (_crates == null || Origin == null || _players?.GetNodeOrNull<Node3D>(e.Peer.ToString()) is not { } body) return;
+        if (_crates == null || Origin == null || BodyOf(e.Peer) is not { } body) return;
         var stacks = new List<Items.ItemStack>();
         for (int i = 0; i < Math.Min(Math.Min(ids.Length, counts.Length), Items.Inventory.Size); i++)
             if (Items.ItemDefs.Get((Items.ItemId)ids[i]) is { } def && def.Id != Items.ItemId.Francs && counts[i] > 0)
@@ -705,7 +805,11 @@ public partial class BrManager : Node
             foreach (var m in _state.Entrants.Where(m => BrState.SideOf(m) == BrState.SideOf(e) && m.Place == 0))
                 m.Place = _state.TeamsAlive + 1;
         var k = killer != e.Peer ? _state.Find(killer) : null;
-        if (k is { Alive: true }) k.Kills++;
+        if (k is { Alive: true })
+        {
+            k.Kills++;
+            if (e.Bot) k.BotKills++;   // a bot counts, and shows: "10 kills (3 bots)" (#837)
+        }
         else k = null;
         string what = cause switch
         {
@@ -721,7 +825,7 @@ public partial class BrManager : Node
         Push();
         // the last one standing of a team is out: the downed ones go with them (#475)
         OutIfAllDown(e);
-        if (_state.TeamsAlive <= LastSides) End();
+        if (_state.TeamsAlive <= LastSides || NoPlayerLeft) End();
     }
 
     private void End()
@@ -729,7 +833,10 @@ public partial class BrManager : Node
         if (_state.Phase != BrPhase.Playing) return;
         // someone standing wins; a team that is all down (#475) is on its way out, and when only
         // the downed are left there is no winner
-        var winner = _state.Entrants.FirstOrDefault(e => e.Alive && !e.Downed)
+        // Every player gone and bots of more than one side standing (#837): nobody won it; they place together.
+        bool botsOnly = NoPlayerLeft && _state.TeamsAlive > 1;
+        int standing = _state.AliveCount;
+        var winner = botsOnly ? null : _state.Entrants.FirstOrDefault(e => e.Alive && !e.Downed)
                      ?? (_state.Entrants.Any(e => e.Alive) ? null : _state.Entrants.OrderBy(e => e.Place).FirstOrDefault());
         // the winner's whole side wins (#231): its living keep standing, its fallen place first too
         long side = winner != null ? BrState.SideOf(winner) : 0;
@@ -748,10 +855,11 @@ public partial class BrManager : Node
         _state.Phase = BrPhase.Ended;
         _endedAt = Now;
         Combat.PvpRules.Override = null;
-        Broadcast(winner == null ? "The Battle Royale ended without a winner."
+        Broadcast(botsOnly ? $"Every player has left: the Battle Royale ends ({standing} bots still in it)."
+            : winner == null ? "The Battle Royale ended without a winner."
             : winner.Team != 0
                 ? $"Team {winner.Team} WINS the Battle Royale in {_state.AreaName}! ({string.Join(", ", _state.Entrants.Where(e => e.Team == winner.Team).Select(e => e.Name))})"
-                : $"{winner.Name} WINS the Battle Royale in {_state.AreaName}! ({BrHud.Kills(winner.Kills)})");
+                : $"{winner.Name}{(winner.Bot ? " (bot)" : "")} WINS the Battle Royale in {_state.AreaName}! ({BrHud.Kills(winner.Kills, winner.BotKills)})");
         GD.Print($"[br] ended, winner {winner?.Name ?? "-"}");
         SaveHistory();
         RecordStats();
@@ -785,7 +893,8 @@ public partial class BrManager : Node
     /// <summary>The match just ended goes into everyone's record, saved off the main thread; each entrant hears theirs.</summary>
     private void RecordStats()
     {
-        Stats.Add(_state.Entrants.Select(e => (e.Name, e.Place, e.Kills, e.Damage, e.Survived)));
+        // bots have no career (#837); a player's kills of them count, and show
+        Stats.Add(_state.Entrants.Where(e => !e.Bot).Select(e => (e.Name, e.Place, e.Kills, e.BotKills, e.Damage, e.Survived)));
         Core.JsonStore.SaveAsync(StatsFile, Stats, Core.JsonStore.Indented, ex => GD.PushWarning($"[br] stats: {ex.Message}"));
         foreach (var e in _state.Entrants)
             if (Stats.Find(e.Name) is { } r && Multiplayer.GetPeers().Contains((int)e.Peer))
@@ -797,8 +906,10 @@ public partial class BrManager : Node
     private void Finish()
     {
         var was = _state;
+        _chat?.Invites?.Withdraw(InviteId, was.Seed);
         Combat.PvpRules.Override = null;
         ClearLoot();
+        RemoveBots(was);
         _state = new BrState();
         foreach (var e in was.Entrants)
             if (Multiplayer.GetPeers().Contains((int)e.Peer)) RpcId(e.Peer, MethodName.Release);

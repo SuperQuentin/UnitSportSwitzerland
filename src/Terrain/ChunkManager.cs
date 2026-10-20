@@ -370,6 +370,12 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         /// <summary>The tile's tunnel bores (#119), with its collision: a body inside one is not under the ground.</summary>
         public List<(float[] Points, int Count, float Half, float Height)>? Bores;
         public bool HolesLoaded;
+        /// <summary>
+        /// The pits the tile's building sites are dug into (#619), tile-local; null until a build has
+        /// planned its sites. Kept so a surface rebuilt without the buildings (a finer or coarser
+        /// LOD) is cut the same, and for <see cref="InPit"/>.
+        /// </summary>
+        public List<Construction.PitCut>? Pits;
         public byte[]? Cover;
         public bool CoverLoaded;
         /// <summary>
@@ -415,7 +421,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         List<(float[] Points, int Count, float Half, float Height)>? Bores = null,
         WaterLayer? WaterLayer = null, SignalBuilder.Lamps? Lamps = null,
         ArrayMesh?[]? BuildingCells = null, Vector3[]? OccluderVertices = null, int[]? OccluderIndices = null,
-        ArrayMesh? Sites = null, Construction.CraneRig[]? Cranes = null);
+        ArrayMesh? Sites = null, Construction.CraneRig[]? Cranes = null,
+        List<Construction.PitCut>? Pits = null);
 
     private Material? _roadMaterial;
     private Material? _buildingMaterial;
@@ -588,6 +595,10 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// <summary>A loaded tile's ground mesh, for per-tile shader parameters (<see cref="PhotoLayer"/>).</summary>
     public MeshInstance3D? GroundAt(TileId id) =>
         _chunks.TryGetValue(id, out var state) ? state.Node?.Ground : null;
+
+    /// <summary>A loaded tile's road mesh, for per-tile shader parameters (the ski slopes, #887).</summary>
+    public MeshInstance3D? RoadsAt(TileId id) =>
+        _chunks.TryGetValue(id, out var state) ? state.Node?.RoadMesh : null;
 
     /// <summary>
     /// The buildings with players inside, for the facade shader's occupancy cues (more lit
@@ -946,6 +957,35 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 
     private readonly HashSet<Node3D> _collisionAnchors = new();
 
+    /// <summary>
+    /// The dedicated server's mode (#837): a collision anchor (a server-run bot) wants collision on the
+    /// tiles within <see cref="CollisionReach.RadiusM"/> of it or of its look-ahead point, not the
+    /// client's ring of <see cref="LodPolicy.CollisionMaxDist"/> tiles, none high in the air, and a
+    /// tile every such anchor has left by <see cref="CollisionReach.ReleaseM"/> is freed back to its
+    /// coarse grid. Off on clients.
+    /// </summary>
+    public bool CollisionByRadius { get; set; }
+
+    /// <summary>Where a radius-mode anchor is and where it is heading (LV95), and whether it is high in the air.</summary>
+    private (double E, double N, double AheadE, double AheadN, bool Airborne) ReachOf(Node3D anchor)
+    {
+        var pos = anchor.GlobalPosition;
+        var (e, n) = _origin!.ToLv95(pos);
+        var v = anchor is CharacterBody3D body ? body.Velocity : Vector3.Zero;
+        var ahead = CollisionReach.Ahead(e, n, pos.Y, v.X, -v.Z, v.Y);
+        bool airborne = TryGetHeight(pos, out float ground)
+            && pos.Y - ground > CollisionReach.AirGapM && ahead.Alt - ground > CollisionReach.AirGapM;
+        return (e, n, ahead.E, ahead.N, airborne);
+    }
+
+    /// <summary>The ring key's part for a radius-mode anchor: its 250 m cell, its look-ahead's, airborne.</summary>
+    private long ReachKey(Node3D anchor)
+    {
+        if (!CollisionByRadius || !_collisionAnchors.Contains(anchor)) return 0;
+        var r = ReachOf(anchor);
+        return CollisionReach.CellKey(r.E, r.N) * 31 ^ CollisionReach.CellKey(r.AheadE, r.AheadN) ^ (r.Airborne ? 1 : 0);
+    }
+
     /// <summary>The anchors that want collision around them (<see cref="World.TreeColliders"/> follows them too).</summary>
     public IEnumerable<Node3D> CollisionAnchors => _collisionAnchors.Where(GodotObject.IsInstanceValid);
 
@@ -1229,6 +1269,22 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     }
 
     /// <summary>
+    /// Whether a world position is down in a building site's pit (#619): under the ground the height
+    /// queries answer, over the pit's floor. A body there is not under the ground.
+    /// </summary>
+    public bool InPit(Vector3 worldPos)
+    {
+        if (_origin == null) return false;
+        var (e, n) = _origin.ToLv95(worldPos);
+        var id = TileId.FromLv95(e, n);
+        if (!_chunks.TryGetValue(id, out var state) || state.Pits is not { Count: > 0 } pits) return false;
+        var at = new Vector2((float)(e - id.MinE), (float)(id.MaxN - n));
+        foreach (var pit in pits)
+            if (pit.Rect.Contains(at, 0.5f) && worldPos.Y > pit.Floor - 1.5f) return true;
+        return false;
+    }
+
+    /// <summary>
     /// Whether the tile under a world position has its collision shape committed. A body
     /// placed before that falls through the ground it can see.
     /// </summary>
@@ -1277,6 +1333,14 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     }
 
     public override void _Process(double delta)
+    {
+        long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+        ProcessTerrain(delta);
+        // the server's share of a frame (#837: collision round the bots); a client is timed by its own tools
+        if (!BuildMeshes) Net.ServerStats.Ran("terrain", t0);
+    }
+
+    private void ProcessTerrain(double delta)
     {
         if (_source == null || _origin == null) return;
         CollectBuildGarbage();
@@ -1436,6 +1500,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 state.RoadCellsQueued = ChunkNode.AllCollisionCells;
             }
             if (result.Bores != null) state.Bores = result.Bores;
+            if (result.Pits != null) state.Pits = result.Pits;
             if (state.CollisionQueued)
             {
                 EnsureNode(result.Id, state);
@@ -1645,14 +1710,14 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// the LOD policy, the world version and <see cref="BuildMeshes"/>. Compared field by field at
     /// 10 Hz, with nothing allocated (it was a string built every evaluation, #221).
     /// </summary>
-    private readonly List<(TileId Tile, bool Collision)> _desiredKey = new(), _keyNow = new();
+    private readonly List<(TileId Tile, bool Collision, long Reach)> _desiredKey = new(), _keyNow = new();
     private (LodPolicy? Lod, long Version, bool Meshes) _desiredKeyRest;
 
     private bool RingKeyChanged()
     {
         _keyNow.Clear();
         foreach (var anchor in _anchors)
-            _keyNow.Add((_origin!.TileAt(anchor.GlobalPosition), _collisionAnchors.Contains(anchor)));
+            _keyNow.Add((_origin!.TileAt(anchor.GlobalPosition), _collisionAnchors.Contains(anchor), ReachKey(anchor)));
         (LodPolicy? Lod, long Version, bool Meshes) rest = (Lod, _worldVersion, BuildMeshes);
         if (rest == _desiredKeyRest   // the policy by reference: a new one is a new key
             && System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_keyNow).SequenceEqual(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_desiredKey)))
@@ -1769,7 +1834,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 // it (#603).
                 bool nearMesh = BuildMeshes && want.Stride > 0 && want.Stride <= TerrainMeshBuilder.MaxHoleStride;
                 StartBuild(id, state, want.Stride, needCollision, needRoads, needBuildings,
-                    roadsForBlend: (needCollision || nearMesh) && want.Roads, fine: fine, cells: wantCells,
+                    // a server builds no roads to draw, but a bot's collision needs the road tile: decks,
+                    // kerbs, walls and tunnel bores are cut from it (#837)
+                    roadsForBlend: (needCollision || nearMesh) && (want.Roads || !BuildMeshes), fine: fine, cells: wantCells,
                     buildingsOnly: needBuildings && cellSwitch);
             }
         }
@@ -1783,6 +1850,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         {
             var center = _origin!.TileAt(anchor.GlobalPosition);
             int radius = Lod.MaxDist;
+            bool byRadius = CollisionByRadius && _collisionAnchors.Contains(anchor);
+            var reach = byRadius ? ReachOf(anchor) : default;
             for (int de = -radius; de <= radius; de++)
                 for (int dn = -radius; dn <= radius; dn++)
                 {
@@ -1795,8 +1864,10 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     // are the fast movers, and a 1001^2 HeightMapShape3D costs ~80 ms to commit -
                     // building nine of them under a camera nothing collides with was the single
                     // biggest hitch in a flight.
-                    bool collision = BuildCollision && dist <= Lod.CollisionMaxDist
-                        && _collisionAnchors.Contains(anchor);
+                    bool collision = BuildCollision && _collisionAnchors.Contains(anchor)
+                        && (byRadius
+                            ? CollisionReach.Wants(id, reach.E, reach.N, reach.AheadE, reach.AheadN, reach.Airborne)
+                            : dist <= Lod.CollisionMaxDist);
                     bool roads = BuildMeshes && dist <= Lod.RoadMaxDist;
                     bool buildings = BuildMeshes && dist <= Lod.BuildingMaxDist;
                     // strides are all 0 when meshes are off, otherwise all > 0: min = finest
@@ -1838,6 +1909,14 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 
         // unload with hysteresis
         var toRemove = new List<TileId>();
+        // A server-run bot's collision is freed once every bot has left the tile by the release
+        // radius (#837): the tile goes back to its 5 KB coarse grid on the next evaluation, or every
+        // tile a bot ever walked past would keep its 2 MB grid and its bodies.
+        if (CollisionByRadius)
+            foreach (var (id, want) in _wanted)
+                if (!want.Collision && _chunks.TryGetValue(id, out var held)
+                    && (held.HasCollision || held.PendingCollision || held.CollisionQueued) && !CollisionHeld(id))
+                    toRemove.Add(id);
         foreach (var (id, state) in _chunks)
         {
             if (desired.ContainsKey(id)) continue;
@@ -1848,6 +1927,18 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 toRemove.Add(id);
         }
         foreach (var id in toRemove) UnloadTile(id);
+    }
+
+    /// <summary>Whether some radius-mode anchor is still within the release radius of a tile.</summary>
+    private bool CollisionHeld(TileId id)
+    {
+        foreach (var anchor in _collisionAnchors)
+        {
+            if (!GodotObject.IsInstanceValid(anchor)) continue;
+            var r = ReachOf(anchor);
+            if (CollisionReach.Wants(id, r.E, r.N, r.AheadE, r.AheadN, r.Airborne, holding: true)) return true;
+        }
+        return false;
     }
 
     /// <summary>
@@ -1985,6 +2076,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 
         var cachedHoles = state.Holes;
         bool holesLoaded = state.HolesLoaded;
+        var cachedPits = state.Pits;
         var cachedCover = state.Cover;
         bool coverLoaded = state.CoverLoaded;
         var cachedWater = state.Water;
@@ -2029,8 +2121,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 if (grid == null) { _failedBuilds.Enqueue(id); return; }
                 ct.ThrowIfCancellationRequested();
 
-                // a headless server draws nothing: holes and the 1 MB cover raster are for meshes
-                var holes = holesLoaded || !BuildMeshes ? cachedHoles : await source.LoadHolesAsync(id, ct);
+                // a headless server draws nothing: the 1 MB cover raster is for meshes, and holes only
+                // matter under a bot's collision (tunnel mouths, #837)
+                var holes = holesLoaded || (!BuildMeshes && !wantCollision) ? cachedHoles : await source.LoadHolesAsync(id, ct);
                 var cover = coverLoaded || !BuildMeshes ? cachedCover : await source.LoadCoverAsync(id, ct);
                 // still water (#299): the source's layer, else the legacy one from the cover
                 var waterLayer = cachedWater ?? await LoadWaterLayerAsync(source, id, grid, cover, ct);
@@ -2046,8 +2139,11 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     surfaceCore = TerrainMeshBuilder.BuildSurfaceCore(grid, stride, holes, cover, detail: detail);
                     // checked right before every Godot object this worker makes: see _ExitTree
                     ct.ThrowIfCancellationRequested();
+                    // the pits already known (#619) are cut now: a new LOD of a tile whose site
+                    // stands must not draw the ground over its pit until the tail
+                    var drawn = cachedPits is { Count: > 0 } ? TerrainMeshBuilder.CutPits(surfaceCore, stride, cachedPits) : surfaceCore;
                     mesh = ChunkNode.ToArrayMesh(
-                        TerrainMeshBuilder.FinishSurface(surfaceCore, grid, stride, holes, null), terrainMaterial);
+                        TerrainMeshBuilder.FinishSurface(drawn, grid, stride, holes, null), terrainMaterial);
                 }
                 Lap(StSurface, stageMs, clock);
 
@@ -2124,23 +2220,15 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 }
 
                 ChunkNode.TreeMeshes? trees = null;
+                List<TreeInstance>? treeList = null;
                 ArrayMesh? water = null;
                 // a switch to or from building cells (#553) redoes the buildings, not the trees and
                 // the water committed with them, which stay where they are
                 if (wantBuildings && !buildingsOnly)
                 {
-                    var treeList = await source.LoadTreesAsync(id, ct);
+                    // built once the sites are planned, below: a tree does not stand in a pit (#619)
+                    treeList = await source.LoadTreesAsync(id, ct);
                     ct.ThrowIfCancellationRequested();
-                    if (treeList is { Count: > 0 } && treeMaterial != null)
-                    {
-                        // a tile's trees lie within its square; the height range is the
-                        // terrain's plus the tallest tree, generously
-                        var bounds = new Aabb(new Vector3(0, grid.MinHeight - 10, 0),
-                            new Vector3(1000, grid.MaxHeight - grid.MinHeight + 80, 1000));
-                        var buffers = ChunkNode.BuildTreeBuffers(treeList);
-                        ct.ThrowIfCancellationRequested();
-                        trees = ChunkNode.BuildTreeMeshes(buffers, treeMaterial, bounds, detail);
-                    }
                     Lap(StTrees, stageMs, clock);
 
                     // watercourses ride in the road tile but are meshed here, so a stream gets
@@ -2175,11 +2263,16 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 ArrayMesh? siteMesh = null;
                 Construction.CraneRig[]? craneRigs = null;
                 Vector3[]? siteFaces = null;
+                Vector3[]? officeFaces = null;
+                List<Construction.ConstructionSite>? sites = null;
+                // the pits (#619): planned again whenever the buildings are read, else as last known
+                List<Construction.PitCut>? plannedPits = null;
                 if (wantBuildings || wantCollision)
                 {
                     var bTile = await source.LoadBuildingsAsync(id, ct);
                     ct.ThrowIfCancellationRequested();
                     Lap(StBldgLoad, stageMs, clock);
+                    plannedPits = new();
 
                     // the building sites (#605): planned from the tile and its roads, the same on
                     // every peer, their shells drawn in place of their solids (#608)
@@ -2187,17 +2280,35 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     {
                         var siteRoads = roadTile ?? await source.LoadRoadsAsync(id, ct);
                         ct.ThrowIfCancellationRequested();
-                        var sites = Construction.SitePlans.For(bTile, siteRoads);
+                        sites = Construction.SitePlans.For(bTile, siteRoads);
                         bool siteMeshWanted = wantBuildings && pierMaterial != null;
                         if (Construction.SiteShellBuilder.Build(bTile, sites, grid, siteMeshWanted, wantCollision) is { } shells)
                         {
                             ct.ThrowIfCancellationRequested();
                             if (shells.Mesh is { } shellData) siteMesh = ChunkNode.ToPropMesh(shellData, pierMaterial!);
                             siteFaces = shells.Faces;
+                            // the site offices' walls are a building's (#822): let through at an open door
+                            officeFaces = shells.OfficeFaces;
+                            plannedPits = shells.Pits;
                             // what the cranes slew (#610): meshes made here, nodes on the main thread
                             if (siteMeshWanted && shells.Cranes.Count > 0)
                                 craneRigs = shells.Cranes.Select(c => Construction.CraneRig.Make(c, pierMaterial!)).ToArray();
                         }
+                        else plannedPits = Construction.SiteShellBuilder.Pits(bTile, sites, grid);
+                    }
+
+                    // a stadium (#885) is built by the tile holding its centre spot, drawn and
+                    // collided like a site's shell: one more prop mesh, both-sided faces
+                    bool stadiumMeshWanted = wantBuildings && pierMaterial != null;
+                    if (Stadiums.StadiumBuilder.Build(id, grid, stadiumMeshWanted, wantCollision) is { } stadium)
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        if (stadium.Mesh is { } stadiumData)
+                        {
+                            if (siteMesh == null) siteMesh = ChunkNode.ToPropMesh(stadiumData, pierMaterial!);
+                            else ChunkNode.WithPiers(siteMesh, stadiumData, pierMaterial!);
+                        }
+                        siteFaces = siteFaces is { Length: > 0 } ? [.. siteFaces, .. stadium.Faces] : stadium.Faces;
                     }
 
                     if (wantBuildings && bTile != null && buildingMaterial != null)
@@ -2207,8 +2318,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         // choice would depend on load order and disagree between peers.
                         var doorRoads = roadTile ?? await source.LoadRoadsAsync(id, ct);
                         ct.ThrowIfCancellationRequested();
-                        doors = Interiors.BuildingFootprint.ComputeDoors(bTile, doorRoads, grid.Stride == 1 ? grid : null);
-                        if (BuildingMeshBuilder.Build(bTile, doors, detail) is { } buildingData)
+                        doors = Interiors.BuildingFootprint.ComputeDoors(bTile, doorRoads, grid.Stride == 1 ? grid : null, sites);
+                        if (BuildingMeshBuilder.Build(bTile, doors, detail, grid) is { } buildingData)
                         {
                             ct.ThrowIfCancellationRequested();
                             if (cells)
@@ -2231,12 +2342,27 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         {
                             var linkRoads = roadTile ?? await source.LoadRoadsAsync(id, ct);
                             ct.ThrowIfCancellationRequested();
-                            linkDoors = Interiors.BuildingFootprint.ComputeDoors(bTile, linkRoads, grid.Stride == 1 ? grid : null);
+                            linkDoors = Interiors.BuildingFootprint.ComputeDoors(bTile, linkRoads, grid.Stride == 1 ? grid : null, sites);
                         }
                         buildingFaces = ChunkNode.SplitByCell(bTile != null
-                            ? [.. BuildingMeshBuilder.BuildCollisionFaces(bTile), .. BuildingMeshBuilder.LinkFaces(linkDoors)] : []);
+                            ? [.. BuildingMeshBuilder.BuildCollisionFaces(bTile, grid), .. BuildingMeshBuilder.LinkFaces(linkDoors), .. officeFaces ?? []] : []);
                     }
                     Lap(StBldgMesh, stageMs, clock);
+                }
+                var pits = plannedPits ?? cachedPits;
+
+                if (treeList is { Count: > 0 } && treeMaterial != null)
+                {
+                    if (pits is { Count: > 0 })
+                        treeList = treeList.Where(t => !pits.Any(p => p.Rect.Contains(new Vector2(t.X, t.Z), 1f))).ToList();
+                    // a tile's trees lie within its square; the height range is the
+                    // terrain's plus the tallest tree, generously
+                    var bounds = new Aabb(new Vector3(0, grid.MinHeight - 10, 0),
+                        new Vector3(1000, grid.MaxHeight - grid.MinHeight + 80, 1000));
+                    var buffers = ChunkNode.BuildTreeBuffers(treeList);
+                    ct.ThrowIfCancellationRequested();
+                    trees = ChunkNode.BuildTreeMeshes(buffers, treeMaterial, bounds, detail);
+                    Lap(StTrees, stageMs, clock);
                 }
 
                 // The bare-terrain collision already went out above so the ground never waits on
@@ -2261,9 +2387,17 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 float[]? blendedCollision = null;
                 Vector3[][]? bridgeCollision = null;
                 List<(float[] Points, int Count, float Half, float Height)>? bores = null;
+                // the pits (#619): their quads out of the height map, the ground round them back as faces
+                HashSet<int>? pitHoles = wantCollision && pits is { Count: > 0 } ? Construction.PitTerrain.Holes(pits) : null;
+                var groundHoles = holes;
+                if (pitHoles != null)
+                {
+                    groundHoles = new HashSet<int>(pitHoles);
+                    if (holes != null) groundHoles.UnionWith(holes);
+                }
                 if (wantCollision && roadTile != null)
                 {
-                    blendedCollision = TerrainMeshBuilder.BuildCollisionMap(grid, holes, blend);
+                    blendedCollision = TerrainMeshBuilder.BuildCollisionMap(grid, groundHoles, blend);
                     // A heightfield cannot hold a deck floating above the terrain it crosses, so
                     // bridges get their own small collision body alongside the blended ground.
                     // and retaining walls (#125): a heightfield cannot stand a vertical face either,
@@ -2277,8 +2411,17 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         .. RoadStreetBuilder.BuildCollisionFaces(roadTile)]);   // sidewalks and kerbs (#119)
                     bores = RoadTunnels.Bores(roadTile);
                 }
-                else if (wantCollision && !publishInterimCollision)
-                    blendedCollision = TerrainMeshBuilder.BuildCollisionMap(grid, holes); // no road tile after all
+                else if (wantCollision && (!publishInterimCollision || pitHoles != null))
+                    blendedCollision = TerrainMeshBuilder.BuildCollisionMap(grid, groundHoles); // no road tile after all
+                if (pitHoles != null)
+                {
+                    var cells = ChunkNode.SplitByCell([.. Construction.PitTerrain.CollisionFaces(pits!, pitHoles,
+                        TerrainMeshBuilder.GroundHeights(grid, roadTile != null ? blend : null, 0.0))]);
+                    if (bridgeCollision == null) bridgeCollision = cells;
+                    else
+                        for (int c = 0; c < cells.Length; c++)
+                            if (cells[c].Length > 0) bridgeCollision[c] = [.. bridgeCollision[c], .. cells[c]];
+                }
                 // piers and jetties (#377) are walked on like a bridge deck and stop a boat
                 if (wantCollision && PierMeshBuilder.Build(landings, id, grid, mesh: false, collision: true) is { Faces.Length: > 0 } piers)
                 {
@@ -2299,6 +2442,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 }
 
                 ArrayMesh? tailMesh = null;
+                // the pits are cut after the road blend: the cut takes the ground as drawn (#619)
+                bool pitCut = surfaceCore != null && pits is { Count: > 0 };
                 if (visualBlend)
                 {
                     // Tunnel portal walls close the mouth from the same hole mask the carve
@@ -2307,18 +2452,25 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     var portals = RoadMeshBuilder.ComputeTunnelPortals(roadTile!, grid);
                     bool hasCorridors = blend!.Cells.Length > 0;
                     bool hasPortalWalls = holes is { Count: > 0 } && portals.Count > 0;
-                    // Nothing to change on a tile with no at-grade road and no portal: the
+                    // Nothing to change on a tile with no at-grade road, no portal and no pit: the
                     // surface already committed is the final one.
-                    if (hasCorridors || hasPortalWalls)
+                    if (hasCorridors || hasPortalWalls || pitCut)
                     {
                         var core = hasCorridors
                             ? TerrainMeshBuilder.PatchSurface(surfaceCore!, grid, stride, cover, blend,
                                 TerrainMeshBuilder.VisualBlendClearance)
                             : surfaceCore!;
+                        if (pitCut) core = TerrainMeshBuilder.CutPits(core, stride, pits!);
                         ct.ThrowIfCancellationRequested();
                         tailMesh = ChunkNode.ToArrayMesh(
                             TerrainMeshBuilder.FinishSurface(core, grid, stride, holes, portals), terrainMaterial!);
                     }
+                }
+                else if (pitCut && terrainMaterial != null)
+                {
+                    var core = TerrainMeshBuilder.CutPits(surfaceCore!, stride, pits!);
+                    ct.ThrowIfCancellationRequested();
+                    tailMesh = ChunkNode.ToArrayMesh(TerrainMeshBuilder.FinishSurface(core, grid, stride, holes, null), terrainMaterial);
                 }
 
                 // a held-back surface goes out now: as it is when the tail found nothing to blend
@@ -2334,7 +2486,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     tailMesh, blendedCollision, roads, wantRoads,
                     holes, cover, buildings, buildingFaces, wantBuildings, trees, water,
                     bridgeCollision, stageMs, doors, bores, waterLayer, lamps,
-                    buildingCells, occluders?.Vertices, occluders?.Indices, siteMesh, craneRigs));
+                    buildingCells, occluders?.Vertices, occluders?.Indices, siteMesh, craneRigs, plannedPits));
             }
             catch (OperationCanceledException)
             {

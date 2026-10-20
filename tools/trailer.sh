@@ -2,14 +2,28 @@
 # The trailer (#706): preview its shots, frame them, or film the whole thing and cut it on its
 # song. One game launch per run; the director stages each shot. The films: FILM=story (default,
 # docs/trailer/script.md, StoryScript.cs), FILM=showcase (docs/trailer/storyboard.md,
-# TrailerScript.cs) and FILM=drognens (the music clip, docs/trailer/drognens.md, DrognensScript.cs).
+# TrailerScript.cs), FILM=drognens (the music clip, docs/trailer/drognens.md, DrognensScript.cs),
+# FILM=fondue ("The Stolen Fondue", docs/trailer/fondue.md, FondueScript.cs, #864),
+# FILM=tourist ("The Alien Tourist", docs/trailer/tourist.md, TouristScript.cs, #865) and
+# FILM=invasion ("Invasion, Swiss Style", docs/trailer/invasion.md, InvasionScript.cs, #866).
 #
 #   tools/trailer.sh preview [shots]   play in a window, each shot with its part of the song
-#   tools/trailer.sh stills  [shots]   first, middle and last frame of each shot as PNGs
+#   tools/trailer.sh stills  [shots]   first, middle and last frame of each shot as PNGs (at --fixed-fps 30, as render)
 #   tools/trailer.sh render  [shots]   film the shots (1920x1080, 30 fps, frame-exact) and cut them
 #                                      on the song, as the film's next version; a few shots are
 #                                      filmed again and cut with the last version's others
-#   tools/trailer.sh cut               cut the newest version again (after replacing a shot by hand)
+#   tools/trailer.sh cut               cut the newest version again (after replacing a shot by hand,
+#                                      or after new translations)
+#   tools/trailer.sh lines             add the film's English lines (captions, bubbles, chat) to its
+#                                      translations, docs/trailer/<film>.subtitles.json, and say
+#                                      what each language lacks
+#
+# Subtitles (#862): the director writes each filmed shot's English lines and their frames beside
+# it (shotNN.cues.json); the cut writes <film>.<lang>.srt into the version folder for English and
+# every language of docs/trailer/<film>.subtitles.json ({"id": {"en", "fr", "de", "it", "rm"}};
+# a missing translation is English, with a warning) and muxes them into trailer.mp4 and
+# trailer_share.mp4 as soft tracks (mov_text, language and title set, none on by default: the
+# bubbles are burnt in, in English).
 #
 # Every render is a version of its own, never written over: <trailers>/<film>/v1, v2, ... each with
 # trailer.mp4, trailer_share.mp4 (lighter, to send), its shots/, render.log and version.txt (when,
@@ -18,11 +32,23 @@
 # test_output/trailer/<film>/stills.
 #
 # shots: all (default), 5, 5-9 or 5,7,12 (shot numbers of the film).
-# Env: GODOT (default godot), CHUNKS (terrain; default ./terrain_chunks, or the main checkout's
-# from a worktree), SIZE (default 1920x1080), LOG=1 prints every actor twice a second,
-# TRAILERS (where the versions go), VERSION (which one `cut` cuts; default the newest).
+# Env: GODOT (default godot), CHUNKS (terrain; default ./terrain_chunks, else where this checkout's
+# or the main checkout's terrain_location.json points, else the main checkout's terrain_chunks; a
+# fixture course as fixture:lake), ARGS (more game arguments, e.g. "--at E,N --trailer-allow-generated"),
+# GODOT_ARGS (engine arguments, e.g. "--screen 1"), SIZE (default 1920x1080), LOG=1 prints every actor twice a second,
+# TRAILERS (where the versions go), VERSION (which one `cut` cuts; default the newest),
+# TRACKS=DIR every actor and staged object each frame of each shot to DIR/shotNN.tracks.csv
+# (tools/trailer-drift.py compares two such dumps), RENDER (the render settings, below),
+# PINS=0 a run as before #924 (the user's own user://, the real date, no seeds pinned: a baseline only).
+#
+# Pinned renders (#924): every run plays in a fresh user:// of its own (test_output/trailer/<film>/profile:
+# no settings, placed objects, structures, chunk cache or occasions.json of the player's), with the
+# default settings and RENDER's on top; the film's date is the calendar (TrailerDirector.FilmDate),
+# every shot's chance from (film, shot) seeds. Only the compiled shader caches are kept from run to
+# run (they change no pixel). Each shot writes shotNN.pins.json beside it, and version.txt carries the
+# run's pins: commit (+dirty), Godot, GPU, terrain fingerprint, date, occasions, styles, song, settings.
 # The film's song (incompetech.com, CC BY 4.0: "Voxel Revolution" for the trailers, "I Got a Stick
-# Feat James Gavins" for the clip) is downloaded once into <trailers>/ (not committed). Needs ffmpeg
+# Feat James Gavins" for the clip, "Hep Cats" for the fondue film) is downloaded once into <trailers>/ (not committed). Needs ffmpeg
 # on PATH (or bin/).
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -39,24 +65,78 @@ scratch=test_output/trailer/$FILM
 mkdir -p "$films" "$scratch"
 case $FILM in
   drognens) title="I Got a Stick Feat James Gavins" ;;
+  fondue) title="Hep Cats" ;;
+  tourist) title="Mighty Like Us" ;;
+  invasion) title="Space 1990" ;;
   *) title="Voxel Revolution" ;;
 esac
 song=$TRAILERS/$(echo "$title" | tr 'A-Z ' 'a-z_').mp3
 
+# the chunks a terrain_location.json points at ({"chunks": "..."}), empty without one
+located() {
+  [ -f "$1" ] && sed -n 's/.*"chunks"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$1" | head -1
+}
 if [ -z "${CHUNKS:-}" ]; then
   if [ -f terrain_chunks/manifest.json ]; then CHUNKS=terrain_chunks
+  elif [ -n "$(located terrain_location.json)" ]; then CHUNKS=$(located terrain_location.json)
+  elif [ -n "$(located "$main/terrain_location.json")" ]; then CHUNKS=$(located "$main/terrain_location.json")
   else CHUNKS="$main/terrain_chunks"
   fi
 fi
+case $CHUNKS in
+  fixture:*) ;;
+  *) [ -f "$CHUNKS/manifest.json" ] || echo "warning: no manifest.json in $CHUNKS: the director will find no real tiles" >&2 ;;
+esac
 
 # the song only for what plays or cuts it
-if [ "$mode" != stills ] && [ ! -f "$song" ]; then
+if [ "$mode" != stills ] && [ "$mode" != lines ] && [ ! -f "$song" ]; then
   curl -fsSL -o "$song" "https://incompetech.com/music/royalty-free/mp3-royaltyfree/${title// /%20}.mp3"
 fi
 
 log=()
 [ "${LOG:-}" = 1 ] && log=(--trailer-log)
-game=(--chunks "$CHUNKS" --title "trailer $mode $shots" --trailer "$shots" --trailer-film "$FILM" --trailer-size "$SIZE" "${log[@]}")
+[ -n "${TRACKS:-}" ] && { mkdir -p "$TRACKS"; log+=(--trailer-tracks "$(cd "$TRACKS" && pwd)"); }
+
+# the render profile (#924): a fresh user:// (see the top), RENDER's settings, the commit
+PINS=${PINS:-1}
+RENDER=${RENDER:---rings 6 --detail high --horizon 150 --fog off --vsync off --render-scale 1 --aa fxaa}
+dirty=$(git status --porcelain -- src tools | grep -q . && echo +dirty || true)
+pins=(--trailer-commit "$(git rev-parse --short HEAD)$dirty" --trailer-song "$song")
+envrun=()
+if [ "$PINS" = 1 ]; then
+  read -r -a render <<< "$RENDER"
+  pins+=(${render[@]+"${render[@]}"})
+  profile=$scratch/profile
+  caches=$scratch/profile_caches
+  rm -rf "$profile"
+  mkdir -p "$profile" "$caches"
+  profile=$(cd "$profile" && pwd)
+  # where Godot puts user:// under that profile: APPDATA on Windows, XDG_DATA_HOME on Linux, HOME on macOS
+  case "$(uname -s)" in
+    Darwin) envrun=(env HOME="$profile"); userdir="$profile/Library/Application Support/Godot/app_userdata/UnitSportSwitzerland" ;;
+    MINGW*|MSYS*|CYGWIN*) envrun=(env APPDATA="$(cygpath -w "$profile")"); userdir="$profile/Godot/app_userdata/UnitSportSwitzerland" ;;
+    *) envrun=(env XDG_DATA_HOME="$profile"); userdir="$profile/godot/app_userdata/UnitSportSwitzerland" ;;
+  esac
+  mkdir -p "$userdir"
+  for c in shader_cache vulkan; do [ -d "$caches/$c" ] && cp -R "$caches/$c" "$userdir/"; done
+else
+  pins+=(--trailer-unpinned)
+fi
+# after a pinned run: its compiled shaders kept for the next one
+keep_caches() {
+  [ "$PINS" = 1 ] || return 0
+  for c in shader_cache vulkan; do
+    [ -d "$userdir/$c" ] && { rm -rf "${caches:?}/$c"; cp -R "$userdir/$c" "$caches/"; }
+  done
+  return 0
+}
+# ARGS: more game arguments, split on spaces (ARGS="--at 2600000,1200000 --trailer-allow-generated")
+extra=()
+[ -n "${ARGS:-}" ] && read -r -a extra <<< "$ARGS"
+# GODOT_ARGS: engine arguments, before the "--" (GODOT_ARGS="--screen 1")
+engine=()
+[ -n "${GODOT_ARGS:-}" ] && read -r -a engine <<< "$GODOT_ARGS"
+game=(--chunks "$CHUNKS" --title "trailer $mode $shots" --trailer "$shots" --trailer-film "$FILM" --trailer-size "$SIZE" "${pins[@]}" ${log[@]+"${log[@]}"} ${extra[@]+"${extra[@]}"})
 
 # the newest version's number, 0 when there is none yet
 newest() {
@@ -76,18 +156,93 @@ cut_film() {
   for f in "$out"/shots/shot*.mp4; do echo "file '$(basename "$f")'" >> "$out/shots/list.txt"; done
   ffmpeg -y -loglevel error -f concat -safe 0 -i "$out/shots/list.txt" -ss "$start" -i "$song" \
     -map 0:v -map 1:a -c:v copy -c:a aac -b:a 192k -shortest -movflags +faststart "$out/trailer.mp4"
-  ffmpeg -y -loglevel error -i "$out/trailer.mp4" -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 160k \
-    -movflags +faststart "$out/trailer_share.mp4"
+  subtitle_tracks "$out"
+  ffmpeg -y -loglevel error -i "$out/trailer.mp4" -map 0 -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 160k \
+    -c:s copy -movflags +faststart "$out/trailer_share.mp4"
+  subtitles_off "$out/trailer.mp4"
+  subtitles_off "$out/trailer_share.mp4"
   echo "wrote $out/trailer.mp4 and trailer_share.mp4 ($(ls "$out"/shots/shot*.mp4 | wc -l) shots, the song from ${start} s)"
+}
+
+# every subtitle track of MP4 $1 off by default: ffmpeg's mp4 muxer enables the first track of
+# each kind when none is default (QuickTime then shows it), so the tkhd "enabled" flag is cleared
+# on the text tracks by hand (python3; without it, a warning and the first track stays on)
+subtitles_off() {
+  [ -f "$1" ] || return 0
+  python3 - "$1" <<'PY' || echo "warning: could not turn the subtitle tracks off by default in $1" >&2
+import struct, sys
+path = sys.argv[1]
+data = bytearray(open(path, "rb").read())
+def atoms(start, end):
+    while start + 8 <= end:
+        size, kind = struct.unpack(">I4s", data[start:start + 8])
+        if size < 8: return
+        yield start, size, kind
+        start += size
+off = 0
+for at, size, kind in atoms(0, len(data)):
+    if kind != b"moov": continue
+    for t, tsize, tkind in atoms(at + 8, at + size):
+        if tkind != b"trak": continue
+        tkhd = handler = None
+        for c, csize, ckind in atoms(t + 8, t + tsize):
+            if ckind == b"tkhd": tkhd = c
+            if ckind == b"mdia":
+                for m, msize, mkind in atoms(c + 8, c + csize):
+                    if mkind == b"hdlr": handler = bytes(data[m + 16:m + 20])
+        if tkhd is not None and handler in (b"sbtl", b"text", b"subt"):
+            data[tkhd + 11] &= 0xFE
+            off += 1
+open(path, "wb").write(data)
+print(f"subtitle tracks off by default: {off}")
+PY
+}
+
+# the cut's subtitles (#862): <film>.<lang>.srt from the shots' cues and the translations, muxed
+# into version folder $1's trailer.mp4 as soft tracks, none on by default
+subtitle_tracks() {
+  local out=$1 lang iso title n=0
+  local inputs=() meta=() log
+  rm -f "$out/$FILM".*.srt
+  # the RESULT line decides, not Godot's exit code (docs/notes/general/headless-exit-139.md)
+  log=$("$GODOT" --headless --path . -- --trailer-subtitles "$out" --trailer-film "$FILM" 2>&1 || true)
+  echo "$log" | grep '\[subtitles\]' || true
+  if ! echo "$log" | grep -q 'RESULT: ok'; then
+    echo "no subtitles for this cut" >&2
+    return 0
+  fi
+  for lang in en fr de it rm; do
+    [ -f "$out/$FILM.$lang.srt" ] || continue
+    case $lang in
+      en) iso=eng; title=English ;;
+      fr) iso=fra; title="Français" ;;
+      de) iso=deu; title=Deutsch ;;
+      it) iso=ita; title=Italiano ;;
+      rm) iso=roh; title=Rumantsch ;;
+    esac
+    inputs+=(-i "$out/$FILM.$lang.srt")
+    meta+=(-map $((n + 1)):s "-metadata:s:s:$n" "language=$iso" "-metadata:s:s:$n" "title=$title"
+      "-metadata:s:s:$n" "handler_name=$title" "-disposition:s:$n" 0)
+    n=$((n + 1))
+  done
+  [ "$n" -gt 0 ] || return 0
+  ffmpeg -y -loglevel error -i "$out/trailer.mp4" ${inputs[@]+"${inputs[@]}"} -map 0:v -map 0:a \
+    ${meta[@]+"${meta[@]}"} -c:v copy -c:a copy -c:s mov_text -movflags +faststart "$out/trailer.subs.mp4"
+  mv "$out/trailer.subs.mp4" "$out/trailer.mp4"
+  echo "subtitle tracks: $n ($(cd "$out" && ls "$FILM".*.srt | tr '\n' ' '))"
 }
 
 case $mode in
   preview)
-    "$GODOT" --path . --resolution 1280x720 -- "${game[@]}" --trailer-song "$song"
+    # --fixed-fps as the render: under load the actors keep the film's time, not the wall clock's
+    ${envrun[@]+"${envrun[@]}"} "$GODOT" --path . --resolution 1280x720 --fixed-fps 30 ${engine[@]+"${engine[@]}"} -- "${game[@]}"
+    keep_caches
     ;;
   stills)
     rm -rf "$scratch/stills"
-    "$GODOT" --path . --resolution 1280x720 -- "${game[@]}" --trailer-stills "$scratch/stills" | tee "$scratch/stills.log" | grep '\[trailer\]'
+    # --fixed-fps as the render: a still is the frame at its film time, never one skipped under load
+    ${envrun[@]+"${envrun[@]}"} "$GODOT" --path . --resolution 1280x720 --fixed-fps 30 ${engine[@]+"${engine[@]}"} -- "${game[@]}" --trailer-stills "$scratch/stills" 2>&1 | tee "$scratch/stills.log" | grep '\[trailer\]'
+    keep_caches
     echo "stills in $scratch/stills"
     ;;
   render)
@@ -106,8 +261,9 @@ case $mode in
       filmed="$shots (the others from v$last)"
     fi
     # --fixed-fps: one frame is one 30th of game time, however slowly a frame renders
-    "$GODOT" --path . --resolution 1280x720 --fixed-fps 30 -- "${game[@]}" --trailer-record "$out/shots" \
+    ${envrun[@]+"${envrun[@]}"} "$GODOT" --path . --resolution 1280x720 --fixed-fps 30 ${engine[@]+"${engine[@]}"} -- "${game[@]}" --trailer-record "$out/shots" \
       | tee "$out/render.log" | grep '\[trailer\]' || true
+    keep_caches
     changed=$(git status --porcelain -- src tools | grep -q . && echo ", with local changes" || true)
     {
       echo "film: $FILM"
@@ -115,8 +271,15 @@ case $mode in
       echo "made: $(date '+%Y-%m-%d %H:%M')"
       echo "commit: $(git rev-parse --short HEAD) on $(git branch --show-current)$changed"
       echo "filmed: $filmed"
+      echo "godot binary: $("$GODOT" --version 2>/dev/null | tail -1)"
+      echo "profile: $([ "$PINS" = 1 ] && echo "fresh user:// ($RENDER)" || echo "the user's own (PINS=0)")"
+      # the run's pins, as the director printed them (shotNN.pins.json has each shot's)
+      grep '\[trailer\] pin: ' "$out/render.log" | sed 's/^\[trailer\] pin: /pin /' || true
     } > "$out/version.txt"
     cut_film "$out"
+    ;;
+  lines)
+    "$GODOT" --headless --path . -- --trailer-lines --trailer-film "$FILM" 2>&1 | grep '\[subtitles\]' || true
     ;;
   cut)
     version=${VERSION:-$(newest)}
@@ -124,7 +287,7 @@ case $mode in
     cut_film "$films/v$version"
     ;;
   *)
-    echo "usage: [FILM=story|showcase] tools/trailer.sh preview|stills|render [shots] | cut" >&2
+    echo "usage: [FILM=story|showcase|drognens|fondue|tourist|invasion|bubbles|ufo] tools/trailer.sh preview|stills|render [shots] | cut | lines" >&2
     exit 2
     ;;
 esac

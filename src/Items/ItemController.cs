@@ -199,7 +199,8 @@ public partial class ItemController : Node
         {
             var p = CurrentPlayer();
             // downed (#475): no items until a team-mate picks you up; in a fist fight (#495) the hands are fists
-            return p is { IsViewing: true, RidingAlong: false, IsSwimming: false, Downed: false, Fighting: false } && p.Ride == RideKind.OnFoot ? p : null;
+            // the phone out (#889): both hands are on it
+            return p is { IsViewing: true, RidingAlong: false, IsSwimming: false, Downed: false, InDuel: false, PhoneState: 0 } && p.Ride == RideKind.OnFoot ? p : null;
         }
     }
 
@@ -240,7 +241,7 @@ public partial class ItemController : Node
         }
         _wasKnockedOut = player.KnockedOut;
 
-        player.HeldItemId = (int)_inventory.HeldId;
+        player.HeldItemId = player.PhoneState != 0 ? 0 : (int)_inventory.HeldId;
         // a radio plays in the hand too, and on the back once put away: everyone near hears what
         // the stack's data says (#168, #261); one not in the hand is drawn on the back
         int radio = _inventory.RadioSlot();

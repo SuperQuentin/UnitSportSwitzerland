@@ -35,6 +35,13 @@ public partial class ClockSync : Node
     public static double ServerNow => LocalNow + _offset;
 
     /// <summary>
+    /// Simulated time now, comparable between peers (<see cref="Core.SimClock.SimAt"/> at
+    /// <see cref="ServerNow"/>): the clock for timelines that cross the wire and must follow
+    /// <c>/speed</c>, such as a battle royale match (#855).
+    /// </summary>
+    public static double SimNow => Core.SimClock.SimAt(ServerNow);
+
+    /// <summary>
     /// The server's wall clock (Unix seconds), as well as this peer can tell (#452): for stamps
     /// the server writes in Unix time because they outlive it on disk (a campfire's lighting, a
     /// vehicle's spawn), compared on a client whose own system clock may be minutes off. This

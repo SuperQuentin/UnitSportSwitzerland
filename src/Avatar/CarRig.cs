@@ -249,6 +249,8 @@ public partial class CarRig : Node3D, IHingedDoors, Items.IBeatReactive
     private Node3D[] _pedals = System.Array.Empty<Node3D>();
     private HumanPalette? _driverPalette;
     private MeshInstance3D? _driverBody, _driverHead;
+    /// <summary>Their shadows while the seat's eye leaves them out (<see cref="OwnBody"/>, #833).</summary>
+    private MeshInstance3D? _driverHeadShadow, _driverBodyShadow;
     private (int Turn, int Throttle, int Brake, bool Smooth) _driverPose = (int.MinValue, 0, 0, false);
     private readonly Dictionary<(int Turn, int Throttle, int Brake, bool Smooth), ArrayMesh> _driverPoses = new();
     /// <summary>Whether the driver's head was built smooth (<see cref="HumanMeshBuilder.SmoothFigures"/>).</summary>
@@ -546,16 +548,22 @@ public partial class CarRig : Node3D, IHingedDoors, Items.IBeatReactive
         _glass.AlbedoColor = Colors.White with { A = View == CockpitView.Outside ? 1f : GlassFromSeat };
 
         if (_driverBody == null || _driverHead == null || _driverPalette is not { } palette) return;
-        _driverBody.Visible = DriverShown && View != CockpitView.Bare;
-        _driverHead.Visible = DriverShown && View == CockpitView.Outside;
-        if (!_driverBody.Visible) return;
+        // in the seat's eye the head, and a bare cockpit's body, are still drawn for the mirrors and
+        // the shadow, only not for the eye (#833)
+        _driverBody.Visible = DriverShown;
+        _driverHead.Visible = DriverShown;
+        if (!DriverShown) return;
         var pose = (Mathf.RoundToInt(WheelTurn / 0.03f), Mathf.RoundToInt(Throttle * 8f), Mathf.RoundToInt(Brake * 8f),
             HumanMeshBuilder.SmoothFigures);
-        if (pose == _driverPose) return;
-        // a restyle to or from a lit style (#311): the head is rebuilt with the body
-        if (pose.Item4 != _driverSmooth) (_driverHead.Mesh, _driverSmooth) = (HumanMeshBuilder.DriverHead(palette, _cabin.Seat), pose.Item4);
-        _driverPose = pose;
-        _driverBody.Mesh = HumanMeshBuilder.DriverBody(_driverPoses, pose, palette, _cabin.Seat);
+        if (pose != _driverPose)
+        {
+            // a restyle to or from a lit style (#311): the head is rebuilt with the body
+            if (pose.Item4 != _driverSmooth) (_driverHead.Mesh, _driverSmooth) = (HumanMeshBuilder.DriverHead(palette, _cabin.Seat), pose.Item4);
+            _driverPose = pose;
+            _driverBody.Mesh = HumanMeshBuilder.DriverBody(_driverPoses, pose, palette, _cabin.Seat);
+        }
+        OwnBody.See(_driverHead, View != CockpitView.Outside, ref _driverHeadShadow);
+        OwnBody.See(_driverBody, View == CockpitView.Bare, ref _driverBodyShadow);
     }
 
     /// <summary>

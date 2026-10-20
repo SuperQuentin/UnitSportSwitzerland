@@ -55,7 +55,11 @@ public enum RideKind
     WheelLoaderForks = 199,
     /// <summary>A tracked mini dumper (#614): a <see cref="Player.MiniDumper"/>, a skip that tips forward.</summary>
     MiniDumper = 200,
-    // The next other mount is 201.
+    /// <summary>The flying saucer (#861): a <see cref="Player.Ufo"/>, hover flight, landing legs, a ramp and a tractor beam.</summary>
+    Ufo = 201,
+    /// <summary>A snowboard (#922): a <see cref="Player.Snowboard"/>, on the ski model like the skis.</summary>
+    Snowboard = 202,
+    // The next other mount is 203.
 }
 
 /// <summary>
@@ -107,7 +111,12 @@ public readonly record struct RideInput(float Throttle, float Brake, float Steer
 /// Share of the air drag taken away by a vehicle close ahead (slipstream, 0..<see cref="MaxDraft"/>);
 /// the cars and motorbikes read it. <see cref="DraftBehind"/> works it out.
 /// </param>
-public readonly record struct RideGround(bool OnFloor, float Grade, Audio.Surface Surface = Audio.Surface.Asphalt, float Draft = 0f)
+/// <param name="SnowFriction">Skis: the slope's snow against a groomed run's friction (#887), 1 off a slope.</param>
+/// <param name="SlopeAlong">Skis: gravity's pull down the slope along the heading, m/s² (#899, <see cref="SkiDynamics.Slope"/>).</param>
+/// <param name="SlopeAcross">Skis: the same across the heading, + to the left.</param>
+/// <param name="SnowGrip">Skis: the slope's snow against a groomed run's edge grip (#887), 1 off a slope.</param>
+public readonly record struct RideGround(bool OnFloor, float Grade, Audio.Surface Surface = Audio.Surface.Asphalt, float Draft = 0f,
+    float SnowFriction = 1f, float SlopeAlong = 0f, float SlopeAcross = 0f, float SnowGrip = 1f)
 {
     /// <summary>Drag taken away right behind another vehicle (2 m): a car in a tow loses 30-45%.</summary>
     public const float MaxDraft = 0.45f;
@@ -216,6 +225,9 @@ public abstract class Rideable
     /// <summary>Chase camera offset behind and above the rider. Zero distance means first person.</summary>
     public virtual float ChaseDistance => 3.6f;
     public virtual float ChaseHeight => 1.45f;
+
+    /// <summary>How much further back the chase camera sits at <paramref name="speed"/> (m/s), m: the speed felt as distance.</summary>
+    public virtual float ChaseStretch(float speed) => 0f;
     /// <summary>Chase camera tilt, radians, negative looks down. A car's roof hides the road from a level camera behind it.</summary>
     public virtual float ChasePitch => 0f;
     /// <summary>How far the chase camera swings toward the direction of travel in a slide, 0..1.</summary>
@@ -291,6 +303,12 @@ public abstract class Rideable
 
     /// <summary>The driver climbs out on the left (a left-hand-drive cab), not the right.</summary>
     public virtual bool ExitLeft => false;
+
+    /// <summary>
+    /// Where the driver stands after getting out on the ground, in the visual's frame, when that spot
+    /// is clear (the foot of a UFO's ramp, #861); null: beside the door (<see cref="EntryPoint"/>).
+    /// </summary>
+    public virtual Vector3? ExitSpot => null;
 
     // ---- passengers (#158) ----------------------------------------------------------------
     /// <summary>
@@ -482,7 +500,7 @@ public abstract class Rideable
     /// Twin) folds open on its own page like the cars.
     /// </remarks>
     public static readonly Rideable[] All =
-        { new Bicycle(), new Skis(), new Canopy(paraglider: true), new Helicopter(), new Plane(), new Pigeon() };
+        { new Bicycle(), new Skis(), new Snowboard(), new Canopy(paraglider: true), new Helicopter(), new Plane(), new Pigeon(), new Ufo() };
 
     /// <summary>
     /// A fresh instance for one rider.
@@ -497,12 +515,14 @@ public abstract class Rideable
     {
         RideKind.RoadBike => new Bicycle(),
         RideKind.Skis => new Skis(),
+        RideKind.Snowboard => new Snowboard(),
         RideKind.Wingsuit => new Wingsuit(),
         RideKind.Parachute => new Canopy(paraglider: false),
         RideKind.Paraglider => new Canopy(paraglider: true),
         RideKind.Helicopter => new Helicopter(),
         RideKind.Plane => new Plane(),
         RideKind.Pigeon => new Pigeon(),
+        RideKind.Ufo => new Ufo(),
         RideKind.Airstairs => new Airstairs(),
         RideKind.Forklift => new Forklift(),
         RideKind.Excavator => new Excavator(),
@@ -536,7 +556,7 @@ public abstract class Rideable
                 Motorbike => "Motorbikes",
                 Truck => "Trucks and buses",
                 Boat => "Boats",
-                Airliner or Helicopter or Plane => "Aircraft",
+                Airliner or Helicopter or Plane or Ufo => "Aircraft",
                 _ => "Rides",
             };
             int rider = k;

@@ -55,9 +55,16 @@ public partial class ControlsHelp : CanvasLayer
             new("Pick a hotbar slot", Keys: "1–6 / Wheel", Pad: "{next_item}"),
             new("Quick wheel (hold)", PlayerInput.QuickWheel),
             new("Emote wheel: dances and gestures (hold; tap: stop / again)", PlayerInput.EmoteWheel),
-            new("Inventory", PlayerInput.Inventory),
+            new("Inventory", PlayerInput.Inventory, Pad: "{inventory} (tap)"),
             new("Gather stone, water, wood (hold)", PlayerInput.Gather),
             new("Bird journal", PlayerInput.BirdJournal),
+        }),
+        ("Quick menu and invites (#840)", new Row[]
+        {
+            new("Quick menu: activities, invites, inventory, vehicles, map, emotes (hold, aim, let go)", PlayerInput.QuickMenu, Pad: "{quick_menu} (hold)"),
+            new("Phone: take it out, again to open it; out, WASD and the mouse work it (click, swipe), Enter selects, S / Esc puts it away", PlayerInput.Phone, Pad: "{quick_menu} (hold) › Phone"),
+            new("Accept the invite on screen", PlayerInput.QuickMenu, Keys: "{quick_menu} (tap)", Pad: "{menu}, then A"),
+            new("Decline the invite on screen", PlayerInput.InviteDecline, Pad: "{quick_menu} (hold) › Invites"),
         }),
         ("Fishing (rod in hand)", new Row[]
         {
@@ -77,6 +84,18 @@ public partial class ControlsHelp : CanvasLayer
             new("Uppercut: down, forward + punch", Keys: "{move_back} {move_right} + {fight_punch}", Pad: "{move_back} {move_right} + {fight_punch}"),
             new("String: punch, punch, kick", Keys: "{fight_punch} {fight_punch} {fight_kick}", Pad: "{fight_punch} {fight_punch} {fight_kick}"),
             new("Finish them: down, down + kick", Keys: "{move_back} {move_back} + {fight_kick}", Pad: "{move_back} {move_back} + {fight_kick}"),
+        }),
+        ("Aura battle (#907, /aura <player>)", new Row[]
+        {
+            new("Planner: add the move picked", Keys: "click, or arrows + {ui_accept}", Pad: "{ui_accept}"),
+            new("Planner: take back the last move", PlayerInput.AuraRemove),
+            new("Planner: suggest a combo", PlayerInput.AuraSuggest),
+            new("Planner: lock in", PlayerInput.AuraLock),
+            new("Next move, on the downbeat (the timing scores)", PlayerInput.AuraNext),
+            new("Rival performing: keep a straight face when tempted (only then!)", PlayerInput.AuraNext),
+            new("Accept a player's aura challenge: look at them", PlayerInput.InteractMount),
+            new("Battle a bot: /aura <bot's name>", Keys: "/aura", Pad: "/aura"),
+            new("Cheer a battle you watch (emote wheel: Cheer, Clap, Fist pump)", PlayerInput.EmoteWheel),
         }),
         ("Building (hammer in hand)", new Row[]
         {
@@ -109,6 +128,14 @@ public partial class ControlsHelp : CanvasLayer
             new("At a car door: open it, then get in", PlayerInput.InteractMount),
             new("Open / shut the car door you are at", PlayerInput.CarDoor),
             new("Get out", PlayerInput.InteractMount),
+        }),
+        ("Stadiums", new Row[]
+        {
+            new("On a stand's row: sit down; again, or walk off, to stand up", PlayerInput.InteractMount),
+            new("At a concert's front-of-house console: the light desk (cues, effects, show input)", PlayerInput.InteractMount),
+            new("Running a concert camera (/concert camera take N): zoom in", PlayerInput.CamZoomIn),
+            new("Running a concert camera: zoom out", PlayerInput.CamZoomOut),
+            new("Running a concert camera: cut to it (on air); Esc leaves it", PlayerInput.CamCut),
         }),
         ("Passengers (online)", new Row[]
         {
@@ -233,6 +260,16 @@ public partial class ControlsHelp : CanvasLayer
             new("Cockpit view, without your body, chase camera", PlayerInput.CameraToggle),
             new("Light sim: pitch trim nose down / up (AN-124, military freighter)", Keys: "{trim_nose_down} / {trim_nose_up}", Pad: "—"),
         }),
+        ("UFO", new Row[]
+        {
+            new("Fly where you look (strafe sideways)", Keys: Wasd, Pad: "{move_forward}"),
+            new("Up / down (let go: it hovers)", Keys: "{jump} / {crouch_slide}", Pad: "{throttle} / {brake}"),
+            new("Boost", Keys: "{sprint} / {boost}", Pad: "{sprint} / {boost}"),
+            new("Tractor beam on / off", PlayerInput.TractorBeam),
+            new("Ramp (landed) / legs (flying)", PlayerInput.CarDoor),
+            new("Rim lights", PlayerInput.LightsToggle),
+            new("Get out (down the ramp when landed)", PlayerInput.InteractMount),
+        }),
         ("Flying", new Row[]
         {
             new("Pitch and roll", Keys: Wasd, Pad: "{move_forward}"),
@@ -271,6 +308,8 @@ public partial class ControlsHelp : CanvasLayer
             new("Debug menu (offline or admin)", PlayerInput.DebugMenu),
 #if PLAYTEST
             new("Playtest panel (--playtest, Debug builds)", Keys: "F10", Pad: "L3 + R3"),
+            new("Playtest note: what's wrong, stamped with the place (--playtest-record)", Keys: "F12", Pad: "L3 + R3 › Note"),
+            new("Playtest top view / pause and scrub it (Ctrl + wheel)", Keys: "Shift+F12 / Ctrl+F12", Pad: "L3 + R3 › Top view"),
 #endif
         }),
     };
@@ -331,7 +370,7 @@ public partial class ControlsHelp : CanvasLayer
     }
 
     /// <summary>The groups whose controls are used mounted: their VR names are the mounted ones.</summary>
-    private static readonly string[] Mounted = { "Riding and driving", "Trucks and buses", "Paddle steamer", "Airliners", "Flying" };
+    private static readonly string[] Mounted = { "Riding and driving", "Trucks and buses", "Paddle steamer", "Airliners", "UFO", "Flying" };
 
     private static readonly Color KeyColor = new(1f, 0.84f, 0.42f);
     private static readonly Color PadColor = new(0.6f, 0.8f, 1f);

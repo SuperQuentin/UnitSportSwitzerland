@@ -70,6 +70,45 @@ public static partial class Preprocessor
     // incremental — see TerrainBuild.
     private static async Task<int> RunCoreAsync(IReadOnlyList<string> args, LogWriter? writer, CancellationToken ct)
     {
+        int rc = await RunPassAsync(args, writer, ct);
+        // every pass that writes tiles ends with their content hashes in the manifest (#924), so a
+        // fresh build carries them; incremental, so a pass that changed a few tiles reads only those
+        if (rc != 0 || !HashesAfter(args, out string outDir, out string tempDir, out int ioJobs)) return rc;
+        if (writer != null) writer.Stage = "hash";
+        return ManifestHashStage.Run(outDir, tempDir, ioJobs, ct);
+    }
+
+    /// <summary>
+    /// Whether a successful run with <paramref name="args"/> may have changed tiles, so the manifest's
+    /// hashes are brought up to date after it: a run with <c>--out</c> and a manifest there, not
+    /// <c>--no-hash</c>, not <c>--manifest-hash</c> itself, nor a pass that writes nothing under it.
+    /// </summary>
+    private static bool HashesAfter(IReadOnlyList<string> args, out string outDir, out string tempDir, out int ioJobs)
+    {
+        outDir = tempDir = "";
+        ioJobs = 4;
+        string? o = null, t = null;
+        for (int i = 0; i < args.Count; i++)
+        {
+            switch (args[i])
+            {
+                case "--out" when i + 1 < args.Count: o = args[++i]; break;
+                case "--temp" when i + 1 < args.Count: t = args[++i]; break;
+                case "--io-jobs" when i + 1 < args.Count && int.TryParse(args[i + 1], out int n): ioJobs = n; i++; break;
+                case "--no-hash" or "--manifest-hash" or "--osm-check" or "--fields-check" or "--export-route-keys"
+                    or "--dem-check" or "--rgealti-check" or "--dem-probe"
+                    or "--osm-overlay" or "--landings-file" or "--airports-file":
+                    return false;
+            }
+        }
+        if (o == null || !File.Exists(Path.Combine(o, "manifest.json"))) return false;
+        outDir = o;
+        tempDir = t ?? o.TrimEnd('/', '\\') + "_temp";
+        return true;
+    }
+
+    private static async Task<int> RunPassAsync(IReadOnlyList<string> args, LogWriter? writer, CancellationToken ct)
+    {
         void SetStage(string stage) { if (writer != null) writer.Stage = stage; }
 
         var inDirs = new List<string>();
@@ -100,15 +139,26 @@ public static partial class Preprocessor
         // airports (#422): stands and runways from swissTLM3D and OpenStreetMap (--osm <pbf>) over the built tiles
         bool airportsOnly = false;
         string? airportsFile = null, airportsOsm = null;
+        // castles (#859): which solids of the built tiles are castles, into a C# list the game compiles in
+        string? castlesFile = null;
         var pngCrops = new List<(double E, double N, int Size)>();
-        bool force = false, fresh = false;
+        bool force = false, fresh = false, hashOnly = false;
         string? franceBox = null;
+        // the neighbours' terrain (#936, #965): their DEMs for the LV95 tiles swissALTI3D lacks, in a box (km).
+        // --dem <grid>,<dir>[,<dz m>] is repeatable; --rgealti <dir> [--rgealti-dz m] is --dem lambert93,<dir>,<dz>
+        var demArgs = new List<string>();
+        string? rgeAltiDir = null, demBox = null;
+        double rgeAltiDz = 0;
+        bool demCheck = false, demReparse = false;
+        var demProbes = new List<(double E, double N)>();
         // optional OpenStreetMap overlay (#118): a region-wide intermediate for the road network stage
         string? osmPbf = null;
         bool osmCheck = false;
         // real farm fields (#494): federal LWB land use per canton from <dir>, OSM fallback for the gated cantons
         string? fieldsDir = null, osmFieldsPbf = null;
         bool fieldsCheck = false;
+        // ski slopes (#887): OSM piste:type from --osm-pbf, pistes_E_N.pst per manifest tile
+        bool pistes = false, pistesCheck = false;
         int jobs = Environment.ProcessorCount;
         int ioJobs = 4;
 
@@ -146,6 +196,7 @@ public static partial class Preprocessor
                 case "--landings-file": landingsFile = args[++i]; break;
                 case "--airports": airportsOnly = true; break;
                 case "--airports-file": airportsFile = args[++i]; break;
+                case "--castles": castlesFile = args[++i]; break;
                 case "--osm": airportsOsm = args[++i]; break;
                 case "--bathy": bathyDir = args[++i]; break;
                 case "--png-crop":
@@ -159,15 +210,35 @@ public static partial class Preprocessor
                 case "--photos": photosOnly = true; break;
                 case "--verify": verify = true; break;
                 case "--france": franceBox = args[++i]; break;
+                case "--dem": demArgs.Add(args[++i]); break;
+                case "--rgealti": rgeAltiDir = args[++i]; break;
+                case "--dem-box": case "--rgealti-box": demBox = args[++i]; break;
+                case "--rgealti-dz": rgeAltiDz = double.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break;
+                case "--dem-check": case "--rgealti-check": demCheck = true; break;
+                // swissALTI3D tiles with foreign data under them are parsed again, so their -9999 gaps
+                // (0 m pits before #936) are filled from it; their old .edge files are set aside
+                case "--dem-reparse": demReparse = true; break;
+                case "--dem-probe":
+                {
+                    var p = args[++i].Split(',');
+                    demProbes.Add((double.Parse(p[0], System.Globalization.CultureInfo.InvariantCulture), double.Parse(p[1], System.Globalization.CultureInfo.InvariantCulture)));
+                    break;
+                }
                 case "--osm-overlay": osmPbf = args[++i]; break;
                 case "--osm-check": osmCheck = true; break;
                 case "--fields": fieldsDir = args[++i]; break;
                 case "--osm-pbf": osmFieldsPbf = args[++i]; break;
                 case "--fields-check": fieldsCheck = true; break;
+                case "--pistes": pistes = true; break;
+                case "--pistes-check": pistesCheck = true; break;
                 case "--jobs": jobs = int.Parse(args[++i]); break;
                 case "--io-jobs": ioJobs = int.Parse(args[++i]); break;
                 case "--force": force = true; break;
                 case "--fresh": fresh = true; break;
+                // the tiles' content hashes into the manifest, nothing else (#924, ManifestHashStage)
+                case "--manifest-hash": hashOnly = true; break;
+                // no hashing after this pass (RunCoreAsync)
+                case "--no-hash": break;
                 default:
                     Console.Error.WriteLine($"Unknown argument: {args[i]}");
                     return 2;
@@ -175,7 +246,36 @@ public static partial class Preprocessor
         }
 
         if (osmCheck) return OsmOverlay.SelfCheck();
+
+        // ---- tile content hashes (#924): read only the tiles, add their hashes to the manifest -----
+        if (hashOnly)
+        {
+            if (outDir == null)
+            {
+                Console.Error.WriteLine("--manifest-hash requires --out <chunk dir>");
+                return 2;
+            }
+            SetStage("hash");
+            return ManifestHashStage.Run(outDir, tempDir ?? outDir.TrimEnd('/', '\\') + "_temp", ioJobs, ct);
+        }
         if (fieldsCheck) return FieldStage.SelfCheck();
+        if (pistesCheck) return PisteStage.SelfCheck();
+
+        // ---- ski slopes (#887): pistes_E_N.pst per manifest tile, standalone -------------------------
+        if (pistes)
+        {
+            if (outDir == null || osmFieldsPbf == null)
+            {
+                Console.Error.WriteLine("--pistes requires --out <chunk dir> --osm-pbf <switzerland.osm.pbf> [--tiles-file f]");
+                return 2;
+            }
+            var manifestPath = Path.Combine(outDir, "manifest.json");
+            var region = tilesFile != null ? TileId.ReadList(tilesFile).ToHashSet()
+                : File.Exists(manifestPath) ? TerrainManifest.FromJson(File.ReadAllText(manifestPath)).Tiles.Select(t => t.Id).ToHashSet()
+                : new HashSet<TileId>();
+            SetStage("pistes");
+            return PisteStage.Run(osmFieldsPbf, outDir, region, jobs);
+        }
 
         // ---- farm fields (#494): fields_E_N.fld per manifest tile, standalone -------------------------
         // --gwr (the GWR data.sqlite) tells which OSM fields lie in the cantons without freely published data
@@ -192,6 +292,17 @@ public static partial class Preprocessor
                 : new HashSet<TileId>();
             SetStage("fields");
             return FieldStage.Run(fieldsDir, osmFieldsPbf, gwrPath, outDir, region, jobs);
+        }
+
+        // ---- castles (#859): OSM historic=castle and GWR names resolved to solids --------------------
+        if (castlesFile != null)
+        {
+            if (outDir == null || gwrPath == null || airportsOsm == null)
+            {
+                Console.Error.WriteLine("--castles <file.cs> requires --out <chunk dir>, --gwr <gwr data.sqlite> and --osm <switzerland .osm.pbf>");
+                return 2;
+            }
+            return CastleStage.Run(outDir, gwrPath, airportsOsm, castlesFile, jobs);
         }
 
         // ---- airports: stands and runways (#422) ---------------------------------------------------
@@ -284,7 +395,11 @@ public static partial class Preprocessor
                 Console.WriteLine);
         }
 
-        WaterStage.Options WaterOptions() => new() { Jobs = jobs, BathyDir = bathyDir, PngDir = pngDir, Crops = pngCrops, TempDir = tempDir };
+        WaterStage.Options WaterOptions() => new()
+        {
+            Jobs = jobs, BathyDir = bathyDir, PngDir = pngDir, Crops = pngCrops, TempDir = tempDir,
+            Only = waterOnly && tilesFile != null ? TileId.ReadList(tilesFile).ToHashSet() : null,
+        };
 
         // ---- coarse companion tiles: decimate what is already built -----------------------------
         // Standalone because it needs nothing but the .terr files themselves. A region built before
@@ -379,7 +494,8 @@ public static partial class Preprocessor
             return await FranceStage.RunAsync(outDir, box.MinLon, box.MinLat, box.MaxLon, box.MaxLat);
         }
 
-        if (outDir == null || (inDirs.Count == 0 && !roadsOnly && !featuresOnly))
+        if (rgeAltiDir != null) demArgs.Insert(0, FormattableString.Invariant($"lambert93,{rgeAltiDir},{rgeAltiDz}"));
+        if (outDir == null || (inDirs.Count == 0 && demArgs.Count == 0 && !roadsOnly && !featuresOnly))
         {
             Console.Error.WriteLine("Required: --in <source dir> --out <chunk dir>");
             Console.Error.WriteLine("  (--in is not needed with --roads-only / --features-only)");
@@ -402,6 +518,87 @@ public static partial class Preprocessor
         // ---- terrain: sources -> .terr + .terrc, parsed and finished in one parallel pass -------
         var sw = Stopwatch.StartNew();
         var sources = TerrainBuild.Discover(inDirs);
+        List<ForeignDem>? foreign = null;
+        if (demArgs.Count > 0)
+        {
+            var b = (demBox ?? "").Split(',').Select(v => int.Parse(v.Trim(), System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+            if (b.Length != 4)
+            {
+                Console.Error.WriteLine("--dem / --rgealti needs --dem-box minE,minN,maxE,maxN (LV95 km, e.g. 2495,1100,2565,1145)");
+                return 2;
+            }
+            foreign = new List<ForeignDem>();
+            foreach (var d in demArgs)
+            {
+                // grid,dir[,dz]: the dir may hold a drive letter's colon, so commas split
+                var parts = d.Split(',');
+                double dz = parts.Length > 2 ? double.Parse(parts[2], System.Globalization.CultureInfo.InvariantCulture) : 0;
+                var dem = new ForeignDem(DemProjection.Parse(parts[0]), parts[1], dz);
+                Console.WriteLine($"DEM {dem.Name}: {dem.FileCount} rasters, dz {dz:+0.00;-0.00} m");
+                foreign.Add(dem);
+            }
+            if (demProbes.Count > 0)
+            {
+                // each DEM's height (offset applied) at LV95 points, and where they land in its grid
+                foreach (var (pe, pn) in demProbes)
+                    foreach (var dem in foreign)
+                    {
+                        var (x, y) = DemProjection.FromLv95(dem.Crs, pe, pn);
+                        var cur = new ForeignDem.Cursor();
+                        double z = dem.Sample(x, y, ref cur);
+                        Console.WriteLine(FormattableString.Invariant($"probe {pe:F2},{pn:F2} {dem.Name}: ({x:F3}, {y:F3}) -> {z + dem.OffsetZ:F3}"));
+                    }
+                return 0;
+            }
+            if (demCheck)
+            {
+                int worst = 0;
+                foreach (var dem in foreign) worst = Math.Max(worst, ForeignDemCheck.Run(dem, outDir, b[0], b[1], b[2], b[3], jobs));
+                return worst;
+            }
+
+            // every tile already real stays Swiss; the foreign tiles of earlier runs are ours to rebuild
+            string listPath = Path.Combine(tempDir, "foreign_tiles.txt"), legacyList = Path.Combine(tempDir, "rgealti_tiles.txt");
+            var previous = new HashSet<TileId>();
+            foreach (var f in new[] { listPath, legacyList })
+                if (File.Exists(f)) previous.UnionWith(TileId.ReadList(f));
+            var swiss = sources.Select(t => t.Id).ToHashSet();
+            string mPath = Path.Combine(outDir, "manifest.json");
+            if (File.Exists(mPath))
+                foreach (var t in TerrainManifest.FromJson(File.ReadAllText(mPath)).Tiles)
+                    if (!previous.Contains(t.Id)) swiss.Add(t.Id);
+            var tiles = new HashSet<TileId>();
+            foreach (var dem in foreign)
+            {
+                // a new tile needs data under half of it; partial ones are the generated fill's
+                var mine = dem.TilesIn(b[0], b[1], b[2], b[3], swiss, minProbes: 13);
+                Console.WriteLine($"DEM {dem.Name}: {mine.Count} LV95 tiles with its data and no swissALTI3D");
+                tiles.UnionWith(mine);
+            }
+            if (demReparse)
+            {
+                var sourceIds = sources.Where(t => t.Path != ForeignDem.SourcePath).Select(t => t.Id).ToHashSet();
+                var notSwiss = new HashSet<TileId>();
+                for (int n = b[1]; n < b[3]; n++)
+                    for (int e = b[0]; e < b[2]; e++)
+                        if (!sourceIds.Contains(new TileId(e, n))) notSwiss.Add(new TileId(e, n));
+                string aside = Path.Combine(tempDir, "edges_before_dem");
+                Directory.CreateDirectory(aside);
+                int moved = 0;
+                foreach (var dem in foreign)
+                    foreach (var id in dem.TilesIn(b[0], b[1], b[2], b[3], notSwiss))
+                    {
+                        string edge = EdgeStrips.PathFor(tempDir, id);
+                        if (!File.Exists(edge)) continue;
+                        File.Move(edge, Path.Combine(aside, Path.GetFileName(edge)), overwrite: true);
+                        moved++;
+                    }
+                Console.WriteLine($"--dem-reparse: {moved} swissALTI3D tiles with foreign data under them parsed again (old edges in {aside})");
+            }
+            Directory.CreateDirectory(tempDir);
+            File.WriteAllLines(listPath, previous.Union(tiles).OrderBy(t => t.N).ThenBy(t => t.E).Select(t => $"{t.E}_{t.N}"));
+            sources.AddRange(tiles.Select(ForeignDem.SourceFor));
+        }
         if (sources.Count == 0)
         {
             Console.Error.WriteLine($"No swissalti3d 0.5 m *.xyz(.zip) files found under {string.Join(", ", inDirs)}");
@@ -413,7 +610,7 @@ public static partial class Preprocessor
         SetStage("terrain");
         var manifest = TerrainBuild.Run(sources, outDir, tempDir, new TerrainBuild.Options
         {
-            Jobs = jobs, IoJobs = ioJobs, Force = force, Fresh = fresh, Verify = verify,
+            Jobs = jobs, IoJobs = ioJobs, Force = force, Fresh = fresh, Verify = verify, Foreign = foreign,
         }, ct);
         if (manifest == null) return 1;
         File.WriteAllText(Path.Combine(outDir, "manifest.json"), manifest.ToJson());

@@ -130,9 +130,18 @@ public partial class XrWristMenu : CanvasLayer
         _entries.AddChild(UiKit.Text("Wrist", UiTheme.FontHeading, UiTheme.Text, bold: true));
         bool onFoot = player is { Ride: RideKind.OnFoot, RidingWith: 0 };
         if (onFoot) Entry("Travel: mounts and vehicles", PlayerInput.RideMenu);
+        // #840: activities and invites have no button of their own in VR
+        if (Permissions.Online)
+        {
+            int waiting = Net.InviteService.Client?.IncomingCount ?? 0;
+            Entry(waiting > 0 ? $"Invites ({waiting})" : "Invites", null, () => Ui.ActivitiesScreen.Open(Ui.ActivitiesScreen.Tab.Invites));
+            Entry("Activities: Battle Royale, races", null, () => Ui.ActivitiesScreen.Open(Ui.ActivitiesScreen.Tab.BattleRoyale));
+        }
         Entry("Inventory", PlayerInput.Inventory);
         Entry("Map and place search", PlayerInput.Teleport);
         if (onFoot) Entry("Map in your hand", null, () => _rig.ToggleHandMap());
+        // the phone (#920): into the holding hand, as from the front pocket
+        if (onFoot) Entry("Phone", PlayerInput.Phone);
         Entry("Bird journal", PlayerInput.BirdJournal);
         if (onFoot) Entry("Drop the item in hand", PlayerInput.DropItem);
         Entry(player == null ? "Walk" : "Fly camera", PlayerInput.ToggleMode);

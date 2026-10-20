@@ -1,5 +1,7 @@
 using Godot;
 using UnitSport.Core;
+using UnitSport.Playtest.Recording;
+using UnitSport.Playtest.TopView;
 using UnitSport.Ui;
 
 namespace UnitSport.Playtest;
@@ -15,6 +17,11 @@ namespace UnitSport.Playtest;
 /// The text box registers with <see cref="UiFocus"/>, as the chat does, so typing never walks the
 /// player. In VR it shows on the XrUi panel with the rest of the screen UI (no keyboard there yet:
 /// the buttons work, typing does not).
+/// </para>
+/// <para>
+/// Recorded (#844): a row of Note (the text in the box, or none: a pad's way to mark a moment), Top
+/// view, Free play and End session. In batch mode the conversation with Claude is hidden and what
+/// is sent from the box is a note.
 /// </para>
 /// </summary>
 public partial class PlaytestPanel : CanvasLayer
@@ -54,6 +61,8 @@ public partial class PlaytestPanel : CanvasLayer
 
     public override void _Process(double delta)
     {
+        // open, it is there to be clicked: the world's start (or a menu closing) captures the pointer under it
+        if (IsOpen && Input.MouseMode == Input.MouseModeEnum.Captured) Input.MouseMode = Input.MouseModeEnum.Visible;
         if (_dirty) Refresh();
         // the "listening" dot follows time, not events: checked twice a second, drawn only on change
         if (Engine.GetProcessFrames() % 30 == 0) UpdateClaude();
@@ -156,9 +165,43 @@ public partial class PlaytestPanel : CanvasLayer
         verdicts.AddChild(reset);
         col.AddChild(verdicts);
 
-        col.AddChild(UiKit.Line());
-        col.AddChild(UiKit.Section("Claude"));
+        // the recorder's row (#844): a pad and VR reach the note and the top view here
+        if (PlaytestRecorder.Instance != null)
+        {
+            var rec = UiKit.HBox(8);
+            var note = UiKit.Button("📝 Note");
+            note.TooltipText = "Mark this moment for Claude (the text in the box, if any); F12 does it with the panel closed";
+            note.Pressed += () =>
+            {
+                string text = TakeInput();
+                _ = _director.NoteWithShot(text.Length > 0 ? text : "(marked from the panel)", "panel");
+            };
+            var top = UiKit.Button("Top view");
+            top.TooltipText = "The top-down view of the last seconds (Shift+F12)";
+            top.Pressed += () => PlaytestRecorder.Instance?.GetNodeOrNull<TopViewOverlay>("TopViewOverlay")?.Toggle();
+            var free = UiKit.Button("Free play");
+            free.TooltipText = "Record without a scenario";
+            free.Pressed += () => _ = _director.FreePlay();
+            var end = UiKit.Button("End session");
+            end.TooltipText = "Stop recording and write report.md for Claude";
+            end.Pressed += () => _ = _director.EndSession();
+            foreach (var b in new[] { note, top, free, end })
+            {
+                b.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+                rec.AddChild(b);
+            }
+            col.AddChild(rec);
+        }
+
+        // batch mode (#844): no Claude in the loop, the box takes notes
+        bool batch = PlaytestDirector.Batch;
+        var line = UiKit.Line();
+        var section = UiKit.Section("Claude");
+        line.Visible = section.Visible = !batch;
+        col.AddChild(line);
+        col.AddChild(section);
         (_talkScroll, _talk) = UiKit.ScrollPage(4);
+        _talkScroll.Visible = !batch;
         _talkScroll.CustomMinimumSize = new Vector2(0, 90);
         // to the newest line once the new rows have their height: the bar's range changes a frame or two later
         _talkScroll.GetVScrollBar().Changed += () =>
@@ -173,14 +216,14 @@ public partial class PlaytestPanel : CanvasLayer
         var inputRow = UiKit.HBox(8);
         _input = new LineEdit
         {
-            PlaceholderText = "Tell Claude what you see…",
+            PlaceholderText = PlaytestDirector.Batch ? "A note: what is wrong? (Enter saves it)" : "Tell Claude what you see…",
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
             CustomMinimumSize = new Vector2(0, 38),
         };
         _input.FocusEntered += () => UiFocus.Set(this, true);
         _input.FocusExited += () => UiFocus.Set(this, false);
         _input.TextSubmitted += _ => Send();
-        var send = UiKit.Button("Send");
+        var send = UiKit.Button(PlaytestDirector.Batch ? "Note" : "Send");
         send.Pressed += Send;
         inputRow.AddChild(_input);
         inputRow.AddChild(send);
@@ -337,8 +380,13 @@ public partial class PlaytestPanel : CanvasLayer
         if (_failing)
         {
             _failing = false;
-            _input.PlaceholderText = "Tell Claude what you see…";
+            _input.PlaceholderText = PlaytestDirector.Batch ? "A note: what is wrong? (Enter saves it)" : "Tell Claude what you see…";
             _director.Verdict(false, text.Length > 0 ? text : "no reason given");
+            return;
+        }
+        if (PlaytestDirector.Batch)
+        {
+            if (text.Length > 0) _ = _director.NoteWithShot(text, "panel");
             return;
         }
         _director.PlayerSays(text);

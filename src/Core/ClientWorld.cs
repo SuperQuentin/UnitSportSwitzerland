@@ -44,6 +44,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private ShaderMaterial? _treeMaterial;
     private NearTrees? _nearTrees;
     private PhotoLayer? _photos;
+    private World.Snow.PisteLayer? _pistes;
 
     /// <summary>The session this world is built for: the title screen's choice, or the command line's.</summary>
     public WorldLaunch Launch { get; init; } = WorldLaunch.FromArgs();
@@ -115,6 +116,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Interiors.FlatCheck.Requested, Interiors.FlatCheck.Run),
         (() => Interiors.ShapedCheck.Requested, Interiors.ShapedCheck.Run),
         (() => Terrain.Construction.ConstructionCheck.Requested, Terrain.Construction.ConstructionCheck.Run),
+        (() => Terrain.Construction.PitSurvey.Requested, Terrain.Construction.PitSurvey.Run),
+        (() => Terrain.Stadiums.StadiumCheck.Requested, Terrain.Stadiums.StadiumCheck.Run),
+        (() => Concert.ConcertCheck.Requested, Concert.ConcertCheck.Run),
         (() => Items.InventoryCheck.Requested, Items.InventoryCheck.Run),
         (() => ChatCheck.Requested, () => ChatCheck.Run(this)),
         (() => StyleKit.ReportRequested, StyleKit.Report),
@@ -131,6 +135,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the playtest suite's scenarios, MCP endpoint and ledger (#751)
         (() => Playtest.PlaytestCheck.Requested, Playtest.PlaytestCheck.Run),
         (() => Playtest.PlaytestCheck.ListRequested, Playtest.PlaytestCheck.List),
+        // the playtest recorder's offline top view and report (#844)
+        (() => Playtest.TopView.TopViewCli.Requested, Playtest.TopView.TopViewCli.Run),
+        (() => Playtest.TopView.TopViewCli.ReportRequested, Playtest.TopView.TopViewCli.Report),
 #endif
     };
 
@@ -317,11 +324,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // Outermost, so a tile decoded once is not decoded again when the rings drop it and pick
         // it back up — which a route that doubles back does constantly.
         // decoded tiles in RAM: a phone has a fraction of a desktop's to spare (#63)
-        _cache = Platform.IsMobile
-            ? new CachingChunkSource(fallback ?? (IChunkSource)streamedSource, 96L * 1024 * 1024)
-            : new CachingChunkSource(fallback ?? (IChunkSource)streamedSource);
-        // the blend reads real neighbours through the cache, sharing what the loader decodes
-        if (fallback != null) fallback.Neighbours = _cache;
+        // The blend reads real neighbours through the cache, sharing what the loader decodes.
+        long cacheBytes = Platform.IsMobile ? 96L * 1024 * 1024 : 256L * 1024 * 1024;
+        _cache = fallback?.Cached(cacheBytes) ?? new CachingChunkSource(streamedSource, cacheBytes);
 
         _chunks = new ChunkManager { Name = "Terrain" };
         // the auto build cap depends on whether tiles are coming over the wire
@@ -392,6 +397,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         radios.PlayerPositions = vehicles.PlayerPositions;
         // items dropped and thrown on the ground (#206)
         Items.DroppedItems.Create(this, origin).PlayerPositions = vehicles.PlayerPositions;
+        // the UFOs' tractor beams (#861): what each peer simulates, moved when a beam holds it
+        Player.TractorBeams.Create(this);
         var chunksForDrops = _chunks;
         // on the water where there is some (#299): nothing is dropped onto a lake bed
         Items.DroppedItems.GroundHeight = p => chunksForDrops != null && chunksForDrops.TryGetSurface(p, out float y) ? y : null;
@@ -471,11 +478,35 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Occasions.OccasionAmbience(_chunks, origin, EarNode));
             // …and snow falling round the camera, except indoors
             AddChild(new Occasions.OccasionPrecip());
+            // the UFO sightings (#863): the server's plans played back here, their beams, their landings
+            Occasions.UfoSightings.Create(this, _chunks, origin, dedicated: false);
+            if (Occasions.SightingShots.Dir != null) AddChild(new Occasions.SightingShots(_chunks, origin, () => LocalPlayer));
+        }
+        // the ski slopes' snow (#887): the weather alone offline, plus the server's word online;
+        // the slopes drawn on the terrain material near the camera
+        if (Systems.On(Systems.Snow))
+        {
+            var snow = World.Snow.SnowService.Create(this, _chunks);
+            if (_worldMaterials.Length > 0)
+            {
+                _pistes = new World.Snow.PisteLayer(_chunks, origin, _worldMaterials[0], _worldMaterials.Length > 1 ? _worldMaterials[1] : null, snow);
+                AddChild(_pistes);
+            }
+            AddChild(new World.Snow.SlopeMarkers(_chunks, snow));
+        }
+        // the ski lifts (#912): the lines from the road tiles, the carriers on the shared clock
+        if (Systems.On(Systems.Lifts))
+        {
+            var lifts = World.Ropeways.RopewayService.Create(this, () => _chunks?.Source, _chunks);
+            AddChild(new World.Ropeways.RopewayLayer(lifts, _chunks));
+            AddChild(new World.Snow.SlopeHud(() => LocalPlayer, _chunks));
         }
         // a sign over every bank door (#213)
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.BankSigns(_chunks));
         // the IKEA totem out by the road (#501), the same tile hook as the door signs
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.IkeaPylon(_chunks));
+        // tonight's concert in each stadium (#885)
+        AddChild(new Concert.ConcertDirector(_chunks));
 
         // the clock: sun, light colour, sky and night for every shader and the environment.
         // Off (--systems without sky): no clock, the style's fixed sun and the background colour.
@@ -571,6 +602,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             new(HitboxProbe.Requested, ToolAnchor.Own, _ => new HitboxProbe(chunks, origin)),
             new(SyncProbe.Requested, ToolAnchor.AtTarget, _ => new SyncProbe(chunks, origin)),
             new(MantleProbe.Requested, ToolAnchor.AtTarget, _ => new MantleProbe(chunks, origin)),
+            new(SlopeWalkProbe.Requested, ToolAnchor.AtTarget, _ => new SlopeWalkProbe(chunks, origin)),
             new(VoidProbe.Requested, ToolAnchor.AtTarget, _ => new VoidProbe(chunks, origin)),
             new(() => RoadPerfProbe.ParseArgs() != null, ToolAnchor.Own, _ =>
             {
@@ -588,6 +620,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             new(() => World.TreeCheck.ParseArgs().Requested, ToolAnchor.AtTarget,
                 _ => new World.TreeCheck(chunks, origin, World.TreeCheck.ParseArgs().Shot)),
             new(() => TruckProbe.Requested, ToolAnchor.AtTarget, _ => new TruckProbe(chunks, origin)),
+            // the pit of a building site driven, walked and dropped into (#619)
+            new(() => Terrain.Construction.PitCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.Construction.PitCheck(chunks, origin)),
             new(() => Terrain.ParkingProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
                 _ => new Terrain.ParkingProbe(chunks, origin, Terrain.ParkingProbe.ParseArgs().Shot)),
             new(() => Vehicles.WakeProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
@@ -645,13 +679,19 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 var inv = System.Globalization.CultureInfo.InvariantCulture;
                 return new ShotRunner(_spectator!,
                     new Vector3(float.Parse(shot[0], inv), float.Parse(shot[1], inv), float.Parse(shot[2], inv)),
-                    float.Parse(shot[3], inv), float.Parse(shot[4], inv), double.Parse(shot[5], inv), shot[6]) { Origin = _worldOrigin };
+                    float.Parse(shot[3], inv), float.Parse(shot[4], inv), double.Parse(shot[5], inv), shot[6])
+                {
+                    Origin = _worldOrigin,
+                    // settled on the tiles, not a fixed time (#924), as the trailer director stages
+                    TilesComplete = at => chunks.SettledNear(at, 3) && chunks.CompleteNear(at, 3),
+                };
             }),
             new(() => ShotRunner.ParseQueueArg() != null, ToolAnchor.Own, _ =>
             {
                 FreeSpectator();
                 var runner = ShotRunner.ForQueue(_spectator!, ShotRunner.ParseQueueArg()!, _worldOrigin);
                 runner.GroundHeight = at => chunks.TryGetSurface(at, out float h) ? h : null;
+                runner.TilesComplete = at => chunks.SettledNear(at, 3) && chunks.CompleteNear(at, 3);
                 runner.RunCommand = line => _chat?.Send(line);
                 return runner;
             }),
@@ -714,6 +754,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Audio.EarsProbe.Requested) AddChild(new Audio.EarsProbe(() => LocalPlayer));
         if (Items.RadioPanelProbe.Requested) AddChild(new Items.RadioPanelProbe(() => LocalPlayer));
         if (Player.EmoteWheelProbe.Requested) AddChild(new Player.EmoteWheelProbe(() => LocalPlayer));
+        if (Player.SitProbe.Requested) AddChild(new Player.SitProbe(() => LocalPlayer));
+        if (Concert.ConcertDeskProbe.Requested) AddChild(new Concert.ConcertDeskProbe(() => LocalPlayer));
+        if (Concert.ConcertCamProbe.Requested) AddChild(new Concert.ConcertCamProbe(() => LocalPlayer, () => GetNodeOrNull<ChatManager>(ChatManager.NodeName)));
+        if (Phone.PhoneProbe.Requested) AddChild(new Phone.PhoneProbe(() => LocalPlayer));
+        if (Phone.PhoneVrProbe.Requested) AddChild(new Phone.PhoneVrProbe(() => LocalPlayer));
         if (Items.SparkleProbe.Requested) AddChild(new Items.SparkleProbe(() => LocalPlayer));
         if (Items.RadioFocusProbe.Requested) AddChild(new Items.RadioFocusProbe(() => LocalPlayer));
         if (Items.BeatFieldProbe.Requested) AddChild(new Items.BeatFieldProbe(() => LocalPlayer));
@@ -733,20 +778,26 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (World.AirportCheck.Requested) AddChild(new World.AirportCheck(() => LocalPlayer));
 
         // The inventory is this machine's, not the player node's: it outlives a respawn or a
-        // reconnect, and the player it acts on is resolved per frame like the picker's.
-        var inventory = Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
+        // reconnect, and the player it acts on is resolved per frame like the picker's. A check gets
+        // a scratch one, the starter kit never saved: the player's user://inventory.json is neither
+        // changed by it nor fills up and fails it with "No room" (#932). Every verification tool
+        // (placedByTool) does; the probes started further down are listed.
+        var inventory = placedByTool || Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
+            || Net.TransferProbe.Role != null || Items.SwissNetProbe.Role != null || Player.AuraNetProbe.Role != null || Items.BeatFieldProbe.Requested || Player.TractorCheck.Role != null
             || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Interiors.LiftSyncProbe.Role != null || Interiors.HallCarProbe.Role != null || Loot.BankProbe.Role != null
-            || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.ExcavatorNetProbe.Role != null || Items.SitePalletNetProbe.Role != null || Loot.YardLootNetProbe.Role != null || Terrain.Construction.CraneNetProbe.Role != null || Items.BedNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
+            || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.UfoNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.ExcavatorNetProbe.Role != null || Items.SitePalletNetProbe.Role != null || Loot.YardLootNetProbe.Role != null || Terrain.Construction.CraneNetProbe.Role != null || Items.BedNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
-            || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
+            || Items.PvpProbe.Role != null || Bots.BotProbe.Role != null || BattleRoyale.BrBotProbe.Requested || Bots.BotFilmProbe.Requested || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
             || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
             || World.ContainerNetProbe.Role != null
+            || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null
             || Player.TractorNetProbe.Role != null || Farming.FarmProbe.Requested || Farming.HandFarmCheck.Requested || Farming.FarmNetProbe.Role != null || Farming.SellNetProbe.Role != null || Farming.CoopNetProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
         if (Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null) Crafting.CampfireProbe.Stock(inventory);
         if (Items.PlantProbe.Role != null) inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.SwissFlag, 1));   // on the hotbar for --hold
         if (Items.ShotgunProbe.Role != null) { inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.Shotgun, 1)); inventory.Add(Items.ItemId.Shells, 25); }   // on the hotbar for --hold
         if (Items.PvpProbe.Role != null) Items.PvpProbe.Stock(inventory);
+        if (Bots.BotProbe.Role != null) Bots.BotProbe.Stock(inventory);
         if (Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null) Build.BuildProbe.Stock(inventory);
         // the account claimed cash goes to: the server's online, this machine's offline. Made
         // before the items, whose panel shows the balance from its first frame.
@@ -758,8 +809,18 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(items);
         _items = items;
         AddChild(new Player.EmoteWheel(() => _onFoot ? LocalPlayer : null) { Name = "EmoteWheel" });
+        // the quick menu (#840): hold F2 / pad Back for activities, invites, inventory, vehicles, map...
+        var emotes = GetNodeOrNull<Player.EmoteWheel>("EmoteWheel");
+        AddChild(new Ui.QuickMenu(() => MenuOpen?.Invoke() == true, () => _onFoot && LocalPlayer is { Ride: Player.RideKind.OnFoot, RidingWith: 0 },
+            () => emotes));
+        AddChild(new Ui.InviteToasts());
+        // the phone (#889): Up on foot, or the quick menu's Phone
+        AddChild(new Phone.PhoneController(() => _onFoot ? LocalPlayer : null, () => MenuOpen?.Invoke() == true || _places is { IsOpen: true },
+            () => _places, () => GetNodeOrNull<Net.ChatManager>(Net.ChatManager.NodeName)));
         if (Items.InventoryUiProbe.Requested) AddChild(new Items.InventoryUiProbe(items));
         if (Loot.LootSyncProbe.Role != null) AddChild(new Loot.LootSyncProbe(items, origin));
+        if (Interiors.SiteOfficeNetProbe.Role != null) AddChild(new Interiors.SiteOfficeNetProbe(items, origin));
+        if (Interiors.SiteUpperNetProbe.Role != null) AddChild(new Interiors.SiteUpperNetProbe(items, origin));
         if (Loot.LockSyncProbe.Role != null) AddChild(new Loot.LockSyncProbe(items, origin));
         if (Interiors.LiftSyncProbe.Role != null) AddChild(new Interiors.LiftSyncProbe(items, origin));
         if (Interiors.HallCarProbe.Role != null) AddChild(new Interiors.HallCarProbe(items, origin));
@@ -769,6 +830,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.PlacedProbe.Role != null) AddChild(new Items.PlacedProbe(items));
         if (Birds.BirdNetProbe.Role != null) AddChild(new Birds.BirdNetProbe(items));
         if (Birds.PigeonNetProbe.Role != null) AddChild(new Birds.PigeonNetProbe(items));
+        if (Player.UfoNetProbe.Role != null) AddChild(new Player.UfoNetProbe(items));
         if (Player.AirlinerNetProbe.Role != null) AddChild(new Player.AirlinerNetProbe(items));
         if (Player.StairsNetProbe.Role != null) AddChild(new Player.StairsNetProbe(items));
         if (Player.TractorNetProbe.Role != null) AddChild(new Player.TractorNetProbe(items));
@@ -785,6 +847,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.ShotgunProbe.Role != null) AddChild(new Items.ShotgunProbe(items));
         if (Items.PlantProbe.Role != null) AddChild(new Items.PlantProbe(items));
         if (Items.PvpProbe.Role != null) AddChild(new Items.PvpProbe(items));
+        if (Bots.BotProbe.Role != null) AddChild(new Bots.BotProbe(items));
         if (Build.BuildProbe.Requested) AddChild(new Build.BuildProbe(items));
         if (Build.BuildNetProbe.Role != null) AddChild(new Build.BuildNetProbe(items));
         if (Build.GadgetProbe.Requested) { Build.GadgetProbe.Stock(items.Inventory); AddChild(new Build.GadgetProbe(items)); }
@@ -796,14 +859,22 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new World.ContainerNetProbe(containerNet, _chunks, containerOrigin));
         if (BattleRoyale.PrefabProbe.Requested) AddChild(new BattleRoyale.PrefabProbe());
         if (BattleRoyale.BrProbe.Role != null) AddChild(new BattleRoyale.BrProbe(items));
+        if (BattleRoyale.BrBotProbe.Requested) AddChild(new BattleRoyale.BrBotProbe(items));
+        if (Bots.BotFilmProbe.Requested) AddChild(new Bots.BotFilmProbe(items));
         if (Crafting.CampfireProbe.Requested) AddChild(new Crafting.CampfireProbe(items));
         if (Crafting.CampfireNetProbe.Role != null) AddChild(new Crafting.CampfireNetProbe(items));
         if (Player.SwimNetProbe.Role != null) AddChild(new Player.SwimNetProbe(items));
         if (Player.EmoteNetProbe.Role != null) AddChild(new Player.EmoteNetProbe(items));
+        if (Occasions.SightingNetProbe.Role != null) AddChild(new Occasions.SightingNetProbe(items));
+        if (Concert.ConcertNetProbe.Role != null) AddChild(new Concert.ConcertNetProbe(items));
+        if (Phone.PhoneNetProbe.Role != null) AddChild(new Phone.PhoneNetProbe(items));
         if (Player.FightNetProbe.Role != null) AddChild(new Player.FightNetProbe(items));
+        if (Player.AuraNetProbe.Role != null) AddChild(new Player.AuraNetProbe(items));
+        if (Net.InviteProbe.Role != null) AddChild(new Net.InviteProbe(items));
         if (Items.SwissNetProbe.Role != null) AddChild(new Items.SwissNetProbe(items));
         if (Items.Fishing.FishNetProbe.Role != null) AddChild(new Items.Fishing.FishNetProbe(items));
         if (World.ClockNetProbe.Role != null) AddChild(new World.ClockNetProbe(items));
+        if (World.Ropeways.LiftNetProbe.Role != null) AddChild(new World.Ropeways.LiftNetProbe(items));
         if (SpeedNetProbe.Role != null) AddChild(new SpeedNetProbe(items));
         if (Net.SleeperProbe.Role != null) AddChild(new Net.SleeperProbe(items));
         if (Net.ArrivalProbe.Role != null) AddChild(new Net.ArrivalProbe(items));
@@ -835,10 +906,18 @@ public partial class ClientWorld : Node3D, IOriginContainer
             PlayersWanted = _chat.RequestPlayerNames,
         });
         AddChild(_chatUi);
+        // what players near you say, in a bubble over their head (#862): online the server names the speaker, offline it is you
+        AddChild(new Ui.Bubbles.ChatBubbles(_chat, peer => peer == ChatManager.OfflineSelf ? LocalPlayer
+            : _players?.GetNodeOrNull<FootPlayer>(peer.ToString())));
         // the item catalogue types its commands into the chat, so the server checks them (#262)
         items.RunCommand = _chat.Send;
         _chat.CatalogueRequested += () => items.Catalogue.Open();
 #if PLAYTEST
+        // the playtest recorder (#844, docs/notes/general/playtest-recorder.md): offline or online, before the director that reports to it
+        if (Playtest.Recording.PlaytestRecorder.Requested)
+            AddChild(new Playtest.Recording.PlaytestRecorder(server: false, () => _chunks?.Origin, () => LocalPlayer, _chat,
+                new Playtest.TopView.GroundSpec(_cache, Systems.FixtureCourse is { } course ? Systems.FixturePrefix + course : TerrainPaths.FindChunkDir(),
+                    _fixtureStart?.E ?? SpawnPoint.DefaultLv95E, _fixtureStart?.N ?? SpawnPoint.DefaultLv95N)));
         // the playtest suite (#751, docs/notes/general/playtest.md): Debug builds with --playtest, offline
         if (Playtest.PlaytestDirector.Requested && !Launch.Networked)
             AddChild(new Playtest.PlaytestDirector(() => LocalPlayer, _chat.Send, _fixtureStart));
@@ -877,6 +956,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Items.PalletService.Create(this, origin, server: false).Source = () => _chunks?.Source;
         // cranes players work (#618): the server says who works which, offline this client does
         Terrain.Construction.CraneService.Create(this, server: false).Source = () => _chunks?.Source;
+        // concerts (#885): the hosted sets and their cues from the server, the operator's show input
+        Concert.ConcertService.Create(this, server: false).Local = () => LocalPlayer;
         // built structures (#274): the server owns them, offline this client does
         if (Systems.On(Systems.Build))
         {
@@ -909,6 +990,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         // the radio's panel: CDs to play, burn a new one, pick it up (opened from FootPlayer.TryInteract)
         _radioUi = Items.RadioUi.Create(() => LocalPlayer, items.Inventory);
+        // a concert's light desk (#885), opened at its front-of-house console
+        AddChild(Concert.ConcertDeskUi.Create(() => LocalPlayer, () => GetNodeOrNull<ChatManager>(ChatManager.NodeName)));
+        // its cameras on this screen (program view) and out over NDI
+        AddChild(new Concert.ConcertBroadcast());
+        AddChild(new Concert.ConcertBeatDebug());
         _radioUi.Give = items.Give;
         AddChild(_radioUi);
         if (Items.CarCdCheck.Create(() => LocalPlayer, () => _players, items.Inventory, networked: false) is { } carCdShots) AddChild(carCdShots);
@@ -922,6 +1008,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Systems.On(Systems.Farming))
         {
             Farming.FarmField.Create(this, _chunks?.Source, origin, _chunks, dedicated: false);
+            // the herds on the pastures (#863): worked out here from the fields, drawn, beamed up by the server
+            Farming.Herds.Create(this, _chunks, origin, dedicated: false);
             AddChild(new Farming.HandFarming(items, origin));
             if (Farming.FarmProbe.Requested) AddChild(new Farming.FarmProbe(items, origin));
             if (Farming.HandFarmCheck.Requested) AddChild(new Farming.HandFarmCheck(items, origin));
@@ -1239,6 +1327,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         ApplySun();
         ApplyNearTrees();
         ApplyPhotos();
+        _pistes?.Apply();
     }
 
     /// <summary>
@@ -1419,6 +1508,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.EconomyProbe.Password != null && _items != null && _chat != null)
             AddChild(new Items.EconomyProbe(_chat, _items.Inventory));
 
+        // World/Invites and World/Parties on both sides (#840): what others ask of this player
+        AddChild(InviteService.CreateClient());
+        AddChild(Parties.CreateClient());
+
         // World/Race on both sides; the client side puts this player on the grid and times the run
         var race = World.RaceManager.CreateClient(_worldOrigin!);
         race.LocalPlayer = () => LocalPlayer;
@@ -1427,6 +1520,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // World/Fight on both sides (#495): the challenge, the match state, and its screen
         AddChild(Combat.FightManager.CreateClient());
         AddChild(new Combat.FightHud());
+        AddChild(Combat.AuraManager.CreateClient());
+        AddChild(new Combat.AuraHud());
+        AddChild(new Combat.AuraPlanner());
+        AddChild(new Combat.AuraWatchHud());
 
         // World/BattleRoyale (#177): the match HUD, the zone, the drop and the way back
         var br = BattleRoyale.BrManager.CreateClient(_worldOrigin!);
@@ -1722,6 +1819,16 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         else if (viewer is { } p && IsInstanceValid(p))
         {
+            // a ski lift (#912): its station, the wait, the ride
+            if (p.Lift is { } lift)
+            {
+                bool drag = lift.Kind is World.Ropeways.RopewayKind.TBar or World.Ropeways.RopewayKind.RopeTow;
+                string name = World.Ropeways.RopewayService.Called(lift);
+                if (p.LiftWait > 0) yield return (PlayerInput.InteractMount, $"Waiting for {name}: {p.LiftWait:0} s");
+                else if (drag) yield return (PlayerInput.InteractMount, $"Let go of {name}");
+            }
+            else if (p.LiftInReach() is { } station)
+                yield return (PlayerInput.InteractMount, $"Take {World.Ropeways.RopewayService.Called(station)}");
             // a bus door's button in reach, inside or out (#162)
             if (p.Vehicle == null && p.ButtonInReach() is { } button)
                 yield return (PlayerInput.InteractMount, button.Open ? "Shut the door" : "Open the door");
@@ -1763,6 +1870,16 @@ public partial class ClientWorld : Node3D, IOriginContainer
             else if (p.Vehicle is { } gear)
             {
                 if (p.IsOnFloor()) yield return (PlayerInput.RideMenu, $"Take off the {gear.Label.ToLowerInvariant()}");
+                // skis (#899) and the board (#922): a stride is a press, so say so when going slow; a skid stops a fast run
+                if (gear is SnowRide && p.IsOnFloor())
+                {
+                    bool board = gear is Snowboard;
+                    if (p.RideSpeed < 4f) yield return (PlayerInput.MoveForward, board ? "Tap to push" : "Tap to skate");
+                    // skis (#933): the hockey stop only above 5 m/s (Skis.PivotSpeed); slower, brake is the snowplough
+                    else if (!board && p.RideSpeed < 6f) yield return (PlayerInput.Brake, "Brake: snowplough");
+                    else yield return (PlayerInput.Brake, board ? "Brake: skid to a stop" : "Brake + turn: skid to a stop");
+                    yield return (PlayerInput.TuckBoost, board ? "Hold: straight-line" : "Hold: schuss");
+                }
                 if (gear is not Flyer && gear.CanHop) yield return (PlayerInput.Trick, "Trick (in the air)");
             }
             else if (p.Fighting)
@@ -1771,6 +1888,15 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 yield return (PlayerInput.FightPunch, "Punch");
                 yield return (PlayerInput.FightKick, "Kick");
                 yield return (PlayerInput.FightBlock, "Block (hold)");
+            }
+            else if (p.InAura)
+            {
+                // an aura battle (#907): the one timed key; the planner shows its own
+                if (Combat.AuraManager.Client?.Current is { MyTurn: true, Phase: Combat.AuraPhase.Perform or Combat.AuraPhase.Countdown })
+                    yield return (PlayerInput.AuraNext, "Next move (on the beat)");
+                // the rival performs (#914): the same key keeps a straight face, but only when tempted
+                else if (Combat.AuraManager.Client?.Current is { MyTurn: false, Phase: Combat.AuraPhase.Perform })
+                    yield return (PlayerInput.AuraNext, "Keep a straight face (only when tempted)");
             }
             else if (Items.ItemController.Instance is { Inventory.HeldId: Items.ItemId.FishingRod } rodHand && rodHand.UsablePlayer != null)
             {
@@ -1814,8 +1940,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
             }
             else if (Vehicles.VehicleReach.Current == null && Combat.FightManager.Client is { } fights
                      && NetLink.Online(this) && p.PointedFighter() is { } rival && FootPlayer.NetId(rival.Name) is { } rivalId)
-                // another player looked at (#495): E challenges, or takes their challenge
-                yield return (PlayerInput.InteractMount, fights.Prompt(rivalId));
+                // another player looked at (#495): E challenges, or takes their challenge; an aura
+                // challenge from them comes first (#914)
+                yield return (PlayerInput.InteractMount, Combat.AuraManager.Client?.ChallengedBy(rivalId) == true
+                    ? Combat.AuraManager.Client.Prompt(rivalId) : fights.Prompt(rivalId));
             else if (p.Indoors)
             {
                 // the chess type beat in a church (#370): dance to it, away from its radio and the door
@@ -1826,7 +1954,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
             }
             else
             {
-                if (Interiors.InteriorManager.Instance?.OutsideDoorInReach(p.GlobalPosition) == null
+                // a concert's light desk (#885), at its console
+                if (Concert.ConcertDeskUi.At(p) != null) yield return (PlayerInput.InteractMount, "Light desk");
+                // a stand's seat (#885), before the dance: E sits there first
+                else if (p.Sitting) yield return (PlayerInput.InteractMount, "Stand up");
+                else if (p.SeatInReach() != null) yield return (PlayerInput.InteractMount, "Sit down");
+                else if (Interiors.InteriorManager.Instance?.OutsideDoorInReach(p) == null
                     && Items.RadioManager.Instance?.NearestMusic(p.GlobalPosition, Items.RadioManager.DanceRadius, heard: p.DanceId == 0) != null)
                     yield return (PlayerInput.InteractMount, p.DanceId == 0 ? "Dance" : "Stop dancing");
                 if (Vehicles.VehicleReach.Current is { } at)
@@ -1840,6 +1973,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 if (!Permissions.InMatch) yield return (PlayerInput.ToggleMode, "Fly camera");
             }
         }
+        // the quick menu (#840): activities, invites and the rest, from anywhere
+        yield return (PlayerInput.QuickMenu, "Quick menu");
         yield return (PlayerInput.Help, "All controls");
     }
 
@@ -1854,7 +1989,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         TrackLoading(delta);
         if ((_appearanceIn -= delta) <= 0) { _appearanceIn = 0.25; PublishAppearance(); }
         if (GameClock.Fixed) GameClock.Pace(Stage != LoadStage.Ready || _chunks is { Settled: false });
-        if (_pendingFoot != null && !SpawnPending)
+        if (_pendingFoot != null && !SpawnPending && GroundUnderCamera)
         {
             var player = _pendingFoot;
             _pendingFoot = null;
@@ -1941,7 +2076,27 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private SeatStart? _seatStart;
     private bool _seatAsked;
 
-    private bool SpawnPending => _awaitingServerSpawn || _spawn != null && IsInstanceValid(_spawn) && _spawn.IsInsideTree();
+    /// <summary>
+    /// Any spawn point still settling, not only <see cref="_spawn"/>: a teleport replaces it with
+    /// its own (a returning player's sleeper wakes one round trip after the server's start point),
+    /// and the gate must hold through that one too, or the body steps off the fly camera at 4.8 km.
+    /// </summary>
+    private bool SpawnPending
+    {
+        get
+        {
+            if (_awaitingServerSpawn) return true;
+            foreach (var node in GetChildren())
+                if (node is SpawnPoint s && !s.IsQueuedForDeletion()) return true;
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// The ground under the fly camera is known. A spawn point that gave up (no tile after 15 s, a
+    /// slow first join) leaves the camera at its preload altitude: the body waits for the ground then.
+    /// </summary>
+    private bool GroundUnderCamera => _chunks != null && _spectator != null && _chunks.TryGetSurface(_spectator.GlobalPosition, out _);
 
     /// <summary>Online, before the server's <c>Net/Arrival</c> has said where this player starts (#799).</summary>
     private bool _awaitingServerSpawn;
@@ -1971,7 +2126,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
     /// </summary>
     private void EnterFootWhenGrounded(FootPlayer player)
     {
-        if (SpawnPending) { _pendingFoot = player; return; }
+        if (SpawnPending || !GroundUnderCamera) { _pendingFoot = player; return; }
         EnterFootMode(player);
     }
 

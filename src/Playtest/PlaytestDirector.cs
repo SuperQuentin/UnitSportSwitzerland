@@ -7,6 +7,8 @@ using System.Threading.Channels;
 using Godot;
 using UnitSport.Core;
 using UnitSport.Player;
+using UnitSport.Playtest.Recording;
+using UnitSport.Playtest.TopView;
 
 namespace UnitSport.Playtest;
 
@@ -32,6 +34,16 @@ public partial class PlaytestDirector : Node
     private const string ResumeFile = "user://playtest_resume.json";
 
     public static bool Requested => OS.IsDebugBuild() && CmdArgs.Has("--playtest");
+
+    /// <summary>
+    /// <c>--playtest-batch</c> (#844, tools/playtest.sh batch): the player goes through scenarios without
+    /// Claude in the loop, the session recorded (<see cref="PlaytestRecorder"/>): a verdict moves on to
+    /// the next one due, Fail's text is a note, the chat with Claude is hidden.
+    /// </summary>
+    public static bool Batch => CmdArgs.Has("--playtest-batch");
+
+    /// <summary><c>--playtest-retest</c> (tools/playtest.sh retest): only the scenarios due (failed, stale, never played).</summary>
+    private static bool Retest => CmdArgs.Has("--playtest-retest");
 
     public static PlaytestDirector? Instance { get; private set; }
 
@@ -98,8 +110,13 @@ public partial class PlaytestDirector : Node
         _by = Git("config", "user.name");
         _commit = Git("rev-parse", "--short", "HEAD");
         RefreshStatus();
+        if (Retest)
+        {
+            Entries = Entries.Where(e => Status.GetValueOrDefault(e.Id) != PlaytestStatus.Validated).ToList();
+            GD.Print($"[playtest] retest: {Entries.Count} scenarios due");
+        }
 
-        var protocol = new McpProtocol("unitsport-playtest", "1", Instructions, Tools());
+        var protocol = new McpProtocol("unitsport-playtest", "1", Instructions, [.. Tools(), .. RecorderTools()]);
         protocol.Initialized += client => OnMain(() => { Client = client; Say("system", $"{client} connected."); return Task.FromResult(0); });
         protocol.ToolCalled += tool => { if (Client == null) _ = Sync(() => { Client ??= "Claude"; Changed?.Invoke(); return 0; }); };
         // the smoke run must not take the port a real session (or another check) is using
@@ -117,7 +134,9 @@ public partial class PlaytestDirector : Node
         AddChild(PlaytestPanel.Create(this));
         if (_http == null || !CmdArgs.Has("--playtest-resume")) Say("system", _http == null
             ? "The playtest server could not start (port taken): Claude cannot reach this game."
-            : "Playtest mode. In Claude Code, run /playtest (or ask it to listen to the game), then write here.");
+            : Batch
+                ? $"Batch playtest{(Retest ? $" (retest: {Entries.Count} due)" : "")}: play the scenarios, F12 notes what is wrong, End session when done. Claude fixes from the recording afterwards."
+                : "Playtest mode. In Claude Code, run /playtest (or ask it to listen to the game), then write here.");
         if (CmdArgs.Has("--playtest-resume")) _ = Resume();
         if (Smoke) _ = RunSmoke();
     }
@@ -230,6 +249,7 @@ public partial class PlaytestDirector : Node
         await _ctx.Clear();
         Current = e;
         SetupError = null;
+        PlaytestRecorder.Instance?.Event("scenario", ("what", "start"), ("id", e.Id), ("title", e.Title));
         _ctx.Params = new Dictionary<string, double>(e.Scenario.Params);
         if (parameters != null) foreach (var (k, v) in parameters) _ctx.Params[k] = v;
         _settingUp = true;
@@ -253,6 +273,7 @@ public partial class PlaytestDirector : Node
         catch (Exception x)
         {
             SetupError = x.Message;
+            PlaytestRecorder.Instance?.Event("scenario", ("what", "setup failed"), ("id", e.Id), ("note", x.ToString()));
             Say("system", $"Setup failed: {x.Message}");
             Tell($"scenario {e.Id} setup FAILED: {x}");
             return $"setup of {e.Id} failed: {x}";
@@ -274,8 +295,58 @@ public partial class PlaytestDirector : Node
         Status[e.Id] = PlaytestLedger.StatusOf(record, hash);
         Say("system", validated ? $"✔ Validated: {e.Title}" : $"✖ Failed: {e.Title}{(note.Length > 0 ? " — " + note : "")}");
         Tell(validated ? $"VALIDATED {e.Id}{(note.Length > 0 ? ": " + note : "")}" : $"FAILED {e.Id}: {note}");
+        if (PlaytestRecorder.Instance is { Running: true } rec)
+        {
+            rec.Event("scenario", ("what", "verdict"), ("id", e.Id), ("verdict", validated ? "validated" : "failed"), ("note", note));
+            if (!validated) _ = NoteWithShot(note, "fail");
+        }
+        if (Batch) GetTree().CreateTimer(0.6).Timeout += NextOrDone;
         return record;
     }
+
+    /// <summary>Batch mode, after a verdict: the next scenario due, or say that none is left.</summary>
+    private void NextOrDone()
+    {
+        if (NextDue() is { } next) _ = Start(next);
+        else Say("system", "Every scenario due has been played: End session saves the recording for Claude.");
+    }
+
+    /// <summary>A note with the screen as it is, the panel hidden (#844): from Fail, the panel's Note button, Claude.</summary>
+    public async Task<int> NoteWithShot(string text, string source)
+    {
+        if (PlaytestRecorder.Instance is not { Running: true } rec) return 0;
+        double when = rec.Now;
+        var shot = DisplayServer.GetName() == "headless" ? null : await Shot(withPanel: false);
+        return rec.Note(text, source, shot, when);
+    }
+
+    /// <summary>Batch mode: recording without a scenario, the stage cleared.</summary>
+    public async Task FreePlay()
+    {
+        await _ctx.Clear();
+        Current = null;
+        SetupError = null;
+        PlaytestRecorder.Instance?.Event("scenario", ("what", "free play"), ("id", ""));
+        Say("system", "Free play: go anywhere, F12 notes what is wrong.");
+    }
+
+    /// <summary>Stops the recording and writes report.md (#844); the game goes on unrecorded.</summary>
+    public async Task EndSession()
+    {
+        if (PlaytestRecorder.Instance is not { Running: true } rec)
+        {
+            Say("system", "Nothing is being recorded (start with tools/playtest.sh batch).");
+            return;
+        }
+        Say("system", "Saving the session…");
+        await rec.Stop();
+        string report = Path.GetRelativePath(Root, Path.Combine(rec.Dir, SessionReport.ReportFile)).Replace('\\', '/');
+        Say("system", $"Session saved. Tell Claude: read {report} and fix what I noted.");
+        Tell($"session ended: {report}");
+    }
+
+    /// <summary>The scenario's placed vehicles (the recorder's check compares them with the trace).</summary>
+    internal IEnumerable<Vehicles.VehicleBody> Placed() => _ctx.Placed();
 
     // ---- relaunch ------------------------------------------------------------------------
 
@@ -294,6 +365,14 @@ public partial class PlaytestDirector : Node
             f?.StoreString(JsonSerializer.Serialize(state));
 
         var user = CmdArgs.All.Where(a => a != "--playtest-resume").ToList();
+        // a recorded session goes on in the same bundle (#844)
+        if (PlaytestRecorder.Instance is { } recorder)
+        {
+            int r = user.IndexOf("--playtest-record");
+            if (r < 0) user.AddRange(["--playtest-record", recorder.Dir]);
+            else if (r + 1 < user.Count && !user[r + 1].StartsWith("--", StringComparison.Ordinal)) user[r + 1] = recorder.Dir;
+            else user.Insert(r + 1, recorder.Dir);
+        }
         if (course != null)
         {
             // the course is fixed at boot: --world fixture --chunks fixture:<course>
@@ -320,7 +399,13 @@ public partial class PlaytestDirector : Node
             return;
         }
         GD.Print($"[playtest] relaunching ({(rebuild ? "rebuild" : "no rebuild")}), helper pid {pid}");
-        GetTree().Quit();
+        // the recording saved first (its movie is joined on a worker): the helper waits for this process to end
+        if (PlaytestRecorder.Instance is { Running: true } rec)
+        {
+            rec.Event("session", ("what", "relaunch"), ("rebuild", rebuild));
+            rec.Stop().ContinueWith(_ => Callable.From(() => GetTree().Quit()).CallDeferred(), TaskScheduler.Default);
+        }
+        else GetTree().Quit();
     }
 
     /// <summary>bash: Git for Windows' on Windows (tools/*.sh are bash scripts), else the one on PATH.</summary>
@@ -358,8 +443,8 @@ public partial class PlaytestDirector : Node
         "fails or changes scenario), act, answer with say, repeat. You can change the running game live with set_param " +
         "(scenario knobs, then reset_scenario), set_tunable ([Tunable] statics), node_set (any node property), run_command " +
         "(chat commands), and see it with screenshot, status, node_get and log_tail. For a code change: edit the source, " +
-        "then restart(rebuild=true): the game rebuilds, relaunches and reopens the same scenario. Read " +
-        "docs/notes/general/playtest.md in the repo first.";
+        "then restart(rebuild=true): the game rebuilds, relaunches and reopens the same scenario. A recorded session " +
+        "(--playtest-record) also has session_report, topview and note. Read docs/notes/general/playtest.md in the repo first.";
 
     private static JsonElement Obj(string json) => JsonSerializer.Deserialize<JsonElement>(json);
 
@@ -451,6 +536,38 @@ public partial class PlaytestDirector : Node
                 // after this reply has left: the quit would cut it off
                 GetTree().CreateTimer(0.5).Timeout += () => Relaunch(Current, rebuild);
                 return McpToolResult.Text("relaunching; call wait_for_player until the game answers again");
+            })),
+    ];
+
+    /// <summary>The recorder's tools (#844); they answer an error unless the session is recorded.</summary>
+    private List<McpTool> RecorderTools() =>
+    [
+        new("session_report", "The recorded session's report.md as it stands now (scenarios, notes with their pictures' paths, errors, perf), written again first. The bundle's folder is its first line.",
+            McpTool.Schema(),
+            (_, _) => Task.Run(() =>
+            {
+                if (PlaytestRecorder.Instance is not { } rec) return McpToolResult.Error("not recording (--playtest-record)");
+                rec.Sync();
+                return McpToolResult.Text($"bundle: {rec.Dir}\n\n" + SessionReport.Write(rec.Dir));
+            })),
+        new("topview", "A top-down picture of the recorded session (players as arrows, vehicles and objects as boxes, 1 s ticks on each track, notes as pins). Times are seconds since the session began, as the report gives them; default the last 20 s.",
+            McpTool.Schema(("from", "number", "window start, s"), ("to", "number", "window end, s"), ("at", "number", "the instant the boxes stand at (default: the end)"),
+                ("e", "number", "centre LV95 E (with n and radius)"), ("n", "number", "centre LV95 N"), ("radius", "number", "half the square's side, m"),
+                ("size", "number", "px, default 800")),
+            (args, _) => OnMain(async () =>
+            {
+                if (PlaytestRecorder.Instance is not { } rec) return McpToolResult.Error("not recording (--playtest-record)");
+                double to = args.Num("to") ?? rec.Now, from = args.Num("from") ?? to - 20;
+                EN? around = args.Num("e") is { } e && args.Num("n") is { } n ? new EN(e, n) : null;
+                var png = await rec.TopView(from, to, args.Num("at"), around, args.Num("radius"), (int)Math.Clamp(args.Num("size") ?? 800, 200, 2000));
+                return png == null ? McpToolResult.Error("could not draw it") : McpToolResult.Image(png, $"top view {from:0.0}-{to:0.0} s");
+            })),
+        new("note", "Adds a note to the recording, as the player's F12 does (with a screenshot), e.g. to mark what you just changed.",
+            McpTool.Schema([("text", "string", "the note")], ["text"]),
+            (args, _) => OnMain(async () =>
+            {
+                int id = await NoteWithShot(args.Str("text") ?? "", "mcp");
+                return id > 0 ? McpToolResult.Text($"note {id} saved") : McpToolResult.Error("not recording (--playtest-record)");
             })),
     ];
 
@@ -572,7 +689,8 @@ public partial class PlaytestDirector : Node
 
     // ---- screenshot ----------------------------------------------------------------------
 
-    private async Task<McpToolResult> Screenshot(bool withPanel, int width)
+    /// <summary>The screen as the player sees it, the panel hidden unless <paramref name="withPanel"/>.</summary>
+    private async Task<Image> Shot(bool withPanel)
     {
         var panel = GetNodeOrNull<CanvasLayer>(PlaytestPanel.NodeName);
         bool shown = panel?.Visible ?? false;
@@ -582,6 +700,12 @@ public partial class PlaytestDirector : Node
         await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
         var image = GetViewport().GetTexture().GetImage();
         if (panel != null) panel.Visible = shown;
+        return image;
+    }
+
+    private async Task<McpToolResult> Screenshot(bool withPanel, int width)
+    {
+        var image = await Shot(withPanel);
         width = Math.Clamp(width, 320, 1920);
         if (image.GetWidth() > width) image.Resize(width, image.GetHeight() * width / image.GetWidth(), Image.Interpolation.Bilinear);
         return McpToolResult.Image(image.SavePngToBuffer(), $"{image.GetWidth()}x{image.GetHeight()}, scenario {Current?.Id ?? "none"}");

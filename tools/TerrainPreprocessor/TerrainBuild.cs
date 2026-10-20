@@ -40,6 +40,8 @@ public static class TerrainBuild
         public bool Fresh;
         /// <summary>Read every written tile back and compare, then check all seams.</summary>
         public bool Verify;
+        /// <summary>The neighbours' DEMs, for <see cref="ForeignDem.SourceFor"/> tiles and swissALTI3D's gaps (#936, #965).</summary>
+        public IReadOnlyList<ForeignDem>? Foreign;
     }
 
     private static readonly Regex NameRe = new(
@@ -204,18 +206,29 @@ public static class TerrainBuild
                 if (!scratchPool.TryTake(out var sc)) sc = new Scratch();
                 try
                 {
-                    long t0 = Stopwatch.GetTimestamp();
-                    // a legacy pass-1 cache file is the parsed grid already: 8 MB read, no inflate
-                    string legacy = Path.Combine(cacheDir, $"{src.Id.E}_{src.Id.N}.raw");
-                    string readPath = !o.Force && new FileInfo(legacy) is { Exists: true, Length: XyzParser.RawFileBytes } li
-                        && li.LastWriteTimeUtc.Ticks >= src.Ticks ? legacy : src.Path;
-                    byte[] data;
-                    ioGate.Wait();
-                    try { data = File.ReadAllBytes(readPath); }
-                    finally { ioGate.Release(); }
-                    long t1 = Stopwatch.GetTimestamp();
+                    long t0 = Stopwatch.GetTimestamp(), t1 = t0;
+                    if (src.Path == ForeignDem.SourcePath)
+                    {
+                        // a foreign tile (#936, #965): resampled from the neighbours' DEMs, which read their own files
+                        var dems = o.Foreign ?? throw new InvalidOperationException("foreign DEM tile without --dem");
+                        if (ForeignDem.FillAll(dems, src.Id, sc.Cells, onlyMissing: false) < sc.Cells.LongLength) XyzParser.FillMissing(sc.Cells);
+                    }
+                    else
+                    {
+                        // a legacy pass-1 cache file is the parsed grid already: 8 MB read, no inflate
+                        string legacy = Path.Combine(cacheDir, $"{src.Id.E}_{src.Id.N}.raw");
+                        string readPath = !o.Force && new FileInfo(legacy) is { Exists: true, Length: XyzParser.RawFileBytes } li
+                            && li.LastWriteTimeUtc.Ticks >= src.Ticks ? legacy : src.Path;
+                        byte[] data;
+                        ioGate.Wait();
+                        try { data = File.ReadAllBytes(readPath); }
+                        finally { ioGate.Release(); }
+                        t1 = Stopwatch.GetTimestamp();
+                        Interlocked.Add(ref bytesIn, data.Length);
 
-                    XyzParser.Parse(data, readPath, src.Id, sc.Cells, sc.Text);
+                        XyzParser.Parse(data, readPath, src.Id, sc.Cells, sc.Text,
+                            o.Foreign == null ? null : (id, cells) => ForeignDem.FillAll(o.Foreign, id, cells, onlyMissing: true));
+                    }
                     long t2 = Stopwatch.GetTimestamp();
 
                     var heights = new ushort[n * n];
@@ -227,7 +240,6 @@ public static class TerrainBuild
                     Interlocked.Add(ref tRead, t1 - t0);
                     Interlocked.Add(ref tParse, t2 - t1);
                     Interlocked.Add(ref tReduce, t3 - t2);
-                    Interlocked.Add(ref bytesIn, data.Length);
 
                     interiors[src.Id] = heights;
                     edgesOf[src.Id] = edges;

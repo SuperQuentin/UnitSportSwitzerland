@@ -353,13 +353,14 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
             door = ExitAt(player)?.Door;
             if (door == null)
             {
-                Hint(_current.AllEntrances().Count > 1
+                Hint(_current.HasRaisedEntrance() ? "The ways out are the doors."
+                    : _current.AllEntrances().Count > 1
                     ? "The ways out are the doors, on the ground floor."
                     : "The way out is the front door, on the ground floor.");
                 return true;
             }
         }
-        else door = OutsideDoorInReach(player.GlobalPosition);
+        else door = OutsideDoorInReach(player);
         if (door == null) return false;
         if (_requestingDoor != null) return true;
         AskDoor(door, !_doors.ContainsKey(door));
@@ -382,8 +383,10 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         if (player.Indoors) door = _current == null ? null : ExitAt(player)?.Door;
         else
         {
-            var e = DoorIndex.NearestEntrance(hand, HandDoorReach, OpenReachOutside);
-            door = e is { } d && hand.Y > d.World.Y + 0.3f && hand.Y < d.World.Y + d.Height + 0.3f ? d.Key.ToString() : null;
+            // only the doors whose opening the hand is in: one stacked over another (#827) is not in reach of it
+            static bool InOpening(DoorIndex.Entry d, Vector3 hand) => hand.Y > d.World.Y + 0.3f && hand.Y < d.World.Y + d.Height + 0.3f;
+            var e = DoorIndex.NearestEntrance(hand, HandDoorReach, OpenReachOutside, d => InOpening(d, hand));
+            door = e is { } d && InOpening(d, hand) ? d.Key.ToString() : null;
         }
         if (door == null) return false;
         if (_requestingDoor == null) AskDoor(door, !_doors.ContainsKey(door));
@@ -508,7 +511,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     }
 
     /// <summary>The doorway in the interior's wall, world space.</summary>
-    public Vector3 InsideDoorAt(InteriorLayout l, EntrancePlan e) => PlacementFor(l, Origin!) * new Vector3(e.X, 0, e.Z);
+    public Vector3 InsideDoorAt(InteriorLayout l, EntrancePlan e) => PlacementFor(l, Origin!) * new Vector3(e.X, l.EntranceY(e), e.Z);
 
     /// <summary>Server (or offline): shuts every door nobody has been near for a while.</summary>
     private void TickDoors(double delta)
@@ -855,20 +858,33 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         return false;
     }
 
-    /// <summary>The door E works for someone outside at <paramref name="at"/>, if any.</summary>
+    /// <summary>The door nearest someone outside at <paramref name="at"/> that E could work, if any.</summary>
     public string? OutsideDoorInReach(Vector3 at) => DoorIndex.NearestEntrance(at, DoorReach, OpenReachOutside)?.Key.ToString();
+
+    /// <summary>
+    /// The door E works for <paramref name="player"/> outside, if any: of the doors in reach, the
+    /// one they look at the facade of before a nearer one at their back.
+    /// </summary>
+    public string? OutsideDoorInReach(FootPlayer player) =>
+        DoorIndex.FacedEntrance(player.GlobalPosition, -player.Camera.GlobalBasis.Z, DoorReach, OpenReachOutside)?.Key.ToString();
 
     /// <summary>Extra reach in front of a door from outside: an open barn pair's leaves stand out there.</summary>
     private float OpenReachOutside(DoorIndex.Entry e) =>
         DoorLeaf.SwingsOut(e.Hang) && _doors.ContainsKey(e.Key.ToString())
             ? DoorLeaf.OpenReach(e.Hang, e.Width) : 0f;
 
-    /// <summary>The entrance the player is standing at, on the ground floor, if any.</summary>
+    /// <summary>The entrance the player is standing at, on its own floor (the ground floor but for a raised door, #827), if any.</summary>
     private EntrancePlan? ExitAt(FootPlayer player)
     {
         if (!player.Indoors || _current == null || CurrentNode is not { } node) return null;
         var local = node.ToLocal(player.GlobalPosition);
-        if (local.Y > _current.StoreyHeight - 0.5f || local.Y < -0.5f) return null;   // ground floor only, not a cellar
+        var plan = _current;
+        // on the entrance's floor only: never a cellar's, nor the floor under a raised door
+        bool OnItsFloor(EntrancePlan e)
+        {
+            float y = local.Y - plan.EntranceY(e);
+            return y <= plan.StoreyHeight - 0.5f && y >= -0.5f;
+        }
         var at = new Vector2(local.X, local.Z);
         var kind = _current.DressedKind();
         // to the doorway, not its centre: a barn's is 10 m wide. An open leaf swung into the
@@ -885,7 +901,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
             return Mathf.Sqrt(along * along + depth * depth);
         }
         return _current.AllEntrances()
-            .Where(e => Distance(e) <= ExitReach)
+            .Where(e => OnItsFloor(e) && Distance(e) <= ExitReach)
             .MinBy(Distance);
     }
 
@@ -1041,7 +1057,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         float bestD = 12f;
         foreach (var e in _current.AllEntrances())
         {
-            var at = node.GlobalTransform * new Vector3(e.X, 1.2f, e.Z);
+            var at = node.GlobalTransform * new Vector3(e.X, _current.EntranceY(e) + 1.2f, e.Z);
             float d = at.DistanceTo(listener);
             if (d >= bestD) continue;
             bestD = d;
@@ -1068,7 +1084,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
                 door = ExitAt(p)?.Door;
                 if (door == null) text = InsidePrompt(p) ?? ChurchRadios.PromptFor(p) ?? Loot.LootService.Instance?.PromptFor(p);
             }
-            else if (!p.Indoors) door = OutsideDoorInReach(p.GlobalPosition);
+            else if (!p.Indoors) door = OutsideDoorInReach(p);
             // outdoors: a farm stand at hand, a specialty buyer's yard (#494)
             if (door == null && !p.Indoors) text = Farming.FarmSales.PromptFor(p);
             if (door != null)
@@ -1370,7 +1386,7 @@ public partial class InteriorNode : Node3D
         foreach (var e in layout.AllEntrances())
         {
             var z = new Vector3(-e.InX, 0, -e.InZ).Normalized();
-            var doorway = new Transform3D(new Basis(Vector3.Up.Cross(z), Vector3.Up, z), new Vector3(e.X, 0, e.Z));
+            var doorway = new Transform3D(new Basis(Vector3.Up.Cross(z), Vector3.Up, z), new Vector3(e.X, layout.EntranceY(e), e.Z));
             var (width, top) = layout.OpeningOf(e);
             var kind = layout.DressedKind();
             // a barn's pair or a garage's roll-up door moves on the facade, with its link; in here

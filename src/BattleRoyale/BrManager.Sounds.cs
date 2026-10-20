@@ -53,7 +53,7 @@ public partial class BrManager
             _doorsStung = false;
             return;
         }
-        double now = ClockSync.ServerNow;
+        double now = ClockSync.SimNow;
         if (_aboard && _state.Flight is { } flight && flight.DoorsOpen(now) && !_doorsStung)
         {
             _doorsStung = true;

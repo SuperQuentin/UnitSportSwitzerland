@@ -10,9 +10,9 @@ namespace UnitSport.World;
 /// <summary>
 /// <c>--signalnetcheck [E,N] [--seconds N]</c> (#353, <c>tools/signalnetcheck.sh</c>): the traffic
 /// lights over the network. Traffic is local to each client; what every peer shares is the plan
-/// and the server clock, so this logs, every <see cref="Step"/> s of <c>ClockSync.ServerNow</c>,
+/// and the simulated clock (<c>SignalLamps.Clock</c>, #867), so this logs, every <see cref="Step"/> s of it,
 /// the aspect of every group of one junction as the lamps read it (<c>SignalPlan.State(group,
-/// ClockSync.ServerNow)</c>), with the system wall clock beside it (one machine: the script turns
+/// SignalLamps.Clock())</c>), with the system wall clock beside it (one machine: the script turns
 /// it into each client's clock error). The junction: the signal record nearest LV95 E,N in that
 /// tile of the chunk directory (<c>--chunks</c>; a client may run without terrain, the tile is
 /// read from disk), else a crossroads plan built in code (the same on every peer). A client
@@ -103,9 +103,7 @@ public partial class SignalNetProbe : Node
             if (double.IsNaN(_syncedAt)) _syncedAt = local;
             if (local - _syncedAt < Settle) return;
         }
-        double t = ClockSync.ServerNow;
-        // (the plan read on the lights' own clock, simulated time, #979)
-        double sim = Terrain.SignalLamps.Clock();
+        double t = SignalLamps.Clock();
         long key = (long)Math.Floor(t / Step);
         if (key == _lastKey) return;
         bool first = _lastKey == long.MinValue;
@@ -116,8 +114,8 @@ public partial class SignalNetProbe : Node
         double edge = double.PositiveInfinity;
         for (int g = 0; g < _plan.Groups.Count; g++)
         {
-            _states.Append(Letter(_plan.State(g, sim)));
-            edge = Math.Min(edge, Math.Min(_plan.UntilChange(g, sim), SinceChange(_plan, g, sim)));
+            _states.Append(Letter(_plan.State(g, t)));
+            edge = Math.Min(edge, Math.Min(_plan.UntilChange(g, t), SinceChange(_plan, g, t)));
         }
         GD.Print(string.Create(CultureInfo.InvariantCulture,
             $"[signalnet {_role}] k={key} t={t:F4} wall={wall:F4} edge={Math.Min(edge, 999):F4} rtt={(_server ? 0 : ClockSync.Rtt) * 1000:F1} states={_states}"));

@@ -243,11 +243,12 @@ public sealed class AutoPilot
     private static (float Lean, float Brake)? MeasureLean(RideKind kind)
     {
         if (Rideable.Create(kind) is not { } probe || probe is UnitSport.Player.Car or Flyer) return null;
-        var flat = new RideGround(true, 0f);
+        // skis are measured on snow (off it they barely move, #899), and a turn may skid them a little
+        var flat = new RideGround(true, 0f, probe is SnowRide ? Audio.Surface.Snow : Audio.Surface.Asphalt);
         var turn = new RideMotion { Speed = 10f };
         for (int i = 0; i < 120; i++) probe.Step(new RideInput(0.3f, 0f, 1f, false), flat, SimDt, ref turn);
         float lean = Mathf.Abs(turn.Bank);
-        if (lean < 0.1f || turn.Slip != 0f) return null;
+        if (lean < 0.1f || (turn.Slip != 0f && probe is not SnowRide)) return null;
         var braked = new RideMotion { Speed = 10f };
         var coast = new RideMotion { Speed = 10f };
         var a = Rideable.Create(kind)!;
@@ -1110,8 +1111,16 @@ public sealed class AutoPilot
         if (Finished) want = 0f;
         float throttle = Mathf.Clamp((want - v) * 0.5f, 0f, 1f);
         float brake = Mathf.Clamp((v - want) * 0.4f, 0f, 1f);
+        // skis and the board stride on a press, not a hold (#899): wanting to go, it presses about four times a second
+        if (SnowRide.Is(Player.RideKindId))
+        {
+            _strideClock += dt;
+            throttle = throttle > 0.2f && _strideClock % 0.26f < 0.13f ? 1f : 0f;
+        }
         return new RideInput(throttle, brake, steer, want - v > 2f);
     }
+
+    private float _strideClock;
 
     /// <summary>A runner: toward a point a few metres ahead on the line, running, stopping at the finish.</summary>
     private (Vector3 Wish, bool Run) Walk()
@@ -1284,6 +1293,12 @@ public sealed class AutoPilot
     private static float Wrap(float a) => Core.MathX.WrapAngle(a);
 
     /// <summary>Whether <see cref="For"/> has a pilot for this class (the server asks it before spawning an NPC in it).</summary>
-    public static bool Drives(RideKind kind) => kind == RideKind.OnFoot || CarCatalog.IsCar(kind)
-        || (Rideable.Create(kind) is { } ride && ride is not Flyer && MeasureLean(kind) != null);
+    public static bool Drives(RideKind kind) => DrivesCache.GetOrAdd(kind, k => k == RideKind.OnFoot || CarCatalog.IsCar(k)
+        || (Rideable.Create(k) is { } ride && ride is not Flyer && MeasureLean(k) != null));
+
+    /// <summary>
+    /// <see cref="Drives"/> per kind: a mount's answer is a fresh copy of it stepped 180 times, and a bot asks
+    /// it of every vehicle it might see every 1.5 s (#837): 100 bots spent 25-40 ms a frame and 24 s of GC on it.
+    /// </summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<RideKind, bool> DrivesCache = new();
 }
