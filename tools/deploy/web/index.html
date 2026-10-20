@@ -369,17 +369,20 @@ const PEOPLE = [
     };
     $("styles").append(b);
   }
-  // the crowd: a figure in each margin of every other section, drifting slower than the page
-  const drifting = [];
-  [...document.querySelectorAll("section.block")].filter(s => s.id !== "people").forEach((sec, k) => {
+  // the crowd: a figure in each margin of the other sections, a pair every ~900 px down a tall one, drifting slower than the page
+  const drifting = []; let j = 0;
+  [...document.querySelectorAll("section.block")].filter(s => s.id !== "people").forEach(sec => {
     const crowd = document.createElement("div"); crowd.className = "crowd"; crowd.setAttribute("aria-hidden", "true");
-    for (const [side, j] of [["l", k * 2], ["r", k * 2 + 1]]) {
-      const i = (j * 5 + 3) % PEOPLE.length, img = new Image();
-      img.alt = ""; img.className = side; img.loading = "lazy"; img.src = `media/people-${i}.webp`; img.onerror = () => img.remove();
-      img.style.setProperty("--h", Math.round(PEOPLE[i][2] * (side === "l" ? 300 : 250)) + "px");
-      img.dataset.depth = side === "l" ? .12 : .07;
-      crowd.append(img); drifting.push(img);
-    }
+    const pairs = Math.max(1, Math.round(sec.offsetHeight / 900));
+    for (let k = 0; k < pairs; k++)
+      for (const side of ["l", "r"]) {
+        const i = (j++ * 5 + 3) % PEOPLE.length, img = new Image();
+        img.alt = ""; img.className = side; img.loading = "lazy"; img.src = `media/people-${i}.webp`; img.onerror = () => img.remove();
+        img.style.setProperty("--h", Math.round(PEOPLE[i][2] * (side === "l" ? 300 : 250)) + "px");
+        img.style.bottom = ((k + (side === "l" ? .1 : .45)) / pairs * 100).toFixed(1) + "%";
+        img.dataset.depth = side === "l" ? .12 : .07;
+        crowd.append(img); drifting.push(img);
+      }
     sec.prepend(crowd);
   });
   if (calm) return;
