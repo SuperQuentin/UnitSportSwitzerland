@@ -208,28 +208,12 @@ public static class ChatCheck
     }
 
     /// <summary>
-    /// <c>/stadium</c> (#994): finding a venue by number, name or town, accents and case ignored, its
-    /// completion, the list, and the help built from the command table.
+    /// <c>/stadium</c> (#994): its completion and its replies offline, <c>/tp</c> to coordinates,
+    /// <c>/concert</c>'s completion and the help built from the command table.
     /// </summary>
     private static void Venues(ChatCompleter completer, Node host)
     {
-        static string Names(IReadOnlyList<Terrain.Stadiums.StadiumSpec> v) => string.Join(", ", v.Select(s => s.Name));
-        var byName = Terrain.Stadiums.StadiumLookup.Find("wankdorf");
-        Expect(byName is [{ Name: "Stadion Wankdorf" }], $"a venue by its name: {Names(byName)}");
-        var byTown = Terrain.Stadiums.StadiumLookup.Find("Bern");
-        Expect(byTown.Count == 3 && byTown.Any(v => v.Name == "PostFinance Arena"), $"a town finds its venues: {Names(byTown)}");
-        Expect(Terrain.Stadiums.StadiumLookup.Find("brugglifeld") is [{ Name: "Stadion Brügglifeld" }], "accents ignored");
-        Expect(Terrain.Stadiums.StadiumLookup.Find("#1") is [{ Name: "Stade de Genève" }], "a venue by its number");
-        Expect(Terrain.Stadiums.StadiumLookup.Find("STADE DE GENEVE") is [{ Name: "Stade de Genève" }], "a whole name wins over the names it is part of");
-        Expect(Terrain.Stadiums.StadiumLookup.Find("99").Count == 0 && Terrain.Stadiums.StadiumLookup.Find("nowhere").Count == 0, "no venue");
-        Expect(Terrain.Stadiums.StadiumCatalog.All.All(v => v.Town.Length > 0), "every venue has its town");
-        var list = Terrain.Stadiums.StadiumLookup.List().ToList();
-        // open airs have commas in their names ("Paléo Festival, Grande Scène"): look for each row whole
-        Expect(list.Count == 3 && Terrain.Stadiums.StadiumCatalog.All.All(v => list.Count(l => l.Contains($"{Terrain.Stadiums.StadiumLookup.Number(v)} {Terrain.Stadiums.StadiumLookup.Label(v)}")) == 1),
-            $"the list has every venue, by kind: {string.Join(" | ", list)}");
-        var near = Terrain.Stadiums.StadiumLookup.Nearest(2601900, 1201300);
-        Expect(near.Venue.Name == "Stadion Wankdorf" && near.Distance < 200, $"the nearest venue: {near.Venue.Name} {near.Distance:F0} m");
-
+        // finding a venue is unit-tested (StadiumLookupTests); here, what the chat makes of it
         ExpectTexts(completer, "/sta", ["/stadium "], "/stadium is offered offline");
         ExpectTexts(completer, "/stadium ", ["/stadium list", "/stadium Stade de Genève"], "/stadium offers the list and the venues");
         ExpectTexts(completer, "/stadium wank", ["/stadium Stadion Wankdorf"], "a venue completes from part of its name");
