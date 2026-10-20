@@ -288,8 +288,9 @@ public static partial class HumanMeshBuilder
             {
                 // the print on the chest: a block and a smaller one inside it (a band logo, a heart)
                 float w = Mathf.Min(0.13f, FrontWidth(fit, 2.62f) * 0.95f);
+                // the inner one's face 1 cm in front of the block's (#947: 6 mm z-fought)
                 s.Box(t.Front(2.62f, 0.004f), new Vector3(w, 0.11f, 0.012f), c.B, TrunkBasis(fit, 2.62f));
-                s.Box(t.Front(2.62f, 0.010f), new Vector3(w * 0.46f, 0.05f, 0.012f), c.C, TrunkBasis(fit, 2.62f));
+                s.Box(t.Front(2.62f, 0.014f), new Vector3(w * 0.46f, 0.05f, 0.012f), c.C, TrunkBasis(fit, 2.62f));
                 break;
             }
 
@@ -426,14 +427,16 @@ public static partial class HumanMeshBuilder
             {
                 // #880: a ringed collar, a belt with a glowing buckle, a round glowing badge on the chest
                 var glow = Garments.Fx(top.C, Finish.Neon);
-                t.Band(s, 3.78f, 4f, c.B, 0.010f);
-                t.Band(s, 1.90f, 2.06f, c.B, 0.008f);
+                // #947: the collar and belt stand 1.8 / 1.2 cm proud, the badge's glow 1 cm in front of its disc:
+                // closer, the bands' flat facets come within the 8 mm of the suit's that z-fight (general/zfight)
+                t.Band(s, 3.78f, 4f, c.B, 0.018f);
+                t.Band(s, 1.90f, 2.06f, c.B, 0.012f);
                 var basis = TrunkBasis(fit, 1.98f);
-                s.Box(t.Front(1.98f, 0.014f), new Vector3(0.040f, 0.030f, 0.010f), glow, basis);
-                var at = t.Front(3.10f, 0.006f);
+                s.Box(t.Front(1.98f, 0.018f), new Vector3(0.040f, 0.030f, 0.010f), glow, basis);
+                var at = t.Front(3.10f, 0.010f);
                 var (_, _, fwd) = t.Frame(3.10f);
                 s.Ring(at, fwd, 0f, 0.030f, 0.008f, c.B, 12);
-                s.Ring(at + fwd * 0.004f, fwd, 0f, 0.020f, 0.008f, glow, 12);
+                s.Ring(at + fwd * 0.010f, fwd, 0f, 0.020f, 0.008f, glow, 12);
                 break;
             }
         }
@@ -461,9 +464,9 @@ public static partial class HumanMeshBuilder
             }
             case GarmentShape.Pants:
             case GarmentShape.Cargo:
-                // a belt with its buckle
-                t.Band(s, 1.86f, 1.98f, Shade(c.A, 0.55f), 0.007f);
-                s.Box(t.Front(1.92f, 0.013f), new Vector3(0.035f, 0.026f, 0.010f), c.B, TrunkBasis(fit, 1.92f));
+                // a belt with its buckle, 1.2 cm proud (#947: at 7 mm the belt's facets z-fought the trousers')
+                t.Band(s, 1.86f, 1.98f, Shade(c.A, 0.55f), 0.012f);
+                s.Box(t.Front(1.92f, 0.018f), new Vector3(0.035f, 0.026f, 0.010f), c.B, TrunkBasis(fit, 1.92f));
                 break;
             case GarmentShape.SlitMaxi:
             case GarmentShape.HighLowSkirt:
@@ -506,9 +509,13 @@ public static partial class HumanMeshBuilder
                     LimbBand(s, shoulder, elbow, wrist, 1.86f, 2f, p, arm: true, 0.006f, c.B);
                     break;
                 case GarmentShape.FieldJacket:
-                case GarmentShape.SpaceSuit:
                     // the cuff
                     LimbBand(s, shoulder, elbow, wrist, 1.84f, 2f, p, arm: true, 0.006f, c.B);
+                    break;
+                case GarmentShape.SpaceSuit:
+                    // the cuff, 1.6 cm proud and short of the wrist (#947: at 6 mm its facets z-fight the sleeve's,
+                    // and its end lay in the sleeve's)
+                    LimbBand(s, shoulder, elbow, wrist, 1.74f, 1.90f, p, arm: true, 0.016f, c.B);
                     break;
                 case GarmentShape.CroppedJacket:
                     // puffed at the shoulder, the jacket's sleeve over the blouse's, a white cuff
@@ -584,7 +591,8 @@ public static partial class HumanMeshBuilder
         switch (feet.Shape)
         {
             case GarmentShape.Sneakers:
-                LimbBand(s, hip, knee, ankle, 1.9f, 1.99f, p, arm: false, 0.016f, b.B);   // the collar
+                // the collar, 1 cm over the shoe (which stands 1.2 cm proud of the leg; #947: 4 mm z-fought)
+                LimbBand(s, hip, knee, ankle, 1.9f, 1.99f, p, arm: false, 0.022f, b.B);
                 break;
             case GarmentShape.PlatformBoots:
                 // knee-high, buckled three times up the shaft

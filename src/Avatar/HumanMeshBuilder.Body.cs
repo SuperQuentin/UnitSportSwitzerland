@@ -969,6 +969,9 @@ public static partial class HumanMeshBuilder
             new(0.054f, 0.046f, 0.062f, -0.010f),
         };
 
+        /// <summary>How far the pixel face's band stands off the head (profile metres, #947).</summary>
+        private const float FaceLift = 0.010f;
+
         /// <summary>The height of the top of the scalp, and of the hair cap over it (profile metres).</summary>
         public const float Crown = 0.250f, HairCrown = 0.276f;
 
@@ -1041,10 +1044,10 @@ public static partial class HumanMeshBuilder
         /// <summary>Half the head's width at its widest, with hair on or not.</summary>
         public float HalfWidth(bool hair) => (0.086f + 0.014f * _dome + (hair ? 0.013f : 0f)) * K;
 
-        private Vector3[] Ring(RingPool pool, float y, float inflate)
+        private Vector3[] Ring(RingPool pool, float y, float inflate, float rise = 0f)
         {
             var ring = pool.Ring(Sides);
-            for (int k = 0; k < Sides; k++) ring[k] = Vertex(y, k, inflate);
+            for (int k = 0; k < Sides; k++) ring[k] = Vertex(y, k, inflate) + UpAxis * rise * K;
             return ring;
         }
 
@@ -1056,7 +1059,11 @@ public static partial class HumanMeshBuilder
             s.Loft(pool.Sections, pool.Fill(skin), skin);
         }
 
-        /// <summary>The pixel face: a band over the front of the head, from brow to chin, drawn from <paramref name="face"/> by the shader (#657); its vertex colour is the eye colour.</summary>
+        /// <summary>
+        /// The pixel face: a band over the front of the head, from brow to chin, drawn from <paramref name="face"/>
+        /// by the shader (#657); its vertex colour is the eye colour. 1 cm proud (#947): its rows and columns are
+        /// chords across the head's facets, so at 4 mm parts of it came within 2 mm of the skin and z-fought it.
+        /// </summary>
         public void Face(MeshScratch s, FaceGenome face, Color eyes)
         {
             ReadOnlySpan<float> rows = [0.178f, 0.135f, 0.090f, 0.045f, 0.010f];
@@ -1067,7 +1074,7 @@ public static partial class HumanMeshBuilder
             {
                 var row = pool.Ring(columns);
                 for (int i = 0; i < columns; i++)
-                    row[i] = Point(rows[r], Mathf.DegToRad(Mathf.Lerp(145f, 35f, i / (columns - 1f))), 0.004f);
+                    row[i] = Point(rows[r], Mathf.DegToRad(Mathf.Lerp(145f, 35f, i / (columns - 1f))), FaceLift);
                 pool.Sections.Add(row);
             }
             var (low, high) = face.Code;
@@ -1108,12 +1115,19 @@ public static partial class HumanMeshBuilder
             for (int k = 0; k < Sides; k++)
             {
                 float front = (Mathf.Sin(Mathf.Tau * k / Sides) + 1f) * 0.5f;
-                hairline[k] = Vertex(Mathf.Lerp(0.060f, low + 0.012f, front), k, inflate);
+                // over the brow the hairline comes down onto the face band's top row: stand it 1.2 cm
+                // proud of the band there, or the two z-fight (#947)
+                float over = Mathf.Lerp(inflate, Mathf.Max(inflate, FaceLift + 0.012f), Mathf.SmoothStep(0.7f, 0.93f, front));
+                hairline[k] = Vertex(Mathf.Lerp(0.060f, low + 0.012f, front), k, over);
             }
             pool.Sections.Add(hairline);
             pool.Sections.Add(Ring(pool, 0.200f, inflate));
-            pool.Sections.Add(Ring(pool, 0.238f, inflate));   // over the crown's dome (#671)
-            pool.Sections.Add(Ring(pool, Crown, inflate));
+            // over the crown's dome (#671). The scalp is nearly flat up there (flatter still on the
+            // aliens' dome), so a ring pushed out sideways sits only a few mm over it: raise these two
+            // as well, or the cap's top z-fights the scalp (#947)
+            float rise = inflate * 0.5f;
+            pool.Sections.Add(Ring(pool, 0.238f, inflate, rise));
+            pool.Sections.Add(Ring(pool, Crown, inflate, rise));
             pool.Sections.Add(Ring(pool, Crown + inflate * 2f, inflate - 0.013f));   // the top profile, raised over the scalp
             s.Loft(pool.Sections, pool.Fill(colour), colour);
         }
@@ -1123,7 +1137,9 @@ public static partial class HumanMeshBuilder
         {
             var top = Centre(0.19f) - Fwd * 0.01f * K;
             var bottom = _base + (UpAxis * end - Fwd * Mathf.Lerp(0.012f, 0.03f, Mathf.Clamp(-end * 5f, 0f, 1f))) * K;
-            s.Skirt(top, bottom, 0.100f * K, flare * K, colour, 12, gap: Fwd, gapAngle: gapAngle);
+            // the aliens' dome is wider: start outside its cap (#947: inside, the cap and the fall z-fought)
+            float dome = 0.018f * _dome;
+            s.Skirt(top, bottom, (0.100f + dome) * K, (flare + dome) * K, colour, 12, gap: Fwd, gapAngle: gapAngle);
         }
 
         private enum Fringe { None, Short, Locks, Spiky, Blunt, Swept }

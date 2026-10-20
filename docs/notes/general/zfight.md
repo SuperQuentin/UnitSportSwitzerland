@@ -75,6 +75,15 @@ Flickering faces have two causes, and each test catches what the other cannot.
   5 mm under the bumper, alternating canopy cells of one size (paraglider). The airliner rig's
   `Hinge()` used to set `Rotation`, dropping each surface's swept hinge basis: spoilers and flaps
   sat yawed off the wing in game (`AirlinerRig.RestOf`).
+- Figures (#947): the pixel face band was 4 mm off the head, but its rows and columns are chords
+  across the head's facets, so parts came within 2 mm of the skin: ~270 cm² on every figure (the
+  aliens' 1.38x head ~500). It is 1 cm proud now (`Head.FaceLift`); the hair cap's hairline stands
+  1.2 cm over the band above the brow, its two crown rings rise by half the inflate (the scalp is
+  nearly flat up there, flattest on the alien dome: a ring pushed out sideways sat 4-6 mm over it),
+  a fall starts outside the dome's wider cap. Space suit collar/belt/cuff 1.2-1.8 cm, the cuff short
+  of the wrist (its end lay in the sleeve's). 364 rows dropped (a bald figure 268 -> 0, `Build - Slim`
+  299 -> 8). Left: the 7-9 mm caps (`Short`, `Quiff`, `Mohawk`) still fight round the nape, and a
+  held icon card's run under a wider run of another colour scores 3 cm² (hidden inside the card).
 - The visibility rays start just past the nearer face of the pair (#755): a cover 1 cm over a
   fight hides it; started further out, a ray could begin inside a part a few mm off and call a
   visible fight hidden (the Setra's door leaves).
