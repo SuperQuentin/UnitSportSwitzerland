@@ -3131,6 +3131,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public void TakeDamage(float amount, long attacker, DamageCause cause)
     {
         if (amount <= 0 || _deadTimer > 0) return;
+        // creative mode (#1002): nothing hurts
+        if (_creative) return;
         if (Downed)
         {
             HurtDowned(amount, attacker, cause);
@@ -3742,6 +3744,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (BeamPhysics(dt, onFloor)) return;
         // in an aura battle (#907, FootPlayer.Aura.cs)
         if (AuraPhysics(dt, onFloor)) return;
+        // flying in creative mode (#1002, FootPlayer.Creative.cs)
+        if (CreativePhysics(dt, onFloor)) return;
 
         if (Npc && WalkControls == null)
         {
@@ -4211,6 +4215,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private bool RescueFromVoid(double delta)
     {
         _sinceSnapWarning += delta;
+        // creative flight through walls (#1002) goes into hills on purpose: back up once it lands
+        if (CreativeFlying && GameSettings.Current.CreativeNoclip) return false;
         Vector3 to;
         if (Indoors)
         {

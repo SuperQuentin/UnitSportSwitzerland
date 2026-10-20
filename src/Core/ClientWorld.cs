@@ -1403,10 +1403,16 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
     private void Toast(string message) => _items?.Ui.Toast(message);
 
-    /// <summary>Boarding a Battle Royale on the fly camera (#425): back into the body, where it stands.</summary>
+    /// <summary>Boarding a Battle Royale on the fly camera (#425): back into the body, where it stands; out of creative mode.</summary>
     private void OnPermissionsChanged()
     {
         if (Permissions.InMatch && !_onFoot && _chunks != null && LocalPlayer is { } body) EnterFootMode(body, inPlace: true);
+        // nor in creative mode (#1002)
+        if ((Permissions.InMatch || _networked && !Permissions.CanTeleport) && LocalPlayer is { Creative: true } flyer)
+        {
+            flyer.Creative = false;
+            Toast("Survival mode.");
+        }
     }
 
     /// <summary>
@@ -1761,7 +1767,32 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // T is also the fly camera: at a garage, in a stopped car, it tunes instead
         if (@event.IsActionPressed(PlayerInput.Tune) && _garage?.TryOpen() == true) return;
 
-        if (@event.IsActionPressed(PlayerInput.ToggleMode)) ToggleMode();
+        if (@event.IsActionPressed(PlayerInput.ToggleMode))
+        {
+            // creative mode (#1002), unless the setting keeps T on the camera-only fly mode; on the
+            // fly camera already (the start, a probe), T still goes back into the body
+            if (GameSettings.Current.FlyCameraOnT || !_onFoot) ToggleMode();
+            else ToggleCreative();
+        }
+    }
+
+    /// <summary>
+    /// Creative mode on the body (#1002): no damage, a double jump to fly. Refused where the fly camera
+    /// is: in a Battle Royale match, and on a server without teleporting, since flying carries you.
+    /// </summary>
+    public void ToggleCreative()
+    {
+        if (LocalPlayer is not { } player) return;
+        if (!player.Creative)
+        {
+            if (Permissions.InMatch) { Toast("No creative mode in a Battle Royale match."); return; }
+            if (_networked && !Permissions.CanTeleport) { Toast("This server does not allow creative mode."); return; }
+        }
+        player.Creative = !player.Creative;
+        Toast(player.Creative
+            ? InputHints.Format("Creative mode: nothing hurts you. {jump} twice to fly, {jump} / {sprint} up and down.")
+            : "Survival mode.");
+        GD.Print($"[world] creative {(player.Creative ? "on" : "off")}");
     }
 
     private FootPlayer? LocalPlayer => _networked ? GetLocalNetPlayer() : _player;
@@ -1971,7 +2002,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 if (!Permissions.InMatch) yield return (PlayerInput.RideMenu, "Travel");
                 yield return (PlayerInput.Inventory, "Inventory");
                 yield return (PlayerInput.Teleport, "Map");
-                if (!Permissions.InMatch) yield return (PlayerInput.ToggleMode, "Fly camera");
+                if (!Permissions.InMatch)
+                    yield return (PlayerInput.ToggleMode, GameSettings.Current.FlyCameraOnT ? "Fly camera" : p.Creative ? "Survival" : "Creative");
             }
         }
         // the quick menu (#840): activities, invites and the rest, from anywhere

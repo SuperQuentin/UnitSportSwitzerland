@@ -277,9 +277,11 @@ public partial class ControlsHelp : CanvasLayer
             new("Plane throttle up / down", Keys: "{sprint} / {crouch_slide}", Pad: "{throttle} / {brake}"),
             new("Guns (armed aircraft)", PlayerInput.Fire),
         }),
-        ("Fly camera", new Row[]
+        ("Creative mode and fly camera", new Row[]
         {
-            new("Fly camera / walk", PlayerInput.ToggleMode),
+            new("Creative mode / survival (the fly camera with its setting)", PlayerInput.ToggleMode),
+            new("Creative: take off / land", Keys: "{jump} {jump}", Pad: "{jump} {jump}"),
+            new("Creative: up / down", Keys: "{jump} / {sprint}", Pad: "{jump} / {crouch_slide}"),
             new("Up", PlayerInput.FlyUp),
             new("Down", PlayerInput.FlyDown),
             new("Fast", PlayerInput.FlyBoost),

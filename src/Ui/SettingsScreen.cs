@@ -186,6 +186,10 @@ public partial class SettingsScreen : Screen
             UiKit.ToggleRow(rows, "Invert look Y", s.InvertY, on => GameSettings.Current.InvertY = on);
             UiKit.ToggleRow(rows, "Level flight", s.LevelFlight, on => GameSettings.Current.LevelFlight = on,
                 "Free fly moves flat, Space and Shift for height; off, forward follows the look");
+            UiKit.ToggleRow(rows, "T opens the fly camera", s.FlyCameraOnT, on => GameSettings.Current.FlyCameraOnT = on,
+                "Off, T switches creative mode: invincible, jump twice to fly");
+            UiKit.ToggleRow(rows, "Creative flight through walls", s.CreativeNoclip, on => GameSettings.Current.CreativeNoclip = on,
+                "Fly through the ground, walls and roofs in creative mode");
             UiKit.ToggleRow(rows, "Controller vibration", s.Vibration, on => GameSettings.Current.Vibration = on);
             UiKit.ActionRow(rows, "Every key and button", "Show controls", () => Shell.ShowControls(),
                 InputHints.Format("As bound on your keyboard and pad ({help})"));
