@@ -4709,9 +4709,22 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // view would hang level while the handlebars tip under it. The horizon itself takes
             // only part of that roll — all of it at 40° of lean is a recipe for seasickness.
             // the visual is rolled by Rotation.Z = Lean, i.e. about +Z
-            _camera.Position = new Basis(Vector3.Back, _motion.Lean) * _ride.FirstPersonEye;
+            var eyeAt = new Basis(Vector3.Back, _motion.Lean) * _ride.FirstPersonEye;
             // in VR the eye stays level and the head looks for itself: you lean with your body (#186)
-            _camera.Rotation = XR.XrSession.Active ? Vector3.Zero : new Vector3(_pitch, _lookYaw, _motion.Lean * 0.5f);
+            if (XR.XrSession.Active)
+            {
+                _camera.Position = eyeAt;
+                _camera.Rotation = Vector3.Zero;
+            }
+            else
+            {
+                // a trick turns the head with the body (#933): the spin and the flip as PoseRideVisual
+                // turns the figure, about the same point, so the view goes round with it
+                var trick = new Basis(Vector3.Up, _airSpin) * new Basis(Vector3.Right, _airPitch);
+                var pivot = Vector3.Up * 0.9f;
+                _camera.Position = trick * (eyeAt - pivot) + pivot;
+                _camera.Basis = trick * Basis.FromEuler(new Vector3(_pitch, _lookYaw, _motion.Lean * 0.5f));
+            }
             ApplyRideFov(dt);
             ShakeRideCamera();
             return;
@@ -4731,8 +4744,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // both are local to the body, which is yaw-only, so the camera stays level
         var eye = new Vector3(0, _ride.EyeHeight, 0);
         var (liftUp, liftBack) = LiftCamera;
+        // further back the faster it goes (#933, the skis), eased so a bump in speed does not pump the lens
+        _chaseStretch = Mathf.Lerp(_chaseStretch, _ride.ChaseStretch(_motion.Speed), MathX.Damp(1.5f, dt));
         var back = new Basis(Vector3.Up, orbit)
-            * new Vector3(0, _ride.ChaseHeight + liftUp, _ride.ChaseDistance + liftBack);
+            * new Vector3(0, _ride.ChaseHeight + liftUp + 0.25f * _chaseStretch, _ride.ChaseDistance + liftBack + _chaseStretch);
 
         // Pull in when the camera would sit inside the hillside. Alpine terrain climbs behind
         // you constantly, so without this half of every ascent is spent looking at the inside
@@ -4763,6 +4778,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         ApplyRideFov(dt);
         ShakeRideCamera();
     }
+
+    private float _chaseStretch;
 
     /// <summary>The ride camera's last tremble, rad (0 when still): what a check reads.</summary>
     public float RideShake { get; private set; }

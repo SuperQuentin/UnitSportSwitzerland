@@ -650,6 +650,17 @@ public static partial class HumanMeshBuilder
     }
 
     /// <summary>
+    /// A figure from free joint points (the order of <see cref="PoseJoints"/>) added to
+    /// <paramref name="scratch"/>, so a live rig (a skier, #933) draws its gear in the same surface.
+    /// </summary>
+    public static void AppendJoints(MeshScratch scratch, HumanPalette palette, ReadOnlySpan<Vector3> j, bool helmet)
+    {
+        var rig = new Rig(j[0], j[1], j[2], j[3], j[4], j[5], j[6], j[7], j[8], j[9], j[10], j[11],
+            j[12], j[13], j[14], j[15], j[16], j[17], j[18], j[19], TorsoLean: 0f);
+        AppendRig(scratch, palette, rig, includeLegs: true, helmet, Headwear.None);
+    }
+
+    /// <summary>
     /// How far short each limb falls of what it holds, m: the right and left hand of the rim, the
     /// right foot of the throttle and the left of its rest. Zero when it reaches (the two-bone
     /// solve keeps the upper bone's length, so a target out of reach stretches the lower one).
