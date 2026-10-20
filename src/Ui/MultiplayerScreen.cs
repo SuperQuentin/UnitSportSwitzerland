@@ -199,7 +199,7 @@ public partial class MultiplayerScreen : Screen
         foreach (var s in servers)
         {
             var row = new ServerRow(s.Name, s.Endpoint, ServerBook.Ago(s.LastPlayed));
-            row.Joined += () => Join(s.Endpoint);
+            row.Joined += () => Join(s.Endpoint, world: row.World);
             var star = UiKit.IconButton(s.Favorite ? Icons.StarFilled : Icons.Star, s.Favorite ? "Unpin" : "Pin to the top", 30);
             if (s.Favorite) star.AddThemeColorOverride("icon_normal_color", UiTheme.Amber);
             star.Pressed += () => { Shell.Book.SetFavorite(s.Endpoint, !s.Favorite); RebuildSaved(); };
@@ -245,7 +245,8 @@ public partial class MultiplayerScreen : Screen
             {
                 row = new ServerRow(f.Name, f.Endpoint, f.Status?.Local == true ? "this computer" : "LAN");
                 string endpoint = f.Endpoint, name = f.Name;
-                row.Joined += () => Join(endpoint, name);
+                var lanRow = row;
+                row.Joined += () => Join(endpoint, name, lanRow.World);
                 var save = UiKit.IconButton(Icons.Star, "Save to your list", 30);
                 save.Pressed += () =>
                 {
@@ -270,10 +271,10 @@ public partial class MultiplayerScreen : Screen
         Join(a);
     }
 
-    private void Join(string endpoint, string? name = null)
+    private void Join(string endpoint, string? name = null, WorldChoice? world = null)
     {
         if (Shell.PlayerName.Length == 0) { AskName(mandatory: true); return; }
-        Shell.Join(endpoint, name);
+        Shell.Join(endpoint, name, world);
     }
 
     private void EditServer(SavedServer? existing)
@@ -322,9 +323,16 @@ public partial class MultiplayerScreen : Screen
         var lan = new CheckBox { Text = "Visible to players on your network", ButtonPressed = _hostLan };
         form.AddChild(lan);
 
+        // which world the server plays (#999): players who join load the same one
+        form.AddChild(UiKit.Text("World", UiTheme.FontSmall, UiTheme.TextDim));
+        var (worldPicker, worldBlurb) = WorldPicker.Create(settings.HostWorld);
+        form.AddChild(worldPicker);
+        form.AddChild(worldBlurb);
+
         // where everyone starts (#799): the server's choice, so it is made here and not on joining
         var spawn = HostSpawn();
-        form.AddChild(UiKit.Text("Where players start", UiTheme.FontSmall, UiTheme.TextDim));
+        var spawnLabel = UiKit.Text("Where players start", UiTheme.FontSmall, UiTheme.TextDim);
+        form.AddChild(spawnLabel);
         var spawnRow = UiKit.HBox(8);
         var spawnName = UiKit.Text(MapScreen.PlaceNear(spawn.E, spawn.N), UiTheme.FontBody, UiTheme.Text);
         spawnName.SizeFlagsHorizontal = SizeFlags.ExpandFill;
@@ -342,6 +350,7 @@ public partial class MultiplayerScreen : Screen
             _hostPort = port.Text;
             _hostLan = lan.ButtonPressed;
             settings.HostTeleport = teleport.ButtonPressed;
+            settings.HostWorld = WorldPicker.Picked(worldPicker).Id;
         }
 
         var (modal, recheck) = Modal.Form(this, "Host a game",
@@ -351,10 +360,15 @@ public partial class MultiplayerScreen : Screen
             {
                 Keep();
                 settings.Save();
+                var world = WorldPicker.Picked(worldPicker);
                 Shell.Host(name.Text.Trim().Length > 0 ? name.Text.Trim() : $"{Shell.PlayerName}'s game", int.Parse(port.Text),
-                    lan.ButtonPressed, HostSpawn(), teleport.ButtonPressed);
+                    lan.ButtonPressed, world.IsOpen ? HostSpawn() : null, teleport.ButtonPressed, world);
             });
         port.TextChanged += _ => recheck();
+        // a test world starts where its course does: no map pick
+        void ShowSpawn() => spawnLabel.Visible = spawnRow.Visible = WorldPicker.Picked(worldPicker).IsOpen;
+        worldPicker.ItemSelected += _ => ShowSpawn();
+        ShowSpawn();
         pick.Pressed += () =>
         {
             Keep();
@@ -450,6 +464,9 @@ public partial class ServerRow : HBoxContainer
         }
     }
 
+    /// <summary>The test world the server said it plays (#999), or null (the open world, no reply yet).</summary>
+    public WorldChoice? World { get; private set; }
+
     public void SetStatus(QueryResult? r)
     {
         if (r == null)
@@ -466,7 +483,9 @@ public partial class ServerRow : HBoxContainer
         _players.Text = $"{r.Status.Players}/{r.Status.Max}";
         _ping.Text = $"{r.PingMs} ms";
         _ping.AddThemeColorOverride("font_color", colour);
-        string world = r.Status.World == "generated" ? "  ·  generated world" : "";
+        // a test world (#999): joining loads it
+        World = WorldChoice.Find(r.Status.World);
+        string world = r.Status.World == "generated" ? "  ·  generated world" : World is { IsOpen: false } test ? $"  ·  {test.Title}" : "";
         string version = r.Status.Version.Length > 0 ? $"  ·  v{r.Status.Version}" : "";
         // another wire protocol: the server would refuse this client (Net/Handshake)
         if (r.Status.Wire != Net.Handshake.Protocol)

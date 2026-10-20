@@ -51,6 +51,17 @@ public partial class ServerWorld : Node3D, IOriginContainer
     public override async void _Ready()
     {
         if (ServerStats.Requested) AddChild(new ServerStats { Name = "ServerStats" });
+        // --test-world (#999, a game hosted from the menu on a test world): its tiles, course and saves
+        if ((WorldChoice.Active = WorldChoice.FromArgs()) is { } testWorld)
+        {
+            if (await System.Threading.Tasks.Task.Run(testWorld.Prepare) is { } why)
+            {
+                GD.PushError($"[server] {why}");
+                GetTree().Quit(1);
+                return;
+            }
+            GD.Print($"[server] test world {testWorld.Id}: {testWorld.Title}");
+        }
         string chunkDir = TerrainPaths.FindChunkDir();
         // a test course built in code instead of the map (#221, Core/Systems): the same as the clients'
         IChunkSource local = Systems.FixtureCourse is { } course
@@ -399,7 +410,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
 
         string name = QueryResponder.ParseServerName();
         string version = (string)ProjectSettings.GetSetting("application/config/version", "");
-        string world = manifest.Tiles.Count > 0 ? "real" : "generated";
+        // a test world says which (#999): joining clients load it
+        string world = WorldChoice.Active?.Id ?? (manifest.Tiles.Count > 0 ? "real" : "generated");
         var registry = _registry;
         // status queries on port + 1: LAN lists find this server, saved lists show it is up
         // and how full it is (Net/QueryResponder, docs/notes/net/server-query.md)

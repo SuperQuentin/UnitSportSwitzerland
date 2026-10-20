@@ -14,7 +14,7 @@
   (VS Code: `data: signal test region`). Raw input goes to `DIR_temp`. A directory is cleared only
   if it holds `signal_test_region.txt` (the command's marker), so it never wipes real data. Prints
   the junction table and `[testregion] RESULT: ok` when every designed approach got its lanes.
-- **Play it**: VS Code `run: signal test region` (rebuilds it, then the game windowed at a junction
+- **Play it**: from the menus, Play solo or Host a game, World: Traffic lights region (the game builds its own copy, `core/test-worlds`); or VS Code `run: signal test region` (rebuilds it, then the game windowed at a junction
   picked from a list, `--traffic 150 --generated off`), or
   `<godot> --path . -- --chunks test_output/signal-region --at 2910475,1322475 --traffic 150 --generated off`.
   `--generated off`: outside Switzerland the generated fill has no relief to follow. Tab (or

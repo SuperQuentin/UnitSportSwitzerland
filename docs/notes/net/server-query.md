@@ -2,7 +2,7 @@
 
 - **Protocol** (`Net/QueryResponder` server side, `Net/ServerQuery` client side): UDP on **game port
   + 1** (7778). Query = `USQ1` + uint32 nonce (8 bytes); reply = `USR1` + the nonce + UTF-8 JSON
-  `{name, port, players, max, version, world, proto}` (`ServerStatus`). Ping is the reply time of
+  `{name, port, players, max, version, world, proto}` (`ServerStatus`; `world` is `real`, `generated` or a test world's id, `core/test-worlds`). Ping is the reply time of
   that nonce, the median of the last three.
 - **Uses**: the Multiplayer screen broadcasts every 2 s (each interface's directed broadcast,
   255.255.255.255 and 127.0.0.1, to the status ports of game ports 7777..7787) for "On your

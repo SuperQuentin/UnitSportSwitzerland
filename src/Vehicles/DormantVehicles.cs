@@ -492,17 +492,22 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         if (_unposed.Count > 0)
         {
             _repose.Clear();
-            _repose.AddRange(_unposed);
+            _repose.AddRange(_unposed.Keys);
             foreach (var id in _repose)
             {
-                if (!_slots.TryGetValue(id, out var slots)) { _unposed.Remove(id); continue; }
-                // only once the collision has come: posing again before would find the same terrain
-                foreach (var s in slots)
-                    if (LookOf(s) is { Bodies: not null } && _chunks.HasCollisionAt(_origin.ToWorld(s.E, s.N, s.Height)))
-                    {
-                        DrawLooks(id);
-                        break;
-                    }
+                if (!_slots.ContainsKey(id)) { _unposed.Remove(id); continue; }
+                // only once the collision under every point that missed has come: posing again before
+                // would find the same terrain
+                bool built = true;
+                foreach (var (e, n, alt) in _unposed[id])
+                    if (!_chunks.HasCollisionAt(_origin.ToWorld(e, n, alt))) { built = false; break; }
+                if (!built) continue;
+                DrawLooks(id);
+                // and only once: a point that still misses with its collision built never will be hit (a
+                // slot recorded a metre under that ground: the ray's ceiling look starts inside it). Posed
+                // again every half second, the tile was redrawn for good, and the replay buffer kept a copy
+                // of every redraw: 48 orphan instancers a second on a Battle Royale client (#966).
+                _unposed.Remove(id);
             }
         }
 
@@ -837,7 +842,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
             list.Add(s);
         }
         var instances = new List<MultiMeshInstance3D>(byLook.Count);
-        bool flat = false;
+        _missed.Clear();
         foreach (var (_, list) in byLook)
         {
             if (LookOf(list[0]) is not { } look) continue;
@@ -848,8 +853,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
                 for (int k = 0; k < sections.Length; k++) perSection[k] = new List<Transform3D>(list.Count);
                 foreach (var s in list)
                 {
-                    var poses = Poses(s, look, out bool grounded);
-                    flat |= !grounded;
+                    var poses = Poses(s, look);
                     for (int k = 0; k < sections.Length && k < poses.Length; k++) perSection[k].Add(poses[k]);
                 }
                 for (int k = 0; k < sections.Length; k++)
@@ -865,15 +869,18 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         foreach (var mm in instances) AddChild(mm);
         _drawn[id] = instances;
         // a train drawn before the ground under it had loaded stands level: posed again on a later look
-        if (flat) _unposed.Add(id);
+        if (_missed.Count > 0) _unposed[id] = new List<(double, double, double)>(_missed);
         else _unposed.Remove(id);
     }
 
     /// <summary>
     /// Tiles whose trains were posed before the collision under them was built (on the terrain's
-    /// height, which a live train does not stand on): posed again once it has been.
+    /// height, which a live train does not stand on), with the LV95 points the ground was missed at:
+    /// posed again once the collision under all of them has been.
     /// </summary>
-    private readonly HashSet<TileId> _unposed = new();
+    private readonly Dictionary<TileId, List<(double E, double N, double Alt)>> _unposed = new();
+    /// <summary>The points <see cref="Poses"/> found no solid ground under since <see cref="DrawLooks"/> began.</summary>
+    private readonly List<(double E, double N, double Alt)> _missed = new();
     private readonly List<TileId> _repose = new();
 
     /// <summary>Where a slot stands, a vehicle in one piece: its place and its heading.</summary>
@@ -884,23 +891,24 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// <summary>
     /// A goods vehicle's sections where the live one stands them (#560): <see cref="HeavyGround.Stand"/>
     /// from the slot, on the ground's height under each axle, which is what <see cref="VehicleBody"/>
-    /// poses a parked train with. Level at the slot where the ground has not loaded
-    /// (<paramref name="grounded"/> false).
+    /// poses a parked train with. Level at the slot where the ground has not loaded: each such point
+    /// goes into <see cref="_missed"/>.
     /// </summary>
-    private Transform3D[] Poses(VehicleSlot s, DormantLook look, out bool grounded)
+    private Transform3D[] Poses(VehicleSlot s, DormantLook look)
     {
-        bool ok = true;
         var world = GetWorld3D();
         float Ground(Vector3 p)
         {
             // the very query a parked train stands on (VehicleBody.Ground): what a vehicle collides with
             float y = World.GroundQuery.Under(world, GroundMask, _groundRay, _noExclude, p, _chunks, true, out bool solid);
-            ok &= solid;
+            if (!solid)
+            {
+                var g = _origin.ToGlobal(p);
+                _missed.Add((g.E, g.N, g.Alt));
+            }
             return y;
         }
-        var poses = HeavyGround.Stand(SlotTransform(s), look.Bodies!, look.NodeLocal!, Ground);
-        grounded = ok;
-        return poses;
+        return HeavyGround.Stand(SlotTransform(s), look.Bodies!, look.NodeLocal!, Ground);
     }
 
     /// <summary>What a parked vehicle's ground rays hit: its own collision mask (the default layer), trees aside.</summary>
@@ -915,7 +923,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// </summary>
     public Transform3D[] DrawnPoses(VehicleSlot s)
     {
-        if (LookOf(s) is { Bodies: not null } look) return Poses(s, look, out _);
+        if (LookOf(s) is { Bodies: not null } look) return Poses(s, look);
         return new[] { SlotTransform(s) };
     }
 

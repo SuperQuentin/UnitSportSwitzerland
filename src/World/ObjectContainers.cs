@@ -66,7 +66,7 @@ public partial class ObjectContainers : Node
         if (!Systems.On(Systems.Containers)) return null;
         string? dir = CmdArgs.Value("--containers-dir");
         if (dir == null && Systems.FixtureCourse != null) return null;
-        var containers = new ObjectContainers(ProjectSettings.GlobalizePath(dir ?? "user://containers/server"), vehicles, items, radios, players);
+        var containers = new ObjectContainers(ProjectSettings.GlobalizePath(dir ?? Core.WorldChoice.SavePath("user://containers/server")), vehicles, items, radios, players);
         world.AddChild(containers);
         return containers;
     }

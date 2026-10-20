@@ -42,7 +42,9 @@ public static class Systems
     public static WorldKind World => Parsed.World;
 
     /// <summary>True when this run boots <paramref name="system"/>: always, unless a test narrowed it.</summary>
-    public static bool On(string system) => Parsed.On == null || Parsed.On.Contains(system);
+    public static bool On(string system) =>
+        // a test world (#999) is the whole game on its own tiles: nothing generated round them
+        (system != Generated || WorldChoice.Active == null) && (Parsed.On == null || Parsed.On.Contains(system));
 
     /// <summary>A test narrowed the systems (<c>--systems</c> or <c>--world flat|fixture</c>).</summary>
     public static bool Narrowed => Parsed.On != null;
@@ -52,6 +54,7 @@ public static class Systems
     {
         get
         {
+            if (WorldChoice.Active is { } test) return test.Course;   // a test world picked in the menus (#999)
             if (TerrainPaths.ParseChunkDirArg() is { } c && c.StartsWith(FixturePrefix)) return c[FixturePrefix.Length..];
             return World == WorldKind.Fixture || !On(Terrain) ? "flat" : null;
         }
