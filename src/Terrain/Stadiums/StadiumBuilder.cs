@@ -453,7 +453,8 @@ public static class StadiumBuilder
                     // lintel over its mouth, and that row's front down to the ceiling
                     q.Flat(0, d0, gateTop, c.ConcreteDark, solid: true);
                     q.Wall(0, gateTop, gateTop + GateClearance, c.Concrete, solid: true);
-                    q.Wall(d0, gateTop, hr, c.Concrete, solid: true);
+                    // (at a tier's first row its own front wall already rises from the ceiling: no second, coplanar one)
+                    if (r > 0) q.Wall(d0, gateTop, hr, c.Concrete, solid: true);
                     tunnelClosed = true;
                 }
                 if (holed)
@@ -493,9 +494,13 @@ public static class StadiumBuilder
         {
             // the club level, out to the facade; a stair's segment has its flight instead of the outer part
             float endA = q.A.Depth - 0.3f, endB = q.B.Depth - 0.3f;
+            float stairFoot = Math.Min(q.A.Depth, q.B.Depth) - 1.2f;
+            // a stair needs its run between the club level's edge and the facade: on a shallow side (#948,
+            // kybunpark) its top step landed on the walkway; there the club level goes on to the facade
+            if (stair && stairFoot - Math.Max(0f, slabH - ground(stairFoot)) / StairSlope < slabFrom + 1f) stair = false;
             if (stair)
             {
-                float foot = Math.Min(q.A.Depth, q.B.Depth) - 1.2f, footH = ground(foot);
+                float foot = stairFoot, footH = ground(foot);
                 float land = foot - Math.Max(0f, slabH - footH) / StairSlope;
                 int steps = Math.Max(1, (int)MathF.Ceiling((slabH - footH) / StairRise));
                 float run = (foot - land) / steps, rise = (slabH - footH) / steps;
