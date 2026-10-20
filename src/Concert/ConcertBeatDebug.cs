@@ -37,7 +37,11 @@ public partial class ConcertBeatDebug : CanvasLayer
     private readonly string[] _text = { "", "", "", "" };
     private ConcertRig? _rig;
     private Fixture[][] _fx = Array.Empty<Fixture[]>();
-    private static readonly RigGroup[] FxGroups = { RigGroup.Co2, RigGroup.Flames, RigGroup.Gerbs, RigGroup.Confetti, RigGroup.Airbursts, RigGroup.Strobes, RigGroup.Blinders };
+    private static readonly RigGroup[] FxGroups =
+    {
+        RigGroup.Co2, RigGroup.Flames, RigGroup.Gerbs, RigGroup.Confetti, RigGroup.Airbursts, RigGroup.Strobes, RigGroup.Blinders,
+        RigGroup.IrHeads, RigGroup.IrFloods, RigGroup.Wristbands,
+    };
 
     public ConcertBeatDebug()
     {
@@ -157,7 +161,7 @@ public partial class ConcertBeatDebug : CanvasLayer
             foreach (var f in _fx[g])
                 on |= FxGroups[g] switch
                 {
-                    RigGroup.Strobes => p.Get01(f, Attr.Dimmer) > 0.05f,
+                    RigGroup.Strobes or RigGroup.IrHeads or RigGroup.IrFloods or RigGroup.Wristbands => p.Get01(f, Attr.Dimmer) > 0.05f,
                     RigGroup.Blinders => p.Get(f, 0) > 12,
                     _ => p.Get01(f, Attr.Fire) > 0.5f,
                 };

@@ -23,7 +23,12 @@ public enum Attr : byte
 }
 
 /// <summary>How a fixture looks and moves; each has its own real channel layout.</summary>
-public enum FixtureKind : byte { Spot, Beam, Wash, Blinder, Strobe, PixelBar, Screen, Hazer, Flame, Co2, Confetti, Gerb, Airburst, LowFog }
+public enum FixtureKind : byte
+{
+    Spot, Beam, Wash, Blinder, Strobe, PixelBar, Screen, Hazer, Flame, Co2, Confetti, Gerb, Airburst, LowFog,
+    /// <summary>The crowd's LED wristbands (#986): an infrared moving head, a wide IR flood, the transmitter that drives every band.</summary>
+    IrHead, IrFlood, Wristbands,
+}
 
 /// <summary>
 /// A fixture type, as its manufacturer's manual lays out its DMX channels in one mode: modelled on
@@ -98,6 +103,28 @@ public sealed record FixtureType(string Name, FixtureKind Kind, Attr[] Channels,
     public static readonly FixtureType Airburst = Sfx("Pyro airburst 2ch", FixtureKind.Airburst);
     public static readonly FixtureType LowFog = new("Low fog 2ch", FixtureKind.LowFog, new[] { Attr.Pump, Attr.Fan }, PanRange: 0, TiltRange: 0);
 
+    // LED wristbands (#986), as PixMob's and Xylobands' shows run them: every band has an IR receiver
+    // and lights in the colour code of the strongest infrared it sees. The code rides R, G, B; the
+    // dimmer is the emitter's power (0 = off). Invisible beams: nothing is drawn but the bands.
+
+    /// <summary>An IR emitter on a moving yoke (a spot's motors): paints a spot of colour across the crowd.</summary>
+    public static readonly FixtureType IrHead = new("IR emitter head 10ch", FixtureKind.IrHead, new[]
+    {
+        Attr.Pan, Attr.PanFine, Attr.Tilt, Attr.TiltFine, Attr.PanTiltSpeed, Attr.Dimmer, Attr.Red, Attr.Green, Attr.Blue, Attr.Zoom,
+    }, BeamMin: 6f, BeamMax: 40f);
+
+    /// <summary>A fixed, wide IR flood: a whole stand at once.</summary>
+    public static readonly FixtureType IrFlood = new("IR flood 5ch", FixtureKind.IrFlood,
+        new[] { Attr.Dimmer, Attr.Red, Attr.Green, Attr.Blue, Attr.Zoom }, PanRange: 0, TiltRange: 0, BeamMin: 30f, BeamMax: 100f);
+
+    /// <summary>
+    /// The bands' transmitter ("all bands"): every band at once, in its colour, solid or with an effect
+    /// the bands play themselves (<see cref="Concert.Wristbands"/>: effect 0..63 solid, 64..127 a random
+    /// twinkle, 128..191 a random half flashing on each beat; rate the twinkle's speed).
+    /// </summary>
+    public static readonly FixtureType Wristbands = new("Wristband transmitter 6ch", FixtureKind.Wristbands,
+        new[] { Attr.Dimmer, Attr.Red, Attr.Green, Attr.Blue, Attr.Effect, Attr.Rate }, PanRange: 0, TiltRange: 0);
+
     /// <summary>A spot's or a beam's colour wheel, slot by slot (each slot is 8 DMX values wide).</summary>
     public static readonly Color[] Wheel =
     {
@@ -119,7 +146,12 @@ public sealed record FixtureType(string Name, FixtureKind Kind, Attr[] Channels,
 }
 
 /// <summary>Where a fixture hangs: which position of the rig it belongs to (a console's group).</summary>
-public enum RigGroup : byte { FrontTruss, MidTruss, BackTruss, Floor, Towers, Blinders, Strobes, PixelBars, Screens, Haze, Flames, Co2, Confetti, Gerbs, Airbursts, LowFog }
+public enum RigGroup : byte
+{
+    FrontTruss, MidTruss, BackTruss, Floor, Towers, Blinders, Strobes, PixelBars, Screens, Haze, Flames, Co2, Confetti, Gerbs, Airbursts, LowFog,
+    // the wristbands' emitters (#986), last: the groups before keep their numbers (cues send them)
+    IrHeads, IrFloods, Wristbands,
+}
 
 /// <summary>
 /// One fixture of the rig: its type, its group, where it hangs (stadium frame, metres over the pitch)

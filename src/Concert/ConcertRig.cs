@@ -67,11 +67,15 @@ public partial class ConcertRig : Node3D
     private OmniLight3D? _crowdLight;
     private float _haze;
     private ConcertCrowd? _crowd;
+    private Wristbands? _bands;
+    /// <summary>The crowd's wristbands, read from the IR emitters (#986); null without a crowd.</summary>
+    public Wristbands? Bands => _bands;
     private ConcertSfx _sfx = null!;
     private ConcertMusic _music = null!;
     private ConcertPa _pa = null!;
     private ConcertCameras _cameras = null!;
     private ConcertPerformers _performers = null!;
+    private ConcertCrew _crew = null!;
     private MeshInstance3D[] _feeds = Array.Empty<MeshInstance3D>();
     private MultiMeshInstance3D[] _pixelNodes = Array.Empty<MultiMeshInstance3D>();
     /// <summary>An imported screen's own video source where it plays here (#975); null shows the show's content.</summary>
@@ -146,9 +150,14 @@ public partial class ConcertRig : Node3D
         AddChild(_performers);
         _cameras = new ConcertCameras(_plan, _desk);
         AddChild(_cameras);
+        // the crew at front of house and behind the cameras (#985)
+        _crew = new ConcertCrew(_plan, _desk, _cameras) { FloorTop = Event.Stadium.Kind == VenueKind.Stadium ? FloorTop : 0f };
+        AddChild(_crew);
         // the music from the PA: the setlist on the shared clock, read for the desk
-        _music = new ConcertMusic(Event, _plan.PaHangs.ToArray());
+        _music = new ConcertMusic(Event, _plan);
         AddChild(_music);
+        // the stadium round the PA and the crowd's voice, for this machine's ears (#984)
+        AddChild(new ConcertSound(Event, _music));
         _pa = new ConcertPa(_plan);
         AddChild(_pa);
         // pyro, CO2, confetti, fog: fixtures of the rig like the rest
@@ -161,6 +170,7 @@ public partial class ConcertRig : Node3D
             var floor = FloorTop;
             _crowd = new ConcertCrowd(_plan) { Visible = false, Ground = Ground ?? (Event.Stadium.Kind == VenueKind.Stadium ? _ => floor : null) };
             AddChild(_crowd);
+            _bands = new Wristbands(_plan.Patch);
         }
         Live[Event.Stadium.Name] = this;
         GD.Print($"[concert] {Event}: {fx.Count} fixtures, {_plan.Patch.Universes.Count} universes ({_plan.Patch.ChannelsUsed} channels){(BodiesDrawn > 0 ? $", {BodiesDrawn} with their own GDTF bodies" : "")}");
@@ -512,6 +522,7 @@ public partial class ConcertRig : Node3D
         if (near && (ShowOn() || ExternalLive)) _performers.Step(_strobeHz, _strobeT);
         _cameras.ImagWanted = imag && near;
         _cameras.Step(now % 86400.0);
+        if (near) _crew.Step(ShowOn() || ExternalLive, dt);
         // the PA bounces on the kick
         if (near)
         {
@@ -536,6 +547,11 @@ public partial class ConcertRig : Node3D
             _crowdLight.LightEnergy = 0.6f * Math.Min(1f, b.R + b.G + b.B);
         }
         DriveCrowd(washSum + beamSum);
+        if (_bands != null && _crowd is { Visible: true })
+        {
+            _bands.Step(dt, GlobalTransform);
+            _crowd.DriveBands(_bands);
+        }
     }
 
     /// <summary>The audience follows the show: how hard it dances by section, the rig's colour on it.</summary>
@@ -564,11 +580,13 @@ public partial class ConcertRig : Node3D
     }
 
     /// <summary>The beam's direction from 16-bit pan and tilt: tilt tips it from the yoke's axis towards the fixture's home side, pan turns that about the axis.</summary>
-    private Vector3 Direction(int i)
+    private Vector3 Direction(int i) => Direction(_heads[i], _pan[i], _tilt[i]);
+
+    /// <summary>A head's beam with its motors at <paramref name="panDeg"/>, <paramref name="tiltDeg"/> (the IR heads' too, <see cref="Wristbands"/>).</summary>
+    public static Vector3 Direction(Fixture f, float panDeg, float tiltDeg)
     {
-        var f = _heads[i];
         // an imported plot's focus point is the beam at pan and tilt centre (#959)
-        float pan = Mathf.DegToRad(_pan[i] + f.HomePan), tilt = Mathf.DegToRad(_tilt[i] + f.HomeTilt);
+        float pan = Mathf.DegToRad(panDeg + f.HomePan), tilt = Mathf.DegToRad(tiltDeg + f.HomeTilt);
         var up = f.Up;
         var fwd = (f.Home - up * f.Home.Dot(up));
         fwd = fwd.LengthSquared() < 1e-6f ? up.Cross(Vector3.Right).Normalized() : fwd.Normalized();

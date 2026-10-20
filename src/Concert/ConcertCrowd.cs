@@ -6,10 +6,11 @@ namespace UnitSport.Concert;
 
 /// <summary>
 /// The audience of a concert (#885): people on the stadium's seats (<see cref="StadiumBuilder.Seats"/>)
-/// and standing on the pitch in front of the stage, as instances of one 36-triangle figure in a few
+/// and standing on the pitch in front of the stage, as instances of one 48-triangle figure in a few
 /// multimeshes, drawn by <c>shaders/concert/crowd.gdshader</c>: a shirt colour each, a hop on the
-/// beat as hard as the show goes, hands up in a chorus, and the rig's colour on them. Nobody is a
-/// node and nothing per person runs on the CPU: a frame sets four uniforms.
+/// beat as hard as the show goes, hands up in a chorus, the rig's colour on them, and an LED
+/// wristband each that the IR emitters light (<see cref="Wristbands"/>, #986). Nobody is a node and
+/// nothing per person runs on the CPU: a frame sets a few uniforms.
 ///
 /// <para>
 /// Seats behind an end or side stage are not sold. The floor is filled from the barrier back, densest
@@ -27,7 +28,8 @@ public partial class ConcertCrowd : Node3D
     private const float Range = 700f;
     private const int Batches = 4;
 
-    private static readonly StringName UBeat = "beat", UEnergy = "energy", UTint = "tint", UArms = "arms_up";
+    private static readonly StringName UBeat = "beat", UEnergy = "energy", UTint = "tint", UArms = "arms_up",
+        UIr = "ir", UIrCount = "ir_count", UBandsAll = "bands_all", UBandsEffect = "bands_effect";
 
     private readonly StagePlan _plan;
     private ShaderMaterial _material = null!;
@@ -85,6 +87,20 @@ public partial class ConcertCrowd : Node3D
         _material.SetShaderParameter(UArms, armsUp);
     }
 
+    /// <summary>The wristbands' emitters and transmitter (#986), sent only when they changed.</summary>
+    public void DriveBands(Wristbands bands)
+    {
+        if (!bands.Dirty) return;
+        bands.Dirty = false;
+        // a Variant of an array owns native memory: freed now, never left to the finalizer
+        Variant ir = bands.Emitters;
+        _material.SetShaderParameter(UIr, ir);
+        ir.Dispose();
+        _material.SetShaderParameter(UIrCount, bands.Count);
+        _material.SetShaderParameter(UBandsAll, bands.All);
+        _material.SetShaderParameter(UBandsEffect, bands.Effect);
+    }
+
     // ---- where they are -------------------------------------------------------------------------------
 
     private static readonly Color[] Shirts =
@@ -93,7 +109,8 @@ public partial class ConcertCrowd : Node3D
         new(0.2f, 0.2f, 0.22f), new(0.85f, 0.75f, 0.2f), new(0.25f, 0.45f, 0.25f), new(0.6f, 0.35f, 0.55f),
     };
 
-    private List<(Transform3D, Color)> Places()
+    /// <summary>Everyone's place and look (custom data), seats then floor; internal for <c>--concertcheck</c> (#985: none in a crew zone).</summary>
+    internal List<(Transform3D, Color)> Places()
     {
         var list = new List<(Transform3D, Color)>();
         var rng = new Random(_plan.Event.Seed ^ 0x5eed);
@@ -149,7 +166,11 @@ public partial class ConcertCrowd : Node3D
 
     // ---- the figure ---------------------------------------------------------------------------------
 
-    /// <summary>Legs, a shirt, a head: three boxes, 36 triangles, the feet at the origin, facing −Z. Alpha 1 marks the shirt.</summary>
+    /// <summary>
+    /// Legs, a shirt, a head and a wristband: four boxes, 48 triangles, the feet at the origin, facing
+    /// −Z. Alpha 1 marks the shirt, 0.25 the band (on the right wrist, hanging by the hip; raised with
+    /// the hands in a chorus).
+    /// </summary>
     [Showcase("Concert", "Crowd figure")]
     private static ArrayMesh Figure()
     {
@@ -173,6 +194,7 @@ public partial class ConcertCrowd : Node3D
         Box(new Vector3(-0.17f, 0f, -0.1f), new Vector3(0.17f, 0.8f, 0.1f), new Color(0.12f, 0.13f, 0.18f, 0f));     // jeans
         Box(new Vector3(-0.22f, 0.8f, -0.13f), new Vector3(0.22f, 1.45f, 0.13f), new Color(1f, 1f, 1f, 1f));       // shirt
         Box(new Vector3(-0.1f, 1.47f, -0.11f), new Vector3(0.1f, 1.72f, 0.11f), new Color(0.78f, 0.6f, 0.48f, 0f)); // head
+        Box(new Vector3(0.22f, 0.78f, -0.06f), new Vector3(0.32f, 0.9f, 0.06f), new Color(0.1f, 0.1f, 0.11f, 0.25f));  // wristband
         using var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = v.ToArray();

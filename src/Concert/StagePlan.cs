@@ -12,6 +12,33 @@ public readonly record struct StageBox(Vector3 Centre, Vector3 Size, float Yaw, 
 /// </summary>
 public readonly record struct PaCab(Vector3 Centre, Vector3 Size, Vector3 Facing, bool Sub);
 
+/// <summary>
+/// Ground the crew keeps (#985): a rectangle of the pitch, stadium frame (u, v), its half sizes along
+/// its own axes, turned by <see cref="Yaw"/> as a <see cref="StageBox"/> is. The audience never stands
+/// in it: a camera's track or a jib's sweep, a camera platform, the front of house, a delay tower,
+/// the pit. <see cref="Fenced"/>: crew barriers stand round it.
+/// </summary>
+public readonly record struct CrewZone(string Name, Vector2 Centre, Vector2 Half, float Yaw, bool Fenced)
+{
+    /// <summary>Whether a point (u, v) is in it, grown by <paramref name="margin"/> (shrunk if negative).</summary>
+    public bool Contains(Vector2 uv, float margin = 0f)
+    {
+        var d = uv - Centre;
+        float c = MathF.Cos(Yaw), s = MathF.Sin(Yaw);
+        return MathF.Abs(d.X * c - d.Y * s) < Half.X + margin && MathF.Abs(d.X * s + d.Y * c) < Half.Y + margin;
+    }
+
+    /// <summary>A strip along a segment (u, v): <paramref name="halfWidth"/> to each side, <paramref name="extend"/> past each end.</summary>
+    public static CrewZone Along(string name, Vector2 a, Vector2 b, float halfWidth, float extend, bool fenced = true)
+    {
+        var d = b - a;
+        float len = d.Length();
+        var dir = len > 1e-3f ? d / len : new Vector2(0, 1);
+        // the zone's own z runs along the strip: (sin, cos) of its yaw is the strip's way
+        return new CrewZone(name, (a + b) / 2, new Vector2(halfWidth, len / 2 + extend), MathF.Atan2(dir.X, dir.Y), fenced);
+    }
+}
+
 /// <summary>A walkable slope (stairs up to a deck), four corners in the stadium frame.</summary>
 public readonly record struct StageRamp(Vector3 A, Vector3 B, Vector3 C, Vector3 D);
 
@@ -34,6 +61,14 @@ public sealed class StagePlan
     public readonly List<PaCab> Pa = new();
     /// <summary>The lighting desk on the front-of-house riser, stadium frame: where its screen opens.</summary>
     public Vector3 Desk { get; private set; }
+    /// <summary>The camera platform beside front of house: its deck's top middle, stadium frame (#985).</summary>
+    public Vector3 FohCamera { get; private set; }
+    /// <summary>The far camera tower's deck top, out on the floor facing the stage; null when the floor has no room for it (#985).</summary>
+    public Vector3? FarCamera { get; private set; }
+    /// <summary>Where the crew works and the audience never stands (#985): what <see cref="Blocked"/> keeps the crowd out of.</summary>
+    public readonly List<CrewZone> Zones = new();
+    /// <summary>The first of <see cref="Boxes"/> that is a crew barrier: the stage's own boxes come before.</summary>
+    public int FenceFrom { get; private set; }
     public readonly ConcertEvent Event;
 
     // stage frame -> stadium frame
@@ -57,6 +92,8 @@ public sealed class StagePlan
             float lx = d.X * c - d.Y * s, lz = d.X * s + d.Y * c;
             if (MathF.Abs(lx) < b.Size.X / 2 + margin && MathF.Abs(lz) < b.Size.Z / 2 + margin) return true;
         }
+        foreach (var z in Zones)
+            if (z.Contains(uv, margin)) return true;
         return false;
     }
 
@@ -217,6 +254,8 @@ public sealed class StagePlan
             Ramps[i] = new StageRamp(L(r.A), L(r.B), L(r.C), L(r.D));
         }
         Desk += Vector3.Up * ground(new Vector2(Desk.X, Desk.Z));
+        FohCamera += Vector3.Up * ground(new Vector2(FohCamera.X, FohCamera.Z));
+        if (FarCamera is { } far) FarCamera = far + Vector3.Up * ground(new Vector2(far.X, far.Z));
     }
 
     /// <summary>A PA cabinet in the stage frame, facing (<paramref name="fx"/>, <paramref name="fz"/>).</summary>
@@ -346,9 +385,12 @@ public sealed class StagePlan
         foreach (float x in new[] { -4.8f, 4.8f })
             foreach (float z in new[] { foh + 0.2f, foh + 5.8f })
                 Box(x - 0.1f, x + 0.1f, 1.2f, 3.6f, z - 0.1f, z + 0.1f, Truss, solid: false);
+        CameraDeck(5.6f, 8.6f, foh + 1.5f, foh + 4.5f);
+        var delays = new List<float>();
         foreach (float side in new[] { -1f, 1f })
         {
             float dx = side * Math.Min(18f, (across ? e.Stadium.FrontHalfV : e.Stadium.FrontHalfU) * 0.7f);
+            delays.Add(dx);
             // a delay tower under an arena's ceiling
             float tower = e.Stadium.Kind == VenueKind.Arena ? Math.Min(12f, e.Stadium.RoofInner - e.Stadium.RoofThickness - 1.5f) : 12f;
             Tower(dx, foh - 6f, tower);
@@ -363,7 +405,141 @@ public sealed class StagePlan
         }
         else Box(-hw, hw, 0, 1.2f, 2.4f, 2.6f, Barrier);
 
+        // the far camera's tower, out on the floor behind front of house, if the floor has room
+        float far = Math.Max(Math.Min(75f, ahead - 4f), foh + 9.5f);
+        if (far <= ahead - 2f) CameraTower(far);
+
+        // the crew's ground: front of house with its camera platform, the delay towers, the pit
+        Zone("front of house", -6.5f, 9.6f, foh - 1.5f, foh + 7.5f, true);
+        foreach (float dx in delays) Zone("delay tower", dx - 1.6f, dx + 1.6f, foh - 8.3f, foh - 4.8f, true);
+        Zone("pit", -hw, hw, -0.2f, 2.7f, false);
         Rig(e, hw, d, h, r, catwalk);
+        IrRig(e, hw, d, r, foh, across);
+        CrewGround();
+    }
+
+    // ---- the crew's ground (#985) ------------------------------------------------------------------
+
+    /// <summary>A zone of the stage frame (x across, z towards the audience).</summary>
+    private void Zone(string name, float x0, float x1, float z0, float z1, bool fenced)
+    {
+        var c = At((x0 + x1) / 2, 0, (z0 + z1) / 2);
+        Zones.Add(new CrewZone(name, new Vector2(c.X, c.Z), new Vector2((x1 - x0) / 2, (z1 - z0) / 2), Yaw, fenced));
+    }
+
+    /// <summary>A scaffold camera platform: four legs and a deck, its top at <paramref name="top"/>.</summary>
+    private void Platform(float x0, float x1, float z0, float z1, float top)
+    {
+        foreach (float x in new[] { x0 + 0.15f, x1 - 0.15f })
+            foreach (float z in new[] { z0 + 0.15f, z1 - 0.15f })
+                Box(x - 0.12f, x + 0.12f, 0.012f, top - 0.16f, z - 0.12f, z + 0.12f, Truss);   // a hair under the deck: never in its underside's plane
+        Box(x0, x1, top - 0.15f, top, z0, z1, Deck);
+    }
+
+    /// <summary>The camera platform beside front of house (the long lens and the wide), 3 m up: over the heads.</summary>
+    private void CameraDeck(float x0, float x1, float z0, float z1)
+    {
+        Platform(x0, x1, z0, z1, 3f);
+        FohCamera = At((x0 + x1) / 2, 3f, (z0 + z1) / 2);
+    }
+
+    /// <summary>The far camera's tower on the floor, <paramref name="z"/> out along the stage's axis; an arena's ceiling caps it.</summary>
+    private void CameraTower(float z)
+    {
+        var s = Event.Stadium;
+        float top = s.Kind == VenueKind.Arena ? Math.Min(10f, s.RoofInner - s.RoofThickness - 3.5f) : 10f;
+        if (top < 3f) return;
+        Platform(-1.2f, 1.2f, z - 1.2f, z + 1.2f, top);
+        FarCamera = At(0, top, z);
+        Zone("camera tower", -2.4f, 2.4f, z - 2.4f, z + 2.4f, true);
+    }
+
+    /// <summary>
+    /// The camera rigs' own ground (<see cref="CameraRig.Footprint"/>: the tracks, the jib's sweep, the
+    /// tripods) added to the zones, then crew barriers round every fenced zone: panels along its edges,
+    /// none inside another zone, none through the stage, none off the floor, a gate left in the edge
+    /// furthest from the stage.
+    /// </summary>
+    private void CrewGround()
+    {
+        foreach (var rig in CameraRig.For(this))
+            if (rig.Footprint() is { } fp) Zones.Add(fp);
+        FenceFrom = Boxes.Count;
+        var stage = new Vector2(Boxes[0].Centre.X, Boxes[0].Centre.Z);
+        for (int zi = 0; zi < Zones.Count; zi++)
+        {
+            var zone = Zones[zi];
+            if (!zone.Fenced) continue;
+            float c = MathF.Cos(zone.Yaw), sn = MathF.Sin(zone.Yaw);
+            Vector2 ax = new(c, -sn), az = new(sn, c);
+            // the four edges: a midpoint, the way along it, the way out of the zone, its half length
+            var edges = new (Vector2 Mid, Vector2 Along, Vector2 Out, float Half)[]
+            {
+                (zone.Centre + az * zone.Half.Y, ax, az, zone.Half.X), (zone.Centre - az * zone.Half.Y, ax, -az, zone.Half.X),
+                (zone.Centre + ax * zone.Half.X, az, ax, zone.Half.Y), (zone.Centre - ax * zone.Half.X, az, -ax, zone.Half.Y),
+            };
+            int gate = 0;
+            float away = float.MinValue;
+            for (int k = 0; k < 4; k++)
+            {
+                float a = edges[k].Out.Dot((edges[k].Mid - stage).Normalized());
+                if (a > away) { away = a; gate = k; }
+            }
+            for (int k = 0; k < 4; k++)
+            {
+                var (mid, along, _, half) = edges[k];
+                // the corners left open: two edges' panels never cross
+                float run = half - 0.15f;
+                if (run < 0.5f) continue;
+                int n = (int)MathF.Ceiling(2 * run / 2.4f);
+                float step = 2 * run / n, len = step - 0.12f;
+                for (int i = 0; i < n; i++)
+                {
+                    var p = mid + along * (-run + step * (i + 0.5f));
+                    if (k == gate && (p - mid).Length() < step * 0.6f) continue;
+                    if (FenceFits(p, along, len, zi)) Panel(p, along, len);
+                }
+            }
+        }
+    }
+
+    /// <summary>Whether a barrier panel at <paramref name="p"/> stands clear: on the floor, outside the other zones, off the stage.</summary>
+    private bool FenceFits(Vector2 p, Vector2 along, float len, int zone)
+    {
+        var s = Event.Stadium;
+        float ex = MathF.Abs(along.X) * len / 2 + MathF.Abs(along.Y) * 0.25f, ez = MathF.Abs(along.Y) * len / 2 + MathF.Abs(along.X) * 0.25f;
+        if (MathF.Abs(p.X) + ex > s.FrontHalfU - 0.1f || MathF.Abs(p.Y) + ez > s.FrontHalfV - 0.1f) return false;
+        for (int i = 0; i < Zones.Count; i++)
+            if (i != zone && Zones[i].Contains(p, -0.2f)) return false;
+        for (int i = 0; i < FenceFrom; i++)
+        {
+            var b = Boxes[i];
+            if (b.Centre.Y - b.Size.Y / 2 > 1.3f) continue;   // flown, or high on a tower: walked under
+            var d = p - new Vector2(b.Centre.X, b.Centre.Z);
+            float c = MathF.Cos(b.Yaw), sn = MathF.Sin(b.Yaw);
+            float lx = d.X * c - d.Y * sn, lz = d.X * sn + d.Y * c, m = len / 2 + 0.3f;
+            if (MathF.Abs(lx) < b.Size.X / 2 + m && MathF.Abs(lz) < b.Size.Z / 2 + m) return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// A crew barrier panel (#985): black scrim under a rail, a foot across each end, 1.1 m high, on the
+    /// pitch at <paramref name="p"/> along <paramref name="along"/>. Its parts overlap or keep a few
+    /// centimetres apart: no two of their faces share a plane (zfight).
+    /// </summary>
+    private void Panel(Vector2 p, Vector2 along, float len)
+    {
+        float yaw = MathF.Atan2(-along.Y, along.X);
+        void Part(float x, float y0, float y1, float sx, float sz, Color col)
+        {
+            var c = p + along * x;
+            Boxes.Add(new StageBox(new Vector3(c.X, (y0 + y1) / 2, c.Y), new Vector3(sx, y1 - y0, sz), yaw, col, true));
+        }
+        Part(0, 0.05f, 1.08f, len, 0.04f, Scrim);
+        Part(0, 1.05f, 1.12f, len + 0.04f, 0.07f, Barrier);
+        Part(-(len / 2 - 0.08f), 0.012f, 0.16f, 0.1f, 0.5f, Barrier);
+        Part(len / 2 - 0.08f, 0.012f, 0.16f, 0.1f, 0.5f, Barrier);
     }
 
     /// <summary>The fixtures of an end stage, by position, as a lighting designer would hang them.</summary>
@@ -411,6 +587,69 @@ public sealed class StagePlan
         Patch.Add(FixtureType.LowFog, RigGroup.LowFog, At(hw * 0.5f, h, -d + 1f), toward, Vector3.Up);
     }
 
+    // ---- the wristbands' emitters (#986) -----------------------------------------------------------
+
+    /// <summary>How far the floor runs ahead of the stage's front, and half its width across (stage frame): where the IR heads sweep.</summary>
+    public float CrowdAhead { get; private set; }
+    public float CrowdHalf { get; private set; }
+
+    /// <summary>
+    /// The IR emitters of an end stage, patched after the rest of the rig (the earlier addresses stay
+    /// put): four heads on the front truss and two on each delay tower, sweeping the floor and the far
+    /// stand; four floods, one for the floor (the front truss's middle), one for each side stand (the
+    /// truss's ends) and one for the far stand; the transmitter at front of house.
+    /// </summary>
+    private void IrRig(ConcertEvent e, float hw, float d, float r, float foh, bool across)
+    {
+        float half = across ? e.Stadium.FrontHalfV : e.Stadium.FrontHalfU;
+        CrowdAhead = 2 * (across ? e.Stadium.FrontHalfU : e.Stadium.FrontHalfV) - 1.5f - d;
+        CrowdHalf = half;
+        var toward = Dir(0, 0, 1);
+        foreach (float k in new[] { -0.45f, -0.15f, 0.15f, 0.45f })
+            Patch.Add(FixtureType.IrHead, RigGroup.IrHeads, At(k * (hw * 2 - 3f), r - 0.9f, -0.7f), toward, Vector3.Down);
+        float tower = e.Stadium.Kind == VenueKind.Arena ? Math.Min(12f, e.Stadium.RoofInner - e.Stadium.RoofThickness - 1.5f) : 12f;
+        foreach (float side in new[] { -1f, 1f })
+        {
+            float dx = side * Math.Min(18f, half * 0.7f);
+            // on the tower's top, standing: they reach the floor all round and the stands behind
+            foreach (float o in new[] { -0.2f, 0.2f })
+                Patch.Add(FixtureType.IrHead, RigGroup.IrHeads, At(dx + o, tower + 0.3f, foh - 6f), toward, Vector3.Up);
+        }
+        // the floods: home is where they point, for good
+        var floor = At(0, r - 0.6f, -0.7f);
+        Patch.Add(FixtureType.IrFlood, RigGroup.IrFloods, floor, At(0, 0, CrowdAhead * 0.45f) - floor, Vector3.Up);
+        foreach (float side in new[] { -1f, 1f })
+        {
+            var from = At(side * hw, r - 0.6f, -0.7f);
+            Patch.Add(FixtureType.IrFlood, RigGroup.IrFloods, from, At(side * (half + 16f), 12f, CrowdAhead * 0.45f) - from, Vector3.Up);
+        }
+        var far = At(0, r - 0.3f, -0.7f);
+        Patch.Add(FixtureType.IrFlood, RigGroup.IrFloods, far, At(0, 14f, CrowdAhead + 16f) - far, Vector3.Up);
+        Patch.Add(FixtureType.Wristbands, RigGroup.Wristbands, Desk, toward, Vector3.Up);
+    }
+
+    /// <summary>In the round: two IR heads and a flood on each side of the grid, facing out to its stand; the transmitter at front of house.</summary>
+    private void IrRound(ConcertEvent e, float g, float r)
+    {
+        CrowdHalf = Math.Min(e.Stadium.FrontHalfU, e.Stadium.FrontHalfV);
+        CrowdAhead = CrowdHalf;
+        foreach (var n in new[] { new Vector2(0, 1), new Vector2(0, -1), new Vector2(1, 0), new Vector2(-1, 0) })
+        {
+            var outward = Dir(n.X, 0, n.Y);
+            var along = new Vector2(-n.Y, n.X);
+            foreach (float a in new[] { -g * 0.5f, g * 0.5f })
+            {
+                var p = n * g + along * a;
+                Patch.Add(FixtureType.IrHead, RigGroup.IrHeads, At(p.X, r - 0.9f, p.Y), outward, Vector3.Down);
+            }
+            // the stand this side faces: the pitch's end or its side (stage x is u, stage z is -v)
+            float stand = n.X != 0 ? e.Stadium.FrontHalfU : e.Stadium.FrontHalfV;
+            var from = At(n.X * g, r - 0.6f, n.Y * g);
+            Patch.Add(FixtureType.IrFlood, RigGroup.IrFloods, from, At(n.X * (stand + 16f), 12f, n.Y * (stand + 16f)) - from, Vector3.Up);
+        }
+        Patch.Add(FixtureType.Wristbands, RigGroup.Wristbands, Desk, Dir(0, 0, 1), Vector3.Up);
+    }
+
     // ---- in the round ------------------------------------------------------------------------------
 
     private void BuildRound(ConcertEvent e)
@@ -443,6 +682,10 @@ public sealed class StagePlan
         Box(-5f, 5f, 3.6f, 3.8f, foh, foh + 6f, tent, solid: false);
         Box(-2.5f, 2.5f, 1.2f, 2.15f, foh + 1.2f, foh + 2.2f, Speaker);
         Desk = At(0, 1.2f, foh + 2.8f);
+        CameraDeck(5.6f, 8.6f, foh + 1.5f, foh + 4.5f);
+        Zone("front of house", -6.5f, 9.6f, foh - 1.5f, foh + 7.5f, true);
+        // the far camera across the bowl from front of house
+        CameraTower(-Math.Min(60f, e.Stadium.FrontHalfV - 4f));
 
         // the video cube hung over the middle, a face to each quarter
         if (e.HasCenterScreen)
@@ -502,5 +745,7 @@ public sealed class StagePlan
         }
         Patch.Add(FixtureType.Confetti, RigGroup.Confetti, At(-hw, h, -hw), Dir(-0.4f, 1, -0.4f), Vector3.Up);
         Patch.Add(FixtureType.Confetti, RigGroup.Confetti, At(hw, h, hw), Dir(0.4f, 1, 0.4f), Vector3.Up);
+        IrRound(e, g, r);
+        CrewGround();
     }
 }
