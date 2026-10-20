@@ -6,7 +6,7 @@ namespace UnitSport.Concert;
 
 /// <summary>
 /// An imported rig's trusses and scene objects (#958), drawn once in the rig's frame with the stage's
-/// flat prop material, no collision (a truss is walked under, not on). A mesh placed many times is
+/// flat prop material; collision by ConcertRig.Collision (#974). A mesh placed many times is
 /// one MultiMesh; the rest (Capture writes every object as its own file) are baked into one mesh, so
 /// a show of nine hundred one-off files is one draw call, not nine hundred. Faces' looks (#973): the
 /// vertex colours, and a surface per texture drawn by a prop material holding it.
@@ -178,6 +178,7 @@ public partial class ConcertRig
         foreach (var o in rig.Objects)
             multi[o.Mesh]?.SetInstanceTransform(next[o.Mesh]++, RigData.X(o.Xf));
         AddChild(root);
+        BuildObjectCollision(rig, looked.Select(l => l.Positions).ToArray(), looked.Select(l => l.Indices).ToArray());   // #974
         ObjectsDrawn = rig.Objects.Count;
     }
 }
