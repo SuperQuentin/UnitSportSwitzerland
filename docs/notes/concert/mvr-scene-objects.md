@@ -44,3 +44,10 @@
   `tools/concertnetcheck.sh` (B gets A's rig with 3 pieces and draws them).
 - Not done: textures (a flat colour per file), per-face colours, `Support`'s and
   `Projector`'s own data (only their bodies), `VideoScreen` sources.
+- **The building as an option** (#980): `/concert import <file> venue` (the desk's *Building* box) reads
+  the venue pieces too and measures them; when they fit the venue's free space (`ConcertMvrTool.RoomOf`:
+  inside the seating front, up to an arena's ceiling, open sky over a pitch or a field), turned a
+  quarter if only that fits, the whole file (building, set, rig) is centred on the pitch, its lowest
+  point 2 cm over our floor (`VenueFit.Placement`, `RigData.Move`); otherwise it is skipped with a note
+  giving both sizes. Capture's hall 32 x 30 x 13 m and Vectorworks' theatre 30 x 18 x 9 m fit Geneva's
+  80 x 124 m. Our own stage stays where it is. Import replies are logged (`[concert] /concert import`).

@@ -45,6 +45,8 @@
     <Compile Include="..\..\src\Concert\Mvr\MvrGeometry.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Concert\Mvr\MvrImage.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Concert\Mvr\RigData.Objects.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Concert\Mvr\RigData.Venue.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Concert\Mvr\MvrVenue.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Concert\Mvr\RigData.Bodies.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Concert\Mvr\GdtfBody.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Concert\Mvr\MvrCollision.cs" Link="Game\%(Filename)%(Extension)" />

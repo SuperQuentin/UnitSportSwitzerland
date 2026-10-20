@@ -111,14 +111,25 @@ public static class ConcertMvrTool
     /// </summary>
     public static string Import(string args)
     {
+        // the reply in the log too: a queued or scripted import is read there, not in the chat
+        string reply = ImportRig(args);
+        GD.Print($"[concert] /concert import {args}: {reply}");
+        return reply;
+    }
+
+    private static string ImportRig(string args)
+    {
         if (ConcertService.Instance is not { } svc) return "Concerts are not running.";
         if (Nearest() is not { Plan: { } plan } rig) return "No concert near: stand in the stadium.";
         int stadium = Array.IndexOf(StadiumCatalog.All, rig.Event.Stadium);
         if (stadium < 0) return "This stage's stadium is not in the catalog.";
         string a = args.Trim();
         if (a is "off" or "none" or "clear") return svc.SendRig(stadium, Array.Empty<byte>());
-        if (a.Length == 0) return "/concert import <file.mvr> [stage|stadium] | off; " + List();
+        if (a.Length == 0) return "/concert import <file.mvr> [stage|stadium] [venue] | off; " + List();
 
+        // venue (#980): the file's building round the set too, when it fits this venue's free space
+        bool withVenue = false;
+        if (a.EndsWith(" venue", StringComparison.OrdinalIgnoreCase)) { withVenue = true; a = a[..^" venue".Length].Trim(); }
         string? frame = null;
         foreach (var f in new[] { " stage", " stadium" })
             if (a.EndsWith(f, StringComparison.OrdinalIgnoreCase)) { frame = f.Trim(); a = a[..^f.Length].Trim(); }
@@ -128,19 +139,38 @@ public static class ConcertMvrTool
         if (new FileInfo(path).Length > 256L << 20) return "That MVR is over 256 MB.";
 
         var mvr = File.ReadAllBytes(path);
-        var import = MvrFile.Read(mvr, Path.GetFileName(path), out string? error);
+        var import = MvrFile.Read(mvr, Path.GetFileName(path), withVenue ? RoomOf(rig.Event.Stadium) : null, out string? error);
         if (import == null) return $"Could not read {Path.GetFileName(path)}: {error}";
         var data = import.Rig;
         Originals[data.Source] = MvrFile.Gdtfs(mvr, data.Types.Select(t => t.GdtfSpec).OfType<string>());
         CacheVideos(mvr, data);
         bool stadiumFrame = frame == "stadium" || frame == null && import.OursStadiumFrame;
-        if (!stadiumFrame) plan.FromStage(data);
+        // a building that fits stands centred on the pitch, the set and rig inside it as the file has them
+        if (import.Venue is { } fit) data.Move(fit.Placement(FloorOf(rig) + 0.02f));
+        else if (!stadiumFrame) plan.FromStage(data);
         if (data.Check() is { } bad) return $"That rig does not fit: {bad}.";
         foreach (var n in import.Notes) GD.Print($"[concert] import {Path.GetFileName(path)}: {n}");
         string reply = svc.SendRig(stadium, data.Pack());
         string skipped = import.Notes.Count > 0 ? $" ({import.Notes.Count} note(s): {string.Join("; ", import.Notes.Take(2))})" : "";
-        return $"{data.Fixtures.Count} fixtures read from {Path.GetFileName(path)} in the {(stadiumFrame ? "stadium" : "stage")} frame{skipped}. {reply}";
+        string where = import.Venue != null ? "with its building on the pitch" : $"in the {(stadiumFrame ? "stadium" : "stage")} frame";
+        return $"{data.Fixtures.Count} fixtures read from {Path.GetFileName(path)} {where}{skipped}. {reply}";
     }
+
+    /// <summary>
+    /// The space a venue gives an imported building (#980): inside the seating front; up to an arena's
+    /// ceiling over its floor, the open sky over a stadium's pitch (its roof only covers the stands) or
+    /// an open air's field.
+    /// </summary>
+    public static VenueRoom RoomOf(StadiumSpec s) => new(2 * s.FrontHalfU, 2 * s.FrontHalfV,
+        s.Kind == VenueKind.Arena ? s.RoofInner - s.RoofThickness - StadiumBuilder.FloorLift : float.PositiveInfinity);
+
+    /// <summary>The ground an imported building stands on: a stadium's pitch boards, an arena's floor, an open air's field.</summary>
+    private static float FloorOf(ConcertRig rig) => rig.Event.Stadium.Kind switch
+    {
+        VenueKind.Stadium => rig.FloorTop,
+        VenueKind.Arena => StadiumBuilder.FloorLift,
+        _ => 0f,
+    };
 
     // ---- screens' video files (#975) ---------------------------------------------------------------
 
