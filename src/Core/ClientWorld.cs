@@ -887,6 +887,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _chat.Inventory = inventory;
         _chat.GiveOrDrop = items.Give;
         _chat.PlaceSearch = _places;
+        _chat.Here = () => _teleporter?.ActiveTarget() is { } body && _worldOrigin != null ? _worldOrigin.ToGlobal(body.GlobalPosition) : null;
         AddChild(_chat);
         _chatUi = ChatUi.Create(_chat, new ChatCompleter
         {

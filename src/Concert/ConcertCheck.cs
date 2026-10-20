@@ -186,6 +186,19 @@ public static class ConcertCheck
         };
         var set = ConcertMusic.SetlistOf(ev, lib);
         Expect(set.Length == 2 && set.All(c => c.Id is 3 or 9), $"the setlist takes the library's songs, not a personal or a 12 s one ({string.Join(",", set.Select(c => c.Id))})");
+
+        // the setlist moved by hand (#994): a song cue starts song i at an instant and the set runs on from it
+        var two = new[] { lib[0], lib[3] };   // 200 s, then 180 s, a 6 s gap after each: a 392 s loop
+        Expect(ConcertMusic.At(two, ConcertMusic.Position(two, 1000.0, null)) is (1, var o1, false) && Math.Abs(o1 - 10) < 1e-6,
+            $"on the clock alone: 1000 s is 10 s into the second song");
+        Expect(ConcertMusic.At(two, ConcertMusic.Position(two, 1000.0, new SongCue(1, 990.0, false))) is (1, var o2, false) && Math.Abs(o2 - 10) < 1e-6,
+            $"a cue on song 2 ten seconds ago: 10 s into it");
+        Expect(ConcertMusic.At(two, ConcertMusic.Position(two, 1000.0 + 180 + 3, new SongCue(1, 1000.0, false))) is (1, _, true),
+            $"after it, its gap");
+        Expect(ConcertMusic.At(two, ConcertMusic.Position(two, 1000.0 + 186 + 50, new SongCue(1, 1000.0, false))) is (0, var o3, false) && Math.Abs(o3 - 50) < 1e-6,
+            $"then the set loops on to the first song");
+        Expect(ConcertMusic.Position(two, 500.0, new SongCue(0, 900.0, false)) is >= 0 and < 392,
+            $"a cue in the future (a peer's clock behind) still lands in the set");
         desk.Music = new MusicMoment(ShowSection.Peak, 37.5f, 0.9f, 0.8f, 3, true, 0f);
         desk.Write(100);
         Expect(desk.Section == ShowSection.Peak && MathF.Abs(desk.Beat - 37.5f) < 1e-4f && desk.SectionBar == 3 && desk.LastSection,

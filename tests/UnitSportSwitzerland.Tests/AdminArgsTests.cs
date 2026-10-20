@@ -80,4 +80,25 @@ public class AdminArgsTests
     [InlineData("Anna add 5 extra")]
     public void TryBank_rejects(string line) =>
         Assert.False(AdminArgs.TryBank(line.Split(' '), out _, out _, out _, out _));
+
+    [Theory]
+    [InlineData("2600000 1200000", 2600000, 1200000)]
+    [InlineData("2600000,1200000", 2600000, 1200000)]
+    [InlineData("2'498'751.2 1'114'890.3", 2498751.2, 1114890.3)]
+    [InlineData(" 2601996.7 , 1201338.3 ", 2601996.7, 1201338.3)]
+    public void TryLv95_accepts(string text, double e, double n)
+    {
+        Assert.True(AdminArgs.TryLv95(text, out double ge, out double gn));
+        Assert.Equal(e, ge, 3);
+        Assert.Equal(n, gn, 3);
+    }
+
+    [Theory]
+    [InlineData("Anna")]
+    [InlineData("2600000")]
+    [InlineData("1200000 2600000")]   // swapped
+    [InlineData("600000 200000")]     // LV03
+    [InlineData("2600000 1200000 5")]
+    [InlineData("2600000,5 1200000")] // a French decimal comma
+    public void TryLv95_rejects(string text) => Assert.False(AdminArgs.TryLv95(text, out _, out _));
 }
