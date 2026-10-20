@@ -16,7 +16,9 @@ using UnitSport.Tools.RoadGen.Geometry;
 public static class ConflictTimes
 {
     /// <summary>Clearing and entering speeds (m/s) and lengths (m) by who moves (the user's defaults, Oct 20 2026).</summary>
-    public const double CarClear = 10, CarEnter = 40 / 3.6, BikeClear = 4, BikeEnter = 5, WalkClear = 1.2, WalkEnter = 1.5;
+    /// <remarks>A cyclist enters at 30 km/h: it depends on the cyclist, the first at green may be a fast e-bike already rolling
+    /// (the user, Oct 20 2026; clearing stays at 4 m/s).</remarks>
+    public const double CarClear = 10, CarEnter = 40 / 3.6, BikeClear = 4, BikeEnter = 30 / 3.6, WalkClear = 1.2, WalkEnter = 1.5;
     public const double CarLength = 6, BikeLength = 2, WalkLength = 0;
 
     /// <summary>A turning car at most the speed its path's radius allows, with this lateral acceleration (m/s², as traffic drives).</summary>
