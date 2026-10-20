@@ -6,6 +6,22 @@
 154.7	Aircraft / Antonov AN-124 (parked)
 365.3	Aircraft / Military cargo plane
 365.3	Aircraft / Military cargo plane (parked)
+304.2	Aircraft / UFO
+367.8	Aircraft / UFO, flying (legs up, beam on, shortened)
+484	Aliens / Alien green
+484	Aliens / Alien grey
+484	Aliens / Alien teal
+484	Aliens / Alien violet
+695.7	Aliens / Blip
+758.4	Aliens / Gleeb
+758.4	Aliens / Gleeb Happy
+758.4	Aliens / Gleeb Sad
+758.4	Aliens / Gleeb Surprised
+758.4	Aliens / Visitor
+758.4	Aliens / Zib
+725.2	Aliens / Zib waving
+758.4	Aliens / Zorp
+774.7	Aliens / Zorp doing the robot
 782	Aura / Move - Arms crossed
 261.5	Aura / Move - Bow
 367.8	Aura / Move - Cut the rope
@@ -408,6 +424,7 @@
 79.2	Cars / ZN6 (parked)
 207	Cars / ZZW30 MR-S
 4.8	Cars / ZZW30 MR-S (parked)
+274	Clothes / Alien antennae
 2216.3	Clothes / Bee stockings
 278.2	Clothes / Bell collar
 755.6	Clothes / Big pink bow
@@ -479,7 +496,9 @@
 414	Clothes / Red tartan skirt
 295.8	Clothes / Round glasses
 3264.1	Clothes / Ruffled black mini
+873.2	Clothes / Silver antennae
 354.6	Clothes / Silver hoops
+1297.1	Clothes / Silver space suit
 274	Clothes / Silver studs
 311.4	Clothes / Skull mask
 298.8	Clothes / Spike piercings
@@ -492,6 +511,7 @@
 298.7	Clothes / Swirly OwO mask
 782.1	Clothes / TAZ 90 jacket
 355.6	Clothes / TAZ 90 trousers
+401.5	Clothes / Tall antennae
 236.4	Clothes / Tongue-out mask
 287.1	Clothes / UwU mask
 298.8	Clothes / White T-shirt
@@ -561,6 +581,8 @@
 267.9	Faces / Preset - cute
 267.9	Faces / Preset - dreamy
 267.9	Faces / Preset - freckles
+267.9	Faces / Preset - gazer
+267.9	Faces / Preset - giggler
 267.9	Faces / Preset - gloomy
 267.9	Faces / Preset - grin
 267.9	Faces / Preset - sharp
@@ -569,6 +591,7 @@
 267.9	Faces / Preset - startled
 267.9	Faces / Preset - stern
 267.9	Faces / Preset - stubble
+267.9	Faces / Preset - visitor
 267.9	Faces / Seeded - seed 0
 267.9	Faces / Seeded - seed 1
 254	Faces / Seeded - seed 2
@@ -595,6 +618,7 @@
 754.4	Fights / Stance - HitStun
 324.8	Fights / Stance - Stand
 367.8	Fights / Stance - Victory
+620.1	Figures / Build - Alien
 286.1	Figures / Build - Broad
 298.8	Figures / Build - Curvy
 286.1	Figures / Build - Lean
@@ -698,6 +722,7 @@
 144	Furniture / WaterTank
 100	Furniture / Workbench
 2.3	Items / Agone
+3	Items / AlienAntennae
 44.9	Items / Alphorn
 2.3	Items / ArcticChar
 3	Items / ArmyTee
@@ -792,6 +817,7 @@
 2.3	Items / LakeTrout
 2.9	Items / LavaTee
 5.3	Items / LolitaDress
+3	Items / LongAntennae
 3.9	Items / Maize
 3.9	Items / MaizeMeal
 5.9	Items / MaizeSeed
@@ -855,6 +881,7 @@
 7.5	Items / RuffledMini
 5.9	Items / SeedPotato
 6.4	Items / Shotgun
+3	Items / SilverAntennae
 7.5	Items / SlitMaxiSkirt
 12	Items / SmartBinoculars
 7.9	Items / SmokeCanister
