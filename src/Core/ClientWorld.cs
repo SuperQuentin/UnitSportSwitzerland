@@ -866,6 +866,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.SwissNetProbe.Role != null) AddChild(new Items.SwissNetProbe(items));
         if (Items.Fishing.FishNetProbe.Role != null) AddChild(new Items.Fishing.FishNetProbe(items));
         if (World.ClockNetProbe.Role != null) AddChild(new World.ClockNetProbe(items));
+        if (World.Ropeways.LiftNetProbe.Role != null) AddChild(new World.Ropeways.LiftNetProbe(items));
         if (SpeedNetProbe.Role != null) AddChild(new SpeedNetProbe(items));
         if (Net.SleeperProbe.Role != null) AddChild(new Net.SleeperProbe(items));
         if (Net.ArrivalProbe.Role != null) AddChild(new Net.ArrivalProbe(items));
@@ -1812,12 +1813,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (p.Lift is { } lift)
             {
                 bool drag = lift.Kind is World.Ropeways.RopewayKind.TBar or World.Ropeways.RopewayKind.RopeTow;
-                string name = World.Ropeways.RopewayService.KindName(lift.Kind);
-                if (p.LiftWait > 0) yield return (PlayerInput.InteractMount, $"Waiting for the {name}: {p.LiftWait:0} s");
-                else if (drag) yield return (PlayerInput.InteractMount, $"Let go of the {name}");
+                string name = World.Ropeways.RopewayService.Called(lift);
+                if (p.LiftWait > 0) yield return (PlayerInput.InteractMount, $"Waiting for {name}: {p.LiftWait:0} s");
+                else if (drag) yield return (PlayerInput.InteractMount, $"Let go of {name}");
             }
             else if (p.LiftInReach() is { } station)
-                yield return (PlayerInput.InteractMount, $"Take the {World.Ropeways.RopewayService.KindName(station.Kind)}");
+                yield return (PlayerInput.InteractMount, $"Take {World.Ropeways.RopewayService.Called(station)}");
             // a bus door's button in reach, inside or out (#162)
             if (p.Vehicle == null && p.ButtonInReach() is { } button)
                 yield return (PlayerInput.InteractMount, button.Open ? "Shut the door" : "Open the door");

@@ -91,6 +91,12 @@ public enum AssetKind
     /// others answer "missing".
     /// </summary>
     Pistes = 15,
+
+    /// <summary>
+    /// <c>ropeways.json</c>, the region's OSM aerialways (#915). Not tile-scoped, like
+    /// <see cref="Landings"/>: fetched once during sync; an older server answers "missing".
+    /// </summary>
+    Ropeways = 16,
 }
 
 /// <summary>
@@ -142,6 +148,7 @@ public static class AssetStream
         AssetKind.HttpBase => "",
         AssetKind.Fields => FieldFormat.FileName(id),
         AssetKind.Pistes => PisteFormat.FileName(id),
+        AssetKind.Ropeways => RopewayInfoIndex.FileName,
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 

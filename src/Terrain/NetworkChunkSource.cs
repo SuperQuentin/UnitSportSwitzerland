@@ -207,6 +207,11 @@ public sealed class NetworkChunkSource : IChunkSource
     /// <summary>The shipped landings first, else the server's, pulled into the cache during sync (#377).</summary>
     public Task<AirportIndex?> LoadAirportsAsync(CancellationToken ct = default) => _local.LoadAirportsAsync(ct);
 
+    /// <summary>The lifts' OSM details (#915): shipped, else the copy <see cref="ClientTerrainSync"/> pulled into the cache.</summary>
+    public async Task<RopewayInfoIndex?> LoadRopewayInfoAsync(CancellationToken ct = default) =>
+        await _local.LoadRopewayInfoAsync(ct).ConfigureAwait(false)
+        ?? await LocalChunkSource.ReadRopewayInfoAsync(_cacheDirectory, ct).ConfigureAwait(false);
+
     public async Task<LandingIndex?> LoadLandingsAsync(CancellationToken ct = default) =>
         await _local.LoadLandingsAsync(ct).ConfigureAwait(false)
         ?? await LocalChunkSource.ReadLandingsAsync(_cacheDirectory, ct).ConfigureAwait(false);

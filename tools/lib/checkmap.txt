@@ -346,6 +346,8 @@ src/World/SignalNetProbe net    tools/signalnetcheck.sh
 src/Terrain/SignalLamps  net    tools/signalnetcheck.sh
 src/Net/ClockSync        net    tools/signalnetcheck.sh
 # the time of day (#452): two clients, B joining later with its own clock, agree on the server's hour
+src/World/Ropeways       full   tools/liftnetcheck.sh
+src/Player/FootPlayer.Lift full  tools/liftnetcheck.sh
 src/World/DayNight       net    tools/clocknetcheck.sh
 src/World/WorldClock     net    tools/clocknetcheck.sh
 src/World/TimeCommand    net    tools/clocknetcheck.sh

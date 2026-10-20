@@ -1,29 +1,39 @@
 using Godot;
+using UnitSport.Avatar;
 using UnitSport.World.Ropeways;
 
 namespace UnitSport.Player;
 
 /// <summary>
-/// Riding a ski lift (#912, docs/notes/world/ski-lifts.md). At a bottom station, on foot or on
-/// skis, interact boards the next carrier (<see cref="RopewayMotion.Next"/>): the body waits at the
-/// station until it arrives, then <see cref="Carrier"/> follows it up the line on the shared clock;
-/// at the top it is set down past the station, still on skis if it came on skis. A drag lift (T-bar,
-/// rope tow) is let go of with interact again. Runs on whoever simulates the body: the owner, or the
-/// server for a bot (<see cref="TryLift"/> is the bots' call too). Nothing new is sent: the rider's
-/// position replicates as any player's.
+/// Riding a ski lift (#912, #915, docs/notes/world/ski-lifts.md). At a bottom station, on foot or on
+/// skis, interact boards the next carrier (<see cref="RopewayMotion.Next"/>). The rider is on that
+/// carrier from then on: <see cref="LiftLine"/> and <see cref="LiftCarrier"/> are replicated, and
+/// every peer places the rider from the shared clock (<see cref="LiftPose"/>), exactly on the chair,
+/// not from the interpolated position stream. Before the carrier leaves the rider waits on the
+/// station's spot; at the top it is set down past the station, still on skis if it came on skis.
+/// On a chair the rider is drawn sitting (<see cref="UpdateLiftSeat"/>); in a cabin it is out of sight.
+/// A drag lift (T-bar, rope tow) is let go of with interact again. <see cref="TryLift"/> is the
+/// bots' call too, on the body's simulator.
 /// </summary>
 public partial class FootPlayer
 {
+    /// <summary>The lift ridden or waited for (<see cref="RopewayLine.Id"/>), 0 for none. Replicated.</summary>
+    [Export] public int LiftLine { get; set; }
+
+    /// <summary>The carrier on <see cref="LiftLine"/>: its chair, cabin or bar. Replicated.</summary>
+    [Export] public int LiftCarrier { get; set; }
+
     private RopewayLine? _lift;
-    private int _liftCarrier;
-    private double _liftBoardAt;
     private bool _liftArriving;
+    private MeshInstance3D? _liftSeat;
+    private (int Line, int Seats, bool Skis, int Look) _liftSeatFor;
+    private bool _liftHidWalker;
 
     /// <summary>The lift this body rides, or waits for at its station.</summary>
     public RopewayLine? Lift => _lift;
 
-    /// <summary>Seconds until the carrier comes, while waiting at the station; 0 once aboard.</summary>
-    public double LiftWait => _lift == null ? 0 : System.Math.Max(0, _liftBoardAt - RopewayService.Sim);
+    /// <summary>Seconds until the carrier leaves the bottom station, while waiting; 0 once aboard.</summary>
+    public double LiftWait => _lift == null ? 0 : RopewayMotion.UntilDeparture(_lift, LiftCarrier, RopewayService.Sim);
 
     /// <summary>A bottom station within reach, if the body may board: on foot or on skis, standing, not carried.</summary>
     public RopewayLine? LiftInReach()
@@ -49,46 +59,149 @@ public partial class FootPlayer
 
     private void Board(RopewayLine line)
     {
-        var (carrier, wait) = RopewayMotion.Next(line, RopewayService.Sim);
+        var (carrier, _) = RopewayMotion.Next(line, RopewayService.Sim);
         _lift = line;
-        _liftCarrier = carrier;
-        _liftBoardAt = RopewayService.Sim + wait;
+        LiftLine = line.Id;
+        LiftCarrier = carrier;
         _liftArriving = false;
         _motion.Speed = 0f;
         // inside a cabin there is nothing to see; on a chair or a drag lift the rider is
-        ShowWhileCarried = line.Kind != RopewayKind.Gondola;
+        ShowWhileCarried = line.Kind is not (RopewayKind.Gondola or RopewayKind.CableCar);
         CarriedPose = 0;
         Carrier = LiftFrame;
     }
 
-    /// <summary>The carrier's hold on the body this frame.</summary>
+    /// <summary>The carrier's hold on the body this frame, on its simulator; it starts the arrival at the top.</summary>
     private (Vector3 At, float Yaw, Vector3 Velocity)? LiftFrame()
     {
         if (_lift is not { } line || Terrain?.Origin is not { } origin) return null;
-        double sim = RopewayService.Sim;
-        var (speed, _, hang, _) = RopewayMotion.Of(line.Kind);
-        if (sim < _liftBoardAt)
-        {
-            // waiting on the station's spot, facing up the line
-            var (e0, n0, alt0, de0, dn0) = line.At(0);
-            var spot = origin.ToWorld(e0, n0, alt0);
-            float ground = Terrain.TryGetHeight(spot, out float g0) ? g0 : alt0;
-            return (spot with { Y = ground }, Yaw(de0, dn0), Vector3.Zero);
-        }
-        float s = (float)((sim - _liftBoardAt) * speed);
-        if (s >= line.Length - 2f && !_liftArriving)
+        var pose = LiftPose(line, LiftCarrier, origin);
+        var (s, _, up) = RopewayMotion.Carrier(line, LiftCarrier, RopewayService.Sim);
+        if (up && s >= line.Length - 2f && !_liftArriving)
         {
             _liftArriving = true;
             Callable.From(ArriveAtTop).CallDeferred();
         }
+        return (pose.At, pose.Yaw, pose.Velocity);
+    }
+
+    /// <summary>
+    /// Where a rider of carrier <paramref name="carrier"/> is, on every peer: on its way up, on the
+    /// chair (its feet below the seat), on the cabin's floor, or pulled along the snow; otherwise on
+    /// the spot of the station it is waiting at (or has just reached).
+    /// </summary>
+    private (Vector3 At, float Yaw, Vector3 Velocity, bool Aboard) LiftPose(RopewayLine line, int carrier, Core.WorldOrigin origin)
+    {
+        var (s, _, up) = RopewayMotion.Carrier(line, carrier, RopewayService.Sim);
+        if (!up)
+        {
+            // waiting at the bottom, or set down at the top a moment ago
+            float at = s < line.Length / 2 ? 0f : line.Length;
+            var (e0, n0, alt0, de0, dn0) = line.At(at);
+            var spot = origin.ToWorld(e0, n0, alt0);
+            float ground = Terrain != null && Terrain.TryGetHeight(spot, out float g0) ? g0 : alt0;
+            return (spot with { Y = ground }, Yaw(de0, dn0), Vector3.Zero, false);
+        }
         var (e, n, alt, de, dn) = line.At(s);
-        var at = origin.ToWorld(e, n, alt);
+        var world = origin.ToWorld(e, n, alt);
         if (line.Kind is RopewayKind.TBar or RopewayKind.RopeTow)
-            at.Y = Terrain.TryGetHeight(at, out float g) ? g : alt - 6f;   // pulled along the snow
+            world.Y = Terrain != null && Terrain.TryGetHeight(world, out float g) ? g : alt - 6f;   // pulled along the snow
         else
-            at.Y = alt - hang - (line.Kind == RopewayKind.Chair ? 0.5f : 0f);   // on the seat, on the cabin's floor
-        var velocity = new Vector3(de, 0, -dn) * speed;
-        return (at, Yaw(de, dn), velocity);
+            world.Y = alt - line.Hang - (line.Kind == RopewayKind.Chair ? 0.5f : 0f);   // under the seat, on the cabin's floor
+        return (world, Yaw(de, dn), new Vector3(de, 0, -dn) * line.Speed, true);
+    }
+
+    /// <summary>
+    /// Another peer's rider (#915): on its carrier from the clock, not where the position stream
+    /// would put it a moment late. Called after the remote copy's interpolation.
+    /// </summary>
+    private void PlaceRemoteOnLift()
+    {
+        if (LiftLine == 0 || Origin is not { } origin || RopewayService.Instance is not { } lifts) { _lift = null; return; }
+        var (e, n) = origin.ToLv95(Position);
+        if (_lift == null || _lift.Id != LiftLine) _lift = lifts.Find(LiftLine, e, n);
+        if (_lift == null) return;
+        var pose = LiftPose(_lift, LiftCarrier, origin);
+        Position = pose.At;
+        Rotation = new Vector3(0, pose.Yaw, 0);
+    }
+
+    /// <summary>Where this rider should be by the clock, and whether it is aboard (<c>--liftnet</c>, #915); null off a lift.</summary>
+    public (Vector3 At, bool Aboard)? LiftExpected()
+    {
+        if (LiftLine == 0 || _lift == null || Origin is not { } origin) return null;
+        var pose = LiftPose(_lift, LiftCarrier, origin);
+        return (pose.At, pose.Aboard);
+    }
+
+    /// <summary>Drawn sitting on a chair now.</summary>
+    public bool LiftSeated => _liftSeat != null && IsInstanceValid(_liftSeat);
+
+    /// <summary>
+    /// The rider drawn for the lift, on every peer: sitting on a chair (skis on its feet when on
+    /// skis), out of sight in a cabin, the usual figure otherwise.
+    /// </summary>
+    private void UpdateLiftSeat()
+    {
+        bool aboard = _lift != null && LiftLine != 0 && Origin is { } origin && LiftPose(_lift, LiftCarrier, origin).Aboard;
+        bool chair = aboard && _lift!.Kind == RopewayKind.Chair;
+        bool cabin = aboard && _lift!.Kind is RopewayKind.Gondola or RopewayKind.CableCar;
+        if (!chair && _liftSeat != null)
+        {
+            if (IsInstanceValid(_liftSeat)) _liftSeat.QueueFree();
+            _liftSeat = null;
+        }
+        if (chair)
+        {
+            bool skis = RideKindId == (int)RideKind.Skis;
+            var want = (LiftLine, _lift!.Seats, skis, AppearanceBits ^ OutfitBits.GetHashCode());
+            if (_liftSeat == null || !IsInstanceValid(_liftSeat) || _liftSeatFor != want)
+            {
+                if (_liftSeat != null && IsInstanceValid(_liftSeat)) _liftSeat.QueueFree();
+                _liftSeat = BuildLiftSeat(skis);
+                AddChild(_liftSeat);
+                _liftSeatFor = want;
+            }
+            // side by side on the bench: each rider has its seat, the same on every peer
+            int seats = Mathf.Clamp(_lift!.Seats, 1, 8);
+            int seat = StableSeat(seats);
+            float x = (seat - (seats - 1) * 0.5f) * 0.6f;
+            _liftSeat.Transform = new Transform3D(Basis.Identity, new Vector3(x, 0.62f, 0.2f));
+        }
+        bool hide = chair || cabin;
+        if (_visual != null)
+        {
+            if (hide && _visual.Visible) { _visual.Visible = false; _liftHidWalker = true; }
+            else if (!hide && _liftHidWalker) { _visual.Visible = true; _liftHidWalker = false; }
+        }
+    }
+
+    /// <summary>A seat on the bench from the player's name: the same on every peer (not string.GetHashCode, which is per process).</summary>
+    private int StableSeat(int seats)
+    {
+        int h = 0;
+        foreach (char c in Name.ToString()) h = h * 31 + c;
+        return (int)((uint)h % (uint)seats);
+    }
+
+    private MeshInstance3D BuildLiftSeat(bool skis)
+    {
+        var seat = new SeatAnchor(0, Vector3.Zero, 0.12f, -0.55f) { Pose = SeatPose.Seated };
+        var figure = new MeshInstance3D
+        {
+            Name = "LiftSeat",
+            Mesh = SeatedFigure.Build(FigurePalette(RiderIndex()), seat, Hat, head: !(IsMultiplayerAuthority() && !_thirdPerson)),
+            MaterialOverride = HumanMeshBuilder.FigureMaterial(),
+        };
+        if (skis)
+            foreach (float side in new[] { -0.11f, 0.11f })
+                figure.AddChild(new MeshInstance3D
+                {
+                    Mesh = new BoxMesh { Size = new Vector3(0.09f, 0.03f, 1.7f) },
+                    Position = new Vector3(side, -0.6f, -0.65f),
+                    MaterialOverride = HumanMeshBuilder.FigureMaterial(),
+                });
+        return figure;
     }
 
     /// <summary>
@@ -99,21 +212,29 @@ public partial class FootPlayer
     {
         RopewayKind.Chair => (3.2f, 3f),
         RopewayKind.Gondola => (4f, 7f),
+        RopewayKind.CableCar => (5f, 10f),
         _ => (0f, 0f),
     };
 
     /// <summary>The yaw that faces a flat direction (east, north).</summary>
     private static float Yaw(float de, float dn) => Mathf.Atan2(-de, dn);
 
+    private void ClearLift()
+    {
+        _lift = null;
+        LiftLine = 0;
+        LiftCarrier = 0;
+    }
+
     /// <summary>At the top: off past the station, still on skis if on skis, at a walking pace.</summary>
     private void ArriveAtTop()
     {
-        if (_lift is not { } line || Terrain?.Origin is not { } origin) { _lift = null; return; }
+        if (_lift is not { } line || Terrain?.Origin is not { } origin) { ClearLift(); return; }
         var (e, n, alt, de, dn) = line.At(line.Length);
         var at = origin.ToWorld(e + de * 4, n + dn * 4, alt);
         at.Y = Terrain.TryGetHeight(at, out float g) ? g + 0.1f : alt;
         var on = new Vector3(de, 0, -dn) * 2f;
-        _lift = null;
+        ClearLift();
         if (_ride is Skis) ReleaseRiding(at, on, Yaw(de, dn));
         else Release(at, Vector3.Zero);
     }
@@ -122,10 +243,9 @@ public partial class FootPlayer
     private void LetGoOfLift()
     {
         if (_lift is not { } line) return;
-        var (speed, _, _, _) = RopewayMotion.Of(line.Kind);
         var fwd = -GlobalTransform.Basis.Z with { Y = 0 };
-        _lift = null;
-        if (_ride is Skis) ReleaseRiding(GlobalPosition, fwd.Normalized() * speed, Rotation.Y);
+        ClearLift();
+        if (_ride is Skis) ReleaseRiding(GlobalPosition, fwd.Normalized() * line.Speed, Rotation.Y);
         else Release(GlobalPosition, Vector3.Zero);
     }
 
