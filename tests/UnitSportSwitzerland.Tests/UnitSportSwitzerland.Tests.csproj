@@ -28,6 +28,7 @@
     <Compile Include="..\..\src\World\Snow\SnowModel.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\Snow\WeatherCommand.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\SkiDynamics.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\World\Snow\PisteCourse.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Concert\Protocols\ShowProtocols.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\CollisionReach.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\SimClock.cs" Link="Game\%(Filename)%(Extension)" />

@@ -262,7 +262,11 @@ public partial class RaceManager : Node, IOriginShiftAware
             }
             else
             {
-                var route = await RaceRoute.BuildAsync(source, frame, at);
+                // skis race down the slopes (#909): off snow they barely move (#899); the road only where there is no slope
+                RaceRoute? route = mount == (int)RideKind.Skis ? await RaceRoute.BuildPisteAsync(source, frame, at, race.Metres + 200f) : null;
+                if (mount == (int)RideKind.Skis && route == null)
+                    Callable.From(() => _chat?.Tell(sender, $"[race] #{raceId} no slope here, racing the road", ChatKind.System)).CallDeferred();
+                route ??= await RaceRoute.BuildAsync(source, frame, at);
                 Callable.From(() => Opened(raceId, route, null, "")).CallDeferred();
             }
         });
@@ -410,7 +414,9 @@ public partial class RaceManager : Node, IOriginShiftAware
             var all = _players.GetChildren().OfType<FootPlayer>().ToList();
             plan = NpcArrival.Plan(road, lane.Zero, race.Entrants.Count, count, race.Entrants.Count + count,
                 all.Where(p => !p.Npc).Select(p => race.Frame.ToWorld(p.Global)).ToList(), all.Select(p => race.Frame.ToWorld(p.Global)).ToList(),
-                race.Id * 7919 + (int)(owner % 100000) * 31 + race.Entrants.Count);
+                race.Id * 7919 + (int)(owner % 100000) * 31 + race.Entrants.Count,
+                // skis cannot climb back to a slot from ahead: they all come down from above (#909)
+                mount == (int)RideKind.Skis ? ArrivalStyle.Behind : null);
         }
         var ids = npcs.Spawn(owner, count, (RideKind)mount, host.Global, host.Rotation.Y,
             plan == null ? null : i => (race.Frame.ToGlobal(plan[i].At), plan[i].Yaw), race.Class >= 0 ? race.Class : race.NpcSetup);
