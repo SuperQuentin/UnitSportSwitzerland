@@ -265,7 +265,10 @@ off, `--junctions new` plans and reports without writing.
   the riders' ways (`ConnectorKind.Path`, `JunctionPathKind.Path`, written with the core's paths after it): straight on from A's
   path at its mouth over the red crossing of the arm between to B's (the crossing's own run), and right round the corner (the
   kerb between the mouths moved out to the paths' middles, `OffsetAlong`), on the arm's bike group. Their ends lie on the paths:
-  `SignalCheck` leaves them out of the lane and cap checks. Test region: J2 4 + 4; 168 real tiles 712.
+  `SignalCheck` leaves them out of the lane and cap checks. Test region: J2 4 + 4; 168 real tiles 712. A riders' turn from a
+  bike lane into an exit with no bike lane but a separated path (J2's left turns from the left-turn bike lane) is carried on
+  from its end into the path's middle `PathJoin` (6 m) out along the exit, written as a Path way too (it ended at the kerb
+  edge of the exit's outer lane, the user).
 - **5a, written** (`TileRewriter.LayoutWrite` `WritePaths`): one path per connector, car and bike; its ends where the arm's road
   meets the mouth (the axis point at the mouth station, height from the cap) with the lane's offset right of a driver arriving
   (the connector's `FromOffset`/`ToOffset`); signal record and group as the bike crossings find them; points on the cap's
