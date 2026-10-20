@@ -90,17 +90,16 @@ public partial class FootPlayer
         // a little inertia, as Minecraft's: it eases into speed and glides to a stop
         var velocity = Velocity.Lerp(wish, MathX.Damp(8f, dt));
         _fallSpeed = 0;
-        if (GameSettings.Current.CreativeNoclip)
-        {
-            Velocity = velocity;
-            GlobalPosition += velocity * dt;
-            return true;
-        }
-
         Velocity = velocity;
-        MoveAndSlide();
-        // sinking onto the ground lands, as in Minecraft
-        if (IsOnFloor() && climb < 0f) CreativeFlying = false;
+        if (GameSettings.Current.CreativeNoclip) GlobalPosition += velocity * dt;
+        else
+        {
+            MoveAndSlide();
+            // sinking onto the ground lands, as in Minecraft
+            if (IsOnFloor() && climb < 0f) CreativeFlying = false;
+        }
+        // the first-person eye takes its pitch here, as the walk and the swim do: without it the view stays level
+        UpdateCameraFeel(dt, false, false);
         return true;
     }
 }

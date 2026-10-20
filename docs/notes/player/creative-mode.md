@@ -8,7 +8,9 @@
   Jump held rises, Shift sinks (a pad's B, since L3 is `FlyBoost` with Ctrl), boost ×5, a little
   inertia (`Damp(8)`). Sinking onto the floor lands and ends the flight. While flying the view
   looks straight up and down (`ClampPitch`; the third-person clamp keeps the lens off the ground and
-  comes back on landing), and `PlayerFeel` draws no speed lines and no shake. It runs after the swim, fight,
+  comes back on landing), and `PlayerFeel` draws no speed lines and no shake. **The flight step must
+  call `UpdateCameraFeel`** before it returns, as the swim does: the first-person eye takes its pitch
+  there, at the end of the walk step, and without it the view stayed level (#1002 playtest). It runs after the swim, fight,
   beam and aura steps, before the walk, so water and duels still win.
 - **`GameSettings.CreativeNoclip`** (Settings > Controls > "Creative flight through walls", off):
   the flight moves the position without `MoveAndSlide`; `RescueFromVoid` waits while it flies, so

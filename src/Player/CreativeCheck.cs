@@ -90,10 +90,21 @@ public partial class CreativeCheck : Node3D
             await Wait(1.0);
             Expect(Mathf.Abs(_me.GlobalPosition.Y - hover) < 0.3f, $"let go, it hovers ({hover:F1} -> {_me.GlobalPosition.Y:F1} m)");
 
-            // flying, the view looks straight down at what is under you, in third person too
-            _me.DebugThirdPerson(true);
-            _me.LookPitch = -1.5f;
-            Expect(_me.LookPitch < -1.45f, $"flying, the view looks straight down (pitch {_me.LookPitch:F2})");
+            // flying, the camera itself looks straight down at what is under you and up at the sky,
+            // in first and in third person (first person once stayed level: its eye is set in the walk step)
+            foreach (bool third in new[] { false, true })
+            {
+                _me.DebugThirdPerson(third);
+                string view = third ? "third person" : "first person";
+                _me.LookPitch = -1.5f;
+                await Wait(0.2);
+                float lookDown = -_me.Camera.GlobalBasis.Z.Y;
+                _me.LookPitch = 1.3f;
+                await Wait(0.2);
+                float lookUp = -_me.Camera.GlobalBasis.Z.Y;
+                Expect(_me.LookPitch > 1.25f && lookDown < -0.95f && lookUp > 0.9f,
+                    $"flying, {view}: the camera looks down and up (forward y {lookDown:F2} / {lookUp:F2})");
+            }
             _me.LookPitch = 0f;
 
             var from = _me.GlobalPosition;
