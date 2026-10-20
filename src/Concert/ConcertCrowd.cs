@@ -92,7 +92,8 @@ public partial class ConcertCrowd : Node3D
         new(0.2f, 0.2f, 0.22f), new(0.85f, 0.75f, 0.2f), new(0.25f, 0.45f, 0.25f), new(0.6f, 0.35f, 0.55f),
     };
 
-    private List<(Transform3D, Color)> Places()
+    /// <summary>Everyone's place and look (custom data), seats then floor; internal for <c>--concertcheck</c> (#985: none in a crew zone).</summary>
+    internal List<(Transform3D, Color)> Places()
     {
         var list = new List<(Transform3D, Color)>();
         var rng = new Random(_plan.Event.Seed ^ 0x5eed);

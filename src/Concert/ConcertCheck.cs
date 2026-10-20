@@ -102,6 +102,49 @@ public static class ConcertCheck
             }
             Expect(bad == null, $"{venue.Name}: {(venue.Kind == VenueKind.Stadium ? "boards for the crowd, grass under the stage" : "no protection floor")}{(bad != null ? ": " + bad : "")}");
         }
+        // #985: the crew's ground. Every venue, every layout in two seeds: nobody of the crowd stands in a
+        // crew zone, the zones hold front of house and the cameras' tracks and jib, barriers stand round
+        // them, three work the desk and an operator stands at every crewed camera
+        foreach (var venue in StadiumCatalog.All)
+        {
+            string? bad = null;
+            var seen = new Dictionary<StageLayout, int>();
+            int plans = 0, panels = 0, people = 0;
+            // an open air builds in one place: its one layout
+            int layoutsHere = venue.StageAt != null ? 1 : Enum.GetValues<StageLayout>().Length;
+            for (int seed = 1; seed <= 400 && bad == null && plans < layoutsHere * 2; seed++)
+            {
+                var e = ConcertPlanner.Plan(venue, seed);
+                if (seen.GetValueOrDefault(e.Layout) >= 2) continue;
+                seen[e.Layout] = seen.GetValueOrDefault(e.Layout) + 1;
+                var plan = new StagePlan(e);
+                plans++;
+                panels += (plan.Boxes.Count - plan.FenceFrom) / 4;
+                var crowd = new ConcertCrowd(plan);
+                var places = crowd.Places();
+                crowd.Free();
+                people += places.Count;
+                foreach (var (t, _) in places)
+                    foreach (var z in plan.Zones)
+                        if (z.Contains(new Vector2(t.Origin.X, t.Origin.Z)))
+                        {
+                            bad ??= FormattableString.Invariant($"seed {seed} ({e.Layout}): someone at {t.Origin} in the {z.Name} zone");
+                            break;
+                        }
+                var rigs = CameraRig.For(plan);
+                var posts = ConcertCrew.Posts(plan, rigs);
+                int atDesk = posts.Count(p => p.Role != CrewRole.Camera && p.Feet.DistanceTo(plan.Desk) < 3f && MathF.Abs(p.Feet.Y - plan.Desk.Y) < 0.01f);
+                int crewed = rigs.Count(r => r.Crewed > 0 && !r.Hidden), operators = posts.Count(p => p.Role == CrewRole.Camera);
+                if (atDesk != 3) bad ??= $"seed {seed} ({e.Layout}): {atDesk} at the desk";
+                else if (operators != crewed || crewed < 6) bad ??= $"seed {seed} ({e.Layout}): {operators} operators for {crewed} crewed cameras";
+                else if (!plan.Zones.Any(z => z.Name == "front of house") || !plan.Zones.Any(z => z.Name == "Side track") || !plan.Zones.Any(z => z.Name == "Jib"))
+                    bad ??= $"seed {seed} ({e.Layout}): zones {string.Join(", ", plan.Zones.Select(z => z.Name))}";
+                else if (plan.Boxes.Count == plan.FenceFrom) bad ??= $"seed {seed} ({e.Layout}): no crew barrier";
+            }
+            Expect(bad == null && seen.Count == layoutsHere,
+                $"{venue.Name}: {plans} stages ({seen.Count} layouts), {people} people, none in a crew zone, {panels} barrier panels, crew at the desk and the cameras{(bad != null ? ": " + bad : "")}");
+        }
+
         var day = ConcertPlanner.Plan(s, 7);
         Expect(!day.Standing(3) && day.Standing(ConcertEvent.BuildHour) && day.Standing(day.StartHour) && !day.Standing(day.EndHour),
             $"the stage is built by {ConcertEvent.BuildHour}h and struck at the show's end ({day.EndHour}h)");
