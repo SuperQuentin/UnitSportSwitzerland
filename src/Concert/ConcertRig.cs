@@ -139,8 +139,10 @@ public partial class ConcertRig : Node3D
         _cameras = new ConcertCameras(_plan, _desk);
         AddChild(_cameras);
         // the music from the PA: the setlist on the shared clock, read for the desk
-        _music = new ConcertMusic(Event, _plan.PaHangs.ToArray());
+        _music = new ConcertMusic(Event, _plan);
         AddChild(_music);
+        // the stadium round the PA and the crowd's voice, for this machine's ears (#984)
+        AddChild(new ConcertSound(Event, _music));
         _pa = new ConcertPa(_plan);
         AddChild(_pa);
         // pyro, CO2, confetti, fog: fixtures of the rig like the rest
