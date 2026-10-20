@@ -66,9 +66,10 @@ public class LaneDataRegionTests(SignalTestRegionFixture region) : IClassFixture
             int car = plan.Groups.FindIndex(g => g.Arm == a.SignalArm && g.Kind == SignalGroupKind.Car && (g.Moves & SignalMoves.Through) != 0);
             int arrow = plan.Groups.FindIndex(g => g.Arm == a.SignalArm && g.Kind == SignalGroupKind.RightArrow);
             Assert.True(arrow >= 0 && car >= 0);
-            // (each group starting on its own: the arrow may follow the through green by a moment)
+            // (each group starting on its own: the arrow may follow the through green by a moment, up to 3 s where the turning cars'
+            // faster entering, 4 m/s² round the bend, holds it for the stream it turns across)
             Assert.True(Enumerable.Range(0, (int)plan.Cycle * 4).Select(k => k * 0.25)
-                .Count(t => plan.State(car, t) == SignalAspect.Green && plan.State(arrow, t) != SignalAspect.Green) <= 8);
+                .Count(t => plan.State(car, t) == SignalAspect.Green && plan.State(arrow, t) != SignalAspect.Green) <= 12);
         }
         // J1, the same crossroads by the rule: kerbside, a bike signal, the right arrow held while the riders go
         var j1 = Approach("J1", east: false, west: true);
