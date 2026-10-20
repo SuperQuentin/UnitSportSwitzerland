@@ -93,8 +93,8 @@ public sealed class GameSettings
 
     /// <summary>
     /// Generate the terrain there is no data for, blended into the real tiles beside it
-    /// (<see cref="Terrain.FallbackChunkSource"/>). Off leaves void past the real region, and
-    /// no world at all on a copy with no terrain.
+    /// (<see cref="Terrain.FallbackChunkSource"/>). Off leaves void past the real region; offline on a
+    /// copy with no terrain it generates anyway, the only ground there is (#1002).
     /// </summary>
     public bool GeneratedFill { get; set; } = true;
 

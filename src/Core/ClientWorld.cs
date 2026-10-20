@@ -267,6 +267,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // however far it goes. Online too: positions on the wire are LV95, never world space.
         AddChild(new OriginShifter(origin, () => GetViewport().GetCamera3D()?.GlobalPosition, () => true));
 
+        // Offline with no terrain data, the generated fill is the whole world: with the setting off
+        // there would be no ground anywhere, and the body would hang where the fly camera left it.
+        // A --generated on the command line is a run's own choice and stands.
+        _fillForced = !hasLocalTerrain && !Launch.Networked && generated != null && !CmdArgs.Has("--generated");
+        if (_fillForced && !GameSettings.Current.GeneratedFill)
+            GD.Print("[world] generated terrain is off in the settings, but this copy has no terrain data: generating it anyway");
+
         if (!hasLocalTerrain && generated != null)
             GD.PushWarning(
                 "[world] no terrain data found, showing generated terrain. Generate the real one "
@@ -319,7 +326,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // source so a client never asks a server for one, and under the cache so a generated tile
         // is not generated twice. Built even when switched off, so the setting can turn it on.
         var fallback = generated == null ? null : new FallbackChunkSource(streamedSource, generated, startE, startN,
-            GameSettings.Current.GeneratedFill) { Log = s => GD.Print(s), HorizonCacheDir = TerrainPaths.FindCacheDir() };
+            FillOn) { Log = s => GD.Print(s), HorizonCacheDir = TerrainPaths.FindCacheDir() };
 
         // Outermost, so a tile decoded once is not decoded again when the rings drop it and pick
         // it back up — which a route that doubles back does constantly.
@@ -1283,6 +1290,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
     private static long CacheCapBytes => (long)(GameSettings.Current.CacheGb * 1024 * 1024 * 1024);
 
+    /// <summary>The generated fill is on regardless of its setting: offline with no terrain data, it is the only ground.</summary>
+    private bool _fillForced;
+    private bool FillOn => GameSettings.Current.GeneratedFill || _fillForced;
+
     private void OnSettingsChanged()
     {
         if (_chunkSource != null) _chunkSource.MaxCacheBytes = CacheCapBytes;
@@ -1290,7 +1301,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // before the terrain takes the settings: its rings and mesh detail are the style's
         if (StyleKit.Restyle()) ApplyStyle();
         _chunks?.ApplySettings(GameSettings.Current);
-        _chunks?.SetFallbackEnabled(GameSettings.Current.GeneratedFill);
+        _chunks?.SetFallbackEnabled(FillOn);
         if (_ambience != null) _ambience.Volume = Audio.SfxBus.SliderGain(GameSettings.Current.AmbienceVolume);
         SetCameraFar(GameSettings.Current.CameraFar);
         PublishAppearance();
