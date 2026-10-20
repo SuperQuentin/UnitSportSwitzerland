@@ -74,6 +74,11 @@ public partial class ConcertNetProbe : ChatProbe
         Expect(import != null, $"A reads the MVR ({error})");
         if (import != null)
         {
+            // and its scene objects (#958): one truss piece's mesh, three pieces of it
+            var box = new[] { new Vector3(0, 0, 0), new Vector3(2, 0, 0), new Vector3(0, 0.4f, 0), new Vector3(0, 0, 0.4f) };
+            import.Rig.Meshes.Add(Mvr.RigData.Quantise(box, new[] { 0, 1, 2, 0, 2, 3, 0, 3, 1, 1, 3, 2 }, Colors.Silver));
+            for (int i = 0; i < 3; i++)
+                import.Rig.Objects.Add(new Mvr.RigData.ObjectRow { Mesh = 0, Xf = Mvr.RigData.X(new Transform3D(Basis.Identity, new Vector3(i * 2f, 12f, 0))) });
             Svc?.SendRig(0, import.Rig.Pack());
             Say($"rig {import.Rig.Fixtures.Count}");
             if (!await Heard("B", "rig ok", 30)) Fail("B never got the rig");
@@ -99,6 +104,9 @@ public partial class ConcertNetProbe : ChatProbe
         if (await HeardStarting("A", "rig ", 30) is { } said && int.TryParse(said[4..], out int n))
         {
             Expect(await Until(() => Svc?.RigFor(0)?.Fixtures.Count == n, 20), $"A's imported rig arrives ({Svc?.RigFor(0)?.Fixtures.Count} of {n} fixtures, from {Svc?.RigFor(0)?.Source})");
+            Expect(Svc?.RigFor(0) is { Objects.Count: 3, Meshes.Count: 1 } r && r.Meshes[0].TriangleCount == 4, $"with its scene objects ({Svc?.RigFor(0)?.Objects.Count} pieces of 3)");
+            if (ConcertRig.Live.Count > 0)
+                Expect(await Until(() => ConcertRig.Live.Values.Any(r => r.ObjectsDrawn == 3), 20), "and the stage draws them");
             Say("rig ok");
             Expect(await Until(() => Svc?.RigFor(0) == null, 20), "and goes when A gives the set its own rig back");
             Say("own ok");
