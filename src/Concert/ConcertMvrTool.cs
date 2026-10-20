@@ -41,6 +41,13 @@ public static class ConcertMvrTool
         return best;
     }
 
+    /// <summary>
+    /// The GDTFs of the MVRs imported on this machine, by the rig's source and GDTFSpec (#959): only the
+    /// importer re-exports an imported rig with its original GDTFs (they never go over the network);
+    /// another client writes ours. Lost when the game quits.
+    /// </summary>
+    private static readonly Dictionary<string, Dictionary<string, byte[]>> Originals = new();
+
     private static string Safe(string s) => string.Concat(s.Select(c => char.IsLetterOrDigit(c) || c is ' ' or '-' ? c : '_')).Trim();
 
     /// <summary>The MVR files in the folder, newest first.</summary>
@@ -58,11 +65,13 @@ public static class ConcertMvrTool
         if (Nearest() is not { Plan: { } plan } rig) return "No concert near to export.";
         var e = rig.Event;
         string title = $"{e.Stadium.Name} - {e.Artist}";
-        var data = RigData.FromPatch(plan.Patch, title);
+        // an imported rig goes out as it came in (its uuids, IDs, focus, breaks), with its own GDTFs on the machine that imported it (#959)
+        var data = rig.Imported ?? RigData.FromPatch(plan.Patch, title);
         byte[]? glb = null;
         try { glb = StageGlb(rig); }
         catch (Exception ex) { GD.PushWarning($"[concert] the stage did not export as glTF: {ex.Message}"); }
-        var bytes = MvrFile.Write(data, title, glb);
+        var originals = Originals.GetValueOrDefault(data.Source);
+        var bytes = MvrFile.Write(data, title, glb, originals == null ? null : spec => originals.GetValueOrDefault(spec));
         string path = Path.Combine(FolderPath, Safe(title) + ".mvr");
         File.WriteAllBytes(path, bytes);
         GD.Print($"[concert] exported {data.Fixtures.Count} fixtures of {data.Types.Count} types to {path} ({bytes.Length / 1024} kB)");
@@ -116,9 +125,11 @@ public static class ConcertMvrTool
         if (!File.Exists(path)) return $"No file {path}. " + List();
         if (new FileInfo(path).Length > 256L << 20) return "That MVR is over 256 MB.";
 
-        var import = MvrFile.Read(File.ReadAllBytes(path), Path.GetFileName(path), out string? error);
+        var mvr = File.ReadAllBytes(path);
+        var import = MvrFile.Read(mvr, Path.GetFileName(path), out string? error);
         if (import == null) return $"Could not read {Path.GetFileName(path)}: {error}";
         var data = import.Rig;
+        Originals[data.Source] = MvrFile.Gdtfs(mvr, data.Types.Select(t => t.GdtfSpec).OfType<string>());
         bool stadiumFrame = frame == "stadium" || frame == null && import.OursStadiumFrame;
         if (!stadiumFrame) plan.FromStage(data);
         if (data.Check() is { } bad) return $"That rig does not fit: {bad}.";

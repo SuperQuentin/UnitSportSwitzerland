@@ -371,6 +371,8 @@ public static class Gdtf
                 }
             else channels.Add(new Channel(bytes[0] - 1, bytes.Length, attr, geometry, pf, pt, br, bytes.Max()));
         }
+        // in address order: a reference's cells come out R, G, B per cell, as the bar lays them
+        channels.Sort((a, b) => a.Break != b.Break ? a.Break.CompareTo(b.Break) : a.Offset.CompareTo(b.Offset));
         var breakList = channels.Select(c => c.Break).Distinct().OrderBy(b => b).ToArray();
         int footprint = channels.Where(c => c.Break == 1).Select(c => c.Last).DefaultIfEmpty(0).Max();
         float beamAngle = ft.Descendants("Beam").Select(b => Float((string?)b.Attribute("BeamAngle"), 0f)).FirstOrDefault(a => a > 0f);

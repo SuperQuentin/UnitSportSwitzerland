@@ -114,7 +114,12 @@ public static partial class MvrFile
                     new XElement("Classing", ClassUuid(f.Group)),
                     new XElement("Geometries")));
             }
-            children.Add(Fixture(f.Name, uuid, Axes(up, home), pos, spec, mode, focus, f, id, addresses));
+            var fixture = Fixture(f.Name, uuid, Axes(up, home), pos, spec, mode, focus, f, id, addresses);
+            // a fixed head's zoom its GDTF has no channel for goes back as the CustomCommand it came as
+            var tr = rig.Types[f.Type];
+            if (kept[f.Type] != null && tr.Name.EndsWith(ZoomTag(tr.BeamMax), StringComparison.Ordinal))
+                fixture.Element("CustomId")!.AddBeforeSelf(new XElement("CustomCommands", new XElement("CustomCommand", "Zoom,f " + F(tr.BeamMax))));
+            children.Add(fixture);
             // what MVR has no place for: the exact home, a screen's size and pixels
             var extra = new XElement("Fixture", new XAttribute("uuid", uuid), new XAttribute("home", Vec(home)));
             if (f.Screen != null)
@@ -172,6 +177,8 @@ public static partial class MvrFile
         }
         return ms.ToArray();
     }
+
+    private static string ZoomTag(float zoom) => FormattableString.Invariant($" (zoom {zoom})");
 
     private static string ClassUuid(int group) => Gdtf.Uuid($"UnitSport/class/{(RigGroup)group}");
     private static string PositionUuid(int group) => Gdtf.Uuid($"UnitSport/position/{(RigGroup)group}");
@@ -315,7 +322,7 @@ public static partial class MvrFile
             }
             // a CustomCommand's zoom on a head with no zoom channel: its beam (the pendants' 44 degrees)
             if (type != null && zoom is { } z && type.Offset(Attr.Zoom) < 0)
-                type = type with { Name = FormattableString.Invariant($"{type.Name} (zoom {z})"), BeamMin = z, BeamMax = z };
+                type = type with { Name = type.Name + ZoomTag(z), BeamMin = z, BeamMax = z };
             t = typeIndex[key] = type == null ? -1 : rig.Types.Count;
             if (type != null)
             {
