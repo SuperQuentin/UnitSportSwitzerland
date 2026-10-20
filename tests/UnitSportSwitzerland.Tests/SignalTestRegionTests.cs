@@ -102,6 +102,11 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
         var plan = signal.Plan;
         var conflicts = plan.Conflicts();
         Assert.NotEmpty(signal.ConflictPairs);
+        // every movement once for the trails (the user: only the west path's riders turning right were shown): each lit path, the
+        // riders' among them, and each crossing both ways
+        Assert.Equal(tile.JunctionPaths.Count(p => p.Signal == 0), signal.ConflictLines.Count(l => l.Mover != ConflictMover.Walker));
+        Assert.Equal(2 * plan.Groups.Count(g => g.Kind == SignalGroupKind.Pedestrian), signal.ConflictLines.Count(l => l.Mover == ConflictMover.Walker));
+        Assert.All(signal.ConflictPairs, p => Assert.Contains(signal.ConflictLines, l => ReferenceEquals(l.Points, p.EndingLine)));
         foreach (var p in signal.ConflictPairs)
         {
             Assert.Equal(SignalPlan.Conflict.Hard, conflicts[p.Ending, p.Starting]);

@@ -68,7 +68,8 @@ public partial class Traffic
             return;
         }
         if ((_debugDue -= dt) > 0) return;
-        _debugDue = 0.2;
+        // five times a second, every frame for the timing's trails and movers (moving at up to 11 m/s, the user)
+        _debugDue = ShowMovers || ShowTrails ? 0 : 0.2;
         if (_debugLines is null)
         {
             _debugMesh = new ImmediateMesh();
@@ -131,7 +132,7 @@ public partial class Traffic
         // the movers last: drawn over the lit paths
         if ((ShowMovers || ShowTrails) && _roads is not null && Focus?.Invoke() is { } here)
             foreach (var site in _roads.Signals)
-                if (site.Pairs.Count > 0 && new Vector2(site.Pairs[0].Starting[0].X - here.X, site.Pairs[0].Starting[0].Z - here.Z).Length() < LightsDrawn)
+                if (site.Lines.Count > 0 && new Vector2(site.Lines[0].Points[0].X - here.X, site.Lines[0].Points[0].Z - here.Z).Length() < LightsDrawn)
                     lines += ShowMovers ? DrawMovers(mesh, site) : DrawTrails(mesh, site);
         if (lines == 0)
         {
@@ -335,11 +336,14 @@ public partial class Traffic
         return n;
     }
 
-    /// <summary>A movement of the timing's pairs: its line, group, who moves, its clearing and entering speeds, its amber, its turn.</summary>
+    /// <summary>A movement as the timing took it: its line (world), group, who moves, its clearing and entering speeds, its amber, its turn.</summary>
     private sealed record Stream(Vector3[] Line, int Group, ConflictMover Who, float Clear, float Enter, float Amber, float Length)
     {
         public SignalMoves Turn { get; } = TurnOf(Line);
     }
+
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<SignalSite, List<Stream>> _streams = new();
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<SignalPlan, SignalPlan.Conflict[,]> _conflicts = new();
 
     /// <summary>Which way a line turns, from its first and last stretches: under 30 degrees straight on.</summary>
     private static SignalMoves TurnOf(Vector3[] line)
@@ -356,39 +360,10 @@ public partial class Traffic
             : cross < 0 ? SignalMoves.Right : SignalMoves.Left;
     }
 
-    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<SignalSite, List<Stream>> _streams = new();
-
-    /// <summary>
-    /// A site's movements, each line once, from its pairs: speeds and amber as the timing took them where the line was seen in that
-    /// role, else the timing's defaults (its amber: the group's own after its green, none for walkers).
-    /// </summary>
-    private static List<Stream> StreamsOf(SignalSite site)
-    {
-        var list = new List<Stream>();
-        foreach (var (pair, ending, starting) in site.Pairs)
-        {
-            Add(ending, pair.Ending, pair.EndingMover, pair.ClearSpeed, -1, pair.Amber);
-            Add(starting, pair.Starting, pair.StartingMover, -1, pair.EnterSpeed, -1);
-        }
-        for (int k = 0; k < list.Count; k++)
-        {
-            var s = list[k];
-            var (clear, enter) = s.Who switch { ConflictMover.Bike => (4f, 5f), ConflictMover.Walker => (1.2f, 1.5f), _ => (10f, 40f / 3.6f) };
-            float amber = s.Amber >= 0 ? s.Amber : s.Who == ConflictMover.Walker ? 0 : AmberAfterGreen(site.Plan, s.Group);
-            list[k] = s with { Clear = s.Clear > 0 ? s.Clear : clear, Enter = s.Enter > 0 ? s.Enter : enter, Amber = amber };
-        }
-        return list;
-
-        void Add(Vector3[] line, int group, ConflictMover who, float clear, float enter, float amber)
-        {
-            int i = list.FindIndex(s => s.Group == group && s.Line.Length == line.Length && s.Line.AsSpan().SequenceEqual(line));
-            if (i < 0) list.Add(new Stream(line, group, who, clear, enter, amber, Length(line)));
-            else list[i] = list[i] with
-            {
-                Clear = clear > 0 ? clear : list[i].Clear, Enter = enter > 0 ? enter : list[i].Enter, Amber = amber >= 0 ? amber : list[i].Amber,
-            };
-        }
-    }
+    /// <summary>A site's movements, every one the timing took (<c>CPAR</c>'s lines).</summary>
+    private static List<Stream> StreamsOf(SignalSite site) =>
+        site.Lines.Where(l => l.Line.Group < site.Plan.Groups.Count && l.Line.ClearSpeed > 0 && l.Line.EnterSpeed > 0)
+            .Select(l => new Stream(l.Points, l.Line.Group, l.Line.Mover, l.Line.ClearSpeed, l.Line.EnterSpeed, l.Line.Amber, Length(l.Points))).ToList();
 
     /// <summary>
     /// Whether arm <paramref name="arm"/>'s crossing has walkers on it at plan time <paramref name="u"/>: from its green until the
@@ -412,16 +387,6 @@ public partial class Traffic
         return false;
     }
 
-    /// <summary>How long a group's amber after its green lasts (s); none where its green ends in red.</summary>
-    private static float AmberAfterGreen(SignalPlan plan, int group)
-    {
-        var v = plan.Groups[group].Intervals;
-        for (int i = 0; i < v.Count; i++)
-            if (v[i].Aspect == SignalAspect.Green && v[(i + 1) % v.Count].Aspect == SignalAspect.Amber)
-                return v[(i + 1) % v.Count].To - v[(i + 1) % v.Count].From;
-        return 0;
-    }
-
     /// <summary>
     /// Each movement's trail through its greens (see <see cref="ShowTrails"/>): its head at its entering speed from its line at
     /// green, its tail at its clearing speed from its line at the end of its amber, one trail from its green until its tail has
@@ -443,10 +408,12 @@ public partial class Traffic
             int from = plan.Groups[s.Group].Arm;
             int to = s.Who == ConflictMover.Walker || from < 0 || from >= plan.Arms.Count ? -1 : Enumerable.Range(0, plan.Arms.Count)
                 .FirstOrDefault(k => k != from && plan.Arms[k].Out && SignalPlan.Turn(plan.Arms, from, k) == s.Turn, -1);
-            // (and, turning into an arm across its crossing, for as long as its walkers' trail is on it: their yellow and the red
-            // after it too, the user)
+            // (and, where the plan lets it go across that arm's crossing with the walkers, a permissive conflict, for as long as
+            // their trail is on it: their yellow and the red after it too; a protected turn the conflict times keep apart never, the user)
+            var conflicts = _conflicts.GetValue(plan, p => p.Conflicts());
+            int walk = to < 0 ? -1 : plan.Groups.FindIndex(x => x.Kind == SignalGroupKind.Pedestrian && x.Arm == to);
             bool yields = aspect == SignalAspect.Green && to >= 0 && (plan.YieldsAt(from, to, s.Turn, s.Group, now)
-                || s.Turn != SignalMoves.Through && (s.Who == ConflictMover.Car || s.Turn == SignalMoves.Right) && Crossing(plan, streams, to, u));
+                || walk >= 0 && conflicts[s.Group, walk] == SignalPlan.Conflict.Permissive && Crossing(plan, streams, to, u));
             var colour = aspect switch
             {
                 SignalAspect.Green => Colors.LimeGreen,

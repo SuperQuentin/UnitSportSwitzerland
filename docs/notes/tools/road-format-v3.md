@@ -108,10 +108,11 @@
   a driver arriving on that arm), `move u8`, `kind u8` (car, bike), `signal zigzag` (the SGNL record, -1 without lights), `group
   u8`, `width, toWidth varint cm`, `pointCount varint`, points as zigzag cm (the first absolute, then deltas). Ends are positions,
   not segments, so a path reaches a road in the next tile; the game ties them to road ends by position, as road ends to each other.
-- **`CPAR`** conflict pairs (#979, `RoadConflictPair.cs`, `traffic-signals`), after `JPTH`: `version u8` (1; skipped whole when
-  unknown), `count varint`, per pair `signal varint` (the SGNL record), `ending, starting u8` (groups), `movers u8` (ending | starting
-  << 4: car, bike, walker), `clear, enter, clearSpeed, enterSpeed, length, amber, time f32`, then the ending and the starting line
-  (`count varint`, `x y z f32` tile-local each, from their stop lines). Only for the debug view's movers; the plan holds the timing.
+- **`CPAR`** conflict lines and pairs (#979, `RoadConflictPair.cs`, `traffic-signals`), after `JPTH`: `version u8` (2; skipped
+  whole when another), `count varint`, per line (every movement the timing took, once) `signal varint` (the SGNL record), `group,
+  mover u8` (car, bike, walker), `clearSpeed, enterSpeed, amber, length f32`, points (`count varint`, `x y z f32` tile-local, from
+  its stop line, simplified to 5 cm); `count varint`, per pair `signal varint, ending line, starting line varint` (indices in that
+  signal's lines), `clear, enter, time f32`. Only for the debug view's trails and movers; the plan holds the timing.
 - **Varying along a link** (a sidewalk width per sample, OSM lanes changing mid-line): the
   stage splits the segment; attributes are per segment. Segments already meet end to end at
   tile seams and junction trims.

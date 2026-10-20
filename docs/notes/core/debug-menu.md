@@ -58,11 +58,12 @@
   as its amber ends, at its clearing speed, until it has left its line's end, its trail held ahead of it), the starting group's first (dark green,
   from its line at green at its entering speed to its line's end, its trail behind it back to its line; a crossing's walkers from both kerbs at once), their lines faint
   and the conflict area ringed in white: the green one reaches the ring just as the red one has left it (`SignalSite.Pairs`, from `CPAR`).
-  `trails` (#979) draws only the trails, one per movement of those pairs through each of its greens: grown from its line at
+  `trails` (#979) draws only the trails, one per movement the timing took (`SignalSite.Lines`) through each of its greens: grown from its line at
   green at its entering speed, closed behind its last mover from its amber's end at its clearing speed, in its group's light
   now (green, yellow on amber, red), so a trail whose green ends before it reaches its exit turns yellow then red as it is; no
   movers, lines or rings (a red-amber shows nothing), see-through over the cars, dashed on green where it must yield as the
-  green paths (`SignalPlan.YieldsAt`, its turn read off the line's first and last stretches), and a turn across an exit's
-  crossing for as long as walkers are on it (its green to its last walker across, through its yellow and red). A line seen in one role only
-  takes the timing's defaults for the other. The debug lines' material is alpha-blended.
+  green paths (`SignalPlan.YieldsAt`, its turn read off the line's first and last stretches), and where the plan lets it
+  cross an exit's crossing with its walkers (a permissive conflict: riders turning right) for as long as walkers are on it
+  (their green to the last across, through their yellow and red); a protected turn, kept apart by the times, never.
+  Trails and movers redraw every frame, the other tools five times a second. The debug lines' material is alpha-blended.
 - **Z-fighting** overlay (`zfight`) and **Flicker shot** button (`--debugview flicker`): `general/zfight` (#788).

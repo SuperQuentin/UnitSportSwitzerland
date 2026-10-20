@@ -184,7 +184,10 @@ public sealed class SignalSite
     /// <summary>Its crossings (#971, the debug drawing): kerb to kerb between the arm's pedestrian heads (world), and the arm.</summary>
     public List<(Vector3 From, Vector3 To, int Arm)> Walks { get; } = new();
 
-    /// <summary>The pairs of movements that set its groups' green starts (#979, <c>CPAR</c>), their lines in world space, for the debug view's movers.</summary>
+    /// <summary>Its movements as its timing took them (#979, <c>CPAR</c>), their lines in world space, for the debug view's trails.</summary>
+    public List<(RoadConflictLine Line, Vector3[] Points)> Lines { get; } = new();
+
+    /// <summary>The pairs of those that set its groups' green starts and ends (#979, <c>CPAR</c>), on the same world lines, for the movers.</summary>
     public List<(RoadConflictPair Pair, Vector3[] Ending, Vector3[] Starting)> Pairs { get; } = new();
 
     public void Shift(OriginShift shift)
@@ -192,11 +195,9 @@ public sealed class SignalSite
         foreach (var (points, _, _) in Rides)
             for (int i = 0; i < points.Length; i++) points[i] = shift.Point(points[i]);
         for (int i = 0; i < Walks.Count; i++) Walks[i] = (shift.Point(Walks[i].From), shift.Point(Walks[i].To), Walks[i].Arm);
-        foreach (var (_, ending, starting) in Pairs)
-        {
-            for (int i = 0; i < ending.Length; i++) ending[i] = shift.Point(ending[i]);
-            for (int i = 0; i < starting.Length; i++) starting[i] = shift.Point(starting[i]);
-        }
+        // (the pairs' lines are these same arrays)
+        foreach (var (_, points) in Lines)
+            for (int i = 0; i < points.Length; i++) points[i] = shift.Point(points[i]);
     }
 }
 
@@ -441,7 +442,11 @@ public sealed class LaneGraph
                     for (int i = 0; i < v.Length; i++) v[i] = origin.ToWorld(tile.Id.MinE + f[i * 3], tile.Id.MaxN - f[i * 3 + 2], f[i * 3 + 1]);
                     return v;
                 }
-                foreach (var pair in tile.Signals[k].ConflictPairs) sites[k].Pairs.Add((pair, World(pair.EndingLine), World(pair.StartingLine)));
+                var worldOf = new Dictionary<float[], Vector3[]>(ReferenceEqualityComparer.Instance);
+                foreach (var line in tile.Signals[k].ConflictLines) sites[k].Lines.Add((line, worldOf[line.Points] = World(line.Points)));
+                foreach (var pair in tile.Signals[k].ConflictPairs)
+                    if (worldOf.TryGetValue(pair.EndingLine, out var ending) && worldOf.TryGetValue(pair.StartingLine, out var starting))
+                        sites[k].Pairs.Add((pair, ending, starting));
                 // its crossings (the debug drawing, #971): kerb to kerb between each arm's two pedestrian heads, moved along the arm
                 // onto the zebra, which RoadGen paints 0.3 m on from the cars' stop line and 3 m deep (TileRewriter.Crossings)
                 var sg = tile.Signals[k];
