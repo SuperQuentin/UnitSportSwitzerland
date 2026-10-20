@@ -218,8 +218,8 @@ foundations, the office two high, determinism. Pictures: `--shot-queue` on the g
 
 - Loot: the materials and the skips are searched outdoors (#627, `loot/yard-loot`); the office's
   and the cabins' is ordinary interior loot (#822).
-- The office has no stair to its upper containers: raised doors are #827. The lamps do not blink
-  at night.
+- The office's upper containers are entered off its gallery where the yard has room for one
+  (#827, "The gallery" below). The lamps do not blink at night.
 
 ## The site office (#822)
 
@@ -320,12 +320,47 @@ and search.
   positions from a probe's log: `--constructioncheck`'s `--at` is its own world's, a few metres off
   the live one.
 
-### Not done
+## The gallery: the office's upper containers (#827)
 
-- **The upper containers** stay closed: the outside stair, the walkway and a door each are #827
-  (raised doors). A door whose sill is above the ground needs the door system to know an
-  entrance's floor (`EntrancePlan` is ground floor only: `DoorLink.Create`, `InsideDoorAt`, the
-  leaf, `OpeningOf`, `FitEntry` and the validator's reachability all assume it).
+- **Fitted after the yard.** `ConstructionSites.Plan` lays the site out as before, then tries the
+  gallery on the office row's end nearer the gate, then the other (`SiteOffices.GalleryStrips`: the
+  stair's strip beside the end container and the walkway's along the door end). A side is taken when
+  both are clear of the building's scaffold (or pit), the gate lane, every zone, machine and crane
+  (`Placer.Clear`, no walking gap: it is part of the office), the builder's board (`SiteDressings.BoardRect`,
+  stood by the dressing later), roads and other buildings, the stair 0.15 m and the walkway 0.05 m
+  inside the hoarding line. `ConstructionSite.GallerySide` (−1, +1, 0). Nothing placed before moves.
+  **Coverage: 240 of the 566 real offices (42 %), 7 of the 13 generated ones round the spawn** (after
+  #619's pits; 45 % before). Where none fits the upper row stays closed.
+- **What it is** (`SiteOffices.Gallery`, site frame): a galvanised grating deck (`ShellPart.Grating`)
+  0.8 m clear along the upper row's door end, its top the upper containers' floor and their doors'
+  sill (ground + 2.6 m), 0.4 m over the ground doors' heads, on brackets out of the containers; a
+  railing (posts, top and mid rail, toe board 1 cm inside the strip so no post face lies in it, one
+  `Invisible` solid slab) round its open sides. The stair along the end container's outer long face,
+  11 to 16 steps of at most 0.2 m (13 on flat ground, 41°), treads and stepped stringers drawn over
+  one ramp to stand on (`SiteDressingPlan.Ramps`, as a shell's flights), a handrail (drawn) and an
+  invisible solid stop per step on its open side, a plinth where the ground falls under the first step.
+  `Foot`, `Top` and each upper door's `Doorsteps` are the walking points (a bot's waypoints).
+- **Yard boxes, never the building body.** The gallery's boxes go after every other yard box
+  (`SiteDressingPlan.GalleryBoxes`) into the road cells' collision. In the building body, the
+  collision exception `BeforeMove` takes for a body in an open office doorway would drop it through
+  the deck at the upper door. The server builds them round a bot like every yard box.
+- **The upper doors**: one per upper container after the cabins' slots (`c + t + i`), the ground
+  door's panel and doorway one container up, `DoorSpot.Level` 1, swinging in. The drawn panels are
+  among the gallery's boxes, so an office is drawn box for box as before.
+- **Upstairs** (`InteriorGenerator.SiteOffice`): floor 1, a room over each container, the site
+  manager's office (`RoomType.SiteManager`: desk, chairs, shelf, locker, whiteboard, heater, plant)
+  over the office and the drawing office (`RoomType.DrawingOffice`: two plans tables, a drafting
+  desk, chairs, shelf, whiteboard, heater) over the mess room, joined at the back, no inner stair:
+  each is reached by its own raised door (`docs/notes/terrain/raised-doors.md`). Furnished after the
+  cabins, so no piece below moves. Loot pools for their desks, shelves and the manager's locker.
+  Plan version 28.
+- **Checks**: tier 0 `SiteGalleryTests` (the yard and the office's boxes and ground doors exactly the
+  gallery-less ones, the upper doors on their containers at the deck's top, the stair's risers and
+  slope, the strips clear of everything); `--constructioncheck` (and `--galleryscan`);
+  `--shellwalkcheck` walks each stair; `--interiorcheck --doorlevel 1 --generated on --at
+  2591104,1117808`; `tools/siteuppernetcheck.sh`. Model viewer: "Building site - a site office with
+  its gallery".
+- **Seen**: the Halloween occasion stands its pumpkin at the upper door too, on the deck.
 
 ## The cranes (#610)
 

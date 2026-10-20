@@ -1,6 +1,10 @@
 # Raised doors, and the site office's upper containers (#827)
 
-Status: in progress (`feat/827-raised-doors`, PR #938). Part of #605, split out of #822 (PR #824).
+Status: built (`feat/827-raised-doors`, PR #938). Built as planned, but: the walkway is 0.8 m
+clear, not 1.0 (1.0 fitted far fewer offices: the zone sits 0.8 m off the hoarding); the stair keeps
+0.15 m and the walkway 0.05 m inside the hoarding line, and both off the builder's board, which the
+dressing stands after the planner; `DoorIndex.Entry` got a `Level` after all, for probes and a bot's
+plans; a new `ShellPart.Grating`. Coverage 240 of 566 real offices (42 %), 7 of 13 generated. Part of #605, split out of #822 (PR #824).
 
 A door's sill can stand above the ground: an entrance on floor k of a plan, its sill at that
 floor's height on the facade. The site office uses it for its upper row of containers: an outside
