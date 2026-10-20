@@ -47,5 +47,8 @@
   car's to its destination in that destination's colour), `endpoints` the traffic endpoints. An admin places a generator /
   destination on the road at the crosshair, facing the way the camera looks along it (switches and pickers: generates,
   destination, cars a minute, cars along the road or an equal share to every destination), removes the nearest or all;
-  they go to the server and everyone's traffic. Example: `--debugview paths,endpoints`.
+  they go to the server and everyone's traffic. Example: `--debugview paths,endpoints`. `lights` draws the paths through
+  lit junctions that may go now (within 400 m): solid green on green with absolute priority, dashed green on green where they
+  must yield (`SignalPlan.YieldsAt`: a flasher on a turn, oncoming cars for a left from a shared lane, a crossing or bike lane
+  green across it; straight on keeps its priority), yellow on amber; none on red.
 - **Z-fighting** overlay (`zfight`) and **Flicker shot** button (`--debugview flicker`): `general/zfight` (#788).

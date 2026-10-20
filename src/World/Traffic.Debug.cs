@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Terrain.Format;
 
 namespace UnitSport.World;
 
@@ -14,6 +15,12 @@ public partial class Traffic
 
     /// <summary>Draws the traffic endpoints.</summary>
     public bool ShowEndpoints { get; set; }
+
+    /// <summary>Draws the paths through lit junctions whose light is green (green) or amber (yellow) now; on red, none (#971).</summary>
+    public bool ShowLights { get; set; }
+
+    /// <summary>How far from the camera the lit paths are drawn (m).</summary>
+    private const float LightsDrawn = 400f;
 
     private MeshInstance3D? _debugLines;
     private ImmediateMesh? _debugMesh;
@@ -33,7 +40,7 @@ public partial class Traffic
 
     private void StepDebugDraw(double dt)
     {
-        if (!ShowPaths && !ShowEndpoints)
+        if (!ShowPaths && !ShowEndpoints && !ShowLights)
         {
             if (_debugLines is not null) _debugLines.Visible = false;
             return;
@@ -64,6 +71,10 @@ public partial class Traffic
             foreach (var car in _cars) lines += DrawWay(mesh, car);
         if (ShowEndpoints)
             foreach (var s in _endpoints.Values) lines += DrawEndpoint(mesh, s);
+        if (ShowLights && _roads is not null && Focus?.Invoke() is { } focus)
+            foreach (var e in _roads.Edges)
+                if (e.Path is { Site: { } site } path && new Vector2(e.Points[0].X - focus.X, e.Points[0].Z - focus.Z).Length() < LightsDrawn)
+                    lines += DrawLit(mesh, e, site, path);
         if (lines == 0)
         {
             // an empty surface is an error: one invisible line
@@ -159,6 +170,59 @@ public partial class Traffic
             return usual + (approach.LaneCentre - usual) * onto + approach.Lateral(approach.LaneNearest(path.FromOffset), d);
         }
         return usual;
+    }
+
+    /// <summary>
+    /// A junction path in its light's colour: solid green on green with absolute priority, dashed green on green where it must
+    /// yield (a flasher, oncoming traffic for a left from a shared lane, a crossing or bike lane green across it), yellow on amber
+    /// or red-amber; nothing on red or off (the user, #971).
+    /// </summary>
+    private int DrawLit(ImmediateMesh mesh, LaneEdge e, SignalSite site, JunctionPathInfo path)
+    {
+        int from = ArmInto(e, site);
+        int group = path.Group >= 0 ? path.Group : from >= 0 ? GroupFor(site, from, path.Move) : -1;
+        if (group < 0 || group >= site.Plan.Groups.Count) return 0;
+        double now = Net.ClockSync.ServerNow;
+        var plan = site.Plan;
+        int to = from < 0 ? -1 : Enumerable.Range(0, plan.Arms.Count)
+            .FirstOrDefault(k => k != from && plan.Arms[k].Out && SignalPlan.Turn(plan.Arms, from, k) == path.Move, -1);
+        var aspect = plan.State(group, now);
+        bool yields = aspect == SignalAspect.Green && to >= 0 && plan.YieldsAt(from, to, path.Move, group, now);
+        var colour = aspect switch
+        {
+            SignalAspect.Green => new Color(0.1f, 0.9f, 0.2f),
+            SignalAspect.Amber or SignalAspect.RedAmber or SignalAspect.FlashingAmber => new Color(1f, 0.85f, 0.1f),
+            _ => (Color?)null,
+        };
+        if (colour is not { } c) return 0;
+        var up = Vector3.Up * 1.0f;
+        if (!yields)
+        {
+            for (int i = 0; i + 1 < e.Points.Length; i++) Ribbon(mesh, e.Points[i] + up, e.Points[i + 1] + up, c, 0.8f);
+            return e.Points.Length - 1;
+        }
+        // dashed: 1.5 m drawn, 1.5 m left out, along the path
+        int n = 0;
+        for (float s = 0f; s < e.Length; s += 3f, n++)
+        {
+            var (a, _) = e.Sample(s);
+            var (b, _) = e.Sample(Mathf.Min(s + 1.5f, e.Length));
+            Ribbon(mesh, a + up, b + up, c, 0.8f);
+        }
+        return n;
+    }
+
+    /// <summary>The plan arm a path leaves from: its approach's (the road arriving at its start, or the short piece before that).</summary>
+    private int ArmInto(LaneEdge e, SignalSite site)
+    {
+        foreach (var (into, forward) in _roads!.Entering(e.KeyStart))
+        {
+            if ((forward ? into.ApproachAtEnd : into.ApproachAtStart) is var (a, _) && a.Site == site) return a.Arm;
+            if (into.Length > PathGap) continue;
+            foreach (var (before, beforeForward) in _roads.Entering(forward ? into.KeyStart : into.KeyEnd))
+                if ((beforeForward ? before.ApproachAtEnd : before.ApproachAtStart) is var (b, _) && b.Site == site) return b.Arm;
+        }
+        return -1;
     }
 
     private int DrawEndpoint(ImmediateMesh mesh, EndpointState s)

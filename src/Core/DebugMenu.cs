@@ -364,7 +364,7 @@ public partial class DebugMenu : CanvasLayer
         if (_timeScaled) _askSpeed(SimClock.Normal);
         _timeScaled = false;
         _timePicker.Selected = Array.IndexOf(TimeScales, 1.0);
-        if (World.Traffic.Current is { } traffic) traffic.ShowPaths = traffic.ShowEndpoints = false;
+        if (World.Traffic.Current is { } traffic) traffic.ShowPaths = traffic.ShowEndpoints = traffic.ShowLights = false;
     }
 
     // ------------------------------------------------------------------------------------
@@ -388,6 +388,9 @@ public partial class DebugMenu : CanvasLayer
         Switch(grid, "paths", "Vehicle paths", false, on => { if (World.Traffic.Current is { } t) t.ShowPaths = on; },
             "Each car's way ahead: a generated car's way to its destination in that destination's colour,\n"
             + "any other's next legs in grey.");
+        Switch(grid, "lights", "Green paths", false, on => { if (World.Traffic.Current is { } t) t.ShowLights = on; },
+            "The paths through lit junctions that may go now: green on green, yellow on amber;\n"
+            + "on red none (#971).");
         Switch(grid, "endpoints", "Traffic endpoints", false, on => { if (World.Traffic.Current is { } t) t.ShowEndpoints = on; },
             "Generators (green), destinations (red), both (yellow): a post with an arrow along its heading,\n"
             + "a destination's ring in the colour its cars' ways are drawn in.");

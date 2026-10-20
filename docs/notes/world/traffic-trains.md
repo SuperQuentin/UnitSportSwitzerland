@@ -120,5 +120,13 @@
 - **Fed cars where there is room** (`SpawnInto`): six spots tried; refused only within 8 m of a car or with one coming up behind
   within 30 m, and it starts no faster than it can brake from for one ahead (the 30 m round any car let few in): J10 fed 36 ->
   130 cars in 90 s, 30 -> 42 within 80 m. `--feed-rate N` cars a second (2.5); the probe prints the average within 80 m.
+- **Lights past a short piece** (#971, J2): where a short road piece (under 12 m, `PathGap`: J2's 4 m over the crosswalk)
+  lies between an approach's end and its path, a car looks past it for the path ahead (its move, lane and group: 12 of 40 cars
+  at J2 waited for one group and drove another, left turns on the through green), `RoomPast` measures across it, and
+  `GiveWay` leaves the yield on it to the lights (a car past its line on green gave way to the cross road's cars at their red,
+  for good: the south and north heads stood on the zebra). **Amber**: a car clears it only if it reaches its line before the
+  red with 0.5 s to spare at the speed it will have (the bend's ahead if lower), else it stops if it can; one clearing goes on
+  only while it still cannot stop hard (it was kept until its next green: 15 of 28 crossed on red at J2, now 0). The probe
+  prints the crossings on red while clearing.
 - **`--feed-turns L,T,R`** (#854, demos): weights for the fed cars' moves (`1,2,3`: a sixth left, a third straight, half
   right); each draws one and takes a path with it at its junction (`Vehicle.Wants`); the probe prints the moves taken.

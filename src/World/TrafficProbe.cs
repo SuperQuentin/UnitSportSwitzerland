@@ -127,7 +127,7 @@ public partial class TrafficProbe : Node
             GD.Print($"[trafficcheck] t={_t:F0}s cars {_traffic.CarCount} (avg {_traffic.AverageCarSpeed * 3.6f:F0} km/h), "
                 + $"trains {_traffic.TrainCount} (avg {_traffic.AverageTrainSpeed * 3.6f:F0} km/h), "
                 + $"one-way edges {_traffic.OneWayEdges}, cars against one-way {_traffic.WrongWayCars}, giving way {_traffic.GivingWayCars}, "
-                + $"signalised approaches {_traffic.SignalApproaches}, at red {_traffic.AtRedCars}, stops at red {_traffic.RedStops}, lines crossed {_traffic.LinesCrossed}, red runs {_traffic.RedRuns}, junction paths taken {_traffic.PathEntries} (step onto {_traffic.PathStepIn:F2} m, {_traffic.PathStepsOver1m} over 1 m, off {_traffic.PathStepOut:F2} m), transition lanes followed {_traffic.TransitionFollows} (pieces {_traffic.TransitionPieces}), cars on one spot {_traffic.DoubledNow} (most {_traffic.DoubledMost})");
+                + $"signalised approaches {_traffic.SignalApproaches}, at red {_traffic.AtRedCars}, stops at red {_traffic.RedStops}, lines crossed {_traffic.LinesCrossed}, red runs {_traffic.RedRuns} (crossed on red clearing an amber {_traffic.ClearedOnRed}), junction paths taken {_traffic.PathEntries} (step onto {_traffic.PathStepIn:F2} m, {_traffic.PathStepsOver1m} over 1 m, off {_traffic.PathStepOut:F2} m), transition lanes followed {_traffic.TransitionFollows} (pieces {_traffic.TransitionPieces}), cars on one spot {_traffic.DoubledNow} (most {_traffic.DoubledMost})");
 
         if (_t < _seconds) return;
         if (_shot != null && GetViewport().GetTexture().GetImage().SavePng(_shot) == Error.Ok)
