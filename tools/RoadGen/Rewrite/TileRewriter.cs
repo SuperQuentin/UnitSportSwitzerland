@@ -822,7 +822,7 @@ public static partial class TileRewriter
                 // the junction planner's junctions written (#818 phase 3): cores, trims, transitions and their paint
                 if (layouts is not null && writtenNodes.Count > 0)
                     WriteLayouts(layouts, writtenNodes, result, layoutSegmentOf, finalPieces, layoutOutput, capOf, caps, writtenCaps, paint, layoutStation,
-                        transitionsOf, islands, signs, signalRecords, approachRecords, cantons, netStats.Signals, netStats.LayoutWrite, coreCorners, pathEnds, bikeBridges, pathsOf);
+                        transitionsOf, islands, signs, signalRecords, approachRecords, cantons, netStats.Signals, netStats.LayoutWrite, coreCorners, pathEnds, bikeBridges, pathsOf, buildings);
 
                 // the paths' paint on their final pieces, and the crossings at the junctions (#120)
                 var linkOf = new Dictionary<RoadSegment, int>(ReferenceEqualityComparer.Instance);

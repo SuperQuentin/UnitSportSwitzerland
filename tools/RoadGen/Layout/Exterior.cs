@@ -42,7 +42,9 @@ public sealed record PoleSpot(double Station, bool RightKerb, bool OnRefuge, Sig
 /// A priority sign beside an arm (#121): its station, type and variant, on the arriving traffic's right (else its left) and facing
 /// it (else the traffic leaving: a rural 3.03 stands after the junction).
 /// </summary>
-public sealed record SignSpot(double Station, PointPropType Type, byte Variant, bool RightKerb, bool FacesArriving);
+/// <param name="OnMainPole">A lit approach's priority sign (for when the lights are off): on its main signal pole, not a post of its
+/// own (the old layout's rule, #350/#711; #1000).</param>
+public sealed record SignSpot(double Station, PointPropType Type, byte Variant, bool RightKerb, bool FacesArriving, bool OnMainPole = false);
 
 /// <summary>
 /// An arm's exterior (#818 phase 4, the user's generalization): one stack of bars laid outward from its mouth (the crosswalk, the
@@ -85,8 +87,12 @@ public sealed class ArmExterior
 public static class ExteriorPlanner
 {
     public const double CrosswalkFromMouth = 0.5, CrosswalkDepth = 3.0, StopBehindCrosswalk = 2.0, StopFromMouth = 0.5;
-    /// <summary>A lit arm's poles stand this far out past its crosswalk, on its near side (m; the old layout's, #711).</summary>
-    public const double PoleBehindCrosswalk = 0.4;
+    /// <summary>
+    /// A lit arm's poles stand this far out past its crosswalk, on its near side, and its riders' line starts
+    /// <see cref="RiderLineBehindPole"/> behind them; with no crosswalk, <see cref="PoleAlong"/> out from the mouth, by the corner
+    /// (m; the old layout's rules, #350/#711, restored by #1000).
+    /// </summary>
+    public const double PoleBehindCrosswalk = 0.4, RiderLineBehindPole = 0.5, PoleAlong = 0.4;
     public const double RidersBehindCrosswalk = 0.5, RidersLineWidth = 0.3, AdvancedLine = 3.0, BikeBoxDepth = 4.0;
     public const double PocketBarFromMouth = 0.1;
     /// <summary>A give-way row stands this far out past the mouth (or what lies before it) and keeps this far off the lane edges.</summary>
@@ -221,7 +227,8 @@ public static class ExteriorPlanner
             double carFront;
             if (bikes.Count > 0)
             {
-                double riders = s + (crosswalkAt is not null ? RidersBehindCrosswalk : StopFromMouth);
+                // (beside a crosswalk the riders wait a little behind the pole, the old layout's #711)
+                double riders = s + (crosswalkAt is not null ? PoleBehindCrosswalk + RiderLineBehindPole : StopFromMouth);
                 foreach (var (l, r) in bikes) ex.Bars.Add(new ExteriorBar(BarKind.RidersLine, riders, riders + RidersLineWidth, l, r));
                 ex.RiderStop = riders + RidersLineWidth * 0.5;
                 var stops = SectionAt(a, riders).Strips.Where(BikeIn).Select(x => x.Stop).ToList();
@@ -249,9 +256,16 @@ public static class ExteriorPlanner
                 if (r - l >= RefugeMinWidth) ex.Refuge = new Refuge(IslandFromMouth, carFront + width + IslandPastStop, l, r);
             }
             // the poles: the main one at the right kerb, the second at the left one or on the refuge; beside a crosswalk on its near
-            // side, past every line (the old layout's rule, #711; #1000: at the cars' line they stood behind the riders' line and
-            // box), else beside the cars' line
-            double poleAt = crosswalkAt is not null ? s + PoleBehindCrosswalk : carFront + width * 0.5;
+            // side, past every line, else by the corner (the old layout's rules, #350/#711; #1000: at the cars' line they stood behind
+            // the riders' line and box)
+            double poleAt = crosswalkAt is not null ? s + PoleBehindCrosswalk : PoleAlong;
+            // the approach's priority signs for when the lights are off on its main pole (the old layout's, #350/#711): its main-road
+            // sign, and a give-way sign where it would yield
+            for (int i = 0; i < ex.Signs.Count; i++)
+                if (ex.Signs[i].FacesArriving) ex.Signs[i] = ex.Signs[i] with { Station = poleAt, RightKerb = true, OnMainPole = true };
+            foreach (var sign in signs ?? [])
+                if (sign.FacesArriving && sign.Type == PointPropType.YieldSign)
+                    ex.Signs.Add(new SignSpot(poleAt, sign.Type, sign.Variant, RightKerb: true, FacesArriving: true, OnMainPole: true));
             bool second = a.HasLeft || a.HasRight || here.CarLanes(StripWay.In).Count() > 1;
             // pedestrian heads only where the arm has a crosswalk (#711; where OSM maps its crossings on other arms, none here)
             var walk = crosswalkAt is not null ? SignalPoleFlags.Pedestrian : 0;

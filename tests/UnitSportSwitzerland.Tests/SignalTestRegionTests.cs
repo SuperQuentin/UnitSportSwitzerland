@@ -184,6 +184,22 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
     }
 
     [Fact]
+    public void Priority_signs_at_lights_stand_on_their_main_poles()
+    {
+        // #1000 (the old layout's rule, #350/#711): an approach's priority sign for when the lights are off is on its main pole,
+        // not a post of its own
+        int onPoles = 0;
+        foreach (var (_, tile) in region.Tiles())
+            foreach (var sign in tile.PointProps.Where(x => (x.Flags & PropFlags.OnSignalPole) != 0))
+            {
+                Assert.Contains(tile.Signals.SelectMany(g => g.Poles), p => (p.Flags & SignalPoleFlags.Main) != 0
+                    && Math.Abs(p.X - sign.X) < 0.01f && Math.Abs(p.Z - sign.Z) < 0.01f);
+                onPoles++;
+            }
+        Assert.True(onPoles > 0);
+    }
+
+    [Fact]
     public void Region_builds_with_the_designed_lanes_and_valid_plans()
     {
         Assert.True(region.Code == 0, string.Join("\n", region.Log.Where(l => l.StartsWith("J", StringComparison.Ordinal) || l.Contains("RESULT"))));
