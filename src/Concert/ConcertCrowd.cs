@@ -22,6 +22,7 @@ public partial class ConcertCrowd : Node3D
     /// <summary>One person in this many seats is drawn, and the share of the floor's places taken.</summary>
     private const int SeatSpacing = 2;
     private const float Occupancy = 0.8f, FloorSpacing = 1.3f;
+    private const int MaxFloor = 24000;
     private const float Range = 700f;
     private const int Batches = 4;
 
@@ -36,6 +37,12 @@ public partial class ConcertCrowd : Node3D
         _plan = plan;
         Name = "Crowd";
     }
+
+    /// <summary>
+    /// The ground's height at a point of the venue's frame (#948): an open air's field as it lies, an
+    /// arena's raised floor; null for a stadium's pitch, level at 0.
+    /// </summary>
+    public Func<Vector2, float>? Ground { get; init; }
 
     public ConcertCrowd() : this(new StagePlan(ConcertPlanner.Plan(StadiumCatalog.Geneva, 1))) { }
 
@@ -110,12 +117,14 @@ public partial class ConcertCrowd : Node3D
             Person(pos - new Vector3(0, 0.05f, 0), facing);
         }
 
-        // the floor: everyone looks at the stage; densest in front of it
+        // the floor: everyone looks at the stage; densest in front of it. A festival field is wide:
+        // spread out to at most MaxFloor people, as the eye counts a crowd from inside it
         var s = _plan.Event.Stadium;
-        for (float u = -s.FrontHalfU + 2; u < s.FrontHalfU - 2; u += FloorSpacing)
-            for (float v = -s.FrontHalfV + 2; v < s.FrontHalfV - 2; v += FloorSpacing)
+        float spacing = Math.Max(FloorSpacing, MathF.Sqrt(4f * s.FrontHalfU * s.FrontHalfV * 0.55f / MaxFloor));
+        for (float u = -s.FrontHalfU + 2; u < s.FrontHalfU - 2; u += spacing)
+            for (float v = -s.FrontHalfV + 2; v < s.FrontHalfV - 2; v += spacing)
             {
-                var p = new Vector2(u, v) + new Vector2((float)rng.NextDouble() - 0.5f, (float)rng.NextDouble() - 0.5f) * FloorSpacing * 0.7f;
+                var p = new Vector2(u, v) + new Vector2((float)rng.NextDouble() - 0.5f, (float)rng.NextDouble() - 0.5f) * spacing * 0.7f;
                 if (_plan.Blocked(p, 1.2f)) continue;
                 Vector2 toStage;
                 float density;
@@ -132,7 +141,7 @@ public partial class ConcertCrowd : Node3D
                     density = Mathf.Clamp(1.15f - ahead / 70f, 0.15f, 1f);
                 }
                 if (rng.NextDouble() > density) continue;
-                Person(new Vector3(p.X, 0, p.Y), toStage);
+                Person(new Vector3(p.X, Ground?.Invoke(p) ?? 0f, p.Y), toStage);
             }
         return list;
     }

@@ -138,6 +138,15 @@ public static class ConcertPlanner
             < 90 => StageLayout.SideEast,
             _ => StageLayout.SideWest,
         };
+        // a venue that always builds its stage in one place (an open air's ground, #948)
+        if (stadium.StageAt is { } at)
+            layout = at switch
+            {
+                StadiumSide.North => StageLayout.EndNorth,
+                StadiumSide.East => StageLayout.SideEast,
+                StadiumSide.West => StageLayout.SideWest,
+                _ => StageLayout.EndSouth,
+            };
         var screens = (ScreenSet)rng.Next(4);
         // an in-the-round show's screen is the cube over it, or nothing
         if (layout == StageLayout.Center && screens == ScreenSet.Sides) screens = ScreenSet.Center;
@@ -168,9 +177,23 @@ public static class ConcertPlanner
             _ => Range(100, 124),
         };
         // the rig: an EDM show is beams and strobes, a ballad washes and spots
-        float size = Range(0.8f, 1.2f);
-        int N(float n) => Math.Max(2, (int)MathF.Round(n * size / 2) * 2);
         bool round = layout == StageLayout.Center;
+        // the stage fits its venue (#948): its width across the floor, its depth a share of the floor's
+        // length, its roof under an arena's ceiling; a smaller stage flies a smaller rig
+        bool side = layout is StageLayout.SideEast or StageLayout.SideWest;
+        float floorW = 2 * stadium.FrontHalfU, floorL = 2 * stadium.FrontHalfV;
+        float across = side ? floorL : floorW, along = side ? floorW : floorL;
+        // room for the wings and the PA beside it: never more than about seven tenths of the floor
+        float width = round ? Math.Min(Range(20f, 26f), Math.Min(floorW, floorL) * 0.45f) : Math.Min(Range(40f, 54f), across * 0.72f);
+        float depth = round ? 0f : Math.Min(Range(15f, 20f), along * 0.22f);
+        float roof = Range(16f, 22f);
+        // under an arena's ceiling, its canopy (2.8 m over the grid) included
+        if (stadium.Kind == VenueKind.Arena) roof = Math.Max(4.5f, Math.Min(roof, stadium.RoofInner - stadium.RoofThickness - 4.3f));
+        // side screens only where there is room beside the stage for them
+        if (!round && across / 2 - width / 2 < 14f)
+            screens = screens switch { ScreenSet.Sides => ScreenSet.None, ScreenSet.CenterAndSides => ScreenSet.Center, _ => screens };
+        float size = Range(0.8f, 1.2f) * Math.Clamp(width / (round ? 23f : 47f), 0.45f, 1f);
+        int N(float n) => Math.Max(2, (int)MathF.Round(n * size / 2) * 2);
 
         return new ConcertEvent
         {
@@ -183,10 +206,10 @@ public static class ConcertPlanner
             Screens = screens,
             Palette = palette,
             Bpm = bpm,
-            Width = round ? Range(20f, 26f) : Range(40f, 54f),
-            Depth = round ? 0f : Range(15f, 20f),
+            Width = width,
+            Depth = depth,
             DeckHeight = Range(1.8f, 2.4f),
-            RoofHeight = Range(16f, 22f),
+            RoofHeight = roof,
             Spots = N(genre is Genre.Ballad or Genre.Rock ? 20 : 14),
             Beams = N(genre is Genre.Electronic or Genre.HipHop ? 28 : 18),
             Washes = N(genre is Genre.Ballad or Genre.Pop ? 20 : 14),

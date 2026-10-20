@@ -110,9 +110,13 @@ public partial class ConcertRig : Node3D
 
     public ConcertRig() : this(ConcertPlanner.Plan(StadiumCatalog.Geneva, 1)) { }
 
+    /// <summary>The ground's height at a point of the venue's frame (an open air's slope, an arena's floor), set by the director (#948).</summary>
+    public Func<Vector2, float>? Ground { get; init; }
+
     public override void _Ready()
     {
         _plan = new StagePlan(Event);
+        if (Ground != null && Event.Stadium.Kind == VenueKind.OpenAir) _plan.Lift(Ground);
         _desk = new LightDesk(_plan);
         BuildStage();
         var fx = _plan.Patch.Fixtures;
@@ -142,7 +146,7 @@ public partial class ConcertRig : Node3D
         // the audience, during the show
         if (WithCrowd)
         {
-            _crowd = new ConcertCrowd(_plan) { Visible = false };
+            _crowd = new ConcertCrowd(_plan) { Visible = false, Ground = Ground };
             AddChild(_crowd);
         }
         Live[Event.Stadium.Name] = this;
@@ -380,6 +384,8 @@ public partial class ConcertRig : Node3D
             _ray.TargetPosition = _ray.Basis.Inverse() * (dir * max);
             _ray.ForceRaycastUpdate();
             float reach = _ray.IsColliding() ? _ray.GlobalPosition.DistanceTo(_ray.GetCollisionPoint()) / Scale.X + 0.4f : max;
+            // the venue's own walls and roof, whether or not its collision is built (it is only near a body)
+            reach = Math.Min(reach, VenueReach(f.Position, dir, max));
             _reach[i] = Mathf.Lerp(_reach[i], reach, 0.6f);
         }
 
@@ -535,6 +541,27 @@ public partial class ConcertRig : Node3D
         fwd = fwd.LengthSquared() < 1e-6f ? up.Cross(Vector3.Right).Normalized() : fwd.Normalized();
         var right = up.Cross(fwd);
         return (up * MathF.Cos(tilt) + (fwd * MathF.Cos(pan) + right * MathF.Sin(pan)) * MathF.Sin(tilt)).Normalized();
+    }
+
+    /// <summary>
+    /// How far a beam goes before the venue stops it (#948), from its shape alone: out of the open
+    /// column over the pitch below the roof's edge (into the stands, under the roof), or up into an
+    /// arena's ceiling. Over a stadium's roof edge it goes on into the sky. An open air stops nothing.
+    /// </summary>
+    private float VenueReach(Vector3 p, Vector3 dir, float max)
+    {
+        var s = Event.Stadium;
+        if (s.Kind == VenueKind.OpenAir) return max;
+        float a = s.FrontHalfU + Math.Max(0f, s.RoofInset), b = s.FrontHalfV + Math.Max(0f, s.RoofInset);
+        if (MathF.Abs(p.X) > a || MathF.Abs(p.Z) > b) return max;   // a head outside the column: the physics ray's job
+        float t = max;
+        if (MathF.Abs(dir.X) > 1e-4f) t = Math.Min(t, ((dir.X > 0 ? a : -a) - p.X) / dir.X);
+        if (MathF.Abs(dir.Z) > 1e-4f) t = Math.Min(t, ((dir.Z > 0 ? b : -b) - p.Z) / dir.Z);
+        float ceiling = s.RoofInner - s.RoofThickness;
+        if (s.Kind == VenueKind.Arena)
+            return dir.Y > 1e-4f ? Math.Max(0.5f, Math.Min(t, (ceiling - p.Y) / dir.Y)) : Math.Max(0.5f, t);
+        // a stadium: leaving the column over the roof's edge, the beam is in the sky
+        return p.Y + dir.Y * t > s.RoofInner ? max : Math.Max(0.5f, t);
     }
 
     /// <summary>
