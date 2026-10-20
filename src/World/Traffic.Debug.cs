@@ -26,6 +26,12 @@ public partial class Traffic
     private ImmediateMesh? _debugMesh;
     private double _debugDue;
 
+    /// <summary>
+    /// How far above the road the lines lie (m): on it, drawn over everything (no depth test). Higher, the tilted camera showed
+    /// them shifted off their lanes toward it (the user, #971).
+    /// </summary>
+    private const float DrawLift = 0.1f;
+
     /// <summary>How far ahead a car's way is drawn (m): a generated car's to its destination at most this.</summary>
     private const float PathDrawn = 600f;
 
@@ -90,7 +96,7 @@ public partial class Traffic
                     bool yields = move == SignalMoves.Right && site.Plan.Groups.Select((g, k) => (g, k))
                         .Any(x => x.g.Kind == SignalGroupKind.Flasher && x.g.Qualifies == group && site.Plan.State(x.k, now) == SignalAspect.FlashingAmber);
                     for (int i = 0; i + 1 < points.Length; i++, lines++)
-                        if (!yields || i % 2 == 0) Ribbon(mesh, points[i] + Vector3.Up * 1.2f, points[i + 1] + Vector3.Up * 1.2f, c, 0.35f);
+                        if (!yields || i % 2 == 0) Ribbon(mesh, points[i] + Vector3.Up * DrawLift, points[i + 1] + Vector3.Up * DrawLift, c, 0.35f);
                 }
                 foreach (var (from, to, arm) in site.Walks)
                 {
@@ -98,7 +104,7 @@ public partial class Traffic
                         .FirstOrDefault(g => site.Plan.Groups[g].Kind == SignalGroupKind.Pedestrian && site.Plan.Groups[g].Arm == arm, -1);
                     if (group >= 0 && LitColour(site.Plan.State(group, now)) is { } c)
                     {
-                        Ribbon(mesh, from + Vector3.Up * 0.8f, to + Vector3.Up * 0.8f, c, 2.5f);
+                        Ribbon(mesh, from + Vector3.Up * DrawLift, to + Vector3.Up * DrawLift, c, 2.5f);
                         lines++;
                     }
                 }
@@ -129,7 +135,7 @@ public partial class Traffic
 
     private int DrawWay(ImmediateMesh mesh, Vehicle car)
     {
-        var up = Vector3.Up * 1.5f;
+        var up = Vector3.Up * DrawLift;
         var colour = car.Planned is { Count: > 0 } way && car.ToId > 0 ? DestinationColour(car.ToId) : new Color(0.7f, 0.7f, 0.7f, 0.8f);
         // the legs from its own: its planned way to the destination, else the legs its route has planned ahead
         var legs = new List<(LaneEdge Edge, bool Forward)>();
@@ -224,7 +230,7 @@ public partial class Traffic
             _ => (Color?)null,
         };
         if (colour is not { } c) return 0;
-        var up = Vector3.Up * 1.0f;
+        var up = Vector3.Up * DrawLift;
         if (!yields)
         {
             for (int i = 0; i + 1 < e.Points.Length; i++) Ribbon(mesh, e.Points[i] + up, e.Points[i + 1] + up, c, 0.8f);
