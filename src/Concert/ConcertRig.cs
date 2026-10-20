@@ -114,7 +114,7 @@ public partial class ConcertRig : Node3D
     public Func<Vector2, float>? Ground { get; init; }
 
     /// <summary>A stadium's protection floor's top over the centre spot (#956): over the terrain's bumps, set by the director.</summary>
-    public float FloorTop { get; init; } = 0.06f;
+    public float FloorTop { get; init; } = 0.1f;
 
     public override void _Ready()
     {
