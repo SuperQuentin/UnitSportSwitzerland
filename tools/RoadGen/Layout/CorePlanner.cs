@@ -55,6 +55,8 @@ public static class CorePlanner
     private const double MostRadius = 500;
     /// <summary>A connector's edge may stand this far outside the outline (m): the mitred edges of a lane whose width eases along a tight curve.</summary>
     public const double OutsideTolerance = 0.25;
+    /// <summary>A kerb's arc may start this far past its mouth (m) before the check fails: pushing the mouth out widens the turns and the arc with it.</summary>
+    public const double KerbTolerance = 0.3;
     /// <summary>An arc is drawn with chords no longer than this (m).</summary>
     private const double Chord = 0.5;
 
@@ -240,7 +242,7 @@ public static class CorePlanner
         foreach (var corner in corners)
         {
             int a = index[corner.ArmA], b = index[corner.ArmB];
-            if (corner.Shape == CornerShape.Arc && (corner.StationA > m[a] + 0.02 || corner.StationB > m[b] + 0.02)) core.KerbsNotTangent++;
+            if (corner.Shape == CornerShape.Arc && (corner.StationA > m[a] + KerbTolerance || corner.StationB > m[b] + KerbTolerance)) core.KerbsNotTangent++;
         }
 
         // the outline: each mouth across its carriageway, then the corner after it
@@ -611,6 +613,15 @@ public static class CorePlanner
             corner.StationA = fi.StationOf(c) + leg;
             corner.StationB = fj.StationOf(c) + leg;
             if (!mouthCap) continue;
+            // an arc whose kerb would start past both mouths (a corner near a straight line, a through lane bending past it): a
+            // straight kerb between the mouths instead, pushed out where a connector passes beyond it (#854)
+            if (corner.StationA > fi.Station + 1 && corner.StationB > fj.Station + 1)
+            {
+                corner.Shape = CornerShape.Chord;
+                corner.StationA = corner.StationB = double.NaN;
+                corner.Kerb.AddRange(InLineKerb(fi.Point(arms[i].Mouth.CarriagewayRight), -ui, fj.Point(arms[j].Mouth.CarriagewayLeft), uj, connectors));
+                continue;
+            }
             // the arc from arm A's kerb to arm B's, round the sidewalk's corner
             var ta = c + ui * leg;
             var tb = c + uj * leg;

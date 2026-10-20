@@ -374,6 +374,10 @@ off, `--junctions new` plans and reports without writing.
 - **Outside tolerance 0.25 m** (#854, Oct 20; was 0.15): a connector's edge may stand that far past the outline (a lane's mitred
   edge where its width eases along an S near a mouth; the in-line kerb and the kerb push use the same number). 168 real tiles:
   old layout 229 -> 210, path ends off their lane 73 -> 74.
+- **Kerbs past a mouth** (#854, Oct 20): a kerb's arc may start `KerbTolerance` 0.3 m past its mouth before the check fails
+  (pushing the mouth out widens the turns and the arc with it: the push chased it); an arc whose kerb would start more than a
+  metre past both mouths (a corner near a straight line, radii of 100-180 m against mouths at 40) is a straight kerb between the
+  mouths instead (`InLineKerb`, pushed out where a connector passes beyond it). 168 real tiles: old layout 210 -> 191.
 - **Tried and reverted** (#854, Oct 20): a slip lane's node (two car roads and a Verbindung) planned only to merge into a junction
   whose mouth reaches it, the slip lane an arm of the merged core: "a road joins short of a mouth" 52 -> 25 and the old layout
   229 -> 219, but 18 more path ends 0.6-1 m off their lane (most of those slip lanes are TLM stubs of 0 m between carriageways,
