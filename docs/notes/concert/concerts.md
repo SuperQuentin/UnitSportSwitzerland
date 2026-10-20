@@ -232,9 +232,12 @@
 - The rigs, placed from the stage (`CameraRig.For`): FOH long lens, pit dolly and side track (ground
   rails), wire cam (a box under the roof, four cables to its inner corners), jib, steadicam, crowd,
   wide FOH, wide far stand, drone, artist POV. Each moves on its own when nobody runs it (`Auto`).
-- Three SubViewports sharing the world: IMAG (256x144, on the LED screens when the screen clip is
+- Three SubViewports sharing the world: IMAG (on the LED screens when the screen clip is
   `LightDesk.CameraClip`), program (1280x720) and the operator's viewfinder. They render only when
-  wanted and near (900 m).
+  wanted and near (900 m). IMAG's size is the Video setting "Concert screens" (256/512/1024 wide, 16:9,
+  512 by default; #996), or `/concert imag <64..1920>|auto` for the run, client-local; it resizes live.
+- Their cameras' near plane is 0.7 m, past the rig's own kit (hood 0.55 m, drone rotors 0.68 m): the
+  on-air body is hidden only while the program renders, and IMAG filmed its own hood as a black square.
 - The auto director cuts on the music's bars (calm 8, groove 4, chorus 2, peak 1). Every other cut
   goes to a camera someone runs. `/concert cue ... camera <n|auto>` and OSC `/concert/camera` pick one.
 - Crew: `/concert camera take <n>|leave|list` (and the desk's Operate row). The server keeps who runs

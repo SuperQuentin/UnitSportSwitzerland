@@ -128,6 +128,12 @@ public sealed class GameSettings
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public AntiAliasing AntiAliasing { get; set; } = AntiAliasing.Fxaa;
 
+    /// <summary>
+    /// The width of the concert screens' camera feed (IMAG, #996), 16:9: 256, 512 or 1024. Each is
+    /// another render of the bowl; the size costs less than the render itself.
+    /// </summary>
+    public int ConcertScreenWidth { get; set; } = 512;
+
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public PerfOverlayMode PerfOverlay { get; set; } = PerfOverlayMode.Off;
 
@@ -494,6 +500,7 @@ public sealed class GameSettings
         CommitBudgetMs = Math.Clamp(CommitBudgetMs, 1, 16);
         CacheGb = Math.Clamp(CacheGb, 0.1f, 20f);
         RenderScale = Math.Clamp(RenderScale, MinRenderScale, MaxRenderScale);
+        ConcertScreenWidth = ConcertScreenWidth switch { <= 384 => 256, <= 768 => 512, _ => 1024 };
         VrMsaa = VrMsaa switch { <= 0 => 0, <= 2 => 2, <= 4 => 4, _ => 8 };
         VrRenderScale = Math.Clamp(VrRenderScale, MinVrRenderScale, MaxVrRenderScale);
         StickSensitivity = Math.Clamp(StickSensitivity, 0.2f, 3f);
