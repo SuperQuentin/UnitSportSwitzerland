@@ -32,7 +32,7 @@
   heaviest dropped, then pieces past the drawn and count caps; each step noted.
 - **Drawn** (`ConcertRig.Objects.cs`, once in `_Ready`): a mesh placed 4 times or more is a
   `MultiMesh`, the rest baked into one mesh (Capture: hundreds of one-off files, one draw call); the
-  prop material, vertex colour, no collision (walked under, not on).
+  prop material, vertex colour; collision in `mvr-collision` (#974).
 - **Real files** (Oct 2026, not committed; `MVR_SAMPLES=<folder> dotnet test --filter Real_files`
   prints them): `capture_demo_show.mvr` 2251 pieces of 874 meshes, 100918 triangles, 942 kB of
   meshes, 559 kB packed, 16 venue pieces skipped (the hall, the Venue layer), 0.2 s; trusses and
@@ -42,5 +42,5 @@
 - Checks: `MvrSceneTests` (3DS and GLB byte by byte, a gltf's buffers, junk, a Symdef under 200
   trusses in a group, the venue, our own stage, caps and `Check`, `MoveObjects`);
   `tools/concertnetcheck.sh` (B gets A's rig with 3 pieces and draws them).
-- Not done: textures (a flat colour per file), per-face colours, collision, `Support`'s and
+- Not done: textures (a flat colour per file), per-face colours, `Support`'s and
   `Projector`'s own data (only their bodies), `VideoScreen` sources.
