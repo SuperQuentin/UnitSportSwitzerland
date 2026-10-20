@@ -278,10 +278,18 @@ public static class CorePlanner
     /// a connector passes beyond it (<see cref="InLineKerb"/>); where the kerbs cross, the loops cut away, the mouths kept. No check
     /// holds it back; <see cref="JunctionCore.IsFallback"/> counts it.
     /// </summary>
-    public static JunctionCore Fallback(JunctionPlan jp, JunctionCore failed)
+    /// <param name="limit">How far out each arm's mouth may stand (short of the next node where anything joins its street).</param>
+    public static JunctionCore Fallback(JunctionPlan jp, JunctionCore failed, Func<ArmPlan, double>? limit = null)
     {
         var core = new JunctionCore { IsFallback = true };
-        core.Mouths.AddRange(failed.Mouths);
+        foreach (var m in failed.Mouths)
+        {
+            // (held in short of a road joining its street: that road's own cap past it)
+            var arm = jp.Arms.FirstOrDefault(a => a.Arm == m.Arm);
+            double most = arm?.Axis is not null && limit is not null ? limit(arm) : double.MaxValue;
+            core.Mouths.Add(m.Station <= most ? m : new CoreMouth(m.Arm, Math.Max(0.5, most),
+                arm!.Axis!.At(Math.Max(0.5, most), arm.Mouth.CarriagewayLeft), arm.Axis.At(Math.Max(0.5, most), arm.Mouth.CarriagewayRight)));
+        }
         core.Connectors.AddRange(failed.Connectors);
         // each move laid again as one smooth curve from its lane at its mouth to its lane at the exit's (the failed core's may stray)
         var stationOf = core.Mouths.ToDictionary(m => m.Arm, m => m.Station);

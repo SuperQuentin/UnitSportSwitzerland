@@ -96,7 +96,7 @@ public static partial class TileRewriter
                 }
                 else
                 {
-                    jp.Core = CorePlanner.Fallback(jp, failing);
+                    jp.Core = CorePlanner.Fallback(jp, failing, a => JoinLimit(result, a));
                     CorePlanner.Lift(jp.Core, m => result.Network.Links[jp.Arms.First(a => a.Arm == m.Arm).LinkId].Tag is Source source
                         ? source.SampleHeight((m.Left + m.Right) * 0.5) : 0);
                     if (!jp.Beyond) stats.Fallbacks++;
@@ -122,6 +122,17 @@ public static partial class TileRewriter
                     != (j.Ring is null ? Directions(jp.Arms.Select(x => x.Heading)) : jp.Arms.Count))
                 no = "a path or track joins";
             else if (jp.Arms.Any(a => a.Axis is null || !core.Mouths.Any(m => m.Arm == a.Arm))) no = "an arm without a mouth";
+            // a road joining an arm short of its mouth: a plain core, its mouths held in short of it (#854, the user, Oct 20)
+            else if (jp.Merged?.Ring is null && !core.IsFallback && jp.Arms.Any(a => RoadJoinsShortOfMouth(result, a, core.Mouths.First(m => m.Arm == a.Arm).Station))
+                && CorePlanner.Fallback(jp, core, a => JoinLimit(result, a)) is { Simple: true } held
+                && !jp.Arms.Any(a => RoadJoinsShortOfMouth(result, a, held.Mouths.First(m => m.Arm == a.Arm).Station)))
+            {
+                jp.Core = held;
+                CorePlanner.Lift(jp.Core, m => result.Network.Links[jp.Arms.First(a => a.Arm == m.Arm).LinkId].Tag is Source source
+                    ? source.SampleHeight((m.Left + m.Right) * 0.5) : 0);
+                if (!jp.Beyond) stats.Fallbacks++;
+                if (jp.Arms.Any(MissesMouth)) no = "a transition misses its mouth";
+            }
             else if (jp.Arms.Any(a => RoadJoinsShortOfMouth(result, a, core.Mouths.First(m => m.Arm == a.Arm).Station)))
             {
                 no = "a road joins short of a mouth";
@@ -231,6 +242,26 @@ public static partial class TileRewriter
         foreach (double h in headings)
             if (!kept.Any(k => Math.Abs(Angles.Normalize(h - k)) < 2 * Math.PI / 180)) kept.Add(h);
         return kept.Count;
+    }
+
+    /// <summary>
+    /// How far out an arm's mouth may stand: short of the first node along its street where anything else joins it, by that node's
+    /// join margin (as <see cref="NodeShortOfMouth"/> reckons it); unbounded where none does.
+    /// </summary>
+    private static double JoinLimit(RoadGenResult result, ArmPlan a)
+    {
+        var net = result.Network;
+        var l0 = net.Links[a.LinkId];
+        var nodes = new List<(int Link, int Node)> { (a.LinkId, a.AtEnd ? l0.StartNode : l0.EndNode) };
+        foreach (var (link, atEnd) in a.StreetOn) { var l = net.Links[link]; nodes.Add((link, atEnd ? l.StartNode : l.EndNode)); }
+        int self = a.AtEnd ? l0.EndNode : l0.StartNode;
+        foreach (var (link, node) in nodes)
+        {
+            if (node < 0 || node >= net.Nodes.Count) break;
+            if (node == self || net.Nodes[node].Degree <= 2) continue;
+            return a.Axis!.StationPast(net.Nodes[node].Position) - JoinMarginAt(result, link, node) - 0.1;
+        }
+        return double.MaxValue;
     }
 
     /// <summary>A road joining an arm's street this far past its mouth (m, its crosswalk's reach) still joins the junction.</summary>

@@ -386,7 +386,10 @@ off, `--junctions new` plans and reports without writing.
   cut (a mouth may be cut away: its arm then ends inside the paved core). Only an outline crossing itself holds it back
   (`JunctionPlan.CoreFails`). A ring failing its checks is written as laid (`JunctionCore.AsLaid`: its island, its teeth).
   `FALLBACKDBG=1` prints each. 168 real tiles: 88 plain cores, 6 rings as laid; old layout 191 -> 128 (no check failure nor
-  overlap left); JPTH points off their core 0 -> 24 (fallback cores, within 0.6 m near a mouth).
+  overlap left); JPTH points off their core 0 -> 24 (fallback cores, within 0.6 m near a mouth). A fallback core's mouths stand
+  short of the first node where anything joins their street (`JoinLimit`, by that node's join margin), and a core whose only
+  fault is a road joining short of a mouth is laid as a fallback held in short of it: old layout 128 -> 57 (118 plain cores),
+  JPTH points off their core 48, path ends off their lane 78.
 - **Tried and reverted** (#854, Oct 20): a slip lane's node (two car roads and a Verbindung) planned only to merge into a junction
   whose mouth reaches it, the slip lane an arm of the merged core: "a road joins short of a mouth" 52 -> 25 and the old layout
   229 -> 219, but 18 more path ends 0.6-1 m off their lane (most of those slip lanes are TLM stubs of 0 m between carriageways,
