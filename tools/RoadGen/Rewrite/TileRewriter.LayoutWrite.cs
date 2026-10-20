@@ -840,6 +840,20 @@ public static partial class TileRewriter
                 }
                 if (plan.Retime(table)) stats.SignalsRetimed++; else stats.SignalsNotRetimed++;
                 SignalPlan.DebugTiming = false;
+                // CTTABLE=E,N,file.json: a junction's table with its groups, for a look at it
+                if (Environment.GetEnvironmentVariable("CTTABLE") is { } tableAt && tableAt.Split(',') is [var te, var tn, var tfile]
+                    && Math.Abs(jp.Centre.X - double.Parse(te, System.Globalization.CultureInfo.InvariantCulture)) < 20
+                    && Math.Abs(jp.Centre.Y - double.Parse(tn, System.Globalization.CultureInfo.InvariantCulture)) < 20)
+                {
+                    var names = plan.Groups.Select(g => new { kind = g.Kind.ToString(), moves = g.Moves.ToString(), arm = g.Arm,
+                        heading = plan.Arms[g.Arm].Heading,
+                        green = g.Intervals.Where(v => v.Aspect == SignalAspect.Green).Select(v => new[] { v.From, v.To }).ToArray() }).ToArray();
+                    var rows = Enumerable.Range(0, plan.Groups.Count).Select(g => Enumerable.Range(0, plan.Groups.Count)
+                        .Select(h => float.IsNaN(table[g, h]) ? (float?)null : table[g, h]).ToArray()).ToArray();
+                    var conflict = plan.Conflicts();
+                    var kinds = Enumerable.Range(0, plan.Groups.Count).Select(g => Enumerable.Range(0, plan.Groups.Count).Select(h => conflict[g, h].ToString()).ToArray()).ToArray();
+                    File.WriteAllText(tfile, System.Text.Json.JsonSerializer.Serialize(new { centre = new[] { jp.Centre.X, jp.Centre.Y }, cycle = plan.Cycle, groups = names, times = rows, conflicts = kinds }));
+                }
             }
             // a corner a path crossing ends on is laid as beside a crosswalk (the user, Oct 14 2026)
             if (landings.Count == 0 || !capOfPlan.TryGetValue(jp, out var hc3) || !coreCorners.TryGetValue(hc3.Home, out var byCap3)

@@ -72,7 +72,8 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   conflicts with its arm's right arrow. Test region: J1 74 -> 71 s, J2 86 -> 77, J5a/b 83/84 -> 74/75, J10 70 -> 71, the
   rest at their scheme's target (the time saved goes to green). 168 real tiles: 16 of 19 timed from conflict times (3 keep
   today's: their times not kept), 0 invalid. Debugging: `CTDBG=E,N` prints a junction's times over 4 s with the worst pair
-  of lines, `CTDBG2=1` with it each phase change's wait and the pair that sets it.
+  of lines, `CTDBG2=1` with it each phase change's wait and the pair that sets it; `CTTABLE=E,N,file.json` writes the junction's table, groups,
+  conflicts and greens.
 - **Timing**: yellow 3/4/5 s by speed (SN 640 837 via SRF), red+yellow 2 s (cars, secondary
   source BASt V 149) / 1 s (bikes), all-red 2 s fixed (SN 640 838 computes it per conflict,
   paywalled), min green 4 s, pedestrian green >= 5 s, pedestrian clearance 2/3 of the crossing
