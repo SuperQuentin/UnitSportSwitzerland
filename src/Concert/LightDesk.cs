@@ -403,9 +403,13 @@ public sealed class LightDesk
         var p = _plan.Patch;
         p.Set01(f, Attr.Dimmer, 0f);
         p.Set01(f, Attr.DimmerFine, 0f);
-        if (f.Type.Kind is FixtureKind.Blinder or FixtureKind.PixelBar)
-            for (int c = 0; c < f.Type.Footprint; c++) p.Set(f, c, 0);
+        foreach (int o in f.Type.CellOffsets) p.Set(f, o, 0);
+        // a fixture with no dimmer (an imported LED par) goes dark by its colours
+        if (f.Type.Offset(Attr.Dimmer) < 0)
+            foreach (var a in DarkColours) p.Set01(f, a, 0f);
     }
+
+    private static readonly Attr[] DarkColours = { Attr.Red, Attr.Green, Attr.Blue, Attr.White };
 
     private void Off(RigGroup g)
     {
@@ -563,7 +567,10 @@ public sealed class LightDesk
     private void Blinders(float level)
     {
         foreach (var f in G(RigGroup.Blinders))
-            for (int c = 0; c < f.Type.Footprint; c++) _plan.Patch.Set(f, c, (byte)(level * 255));
+        {
+            _plan.Patch.Set01(f, Attr.Dimmer, 1f);
+            foreach (int o in f.Type.CellOffsets) _plan.Patch.Set(f, o, (byte)(level * 255));
+        }
     }
 
     private void Strobes(float dim, float rate)
@@ -579,13 +586,18 @@ public sealed class LightDesk
     private void Pixels(Func<int, Color> cell)
     {
         foreach (var f in G(RigGroup.PixelBars))
-            for (int c = 0; c < 8; c++)
+        {
+            // the cells wherever its layout puts them (an imported bar may lead with a master dimmer)
+            var cells = f.Type.CellOffsets;
+            _plan.Patch.Set01(f, Attr.Dimmer, 1f);
+            for (int c = 0; c + 2 < cells.Length; c += 3)
             {
-                var col = cell(c + f.Id) * _pixelGain;
-                _plan.Patch.Set(f, c * 3, (byte)(Math.Clamp(col.R, 0, 1) * 255));
-                _plan.Patch.Set(f, c * 3 + 1, (byte)(Math.Clamp(col.G, 0, 1) * 255));
-                _plan.Patch.Set(f, c * 3 + 2, (byte)(Math.Clamp(col.B, 0, 1) * 255));
+                var col = cell(c / 3 + f.Id) * _pixelGain;
+                _plan.Patch.Set(f, cells[c], (byte)(Math.Clamp(col.R, 0, 1) * 255));
+                _plan.Patch.Set(f, cells[c + 1], (byte)(Math.Clamp(col.G, 0, 1) * 255));
+                _plan.Patch.Set(f, cells[c + 2], (byte)(Math.Clamp(col.B, 0, 1) * 255));
             }
+        }
     }
 
     /// <summary>The media-server clip that shows the program camera (IMAG).</summary>
