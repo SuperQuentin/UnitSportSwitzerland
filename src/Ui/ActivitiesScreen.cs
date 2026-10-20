@@ -289,6 +289,7 @@ public partial class ActivitiesScreen : Screen
         Ask("Ask them to teleport to you", "tphere", "They accept, and they come to you (/tphere)");
         Ask("Invite to my party", "party invite", "A party plays a Battle Royale as one team (/party invite)");
         Ask("Challenge to a fist fight", "fight", "Within 12 m, both on foot (/fight)");
+        Ask("Challenge to an aura battle", "aura", "Within 12 m, both on foot: plan a combo, cut it on the beat (/aura)");
 
         right.AddChild(UiKit.Spacer(10));
         right.AddChild(UiKit.Section("Party"));

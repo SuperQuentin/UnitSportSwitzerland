@@ -7,7 +7,7 @@ namespace UnitSport.Loot;
 
 /// <summary>
 /// The panel over an open container: its stacks drawn exactly like inventory slots, click (or A)
-/// to take one, "Take all". E, B or Esc closes it, and so does walking away
+/// to take one, "Take all" (which closes it once the container is empty). E, B or Esc closes it, and so does walking away
 /// (<see cref="LootService._Process"/>).
 /// </summary>
 public partial class LootUi : CanvasLayer
@@ -65,7 +65,7 @@ public partial class LootUi : CanvasLayer
         row.AddThemeConstantOverride("separation", 12);
         box.AddChild(row);
         _takeAll = new Button { Text = "Take all" };
-        _takeAll.Pressed += () => _service.TakeAll();
+        _takeAll.Pressed += () => _service.TakeAllAndClose();
         row.AddChild(_takeAll);
         var close = new Button { Text = "Close" };
         close.Pressed += () => _service.Close();

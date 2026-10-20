@@ -62,6 +62,14 @@ internal sealed partial class XrHand : Node3D
     public readonly float[] Bend = new float[Bones];
     /// <summary>0: the thumb stands up off the controller; 1: it lies on its buttons.</summary>
     public float ThumbDown;
+    /// <summary>
+    /// The index fingertip in the world (#920: the finger on the phone's glass): the end of the drawn
+    /// distal bone, from hand tracking or from the controller's sensors, whichever drove it.
+    /// </summary>
+    public Vector3 IndexTip => _joints[2].GlobalTransform * new Vector3(0f, -Lengths[2] * _k, 0f);
+
+    private float _k = 1f;
+
     /// <summary>Whether the last <see cref="Drive"/> read the fingers from hand tracking.</summary>
     public bool Tracked { get; private set; }
 
@@ -110,7 +118,7 @@ internal sealed partial class XrHand : Node3D
     {
         if (_look == look) return;
         _look = look;
-        float k = look.Scale;
+        float k = _k = look.Scale;
         // normals in every style: a PS1 figure is lit flat from afar, but a hand seen at 30 cm would be one blob
         var s = new MeshScratch { Smooth = true };
 

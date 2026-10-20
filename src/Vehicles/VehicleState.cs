@@ -78,6 +78,8 @@ public readonly record struct VehicleState(
         if (Kind == RideKind.CompactRoller) { var roller = new CompactRoller(); roller.UnpackFlags(Flags); return roller; }
         if (Kind == RideKind.MiniDumper) { var dumper = new MiniDumper(); dumper.UnpackFlags(Flags); return dumper; }
         if (Kind == RideKind.Telehandler) { var boom = new Telehandler(); boom.UnpackFlags(Flags); return boom; }
+        // a saucer with its ramp and lamps as they were left (#861)
+        if (Kind == RideKind.Ufo) { var ufo = new Ufo(); ufo.UnpackFlags(Flags); return ufo; }
         return CarSetups.Ride(Kind, Setup, Tuning);
     }
 
@@ -171,6 +173,9 @@ public readonly record struct VehicleState(
     /// <summary>The server's wall clock, which <c>SpawnedAt</c> is stamped by and read against on every peer (#452).</summary>
     public static double Now => Net.ClockSync.ServerUnixNow;
 
-    /// <summary>A fresh <see cref="Oid"/>: random 63 bits, so nothing has to be counted across restarts.</summary>
-    public static long NewOid() => Random.Shared.NextInt64(1, long.MaxValue);
+    /// <summary>
+    /// A fresh <see cref="Oid"/>: random 63 bits, so nothing has to be counted across restarts; a
+    /// film's shot draws them from its pinned seed (<see cref="Core.RunSeeds.NewId"/>, #924).
+    /// </summary>
+    public static long NewOid() => Core.RunSeeds.NewId();
 }

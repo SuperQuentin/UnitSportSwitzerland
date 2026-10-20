@@ -8,12 +8,14 @@
 # first shrink ends 216 s after the doors close and its circle holds every landing spot, so the zone never takes part.
 # The seed is fixed (--brseed): the same region, zone, plane line and bots every run. BRSEED=0 draws one, BRPACE,
 # BOTLOG=1 (bot status every 5 s) and SERVER_ARGS go to the server.
+# At /speed 4 (A's --checkspeed, #931), unlike a faster --brpace: the falls, the zone and the probe's waits all
+# scale together, so the zone still never takes part. SPEED=1 runs it at normal speed.
 #   GODOT=<exe> tools/brbotcheck.sh
 . "$(dirname "$0")/lib/twoclient.sh" brbots
 AT=2583250,1113250
 PORT=${PORT:-7835}
 tc_server 560 120 "$OUT/brbots_server.log" --server --generated-world --port $PORT --no-query --admin-password brbots --brpace ${BRPACE:-1} --brbotspread 100 --brbotsharmless --brseed ${BRSEED:-1152803998} ${BOTLOG:+--botlog} ${SERVER_ARGS:-}
-tc_client 440 "$OUT/brbots_A.log" --connect 127.0.0.1:$PORT --name "BRBA" --cache "$OUT/brbots_cache_A" --at "$AT" --view first --brbotcheck
+tc_client 440 "$OUT/brbots_A.log" --connect 127.0.0.1:$PORT --name "BRBA" --cache "$OUT/brbots_cache_A" --at "$AT" --view first --brbotcheck --checkspeed ${SPEED:-4}
 tc_stop
 grep -h "\[brbots" "$OUT/brbots_A.log" | grep -v " say "
 grep -h "^\[br\]\|^\[bots\]" "$OUT/brbots_server.log" | head -30

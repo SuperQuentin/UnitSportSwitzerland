@@ -569,6 +569,7 @@ public partial class PortalDemo : Node3D
             foreach (var (x, z) in new[] { (x0, z0), (x1, z0), (x1, z1), (x0, z0), (x1, z1), (x0, z1) })
             {
                 st.SetColor(c);
+                st.SetNormal(Vector3.Up);   // the terrain body lights steep ground by it (#883)
                 st.AddVertex(new Vector3(x, y, z));
             }
         }
