@@ -12,7 +12,9 @@
 #      docs/notes/general/godot-exe.md), TEST_BASE (origin/main), TEST_TIMEOUT (600 s per check),
 #      TEST_RAM_GB (3, free RAM before each light Godot run), TEST_HEAVY_RAM_GB (6, before the
 #      net/full tiers), TEST_PORT (7821), CHUNKS (passed on to the tools/*check.sh scripts),
-#      TEST_REALTIME (1: run the quick tier in real time, without --fixed-fps).
+#      TEST_REALTIME (1: run the quick tier in real time, without --fixed-fps), TEST_JOBS (net/full checks at
+#      once, default the heavy lock's slot count; 1 = one at a time), TEST_ONLY (one tier's rows alone:
+#      `TEST_ONLY=net tools/test.sh full` runs the whole net tier).
 # Quick-tier Godot checks run with --fixed-fps 60: game time, as fast as the CPU allows
 # (docs/notes/general/fast-checks.md); a map row whose check starts with @realtime opts out.
 # Prints one PASS/FAIL table; every log goes to test_output/tests/. Exit code 0 only if all passed.
@@ -96,6 +98,7 @@ while read -r prefix tier check; do
   check=${check%$'\r'}  # a CRLF checkout must not glue a CR to the check
   [ -z "$prefix" ] || [[ $prefix == \#* ]] && continue
   [[ $WANT == *" $tier "* ]] || continue
+  [ -n "${TEST_ONLY:-}" ] && [ "$tier" != "$TEST_ONLY" ] && continue   # one tier alone, e.g. TEST_ONLY=net with full
   if [ -n "$AREA" ]; then
     # tr, not ${x,,}: macOS ships bash 3.2, where that expansion is a syntax error and the
     # whole area match silently fell through to "no Godot check matches <area>"
