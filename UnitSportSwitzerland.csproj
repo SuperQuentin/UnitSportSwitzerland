@@ -29,6 +29,9 @@
     <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="7" />
   </ItemGroup>
 
+  <!-- home trainers (#901): RideLink, and the Windows TFM its Bluetooth needs -->
+  <Import Project="tools\RideLink\Game.props" />
+
   <ItemGroup>
     <ProjectReference Include="tools\TerrainFormat\TerrainFormat.csproj" />
     <!-- The map screen's country map, selection, plan and estimates, shared with the terminal
