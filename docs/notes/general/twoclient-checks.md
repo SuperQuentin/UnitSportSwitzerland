@@ -25,6 +25,20 @@
   second client logs on the server as `identity XXXX already connected, no sleeper for it`. A client
   that must be a player of its own runs under `( tc_userdata "$OUT/userdata_<x>_B"; tc_client ... ) &`
   (`tools/sleepercheck.sh`, `tools/yardlootnetcheck.sh`); never set `APPDATA`/`XDG_DATA_HOME` by hand.
+- **A check of the generated world passes `"${NOTERRAIN[@]}"`** (`--chunks test_output/no_terrain`,
+  an empty folder the lib makes) to its server and every client, besides `--generated-world`.
+  `--generated-world` alone only lets a server start with no terrain: where `terrain_location.json`
+  points at real tiles (the main checkout's D:, 825 tiles), server and clients load them, and the
+  generated site office at 2586561,1115543 is real ground there: `siteofficenetcheck` failed "no site
+  office door near the spot" (#943). Done for every script whose `AT` is a generated-world place:
+  `siteofficenetcheck`, `siteuppernetcheck`, `cranenetcheck`, `sitemachinenetcheck`,
+  `sitepalletnetcheck`, `yardlootnetcheck`, `brsquadcheck` (generated Zürich) and `liftsynccheck`
+  (unless `CHUNKS=` asks for real data). Not done: the scripts at the default spawn
+  (2583250,1113250: birds, pigeon, pvp, plant, placed, gunshot, useanim, bots, br...), which test
+  things that work on any ground and some of which take real terrain on purpose (`SERVER_ARGS=`,
+  `REAL=1`, `CHUNKS=`), and those that look for the nearest generated works or shop from the spawn
+  with no `AT` of their own (`baycheck`, `palletnetcheck`, `shopcheck`): from the main checkout they
+  meet the real buildings round Riddes instead. Give one `NOTERRAIN` if it must see generated ground.
 
 ## macOS
 

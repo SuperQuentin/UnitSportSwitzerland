@@ -9,14 +9,16 @@
 # a generated village with blocks of flats in its core (the probe also searches the villages nearest)
 AT=${1:-2584978,1114253}
 PORT=7797
+# the generated world wherever it runs: no real tiles, even where terrain_location.json has some (#943)
+NT=(); [ -z "${CHUNKS:-}" ] && NT=("${NOTERRAIN[@]}")
 GEN=(); [ -z "${CHUNKS:-}" ] && GEN=(--generated-world)
-tc_server 420 120 $OUT/liftsync_server.log --server --port $PORT ${GEN[@]+"${GEN[@]}"} ${CH[@]+"${CH[@]}"}
+tc_server 420 120 $OUT/liftsync_server.log --server --port $PORT ${GEN[@]+"${GEN[@]}"} ${CH[@]+"${CH[@]}"} ${NT[@]+"${NT[@]}"}
 tc_client 360 $OUT/liftsync_a.log --connect 127.0.0.1:$PORT --name LiftA --cache "$OUT/liftsync_cache_a" \
-    --at "$AT" --traffic 0 --liftsynccheck A ${CH[@]+"${CH[@]}"} &
+    --at "$AT" --traffic 0 --liftsynccheck A ${CH[@]+"${CH[@]}"} ${NT[@]+"${NT[@]}"} &
 A=$!
 sleep 3
 tc_client 360 $OUT/liftsync_b.log --connect 127.0.0.1:$PORT --name LiftB --cache "$OUT/liftsync_cache_b" \
-    --at "$AT" --traffic 0 --liftsynccheck B ${CH[@]+"${CH[@]}"}
+    --at "$AT" --traffic 0 --liftsynccheck B ${CH[@]+"${CH[@]}"} ${NT[@]+"${NT[@]}"}
 wait $A
 tc_stop
 grep -h "\[liftsync\|\[lift\]" $OUT/liftsync_a.log $OUT/liftsync_b.log
