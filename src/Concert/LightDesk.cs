@@ -321,11 +321,12 @@ public sealed class LightDesk
                 // there and back in eight bars, a little past the floor's end: up the far stand
                 float u = beat / 16f - MathF.Floor(beat / 32f) * 2f;
                 float depth = (u < 1f ? u : 2f - u) * 1.15f;
-                for (int i = 0; i < heads.Length; i++) IrSpot(heads[i], CrowdPoint(heads[i], depth, _irLateral[i]), _pal[1], 0.5f);
+                for (int i = 0; i < heads.Length; i++) IrSpot(heads[i], CrowdPoint(heads[i], depth, _irLateral[i]), _pal[1], 0.25f);
                 break;
             }
             case ShowSection.Chorus:
-                if (SectionBar < 2)
+                // a chorus held by the operator counts the bar on from the show's start: it opens again every 16 bars
+                if ((HeldSection != null ? SectionBar % BarsPerSection : SectionBar) < 2)
                 {
                     Transmit(_pal[0], 1f, Wristbands.Solid, 0f);
                     break;
@@ -361,7 +362,7 @@ public sealed class LightDesk
         if (!_plan.Round)
         {
             float z = 3f + depth * (_plan.CrowdAhead - 3f);
-            return _plan.StagePoint(lateral * _plan.CrowdHalf * 0.9f, 1.3f + Math.Max(0f, z - _plan.CrowdAhead) * 0.6f, z);
+            return _plan.StagePoint(lateral * _plan.CrowdHalf * 0.8f, 1.3f + Math.Max(0f, z - _plan.CrowdAhead) * 0.6f, z);
         }
         var h = new Vector2(f.Home.X, f.Home.Z).Normalized();
         float front = MathF.Abs(h.X) > 0.5f ? _e.Stadium.FrontHalfU : _e.Stadium.FrontHalfV;
