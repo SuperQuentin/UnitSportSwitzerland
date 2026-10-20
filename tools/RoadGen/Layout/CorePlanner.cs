@@ -54,7 +54,7 @@ public static class CorePlanner
     /// <summary>The largest kerb radius considered (m).</summary>
     private const double MostRadius = 500;
     /// <summary>A connector's edge may stand this far outside the outline (m): the mitred edges of a lane whose width eases along a tight curve.</summary>
-    public const double OutsideTolerance = 0.15;
+    public const double OutsideTolerance = 0.25;
     /// <summary>An arc is drawn with chords no longer than this (m).</summary>
     private const double Chord = 0.5;
 

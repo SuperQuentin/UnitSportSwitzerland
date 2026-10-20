@@ -371,6 +371,9 @@ off, `--junctions new` plans and reports without writing.
   (or that node's own cap's trim, where its lanes stop) instead of `JoinMargin` 4 m; a street looping back to its junction's
   own node is no road joining it; a link from a node back to itself under a metre (a stitch on a tile's border) is no arm.
   168 real tiles: old layout 250 -> 231, path ends off their lane 75 -> 73.
+- **Outside tolerance 0.25 m** (#854, Oct 20; was 0.15): a connector's edge may stand that far past the outline (a lane's mitred
+  edge where its width eases along an S near a mouth; the in-line kerb and the kerb push use the same number). 168 real tiles:
+  old layout 229 -> 210, path ends off their lane 73 -> 74.
 - **Tried and reverted** (#854, Oct 20): a slip lane's node (two car roads and a Verbindung) planned only to merge into a junction
   whose mouth reaches it, the slip lane an arm of the merged core: "a road joins short of a mouth" 52 -> 25 and the old layout
   229 -> 219, but 18 more path ends 0.6-1 m off their lane (most of those slip lanes are TLM stubs of 0 m between carriageways,
