@@ -36,6 +36,9 @@
     <Compile Include="..\..\src\Concert\Mvr\RigData.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Concert\Mvr\Gdtf.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Concert\Mvr\Mvr.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Concert\Mvr\MvrXchange.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Concert\Mvr\MvrXchangeStation.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Concert\Mvr\Mdns.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Concert\Mvr\MvrFixtures.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Concert\Mvr\MvrScene.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Concert\Mvr\MvrGeometry.cs" Link="Game\%(Filename)%(Extension)" />

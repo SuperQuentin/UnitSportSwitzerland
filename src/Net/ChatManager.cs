@@ -164,7 +164,7 @@ public partial class ChatManager : Node
             return;
         }
         // a concert operator's show input and patch (#885): this machine's ports and files
-        if (Concert.ConcertService.RunLocal(text.Trim()) is { } show)
+        if (Concert.ConcertService.RunLocal(text.Trim(), line => LineReceived?.Invoke(line, ChatKind.Private)) is { } show)
         {
             LineReceived?.Invoke(show, ChatKind.Private);
             return;

@@ -10,7 +10,8 @@ namespace UnitSport.Concert;
 /// (<c>--chunks &lt;main&gt;/terrain_chunks --at 2498751,1114890 --concert 11</c>): the player is put at
 /// the front-of-house console, E opens the light desk's screen (the key's own path), its buttons host
 /// the set, hold the peak, fire the confetti and pull the master down, each checked on the service
-/// and the rig; Esc closes it. Windowed, it saves <c>test_output/concert/desk_*.png</c>.
+/// and the rig; the MVR-xchange row pulls a rig from a loopback station (#960); Esc closes it.
+/// Windowed, it saves <c>test_output/concert/desk_*.png</c>.
 /// </summary>
 public partial class ConcertDeskProbe : Node
 {
@@ -107,11 +108,46 @@ public partial class ConcertDeskProbe : Node
             await Wait(0.6);
         }
         Check(MathF.Abs(rig.Desk.Master - 0.4f) < 0.01f, $"the master fader pulls the rig down ({rig.Desk.Master:F2})");
+        await Xchange(svc);
 
         await Press("ui_cancel");
         await Wait(0.4);
         Check(ConcertDeskUi.Instance?.IsOpen == false, $"Esc closes it");
         Finish(null);
+    }
+
+    /// <summary>
+    /// The MVR-xchange row (#960), on loopback: a station of the probe's offers set 21's rig, the
+    /// screen lists it, Pull imports it on the hosted set, Xchange off leaves.
+    /// </summary>
+    private async Task Xchange(ConcertService? svc)
+    {
+        ConcertMvrTool.Xchange(new[] { "on", "DeskCheck", "local" }, null);   // the button's "on" would open the LAN
+        var desk = new Mvr.MvrXchangeStation("DeskCheck", "Probe console", Mvr.MvrXchange.NewUuid()) { SaveFolder = OS.GetUserDataDir() + "/concert/xchange_probe" };
+        desk.Start(System.Net.IPAddress.Loopback, 0, discovery: false);
+        try
+        {
+            var mvr = Mvr.MvrFile.Write(Mvr.RigData.FromPatch(new StagePlan(ConcertPlanner.Plan(Terrain.Stadiums.StadiumCatalog.Geneva, 21)).Patch, "desk"), "desk");
+            int n = Mvr.MvrFile.Read(mvr, "d.mvr", out _)?.Rig.Fixtures.Count ?? -1;
+            desk.CommitFile(mvr, "Console rig.mvr", "set 21 from the console");
+            ConcertMvrTool.Xchange(new[] { "join", $"127.0.0.1:{desk.Port}" }, null);
+            for (int i = 0; i < 50 && ConcertMvrTool.Station?.Offers().Length != 1; i++) await Wait(0.1);
+            await Wait(0.8);   // the screen's twice-a-second refresh
+            var picker = ConcertDeskUi.Instance!.FindChildren("*", "OptionButton", true, false).OfType<OptionButton>()
+                .FirstOrDefault(o => o.ItemCount > 0 && o.GetItemText(0).StartsWith("Console rig.mvr", StringComparison.Ordinal));
+            Check(picker != null, $"the Xchange row lists the console's file ({ConcertMvrTool.Station?.Offers().Length} offered)");
+            Check(ButtonNamed(ConcertDeskUi.Instance!, "Xchange off") != null, $"and its button says it is on");
+            Shot("desk_xchange.png");
+            await Click("Pull", 2.0);
+            Check(svc?.RigFor(0)?.Fixtures.Count == n, $"'Pull' imports it on the hosted set ({svc?.RigFor(0)?.Fixtures.Count} of {n} fixtures)");
+            await Click("Xchange off");
+            Check(ConcertMvrTool.Station == null, $"'Xchange off' turns the station off");
+        }
+        finally
+        {
+            desk.Stop();
+            ConcertMvrTool.Xchange(new[] { "off" }, null);
+        }
     }
 
     private void Finish(string? error)
