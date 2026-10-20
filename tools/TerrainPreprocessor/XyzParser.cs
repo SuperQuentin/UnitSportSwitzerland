@@ -202,19 +202,21 @@ public static class XyzParser
                 else if (carry != MissingCell) grid[rowStart + c] = carry;
             }
         }
-        // any rows that were entirely missing: copy from vertical neighbors
+        // any rows that were entirely missing: copy the nearest filled row, above or below. (The old
+        // search went down first and, past the bottom, up from the same distance: a tile empty at its
+        // foot kept MissingCell rows, 4700 m walls, #965.)
+        var filled = new List<int>();
         for (int r = 0; r < CellsPerSide; r++)
+            if (grid[r * CellsPerSide] != MissingCell) filled.Add(r);
+        if (filled.Count == 0) return;
+        for (int r = 0, k = 0; r < CellsPerSide; r++)
         {
+            while (k + 1 < filled.Count && filled[k + 1] <= r) k++;
             if (grid[r * CellsPerSide] != MissingCell) continue;
-            for (int rr = 1; rr < CellsPerSide; rr++)
-            {
-                int src = (r + rr < CellsPerSide ? r + rr : r - rr);
-                if ((uint)src < CellsPerSide && grid[src * CellsPerSide] != MissingCell)
-                {
-                    Array.Copy(grid, src * CellsPerSide, grid, r * CellsPerSide, CellsPerSide);
-                    break;
-                }
-            }
+            int up = filled[k] <= r ? filled[k] : -1;
+            int down = filled[k] > r ? filled[k] : k + 1 < filled.Count ? filled[k + 1] : -1;
+            int src = up < 0 ? down : down < 0 ? up : (r - up <= down - r ? up : down);
+            Array.Copy(grid, src * CellsPerSide, grid, r * CellsPerSide, CellsPerSide);
         }
     }
 }

@@ -354,8 +354,15 @@ public static class WaterStage
         held.Clear();
         Directory.Delete(cacheDir, recursive: true);
 
+        // ---- stitch: a dry neighbour takes the carved edge ----------------------------------------
+        // A tile with no water of its own is not rewritten, so where a river crosses into one whose
+        // cover does not know it (a foreign tile, #965: the Rhine at Basel) the wet tile's carved edge
+        // would meet the old surface. The neighbour takes the shared vertices instead.
+        foreach (var st in StitchDryNeighbours(outDir, changed.Select(t => t.Id).ToHashSet(), labelBase.Keys.ToHashSet(), region))
+            changed.Add(st);
+
         // ---- D: manifest, horizon, seams ---------------------------------------------------------
-        var byId = changed.ToDictionary(t => t.Id);
+        var byId = changed.GroupBy(t => t.Id).ToDictionary(g => g.Key, g => g.Last());
         foreach (var t in manifest.Tiles)
             if (byId.TryGetValue(t.Id, out var c)) { t.Min = c.Min; t.Max = c.Max; }
         AtomicFile.Write(manifestPath, s => { using var w = new StreamWriter(s); w.Write(manifest.ToJson()); });
@@ -396,6 +403,59 @@ public static class WaterStage
         Console.WriteLine($"Water pass done: {byId.Count} tiles in {clock.Elapsed.TotalSeconds:F1}s"
             + (seamErrors > 0 ? $", {seamErrors} SEAM ERRORS" : ""));
         return seamErrors > 0 ? 1 : 0;
+    }
+
+    /// <summary>
+    /// Copies the shared edge (or corner) vertices of each rewritten tile into its neighbours that hold
+    /// no water and were therefore not rewritten; returns the neighbours it changed.
+    /// </summary>
+    private static List<ManifestTile> StitchDryNeighbours(string outDir, HashSet<TileId> written, HashSet<TileId> wetTiles, HashSet<TileId> region)
+    {
+        var result = new List<ManifestTile>();
+        var dry = written.SelectMany(id => Enumerable.Range(-1, 3).SelectMany(dy => Enumerable.Range(-1, 3).Select(dx => new TileId(id.E + dx, id.N + dy))))
+            .Where(nb => region.Contains(nb) && !wetTiles.Contains(nb) && !written.Contains(nb)).Distinct()
+            .OrderBy(t => t.E).ThenBy(t => t.N).ToList();
+        var cache = new Dictionary<TileId, ushort[]>();
+        ushort[] HeightsOf(TileId id)
+        {
+            if (cache.TryGetValue(id, out var h)) return h;
+            using var fs = File.OpenRead(Path.Combine(outDir, ChunkFormat.ChunkFileName(id)));
+            return cache[id] = ChunkCodec.Decode(fs).Heights;
+        }
+
+        foreach (var nb in dry)
+        {
+            var mine = (ushort[])HeightsOf(nb).Clone();
+            bool any = false;
+            void Take(int c, int r, ushort v) { if (mine[r * S + c] != v) { mine[r * S + c] = v; any = true; } }
+            foreach (var w in written.Where(w => Math.Abs(w.E - nb.E) <= 1 && Math.Abs(w.N - nb.N) <= 1).OrderBy(t => t.E).ThenBy(t => t.N))
+            {
+                var theirs = HeightsOf(w);
+                int dx = w.E - nb.E, dy = w.N - nb.N; // dy +1: w lies north (its row S-1 is our row 0)
+                for (int k = 0; k < S; k++)
+                {
+                    if (dx == 1 && dy == 0) Take(S - 1, k, theirs[k * S]);
+                    else if (dx == -1 && dy == 0) Take(0, k, theirs[k * S + S - 1]);
+                    else if (dx == 0 && dy == 1) Take(k, 0, theirs[(S - 1) * S + k]);
+                    else if (dx == 0 && dy == -1) Take(k, S - 1, theirs[k]);
+                }
+                // a diagonal neighbour shares one corner
+                if (dx == 1 && dy == 1) Take(S - 1, 0, theirs[(S - 1) * S]);
+                else if (dx == -1 && dy == 1) Take(0, 0, theirs[(S - 1) * S + S - 1]);
+                else if (dx == 1 && dy == -1) Take(S - 1, S - 1, theirs[0]);
+                else if (dx == -1 && dy == -1) Take(0, S - 1, theirs[S - 1]);
+            }
+            if (!any) continue;
+
+            ushort qMin = ushort.MaxValue, qMax = 0;
+            foreach (ushort q in mine) { if (q < qMin) qMin = q; if (q > qMax) qMax = q; }
+            var grid = new ChunkGrid(nb, mine, (float)ChunkFormat.Dequantize(qMin), (float)ChunkFormat.Dequantize(qMax));
+            AtomicFile.Write(Path.Combine(outDir, ChunkFormat.ChunkFileName(nb)), s => ChunkCodec.Encode(grid, s));
+            AtomicFile.Write(Path.Combine(outDir, ChunkFormat.CoarseFileName(nb)), s => ChunkCodec.Encode(grid.Decimate(ChunkFormat.CoarseStride), s));
+            result.Add(new ManifestTile { E = nb.E, N = nb.N, Min = grid.MinHeight, Max = grid.MaxHeight });
+        }
+        if (result.Count > 0) Console.WriteLine($"  stitched the carved edges into {result.Count} dry neighbour tiles");
+        return result;
     }
 
     // ---- per tile ----------------------------------------------------------------------------------

@@ -1,0 +1,356 @@
+using System.Buffers.Text;
+using System.IO.Compression;
+using System.Text.RegularExpressions;
+using UnitSport.Terrain.Format;
+
+namespace UnitSport.Tools.Preprocessor;
+
+/// <summary>
+/// A neighbour's elevation model as a terrain source for the LV95 tiles swissALTI3D does not cover,
+/// and for the -9999 gaps of its border tiles (#936 France, #965 Germany / Austria / Italy):
+/// GeoTIFFs (<see cref="TiffFloat"/>) or zipped XYZ text (Baden-Württemberg's DGM1), in one of the
+/// <see cref="DemCrs"/> grids, with a height offset to swissALTI3D's LN02.
+///
+/// <para>
+/// Each LV95 tile is resampled straight onto the 2000x2000 cell lattice <see cref="XyzParser"/>
+/// fills, so everything after it — <see cref="TileReducer"/>, seams, <c>.terr</c>/<c>.terrc</c>, the
+/// manifest — is the swissALTI3D path unchanged. Cells are bilinear in the source grid; their
+/// positions in it are exact at every 25 m knot (<see cref="DemProjection"/>) and bilinear between,
+/// far below a millimetre on a map this smooth.
+/// </para>
+///
+/// <para>
+/// Decoded blocks (a TIFF tile, a striped file, or one XYZ kilometre) sit in an LRU capped at
+/// <see cref="CacheBytes"/>, so a run stays a few hundred MB whatever the region's size — BEV's
+/// 50 km tiles are 10 GB decoded. The build walks LV95 rows north to south, so the hit rate is high.
+/// </para>
+/// </summary>
+public sealed class ForeignDem
+{
+    /// <summary>Bumped when the resampling changes, so cached edges of foreign tiles are rebuilt.</summary>
+    public const long SourceVersion = 936_001;
+
+    /// <summary>Marks a <see cref="SourceTile"/> as resampled from foreign DEMs rather than read from a file.</summary>
+    public const string SourcePath = "dem:";
+
+    public readonly DemCrs Crs;
+    public readonly string Dir;
+    /// <summary>Added to every height: the source's datum -> the LN02 heights of swissALTI3D.</summary>
+    public double OffsetZ;
+    public long CacheBytes = 384L << 20;
+
+    /// <summary>A georeferenced raster in the source grid: one TIFF, or one XYZ kilometre in a zip.</summary>
+    private sealed class Entry
+    {
+        public required string Name;
+        public TiffFloat? Tiff;
+        public string? Zip, Member;
+        public double OriginX, OriginY, PixelX, PixelY; // pixel (0,0)'s centre, pixel size
+        public int Width, Height, BlockW, BlockH;
+        public float? NoData;
+        public double MinX => OriginX - PixelX / 2;
+        public double MaxX => OriginX + (Width - 0.5) * PixelX;
+        public double MaxY => OriginY + PixelY / 2;
+        public double MinY => OriginY - (Height - 0.5) * PixelY;
+    }
+
+    private readonly List<Entry> _entries = new();
+    /// <summary>Entries by the 1 km cells of the source grid they touch.</summary>
+    private readonly Dictionary<(int, int), List<int>> _index = new();
+
+    private readonly object _gate = new();
+    private readonly LinkedList<(int Entry, int Bx, int By)> _lru = new();
+    private readonly Dictionary<(int, int, int), (float[] Data, LinkedListNode<(int, int, int)> Node)> _cache = new();
+    private readonly Dictionary<(int, int, int), Lazy<float[]>> _loading = new();
+    private long _cachedBytes;
+
+    private static readonly Regex XyzKm = new(@"_(\d{3,4})_(\d{4})_1_", RegexOptions.CultureInvariant);
+
+    public int FileCount => _entries.Count;
+    public string Name => $"{Crs} {Path.GetFileName(Dir.TrimEnd('/', '\\'))}";
+
+    public ForeignDem(DemCrs crs, string dir, double offsetZ = 0)
+    {
+        if (!Directory.Exists(dir)) throw new DirectoryNotFoundException($"DEM directory not found: {dir}");
+        Crs = crs; Dir = dir; OffsetZ = offsetZ;
+        var opts = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
+        int skipped = 0;
+        string? lastSkip = null;
+        foreach (var path in Directory.EnumerateFiles(dir, "*", opts).OrderBy(p => p, StringComparer.Ordinal))
+        {
+            if (path.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase))
+            {
+                TiffFloat t;
+                try { t = TiffFloat.Open(path); }
+                catch (InvalidDataException e) { skipped++; lastSkip = e.Message; continue; } // e.g. RGE ALTI's 8-bit DST/SRC companions
+                Add(new Entry
+                {
+                    Name = path, Tiff = t, OriginX = t.OriginX, OriginY = t.OriginY, PixelX = t.PixelX, PixelY = t.PixelY,
+                    Width = t.Width, Height = t.Height, BlockW = t.BlockW, BlockH = t.BlockH, NoData = t.NoData,
+                });
+            }
+            else if (path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+            {
+                // Baden-Württemberg: dgm1_32_<E km>_<N km>_1_bw_<year>.xyz, 1 m point centres at .5,
+                // the kilometre whose south-west corner the name gives
+                using var zip = ZipFile.OpenRead(path);
+                foreach (var z in zip.Entries)
+                {
+                    if (!z.Name.EndsWith(".xyz", StringComparison.OrdinalIgnoreCase)) continue;
+                    var m = XyzKm.Match(z.Name);
+                    if (!m.Success) continue;
+                    double e0 = int.Parse(m.Groups[1].Value) * 1000.0, n0 = int.Parse(m.Groups[2].Value) * 1000.0;
+                    Add(new Entry
+                    {
+                        Name = $"{path}!{z.FullName}", Zip = path, Member = z.FullName,
+                        OriginX = e0 + 0.5, OriginY = n0 + 999.5, PixelX = 1, PixelY = 1,
+                        Width = 1000, Height = 1000, BlockW = 1000, BlockH = 1000,
+                    });
+                }
+            }
+        }
+        if (skipped > 0) Console.WriteLine($"  {Name}: skipped {skipped} files that are not one float32 band, e.g. {lastSkip}");
+    }
+
+    private void Add(Entry e)
+    {
+        int i = _entries.Count;
+        _entries.Add(e);
+        for (int y = (int)Math.Floor(e.MinY / 1000); y <= (int)Math.Floor(e.MaxY / 1000); y++)
+            for (int x = (int)Math.Floor(e.MinX / 1000); x <= (int)Math.Floor(e.MaxX / 1000); x++)
+            {
+                if (!_index.TryGetValue((x, y), out var list)) _index[(x, y)] = list = new List<int>();
+                list.Add(i);
+            }
+    }
+
+    // ---- which tiles ----------------------------------------------------------------------------
+
+    /// <summary>
+    /// The LV95 tiles in the box with real data under at least <paramref name="minProbes"/> of a 5x5
+    /// grid of points (the corners included), minus <paramref name="exclude"/>. Reads the blocks under
+    /// the probes: a file that covers a tile with no-data alone does not make it a tile, and a tile the
+    /// data only clips is left to the generated fill rather than stretched from a few rows.
+    /// </summary>
+    public List<TileId> TilesIn(int minE, int minN, int maxE, int maxN, IReadOnlySet<TileId> exclude, int minProbes = 1)
+    {
+        var ids = new List<TileId>();
+        for (int n = minN; n < maxN; n++)
+            for (int e = minE; e < maxE; e++)
+                if (!exclude.Contains(new TileId(e, n))) ids.Add(new TileId(e, n));
+        var hit = new System.Collections.Concurrent.ConcurrentBag<TileId>();
+        Parallel.ForEach(ids, new ParallelOptions { MaxDegreeOfParallelism = 4 }, id =>
+        {
+            var cur = new Cursor();
+            int found = 0;
+            for (int j = 0; j <= 4; j++)
+                for (int i = 0; i <= 4; i++)
+                {
+                    var (x, y) = DemProjection.FromLv95(Crs, id.MinE + 250.0 * i, id.MaxN - 250.0 * j);
+                    if (!Covers(x, y)) continue;
+                    if (!double.IsNaN(Sample(x, y, ref cur)) && ++found >= minProbes) { hit.Add(id); return; }
+                }
+        });
+        return hit.OrderByDescending(t => t.N).ThenBy(t => t.E).ToList();
+    }
+
+    private bool Covers(double x, double y) => _index.ContainsKey(((int)Math.Floor(x / 1000), (int)Math.Floor(y / 1000)));
+
+    /// <summary>Build sources for these tiles; length and mtime stand in as a version stamp for the edge cache.</summary>
+    public static SourceTile SourceFor(TileId id) => new(id, SourcePath, 0, SourceVersion, 0);
+
+    // ---- filling ---------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Fills a tile's cells from each DEM in turn: the first fills what it has, the next only what is
+    /// still missing. Returns the cells filled.
+    /// </summary>
+    public static long FillAll(IReadOnlyList<ForeignDem> dems, TileId id, ushort[] cells, bool onlyMissing)
+    {
+        long filled = 0;
+        for (int i = 0; i < dems.Count; i++)
+            filled += dems[i].Fill(id, cells, onlyMissing || i > 0);
+        return filled;
+    }
+
+    /// <summary>
+    /// Fills a tile's 0.5 m cells (row 0 north, centres at MinE + 0.25 + 0.5c, MaxN - 0.25 - 0.5r) from
+    /// this grid; cells with no height stay <see cref="XyzParser.MissingCell"/>. Returns how many
+    /// were filled. With <paramref name="onlyMissing"/> only cells still missing are touched.
+    /// </summary>
+    public long Fill(TileId id, ushort[] cells, bool onlyMissing = false)
+    {
+        const int Cells = XyzParser.CellsPerSide, Knot = 50; // 25 m
+        const int Knots = Cells / Knot + 1;
+        if (!onlyMissing) Array.Fill(cells, XyzParser.MissingCell);
+
+        var kx = new double[Knots * Knots];
+        var ky = new double[Knots * Knots];
+        for (int j = 0; j < Knots; j++)
+            for (int i = 0; i < Knots; i++)
+            {
+                // knot (i, j) at the position of cell (i*Knot, j*Knot)'s centre
+                var (x, y) = DemProjection.FromLv95(Crs, id.MinE + 0.25 + 0.5 * i * Knot, id.MaxN - 0.25 - 0.5 * j * Knot);
+                kx[j * Knots + i] = x;
+                ky[j * Knots + i] = y;
+            }
+
+        long filled = 0;
+        var cur = new Cursor();
+        for (int r = 0; r < Cells; r++)
+        {
+            int j = Math.Min(r / Knot, Knots - 2);
+            double v = (r - j * Knot) / (double)Knot;
+            for (int c = 0; c < Cells; c++)
+            {
+                if (onlyMissing && cells[r * Cells + c] != XyzParser.MissingCell) continue;
+                int i = Math.Min(c / Knot, Knots - 2);
+                double u = (c - i * Knot) / (double)Knot;
+                int k = j * Knots + i;
+                double x = Bilerp(kx[k], kx[k + 1], kx[k + Knots], kx[k + Knots + 1], u, v);
+                double y = Bilerp(ky[k], ky[k + 1], ky[k + Knots], ky[k + Knots + 1], u, v);
+
+                double z = Sample(x, y, ref cur);
+                if (double.IsNaN(z)) continue;
+                cells[r * Cells + c] = ChunkFormat.Quantize(z + OffsetZ);
+                filled++;
+            }
+        }
+        return filled;
+    }
+
+    // ---- sampling --------------------------------------------------------------------------------
+
+    /// <summary>The block a worker read last: most samples land in it again.</summary>
+    public struct Cursor
+    {
+        internal int Entry, Bx, By;
+        internal float[]? Data;
+        public Cursor() { Entry = -1; }
+    }
+
+    /// <summary>
+    /// Height at (x, y) in the source grid, bilinear between the four nearest samples, or NaN with
+    /// no data; at a data edge, the nearest sample alone. A point near a block's edge reads its
+    /// neighbours' samples too.
+    /// </summary>
+    public double Sample(double x, double y, ref Cursor cur)
+    {
+        int ei = Find(x, y, cur.Entry);
+        if (ei < 0) return double.NaN;
+        var e = _entries[ei];
+        double gx = Math.Floor((x - e.OriginX) / e.PixelX), gy = Math.Floor((e.OriginY - y) / e.PixelY);
+        double fx = (x - e.OriginX) / e.PixelX - gx, fy = (e.OriginY - y) / e.PixelY - gy;
+        double x0 = e.OriginX + gx * e.PixelX, y0 = e.OriginY - gy * e.PixelY;
+        double h00 = At(x0, y0, ref cur), h10 = At(x0 + e.PixelX, y0, ref cur);
+        double h01 = At(x0, y0 - e.PixelY, ref cur), h11 = At(x0 + e.PixelX, y0 - e.PixelY, ref cur);
+        if (double.IsNaN(h00) || double.IsNaN(h10) || double.IsNaN(h01) || double.IsNaN(h11))
+            return (fx < 0.5, fy < 0.5) switch { (true, true) => h00, (false, true) => h10, (true, false) => h01, _ => h11 };
+        return Bilerp(h00, h10, h01, h11, fx, fy);
+    }
+
+    /// <summary>The sample whose centre is at (x, y), or NaN.</summary>
+    private double At(double x, double y, ref Cursor cur)
+    {
+        int ei = Find(x, y, cur.Entry);
+        if (ei < 0) return double.NaN;
+        var e = _entries[ei];
+        int col = (int)Math.Round((x - e.OriginX) / e.PixelX);
+        int row = (int)Math.Round((e.OriginY - y) / e.PixelY);
+        if ((uint)col >= (uint)e.Width || (uint)row >= (uint)e.Height) return double.NaN;
+        int bx = col / e.BlockW, by = row / e.BlockH;
+        if (cur.Entry != ei || cur.Bx != bx || cur.By != by || cur.Data == null)
+        {
+            cur.Entry = ei; cur.Bx = bx; cur.By = by;
+            cur.Data = Block(ei, bx, by);
+        }
+        float h = cur.Data[(row - by * e.BlockH) * e.BlockW + (col - bx * e.BlockW)];
+        return float.IsNaN(h) || h == e.NoData || h < -1000 || h > 9000 ? double.NaN : h;
+    }
+
+    /// <summary>The entry holding (x, y), preferring <paramref name="hint"/>; -1 if none.</summary>
+    private int Find(double x, double y, int hint)
+    {
+        if (hint >= 0 && Inside(_entries[hint], x, y)) return hint;
+        if (!_index.TryGetValue(((int)Math.Floor(x / 1000), (int)Math.Floor(y / 1000)), out var list)) return -1;
+        foreach (int i in list)
+            if (Inside(_entries[i], x, y)) return i;
+        return -1;
+    }
+
+    private static bool Inside(Entry e, double x, double y) => x >= e.MinX && x < e.MaxX && y > e.MinY && y <= e.MaxY;
+
+    private float[] Block(int ei, int bx, int by)
+    {
+        var key = (ei, bx, by);
+        Lazy<float[]> lazy;
+        lock (_gate)
+        {
+            if (_cache.TryGetValue(key, out var hit))
+            {
+                _lru.Remove(hit.Node);
+                _lru.AddFirst(hit.Node);
+                return hit.Data;
+            }
+            if (!_loading.TryGetValue(key, out lazy!))
+                _loading[key] = lazy = new Lazy<float[]>(() => Decode(_entries[ei], bx, by));
+        }
+        var data = lazy.Value; // decoded outside the lock, once, however many workers wait for it
+        lock (_gate)
+        {
+            _loading.Remove(key);
+            if (!_cache.ContainsKey(key))
+            {
+                _cache[key] = (data, _lru.AddFirst(key));
+                _cachedBytes += data.Length * 4L;
+                while (_cachedBytes > CacheBytes && _lru.Count > 1)
+                {
+                    var old = _lru.Last!.Value;
+                    _lru.RemoveLast();
+                    _cachedBytes -= _cache[old].Data.Length * 4L;
+                    _cache.Remove(old);
+                }
+            }
+        }
+        return data;
+    }
+
+    private static float[] Decode(Entry e, int bx, int by)
+    {
+        if (e.Tiff != null) return e.Tiff.ReadBlock(bx, by);
+
+        // one XYZ kilometre: "x y z" lines, placed by coordinate, missing points NaN
+        var grid = new float[e.Width * e.Height];
+        Array.Fill(grid, float.NaN);
+        byte[] text;
+        using (var zip = ZipFile.OpenRead(e.Zip!))
+        using (var s = zip.GetEntry(e.Member!)!.Open())
+        using (var ms = new MemoryStream())
+        {
+            s.CopyTo(ms);
+            text = ms.ToArray();
+        }
+        var span = text.AsSpan();
+        Span<double> v = stackalloc double[3];
+        int pos = 0;
+        while (pos < span.Length)
+        {
+            int k = 0;
+            while (k < 3 && pos < span.Length)
+            {
+                while (pos < span.Length && (span[pos] == ' ' || span[pos] == '\t' || span[pos] == '\r' || span[pos] == '\n' || span[pos] == ';' || span[pos] == ',')) pos++;
+                if (pos >= span.Length) break;
+                if (!Utf8Parser.TryParse(span[pos..], out double d, out int used)) { while (pos < span.Length && span[pos] != '\n') pos++; k = 0; continue; }
+                v[k++] = d;
+                pos += used;
+            }
+            if (k < 3) break;
+            int col = (int)Math.Round((v[0] - e.OriginX) / e.PixelX), row = (int)Math.Round((e.OriginY - v[1]) / e.PixelY);
+            if ((uint)col < (uint)e.Width && (uint)row < (uint)e.Height) grid[row * e.Width + col] = (float)v[2];
+        }
+        return grid;
+    }
+
+    private static double Bilerp(double a, double b, double c, double d, double u, double v) =>
+        (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
+}
