@@ -74,6 +74,7 @@ public partial class ConcertRig
         foreach (var o in rig.Objects)
             multi[o.Mesh]?.SetInstanceTransform(next[o.Mesh]++, Mvr.RigData.X(o.Xf));
         AddChild(root);
+        BuildObjectCollision(rig, positions, indices);   // #974
         ObjectsDrawn = rig.Objects.Count;
     }
 }

@@ -13,7 +13,8 @@ namespace UnitSport.Concert;
 ///
 /// <para>
 /// Seats behind an end or side stage are not sold. The floor is filled from the barrier back, densest
-/// at the front, never under the stage, its catwalk, the front-of-house riser or the delay towers.
+/// at the front, never under the stage, its catwalk, the front-of-house riser, the delay towers or an
+/// imported set's pieces on the floor (#974, <see cref="StagePlan.ObjectFootprints"/>).
 /// Only during the show (the rig says when); out past <see cref="Range"/> m it is not drawn.
 /// </para>
 /// </summary>
