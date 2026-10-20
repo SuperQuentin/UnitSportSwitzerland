@@ -6,48 +6,26 @@
 154.7	Aircraft / Antonov AN-124 (parked)
 365.3	Aircraft / Military cargo plane
 365.3	Aircraft / Military cargo plane (parked)
-304.2	Aircraft / UFO
-367.8	Aircraft / UFO, flying (legs up, beam on, shortened)
-484	Aliens / Alien green
-484	Aliens / Alien grey
-484	Aliens / Alien teal
-484	Aliens / Alien violet
-695.7	Aliens / Blip
-758.4	Aliens / Gleeb
-758.4	Aliens / Gleeb Happy
-758.4	Aliens / Gleeb Sad
-758.4	Aliens / Gleeb Surprised
-758.4	Aliens / Visitor
-758.4	Aliens / Zib
-725.2	Aliens / Zib waving
-758.4	Aliens / Zorp
-774.7	Aliens / Zorp doing the robot
-782	Aura / Move - Arms crossed
-261.5	Aura / Move - Bow
-367.8	Aura / Move - Cut the rope
-321.9	Aura / Move - Dab
-367.8	Aura / Move - Floss
-782	Aura / Move - Griddy
-782	Aura / Move - Lasso
-314.6	Aura / Move - Lead the rival
-754.4	Aura / Move - Mewing
-282.7	Aura / Move - Moonwalk
-298.8	Aura / Move - Point to sky
-274	Aura / Move - Robot
-367.8	Aura / Move - Shush
-367.8	Aura / Move - Siuuu
-298.8	Aura / Move - Six seven
-298.8	Aura / Move - Slow walk
-298.8	Aura / Move - Stand tall
-282.7	Aura / Move - Stare down
-367.8	Aura / Move - Sunglasses
-754.4	Aura / Move - Yawn
-367.8	Aura / Stance - Defeat
-754.4	Aura / Stance - Laugh
-782	Aura / Stance - Planning
-298.8	Aura / Stance - Stumble
-282.7	Aura / Stance - Victory
-298.8	Aura / Stance - Waiting
+38.4	Aircraft / UFO
+96.1	Aircraft / UFO, flying (legs up, beam on, shortened)
+382.9	Aura / Move - Arms crossed
+96.1	Aura / Move - Cut the rope
+115.3	Aura / Move - Dab
+96.1	Aura / Move - Floss
+382.9	Aura / Move - Griddy
+381.4	Aura / Move - Lasso
+34.7	Aura / Move - Lead the rival
+403.1	Aura / Move - Mewing
+2.8	Aura / Move - Moonwalk
+96.1	Aura / Move - Shush
+96.1	Aura / Move - Siuuu
+2.8	Aura / Move - Stare down
+96.1	Aura / Move - Sunglasses
+403.1	Aura / Move - Yawn
+96.1	Aura / Stance - Defeat
+403.1	Aura / Stance - Laugh
+382.8	Aura / Stance - Planning
+2.8	Aura / Stance - Victory
 112	Battle royale / Military
 2088	Battle royale / Postauto stop
 5568.2	Battle royale / Prefab - army checkpoint
@@ -331,11 +309,11 @@
 18.1	Birds / Woodlark
 124.8	Birds / Yellow-legged Gull
 20.6	Birds / Yellowhammer
-467.7	Boats / Jetski
+193.7	Boats / Jetski
 178	Boats / Jetski (parked)
-719.7	Boats / Paddle steamer
+523.8	Boats / Paddle steamer
 459.8	Boats / Paddle steamer (parked)
-971.1	Boats / Speedboat
+646.9	Boats / Speedboat
 97.9	Boats / Speedboat (parked)
 30.7	Build / CamoNet
 2016	Build / DoorWall - Metal
@@ -349,336 +327,242 @@
 30013	Build / Stairs - Metal
 2300.1	Build / Wall - Metal
 2880	Build / WindowWall - Metal
-374.3	Cars / AE85 Levin
+168.6	Cars / AE85 Levin
 72	Cars / AE85 Levin (parked)
-284.1	Cars / AE86 coupe
+72	Cars / AE86 coupe
 72	Cars / AE86 coupe (parked)
-638.1	Cars / AE86 hatch
+344.9	Cars / AE86 hatch
 73.7	Cars / AE86 hatch (parked)
-684.5	Cars / BNR32
+399.1	Cars / BNR32
 78.2	Cars / BNR32 (parked)
-380.9	Cars / BNR34
+175.2	Cars / BNR34
 79.7	Cars / BNR34 (parked)
-1155.1	Cars / CE9A Evo III
+937.2	Cars / CE9A Evo III
 848.3	Cars / CE9A Evo III (parked)
-1041.7	Cars / CN9A Evo IV
+848.8	Cars / CN9A Evo IV
 848.8	Cars / CN9A Evo IV (parked)
-1098.7	Cars / CT9A Evo VII
+869.3	Cars / CT9A Evo VII
 869.3	Cars / CT9A Evo VII (parked)
-213.8	Cars / DC2 Type R
+4.8	Cars / DC2 Type R
 4.8	Cars / DC2 Type R (parked)
-372.6	Cars / EG6 hatch
+153	Cars / EG6 hatch
 75.2	Cars / EG6 hatch (parked)
-372.6	Cars / EK9 Type R
+153	Cars / EK9 Type R
 75.2	Cars / EK9 Type R (parked)
-282	Cars / ER34 Skyline
+76.5	Cars / ER34 Skyline
 76.5	Cars / ER34 Skyline (parked)
-309.2	Cars / FC3S
+75	Cars / FC3S
 75	Cars / FC3S (parked)
-401.7	Cars / FD3S
+184.1	Cars / FD3S
 90.7	Cars / FD3S (parked)
-1408.8	Cars / GC8 rally saloon
+1143.7	Cars / GC8 rally saloon
 857.6	Cars / GC8 rally saloon (parked)
-379.8	Cars / JZA80 Supra
+174.1	Cars / JZA80 Supra
 80.9	Cars / JZA80 Supra (parked)
-1180.8	Cars / NA1 NSX
+996.5	Cars / NA1 NSX
 996.5	Cars / NA1 NSX (parked)
-235.6	Cars / NA6CE Roadster
+17	Cars / NA6CE Roadster
 17	Cars / NA6CE Roadster (parked)
-261.5	Cars / NB8C Roadster
+17	Cars / NB8C Roadster
 17	Cars / NB8C Roadster (parked)
-282.2	Cars / PS13 Sileighty
+75	Cars / PS13 Sileighty
 75	Cars / PS13 Sileighty (parked)
-389.2	Cars / RPS13 180SX
+168.4	Cars / RPS13 180SX
 75	Cars / RPS13 180SX (parked)
-1136.3	Cars / Rental kart
+837.8	Cars / Rental kart
 722.4	Cars / Rental kart (parked)
-597.5	Cars / Rental kart - Army M 28 148
-1157.9	Cars / Rental kart - Army M 41 185
-710.6	Cars / Rental kart - Army M 54 222
-831.2	Cars / Rental kart - Blue no. 11
-1428.8	Cars / Rental kart - Cyan no. 46
-974.5	Cars / Rental kart - Green no. 25
-1503.8	Cars / Rental kart - Lime no. 60
-957.9	Cars / Rental kart - Orange no. 32
-975	Cars / Rental kart - Pink no. 53
-1066.7	Cars / Rental kart - Purple no. 39
-811.6	Cars / Rental kart - Red no. 4
-1019.2	Cars / Rental kart - White no. 67
-1432.3	Cars / Rental kart - Yellow no. 18
-1432.3	Cars / Rental kart - cornering on three wheels
-1066.7	Cars / Rental kart - tipped over
-287.1	Cars / S13 Silvia
+298.7	Cars / Rental kart - Army M 28 148
+758.7	Cars / Rental kart - Army M 41 185
+411.8	Cars / Rental kart - Army M 54 222
+532.4	Cars / Rental kart - Blue no. 11
+1077.4	Cars / Rental kart - Cyan no. 46
+675.7	Cars / Rental kart - Green no. 25
+1104.7	Cars / Rental kart - Lime no. 60
+678	Cars / Rental kart - Orange no. 32
+676.2	Cars / Rental kart - Pink no. 53
+795	Cars / Rental kart - Purple no. 39
+531.7	Cars / Rental kart - Red no. 4
+747.5	Cars / Rental kart - White no. 67
+1033.1	Cars / Rental kart - Yellow no. 18
+1033.1	Cars / Rental kart - cornering on three wheels
+795	Cars / Rental kart - tipped over
+75	Cars / S13 Silvia
 75	Cars / S13 Silvia (parked)
-308.4	Cars / SW20 MR2
+75.4	Cars / SW20 MR2
 75.4	Cars / SW20 MR2 (parked)
-838	Cars / XP90 Yaris
+630.4	Cars / XP90 Yaris
 630.4	Cars / XP90 Yaris (parked)
-1088.2	Cars / XW20 Prius
+911.8	Cars / XW20 Prius
 911.8	Cars / XW20 Prius (parked)
-1061.9	Cars / XW30 Prius
+905	Cars / XW30 Prius
 905	Cars / XW30 Prius (parked)
-215.7	Cars / Z33
+4.8	Cars / Z33
 4.8	Cars / Z33 (parked)
-390.5	Cars / ZN6
+172.6	Cars / ZN6
 79.2	Cars / ZN6 (parked)
-207	Cars / ZZW30 MR-S
+4.8	Cars / ZZW30 MR-S
 4.8	Cars / ZZW30 MR-S (parked)
-274	Clothes / Alien antennae
-2216.3	Clothes / Bee stockings
-278.2	Clothes / Bell collar
-755.6	Clothes / Big pink bow
-443.8	Clothes / Black band tee
-451.3	Clothes / Black beanie
-490.8	Clothes / Black cargo pants
-298.7	Clothes / Black cat ears
-213.8	Clothes / Black face mask
-840.1	Clothes / Black gothic robe
-298.8	Clothes / Black headset
-274	Clothes / Black marcel
-363.2	Clothes / Black shades
-414	Clothes / Black shorts
-881.3	Clothes / Black slit maxi skirt
-330.9	Clothes / Black thigh-highs
-3060.4	Clothes / Black-white thigh-highs
-841.1	Clothes / Buckle corset
-302.4	Clothes / Bunny ears
-793.4	Clothes / Cat-ear headset
-414	Clothes / Chain crop top
-367.8	Clothes / Chain necklace
-573.8	Clothes / Combat boots
-367.8	Clothes / Devil horns
-401.5	Clothes / Disco platforms
-269.3	Clothes / Disco shades
-367.8	Clothes / Disco-ball top
-200.5	Clothes / Fang mask
-333.9	Clothes / Fingerless gloves
-5988	Clothes / Fishnets
-274	Clothes / Galaxy dress
-414	Clothes / Galaxy hoodie
-354.6	Clothes / Glitch tee
-279.6	Clothes / Gothic round shades
-540.6	Clothes / Green polo
-257.8	Clothes / Grey jogging shorts
-234.5	Clothes / Hard hat
-346.2	Clothes / Heart choker
-792.2	Clothes / Heart shades
-609.5	Clothes / Hi-vis vest
-166.9	Clothes / Holo mask
-416.4	Clothes / Holo skirt
-282.7	Clothes / Industrial bar and nose ring
-917.7	Clothes / Jeans
-742.6	Clothes / Kawaii knee socks
-873.2	Clothes / Lace arm warmers
-298.8	Clothes / Lace headband
-367.8	Clothes / Lava tee
-272.4	Clothes / Mary Janes
-586	Clothes / Navy polo
-873.2	Clothes / Neon gloves
-757.2	Clothes / Neon headset
-873.2	Clothes / Olive army T-shirt
-344.5	Clothes / Pastel heart tee
-521.8	Clothes / Pastel hoodie
-310.3	Clothes / Pink cat ears
-222.7	Clothes / Pink cat mask
-429.3	Clothes / Pink crop top
-4122.3	Clothes / Pink lolita dress
-284.4	Clothes / Pink paw gloves
-416.6	Clothes / Pink pleated skirt
-438.5	Clothes / Pink sneakers
-2970.1	Clothes / Pink-white thigh-highs
-745	Clothes / Platform buckle boots
-4071.8	Clothes / Postal-doll jacket
-297.5	Clothes / Postal-doll skirt
-360.7	Clothes / Rainbow cat ears
-935.4	Clothes / Rainbow stockings
-274	Clothes / Rainbow tee
-414	Clothes / Red tartan skirt
-295.8	Clothes / Round glasses
-3264.1	Clothes / Ruffled black mini
-873.2	Clothes / Silver antennae
-354.6	Clothes / Silver hoops
-1297.1	Clothes / Silver space suit
-274	Clothes / Silver studs
-311.4	Clothes / Skull mask
-298.8	Clothes / Spike piercings
-434.8	Clothes / Spiked choker
-393.9	Clothes / Star glasses
-274	Clothes / Star studs
-780.7	Clothes / Striped arm warmers
-2891.1	Clothes / Striped long-sleeve
-223.6	Clothes / Swirly A mask
-298.7	Clothes / Swirly OwO mask
-782.1	Clothes / TAZ 90 jacket
-355.6	Clothes / TAZ 90 trousers
-401.5	Clothes / Tall antennae
-236.4	Clothes / Tongue-out mask
-287.1	Clothes / UwU mask
-298.8	Clothes / White T-shirt
-414	Clothes / White marcel
-447.8	Clothes / White sneakers
-831.8	Clothes / Witch robe
+1917.7	Clothes / Bee stockings
+4.2	Clothes / Bell collar
+409.1	Clothes / Big pink bow
+115.4	Clothes / Black band tee
+265.5	Clothes / Black beanie
+115.4	Clothes / Black cargo pants
+26.4	Clothes / Black cat ears
+2.8	Clothes / Black face mask
+568.3	Clothes / Black gothic robe
+96.1	Clothes / Black shades
+115.4	Clothes / Black shorts
+557.1	Clothes / Black slit maxi skirt
+56.9	Clothes / Black thigh-highs
+2761.1	Clothes / Black-white thigh-highs
+542.5	Clothes / Buckle corset
+22.5	Clothes / Bunny ears
+403.2	Clothes / Cat-ear headset
+115.4	Clothes / Chain crop top
+96.1	Clothes / Chain necklace
+287.7	Clothes / Combat boots
+96.1	Clothes / Devil horns
+115.4	Clothes / Disco platforms
+96.1	Clothes / Disco-ball top
+6.5	Clothes / Fang mask
+76.1	Clothes / Fingerless gloves
+5689.4	Clothes / Fishnets
+115.4	Clothes / Galaxy hoodie
+99.1	Clothes / Glitch tee
+2.8	Clothes / Gothic round shades
+285.1	Clothes / Green polo
+97.2	Clothes / Hard hat
+66.3	Clothes / Heart choker
+391.5	Clothes / Heart shades
+337.1	Clothes / Hi-vis vest
+117.9	Clothes / Holo skirt
+2.8	Clothes / Industrial bar and nose ring
+517.9	Clothes / Jeans
+444.1	Clothes / Kawaii knee socks
+549	Clothes / Lace arm warmers
+96.1	Clothes / Lava tee
+287.5	Clothes / Navy polo
+549	Clothes / Neon gloves
+405.8	Clothes / Neon headset
+549	Clothes / Olive army T-shirt
+40.7	Clothes / Pastel heart tee
+223.3	Clothes / Pastel hoodie
+19.1	Clothes / Pink cat ears
+11.7	Clothes / Pink cat mask
+157.6	Clothes / Pink crop top
+3864.5	Clothes / Pink lolita dress
+12	Clothes / Pink paw gloves
+118	Clothes / Pink pleated skirt
+18	Clothes / Pink sneakers
+2645.9	Clothes / Pink-white thigh-highs
+489.5	Clothes / Platform buckle boots
+3797.8	Clothes / Postal-doll jacket
+23.5	Clothes / Postal-doll skirt
+96.1	Clothes / Rainbow cat ears
+611.2	Clothes / Rainbow stockings
+115.4	Clothes / Red tartan skirt
+2965.5	Clothes / Ruffled black mini
+549	Clothes / Silver antennae
+99.1	Clothes / Silver hoops
+549	Clothes / Silver space suit
+113.2	Clothes / Skull mask
+179.4	Clothes / Spiked choker
+124.9	Clothes / Star glasses
+506.7	Clothes / Striped arm warmers
+2633.3	Clothes / Striped long-sleeve
+12.5	Clothes / Swirly A mask
+100.5	Clothes / Swirly OwO mask
+483.5	Clothes / TAZ 90 jacket
+115.4	Clothes / Tall antennae
+6.4	Clothes / Tongue-out mask
+99.1	Clothes / UwU mask
+115.4	Clothes / White marcel
+533.3	Clothes / Witch robe
 7.8	Crafting / Ashes
-367.8	Emotes / Air drums
-790.7	Emotes / Air guitar
-367.8	Emotes / Arm wave
-274	Emotes / Body roll
-282.7	Emotes / Cabbage patch
-367.8	Emotes / Carlton
-354.6	Emotes / Charleston
-298.8	Emotes / Cheer
-367.8	Emotes / Chicken dance
-282.7	Emotes / Clap
-314.8	Emotes / Dab
-239.4	Emotes / Disco point
-754.4	Emotes / Fist pump
-754.4	Emotes / Floss
-257.8	Emotes / Gangnam style
-282.7	Emotes / Griddy
-298.8	Emotes / Headbang
-354.6	Emotes / Headspin
-298.8	Emotes / Macarena
-354.6	Emotes / Moonwalk
-298.8	Emotes / Orange justice
-282.7	Emotes / Pogo
-298.8	Emotes / Rat dance
-274	Emotes / Robot
-282.7	Emotes / Running man
-782	Emotes / Salute
-355.9	Emotes / Shoulder lean
-298.8	Emotes / Shrug
-274	Emotes / Shuffle
-282.7	Emotes / Skank
-313	Emotes / Sprinkler
-367.8	Emotes / Swim
-277.9	Emotes / T-step
-416.2	Emotes / Toprock
-367.8	Emotes / Twerk
-282.7	Emotes / Wave
-274	Emotes / Windmill
-298.8	Emotes / Wop
-782	Emotes / YMCA
-267.9	Faces / Expression - Angry
-267.9	Faces / Expression - Dizzy
-267.9	Faces / Expression - Focused
-267.9	Faces / Expression - Happy
-267.9	Faces / Expression - Joy
-267.9	Faces / Expression - Love
-267.9	Faces / Expression - Neutral
-267.9	Faces / Expression - Out
-267.9	Faces / Expression - Pain
-267.9	Faces / Expression - Rock
-267.9	Faces / Expression - Sad
-267.9	Faces / Expression - Sleepy
-267.9	Faces / Expression - Surprised
-267.9	Faces / Expression - Unsure
-267.9	Faces / Expression - Wink
-267.9	Faces / Preset - anime
-267.9	Faces / Preset - bold
-267.9	Faces / Preset - button
-267.9	Faces / Preset - calm
-267.9	Faces / Preset - cheeky
-267.9	Faces / Preset - cute
-267.9	Faces / Preset - dreamy
-267.9	Faces / Preset - freckles
-267.9	Faces / Preset - gazer
-267.9	Faces / Preset - giggler
-267.9	Faces / Preset - gloomy
-267.9	Faces / Preset - grin
-267.9	Faces / Preset - sharp
-267.9	Faces / Preset - sleepy
-267.9	Faces / Preset - sparkle
-267.9	Faces / Preset - startled
-267.9	Faces / Preset - stern
-267.9	Faces / Preset - stubble
-267.9	Faces / Preset - visitor
-267.9	Faces / Seeded - seed 0
-267.9	Faces / Seeded - seed 1
-254	Faces / Seeded - seed 2
-267.9	Faces / Seeded - seed 3
-267.9	Faces / Seeded - seed 4
-254	Faces / Seeded - seed 5
-235.8	Faces / Seeded - seed 6
-267.9	Faces / Seeded - seed 7
-782	Fights / Move - Finisher
-298.8	Fights / Move - Jab
-368.5	Fights / Move - JumpKick
-778.1	Fights / Move - Kick
-298.8	Fights / Move - LowJab
-301.4	Fights / Move - StringKick
-282.7	Fights / Move - Sweep
-754.4	Fights / Move - Uppercut
-367.8	Fights / Stance - Air
-729.5	Fights / Stance - BlockStun
-324.8	Fights / Stance - Crouch
-782	Fights / Stance - Dazed
-327.9	Fights / Stance - Down
-770.9	Fights / Stance - GuardHigh
-312	Fights / Stance - GuardLow
-754.4	Fights / Stance - HitStun
-324.8	Fights / Stance - Stand
-367.8	Fights / Stance - Victory
-620.1	Figures / Build - Alien
-286.1	Figures / Build - Broad
-298.8	Figures / Build - Curvy
-286.1	Figures / Build - Lean
-298.8	Figures / Build - Slim
-269.2	Figures / Build - Stocky
-298.8	Figures / Hair - BluntBangs
-298.8	Figures / Hair - Bob
-401.5	Figures / Hair - Bun
-272.4	Figures / Hair - Long
-909.2	Figures / Hair - Mohawk
-267.9	Figures / Hair - None
-414	Figures / Hair - Ponytail
-885.1	Figures / Hair - Quiff
-353.8	Figures / Hair - Shaggy
-808	Figures / Hair - Short
-282.7	Figures / Hair - SideSwept
-399	Figures / Hair - Spiky
-414	Figures / Hair - Twintails
-265.1	Figures / Hat - ReindeerAntlers
-273.5	Figures / Hat - SantaHat
-304.7	Figures / Hat - WitchHat
-244.2	Figures / Helmet
-282.7	Figures / Holding - Hold
-298.8	Figures / Holding - Mouth
-298.8	Figures / Holding - Phone
-782	Figures / Holding - PhoneOpen
-367.8	Figures / Holding - PhoneRaised
-754.4	Figures / Holding - PhoneSelfie
-282.7	Figures / Holding - Plant
-272.8	Figures / Holding - ShoulderAim
-754.4	Figures / Holding - ThrowRelease
-367.8	Figures / Holding - ThrowWindup
-782	Figures / Holding - TwoHandEye
-788.6	Figures / Pose - Boarding
-755.9	Figures / Pose - ClimbLeft
-300.7	Figures / Pose - ClimbRight
-420.6	Figures / Pose - Cycling
-367.8	Figures / Pose - Hanging
-298.6	Figures / Pose - Running
-282.4	Figures / Pose - Spread
-282.7	Figures / Pose - Standing
-300.7	Figures / Pose - Tucked
-782	Figures / Running
-367.8	Figures / Seated passenger
-260.4	Figures / Snow poses - Board - heel edge
-269.8	Figures / Snow poses - Board - pushing
-269.8	Figures / Snow poses - Board - stance
-260.4	Figures / Snow poses - Board - toe edge
-269.8	Figures / Snow poses - Board - tuck
-287.2	Figures / Snow poses - Ski - carving left
-564	Figures / Snow poses - Ski - in the air
-569.7	Figures / Snow poses - Ski - landing
-554.5	Figures / Snow poses - Ski - schuss
-562.4	Figures / Snow poses - Ski - skating push
-558	Figures / Snow poses - Ski - snowplough
-564	Figures / Snow poses - Ski - stance
-310.7	Figures / Swim - Crawl
-298	Figures / Swim - Tread
-368	Figures / Swim - Under
-298.8	Figures / Walking
+96.1	Emotes / Air drums
+391.5	Emotes / Air guitar
+96.1	Emotes / Arm wave
+2.8	Emotes / Cabbage patch
+96.1	Emotes / Carlton
+99.1	Emotes / Charleston
+96.1	Emotes / Chicken dance
+2.8	Emotes / Clap
+96.1	Emotes / Dab
+3.6	Emotes / Disco point
+403.1	Emotes / Fist pump
+403.1	Emotes / Floss
+2.8	Emotes / Griddy
+99.1	Emotes / Headspin
+99.1	Emotes / Moonwalk
+2.8	Emotes / Pogo
+2.8	Emotes / Running man
+381.4	Emotes / Salute
+100.4	Emotes / Shoulder lean
+2.8	Emotes / Skank
+33.1	Emotes / Sprinkler
+96.1	Emotes / Swim
+117.7	Emotes / Toprock
+96.1	Emotes / Twerk
+2.8	Emotes / Wave
+381.4	Emotes / YMCA
+382.9	Fights / Move - Finisher
+102.9	Fights / Move - JumpKick
+388.1	Fights / Move - Kick
+2.6	Fights / Move - StringKick
+2.8	Fights / Move - Sweep
+403.1	Fights / Move - Uppercut
+96.1	Fights / Stance - Air
+416.1	Fights / Stance - BlockStun
+26	Fights / Stance - Crouch
+382.9	Fights / Stance - Dazed
+29	Fights / Stance - Down
+389.5	Fights / Stance - GuardHigh
+32.1	Fights / Stance - GuardLow
+403.1	Fights / Stance - HitStun
+26	Fights / Stance - Stand
+96.1	Fights / Stance - Victory
+115.4	Figures / Hair - Bun
+566.8	Figures / Hair - Mohawk
+115.4	Figures / Hair - Ponytail
+501.7	Figures / Hair - Quiff
+55.8	Figures / Hair - Shaggy
+362.3	Figures / Hair - Short
+2.8	Figures / Hair - SideSwept
+115.4	Figures / Hair - Spiky
+115.4	Figures / Hair - Twintails
+2.8	Figures / Hat - ReindeerAntlers
+37.7	Figures / Hat - SantaHat
+69	Figures / Hat - WitchHat
+2.8	Figures / Helmet
+2.8	Figures / Holding - Hold
+382.9	Figures / Holding - PhoneOpen
+96.1	Figures / Holding - PhoneRaised
+403.1	Figures / Holding - PhoneSelfie
+2.8	Figures / Holding - Plant
+403.1	Figures / Holding - ThrowRelease
+96.1	Figures / Holding - ThrowWindup
+382.9	Figures / Holding - TwoHandEye
+378.5	Figures / Pose - Boarding
+403.5	Figures / Pose - ClimbLeft
+373.6	Figures / Pose - Cycling
+96.1	Figures / Pose - Hanging
+2.8	Figures / Pose - Spread
+2.8	Figures / Pose - Standing
+382.9	Figures / Running
+96.1	Figures / Seated passenger
+9.5	Figures / Snow poses - Board - pushing
+9.5	Figures / Snow poses - Board - stance
+9.5	Figures / Snow poses - Board - tuck
+26.9	Figures / Snow poses - Ski - carving left
+303.6	Figures / Snow poses - Ski - in the air
+309.4	Figures / Snow poses - Ski - landing
+294.1	Figures / Snow poses - Ski - schuss
+302	Figures / Snow poses - Ski - skating push
+297.6	Figures / Snow poses - Ski - snowplough
+303.6	Figures / Snow poses - Ski - stance
+31.6	Figures / Swim - Crawl
+96.1	Figures / Swim - Under
 90.4	Furniture / Amplifier
 4000	Furniture / Armchair
 2048	Furniture / Banner
@@ -1069,39 +953,39 @@
 7.9	Parts / Phone back half
 83.3	Parts / Telehandler boom
 29.3	Parts / Wheel loader bucket
-575.5	Rides / Airstairs
+348.3	Rides / Airstairs
 64	Rides / Airstairs (parked)
-589.3	Rides / Compact roller
+305.3	Rides / Compact roller
 270.6	Rides / Compact roller (parked)
-862.8	Rides / Excavator
+718.5	Rides / Excavator
 271	Rides / Excavator (parked)
-734.1	Rides / Forklift
+450.1	Rides / Forklift
 427.2	Rides / Forklift (parked)
-1229.8	Rides / Mini dumper
+976	Rides / Mini dumper
 972.4	Rides / Mini dumper (parked)
-1260.1	Rides / Mini excavator
+898.4	Rides / Mini excavator
 454.1	Rides / Mini excavator (parked)
-245.9	Rides / Parachute
-356.7	Rides / Paraglider
+4.5	Rides / Parachute
+109.5	Rides / Paraglider
 75.6	Rides / Pigeon
-133.8	Rides / Road bike
+123.5	Rides / Road bike
 3.5	Rides / Road bike (parked)
-884.3	Rides / Skis
-379.3	Rides / Snowboard
-424.8	Rides / Telehandler
+606.9	Rides / Skis
+115.4	Rides / Snowboard
+208.3	Rides / Telehandler
 208.3	Rides / Telehandler (parked)
-740.4	Rides / Wheel loader
-716.9	Rides / Wheel loader (forks)
+515.9	Rides / Wheel loader
+484.9	Rides / Wheel loader (forks)
 483.9	Rides / Wheel loader (forks) (parked)
 513.1	Rides / Wheel loader (parked)
-270.6	Rides / Wingsuit
+9.5	Rides / Wingsuit
+295728	Terrain / Building site - a site office with its gallery, one stack (#827)
+591455.4	Terrain / Building site - a site office with its gallery, two stacks (#827)
 157090.4	Terrain / Building site - foundations, a block of four floors
 153701.8	Terrain / Building site - foundations, a house
 152483.5	Terrain / Building site - shell, a block of four floors
 709075.2	Terrain / Building site - topped out, a house
 1957418	Terrain / Building site - topped out, a six-floor block
-295728	Terrain / Building site - a site office with its gallery, one stack (#827)
-591455.4	Terrain / Building site - a site office with its gallery, two stacks (#827)
 91640	Terrain / Garage door - Sidewalk
 515456.5	Terrain / Garage ramp
 7741.9	Terrain / Landing - Jetty
@@ -1117,41 +1001,41 @@
 7003.4	Terrain / Traffic light - Geneva
 6512.5	Terrain / Traffic light - Vaud
 42281.1	Trailer / Drognens dormitory
-638.6	Trucks and buses / Arocs 3240 8x4 mixer
+344.1	Trucks and buses / Arocs 3240 8x4 mixer
 67.9	Trucks and buses / Arocs 3240 8x4 mixer (parked)
-299.6	Trucks and buses / Arocs 3245 8x4 tipper
+88.9	Trucks and buses / Arocs 3245 8x4 tipper
 67.9	Trucks and buses / Arocs 3245 8x4 tipper (parked)
-561.1	Trucks and buses / Citaro G articulated
+304.2	Trucks and buses / Citaro G articulated
 376	Trucks and buses / Citaro G articulated (parked)
-581.4	Trucks and buses / Citaro city bus
+336.2	Trucks and buses / Citaro city bus
 336.2	Trucks and buses / Citaro city bus (parked)
-258.4	Trucks and buses / Claas Lexion 6800
+75.8	Trucks and buses / Claas Lexion 6800
 75.8	Trucks and buses / Claas Lexion 6800 (parked)
-416	Trucks and buses / Fendt 724 Vario
+195.6	Trucks and buses / Fendt 724 Vario
 125.4	Trucks and buses / Fendt 724 Vario (parked)
 125.4	Trucks and buses / Fendt 724 Vario + Disc mower 3 m
 125.4	Trucks and buses / Fendt 724 Vario + Reversible plough
 119.3	Trucks and buses / Fendt 724 Vario + Seed drill 3 m
-672.5	Trucks and buses / Ford F-150 Raptor
+442	Trucks and buses / Ford F-150 Raptor
 125	Trucks and buses / Ford F-150 Raptor (parked)
-385.5	Trucks and buses / Iveco Trakker 6x6 lorry
+174.8	Trucks and buses / Iveco Trakker 6x6 lorry
 153.8	Trucks and buses / Iveco Trakker 6x6 lorry (parked)
-667	Trucks and buses / MAN TGS 26.440 rigid
+346	Trucks and buses / MAN TGS 26.440 rigid
 67.9	Trucks and buses / MAN TGS 26.440 rigid (parked)
 67.9	Trucks and buses / MAN TGS 26.440 rigid + Drawbar trailer
 67.9	Trucks and buses / MAN TGS 26.440 rigid + Jetski trailer
 67.9	Trucks and buses / MAN TGS 26.440 rigid + Speedboat trailer
 67.9	Trucks and buses / MAN TGS 26.440 rigid + Tipping trailer
-300.7	Trucks and buses / Mercedes-Benz G 300 CDI
+113.9	Trucks and buses / Mercedes-Benz G 300 CDI
 113.9	Trucks and buses / Mercedes-Benz G 300 CDI (parked)
-1093.8	Trucks and buses / Mowag Duro II 4x4
+891.5	Trucks and buses / Mowag Duro II 4x4
 848.9	Trucks and buses / Mowag Duro II 4x4 (parked)
-369.7	Trucks and buses / Scania R 450 tractor
+117.8	Trucks and buses / Scania R 450 tractor
 75.2	Trucks and buses / Scania R 450 tractor (parked)
 75.2	Trucks and buses / Scania R 450 tractor + Curtainsider 13.6 m
 75.2	Trucks and buses / Scania R 450 tractor + Fuel tanker
 75.2	Trucks and buses / Scania R 450 tractor + Timber trailer
-2936.8	Trucks and buses / Setra S 516 HD coach
+2661.2	Trucks and buses / Setra S 516 HD coach
 2580	Trucks and buses / Setra S 516 HD coach (parked)
 2.2	Unlisted / BoatMeshBuilder.RunaboutWheel
 28.3	Unlisted / FarmStandVisual.StandMesh
