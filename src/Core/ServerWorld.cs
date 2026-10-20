@@ -208,6 +208,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _occasions = Occasions.OccasionManager.Create(this);
         // the ski slopes' weather and the wear real skiers put on them (#887)
         if (Systems.On(Systems.Snow)) _snow = World.Snow.SnowService.Create(this, _chunks!);
+        // the ski lifts (#912): the same lines, for bots that ride them
+        if (Systems.On(Systems.Lifts)) World.Ropeways.RopewayService.Create(this, () => source, _chunks!);
         // the UFO sightings (#863): planned here, played back by every peer from the shared clock
         Occasions.UfoSightings.Create(this, _chunks, origin, dedicated: true);
 

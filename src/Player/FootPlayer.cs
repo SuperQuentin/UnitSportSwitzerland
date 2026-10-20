@@ -2648,6 +2648,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (Ragdolled || Downed) return true;
         // in a fist fight (#495) or an aura battle (#907) the hands are busy
         if (InDuel) return true;
+        // a ski lift (#912): board at its bottom station, on foot or on skis; let go of a drag lift
+        if (TryLift()) return true;
         // on a crane's ladder nothing; at its controls, let go of them (#618)
         if (_craneAt != CraneSeat.None) return TryCrane() || true;
         // a walkable vehicle's passenger stands up into the aisle; any other gets out
@@ -3639,7 +3641,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         if (Net.NetLink.Dropped(this)) return;   // freed with the link a frame later
         // held by the Battle Royale cargo plane (#207): it moves the body, nothing else does
-        if (Carried()) return;
+        if (Carried())
+        {
+            // a ski lift (#912) carries a rider who is still on skis: the chase camera keeps following
+            if (_lift != null && _ride != null) UpdateRideCamera((float)delta);
+            return;
+        }
         // drop onto the terrain surface once its height data is available
         if (!_placed && !Indoors)
         {
@@ -4905,8 +4912,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         // both are local to the body, which is yaw-only, so the camera stays level
         var eye = new Vector3(0, _ride.EyeHeight, 0);
+        var (liftUp, liftBack) = LiftCamera;
         var back = new Basis(Vector3.Up, orbit)
-            * new Vector3(0, _ride.ChaseHeight, _ride.ChaseDistance);
+            * new Vector3(0, _ride.ChaseHeight + liftUp, _ride.ChaseDistance + liftBack);
 
         // Pull in when the camera would sit inside the hillside. Alpine terrain climbs behind
         // you constantly, so without this half of every ascent is spent looking at the inside
