@@ -4580,16 +4580,23 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // a motorbike's or a car's grip depends on what is under it (cached lookup: road, else cover).
         // Not for a stock race NPC car: its racing line is planned on tarmac grip and may put two
         // wheels on the verge. An NPC given a preset (#40) races on the ground it is built for.
-        var surface = (_ride is Motorbike or Truck || _ride is Car && (!Npc || CarSetupId != 0)) && Terrain != null
+        var surface = (_ride is Motorbike or Truck or Skis || _ride is Car && (!Npc || CarSetupId != 0)) && Terrain != null
             ? Audio.Surfaces.At(Terrain, GlobalPosition, Indoors, this) : Audio.Surface.Asphalt;
         // a tow behind another vehicle: less air to push (cars and motorbikes read it)
         Draft = onFloor && _ride is Car or Motorbike or Truck && _motion.Speed > 10f
             ? RideGround.DraftBehind(GlobalPosition, heading.Rotated(Vector3.Up, _motion.Slip), OtherVehicles()) : 0f;
         if (_ride is Truck driving) PrepareTruck(driving);
         else if (_ride is Car shifting) PrepareCar(shifting);
-        if (_ride is Skis) LookAtSnow(onFloor);
+        var ground = new RideGround(onFloor, grade, surface, Draft);
+        if (_ride is Skis)
+        {
+            LookAtSnow(onFloor);
+            // gravity down the fall line, along and across the skis (#899)
+            var (along, across) = onFloor ? SkiDynamics.Slope(normal.X, normal.Y, normal.Z, heading.X, heading.Z) : (0f, 0f);
+            ground = ground with { SnowFriction = _snowFriction, SnowGrip = _snowGrip, SlopeAlong = along, SlopeAcross = across };
+        }
         else Slope = null;
-        _ride!.Step(input, new RideGround(onFloor, grade, surface, Draft, _ride is Skis ? _snowFriction : 1f), dt, ref _motion);
+        _ride!.Step(input, ground, dt, ref _motion);
         // a wheelie taken over the top (#410): the bike goes on its back, the rider off it
         if (_ride is Motorbike { LoopedOut: true })
         {
@@ -4640,7 +4647,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         heading = -GlobalTransform.Basis.Z with { Y = 0 };
         heading = heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector3.Forward;
 
-        // a drifting car travels at an angle to its nose; everything else has Slip = 0
+        // a drifting car, or skis in a skid (#899), travel at an angle to the nose; everything else has Slip = 0
         var travel = heading.Rotated(Vector3.Up, _motion.Slip);
         var velocity = Velocity;
         velocity.X = travel.X * _motion.Speed;
@@ -4718,7 +4725,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         // Landing mounted: the vertical speed the ground took, like the on-foot landing thump.
         bool nowOnFloor = IsOnFloor();
-        if (!nowOnFloor) _rideFall = Mathf.Max(_rideFall, -Velocity.Y);
+        if (!nowOnFloor)
+        {
+            _rideFall = Mathf.Max(_rideFall, -Velocity.Y);
+            _rideAirVelocity = Velocity;
+        }
         else if (!_rideWasOnFloor)
         {
             if (_rideFall > 1.5f)
@@ -4727,6 +4738,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 PlayerInput.Rumble(0.3f, Mathf.Clamp((_rideFall - 1.5f) / 6f, 0.1f, 1f), 0.15f);
             }
             if (_rideAir > 0.3f) GradeLanding();
+            if (_ride is Skis && _bailTimer <= 0f && _rideAir > 0.2f) LandSkis();
             _rideFall = 0f;
             _rideAir = 0f;
             _airPitch = _airSpin = 0f;

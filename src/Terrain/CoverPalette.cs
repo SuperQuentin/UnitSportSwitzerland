@@ -10,6 +10,9 @@ namespace UnitSport.Terrain;
 /// </summary>
 public static class CoverPalette
 {
+    /// <summary>The permanent snow line: above it everything but open water is drawn white, and skis glide (#899).</summary>
+    public const float SnowLine = 2900f;
+
     public static Color ColorFor(CoverClass cover, float altitude, float hash)
     {
         // hash in [0,1) gives stable per-vertex variation so large areas are not flat
@@ -66,9 +69,9 @@ public static class CoverPalette
         };
 
         // snow caps everything above the permanent line except open water
-        if (altitude > 2900f && cover != CoverClass.Water)
+        if (altitude > SnowLine && cover != CoverClass.Water)
         {
-            float t = Mathf.Clamp((altitude - 2900f) / 250f, 0f, 1f);
+            float t = Mathf.Clamp((altitude - SnowLine) / 250f, 0f, 1f);
             c = c.Lerp(new Color(0.92f, 0.94f, 0.96f), t);
         }
 

@@ -71,6 +71,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 |---|---|---|---|
 | throttle / brake / steer | W S A D / RT LT stick | ok: triggers; **wheel by grip** | keep |
 | tuck_boost / trick / boost | Shift F Q / X RB LB | ok: X, grips | keep |
+| skis: stride (#899): a press of forward, never a hold; skates on the flat, steps off snow | tap W / tap RT or flick L stick ↑ | ok: a **pole push** (`XrRig.UpdateSki`, a pulse per push) | keep |
+| skis: hockey stop (#899): brake + turn pivots the skis across | S + A/D / LT + stick | ok: L trigger + head lean | keep |
 | engine_toggle | Z / D-pad ↑ | ok: R stick ↑ | keep (R3) |
 | lights_toggle | L / D-pad → | ok: R stick → (#436) | keep |
 | cruise (speed regulator: car, truck, farm machine, motorbike, #494) | Y / hold D-pad → (a tap stays the lights) | ok: a **dash poke** in a car or truck (`XrCabControls`), or hold R stick → | keep |
