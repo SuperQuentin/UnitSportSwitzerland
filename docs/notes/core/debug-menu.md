@@ -58,6 +58,8 @@
   as its amber ends, at its clearing speed, until it has left its line's end, its trail held ahead of it), the starting group's first (dark green,
   from its line at green at its entering speed to its line's end, its trail behind it back to its line; a crossing's walkers from both kerbs at once), their lines faint
   and the conflict area ringed in white: the green one reaches the ring just as the red one has left it (`SignalSite.Pairs`, from `CPAR`).
-  `trails` (#979) draws those trails alone, in their own lights: the starting stream green from its line to its first mover,
-  the ending one yellow on amber then red ahead of its last; no movers, lines or rings (a red-amber shows nothing).
+  `trails` (#979) draws only the trails, one per movement of those pairs through each of its greens: grown from its line at
+  green at its entering speed, closed behind its last mover from its amber's end at its clearing speed, in its group's light
+  now (green, yellow on amber, red), so a trail whose green ends before it reaches its exit turns yellow then red as it is; no
+  movers, lines or rings (a red-amber shows nothing). A line seen in one role only takes the timing's defaults for the other.
 - **Z-fighting** overlay (`zfight`) and **Flicker shot** button (`--debugview flicker`): `general/zfight` (#788).

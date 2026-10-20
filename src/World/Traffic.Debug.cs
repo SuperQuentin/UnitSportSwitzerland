@@ -28,8 +28,10 @@ public partial class Traffic
     public bool ShowMovers { get; set; }
 
     /// <summary>
-    /// <see cref="ShowMovers"/>' trails alone (#979, the user: simpler): each in its own group's light, the starting one green, the
-    /// ending one yellow on amber and red after; no movers, lines or rings.
+    /// The timing's trails alone (#979, the user: simpler): each movement of the timing's pairs one trail through its green, grown
+    /// from its line by its first mover from green, closed behind its last from its amber's end, in its group's light as it is
+    /// now (green, yellow on amber, red), the same trail turning yellow and red when its green ends before it reaches its exit; no
+    /// movers, lines or rings.
     /// </summary>
     public bool ShowTrails { get; set; }
 
@@ -128,7 +130,7 @@ public partial class Traffic
         if ((ShowMovers || ShowTrails) && _roads is not null && Focus?.Invoke() is { } here)
             foreach (var site in _roads.Signals)
                 if (site.Pairs.Count > 0 && new Vector2(site.Pairs[0].Starting[0].X - here.X, site.Pairs[0].Starting[0].Z - here.Z).Length() < LightsDrawn)
-                    lines += DrawMovers(mesh, site, trailsOnly: !ShowMovers);
+                    lines += ShowMovers ? DrawMovers(mesh, site) : DrawTrails(mesh, site);
         if (lines == 0)
         {
             // an empty surface is an error: one invisible line
@@ -269,7 +271,7 @@ public partial class Traffic
     private static readonly Color EndingMover = new(0.95f, 0.1f, 0.1f), StartingMover = new(0.05f, 0.42f, 0.12f);
 
     /// <summary>The movers of each pair whose phase change is under way at a junction (see <see cref="ShowMovers"/>, <see cref="ShowTrails"/>).</summary>
-    private int DrawMovers(ImmediateMesh mesh, SignalSite site, bool trailsOnly)
+    private int DrawMovers(ImmediateMesh mesh, SignalSite site)
     {
         var plan = site.Plan;
         if (plan.Cycle <= 0) return 0;
@@ -292,27 +294,12 @@ public partial class Traffic
                 // each one shown, and its line, only while it moves: the last one from a moment before its line (it comes on at its
                 // clearing speed) until it has left its line's end, the first one from its line at green until it has left its end;
                 // each window on its own, round the cycle, so neither is cut off mid-move by the other's
-                // (the trails alone: the ending one from its green's end, whole through its amber)
-                double from = trailsOnly ? Math.Min(end, crosses - Lead) : crosses - Lead;
-                double? last = Moving(u, plan.Cycle, from, crosses - from + (Length(ending) + Size(pair.EndingMover).Length) / Math.Max(0.1, pair.ClearSpeed));
+                double? last = Moving(u, plan.Cycle, crosses - Lead, Lead + (Length(ending) + Size(pair.EndingMover).Length) / Math.Max(0.1, pair.ClearSpeed));
                 double? first = Moving(u, plan.Cycle, start, (Length(starting) + Size(pair.StartingMover).Length) / Math.Max(0.1, pair.EnterSpeed));
                 if (last is null && first is null) continue;
                 var up = Vector3.Up * DrawLift;
                 // each green a trail (the user): the ending one's held ahead of its last mover to its line's end, the starting one's
                 // from its line to its first mover; a crossing has no way, its walkers leave both kerbs at once
-                if (trailsOnly)
-                {
-                    var closing = plan.State(pair.Ending, now) == SignalAspect.Amber ? Colors.Yellow : EndingMover;
-                    if (last is { } tl2)
-                        foreach (bool back in pair.EndingMover == ConflictMover.Walker ? Both : One)
-                            Trail(mesh, ending, (float)((tl2 - crosses) * pair.ClearSpeed) - Size(pair.EndingMover).Length, float.MaxValue,
-                                TrailWidth(pair.EndingMover), closing with { A = 0.75f }, back);
-                    if (first is { } tf2)
-                        foreach (bool back in pair.StartingMover == ConflictMover.Walker ? Both : One)
-                            Trail(mesh, starting, 0, (float)((tf2 - start) * pair.EnterSpeed), TrailWidth(pair.StartingMover), Colors.LimeGreen with { A = 0.75f }, back);
-                    n += 2;
-                    continue;
-                }
                 if (last is { } tl)
                 {
                     for (int i = 0; i + 1 < ending.Length; i++) Ribbon(mesh, ending[i] + up, ending[i + 1] + up, EndingMover with { A = 0.35f }, 0.25f);
@@ -341,6 +328,93 @@ public partial class Traffic
                     Ribbon(mesh, meet + up + new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a)) * 2.2f, meet + up + new Vector3(Mathf.Cos(b), 0, Mathf.Sin(b)) * 2.2f, Colors.White, 0.25f);
                 }
                 n += 3;
+            }
+        }
+        return n;
+    }
+
+    /// <summary>A movement of the timing's pairs: its line, group, who moves, its clearing and entering speeds and its amber.</summary>
+    private sealed record Stream(Vector3[] Line, int Group, ConflictMover Who, float Clear, float Enter, float Amber, float Length);
+
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<SignalSite, List<Stream>> _streams = new();
+
+    /// <summary>
+    /// A site's movements, each line once, from its pairs: speeds and amber as the timing took them where the line was seen in that
+    /// role, else the timing's defaults (its amber: the group's own after its green, none for walkers).
+    /// </summary>
+    private static List<Stream> StreamsOf(SignalSite site)
+    {
+        var list = new List<Stream>();
+        foreach (var (pair, ending, starting) in site.Pairs)
+        {
+            Add(ending, pair.Ending, pair.EndingMover, pair.ClearSpeed, -1, pair.Amber);
+            Add(starting, pair.Starting, pair.StartingMover, -1, pair.EnterSpeed, -1);
+        }
+        for (int k = 0; k < list.Count; k++)
+        {
+            var s = list[k];
+            var (clear, enter) = s.Who switch { ConflictMover.Bike => (4f, 5f), ConflictMover.Walker => (1.2f, 1.5f), _ => (10f, 40f / 3.6f) };
+            float amber = s.Amber >= 0 ? s.Amber : s.Who == ConflictMover.Walker ? 0 : AmberAfterGreen(site.Plan, s.Group);
+            list[k] = s with { Clear = s.Clear > 0 ? s.Clear : clear, Enter = s.Enter > 0 ? s.Enter : enter, Amber = amber };
+        }
+        return list;
+
+        void Add(Vector3[] line, int group, ConflictMover who, float clear, float enter, float amber)
+        {
+            int i = list.FindIndex(s => s.Group == group && s.Line.Length == line.Length && s.Line.AsSpan().SequenceEqual(line));
+            if (i < 0) list.Add(new Stream(line, group, who, clear, enter, amber, Length(line)));
+            else list[i] = list[i] with
+            {
+                Clear = clear > 0 ? clear : list[i].Clear, Enter = enter > 0 ? enter : list[i].Enter, Amber = amber >= 0 ? amber : list[i].Amber,
+            };
+        }
+    }
+
+    /// <summary>How long a group's amber after its green lasts (s); none where its green ends in red.</summary>
+    private static float AmberAfterGreen(SignalPlan plan, int group)
+    {
+        var v = plan.Groups[group].Intervals;
+        for (int i = 0; i < v.Count; i++)
+            if (v[i].Aspect == SignalAspect.Green && v[(i + 1) % v.Count].Aspect == SignalAspect.Amber)
+                return v[(i + 1) % v.Count].To - v[(i + 1) % v.Count].From;
+        return 0;
+    }
+
+    /// <summary>
+    /// Each movement's trail through its greens (see <see cref="ShowTrails"/>): its head at its entering speed from its line at
+    /// green, its tail at its clearing speed from its line at the end of its amber, one trail from its green until its tail has
+    /// left its line's end, coloured by its group's light now.
+    /// </summary>
+    private int DrawTrails(ImmediateMesh mesh, SignalSite site)
+    {
+        var plan = site.Plan;
+        if (plan.Cycle <= 0) return 0;
+        double now = Net.ClockSync.ServerNow;
+        double u = ((now + plan.Offset) % plan.Cycle + plan.Cycle) % plan.Cycle;
+        var streams = _streams.GetValue(site, StreamsOf);
+        int n = 0;
+        foreach (var s in streams)
+        {
+            var v = plan.Groups[s.Group].Intervals;
+            var colour = plan.State(s.Group, now) switch
+            {
+                SignalAspect.Green => Colors.LimeGreen,
+                SignalAspect.Amber or SignalAspect.RedAmber or SignalAspect.FlashingAmber => Colors.Yellow,
+                _ => EndingMover,
+            };
+            for (int i = 0; i < v.Count; i++)
+            {
+                // each green from its start (a green over the cycle's seam from its piece before the seam), to its end round the cycle
+                if (v[i].Aspect != SignalAspect.Green || (v[i].From < 1e-3f && v[^1].Aspect == SignalAspect.Green)) continue;
+                double start = v[i].From, end = v[i].To;
+                if (end >= plan.Cycle - 1e-3f && v[0].Aspect == SignalAspect.Green) end = plan.Cycle + v[0].To;
+                double crosses = end + s.Amber;
+                double span = crosses - start + (s.Length + Size(s.Who).Length) / s.Clear;
+                if (Moving(u, plan.Cycle, start, span) is not { } t) continue;
+                float head = (float)((t - start) * s.Enter), tail = (float)((t - crosses) * s.Clear) - Size(s.Who).Length;
+                foreach (bool back in s.Who == ConflictMover.Walker ? Both : One)
+                    Trail(mesh, s.Line, Mathf.Max(0, tail), head, TrailWidth(s.Who), colour with { A = 0.75f }, back);
+                n++;
             }
         }
         return n;
