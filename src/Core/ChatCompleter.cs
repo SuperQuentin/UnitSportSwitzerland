@@ -74,7 +74,7 @@ public sealed class ChatCompleter
         ("race", false, false, "start | duel <player> | join | leave | list | npc | cancel"),
         ("fight", false, false, "<player> | accept | decline | leave"),
         ("aura", false, false, "<player> | accept | decline | leave"),
-        ("concert", false, true, "host [seed] | release | status | cue <go | section | fx ...> | input artnet|sacn|osc|all [on|off] | patch | debug | export | import <file> | rigs | videos | xchange | view | camera"),
+        ("concert", false, true, "host [seed] | release | status | song [list | next | prev | <n | title> | stop | play | auto] | cue <go | section | fx ...> | input artnet|sacn|osc|all [on|off] | patch | debug | export | import <file> | rigs | videos | xchange | view | camera"),
         ("br", false, false, "open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] | join | leave | team [name] | invite <player> | start | bots [n|off] [easy|normal|hard] | cancel | status"),
         // invites (#840)
         ("invites", false, false, ""),
@@ -199,7 +199,9 @@ public sealed class ChatCompleter
                 string sub = words.Length > 1 ? words[1].ToLowerInvariant() : "";
                 options = argIndex switch
                 {
-                    0 => ["host", "release", "status", "cue", "input", "patch", "debug", "export", "import", "rigs", "videos", "xchange", "view", "camera"],
+                    0 => ["host", "release", "status", "song", "cue", "input", "patch", "debug", "export", "import", "rigs", "videos", "xchange", "view", "ndi", "snap", "camera"],
+                    1 when sub == "song" => ["list", "next", "prev", "restart", "stop", "play", "auto"],
+                    1 when sub == "camera" => ["take", "leave", "list"],
                     1 when sub == "cue" => ["go", "calm", "groove", "chorus", "peak", "blackout", "release", "bpm", "master", "flames", "co2", "confetti", "gerbs", "pyro", "camera"],
                     1 when sub == "input" => ["artnet", "sacn", "osc", "all", "status"],
                     2 when sub == "input" => ["on", "off"],

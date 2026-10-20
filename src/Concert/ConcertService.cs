@@ -129,6 +129,7 @@ public partial class ConcertService : Node
     /// <summary>The cues in force, put on a rig as it is built (a tile loaded after they came).</summary>
     public void ApplyCues(int stadium, ConcertRig rig)
     {
+        rig.Music.Cue = SongCueOf(stadium);
         if (!_hosted.TryGetValue(stadium, out var h)) return;
         var d = rig.Desk;
         d.HeldSection = h.Held >= 0 ? (ShowSection)h.Held : null;
@@ -166,13 +167,18 @@ public partial class ConcertService : Node
         var parts = rest.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         int stadium = at is { } p ? StadiumNear(p) : 0;
         string name = StadiumCatalog.All[stadium].Name;
-        switch (parts.Length == 0 ? "status" : parts[0])
+        switch (parts.Length == 0 ? "status" : parts[0].ToLowerInvariant())
         {
             case "host":
-                int seed = parts.Length > 1 && int.TryParse(parts[1], out int s) ? s : Random.Shared.Next(1, 100000);
+                // a word that is not a seed ("/concert host status") was a new random set every time (#994)
+                if (parts.Length > 2 || (parts.Length == 2 && !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out _)))
+                    return $"'{string.Join(' ', parts[1..])}' is not a set number: /concert host [seed], no seed for a random set.";
+                int seed = parts.Length == 2 ? int.Parse(parts[1], CultureInfo.InvariantCulture) : Random.Shared.Next(1, 100000);
                 return ServeHost(sender, stadium, seed, admin);
             case "release":
                 return ServeRelease(sender, stadium, admin);
+            case "song" or "songs":
+                return SongCommand(sender, stadium, parts[1..], admin);
             case "cue":
                 // the operator's cues by hand: what OSC and the desk screen send
                 if (!_hosted.TryGetValue(stadium, out var hc) || hc.Seed < 0) return "Host a set first ('/concert host [seed]').";
@@ -198,14 +204,14 @@ public partial class ConcertService : Node
                     case "pyro": ServeCue(stadium, (int)CueKind.Fx, (int)RigGroup.Airbursts, when); return "Airbursts!";
                     default:
                         if (Enum.TryParse<ShowSection>(what, true, out var sec)) { ServeCue(stadium, (int)CueKind.Section, (int)sec, when); return $"Held: {sec}."; }
-                        return "/concert cue go | calm|groove|chorus|peak|blackout | release | bpm <n> | master <0..1> | flames|co2|confetti|gerbs|pyro | camera <1..8|auto>";
+                        return "/concert cue go | calm|groove|chorus|peak|blackout | release | bpm <n> | master <0..1> | flames|co2|confetti|gerbs|pyro | camera <1..11|auto>";
                 }
             case "status":
                 return _hosted.TryGetValue(stadium, out var h) && h.Seed >= 0
                     ? $"{name}: set {h.Seed} ({ConcertPlanner.Plan(StadiumCatalog.All[stadium], h.Seed).Artist}), operator {h.Operator}"
                     : $"{name}: tonight's show; '/concert host [seed]' takes it";
             default:
-                return "/concert host [seed] | release | status; on your own game: /concert input artnet|sacn|osc on|off, /concert patch";
+                return "/concert host [seed] | release | status | song [list | next | prev | <n | title> | stop | play | auto]; on your own game: /concert input artnet|sacn|osc on|off, /concert patch";
         }
     }
 
@@ -216,6 +222,7 @@ public partial class ConcertService : Node
             return $"Someone else ({h.Operator}) runs that show; '/concert release' first.";
         _hosted[stadium] = new Hosted { Seed = seed, Operator = sender };
         SetRig(stadium, Array.Empty<byte>());   // a new set starts on its own rig
+        SetSongs(stadium, null);                // and its own setlist from the top of the clock
         Announce(stadium);
         var e = ConcertPlanner.Plan(StadiumCatalog.All[stadium], seed);
         return $"You host set {seed} at {e.Stadium.Name}: {e}";
@@ -227,6 +234,7 @@ public partial class ConcertService : Node
         if (h.Operator != sender && !admin) return "Only its operator or an admin can release it.";
         _hosted.Remove(stadium);
         SetRig(stadium, Array.Empty<byte>());
+        SetSongs(stadium, null);
         Announce(stadium);
         return "Released: tonight's show is back.";
     }
@@ -250,6 +258,7 @@ public partial class ConcertService : Node
         // the rig before the set, so the joiner builds the stage once with it
         foreach (var (stadium, r) in _rigs) RpcId(peer, MethodName.RigSet, stadium, r.Packed);
         foreach (int stadium in _hosted.Keys) SendState(peer, stadium);
+        SendSongsTo(peer);
         foreach (var ((stadium, cam), op) in _crew) RpcId(peer, MethodName.Operated, stadium, cam, op);
     }
 
@@ -334,6 +343,7 @@ public partial class ConcertService : Node
         {
             _hosted.Remove(stadium);
             SetRig(stadium, Array.Empty<byte>());
+            SetSongs(stadium, null);
             Announce(stadium);
         }
     }
