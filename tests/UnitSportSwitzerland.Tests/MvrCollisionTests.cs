@@ -62,15 +62,16 @@ public class MvrCollisionTests
             (Mesh((Vector3.Zero, new Vector3(0.4f, 4, 0.4f))), At(20, 0, 0)),                     // a tower: a box
             (Mesh((Vector3.Zero, new Vector3(0.1f, 0.2f, 0.15f))), At(0, 1, 0)),                  // a lamp: nothing
             (Mesh((Vector3.Zero, new Vector3(0.03f, 0.03f, 6))), At(0, 0, 5)),                    // a cable: nothing
-            (Mesh((Vector3.Zero, new Vector3(6, 0.08f, 4))), At(30, 0, 0)),                       // a floor plate: a box (too thin to hull)
+            (Mesh((Vector3.Zero, new Vector3(6, 0.08f, 4))), At(30, 1, 0)),                       // a plate up a metre: a box (too thin to hull)
             // a set 6 m tall with a doorway: its own triangles, not a hull that would fill the door
             (Mesh((Vector3.Zero, new Vector3(1, 6, 1)), (new Vector3(4, 0, 0), new Vector3(5, 6, 1)), (new Vector3(0, 5, 0), new Vector3(5, 6, 1))), At(40, 0, 0)),
-            (Mesh((Vector3.Zero, new Vector3(3, 1, 3))), At(0, 4, 20)));                          // a deck up high: out of reach, a box
+            (Mesh((Vector3.Zero, new Vector3(3, 1, 3))), At(0, 4, 20)),                           // a deck up high: out of reach, a box
+            (Mesh((Vector3.Zero, new Vector3(0.6f, 0.02f, 0.6f))), At(50, 0, 0)));                // a focus point's disc on the floor: nothing
         var plan = MvrCollision.Plan(rig);
         Assert.Equal(new[]
         {
             MvrCollision.Kind.Hull, MvrCollision.Kind.Hull, MvrCollision.Kind.Box, MvrCollision.Kind.Box, MvrCollision.Kind.None,
-            MvrCollision.Kind.None, MvrCollision.Kind.Box, MvrCollision.Kind.Mesh, MvrCollision.Kind.Box,
+            MvrCollision.Kind.None, MvrCollision.Kind.Box, MvrCollision.Kind.Mesh, MvrCollision.Kind.Box, MvrCollision.Kind.None,
         }, plan.Select(p => p.Kind).ToArray());
         // the faces are the set's own 36 triangles, placed
         var positions = rig.Meshes.Select(RigData.Positions).ToArray();

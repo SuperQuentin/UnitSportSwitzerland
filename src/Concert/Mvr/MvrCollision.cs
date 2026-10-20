@@ -8,7 +8,8 @@ namespace UnitSport.Concert.Mvr;
 /// <list type="bullet">
 /// <item>nothing for a piece under <see cref="TinyBelow"/> across (a clamp, a lamp, a bolt) or one thinner
 /// than <see cref="LineBelow"/> on two axes (a cable, a pipe, a rod): nobody stands on them and a beam
-/// passes them;</item>
+/// passes them; nor for one lying on the floor under <see cref="FlatUnder"/> (a focus point's disc, a
+/// floor plate), walked over without a lip to catch on;</item>
 /// <item>a convex hull for a low walkable piece (both sides of its footprint at least
 /// <see cref="WalkableSide"/>, <see cref="LowUnder"/> tall at most, standing below <see cref="ReachUnder"/>):
 /// a deck is its block and a flight of stairs its ramp, as the generated stage's stairs are ramps (the
@@ -106,7 +107,8 @@ public static class MvrCollision
 
         float big = Math.Max(ext.X, Math.Max(ext.Y, ext.Z)), small = Math.Min(ext.X, Math.Min(ext.Y, ext.Z));
         float mid = ext.X + ext.Y + ext.Z - big - small;
-        if (big < TinyBelow || mid < LineBelow) return piece with { Kind = Kind.None };
+        // tiny, a line, or lying flat on the floor (a marker, a plate): walked over, as the floor is
+        if (big < TinyBelow || mid < LineBelow || bounds.End.Y < FlatUnder) return piece with { Kind = Kind.None };
         bool walkable = bounds.Size.X >= WalkableSide && bounds.Size.Z >= WalkableSide && small >= SolidFrom && bounds.Position.Y < ReachUnder;
         if (!walkable) return piece;
         if (bounds.Size.Y <= LowUnder) return piece with { Kind = Kind.Hull };

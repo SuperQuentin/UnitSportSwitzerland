@@ -7,7 +7,8 @@
 - **Judged per piece** by its oriented box (its mesh's box through its transform), in
   `Mvr/MvrCollision.cs` (pure, xunit-tested):
   - **nothing** under 0.3 m across (clamps, lamps, bolts) or thinner than 8 cm on two axes (cables,
-    pipes, rods): nobody stands on them, and a beam passes;
+    pipes, rods): nobody stands on them, and a beam passes; nor for a piece lying on the floor, its top
+    under 15 cm (a focus point's disc, a floor plate): walked over with no lip to catch a walker;
   - **a convex hull** for a low walkable piece: both footprint sides from 0.8 m, its thinnest side
     from 12 cm, at most 2.1 m tall (a mantle's reach), standing below 3 m. A deck is its block and a
     **flight of stairs its ramp**: the player has no step-up (`FootPlayer.MantleMin`: under 0.45 m
