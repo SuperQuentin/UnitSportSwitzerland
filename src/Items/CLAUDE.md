@@ -30,6 +30,7 @@ touches its topic; search with `grep -ril <word> docs/notes/items`.
 - `throw-hits` — A thrown item hitting a player (#261): thrower-side path test, `ItemEventKind.Bonk` relayed by the server, non-lethal damage (floor 5), flinch on every copy, bonk + oof + dizzy tune
 - `catalogue` — Item catalogue (#262): every item as tiles, tabs + search, click 1 / right 10 / shift stack, money + clear buttons; only sends chat commands, so the server checks admin
 - `barracks-items` — Cards, chips, beer, Gamelle and the TAZ 90 uniform (#716): held meshes in `BarracksMeshes`, camo as `Finish.Camo`, where they are sold and found, viewer commands
+- `traffic-tool` — An admin's traffic tool (#971): held, the traffic endpoints show and a ghost where Use places a generator (or a halo on one Use opens); its settings window (`TrafficGeneratorUi`); from the debug menu only
 - `smart-binoculars` — Held at a building's door (or inside): reads out its loot table (LootTables.BuildingTable); no aim, no zoom (#165)
 
 - `vehicles/pallets` (in docs/notes/vehicles/) — `Pallets` (load byte, ids, fork rule), `PalletNode`, `PalletService` at World/Pallets (server-owned, session-only), `PalletCheck`, `PalletNetProbe` (#583)

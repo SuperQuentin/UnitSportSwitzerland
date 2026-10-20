@@ -58,10 +58,80 @@ public sealed class LaneEdge
     public (LaneApproach Approach, float StopBack)? ApproachAtEnd { get; set; }
     public (LaneApproach Approach, float StopBack)? ApproachAtStart { get; set; }
 
-    /// <summary>A straight link across a junction between two trimmed road ends (<see cref="LaneGraph.JoinTrimmedEnds"/>).</summary>
+    /// <summary>A straight link across a junction between two trimmed road ends (<see cref="LaneGraph.JoinTrimmedEnds"/>), or a junction path.</summary>
     public bool Connector { get; init; }
 
+    /// <summary>
+    /// A path through a junction core (#818 phase 5, <c>JPTH</c>): a lane-to-lane line the junction's paint draws, driven on its
+    /// own line (no lane offset) from its lane at one arm's mouth to its lane at the exit's. Null on a road or a plain connector.
+    /// </summary>
+    public JunctionPathInfo? Path { get; init; }
+
     public float Length => Cumulative[^1];
+
+    /// <summary>
+    /// The transition this piece is (#818 phase 5, <c>TRNS</c>): its lanes from station to station, which cars follow; null for a
+    /// street at its normal section.
+    /// </summary>
+    public RoadTransition? Transition { get; init; }
+
+    /// <summary>A transition's lane narrower than this is not open (a pocket's taper): no car is placed in it, m.</summary>
+    private const float OpenLane = 1.5f;
+
+    /// <summary>An opening lane is a car's own from this width on; narrower, the car is between it and the lane it branches from, m.</summary>
+    private const float OwnLane = 2.5f;
+
+    /// <summary>
+    /// The id of the transition's car lane, of a car travelling <paramref name="forward"/>, whose centre lies nearest
+    /// <paramref name="driverRight"/> (m right of that driver) at the end it travels to (or from); -1 for none.
+    /// </summary>
+    public int StripAt(bool forward, bool atTravelEnd, float driverRight)
+    {
+        if (Transition is not { } tr) return -1;
+        double s = forward == atTravelEnd ? tr.Stations[^1] : 0;
+        float drawing = forward ? driverRight : -driverRight;
+        int best = -1;
+        float bestD = float.MaxValue;
+        for (int k = 0; k < tr.Strips.Count; k++)
+        {
+            var x = tr.Strips[k];
+            if (x.Kind != StripKind.CarLane || x.Travel != (forward ? 1 : -1) || tr.WidthAt(k, s) < OpenLane) continue;
+            var (from, to) = tr.SpanAt(k, s);
+            float d = Mathf.Abs((from + to) * 0.5f - drawing);
+            if (d < bestD) (best, bestD) = (x.Id, d);
+        }
+        return best;
+    }
+
+    /// <summary>
+    /// Where lane <paramref name="id"/>'s centre lies <paramref name="arc"/> m along the car's way (m right of its driver). A lane
+    /// opening or closing (a pocket's taper, an exit's lane merging) takes the car from the nearest open lane of its direction
+    /// (the one it branches from or merges into) over to its own as it widens: no jump where it opens. Null without the lane.
+    /// </summary>
+    public float? LaneAt(bool forward, float arc, int id)
+    {
+        if (Transition is not { } tr || Length < 1e-3f) return null;
+        double s = tr.Stations[^1] * Mathf.Clamp(forward ? arc : Length - arc, 0f, Length) / Length;
+        int at = tr.Strips.FindIndex(x => x.Id == id);
+        if (at < 0) return null;
+        float Centre(int k) { var (from, to) = tr.SpanAt(k, s); return (from + to) * 0.5f; }
+        // (a lane only narrower than at its widest, as a 5 m lane easing to 3.5, is its own all along)
+        float w = tr.WidthAt(at, s), full = Mathf.Min(tr.Strips[at].Widths.Max(), OwnLane);
+        float centre = Centre(at);
+        if (full > 1e-3f && w < full - 0.01f)
+        {
+            int parent = -1;
+            for (int k = 0; k < tr.Strips.Count; k++)
+            {
+                var x = tr.Strips[k];
+                if (k == at || x.Kind != StripKind.CarLane || x.Travel != tr.Strips[at].Travel || tr.WidthAt(k, s) < OpenLane) continue;
+                if (parent < 0 || Math.Abs(k - at) < Math.Abs(parent - at)) parent = k;
+            }
+            if (parent >= 0) centre = Mathf.Lerp(Centre(parent), centre, w / full);
+            else if (w < 1e-3f) return null;
+        }
+        return forward ? centre : -centre;
+    }
 
     /// <summary>The origin moved (#185): the line is somewhere else in world space, the same shape.</summary>
     public void Shift(OriginShift shift)
@@ -94,6 +164,12 @@ public sealed class LaneEdge
 }
 
 /// <summary>
+/// What traffic needs of a junction path (#818 phase 5): its move, where its lane lies at each end (metres right of a driver
+/// arriving on that arm, from the road's centreline), and the lights and group it goes on (null and -1 without lights).
+/// </summary>
+public sealed record JunctionPathInfo(SignalMoves Move, float FromOffset, float ToOffset, SignalSite? Site, int Group);
+
+/// <summary>
 /// A signalised junction as traffic sees it (#353): its plan (#349, shared with the lamps, a
 /// function of the server clock) and, per arm, the way out of the junction along it (world, flat).
 /// </summary>
@@ -101,6 +177,28 @@ public sealed class SignalSite
 {
     public required SignalPlan Plan { get; init; }
     public required Vector3[] Out { get; init; }
+
+    /// <summary>The riders' paths through it (#971, the debug drawing; riders are not traffic): their line (world) and group.</summary>
+    public List<(Vector3[] Points, int Group, SignalMoves Move)> Rides { get; } = new();
+
+    /// <summary>Its crossings (#971, the debug drawing): kerb to kerb between the arm's pedestrian heads (world), and the arm.</summary>
+    public List<(Vector3 From, Vector3 To, int Arm)> Walks { get; } = new();
+
+    /// <summary>Its movements as its timing took them (#979, <c>CPAR</c>), their lines in world space, for the debug view's trails.</summary>
+    public List<(RoadConflictLine Line, Vector3[] Points)> Lines { get; } = new();
+
+    /// <summary>The pairs of those that set its groups' green starts and ends (#979, <c>CPAR</c>), on the same world lines, for the movers.</summary>
+    public List<(RoadConflictPair Pair, Vector3[] Ending, Vector3[] Starting)> Pairs { get; } = new();
+
+    public void Shift(OriginShift shift)
+    {
+        foreach (var (points, _, _) in Rides)
+            for (int i = 0; i < points.Length; i++) points[i] = shift.Point(points[i]);
+        for (int i = 0; i < Walks.Count; i++) Walks[i] = (shift.Point(Walks[i].From), shift.Point(Walks[i].To), Walks[i].Arm);
+        // (the pairs' lines are these same arrays)
+        foreach (var (_, points) in Lines)
+            for (int i = 0; i < points.Length; i++) points[i] = shift.Point(points[i]);
+    }
 }
 
 /// <summary>
@@ -211,6 +309,23 @@ public sealed class LaneApproach
         }
         return best >= 0 ? best : root;
     }
+
+    /// <summary>
+    /// The car lane whose centre at the stop line lies nearest <paramref name="offset"/> (metres right of the road's centreline):
+    /// the lane a junction path starts from (#818 phase 5); -1 without a car lane.
+    /// </summary>
+    public int LaneNearest(float offset)
+    {
+        int best = -1;
+        float bestGap = float.MaxValue;
+        for (int i = 0; i < Lanes.Length; i++)
+        {
+            if (Lanes[i].Kind != ApproachLaneKind.Car) continue;
+            float gap = Mathf.Abs(LaneCentre + Lanes[i].Offset - offset);
+            if (gap < bestGap) { best = i; bestGap = gap; }
+        }
+        return best;
+    }
 }
 
 /// <summary>
@@ -259,6 +374,10 @@ public sealed class LaneGraph
     {
         var g = new LaneGraph(origin);
         foreach (var tile in tiles)
+        {
+            // the transitions' pieces (#818 phase 5): their lanes, which cars follow
+            var transitionOf = tile.Transitions.Count == 0 ? null
+                : tile.Transitions.ToDictionary(t => t.Segment, t => t, ReferenceEqualityComparer.Instance);
             foreach (var seg in tile.Segments)
             {
                 if (seg.PointCount < 2 || !keep(seg)) continue;
@@ -298,11 +417,14 @@ public sealed class LaneGraph
                     Yield = seg.Attributes.Flags & (RoadAttrFlags.YieldAtStart | RoadAttrFlags.YieldAtEnd),
                     RightLane = RoadCrossSection.RightLaneOffset(seg.Class, seg.Width,
                         Math.Max(seg.Attributes.LanesForward, seg.Attributes.LanesBackward)),
+                    Transition = transitionOf?.GetValueOrDefault(seg),
                 };
                 g.Edges.Add(edge);
+                if (edge.Transition is not null) g.Transitions++;
                 g.Link(edge.KeyStart, edge, true);
                 g.Link(edge.KeyEnd, edge, false);
             }
+        }
         g.OrientDivided();
         var matched = new Dictionary<(LaneEdge, bool), float>();
         foreach (var tile in tiles)
@@ -314,6 +436,79 @@ public sealed class LaneGraph
                 var outs = new Vector3[plan.Arms.Count];
                 for (int a = 0; a < outs.Length; a++) outs[a] = OutOf(plan.Arms[a].Heading);
                 g.Signals.Add(sites[k] = new SignalSite { Plan = plan, Out = outs });
+                Vector3[] World(float[] f)
+                {
+                    var v = new Vector3[f.Length / 3];
+                    for (int i = 0; i < v.Length; i++) v[i] = origin.ToWorld(tile.Id.MinE + f[i * 3], tile.Id.MaxN - f[i * 3 + 2], f[i * 3 + 1]);
+                    return v;
+                }
+                var worldOf = new Dictionary<float[], Vector3[]>(ReferenceEqualityComparer.Instance);
+                foreach (var line in tile.Signals[k].ConflictLines) sites[k].Lines.Add((line, worldOf[line.Points] = World(line.Points)));
+                foreach (var pair in tile.Signals[k].ConflictPairs)
+                    if (worldOf.TryGetValue(pair.EndingLine, out var ending) && worldOf.TryGetValue(pair.StartingLine, out var starting))
+                        sites[k].Pairs.Add((pair, ending, starting));
+                // its crossings (the debug drawing, #971): kerb to kerb between each arm's two pedestrian heads, moved along the arm
+                // onto the zebra, which RoadGen paints 0.3 m on from the cars' stop line and 3 m deep (TileRewriter.Crossings)
+                var sg = tile.Signals[k];
+                foreach (var arm in sg.Poles.Where(p => (p.Flags & SignalPoleFlags.Pedestrian) != 0).GroupBy(p => p.Arm))
+                {
+                    var heads = arm.Select(p => origin.ToWorld(tile.Id.MinE + p.X, tile.Id.MaxN - p.Z, p.Y)).ToList();
+                    if (heads.Count < 2 || arm.Key * 3 + 2 >= sg.Stops.Length || float.IsNaN(sg.Stops[arm.Key * 3])) continue;
+                    var (a0, b0) = heads.SelectMany(x => heads, (x, y) => (x, y)).MaxBy(xy => xy.x.DistanceSquaredTo(xy.y));
+                    var stop = origin.ToWorld(tile.Id.MinE + sg.Stops[arm.Key * 3], tile.Id.MaxN - sg.Stops[arm.Key * 3 + 2], sg.Stops[arm.Key * 3 + 1]);
+                    var u = outs[arm.Key];
+                    // the zebra's own bars where the tile has them: the yellow paint across the arm nearest the stop line
+                    var zebra = stop - u * 1.8f;
+                    float best = 8f;
+                    foreach (var paint in tile.Paint)
+                    {
+                        if (paint.Type != PaintType.YellowSolid || paint.Shape != PaintShape.Triangles || paint.Vertices.Length < 9) continue;
+                        var c = Vector3.Zero;
+                        int nv = paint.Vertices.Length / 3;
+                        for (int v = 0; v < nv; v++)
+                            c += new Vector3(paint.Vertices[v * 3], paint.Vertices[v * 3 + 1], paint.Vertices[v * 3 + 2]);
+                        c /= nv;
+                        var at = origin.ToWorld(tile.Id.MinE + c.X, tile.Id.MaxN - c.Z, c.Y);
+                        var d = at - stop;
+                        float along = d.Dot(u), across = (d - u * along).Length();
+                        if (along < 0.5f && -along < best && across < 15f) { best = -along; zebra = at; }
+                    }
+                    sites[k].Walks.Add((a0 + u * (zebra - a0).Dot(u), b0 + u * (zebra - b0).Dot(u), arm.Key));
+                }
+            }
+            // the junction paths (#818 phase 5): each a one-way edge from the road end at its arm's mouth to the exit's; their ends meet
+            // those roads, so JoinTrimmedEnds leaves the junction to them. Cars only (riders are not traffic)
+            foreach (var jpath in tile.JunctionPaths)
+            {
+                // a riders' path at the lights: kept for the debug drawing only (#971)
+                if (jpath.Kind is JunctionPathKind.Bike or JunctionPathKind.Path && jpath.PointCount >= 2 && jpath.Signal >= 0 && jpath.Signal < sites.Length)
+                {
+                    var ride = new Vector3[jpath.PointCount];
+                    for (int i = 0; i < ride.Length; i++)
+                        ride[i] = origin.ToWorld(tile.Id.MinE + jpath.Points[i * 3], tile.Id.MaxN - jpath.Points[i * 3 + 2], jpath.Points[i * 3 + 1]);
+                    sites[jpath.Signal].Rides.Add((ride, jpath.Group, jpath.Move));
+                }
+                if (jpath.Kind != JunctionPathKind.Car || jpath.PointCount < 2) continue;
+                int n = jpath.PointCount;
+                var pts = new Vector3[n];
+                var cum = new float[n];
+                for (int i = 0; i < n; i++)
+                {
+                    pts[i] = origin.ToWorld(tile.Id.MinE + jpath.Points[i * 3], tile.Id.MaxN - jpath.Points[i * 3 + 2], jpath.Points[i * 3 + 1]);
+                    if (i > 0) cum[i] = cum[i - 1] + pts[i].DistanceTo(pts[i - 1]);
+                }
+                if (cum[^1] < 0.5f) continue;
+                var site = jpath.Signal >= 0 && jpath.Signal < sites.Length ? sites[jpath.Signal] : null;
+                var edge = new LaneEdge
+                {
+                    Points = pts, Cumulative = cum, Class = jpath.Junction.Class, Width = Math.Max(jpath.Width, jpath.ToWidth), OneWay = 1, Connector = true,
+                    KeyStart = Key(tile.Id.MinE + jpath.From.X, tile.Id.MaxN - jpath.From.Z), KeyEnd = Key(tile.Id.MinE + jpath.To.X, tile.Id.MaxN - jpath.To.Z),
+                    Path = new JunctionPathInfo(jpath.Move, jpath.From.Offset, jpath.To.Offset, site, site is null ? -1 : jpath.Group),
+                };
+                g.Edges.Add(edge);
+                g.Link(edge.KeyStart, edge, true);
+                g.Link(edge.KeyEnd, edge, false);
+                g.Paths++;
             }
             // the lanes of every approach the tile records (#353), then any signalised approach it does not (an older tile)
             var recorded = new HashSet<(int, int)>();
@@ -340,6 +535,12 @@ public sealed class LaneGraph
         }
         return g;
     }
+
+    /// <summary>The junction paths it holds (#818 phase 5).</summary>
+    public int Paths { get; private set; }
+
+    /// <summary>Its edges that are a transition's pieces, whose lanes cars follow (#818 phase 5).</summary>
+    public int Transitions { get; private set; }
 
     /// <summary>Every approach tied to an edge (#353).</summary>
     public List<LaneApproach> Approaches { get; } = new();
@@ -450,6 +651,7 @@ public sealed class LaneGraph
         foreach (var e in Edges)
             if (done.Add(e)) e.Shift(shift);
         foreach (var a in Approaches) a.Stop = shift.Point(a.Stop);
+        foreach (var s in Signals) s.Shift(shift);
         Frame = now;
     }
 

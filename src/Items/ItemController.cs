@@ -91,6 +91,7 @@ public partial class ItemController : Node
     /// <summary>Gadgets in hand and in use: the zipline, ladder, trampoline, launch pad (#275).</summary>
     public Build.GadgetTool GadgetTool => _gadgets;
     private Build.GadgetTool _gadgets = null!;
+    private TrafficTool _trafficTool = null!;
     public InventoryUi Ui => _ui;
 
     /// <summary>Every item, for the offline player or an admin (#262).</summary>
@@ -144,6 +145,8 @@ public partial class ItemController : Node
         AddChild(_build);
         _gadgets = new Build.GadgetTool(this) { Name = "GadgetTool" };
         AddChild(_gadgets);
+        _trafficTool = new TrafficTool(_origin) { Name = "TrafficTool" };
+        AddChild(_trafficTool);
         Instance = this;
         DroppedItems.Refused += OnDropRefused;
 
@@ -221,6 +224,7 @@ public partial class ItemController : Node
             ShowGhost(null);
             _build.Step(null, false, false);
             _gadgets.Step(null, ItemId.None, false);
+            _trafficTool.Step(null, false);
             Highlight.Point(null);
             Vehicles.VehicleReach.Point(null);
             _throw.Step(null, false, false, (float)delta);
@@ -294,6 +298,7 @@ public partial class ItemController : Node
             PlayerInput.Held(PlayerInput.AimItem) || _forceAim);
         _gadgets.Step(usable && !UiFocus.TextEntryActive ? player : null, _inventory.HeldId, PlayerInput.Held(PlayerInput.AimItem) || _forceAim);
         _gadgets.Tick(usable ? player : null);
+        _trafficTool.Step(player, usable && !UiFocus.TextEntryActive && _inventory.HeldId == ItemId.TrafficTool);
         if (visual != null)
         {
             visual.SetPose(_raiseFlag ? ViewPose.Raise : !aiming ? ViewPose.Rest : def!.Use switch
@@ -521,6 +526,10 @@ public partial class ItemController : Node
 
             case ItemUse.Gadget:
                 _gadgets.Use(player, slot, PlayerInput.Held(PlayerInput.AimItem) || _forceAim);
+                break;
+
+            case ItemUse.TrafficTool:
+                _trafficTool.Use(player, Toast);
                 break;
 
             case ItemUse.Optic:

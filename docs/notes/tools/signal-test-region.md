@@ -20,6 +20,17 @@
   `--generated off`: outside Switzerland the generated fill has no relief to follow. Tab (or
   `--goto J3`) finds the junctions: `places.json` names them (towns with no buildings, so no
   occasion or town sound picks them).
+- **A lane arm through a tracks' node** (#818, `ShortArmE` 2914000 on the twins' row N 1321400): a town T without lights, a
+  3 m lane from the south whose first link ends 7 m out where two tracks branch off (on the main road's own path band). The
+  planner's core puts the lane's mouth past that node: the lane is trimmed to it along the run-on street (it left a hole
+  before `ArmAxis.StationPast`).
+- **The divided-road T** (#818, `DividedTeeE` 2915300 on N 1321400): the real junction 2619795,1264700 moved here as it is
+  (points shifted by 295505.6, 56695.2): 6 m west of the T the main road divides into two 2.2 m carriageways
+  (`Line.Divided`: TLM `richtungsgetrennt`) joined by a 1.5 m `Verbindung`. Both #818 cases stay on the old layout (a road
+  joins short of a mouth).
+- **Staggered T's** (#818 phase 5, `StaggerE` 2916500 on N 1321400, all in tile 2916 so no street runs on into another
+  block): a 10 m main road with side roads alternately north and south: 24 m apart (two cores), 8 m apart (the cores overlap:
+  old layout until they merge), and 300 m east 24 m apart with lights at both (J9: the street between is inside the lights).
 - **Where**: tiles E 2910-2917 N 1321-1323 (24 tiles; J6/J7 #700 in 2916-2917), flat at 500 m, one 6 km rewrite block),
   outside Switzerland on purpose: no real tile, streamed or cached, shares an id. Manifest origin
   2913000,1322500 (shots' world x = E - 2913000, z = 1322500 - N). Junctions on one row, N 1322500,
@@ -45,9 +56,11 @@ a bike box, `[adv]` an advanced bike line); the approach is named by where it co
 
 | Junction | LV95 | Design | Built | Cycle, phases |
 |---|---|---|---|---|
-| J1-ideal-lanes | 2910500,1322500 | two 10 m roads, room everywhere; painted lanes; the north road is `cycleway=shared_lane` | W `L[box] \| bL \| T \| bT \| R` (layout b), E and S `L \|E `L | bL[adv] | T | R` (20+20 pocket, the right pocket reaching 8 m past the left's storage, #682)\| T \| R \| bTR` + bike signal (layout a), N `L \| bL[adv] \| T \| R` | 100 s, lead/both/lag per road (10 phases) |
-| J2-ideal-paths | 2911500,1322500 | the same in town (OSM sidewalks): separated paths | every arm `L[adv] \| bL \| TR` + bike signal: no right pocket in town (50 km/h, #711); square red crossings | 88 s |
-| J3-mismatch | 2912500,1322500 | W long, its last metres in town (the houses beside the north road give it sidewalks); E houses 1.5 m from the kerb from 68 m out; N houses 1 m from the kerb; S a 6 m road 52 m to a T | W `L[adv] \| bL \| TR` (in town: no right pocket, #711), E `L[adv] \| bL \| T \| R` (20+20 pocket, the right pocket reaching 8 m past the left's storage, #682), N `LTR` (building), S `LT \| R \| bTR` (too short for a left pocket, a 10+15 right one fits) | 60 s, main road lead/both/lag, then N + S together |
+| J1-ideal-lanes | 2910500,1322500 | two 10 m roads, room everywhere; painted lanes; the north road is `cycleway=shared_lane` | every arm `L \| bL \| T \| R \| bTR` + bike signal (layout a: every arm turns left, `junction-planner`) | 74 s, the right arrows apart from the through green (10 phases) |
+| J10-between-lanes | 2910500,1323500 | J1 a tile north (#854), OSM `bicycle:lanes=no\|no\|designated\|no` on every approach | every arm `L \| bL \| T \| bT \| R \| bR` (layout b from data, a right-turn bike lane at the kerb), no bike signal | 70 s, each right turn with its through green |
+| J11-town-pockets | 2911500,1323500 | J2 a tile north (#971), OSM `turn:lanes=left\|through\|right` on every approach | every arm `L \| bL \| T \| R` + bike signal (the pockets from data) | 86 s |
+| J2-ideal-paths | 2911500,1322500 | the same in town (OSM sidewalks): separated paths | every arm `L \| bL \| T \| R` + bike signal: right pockets at the lights in town too (#971); square red crossings | 86 s |
+| J3-mismatch | 2912500,1322500 | W long, its last metres in town (the houses beside the north road give it sidewalks); E houses 1.5 m from the kerb from 68 m out; N houses 1 m from the kerb; S a 6 m road 52 m to a T | W `L \| bL \| T \| R` (a right pocket at the lights in town, #971), E `L \| bL \| T \| R \| bTR` (20+20 pocket, the right pocket reaching 8 m past the left's storage, #682), N `LTR` (building), S `LT \| R \| bTR` as the old layout builds it, `LTR \| bTR` from the planner (52 m: its right pocket gives way to the exit the west arm's needs, `PlannerDesign`) | 60 s, main road lead/both/lag, then N + S together |
 | J3b-narrow-arm | 2913500,1322500 | an 8 m road, a 6 m road S, a 4 m road N | W `L[box] \| bL \| T \| bT \| R` (box: the 4 m road has no bike lane), E `L | bL[adv] | T | R` (20+20 pocket, the right pocket reaching 8 m past the left's storage, #682)\| bL[adv] \| T \| bT \| R`, N `LTR` (no pockets on that class), S `LT \| R \| bTR` (no lane out on the 4 m road: "no main road out") | 75 s |
 | J4-tee | 2914500,1322500 | T, stem south | W `T \| bT \| R`, E `L | bL[adv] | T | R` (20+20 pocket, the right pocket reaching 8 m past the left's storage, #682)\| bL[adv] \| T \| bT`, S `L \| bL \| R` | 75 s: main, main left + its through, side |
 | J5a/J5b-pair | 2915470 / 2915530,1322500 | two crossroads 60 m apart, 6 m cross roads | between them a merged strip (#325): `L \| TR \| bTR` both ways; the other arms `L \|E `L | bL[adv] | T | R` (20+20 pocket, the right pocket reaching 8 m past the left's storage, #682)\| T \| R` | 99 s each |

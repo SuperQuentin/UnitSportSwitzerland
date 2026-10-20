@@ -542,6 +542,16 @@ public partial class ClientWorld : Node3D, IOriginContainer
             };
             AddChild(_traffic);
         }
+        // traffic endpoints (#971): the server's list (same node path as its), every client running them on its own cars; the
+        // test world's cars come from them alone (its marker beside the tiles)
+        var endpoints = World.TrafficGenerators.Create(this, server: false);
+        if (_traffic != null)
+        {
+            _traffic.Generators = endpoints;
+            endpoints.Changed += _traffic.EndpointsChanged;
+            _traffic.GeneratorsOnly = System.IO.File.Exists(System.IO.Path.Combine(TerrainPaths.FindChunkDir(), "signal_test_region.txt"));
+            _traffic.GeneratorRate = (float)(CmdArgs.Double("--traffic-rate") ?? 1.0);
+        }
         if (Systems.On(Systems.Npcs) && World.NpcWatch.FromArgs() is { } npcWatch) AddChild(npcWatch);
         if (_traffic != null && World.TrafficProbe.ParseArgs() is { Requested: true } tcheck)
         {

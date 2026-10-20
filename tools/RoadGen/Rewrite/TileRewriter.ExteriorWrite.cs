@@ -1,0 +1,393 @@
+namespace UnitSport.Tools.RoadGen.Rewrite;
+
+using UnitSport.Terrain.Format;
+using UnitSport.Tools.RoadGen.Geometry;
+using UnitSport.Tools.RoadGen.Junctions;
+using UnitSport.Tools.RoadGen.Layout;
+using UnitSport.Tools.RoadGen.Meshing;
+using UnitSport.Tools.RoadGen.Network;
+
+/// <summary>
+/// The planner's exterior written (#818 phase 4): each arm's bars (<see cref="ExteriorPlanner"/>) as paint across the arm at their
+/// stations, its refuge as an island, its signs; points from the arm's axis out from the mouth, heights from the line's own. The
+/// crosswalk is <see cref="EmitCrossing"/>'s (its zebra, the path's stop line and the path surface over the grass beside it).
+/// </summary>
+public static partial class TileRewriter
+{
+    /// <summary>
+    /// The street's sides at an arm's junction end, as a driver arriving sees them (left, right): its first piece's, the drawing's
+    /// right being the driver's where the junction is at the link's last point.
+    /// </summary>
+    private static (RoadSide Left, RoadSide Right) SidesAtMouth(ArmPlan a, RoadSegment piece) =>
+        a.AtEnd ? (piece.Attributes.Left, piece.Attributes.Right) : (piece.Attributes.Right, piece.Attributes.Left);
+
+    /// <summary>
+    /// A lit junction's lights (#818 phase 4): its plan from every arm's mouth section (<see cref="SignalPlan.Build"/>, validated
+    /// as the old layout's), its poles at the kerb beside each cars' line (the second at the other kerb or on the refuge), the
+    /// cars' line's middle per arm (<c>SGNL</c> stops), and each approach's lanes (<c>LANE</c>) as its transition lays them out.
+    /// </summary>
+    /// <summary>Riders following the cars' lights get a bike group of their own where they lengthen a conflict time by more than this (s, #979).</summary>
+    private const float LongRiders = 2f;
+
+    private static SignalPlan? WriteSignals(JunctionPlan jp, RoadGenResult result, Dictionary<TileId, List<RoadSignal>> signals,
+        Dictionary<TileId, List<RoadApproach>> approaches, Cantons? cantons, SignalStats signalStats, LayoutWriteStats stats)
+    {
+        var net = result.Network;
+        var home = TileId.FromLv95(jp.Centre.X, jp.Centre.Y);
+        var arms = new List<SignalArm>();
+        var exterior = new List<ArmExterior>();
+        foreach (var a in jp.Arms)
+        {
+            var ex = jp.Exterior.First(x => x.Arm == a);
+            exterior.Add(ex);
+            var mouth = a.Mouth;
+            var ins = mouth.CarLanes(StripWay.In).Select(l => l.Strip).ToList();
+            bool approach = ins.Count > 0 && ex.CarStop is not null, leaves = mouth.CarLanes(StripWay.Out).Any();
+            var info = InfoOf(net.Links[a.LinkId]);
+            bool urban = mouth.KerbLeftCm > 0 || mouth.KerbRightCm > 0;
+            // riders get their own signal on a path, or on a bike lane kerbside of a right pocket (layout a); not on layout (b)'s
+            // right-turn bike lane at the kerb, its riders turning with the pocket's cars (#854: it held the right arrow back)
+            int last = mouth.LastCarriageway;
+            bool path = mouth.Strips.Skip(last + 1).Any(x => x.Kind == StripKind.Path);
+            bool kerbside = a.HasRight && last >= 0 && mouth.Strips[last] is { Kind: StripKind.BikeLane, Way: StripWay.In } kerbLane
+                && kerbLane.Moves != SignalMoves.Right;
+            // the bike lane between the through lane and the right pocket (layout b): no conflict with that pocket's arrow (#979)
+            bool between = a.HasRight && !kerbside && mouth.Strips.Any(x => x.Kind == StripKind.BikeLane && x.Way == StripWay.In && x.Moves != SignalMoves.Right && x.Moves != SignalMoves.Left);
+            arms.Add(new SignalArm(a.Heading, approach, leaves, ins.Any(l => l.Moves == SignalMoves.Left), ins.Any(l => l.Moves == SignalMoves.Right),
+                Pedestrians: ex.Crosswalk is not null, BikeSignal: approach && (path || kerbside), SpeedKmh: urban ? 50 : 60,
+                CrossingM: (float)(mouth.CarriagewayWidth), Rank: (byte)Math.Clamp(info is { } i ? PriorityPlanner.Rank(i) / 4 : 1, 1, 255),
+                Banned: approach ? a.Wants.Banned : SignalMoves.None, BikeBetween: between));
+        }
+        if (arms.Count(x => x.In) < 2) return null;
+        string? canton = cantons?.CodeAt(jp.Centre.X, jp.Centre.Y);
+        bool amber = PedestrianAmber(canton);
+        uint seed = (uint)(long)Math.Round(jp.Centre.X) * 73856093u ^ (uint)(long)Math.Round(jp.Centre.Y) * 19349663u;
+        var plan = SignalPlan.Build(arms, seed, amber);
+        // a kerbside bike lane keeps its signal only where a phase holds the right arrow while its riders go; a bike group that
+        // finds no phase goes without its signal, not the junction without its plan (as the old layout)
+        for (int k = 0; k < arms.Count; k++)
+            if (arms[k].BikeSignal && !plan.ThroughWithRightHeld(k) && exterior[k].Arm.HasRight)
+            {
+                arms[k] = arms[k] with { BikeSignal = false };
+                plan = SignalPlan.Build(arms, seed, amber);
+            }
+        // riders who follow the cars' lights (a bike lane with no signal of its own, a left-turn bike lane) and whose slow clearing
+        // would lengthen their cars' conflict times by more than LongRiders get a bike group of their own, which can end earlier
+        // (the user, #979: only where it is long)
+        if (jp.Core is { } ridersCore && ridersCore.Connectors.Any(c => c.Kind == ConnectorKind.Bike))
+        {
+            int GroupOfPath(Connector c) => PathGroup(plan, jp.Arms.FindIndex(x => x.Arm == c.FromArm), c.Move, c.Kind);
+            bool Shared(ConflictTimes.Line l) => l.Mover == ConflictTimes.Mover.Bike && plan.Groups[l.Group].Kind != SignalGroupKind.Bike;
+            var with = ConflictTimes.Of(jp, plan, [], GroupOfPath);
+            var without = ConflictTimes.Of(jp, plan, [], GroupOfPath, l => !Shared(l));
+            bool rebuild = false;
+            foreach (var c in ridersCore.Connectors.Where(c => c.Kind == ConnectorKind.Bike))
+            {
+                int k = jp.Arms.FindIndex(x => x.Arm == c.FromArm), g = GroupOfPath(c);
+                if (k < 0 || g < 0 || plan.Groups[g].Kind == SignalGroupKind.Bike) continue;
+                float most = 0;
+                for (int h = 0; h < plan.Groups.Count; h++)
+                    if (!float.IsNaN(with[g, h])) most = Math.Max(most, with[g, h] - (float.IsNaN(without[g, h]) ? 0f : without[g, h]));
+                if (most <= LongRiders) continue;
+                if (c.Move == SignalMoves.Left && !arms[k].RiderLeft) { arms[k] = arms[k] with { RiderLeft = true }; rebuild = true; }
+                else if (c.Move != SignalMoves.Left && !arms[k].BikeSignal) { arms[k] = arms[k] with { BikeSignal = true }; rebuild = true; }
+            }
+            if (rebuild) { plan = SignalPlan.Build(arms, seed, amber); stats.RiderGroups++; }
+        }
+        if (plan.Validate().Any(e => e.Contains("(Bike arm")))
+        {
+            for (int k = 0; k < arms.Count; k++) arms[k] = arms[k] with { BikeSignal = false };
+            plan = SignalPlan.Build(arms, seed, amber);
+        }
+        if (plan.Validate() is { Count: > 0 })
+        {
+            stats.SignalsInvalid++;
+            return null;
+        }
+        plan.ArrowPlates = ArrowPlates(canton);
+
+        float SampleAt(ArmPlan a, Vec2 p) => net.Links[a.LinkId].Tag is Source s ? s.SampleHeight(p) : 0f;
+        var stops = new float[arms.Count * 3];
+        var poles = new List<SignalPole>();
+        var records = new List<(int Arm, Vec2 At, double Stop)>();
+        for (int k = 0; k < arms.Count; k++)
+        {
+            var ex = exterior[k];
+            var a = ex.Arm;
+            double m0 = jp.Core!.Mouths.First(m => m.Arm == a.Arm).Station;
+            var axis = a.Axis!;
+            Vec2 P(double s, double o) => axis.At(m0 + s, o);
+            if (arms[k].In && ex.CarStop is { } stop)
+            {
+                var sec = ExteriorPlanner.SectionAt(a, stop);
+                var runs = ExteriorPlanner.Runs(sec, x => x.IsCarLane && x.Way == StripWay.In);
+                var at = P(stop, (runs.Min(r => r.Left) + runs.Max(r => r.Right)) * 0.5);
+                var local = Local(home, [at], p => SampleAt(a, p), 0f);
+                Array.Copy(local, 0, stops, k * 3, 3);
+                records.Add((k, at, stop));
+            }
+            else for (int j = 0; j < 3; j++) stops[k * 3 + j] = float.NaN;
+            var u = axis.DirAt(m0);
+            var right = axis.RightAt(m0);
+            foreach (var p in ex.Poles)
+            {
+                // the foot: on the sidewalk past a path (half a metre in), or on the refuge
+                var sec = ExteriorPlanner.SectionAt(a, p.Station);
+                double o;
+                float lift;
+                if (p.OnRefuge && ex.Refuge is { } rf) { o = (rf.Left + rf.Right) * 0.5; lift = 0.12f; }
+                else
+                {
+                    var bands = p.RightKerb ? sec.Strips.Skip(sec.LastCarriageway + 1).ToList() : sec.Strips.Take(Math.Max(0, sec.FirstCarriageway)).Reverse().ToList();
+                    double past = 0;
+                    foreach (var b in bands) { if (b.Kind == StripKind.Sidewalk) break; past += b.Width; }
+                    double d = past + 0.5;
+                    o = p.RightKerb ? sec.CarriagewayRight + d : sec.CarriagewayLeft - d;
+                    lift = (p.RightKerb ? sec.KerbRightCm : sec.KerbLeftCm) / 100f;
+                }
+                var foot = P(p.Station, o);
+                var local = Local(home, [foot], q => SampleAt(a, q), lift);
+                // car heads face the arriving drivers; a pedestrian head faces across its crossing
+                // the second pole carries the left arrow where a lane turns left only (the check: every such arm has one)
+                var flags = p.Flags | (!p.RightKerb && arms[k].LeftPocket ? SignalPoleFlags.Second : SignalPoleFlags.None);
+                if (!arms[k].In) flags &= ~(SignalPoleFlags.Main | SignalPoleFlags.Second);
+                poles.Add(new SignalPole(local[0], local[1], local[2], Heading(u), Heading(p.RightKerb ? -right : right), (byte)k, flags));
+                stats.Poles++;
+            }
+        }
+        var centre = Local(home, [jp.Centre], p => SampleAt(jp.Arms[0], p), 0f);
+        Get(signals, home).Add(new RoadSignal { X = centre[0], Y = centre[1], Z = centre[2], Stops = stops, Plan = plan, Poles = poles });
+        short index = (short)(Get(signals, home).Count - 1);
+        foreach (var (k, at, stop) in records)
+            Get(approaches, home).Add(ApproachOf(exterior[k], at, stop, home, index, (byte)k, net));
+        stats.Signals++;
+        signalStats.Junctions++;
+        return plan;
+    }
+
+    /// <summary>
+    /// An approach's lane record (<c>LANE</c>, #353) as its transition lays the lanes out: every arriving car and bike lane at
+    /// the cars' line left to right, offsets from the street's own arriving lane, each lane full from where it stops changing
+    /// (out from the line) and starting where it leaves the street's normal section; riders' lanes stop at their own line.
+    /// </summary>
+    private static RoadApproach ApproachOf(ArmExterior ex, Vec2 at, double stop, TileId home, short signal, byte planArm, RoadNetwork net)
+    {
+        var a = ex.Arm;
+        var sec = ExteriorPlanner.SectionAt(a, stop);
+        double centre = a.Normal.CarLanes(StripWay.In).Select(l => a.Normal.Span(l.Index)).Select(s => (s.From + s.To) * 0.5).DefaultIfEmpty(0).First();
+        var all = SignalMoves.None;
+        foreach (var x in a.Mouth.CarLanes(StripWay.In)) all |= x.Strip.Moves;
+        var lanes = new List<ApproachLane>();
+        for (int k = 0; k < sec.Strips.Count; k++)
+        {
+            var x = sec.Strips[k];
+            if (x.Way != StripWay.In || !(x.IsCarLane || x.Kind == StripKind.BikeLane)) continue;
+            var (f, t) = sec.Span(k);
+            var (full, from) = Reach(a, x.Id, stop);
+            var moves = x.Moves != SignalMoves.None ? x.Moves : all != SignalMoves.None ? all : SignalMoves.Left | SignalMoves.Through | SignalMoves.Right;
+            bool bike = x.Kind == StripKind.BikeLane;
+            lanes.Add(new ApproachLane((float)((f + t) * 0.5 - centre), (float)full, (float)Math.Max(full, from), moves,
+                bike ? ApproachLaneKind.Bike : ApproachLaneKind.Car, bike && ex.RiderStop is { } r ? (float)(r - stop) : 0f));
+        }
+        float y = net.Links[a.LinkId].Tag is Source s ? s.SampleHeight(at) : 0f;
+        var local = Local(home, [at], _ => y, 0f);
+        return new RoadApproach
+        {
+            X = local[0], Y = local[1], Z = local[2], Heading = (float)a.Heading, Signal = signal, SignalArm = planArm, Banned = a.Wants.Banned,
+            LaneCentre = (float)centre, Lanes = lanes,
+        };
+    }
+
+    /// <summary>
+    /// How far out from the line (at <paramref name="stop"/>) a lane keeps its width and place, and from where out it starts (where
+    /// the street's normal section takes over): its transition's stations; 15 m and 30 m (the old records') without one.
+    /// </summary>
+    private static (double Full, double From) Reach(ArmPlan a, int id, double stop)
+    {
+        if (a.Transition is not { } t) return (15, 30);
+        var sections = new List<(double S, double Mid, double W)>();
+        for (double s = 0; s <= t.Length + 1e-6; s += 0.5)
+        {
+            var sec = ExteriorPlanner.SectionAt(a, s);
+            int k = sec.Strips.ToList().FindIndex(x => x.Id == id);
+            if (k < 0) { sections.Add((s, double.NaN, 0)); continue; }
+            var (f, to) = sec.Span(k);
+            sections.Add((s, (f + to) * 0.5, to - f));
+        }
+        // a line past the transition's end stands on the street's own lanes: as without one
+        int at = sections.FindIndex(x => x.S >= stop - 1e-6);
+        if (at < 0 || double.IsNaN(sections[at].Mid)) return (15, 30);
+        var first = sections[at];
+        double full = sections.TakeWhile(x => x.S < stop - 1e-6 || (!double.IsNaN(x.Mid) && Math.Abs(x.Mid - first.Mid) < 0.02 && Math.Abs(x.W - first.W) < 0.02)).Last().S;
+        double from = t.Length;
+        return (Math.Max(0, full - stop), Math.Max(0, from - stop));
+    }
+
+    /// <summary>
+    /// The lines painted through a core (#818 phase 2's, connector edges chosen by <c>JunctionRules</c>): the main road's centre
+    /// line (the street's dashes), the edge guides (dashed across a joining road, solid else, none in towns), the left-turn, pair
+    /// and through guides (dashed); on the core's surface, its heights blended from the mouths.
+    /// </summary>
+    private static void WriteCoreLines(JunctionPlan jp, RoadGenResult result, RoadJunction? cap, Dictionary<TileId, List<RoadPaint>> paint, LayoutWriteStats stats)
+    {
+        var core = jp.Core!;
+        var home = TileId.FromLv95(jp.Centre.X, jp.Centre.Y);
+        var anchors = new List<(Vec2 At, float Height)>();
+        foreach (var m in core.Mouths)
+            if (result.Network.Links[jp.Arms.First(a => a.Arm == m.Arm).LinkId].Tag is Source s)
+            {
+                var mid = (m.Left + m.Right) * 0.5;
+                anchors.Add((mid, s.SampleHeight(mid)));
+            }
+        if (anchors.Count == 0) return;
+        bool urban = jp.Arms.Any(a => a.Normal.KerbLeftCm > 0 || a.Normal.KerbRightCm > 0);
+        float Height(Vec2 p) => cap is null ? HeightAt(anchors, p) : CapHeightAt(cap, home, p);
+        // a roundabout's entries give way at the ring's edge (#854): whole teeth, centred, apexes toward the arriving driver
+        foreach (var (left, right) in core.Teeth)
+        {
+            double period = RoadSigns.ToothBase + RoadSigns.ToothGap, length = left.DistanceTo(right);
+            int count = (int)Math.Floor((length + RoadSigns.ToothGap) / period);
+            if (count < 1) continue;
+            double used = count * period - RoadSigns.ToothGap;
+            var u = (right - left) / length;
+            var a0 = left + u * ((length - used) * 0.5);
+            Get(paint, home).Add(new RoadPaint
+            {
+                Shape = PaintShape.Polyline, Type = PaintType.SharkTooth, Rgba = PaintEmitter.White, Width = RoadSigns.ToothHeight,
+                Dash = RoadSigns.ToothBase, Gap = RoadSigns.ToothGap, Vertices = Local(home, [a0, a0 + u * used], Height, 0f),
+            });
+            stats.Bars++;
+        }
+        foreach (var line in core.Lines)
+        {
+            if (line.Points.Count < 2 || ClipToRing(line.Points, core.Outline, core.Mouths).Count < 2) continue;
+            bool centre = line.Kind == "centre";
+            if (!centre && !line.Dashed && urban) continue;
+            float dash = centre ? 3f : line.Dashed ? GuideDash : 0f, gap = centre ? (urban ? 3f : 6f) : line.Dashed ? GuideDash : 0f;
+            Get(paint, home).Add(new RoadPaint
+            {
+                Shape = PaintShape.Polyline, Type = dash > 0 ? PaintType.WhiteDashed : PaintType.WhiteSolid, Rgba = PaintEmitter.White,
+                Width = PaintEmitter.LineWidth, Dash = dash, Gap = gap,
+                // cut to the core's surface: none off the road (the user, Oct 17)
+                Vertices = RoadPaintGeometry.Simplify(Local(home, ClipToRing(line.Points, core.Outline, core.Mouths), p => cap is null ? HeightAt(anchors, p) : CapHeightAt(cap, home, p), 0f)),
+            });
+            stats.CoreLines++;
+        }
+    }
+
+    private static void WriteExterior(JunctionPlan jp, RoadGenResult result, Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf,
+        Dictionary<RoadSegment, List<RoadSegment>> finalPieces, Dictionary<TileId, List<RoadPaint>> paint, Dictionary<TileId, List<RoadAreaProp>> areas,
+        Dictionary<TileId, List<RoadPointProp>> signs, SignalStats signalStats, LayoutWriteStats stats)
+    {
+        var net = result.Network;
+        foreach (var ex in jp.Exterior)
+        {
+            var a = ex.Arm;
+            if (a.Axis is not { } axis || net.Links[a.LinkId].Tag is not Source source || jp.Core!.Mouths.FirstOrDefault(m => m.Arm == a.Arm) is not { } mouth)
+                continue;
+            double m0 = mouth.Station;
+            Vec2 P(double s, double o) => axis.At(m0 + s, o);
+            var tile = source.Tile;
+            var into = Get(paint, tile);
+            var so = segmentOf[a.LinkId];
+            var pieces = finalPieces.TryGetValue(so.Segment, out var ps) && ps.Count > 0 ? ps : [so.Segment];
+            var (leftSide, rightSide) = SidesAtMouth(a, a.AtEnd ? pieces[^1] : pieces[0]);
+            RoadPaint Across(double s, double l, double r, PaintType type, uint rgba, float width) => new()
+            {
+                Shape = PaintShape.Polyline, Type = type, Rgba = rgba, Width = width,
+                Vertices = Local(tile, [P(s, l), P(s, r)], source.SampleHeight, 0f),
+            };
+            // a hatch wide at the mouth (an exit's, a line-up's) closed by a solid line across it, as the old layout's (#123): where
+            // its stripes and borders start (the line on their ends), past what the transition's paint keeps clear (the cars' line at the lights, a crosswalk)
+            double barsTo = ex.Bars.Where(b => b.Kind is BarKind.StopLine or BarKind.RidersLine).Select(b => b.To).DefaultIfEmpty(0).Max();
+            double closeAt = jp.Lights && barsTo > 0 ? barsTo : ex.Crosswalk is { } zebra && zebra.From - 0.3 < 0.5 ? zebra.To + 0.3 : 0;
+            var atMouth = ExteriorPlanner.SectionAt(a, closeAt);
+            for (int k = 0; k < atMouth.Strips.Count; k++)
+                if (atMouth.Strips[k].Kind == StripKind.Hatch && atMouth.Strips[k].Width >= 0.5)
+                {
+                    var (hl, hr) = atMouth.Span(k);
+                    into.Add(Across(closeAt, hl, hr, PaintType.WhiteSolid, PaintEmitter.White, PaintEmitter.LineWidth));
+                    stats.Marks++;
+                }
+            foreach (var b in ex.Bars)
+            {
+                switch (b.Kind)
+                {
+                    case BarKind.Crosswalk:
+                        EmitCrossing(paint, source, axis.PointAt(m0), axis.DirAt(m0), axis.RightAt(m0), b.To + ZebraClear, b.Left, b.Right, rightSide, leftSide,
+                            areas, signalStats, gap: b.Gap is { } g ? (g.Left, g.Right) : null, riderStop: ex.RiderStop ?? ex.CarStop, pavedGrass: false);
+                        break;
+                    case BarKind.RidersLine:
+                        into.Add(Across(b.Middle, b.Left + 0.05, b.Right - 0.05, PaintType.StopLine, PaintEmitter.Yellow, (float)(b.To - b.From)));
+                        break;
+                    case BarKind.StopLine:
+                    case BarKind.PocketBar:
+                        into.Add(Across(b.Middle, b.Left + 0.1, b.Right - 0.1, PaintType.StopLine, PaintEmitter.White, (float)(b.To - b.From)));
+                        break;
+                    case BarKind.BikeBox:
+                    {
+                        // the box's yellow sides and the bike symbol in it, the riders facing the junction; no red surface (the user, Oct 17)
+                        double c = (b.Left + b.Right) * 0.5;
+                        foreach (double o in (ReadOnlySpan<double>)[b.Left + 0.075, b.Right - 0.075])
+                            into.Add(new RoadPaint
+                            {
+                                Shape = PaintShape.Polyline, Type = PaintType.YellowSolid, Rgba = PaintEmitter.Yellow, Width = BikePlanner.LineWidth,
+                                Vertices = Local(tile, [P(b.From, o), P(b.To, o)], source.SampleHeight, 0f),
+                            });
+                        double mid = b.Middle;
+                        into.Add(new RoadPaint
+                        {
+                            Shape = PaintShape.Polyline, Type = PaintType.BikeSymbol, Rgba = PaintEmitter.Yellow, Width = BikePlanner.SymbolSize,
+                            Vertices = Local(tile, [P(mid + BikePlanner.SymbolSize * 0.5, c), P(mid - BikePlanner.SymbolSize * 0.5, c)], source.SampleHeight, 0f),
+                        });
+                        break;
+                    }
+                    case BarKind.GiveWay:
+                    {
+                        // whole teeth, centred in the row; apexes toward the arriving driver (on the right of left-to-right)
+                        double period = RoadSigns.ToothBase + RoadSigns.ToothGap, length = b.Right - b.Left;
+                        int count = (int)Math.Floor((length + RoadSigns.ToothGap) / period);
+                        if (count < 1) break;
+                        double used = count * period - RoadSigns.ToothGap, l = b.Left + (length - used) * 0.5;
+                        into.Add(new RoadPaint
+                        {
+                            Shape = PaintShape.Polyline, Type = PaintType.SharkTooth, Rgba = PaintEmitter.White, Width = RoadSigns.ToothHeight,
+                            Dash = RoadSigns.ToothBase, Gap = RoadSigns.ToothGap,
+                            Vertices = Local(tile, [P(b.From, l), P(b.From, l + used)], source.SampleHeight, 0f),
+                        });
+                        break;
+                    }
+                }
+                stats.Bars++;
+            }
+            if (ex.Refuge is { } rf)
+            {
+                Get(areas, tile).Add(new RoadAreaProp
+                {
+                    Type = AreaPropType.Island, Variant = 2, Flags = PropFlags.Solid, Height = 0.12f,
+                    Vertices = Local(tile, [P(rf.From, rf.Left), P(rf.To, rf.Left), P(rf.To, rf.Right), P(rf.From, rf.Right)], source.SampleHeight, 0f),
+                    Indices = [0, 1, 2, 0, 2, 3],
+                });
+                stats.Refuges++;
+            }
+            foreach (var sign in ex.Signs)
+            {
+                // beside the kerb, its plate clear of the carriageway, on the sidewalk where the side has one
+                var sec = ExteriorPlanner.SectionAt(a, sign.Station);
+                var side = sign.RightKerb ? rightSide : leftSide;
+                bool urban = side.KerbCm > 0;
+                double clear = RoadSigns.Clearance(urban) + RoadSigns.Side(sign.Type, sign.Variant) * 0.5;
+                double o = sign.RightKerb ? sec.CarriagewayRight + clear : sec.CarriagewayLeft - clear;
+                var at = P(sign.Station, o);
+                bool onSidewalk = side.OuterDm / 10.0 >= clear;
+                float road = source.SampleHeight(P(sign.Station, 0));
+                float kerb = onSidewalk ? side.KerbCm / 100f : 0f;
+                var facing = sign.FacesArriving ? axis.DirAt(m0 + sign.Station) : -axis.DirAt(m0 + sign.Station);
+                var local = Local(tile, [at], _ => road, 0f);
+                Get(signs, tile).Add(new RoadPointProp(sign.Type, sign.Variant, PropFlags.Solid, local[0], road + kerb, local[2],
+                    (float)Math.Atan2(-facing.X, facing.Y), (onSidewalk ? RoadSigns.LowerEdgeSidewalk : RoadSigns.LowerEdge) + RoadSigns.PlateHeight(sign.Type, sign.Variant)));
+                stats.Signs++;
+            }
+        }
+    }
+}

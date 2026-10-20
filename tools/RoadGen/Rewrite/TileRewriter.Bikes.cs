@@ -527,9 +527,17 @@ public static partial class TileRewriter
                 }
             }
         }
-        // (#711) two sides carried on to the kerb that cross in one corner (a junction of several nodes: each arm's path carried
-        // across the other's road) would lie over each other: neither is laid, the corner planner lays that corner in its sides'
-        // bands (path along the kerb, sidewalk outside), and both crossings start at its kerb
+        stats.PathsToKerbCrossing += LayCarriedSides(carriedSides, bridges);
+    }
+
+    /// <summary>
+    /// The sides carried on to the kerb, laid (#711): two that cross in one corner (each arm's path carried across the other's
+    /// road) would lie over each other: neither is laid, the corner planner lays that corner in its sides' bands (path along the
+    /// kerb, sidewalk outside), and both crossings start at its kerb. Returns how many were left to their corner.
+    /// </summary>
+    private static int LayCarriedSides(List<(TileId Home, List<(RoadAreaProp Band, List<Vec2> Ring)> Bands)> carriedSides,
+        Dictionary<TileId, List<(RoadAreaProp Band, List<Vec2> Ring)>> bridges)
+    {
         static bool Over(List<(RoadAreaProp Band, List<Vec2> Ring)> x, List<(RoadAreaProp Band, List<Vec2> Ring)> y) =>
             x.Any(a => y.Any(b => b.Ring.Any(p => PriorityPlanner.Inside(a.Ring, p)) || a.Ring.Any(p => PriorityPlanner.Inside(b.Ring, p))));
         var crossing = new HashSet<int>();
@@ -540,9 +548,9 @@ public static partial class TileRewriter
                     crossing.Add(x);
                     crossing.Add(y);
                 }
-        stats.PathsToKerbCrossing += crossing.Count;
         for (int x = 0; x < carriedSides.Count; x++)
             if (!crossing.Contains(x)) Get(bridges, carriedSides[x].Home).AddRange(carriedSides[x].Bands);
+        return crossing.Count;
     }
 
     /// <summary>A side carried on to the kerb turns the corner instead only where its carried stretch is shorter than this (m, #711).</summary>
@@ -955,9 +963,15 @@ public static partial class TileRewriter
     private static (List<(RoadAreaProp Band, List<Vec2> Ring)> Bands, int SplitAt, Func<double, Vec2> KerbA, Func<double, Vec2> KerbB, List<CornerPlanner.PathEnd> Ends)?
         PathsToKerb(TileId home, Junction junction, List<RoadAreaProp>? pavement, List<int> joined, RoadSide sa, RoadSide sb,
             Vec2 ca, Vec2 da, Vec2 ua, double xa, Vec2 cb, Vec2 db, Vec2 ub, double xb, double reach, Func<Vec2, float> junctionHeight,
+            Func<Vec2, float>? streetA = null, Func<Vec2, float>? streetB = null, Func<Vec2, float>? roadHeight = null) =>
+        PathsToKerb(home, Carriageway(junction, home, pavement, joined), sa, sb, ca, da, ua, xa, cb, db, ub, xb, reach, junctionHeight, streetA, streetB, roadHeight);
+
+    /// <summary>The same, the carriageway given as a test (#818: a junction core's outline and the arms its path crosses).</summary>
+    private static (List<(RoadAreaProp Band, List<Vec2> Ring)> Bands, int SplitAt, Func<double, Vec2> KerbA, Func<double, Vec2> KerbB, List<CornerPlanner.PathEnd> Ends)?
+        PathsToKerb(TileId home, Func<Vec2, bool> road, RoadSide sa, RoadSide sb,
+            Vec2 ca, Vec2 da, Vec2 ua, double xa, Vec2 cb, Vec2 db, Vec2 ub, double xb, double reach, Func<Vec2, float> junctionHeight,
             Func<Vec2, float>? streetA = null, Func<Vec2, float>? streetB = null, Func<Vec2, float>? roadHeight = null)
     {
-        var road = Carriageway(junction, home, pavement, joined);
 
         // from the edge's point at offset o, inward along the arm, the first step on the carriageway (the line along the edge
         // itself is the outline's: 5 cm out)

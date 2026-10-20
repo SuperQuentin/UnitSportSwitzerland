@@ -35,6 +35,9 @@ public partial class ClipRecorder : Node
 
     private const double DefaultSeconds = 10, MaxSeconds = 60, ChatDelay = 2;
 
+    /// <summary>The longest <c>--clip</c> from the command line (#971: a demo of several traffic light cycles); the chat's stays at <see cref="MaxSeconds"/>.</summary>
+    private const double MaxCommandSeconds = 600;
+
     private static readonly StringName ClipName = "ClipRecorder";
 
     private static ClipRecorder? _instance;
@@ -65,7 +68,7 @@ public partial class ClipRecorder : Node
         var inv = CultureInfo.InvariantCulture;
         double delay = p.Length > 1 && double.TryParse(p[1], NumberStyles.Float, inv, out double d) ? d : 0;
         double seconds = p.Length > 2 && double.TryParse(p[2], NumberStyles.Float, inv, out double s) ? s : DefaultSeconds;
-        string? error = Ensure(tree).Start(p[0], seconds, delay, _ => { });   // Say logs it
+        string? error = Ensure(tree).Start(p[0], seconds, delay, _ => { }, MaxCommandSeconds);   // Say logs it
         if (error != null)
         {
             GD.PrintErr($"[clip] FAILED {error}");
@@ -115,7 +118,7 @@ public partial class ClipRecorder : Node
     }
 
     /// <summary>Arms a recording; null when it starts, else why not.</summary>
-    private string? Start(string name, double seconds, double delay, System.Action<string> reply)
+    private string? Start(string name, double seconds, double delay, System.Action<string> reply, double longest = MaxSeconds)
     {
         if (_recording || _encoding) return $"Already busy with '{_name}'.";
         if (DisplayServer.GetName() == "headless") return "Nothing is drawn in a headless run.";
@@ -125,7 +128,7 @@ public partial class ClipRecorder : Node
         _name = name;
         _gifPath = $"{Directory}/{name}.gif";
         _mp4Path = $"{Directory}/{name}.mp4";
-        _seconds = System.Math.Clamp(seconds, 1, MaxSeconds);
+        _seconds = System.Math.Clamp(seconds, 1, longest);
         _delay = System.Math.Max(0, delay);
         _elapsed = 0;
         _sinceFrame = 0;

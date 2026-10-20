@@ -266,7 +266,8 @@ lights), an island to avoid, or several lanes turning alike (`EmitPairGuides`, a
   lane stays the carriageway's). **Where an OSM crosswalk crosses the exit** the exit lane narrows to a turn lane (3 m)
   and the hatch takes the rest (the user's rule: room for a refuge). Sion keeps its 2 refuges (the narrower pocket alone
   left the hatch 1.6 m wide where the island stands, under the 1.7 m it needs).
-- **Right-turn pockets only above 50 km/h, at every kind of junction** (`RightPocketSpeed`; the user's decision): the
+- **Right-turn pockets only above 50 km/h, without lights** (`RightPocketSpeed`; the user's decision; built for every kind of
+  junction from #711 to #971, a misreading: at the lights a right pocket at any speed again, J2 and J3's west arm have theirs): the
   approach's OSM speed (`ApproachSpeed`, the overlay row at the junction end, `osm-overlay`'s v2 columns), else
   Switzerland's general limits: 50 in town (a sidewalk or path along either side at the junction), 80 outside. A
   segment's Urban flag is not set yet at this stage (it read every approach as rural). Without lights a right pocket

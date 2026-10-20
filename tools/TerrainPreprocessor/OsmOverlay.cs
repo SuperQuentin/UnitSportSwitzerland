@@ -39,6 +39,7 @@ public static class OsmOverlay
         "cycleway", "cycleway:left", "cycleway:right", "cycleway:both",
         "turn:lanes", "turn:lanes:forward", "turn:lanes:backward",
         "maxspeed", "maxspeed:forward", "maxspeed:backward",
+        "bicycle:lanes", "bicycle:lanes:forward", "bicycle:lanes:backward",
     ];
 
     private static readonly HashSet<string> IgnoredHighways =
@@ -56,7 +57,8 @@ public static class OsmOverlay
     public sealed record Row(string Uuid, int Part, double From, double To, long Way, bool SameDir, string Highway,
         string OneWay, string Lanes, string LanesFwd, string LanesBwd, string Width,
         string SidewalkLeft, string SidewalkRight, string CyclewayLeft, string CyclewayRight,
-        string TurnFwd, string TurnBwd, bool Roundabout, bool Tram, string MaxSpeedFwd = "", string MaxSpeedBwd = "");
+        string TurnFwd, string TurnBwd, bool Roundabout, bool Tram, string MaxSpeedFwd = "", string MaxSpeedBwd = "",
+        string BikeFwd = "", string BikeBwd = "");
 
     public sealed record Conflict(string Uuid, int Part, double From, double To, long Way, double E, double N, string Reason);
 
@@ -334,6 +336,10 @@ public static class OsmOverlay
         string fwdTurn = t.GetValueOrDefault("turn:lanes:forward", ""), bwdTurn = t.GetValueOrDefault("turn:lanes:backward", "");
         if (fwdTurn == "" && osmDir == 1) fwdTurn = t.GetValueOrDefault("turn:lanes", "");
         if (bwdTurn == "" && osmDir == -1) bwdTurn = t.GetValueOrDefault("turn:lanes", "");
+        // which lane is the bike lane (#854: one between the through lane and a right pocket), read as turn:lanes is
+        string fwdBike = t.GetValueOrDefault("bicycle:lanes:forward", ""), bwdBike = t.GetValueOrDefault("bicycle:lanes:backward", "");
+        if (fwdBike == "" && osmDir == 1) fwdBike = t.GetValueOrDefault("bicycle:lanes", "");
+        if (bwdBike == "" && osmDir == -1) bwdBike = t.GetValueOrDefault("bicycle:lanes", "");
 
         string sl = Side("sidewalk", "left"), sr = Side("sidewalk", "right");
         string cl = Side("cycleway", "left"), cr = Side("cycleway", "right");
@@ -349,7 +355,8 @@ public static class OsmOverlay
             roundabout, tramCount * 2 >= tram.Length,
             // the speed limit per direction (#711): maxspeed:forward/backward where OSM splits it, else maxspeed
             OsmSpeed.Kmh(t.GetValueOrDefault(same ? "maxspeed:forward" : "maxspeed:backward") ?? t.GetValueOrDefault("maxspeed")),
-            OsmSpeed.Kmh(t.GetValueOrDefault(same ? "maxspeed:backward" : "maxspeed:forward") ?? t.GetValueOrDefault("maxspeed")));
+            OsmSpeed.Kmh(t.GetValueOrDefault(same ? "maxspeed:backward" : "maxspeed:forward") ?? t.GetValueOrDefault("maxspeed")),
+            same ? fwdBike : bwdBike, same ? bwdBike : fwdBike);
     }
 
     private static string Int(string? v) => int.TryParse(v, NumberStyles.None, CultureInfo.InvariantCulture, out int n) ? n.ToString(CultureInfo.InvariantCulture) : "";
@@ -365,19 +372,19 @@ public static class OsmOverlay
     // ---- output --------------------------------------------------------------------------------
 
     public const string Header = "uuid\tpart\tfrom_m\tto_m\tosm_way\tdir\thighway\toneway\tlanes\tlanes_fwd\tlanes_bwd\twidth"
-        + "\tsidewalk_left\tsidewalk_right\tcycleway_left\tcycleway_right\tturn_lanes_fwd\tturn_lanes_bwd\troundabout\ttram\tmaxspeed_fwd\tmaxspeed_bwd";
+        + "\tsidewalk_left\tsidewalk_right\tcycleway_left\tcycleway_right\tturn_lanes_fwd\tturn_lanes_bwd\troundabout\ttram\tmaxspeed_fwd\tmaxspeed_bwd\tbicycle_lanes_fwd\tbicycle_lanes_bwd";
 
     public static string Format(List<Row> rows, string pbfName, string tlmName, double minE, double minN, double maxE, double maxN)
     {
         var sb = new StringBuilder();
         sb.Append(CultureInfo.InvariantCulture,
-            $"# osm_overlay v2 osm={pbfName} tlm={tlmName} bbox={minE:F0},{minN:F0},{maxE:F0},{maxN:F0} (c) OpenStreetMap contributors, ODbL\n");
+            $"# osm_overlay v3 osm={pbfName} tlm={tlmName} bbox={minE:F0},{minN:F0},{maxE:F0},{maxN:F0} (c) OpenStreetMap contributors, ODbL\n");
         sb.Append(Header).Append('\n');
         foreach (var r in rows)
             sb.Append(CultureInfo.InvariantCulture,
                 $"{r.Uuid}\t{r.Part}\t{r.From:F1}\t{r.To:F1}\t{r.Way}\t{(r.SameDir ? '+' : '-')}\t{Clean(r.Highway)}\t{r.OneWay}\t{r.Lanes}\t{r.LanesFwd}\t{r.LanesBwd}\t{r.Width}"
                 + $"\t{Clean(r.SidewalkLeft)}\t{Clean(r.SidewalkRight)}\t{Clean(r.CyclewayLeft)}\t{Clean(r.CyclewayRight)}"
-                + $"\t{Clean(r.TurnFwd)}\t{Clean(r.TurnBwd)}\t{(r.Roundabout ? 1 : 0)}\t{(r.Tram ? 1 : 0)}\t{r.MaxSpeedFwd}\t{r.MaxSpeedBwd}\n");
+                + $"\t{Clean(r.TurnFwd)}\t{Clean(r.TurnBwd)}\t{(r.Roundabout ? 1 : 0)}\t{(r.Tram ? 1 : 0)}\t{r.MaxSpeedFwd}\t{r.MaxSpeedBwd}\t{Clean(r.BikeFwd)}\t{Clean(r.BikeBwd)}\n");
         return sb.ToString();
     }
 
@@ -593,6 +600,7 @@ public static class OsmOverlay
             {
                 ["highway"] = "secondary", ["oneway"] = "yes", ["lanes"] = "2", ["lanes:forward"] = "2",
                 ["sidewalk"] = "left", ["cycleway:right"] = "lane", ["turn:lanes"] = "left|through", ["width"] = "7.5 m",
+                ["bicycle:lanes"] = "no|designated|no",
             }),
             // a perpendicular path across the street: must never match it
             new(9, [50, 50], [-50, 50], new() { ["highway"] = "footway" }),
@@ -615,6 +623,7 @@ public static class OsmOverlay
             Check(s.SidewalkLeft == "no" && s.SidewalkRight == "yes", $"OSM left sidewalk is TLM right, got {s.SidewalkLeft}/{s.SidewalkRight}");
             Check(s.CyclewayLeft == "lane" && s.CyclewayRight == "", $"OSM right cycleway is TLM left, got {s.CyclewayLeft}/{s.CyclewayRight}");
             Check(s.TurnBwd == "left|through" && s.TurnFwd == "", $"turn:lanes follows the one-way, got {s.TurnFwd}/{s.TurnBwd}");
+            Check(s.BikeBwd == "no|designated|no" && s.BikeFwd == "", $"bicycle:lanes follows the one-way, got {s.BikeFwd}/{s.BikeBwd}");
             Check(s.Width == "7.5", $"width 7.5, got '{s.Width}'");
         }
         var south = r.Rows.Where(x => x.Uuid == "south").ToList();

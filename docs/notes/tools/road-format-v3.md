@@ -91,6 +91,28 @@
   `taperFrom`; stops `stopBehind` behind the line, a bike box 4 m, an advanced bike line -3 m;
   `Car` or `Bike`). Geneva: 815 records, +1.46 KB/tile raw, 0.75 deflated alone. Tier 0:
   `TerrainFormatTests.Road_lane_section_*`.
+- **`TRNS`** transitions (#818, `RoadTransition.cs`, `junction-planner`): `version u8` (1; a reader skips a version it does not
+  know, a build before #818 the tag), `count varint`, per transition `segment varint` (a whole segment of the tile, flagged
+  `RoadAttrFlags.InTransition` = 1 << 12), `stationCount varint`, stations as varint cm deltas from the segment's first point (plan
+  metres, the first 0, the last its length), the centre line's offset per station (zigzag cm, right of the drawing), `anchor
+  varint` (strips before it stack out left of the centre line), `stripCount varint`, per strip left to right along the drawing
+  `kind u8` (`StripKind`), `id varint`, `travel i8` (+1 along the drawing), `moves u8`, `flags u8` (SharedWithBikes), its width
+  per station (varint cm); then `lineCount varint`, per line `type u8, rgba u32, width, dash, gap f32, boundary varint` (the
+  strip on its right), `offset zigzag mm, from varint cm, to varint cm (0 = to the end)`: a polyline the decoder rebuilds with
+  `RoadPaintGeometry.AlongTransition` and appends to the tile's paint (so they come back after PNT2's; `PaintInFileOrder`). The
+  game builds the piece from it (`SegmentSections`: carriageway edges and bands per point, kerb heights and the path's kind
+  from the segment's sides); an older build ignores both and draws the plain street. Self-check `--format-check`.
+- **`JPTH`** junction paths (#818 phase 5, #709, `RoadJunctionPath.cs`, `junction-planner`): `version u8` (1; skipped whole when
+  unknown), `count varint`, per path `junction varint` (the core's cap in the tile), its two ends (`x, y, z, offset` zigzag cm: where
+  the arm's road meets the mouth on its centreline, tile-local, possibly just past the tile's edge, and the lane's offset right of
+  a driver arriving on that arm), `move u8`, `kind u8` (car, bike), `signal zigzag` (the SGNL record, -1 without lights), `group
+  u8`, `width, toWidth varint cm`, `pointCount varint`, points as zigzag cm (the first absolute, then deltas). Ends are positions,
+  not segments, so a path reaches a road in the next tile; the game ties them to road ends by position, as road ends to each other.
+- **`CPAR`** conflict lines and pairs (#979, `RoadConflictPair.cs`, `traffic-signals`), after `JPTH`: `version u8` (2; skipped
+  whole when another), `count varint`, per line (every movement the timing took, once) `signal varint` (the SGNL record), `group,
+  mover u8` (car, bike, walker), `clearSpeed, enterSpeed, amber, length f32`, points (`count varint`, `x y z f32` tile-local, from
+  its stop line, simplified to 5 cm); `count varint`, per pair `signal varint, ending line, starting line varint` (indices in that
+  signal's lines), `clear, enter, time f32`. Only for the debug view's trails and movers; the plan holds the timing.
 - **Varying along a link** (a sidewalk width per sample, OSM lanes changing mid-line): the
   stage splits the segment; attributes are per segment. Segments already meet end to end at
   tile seams and junction trims.
