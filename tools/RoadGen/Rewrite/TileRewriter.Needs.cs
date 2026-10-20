@@ -29,7 +29,7 @@ public static partial class TileRewriter
         LaneWish? Wish, bool Left, int LeftArm, bool Right, int Exit, int Kmh, bool Town, bool WantLeft, bool WantRight, bool BikeBetween,
         bool BikeBox)
     {
-        /// <summary>A right-turn pocket only on a faster road (#711): the speed OSM maps, else 50 in a town and 80 outside.</summary>
+        /// <summary>Without lights a right-turn pocket only on a faster road (#711): the speed OSM maps, else 50 in a town and 80 outside.</summary>
         public bool Fast => (Kmh > 0 ? Kmh : Town ? 50 : 80) > RightPocketSpeed;
     }
 
@@ -82,12 +82,14 @@ public static partial class TileRewriter
         // assigned to the lanes the carriageway holds; the pockets it wants are built, and none it does not want
         var banned = restrictions?.Banned(junction, i, net, scratchLanes) ?? SignalMoves.None;
         var wished = WishedLanes(overlay, net.Links[arm.LinkId], arm.End, can & ~banned);
-        // a right-turn pocket only on a faster road (#711, the user's decision), at every kind of junction: the speed OSM maps
-        // for the approach, else Switzerland's general limits (50 in a town, 80 outside)
+        // without lights a right-turn pocket only on a faster road (#711, the user's decision): the speed OSM maps for the
+        // approach, else Switzerland's general limits (50 in a town, 80 outside). At the lights at any speed (the user, #971:
+        // the rule was meant for junctions without lights; read as every junction from #711 on, it took J2's in town)
         int kmh = ApproachSpeed(overlay, net.Links[arm.LinkId], arm.End);
         // in town: a sidewalk or path along either side at the junction (the street planner's, #119)
         bool town = streetSide(arm.LinkId, arm.End, true).OuterDm > 0 || streetSide(arm.LinkId, arm.End, false).OuterDm > 0;
-        bool fast = (kmh > 0 ? kmh : town ? 50 : 80) > RightPocketSpeed;
+        bool lit = plan.Kind == PriorityPlanner.Kind.Signal;
+        bool fast = lit || (kmh > 0 ? kmh : town ? 50 : 80) > RightPocketSpeed;
         var wish = Assign(wished, ownLanes, rightPocketPossible: fast && right && ownLanes == 1);
         bool wantLeft = wish is null ? left && ownLanes == 1 : left && wish.Pocket.Length > 0;
         bool wantRight = wish is null ? right && ownLanes == 1 && fast : wish.RightPocket;

@@ -67,7 +67,7 @@ public static partial class TileRewriter
     /// <summary>At the lights the centre line goes solid this far before the stop line on an approach without a left pocket (#711, the user's rule).</summary>
     private const double CentreSolidAtLights = 20;
 
-    /// <summary>A right-turn pocket only where the approach is faster than this, km/h (#711, the user's decision).</summary>
+    /// <summary>Without lights a right-turn pocket only where the approach is faster than this, km/h (#711, the user's decision; at the lights any, #971).</summary>
     private const int RightPocketSpeed = 50;
     /// <summary>The angled closing line of a lead-in hatch runs this far along the road (#700).</summary>
     private const double LeadInClose = 10;
