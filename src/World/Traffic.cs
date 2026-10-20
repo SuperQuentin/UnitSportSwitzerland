@@ -359,6 +359,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         _tickUs[_ticks++ % _tickUs.Length] = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - tick) * 1e6 / System.Diagnostics.Stopwatch.Frequency);
 
         Cull(_cars, focus, CarDespawn, GeneratorsOnly ? int.MaxValue : wantCars);
+        StepDebugDraw(delta);
         Cull(_trains, focus, TrainDespawn, wantTrains);
     }
 
@@ -1577,6 +1578,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         /// <summary>Made by a traffic endpoint (#971): counted against <see cref="Traffic.MaxGenerated"/>.</summary>
         public bool FromEndpoint;
         public int FromId;
+        /// <summary>The destination a generated car is on its way to (#971), 0 none.</summary>
+        public int ToId;
         /// <summary>A fed car's move at one approach (#854, <c>--feed-turns</c>): the path it takes there; none, as the traffic picks.</summary>
         public (LaneApproach At, SignalMoves Move)? Wants;
         /// <summary>Placed on its lane at its first step.</summary>

@@ -43,4 +43,9 @@
   the viewport, Space, Esc (not the pause menu), `/debug`, clay through a `/style` restyle and back.
   `tools/debugcheck.sh` (net): a server with `--admin-password`; refused, `/login`, offered,
   `/admin remove`, every tool off. The view picker is set through `ItemSelected`, not its popup.
+- **Traffic** (#971, `world/traffic-generators`): `paths` draws every car's way ahead on the lanes it drives (a generated
+  car's to its destination in that destination's colour), `endpoints` the traffic endpoints. An admin places a generator /
+  destination on the road at the crosshair, facing the way the camera looks along it (switches and pickers: generates,
+  destination, cars a minute, cars along the road or an equal share to every destination), removes the nearest or all;
+  they go to the server and everyone's traffic. Example: `--debugview paths,endpoints`.
 - **Z-fighting** overlay (`zfight`) and **Flicker shot** button (`--debugview flicker`): `general/zfight` (#788).

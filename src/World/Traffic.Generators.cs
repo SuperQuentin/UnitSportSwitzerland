@@ -157,6 +157,7 @@ public partial class Traffic
         car.Planned = way;
         car.FromEndpoint = true;
         car.FromId = s.Ep.Id;
+        car.ToId = way is not null ? share.To : 0;
         _generatedLive++;
         Generated++;
         return true;
