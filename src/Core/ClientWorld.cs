@@ -323,11 +323,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // Outermost, so a tile decoded once is not decoded again when the rings drop it and pick
         // it back up — which a route that doubles back does constantly.
         // decoded tiles in RAM: a phone has a fraction of a desktop's to spare (#63)
-        _cache = Platform.IsMobile
-            ? new CachingChunkSource(fallback ?? (IChunkSource)streamedSource, 96L * 1024 * 1024)
-            : new CachingChunkSource(fallback ?? (IChunkSource)streamedSource);
-        // the blend reads real neighbours through the cache, sharing what the loader decodes
-        if (fallback != null) fallback.Neighbours = _cache;
+        // The blend reads real neighbours through the cache, sharing what the loader decodes.
+        long cacheBytes = Platform.IsMobile ? 96L * 1024 * 1024 : 256L * 1024 * 1024;
+        _cache = fallback?.Cached(cacheBytes) ?? new CachingChunkSource(streamedSource, cacheBytes);
 
         _chunks = new ChunkManager { Name = "Terrain" };
         // the auto build cap depends on whether tiles are coming over the wire
