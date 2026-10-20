@@ -9,7 +9,8 @@ namespace UnitSport.Concert.Mvr;
 /// shared by every type that has the same part; the yoke's and head's pivots and the beam's point.
 /// Capped in <see cref="Check"/> on the server and every client: <see cref="MaxBodyTriangles"/> a part,
 /// <see cref="MaxBodyBytes"/> in all; the import keeps to them (a body past the budget is left off,
-/// and the type draws as the generic head).
+/// and the type draws as the generic head). Its faces' colours and textures as the objects' (#973),
+/// its textures in the rig's shared <see cref="Textures"/> budget (past it: colours only).
 /// </summary>
 public sealed partial class RigData
 {
@@ -37,9 +38,10 @@ public sealed partial class RigData
     public bool AddBody(TypeRow row, GdtfBody? body)
     {
         if (body == null) return false;
+        // its textures while the shared budget lasts (#973); a body refused below leaves them unused: dropped again
         var parts = new[] { body.Base, body.Yoke, body.Head }
-            .Select(m => m == null ? null : Quantise(m.Positions, m.Indices, m.Color)).Select(r => r is { TriangleCount: > 0 } ? r : null).ToArray();
-        if (parts.All(p => p == null)) return false;
+            .Select(m => m == null ? null : Quantise(m, AddTexture)).Select(r => r is { TriangleCount: > 0 } ? r : null).ToArray();
+        if (parts.All(p => p == null)) { CompactTextures(); return false; }
         int bytes = Bodies.Sum(b => b.Bytes);
         var index = new int[3];
         int added = 0;
@@ -47,11 +49,10 @@ public sealed partial class RigData
         {
             index[k] = -1;
             if (parts[k] is not { } p) continue;
-            index[k] = Bodies.FindIndex(b => b.Color == p.Color && b.Vertices.AsSpan().SequenceEqual(p.Vertices) && b.Indices.AsSpan().SequenceEqual(p.Indices)
-                && b.Min.SequenceEqual(p.Min) && b.Size.SequenceEqual(p.Size));
+            index[k] = Bodies.FindIndex(b => b.Same(p));
             if (index[k] < 0) { bytes += p.Bytes; added++; }
         }
-        if (bytes > MaxBodyBytes || Bodies.Count + added > MaxBodyMeshes) return false;
+        if (bytes > MaxBodyBytes || Bodies.Count + added > MaxBodyMeshes) { CompactTextures(); return false; }
         for (int k = 0; k < 3; k++)
             if (parts[k] is { } p && index[k] < 0)
             {
@@ -91,6 +92,7 @@ public sealed partial class RigData
             int verts = mesh.VertexCount;
             for (int i = 0; i < mesh.Indices.Length; i += 2)
                 if (BitConverter.ToUInt16(mesh.Indices, i) >= verts) return $"body mesh {m}: an index past its vertices";
+            if (CheckLooks(mesh) is { } look) return $"body mesh {m}: {look}";
             bytes += mesh.Bytes;
         }
         if (bytes > MaxBodyBytes) return $"{bytes} bytes of bodies (0..{MaxBodyBytes})";
