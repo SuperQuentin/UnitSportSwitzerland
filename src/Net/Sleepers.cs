@@ -26,7 +26,7 @@ namespace UnitSport.Net;
 public partial class Sleepers : Node
 {
     public const string NodeName = "Sleepers";
-    private const string StorePath = "user://sleepers/server.json";
+    private static string StorePath => Core.WorldChoice.SavePath("user://sleepers/server.json");
     private const string KeyPath = "user://identity.key";
 
     /// <summary>How flat a sleeper lies: the knocked-out body's angle (<c>FootPlayer.PublishFootPose</c>).</summary>

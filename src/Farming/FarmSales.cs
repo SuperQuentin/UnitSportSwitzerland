@@ -38,7 +38,7 @@ public partial class FarmSales : Node
     public static long Week => FarmCalendar.Week(Now);
 
     /// <summary>Where contracts and stands are saved: <c>--selldir &lt;dir&gt;</c> (checks), else <c>user://farm</c>.</summary>
-    public static string StoreDir => CmdArgs.Value("--selldir") is { } d ? ProjectSettings.GlobalizePath(d.StartsWith("res://") || d.StartsWith("user://") ? d : "res://" + d) : ProjectSettings.GlobalizePath("user://farm");
+    public static string StoreDir => CmdArgs.Value("--selldir") is { } d ? ProjectSettings.GlobalizePath(d.StartsWith("res://") || d.StartsWith("user://") ? d : "res://" + d) : ProjectSettings.GlobalizePath(Core.WorldChoice.SavePath("user://farm"));
 
     private bool _server;
     private WorldOrigin _origin = null!;

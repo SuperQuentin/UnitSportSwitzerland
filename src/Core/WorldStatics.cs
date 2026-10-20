@@ -24,6 +24,7 @@ public static class WorldStatics
         Audio.Surfaces.Origin = null;
         Audio.Surfaces.Forget();
         Occasions.OccasionTowns.UseGenerated(null);
+        WorldChoice.Active = null;   // back to the open world for the title (#999)
 
         Items.ItemEvents.ResetEvents();
         Items.PhotoTransfer.ResetEvents();

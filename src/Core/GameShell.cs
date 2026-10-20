@@ -44,6 +44,10 @@ public partial class GameShell : Node
     private ClientWorld? _world;
     private WorldLaunch? _launch;
     private HostedServer? _hosted;
+    /// <summary>The test world the hosted server plays (#999), null for the open world.</summary>
+    private WorldChoice? _hostedWorld;
+    /// <summary>A join to start again once the world is torn down: the server plays another world (#999).</summary>
+    private WorldLaunch? _rejoin;
     private ServerQuery? _hostProbe;
     private double _hostWait, _sinceHostProbe;
     private string? _error;
@@ -426,7 +430,8 @@ public partial class GameShell : Node
         Callable.From(() => GetParent().AddChild(world)).CallDeferred();
     }
 
-    public void Join(string endpoint, string? serverName = null)
+    /// <param name="world">The server's test world, from its status reply (#999); null: the open world, or unknown.</param>
+    public void Join(string endpoint, string? serverName = null, WorldChoice? world = null)
     {
         // a metered connection (#63): say what streaming costs before it starts, once per session
         if (GameSettings.Current.WarnMetered && DataWatch.Metered && !GameSettings.Current.LowDataActive && !_meteredAsked)
@@ -436,9 +441,9 @@ public partial class GameShell : Node
                 "You are on mobile data or a hotspot. The world streams from the server: about "
                 + $"{StreamEstimate.ArrivalMb} MB on arrival, and more as you travel. Low data streams "
                 + $"only the nearest tiles (about {StreamEstimate.ArrivalLowMb} MB on arrival).",
-                ("Use Low data", () => { GameSettings.Current.Data = DataPreset.Low; GameSettings.Current.Commit(); Join(endpoint, serverName); }),
-                ("Join anyway", () => Join(endpoint, serverName)),
-                ("Never ask", () => { GameSettings.Current.WarnMetered = false; GameSettings.Current.Commit(); Join(endpoint, serverName); }));
+                ("Use Low data", () => { GameSettings.Current.Data = DataPreset.Low; GameSettings.Current.Commit(); Join(endpoint, serverName, world); }),
+                ("Join anyway", () => Join(endpoint, serverName, world)),
+                ("Never ask", () => { GameSettings.Current.WarnMetered = false; GameSettings.Current.Commit(); Join(endpoint, serverName, world); }));
             return;
         }
         GameSettings.Current.LastHost = endpoint;
@@ -449,17 +454,20 @@ public partial class GameShell : Node
             Endpoint = endpoint,
             PlayerName = PlayerName,
             ServerName = serverName,
+            World = world is { IsOpen: false } ? world : null,
         });
     }
 
     /// <summary>"Host a game": starts the server process, then joins it once it answers.</summary>
     /// <param name="spawn">Where every player starts on it (#799), LV95 metres.</param>
     /// <param name="teleport">Players who are not admins may teleport.</param>
-    public void Host(string name, int port, bool lanVisible, (double E, double N)? spawn = null, bool teleport = true)
+    /// <param name="world">A test world to serve (#999); null: the open world.</param>
+    public void Host(string name, int port, bool lanVisible, (double E, double N)? spawn = null, bool teleport = true, WorldChoice? world = null)
     {
         if (_state != State.Title) return;
         _hosted = new HostedServer(name, port);
-        if (_hosted.Start(lanVisible, spawn, teleport) is { } err)
+        _hostedWorld = world is { IsOpen: false } ? world : null;
+        if (_hosted.Start(lanVisible, spawn, teleport, _hostedWorld) is { } err)
         {
             _hosted = null;
             Modal.Inform(_menuRoot, "Could not host", err);
@@ -505,6 +513,7 @@ public partial class GameShell : Node
                 PlayerName = PlayerName,
                 Hosted = true,
                 HostToken = _hosted.HostToken,
+                World = _hostedWorld,
                 ServerName = _hosted.Name,
             });
             return;
@@ -527,6 +536,12 @@ public partial class GameShell : Node
             case State.Loading when _world != null && IsInstanceValid(_world):
                 _loading.Report(StageText(_world.Stage), Overall(_world), _world.LoadDetail);
                 if (_world.Stage == LoadStage.Ready) FinishLoading();
+                else if (_world.Stage == LoadStage.Failed && _world.ServerPlays is { } other && _launch is { Mode: GameMode.Multiplayer, Hosted: false } joined)
+                {
+                    // the server plays another world than the list said (#999): join again in that one
+                    _rejoin = joined with { World = other.IsOpen ? null : other };
+                    LeaveWorld(null);
+                }
                 else if (_world.Stage == LoadStage.Failed) LeaveWorld(_world.Failure ?? "The world could not be started.");
                 break;
         }
@@ -646,6 +661,15 @@ public partial class GameShell : Node
 
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        if (_rejoin is { } again)
+        {
+            // straight on behind the loading screen, no title in between
+            _rejoin = null;
+            _state = State.Title;
+            GD.Print($"[shell] joining {again.Endpoint} again in world {again.World?.Id ?? WorldChoice.OpenId}");
+            Launch(again);
+            return;
+        }
         _loading.Close();
         ShowTitle();
         // a deliberate leave lands on the title; a failure goes back to where the session was

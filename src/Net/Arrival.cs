@@ -38,10 +38,14 @@ public partial class Arrival : Node
     /// <summary>Client: the server said where to start, LV95 metres.</summary>
     public event Action<double, double>? Told;
 
+    /// <summary>Client: the server plays another world than this client loaded (#999): its id, to load it instead.</summary>
+    public event Action<string>? OtherWorld;
+
     public static Arrival CreateServer(Node world)
     {
         var a = new Arrival { Name = NodeName, _server = true };
-        if (SpawnPoint.ParseLv95("--spawn") is { } spawn) a.Spawn = spawn;
+        // a test world starts at its own start unless told otherwise (#999)
+        if ((SpawnPoint.ParseLv95("--spawn") ?? WorldChoice.Active?.Start) is { } spawn) a.Spawn = spawn;
         a.FreeTeleport = !CmdArgs.Has("--no-teleport");
         GD.Print($"[arrival] players start at {a.Spawn.E:F0}/{a.Spawn.N:F0}, teleporting {(a.FreeTeleport ? "allowed" : "admins only")}");
         world.AddChild(a);
@@ -56,12 +60,18 @@ public partial class Arrival : Node
     }
 
     /// <summary>Server: a peer was accepted; tell it where it starts and what it may do.</summary>
-    public void SendTo(long peer) => RpcId(peer, MethodName.Rules, Spawn.E, Spawn.N, FreeTeleport);
+    public void SendTo(long peer) => RpcId(peer, MethodName.Rules, Spawn.E, Spawn.N, FreeTeleport, WorldChoice.ActiveId);
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Rules(double e, double n, bool freeTeleport)
+    private void Rules(double e, double n, bool freeTeleport, string world)
     {
         if (_server) return;
+        // the world this client loaded came from the server list; a server it could not ask says it here
+        if (world != WorldChoice.ActiveId)
+        {
+            OtherWorld?.Invoke(world);
+            return;
+        }
         Permissions.SetServerTeleport(freeTeleport);
         Told?.Invoke(e, n);
     }

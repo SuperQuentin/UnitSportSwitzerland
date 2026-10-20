@@ -310,6 +310,10 @@ public sealed class GameSettings
     public double HostSpawnN { get; set; }
     public bool HostTeleport { get; set; } = true;
 
+    /// <summary>The world last picked on Play solo and in the Host dialog (#999, a <see cref="WorldChoice"/> id).</summary>
+    public string SoloWorld { get; set; } = WorldChoice.OpenId;
+    public string HostWorld { get; set; } = WorldChoice.OpenId;
+
     /// <summary>GPX files replayed recently, newest first (the Play solo track picker lists them).</summary>
     public List<string> RecentGpx { get; set; } = new();
 
