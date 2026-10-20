@@ -609,6 +609,18 @@
 300.7	Figures / Pose - Tucked
 782	Figures / Running
 367.8	Figures / Seated passenger
+260.4	Figures / Snow poses - Board - heel edge
+269.8	Figures / Snow poses - Board - pushing
+269.8	Figures / Snow poses - Board - stance
+260.4	Figures / Snow poses - Board - toe edge
+269.8	Figures / Snow poses - Board - tuck
+287.2	Figures / Snow poses - Ski - carving left
+564	Figures / Snow poses - Ski - in the air
+569.7	Figures / Snow poses - Ski - landing
+554.5	Figures / Snow poses - Ski - schuss
+562.4	Figures / Snow poses - Ski - skating push
+558	Figures / Snow poses - Ski - snowplough
+564	Figures / Snow poses - Ski - stance
 310.7	Figures / Swim - Crawl
 298	Figures / Swim - Tread
 368	Figures / Swim - Under
