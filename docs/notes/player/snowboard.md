@@ -14,6 +14,9 @@
 - **Brake**: above 2 m/s the board swings to a quarter turn (it stops pivoting at 1.45 rad of slip)
   and skids on the trailing edge: without steer the heel side (chest to the travel), with steer to
   the side steered.
+- **Hop turn (#954)**: brake in the air swings the board across as on the snow (to the side steered,
+  else heel side) at `SkiDynamics.HopTurnRate`, to `StopAngle`; landed, it skids on its edge (5.7 m/s
+  to a stop in 1.35 s, `--ride board --hopturn 2.5`).
 - **Switch**: `SkiDynamics.Switch`: tail first (|slip| > pi/2 + 0.2) above 1.5 m/s turns the
   heading half a turn and the slip with it; the velocity is unchanged and the rider keeps facing
   the same way (`FacingRight = Goofy == Switch`).

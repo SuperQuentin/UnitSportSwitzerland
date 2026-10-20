@@ -72,6 +72,29 @@ public static class SkiDynamics
     /// </summary>
     public static bool ToeSide(float bank, bool facingRight) => (bank < 0f) == facingRight;
 
+    /// <summary>A hop turn's swing in the air, rad/s (#954): a quarter turn in about 0.2 s.</summary>
+    public const float HopTurnRate = 7f;
+
+    /// <summary>
+    /// The most a stop swings the skis or the board off the travel, rad (~83°): square across it,
+    /// on the edges, not past it into riding backwards. The hop turn and the hockey stop both hold here.
+    /// </summary>
+    public const float StopAngle = 1.45f;
+
+    /// <summary>
+    /// A stop's swing of the heading, at <paramref name="rate"/> rad/s toward <paramref name="side"/>
+    /// (+1 turns left, as the yaw): the slip after <paramref name="dt"/>, never swung past
+    /// <see cref="StopAngle"/> (already past it, it is left alone). The heading turns by the old slip
+    /// minus the new one; the velocity does not turn at all.
+    /// </summary>
+    public static float SwingAcross(float slip, float side, float rate, float dt)
+    {
+        float next = slip - side * rate * dt;
+        if (MathF.Abs(next) <= StopAngle) return next;
+        // stop at the quarter turn; one already beyond it (a skid that came round) is not pushed further
+        return MathF.Abs(slip) >= StopAngle ? slip : MathF.CopySign(StopAngle, next);
+    }
+
     /// <summary>Speed above which travelling tail first counts as riding switch, m/s.</summary>
     public const float SwitchSpeed = 1.5f;
 
