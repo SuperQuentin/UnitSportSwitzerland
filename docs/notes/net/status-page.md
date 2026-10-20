@@ -23,7 +23,9 @@
   two trailers): cut from the newest render of each film (`trailer/director`; `VERSION_story=v2` pins one), shot
   picks hard-coded in the script (re-pick after a re-shoot; showcase shots carry burned-in captions, some story shots
   chat lines). A row with no trailer shot takes `test_output/clips/web-<key>.mp4` (`general/feature-clips`) when it
-  is there (`concert`). **Never committed** (the trailers' music, `royalty-free-music`). Without `media/` the hero
+  is there (`concert`: `tools/record-clip.sh web-concert 40 12 --chunks <main>/terrain_chunks --at 2498751,1114890
+  --origin 2498751,1114890 --concert 13 --shot-queue <q> --nohud --nocapture`, the queue `/time set 22:00` then
+  `0,g18,0,-7,180,60,<png>` and `quit`: the Stade de Genève from mid-pitch, facing the stage). **Never committed** (the trailers' music, `royalty-free-music`). Without `media/` the hero
   shows its drawn sky and ridges, the rows lose their pictures, the people section stays hidden.
 - **v2 renders** (Oct 2026, #998): pinned to 15 July (`trailer/render-pins`), so no Halloween sun (18:30 sunset) as v1
   had: the story's evening shots from 18 on are night. Kept as is for the page; the hero and rows use its day shots.
