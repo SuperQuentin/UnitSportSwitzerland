@@ -48,3 +48,14 @@
   everyone (sent on join and on change); offline anyone. **`/water [E N]`**: the water at an LV95 point (or
   where you are) as this side computes it, to the 0.1 mm; the server's answer and a client's own compare
   directly (`tools/watercheck.sh`).
+- **Venues and getting around (#994)**: `/stadium` (alias `/venue`, anyone, offline too): bare it gives the nearest of the
+  33 `StadiumCatalog` venues, how far away it is and what plays there today (`ConcertService.ShowAt`: a hosted set or tonight's
+  artist and hours). `/stadium list [stadium|arena|openair]` numbers them by kind; `/stadium <name|town|#n>` goes there
+  (`Terrain/Stadiums/StadiumLookup`: case and accents ignored, a town finds every venue in it (`StadiumSpec.Town`), a whole
+  name wins, an ambiguous query lists its matches). Going there is a teleport like `/city` (`MayTeleport`: not out of a
+  Battle Royale, not on a `--no-teleport` server unless you're an admin), to the centre spot. `/concert` acts on the venue
+  nearest you, so `/stadium <name>` then `/concert host` hosts there. `/tp <E> <N>` (admin; offline anyone) jumps to
+  an LV95 point (`AdminArgs.TryLv95`: space or comma, apostrophes allowed, only round Switzerland).
+- **`/help` is read off the completer's table** (`ChatCompleter.Help`, the same `Commands` rows as Tab): a new command
+  gets its row there and shows in Tab, its usage line and `/help` together, so it can't be forgotten in one of them.
+  Tab also completes `/concert` (sub-commands, cues, input protocols, xchange), `/transfer` and `/inertia`.

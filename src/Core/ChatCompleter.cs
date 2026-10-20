@@ -1,4 +1,5 @@
 using UnitSport.Items;
+using UnitSport.Terrain.Stadiums;
 
 namespace UnitSport.Core;
 
@@ -52,6 +53,7 @@ public sealed class ChatCompleter
         ("seastate", false, true, "[0..1 | calm | chop | storm | gamey]"),
         ("weather", false, true, "[snow <cm> | fall <cm> | temp <°C> | clear | cloudy | reroll | hold | auto]"),
         ("water", false, true, "[E N]"),
+        ("stadium", false, true, "[list [stadium | arena | openair] | <name | town | #n>]"),
         ("style", false, true, "[ps1 | cartoon | real- | real+ | rebuild]"),
         ("clip", false, true, "start <name> [seconds] [delay] | stop"),
         ("spawn", true, true, "<item> [count]"),
@@ -61,6 +63,8 @@ public sealed class ChatCompleter
         ("note", false, true, "<what's wrong>"),
 #endif
         ("clear", false, true, "[player]"),
+        ("transfer", false, false, "me <player> | <from> <to>"),
+        ("inertia", false, false, "[steady | sway | full]"),
         ("money", true, true, "<amount> [player]"),
         ("bank", true, true, "[player] [set | add | take <amount>]"),
         ("give", true, false, "<player> <item> [count]"),
@@ -70,7 +74,7 @@ public sealed class ChatCompleter
         ("race", false, false, "start | duel <player> | join | leave | list | npc | cancel"),
         ("fight", false, false, "<player> | accept | decline | leave"),
         ("aura", false, false, "<player> | accept | decline | leave"),
-        ("concert", false, true, "host [seed] | release | status | input artnet|sacn|osc|all [on|off] | patch"),
+        ("concert", false, true, "host [seed] | release | status | song [list | next | prev | <n | title> | stop | play | auto] | cue <go | section | fx ...> | input artnet|sacn|osc|all [on|off] | patch | debug | export | import <file> | rigs | videos | xchange | view | camera"),
         ("br", false, false, "open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] | join | leave | team [name] | invite <player> | start | bots [n|off] [easy|normal|hard] | cancel | status"),
         // invites (#840)
         ("invites", false, false, ""),
@@ -82,7 +86,7 @@ public sealed class ChatCompleter
         ("bot", true, false, "add [n] [easy|normal|hard] | arm <weapon> [rounds] | fire | clear | list"),
         ("say", true, false, "<message>"),
         ("admin", true, false, "list | add <player> | remove <player>"),
-        ("tp", true, false, "<player>"),
+        ("tp", true, true, "<player> | <E> <N>"),
         ("bring", true, false, "<player>"),
         ("tpall", true, false, "<town>"),
         ("kick", true, false, "<player> [reason]"),
@@ -91,17 +95,34 @@ public sealed class ChatCompleter
     ];
 
     /// <summary>The commands this player can run right now.</summary>
-    public IEnumerable<string> VisibleCommands()
+    public IEnumerable<string> VisibleCommands() => Visible(Permissions.Online, Permissions.IsAdmin);
+
+    /// <summary>The commands someone online or not, operator or not, may run.</summary>
+    public static IEnumerable<string> Visible(bool online, bool isAdmin)
     {
-        bool online = Permissions.Online;
         foreach (var (name, admin, offline, _) in Commands)
         {
             if (!online && !offline) continue;
-            if (online && admin && !Permissions.IsAdmin) continue;
+            if (online && admin && !isAdmin) continue;
             // /login is how a non-admin becomes one; an admin has no use for it
-            if (online && name == "login" && Permissions.IsAdmin) continue;
+            if (online && name == "login" && isAdmin) continue;
             yield return name;
         }
+    }
+
+    /// <summary>
+    /// <c>/help</c> (#994), read off the same table as the completion so it never misses a command:
+    /// what anyone may run, then an operator's own; offline it is all one list.
+    /// </summary>
+    public static IEnumerable<string> Help(bool online, bool isAdmin)
+    {
+        var mine = Visible(online, isAdmin).ToHashSet();
+        string Line(bool admin) => string.Join("  ", Commands
+            .Where(c => mine.Contains(c.Name) && (!online || c.Admin == admin))
+            .Select(c => "/" + c.Name));
+        yield return Line(admin: false);
+        if (online && isAdmin) yield return "admin: " + Line(admin: true);
+        yield return "Tab completes a command and shows its arguments; /stadium list for the venues.";
     }
 
     /// <summary>"/spawn &lt;item&gt; [count]" once the line starts with a command this player can run, else null.</summary>
@@ -153,6 +174,55 @@ public sealed class ChatCompleter
                     .Select(p => new Suggestion(p, head + p))
                     .ToList();
             }
+
+            case "stadium":
+            {
+                // a venue's name has spaces in it too: everything after the verb is one query
+                current = text[(1 + words[0].Length)..].TrimStart();
+                string head = text[..(text.Length - current.Length)];
+                if (current.StartsWith("list", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (argIndex == 0) return [new Suggestion("list", head + "list")];
+                    if (argIndex != 1) return [];
+                    string kind = trailing ? "" : words[^1];
+                    return Match(StadiumLookup.KindWords, kind).Select(k => new Suggestion(k, head + "list " + k)).ToList();
+                }
+                var venues = current.Trim().Length == 0 ? StadiumCatalog.All : StadiumLookup.Find(current);
+                var rows = venues.Select(v => new Suggestion(v.Name, head + v.Name, v.Town)).Take(MaxSuggestions);
+                return (current.Trim().Length == 0 || "list".StartsWith(current.Trim(), StringComparison.OrdinalIgnoreCase)
+                    ? rows.Prepend(new Suggestion("list", head + "list", "every venue, numbered"))
+                    : rows).Take(MaxSuggestions).ToList();
+            }
+
+            case "concert":
+            {
+                string sub = words.Length > 1 ? words[1].ToLowerInvariant() : "";
+                options = argIndex switch
+                {
+                    0 => ["host", "release", "status", "song", "cue", "input", "patch", "debug", "export", "import", "rigs", "videos", "xchange", "view", "ndi", "snap", "camera"],
+                    1 when sub == "song" => ["list", "next", "prev", "restart", "stop", "play", "auto"],
+                    1 when sub == "camera" => ["take", "leave", "list"],
+                    1 when sub == "cue" => ["go", "calm", "groove", "chorus", "peak", "blackout", "release", "bpm", "master", "flames", "co2", "confetti", "gerbs", "pyro", "camera"],
+                    1 when sub == "input" => ["artnet", "sacn", "osc", "all", "status"],
+                    2 when sub == "input" => ["on", "off"],
+                    1 when sub == "xchange" => ["on", "off", "list", "pull", "commit", "join", "ws"],
+                    _ => [],
+                };
+                break;
+            }
+
+            case "transfer":
+                options = argIndex switch
+                {
+                    0 => PlayerNames().Prepend("me"),
+                    1 => PlayerNames(),
+                    _ => [],
+                };
+                break;
+
+            case "inertia":
+                options = argIndex == 0 ? ["steady", "sway", "full"] : [];
+                break;
 
             case "spawn":
                 if (argIndex != 0) return [];

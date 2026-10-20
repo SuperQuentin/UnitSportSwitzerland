@@ -48,6 +48,11 @@ public partial class ConcertNetProbe : ChatProbe
         if (!await Heard("B", "ready", 60)) { Fail("B never got ready"); return; }
         Chat?.Send($"/concert host {Seed}");
         Expect(await Until(() => Svc?.SeedFor(0) == Seed, 10), $"the server confirms set {Seed} hosted");
+        // #994: a word where the seed goes is refused, not a new random set; the songs answer
+        Chat?.Send("/concert host status");
+        Expect(await Until(() => _heard.Any(l => l.Contains("is not a set number")), 10) && Svc?.SeedFor(0) == Seed, "'/concert host status' is refused, the set stays");
+        Chat?.Send("/concert song");
+        Expect(await Until(() => _heard.Any(l => l.Contains("no CDs to play") || l.Contains(" next \"")), 10), "the server answers /concert song");
         Chat?.Send("/concert input artnet on");
         Chat?.Send("/concert input osc on");
         await Seconds(0.5);

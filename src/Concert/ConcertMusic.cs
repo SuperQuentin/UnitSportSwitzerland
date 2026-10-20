@@ -9,6 +9,13 @@ namespace UnitSport.Concert;
 /// (<see cref="CdAnalysisRuntime.SampleBands"/>): snare and hat hits, the bass and the brightness, 0..1;
 /// <see cref="Build"/> 0..1 through a build, <see cref="SinceDrop"/> seconds since the last drop.
 /// </summary>
+/// <summary>
+/// The setlist moved by hand (#994, <c>/concert song</c>): song <see cref="Index"/> of the setlist started
+/// at <see cref="At"/> on the shared clock and the set runs on from it; <see cref="Off"/> the PA is silent
+/// (the desk then makes its songs up). Null on a <see cref="ConcertMusic"/>: the set runs on the clock alone.
+/// </summary>
+public readonly record struct SongCue(int Index, double At, bool Off);
+
 public readonly record struct MusicMoment(ShowSection Section, float Beat, float Kick, float Level, int SectionBar, bool LastSection, float Burst,
     float Snare = 0f, float Hat = 0f, float Bass = 0.5f, float Bright = 0.5f, float Build = 0f, float SinceDrop = float.PositiveInfinity,
     bool HasBands = false, bool Finale = false);
@@ -51,6 +58,9 @@ public partial class ConcertMusic : Node3D
     public double GapTime { get; private set; } = -1;
     public double GapLeft { get; private set; }
     public bool Finale { get; private set; }
+    /// <summary>The song cue in force (<see cref="ConcertService"/>), or null: the set runs on the clock.</summary>
+    public SongCue? Cue { get; set; }
+
     /// <summary>What the last <see cref="Step"/> told the desk.</summary>
     public MusicMoment? Moment { get; private set; }
 
@@ -124,6 +134,36 @@ public partial class ConcertMusic : Node3D
     }
 
     /// <summary>
+    /// Where the set is at this moment of the shared clock, s into its loop: on the clock alone, or from
+    /// the song a cue started. Pure: the server and every peer find the same song (#994).
+    /// </summary>
+    public static double Position(IReadOnlyList<CdInfo> setlist, double serverNow, SongCue? cue)
+    {
+        double cycle = 0, offset = 0;
+        for (int i = 0; i < setlist.Count; i++)
+        {
+            if (cue is { } c && i < c.Index) offset += setlist[i].Duration + Gap;
+            cycle += setlist[i].Duration + Gap;
+        }
+        if (cycle <= 0) return 0;
+        double t = cue is { } k ? serverNow - k.At + offset : serverNow;
+        return ((t % cycle) + cycle) % cycle;
+    }
+
+    /// <summary>The song playing at a position of the set (<see cref="Position"/>), or the one whose gap it is in; and seconds into it.</summary>
+    public static (int Index, double Into, bool InGap) At(IReadOnlyList<CdInfo> setlist, double pos)
+    {
+        for (int i = 0; i < setlist.Count; i++)
+        {
+            double len = setlist[i].Duration;
+            if (pos < len) return (i, pos, false);
+            if (pos < len + Gap) return (i, pos, true);
+            pos -= len + Gap;
+        }
+        return (Math.Max(0, setlist.Count - 1), 0, true);
+    }
+
+    /// <summary>
     /// Plays the setlist at this moment of the shared clock and says where the song is; null when there
     /// is no music (no CDs, or the show is not on), the desk then makes up its songs.
     /// </summary>
@@ -136,16 +176,14 @@ public partial class ConcertMusic : Node3D
         }
         ShowOn = on;
         SongTime = GapTime = -1;
-        if (!on || _setlist.Length == 0)
+        if (!on || _setlist.Length == 0 || Cue is { Off: true })
         {
             Song = null;
             foreach (var s in _speakers) s.On = false;
             return Moment = null;
         }
         // the setlist loops on the shared clock: the same song and second on every peer
-        double cycle = 0;
-        foreach (var c in _setlist) cycle += c.Duration + Gap;
-        double pos = serverNow % cycle, start = serverNow - pos;
+        double pos = Position(_setlist, serverNow, Cue), start = serverNow - pos;
         CdInfo? song = null;
         bool finale = false;
         for (int i = 0; i < _setlist.Length; i++)

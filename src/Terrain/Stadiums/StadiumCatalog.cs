@@ -27,7 +27,7 @@ public static class StadiumCatalog
     /// </summary>
     public static readonly StadiumSpec Geneva = new()
     {
-        Name = "Stade de Genève",
+        Name = "Stade de Genève", Town = "Lancy",
         E = 2498751.2, N = 1114890.3, AzimuthDeg = -1.35f,
         PitchWidth = 68f, PitchLength = 105f,
         FrontHalfU = 40f, FrontHalfV = 62f, FrontCorner = 4f,
@@ -49,7 +49,7 @@ public static class StadiumCatalog
     /// <summary>Stadion Wankdorf (Bern), 2005: 31,500 seats. Centre, axis and outline from the swissimage aerial; heights, tiers and colours estimated (#948 research).</summary>
     public static readonly StadiumSpec Wankdorf = new()
     {
-        Name = "Stadion Wankdorf",
+        Name = "Stadion Wankdorf", Town = "Bern",
         E = 2601996.7, N = 1201338.3, AzimuthDeg = -63.5f,
         PitchWidth = 68f, PitchLength = 105f,
         FrontHalfU = 42.5f, FrontHalfV = 63.5f, FrontCorner = 6f,
@@ -70,7 +70,7 @@ public static class StadiumCatalog
     /// <summary>St. Jakob-Park (Basel), 2001: 38,512 seats. Centre, axis and outline from the swissimage aerial; heights, tiers and colours estimated (#948 research).</summary>
     public static readonly StadiumSpec StJakobPark = new()
     {
-        Name = "St. Jakob-Park",
+        Name = "St. Jakob-Park", Town = "Basel",
         E = 2613666.2, N = 1265671.3, AzimuthDeg = -68f,
         PitchWidth = 68f, PitchLength = 105f,
         FrontHalfU = 41f, FrontHalfV = 63.5f, FrontCorner = 10f,
@@ -92,7 +92,7 @@ public static class StadiumCatalog
     /// <summary>Stadion Letzigrund (Zürich), 2007: 26,104 seats. Centre, axis and outline from the swissimage aerial; heights, tiers and colours estimated (#948 research).</summary>
     public static readonly StadiumSpec Letzigrund = new()
     {
-        Name = "Stadion Letzigrund",
+        Name = "Stadion Letzigrund", Town = "Zürich",
         E = 2680429.7, N = 1248535.3, AzimuthDeg = 38.7f,
         PitchWidth = 68f, PitchLength = 105f,
         FrontHalfU = 52f, FrontHalfV = 90f, FrontCorner = 48f,
@@ -113,7 +113,7 @@ public static class StadiumCatalog
     /// <summary>kybunpark (Berit Sitterstadion) (St. Gallen), 2008: 20,660 seats. Centre, axis and outline from the swissimage aerial; heights, tiers and colours estimated (#948 research).</summary>
     public static readonly StadiumSpec Kybunpark = new()
     {
-        Name = "kybunpark (Berit Sitterstadion)",
+        Name = "kybunpark (Berit Sitterstadion)", Town = "St. Gallen",
         E = 2740904.3, N = 1252512, AzimuthDeg = 67f,
         PitchWidth = 68f, PitchLength = 105f,
         FrontHalfU = 40f, FrontHalfV = 58.5f, FrontCorner = 8f,
@@ -134,7 +134,7 @@ public static class StadiumCatalog
     /// <summary>swissporarena (Luzern), 2011: 16,800 seats. Centre, axis and outline from the swissimage aerial; heights, tiers and colours estimated (#948 research).</summary>
     public static readonly StadiumSpec Swissporarena = new()
     {
-        Name = "swissporarena",
+        Name = "swissporarena", Town = "Luzern",
         E = 2665861.7, N = 1209462, AzimuthDeg = -10.5f,
         PitchWidth = 68f, PitchLength = 105f,
         FrontHalfU = 39f, FrontHalfV = 58.5f, FrontCorner = 14f,
@@ -155,7 +155,7 @@ public static class StadiumCatalog
     /// <summary>Stockhorn Arena (Visana Stadion) (Thun), 2011: 10,398 seats. Centre, axis and outline from the swissimage aerial; heights, tiers and colours estimated (#948 research).</summary>
     public static readonly StadiumSpec StockhornArena = new()
     {
-        Name = "Stockhorn Arena (Visana Stadion)",
+        Name = "Stockhorn Arena (Visana Stadion)", Town = "Thun",
         E = 2612836, N = 1177056.7, AzimuthDeg = -22.5f,
         PitchWidth = 68f, PitchLength = 105f,
         FrontHalfU = 40f, FrontHalfV = 60f, FrontCorner = 4f,
@@ -176,7 +176,7 @@ public static class StadiumCatalog
     /// <summary>Stade de Tourbillon (Sion), 1968: 14,283 seats. Centre, axis and outline from the swissimage aerial; heights, tiers and colours estimated (#948 research).</summary>
     public static readonly StadiumSpec Tourbillon = new()
     {
-        Name = "Stade de Tourbillon",
+        Name = "Stade de Tourbillon", Town = "Sion",
         E = 2595164.7, N = 1120212.3, AzimuthDeg = -58f,
         PitchWidth = 68f, PitchLength = 105f,
         FrontHalfU = 43.5f, FrontHalfV = 59f, FrontCorner = 12f,
@@ -196,7 +196,7 @@ public static class StadiumCatalog
     /// <summary>Stade de la Tuilière (Lausanne), 2020: 12,544 seats. Centre, axis and outline from the swissimage aerial; heights, tiers and colours estimated (#948 research).</summary>
     public static readonly StadiumSpec Tuiliere = new()
     {
-        Name = "Stade de la Tuilière",
+        Name = "Stade de la Tuilière", Town = "Lausanne",
         E = 2537360.3, N = 1155029.3, AzimuthDeg = -27.2f,
         PitchWidth = 68f, PitchLength = 105f,
         FrontHalfU = 37.5f, FrontHalfV = 57f, FrontCorner = 4f,
@@ -217,7 +217,7 @@ public static class StadiumCatalog
     /// <summary>Stade de la Maladière (Neuchâtel), 2007: 12,500 seats. Centre, axis and outline from the swissimage aerial; heights, tiers and colours estimated (#948 research).</summary>
     public static readonly StadiumSpec Maladiere = new()
     {
-        Name = "Stade de la Maladière",
+        Name = "Stade de la Maladière", Town = "Neuchâtel",
         E = 2562388, N = 1205021, AzimuthDeg = 63f,
         PitchWidth = 68f, PitchLength = 105f,
         FrontHalfU = 37f, FrontHalfV = 57.5f, FrontCorner = 4f,
@@ -238,7 +238,7 @@ public static class StadiumCatalog
     /// <summary>Stadion Brügglifeld (Aarau), 1924: 8,450 seats. Centre, axis and outline from the swissimage aerial; heights, tiers and colours estimated (#948 research).</summary>
     public static readonly StadiumSpec Brugglifeld = new()
     {
-        Name = "Stadion Brügglifeld",
+        Name = "Stadion Brügglifeld", Town = "Aarau",
         E = 2646907, N = 1248242, AzimuthDeg = 41.5f,
         PitchWidth = 68f, PitchLength = 105f,
         FrontHalfU = 37f, FrontHalfV = 53f, FrontCorner = 4f,
@@ -258,7 +258,7 @@ public static class StadiumCatalog
     /// <summary>Stadion Schützenwiese (Winterthur), 1922: 8,700 seats. Centre, axis and outline from the swissimage aerial; heights, tiers and colours estimated (#948 research).</summary>
     public static readonly StadiumSpec Schutzenwiese = new()
     {
-        Name = "Stadion Schützenwiese",
+        Name = "Stadion Schützenwiese", Town = "Winterthur",
         E = 2696352.7, N = 1261898.3, AzimuthDeg = 23f,
         PitchWidth = 68f, PitchLength = 105f,
         FrontHalfU = 41f, FrontHalfV = 56.5f, FrontCorner = 4f,
@@ -278,7 +278,7 @@ public static class StadiumCatalog
     /// <summary>Hallenstadion (Zürich-Oerlikon), arena: 11,200 seats, 13,000 for a concert. Footprint from the swissimage aerial; the inside estimated (#948 research).</summary>
     public static readonly StadiumSpec Hallenstadion = new()
     {
-        Name = "Hallenstadion",
+        Name = "Hallenstadion", Town = "Zürich",
         Kind = VenueKind.Arena,
         E = 2684005, N = 1251786, AzimuthDeg = 0f,
         PitchWidth = 30f, PitchLength = 60f,
@@ -300,7 +300,7 @@ public static class StadiumCatalog
     /// <summary>PostFinance Arena (Bern), arena: 17,031 seats, 17,031 for a concert. Footprint from the swissimage aerial; the inside estimated (#948 research).</summary>
     public static readonly StadiumSpec PostFinanceArena = new()
     {
-        Name = "PostFinance Arena",
+        Name = "PostFinance Arena", Town = "Bern",
         Kind = VenueKind.Arena,
         E = 2602296, N = 1200841, AzimuthDeg = -42f,
         PitchWidth = 30f, PitchLength = 60f,
@@ -323,7 +323,7 @@ public static class StadiumCatalog
     /// <summary>St. Jakobshalle (Basel (Münchenstein BL, Basel border)), arena: 9,000 seats, 12,000 for a concert. Footprint from the swissimage aerial; the inside estimated (#948 research).</summary>
     public static readonly StadiumSpec StJakobshalle = new()
     {
-        Name = "St. Jakobshalle",
+        Name = "St. Jakobshalle", Town = "Basel",
         Kind = VenueKind.Arena,
         E = 2613529, N = 1265481, AzimuthDeg = -4f,
         PitchWidth = 30f, PitchLength = 60f,
@@ -345,7 +345,7 @@ public static class StadiumCatalog
     /// <summary>Swiss Life Arena (Zürich-Altstetten), arena: 11,157 seats, 12,000 for a concert. Footprint from the swissimage aerial; the inside estimated (#948 research).</summary>
     public static readonly StadiumSpec SwissLifeArena = new()
     {
-        Name = "Swiss Life Arena",
+        Name = "Swiss Life Arena", Town = "Zürich",
         Kind = VenueKind.Arena,
         E = 2678619, N = 1249913, AzimuthDeg = 21f,
         PitchWidth = 30f, PitchLength = 60f,
@@ -367,7 +367,7 @@ public static class StadiumCatalog
     /// <summary>Vaudoise Aréna (Lausanne (Prilly/Renens, Malley)), arena: 10,000 seats, 9,600 for a concert. Footprint from the swissimage aerial; the inside estimated (#948 research).</summary>
     public static readonly StadiumSpec VaudoiseArena = new()
     {
-        Name = "Vaudoise Aréna",
+        Name = "Vaudoise Aréna", Town = "Lausanne",
         Kind = VenueKind.Arena,
         E = 2535600, N = 1153410, AzimuthDeg = 25f,
         PitchWidth = 30f, PitchLength = 60f,
@@ -389,7 +389,7 @@ public static class StadiumCatalog
     /// <summary>Patinoire des Vernets (Genève), arena: 7,100 seats, 8,500 for a concert. Footprint from the swissimage aerial; the inside estimated (#948 research).</summary>
     public static readonly StadiumSpec VernetsArena = new()
     {
-        Name = "Patinoire des Vernets",
+        Name = "Patinoire des Vernets", Town = "Genève",
         Kind = VenueKind.Arena,
         E = 2499209, N = 1116735, AzimuthDeg = 39f,
         PitchWidth = 30f, PitchLength = 60f,
@@ -411,7 +411,7 @@ public static class StadiumCatalog
     /// <summary>Palexpo Arena Genève (Geneva Arena) (Le Grand-Saconnex), arena: 9,500 seats, 9,500 for a concert. Footprint from the swissimage aerial; the inside estimated (#948 research).</summary>
     public static readonly StadiumSpec GenevaArena = new()
     {
-        Name = "Palexpo Arena Genève (Geneva Arena)",
+        Name = "Palexpo Arena Genève (Geneva Arena)", Town = "Genève",
         Kind = VenueKind.Arena,
         E = 2497680, N = 1121110, AzimuthDeg = 40f,
         PitchWidth = 30f, PitchLength = 60f,
@@ -433,7 +433,7 @@ public static class StadiumCatalog
     /// <summary>BCF Arena (Fribourg (St-Léonard)), arena: 6,900 seats, 9,000 for a concert. Footprint from the swissimage aerial; the inside estimated (#948 research).</summary>
     public static readonly StadiumSpec BcfArena = new()
     {
-        Name = "BCF Arena",
+        Name = "BCF Arena", Town = "Fribourg",
         Kind = VenueKind.Arena,
         E = 2578388, N = 1185176, AzimuthDeg = 74f,
         PitchWidth = 30f, PitchLength = 60f,
@@ -455,7 +455,7 @@ public static class StadiumCatalog
     /// <summary>Tissot Arena (ice halls) (Biel/Bienne), arena: 6,521 seats, 7,000 for a concert. Footprint from the swissimage aerial; the inside estimated (#948 research).</summary>
     public static readonly StadiumSpec TissotArena = new()
     {
-        Name = "Tissot Arena (ice halls)",
+        Name = "Tissot Arena (ice halls)", Town = "Biel/Bienne",
         Kind = VenueKind.Arena,
         E = 2588178, N = 1222825, AzimuthDeg = 56f,
         PitchWidth = 30f, PitchLength = 60f,
@@ -477,7 +477,7 @@ public static class StadiumCatalog
     /// <summary>Bossard Arena (Zug), arena: 7,015 seats, 8,000 for a concert. Footprint from the swissimage aerial; the inside estimated (#948 research).</summary>
     public static readonly StadiumSpec BossardArena = new()
     {
-        Name = "Bossard Arena",
+        Name = "Bossard Arena", Town = "Zug",
         Kind = VenueKind.Arena,
         E = 2681044, N = 1225660, AzimuthDeg = -78f,
         PitchWidth = 30f, PitchLength = 60f,
@@ -499,7 +499,7 @@ public static class StadiumCatalog
     /// <summary>Cornèr Arena (Lugano (Porza)), arena: 7,200 seats, 8,000 for a concert. Footprint from the swissimage aerial; the inside estimated (#948 research).</summary>
     public static readonly StadiumSpec CornerArena = new()
     {
-        Name = "Cornèr Arena",
+        Name = "Cornèr Arena", Town = "Lugano",
         Kind = VenueKind.Arena,
         E = 2718047, N = 1098354, AzimuthDeg = 4f,
         PitchWidth = 30f, PitchLength = 60f,
@@ -521,7 +521,7 @@ public static class StadiumCatalog
     /// <summary>THE HALL (ex Samsung Hall) (Dübendorf), arena: 3,000 seats, 5,062 for a concert. Footprint from the swissimage aerial; the inside estimated (#948 research).</summary>
     public static readonly StadiumSpec TheHall = new()
     {
-        Name = "THE HALL (ex Samsung Hall)",
+        Name = "THE HALL (ex Samsung Hall)", Town = "Dübendorf",
         Kind = VenueKind.Arena,
         E = 2687522, N = 1250085, AzimuthDeg = 0f,
         PitchWidth = 30f, PitchLength = 60f,
@@ -542,7 +542,7 @@ public static class StadiumCatalog
     /// <summary>SWISS Arena (Kloten) (Kloten), arena: 7,624 seats, 7,000 for a concert. Footprint from the swissimage aerial; the inside estimated (#948 research).</summary>
     public static readonly StadiumSpec SwissArenaKloten = new()
     {
-        Name = "SWISS Arena (Kloten)",
+        Name = "SWISS Arena (Kloten)", Town = "Kloten",
         Kind = VenueKind.Arena,
         E = 2686386, N = 1255203, AzimuthDeg = -30f,
         PitchWidth = 30f, PitchLength = 60f,
@@ -564,7 +564,7 @@ public static class StadiumCatalog
     /// <summary>Zondacrypto Arena (Vaillant Arena) (Davos), arena: 7,080 seats, 6,500 for a concert. Footprint from the swissimage aerial; the inside estimated (#948 research).</summary>
     public static readonly StadiumSpec DavosArena = new()
     {
-        Name = "Zondacrypto Arena (Vaillant Arena)",
+        Name = "Zondacrypto Arena (Vaillant Arena)", Town = "Davos",
         Kind = VenueKind.Arena,
         E = 2782260, N = 1185812, AzimuthDeg = -80f,
         PitchWidth = 30f, PitchLength = 60f,
@@ -587,7 +587,7 @@ public static class StadiumCatalog
     /// <summary>Paléo Festival, Grande Scène (Nyon), open air: about 35,000 a day. The main stage placed from the 2026 site plan fitted to the aerial; the 2013 festival flight shows the stage roof (high) (#948 research).</summary>
     public static readonly StadiumSpec PaleoOpenAir = new()
     {
-        Name = "Paléo Festival, Grande Scène",
+        Name = "Paléo Festival, Grande Scène", Town = "Nyon",
         Kind = VenueKind.OpenAir, StageAt = StadiumSide.North,
         E = 2505256.1, N = 1139822.8, AzimuthDeg = 176f,
         FrontHalfU = 95f, FrontHalfV = 80f, FrontCorner = 6f,
@@ -602,7 +602,7 @@ public static class StadiumCatalog
     /// <summary>Gurtenfestival, Hauptbühne (Bern (Gurten)), open air: about 27,000 a day. The main stage placed from the 2026 Geländeplan fitted on three landmarks (5 m); the crowd's meadow rises away from the stage (#948 research).</summary>
     public static readonly StadiumSpec GurtenOpenAir = new()
     {
-        Name = "Gurtenfestival, Hauptbühne",
+        Name = "Gurtenfestival, Hauptbühne", Town = "Bern",
         Kind = VenueKind.OpenAir, StageAt = StadiumSide.North,
         E = 2600188.6, N = 1196352.6, AzimuthDeg = -25f,
         FrontHalfU = 55f, FrontHalfV = 80f, FrontCorner = 6f,
@@ -617,7 +617,7 @@ public static class StadiumCatalog
     /// <summary>Openair Frauenfeld, Arena Stage (Frauenfeld), open air: about 35,000 a day. The main stage placed from the worn crowd rectangle in the racecourse infield on the 2025 aerial (low: the stage may face the other way) (#948 research).</summary>
     public static readonly StadiumSpec FrauenfeldOpenAir = new()
     {
-        Name = "Openair Frauenfeld, Arena Stage",
+        Name = "Openair Frauenfeld, Arena Stage", Town = "Frauenfeld",
         Kind = VenueKind.OpenAir, StageAt = StadiumSide.North,
         E = 2710209.4, N = 1270159.3, AzimuthDeg = 35f,
         FrontHalfU = 67.5f, FrontHalfV = 100f, FrontCorner = 6f,
@@ -632,7 +632,7 @@ public static class StadiumCatalog
     /// <summary>OpenAir St. Gallen, Sitterbühne (St. Gallen (Sittertobel)), open air: about 30,000 a day. The main stage placed from the 2026 Geländeplan's illustration matched to the Sitter-loop meadow (low-medium) (#948 research).</summary>
     public static readonly StadiumSpec StGallenOpenAir = new()
     {
-        Name = "OpenAir St. Gallen, Sitterbühne",
+        Name = "OpenAir St. Gallen, Sitterbühne", Town = "St. Gallen",
         Kind = VenueKind.OpenAir, StageAt = StadiumSide.North,
         E = 2742507.9, N = 1253134.6, AzimuthDeg = 50f,
         FrontHalfU = 55f, FrontHalfV = 65f, FrontCorner = 6f,
@@ -647,7 +647,7 @@ public static class StadiumCatalog
     /// <summary>Greenfield Festival, Jungfrau Stage (Interlaken), open air: about 25,000 a day. The main stage placed from the 2018 build-up flight's platform on the old airfield apron (medium-low) (#948 research).</summary>
     public static readonly StadiumSpec GreenfieldOpenAir = new()
     {
-        Name = "Greenfield Festival, Jungfrau Stage",
+        Name = "Greenfield Festival, Jungfrau Stage", Town = "Interlaken",
         Kind = VenueKind.OpenAir, StageAt = StadiumSide.North,
         E = 2633958.7, N = 1169472.0, AzimuthDeg = 120f,
         FrontHalfU = 55f, FrontHalfV = 90f, FrontCorner = 6f,
@@ -662,7 +662,7 @@ public static class StadiumCatalog
     /// <summary>Heitere Open Air (Zofingen), open air: about 10,000 a day. The main stage placed from the main stage and the arena read off a swissimage tile shot during the festival (medium) (#948 research).</summary>
     public static readonly StadiumSpec HeitereOpenAir = new()
     {
-        Name = "Heitere Open Air",
+        Name = "Heitere Open Air", Town = "Zofingen",
         Kind = VenueKind.OpenAir, StageAt = StadiumSide.North,
         E = 2639062.5, N = 1237134.7, AzimuthDeg = -30f,
         FrontHalfU = 35f, FrontHalfV = 75f, FrontCorner = 6f,
@@ -677,7 +677,7 @@ public static class StadiumCatalog
     /// <summary>Moon&Stars, Piazza Grande (Locarno), open air: about 8,000 a day. The main stage placed from the piazza from the building outlines, the stage assumed at its west end (low) (#948 research).</summary>
     public static readonly StadiumSpec MoonAndStarsOpenAir = new()
     {
-        Name = "Moon&Stars, Piazza Grande",
+        Name = "Moon&Stars, Piazza Grande", Town = "Locarno",
         Kind = VenueKind.OpenAir, StageAt = StadiumSide.North,
         E = 2704818.4, N = 1114001.6, AzimuthDeg = -102f,
         FrontHalfU = 35f, FrontHalfV = 85f, FrontCorner = 6f,

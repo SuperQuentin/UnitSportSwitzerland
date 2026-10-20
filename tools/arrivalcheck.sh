@@ -2,7 +2,7 @@
 # The server decides where players start and whether they may teleport (#799, src/Net/Arrival +
 # ArrivalProbe): a dedicated server on the flat fixture with --spawn 150 m east of Riddes and
 # --no-teleport; one client joins with no --at and must start there, know it may not teleport, be
-# refused /city, and come back from the fly camera where it stood. No terrain data needed.
+# refused /city and /stadium <venue> (the venue list and the nearest one still answered, #994), and come back from the fly camera where it stood. No terrain data needed.
 #   GODOT=<exe> [PORT=] tools/arrivalcheck.sh
 . "$(dirname "$0")/lib/twoclient.sh" arrival
 PORT=${PORT:-7879}

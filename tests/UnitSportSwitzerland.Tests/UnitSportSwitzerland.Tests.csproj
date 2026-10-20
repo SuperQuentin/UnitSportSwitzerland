@@ -62,6 +62,10 @@
     <Compile Include="..\..\src\Core\TutorialSteps.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\VehicleIntros.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Net\AdminArgs.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- /stadium (#994): the venue catalog and finding a venue in it -->
+    <Compile Include="..\..\src\Terrain\Stadiums\StadiumSpec.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Stadiums\StadiumCatalog.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Stadiums\StadiumLookup.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Net\PlayerKey.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Net\SleeperBook.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Net\Invites\InviteBook.cs" Link="Game\%(Filename)%(Extension)" />

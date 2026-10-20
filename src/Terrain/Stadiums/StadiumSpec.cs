@@ -38,6 +38,8 @@ public enum StadiumSide { North, East, South, West }
 public sealed record StadiumSpec
 {
     public required string Name { get; init; }
+    /// <summary>The town it is known by, for <c>/stadium</c> (#994): "Bern" finds Wankdorf and the PostFinance Arena.</summary>
+    public string Town { get; init; } = "";
     public VenueKind Kind { get; init; } = VenueKind.Stadium;
     /// <summary>
     /// Where the main stage always stands (an open air's is where the festival builds it; an arena's
