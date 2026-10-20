@@ -28,6 +28,8 @@ public sealed partial class RigData
         [JsonPropertyName("tilt")] public float TiltRange { get; set; }
         [JsonPropertyName("b0")] public float BeamMin { get; set; } = 4f;
         [JsonPropertyName("b1")] public float BeamMax { get; set; } = 40f;
+        /// <summary>Its GDTF's own body (#961, RigData.Bodies.cs); null: the generic head.</summary>
+        [JsonPropertyName("body")] public BodyRow? Body { get; set; }
         /// <summary>
         /// An imported type's GDTFSpec and GDTFMode as its file named them (#959), so a re-export keeps
         /// the original GDTF (cached on the importing machine only); null for ours.
@@ -227,6 +229,6 @@ public sealed partial class RigData
             }
         }
         if (patched > MaxFixtures) return $"{patched} fixtures with their DMX breaks (1..{MaxFixtures})";
-        return CheckObjects();
+        return CheckObjects() ?? CheckBodies();
     }
 }

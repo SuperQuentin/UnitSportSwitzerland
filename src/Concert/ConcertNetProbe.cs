@@ -81,6 +81,11 @@ public partial class ConcertNetProbe : ChatProbe
             import.Rig.Meshes.Add(Mvr.RigData.Quantise(box, new[] { 0, 1, 2, 0, 2, 3, 0, 3, 1, 1, 3, 2 }, Colors.Silver));
             for (int i = 0; i < 3; i++)
                 import.Rig.Objects.Add(new Mvr.RigData.ObjectRow { Mesh = 0, Xf = Mvr.RigData.X(new Transform3D(Basis.Identity, new Vector3(i * 2f, 12f, 0))) });
+            // and a GDTF body (#961) on its first head type: base, yoke and head primitives
+            var headType = import.Rig.Types.First(t => (FixtureKind)t.Kind is FixtureKind.Spot or FixtureKind.Beam or FixtureKind.Wash);
+            import.Rig.AddBody(headType, new Mvr.GdtfBody(Mvr.GdtfBody.Primitive("Base", new Vector3(0.3f, 0.3f, 0.13f)),
+                Mvr.GdtfBody.Primitive("Yoke", new Vector3(0.35f, 0.12f, 0.3f)), Mvr.GdtfBody.Primitive("Head", new Vector3(0.22f, 0.19f, 0.24f)),
+                new Vector3(0, 0, -0.28f), new Vector3(0, 0, -0.38f), new Vector3(0, 0, -0.51f)));
             Svc?.SendRig(0, import.Rig.Pack());
             Say($"rig {import.Rig.Fixtures.Count}");
             if (!await Heard("B", "rig ok", 30)) Fail("B never got the rig");
@@ -156,6 +161,9 @@ public partial class ConcertNetProbe : ChatProbe
             Expect(Svc?.RigFor(0) is { Objects.Count: 3, Meshes.Count: 1 } r && r.Meshes[0].TriangleCount == 4, $"with its scene objects ({Svc?.RigFor(0)?.Objects.Count} pieces of 3)");
             if (ConcertRig.Live.Count > 0)
                 Expect(await Until(() => ConcertRig.Live.Values.Any(r => r.ObjectsDrawn == 3), 20), "and the stage draws them");
+            Expect(Svc?.RigFor(0) is { Bodies.Count: 3 } rb && rb.Types.Count(t => t.Body != null) == 1, $"with a type's GDTF body ({Svc?.RigFor(0)?.Bodies.Count} meshes of 3)");
+            if (ConcertRig.Live.Count > 0)
+                Expect(await Until(() => ConcertRig.Live.Values.Any(r => r.BodiesDrawn > 0), 20), "and the rig draws its heads with it");
             Say("rig ok");
             Expect(await Until(() => Svc?.RigFor(0) == null, 20), "and goes when A gives the set its own rig back");
             Say("own ok");

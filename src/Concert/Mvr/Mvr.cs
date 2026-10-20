@@ -329,7 +329,8 @@ public static partial class MvrFile
             {
                 var row = RigData.Row(type);
                 if (g != null) { row.GdtfSpec = spec; row.GdtfMode = g.Mode; }
-                rig.Types.Add(row);
+                // its own body (#961): a head's first break only, never a screen we drive as our own
+                rig.Types.Add(dmxBreak == 1 && !screen && g?.Body != null ? rig.WithBody(row, g.Body) : row);
             }
             else notes.Add($"{spec} ({mode}{(dmxBreak > 1 ? $", break {dmxBreak}" : "")}): {why}");
             if (type != null && dmxBreak == 1 && type.Name.Contains("(layout unknown", StringComparison.Ordinal))
