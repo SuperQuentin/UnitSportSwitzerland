@@ -22,7 +22,7 @@ public partial class ConcertSound : Node3D
     private static readonly StringName BusId = BusName, CrowdId = CrowdBus;
 
     /// <summary>The crowd's full level and the room's poll, s.</summary>
-    private const float CrowdBaseDb = -9f, RoomPoll = 0.2f;
+    private const float CrowdBaseDb = 0f, RoomPoll = 0.2f;
 
     private static AudioEffectDelay? _slap;
     private static AudioEffectReverb? _room;
@@ -53,7 +53,7 @@ public partial class ConcertSound : Node3D
     public RoomTone Tone => _tone;
 
     /// <summary>The main thread's time in this and the PA's speakers, for the probe (Stopwatch ticks, frames).</summary>
-    public static long CostTicks, CostFrames;
+    public static long CostTicks, CostFrames, RadioTicks;
 
     public ConcertSound(ConcertEvent e, ConcertMusic music)
     {

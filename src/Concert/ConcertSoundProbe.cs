@@ -56,14 +56,21 @@ public partial class ConcertSoundProbe : Node
     private async Task Run()
     {
         ConcertSound? sound = null;
-        for (int i = 0; i < 1800 && (sound == null || Ears.Body is not { } b0 || !b0.IsOnFloor()); i++)
+        for (int i = 0; i < 3000 && (sound == null || Ears.Body is not { } b0 || !b0.IsOnFloor()); i++)
         {
             sound = Playing();
+            // a free camera at start: into the body, as the desk probe does
+            if (Ears.Body == null && i % 50 == 25)
+            {
+                Input.ParseInputEvent(new InputEventAction { Action = PlayerInput.ToggleMode, Pressed = true });
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                Input.ParseInputEvent(new InputEventAction { Action = PlayerInput.ToggleMode, Pressed = false });
+            }
             await Wait(0.1);
         }
         if (sound == null || Ears.Body == null || sound.GetParent() is not ConcertRig rig || rig.Plan is not { } plan)
         {
-            Finish("no player, or no concert playing a CD");
+            Finish($"no player ({Ears.Body != null}), or no concert playing a CD ({sound != null})");
             return;
         }
         var e = rig.Event;
@@ -157,6 +164,28 @@ public partial class ConcertSoundProbe : Node
             Check(outside.Centroid < near.Centroid, $"outside the bowl is darker (centroid {outside.Centroid:F0} against {near.Centroid:F0} Hz)");
         }
 
+        // a jog from front of house towards the far end, 2.5 m/s: the delay grows ~7 ms a second, which
+        // the speakers follow by pitch (a Doppler shift) instead of seeking
+        Place(rig, spots[1].At);
+        await Wait(4);
+        float worst = 0f, pitchLo = 1f, pitchHi = 1f;
+        int over = 0;
+        var speaker0 = sound.Music.Speakers[0];
+        float delayFrom = speaker0.Heard.Delay;
+        for (int i = 0; i < 100 && Ears.Body is { } jogger; i++)
+        {
+            jogger.GlobalPosition += rig.GlobalBasis * (fwd * 0.25f);
+            await Wait(0.1);
+            if (double.IsNaN(speaker0.HeardPosition)) continue;
+            float err = (float)Math.Abs(speaker0.WantedPosition - speaker0.HeardPosition);
+            worst = MathF.Max(worst, err);
+            if (err > 0.08f) over++;
+            pitchLo = MathF.Min(pitchLo, speaker0.PitchScale);
+            pitchHi = MathF.Max(pitchHi, speaker0.PitchScale);
+        }
+        Log($"jog 25 m: delay {delayFrom * 1000f:F0} -> {speaker0.Heard.Delay * 1000f:F0} ms, worst drift {worst * 1000f:F0} ms, {over} samples past the 80 ms seek line, pitch {pitchLo:F3}..{pitchHi:F3}");
+        Check(over <= 2, $"a jog's growing delay is followed without seeking");
+
         // a timeline at front of house through the next gap between songs
         Place(rig, spots[1].At);
         Log($"-- timeline at front of house (song s or gap s, section, since drop; crowd roar/applause target and now, dB; buses)");
@@ -178,7 +207,8 @@ public partial class ConcertSoundProbe : Node
         else Log($"no gap between songs in the window");
         if (dropRoar > -80f) Check(dropRoar > songRoar, $"a drop gets a roar ({dropRoar:F1} against {songRoar:F1} dB)");
         double us = ConcertSound.CostFrames > 0 ? ConcertSound.CostTicks * 1e6 / Stopwatch.Frequency / ConcertSound.CostFrames : 0;
-        Log($"main thread: {us:F1} us a frame in the concert's sound and its speakers ({ConcertSound.CostFrames} frames)");
+        double radio = ConcertSound.CostFrames > 0 ? ConcertSound.RadioTicks * 1e6 / Stopwatch.Frequency / ConcertSound.CostFrames : 0;
+        Log($"main thread: {us:F1} us a frame in the concerts' sound and speakers, of which {radio:F1} us the radio speakers' own work ({ConcertSound.CostFrames} frames, {ConcertRig.Live.Count} concerts)");
         Finish(null);
     }
 
@@ -186,22 +216,20 @@ public partial class ConcertSoundProbe : Node
     private static bool Place(ConcertRig rig, Vector3 at)
     {
         if (Ears.Body is not { } body) return false;
-        var top = rig.ToGlobal(at + Vector3.Up * 40f);
-        var query = PhysicsRayQueryParameters3D.Create(top, top + Vector3.Down * 80f);
-        query.Exclude = new Godot.Collections.Array<Rid> { body.GetRid() };
-        var hit = body.GetWorld3D().DirectSpaceState.IntersectRay(query);
-        if (hit.Count == 0) return false;
-        // the spot's own height when it is over the floor below it (a stand's row, not the roof)
-        var ground = hit["position"].AsVector3();
+        // down from just over the spot (a stand's row, not the roof over it), else from high up
+        var space = body.GetWorld3D().DirectSpaceState;
+        var exclude = new Godot.Collections.Array<Rid> { body.GetRid() };
         var want = rig.ToGlobal(at);
-        if (want.Y - ground.Y > 3f)
+        Vector3? ground = null;
+        foreach (var from in new[] { want + Vector3.Up * 2f, want + Vector3.Up * 40f })
         {
-            query = PhysicsRayQueryParameters3D.Create(want + Vector3.Up * 2f, want + Vector3.Down * 40f);
-            query.Exclude = new Godot.Collections.Array<Rid> { body.GetRid() };
-            var low = body.GetWorld3D().DirectSpaceState.IntersectRay(query);
-            if (low.Count > 0) ground = low["position"].AsVector3();
+            var query = PhysicsRayQueryParameters3D.Create(from, from + Vector3.Down * 80f);
+            query.Exclude = exclude;
+            var hit = space.IntersectRay(query);
+            if (hit.Count > 0) { ground = hit["position"].AsVector3(); break; }
         }
-        body.GlobalPosition = ground + Vector3.Up * 0.2f;
+        if (ground == null) return false;
+        body.GlobalPosition = ground.Value + Vector3.Up * 0.2f;
         body.Velocity = Vector3.Zero;
         return true;
     }

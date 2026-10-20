@@ -51,7 +51,9 @@ public partial class ConcertSpeaker : RadioSpeaker
         if (GetParent() is Node3D frame && Ears.Of(this) is { } ear)
             Heard = ConcertAcoustics.Hear(Source, frame.ToLocal(ear), OuterHalf, HeardBlocked);
         StartedAt = SongStart + Heard.Delay;
+        long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
         base._Process(delta);
+        ConcertSound.RadioTicks += System.Diagnostics.Stopwatch.GetTimestamp() - t0;
         // the PA as one: a sibling hang louder at the ears is no reason to duck
         float duck = MusicFocus.Focus is ConcertSpeaker f && f.GetParent() == GetParent() ? 0f : DuckDb;
         float d = GlobalPosition.DistanceTo(Ears.Of(this) ?? GlobalPosition);
