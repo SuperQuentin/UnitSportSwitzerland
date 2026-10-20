@@ -13,8 +13,9 @@ PORT=${PORT:-7887}
 # where a telehandler came from, and its yard no room left for another way in; this topped-out one keeps
 # its materials an 8 m way in on the side their pallets face
 AT=${AT:-2582832,1102441}
-WORLD="--generated-world --traffic 0 --at $AT"
-tc_server 420 120 "$OUT/sitepalletnet_server.log" --server --port $PORT --generated-world --admin-password test
+# the generated world wherever it runs: no real tiles, even where terrain_location.json has some (#943)
+WORLD="--generated-world ${NOTERRAIN[*]} --traffic 0 --at $AT"
+tc_server 420 120 "$OUT/sitepalletnet_server.log" --server --port $PORT --generated-world "${NOTERRAIN[@]}" --admin-password test
 tc_client 300 "$OUT/sitepalletnet_A.log" --connect 127.0.0.1:$PORT --name SiteA $WORLD --sitepalletnet A & A=$!
 tc_client 300 "$OUT/sitepalletnet_B.log" --connect 127.0.0.1:$PORT --name SiteB $WORLD --sitepalletnet B & B=$!
 wait $A $B

@@ -12,8 +12,9 @@
 PORT=${PORT:-7893}
 # a generated site with pallets of materials and a crane (--constructioncheck lists each site's)
 AT=${AT:-2588796,1118441}
-WORLD="--generated-world --traffic 0 --at $AT"
-tc_server 480 120 "$OUT/cranenet_server.log" --server --port $PORT --generated-world --admin-password test
+# the generated world wherever it runs: no real tiles, even where terrain_location.json has some (#943)
+WORLD="--generated-world ${NOTERRAIN[*]} --traffic 0 --at $AT"
+tc_server 480 120 "$OUT/cranenet_server.log" --server --port $PORT --generated-world "${NOTERRAIN[@]}" --admin-password test
 tc_client 360 "$OUT/cranenet_A.log" --connect 127.0.0.1:$PORT --name CraneA $WORLD --cranenet A & A=$!
 tc_client 360 "$OUT/cranenet_B.log" --connect 127.0.0.1:$PORT --name CraneB $WORLD --cranenet B & B=$!
 wait $A $B
