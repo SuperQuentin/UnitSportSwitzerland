@@ -21,6 +21,7 @@ touches its topic; search with `grep -ril <word> docs/notes/ui`.
 - `activities` — `Ui/ActivitiesScreen` (#840): tabs Invites / Battle Royale / Race, every button sends the console's command, admin BR settings and open/start/cancel, race list (`RaceManager.RequestRows`), party and teleport requests
 - `chat-bubbles` — Comic speech bubbles over players who talk near you (#862, `Ui/Bubbles/ChatBubbles`, the films' `SpeechBubble`): `ChatManager.Say`/`Spoken` name the speaker, 36 m and in view, capitals shout, (parentheses) think, VR as world billboards, Settings › Gameplay, `--bubblecheck`
 - `phone` — Foldable phone (#889, `src/Phone/`): Up / quick menu › Phone; cover quick actions, open = camera onto the inner screen then the same `SubViewport` full screen; Map / Contacts / Activities; `Teleporter.Curtain` holds a jump until the screen covers the view, `Teleporter.Arrived` folds it away there; one replicated byte `PhoneState`; `--phonecheck`
+  - Training app (#901): see `player/home-trainer-training`
 - `travel-menu` — R travel menu (tabs, card grid, brand/model folders (#410), pre-rendered thumbnails cached in user://thumbs, live stage: doors open + lamps on while pointed) and the F1 controls screen, both sized to the window (#210)
 
 ## Gotchas

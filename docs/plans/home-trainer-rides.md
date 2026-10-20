@@ -3,6 +3,21 @@
 
 # Home trainer rides: a GPX route on the roads, turn at junctions, a BLE smart trainer (#901)
 
+## Status (PR #969)
+
+| Part | State | What |
+|---|---|---|
+| Course and riding | built | **Phone › Training** app; GPX snapped, ridden by the lean `AutoPilot` (not the on-rails `RideCourse` planned below: the pilot already holds a bike on a route, bends and brakes included) |
+| Trainer link | built | RideLink in `tools/RideLink/`, `TrainerLink`, scan / connect / reconnect, watts → `RiderWatts`, the windows TFM through `tools/RideLink/Game.props` |
+| SIM grade | built | `CourseProfile.GradeAt` (40 m window) × difficulty, ≤ 1 Hz, ≥ 0.2% |
+| HUD | built | watts, rpm, bpm, speed, grades, km, climbing left, time |
+| Junction choice, Rejoin | next | needs the edge sequence from `TrackMatcher` (design 1 below) |
+| ERG button | next | design 3 below |
+| FTP test hookup | after #903 | `Bicycle.PowerMeasured = TrainerLink.PowerLive` |
+| Group rides | later | phase 4 |
+
+Notes: `docs/notes/player/home-trainer-training.md`.
+
 Ride like Zwift or MyWhoosh. Import a GPX, ride it on the mapped Swiss roads, and the trainer's
 watts move the bike. Nobody steers: the bike follows the road. At each junction the rider can
 take another branch. Decided with the owner (Oct 19 2026):
