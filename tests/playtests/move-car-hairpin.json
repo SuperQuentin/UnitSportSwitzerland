@@ -1,0 +1,23 @@
+{
+  "id": "move-car-hairpin",
+  "title": "Car down the hairpins",
+  "verdict": "validated",
+  "by": "Quentin Aellen",
+  "date": "2026-10-20T17:12Z",
+  "commit": "e6b105f8",
+  "coverHash": "b387b0502c33801e",
+  "covers": [
+    "src/Player/Car.cs",
+    "src/Player/CarCatalog.cs",
+    "src/Player/Rideable.cs",
+    "src/Core/SteeringWheel.cs"
+  ],
+  "notes": [
+    {
+      "date": "2026-10-20T17:12Z",
+      "by": "Quentin Aellen",
+      "verdict": "validated",
+      "text": ""
+    }
+  ]
+}
