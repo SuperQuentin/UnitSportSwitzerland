@@ -279,4 +279,58 @@ public class MvrTests
         // its Z is MVR's +Y (upstage): the beam, along -Z, faces downstage, the audience (+z ours)
         Assert.True(RigData.V(bar.Up).Dot(new Vector3(0, 0, 1)) > 0.999f, $"bar faces the audience: {RigData.V(bar.Up)}");
     }
+
+    /// <summary>A profile stripped as Capture's exported demo show's are: every channel a numbered placeholder.</summary>
+    private static string Stripped(string name, int channels) =>
+        $"""<?xml version="1.0" encoding="UTF-8"?><GDTF DataVersion="1.1"><FixtureType Name="{name}" Manufacturer="Acme"><Geometries><Geometry Name="Base"/></Geometries>"""
+        + """<DMXModes><DMXMode Name="Standard" Geometry="Base"><DMXChannels>"""
+        + string.Concat(Enumerable.Range(1, channels).Select(i =>
+            $"""<DMXChannel DMXBreak="1" Geometry="Base" Offset="{i}"><LogicalChannel Attribute="Dimmer{i}"><ChannelFunction Attribute="Dimmer{i}" DMXFrom="0/1"/></LogicalChannel></DMXChannel>"""))
+        + "</DMXChannels></DMXMode></DMXModes></FixtureType></GDTF>";
+
+    [Fact]
+    public void A_stripped_profile_is_hung_as_our_type_of_its_kind()
+    {
+        FixtureType? Of(string name) => Gdtf.ToFixtureType(Gdtf.FromXml(XDocument.Parse(Stripped(name, 268)), null, out _)!, out _);
+        var spot = Of("Alpha Spot QWO 800");
+        Assert.NotNull(spot);
+        Assert.Equal(FixtureKind.Spot, spot!.Kind);
+        Assert.Equal(FixtureType.Spot.Channels, spot.Channels);   // ours, not its 268 placeholders
+        Assert.Contains("layout unknown", spot.Name);
+        Assert.Equal(FixtureKind.Wash, Of("A.leda Wash K20")!.Kind);
+        Assert.Equal(FixtureKind.Beam, Of("Sharpy Beam")!.Kind);
+        var cyc = Of("ALC4")!;   // no word for what it is: a static wash
+        Assert.Equal(FixtureKind.Wash, cyc.Kind);
+        Assert.Equal(0f, cyc.PanRange);
+        // real channels we only do not know stay refused
+        Assert.Null(Gdtf.ToFixtureType(Gdtf.FromXml(XDocument.Parse(Odd), null, out _)!, out _));
+    }
+
+    [Fact]
+    public void Fixtures_not_patched_in_the_file_are_patched_after_the_rest()
+    {
+        // a plot drawn before the patch: address 0, as BlenderDMX's and Vectorworks' samples have them
+        const string scene = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <GeneralSceneDescription verMajor="1" verMinor="5">
+              <Scene><Layers><Layer name="Rig" uuid="L1"><ChildList>
+                <Fixture name="A" uuid="F1"><GDTFSpec>Acme@Aura.gdtf</GDTFSpec><GDTFMode>Mode 1 - 14ch</GDTFMode>
+                  <Addresses><Address break="0">0</Address></Addresses></Fixture>
+                <Fixture name="B" uuid="F2"><GDTFSpec>Acme@Aura.gdtf</GDTFSpec><GDTFMode>Mode 1 - 14ch</GDTFMode>
+                  <Addresses><Address break="0">491</Address></Addresses></Fixture>
+                <Fixture name="C" uuid="F3"><GDTFSpec>Acme@Aura.gdtf</GDTFSpec><GDTFMode>Mode 1 - 14ch</GDTFMode></Fixture>
+              </ChildList></Layer></Layers></Scene>
+            </GeneralSceneDescription>
+            """;
+        var import = MvrFile.Read(Zip(("GeneralSceneDescription.xml", Text(scene)), ("Acme@Aura.gdtf", Zip(("description.xml", Text(ThirdWash))))), "plot.mvr", out string? error);
+        Assert.True(import != null, error);
+        var f = import!.Rig.Fixtures;
+        Assert.Equal(3, f.Count);
+        Assert.Equal((0, 490), (f[1].Universe, f[1].Address));
+        // 504 + 14 would cross the universe's end: the next starts the second universe
+        Assert.Equal((1, 0), (f[0].Universe, f[0].Address));
+        Assert.Equal((1, 14), (f[2].Universe, f[2].Address));
+        Assert.Contains(import.Notes, n => n.Contains("not patched"));
+        Assert.Null(import.Rig.Check());
+    }
 }

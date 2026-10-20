@@ -181,6 +181,8 @@ public static class MvrFile
         var typeIndex = new Dictionary<string, int>();
         var skipped = new Dictionary<string, int>();
         var ids = new List<int?>();
+        var unpatched = new List<RigData.FixtureRow>();
+        int end = 0;
         foreach (var layer in root.Element("Scene")?.Element("Layers")?.Elements("Layer") ?? Enumerable.Empty<XElement>())
         {
             string layerName = (string?)layer.Attribute("name") ?? "";
@@ -217,11 +219,14 @@ public static class MvrFile
                 t = typeIndex[key] = type == null ? -1 : rig.Types.Count;
                 if (type != null) rig.Types.Add(RigData.Row(type));
                 else notes.Add($"{spec} ({mode}): {why}");
+                if (type != null && type.Name.Contains("(layout unknown", StringComparison.Ordinal))
+                    notes.Add($"{spec}: its channels are numbered placeholders (a stripped profile): hung with our own layout");
             }
             if (t < 0) { Skip(spec); return; }
-            if (!TryAddress(x, out int universe, out int address)) { Skip("no DMX address"); return; }
             var type0 = rig.Types[t];
-            if (address + type0.Channels.Length > DmxPatch.Channels) { Skip("crosses a universe's end"); return; }
+            // address 0 or none: hung but not patched yet (a plot drawn before the patch); patched after the rest below
+            bool patched = TryAddress(x, out int universe, out int address);
+            if (patched && address + type0.Channels.Length > DmxPatch.Channels) { Skip("crosses a universe's end"); return; }
 
             // MVR is millimetres, Z up: the fixture's axes and place in ours
             var zAxis = FromMvr(xf.Basis.Z).Normalized();
@@ -252,10 +257,23 @@ public static class MvrFile
             }
             row.Group = (int)(Enum.TryParse<RigGroup>(layerName, out var layerGroup) ? layerGroup : GroupOf(kind, up));
             rig.Fixtures.Add(row);
+            if (patched) end = Math.Max(end, universe * DmxPatch.Channels + address + type0.Channels.Length);
+            else unpatched.Add(row);
             ids.Add(int.TryParse(x.Element("FixtureIDNumeric")?.Value ?? x.Element("FixtureID")?.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int fid) ? fid : null);
         }
 
         void Skip(string why) => skipped[why] = skipped.GetValueOrDefault(why) + 1;
+
+        // the unpatched, one after another past the last address in use, never across a universe's end
+        foreach (var row in unpatched)
+        {
+            int len = rig.Types[row.Type].Channels.Length;
+            if (end % DmxPatch.Channels + len > DmxPatch.Channels) end = (end / DmxPatch.Channels + 1) * DmxPatch.Channels;
+            row.Universe = end / DmxPatch.Channels;
+            row.Address = end % DmxPatch.Channels;
+            end += len;
+        }
+        if (unpatched.Count > 0) notes.Add($"{unpatched.Count} not patched in the file: given addresses from {unpatched[0].Universe + 1}.{unpatched[0].Address + 1}");
 
         // in fixture-ID order, as a console lists them (when every fixture has one)
         if (ids.Count > 1 && ids.All(i => i != null))

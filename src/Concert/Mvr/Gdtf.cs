@@ -350,6 +350,38 @@ public static class Gdtf
     private static float Float(string? s, float fallback) =>
         float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out float v) && float.IsFinite(v) ? v : fallback;
 
+    /// <summary>Placeholder channels: every one named a stem and a number, the same stem (Capture's demo show: Dimmer1..Dimmer268).</summary>
+    private static readonly System.Text.RegularExpressions.Regex Numbered = new(@"^([A-Za-z]+?)\d+$");
+
+    /// <summary>
+    /// A GDTF whose channels say nothing (#941): a file whose profiles were stripped to numbered
+    /// placeholders, as Capture's exported demo shows are, the real layout lost. The fixture is still
+    /// hung where the file puts it, as our own type of the kind its name says (a wash, a beam, a spot; a
+    /// static wash for anything else), our channels at its address; the import notes it. Null when the channels are real and only unknown to us.
+    /// </summary>
+    private static FixtureType? Placeholder(Type g)
+    {
+        if (g.Channels.Count == 0) return null;
+        string? stem = null;
+        foreach (var c in g.Channels)
+        {
+            var m = Numbered.Match(c.Attribute.Trim());
+            if (!m.Success || stem != null && m.Groups[1].Value != stem) return null;
+            stem = m.Groups[1].Value;
+        }
+        string n = g.Name.ToLowerInvariant();
+        bool moving = n.Contains("spot") || n.Contains("wash") || n.Contains("beam") || n.Contains("profile") || n.Contains("hybrid");
+        var ours = n.Contains("wash") ? FixtureType.Wash : n.Contains("beam") && !n.Contains("wash") ? FixtureType.Beam : n.Contains("spot") || moving ? FixtureType.Spot : null;
+        var layout = ours?.Channels ?? new[] { Attr.Dimmer, Attr.Red, Attr.Green, Attr.Blue, Attr.White };
+        // our channels only: a stripped profile lists every mode's channels at once (268 for a spot the file
+        // patches 32 apart), so its footprint says nothing either
+        var attrs = layout.ToArray();
+        string name = $"{(g.Manufacturer is "" ? "" : g.Manufacturer + " ")}{g.Name} (layout unknown: as {(ours?.Name ?? "a static RGBW wash")})";
+        return ours != null
+            ? new FixtureType(name, ours.Kind, attrs, ours.PanRange, ours.TiltRange, ours.BeamMin, ours.BeamMax)
+            : new FixtureType(name, FixtureKind.Wash, attrs, 0f, 0f, 25f, 25f);
+    }
+
     /// <summary>
     /// One of our fixture types from a read GDTF mode: each channel at its offset (a 16-bit channel's
     /// second byte its fine, or Other), and a kind from what it can do. Null, with why, for a device
@@ -384,6 +416,7 @@ public static class Gdtf
         else if (has(Attr.Arm) && has(Attr.Fire)) kind = FixtureKind.Flame;
         else if (has(Attr.Pump)) kind = FixtureKind.Hazer;
         else if (rgb || has(Attr.Dimmer)) kind = FixtureKind.Wash;   // a static par or a bar of one cell: a wash that never moves
+        else if (Placeholder(g) is { } stand) return stand;
         else { why = "no light or effect the game knows (" + string.Join(", ", g.Channels.Select(c => c.Attribute).Distinct().Take(6)) + ")"; return null; }
 
         // where each channel goes

@@ -20,16 +20,19 @@
 - **Import** (`/concert import <file> [stage|stadium]`, `off`; the desk's MVR row lists
   `user://concert/mvr/*.mvr`, *Folder* opens it): reads the scene (nested trusses and groups composed),
   each GDTF mode mapped by `Gdtf.ToFixtureType`: channels to our `Attr` by name (`Parse`), the rest
-  `Attr.Other` so offsets hold; a kind from what it can do (pan/tilt + RGB = wash, narrow or prism =
+  `Attr.Other` so offsets hold; a profile stripped to numbered placeholders (`Dimmer1`..`DimmerN`, as
+  Capture's exported demo shows are) is hung as our own spot, wash or beam by its name, a static RGBW
+  wash otherwise (`Gdtf.Placeholder`), noted; a kind from what it can do (pan/tilt + RGB = wash, narrow or prism =
   beam, else spot; R/G/B on several cells = pixel bar, dimmers on cells = blinder, strobe rate = strobe,
   fog = hazer, a static RGB par = a wash that never moves). Groups from our layer names, else
   `MvrFile.GroupOf` (kind, yoke up or down). Order by `FixtureIDNumeric`. Ours lands in the stadium
-  frame exactly; anyone else's in the stage's (`StagePlan.FromStage`: origin the deck's front centre on
+  frame exactly; a fixture at address 0 or none (a plot drawn before its patch) is patched after the
+  last address in use, never across a universe's end, noted; anyone else's in the stage's (`StagePlan.FromStage`: origin the deck's front centre on
   the pitch, MVR Y upstage). Devices it cannot show are skipped and listed in the log.
 - **On a hosted set only.** The client packs the rig (`RigData`, gzipped JSON, ~10 kB for 134
   fixtures), the server checks it (`RigData.Check`: 128 types, 4000 fixtures, 64 universes, addresses
   inside their universe, within 400 m) and only from the set's operator, then `RigSet` to every client
-  and joiner (protocol 39); `StagePlan.UseRig` patches it in place of the generated rig and keeps the
+  and joiner (protocol 42); `StagePlan.UseRig` patches it in place of the generated rig and keeps the
   stage's screens, haze and effects when it has none. Hosting or releasing drops it.
 - **Fixtures not ours.** Cells may start anywhere (`FixtureType.CellOffsets`: a master dimmer before a
   bar's cells, which the desk opens); a head without a dimmer lights by its colours and goes dark by
@@ -38,5 +41,12 @@
   scene); `--concertcheck` (a generated rig out and back the same patch; a lights-only rig on another
   stage keeps its screens and effects); `tools/concertnetcheck.sh` (A imports, B gets the 134 fixtures,
   then the set's own rig back).
+- **Real files** (Oct 2026, #941): python-mvr's test files (MIT, `open-stage/python-mvr/tests`), read
+  with `MvrFile.Read`: `capture_demo_show.mvr` (Capture, 76 fixtures, 5 stripped profiles: Clay Paky
+  Alpha Spot and A.leda, Robe MMX Spot and WashBeam, ADB ALC4: a V of heads before the screen at
+  Geneva), `basic_fixture.mvr` (a BlenderDMX RGBW par, unpatched), `scene_objects.mvr` (72 pendants,
+  unpatched), and the spec's `basic_gdtf.mvr` (4 Robe MegaPointes, 39 ch). Not committed (sizes);
+  `MvrTests` copies their two quirks. In game: copy one to `user://concert/mvr/`, `/concert host 5`,
+  `/concert import capture_demo_show.mvr stage`.
 - Not done: someone else's 3D (`Geometry3D`, trusses' models) is not drawn, only fixtures; 3DS is not
   readable at runtime, glTF could be. Multi-break fixtures keep their first break. No live MVR-xchange.
