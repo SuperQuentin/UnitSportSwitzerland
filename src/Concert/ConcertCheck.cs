@@ -42,7 +42,8 @@ public static class ConcertCheck
             var patch = plan.Patch;
             worstChannels = Math.Max(worstChannels, patch.ChannelsUsed);
             worstFixtures = Math.Max(worstFixtures, patch.Fixtures.Count);
-            if (seed <= 24) GD.Print($"[concertcheck] seed {seed}: {e}");
+            // where to look: the front-of-house desk and the far camera, stadium frame (u, height, v)
+            if (seed <= 24) GD.Print(FormattableString.Invariant($"[concertcheck] seed {seed}: {e}; desk {plan.Desk:F1}, far camera {plan.FarCamera?.ToString("F1") ?? "none"}"));
             foreach (var f in patch.Fixtures)
                 if (f.Address + f.Type.Footprint > DmxPatch.Channels)
                     Expect(false, $"seed {seed}: fixture {f.Id} straddles universe {f.Universe}");
