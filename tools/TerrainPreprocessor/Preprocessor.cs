@@ -143,10 +143,13 @@ public static partial class Preprocessor
         var pngCrops = new List<(double E, double N, int Size)>();
         bool force = false, fresh = false, hashOnly = false;
         string? franceBox = null;
-        // French terrain (#936): RGE ALTI 1 m GeoTIFFs for the LV95 tiles swissALTI3D lacks, in a box (km)
-        string? rgeAltiDir = null, rgeAltiBox = null;
+        // the neighbours' terrain (#936, #965): their DEMs for the LV95 tiles swissALTI3D lacks, in a box (km).
+        // --dem <grid>,<dir>[,<dz m>] is repeatable; --rgealti <dir> [--rgealti-dz m] is --dem lambert93,<dir>,<dz>
+        var demArgs = new List<string>();
+        string? rgeAltiDir = null, demBox = null;
         double rgeAltiDz = 0;
-        bool rgeAltiCheck = false;
+        bool demCheck = false;
+        var demProbes = new List<(double E, double N)>();
         // optional OpenStreetMap overlay (#118): a region-wide intermediate for the road network stage
         string? osmPbf = null;
         bool osmCheck = false;
@@ -206,10 +209,17 @@ public static partial class Preprocessor
                 case "--photos": photosOnly = true; break;
                 case "--verify": verify = true; break;
                 case "--france": franceBox = args[++i]; break;
+                case "--dem": demArgs.Add(args[++i]); break;
                 case "--rgealti": rgeAltiDir = args[++i]; break;
-                case "--rgealti-box": rgeAltiBox = args[++i]; break;
+                case "--dem-box": case "--rgealti-box": demBox = args[++i]; break;
                 case "--rgealti-dz": rgeAltiDz = double.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break;
-                case "--rgealti-check": rgeAltiCheck = true; break;
+                case "--dem-check": case "--rgealti-check": demCheck = true; break;
+                case "--dem-probe":
+                {
+                    var p = args[++i].Split(',');
+                    demProbes.Add((double.Parse(p[0], System.Globalization.CultureInfo.InvariantCulture), double.Parse(p[1], System.Globalization.CultureInfo.InvariantCulture)));
+                    break;
+                }
                 case "--osm-overlay": osmPbf = args[++i]; break;
                 case "--osm-check": osmCheck = true; break;
                 case "--fields": fieldsDir = args[++i]; break;
@@ -480,7 +490,8 @@ public static partial class Preprocessor
             return await FranceStage.RunAsync(outDir, box.MinLon, box.MinLat, box.MaxLon, box.MaxLat);
         }
 
-        if (outDir == null || (inDirs.Count == 0 && rgeAltiDir == null && !roadsOnly && !featuresOnly))
+        if (rgeAltiDir != null) demArgs.Insert(0, FormattableString.Invariant($"lambert93,{rgeAltiDir},{rgeAltiDz}"));
+        if (outDir == null || (inDirs.Count == 0 && demArgs.Count == 0 && !roadsOnly && !featuresOnly))
         {
             Console.Error.WriteLine("Required: --in <source dir> --out <chunk dir>");
             Console.Error.WriteLine("  (--in is not needed with --roads-only / --features-only)");
@@ -503,31 +514,65 @@ public static partial class Preprocessor
         // ---- terrain: sources -> .terr + .terrc, parsed and finished in one parallel pass -------
         var sw = Stopwatch.StartNew();
         var sources = TerrainBuild.Discover(inDirs);
-        RgeAlti? france = null;
-        if (rgeAltiDir != null)
+        List<ForeignDem>? foreign = null;
+        if (demArgs.Count > 0)
         {
-            var b = (rgeAltiBox ?? "").Split(',').Select(v => int.Parse(v.Trim(), System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+            var b = (demBox ?? "").Split(',').Select(v => int.Parse(v.Trim(), System.Globalization.CultureInfo.InvariantCulture)).ToArray();
             if (b.Length != 4)
             {
-                Console.Error.WriteLine("--rgealti <dir> needs --rgealti-box minE,minN,maxE,maxN (LV95 km, e.g. 2495,1100,2565,1145)");
+                Console.Error.WriteLine("--dem / --rgealti needs --dem-box minE,minN,maxE,maxN (LV95 km, e.g. 2495,1100,2565,1145)");
                 return 2;
             }
-            france = new RgeAlti(rgeAltiDir) { OffsetZ = rgeAltiDz };
-            if (rgeAltiCheck) return RgeAltiCheck.Run(france, outDir, b[0], b[1], b[2], b[3], jobs);
+            foreign = new List<ForeignDem>();
+            foreach (var d in demArgs)
+            {
+                // grid,dir[,dz]: the dir may hold a drive letter's colon, so commas split
+                var parts = d.Split(',');
+                double dz = parts.Length > 2 ? double.Parse(parts[2], System.Globalization.CultureInfo.InvariantCulture) : 0;
+                var dem = new ForeignDem(DemProjection.Parse(parts[0]), parts[1], dz);
+                Console.WriteLine($"DEM {dem.Name}: {dem.FileCount} rasters, dz {dz:+0.00;-0.00} m");
+                foreign.Add(dem);
+            }
+            if (demProbes.Count > 0)
+            {
+                // each DEM's height (offset applied) at LV95 points, and where they land in its grid
+                foreach (var (pe, pn) in demProbes)
+                    foreach (var dem in foreign)
+                    {
+                        var (x, y) = DemProjection.FromLv95(dem.Crs, pe, pn);
+                        var cur = new ForeignDem.Cursor();
+                        double z = dem.Sample(x, y, ref cur);
+                        Console.WriteLine(FormattableString.Invariant($"probe {pe:F2},{pn:F2} {dem.Name}: ({x:F3}, {y:F3}) -> {z + dem.OffsetZ:F3}"));
+                    }
+                return 0;
+            }
+            if (demCheck)
+            {
+                int worst = 0;
+                foreach (var dem in foreign) worst = Math.Max(worst, ForeignDemCheck.Run(dem, outDir, b[0], b[1], b[2], b[3], jobs));
+                return worst;
+            }
 
-            // every tile already real stays Swiss; the French list of the last run is ours to rebuild
-            string frenchList = Path.Combine(tempDir, "rgealti_tiles.txt");
-            var previous = File.Exists(frenchList) ? TileId.ReadList(frenchList).ToHashSet() : new HashSet<TileId>();
+            // every tile already real stays Swiss; the foreign tiles of earlier runs are ours to rebuild
+            string listPath = Path.Combine(tempDir, "foreign_tiles.txt"), legacyList = Path.Combine(tempDir, "rgealti_tiles.txt");
+            var previous = new HashSet<TileId>();
+            foreach (var f in new[] { listPath, legacyList })
+                if (File.Exists(f)) previous.UnionWith(TileId.ReadList(f));
             var swiss = sources.Select(t => t.Id).ToHashSet();
             string mPath = Path.Combine(outDir, "manifest.json");
             if (File.Exists(mPath))
                 foreach (var t in TerrainManifest.FromJson(File.ReadAllText(mPath)).Tiles)
                     if (!previous.Contains(t.Id)) swiss.Add(t.Id);
-            var french = france.Sources(b[0], b[1], b[2], b[3], swiss);
+            var tiles = new HashSet<TileId>();
+            foreach (var dem in foreign)
+            {
+                var mine = dem.TilesIn(b[0], b[1], b[2], b[3], swiss);
+                Console.WriteLine($"DEM {dem.Name}: {mine.Count} LV95 tiles with its data and no swissALTI3D");
+                tiles.UnionWith(mine);
+            }
             Directory.CreateDirectory(tempDir);
-            File.WriteAllLines(frenchList, french.Select(t => $"{t.Id.E}_{t.Id.N}"));
-            Console.WriteLine($"RGE ALTI: {france.FileCount} French files, {french.Count} LV95 tiles to fill (dz {rgeAltiDz:+0.00;-0.00} m)");
-            sources.AddRange(french);
+            File.WriteAllLines(listPath, previous.Union(tiles).OrderBy(t => t.N).ThenBy(t => t.E).Select(t => $"{t.E}_{t.N}"));
+            sources.AddRange(tiles.Select(ForeignDem.SourceFor));
         }
         if (sources.Count == 0)
         {
@@ -540,7 +585,7 @@ public static partial class Preprocessor
         SetStage("terrain");
         var manifest = TerrainBuild.Run(sources, outDir, tempDir, new TerrainBuild.Options
         {
-            Jobs = jobs, IoJobs = ioJobs, Force = force, Fresh = fresh, Verify = verify, France = france,
+            Jobs = jobs, IoJobs = ioJobs, Force = force, Fresh = fresh, Verify = verify, Foreign = foreign,
         }, ct);
         if (manifest == null) return 1;
         File.WriteAllText(Path.Combine(outDir, "manifest.json"), manifest.ToJson());

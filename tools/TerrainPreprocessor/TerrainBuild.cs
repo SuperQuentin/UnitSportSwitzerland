@@ -40,8 +40,8 @@ public static class TerrainBuild
         public bool Fresh;
         /// <summary>Read every written tile back and compare, then check all seams.</summary>
         public bool Verify;
-        /// <summary>RGE ALTI, for the French sources <see cref="RgeAlti.Sources"/> made (#936).</summary>
-        public RgeAlti? France;
+        /// <summary>The neighbours' DEMs, for <see cref="ForeignDem.SourceFor"/> tiles and swissALTI3D's gaps (#936, #965).</summary>
+        public IReadOnlyList<ForeignDem>? Foreign;
     }
 
     private static readonly Regex NameRe = new(
@@ -207,11 +207,11 @@ public static class TerrainBuild
                 try
                 {
                     long t0 = Stopwatch.GetTimestamp(), t1 = t0;
-                    if (src.Path == RgeAlti.SourcePath)
+                    if (src.Path == ForeignDem.SourcePath)
                     {
-                        // a French tile (#936): resampled from RGE ALTI, which reads its own files
-                        var france = o.France ?? throw new InvalidOperationException("RGE ALTI tile without --rgealti");
-                        if (france.Fill(src.Id, sc.Cells) < sc.Cells.LongLength) XyzParser.FillMissing(sc.Cells);
+                        // a foreign tile (#936, #965): resampled from the neighbours' DEMs, which read their own files
+                        var dems = o.Foreign ?? throw new InvalidOperationException("foreign DEM tile without --dem");
+                        if (ForeignDem.FillAll(dems, src.Id, sc.Cells, onlyMissing: false) < sc.Cells.LongLength) XyzParser.FillMissing(sc.Cells);
                     }
                     else
                     {
@@ -227,7 +227,7 @@ public static class TerrainBuild
                         Interlocked.Add(ref bytesIn, data.Length);
 
                         XyzParser.Parse(data, readPath, src.Id, sc.Cells, sc.Text,
-                            o.France == null ? null : (id, cells) => o.France.Fill(id, cells, onlyMissing: true));
+                            o.Foreign == null ? null : (id, cells) => ForeignDem.FillAll(o.Foreign, id, cells, onlyMissing: true));
                     }
                     long t2 = Stopwatch.GetTimestamp();
 
