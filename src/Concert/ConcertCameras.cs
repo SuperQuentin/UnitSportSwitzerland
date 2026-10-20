@@ -243,8 +243,10 @@ public partial class ConcertCameras : Node3D
         if (finder) Aim(_finderCam, Pose(_rigs[Operating]), _rigs[Operating].Fov);
         // the screens' feed at half the frame rate: 256x144 on an LED wall does not need more
         _tick++;
-        var imagMode = !imag ? SubViewport.UpdateMode.Disabled : (_tick & 1) == 0 ? SubViewport.UpdateMode.Once : _imag.RenderTargetUpdateMode;
-        if (_imag.RenderTargetUpdateMode != imagMode) _imag.RenderTargetUpdateMode = imagMode;
+        // Once must be asked again every time: the server drops back to disabled after the render, but
+        // the property still reads Once, so comparing with it froze the feed on its first frame
+        if (imag && (_tick & 1) == 0) _imag.RenderTargetUpdateMode = SubViewport.UpdateMode.Once;
+        else if (!imag && _imag.RenderTargetUpdateMode != SubViewport.UpdateMode.Disabled) _imag.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
         Mode(_program, prog);
         Mode(_finder, finder);
         // an operator's own camera hides its body from its own lens
