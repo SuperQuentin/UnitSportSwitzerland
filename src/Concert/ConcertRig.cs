@@ -67,6 +67,9 @@ public partial class ConcertRig : Node3D
     private OmniLight3D? _crowdLight;
     private float _haze;
     private ConcertCrowd? _crowd;
+    private Wristbands? _bands;
+    /// <summary>The crowd's wristbands, read from the IR emitters (#986); null without a crowd.</summary>
+    public Wristbands? Bands => _bands;
     private ConcertSfx _sfx = null!;
     private ConcertMusic _music = null!;
     private ConcertPa _pa = null!;
@@ -153,6 +156,7 @@ public partial class ConcertRig : Node3D
             var floor = FloorTop;
             _crowd = new ConcertCrowd(_plan) { Visible = false, Ground = Ground ?? (Event.Stadium.Kind == VenueKind.Stadium ? _ => floor : null) };
             AddChild(_crowd);
+            _bands = new Wristbands(_plan.Patch);
         }
         Live[Event.Stadium.Name] = this;
         GD.Print($"[concert] {Event}: {fx.Count} fixtures, {_plan.Patch.Universes.Count} universes ({_plan.Patch.ChannelsUsed} channels)");
@@ -510,6 +514,11 @@ public partial class ConcertRig : Node3D
             _crowdLight.LightEnergy = 0.6f * Math.Min(1f, b.R + b.G + b.B);
         }
         DriveCrowd(washSum + beamSum);
+        if (_bands != null && _crowd is { Visible: true })
+        {
+            _bands.Step(dt, GlobalTransform);
+            _crowd.DriveBands(_bands);
+        }
     }
 
     /// <summary>The audience follows the show: how hard it dances by section, the rig's colour on it.</summary>
@@ -538,10 +547,12 @@ public partial class ConcertRig : Node3D
     }
 
     /// <summary>The beam's direction from 16-bit pan and tilt: tilt tips it from the yoke's axis towards the fixture's home side, pan turns that about the axis.</summary>
-    private Vector3 Direction(int i)
+    private Vector3 Direction(int i) => Direction(_heads[i], _pan[i], _tilt[i]);
+
+    /// <summary>A head's beam with its motors at <paramref name="panDeg"/>, <paramref name="tiltDeg"/> (the IR heads' too, <see cref="Wristbands"/>).</summary>
+    public static Vector3 Direction(Fixture f, float panDeg, float tiltDeg)
     {
-        var f = _heads[i];
-        float pan = Mathf.DegToRad(_pan[i]), tilt = Mathf.DegToRad(_tilt[i]);
+        float pan = Mathf.DegToRad(panDeg), tilt = Mathf.DegToRad(tiltDeg);
         var up = f.Up;
         var fwd = (f.Home - up * f.Home.Dot(up));
         fwd = fwd.LengthSquared() < 1e-6f ? up.Cross(Vector3.Right).Normalized() : fwd.Normalized();

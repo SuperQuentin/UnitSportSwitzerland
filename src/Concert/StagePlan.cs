@@ -316,6 +316,7 @@ public sealed class StagePlan
         else Box(-hw, hw, 0, 1.2f, 2.4f, 2.6f, Barrier);
 
         Rig(e, hw, d, h, r, catwalk);
+        IrRig(e, hw, d, r, foh, across);
     }
 
     /// <summary>The fixtures of an end stage, by position, as a lighting designer would hang them.</summary>
@@ -361,6 +362,69 @@ public sealed class StagePlan
         }
         Patch.Add(FixtureType.LowFog, RigGroup.LowFog, At(-hw * 0.5f, h, -d + 1f), toward, Vector3.Up);
         Patch.Add(FixtureType.LowFog, RigGroup.LowFog, At(hw * 0.5f, h, -d + 1f), toward, Vector3.Up);
+    }
+
+    // ---- the wristbands' emitters (#986) -----------------------------------------------------------
+
+    /// <summary>How far the floor runs ahead of the stage's front, and half its width across (stage frame): where the IR heads sweep.</summary>
+    public float CrowdAhead { get; private set; }
+    public float CrowdHalf { get; private set; }
+
+    /// <summary>
+    /// The IR emitters of an end stage, patched after the rest of the rig (the earlier addresses stay
+    /// put): four heads on the front truss and two on each delay tower, sweeping the floor and the far
+    /// stand; four floods, one for the floor (the front truss's middle), one for each side stand (the
+    /// truss's ends) and one for the far stand; the transmitter at front of house.
+    /// </summary>
+    private void IrRig(ConcertEvent e, float hw, float d, float r, float foh, bool across)
+    {
+        float half = across ? e.Stadium.FrontHalfV : e.Stadium.FrontHalfU;
+        CrowdAhead = 2 * (across ? e.Stadium.FrontHalfU : e.Stadium.FrontHalfV) - 1.5f - d;
+        CrowdHalf = half;
+        var toward = Dir(0, 0, 1);
+        foreach (float k in new[] { -0.45f, -0.15f, 0.15f, 0.45f })
+            Patch.Add(FixtureType.IrHead, RigGroup.IrHeads, At(k * (hw * 2 - 3f), r - 0.9f, -0.7f), toward, Vector3.Down);
+        float tower = e.Stadium.Kind == VenueKind.Arena ? Math.Min(12f, e.Stadium.RoofInner - e.Stadium.RoofThickness - 1.5f) : 12f;
+        foreach (float side in new[] { -1f, 1f })
+        {
+            float dx = side * Math.Min(18f, half * 0.7f);
+            // on the tower's top, standing: they reach the floor all round and the stands behind
+            foreach (float o in new[] { -0.2f, 0.2f })
+                Patch.Add(FixtureType.IrHead, RigGroup.IrHeads, At(dx + o, tower + 0.3f, foh - 6f), toward, Vector3.Up);
+        }
+        // the floods: home is where they point, for good
+        var floor = At(0, r - 0.6f, -0.7f);
+        Patch.Add(FixtureType.IrFlood, RigGroup.IrFloods, floor, At(0, 0, CrowdAhead * 0.45f) - floor, Vector3.Up);
+        foreach (float side in new[] { -1f, 1f })
+        {
+            var from = At(side * hw, r - 0.6f, -0.7f);
+            Patch.Add(FixtureType.IrFlood, RigGroup.IrFloods, from, At(side * (half + 16f), 12f, CrowdAhead * 0.45f) - from, Vector3.Up);
+        }
+        var far = At(0, r - 0.3f, -0.7f);
+        Patch.Add(FixtureType.IrFlood, RigGroup.IrFloods, far, At(0, 14f, CrowdAhead + 16f) - far, Vector3.Up);
+        Patch.Add(FixtureType.Wristbands, RigGroup.Wristbands, Desk, toward, Vector3.Up);
+    }
+
+    /// <summary>In the round: two IR heads and a flood on each side of the grid, facing out to its stand; the transmitter at front of house.</summary>
+    private void IrRound(ConcertEvent e, float g, float r)
+    {
+        CrowdHalf = Math.Min(e.Stadium.FrontHalfU, e.Stadium.FrontHalfV);
+        CrowdAhead = CrowdHalf;
+        foreach (var n in new[] { new Vector2(0, 1), new Vector2(0, -1), new Vector2(1, 0), new Vector2(-1, 0) })
+        {
+            var outward = Dir(n.X, 0, n.Y);
+            var along = new Vector2(-n.Y, n.X);
+            foreach (float a in new[] { -g * 0.5f, g * 0.5f })
+            {
+                var p = n * g + along * a;
+                Patch.Add(FixtureType.IrHead, RigGroup.IrHeads, At(p.X, r - 0.9f, p.Y), outward, Vector3.Down);
+            }
+            // the stand this side faces: the pitch's end or its side (stage x is u, stage z is -v)
+            float stand = n.X != 0 ? e.Stadium.FrontHalfU : e.Stadium.FrontHalfV;
+            var from = At(n.X * g, r - 0.6f, n.Y * g);
+            Patch.Add(FixtureType.IrFlood, RigGroup.IrFloods, from, At(n.X * (stand + 16f), 12f, n.Y * (stand + 16f)) - from, Vector3.Up);
+        }
+        Patch.Add(FixtureType.Wristbands, RigGroup.Wristbands, Desk, Dir(0, 0, 1), Vector3.Up);
     }
 
     // ---- in the round ------------------------------------------------------------------------------
@@ -453,6 +517,6 @@ public sealed class StagePlan
             Patch.Add(FixtureType.Airburst, RigGroup.Airbursts, from, At(n.X * 30f, 24f, n.Y * 30f) - from, Vector3.Up);
         }
         Patch.Add(FixtureType.Confetti, RigGroup.Confetti, At(-hw, h, -hw), Dir(-0.4f, 1, -0.4f), Vector3.Up);
-        Patch.Add(FixtureType.Confetti, RigGroup.Confetti, At(hw, h, hw), Dir(0.4f, 1, 0.4f), Vector3.Up);
+        Patch.Add(FixtureType.Confetti, RigGroup.Confetti, At(hw, h, hw), Dir(0.4f, 1, 0.4f), Vector3.Up);        IrRound(e, g, r);
     }
 }

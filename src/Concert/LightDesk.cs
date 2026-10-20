@@ -94,6 +94,21 @@ public sealed class LightDesk
         _full = i => 1f;
         _floorGroove = i => 0.8f;
         _buildPixels = i => (i % 8) < _buildFill * 8f ? Colors.White : _pal[0] * 0.1f;
+        // each IR head's place across the crowd: an end stage's heads by where they hang, left to
+        // right (front truss and delay towers mixed), so a sweep draws one line; a round's along its side
+        var ir = G(RigGroup.IrHeads);
+        _irLateral = new float[ir.Length];
+        var right = new Vector2(-_plan.Forward.Y, _plan.Forward.X);
+        var order = Enumerable.Range(0, ir.Length)
+            .OrderBy(i => (new Vector2(ir[i].Position.X, ir[i].Position.Z) - _plan.Origin).Dot(right)).ThenBy(i => i).ToArray();
+        for (int k = 0; k < order.Length; k++)
+        {
+            var f = ir[order[k]];
+            var h = new Vector2(f.Home.X, f.Home.Z).Normalized();
+            _irLateral[order[k]] = _plan.Round
+                ? Math.Clamp(new Vector2(f.Position.X, f.Position.Z).Dot(new Vector2(-h.Y, h.X)) / 12f, -1f, 1f)
+                : (k + 0.5f) / order.Length * 2f - 1f;
+        }
     }
 
     /// <summary>The section playing at a moment of the show (seconds since it started; negative before).</summary>
@@ -258,6 +273,134 @@ public sealed class LightDesk
         if (bands is { } m && Section is not (ShowSection.Blackout or ShowSection.WalkIn)) Accents(m, beat);
         StrobeBursts();
         Effects(beat);
+        Bands(beat);
+    }
+
+    // ---- the crowd's wristbands (#986) ---------------------------------------------------------------
+
+    private readonly float[] _irLateral;
+
+    /// <summary>A slow song: its bands twinkle through the verses instead of staying dark.</summary>
+    private bool Ballad => _e.Genre == Genre.Ballad || (_bpm ?? _e.Bpm) < 90f;
+
+    /// <summary>
+    /// The crowd's wristbands, by section: dark through the walk-in, between songs and in a song's calm
+    /// verse (a ballad's verse twinkles slowly, at random, in the artist's colour); in a groove the IR
+    /// heads sweep a line of colour across the floor and up the far stand and back, every eight bars; a
+    /// chorus opens with every band on in the artist's colour (two bars), then chases the floods stand
+    /// by stand on the beat; at a peak the heads jump to a new spot of the crowd on every beat while
+    /// half the bands, a different half each time, flash on it. A build twinkles faster as it rises;
+    /// the drop lights every band at once.
+    /// </summary>
+    private void Bands(float beat)
+    {
+        var heads = G(RigGroup.IrHeads);
+        var floods = G(RigGroup.IrFloods);
+        foreach (var f in heads) Dark(f);
+        foreach (var f in floods) Dark(f);
+        foreach (var f in G(RigGroup.Wristbands)) Dark(f);
+        if (Section is ShowSection.WalkIn or ShowSection.Blackout) return;
+        int beatN = (int)MathF.Floor(beat);
+        if (Music is { SinceDrop: < 4f })
+        {
+            Transmit(_pal[0], 1f, Wristbands.Solid, 0f);
+            return;
+        }
+        if (Music is { Build: > 0f } m)
+        {
+            Transmit(_pal[1], 0.4f + 0.6f * m.Build, Wristbands.Twinkle, m.Build);
+            return;
+        }
+        switch (Section)
+        {
+            case ShowSection.Calm:
+                if (Ballad) Transmit(_pal[0], 0.8f, Wristbands.Twinkle, 0.1f);
+                break;
+            case ShowSection.Groove:
+            {
+                // there and back in eight bars, a little past the floor's end: up the far stand
+                float u = beat / 16f - MathF.Floor(beat / 32f) * 2f;
+                float depth = (u < 1f ? u : 2f - u) * 1.15f;
+                for (int i = 0; i < heads.Length; i++) IrSpot(heads[i], CrowdPoint(heads[i], depth, _irLateral[i]), _pal[1], 0.5f);
+                break;
+            }
+            case ShowSection.Chorus:
+                if (SectionBar < 2)
+                {
+                    Transmit(_pal[0], 1f, Wristbands.Solid, 0f);
+                    break;
+                }
+                // one stand a beat, the colour turning every two bars
+                if (floods.Length > 0)
+                {
+                    var f = floods[(beatN % floods.Length + floods.Length) % floods.Length];
+                    Paint(f, (SectionBar / 2) % 2 == 0 ? _pal[0] : _pal[2]);
+                    _plan.Patch.Set01(f, Attr.Dimmer, 1f);
+                    _plan.Patch.Set01(f, Attr.Zoom, 0.7f);
+                }
+                break;
+            case ShowSection.Peak:
+                Transmit(_pal[1], 1f, Wristbands.BeatFlash, 0f);
+                for (int i = 0; i < heads.Length; i++)
+                {
+                    uint h = (uint)(beatN * 7919 + i * 104729 + _e.Seed);
+                    h ^= h >> 13; h *= 0x5bd1e995; h ^= h >> 15;
+                    IrSpot(heads[i], CrowdPoint(heads[i], (h % 1000) / 1000f, ((h >> 10) % 1000) / 500f - 1f), _pal[2], 0.35f);
+                }
+                break;
+        }
+    }
+
+    /// <summary>
+    /// A point of the crowd for an IR head: <paramref name="depth"/> 0 at the barrier, 1 at the floor's
+    /// far end, past it up the stand; <paramref name="lateral"/> -1..1 across. In the round, out from
+    /// the head's own side.
+    /// </summary>
+    private Vector3 CrowdPoint(Fixture f, float depth, float lateral)
+    {
+        if (!_plan.Round)
+        {
+            float z = 3f + depth * (_plan.CrowdAhead - 3f);
+            return _plan.StagePoint(lateral * _plan.CrowdHalf * 0.9f, 1.3f + Math.Max(0f, z - _plan.CrowdAhead) * 0.6f, z);
+        }
+        var h = new Vector2(f.Home.X, f.Home.Z).Normalized();
+        float front = MathF.Abs(h.X) > 0.5f ? _e.Stadium.FrontHalfU : _e.Stadium.FrontHalfV;
+        float from = MathF.Abs(new Vector2(f.Position.X, f.Position.Z).Dot(h)) + 3f;
+        float d = from + depth * (front - from);
+        var p = h * d + new Vector2(-h.Y, h.X) * lateral * front * 0.8f;
+        return new Vector3(p.X, 1.3f + Math.Max(0f, d - front) * 0.6f, p.Y);
+    }
+
+    /// <summary>An IR head on, aimed at a point, in a colour code, its beam <paramref name="zoom"/> open.</summary>
+    private void IrSpot(Fixture f, Vector3 target, Color c, float zoom)
+    {
+        var d = (target - f.Position).Normalized();
+        var up = f.Up;
+        var fwd = f.Home - up * f.Home.Dot(up);
+        fwd = fwd.LengthSquared() < 1e-6f ? up.Cross(Vector3.Right).Normalized() : fwd.Normalized();
+        var right = up.Cross(fwd);
+        // the inverse of ConcertRig.Direction; the pan the turn nearest to where the yoke is, never the long way round
+        float tilt = Mathf.RadToDeg(MathF.Acos(Math.Clamp(d.Dot(up), -1f, 1f)));
+        float pan = Mathf.RadToDeg(MathF.Atan2(d.Dot(right), d.Dot(fwd)));
+        float was = (_plan.Patch.Get16(f, Attr.Pan, Attr.PanFine) - 0.5f) * f.Type.PanRange;
+        pan += 360f * MathF.Round((was - pan) / 360f);
+        if (MathF.Abs(pan) > f.Type.PanRange / 2f) pan -= 360f * MathF.Sign(pan);
+        Aim(f, pan, Math.Min(tilt, f.Type.TiltRange / 2f));
+        Paint(f, c);
+        _plan.Patch.Set01(f, Attr.Dimmer, 1f);
+        _plan.Patch.Set01(f, Attr.Zoom, zoom);
+    }
+
+    /// <summary>Every band at once, through the transmitter: a colour, a level, an effect the bands play.</summary>
+    private void Transmit(Color c, float level, int effect, float rate)
+    {
+        foreach (var f in G(RigGroup.Wristbands))
+        {
+            Paint(f, c);
+            _plan.Patch.Set01(f, Attr.Dimmer, level);
+            _plan.Patch.Set(f, f.Type.Offset(Attr.Effect), Wristbands.EffectValue(effect));
+            _plan.Patch.Set01(f, Attr.Rate, rate);
+        }
     }
 
     /// <summary>
@@ -429,6 +572,10 @@ public sealed class LightDesk
                 // RGBW: white takes what the three share
                 float w = MathF.Min(c.R, MathF.Min(c.G, c.B));
                 p.Set01(f, Attr.Red, c.R - w); p.Set01(f, Attr.Green, c.G - w); p.Set01(f, Attr.Blue, c.B - w); p.Set01(f, Attr.White, w);
+                break;
+            case FixtureKind.IrHead or FixtureKind.IrFlood or FixtureKind.Wristbands:
+                // a band's colour code, plain RGB
+                p.Set01(f, Attr.Red, c.R); p.Set01(f, Attr.Green, c.G); p.Set01(f, Attr.Blue, c.B);
                 break;
             case FixtureKind.Spot:
                 // CMY subtracts from white
