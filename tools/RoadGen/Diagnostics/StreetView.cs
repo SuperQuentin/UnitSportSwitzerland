@@ -41,6 +41,7 @@ public static class StreetView
 
         int segments = 0, sides = 0, tracks = 0;
         var bikes = new StringBuilder();
+        var paths = new StringBuilder();
         var roads = new StringBuilder();
         var walks = new StringBuilder();
         var walls = new StringBuilder();
@@ -222,6 +223,17 @@ public static class StreetView
                 }
             }
 
+            // the junction paths (#818, #971): cars white, riders on a bike lane yellow, riders from path to path cyan; a dot at the start
+            foreach (var jp in tile.JunctionPaths)
+            {
+                var v = jp.Points;
+                var pts = new (double E, double N)[jp.PointCount];
+                for (int i = 0; i < pts.Length; i++) pts[i] = (id.MinE + v[i * 3], id.MaxN - v[i * 3 + 2]);
+                string colour = jp.Kind switch { JunctionPathKind.Bike => "#f1c40f", JunctionPathKind.Path => "#00bcd4", _ => "#ffffff" };
+                paths.Append(c, $"<path d=\"{Offset(pts, 0, X, Y)}\" stroke=\"{colour}\" stroke-width=\"{(jp.Kind == JunctionPathKind.Car ? 1.2 : 2):F1}\" fill=\"none\" opacity=\"0.9\"/>");
+                paths.Append(c, $"<circle cx=\"{X(pts[0].E)}\" cy=\"{Y(pts[0].N)}\" r=\"2.5\" fill=\"{colour}\"/>");
+            }
+
             foreach (var prop in tile.LinearProps)
             {
                 var pts = new (double E, double N)[prop.PointCount];
@@ -233,6 +245,7 @@ public static class StreetView
         svg.Append("<g>").Append(roads).Append("</g>\n");
         svg.Append("<g>").Append(walks).Append("</g>\n");
         svg.Append("<g>").Append(bikes).Append("</g>\n");
+        svg.Append("<g>").Append(paths).Append("</g>\n");
         svg.Append("<g fill=\"#222\" stroke=\"#222\" stroke-width=\"1\">").Append(walls).Append("</g>\n");
         svg.Append(c, $"<text x=\"8\" y=\"20\" font-family=\"sans-serif\" font-size=\"16\">LV95 {e:F0},{n:F0}, {size:F0} m; {segments} segments, {sides} sidewalk sides, {tracks} bike path sides</text>\n");
         svg.Append("</svg>\n");
