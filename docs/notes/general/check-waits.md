@@ -1,0 +1,48 @@
+# Waits in checks: wait for the thing, never a fixed time (#992)
+
+A fixed `await Seconds(n)` costs n real seconds in every net and full run, padded for the slowest machine.
+In #992, about 70 of them moved to the event they stood for (38 probes), and so did the scripts' sleeps,
+polls and lingers.
+
+## Rules for a probe (`ChatProbe` or its own helpers)
+
+- **Settle waits become `Until(cond, T)`.** The `cond` is exactly what the next line needs or asserts, and
+  the `Expect` after it stays. `T` is never shorter than the old wait: a check may get faster, never less
+  patient.
+- **Keep it fixed when nothing on the client can see the event:**
+  - **Observation windows**: a refusal leaves no trace, a rate budget holds, "still down 5 s later".
+  - **Input pacing**: holds and taps, drive and fly durations.
+  - **Sampling**: `Sample`, `Watch`.
+  - **Single-snapshot reads** sent to a peer: excavator arm angles, airliner N1.
+  - **Settles after a teleport** (`PlaceAt`, `StandAt`, `WalkIn`, before a `Take` / `Open` / `Claim`): the
+    server must have our new position, which a client cannot see.
+- **`IsOnFloor()` right after a teleport** can still read the old ground. Wait a physics frame first, or keep
+  the settle.
+- **Logins:** `if (!await LogIn("pw")) return;`, which waits for `Permissions.IsAdmin`. Never `/login` then a
+  pause.
+- **Say-and-sleep retry loops:** `Say(x); if (await Until(answered, t)) break;` at the old interval.
+- **Waits only for a screenshot:** `if (DisplayServer.GetName() != "headless")`. Headless draws no frame.
+- **A peer that runs on a timeline** (thrower, driver, bridge) steps when the watcher says it saw the last
+  step:
+  - `radiocheck`: `RS watch <key>`.
+  - `bonkcheck`: `BK victim back|lowered`.
+  - The old time stays as the latest.
+- **`Finish(linger)`** prints RESULT, says `finished`, and quits once every peer it heard has said `finished`
+  too. The linger is the most it waits, then 0.25 s to flush. A probe with no prefix, or one that heard no
+  peer, lingers as before.
+
+## Rules for a script
+
+- Poll every 0.2 s (`sleep 0.2`, five times the count: same timeout). `tc_server`, `guard_run` and the
+  polls all do.
+- **No stagger sleep** between clients whose probes already wait for each other: a hello/ready
+  handshake, a gate on `Other()`.
+- A late joiner waits for a log line, never a time. `clocknetcheck`'s B starts once A's sky follows the
+  world clock.
+- **Keep the stagger where the second client must be connected before the first acts:**
+  - `racecheck`'s `--racejoin` reacts to the invite line, and chat is not replayed.
+  - `crashnetcheck`'s driver crashes at t = 4 s whatever the watcher does.
+- **World:** the lightest one the assertions need (`test-systems-optin`).
+  - Ten scripts moved from the generated world or the real map to `--world fixture`, server and clients:
+    bonk, gadgetnet, buildnet, plant, gunshot, useanim, pvp, placed, switch, radio.
+  - `REAL=1` boots their old ground.

@@ -22,6 +22,7 @@ occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new o
 `twoclient-checks` (server + two-client `tools/*check.sh` go through `tools/lib/twoclient.sh`),
 `testing` (test tiers, `tools/test.sh unit|quick|net|full`, path-to-check map, resource guard),
 `fast-checks` (the quick tier runs `--fixed-fps 60`: time waits with `GameClock.Now`, wait for threads on the wall clock; net checks at `/speed` with `--checkspeed`),
+`check-waits` (wait for the event, never a fixed time: `Until`, `LogIn`, `Finish` ends with the peers, 0.2 s polls, `REAL=1` for the flat-world scripts),
 `dead-code-and-shared-helpers` (use `Terrain.Format.SwissProjection`, `TileId.ReadList`; prove a member unused before deleting it),
 `test-systems-optin` (every probe declares `--world flat|fixture` / `--systems`, the lightest that works; driving checks run on fixture courses),
 `perf-no-per-frame-allocations` (static `StringName`, no LINQ/strings/lists per frame, UI text and shader params only on change),
