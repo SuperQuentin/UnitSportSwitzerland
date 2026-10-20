@@ -10,8 +10,9 @@ namespace UnitSport.Terrain;
 /// <para>
 /// A decorator on the ordinary chain, like <see cref="NetworkChunkSource"/>: a tile this source
 /// <see cref="Covers"/> is generated here, everything else goes to the inner source untouched. A
-/// tile is covered when it is not real and lies inside the fill domain: the box round the spawn
-/// tile and the real set's bounding box, each grown by <see cref="FillRadiusTiles"/>. So a partial
+/// tile is covered when it is not real and lies inside the fill domain (<see cref="FillDomain"/>): the
+/// box round the spawn tile, the boxes round the places it was asked to <see cref="Reach"/> (a server's
+/// players), and the real set's bounding box, each grown by <see cref="FillRadiusTiles"/>. So a partial
 /// region — a MapSetup zone, a server streaming part of the country, a download with holes — is
 /// surrounded by generated land instead of void, and a fresh clone with no terrain at all is
 /// generated throughout. Clients never ask a server for a generated tile: this sits above
@@ -64,42 +65,29 @@ public sealed partial class FallbackChunkSource : IChunkSource
     /// </summary>
     public string? HorizonCacheDir { get; set; }
 
-    /// <summary>An inclusive tile rectangle.</summary>
-    public readonly record struct TileRect(int MinE, int MinN, int MaxE, int MaxN)
-    {
-        public bool Contains(TileId id) => id.E >= MinE && id.E <= MaxE && id.N >= MinN && id.N <= MaxN;
-        public TileRect Grow(int by) => new(MinE - by, MinN - by, MaxE + by, MaxN + by);
-        public TileRect Union(TileRect o) =>
-            new(Math.Min(MinE, o.MinE), Math.Min(MinN, o.MinN), Math.Max(MaxE, o.MaxE), Math.Max(MaxN, o.MaxN));
-    }
-
-    /// <summary>What is real and what may be generated, as of one <see cref="SetReal"/>.</summary>
+    /// <summary>What is real and what may be generated, as of one <see cref="SetReal"/> or <see cref="Reach"/>.</summary>
     public sealed class Snapshot
     {
         public IReadOnlySet<TileId> Real { get; }
-        public TileRect Spawn { get; }
-
-        /// <summary>The real set's bounding box grown by the fill radius; null with no real tiles yet.</summary>
-        public TileRect? RealBox { get; }
+        public FillDomain Domain { get; }
 
         public bool Enabled { get; }
         public long Version { get; }
 
-        internal Snapshot(IReadOnlySet<TileId> real, TileRect spawn, TileRect? realBox, bool enabled, long version)
+        internal Snapshot(IReadOnlySet<TileId> real, FillDomain domain, bool enabled, long version)
         {
             Real = real;
-            Spawn = spawn;
-            RealBox = realBox;
+            Domain = domain;
             Enabled = enabled;
             Version = version;
         }
 
-        public bool InDomain(TileId id) => Spawn.Contains(id) || RealBox?.Contains(id) == true;
+        public bool InDomain(TileId id) => Domain.Contains(id);
 
         public bool Covers(TileId id) => Enabled && !Real.Contains(id) && InDomain(id);
 
         /// <summary>One rectangle holding the whole domain, for sizing the horizon's coverage texture.</summary>
-        public TileRect Bounds => RealBox is { } r ? Spawn.Union(r) : Spawn;
+        public TileRect Bounds => Domain.Bounds;
     }
 
     /// <param name="spawnE">Where the player starts: the fill always reaches this far round it.</param>
@@ -108,9 +96,8 @@ public sealed partial class FallbackChunkSource : IChunkSource
     {
         _inner = inner;
         World = world;
-        var t = TileId.FromLv95(spawnE, spawnN);
-        var spawn = new TileRect(t.E, t.N, t.E, t.N).Grow(FillRadiusTiles);
-        _snapshot = new Snapshot(new HashSet<TileId>(), spawn, null, enabled, 0);
+        var domain = FillDomain.At(TileId.FromLv95(spawnE, spawnN), FillRadiusTiles);
+        _snapshot = new Snapshot(new HashSet<TileId>(), domain, enabled, 0);
     }
 
     public Snapshot Current => _snapshot;
@@ -120,7 +107,7 @@ public sealed partial class FallbackChunkSource : IChunkSource
 
     /// <summary>
     /// Takes the set of real tiles (a copy is kept) and optionally switches generation on or off.
-    /// The domain only ever grows: the real set only grows, and the spawn box is fixed.
+    /// The domain only ever grows: the real set only grows, and the boxes are only added to.
     /// </summary>
     public Snapshot SetReal(IEnumerable<TileId> real, bool? enabled = null)
     {
@@ -140,10 +127,25 @@ public sealed partial class FallbackChunkSource : IChunkSource
         }
         var old = _snapshot;
         // never shrink: a tile that was generated keeps being generated
-        if (old.RealBox is { } previous) box = box is { } b ? b.Union(previous) : previous;
-        var next = new Snapshot(set, old.Spawn, box, enabled ?? old.Enabled, old.Version + 1);
+        var next = new Snapshot(set, old.Domain.WithReal(box), enabled ?? old.Enabled, old.Version + 1);
         _snapshot = next;
         return next;
+    }
+
+    /// <summary>
+    /// Grows the domain so it holds <paramref name="at"/>, <see cref="FillRadiusTiles"/> round it as a fill
+    /// started there would (<see cref="FillDomain.Reach"/>). Returns the box added, or null when the tile
+    /// was already in the domain (or the fill is off). Unloading the tiles it now covers, which were loaded
+    /// as void, is the caller's job (<see cref="ChunkManager.FillFollowsAnchors"/>).
+    /// </summary>
+    public TileRect? Reach(TileId at)
+    {
+        var old = _snapshot;
+        if (!old.Enabled || old.Real.Contains(at)) return null;
+        var domain = old.Domain.Reach(at, FillRadiusTiles);
+        if (ReferenceEquals(domain, old.Domain)) return null;
+        _snapshot = new Snapshot(old.Real, domain, old.Enabled, old.Version + 1);
+        return domain.Boxes[^1];
     }
 
     // ---- IChunkSource ------------------------------------------------------------------------

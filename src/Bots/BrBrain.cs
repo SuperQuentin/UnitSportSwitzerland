@@ -219,6 +219,8 @@ public sealed class BrBrain : IBotBrain
 
     private Vector3? _pingAt;
     private double _pingSeen;
+    /// <summary>When this bot took the ping on, on its own clock (the physics it has run, BotDirector.Clock).</summary>
+    private double _pingFrom;
     private long _reviveWho;
     private double _reviveFrom;
     private double _pingOutAt;
@@ -228,7 +230,10 @@ public sealed class BrBrain : IBotBrain
     /// <summary>Seconds a bot stays at a human's ping once there.</summary>
     private const double PingLinger = 8;
     private readonly Dictionary<long, double> _pingedEnemy = new();
-    /// <summary>A human's ping is followed this long, unless reached.</summary>
+    /// <summary>
+    /// A human's ping is followed this long, unless reached: seconds of the bot's own physics, not SimNow, which
+    /// runs on the wall clock (#937: a server dropping frames at /speed 4 gave the walk a third of its minute).
+    /// </summary>
     private const double PingFollow = 60;
 
     /// <summary>The squad's part of what it knows; and, with a human in the team, it pings an enemy it sees for them.</summary>
@@ -239,10 +244,11 @@ public sealed class BrBrain : IBotBrain
         if (_br.State.Find(bot.Id) is { } me && _br.HumanPing(me.Team) is { } ping && ping.When > _pingSeen)
         {
             _pingSeen = ping.When;
+            _pingFrom = now;
             _pingAt = ping.At;
             _pingHereUntil = 0;
         }
-        if (_pingAt != null && SimNow - _pingSeen > PingFollow) _pingAt = null;
+        if (_pingAt != null && now - _pingFrom > PingFollow) _pingAt = null;
         // for a human mate: an enemy seen for the first time in a while, at most one ping every 10 s
         if (team.HasHuman && enemy is { } e && e.Distance < 250f && now - _pingOutAt > 10
             && (!_pingedEnemy.TryGetValue(e.Id, out double at) || now - at > 30) && bot.Body.Origin is { } origin)

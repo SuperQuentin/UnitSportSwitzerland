@@ -816,6 +816,28 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     }
 
     /// <summary>
+    /// The dedicated server's mode (#937): the generated fill's domain grows round every anchor that
+    /// stands outside it (<see cref="FallbackChunkSource.Reach"/>). A client fills round its own start, so
+    /// a player who started 170 km from the server's spawn (<c>--at</c>), and the Battle Royale opened
+    /// where they stand, had ground on their side and none on the server's: no heights, no road points,
+    /// and a bot dropped there sank through the world. Off on clients.
+    /// </summary>
+    public bool FillFollowsAnchors { get; set; }
+
+    /// <summary>Grows the fill round the anchors outside it, and drops the void tiles it now covers.</summary>
+    private void ReachFill()
+    {
+        if (_fallback is not { Current.Enabled: true } fallback) return;
+        foreach (var anchor in _anchors)
+        {
+            if (!GodotObject.IsInstanceValid(anchor)) continue;
+            if (fallback.Reach(_origin!.TileAt(anchor.GlobalPosition)) is not { } box) continue;
+            ReplaceTiles(id => box.Contains(id) && !_available.Contains(id));
+            GD.Print($"[terrain] generated fill reaches {box} round {anchor.Name}");
+        }
+    }
+
+    /// <summary>
     /// Switches the generated fill on or off while running: every generated tile is unloaded (or
     /// every missing one starts generating) and the horizon is rebuilt.
     /// </summary>
@@ -1755,6 +1777,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 
     private void EvaluateRings()
     {
+        if (FillFollowsAnchors) ReachFill();
         if (RingKeyChanged())
         {
             _orderedView = null;
