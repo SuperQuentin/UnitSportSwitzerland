@@ -39,8 +39,11 @@
 - **Vertical**: `--rgealti-check` compares with swissALTI3D where both exist: median Swiss - French
   **-0.28 m** over the clean tiles; best horizontal shift within 1 m of zero. Lake tiles (Swiss bed
   carved, French surface) and steep Alpine tiles disagree by metres and are not a datum signal.
-- **RGE ALTI already holds Léman's bed** on the French side (93 m minimum), but French tiles have no
-  `.cover`, so the water pass gives them no `.water`: the French half of the lake is dry ground
-  until a French cover (BD TOPO hydrography/vegetation) exists.
+- **Léman's French half is in Swiss tiles**: swissALTI3D and swissTLM3D (its Water cover) span
+  the whole lake, so the water pass gives it its level and bed like the Swiss half. The French
+  *tiles* (RGE ALTI, the Chablais) have no `.cover`: no inland water there (Dranse, Montriond)
+  and no land cover until BD TOPO hydrography/vegetation is rasterized onto them.
+  Do not seed water by "below Léman's level and connected to it": the Rhône below Geneva is
+  lower than the lake and its banks connect through the river.
 - `TiffFloat` reads IGN's strip float32 TIFFs (LZW, predictor 2) without GDAL. 16 GB for D074;
   a 1 735-tile fill took ~16 min on the NAS at 6 jobs, peak a few hundred MB.
