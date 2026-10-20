@@ -179,14 +179,14 @@ public sealed class SignalSite
     public required Vector3[] Out { get; init; }
 
     /// <summary>The riders' paths through it (#971, the debug drawing; riders are not traffic): their line (world) and group.</summary>
-    public List<(Vector3[] Points, int Group)> Rides { get; } = new();
+    public List<(Vector3[] Points, int Group, SignalMoves Move)> Rides { get; } = new();
 
     /// <summary>Its crossings (#971, the debug drawing): kerb to kerb between the arm's pedestrian heads (world), and the arm.</summary>
     public List<(Vector3 From, Vector3 To, int Arm)> Walks { get; } = new();
 
     public void Shift(OriginShift shift)
     {
-        foreach (var (points, _) in Rides)
+        foreach (var (points, _, _) in Rides)
             for (int i = 0; i < points.Length; i++) points[i] = shift.Point(points[i]);
         for (int i = 0; i < Walks.Count; i++) Walks[i] = (shift.Point(Walks[i].From), shift.Point(Walks[i].To), Walks[i].Arm);
     }
@@ -461,12 +461,12 @@ public sealed class LaneGraph
             foreach (var jpath in tile.JunctionPaths)
             {
                 // a riders' path at the lights: kept for the debug drawing only (#971)
-                if (jpath.Kind == JunctionPathKind.Bike && jpath.PointCount >= 2 && jpath.Signal >= 0 && jpath.Signal < sites.Length)
+                if (jpath.Kind is JunctionPathKind.Bike or JunctionPathKind.Path && jpath.PointCount >= 2 && jpath.Signal >= 0 && jpath.Signal < sites.Length)
                 {
                     var ride = new Vector3[jpath.PointCount];
                     for (int i = 0; i < ride.Length; i++)
                         ride[i] = origin.ToWorld(tile.Id.MinE + jpath.Points[i * 3], tile.Id.MaxN - jpath.Points[i * 3 + 2], jpath.Points[i * 3 + 1]);
-                    sites[jpath.Signal].Rides.Add((ride, jpath.Group));
+                    sites[jpath.Signal].Rides.Add((ride, jpath.Group, jpath.Move));
                 }
                 if (jpath.Kind != JunctionPathKind.Car || jpath.PointCount < 2) continue;
                 int n = jpath.PointCount;

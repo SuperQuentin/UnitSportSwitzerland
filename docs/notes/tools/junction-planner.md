@@ -261,6 +261,11 @@ off, `--junctions new` plans and reports without writing.
   along transitions from `TRNS` (today traffic reads neither: `KeepRight` offsets, `LaneApproach.Lateral`, straight connectors
   with every lane offset 0); 5c cores spanning several nodes. The marking details (bike boxes, solid lines, guides past islands)
   are settled in phase 6's review (the user, Oct 15).
+- **Riders from path to path** (#971, the user): at a junction whose arms have separated paths, `WriteBikeCrossings` hands back
+  the riders' ways (`ConnectorKind.Path`, `JunctionPathKind.Path`, written with the core's paths after it): straight on from A's
+  path at its mouth over the red crossing of the arm between to B's (the crossing's own run), and right round the corner (the
+  kerb between the mouths moved out to the paths' middles, `OffsetAlong`), on the arm's bike group. Their ends lie on the paths:
+  `SignalCheck` leaves them out of the lane and cap checks. Test region: J2 4 + 4; 168 real tiles 712.
 - **5a, written** (`TileRewriter.LayoutWrite` `WritePaths`): one path per connector, car and bike; its ends where the arm's road
   meets the mouth (the axis point at the mouth station, height from the cap) with the lane's offset right of a driver arriving
   (the connector's `FromOffset`/`ToOffset`); signal record and group as the bike crossings find them; points on the cap's

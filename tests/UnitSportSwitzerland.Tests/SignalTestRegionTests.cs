@@ -50,6 +50,25 @@ public sealed class SignalTestRegionFixture : IDisposable
 public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixture<SignalTestRegionFixture>
 {
     [Fact]
+    public void J2s_riders_go_from_path_to_path_straight_on_and_right_and_flash_turning_across_a_crossing()
+    {
+        // #971, the user: the separated paths' riders straight on over the next arm's bike crossing and right round the corner, on
+        // their bike group; turning right across a crossing green with them, their head has the flasher
+        var j = region.Junction("J2");
+        var tile = region.Tile(j.E, j.N);
+        var plan = tile.Signals.Single().Plan;
+        var rides = tile.JunctionPaths.Where(p => p.Kind == JunctionPathKind.Path).ToList();
+        foreach (var move in new[] { SignalMoves.Through, SignalMoves.Right })
+            Assert.Equal(4, rides.Count(p => p.Move == move && p.Signal == 0 && plan.Groups[p.Group].Kind == SignalGroupKind.Bike));
+        Assert.Contains(plan.Groups, g => g.Kind == SignalGroupKind.Flasher && plan.Groups[g.Qualifies].Kind == SignalGroupKind.Bike);
+        // and it flashes while their green is on: the bike head's own yellow, flashing beside the green
+        int flasher = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Flasher && plan.Groups[g.Qualifies].Kind == SignalGroupKind.Bike);
+        int riders = plan.Groups[flasher].Qualifies;
+        Assert.Contains(Enumerable.Range(0, (int)(plan.Cycle * 4)).Select(k => k * 0.25),
+            t => plan.State(riders, t) == SignalAspect.Green && plan.State(flasher, t) == SignalAspect.FlashingAmber);
+    }
+
+    [Fact]
     public void Region_builds_with_the_designed_lanes_and_valid_plans()
     {
         Assert.True(region.Code == 0, string.Join("\n", region.Log.Where(l => l.StartsWith("J", StringComparison.Ordinal) || l.Contains("RESULT"))));

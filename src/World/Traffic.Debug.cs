@@ -83,9 +83,15 @@ public partial class Traffic
                 var near = site.Walks.Count > 0 ? site.Walks[0].From : site.Rides[0].Points[0];
                 if (new Vector2(near.X - focus.X, near.Z - focus.Z).Length() > LightsDrawn) continue;
                 double now = Net.ClockSync.ServerNow;
-                foreach (var (points, group) in site.Rides)
-                    if (group < site.Plan.Groups.Count && LitColour(site.Plan.State(group, now)) is { } c)
-                        for (int i = 0; i + 1 < points.Length; i++, lines++) Ribbon(mesh, points[i] + Vector3.Up * 1.2f, points[i + 1] + Vector3.Up * 1.2f, c, 0.35f);
+                foreach (var (points, group, move) in site.Rides)
+                {
+                    if (group >= site.Plan.Groups.Count || LitColour(site.Plan.State(group, now)) is not { } c) continue;
+                    // a riders' right turn giving way to the crossing it crosses (their flasher on): dashed
+                    bool yields = move == SignalMoves.Right && site.Plan.Groups.Select((g, k) => (g, k))
+                        .Any(x => x.g.Kind == SignalGroupKind.Flasher && x.g.Qualifies == group && site.Plan.State(x.k, now) == SignalAspect.FlashingAmber);
+                    for (int i = 0; i + 1 < points.Length; i++, lines++)
+                        if (!yields || i % 2 == 0) Ribbon(mesh, points[i] + Vector3.Up * 1.2f, points[i + 1] + Vector3.Up * 1.2f, c, 0.35f);
+                }
                 foreach (var (from, to, arm) in site.Walks)
                 {
                     int group = Enumerable.Range(0, site.Plan.Groups.Count)

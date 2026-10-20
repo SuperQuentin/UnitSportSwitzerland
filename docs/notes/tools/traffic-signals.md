@@ -50,6 +50,10 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   approach (+ flasher). The user's 6-phase table holds exactly (test `FullCrossroads_RunsTheSixPhases`).
   Correction found while building it: a T's side-road right overlap goes with the main left
   phase, not the main through (it would merge with the through traffic going its way).
+  **Riders turning right** (#971, the user): a bike group carries Right too where the approach turns right; that move keeps to
+  its own way round the corner (no car conflicts) and yields to the exit arm's crossing (permissive, so it shares the walkers'
+  green, `Expand`), which gives the bike group a flasher: the bike head's own yellow lens flashes during its green
+  (`SignalBuilder.Lens.Flash`, no lamp of its own). J2: on every arm.
 - **Timing**: yellow 3/4/5 s by speed (SN 640 837 via SRF), red+yellow 2 s (cars, secondary
   source BASt V 149) / 1 s (bikes), all-red 2 s fixed (SN 640 838 computes it per conflict,
   paywalled), min green 4 s, pedestrian green >= 5 s, pedestrian clearance 2/3 of the crossing

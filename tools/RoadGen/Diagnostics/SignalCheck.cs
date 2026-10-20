@@ -125,6 +125,8 @@ public static class SignalCheck
         t.Cores += tile.JunctionPaths.Select(p => p.Junction).Distinct().Count();
         foreach (var p in tile.JunctionPaths)
         {
+            // riders from path to path (#971) run round the core from path to path: no lane at their ends, not on the cap
+            if (p.Kind == JunctionPathKind.Path) continue;
             t.Paths++;
             int n = p.PointCount;
             string? bad = null;

@@ -21,7 +21,7 @@ public static partial class TileRewriter
     private static void WriteBikeCrossings(JunctionPlan jp, RoadGenResult result, Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf,
         Dictionary<RoadSegment, List<RoadSegment>> finalPieces, SignalPlan? plan, RoadJunction? cap, Dictionary<TileId, List<RoadPaint>> paint,
         Dictionary<TileId, List<(RoadAreaProp Band, List<Vec2> Ring)>> bridges, Dictionary<TileId, List<CornerPlanner.PathEnd>> pathEnds, LayoutWriteStats stats,
-        List<Vec2> landings)
+        List<Vec2> landings, List<Connector> rides)
     {
         var core = jp.Core!;
         var net = result.Network;
@@ -207,6 +207,32 @@ public static partial class TileRewriter
             Line(OffsetLine(run, width * 0.5 - lw * 0.5), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
             Line(OffsetLine(run, -(width * 0.5 - lw * 0.5)), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
             stats.PathCrossings++;
+            // the riders' way straight on (the user, #971): from A's path at its mouth over this crossing to B's
+            var (centreA, _) = PathBand(secA, right: true)!.Value;
+            var (centreB, _) = PathBand(secB, right: false)!.Value;
+            var way = new List<Vec2> { a.Axis.At(ma.Station, centreA) };
+            way.AddRange(run);
+            way.Add(b.Axis.At(mb.Station, centreB));
+            rides.Add(Ride(a.Arm, b.Arm, SignalMoves.Through, way, pathA, pathB, centreA, centreB));
+        }
+
+        // 3. the riders turning right from a path onto the next arm's (the user, #971): round the corner between them, the kerb
+        // moved out to the paths' middles (no carriageway crossed; the next arm's crossing is, so they wait for its walkers)
+        if (jp.Merged?.Ring is null)
+        foreach (var a in jp.Arms)
+        {
+            if (!a.Toward.TryGetValue(SignalMoves.Right, out int toArm) || jp.Arms.FirstOrDefault(x => x.Arm == toArm) is not { } c) continue;
+            var ma = core.Mouths.FirstOrDefault(m => m.Arm == a.Arm);
+            var mc = core.Mouths.FirstOrDefault(m => m.Arm == c.Arm);
+            if (ma is null || mc is null || a.Axis is null || c.Axis is null) continue;
+            var secA = ExteriorPlanner.SectionAt(a, 0);
+            var secC = ExteriorPlanner.SectionAt(c, 0);
+            if (PathBand(secA, right: true) is not var (centreA, widthA) || PathBand(secC, right: false) is not var (centreC, widthC)) continue;
+            if (core.Corners.FirstOrDefault(k => k.ArmA == a.Arm && k.ArmB == c.Arm) is not { Shape: not CornerShape.Gore } corner) continue;
+            var kerb = KerbAlong(ma.Right, corner.Kerb, mc.Left);
+            var way = OffsetAlong(kerb, centreA - secA.CarriagewayRight, secC.CarriagewayLeft - centreC, a.Axis.RightAt(ma.Station), -c.Axis.RightAt(mc.Station));
+            if (way.Count < 2) continue;
+            rides.Add(Ride(a.Arm, c.Arm, SignalMoves.Right, way, widthA, widthC, centreA, centreC));
         }
         stats.PathsCrossingInCorner += LayCarriedSides(carriedSides, bridges);
 
@@ -219,6 +245,14 @@ public static partial class TileRewriter
             return right ? r : l;
         }
     }
+
+    /// <summary>A riders' way from one arm's path to another's (#971): a bike connector off the core, written as a junction path.</summary>
+    private static Connector Ride(int from, int to, SignalMoves move, List<Vec2> way, double width, double toWidth, double fromOffset, double toOffset) =>
+        new()
+        {
+            FromArm = from, FromId = -1, ToArm = to, ToId = -1, Move = move, Kind = ConnectorKind.Path, Width = width, ToWidth = toWidth,
+            FromOffset = fromOffset, ToOffset = toOffset, Centre = way,
+        };
 
     /// <summary>A path band beside a section's carriageway on one side: its centre's offset and its width; null without one.</summary>
     private static (double Centre, double Width)? PathBand(Section s, bool right)
