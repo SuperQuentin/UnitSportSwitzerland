@@ -44,6 +44,12 @@ public partial class GameShell : Node
     private ClientWorld? _world;
     private WorldLaunch? _launch;
     private HostedServer? _hosted;
+    /// <summary>The test world the hosted server plays (#999), null for the open world.</summary>
+    private WorldChoice? _hostedWorld;
+    /// <summary>A join to start again once the world is torn down: the server plays another world (#999).</summary>
+    private WorldLaunch? _rejoin;
+    /// <summary>Counts Host calls, so a build finishing after a cancel and a new Host starts nothing (#999).</summary>
+    private int _hostCalls;
     private ServerQuery? _hostProbe;
     private double _hostWait, _sinceHostProbe;
     private string? _error;
@@ -89,7 +95,7 @@ public partial class GameShell : Node
             "--menu", "--fakeversion", "--updatefeed", "--updateaccept", "--settings", "--licenses", "--controls", "--tutorial",
             "--multiplayer", "--solo", "--map", "--landing", "--uishot", "--menucheck", "--mapcheck", "--leavecheck",
             "--leave-restart", "--mobile", "--autostart", "--wheellock", "--fakewheel", "--ffblog", "--vr", "--xrsim", "--vrmonitor", "--xrheadshot", "--xrwrist", "--xrprofile", "--xrcab", "--xrhands",
-            "--bubblecheck",
+            "--bubblecheck", "--worldpickcheck",
         };
         foreach (string a in args)
             if (a.StartsWith("--") && Array.IndexOf(harmless, a) < 0) return false;
@@ -175,6 +181,7 @@ public partial class GameShell : Node
         if (MenuCheck.Requested()) AddChild(new MenuCheck(this));
         if (Ui.MapCheck.Requested()) AddChild(new Ui.MapCheck(this));
         if (LeaveCheck.Requested()) AddChild(new LeaveCheck(this));
+        if (WorldPickCheck.Requested()) AddChild(new WorldPickCheck(this));
     }
 
     public override void _ExitTree()
@@ -426,7 +433,8 @@ public partial class GameShell : Node
         Callable.From(() => GetParent().AddChild(world)).CallDeferred();
     }
 
-    public void Join(string endpoint, string? serverName = null)
+    /// <param name="world">The server's test world, from its status reply (#999); null: the open world, or unknown.</param>
+    public void Join(string endpoint, string? serverName = null, WorldChoice? world = null)
     {
         // a metered connection (#63): say what streaming costs before it starts, once per session
         if (GameSettings.Current.WarnMetered && DataWatch.Metered && !GameSettings.Current.LowDataActive && !_meteredAsked)
@@ -436,9 +444,9 @@ public partial class GameShell : Node
                 "You are on mobile data or a hotspot. The world streams from the server: about "
                 + $"{StreamEstimate.ArrivalMb} MB on arrival, and more as you travel. Low data streams "
                 + $"only the nearest tiles (about {StreamEstimate.ArrivalLowMb} MB on arrival).",
-                ("Use Low data", () => { GameSettings.Current.Data = DataPreset.Low; GameSettings.Current.Commit(); Join(endpoint, serverName); }),
-                ("Join anyway", () => Join(endpoint, serverName)),
-                ("Never ask", () => { GameSettings.Current.WarnMetered = false; GameSettings.Current.Commit(); Join(endpoint, serverName); }));
+                ("Use Low data", () => { GameSettings.Current.Data = DataPreset.Low; GameSettings.Current.Commit(); Join(endpoint, serverName, world); }),
+                ("Join anyway", () => Join(endpoint, serverName, world)),
+                ("Never ask", () => { GameSettings.Current.WarnMetered = false; GameSettings.Current.Commit(); Join(endpoint, serverName, world); }));
             return;
         }
         GameSettings.Current.LastHost = endpoint;
@@ -449,26 +457,65 @@ public partial class GameShell : Node
             Endpoint = endpoint,
             PlayerName = PlayerName,
             ServerName = serverName,
+            World = world is { IsOpen: false } ? world : null,
         });
     }
 
     /// <summary>"Host a game": starts the server process, then joins it once it answers.</summary>
     /// <param name="spawn">Where every player starts on it (#799), LV95 metres.</param>
     /// <param name="teleport">Players who are not admins may teleport.</param>
-    public void Host(string name, int port, bool lanVisible, (double E, double N)? spawn = null, bool teleport = true)
+    /// <param name="world">A test world to serve (#999); null: the open world.</param>
+    public void Host(string name, int port, bool lanVisible, (double E, double N)? spawn = null, bool teleport = true, WorldChoice? world = null)
     {
         if (_state != State.Title) return;
+        _hostedWorld = world is { IsOpen: false } ? world : null;
+        if (_hostedWorld is { Prepared: false } unbuilt)
+        {
+            // the traffic lights region is built here first (#999): the server would spend its start on it
+            _returnTo = "multiplayer";
+            _state = State.Starting;
+            ClearStack();
+            _loading.Begin($"Hosting {name}");
+            _loading.Report("Starting your server", 0.01f, WorldChoice.PreparingDetail);
+            PrepareThenHost(unbuilt, ++_hostCalls, name, port, lanVisible, spawn, teleport);
+            return;
+        }
         _hosted = new HostedServer(name, port);
-        if (_hosted.Start(lanVisible, spawn, teleport) is { } err)
+        if (_hosted.Start(lanVisible, spawn, teleport, _hostedWorld) is { } err)
         {
             _hosted = null;
             Modal.Inform(_menuRoot, "Could not host", err);
             return;
         }
+        WaitForHosted(name);
+    }
+
+    private async void PrepareThenHost(WorldChoice world, int call, string name, int port, bool lanVisible, (double E, double N)? spawn, bool teleport)
+    {
+        string? err = await System.Threading.Tasks.Task.Run(world.Prepare);
+        if (call != _hostCalls || _state != State.Starting || _hosted != null) return;   // cancelled while it built
+        if (err == null)
+        {
+            _hosted = new HostedServer(name, port);
+            if ((err = _hosted.Start(lanVisible, spawn, teleport, world)) == null)
+            {
+                WaitForHosted(name);
+                return;
+            }
+        }
+        ReturnWithError(err);
+    }
+
+    /// <summary>The server process runs: the loading screen waits until it answers (<see cref="PollHost"/>).</summary>
+    private void WaitForHosted(string name)
+    {
         _returnTo = "multiplayer";
-        _state = State.Starting;
-        ClearStack();
-        _loading.Begin($"Hosting {name}");
+        if (_state != State.Starting)
+        {
+            _state = State.Starting;
+            ClearStack();
+            _loading.Begin($"Hosting {name}");
+        }
         _loading.Report("Starting your server", 0.02f, "");
         _hostProbe = new ServerQuery();
         _hostProbe.Start();
@@ -505,6 +552,7 @@ public partial class GameShell : Node
                 PlayerName = PlayerName,
                 Hosted = true,
                 HostToken = _hosted.HostToken,
+                World = _hostedWorld,
                 ServerName = _hosted.Name,
             });
             return;
@@ -527,6 +575,12 @@ public partial class GameShell : Node
             case State.Loading when _world != null && IsInstanceValid(_world):
                 _loading.Report(StageText(_world.Stage), Overall(_world), _world.LoadDetail);
                 if (_world.Stage == LoadStage.Ready) FinishLoading();
+                else if (_world.Stage == LoadStage.Failed && _world.ServerPlays is { } other && _launch is { Mode: GameMode.Multiplayer, Hosted: false } joined)
+                {
+                    // the server plays another world than the list said (#999): join again in that one
+                    _rejoin = joined with { World = other.IsOpen ? null : other };
+                    LeaveWorld(null);
+                }
                 else if (_world.Stage == LoadStage.Failed) LeaveWorld(_world.Failure ?? "The world could not be started.");
                 break;
         }
@@ -646,6 +700,15 @@ public partial class GameShell : Node
 
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        if (_rejoin is { } again)
+        {
+            // straight on behind the loading screen, no title in between
+            _rejoin = null;
+            _state = State.Title;
+            GD.Print($"[shell] joining {again.Endpoint} again in world {again.World?.Id ?? WorldChoice.OpenId}");
+            Launch(again);
+            return;
+        }
         _loading.Close();
         ShowTitle();
         // a deliberate leave lands on the title; a failure goes back to where the session was

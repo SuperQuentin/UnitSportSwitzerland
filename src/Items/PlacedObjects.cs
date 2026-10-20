@@ -476,7 +476,7 @@ public partial class PlacedObjects : Node
 
     private void Load(string path)
     {
-        _storePath = ProjectSettings.GlobalizePath(path);
+        _storePath = ProjectSettings.GlobalizePath(Core.WorldChoice.SavePath(path));
         try
         {
             if (!File.Exists(_storePath)) return;
@@ -497,7 +497,7 @@ public partial class PlacedObjects : Node
 
     private void Save()
     {
-        if (_storePath.Length == 0) _storePath = ProjectSettings.GlobalizePath("user://placed/offline.json");
+        if (_storePath.Length == 0) _storePath = ProjectSettings.GlobalizePath(Core.WorldChoice.SavePath("user://placed/offline.json"));
         try
         {
             var store = new Store

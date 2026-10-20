@@ -143,6 +143,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
     public override async void _Ready()
     {
+        // which world this is (#999): every path, course and save below reads it
+        WorldChoice.Active = Launch.World;
         Audio.SfxBus.Ensure();
         foreach (var (requested, run) in QuickChecks)
             if (requested())
@@ -223,6 +225,18 @@ public partial class ClientWorld : Node3D, IOriginContainer
             MouseCapture.Disabled = true;
             AddChild(new Interiors.ChurchStageProbe(churchStage.Shot) { Name = "ChurchStageProbe" });
             return;
+        }
+
+        // a test world whose tiles are built on this machine (the traffic lights region, #999)
+        if (WorldChoice.Active is { Prepared: false } testWorld)
+        {
+            Report(LoadStage.ReadingMap, 0.02f, WorldChoice.PreparingDetail);
+            if (await Task.Run(testWorld.Prepare) is { } why)
+            {
+                Fail(why);
+                return;
+            }
+            if (!IsInsideTree()) return;   // left during the build
         }
 
         // a test course built in code instead of the map: --chunks fixture:<course>, --world fixture,
@@ -950,7 +964,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // online the server says where we start (#799): the loading screen holds until it has
         if (Launch.Networked)
         {
-            Net.Arrival.CreateClient(this).Told += OnServerSpawn;
+            var arrival = Net.Arrival.CreateClient(this);
+            arrival.Told += OnServerSpawn;
+            arrival.OtherWorld += OnOtherWorld;
             _awaitingServerSpawn = SpawnPoint.ParseLv95("--at") == null;
         }
         // pallets a forklift has moved (#583): the server keeps them for the session, offline this client does
@@ -1664,6 +1680,24 @@ public partial class ClientWorld : Node3D, IOriginContainer
     {
         GD.Print($"[net] kicked: {reason}");
         ReportDisconnect($"Kicked from the server: {reason}");
+    }
+
+    /// <summary>
+    /// Online, the world the server plays (#999), when it is not the one this client loaded: the
+    /// shell leaves and joins again in that world (<see cref="GameShell"/>), behind the loading screen.
+    /// </summary>
+    public WorldChoice? ServerPlays { get; private set; }
+
+    private void OnOtherWorld(string id)
+    {
+        GD.Print($"[net] the server plays world '{id}', this client loaded '{WorldChoice.ActiveId}'");
+        if (WorldChoice.Find(id) is not { } world)
+        {
+            Fail("This server plays a test world this version of the game does not have.");
+            return;
+        }
+        ServerPlays = world;
+        Fail($"This server plays {world.Title}.");
     }
 
     private void ReportDisconnect(string reason)

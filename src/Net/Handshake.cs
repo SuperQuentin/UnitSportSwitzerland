@@ -71,7 +71,8 @@ public partial class Handshake : Node
     /// 42: World/Concerts AskRig and RigSet: an imported MVR rig on a hosted set, gzipped (#941).
     /// 43: World/Concerts SongState: a venue's setlist moved by hand, /concert song (#994).
     /// 44: World/TrafficGenerators (AskSet, AskRemove; Set, Remove, Snapshot) (#971).
-    public const int Protocol = 44;
+    /// 45: World/Arrival Rules carries the server's world, a test world picked in the menus (#999).
+    public const int Protocol = 45;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

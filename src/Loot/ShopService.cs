@@ -83,7 +83,7 @@ public partial class ShopService : Node
 
     public override void _Ready()
     {
-        _storeDir = ProjectSettings.GlobalizePath("user://shops");
+        _storeDir = ProjectSettings.GlobalizePath(Core.WorldChoice.SavePath("user://shops"));
         _ledger = new ShopLedger(LoadTile, SaveTile, InteriorLayout.CurrentVersion);
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--shopstuck") >= 0) ForceStuck = true;
         if (DisplayServer.GetName() == "headless" && Multiplayer.IsServer() && Online) return;

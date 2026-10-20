@@ -6,7 +6,7 @@
   be renamed. Flow: Title -> Loading -> InWorld -> (pause -> Leave) -> Title.
 - **Pages** are `Ui/Screen` subclasses on the shell's stack (CanvasLayer 40, one shared theme):
   `TitleScreen` (Play solo / Multiplayer / Settings / Controls / Quit over `TitleDiorama`),
-  `SoloScreen` (Explore and GPX cards + session options), `GpxPicker`, `MultiplayerScreen`,
+  `SoloScreen` (Explore and GPX cards + session options; the Explore card picks the world, `core/test-worlds`), `GpxPicker`, `MultiplayerScreen`,
   `SettingsScreen` (tabs), `PauseScreen`. `Shell.Push` / `Shell.Back`; Esc / pad B pops,
   and is always consumed (the title refuses, see `core/menu-refuses-close-still-consume`).
   Pages are created fresh on every push, so a page always shows the current settings.

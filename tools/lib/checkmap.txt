@@ -165,6 +165,10 @@ src/Core/TerrainPaths    quick  --mapcheck --systems ui
 src/Core/GameShell       quick  --menucheck --systems ui
 src/Core/Systems         quick  --menucheck --systems ui
 src/Core/ClientWorld     quick  --leavecheck --world fixture
+src/Core/WorldChoice     quick  --worldpickcheck --world fixture
+src/Ui/WorldPick         quick  --worldpickcheck --world fixture
+src/Ui/SoloScreen        quick  --worldpickcheck --world fixture
+src/Core/TerrainPaths    quick  --worldpickcheck --world fixture
 src/Core/Debug           quick  --debugcheck --systems ui
 src/Styles/StyleKit      quick  --debugcheck --systems ui
 src/Terrain/ChunkNode    quick  --debugcheck --systems ui
@@ -278,6 +282,11 @@ src/Net/Arrival          net    tools/arrivalcheck.sh
 src/Core/Permissions     net    tools/arrivalcheck.sh
 src/Core/PlaceSearchUi   net    tools/arrivalcheck.sh
 src/Net/HostedServer     net    tools/arrivalcheck.sh
+src/Net/HostedServer     net    tools/worldpicknetcheck.sh
+src/Net/Arrival          net    tools/worldpicknetcheck.sh
+src/Core/WorldChoice     net    tools/worldpicknetcheck.sh
+src/Ui/WorldPick         net    tools/worldpicknetcheck.sh
+src/Ui/MultiplayerScreen net    tools/worldpicknetcheck.sh
 src/Net/ChatManager      net    tools/transfercheck.sh
 src/Net/TransferProbe    net    tools/transfercheck.sh
 src/Core/ServerWorld     net    @netsmoke

@@ -86,7 +86,7 @@ public partial class LootService : Node
 
     public override void _Ready()
     {
-        _storeDir = ProjectSettings.GlobalizePath("user://loot");
+        _storeDir = ProjectSettings.GlobalizePath(Core.WorldChoice.SavePath("user://loot"));
         // "--lootepoch N" pretends N restock periods have passed, to test a refill
         if (long.TryParse(CmdArgs.Value("--lootepoch")?.TrimStart('+'), out long offset))
             LootTables.EpochOffset = offset;
