@@ -42,6 +42,30 @@ public sealed class CameraRig
     public required Func<double, Vector3> Target { get; init; }
     /// <summary>Nothing of it shows (a head-cam).</summary>
     public bool Hidden { get; init; }
+    /// <summary>A crew member works it (#985): how far below the lens their feet are (a jib's: at its base); 0 nobody stands at it.</summary>
+    public float Crewed { get; init; }
+
+    /// <summary>
+    /// The ground it takes on the pitch (#985), stadium frame, <paramref name="margin"/> round its kit and
+    /// its operator: a track's rails and dolly, a jib's whole sweep (±70°, the counterweight behind), a
+    /// crewed tripod. Null for what flies, rides wires or works on the deck.
+    /// </summary>
+    public CrewZone? Footprint(float margin = 1f)
+    {
+        static Vector2 Flat(Vector3 p) => new(p.X, p.Z);
+        switch (Kind)
+        {
+            case RigKind.Rail:
+                return CrewZone.Along(Name, Flat(A), Flat(B), 0.9f + margin, 0.9f + margin);
+            case RigKind.Jib:
+                var dir = Flat(B).Normalized();
+                return CrewZone.Along(Name, Flat(A) - dir * (0.3f * Arm), Flat(A) + dir * Arm, Arm * MathF.Sin(Mathf.DegToRad(70f)) + margin, margin);
+            case RigKind.Fixed when Crewed > 0 && !Hidden:
+                return CrewZone.Along(Name, Flat(A), Flat(A), 0.9f + margin, 0.9f + margin);
+            default:
+                return null;
+        }
+    }
 
     /// <summary>Its lens: the widest and the tightest field of view, and the one it rests at.</summary>
     public float FovWide { get; init; } = 70f;
@@ -171,6 +195,9 @@ public sealed class CameraRig
         "FOH long lens", "Pit dolly", "Side track", "Wire cam", "Jib", "Steadicam", "Crowd", "Wide FOH", "Wide far stand", "Drone", "Artist POV",
     };
 
+    /// <summary>A tripod's lens over its platform, and a dolly's over the dolly's deck (<see cref="ConcertCameras"/> draws them so).</summary>
+    public const float Tripod = 1.35f, Dolly = 1.29f;
+
     /// <summary>A concert's camera rigs, placed from its stage: the order is the cameras' numbers.</summary>
     public static List<CameraRig> For(StagePlan plan)
     {
@@ -182,22 +209,34 @@ public sealed class CameraRig
         Func<double, Vector3> onArtist = _ => artist;
         var deckFront = Sp(0, h + 1.2f, -1f);
         float hu = s.FrontHalfU - 4f, hv = s.FrontHalfV - 4f;
+        // the deck's front edge along the stage's axis: a round deck's is half its width out
+        float front = plan.Round ? hw : 0f;
+        // the platforms' cameras on tripods (#985), their operators behind them
+        var across = Sp(1, 0, 0) - Sp(0, 0, 0);
+        var lift = new Vector3(0, Tripod, 0);
+        var fohDeck = plan.FohCamera;
+        // the side track beside the deck, on the floor: an arena's is narrow, its seats come close (#985)
+        bool sideways = e.Layout is StageLayout.SideEast or StageLayout.SideWest;
+        float track = Math.Min(hw + 6f, (sideways ? s.FrontHalfV : s.FrontHalfU) - 2.2f);
+        // and short of the floor's far corners (cut off by the seats) ahead of the deck
+        float trackEnd = Math.Min(plan.Round ? 30f : 45f, (plan.Round ? s.FrontHalfV : 2 * (sideways ? s.FrontHalfU : s.FrontHalfV) - 1.5f - d) - 3f - s.FrontCorner);
         var list = new List<CameraRig>
         {
-            new() { Name = "FOH long lens", Kind = RigKind.Fixed, A = plan.Desk + new Vector3(0, 2.8f, 0), Target = onArtist, FovRest = 14f, FovTight = 4f },
-            new() { Name = "Pit dolly", Kind = RigKind.Rail, A = Sp(-hw + 2f, 1.5f, 1.3f), B = Sp(hw - 2f, 1.5f, 1.3f), Target = onArtist, FovRest = 40f },
-            new() { Name = "Side track", Kind = RigKind.Rail, A = Sp(-(hw + 6f), 1.7f, 4f), B = Sp(-(hw + 6f), 1.7f, plan.Round ? 30f : 45f), Target = _ => deckFront, FovRest = 35f },
+            new() { Name = "FOH long lens", Kind = RigKind.Fixed, A = fohDeck + lift - across * 0.7f, Target = onArtist, FovRest = 14f, FovTight = 4f, Crewed = Tripod },
+            new() { Name = "Pit dolly", Kind = RigKind.Rail, A = Sp(-hw + 2f, 1.5f, front + 1.3f), B = Sp(hw - 2f, 1.5f, front + 1.3f), Target = onArtist, FovRest = 40f, Crewed = Dolly },
+            new() { Name = "Side track", Kind = RigKind.Rail, A = Sp(-track, 1.7f, 4f), B = Sp(-track, 1.7f, trackEnd), Target = _ => deckFront, FovRest = 35f, Crewed = Dolly },
             new()
             {
                 Name = "Wire cam", Kind = RigKind.Wire, P = new Vector3(0, 16f, 0),
                 BoxMin = new Vector3(-hu, 7f, -hv), BoxMax = new Vector3(hu, 26f, hv), Target = onArtist, FovRest = 55f,
             },
-            new() { Name = "Jib", Kind = RigKind.Jib, A = Sp(hw * 0.55f, 0f, 7f), B = Sp(0, 0, -1f) - Sp(hw * 0.55f, 0f, 7f), Arm = 9f, Target = onArtist, FovRest = 42f },
+            new() { Name = "Jib", Kind = RigKind.Jib, A = Sp(hw * 0.55f, 0f, front + 7f), B = Sp(0, 0, front - 1f) - Sp(hw * 0.55f, 0f, front + 7f), Arm = 9f, Target = onArtist, FovRest = 42f, Crewed = 1f },
             // the steadicam works the deck's front corner, the crowd camera on the other: never between the artist and the crowd
-            new() { Name = "Steadicam", Kind = RigKind.Steadicam, A = Sp(hw * 0.72f, h + 1.6f, plan.Round ? hw * 0.6f : -3f), BoxMax = new Vector3(Math.Min(2.5f, hw * 0.25f), 0, 0), Target = onArtist, FovRest = 60f },
+            new() { Name = "Steadicam", Kind = RigKind.Steadicam, A = Sp(hw * 0.72f, h + 1.6f, plan.Round ? hw * 0.6f : -3f), BoxMax = new Vector3(Math.Min(2.5f, hw * 0.25f), 0, 0), Target = onArtist, FovRest = 60f, Crewed = 1.6f },
             new() { Name = "Crowd", Kind = RigKind.Fixed, A = Sp(-(hw - 1.2f), h + 2.2f, plan.Round ? hw - 1.2f : -0.8f), Target = _ => Sp(0, 1.5f, 25f), FovRest = 70f },
-            new() { Name = "Wide FOH", Kind = RigKind.Fixed, A = plan.Desk + new Vector3(0, 6f, 2f), Target = _ => Sp(0, h + 4f, -d * 0.5f), FovRest = 50f },
-            new() { Name = "Wide far stand", Kind = RigKind.Fixed, A = Sp(0, 22f, plan.Round ? 60f : 75f), Target = _ => Sp(0, h + 3f, -d * 0.5f), FovRest = 45f },
+            new() { Name = "Wide FOH", Kind = RigKind.Fixed, A = fohDeck + lift + across * 0.7f, Target = _ => Sp(0, h + 4f, -d * 0.5f), FovRest = 50f, Crewed = Tripod },
+            // on its tower out on the floor; with no room for one, on the front of house platform's middle
+            new() { Name = "Wide far stand", Kind = RigKind.Fixed, A = (plan.FarCamera ?? fohDeck) + lift, Target = _ => Sp(0, h + 3f, -d * 0.5f), FovRest = 45f, Crewed = Tripod },
             new()
             {
                 Name = "Drone", Kind = RigKind.Drone, A = Vector3.Zero, P = new Vector3(120f, 70f, 0),
