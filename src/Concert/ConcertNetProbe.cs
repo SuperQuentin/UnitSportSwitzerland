@@ -76,9 +76,14 @@ public partial class ConcertNetProbe : ChatProbe
         Expect(import != null, $"A reads the MVR ({error})");
         if (import != null)
         {
-            // and its scene objects (#958): one truss piece's mesh, three pieces of it
+            // and its scene objects (#958): one truss piece's mesh, three pieces of it; a face red, one textured (#973)
             var box = new[] { new Vector3(0, 0, 0), new Vector3(2, 0, 0), new Vector3(0, 0.4f, 0), new Vector3(0, 0, 0.4f) };
-            import.Rig.Meshes.Add(Mvr.RigData.Quantise(box, new[] { 0, 1, 2, 0, 2, 3, 0, 3, 1, 1, 3, 2 }, Colors.Silver));
+            var texture = Mvr.MvrImages.Shrink(Mvr.MvrImages.EncodePng(2, 2, new byte[] { 255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255 }))!;
+            import.Rig.Meshes.Add(Mvr.RigData.Quantise(new Mvr.MvrMesh(box, new[] { 0, 1, 2, 0, 2, 3, 0, 3, 1, 1, 3, 2 }, Colors.Silver)
+            {
+                Colors = new[] { Colors.Silver, Colors.Red, Colors.Silver, Colors.Silver },
+                Uvs = new[] { Vector2.Zero, Vector2.Right, Vector2.Down, Vector2.One }, TriangleImages = new[] { 0, -1, -1, -1 }, Images = new[] { texture },
+            }, import.Rig.AddTexture));
             for (int i = 0; i < 3; i++)
                 import.Rig.Objects.Add(new Mvr.RigData.ObjectRow { Mesh = 0, Xf = Mvr.RigData.X(new Transform3D(Basis.Identity, new Vector3(i * 2f, 12f, 0))) });
             // and a GDTF body (#961) on its first head type: base, yoke and head primitives
@@ -159,8 +164,13 @@ public partial class ConcertNetProbe : ChatProbe
         {
             Expect(await Until(() => Svc?.RigFor(0)?.Fixtures.Count == n, 20), $"A's imported rig arrives ({Svc?.RigFor(0)?.Fixtures.Count} of {n} fixtures, from {Svc?.RigFor(0)?.Source})");
             Expect(Svc?.RigFor(0) is { Objects.Count: 3, Meshes.Count: 1 } r && r.Meshes[0].TriangleCount == 4, $"with its scene objects ({Svc?.RigFor(0)?.Objects.Count} pieces of 3)");
+            Expect(Svc?.RigFor(0) is { Textures.Count: 1, Meshes: [{ VertexColors: not null, Runs: [-1, 3, 0, 1] }] },
+                $"with their faces' colours and texture ({Svc?.RigFor(0)?.Textures.Count} textures of 1)");
             if (ConcertRig.Live.Count > 0)
+            {
                 Expect(await Until(() => ConcertRig.Live.Values.Any(r => r.ObjectsDrawn == 3), 20), "and the stage draws them");
+                Expect(ConcertRig.Live.Values.Any(r => r.TexturesDrawn == 1), "with their texture");
+            }
             Expect(Svc?.RigFor(0) is { Bodies.Count: 3 } rb && rb.Types.Count(t => t.Body != null) == 1, $"with a type's GDTF body ({Svc?.RigFor(0)?.Bodies.Count} meshes of 3)");
             if (ConcertRig.Live.Count > 0)
                 Expect(await Until(() => ConcertRig.Live.Values.Any(r => r.BodiesDrawn > 0), 20), "and the rig draws its heads with it");

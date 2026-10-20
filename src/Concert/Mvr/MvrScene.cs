@@ -169,12 +169,32 @@ public static partial class MvrFile
                 }
         }
 
+        // textures (#973): each distinct image, the most drawn first, while the rig's budget lasts
+        var weight = new Dictionary<string, (MvrImage Image, long Triangles)>();
+        foreach (var (m, _) in placed)
+            if (mesh[m] is { TriangleImages: { } ti, Images: { } ims })
+                foreach (int img in ti)
+                    if (img >= 0 && img < ims.Length)
+                    {
+                        string key = Convert.ToHexString(SHA1.HashData(ims[img].Png));
+                        weight[key] = (ims[img], weight.GetValueOrDefault(key).Triangles + 1);
+                    }
+        int texturesBefore = rig.Textures.Count, leftOff = 0;
+        foreach (var (image, _) in weight.Values.OrderByDescending(w => w.Triangles))
+            if (rig.AddTexture(image) < 0) leftOff++;
+        int TextureOf(MvrImage image)
+        {
+            for (int t = 0; t < rig.Textures.Count; t++)
+                if (rig.Textures[t].AsSpan().SequenceEqual(image.Png)) return t;
+            return -1;
+        }
+
         var rows = new RigData.MeshRow?[mesh.Length];
         long tris = 0, bytes = 0;
         for (int i = 0; i < mesh.Length; i++)
             if (mesh[i] is { } m)
             {
-                rows[i] = RigData.Quantise(m.Positions, m.Indices, m.Color);
+                rows[i] = RigData.Quantise(m, TextureOf);
                 if (rows[i]!.TriangleCount == 0) { rows[i] = null; continue; }
                 tris += rows[i]!.TriangleCount;
                 bytes += rows[i]!.Bytes;
@@ -207,6 +227,12 @@ public static partial class MvrFile
             rig.Objects.Add(new RigData.ObjectRow { Mesh = index[m], Xf = RigData.X(xf) });
         }
 
+        rig.CompactTextures();
+        if (rig.Textures.Count > texturesBefore)
+            notes.Add(string.Format(CultureInfo.InvariantCulture, "{0} texture(s) on the objects, at most {1} pixels a side ({2:0} kB)",
+                rig.Textures.Count - texturesBefore, RigData.MaxTextureSize, rig.Textures.Skip(texturesBefore).Sum(t => t.Length) / 1000f));
+        if (leftOff > 0)
+            notes.Add($"{leftOff} texture(s) left off past the budget ({RigData.MaxTextures} textures, {RigData.MaxTextureBytes / 1000} kB): their faces keep their colours");
         if (decimated > 0) notes.Add($"{decimated} object mesh(es) simplified to fit: {before} triangles to {rig.Meshes.Sum(r => r.TriangleCount)}");
         if (dropped > 0) notes.Add($"{dropped} heaviest object mesh(es) dropped to fit {RigData.MaxSceneTriangles} triangles and {RigData.MaxSceneBytes / 1000} kB");
         if (cut > 0) notes.Add($"{cut} object piece(s) past the caps ({RigData.MaxObjects} pieces, {RigData.MaxDrawnTriangles} triangles drawn) not drawn");
@@ -218,7 +244,9 @@ public static partial class MvrFile
     /// <summary>
     /// A mesh to at most <paramref name="target"/> triangles by vertex clustering: vertices snapped to a
     /// grid and merged at their cells' mean, collapsed and repeated triangles dropped; the finest grid
-    /// that fits, found by halving. Low-poly by nature, which is the game's look.
+    /// that fits, found by halving. Low-poly by nature, which is the game's look. Faces' looks are kept
+    /// (#973): a cell's vertices merge per colour and texture, so a seam stays a seam, and texture
+    /// coordinates merging in one are averaged.
     /// </summary>
     public static MvrMesh Decimate(MvrMesh mesh, int target)
     {
@@ -227,7 +255,7 @@ public static partial class MvrFile
         var hi = -Vector3.Inf;
         foreach (var p in mesh.Positions) { lo = lo.Min(p); hi = hi.Max(p); }
         float extent = MathF.Max(hi.X - lo.X, MathF.Max(hi.Y - lo.Y, hi.Z - lo.Z));
-        if (!(extent > 0) || !float.IsFinite(extent)) return mesh with { Indices = mesh.Indices[..(Math.Max(0, target) * 3)] };
+        if (!(extent > 0) || !float.IsFinite(extent)) return Cut(mesh, Math.Max(0, target));
         MvrMesh? best = null;
         float fine = extent / 65536f, coarse = extent * 1.01f;
         for (int step = 0; step < 18; step++)
@@ -238,8 +266,12 @@ public static partial class MvrFile
             else fine = cell;
         }
         best ??= Cluster(mesh, lo, coarse);
-        return best.Triangles <= target ? best : best with { Indices = best.Indices[..(target * 3)] };
+        return best.Triangles <= target ? best : Cut(best, target);
     }
+
+    /// <summary>The first triangles only.</summary>
+    private static MvrMesh Cut(MvrMesh mesh, int triangles) =>
+        mesh with { Indices = mesh.Indices[..(triangles * 3)], TriangleImages = mesh.TriangleImages?[..triangles] };
 
     private static MvrMesh Cluster(MvrMesh mesh, Vector3 lo, float cell)
     {
@@ -261,19 +293,52 @@ public static partial class MvrFile
             count[c]++;
             map[i] = c;
         }
-        var seen = new HashSet<(int, int, int)>();
+        // a vertex out per cell and look
+        var outOf = new Dictionary<(int Cell, Color Colour, int Image), int>();
+        var outCell = new List<int>();
+        var outColour = new List<Color>();
+        var uvSum = new List<Vector2>();
+        var uvCount = new List<int>();
+        var seen = new HashSet<(int, int, int, int)>();
         var indices = new List<int>();
+        var images = new List<int>();
+        Span<int> corner = stackalloc int[3];
         for (int t = 0; t + 2 < mesh.Indices.Length; t += 3)
         {
             int a = map[mesh.Indices[t]], b = map[mesh.Indices[t + 1]], c = map[mesh.Indices[t + 2]];
             if (a == b || b == c || a == c) continue;
-            // the same three cells once, whichever way round
+            int image = mesh.ImageOf(t / 3);
+            // the same three cells once per texture, whichever way round
             int x = Math.Min(a, Math.Min(b, c)), z = Math.Max(a, Math.Max(b, c)), y = a + b + c - x - z;
-            if (!seen.Add((x, y, z))) continue;
-            indices.Add(a); indices.Add(b); indices.Add(c);
+            if (!seen.Add((x, y, z, image))) continue;
+            for (int k = 0; k < 3; k++)
+            {
+                int v = mesh.Indices[t + k];
+                var key = (map[v], mesh.ColorAt(v), image);
+                if (!outOf.TryGetValue(key, out int o))
+                {
+                    outOf[key] = o = outCell.Count;
+                    outCell.Add(map[v]);
+                    outColour.Add(key.Item2);
+                    uvSum.Add(Vector2.Zero);
+                    uvCount.Add(0);
+                }
+                if (mesh.Uvs != null) { uvSum[o] += mesh.Uvs[v]; uvCount[o]++; }
+                corner[k] = o;
+            }
+            indices.Add(corner[0]); indices.Add(corner[1]); indices.Add(corner[2]);
+            images.Add(image);
         }
-        var positions = new Vector3[sum.Count];
-        for (int i = 0; i < positions.Length; i++) positions[i] = sum[i] / count[i];
-        return new MvrMesh(positions, indices.ToArray(), mesh.Color);
+        var positions = new Vector3[outCell.Count];
+        for (int i = 0; i < positions.Length; i++) positions[i] = sum[outCell[i]] / count[outCell[i]];
+        var result = new MvrMesh(positions, indices.ToArray(), mesh.Color);
+        if (mesh.Colors != null) result = result with { Colors = outColour.ToArray() };
+        if (mesh.TriangleImages != null)
+        {
+            var uvs = new Vector2[positions.Length];
+            for (int i = 0; i < uvs.Length; i++) uvs[i] = uvCount[i] > 0 ? uvSum[i] / uvCount[i] : Vector2.Zero;
+            result = result with { Uvs = mesh.Uvs != null ? uvs : null, TriangleImages = images.ToArray(), Images = mesh.Images };
+        }
+        return result;
     }
 }
