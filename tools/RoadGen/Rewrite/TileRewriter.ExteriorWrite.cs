@@ -26,6 +26,9 @@ public static partial class TileRewriter
     /// as the old layout's), its poles at the kerb beside each cars' line (the second at the other kerb or on the refuge), the
     /// cars' line's middle per arm (<c>SGNL</c> stops), and each approach's lanes (<c>LANE</c>) as its transition lays them out.
     /// </summary>
+    /// <summary>Riders following the cars' lights get a bike group of their own where they lengthen a conflict time by more than this (s, #979).</summary>
+    private const float LongRiders = 2f;
+
     private static SignalPlan? WriteSignals(JunctionPlan jp, RoadGenResult result, Dictionary<TileId, List<RoadSignal>> signals,
         Dictionary<TileId, List<RoadApproach>> approaches, Cantons? cantons, SignalStats signalStats, LayoutWriteStats stats)
     {
@@ -48,10 +51,12 @@ public static partial class TileRewriter
             bool path = mouth.Strips.Skip(last + 1).Any(x => x.Kind == StripKind.Path);
             bool kerbside = a.HasRight && last >= 0 && mouth.Strips[last] is { Kind: StripKind.BikeLane, Way: StripWay.In } kerbLane
                 && kerbLane.Moves != SignalMoves.Right;
+            // the bike lane between the through lane and the right pocket (layout b): no conflict with that pocket's arrow (#979)
+            bool between = a.HasRight && !kerbside && mouth.Strips.Any(x => x.Kind == StripKind.BikeLane && x.Way == StripWay.In && x.Moves != SignalMoves.Right && x.Moves != SignalMoves.Left);
             arms.Add(new SignalArm(a.Heading, approach, leaves, ins.Any(l => l.Moves == SignalMoves.Left), ins.Any(l => l.Moves == SignalMoves.Right),
                 Pedestrians: ex.Crosswalk is not null, BikeSignal: approach && (path || kerbside), SpeedKmh: urban ? 50 : 60,
                 CrossingM: (float)(mouth.CarriagewayWidth), Rank: (byte)Math.Clamp(info is { } i ? PriorityPlanner.Rank(i) / 4 : 1, 1, 255),
-                Banned: approach ? a.Wants.Banned : SignalMoves.None));
+                Banned: approach ? a.Wants.Banned : SignalMoves.None, BikeBetween: between));
         }
         if (arms.Count(x => x.In) < 2) return null;
         string? canton = cantons?.CodeAt(jp.Centre.X, jp.Centre.Y);
@@ -66,6 +71,29 @@ public static partial class TileRewriter
                 arms[k] = arms[k] with { BikeSignal = false };
                 plan = SignalPlan.Build(arms, seed, amber);
             }
+        // riders who follow the cars' lights (a bike lane with no signal of its own, a left-turn bike lane) and whose slow clearing
+        // would lengthen their cars' conflict times by more than LongRiders get a bike group of their own, which can end earlier
+        // (the user, #979: only where it is long)
+        if (jp.Core is { } ridersCore && ridersCore.Connectors.Any(c => c.Kind == ConnectorKind.Bike))
+        {
+            int GroupOfPath(Connector c) => PathGroup(plan, jp.Arms.FindIndex(x => x.Arm == c.FromArm), c.Move, c.Kind);
+            bool Shared(ConflictTimes.Line l) => l.Mover == ConflictTimes.Mover.Bike && plan.Groups[l.Group].Kind != SignalGroupKind.Bike;
+            var with = ConflictTimes.Of(jp, plan, [], GroupOfPath);
+            var without = ConflictTimes.Of(jp, plan, [], GroupOfPath, l => !Shared(l));
+            bool rebuild = false;
+            foreach (var c in ridersCore.Connectors.Where(c => c.Kind == ConnectorKind.Bike))
+            {
+                int k = jp.Arms.FindIndex(x => x.Arm == c.FromArm), g = GroupOfPath(c);
+                if (k < 0 || g < 0 || plan.Groups[g].Kind == SignalGroupKind.Bike) continue;
+                float most = 0;
+                for (int h = 0; h < plan.Groups.Count; h++)
+                    if (!float.IsNaN(with[g, h])) most = Math.Max(most, with[g, h] - (float.IsNaN(without[g, h]) ? 0f : without[g, h]));
+                if (most <= LongRiders) continue;
+                if (c.Move == SignalMoves.Left && !arms[k].RiderLeft) { arms[k] = arms[k] with { RiderLeft = true }; rebuild = true; }
+                else if (c.Move != SignalMoves.Left && !arms[k].BikeSignal) { arms[k] = arms[k] with { BikeSignal = true }; rebuild = true; }
+            }
+            if (rebuild) { plan = SignalPlan.Build(arms, seed, amber); stats.RiderGroups++; }
+        }
         if (plan.Validate().Any(e => e.Contains("(Bike arm")))
         {
             for (int k = 0; k < arms.Count; k++) arms[k] = arms[k] with { BikeSignal = false };

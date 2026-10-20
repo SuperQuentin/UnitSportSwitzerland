@@ -186,14 +186,20 @@ public class SignalPlanTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void Bikes_LeadTheirApproach_AndNeverMeetTheRightArrow()
+    public void Bikes_LeadTheirApproach_OnlyWhereACarTurnsAcrossThem_AndNeverMeetTheRightArrow()
     {
+        // a right arrow of its own holds the turning cars: the riders are protected, no lead (the user, #979)
         var plan = SignalPlan.Build([Arm(N, true, true, bike: true), Arm(E, true, true), Arm(S, true, true, bike: true), Arm(W, true, true)]);
         AssertValid(plan);
         int bike = Group(plan, SignalGroupKind.Bike, S), car = Group(plan, SignalGroupKind.Car, S);
         int right = Group(plan, SignalGroupKind.RightArrow, S);
         Assert.Empty(WhenGreen(plan, bike, right));
-        Assert.True(WhenGreen(plan, bike).Count > WhenGreen(plan, bike, car).Count, "the bike green starts before the car's");
+        Assert.Equal(WhenGreen(plan, bike).Count, WhenGreen(plan, bike, car).Count);
+        // the cars turning right from the riders' own green: the riders lead them
+        var turning = SignalPlan.Build([Arm(N), Arm(E), Arm(S, bike: true), Arm(W)]);
+        AssertValid(turning);
+        int bike2 = Group(turning, SignalGroupKind.Bike, S), car2 = Group(turning, SignalGroupKind.Car, S);
+        Assert.True(WhenGreen(turning, bike2).Count > WhenGreen(turning, bike2, car2).Count, "the bike green starts before the car's");
     }
 
     [Fact]

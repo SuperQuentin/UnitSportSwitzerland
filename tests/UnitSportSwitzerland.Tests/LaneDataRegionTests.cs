@@ -61,8 +61,14 @@ public class LaneDataRegionTests(SignalTestRegionFixture region) : IClassFixture
             int through = a.Lanes.FindIndex(l => l.Kind == ApproachLaneKind.Car && l.Moves == SignalMoves.Through);
             int right = a.Lanes.FindIndex(l => l.Kind == ApproachLaneKind.Car && l.Moves == SignalMoves.Right);
             Assert.Contains(a.Lanes.Skip(through + 1).Take(right - through - 1), l => l.Kind == ApproachLaneKind.Bike);
-            Assert.False(plan.ThroughWithRightHeld(a.SignalArm));
-            Assert.DoesNotContain(plan.Groups, g => g.Arm == a.SignalArm && g.Kind == SignalGroupKind.Bike);
+            // the right arrow green whenever the through green is: the right turns go with it (riders with a group of their own
+            // where their clearing is long, #979, ride between and do not hold the arrow)
+            int car = plan.Groups.FindIndex(g => g.Arm == a.SignalArm && g.Kind == SignalGroupKind.Car && (g.Moves & SignalMoves.Through) != 0);
+            int arrow = plan.Groups.FindIndex(g => g.Arm == a.SignalArm && g.Kind == SignalGroupKind.RightArrow);
+            Assert.True(arrow >= 0 && car >= 0);
+            // (each group starting on its own: the arrow may follow the through green by a moment)
+            Assert.True(Enumerable.Range(0, (int)plan.Cycle * 4).Select(k => k * 0.25)
+                .Count(t => plan.State(car, t) == SignalAspect.Green && plan.State(arrow, t) != SignalAspect.Green) <= 8);
         }
         // J1, the same crossroads by the rule: kerbside, a bike signal, the right arrow held while the riders go
         var j1 = Approach("J1", east: false, west: true);

@@ -55,6 +55,24 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   green, `Expand`), which gives the bike group a flasher: the bike head's own yellow lens flashes during its green
   (`SignalBuilder.Lens.Flash`, no lamp of its own). J2: on every arm. **Riders turning left** from the left-turn bike lane
   go with the arm's left arrow (`WritePaths`' group; they went with the through green, across the oncoming traffic).
+- **Conflict times** (#979, plan `docs/plans/intergreen-times.md` on `main`): RoadGen times each lit plan from the conflict times
+  between its movements (`Layout/ConflictTimes`), not a fixed all-red. A pair's time is from the end of the ending group's
+  green to the start of the next one's: `amber + (clearing + length) / v_clear − entering / v_enter` (the next red-amber not
+  counted, negative where the geometry allows; the timing clamps at 0), with the movements as laid: car and riders' junction
+  paths and riders' ways from their stop line, the walkers along the zebra from either kerb. Speeds: clearing car 10 m/s,
+  bike 4, walker 1.2; entering car 11.1, bike 5, walker 1.5; lengths 6 / 2 / 0 m; capped by the arm's limit, a turning car
+  at `sqrt(2.5 · r)`. Amber: the cars' by speed, the riders' 2 s, walkers none. `SignalPlan.Retime(table)` keeps the phases
+  and starts each group as soon as its own conflicts allow; walkers' and riders' greens end early enough that their
+  clearing fits in the gap the cars set (never under 4 s of green; an early end held back by it is limited and the plan
+  timed again). Riders following the cars' lights whose clearing would lengthen a car group's times by over 2 s get a bike
+  group of their own (`LongRiders`; a riders' left turn: a bike group with the left arrow's phase, its head on the left
+  pole). The bike lead (Vorgrün) only where a car group turning across the riders goes green with them. A plan so timed
+  carries `ConflictTimed` (flags bit 2): `Validate` then holds conflicting groups never green together (a green may begin
+  in another's amber) and `KeepsTimes` every time. Layout (b)'s bike lane (`SignalArm.BikeBetween`, arm bit 7) no longer
+  conflicts with its arm's right arrow. Test region: J1 74 -> 71 s, J2 86 -> 77, J5a/b 83/84 -> 74/75, J10 70 -> 71, the
+  rest at their scheme's target (the time saved goes to green). 168 real tiles: 16 of 19 timed from conflict times (3 keep
+  today's: their times not kept), 0 invalid. Debugging: `CTDBG=E,N` prints a junction's times over 4 s with the worst pair
+  of lines, `CTDBG2=1` with it each phase change's wait and the pair that sets it.
 - **Timing**: yellow 3/4/5 s by speed (SN 640 837 via SRF), red+yellow 2 s (cars, secondary
   source BASt V 149) / 1 s (bikes), all-red 2 s fixed (SN 640 838 computes it per conflict,
   paywalled), min green 4 s, pedestrian green >= 5 s, pedestrian clearance 2/3 of the crossing

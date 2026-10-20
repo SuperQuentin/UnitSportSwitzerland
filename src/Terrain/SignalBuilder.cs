@@ -351,8 +351,9 @@ public static class SignalBuilder
                 if (rightArrow >= 0) row.Add((rightArrow, Shape.RightArrow));
                 else if (rightLane >= 0 && rightLane != car) row.Add((rightLane, Shape.Circle));
             }
-            // the bike head (#351), low, in front of the pole, facing the approach
-            int bike = main ? Find(plan, SignalGroupKind.Bike, pole.Arm, SignalMoves.None) : -1;
+            // the bike head (#351), low, in front of the pole, facing the approach: on the main pole the riders going straight on and
+            // right; the riders turning left with a group of their own (#979, the user) on the left pole, its arrow on its plate
+            int bike = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Bike && g.Arm == pole.Arm && (main ? g.Moves != SignalMoves.Left : g.Moves == SignalMoves.Left));
             if (bike >= 0)
                 heads.Add(new Head(foot + front * (PoleRadius + BoardThickness + HeadDepth * BikeScale + 0.01f)
                     + Vector3.Up * (BikeLowerEdge + 1.5f * Pitch * BikeScale), front, right, bike, Shape.Bike, 3, false, BikeScale));

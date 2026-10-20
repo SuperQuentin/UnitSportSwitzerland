@@ -50,7 +50,17 @@ public readonly record struct SignalArm(
     /// <summary>Turns this approach may not make (#700: its lane data or an OSM restriction): its groups leave them out. Not stored: the groups carry it.</summary>
     SignalMoves Banned = SignalMoves.None,
     /// <summary>Riders may turn right on red (SSV Art. 69a, signal 5.18, #711): the sign stands beside the red lamp.</summary>
-    bool BikeRightOnRed = false);
+    bool BikeRightOnRed = false,
+    /// <summary>
+    /// The riders turning left (a left-turn bike lane) have a bike group of their own, with the left arrow's phase, so their slow
+    /// clearing can end before the cars' (#979). Not stored: the groups carry it.
+    /// </summary>
+    bool RiderLeft = false,
+    /// <summary>
+    /// The bike lane runs between the through lane and the right pocket (layout b, #351): the cars turning right cross it before
+    /// the junction, not at the mouth, so the riders' green and the right arrow's are free to meet (#979). Bit 7 of the arm's byte.
+    /// </summary>
+    bool BikeBetween = false);
 
 public readonly record struct SignalInterval(SignalAspect Aspect, float From, float To);
 
@@ -105,6 +115,86 @@ public sealed class SignalPlan
     /// </summary>
     public bool ArrowPlates { get; set; }
 
+    /// <summary>
+    /// Timed from the conflict times between its groups (#979, <see cref="Retime"/>): a group's green may begin while one it
+    /// conflicts with is still amber, as far as the geometry allows. Bit 2 of the byte that holds <see cref="PedestrianAmber"/>.
+    /// </summary>
+    public bool ConflictTimed { get; set; }
+
+    /// <summary>Prints each phase change's wait and the pair that sets it while timing (a debugging aid).</summary>
+    public static bool DebugTiming;
+
+    /// <summary>The conflict times it was timed from (<see cref="Retime"/>), by ending and starting group; not written.</summary>
+    public float[,]? ConflictTimes { get; private set; }
+
+    // what Build planned, kept to time it again (not written: a plan read from a tile has none)
+    private List<Phase>? _phases;
+    private Conflict[,]? _conflicts;
+    private uint _seed;
+
+    /// <summary>
+    /// Times the plan again from <paramref name="times"/> (#979): seconds from the end of an ending group's green to the start
+    /// of a starting one's it conflicts with, NaN where there is none (<c>RoadGen</c>'s <c>ConflictTimes</c>). Each group then
+    /// starts as soon as its own conflicts with the groups ending allow. False (and the plan as it was) for a plan not built
+    /// here, or one the times leave invalid.
+    /// </summary>
+    public bool Retime(float[,] times)
+    {
+        if (_phases is null || _conflicts is null || times.GetLength(0) != Groups.Count || times.GetLength(1) != Groups.Count) return false;
+        ConflictTimes = times;
+        ConflictTimed = true;
+        // a slow group's early end is held back by its minimum green: limit it to what that green leaves and time again (the phase
+        // change then waits for it); failing that, every group ends with its phase
+        var limits = new Dictionary<(int, int), float>();
+        for (int pass = 0; pass < 4; pass++)
+        {
+            var slowEnds = new List<(int Phase, int Group, float From, float End)>();
+            Time(this, _phases, _conflicts, times, true, limits, slowEnds);
+            if (KeepsTimes(times)) break;
+            bool more = false;
+            foreach (var (k, g, from, end) in slowEnds)
+            {
+                float most = Math.Max(0f, end - from - MinGreen);
+                if (most < limits.GetValueOrDefault((k, g), float.PositiveInfinity) - 0.05f) { limits[(k, g)] = most; more = true; }
+            }
+            if (!more) break;
+        }
+        if (!KeepsTimes(times)) Time(this, _phases, _conflicts, times, early: false);
+        Offset = Cycle <= 0 ? 0 : (Mix(_seed) % (uint)Math.Max(1, Cycle * 10)) / 10f;
+        if (Validate().Count == 0 && KeepsTimes(times)) return true;
+        ConflictTimes = null;
+        ConflictTimed = false;
+        Time(this, _phases, _conflicts, null);
+        Offset = Cycle <= 0 ? 0 : (Mix(_seed) % (uint)Math.Max(1, Cycle * 10)) / 10f;
+        return false;
+    }
+
+    /// <summary>
+    /// Whether every green keeps its conflict time after the end of the last green of each group it conflicts with hard (#979):
+    /// <c>start − end ≥ time</c>, round the cycle.
+    /// </summary>
+    public bool KeepsTimes(float[,] times)
+    {
+        var conflicts = Conflicts();
+        int n = Groups.Count;
+        List<(float From, float To)> Greens(int g) => Groups[g].Intervals.Where(v => v.Aspect == SignalAspect.Green).Select(v => (v.From, v.To)).ToList();
+        for (int g = 0; g < n; g++)
+            for (int h = 0; h < n; h++)
+            {
+                if (g == h || conflicts[g, h] != Conflict.Hard || float.IsNaN(times[g, h])) continue;
+                var ends = Greens(g).Select(v => v.To).ToList();
+                if (ends.Count == 0) continue;
+                foreach (var (from, _) in Greens(h))
+                {
+                    if (from < 1e-3f && Groups[h].Intervals[^1].Aspect == SignalAspect.Green) continue;   // a green over the seam starts earlier
+                    // the end of g's green that comes last before this start, round the cycle
+                    float since = ends.Select(e => ((from - e) % Cycle + Cycle) % Cycle).Min();
+                    if (since < Math.Max(0f, times[g, h]) - 0.15f) return false;
+                }
+            }
+        return true;
+    }
+
     /// <summary>The aspect of a group at server time <paramref name="t"/> (seconds).</summary>
     public SignalAspect State(int group, double t)
     {
@@ -145,7 +235,7 @@ public sealed class SignalPlan
         {
             var group = Groups[g];
             if (group.Arm != arm) continue;
-            if (group.Kind == SignalGroupKind.Bike) bike = g;
+            if (group.Kind == SignalGroupKind.Bike && (group.Moves & SignalMoves.Through) != 0) bike = g;
             else if (group.Kind == SignalGroupKind.RightArrow) right = g;
             else if (group.Kind == SignalGroupKind.Car && (group.Moves & SignalMoves.Through) != 0) through = g;
             else if (group.Kind == SignalGroupKind.Car && group.Moves == SignalMoves.Right) right = g;
@@ -257,6 +347,7 @@ public sealed class SignalPlan
         for (int g = 0; g < n; g++)
         {
             if (Groups[g].Kind != SignalGroupKind.Bike) continue;
+            if (Arms[Groups[g].Arm].BikeBetween) continue;
             for (int h = 0; h < n; h++)
                 if (Groups[h].Arm == Groups[g].Arm && Groups[h].Kind == SignalGroupKind.RightArrow) Set(g, h, Conflict.Hard);
                 else if (Groups[h].Arm == Groups[g].Arm && Groups[h].Kind == SignalGroupKind.Car && (Groups[h].Moves & SignalMoves.Right) != 0)
@@ -332,6 +423,7 @@ public sealed class SignalPlan
             if (main != SignalMoves.None) car[a] = plan.Add(SignalGroupKind.Car, a, main);
             // the riders go straight on, and turn right beside the cars on their own way (#971: from a path onto the next arm's)
             if (arms[a].BikeSignal && (moves & SignalMoves.Through) != 0) plan.Add(SignalGroupKind.Bike, a, SignalMoves.Through | (moves & SignalMoves.Right));
+            if (arms[a].RiderLeft && (moves & SignalMoves.Left) != 0) plan.Add(SignalGroupKind.Bike, a, SignalMoves.Left);
         }
         for (int a = 0; a < arms.Count; a++)
             if (arms[a].Pedestrians) plan.Add(SignalGroupKind.Pedestrian, a, SignalMoves.None);
@@ -385,8 +477,9 @@ public sealed class SignalPlan
             if (flashes) plan.Groups.Add(new SignalGroup { Kind = SignalGroupKind.Flasher, Arm = plan.Groups[g].Arm, Qualifies = g });
         }
 
-        Time(plan, phases, conflicts);
+        Time(plan, phases, conflicts, null);
         plan.Offset = plan.Cycle <= 0 ? 0 : (Mix(seed) % (uint)Math.Max(1, plan.Cycle * 10)) / 10f;
+        (plan._phases, plan._conflicts, plan._seed) = (phases, conflicts, seed);
         return plan;
     }
 
@@ -496,8 +589,11 @@ public sealed class SignalPlan
                 {
                     if (plan.Groups[g].Kind != kind || phase.Green.Contains(g)) continue;
                     bool protectedOnly = kind == SignalGroupKind.RightArrow;
-                    // a bike goes with its own approach's main lane
-                    if (kind == SignalGroupKind.Bike && !phase.Green.Any(h => plan.Groups[h].Kind == SignalGroupKind.Car && plan.Groups[h].Arm == plan.Groups[g].Arm))
+                    // a bike goes with its own approach's main lane; its riders turning left with its left arrow (#979)
+                    bool riderLeft = plan.Groups[g].Moves == SignalMoves.Left;
+                    if (kind == SignalGroupKind.Bike && !phase.Green.Any(h => plan.Groups[h].Arm == plan.Groups[g].Arm && (riderLeft
+                            ? plan.Groups[h].Kind is SignalGroupKind.LeftArrow or SignalGroupKind.Car && (plan.Groups[h].Moves & SignalMoves.Left) != 0
+                            : plan.Groups[h].Kind == SignalGroupKind.Car)))
                         continue;
                     // (riders turning right share a green with the crossing they cross, giving way by the flasher, #971)
                     if (phase.Green.All(h => conflicts[g, h] == Conflict.None || (!protectedOnly && conflicts[g, h] == Conflict.Permissive
@@ -508,6 +604,17 @@ public sealed class SignalPlan
     }
 
     // ---- timing ------------------------------------------------------------------------------
+
+    /// <summary>
+    /// How long a group's last movers may still cross its line after its green (#979's passing time): its amber for cars, the
+    /// riders' yellow, none for walkers (none may start on amber) or a flasher.
+    /// </summary>
+    public float PassingTime(int g) => Groups[g].Kind switch
+    {
+        SignalGroupKind.Pedestrian or SignalGroupKind.Flasher => 0,
+        SignalGroupKind.Bike => YellowBike,
+        _ => Yellow(Arms[Groups[g].Arm].SpeedKmh),
+    };
 
     private float ClearanceOf(int g)
     {
@@ -536,19 +643,64 @@ public sealed class SignalPlan
         _ => RedAmberCar,
     };
 
-    private static void Time(SignalPlan plan, List<Phase> phases, Conflict[,] conflicts)
+    /// <param name="limits">How far a slow group may end early at a phase change at most (s, by phase and group): its minimum green.</param>
+    /// <param name="slowEnds">Filled with each slow group's early-ended green: the phase change, the group, its green's start and the phase's end.</param>
+    private static void Time(SignalPlan plan, List<Phase> phases, Conflict[,] conflicts, float[,]? times, bool early = true,
+        Dictionary<(int Phase, int Group), float>? limits = null, List<(int Phase, int Group, float From, float End)>? slowEnds = null)
     {
         int n = phases.Count;
         if (n == 0) return;
-        // intergreen after each phase: the longest clearance of a group that stops, then all red
+        // a bike group starting with a car group that turns across its riders leads it (Vorgrün); with every car that would
+        // cross them red, the riders are protected anyway: no lead (the user, #979)
+        bool Leads(int bike, IEnumerable<int> starting) =>
+            plan.Groups[bike].Kind == SignalGroupKind.Bike
+            && starting.Any(h => plan.Groups[h].Kind == SignalGroupKind.Car && conflicts[bike, h] == Conflict.Permissive);
+        // the gap after each phase, and with conflict times each starting group's own wait after the phase's green ends
         var inter = new float[n];
+        var wait = new Dictionary<int, float>[n];
+        // walkers and riders clear slowly: with conflict times their green ends early enough that their clearing fits in the gap
+        // the cars' set (the user, #979, as a walkers' green ends before the parallel cars'); by how much before the phase's end
+        var shift = new Dictionary<int, float>[n];
+        bool Slow(int g) => plan.Groups[g].Kind is SignalGroupKind.Pedestrian or SignalGroupKind.Bike;
+        bool Timed(int g, int h) => times is not null && conflicts[g, h] == Conflict.Hard && !float.IsNaN(times[g, h]);
         for (int i = 0; i < n; i++)
         {
             var next = phases[(i + 1) % n];
             var ending = phases[i].Green.Where(g => !next.Green.Contains(g)).ToList();
-            inter[i] = ending.Count == 0 || n == 1 ? 0 : ending.Max(g => plan.ClearanceOf(g) + plan.AllRedAfter(g));
-            // a bike group starting next leads its cars (Vorgrün): they wait that much longer
-            if (n > 1 && next.Green.Any(g => plan.Groups[g].Kind == SignalGroupKind.Bike && !phases[i].Green.Contains(g))) inter[i] += BikeLead;
+            var starting = next.Green.Where(g => !phases[i].Green.Contains(g)).ToList();
+            wait[i] = new Dictionary<int, float>();
+            shift[i] = new Dictionary<int, float>();
+            if (n == 1) continue;
+            if (times is null)
+            {
+                // the longest clearance of a group that stops, then all red; a leading bike group adds its lead
+                inter[i] = ending.Count == 0 ? 0 : ending.Max(g => plan.ClearanceOf(g) + plan.AllRedAfter(g));
+                if (starting.Any(g => Leads(g, starting))) inter[i] += BikeLead;
+                continue;
+            }
+            // each starting group as soon as every ending one it conflicts with (hard: they never share a green) has given way
+            // by its time (#979: from the end of that one's green, its amber included, never before it); then a car group
+            // turning across a leading bike group's riders after their lead
+            // the gap the cars set (where only slow groups end, theirs)
+            var setters = ending.Where(g => !Slow(g) && starting.Any(h => Timed(g, h))).ToList();
+            if (setters.Count == 0) setters = ending;
+            float gap = Math.Max(0f, setters.SelectMany(g => starting.Where(h => Timed(g, h)).Select(h => times[g, h])).DefaultIfEmpty(0f).Max());
+            if (early)
+                foreach (int g in ending.Where(g => Slow(g) && !setters.Contains(g)))
+                    shift[i][g] = Math.Max(-(limits?.GetValueOrDefault((i, g), float.PositiveInfinity) ?? float.PositiveInfinity),
+                        Math.Min(0f, starting.Where(h => Timed(g, h)).Select(h => gap - times[g, h]).DefaultIfEmpty(0f).Min()));
+            foreach (int h in starting)
+                wait[i][h] = ending.Where(g => Timed(g, h)).Select(g => Math.Max(0f, shift[i].GetValueOrDefault(g) + times[g, h])).DefaultIfEmpty(0f).Max();
+            foreach (int b in starting.Where(b => Leads(b, starting)))
+                foreach (int h in starting.Where(h => plan.Groups[h].Kind == SignalGroupKind.Car && conflicts[b, h] == Conflict.Permissive))
+                    wait[i][h] = Math.Max(wait[i][h], wait[i][b] + BikeLead);
+            inter[i] = MathF.Round(wait[i].Values.DefaultIfEmpty(0f).Max(), 1);
+            if (DebugTiming && wait[i].Count > 0)
+            {
+                int hb = wait[i].MaxBy(kv => kv.Value).Key;
+                int gb = ending.Where(g => Timed(g, hb)).DefaultIfEmpty(-1).MaxBy(g => g < 0 ? 0 : shift[i].GetValueOrDefault(g) + times[g, hb]);
+                Console.WriteLine($"[tr] {i}->{(i + 1) % n}: {inter[i]:F1} s by {(gb >= 0 ? $"{plan.Groups[gb].Kind}/{plan.Groups[gb].Moves}/a{plan.Groups[gb].Arm} (shift {shift[i].GetValueOrDefault(gb):F1}, t {times[gb, hb]:F1})" : "-")} -> {plan.Groups[hb].Kind}/{plan.Groups[hb].Moves}/a{plan.Groups[hb].Arm}");
+            }
         }
 
         float target = n <= 2 ? 60 : n <= 4 ? 60 : 70;
@@ -587,12 +739,23 @@ public sealed class SignalPlan
             {
                 if (!phases[i].Green.Contains(g) || phases[(i - 1 + n) % n].Green.Contains(g) && n > 1) continue;
                 float from = start[i];
+                // timed from conflict times: as soon as its own wait after the phase before ends (#979)
+                int before = (i - 1 + n) % n;
+                if (times is not null && n > 1 && wait[before].TryGetValue(g, out float w)) from = start[i] - inter[before] + MathF.Round(w, 1);
                 int k = i;
                 while (n > 1 && phases[(k + 1) % n].Green.Contains(g) && (k + 1) % n != i) k = (k + 1) % n;
                 float to = start[k] + phases[k].GreenTime;
+                // a slow group ending early (#979), its green never under the minimum
+                if (times is not null && n > 1 && shift[k].TryGetValue(g, out float sooner))
+                {
+                    slowEnds?.Add((k, g, from, to));
+                    to = Math.Max(from + MinGreen, to + MathF.Round(sooner, 1));
+                }
                 if (k < i) to += plan.Cycle;
-                // a bike leads its approach by up to BikeLead s, once whatever it conflicts with has cleared
-                if (plan.Groups[g].Kind == SignalGroupKind.Bike)
+                // a bike leads its approach by up to BikeLead s, once whatever it conflicts with has cleared (without conflict
+                // times, and only where it leads, #979)
+                if (times is null && plan.Groups[g].Kind == SignalGroupKind.Bike && n > 1
+                    && Leads(g, phases[i].Green.Where(h => !phases[(i - 1 + n) % n].Green.Contains(h))))
                 {
                     int prev = (i - 1 + n) % n;
                     float prevEnd = start[prev] + phases[prev].GreenTime - (prev > i ? plan.Cycle : 0);
@@ -741,7 +904,10 @@ public sealed class SignalPlan
                 if (ring[i].To - ring[i].From < MinGreen - 1e-3) errors.Add($"group {g} green for {ring[i].To - ring[i].From:F1} s");
             }
         }
-        static bool Live(SignalAspect a) => a is SignalAspect.Green or SignalAspect.Amber or SignalAspect.RedAmber;
+        // timed from conflict times (#979), a green may begin during a conflicting group's amber as far as the geometry allows:
+        // two conflicting groups then never green together; else never live together
+        bool timed = ConflictTimed;
+        bool Live(SignalAspect a) => timed ? a == SignalAspect.Green : a is SignalAspect.Green or SignalAspect.Amber or SignalAspect.RedAmber;
         // a turn arrow's last yellow second may overlap the next group's red-yellow (AllRedAfterArrow)
         bool EntryOverlap(int a, int b, double t) =>
             (State(a, t) == SignalAspect.Amber && Groups[a].Kind is SignalGroupKind.LeftArrow or SignalGroupKind.RightArrow or SignalGroupKind.Pedestrian && State(b, t) == SignalAspect.RedAmber)
@@ -800,7 +966,7 @@ public sealed class RoadSignal
     public const byte SectionVersion = 2;
 
     [Flags]
-    private enum ArmBits : byte { In = 1, Out = 2, LeftPocket = 4, RightPocket = 8, Pedestrians = 16, Bike = 32, BikeRightOnRed = 64 }
+    private enum ArmBits : byte { In = 1, Out = 2, LeftPocket = 4, RightPocket = 8, Pedestrians = 16, Bike = 32, BikeRightOnRed = 64, BikeBetween = 128 }
 
     public static void Write(BinaryWriter w, IReadOnlyList<RoadSignal> signals)
     {
@@ -811,7 +977,7 @@ public sealed class RoadSignal
             var p = s.Plan;
             w.Write(s.X); w.Write(s.Y); w.Write(s.Z);
             w.Write(p.Cycle); w.Write(p.Offset);
-            w.Write((byte)((p.PedestrianAmber ? 1 : 0) | (p.ArrowPlates ? 2 : 0)));
+            w.Write((byte)((p.PedestrianAmber ? 1 : 0) | (p.ArrowPlates ? 2 : 0) | (p.ConflictTimed ? 4 : 0)));
             w.Write(checked((byte)p.Arms.Count));
             w.Write(checked((byte)p.Groups.Count));
             for (int i = 0; i < p.Arms.Count; i++)
@@ -820,7 +986,7 @@ public sealed class RoadSignal
                 w.Write((float)a.Heading);
                 var bits = (a.In ? ArmBits.In : 0) | (a.Out ? ArmBits.Out : 0) | (a.LeftPocket ? ArmBits.LeftPocket : 0)
                     | (a.RightPocket ? ArmBits.RightPocket : 0) | (a.Pedestrians ? ArmBits.Pedestrians : 0) | (a.BikeSignal ? ArmBits.Bike : 0)
-                    | (a.BikeRightOnRed ? ArmBits.BikeRightOnRed : 0);
+                    | (a.BikeRightOnRed ? ArmBits.BikeRightOnRed : 0) | (a.BikeBetween ? ArmBits.BikeBetween : 0);
                 w.Write((byte)bits);
                 w.Write((byte)Math.Clamp(MathF.Round(a.SpeedKmh), 0, 255));
                 w.Write(a.Rank);
@@ -863,9 +1029,9 @@ public sealed class RoadSignal
             float x = r.ReadSingle(), y = r.ReadSingle(), z = r.ReadSingle();
             float cycle = r.ReadSingle(), offset = r.ReadSingle();
             byte kinds = r.ReadByte();
-            bool pedAmber = (kinds & 1) != 0, arrowPlates = (kinds & 2) != 0;
+            bool pedAmber = (kinds & 1) != 0, arrowPlates = (kinds & 2) != 0, conflictTimed = (kinds & 4) != 0;
             int arms = r.ReadByte(), groups = r.ReadByte();
-            var plan = new SignalPlan { Cycle = cycle, Offset = offset, PedestrianAmber = pedAmber, ArrowPlates = arrowPlates };
+            var plan = new SignalPlan { Cycle = cycle, Offset = offset, PedestrianAmber = pedAmber, ArrowPlates = arrowPlates, ConflictTimed = conflictTimed };
             var stops = new float[arms * 3];
             for (int i = 0; i < arms; i++)
             {
@@ -876,7 +1042,7 @@ public sealed class RoadSignal
                 float crossing = r.ReadUInt16() / 10f;
                 plan.Arms.Add(new SignalArm(heading, bits.HasFlag(ArmBits.In), bits.HasFlag(ArmBits.Out), bits.HasFlag(ArmBits.LeftPocket),
                     bits.HasFlag(ArmBits.RightPocket), bits.HasFlag(ArmBits.Pedestrians), bits.HasFlag(ArmBits.Bike), speed, crossing, rank,
-                    BikeRightOnRed: bits.HasFlag(ArmBits.BikeRightOnRed)));
+                    BikeRightOnRed: bits.HasFlag(ArmBits.BikeRightOnRed), BikeBetween: bits.HasFlag(ArmBits.BikeBetween)));
                 stops[i * 3] = r.ReadSingle(); stops[i * 3 + 1] = r.ReadSingle(); stops[i * 3 + 2] = r.ReadSingle();
             }
             for (int g = 0; g < groups; g++)

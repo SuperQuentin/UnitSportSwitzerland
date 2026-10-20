@@ -52,13 +52,21 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
     [Fact]
     public void Riders_turning_left_go_with_the_left_arrow()
     {
-        // #971, the user: a riders' left turn from the left-turn bike lane follows the left arrow, never the through green
+        // #971, the user: a riders' left turn from the left-turn bike lane follows the left arrow, never the through green; where
+        // their clearing is long, on a bike group of their own green with that arrow (#979)
         var j = region.Junction("J1");
         var tile = region.Tile(j.E, j.N);
         var plan = tile.Signals.Single().Plan;
         var lefts = tile.JunctionPaths.Where(p => p.Kind == JunctionPathKind.Bike && p.Move == SignalMoves.Left && p.Signal == 0).ToList();
         Assert.NotEmpty(lefts);
-        Assert.All(lefts, p => Assert.Equal(SignalGroupKind.LeftArrow, plan.Groups[p.Group].Kind));
+        Assert.All(lefts, p => Assert.True(plan.Groups[p.Group].Kind == SignalGroupKind.LeftArrow
+            || plan.Groups[p.Group] is { Kind: SignalGroupKind.Bike, Moves: SignalMoves.Left }));
+        foreach (var p in lefts.Where(p => plan.Groups[p.Group].Kind == SignalGroupKind.Bike))
+        {
+            int arrow = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.LeftArrow && g.Arm == plan.Groups[p.Group].Arm);
+            Assert.Contains(Enumerable.Range(0, (int)plan.Cycle * 4).Select(k => k * 0.25),
+                t => plan.State(p.Group, t) == SignalAspect.Green && plan.State(arrow, t) == SignalAspect.Green);
+        }
     }
 
     [Fact]
@@ -73,7 +81,8 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
         foreach (var move in new[] { SignalMoves.Through, SignalMoves.Right })
             Assert.Equal(4, rides.Count(p => p.Move == move && p.Signal == 0 && plan.Groups[p.Group].Kind == SignalGroupKind.Bike));
         // the left turns from the left-turn bike lane carried on onto the exit's path, on the left arrow
-        Assert.Equal(4, rides.Count(p => p.Move == SignalMoves.Left && p.Signal == 0 && plan.Groups[p.Group].Kind == SignalGroupKind.LeftArrow));
+        Assert.Equal(4, rides.Count(p => p.Move == SignalMoves.Left && p.Signal == 0
+            && (plan.Groups[p.Group].Kind == SignalGroupKind.LeftArrow || plan.Groups[p.Group] is { Kind: SignalGroupKind.Bike, Moves: SignalMoves.Left })));
         Assert.Contains(plan.Groups, g => g.Kind == SignalGroupKind.Flasher && plan.Groups[g.Qualifies].Kind == SignalGroupKind.Bike);
         // and it flashes while their green is on: the bike head's own yellow, flashing beside the green
         int flasher = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Flasher && plan.Groups[g.Qualifies].Kind == SignalGroupKind.Bike);
