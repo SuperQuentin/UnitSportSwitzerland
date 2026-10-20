@@ -46,7 +46,7 @@ public static class BotHands
         var body = bot.Body;
         // on foot only, as a player's items (ItemController.UsablePlayer): nobody shoots from the wheel
         if (body.Eliminated || body.KnockedOut || body.Down != 0 || BotDriving.Mounted(bot)) return false;
-        double now = GameClock.Now;
+        double now = BotDirector.Clock;
         if (now < bot.NextShotAt) return false;
         Cancel(bot);   // a shot ends any bandaging
         bot.Inventory.Select(slot);
@@ -103,7 +103,7 @@ public static class BotHands
         body.HeldItemId = (int)item;
         body.ItemAction = 2;
         bot.UseItem = item;
-        bot.UseUntil = GameClock.Now + (vest ? 0.5 : Math.Max(0.6, ItemController.MedicalSeconds(item)));
+        bot.UseUntil = BotDirector.Clock + (vest ? 0.5 : Math.Max(0.6, ItemController.MedicalSeconds(item)));
         return true;
     }
 

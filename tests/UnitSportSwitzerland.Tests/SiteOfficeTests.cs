@@ -13,7 +13,7 @@ namespace UnitSportSwitzerland.Tests;
 /// plan box is the ground row of containers with every door on its front wall, and the rooms fill
 /// the row one per container.
 /// </summary>
-public class SiteOfficeTests
+public partial class SiteOfficeTests
 {
     private static Building Box(float w, float d, float h, byte floors, float turn)
     {
@@ -199,7 +199,7 @@ public class SiteOfficeTests
         var (toilets, cabinBoxes) = SiteOffices.Toilets(site, Slope, office.ContainerDoors)!.Value;
         Assert.Equal(SiteOffices.Cabins, office.Toilets.Count);
         Assert.Equal(toilets, office.Toilets);
-        Assert.Equal(office.Toilets.Select(t => t.Door), office.Doors.Skip(office.ContainerDoors));
+        Assert.Equal(office.Toilets.Select(t => t.Door), office.Doors.Skip(office.ContainerDoors).Take(office.Toilets.Count));
         var cabins = cabinBoxes.Where(b => b.Solid).ToList();
         Assert.Equal(SiteOffices.Cabins, cabins.Count);
         for (int i = 0; i < office.Toilets.Count; i++)

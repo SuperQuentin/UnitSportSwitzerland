@@ -234,6 +234,9 @@ public sealed class GameSettings
     /// <summary>Radial streaks at the screen edge at speed.</summary>
     public bool SpeedLines { get; set; } = true;
 
+    /// <summary>A comic speech bubble over a player who talks in the chat near you (#862, <see cref="Ui.Bubbles.ChatBubbles"/>).</summary>
+    public bool ChatBubbles { get; set; } = true;
+
     /// <summary>Over-the-shoulder view on foot and a chase view mounted; V / R3 toggles it in game.</summary>
     public bool ThirdPerson { get; set; } = true;
 
@@ -542,6 +545,9 @@ public sealed class GameSettings
                 case "--detail" when Enum.TryParse<DetailPreset>(v, true, out var d): Detail = d; break;
                 case "--data" when Enum.TryParse<DataPreset>(v, true, out var dp): Data = dp; break;
                 case "--builds" when int.TryParse(v, out int b): MaxConcurrentBuilds = b; break;
+                // #880: this run's figure, an alien preset by name (zorp, zib…) or packed bits, for a screenshot; not saved
+                case "--appearance" when Avatar.Aliens.Named(v) is { } alien: AppearanceBits = alien.Looks.Pack(); break;
+                case "--appearance" when int.TryParse(v, out int bits): AppearanceBits = bits; break;
                 case "--commit" when double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out double c):
                     CommitBudgetMs = c; break;
                 case "--profile" when Enum.TryParse<RideProfile>(v, true, out var rp): RideProfile = rp; break;
@@ -598,6 +604,10 @@ public sealed class GameSettings
                         "third" => XR.MonitorView.ThirdPerson, _ => XR.MonitorView.FirstPerson };
                     break;
                 case "--vsync": VSync = v is "on" or "1" or "true"; break;
+                // a film's render profile sets the picture itself (#924, tools/trailer.sh RENDER), never the player's file
+                case "--render-scale" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float rs):
+                    RenderScale = Math.Clamp(rs, MinRenderScale, MaxRenderScale); break;
+                case "--aa" when Enum.TryParse<AntiAliasing>(v, true, out var aa): AntiAliasing = aa; break;
                 case "--perf":
                     PerfOverlay = v switch { "full" or "detailed" => PerfOverlayMode.Detailed,
                         "fps" => PerfOverlayMode.Fps, _ => PerfOverlayMode.Off };

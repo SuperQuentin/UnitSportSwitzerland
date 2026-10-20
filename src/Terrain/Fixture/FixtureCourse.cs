@@ -19,6 +19,8 @@ namespace UnitSport.Terrain.Fixture;
 /// drop-off to 25 m and a river coming in from the west; a slipway road runs into it.</item>
 /// <item><c>airport</c> (#422): flat, a 2.7 km runway, a taxiway, a terminal apron with six stands and
 /// a cargo apron with two (<see cref="FixtureAirport"/>).</item>
+/// <item><c>site</c> (#619): three building sites with pits on a street, flat: a block at its foundations, a
+/// shell over its basement, a house plot turned 25° (<c>--pitcheck</c>).</item>
 /// </list>
 /// </summary>
 public sealed class FixtureCourse
@@ -29,7 +31,7 @@ public sealed class FixtureCourse
     public List<(RoadClass Class, List<(double X, double Y, double Z)> Points)> Roads { get; } = new();
     public List<(double X, double Y, double Z, float Height)> Trees { get; } = new();
 
-    public static readonly string[] Names = { "flat", "straight", "hairpin", "narrow", "junction", "verge", "lake", "parking", "airport", "garage" };
+    public static readonly string[] Names = { "flat", "straight", "hairpin", "narrow", "junction", "verge", "lake", "parking", "airport", "garage", "site" };
 
     /// <summary>The ground as a function, instead of following the roads; null: <see cref="Ground"/>'s roads.</summary>
     public Func<double, double, double>? Terrain { get; init; }
@@ -49,7 +51,7 @@ public sealed class FixtureCourse
     /// roof, nothing else, as a synthetic solid in the door checks.
     /// </summary>
     public sealed record Block(double X, double Y, float Width, float Depth, float Height, float Turn = 0f,
-        BuildingKind Kind = BuildingKind.Apartment);
+        BuildingKind Kind = BuildingKind.Apartment, byte Floors = 0);
 
     /// <summary>Buildings standing on the course; none by default.</summary>
     public List<Block> Blocks { get; } = new();
@@ -92,8 +94,8 @@ public sealed class FixtureCourse
     public List<(uint Id, CropKind Crop, (double X, double Y)[] Outline)> Fields { get; } = new();
 
     /// <summary>
-    /// The flat course's three fields, clear of the spawn and inside its tiles: a wheat field east
-    /// (18 x 18 cells), a potato field north of it, a meadow west. Further east, clear of all three
+    /// The flat course's four fields, clear of the spawn and inside its tiles: a wheat field east
+    /// (18 x 18 cells), a potato field north of it, a meadow west, a pasture with a herd south-west. Further east, clear of all three
     /// (#494, <c>--tractorcheck</c>): a 12 m strip of paving running north-south
     /// (<see cref="PavedFrom"/>), then a ridge across the whole tile (<see cref="RidgeHeight"/>):
     /// up at <see cref="RidgeGrade"/>, a plateau, down again.
@@ -111,6 +113,8 @@ public sealed class FixtureCourse
         c.Fields.Add((0xF1E1D001, CropKind.Wheat, Box(24, -36, 96, 36)));
         c.Fields.Add((0xF1E1D002, CropKind.Potato, Box(24, 44, 72, 92)));
         c.Fields.Add((0xF1E1D003, CropKind.Meadow, Box(-96, -36, -24, 36)));
+        // a pasture south-west, where a herd grazes (#863: cows, the UFO sightings' abductions)
+        c.Fields.Add((0xF1E1D004, CropKind.Pasture, Box(-96, -150, -10, -60)));
         return c;
 
         static (double, double)[] Box(double x0, double y0, double x1, double y1) => [(x0, y0), (x1, y0), (x1, y1), (x0, y1)];
@@ -150,8 +154,29 @@ public sealed class FixtureCourse
         "parking" => Parking(),
         "airport" => FixtureAirport.Create(),
         "garage" => Garage(),
+        "site" => Site(),
         _ => null,
     };
+
+    /// <summary>
+    /// Three building sites with pits (#619) along a minor street, on flat ground: a block at its
+    /// foundations, a block's shell two storeys up (its basement in the pit), and a house plot at its
+    /// foundations turned 25°. Within a tile of the default spawn, clear of each other's yards.
+    /// <c>--pitcheck</c> drives an excavator down the first one's ramp and walks the second.
+    /// </summary>
+    private static FixtureCourse Site()
+    {
+        var course = new FixtureCourse
+        {
+            Name = "site",
+            Terrain = (_, _) => FlatHeight,
+            Extent = (-150, -150, 450, 200),
+        }.Road(RoadClass.Minor, new Pen(-120, 0, FlatHeight, 0, 0).Straight(560));
+        course.Blocks.Add(new Block(60, 24, 24, 15, 1.3f, Kind: BuildingKind.UnderConstruction, Floors: 4));
+        course.Blocks.Add(new Block(160, 24, 24, 15, 6.3f, Kind: BuildingKind.UnderConstruction, Floors: 4));
+        course.Blocks.Add(new Block(255, 22, 14, 11, 1.0f, 25f, BuildingKind.UnderConstruction, 2));
+        return course;
+    }
 
     /// <summary>
     /// A big-box store's car park off a main road (#499): 34 m deep, so it takes two-sided bands,

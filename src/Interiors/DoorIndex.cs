@@ -30,6 +30,9 @@ public static class DoorIndex
 
         /// <summary>The shop behind it, if any (a farm co-op is found by it, #494).</summary>
         public Loot.ShopType Shop { get; init; }
+
+        /// <summary>Storeys above its building's ground floor it opens onto (<see cref="DoorSpot.Level"/>, #827): for probes and a bot's plans; reach reads <see cref="World"/>.</summary>
+        public int Level { get; init; }
     }
 
     private static readonly Dictionary<TileId, Entry[]> Tiles = new();
@@ -41,7 +44,7 @@ public static class DoorIndex
             if (d.Width > 0)
                 list.Add(new Entry(d.KeyIn(id), tileOrigin + d.Position, d.Outward, d.Width, d.Height, d.Kind)
                 {
-                    Hang = d.Hang, Vehicle = d.Vehicle, Link = d.Link, Ramp = d.Ramp, RampDir = d.RampDir, Shop = d.Shop,
+                    Hang = d.Hang, Vehicle = d.Vehicle, Link = d.Link, Ramp = d.Ramp, RampDir = d.RampDir, Shop = d.Shop, Level = d.Level,
                 });
         Tiles[id] = list.ToArray();
     }
@@ -151,6 +154,23 @@ public static class DoorIndex
     public static Entry? NearestEntrance(Vector3 at, float reach, Func<Entry, float>? deeper = null) =>
         Nearest(at, reach, _ => true, deeper);
 
+    /// <summary>As <see cref="NearestEntrance(Vector3, float, Func{Entry, float}?)"/>, among the doors <paramref name="wanted"/> keeps (a VR hand: the doors whose opening it is in).</summary>
+    public static Entry? NearestEntrance(Vector3 at, float reach, Func<Entry, float>? deeper, Func<Entry, bool> wanted) =>
+        Nearest(at, reach, wanted, deeper);
+
+    /// <summary>
+    /// How far a door's sill may be from the feet for the door to be at the player's level (#827):
+    /// half a storey. Of the doors in reach, one at the player's level is taken before one that is
+    /// not (<see cref="Nearest(Vector3, float, Func{Entry, bool}, Func{Entry, float})"/>,
+    /// <see cref="FacedEntrance"/>), so a door stacked over another (a site office's upper container
+    /// over the one below) is told from it by the floor the player stands on, not by
+    /// <see cref="MaxRise"/> happening to be shorter than the storey.
+    /// </summary>
+    public const float LevelBand = 1.3f;
+
+    /// <summary>Whether a door's sill is at the level of a player whose feet are at <paramref name="feet"/> (<see cref="LevelBand"/>).</summary>
+    public static bool AtLevel(Entry e, Vector3 feet) => Mathf.Abs(feet.Y - e.World.Y) <= LevelBand;
+
     /// <summary>
     /// As <see cref="NearestEntrance"/>, but the nearest door whose facade the player faces
     /// (<paramref name="look"/>, flattened) wins over a nearer one at their back: two doors facing
@@ -159,18 +179,23 @@ public static class DoorIndex
     /// </summary>
     public static Entry? FacedEntrance(Vector3 at, Vector3 look, float reach, Func<Entry, float>? deeper = null)
     {
-        Entry? faced = null, any = null;
-        float facedD = reach, anyD = reach;
+        // faced before not, and within each, at the player's level before not (#827)
+        Entry? facedLevel = null, faced = null, level = null, any = null;
+        float facedLevelD = reach, facedD = reach, levelD = reach, anyD = reach;
         foreach (var doors in Tiles.Values)
             foreach (var e in doors)
             {
                 var (d, rejected) = Measure(e, at, deeper);
                 if (rejected != null) continue;
-                if (d < anyD) { anyD = d; any = e; }
+                bool atLevel = AtLevel(e, at);
                 // facing into it: the look against the door's outward normal
-                if (d < facedD && look.X * e.Outward.X + look.Z * e.Outward.Z < 0f) { facedD = d; faced = e; }
+                bool isFaced = look.X * e.Outward.X + look.Z * e.Outward.Z < 0f;
+                if (d < anyD) { anyD = d; any = e; }
+                if (atLevel && d < levelD) { levelD = d; level = e; }
+                if (isFaced && d < facedD) { facedD = d; faced = e; }
+                if (isFaced && atLevel && d < facedLevelD) { facedLevelD = d; facedLevel = e; }
             }
-        return faced ?? any;
+        return facedLevel ?? faced ?? level ?? any;
     }
 
     /// <summary>
@@ -201,22 +226,32 @@ public static class DoorIndex
 
     private static Entry? Nearest(Vector3 at, float reach, Func<Entry, bool> wanted, Func<Entry, float>? deeper = null)
     {
-        Entry? best = null;
-        float bestD = reach;
+        // a door at the player's level before one that is not (#827), the nearest of each
+        Entry? best = null, off = null;
+        float bestD = reach, offD = reach;
         foreach (var doors in Tiles.Values)
             foreach (var e in doors)
             {
                 if (!wanted(e)) continue;
                 var (d, rejected) = Measure(e, at, deeper);
-                if (rejected != null || d >= bestD) continue;
-                bestD = d;
-                best = e;
+                if (rejected != null) continue;
+                if (AtLevel(e, at))
+                {
+                    if (d >= bestD) continue;
+                    bestD = d;
+                    best = e;
+                }
+                else if (d < offD)
+                {
+                    offD = d;
+                    off = e;
+                }
             }
-        return best;
+        return best ?? off;
     }
 
     /// <summary>A door more than this far above or below the player is a different storey's.</summary>
-    private const float MaxRise = 2.5f;
+    public const float MaxRise = 2.5f;
 
     /// <summary>
     /// How far <paramref name="at"/> is from a door's opening, and what rules the door out from

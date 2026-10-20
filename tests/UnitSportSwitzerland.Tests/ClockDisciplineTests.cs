@@ -56,6 +56,7 @@ public class ClockDisciplineTests
         ["src/Core/GameClock.cs"] = "clock: Pace holds the frames to real time while the world loads",
         ["src/Net/ClockSync.cs"] = "clock: LocalNow's fallback off --fixed-fps, and the server's Unix offset",
         ["src/Core/DebugMenu.cs"] = "clock: a speed change is scheduled at a server instant (SimClock.Schedule)",
+        ["src/Phone/PhoneController.cs"] = "calendar: the phone's lock screen shows today's date, as a phone does",
         ["src/World/WorldClock.cs"] = "clock: Hour reads the sky at a server instant, through SimClock",
         ["src/Net/ChatManager.cs"] = "clock: /speed is scheduled at a server instant; plumbing: the rate limit on asking the server for player names",
 
@@ -64,6 +65,7 @@ public class ClockDisciplineTests
         ["src/Net/ServerStats.cs"] = "plumbing: the stats sampling window",
         ["src/Net/Swarm.cs"] = "plumbing: a load tool that measures frame times, so it wants the engine's own delta",
         ["src/Net/StatusFile.cs"] = "plumbing: Unix stamps a web page compares with its own clock",
+        ["src/Net/LiveMapFile.cs"] = "plumbing: Unix stamps the live map page compares with its own clock",
         ["src/Core/SteeringWheel.Force.cs"] = "plumbing: force feedback goes to hardware on the wall clock",
         ["src/Items/RadioSpeaker.cs"] = "plumbing: the backoff before retrying a failed network stream, and where the CD should be playing now",
         ["src/Occasions/OccasionHunt.cs"] = "plumbing: a probe's wall-clock timeout on a tile load (#522)",
@@ -92,7 +94,17 @@ public class ClockDisciplineTests
         // ---- presentation: the player is not slowed even when their character is ----
         // music plays in real time, so a CD's position, its beat and everything dancing to it do too
         ["src/Items/RadioManager.cs"] = "presentation: a radio's CD position is server real time, as its audio plays",
+        // an aura battle (#907) is a rhythm game two peers play on one beat: a player's press keeps the player's time
+        ["src/Combat/AuraManager.cs"] = "presentation: an aura battle's beat, its downbeats and every press graded on them, shared by both battlers",
+        ["src/Combat/AuraHud.cs"] = "presentation: the aura battle's beat ring and countdown, on the battle's shared beat",
+        ["src/Player/FootPlayer.Aura.cs"] = "presentation: which move of the combo the shared beat is on, and the Griddy's beat",
+        ["src/Combat/AuraManager.Bots.cs"] = "presentation: a bot battler's laugh on the aura battle's shared beat (#914)",
+        ["src/Combat/AuraManager.Music.cs"] = "presentation: a radio's CD position, which an aura battle takes its beat from (#914)",
+        ["src/Combat/AuraWatchHud.cs"] = "presentation: the move a watched aura battle is on, on its shared beat (#914)",
         ["src/Items/RadioBody.cs"] = "presentation: a placed radio's CD position and groove",
+        ["src/Concert/ConcertService.cs"] = "presentation: an operator's cue is stamped with the shared clock, so every peer's light show keeps the same beat",
+        ["src/Concert/ConcertBeatDebug.cs"] = "presentation: the beat debug window scrolls its own history in real time",
+        ["src/Concert/ConcertRig.cs"] = "presentation: a concert's light show runs in real time with the music it lights, the same frame on every peer",
         ["src/Items/RadioTap.cs"] = "presentation: the tap on a playing CD's samples",
         ["src/Items/BeatField.cs"] = "presentation: the beat of the music nearby",
         ["src/Items/HeldItemVisual.cs"] = "presentation: a held radio's sparkles on the beat",
@@ -118,6 +130,7 @@ public class ClockDisciplineTests
         ["src/Items/Fishing/FishingVisuals.cs"] = "presentation: float and line animation",
         ["src/Items/InventoryUi.cs"] = "presentation: panel timeouts and the drag halo's pulse",
         ["src/Items/ItemController.cs"] = "presentation: the held item's idle breath sway",
+        ["src/Trailer/Actor.cs"] = "presentation: a film actor's held radio starts its CD on the server's real clock, as a player's does (RadioUi)",
         ["src/Items/RadioUi.cs"] = "presentation: how long a status line stays on the radio's display, and a CD's start on the server's real clock",
         ["src/Items/SmartBinocularsHud.cs"] = "presentation: the HUD's sweep",
         ["src/Items/ThrowAim.cs"] = "presentation: the charge hum's pitch and the full-power flash",
@@ -128,13 +141,10 @@ public class ClockDisciplineTests
         ["src/World/Traffic.cs"] = "presentation: a car's age in the debug readout",
 
         // ---- calendar: the real date, on purpose ----
-        ["src/Farming/FarmField.cs"] = "calendar: the crop month is the real month (--month overrides)",
-        ["src/Farming/FarmSales.cs"] = "calendar: the farm stand's month is the real month",
-        ["src/Birds/BirdLife.cs"] = "calendar: the birds of the real month",
-        ["src/Occasions/OccasionManager.cs"] = "calendar: today's occasions (Fasnacht, 1 August...) are on the real date",
+        ["src/Core/Calendar.cs"] = "calendar: the one reader of today's date for the occasions, the farm, the birds, fishing, shops and tonight's concert; --date or a film's date pins it (#924)",
         ["src/Occasions/OccasionAmbience.cs"] = "calendar: an occasion's ambience follows the real date",
         ["src/Loot/LootService.cs"] = "calendar: a building restocks once a real day (LootTables.RestockSeconds)",
-        ["src/Loot/ShopService.cs"] = "calendar: a shop restocks once a real day, and its seasonal goods follow the real month",
+        ["src/Loot/ShopService.cs"] = "calendar: a shop restocks once a real day",
     };
 
     /// <summary>The repo root, found by walking up to the directory holding project.godot.</summary>

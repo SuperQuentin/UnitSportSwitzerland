@@ -43,6 +43,12 @@ public readonly record struct DoorSpot(int Index, Vector3 Position, Vector3 Outw
     /// <summary>What it sells, if it is a shop (#273, <see cref="BuildingFootprint.ShopOf"/>): a sign over the door, a counter inside.</summary>
     public Loot.ShopType Shop { get; init; }
 
+    /// <summary>
+    /// Storeys above its building's ground floor the door opens onto (#827): a site office's upper
+    /// container, off its walkway. 0, the ground floor, on every other door. Not part of its key.
+    /// </summary>
+    public int Level { get; init; }
+
     public DoorKey KeyIn(TileId tile) => new(tile.E, tile.N, Index, Slot);
 }
 

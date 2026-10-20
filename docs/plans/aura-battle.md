@@ -5,7 +5,14 @@
 
 ## Status
 
-Planned; not started.
+P1 (the MVP) built on `feat/907-aura-battle`; the note is `docs/notes/combat/aura-battle.md`.
+Differences from the plan:
+
+- The planner has no family tabs: all 13 cards fit one grid, so `aura_tab_prev/next` were dropped.
+- `Next` on keyboard is Space and the left click (J is the bird journal on foot).
+- 13 moves, not 12: Cut the rope is in, since it is the Lasso's answer.
+- The answer worked example scores 54 (no streak bonus on three moves), not 57.
+- P2-P4 (full catalog, composure, spectator HUD, radio beat, bots, real-pose VR) are follow-ups.
 
 ## Context
 The user researched real-life aura battles (the doc "Aura Battles: How Real-Life Aura Fights Work"). They want the same thing in the game as a two-player duel, separate from the existing Tekken-style fist fight ([#495](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/495)).

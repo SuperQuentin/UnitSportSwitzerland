@@ -36,8 +36,9 @@ public static class DoorSearch
     public static float Reach(BuildingKind? kind) => kind == null ? NearReach : KindReach;
 
     /// <summary>The nearest door a probe asked for, or null while none is drawn in reach.</summary>
-    public static DoorIndex.Entry? Nearest(Vector3 at, BuildingKind? kind, bool vehicleOnly = false) =>
-        kind is { } k ? DoorIndex.NearestOfKind(at, KindReach, k, vehicleOnly)
+    public static DoorIndex.Entry? Nearest(Vector3 at, BuildingKind? kind, bool vehicleOnly = false, int? level = null) =>
+        level is { } lv ? DoorIndex.NearestOfKind(at, KindReach, kind ?? BuildingKind.UnderConstruction, vehicleOnly, e => e.Level == lv)
+        : kind is { } k ? DoorIndex.NearestOfKind(at, KindReach, k, vehicleOnly)
         : vehicleOnly ? DoorIndex.NearestVehicle(at, NearReach)
         : DoorIndex.Nearest(at, NearReach);
 

@@ -6,6 +6,48 @@
 154.7	Aircraft / Antonov AN-124 (parked)
 365.3	Aircraft / Military cargo plane
 365.3	Aircraft / Military cargo plane (parked)
+304.2	Aircraft / UFO
+367.8	Aircraft / UFO, flying (legs up, beam on, shortened)
+484	Aliens / Alien green
+484	Aliens / Alien grey
+484	Aliens / Alien teal
+484	Aliens / Alien violet
+695.7	Aliens / Blip
+758.4	Aliens / Gleeb
+758.4	Aliens / Gleeb Happy
+758.4	Aliens / Gleeb Sad
+758.4	Aliens / Gleeb Surprised
+758.4	Aliens / Visitor
+758.4	Aliens / Zib
+725.2	Aliens / Zib waving
+758.4	Aliens / Zorp
+774.7	Aliens / Zorp doing the robot
+782	Aura / Move - Arms crossed
+261.5	Aura / Move - Bow
+367.8	Aura / Move - Cut the rope
+321.9	Aura / Move - Dab
+367.8	Aura / Move - Floss
+782	Aura / Move - Griddy
+782	Aura / Move - Lasso
+314.6	Aura / Move - Lead the rival
+754.4	Aura / Move - Mewing
+282.7	Aura / Move - Moonwalk
+298.8	Aura / Move - Point to sky
+274	Aura / Move - Robot
+367.8	Aura / Move - Shush
+367.8	Aura / Move - Siuuu
+298.8	Aura / Move - Six seven
+298.8	Aura / Move - Slow walk
+298.8	Aura / Move - Stand tall
+282.7	Aura / Move - Stare down
+367.8	Aura / Move - Sunglasses
+754.4	Aura / Move - Yawn
+367.8	Aura / Stance - Defeat
+754.4	Aura / Stance - Laugh
+782	Aura / Stance - Planning
+298.8	Aura / Stance - Stumble
+282.7	Aura / Stance - Victory
+298.8	Aura / Stance - Waiting
 112	Battle royale / Military
 2088	Battle royale / Postauto stop
 5568.2	Battle royale / Prefab - army checkpoint
@@ -382,6 +424,7 @@
 79.2	Cars / ZN6 (parked)
 207	Cars / ZZW30 MR-S
 4.8	Cars / ZZW30 MR-S (parked)
+274	Clothes / Alien antennae
 2216.3	Clothes / Bee stockings
 278.2	Clothes / Bell collar
 755.6	Clothes / Big pink bow
@@ -453,7 +496,9 @@
 414	Clothes / Red tartan skirt
 295.8	Clothes / Round glasses
 3264.1	Clothes / Ruffled black mini
+873.2	Clothes / Silver antennae
 354.6	Clothes / Silver hoops
+1297.1	Clothes / Silver space suit
 274	Clothes / Silver studs
 311.4	Clothes / Skull mask
 298.8	Clothes / Spike piercings
@@ -466,6 +511,7 @@
 298.7	Clothes / Swirly OwO mask
 782.1	Clothes / TAZ 90 jacket
 355.6	Clothes / TAZ 90 trousers
+401.5	Clothes / Tall antennae
 236.4	Clothes / Tongue-out mask
 287.1	Clothes / UwU mask
 298.8	Clothes / White T-shirt
@@ -535,6 +581,8 @@
 267.9	Faces / Preset - cute
 267.9	Faces / Preset - dreamy
 267.9	Faces / Preset - freckles
+267.9	Faces / Preset - gazer
+267.9	Faces / Preset - giggler
 267.9	Faces / Preset - gloomy
 267.9	Faces / Preset - grin
 267.9	Faces / Preset - sharp
@@ -543,6 +591,7 @@
 267.9	Faces / Preset - startled
 267.9	Faces / Preset - stern
 267.9	Faces / Preset - stubble
+267.9	Faces / Preset - visitor
 267.9	Faces / Seeded - seed 0
 267.9	Faces / Seeded - seed 1
 254	Faces / Seeded - seed 2
@@ -569,6 +618,7 @@
 754.4	Fights / Stance - HitStun
 324.8	Fights / Stance - Stand
 367.8	Fights / Stance - Victory
+620.1	Figures / Build - Alien
 286.1	Figures / Build - Broad
 298.8	Figures / Build - Curvy
 286.1	Figures / Build - Lean
@@ -593,6 +643,10 @@
 244.2	Figures / Helmet
 282.7	Figures / Holding - Hold
 298.8	Figures / Holding - Mouth
+298.8	Figures / Holding - Phone
+782	Figures / Holding - PhoneOpen
+367.8	Figures / Holding - PhoneRaised
+754.4	Figures / Holding - PhoneSelfie
 282.7	Figures / Holding - Plant
 272.8	Figures / Holding - ShoulderAim
 754.4	Figures / Holding - ThrowRelease
@@ -658,7 +712,7 @@
 1936	Furniture / Stove
 100	Furniture / Table
 28800	Furniture / TellerDesk
-13719.9	Furniture / ToolChest
+6949.2	Furniture / ToolChest
 4000	Furniture / ToyBox
 4207.8	Furniture / TruckProp
 768	Furniture / Tv
@@ -668,6 +722,7 @@
 144	Furniture / WaterTank
 100	Furniture / Workbench
 2.3	Items / Agone
+3	Items / AlienAntennae
 44.9	Items / Alphorn
 2.3	Items / ArcticChar
 3	Items / ArmyTee
@@ -762,6 +817,7 @@
 2.3	Items / LakeTrout
 2.9	Items / LavaTee
 5.3	Items / LolitaDress
+3	Items / LongAntennae
 3.9	Items / Maize
 3.9	Items / MaizeMeal
 5.9	Items / MaizeSeed
@@ -784,6 +840,10 @@
 5.9	Items / PeaSeed
 3.9	Items / Peas
 10.9	Items / PerchFillets
+217.8	Items / Phone - back
+217.8	Items / Phone - folded
+252.3	Items / Phone - half open
+162.3	Items / Phone - open
 3.1	Items / PinkBow
 3	Items / PinkCropTop
 7.5	Items / PinkPleated
@@ -821,6 +881,7 @@
 7.5	Items / RuffledMini
 5.9	Items / SeedPotato
 6.4	Items / Shotgun
+3	Items / SilverAntennae
 7.5	Items / SlitMaxiSkirt
 12	Items / SmartBinoculars
 7.9	Items / SmokeCanister
@@ -992,6 +1053,7 @@
 97	Parts / Mini dumper roller
 138.6	Parts / Mini excavator boom
 14.2	Parts / Mini excavator bucket
+7.9	Parts / Phone back half
 83.3	Parts / Telehandler boom
 29.3	Parts / Wheel loader bucket
 575.5	Rides / Airstairs
@@ -1019,10 +1081,13 @@
 483.9	Rides / Wheel loader (forks) (parked)
 513.1	Rides / Wheel loader (parked)
 270.6	Rides / Wingsuit
-295727.7	Terrain / Building site - foundations, a block of four floors
-295727.7	Terrain / Building site - shell, a block of four floors
-909208.4	Terrain / Building site - topped out, a house
-2228729	Terrain / Building site - topped out, a six-floor block
+157090.4	Terrain / Building site - foundations, a block of four floors
+153701.8	Terrain / Building site - foundations, a house
+152483.5	Terrain / Building site - shell, a block of four floors
+709075.2	Terrain / Building site - topped out, a house
+1957418	Terrain / Building site - topped out, a six-floor block
+295728	Terrain / Building site - a site office with its gallery, one stack (#827)
+591455.4	Terrain / Building site - a site office with its gallery, two stacks (#827)
 91640	Terrain / Garage door - Sidewalk
 515456.5	Terrain / Garage ramp
 7741.9	Terrain / Landing - Jetty
