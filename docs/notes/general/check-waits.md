@@ -54,3 +54,23 @@ polls and lingers.
   - Ten scripts moved from the generated world or the real map to `--world fixture`, server and clients:
     bonk, gadgetnet, buildnet, plant, gunshot, useanim, pvp, placed, switch, radio.
   - `REAL=1` boots their old ground.
+
+## Measured (Oct 20-21, 2026, Windows, 4.7.2, one run per side, cold tile cache)
+
+| Scripts passing on both `main` and #992 | `main` | #992 |
+|---|---|---|
+| 48 net-tier scripts | 52.5 min | 47.0 min (−10.5 %) |
+| 5 windowed full-tier scripts (plant, gunshot, useanim, pvp, placed) | 7.5 min | 4.4 min (−41 %) |
+
+- **Biggest savings:**
+  - buildnetcheck 75 → 32 s, gadgetnetcheck 74 → 34 s and bonkcheck 56 → 20 s (flat world, handshakes).
+  - placedcheck 129 → 75 s, pvpcheck 127 → 80 s, plantcheck 63 → 33 s.
+- **switchcheck** timed out on `main`'s real map (145 s) and passes on the flat world (35 s).
+- **Already failing on `main`, the same on #992:** auranet, bot, brsquad (#951), crane, hold, rampalong, shop,
+  sleeper, stairs, lootsync, locksync, decknet, and `--collidecheck --targets machines/` (a UFO invisible
+  wall).
+- **Not run on either side:** `radiocheck` and `uploadcheck` need `ffmpeg`, and this machine has none. The
+  radiocheck handshake is untested.
+- **Timing a script:** take the heavy lock yourself first (`guard_lock`, then `GUARD_LOCK_HELD=1 bash
+  tools/x.sh`). Otherwise the time includes waiting behind another session's run, and the lock only says
+  so after 2 min: one pvpcheck read 571 s.
