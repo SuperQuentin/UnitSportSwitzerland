@@ -1059,7 +1059,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             return float.MaxValue;
         }
         if (toLine > SignalLookAhead || toLine < -0.5f) return float.MaxValue;
-        var aspect = site.Plan.State(car.Group, Net.ClockSync.ServerNow);
+        var aspect = site.Plan.State(car.Group, Terrain.SignalLamps.Clock());
         // crossing the line on red, unless it was already clearing a yellow it could not stop for
         if (crossed)
         {
@@ -1101,7 +1101,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         float bend = Mathf.Acos(Mathf.Clamp(car.Route.At(0).Dir.Dot(bendDir), -1f, 1f));
         float reaching = bend > 0.05f ? Mathf.Min(car.Speed, (float)Terrain.Format.TurnSpeed.Of(18f / bend)) : car.Speed;
         bool inTime = aspect == SignalAspect.Amber && reaching > 0.5f
-            && (toLine - CarFront) / reaching <= site.Plan.UntilChange(car.Group, Net.ClockSync.ServerNow) - 0.5;
+            && (toLine - CarFront) / reaching <= site.Plan.UntilChange(car.Group, Terrain.SignalLamps.Clock()) - 0.5;
         if (car.ClearingAmber && cannotStop || firstSight && cannotStop
             || aspect == SignalAspect.Amber && car.Speed * car.Speed / (2f * AmberBrake) > stopAt && (inTime || cannotStop))
         {

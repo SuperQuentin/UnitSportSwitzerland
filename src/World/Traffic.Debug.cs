@@ -107,7 +107,7 @@ public partial class Traffic
                 if (site.Walks.Count + site.Rides.Count == 0) continue;
                 var near = site.Walks.Count > 0 ? site.Walks[0].From : site.Rides[0].Points[0];
                 if (new Vector2(near.X - focus.X, near.Z - focus.Z).Length() > LightsDrawn) continue;
-                double now = Net.ClockSync.ServerNow;
+                double now = Terrain.SignalLamps.Clock();
                 foreach (var (points, group, move) in site.Rides)
                 {
                     if (group >= site.Plan.Groups.Count || LitColour(site.Plan.State(group, now)) is not { } c) continue;
@@ -241,7 +241,7 @@ public partial class Traffic
         int from = ArmInto(e, site);
         int group = path.Group >= 0 ? path.Group : from >= 0 ? GroupFor(site, from, path.Move) : -1;
         if (group < 0 || group >= site.Plan.Groups.Count) return 0;
-        double now = Net.ClockSync.ServerNow;
+        double now = Terrain.SignalLamps.Clock();
         var plan = site.Plan;
         int to = from < 0 ? -1 : Enumerable.Range(0, plan.Arms.Count)
             .FirstOrDefault(k => k != from && plan.Arms[k].Out && SignalPlan.Turn(plan.Arms, from, k) == path.Move, -1);
@@ -278,7 +278,7 @@ public partial class Traffic
     {
         var plan = site.Plan;
         if (plan.Cycle <= 0) return 0;
-        double now = Net.ClockSync.ServerNow;
+        double now = Terrain.SignalLamps.Clock();
         double u = ((now + plan.Offset) % plan.Cycle + plan.Cycle) % plan.Cycle;
         int n = 0;
         foreach (var (pair, ending, starting) in site.Pairs)
@@ -396,7 +396,7 @@ public partial class Traffic
     {
         var plan = site.Plan;
         if (plan.Cycle <= 0) return 0;
-        double now = Net.ClockSync.ServerNow;
+        double now = Terrain.SignalLamps.Clock();
         double u = ((now + plan.Offset) % plan.Cycle + plan.Cycle) % plan.Cycle;
         var streams = _streams.GetValue(site, StreamsOf);
         int n = 0;

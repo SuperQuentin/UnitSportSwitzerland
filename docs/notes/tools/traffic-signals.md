@@ -83,7 +83,8 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   rest at their scheme's target (the time saved goes to green). 168 real tiles: 16 of 19 timed from conflict times (3 keep
   today's: their times not kept), 0 invalid. Debugging: `CTDBG=E,N` prints a junction's times over 4 s with the worst pair
   of lines, `CTDBG2=1` with it each phase change's wait and the pair that sets it; `CTTABLE=E,N,file.json` writes the junction's table, groups,
-  conflicts and greens. Each plan's movements as timed (`RoadSignal.ConflictLines`, every one once; region: 291) and its tightest
+  conflicts and greens. A flasher stays on while its crossing's walkers are still on it (green end + kerb-to-kerb at 1.2 m/s).
+  The plans are read on the lights' clock, simulated time (`SignalLamps.Clock`): `/speed` runs them with the cars. Each plan's movements as timed (`RoadSignal.ConflictLines`, every one once; region: 291) and its tightest
   pairs of them (for each green start the ending group leaving it the least slack, for each green end the starting group it
   leaves the least, with the pair of lines that gives that time; `ConflictPairs`, region: 276) go in the tile (`CPAR`) for the debug view's
   `movers` (`core/debug-menu`).

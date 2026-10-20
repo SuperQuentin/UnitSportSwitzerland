@@ -258,7 +258,7 @@ public partial class TrafficProbe : Node
     private void Capture()
     {
         if (_captured >= CaptureAt.Length || _traffic.Roads is not { } roads) return;
-        double now = Net.ClockSync.ServerNow;
+        double now = Terrain.SignalLamps.Clock();
         if (_capture is null)
         {
             int best = CaptureQueue - 1;

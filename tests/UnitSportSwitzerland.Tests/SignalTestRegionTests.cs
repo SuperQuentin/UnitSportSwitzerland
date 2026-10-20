@@ -89,6 +89,11 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
         int riders = plan.Groups[flasher].Qualifies;
         Assert.Contains(Enumerable.Range(0, (int)(plan.Cycle * 4)).Select(k => k * 0.25),
             t => plan.State(riders, t) == SignalAspect.Green && plan.State(flasher, t) == SignalAspect.FlashingAmber);
+        // and on while the crossing's walkers are still on it after their green (the user, #979: it went off as their green ended)
+        var walkers = Enumerable.Range(0, plan.Groups.Count).Where(h => plan.Groups[h].Kind == SignalGroupKind.Pedestrian
+            && plan.Conflicts()[riders, h] == SignalPlan.Conflict.Permissive).ToList();
+        Assert.Contains(Enumerable.Range(0, (int)(plan.Cycle * 4)).Select(k => k * 0.25),
+            t => plan.State(flasher, t) == SignalAspect.FlashingAmber && walkers.All(h => plan.State(h, t) != SignalAspect.Green));
     }
 
     [Fact]

@@ -104,6 +104,8 @@ public partial class SignalNetProbe : Node
             if (local - _syncedAt < Settle) return;
         }
         double t = ClockSync.ServerNow;
+        // (the plan read on the lights' own clock, simulated time, #979)
+        double sim = Terrain.SignalLamps.Clock();
         long key = (long)Math.Floor(t / Step);
         if (key == _lastKey) return;
         bool first = _lastKey == long.MinValue;
@@ -114,8 +116,8 @@ public partial class SignalNetProbe : Node
         double edge = double.PositiveInfinity;
         for (int g = 0; g < _plan.Groups.Count; g++)
         {
-            _states.Append(Letter(_plan.State(g, t)));
-            edge = Math.Min(edge, Math.Min(_plan.UntilChange(g, t), SinceChange(_plan, g, t)));
+            _states.Append(Letter(_plan.State(g, sim)));
+            edge = Math.Min(edge, Math.Min(_plan.UntilChange(g, sim), SinceChange(_plan, g, sim)));
         }
         GD.Print(string.Create(CultureInfo.InvariantCulture,
             $"[signalnet {_role}] k={key} t={t:F4} wall={wall:F4} edge={Math.Min(edge, 999):F4} rtt={(_server ? 0 : ClockSync.Rtt) * 1000:F1} states={_states}"));

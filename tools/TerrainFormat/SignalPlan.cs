@@ -807,7 +807,20 @@ public sealed class SignalPlan
                 plan.Groups[g].Kind == SignalGroupKind.Pedestrian && !plan.PedestrianAmber));
         }
 
-        // flashers: on while their group is green and a pedestrian or bike group it yields to is green too
+        // flashers: on while their group is green and a pedestrian or bike group it yields to is green too, or a crossing's walkers are
+        // still on it: the last to step off as its green ended crosses it at the walking speed (the user, #979: it went off as the
+        // walkers' green ended, with them still on the zebra)
+        float Walk(int h) => plan.Groups[h].Kind == SignalGroupKind.Pedestrian ? plan.Arms[plan.Groups[h].Arm].CrossingM / WalkSpeed : 0f;
+        bool Active(int h, double t)
+        {
+            if (plan.State(h, t) == SignalAspect.Green) return true;
+            float walk = Walk(h);
+            if (walk <= 0) return false;
+            double u = ((t + plan.Offset) % plan.Cycle + plan.Cycle) % plan.Cycle;
+            foreach (var iv in plan.Groups[h].Intervals)
+                if (iv.Aspect == SignalAspect.Green && ((u - iv.To) % plan.Cycle + plan.Cycle) % plan.Cycle < walk) return true;
+            return false;
+        }
         for (int f = 0; f < groups; f++)
         {
             var fl = plan.Groups[f];
@@ -815,7 +828,13 @@ public sealed class SignalPlan
             var cuts = new SortedSet<float> { 0, plan.Cycle };
             var watch = Enumerable.Range(0, conflicts.GetLength(0)).Where(h => conflicts[fl.Qualifies, h] == Conflict.Permissive
                 && plan.Groups[h].Kind is SignalGroupKind.Pedestrian or SignalGroupKind.Bike).Append(fl.Qualifies).ToList();
-            foreach (int h in watch) foreach (var iv in plan.Groups[h].Intervals) { cuts.Add(iv.From); cuts.Add(iv.To); }
+            foreach (int h in watch)
+                foreach (var iv in plan.Groups[h].Intervals)
+                {
+                    cuts.Add(iv.From);
+                    cuts.Add(iv.To);
+                    if (iv.Aspect == SignalAspect.Green && Walk(h) > 0) cuts.Add((iv.To + Walk(h)) % plan.Cycle);
+                }
             var list = new List<SignalInterval>();
             float prevCut = -1;
             foreach (float c in cuts)
@@ -824,7 +843,7 @@ public sealed class SignalPlan
                 {
                     double mid = (prevCut + c) * 0.5 - plan.Offset;
                     bool on = plan.State(fl.Qualifies, mid) == SignalAspect.Green
-                        && watch.Any(h => h != fl.Qualifies && plan.State(h, mid) == SignalAspect.Green);
+                        && watch.Any(h => h != fl.Qualifies && Active(h, mid));
                     var aspect = on ? SignalAspect.FlashingAmber : SignalAspect.Off;
                     if (list.Count > 0 && list[^1].Aspect == aspect) list[^1] = list[^1] with { To = c };
                     else list.Add(new SignalInterval(aspect, prevCut, c));
