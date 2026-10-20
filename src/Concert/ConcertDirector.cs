@@ -119,7 +119,11 @@ public partial class ConcertDirector : Node
         if (EventFor(s, index) is not { } e || Frame(id, node, s) is not { } frame) return;
         // a hosted set plays whatever the hour: its operator runs it
         bool hosted = ConcertService.Instance?.SeedFor(index) != null;
-        var rig = new ConcertRig(e) { Name = NodeName, Transform = frame, ForceLive = hosted || ForcedSeed is >= 0 };
+        var rig = new ConcertRig(e)
+        {
+            Name = NodeName, Transform = frame, ForceLive = hosted || ForcedSeed is >= 0,
+            Imported = hosted ? ConcertService.Instance?.RigFor(index) : null,
+        };
         node.AddChild(rig);
         ConcertService.Instance?.ApplyCues(index, rig);
     }

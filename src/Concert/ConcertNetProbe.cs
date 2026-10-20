@@ -67,6 +67,19 @@ public partial class ConcertNetProbe : ChatProbe
         var blackout = Osc.Encode("/concert/blackout", 1f);
         udp.Send(blackout, blackout.Length, "127.0.0.1", Osc.DefaultPort);
         if (!await Heard("B", "got", 30)) Fail("B never got the show");
+
+        // an MVR rig on the set (#941): set 13's patch through the file format, sent as the operator
+        var mvr = Mvr.MvrFile.Write(Mvr.RigData.FromPatch(new StagePlan(ConcertPlanner.Plan(Terrain.Stadiums.StadiumCatalog.Geneva, 13)).Patch, "net"), "net");
+        var import = Mvr.MvrFile.Read(mvr, "netcheck.mvr", out string? error);
+        Expect(import != null, $"A reads the MVR ({error})");
+        if (import != null)
+        {
+            Svc?.SendRig(0, import.Rig.Pack());
+            Say($"rig {import.Rig.Fixtures.Count}");
+            if (!await Heard("B", "rig ok", 30)) Fail("B never got the rig");
+            Svc?.SendRig(0, Array.Empty<byte>());
+            if (!await Heard("B", "own ok", 30)) Fail("B never got the set's own rig back");
+        }
         Chat?.Send("/concert release");
         Expect(await Until(() => Svc?.SeedFor(0) == null, 10), "released: tonight's show is back");
     }
@@ -81,6 +94,16 @@ public partial class ConcertNetProbe : ChatProbe
         Expect(last is { Length: 512 } && last[1] == 0xAB && last[511] == 0xCD, "with the bytes A's controller sent");
         Expect(await Until(() => Svc?.CuesOf(0) is { Blackout: true }, 20), "the OSC blackout reaches this peer as a cue");
         Say("got");
+
+        // the rig A imports reaches this peer, and goes with A's "own rig"
+        if (await HeardStarting("A", "rig ", 30) is { } said && int.TryParse(said[4..], out int n))
+        {
+            Expect(await Until(() => Svc?.RigFor(0)?.Fixtures.Count == n, 20), $"A's imported rig arrives ({Svc?.RigFor(0)?.Fixtures.Count} of {n} fixtures, from {Svc?.RigFor(0)?.Source})");
+            Say("rig ok");
+            Expect(await Until(() => Svc?.RigFor(0) == null, 20), "and goes when A gives the set its own rig back");
+            Say("own ok");
+        }
+        else Fail("A never sent a rig");
         Expect(await Until(() => Svc?.SeedFor(0) == null, 20), "and the release");
     }
 }

@@ -110,9 +110,13 @@ public partial class ConcertRig : Node3D
 
     public ConcertRig() : this(ConcertPlanner.Plan(StadiumCatalog.Geneva, 1)) { }
 
+    /// <summary>An imported rig to build in place of the generated one (#941), set before it enters the tree.</summary>
+    public Mvr.RigData? Imported { get; init; }
+
     public override void _Ready()
     {
         _plan = new StagePlan(Event);
+        if (Imported != null) _plan.UseRig(Imported);
         _desk = new LightDesk(_plan);
         BuildStage();
         var fx = _plan.Patch.Fixtures;

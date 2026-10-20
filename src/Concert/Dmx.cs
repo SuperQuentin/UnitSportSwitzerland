@@ -176,6 +176,14 @@ public sealed class DmxPatch
         return f;
     }
 
+    /// <summary>Unpatches everything (an imported rig takes the generated one's place).</summary>
+    public void Clear()
+    {
+        Fixtures.Clear();
+        Universes.Clear();
+        _next = 0;
+    }
+
     /// <summary>Patches a screen (a media-server layer driving its pixels).</summary>
     public Fixture AddScreen(Vector3 centre, Vector3 facing, Vector3 size, int px, int py)
     {
