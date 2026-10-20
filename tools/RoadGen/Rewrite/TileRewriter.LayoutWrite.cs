@@ -427,10 +427,16 @@ public static partial class TileRewriter
                 var inward = (c.Centre[1] - start) / Math.Max(c.Centre[1].DistanceTo(start), 1e-9);
                 var target = axis.At(mb.Station + PathJoin, centreB);
                 var outward = axis.DirAt(mb.Station);
+                // straight on along its lane as far as the cars making the same turn from the arm go before they bend (the user:
+                // the arc starts as late as the car's), then the turn
+                double lead = core.Connectors.Where(x => x.Kind == ConnectorKind.Car && x.FromArm == c.FromArm && x.Move == c.Move && x.Centre.Count > 2)
+                    .Select(x => StraightLead(x.Centre)).DefaultIfEmpty(0).Max();
+                lead = Math.Min(lead, Math.Max(0, (target - start).Dot(inward) - 2));
+                var way = new List<Vec2> { start };
+                start += inward * lead;
                 // the legs of a quarter circle's Bezier through the corner the two lines make, else a third of the chord
                 double chord = start.DistanceTo(target), l = chord * 0.45;
-                var way = new List<Vec2>();
-                for (int k = 0; k <= 32; k++)
+                for (int k = lead > 0 ? 0 : 1; k <= 32; k++)
                 {
                     double t = k / 32.0, mt = 1 - t;
                     way.Add(start * (mt * mt * mt) + (start + inward * l) * (3 * mt * mt * t) + (target - outward * l) * (3 * mt * t * t) + target * (t * t * t));
@@ -883,6 +889,20 @@ public static partial class TileRewriter
     /// <summary>A cap's outline may leave its kerb by this much in plan and in height (as the sides' vertices, <c>RoadStreetBuilder</c>).</summary>
     /// <summary>A crosswalk lowers the kerbs either side this far past its bars each way (#711).</summary>
     private const double RampMargin = 0.6;
+
+    /// <summary>How far a connector runs on straight from its start before it bends by more than a few degrees (m).</summary>
+    private static double StraightLead(List<Vec2> centre)
+    {
+        var d0 = (centre[1] - centre[0]) / Math.Max(centre[1].DistanceTo(centre[0]), 1e-9);
+        double along = 0;
+        for (int i = 1; i < centre.Count; i++)
+        {
+            var d = (centre[i] - centre[i - 1]) / Math.Max(centre[i].DistanceTo(centre[i - 1]), 1e-9);
+            if (d.Dot(d0) < Math.Cos(3 * Math.PI / 180)) break;
+            along += centre[i].DistanceTo(centre[i - 1]);
+        }
+        return along;
+    }
 
     /// <summary>How far out along the exit a riders' turn from a bike lane joins the exit's separated path (m, #971).</summary>
     private const double PathJoin = 6;
