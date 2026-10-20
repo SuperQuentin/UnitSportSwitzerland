@@ -63,3 +63,10 @@ groups `IrHeads`, `IrFloods`, `Wristbands` are appended to `RigGroup` (cue numbe
   chases; the drop lights all; blackout is dark and the bands hold 0.3 s, dark at 0.6 s; a fast
   song's calm verse is dark.
 - `/concert debug` lists `IrHeads`, `IrFloods`, `Wristbands` under "firing" while on.
+
+## Cost (Oct 2026, Geneva, concert 13, a held chorus, 2560x1392, back to back)
+
+`--shot-queue` frame= ms, main against the branch: high over the bowl 22.9 -> 24.7, from the floor
+16.5 -> 18.2 (three shots each). The machine was shared and the noise is of that order; part of it is
+the figure's fourth box (+33 % crowd vertices). The cone loop runs only on band vertices and only over
+the lit emitters (`ir_count`); nothing per frame allocates.
