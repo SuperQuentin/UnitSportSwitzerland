@@ -398,6 +398,11 @@ off, `--junctions new` plans and reports without writing.
   corners kept (no core corners given). Merged junctions and rings are not (their boundary is no one outline). 168 real tiles:
   35 caps, old layout 57 -> 20; JPTH points off their core 24, path ends off their lane 78 -> 110 (36 at about ten caps, where
   the street's written piece stops short of today's trim: a gap between the cap's mouth and the street).
+- **The old layout's share at zero** (#854, Oct 20): a ring or merged core a road joins right at, or a stub meets, is written as
+  laid (`AsLaid`: the joining node's own cap meets its mouth, a stub's end lies under its paving); a ring its builder refuses (an
+  arm running past it) is laid as any junction (`CorePlanner.Plan`, a fallback where that fails). 168 real tiles: 3,841
+  junctions as cores, 0 left to the old layout (118 plain cores, 24 rings or merged cores as laid, 35 today's caps); JPTH path
+  ends off their lane 128 (51 on #820's base), points off their core 25; format and priority checks pass.
 - **Tried and reverted** (#854, Oct 20): a slip lane's node (two car roads and a Verbindung) planned only to merge into a junction
   whose mouth reaches it, the slip lane an arm of the merged core: "a road joins short of a mouth" 52 -> 25 and the old layout
   229 -> 219, but 18 more path ends 0.6-1 m off their lane (most of those slip lanes are TLM stubs of 0 m between carriageways,

@@ -85,6 +85,13 @@ public static partial class TileRewriter
         foreach (var jp in plans)
         {
             string? no = null;
+            // a ring its builder refuses (an arm running past it): laid as any junction instead (#854)
+            if (jp.Core is { Refused: not null } && jp.Merged?.Ring is not null)
+            {
+                jp.Core = CorePlanner.Plan(jp);
+                CorePlanner.Lift(jp.Core, m => result.Network.Links[jp.Arms.First(a => a.Arm == m.Arm).LinkId].Tag is Source source
+                    ? source.SampleHeight((m.Left + m.Right) * 0.5) : 0);
+            }
             // a core failing its checks: a ring written as laid (its island, its teeth), any other as a plain core from its mouths
             // (#854, the user, Oct 20: so the old layout can go)
             if (jp.Core is { Refused: null } failing && jp.CoreFails)
@@ -164,8 +171,9 @@ public static partial class TileRewriter
                 if (!jp.Beyond) stats.Caps++;
                 no = null;
             }
-            // (a ring a road joins right at: written as laid, the joining node's own cap meeting its mouth, as today's caps' do)
-            if (no == "a road joins short of a mouth" && jp.Merged?.Ring is not null && jp.Core is { } ringCore)
+            // (a ring or a merged core a road joins right at, or a stub meets: written as laid, the joining node's own cap meeting
+            // its mouth as today's caps' do, a stub's end under its paving)
+            if (no is "a road joins short of a mouth" or "a path or track joins" && jp.Merged is not null && jp.Core is { } ringCore)
             {
                 ringCore.AsLaid = true;
                 if (!jp.Beyond) stats.RingsAsLaid++;
