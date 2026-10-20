@@ -176,7 +176,8 @@ public partial class SiteOfficeNetProbe : ChatProbe
     {
         DoorIndex.Entry? last = null;
         foreach (var e in DoorIndex.All())
-            if (e.Key.Building == office.Key.Building && (last == null || e.Key.Slot > last.Value.Key.Slot)) last = e;
+            // the cabins are the last ground doors: an office with its gallery has its upper doors after them (#827)
+            if (e.Key.Building == office.Key.Building && e.Level == 0 && (last == null || e.Key.Slot > last.Value.Key.Slot)) last = e;
         if (last is not { } cabin || cabin.Key.Slot == 0) { Expect(false, "the site has a toilet cabin door"); return; }
         string key = cabin.Key.ToString();
         var inward = -cabin.Outward;
