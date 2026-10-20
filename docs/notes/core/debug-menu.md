@@ -61,7 +61,7 @@
   `trails` (#979) draws only the trails, one per movement the timing took (`SignalSite.Lines`) through each of its greens: grown from its line at
   green at its entering speed, closed behind its last mover from its amber's end at its clearing speed, in its group's light
   now (green, yellow on amber, red), so a trail whose green ends before it reaches its exit turns yellow then red as it is; no
-  movers, lines or rings (a red-amber shows nothing), see-through over the cars, dashed on green where it must yield as the
+  movers, lines or rings (a red-amber shows nothing), see-through over the cars, dashed (on yellow and red too: its last ones still give way) where it must yield as the
   green paths (`SignalPlan.YieldsAt`, its turn read off the line's first and last stretches), and where the plan lets it
   cross an exit's crossing with its walkers (a permissive conflict: riders turning right) for as long as walkers are on it
   (their green to the last across, through their yellow and red); a protected turn, kept apart by the times, never.

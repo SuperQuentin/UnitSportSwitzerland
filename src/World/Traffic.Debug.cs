@@ -412,7 +412,8 @@ public partial class Traffic
             // their trail is on it: their yellow and the red after it too; a protected turn the conflict times keep apart never, the user)
             var conflicts = _conflicts.GetValue(plan, p => p.Conflicts());
             int walk = to < 0 ? -1 : plan.Groups.FindIndex(x => x.Kind == SignalGroupKind.Pedestrian && x.Arm == to);
-            bool yields = aspect == SignalAspect.Green && to >= 0 && (plan.YieldsAt(from, to, s.Turn, s.Group, now)
+            // (on its yellow and red too: its last ones on it still give way, the user)
+            bool yields = to >= 0 && (plan.YieldsAt(from, to, s.Turn, s.Group, now)
                 || walk >= 0 && conflicts[s.Group, walk] == SignalPlan.Conflict.Permissive && Crossing(plan, streams, to, u));
             var colour = aspect switch
             {
