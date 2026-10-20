@@ -132,6 +132,15 @@ public sealed record Fixture(int Id, FixtureType Type, RigGroup Group, Vector3 P
     public Vector3 ScreenSize { get; init; }
     public int PixelsX { get; init; }
     public int PixelsY { get; init; }
+    /// <summary>
+    /// Where the beam points at pan and tilt centre, as a pan from <see cref="Home"/> and a tilt from
+    /// <see cref="Up"/> (degrees): an imported plot's focus point (#959); zero for ours.
+    /// </summary>
+    public float HomePan { get; init; }
+    public float HomeTilt { get; init; }
+    /// <summary>The fixture's pan or tilt runs the other way for the same DMX (an MVR's DMXInvertPan/Tilt, #959).</summary>
+    public bool InvertPan { get; init; }
+    public bool InvertTilt { get; init; }
 }
 
 /// <summary>

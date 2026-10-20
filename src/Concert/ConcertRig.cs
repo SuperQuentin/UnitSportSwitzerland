@@ -372,8 +372,10 @@ public partial class ConcertRig : Node3D
         for (int i = 0; i < _heads.Length; i++)
         {
             var f = _heads[i];
-            float wantPan = (p.Get16(f, Attr.Pan, Attr.PanFine) - 0.5f) * f.Type.PanRange;
-            float wantTilt = (p.Get16(f, Attr.Tilt, Attr.TiltFine) - 0.5f) * f.Type.TiltRange;
+            float pan01 = p.Get16(f, Attr.Pan, Attr.PanFine), tilt01 = p.Get16(f, Attr.Tilt, Attr.TiltFine);
+            // an inverted head turns the other way for the same DMX (#959)
+            float wantPan = ((f.InvertPan ? 1f - pan01 : pan01) - 0.5f) * f.Type.PanRange;
+            float wantTilt = ((f.InvertTilt ? 1f - tilt01 : tilt01) - 0.5f) * f.Type.TiltRange;
             if (!_motorsSet) { _pan[i] = wantPan; _tilt[i] = wantTilt; continue; }
             // degrees a second, and a second squared: a beam head is quick, a wash a heavier yoke
             (float v, float a) = f.Type.Kind switch { FixtureKind.Beam => (300f, 1800f), FixtureKind.Spot => (220f, 1100f), _ => (160f, 700f) };
@@ -552,7 +554,8 @@ public partial class ConcertRig : Node3D
     private Vector3 Direction(int i)
     {
         var f = _heads[i];
-        float pan = Mathf.DegToRad(_pan[i]), tilt = Mathf.DegToRad(_tilt[i]);
+        // an imported plot's focus point is the beam at pan and tilt centre (#959)
+        float pan = Mathf.DegToRad(_pan[i] + f.HomePan), tilt = Mathf.DegToRad(_tilt[i] + f.HomeTilt);
         var up = f.Up;
         var fwd = (f.Home - up * f.Home.Dot(up));
         fwd = fwd.LengthSquared() < 1e-6f ? up.Cross(Vector3.Right).Normalized() : fwd.Normalized();

@@ -36,6 +36,7 @@
     <Compile Include="..\..\src\Concert\Mvr\RigData.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Concert\Mvr\Gdtf.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Concert\Mvr\Mvr.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Concert\Mvr\MvrFixtures.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\CollisionReach.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\SimClock.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\DancePick.cs" Link="Game\%(Filename)%(Extension)" />
