@@ -30,6 +30,9 @@ public static class DoorIndex
 
         /// <summary>The shop behind it, if any (a farm co-op is found by it, #494).</summary>
         public Loot.ShopType Shop { get; init; }
+
+        /// <summary>Storeys above its building's ground floor it opens onto (<see cref="DoorSpot.Level"/>, #827): for probes and a bot's plans; reach reads <see cref="World"/>.</summary>
+        public int Level { get; init; }
     }
 
     private static readonly Dictionary<TileId, Entry[]> Tiles = new();
@@ -41,7 +44,7 @@ public static class DoorIndex
             if (d.Width > 0)
                 list.Add(new Entry(d.KeyIn(id), tileOrigin + d.Position, d.Outward, d.Width, d.Height, d.Kind)
                 {
-                    Hang = d.Hang, Vehicle = d.Vehicle, Link = d.Link, Ramp = d.Ramp, RampDir = d.RampDir, Shop = d.Shop,
+                    Hang = d.Hang, Vehicle = d.Vehicle, Link = d.Link, Ramp = d.Ramp, RampDir = d.RampDir, Shop = d.Shop, Level = d.Level,
                 });
         Tiles[id] = list.ToArray();
     }

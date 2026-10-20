@@ -161,7 +161,7 @@ public static class ConstructionCheck
     private static int GalleryScan(string dir)
     {
         var source = new LocalChunkSource(dir);
-        int tiles = 0, sites = 0, offices = 0, galleries = 0, overlaps = 0;
+        int tiles = 0, sites = 0, offices = 0, galleries = 0, overlaps = 0, twoStacks = 0;
         var sides = new int[3];
         foreach (var file in System.IO.Directory.EnumerateFiles(dir, "buildings_*.bldg").OrderBy(f => f, StringComparer.Ordinal))
         {
@@ -181,6 +181,11 @@ public static class ConstructionCheck
                 if (site.GallerySide == 0) continue;
                 galleries++;
                 var yard = SiteShellBuilder.Dressing(bt, site, null);
+                if (yard.Office is { Rooms.Count: > 1 } two && ++twoStacks <= 3 && two.Gallery is { } g2)
+                {
+                    var foot = SiteShellBuilder.ToTile(site, g2.Foot);
+                    GD.Print($"[constructioncheck]      {site.Key}: a two-container office with its gallery, its stair foot --at {id.MinE + foot.X:F0},{id.MaxN - foot.Z:F0}");
+                }
                 var (g0, gn) = yard.GalleryBoxes;
                 for (int i = g0; i < g0 + gn; i++)
                 {
