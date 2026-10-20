@@ -44,9 +44,10 @@ public sealed class StagePlan
     public Vector2 Forward => _forward;
     public bool Round => Event.Layout == StageLayout.Center;
 
-    /// <summary>Whether a point of the pitch (u, v) is under any part of the stage, give or take <paramref name="margin"/>.</summary>
+    /// <summary>Whether a point of the pitch (u, v) is under any part of the stage or an imported set's piece on the floor, give or take <paramref name="margin"/>.</summary>
     public bool Blocked(Vector2 uv, float margin)
     {
+        if (Mvr.MvrCollision.Blocks(ObjectFootprints, uv, margin)) return true;
         foreach (var b in Boxes)
         {
             if (b.Size.X * b.Size.Z < 0.5f) continue;   // a pole
@@ -165,7 +166,11 @@ public sealed class StagePlan
             else Patch.Add(f.Type, f.Group, f.Position, f.Home, f.Up);
         }
         Imported = rig.Source;
+        ObjectFootprints = Mvr.MvrCollision.Footprints(Mvr.MvrCollision.Plan(rig));
     }
+
+    /// <summary>Where an imported rig's scene objects stand on the floor (#974), x and z: <see cref="Blocked"/> to the crowd.</summary>
+    public List<Rect2> ObjectFootprints { get; private set; } = new();
 
     /// <summary>The file an imported rig came from, or null for the generated one.</summary>
     public string? Imported { get; private set; }

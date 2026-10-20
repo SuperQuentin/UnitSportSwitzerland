@@ -136,6 +136,7 @@ public partial class ConcertRig : Node3D
         _panV = new float[_heads.Length]; _tiltV = new float[_heads.Length];
         _ray = new RayCast3D { Name = "BeamRay", Enabled = false, HitBackFaces = true, HitFromInside = false };
         AddChild(_ray);
+        // the stage's own body is excepted; an imported set's (ObjectsBody) is not: beams stop on it (#974)
         if (_stageBody != null) _ray.AddException(_stageBody);
         _cells = fx.Where(f => f.Type.Kind is FixtureKind.Blinder or FixtureKind.Strobe or FixtureKind.PixelBar).ToArray();
         _screens = fx.Where(f => f.Type.Kind == FixtureKind.Screen).ToArray();
@@ -403,14 +404,7 @@ public partial class ConcertRig : Node3D
             int i = _rayNext++ % _heads.Length;
             var f = _heads[i];
             float max = f.Type.Kind == FixtureKind.Wash ? BeamLength * 0.55f : BeamLength;
-            var dir = Direction(i);
-            _ray.Position = f.Position + dir * 0.4f;
-            _ray.TargetPosition = _ray.Basis.Inverse() * (dir * max);
-            _ray.ForceRaycastUpdate();
-            float reach = _ray.IsColliding() ? _ray.GlobalPosition.DistanceTo(_ray.GetCollisionPoint()) / Scale.X + 0.4f : max;
-            // the venue's own walls and roof, whether or not its collision is built (it is only near a body)
-            reach = Math.Min(reach, VenueReach(f.Position, dir, max));
-            _reach[i] = Mathf.Lerp(_reach[i], reach, 0.6f);
+            _reach[i] = Mathf.Lerp(_reach[i], BeamReach(f.Position, Direction(i), max), 0.6f);
         }
 
         int glow = 0;
