@@ -126,6 +126,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | menu | Esc / Start | ok: Menu tap | keep |
 | teleport (place search, BR map) | M / — | ok: wrist menu (#437), hand-held map with point and pull (#439) | keep |
 | help / debug | F1 F9 / — | help: wrist menu (#437); debug: gap | debug in the wrist menu for admins |
+| traffic endpoints (#971) | debug menu (F9): mouse / — | gap, as the rest of the debug menu | with the debug menu |
 | playtest_panel (Debug `--playtest`, #751) | F10 / L3 + R3 | ok: both stick clicks (XrPad), the panel on the XrUi screen; typing to Claude: gap (no keyboard) | the laser key grid planned for the chat |
 | fly camera up / down / boost | Space Ctrl… / A B L3 | ok: A B L3 | keep |
 | BR jump out / spectate | E, ←→ / Y, D-pad | ok | spectate on R stick ←/→ |

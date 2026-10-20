@@ -372,6 +372,43 @@ public sealed class SignalPlan
 
     private static bool Turning(Movement m, SignalGroup g) => m.Turn != SignalMoves.Through && g.Kind == SignalGroupKind.Car;
 
+    /// <summary>
+    /// Whether the movement from arm <paramref name="from"/> to <paramref name="to"/> (<paramref name="turn"/>, on group
+    /// <paramref name="group"/>) has no absolute priority at <paramref name="t"/> (#971, the debug drawing): a flasher qualifies its
+    /// group, or a group it yields to is green with it, by <see cref="Conflicts"/>' rules: a left turn from a shared lane to
+    /// oncoming cars, a turn across a bike's way, a turn into an arm whose crossing is green.
+    /// </summary>
+    public bool YieldsAt(int from, int to, SignalMoves turn, int group, double t)
+    {
+        var g = Groups[group];
+        bool Going(int h) => State(h, t) is SignalAspect.Green;
+        for (int h = 0; h < Groups.Count; h++)
+        {
+            var other = Groups[h];
+            // (a flasher warns the turns of its group: straight on from a shared lane keeps its priority, the user)
+            if (other.Kind == SignalGroupKind.Flasher && other.Qualifies == group && turn != SignalMoves.Through
+                && State(h, t) == SignalAspect.FlashingAmber) return true;
+            if (!Going(h)) continue;
+            if (other.Kind == SignalGroupKind.Pedestrian && other.Arm == to && turn != SignalMoves.Through
+                && (g.Kind == SignalGroupKind.Car || g.Kind == SignalGroupKind.Bike && turn == SignalMoves.Right)) return true;
+            if (other.Kind == SignalGroupKind.Bike && other.Arm == from && g.Kind == SignalGroupKind.Car && turn == SignalMoves.Right) return true;
+        }
+        // riders turning right keep to their own way round the corner: only the exit's crossing above stops them
+        if (g.Kind == SignalGroupKind.Bike && turn == SignalMoves.Right) return false;
+        const double Lane = 0.08;
+        double Entry(int arm) => Arms[arm].Heading + Lane;
+        double Exit(int arm) => Arms[arm].Heading - Lane;
+        foreach (var m in Movements())
+        {
+            if (m.Group == group || m.From == from || !Going(m.Group) || RidesRight(m, Groups[m.Group])) continue;
+            if (m.To != to && !Crosses(Entry(from), Exit(to), Entry(m.From), Exit(m.To))) continue;
+            var gm = Groups[m.Group];
+            if (gm.Kind == SignalGroupKind.Bike ? turn != SignalMoves.Through && g.Kind == SignalGroupKind.Car
+                : turn == SignalMoves.Left && g.Kind == SignalGroupKind.Car && m.Turn != SignalMoves.Left) return true;
+        }
+        return false;
+    }
+
     /// <summary>Riders turning right (#971): on their own way round the corner, across only the exit's crossing.</summary>
     private static bool RidesRight(Movement m, SignalGroup g) => g.Kind == SignalGroupKind.Bike && m.Turn == SignalMoves.Right;
 

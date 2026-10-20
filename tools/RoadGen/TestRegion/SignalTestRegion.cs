@@ -63,6 +63,11 @@ public static class SignalTestRegion
     /// its bike lane between the through lane and the right pocket (layout (b)), the right turns going with the through green.
     /// </summary>
     public const double BetweenE = 2910500, BetweenN = 1323500;
+    /// <summary>
+    /// J2's town crossroads again (#971), at LV95 <see cref="TownPocketsE"/>,<see cref="BetweenN"/>: sidewalks and crossings on every arm,
+    /// and OSM's turn:lanes left|through|right on every approach: the data builds its right pockets (J2's come from the rule).
+    /// </summary>
+    public const double TownPocketsE = 2911500;
     /// <summary>The ground, metres (as the fixture courses).</summary>
     public const double Ground = 500;
     /// <summary>Region centre: the manifest's suggested origin.</summary>
@@ -155,6 +160,23 @@ public static class SignalTestRegion
             lines.Add(new Line("J10N", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(e, nb), (e, nb + 400)], "secondary",
                 Rows: [new OsmRow(0, 400, BikeBwd: Between)]));
             junctions.Add(new Junction("J10-between-lanes", e, nb, "J1 with every bike lane between the through lane and the right pocket",
+                Arms("L|T|R", "L|T|R", "L|T|R", "L|T|R")));
+        }
+
+        // 2b. J2 again a tile north (#971): the town crossroads with crossings on every arm, its right pockets from OSM's turn:lanes
+        // (the data is the truth at any speed; at the lights the rule builds them too since #971, J2's)
+        {
+            const double e = TownPocketsE, nb = BetweenN;
+            const string Turns = "left|through|right";
+            lines.Add(new Line("J11W", "10m Strasse", "Durchgangsstrasse", "Kanton", [(e - 450, nb), (e, nb)], "secondary", "yes",
+                Rows: [new OsmRow(0, 450, TurnFwd: Turns)]));
+            lines.Add(new Line("J11E", "10m Strasse", "Durchgangsstrasse", "Kanton", [(e, nb), (e + 450, nb)], "secondary", "yes",
+                Rows: [new OsmRow(0, 450, TurnBwd: Turns)]));
+            lines.Add(new Line("J11S", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(e, nb - 400), (e, nb)], "secondary", "yes",
+                Rows: [new OsmRow(0, 400, TurnFwd: Turns)]));
+            lines.Add(new Line("J11N", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(e, nb), (e, nb + 400)], "secondary", "yes",
+                Rows: [new OsmRow(0, 400, TurnBwd: Turns)]));
+            junctions.Add(new Junction("J11-town-pockets", e, nb, "J2 in town with OSM turn:lanes left|through|right: right pockets and crossings",
                 Arms("L|T|R", "L|T|R", "L|T|R", "L|T|R")));
         }
 
