@@ -128,6 +128,9 @@ public static class CollisionTargets
         ("Machines/Wheel loader (forks)", "*", new[] { "side-" }, "the parked box leaves out the arms and forks"),
         ("Machines/Mini excavator", "*", new[] { "side-" }, "the parked box leaves out the boom and bucket"),
         ("Machines/Telehandler", "*", new[] { "side-" }, "the parked box leaves out the boom"),
+        // Ufo.ParkedBox and its leg posts: the ramp is drawn only (E gets in at its foot), and its
+        // high end under the hatch is at a walker's head height (#1006)
+        ("Machines/UFO", "walk", new[] { "side" }, "the ramp is drawn only: a walker's head goes through its high end"),
         // Rideable.ParkedBox, measured without the rotor: one box from the ground up, under the tail boom too
         ("Aircraft/Helicopter", "car", new[] { "side+" }, "the parked box is solid under the tail boom"),
         // Steamer.BuildParkedHull: the hull's own sections, the paddle boxes either side left out

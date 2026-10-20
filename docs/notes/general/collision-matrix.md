@@ -57,7 +57,12 @@
     - the helicopter's parked box is solid under its tail boom;
     - the paddle steamer's parked hull leaves out the paddle boxes (`end-`/`end+`; hidden until #738
       stopped a teleported mover dragging the steamer into the lane).
+    - the UFO's ramp is drawn only: a walker's head goes through its high end on the `side` lane (#1006).
 - **Traps found on the way:**
+  - **Read the lanes once the targets rest** (`Rested`, after the 1 s): a parked UFO that sank to its
+    belly box was still 0.6 m up after 1 s, so what stood in a lane was read off the wrong height (#1006).
+  - **`MeshBounds.Of` counts hidden meshes**: the UFO's hidden beam cone makes its drawn box 36 m
+    across, so its off-centre lanes run 12 m out and miss it (#1011).
   - **A placed node that builds its mesh in `_Ready`** (campfire, farm stand) draws nothing off the
     tree, so every run read as an invisible wall. Such a kind is measured by its `Placeables` ghost mesh.
   - **Put the mover at its start before `AddChild`.** Added at the run's centre and then moved, Jolt

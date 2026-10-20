@@ -157,8 +157,10 @@ public partial class CollisionMatrixProbe : Node3D
             r.Root.GlobalPosition = centre;
             r.Body = CollisionTargets.Spawn(r.Target, r.Root, _origin, new Transform3D(Basis.Identity, centre));
         }
-        // a parked vehicle drops the hand's breadth it was put up by, and settles
+        // a parked vehicle drops the hand's breadth it was put up by, and settles: what is in a lane is
+        // read from where it rests (a parked UFO was still 0.6 m up after 1 s, #1006)
         await Seconds(1.0);
+        await Rested(batch, 5.0);
 
         foreach (var r in batch)
         {
@@ -280,6 +282,23 @@ public partial class CollisionMatrixProbe : Node3D
         var lo = -along * 1e4f + across * (aim.Dot(across) - m.Width * 0.5f) + Vector3.Up * (TestWorld.GroundY + m.Low);
         var hi = along * 1e4f + across * (aim.Dot(across) + m.Width * 0.5f) + Vector3.Up * (TestWorld.GroundY + m.High);
         return new Aabb(lo, hi - lo);
+    }
+
+    /// <summary>Until no target has moved a millimetre for a quarter second, at most <paramref name="max"/> s.</summary>
+    private async Task Rested(List<Run> batch, double max)
+    {
+        double end = GameClock.Now + max, still = GameClock.Now + 0.25;
+        var was = batch.Select(r => r.Body!.GlobalPosition).ToArray();
+        while (GameClock.Now < end && GameClock.Now < still)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+            for (int i = 0; i < batch.Count; i++)
+            {
+                var now = batch[i].Body!.GlobalPosition;
+                if (now.DistanceSquaredTo(was[i]) > 1e-6f) still = GameClock.Now + 0.25;
+                was[i] = now;
+            }
+        }
     }
 
     private async Task Seconds(double s)

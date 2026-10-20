@@ -40,6 +40,18 @@ public partial class UfoRig : Node3D
 
     /// <summary>The legs' angles round the axis, rad: clear of the ramp at the front.</summary>
     private static readonly float[] LegAngles = { Mathf.Pi / 3f, Mathf.Pi, 5f * Mathf.Pi / 3f };
+    public static int LegCount => LegAngles.Length;
+
+    /// <summary>
+    /// Leg <paramref name="i"/> down, in the saucer's node space, as <see cref="Show"/> poses it: the
+    /// hinge under the belly and the bottom of the pad (the parked posts, <c>Ufo.ExtraBoxes</c>).
+    /// </summary>
+    public static (Vector3 Hinge, Vector3 Pad) LegDown(int i)
+    {
+        float a = LegAngles[i];
+        var hinge = AircraftMeshBuilder.Flip(new Vector3(Mathf.Sin(a) * LegHingeR, Belly + 0.02f, Mathf.Cos(a) * LegHingeR));
+        return (hinge, hinge + new Basis(Vector3.Up, a) * new Vector3(0, -(Belly - 0.08f), LegFootR - LegHingeR));
+    }
 
     /// <summary>Lamp brightness steps: the chase head, two trailing, then the rest.</summary>
     private const int Levels = 4;

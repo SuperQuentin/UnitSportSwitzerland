@@ -54,6 +54,25 @@ public sealed class Ufo : Flyer
         (new Vector3(0, (UfoMeshBuilder.Belly + 0.05f + UfoMeshBuilder.DomeBase + 1.2f) / 2f, 0),
          new Vector3(8.4f, UfoMeshBuilder.DomeBase + 1.2f - UfoMeshBuilder.Belly - 0.05f, 8.4f));
 
+    /// <summary>
+    /// The three legs, parked: a post round each strut, from its pad up into the hull box. The hull
+    /// box alone starts at the belly, and a parked saucer sank 2.25 m onto it (#1006). Axis-aligned:
+    /// a settled vehicle's extra boxes are put back by their centre only (<c>VehicleBody</c>).
+    /// </summary>
+    public override System.Collections.Generic.IEnumerable<(Transform3D Pose, Vector3 Centre, Vector3 Size)> ExtraBoxes()
+    {
+        // the pad is 0.8 m across
+        const float pad = 0.4f;
+        float top = UfoMeshBuilder.Belly + 0.1f;
+        for (int i = 0; i < UfoRig.LegCount; i++)
+        {
+            var (hinge, foot) = UfoRig.LegDown(i);
+            var lo = new Vector3(Mathf.Min(hinge.X, foot.X) - pad, foot.Y, Mathf.Min(hinge.Z, foot.Z) - pad);
+            var hi = new Vector3(Mathf.Max(hinge.X, foot.X) + pad, top, Mathf.Max(hinge.Z, foot.Z) + pad);
+            yield return (Transform3D.Identity, (lo + hi) * 0.5f, hi - lo);
+        }
+    }
+
     private static SeatAnchor[]? _seats;
     /// <summary>Two seats under the dome, the pilot's on the left.</summary>
     public override SeatAnchor[] Seats => _seats ??= new[]
