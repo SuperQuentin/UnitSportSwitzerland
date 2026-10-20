@@ -54,7 +54,7 @@ public partial class SlopeMap : Control
         if (_since < 0.1) return;
         _since = 0;
         var p = _player();
-        bool show = p != null && IsInstanceValid(p) && p.RideKindId == (int)RideKind.Skis
+        bool show = p != null && IsInstanceValid(p) && SnowRide.Is(p.RideKindId)
                     && SnowService.Instance?.Index != null && _chunks.Origin != null;
         Visible = show;
         if (!show) return;

@@ -16,7 +16,7 @@ namespace UnitSport.Player;
 /// skating on a flat run, small steps on grass or tarmac.
 /// </para>
 /// </summary>
-public sealed class Skis : Rideable
+public sealed class Skis : SnowRide
 {
     public override RideKind Kind => RideKind.Skis;
     public override string Label => "Skis";
@@ -41,11 +41,6 @@ public sealed class Skis : Rideable
 
     // ---- the Game profile (Rideable.Arcade): deeper edges, a quicker roll ----
     private const float ArcadeMaxLean = 1.12f, ArcadeBankResponse = 9f, ArcadeMaxYawRate = 2.7f;
-
-    private SkiDynamics.State _state;
-
-    /// <summary>Skidding in the last step (sound, spray).</summary>
-    public bool Skidding => _state.Skidding;
 
     /// <summary>The figure's own eye, so first person sits where the drawn head is looking from.</summary>
     public override Vector3 FirstPersonEye { get; } = HumanMeshBuilder.MountsForPose(HumanPose.Tucked).Eye
@@ -92,20 +87,7 @@ public sealed class Skis : Rideable
             motion.Slip -= motion.Yaw - before;
         }
 
-        _state = SkiDynamics.State.From(motion.Speed, motion.Slip, _state);
-        if (!ground.OnFloor)
-        {
-            SkiDynamics.Air(ref _state, tuning, input.Effort, dt);
-            // in the air the skis are turned freely; the velocity is the jump's
-        }
-        else
-        {
-            bool onSnow = ground.Surface is Audio.Surface.Snow or Audio.Surface.Ice;
-            var g = new SkiDynamics.Ground(onSnow, ground.SlopeAlong, ground.SlopeAcross, ground.SnowFriction, ground.SnowGrip);
-            float edge = pivot ? 1f : Mathf.Abs(motion.Bank) / maxLean;
-            SkiDynamics.Step(ref _state, tuning, g, new SkiDynamics.Input(input.Throttle, pivot ? 0f : input.Brake, input.Effort, edge), dt);
-        }
-        motion.Speed = _state.Speed;
-        motion.Slip = _state.Slip;
+        float edge = pivot ? 1f : Mathf.Abs(motion.Bank) / maxLean;
+        Glide(input, ground, tuning, edge, pivot ? 0f : input.Brake, 1f, dt, ref motion);
     }
 }

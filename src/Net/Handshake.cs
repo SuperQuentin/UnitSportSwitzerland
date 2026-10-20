@@ -67,7 +67,8 @@ public partial class Handshake : Node
     /// 38: an interior plan's entrance may be raised (EntrancePlan.Level, #827): an old peer would put its doorway on the ground floor.
     /// 39: ski slopes (#887): AssetKind.Pistes, World/Snow (weather and slope wear).
     /// 40: ski lifts part 2 (#915): AssetKind.Ropeways 16, FootPlayer LiftLine/LiftCarrier replicated.
-    public const int Protocol = 40;
+    /// 41: the snowboard (#922): RideKind.Snowboard 202, its stance and switch in FootPlayer.TuningBits.
+    public const int Protocol = 41;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

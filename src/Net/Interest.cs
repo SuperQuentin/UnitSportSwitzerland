@@ -43,7 +43,7 @@ public static class Interest
     /// <summary>The size a target presents, in metres: what decides how far it can be seen.</summary>
     public static float SizeOf(RideKind kind) => kind switch
     {
-        RideKind.OnFoot or RideKind.Skis => 1.8f,
+        RideKind.OnFoot or RideKind.Skis or RideKind.Snowboard => 1.8f,
         RideKind.RoadBike => 1.9f,
         RideKind.Wingsuit => 2.0f,
         RideKind.Parachute => 8f,

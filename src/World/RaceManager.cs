@@ -263,8 +263,8 @@ public partial class RaceManager : Node, IOriginShiftAware
             else
             {
                 // skis race down the slopes (#909): off snow they barely move (#899); the road only where there is no slope
-                RaceRoute? route = mount == (int)RideKind.Skis ? await RaceRoute.BuildPisteAsync(source, frame, at, race.Metres + 200f) : null;
-                if (mount == (int)RideKind.Skis && route == null)
+                RaceRoute? route = Player.SnowRide.Is(mount) ? await RaceRoute.BuildPisteAsync(source, frame, at, race.Metres + 200f) : null;
+                if (Player.SnowRide.Is(mount) && route == null)
                     Callable.From(() => _chat?.Tell(sender, $"[race] #{raceId} no slope here, racing the road", ChatKind.System)).CallDeferred();
                 route ??= await RaceRoute.BuildAsync(source, frame, at);
                 Callable.From(() => Opened(raceId, route, null, "")).CallDeferred();
@@ -416,7 +416,7 @@ public partial class RaceManager : Node, IOriginShiftAware
                 all.Where(p => !p.Npc).Select(p => race.Frame.ToWorld(p.Global)).ToList(), all.Select(p => race.Frame.ToWorld(p.Global)).ToList(),
                 race.Id * 7919 + (int)(owner % 100000) * 31 + race.Entrants.Count,
                 // skis cannot climb back to a slot from ahead: they all come down from above (#909)
-                mount == (int)RideKind.Skis ? ArrivalStyle.Behind : null);
+                Player.SnowRide.Is(mount) ? ArrivalStyle.Behind : null);
         }
         var ids = npcs.Spawn(owner, count, (RideKind)mount, host.Global, host.Rotation.Y,
             plan == null ? null : i => (race.Frame.ToGlobal(plan[i].At), plan[i].Yaw), race.Class >= 0 ? race.Class : race.NpcSetup);
@@ -725,7 +725,7 @@ public partial class RaceManager : Node, IOriginShiftAware
 
     private static float SlowPace(int mount) => mount switch
     {
-        (int)RideKind.OnFoot or (int)RideKind.Skis or Open => 2f,
+        (int)RideKind.OnFoot or (int)RideKind.Skis or (int)RideKind.Snowboard or Open => 2f,
         (int)RideKind.RoadBike or (int)RideKind.Paraglider => 4f,
         (int)RideKind.Plane => 25f,
         (int)RideKind.Helicopter or (int)RideKind.Wingsuit => 15f,
@@ -823,7 +823,7 @@ public partial class RaceManager : Node, IOriginShiftAware
     private static float MaxPace(int mount) => (RideKind)mount switch
     {
         RideKind.OnFoot => 14f,
-        RideKind.RoadBike or RideKind.Skis => 45f,
+        RideKind.RoadBike or RideKind.Skis or RideKind.Snowboard => 45f,
         RideKind.Paraglider or RideKind.Wingsuit or RideKind.Parachute => 70f,
         RideKind.Helicopter or RideKind.Plane => 120f,
         _ => 125f,   // cars and motorbikes: 450 km/h
@@ -912,6 +912,7 @@ public partial class RaceManager : Node, IOriginShiftAware
             case "foot" or "run": return (int)RideKind.OnFoot;
             case "bike": return (int)RideKind.RoadBike;
             case "skis" or "ski": return (int)RideKind.Skis;
+            case "snowboard" or "board": return (int)RideKind.Snowboard;
             case "car": return (int)CarCatalog.All[0].Kind;
             case "moto" or "r1" or "motorbike": return 64;   // the motorbikes (#38): 64 and 65
             case "monster": return 65;

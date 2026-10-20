@@ -38,6 +38,61 @@ public static class SkiDynamics
             Mu = 0.04f, CarveWindow = 0.22f, GripBase = 0.5f, GripEdge = 0.7f, SkidMu = 0.45f,
             StridePush = 1.4f, StrideCap = 5.5f, OffSnowPush = 0.8f, OffSnowCap = 1.6f,
         };
+
+        /// <summary>
+        /// A snowboard (#922): one wide edge with a tighter sidecut (a narrower carve window, more
+        /// bite at full edge), more frontal area standing sideways, no plough (brake is dragging the
+        /// back edge), and one foot strapped in: a push with the free foot is shorter and slower
+        /// than a skate on skis, and off snow it is a hobble.
+        /// </summary>
+        public static readonly Tuning Board = Sim with
+        {
+            DragArea = 0.70f, TuckDragArea = 0.42f,
+            CarveWindow = 0.10f, GripBase = 0.30f, GripEdge = 0.68f, SkidMu = 0.60f, PloughDecel = 1.5f,
+            StridePush = 0.8f, StrideCap = 2.5f, OffSnowPush = 0.5f, OffSnowCap = 1.0f, StrideGap = 0.25f,
+        };
+
+        /// <summary>The board in the Game profile.</summary>
+        public static readonly Tuning BoardGame = Board with
+        {
+            Mu = 0.04f, CarveWindow = 0.20f, GripBase = 0.45f, GripEdge = 0.78f, SkidMu = 0.50f,
+            StridePush = 1.0f, StrideCap = 3.2f, OffSnowPush = 0.6f, OffSnowCap = 1.2f,
+        };
+    }
+
+    /// <summary>
+    /// A board's edge grip against a ski's: the toe side is held on the balls of the feet, the
+    /// heel side only by the highbacks and the shins, so it slips sooner.
+    /// </summary>
+    public static float BoardEdgeGrip(bool toeSide) => toeSide ? 1.1f : 0.9f;
+
+    /// <summary>
+    /// Whether a board's lean (<c>RideMotion.Bank</c>, − to the right) is onto its toe edge, for a
+    /// rider whose chest faces the right of the travel (regular, or goofy riding switch).
+    /// </summary>
+    public static bool ToeSide(float bank, bool facingRight) => (bank < 0f) == facingRight;
+
+    /// <summary>Speed above which travelling tail first counts as riding switch, m/s.</summary>
+    public const float SwitchSpeed = 1.5f;
+
+    /// <summary>
+    /// A board is the same at both ends: travelling tail first (the slip past a quarter turn, with
+    /// a margin so it does not flicker at 90°) it is ridden switch, the tail becoming the nose. The
+    /// heading turns half a turn and the slip with it, so the velocity does not change. True when
+    /// it swapped.
+    /// </summary>
+    public static bool Switch(ref float yaw, ref float slip, float speed)
+    {
+        if (speed < SwitchSpeed || MathF.Abs(slip) < MathF.PI / 2f + 0.2f) return false;
+        yaw = Wrap(yaw + MathF.PI);
+        slip = Wrap(slip - MathF.PI);
+        return true;
+    }
+
+    private static float Wrap(float a)
+    {
+        a %= 2f * MathF.PI;
+        return a > MathF.PI ? a - 2f * MathF.PI : a < -MathF.PI ? a + 2f * MathF.PI : a;
     }
 
     /// <summary>What is under the skis this step.</summary>

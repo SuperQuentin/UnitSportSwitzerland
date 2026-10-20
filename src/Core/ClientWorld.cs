@@ -1860,11 +1860,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
             else if (p.Vehicle is { } gear)
             {
                 if (p.IsOnFloor()) yield return (PlayerInput.RideMenu, $"Take off the {gear.Label.ToLowerInvariant()}");
-                // skis (#899): a stride is a press, so say so when going slow; a skid stops a fast run
-                if (gear is Skis && p.IsOnFloor())
+                // skis (#899) and the board (#922): a stride is a press, so say so when going slow; a skid stops a fast run
+                if (gear is SnowRide && p.IsOnFloor())
                 {
-                    if (p.RideSpeed < 4f) yield return (PlayerInput.MoveForward, "Tap to skate");
-                    else yield return (PlayerInput.Brake, "Brake + turn: skid to a stop");
+                    bool board = gear is Snowboard;
+                    if (p.RideSpeed < 4f) yield return (PlayerInput.MoveForward, board ? "Tap to push" : "Tap to skate");
+                    else yield return (PlayerInput.Brake, board ? "Brake: skid to a stop" : "Brake + turn: skid to a stop");
                 }
                 if (gear is not Flyer && gear.CanHop) yield return (PlayerInput.Trick, "Trick (in the air)");
             }
