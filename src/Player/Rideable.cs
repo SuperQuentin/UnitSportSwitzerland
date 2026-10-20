@@ -225,6 +225,9 @@ public abstract class Rideable
     /// <summary>Chase camera offset behind and above the rider. Zero distance means first person.</summary>
     public virtual float ChaseDistance => 3.6f;
     public virtual float ChaseHeight => 1.45f;
+
+    /// <summary>How much further back the chase camera sits at <paramref name="speed"/> (m/s), m: the speed felt as distance.</summary>
+    public virtual float ChaseStretch(float speed) => 0f;
     /// <summary>Chase camera tilt, radians, negative looks down. A car's roof hides the road from a level camera behind it.</summary>
     public virtual float ChasePitch => 0f;
     /// <summary>How far the chase camera swings toward the direction of travel in a slide, 0..1.</summary>

@@ -27,19 +27,25 @@ public sealed class Snowboard : SnowRide
     public override RideKind Kind => RideKind.Snowboard;
     public override string Label => "Snowboard";
     public override string Blurb =>
-        "Gravity: {move_left}/{move_right} carve toe or heel edge, {brake} skid to a stop, tap {move_forward} to push, {jump} ollie, {tuck_boost} tuck";
+        "Gravity: {move_left}/{move_right} carve toe or heel edge, {brake} skid to a stop, tap {move_forward} to push, {jump} ollie, hold {tuck_boost} to straight-line";
 
     /// <summary>A board tips further than skis: the whole body leans over the edge. ~63 degrees.</summary>
     private const float MaxLean = 1.1f;
-    private const float MaxYawRate = 2.6f;
-    private const float BankResponse = 6f;
+    /// <summary>Gentler than it was (#933), as the skis: a board comes round on its sidecut, not on a pivot.</summary>
+    private const float MaxYawRate = 1.7f;
+    private const float BankResponse = 4.5f;
     private const float SlowSpeed = 1.2f;
 
     /// <summary>The swing across the travel for a stop, rad/s; it stops at the quarter turn.</summary>
     private const float PivotRate = 3.2f;
     private const float PivotTo = 1.45f;
 
-    private const float ArcadeMaxLean = 1.2f, ArcadeBankResponse = 8f, ArcadeMaxYawRate = 2.9f;
+    private const float ArcadeMaxLean = 1.2f, ArcadeBankResponse = 5.5f, ArcadeMaxYawRate = 1.95f;
+
+    /// <summary>The tuck (Shift) runs straight: steering only nudges the board.</summary>
+    private const float TuckSteer = 0.3f;
+
+    protected override float StrideTime => 0.5f;
 
     /// <summary>Right foot forward. The owner's setting; a remote copy has it from <see cref="Bits"/>.</summary>
     public bool Goofy { get; set; }
@@ -57,17 +63,16 @@ public sealed class Snowboard : SnowRide
     /// <summary>The rider's chest faces the right of the travel: regular forward, or goofy on switch.</summary>
     public bool FacingRight => Goofy == Switch;
 
-    public override Vector3 FirstPersonEye { get; } = new(0f, 1.42f, 0.05f);
     public override float EyeHeight => 1.42f;
-    public override float ChaseDistance => 4.4f;
-    public override float ChaseHeight => 1.7f;
+    public override float ChaseDistance => 5.4f;
+    public override float ChaseHeight => 1.9f;
     public override float MaxFov => 100f;
     public override float FovSpeed => 20f;
     public override float DismountSpeed => 3.0f;
 
+    /// <summary>The live boarder (#933): toe and heel lean, the back foot pushing, the arms balancing.</summary>
     public override Node3D BuildVisual(int riderIndex, Outfit outfit = default) =>
-        SnowboardMeshBuilder.Snowboarder(HumanPalette.ForRider(riderIndex) with { Outfit = outfit },
-            SkiPalette.ForRider(riderIndex), FacingRight);
+        SnowRig.Boarder(HumanPalette.ForRider(riderIndex) with { Outfit = outfit }, SkiPalette.ForRider(riderIndex), FacingRight);
 
     public override void Step(in RideInput input, in RideGround ground, float dt, ref RideMotion motion)
     {
@@ -93,7 +98,8 @@ public sealed class Snowboard : SnowRide
         else
         {
             float before = motion.Yaw;
-            SteerByLean(ref motion, input.Steer, motion.Speed, maxLean, arcade ? ArcadeMaxYawRate : MaxYawRate,
+            float steer = input.Effort && ground.OnFloor ? input.Steer * TuckSteer : input.Steer;
+            SteerByLean(ref motion, steer, motion.Speed, maxLean, arcade ? ArcadeMaxYawRate : MaxYawRate,
                 arcade ? ArcadeBankResponse : BankResponse, SlowSpeed, dt);
             motion.Slip -= motion.Yaw - before;
         }

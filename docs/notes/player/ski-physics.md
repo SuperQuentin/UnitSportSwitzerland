@@ -32,7 +32,14 @@
   - to 3 m: STUMBLE, 25 % of the speed lost;
   - beyond: BAIL.
   - The trick grades (`GradeLanding`) still apply first.
-- **Hints**: "Tap to skate" under 4 m/s; "Brake + turn: skid to a stop" faster.
+- **Hints**: "Tap to skate" under 4 m/s; "Brake: snowplough" to 6; "Brake + turn: skid to a stop"
+  faster; "Hold: schuss".
+- **Feel (#933, playtest)**: turns were a snap. `MaxYawRate` 2.4 → 1.5 (Game 2.7 → 1.75),
+  `BankResponse` 7 → 4.5 (Game 9 → 5.5). The plough decelerates 4.5 m/s² (Game 5.5); brake with a
+  turn is a hockey stop only above 5 m/s (`PivotSpeed`), slower it is a plough turn. Shift is the
+  schuss: steering x0.3 (`SchussSteer`) and the tuck's drag; the figure folds into the egg
+  (`avatar/snow-rig`). The chase camera sits 5.4 m back and eases out 0.12 m per m/s, up to 3 m
+  more (`Rideable.ChaseStretch`). First person turns with trick spins and flips (not in VR).
 - **AutoPilot**: `MeasureLean` measures skis on snow and accepts their slip; it returned null
   for any slipping mount, which would have stopped skis being a lean mount.
 - **Races on skis need snow**: off snow a ski race is a walk, so ski courses follow the slopes

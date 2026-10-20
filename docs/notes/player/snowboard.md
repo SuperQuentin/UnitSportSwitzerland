@@ -24,5 +24,8 @@
   and `HumanPose.Boarding` (feet at +-0.27 m on the bindings, arms out) turned a quarter turn, the
   chest to the toe edge. In the model viewer under Rides. First-run intro card
   `VehicleIntroKind.Snowboard`; race mount word `snowboard`.
+- **Feel (#933)**: `MaxYawRate` 1.7 (Game 1.95), `BankResponse` 4.5 (Game 5.5); Shift
+  straight-lines (steer x0.3). The rider is a live `SnowRig` (`avatar/snow-rig`): toe and heel
+  lean, the back foot pushing, arms balancing, angulation.
 - **Checks**: `SnowboardDynamicsTests`; `--ride board,25,out.png --at 2580350,1100050` (with
   `--chunks` from a worktree): top 9.1 m/s against the skis' 10.7 on the same line.

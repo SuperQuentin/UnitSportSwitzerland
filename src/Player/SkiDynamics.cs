@@ -29,13 +29,13 @@ public static class SkiDynamics
         /// <summary>Close to the numbers: μ 0.05 groomed, edges up to ~0.95 g, a skid at 0.55 g.</summary>
         public static readonly Tuning Sim = new(
             Mass: 82f, Mu: 0.05f, OffSnowMu: 0.30f, DragArea: 0.62f, TuckDragArea: 0.30f, AirDensity: 1.05f,
-            CarveWindow: 0.12f, GripBase: 0.35f, GripEdge: 0.6f, SkidMu: 0.55f, PloughDecel: 3.5f,
+            CarveWindow: 0.12f, GripBase: 0.35f, GripEdge: 0.6f, SkidMu: 0.55f, PloughDecel: 4.5f,
             StridePush: 1.1f, StrideCap: 4.5f, OffSnowPush: 0.7f, OffSnowCap: 1.4f, StrideGap: 0.15f);
 
         /// <summary>The Game profile: more grip, a wider carve window, a gentler scrub, quicker strides.</summary>
         public static readonly Tuning Game = Sim with
         {
-            Mu = 0.04f, CarveWindow = 0.22f, GripBase = 0.5f, GripEdge = 0.7f, SkidMu = 0.45f,
+            Mu = 0.04f, CarveWindow = 0.22f, GripBase = 0.5f, GripEdge = 0.7f, SkidMu = 0.45f, PloughDecel = 5.5f,
             StridePush = 1.4f, StrideCap = 5.5f, OffSnowPush = 0.8f, OffSnowCap = 1.6f,
         };
 

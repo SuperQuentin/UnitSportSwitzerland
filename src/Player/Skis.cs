@@ -21,17 +21,21 @@ public sealed class Skis : SnowRide
     public override RideKind Kind => RideKind.Skis;
     public override string Label => "Skis";
     public override string Blurb =>
-        "Gravity: {move_left}/{move_right} carve, {brake} plough, {brake} + turn to skid to a stop, tap {move_forward} to skate, {tuck_boost} tuck";
+        "Gravity: {move_left}/{move_right} carve, {brake} snowplough, fast: {brake} + turn to skid to a stop, tap {move_forward} to skate, hold {tuck_boost} to schuss";
 
     /// <summary>
     /// How far the skis tip onto their edges. ~57 degrees: a World Cup giant-slalom skier is past
     /// 60, and at 43 the tightest turn at 70 km/h was a 45 m arc.
     /// </summary>
     private const float MaxLean = 1.0f;
-    private const float MaxYawRate = 2.4f;
+    /// <summary>
+    /// The quickest the skis come round, rad/s (#933: 2.4 felt like a snap). 1.5 is a short swing
+    /// at 6 m/s on a 4 m arc; faster, the lean sets a longer one.
+    /// </summary>
+    private const float MaxYawRate = 1.5f;
 
-    /// <summary>Quicker than the bike: there is no machine to tip, only knees and hips.</summary>
-    private const float BankResponse = 7f;
+    /// <summary>The roll onto the edges, 1/s: knees and hips, a quarter second to settle (#933: 7 was a flick).</summary>
+    private const float BankResponse = 4.5f;
 
     /// <summary>Below this you are shuffling and turn the skis directly.</summary>
     private const float SlowSpeed = 1.5f;
@@ -39,27 +43,25 @@ public sealed class Skis : SnowRide
     /// <summary>A hockey stop: brake with a turn swings the skis across at this rate, whatever the speed.</summary>
     private const float PivotRate = 3f;
 
-    // ---- the Game profile (Rideable.Arcade): deeper edges, a quicker roll ----
-    private const float ArcadeMaxLean = 1.12f, ArcadeBankResponse = 9f, ArcadeMaxYawRate = 2.7f;
+    /// <summary>Above this a brake with a turn is a hockey stop; below, a snowplough turn, m/s.</summary>
+    private const float PivotSpeed = 5f;
 
-    /// <summary>The figure's own eye, so first person sits where the drawn head is looking from.</summary>
-    public override Vector3 FirstPersonEye { get; } = HumanMeshBuilder.MountsForPose(HumanPose.Tucked).Eye
-        + new Vector3(0, 0, -0.06f);   // just proud of the face, so the head never fills the lens
+    /// <summary>The schuss (Shift, #933): the skis flat and straight, steering only nudges them.</summary>
+    private const float SchussSteer = 0.3f;
+
+    // ---- the Game profile (Rideable.Arcade): deeper edges, a quicker roll ----
+    private const float ArcadeMaxLean = 1.12f, ArcadeBankResponse = 5.5f, ArcadeMaxYawRate = 1.75f;
 
     public override float EyeHeight => 1.32f;
-    public override float ChaseDistance => 4.2f;
-    public override float ChaseHeight => 1.60f;
+    public override float ChaseDistance => 5.4f;
+    public override float ChaseHeight => 1.85f;
     public override float MaxFov => 104f;        // steeper FOV ramp: the speed is the point
     public override float FovSpeed => 22f;
     public override float DismountSpeed => 3.0f;
 
-    public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default) => new MeshInstance3D
-    {
-        Name = "Skier",
-        Mesh = SkierMeshBuilder.BuildSkier(
-            HumanPalette.ForRider(riderIndex) with { Outfit = outfit }, SkiPalette.ForRider(riderIndex)),
-        MaterialOverride = HumanMeshBuilder.FigureMaterial(),
-    };
+    /// <summary>The live skier (#933): the knees, the plough, the skate, the poles move.</summary>
+    public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default) =>
+        SnowRig.Skier(HumanPalette.ForRider(riderIndex) with { Outfit = outfit }, SkiPalette.ForRider(riderIndex));
 
     public override void Step(in RideInput input, in RideGround ground, float dt, ref RideMotion motion)
     {
@@ -68,7 +70,9 @@ public sealed class Skis : SnowRide
         float maxLean = arcade ? ArcadeMaxLean : MaxLean;
 
         // a hockey stop: brake with a turn throws the skis across the travel, not into a lean
-        bool pivot = ground.OnFloor && input.Brake > 0.3f && Mathf.Abs(input.Steer) > 0.3f && motion.Speed > 2f;
+        bool pivot = ground.OnFloor && input.Brake > 0.3f && Mathf.Abs(input.Steer) > 0.3f && motion.Speed > PivotSpeed;
+        // the schuss holds the line: the skis flat, a steer only nudges them
+        float steer = input.Effort && ground.OnFloor ? input.Steer * SchussSteer : input.Steer;
         if (pivot)
         {
             float yawRate = -Mathf.Sign(input.Steer) * PivotRate;
@@ -82,12 +86,14 @@ public sealed class Skis : SnowRide
         else
         {
             float before = motion.Yaw;
-            SteerByLean(ref motion, input.Steer, motion.Speed, maxLean, arcade ? ArcadeMaxYawRate : MaxYawRate,
+            SteerByLean(ref motion, steer, motion.Speed, maxLean, arcade ? ArcadeMaxYawRate : MaxYawRate,
                 arcade ? ArcadeBankResponse : BankResponse, SlowSpeed, dt);
             motion.Slip -= motion.Yaw - before;
         }
 
         float edge = pivot ? 1f : Mathf.Abs(motion.Bank) / maxLean;
-        Glide(input, ground, tuning, edge, pivot ? 0f : input.Brake, 1f, dt, ref motion);
+        // brake alone, or slow with a turn, is the snowplough: the tails pushed out into a V
+        float plough = pivot || !ground.OnFloor ? 0f : input.Brake;
+        Glide(input, ground, tuning, edge, plough, 1f, dt, ref motion, plough);
     }
 }
