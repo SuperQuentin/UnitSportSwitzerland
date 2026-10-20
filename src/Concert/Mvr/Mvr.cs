@@ -21,7 +21,7 @@ namespace UnitSport.Concert.Mvr;
 /// </para>
 /// Pure: the caller reads and writes the file and builds the glTF.
 /// </summary>
-public static class MvrFile
+public static partial class MvrFile
 {
     public const string SceneEntry = "GeneralSceneDescription.xml";
     private const string Provider = "UnitSport";

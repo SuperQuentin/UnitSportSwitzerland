@@ -13,7 +13,7 @@ namespace UnitSport.Concert.Mvr;
 /// few kB for a stadium rig), and what <see cref="StagePlan.UseRig"/> patches in place of the
 /// generated rig. Pure: no node, no file.
 /// </summary>
-public sealed class RigData
+public sealed partial class RigData
 {
     public const int Version = 1;
     /// <summary>The server's limits on a rig a player sends.</summary>
