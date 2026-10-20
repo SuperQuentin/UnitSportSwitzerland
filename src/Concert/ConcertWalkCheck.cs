@@ -60,7 +60,9 @@ public partial class ConcertWalkCheck : Node3D
             $"the deck and the stairs are hulls, the tower a box, the lamp nothing ({_rig.ObjectHulls} hulls, {_rig.ObjectBoxes} boxes, {_rig.ObjectTriangles} triangles)");
         var deck = new Vector2(_c.X, _c.Z);
         Check(_rig.Plan!.Blocked(deck, 0f) && !bare.Blocked(deck, 0f), $"the crowd keeps off the deck, which the bare stage did not");
-        Check(!_rig.Plan.Blocked(deck + new Vector2(0, 6f), 0.5f), $"and not off the open floor behind it");
+        // the stage's own crew zones (#985) may cover that floor: the import must add nothing to them there
+        var behind = deck + new Vector2(0, 6f);
+        Check(_rig.Plan.Blocked(behind, 0.5f) == bare.Blocked(behind, 0.5f), $"and not off the open floor behind it");
 
         _route.AddRange(new[] { _c + new Vector3(0, 0, -7f), _c + new Vector3(0, 0, -3.4f), _c + new Vector3(0, DeckTop, -1.2f), _c + new Vector3(0, DeckTop, 0) });
         _climber = Walker("Climber", _route[0]);
