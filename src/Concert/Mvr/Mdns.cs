@@ -285,9 +285,10 @@ public sealed class Mdns : IDisposable
         _host = $"{label}.local";
         _port = tcpPort;
         _texts = new[] { $"StationName={stationName}", $"StationUUID={stationUuid}" };
+        Socket? s = null;
         try
         {
-            var s = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+            s = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
             s.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
             s.Bind(new IPEndPoint(IPAddress.Any, Port));
             s.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastTimeToLive, 255);
@@ -301,8 +302,7 @@ public sealed class Mdns : IDisposable
         }
         catch (Exception e) when (e is SocketException or ObjectDisposedException)
         {
-            _sock?.Dispose();
-            _sock = null;
+            s?.Dispose();
             return $"mDNS could not share UDP {Port}: {e.Message}";
         }
         var token = _stop.Token;
