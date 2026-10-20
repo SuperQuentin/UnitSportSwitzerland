@@ -108,8 +108,10 @@ public partial class TrafficProbe : Node
         if (_t >= TickFrom && _t - delta < TickFrom) _traffic.ResetTickCost();
         // --dense: more of the traffic where the junction under test is (#353)
         if (_dense && (int)(_t * 4) != (int)((_t - delta) * 4)) _traffic.SpawnNear(_camera.GlobalPosition, NearSpawn);
-        // --feed: a car into one of the junction's signalised approaches every 0.4 s, so queues form at its reds
-        if (_feed && _placed && (int)(_t * 2.5) != (int)((_t - delta) * 2.5)) Feed();
+        // --feed: a car into one of the junction's signalised approaches every 0.4 s (--feed-rate N a second), so queues form at its reds
+        if (_feed && _placed && (int)(_t * _feedRate) != (int)((_t - delta) * _feedRate)) Feed();
+        // the cars about the junction, once the feed has filled it (#854)
+        if (_feed && _placed && _t > 20 && (int)_t != (int)(_t - delta)) { _nearSum += _traffic.CarsWithin(_spot, 80f); _nearSamples++; }
         _maxCars = Math.Max(_maxCars, _traffic.CarCount);
         _maxTrains = Math.Max(_maxTrains, _traffic.TrainCount);
         _maxSpeed = Math.Max(_maxSpeed, _traffic.AverageCarSpeed);
@@ -128,7 +130,7 @@ public partial class TrafficProbe : Node
             GD.Print($"[trafficcheck] wrote {_shot}");
         if (_stay && _shot != null && _captured < CaptureAt.Length)
             GD.Print($"[trafficcheck] capture: {(_capture is null ? "no queue of " + CaptureQueue + " at a red near --at" : $"{_captured} of {CaptureAt.Length} shots")} before the end, run longer (--seconds)");
-        if (_feed) GD.Print($"[trafficcheck] fed {_fedCars} cars into {_fed.Count} approaches near --at"
+        if (_feed) GD.Print($"[trafficcheck] fed {_fedCars} cars into {_fed.Count} approaches near --at (fails {string.Join("/", _traffic.FeedFails)}), on average {(_nearSamples > 0 ? _nearSum / (float)_nearSamples : 0f):F0} cars within 80 m from 20 s"
             + (_feedTurns is null ? "" : $", moves taken L/T/R {_traffic.FedMoves[0]}/{_traffic.FedMoves[1]}/{_traffic.FedMoves[2]} ({_traffic.FedMovesMissed} not the one drawn)"));
         var (mean, p50, p99, ticks, cars) = _traffic.TickCost();
         GD.Print($"[trafficcheck] tick cost from {TickFrom:F0} s (perf-traffic-tick): mean {mean:F0} us, p50 {p50:F0} us, p99 {p99:F0} us over {ticks} ticks, {cars:F0} cars on average");
@@ -304,6 +306,9 @@ public partial class TrafficProbe : Node
         && w.Split(',').Select(x => float.TryParse(x, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float f) ? f : -1f).ToArray() is { Length: 3 } t
         && t.All(f => f >= 0f) && t.Sum() > 0f ? t : null;
     private readonly Random _feedRng = new(854);
+    /// <summary><c>--feed-rate N</c> (#854): cars fed a second (2.5).</summary>
+    private readonly double _feedRate = CmdArgs.Double("--feed-rate") ?? 2.5;
+    private int _nearSum, _nearSamples;
 
     /// <summary>
     /// <c>--feed</c> (#353, for the capture, not the game's traffic): one more car on the road into

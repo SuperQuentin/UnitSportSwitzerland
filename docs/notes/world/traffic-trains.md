@@ -112,5 +112,13 @@
   car (`SpawnClear`); the line is where its front stops (`CarFront` 2.5 m). `--trafficcheck` prints **cars on one spot**
   (pairs within 1 m, most in a tick): J1 `--dense --feed` 90 s from 106 to 0. The probe's fed cars start 120 m+ out (out of
   the camera's view), its extra cars too (`ProbeSpawnMin`).
+- **Cars steer, never slide** (#854, the user): a car's rear follows the trail of its front (`Vehicle.Trail`, a ring of the
+  front's points every 0.25 m; the rear goes by the route only until the trail is a car long, after a spawn, a turn round or
+  a jump over 3 m), so a lane change, a pull over or a road widening turns the body. Sideways moves only while it rolls (lane
+  0.35 m per metre travelled, pull scaled to 3 m/s: a standing car slid over before). From one road piece to the next it keeps
+  its place (`HandOver`, was only where a transition steers): it jumped over where a road widens.
+- **Fed cars where there is room** (`SpawnInto`): six spots tried; refused only within 8 m of a car or with one coming up behind
+  within 30 m, and it starts no faster than it can brake from for one ahead (the 30 m round any car let few in): J10 fed 36 ->
+  130 cars in 90 s, 30 -> 42 within 80 m. `--feed-rate N` cars a second (2.5); the probe prints the average within 80 m.
 - **`--feed-turns L,T,R`** (#854, demos): weights for the fed cars' moves (`1,2,3`: a sixth left, a third straight, half
   right); each draws one and takes a path with it at its junction (`Vehicle.Wants`); the probe prints the moves taken.
