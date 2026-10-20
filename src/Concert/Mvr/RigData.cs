@@ -28,6 +28,8 @@ public sealed partial class RigData
         [JsonPropertyName("tilt")] public float TiltRange { get; set; }
         [JsonPropertyName("b0")] public float BeamMin { get; set; } = 4f;
         [JsonPropertyName("b1")] public float BeamMax { get; set; } = 40f;
+        /// <summary>Its GDTF's own body (#961, RigData.Bodies.cs); null: the generic head.</summary>
+        [JsonPropertyName("body")] public BodyRow? Body { get; set; }
     }
 
     public sealed class FixtureRow
@@ -167,6 +169,6 @@ public sealed partial class RigData
             if (V(f.Up).LengthSquared() < 0.25f) return $"{f.Name}: no yoke axis";
             if (f.Screen != null && (f.PixelsX is < 1 or > 128 || f.PixelsY is < 1 or > 128)) return $"{f.Name}: screen pixels";
         }
-        return CheckObjects();
+        return CheckObjects() ?? CheckBodies();
     }
 }

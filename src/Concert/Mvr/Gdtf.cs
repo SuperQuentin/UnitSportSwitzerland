@@ -284,7 +284,7 @@ public static class Gdtf
 
     /// <summary>A GDTF as read: its names, a mode's channels, the first beam's angle.</summary>
     public sealed record Type(string Name, string Manufacturer, string Mode, List<Channel> Channels, float BeamAngle, int Footprint, string[] Modes,
-        string Description = "");
+        string Description = "", GdtfBody? Body = null);
 
     /// <summary>Reads a .gdtf (a zip) and one of its modes (the first when not named or not found); null with why when it is not one.</summary>
     public static Type? Read(byte[] gdtf, string? mode, out string? error)
@@ -298,7 +298,9 @@ public static class Gdtf
             if (entry == null) { error = "no description.xml"; return null; }
             if (entry.Length > 32 << 20) { error = "description.xml over 32 MB"; return null; }
             using var s = entry.Open();
-            return FromXml(XDocument.Load(s), mode, out error);
+            var doc = XDocument.Load(s);
+            var type = FromXml(doc, mode, out error);
+            return type == null ? null : type with { Body = GdtfBody.Of(doc, type, GdtfBody.Files(zip)) };   // its own body (#961)
         }
         catch (Exception e) when (e is InvalidDataException or System.Xml.XmlException or IOException)
         {

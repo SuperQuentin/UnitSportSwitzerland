@@ -214,11 +214,12 @@ public static partial class MvrFile
             {
                 var bytes = files(spec);
                 FixtureType? type = null;
+                GdtfBody? body = null;
                 string? why;
                 if (bytes == null) why = $"{spec} is not in the file";
-                else if (Gdtf.Read(bytes, mode, out why) is { } g) type = Gdtf.ToFixtureType(g, out why);
+                else if (Gdtf.Read(bytes, mode, out why) is { } g) { type = Gdtf.ToFixtureType(g, out why); body = g.Body; }
                 t = typeIndex[key] = type == null ? -1 : rig.Types.Count;
-                if (type != null) rig.Types.Add(RigData.Row(type));
+                if (type != null) rig.Types.Add(rig.WithBody(RigData.Row(type), body));   // its own body (#961)
                 else notes.Add($"{spec} ({mode}): {why}");
                 if (type != null && type.Name.Contains("(layout unknown", StringComparison.Ordinal))
                     notes.Add($"{spec}: its channels are numbered placeholders (a stripped profile): hung with our own layout");

@@ -160,7 +160,7 @@ public partial class ConcertRig : Node3D
             AddChild(_crowd);
         }
         Live[Event.Stadium.Name] = this;
-        GD.Print($"[concert] {Event}: {fx.Count} fixtures, {_plan.Patch.Universes.Count} universes ({_plan.Patch.ChannelsUsed} channels)");
+        GD.Print($"[concert] {Event}: {fx.Count} fixtures, {_plan.Patch.Universes.Count} universes ({_plan.Patch.ChannelsUsed} channels){(BodiesDrawn > 0 ? $", {BodiesDrawn} with their own GDTF bodies" : "")}");
     }
 
     // ---- the stage ----------------------------------------------------------------------------------
@@ -259,6 +259,7 @@ public partial class ConcertRig : Node3D
             _bodies.SetInstanceTransform(_heads.Length + i, new Transform3D(basis, f.Position));
             _bodies.SetInstanceColor(_heads.Length + i, Colors.White);
         }
+        BuildBodies();   // imported fixtures' own GDTF bodies in place of the box (#961)
 
         // the screens: a grid of pixels each, facing out
         _pixels = new MultiMesh[_screens.Length];
@@ -413,16 +414,21 @@ public partial class ConcertRig : Node3D
             float angle = Mathf.DegToRad(Mathf.Lerp(f.Type.BeamMin, f.Type.BeamMax, zoom));
             float len = _reach[i];
             float radius = len * MathF.Tan(angle / 2);
-            // the head turns with its beam
-            _bodies.SetInstanceTransform(i, new Transform3D(Facing(dir), f.Position));
-            _bodies.SetInstanceColor(i, Colors.White);
+            // the head turns with its beam; a GDTF body's yoke and head turn, its beam leaves the lens (#961)
+            var from = f.Position;
+            if (_bodied[i]) from = PoseBody(i);
+            else
+            {
+                _bodies.SetInstanceTransform(i, new Transform3D(Facing(dir), f.Position));
+                _bodies.SetInstanceColor(i, Colors.White);
+            }
             // the cone: Y down the beam, X and Z its radius
             var side = dir.Cross(Mathf.Abs(dir.Y) > 0.95f ? Vector3.Right : Vector3.Up).Normalized();
             var other = side.Cross(dir).Normalized();
-            _beams.SetInstanceTransform(i, new Transform3D(new Basis(side * radius, -dir * len, other * radius), f.Position));
+            _beams.SetInstanceTransform(i, new Transform3D(new Basis(side * radius, -dir * len, other * radius), from));
             float strength = f.Type.Kind switch { FixtureKind.Beam => 0.6f, FixtureKind.Spot => 0.27f, _ => 0.1f };
             _beams.SetInstanceColor(i, (col * (dim * strength * haze)) with { A = 1f });
-            _glows.SetInstanceTransform(glow, new Transform3D(Basis.FromScale(Vector3.One * (f.Type.Kind == FixtureKind.Wash ? 1.4f : 0.9f)), f.Position + dir * 0.35f));
+            _glows.SetInstanceTransform(glow, new Transform3D(Basis.FromScale(Vector3.One * (f.Type.Kind == FixtureKind.Wash ? 1.4f : 0.9f)), from + dir * (_bodied[i] ? 0.05f : 0.35f)));
             _glows.SetInstanceColor(glow++, (col * dim) with { A = 1f });
             if (f.Type.Kind == FixtureKind.Wash) washSum += col * dim;
             else beamSum += col * dim;

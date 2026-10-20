@@ -248,7 +248,7 @@ public class MvrSceneTests
     }
 
     /// <summary>A box from the origin to (x, y, z) mm, optionally with a red material on all its faces.</summary>
-    private static byte[] Box3ds(float x, float y, float z, bool red)
+    internal static byte[] Box3ds(float x, float y, float z, bool red)
     {
         var v = new List<byte>(BitConverter.GetBytes((ushort)8));
         for (int i = 0; i < 8; i++)
@@ -271,7 +271,7 @@ public class MvrSceneTests
     }
 
     /// <summary>Three float positions then three u16 indices (padded to 4).</summary>
-    private static byte[] Triangle()
+    internal static byte[] Triangle()
     {
         var b = new List<byte>();
         foreach (float f in new float[] { 0, 0, 0, 1, 0, 0, 0, 1, 0 }) b.AddRange(BitConverter.GetBytes(f));
@@ -303,7 +303,7 @@ public class MvrSceneTests
     }
 
     /// <summary>A GLB of one mesh: positions then indices (u16 for the triangle, u32 for a grid) in its BIN chunk.</summary>
-    private static byte[] Glb(byte[] bin, string node, string? colour, int verts = 3, int corners = 3, string required = "")
+    internal static byte[] Glb(byte[] bin, string node, string? colour, int verts = 3, int corners = 3, string required = "")
     {
         int posBytes = verts * 12;
         int indexType = verts == 3 ? 5123 : 5125;
