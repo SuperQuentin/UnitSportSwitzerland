@@ -141,6 +141,8 @@ public sealed class JunctionCore
     /// straight kerbs between the mouths pushed out to pave the connectors (<see cref="CorePlanner.Fallback"/>).
     /// </summary>
     public bool IsFallback { get; set; }
+    /// <summary>Today's cap written by the planner (#854): its boundary, its mouths at today's trims; the sidewalk corners as today's.</summary>
+    public bool IsCap { get; set; }
     /// <summary>Written as laid though it fails a check (a roundabout's core, #854): its checks no longer hold it back.</summary>
     public bool AsLaid { get; set; }
     /// <summary>A merged junction's core laid member by member (<see cref="MergedCore"/>, #854), not as one node's.</summary>

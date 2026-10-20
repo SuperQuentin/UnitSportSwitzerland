@@ -391,6 +391,13 @@ off, `--junctions new` plans and reports without writing.
   fault is a road joining short of a mouth is laid as a fallback held in short of it: old layout 128 -> 57 (118 plain cores),
   JPTH points off their core 48, path ends off their lane 78. The fallback's outline is pushed in up to four rounds while it
   helps (a push reaches only the connector points beside each kerb point), its kerbs right up to the mouths: points off 24.
+- **Today's caps as cores** (#854, the user, Oct 20): what no plain core holds (a road joining within a join margin of the node,
+  a path's or slip lane's stub meeting it) is written as today's cap by the planner (`CorePlanner.Cap`, `JunctionCore.IsCap`):
+  the cap's boundary with each mouth at today's trim across the planner's carriageway there (its transition starts at the
+  written mouth with the mouth's section), the moves laid as `Fallback`'s, the outline pushed to pave them; today's sidewalk
+  corners kept (no core corners given). Merged junctions and rings are not (their boundary is no one outline). 168 real tiles:
+  35 caps, old layout 57 -> 20; JPTH points off their core 24, path ends off their lane 78 -> 110 (36 at about ten caps, where
+  the street's written piece stops short of today's trim: a gap between the cap's mouth and the street).
 - **Tried and reverted** (#854, Oct 20): a slip lane's node (two car roads and a Verbindung) planned only to merge into a junction
   whose mouth reaches it, the slip lane an arm of the merged core: "a road joins short of a mouth" 52 -> 25 and the old layout
   229 -> 219, but 18 more path ends 0.6-1 m off their lane (most of those slip lanes are TLM stubs of 0 m between carriageways,

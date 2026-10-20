@@ -389,6 +389,57 @@ public static class CorePlanner
         return core;
     }
 
+    /// <summary>
+    /// Today's cap as a core (#854, the user, Oct 20: what no plain core can hold, a road joining right at the node, a path's stub
+    /// meeting it): its boundary (every arm, the paths' too, already trimmed to it), its car arms' mouths at today's trims, each move
+    /// a smooth curve between them (as <see cref="Fallback"/>'s). Null where an arm has no end on the cap.
+    /// </summary>
+    public static JunctionCore? Cap(JunctionPlan jp, Junction cap, IReadOnlyList<Connector> moves)
+    {
+        if (cap.Boundary.Count < 3) return null;
+        // each mouth at today's trim, across the planner's carriageway there (its transition starts at the written mouth with the
+        // mouth's section: the moves keep their lanes), today's ribbon corners in the boundary moved out to it
+        var stub = new JunctionCore();
+        var outline = cap.Boundary.ToList();
+        foreach (var a in jp.Arms)
+        {
+            int i = cap.Arms.FindIndex(x => x.LinkId == a.LinkId);
+            if (i < 0 || a.Axis is null) return null;
+            double s = cap.Arms[i].Trim;
+            var mouth = new CoreMouth(a.Arm, s, a.Axis.At(s, a.Mouth.CarriagewayLeft), a.Axis.At(s, a.Mouth.CarriagewayRight));
+            stub.Mouths.Add(mouth);
+            // (a driver arriving faces the node: the arm's right looking outward is the mouth's left)
+            int l = outline.FindIndex(p => p.DistanceTo(cap.Arms[i].Right) < 1e-3), r = outline.FindIndex(p => p.DistanceTo(cap.Arms[i].Left) < 1e-3);
+            if (l < 0 || r < 0) return null;
+            outline[l] = mouth.Left;
+            outline[r] = mouth.Right;
+        }
+        stub.Connectors.AddRange(moves);
+        var core = Fallback(jp, stub);
+        core.IsCap = true;
+        if (SignedArea(outline) < 0) outline.Reverse();
+        var ends = core.Mouths.SelectMany(m => new[] { m.Left, m.Right }).ToHashSet();
+        var paved = core.Connectors.SelectMany(c => c.Left.Concat(c.Right)).ToList();
+        MergedCore.Clean(outline, ends);
+        for (int round = 0; round < 4 && paved.Any(p => Outside(outline, p) > OutsideTolerance); round++)
+        {
+            MergedCore.Envelope(outline, paved, core.Mouths, FallbackPush, nearMouth: 0.05);
+            MergedCore.Clean(outline, ends);
+            if (SignedArea(outline) < 0) outline.Reverse();
+        }
+        core.Outline.Clear();
+        core.Outline.AddRange(outline);
+        core.Corners.Clear();
+        core.Triangles.Clear();
+        core.Triangles.AddRange(EarClip.Triangulate(core.Outline));
+        core.Simple = Simple(core.Outline);
+        core.Area = Math.Abs(SignedArea(core.Outline));
+        core.ConnectorsOutside = 0;
+        foreach (var c in core.Connectors)
+            if ((c.Outside = c.Left.Concat(c.Right).Select(p => Outside(core.Outline, p)).DefaultIfEmpty(0).Max()) > OutsideTolerance) core.ConnectorsOutside++;
+        return core;
+    }
+
     /// <summary>The most a fallback core's outline is pushed out to pave a connector (m).</summary>
     private const double FallbackPush = 20;
 
