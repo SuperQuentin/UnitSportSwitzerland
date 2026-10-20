@@ -135,6 +135,25 @@ public partial class ConcertDeskUi : CanvasLayer
         foreach (var (label, cmd) in new[] { ("Flames", "flames"), ("CO2", "co2"), ("Confetti", "confetti"), ("Gerbs", "gerbs"), ("Pyro", "pyro") })
             Btn(fx, label, () => Run($"/concert cue {cmd}"));
 
+        // a rig from a lighting tool, or this one out to it (#941): the files in the rig folder, so a pad
+        // or a VR hand picks one as easily as a mouse
+        Section(col, "Rig (MVR)");
+        var mvr = Row(col);
+        Btn(mvr, "Export MVR", () => { Run("/concert export"); RefreshRigs(); });
+        _rigFiles = new OptionButton { FocusMode = Control.FocusModeEnum.All, CustomMinimumSize = new Vector2(220, 0) };
+        mvr.AddChild(_rigFiles);
+        Btn(mvr, "Import", () =>
+        {
+            if (_rigFiles.Selected >= 0 && _rigFiles.GetItemText(_rigFiles.Selected) is { Length: > 0 } file && file != NoRig)
+                Run($"/concert import {file}");
+        });
+        Btn(mvr, "Own rig", () => Run("/concert import off"));
+        Btn(mvr, "Folder", () =>
+        {
+            RefreshRigs();
+            OS.ShellShowInFileManager(ConcertMvrTool.FolderPath);
+        });
+
         Section(col, "Show input (this machine)");
         var input = Row(col);
         Btn(input, "Art-Net", () => Toggle("artnet", ConcertService.Instance?.Input?.ArtNetOn == true));
@@ -175,6 +194,20 @@ public partial class ConcertDeskUi : CanvasLayer
 
     private void Run(string command) => _chat()?.Send(command);
 
+    private OptionButton? _rigFiles;
+    private const string NoRig = "(no .mvr in the folder)";
+
+    /// <summary>The rig folder's files in the picker, newest first.</summary>
+    private void RefreshRigs()
+    {
+        if (_rigFiles == null) return;
+        _rigFiles.Clear();
+        var files = ConcertMvrTool.Files();
+        if (files.Length == 0) _rigFiles.AddItem(NoRig);
+        foreach (var f in files) _rigFiles.AddItem(System.IO.Path.GetFileName(f));
+        _rigFiles.Selected = 0;
+    }
+
     private void Toggle(string what, bool on) => Run($"/concert input {what} {(on ? "off" : "on")}");
 
     /// <summary>Tap tempo: the mean of the last taps' intervals, sent once there are four.</summary>
@@ -194,6 +227,7 @@ public partial class ConcertDeskUi : CanvasLayer
         _rig = rig;
         _stadium = rig.Event.Stadium.Name;
         _panel.Visible = true;
+        RefreshRigs();
         Input.MouseMode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
         Refresh();

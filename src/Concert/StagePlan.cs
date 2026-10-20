@@ -146,6 +146,48 @@ public sealed class StagePlan
     }
 
     /// <summary>
+    /// An imported rig (#941, MVR) in place of the generated one: its fixtures at their own addresses.
+    /// What it lacks of the stage's own (the screens, the haze, the effects) stays, patched after it, so
+    /// a rig of lights only still has its walls and its pyro. Positions are the stadium frame already
+    /// (<see cref="Mvr.MvrFile"/> or <see cref="FromStage"/> made them so).
+    /// </summary>
+    public void UseRig(Mvr.RigData rig)
+    {
+        var generated = Patch.Fixtures.ToList();
+        Patch.Clear();
+        rig.PatchInto(Patch);
+        var have = Patch.Fixtures.Select(f => f.Type.Kind).ToHashSet();
+        foreach (var f in generated)
+        {
+            if (f.Type.Kind is not (FixtureKind.Screen or FixtureKind.Hazer or FixtureKind.Flame or FixtureKind.Co2 or FixtureKind.Confetti
+                or FixtureKind.Gerb or FixtureKind.Airburst or FixtureKind.LowFog) || have.Contains(f.Type.Kind)) continue;
+            if (f.Type.Kind == FixtureKind.Screen) Patch.AddScreen(f.Position, f.Home, f.ScreenSize, f.PixelsX, f.PixelsY);
+            else Patch.Add(f.Type, f.Group, f.Position, f.Home, f.Up);
+        }
+        Imported = rig.Source;
+    }
+
+    /// <summary>The file an imported rig came from, or null for the generated one.</summary>
+    public string? Imported { get; private set; }
+
+    /// <summary>
+    /// Someone else's MVR into the stadium frame: its origin the deck's front centre on the pitch, its
+    /// Y upstage (ours after <see cref="Mvr.MvrFile.FromMvr"/>: x right, y up, z toward the audience).
+    /// </summary>
+    public void FromStage(Mvr.RigData rig)
+    {
+        var o = At(0, 0, 0);
+        foreach (var f in rig.Fixtures)
+        {
+            var p = Mvr.RigData.V(f.Pos);
+            f.Pos = Mvr.RigData.V(At(p.X, p.Y, p.Z));
+            Vector3 D(Vector3 d) => At(d.X, d.Y, d.Z) - o;
+            f.Home = Mvr.RigData.V(D(Mvr.RigData.V(f.Home)));
+            f.Up = Mvr.RigData.V(D(Mvr.RigData.V(f.Up)));
+        }
+    }
+
+    /// <summary>
     /// An open air's stage on the ground as it lies (#948): every box that stands on the pitch level
     /// (the front of house, the delay towers, the barrier, the catwalk, the stairs) raised or lowered to
     /// the ground under its centre, the desk with its riser, the subs with their stacks. The deck stands

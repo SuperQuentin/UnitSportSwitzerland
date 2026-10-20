@@ -110,6 +110,9 @@ public partial class ConcertRig : Node3D
 
     public ConcertRig() : this(ConcertPlanner.Plan(StadiumCatalog.Geneva, 1)) { }
 
+    /// <summary>An imported rig to build in place of the generated one (#941), set before it enters the tree.</summary>
+    public Mvr.RigData? Imported { get; init; }
+
     /// <summary>The ground's height at a point of the venue's frame (an open air's slope, an arena's floor), set by the director (#948).</summary>
     public Func<Vector2, float>? Ground { get; init; }
 
@@ -120,6 +123,7 @@ public partial class ConcertRig : Node3D
     {
         _plan = new StagePlan(Event);
         if (Ground != null && Event.Stadium.Kind == VenueKind.OpenAir) _plan.Lift(Ground);
+        if (Imported != null) _plan.UseRig(Imported);
         _desk = new LightDesk(_plan);
         BuildStage();
         var fx = _plan.Patch.Fixtures;
@@ -301,7 +305,7 @@ public partial class ConcertRig : Node3D
         AddChild(_crowdLight);
     }
 
-    private static int CellsOf(Fixture f) => f.Type.Kind switch { FixtureKind.Blinder => 4, FixtureKind.PixelBar => 8, _ => 1 };
+    private static int CellsOf(Fixture f) => f.Type.Cells;
 
     /// <summary>A basis whose −Z looks along <paramref name="dir"/> (what a screen or a cell faces).</summary>
     private static Basis Facing(Vector3 dir)
@@ -401,7 +405,8 @@ public partial class ConcertRig : Node3D
         {
             var f = _heads[i];
             var dir = Direction(i);
-            float dim = p.Get01(f, Attr.Dimmer) * Shutter(f, t) * master;
+            // no dimmer channel (an imported LED par): its colours carry the level
+            float dim = (f.Type.Offset(Attr.Dimmer) >= 0 ? p.Get01(f, Attr.Dimmer) : 1f) * Shutter(f, t) * master;
             var col = ColorOf(f);
             float zoom = p.Get01(f, Attr.Zoom);
             float angle = Mathf.DegToRad(Mathf.Lerp(f.Type.BeamMin, f.Type.BeamMax, zoom));
@@ -434,12 +439,18 @@ public partial class ConcertRig : Node3D
                 float size;
                 if (f.Type.Kind == FixtureKind.PixelBar)
                 {
-                    col = new Color(p.Get(f, c * 3) / 255f, p.Get(f, c * 3 + 1) / 255f, p.Get(f, c * 3 + 2) / 255f);
+                    var co = f.Type.CellOffsets;
+                    float own = f.Type.Offset(Attr.Dimmer) >= 0 ? p.Get01(f, Attr.Dimmer) : 1f;
+                    col = co.Length >= c * 3 + 3
+                        ? new Color(p.Get(f, co[c * 3]) / 255f, p.Get(f, co[c * 3 + 1]) / 255f, p.Get(f, co[c * 3 + 2]) / 255f) * own
+                        : Colors.Black;
                     size = 0.5f;
                 }
                 else if (f.Type.Kind == FixtureKind.Blinder)
                 {
-                    col = new Color(1f, 0.78f, 0.45f) * (p.Get(f, c) / 255f);   // tungsten
+                    var co = f.Type.CellOffsets;
+                    float own = f.Type.Offset(Attr.Dimmer) >= 0 ? p.Get01(f, Attr.Dimmer) : 1f;
+                    col = new Color(1f, 0.78f, 0.45f) * (c < co.Length ? p.Get(f, co[c]) / 255f * own : 0f);   // tungsten
                     size = 1.3f;
                 }
                 else

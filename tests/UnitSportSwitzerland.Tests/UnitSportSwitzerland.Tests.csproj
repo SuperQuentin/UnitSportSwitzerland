@@ -32,6 +32,10 @@
     <Compile Include="..\..\src\World\Snow\PisteCourse.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\Ropeways\Ropeway.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Concert\Protocols\ShowProtocols.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Concert\Dmx.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Concert\Mvr\RigData.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Concert\Mvr\Gdtf.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Concert\Mvr\Mvr.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\CollisionReach.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\SimClock.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\DancePick.cs" Link="Game\%(Filename)%(Extension)" />

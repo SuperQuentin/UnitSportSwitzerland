@@ -192,6 +192,36 @@ public static class ConcertCheck
         Expect(!desk.Strobing, $"and a plain groove does not");
         desk.Music = null;
 
+        // MVR (#941): a generated rig out and back the same; and onto another set's stage, whose screens
+        // and effects it lacks stay
+        {
+            var ev13 = ConcertPlanner.Plan(StadiumCatalog.Geneva, 13);
+            var src = new StagePlan(ev13);
+            var data = Mvr.RigData.FromPatch(src.Patch, "check");
+            var lights = new Mvr.RigData { Source = "lights", Types = data.Types };
+            lights.Fixtures = data.Fixtures.Where(f => (FixtureKind)data.Types[f.Type].Kind is FixtureKind.Spot or FixtureKind.Beam or FixtureKind.Wash).ToList();
+            var import = Mvr.MvrFile.Read(Mvr.MvrFile.Write(data, "check"), "check.mvr", out string? error);
+            Expect(import != null && import.OursStadiumFrame, $"the rig's MVR reads back ({error})");
+            if (import != null)
+            {
+                var back = new StagePlan(ev13);
+                back.UseRig(import.Rig);
+                bool same = back.Patch.Fixtures.Count == src.Patch.Fixtures.Count
+                    && back.Patch.Fixtures.Zip(src.Patch.Fixtures).All(p => p.First.Type.Name == p.Second.Type.Name && p.First.Universe == p.Second.Universe
+                        && p.First.Address == p.Second.Address && p.First.Position.DistanceTo(p.Second.Position) < 0.002f);
+                Expect(same, $"export then import gives the same patch ({back.Patch.Fixtures.Count} of {src.Patch.Fixtures.Count})");
+                var d2 = new LightDesk(back);
+                d2.Write(100);
+                Expect(back.Imported == "check.mvr", $"and the desk drives it");
+            }
+            var other = new StagePlan(ConcertPlanner.Plan(StadiumCatalog.Geneva, 5));
+            int walls = other.Patch.Fixtures.Count(f => f.Type.Kind == FixtureKind.Screen);
+            other.UseRig(lights);
+            Expect(other.Patch.Fixtures.Count(f => f.Type.Kind == FixtureKind.Screen) == walls
+                && other.Patch.Fixtures.Count(f => f.Type.Kind is FixtureKind.Spot or FixtureKind.Beam or FixtureKind.Wash) == lights.Fixtures.Count,
+                $"a lights-only rig on another stage keeps its {walls} screens and its effects ({other.Patch.Fixtures.Count} fixtures)");
+        }
+
         GD.Print(failures == 0 ? "[concertcheck] RESULT: ok" : $"[concertcheck] RESULT: FAILED ({failures})");
         return failures == 0 ? 0 : 1;
     }
