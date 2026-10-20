@@ -70,7 +70,18 @@ public sealed partial class RigData
         /// channels span several start addresses, each break patched as a fixture of its own at its address.
         /// </summary>
         [JsonPropertyName("xb")] public List<int[]>? Breaks { get; set; }
+        /// <summary>
+        /// A screen's video (#975): its source's kind (<see cref="Mvr.VideoSource"/>), its name (a file in
+        /// the MVR, an NDI source) and, for a file the game plays, its SHA-256: the key of the importing
+        /// machine's cache. The file itself never goes over the network.
+        /// </summary>
+        [JsonPropertyName("vs")] public int VideoSource { get; set; }
+        [JsonPropertyName("vn")] public string? VideoName { get; set; }
+        [JsonPropertyName("vh")] public string? VideoHash { get; set; }
     }
+
+    /// <summary>The longest video source name a screen may carry.</summary>
+    public const int MaxVideoName = 256;
 
     /// <summary>The most DMX breaks a fixture may add.</summary>
     public const int MaxBreaks = 8;
@@ -214,6 +225,7 @@ public sealed partial class RigData
             if (f.Screen != null && (Bad(f.Screen) || f.Screen.Any(v => v is < 0 or > 200))) return $"{f.Name}: screen size (0..200 m)";
             if (f.Uuid != null && (f.Uuid.Length > 64 || !Guid.TryParse(f.Uuid, out var g) || g == Guid.Empty)) return $"{f.Name}: uuid";
             if (f.FixtureId < 0) return $"{f.Name}: fixture ID";
+            if (CheckVideo(f) is { } video) return $"{f.Name}: {video}";
             if (!float.IsFinite(f.FocusPan) || MathF.Abs(f.FocusPan) > 360 || !float.IsFinite(f.FocusTilt) || MathF.Abs(f.FocusTilt) > 180 || !float.IsFinite(f.FocusDistance) || f.FocusDistance is < 0 or > 1000)
                 return $"{f.Name}: focus (pan within 360 degrees, tilt 180, 0..1000 m)";
             if (f.Breaks is { } breaks)
@@ -230,5 +242,17 @@ public sealed partial class RigData
         }
         if (patched > MaxFixtures) return $"{patched} fixtures with their DMX breaks (1..{MaxFixtures})";
         return CheckObjects() ?? CheckBodies();
+    }
+
+    /// <summary>A screen's video source (#975): a known kind, on a screen; a short printable name; a SHA-256 for a file only.</summary>
+    private static string? CheckVideo(FixtureRow f)
+    {
+        if (f.VideoSource == 0) return f.VideoName == null && f.VideoHash == null ? null : "video name without a source";
+        if (f.VideoSource < 0 || f.VideoSource >= Enum.GetValues<VideoSource>().Length) return "unknown video source";
+        if (f.Screen == null) return "a video source on something not a screen";
+        if (f.VideoName is not { Length: > 0 and <= MaxVideoName } n || n.Any(char.IsControl)) return $"video source name (1..{MaxVideoName} printable characters)";
+        if (f.VideoHash != null && (f.VideoSource != (int)Mvr.VideoSource.File || f.VideoHash.Length != 64 || !f.VideoHash.All(Uri.IsHexDigit)))
+            return "video file hash (a file's SHA-256)";
+        return null;
     }
 }

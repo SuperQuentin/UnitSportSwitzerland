@@ -172,6 +172,116 @@ public sealed class ConcertNdi : IDisposable
         return "NDI: no runtime installed. Install NDI Tools (ndi.video) on this machine, restart the game, then '/concert ndi on'.";
     }
 
+    // ---- receiving onto a screen (#975) ---------------------------------------------------------------
+
+    /// <summary>
+    /// An NDI source received for an imported screen (#975): a worker finds it by name (as
+    /// <see cref="Check"/>, a part of its full "MACHINE (name)" will do), connects at the lowest
+    /// bandwidth (NDI's preview stream: plenty for an LED wall of the game's pixels) and keeps the newest
+    /// frame; the main thread takes it when it wants one. Two buffers swapped, so nothing is allocated
+    /// per frame once the size is known. The runtime keeps the link through a source's restarts.
+    /// </summary>
+    public sealed class Receiver : IDisposable
+    {
+        public string Source { get; }
+        /// <summary>What the worker is doing, for the log: looking, connected, gone.</summary>
+        public volatile string Status = "looking";
+        private readonly Thread _worker;
+        private volatile bool _stop;
+        private byte[]? _back, _ready;
+        private int _w, _h;
+        private bool _fresh;
+
+        private Receiver(string source)
+        {
+            Source = source;
+            _worker = new Thread(Run) { IsBackground = true, Name = "NDI receive" };
+            _worker.Start();
+        }
+
+        /// <summary>A receiver looking for <paramref name="source"/>, or null with the reason (no runtime). Main thread.</summary>
+        public static Receiver? Start(string source, out string? why)
+        {
+            why = Load();
+            return why == null ? new Receiver(source) : null;
+        }
+
+        /// <summary>Main thread: the newest frame (RGBA) in place of <paramref name="buffer"/> when one came since the last take.</summary>
+        public bool Take(ref byte[]? buffer, out int w, out int h)
+        {
+            lock (this)
+            {
+                w = _w;
+                h = _h;
+                if (!_fresh) return false;
+                (buffer, _ready) = (_ready, buffer);
+                _fresh = false;
+                return buffer != null;
+            }
+        }
+
+        private void Run()
+        {
+            var findCreate = Fn<FindCreateFn>("NDIlib_find_create_v2");
+            var findWait = Fn<FindWait>("NDIlib_find_wait_for_sources");
+            var findSources = Fn<FindSources>("NDIlib_find_get_current_sources");
+            var findDestroy = Fn<FindDestroy>("NDIlib_find_destroy");
+            var capture = Fn<RecvCapture>("NDIlib_recv_capture_v2");
+            var free = Fn<RecvFree>("NDIlib_recv_free_video_v2");
+            var fc = new FindCreate { ShowLocal = true };
+            var finder = findCreate(ref fc);
+            if (finder == IntPtr.Zero) { Status = "no finder"; return; }
+            IntPtr recv = IntPtr.Zero;
+            try
+            {
+                while (!_stop && recv == IntPtr.Zero)
+                {
+                    findWait(finder, 1000);
+                    var list = findSources(finder, out uint count);
+                    for (int i = 0; i < count && recv == IntPtr.Zero; i++)
+                    {
+                        var src = Marshal.PtrToStructure<Source>(list + i * Marshal.SizeOf<Source>());
+                        if (!(Marshal.PtrToStringUTF8(src.Name) ?? "").Contains(Source, StringComparison.OrdinalIgnoreCase)) continue;
+                        var rc = new RecvCreate { SourceToConnect = src, ColorFormat = 2, Bandwidth = 0, AllowFields = false };
+                        recv = Fn<RecvCreateFn>("NDIlib_recv_create_v3")(ref rc);
+                        Status = recv != IntPtr.Zero ? $"connected to {Marshal.PtrToStringUTF8(src.Name)}" : "could not connect";
+                    }
+                }
+            }
+            finally { findDestroy(finder); }
+            try
+            {
+                while (!_stop && recv != IntPtr.Zero)
+                {
+                    var v = new VideoFrame();
+                    if (capture(recv, ref v, IntPtr.Zero, IntPtr.Zero, 200) != 1) continue;   // 1 = a video frame
+                    try
+                    {
+                        int w = v.XRes, h = v.YRes, row = w * 4;
+                        if (w <= 0 || h <= 0 || w > 4096 || h > 4096 || v.Data == IntPtr.Zero || v.LineStride < row) continue;
+                        if (_back == null || _back.Length != row * h) _back = new byte[row * h];
+                        for (int y = 0; y < h; y++) Marshal.Copy(v.Data + y * v.LineStride, _back, y * row, row);
+                        lock (this)
+                        {
+                            (_back, _ready) = (_ready, _back);
+                            _w = w;
+                            _h = h;
+                            _fresh = true;
+                        }
+                    }
+                    finally { free(recv, ref v); }
+                }
+            }
+            finally { if (recv != IntPtr.Zero) Fn<RecvDestroy>("NDIlib_recv_destroy")(recv); }
+        }
+
+        public void Dispose()
+        {
+            _stop = true;
+            _worker.Join(1500);
+        }
+    }
+
     // ---- one sender ------------------------------------------------------------------------------------
 
     public string SourceName { get; }
