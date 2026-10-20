@@ -145,8 +145,10 @@ public partial class ConcertDeskUi : CanvasLayer
         Btn(mvr, "Import", () =>
         {
             if (_rigFiles.Selected >= 0 && _rigFiles.GetItemText(_rigFiles.Selected) is { Length: > 0 } file && file != NoRig)
-                Run($"/concert import {file}");
+                Run($"/concert import {file}{(_withBuilding?.ButtonPressed == true ? " venue" : "")}");
         });
+        _withBuilding = new CheckBox { Text = "Building", FocusMode = Control.FocusModeEnum.All, TooltipText = "Bring the file's building round the set, when it fits the venue" };
+        mvr.AddChild(_withBuilding);
         Btn(mvr, "Own rig", () => Run("/concert import off"));
         Btn(mvr, "Folder", () =>
         {
@@ -239,6 +241,8 @@ public partial class ConcertDeskUi : CanvasLayer
     }
 
     private OptionButton? _rigFiles;
+    /// <summary>Import the file's building too, when it fits the venue (#980).</summary>
+    private CheckBox? _withBuilding;
     private const string NoRig = "(no .mvr in the folder)";
 
     /// <summary>The rig folder's files in the picker, newest first.</summary>

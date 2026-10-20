@@ -218,10 +218,14 @@ public static partial class MvrFile
     /// What an MVR holds for the game: the rig (positions in the file's frame turned Y up, metres; ours
     /// already in the stadium frame), whether it is ours, and what was skipped and why.
     /// </summary>
-    public sealed record Import(RigData Rig, bool OursStadiumFrame, List<string> Notes);
+    /// <param name="Venue">The building drawn around the set (#980): only when it was asked for and fits.</param>
+    public sealed record Import(RigData Rig, bool OursStadiumFrame, List<string> Notes, VenueFit? Venue = null);
 
     /// <summary>Reads an .mvr; null with why when it is not one or holds nothing the game can light.</summary>
-    public static Import? Read(byte[] mvr, string source, out string? error)
+    public static Import? Read(byte[] mvr, string source, out string? error) => Read(mvr, source, null, out error);
+
+    /// <summary>Reads an .mvr; with <paramref name="room"/>, its building too when it fits that room (#980).</summary>
+    public static Import? Read(byte[] mvr, string source, VenueRoom? room, out string? error)
     {
         error = null;
         try
@@ -232,7 +236,7 @@ public static partial class MvrFile
             if (sceneEntry == null) { error = $"no {SceneEntry}"; return null; }
             XDocument doc;
             using (var s = sceneEntry.Open()) doc = XDocument.Load(s);
-            return FromScene(doc, name => Entry(zip, name), source, out error);
+            return FromScene(doc, name => Entry(zip, name), source, out error, room);
         }
         catch (Exception e) when (e is InvalidDataException or System.Xml.XmlException or IOException)
         {
@@ -253,7 +257,7 @@ public static partial class MvrFile
         return ms.ToArray();
     }
 
-    public static Import? FromScene(XDocument doc, Func<string, byte[]?> files, string source, out string? error)
+    public static Import? FromScene(XDocument doc, Func<string, byte[]?> files, string source, out string? error, VenueRoom? room = null)
     {
         error = null;
         var root = doc.Root;
@@ -282,7 +286,7 @@ public static partial class MvrFile
         }
         foreach (var (node, xf, layerName) in index.Screens) AddFixture(node, xf, layerName);
         NoteProjectors(root, notes);
-        ReadObjects(root, files, rig, notes, ours != null);   // trusses, scene objects, symbols (#958)
+        var venue = ReadObjects(root, files, rig, notes, ours != null, room);   // trusses, scene objects, symbols (#958), the building (#980)
 
         void Walk(XElement? list, Transform3D parent, string layerName)
         {
@@ -439,7 +443,7 @@ public static partial class MvrFile
         foreach (var (why, n) in skipped) notes.Add($"{n} skipped: {why}");
         foreach (var (what, n) in told) notes.Add($"{n} {what}");
         if (rig.Fixtures.Count == 0) { error = "no fixture the game can show" + (notes.Count > 0 ? ": " + string.Join("; ", notes.Take(4)) : ""); return null; }
-        return new Import(rig, stadiumFrame, notes);
+        return new Import(rig, stadiumFrame, notes, venue);
     }
 
     /// <summary>Where a fixture of no known layer hangs in the desk's groups: by what it is and which way its yoke points.</summary>

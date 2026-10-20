@@ -39,7 +39,7 @@ public static partial class MvrFile
     /// origin). <paramref name="ours"/>: a file we wrote, whose stage object (<c>stage.glb</c>) is not
     /// drawn, as we build our own stage.
     /// </summary>
-    internal static void ReadObjects(XElement root, Func<string, byte[]?> files, RigData rig, List<string> notes, bool ours)
+    internal static VenueFit? ReadObjects(XElement root, Func<string, byte[]?> files, RigData rig, List<string> notes, bool ours, VenueRoom? room = null)
     {
         var scene = root.Element("Scene");
         var symdefs = new Dictionary<string, XElement>(StringComparer.OrdinalIgnoreCase);
@@ -50,6 +50,8 @@ public static partial class MvrFile
         var byFile = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var byContent = new Dictionary<string, int>();
         var placed = new List<(int Mesh, Transform3D Xf)>();
+        // the building's pieces, kept apart: drawn only when asked for and they fit the room (#980)
+        var building = new List<(int Mesh, Transform3D Xf)>();
         var failed = new Dictionary<string, int>();
         var classes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var c in scene?.Element("AUXData")?.Elements("Class") ?? Enumerable.Empty<XElement>())
@@ -60,10 +62,35 @@ public static partial class MvrFile
         foreach (var layer in scene?.Element("Layers")?.Elements("Layer") ?? Enumerable.Empty<XElement>())
             Walk(layer.Element("ChildList"), ParseMatrix((string?)layer.Element("Matrix")?.Value), 0, IsVenueName((string?)layer.Attribute("name")));
         foreach (var (why, n) in failed) notes.Add($"{n} object geometr{(n == 1 ? "y" : "ies")} not drawn: {why}");
-        if (venue > 0) notes.Add($"{venue} venue piece(s) not drawn (walls, floors, ceilings, roofs: on a site or venue layer or class, or over {VenueSpan:0} m across): the stadium is the venue");
+        VenueFit? fit = null;
+        if (room != null && building.Count > 0)
+        {
+            var box = (building[0].Xf * boxes[building[0].Mesh]);
+            foreach (var (m, xf) in building) box = box.Merge(xf * boxes[m]);
+            var size = box.Size;
+            string dims = FormattableString.Invariant($"{size.X:0} x {size.Z:0} x {size.Y:0} m");
+            string space = FormattableString.Invariant($"{room.Width:0} x {room.Length:0} m{(float.IsFinite(room.Height) ? $" x {room.Height:0} m" : ", open sky")}");
+            bool high = size.Y <= room.Height;
+            bool straight = high && size.X <= room.Width && size.Z <= room.Length;
+            bool turned = !straight && high && size.Z <= room.Width && size.X <= room.Length;
+            if (straight || turned)
+            {
+                placed.AddRange(building);
+                fit = new VenueFit(box, turned);
+                notes.Add($"the building ({dims}, {building.Count} pieces) fits the venue ({space}){(turned ? ", turned a quarter" : "")}: drawn round the set, centred on the pitch");
+            }
+            else
+            {
+                venue += building.Count;
+                notes.Add($"the building ({dims}) does not fit the venue ({space}): not drawn");
+            }
+        }
+        else venue += building.Count;
+        if (venue > 0) notes.Add($"{venue} venue piece(s) not drawn (walls, floors, ceilings, roofs: on a site or venue layer or class, or over {VenueSpan:0} m across){(room == null ? ": the stadium is the venue (import with venue to try the building)" : "")}");
         if (far > 0) notes.Add($"{far} object(s) over {ObjectReach} m from the file's origin not drawn");
-        if (placed.Count == 0) return;
+        if (placed.Count == 0) return fit;
         Fit(rig, meshes, placed, objects, notes);
+        return fit;
 
         void Walk(XElement? list, Transform3D parent, int depth, bool inVenue)
         {
@@ -76,30 +103,30 @@ public static partial class MvrFile
                 if (ObjectNodes.Contains(child.Name.LocalName))
                 {
                     objects++;
-                    if (isVenue) venue += child.Element("Geometries")?.Elements().Count() ?? 0;
-                    else Geometries(child.Element("Geometries"), xf, 0);
+                    if (isVenue && room == null) venue += child.Element("Geometries")?.Elements().Count() ?? 0;
+                    else Geometries(child.Element("Geometries"), xf, 0, isVenue);
                 }
                 Walk(child.Element("ChildList"), xf, depth + 1, isVenue);
             }
         }
 
         // a Geometries list or a Symdef's child list: files placed, symbols followed (never round a loop)
-        void Geometries(XElement? list, Transform3D parent, int depth)
+        void Geometries(XElement? list, Transform3D parent, int depth, bool inVenue)
         {
             if (list == null || depth > 8) return;
             foreach (var g in list.Elements())
             {
                 var xf = parent * ParseMatrix((string?)g.Element("Matrix")?.Value);
-                if (g.Name.LocalName == "Geometry3D") Place(((string?)g.Attribute("fileName") ?? "").Trim(), xf);
+                if (g.Name.LocalName == "Geometry3D") Place(((string?)g.Attribute("fileName") ?? "").Trim(), xf, inVenue);
                 else if (g.Name.LocalName == "Symbol")
                 {
-                    if ((string?)g.Attribute("symdef") is { } id && symdefs.TryGetValue(id, out var def)) Geometries(def.Element("ChildList"), xf, depth + 1);
+                    if ((string?)g.Attribute("symdef") is { } id && symdefs.TryGetValue(id, out var def)) Geometries(def.Element("ChildList"), xf, depth + 1, inVenue);
                     else Fail("a symbol of no Symdef");
                 }
             }
         }
 
-        void Place(string file, Transform3D mm)
+        void Place(string file, Transform3D mm, bool inVenue)
         {
             if (file.Length == 0) { Fail("no file name"); return; }
             if (ours && file.Equals("stage.glb", StringComparison.OrdinalIgnoreCase)) return;   // our own stage: built, not drawn twice
@@ -108,7 +135,7 @@ public static partial class MvrFile
             var xf = ObjectToOurs(mm);
             if (MathF.Abs(xf.Origin.X) > ObjectReach || MathF.Abs(xf.Origin.Z) > ObjectReach || MathF.Abs(xf.Origin.Y) > ObjectReach) { far++; return; }
             var span = (xf * boxes[mesh]).Size;
-            if (span.X > VenueSpan || span.Z > VenueSpan) { venue++; return; }
+            if (inVenue || span.X > VenueSpan || span.Z > VenueSpan) { building.Add((mesh, xf)); return; }
             placed.Add((mesh, xf));
         }
 

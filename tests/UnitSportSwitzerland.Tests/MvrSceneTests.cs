@@ -162,6 +162,53 @@ public class MvrSceneTests
     }
 
     [Fact]
+    public void The_building_comes_only_when_asked_and_when_it_fits_the_venue()
+    {
+        // the scene's building: the 40 m hall (40 x 0.3 x 0.3 m) and the Venue layer's chair beside it
+        var none = MvrFile.Read(Scene(), "scene.mvr", out string? error)!;
+        Assert.Null(none.Venue);
+        Assert.Equal(202, none.Rig.Objects.Count);
+
+        var pitch = MvrFile.Read(Scene(), "scene.mvr", new VenueRoom(68, 105, float.PositiveInfinity), out error);
+        Assert.True(pitch != null, error);
+        Assert.NotNull(pitch!.Venue);
+        Assert.False(pitch.Venue!.Turned);
+        Assert.Equal(204, pitch.Rig.Objects.Count);
+        Assert.Contains(pitch.Notes, n => n.StartsWith("the building (40 x 0 x 0 m, 2 pieces) fits the venue (68 x 105 m, open sky)"));
+        Assert.DoesNotContain(pitch.Notes, n => n.Contains("venue piece(s) not drawn"));
+
+        // too wide across, but long enough along: it goes in turned a quarter
+        var turned = MvrFile.Read(Scene(), "scene.mvr", new VenueRoom(30, 105, 12), out error)!;
+        Assert.True(turned.Venue is { Turned: true });
+
+        // too big either way, or too high under a ceiling: not drawn, both sizes said
+        var small = MvrFile.Read(Scene(), "scene.mvr", new VenueRoom(30, 35, 12), out error)!;
+        Assert.Null(small.Venue);
+        Assert.Equal(202, small.Rig.Objects.Count);
+        Assert.Contains(small.Notes, n => n.StartsWith("the building (40 x 0 x 0 m) does not fit the venue (30 x 35 m x 12 m)"));
+        Assert.Null(MvrFile.Read(Scene(), "scene.mvr", new VenueRoom(68, 105, 0.2f), out error)!.Venue);
+    }
+
+    [Fact]
+    public void A_building_that_fits_is_centred_on_the_pitch_on_its_floor()
+    {
+        var fit = new VenueFit(new Aabb(new Vector3(0, -1, -0.3f), new Vector3(40, 5, 0.3f)), Turned: false);
+        var at = fit.Placement(0.12f);
+        Near(new Vector3(0, 0.12f, 0), at * new Vector3(20, -1, -0.15f));    // the box's floor centre
+        Near(new Vector3(20, 0.12f, 0.15f), at * new Vector3(40, -1, 0));
+        var quarter = (fit with { Turned = true }).Placement(0f);
+        Assert.True(MathF.Abs((quarter * new Vector3(40, -1, -0.15f)).Z) > 19.9f);   // its long side along the pitch
+
+        var rig = new RigData { Source = "t" };
+        rig.Types.Add(RigData.Row(FixtureType.Wash));
+        rig.Fixtures.Add(new RigData.FixtureRow { Name = "w", Pos = new[] { 20f, 4f, -0.15f }, Up = new[] { 0f, -1f, 0f }, Home = new[] { 1f, 0f, 0f } });
+        rig.Move(quarter);
+        Near(new Vector3(0, 5f, 0), RigData.V(rig.Fixtures[0].Pos));
+        Near(new Vector3(0, -1f, 0), RigData.V(rig.Fixtures[0].Up));
+        Assert.True(MathF.Abs(RigData.V(rig.Fixtures[0].Home).Z) > 0.999f);   // its home turned with it
+    }
+
+    [Fact]
     public void Our_own_file_does_not_draw_its_stage_twice()
     {
         var rig = new RigData { Source = "t" };
