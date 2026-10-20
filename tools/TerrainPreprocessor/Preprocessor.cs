@@ -570,7 +570,8 @@ public static partial class Preprocessor
             var tiles = new HashSet<TileId>();
             foreach (var dem in foreign)
             {
-                var mine = dem.TilesIn(b[0], b[1], b[2], b[3], swiss);
+                // a new tile needs data under half of it; partial ones are the generated fill's
+                var mine = dem.TilesIn(b[0], b[1], b[2], b[3], swiss, minProbes: 13);
                 Console.WriteLine($"DEM {dem.Name}: {mine.Count} LV95 tiles with its data and no swissALTI3D");
                 tiles.UnionWith(mine);
             }

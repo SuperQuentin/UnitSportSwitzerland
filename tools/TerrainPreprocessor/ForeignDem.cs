@@ -127,11 +127,12 @@ public sealed class ForeignDem
     // ---- which tiles ----------------------------------------------------------------------------
 
     /// <summary>
-    /// The LV95 tiles in the box with real data under any of a 5x5 grid of points (the corners
-    /// included), minus <paramref name="exclude"/>. Reads the blocks under the probes: a file that
-    /// covers a tile with no-data alone does not make it a tile.
+    /// The LV95 tiles in the box with real data under at least <paramref name="minProbes"/> of a 5x5
+    /// grid of points (the corners included), minus <paramref name="exclude"/>. Reads the blocks under
+    /// the probes: a file that covers a tile with no-data alone does not make it a tile, and a tile the
+    /// data only clips is left to the generated fill rather than stretched from a few rows.
     /// </summary>
-    public List<TileId> TilesIn(int minE, int minN, int maxE, int maxN, IReadOnlySet<TileId> exclude)
+    public List<TileId> TilesIn(int minE, int minN, int maxE, int maxN, IReadOnlySet<TileId> exclude, int minProbes = 1)
     {
         var ids = new List<TileId>();
         for (int n = minN; n < maxN; n++)
@@ -141,12 +142,13 @@ public sealed class ForeignDem
         Parallel.ForEach(ids, new ParallelOptions { MaxDegreeOfParallelism = 4 }, id =>
         {
             var cur = new Cursor();
+            int found = 0;
             for (int j = 0; j <= 4; j++)
                 for (int i = 0; i <= 4; i++)
                 {
                     var (x, y) = DemProjection.FromLv95(Crs, id.MinE + 250.0 * i, id.MaxN - 250.0 * j);
                     if (!Covers(x, y)) continue;
-                    if (!double.IsNaN(Sample(x, y, ref cur))) { hit.Add(id); return; }
+                    if (!double.IsNaN(Sample(x, y, ref cur)) && ++found >= minProbes) { hit.Add(id); return; }
                 }
         });
         return hit.OrderByDescending(t => t.N).ThenBy(t => t.E).ToList();
