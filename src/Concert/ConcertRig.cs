@@ -126,6 +126,7 @@ public partial class ConcertRig : Node3D
         if (Imported != null) _plan.UseRig(Imported);
         _desk = new LightDesk(_plan);
         BuildStage();
+        BuildObjects();
         var fx = _plan.Patch.Fixtures;
         _heads = fx.Where(f => f.Type.Kind is FixtureKind.Spot or FixtureKind.Beam or FixtureKind.Wash).ToArray();
         _reach = _heads.Select(f => f.Type.Kind == FixtureKind.Wash ? BeamLength * 0.55f : BeamLength).ToArray();

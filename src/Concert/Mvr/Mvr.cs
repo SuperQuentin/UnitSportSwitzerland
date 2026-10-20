@@ -281,6 +281,7 @@ public static partial class MvrFile
             Walk(layer.Element("ChildList"), layerXf, layerName);
         }
         foreach (var (node, xf, layerName) in index.Screens) AddFixture(node, xf, layerName);
+        ReadObjects(root, files, rig, notes, ours != null);   // trusses, scene objects, symbols (#958)
 
         void Walk(XElement? list, Transform3D parent, string layerName)
         {

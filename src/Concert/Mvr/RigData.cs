@@ -227,6 +227,6 @@ public sealed partial class RigData
             }
         }
         if (patched > MaxFixtures) return $"{patched} fixtures with their DMX breaks (1..{MaxFixtures})";
-        return null;
+        return CheckObjects();
     }
 }
