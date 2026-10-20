@@ -116,6 +116,10 @@ public class MvrSceneTests
                   <Fixture name="Wash 1" uuid="F1"><Matrix>{"{1,0,0}{0,1,0}{0,0,1}{0,0,6000}"}</Matrix>
                     <GDTFSpec>{Gdtf.FileName(wash)}</GDTFSpec><GDTFMode>{Gdtf.ModeName}</GDTFMode>
                     <Addresses><Address break="0">1</Address></Addresses></Fixture>
+                  <SceneObject uuid="H1" name="hall"><Geometries><Geometry3D fileName="box.3ds"><Matrix>{"{40,0,0}{0,1,0}{0,0,1}{0,0,0}"}</Matrix></Geometry3D></Geometries></SceneObject>
+                </ChildList></Layer>
+                <Layer name="Venue" uuid="L2"><ChildList>
+                  <SceneObject uuid="V1" name="chair"><Geometries><Geometry3D fileName="box.3ds"/></Geometries></SceneObject>
                 </ChildList></Layer></Layers>
               </Scene>
             </GeneralSceneDescription>
@@ -136,6 +140,7 @@ public class MvrSceneTests
         Assert.Equal(201, rig.Objects.Count(o => o.Mesh == rig.Objects[0].Mesh));
         Assert.Contains(import.Notes, n => n.Contains("no Symdef"));
         Assert.Contains(import.Notes, n => n.Contains("202 pieces of 2 meshes"));
+        Assert.Contains(import.Notes, n => n.StartsWith("2 venue piece(s) not drawn"));   // the 40 m hall and the Venue layer's chair
 
         // truss 3: group 6 m up, its own 3 m along MVR X, the symdef's geometry 0.1 m up; the box's far
         // corner (1, 0.3, 0.3) m: in ours (x, z, -y)

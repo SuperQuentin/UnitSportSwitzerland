@@ -23,6 +23,18 @@ public static partial class MvrFile
     private const float ObjectReach = 300f;
 
     /// <summary>
+    /// A piece longer than this across (m) is the venue, not the show: a room's walls, floor or ceiling,
+    /// a hall's roof (Capture's demo, Vectorworks' theatre). The stadium is the venue, so it is not drawn.
+    /// </summary>
+    public const float VenueSpan = 28f;
+
+    /// <summary>Layer, group and class names that say "the venue" (Vectorworks' Site- classes, Capture's Venue layer).</summary>
+    private static readonly string[] VenueWords = { "site", "venue", "architect", "building", "floorplan", "floor plan", "ceiling", "cieling" };
+
+    public static bool IsVenueName(string? name) =>
+        name != null && VenueWords.Any(w => name.Contains(w, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
     /// Reads the scene's objects into <paramref name="rig"/> (our frame: metres, Y up, the file's
     /// origin). <paramref name="ours"/>: a file we wrote, whose stage object (<c>stage.glb</c>) is not
     /// drawn, as we build our own stage.
@@ -39,27 +51,35 @@ public static partial class MvrFile
         var byContent = new Dictionary<string, int>();
         var placed = new List<(int Mesh, Transform3D Xf)>();
         var failed = new Dictionary<string, int>();
-        int objects = 0, far = 0;
+        var classes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var c in scene?.Element("AUXData")?.Elements("Class") ?? Enumerable.Empty<XElement>())
+            if ((string?)c.Attribute("uuid") is { } id) classes[id] = (string?)c.Attribute("name") ?? "";
+        var boxes = new List<Aabb>();
+        int objects = 0, far = 0, venue = 0;
 
         foreach (var layer in scene?.Element("Layers")?.Elements("Layer") ?? Enumerable.Empty<XElement>())
-            Walk(layer.Element("ChildList"), ParseMatrix((string?)layer.Element("Matrix")?.Value), 0);
+            Walk(layer.Element("ChildList"), ParseMatrix((string?)layer.Element("Matrix")?.Value), 0, IsVenueName((string?)layer.Attribute("name")));
         foreach (var (why, n) in failed) notes.Add($"{n} object geometr{(n == 1 ? "y" : "ies")} not drawn: {why}");
+        if (venue > 0) notes.Add($"{venue} venue piece(s) not drawn (walls, floors, ceilings, roofs: on a site or venue layer or class, or over {VenueSpan:0} m across): the stadium is the venue");
         if (far > 0) notes.Add($"{far} object(s) over {ObjectReach} m from the file's origin not drawn");
         if (placed.Count == 0) return;
         Fit(rig, meshes, placed, objects, notes);
 
-        void Walk(XElement? list, Transform3D parent, int depth)
+        void Walk(XElement? list, Transform3D parent, int depth, bool inVenue)
         {
             if (list == null || depth > 32) return;
             foreach (var child in list.Elements())
             {
                 var xf = parent * ParseMatrix((string?)child.Element("Matrix")?.Value);
+                bool isVenue = inVenue || child.Name.LocalName == "GroupObject" && IsVenueName((string?)child.Attribute("name"))
+                    || classes.TryGetValue(child.Element("Classing")?.Value.Trim() ?? "", out var cls) && IsVenueName(cls);
                 if (ObjectNodes.Contains(child.Name.LocalName))
                 {
                     objects++;
-                    Geometries(child.Element("Geometries"), xf, 0);
+                    if (isVenue) venue += child.Element("Geometries")?.Elements().Count() ?? 0;
+                    else Geometries(child.Element("Geometries"), xf, 0);
                 }
-                Walk(child.Element("ChildList"), xf, depth + 1);
+                Walk(child.Element("ChildList"), xf, depth + 1, isVenue);
             }
         }
 
@@ -87,6 +107,8 @@ public static partial class MvrFile
             if (mesh < 0) return;
             var xf = ObjectToOurs(mm);
             if (MathF.Abs(xf.Origin.X) > ObjectReach || MathF.Abs(xf.Origin.Z) > ObjectReach || MathF.Abs(xf.Origin.Y) > ObjectReach) { far++; return; }
+            var span = (xf * boxes[mesh]).Size;
+            if (span.X > VenueSpan || span.Z > VenueSpan) { venue++; return; }
             placed.Add((mesh, xf));
         }
 
@@ -104,6 +126,9 @@ public static partial class MvrFile
             var pos = new Vector3[mesh.Positions.Length];
             for (int i = 0; i < pos.Length; i++) pos[i] = FromMvr(mesh.Positions[i]);
             meshes.Add(mesh with { Positions = pos });
+            var box = new Aabb(pos[mesh.Indices[0]], Vector3.Zero);
+            foreach (int i in mesh.Indices) box = box.Expand(pos[i]);
+            boxes.Add(box);
             return byFile[file] = byContent[key] = meshes.Count - 1;
         }
 
