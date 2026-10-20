@@ -59,6 +59,52 @@ public static class ConcertCheck
                 }
             }
         }
+        // every venue (#948): its stages inside its floor and under its roof, in 60 shows each
+        foreach (var venue in StadiumCatalog.All)
+        {
+            string? bad = null;
+            for (int seed = 1; seed <= 60 && bad == null; seed++)
+            {
+                var e = ConcertPlanner.Plan(venue, seed);
+                var plan = new StagePlan(e);
+                foreach (var b in plan.Boxes)
+                {
+                    float c = MathF.Abs(MathF.Cos(b.Yaw)), sn = MathF.Abs(MathF.Sin(b.Yaw));
+                    float ex = c * b.Size.X / 2 + sn * b.Size.Z / 2, ez = sn * b.Size.X / 2 + c * b.Size.Z / 2;
+                    bool outside = MathF.Abs(b.Centre.X) + ex > venue.FrontHalfU + 0.5f || MathF.Abs(b.Centre.Z) + ez > venue.FrontHalfV + 0.5f;
+                    // under a roof: all of an arena's floor; a stadium's only where its roof overhangs the pitch
+                    bool covered = venue.Kind == VenueKind.Arena
+                        || venue.Kind == VenueKind.Stadium && (MathF.Abs(b.Centre.X) + ex > venue.FrontHalfU + venue.RoofInset || MathF.Abs(b.Centre.Z) + ez > venue.FrontHalfV + venue.RoofInset);
+                    bool roof = covered && b.Centre.Y + b.Size.Y / 2 > venue.RoofInner - venue.RoofThickness - 0.5f;
+                    if (outside || roof)
+                    {
+                        bad = FormattableString.Invariant($"seed {seed} ({e.Layout}, {e.Width:F0} x {e.Depth:F0} m, roof {e.RoofHeight:F0}): a box at {b.Centre} size {b.Size} {(outside ? "leaves the floor" : "reaches the roof")}");
+                        break;
+                    }
+                }
+            }
+            Expect(bad == null, $"{venue.Name}: 60 stages fit {(venue.Kind == VenueKind.Arena ? "under its roof and " : "")}on its floor{(bad != null ? ": " + bad : "")}");
+        }
+        // #956: a stadium's pitch boarded for the crowd, its stage on the grass; arenas and open airs keep their own ground
+        foreach (var venue in StadiumCatalog.All)
+        {
+            string? bad = null;
+            for (int seed = 1; seed <= 60 && bad == null; seed++)
+            {
+                var plan = new StagePlan(ConcertPlanner.Plan(venue, seed));
+                var g = new StadiumBuilder.Geo(mesh: true, collision: true);
+                ConcertFloor.Build(plan, 0.1f, g);
+                var deck = plan.Boxes[0].Centre;
+                if (venue.Kind != VenueKind.Stadium) { if (g.Vertices.Count > 0) bad = $"seed {seed}: a floor laid"; }
+                else if (g.Vertices.Count == 0 || g.Faces.Count == 0) bad = $"seed {seed}: no floor";
+                else if (!plan.OnGrass(new Vector2(deck.X, deck.Z))) bad = $"seed {seed} ({plan.Event.Layout}): the deck is off the grass";
+                else if (plan.OnGrass(new Vector2(plan.Desk.X, plan.Desk.Z))) bad = $"seed {seed} ({plan.Event.Layout}): the front of house is on the grass";
+            }
+            Expect(bad == null, $"{venue.Name}: {(venue.Kind == VenueKind.Stadium ? "boards for the crowd, grass under the stage" : "no protection floor")}{(bad != null ? ": " + bad : "")}");
+        }
+        var day = ConcertPlanner.Plan(s, 7);
+        Expect(!day.Standing(3) && day.Standing(ConcertEvent.BuildHour) && day.Standing(day.StartHour) && !day.Standing(day.EndHour),
+            $"the stage is built by {ConcertEvent.BuildHour}h and struck at the show's end ({day.EndHour}h)");
         Expect(layouts.Count == Enum.GetValues<StageLayout>().Length, $"300 seeds reach every layout ({layouts.Count})");
         Expect(screens.Count == Enum.GetValues<ScreenSet>().Length, $"and every screen set ({screens.Count})");
         Expect(genres.Count == Enum.GetValues<Genre>().Length, $"and every genre ({genres.Count})");

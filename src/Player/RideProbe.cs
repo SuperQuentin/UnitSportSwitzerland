@@ -34,6 +34,10 @@ public partial class RideProbe : Node
     private readonly double _seconds;
     private readonly string? _shot;
     private Camera3D? _closeCam;
+    private readonly bool _liftMode = CmdArgs.Has("--lift");
+    private bool _liftBoarded, _liftArrived;
+    private string _liftKind = "";
+    private float _liftStartAlt;
 
     private FootPlayer? _player;
     private double _elapsed;
@@ -53,6 +57,42 @@ public partial class RideProbe : Node
     private readonly System.Collections.Generic.List<float> _crashShots = new();
 
     private readonly System.Collections.Generic.List<float> _reached = new();
+
+    // --hopturn (#954): when the hop left the snow and came down, at what speed, and when it stopped
+    private double _hopOff = -1, _hopDown = -1, _hopStopped = -1;
+    private float _hopSpeed, _hopSlip;
+    private double _hopTrace;
+
+    private RideInput HopTurn()
+    {
+        var p = _player!;
+        bool floor = p.IsOnFloor();
+        if (_hopOff < 0)
+        {
+            if (floor) p.Hop();
+            else { _hopOff = _elapsed; _hopSpeed = p.RideSpeed; GD.Print($"[hopturn] off the snow at {_hopSpeed:F1} m/s"); }
+        }
+        else if (_hopDown < 0 && floor && _elapsed - _hopOff > 0.1)
+        {
+            _hopDown = _elapsed;
+            _hopSlip = Mathf.Abs(p.RideSlip);
+            GD.Print($"[hopturn] down after {_hopDown - _hopOff:F2} s at {p.RideSpeed:F1} m/s, {Mathf.RadToDeg(_hopSlip):F0} deg across the travel");
+        }
+        if (_hopDown >= 0 && _hopStopped < 0 && _elapsed - _hopTrace >= 0.1)
+        {
+            _hopTrace = _elapsed;
+            GD.Print($"[hopturn]   +{_elapsed - _hopDown:F1} s  {p.RideSpeed:F1} m/s  {Mathf.RadToDeg(p.RideSlip):F0} deg  {(floor ? "on" : "off")} the ground");
+        }
+        if (_hopDown >= 0 && _hopStopped < 0 && p.RideSpeed < 1f)
+        {
+            _hopStopped = _elapsed;
+            GD.Print($"[hopturn] stopped {_hopStopped - _hopDown:F2} s after landing");
+            bool ok = _hopSlip > 1.2f && _hopStopped - _hopDown > 0.5 && _hopStopped - _hopDown < 5;
+            GD.Print($"[hopturn] RESULT: {(ok ? "ok" : "FAILED")}");
+        }
+        // brake with a turn to the right, held through the air and the skid
+        return new RideInput(0f, 1f, 1f, false);
+    }
     /// <summary>A motorbike's worst use of its wheelie / stoppie limit; 1 or more would be a flip.</summary>
     private float _worstPitch;
 
@@ -101,6 +141,7 @@ public partial class RideProbe : Node
         {
             "bike" or "roadbike" => RideKind.RoadBike,
             "skis" or "ski" => RideKind.Skis,
+            "snowboard" or "board" => RideKind.Snowboard,
             "r1" => (RideKind)MotorbikeCatalog.First,
             // the aircraft (#421): parked, on their brakes
             "a320" => RideKind.A320,
@@ -194,14 +235,43 @@ public partial class RideProbe : Node
             float steer = CmdArgs.Float("--steer") ?? 0f;
             if (_mounted && CmdArgs.Float("--wall") is { } wallAt) SpawnWall(wallAt);
             float brakeAt = CmdArgs.Float("--brake-at") ?? float.MaxValue;
+            // --hopturn S (#954): at S seconds hop, and in the air brake with a turn: a hop turn to a stop
+            float hopAt = CmdArgs.Float("--hopturn") ?? float.MaxValue;
+            if (hopAt < float.MaxValue) _player.Announced += (text, _) => GD.Print($"[hopturn] landing: {text}");
             // (the brake, held at a standstill, would reverse: let go once stopped)
             _player.RideControls = () =>
             {
-                if (_elapsed < brakeAt) return new RideInput(steer != 0f && _player.RideSpeed > 5f ? 0f : 1f, 0f, steer, false);
+                if (_elapsed >= hopAt) return HopTurn();
+                if (_elapsed < brakeAt)
+                {
+                    float throttle = steer != 0f && _player.RideSpeed > 5f ? 0f : 1f;
+                    // skis stride on a press (#899): pressed six times a second, as a player taps W
+                    if (SnowRide.Is(_kind)) throttle *= _elapsed % (1.0 / 6) < 1.0 / 12 ? 1f : 0f;
+                    return new RideInput(throttle, 0f, steer, false);
+                }
                 _stopped |= Mathf.Abs(_player.RideSpeed) < 0.3f;
                 return new RideInput(0f, _stopped ? 0f : 1f, 0f, false, Handbrake: _stopped);
             };
             return;
+        }
+
+        // --lift (#912): stand still at a lift's bottom station, board it, ride it to the top
+        if (_liftMode)
+        {
+            _player.RideControls = () => new RideInput(0f, 0f, 0f, false);
+            if (!_liftBoarded && _player.TryLift())
+            {
+                _liftBoarded = true;
+                _liftKind = _player.Lift?.Kind.ToString() ?? "?";
+                _liftStartAlt = _player.GlobalPosition.Y;
+                GD.Print($"[lift] boarded the {_liftKind} {_player.Lift?.Key}, {_player.Lift?.Length:F0} m, waiting {_player.LiftWait:F1} s");
+            }
+            if (_liftBoarded && !_liftArrived && _player.Lift == null)
+            {
+                _liftArrived = true;
+                GD.Print($"[lift] off at the top after {_elapsed:F1} s, climbed {_player.GlobalPosition.Y - _liftStartAlt:F0} m, "
+                    + $"riding {_player.Ride}, {_player.RideSpeed:F1} m/s");
+            }
         }
 
         _elapsed += delta;
@@ -271,6 +341,14 @@ public partial class RideProbe : Node
 
         if (_elapsed < _seconds) return;
         _done = true;
+        if (_liftMode)
+        {
+            bool ok = _liftBoarded && _liftArrived && _player.Ride == _kind;
+            GD.Print(ok ? $"[lift] RESULT: ok, the {_liftKind} carried the rider up and set it down on {_player.Ride}"
+                : $"[lift] RESULT: FAILED (boarded {_liftBoarded}, arrived {_liftArrived}, riding {_player.Ride})");
+            GetTree().Quit(ok ? 0 : 1);
+            return;
+        }
 
         var end = _player.GlobalPosition;
         float travelled = (float)_origin.ToGlobal(end).HorizontalDistanceTo(_start);

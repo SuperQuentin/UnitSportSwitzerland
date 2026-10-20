@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Terrain.Stadiums;
 
 namespace UnitSport.Concert;
 
@@ -56,6 +57,21 @@ public sealed class StagePlan
             if (MathF.Abs(lx) < b.Size.X / 2 + margin && MathF.Abs(lz) < b.Size.Z / 2 + margin) return true;
         }
         return false;
+    }
+
+    /// <summary>
+    /// Where the stage stands on the grass (#956): a rectangle of the stage's own frame (x across, z
+    /// towards the audience), the deck, its wings and its back to the stand. The pitch's protection
+    /// floor is laid everywhere else.
+    /// </summary>
+    public (float X0, float X1, float Z0, float Z1) Grass { get; private set; }
+
+    /// <summary>Whether a point of the pitch (u, v) is in the stage's <see cref="Grass"/>.</summary>
+    public bool OnGrass(Vector2 uv)
+    {
+        var d = uv - _origin;
+        float x = d.Dot(_right), z = d.Dot(_forward);
+        return x > Grass.X0 && x < Grass.X1 && z > Grass.Z0 && z < Grass.Z1;
     }
 
     // colours, sRGB
@@ -171,6 +187,32 @@ public sealed class StagePlan
         }
     }
 
+    /// <summary>
+    /// An open air's stage on the ground as it lies (#948): every box that stands on the pitch level
+    /// (the front of house, the delay towers, the barrier, the catwalk, the stairs) raised or lowered to
+    /// the ground under its centre, the desk with its riser, the subs with their stacks. The deck stands
+    /// where the rig's origin was put on the ground, so its own boxes barely move.
+    /// </summary>
+    public void Lift(Func<Vector2, float> ground)
+    {
+        for (int i = 0; i < Boxes.Count; i++)
+        {
+            var b = Boxes[i];
+            if (b.Centre.Y - b.Size.Y / 2 > 0.6f) continue;   // flown or on the deck: it goes with the stage
+            Boxes[i] = b with { Centre = b.Centre + Vector3.Up * ground(new Vector2(b.Centre.X, b.Centre.Z)) };
+        }
+        for (int i = 0; i < Pa.Count; i++)
+            if (Pa[i].Sub || Pa[i].Centre.Y < 14f)
+                Pa[i] = Pa[i] with { Centre = Pa[i].Centre + Vector3.Up * ground(new Vector2(Pa[i].Centre.X, Pa[i].Centre.Z)) };
+        for (int i = 0; i < Ramps.Count; i++)
+        {
+            var r = Ramps[i];
+            Vector3 L(Vector3 p) => p + Vector3.Up * ground(new Vector2(p.X, p.Z));
+            Ramps[i] = new StageRamp(L(r.A), L(r.B), L(r.C), L(r.D));
+        }
+        Desk += Vector3.Up * ground(new Vector2(Desk.X, Desk.Z));
+    }
+
     /// <summary>A PA cabinet in the stage frame, facing (<paramref name="fx"/>, <paramref name="fz"/>).</summary>
     private void Cab(float x0, float x1, float y0, float y1, float z0, float z1, float fx, float fz, bool sub)
     {
@@ -201,6 +243,8 @@ public sealed class StagePlan
     private void BuildEnd(ConcertEvent e)
     {
         float w = e.Width, d = e.Depth, h = e.DeckHeight, r = e.RoofHeight, hw = w / 2;
+        // the deck and its wings (8 m at most) on the grass, back to the stand behind it
+        Grass = (-hw - 9f, hw + 9f, -d - 4f, 0.5f);
 
         // the deck, its black skirt, and stairs up at the back corners
         Box(-hw, hw, 0, h, -d, 0, Deck);
@@ -221,21 +265,27 @@ public sealed class StagePlan
         Box(-hw - 1f, hw + 1f, r + 2.5f, r + 2.8f, -d - 0.5f, 0.5f, Canopy);           // the canopy, pitched over the grid
         // the back: a black scrim from the deck to the roof, and the wings beside the stage
         Box(-hw, hw, h, r, -d - 0.1f, -d + 0.1f, Scrim, solid: false);
+        // the room beside the stage, to the seating front (#948: an arena's floor is narrow)
+        bool sideways = e.Layout is StageLayout.SideEast or StageLayout.SideWest;
+        float room = (sideways ? e.Stadium.FrontHalfV : e.Stadium.FrontHalfU) - hw - 0.5f;
+        float wing = Math.Min(8f, room);
+        // a line array no longer than the stage's roof allows
+        float array = Math.Min(10.5f, r - 3.5f);
         foreach (float side in new[] { -1f, 1f })
         {
-            float x0 = side * hw, x1 = side * (hw + 8f);
-            Box(Math.Min(x0, x1), Math.Max(x0, x1), 0, r - 2f, -d, -d + 1f, Scrim);
+            float x0 = side * hw, x1 = side * (hw + wing);
+            if (wing >= 1f) Box(Math.Min(x0, x1), Math.Max(x0, x1), 0, Math.Max(h + 1f, r - 2f), -d, -d + 1f, Scrim);
             // the flown PA: a line array hung off the wing, its subs stacked under the deck's edge; with
             // side screens, beside the screen's inner edge (or past its outer one), never through it
-            float hang = hw + 3f;
+            float hang = hw + Math.Clamp(room - 0.8f, 0.7f, 3f);
             if (e.HasSideScreens)
             {
                 float inner = SideScreenX(e) - SideScreenW / 2 - 0.3f;
                 hang = inner - 1.2f >= hw + 1.2f ? Math.Min(hang, inner - 1.2f) : SideScreenX(e) + SideScreenW / 2 + 1.5f;
             }
-            float px = side * hang, sub = side * (hw + 3f);
-            Cab(px - 0.6f, px + 0.6f, r - 12f, r - 1.5f, -1.7f, -1.05f, 0, 1, sub: false);
-            PaHangs.Add(At(px, r - 7f, -1.3f));
+            float px = side * hang, sub = side * (hw + Math.Clamp(room - 1.3f, 1.2f, 3f));
+            Cab(px - 0.6f, px + 0.6f, r - 1.5f - array, r - 1.5f, -1.7f, -1.05f, 0, 1, sub: false);
+            PaHangs.Add(At(px, r - 1.5f - array / 2, -1.3f));
             Cab(sub - 1.2f, sub + 1.2f, 0.012f, 1.2f, -2f, 0f, 0, 1, sub: true);
         }
 
@@ -243,6 +293,12 @@ public sealed class StagePlan
         if (e.HasCenterScreen)
         {
             float sw = Math.Min(w * 0.62f, 34f), sh = sw * 0.42f;
+            // under the stage's roof: a low hall's wall is shorter, and narrower with it
+            if (sh > r - h - 2.5f)
+            {
+                sh = Math.Max(2f, r - h - 2.5f);
+                sw = sh / 0.42f;
+            }
             var centre = At(0, h + 1.2f + sh / 2, -d + 0.5f);
             Box(-sw / 2 - 0.3f, sw / 2 + 0.3f, h + 0.9f, h + 1.5f + sh, -d + 0.3f, -d + 0.45f, Frame, solid: false);
             Patch.AddScreen(centre, Dir(0, 0, 1), new Vector3(sw, sh, 0), (int)(sw / 0.55f), (int)(sh / 0.55f));
@@ -261,17 +317,21 @@ public sealed class StagePlan
 
         // the thrust: a catwalk down the pitch to a B-stage
         float catwalk = 0;
+        // the floor ahead of the stage's front, as far as the far seating front (#948: arenas are short)
+        bool across = e.Layout is StageLayout.SideEast or StageLayout.SideWest;
+        float ahead = 2 * (across ? e.Stadium.FrontHalfU : e.Stadium.FrontHalfV) - 1.5f - d;
+        float bStage = Math.Min(12f, ahead * 0.12f);
         if (e.Layout == StageLayout.Thrust)
         {
-            catwalk = 30f;
+            catwalk = Math.Min(30f, ahead * 0.32f);
             float ch = h - 0.6f;
             Box(-2f, 2f, 0, ch, 0, catwalk, Deck);
-            Box(-6f, 6f, 0, ch, catwalk, catwalk + 12f, Deck);
+            Box(-6f, 6f, 0, ch, catwalk, catwalk + bStage, Deck);
             Stairs(6.8f, catwalk + 4f, catwalk + 4f + ch * 1.6f, ch);
         }
 
         // front of house and the delay towers, out on the pitch
-        float foh = Math.Max(42f, catwalk + 22f);
+        float foh = Math.Min(Math.Max(42f, catwalk + 22f), Math.Max(catwalk + bStage + 6f, ahead - 12f));
         Box(-5f, 5f, 0, 1.2f, foh, foh + 6f, Tent);
         Box(-5f, 5f, 3.6f, 3.8f, foh, foh + 6f, Tent, solid: false);
         // the consoles, facing the stage
@@ -282,9 +342,11 @@ public sealed class StagePlan
                 Box(x - 0.1f, x + 0.1f, 1.2f, 3.6f, z - 0.1f, z + 0.1f, Truss, solid: false);
         foreach (float side in new[] { -1f, 1f })
         {
-            float dx = side * 18f;
-            Tower(dx, foh - 6f, 12f);
-            Cab(dx - 0.6f, dx + 0.6f, 6f, 11.5f, foh - 7.1f, foh - 6.5f, 0, 1, sub: false);
+            float dx = side * Math.Min(18f, (across ? e.Stadium.FrontHalfV : e.Stadium.FrontHalfU) * 0.7f);
+            // a delay tower under an arena's ceiling
+            float tower = e.Stadium.Kind == VenueKind.Arena ? Math.Min(12f, e.Stadium.RoofInner - e.Stadium.RoofThickness - 1.5f) : 12f;
+            Tower(dx, foh - 6f, tower);
+            Cab(dx - 0.6f, dx + 0.6f, tower * 0.5f, tower - 0.5f, foh - 7.1f, foh - 6.5f, 0, 1, sub: false);
         }
         // the barrier along the stage front, a pit for security behind it
         if (catwalk > 0)
@@ -349,6 +411,8 @@ public sealed class StagePlan
     {
         Place(Vector2.Zero, new Vector2(0, -1));
         float w = e.Width, hw = w / 2, h = e.DeckHeight, r = e.RoofHeight;
+        // the deck and its four towers on the grass
+        Grass = (-hw - 3f, hw + 3f, -hw - 3f, hw + 3f);
         Box(-hw, hw, 0, h, -hw, hw, Deck);
         foreach (float sx in new[] { -1f, 1f })
             foreach (float sz in new[] { -1f, 1f })
@@ -368,7 +432,7 @@ public sealed class StagePlan
         Stairs(0, hw + 0.2f, hw + 0.2f + h * 1.6f, h);
         // front of house, out on the floor towards the main stand
         var tent = new Color(0.86f, 0.86f, 0.84f);
-        float foh = hw + 22f;
+        float foh = Math.Min(hw + 22f, Math.Max(hw + 8f, Math.Min(e.Stadium.FrontHalfU, e.Stadium.FrontHalfV) - 8f));   // inside a small arena's floor too (#948)
         Box(-5f, 5f, 0, 1.2f, foh, foh + 6f, tent);
         Box(-5f, 5f, 3.6f, 3.8f, foh, foh + 6f, tent, solid: false);
         Box(-2.5f, 2.5f, 1.2f, 2.15f, foh + 1.2f, foh + 2.2f, Speaker);

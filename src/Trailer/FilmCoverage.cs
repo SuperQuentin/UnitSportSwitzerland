@@ -34,6 +34,18 @@ public static class FilmCoverage
             }
     }
 
+    /// <summary>
+    /// Every tile round <paramref name="points"/> (each within its <see cref="RadiusFor"/>), sorted,
+    /// each once: the ground a shot shows, whose content hashes make its terrain fingerprint (#924).
+    /// </summary>
+    public static SortedSet<(int E, int N)> Tiles(IEnumerable<Need> points)
+    {
+        var all = new SortedSet<(int, int)>();
+        foreach (var p in points)
+            foreach (var t in TilesNear(p.E, p.N, RadiusFor(p))) all.Add(t);
+        return all;
+    }
+
     /// <summary>The radius a point needs: an eye high up sees further.</summary>
     public static double RadiusFor(Need p) => p.Eye && p.Alt > HighEye ? HighRadius : Radius;
 

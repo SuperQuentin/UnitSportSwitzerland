@@ -6,6 +6,9 @@
 #   OUT     test_output
 #   GODOT   the env value, else the Godot console exe on Windows (docs/notes/general/godot-exe.md), else godot
 #   CH      (--chunks "$CHUNKS") when CHUNKS is set, else empty: pass it as ${CH[@]+"${CH[@]}"} (bash 3.2 + set -u)
+#   NOTERRAIN (--chunks $OUT/no_terrain), an empty folder: for a check of the GENERATED world, on its
+#           server and every client, so a terrain_location.json or UNITSPORT_CHUNKS pointing at real
+#           tiles (the main checkout's) never puts real ground under its generated sites (#943)
 #   user:// a fresh $OUT/userdata_<name> for every Godot started here (APPDATA on Windows,
 #           XDG_DATA_HOME on Linux, HOME of the Godot runs only on macOS), so loot, bank, placed,
 #           birds, identity... are never the real ones; USERDATA=<dir> picks another, USERDATA=real
@@ -43,6 +46,9 @@ if [ -z "${GODOT:-}" ] && [ -n "${LOCALAPPDATA:-}" ]; then
 fi
 GODOT=${GODOT:-godot}
 CH=(); [ -n "${CHUNKS:-}" ] && CH=(--chunks "$CHUNKS")
+# (it must exist: TerrainPaths falls back to terrain_location.json when --chunks names no folder)
+mkdir -p "$OUT/no_terrain"
+NOTERRAIN=(--chunks "$OUT/no_terrain")
 
 # user:// of every Godot started here: Windows reads APPDATA, Linux XDG_DATA_HOME, macOS neither:
 # its user:// is $HOME/Library/Application Support/Godot/app_userdata/<project>. HOME goes to the

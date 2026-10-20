@@ -350,11 +350,11 @@ OpenStreetMap overlay (ODbL, below); see [Licenses](#licenses).
 | **GWR / RegBL**                 | building register: year, floors, category                                                              | `https://public.madd.bfs.admin.ch/{canton}.zip`             |
 | **Veloland / Mountainbikeland** | cycle route networks                                                                                   | STAC `ch.astra.veloland`, `ch.astra.mountainbikeland`       |
 | **swissALTIRegio**              | 10 m terrain incl. border areas, averaged to 500 m for the generated terrain (`tools/swiss_relief.py`) | STAC `ch.swisstopo.swissaltiregio` (one overview read)      |
-| **OpenStreetMap** (optional)    | one-way, lanes, width, sidewalks, cycleways, turn lanes on roads (`--layers osm`); airport stands, aprons, runways (`--airports`) | Geofabrik `switzerland-YYMMDD.osm.pbf`                      |
+| **OpenStreetMap** (optional)    | one-way, lanes, width, sidewalks, cycleways, turn lanes on roads (`--layers osm`); airport stands, aprons, runways (`--airports`); ski slopes (`--layers pistes`) | Geofabrik `switzerland-YYMMDD.osm.pbf`                      |
 
 The OpenStreetMap overlay is © OpenStreetMap contributors, available under the
 [Open Database License](https://www.openstreetmap.org/copyright) (ODbL). Road tiles built with it
-are a derived database: if they are ever distributed, they must be offered under the ODbL too
+and slope tiles (`pistes_E_N.pst`) are a derived database: if they are ever distributed, they must be offered under the ODbL too
 (`docs/notes/tools/osm-odbl-licence.md`). The in-game **Settings > About** tab lists every source.
 
 Data lives under `ressources/data/` (spelling is deliberate — it is referenced throughout).

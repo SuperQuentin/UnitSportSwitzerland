@@ -430,21 +430,43 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                         GD.Print($"[interior] it holds: {(contents.Count == 0 ? "nothing" : string.Join(", ", contents.Select(c => $"{c.Stack.Id} x{c.Stack.Count}")))}");
                         if (_shot != null)
                             GetViewport().GetTexture().GetImage().SavePng(_shot.Replace(".png", "_loot.png"));
-                        loot.TakeAll();
+                        if (!_lootKeyTried && contents.Count > 0)
+                        {
+                            // E with a slot focused (the panel focuses the first one), then searched again (#929)
+                            _lootKeyTried = true;
+                            Input.ParseInputEvent(new InputEventKey { Keycode = Key.E, PhysicalKeycode = Key.E, Pressed = true });
+                            _lootPhase = 10;
+                            return;
+                        }
+                        // the panel's button (#929): offline every grant comes back inside the loop
+                        loot.TakeAllAndClose();
                         Check(!loot.OpenContents().Any(), "take all empties it");
                         Check(CountItems() - _lootBefore == expected, $"the pack gained {CountItems() - _lootBefore} of {expected}");
-                        loot.Close();
-                        Check(!loot.IsOpen, "the panel closes");
+                        // what did not fit (a full pack) keeps it open on what is left
+                        Check(loot.IsOpen == loot.OpenContents().Any(), "take all closes the panel exactly when it emptied it");
                         _lootPhase = 2;
                         return;
                     }
+                    case 10:
+                        Input.ParseInputEvent(new InputEventKey { Keycode = Key.E, PhysicalKeycode = Key.E, Pressed = false });
+                        Check(!loot.IsOpen, "E closes a panel with things in it");
+                        Check(_player!.TryInteract() && loot.IsOpen, "E opens it again");
+                        _lootPhase = 1;
+                        return;
                     case 2:
                         Check(_player!.TryInteract() && loot.IsOpen, "searching again opens it");
                         _lootPhase = 3;
                         return;
-                    default:
+                    case 3:
                         if (loot.Waiting && _t < 8) return;
                         Check(!loot.OpenContents().Any(), "a second search finds it empty");
+                        // the key that opened it closes it (#929): a real key, as the world reads E too
+                        Input.ParseInputEvent(new InputEventKey { Keycode = Key.E, PhysicalKeycode = Key.E, Pressed = true });
+                        _lootPhase = 4;
+                        return;
+                    default:
+                        Input.ParseInputEvent(new InputEventKey { Keycode = Key.E, PhysicalKeycode = Key.E, Pressed = false });
+                        Check(!loot.IsOpen, "E closes the emptied panel");
                         loot.Close();
                         break;
                 }
@@ -1157,6 +1179,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
     }
 
     private int _lootIndex = -1, _lootBefore, _lootPhase;
+    private bool _lootKeyTried;
 
     private static int CountItems()
     {

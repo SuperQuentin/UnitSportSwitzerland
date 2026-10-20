@@ -52,8 +52,8 @@ Bots play duos, trios and squads, in bot-only teams and as team-mates of humans.
   at most every 30 s).
 - **Down:** a downed bot crawls (1.1 m/s, the body's own speed) to its nearest standing mate.
 - **Checks:**
-  - `tools/brsquadcheck.sh` (`--brsquadcheck`, net, about 10 min): a duos match of A and one bot, alone on its
-    side.
+  - `tools/brsquadcheck.sh` (`--brsquadcheck`, net, at `/speed 4` through `--checkspeed`: ~4.5 min, about 10 at
+    x1; failing on main since Oct 20 at the latest, #937): a duos match of A and one bot, alone on its side.
     - Zürich on the generated world, which has the roads for the Postauto stops: a random region or the default
       spawn may have none, and so may a run with the terrain drive asleep (`terrain_location.json ... does not
       exist; falling back`).

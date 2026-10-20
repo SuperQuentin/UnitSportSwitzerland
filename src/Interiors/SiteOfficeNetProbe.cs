@@ -221,8 +221,9 @@ public partial class SiteOfficeNetProbe : ChatProbe
         if (rail >= 0 && await Search(me, layout, node, loot, rail))
         {
             GD.Print($"{Log} the hard-hat rail holds {string.Join(", ", loot.OpenContents().Select(x => $"{x.Stack.Id} x{x.Stack.Count}"))}");
-            loot.TakeAll();
-            await Until(() => !loot.Waiting && !loot.OpenContents().Any(), 10);
+            // the panel's button (#929): one grant after another from the server, then the panel closes
+            loot.TakeAllAndClose();
+            Expect(await Until(() => !loot.IsOpen, 10), "take all closes the emptied panel");
             loot.Close();
         }
         var inv = _items.Inventory;

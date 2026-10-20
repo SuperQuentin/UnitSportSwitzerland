@@ -12,10 +12,11 @@ PORT=${PORT:-7891}
 AT=${AT:-2586561,1115543}
 # a restock period in which the office has something to take (the server remembers takes per run)
 EPOCH=${EPOCH:-424242}
-WORLD="--generated-world --traffic 0 --at $AT --lootepoch $EPOCH"
+# the generated world wherever it runs: no real tiles, even where terrain_location.json has some (#943)
+WORLD="--generated-world ${NOTERRAIN[*]} --traffic 0 --at $AT --lootepoch $EPOCH"
 # C starts on A's "took" line: never on an earlier run's log
 rm -f "$OUT"/siteofficenet_A.log "$OUT"/siteofficenet_B.log "$OUT"/siteofficenet_C.log
-tc_server 420 120 "$OUT/siteofficenet_server.log" --server --port $PORT --generated-world --lootepoch $EPOCH
+tc_server 420 120 "$OUT/siteofficenet_server.log" --server --port $PORT --generated-world "${NOTERRAIN[@]}" --lootepoch $EPOCH
 tc_client 360 "$OUT/siteofficenet_A.log" --connect 127.0.0.1:$PORT --name OfficeA $WORLD --siteofficenet A & A=$!
 tc_client 360 "$OUT/siteofficenet_B.log" --connect 127.0.0.1:$PORT --name OfficeB $WORLD --siteofficenet B & B=$!
 # C joins late: once A has taken its stack

@@ -69,8 +69,8 @@ public partial class OccasionManager : Node
     /// <summary>Every occasion the config knows, running or not — for the settings menu.</summary>
     public IReadOnlyList<OccasionEntry> Known => _config;
 
-    /// <summary>The date the calendar is read at: today, or <c>--date</c>.</summary>
-    public DateOnly Today => _dateOverride ?? DateOnly.FromDateTime(DateTime.Now);
+    /// <summary>The date the calendar is read at: today, <c>--date</c>, or a film's (<see cref="Core.Calendar"/>).</summary>
+    public DateOnly Today => _dateOverride ?? Core.Calendar.Today;
 
     /// <summary>What crosses the wire: the authority's decision, not the content.</summary>
     private sealed record Wire(string Id, int Facets, int Priority, bool AllowOptOut, string Instance);

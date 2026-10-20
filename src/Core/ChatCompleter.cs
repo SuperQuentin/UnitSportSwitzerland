@@ -26,7 +26,7 @@ public readonly record struct Suggestion(string Label, string Text, string Detai
 /// </summary>
 public sealed class ChatCompleter
 {
-    private const int MaxSuggestions = 12;
+    private const int MaxSuggestions = 14;
 
     /// <summary>Towns matching a typed query, best first (<see cref="PlaceSearchUi.Search"/>).</summary>
     public Func<string, int, IEnumerable<string>> Places { get; init; } = (_, _) => [];
@@ -50,6 +50,7 @@ public sealed class ChatCompleter
         ("time", false, true, "[query] | set <hh:mm | noon | night ...> | add <hours> | speed <minutes>"),
         ("speed", false, true, "[<0.05 .. 8> | normal]"),
         ("seastate", false, true, "[0..1 | calm | chop | storm | gamey]"),
+        ("weather", false, true, "[snow <cm> | fall <cm> | temp <°C> | clear | cloudy | reroll | hold | auto]"),
         ("water", false, true, "[E N]"),
         ("style", false, true, "[ps1 | cartoon | real- | real+ | rebuild]"),
         ("clip", false, true, "start <name> [seconds] [delay] | stop"),
@@ -280,6 +281,11 @@ public sealed class ChatCompleter
             case "seastate":
                 options = argIndex == 0 && (!Permissions.Online || Permissions.IsAdmin)
                     ? World.SeaStateCommand.Named.Select(n => n.Name) : [];
+                break;
+
+            case "weather":
+                options = argIndex == 0 && (!Permissions.Online || Permissions.IsAdmin)
+                    ? ["snow", "fall", "temp", "clear", "cloudy", "reroll", "hold", "auto"] : [];
                 break;
 
             case "occasion":

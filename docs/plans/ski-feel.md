@@ -1,6 +1,6 @@
 # Ski and snowboard feel (#933)
 
-Status: in progress (`feat/933-ski-feel`, stacked on #923).
+Status: done in PR #940 (`feat/933-ski-feel`, stacked on #923).
 
 Playtest feedback: plough, turns too sharp, a stiff figure, no push animation, camera.
 

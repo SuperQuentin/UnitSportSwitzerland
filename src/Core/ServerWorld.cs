@@ -37,6 +37,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Concert.ConcertService? _concerts;
     private Build.Structures? _structures;
     private Occasions.OccasionManager? _occasions;
+    private World.Snow.SnowService? _snow;
     private World.RaceNpcs? _npcs;
     private BattleRoyale.BrManager? _br;
     private Combat.FightManager? _fight;
@@ -95,8 +96,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
             enabled: generatedWorld || !GeneratedOff(args)) { Log = s => GD.Print(s) };
         // The server holds 5 KB coarse grids (ChunkManager, BuildMeshes off), plus whatever an
         // interior plan reads lazily: 32 MB is thousands of tiles, and a fixed ceiling.
-        var source = new CachingChunkSource(fallback ?? local, 32L * 1024 * 1024);
-        if (fallback != null) fallback.Neighbours = source;
+        const long cacheBytes = 32L * 1024 * 1024;
+        var source = fallback?.Cached(cacheBytes) ?? new CachingChunkSource(local, cacheBytes);
 
         // A headless server draws nothing, so nothing capped its loop: it spun as fast as a core
         // allows. 60 matches the physics tick and every client's send rate is well under it.
@@ -205,6 +206,10 @@ public partial class ServerWorld : Node3D, IOriginContainer
 
         // occasions run on the server's calendar and are replicated, so every player shares one
         _occasions = Occasions.OccasionManager.Create(this);
+        // the ski slopes' weather and the wear real skiers put on them (#887)
+        if (Systems.On(Systems.Snow)) _snow = World.Snow.SnowService.Create(this, _chunks!);
+        // the ski lifts (#912): the same lines, for bots that ride them
+        if (Systems.On(Systems.Lifts)) World.Ropeways.RopewayService.Create(this, () => source, _chunks!);
         // the UFO sightings (#863): planned here, played back by every peer from the shared clock
         Occasions.UfoSightings.Create(this, _chunks, origin, dedicated: true);
 
@@ -539,6 +544,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _churchRadios?.SendTo(id);
         _passengers?.SendTo(id);
         _occasions?.SendTo(id);
+        _snow?.SendTo(id);
         Farming.Herds.Instance?.SendTo(id);
         Occasions.UfoSightings.Instance?.SendTo(id);
         _placed?.SendTo(id);

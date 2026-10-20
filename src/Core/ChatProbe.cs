@@ -96,6 +96,40 @@ public abstract partial class ChatProbe : Node
 
     protected async Task Seconds(double s) => await ToSignal(GetTree().CreateTimer(s), SceneTreeTimer.SignalName.Timeout);
 
+    /// <summary>
+    /// <c>--checkspeed n</c> (#931): the whole simulation n times faster through <c>/speed</c>, for a net check whose
+    /// time is simulated waiting (bots falling, fight rounds). Logs in with <paramref name="password"/> (the server's
+    /// <c>--admin-password</c>) unless already admin, and waits until the scale is on this peer; every peer follows,
+    /// so one client asks. <see cref="Seconds"/> shrinks with it, <see cref="Until"/>'s deadlines (physics frames)
+    /// do not. True at once without the flag; false after a <see cref="Fail"/>.
+    /// </summary>
+    protected async Task<bool> SpeedUp(string password)
+    {
+        if (CmdArgs.Double("--checkspeed") is not double speed || speed <= 0) return true;
+        if (!Permissions.IsAdmin)
+        {
+            Chat!.Send($"/login {password}");
+            if (!await Until(() => Permissions.IsAdmin, 10)) { Fail("not logged in as admin"); return false; }
+        }
+        Chat!.Send(FormattableString.Invariant($"/speed {speed}"));
+        if (!await Until(() => Math.Abs(SimClock.Scale - speed) < 1e-6, 10)) { Fail($"/speed {speed} never applied"); return false; }
+        GD.Print($"{Log} the simulation at {SimClock.Describe(speed)} (--checkspeed)");
+        return true;
+    }
+
+    /// <summary>
+    /// Back to normal speed after <see cref="SpeedUp"/>, before a part a faster simulation would distort: a hit on
+    /// a remote body moving n times as far in the network's delay, which stays real time (#931).
+    /// </summary>
+    protected async Task<bool> SpeedBack()
+    {
+        if (CmdArgs.Double("--checkspeed") is not double speed || speed <= 0 || speed == SimClock.Normal) return true;
+        Chat!.Send("/speed normal");
+        if (!await Until(() => Math.Abs(SimClock.Scale - SimClock.Normal) < 1e-6, 10)) { Fail("/speed normal never applied"); return false; }
+        GD.Print($"{Log} the simulation back at normal speed");
+        return true;
+    }
+
     protected void Expect(bool ok, string what)
     {
         GD.Print($"{Log} {(ok ? "ok  " : "FAIL")} {what}");

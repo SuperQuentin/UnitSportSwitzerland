@@ -44,6 +44,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private ShaderMaterial? _treeMaterial;
     private NearTrees? _nearTrees;
     private PhotoLayer? _photos;
+    private World.Snow.PisteLayer? _pistes;
 
     /// <summary>The session this world is built for: the title screen's choice, or the command line's.</summary>
     public WorldLaunch Launch { get; init; } = WorldLaunch.FromArgs();
@@ -323,11 +324,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // Outermost, so a tile decoded once is not decoded again when the rings drop it and pick
         // it back up — which a route that doubles back does constantly.
         // decoded tiles in RAM: a phone has a fraction of a desktop's to spare (#63)
-        _cache = Platform.IsMobile
-            ? new CachingChunkSource(fallback ?? (IChunkSource)streamedSource, 96L * 1024 * 1024)
-            : new CachingChunkSource(fallback ?? (IChunkSource)streamedSource);
-        // the blend reads real neighbours through the cache, sharing what the loader decodes
-        if (fallback != null) fallback.Neighbours = _cache;
+        // The blend reads real neighbours through the cache, sharing what the loader decodes.
+        long cacheBytes = Platform.IsMobile ? 96L * 1024 * 1024 : 256L * 1024 * 1024;
+        _cache = fallback?.Cached(cacheBytes) ?? new CachingChunkSource(streamedSource, cacheBytes);
 
         _chunks = new ChunkManager { Name = "Terrain" };
         // the auto build cap depends on whether tiles are coming over the wire
@@ -482,6 +481,25 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // the UFO sightings (#863): the server's plans played back here, their beams, their landings
             Occasions.UfoSightings.Create(this, _chunks, origin, dedicated: false);
             if (Occasions.SightingShots.Dir != null) AddChild(new Occasions.SightingShots(_chunks, origin, () => LocalPlayer));
+        }
+        // the ski slopes' snow (#887): the weather alone offline, plus the server's word online;
+        // the slopes drawn on the terrain material near the camera
+        if (Systems.On(Systems.Snow))
+        {
+            var snow = World.Snow.SnowService.Create(this, _chunks);
+            if (_worldMaterials.Length > 0)
+            {
+                _pistes = new World.Snow.PisteLayer(_chunks, origin, _worldMaterials[0], _worldMaterials.Length > 1 ? _worldMaterials[1] : null, snow);
+                AddChild(_pistes);
+            }
+            AddChild(new World.Snow.SlopeMarkers(_chunks, snow));
+        }
+        // the ski lifts (#912): the lines from the road tiles, the carriers on the shared clock
+        if (Systems.On(Systems.Lifts))
+        {
+            var lifts = World.Ropeways.RopewayService.Create(this, () => _chunks?.Source, _chunks);
+            AddChild(new World.Ropeways.RopewayLayer(lifts, _chunks));
+            AddChild(new World.Snow.SlopeHud(() => LocalPlayer, _chunks));
         }
         // a sign over every bank door (#213)
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.BankSigns(_chunks));
@@ -651,13 +669,19 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 var inv = System.Globalization.CultureInfo.InvariantCulture;
                 return new ShotRunner(_spectator!,
                     new Vector3(float.Parse(shot[0], inv), float.Parse(shot[1], inv), float.Parse(shot[2], inv)),
-                    float.Parse(shot[3], inv), float.Parse(shot[4], inv), double.Parse(shot[5], inv), shot[6]) { Origin = _worldOrigin };
+                    float.Parse(shot[3], inv), float.Parse(shot[4], inv), double.Parse(shot[5], inv), shot[6])
+                {
+                    Origin = _worldOrigin,
+                    // settled on the tiles, not a fixed time (#924), as the trailer director stages
+                    TilesComplete = at => chunks.SettledNear(at, 3) && chunks.CompleteNear(at, 3),
+                };
             }),
             new(() => ShotRunner.ParseQueueArg() != null, ToolAnchor.Own, _ =>
             {
                 FreeSpectator();
                 var runner = ShotRunner.ForQueue(_spectator!, ShotRunner.ParseQueueArg()!, _worldOrigin);
                 runner.GroundHeight = at => chunks.TryGetSurface(at, out float h) ? h : null;
+                runner.TilesComplete = at => chunks.SettledNear(at, 3) && chunks.CompleteNear(at, 3);
                 runner.RunCommand = line => _chat?.Send(line);
                 return runner;
             }),
@@ -744,8 +768,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (World.AirportCheck.Requested) AddChild(new World.AirportCheck(() => LocalPlayer));
 
         // The inventory is this machine's, not the player node's: it outlives a respawn or a
-        // reconnect, and the player it acts on is resolved per frame like the picker's.
-        var inventory = Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
+        // reconnect, and the player it acts on is resolved per frame like the picker's. A check gets
+        // a scratch one, the starter kit never saved: the player's user://inventory.json is neither
+        // changed by it nor fills up and fails it with "No room" (#932). Every verification tool
+        // (placedByTool) does; the probes started further down are listed.
+        var inventory = placedByTool || Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
+            || Net.TransferProbe.Role != null || Items.SwissNetProbe.Role != null || Player.AuraNetProbe.Role != null || Items.BeatFieldProbe.Requested || Player.TractorCheck.Role != null
             || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Interiors.LiftSyncProbe.Role != null || Interiors.HallCarProbe.Role != null || Loot.BankProbe.Role != null
             || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.UfoNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.ExcavatorNetProbe.Role != null || Items.SitePalletNetProbe.Role != null || Loot.YardLootNetProbe.Role != null || Terrain.Construction.CraneNetProbe.Role != null || Items.BedNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
@@ -836,6 +864,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.SwissNetProbe.Role != null) AddChild(new Items.SwissNetProbe(items));
         if (Items.Fishing.FishNetProbe.Role != null) AddChild(new Items.Fishing.FishNetProbe(items));
         if (World.ClockNetProbe.Role != null) AddChild(new World.ClockNetProbe(items));
+        if (World.Ropeways.LiftNetProbe.Role != null) AddChild(new World.Ropeways.LiftNetProbe(items));
         if (SpeedNetProbe.Role != null) AddChild(new SpeedNetProbe(items));
         if (Net.SleeperProbe.Role != null) AddChild(new Net.SleeperProbe(items));
         if (Net.ArrivalProbe.Role != null) AddChild(new Net.ArrivalProbe(items));
@@ -1286,6 +1315,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         ApplySun();
         ApplyNearTrees();
         ApplyPhotos();
+        _pistes?.Apply();
     }
 
     /// <summary>
@@ -1777,6 +1807,16 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         else if (viewer is { } p && IsInstanceValid(p))
         {
+            // a ski lift (#912): its station, the wait, the ride
+            if (p.Lift is { } lift)
+            {
+                bool drag = lift.Kind is World.Ropeways.RopewayKind.TBar or World.Ropeways.RopewayKind.RopeTow;
+                string name = World.Ropeways.RopewayService.Called(lift);
+                if (p.LiftWait > 0) yield return (PlayerInput.InteractMount, $"Waiting for {name}: {p.LiftWait:0} s");
+                else if (drag) yield return (PlayerInput.InteractMount, $"Let go of {name}");
+            }
+            else if (p.LiftInReach() is { } station)
+                yield return (PlayerInput.InteractMount, $"Take {World.Ropeways.RopewayService.Called(station)}");
             // a bus door's button in reach, inside or out (#162)
             if (p.Vehicle == null && p.ButtonInReach() is { } button)
                 yield return (PlayerInput.InteractMount, button.Open ? "Shut the door" : "Open the door");
@@ -1818,6 +1858,16 @@ public partial class ClientWorld : Node3D, IOriginContainer
             else if (p.Vehicle is { } gear)
             {
                 if (p.IsOnFloor()) yield return (PlayerInput.RideMenu, $"Take off the {gear.Label.ToLowerInvariant()}");
+                // skis (#899) and the board (#922): a stride is a press, so say so when going slow; a skid stops a fast run
+                if (gear is SnowRide && p.IsOnFloor())
+                {
+                    bool board = gear is Snowboard;
+                    if (p.RideSpeed < 4f) yield return (PlayerInput.MoveForward, board ? "Tap to push" : "Tap to skate");
+                    // skis (#933): the hockey stop only above 5 m/s (Skis.PivotSpeed); slower, brake is the snowplough
+                    else if (!board && p.RideSpeed < 6f) yield return (PlayerInput.Brake, "Brake: snowplough");
+                    else yield return (PlayerInput.Brake, board ? "Brake: skid to a stop" : "Brake + turn: skid to a stop");
+                    yield return (PlayerInput.TuckBoost, board ? "Hold: straight-line" : "Hold: schuss");
+                }
                 if (gear is not Flyer && gear.CanHop) yield return (PlayerInput.Trick, "Trick (in the air)");
             }
             else if (p.Fighting)

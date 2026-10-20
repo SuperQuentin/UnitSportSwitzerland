@@ -16,6 +16,10 @@
   Add `--menu` to capture the pause menu over the world (the title screen: `--uishot`, `ui/screens`),
   `--settings` or `--licenses` (Settings on its About tab) for those pages. `--nohud` hides every
   `CanvasLayer` (chat, key hints, menus) in the picture.
+  The seconds are the least settle (#924): after them the shot waits, as the trailer director
+  stages, until `ChunkManager.CompleteNear` 3 rings round the camera has held 1 s (every tile at
+  its wanted detail, roads, buildings and collision), 150 wall seconds at most (then taken as it
+  is, with a `[shot] ... not complete` warning). A settle of 0 is taken at once (queue `shift` lines).
 - Feature clip: `--clip name[,delay[,seconds]] [--clip-quit]` films the window to `test_output/clips/<name>.gif`
   (+ `.mp4`); `/clip start|stop` in the chat; `tools/record-clip.sh` (`general/feature-clips`).
 - Many screenshots, one launch: `<godot> --path . -- --shot-queue shots.txt [--nohud]` boots like

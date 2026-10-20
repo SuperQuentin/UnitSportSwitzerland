@@ -24,6 +24,13 @@
     <ProjectReference Include="..\..\tools\TerrainFormat\TerrainFormat.csproj" />
     <ProjectReference Include="..\..\tools\RoadGen\RoadGen.csproj" />
     <Compile Include="..\..\src\World\TimeCommand.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\World\Snow\SnowWeather.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\World\Snow\SnowModel.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\World\Snow\WeatherCommand.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Player\SkiDynamics.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Avatar\SnowPose.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\World\Snow\PisteCourse.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\World\Ropeways\Ropeway.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Concert\Protocols\ShowProtocols.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Concert\Dmx.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Concert\Mvr\RigData.cs" Link="Game\%(Filename)%(Extension)" />
@@ -73,6 +80,8 @@
     <Compile Include="..\..\src\Bots\BotProfile.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Bots\BrTactics.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Fnv.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\RunSeeds.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\Calendar.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Playtest\McpProtocol.cs" Link="Game\Playtest\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Playtest\LoopbackHttp.cs" Link="Game\Playtest\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Playtest\PlaytestLedger.cs" Link="Game\Playtest\%(Filename)%(Extension)" />
