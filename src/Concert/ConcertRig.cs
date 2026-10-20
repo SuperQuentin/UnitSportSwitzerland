@@ -75,6 +75,7 @@ public partial class ConcertRig : Node3D
     private ConcertPa _pa = null!;
     private ConcertCameras _cameras = null!;
     private ConcertPerformers _performers = null!;
+    private ConcertCrew _crew = null!;
     private MeshInstance3D[] _feeds = Array.Empty<MeshInstance3D>();
     private MultiMeshInstance3D[] _pixelNodes = Array.Empty<MultiMeshInstance3D>();
     public ConcertCameras Cameras => _cameras;
@@ -141,6 +142,9 @@ public partial class ConcertRig : Node3D
         AddChild(_performers);
         _cameras = new ConcertCameras(_plan, _desk);
         AddChild(_cameras);
+        // the crew at front of house and behind the cameras (#985)
+        _crew = new ConcertCrew(_plan, _desk, _cameras) { FloorTop = Event.Stadium.Kind == VenueKind.Stadium ? FloorTop : 0f };
+        AddChild(_crew);
         // the music from the PA: the setlist on the shared clock, read for the desk
         _music = new ConcertMusic(Event, _plan.PaHangs.ToArray());
         AddChild(_music);
@@ -490,6 +494,7 @@ public partial class ConcertRig : Node3D
         if (near && (ShowOn() || ExternalLive)) _performers.Step(_strobeHz, _strobeT);
         _cameras.ImagWanted = imag && near;
         _cameras.Step(now % 86400.0);
+        if (near) _crew.Step(ShowOn() || ExternalLive, dt);
         // the PA bounces on the kick
         if (near)
         {
