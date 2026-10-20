@@ -420,8 +420,10 @@ public sealed class LightDesk
     private void Aim(Fixture f, float panDeg, float tiltDeg)
     {
         var p = _plan.Patch;
-        p.Set16(f, Attr.Pan, Attr.PanFine, 0.5f + panDeg / f.Type.PanRange);
-        p.Set16(f, Attr.Tilt, Attr.TiltFine, 0.5f + tiltDeg / f.Type.TiltRange);
+        float pan = 0.5f + panDeg / f.Type.PanRange, tilt = 0.5f + tiltDeg / f.Type.TiltRange;
+        // an inverted head (an MVR's DMXInvertPan/Tilt, #959) wants the mirrored value for the same angle
+        p.Set16(f, Attr.Pan, Attr.PanFine, f.InvertPan ? 1f - pan : pan);
+        p.Set16(f, Attr.Tilt, Attr.TiltFine, f.InvertTilt ? 1f - tilt : tilt);
     }
 
     private void Paint(Fixture f, Color c)

@@ -16,6 +16,8 @@ namespace UnitSport.Concert;
 /// to port 9000.</item>
 /// <item>B must hear the set announced (seed 7, A its operator), receive the relayed universes with
 /// the bytes A's controller sent, and get the blackout cue.</item>
+/// <item>Then A pulls a rig over MVR-xchange (#960, loopback) from a station of its own and commits
+/// ours back; B must get the pulled rig.</item>
 /// </list>
 /// </summary>
 public partial class ConcertNetProbe : ChatProbe
@@ -90,8 +92,55 @@ public partial class ConcertNetProbe : ChatProbe
             Svc?.SendRig(0, Array.Empty<byte>());
             if (!await Heard("B", "own ok", 30)) Fail("B never got the set's own rig back");
         }
+        await Xchange();
         Chat?.Send("/concert release");
         Expect(await Until(() => Svc?.SeedFor(0) == null, 10), "released: tonight's show is back");
+    }
+
+    /// <summary>
+    /// MVR-xchange (#960) on loopback: the game's station joins a station of the probe's own, pulls the
+    /// rig it offers (saved, imported, sent to the set: B must get it), commits ours back, and leaves.
+    /// </summary>
+    private async Task Xchange()
+    {
+        Chat?.Send("/concert xchange on NetCheck local");
+        var game = ConcertMvrTool.Station;
+        Expect(game is { Listening: true }, "the game's MVR-xchange station listens on loopback");
+        if (game == null) return;
+        var desk = new Mvr.MvrXchangeStation("NetCheck", "Probe desk", Mvr.MvrXchange.NewUuid()) { SaveFolder = OS.GetUserDataDir() + "/concert/xchange_probe" };
+        desk.Start(System.Net.IPAddress.Loopback, 0, discovery: false);
+        try
+        {
+            var mvr = Mvr.MvrFile.Write(Mvr.RigData.FromPatch(new StagePlan(ConcertPlanner.Plan(Terrain.Stadiums.StadiumCatalog.Geneva, 21)).Patch, "xchange"), "xchange");
+            desk.CommitFile(mvr, "NetCheck xchange.mvr", "set 21 from a lighting desk");
+            Chat?.Send($"/concert xchange join 127.0.0.1:{desk.Port}");
+            Expect(await Until(() => game.Offers().Length == 1, 10), $"the game joins the desk and sees its file ({game.Offers().Length} offered)");
+            int n = Mvr.MvrFile.Read(mvr, "x.mvr", out _)?.Rig.Fixtures.Count ?? -1;
+            Chat?.Send("/concert xchange pull 1");
+            Say($"xrig {n}");
+            if (!await Heard("B", "xrig ok", 30)) Fail("B never got the rig pulled over MVR-xchange");
+            Svc?.SendRig(0, Array.Empty<byte>());
+            if (!await Heard("B", "xown ok", 30)) Fail("B never got the set's own rig back after the pull");
+
+            // the desk joins back, as mDNS would make it: a JOIN alone gives no address to reach the game at
+            desk.Join(new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, game.Port));
+            Expect(await Until(() => desk.Peers().Any(p => p.Joined && p.EndPoint?.Port == game.Port), 10), "the desk joins the game back");
+            Chat?.Send("/concert xchange commit from the net check");
+            Expect(await Until(() => desk.Offers().Length == 1, 10), $"the desk hears the game's commit ({desk.Offers().Length})");
+            if (desk.Offers().FirstOrDefault() is { } ours)
+            {
+                desk.Pull(ours);
+                string? saved = null;
+                string heard = "";
+                Expect(await Until(() => { while (desk.Events.TryDequeue(out var e)) { saved ??= e.Saved; heard = e.Line; } return saved != null; }, 15), $"the desk pulls the game's rig ({heard})");
+                string sent = System.IO.Path.Combine(ConcertMvrTool.FolderPath, ours.Commit.FileName);
+                Expect(saved != null && System.IO.File.Exists(sent) && System.IO.File.ReadAllBytes(saved).AsSpan().SequenceEqual(System.IO.File.ReadAllBytes(sent)),
+                    $"byte for byte ({ours.Commit.FileName}, {ours.Commit.FileSize} bytes)");
+            }
+            Chat?.Send("/concert xchange off");
+            Expect(ConcertMvrTool.Station == null && await Until(() => desk.Peers().All(p => !p.Joined), 10), "off: the game leaves the group");
+        }
+        finally { desk.Stop(); }
     }
 
     private async Task RunB()
@@ -120,6 +169,15 @@ public partial class ConcertNetProbe : ChatProbe
             Say("own ok");
         }
         else Fail("A never sent a rig");
+        // the rig A pulls over MVR-xchange (#960) reaches this peer the same way
+        if (await HeardStarting("A", "xrig ", 60) is { } x && int.TryParse(x[5..], out int m))
+        {
+            Expect(await Until(() => Svc?.RigFor(0)?.Fixtures.Count == m, 20), $"A's rig pulled over MVR-xchange arrives ({Svc?.RigFor(0)?.Fixtures.Count} of {m} fixtures)");
+            Say("xrig ok");
+            Expect(await Until(() => Svc?.RigFor(0) == null, 20), "and goes again");
+            Say("xown ok");
+        }
+        else Fail("A never pulled a rig over MVR-xchange");
         Expect(await Until(() => Svc?.SeedFor(0) == null, 20), "and the release");
     }
 }
