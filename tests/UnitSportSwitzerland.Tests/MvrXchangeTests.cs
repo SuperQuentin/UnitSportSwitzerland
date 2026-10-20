@@ -157,15 +157,20 @@ public class MvrXchangeTests
     [Fact]
     public void A_stations_announcement_reads_back_as_its_group_name_uuid_and_port()
     {
-        var p = DnsSd.Announce(Service, "MyShow." + Service, "UnitSport-4aa291a1.local", 42424, IPAddress.Parse("192.168.1.50"),
+        var p = DnsSd.Announce(Service, "MyShow", "UnitSport-4aa291a1.MyShow." + Service, "UnitSport-4aa291a1.local", 42424, IPAddress.Parse("192.168.1.50"),
             new[] { "StationName=Front of house", "StationUUID=4aa291a1-1a62-45fe-aabc-e90e5e2399a8" });
         var m = DnsSd.Parse(p)!;
         Assert.True(m.Response);
         var s = Assert.Single(DnsSd.Services(m, IPAddress.Loopback, Service));
         Assert.Equal(("MyShow", "Front of house", "4aa291a1-1a62-45fe-aabc-e90e5e2399a8", "192.168.1.50", 42424, false),
             (s.Group, s.StationName, s.StationUuid, s.Address.ToString(), s.Port, s.Gone));
-        var bye = DnsSd.Services(DnsSd.Parse(DnsSd.Announce(Service, "MyShow." + Service, "h.local", 1, IPAddress.Loopback, Array.Empty<string>(), 0))!, IPAddress.Loopback, Service);
+        var bye = DnsSd.Services(DnsSd.Parse(DnsSd.Announce(Service, "MyShow", "h.MyShow." + Service, "h.local", 1, IPAddress.Loopback, Array.Empty<string>(), 0))!, IPAddress.Loopback, Service);
         Assert.True(Assert.Single(bye).Gone);
+
+        Assert.Equal(2, m.Records.Count(r => r.Type == DnsSd.Ptr && r.Target == "UnitSport-4aa291a1.MyShow." + Service));   // from the service and the group
+        // libMVRgdtf and BlenderDMX name the instance after the group alone
+        var theirs = DnsSd.Services(DnsSd.Parse(DnsSd.Announce(Service, "MyShow", "MyShow." + Service, "h.local", 9, IPAddress.Loopback, Array.Empty<string>()))!, IPAddress.Loopback, Service);
+        Assert.Equal(("MyShow", 9), (Assert.Single(theirs).Group, theirs[0].Port));
 
         var q = DnsSd.Parse(DnsSd.Query((Service, DnsSd.Ptr)))!;
         Assert.False(q.Response);

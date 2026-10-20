@@ -99,6 +99,7 @@ public partial class ConcertService : Node
     public override void _ExitTree()
     {
         Input?.Dispose();
+        ConcertMvrTool.Xchange(new[] { "off" }, null);
         if (Instance == this) Instance = null;
     }
 
@@ -485,8 +486,8 @@ public partial class ConcertService : Node
 
     // ---- the operator's input ----------------------------------------------------------------------
 
-    /// <summary>Client-local <c>/concert input|patch</c>: the operator's own ports and files; null when the line is not ours.</summary>
-    public static string? RunLocal(string text)
+    /// <summary>Client-local <c>/concert input|patch</c>: the operator's own ports and files; null when the line is not ours. <paramref name="say"/> takes what comes later (MVR-xchange).</summary>
+    public static string? RunLocal(string text, Action<string>? say = null)
     {
         if (!text.StartsWith("/concert ", StringComparison.OrdinalIgnoreCase)) return null;
         var parts = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -500,6 +501,7 @@ public partial class ConcertService : Node
             "export" => ConcertMvrTool.Export(),
             "import" => ConcertMvrTool.Import(string.Join(' ', parts.Skip(2))),
             "rigs" => ConcertMvrTool.List(),
+            "xchange" => ConcertMvrTool.Xchange(parts.Skip(2).ToArray(), say),
             _ => null,   // host, release, status: the server's
         };
     }
@@ -549,6 +551,7 @@ public partial class ConcertService : Node
 
     public override void _Process(double delta)
     {
+        ConcertMvrTool.Pump();
         if (_server || Input == null) return;
         int stadium = LocalStadium();
         double now = RealClock.Now;

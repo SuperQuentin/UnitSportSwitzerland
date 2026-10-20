@@ -9,11 +9,13 @@ namespace UnitSport.Concert.Mvr;
 /// <summary>
 /// The few DNS messages MVR-xchange's discovery needs (#960, RFC 1035 / 6762 / 6763): a PTR query for
 /// <c>_mvrxchange._tcp.local</c>, the answer a station gives (PTR, SRV, TXT with StationName and
-/// StationUUID, A), and the reader for others' answers. The instance is named after the group,
-/// <c>&lt;group&gt;._mvrxchange._tcp.local</c>, as libMVRgdtf (Vectorworks) and BlenderDMX name
-/// theirs; a reader takes the label just before the service as the group, which also reads
-/// Perastage's <c>&lt;station&gt;.&lt;group&gt;</c>. Names are written uncompressed; read with
-/// compression, bounds and pointer loops checked.
+/// StationUUID, A), and the reader for others' answers. Ours is the instance
+/// <c>&lt;station&gt;.&lt;group&gt;._mvrxchange._tcp.local</c>, pointed at from the service and from
+/// the group's "sub service" <c>&lt;group&gt;._mvrxchange._tcp.local</c> (as Perastage, tested with
+/// grandMA3): libMVRgdtf (Vectorworks) and BlenderDMX name theirs <c>&lt;group&gt;._mvrxchange…</c>
+/// alone, so every station of a group shares one name and a cache (python-zeroconf) keeps one of
+/// them. Readers take the label just before the service as the group, which reads both. Names are
+/// written uncompressed; read with compression, bounds and pointer loops checked.
 /// </summary>
 public static class DnsSd
 {
@@ -86,15 +88,18 @@ public static class DnsSd
         return w.ToArray();
     }
 
-    /// <summary>A station's announcement: PTR service → instance, SRV instance → host:port, TXT, A host → address. TTL 0 says goodbye.</summary>
-    public static byte[] Announce(string service, string instance, string host, int port, IPAddress address, IEnumerable<string> texts, uint ttl = 120)
+    /// <summary>
+    /// A station's announcement: PTR service → instance and PTR group service → instance, SRV
+    /// instance → host:port, TXT, A host → address. TTL 0 says goodbye.
+    /// </summary>
+    public static byte[] Announce(string service, string group, string instance, string host, int port, IPAddress address, IEnumerable<string> texts, uint ttl = 120)
     {
         var w = new Writer();
-        w.U16(0); w.U16(0x8400); w.U16(0); w.U16(4); w.U16(0); w.U16(0);
+        w.U16(0); w.U16(0x8400); w.U16(0); w.U16(5); w.U16(0); w.U16(0);
         w.Record(service, Ptr, ttl == 0 ? 0u : 4500u, x => x.Name(instance));
-        // shared, not unique: every station of a group answers for the same instance name
-        w.Record(instance, Srv, ttl, x => { x.U16(0); x.U16(0); x.U16(port); x.Name(host); });
-        w.Record(instance, Txt, ttl == 0 ? 0u : 4500u, x =>
+        w.Record($"{group}.{service}", Ptr, ttl == 0 ? 0u : 4500u, x => x.Name(instance));
+        w.Record(instance, Srv, ttl, x => { x.U16(0); x.U16(0); x.U16(port); x.Name(host); }, flush: true);
+        w.Record(instance, Txt, ttl == 0 ? 0u : 4500u, flush: true, data: x =>
         {
             foreach (var t in texts)
             {
@@ -217,7 +222,8 @@ public static class DnsSd
     public static List<MdnsService> Services(Message m, IPAddress from, string service, List<string>? missing = null)
     {
         var list = new List<MdnsService>();
-        var instances = m.Records.Where(r => r.Type == Ptr && SameName(r.Name, service)).Select(r => r.Target)
+        // PTRs of the service and of a group's sub service (<group>.<service>)
+        var instances = m.Records.Where(r => r.Type == Ptr && (SameName(r.Name, service) || GroupOf(r.Name, service) != null)).Select(r => r.Target)
             .Concat(m.Records.Where(r => r.Type == Srv && GroupOf(r.Name, service) != null).Select(r => r.Name))
             .Distinct(StringComparer.OrdinalIgnoreCase);
         foreach (var instance in instances)
@@ -263,7 +269,7 @@ public sealed class Mdns : IDisposable
     private readonly CancellationTokenSource _stop = new();
     private readonly object _send = new();
     private List<IPAddress> _ifaces = new();
-    private string _service = MvrXchange.Service, _instance = "", _host = "";
+    private string _service = MvrXchange.Service, _group = "", _instance = "", _host = "";
     private int _port;
     private string[] _texts = Array.Empty<string>();
     private long _answeredAt;
@@ -271,8 +277,12 @@ public sealed class Mdns : IDisposable
     /// <summary>Joins the group and starts announcing; the error when the port could not be shared.</summary>
     public string? Start(string group, string stationName, string stationUuid, int tcpPort)
     {
-        _instance = $"{group}.{_service}";
-        _host = $"UnitSport-{stationUuid.Replace("-", "")[..Math.Min(8, stationUuid.Replace("-", "").Length)]}.local";
+        // a label of our own (no dots: they would read as more labels), the name itself in the TXT
+        string id = stationUuid.Replace("-", "");
+        string label = $"UnitSport-{id[..Math.Min(8, id.Length)]}";
+        _group = group;
+        _instance = $"{label}.{group}.{_service}";
+        _host = $"{label}.local";
         _port = tcpPort;
         _texts = new[] { $"StationName={stationName}", $"StationUUID={stationUuid}" };
         try
@@ -317,7 +327,7 @@ public sealed class Mdns : IDisposable
     /// <summary>Asks the LAN for MVR-xchange stations.</summary>
     public void Query() => Send(_ => DnsSd.Query((_service, DnsSd.Ptr)));
 
-    private void Announce(uint ttl) => Send(a => DnsSd.Announce(_service, _instance, _host, _port, a, _texts, ttl));
+    private void Announce(uint ttl) => Send(a => DnsSd.Announce(_service, _group, _instance, _host, _port, a, _texts, ttl));
 
     private static List<IPAddress> Interfaces()
     {
@@ -369,7 +379,7 @@ public sealed class Mdns : IDisposable
             if (!m.Response)
             {
                 // a query for any of our names: answer, at most once a second
-                if (m.Questions.Any(q => DnsSd.SameName(q.Name, _service) || DnsSd.SameName(q.Name, _instance) || DnsSd.SameName(q.Name, _host))
+                if (m.Questions.Any(q => DnsSd.SameName(q.Name, _service) || DnsSd.SameName(q.Name, $"{_group}.{_service}") || DnsSd.SameName(q.Name, _instance) || DnsSd.SameName(q.Name, _host))
                     && Environment.TickCount64 - Interlocked.Read(ref _answeredAt) > 1000)
                 {
                     Interlocked.Exchange(ref _answeredAt, Environment.TickCount64);

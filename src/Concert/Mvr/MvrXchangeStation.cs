@@ -22,7 +22,8 @@ public sealed class MvrXchangeStation : IDisposable
     /// <summary>A station of the group: known from mDNS, a direct join, its JOIN or a commit.</summary>
     public sealed record Peer(string Uuid, string Name, string Provider, IPEndPoint? EndPoint, bool Joined, bool ViaWebSocket)
     {
-        public long TriedAt { get; init; } = long.MinValue;
+        /// <summary>When a JOIN was last tried (<see cref="Environment.TickCount64"/>), 0 never.</summary>
+        public long TriedAt { get; init; }
     }
 
     /// <summary>A revision another station offers, and where to ask for it.</summary>
@@ -154,7 +155,7 @@ public sealed class MvrXchangeStation : IDisposable
             long now = Environment.TickCount64;
             p = p with { EndPoint = ep, Name = s.StationName.Length > 0 ? s.StationName : p.Name };
             // join each station once, again after 30 s when it did not answer
-            if (!p.Joined && now - p.TriedAt > 30000) { p = p with { TriedAt = now }; join = ep; }
+            if (!p.Joined && (p.TriedAt == 0 || now - p.TriedAt > 30000)) { p = p with { TriedAt = now }; join = ep; }
             _peers[id] = p;
         }
         if (join != null) Task.Run(() => JoinAsync(join, quiet: true));
@@ -195,7 +196,7 @@ public sealed class MvrXchangeStation : IDisposable
             if (ep != null && _peers.Remove($"{ep.Address}:{ep.Port}", out var byAddress) && !_peers.ContainsKey(uuid)) _peers[uuid] = byAddress;
             var old = _peers.GetValueOrDefault(uuid);
             var p = new Peer(uuid, Str(m, "StationName") is { Length: > 0 } n ? n : old?.Name ?? "?", Str(m, "Provider") is { Length: > 0 } pr ? pr : old?.Provider ?? "",
-                ep ?? old?.EndPoint, true, viaWs) { TriedAt = old?.TriedAt ?? long.MinValue };
+                ep ?? old?.EndPoint, true, viaWs) { TriedAt = old?.TriedAt ?? 0 };
             _peers[uuid] = p;
             int added = commits.Count(c => AddOffer(c, p));
             return (p, added);
