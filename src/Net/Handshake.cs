@@ -64,7 +64,8 @@ public partial class Handshake : Node
     /// 36: seated on a stadium stand (#885): FootPlayer.PoseKind 6 (PoseSit), Anim.X the feet's drop, BodyPose the hip.
     /// </summary>
     /// 37: World/Concerts (AskHost, AskCue, Frame on channel 4; State, Framed) (#885).
-    public const int Protocol = 37;
+    /// 38: an interior plan's entrance may be raised (EntrancePlan.Level, #827): an old peer would put its doorway on the ground floor.
+    public const int Protocol = 38;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

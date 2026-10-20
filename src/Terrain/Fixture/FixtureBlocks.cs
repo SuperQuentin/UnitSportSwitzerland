@@ -33,7 +33,7 @@ public static class FixtureBlocks
         return new Building
         {
             Kind = block.Kind, MinY = (float)FixtureCourse.FlatHeight, MaxY = (float)FixtureCourse.FlatHeight + h,
-            Floors = (byte)Math.Max(1, (int)(h / 3f)),
+            Floors = block.Floors > 0 ? block.Floors : (byte)Math.Max(1, (int)(h / 3f)),
             Triangles = tris.Select((v, i) => i % 3 == 1 ? v + (float)FixtureCourse.FlatHeight : v).ToArray(),
         };
     }

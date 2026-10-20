@@ -2381,8 +2381,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private void StepThrowView(float dt)
     {
-        // the phone (#889) lends third person too: its camera is laid over this one (PhoneCamera)
-        float want = ScopeView ? 0f : GunAim ? 1f : Mathf.Max(Mathf.Clamp(ThrowAim, 0f, 1f), PhoneLook > 0f ? 1f : 0f);
+        // the phone (#889) lends third person too: its camera is laid over this one (PhoneCamera); not in VR (#920)
+        float want = ScopeView ? 0f : GunAim ? 1f : Mathf.Max(Mathf.Clamp(ThrowAim, 0f, 1f), PhoneLook > 0f && !XR.XrSession.Active ? 1f : 0f);
         float side = Core.GameSettings.Current.LeftShoulder ? -1f : 1f;
         _shoulderSide = Mathf.MoveToward(_shoulderSide, side, dt * 8f);
         _throwBlend = Mathf.Lerp(_throwBlend, want, MathX.Damp(want > _throwBlend ? 9f : 7f, dt));
@@ -3036,7 +3036,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             var candidate = raw;
             // in a tunnel, out beside the vehicle only within the bore: past its wall is the hill
             if (Terrain != null && Terrain.InTunnel(at) && !Terrain.InTunnel(raw)) continue;
-            if (raw.Y <= at.Y + 0.01f && !Indoors && Terrain != null && !Terrain.InTunnel(raw) && Terrain.TryGetHeight(raw, out float g))
+            // (in a pit too, #619: the height queries answer the ground at its top)
+            if (raw.Y <= at.Y + 0.01f && !Indoors && Terrain != null && !Terrain.InTunnel(raw) && !Terrain.InPit(raw) && Terrain.TryGetHeight(raw, out float g))
                 candidate = raw with { Y = Mathf.Max(raw.Y, g) };
             var query = new PhysicsShapeQueryParameters3D
             {
@@ -4198,6 +4199,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         else if (Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float ground))
         {
             if (GlobalPosition.Y >= ground - 2f || GlobalPosition.Y >= LowestGroundUnder(ground) - 2f || Terrain.InTunnel(GlobalPosition)
+                || Terrain.InPit(GlobalPosition)
                 || Terrain.FloorBelow(this, GlobalPosition, GetRid())) return false;
             // back up on the ground, or on the water where there is some: never on a lake bed (#299)
             to = GlobalPosition with { Y = (Terrain.TryGetSurface(GlobalPosition, out float surface) ? surface : ground) + 1f };

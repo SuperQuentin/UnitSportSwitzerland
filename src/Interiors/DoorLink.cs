@@ -105,7 +105,8 @@ public sealed class DoorLink
 
         var placement = InteriorManager.PlacementFor(layout, origin);
         var inward = placement.Basis * new Vector3(e.InX, 0, e.InZ);
-        var inside = Frame(placement * new Vector3(e.X, 0, e.Z), -inward.Normalized());
+        // on its floor: a raised door's (#827) doorway is a storey or more up, as its sill is outside
+        var inside = Frame(placement * new Vector3(e.X, layout.EntranceY(e), e.Z), -inward.Normalized());
 
         var kind = layout.DressedKind();
         var (width, top) = layout.OpeningOf(e);

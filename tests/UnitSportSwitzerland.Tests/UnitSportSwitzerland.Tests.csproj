@@ -152,6 +152,9 @@
     <Compile Include="..\..\src\Terrain\Construction\CraneMotion.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Construction\CraneControl.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Construction\CranePlan.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- the pit (#619): its lining and the ground's cut, Godot maths only -->
+    <Compile Include="..\..\src\Terrain\Construction\PitPlan.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Construction\PitTerrain.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the sound of a site (#617): the scheduler and the synthesis, Godot maths only -->
     <Compile Include="..\..\src\Terrain\Construction\SiteSoundPlan.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Audio\SiteSfx.cs" Link="Game\%(Filename)%(Extension)" />

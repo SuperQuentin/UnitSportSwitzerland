@@ -63,6 +63,12 @@ public partial class FootPlayer
     /// <summary>The fingertip the figure was last built pointing at (its mesh frame), for the checks.</summary>
     internal Vector3? DrawnPoint => _poseKey.Point?.Tip;
 
+    /// <summary>
+    /// In VR, where the phone is in the owner's real hand (world), set every frame by <c>XR.XrPhone</c>;
+    /// null: in the figure's hands as every other peer draws it.
+    /// </summary>
+    public Transform3D? PhoneVrPose { get; set; }
+
     /// <summary>The phone as drawn in the hands, null until first taken out.</summary>
     public Phone.PhoneModel? PhoneModel => _phoneModel;
 
@@ -101,7 +107,9 @@ public partial class FootPlayer
         _phoneModel.CoverWhenOpen = PhoneState == PhoneSelfieState;
         _phoneTiltShown = _phoneTiltShown.Lerp(PhoneTilt, MathX.Damp(6f, dt));
         _phoneTurn = Mathf.MoveToward(_phoneTurn, PhoneState == PhoneSelfieState ? 1f : 0f, dt / 0.45f);
-        _phoneModel.Transform = PhoneInHands();
+        // in VR the owner holds it in the real hand (#920); everyone else sees it in the figure's
+        if (IsMultiplayerAuthority() && XR.XrSession.Active && PhoneVrPose is { } real) _phoneModel.GlobalTransform = real;
+        else _phoneModel.Transform = PhoneInHands();
         _phoneModel.Visible = true;
     }
 

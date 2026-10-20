@@ -27,7 +27,10 @@ namespace UnitSport.Phone;
 /// <item>Pad: hold Back → Phone in the quick menu; D-pad and A / B inside, D-pad up opens it.</item>
 /// <item>Camera app: the phone is raised and level before the face; the mouse aims, click / Enter / RT
 /// shoots, the wheel / LB RB zoom, Esc goes back.</item>
-/// <item>VR: not yet (a gap in <c>xr/vr-action-map</c>): no camera moves in VR.</item>
+/// <item>VR (#920, <c>XR.XrPhone</c>): held in the real hand, the real fingertip on the glass
+/// (<see cref="VrPointer"/>), the hinge swung by the free hand (<see cref="VrHinge"/>), X opens and folds,
+/// B goes back; the camera app aimed by the arm, shot by the holding hand's trigger, turned round for a
+/// selfie; a travel waits for the phone at the eyes, a call is answered at the ear. No camera moves.</item>
 /// </list>
 /// </summary>
 public partial class PhoneController : Node
@@ -43,6 +46,8 @@ public partial class PhoneController : Node
     private const float Hover = 0.016f, Touching = 0.002f;
     /// <summary>The main camera's field of view for a selfie, up the tall cover screen.</summary>
     private const float SelfieFov = 80f;
+    /// <summary>In VR, a travel waits this long (game seconds, <see cref="GameClock"/>) for the phone raised to the eyes, then blinks.</summary>
+    private const double VrRaiseSeconds = 3.0;
     /// <summary>A mouse drag longer than this (window pixels) is a swipe, not a click.</summary>
     private const float SwipePixels = 14f;
 
@@ -65,6 +70,7 @@ public partial class PhoneController : Node
     /// <summary>Travelling: since when (real clock), and when the body landed there (−1: not yet).</summary>
     private double _travelSince = -1, _landedAt = -1;
     private bool _arrived;
+    private double _vrTravelAsked;
     /// <summary>Folds and goes back in the pocket once closed (put away while open, or opened by a teleport).</summary>
     private bool _stowWhenFolded;
     private bool _shooting;
@@ -97,6 +103,17 @@ public partial class PhoneController : Node
     /// <summary>Open and settled (on whatever page: square on the map with the world black behind it, or in the hands).</summary>
     public bool IsCovering => _stage == Stage.Open;
     public bool CameraApp => _stage is Stage.Open or Stage.Opening && _screens.Shown == PhoneScreens.Page.Camera;
+    /// <summary>The camera app turned round, filming its owner.</summary>
+    public bool Selfie => _selfie;
+    /// <summary>The newest call waiting for an answer (its invite id), −1 when none rings.</summary>
+    public int RingingId => SimCall ?? InviteService.Client?.Newest?.Id ?? -1;
+    /// <summary>A call ringing for a check (offline there is no invite service); answered, it moves to <see cref="SimAnswered"/>.</summary>
+    internal int? SimCall { get; set; }
+    internal int SimAnswered { get; private set; } = -1;
+    /// <summary>In VR, the phone's screen is raised to the eyes (set each frame by <c>XR.XrPhone</c>).</summary>
+    public bool VrAtEyes { get; set; }
+    /// <summary>Out and in the hand, the hinge can be swung by hand (not while travelling).</summary>
+    public bool CanSwing => _stage is Stage.Folded or Stage.Opening or Stage.Open or Stage.Closing && _travelSince < 0;
 
     /// <param name="player">The local body, on foot; null when there is none.</param>
     /// <param name="blocked">A menu or the loading screen owns the screen.</param>
@@ -244,6 +261,7 @@ public partial class PhoneController : Node
     {
         _stage = Stage.Pocket;
         _look = _cover = _fold = _camApp = 0f;
+        _vrHinge = null;
         _pendingJump?.Invoke();
         _pendingJump = null;
         _travelSince = -1;
@@ -262,6 +280,12 @@ public partial class PhoneController : Node
     /// </summary>
     private void Grip()
     {
+        // VR (#920): the body walks on while you read, as with a real phone; the fingertip is the pointer
+        if (XR.XrSession.Active)
+        {
+            UiFocus.Set(this, false);
+            return;
+        }
         bool phone = _stage != Stage.Pocket && !(_stage is Stage.Open or Stage.Opening && _screens.Shown == PhoneScreens.Page.Camera);
         UiFocus.Set(this, _stage != Stage.Pocket);
         if (_blocked()) return;
@@ -273,7 +297,7 @@ public partial class PhoneController : Node
     {
         why = null;
         var p = _player();
-        if (p == null || _blocked() || XR.XrSession.Active) { why = "Not now"; return false; }
+        if (p == null || _blocked()) { why = "Not now"; return false; }
         if (p is not { Ride: RideKind.OnFoot, RidingAlong: false, IsSwimming: false, Ragdolled: false, Downed: false, Fighting: false })
         {
             why = "On foot only";
@@ -309,7 +333,8 @@ public partial class PhoneController : Node
         bool open = _stage is Stage.Opening or Stage.Open;
         float lookTo = _stage == Stage.Stowing ? 0f : inHands ? 1f : _look;
         _look = Mathf.MoveToward(_look, lookTo, dt / LookSeconds);
-        _fold = Mathf.MoveToward(_fold, open ? 1f : 0f, dt / PhoneModel.UnfoldSeconds);
+        // in VR the free hand may hold the front half (VrHinge): the hinge is where the hand has it
+        _fold = _vrHinge ?? Mathf.MoveToward(_fold, open ? 1f : 0f, dt / PhoneModel.UnfoldSeconds);
         // the map: the lens closes in once the hinge is open, the world fades out only once it is there
         float coverWant = open && FullView && _fold >= 1f ? 1f : 0f;
         _cover = Mathf.MoveToward(_cover, coverWant, dt / CoverSeconds);
@@ -349,6 +374,7 @@ public partial class PhoneController : Node
         StepFinger(p, dt);
 
         _screens.SetActive(true);
+        _screens.SetVr(XR.XrSession.Active);
         _screens.Fit(GetWindow().Size);
         if (p.PhoneModel is { HasLiveScreens: false } model) model.SetScreens(_screens.Cover.GetTexture(), _screens.Inner.GetTexture());
         if (_screens.Shown == PhoneScreens.Page.Camera) AimLens(p, dt);
@@ -371,7 +397,8 @@ public partial class PhoneController : Node
     private void ShowHint()
     {
         string text = _stage is Stage.Folded or Stage.Drawing
-            ? InputHints.Pad ? "D-pad ↑ open     ← →  choose     A  select     B  put away"
+            ? XR.XrSession.Active ? "X  open     swipe  choose     tap, or point and trigger  select     B  put away"
+            : InputHints.Pad ? "D-pad ↑ open     ← →  choose     A  select     B  put away"
                 : "W  open     A D  choose     Enter  select     S  put away     ·     mouse: click, swipe"
             : "";
         _hint.Visible = text.Length > 0 && !_blocked();
@@ -388,6 +415,12 @@ public partial class PhoneController : Node
     /// </summary>
     private void StepFinger(FootPlayer p, float dt)
     {
+        // VR: the real hand points, not the figure's (#920)
+        if (XR.XrSession.Active)
+        {
+            p.PhonePointTip = p.PhonePointDir = null;
+            return;
+        }
         bool hands = _stage is Stage.Folded or Stage.Open && _cover <= 0f && _camApp <= 0f;
         Vector2? uv = null;
         bool cover = _cursorOnCover;
@@ -552,8 +585,24 @@ public partial class PhoneController : Node
         Play(PhoneSounds.Tap);
     }
 
-    /// <summary>A call came in: the phone buzzes in the pocket (the toast chimes on screen).</summary>
-    private void OnCall(InviteView call) => Play(PhoneSounds.Buzz);
+    /// <summary>A call came in: the phone buzzes in the pocket (the toast chimes on screen); in VR it rings from the real pocket (<c>XR.XrPhone</c>).</summary>
+    private void OnCall(InviteView call)
+    {
+        if (!XR.XrSession.Active) Play(PhoneSounds.Buzz);
+    }
+
+    /// <summary>VR: the phone raised to an ear answers the newest call (#920 phase 3).</summary>
+    public void VrAnswer()
+    {
+        if (SimCall is { } sim)
+        {
+            GD.Print($"[phone] answer {sim} at the ear");
+            SimAnswered = sim;
+            SimCall = null;
+            return;
+        }
+        if (InviteService.Client?.Newest is { } call) Answer(call.Id, true);
+    }
 
     // ------------------------------------------------------------------ travel
 
@@ -579,11 +628,12 @@ public partial class PhoneController : Node
         GD.Print($"[phone] travel behind the phone to {where}");
         _pendingJump = jump;
         _travelSince = RealClock.Now;
+        _vrTravelAsked = GameClock.Now;
         _landedAt = -1;
         _arrived = false;
         // it goes away again once there, as a call answered from the cover does
         _stowWhenFolded = true;
-        _screens.ShowTravel(where);
+        _screens.ShowTravel(where, XR.XrSession.Active ? "Bring the phone to your eyes" : "");
         Grip();
         if (_stage != Stage.Open)
         {
@@ -609,8 +659,22 @@ public partial class PhoneController : Node
     /// <summary>On "Travelling…": once landed and settled there, the phone folds away and the camera shows the new place.</summary>
     private void StepTravel()
     {
-        // the jump runs once the world is black behind the phone
-        if (_pendingJump != null && _player() is { PhoneBackdropShown: >= 1f }) RunPendingJump();
+        // the jump runs once the world is black behind the phone; in VR, where the eye never moves, once
+        // the player's own hand has put the screen before the eyes, or behind a blink if it has not come (#920)
+        if (_pendingJump != null && XR.XrSession.Active)
+        {
+            if (VrAtEyes && _fold >= 1f)
+            {
+                GD.Print("[phone] travel behind the phone at the eyes");
+                RunPendingJump();
+            }
+            else if (GameClock.Now - _vrTravelAsked > VrRaiseSeconds)
+            {
+                XR.XrSession.Rig?.Blink();
+                RunPendingJump();
+            }
+        }
+        else if (_pendingJump != null && _player() is { PhoneBackdropShown: >= 1f }) RunPendingJump();
         if (_travelSince < 0 || _pendingJump != null) return;
         var p = _player();
         if (_arrived && _landedAt < 0 && p != null && p.IsOnFloor()) _landedAt = RealClock.Now;
@@ -659,6 +723,11 @@ public partial class PhoneController : Node
             return;
         }
         if (_blocked()) return;   // a page over the phone (Activities menu) takes its own keys
+        if (XR.XrSession.Active)
+        {
+            VrButtons(e);
+            return;
+        }
 
         if (_stage is Stage.Open && _screens.Shown == PhoneScreens.Page.Camera)
         {
@@ -727,6 +796,142 @@ public partial class PhoneController : Node
             return;
         }
         _screens.Inner.PushInput(e, true);
+    }
+
+    /// <summary>
+    /// VR's buttons on the phone (#920): X (the pad's X, the holding hand's lower face button) opens and
+    /// folds it, B goes back, then folds, then puts it away. Everything else is the body's: the stick walks.
+    /// </summary>
+    private void VrButtons(InputEvent e)
+    {
+        if (e is not InputEventJoypadButton { Pressed: true } b) return;
+        if (b.ButtonIndex == JoyButton.X)
+        {
+            if (_stage is Stage.Open or Stage.Opening) Fold();
+            else Open();
+            GetViewport().SetInputAsHandled();
+        }
+        else if (b.ButtonIndex == JoyButton.B)
+        {
+            if (_stage is Stage.Open) Back();
+            else PutAway();
+            GetViewport().SetInputAsHandled();
+        }
+    }
+
+    private bool _vrDown, _vrDrag, _vrCover;
+    private float? _vrHinge;
+
+    /// <summary>
+    /// VR, phase 2: the free hand holds the front half at <paramref name="fold"/> (0 shut, 1 flat; null:
+    /// let go). Held, the phone opens or folds with the hand; let go between, it settles to the nearer.
+    /// </summary>
+    public void VrHinge(float? fold)
+    {
+        if (fold is { } f && CanSwing)
+        {
+            if (_vrHinge == null) GD.Print("[phone] hinge in the hand");
+            _vrHinge = f;
+            if (f > 0.5f)
+            {
+                if (_stage != Stage.Open || f < 1f) _stage = Stage.Opening;
+            }
+            else if (_stage != Stage.Folded || f > 0.05f) _stage = Stage.Closing;
+            return;
+        }
+        if (_vrHinge is not { } last) return;
+        _vrHinge = null;
+        GD.Print($"[phone] hinge let go at {last:F2}");
+        if (last > 0.5f)
+        {
+            if (_stage != Stage.Open) _stage = Stage.Opening;
+        }
+        else
+        {
+            if (_screens.Shown == PhoneScreens.Page.Camera) _screens.ShowPage(PhoneScreens.Page.Home);
+            if (_stage != Stage.Folded) _stage = Stage.Closing;
+        }
+        Play(PhoneSounds.Hinge);
+    }
+
+    /// <summary>VR, phase 2: the holding hand's trigger, the camera app's shutter (as a phone's volume key).</summary>
+    public void VrShutter()
+    {
+        if (CameraApp) _ = TakePhoto();
+    }
+
+    /// <summary>VR: the pointing hand's trigger, its ray off the phone, in the camera app: the next lens (1x, 2x, 5x, round again).</summary>
+    public void VrZoom()
+    {
+        if (!CameraApp) return;
+        _screens.StepZoom(1, wrap: true);
+        Play(PhoneSounds.Tap);
+    }
+
+    /// <summary>VR, phase 2: the phone's back turned to the face (or away again) in the camera app.</summary>
+    public void VrSelfie(bool on)
+    {
+        if (on != _selfie && CameraApp) SetSelfie(on);
+    }
+    private Vector2 _vrFrom, _vrLast;
+
+    /// <summary>
+    /// The real fingertip on the glass (#920, from <c>XR.XrPhone</c>): <paramref name="uv"/> where it is
+    /// over a screen (null off it), <paramref name="down"/> while it touches. A touch and lift in place
+    /// is a click there (on the cover, it runs the quick action); a slide is a drag: up and down
+    /// scroll the list it started on, a sideways swipe picks on the cover and goes back on the inner
+    /// screen. Hovering moves the pointer over the inner screen and shows the ring.
+    /// </summary>
+    public void VrPointer(Vector2? uv, bool cover, bool down)
+    {
+        _screens.ShowRing(_stage == Stage.Pocket ? null : uv, cover, down);
+        if (uv is not { } at)
+        {
+            _vrDown = false;
+            return;
+        }
+        if (down && !_vrDown)
+        {
+            _vrDown = true;
+            _vrDrag = false;
+            _vrFrom = _vrLast = at;
+            _vrCover = cover;
+            return;
+        }
+        if (down)
+        {
+            // past about 8 mm across the glass, a slide
+            if (!_vrDrag && (at - _vrFrom).Length() > 0.05f) _vrDrag = true;
+            if (_vrDrag && !cover && _stage == Stage.Open && _screens.ScrollAt(ToPixels(_vrFrom)) is { } list)
+                list.ScrollVertical -= Mathf.RoundToInt((at.Y - _vrLast.Y) * _screens.Inner.Size.Y / _screens.InnerScale);
+            _vrLast = at;
+            return;
+        }
+        if (_vrDown)
+        {
+            _vrDown = false;
+            var moved = at - _vrFrom;
+            if (_vrDrag)
+            {
+                if (Mathf.Abs(moved.X) > Mathf.Abs(moved.Y) * 1.5f && Mathf.Abs(moved.X) > 0.15f)
+                {
+                    if (_stage == Stage.Folded) Pick(moved.X < 0 ? 1 : -1);
+                    else if (!_vrCover && moved.X > 0) Back();
+                }
+                return;
+            }
+            if (_vrCover && _stage == Stage.Folded) RunQuick();
+            else if (!_vrCover && _stage == Stage.Open && _vrFrom.X is >= 0f and <= 1f && _vrFrom.Y is >= 0f and <= 1f)
+            {
+                foreach (bool press in new[] { true, false })
+                    PushMouse(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = press }, _vrFrom);
+                Play(PhoneSounds.Tap);
+            }
+            return;
+        }
+        // hovering: the inner screen's buttons light under the finger
+        if (!cover && _stage == Stage.Open && at.X is >= 0f and <= 1f && at.Y is >= 0f and <= 1f)
+            PushMouse(new InputEventMouseMotion(), at);
     }
 
     /// <summary>A ui action pressed and released into the inner screen.</summary>

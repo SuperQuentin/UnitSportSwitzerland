@@ -53,3 +53,43 @@ Same verdicts in both modes except `--steamercheck` (default stage) and `--water
   would have no physics tick and `GameClock.Pace` would hold the wrong length.
 - Render frames: in real time a headless check drew ~2 frames per tick (uncapped), now exactly 1.
   `--synccheck` counts half the frames; its thresholds are unchanged and it passes.
+
+## Net checks at `/speed` (`--checkspeed n`, #931)
+
+`--fixed-fps` cannot speed up a server and its clients, but the server-wide `/speed` can: every peer
+follows it through `SimClock`. A client probe on `ChatProbe` passes `--checkspeed n`, and `SpeedUp(password)`
+logs in with the server's `--admin-password` and sends `/speed n`. `SpeedBack()` goes back to x1 before a
+part the scale would distort.
+
+- **What shrinks:** `/speed` sets `Engine.TimeScale` on every peer, so each physics step is `scale / 60` s
+  long. There are not more steps. Probe `Seconds()` timers (`CreateTimer`), the server's `_clock += delta`
+  timers (fight phases, the BR match through `ClockSync.SimNow`), falls, walks and countdowns all shrink.
+- **What does not:** `Until()` deadlines (they count physics frames through `GameClock.Now`, so they only
+  get more lenient), bash `sleep`, boot, tile and collision builds on threads, connects, and network
+  delay.
+- **Where it breaks:**
+  - **Hits on a moving remote body.** At x4 a walking bot is 4 times as far along on the server as its copy
+    on the client is in the same real-time delay. In `brbotcheck`, 20 knife stabs at 1.6-2 m all missed.
+    Go back to x1 for melee.
+  - **Bigger steps.** Vehicles, boats, stacking, ragdolls and lifts take 1/15 s steps at x4. Every
+    vehicle or physics check below stays at x1.
+  - **Clock and sync checks** (`signalnetcheck`, `clocknetcheck`, `speednetcheck`, `radiocheck`,
+    `playtestnetcheck`) and screenshot or perf checks (`useanimcheck`, `switchcheck`, `loadtest`) are
+    meaningless at another scale.
+- **Measured** (Windows, 4.7.2, one after the other, cold tile cache):
+
+| Check | x1 | x4 |
+|---|---|---|
+| `fightnetcheck` | 36 s | 20-21 s (3 runs ok) |
+| `brbotcheck` (x4 until the bots land, then x1 for the knife) | 235 s | 140-154 s (2 runs ok) |
+
+- **Survey of the 72 net/full scripts (estimates, Oct 2026).** Most spend their time on boot, tile
+  loading, `sleep`s and chat handshakes, which leaves `/speed` little to save.
+  - **Worth it, done:** `brbotcheck`, `fightnetcheck`, and `brsquadcheck` (already at x4 before #931; it
+    fails at x4 on main as of Oct 20, the mate falling through the world under its canopy, #937).
+  - **Maybe, with a physics risk:** only one wait at x4, then x1 again.
+    - `rampnetcheck`: the 66 s park wait in `GarageProbe`.
+    - `steamernetcheck`: the 30 s full-ahead in `SteamerNetProbe`, but `Sample()` counts frames.
+    - `racecheck`: the entry window and the countdown.
+    - `palletnetcheck`, `holdnetcheck`, `hallcarnetcheck`, `botcheck`.
+  - **Not worth it:** everything else, at ~0-15 s each.

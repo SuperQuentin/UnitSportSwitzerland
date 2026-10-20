@@ -229,7 +229,8 @@ public partial class OccasionDecor : Node
             Id = id,
             Origin = tileOrigin,
             World = _origin,
-            Doors = tile.Doors,
+            // doorsteps on the ground only: a lantern or a gift at a raised door (#827) stood on the walkway
+            Doors = Array.FindAll(tile.Doors, d => d.Level == 0),
             Roads = tile.Roads,
             HeightAtWorld = p => _chunks.TryGetSurface(p, out float h) ? h : null,
             CoverAtWorld = p => _chunks.TryGetCover(p, out var c) ? c : null,
