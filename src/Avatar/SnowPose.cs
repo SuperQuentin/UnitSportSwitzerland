@@ -109,9 +109,10 @@ public static class SnowPose
         }
 
         // ---- hands: out in front; a pole planted inside a turn; pushing back while skating ------
-        // the figure is rolled about +Z by the lean: its head moves toward −X for a + lean, so the
-        // inside of the turn is −X then
-        float inside = -MathF.Sign(look.Lean), plant = Math.Clamp(MathF.Abs(look.Lean) * 1.4f, 0f, 1f);
+        // the ride rolls the drawn body by the lean about its +Z; the body is author space turned
+        // half round ((−x, y, −z), MeshScratch.Build), so in author space a + lean takes the head
+        // toward +X: the inside of the turn
+        float inside = MathF.Sign(look.Lean), plant = Math.Clamp(MathF.Abs(look.Lean) * 1.4f, 0f, 1f);
         float shoulderY = j[ShoulderL].Y;
         Span<Vector3> dirs = stackalloc Vector3[2];
         for (int side = 0; side < 2; side++)
@@ -134,7 +135,7 @@ public static class SnowPose
 
         Angulate(j, hip, look.Lean, 0.45f);
         // the poles from where the hands ended up, turned with the upper body
-        var turn = new Basis(Vector3.Back, -look.Lean * 0.45f);
+        var turn = new Basis(Vector3.Back, look.Lean * 0.45f);
         for (int side = 0; side < 2; side++)
         {
             var grip = j[side == 0 ? WristL : WristR];
@@ -237,7 +238,8 @@ public static class SnowPose
     private static void Angulate(Span<Vector3> j, Vector3 hip, float lean, float share)
     {
         if (MathF.Abs(lean) < 1e-4f) return;
-        var back = new Basis(Vector3.Back, -lean * share);
+        // the ride's roll is about −Z in author space (see the inside of the turn above): undo part of it
+        var back = new Basis(Vector3.Back, lean * share);
         for (int i = HeadTop; i <= WristR; i++)
             if (i != Hip) j[i] = hip + back * (j[i] - hip);
     }

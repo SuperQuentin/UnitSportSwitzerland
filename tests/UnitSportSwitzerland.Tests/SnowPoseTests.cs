@@ -104,9 +104,9 @@ public class SnowPoseTests
     [Fact]
     public void Inside_a_turn_the_inside_pole_is_planted_ahead()
     {
-        // a + lean rolls the head toward −X: −X is the inside
+        // a + lean takes the head toward +X in author space: +X is the inside
         var (_, _, poles) = Skier(Stand with { Lean = 0.8f });
-        Assert.True(poles[0].Basket.Z > poles[1].Basket.Z + 0.3f, $"{poles[0].Basket} {poles[1].Basket}");
+        Assert.True(poles[1].Basket.Z > poles[0].Basket.Z + 0.3f, $"{poles[0].Basket} {poles[1].Basket}");
     }
 
     [Fact]

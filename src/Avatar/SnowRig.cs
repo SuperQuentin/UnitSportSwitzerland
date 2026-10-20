@@ -85,7 +85,9 @@ public partial class SnowRig : Node3D
             foreach (var pole in _poles) AppendPole(_scratch, _gear, pole);
         }
         _scratch.BuildInto(_mesh);
-        var eye = (_joints[SnowPose.HeadBase] + _joints[SnowPose.HeadTop]) * 0.5f + new Vector3(0, 0, 0.12f);
+        // just in front of the face; the drawn body is author space turned half round (MeshScratch.Build)
+        var eye = (_joints[SnowPose.HeadBase] + _joints[SnowPose.HeadTop]) * 0.5f + new Vector3(0, 0, 0.14f);
+        eye = new Vector3(-eye.X, eye.Y, -eye.Z);
         Eye = _board ? _body.Transform * eye : eye;
         Core.ShowcaseTrace.Mark();
     }
