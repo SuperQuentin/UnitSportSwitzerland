@@ -42,10 +42,12 @@ public static partial class TileRewriter
             bool approach = ins.Count > 0 && ex.CarStop is not null, leaves = mouth.CarLanes(StripWay.Out).Any();
             var info = InfoOf(net.Links[a.LinkId]);
             bool urban = mouth.KerbLeftCm > 0 || mouth.KerbRightCm > 0;
-            // riders get their own signal on a path, or on a bike lane kerbside of a right pocket (layout a)
+            // riders get their own signal on a path, or on a bike lane kerbside of a right pocket (layout a); not on layout (b)'s
+            // right-turn bike lane at the kerb, its riders turning with the pocket's cars (#854: it held the right arrow back)
             int last = mouth.LastCarriageway;
             bool path = mouth.Strips.Skip(last + 1).Any(x => x.Kind == StripKind.Path);
-            bool kerbside = a.HasRight && last >= 0 && mouth.Strips[last].Kind == StripKind.BikeLane && mouth.Strips[last].Way == StripWay.In;
+            bool kerbside = a.HasRight && last >= 0 && mouth.Strips[last] is { Kind: StripKind.BikeLane, Way: StripWay.In } kerbLane
+                && kerbLane.Moves != SignalMoves.Right;
             arms.Add(new SignalArm(a.Heading, approach, leaves, ins.Any(l => l.Moves == SignalMoves.Left), ins.Any(l => l.Moves == SignalMoves.Right),
                 Pedestrians: ex.Crosswalk is not null, BikeSignal: approach && (path || kerbside), SpeedKmh: urban ? 50 : 60,
                 CrossingM: (float)(mouth.CarriagewayWidth), Rank: (byte)Math.Clamp(info is { } i ? PriorityPlanner.Rank(i) / 4 : 1, 1, 255),

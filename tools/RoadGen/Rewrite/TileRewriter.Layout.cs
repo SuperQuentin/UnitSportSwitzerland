@@ -118,8 +118,9 @@ public static partial class TileRewriter
             }
             // beside a right pocket the through riders' lane runs between it and the through lane (layout b): without lights always;
             // at the lights only where the traffic arriving from the arm the pocket turns into cannot turn left (one-way out,
-            // forbidden, no lane shows it), else at the kerb (the user, Oct 13 2026; replaces #351's coin flip). The signal plan
-            // follows the layout: a kerbside lane beside a right pocket gets its bike signal there
+            // forbidden, no lane shows it), else at the kerb (the user, Oct 13 2026; replaces #351's coin flip); where OSM's
+            // bicycle:lanes places it, there (#854). The signal plan follows the layout: a kerbside lane beside a right pocket
+            // gets its bike signal there
             // a through bike lane added only where the straight-on exit carries one (a departing bike lane or path) on, or at the
             // lights, where every bike lane ends at an advanced line or in a bike box (the user)
             ArmPlan? Toward(ArmPlan a, SignalMoves turn)
@@ -140,6 +141,8 @@ public static partial class TileRewriter
                     var into = Toward(a, SignalMoves.Right);
                     bool leftThere = into is not null && into.Wanted.CarLanes(StripWay.In).Any(l => (l.Strip.Moves & SignalMoves.Left) != 0);
                     between = !lights || !leftThere;
+                    // OSM's bicycle:lanes says where it lies: the data wins, as turn:lanes does (the user, #854)
+                    if (BikeLaneBetween(overlay, net.Links[a.LinkId], a.AtEnd ? LinkEnd.End : LinkEnd.Start) is { } mapped) between = mapped;
                 }
                 // one rule for the three bike moves (the user): beside the car lane making the move, where the street it goes into
                 // carries riders on, or at the lights (an advanced line or a bike box ends it)

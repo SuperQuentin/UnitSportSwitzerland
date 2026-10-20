@@ -128,7 +128,8 @@ public partial class TrafficProbe : Node
             GD.Print($"[trafficcheck] wrote {_shot}");
         if (_stay && _shot != null && _captured < CaptureAt.Length)
             GD.Print($"[trafficcheck] capture: {(_capture is null ? "no queue of " + CaptureQueue + " at a red near --at" : $"{_captured} of {CaptureAt.Length} shots")} before the end, run longer (--seconds)");
-        if (_feed) GD.Print($"[trafficcheck] fed {_fedCars} cars into {_fed.Count} approaches near --at");
+        if (_feed) GD.Print($"[trafficcheck] fed {_fedCars} cars into {_fed.Count} approaches near --at"
+            + (_feedTurns is null ? "" : $", moves taken L/T/R {_traffic.FedMoves[0]}/{_traffic.FedMoves[1]}/{_traffic.FedMoves[2]} ({_traffic.FedMovesMissed} not the one drawn)"));
         var (mean, p50, p99, ticks, cars) = _traffic.TickCost();
         GD.Print($"[trafficcheck] tick cost from {TickFrom:F0} s (perf-traffic-tick): mean {mean:F0} us, p50 {p50:F0} us, p99 {p99:F0} us over {ticks} ticks, {cars:F0} cars on average");
         Approaches();
@@ -296,9 +297,18 @@ public partial class TrafficProbe : Node
     private int _fedCars, _feedTurn;
 
     /// <summary>
+    /// <c>--feed-turns L,T,R</c> (#854, for a demo): how the fed cars share left, straight on and right (weights, e.g. <c>1,2,3</c>);
+    /// none, as the traffic picks. Each fed car draws its move and takes a path with it at the junction it is fed into.
+    /// </summary>
+    private readonly float[]? _feedTurns = CmdArgs.Value("--feed-turns") is { } w
+        && w.Split(',').Select(x => float.TryParse(x, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float f) ? f : -1f).ToArray() is { Length: 3 } t
+        && t.All(f => f >= 0f) && t.Sum() > 0f ? t : null;
+    private readonly Random _feedRng = new(854);
+
+    /// <summary>
     /// <c>--feed</c> (#353, for the capture, not the game's traffic): one more car on the road into
     /// one of the signalised approaches within 60 m of <c>--at</c>, in turn, 120-300 m before its
-    /// line and routed through it (<see cref="Traffic.SpawnInto"/>).
+    /// line and routed through it (<see cref="Traffic.SpawnInto"/>), turning as <c>--feed-turns</c> shares the moves.
     /// </summary>
     private void Feed()
     {
@@ -310,7 +320,15 @@ public partial class TrafficProbe : Node
             GD.Print($"[trafficcheck] feeding {_fed.Count} signalised approaches near --at");
         }
         // (from 120 m before the line: out of the camera's view, #854)
-        if (_fed.Count > 0 && _traffic.SpawnInto(_fed[_feedTurn++ % _fed.Count], 120f, 300f)) _fedCars++;
+        if (_fed.Count > 0 && _traffic.SpawnInto(_fed[_feedTurn++ % _fed.Count], 120f, 300f, FeedMove())) _fedCars++;
+    }
+
+    /// <summary>The move the next fed car wants (<see cref="_feedTurns"/>), none without <c>--feed-turns</c>.</summary>
+    private SignalMoves FeedMove()
+    {
+        if (_feedTurns is not { } w) return SignalMoves.None;
+        float at = (float)_feedRng.NextDouble() * w.Sum();
+        return (at -= w[0]) < 0f ? SignalMoves.Left : at - w[1] < 0f ? SignalMoves.Through : SignalMoves.Right;
     }
 
     /// <summary>Seconds from <paramref name="now"/> until the group shows green, if it does within a few changes.</summary>

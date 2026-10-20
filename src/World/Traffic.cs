@@ -451,8 +451,9 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     /// <paramref name="approach"/>, <paramref name="from"/> to <paramref name="to"/> m before its
     /// line (back over the junctions upstream where its edge is shorter), its route already through
     /// the approach; none while there are as many cars as the settings ask, or a car within <see cref="SpawnClear"/> m of the spot.
+    /// With <paramref name="move"/>, the car takes a path with that move at the approach's junction (#854, <c>--feed-turns</c>).
     /// </summary>
-    public bool SpawnInto(LaneApproach approach, float from, float to)
+    public bool SpawnInto(LaneApproach approach, float from, float to, SignalMoves move = SignalMoves.None)
     {
         if (_roads is null || _cars.Count >= GameSettings.Current.TrafficCars) return false;
         foreach (var e in _roads.Edges)
@@ -480,6 +481,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             foreach (var c in _cars)
                 if (new Vector2(c.Head.X - spot.X, c.Head.Z - spot.Z).LengthSquared() < SpawnClear * SpawnClear) return false;
             AddCar(route);
+            _cars[^1].Wants = (approach, move);
             return true;
         }
         return false;
@@ -1163,6 +1165,10 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     /// <summary>Cars onto a junction path (#818 phase 5), and the largest sideways step at the hand-over onto one and off one (m).</summary>
     public int PathEntries { get; private set; }
 
+    /// <summary><c>--feed-turns</c> (#854): the moves fed cars took at their junction (left, straight on, right), and how many not the one they drew.</summary>
+    public readonly int[] FedMoves = new int[3];
+    public int FedMovesMissed { get; private set; }
+
     /// <summary><c>--trafficcheck</c> (#854): pairs of cars on one spot this tick (within 1 m), and the most in any tick.</summary>
     public int DoubledNow { get; private set; }
     public int DoubledMost { get; private set; }
@@ -1217,6 +1223,11 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         {
             car.Lane = KeepRight(from, fromForward, car.Habit) + car.Lane - onto.FromOffset;
             PathEntries++;
+            if (car.Wants is var (wantAt, want) && want != SignalMoves.None && (fromForward ? from.ApproachAtEnd : from.ApproachAtStart) is var (here, _) && here == wantAt)
+            {
+                FedMoves[onto.Move switch { SignalMoves.Left => 0, SignalMoves.Through => 1, _ => 2 }]++;
+                if (onto.Move != want) FedMovesMissed++;
+            }
             PathStepIn = Mathf.Max(PathStepIn, Mathf.Abs(car.Lane));
             if (Mathf.Abs(car.Lane) > 1f) PathStepsOver1m++;
         }
@@ -1290,6 +1301,11 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         // weight each, however many lanes lead there), then the lane nearest the car's usual line
         if (options.All(o => o.Edge.Path is not null) && options.Count > 0)
         {
+            // a fed car that wants a move here takes it, where a path has it (#854, --feed-turns)
+            if (car?.Wants is var (wantAt, want) && want != SignalMoves.None
+                && (leg.Forward ? leg.Edge.ApproachAtEnd : leg.Edge.ApproachAtStart) is var (here, _) && here == wantAt
+                && options.Where(o => o.Edge.Path!.Move == want).ToList() is { Count: > 0 } wanted)
+                options = wanted;
             var exits = options.GroupBy(o => o.Edge.KeyEnd).Select(g => g.ToList()).ToList();
             float ExitWeight(List<(LaneEdge Edge, bool)> g) => Mathf.Abs((int)ExitClass(g[0].Edge) - (int)leg.Edge.Class) <= 1 ? 4f : 1f;
             float sum = exits.Sum(ExitWeight), at = (float)_rng.NextDouble() * sum;
@@ -1512,6 +1528,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         public float Lane, LaneWanted;
         /// <summary>The lane it is heading for at the line, from its usual line (#854): <see cref="LaneWanted"/> before it eases over.</summary>
         public float LaneAim;
+        /// <summary>A fed car's move at one approach (#854, <c>--feed-turns</c>): the path it takes there; none, as the traffic picks.</summary>
+        public (LaneApproach At, SignalMoves Move)? Wants;
         /// <summary>Placed on its lane at its first step.</summary>
         public bool Placed;
         public float Lift;

@@ -47,6 +47,23 @@ public static partial class TileRewriter
         return overlay.AtEnd(key.Uuid, key.Part, m, atEnd)?.Highway;
     }
 
+    /// <summary>
+    /// Where OSM's <c>bicycle:lanes</c> puts the bike lane of the traffic arriving at the link's end (#854): true where a
+    /// <c>designated</c> lane has a car lane to its right (between the through lane and a right pocket, layout b), false
+    /// where it is the last (at the kerb, layout a), null where the row says nothing.
+    /// </summary>
+    private static bool? BikeLaneBetween(OsmOverlayReader? overlay, RoadLink link, LinkEnd end)
+    {
+        if (overlay is null || link.Tag is not Source { Key: { } key } source || source.Plan.Length < 2) return null;
+        bool atEnd = end == LinkEnd.End;
+        double m = key.FromM + source.AlongOf(atEnd ? source.Plan[^1] : source.Plan[0]);
+        if (overlay.AtEnd(key.Uuid, key.Part, m, atEnd) is not { } row) return null;
+        var lanes = (atEnd ? row.BikeLanesFwd : row.BikeLanesBwd).Split('|');
+        int bike = Array.LastIndexOf(lanes, "designated");
+        if (bike < 0) return null;
+        return lanes.Skip(bike + 1).Any(l => l != "designated");
+    }
+
     private static SignalMoves[]? WishedLanes(OsmOverlayReader? overlay, RoadLink link, LinkEnd end, SignalMoves allowed)
     {
         if (overlay is null || link.Tag is not Source { Key: { } key } source || source.Plan.Length < 2) return null;

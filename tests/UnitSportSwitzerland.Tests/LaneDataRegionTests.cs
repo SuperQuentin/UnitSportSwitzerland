@@ -48,6 +48,29 @@ public class LaneDataRegionTests(SignalTestRegionFixture region) : IClassFixture
     }
 
     [Fact]
+    public void J10s_bike_lanes_lie_between_from_data_and_its_right_turns_go_with_the_through_green()
+    {
+        // OSM's bicycle:lanes puts each bike lane between the through lane and the right pocket (#854): the planner's own rule
+        // would put them at the kerb (every arm turns left, as at J1), and the right turn runs with the through traffic
+        foreach (var (e, w, nn, so) in new[] { (true, false, false, false), (false, true, false, false), (false, false, true, false), (false, false, false, true) })
+        {
+            var a = Approach("J10", e, w, nn, so);
+            var j = region.Junction("J10");
+            var plan = region.Tile(j.E, j.N).Signals[a.Signal].Plan;
+            Assert.Equal("L|T|R", Cars(a));
+            int through = a.Lanes.FindIndex(l => l.Kind == ApproachLaneKind.Car && l.Moves == SignalMoves.Through);
+            int right = a.Lanes.FindIndex(l => l.Kind == ApproachLaneKind.Car && l.Moves == SignalMoves.Right);
+            Assert.Contains(a.Lanes.Skip(through + 1).Take(right - through - 1), l => l.Kind == ApproachLaneKind.Bike);
+            Assert.False(plan.ThroughWithRightHeld(a.SignalArm));
+            Assert.DoesNotContain(plan.Groups, g => g.Arm == a.SignalArm && g.Kind == SignalGroupKind.Bike);
+        }
+        // J1, the same crossroads by the rule: kerbside, a bike signal, the right arrow held while the riders go
+        var j1 = Approach("J1", east: false, west: true);
+        var j1j = region.Junction("J1");
+        Assert.True(region.Tile(j1j.E, j1j.N).Signals[j1.Signal].Plan.ThroughWithRightHeld(j1.SignalArm));
+    }
+
+    [Fact]
     public void The_cross_road_gets_its_pocket_from_data()
     {
         Assert.Equal("L|TR", Cars(Approach("J6", east: false, south: true)));

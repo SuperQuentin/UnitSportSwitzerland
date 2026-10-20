@@ -58,6 +58,11 @@ public static class SignalTestRegion
     /// 12 m apart (parallel arms: their turns overlap), and 300 m east one north and one north-east 14 m apart.
     /// </summary>
     public const double ForkE = 2915000;
+    /// <summary>
+    /// J1's crossroads again (#854), at LV95 <see cref="BetweenE"/>,<see cref="BetweenN"/> a tile north of it: every approach with
+    /// its bike lane between the through lane and the right pocket (layout (b)), the right turns going with the through green.
+    /// </summary>
+    public const double BetweenE = 2910500, BetweenN = 1323500;
     /// <summary>The ground, metres (as the fixture courses).</summary>
     public const double Ground = 500;
     /// <summary>Region centre: the manifest's suggested origin.</summary>
@@ -82,7 +87,8 @@ public static class SignalTestRegion
     private sealed record Box(double E0, double N0, double E1, double N1, double Height);
 
     /// <summary>An OSM row over part of a line (#700): metres along it, and the lane columns it carries (turn lanes in the line's drawing direction).</summary>
-    private sealed record OsmRow(double From, double To, string Lanes = "", string LanesFwd = "", string LanesBwd = "", string TurnFwd = "", string TurnBwd = "");
+    private sealed record OsmRow(double From, double To, string Lanes = "", string LanesFwd = "", string LanesBwd = "", string TurnFwd = "", string TurnBwd = "",
+        string BikeFwd = "", string BikeBwd = "");
 
     /// <summary>An OSM <c>highway=crossing</c> node (#700) on a line, metres along it, with its <c>crossing=*</c> value.</summary>
     private sealed record CrossingNode(string LineId, double Along, string Value);
@@ -132,6 +138,25 @@ public static class SignalTestRegion
         Cross("J1N", j1, n, n + 400, "10m Strasse", "Verbindungsstrasse", "secondary", cycleway: "shared_lane");
         junctions.Add(new Junction("J1-ideal-lanes", j1, n, "ideal crossroads, painted bike lanes, bike box (W) and advanced lines",
             Arms("L|T|R", "L|T|R", "L|T|R", "L|T|R")));
+
+        // 1b. J1 again a tile north (#854), every approach with the bike lane between the through lane and the right pocket
+        // (layout (b)): no rider goes straight beside a right-turning car at the mouth, so the right turns can run with the
+        // through green. OSM says where the bike lane lies (bicycle:lanes, the bike lane third of left | through | bike | right);
+        // the planner's own rule would put it at the kerb, every arm turning left
+        {
+            const double e = BetweenE, nb = BetweenN;
+            const string Between = "no|no|designated|no";
+            lines.Add(new Line("J10W", "10m Strasse", "Durchgangsstrasse", "Kanton", [(e - 450, nb), (e, nb)], "secondary",
+                Rows: [new OsmRow(0, 450, BikeFwd: Between)]));
+            lines.Add(new Line("J10E", "10m Strasse", "Durchgangsstrasse", "Kanton", [(e, nb), (e + 450, nb)], "secondary",
+                Rows: [new OsmRow(0, 450, BikeBwd: Between)]));
+            lines.Add(new Line("J10S", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(e, nb - 400), (e, nb)], "secondary",
+                Rows: [new OsmRow(0, 400, BikeFwd: Between)]));
+            lines.Add(new Line("J10N", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(e, nb), (e, nb + 400)], "secondary",
+                Rows: [new OsmRow(0, 400, BikeBwd: Between)]));
+            junctions.Add(new Junction("J10-between-lanes", e, nb, "J1 with every bike lane between the through lane and the right pocket",
+                Arms("L|T|R", "L|T|R", "L|T|R", "L|T|R")));
+        }
 
         // 2. the same crossroads in town (OSM maps sidewalks): separated bike paths. In town (50 km/h, no OSM speed) no
         // approach gets a right-turn pocket (#711, the user's rule: only on roads faster than 50 km/h)
@@ -581,14 +606,14 @@ public static class SignalTestRegion
     {
         var inv = CultureInfo.InvariantCulture;
         var sb = new StringBuilder();
-        sb.Append(inv, $"# osm_overlay v1 {FileTag} bbox={MinTileE * 1000},{MinTileN * 1000},{(MaxTileE + 1) * 1000},{(MaxTileN + 1) * 1000} synthetic (#386)\n");
+        sb.Append(inv, $"# osm_overlay v3 {FileTag} bbox={MinTileE * 1000},{MinTileN * 1000},{(MaxTileE + 1) * 1000},{(MaxTileN + 1) * 1000} synthetic (#386)\n");
         sb.Append("uuid\tpart\tfrom_m\tto_m\tosm_way\tdir\thighway\toneway\tlanes\tlanes_fwd\tlanes_bwd\twidth"
-            + "\tsidewalk_left\tsidewalk_right\tcycleway_left\tcycleway_right\tturn_lanes_fwd\tturn_lanes_bwd\troundabout\ttram\n");
+            + "\tsidewalk_left\tsidewalk_right\tcycleway_left\tcycleway_right\tturn_lanes_fwd\tturn_lanes_bwd\troundabout\ttram\tmaxspeed_fwd\tmaxspeed_bwd\tbicycle_lanes_fwd\tbicycle_lanes_bwd\n");
         int way = 0;
         foreach (var line in lines.OrderBy(l => l.Uuid, StringComparer.Ordinal))
             foreach (var row in line.Rows ?? [new OsmRow(0, Length(line))])
                 sb.Append(inv, $"{line.Uuid}\t0\t{row.From:F1}\t{row.To:F1}\t{386000 + ++way}\t+\t{line.Highway}\t\t{row.Lanes}\t{row.LanesFwd}\t{row.LanesBwd}\t")
-                    .Append(inv, $"\t{line.Sidewalk}\t{line.Sidewalk}\t{line.Cycleway}\t{line.Cycleway}\t{row.TurnFwd}\t{row.TurnBwd}\t0\t0\n");
+                    .Append(inv, $"\t{line.Sidewalk}\t{line.Sidewalk}\t{line.Cycleway}\t{line.Cycleway}\t{row.TurnFwd}\t{row.TurnBwd}\t0\t0\t\t\t{row.BikeFwd}\t{row.BikeBwd}\n");
         File.WriteAllText(Path.Combine(tempDir, "osm_overlay.tsv"), sb.ToString());
     }
 

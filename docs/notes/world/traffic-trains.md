@@ -104,3 +104,13 @@
   Between two pieces of a street the car's line is rebased (the pieces' usual lines differ), and a spawned car starts on its
   lane (`Vehicle.Placed`). Test region, `--dense --feed` 60 s at J1, J2, J7, the town T, the staggered pairs: no step over 1 m
   onto a path (the largest 0.49 m; 15 over 1 m at the town T before), no red run.
+- **Following, no cars on one spot** (#854, the user saw "double cars" and cars through queues): a car looks 70 m ahead
+  (`FollowLook`; 40 was under the 37 m it takes to stop from 75 km/h) and never asks for more than 4 m/s² of braking (the gap
+  rule alone did); a car closer than 1 m ahead still counts (skipped, the pair drove as one or through the queue), on one spot
+  the lower `Habit` waits; it sees the queue on the lane it heads for (`Vehicle.LaneAim`, the lane at the line before it eases
+  over), not only its current line, and holds a lane change while a car is alongside on that side; no spawn within 30 m of a
+  car (`SpawnClear`); the line is where its front stops (`CarFront` 2.5 m). `--trafficcheck` prints **cars on one spot**
+  (pairs within 1 m, most in a tick): J1 `--dense --feed` 90 s from 106 to 0. The probe's fed cars start 120 m+ out (out of
+  the camera's view), its extra cars too (`ProbeSpawnMin`).
+- **`--feed-turns L,T,R`** (#854, demos): weights for the fed cars' moves (`1,2,3`: a sixth left, a third straight, half
+  right); each draws one and takes a path with it at its junction (`Vehicle.Wants`); the probe prints the moves taken.

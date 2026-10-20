@@ -50,6 +50,11 @@ off, `--junctions new` plans and reports without writing.
   forces (b). In (b) the bike lane goes straight on only; riders turning right get **a bike right-turn lane at the kerb**, right
   of the pocket (id 125), where there is plenty of room: it is the first thing the room order gives up (step 1); then
   they **share the right pocket** (`Strip.SharedWithBikes`: a bike connector from it in phase 5, no bike symbol in it). J1: kerbside on every arm (every arm turns left).
+  **OSM's `bicycle:lanes` wins** (the user, #854, as `turn:lanes` does): a `designated` lane with a car lane right of it is
+  (b), one that is last is (a) (`BikeLaneBetween`, overlay v3). (b)'s right-turn bike lane at the kerb gets no bike signal
+  (its riders turn with the pocket's cars; it held the right arrow back before), so in (b) **the right turn goes with the
+  through green** (J10: 70 s, rights in the through phases; J1 74 s with the arrows apart). Real tiles: no overlay carries
+  the tag yet (v2), the 168 tiles unchanged.
 - **One pocket rule** (the user's generalization, Oct 13): `Layout/PocketRules` holds the left and right pocket as one rule
   with a table (move, side, speed condition, sizes, ids, most lanes from data, room step). What a pocket displaces follows
   from its side, not its move: a centre-side pocket pushes the through lane out (alignment, split, merge with the far exit);

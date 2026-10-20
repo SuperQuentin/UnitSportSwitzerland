@@ -29,8 +29,9 @@ public sealed class SignalTestRegionFixture : IDisposable
         return RoadCodec.Decode(fs);
     }
 
-    public SignalTestRegion.Junction Junction(string prefix) =>
-        SignalTestRegion.Junctions.Single(j => j.Name.StartsWith(prefix, StringComparison.Ordinal));
+    /// <summary>The junction whose id (its name up to the first dash) is <paramref name="id"/>: "J1" is not J10's.</summary>
+    public SignalTestRegion.Junction Junction(string id) =>
+        SignalTestRegion.Junctions.Single(j => j.Name.Split('-')[0] == id.TrimEnd('-'));
 
     public void Dispose()
     {
