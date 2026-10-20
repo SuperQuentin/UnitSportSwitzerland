@@ -998,6 +998,8 @@ public sealed class RoadSignal
     public required float[] Stops { get; init; }
     public required SignalPlan Plan { get; init; }
     public List<SignalPole> Poles { get; init; } = new();
+    /// <summary>The pairs that set its groups' green starts (#979, section <c>CPAR</c>, for the debug view's movers).</summary>
+    public List<RoadConflictPair> ConflictPairs { get; } = new();
 
     /// <summary>2 adds the poles (#350); 1 is still read.</summary>
     public const byte SectionVersion = 2;

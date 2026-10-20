@@ -44,6 +44,9 @@ public static class RoadCodec
     /// <summary>#818 phase 5 (#709): lane-to-lane paths through junction cores (<see cref="RoadJunctionPath"/>).</summary>
     public static readonly uint TagJunctionPaths = FourCC("JPTH");
 
+    /// <summary>#979: the pairs of movements that set each signal group's green start (<see cref="RoadConflictPair"/>).</summary>
+    public static readonly uint TagConflictPairs = FourCC("CPAR");
+
     private static uint FourCC(string s) => BitConverter.ToUInt32(Encoding.ASCII.GetBytes(s));
 
     /// <param name="legacySections">Write the pre-#116b ATTR and PANT payloads (format self-check only).</param>
@@ -153,6 +156,8 @@ public static class RoadCodec
             sections.Add((TagParking, Section(s => ParkingBay.Write(s, tile.Parking))));
         if (tile.JunctionPaths.Count > 0)
             sections.Add((TagJunctionPaths, Section(s => RoadJunctionPath.Write(s, tile.JunctionPaths, tile.Junctions))));
+        if (tile.Signals.Any(s => s.ConflictPairs.Count > 0))
+            sections.Add((TagConflictPairs, Section(s => RoadConflictPair.Write(s, tile.Signals))));
 
         w.Write((uint)sections.Count);
         foreach (var (tag, payload) in sections)
@@ -332,6 +337,11 @@ public static class RoadCodec
                 {
                     transitions = RoadTransition.Read(r);
                     if (transitions is null) input.Position = end;   // a newer section version: skipped whole
+                }
+                else if (tag == TagConflictPairs)
+                {
+                    // after SGNL in the file: the signals are read by now
+                    if (!RoadConflictPair.Read(r, tile.Signals)) input.Position = end;
                 }
                 else if (tag == TagJunctionPaths)
                 {

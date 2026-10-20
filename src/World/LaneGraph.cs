@@ -184,11 +184,19 @@ public sealed class SignalSite
     /// <summary>Its crossings (#971, the debug drawing): kerb to kerb between the arm's pedestrian heads (world), and the arm.</summary>
     public List<(Vector3 From, Vector3 To, int Arm)> Walks { get; } = new();
 
+    /// <summary>The pairs of movements that set its groups' green starts (#979, <c>CPAR</c>), their lines in world space, for the debug view's movers.</summary>
+    public List<(RoadConflictPair Pair, Vector3[] Ending, Vector3[] Starting)> Pairs { get; } = new();
+
     public void Shift(OriginShift shift)
     {
         foreach (var (points, _, _) in Rides)
             for (int i = 0; i < points.Length; i++) points[i] = shift.Point(points[i]);
         for (int i = 0; i < Walks.Count; i++) Walks[i] = (shift.Point(Walks[i].From), shift.Point(Walks[i].To), Walks[i].Arm);
+        foreach (var (_, ending, starting) in Pairs)
+        {
+            for (int i = 0; i < ending.Length; i++) ending[i] = shift.Point(ending[i]);
+            for (int i = 0; i < starting.Length; i++) starting[i] = shift.Point(starting[i]);
+        }
     }
 }
 
@@ -427,6 +435,13 @@ public sealed class LaneGraph
                 var outs = new Vector3[plan.Arms.Count];
                 for (int a = 0; a < outs.Length; a++) outs[a] = OutOf(plan.Arms[a].Heading);
                 g.Signals.Add(sites[k] = new SignalSite { Plan = plan, Out = outs });
+                Vector3[] World(float[] f)
+                {
+                    var v = new Vector3[f.Length / 3];
+                    for (int i = 0; i < v.Length; i++) v[i] = origin.ToWorld(tile.Id.MinE + f[i * 3], tile.Id.MaxN - f[i * 3 + 2], f[i * 3 + 1]);
+                    return v;
+                }
+                foreach (var pair in tile.Signals[k].ConflictPairs) sites[k].Pairs.Add((pair, World(pair.EndingLine), World(pair.StartingLine)));
                 // its crossings (the debug drawing, #971): kerb to kerb between each arm's two pedestrian heads, moved along the arm
                 // onto the zebra, which RoadGen paints 0.3 m on from the cars' stop line and 3 m deep (TileRewriter.Crossings)
                 var sg = tile.Signals[k];

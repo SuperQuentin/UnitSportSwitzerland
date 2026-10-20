@@ -92,6 +92,32 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
     }
 
     [Fact]
+    public void J2s_tile_carries_the_pairs_that_set_its_green_starts()
+    {
+        // #979, the user: the debug view's last and first movers, read back from the tile (CPAR): each pair a hard conflict of the
+        // plan whose own lines give its time, and every starting green at least that long after the ending green before it
+        var j = region.Junction("J2");
+        var tile = region.Tile(j.E, j.N);
+        var signal = tile.Signals.Single();
+        var plan = signal.Plan;
+        var conflicts = plan.Conflicts();
+        Assert.NotEmpty(signal.ConflictPairs);
+        foreach (var p in signal.ConflictPairs)
+        {
+            Assert.Equal(SignalPlan.Conflict.Hard, conflicts[p.Ending, p.Starting]);
+            Assert.True(p.EndingLine.Length >= 6 && p.StartingLine.Length >= 6);
+            Assert.Equal(p.Time, p.Amber + (p.Clear + p.Length) / p.ClearSpeed - p.Enter / p.EnterSpeed, 0.11f);
+            var ends = plan.Groups[p.Ending].Intervals.Where(v => v.Aspect == SignalAspect.Green).Select(v => v.To).ToList();
+            foreach (var green in plan.Groups[p.Starting].Intervals.Where(v => v.Aspect == SignalAspect.Green))
+            {
+                if (green.From < 1e-3f && plan.Groups[p.Starting].Intervals[^1].Aspect == SignalAspect.Green) continue;
+                float since = ends.Select(e => ((green.From - e) % plan.Cycle + plan.Cycle) % plan.Cycle).Min();
+                Assert.True(since >= Math.Max(0f, p.Time) - 0.11f, $"group {p.Starting} green at {green.From} only {since} s after {p.Ending}'s, needs {p.Time}");
+            }
+        }
+    }
+
+    [Fact]
     public void Region_builds_with_the_designed_lanes_and_valid_plans()
     {
         Assert.True(region.Code == 0, string.Join("\n", region.Log.Where(l => l.StartsWith("J", StringComparison.Ordinal) || l.Contains("RESULT"))));

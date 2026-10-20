@@ -19,6 +19,14 @@ public partial class Traffic
     /// <summary>Draws the paths through lit junctions whose light is green (green) or amber (yellow) now; on red, none (#971).</summary>
     public bool ShowLights { get; set; }
 
+    /// <summary>
+    /// Draws, at each lit junction's phase changes, the movers its timing was worked out for (#979, the user): the ending group's
+    /// last one (it crosses its line as its amber ends and clears at its clearing speed) and the starting group's first (it
+    /// waits at its line, crosses it at green and enters at its entering speed), the pair that set that green's start, on the
+    /// plan's own clock: the first reaches the conflict area just as the last has left it.
+    /// </summary>
+    public bool ShowMovers { get; set; }
+
     /// <summary>How far from the camera the lit paths are drawn (m).</summary>
     private const float LightsDrawn = 400f;
 
@@ -46,7 +54,7 @@ public partial class Traffic
 
     private void StepDebugDraw(double dt)
     {
-        if (!ShowPaths && !ShowEndpoints && !ShowLights)
+        if (!ShowPaths && !ShowEndpoints && !ShowLights && !ShowMovers)
         {
             if (_debugLines is not null) _debugLines.Visible = false;
             return;
@@ -77,6 +85,10 @@ public partial class Traffic
             foreach (var car in _cars) lines += DrawWay(mesh, car);
         if (ShowEndpoints)
             foreach (var s in _endpoints.Values) lines += DrawEndpoint(mesh, s);
+        if (ShowMovers && _roads is not null && Focus?.Invoke() is { } here)
+            foreach (var site in _roads.Signals)
+                if (site.Pairs.Count > 0 && new Vector2(site.Pairs[0].Starting[0].X - here.X, site.Pairs[0].Starting[0].Z - here.Z).Length() < LightsDrawn)
+                    lines += DrawMovers(mesh, site);
         if (ShowLights && _roads is not null && Focus?.Invoke() is { } focus)
         {
             foreach (var e in _roads.Edges)
@@ -245,6 +257,83 @@ public partial class Traffic
             Ribbon(mesh, a + up, b + up, c, 0.8f);
         }
         return n;
+    }
+
+    private static readonly Color EndingMover = new(1f, 0.42f, 0.18f), StartingMover = new(0.2f, 0.72f, 1f);
+
+    /// <summary>The movers of each pair whose phase change is under way at a junction (see <see cref="ShowMovers"/>).</summary>
+    private int DrawMovers(ImmediateMesh mesh, SignalSite site)
+    {
+        var plan = site.Plan;
+        if (plan.Cycle <= 0) return 0;
+        double u = ((Net.ClockSync.ServerNow + plan.Offset) % plan.Cycle + plan.Cycle) % plan.Cycle;
+        int n = 0;
+        foreach (var (pair, ending, starting) in site.Pairs)
+        {
+            if (pair.Ending >= plan.Groups.Count || pair.Starting >= plan.Groups.Count) continue;
+            var groups = plan.Groups;
+            foreach (var green in groups[pair.Starting].Intervals.Where(v => v.Aspect == SignalAspect.Green))
+            {
+                if (green.From < 1e-3f && groups[pair.Starting].Intervals[^1].Aspect == SignalAspect.Green) continue;
+                // the ending group's green end before this start, round the cycle
+                var ends = groups[pair.Ending].Intervals.Where(v => v.Aspect == SignalAspect.Green).Select(v => (double)v.To).ToList();
+                if (ends.Count == 0) continue;
+                double start = green.From;
+                double end = ends.Select(e => start - (((start - e) % plan.Cycle + plan.Cycle) % plan.Cycle)).Max();
+                double crosses = end + pair.Amber;                          // the last one at its line
+                double meets = start + pair.Enter / Math.Max(0.1, pair.EnterSpeed);   // the first one at the conflict
+                // the window: from a moment before the last one crosses to a moment after the first one is through, round the cycle
+                double from = Math.Min(crosses, start) - 2, to = meets + 2;
+                double at = u;
+                while (at < from) at += plan.Cycle;
+                while (at - plan.Cycle >= from) at -= plan.Cycle;
+                if (at > to) continue;
+                var up = Vector3.Up * DrawLift;
+                // the two lines faintly, the conflict area ringed
+                for (int i = 0; i + 1 < ending.Length; i++) Ribbon(mesh, ending[i] + up, ending[i + 1] + up, EndingMover with { A = 0.35f }, 0.25f);
+                for (int i = 0; i + 1 < starting.Length; i++) Ribbon(mesh, starting[i] + up, starting[i + 1] + up, StartingMover with { A = 0.35f }, 0.25f);
+                var (meet, _) = Along(starting, pair.Enter);
+                for (int k = 0; k < 16; k++)
+                {
+                    float a = k * Mathf.Tau / 16, b = (k + 1) * Mathf.Tau / 16;
+                    Ribbon(mesh, meet + up + new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a)) * 2.2f, meet + up + new Vector3(Mathf.Cos(b), 0, Mathf.Sin(b)) * 2.2f, Colors.White, 0.25f);
+                }
+                // the last one: at its clearing speed from its line, through the cycle's moment
+                Mover(mesh, ending, (float)((at - crosses) * pair.ClearSpeed), pair.EndingMover, EndingMover);
+                // the first one: waiting at its line until green
+                Mover(mesh, starting, (float)(Math.Max(0, at - start) * pair.EnterSpeed), pair.StartingMover, StartingMover);
+                n += 3;
+            }
+        }
+        return n;
+    }
+
+    /// <summary>A mover drawn as its footprint, its front <paramref name="along"/> m along <paramref name="line"/> (before its start: on back along the first stretch).</summary>
+    private static void Mover(ImmediateMesh mesh, Vector3[] line, float along, ConflictMover who, Color colour)
+    {
+        var (length, width) = who switch { ConflictMover.Bike => (1.8f, 0.7f), ConflictMover.Walker => (0.7f, 0.7f), _ => (4.5f, 1.9f) };
+        var (front, dir) = Along(line, along);
+        var rear = front - dir * length;
+        Ribbon(mesh, rear + Vector3.Up * (DrawLift + 0.05f), front + Vector3.Up * (DrawLift + 0.05f), colour, width);
+    }
+
+    /// <summary>The point <paramref name="s"/> m along a polyline and its direction there; before its start or past its end, on along its end stretch.</summary>
+    private static (Vector3 Point, Vector3 Dir) Along(Vector3[] line, float s)
+    {
+        if (line.Length < 2) return (line.Length > 0 ? line[0] : Vector3.Zero, Vector3.Forward);
+        if (s <= 0)
+        {
+            var d0 = (line[1] - line[0]).Normalized();
+            return (line[0] + d0 * s, d0);
+        }
+        for (int i = 0; i + 1 < line.Length; i++)
+        {
+            float len = line[i].DistanceTo(line[i + 1]);
+            var d = (line[i + 1] - line[i]) / Mathf.Max(len, 1e-4f);
+            if (s <= len || i + 2 == line.Length) return (line[i] + d * s, d);
+            s -= len;
+        }
+        return (line[^1], (line[^1] - line[^2]).Normalized());
     }
 
     /// <summary>A lit path's colour for an aspect: green, yellow on amber, none on red or off.</summary>

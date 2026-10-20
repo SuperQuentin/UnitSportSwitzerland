@@ -364,7 +364,7 @@ public partial class DebugMenu : CanvasLayer
         if (_timeScaled) _askSpeed(SimClock.Normal);
         _timeScaled = false;
         _timePicker.Selected = Array.IndexOf(TimeScales, 1.0);
-        if (World.Traffic.Current is { } traffic) traffic.ShowPaths = traffic.ShowEndpoints = traffic.ShowLights = false;
+        if (World.Traffic.Current is { } traffic) traffic.ShowPaths = traffic.ShowEndpoints = traffic.ShowLights = traffic.ShowMovers = false;
     }
 
     // ------------------------------------------------------------------------------------
@@ -391,6 +391,10 @@ public partial class DebugMenu : CanvasLayer
         Switch(grid, "lights", "Green paths", false, on => { if (World.Traffic.Current is { } t) t.ShowLights = on; },
             "The paths through lit junctions that may go now: green on green (dashed where they must give way),\n"
             + "yellow on amber, none on red; the riders' paths thin and the crossings wide, by their own lights (#971).");
+        Switch(grid, "movers", "Timing movers", false, on => { if (World.Traffic.Current is { } t) t.ShowMovers = on; },
+            "At each phase change of the lights, the movers its timing was worked out for: the ending group's last one\n"
+            + "(orange, past its line as its amber ends) and the starting group's first (blue, from its line at green),\n"
+            + "meeting at the ringed conflict area just as the last one has left it (#979).");
         Switch(grid, "endpoints", "Traffic endpoints", false, on => { if (World.Traffic.Current is { } t) t.ShowEndpoints = on; },
             "Generators (green), destinations (red), both (yellow): a post with an arrow along its heading,\n"
             + "a destination's ring in the colour its cars' ways are drawn in.");
