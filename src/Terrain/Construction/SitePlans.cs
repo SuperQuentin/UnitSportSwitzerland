@@ -70,6 +70,25 @@ public static class SitePlans
         }
     }
 
+    /// <summary>A tile's buildings, its roads (null when it has no site: never read) and its building sites.</summary>
+    public readonly record struct TileSites(BuildingTile? Tile, RoadTile? Roads, List<ConstructionSite> Sites);
+
+    /// <summary>
+    /// A tile's building sites from a chunk source's files, the way every peer reads them: the one
+    /// way in for the server's answers below and for <c>--constructioncheck</c> (#943), which reads
+    /// the generated world through <c>FallbackChunkSource.GeneratedOnly</c> instead of the
+    /// generator's raw tiles (their roads had not been through the stage, and a site's office
+    /// found no room for its gallery that the played world gives it). The loader and the dormant
+    /// machines plan from the same source's tiles with <see cref="For"/>. Off the main thread.
+    /// </summary>
+    public static TileSites OfTile(IChunkSource source, TileId id)
+    {
+        var tile = source.LoadBuildingsAsync(id).GetAwaiter().GetResult();
+        if (tile is not { Buildings.Count: > 0 } || !HasSite(tile)) return new(tile, null, new());
+        var roads = source.LoadRoadsAsync(id).GetAwaiter().GetResult();
+        return new(tile, roads, For(tile, roads));
+    }
+
     /// <summary>A tile's yard containers (#627), every site's, for a client's index round the player.</summary>
     public static YardStock[] YardOfTile(IChunkSource source, TileId id) => YardOf(source, id, null);
 
@@ -87,12 +106,11 @@ public static class SitePlans
     /// </summary>
     private static YardStock[] YardOf(IChunkSource source, TileId id, string? only)
     {
-        var tile = source.LoadBuildingsAsync(id).GetAwaiter().GetResult();
-        if (tile is not { Buildings.Count: > 0 } || !HasSite(tile)) return [];
-        var roads = source.LoadRoadsAsync(id).GetAwaiter().GetResult();
+        var (tile, _, sites) = OfTile(source, id);
+        if (tile == null || sites.Count == 0) return [];
         var grid = source.LoadChunkAsync(id).GetAwaiter().GetResult();
         var all = new List<YardStock>();
-        foreach (var site in For(tile, roads))
+        foreach (var site in sites)
             if (only == null || site.Key == only)
                 all.AddRange(SiteLoot.Of(site, SiteShellBuilder.Dressing(tile, site, grid), tile.Id.MinE, tile.Id.MaxN));
         return all.ToArray();
@@ -106,11 +124,10 @@ public static class SitePlans
     public static YardPallet? PalletAt(IChunkSource source, string building, int slot)
     {
         if (!BuildingKey.TryParse(building, out var key)) return null;
-        var tile = source.LoadBuildingsAsync(key.Tile).GetAwaiter().GetResult();
-        if (tile is not { Buildings.Count: > 0 } || !HasSite(tile)) return null;
-        var roads = source.LoadRoadsAsync(key.Tile).GetAwaiter().GetResult();
+        var (tile, _, sites) = OfTile(source, key.Tile);
+        if (tile == null || sites.Count == 0) return null;
         var grid = source.LoadChunkAsync(key.Tile).GetAwaiter().GetResult();
-        foreach (var site in For(tile, roads))
+        foreach (var site in sites)
         {
             if (site.Key != building) continue;
             foreach (var p in PalletsOf(tile, site, grid))
@@ -128,11 +145,10 @@ public static class SitePlans
         tileId = default;
         if (!SiteShellBuilder.TryParseCraneKey(key, out var building, out int k) || !BuildingKey.TryParse(building, out var b)) return null;
         tileId = b.Tile;
-        var tile = source.LoadBuildingsAsync(b.Tile).GetAwaiter().GetResult();
-        if (tile is not { Buildings.Count: > 0 } || !HasSite(tile)) return null;
-        var roads = source.LoadRoadsAsync(b.Tile).GetAwaiter().GetResult();
+        var (tile, _, sites) = OfTile(source, b.Tile);
+        if (tile == null || sites.Count == 0) return null;
         var grid = source.LoadChunkAsync(b.Tile).GetAwaiter().GetResult();
-        foreach (var site in For(tile, roads))
+        foreach (var site in sites)
             if (site.Key == building)
                 return k >= 0 && k < site.Cranes.Count ? SiteShellBuilder.Stand(tile, site, grid, k) : null;
         return null;

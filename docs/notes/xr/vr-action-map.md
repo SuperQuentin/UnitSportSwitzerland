@@ -71,6 +71,14 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 |---|---|---|---|
 | throttle / brake / steer | W S A D / RT LT stick | ok: triggers; **wheel by grip** | keep |
 | tuck_boost / trick / boost | Shift F Q / X RB LB | ok: X, grips | keep |
+| skis: stride (#899): a press of forward, never a hold; skates on the flat, steps off snow | tap W / tap RT or flick L stick ↑ | ok: a **pole push** (`XrRig.UpdateSki`, a pulse per push) | keep |
+| ski lift (#912): board at a bottom station, on foot or on skis; let go of a drag lift | E / the pad's interact | ok: a **grip** reaching out at the station (`XrHands`, on skis too) | keep |
+| skis: hockey stop (#899): brake + turn pivots the skis across | S + A/D / LT + stick | ok: L trigger + head lean | keep |
+| skis: snowplough (#933): brake alone opens a V; slower than 5 m/s brake + turn too | S / LT | ok: L trigger | keep |
+| skis and board: schuss / straight-line (#933): hold, steering damped | Shift / X | ok: the **crouch** (`XrSession.SkiTuck`) | keep |
+| snowboard (#922): carve toe / heel edge, tuck | A/D, Shift / stick, LB | ok: the ski **body lean** and crouch (`XrRig.UpdateSki`, `SnowRide.Is`) | keep |
+| snowboard: push (#922): a press of forward, the free foot | tap W / tap RT | ok: the pad (no poles: the pole push is skis only) | keep |
+| snowboard: heel-side skid stop (#922) | S / LT | ok: L trigger | keep |
 | engine_toggle | Z / D-pad ↑ | ok: R stick ↑ | keep (R3) |
 | lights_toggle | L / D-pad → | ok: R stick → (#436) | keep |
 | cruise (speed regulator: car, truck, farm machine, motorbike, #494) | Y / hold D-pad → (a tap stays the lights) | ok: a **dash poke** in a car or truck (`XrCabControls`), or hold R stick → | keep |

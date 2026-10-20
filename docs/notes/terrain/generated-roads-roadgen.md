@@ -35,7 +35,9 @@
   so it is exact, 80 KB, ~2 ms; RoadGen only ever calls `SampleHeight`); real neighbours give
   their ground and buildings, **never roads** (theirs are already rewritten), so a generated road
   ends at a real tile's edge as before. Buildings come through `Neighbours` (the tile cache), the
-  ones drawn. One `Facades`/`UrbanField` pair per source behind an async `SemaphoreSlim` (waiters
+  ones drawn: wire it with `FallbackChunkSource.Cached()` (or `GeneratedOnly` for no terrain at all,
+  #943), as the client, the server and the checks do; left null, the halo reads the inner source,
+  which has no generated buildings, and the stage reads no walls round the tile. One `Facades`/`UrbanField` pair per source behind an async `SemaphoreSlim` (waiters
   hold no thread), restarted past 64 tiles; walls the field reaches for past the fetched 5x5 are
   loaded synchronously on the stage's worker. The result goes through `RoadCodec` (the game reads
   what a file would give it); a throw logs `[fallback] road stage failed` and serves raw roads.

@@ -386,7 +386,7 @@ public partial class ChatManager : Node
         {
             case "help":
                 Show("/help  /who  /me <action>  /city <town>  /spawn <item> [count]  /catalogue  /clear  /money <amount>  "
-                    + "/bank [set|add|take <amount>]  /occasion  /time  /speed  /seastate  /style  /debug  — Tab completes.", ChatKind.Private);
+                    + "/bank [set|add|take <amount>]  /occasion  /time  /speed  /seastate  /weather  /style  /debug  — Tab completes.", ChatKind.Private);
                 Show("Offline: the server commands (/race, /tp, /kick ...) need a multiplayer game.", ChatKind.Private);
                 return;
 
@@ -432,6 +432,11 @@ public partial class ChatManager : Node
 
             case "water":
                 Show(World.WaterField.Command(rest, GetViewport().GetCamera3D()?.GlobalPosition), ChatKind.Private);
+                return;
+
+            case "weather":
+                if (World.Snow.SnowService.Instance is not { } snowHere) Show("There is no ski weather in this world.", ChatKind.Error);
+                else Show(snowHere.Command(rest, mayChange: true, out bool weatherSet), weatherSet ? ChatKind.Admin : ChatKind.Private);
                 return;
 
             case "seastate":
@@ -733,6 +738,8 @@ public partial class ChatManager : Node
             case "speed": CommandSpeed(sender, rest); return;
             // anyone may ask; setting it is an admin's (checked inside)
             case "seastate": CommandSeaState(sender, rest); return;
+            // anyone may ask; changing it is an admin's (#887)
+            case "weather": CommandWeather(sender, rest); return;
             // the water at a point as the server sees it (#299): a debug line, two peers compare it
             case "water":
                 ReplyTo(sender, World.WaterField.Command(rest,
@@ -849,7 +856,7 @@ public partial class ChatManager : Node
 
     private void SendHelp(long sender)
     {
-        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /race start|duel|join|leave|list|npc  /fight <player>|accept|decline|leave  /aura <player>|accept|decline|leave  /br join|leave|team|invite|status  /tpa <player>  /tphere <player>  /party [invite|leave|kick]  /invites  /accept  /decline  /occasion  /time  /speed  /seastate  /clear  /transfer me <player>", ChatKind.Private);
+        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /race start|duel|join|leave|list|npc  /fight <player>|accept|decline|leave  /aura <player>|accept|decline|leave  /br join|leave|team|invite|status  /tpa <player>  /tphere <player>  /party [invite|leave|kick]  /invites  /accept  /decline  /occasion  /time  /speed  /seastate  /weather  /clear  /transfer me <player>", ChatKind.Private);
 
         if (_registry?.LoginEnabled == true && !IsAdmin(sender))
             ReplyTo(sender, "/login <password>  — become an operator", ChatKind.Private);
@@ -862,6 +869,7 @@ public partial class ChatManager : Node
                 + "/give <player> <item> [count]  /clear [player]  /transfer <from> <to>  /money <amount> [player]  /bot add [n] [easy|normal|hard]|arm <weapon>|fire|clear|list  "
                 + "/bank <player> [set|add|take <amount>]  "
                 + "/time set <hh:mm|noon|night...>|add <h>|speed <min>  /speed <0.05..8|normal>  "
+                + "/weather snow <cm>|fall <cm>|temp <°C>|clear|cloudy|reroll|hold|auto  "
                 + "/seastate <0..1|calm|chop|storm|gamey>  — Tab completes",
                 ChatKind.Private);
     }
@@ -1193,6 +1201,26 @@ public partial class ChatManager : Node
         Broadcast(op != World.TimeOp.Speed ? $"{who} set the time to {World.TimeCommand.Format(hour)}"
             : speed > 0 ? $"{who} set the day to {World.TimeCommand.DescribeSpeed(speed)}"
             : $"{who} stopped the clock at {World.TimeCommand.Format(hour)}", ChatKind.Admin);
+    }
+
+    // ---- /weather (#887) ----------------------------------------------------------------------
+
+    /// <summary>Server <c>/weather</c>: the ski day's weather; an admin changes it for everyone.</summary>
+    private void CommandWeather(long sender, string arg)
+    {
+        if (World.Snow.SnowService.Instance is not { } snow)
+        {
+            ReplyTo(sender, "There is no ski weather on this server.", ChatKind.Error);
+            return;
+        }
+        string reply = snow.Command(arg, IsAdmin(sender), out bool changed);
+        if (!changed)
+        {
+            ReplyTo(sender, reply, ChatKind.Private);
+            return;
+        }
+        GD.Print($"[admin] {NameOf(sender)} set the weather: {arg}");
+        Broadcast($"{NameOf(sender)} changed the weather. {reply}", ChatKind.Admin);
     }
 
     // ---- /seastate (#299) ---------------------------------------------------------------------

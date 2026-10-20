@@ -10,8 +10,9 @@
 . "$(dirname "$0")/lib/twoclient.sh" brsquad
 AT=2682250,1251750   # Zürich on the generated world: 30,000 road points, Postauto stops for the recall
 PORT=${PORT:-7837}
-tc_server 900 120 "$OUT/brsquad_server.log" --server --generated-world --port $PORT --no-query --admin-password brbots --brpace 4 --botlog
-tc_client 800 "$OUT/brsquad_A.log" --connect 127.0.0.1:$PORT --name "BRSA" --cache "$OUT/brsquad_cache_A" --at "$AT" --view first --brsquadcheck --checkspeed 4
+# the generated world wherever it runs: no real tiles, even where terrain_location.json has some (#943)
+tc_server 900 120 "$OUT/brsquad_server.log" --server --generated-world "${NOTERRAIN[@]}" --port $PORT --no-query --admin-password brbots --brpace 4 --botlog
+tc_client 800 "$OUT/brsquad_A.log" --connect 127.0.0.1:$PORT --name "BRSA" --cache "$OUT/brsquad_cache_A" --at "$AT" --view first --brsquadcheck --checkspeed 4 "${NOTERRAIN[@]}"
 tc_stop
 grep -h "\[brbots" "$OUT/brsquad_A.log" | grep -v " say "
 grep -h "^\[br\] \(revived\|recalled\|go\|recall stops\)\|revived a mate\|used a dogtag\|pinged an enemy\|took 1 Dogtag" "$OUT/brsquad_server.log" | head -20

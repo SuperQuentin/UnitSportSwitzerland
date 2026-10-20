@@ -27,6 +27,9 @@ public partial class DayNight : Node
 {
     public static DayNight? Instance { get; private set; }
 
+    /// <summary>A running occasion's snow on the ground, 0..1 (the <c>world_snow</c> global): skis glide on it (#899).</summary>
+    public static float OccasionSnow { get; private set; }
+
     /// <summary>
     /// Hours, 0..24. Online it follows the server's <see cref="WorldClock"/> (#452), so setting it
     /// only holds offline.
@@ -315,7 +318,8 @@ public partial class DayNight : Node
     /// </summary>
     private void ApplyOccasionGlobals(Occasions.OccasionAtmosphere? atmo, Color tintLinear, float delta)
     {
-        RenderingServer.GlobalShaderParameterSet(GSnow, atmo?.Snow ?? 0f);
+        OccasionSnow = atmo?.Snow ?? 0f;
+        RenderingServer.GlobalShaderParameterSet(GSnow, OccasionSnow);
         RenderingServer.GlobalShaderParameterSet(GLights, atmo?.Lights ?? 0f);
 
         float density = atmo == null ? 0f : Mathf.Lerp(atmo.MistDay, atmo.MistNight, Night);

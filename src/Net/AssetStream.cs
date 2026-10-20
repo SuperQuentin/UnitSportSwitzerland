@@ -85,6 +85,18 @@ public enum AssetKind
     /// others answer "missing" and their fields stay natural.
     /// </summary>
     Fields = 14,
+
+    /// <summary>
+    /// <c>pistes_E_N.pst</c>, a tile's ski slopes (#887). Only tiles a slope touches have one: the
+    /// others answer "missing".
+    /// </summary>
+    Pistes = 15,
+
+    /// <summary>
+    /// <c>ropeways.json</c>, the region's OSM aerialways (#915). Not tile-scoped, like
+    /// <see cref="Landings"/>: fetched once during sync; an older server answers "missing".
+    /// </summary>
+    Ropeways = 16,
 }
 
 /// <summary>
@@ -135,6 +147,8 @@ public static class AssetStream
         AssetKind.Landings => LandingIndex.FileName,
         AssetKind.HttpBase => "",
         AssetKind.Fields => FieldFormat.FileName(id),
+        AssetKind.Pistes => PisteFormat.FileName(id),
+        AssetKind.Ropeways => RopewayInfoIndex.FileName,
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
@@ -150,7 +164,7 @@ public static class AssetStream
     /// True for kinds whose format already compresses its own payload, so deflating again
     /// only burns CPU to add a few bytes.
     /// </summary>
-    public static bool IsAlreadyCompressed(AssetKind kind) => kind is AssetKind.Cover or AssetKind.Cd or AssetKind.Water;
+    public static bool IsAlreadyCompressed(AssetKind kind) => kind is AssetKind.Cover or AssetKind.Cd or AssetKind.Water or AssetKind.Pistes;
 
     /// <summary>Deflates a payload, returning null when the result is not smaller.</summary>
     public static byte[]? TryCompress(byte[] payload)

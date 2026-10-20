@@ -143,12 +143,18 @@ public static partial class Preprocessor
         var pngCrops = new List<(double E, double N, int Size)>();
         bool force = false, fresh = false, hashOnly = false;
         string? franceBox = null;
+        // French terrain (#936): RGE ALTI 1 m GeoTIFFs for the LV95 tiles swissALTI3D lacks, in a box (km)
+        string? rgeAltiDir = null, rgeAltiBox = null;
+        double rgeAltiDz = 0;
+        bool rgeAltiCheck = false;
         // optional OpenStreetMap overlay (#118): a region-wide intermediate for the road network stage
         string? osmPbf = null;
         bool osmCheck = false;
         // real farm fields (#494): federal LWB land use per canton from <dir>, OSM fallback for the gated cantons
         string? fieldsDir = null, osmFieldsPbf = null;
         bool fieldsCheck = false;
+        // ski slopes (#887): OSM piste:type from --osm-pbf, pistes_E_N.pst per manifest tile
+        bool pistes = false, pistesCheck = false;
         int jobs = Environment.ProcessorCount;
         int ioJobs = 4;
 
@@ -200,11 +206,17 @@ public static partial class Preprocessor
                 case "--photos": photosOnly = true; break;
                 case "--verify": verify = true; break;
                 case "--france": franceBox = args[++i]; break;
+                case "--rgealti": rgeAltiDir = args[++i]; break;
+                case "--rgealti-box": rgeAltiBox = args[++i]; break;
+                case "--rgealti-dz": rgeAltiDz = double.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break;
+                case "--rgealti-check": rgeAltiCheck = true; break;
                 case "--osm-overlay": osmPbf = args[++i]; break;
                 case "--osm-check": osmCheck = true; break;
                 case "--fields": fieldsDir = args[++i]; break;
                 case "--osm-pbf": osmFieldsPbf = args[++i]; break;
                 case "--fields-check": fieldsCheck = true; break;
+                case "--pistes": pistes = true; break;
+                case "--pistes-check": pistesCheck = true; break;
                 case "--jobs": jobs = int.Parse(args[++i]); break;
                 case "--io-jobs": ioJobs = int.Parse(args[++i]); break;
                 case "--force": force = true; break;
@@ -233,6 +245,23 @@ public static partial class Preprocessor
             return ManifestHashStage.Run(outDir, tempDir ?? outDir.TrimEnd('/', '\\') + "_temp", ioJobs, ct);
         }
         if (fieldsCheck) return FieldStage.SelfCheck();
+        if (pistesCheck) return PisteStage.SelfCheck();
+
+        // ---- ski slopes (#887): pistes_E_N.pst per manifest tile, standalone -------------------------
+        if (pistes)
+        {
+            if (outDir == null || osmFieldsPbf == null)
+            {
+                Console.Error.WriteLine("--pistes requires --out <chunk dir> --osm-pbf <switzerland.osm.pbf> [--tiles-file f]");
+                return 2;
+            }
+            var manifestPath = Path.Combine(outDir, "manifest.json");
+            var region = tilesFile != null ? TileId.ReadList(tilesFile).ToHashSet()
+                : File.Exists(manifestPath) ? TerrainManifest.FromJson(File.ReadAllText(manifestPath)).Tiles.Select(t => t.Id).ToHashSet()
+                : new HashSet<TileId>();
+            SetStage("pistes");
+            return PisteStage.Run(osmFieldsPbf, outDir, region, jobs);
+        }
 
         // ---- farm fields (#494): fields_E_N.fld per manifest tile, standalone -------------------------
         // --gwr (the GWR data.sqlite) tells which OSM fields lie in the cantons without freely published data
@@ -352,7 +381,11 @@ public static partial class Preprocessor
                 Console.WriteLine);
         }
 
-        WaterStage.Options WaterOptions() => new() { Jobs = jobs, BathyDir = bathyDir, PngDir = pngDir, Crops = pngCrops, TempDir = tempDir };
+        WaterStage.Options WaterOptions() => new()
+        {
+            Jobs = jobs, BathyDir = bathyDir, PngDir = pngDir, Crops = pngCrops, TempDir = tempDir,
+            Only = waterOnly && tilesFile != null ? TileId.ReadList(tilesFile).ToHashSet() : null,
+        };
 
         // ---- coarse companion tiles: decimate what is already built -----------------------------
         // Standalone because it needs nothing but the .terr files themselves. A region built before
@@ -447,7 +480,7 @@ public static partial class Preprocessor
             return await FranceStage.RunAsync(outDir, box.MinLon, box.MinLat, box.MaxLon, box.MaxLat);
         }
 
-        if (outDir == null || (inDirs.Count == 0 && !roadsOnly && !featuresOnly))
+        if (outDir == null || (inDirs.Count == 0 && rgeAltiDir == null && !roadsOnly && !featuresOnly))
         {
             Console.Error.WriteLine("Required: --in <source dir> --out <chunk dir>");
             Console.Error.WriteLine("  (--in is not needed with --roads-only / --features-only)");
@@ -470,6 +503,32 @@ public static partial class Preprocessor
         // ---- terrain: sources -> .terr + .terrc, parsed and finished in one parallel pass -------
         var sw = Stopwatch.StartNew();
         var sources = TerrainBuild.Discover(inDirs);
+        RgeAlti? france = null;
+        if (rgeAltiDir != null)
+        {
+            var b = (rgeAltiBox ?? "").Split(',').Select(v => int.Parse(v.Trim(), System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+            if (b.Length != 4)
+            {
+                Console.Error.WriteLine("--rgealti <dir> needs --rgealti-box minE,minN,maxE,maxN (LV95 km, e.g. 2495,1100,2565,1145)");
+                return 2;
+            }
+            france = new RgeAlti(rgeAltiDir) { OffsetZ = rgeAltiDz };
+            if (rgeAltiCheck) return RgeAltiCheck.Run(france, outDir, b[0], b[1], b[2], b[3], jobs);
+
+            // every tile already real stays Swiss; the French list of the last run is ours to rebuild
+            string frenchList = Path.Combine(tempDir, "rgealti_tiles.txt");
+            var previous = File.Exists(frenchList) ? TileId.ReadList(frenchList).ToHashSet() : new HashSet<TileId>();
+            var swiss = sources.Select(t => t.Id).ToHashSet();
+            string mPath = Path.Combine(outDir, "manifest.json");
+            if (File.Exists(mPath))
+                foreach (var t in TerrainManifest.FromJson(File.ReadAllText(mPath)).Tiles)
+                    if (!previous.Contains(t.Id)) swiss.Add(t.Id);
+            var french = france.Sources(b[0], b[1], b[2], b[3], swiss);
+            Directory.CreateDirectory(tempDir);
+            File.WriteAllLines(frenchList, french.Select(t => $"{t.Id.E}_{t.Id.N}"));
+            Console.WriteLine($"RGE ALTI: {france.FileCount} French files, {french.Count} LV95 tiles to fill (dz {rgeAltiDz:+0.00;-0.00} m)");
+            sources.AddRange(french);
+        }
         if (sources.Count == 0)
         {
             Console.Error.WriteLine($"No swissalti3d 0.5 m *.xyz(.zip) files found under {string.Join(", ", inDirs)}");
@@ -481,7 +540,7 @@ public static partial class Preprocessor
         SetStage("terrain");
         var manifest = TerrainBuild.Run(sources, outDir, tempDir, new TerrainBuild.Options
         {
-            Jobs = jobs, IoJobs = ioJobs, Force = force, Fresh = fresh, Verify = verify,
+            Jobs = jobs, IoJobs = ioJobs, Force = force, Fresh = fresh, Verify = verify, France = france,
         }, ct);
         if (manifest == null) return 1;
         File.WriteAllText(Path.Combine(outDir, "manifest.json"), manifest.ToJson());

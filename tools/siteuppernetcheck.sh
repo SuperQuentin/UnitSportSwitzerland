@@ -12,10 +12,11 @@ PORT=${PORT:-7893}
 AT=${AT:-2591104,1117808}
 # a restock period in which an upper room has something to take (the server remembers takes per run)
 EPOCH=${EPOCH:-424242}
-WORLD="--generated-world --traffic 0 --at $AT --lootepoch $EPOCH"
+# the generated world wherever it runs: no real tiles, even where terrain_location.json has some (#943)
+WORLD="--generated-world ${NOTERRAIN[*]} --traffic 0 --at $AT --lootepoch $EPOCH"
 # C starts on A's "took" line: never on an earlier run's log
 rm -f "$OUT"/siteuppernet_A.log "$OUT"/siteuppernet_B.log "$OUT"/siteuppernet_C.log
-tc_server 480 120 "$OUT/siteuppernet_server.log" --server --port $PORT --generated-world --lootepoch $EPOCH
+tc_server 480 120 "$OUT/siteuppernet_server.log" --server --port $PORT --generated-world "${NOTERRAIN[@]}" --lootepoch $EPOCH
 tc_client 420 "$OUT/siteuppernet_A.log" --connect 127.0.0.1:$PORT --name UpperA $WORLD --siteuppernet A & A=$!
 tc_client 420 "$OUT/siteuppernet_B.log" --connect 127.0.0.1:$PORT --name UpperB $WORLD --siteuppernet B & B=$!
 # C joins late: once A has taken its stack

@@ -10,8 +10,9 @@
 PORT=${PORT:-7886}
 # the generated Foundations site nearest the default spawn (--constructioncheck lists them)
 AT=${AT:-2585292,1114432}
-WORLD="--generated-world --traffic 0 --at $AT --parkingkind site"
-tc_server 420 120 "$OUT/sitemachinenet_server.log" --server --port $PORT --generated-world
+# the generated world wherever it runs: no real tiles, even where terrain_location.json has some (#943)
+WORLD="--generated-world ${NOTERRAIN[*]} --traffic 0 --at $AT --parkingkind site"
+tc_server 420 120 "$OUT/sitemachinenet_server.log" --server --port $PORT --generated-world "${NOTERRAIN[@]}"
 tc_client 240 "$OUT/sitemachinenet_A.log" --connect 127.0.0.1:$PORT --name SiteA $WORLD --parkingnet A & A=$!
 # B joins only once A has woken one: what it sees must come from the server, not from its own guess
 for _ in $(seq 1 200); do grep -q "is a real" "$OUT/sitemachinenet_A.log" 2>/dev/null && break; kill -0 $A 2>/dev/null || break; sleep 1; done

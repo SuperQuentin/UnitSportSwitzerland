@@ -8,6 +8,7 @@
 #include "res://shaders/door_light.gdshaderinc"
 #include "res://shaders/portal_clip.gdshaderinc"
 #include "res://shaders/world_origin.gdshaderinc"
+#include "res://shaders/body/piste_snow.gdshaderinc"
 
 // Roads share the terrain's PS1 treatment (vertex snap, dither, fog) and take their base
 // colour from baked vertex colours, so one material covers every road class in a tile.
@@ -51,9 +52,12 @@ uniform sampler2D tex_gravel : source_color, filter_linear_mipmap_anisotropic, r
 varying vec2 surf;   // along, lateral
 varying float style;
 varying vec3 world_pos;
+// the tile's own frame, as the terrain's: where the ski slopes' map is (#887)
+varying vec3 local_vertex;
 
 void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+    local_vertex = VERTEX;
     surf = UV;
     style = UV2.x;
     vec4 view = MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
@@ -128,6 +132,13 @@ void fragment() {
     // ballast holds it between the sleepers.
     col = occasion_snow_amount(col, s == 4 ? 0.65 : s == 6 ? 0.3 : smoothstep(0.7, 1.0, abs(lat)) * 0.85 + 0.08);
 
+    // a road under a ski slope (#887) is the run in winter: the slope's snow over it, paint and
+    // all; the signals' poles and heads (7, 8) stand out of it
+    float rough = 1.0;
+    if (s < 7) {
+        col = piste_snow(col, local_vertex.xz, local_vertex.y, vec3(0.0, 1.0, 0.0), normalize(world_sun_dir), rough);
+    }
+
 #ifdef STYLE_LIT
     // the facet, toward the eye: carriageways face up, the walls and railings of the network
     // stage stand upright and are lit as such
@@ -140,12 +151,21 @@ void fragment() {
     ALBEDO = col;
     NORMAL = style_view_normal(VIEW_MATRIX, n);
 #ifdef STYLE_REAL
-    ROUGHNESS = s == 6 ? 0.6 : 0.85;
+    ROUGHNESS = min(rough, s == 6 ? 0.6 : 0.85);
 #else
-    ROUGHNESS = 1.0;
+    ROUGHNESS = rough;
 #endif
     EMISSION = col * door_light(world_pos, vec3(0.0, 1.0, 0.0));
 #else
+    // under a slope the road is lit as the terrain's snow round it is (terrain.gdshaderinc), or it
+    // shows as a brighter ribbon through the run
+    float covered = s < 7 ? piste_cover(local_vertex.xz) : 0.0;
+    if (covered > 0.0) {
+        vec3 fn = facet_normal(VERTEX, INV_VIEW_MATRIX);
+        fn = fn.y < 0.0 ? -fn : fn;
+        float light = retro_steps(clamp(dot(fn, normalize(world_sun_dir)), 0.0, 1.0), 5.0) * 0.55 + 0.45;
+        col *= mix(1.0, light, covered);
+    }
     col *= world_tint + door_light(world_pos, vec3(0.0, 1.0, 0.0));
     // valley mist of a running occasion; a no-op on an ordinary day
     col = occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX));

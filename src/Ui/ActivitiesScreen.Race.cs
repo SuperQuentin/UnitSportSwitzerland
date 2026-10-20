@@ -20,7 +20,7 @@ public partial class ActivitiesScreen
     private static readonly string[] RaceKinds = { "On the road", "Through air gates" };
     private static readonly (string Name, int Metres)[] Distances = { ("1 km", 1000), ("2 km", 2000), ("4 km", 4000), ("8 km", 8000) };
     private static readonly (string Name, string Word)[] RoadMounts =
-        { ("What each one rides", "open"), ("On foot", "foot"), ("Road bike", "bike"), ("Skis", "skis"), ("Car", "car"), ("Motorbike", "moto") };
+        { ("What each one rides", "open"), ("On foot", "foot"), ("Road bike", "bike"), ("Skis", "skis"), ("Snowboard", "snowboard"), ("Car", "car"), ("Motorbike", "moto") };
     private static readonly (string Name, string Word)[] AirMounts =
         { ("Plane", "plane"), ("Helicopter", "heli"), ("Paraglider", "paraglider"), ("Wingsuit", "wingsuit") };
     private static readonly int[] NpcCounts = { 0, 1, 2, 4, 8 };
