@@ -133,8 +133,7 @@ public partial class SteamerNetProbe : ChatProbe
 
     private async Task RunA(FootPlayer me)
     {
-        Chat?.Send("/login test");
-        await Seconds(1.5);
+        if (!await LogIn("test")) return;
         bool ready = false;
         for (int i = 0; i < 40 && !ready; i++)
         {
@@ -167,7 +166,19 @@ public partial class SteamerNetProbe : ChatProbe
         }
         Expect(steamer.Order == Telegraph.Max, $"the telegraph at {Telegraph.Name(steamer.Order)}");
         me.RideControls = () => new RideInput(0f, 0f, Mathf.Clamp(-3f * Mathf.AngleDifference(me.Rotation.Y, North), -1f, 1f), false);
-        await Seconds(30);
+        // until the paddles hold their speed (#992; a fixed 30 s before, still the most): 10 s at least, then
+        // under 2 % gained in 3 s
+        double upFrom = GameClock.Now, lastAt = upFrom;
+        float lastSpeed = 0f;
+        await Until(() =>
+        {
+            if (GameClock.Now - lastAt < 3) return false;
+            float v = me.BoatMotion.WaterSpeed;
+            bool steady = GameClock.Now - upFrom >= 10 && v > 0.5f && v - lastSpeed < 0.02f * v;
+            lastSpeed = v;
+            lastAt = GameClock.Now;
+            return steady;
+        }, 30);
         GD.Print(F($"{Log} under way at {me.BoatMotion.WaterSpeed * 3.6f:F1} km/h, pitch {Mathf.RadToDeg(me.BoatMotion.Pitch):F2}°, roll {Mathf.RadToDeg(me.BoatMotion.Roll):F2}°"));
 
         // where A draws B on A's own ship, as it pitches and rolls
