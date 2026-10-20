@@ -141,6 +141,8 @@ public partial class PlayerInput : Node
     /// <summary>On foot: the camera over the other shoulder (#460). A pad swaps with R3 while aiming a gun.</summary>
     public const string SwapShoulder = "swap_shoulder";
     public const string ToggleMode = "toggle_mode";
+    /// <summary>The spectator fly camera and back (#1002): Shift+T; a pad holds D-pad down (<c>ClientWorld</c>), VR the wrist menu.</summary>
+    public const string Spectator = "spectator";
     public const string Teleport = "teleport";
     /// <summary>Battle Royale squads (#469): mark the point under the crosshair for your team-mates.</summary>
     public const string Ping = "ping";
@@ -321,6 +323,7 @@ public partial class PlayerInput : Node
     /// </summary>
     public static Vector2 Move => Blocked
         ? Vector2.Zero
+        : MoveIsHeldOff ? MoveHeldOff()
         : Input.GetVector(NLeft, NRight, NForward, NBack);
 
     /// <summary>
@@ -346,20 +349,20 @@ public partial class PlayerInput : Node
 
     /// <summary>Held, for buttons. For an axis-bound action it means past the deadzone (a wheel's pedal: half way).</summary>
     public static bool Held(string action) =>
-        !Blocked && (Input.IsActionPressed(ActionName(action)) || SteeringWheel.Strength(action) > 0.5f);
+        !Blocked && (Input.IsActionPressed(ActionName(action)) && !HeldOff(action) || SteeringWheel.Strength(action) > 0.5f);
 
     /// <summary>
     /// Held on a key or a button, leaving out a wheel's pedal: for a control that takes the pedal's
     /// travel separately (<see cref="WheelPedal"/>), as the clutch does (#290).
     /// </summary>
-    public static bool HeldButton(string action) => !Blocked && Input.IsActionPressed(ActionName(action));
+    public static bool HeldButton(string action) => !Blocked && Input.IsActionPressed(ActionName(action)) && !HeldOff(action);
 
     /// <summary>A steering wheel's pedal behind <paramref name="action"/>, 0..1; 0 without one.</summary>
     public static float WheelPedal(string action) => Blocked ? 0f : SteeringWheel.Strength(action);
 
     /// <summary>0..1 — a trigger's or a pedal's travel, or 1 for a pressed key.</summary>
     public static float Strength(string action) =>
-        Blocked ? 0f : Mathf.Max(Input.GetActionStrength(ActionName(action)), SteeringWheel.Strength(action));
+        Blocked ? 0f : Mathf.Max(HeldOff(action) ? 0f : Input.GetActionStrength(ActionName(action)), SteeringWheel.Strength(action));
 
     /// <summary>
     /// Steering axis −1 left .. +1 right, from the left stick or A/D, else a steering wheel turned
@@ -460,6 +463,7 @@ public partial class PlayerInput : Node
 
     public override void _Input(InputEvent e)
     {
+        if (e is InputEventKey key) TrackKey(key);
         // the steering wheel is read through SDL; Godot's copy of it is not a pad
         if (e is InputEventJoypadButton or InputEventJoypadMotion && _ignoredPads.Contains(e.Device)) return;
         // VR replays the controllers as a pad, and points at the UI panel with mouse events: it
@@ -665,6 +669,7 @@ public partial class PlayerInput : Node
         // H only couples or sounds a horn in a vehicle; on foot it is the other shoulder (#460)
         Bind(SwapShoulder, Keys(Key.H), Mouse(MouseButton.Middle));
         Bind(ToggleMode, Keys(Key.T), Button(JoyButton.DpadDown));
+        Bind(Spectator, new InputEvent[] { new InputEventKey { PhysicalKeycode = Key.T, ShiftPressed = true } });
         // The place search is a map in all but drawing, so it sits on M. A pad can open it but
         // not type in it, so it stays keyboard-only rather than trapping a controller player.
         Bind(Teleport, Keys(Key.M));

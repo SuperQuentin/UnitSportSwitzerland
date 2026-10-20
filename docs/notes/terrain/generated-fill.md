@@ -75,7 +75,9 @@
   Release` (see Commands).
 
 **Saved toggle vs probes (#666)**: Settings → "Generated terrain" is saved in `settings.json` (`generatedFill`). With it
-off and no real tiles the world is empty: `0/0 tiles near`, players hang at y ≈ 4801, `--waterprobe` says "no water
+off and no real tiles the world was empty (`0/0 tiles near`, players hung at y ≈ 4801): since #1002 an offline world
+with no local tiles generates anyway (`ClientWorld._fillForced`, `[world] generated terrain is off in the settings, but
+this copy has no terrain data`), unless the command line says `--generated`. Online, or with `--generated off`, it is still empty: `--waterprobe` says "no water
 level here", `tools/baycheck.sh` never sees a bay. `GameSettings.WantsGeneratedWorld` makes `--generated-world`,
 `--shot`, `--shot-queue` and a `--systems` list naming `generated` switch it on for that run, unless `--generated off`
 is given. Check logs for `[terrain] generated fill on|off` first when a probe shows only the horizon.

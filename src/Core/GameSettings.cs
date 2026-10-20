@@ -93,8 +93,8 @@ public sealed class GameSettings
 
     /// <summary>
     /// Generate the terrain there is no data for, blended into the real tiles beside it
-    /// (<see cref="Terrain.FallbackChunkSource"/>). Off leaves void past the real region, and
-    /// no world at all on a copy with no terrain.
+    /// (<see cref="Terrain.FallbackChunkSource"/>). Off leaves void past the real region; offline on a
+    /// copy with no terrain it generates anyway, the only ground there is (#1002).
     /// </summary>
     public bool GeneratedFill { get; set; } = true;
 
@@ -160,6 +160,12 @@ public sealed class GameSettings
     /// <summary>Touch look (#63): camera turn per pixel of drag, as a multiple of the mouse's.</summary>
     public float TouchLookSpeed { get; set; } = 1.5f;
     public bool InvertY { get; set; }
+
+    /// <summary>Free fly moves on the ground plane, Space / Shift for height, like Minecraft (#1002); off, forward follows the look.</summary>
+    public bool LevelFlight { get; set; } = true;
+
+    /// <summary>Creative flight (#1002) passes through the ground, walls and roofs instead of bumping into them.</summary>
+    public bool CreativeNoclip { get; set; }
 
     /// <summary>Stick travel ignored around centre. Worn pads drift, so it is a setting.</summary>
     public float StickDeadzone { get; set; } = 0.18f;

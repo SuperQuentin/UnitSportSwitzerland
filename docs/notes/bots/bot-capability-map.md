@@ -22,6 +22,7 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 |---|---|---|---|---|---|
 | walk, run | `WalkControls` (wish, run) | the body's physics on the server's collision | its own position | `MoveTo` (phase 2) | ok |
 | jump, crouch, slide | `FootActions` (jump, crouch) | the body | — | `MoveTo` (jumps low walls; no slide yet) | ok |
+| creative mode: invincible, flying (#1002) | `WalkControls` steers the flight; the take-off reads the jump key | — (a client toggle on the owner's body) | — | — | n/a: a player's own mode, never a bot's |
 | mantle a ledge | jump at a wall (`FootActions`) | the body | knee and head rays | `MoveTo` | ok |
 | face / aim | `LookYaw`, `LookPitch`, `SquareToView` (`BotIntent.FaceYaw`) | the body | — | `Engage` | ok |
 | swim | `WalkControls` overrides the stroke | the body | — | `MoveTo` | gap: dive and climb-out read keys (`FootPlayer.Swim`, `limp` for an Npc); landings avoid water (a follow-up) |

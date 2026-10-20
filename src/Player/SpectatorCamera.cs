@@ -3,7 +3,8 @@ using Godot;
 namespace UnitSport.Player;
 
 /// <summary>
-/// Free fly camera: WASD / left stick, Space / E / RT up, Shift / Q / LT down, mouse or right
+/// Free fly camera: WASD / left stick (level by default: <see cref="Core.GameSettings.LevelFlight"/>),
+/// Space / E / RT up, Shift / Q / LT down, mouse or right
 /// stick look, Ctrl / L3 for boost, mouse wheel to change speed. Click to take mouse capture back
 /// after a menu.
 /// </summary>
@@ -67,8 +68,13 @@ public partial class SpectatorCamera : Camera3D
         // does not fly the camera. Space/Shift match the on-foot and mounted controls, so the
         // vertical axis is on the same keys whatever you are; Q/E stay for the other hand, and
         // the triggers do it on a pad.
+        // Level flight (the default, #1002) is Minecraft's: the stick moves on the ground plane
+        // whatever the pitch, so looking down while flying forward does not dive; off, forward
+        // follows the look.
         var stick = UnitSport.Core.PlayerInput.Move;
-        var dir = Basis * new Vector3(stick.X, 0, stick.Y);
+        var dir = Core.GameSettings.Current.LevelFlight
+            ? new Basis(Vector3.Up, Rotation.Y) * new Vector3(stick.X, 0, stick.Y)
+            : Basis * new Vector3(stick.X, 0, stick.Y);
         dir += Vector3.Up * (UnitSport.Core.PlayerInput.Strength(UnitSport.Core.PlayerInput.FlyUp)
             - UnitSport.Core.PlayerInput.Strength(UnitSport.Core.PlayerInput.FlyDown));
 
