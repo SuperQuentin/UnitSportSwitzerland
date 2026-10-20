@@ -18,6 +18,8 @@ public enum Attr : byte
     Pump, Fan,
     // special effects: a safety arm and a fire, as an SFX controller lays them out
     Arm, Fire,
+    /// <summary>A channel the game does not drive (an imported fixture's macro, a 16-bit fine it ignores): kept so the offsets stay right.</summary>
+    Other,
 }
 
 /// <summary>How a fixture looks and moves; each has its own real channel layout.</summary>
@@ -38,6 +40,19 @@ public sealed record FixtureType(string Name, FixtureKind Kind, Attr[] Channels,
     float BeamMin = 4f, float BeamMax = 40f)
 {
     public int Footprint => Channels.Length;
+
+    private int[]? _cells;
+
+    /// <summary>The offsets of the <see cref="Attr.Cell"/> channels, in order: a blinder's lamps, a pixel bar's R, G, B per cell.</summary>
+    public int[] CellOffsets => _cells ??= Enumerable.Range(0, Channels.Length).Where(i => Channels[i] == Attr.Cell).ToArray();
+
+    /// <summary>How many cells it lights: a pixel bar's RGB triples, a blinder's lamps, else one.</summary>
+    public int Cells => Kind switch
+    {
+        FixtureKind.PixelBar => Math.Max(1, CellOffsets.Length / 3),
+        FixtureKind.Blinder => Math.Max(1, CellOffsets.Length),
+        _ => 1,
+    };
 
     /// <summary>The offset of an attribute in the layout, or -1 (the first, for <see cref="Attr.Cell"/>).</summary>
     public int Offset(Attr a) => Array.IndexOf(Channels, a);
@@ -149,6 +164,15 @@ public sealed record Fixture(int Id, FixtureType Type, RigGroup Group, Vector3 P
     public Vector3 ScreenSize { get; init; }
     public int PixelsX { get; init; }
     public int PixelsY { get; init; }
+    /// <summary>
+    /// Where the beam points at pan and tilt centre, as a pan from <see cref="Home"/> and a tilt from
+    /// <see cref="Up"/> (degrees): an imported plot's focus point (#959); zero for ours.
+    /// </summary>
+    public float HomePan { get; init; }
+    public float HomeTilt { get; init; }
+    /// <summary>The fixture's pan or tilt runs the other way for the same DMX (an MVR's DMXInvertPan/Tilt, #959).</summary>
+    public bool InvertPan { get; init; }
+    public bool InvertTilt { get; init; }
 }
 
 /// <summary>
@@ -178,6 +202,27 @@ public sealed class DmxPatch
         _next = next + type.Footprint;
         Fixtures.Add(f);
         return f;
+    }
+
+    /// <summary>
+    /// Patches a fixture at a given universe and address (0-based), as an imported rig lays them out;
+    /// the universes grow to reach it, and later <see cref="Add"/>s go after the highest channel used.
+    /// </summary>
+    public Fixture AddAt(FixtureType type, RigGroup group, Vector3 position, Vector3 home, Vector3 up, int universe, int address)
+    {
+        while (Universes.Count <= universe) Universes.Add(new byte[Channels]);
+        var f = new Fixture(Fixtures.Count, type, group, position, home.Normalized(), up.Normalized(), universe, address);
+        Fixtures.Add(f);
+        if (universe == Universes.Count - 1) _next = Math.Max(_next, address + type.Footprint);
+        return f;
+    }
+
+    /// <summary>Unpatches everything (an imported rig takes the generated one's place).</summary>
+    public void Clear()
+    {
+        Fixtures.Clear();
+        Universes.Clear();
+        _next = 0;
     }
 
     /// <summary>Patches a screen (a media-server layer driving its pixels).</summary>

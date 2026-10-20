@@ -16,6 +16,8 @@ namespace UnitSport.Concert;
 /// to port 9000.</item>
 /// <item>B must hear the set announced (seed 7, A its operator), receive the relayed universes with
 /// the bytes A's controller sent, and get the blackout cue.</item>
+/// <item>Then A pulls a rig over MVR-xchange (#960, loopback) from a station of its own and commits
+/// ours back; B must get the pulled rig.</item>
 /// </list>
 /// </summary>
 public partial class ConcertNetProbe : ChatProbe
@@ -67,8 +69,87 @@ public partial class ConcertNetProbe : ChatProbe
         var blackout = Osc.Encode("/concert/blackout", 1f);
         udp.Send(blackout, blackout.Length, "127.0.0.1", Osc.DefaultPort);
         if (!await Heard("B", "got", 30)) Fail("B never got the show");
+
+        // an MVR rig on the set (#941): set 13's patch through the file format, sent as the operator
+        var mvr = Mvr.MvrFile.Write(Mvr.RigData.FromPatch(new StagePlan(ConcertPlanner.Plan(Terrain.Stadiums.StadiumCatalog.Geneva, 13)).Patch, "net"), "net");
+        var import = Mvr.MvrFile.Read(mvr, "netcheck.mvr", out string? error);
+        Expect(import != null, $"A reads the MVR ({error})");
+        if (import != null)
+        {
+            // and its scene objects (#958): one truss piece's mesh, three pieces of it; a face red, one textured (#973)
+            var box = new[] { new Vector3(0, 0, 0), new Vector3(2, 0, 0), new Vector3(0, 0.4f, 0), new Vector3(0, 0, 0.4f) };
+            var texture = Mvr.MvrImages.Shrink(Mvr.MvrImages.EncodePng(2, 2, new byte[] { 255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255 }))!;
+            import.Rig.Meshes.Add(Mvr.RigData.Quantise(new Mvr.MvrMesh(box, new[] { 0, 1, 2, 0, 2, 3, 0, 3, 1, 1, 3, 2 }, Colors.Silver)
+            {
+                Colors = new[] { Colors.Silver, Colors.Red, Colors.Silver, Colors.Silver },
+                Uvs = new[] { Vector2.Zero, Vector2.Right, Vector2.Down, Vector2.One }, TriangleImages = new[] { 0, -1, -1, -1 }, Images = new[] { texture },
+            }, import.Rig.AddTexture));
+            for (int i = 0; i < 3; i++)
+                import.Rig.Objects.Add(new Mvr.RigData.ObjectRow { Mesh = 0, Xf = Mvr.RigData.X(new Transform3D(Basis.Identity, new Vector3(i * 2f, 12f, 0))) });
+            // and a GDTF body (#961) on its first head type: base, yoke and head primitives
+            var headType = import.Rig.Types.First(t => (FixtureKind)t.Kind is FixtureKind.Spot or FixtureKind.Beam or FixtureKind.Wash);
+            import.Rig.AddBody(headType, new Mvr.GdtfBody(Mvr.GdtfBody.Primitive("Base", new Vector3(0.3f, 0.3f, 0.13f)),
+                Mvr.GdtfBody.Primitive("Yoke", new Vector3(0.35f, 0.12f, 0.3f)), Mvr.GdtfBody.Primitive("Head", new Vector3(0.22f, 0.19f, 0.24f)),
+                new Vector3(0, 0, -0.28f), new Vector3(0, 0, -0.38f), new Vector3(0, 0, -0.51f)));
+            // and its screens' video sources (#975): an NDI source on one, a cached file's hash on another
+            var screens = import.Rig.Fixtures.Where(f => f.Screen != null).ToArray();
+            if (screens.Length > 0) { screens[0].VideoSource = (int)Mvr.VideoSource.Ndi; screens[0].VideoName = "netcheck NDI"; }
+            if (screens.Length > 1) { screens[1].VideoSource = (int)Mvr.VideoSource.File; screens[1].VideoName = "clip.ogv"; screens[1].VideoHash = new string('A', 64); }
+            Svc?.SendRig(0, import.Rig.Pack());
+            Say($"rig {import.Rig.Fixtures.Count}");
+            if (!await Heard("B", "rig ok", 30)) Fail("B never got the rig");
+            Svc?.SendRig(0, Array.Empty<byte>());
+            if (!await Heard("B", "own ok", 30)) Fail("B never got the set's own rig back");
+        }
+        await Xchange();
         Chat?.Send("/concert release");
         Expect(await Until(() => Svc?.SeedFor(0) == null, 10), "released: tonight's show is back");
+    }
+
+    /// <summary>
+    /// MVR-xchange (#960) on loopback: the game's station joins a station of the probe's own, pulls the
+    /// rig it offers (saved, imported, sent to the set: B must get it), commits ours back, and leaves.
+    /// </summary>
+    private async Task Xchange()
+    {
+        Chat?.Send("/concert xchange on NetCheck local");
+        var game = ConcertMvrTool.Station;
+        Expect(game is { Listening: true }, "the game's MVR-xchange station listens on loopback");
+        if (game == null) return;
+        var desk = new Mvr.MvrXchangeStation("NetCheck", "Probe desk", Mvr.MvrXchange.NewUuid()) { SaveFolder = OS.GetUserDataDir() + "/concert/xchange_probe" };
+        desk.Start(System.Net.IPAddress.Loopback, 0, discovery: false);
+        try
+        {
+            var mvr = Mvr.MvrFile.Write(Mvr.RigData.FromPatch(new StagePlan(ConcertPlanner.Plan(Terrain.Stadiums.StadiumCatalog.Geneva, 21)).Patch, "xchange"), "xchange");
+            desk.CommitFile(mvr, "NetCheck xchange.mvr", "set 21 from a lighting desk");
+            Chat?.Send($"/concert xchange join 127.0.0.1:{desk.Port}");
+            Expect(await Until(() => game.Offers().Length == 1, 10), $"the game joins the desk and sees its file ({game.Offers().Length} offered)");
+            int n = Mvr.MvrFile.Read(mvr, "x.mvr", out _)?.Rig.Fixtures.Count ?? -1;
+            Chat?.Send("/concert xchange pull 1");
+            Say($"xrig {n}");
+            if (!await Heard("B", "xrig ok", 30)) Fail("B never got the rig pulled over MVR-xchange");
+            Svc?.SendRig(0, Array.Empty<byte>());
+            if (!await Heard("B", "xown ok", 30)) Fail("B never got the set's own rig back after the pull");
+
+            // the desk joins back, as mDNS would make it: a JOIN alone gives no address to reach the game at
+            desk.Join(new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, game.Port));
+            Expect(await Until(() => desk.Peers().Any(p => p.Joined && p.EndPoint?.Port == game.Port), 10), "the desk joins the game back");
+            Chat?.Send("/concert xchange commit from the net check");
+            Expect(await Until(() => desk.Offers().Length == 1, 10), $"the desk hears the game's commit ({desk.Offers().Length})");
+            if (desk.Offers().FirstOrDefault() is { } ours)
+            {
+                desk.Pull(ours);
+                string? saved = null;
+                string heard = "";
+                Expect(await Until(() => { while (desk.Events.TryDequeue(out var e)) { saved ??= e.Saved; heard = e.Line; } return saved != null; }, 15), $"the desk pulls the game's rig ({heard})");
+                string sent = System.IO.Path.Combine(ConcertMvrTool.FolderPath, ours.Commit.FileName);
+                Expect(saved != null && System.IO.File.Exists(sent) && System.IO.File.ReadAllBytes(saved).AsSpan().SequenceEqual(System.IO.File.ReadAllBytes(sent)),
+                    $"byte for byte ({ours.Commit.FileName}, {ours.Commit.FileSize} bytes)");
+            }
+            Chat?.Send("/concert xchange off");
+            Expect(ConcertMvrTool.Station == null && await Until(() => desk.Peers().All(p => !p.Joined), 10), "off: the game leaves the group");
+        }
+        finally { desk.Stop(); }
     }
 
     private async Task RunB()
@@ -81,6 +162,40 @@ public partial class ConcertNetProbe : ChatProbe
         Expect(last is { Length: 512 } && last[1] == 0xAB && last[511] == 0xCD, "with the bytes A's controller sent");
         Expect(await Until(() => Svc?.CuesOf(0) is { Blackout: true }, 20), "the OSC blackout reaches this peer as a cue");
         Say("got");
+
+        // the rig A imports reaches this peer, and goes with A's "own rig"
+        if (await HeardStarting("A", "rig ", 30) is { } said && int.TryParse(said[4..], out int n))
+        {
+            Expect(await Until(() => Svc?.RigFor(0)?.Fixtures.Count == n, 20), $"A's imported rig arrives ({Svc?.RigFor(0)?.Fixtures.Count} of {n} fixtures, from {Svc?.RigFor(0)?.Source})");
+            Expect(Svc?.RigFor(0) is { Objects.Count: 3, Meshes.Count: 1 } r && r.Meshes[0].TriangleCount == 4, $"with its scene objects ({Svc?.RigFor(0)?.Objects.Count} pieces of 3)");
+            Expect(Svc?.RigFor(0) is { Textures.Count: 1, Meshes: [{ VertexColors: not null, Runs: [-1, 3, 0, 1] }] },
+                $"with their faces' colours and texture ({Svc?.RigFor(0)?.Textures.Count} textures of 1)");
+            if (ConcertRig.Live.Count > 0)
+            {
+                Expect(await Until(() => ConcertRig.Live.Values.Any(r => r.ObjectsDrawn == 3), 20), "and the stage draws them");
+                Expect(ConcertRig.Live.Values.Any(r => r.TexturesDrawn == 1), "with their texture");
+            }
+            Expect(Svc?.RigFor(0) is { Bodies.Count: 3 } rb && rb.Types.Count(t => t.Body != null) == 1, $"with a type's GDTF body ({Svc?.RigFor(0)?.Bodies.Count} meshes of 3)");
+            if (ConcertRig.Live.Count > 0)
+                Expect(await Until(() => ConcertRig.Live.Values.Any(r => r.BodiesDrawn > 0), 20), "and the rig draws its heads with it");
+            var got = Svc?.RigFor(0)?.Fixtures.Where(f => f.Screen != null).ToArray() ?? Array.Empty<Mvr.RigData.FixtureRow>();
+            Expect(got.Length == 0 || got[0] is { VideoSource: (int)Mvr.VideoSource.Ndi, VideoName: "netcheck NDI" },
+                $"with its screens' video sources ({string.Join(", ", got.Take(2).Select(f => $"{(Mvr.VideoSource)f.VideoSource} {f.VideoName}"))})");
+            Expect(got.Length < 2 || got[1] is { VideoSource: (int)Mvr.VideoSource.File, VideoName: "clip.ogv" } && got[1].VideoHash == new string('A', 64), "and a file's hash");
+            Say("rig ok");
+            Expect(await Until(() => Svc?.RigFor(0) == null, 20), "and goes when A gives the set its own rig back");
+            Say("own ok");
+        }
+        else Fail("A never sent a rig");
+        // the rig A pulls over MVR-xchange (#960) reaches this peer the same way
+        if (await HeardStarting("A", "xrig ", 60) is { } x && int.TryParse(x[5..], out int m))
+        {
+            Expect(await Until(() => Svc?.RigFor(0)?.Fixtures.Count == m, 20), $"A's rig pulled over MVR-xchange arrives ({Svc?.RigFor(0)?.Fixtures.Count} of {m} fixtures)");
+            Say("xrig ok");
+            Expect(await Until(() => Svc?.RigFor(0) == null, 20), "and goes again");
+            Say("xown ok");
+        }
+        else Fail("A never pulled a rig over MVR-xchange");
         Expect(await Until(() => Svc?.SeedFor(0) == null, 20), "and the release");
     }
 }

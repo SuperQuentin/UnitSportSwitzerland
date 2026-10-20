@@ -68,6 +68,15 @@ public partial class ConcertService : Node
     }
 
     private readonly Dictionary<int, Hosted> _hosted = new();
+
+    /// <summary>
+    /// The rig imported on a hosted set (#941), packed as it travels and unpacked once: the server's
+    /// (checked when the operator sends it), mirrored on every client, dropped with the set.
+    /// </summary>
+    private readonly Dictionary<int, (byte[] Packed, Mvr.RigData Rig)> _rigs = new();
+
+    /// <summary>The imported rig of a stadium's hosted set, or null for the generated one.</summary>
+    public Mvr.RigData? RigFor(int stadium) => _rigs.TryGetValue(stadium, out var r) ? r.Rig : null;
     /// <summary>Who operates which camera, by stadium and camera: the server's, mirrored on every client.</summary>
     private readonly Dictionary<(int Stadium, int Cam), long> _crew = new();
 
@@ -90,6 +99,7 @@ public partial class ConcertService : Node
     public override void _ExitTree()
     {
         Input?.Dispose();
+        ConcertMvrTool.Xchange(new[] { "off" }, null);
         if (Instance == this) Instance = null;
     }
 
@@ -195,6 +205,7 @@ public partial class ConcertService : Node
         if (_hosted.TryGetValue(stadium, out var h) && h.Operator != 0 && h.Operator != sender)
             return $"Someone else ({h.Operator}) runs that show; '/concert release' first.";
         _hosted[stadium] = new Hosted { Seed = seed, Operator = sender };
+        SetRig(stadium, Array.Empty<byte>());   // a new set starts on its own rig
         Announce(stadium);
         var e = ConcertPlanner.Plan(StadiumCatalog.All[stadium], seed);
         return $"You host set {seed} at {e.Stadium.Name}: {e}";
@@ -205,6 +216,7 @@ public partial class ConcertService : Node
         if (!_hosted.TryGetValue(stadium, out var h) || h.Seed < 0) return "No set is hosted there.";
         if (h.Operator != sender && !admin) return "Only its operator or an admin can release it.";
         _hosted.Remove(stadium);
+        SetRig(stadium, Array.Empty<byte>());
         Announce(stadium);
         return "Released: tonight's show is back.";
     }
@@ -225,6 +237,8 @@ public partial class ConcertService : Node
     /// <summary>Server: what a joining player must know (<c>ServerWorld.OnPeerAccepted</c>).</summary>
     public void SendTo(long peer)
     {
+        // the rig before the set, so the joiner builds the stage once with it
+        foreach (var (stadium, r) in _rigs) RpcId(peer, MethodName.RigSet, stadium, r.Packed);
         foreach (int stadium in _hosted.Keys) SendState(peer, stadium);
         foreach (var ((stadium, cam), op) in _crew) RpcId(peer, MethodName.Operated, stadium, cam, op);
     }
@@ -309,8 +323,67 @@ public partial class ConcertService : Node
         foreach (var stadium in _hosted.Where(kv => kv.Value.Operator == peer).Select(kv => kv.Key).ToList())
         {
             _hosted.Remove(stadium);
+            SetRig(stadium, Array.Empty<byte>());
             Announce(stadium);
         }
+    }
+
+    // ---- an imported rig (#941) ------------------------------------------------------------------------
+
+    /// <summary>Client: the operator sends a rig for their set (empty: back to the set's own); the reply comes in the chat.</summary>
+    public string SendRig(int stadium, byte[] packed)
+    {
+        if (Online)
+        {
+            RpcId(1, MethodName.AskRig, stadium, packed);
+            return "Sending the rig to the server...";
+        }
+        return ServeRig(1, stadium, packed);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void AskRig(int stadium, byte[] packed)
+    {
+        if (!_server) return;
+        long sender = Multiplayer.GetRemoteSenderId();
+        Chat?.Tell(sender, ServeRig(sender, stadium, packed), ChatKind.Private);
+    }
+
+    /// <summary>Server: only the set's operator puts a rig on it, and only one that checks out.</summary>
+    private string ServeRig(long sender, int stadium, byte[] packed)
+    {
+        if (stadium < 0 || stadium >= StadiumCatalog.All.Length) return "No such stadium.";
+        if (!_hosted.TryGetValue(stadium, out var h) || h.Seed < 0) return "Host a set first ('/concert host [seed]').";
+        if (h.Operator != sender) return "Only the show's operator changes its rig.";
+        if (packed.Length == 0)
+        {
+            SetRig(stadium, packed);
+            return "The set's own rig is back.";
+        }
+        if (Mvr.RigData.Unpack(packed, out string? error) is not { } rig) return $"Rig refused: {error}.";
+        SetRig(stadium, packed);
+        return $"Rig {rig.Source}: {rig.Fixtures.Count} fixtures of {rig.Types.Count} types on the stage.";
+    }
+
+    /// <summary>Server (and offline): a stadium's rig changed, told to everyone; the stage is built again with it.</summary>
+    private void SetRig(int stadium, byte[] packed)
+    {
+        if (packed.Length == 0 && !_rigs.ContainsKey(stadium)) return;
+        foreach (int peer in Peers()) RpcId(peer, MethodName.RigSet, stadium, packed);
+        RigSet(stadium, packed);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RigSet(int stadium, byte[] packed)
+    {
+        if (packed.Length == 0) _rigs.Remove(stadium);
+        else if (Mvr.RigData.Unpack(packed, out string? error) is { } rig) _rigs[stadium] = (packed, rig);
+        else
+        {
+            GD.PushWarning($"[concert] a rig from the server did not read: {error}");
+            return;
+        }
+        if (SeedFor(stadium) != null) GetParent()?.GetNodeOrNull<ConcertDirector>(nameof(ConcertDirector))?.Rebuild(stadium);
     }
 
     private IEnumerable<int> Peers() => Online && Multiplayer.IsServer() ? Multiplayer.GetPeers() : Array.Empty<int>();
@@ -374,7 +447,7 @@ public partial class ConcertService : Node
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void State(int stadium, int seed, long op, int held, bool blackout, float master, float bpm, double bpmAt, int camera)
     {
-        if (seed < 0) _hosted.Remove(stadium);
+        if (seed < 0) { _hosted.Remove(stadium); _rigs.Remove(stadium); }
         else _hosted[stadium] = new Hosted { Seed = seed, Operator = op, Held = held, Blackout = blackout, Master = master, Bpm = bpm, BpmAt = bpmAt, Camera = camera };
         ApplyState(stadium);
     }
@@ -413,8 +486,8 @@ public partial class ConcertService : Node
 
     // ---- the operator's input ----------------------------------------------------------------------
 
-    /// <summary>Client-local <c>/concert input|patch</c>: the operator's own ports and files; null when the line is not ours.</summary>
-    public static string? RunLocal(string text)
+    /// <summary>Client-local <c>/concert input|patch</c>: the operator's own ports and files; null when the line is not ours. <paramref name="say"/> takes what comes later (MVR-xchange).</summary>
+    public static string? RunLocal(string text, Action<string>? say = null)
     {
         if (!text.StartsWith("/concert ", StringComparison.OrdinalIgnoreCase)) return null;
         var parts = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -425,6 +498,11 @@ public partial class ConcertService : Node
             "patch" => svc.ExportPatch(),
             "view" or "ndi" or "snap" or "camera" => ConcertBroadcast.Instance?.Command(parts.Skip(1).ToArray()) ?? "The broadcast is not running here.",
             "debug" => ConcertBeatDebug.Instance?.Command(parts.Skip(1).ToArray()) ?? "The beat debug window is not here.",
+            "export" => ConcertMvrTool.Export(),
+            "import" => ConcertMvrTool.Import(string.Join(' ', parts.Skip(2))),
+            "rigs" => ConcertMvrTool.List(),
+            "videos" => ConcertMvrTool.Videos(string.Join(' ', parts.Skip(2))),
+            "xchange" => ConcertMvrTool.Xchange(parts.Skip(2).ToArray(), say),
             _ => null,   // host, release, status: the server's
         };
     }
@@ -474,6 +552,7 @@ public partial class ConcertService : Node
 
     public override void _Process(double delta)
     {
+        ConcertMvrTool.Pump();
         if (_server || Input == null) return;
         int stadium = LocalStadium();
         double now = RealClock.Now;

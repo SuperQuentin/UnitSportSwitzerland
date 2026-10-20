@@ -68,7 +68,8 @@ public partial class Handshake : Node
     /// 39: ski slopes (#887): AssetKind.Pistes, World/Snow (weather and slope wear).
     /// 40: ski lifts part 2 (#915): AssetKind.Ropeways 16, FootPlayer LiftLine/LiftCarrier replicated.
     /// 41: the snowboard (#922): RideKind.Snowboard 202, its stance and switch in FootPlayer.TuningBits.
-    public const int Protocol = 41;
+    /// 42: World/Concerts AskRig and RigSet: an imported MVR rig on a hosted set, gzipped (#941).
+    public const int Protocol = 42;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

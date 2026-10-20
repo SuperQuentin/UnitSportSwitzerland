@@ -905,7 +905,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
 #if PLAYTEST
         // the playtest recorder (#844, docs/notes/general/playtest-recorder.md): offline or online, before the director that reports to it
         if (Playtest.Recording.PlaytestRecorder.Requested)
-            AddChild(new Playtest.Recording.PlaytestRecorder(server: false, () => _chunks?.Origin, () => LocalPlayer, _chat));
+            AddChild(new Playtest.Recording.PlaytestRecorder(server: false, () => _chunks?.Origin, () => LocalPlayer, _chat,
+                new Playtest.TopView.GroundSpec(_cache, Systems.FixtureCourse is { } course ? Systems.FixturePrefix + course : TerrainPaths.FindChunkDir(),
+                    _fixtureStart?.E ?? SpawnPoint.DefaultLv95E, _fixtureStart?.N ?? SpawnPoint.DefaultLv95N)));
         // the playtest suite (#751, docs/notes/general/playtest.md): Debug builds with --playtest, offline
         if (Playtest.PlaytestDirector.Requested && !Launch.Networked)
             AddChild(new Playtest.PlaytestDirector(() => LocalPlayer, _chat.Send, _fixtureStart));

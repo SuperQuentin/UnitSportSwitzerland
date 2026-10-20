@@ -9,8 +9,10 @@ namespace UnitSport.Playtest.TopView;
 /// The offline top view (#844, docs/notes/general/topview.md), headless, no world:
 /// <code>
 /// --topview &lt;session dir&gt; [--from T] [--to T] [--at T] [--around E,N] [--radius m]
-///           [--out x.png] [--size px] [--server &lt;dir&gt;] [--html]
+///           [--out x.png] [--size px] [--server &lt;dir&gt;] [--html] [--ground fixture:&lt;course&gt;|&lt;dir&gt;] [--no-ground]
 /// </code>
+/// The ground (#851) is the one the session ran on, found from its start event; <c>--ground</c>
+/// names another, <c>--no-ground</c> draws the shapes alone.
 /// Times are seconds since the session began (the report's times); the default window is the
 /// session's last 30 s. The server's trace is read from <c>&lt;dir&gt;/server</c> when it is there,
 /// and drawn dashed red with the offset of each thing the client drew. <c>--html</c> writes a page
@@ -38,7 +40,7 @@ public static class TopViewCli
         string? dir = CmdArgs.Value("--topview", notFlag: true);
         if (dir == null || !File.Exists(Path.Combine(dir, TraceFormat.TraceFile)))
         {
-            GD.PrintErr("[topview] usage: --topview <session dir> [--from T] [--to T] [--at T] [--around E,N] [--radius m] [--out x.png] [--size px] [--server dir] [--html]");
+            GD.PrintErr("[topview] usage: --topview <session dir> [--from T] [--to T] [--at T] [--around E,N] [--radius m] [--out x.png] [--size px] [--server dir] [--html] [--ground fixture:<course>|<dir>] [--no-ground]");
             return 2;
         }
         string outPath = CmdArgs.Value("--out", notFlag: true) ?? Path.Combine(PlaytestDirector.Root, "test_output", "topview.png");
@@ -46,7 +48,8 @@ public static class TopViewCli
         try
         {
             string written = Draw(dir, CmdArgs.Double("--from"), CmdArgs.Double("--to"), CmdArgs.Double("--at"), Around(), CmdArgs.Double("--radius"),
-                CmdArgs.Value("--server", notFlag: true), outPath, CmdArgs.Int("--size") ?? 900, CmdArgs.Has("--html"));
+                CmdArgs.Value("--server", notFlag: true), outPath, CmdArgs.Int("--size") ?? 900, CmdArgs.Has("--html"),
+                CmdArgs.Has("--no-ground") ? null : TopViewImage.SourceOf(dir, CmdArgs.Value("--ground", notFlag: true)));
             GD.Print($"[topview] {written}");
             return 0;
         }
@@ -66,7 +69,7 @@ public static class TopViewCli
 
     /// <summary>Draws a session's top view to <paramref name="outPath"/> (or its .html); what was written, for the log.</summary>
     public static string Draw(string dir, double? from, double? to, double? at, EN? around, double? radius, string? serverDir,
-        string outPath, int px, bool html)
+        string outPath, int px, bool html, Terrain.IChunkSource? groundSource = null)
     {
         var reader = new TraceReader(dir);
         double t1 = to ?? Math.Max(0, reader.Duration);
@@ -95,17 +98,28 @@ public static class TopViewCli
         Directory.CreateDirectory(Path.GetDirectoryName(outPath)!);
         if (html)
         {
+            // one square for every step, so the ground is read once and lies under all of them
+            if (around == null || radius == null)
+            {
+                var whole = Shapes(t1);
+                around = new EN(whole.Min.E + whole.Side / 2, whole.Min.N + whole.Side / 2);
+                radius = whole.Side / 2;
+            }
+            var htmlGround = TopViewImage.Ground(groundSource, Shapes(t1), px);
+            string? background = htmlGround == null ? null
+                : Convert.ToBase64String(Image.CreateFromData(px, px, false, Image.Format.Rgba8, htmlGround.Rgba).SavePngToBuffer());
             string page = Path.ChangeExtension(outPath, ".html");
             double step = Math.Max(0.5, (t1 - t0) / 120);
             var steps = new List<(double, string)>();
-            for (double t = t0; t <= t1 + 1e-6; t += step) steps.Add((t, TopViewSvg.Render(Shapes(t), px, pixelText: false)));
-            File.WriteAllText(page, TopViewSvg.Html($"{Path.GetFileName(dir.TrimEnd('/', '\\'))}: {t0.ToString("0.0", Inv)}-{t1.ToString("0.0", Inv)} s", steps));
-            return $"wrote {page} ({steps.Count} steps, {frames.Count} frames{(server != null ? ", with the server's trace" : "")})";
+            for (double t = t0; t <= t1 + 1e-6; t += step) steps.Add((t, TopViewSvg.Render(Shapes(t), px, pixelText: false, htmlGround)));
+            File.WriteAllText(page, TopViewSvg.Html($"{Path.GetFileName(dir.TrimEnd('/', '\\'))}: {t0.ToString("0.0", Inv)}-{t1.ToString("0.0", Inv)} s", steps, background));
+            return $"wrote {page} ({steps.Count} steps, {frames.Count} frames{(server != null ? ", with the server's trace" : "")}{(htmlGround != null ? $", ground from {htmlGround.Tiles} tiles" : ", no ground")})";
         }
         var shapes = Shapes(at);
-        var err = PlaytestRecorder.SavePng(TopViewSvg.Render(shapes, px, pixelText: true), outPath);
+        var ground = TopViewImage.Ground(groundSource, shapes, px);
+        var err = TopViewImage.Save(shapes, ground, px, outPath);
         if (err != Error.Ok) throw new IOException($"could not draw {outPath}: {err}");
         return $"wrote {outPath} ({shapes.Tracks.Count} tracks, {shapes.Boxes.Count} boxes, {shapes.Arrows.Count} players, {shapes.Offsets.Count} server offsets; "
-            + $"{frames.Count} frames, {shapes.Side:0} m across)";
+            + $"{frames.Count} frames, {shapes.Side:0} m across; {(ground == null ? "no ground" : $"ground from {ground.Tiles} tiles, {ground.Roads.Count} roads")})";
     }
 }
