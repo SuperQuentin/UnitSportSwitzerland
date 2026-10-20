@@ -161,6 +161,9 @@ public sealed class GameSettings
     public float TouchLookSpeed { get; set; } = 1.5f;
     public bool InvertY { get; set; }
 
+    /// <summary>Free fly moves on the ground plane, Space / Shift for height, like Minecraft (#1002); off, forward follows the look.</summary>
+    public bool LevelFlight { get; set; } = true;
+
     /// <summary>Stick travel ignored around centre. Worn pads drift, so it is a setting.</summary>
     public float StickDeadzone { get; set; } = 0.18f;
 
