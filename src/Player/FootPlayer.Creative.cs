@@ -6,7 +6,8 @@ namespace UnitSport.Player;
 /// <summary>
 /// Creative mode (#1002, docs/notes/player/creative-mode.md): the body keeps its inventory and
 /// tools, takes no damage (<see cref="TakeDamage(float, long, DamageCause)"/>), and flies like
-/// Minecraft's creative flight. Jump twice quickly to take off or stop; while flying the stick moves
+/// Minecraft's creative flight, without speed lines or shake (<see cref="PlayerFeel"/>), the view free
+/// to look straight up and down (<see cref="ClampPitch"/>). Jump twice quickly to take off or stop; while flying the stick moves
 /// on the ground plane from the view's yaw, Jump rises, Shift (a pad's B) sinks, <see cref="PlayerInput.FlyBoost"/>
 /// goes fast; touching down ends the flight. <see cref="GameSettings.CreativeNoclip"/> flies
 /// through the ground and walls instead. T in <c>ClientWorld</c> switches it; local to the owner.
@@ -25,8 +26,18 @@ public partial class FootPlayer
     }
     private bool _creative;
 
-    /// <summary>Flying in creative mode (<see cref="Creative"/>).</summary>
-    public bool CreativeFlying { get; private set; }
+    /// <summary>Flying in creative mode (<see cref="Creative"/>): the view looks straight up and down while it lasts.</summary>
+    public bool CreativeFlying
+    {
+        get => _creativeFlying;
+        private set
+        {
+            _creativeFlying = value;
+            // back on the ground, the third-person lens keeps out of it again
+            if (!value) _pitch = ClampPitch(_pitch);
+        }
+    }
+    private bool _creativeFlying;
 
     public const float CreativeFlySpeed = 12f;
     public const float CreativeFlyClimb = 8f;

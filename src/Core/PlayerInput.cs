@@ -141,6 +141,8 @@ public partial class PlayerInput : Node
     /// <summary>On foot: the camera over the other shoulder (#460). A pad swaps with R3 while aiming a gun.</summary>
     public const string SwapShoulder = "swap_shoulder";
     public const string ToggleMode = "toggle_mode";
+    /// <summary>The spectator fly camera and back (#1002): Shift+T; a pad holds D-pad down (<c>ClientWorld</c>), VR the wrist menu.</summary>
+    public const string Spectator = "spectator";
     public const string Teleport = "teleport";
     /// <summary>Battle Royale squads (#469): mark the point under the crosshair for your team-mates.</summary>
     public const string Ping = "ping";
@@ -665,6 +667,7 @@ public partial class PlayerInput : Node
         // H only couples or sounds a horn in a vehicle; on foot it is the other shoulder (#460)
         Bind(SwapShoulder, Keys(Key.H), Mouse(MouseButton.Middle));
         Bind(ToggleMode, Keys(Key.T), Button(JoyButton.DpadDown));
+        Bind(Spectator, new InputEvent[] { new InputEventKey { PhysicalKeycode = Key.T, ShiftPressed = true } });
         // The place search is a map in all but drawing, so it sits on M. A pad can open it but
         // not type in it, so it stays keyboard-only rather than trapping a controller player.
         Bind(Teleport, Keys(Key.M));

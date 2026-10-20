@@ -3645,7 +3645,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// Straight up and down in first person; narrower in third, where looking steeply up puts
     /// the lens in the ground and steeply down puts it on top of your own head.
     /// </summary>
-    private float ClampPitch(float pitch) => _ride is Flyer
+    private float ClampPitch(float pitch) => _ride is Flyer && !CreativeFlying
+        ? Mathf.Clamp(pitch, -1.2f, 1.2f)
+        // creative flight (#1002): no ground at the lens to keep it out of, straight up and down
+        : CreativeFlying
+        ? Mathf.Clamp(pitch, -Mathf.Pi / 2 + 0.01f, Mathf.Pi / 2 - 0.01f)
+        : _ride is Flyer
         ? Mathf.Clamp(pitch, -1.2f, 1.2f)
         : InCockpit
         ? Mathf.Clamp(pitch, -0.9f, 0.7f)

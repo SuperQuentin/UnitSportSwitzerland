@@ -1775,16 +1775,44 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         if (_rides is { IsOpen: true }) return;
 
+        // Shift+T: the spectator fly camera and back (#1002), told from T by exact matching
+        if (@event.IsActionPressed(PlayerInput.Spectator, exactMatch: true))
+        {
+            ToggleMode();
+            return;
+        }
+
         // T is also the fly camera: at a garage, in a stopped car, it tunes instead
         if (@event.IsActionPressed(PlayerInput.Tune) && _garage?.TryOpen() == true) return;
 
-        if (@event.IsActionPressed(PlayerInput.ToggleMode))
+        // a pad's D-pad down: a tap is T, a hold the spectator camera (_Process), as Back's hold is the quick menu
+        if (@event is InputEventJoypadButton && @event.IsAction(PlayerInput.ToggleMode))
         {
-            // creative mode (#1002), unless the setting keeps T on the camera-only fly mode; on the
-            // fly camera already (the start, a probe), T still goes back into the body
-            if (GameSettings.Current.FlyCameraOnT || !_onFoot) ToggleMode();
-            else ToggleCreative();
+            if (@event.IsPressed()) _modePadAt = GameClock.Now;
+            else if (_modePadAt >= 0)
+            {
+                _modePadAt = -1;
+                ModeKey();
+            }
+            return;
         }
+
+        if (@event.IsActionPressed(PlayerInput.ToggleMode, exactMatch: true)) ModeKey();
+    }
+
+    /// <summary>Pad D-pad down held this long is the spectator camera; a shorter press is T.</summary>
+    private const double ModePadHold = 0.4;
+    /// <summary>When the pad's D-pad down went down (game clock), while telling a tap from a hold; −1 when not.</summary>
+    private double _modePadAt = -1;
+
+    /// <summary>
+    /// T (#1002): creative mode on the body; on the fly camera (the start, a probe, Shift+T) back
+    /// into the body.
+    /// </summary>
+    private void ModeKey()
+    {
+        if (!_onFoot) ToggleMode();
+        else ToggleCreative();
     }
 
     /// <summary>
@@ -2014,7 +2042,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 yield return (PlayerInput.Inventory, "Inventory");
                 yield return (PlayerInput.Teleport, "Map");
                 if (!Permissions.InMatch)
-                    yield return (PlayerInput.ToggleMode, GameSettings.Current.FlyCameraOnT ? "Fly camera" : p.Creative ? "Survival" : "Creative");
+                {
+                    // a pad's spectator is a hold of the same button
+                    bool pad = InputHints.Pad && !InputHints.Vr;
+                    yield return (PlayerInput.ToggleMode, (p.Creative ? "Survival" : "Creative") + (pad ? ", hold: spectator" : ""));
+                    if (!pad) yield return (PlayerInput.Spectator, "Spectator");
+                }
             }
         }
         // the quick menu (#840): activities, invites and the rest, from anywhere
@@ -2031,6 +2064,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (_chunks != null && GetViewport().GetCamera3D() is { } cam)
             _chunks.SetView(cam);
         TrackLoading(delta);
+        if (_modePadAt >= 0 && GameClock.Now - _modePadAt >= ModePadHold)
+        {
+            _modePadAt = -1;
+            ToggleMode();
+        }
         if ((_appearanceIn -= delta) <= 0) { _appearanceIn = 0.25; PublishAppearance(); }
         if (GameClock.Fixed) GameClock.Pace(Stage != LoadStage.Ready || _chunks is { Settled: false });
         if (_pendingFoot != null && !SpawnPending && GroundUnderCamera)

@@ -48,6 +48,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | aura planner: add / aura_remove / aura_lock / aura_suggest (#907) | click, arrows Enter / Backspace / F / G; A / X / Y / R3 | ok: stick + A / X / Y / R stick click | point at the cards with the laser |
 | toggle_mode | T / D-pad ↓ | ok: wrist menu (#437) | keep |
 | creative mode (#1002): toggle_mode, then jump twice to fly, jump / crouch up and down, boost | T, Space Space, Space / Shift, Ctrl / D-pad ↓, A A, A / B, L3 | ok: wrist menu, then the pad's A A, A / B, L3 | keep |
+| spectator camera and back (#1002) | Shift+T / hold D-pad ↓ | ok: wrist menu "Spectator camera" | keep |
 | climb ladder | W / S on a ladder | ok: stick; rock faces and walls hand over hand (#439, stamina) | keep |
 
 ## Items, building, inventory

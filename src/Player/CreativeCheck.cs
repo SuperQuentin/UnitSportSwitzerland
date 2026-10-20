@@ -6,7 +6,8 @@ namespace UnitSport.Player;
 /// <summary>
 /// <c>--creativecheck --world flat</c> (#1002): creative mode on a body read from the keys. Damage
 /// hurts in survival and not in creative; a double jump takes off, Jump held rises, let go it
-/// hovers, forward flies level, Shift sinks and lands (the flight ends); a 30 m fall costs nothing;
+/// hovers, the view looks straight down, forward flies level, Shift sinks and lands (the flight ends,
+/// the pitch held again); Shift+T reads as a chord; a 30 m fall costs nothing;
 /// <see cref="GameSettings.CreativeNoclip"/> sinks through the ground. Prints <c>[creativecheck] RESULT: ok</c>.
 /// </summary>
 public partial class CreativeCheck : Node3D
@@ -89,6 +90,12 @@ public partial class CreativeCheck : Node3D
             await Wait(1.0);
             Expect(Mathf.Abs(_me.GlobalPosition.Y - hover) < 0.3f, $"let go, it hovers ({hover:F1} -> {_me.GlobalPosition.Y:F1} m)");
 
+            // flying, the view looks straight down at what is under you, in third person too
+            _me.DebugThirdPerson(true);
+            _me.LookPitch = -1.5f;
+            Expect(_me.LookPitch < -1.45f, $"flying, the view looks straight down (pitch {_me.LookPitch:F2})");
+            _me.LookPitch = 0f;
+
             var from = _me.GlobalPosition;
             Input.ActionPress(PlayerInput.MoveForward);
             await Wait(1.5);
@@ -101,6 +108,13 @@ public partial class CreativeCheck : Node3D
             for (int i = 0; i < 300 && _me.CreativeFlying; i++) await Wait(0.05);
             Input.ActionRelease(PlayerInput.Sprint);
             Expect(!_me.CreativeFlying && _me.IsOnFloor(), $"Shift sinks and lands ({_me.GlobalPosition.Y:F1} m)");
+            // third person keeps the lens off the ground (first person always looked straight down)
+            _me.DebugThirdPerson(true);
+            _me.LookPitch = -1.5f;
+            Expect(_me.LookPitch > -1.3f, $"on the ground, third person, the pitch is held again ({_me.LookPitch:F2})");
+            _me.LookPitch = 0f;
+            string spectator = InputHints.Label(PlayerInput.Spectator, InputDevice.KeyboardMouse);
+            Expect(spectator == "Shift+T", $"the spectator key reads as a chord ({spectator})");
 
             // a fall from 30 m, creative and not flying
             before = _me.Health;

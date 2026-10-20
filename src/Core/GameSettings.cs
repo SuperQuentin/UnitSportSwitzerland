@@ -164,9 +164,6 @@ public sealed class GameSettings
     /// <summary>Free fly moves on the ground plane, Space / Shift for height, like Minecraft (#1002); off, forward follows the look.</summary>
     public bool LevelFlight { get; set; } = true;
 
-    /// <summary>T leaves the body for the camera-only fly mode, as before #1002, instead of switching creative mode.</summary>
-    public bool FlyCameraOnT { get; set; }
-
     /// <summary>Creative flight (#1002) passes through the ground, walls and roofs instead of bumping into them.</summary>
     public bool CreativeNoclip { get; set; }
 
