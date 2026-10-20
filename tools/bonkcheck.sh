@@ -5,11 +5,14 @@
 # thrower's radio on its back. No terrain data needed.
 #   tools/bonkcheck.sh          (GODOT = the editor executable, docs/notes/general/godot-exe.md)
 . "$(dirname "$0")/lib/twoclient.sh" bonk
+# the flat test world (#992): nothing here needs real or generated ground; REAL=1 boots the generated world as before
+SW=(--world fixture); CW=(--world fixture)
+[ -n "${REAL:-}" ] && { SW=(--generated-world); CW=(); }
 PORT=${BONK_PORT:-7833}
-tc_server 900 120 $OUT/bonkcheck_server.log --server --port $PORT --generated-world
-tc_client 200 $OUT/bonkcheck_thrower.log --connect 127.0.0.1:$PORT --name Thrower --bonkcheck thrower --traffic 0 &
+tc_server 900 120 $OUT/bonkcheck_server.log --server --port $PORT "${SW[@]}"
+tc_client 200 $OUT/bonkcheck_thrower.log --connect 127.0.0.1:$PORT ${CW[@]+"${CW[@]}"} --name Thrower --bonkcheck thrower --traffic 0 &
 THROWER=$!
-tc_client 195 $OUT/bonkcheck_victim.log --connect 127.0.0.1:$PORT --name Victim --bonkcheck victim --traffic 0
+tc_client 195 $OUT/bonkcheck_victim.log --connect 127.0.0.1:$PORT ${CW[@]+"${CW[@]}"} --name Victim --bonkcheck victim --traffic 0
 wait $THROWER
 code=0
 grep -q "RESULT: ok" $OUT/bonkcheck_thrower.log || code=1

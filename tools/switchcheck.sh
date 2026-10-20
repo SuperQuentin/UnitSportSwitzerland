@@ -6,15 +6,18 @@
 # moving car and on the parked one, and saves test_output/switchcheck_watch.png.
 #   tools/switchcheck.sh [E,N]      (default: the spawn; CHUNKS=<dir> for another terrain_chunks)
 . "$(dirname "$0")/lib/twoclient.sh" switch
+# the flat test world (#992): no half a minute of the real map's horizon before the server listens; REAL=1 boots
+# the real map (or CHUNKS=) as before
+W=(--world fixture); [ -n "${REAL:-}" ] && W=()
 AT=${1:-}
 PORT=7796
 EXTRA=${EXTRA:-}        # more client args, e.g. EXTRA="--time 13" for a daylight shot
 ATARG=()
 [ -n "$AT" ] && ATARG=(--at "$AT")
 C1=$(mktemp -d); C2=$(mktemp -d)
-tc_server 200 120 $OUT/switchcheck_server.log --server --port $PORT --admin-password switchcheck ${CH[@]+"${CH[@]}"}
-tc_client 190 $OUT/switchcheck_driver.log --connect 127.0.0.1:$PORT --name Driver --cache "$C1" --switchcheck driver switchcheck ${ATARG[@]+"${ATARG[@]}"} ${CH[@]+"${CH[@]}"} --traffic 0 $EXTRA &
-tc_client 185 $OUT/switchcheck_watch.log --windowed --connect 127.0.0.1:$PORT --name Watcher --cache "$C2" --switchcheck watch $OUT/switchcheck_watch.png ${ATARG[@]+"${ATARG[@]}"} ${CH[@]+"${CH[@]}"} --traffic 0 $EXTRA
+tc_server 200 120 $OUT/switchcheck_server.log --server --port $PORT ${W[@]+"${W[@]}"} --admin-password switchcheck ${CH[@]+"${CH[@]}"}
+tc_client 190 $OUT/switchcheck_driver.log --connect 127.0.0.1:$PORT ${W[@]+"${W[@]}"} --name Driver --cache "$C1" --switchcheck driver switchcheck ${ATARG[@]+"${ATARG[@]}"} ${CH[@]+"${CH[@]}"} --traffic 0 $EXTRA &
+tc_client 185 $OUT/switchcheck_watch.log --windowed --connect 127.0.0.1:$PORT ${W[@]+"${W[@]}"} --name Watcher --cache "$C2" --switchcheck watch $OUT/switchcheck_watch.png ${ATARG[@]+"${ATARG[@]}"} ${CH[@]+"${CH[@]}"} --traffic 0 $EXTRA
 code=$?
 grep -h "\[switchcheck\]" $OUT/switchcheck_driver.log $OUT/switchcheck_watch.log
 tc_stop
