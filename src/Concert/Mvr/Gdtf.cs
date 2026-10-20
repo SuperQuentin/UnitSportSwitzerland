@@ -279,12 +279,20 @@ public static class Gdtf
 
     // ---- reading ------------------------------------------------------------------------------------
 
-    /// <summary>One DMX channel of a mode as read: its first byte (0-based), how many bytes, its attribute, its geometry, its physical range.</summary>
-    public sealed record Channel(int Offset, int Bytes, string Attribute, string Geometry, float PhysicalFrom, float PhysicalTo);
+    /// <summary>
+    /// One DMX channel of a mode as read: its first byte (0-based, from its break's address), how many
+    /// bytes, its attribute, its geometry, its physical range, its DMX break (1 the fixture's first
+    /// address) and its last byte (1-based).
+    /// </summary>
+    public sealed record Channel(int Offset, int Bytes, string Attribute, string Geometry, float PhysicalFrom, float PhysicalTo,
+        int Break = 1, int Last = 0);
 
-    /// <summary>A GDTF as read: its names, a mode's channels, the first beam's angle.</summary>
+    /// <summary>
+    /// A GDTF as read: its names, a mode's channels (every break's), the first beam's angle, the first
+    /// break's footprint and the breaks the mode uses (null: the first only).
+    /// </summary>
     public sealed record Type(string Name, string Manufacturer, string Mode, List<Channel> Channels, float BeamAngle, int Footprint, string[] Modes,
-        string Description = "");
+        string Description = "", int[]? Breaks = null);
 
     /// <summary>Reads a .gdtf (a zip) and one of its modes (the first when not named or not found); null with why when it is not one.</summary>
     public static Type? Read(byte[] gdtf, string? mode, out string? error)
@@ -316,15 +324,29 @@ public static class Gdtf
         if (modes.Count == 0) { error = "no DMX mode"; return null; }
         var m = modes.FirstOrDefault(x => (string?)x.Attribute("Name") == mode) ?? modes[0];
         var channels = new List<Channel>();
-        int footprint = 0;
+        // a geometry reference repeats a template geometry's channels at its own offsets (a pixel bar's
+        // cells, a ring's segments): each reference's Break says where, for the template's break or for
+        // the channels marked "Overwrite" (its last Break)
+        var refs = new Dictionary<string, List<XElement>>();
+        foreach (var r in ft.Element("Geometries")?.Descendants("GeometryReference") ?? Enumerable.Empty<XElement>())
+        {
+            string g = (string?)r.Attribute("Geometry") ?? "";
+            if (!refs.TryGetValue(g, out var list)) refs[g] = list = new List<XElement>();
+            list.Add(r);
+        }
         foreach (var ch in m.Element("DMXChannels")?.Elements("DMXChannel") ?? Enumerable.Empty<XElement>())
         {
-            // one break only: a second break is another DMX address the game does not patch
-            if ((string?)ch.Attribute("DMXBreak") is { } br && br != "1" && br != "Overwrite") continue;
+            string brText = (string?)ch.Attribute("DMXBreak") ?? "1";
+            bool overwrite = brText == "Overwrite";
+            int br = overwrite ? 1 : Math.Max(1, Int(brText, 1));
             string offs = (string?)ch.Attribute("Offset") ?? "";
             var parts = offs.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             if (parts.Length == 0) continue;   // a virtual channel
-            if (!int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int first) || first < 1) continue;
+            var bytes = new int[parts.Length];
+            bool ok = true;
+            for (int k = 0; k < parts.Length; k++)
+                ok &= int.TryParse(parts[k], NumberStyles.Integer, CultureInfo.InvariantCulture, out bytes[k]) && bytes[k] >= 1;
+            if (!ok) continue;
             var lc = ch.Element("LogicalChannel");
             var cf = lc?.Element("ChannelFunction");
             string attr = (string?)lc?.Attribute("Attribute") ?? (string?)cf?.Attribute("Attribute") ?? "NoFeature";
@@ -337,15 +359,30 @@ public static class Gdtf
                         float a = Float((string?)f.Attribute("PhysicalFrom"), pf), b = Float((string?)f.Attribute("PhysicalTo"), pt);
                         if (pf <= pt) { pf = Math.Min(pf, Math.Min(a, b)); pt = Math.Max(pt, Math.Max(a, b)); }
                     }
-            channels.Add(new Channel(first - 1, parts.Length, attr, (string?)ch.Attribute("Geometry") ?? "", pf, pt));
-            foreach (var p in parts)
-                if (int.TryParse(p, NumberStyles.Integer, CultureInfo.InvariantCulture, out int o)) footprint = Math.Max(footprint, o);
+            string geometry = (string?)ch.Attribute("Geometry") ?? "";
+            if (refs.TryGetValue(geometry, out var instances))
+                foreach (var r in instances)
+                {
+                    var breaks = r.Elements("Break").ToList();
+                    var b = overwrite ? breaks.LastOrDefault() : breaks.FirstOrDefault(x => Int((string?)x.Attribute("DMXBreak"), 1) == br);
+                    int rb = b != null ? Math.Max(1, Int((string?)b.Attribute("DMXBreak"), 1)) : br;
+                    int shift = (b != null ? Math.Max(1, Int((string?)b.Attribute("DMXOffset"), 1)) : 1) - 1;
+                    channels.Add(new Channel(bytes[0] - 1 + shift, bytes.Length, attr, (string?)r.Attribute("Name") ?? geometry, pf, pt, rb, bytes.Max() + shift));
+                }
+            else channels.Add(new Channel(bytes[0] - 1, bytes.Length, attr, geometry, pf, pt, br, bytes.Max()));
         }
+        // in address order: a reference's cells come out R, G, B per cell, as the bar lays them
+        channels.Sort((a, b) => a.Break != b.Break ? a.Break.CompareTo(b.Break) : a.Offset.CompareTo(b.Offset));
+        var breakList = channels.Select(c => c.Break).Distinct().OrderBy(b => b).ToArray();
+        int footprint = channels.Where(c => c.Break == 1).Select(c => c.Last).DefaultIfEmpty(0).Max();
         float beamAngle = ft.Descendants("Beam").Select(b => Float((string?)b.Attribute("BeamAngle"), 0f)).FirstOrDefault(a => a > 0f);
         return new Type((string?)ft.Attribute("Name") ?? "Fixture", (string?)ft.Attribute("Manufacturer") ?? "", (string?)m.Attribute("Name") ?? "",
             channels, beamAngle, footprint, modes.Select(x => (string?)x.Attribute("Name") ?? "").ToArray(),
-            (string?)ft.Attribute("Description") ?? "");
+            (string?)ft.Attribute("Description") ?? "", breakList.Length > 1 || breakList is [not 1] ? breakList : null);
     }
+
+    private static int Int(string? s, int fallback) =>
+        int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out int v) ? v : fallback;
 
     private static float Float(string? s, float fallback) =>
         float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out float v) && float.IsFinite(v) ? v : fallback;
@@ -387,9 +424,15 @@ public static class Gdtf
     /// second byte its fine, or Other), and a kind from what it can do. Null, with why, for a device
     /// the game cannot show (no light, no effect it knows).
     /// </summary>
-    public static FixtureType? ToFixtureType(Type g, out string? why)
+    public static FixtureType? ToFixtureType(Type g, out string? why, int dmxBreak = 1)
     {
         why = null;
+        // one break at a time: each is its own address, patched as its own fixture (#959)
+        if (g.Channels.Any(c => c.Break != dmxBreak))
+        {
+            var mine = g.Channels.Where(c => c.Break == dmxBreak).ToList();
+            g = g with { Channels = mine, Footprint = mine.Select(c => Math.Max(c.Last, c.Offset + c.Bytes)).DefaultIfEmpty(0).Max() };
+        }
         if (g.Footprint == 0 || g.Footprint > DmxPatch.Channels) { why = $"{g.Footprint} channels"; return null; }
         var attrs = Enumerable.Repeat(Attr.Other, g.Footprint).ToArray();
         var parsed = g.Channels.Select(c => (c, a: Parse(c.Attribute))).ToList();
@@ -459,6 +502,7 @@ public static class Gdtf
         }
         string name = g.Manufacturer is "" or "UnitSport" ? g.Name : $"{g.Manufacturer} {g.Name}";
         if (g.Mode is not ("" or ModeName)) name += $" ({g.Mode})";
+        if (dmxBreak != 1) name += FormattableString.Invariant($" (break {dmxBreak})");
         return new FixtureType(name, kind, attrs, Math.Min(panRange, 720f), Math.Min(tiltRange, 360f),
             Math.Clamp(Math.Min(bMin, bMax), 0.5f, 120f), Math.Clamp(Math.Max(bMin, bMax), 0.5f, 120f));
     }

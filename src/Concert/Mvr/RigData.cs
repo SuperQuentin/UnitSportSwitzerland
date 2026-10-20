@@ -28,6 +28,12 @@ public sealed partial class RigData
         [JsonPropertyName("tilt")] public float TiltRange { get; set; }
         [JsonPropertyName("b0")] public float BeamMin { get; set; } = 4f;
         [JsonPropertyName("b1")] public float BeamMax { get; set; } = 40f;
+        /// <summary>
+        /// An imported type's GDTFSpec and GDTFMode as its file named them (#959), so a re-export keeps
+        /// the original GDTF (cached on the importing machine only); null for ours.
+        /// </summary>
+        [JsonPropertyName("gs")] public string? GdtfSpec { get; set; }
+        [JsonPropertyName("gm")] public string? GdtfMode { get; set; }
     }
 
     public sealed class FixtureRow
@@ -44,7 +50,28 @@ public sealed partial class RigData
         [JsonPropertyName("s")] public float[]? Screen { get; set; }
         [JsonPropertyName("px")] public int PixelsX { get; set; }
         [JsonPropertyName("py")] public int PixelsY { get; set; }
+        /// <summary>The MVR uuid and fixture ID it was imported with (#959), kept on re-export; null and 0 for ours.</summary>
+        [JsonPropertyName("id")] public string? Uuid { get; set; }
+        [JsonPropertyName("fid")] public int FixtureId { get; set; }
+        /// <summary>
+        /// Its focus point (#959): the pan from <see cref="Home"/> and tilt from the yoke axis (degrees)
+        /// that meet it, and how far it is (m); 0 for none. Angles and a length, so a frame change keeps them.
+        /// </summary>
+        [JsonPropertyName("fp")] public float FocusPan { get; set; }
+        [JsonPropertyName("ft")] public float FocusTilt { get; set; }
+        [JsonPropertyName("fd")] public float FocusDistance { get; set; }
+        /// <summary>DMXInvertPan / DMXInvertTilt.</summary>
+        [JsonPropertyName("ip")] public bool InvertPan { get; set; }
+        [JsonPropertyName("it")] public bool InvertTilt { get; set; }
+        /// <summary>
+        /// Its other DMX breaks (#959), each { break (2..), type, universe, address }: a GDTF mode whose
+        /// channels span several start addresses, each break patched as a fixture of its own at its address.
+        /// </summary>
+        [JsonPropertyName("xb")] public List<int[]>? Breaks { get; set; }
     }
+
+    /// <summary>The most DMX breaks a fixture may add.</summary>
+    public const int MaxBreaks = 8;
 
     [JsonPropertyName("v")] public int Ver { get; set; } = Version;
     /// <summary>Where it came from (the file's name), for the chat and the desk.</summary>
@@ -53,6 +80,7 @@ public sealed partial class RigData
     [JsonPropertyName("fx")] public List<FixtureRow> Fixtures { get; set; } = new();
 
     public static float[] V(Vector3 v) => new[] { v.X, v.Y, v.Z };
+    private static bool Bad(float[]? a) => a is not { Length: >= 3 } || !float.IsFinite(a[0]) || !float.IsFinite(a[1]) || !float.IsFinite(a[2]);
     public static Vector3 V(float[]? a) => a is { Length: >= 3 } ? new Vector3(a[0], a[1], a[2]) : Vector3.Zero;
 
     public static TypeRow Row(FixtureType t) => new()
@@ -81,6 +109,7 @@ public sealed partial class RigData
                 Name = $"{f.Group} {f.Id + 1}", Type = t, Group = (int)f.Group,
                 Pos = V(f.Position), Home = V(f.Home), Up = V(f.Up), Universe = f.Universe, Address = f.Address,
                 Screen = f.ScreenSize != Vector3.Zero ? V(f.ScreenSize) : null, PixelsX = f.PixelsX, PixelsY = f.PixelsY,
+                FocusPan = f.HomePan, FocusTilt = f.HomeTilt, InvertPan = f.InvertPan, InvertTilt = f.InvertTilt,
             });
         }
         return rig;
@@ -92,9 +121,20 @@ public sealed partial class RigData
         var types = Types.Select(Type).ToArray();
         foreach (var r in Fixtures)
         {
-            var f = patch.AddAt(types[r.Type], (RigGroup)r.Group, V(r.Pos), V(r.Home), V(r.Up), r.Universe, r.Address);
-            if (r.Screen != null)
-                patch.Fixtures[^1] = f with { ScreenSize = V(r.Screen), PixelsX = r.PixelsX, PixelsY = r.PixelsY };
+            var type = types[r.Type];
+            var f = patch.AddAt(type, (RigGroup)r.Group, V(r.Pos), V(r.Home), V(r.Up), r.Universe, r.Address);
+            if (r.Screen != null) f = f with { ScreenSize = V(r.Screen), PixelsX = r.PixelsX, PixelsY = r.PixelsY };
+            // the focus as far as the head reaches, nowhere for one that does not move
+            float pan = type.PanRange / 2, tilt = type.TiltRange / 2;
+            patch.Fixtures[^1] = f with
+            {
+                HomePan = Math.Clamp(r.FocusPan, -pan, pan), HomeTilt = Math.Clamp(r.FocusTilt, -tilt, tilt),
+                InvertPan = r.InvertPan, InvertTilt = r.InvertTilt,
+            };
+            // another break: its channels at their own address, a fixture of their own in the same place
+            if (r.Breaks != null)
+                foreach (var b in r.Breaks)
+                    patch.AddAt(types[b[1]], MvrFile.GroupOf(types[b[1]].Kind, V(r.Up)), V(r.Pos), V(r.Home), V(r.Up), b[2], b[3]);
         }
     }
 
@@ -154,7 +194,9 @@ public sealed partial class RigData
             if (t.Channels.Any(c => c < 0 || c >= attrs)) return $"type {t.Name}: unknown channel";
             if (!float.IsFinite(t.PanRange) || !float.IsFinite(t.TiltRange) || t.PanRange is < 0 or > 720 || t.TiltRange is < 0 or > 360) return $"type {t.Name}: pan/tilt range";
             if (!float.IsFinite(t.BeamMin) || !float.IsFinite(t.BeamMax) || t.BeamMin is <= 0 or > 120 || t.BeamMax is <= 0 or > 120) return $"type {t.Name}: beam angle";
+            if (t.GdtfSpec is { Length: > 256 } || t.GdtfMode is { Length: > 256 }) return $"type {t.Name}: GDTF name over 256 characters";
         }
+        int patched = Fixtures.Count;
         foreach (var f in Fixtures)
         {
             if (f.Type < 0 || f.Type >= Types.Count) return $"{f.Name}: unknown type";
@@ -166,7 +208,25 @@ public sealed partial class RigData
                 return $"{f.Name}: placed {p} (within 400 m of the centre spot)";
             if (V(f.Up).LengthSquared() < 0.25f) return $"{f.Name}: no yoke axis";
             if (f.Screen != null && (f.PixelsX is < 1 or > 128 || f.PixelsY is < 1 or > 128)) return $"{f.Name}: screen pixels";
+            if (Bad(f.Home) || Bad(f.Up)) return $"{f.Name}: home or yoke axis not a number";
+            if (f.Screen != null && (Bad(f.Screen) || f.Screen.Any(v => v is < 0 or > 200))) return $"{f.Name}: screen size (0..200 m)";
+            if (f.Uuid != null && (f.Uuid.Length > 64 || !Guid.TryParse(f.Uuid, out var g) || g == Guid.Empty)) return $"{f.Name}: uuid";
+            if (f.FixtureId < 0) return $"{f.Name}: fixture ID";
+            if (!float.IsFinite(f.FocusPan) || MathF.Abs(f.FocusPan) > 360 || !float.IsFinite(f.FocusTilt) || MathF.Abs(f.FocusTilt) > 180 || !float.IsFinite(f.FocusDistance) || f.FocusDistance is < 0 or > 1000)
+                return $"{f.Name}: focus (pan within 360 degrees, tilt 180, 0..1000 m)";
+            if (f.Breaks is { } breaks)
+            {
+                if (breaks.Count > MaxBreaks) return $"{f.Name}: {breaks.Count} DMX breaks (0..{MaxBreaks})";
+                foreach (var b in breaks)
+                {
+                    if (b is not { Length: 4 } || b[0] is < 2 or > 64 || b[1] < 0 || b[1] >= Types.Count) return $"{f.Name}: DMX break";
+                    if (b[2] < 0 || b[2] >= MaxUniverses || b[3] < 0 || b[3] + Types[b[1]].Channels.Length > DmxPatch.Channels)
+                        return $"{f.Name}: break {b[0]} address does not fit its universe";
+                }
+                patched += breaks.Count;
+            }
         }
-        return null;
+        if (patched > MaxFixtures) return $"{patched} fixtures with their DMX breaks (1..{MaxFixtures})";
+        return CheckObjects();
     }
 }

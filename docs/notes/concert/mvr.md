@@ -48,5 +48,6 @@
   unpatched), and the spec's `basic_gdtf.mvr` (4 Robe MegaPointes, 39 ch). Not committed (sizes);
   `MvrTests` copies their two quirks. In game: copy one to `user://concert/mvr/`, `/concert host 5`,
   `/concert import capture_demo_show.mvr stage`.
-- Not done: someone else's 3D (`Geometry3D`, trusses' models) is not drawn, only fixtures; 3DS is not
-  readable at runtime, glTF could be. Multi-break fixtures keep their first break. No live MVR-xchange.
+- Someone else's trusses, scenery, screens and focus points (3DS and glTF) are drawn: `mvr-scene-objects`
+  (#958). Not done here: multi-break fixtures keep their first break (#959), no live MVR-xchange (#960),
+  fixtures drawn as boxes, not their GDTF bodies (#961).
