@@ -90,13 +90,14 @@ public sealed class RgeAlti
     /// <summary>
     /// Fills a tile's 0.5 m cells (row 0 north, centres at MinE + 0.25 + 0.5c, MaxN - 0.25 - 0.5r) from
     /// the French grid; cells with no French height stay <see cref="XyzParser.MissingCell"/>. Returns
-    /// how many cells were filled.
+    /// how many cells were filled. With <paramref name="onlyMissing"/> only cells still
+    /// <see cref="XyzParser.MissingCell"/> are touched: a swissALTI3D border tile's gaps.
     /// </summary>
-    public long Fill(TileId id, ushort[] cells)
+    public long Fill(TileId id, ushort[] cells, bool onlyMissing = false)
     {
         const int Cells = XyzParser.CellsPerSide, Knot = 50; // 25 m
         const int Knots = Cells / Knot + 1;
-        Array.Fill(cells, XyzParser.MissingCell);
+        if (!onlyMissing) Array.Fill(cells, XyzParser.MissingCell);
 
         var kx = new double[Knots * Knots];
         var ky = new double[Knots * Knots];
@@ -118,6 +119,7 @@ public sealed class RgeAlti
             double v = (r - j * Knot) / (double)Knot;
             for (int c = 0; c < Cells; c++)
             {
+                if (onlyMissing && cells[r * Cells + c] != XyzParser.MissingCell) continue;
                 int i = Math.Min(c / Knot, Knots - 2);
                 double u = (c - i * Knot) / (double)Knot;
                 int k = j * Knots + i;

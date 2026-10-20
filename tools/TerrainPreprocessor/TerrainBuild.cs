@@ -226,7 +226,8 @@ public static class TerrainBuild
                         t1 = Stopwatch.GetTimestamp();
                         Interlocked.Add(ref bytesIn, data.Length);
 
-                        XyzParser.Parse(data, readPath, src.Id, sc.Cells, sc.Text);
+                        XyzParser.Parse(data, readPath, src.Id, sc.Cells, sc.Text,
+                            o.France == null ? null : (id, cells) => o.France.Fill(id, cells, onlyMissing: true));
                     }
                     long t2 = Stopwatch.GetTimestamp();
 
