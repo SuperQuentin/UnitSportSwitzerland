@@ -152,7 +152,8 @@ public sealed partial class TrainerLink : Node
 #if TRAINER_BLE
         list.Add(new RideLink.Bluetooth.Windows.WindowsBleTransport());
 #endif
-        if (Simulated) list.Add(SimRig = RideLink.Simulation.SimulatedTransport.CreateDefaultRig());
+        // 230 W, not the rig's 180: the bike's own RiderWatts is 180, and a check must tell the two apart
+        if (Simulated) list.Add(SimRig = RideLink.Simulation.SimulatedTransport.CreateDefaultRig(new RideLink.Simulation.SteadyRideProfile(watts: 230)));
         return list;
     }
 

@@ -332,7 +332,7 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
         string power = link?.PowerLive == true ? $"{link.Watts} W" : "no trainer: the keys pedal";
         string cadence = link?.Cadence is { } rpm ? $"   {rpm:0} rpm" : "";
         string hr = link?.HeartRate is { } bpm ? $"   {bpm} bpm" : "";
-        string sim = link?.GradeSent is { } g ? $"   trainer {g * 100:0.0}%" : "";
+        string sim = link?.GradeSent is { } g ? string.Create(CultureInfo.InvariantCulture, $"   trainer {g * 100:0.0}%") : "";
         string text = string.Create(CultureInfo.InvariantCulture,
             $"{CourseName}\n{power}{cadence}{hr}\n{me.RideSpeed * 3.6f:0.0} km/h   {GradeHere * 100:+0.0;-0.0;0.0}%{sim}\n"
             + $"{Along / 1000:0.00} / {c.Profile.Length / 1000:0.00} km   {c.Profile.AscentLeft(Along):0} m up left   {Clock(RideSeconds)}");

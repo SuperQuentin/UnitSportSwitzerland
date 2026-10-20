@@ -45,6 +45,15 @@ public partial class TrainingProbe : Node
         if (!ok) _failed++;
     }
 
+    private void Shot(string file)
+    {
+        if (DisplayServer.GetName() == "headless") return;
+        string path = ProjectSettings.GlobalizePath("res://test_output/" + file);
+        DirAccess.MakeDirRecursiveAbsolute(path.GetBaseDir());
+        GetViewport().GetTexture().GetImage().SavePng(path);
+        Log($"screenshot {path}");
+    }
+
     private void Finish(string? fatal = null)
     {
         if (fatal != null) Log($"RESULT: FAILED {fatal}");
@@ -104,8 +113,16 @@ public partial class TrainingProbe : Node
         Check(session.Status.StartsWith("On the roads", StringComparison.Ordinal), $"it snapped onto the fixture road");
         Check(session.CourseKm is > 0.5 and < 0.7, $"its length {session.CourseKm:0.000} km");
 
+        // as a player does it: the Training app open on the phone, Start, the trip to the start behind its screen
+        var phone = Phone.PhoneController.Instance;
+        phone?.Open(Phone.PhoneScreens.Page.Training);
+        await Wait(1.5);
+        Check(phone?.Screens.Shown == Phone.PhoneScreens.Page.Training, $"the Training app opens on the phone ({phone?.Screens.Shown})");
+        Shot("training_1_app.png");
         session.Start();
         for (int i = 0; i < 300 && session.State != TrainingSession.Phase.Riding; i++) await Wait(0.1);
+        for (int i = 0; i < 50 && phone?.IsOut == true; i++) await Wait(0.1);
+        Check(phone?.IsOut != true, $"the phone went back in the pocket after the trip to the start");
         Check(session.State == TrainingSession.Phase.Riding && me.Ride == RideKind.RoadBike, $"riding on the road bike ({session.State}, {me.Ride})");
 
         var trainer = link.SimRig?.Devices.OfType<RideLink.Simulation.SimulatedTrainer>().FirstOrDefault();
@@ -120,10 +137,16 @@ public partial class TrainingProbe : Node
             if (me.Vehicle is Bicycle bike && link.PowerLive)
             {
                 samples++;
-                if (Mathf.Abs(bike.RiderWatts - link.Watts) < 1) onWatts++;
+                // the rig's 230 W wobbles by a few watts between a physics step and this read
+                if (Mathf.Abs(bike.RiderWatts - link.Watts) < 20 && bike.RiderWatts > 205) onWatts++;
             }
             if (link.GradeSent is { } sent) minSent = Math.Min(minSent, sent);
             if (trainer != null) minFelt = Math.Min(minFelt, trainer.GradeFraction);
+            if (i is 150 or 300 or 420)
+            {
+                Shot($"training_2_ride_{i}.png");
+                Log(FormattableString.Invariant($"view at {i}: phone look {me.PhoneLook:F2} cover {me.PhoneCover:F2} backdrop {me.PhoneBackdropShown:F2} state {me.PhoneState}"));
+            }
         }
         Check(session.State == TrainingSession.Phase.Finished, $"finished the course: {session.Status} ({session.Along:0} m, {session.RideSeconds:0} s)");
         Check(samples > 0 && onWatts >= samples * 0.95, $"the bike rode on the rig's watts ({onWatts}/{samples} samples)");
