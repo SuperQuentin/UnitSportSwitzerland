@@ -75,7 +75,9 @@ public partial class ConcertCameras : Node3D
             HandleInputLocally = false, Msaa3D = Viewport.Msaa.Disabled,
         };
         AddChild(port);
-        var cam = new Camera3D { Name = "Camera", Far = 3000f };
+        // near past the rig's own kit (the lens hood ends 0.55 m out, a drone's rotors 0.68 m): the
+        // screens' feed never hides the body on air, and filmed the back of its hood as a black square
+        var cam = new Camera3D { Name = "Camera", Near = 0.7f, Far = 3000f };
         port.AddChild(cam);
         cam.MakeCurrent();
         return (port, cam);
