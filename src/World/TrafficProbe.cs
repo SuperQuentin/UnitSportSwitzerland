@@ -121,7 +121,7 @@ public partial class TrafficProbe : Node
             GD.Print($"[trafficcheck] t={_t:F0}s cars {_traffic.CarCount} (avg {_traffic.AverageCarSpeed * 3.6f:F0} km/h), "
                 + $"trains {_traffic.TrainCount} (avg {_traffic.AverageTrainSpeed * 3.6f:F0} km/h), "
                 + $"one-way edges {_traffic.OneWayEdges}, cars against one-way {_traffic.WrongWayCars}, giving way {_traffic.GivingWayCars}, "
-                + $"signalised approaches {_traffic.SignalApproaches}, at red {_traffic.AtRedCars}, stops at red {_traffic.RedStops}, lines crossed {_traffic.LinesCrossed}, red runs {_traffic.RedRuns}, junction paths taken {_traffic.PathEntries} (step onto {_traffic.PathStepIn:F2} m, {_traffic.PathStepsOver1m} over 1 m, off {_traffic.PathStepOut:F2} m), transition lanes followed {_traffic.TransitionFollows} (pieces {_traffic.TransitionPieces})");
+                + $"signalised approaches {_traffic.SignalApproaches}, at red {_traffic.AtRedCars}, stops at red {_traffic.RedStops}, lines crossed {_traffic.LinesCrossed}, red runs {_traffic.RedRuns}, junction paths taken {_traffic.PathEntries} (step onto {_traffic.PathStepIn:F2} m, {_traffic.PathStepsOver1m} over 1 m, off {_traffic.PathStepOut:F2} m), transition lanes followed {_traffic.TransitionFollows} (pieces {_traffic.TransitionPieces}), cars on one spot {_traffic.DoubledNow} (most {_traffic.DoubledMost})");
 
         if (_t < _seconds) return;
         if (_shot != null && GetViewport().GetTexture().GetImage().SavePng(_shot) == Error.Ok)
@@ -297,7 +297,7 @@ public partial class TrafficProbe : Node
 
     /// <summary>
     /// <c>--feed</c> (#353, for the capture, not the game's traffic): one more car on the road into
-    /// one of the signalised approaches within 60 m of <c>--at</c>, in turn, 40-250 m before its
+    /// one of the signalised approaches within 60 m of <c>--at</c>, in turn, 120-300 m before its
     /// line and routed through it (<see cref="Traffic.SpawnInto"/>).
     /// </summary>
     private void Feed()
@@ -309,7 +309,8 @@ public partial class TrafficProbe : Node
             _fed = roads.Approaches.Where(a => a.Site is not null && new Vector2(a.Stop.X - _spot.X, a.Stop.Z - _spot.Z).Length() < 60f).ToList();
             GD.Print($"[trafficcheck] feeding {_fed.Count} signalised approaches near --at");
         }
-        if (_fed.Count > 0 && _traffic.SpawnInto(_fed[_feedTurn++ % _fed.Count], 40f, 250f)) _fedCars++;
+        // (from 120 m before the line: out of the camera's view, #854)
+        if (_fed.Count > 0 && _traffic.SpawnInto(_fed[_feedTurn++ % _fed.Count], 120f, 300f)) _fedCars++;
     }
 
     /// <summary>Seconds from <paramref name="now"/> until the group shows green, if it does within a few changes.</summary>
