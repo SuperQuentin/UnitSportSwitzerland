@@ -340,13 +340,31 @@ public static class CorePlanner
             MergedCore.Clean(outline, ends);
             if (SignedArea(outline) < 0) outline.Reverse();
             // (every connector paved: the outline pushed out where one still passes beyond it, the loops cut again)
-            MergedCore.Envelope(outline, paved, core.Mouths, FallbackPush);
-            MergedCore.Clean(outline, ends);
+            // (in rounds while it helps: a push reaches only the points beside each kerb point, a far one takes a few)
+            int out0 = Out(outline);
+            for (int round = 0; round < 4 && out0 > 0; round++)
+            {
+                var next = outline.ToList();
+                MergedCore.Envelope(next, paved, core.Mouths, FallbackPush, nearMouth: 0.05);
+                MergedCore.Clean(next, ends);
+                if (SignedArea(next) < 0) next.Reverse();
+                int out1 = Out(next);
+                if (out1 >= out0) break;
+                (outline, out0) = (next, out1);
+            }
             return outline;
         }
+        int Out(List<Vec2> ring) => paved.Count(p => Outside(ring, p) > OutsideTolerance);
         var outline = Build(star: false);
         bool starred = false;
-        if (!Simple(outline) || !ends.All(outline.Contains)) { outline = Build(star: true); starred = true; }
+        // (the mouths joined round their centre where the kerbs cross)
+        if (!Simple(outline) || !ends.All(outline.Contains))
+        {
+            var mouths = core.Mouths.ToList();
+            var round = Build(star: true);
+            if (Simple(round) || !Simple(outline)) { outline = round; starred = true; }
+            else { core.Mouths.Clear(); core.Mouths.AddRange(mouths); }
+        }
         core.Outline.AddRange(outline);
         if (Environment.GetEnvironmentVariable("FALLBACKDBG") is not null)
             Console.WriteLine(FormattableString.Invariant($"[fallback] {jp.Centre.X:F0},{jp.Centre.Y:F0} star {starred} simple {Simple(outline)} mouths {ends.Count(outline.Contains)}/{ends.Count} centre points out {core.Connectors.Sum(c => c.Centre.Count(p => Outside(outline, p) > 0.05))} (most {core.Connectors.SelectMany(c => c.Centre).Select(p => Outside(outline, p)).DefaultIfEmpty(0).Max():F2})"));

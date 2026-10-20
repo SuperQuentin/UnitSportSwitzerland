@@ -350,7 +350,7 @@ public static class MergedCore
     /// between arms in line): drawn with points at most <see cref="EnvelopeStep"/> apart (the mouths kept straight), each but the
     /// mouths' ends moved out, away from the core, as far as an edge point outside the outline lies beyond it there.
     /// </summary>
-    internal static void Envelope(List<Vec2> ring, List<Vec2> paved, IReadOnlyList<CoreMouth> mouths, double most = MostPush)
+    internal static void Envelope(List<Vec2> ring, List<Vec2> paved, IReadOnlyList<CoreMouth> mouths, double most = MostPush, double nearMouth = NearMouth)
     {
         var mouthEnds = mouths.SelectMany(m => new[] { m.Left, m.Right }).ToHashSet();
         bool MouthLine(Vec2 a, Vec2 b) => mouths.Any(m => m.Left == a && m.Right == b || m.Left == b && m.Right == a);
@@ -370,7 +370,7 @@ public static class MergedCore
         {
             var p = dense[k];
             // (a mouth's ends and its kerbs' first metres stay: the kerb leaves the mouth along its arm)
-            if (mouthEnds.Any(m => m.DistanceTo(p) < NearMouth)) { moved.Add(p); continue; }
+            if (mouthEnds.Any(m => m.DistanceTo(p) < nearMouth)) { moved.Add(p); continue; }
             var along = (dense[(k + 1) % dense.Count] - dense[(k - 1 + dense.Count) % dense.Count]).Normalized();
             var outward = -along.Perp;
             double push = 0;

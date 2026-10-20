@@ -389,7 +389,8 @@ off, `--junctions new` plans and reports without writing.
   overlap left); JPTH points off their core 0 -> 24 (fallback cores, within 0.6 m near a mouth). A fallback core's mouths stand
   short of the first node where anything joins their street (`JoinLimit`, by that node's join margin), and a core whose only
   fault is a road joining short of a mouth is laid as a fallback held in short of it: old layout 128 -> 57 (118 plain cores),
-  JPTH points off their core 48, path ends off their lane 78.
+  JPTH points off their core 48, path ends off their lane 78. The fallback's outline is pushed in up to four rounds while it
+  helps (a push reaches only the connector points beside each kerb point), its kerbs right up to the mouths: points off 24.
 - **Tried and reverted** (#854, Oct 20): a slip lane's node (two car roads and a Verbindung) planned only to merge into a junction
   whose mouth reaches it, the slip lane an arm of the merged core: "a road joins short of a mouth" 52 -> 25 and the old layout
   229 -> 219, but 18 more path ends 0.6-1 m off their lane (most of those slip lanes are TLM stubs of 0 m between carriageways,
