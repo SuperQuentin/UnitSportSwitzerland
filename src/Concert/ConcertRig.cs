@@ -74,6 +74,8 @@ public partial class ConcertRig : Node3D
     private ConcertPerformers _performers = null!;
     private MeshInstance3D[] _feeds = Array.Empty<MeshInstance3D>();
     private MultiMeshInstance3D[] _pixelNodes = Array.Empty<MultiMeshInstance3D>();
+    /// <summary>An imported screen's own video source where it plays here (#975); null shows the show's content.</summary>
+    private ConcertScreenVideo?[] _videos = Array.Empty<ConcertScreenVideo?>();
     public ConcertCameras Cameras => _cameras;
     public ConcertMusic Music => _music;
     private float _energy;
@@ -266,6 +268,8 @@ public partial class ConcertRig : Node3D
         _pixels = new MultiMesh[_screens.Length];
         _pixelNodes = new MultiMeshInstance3D[_screens.Length];
         _feeds = new MeshInstance3D[_screens.Length];
+        _videos = new ConcertScreenVideo?[_screens.Length];
+        var videoRows = ConcertScreenVideo.Rows(Imported);
         var screenMat = new StandardMaterial3D { ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, VertexColorUseAsAlbedo = true, DisableFog = true };
         for (int s = 0; s < _screens.Length; s++)
         {
@@ -287,6 +291,12 @@ public partial class ConcertRig : Node3D
                 Mesh = new QuadMesh { Size = new Vector2(f.ScreenSize.X, f.ScreenSize.Y) }, MaterialOverride = feed,
             };
             AddChild(_feeds[s]);
+            if (s < videoRows.Length && ConcertScreenVideo.For(videoRows[s], f) is { } video)
+            {
+                video.Position = f.Position;
+                video.Basis = Facing(-f.Home);
+                AddChild(_videos[s] = video);
+            }
             for (int y = 0; y < f.PixelsY; y++)
                 for (int x = 0; x < f.PixelsX; x++)
                     _pixels[s].SetInstanceTransform(y * f.PixelsX + x, new Transform3D(Basis.Identity,
@@ -483,20 +493,22 @@ public partial class ConcertRig : Node3D
         }
         _screenFlash = _strobeHz <= 0f ? -1f : flash ? 1f : 0f;
         bool imag = false;
+        bool near = GetViewport()?.GetCamera3D() is { } eye && eye.GlobalPosition.DistanceTo(GlobalPosition) < 900f;
         for (int s = 0; s < _screens.Length; s++)
         {
-            bool camera = p.Get(_screens[s], _screens[s].Type.Offset(Attr.Clip)) / 32 == LightDesk.CameraClip && p.Get01(_screens[s], Attr.Dimmer) > 0.05f;
+            // an imported screen's own source (#975) over the show's content while it plays
+            bool video = _videos[s] is { } v && v.Step(near, p.Get01(_screens[s], Attr.Dimmer) * feedLevel);
+            bool camera = !video && p.Get(_screens[s], _screens[s].Type.Offset(Attr.Clip)) / 32 == LightDesk.CameraClip && p.Get01(_screens[s], Attr.Dimmer) > 0.05f;
             if (_feeds[s].Visible != camera)
             {
                 _feeds[s].Visible = camera;
-                _pixelNodes[s].Visible = !camera;
                 if (camera && _feeds[s].MaterialOverride is StandardMaterial3D m) m.AlbedoTexture = _cameras.ImagTexture;
             }
+            if (_pixelNodes[s].Visible != (!camera && !video)) _pixelNodes[s].Visible = !camera && !video;
             imag |= camera;
-            if (!camera) PaintScreen(_screens[s], _pixels[s], t);
+            if (!camera && !video) PaintScreen(_screens[s], _pixels[s], t);
         }
         // the artists dance and the cameras film only while someone can see it
-        bool near = GetViewport()?.GetCamera3D() is { } eye && eye.GlobalPosition.DistanceTo(GlobalPosition) < 900f;
         if (near && (ShowOn() || ExternalLive)) _performers.Step(_strobeHz, _strobeT);
         _cameras.ImagWanted = imag && near;
         _cameras.Step(now % 86400.0);

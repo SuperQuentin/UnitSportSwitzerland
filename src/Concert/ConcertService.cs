@@ -501,6 +501,7 @@ public partial class ConcertService : Node
             "export" => ConcertMvrTool.Export(),
             "import" => ConcertMvrTool.Import(string.Join(' ', parts.Skip(2))),
             "rigs" => ConcertMvrTool.List(),
+            "videos" => ConcertMvrTool.Videos(string.Join(' ', parts.Skip(2))),
             "xchange" => ConcertMvrTool.Xchange(parts.Skip(2).ToArray(), say),
             _ => null,   // host, release, status: the server's
         };

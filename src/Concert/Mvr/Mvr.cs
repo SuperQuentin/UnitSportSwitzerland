@@ -281,6 +281,7 @@ public static partial class MvrFile
             Walk(layer.Element("ChildList"), layerXf, layerName);
         }
         foreach (var (node, xf, layerName) in index.Screens) AddFixture(node, xf, layerName);
+        NoteProjectors(root, notes);
         ReadObjects(root, files, rig, notes, ours != null);   // trusses, scene objects, symbols (#958)
 
         void Walk(XElement? list, Transform3D parent, string layerName)
@@ -383,6 +384,7 @@ public static partial class MvrFile
                 row.PixelsX = 32;
                 row.PixelsY = 18;
             }
+            if (screen) Video(row, x, xf, root, files, notes);   // its geometry's size and its source (#975)
             // the group: its MVR Position's or layer's name when it is one of ours, else what it is
             string? position = Key(x.Element("Position")?.Value) is { } pk ? index.Positions.GetValueOrDefault(pk) : null;
             row.Group = (int)(Enum.TryParse<RigGroup>(position, out var posGroup) ? posGroup

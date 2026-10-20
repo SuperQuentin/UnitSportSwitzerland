@@ -132,6 +132,7 @@ public static class ConcertMvrTool
         if (import == null) return $"Could not read {Path.GetFileName(path)}: {error}";
         var data = import.Rig;
         Originals[data.Source] = MvrFile.Gdtfs(mvr, data.Types.Select(t => t.GdtfSpec).OfType<string>());
+        CacheVideos(mvr, data);
         bool stadiumFrame = frame == "stadium" || frame == null && import.OursStadiumFrame;
         if (!stadiumFrame) plan.FromStage(data);
         if (data.Check() is { } bad) return $"That rig does not fit: {bad}.";
@@ -139,6 +140,47 @@ public static class ConcertMvrTool
         string reply = svc.SendRig(stadium, data.Pack());
         string skipped = import.Notes.Count > 0 ? $" ({import.Notes.Count} note(s): {string.Join("; ", import.Notes.Take(2))})" : "";
         return $"{data.Fixtures.Count} fixtures read from {Path.GetFileName(path)} in the {(stadiumFrame ? "stadium" : "stage")} frame{skipped}. {reply}";
+    }
+
+    // ---- screens' video files (#975) ---------------------------------------------------------------
+
+    /// <summary>
+    /// The video files of the MVRs imported on this machine, by their SHA-256 (#975): a screen of a hosted
+    /// set plays its file where it is cached here; they never go over the network (another player caches
+    /// them with <c>/concert videos &lt;file.mvr&gt;</c>, else sees the show's content). Kept across runs.
+    /// </summary>
+    public const string VideoFolder = Folder + "/video";
+
+    public static string VideoFile(string hash) => $"{VideoFolder}/{hash}.ogv";
+
+    /// <summary>Writes an MVR's playable videos for a rig into the cache; how many it holds.</summary>
+    private static int CacheVideos(byte[] mvr, RigData rig)
+    {
+        var videos = MvrFile.Videos(mvr, rig);
+        if (videos.Count == 0) return 0;
+        Directory.CreateDirectory(ProjectSettings.GlobalizePath(VideoFolder));
+        foreach (var (hash, bytes) in videos)
+        {
+            string path = ProjectSettings.GlobalizePath(VideoFile(hash));
+            try { if (!File.Exists(path)) File.WriteAllBytes(path, bytes); }
+            catch (IOException e) { GD.PushWarning($"[concert] video {hash[..8]} not cached: {e.Message}"); }
+        }
+        return videos.Count;
+    }
+
+    /// <summary><c>/concert videos &lt;file.mvr&gt;</c>: caches an MVR's screen videos on this machine only, for a set someone else hosts with it.</summary>
+    public static string Videos(string args)
+    {
+        string a = args.Trim().Trim('"');
+        if (a.Length == 0) return "/concert videos <file.mvr>: caches its screens' videos here, for a set hosted with it. " + List();
+        string path = File.Exists(a) ? a : Path.Combine(FolderPath, a.EndsWith(".mvr", StringComparison.OrdinalIgnoreCase) ? a : a + ".mvr");
+        if (!File.Exists(path)) return $"No file {path}. " + List();
+        if (new FileInfo(path).Length > 256L << 20) return "That MVR is over 256 MB.";
+        var mvr = File.ReadAllBytes(path);
+        var import = MvrFile.Read(mvr, Path.GetFileName(path), out string? error);
+        if (import == null) return $"Could not read {Path.GetFileName(path)}: {error}";
+        int n = CacheVideos(mvr, import.Rig);
+        return n == 0 ? $"{Path.GetFileName(path)} has no video this game plays." : $"{n} video(s) of {Path.GetFileName(path)} cached: its screens play them here.";
     }
 
     // ---- MVR-xchange (#960) ------------------------------------------------------------------------
