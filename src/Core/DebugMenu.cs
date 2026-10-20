@@ -371,14 +371,10 @@ public partial class DebugMenu : CanvasLayer
     // traffic endpoints (#971)
     // ------------------------------------------------------------------------------------
 
-    private static readonly float[] EndpointRates = [6, 12, 30, 60];
-    private bool _epGenerates = true, _epDestination = true, _epToDestinations;
-    private float _epRate = World.TrafficGenerators.DefaultPerMinute;
-
     /// <summary>
-    /// Traffic (#971): each car's way and the endpoints drawn, and an admin's generators and destinations: one placed on the road
-    /// at the crosshair, facing the way the camera looks along it, with what the switches and pickers say; the nearest to the
-    /// crosshair removed, or all. They go to the server, which shares them with everyone's traffic.
+    /// Traffic (#971): each car's way, the lit paths and the endpoints drawn, and the traffic tool, an admin's held item that places,
+    /// edits and removes generators and destinations (<see cref="Items.TrafficTool"/>: the user, placing them from here was
+    /// impractical); all of them removed at once. They go to the server, which shares them with everyone's traffic.
     /// </summary>
     private void AddTrafficSection(VBoxContainer rows)
     {
@@ -400,59 +396,14 @@ public partial class DebugMenu : CanvasLayer
             + "the ending one yellow on amber, then red, ahead of its last one; they never overlap (#979).");
         Switch(grid, "endpoints", "Traffic endpoints", false, on => { if (World.Traffic.Current is { } t) t.ShowEndpoints = on; },
             "Generators (green), destinations (red), both (yellow): a post with an arrow along its heading,\n"
-            + "a destination's ring in the colour its cars' ways are drawn in.");
-        Switch(grid, "epgenerates", "New: generates", true, on => _epGenerates = on, "The next one placed makes cars.");
-        Switch(grid, "epdestination", "New: destination", true, on => _epDestination = on, "The next one placed takes the cars driving out past it.");
-        var pickers = UiKit.HBox(6);
-        rows.AddChild(pickers);
-        Picker(pickers, Array.ConvertAll(EndpointRates, r => $"{r:0} cars/min"), Array.IndexOf(EndpointRates, _epRate), i => _epRate = EndpointRates[i]);
-        Picker(pickers, ["Cars: along the road", "Cars: to destinations"], 0, i => _epToDestinations = i == 1)
-            .TooltipText = "Along the road: its cars set off the way it faces and pick their way at random.\n"
-                + "To destinations: an equal share to every destination there is now, each along the way found to it.";
+            + "a destination's ring in the colour its cars' ways are drawn in. Always shown with the traffic tool in hand.");
         var buttons = UiKit.HBox(6);
-        buttons.AddChild(ActionButton("Place at crosshair", PlaceEndpoint));
-        buttons.AddChild(ActionButton("Remove nearest", RemoveNearestEndpoint));
-        buttons.AddChild(ActionButton("Remove all", () => World.TrafficGenerators.Instance?.RequestRemove(0)));
+        var tool = ActionButton("Traffic tool", () => Items.ItemController.Instance?.RunCommand?.Invoke("/spawn TrafficTool 1"));
+        tool.TooltipText = "Into your hands: Use on a road places a generator (its settings open), on a placed one opens it.\n"
+            + "Held, every generator and destination shows.";
+        buttons.AddChild(tool);
+        buttons.AddChild(ActionButton("Remove all endpoints", () => World.TrafficGenerators.Instance?.RequestRemove(0)));
         rows.AddChild(buttons);
-    }
-
-    /// <summary>Where the crosshair meets the world, else 60 m ahead of the camera.</summary>
-    private Vector3? Crosshair()
-    {
-        if (GetViewport().GetCamera3D() is not { } cam) return null;
-        var from = cam.GlobalPosition;
-        var ahead = -cam.GlobalBasis.Z;
-        var hit = cam.GetWorld3D().DirectSpaceState.IntersectRay(PhysicsRayQueryParameters3D.Create(from, from + ahead * 2000f));
-        return hit.Count > 0 ? (Vector3)hit["position"] : from + ahead * 60f;
-    }
-
-    private void PlaceEndpoint()
-    {
-        if (World.TrafficGenerators.Instance is not { } list || World.Traffic.Current is not { } traffic || Crosshair() is not { } at
-            || GetViewport().GetCamera3D() is not { } cam) return;
-        if (traffic.OnRoad(at, 30f) is not var (edge, pos, tangent)) { _say("No road within 30 m of the crosshair."); return; }
-        var (p, _) = edge.Sample(pos);
-        var heading = tangent.Dot(-cam.GlobalBasis.Z) >= 0f ? tangent : -tangent;
-        var (e, n) = _origin.ToLv95(p);
-        var shares = _epToDestinations
-            ? list.All.Where(x => x.Destination).Select(x => new World.TrafficShare(x.Id, 1f)).ToArray()
-            : null;
-        list.RequestSet(new World.TrafficEndpoint(0, e, n, Mathf.Atan2(-heading.Z, heading.X), _epGenerates, _epDestination, _epRate,
-            shares is { Length: > 0 } ? shares : null));
-        // shown, so the admin sees what was put down
-        traffic.ShowEndpoints = true;
-        if (_toggles.TryGetValue("endpoints", out var box)) box.SetPressedNoSignal(true);
-        _say(string.Create(CultureInfo.InvariantCulture, $"Traffic endpoint at {e:F0},{n:F0}"));
-    }
-
-    private void RemoveNearestEndpoint()
-    {
-        if (World.TrafficGenerators.Instance is not { } list || Crosshair() is not { } at) return;
-        var (e, n) = _origin.ToLv95(at);
-        var nearest = list.All.MinBy(x => (x.E - e) * (x.E - e) + (x.N - n) * (x.N - n));
-        if (nearest is null) { _say("No traffic endpoint to remove."); return; }
-        list.RequestRemove(nearest.Id);
-        _say($"Traffic endpoint #{nearest.Id} removed");
     }
 
     /// <summary>

@@ -143,6 +143,8 @@ public static class ItemDefs
         // building (#274): pieces cost materials straight from the pack
         new(ItemId.Hammer, "Hammer", "{use_item} builds the piece shown where you look, from wood, stone, metal or sandbags in your pack. {aim_item} + {next_item} picks the piece, {build_turn} turns it, {aim_item} + {build_turn} the material. {aim_item} + {use_item} takes your own piece back.",
             ItemUse.Build, 1, new Color(0.45f, 0.30f, 0.18f), "HM", 0, ItemCategory.Gear, 12f),
+        new(ItemId.TrafficTool, "Traffic tool", "An admin's (#971). Held, the traffic generators show; {use_item} on a road places one, on a placed one opens it: whether it makes cars and how many, whether it is a destination, where its cars go, which way it faces.",
+            ItemUse.TrafficTool, 1, new Color(0.95f, 0.5f, 0.1f), "TG", 0, ItemCategory.Gear, 0f),
 
         // gadgets (#275): set down with Use, taken back with Aim + Use
         Gadget(ItemId.Zipline, "Zipline", "{use_item} at the top sets its start, {use_item} again at the bottom (downhill, 8 to 150 m) strings the cable. {interact_mount} at the top post rides it; {jump} lets go.", "#8a8e94", "ZL", 30),
@@ -442,6 +444,14 @@ public static class ItemDefs
             }
             case ItemId.SwissFlag:
                 AppendFlag(s, pole: 0.95f, cloth: 0.26f, bottom: -0.35f);
+                break;
+            case ItemId.TrafficTool:
+                // a little traffic cone on a grip: orange, a white band, a dark foot
+                s.Box(new Vector3(0, -0.02f, 0), new Vector3(0.03f, 0.1f, 0.03f), new Color(0.15f, 0.15f, 0.17f));
+                s.Box(new Vector3(0, 0.04f, 0), new Vector3(0.09f, 0.015f, 0.09f), new Color(0.15f, 0.15f, 0.17f));
+                s.Tube(new Vector3(0, 0.045f, 0), new Vector3(0, 0.11f, 0), 0.04f, 0.026f, new Color(0.95f, 0.45f, 0.08f), 10);
+                s.Tube(new Vector3(0, 0.11f, 0), new Vector3(0, 0.135f, 0), 0.026f, 0.019f, new Color(0.95f, 0.95f, 0.92f), 10);
+                s.Tube(new Vector3(0, 0.135f, 0), new Vector3(0, 0.19f, 0), 0.019f, 0.006f, new Color(0.95f, 0.45f, 0.08f), 10);
                 break;
             case ItemId.EnergyBar:
                 s.Box(new Vector3(0, 0.02f, 0.02f), new Vector3(0.035f, 0.018f, 0.13f), new Color(0.95f, 0.50f, 0.10f));

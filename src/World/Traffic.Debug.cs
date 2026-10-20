@@ -16,6 +16,9 @@ public partial class Traffic
     /// <summary>Draws the traffic endpoints.</summary>
     public bool ShowEndpoints { get; set; }
 
+    /// <summary>The endpoints drawn while the traffic tool is in hand (#971), whatever <see cref="ShowEndpoints"/> says.</summary>
+    public bool EndpointsHeld { get; set; }
+
     /// <summary>Draws the paths through lit junctions whose light is green (green) or amber (yellow) now; on red, none (#971).</summary>
     public bool ShowLights { get; set; }
 
@@ -62,7 +65,7 @@ public partial class Traffic
 
     private void StepDebugDraw(double dt)
     {
-        if (!ShowPaths && !ShowEndpoints && !ShowLights && !ShowMovers && !ShowTrails)
+        if (!ShowPaths && !ShowEndpoints && !EndpointsHeld && !ShowLights && !ShowMovers && !ShowTrails)
         {
             if (_debugLines is not null) _debugLines.Visible = false;
             return;
@@ -94,7 +97,7 @@ public partial class Traffic
         int lines = 0;
         if (ShowPaths)
             foreach (var car in _cars) lines += DrawWay(mesh, car);
-        if (ShowEndpoints)
+        if (ShowEndpoints || EndpointsHeld)
             foreach (var s in _endpoints.Values) lines += DrawEndpoint(mesh, s);
         if (ShowLights && _roads is not null && Focus?.Invoke() is { } focus)
         {
@@ -143,7 +146,7 @@ public partial class Traffic
     }
 
     /// <summary>A flat band <paramref name="width"/> m wide from <paramref name="a"/> to <paramref name="b"/> (a line is a pixel from above), seen from both sides.</summary>
-    private static void Ribbon(ImmediateMesh mesh, Vector3 a, Vector3 b, Color colour, float width)
+    internal static void Ribbon(ImmediateMesh mesh, Vector3 a, Vector3 b, Color colour, float width)
     {
         var d = b - a;
         // across it on the ground; a post (straight up) across east-west
