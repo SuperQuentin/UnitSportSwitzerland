@@ -604,6 +604,10 @@ public sealed class GameSettings
                         "third" => XR.MonitorView.ThirdPerson, _ => XR.MonitorView.FirstPerson };
                     break;
                 case "--vsync": VSync = v is "on" or "1" or "true"; break;
+                // a film's render profile sets the picture itself (#924, tools/trailer.sh RENDER), never the player's file
+                case "--render-scale" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float rs):
+                    RenderScale = Math.Clamp(rs, MinRenderScale, MaxRenderScale); break;
+                case "--aa" when Enum.TryParse<AntiAliasing>(v, true, out var aa): AntiAliasing = aa; break;
                 case "--perf":
                     PerfOverlay = v switch { "full" or "detailed" => PerfOverlayMode.Detailed,
                         "fps" => PerfOverlayMode.Fps, _ => PerfOverlayMode.Off };

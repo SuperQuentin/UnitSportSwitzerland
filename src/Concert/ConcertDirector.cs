@@ -42,7 +42,7 @@ public partial class ConcertDirector : Node
         {
             -1 => null,
             { } seed => ConcertPlanner.Plan(s, seed),
-            _ => ConcertPlanner.Tonight(s, DateTime.Now.Date),
+            _ => ConcertPlanner.Tonight(s, Core.Calendar.Now.Date),
         };
 
     /// <summary>The tile nodes holding each stadium's rig, so a hosted set can replace it.</summary>

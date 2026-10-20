@@ -108,7 +108,7 @@ public partial class ShopService : Node
     /// <summary>This month is the hunting season (<c>--birdmonth N</c> pretends another month).</summary>
     private static bool DefaultSeason()
     {
-        int month = DateTime.Now.Month;
+        int month = Core.Calendar.Month;
         var args = OS.GetCmdlineUserArgs();
         int at = Array.IndexOf(args, "--birdmonth");
         if (at >= 0 && at + 1 < args.Length && int.TryParse(args[at + 1], out int m) && m is >= 1 and <= 12) month = m;

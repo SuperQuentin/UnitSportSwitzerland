@@ -70,6 +70,44 @@ public static partial class Preprocessor
     // incremental — see TerrainBuild.
     private static async Task<int> RunCoreAsync(IReadOnlyList<string> args, LogWriter? writer, CancellationToken ct)
     {
+        int rc = await RunPassAsync(args, writer, ct);
+        // every pass that writes tiles ends with their content hashes in the manifest (#924), so a
+        // fresh build carries them; incremental, so a pass that changed a few tiles reads only those
+        if (rc != 0 || !HashesAfter(args, out string outDir, out string tempDir, out int ioJobs)) return rc;
+        if (writer != null) writer.Stage = "hash";
+        return ManifestHashStage.Run(outDir, tempDir, ioJobs, ct);
+    }
+
+    /// <summary>
+    /// Whether a successful run with <paramref name="args"/> may have changed tiles, so the manifest's
+    /// hashes are brought up to date after it: a run with <c>--out</c> and a manifest there, not
+    /// <c>--no-hash</c>, not <c>--manifest-hash</c> itself, nor a pass that writes nothing under it.
+    /// </summary>
+    private static bool HashesAfter(IReadOnlyList<string> args, out string outDir, out string tempDir, out int ioJobs)
+    {
+        outDir = tempDir = "";
+        ioJobs = 4;
+        string? o = null, t = null;
+        for (int i = 0; i < args.Count; i++)
+        {
+            switch (args[i])
+            {
+                case "--out" when i + 1 < args.Count: o = args[++i]; break;
+                case "--temp" when i + 1 < args.Count: t = args[++i]; break;
+                case "--io-jobs" when i + 1 < args.Count && int.TryParse(args[i + 1], out int n): ioJobs = n; i++; break;
+                case "--no-hash" or "--manifest-hash" or "--osm-check" or "--fields-check" or "--export-route-keys"
+                    or "--osm-overlay" or "--landings-file" or "--airports-file":
+                    return false;
+            }
+        }
+        if (o == null || !File.Exists(Path.Combine(o, "manifest.json"))) return false;
+        outDir = o;
+        tempDir = t ?? o.TrimEnd('/', '\\') + "_temp";
+        return true;
+    }
+
+    private static async Task<int> RunPassAsync(IReadOnlyList<string> args, LogWriter? writer, CancellationToken ct)
+    {
         void SetStage(string stage) { if (writer != null) writer.Stage = stage; }
 
         var inDirs = new List<string>();
@@ -103,7 +141,7 @@ public static partial class Preprocessor
         // castles (#859): which solids of the built tiles are castles, into a C# list the game compiles in
         string? castlesFile = null;
         var pngCrops = new List<(double E, double N, int Size)>();
-        bool force = false, fresh = false;
+        bool force = false, fresh = false, hashOnly = false;
         string? franceBox = null;
         // optional OpenStreetMap overlay (#118): a region-wide intermediate for the road network stage
         string? osmPbf = null;
@@ -171,6 +209,10 @@ public static partial class Preprocessor
                 case "--io-jobs": ioJobs = int.Parse(args[++i]); break;
                 case "--force": force = true; break;
                 case "--fresh": fresh = true; break;
+                // the tiles' content hashes into the manifest, nothing else (#924, ManifestHashStage)
+                case "--manifest-hash": hashOnly = true; break;
+                // no hashing after this pass (RunCoreAsync)
+                case "--no-hash": break;
                 default:
                     Console.Error.WriteLine($"Unknown argument: {args[i]}");
                     return 2;
@@ -178,6 +220,18 @@ public static partial class Preprocessor
         }
 
         if (osmCheck) return OsmOverlay.SelfCheck();
+
+        // ---- tile content hashes (#924): read only the tiles, add their hashes to the manifest -----
+        if (hashOnly)
+        {
+            if (outDir == null)
+            {
+                Console.Error.WriteLine("--manifest-hash requires --out <chunk dir>");
+                return 2;
+            }
+            SetStage("hash");
+            return ManifestHashStage.Run(outDir, tempDir ?? outDir.TrimEnd('/', '\\') + "_temp", ioJobs, ct);
+        }
         if (fieldsCheck) return FieldStage.SelfCheck();
 
         // ---- farm fields (#494): fields_E_N.fld per manifest tile, standalone -------------------------
