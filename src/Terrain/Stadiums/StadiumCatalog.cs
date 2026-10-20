@@ -549,14 +549,14 @@ public static class StadiumCatalog
         FrontHalfU = 17f, FrontHalfV = 32f, FrontCorner = 8f,
         Tiers = new[]
         {
-            new StadiumTier(Rows: 9, RowDepth: 0.8f, Riser: 0.42f, Gap: 0f, Step: 1.2f),
-            new StadiumTier(Rows: 9, RowDepth: 0.8f, Riser: 0.5f, Gap: 2f, Step: 2.4f),
+            new StadiumTier(Rows: 8, RowDepth: 0.8f, Riser: 0.42f, Gap: 0f, Step: 1.2f),
+            new StadiumTier(Rows: 8, RowDepth: 0.8f, Riser: 0.5f, Gap: 2f, Step: 2.4f),
         },
         DepthNorth = 18f, DepthEast = 18f, DepthSouth = 18f, DepthWest = 18f,
-        RoofOuter = 14.96f, RoofInner = 18f, RoofInset = 0f, RoofRing = 0f, Solar = false,
+        RoofOuter = 14.04f, RoofInner = 18f, RoofInset = 0f, RoofRing = 0f, Solar = false,
         Columns = 0, ColumnTop = 0f,
         Gates = new[] { StadiumSide.North, StadiumSide.South },
-        VomitoryRows = new[] { 3, 3 },
+        VomitoryRows = new[] { 2, 3 },
         Seat = new(0.6f, 0.1f, 0.1f), SeatAlt = new(0.48f, 0.08f, 0.08f), Facade = new(0.65f, 0.65f, 0.68f), Roof = new(0.7f, 0.7f, 0.72f),
         ConcertCapacity = 7000,
     };
@@ -584,9 +584,114 @@ public static class StadiumCatalog
         SeatWidth = 0.42f,   // standing terraces: people closer than seats
     };
 
+    /// <summary>Paléo Festival, Grande Scène (Nyon), open air: about 35,000 a day. The main stage placed from the 2026 site plan fitted to the aerial; the 2013 festival flight shows the stage roof (high) (#948 research).</summary>
+    public static readonly StadiumSpec PaleoOpenAir = new()
+    {
+        Name = "Paléo Festival, Grande Scène",
+        Kind = VenueKind.OpenAir, StageAt = StadiumSide.North,
+        E = 2505256.1, N = 1139822.8, AzimuthDeg = 176f,
+        FrontHalfU = 95f, FrontHalfV = 80f, FrontCorner = 6f,
+        Tiers = Array.Empty<StadiumTier>(),
+        DepthNorth = 1f, DepthEast = 1f, DepthSouth = 1f, DepthWest = 1f,
+        Columns = 0,
+        Gates = new[] { StadiumSide.South, StadiumSide.East, StadiumSide.West },
+        Kiosks = false,
+        ConcertCapacity = 35000,
+    };
+
+    /// <summary>Gurtenfestival, Hauptbühne (Bern (Gurten)), open air: about 27,000 a day. The main stage placed from the 2026 Geländeplan fitted on three landmarks (5 m); the crowd's meadow rises away from the stage (#948 research).</summary>
+    public static readonly StadiumSpec GurtenOpenAir = new()
+    {
+        Name = "Gurtenfestival, Hauptbühne",
+        Kind = VenueKind.OpenAir, StageAt = StadiumSide.North,
+        E = 2600188.6, N = 1196352.6, AzimuthDeg = -25f,
+        FrontHalfU = 55f, FrontHalfV = 80f, FrontCorner = 6f,
+        Tiers = Array.Empty<StadiumTier>(),
+        DepthNorth = 1f, DepthEast = 1f, DepthSouth = 1f, DepthWest = 1f,
+        Columns = 0,
+        Gates = new[] { StadiumSide.South, StadiumSide.East, StadiumSide.West },
+        Kiosks = false,
+        ConcertCapacity = 27000,
+    };
+
+    /// <summary>Openair Frauenfeld, Arena Stage (Frauenfeld), open air: about 35,000 a day. The main stage placed from the worn crowd rectangle in the racecourse infield on the 2025 aerial (low: the stage may face the other way) (#948 research).</summary>
+    public static readonly StadiumSpec FrauenfeldOpenAir = new()
+    {
+        Name = "Openair Frauenfeld, Arena Stage",
+        Kind = VenueKind.OpenAir, StageAt = StadiumSide.North,
+        E = 2710209.4, N = 1270159.3, AzimuthDeg = 35f,
+        FrontHalfU = 67.5f, FrontHalfV = 100f, FrontCorner = 6f,
+        Tiers = Array.Empty<StadiumTier>(),
+        DepthNorth = 1f, DepthEast = 1f, DepthSouth = 1f, DepthWest = 1f,
+        Columns = 0,
+        Gates = new[] { StadiumSide.South, StadiumSide.East, StadiumSide.West },
+        Kiosks = false,
+        ConcertCapacity = 35000,
+    };
+
+    /// <summary>OpenAir St. Gallen, Sitterbühne (St. Gallen (Sittertobel)), open air: about 30,000 a day. The main stage placed from the 2026 Geländeplan's illustration matched to the Sitter-loop meadow (low-medium) (#948 research).</summary>
+    public static readonly StadiumSpec StGallenOpenAir = new()
+    {
+        Name = "OpenAir St. Gallen, Sitterbühne",
+        Kind = VenueKind.OpenAir, StageAt = StadiumSide.North,
+        E = 2742507.9, N = 1253134.6, AzimuthDeg = 50f,
+        FrontHalfU = 55f, FrontHalfV = 65f, FrontCorner = 6f,
+        Tiers = Array.Empty<StadiumTier>(),
+        DepthNorth = 1f, DepthEast = 1f, DepthSouth = 1f, DepthWest = 1f,
+        Columns = 0,
+        Gates = new[] { StadiumSide.South, StadiumSide.East, StadiumSide.West },
+        Kiosks = false,
+        ConcertCapacity = 30000,
+    };
+
+    /// <summary>Greenfield Festival, Jungfrau Stage (Interlaken), open air: about 25,000 a day. The main stage placed from the 2018 build-up flight's platform on the old airfield apron (medium-low) (#948 research).</summary>
+    public static readonly StadiumSpec GreenfieldOpenAir = new()
+    {
+        Name = "Greenfield Festival, Jungfrau Stage",
+        Kind = VenueKind.OpenAir, StageAt = StadiumSide.North,
+        E = 2633958.7, N = 1169472.0, AzimuthDeg = 120f,
+        FrontHalfU = 55f, FrontHalfV = 90f, FrontCorner = 6f,
+        Tiers = Array.Empty<StadiumTier>(),
+        DepthNorth = 1f, DepthEast = 1f, DepthSouth = 1f, DepthWest = 1f,
+        Columns = 0,
+        Gates = new[] { StadiumSide.South, StadiumSide.East, StadiumSide.West },
+        Kiosks = false,
+        ConcertCapacity = 25000,
+    };
+
+    /// <summary>Heitere Open Air (Zofingen), open air: about 10,000 a day. The main stage placed from the main stage and the arena read off a swissimage tile shot during the festival (medium) (#948 research).</summary>
+    public static readonly StadiumSpec HeitereOpenAir = new()
+    {
+        Name = "Heitere Open Air",
+        Kind = VenueKind.OpenAir, StageAt = StadiumSide.North,
+        E = 2639062.5, N = 1237134.7, AzimuthDeg = -30f,
+        FrontHalfU = 35f, FrontHalfV = 75f, FrontCorner = 6f,
+        Tiers = Array.Empty<StadiumTier>(),
+        DepthNorth = 1f, DepthEast = 1f, DepthSouth = 1f, DepthWest = 1f,
+        Columns = 0,
+        Gates = new[] { StadiumSide.South, StadiumSide.East, StadiumSide.West },
+        Kiosks = false,
+        ConcertCapacity = 10000,
+    };
+
+    /// <summary>Moon&Stars, Piazza Grande (Locarno), open air: about 8,000 a day. The main stage placed from the piazza from the building outlines, the stage assumed at its west end (low) (#948 research).</summary>
+    public static readonly StadiumSpec MoonAndStarsOpenAir = new()
+    {
+        Name = "Moon&Stars, Piazza Grande",
+        Kind = VenueKind.OpenAir, StageAt = StadiumSide.North,
+        E = 2704818.4, N = 1114001.6, AzimuthDeg = -102f,
+        FrontHalfU = 35f, FrontHalfV = 85f, FrontCorner = 6f,
+        Tiers = Array.Empty<StadiumTier>(),
+        DepthNorth = 1f, DepthEast = 1f, DepthSouth = 1f, DepthWest = 1f,
+        Columns = 0,
+        Gates = new[] { StadiumSide.South, StadiumSide.East, StadiumSide.West },
+        Kiosks = false,
+        ConcertCapacity = 8000,
+    };
+
     public static readonly StadiumSpec[] All =
     {
-        Geneva, Wankdorf, StJakobPark, Letzigrund, Kybunpark, Swissporarena, StockhornArena, Tourbillon, Tuiliere, Maladiere, Brugglifeld, Schutzenwiese, Hallenstadion, PostFinanceArena, StJakobshalle, SwissLifeArena, VaudoiseArena, VernetsArena, GenevaArena, BcfArena, TissotArena, BossardArena, CornerArena, TheHall, SwissArenaKloten, DavosArena,
+        Geneva, Wankdorf, StJakobPark, Letzigrund, Kybunpark, Swissporarena, StockhornArena, Tourbillon, Tuiliere, Maladiere, Brugglifeld, Schutzenwiese, Hallenstadion, PostFinanceArena, StJakobshalle, SwissLifeArena, VaudoiseArena, VernetsArena, GenevaArena, BcfArena, TissotArena, BossardArena, CornerArena, TheHall, SwissArenaKloten, DavosArena, PaleoOpenAir, GurtenOpenAir, FrauenfeldOpenAir, StGallenOpenAir, GreenfieldOpenAir, HeitereOpenAir, MoonAndStarsOpenAir,
     };
 
     /// <summary>How far past its own tile a data building may reach, m: tiles this far from a stadium's outline are clipped (<see cref="StadiumClip"/>).</summary>

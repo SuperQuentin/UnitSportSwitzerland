@@ -130,6 +130,32 @@ public sealed class StagePlan
         return Math.Min(e.Width / 2 + 10f, room);
     }
 
+    /// <summary>
+    /// An open air's stage on the ground as it lies (#948): every box that stands on the pitch level
+    /// (the front of house, the delay towers, the barrier, the catwalk, the stairs) raised or lowered to
+    /// the ground under its centre, the desk with its riser, the subs with their stacks. The deck stands
+    /// where the rig's origin was put on the ground, so its own boxes barely move.
+    /// </summary>
+    public void Lift(Func<Vector2, float> ground)
+    {
+        for (int i = 0; i < Boxes.Count; i++)
+        {
+            var b = Boxes[i];
+            if (b.Centre.Y - b.Size.Y / 2 > 0.6f) continue;   // flown or on the deck: it goes with the stage
+            Boxes[i] = b with { Centre = b.Centre + Vector3.Up * ground(new Vector2(b.Centre.X, b.Centre.Z)) };
+        }
+        for (int i = 0; i < Pa.Count; i++)
+            if (Pa[i].Sub || Pa[i].Centre.Y < 14f)
+                Pa[i] = Pa[i] with { Centre = Pa[i].Centre + Vector3.Up * ground(new Vector2(Pa[i].Centre.X, Pa[i].Centre.Z)) };
+        for (int i = 0; i < Ramps.Count; i++)
+        {
+            var r = Ramps[i];
+            Vector3 L(Vector3 p) => p + Vector3.Up * ground(new Vector2(p.X, p.Z));
+            Ramps[i] = new StageRamp(L(r.A), L(r.B), L(r.C), L(r.D));
+        }
+        Desk += Vector3.Up * ground(new Vector2(Desk.X, Desk.Z));
+    }
+
     /// <summary>A PA cabinet in the stage frame, facing (<paramref name="fx"/>, <paramref name="fz"/>).</summary>
     private void Cab(float x0, float x1, float y0, float y1, float z0, float z1, float fx, float fz, bool sub)
     {

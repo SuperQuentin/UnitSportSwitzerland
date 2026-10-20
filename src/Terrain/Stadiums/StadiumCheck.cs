@@ -49,6 +49,13 @@ public static class StadiumCheck
         new(StadiumCatalog.SwissArenaKloten, 70f, 100f, 7624),
         // a wooden hall of terraces under its roof's rafters: the depths hold 81 % of its places
         new(StadiumCatalog.DavosArena, 60f, 91f, 7080, Tolerance: 0.2f),
+        new(StadiumCatalog.PaleoOpenAir, 192f, 162f, 35000),
+        new(StadiumCatalog.GurtenOpenAir, 112f, 162f, 27000),
+        new(StadiumCatalog.FrauenfeldOpenAir, 137f, 202f, 35000),
+        new(StadiumCatalog.StGallenOpenAir, 112f, 132f, 30000),
+        new(StadiumCatalog.GreenfieldOpenAir, 112f, 182f, 25000),
+        new(StadiumCatalog.HeitereOpenAir, 72f, 152f, 10000),
+        new(StadiumCatalog.MoonAndStarsOpenAir, 72f, 172f, 8000),
     };
 
     /// <summary>A stadium's mesh may not exceed this; Geneva is about 20 k.</summary>
@@ -79,6 +86,14 @@ public static class StadiumCheck
                 $"{s.Name}: {build.Capacity} seats, the real one has {row.Capacity}");
             int tris = build.Mesh.Indices.Length / 3;
             Expect(tris < TriangleBudget, $"{s.Name}: {tris} triangles, {build.Faces.Length / 3} collision faces (budget {TriangleBudget})");
+            if (s.Kind == VenueKind.OpenAir)
+            {
+                // an open air is a fence round its ground: no stand, gate tunnel or seat to hold it to
+                Expect(build.Faces.Length > 0 && StadiumBuilder.Seats(s).Any() == false, $"{s.Name}: a fence, collided, and no seat");
+                var ownerOa = StadiumCatalog.Owner(s);
+                Expect(StadiumBuilder.Build(ownerOa, null, mesh: false, collision: true) is { Faces.Length: > 0 }, $"{s.Name}: built by tile {ownerOa}");
+                continue;
+            }
 
             // the stands' collision: no slope a player would slide off
             float steepest = 0;
