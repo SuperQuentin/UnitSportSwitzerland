@@ -7,7 +7,8 @@
   - **Instancers** (#782) are recorded only when they opt in with `ReplayWatch.Instanced(mmi)`: a lone object of its
     own, its look a copy of its instances (`WorldRecorder.InstancesLookOf`, one `SetInstanceTransform` at a time: the
     headless renderer refuses a whole buffer and keeps no transforms). Call it again whenever the instances change,
-    or the recording keeps the old copy. In: the dormant fleet (`DormantVehicles.Instanced`, a wake redraws the tile)
+    or the recording keeps the old copy. Every copy is kept for good, so instances drawn again exactly as an earlier
+    copy (same mesh, material, count and transforms) take that copy (#966). In: the dormant fleet (`DormantVehicles.Instanced`, a wake redraws the tile)
     and the hall cars (`ParkedCars.Show`, a car undrawn in place). Out: anything set every frame (`OccasionCreatures`'
     flocks, `CombatManager`'s tracers), which would be a copy a frame.
   - Players and anything under a `FootPlayer` are skipped: they come back as puppets (`movie-studio`).

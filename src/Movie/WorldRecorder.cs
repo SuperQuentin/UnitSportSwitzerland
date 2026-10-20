@@ -306,29 +306,54 @@ public sealed class WorldRecorder
 
     private readonly Dictionary<(ulong MultiMesh, int Version), int> _instancesIndex = new();
 
+    /// <summary>What an instancer copy draws, to find an earlier copy of the same instances (#966).</summary>
+    private readonly record struct InstancesKey(ulong Mesh, ulong Override, float Range, int Shadow, int Count, int Visible, int Hash);
+    private readonly Dictionary<InstancesKey, List<(Transform3D[] At, int Look)>> _instancesByContent = new();
+
     /// <summary>
     /// An instancer's look (#782): a detached copy of it and of its instances as they are now, which a
     /// ghost duplicates like a light's. A new copy each time its owner says the instances changed
     /// (<see cref="ReplayWatch.Instanced"/>): the dormant fleet frees its instancers and the hall cars
-    /// undraw one car, so a copy is the only way to keep what was drawn before.
+    /// undraw one car, so a copy is the only way to keep what was drawn before. Instances drawn again
+    /// as they were (a fleet's tile redrawn, or left and come back to) take the copy made before:
+    /// every copy is kept for good, and a tile redrawn twice a second piled up 48 a second (#966).
     /// </summary>
     private int InstancesLookOf(MultiMeshInstance3D node)
     {
         var src = node.Multimesh!;
         var key = (src.GetInstanceId(), ReplayWatch.InstancedVersion(src));
         if (_instancesIndex.TryGetValue(key, out int i)) return i;
+        int count = src.InstanceCount;
+        // one by one: a whole buffer is refused by the headless renderer, and a few dozen cars cost nothing
+        var at = new Transform3D[count];
+        var hash = new HashCode();
+        for (int k = 0; k < count; k++)
+        {
+            at[k] = src.GetInstanceTransform(k);
+            hash.Add(at[k]);
+        }
+        // colours and custom data are not compared: no recorded instancer has them, so those are copied each time
+        bool plain = !src.UseColors && !src.UseCustomData;
+        var content = new InstancesKey(src.Mesh?.GetInstanceId() ?? 0, node.MaterialOverride?.GetInstanceId() ?? 0,
+            node.VisibilityRangeEnd, (int)node.CastShadow, count, src.VisibleInstanceCount, hash.ToHashCode());
+        if (plain && _instancesByContent.TryGetValue(content, out var same))
+            foreach (var (was, look) in same)
+                if (was.AsSpan().SequenceEqual(at))
+                {
+                    _instancesIndex[key] = look;
+                    return look;
+                }
         var mm = new MultiMesh
         {
             TransformFormat = src.TransformFormat,
             UseColors = src.UseColors,
             UseCustomData = src.UseCustomData,
             Mesh = src.Mesh,
-            InstanceCount = src.InstanceCount,
+            InstanceCount = count,
         };
-        // one by one: a whole buffer is refused by the headless renderer, and a few dozen cars cost nothing
-        for (int k = 0; k < src.InstanceCount; k++)
+        for (int k = 0; k < count; k++)
         {
-            mm.SetInstanceTransform(k, src.GetInstanceTransform(k));
+            mm.SetInstanceTransform(k, at[k]);
             if (src.UseColors) mm.SetInstanceColor(k, src.GetInstanceColor(k));
             if (src.UseCustomData) mm.SetInstanceCustomData(k, src.GetInstanceCustomData(k));
         }
@@ -342,6 +367,11 @@ public sealed class WorldRecorder
         };
         Looks.Add(new WorldLook { Template = copy });
         _instancesIndex[key] = Looks.Count - 1;
+        if (plain)
+        {
+            if (!_instancesByContent.TryGetValue(content, out same)) _instancesByContent[content] = same = new List<(Transform3D[], int)>();
+            same.Add((at, Looks.Count - 1));
+        }
         return Looks.Count - 1;
     }
 
