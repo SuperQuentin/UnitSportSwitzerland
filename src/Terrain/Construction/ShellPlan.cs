@@ -19,6 +19,8 @@ public enum ShellPart : byte
     CraneYellow = 26, Cab = 27, HookBlock = 28, Rope = 29, LampRed = 30,
     // the pit (#619): the sheet piles, and the red and white guard rail round its top
     SheetPile = 31, Barrier = 32,
+    // the site office's gallery (#827): its walkway's deck and its stair's treads
+    Grating = 33,
 }
 
 /// <summary>

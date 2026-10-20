@@ -710,6 +710,17 @@ src/Terrain/Construction/SiteOffice quick --interiorcheck --doorkind UnderConstr
 src/Interiors/InteriorGenerator.SiteOffice net tools/siteofficenetcheck.sh
 src/Interiors/SiteOfficeNetProbe net tools/siteofficenetcheck.sh
 src/Terrain/Construction/SiteOffice net tools/siteofficenetcheck.sh
+# #827: raised doors, the site office's gallery and upper containers: an upper door walked into and
+# searched (interiorcheck --doorlevel 1 on a generated site with a gallery), and over the network: A
+# climbs the stair and opens an upper door, B on the walkway sees it, C joins late (generated world)
+src/Interiors/InteriorGenerator.SiteOffice quick --interiorcheck --doorkind UnderConstruction --doorlevel 1 --generated on --at 2591104,1117808 --traffic 0
+src/Terrain/Construction/SiteOffice quick --interiorcheck --doorkind UnderConstruction --doorlevel 1 --generated on --at 2591104,1117808 --traffic 0
+src/Interiors/DoorLink     quick  --interiorcheck --doorkind UnderConstruction --doorlevel 1 --generated on --at 2591104,1117808 --traffic 0
+src/Interiors/InteriorGenerator.SiteOffice net tools/siteuppernetcheck.sh
+src/Interiors/SiteUpperNetProbe net tools/siteuppernetcheck.sh
+src/Terrain/Construction/SiteOffice net tools/siteuppernetcheck.sh
+src/Interiors/DoorIndex    net    tools/siteuppernetcheck.sh
+src/Interiors/InteriorManager net tools/siteuppernetcheck.sh
 # #627: a building site's skip searched outdoors, the take seen by a peer with it open and by a late joiner (generated world)
 src/Loot/                net    tools/yardlootnetcheck.sh
 src/Terrain/Construction/SiteLoot net tools/yardlootnetcheck.sh

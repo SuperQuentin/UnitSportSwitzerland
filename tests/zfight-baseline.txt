@@ -1059,6 +1059,8 @@
 152483.5	Terrain / Building site - shell, a block of four floors
 709075.2	Terrain / Building site - topped out, a house
 1957418	Terrain / Building site - topped out, a six-floor block
+295728	Terrain / Building site - a site office with its gallery, one stack (#827)
+591455.4	Terrain / Building site - a site office with its gallery, two stacks (#827)
 91640	Terrain / Garage door - Sidewalk
 515456.5	Terrain / Garage ramp
 7741.9	Terrain / Landing - Jetty

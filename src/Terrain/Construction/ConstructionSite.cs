@@ -142,6 +142,14 @@ public sealed record ConstructionSite(
 
     /// <summary>A house plot: a self-erecting crane, the mini machines, two containers at most.</summary>
     public bool Small => ConstructionSites.IsSmall(Box, TargetStoreys);
+
+    /// <summary>
+    /// Where the site office's gallery stands (#827): the outside stair and the walkway to its upper
+    /// containers' doors, on the office row's low (−1) or high (+1) end in the office zone's own
+    /// terms (<see cref="SiteOffices.GalleryStrips"/>), or 0 where nothing of it fits beside the
+    /// yard. Decided after everything else is placed, so it moves nothing.
+    /// </summary>
+    public int GallerySide { get; init; }
 }
 
 /// <summary>
@@ -489,8 +497,24 @@ public static class ConstructionSites
         Zone(SiteZoneKind.Materials, small ? 6f : 8f + 4f * size, small ? 4f : 6f, p => p.DistanceTo(hook));
         Zone(SiteZoneKind.Skips, small ? 4.4f : 9f, 2.6f, p => p.DistanceTo(gate) + 4f);
 
+        // the office's gallery (#827), fitted last on a side that is free, nearer the gate first:
+        // it moves nothing placed above, so every yard is laid out as it was without it
+        int gallery = 0;
+        if (zones.FirstOrDefault(z => z.Kind == SiteZoneKind.Office) is { } officeZone)
+        {
+            var sides = new[] { -1, 1 }
+                .Select(side => (Side: side, Strips: SiteOffices.GalleryStrips(officeZone.Rect, box, side)))
+                .OrderBy(c => c.Strips.Stair.Center.DistanceTo(gate)).ThenBy(c => c.Side);
+            // the builder's board by the gate, which the dressing stands after this; the stair keeps
+            // off the hoarding's feet, the walkway (2.5 m up, over the 2 m panels) only off its line
+            var board = SiteDressings.BoardRect(gate, front, gateWidth);
+            foreach (var (side, (stair, walk)) in sides)
+                if (!stair.Overlaps(board) && !walk.Overlaps(board)
+                    && placer.Clear(stair, officeZone.Rect, 0.15f) && placer.Clear(walk, officeZone.Rect, 0.05f)) { gallery = side; break; }
+        }
+
         return new ConstructionSite(key, phase, box, b.MinY, measured, storey, built, target,
-            area, front, gate, gateWidth, hoarding, zones, cranes, machines, pit);
+            area, front, gate, gateWidth, hoarding, zones, cranes, machines, pit) { GallerySide = gallery };
     }
 
     /// <summary>
@@ -754,6 +778,30 @@ public static class ConstructionSites
             foreach (var p in corners)
                 if (blocked(p)) return false;
             return !blocked(w.Center);
+        }
+
+        /// <summary>
+        /// Whether a rectangle is clear of the building and its scaffolding, the way in, the hoarding
+        /// line, roads and other buildings, and of everything placed but <paramref name="beside"/>
+        /// (#827): for a thing fitted after the yard is laid out, against one already there. No walking
+        /// gap round it: it is a part of the thing beside it, as the gallery is of the office.
+        /// </summary>
+        /// <param name="inside">How far inside the hoarding line it must stay.</param>
+        public bool Clear(SiteRect r, SiteRect beside, float inside)
+        {
+            foreach (var c in clear)
+                if (r.Overlaps(c)) return false;
+            foreach (var t in _taken)
+                if (t != beside && r.Overlaps(t, 0.05f)) return false;
+            foreach (var p in r.Corners())
+                if (!area.Contains(p, -inside)) return false;
+            // the obstacle callback at its corners and every metre over it: a long strip can cross a road
+            int nu = Math.Max(1, (int)MathF.Ceiling(r.Width)), nv = Math.Max(1, (int)MathF.Ceiling(r.Depth));
+            for (int a = 0; a <= nu; a++)
+                for (int d = 0; d <= nv; d++)
+                    if (blocked(r.Center + r.AxisU * (r.Width * (a / (float)nu - 0.5f)) + r.AxisV * (r.Depth * (d / (float)nv - 0.5f))))
+                        return false;
+            return true;
         }
 
         /// <summary>Gives back a rectangle <see cref="Place"/> took, when the caller decided against it.</summary>

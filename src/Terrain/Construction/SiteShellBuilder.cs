@@ -55,6 +55,7 @@ public static class SiteShellBuilder
         new Color(0.95f, 0.08f, 0.05f).SrgbToLinear() with { A = 1f },   // LampRed
         C(0.33f, 0.27f, 0.22f),   // SheetPile, rusted steel
         C(0.86f, 0.18f, 0.14f),   // Barrier, the guard rail's red
+        C(0.55f, 0.57f, 0.58f),   // Grating: the office gallery's galvanised deck and treads (#827)
     };
 
     /// <summary>Faces lit by the sun in a flat-shaded world: the top full, the sides darker, the bottom darkest.</summary>
@@ -125,7 +126,8 @@ public static class SiteShellBuilder
 
     /// <summary>
     /// The site building's doors (#822): its office's, one per ground-floor container, slot 0 first,
-    /// then its toilet cabins' (one each),
+    /// then its toilet cabins' (one each), then one per upper container where the office has its
+    /// gallery (#827, <see cref="DoorSpot.Level"/> 1, its sill on the walkway),
     /// tile-local like every <see cref="DoorSpot"/> (3 cm proud of the facade plane, on the sill).
     /// Plain pedestrian doors: the containers' swing in, the cabins' out.
     /// </summary>
@@ -141,8 +143,8 @@ public static class SiteShellBuilder
                 new Vector3(outward.X, 0, outward.Y), d.Width, d.Height)
             {
                 // a toilet cabin's leaf swings out: in, it would fill the cabin (#822)
-                Slot = d.Slot, Hang = i < office.ContainerDoors ? DoorHang.Inward : DoorHang.Outward,
-                Vehicle = false, Kind = BuildingKind.UnderConstruction,
+                Slot = d.Slot, Hang = office.IsCabin(i) ? DoorHang.Outward : DoorHang.Inward,
+                Vehicle = false, Kind = BuildingKind.UnderConstruction, Level = d.Level,
             };
         }
         return doors;
@@ -387,6 +389,9 @@ public static class SiteShellBuilder
                 pits.Add(CutOf(site, pit));
             }
             foreach (var m in yard.Mounds) Mound(g, m, site);
+            // the office gallery's stair (#827): a ramp under its treads, as the shell's flights
+            foreach (var r in yard.Ramps)
+                g.Solid(T(r.A.X, r.A.Y, r.A.Z), T(r.B.X, r.B.Y, r.B.Z), T(r.C.X, r.C.Y, r.C.Z), T(r.D.X, r.D.Y, r.D.Z));
             foreach (var r in shell.Ramps)
                 g.Solid(T(r.A.X, r.A.Y, r.A.Z), T(r.B.X, r.B.Y, r.B.Z), T(r.C.X, r.C.Y, r.C.Z), T(r.D.X, r.D.Y, r.D.Z));
 
