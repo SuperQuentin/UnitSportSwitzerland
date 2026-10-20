@@ -1,7 +1,7 @@
 # Waits in checks: wait for the thing, never a fixed time (#992)
 
 A fixed `await Seconds(n)` costs n real seconds in every net and full run, padded for the slowest machine.
-In #992, about 70 of them moved to the event they stood for (38 probes), and so did the scripts' sleeps,
+In #992, about 70 of them moved to the event they stood for (35 probes), and so did the scripts' sleeps,
 polls and lingers.
 
 ## Rules for a probe (`ChatProbe` or its own helpers)
@@ -16,6 +16,14 @@ polls and lingers.
   - **Single-snapshot reads** sent to a peer: excavator arm angles, airliner N1.
   - **Settles after a teleport** (`PlaceAt`, `StandAt`, `WalkIn`, before a `Take` / `Open` / `Claim`): the
     server must have our new position, which a client cannot see.
+- **A "steady state" condition is checked against what the fixed wait reached.**
+  - `steamernetcheck`'s "under 2 % gained in 3 s" held at 5.3 km/h, where the fixed 30 s reaches
+    14.5 km/h, so the check sampled a slow ship. The 30 s is back.
+  - Compare the logged value (speed, angle) of a run before and after.
+- **A wait on one peer can be what paces the other.**
+  - `freighternetcheck`'s A said "ramp open" on the door bit and "parked" the moment it was out. B then
+    walked up a ramp still swinging down.
+  - The ramp has no state to wait on headless, so those waits stay.
 - **`IsOnFloor()` right after a teleport** can still read the old ground. Wait a physics frame first, or keep
   the settle.
 - **Logins:** `if (!await LogIn("pw")) return;`, which waits for `Permissions.IsAdmin`. Never `/login` then a
