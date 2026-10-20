@@ -25,6 +25,14 @@
   second client logs on the server as `identity XXXX already connected, no sleeper for it`. A client
   that must be a player of its own runs under `( tc_userdata "$OUT/userdata_<x>_B"; tc_client ... ) &`
   (`tools/sleepercheck.sh`, `tools/yardlootnetcheck.sh`); never set `APPDATA`/`XDG_DATA_HOME` by hand.
+- **A check of the generated world passes `"${NOTERRAIN[@]}"`** (`--chunks test_output/no_terrain`,
+  an empty folder the lib makes) to its server and every client, besides `--generated-world`.
+  `--generated-world` alone only lets a server start with no terrain: where `terrain_location.json`
+  points at real tiles (the main checkout's D:, 825 tiles), server and clients load them, and the
+  generated site office at 2586561,1115543 is real ground there: `siteofficenetcheck` failed "no site
+  office door near the spot" (#943). Done for `siteofficenetcheck` and `siteuppernetcheck`; other
+  generated-site scripts (`cranenetcheck`, `sitemachinenetcheck`, `sitepalletnetcheck`,
+  `yardlootnetcheck`, ...) still read whatever terrain the checkout has.
 
 ## macOS
 
