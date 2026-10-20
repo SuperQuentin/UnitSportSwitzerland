@@ -23,15 +23,15 @@ guard_wait_ram 4 600 || exit 1
 "$GODOT" --headless --path . -- --server --port $PORT --generated-world > $OUT/buildnet_server.log 2>&1 < /dev/null &
 SERVER=$!
 guard_watch $SERVER > /dev/null
-for _ in $(seq 1 120); do
+for _ in $(seq 1 600); do
   grep -q "server listening" $OUT/buildnet_server.log 2>/dev/null && break
   kill -0 "$SERVER" 2>/dev/null || break
-  sleep 1
+  sleep 0.2
 done
 guard_run 300 $OUT/buildnet_A.log "$GODOT" --headless --path . -- --connect 127.0.0.1:$PORT --name BuilderA --buildnet A --traffic 0 ${ORIGINSTRESS:+--originstress $ORIGINSTRESS} &
 A=$!
 # B joins only once A has built: what it sees comes from the join snapshot
-for _ in $(seq 1 200); do grep -q "say built" $OUT/buildnet_A.log 2>/dev/null && break; kill -0 $A 2>/dev/null || break; sleep 1; done
+for _ in $(seq 1 1000); do grep -q "say built" $OUT/buildnet_A.log 2>/dev/null && break; kill -0 $A 2>/dev/null || break; sleep 0.2; done
 guard_run 240 $OUT/buildnet_B.log "$GODOT" --headless --path . -- --connect 127.0.0.1:$PORT --name WatcherB --buildnet B --traffic 0 ${ORIGINSTRESS:+--originstress $ORIGINSTRESS}
 wait $A
 code=0

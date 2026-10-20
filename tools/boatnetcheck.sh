@@ -17,7 +17,7 @@ tc_client 360 $OUT/boatnet_A.log --connect 127.0.0.1:$PORT --name BoaterA $WORLD
 A=$!
 WINDOW=; [ -n "${SHOTS:-}" ] && WINDOW=--windowed
 tc_client 300 $OUT/boatnet_B.log $WINDOW --connect 127.0.0.1:$PORT --name WatcherB $WORLD --view first --nocapture --time 14 ${STYLE:+--style $STYLE} --boatnet B
-for _ in $(seq 1 30); do kill -0 "$A" 2>/dev/null || break; sleep 1; done
+for _ in $(seq 1 150); do kill -0 "$A" 2>/dev/null || break; sleep 0.2; done
 grep -h "\[boatnet" $OUT/boatnet_A.log $OUT/boatnet_B.log
 code=0
 grep -q "\[boatnet A\] RESULT: ok" $OUT/boatnet_A.log || code=1

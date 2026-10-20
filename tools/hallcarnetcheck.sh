@@ -23,10 +23,9 @@ tc_server 420 120 "$OUT/hallcarnet_server.log" --server --port $PORT --world fix
 # B first, so it is already waiting when A walks in
 tc_client 360 "$OUT/hallcarnet_B.log" --connect 127.0.0.1:$PORT --name HallB --cache "$OUT/hallcarnet_cache_b" $WORLD --hallcarcheck B &
 B=$!
-sleep 3
 # a third client joins once A has woken its car, and must find it a vehicle and its sleeper never drawn
 (
-  for i in $(seq 1 180); do grep -aq "sleeping copy is gone" "$OUT/hallcarnet_A.log" 2>/dev/null && break; sleep 1; done
+  for i in $(seq 1 900); do grep -aq "sleeping copy is gone" "$OUT/hallcarnet_A.log" 2>/dev/null && break; sleep 0.2; done
   tc_client 240 "$OUT/hallcarnet_C.log" --connect 127.0.0.1:$PORT --name HallC --cache "$OUT/hallcarnet_cache_c" $WORLD --hallcarcheck C
 ) &
 C=$!

@@ -14,7 +14,7 @@ tc_client 200 "$OUT/sleepers_A1.log" --connect 127.0.0.1:$PORT --name Sleepy $WO
 B_UD="$OUT/userdata_sleepers_B"; rm -rf "$B_UD"; mkdir -p "$B_UD"
 ( tc_userdata "$B_UD"; tc_client 600 "$OUT/sleepers_B.log" --connect 127.0.0.1:$PORT --name Watcher $WORLD --sleepers watch ) & B=$!
 # B is in and has seen the sleeper before A comes back
-for i in $(seq 1 300); do grep -q "one sleeper shown" "$OUT/sleepers_B.log" 2>/dev/null && break; sleep 1; done
+for i in $(seq 1 1500); do grep -q "one sleeper shown" "$OUT/sleepers_B.log" 2>/dev/null && break; sleep 0.2; done
 echo "[sleepercheck] B saw the sleeper after ${i} s; A comes back"
 tc_client 200 "$OUT/sleepers_A2.log" --connect 127.0.0.1:$PORT --name Sleepy $WORLD --sleepers wake
 wait $B

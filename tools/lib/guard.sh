@@ -233,7 +233,10 @@ guard_run() {
         return 137
       fi
     fi
-    sleep 1; elapsed=$(( elapsed + 1 ))
+    # a second in fifths: the end of a run is seen within 0.2 s, not 1 s, for every client a script waits
+    # on (#992); elapsed still counts whole seconds for the timeout and the memory checks
+    for _ in 1 2 3 4 5; do kill -0 "$pid" 2>/dev/null || break; sleep 0.2; done
+    elapsed=$(( elapsed + 1 ))
   done
   wait "$pid"
 }

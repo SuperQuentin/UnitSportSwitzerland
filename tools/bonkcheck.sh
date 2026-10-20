@@ -9,7 +9,6 @@ PORT=${BONK_PORT:-7833}
 tc_server 900 120 $OUT/bonkcheck_server.log --server --port $PORT --generated-world
 tc_client 200 $OUT/bonkcheck_thrower.log --connect 127.0.0.1:$PORT --name Thrower --bonkcheck thrower --traffic 0 &
 THROWER=$!
-sleep 2
 tc_client 195 $OUT/bonkcheck_victim.log --connect 127.0.0.1:$PORT --name Victim --bonkcheck victim --traffic 0
 wait $THROWER
 code=0

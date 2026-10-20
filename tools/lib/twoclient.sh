@@ -73,7 +73,8 @@ fi
 _tc_servers=()
 _tc_cleanup() {
   local p
-  for p in ${_tc_servers[@]+"${_tc_servers[@]}"}; do _guard_kill_tree "$p"; done
+  # only the ones still up: a tree walk costs ~0.5 s on Git Bash, for a server tc_stop already took down
+  for p in ${_tc_servers[@]+"${_tc_servers[@]}"}; do kill -0 "$p" 2>/dev/null && _guard_kill_tree "$p"; done
   [ -n "${GUARD_LOCK_HELD:-}" ] || guard_unlock
 }
 trap _tc_cleanup EXIT
@@ -88,11 +89,14 @@ tc_server() {
   guard_run "$timeout_s" "$log" ${_tc_env[@]+"${_tc_env[@]}"} "$GODOT" --headless --path . -- "$@" &
   SERVER=$!
   _tc_servers+=("$SERVER")
-  for i in $(seq 1 "$wait_s"); do
+  # every 0.2 s (#992): the clients start the moment it listens
+  for i in $(seq 1 $(( wait_s * 5 ))); do
     grep -q "server listening" "$log" 2>/dev/null && return 0
     kill -0 "$SERVER" 2>/dev/null || return 1
-    sleep 1
+    sleep 0.2
   done
+  echo "[$_tc_name] the server did not listen within ${wait_s}s ($log)" >&2
+  return 1
 }
 
 tc_client() {

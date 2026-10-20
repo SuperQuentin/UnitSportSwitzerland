@@ -13,7 +13,7 @@ tc_server 1800 120 $OUT/parkingnet_server.log --server --port $PORT --chunks $CO
 tc_client 240 $OUT/parkingnet_A.log --connect 127.0.0.1:$PORT --chunks $COURSE --name ParkA --parkingnet A --traffic 0 &
 A=$!
 # B joins only once A has woken one: what it sees must come from the server, not from its own guess
-for _ in $(seq 1 200); do grep -q "is a real" $OUT/parkingnet_A.log 2>/dev/null && break; kill -0 $A 2>/dev/null || break; sleep 1; done
+for _ in $(seq 1 1000); do grep -q "is a real" $OUT/parkingnet_A.log 2>/dev/null && break; kill -0 $A 2>/dev/null || break; sleep 0.2; done
 tc_client 240 $OUT/parkingnet_B.log --connect 127.0.0.1:$PORT --chunks $COURSE --name ParkB --parkingnet B --traffic 0
 wait $A
 code=0
