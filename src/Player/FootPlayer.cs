@@ -782,6 +782,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     /// <summary>Ground speed, m/s — for a speedometer, and for the trainer link later.</summary>
     public float RideSpeed => _motion.Speed;
+    /// <summary>The travel off the nose, rad (+ left): a skid, a drift, a hop turn landed across (#954).</summary>
+    public float RideSlip => _motion.Slip;
 
     // --- what the feel layer (PlayerFeel: sound, shake, particles, HUD) listens to ---
     /// <summary>Touched down; the argument is the downward speed that was arrested, m/s.</summary>
@@ -972,6 +974,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     /// <summary>A landing verdict or trick name to show; true for a good one.</summary>
     public event Action<string, bool>? Announced;
+
+    private bool _hopWanted;
+
+    /// <summary>
+    /// A ride's hop asked for by code, as Space asks for it (#954: a bot's or a probe's hop turn):
+    /// taken on this physics step if the ride is on the ground and can hop, else dropped.
+    /// </summary>
+    public void Hop() => _hopWanted = true;
 
     // --- vehicle state while driving, and the player's own health ---
     /// <summary>The engine of the vehicle being driven is running. Entering starts it.</summary>
@@ -4679,8 +4689,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // every frame, and only from the ground - there is nothing to push against in the air.
         // Speed and heading are untouched: a hop carries the bike's momentum, it does not add any.
         bool spaceDown = !Npc && PlayerInput.Held(PlayerInput.Jump);
-        bool hop = spaceDown && !_jumpHeld && onFloor && _ride.CanHop;
+        bool hop = (spaceDown && !_jumpHeld || _hopWanted) && onFloor && _ride.CanHop;
         _jumpHeld = spaceDown;
+        _hopWanted = false;
         if (hop) { velocity.Y = RideJumpVelocity; Jumped?.Invoke(); }
         LastRideInput = input;
 

@@ -21,7 +21,7 @@ public sealed class Skis : SnowRide
     public override RideKind Kind => RideKind.Skis;
     public override string Label => "Skis";
     public override string Blurb =>
-        "Gravity: {move_left}/{move_right} carve, {brake} snowplough, fast: {brake} + turn to skid to a stop, tap {move_forward} to skate, hold {tuck_boost} to schuss";
+        "Gravity: {move_left}/{move_right} carve, {brake} snowplough, fast: {brake} + turn to skid to a stop (in the air too: a hop turn), tap {move_forward} to skate, hold {tuck_boost} to schuss";
 
     /// <summary>
     /// How far the skis tip onto their edges. ~57 degrees: a World Cup giant-slalom skier is past
@@ -40,11 +40,14 @@ public sealed class Skis : SnowRide
     /// <summary>Below this you are shuffling and turn the skis directly.</summary>
     private const float SlowSpeed = 1.5f;
 
-    /// <summary>A hockey stop: brake with a turn swings the skis across at this rate, whatever the speed.</summary>
+    /// <summary>A hockey stop: brake with a turn swings the skis across at this rate, whatever the speed, to SkiDynamics.StopAngle.</summary>
     private const float PivotRate = 3f;
 
     /// <summary>Above this a brake with a turn is a hockey stop; below, a snowplough turn, m/s.</summary>
     private const float PivotSpeed = 5f;
+
+    /// <summary>Above this a brake with a turn in the air is a hop turn (#954), m/s: below it there is little to stop.</summary>
+    private const float HopSpeed = 2f;
 
     /// <summary>The schuss (Shift, #933): the skis flat and straight, steering only nudges them.</summary>
     private const float SchussSteer = 0.3f;
@@ -69,19 +72,27 @@ public sealed class Skis : SnowRide
         var tuning = arcade ? SkiDynamics.Tuning.Game : SkiDynamics.Tuning.Sim;
         float maxLean = arcade ? ArcadeMaxLean : MaxLean;
 
-        // a hockey stop: brake with a turn throws the skis across the travel, not into a lean
-        bool pivot = ground.OnFloor && input.Brake > 0.3f && Mathf.Abs(input.Steer) > 0.3f && motion.Speed > PivotSpeed;
+        // brake with a turn throws the skis across the travel, not into a lean: on the snow a hockey
+        // stop above PivotSpeed; in the air a hop turn (#954), quicker with nothing holding the skis.
+        // Either holds square across (SkiDynamics.StopAngle) and the edges skid the speed off.
+        bool across = input.Brake > 0.3f && Mathf.Abs(input.Steer) > 0.3f;
+        // once across (a hop turn landed, a hockey stop under way) it skids on down to a standstill
+        // rather than turning into a plough on top of the skid below PivotSpeed
+        bool alreadyAcross = Mathf.Abs(motion.Slip) > 0.8f && motion.Speed > 0.5f;
+        bool pivot = across && (ground.OnFloor ? motion.Speed > PivotSpeed || alreadyAcross : motion.Speed > HopSpeed);
         // the schuss holds the line: the skis flat, a steer only nudges them
         float steer = input.Effort && ground.OnFloor ? input.Steer * SchussSteer : input.Steer;
         if (pivot)
         {
-            float yawRate = -Mathf.Sign(input.Steer) * PivotRate;
-            motion.Yaw += yawRate * dt;
-            motion.YawRate = yawRate;
+            // the heading turns, the velocity does not: it is that much further off the nose
+            float slip = SkiDynamics.SwingAcross(motion.Slip, -Mathf.Sign(input.Steer),
+                ground.OnFloor ? PivotRate : SkiDynamics.HopTurnRate, dt);
+            float turned = motion.Slip - slip;
+            motion.Yaw += turned;
+            motion.YawRate = turned / dt;
+            motion.Slip = slip;
             motion.Bank = Mathf.MoveToward(motion.Bank, -Mathf.Sign(input.Steer) * maxLean, 4f * dt);
             motion.Lean = motion.Bank * 0.6f;
-            // the heading turned, the velocity did not: it is that much further off the nose
-            motion.Slip -= yawRate * dt;
         }
         else
         {

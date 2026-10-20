@@ -32,6 +32,14 @@
   - to 3 m: STUMBLE, 25 % of the speed lost;
   - beyond: BAIL.
   - The trick grades (`GradeLanding`) still apply first.
+- **Hop turn (#954)**: in the air, brake + turn swings the skis across at `SkiDynamics.HopTurnRate`
+  (7 rad/s, a quarter turn in 0.2 s) to `StopAngle` (1.45 rad, ~83°); the hockey stop holds there
+  too (`SwingAcross`). It turns the heading, not the trick spin (`_airSpin`, F), so the landing is
+  not graded SLOPPY/BAIL. Once across (|slip| > 0.8) the stop skids on to a standstill below
+  `PivotSpeed` instead of turning into a plough on top of the skid. Measured (`--ride skis
+  --hopturn 1.6`, La Pasay): 6 m/s to a stop in 2.3 s on the snow; off it (the edge of a run,
+  mask < 0.3) the doubled off-snow scrub stops it in 0.7 s.
+  - `FootPlayer.Hop()` asks for a ride's hop from code (a bot, a probe); `RideSlip` reads the slip.
 - **Hints**: "Tap to skate" under 4 m/s; "Brake: snowplough" to 6; "Brake + turn: skid to a stop"
   faster; "Hold: schuss".
 - **Feel (#933, playtest)**: turns were a snap. `MaxYawRate` 2.4 → 1.5 (Game 2.7 → 1.75),

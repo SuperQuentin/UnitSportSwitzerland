@@ -62,6 +62,41 @@ public class SnowboardDynamicsTests
     }
 
     [Fact]
+    public void A_hop_turn_swings_square_across_in_a_fifth_of_a_second_and_no_further()
+    {
+        float slip = 0f, t = 0f;
+        while (MathF.Abs(slip) < SkiDynamics.StopAngle - 1e-4f && t < 1f)
+        {
+            slip = SkiDynamics.SwingAcross(slip, 1f, SkiDynamics.HopTurnRate, Dt);
+            t += Dt;
+        }
+        Assert.InRange(t, 0.15f, 0.25f);
+        // turning left (+1) puts the travel to the right of the nose: slip −
+        Assert.Equal(-SkiDynamics.StopAngle, slip, 4);
+        // held on, it stays square across
+        for (int i = 0; i < 60; i++) slip = SkiDynamics.SwingAcross(slip, 1f, SkiDynamics.HopTurnRate, Dt);
+        Assert.Equal(-SkiDynamics.StopAngle, slip, 4);
+        // swung back the other way, it comes back
+        Assert.True(SkiDynamics.SwingAcross(slip, -1f, SkiDynamics.HopTurnRate, Dt) > slip);
+        // a skid already past the quarter turn is not pushed on
+        Assert.Equal(-2f, SkiDynamics.SwingAcross(-2f, 1f, SkiDynamics.HopTurnRate, Dt), 4);
+    }
+
+    [Fact]
+    public void Landed_square_across_the_edges_stop_fast_but_not_at_once()
+    {
+        // 15 m/s, landed at the stop angle on full edge, on the flat
+        var s = SkiDynamics.State.From(15f, SkiDynamics.StopAngle);
+        float t = 0f;
+        while (s.Speed > 1f && t < 10f)
+        {
+            SkiDynamics.Step(ref s, SkiDynamics.Tuning.Sim, new SkiDynamics.Ground(true, 0, 0), new SkiDynamics.Input(0, 0, false, 1f), Dt);
+            t += Dt;
+        }
+        Assert.InRange(t, 1.2f, 4f);
+    }
+
+    [Fact]
     public void A_board_runs_slower_than_tucked_skis()
     {
         var (along, _) = SkiDynamics.Slope(0, MathF.Cos(0.35f), MathF.Sin(0.35f), 0, 1);

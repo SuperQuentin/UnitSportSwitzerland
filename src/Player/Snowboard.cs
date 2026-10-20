@@ -27,7 +27,7 @@ public sealed class Snowboard : SnowRide
     public override RideKind Kind => RideKind.Snowboard;
     public override string Label => "Snowboard";
     public override string Blurb =>
-        "Gravity: {move_left}/{move_right} carve toe or heel edge, {brake} skid to a stop, tap {move_forward} to push, {jump} ollie, hold {tuck_boost} to straight-line";
+        "Gravity: {move_left}/{move_right} carve toe or heel edge, {brake} skid to a stop (in the air too: a hop turn), tap {move_forward} to push, {jump} ollie, hold {tuck_boost} to straight-line";
 
     /// <summary>A board tips further than skis: the whole body leans over the edge. ~63 degrees.</summary>
     private const float MaxLean = 1.1f;
@@ -36,9 +36,8 @@ public sealed class Snowboard : SnowRide
     private const float BankResponse = 4.5f;
     private const float SlowSpeed = 1.2f;
 
-    /// <summary>The swing across the travel for a stop, rad/s; it stops at the quarter turn.</summary>
+    /// <summary>The swing across the travel for a stop on the snow, rad/s, to <see cref="SkiDynamics.StopAngle"/>.</summary>
     private const float PivotRate = 3.2f;
-    private const float PivotTo = 1.45f;
 
     private const float ArcadeMaxLean = 1.2f, ArcadeBankResponse = 5.5f, ArcadeMaxYawRate = 1.95f;
 
@@ -81,15 +80,17 @@ public sealed class Snowboard : SnowRide
         float maxLean = arcade ? ArcadeMaxLean : MaxLean;
 
         // a skid stop: brake swings the board across the travel, to the side steered to, else
-        // a heel-side stop (the chest turned to the travel), and holds it there at a quarter turn
-        bool stop = ground.OnFloor && input.Brake > 0.3f && motion.Speed > 2f;
+        // a heel-side stop (the chest turned to the travel), and holds it there at a quarter turn.
+        // In the air it is a hop turn (#954): swung quicker, landed on the edge that skids.
+        bool stop = input.Brake > 0.3f && motion.Speed > 2f;
         if (stop)
         {
             float side = Mathf.Abs(input.Steer) > 0.3f ? -Mathf.Sign(input.Steer) : FacingRight ? 1f : -1f;
-            float yawRate = Mathf.Abs(motion.Slip) < PivotTo ? side * PivotRate : 0f;
-            motion.Yaw += yawRate * dt;
-            motion.YawRate = yawRate;
-            motion.Slip -= yawRate * dt;
+            float slip = SkiDynamics.SwingAcross(motion.Slip, side, ground.OnFloor ? PivotRate : SkiDynamics.HopTurnRate, dt);
+            float turned = motion.Slip - slip;
+            motion.Yaw += turned;
+            motion.YawRate = turned / dt;
+            motion.Slip = slip;
             // leaning away from the slide onto the trailing edge (Slip + is travel to the left,
             // Bank − a lean to the right): facing the travel, that is the heel edge
             motion.Bank = Mathf.MoveToward(motion.Bank, -Mathf.Sign(motion.Slip) * maxLean, 4f * dt);
