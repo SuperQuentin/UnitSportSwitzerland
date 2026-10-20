@@ -1200,6 +1200,32 @@ public static partial class InteriorGenerator
             new Piece(FurnitureType.Chair, 0.5f, 0.5f, 0.9f, false),
             new Piece(FurnitureType.FireExtinguisher, 0.25f, 0.25f, 0.7f, true),
         },
+        // #827: up the site office's stair, over the office: the site manager's own desk, the
+        // folders of the job on the shelf, a locker, the programme on the whiteboard
+        RoomType.SiteManager => new[]
+        {
+            new Piece(FurnitureType.Desk, 1.4f, 0.7f, 0.75f, true),
+            new Piece(FurnitureType.Chair, 0.5f, 0.5f, 0.9f, false),
+            new Piece(FurnitureType.Shelf, 1.0f, 0.4f, 1.9f, true),
+            new Piece(FurnitureType.Locker, 0.8f, 0.45f, 1.9f, true),
+            new Piece(FurnitureType.Whiteboard, 1.2f, 0.08f, 0.9f, true),
+            new Piece(FurnitureType.Heater, 0.7f, 0.25f, 0.6f, true),
+            new Piece(FurnitureType.Chair, 0.5f, 0.5f, 0.9f, false),
+            new Piece(FurnitureType.Plant, 0.4f, 0.4f, 1.1f, true),
+        },
+        // and over the mess room the drawing office: the plans spread on two tables, a drafting
+        // desk, the plan rolls on the shelf
+        RoomType.DrawingOffice => new[]
+        {
+            new Piece(FurnitureType.Table, 1.6f, 0.8f, 0.9f, true),
+            new Piece(FurnitureType.Table, 1.6f, 0.8f, 0.9f, true),
+            new Piece(FurnitureType.Desk, 1.2f, 0.7f, 0.75f, true),
+            new Piece(FurnitureType.Chair, 0.5f, 0.5f, 0.9f, false),
+            new Piece(FurnitureType.Chair, 0.5f, 0.5f, 0.9f, false),
+            new Piece(FurnitureType.Shelf, 1.0f, 0.4f, 1.9f, true),
+            new Piece(FurnitureType.Whiteboard, 1.2f, 0.08f, 0.9f, true),
+            new Piece(FurnitureType.Heater, 0.7f, 0.25f, 0.6f, true),
+        },
         RoomType.BankHall => new[]
         {
             new Piece(FurnitureType.TellerDesk, Math.Clamp(Math.Max(r.Width, r.Depth) * 0.45f, 2.0f, 3.6f), 0.8f, 1.15f, true),
@@ -1212,13 +1238,20 @@ public static partial class InteriorGenerator
         _ => Array.Empty<Piece>(),
     };
 
-    private static void Furnish(InteriorLayout l, Random rng)
+    private static void Furnish(InteriorLayout l, Random rng) => Furnish(l, rng, 0);
+
+    /// <summary>
+    /// Furnishes the plan's floors from <paramref name="fromFloor"/> up: a floor added after the rest
+    /// was furnished (a site office's upper containers, #827) is furnished without touching the
+    /// pieces already placed below it.
+    /// </summary>
+    private static void Furnish(InteriorLayout l, Random rng, int fromFloor)
     {
         // a vending machine is the building's own dice roll, so it moves nothing else in the plan
         bool vending = !l.IsBank && Core.Fnv.Unit(l.Key + "|vending") < VendingChance(l.Kind);
         bool apt = l.Type is BuildingType.Apartments or BuildingType.MixedUse;
         var rooms = new List<(int Floor, RoomPlan Room, List<RectPlan> Placed, List<RectPlan> Blocked)>();
-        for (int f = 0; f < l.Floors.Count; f++)
+        for (int f = fromFloor; f < l.Floors.Count; f++)
         {
             var floor = l.Floors[f];
             for (int ri = 0; ri < floor.Rooms.Count; ri++)

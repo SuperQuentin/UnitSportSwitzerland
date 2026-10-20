@@ -317,7 +317,7 @@ public partial class Swarm : Node
         world.AddChild(InviteService.CreateClient());
         world.AddChild(Parties.CreateClient());
         // ChunkStream only answers requests, and a bot makes none
-        foreach (string stub in new[] { "Vehicles", "Combat", "Interiors", "Loot", "ChunkStream" })
+        foreach (string stub in new[] { "Vehicles", "Combat", "Interiors", "Loot", "ChunkStream", Concert.ConcertService.NodeName })
             world.AddChild(new Node { Name = stub });
         world.AddChild(new SwarmOccasions { Name = "Occasions" });
         world.AddChild(new Birds.BirdNet { Name = Birds.BirdNet.NodeName });   // takes the bird snapshots, draws nothing

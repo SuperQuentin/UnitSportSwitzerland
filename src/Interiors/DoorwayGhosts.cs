@@ -120,13 +120,17 @@ public partial class DoorwayGhosts : Node3D, Core.IOriginContainer
         return false;
     }
 
-    private static void Collect(Node node, List<MeshInstance3D> into)
+    /// <summary>The meshes of a thing its ghost copies (internal for <c>--ownbodycheck</c>).</summary>
+    internal static void Collect(Node node, List<MeshInstance3D> into)
     {
         foreach (var child in node.GetChildren())
         {
             // the first-person viewmodel (and its print, screen) belongs to the screen's camera only
             if (child is VisualInstance3D v && (v.Layers & Items.HeldItemVisual.ViewmodelLayer) != 0) continue;
-            if (child is MeshInstance3D m && m.Visible && m.Mesh != null && (m.Layers & DoorPortals.AllQuadLayers) == 0)
+            // a shadow-only twin (the own body seen from its eye, #833) casts only: its ghost, which
+            // casts nothing, would draw it, and the portal showed the player's own head
+            if (child is MeshInstance3D m && m.Visible && m.Mesh != null && (m.Layers & DoorPortals.AllQuadLayers) == 0
+                && m.CastShadow != GeometryInstance3D.ShadowCastingSetting.ShadowsOnly)
                 into.Add(m);
             if (child is Node3D { Visible: false }) continue;
             Collect(child, into);

@@ -390,6 +390,7 @@ public partial class LootService : Node
         if (_crate != id) return;
         _ui?.Refresh();
         if (_pendingAll) { _pendingAll = false; TakeAll(); }
+        else AllTaken();
     }
 
     /// <summary>The server said no (someone was quicker): the panel shows what is left.</summary>
@@ -397,7 +398,9 @@ public partial class LootService : Node
     {
         _waiting = false;
         _pendingAll = false;
-        if (_crate == id) _ui?.Refresh();
+        if (_crate != id) return;
+        _ui?.Refresh();
+        AllTaken();
     }
 
     public void Close()
@@ -407,6 +410,7 @@ public partial class LootService : Node
         _searcher = null;
         _waiting = false;
         _pendingAll = false;
+        _closeWhenEmpty = false;
         _ui?.Close();
     }
 
@@ -504,14 +508,39 @@ public partial class LootService : Node
 
     public void TakeAll()
     {
-        foreach (var (i, _) in OpenContents().ToList())
+        _takingAll = true;
+        try
         {
-            if (_waiting && Online) { _pendingAll = true; return; }
-            Take(i);
+            foreach (var (i, _) in OpenContents().ToList())
+            {
+                if (_waiting && Online) { _pendingAll = true; return; }
+                Take(i);
+            }
         }
+        finally { _takingAll = false; }
+        AllTaken();
     }
 
-    private bool _pendingAll;
+    /// <summary>The panel's "Take all": <see cref="TakeAll"/>, and the panel closes once it has emptied the container (#929).</summary>
+    public void TakeAllAndClose()
+    {
+        _closeWhenEmpty = true;
+        TakeAll();
+    }
+
+    private bool _pendingAll, _takingAll, _closeWhenEmpty;
+
+    /// <summary>
+    /// A take-all is over once no take is waiting and none is still to ask for: an empty container
+    /// closes the panel; anything left (no room in the pack, someone was quicker) keeps it open.
+    /// Offline every grant comes back inside the loop, hence <see cref="_takingAll"/>.
+    /// </summary>
+    private void AllTaken()
+    {
+        if (!_closeWhenEmpty || _takingAll || _waiting || _pendingAll) return;
+        _closeWhenEmpty = false;
+        if (!OpenContents().Any()) Close();
+    }
 
     // ---- client: replies ------------------------------------------------------------------------
 
@@ -533,6 +562,7 @@ public partial class LootService : Node
         if (!OpenContents().Any()) _seenEmpty[(key, furniture)] = epoch;
         _ui?.Refresh();
         if (_pendingAll) { _pendingAll = false; TakeAll(); }
+        else AllTaken();
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -555,6 +585,7 @@ public partial class LootService : Node
             if (!OpenContents().Any()) _seenEmpty[(key, furniture)] = _openEpoch;
             _ui?.Refresh();
             if (_pendingAll) { _pendingAll = false; TakeAll(); }
+            else AllTaken();
         }
     }
 

@@ -99,7 +99,7 @@ public sealed class CameraTrack
     public ShakeSettings Shake { get; set; } = new();
     public List<BeatLink> Links { get; } = new();
     /// <summary>Its noise seed: stable across saves, so its shake replays the same.</summary>
-    public int Seed { get; set; } = Random.Shared.Next();
+    public int Seed { get; set; } = Core.RunSeeds.Pinned ? Core.RunSeeds.Of("camera-track") : Random.Shared.Next();
 
     /// <summary>Follows an actor: its keys are in the actor's frame.</summary>
     public bool Relative => Rig != ShotRig.World && Target >= 0;

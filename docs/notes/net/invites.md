@@ -38,6 +38,7 @@
 | `tphere` | `/tphere <player>` | that player | the accepter goes to the sender |
 | `party` | `/party invite <player>` (the leader, or anyone with no party) | that player | `PartyBook.Join` |
 | `fight` | E at a player, `/fight <player>` (mutual) | that player | `FightManager.Begin` after the range and on-foot checks |
+| `aura` | `/aura <player>`, Activities (mutual, #907) | that player | `AuraManager.Begin` after the range, on-foot and not-in-a-fight checks |
 | `race` | `/race duel <player>`, once the course is built (key = race id) | that player | `RaceManager.Join`; a decline ends the duel |
 | `race` | `/race start`, once open | everyone | `RaceManager.Join` |
 

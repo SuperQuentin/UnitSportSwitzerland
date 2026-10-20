@@ -20,7 +20,10 @@
   - every `PlacedKind`, through `PlacedObjects.VisualOf`;
   - every allowed `PieceKind` × `BuildMaterial`;
   - a pallet;
-  - every `DoorLeaf` hang.
+  - every `DoorLeaf` hang;
+  - one castle solid of each dress (`PortalDemo.CastleSamples`, #859: a keep per region, brick, a
+    manor, a ruin as its broken walls), drawn and collided from its tile; not in the two quick-tier
+    halves, but run alone (`--targets castles/`) for a change to the castle or building builders.
 - **To add a kind of thing that is in no registry:** add a `yield return` in `All()`. That is a
   `Func<WorldOrigin, Transform3D, Node3D>` building it at a world transform, plus a `Drawn` builder
   when the spawned node draws nothing headless (a parked vehicle does not).

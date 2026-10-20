@@ -6,6 +6,7 @@ public static class OccasionIds
 {
     public const string Halloween = "halloween";
     public const string Christmas = "christmas";
+    public const string Ufo = "ufo";
 }
 
 /// <summary>
@@ -108,6 +109,7 @@ public static class OccasionRegistry
     {
         [OccasionIds.Halloween] = new HalloweenOccasion(),
         [OccasionIds.Christmas] = new ChristmasOccasion(),
+        [OccasionIds.Ufo] = new UfoOccasion(),
     };
 
     private static readonly Dictionary<string, Occasion> Generic = new(StringComparer.OrdinalIgnoreCase);

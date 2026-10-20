@@ -115,6 +115,9 @@ public partial class FlightCheckProbe : Node
             case "pigeoncrash":
                 p.SetRide(RideKind.Pigeon);
                 break;
+            case "ufo":
+                p.SetRide(RideKind.Ufo);
+                break;
             case "plane":
                 p.SetRide(RideKind.Plane);
                 p.DebugLaunch(p.GlobalPosition + Vector3.Up * 400f, new Vector3(0, 0, -50));
@@ -223,6 +226,9 @@ public partial class FlightCheckProbe : Node
                     End(how.Text);
                 }
                 break;
+            case "ufo":
+                UfoSortie(t, Hold);
+                break;
             case "plane":
                 Hold(PlayerInput.Sprint, t < 3);                  // throttle lever up
                 Hold(PlayerInput.MoveBack, t > 6 && t < 7.5);     // pull up
@@ -230,6 +236,64 @@ public partial class FlightCheckProbe : Node
                 if (t > 20) End("flying");
                 break;
         }
+    }
+
+    private float _ufoY, _ufoCruise, _ufoDash, _ufoLegsHigh = -1f, _ufoRampStart = -1f;
+    private bool _ufoBeamSeen, _ufoPressed;
+
+    /// <summary>A switch pressed as a key would be: an input event, which the player's handler reads (#861).</summary>
+    private static void Tap(string action)
+    {
+        Input.ParseInputEvent(new InputEventAction { Action = action, Pressed = true });
+        Input.ParseInputEvent(new InputEventAction { Action = action, Pressed = false });
+    }
+
+    /// <summary>
+    /// The saucer (#861): the ramp opens on the ground, climb (legs fold), cruise, boost, let go
+    /// (it stops and holds its height), the beam on and off, descend and land on its legs (the
+    /// ramp opens again). Each step checked against <see cref="UfoFlight"/>'s numbers.
+    /// </summary>
+    private void UfoSortie(double t, System.Action<string, bool> hold)
+    {
+        var p = _player!;
+        if (p.Saucer is not { } ufo) { _crashed = true; End($"not in the saucer: {p.Ride}"); return; }
+        var s = ufo.State;
+        float flat = MathX.FlatLength(p.Flight.Velocity);
+        void Check(bool ok, string what) { GD.Print($"[flycheck] ufo {(ok ? "ok" : "FAIL")}: {what}"); if (!ok) _crashed = true; }
+        void Once(double at, System.Action act) { if (t >= at && t < at + 0.05 && !_ufoPressed) { _ufoPressed = true; act(); } else if (t >= at + 0.05 && t < at + 0.1) _ufoPressed = false; }
+
+        Once(4.4, () => { _ufoRampStart = s.Ramp; Check(s.Landed && s.Ramp > 0.99f, $"landed, the ramp opened by itself ({s.Ramp:F2})"); });
+        hold(PlayerInput.Jump, t > 4.5 && t < 7.5);
+        Once(8, () => { _ufoY = p.GlobalPosition.Y; Check(s.Ramp < 0.01f && !s.Landed, $"lifted off, ramp in ({s.Ramp:F2}), {Agl(p.GlobalPosition):F0} m up"); });
+        hold(PlayerInput.MoveForward, t > 8.3 && t < 15);
+        hold(PlayerInput.Sprint, t > 11.2 && t < 15);
+        Once(11, () => { _ufoCruise = flat; _ufoLegsHigh = s.Legs; Check(flat > UfoFlight.Cruise - 1f && flat < UfoFlight.Cruise + 1f, $"cruising {flat:F1} m/s"); });
+        Once(14.7, () => { _ufoDash = flat; Check(flat > UfoFlight.Dash - 3f, $"boosted {flat:F1} m/s"); });
+        Once(14.8, () => Check(_ufoLegsHigh < 0.01f, $"legs folded up high ({_ufoLegsHigh:F2})"));
+        Once(19.5, () => Check(flat < 0.3f && Mathf.Abs(p.GlobalPosition.Y - _ufoY) < 1.5f,
+            $"let go: stopped ({flat:F2} m/s), height held ({p.GlobalPosition.Y - _ufoY:+0.0;-0.0} m), tilt {s.Tilt.X:F3}"));
+        // windowed with a picture: one braking (the wobble) and one with the beam on, beside it
+        Once(16.2, () => Snap("braking"));
+        Once(20, () => Tap(PlayerInput.TractorBeam));
+        Once(21.4, () => Snap("beam"));
+        if (t > 20.5 && t < 21.5 && s.Beam) _ufoBeamSeen = true;
+        Once(22, () => Tap(PlayerInput.TractorBeam));
+        Once(22.5, () => Check(_ufoBeamSeen && !s.Beam, "beam on, then off"));
+        hold(PlayerInput.CrouchSlide, t > 23 && !s.Landed);
+        if (t > 23 && s.Landed && s.Ramp > 0.99f)
+        {
+            Check(s.Legs > 0.99f, $"down on its legs ({s.Legs:F2}), ramp open, {Agl(p.GlobalPosition):F1} m agl");
+            End("landed, ramp open");
+        }
+        if (t > 50) { _crashed = true; End("never landed"); }
+    }
+
+    /// <summary>A picture beside the end one, <c>&lt;name&gt;_&lt;what&gt;.png</c>, when the run asked for one.</summary>
+    private void Snap(string what)
+    {
+        if (_shot == null) return;
+        string path = _shot.Replace(".png", $"_{what}.png");
+        if (GetViewport().GetTexture().GetImage().SavePng(path) == Error.Ok) GD.Print($"[flycheck] wrote {path}");
     }
 
     /// <summary>Wall-clock frame times, ms, while flying: what a windowed run costs (#421, the cockpit's screens with <c>--instruments off</c> to compare).</summary>

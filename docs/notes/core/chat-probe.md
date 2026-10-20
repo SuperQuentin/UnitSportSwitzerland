@@ -51,8 +51,9 @@ Second PR: `BankProbe`, `BrProbe`, `PvpProbe`, `BirdNetProbe` −296 / +70 lines
   failures count and carry on instead of quitting (`BirdNetProbe`) overrides `Fail` with `Expect(false, why)`;
   one whose `Fail` must also count (so a later `_failures == 0` check sees it, `BrProbe`) overrides `Fail` with
   `_failures++; base.Fail(why);`.
-- The scratch-inventory OR list and the `if (XProbe.Role != null) AddChild(new XProbe(items))` lines
-  further down are unchanged: keep adding there (#169 does).
+- The `if (XProbe.Role != null) AddChild(new XProbe(items))` lines further down are unchanged: keep adding there
+  (#169 does). A tool in `tools` gets the scratch inventory through `placedByTool` (#932); a probe started
+  further down that moves items still goes in the scratch-inventory OR list.
 
 ## How to check
 
