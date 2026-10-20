@@ -645,6 +645,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         // off its lane); after that it eases
         if (!car.Placed) (car.Lane, car.Placed) = (car.LaneWanted, true);
         target = Mathf.Min(target, lights);
+        target = Mathf.Min(target, LitLimit(car, edge));
 
         bool sampled = false;
         foreach (var (oPos, oVel) in obstacles)
@@ -909,6 +910,26 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
 
     /// <summary>A car finds the approach its route leads into this far ahead: its lanes start up to ~80 m before the line.</summary>
     private const float ApproachLookAhead = 110f;
+
+    /// <summary>How hard a car eases down to a lit junction's limit on its way to the line (m/s²).</summary>
+    private const float LimitEase = 2f;
+
+    /// <summary>
+    /// The speed limit a car keeps to at traffic lights (#979, the user): its arm's (the signal plan's, 50 km/h in town) through the
+    /// junction, eased down to on the approach so it crosses its line no faster: the lights are timed for a first car entering at
+    /// that limit (SN 640 838), and a car arriving on a green does no more. +∞ elsewhere.
+    /// </summary>
+    private static float LitLimit(Vehicle car, LaneEdge edge)
+    {
+        if (edge.Path is { Site: { } here, Group: >= 0 } p && p.Group < here.Plan.Groups.Count)
+            return here.Plan.Arms[here.Plan.Groups[p.Group].Arm].SpeedKmh / 3.6f;
+        if (car.Approach is { Site: { } site } a && a.Arm < site.Plan.Arms.Count && car.ToLine < float.MaxValue)
+        {
+            float limit = site.Plan.Arms[a.Arm].SpeedKmh / 3.6f;
+            return Mathf.Sqrt(limit * limit + 2f * LimitEase * Mathf.Max(0f, car.ToLine));
+        }
+        return float.MaxValue;
+    }
 
     /// <summary>A car reads the lights this far before the stop line.</summary>
     private const float SignalLookAhead = 80f;

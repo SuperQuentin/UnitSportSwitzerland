@@ -18,7 +18,8 @@ public static class ConflictTimes
     /// <summary>Clearing and entering speeds (m/s) and lengths (m) by who moves (the user's defaults, Oct 20 2026).</summary>
     /// <remarks>A cyclist enters at 30 km/h: it depends on the cyclist, the first at green may be a fast e-bike already rolling
     /// (the user, Oct 20 2026; clearing stays at 4 m/s).</remarks>
-    public const double CarClear = 10, CarEnter = 40 / 3.6, BikeClear = 4, BikeEnter = 30 / 3.6, WalkClear = 1.2, WalkEnter = 1.5;
+    /// <remarks><see cref="CarEnter"/>: a straight car at a 50 km/h limit; <see cref="Lines"/> enters each at its arm's own limit.</remarks>
+    public const double CarClear = 10, CarEnter = 50 / 3.6, BikeClear = 4, BikeEnter = 30 / 3.6, WalkClear = 1.2, WalkEnter = 1.5;
     public const double CarLength = 6, BikeLength = 2, WalkLength = 0;
 
     /// <summary>A turning car at most the speed its path's radius allows as traffic drives it (<see cref="TurnSpeed"/>), never over this (m/s).</summary>
@@ -163,7 +164,8 @@ public static class ConflictTimes
             if (car)
             {
                 double turn = Math.Min(TurnMost, TurnSpeed.Of(LeastRadius(centre)));
-                lines.Add(new Line(g, Mover.Car, points, c.Width, Min(CarClear, limit, turn), Min(CarEnter, limit, turn), CarLength, plan.PassingTime(g)));
+                // (entering at the arm's limit, as SN 640 838 and as traffic keeps to it at lights, the user; clearing at 10 m/s at most)
+                lines.Add(new Line(g, Mover.Car, points, c.Width, Min(CarClear, limit, turn), Math.Max(0.5, Math.Min(limit, turn)), CarLength, plan.PassingTime(g)));
             }
             else lines.Add(new Line(g, Mover.Bike, points, c.Width, BikeClear, BikeEnter, BikeLength, plan.PassingTime(g)));
         }

@@ -24,7 +24,7 @@ public class ConflictTimesTests
         Assert.InRange(meet.Value.Enter, 16.9, 17.6);    // into it 3 m before
         double expected = 3 + (meet.Value.Clear + ConflictTimes.CarLength) / ConflictTimes.CarClear - meet.Value.Enter / ConflictTimes.CarEnter;
         Assert.Equal(expected, ConflictTimes.Time(north, east)!.Value, 3);
-        Assert.InRange(expected, 4.2, 4.5);
+        Assert.InRange(expected, 4.5, 4.8);
     }
 
     [Fact]

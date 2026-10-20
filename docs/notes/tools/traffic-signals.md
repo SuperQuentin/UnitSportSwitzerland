@@ -66,7 +66,8 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   each shared point: a mover is in another's band within half that band's width
   plus half its own (a vehicle: its lane; a walker: 0.5 m, not the zebra, so it enters a lane in the middle of the crossing
   later and leaves it sooner; a vehicle keeps clear of the whole zebra). Speeds: clearing car 10 m/s,
-  bike 4, walker 1.2; entering car 11.1, bike 8.3 (30 km/h: it depends on
+  bike 4, walker 1.2; entering car at its arm's limit (13.9 at 50 km/h, SN 640 838; traffic keeps
+  to that limit at lights, `Traffic.LitLimit`), bike 8.3 (30 km/h: it depends on
   the cyclist, the first may be a fast e-bike, the user), walker 1.5; lengths 6 / 2 / 0 m; capped by the arm's limit, a turning car
   at `sqrt(3 · r)`, at most 10 m/s: `Terrain.Format.TurnSpeed`, the same the traffic cars slow to for a bend, so the lights are
   timed for the cars that drive them (the user: the more realistic, and both the same; ~5.5 m/s round a 10 m right turn, ~7.7
