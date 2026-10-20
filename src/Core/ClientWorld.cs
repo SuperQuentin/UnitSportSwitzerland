@@ -1812,7 +1812,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 {
                     bool board = gear is Snowboard;
                     if (p.RideSpeed < 4f) yield return (PlayerInput.MoveForward, board ? "Tap to push" : "Tap to skate");
+                    // skis (#933): the hockey stop only above 5 m/s (Skis.PivotSpeed); slower, brake is the snowplough
+                    else if (!board && p.RideSpeed < 6f) yield return (PlayerInput.Brake, "Brake: snowplough");
                     else yield return (PlayerInput.Brake, board ? "Brake: skid to a stop" : "Brake + turn: skid to a stop");
+                    yield return (PlayerInput.TuckBoost, board ? "Hold: straight-line" : "Hold: schuss");
                 }
                 if (gear is not Flyer && gear.CanHop) yield return (PlayerInput.Trick, "Trick (in the air)");
             }
