@@ -27,7 +27,8 @@
   - the headset renders its own `Headset` SubViewport with `UseXR` (`XrRig`); the root viewport
     stays the window's, for the monitor view
   - vsync off
-  - 90 Hz if the runtime offers it
+  - the refresh rate of `VrRefreshHz` (72 by default) among those the runtime offers, physics
+    ticking at it (`air-link`)
   - the headset's MSAA, render scale and VRS foveation come from the VR settings (`air-link`)
   - `xr_smooth` on: no PS1 vertex snap or dither (`air-link`)
 
