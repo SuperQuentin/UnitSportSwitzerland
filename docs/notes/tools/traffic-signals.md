@@ -130,10 +130,20 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   paywalled), min green 4 s, pedestrian green >= 5 s, pedestrian clearance 2/3 of the crossing
   at 1.2 m/s (2-8 s) as yellow on 3-lens heads, red on 2-lens ones (Geneva, `PedestrianAmber`
   by canton from `tools/MapCore/switzerland.bin`, `Cantons`); bike lead green 3 s (the cars'
-  intergreen grows by it); turn phases 8 s; cycle ~60 s (2 phases), 75 (3-4), 90 (5-6), max 120,
-  greens split by rank. A group green in two phases in a row does not change. Offset: a hash of
+  intergreen grows by it); turn phases 5 s where the pocket's storage is unknown; cycle target 60 s (up to 4 phases), 70 (more),
+  min 30, max 120, greens split by rank, shaped by queue storage (below). A group green in two phases in a row does not change. Offset: a hash of
   the junction's LV95 metres (junctions are not coordinated, #356). `State(group, t)` with the
   server clock: every peer agrees, nothing is replicated.
+- **Queue storage** (#982, the user): `SignalArm.StorageM` / `LeftStorageM` / `RightStorageM` (not stored), from the planner
+  (`WriteSignals`): a pocket's storage (`Opening.Storage`), a lane of the street's own (through, or a turn lane from OSM's
+  lanes) the street's `Length`, both less the car stop's station, at least 6 m. A full queue clears in `ClearingGreen` =
+  2 s start-up loss + (storage / 6 m) x 2 s (saturation headway), at least 4 s. A turn phase's green is its pocket's
+  clearing time (at most `MaxTurnStorage` 40 m, the longest pocket: 20 m 8.7 s, 30 m 12 s, 40 m 15.3 s); the cycle budgets
+  5 s for it, so a longer one lengthens the cycle (the user's choice: the through phases keep their green). A shared phase's
+  green is capped at its base groups' longest clearing time (less the green that group has in the fixed phases beside it);
+  the time a cap saves shortens the cycle (the user), never under 30 s (shares stretched by weight). Unknown storage (0: the
+  old layout, tests, the game's showcases) times as before. Test region: 4-pocket crossroads 73-85 -> 102-111 s, J2-like
+  78 -> 117, Ts 60-64 -> 69-72; no cap binds there (its streets are long), one plan 63 -> 61.
 - **Checks**: `RoadGen --signal-check --chunks DIR [--at E,N] [--list]` validates every plan
   (no hard conflict live at once, red+yellow before green, yellow after, min green, every group
   served) and dumps one; `--priority-check` has the inference cases. Invalid plans are not written
@@ -251,7 +261,9 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   no board at all (user's review). Geneva's pedestrian head (the two-lens one, `!PedestrianAmber`,
   after the user's photo) is a light grey housing with one dark window, the red standing figure
   left and the green walking one right, side by side at 1.45 times a lens (`Head.SideBySide`);
-  the model viewer shows a Vaud and a Geneva pole.
+  the model viewer shows a Vaud and a Geneva pole. In game: the test region's canton row (#1038, `signal-test-region`),
+  the same crossroads in the default zone, Geneva and Vaud side by side; a canton whose lights get a rule of their own
+  gets a zone there (`CantonTiles`).
 - **Arrows in the round lenses** (#759, user: "when the ball would not allow every direction, a
   straight or combined arrow"): `SignalBuilder.ArrowMoves(plan, group)` gives a car group's moves
   when they are not every move its approach has (the union of the arm's Car, LeftArrow and
@@ -338,9 +350,42 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   builds seven designed junctions (ideal with lanes / paths, mismatched room, a narrow arm, a T, a
   close pair) through this pipeline in ~2 s; the clean place to look at and test lights before
   Geneva (tier 0 `SignalTestRegionTests`, `--signal-check`, windowed `--trafficcheck` at each).
+- **Overhead heads** (#1037, plan `docs/plans/overhead-traffic-lights.md`). **Which approaches** (`Layout/Overhead.cs`,
+  `OverheadPlanner.Heads`, from `ExteriorPlanner.Plan`): only a street with 2+ lanes of its own toward the junction (its normal
+  section's in-lanes: a 2+2 artery, OSM `lanes:forward=2` and up), turn pockets not counted (the user, Oct 21 2026: counted, the
+  test region's 1+1 crossroads, ~20 m wide at the lights with both pockets and bike lanes, took heads overhead at 59 approaches,
+  45 as portals); then Stadt Bern's Handbuch LSA 2025 (Abb. 12-19): a lane's own kerb head (a left lane's on the left kerb or the
+  refuge, every other's on the right kerb) more than 6 m sideways, two lanes turning the same way, a side road (yields when off)
+  of 2+ lanes without a refuge, or 3+ lanes. Then a head over the middle of every lane, its lenses and plate showing that lane's
+  moves (the user: one light per lane; one head per group hung over the line between two lanes; Bern's Abb. 19 leaves the kerb
+  lane to its kerb head, here it gets one too). The kerb poles keep theirs. **What carries them** (`TileRewriter.ExteriorWrite.PlaceOverhead`), first that fits: a **mast arm** whose post stands on the
+  main pole (the user: no pole beside it; `SignalOverhead.StandsOn`: the pole's column is not drawn, its heads and its priority
+  signs stand out by the post's half width, `PostHalf`) when every head lies within 10 m (Basel-Landschaft: 3-4.5 m one lane,
+  5.5-7.5 m two, to 10 m with a tie rod past 7 m); one **from the refuge** (its post on the refuge's pole) reaching right; on a tram street
+  (`Source.Line.Osm.Tram`: the overlay's `tram` column; the segment's attributes get the overlay only when written) with a
+  building's facade within 8 m outward from both kerb poles (`Footprints`), a **span wire** from facade to facade, a plate on
+  each wall, no poles; else a **portal** from the main pole to the far kerb's pole, both its posts on them (no case in the test region builds a refuge arm). Span wires only
+  there (the user, Oct 21 2026: rare in Switzerland, used between buildings, never on poles; Bern's handbook mentions carriers
+  hung from span points and heads on house fronts). A tram catenary (its own issue) would carry them on its span wires.
+  Lower edge of the plates 5.0 m over the road (SSV Art. 71: 4.50-5.50), 5.5 m on a wire. **Record**: section `OVHD`
+  (`SignalOverhead`, version 1; older readers skip it, a newer SGNL version would have made them drop every light): kind, arm,
+  post foot, far end (an arm's tip, a portal's or span's second foot), plates' lower edge, heading, heads (along the structure,
+  lane moves). **Drawn** (`SignalBuilder.Overhead`): square posts and arms (RRW 300, 300 x 200), a portal beam, round anchor poles
+  a sagging wire between wall plates; heads at 1.5 x a kerb head (300 mm lenses: the lens transform scaled, a bike head's 100 mm keeps
+  its own mesh), each drawn as a pole's head (the user: no lane plate above, the canton's plates below as on its poles, a
+  lane's own arrow in its lenses and on such a plate), mounted on the front of the arm or beam at its mid-height by a bracket (the user: mounted, not hung), hung from a span wire by a hanger; collision on the posts and anchors only (4 m columns: everything above is over the 4 m vehicle limit).
+  Model viewer: "Traffic light - Mast arm / Portal / Span wire". Stats: the layout line's `overhead heads (#1037)`. Test region:
+  J6 arms, J7's 2+2 cross road arms, J13 portals, J14 (J13 with trams, between houses) span wires (`signal-test-region`); J7's double left (pockets on a 1+1
+  road) keeps its poles by the user's rule. Tier 0 `OverheadPlannerTests` (Bern's layouts), `SignalPlanTests` (OVHD round trip),
+  `SignalTestRegionTests.Wide_approaches_carry_their_heads_overhead`. Old layout (`--junctions old`): none.
+- **Pole colour per canton** (#1037, `SignalPlan.PoleColour`, bits 3-5 of the flag byte; RoadGen `PoleColour(canton)`): Basel-
+  Landschaft anthracite DB703 (ATS LSA Aussenanlagen 2024), Bern RAL 7042 (the city's Handbuch LSA 2025, taken for the canton),
+  the rest RAL 7001; poles and overhead structures. Model viewer: "Traffic light - Basel-Landschaft / Bern"; in game the canton
+  row's BL and BE zones. RAL 7042 is close to 7001: the difference is real, not a bug.
 - **Not done**: one record for a junction of several nodes (the internal links are only kept
   clean); OSM `turn:lanes` not read yet, restrictions only for the lane records (a left pocket is
   still built where the left turn is forbidden: 10 in Geneva); thin median (optional); crossings of divided roads
   (several nodes); 3-lane roads; at a compact junction a left + right pocket's mouth reaches into
   the next arm's sidewalk corner (it stands on the widening, over part of the crossing:
-  2499132,1116455); 300 mm overhead heads (#354); rejected poles are dropped, not moved along the kerb.
+  2499132,1116455); rejected poles are dropped, not moved along the kerb; overhead direction signs on portals, horizontal heads,
+  heads on house fronts, the tram wire itself (#1037's not done).

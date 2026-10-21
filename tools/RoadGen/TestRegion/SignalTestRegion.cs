@@ -68,6 +68,27 @@ public static class SignalTestRegion
     /// and OSM's turn:lanes left|through|right on every approach: the data builds its right pockets (J2's come from the rule).
     /// </summary>
     public const double TownPocketsE = 2911500;
+    /// <summary>
+    /// The canton row (#1038), LV95 N <see cref="BetweenN"/>: J2's town crossroads once per canton zone, at these E (the default
+    /// zone, Geneva, Vaud, Basel-Landschaft, Bern), on one main road across the borders.
+    /// </summary>
+    public const double CantonDefaultE = 2912500, CantonGenevaE = 2913500, CantonVaudE = 2914500, CantonBaselLandE = 2915500, CantonBernE = 2916500;
+    /// <summary>
+    /// Overhead heads (#1037), LV95 E 2917500: a portal over a 4+4 artery (its left lanes beyond a mast arm's reach) on
+    /// <see cref="TwinRowN"/>'s tile row (N <see cref="PortalN"/>), and J6 again as a tram street (a span wire) on the canton row's.
+    /// </summary>
+    public const double OverheadE = 2917500, PortalN = 1321500;
+    /// <summary>
+    /// The region's cantons (#1038), by kilometre tile: only those whose lights or poles differ (pedestrian heads, arrow plates,
+    /// pole colours, #1037; <c>tools/traffic-signals</c>); every other tile is the default zone (the cantons not checked yet).
+    /// </summary>
+    public static readonly IReadOnlyDictionary<(int E, int N), string> CantonTiles =
+        new Dictionary<(int E, int N), string> { [(2913, 1323)] = "GE", [(2914, 1323)] = "VD", [(2915, 1323)] = "BL", [(2916, 1323)] = "BE" };
+    /// <summary>The border drawn on the ground (#1038): purple, as no Swiss marking is (bike crossings are red).</summary>
+    public const uint BorderRgba = 0x8E3FB0FF;
+    /// <summary>The ground band's half width (vertices within it take <see cref="CoverClass.Border"/>), the stripe across a carriageway.</summary>
+    private const double BorderBandHalf = 1.5;
+    private const float BorderStripe = 0.5f;
     /// <summary>The ground, metres (as the fixture courses).</summary>
     public const double Ground = 500;
     /// <summary>Region centre: the manifest's suggested origin.</summary>
@@ -93,7 +114,7 @@ public static class SignalTestRegion
 
     /// <summary>An OSM row over part of a line (#700): metres along it, and the lane columns it carries (turn lanes in the line's drawing direction).</summary>
     private sealed record OsmRow(double From, double To, string Lanes = "", string LanesFwd = "", string LanesBwd = "", string TurnFwd = "", string TurnBwd = "",
-        string BikeFwd = "", string BikeBwd = "");
+        string BikeFwd = "", string BikeBwd = "", bool Tram = false);
 
     /// <summary>An OSM <c>highway=crossing</c> node (#700) on a line, metres along it, with its <c>crossing=*</c> value.</summary>
     private sealed record CrossingNode(string LineId, double Along, string Value);
@@ -347,6 +368,57 @@ public static class SignalTestRegion
             lines.Add(new Line("FKN4", "6m Strasse", "Verbindungsstrasse", "Gemeinde", [(e + 314, nb), (e + 314 + 140, nb + 140)], "secondary", "yes"));
         }
 
+        // 14. the canton row (#1038): J2's town crossroads in the default zone, in Geneva and in Vaud (CantonTiles), on one 10 m main
+        // road with sidewalks that crosses both borders halfway between them; only the canton differs (ids whose hash gives every
+        // street J2's path layout, 2: BikePlanner.StrokeLayouts)
+        {
+            const double nb = BetweenN;
+            double[] at = [CantonDefaultE - 450, CantonDefaultE, CantonGenevaE, CantonVaudE, CantonBaselLandE, CantonBernE, CantonBernE + 450];
+            for (int i = 0; i + 1 < at.Length; i++)
+                lines.Add(new Line($"CN{i}", "10m Strasse", "Durchgangsstrasse", "Kanton", [(at[i], nb), (at[i + 1], nb)], "secondary", "yes"));
+            foreach (var (name, id, e) in new[] { ("default", "CA", CantonDefaultE), ("GE", "CB", CantonGenevaE), ("VD", "CI", CantonVaudE),
+                         ("BL", "CS", CantonBaselLandE), ("BE", "KA", CantonBernE) })
+            {
+                Cross(id + "S", e, nb - 400, nb, "10m Strasse", "Verbindungsstrasse", "secondary", sidewalk: "yes");
+                Cross(id + "N", e, nb, nb + 400, "10m Strasse", "Verbindungsstrasse", "secondary", sidewalk: "yes");
+                junctions.Add(new Junction($"J12-canton-{name}", e, nb, $"J2's crossroads in {(name == "default" ? "the default zone" : name)}: the canton's heads and plates",
+                    Arms("L|T|R", "L|T|R", "L|T|R", "L|T|R")));
+            }
+        }
+
+        // 15. overhead heads (#1037): a 4+4 artery (OSM lanes=8, 24 m) whose turn:lanes left|through|through|through;right are
+        // assigned in place, across a 10 m road: its left lane lies beyond a mast arm's reach from the right kerb, so a portal; and
+        // the same artery with OSM's tram on it, between houses: a span wire from facade to facade where the portal would stand (the
+        // cross roads as J6's)
+        {
+            const string Wide = "left|through|through|through;right";
+            lines.Add(new Line("POW", "10m Strasse", "Durchgangsstrasse", "Kanton", [(OverheadE - 450, PortalN), (OverheadE, PortalN)], "secondary",
+                Rows: [new OsmRow(0, 450, Lanes: "8", TurnFwd: Wide, TurnBwd: Wide)]));
+            lines.Add(new Line("POE", "10m Strasse", "Durchgangsstrasse", "Kanton", [(OverheadE, PortalN), (OverheadE + 450, PortalN)], "secondary",
+                Rows: [new OsmRow(0, 450, Lanes: "8", TurnFwd: Wide, TurnBwd: Wide)]));
+            Cross("POS", OverheadE, PortalN - 400, PortalN, "10m Strasse", "Verbindungsstrasse", "secondary");
+            Cross("PON", OverheadE, PortalN, PortalN + 400, "10m Strasse", "Verbindungsstrasse", "secondary");
+            junctions.Add(new Junction("J13-portal", OverheadE, PortalN, "a 4+4 artery, its lanes assigned in place: heads overhead on a portal",
+                Arms("L|T|T|TR", "L|T|T|TR", "L|T|R", "L|T|R")));
+
+            const double nb = BetweenN;
+            lines.Add(new Line("TRW", "10m Strasse", "Durchgangsstrasse", "Kanton", [(OverheadE - 450, nb), (OverheadE, nb)], "secondary",
+                Rows: [new OsmRow(0, 450, Lanes: "8", TurnFwd: Wide, TurnBwd: Wide, Tram: true)]));
+            lines.Add(new Line("TRE", "10m Strasse", "Durchgangsstrasse", "Kanton", [(OverheadE, nb), (OverheadE + 450, nb)], "secondary",
+                Rows: [new OsmRow(0, 450, Lanes: "8", TurnFwd: Wide, TurnBwd: Wide, Tram: true)]));
+            lines.Add(new Line("TRS", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(OverheadE, nb - 400), (OverheadE, nb)], "secondary",
+                Rows: [new OsmRow(0, 400, TurnFwd: Arrows)]));
+            lines.Add(new Line("TRN", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(OverheadE, nb), (OverheadE, nb + 400)], "secondary",
+                Rows: [new OsmRow(0, 400, TurnBwd: Arrows)]));
+            // houses 3 m back from both kerbs of the artery (12 m out), on both arms: the span wire's facades
+            foreach (double side in (ReadOnlySpan<double>)[-1, 1])
+                foreach (double way in (ReadOnlySpan<double>)[-1, 1])
+                    boxes.Add(new Box(Math.Min(OverheadE + way * 9, OverheadE + way * 60), Math.Min(nb + side * 15, nb + side * 27),
+                        Math.Max(OverheadE + way * 9, OverheadE + way * 60), Math.Max(nb + side * 15, nb + side * 27), 15));
+            junctions.Add(new Junction("J14-tram", OverheadE, nb, "J13's 4+4 artery with trams between houses: heads overhead on a span wire between facades",
+                Arms("L|T|T|TR", "L|T|T|TR", "L|TR", "L|TR")));
+        }
+
         junctions.Add(new Junction("J9-stagger-west", StaggerE + 300, TwinRowN, "staggered T's 24 m apart, both lit: the west one", Arms(null, null, null, null)));
         junctions.Add(new Junction("J9-stagger-east", StaggerE + 324, TwinRowN, "staggered T's 24 m apart, both lit: the east one", Arms(null, null, null, null)));
         junctions.Add(new Junction("J8-twin-lights", TwinLitE, TwinRowN, "the twins' T with lights (the other, 1.5 km east, has none)",
@@ -395,10 +467,11 @@ public static class SignalTestRegion
             + $"{design.Buildings.Count} buildings, {design.Junctions.Count} signal nodes; written in {clock.Elapsed.TotalSeconds:F1} s");
 
         var stats = TileRewriter.Run(chunkDir, roadTiles, new TileRewriter.Options(
-            RawDir: RawRoads.DirFor(tempDir), OsmOverlay: Path.Combine(tempDir, "osm_overlay.tsv"), NewJunctions: newJunctions, WriteJunctions: writeJunctions), log);
+            RawDir: RawRoads.DirFor(tempDir), OsmOverlay: Path.Combine(tempDir, "osm_overlay.tsv"), NewJunctions: newJunctions, WriteJunctions: writeJunctions,
+            Cantons: TileRewriter.Cantons.Of(CantonTiles), Decorate: MarkBorders), log);
         log(stats.Network.Format(stats.TilesWritten));
         log("");
-        int bad = Report(chunkDir, design.Junctions, log);
+        int bad = Report(chunkDir, design.Junctions, log) + BorderReport(chunkDir, log);
         int planned = 0;
         if (newJunctions)
         {
@@ -454,13 +527,121 @@ public static class SignalTestRegion
             using (var fs = File.Create(Path.Combine(dir, ChunkFormat.CoarseFileName(id))))
                 ChunkCodec.Encode(new ChunkGrid(id, Enumerable.Repeat(q, coarse * coarse).ToArray(), h, h, ChunkFormat.CoarseStride), fs);
             using (var fs = File.Create(Path.Combine(dir, CoverFormat.FileName(id))))
-                CoverFormat.Encode(id, new byte[CoverFormat.Size * CoverFormat.Size], fs);   // open grass
+                CoverFormat.Encode(id, BorderBand(id), fs);   // open grass, the canton borders' band (#1038)
             using (var fs = File.Create(Path.Combine(dir, TreeFormat.FileName(id)))) TreeFormat.Encode(id, [], fs);
             horizon[id] = HorizonFormat.Extract(grid);
             manifest.Tiles.Add(new ManifestTile { E = id.E, N = id.N, Min = h, Max = h });
         }
         using (var fs = File.Create(Path.Combine(dir, HorizonFormat.FileName))) HorizonFormat.Encode(horizon, fs);
         File.WriteAllText(Path.Combine(dir, "manifest.json"), manifest.ToJson());
+    }
+
+    // ---- canton borders (#1038) ------------------------------------------------------------------
+
+    /// <summary>The canton of the zone a point lies in (<see cref="CantonTiles"/>), null in the default zone.</summary>
+    public static string? CantonAt(double e, double n) => CantonTiles.GetValueOrDefault(((int)Math.Floor(e / 1000), (int)Math.Floor(n / 1000)));
+
+    /// <summary>
+    /// A tile edge between two zones: along N (E = <see cref="At"/>, N from <see cref="From"/> to <see cref="To"/>) or along E,
+    /// the cantons on its low side (west, south) and its high side (null: the default zone).
+    /// </summary>
+    private readonly record struct Border(bool AlongN, double At, double From, double To, string? Low, string? High);
+
+    /// <summary>Every edge between two of the region's tiles in different zones.</summary>
+    private static List<Border> Borders()
+    {
+        var borders = new List<Border>();
+        for (int e = MinTileE; e <= MaxTileE; e++)
+            for (int n = MinTileN; n <= MaxTileN; n++)
+            {
+                string? here = CantonTiles.GetValueOrDefault((e, n));
+                string? east = CantonTiles.GetValueOrDefault((e + 1, n)), north = CantonTiles.GetValueOrDefault((e, n + 1));
+                if (e < MaxTileE && east != here) borders.Add(new Border(true, (e + 1) * 1000.0, n * 1000.0, (n + 1) * 1000.0, here, east));
+                if (n < MaxTileN && north != here) borders.Add(new Border(false, (n + 1) * 1000.0, e * 1000.0, (e + 1) * 1000.0, here, north));
+            }
+        return borders;
+    }
+
+    /// <summary>A tile's cover: open grass, and <see cref="CoverClass.Border"/> on the vertices within <see cref="BorderBandHalf"/> of a border.</summary>
+    private static byte[] BorderBand(TileId id)
+    {
+        var cells = new byte[CoverFormat.Size * CoverFormat.Size];
+        foreach (var b in Borders())
+            for (int row = 0; row < CoverFormat.Size; row++)
+                for (int col = 0; col < CoverFormat.Size; col++)
+                {
+                    double e = id.MinE + ChunkFormat.SpacingM * col, n = id.MaxN - ChunkFormat.SpacingM * row;   // row 0 north
+                    var (across, along) = b.AlongN ? (e, n) : (n, e);
+                    if (Math.Abs(across - b.At) <= BorderBandHalf && along >= b.From - BorderBandHalf && along <= b.To + BorderBandHalf)
+                        cells[row * CoverFormat.Size + col] = (byte)CoverClass.Border;
+                }
+        return cells;
+    }
+
+    // a canton sign stands this far past the border along the road, this far out from everything beside the carriageway
+    private const double SignPast = 0.5, SignClear = 0.6;
+
+    /// <summary>
+    /// A tile's border marks as it is written (#1038, <see cref="TileRewriter.Options.Decorate"/>): where a carriageway crosses a
+    /// border, a stripe across it (in the tile whose piece reaches the border from the low side), and a canton sign on each side,
+    /// on the right of the traffic entering that canton and facing it, each in the tile its side lies in. The ground band is in
+    /// the cover (<see cref="BorderBand"/>): the terrain blends up to the roads, a line painted at the ground's height would sink.
+    /// </summary>
+    private static void MarkBorders(RoadTile tile)
+    {
+        const double eps = 1e-3;
+        var borders = Borders();
+        foreach (var seg in tile.Segments)
+        {
+            if (seg.Class is not (RoadClass.Major or RoadClass.Road or RoadClass.Minor or RoadClass.Lane)) continue;
+            for (int i = 1; i < seg.PointCount; i++)
+            {
+                var (p0, p1) = (seg.Lv95(tile.Id, i - 1), seg.Lv95(tile.Id, i));
+                foreach (var b in borders)
+                {
+                    double c0 = (b.AlongN ? p0.E : p0.N) - b.At, c1 = (b.AlongN ? p1.E : p1.N) - b.At;
+                    // a piece reaching the border from the low side (on to it or across), or one leaving it to the high side
+                    bool fromLow = c0 < -eps && c1 > -eps || c1 < -eps && c0 > -eps;
+                    bool toHigh = !fromLow && (Math.Abs(c0) <= eps && c1 > eps || Math.Abs(c1) <= eps && c0 > eps);
+                    if (!fromLow && !toHigh) continue;
+                    double t = -c0 / (c1 - c0);
+                    double e = p0.E + (p1.E - p0.E) * t, n = p0.N + (p1.N - p0.N) * t;
+                    double along = b.AlongN ? n : e;
+                    if (along < b.From || along > b.To) continue;
+
+                    // tile-local: x east, z south; the way to the high side and its right
+                    bool forward = c1 > c0;
+                    double dx = (p1.E - p0.E) * (forward ? 1 : -1), dz = -(p1.N - p0.N) * (forward ? 1 : -1), length = Math.Sqrt(dx * dx + dz * dz);
+                    dx /= length; dz /= length;
+                    double rx = -dz, rz = dx;
+                    float x = (float)(e - tile.Id.MinE), z = (float)(tile.Id.MaxN - n);
+                    float y = seg.Points[(i - 1) * 3 + 1] + (seg.Points[i * 3 + 1] - seg.Points[(i - 1) * 3 + 1]) * (float)t;
+                    float half = seg.Width * 0.5f;
+
+                    if (fromLow)
+                        tile.Paint.Add(new RoadPaint
+                        {
+                            Shape = PaintShape.Polyline, Type = PaintType.WhiteSolid, Rgba = BorderRgba, Width = BorderStripe,
+                            Vertices = [x - (float)rx * half, y, z - (float)rz * half, x + (float)rx * half, y, z + (float)rz * half],
+                        });
+                    // the high side's sign where this tile holds the road past the border; the low side's where it holds the road before it
+                    if (toHigh || Math.Max(c0, c1) > eps)
+                        tile.PointProps.Add(CantonSign(b.High, forward ? seg.Attributes.Right : seg.Attributes.Left, x, y, z, half, dx, dz, rx, rz));
+                    if (fromLow)
+                        tile.PointProps.Add(CantonSign(b.Low, forward ? seg.Attributes.Left : seg.Attributes.Right, x, y, z, half, -dx, -dz, -rx, -rz));
+                }
+            }
+        }
+    }
+
+    /// <summary>The sign for traffic going (dx, dz) from the border point into <paramref name="canton"/>: on its right past the street's side, facing it.</summary>
+    private static RoadPointProp CantonSign(string? canton, RoadSide side, float x, float y, float z, float half, double dx, double dz, double rx, double rz)
+    {
+        double reach = half + side.Reach + SignClear;
+        float foot = y + RoadStreetSection.HeightAt(side, side.OuterDm / 10f);
+        return new RoadPointProp(PointPropType.CantonSign, RoadSigns.CantonVariant(canton), PropFlags.Solid,
+            x + (float)(dx * SignPast + rx * reach), foot, z + (float)(dz * SignPast + rz * reach),
+            (float)Math.Atan2(dx, dz), RoadSigns.LowerEdge + RoadSigns.CantonSignHeight);
     }
 
     /// <summary>Box buildings (walls and a flat roof) as the building stage writes them: tile-local triangles, X east, Y up, Z south.</summary>
@@ -498,7 +679,7 @@ public static class SignalTestRegion
     {
         var index = new PlaceIndex();
         foreach (var j in junctions)
-            index.Places.Add(new Place { Name = j.Name, Canton = "", E = j.E, N = j.N, Kind = PlaceKind.Town });
+            index.Places.Add(new Place { Name = j.Name, Canton = CantonAt(j.E, j.N) ?? "", E = j.E, N = j.N, Kind = PlaceKind.Town });
         File.WriteAllText(Path.Combine(dir, PlaceIndex.FileName), index.ToJson());
     }
 
@@ -636,7 +817,7 @@ public static class SignalTestRegion
         foreach (var line in lines.OrderBy(l => l.Uuid, StringComparer.Ordinal))
             foreach (var row in line.Rows ?? [new OsmRow(0, Length(line))])
                 sb.Append(inv, $"{line.Uuid}\t0\t{row.From:F1}\t{row.To:F1}\t{386000 + ++way}\t+\t{line.Highway}\t\t{row.Lanes}\t{row.LanesFwd}\t{row.LanesBwd}\t")
-                    .Append(inv, $"\t{line.Sidewalk}\t{line.Sidewalk}\t{line.Cycleway}\t{line.Cycleway}\t{row.TurnFwd}\t{row.TurnBwd}\t0\t0\t\t\t{row.BikeFwd}\t{row.BikeBwd}\n");
+                    .Append(inv, $"\t{line.Sidewalk}\t{line.Sidewalk}\t{line.Cycleway}\t{line.Cycleway}\t{row.TurnFwd}\t{row.TurnBwd}\t0\t{(row.Tram ? 1 : 0)}\t\t\t{row.BikeFwd}\t{row.BikeBwd}\n");
         File.WriteAllText(Path.Combine(tempDir, "osm_overlay.tsv"), sb.ToString());
     }
 
@@ -745,9 +926,35 @@ public static class SignalTestRegion
             }
             foreach (var (dir, want) in j.Design)
                 if (want is not null && !seen.Contains(dir)) { bad++; arms.Add($"{dir}: MISSING ({want})"); }
-            log(string.Create(inv, $"{j.Name,-16} {j.E:F0},{j.N:F0}   {string.Join("; ", arms)}   {plan.Cycle:F0} s   {Phases(plan)}"));
+            // the canton's look (#1038): two-lens pedestrian heads (Geneva), arrow plates (Vaud)
+            string look = (plan.PedestrianAmber ? "" : "  2-lens peds") + (plan.ArrowPlates ? "  arrow plates" : "");
+            log(string.Create(inv, $"{j.Name,-16} {j.E:F0},{j.N:F0}   {string.Join("; ", arms)}   {plan.Cycle:F0} s{look}   {Phases(plan)}"));
         }
         return bad;
+    }
+
+    /// <summary>
+    /// The border marks as written (#1038): stripes across carriageways and canton signs, by canton. Every crossing has a stripe and
+    /// a sign each way; returns 1 when the counts disagree or nothing crosses a border.
+    /// </summary>
+    private static int BorderReport(string chunkDir, Action<string> log)
+    {
+        int stripes = 0;
+        var signs = new SortedDictionary<string, int>(StringComparer.Ordinal);
+        foreach (string path in Directory.EnumerateFiles(chunkDir, "*" + Path.GetExtension(RoadFormat.FileName(new TileId(MinTileE, MinTileN)))))
+        {
+            RoadTile tile;
+            using (var fs = File.OpenRead(path)) tile = RoadCodec.Decode(fs);
+            stripes += tile.Paint.Count(p => p.Rgba == BorderRgba);
+            foreach (var p in tile.PointProps.Where(p => p.Type == PointPropType.CantonSign))
+            {
+                string name = RoadSigns.CantonCode(p.Variant) ?? "default";
+                signs[name] = signs.GetValueOrDefault(name) + 1;
+            }
+        }
+        int total = signs.Values.Sum();
+        log($"canton borders (#1038): {stripes} stripes across carriageways, {total} signs ({string.Join(", ", signs.Select(s => $"{s.Key} {s.Value}"))})");
+        return stripes > 0 && total == 2 * stripes ? 0 : 1;
     }
 
     /// <summary>

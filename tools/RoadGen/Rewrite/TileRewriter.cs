@@ -68,7 +68,11 @@ public static partial class TileRewriter
         /// Write the planner's junctions into the tiles (#818, the default; <c>--junctions new</c> plans only): cores, trims,
         /// transitions, exteriors and paths where its checks pass; the old layout builds the rest (and nothing of its own there).
         /// </summary>
-        bool WriteJunctions = true);
+        bool WriteJunctions = true,
+        /// <summary>The canton of each tile; null = <c>switzerland.bin</c>'s (<see cref="Cantons.Find"/>). A test world's own zones (#1038).</summary>
+        Cantons? Cantons = null,
+        /// <summary>Called on each tile as it is about to be written (#1038: a test world's border marks); null = none.</summary>
+        Action<RoadTile>? Decorate = null);
 
     public sealed record Stats(
         int TilesRead, int TilesWritten, int Junctions, int SegmentsWritten, int SegmentsDropped,
@@ -262,7 +266,7 @@ public static partial class TileRewriter
         if (rewritten.Count > 0) log($"  skipping {rewritten.Count} rewritten tiles with no raw input");
 
         var overlay = options.OsmOverlay is { } overlayPath ? OsmOverlayReader.TryLoad(overlayPath) : null;
-        var cantons = Cantons.Find();   // pedestrian heads per canton (#348)
+        var cantons = options.Cantons ?? Cantons.Find();   // pedestrian heads per canton (#348); a test world's zones (#1038)
         // OSM traffic signals (#347), beside the overlay
         var osmNodes = options.OsmOverlay is { } nodesBeside
             ? OsmNodesReader.TryLoad(Path.Combine(Path.GetDirectoryName(nodesBeside) ?? ".", OsmNodesReader.FileName)) : null;
@@ -290,6 +294,7 @@ public static partial class TileRewriter
             blockIndex++;
             foreach (var tile in session.Block(block, wanted))
             {
+                options.Decorate?.Invoke(tile);
                 var bytes = Encode(tile);
                 Count(session.Net, tile, bytes);
 

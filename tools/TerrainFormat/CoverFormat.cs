@@ -73,6 +73,8 @@ public enum CoverClass : byte
     /// better than bare tarmac.
     /// </summary>
     ParkingPaved = 40,
+    /// <summary>A border drawn on the ground in a test world (#1038): the signal test region's canton zones, a band along each edge.</summary>
+    Border = 41,
 }
 
 /// <summary>

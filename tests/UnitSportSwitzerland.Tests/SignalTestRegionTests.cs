@@ -107,6 +107,67 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
     }
 
     [Fact]
+    public void Canton_row_differs_only_by_its_canton()
+    {
+        // #1038: J2's crossroads once per zone; Geneva's walkers' heads have two lenses, Vaud's heads arrow plates, Basel-Landschaft's
+        // and Bern's poles their colours (#1037), the rest alike
+        var plans = new[] { "default", "GE", "VD", "BL", "BE" }
+            .Select(c => SignalTestRegion.Junctions.Single(j => j.Name == $"J12-canton-{c}"))
+            .Select(j => region.Tile(j.E, j.N).Signals.Single().Plan).ToArray();
+        Assert.Equal((true, false), (plans[0].PedestrianAmber, plans[0].ArrowPlates));
+        Assert.Equal((false, false), (plans[1].PedestrianAmber, plans[1].ArrowPlates));
+        Assert.Equal((true, true), (plans[2].PedestrianAmber, plans[2].ArrowPlates));
+        Assert.Equal([SignalPoleColour.SilverGrey, SignalPoleColour.SilverGrey, SignalPoleColour.SilverGrey, SignalPoleColour.Anthracite,
+            SignalPoleColour.TrafficGrey], plans.Select(p => p.PoleColour));
+        Assert.All(plans, p => Assert.Equal((plans[0].Cycle, plans[0].Groups.Count), (p.Cycle, p.Groups.Count)));
+    }
+
+    [Fact]
+    public void Canton_borders_are_marked_where_roads_cross()
+    {
+        // #1038: the main road crosses four borders (#1037 added Basel-Landschaft and Bern): a stripe across it at each, and a sign
+        // each way standing in the canton it names, facing the traffic coming in across the border
+        var tiles = region.Tiles().Select(t => t.Tile).ToList();
+        Assert.Equal(4, tiles.Sum(t => t.Paint.Count(p => p.Rgba == SignalTestRegion.BorderRgba)));
+        var signs = tiles.SelectMany(t => t.PointProps.Where(p => p.Type == PointPropType.CantonSign).Select(p => (t.Id, Sign: p))).ToList();
+        Assert.Equal(8, signs.Count);
+        foreach (var (id, s) in signs)
+        {
+            double e = id.MinE + s.X, n = id.MaxN - s.Z, border = Math.Round(e / 1000) * 1000;
+            Assert.Equal(SignalTestRegion.CantonAt(e, n), RoadSigns.CantonCode(s.Variant));
+            double frontEast = -Math.Sin(s.Heading);   // heading 0 faces -Z (north)
+            Assert.True(Math.Sign(frontEast) == Math.Sign(border - e), $"the sign at E {e:F1} faces away from the border at {border}");
+        }
+    }
+
+    [Fact]
+    public void Wide_approaches_carry_their_heads_overhead()
+    {
+        // #1037: J6's 2+2 artery on mast arms, the 4+4 artery of J13 on portals, the same with trams (J14) on span wires; the
+        // 1+1 roads with pockets keep their kerb poles; every head 4.50-5.50 m over the road (5.50 m and up on a wire)
+        (OverheadKind Kind, int Count) At(string id)
+        {
+            var j = region.Junction(id);
+            var all = region.Tile(j.E, j.N).Signals.SelectMany(s => s.Overheads).ToList();
+            return (all.Select(o => o.Kind).DefaultIfEmpty().First(), all.Count);
+        }
+        Assert.Equal((OverheadKind.Arm, 2), At("J6"));
+        Assert.Equal((OverheadKind.Portal, 2), At("J13"));
+        Assert.Equal((OverheadKind.Span, 2), At("J14"));
+        Assert.Equal(0, At("J2").Count);
+        foreach (var (_, tile) in region.Tiles())
+            foreach (var s in tile.Signals)
+                foreach (var o in s.Overheads)
+                {
+                    Assert.NotEmpty(o.Heads);
+                    Assert.All(o.Heads, h => Assert.InRange(h.Along, 0.3f, o.Length));
+                    float lift = o.Bottom - s.Y;
+                    Assert.InRange(lift, o.Kind == OverheadKind.Span ? 5.4f : 4.4f, 6.2f);
+                    if (o.Kind is OverheadKind.Arm or OverheadKind.RefugeArm) Assert.True(o.Length <= 10.01f, $"an arm {o.Length:F1} m long");
+                }
+    }
+
+    [Fact]
     public void Riders_turning_left_go_with_the_left_arrow()
     {
         // #971, the user: a riders' left turn from the left-turn bike lane follows the left arrow, never the through green; where
@@ -286,13 +347,13 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
     public void Priority_signs_at_lights_stand_on_their_main_poles()
     {
         // #1000 (the old layout's rule, #350/#711): an approach's priority sign for when the lights are off is on its main pole,
-        // not a post of its own
+        // not a post of its own; on a mast arm's or portal's post (#1037) out in front of its face, by its half width
         int onPoles = 0;
         foreach (var (_, tile) in region.Tiles())
             foreach (var sign in tile.PointProps.Where(x => (x.Flags & PropFlags.OnSignalPole) != 0))
             {
                 Assert.Contains(tile.Signals.SelectMany(g => g.Poles), p => (p.Flags & SignalPoleFlags.Main) != 0
-                    && Math.Abs(p.X - sign.X) < 0.01f && Math.Abs(p.Z - sign.Z) < 0.01f);
+                    && Math.Abs(p.X - sign.X) < SignalOverhead.PostHalf && Math.Abs(p.Z - sign.Z) < SignalOverhead.PostHalf);
                 onPoles++;
             }
         Assert.True(onPoles > 0);

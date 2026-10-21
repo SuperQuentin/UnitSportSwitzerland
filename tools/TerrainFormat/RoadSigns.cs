@@ -30,10 +30,42 @@ public static class RoadSigns
         _ => variant == Small ? 0.05f : 0.07f,
     };
 
-    /// <summary>Plate height: an equilateral triangle's, or a diamond's diagonal.</summary>
-    public static float PlateHeight(PointPropType type, byte variant) => type == PointPropType.MainRoadSign
-        ? Side(type, variant) * MathF.Sqrt(2f)
-        : Side(type, variant) * MathF.Sqrt(3f) * 0.5f;
+    /// <summary>Plate height: an equilateral triangle's, a diamond's diagonal, or a canton sign's rectangle.</summary>
+    public static float PlateHeight(PointPropType type, byte variant) => type switch
+    {
+        PointPropType.MainRoadSign => Side(type, variant) * MathF.Sqrt(2f),
+        PointPropType.CantonSign => CantonSignHeight,
+        _ => Side(type, variant) * MathF.Sqrt(3f) * 0.5f,
+    };
+
+    /// <summary>A canton sign's plate (#1038, a test world's border): wide enough for its shield and two lines of name.</summary>
+    public const float CantonSignWidth = 1.2f, CantonSignHeight = 0.6f;
+
+    /// <summary>The cantons in the federal order (BFS numbers 1-26, as MapSetup bakes them into <c>switzerland.bin</c>).</summary>
+    public static readonly string[] CantonCodes =
+    [
+        "ZH", "BE", "LU", "UR", "SZ", "OW", "NW", "GL", "ZG", "FR", "SO", "BS", "BL",
+        "SH", "AR", "AI", "SG", "GR", "AG", "TG", "TI", "VD", "VS", "NE", "GE", "JU",
+    ];
+
+    // each canton's name as its border signs give it, in its own language
+    private static readonly string[] CantonNames =
+    [
+        "Kanton Zürich", "Kanton Bern", "Kanton Luzern", "Kanton Uri", "Kanton Schwyz", "Kanton Obwalden", "Kanton Nidwalden",
+        "Kanton Glarus", "Kanton Zug", "Canton de Fribourg", "Kanton Solothurn", "Kanton Basel-Stadt", "Kanton Basel-Landschaft",
+        "Kanton Schaffhausen", "Kanton Appenzell Ausserrhoden", "Kanton Appenzell Innerrhoden", "Kanton St. Gallen",
+        "Kanton Graubünden", "Kanton Aargau", "Kanton Thurgau", "Cantone Ticino", "Canton de Vaud", "Canton du Valais",
+        "Canton de Neuchâtel", "Canton de Genève", "Canton du Jura",
+    ];
+
+    /// <summary>A <see cref="PointPropType.CantonSign"/>'s variant: its canton's place in <see cref="CantonCodes"/> plus one; 0 a test world's default zone (null, or a code not known).</summary>
+    public static byte CantonVariant(string? code) => (byte)(code is null ? 0 : Array.IndexOf(CantonCodes, code) + 1);
+
+    /// <summary>The canton's code for a sign variant, null for the default zone.</summary>
+    public static string? CantonCode(byte variant) => variant >= 1 && variant <= CantonCodes.Length ? CantonCodes[variant - 1] : null;
+
+    /// <summary>The name a canton sign shows: the canton's own, or the default zone's (the cantons whose lights are not checked yet).</summary>
+    public static string CantonName(byte variant) => variant >= 1 && variant <= CantonNames.Length ? CantonNames[variant - 1] : "Other cantons";
 
     /// <summary>
     /// Lower plate edge above the road: SSV Art. 103 al. 3 allows 0.60 to 2.50 m. 1.50 m by the

@@ -100,6 +100,51 @@ public class SignalPlanTests(ITestOutputHelper output)
         Assert.InRange(plan.Cycle, 60, SignalPlan.MaxCycle);
     }
 
+    /// <summary>Seconds a group is green per cycle.</summary>
+    private static float GreenFor(SignalPlan plan, int g) =>
+        plan.Groups[g].Intervals.Where(iv => iv.Aspect == SignalAspect.Green).Sum(iv => iv.To - iv.From);
+
+    [Fact]
+    public void TurnPhase_ClearsItsPocketsQueue()
+    {
+        // #982: a turn phase's green clears its pocket's full queue, the start-up loss then a car per 6 m every 2 s
+        SignalArm Pocket(int i, float storage) => Arm(i, left: true) with { LeftStorageM = storage };
+        var shortPocket = SignalPlan.Build([Pocket(N, 18), Arm(E), Pocket(S, 18), Arm(W)]);
+        var longPocket = SignalPlan.Build([Pocket(N, 36), Arm(E), Pocket(S, 36), Arm(W)]);
+        AssertValid(shortPocket);
+        AssertValid(longPocket);
+        Assert.Equal(8f, GreenFor(shortPocket, Group(shortPocket, SignalGroupKind.LeftArrow, S)), 1);   // 2 + 3 cars x 2
+        Assert.Equal(14f, GreenFor(longPocket, Group(longPocket, SignalGroupKind.LeftArrow, S)), 1);    // 2 + 6 cars x 2
+        // what a pocket needs past the turn phase's budget lengthens the cycle; the through phases keep their green
+        Assert.Equal(2 * (14f - 8f), longPocket.Cycle - shortPocket.Cycle, 1);
+        Assert.Equal(GreenFor(shortPocket, Group(shortPocket, SignalGroupKind.Car, E)), GreenFor(longPocket, Group(longPocket, SignalGroupKind.Car, E)), 1);
+        // a turn lane the whole street long clears no more than the longest pocket holds
+        var lane = SignalPlan.Build([Pocket(N, 400), Arm(E), Pocket(S, 400), Arm(W)]);
+        Assert.Equal(SignalPlan.ClearingGreen(SignalPlan.MaxTurnStorage), GreenFor(lane, Group(lane, SignalGroupKind.LeftArrow, S)), 1);
+        // unknown storage: the budget alone
+        var unknown = SignalPlan.Build([Arm(N, left: true), Arm(E), Arm(S, left: true), Arm(W)]);
+        Assert.Equal(SignalPlan.TurnPhaseGreen, GreenFor(unknown, Group(unknown, SignalGroupKind.LeftArrow, S)), 1);
+    }
+
+    [Fact]
+    public void ShortStreets_CapTheirGreens_AndShortenTheCycle()
+    {
+        // #982: a phase gets no more green than clearing what its lanes store; the time it saves shortens the cycle (the user)
+        SignalArm Street(int i, float storage) => Arm(i) with { StorageM = storage };
+        var open = SignalPlan.Build([Arm(N), Arm(E), Arm(S), Arm(W)]);
+        var capped = SignalPlan.Build([Street(N, 300), Street(E, 24), Street(S, 300), Street(W, 24)]);
+        AssertValid(capped);
+        Assert.Equal(60, open.Cycle, 1);
+        int ew = Group(capped, SignalGroupKind.Car, E), ns = Group(capped, SignalGroupKind.Car, N);
+        Assert.Equal(10f, GreenFor(capped, ew), 1);   // 2 + 4 cars x 2
+        Assert.Equal(GreenFor(open, Group(open, SignalGroupKind.Car, N)), GreenFor(capped, ns), 1);
+        Assert.Equal(open.Cycle - (GreenFor(open, Group(open, SignalGroupKind.Car, E)) - 10f), capped.Cycle, 1);
+        // every street a car long: the minimum cycle, shared out
+        var tiny = SignalPlan.Build([Street(N, 6), Street(E, 6), Street(S, 6), Street(W, 6)]);
+        AssertValid(tiny);
+        Assert.Equal(SignalPlan.MinCycle, tiny.Cycle, 1);
+    }
+
     [Fact]
     public void NoPockets_BothDirectionsTogether_LeftsPermissive()
     {
@@ -259,6 +304,35 @@ public class SignalPlanTests(ITestOutputHelper output)
             for (int g = 0; g < plan.Groups.Count; g++)
                 Assert.Equal(plan.State(g, t), p.State(g, t));
         Assert.Empty(p.Validate());
+    }
+    [Fact]
+    public void RoadTile_RoundTripsTheOverheadsAndThePoleColour()
+    {
+        // #1037: the canton's pole colour in bits 3-5 of the plan's flag byte, the overhead structures in OVHD after SGNL
+        var plan = SignalPlan.Build([Arm(N, true, true), Arm(E), Arm(S, true), Arm(W)], seed: 7, pedestrianAmber: true);
+        plan.ArrowPlates = true;
+        plan.PoleColour = SignalPoleColour.TrafficGrey;
+        var signal = new RoadSignal { X = 5, Y = 400, Z = 6, Stops = new float[12], Plan = plan };
+        signal.Overheads.Add(new SignalOverhead
+        {
+            Kind = OverheadKind.Portal, Arm = 2, X = 1, Y = 400.1f, Z = 2, EndX = 13, EndY = 400.2f, EndZ = 2.5f, Bottom = 405, Heading = 1.5f,
+            Heads = [new OverheadHead(3.4f, SignalMoves.Through | SignalMoves.Right), new OverheadHead(9.4f, SignalMoves.Left)],
+        });
+        var tile = new RoadTile
+        {
+            Id = new TileId(2500, 1117),
+            Segments = [new RoadSegment { Class = RoadClass.Road, Width = 6, Points = [0, 400, 0, 10, 400, 0] }],
+            Signals = [signal],
+        };
+        using var ms = new MemoryStream();
+        RoadCodec.Encode(tile, ms);
+        ms.Position = 0;
+        var back = Assert.Single(RoadCodec.Decode(ms).Signals);
+        Assert.Equal((SignalPoleColour.TrafficGrey, true, true), (back.Plan.PoleColour, back.Plan.ArrowPlates, back.Plan.PedestrianAmber));
+        var o = Assert.Single(back.Overheads);
+        Assert.Equal((OverheadKind.Portal, (byte)2, 1f, 400.1f, 2f, 13f, 400.2f, 2.5f, 405f, 1.5f),
+            (o.Kind, o.Arm, o.X, o.Y, o.Z, o.EndX, o.EndY, o.EndZ, o.Bottom, o.Heading));
+        Assert.Equal(signal.Overheads[0].Heads, o.Heads);
     }
     [Theory]
     [InlineData(187, -135, 45)]
