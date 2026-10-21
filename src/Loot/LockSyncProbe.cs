@@ -199,8 +199,7 @@ public partial class LockSyncProbe : ChatProbe
     /// The door as the index has it now: an entry kept across awaits holds world space from before
     /// any origin shift since (#185, <c>--originstress</c>); the index itself follows the shifts.
     /// </summary>
-    private static DoorIndex.Entry Fresh(DoorIndex.Entry door) =>
-        DoorIndex.All().Where(d => d.Key.Equals(door.Key)).Select(d => (DoorIndex.Entry?)d).FirstOrDefault() ?? door;
+    private static DoorIndex.Entry Fresh(DoorIndex.Entry door) => DoorIndex.Find(door.Key) ?? door;
 
     /// <summary>From just outside the door: open it unless it stands open, and walk through.</summary>
     private async Task<bool> WalkIn(FootPlayer me, InteriorManager interiors, DoorIndex.Entry door)
