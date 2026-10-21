@@ -190,7 +190,8 @@ public partial class PortalDemo : Node3D
     /// <summary>
     /// Roof shapes for the overhangs (#1067; <see cref="RoofOverhangs"/>, drawn with the style's
     /// mesh detail, so only High shows them): a hipped roof, a terraced row whose middle house
-    /// stands taller (no verge over a neighbour's roof), and a lean-to shed against a house (no
+    /// stands taller (its verges reach over the lower neighbours' roofs, theirs stop at its walls),
+    /// a pair of equal houses (no verge on the party wall), and a lean-to shed against a house (no
     /// overhang along the wall it leans on).
     /// </summary>
     [Showcase("Terrain", "Roof")]
@@ -208,6 +209,9 @@ public partial class PortalDemo : Node3D
             House(Solid(new Vector2(-7f, 0f), 7f, 9f, 6.2f, 9f), 9f),
             House(Solid(Vector2.Zero, 7f, 9f, 7.2f, 10.5f), 10.5f),
             House(Solid(new Vector2(7f, 0f), 7f, 9f, 6.2f, 9f), 9f)));
+        yield return ("Pair", () => Show(
+            House(Solid(new Vector2(-3.5f, 0f), 7f, 9f, 6.2f, 9f), 9f),
+            House(Solid(new Vector2(3.5f, 0f), 7f, 9f, 6.2f, 9f), 9f)));
         yield return ("Lean-to", () => Show(
             House(Solid(Vector2.Zero, 8f, 9f, 6.2f, 9f), 9f),
             House(LeanTo(-4f - 3.5f, -4f, -3f, 3f, 2.6f, 4.2f), 4.2f, BuildingKind.Annex)));

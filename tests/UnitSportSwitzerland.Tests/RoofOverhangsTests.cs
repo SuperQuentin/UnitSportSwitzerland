@@ -94,6 +94,30 @@ public class RoofOverhangsTests
     }
 
     [Fact]
+    public void A_taller_house_keeps_its_verge_over_a_clearly_lower_neighbour()
+    {
+        // west: eave 6, ridge 9; east: eave 8, ridge 12, its west gable on the party wall at x = 10
+        var tile = Tile(Gabled(0, 10, 0, 8, 6, 9), Gabled(10, 20, 0, 8, 8, 12));
+        var east = Plan(tile, 1);
+        // both its gables' verges (and its two eaves): the west ones reach over the lower roof
+        Assert.Equal(6, east.Count);
+        Assert.Contains(east, s => s.OuterP.X < 9.7f && s.OuterQ.X < 9.7f);
+        // the lower house's verge would run into the taller one's wall: none past x = 10
+        var west = Plan(tile, 0);
+        Assert.DoesNotContain(west, s => s.OuterP.X > 10.01f || s.OuterQ.X > 10.01f);
+    }
+
+    [Fact]
+    public void A_neighbour_only_a_little_lower_still_loses_the_verge()
+    {
+        // 40 cm lower: the soffit would hang less than the clearance over it
+        var tile = Tile(Gabled(0, 10, 0, 8, 6, 9), Gabled(10, 20, 0, 8, 6.4f, 9.4f));
+        var east = Plan(tile, 1);
+        Assert.DoesNotContain(east, s => s.OuterP.X < 9.99f || s.OuterQ.X < 9.99f);
+        Assert.Equal(4, east.Count);
+    }
+
+    [Fact]
     public void A_lean_to_has_no_overhang_along_the_wall_it_leans_on()
     {
         // a shed's roof climbing from 2.5 m at x = 0 to 4 m at x = 3, against a wall there

@@ -15,7 +15,8 @@ namespace UnitSport.Terrain;
 /// A free edge is one no other roof triangle of the solid shares (a ridge, a hip or a valley is
 /// shared and stays), facing down or across the slope (the top edge of a lean-to against a
 /// taller wall faces up it and stays). One that would run into a neighbour's roof (a terraced
-/// row's party wall) or under a higher roof of its own solid stays too: <see cref="RoofCover"/>.
+/// row's party wall) or under a higher roof of its own solid stays too, and so does one whose soffit
+/// would pass less than <see cref="Clearance"/> over a lower roof: <see cref="RoofCover"/>.
 /// Strips meet at a corner on the line their offset edges cross (a mitre), and an eave next to
 /// a hip ends on the hip's line carried on, so a hipped roof's corners close.
 /// </para>
@@ -219,13 +220,24 @@ public static class RoofOverhangs
         return (square + e.Dir * beta, f.Depth <= 0f && f.Free);
     }
 
-    // whether a strip along p-q, out by depth, would run into another roof at its height or above
+    /// <summary>
+    /// How far a strip's soffit must stay above a neighbour's roof for the strip to pass over it:
+    /// a taller house's verge or eave over a lower neighbour keeps its overhang only with this much
+    /// air under it. Anything closer (touching, within a hand's breadth, or under the other roof)
+    /// would fight it or poke through, and the edge gets no strip.
+    /// </summary>
+    public const float Clearance = 0.5f;
+
+    // whether a strip along p-q, out by depth, comes within Clearance of another roof under its
+    // soffit, or meets one at its height or above: probed along its middle line and its outer edge
+    // (an eave's lowest), at three points along it
     private static bool Blocked(RoofCover cover, int index, (int, int, int, int) plane, Vector3 p, Vector3 q, Vector3 o, float depth)
     {
         for (int s = 0; s < 3; s++)
+        for (int k = 1; k <= 2; k++)
         {
-            var m = p.Lerp(q, 0.15f + 0.35f * s) + o * (depth * 0.5f);
-            if (cover.HeightAt(m.X, m.Z, index, plane) >= m.Y - 0.3f) return true;
+            var m = p.Lerp(q, 0.15f + 0.35f * s) + o * (depth * 0.5f * k);
+            if (cover.HeightAt(m.X, m.Z, index, plane) > m.Y - Thickness - Clearance) return true;
         }
         return false;
     }

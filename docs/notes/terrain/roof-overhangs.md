@@ -14,10 +14,14 @@
 - **How far**: `RoofOverhangs.For(kind)`, in the roof's plane: house 0.7 m eave / 0.4 m verge, barn
   1.1 / 0.6, block 0.5 / 0.3, church, works, shop 0.4 / 0.25, garage and annex 0.35 / 0.25; at
   most half the plane's eave-to-ridge length (sheds).
-- **Neighbours** (`RoofCover`: the tile's roof triangles in 4 m cells): an edge whose strip would
-  pass within 0.3 m of another roof, or under it (three probes along the strip's middle line), gets
-  none: a terraced row's party walls, a lower roof against a taller wing of the same solid. Without
-  it a verge lay coplanar on the neighbour's roof and fought it.
+- **Neighbours** (`RoofCover`: the tile's roofs in 4 m cells): six probes per edge (three along
+  it, on the strip's middle line and on its outer edge). A strip passes over another roof only with
+  `RoofOverhangs.Clearance` (0.5 m) of air between its soffit (18 cm under its top) and that roof,
+  so a taller house's verge or eave over a clearly lower neighbour keeps its overhang; one that would
+  hit, sit closer than that (less than 0.68 m between the two roof surfaces) or pass under another
+  roof gets none: a terraced row's party walls between equal houses, the lower house's verge against
+  a taller neighbour's wall, a lower roof against a taller wing of the same solid. Without it a verge
+  lay coplanar on the neighbour's roof and fought it.
 - **Corners**: a strip ends where its offset edge crosses the plane's other boundary edge at that
   vertex (that edge's own offset, or the edge carried on when it has none), so an eave and a verge
   meet at one point, both verges of a gable meet at the ridge, and an eave next to a hip stops on
@@ -31,6 +35,6 @@
 - **Tile courses**: each plane's eave in `roofSpans` moves to the strips' lowest point before the
   roof triangles are written, so the shader's gutter runs along the overhang's edge and the courses
   carry across the wall line without a seam.
-- Checks: model viewer `Terrain / Roof` (hipped, terraced row, lean-to) and `Terrain / Building`
+- Checks: model viewer `Terrain / Roof` (hipped, terraced row with a taller middle house, an equal pair, lean-to) and `Terrain / Building`
   in `--style cartoon` and `ps1`; `--zfightcheck` (none of them fights); PS1 town shots are
   pixel-identical before and after (birds aside).
