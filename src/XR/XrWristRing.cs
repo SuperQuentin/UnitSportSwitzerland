@@ -8,7 +8,7 @@ namespace UnitSport.XR;
 /// <summary>
 /// The radial menu over the watch (#1097): twist the left wrist to read the watch and a ring of
 /// actions opens just above it, facing you. The right hand's ray aims a wedge and the trigger picks
-/// it; twisting the watch away shuts the ring. <i>More…</i> opens the full wrist list
+/// it; or the right stick aims and A or the trigger picks (playtest #1097); twisting the watch away shuts the ring. <i>More…</i> opens the full wrist list
 /// (<see cref="XrWristMenu"/>), which has everything the ring has no room for.
 ///
 /// <para>
@@ -46,8 +46,15 @@ internal sealed partial class XrWristRing : Node3D
     private bool _triggerWas = true;
     private FootPlayer? _player;
 
-    /// <summary>Open with the right hand's ray on it: the trigger picks here, it is not a use.</summary>
+    /// <summary>Open with the right hand's ray on it.</summary>
     public bool Pointing { get; private set; }
+
+    /// <summary>
+    /// The right trigger is the ring's: while it is open, and after a pick until the trigger is let
+    /// go, so the pull that picked is never also a shot or a use.
+    /// </summary>
+    public bool HoldsTrigger => IsOpen || _triggerAfterPick;
+    private bool _triggerAfterPick;
 
     public bool IsOpen => Visible;
 
@@ -116,6 +123,7 @@ internal sealed partial class XrWristRing : Node3D
     public void Update(Transform3D head, Transform3D watch, bool watchShown, XRController3D aim, FootPlayer? player, bool inWorld, float dt)
     {
         _player = player;
+        if (aim.GetFloat("trigger") < 0.3f) _triggerAfterPick = false;
         var to = head.Origin - watch.Origin;
         float d = to.Length();
         float facing = d > 0.01f ? watch.Basis.Z.Normalized().Dot(to / d) : 0f;
@@ -151,7 +159,8 @@ internal sealed partial class XrWristRing : Node3D
         Visible = true;
         _placed = false;
         Place(watch, head, 1f);
-        _triggerWas = true;   // a trigger already held does not pick the moment it opens
+        _triggerWas = _aWas = true;   // a trigger or A already held does not pick the moment it opens
+        _stickAim = -1;
         _face.Highlight = -1;
         Redraw();
         aim.TriggerHapticPulse("haptic", 0.0, 0.3, 0.04, 0.0);
@@ -181,10 +190,17 @@ internal sealed partial class XrWristRing : Node3D
         GlobalTransform = Transform3D.Identity.Translated(_at).LookingAt(_at - toEyes, Vector3.Up);
     }
 
+    /// <summary>The wedge the right stick last aimed, kept when it is let go back to the middle; −1 none.</summary>
+    private int _stickAim = -1;
+    private bool _aWas = true;
+
     private void AimAndPick(XRController3D aim, FootPlayer? player)
     {
         int highlight = -1;
         Pointing = false;
+        // the stick first: pushed, it aims (up is the top wedge); let back to the middle, its wedge stays lit
+        var stick = aim.GetVector2("primary");
+        if (stick.Length() > 0.5f) _stickAim = Radial.Aimed(new Vector2(stick.X, -stick.Y), _wedges.Length, 0.5f);
         if (aim.GetHasTrackingData())
         {
             var plane = new Godot.Plane(GlobalBasis.Z, GlobalPosition);
@@ -202,6 +218,9 @@ internal sealed partial class XrWristRing : Node3D
                 }
             }
         }
+        // a wedge the ray is on wins; otherwise the stick's
+        if (highlight >= 0) _stickAim = -1;
+        else highlight = _stickAim;
         if (highlight != _face.Highlight)
         {
             _face.Highlight = highlight;
@@ -209,11 +228,14 @@ internal sealed partial class XrWristRing : Node3D
             if (highlight >= 0) aim.TriggerHapticPulse("haptic", 0.0, 0.1, 0.015, 0.0);
         }
 
-        bool trigger = aim.GetFloat("trigger") > 0.6f;
-        if (trigger && !_triggerWas && Pointing && highlight >= 0 && _wedges[highlight].Refusal(player) == null)
+        bool trigger = aim.GetFloat("trigger") > 0.6f, a = aim.IsButtonPressed("ax_button");
+        bool pressed = trigger && !_triggerWas && (Pointing || _stickAim >= 0) || a && !_aWas;
+        _aWas = a;
+        if (pressed && highlight >= 0 && _wedges[highlight].Refusal(player) == null)
         {
             var wedge = _wedges[highlight];
             GD.Print($"[xr] wrist ring: {wedge.Name}");
+            _triggerAfterPick = trigger;
             Close();
             wedge.Pick(player);
         }

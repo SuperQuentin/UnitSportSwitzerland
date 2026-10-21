@@ -358,6 +358,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         if (!_calibrated && _trackedFor > 0.5f) Recentre();
 
         var player = Anchor?.GetParent() as FootPlayer;
+        ReseatOnRideChange(player);
         UpdateAnchor(player);
         var calibrated = _calib * head;
 
@@ -384,7 +385,8 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         // "--xrring <wedge>" with --xrsim: the ring held open before the eyes, that wedge lit, for a headset shot
         if (_ringShot is int lit) _ring.ShowForShot(_camera.GlobalTransform, lit);
         else _ring.Update(_camera.GlobalTransform, _watch.GlobalTransform, _watch.Visible, _leftHanded ? _left : _right, player, InWorld, dt);
-        _pad.Update(player, calibrated, uiActive: _ui.Pointing || _map.Pointing || _ring.Pointing, dt);
+        _pad.SuppressRight = _ring.IsOpen;
+        _pad.Update(player, calibrated, uiActive: _ui.Pointing || _map.Pointing || _ring.HoldsTrigger, dt);
         UpdateHandAim();
         ShareHands(player);
         _ui.UpdatePanel(dt);
@@ -598,6 +600,29 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         GD.Print($"[xr] loading space {(want ? "on" : "off")}");
     }
 
+    /// <summary>What the player was riding last frame (−1: no player yet), to see a seat change.</summary>
+    private (int Ride, long With) _seat = (-1, 0);
+
+    /// <summary>
+    /// Sitting down in a vehicle or getting out (playtest): your head, where it is now, goes onto
+    /// the new eye, the heading kept. A calibration taken standing put a seated eye 40 cm up through
+    /// the car's roof; one taken sitting put a walker's head as far down.
+    /// </summary>
+    private void ReseatOnRideChange(FootPlayer? player)
+    {
+        if (player == null) return;
+        var seat = ((int)player.Ride, player.RidingWith);
+        if (seat == _seat) return;
+        bool first = _seat.Ride < 0;
+        _seat = seat;
+        if (first || !_calibrated) return;
+        var head = _camera.Transform;
+        if (head.Origin == Vector3.Zero) return;   // not tracked
+        var yaw = _calib.AffineInverse().Basis;
+        _calib = new Transform3D(yaw, head.Origin).AffineInverse();
+        GD.Print($"[xr] reseated at head height {head.Origin.Y:F2} m ({player.Ride})");
+    }
+
     /// <summary>Takes where the head is now as the neutral pose: straight ahead, at the avatar's eye.</summary>
     public void Recentre()
     {
@@ -632,12 +657,14 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         // while perched or walking (PigeonSnap says no in the air)
         bool onFoot = player != null && player.Ride == RideKind.OnFoot && player.RidingWith == 0;
         int snapDegrees = Core.GameSettings.Current.VrSnapDegrees;
-        if (onFoot && snapDegrees == 0 && !_ui.Pointing)
+        // the wrist ring open (#1097): the right stick aims its wedges, it does not turn
+        bool turning = !_ui.Pointing && !_ring.IsOpen;
+        if (onFoot && snapDegrees == 0 && turning)
         {
             // smooth, past a small deadzone (#439)
             if (Mathf.Abs(stick.X) > 0.2f) player!.LookYaw -= stick.X * SmoothTurnRate * dt;
         }
-        else if ((onFoot || player?.Ride == RideKind.Pigeon) && Mathf.Abs(stick.X) > 0.7f && _snapArmed && !_ui.Pointing)
+        else if ((onFoot || player?.Ride == RideKind.Pigeon) && Mathf.Abs(stick.X) > 0.7f && _snapArmed && turning)
         {
             float turn = -Mathf.Sign(stick.X) * Mathf.DegToRad(snapDegrees == 0 ? 30 : snapDegrees);
             if (onFoot) player!.LookYaw += turn;
