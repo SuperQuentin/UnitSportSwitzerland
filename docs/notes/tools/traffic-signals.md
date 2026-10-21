@@ -93,10 +93,20 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   paywalled), min green 4 s, pedestrian green >= 5 s, pedestrian clearance 2/3 of the crossing
   at 1.2 m/s (2-8 s) as yellow on 3-lens heads, red on 2-lens ones (Geneva, `PedestrianAmber`
   by canton from `tools/MapCore/switzerland.bin`, `Cantons`); bike lead green 3 s (the cars'
-  intergreen grows by it); turn phases 8 s; cycle ~60 s (2 phases), 75 (3-4), 90 (5-6), max 120,
-  greens split by rank. A group green in two phases in a row does not change. Offset: a hash of
+  intergreen grows by it); turn phases 5 s where the pocket's storage is unknown; cycle target 60 s (up to 4 phases), 70 (more),
+  min 30, max 120, greens split by rank, shaped by queue storage (below). A group green in two phases in a row does not change. Offset: a hash of
   the junction's LV95 metres (junctions are not coordinated, #356). `State(group, t)` with the
   server clock: every peer agrees, nothing is replicated.
+- **Queue storage** (#982, the user): `SignalArm.StorageM` / `LeftStorageM` / `RightStorageM` (not stored), from the planner
+  (`WriteSignals`): a pocket's storage (`Opening.Storage`), a lane of the street's own (through, or a turn lane from OSM's
+  lanes) the street's `Length`, both less the car stop's station, at least 6 m. A full queue clears in `ClearingGreen` =
+  2 s start-up loss + (storage / 6 m) x 2 s (saturation headway), at least 4 s. A turn phase's green is its pocket's
+  clearing time (at most `MaxTurnStorage` 40 m, the longest pocket: 20 m 8.7 s, 30 m 12 s, 40 m 15.3 s); the cycle budgets
+  5 s for it, so a longer one lengthens the cycle (the user's choice: the through phases keep their green). A shared phase's
+  green is capped at its base groups' longest clearing time (less the green that group has in the fixed phases beside it);
+  the time a cap saves shortens the cycle (the user), never under 30 s (shares stretched by weight). Unknown storage (0: the
+  old layout, tests, the game's showcases) times as before. Test region: 4-pocket crossroads 73-85 -> 102-111 s, J2-like
+  78 -> 117, Ts 60-64 -> 69-72; no cap binds there (its streets are long), one plan 63 -> 61.
 - **Checks**: `RoadGen --signal-check --chunks DIR [--at E,N] [--list]` validates every plan
   (no hard conflict live at once, red+yellow before green, yellow after, min green, every group
   served) and dumps one; `--priority-check` has the inference cases. Invalid plans are not written

@@ -100,6 +100,51 @@ public class SignalPlanTests(ITestOutputHelper output)
         Assert.InRange(plan.Cycle, 60, SignalPlan.MaxCycle);
     }
 
+    /// <summary>Seconds a group is green per cycle.</summary>
+    private static float GreenFor(SignalPlan plan, int g) =>
+        plan.Groups[g].Intervals.Where(iv => iv.Aspect == SignalAspect.Green).Sum(iv => iv.To - iv.From);
+
+    [Fact]
+    public void TurnPhase_ClearsItsPocketsQueue()
+    {
+        // #982: a turn phase's green clears its pocket's full queue, the start-up loss then a car per 6 m every 2 s
+        SignalArm Pocket(int i, float storage) => Arm(i, left: true) with { LeftStorageM = storage };
+        var shortPocket = SignalPlan.Build([Pocket(N, 18), Arm(E), Pocket(S, 18), Arm(W)]);
+        var longPocket = SignalPlan.Build([Pocket(N, 36), Arm(E), Pocket(S, 36), Arm(W)]);
+        AssertValid(shortPocket);
+        AssertValid(longPocket);
+        Assert.Equal(8f, GreenFor(shortPocket, Group(shortPocket, SignalGroupKind.LeftArrow, S)), 1);   // 2 + 3 cars x 2
+        Assert.Equal(14f, GreenFor(longPocket, Group(longPocket, SignalGroupKind.LeftArrow, S)), 1);    // 2 + 6 cars x 2
+        // what a pocket needs past the turn phase's budget lengthens the cycle; the through phases keep their green
+        Assert.Equal(2 * (14f - 8f), longPocket.Cycle - shortPocket.Cycle, 1);
+        Assert.Equal(GreenFor(shortPocket, Group(shortPocket, SignalGroupKind.Car, E)), GreenFor(longPocket, Group(longPocket, SignalGroupKind.Car, E)), 1);
+        // a turn lane the whole street long clears no more than the longest pocket holds
+        var lane = SignalPlan.Build([Pocket(N, 400), Arm(E), Pocket(S, 400), Arm(W)]);
+        Assert.Equal(SignalPlan.ClearingGreen(SignalPlan.MaxTurnStorage), GreenFor(lane, Group(lane, SignalGroupKind.LeftArrow, S)), 1);
+        // unknown storage: the budget alone
+        var unknown = SignalPlan.Build([Arm(N, left: true), Arm(E), Arm(S, left: true), Arm(W)]);
+        Assert.Equal(SignalPlan.TurnPhaseGreen, GreenFor(unknown, Group(unknown, SignalGroupKind.LeftArrow, S)), 1);
+    }
+
+    [Fact]
+    public void ShortStreets_CapTheirGreens_AndShortenTheCycle()
+    {
+        // #982: a phase gets no more green than clearing what its lanes store; the time it saves shortens the cycle (the user)
+        SignalArm Street(int i, float storage) => Arm(i) with { StorageM = storage };
+        var open = SignalPlan.Build([Arm(N), Arm(E), Arm(S), Arm(W)]);
+        var capped = SignalPlan.Build([Street(N, 300), Street(E, 24), Street(S, 300), Street(W, 24)]);
+        AssertValid(capped);
+        Assert.Equal(60, open.Cycle, 1);
+        int ew = Group(capped, SignalGroupKind.Car, E), ns = Group(capped, SignalGroupKind.Car, N);
+        Assert.Equal(10f, GreenFor(capped, ew), 1);   // 2 + 4 cars x 2
+        Assert.Equal(GreenFor(open, Group(open, SignalGroupKind.Car, N)), GreenFor(capped, ns), 1);
+        Assert.Equal(open.Cycle - (GreenFor(open, Group(open, SignalGroupKind.Car, E)) - 10f), capped.Cycle, 1);
+        // every street a car long: the minimum cycle, shared out
+        var tiny = SignalPlan.Build([Street(N, 6), Street(E, 6), Street(S, 6), Street(W, 6)]);
+        AssertValid(tiny);
+        Assert.Equal(SignalPlan.MinCycle, tiny.Cycle, 1);
+    }
+
     [Fact]
     public void NoPockets_BothDirectionsTogether_LeftsPermissive()
     {

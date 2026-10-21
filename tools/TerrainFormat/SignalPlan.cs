@@ -60,7 +60,16 @@ public readonly record struct SignalArm(
     /// The bike lane runs between the through lane and the right pocket (layout b, #351): the cars turning right cross it before
     /// the junction, not at the mouth, so the riders' green and the right arrow's are free to meet (#979). Bit 7 of the arm's byte.
     /// </summary>
-    bool BikeBetween = false);
+    bool BikeBetween = false,
+    /// <summary>
+    /// How far behind the stop line the main lane can hold a queue (m): its run back to the junction behind (#982); 0 unknown.
+    /// Not stored: the greens carry it.
+    /// </summary>
+    float StorageM = 0,
+    /// <summary>The left-turn lane's queue room behind the stop line (m, #982): its pocket's storage; 0 unknown. Not stored.</summary>
+    float LeftStorageM = 0,
+    /// <summary>The right pocket's queue room behind the stop line (m, #982); 0 unknown. Not stored.</summary>
+    float RightStorageM = 0);
 
 public readonly record struct SignalInterval(SignalAspect Aspect, float From, float To);
 
@@ -94,9 +103,23 @@ public sealed class SignalPlan
     public const float MinGreen = 4f, AllRed = 2f, AllRedAfterArrow = 1f, BikeLead = 3f;
     /// <summary>A pedestrian clears 2/3 of the crossing at this pace in the clearance time (2-8 s).</summary>
     public const float WalkSpeed = 1.2f;
-    /// <summary>The green of a leading or lagging left-turn phase.</summary>
+    /// <summary>The green of a leading or lagging left-turn phase whose pocket's storage is unknown; the time the cycle budgets for one.</summary>
     public const float TurnPhaseGreen = 5f;
-    public const float MaxCycle = 120f;
+    public const float MinCycle = 30f, MaxCycle = 120f;
+    /// <summary>A queue (#982): a car per <see cref="CarSpacing"/> m of lane, leaving every <see cref="Headway"/> s (saturation) after the start-up loss.</summary>
+    public const float CarSpacing = 6f, Headway = 2f, StartLoss = 2f;
+    /// <summary>
+    /// The most queue a turn phase clears (m, #982): the longest left pocket RoadGen lays (<c>PocketRules.Left</c>). A turn lane
+    /// running the whole street back (OSM's lanes) is not all left-turners.
+    /// </summary>
+    public const float MaxTurnStorage = 40f;
+
+    /// <summary>
+    /// The green that clears a full queue of <paramref name="storageM"/> m (#982): the start-up loss, then a car every
+    /// <see cref="Headway"/> s; never under <see cref="MinGreen"/>, infinite where the storage is unknown (0).
+    /// </summary>
+    public static float ClearingGreen(float storageM) =>
+        storageM <= 0 ? float.PositiveInfinity : Math.Max(MinGreen, StartLoss + storageM / CarSpacing * Headway);
 
     // ---- the plan ----------------------------------------------------------------------------
 
@@ -526,7 +549,7 @@ public sealed class SignalPlan
         return Groups.Count - 1;
     }
 
-    private sealed class Phase(float weight, float fixedGreen = 0)
+    private sealed class Phase(float weight, float fixedGreen = 0, float budget = -1)
     {
         /// <summary>The groups the scheme runs in this phase.</summary>
         public readonly List<int> Base = new();
@@ -535,8 +558,20 @@ public sealed class SignalPlan
         public readonly float Weight = weight;
         /// <summary>A fixed green (a turn phase); 0: a share of what is left of the cycle.</summary>
         public readonly float FixedGreen = fixedGreen;
+        /// <summary>
+        /// What the target cycle sets aside for the fixed green (#982: a turn phase's <see cref="TurnPhaseGreen"/>): a pocket that
+        /// needs more lengthens the cycle rather than shortening the through phases.
+        /// </summary>
+        public readonly float Budget = budget < 0 ? fixedGreen : budget;
+        /// <summary>The most green its lanes' queues need (#982); infinite where a lane's storage is unknown.</summary>
+        public float Cap = float.PositiveInfinity;
         public float GreenTime;
     }
+
+    /// <summary>A left-turn phase (#982): what clearing its pocket's full queue takes (up to <see cref="MaxTurnStorage"/>), <see cref="TurnPhaseGreen"/> where unknown.</summary>
+    private static Phase TurnPhase(IReadOnlyList<SignalArm> arms, int arm, bool pocket) =>
+        new(0, pocket && arms[arm].LeftStorageM > 0 ? MathF.Round(ClearingGreen(Math.Min(MaxTurnStorage, arms[arm].LeftStorageM)), 1) : TurnPhaseGreen,
+            TurnPhaseGreen);
 
     private static List<Phase> Phases(SignalPlan plan, IReadOnlyList<SignalArm> arms, int[] car, int[] left, int[] right)
     {
@@ -580,9 +615,9 @@ public sealed class SignalPlan
                     if (arms[a].In) Add(new Phase(weight), car[a], left[a]);
                     continue;
                 }
-                if (left[p] >= 0) Add(new Phase(0, TurnPhaseGreen), car[p], left[p]);
+                if (left[p] >= 0) Add(TurnPhase(arms, p, true), car[p], left[p]);
                 Add(new Phase(weight), car[p], car[q]);
-                if (left[q] >= 0) Add(new Phase(0, TurnPhaseGreen), car[q], left[q]);
+                if (left[q] >= 0) Add(TurnPhase(arms, q, true), car[q], left[q]);
             }
         }
         else if (arms.Count == 3 && axes.Count == 1 && single.Count == 1)
@@ -592,7 +627,7 @@ public sealed class SignalPlan
             // the main approach that turns left into the side road
             int ml = arms[p].In && Turn(arms, p, s) == SignalMoves.Left ? p : arms[q].In && Turn(arms, q, s) == SignalMoves.Left ? q : -1;
             Add(new Phase(Math.Max(1, Rank(p) + Rank(q))), car[p], car[q]);
-            if (ml >= 0) Add(new Phase(0, TurnPhaseGreen), car[ml], left[ml]);
+            if (ml >= 0) Add(TurnPhase(arms, ml, left[ml] >= 0), car[ml], left[ml]);
             Add(new Phase(Math.Max(1, Rank(s))), car[s], left[s], right[s]);
         }
         else phases.AddRange(Split(plan, arms));
@@ -652,6 +687,25 @@ public sealed class SignalPlan
         SignalGroupKind.Bike => YellowBike,
         _ => Yellow(Arms[Groups[g].Arm].SpeedKmh),
     };
+
+    /// <summary>
+    /// How far behind its stop line a group's lane can queue (m, #982): an arrow's pocket, the main lane's run back; a right arrow
+    /// no phase could carry, made a full green with its approach, keeps its pocket's. 0 unknown, or not a car group.
+    /// </summary>
+    public float StorageOf(int g)
+    {
+        var group = Groups[g];
+        var arm = Arms[group.Arm];
+        return group.Kind switch
+        {
+            SignalGroupKind.LeftArrow => arm.LeftStorageM,
+            SignalGroupKind.RightArrow => arm.RightStorageM,
+            SignalGroupKind.Car when group.Moves == SignalMoves.Right && arm.RightPocket
+                && Groups.Any(h => h != group && h.Arm == group.Arm && h.Kind == SignalGroupKind.Car) => arm.RightStorageM,
+            SignalGroupKind.Car => arm.StorageM,
+            _ => 0,
+        };
+    }
 
     private float ClearanceOf(int g)
     {
@@ -740,15 +794,37 @@ public sealed class SignalPlan
             }
         }
 
+        // a phase needs no more green than clearing what its lanes can store (#982): the longest of its base groups' full queues,
+        // less the green that group has in the fixed phases beside it (a leading turn phase's through group); unknown, no cap
+        for (int i = 0; i < n; i++)
+        {
+            var p = phases[i];
+            p.Cap = float.PositiveInfinity;
+            if (p.FixedGreen > 0 || n == 1 || p.Base.Count == 0) continue;
+            float cap = 0;
+            foreach (int g in p.Base)
+            {
+                float need = ClearingGreen(plan.StorageOf(g));
+                if (float.IsInfinity(need)) { cap = need; break; }
+                for (int k = (i - 1 + n) % n; k != i && phases[k].FixedGreen > 0 && phases[k].Green.Contains(g); k = (k - 1 + n) % n)
+                    need -= phases[k].FixedGreen + inter[k];
+                for (int k = (i + 1) % n; k != i && phases[k].FixedGreen > 0 && phases[k].Green.Contains(g); k = (k + 1) % n)
+                    need -= phases[k].FixedGreen + inter[(k - 1 + n) % n];
+                cap = Math.Max(cap, need);
+            }
+            p.Cap = Math.Max(MinGreen, cap);
+        }
+
+        // the phases share the target cycle by weight, none past its cap: the time a capped one saves shortens the cycle (the
+        // user, #982), and a pocket needing more than its turn phase's budget lengthens it; over the maximum, the shares shrink
         float target = n <= 2 ? 60 : n <= 4 ? 60 : 70;
-        float fixedSum = phases.Sum(p => p.FixedGreen) + inter.Sum();
         float weights = phases.Sum(p => p.FixedGreen > 0 ? 0 : p.Weight);
         float cycle = target;
         for (int pass = 0; pass < 2; pass++)
         {
-            float share = Math.Max(0, cycle - fixedSum);
+            float share = Math.Max(0, cycle - phases.Sum(p => pass == 0 ? p.Budget : p.FixedGreen) - inter.Sum());
             foreach (var p in phases)
-                p.GreenTime = p.FixedGreen > 0 ? p.FixedGreen : weights > 0 ? Math.Max(MinGreen, share * p.Weight / weights) : MinGreen;
+                p.GreenTime = p.FixedGreen > 0 ? p.FixedGreen : weights > 0 ? Math.Max(MinGreen, Math.Min(p.Cap, share * p.Weight / weights)) : MinGreen;
             // a pedestrian green at least as long as its crossing's clearance, never under the minimum
             foreach (var p in phases)
             {
@@ -758,6 +834,15 @@ public sealed class SignalPlan
             float total = phases.Sum(p => p.GreenTime) + inter.Sum();
             if (total <= MaxCycle || pass == 1) { cycle = total; break; }
             cycle = MaxCycle;
+        }
+        // every phase short (#982): never under the minimum cycle, the shares stretched by weight (the fixed phases where none is shared)
+        if (cycle < MinCycle && n > 1)
+        {
+            var stretch = phases.Where(p => p.FixedGreen <= 0).ToList();
+            if (stretch.Count == 0) stretch = phases;
+            float w = stretch.Sum(p => p.FixedGreen > 0 ? 1 : p.Weight);
+            foreach (var p in stretch) p.GreenTime = MathF.Round(p.GreenTime + (MinCycle - cycle) * (p.FixedGreen > 0 ? 1 : p.Weight) / w, 1);
+            cycle = phases.Sum(p => p.GreenTime) + inter.Sum();
         }
         plan.Cycle = MathF.Round(cycle, 1);
 
