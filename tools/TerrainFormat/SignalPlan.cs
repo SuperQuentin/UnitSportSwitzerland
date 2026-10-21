@@ -144,6 +144,12 @@ public sealed class SignalPlan
     /// </summary>
     public bool ConflictTimed { get; set; }
 
+    /// <summary>
+    /// The canton's colour for its signal poles and overhead structures (#1037, <see cref="SignalPoleColour"/>). Bits 3-5 of the
+    /// byte that holds <see cref="PedestrianAmber"/>: data written before reads the default, RAL 7001.
+    /// </summary>
+    public SignalPoleColour PoleColour { get; set; }
+
     /// <summary>Prints each phase change's wait and the pair that sets it while timing (a debugging aid).</summary>
     public static bool DebugTiming;
 
@@ -1063,6 +1069,12 @@ public sealed class SignalPlan
     }
 }
 
+/// <summary>
+/// A canton's colour for its signal poles and overhead structures (#1037): RAL 7001 silver grey where not checked; Basel-Landschaft's
+/// anthracite (DB703, ATS LSA Aussenanlagen 2024), the city of Bern's RAL 7042 traffic grey A (Handbuch LSA 2025).
+/// </summary>
+public enum SignalPoleColour : byte { SilverGrey = 0, Anthracite = 1, TrafficGrey = 2 }
+
 /// <summary>What a signal pole carries (#350): the heads for its arm's approach, and a pedestrian head.</summary>
 [Flags]
 public enum SignalPoleFlags : byte
@@ -1102,6 +1114,8 @@ public sealed class RoadSignal
     public required float[] Stops { get; init; }
     public required SignalPlan Plan { get; init; }
     public List<SignalPole> Poles { get; init; } = new();
+    /// <summary>Its approaches' overhead structures (#1037, section <c>OVHD</c>).</summary>
+    public List<SignalOverhead> Overheads { get; } = new();
     /// <summary>Its movements as its timing took them, each once (#979, section <c>CPAR</c>, for the debug view's trails).</summary>
     public List<RoadConflictLine> ConflictLines { get; } = new();
     /// <summary>The pairs of those lines that set its groups' green starts and ends (#979, <c>CPAR</c>, for the debug view's movers).</summary>
@@ -1122,7 +1136,7 @@ public sealed class RoadSignal
             var p = s.Plan;
             w.Write(s.X); w.Write(s.Y); w.Write(s.Z);
             w.Write(p.Cycle); w.Write(p.Offset);
-            w.Write((byte)((p.PedestrianAmber ? 1 : 0) | (p.ArrowPlates ? 2 : 0) | (p.ConflictTimed ? 4 : 0)));
+            w.Write((byte)((p.PedestrianAmber ? 1 : 0) | (p.ArrowPlates ? 2 : 0) | (p.ConflictTimed ? 4 : 0) | ((int)p.PoleColour & 7) << 3));
             w.Write(checked((byte)p.Arms.Count));
             w.Write(checked((byte)p.Groups.Count));
             for (int i = 0; i < p.Arms.Count; i++)
@@ -1176,7 +1190,11 @@ public sealed class RoadSignal
             byte kinds = r.ReadByte();
             bool pedAmber = (kinds & 1) != 0, arrowPlates = (kinds & 2) != 0, conflictTimed = (kinds & 4) != 0;
             int arms = r.ReadByte(), groups = r.ReadByte();
-            var plan = new SignalPlan { Cycle = cycle, Offset = offset, PedestrianAmber = pedAmber, ArrowPlates = arrowPlates, ConflictTimed = conflictTimed };
+            var plan = new SignalPlan
+            {
+                Cycle = cycle, Offset = offset, PedestrianAmber = pedAmber, ArrowPlates = arrowPlates, ConflictTimed = conflictTimed,
+                PoleColour = (SignalPoleColour)((kinds >> 3) & 7),
+            };
             var stops = new float[arms * 3];
             for (int i = 0; i < arms; i++)
             {
