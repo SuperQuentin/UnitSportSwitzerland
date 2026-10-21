@@ -61,7 +61,7 @@ public partial class BotProbe : ChatProbe
 
         // walking on the server's collision: someone moved, and stands on the ground
         var start = bots.ToDictionary(b => b, b => b.Global);
-        await Seconds(8.0);
+        await Until(() => bots.Any(b => GodotObject.IsInstanceValid(b) && b.Global.DistanceTo(start[b]) > 1f), 12);
         var walker = bots.Where(GodotObject.IsInstanceValid).OrderByDescending(b => b.Global.DistanceTo(start[b])).First();
         float moved = (float)walker.Global.DistanceTo(start[walker]);
         Expect(moved > 1f, $"a bot walks here: {walker.Name} moved {moved:F1} m in 8 s");

@@ -340,7 +340,7 @@ public partial class PalletNetProbe : Node
         var parkedAt = me.GlobalPosition;
         float parkedYaw = me.Rotation.Y;
         me.ExitVehicle();
-        await Seconds(1);
+        await Until(() => me.Ride == RideKind.OnFoot, 3);
 
         // beside the sleeper on its step side, facing it
         var at = origin.ToWorld(slot.E, slot.N, slot.Height);
@@ -358,7 +358,7 @@ public partial class PalletNetProbe : Node
         if (parked == null || !alreadyUp && !parked.Visible) { Log("the hall's forklift is not there to be woken"); return false; }
         if (!alreadyUp) DormantVehicles.Instance!.Wake(slot);
         bool woken = await Until(() => VehicleManager.Instance?.GetNodeOrNull(slot.NodeName) != null, 10);
-        await Seconds(0.5);
+        await Until(() => parked is { Visible: false }, 2);
         bool hidden = parked is { Visible: false };
         Log($"woken {woken}, the sleeping copy gone {hidden}");
         Log($"  (woken {(alreadyUp ? "by being aimed at on the way in" : "by the probe")}; solid {(parked?.GetNodeOrNull<DormantBody>("Body")?.GetChildren().OfType<CollisionShape3D>().Any(s => !s.Disabled) == true)})");
@@ -382,7 +382,7 @@ public partial class PalletNetProbe : Node
         // the watcher needs to see it driven
         await Seconds(3);
         me.ExitVehicle();
-        await Seconds(1);
+        await Until(() => me.Ride == RideKind.OnFoot, 3);
         if (moved < 1f || hallLift.Lift < 0.3f) return false;
 
         // back into the apron forklift, from its step side
