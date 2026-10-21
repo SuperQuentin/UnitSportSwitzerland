@@ -130,3 +130,33 @@
   prints the crossings on red while clearing.
 - **`--feed-turns L,T,R`** (#854, demos): weights for the fed cars' moves (`1,2,3`: a sixth left, a third straight, half
   right); each draws one and takes a path with it at its junction (`Vehicle.Wants`); the probe prints the moves taken.
+- **Queues start car by car** (#1046, the user watching the timing trails: a queue moved off as one train of cars): a
+  standing car (under 0.5 m/s, `StartSpeed`) that is let go (its green, the car ahead moving off) starts its driver's
+  `Reaction` + 0.25 s later (0.75-1.25 s, `Vehicle.Starting`), so the start-up wave runs back along the queue. The lights'
+  conflict times assume the first car entering at its arm's limit from its line (`ConflictTimes`): a later start is on the
+  safe side. `--trafficcheck` prints the **queue discharge headways** (between two cars that stood at red crossing their
+  lane's line on green, by place in the queue: 2nd, 3rd, 4th, 5th and later; over 6 s apart is a new queue).
+- **Permissive turns wait at the conflict point** (#1046): at load each car junction path at a lit junction gets its
+  `JunctionPathInfo.Yields` (`World/ConflictPoints`, unit-tested in `ConflictPointsTests`): where the path first meets a
+  movement it gives way to by `SignalPlan.Conflicts`' rules (a shared lane's left to oncoming cars not turning left, a shared
+  lane's turn across a bike way or into a crossing), from the other cars' `JPTH` paths, the riders' `JPTH` paths and the
+  walkers' `CPAR` lines (a zebra 3 m deep); `At`/`Out` along the path (the car's body, 1 m, in the other's band), `Enter`
+  along the other car's path. On green the turning car drives in to 1 m short of the first point a mover is coming to and
+  waits there (`GapWait`): a car on its way onto that path reaching where its body enters this lane within 4.5 s
+  (`AcceptGap`), or in it; a player or racer at the conflict or closing on it (#1033's walkers and riders join in `Coming`).
+  It never stands in an earlier band it has not passed (it waits short of that one), goes once the gap comes, and past its
+  line it clears on amber or red. As many as fit: one still before its line goes in only if it would stand fully past it
+  behind those waiting (`GapHeld` otherwise, at the line). A wait inside is not stuck (it vanished there). Where the path has
+  no points (an older tile without `JPTH`), the old rule holds: a left from a shared lane waits at the line (`Oncoming`).
+  A car on the movement it gives way to counts only if its light lets it in (green, or an amber it clears) or it can no longer
+  stop short of the path: lefts first waited a whole green for oncoming cars 90 m out, on their way to their red.
+  Debug menu, Green paths: a white bar across each lit path where a waiting car's front stops. `--trafficcheck` prints the
+  cars that stood in a junction for a gap, the longest wait, those that left on amber or red, and the paths with points;
+  windowed with a picture, `<png>_5_gap` frames one standing (its light not red yet) from above with the paths drawn.
+  `--lights` keeps the Green paths view on through the run, for a clip: `tools/record-clip.sh permissive-left-j7 30 60
+  --trafficcheck --lights --cam-height 25 --chunks <region> --at 2917500,1322500 --generated off --traffic 300 --dense --feed
+  --feed-turns 2,1,1 --seconds 95`.
+  Measured (signal test region, J7 `--at 2917500,1322500 --traffic 300 --dense --feed --feed-turns 2,1,1 --seconds 120`,
+  same feed before and after): headways 2nd/3rd/4th/5th+ 1.4/1.2/1.2/0.8 s -> 2.4/2.1/1.7/1.2 s; 6 cars stood in the
+  junction for an oncoming car (longest 9 s), no red run. The front car moves at 0.75-1.25 s and then accelerates at the
+  usual 2.2 m/s² (3-4 m by 2.5 s after the green).

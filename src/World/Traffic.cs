@@ -382,6 +382,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         _byX.AddRange(_cars);
         _byX.Sort(ByX);
         DoubledNow = 0;
+        _now += dt;
         foreach (var car in _cars) StepCar(car, dt, obstacles);
         DoubledMost = Math.Max(DoubledMost, DoubledNow);
         foreach (var train in _trains) StepTrain(train, dt);
@@ -676,6 +677,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         if (!car.Placed) (car.Lane, car.Placed) = (car.LaneWanted, true);
         target = Mathf.Min(target, lights);
         target = Mathf.Min(target, LitLimit(car, edge));
+        // a turn that gives way on its green: in to the conflict point, and wait there for a gap (#1046)
+        target = Mathf.Min(target, GapWait(car, dt, obstacles));
 
         bool sampled = false;
         foreach (var (oPos, oVel) in obstacles)
@@ -811,13 +814,21 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             if (car.StartleBrake) { target = 0f; accel = 8f; }
         }
         if (racerRight) wantPull = Mathf.Min(wantPull, car.Pull);
+        // a queue starts car by car (#1046): a standing car let go (its light turns green, the car ahead moves off) starts its
+        // driver's reaction time later, so a queue stretches out as it discharges (it moved off as one train of cars)
+        if (car.Speed < StartSpeed)
+        {
+            if (target <= StartSpeed) car.Starting = 0f;
+            else if ((car.Starting += dt) < car.Reaction + StartLag) target = car.Speed;
+        }
         car.Speed = Mathf.MoveToward(car.Speed, target, accel * dt);
         // waiting for a race is not stuck: a car dropped after 20 s of it vanished in front of the racers.
         // Nor is waiting at a red (#353): a car 20 s at one vanished from the line (a red always ends;
-        // a wait on green for room or a gap still counts, the way out of a gridlock). A car held by the
-        // lights (a red, a wait at the line) in a queue does not turn round either
+        // a wait on green for room still counts, the way out of a gridlock), nor in a junction for a gap (#1046: it vanished
+        // there; the green it gives way to ends too). A car held by the lights (a red, a wait at the line) in a queue does not
+        // turn round either
         bool atLights = lights < float.MaxValue;
-        car.Stuck = car.Speed < 0.3f && !stopFor && !hold && !car.AtRed ? car.Stuck + dt : 0f;
+        car.Stuck = car.Speed < 0.3f && !stopFor && !hold && !car.AtRed && !car.GapWaiting && !car.GapHeld ? car.Stuck + dt : 0f;
         car.Holding = hold;
         car.Yield = yield;
         car.Stale = blocked && car.Speed < 0.3f && !atLights ? car.Stale + dt : 0f;
@@ -1095,7 +1106,12 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         {
             if (aspect is SignalAspect.Red && !car.ClearingAmber) { RedRuns++; approach.RedRuns++; }
             else if (car.ClearingAmber) { AmberClears++; approach.AmberClears++; if (aspect is SignalAspect.Red or SignalAspect.RedAmber) ClearedOnRed++; }
-            else { LinesCrossed++; approach.GreenCrossings++; }
+            else
+            {
+                LinesCrossed++;
+                approach.GreenCrossings++;
+                if (car.WasAtRed) Discharged(approach, car.LaneIndex);
+            }
         }
         // its lane's line: a bike box in front of it keeps cars back
         // (by its front: the line is where its bumper stops, not its middle, #854)
@@ -1104,8 +1120,10 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         {
             car.ClearingAmber = false;
             if (toLine <= 0f) return float.MaxValue;
-            // a left turn from the shared lane gives way to oncoming traffic: it waits at the line
-            if (car.Turn == SignalMoves.Left && site.Plan.Groups[car.Group].Kind == SignalGroupKind.Car && Oncoming(car, site, approach.Arm))
+            // a left turn from the shared lane gives way to oncoming traffic: it waits at the line, where its path has no points to
+            // wait at inside the junction (#1046: an older tile, no junction paths)
+            if (car.Turn == SignalMoves.Left && site.Plan.Groups[car.Group].Kind == SignalGroupKind.Car && pathAhead is not { Yields.Length: > 0 }
+                && Oncoming(car, site, approach.Arm))
             {
                 if (!car.WaitedPermissive) { car.WaitedPermissive = true; approach.PermissiveWaits++; PermissiveWaits++; }
                 return StopWithin(stopAt);
@@ -1261,6 +1279,187 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
                 return true;
         return false;
     }
+
+    // ---- permissive turns: in to the conflict point, and wait there for a gap (#1046) ---------
+
+    /// <summary>The gap a turning car accepts (s): it goes unless a mover it gives way to reaches the conflict sooner (a permissive left's critical gap is ~4-5 s).</summary>
+    private const float AcceptGap = 4.5f;
+
+    /// <summary>Its front stands this far short of the other's band (m).</summary>
+    private const float GapMargin = 1f;
+
+    /// <summary>A car looks this far ahead for a junction path with points to give way at, and as far along the movers' ways (m).</summary>
+    private const float GapLook = 60f;
+
+    /// <summary>A start (#1046): under this speed (m/s) a car stands; let go, it starts its <see cref="Vehicle.Reaction"/> and this later (s): 0.75-1.25 s.</summary>
+    private const float StartSpeed = 0.5f, StartLag = 0.25f;
+
+    /// <summary>
+    /// The speed a car may still do toward a point on the junction path ahead where it gives way (#1046): on its green a turn that
+    /// yields (<see cref="JunctionPathInfo.Yields"/>) pulls into the junction up to just short of the first such point a mover is
+    /// coming to (<see cref="Coming"/>), not into an earlier band it would stand in, and goes once the gap comes; already past its
+    /// line, it clears on amber or red. One still before its line waits there unless it would stand fully past it behind the cars
+    /// already waiting in the junction. +∞ when nothing holds it.
+    /// </summary>
+    private float GapWait(Vehicle car, float dt, List<(Vector3 Pos, Vector3 Vel)> obstacles)
+    {
+        var inside = car.GapWaiting ? car.GapPath : null;
+        car.GapWaiting = car.GapHeld = false;
+        float result = float.MaxValue;
+        var legs = car.Route.Legs;
+        float along = -car.Route.Arc;
+        for (int i = car.Route.Leg; i < legs.Count && along < GapLook && result == float.MaxValue; i++)
+        {
+            var (e, forward) = legs[i];
+            if (forward && e.Path is { Yields.Length: > 0 } p)
+            {
+                var yields = p.Yields;
+                float stop = float.MaxValue;
+                for (int k = 0; k < yields.Length; k++)
+                {
+                    float wait = along + yields[k].At - CarFront - GapMargin;
+                    if (wait < -1.5f || !Coming(car, e, yields[k], obstacles)) continue;
+                    // not standing in an earlier band it has not passed yet: it waits short of that one
+                    for (int j = 0; j < k; j++)
+                    {
+                        float earlier = along + yields[j].At - CarFront - GapMargin;
+                        if (earlier >= -1.5f && wait - CarFront < along + yields[j].Out) wait = Mathf.Min(wait, earlier);
+                    }
+                    stop = wait;
+                    break;
+                }
+                // (too close to stop even hard: committed, it goes)
+                if (stop < float.MaxValue && car.Speed * car.Speed / 12f <= Mathf.Max(stop, 0f) + 1f)
+                {
+                    car.GapPath = p;
+                    result = StopWithin(stop);
+                    // before its line, behind the cars waiting in the junction: it goes in only to stand fully past its line
+                    if (car.ToLine <= 0f || car.Approach?.Site != p.Site) car.GapWaiting = true;
+                    else if (WaitingOn(car, p) is var ahead and > 0 && stop - ahead * QueueSpacing - CarFront < car.ToLine + 0.5f)
+                    {
+                        car.GapHeld = true;
+                        result = Mathf.Min(result, StopWithin(car.ToLine - 0.5f - CarFront));
+                    }
+                }
+            }
+            along += e.Length;
+        }
+        // --trafficcheck: cars that stood in a junction for a gap, the longest wait, those that left it on amber or red
+        if (car.GapWaiting && car.Speed < StartSpeed)
+        {
+            if (car.GapFor == 0f) InsideWaits++;
+            car.GapFor += dt;
+        }
+        else if (inside is not null && !(car.GapWaiting && car.GapPath == inside) && car.GapFor > 0f)
+        {
+            LongestInsideWait = Mathf.Max(LongestInsideWait, car.GapFor);
+            if (inside.Site is { } site && site.Plan.State(inside.Group, SignalLamps.Clock()) != SignalAspect.Green) ClearedInside++;
+            car.GapFor = 0f;
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Whether a mover the car on <paramref name="path"/> gives way to at <paramref name="y"/> is in the conflict or reaches it within
+    /// <see cref="AcceptGap"/>: a car whose way goes onto that movement's path (by where its body comes into this car's lane), a
+    /// player or a racer at the conflict or closing on it. (The walkers and riders of #1033 belong here too.)
+    /// </summary>
+    private bool Coming(Vehicle car, LaneEdge path, PathYield y, List<(Vector3 Pos, Vector3 Vel)> obstacles)
+    {
+        var (at, _) = path.Sample((y.At + y.Out) * 0.5f);
+        float zone = (y.Out - y.At) * 0.5f + 1f;
+        foreach (var (pos, vel) in obstacles)
+        {
+            var d = MathX.Flat(at - pos);
+            float dist = d.Length();
+            if (dist < zone) return true;
+            float closing = (vel.X * d.X + vel.Z * d.Z) / dist;
+            if (dist < GapLook && closing > 0.5f && (dist - zone) / closing < AcceptGap) return true;
+        }
+        if (y.Edge is not { } other) return false;
+        _xKey.Head.X = at.X - GapLook - 20f;
+        int from = _byX.BinarySearch(_xKey, ByX);
+        for (int o = from < 0 ? ~from : from; o < _byX.Count && _byX[o].Head.X <= at.X + GapLook + 20f; o++)
+        {
+            var c = _byX[o];
+            if (c == car) continue;
+            var cl = c.Route.Legs;
+            float d = -c.Route.Arc;
+            int i = c.Route.Leg;
+            for (; i < cl.Count && d < GapLook && cl[i].Edge != other; i++) d += cl[i].Edge.Length;
+            if (i >= cl.Count || cl[i].Edge != other) continue;
+            // one whose light does not let it in (red, or an amber it stops for) and that can still stop short of the path will stop
+            // there: not coming (#1046: lefts waited inside a whole green for oncoming cars 90 m out, on their way to their red)
+            if (i > c.Route.Leg && other.Path is { Site: { } site, Group: >= 0 } op && op.Group < site.Plan.Groups.Count
+                && site.Plan.State(op.Group, SignalLamps.Clock()) is var aspect
+                && !(aspect is SignalAspect.Green or SignalAspect.FlashingAmber or SignalAspect.Off || aspect == SignalAspect.Amber && c.ClearingAmber)
+                && c.Speed * c.Speed / 12f < d - 1f)
+                continue;
+            d += y.Enter;
+            // in this car's lane now, until it is past by its length and the lane
+            if (d <= 0f)
+            {
+                if (d > -(2f * CarFront + 2f * ConflictPoints.CarBody + 3.5f)) return true;
+                continue;
+            }
+            if (d / Mathf.Max(c.Speed, 0.1f) < AcceptGap) return true;
+        }
+        return false;
+    }
+
+    /// <summary>For <c>--trafficcheck</c>'s gap shot (#1046): a car that has stood over a second in a junction for a gap, its light not red yet, within <paramref name="within"/> m.</summary>
+    public Vector3? StandingForGap(Vector3 near, float within)
+    {
+        foreach (var c in _cars)
+            if (c.GapWaiting && c.GapFor > 1f && MathX.Flat(c.Head - near).Length() < within
+                && c.GapPath is { Site: { } site, Group: >= 0 } p && site.Plan.State(p.Group, SignalLamps.Clock()) is not (SignalAspect.Red or SignalAspect.RedAmber))
+                return c.Head;
+        return null;
+    }
+
+    /// <summary>Cars standing in the junction for a gap on path <paramref name="p"/> (#1046), near <paramref name="car"/>.</summary>
+    private int WaitingOn(Vehicle car, JunctionPathInfo p)
+    {
+        int n = 0;
+        _xKey.Head.X = car.Head.X - GapLook;
+        int from = _byX.BinarySearch(_xKey, ByX);
+        for (int o = from < 0 ? ~from : from; o < _byX.Count && _byX[o].Head.X <= car.Head.X + GapLook; o++)
+        {
+            var c = _byX[o];
+            if (c != car && c.GapWaiting && ReferenceEquals(c.GapPath, p) && c.Speed < 2f) n++;
+        }
+        return n;
+    }
+
+    /// <summary>Two queued cars crossing their lane's line further apart than this (s) are two queues (#1046).</summary>
+    private const double DischargeGap = 6;
+
+    /// <summary>
+    /// A car that stood at red crossed its line on green (#1046, <c>--trafficcheck</c>): the time since the car before it in that
+    /// lane's queue did, by its place in the queue (the second car's, the third's, ...; the fifth's and later together).
+    /// </summary>
+    private void Discharged(LaneApproach approach, int lane)
+    {
+        int i = Math.Clamp(lane, 0, approach.LastDischarge.Length - 1);
+        double gap = _now - approach.LastDischarge[i];
+        approach.LastDischarge[i] = _now;
+        approach.QueuePlace[i] = gap < DischargeGap ? approach.QueuePlace[i] + 1 : 1;
+        if (approach.QueuePlace[i] < 2) return;
+        int place = Math.Min(approach.QueuePlace[i], HeadwaySum.Length - 1);
+        HeadwaySum[place] += gap;
+        HeadwayCount[place]++;
+    }
+
+    /// <summary>Queue discharge headways (#1046): their sum (s) and count by place in the queue, 2 to 5 (5: the fifth and later).</summary>
+    public double[] HeadwaySum { get; } = new double[6];
+    public int[] HeadwayCount { get; } = new int[6];
+    /// <summary>Cars that stood in a junction for a gap (#1046), the longest such wait (s), and those that left it on amber or red.</summary>
+    public int InsideWaits { get; private set; }
+    public float LongestInsideWait { get; private set; }
+    public int ClearedInside { get; private set; }
+
+    /// <summary>The traffic's own time (s), for the probe's headways.</summary>
+    private double _now;
 
     /// <summary>
     /// For <c>--trafficcheck</c>'s capture (#353): the cars on an approach that read group
@@ -1645,6 +1844,13 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         public bool GivingWay;
         /// <summary>Stopping for a red light (#353), clearing a yellow, has stopped for this red; waited to turn left across oncoming traffic, waited for room past the junction.</summary>
         public bool AtRed, ClearingAmber, WasAtRed, WaitedPermissive, WaitedRoom;
+        /// <summary>
+        /// Held for a gap on a junction path (#1046): past its line, short of a point in the junction; at its line behind the cars
+        /// waiting there; the path, and how long it has stood in the junction (s). How long it has been let go standing (s).
+        /// </summary>
+        public bool GapWaiting, GapHeld;
+        public JunctionPathInfo? GapPath;
+        public float GapFor, Starting;
         /// <summary>
         /// The approach its route leads into (#353), metres to its stop line (+∞ none), the turn it makes
         /// there, its lane and signal group (-1 none); and where it drives: metres right of its usual line, and the target.
