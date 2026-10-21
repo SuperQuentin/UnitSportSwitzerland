@@ -1,7 +1,8 @@
 # UnitSportSwitzerland
 
 Godot 4.7 C# multiplayer game: real swissALTI3D/swissTLM3D/GWR data -> `tools/TerrainPreprocessor` ->
-tiles in `terrain_chunks/` -> streamed by `src/Terrain/ChunkManager` -> low-poly PS1-style Switzerland,
+tiles in `terrain_chunks/` -> streamed by `src/Terrain/ChunkManager` -> low-poly Switzerland in the Cartoon
+style by default (PS1 and Realistic one setting away; new visuals are built in Cartoon first, `styles/style-kit`),
 on foot, mounted, driving or flying, over ENet multiplayer.
 
 ## Notes: read on demand, never up front
