@@ -11,7 +11,8 @@ using UnitSport.Tools.RoadGen.Geometry;
 /// ±0.30 m of the track, L ≤ √(4.8·R)), so neighbouring tiles agree on them. On a street (track in the carriageway or in town
 /// paving) a span across it, anchored on the first facade within <see cref="SearchReach"/> each side, else on a mast at the first
 /// spot off every carriageway (the user's rule); elsewhere a cantilever mast <see cref="MastOut"/> out from each track, on the
-/// side away from a neighbouring track; a tram's own double track with no building near gets centre masts between its tracks.
+/// side away from a neighbouring track; a tram's own double track with no building near gets centre masts between its tracks,
+/// and so do two single tram tracks side by side (Geneva maps each track as a line of its own, #1094).
 /// Pure: buildings and carriageways come in as predicates.
 /// </summary>
 public static class CatenaryPlanner
@@ -27,6 +28,8 @@ public static class CatenaryPlanner
     public const double MastOut = 3.0, SearchReach = 15, SearchStep = 0.25, TrackClear = 2.0;
     /// <summary>A reserved double tram track with no building this close either side gets centre masts (m; the user: a grassy tram track out of town).</summary>
     public const double CentreOpen = 15;
+    /// <summary>Two single tram tracks off the street this far apart (m, centre to centre) make a pair for centre masts (#1094).</summary>
+    public const double TwinMin = 2.5, TwinMax = 5.0;
     /// <summary>A contact wire's points stand this far apart along its track (m).</summary>
     public const double WireStep = 4.0;
 
@@ -35,11 +38,11 @@ public static class CatenaryPlanner
 
     public sealed class Stats
     {
-        public int Pieces, Cantilevers, CentreMasts, Spans, SpansShared, WallEnds, MastEnds, Skipped;
+        public int Pieces, Cantilevers, CentreMasts, CentreMastsShared, Spans, SpansShared, WallEnds, MastEnds, Skipped;
         public double WireKm, Ms;
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
-            $"    overhead lines (#1052): {Pieces:N0} electrified rail pieces, {WireKm:F2} km of contact wire, {Cantilevers:N0} cantilever masts, {CentreMasts:N0} centre masts, {Spans:N0} spans ({WallEnds:N0} ends on facades, {MastEnds:N0} on masts; {SpansShared:N0} times a track's wire hung from another track's span), {Skipped:N0} supports with no room; planning {Ms:N0} ms");
+            $"    overhead lines (#1052): {Pieces:N0} electrified rail pieces, {WireKm:F2} km of contact wire, {Cantilevers:N0} cantilever masts, {CentreMasts:N0} centre masts ({CentreMastsShared:N0} times a single track's wire hung from its twin's), {Spans:N0} spans ({WallEnds:N0} ends on facades, {MastEnds:N0} on masts; {SpansShared:N0} times a track's wire hung from another track's span), {Skipped:N0} supports with no room; planning {Ms:N0} ms");
     }
 
     /// <summary>Electrified: rail at grade or on a bridge, neither a funicular nor disused (TLM has no electrification; nearly all Swiss rail is).</summary>
@@ -64,6 +67,10 @@ public static class CatenaryPlanner
         var near = new TrackGrid(tracks);
         // the spans placed so far: a track mapped as a line of its own beside another (Geneva) hangs its wire from theirs
         var spans = new List<(Vec2 A, Vec2 B, CatenarySupport Support, TileId Tile)>();
+        // single tram tracks off the street: a pair's first track puts a centre mast between them, the second hangs from it (#1094)
+        var singles = new TrackGrid(rails.Where(r => (r.Flags & RoadFlags.Tramway) != 0 && !r.Street && RoadFormat.TrackOffset(r.Flags) <= 0)
+            .Select(r => r.Plan).ToList());
+        var paired = new List<(Vec2 Twin, CatenarySupport Support)>();
         foreach (var rail in rails)
         {
             if (rail.Plan.Count < 2) continue;
@@ -113,21 +120,35 @@ public static class CatenaryPlanner
                 {
                     bool placed = false;
                     // a tram on its own double track, nothing built near: one mast between the tracks, an arm out to each (the user)
-                    if (tram && offsets.Length == 2 && clear(at) && !Built(at, n, CentreOpen, building))
+                    double twin = 0;
+                    if (tram && offsets.Length == 1)
+                    {
+                        // the pair's other track already put a centre mast here: this track's wire hangs from its arm
+                        if (paired.Any(q => Math.Abs((q.Twin - at).Dot(dir)) <= step * 0.5 && Math.Abs((q.Twin - at).Dot(n)) < 1.0))
+                        {
+                            stats.CentreMastsShared++;
+                            continue;
+                        }
+                        twin = singles.Twin(at, dir, n, TwinMin, TwinMax);
+                    }
+                    var mid = at + n * (twin * 0.5);
+                    float[] arms = twin != 0 ? [0f, (float)twin] : offsets;
+                    if (tram && arms.Length == 2 && clear(mid) && !Built(mid, n, CentreOpen, building))
                     {
                         var over = new float[4];
                         for (int i = 0; i < 2; i++)
                         {
-                            var p = at + n * offsets[i];
+                            var p = at + n * arms[i];
                             over[i * 2] = (float)(p.X - tile.MinE);
                             over[i * 2 + 1] = (float)(tile.MaxN - p.Y);
                         }
                         Get(supports, tile).Add(new CatenarySupport
                         {
                             Kind = CatenarySupportKind.CentreMast, Line = line,
-                            AX = (float)(at.X - tile.MinE), AY = y, AZ = (float)(tile.MaxN - at.Y),
+                            AX = (float)(mid.X - tile.MinE), AY = y, AZ = (float)(tile.MaxN - mid.Y),
                             BX = over[0], BY = y, BZ = over[1], WireY = wireY, Over = over,
                         });
+                        if (twin != 0) paired.Add((at + n * twin, Get(supports, tile)[^1]));
                         stats.CentreMasts++;
                         continue;
                     }
@@ -254,6 +275,32 @@ public static class CatenaryPlanner
         }
 
         private static long Key(double v) => (long)Math.Floor(v / Cell);
+
+        /// <summary>
+        /// The signed offset (along <paramref name="n"/>) of a parallel line straight across from <paramref name="at"/>, between
+        /// <paramref name="min"/> and <paramref name="max"/> metres away; 0 if none. The nearer one wins.
+        /// </summary>
+        public double Twin(Vec2 at, Vec2 dir, Vec2 n, double min, double max)
+        {
+            double best = 0;
+            for (long x = Key(at.X - max); x <= Key(at.X + max); x++)
+                for (long y = Key(at.Y - max); y <= Key(at.Y + max); y++)
+                    if (_cells.TryGetValue((x, y), out var l))
+                        foreach (var (a, b) in l)
+                        {
+                            var e = b - a;
+                            double len = e.Length;
+                            if (len < 1e-9 || Math.Abs(e.Dot(dir)) < 0.95 * len) continue;
+                            // where the line through at across the track meets this edge
+                            double den = n.X * e.Y - n.Y * e.X;
+                            if (Math.Abs(den) < 1e-9) continue;
+                            var d = a - at;
+                            double t = (d.X * e.Y - d.Y * e.X) / den, w = (d.X * n.Y - d.Y * n.X) / den;
+                            if (w < 0 || w > 1 || Math.Abs(t) < min || Math.Abs(t) > max) continue;
+                            if (best == 0 || Math.Abs(t) < Math.Abs(best)) best = t;
+                        }
+            return best;
+        }
 
         public bool Within(Vec2 p, double gap)
         {
