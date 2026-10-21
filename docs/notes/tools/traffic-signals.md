@@ -45,7 +45,10 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   same exit arm conflict); a turn sharing the main lane yields (permissive), arrows are protected
   only. Schemes: 4 arms in two roads: per road lead (its left pocket), both, lag (the other's
   pocket), each only if that pocket exists, the higher ranked road first; a T: main, main left +
-  its through, side; else split phasing. Then each phase takes the pedestrians, bikes and right
+  its through, side; else split phasing (each approach on its own; one none of whose movements conflict hard with a phase's goes
+  with it, #1030: Geneva's 10-arm node at 2500974,1117838 ran 9 phases to 157 s once timed from conflict times, now 107 s in
+  tier 0 `ManyArms_StayWithinTheLegalMaximum`). **120 s is the legal maximum** (the user): a conflict-timed plan past it is
+  not taken (`Retime`), and `--signal-check` fails on any cycle over it. Then each phase takes the pedestrians, bikes and right
   arrows nothing green stops; a right arrow no phase carries becomes a full green with its
   approach (+ flasher). The user's 6-phase table holds exactly (test `FullCrossroads_RunsTheSixPhases`).
   Correction found while building it: a T's side-road right overlap goes with the main left
@@ -79,7 +82,10 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   pole). **Riders in a bike box never end early** (the user, #1030's PR): they wait in front of the pocket's cars, so an
   early end would have those cars run into them from behind; an early start (the lead) stays. `SignalArm.RiderBox` (not
   stored: the arm's exterior has a `BarKind.BikeBox`) makes their left-turn group count with the cars in `Time` (not slow:
-  it sets the gap, its green ends with the phase). Test region: 7 such groups (`RidersInABikeBox_...` tier 0). The bike lead (Vorgrün) only where a car group turning across the riders goes green with them. A plan so timed
+  it sets the gap, its green ends with the phase). Test region: 7 such groups, J6 78 -> 81 s for it (`RidersInABikeBox_...` tier 0).
+  Geneva centre with all of #1030 against main (246 lit junctions): longest cycle 150 -> 115 s, none over 120; 165 -> 211 timed
+  from conflict times; 195 cycles the same, 39 shorter, 12 longer (8 by 1 s; 2499106,1117630 78 -> 99 s, now timed from its
+  conflict times); the 5 two-stage junctions keep their cycles. The bike lead (Vorgrün) only where a car group turning across the riders goes green with them. A plan so timed
   carries `ConflictTimed` (flags bit 2): `Validate` then holds conflicting groups never green together (a green may begin
   in another's amber) and `KeepsTimes` every time. Layout (b)'s bike lane (`SignalArm.BikeBetween`, arm bit 7) no longer
   conflicts with its arm's right arrow. Test region: J1 74 -> 73 s, J2 86 -> 85 (bikes entering at 30 km/h, turning cars at 3 m/s²; walkers on the bike paths' squares: a riders' left turn holds the next walkers ~15 s), J5a/b 83/84 -> 74/75, J10 70 -> 71, the
