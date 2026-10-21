@@ -1,3 +1,4 @@
+using System.Linq;
 using Godot;
 using UnitSport.Core;
 using UnitSport.Vehicles;
@@ -493,6 +494,12 @@ public partial class DeckProbe : Node
                 var door = OnBus(xframe, 0.2f, 0.3f, 5.8f);
                 var outside = OnBus(xframe, 1.275f + 3f, 0.3f, 5.8f);
                 WalkTo(me, me.DeckOn != "" && (me.GlobalPosition - door).Length() > 0.5f && !_seen.Contains("at-door") ? ViaAisle(xframe, me, door) : outside);
+                if (Mathf.PosMod(InStage, 1.0) < GetPhysicsProcessDeltaTime())
+                {
+                    var hits = string.Join(",", Enumerable.Range(0, me.GetSlideCollisionCount()).Select(i => me.GetSlideCollision(i) is var c
+                        && c.GetColliderShape() is CollisionShape3D cs ? $"{cs.Name}@{xframe.GlobalTransform.AffineInverse() * cs.GlobalPosition} {cs.Shape} n{c.GetNormal()}" : "?"));
+                    Log($"  exiting: at {me.DeckPos}, on '{me.DeckOn}', to {xframe.GlobalTransform.AffineInverse() * _target}, wants {me.WalkControls?.Invoke().Item1}, vel {me.Velocity}, floor {me.IsOnFloor()}, stunned {me.Stunned}, hits [{hits}], {me.WalkState}");
+                }
                 if ((me.GlobalPosition - door).Length() < 0.5f) _seen.Add("at-door");
                 if (me.DeckOn == "" && InStage > 1 && _seen.Add("out"))
                 {

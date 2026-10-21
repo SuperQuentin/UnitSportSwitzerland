@@ -107,6 +107,12 @@ public partial class FootPlayer
     /// <summary>Just stood up or left the wheel: carried at this velocity until the vehicle's deck is here to stand on.</summary>
     private float _deckWait;
     private Vector3 _deckWaitVelocity;
+    /// <summary>
+    /// Where this player stood in a vehicle whose driver just got out, in its section's frame: put back
+    /// there on its parked copy's deck. Carried on in between with no deck to collide with, they came
+    /// down on it a metre aft, between two rows of seats, jammed in them for good (#1006).
+    /// </summary>
+    private (Vector3 Spot, float Yaw, int Section)? _handoverSpot;
 
     /// <summary>
     /// How long a driver who got up from the wheel waits for the parked vehicle's deck: the server
@@ -201,6 +207,7 @@ public partial class FootPlayer
         {
             var speed = _decks.TryGetValue(DeckOn, out var gone) ? gone.Velocity : Vector3.Zero;
             var world = Velocity + speed;
+            _handoverSpot = (DeckPos, DeckYaw, DeckSection);
             LeaveDeck(keepVelocity: false);
             Velocity = world;
             _deckWait = 2.5f;
@@ -461,6 +468,7 @@ public partial class FootPlayer
         if (Aboard) LeaveDeck(keepVelocity: false);
         _deckWait = 0f;
         _standInExit = null;
+        _handoverSpot = null;
         foreach (var set in _decks.Values)
             foreach (var (_, body, _) in set.Sections)
                 if (IsInstanceValid(body)) { body.CollisionLayer = 0; body.ProcessMode = ProcessModeEnum.Disabled; }
@@ -506,7 +514,16 @@ public partial class FootPlayer
 
         if (Inside() is { } at)
         {
-            if (!Aboard) BoardDeck(at.Set, at.Deck.Section, at.Frame);
+            if (!Aboard)
+            {
+                var handover = _handoverSpot;
+                BoardDeck(at.Set, at.Deck.Section, at.Frame);
+                if (handover is { } h && h.Section == at.Deck.Section && at.Deck.Contains(h.Spot, 0f))
+                {
+                    GlobalPosition = at.Frame * h.Spot;
+                    Rotation = new Vector3(0, YawOf(at.Frame) + h.Yaw, 0);
+                }
+            }
             else if (at.Set.Key != DeckOn || at.Deck.Section != DeckSection)
             {
                 // into the other half of an articulated bus, or another vehicle: relative to it now
@@ -525,6 +542,7 @@ public partial class FootPlayer
         {
             // stood up from a seat, or off the wheel, before this peer has the deck it stands on
             _deckWait -= dt;
+            if (_deckWait <= 0f) _handoverSpot = null;
             GlobalPosition += _deckWaitVelocity * dt;
             Velocity = _deckWaitVelocity;
             if (_deckWait <= 0f && _standInExit is { } exit)
@@ -551,6 +569,7 @@ public partial class FootPlayer
         _deckSpotValid = false;
         _deckWait = 0f;
         _standInExit = null;
+        _handoverSpot = null;
         _deckFrameValid = false;
         Velocity -= VelocityOfHost(set.Host);
         CollisionMask = DeckLayer;
