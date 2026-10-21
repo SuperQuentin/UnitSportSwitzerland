@@ -237,7 +237,8 @@ public partial class LiftSyncProbe : ChatProbe
     /// <summary>From just outside the door: open it unless it stands open, and walk through.</summary>
     private async Task<bool> WalkIn(FootPlayer me, InteriorManager interiors, DoorIndex.Entry door)
     {
-        door = DoorIndex.All().Where(d => d.Key.Equals(door.Key)).Select(d => (DoorIndex.Entry?)d).FirstOrDefault() ?? door;
+        // the index's own entry, in today's frame: a copy from before an origin shift points kilometres off (#1090)
+        door = DoorIndex.Find(door.Key) ?? door;
         string doorKey = door.Key.ToString();
         var inward = -door.Outward;
         me.LeaveInterior(door.World + door.Outward * 1.2f + Vector3.Up * 0.3f, Mathf.Atan2(-inward.X, -inward.Z));

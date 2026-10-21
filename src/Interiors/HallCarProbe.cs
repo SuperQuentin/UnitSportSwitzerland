@@ -224,7 +224,9 @@ public partial class HallCarProbe : ChatProbe
         await Until(() => me.Ride == RideKind.OnFoot, 3);
         Expect(me.Ride == RideKind.OnFoot, "A: got out in the street");
         // far from the bay and from the car, so nobody is near when the slot is restocked
-        me.LeaveInterior(door.World + door.Outward * 90f + Vector3.Up * 2f, 0);
+        // the index's entry, in today's frame: the copy is from before the drive out (#1090)
+        var street = DoorIndex.Find(door.Key) ?? door;
+        me.LeaveInterior(street.World + street.Outward * 90f + Vector3.Up * 2f, 0);
         me.Velocity = Vector3.Zero;
         Say("gone");
         bool refilled = await Heard("B", "refilled", 90);
@@ -311,7 +313,8 @@ public partial class HallCarProbe : ChatProbe
     /// <summary>From just outside the door: open it unless it stands open, and walk through.</summary>
     private async Task<bool> WalkIn(FootPlayer me, InteriorManager interiors, DoorIndex.Entry door)
     {
-        door = DoorIndex.All().Where(d => d.Key.Equals(door.Key)).Select(d => (DoorIndex.Entry?)d).FirstOrDefault() ?? door;
+        // the index's own entry, in today's frame: a copy from before an origin shift points kilometres off (#1090)
+        door = DoorIndex.Find(door.Key) ?? door;
         string doorKey = door.Key.ToString();
         var inward = -door.Outward;
         me.LeaveInterior(door.World + door.Outward * 1.2f + Vector3.Up * 0.3f, Mathf.Atan2(-inward.X, -inward.Z));
