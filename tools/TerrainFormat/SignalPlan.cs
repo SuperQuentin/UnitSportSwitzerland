@@ -789,31 +789,58 @@ public sealed class SignalPlan
 
     /// <summary>
     /// Keeps the island waits (#1030, the user: stretch the greens): where a half's first walker waits on the island longer than
-    /// <see cref="IslandWaitShare"/> of the cycle, the phase in which the other half turns green for them gets that much longer
-    /// that the cycle grows to hold it (the wait itself lies before it, unchanged), never past <see cref="MaxCycle"/>. True where
-    /// it stretched one: time the plan again.
+    /// <see cref="IslandWaitShare"/> of the cycle, the cheaper of two stretches, never past <see cref="MaxCycle"/>: the phase in
+    /// which the other half's green ended while they walked gets long enough that they reach the island on it (Geneva: they
+    /// missed it by tenths of a second and waited a whole cycle), or the cycle grows, the phase that lets them on taking it, until
+    /// the wait (before it, unchanged) is within the share. True where it stretched one: time the plan again; false where
+    /// neither fits (the check reports the wait).
     /// </summary>
     private static bool Stretch(SignalPlan plan, List<Phase> phases)
     {
         float room = MaxCycle - plan.Cycle;
         if (room < 0.1f) return false;
-        var over = plan.IslandWaits().Where(w => w.Wait > plan.Cycle * IslandWaitShare + 0.05f).ToList();
-        if (over.Count == 0) return false;
-        var worst = over.MaxBy(w => w.Wait);
-        // the phase carrying the other half's green as they wait: the first green for it whose green ends after it begins
-        float at = worst.Arrive + worst.Wait;
+        float cap = plan.Cycle * IslandWaitShare;
+        foreach (var w in plan.IslandWaits().Where(w => w.Wait > cap + 0.05f).OrderByDescending(w => w.Wait))
+        {
+            // (a) the other half green as they set off, its green ending before they reach the island: that green longer
+            float ended = float.NaN;
+            foreach (var iv in plan.Groups[w.Other].Intervals)
+            {
+                if (iv.Aspect != SignalAspect.Green) continue;
+                float end = w.Green + Wrap(iv.To - w.Green, plan.Cycle);
+                if (end < w.Arrive && !(end <= ended)) ended = end;
+            }
+            float catchUp = float.IsNaN(ended) ? float.PositiveInfinity : MathF.Round(w.Arrive - ended + 0.5f, 1);
+            // (b) the cycle at least the wait over the share, the phase letting them on taking the time
+            float grow = MathF.Round(w.Wait / IslandWaitShare - plan.Cycle + 0.1f, 1);
+            bool byCatch = catchUp <= grow;
+            float add = byCatch ? catchUp : grow;
+            if (add > room) continue;
+            float at = byCatch ? ended : w.Arrive + w.Wait;
+            int k = PhaseOf(plan, phases, w.Other, at, ending: byCatch);
+            if (k < 0) continue;
+            phases[k].Extra += add;
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// The phase in which group <paramref name="g"/>'s green ends at plan time <paramref name="at"/> (<paramref name="ending"/>;
+    /// a slow group may end a little before its phase), else the one whose green it starts in: the first green for it whose phase
+    /// ends after <paramref name="at"/>; -1 where none.
+    /// </summary>
+    private static int PhaseOf(SignalPlan plan, List<Phase> phases, int g, float at, bool ending)
+    {
         int k = -1;
         float soonest = float.PositiveInfinity;
         for (int i = 0; i < phases.Count; i++)
         {
-            if (!phases[i].Green.Contains(worst.Other)) continue;
+            if (!phases[i].Green.Contains(g) || ending && phases[(i + 1) % phases.Count].Green.Contains(g) && phases.Count > 1) continue;
             float d = Wrap(phases[i].Start + phases[i].GreenTime - at - 1e-3f, plan.Cycle);
             if (d < soonest) (soonest, k) = (d, i);
         }
-        if (k < 0) return false;
-        // the wait within a share of the cycle: the cycle at least the wait over that share
-        phases[k].Extra += MathF.Round(Math.Min(room, worst.Wait / IslandWaitShare - plan.Cycle + 0.1f), 1);
-        return true;
+        return k;
     }
 
     /// <summary>The fixed-time plan (<see cref="Time"/> without conflict times) with its island waits kept (<see cref="Stretch"/>).</summary>

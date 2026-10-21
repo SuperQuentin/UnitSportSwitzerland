@@ -326,6 +326,32 @@ public class SignalPlanTests(ITestOutputHelper output)
         Assert.All(waits, w => Assert.True(w.Wait <= plan.Cycle * SignalPlan.IslandWaitShare + 0.1f, $"waits {w.Wait:F1} s of a {plan.Cycle:F1} s cycle"));
     }
 
+    /// <summary>
+    /// Two Geneva junctions (LV95 2499863,1118279 and 2499652,1118687, #1030) whose arm 3 crosses in two stages: their first
+    /// walkers missed the other half's green by tenths of a second, and the cycle grew to 177 s chasing the wait. Now that
+    /// green holds on for them: the waits within a third, the cycle (about) the one-stage plan's.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void TwoStageCrossing_FromGeneva_KeepsTheWaitWithoutLengtheningTheCycle(int which)
+    {
+        static SignalArm Deg(double d, bool i, bool o, float crossing, bool peds = true, bool left = false, byte rank = 18, bool bike = false) =>
+            new(d * Math.PI / 180, i, o, LeftPocket: left, Pedestrians: peds, BikeSignal: bike, CrossingM: crossing, Rank: rank);
+        List<SignalArm> arms = which == 0
+            ? [Deg(230, false, true, 10), Deg(-11, true, true, 13.2f, left: true), Deg(46, true, true, 10, rank: 2), Deg(168, true, true, 16.5f)]
+            : [Deg(-121, false, true, 8, peds: false), Deg(326, true, true, 13.5f, left: true, bike: true), Deg(59, true, true, 5.8f, rank: 2),
+                Deg(130, true, true, 12.1f, left: true, bike: true)];
+        var one = SignalPlan.Build(arms, 7);
+        arms[3] = arms[3] with { HalfInM = arms[3].CrossingM * 0.45f, HalfOutM = arms[3].CrossingM * 0.4f };
+        var two = SignalPlan.Build(arms, 7);
+        AssertValid(two);
+        output.WriteLine($"one stage {one.Cycle:F1} s, two stages {two.Cycle:F1} s");
+        foreach (var w in two.IslandWaits()) output.WriteLine($"group {w.Group} green {w.Green:F1}, on the island {w.Arrive:F1}, waits {w.Wait:F1} s");
+        Assert.All(two.IslandWaits(), w => Assert.True(w.Wait <= two.Cycle * SignalPlan.IslandWaitShare + 0.1f, $"waits {w.Wait:F1} s of {two.Cycle:F1}"));
+        Assert.InRange(two.Cycle, 0, one.Cycle + 2);
+    }
+
     [Fact]
     public void TwoStageCrossing_RoundTripsItsHalves()
     {
