@@ -339,7 +339,7 @@ public partial class GameShell : Node
         bool open = _stack.Count > 0;
         _menuLayer.Visible = open;
         UiFocus.Set(this, open);
-        if (open) Input.MouseMode = Input.MouseModeEnum.Visible;
+        if (open) MouseCapture.Mode = Input.MouseModeEnum.Visible;
         else if (_state == State.InWorld) _world?.ResumeControl();
     }
 
@@ -369,7 +369,7 @@ public partial class GameShell : Node
         }
         ClearStack();
         Push(TitleScreen.Create());
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
     }
 
     public override void _UnhandledInput(InputEvent e)
