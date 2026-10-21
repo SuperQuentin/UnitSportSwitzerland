@@ -262,7 +262,14 @@ public sealed class GameSettings
 
     /// <summary>How the world looks (<see cref="Styles.StyleKit"/>). Client-only, never replicated.</summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
-    public Styles.VisualStyle VisualStyle { get; set; } = Styles.VisualStyle.Ps1;
+    public Styles.VisualStyle VisualStyle { get; set; } = Styles.StyleKit.Default;
+
+    /// <summary>
+    /// The file has been through the move to Cartoon as the default (#849). Before it, every file
+    /// saved PS1 whether the player chose it or not, so a file without this flag that says PS1
+    /// is read as Cartoon once; a PS1 picked since is kept.
+    /// </summary>
+    public bool CartoonDefault { get; set; } = true;
 
     /// <summary>Camera shake strength, 0 (off) .. 1.</summary>
     public float ScreenShake { get; set; } = 1f;
@@ -432,6 +439,8 @@ public sealed class GameSettings
                 // before #261 the radios' volume lived in radio.cfg: carried over once
                 if (!text.Contains("\"musicVolume\"", StringComparison.OrdinalIgnoreCase) && OldRadioVolume() is float old)
                     loaded.MusicVolume = old;
+                if (!text.Contains("\"cartoonDefault\"", StringComparison.OrdinalIgnoreCase) && loaded.VisualStyle == Styles.VisualStyle.Ps1)
+                    loaded.VisualStyle = Styles.StyleKit.Default;
             }
             else if (OldRadioVolume() is float old) loaded.MusicVolume = old;
         }
