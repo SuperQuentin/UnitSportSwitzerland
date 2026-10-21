@@ -70,13 +70,17 @@ public static class TerrainShowcase
         // riders may turn right on red (#711, signal 5.18): beside the bike head's red lamp, else the car head's
         ("Bike right on red", () => TrafficLight(pedestrianAmber: true, rightOnRed: true)),
         ("Bike right on red, no bike head", () => TrafficLight(pedestrianAmber: true, rightOnRed: true, bikeHead: false)),
+        // a two-stage crossing's island pole (#1030): the left repeater over two pedestrian heads back to back, one per half
+        ("Two-stage island", () => TrafficLight(pedestrianAmber: true, island: true)),
+        ("Two-stage island, Geneva", () => TrafficLight(pedestrianAmber: false, island: true)),
     ];
 
-    private static Node3D TrafficLight(bool pedestrianAmber, bool arrowPlates = false, bool rightOnRed = false, bool bikeHead = true)
+    private static Node3D TrafficLight(bool pedestrianAmber, bool arrowPlates = false, bool rightOnRed = false, bool bikeHead = true, bool island = false)
     {
         var plan = SignalPlan.Build(
         [
-            new SignalArm(0, true, true, LeftPocket: true, Pedestrians: true, BikeSignal: bikeHead, Rank: 2, BikeRightOnRed: rightOnRed),
+            new SignalArm(0, true, true, LeftPocket: true, Pedestrians: true, BikeSignal: bikeHead, Rank: 2, BikeRightOnRed: rightOnRed,
+                HalfInM: island ? 4 : 0, HalfOutM: island ? 3.5f : 0),
             new SignalArm(Math.PI / 2, true, true, Pedestrians: true),
             new SignalArm(Math.PI, true, true, LeftPocket: true, Pedestrians: true, Rank: 2),
             new SignalArm(-Math.PI / 2, true, true, Pedestrians: true),
@@ -87,7 +91,12 @@ public static class TerrainShowcase
         {
             Stops = new float[12],
             Plan = plan,
-            Poles = { new SignalPole(0, 0, 0, 0f, Mathf.Pi / 2, 0, SignalPoleFlags.Main | SignalPoleFlags.Pedestrian) },
+            Poles =
+            {
+                island
+                    ? new SignalPole(0, 0, 0, 0f, Mathf.Pi / 2, 0, SignalPoleFlags.Second | SignalPoleFlags.Pedestrian | SignalPoleFlags.ArrivingHalf | SignalPoleFlags.DepartingHalf)
+                    : new SignalPole(0, 0, 0, 0f, Mathf.Pi / 2, 0, SignalPoleFlags.Main | SignalPoleFlags.Pedestrian),
+            },
         });
         return RoadProps(tile);
     }
