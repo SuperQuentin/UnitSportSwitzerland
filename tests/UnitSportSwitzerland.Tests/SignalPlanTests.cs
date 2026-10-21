@@ -349,7 +349,8 @@ public class SignalPlanTests(ITestOutputHelper output)
         output.WriteLine($"one stage {one.Cycle:F1} s, two stages {two.Cycle:F1} s");
         foreach (var w in two.IslandWaits()) output.WriteLine($"group {w.Group} green {w.Green:F1}, on the island {w.Arrive:F1}, waits {w.Wait:F1} s");
         Assert.All(two.IslandWaits(), w => Assert.True(w.Wait <= two.Cycle * SignalPlan.IslandWaitShare + 0.1f, $"waits {w.Wait:F1} s of {two.Cycle:F1}"));
-        Assert.InRange(two.Cycle, 0, one.Cycle + 2);
+        // an island makes the cycle 3 s longer at most (the user)
+        Assert.InRange(two.Cycle, 0, one.Cycle + SignalPlan.IslandGrowMost + 0.05f);
     }
 
     [Theory]

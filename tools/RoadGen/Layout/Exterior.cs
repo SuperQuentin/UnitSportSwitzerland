@@ -135,6 +135,26 @@ public static class ExteriorPlanner
     /// </summary>
     public const double TwoStageWidth = 2.0;
 
+    /// <summary>
+    /// An arm's crossing back in one go where its island wait cannot be kept without a longer cycle (#1030, the user: an island
+    /// never makes the crossing worse): no half heads, the island's pole the repeater's alone (none without one), the zebra
+    /// across the island as before.
+    /// </summary>
+    public static void OneStage(ArmExterior ex)
+    {
+        if (ex.StageIsland is null) return;
+        ex.StageIsland = null;
+        int z = ex.Bars.FindIndex(b => b.Kind == BarKind.Crosswalk);
+        if (z >= 0) ex.Bars[z] = ex.Bars[z] with { Gap = null };
+        const SignalPoleFlags Halves = SignalPoleFlags.ArrivingHalf | SignalPoleFlags.DepartingHalf;
+        for (int i = ex.Poles.Count - 1; i >= 0; i--)
+        {
+            var p = ex.Poles[i];
+            if (p.OnRefuge && (p.Flags & SignalPoleFlags.Second) == 0) ex.Poles.RemoveAt(i);
+            else ex.Poles[i] = p with { Flags = p.OnRefuge ? SignalPoleFlags.Second : p.Flags & ~Halves };
+        }
+    }
+
     /// <summary>How far into the junction (a negative station, from <paramref name="from"/> toward <paramref name="to"/>) an island's tip
     /// may reach with every car's way through the core clear of it by half its width and <see cref="IslandCarClear"/>.</summary>
     private static double ClearTip(JunctionPlan jp, ArmPlan a, double from, double to)

@@ -106,6 +106,20 @@ public static partial class TileRewriter
             for (int k = 0; k < arms.Count; k++) arms[k] = arms[k] with { BikeSignal = false };
             plan = SignalPlan.Build(arms, seed, amber);
         }
+
+        // a two-stage crossing whose island wait the cycle cannot keep (3 s longer at most) crosses in one go, as without the
+        // island: never worse (#1030, the user; Geneva: a junction at its minimum greens missed the far half by 0.7 s)
+        var oneStage = plan.IslandWaits().Where(w => w.Wait > plan.Cycle * SignalPlan.IslandWaitShare + 0.1f).Select(w => plan.Groups[w.Group].Arm).Distinct().ToList();
+        if (oneStage.Count > 0)
+        {
+            foreach (int k in oneStage)
+            {
+                arms[k] = arms[k] with { HalfInM = 0, HalfOutM = 0 };
+                ExteriorPlanner.OneStage(exterior[k]);
+            }
+            plan = SignalPlan.Build(arms, seed, amber);
+            stats.TwoStageDropped += oneStage.Count;
+        }
         if (plan.Validate() is { Count: > 0 })
         {
             stats.SignalsInvalid++;

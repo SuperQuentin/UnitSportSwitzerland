@@ -130,6 +130,11 @@ public sealed class SignalPlan
     /// (#1030, the user); where the plan would keep them longer, the phase that lets them on gets longer (<see cref="Stretch"/>).
     /// </summary>
     public const float IslandWaitShare = 1f / 3f;
+    /// <summary>
+    /// Keeping an island wait may lengthen the cycle by this much at most (s, the user: where the other phases have no green to
+    /// give); past that the arm crosses in one go (RoadGen), as without the island.
+    /// </summary>
+    public const float IslandGrowMost = 3f;
     private const int StretchPasses = 8;
 
     // ---- the plan ----------------------------------------------------------------------------
@@ -178,6 +183,8 @@ public sealed class SignalPlan
         ConflictTimes = times;
         ConflictTimed = true;
         foreach (var p in _phases) p.Extra = 0;
+        float unstretched = float.NaN;
+        (int Phase, float Add)? last = null;
         for (int stretch = 0; ; stretch++)
         {
             // a slow group's early end is held back by its minimum green: limit it to what that green leaves and time again (the
@@ -197,11 +204,14 @@ public sealed class SignalPlan
                 if (!more) break;
             }
             if (!KeepsTimes(times)) Time(this, _phases, _conflicts, times, early: false);
-            // the island waits kept (#1030): stretched, then timed again
-            if (stretch >= StretchPasses || !Stretch(this, _phases)) break;
+            // the island waits kept (#1030): stretched, timed again, taken back where the cycle grew
+            if (float.IsNaN(unstretched)) unstretched = Cycle;
+            else if (last is { } done && !Kept(this, _phases, done, unstretched)) { last = null; stretch = StretchPasses; continue; }
+            if (stretch >= StretchPasses || (last = Stretch(this, _phases)) is null) break;
         }
         Offset = Cycle <= 0 ? 0 : (Mix(_seed) % (uint)Math.Max(1, Cycle * 10)) / 10f;
         if (Validate().Count == 0 && KeepsTimes(times)) return true;
+        if (DebugTiming) Console.WriteLine($"[tr] not timed from conflict times: {string.Join("; ", Validate().Take(3).DefaultIfEmpty("valid"))}, times kept {KeepsTimes(times)}\n{Describe()}");
         ConflictTimes = null;
         ConflictTimed = false;
         foreach (var p in _phases) p.Extra = 0;
@@ -793,21 +803,20 @@ public sealed class SignalPlan
     }
 
     /// <summary>
-    /// Keeps the island waits (#1030, the user: stretch the greens): where a half's first walker waits on the island longer than
-    /// <see cref="IslandWaitShare"/> of the cycle, the cheaper of two stretches, never past <see cref="MaxCycle"/>: the phase in
-    /// which the other half's green ended while they walked gets long enough that they reach the island on it (Geneva: they
-    /// missed it by tenths of a second and waited a whole cycle), or the cycle grows, the phase that lets them on taking it, until
-    /// the wait (before it, unchanged) is within the share. True where it stretched one: time the plan again; false where
-    /// neither fits (the check reports the wait).
+    /// Keeps the island waits (#1030, the user: stretch the greens, the cycle at most 3 s longer for it): where a half's
+    /// first walker waits on the island longer than <see cref="IslandWaitShare"/> of the cycle because the other half's green
+    /// ended while they walked (Geneva: by tenths of a second, then a whole cycle on the island), the phase it ended in holds on
+    /// until they reach the island; the seconds come from the phases that share the cycle (<see cref="Time"/>), the cycle
+    /// growing only where they are at their minimum. The phase and the seconds it took, null where none does: time the plan
+    /// again, and take it back where the cycle would grow past <see cref="IslandGrowMost"/> (<see cref="Kept"/>); a wait left
+    /// over sends RoadGen back to one crossing.
     /// </summary>
-    private static bool Stretch(SignalPlan plan, List<Phase> phases)
+    private static (int Phase, float Add)? Stretch(SignalPlan plan, List<Phase> phases)
     {
-        float room = MaxCycle - plan.Cycle;
-        if (room < 0.1f) return false;
         float cap = plan.Cycle * IslandWaitShare;
         foreach (var w in plan.IslandWaits().Where(w => w.Wait > cap + 0.05f).OrderByDescending(w => w.Wait))
         {
-            // (a) the other half green as they set off, its green ending before they reach the island: that green longer
+            // the other half green as they set off, its green ending before they reach the island: that green longer
             float ended = float.NaN;
             foreach (var iv in plan.Groups[w.Other].Intervals)
             {
@@ -815,44 +824,56 @@ public sealed class SignalPlan
                 float end = w.Green + Wrap(iv.To - w.Green, plan.Cycle);
                 if (end < w.Arrive && !(end <= ended)) ended = end;
             }
-            float catchUp = float.IsNaN(ended) ? float.PositiveInfinity : MathF.Round(w.Arrive - ended + 0.5f, 1);
-            // (b) the cycle at least the wait over the share, the phase letting them on taking the time
-            float grow = MathF.Round(w.Wait / IslandWaitShare - plan.Cycle + 0.1f, 1);
-            bool byCatch = catchUp <= grow;
-            float add = byCatch ? catchUp : grow;
-            if (add > room) continue;
-            float at = byCatch ? ended : w.Arrive + w.Wait;
-            int k = PhaseOf(plan, phases, w.Other, at, ending: byCatch);
+            if (float.IsNaN(ended)) continue;
+            int k = EndingPhase(plan, phases, w.Other, ended);
             if (k < 0) continue;
+            float add = MathF.Round(w.Arrive - ended + 0.5f, 1);
             phases[k].Extra += add;
-            return true;
+            return (k, add);
         }
-        return false;
+        return null;
     }
 
     /// <summary>
-    /// The phase in which group <paramref name="g"/>'s green ends at plan time <paramref name="at"/> (<paramref name="ending"/>;
-    /// a slow group may end a little before its phase), else the one whose green it starts in: the first green for it whose phase
-    /// ends after <paramref name="at"/>; -1 where none.
+    /// The phase in which group <paramref name="g"/>'s green ends at plan time <paramref name="at"/> (a slow group may end a little
+    /// before its phase): the last of a run of phases green for it whose green ends soonest after <paramref name="at"/>; -1 where none.
     /// </summary>
-    private static int PhaseOf(SignalPlan plan, List<Phase> phases, int g, float at, bool ending)
+    private static int EndingPhase(SignalPlan plan, List<Phase> phases, int g, float at)
     {
         int k = -1;
         float soonest = float.PositiveInfinity;
         for (int i = 0; i < phases.Count; i++)
         {
-            if (!phases[i].Green.Contains(g) || ending && phases[(i + 1) % phases.Count].Green.Contains(g) && phases.Count > 1) continue;
+            if (!phases[i].Green.Contains(g) || phases[(i + 1) % phases.Count].Green.Contains(g) && phases.Count > 1) continue;
             float d = Wrap(phases[i].Start + phases[i].GreenTime - at - 1e-3f, plan.Cycle);
             if (d < soonest) (soonest, k) = (d, i);
         }
         return k;
     }
 
+    /// <summary>
+    /// After a <see cref="Stretch"/> and the timing that followed: whether the cycle stayed within <see cref="IslandGrowMost"/>
+    /// of <paramref name="cycle"/>, its length before any stretch (the user); where not, the stretch is taken back.
+    /// </summary>
+    private static bool Kept(SignalPlan plan, List<Phase> phases, (int Phase, float Add) stretch, float cycle)
+    {
+        if (plan.Cycle <= cycle + IslandGrowMost + 0.05f) return true;
+        phases[stretch.Phase].Extra -= stretch.Add;
+        return false;
+    }
+
     /// <summary>The fixed-time plan (<see cref="Time"/> without conflict times) with its island waits kept (<see cref="Stretch"/>).</summary>
     private static void TimeStretched(SignalPlan plan, List<Phase> phases, Conflict[,] conflicts)
     {
         Time(plan, phases, conflicts, null);
-        for (int pass = 0; pass < StretchPasses && Stretch(plan, phases); pass++) Time(plan, phases, conflicts, null);
+        float cycle = plan.Cycle;
+        for (int pass = 0; pass < StretchPasses && Stretch(plan, phases) is { } stretch; pass++)
+        {
+            Time(plan, phases, conflicts, null);
+            if (Kept(plan, phases, stretch, cycle)) continue;
+            Time(plan, phases, conflicts, null);
+            break;
+        }
     }
 
     /// <param name="limits">How far a slow group may end early at a phase change at most (s, by phase and group): its minimum green.</param>
@@ -923,7 +944,8 @@ public sealed class SignalPlan
         float cycle = target;
         for (int pass = 0; pass < 2; pass++)
         {
-            float share = Math.Max(0, cycle - fixedSum);
+            // (a stretch for an island wait comes out of the shared green: the cycle keeps its length, #1030)
+            float share = Math.Max(0, cycle - fixedSum - phases.Sum(p => p.Extra));
             foreach (var p in phases)
                 p.GreenTime = p.FixedGreen > 0 ? p.FixedGreen : weights > 0 ? Math.Max(MinGreen, share * p.Weight / weights) : MinGreen;
             // a pedestrian green at least as long as its crossing's clearance, never under the minimum
