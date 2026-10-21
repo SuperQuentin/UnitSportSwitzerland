@@ -180,8 +180,7 @@ public partial class AuraNetProbe : ChatProbe
         Expect(await Until(() => Auras.Watched == null, 15), "the battle over, nothing left to watch");
 
         // a bot: added by an admin, stepped up to, challenged; it takes it and performs
-        Chat?.Send("/login test");
-        await Seconds(1.0);
+        if (!await LogIn("test")) return;
         Chat?.Send("/bot add 1 hard");
         FootPlayer? bot = null;
         if (!Expect2(await Until(() => (bot = BotCopy()) != null && bot.BotName.Length > 0, 20), "a bot is here")) return;
@@ -238,9 +237,9 @@ public partial class AuraNetProbe : ChatProbe
     private async Task<bool> Turn(AuraManager.View v, int turn, AuraMove[] plan, bool skipLast)
     {
         if (!Expect2(await Until(() => v.Turn == turn && v.Phase == AuraPhase.Plan && v.MyTurn, 45), $"turn {turn + 1}: my plan")) return false;
-        await Seconds(1.0);
         // windowed (SHOTS=1): the planner as it opens, then the performance with its beat ring
         bool windowed = DisplayServer.GetName() != "headless";
+        if (windowed) await Seconds(1.0);
         if (windowed) GD.Print($"{Log} shot {Shot($"{_role}_plan{turn + 1}")}");
         Auras!.SendPlan(plan);
         if (!Expect2(await Until(() => v.Plan.Length == plan.Length && v.Turn == turn, 10), $"turn {turn + 1}: the plan is taken")) return false;

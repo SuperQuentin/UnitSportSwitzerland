@@ -48,8 +48,8 @@ public partial class HoldNetProbe : ChatProbe
             await Finish(0);
             return;
         }
-        Chat?.Send("/login test");   // both: B parks a car it conjured (admin-only-spawning)
-        await Seconds(1.5);
+        // both: B parks a car it conjured (admin-only-spawning)
+        if (!await LogIn("test")) { await Finish(0); return; }
         if (_role == "A") await RunA(Me!); else await RunB(Me!);
         await Finish(2.0);
     }
@@ -107,7 +107,7 @@ public partial class HoldNetProbe : ChatProbe
         if (!ready) { Fail("B never got ready"); return; }
 
         Expect(me.SetRide(RideKind.A320), "A takes an A320");
-        await Seconds(1);
+        await Until(() => me.Vehicle is Airliner j && j.State.OnGround, 5);
         if (me.Vehicle is not Airliner jet) { Fail("not an airliner"); return; }
         await ParkingBrake(jet, true);
         jet.ToggleDoor(HoldCheck.RampDoor);
@@ -313,7 +313,7 @@ public partial class HoldNetProbe : ChatProbe
         // the handbrake alone: a brake pedal at a standstill is reverse
         me.RideControls = () => new RideInput(0f, 0f, 0f, false, true);
         await Until(() => me.GroundSpeed < 0.2f, 10);
-        await Seconds(1);
+        await Until(() => me.IsOnFloor() && Mathf.Abs(InFrame(a, me.GlobalPosition).Y) < 0.3f, 4);
         var at = InFrame(a, me.GlobalPosition);
         Expect(outside && me.IsOnFloor() && Mathf.Abs(at.Y) < 0.3f, $"B reversed down the ramp, out on the ground behind it ({F(at)}, '{me.DeckOn}')");
         GD.Print($"{Log}   out: me {F(me.GlobalPosition)} A {F(a.GlobalPosition)} A's frame {F(FootPlayer.HoldFrame(a, 0).Origin)}");

@@ -282,6 +282,47 @@ public partial class SettingsScreen : Screen
 
     private int _about;
 
+    /// <summary>
+    /// Copies the log Godot writes (<c>debug/file_logging</c>, on for every platform since #1040) to a
+    /// file the player picks. The system dialog: on Android the document picker, which hands back a
+    /// <c>content://</c> URI that <c>Godot.FileAccess</c> writes, with no permission.
+    /// </summary>
+    private void SaveLog()
+    {
+        string log = ProjectSettings.GetSetting("debug/file_logging/log_path", "user://logs/godot.log").AsString();
+        string stamp = Time.GetDatetimeStringFromSystem(false, true).Replace(":", "").Replace(" ", "-");
+        var dialog = new FileDialog
+        {
+            FileMode = FileDialog.FileModeEnum.SaveFile,
+            Access = FileDialog.AccessEnum.Filesystem,
+            Title = "Save log file",
+            CurrentFile = $"unitsport-log-{stamp}.txt",
+            UseNativeDialog = true,
+            Size = new Vector2I(860, 580),
+        };
+        dialog.AddFilter("*.txt", "Text");
+        dialog.FileSelected += path =>
+        {
+            byte[] bytes = Godot.FileAccess.GetFileAsBytes(log);
+            using (var file = bytes.Length > 0 ? Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Write) : null)
+            {
+                if (file == null)
+                    Modal.Inform(this, "Log not saved", bytes.Length == 0
+                        ? $"There is no log at {log} yet."
+                        : $"Could not write the file ({Godot.FileAccess.GetOpenError()}).");
+                else
+                {
+                    file.StoreBuffer(bytes);
+                    Modal.Inform(this, "Log saved", $"{bytes.Length / 1024} KB of log written.");
+                }
+            }
+            dialog.QueueFree();
+        };
+        dialog.Canceled += dialog.QueueFree;
+        AddChild(dialog);
+        dialog.PopupCentered();
+    }
+
     /// <summary>The About tab, the licenses and data sources (<c>--licenses</c>, for screenshotting it).</summary>
     public void ShowLicenses() => Show(_about);
 
@@ -290,8 +331,16 @@ public partial class SettingsScreen : Screen
     /// from and credits, the OpenStreetMap overlay's ODbL among them), then what Godot itself
     /// requires, its licence text and the components built into it.
     /// </summary>
-    private static void LicenseRows(VBoxContainer rows)
+    private void LicenseRows(VBoxContainer rows)
     {
+        // the game's log, for a bug report from a phone (#1040): wherever the system picker points
+        rows.AddChild(UiKit.Section("Diagnostics"));
+        rows.AddChild(UiKit.Text("Save the game's log to send with a bug report: Downloads, Drive, wherever.",
+            UiTheme.FontSmall, UiTheme.TextDim, wrap: true));
+        var save = UiKit.Button("Save log file…");
+        save.Pressed += SaveLog;
+        rows.AddChild(save);
+
         foreach (var e in Licenses.All)
         {
             rows.AddChild(UiKit.Section(e.Name));

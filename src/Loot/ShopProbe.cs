@@ -47,9 +47,8 @@ public partial class ShopProbe : ChatProbe
     {
         var me = Me!;
         var bank = Bank.Instance!;
-        Chat!.Send("/login shopcheck");
-        await Seconds(2.0);
-        Chat.Send("/bank me set 1000");
+        if (!await LogIn("shopcheck")) return;
+        Chat!.Send("/bank me set 1000");
         if (!await Until(() => bank.Balance == 1000, 20)) { Fail($"the account was not set to 1000 (it says {bank.Balance})"); return; }
         Expect(bank.Balance == 1000, "1000 CHF on the account");
 
@@ -101,8 +100,12 @@ public partial class ShopProbe : ChatProbe
             Expect(Shops.LastOutcome == BuyOutcome.Sold && bank.Balance == before - card.Price && _items.Inventory.Cash == cash,
                 $"the account paid ({before} -> {bank.Balance}), the pocket did not ({cash} -> {_items.Inventory.Cash})");
             // ask again: the balance must be the server's, not this client's sums
+            bool answered = false;
+            void OnBalance(long _) => answered = true;
+            bank.BalanceChanged += OnBalance;
             bank.Refresh();
-            await Seconds(2.0);
+            await Until(() => answered, 5);
+            bank.BalanceChanged -= OnBalance;
             Expect(bank.Balance == before - card.Price, $"the server's account says {bank.Balance}");
         }
 
@@ -123,7 +126,7 @@ public partial class ShopProbe : ChatProbe
         Expect(!Shops.Sell(never.Id, 1), $"the {layout.Shop} does not buy {never.Id}");
         Shot("bought");
         me.TryInteract();   // closes the shop
-        await Seconds(0.5);
+        await Until(() => !Shops.IsOpen, 2);
         Expect(!Shops.IsOpen, "E closes it");
         await Vending(me);
 
@@ -206,7 +209,7 @@ public partial class ShopProbe : ChatProbe
                 if (l.Shop is ShopType.None or ShopType.Grocery or ShopType.Kiosk) continue;
                 return (d, l);
             }
-            await Seconds(3.0);
+            await Until(() => DoorIndex.All().Any(d => d.Kind == BuildingKind.Commercial && !tried.Contains(d.Key.ToString())), 3.0);
         }
         Fail($"no shop taking the card among {tried.Count} commercial doors");
         return (null, null);

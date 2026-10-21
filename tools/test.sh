@@ -122,10 +122,10 @@ netsmoke() { # headless dedicated server on the flat fixture world + a headless 
   local port=${TEST_PORT:-7821} slog=$OUT/netsmoke_server.log
   "$GODOT" --headless --path . -- --server --port "$port" --world fixture > "$slog" 2>&1 < /dev/null &
   SERVER=$!
-  for _ in $(seq 1 120); do
+  for _ in $(seq 1 600); do
     grep -q "server listening" "$slog" 2>/dev/null && break
     kill -0 "$SERVER" 2>/dev/null || break
-    sleep 1
+    guard_nap 0.2
   done
   guard_run "$TIMEOUT" "$1" "$GODOT" --headless --path . -- --leavecheck connect "127.0.0.1:$port" --world fixture
   local code=$?

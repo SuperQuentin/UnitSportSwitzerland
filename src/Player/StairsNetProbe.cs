@@ -57,8 +57,7 @@ public partial class StairsNetProbe : ChatProbe
 
     private async Task RunA(FootPlayer me)
     {
-        Chat?.Send("/login test");
-        await Seconds(1.5);
+        if (!await LogIn("test")) return;
         bool ready = false;
         for (int i = 0; i < 40 && !ready; i++)
         {
@@ -69,7 +68,7 @@ public partial class StairsNetProbe : ChatProbe
 
         // an A320 parked here with its left doors open
         Expect(me.SetRide(RideKind.A320), "A takes an A320");
-        await Seconds(2);
+        await Until(() => me.Vehicle is Airliner j && j.State.OnGround, 5);
         if (me.Vehicle is not Airliner jet) { Fail("not an airliner"); return; }
         jet.ToggleDoor(0);
         jet.ToggleDoor(2);

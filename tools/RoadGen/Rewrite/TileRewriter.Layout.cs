@@ -294,6 +294,8 @@ public static partial class TileRewriter
                 var signs = plan.Signs.Where(x => x.LinkId == a.LinkId).Select(x => (x.Type, x.Variant, FacesArriving: x.Facing.Dot(u) > 0)).ToList();
                 jp.Exterior.Add(ExteriorPlanner.Plan(jp, a, at, yields: jp.Merged?.Ring is null && plan.Teeth.Any(t => t.LinkId == a.LinkId), signs));
             }
+            // the guides past the islands it laid (#1000)
+            CorePlanner.IslandGuides(jp);
         }
         // 9. each transition's paint, its solid stretches and arrows counted from where its arms' traffic stops (the exterior)
         double StopOf(ArmPlan? a) => a is null ? 0 : planOf[a].Exterior.FirstOrDefault(x => x.Arm == a)?.Bars

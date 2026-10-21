@@ -197,8 +197,12 @@ _guard_kill_tree() {
   fi
 }
 
+# guard_nap <seconds>: the polls' sleep (#992). A FIFO read instead of the fork crashed Git Bash ("fifo_reader:
+# fatal error - Can't add a client handler"), so it is plain sleep; guard_run no longer polls at all.
+guard_nap() { sleep "$1"; }
+
 guard_run() {
-  local timeout_s=$1 log=$2 pid elapsed=0 free
+  local timeout_s=$1 log=$2 pid wd code why
   shift 2
   mkdir -p "$(dirname "$log")"
   # its own process group on Linux, so the timeout can take its children down with it
@@ -208,34 +212,40 @@ guard_run() {
     "$@" > "$log" 2>&1 < /dev/null &
   fi
   pid=$!
-  while kill -0 "$pid" 2>/dev/null; do
-    if [ "$elapsed" -ge "$timeout_s" ]; then
-      echo "[guard] timeout after ${timeout_s}s, killing PID $pid and its children" >> "$log"
-      _guard_kill_tree "$pid"
-      wait "$pid" 2>/dev/null
-      return 124
-    fi
-    if [ $(( elapsed % GUARD_MEM_EVERY )) -eq 0 ]; then
-      free=$(guard_free_mb)
-      if [ "$free" -lt "$GUARD_MIN_FREE_MB" ]; then
-        echo "[guard] only ${free} MB free (floor ${GUARD_MIN_FREE_MB} MB): killing PID $pid and its children" | tee -a "$log" >&2
-        _guard_kill_tree "$pid"
-        wait "$pid" 2>/dev/null
-        return 137
+  why="${TMPDIR:-${TEMP:-/tmp}}/guard_run.$$.$pid"
+  rm -f "$why"
+  # the watchdog ticks once a second beside the run and writes its exit code before it kills it; the run's end
+  # is seen at once by the wait below, not on a poll (#992)
+  (
+    elapsed=0
+    while kill -0 "$pid" 2>/dev/null; do
+      if [ "$elapsed" -ge "$timeout_s" ]; then
+        echo "[guard] timeout after ${timeout_s}s, killing PID $pid and its children" >> "$log"
+        echo 124 > "$why"; _guard_kill_tree "$pid"; exit 0
       fi
-    fi
-    if [ "$elapsed" -gt 0 ] && [ $(( elapsed % GUARD_MAX_EVERY )) -eq 0 ]; then
-      local used; used=$(_guard_mem_mb "$pid")
-      if [ "${used:-0}" -gt "$GUARD_MAX_MB" ]; then
-        echo "[guard] PID $pid uses ${used} MB (cap GUARD_MAX_MB ${GUARD_MAX_MB} MB): killing it and its children" | tee -a "$log" >&2
-        _guard_kill_tree "$pid"
-        wait "$pid" 2>/dev/null
-        return 137
+      if [ $(( elapsed % GUARD_MEM_EVERY )) -eq 0 ]; then
+        free=$(guard_free_mb)
+        if [ "$free" -lt "$GUARD_MIN_FREE_MB" ]; then
+          echo "[guard] only ${free} MB free (floor ${GUARD_MIN_FREE_MB} MB): killing PID $pid and its children" | tee -a "$log" >&2
+          echo 137 > "$why"; _guard_kill_tree "$pid"; exit 0
+        fi
       fi
-    fi
-    sleep 1; elapsed=$(( elapsed + 1 ))
-  done
-  wait "$pid"
+      if [ "$elapsed" -gt 0 ] && [ $(( elapsed % GUARD_MAX_EVERY )) -eq 0 ]; then
+        used=$(_guard_mem_mb "$pid")
+        if [ "${used:-0}" -gt "$GUARD_MAX_MB" ]; then
+          echo "[guard] PID $pid uses ${used} MB (cap GUARD_MAX_MB ${GUARD_MAX_MB} MB): killing it and its children" | tee -a "$log" >&2
+          echo 137 > "$why"; _guard_kill_tree "$pid"; exit 0
+        fi
+      fi
+      sleep 1; elapsed=$(( elapsed + 1 ))
+    done
+  ) &
+  wd=$!
+  wait "$pid"; code=$?
+  kill "$wd" 2>/dev/null; wait "$wd" 2>/dev/null
+  [ -s "$why" ] && code=$(cat "$why")
+  rm -f "$why"
+  return "$code"
 }
 
 guard_watch() {
