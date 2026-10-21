@@ -71,6 +71,11 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
     private XrHands _hands = null!;
     private XrUi _ui = null!;
     private MeshInstance3D _vignette = null!;
+    private MeshInstance3D _space = null!;
+    private ShaderMaterial _spaceMat = null!;
+    /// <summary>In the loading space: the headset camera's world mask, kept to put back.</summary>
+    private bool _inSpace, _spaceShot;
+    private uint _worldCull;
     private ShaderMaterial _vignetteMat = null!;
 
     /// <summary>Tracking space → anchor: the inverse of the (yaw-only) head pose at the last recentre.</summary>
@@ -192,6 +197,24 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
             Layers = XrSession.HeadsetOnlyLayer,
         };
         _camera.AddChild(_vignette);
+
+        // the loading space (#1101): round the head while the world loads, in place of the world
+        _spaceMat = new ShaderMaterial
+        {
+            Shader = GD.Load<Shader>("res://shaders/xr_loading_space.gdshader"),
+            RenderPriority = (int)Material.RenderPriorityMin,
+        };
+        _space = new MeshInstance3D
+        {
+            Name = "LoadingSpace",
+            Mesh = new SphereMesh { Radius = 40f, Height = 80f, RadialSegments = 32, Rings = 16 },
+            MaterialOverride = _spaceMat,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            Visible = false,
+            Layers = XrSession.HeadsetOnlyLayer,
+        };
+        _camera.AddChild(_space);
+        _spaceShot = XrSession.Simulated && CmdArgs.Has("--xrspace");
 
         _pad = new XrPad(_left, _right);
         XrProfile.Watch();
@@ -367,6 +390,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         _ui.UpdatePanel(dt);
         UpdateSki(player, calibrated, dt);
         UpdateVignette(player, dt);
+        UpdateLoadingSpace();
 
         // the player aims and is heard from where its head really is
         if (player != null && Anchor != null)
@@ -545,6 +569,34 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
     /// in plain sight is a lurch; one that jumps behind a blink reads as a teleport.
     /// </summary>
     public void Blink() => _blink = 1f;
+
+    private static readonly StringName EyeHeight = "eye_height";
+
+    /// <summary>
+    /// While a session loads (<see cref="Ui.LoadingScreen.Active"/>) the headset draws only what is
+    /// its own (the panel, the pointer, the hands, the watch) inside the loading space; the
+    /// half-streamed world comes in behind a blink when the load is done (#1101).
+    /// </summary>
+    private void UpdateLoadingSpace()
+    {
+        bool want = Ui.LoadingScreen.Active || _spaceShot;
+        if (want == _inSpace) return;
+        _inSpace = want;
+        if (want)
+        {
+            _worldCull = _camera.CullMask;
+            _camera.CullMask = XrSession.HeadsetOnlyLayer;
+            // the floor where yours is: the head's height in the tracking space, standing or sitting
+            _spaceMat.SetShaderParameter(EyeHeight, Mathf.Clamp(_camera.Transform.Origin.Y, 1.0f, 2.0f));
+        }
+        else
+        {
+            _camera.CullMask = _worldCull;
+            Blink();
+        }
+        _space.Visible = want;
+        GD.Print($"[xr] loading space {(want ? "on" : "off")}");
+    }
 
     /// <summary>Takes where the head is now as the neutral pose: straight ahead, at the avatar's eye.</summary>
     public void Recentre()
