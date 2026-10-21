@@ -324,8 +324,8 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   post foot, far end (an arm's tip, a portal's or span's second foot), plates' lower edge, heading, heads (along the structure,
   lane moves). **Drawn** (`SignalBuilder.Overhead`): square posts and arms (RRW 300, 300 x 200), a portal beam, round anchor poles
   a sagging wire between wall plates; heads at 1.5 x a kerb head (300 mm lenses: the lens transform scaled, a bike head's 100 mm keeps
-  its own mesh), the lanes' arrow on a white plate above each head (Basel-Landschaft: "über dem Signalgeber"), a hanger up to
-  the arm, beam or wire; collision on the posts and anchors only (4 m columns: everything above is over the 4 m vehicle limit).
+  its own mesh), each drawn as a pole's head (the user: no lane plate above, the canton's plates below as on its poles, a
+  lane's own arrow in its lenses and on such a plate), a hanger from its plate up to the arm, beam or wire; collision on the posts and anchors only (4 m columns: everything above is over the 4 m vehicle limit).
   Model viewer: "Traffic light - Mast arm / Portal / Span wire". Stats: the layout line's `overhead heads (#1037)`. Test region:
   J6 arms, J7's 2+2 cross road arms, J13 portals, J14 (J13 with trams, between houses) span wires (`signal-test-region`); J7's double left (pockets on a 1+1
   road) keeps its poles by the user's rule. Tier 0 `OverheadPlannerTests` (Bern's layouts), `SignalPlanTests` (OVHD round trip),

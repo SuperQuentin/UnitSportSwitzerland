@@ -226,9 +226,6 @@ public static class SignalBuilder
     private const float PostHalf = 0.15f, BeamHeight = 0.3f, BeamDepth = 0.2f, HangerGap = 0.25f, TieFrom = 7f;
     /// <summary>A span wire hangs between two facades (#1037, the user: between buildings, never on poles), from a plate on each wall.</summary>
     private const float WireRadius = 0.012f, WireSag = 0.25f, HangerHalf = 0.025f, WallPlate = 0.12f;
-    /// <summary>The lane arrow over an overhead head, on a white plate of its own (Basel-Landschaft: "über dem Signalgeber"), this tall.</summary>
-    private const float LanePlate = 0.45f;
-
     /// <summary>The heads an overhead structure carries, each over its lanes (with its record): a turn's arrow head, else the approach's main head.</summary>
     private static List<(Head Head, OverheadHead Record)> OverheadHeads(SignalPlan plan, SignalOverhead o)
     {
@@ -242,7 +239,9 @@ public static class SignalBuilder
             var (group, shape) = OverheadGroup(plan, o.Arm, h.Moves);
             if (group < 0) continue;
             var at = a + dir * h.Along + front * (HeadDepth * OverheadScale * 0.5f);
-            at.Y = o.Bottom + (BorderGap + BorderWidth) * OverheadScale + half;
+            // drawn as a pole's head (the user): where the canton's plates run on below the heads with their arrow, the plate's
+            // lower edge stays at the structure's
+            at.Y = o.Bottom + (BorderGap + BorderWidth + (plan.ArrowPlates ? ArrowPanel : 0f)) * OverheadScale + half;
             // its round lenses show its own lanes' moves (the user, #1037: the head over the through lanes is not the kerb lane's
             // through-and-right)
             var arrow = shape == Shape.Circle ? LaneArrow(plan, o.Arm, h.Moves) : (SignalMoves?)null;
@@ -277,13 +276,14 @@ public static class SignalBuilder
         return (MainCar(plan, arm), Shape.Circle);
     }
 
-    /// <summary>The top of an overhead head's lane plate above the plates' lower edge.</summary>
-    private static float LanePlateTop => (BorderGap + BorderWidth) * OverheadScale * 2 + 3 * Pitch * OverheadScale + LanePlate;
+    /// <summary>The top of an overhead head's plate above the plates' lower edge.</summary>
+    private static float PlateTop(SignalPlan plan) =>
+        ((BorderGap + BorderWidth) * 2 + (plan.ArrowPlates ? ArrowPanel : 0f) + 3 * Pitch) * OverheadScale;
 
     /// <summary>
     /// An overhead structure and its heads (#1037): a mast arm (its post by the main pole or on the refuge, a tie rod past
-    /// <see cref="TieFrom"/> m), a portal (two posts, a beam), or a span wire between two facades; each head hung from it
-    /// with its lane arrow on a plate above it.
+    /// <see cref="TieFrom"/> m), a portal (two posts, a beam), or a span wire between two facades; each head hung from it, drawn
+    /// as a pole's (the canton's plates and arrows).
     /// </summary>
     private static void Overhead(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
         SignalPlan plan, SignalOverhead o, Color colour, bool rounded)
@@ -296,7 +296,7 @@ public static class SignalBuilder
         dir /= length;
         var depth = dir.Cross(Vector3.Up).Normalized();
         var heads = OverheadHeads(plan, o);
-        float plateTop = o.Bottom + LanePlateTop, beam = plateTop + HangerGap;   // the beam's lower face
+        float plateTop = o.Bottom + PlateTop(plan), beam = plateTop + HangerGap;   // the beam's lower face
         Func<float, float> hangFrom;   // the underside of what carries a head, at a distance along the structure
         if (o.Kind == OverheadKind.Span)
         {
@@ -338,17 +338,10 @@ public static class SignalBuilder
         }
         foreach (var (h, record) in heads)
         {
-            DrawHead(vertices, colors, uvs, uv2s, indices, plan, h, rounded, arrowsBelow: false);
-            // its lanes' arrow on a white plate above it, and a hanger from that plate up to what carries it
-            float plateBottom = h.Centre.Y + h.Half + (BorderGap + BorderWidth) * OverheadScale, w = HeadWidth * OverheadScale * 0.5f;
-            var plate = h.Centre - h.Front * 0.002f + Vector3.Up * (plateBottom - h.Centre.Y + LanePlate * 0.5f);
-            if (record.Moves != SignalMoves.None)
-            {
-                RoundedPlate(vertices, colors, uvs, uv2s, indices, WhitePlate.SrgbToLinear(), plate, h.Right, w, LanePlate * 0.5f, rounded ? CornerRadius : 0f);
-                ArrowOn(vertices, colors, uvs, uv2s, indices, record.Moves, plate + h.Front * 0.003f, h.Right, LanePlate * 0.5f * ArrowFill);
-            }
+            DrawHead(vertices, colors, uvs, uv2s, indices, plan, h, rounded, plan.ArrowPlates);
+            // a hanger from the top of its plate up to what carries it
             var hanger = a + dir * record.Along;
-            hanger.Y = plateBottom + LanePlate;
+            hanger.Y = h.Centre.Y + h.Half + (BorderGap + BorderWidth) * OverheadScale;
             Post(vertices, colors, uvs, uv2s, indices, hanger, hangFrom(record.Along), dir, depth, HangerHalf, Housing.SrgbToLinear(), sink: false);
         }
     }
@@ -538,7 +531,7 @@ public static class SignalBuilder
         Shape.LeftArrow => SignalMoves.Left,
         Shape.RightArrow => SignalMoves.Right,
         Shape.Bike => plan.Groups[h.Group].Moves is var m and not SignalMoves.None ? m : SignalMoves.Through,
-        Shape.Circle => ArrowMoves(plan, h.Group),
+        Shape.Circle => h.Arrow ?? ArrowMoves(plan, h.Group),
         _ => SignalMoves.None,
     };
 
