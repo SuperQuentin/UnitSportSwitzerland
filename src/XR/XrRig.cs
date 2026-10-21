@@ -148,8 +148,8 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         {
             _view.Size = new Vector2I(2 * 1832, 1920);
             _view.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
-            _load = new double[3];
         }
+        if (XrSession.Stats) _load = new double[3];
         AddChild(_view);
         if (_load != null) RenderingServer.ViewportSetMeasureRenderTime(_view.GetViewportRid(), true);
         _origin = new XROrigin3D { Name = "Origin", Current = true };
@@ -320,6 +320,8 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         _load[2] += RenderingServer.ViewportGetMeasuredRenderTimeGpu(_view.GetViewportRid());
         if (_load[1] < 5000.0) return;
         double n = _load[0];
+        if (!XrSession.Simulated && XRServer.PrimaryInterface is { } xr)
+            GD.Print($"[xr] eyes {xr.GetRenderTargetSize()} x{_view.Scaling3DScale:F2}, {RenderingServer.GetCurrentRenderingMethod()}, MSAA {_view.Msaa3D}");
         GD.Print($"[xr] load: frame {_load[1] / n:F1} ms, headset gpu {_load[2] / n:F1} ms, "
             + $"{RenderingServer.GetRenderingInfo(RenderingServer.RenderingInfo.TotalPrimitivesInFrame) / 1e6:F1} M prims, "
             + $"physics {Engine.PhysicsTicksPerSecond} Hz");
