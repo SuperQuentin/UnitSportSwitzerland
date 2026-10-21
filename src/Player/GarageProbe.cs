@@ -214,7 +214,7 @@ public partial class GarageProbe : Node
     private Vector3 _eyeTo;
     private Vector3 _from;
     private double _stillFor, _goneFor;
-    private bool _sawOther;
+    private bool _wasInside, _cameOut;
 
     /// <summary>
     /// Inside a building or out. From position, so it holds for a remote copy too: the interior it
@@ -592,11 +592,13 @@ public partial class GarageProbe : Node
         _snap = 0;
         if (_clock > 150 + ParkWait) { Log("RESULT: done"); GetTree().Quit(); return; }
         var other = GetTree().GetNodesInGroup(FootPlayer.Group).OfType<FootPlayer>().FirstOrDefault(p => p != me);
-        // the driver quits on its RESULT: its player gone for a second, there is nothing left to watch (#1007)
-        _goneFor = other == null && _sawOther ? _goneFor + 0.25 : 0;
+        // the driver quits on its RESULT, out of the building again: its player gone for a second after that, there is
+        // nothing left to watch (#1007). Gone before, it is only out of sight (the works can be tiles from the spawn)
+        _goneFor = other == null && _cameOut ? _goneFor + 0.25 : 0;
         if (_goneFor > 1) { Log("RESULT: done (the driver left)"); GetTree().Quit(); return; }
         if (other == null) return;
-        _sawOther = true;
+        _wasInside |= InsideTarget(other);
+        _cameOut |= _wasInside && !Interiors.InteriorManager.InInteriorSpace(other.GlobalPosition);
         // with no --at, stand beside the garage the driver will pick (the nearest to the same spawn)
         // (until it is found: the works can be tiles away, and not yet built at the first look, #666)
         if (AutoGarage && !_standing && _clock > 3) { _watchedDoor = StandAtGarage(me, 9f, 3.5f); _standing = _watchedDoor != null; }
