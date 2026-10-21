@@ -53,4 +53,23 @@
     <Compile Remove="src/Playtest/**" />
   </ItemGroup>
 
+  <!-- Build features (#1074, docs/notes/general/build-features.md): dev tools an exported build may leave out. The
+       editor (Debug) has all of them, so tools/test.sh and every probe keep working. An export (ExportRelease,
+       ExportDebug) has none unless UNITSPORT_FEATURES lists them: "trailer", or "all". An environment variable, so
+       Godot's dotnet publish sees it: UNITSPORT_FEATURES=trailer tools/release.sh. -->
+  <PropertyGroup>
+    <UnitSportFeatures Condition=" '$(Configuration)' == 'Debug' ">all</UnitSportFeatures>
+    <UnitSportFeatures Condition=" '$(Configuration)' != 'Debug' ">$(UNITSPORT_FEATURES)</UnitSportFeatures>
+    <_UnitSportFeatureList>;$(UnitSportFeatures.ToLowerInvariant().Replace(',', ';').Replace(' ', ''));</_UnitSportFeatureList>
+    <UnitSportTrailer>false</UnitSportTrailer>
+    <UnitSportTrailer Condition=" $(_UnitSportFeatureList.Contains(';all;')) or $(_UnitSportFeatureList.Contains(';trailer;')) ">true</UnitSportTrailer>
+  </PropertyGroup>
+  <!-- The trailer studio (src/Trailer, #706): films the trailers with tools/trailer.sh, never a player's tool -->
+  <PropertyGroup Condition=" '$(UnitSportTrailer)' == 'true' ">
+    <DefineConstants>$(DefineConstants);TRAILER</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition=" '$(UnitSportTrailer)' != 'true' ">
+    <Compile Remove="src/Trailer/**" />
+  </ItemGroup>
+
 </Project>
