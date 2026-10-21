@@ -210,8 +210,9 @@ public sealed class SignalPlan
             if (stretch >= StretchPasses || (last = Stretch(this, _phases)) is null) break;
         }
         Offset = Cycle <= 0 ? 0 : (Mix(_seed) % (uint)Math.Max(1, Cycle * 10)) / 10f;
-        if (Validate().Count == 0 && KeepsTimes(times)) return true;
-        if (DebugTiming) Console.WriteLine($"[tr] not timed from conflict times: {string.Join("; ", Validate().Take(3).DefaultIfEmpty("valid"))}, times kept {KeepsTimes(times)}\n{Describe()}");
+        // (never past the legal maximum, the user)
+        if (Validate().Count == 0 && KeepsTimes(times) && Cycle <= MaxCycle + 0.05f) return true;
+        if (DebugTiming) Console.WriteLine($"[tr] not timed from conflict times: {string.Join("; ", Validate().Take(3).DefaultIfEmpty("valid"))}, times kept {KeepsTimes(times)}, cycle {Cycle:F1} s\n{Describe()}");
         ConflictTimes = null;
         ConflictTimed = false;
         foreach (var p in _phases) p.Extra = 0;
@@ -665,16 +666,27 @@ public sealed class SignalPlan
     /// <summary>Split phasing: each approach on its own, every lane of it.</summary>
     private static List<Phase> Split(SignalPlan plan, IReadOnlyList<SignalArm> arms)
     {
-        var phases = new List<Phase>();
+        // each approach with every lane of it; an approach none of whose movements conflict hard with a phase's goes with it
+        // (#1030, the user: 120 s is the legal maximum; Geneva's 10-arm node ran 9 phases of 5 s greens to 157 s)
+        var conflicts = plan.Conflicts();
+        var phases = new List<(List<int> Groups, float Weight)>();
         for (int a = 0; a < arms.Count; a++)
         {
             if (!arms[a].In) continue;
-            var phase = new Phase(Math.Max(1, (float)arms[a].Rank));
-            phase.Base.AddRange(Enumerable.Range(0, plan.Groups.Count)
-                .Where(g => plan.Groups[g].Arm == a && plan.Groups[g].Kind is SignalGroupKind.Car or SignalGroupKind.LeftArrow or SignalGroupKind.RightArrow));
-            if (phase.Base.Count > 0) phases.Add(phase);
+            var mine = Enumerable.Range(0, plan.Groups.Count)
+                .Where(g => plan.Groups[g].Arm == a && plan.Groups[g].Kind is SignalGroupKind.Car or SignalGroupKind.LeftArrow or SignalGroupKind.RightArrow).ToList();
+            if (mine.Count == 0) continue;
+            float weight = Math.Max(1, (float)arms[a].Rank);
+            int with = phases.FindIndex(p => p.Groups.All(g => mine.All(h => conflicts[g, h] != Conflict.Hard)));
+            if (with >= 0) phases[with] = (phases[with].Groups.Concat(mine).ToList(), Math.Max(phases[with].Weight, weight));
+            else phases.Add((mine, weight));
         }
-        return phases;
+        return phases.Select(p =>
+        {
+            var phase = new Phase(p.Weight);
+            phase.Base.AddRange(p.Groups);
+            return phase;
+        }).ToList();
     }
 
     /// <summary>Each phase's green: its base, then pedestrians, bikes and right arrows that nothing green stops.</summary>

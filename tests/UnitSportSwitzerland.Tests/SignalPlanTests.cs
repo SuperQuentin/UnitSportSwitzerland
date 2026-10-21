@@ -394,6 +394,31 @@ public class SignalPlanTests(ITestOutputHelper output)
         Assert.True(Start(riders) <= Start(cars) + 0.05f, "the riders never start after their cars");
     }
 
+    /// <summary>
+    /// Geneva's 10-arm node at LV95 2500974,1117838 (#1030): split phasing ran its 9 approaches one by one, 5 s greens, to 157 s
+    /// once timed from conflict times. 120 s is the legal maximum (the user): approaches that never conflict share a phase.
+    /// </summary>
+    [Fact]
+    public void ManyArms_StayWithinTheLegalMaximum()
+    {
+        static SignalArm Deg(double d, bool i, float crossing, byte rank = 1, bool peds = false, float kmh = 60) =>
+            new(d * Math.PI / 180, i, true, Pedestrians: peds, CrossingM: crossing, Rank: rank, SpeedKmh: kmh);
+        var plan = SignalPlan.Build([Deg(211, true, 4.5f), Deg(214, true, 12, 34, true, 50), Deg(-54, true, 3), Deg(34, false, 13.5f, 34),
+            Deg(124, true, 3), Deg(34, true, 4.5f), Deg(33, true, 6, 2), Deg(125, true, 3), Deg(-56, true, 3), Deg(-147, true, 7.5f, 2, true, 50)], 7);
+        AssertValid(plan);
+        Assert.InRange(plan.Cycle, 0, SignalPlan.MaxCycle);
+        var conflicts = plan.Conflicts();
+        int n = plan.Groups.Count;
+        var times = new float[n, n];
+        for (int g = 0; g < n; g++)
+            for (int h = 0; h < n; h++)
+                times[g, h] = conflicts[g, h] == SignalPlan.Conflict.Hard ? (plan.Groups[g].Kind == SignalGroupKind.Pedestrian ? 9f : 5f) : float.NaN;
+        bool timed = plan.Retime(times);
+        output.WriteLine($"timed {timed}\n{plan.Describe()}");
+        AssertValid(plan);
+        Assert.InRange(plan.Cycle, 0, SignalPlan.MaxCycle);
+    }
+
     [Fact]
     public void TwoStageCrossing_RoundTripsItsHalves()
     {

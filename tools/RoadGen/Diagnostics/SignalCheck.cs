@@ -15,7 +15,7 @@ public static class SignalCheck
     public static int Run(string chunkDir, string? at, Action<string> log, bool list = false)
     {
         var c = CultureInfo.InvariantCulture;
-        int tiles = 0, junctions = 0, invalid = 0;
+        int tiles = 0, junctions = 0, invalid = 0, overMax = 0;
         // (#711, the user's review) every approach has its main pole, and one with a left pocket its second head (a pole or an island's)
         int approaches = 0, noMain = 0, pocketArms = 0, noSecond = 0;
         var poleMisses = new List<string>();
@@ -68,6 +68,8 @@ public static class SignalCheck
                     log($"  INVALID {where}: {string.Join("; ", errors.Take(3))}");
                 }
                 if (p.Cycle < 30) log($"  odd: {where} cycle {p.Cycle:F1} s ({shape})");
+                // 120 s is the legal maximum (the user)
+                if (p.Cycle > SignalPlan.MaxCycle + 0.05f) { overMax++; log(string.Create(c, $"  OVER 120 s: {where} cycle {p.Cycle:F1} s ({shape}{(p.ConflictTimed ? ", conflict-timed" : "")})")); }
                 for (int a = 0; a < p.Arms.Count; a++)
                 {
                     if (!p.Arms[a].In) continue;
@@ -118,9 +120,9 @@ public static class SignalCheck
         log(string.Create(c, $"  poles (#350, #711): {approaches} approaches, {noMain} without a main pole; {pocketArms} with a left pocket, {noSecond} without its second head"));
         foreach (var miss in poleMisses.Take(list ? int.MaxValue : 30)) log(miss);
         log(string.Create(c, $"  junction paths (#818, JPTH): {paths.Paths} on {paths.Cores} cores; ends off their lane {paths.OffLane}, points off the core {paths.OffCore}"));
-        bool ok = invalid == 0 && lanes.Bad == 0 && lanes.Missing == 0 && noMain == 0 && noSecond == 0 && paths.OffLane == 0 && paths.OffCore == 0;
+        bool ok = invalid == 0 && overMax == 0 && lanes.Bad == 0 && lanes.Missing == 0 && noMain == 0 && noSecond == 0 && paths.OffLane == 0 && paths.OffCore == 0;
         log(ok ? "[signalcheck] RESULT: ok"
-            : $"[signalcheck] RESULT: FAILED {invalid} invalid plans, {lanes.Bad} bad lane records, {lanes.Missing} signalised approaches without one, {noMain} approaches without a main pole, {noSecond} without a second head, {paths.OffLane + paths.OffCore} bad junction paths");
+            : $"[signalcheck] RESULT: FAILED {invalid} invalid plans, {overMax} cycles over 120 s, {lanes.Bad} bad lane records, {lanes.Missing} signalised approaches without one, {noMain} approaches without a main pole, {noSecond} without a second head, {paths.OffLane + paths.OffCore} bad junction paths");
         return ok ? 0 : 2;
     }
 
