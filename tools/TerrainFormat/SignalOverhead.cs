@@ -36,6 +36,18 @@ public sealed class SignalOverhead
     public float Heading { get; init; }
     public List<OverheadHead> Heads { get; init; } = new();
 
+    /// <summary>
+    /// Half the side of a mast arm's or portal's square post (Basel-Landschaft's RRW 300). A post stands on the signal pole it
+    /// replaces (the user: the kerb heads and signs are mounted on it, no pole beside it): those heads and signs stand out from it by
+    /// this, less a pole's radius.
+    /// </summary>
+    public const float PostHalf = 0.15f;
+
+    /// <summary>The post stands on this pole foot (tile-local): foot A of an arm or portal, or a portal's second foot.</summary>
+    public bool StandsOn(float x, float z) =>
+        Kind != OverheadKind.Span && ((X - x) * (X - x) + (Z - z) * (Z - z) < 1e-4f
+            || Kind == OverheadKind.Portal && (EndX - x) * (EndX - x) + (EndZ - z) * (EndZ - z) < 1e-4f);
+
     /// <summary>Horizontal length from A to the far end.</summary>
     public float Length => MathF.Sqrt((EndX - X) * (EndX - X) + (EndZ - Z) * (EndZ - Z));
 

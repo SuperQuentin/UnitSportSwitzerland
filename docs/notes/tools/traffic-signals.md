@@ -311,12 +311,13 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   refuge, every other's on the right kerb) more than 6 m sideways, two lanes turning the same way, a side road (yields when off)
   of 2+ lanes without a refuge, or 3+ lanes. Then a head over the middle of every lane, its lenses and plate showing that lane's
   moves (the user: one light per lane; one head per group hung over the line between two lanes; Bern's Abb. 19 leaves the kerb
-  lane to its kerb head, here it gets one too). The kerb poles keep theirs. **What carries them** (`TileRewriter.ExteriorWrite.PlaceOverhead`), first that fits: a **mast arm** from a post 0.4 m
-  outside the main pole (the kerb heads keep their place) when every head lies within 10 m (Basel-Landschaft: 3-4.5 m one lane,
-  5.5-7.5 m two, to 10 m with a tie rod past 7 m); one **from the refuge** reaching right; on a tram street
+  lane to its kerb head, here it gets one too). The kerb poles keep theirs. **What carries them** (`TileRewriter.ExteriorWrite.PlaceOverhead`), first that fits: a **mast arm** whose post stands on the
+  main pole (the user: no pole beside it; `SignalOverhead.StandsOn`: the pole's column is not drawn, its heads and its priority
+  signs stand out by the post's half width, `PostHalf`) when every head lies within 10 m (Basel-Landschaft: 3-4.5 m one lane,
+  5.5-7.5 m two, to 10 m with a tie rod past 7 m); one **from the refuge** (its post on the refuge's pole) reaching right; on a tram street
   (`Source.Line.Osm.Tram`: the overlay's `tram` column; the segment's attributes get the overlay only when written) with a
   building's facade within 8 m outward from both kerb poles (`Footprints`), a **span wire** from facade to facade, a plate on
-  each wall, no poles; else a **portal** to the far kerb (no case in the test region builds a refuge arm). Span wires only
+  each wall, no poles; else a **portal** from the main pole to the far kerb's pole, both its posts on them (no case in the test region builds a refuge arm). Span wires only
   there (the user, Oct 21 2026: rare in Switzerland, used between buildings, never on poles; Bern's handbook mentions carriers
   hung from span points and heads on house fronts). A tram catenary (its own issue) would carry them on its span wires.
   Lower edge of the plates 5.0 m over the road (SSV Art. 71: 4.50-5.50), 5.5 m on a wire. **Record**: section `OVHD`
@@ -325,7 +326,7 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   lane moves). **Drawn** (`SignalBuilder.Overhead`): square posts and arms (RRW 300, 300 x 200), a portal beam, round anchor poles
   a sagging wire between wall plates; heads at 1.5 x a kerb head (300 mm lenses: the lens transform scaled, a bike head's 100 mm keeps
   its own mesh), each drawn as a pole's head (the user: no lane plate above, the canton's plates below as on its poles, a
-  lane's own arrow in its lenses and on such a plate), a hanger from its plate up to the arm, beam or wire; collision on the posts and anchors only (4 m columns: everything above is over the 4 m vehicle limit).
+  lane's own arrow in its lenses and on such a plate), mounted on the front of the arm or beam at its mid-height by a bracket (the user: mounted, not hung), hung from a span wire by a hanger; collision on the posts and anchors only (4 m columns: everything above is over the 4 m vehicle limit).
   Model viewer: "Traffic light - Mast arm / Portal / Span wire". Stats: the layout line's `overhead heads (#1037)`. Test region:
   J6 arms, J7's 2+2 cross road arms, J13 portals, J14 (J13 with trams, between houses) span wires (`signal-test-region`); J7's double left (pockets on a 1+1
   road) keeps its poles by the user's rule. Tier 0 `OverheadPlannerTests` (Bern's layouts), `SignalPlanTests` (OVHD round trip),

@@ -107,9 +107,9 @@ public static class TerrainShowcase
             Plan = plan,
             Poles = { new SignalPole(0, 0, 0, 0f, Mathf.Pi / 2, 0, SignalPoleFlags.Main | SignalPoleFlags.Pedestrian) },
         };
-        // the heads face -Z, the driver's left is +X: the post just right of the pole, the lanes to its left
-        // (a span wire from the facade 2.6 m outside the pole to one across the street)
-        float from = overhead == OverheadKind.Span ? -3f : -0.4f;
+        // the heads face -Z, the driver's left is +X: the lanes to the pole's left
+        // (an arm's or portal's post on the pole, carrying its heads; a span wire from the facade 3 m outside it to one across the street)
+        float from = overhead == OverheadKind.Span ? -3f : 0f;
         if (overhead is { } kind)
             signal.Overheads.Add(new SignalOverhead
             {

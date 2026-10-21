@@ -112,11 +112,13 @@ public static class SignalBuilder
             var colour = PoleColourOf(signal.Plan.PoleColour).SrgbToLinear();
             foreach (var pole in signal.Poles)
             {
-                var heads = Heads(signal.Plan, pole);
+                var heads = PoleHeads(signal, pole);
                 var foot = new Vector3(pole.X, pole.Y, pole.Z);
                 float top = 0f;
                 foreach (var h in heads) top = Mathf.Max(top, h.Centre.Y - pole.Y + h.Half + BoardMargin);
-                Column(vertices, colors, uvs, uv2s, indices, foot, top, colour);
+                // a mast arm's or portal's post stands on the pole and carries its heads: no pole beside it (#1037, the user)
+                if (!signal.Overheads.Any(o => o.StandsOn(pole.X, pole.Z)))
+                    Column(vertices, colors, uvs, uv2s, indices, foot, top, colour);
                 RightOnRedSign(vertices, colors, uvs, uv2s, indices, signal.Plan, pole, heads);   // #711
                 foreach (var h in heads)
                 {
@@ -223,7 +225,7 @@ public static class SignalBuilder
     /// RRW 300 the post and 300 x 200 the arm, hung this far above the heads' lane plates; past <see cref="TieFrom"/> m an arm
     /// has a tie rod ("ab 7 m mit Abspannung") (m).
     /// </summary>
-    private const float PostHalf = 0.15f, BeamHeight = 0.3f, BeamDepth = 0.2f, HangerGap = 0.25f, TieFrom = 7f;
+    private const float PostHalf = SignalOverhead.PostHalf, BeamHeight = 0.3f, BeamDepth = 0.2f, HangerGap = 0.25f, TieFrom = 7f;
     /// <summary>A span wire hangs between two facades (#1037, the user: between buildings, never on poles), from a plate on each wall.</summary>
     private const float WireRadius = 0.012f, WireSag = 0.25f, HangerHalf = 0.025f, WallPlate = 0.12f;
     /// <summary>The heads an overhead structure carries, each over its lanes (with its record): a turn's arrow head, else the approach's main head.</summary>
@@ -238,7 +240,10 @@ public static class SignalBuilder
         {
             var (group, shape) = OverheadGroup(plan, o.Arm, h.Moves);
             if (group < 0) continue;
-            var at = a + dir * h.Along + front * (HeadDepth * OverheadScale * 0.5f);
+            // on an arm or a portal mounted in front of the beam, its back a bracket's length off the beam's face (the user: mounted
+            // onto the arm, not hung); on a span wire under it
+            float ahead = o.Kind == OverheadKind.Span ? HeadDepth * OverheadScale * 0.5f : BeamDepth * 0.5f + MountGap + HeadDepth * OverheadScale;
+            var at = a + dir * h.Along + front * ahead;
             // drawn as a pole's head (the user): where the canton's plates run on below the heads with their arrow, the plate's
             // lower edge stays at the structure's
             at.Y = o.Bottom + (BorderGap + BorderWidth + (plan.ArrowPlates ? ArrowPanel : 0f)) * OverheadScale + half;
@@ -276,14 +281,17 @@ public static class SignalBuilder
         return (MainCar(plan, arm), Shape.Circle);
     }
 
+    /// <summary>A head mounted on an arm or beam stands this far off its face (m): the bracket between.</summary>
+    private const float MountGap = 0.04f;
+
     /// <summary>The top of an overhead head's plate above the plates' lower edge.</summary>
     private static float PlateTop(SignalPlan plan) =>
         ((BorderGap + BorderWidth) * 2 + (plan.ArrowPlates ? ArrowPanel : 0f) + 3 * Pitch) * OverheadScale;
 
     /// <summary>
     /// An overhead structure and its heads (#1037): a mast arm (its post by the main pole or on the refuge, a tie rod past
-    /// <see cref="TieFrom"/> m), a portal (two posts, a beam), or a span wire between two facades; each head hung from it, drawn
-    /// as a pole's (the canton's plates and arrows).
+    /// <see cref="TieFrom"/> m), a portal (two posts, a beam), or a span wire between two facades; each head mounted on the front
+    /// of the arm or beam at its mid-height (hung from the wire), drawn as a pole's (the canton's plates and arrows).
     /// </summary>
     private static void Overhead(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
         SignalPlan plan, SignalOverhead o, Color colour, bool rounded)
@@ -296,7 +304,9 @@ public static class SignalBuilder
         dir /= length;
         var depth = dir.Cross(Vector3.Up).Normalized();
         var heads = OverheadHeads(plan, o);
-        float plateTop = o.Bottom + PlateTop(plan), beam = plateTop + HangerGap;   // the beam's lower face
+        // the beam's lower face: on an arm or portal the beam runs behind the heads' middle, a wire above their plates
+        float plateTop = o.Bottom + PlateTop(plan);
+        float beam = o.Kind == OverheadKind.Span || heads.Count == 0 ? plateTop + HangerGap : heads[0].Head.Centre.Y - BeamHeight * 0.5f;
         Func<float, float> hangFrom;   // the underside of what carries a head, at a distance along the structure
         if (o.Kind == OverheadKind.Span)
         {
@@ -336,13 +346,22 @@ public static class SignalBuilder
             }
             hangFrom = _ => beam;
         }
+        var (front, _) = Frame(o.Heading);
         foreach (var (h, record) in heads)
         {
             DrawHead(vertices, colors, uvs, uv2s, indices, plan, h, rounded, plan.ArrowPlates);
-            // a hanger from the top of its plate up to what carries it
-            var hanger = a + dir * record.Along;
-            hanger.Y = h.Centre.Y + h.Half + (BorderGap + BorderWidth) * OverheadScale;
-            Post(vertices, colors, uvs, uv2s, indices, hanger, hangFrom(record.Along), dir, depth, HangerHalf, Housing.SrgbToLinear(), sink: false);
+            var on = a + dir * record.Along;
+            if (o.Kind == OverheadKind.Span)
+            {
+                // a hanger from the top of its plate up to the wire
+                on.Y = h.Centre.Y + h.Half + (BorderGap + BorderWidth) * OverheadScale;
+                Post(vertices, colors, uvs, uv2s, indices, on, hangFrom(record.Along), dir, depth, HangerHalf, Housing.SrgbToLinear(), sink: false);
+                continue;
+            }
+            // a bracket from the beam's face into the back of its housing
+            on.Y = h.Centre.Y;
+            Beam(vertices, colors, uvs, uv2s, indices, on + front * (BeamDepth * 0.5f - 0.01f), on + front * (BeamDepth * 0.5f + MountGap + 0.01f),
+                dir, 0.06f, 0.06f, Housing.SrgbToLinear());
         }
     }
 
@@ -473,7 +492,7 @@ public static class SignalBuilder
         {
             int j = lamps.Plans.Count;
             lamps.Plans.Add(signal.Plan);
-            foreach (var h in signal.Poles.SelectMany(pole => Heads(signal.Plan, pole)).Concat(signal.Overheads.SelectMany(o => OverheadHeads(signal.Plan, o).Select(x => x.Head))))
+            foreach (var h in signal.Poles.SelectMany(pole => PoleHeads(signal, pole)).Concat(signal.Overheads.SelectMany(o => OverheadHeads(signal.Plan, o).Select(x => x.Head))))
                 {
                     // a 300 mm overhead lens is the 200 mm lens scaled (a bike head's 100 mm has a mesh of its own)
                     float lens = h.Shape == Shape.Bike ? 1f : h.Scale;
@@ -540,6 +559,15 @@ public static class SignalBuilder
         for (int g = 0; g < plan.Groups.Count; g++)
             if (plan.Groups[g].Kind == SignalGroupKind.Flasher && plan.Groups[g].Qualifies == group) return g;
         return -1;
+    }
+
+    /// <summary>A pole's heads, moved out onto the face of an overhead structure's post where one stands on the pole (#1037).</summary>
+    private static List<Head> PoleHeads(RoadSignal signal, SignalPole pole)
+    {
+        var heads = Heads(signal.Plan, pole);
+        if (!signal.Overheads.Any(o => o.StandsOn(pole.X, pole.Z))) return heads;
+        float shift = SignalOverhead.PostHalf - PoleRadius;
+        return heads.Select(h => h with { Centre = h.Centre + h.Front * shift }).ToList();
     }
 
     /// <summary>The heads a pole carries, from the plan's groups of its arm.</summary>

@@ -133,6 +133,7 @@ public static partial class TileRewriter
             var u = axis.DirAt(m0);
             var right = axis.RightAt(m0);
             (Vec2 Foot, float Y)? mainFoot = null, leftFoot = null, refugeFoot = null;   // for an overhead structure (#1037)
+            (int From, int Count) mainSigns = (0, 0);   // the main pole's priority signs, moved out onto a post standing on it
             foreach (var p in ex.Poles)
             {
                 // the foot (the old layout's PlacePole, #350/#711, restored by #1000): on the refuge; else half a metre out of the kerb,
@@ -165,6 +166,7 @@ public static partial class TileRewriter
                 // the approach's priority signs for when the lights are off (#121) on its main pole: below the heads, or above them
                 // where a bike head takes the room below (the old layout's, #350/#711)
                 if ((flags & SignalPoleFlags.Main) == 0) continue;
+                mainSigns = (Get(signs, home).Count, ex.Signs.Count(x => x.OnMainPole));
                 bool bikeHead = plan.Groups.Any(g => g.Kind == SignalGroupKind.Bike && g.Arm == k && g.Moves != SignalMoves.Left);
                 bool pedHead = (flags & SignalPoleFlags.Pedestrian) != 0 && plan.Groups.Any(g => g.Kind == SignalGroupKind.Pedestrian && g.Arm == k);
                 foreach (var sign in ex.Signs.Where(x => x.OnMainPole))
@@ -185,7 +187,18 @@ public static partial class TileRewriter
                     leftFoot = (lf, Local(home, [lf], q => SampleAt(a, q), lLift)[1]);
                 bool tram = net.Links[a.LinkId].Tag is Source { Line.Osm.Tram: true };   // OSM railway=tram along the arm
                 if (PlaceOverhead(ex, (byte)k, P, u, right, mainFoot, leftFoot, refugeFoot, tram, home, q => SampleAt(a, q), clear, building, stats) is { } o)
+                {
                     overheads.Add(o);
+                    // a post on the main pole carries its signs: their plates out in front of its face (the user)
+                    var list = Get(signs, home);
+                    for (int i = mainSigns.From; i < mainSigns.From + mainSigns.Count && i < list.Count; i++)
+                        if (o.StandsOn(list[i].X, list[i].Z))
+                        {
+                            var p0 = list[i];
+                            float shift = SignalOverhead.PostHalf - RoadSigns.PoleDiameter * 0.5f;
+                            list[i] = p0 with { X = p0.X - MathF.Sin(p0.Heading) * shift, Z = p0.Z - MathF.Cos(p0.Heading) * shift };
+                        }
+                }
             }
         }
         var centre = Local(home, [jp.Centre], p => SampleAt(jp.Arms[0], p), 0f);
@@ -475,12 +488,12 @@ public static partial class TileRewriter
     }
 
     /// <summary>
-    /// An overhead structure's post stands this far outside its pole (the kerb heads on the pole keep their place), an arm reaches
-    /// at most this far (Basel-Landschaft's mast arms: 3-4.5 m over one lane, 5.5-7.5 m over two, to 10 m with a tie rod) and runs
-    /// on this far past its last head; the plates' lower edge stands this high over the road (SSV Art. 71: 4.50-5.50 m), on a span
-    /// wire higher (tram wires, Bern: 5.50-6.00 m) (m, #1037).
+    /// An overhead structure's post stands on its pole (the user: the pole's heads and signs are mounted on it, no pole beside it);
+    /// an arm reaches at most this far (Basel-Landschaft's mast arms: 3-4.5 m over one lane, 5.5-7.5 m over two, to 10 m with a tie
+    /// rod) and runs on this far past its last head; the plates' lower edge stands this high over the road (SSV Art. 71: 4.50-5.50
+    /// m), on a span wire higher (tram wires, Bern: 5.50-6.00 m) (m, #1037).
     /// </summary>
-    private const double PostOut = 0.4, ArmReach = 10.0, ArmBeyond = 0.4;
+    private const double ArmReach = 10.0, ArmBeyond = 0.4;
     /// <summary>A span wire's facades stand at most this far out from the kerb poles (m), looked for in steps of <see cref="FacadeStep"/>.</summary>
     private const double FacadeReach = 8.0, FacadeStep = 0.25;
     private const float HeadLowerEdge = 5.0f, SpanLowerEdge = 5.5f;
@@ -508,15 +521,14 @@ public static partial class TileRewriter
         if (main is not var (m, mY)) { stats.OverheadsRejected++; return null; }
         var origin = P(0, 0);
         double Off(Vec2 q) => (q - origin).Dot(right);
-        Vec2 Out(Vec2 foot, Vec2 away) => clear(foot + away * PostOut) ? foot + away * PostOut : foot;
         var heads = ex.Overhead;
-        var post = Out(m, right);
+        var post = m;
         float y = mY, endY = mY;
         double reach = heads.Max(h => Off(post) - h.Offset);
         OverheadKind kind;
         Vec2 end;
         if (reach + ArmBeyond <= ArmReach) (kind, end) = (OverheadKind.Arm, post - right * (reach + ArmBeyond));
-        else if (refuge is var (r, rY) && r + u * PostOut is var rPost && heads.All(h => h.Offset > Off(rPost))
+        else if (refuge is var (r, rY) && r is var rPost && heads.All(h => h.Offset > Off(rPost))
                  && heads.Max(h => h.Offset - Off(rPost)) + ArmBeyond <= ArmReach)
         {
             (kind, post, y, endY) = (OverheadKind.RefugeArm, rPost, rY, rY);
@@ -524,7 +536,7 @@ public static partial class TileRewriter
         }
         else if (tram && left is var (lf, _) && Facade(m, right) is { } wallA && Facade(lf, right * -1) is { } wallB)
             (kind, post, end, y, endY) = (OverheadKind.Span, wallA, wallB, height(wallA), height(wallB));
-        else if (left is var (l2, l2Y)) (kind, end, endY) = (OverheadKind.Portal, Out(l2, right * -1), l2Y);
+        else if (left is var (l2, l2Y)) (kind, end, endY) = (OverheadKind.Portal, l2, l2Y);
         else { stats.OverheadsRejected++; return null; }
 
         // along the structure: a metre of it moves (dir . right) across the arm
