@@ -140,6 +140,10 @@ public partial class PalletNetProbe : Node
 
     private static float Yaw(Vector3 toward) => Mathf.Atan2(-toward.X, -toward.Z);
 
+    /// <summary>The other player here, the watcher: null once it has left.</summary>
+    private FootPlayer? Watcher(FootPlayer me) =>
+        GetTree().GetNodesInGroup(FootPlayer.Group).OfType<FootPlayer>().FirstOrDefault(p => p != me && !p.Npc);
+
     // ---- drive: A ---------------------------------------------------------------------------------
 
     private async Task<bool> Drive()
@@ -176,8 +180,11 @@ public partial class PalletNetProbe : Node
         var lineUp = Door().World + o * 12f;
         if (me.Terrain != null && me.Terrain.TryGetHeight(lineUp, out float lineGround)) lineUp.Y = lineGround + 0.3f;
         me.PlaceAt(lineUp, Yaw(-o));
-        // the watcher takes its place beside the bay meanwhile
-        await Seconds(6);
+        // the watcher takes its place beside the bay meanwhile: once its player stands there (and we on the ground,
+        // a second after the move), at most the 6 s this used to wait (#1007)
+        await Seconds(1);
+        await Until(() => me.IsOnFloor() && Watcher(me) is { } w
+            && new Vector2(w.GlobalPosition.X - Door().World.X, w.GlobalPosition.Z - Door().World.Z).Length() < 8f, 5);
 
         // ---- in through the bay -------------------------------------------------------------
         Log($"driving in, {Where(me)}");
@@ -260,7 +267,8 @@ public partial class PalletNetProbe : Node
         bool apron = await ForkApronPallet(me, fork);
         await Seconds(3);
         bool tele = apron && await ForkWithTelehandler(me);
-        await Seconds(6);
+        // the watcher quits on its RESULT: its player gone, it has seen all it needed (at most the old 6 s, #1007)
+        await Until(() => Watcher(me) == null, 6);
         return outside && carriedOut != 0 && down && set is { Altitude: > InteriorManager.InteriorBaseY + 1000f } && apron && tele
             && (_woke || !_liftSeen);
     }
