@@ -1,0 +1,86 @@
+# iOS build check (#1025, docs/notes/core/ios-build.md): Godot exports the Xcode project and xcodebuild compiles
+# it, unsigned. Godot exports C# to iOS only on macOS, hence the macOS runner (free: the repo is public).
+# Not part of a release: run by hand, or by a PR that touches the iOS build itself.
+name: iOS build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/ios.yml
+      - tools/ios-build.sh
+      - tools/ci/install-godot.sh
+      - tools/ci/export_presets.cfg
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 300 # Godot runs NativeAOT three times (device, simulator arm64 and x64), ~45 min each
+    env:
+      GODOT_VERSION: 4.7.2-stable
+      GODOT: ${{ github.workspace }}/.godot-ci/godot
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false # the LFS assets are excluded from every export
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+
+      - name: Cache Godot and its export templates
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .godot-ci
+            ~/Library/Application Support/Godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}-mono-macos
+
+      - name: Install Godot ${{ env.GODOT_VERSION }} mono
+        if: steps.godot-cache.outputs.cache-hit != 'true'
+        run: bash tools/ci/install-godot.sh
+
+      # Godot 4.7's iOS template links iOS 26 SDK symbols (CADynamicRange*, MTLTensorDomain): Xcode 16 cannot link it
+      - name: Pick Xcode 26
+        run: |
+          x=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$x" ] || { echo "No Xcode 26 on this runner:"; ls -d /Applications/Xcode*; exit 1; }
+          sudo xcode-select -s "$x"
+
+      - name: Build
+        timeout-minutes: 280 # leaves time to upload the logs
+        run: |
+          cp tools/ci/export_presets.cfg export_presets.cfg
+          xcodebuild -version
+          # the export prints nothing while dotnet publish / NativeAOT / Xcode tools run: show what is running
+          ( while sleep 300; do echo "--- running after $SECONDS s:"; ps -A -o pid,ppid,etime,%cpu,command | grep -E 'dotnet publish|/ilc|Godot --|xcrun|xcodebuild|clang|ld-classic|ld64|codesign' | grep -v grep | cut -c1-220; done ) &
+          bash tools/ios-build.sh
+
+      # Install it without a Mac: xtool (WSL) signs it with an Apple ID, `xtool install` (docs/notes/core/ios-build.md)
+      - name: Keep the unsigned ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-unsigned-ipa
+          path: test_output/ios/UnitSportSwitzerland-unsigned.ipa
+          if-no-files-found: ignore
+          compression-level: 0 # already a zip
+          retention-days: 14
+
+      - name: Keep the logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-logs
+          path: test_output/ios/*.log
+          if-no-files-found: ignore

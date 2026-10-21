@@ -22,6 +22,17 @@
     <TargetFramework>net9.0</TargetFramework>
   </PropertyGroup>
 
+  <!-- iOS (tools/ios-build.sh, #1025): NativeAOT makes one dylib of the game's ~15 MB of IL, and its code has to
+       stay under 128 MB, the reach of an ARM64 branch: -ld_classic inserts no branch islands, and Xcode's current
+       linker asserts on NativeAOT objects ("too many large addends", .NET 8 and 9 alike). Speed-optimised it came
+       out ~134 MB; size optimisation and folding identical method bodies bring it under. net9.0 like Android. -->
+  <PropertyGroup Condition=" '$(GodotTargetPlatform)' == 'ios' ">
+    <TargetFramework>net9.0</TargetFramework>
+    <UseLdClassicXCodeLinker>true</UseLdClassicXCodeLinker>
+    <OptimizationPreference>Size</OptimizationPreference>
+    <IlcFoldIdenticalMethodBodies>true</IlcFoldIdenticalMethodBodies>
+  </PropertyGroup>
+
   <ItemGroup>
     <!-- Tiles churn through the large-object heap (1-4 MB grids, covers, collision maps), which
          the GC never compacts by default: the heap grows with fragmentation, not live data.
@@ -41,6 +52,22 @@
          and WithCulture because MSBuild otherwise reads ".bin"-like infixes as a culture -->
     <EmbeddedResource Include="src/Terrain/swiss_relief.gz" LogicalName="swiss_relief.gz" WithCulture="false" />
     <PackageReference Include="ppy.SDL3-CS" Version="2026.722.0" />
+  </ItemGroup>
+
+  <!-- Godot's iOS export always publishes the simulator slices too (iossimulator-arm64 and -x64, ~45 min of NativeAOT
+       each on the CI runner). tools/ios-build.sh sets UNITSPORT_IOS_DEVICE_ONLY unless asked for the simulator: those
+       publishes then compile no game code, and the simulator slice of the app is an empty stub. -->
+  <ItemGroup Condition=" '$(UNITSPORT_IOS_DEVICE_ONLY)' == '1' and $(RuntimeIdentifier.StartsWith('iossimulator')) ">
+    <Compile Remove="@(Compile)" />
+    <EmbeddedResource Remove="@(EmbeddedResource)" />
+    <ProjectReference Remove="@(ProjectReference)" />
+  </ItemGroup>
+
+  <!-- SDL (steering wheel) never starts on a phone (SteeringWheel.Install), and the package's iOS library lands in
+       the device folder as its simulator build, which fails the Xcode link: iOS ships without it. Below the
+       Include, since Update only reaches items already defined. -->
+  <ItemGroup Condition=" '$(GodotTargetPlatform)' == 'ios' ">
+    <PackageReference Update="ppy.SDL3-CS" ExcludeAssets="native" />
   </ItemGroup>
 
   <!-- The playtest suite (#751, docs/notes/general/playtest.md): an in-game MCP server Claude Code drives the
