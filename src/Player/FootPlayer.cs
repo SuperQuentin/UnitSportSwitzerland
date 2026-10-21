@@ -4528,8 +4528,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>The controls of a ground ride this step: a script's (<see cref="RideControls"/>), else the pedals, stick and wheel.</summary>
     private RideInput RideInputNow()
     {
+        // a script or a bot drives: no stick read (a dedicated server has no input actions, and a bot's
+        // drive printed four InputMap errors with their stacks every physics frame, #1006)
+        if (RideControls is { } scripted) return scripted();
         var stick = PlayerInput.Move;
-        return RideControls?.Invoke() ?? new RideInput(
+        return new RideInput(
             Throttle: Mathf.Max(PlayerInput.Strength(PlayerInput.Throttle), Mathf.Max(0f, -stick.Y)),
             Brake: Mathf.Max(PlayerInput.Strength(PlayerInput.Brake), Mathf.Max(0f, stick.Y)),
             Steer: SteerInput(),
@@ -4547,7 +4550,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (WaterPhysics(dt)) return;
         // Triggers are analog, and the vehicles already take 0..1: half a trigger is half the
         // watts. Pushing the stick forward or back does the same, for anyone who expects it to.
-        var stick = PlayerInput.Move;
+        var stick = RideControls == null ? PlayerInput.Move : Vector2.Zero;
         var input = RideInputNow();
 
         // skiing with the body in VR (#186): lean, pole and tuck on top of the sticks
