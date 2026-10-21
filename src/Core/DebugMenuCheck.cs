@@ -109,6 +109,9 @@ public partial class DebugMenuCheck : ChatProbe
 
         var from = StyleKit.Applied;
         var to = from == VisualStyle.Cartoon ? VisualStyle.Ps1 : VisualStyle.Cartoon;
+        // a solid object's material (#1069): unshaded in PS1 only, and it follows a live restyle
+        var solid = StyleKit.Solid(new StandardMaterial3D());
+        Expect(solid.ShadingMode == ShadingIn(from), $"a solid is {ShadingIn(from)} in {from}");
         Chat!.Send($"/style {(to == VisualStyle.Cartoon ? "cartoon" : "ps1")}");
         if (!await Until(() => StyleKit.Applied == to, 10))
         {
@@ -118,11 +121,15 @@ public partial class DebugMenuCheck : ChatProbe
         await Frames(3);
         Expect(GroundShader() == DebugView.Clay, $"clay survives the restyle to {to}");
         Expect(StyleKit.Material(MaterialRole.Terrain).Shader == DebugView.Clay, "a material made meanwhile is clay too");
+        Expect(solid.ShadingMode == ShadingIn(to), $"the solid follows the restyle to {to} ({solid.ShadingMode})");
 
         await PickView(DebugViewMode.Normal);
         var want = GD.Load<Shader>(StyleKit.Resolve(to, MaterialRole.Terrain).Path);
         Expect(GroundShader() == want, $"Normal gives back {to}'s terrain shader ({GroundShader()?.ResourcePath})");
     }
+
+    private static BaseMaterial3D.ShadingModeEnum ShadingIn(VisualStyle style) =>
+        style == VisualStyle.Ps1 ? BaseMaterial3D.ShadingModeEnum.Unshaded : BaseMaterial3D.ShadingModeEnum.PerPixel;
 
     private async Task Online()
     {
