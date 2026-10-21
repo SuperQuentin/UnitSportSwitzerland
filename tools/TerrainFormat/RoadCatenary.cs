@@ -32,7 +32,7 @@ public sealed class CatenarySupport
     /// <summary>The contact wire's height (tile-local y) at this support.</summary>
     public float WireY { get; init; }
     /// <summary>Where the contact wires pass, x and z per track.</summary>
-    public required float[] Over { get; init; }
+    public required float[] Over { get; set; }
 }
 
 /// <summary>A contact wire over one track (#1052), tile-local x y z triples; a main line's messenger and droppers are drawn from it.</summary>

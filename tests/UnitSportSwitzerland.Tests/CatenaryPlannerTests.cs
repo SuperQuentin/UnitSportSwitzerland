@@ -54,6 +54,20 @@ public class CatenaryPlannerTests
     }
 
     [Fact]
+    public void Two_tracks_mapped_as_lines_of_their_own_share_the_spans()
+    {
+        // Geneva maps each tram track as its own line: the second hangs its wire from the first's spans, on a grid of its own
+        var north = new CatenaryPlanner.Rail([new Vec2(2600000, 1200504), new Vec2(2600100, 1200504)], [500f, 500f], RoadFlags.Tramway, true, false, 13, Tile);
+        // a 16 m road over both tracks: the spans reach past it
+        var (supports, wires, stats) = Plan([Straight(0, 100, RoadFlags.Tramway, street: true), north], clear: p => Math.Abs(p.Y - 1200502) > 8);
+        Assert.Equal(2, wires.Count);
+        Assert.Equal(4, supports.Count);
+        // the second track's supports from 30 m on (its grid starts 13 m in) hang on the first's; the first span carries one wire
+        Assert.Equal(3, supports.Count(s => s.Over.Length == 4));
+        Assert.Equal(3, stats.SpansShared);
+    }
+
+    [Fact]
     public void A_double_track_main_line_has_a_mast_outside_each_track_and_two_wires()
     {
         var (supports, wires, _) = Plan([Straight(0, 130, RoadFlags.DoubleTrack)]);

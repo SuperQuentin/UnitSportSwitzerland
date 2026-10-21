@@ -32,11 +32,11 @@ public static class CatenaryPlanner
 
     public sealed class Stats
     {
-        public int Pieces, Cantilevers, Spans, WallEnds, MastEnds, Skipped;
+        public int Pieces, Cantilevers, Spans, SpansShared, WallEnds, MastEnds, Skipped;
         public double WireKm, Ms;
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
-            $"    overhead lines (#1052): {Pieces:N0} electrified rail pieces, {WireKm:F2} km of contact wire, {Cantilevers:N0} cantilever masts, {Spans:N0} spans ({WallEnds:N0} ends on facades, {MastEnds:N0} on masts), {Skipped:N0} supports with no room; planning {Ms:N0} ms");
+            $"    overhead lines (#1052): {Pieces:N0} electrified rail pieces, {WireKm:F2} km of contact wire, {Cantilevers:N0} cantilever masts, {Spans:N0} spans ({WallEnds:N0} ends on facades, {MastEnds:N0} on masts; {SpansShared:N0} times a track's wire hung from another track's span), {Skipped:N0} supports with no room; planning {Ms:N0} ms");
     }
 
     /// <summary>Electrified: rail at grade or on a bridge, neither a funicular nor disused (TLM has no electrification; nearly all Swiss rail is).</summary>
@@ -59,6 +59,8 @@ public static class CatenaryPlanner
     {
         var clock = System.Diagnostics.Stopwatch.StartNew();
         var near = new TrackGrid(tracks);
+        // the spans placed so far: a track mapped as a line of its own beside another (Geneva) hangs its wire from theirs
+        var spans = new List<(Vec2 A, Vec2 B, CatenarySupport Support, TileId Tile)>();
         foreach (var rail in rails)
         {
             if (rail.Plan.Count < 2) continue;
@@ -103,7 +105,7 @@ public static class CatenaryPlanner
                 var (at, dir, height) = At(rail.Plan, arc, rail.Height, u);
                 var n = new Vec2(dir.Y, -dir.X);   // right of the line's drawing direction
                 float y = height, wireY = height + wire;
-                if (rail.Street) PlaceSpan(at, n, offsets, y, wireY, line, tile, building, clear, supports, stats);
+                if (rail.Street) PlaceSpan(at, n, offsets, y, wireY, line, tile, step * 0.5, spans, building, clear, supports, stats);
                 else
                 {
                     bool placed = false;
@@ -135,10 +137,40 @@ public static class CatenaryPlanner
         stats.Ms += clock.Elapsed.TotalMilliseconds;
     }
 
-    /// <summary>A span across a street at <paramref name="at"/>: to the first facade within reach each side, else to the first spot off the road.</summary>
-    private static void PlaceSpan(Vec2 at, Vec2 n, float[] offsets, float y, float wireY, CatenaryLine line, TileId tile,
+    /// <summary>
+    /// A span across a street at <paramref name="at"/>: to the first facade within reach each side, else to the first spot off the
+    /// road; or, where a span already crosses this track within <paramref name="share"/> metres along it (another track of the
+    /// street, mapped as a line of its own), this track's wire hung from that span instead.
+    /// </summary>
+    private static void PlaceSpan(Vec2 at, Vec2 n, float[] offsets, float y, float wireY, CatenaryLine line, TileId tile, double share,
+        List<(Vec2 A, Vec2 B, CatenarySupport Support, TileId Tile)> spans,
         Func<Vec2, bool> building, Func<Vec2, bool> clear, Dictionary<TileId, List<CatenarySupport>> supports, Stats stats)
     {
+        var dir = new Vec2(-n.Y, n.X);
+        foreach (var (sa, sb, support, home) in spans)
+        {
+            // where the span crosses this track's line: at + dir t = sa + (sb - sa) w
+            var e = sb - sa;
+            double det = dir.X * -e.Y - dir.Y * -e.X;
+            if (Math.Abs(det) < 1e-6) continue;
+            var d = sa - at;
+            double t = (d.X * -e.Y - d.Y * -e.X) / det, w = (dir.X * d.Y - dir.Y * d.X) / det;
+            if (Math.Abs(t) > share || w < 0 || w > 1) continue;
+            var cross = at + dir * t;
+            var hung = support.Over.ToList();
+            foreach (float off in offsets)
+            {
+                var q = cross + n * off;
+                float qx = (float)(q.X - home.MinE), qz = (float)(home.MaxN - q.Y);
+                bool known = false;
+                for (int i = 0; i + 1 < hung.Count; i += 2)
+                    if ((hung[i] - qx) * (hung[i] - qx) + (hung[i + 1] - qz) * (hung[i + 1] - qz) < 1f) known = true;
+                if (!known) { hung.Add(qx); hung.Add(qz); }
+            }
+            support.Over = [.. hung];
+            stats.SpansShared++;
+            return;
+        }
         double outer = offsets.Max(Math.Abs);
         (Vec2 P, bool Wall)? End(double side)
         {
@@ -156,13 +188,15 @@ public static class CatenaryPlanner
             over[i * 2] = (float)(p.X - tile.MinE);
             over[i * 2 + 1] = (float)(tile.MaxN - p.Y);
         }
-        Get(supports, tile).Add(new CatenarySupport
+        var span = new CatenarySupport
         {
             Kind = CatenarySupportKind.Span, Line = line,
             AX = (float)(a.X - tile.MinE), AY = y, AZ = (float)(tile.MaxN - a.Y), AWall = aWall,
             BX = (float)(b.X - tile.MinE), BY = y, BZ = (float)(tile.MaxN - b.Y), BWall = bWall,
             WireY = wireY, Over = over,
-        });
+        };
+        Get(supports, tile).Add(span);
+        spans.Add((a, b, span, tile));
         stats.Spans++;
         stats.WallEnds += (aWall ? 1 : 0) + (bWall ? 1 : 0);
         stats.MastEnds += (aWall ? 0 : 1) + (bWall ? 0 : 1);
