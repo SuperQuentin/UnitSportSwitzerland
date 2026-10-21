@@ -268,6 +268,8 @@ public partial class BrBotProbe : ChatProbe
             }
         }
 
+        // no knife left to swing: the results' 20 s at x4 again (#1007)
+        if (!await SpeedUp("brbots")) return;
         if (!await Until(() => br.State.Phase == BrPhase.Ended, 20)) { Expect(false, "the match ended"); return; }
         var end = br.State;
         Expect(end.Winner == br.Me, $"I won ({end.Find(end.Winner)?.Shown})");
@@ -313,11 +315,16 @@ public partial class BrBotProbe : ChatProbe
             // out of a knife's reach: beside it again (not on it: a remote body is solid, and its head is out of reach)
             if (Flat(body.GlobalPosition - me.GlobalPosition) > 1.9f || Mathf.Abs(body.GlobalPosition.Y - me.GlobalPosition.Y) > 0.8f)
             {
-                var (e, n) = br.Origin!.ToLv95(body.GlobalPosition);
-                br.Teleport(e + 1.6, n, "next to the bot");
-                // a teleport lands a few frames later: wait until we really stand by it (it walks on meanwhile)
-                await Until(() => BodyOf(id) is { } near && Flat(near.GlobalPosition - me.GlobalPosition) < 2.0f
-                    && Mathf.Abs(near.GlobalPosition.Y - me.GlobalPosition.Y) < 0.8f && me.IsOnFloor(), 6);
+                // a teleport lands a few frames later: wait until we really stand by it. A running bot is metres on
+                // by then: beside where it has got to again, four times in the same 6 s (one wait of 6 s used to
+                // land 30 m behind it, three times in a row, #1007)
+                for (int t = 0; t < 4 && BodyOf(id) is { } to; t++)
+                {
+                    var (e, n) = br.Origin!.ToLv95(to.GlobalPosition);
+                    br.Teleport(e + 1.6, n, "next to the bot");
+                    if (await Until(() => BodyOf(id) is { } near && Flat(near.GlobalPosition - me.GlobalPosition) < 2.0f
+                        && Mathf.Abs(near.GlobalPosition.Y - me.GlobalPosition.Y) < 0.8f && me.IsOnFloor(), 1.5)) break;
+                }
             }
             if (BodyOf(id) is not { } b) break;
             var dir = (b.GlobalPosition + Vector3.Up * 1.1f - me.EyePosition).Normalized();
