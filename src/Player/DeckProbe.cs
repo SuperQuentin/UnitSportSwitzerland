@@ -362,6 +362,21 @@ public partial class DeckProbe : Node
     private double _stillFor;
     private float _localZ0;
 
+    /// <summary>
+    /// Where to walk for <paramref name="target"/> on the bus: out into the aisle first when b stands in a
+    /// seat bay off it, a row or more away. Swayed aft into the bay by the bus pulling away, b walked
+    /// straight at the door into a seat back and never got out (#1006).
+    /// </summary>
+    private static Vector3 ViaAisle(Node3D frame, FootPlayer me, Vector3 target)
+    {
+        const float aisle = 0.05f;
+        var to = frame.GlobalTransform.AffineInverse() * target;
+        var at = frame.GlobalTransform.AffineInverse() * me.GlobalPosition;
+        return Mathf.Abs(at.Z - to.Z) > 0.5f && Mathf.Abs(at.X - aisle) > 0.25f
+            ? frame.GlobalTransform * new Vector3(aisle, to.Y, at.Z)
+            : target;
+    }
+
     private void WalkTo(FootPlayer me, Vector3 target, float speed = 1f)
     {
         _target = target;
@@ -461,8 +476,9 @@ public partial class DeckProbe : Node
                 if (ParkedBus is not { } parked || parked.Visual is not { } pframe) return;
                 if (!_seen.Contains("pressed"))
                 {
-                    _target = OnBus(pframe, 1.195f - 0.45f, 0.3f, 5.06f);
-                    if (me.WalkControls == null) WalkTo(me, _target);
+                    var button = ViaAisle(pframe, me, OnBus(pframe, 1.195f - 0.45f, 0.3f, 5.06f));
+                    if (me.WalkControls == null) WalkTo(me, button);
+                    _target = button;
                 }
                 if (InStage > 4 && _seen.Add("pressed"))
                 {
@@ -476,7 +492,7 @@ public partial class DeckProbe : Node
                 if (ParkedBus is not { } at || at.Visual is not { } xframe) return;
                 var door = OnBus(xframe, 0.2f, 0.3f, 5.8f);
                 var outside = OnBus(xframe, 1.275f + 3f, 0.3f, 5.8f);
-                WalkTo(me, me.DeckOn != "" && (me.GlobalPosition - door).Length() > 0.5f && !_seen.Contains("at-door") ? door : outside);
+                WalkTo(me, me.DeckOn != "" && (me.GlobalPosition - door).Length() > 0.5f && !_seen.Contains("at-door") ? ViaAisle(xframe, me, door) : outside);
                 if ((me.GlobalPosition - door).Length() < 0.5f) _seen.Add("at-door");
                 if (me.DeckOn == "" && InStage > 1 && _seen.Add("out"))
                 {

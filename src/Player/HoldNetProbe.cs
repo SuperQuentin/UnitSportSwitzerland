@@ -200,7 +200,16 @@ public partial class HoldNetProbe : ChatProbe
         var parked = ParkedCar();
         Expect(there, $"A sees B's parked car carried by its aircraft ('{parked?.Carrier}')");
         if (parked == null) return;
+        // its spot once it rests: a parked vehicle is put down a hand's breadth up and drops onto the
+        // hold's floor, and a spot read as it appeared failed the taxi by 5.5 cm against 5 (#1006)
         var left = InFrame(me, parked.GlobalPosition);
+        double still = GameClock.Now + 0.5;
+        await Until(() =>
+        {
+            var now = InFrame(me, parked.GlobalPosition);
+            if (now.DistanceTo(left) > 0.002f) { left = now; still = GameClock.Now + 0.5; }
+            return GameClock.Now >= still;
+        }, 5);
         jet.ToggleDoor(HoldCheck.RampDoor);
         await ParkingBrake(jet, false);
         worst = 0f;
