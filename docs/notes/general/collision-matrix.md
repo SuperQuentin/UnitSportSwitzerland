@@ -58,12 +58,19 @@
     - the paddle steamer's parked hull leaves out the paddle boxes (`end-`/`end+`; hidden until #738
       stopped a teleported mover dragging the steamer into the lane).
     - the UFO's ramp is drawn only: on the `side` lane a car goes through its low part and a walker's
-      head through its high end (#1006).
+      head through its high end (#1006), and on `side-` a car through its foot (#1011).
 - **Traps found on the way:**
   - **Read the lanes once the targets rest** (`Rested`, after the 1 s): a parked UFO that sank to its
     belly box was still 0.6 m up after 1 s, so what stood in a lane was read off the wrong height (#1006).
-  - **`MeshBounds.Of` counts hidden meshes**: the UFO's hidden beam cone makes its drawn box 36 m
-    across, so its off-centre lanes run 12 m out and miss it (#1011).
+  - **The lanes are laid over what is shown** (`DrawnTriangles`, hidden meshes left out), not
+    `MeshBounds.Of`, which counts them: the UFO's hidden beam cone made its box 36 m across, and its
+    off-centre lanes ran 12 m out, past it (#1011). The A320's car `side` lane moved onto drawn parts
+    with it, and its wing-root gap line went.
+  - **A ghost names what was drawn in the lane** (`drawn in the lane: Ufo/Hull/Ramp/...`, the mesh
+    paths), which is what to look at or list as a gap.
+  - **Every `MeshScratch` mesh is built turned, `(−x, y, −z)`**: a box placed from a part's authored
+    offset (`UfoRig.LegDown`) flips that offset too. Unflipped, the UFO's leg posts stood inside the
+    hinge circle and the legs were ghosts on the real lanes (#1011).
   - **A placed node that builds its mesh in `_Ready`** (campfire, farm stand) draws nothing off the
     tree, so every run read as an invisible wall. Such a kind is measured by its `Placeables` ghost mesh.
   - **Put the mover at its start before `AddChild`.** Added at the run's centre and then moved, Jolt
