@@ -135,6 +135,7 @@ public static partial class TileRewriter
             return null;
         }
         plan.ArrowPlates = ArrowPlates(canton);
+        plan.TramTHead = RomandyTramHead(canton, jp.Centre.X);
         stats.TwoStage += arms.Count(x => x.TwoStage);
         stats.RiderBoxes += Enumerable.Range(0, arms.Count).Count(k => arms[k].RiderBox && plan.Groups.Any(g => g.Kind == SignalGroupKind.Bike && g.Arm == k && g.Moves == SignalMoves.Left));
         plan.PoleColour = PoleColour(canton);
@@ -232,17 +233,20 @@ public static partial class TileRewriter
                 }
             }
         }
-        // the trams' bar heads (#1057): on the pole on their track's side of the approach, the right kerb's where the track lies
-        // right of the axis, else the left one's (the refuge's); any of the arm's poles where that one is missing
-        foreach (var (k, (moves, lateral)) in trams ?? new Dictionary<int, (SignalMoves, double)>())
+        // the trams' heads (#1057, the user: "pole only, repeated on both sides if repeater pole"): on the approach's main pole and on
+        // its repeater (the left kerb's or the refuge's) where it has one; on any of the arm's poles where it has neither
+        foreach (var (k, (moves, _)) in trams ?? new Dictionary<int, (SignalMoves, double)>())
         {
             if (moves == SignalMoves.None || plan.Groups.All(g => g.Kind != SignalGroupKind.Tram || g.Arm != k)) continue;
-            var want = lateral >= 0 ? SignalPoleFlags.Main : SignalPoleFlags.Second;
-            int at = poles.FindIndex(p => p.Arm == k && (p.Flags & want) != 0);
-            if (at < 0) at = poles.FindIndex(p => p.Arm == k && (p.Flags & (SignalPoleFlags.Main | SignalPoleFlags.Second)) != 0);
-            if (at < 0) at = poles.FindIndex(p => p.Arm == k);
-            if (at >= 0) poles[at] = poles[at] with { Flags = poles[at].Flags | SignalPoleFlags.Tram };
-            stats.TramGroups++;
+            bool any = false;
+            for (int i = 0; i < poles.Count; i++)
+                if (poles[i].Arm == k && (poles[i].Flags & (SignalPoleFlags.Main | SignalPoleFlags.Second)) != 0)
+                {
+                    poles[i] = poles[i] with { Flags = poles[i].Flags | SignalPoleFlags.Tram };
+                    any = true;
+                }
+            if (!any && poles.FindIndex(p => p.Arm == k) is var at and >= 0) poles[at] = poles[at] with { Flags = poles[at].Flags | SignalPoleFlags.Tram };
+            stats.TramGroups += plan.Groups.Count(g => g.Kind == SignalGroupKind.Tram && g.Arm == k);
         }
         var centre = Local(home, [jp.Centre], p => SampleAt(jp.Arms[0], p), 0f);
         var record = new RoadSignal { X = centre[0], Y = centre[1], Z = centre[2], Stops = stops, Plan = plan, Poles = poles };

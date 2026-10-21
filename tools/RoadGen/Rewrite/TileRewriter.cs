@@ -377,7 +377,7 @@ public static partial class TileRewriter
         private readonly ParkingStats parkingStats = new();
         private readonly Footprints buildings = new(inputs.Buildings);
         /// <summary>The region's tram stops (#1057, <see cref="Options.TramStops"/>), none without the file.</summary>
-        private readonly List<(string Name, Vec2 At)> tramStops = options.TramStops is { } stopsPath && File.Exists(stopsPath) ? ReadTramStops(stopsPath) : [];
+        private readonly List<(string Name, Vec2 At)> tramStops = options.TramStops is { } stopsPath ? ReadAllTramStops(stopsPath) : [];
 
         /// <summary>
         /// Rewrites one block: its tiles and a halo of <see cref="Options.Halo"/> read for context;

@@ -165,4 +165,25 @@ public class TramTests
         Assert.NotEmpty(cars);
         Assert.All(cars, s => Assert.Contains(trams, t => Ahead(plan, s, t) >= SignalPlan.BikeLead - 0.05f && Ahead(plan, s, t) < 6f));
     }
+
+    [Fact]
+    public void TramsGoingTwoWays_HaveAGroupPerDirection()
+    {
+        // the user: one head per direction, its arrow on its plate
+        var plan = Crossroads(SignalMoves.Left | SignalMoves.Through, SignalMoves.None);
+        Assert.Empty(plan.Validate());
+        var trams = plan.Groups.Where(g => g.Kind == SignalGroupKind.Tram).ToList();
+        Assert.Equal([SignalMoves.Left, SignalMoves.Through], trams.Select(g => g.Moves));
+        Assert.All(trams, g => Assert.Contains(g.Intervals, iv => iv.Aspect == SignalAspect.Green));
+    }
+
+    [Theory]
+    [InlineData("GE", 2_500_000, true)]
+    [InlineData("VD", 2_530_000, true)]
+    [InlineData("VS", 2_590_000, true)]
+    [InlineData("VS", 2_640_000, false)]
+    [InlineData("ZH", 2_683_000, false)]
+    [InlineData(null, 2_500_000, false)]
+    public void RomandyHasTheTHead(string? canton, double e, bool t) =>
+        Assert.Equal(t, UnitSport.Tools.RoadGen.Rewrite.TileRewriter.RomandyTramHead(canton, e));
 }

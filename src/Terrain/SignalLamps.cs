@@ -34,8 +34,10 @@ public partial class SignalLamps : Node3D
         LeftArrowMask, RightArrowMask, StraightMask, StraightLeftMask, StraightRightMask,
         // a tram bar signal's lamps (#1057): the bar across (stop), the dot (stop expected), the bar upright or slanted left or right (go)
         TramStop, TramDot, TramGo, TramLeft, TramRight,
+        // Romandy's T head (#1057): its bar across and its bar upright, each flashing before the other comes
+        TramTStop, TramTGo,
     }
-    private const int IconCount = 19;
+    private const int IconCount = 21;
     /// <summary>The arrows, and how many there are before their masks.</summary>
     private static readonly Icon[] Arrows = [Icon.LeftArrow, Icon.RightArrow, Icon.Straight, Icon.StraightLeft, Icon.StraightRight];
 
@@ -52,6 +54,7 @@ public partial class SignalLamps : Node3D
         SignalBuilder.Shape.RightArrow => Icon.RightArrow,
         SignalBuilder.Shape.Square => lens.Role == SignalBuilder.Role.Red ? Icon.Standing : Icon.Walking,
         SignalBuilder.Shape.Bike => Icon.Bike,
+        SignalBuilder.Shape.TramT => lens.Role == SignalBuilder.Role.Red ? Icon.TramTStop : Icon.TramTGo,
         SignalBuilder.Shape.Tram => lens.Role switch
         {
             SignalBuilder.Role.Red => Icon.TramStop,
@@ -301,7 +304,9 @@ void fragment() {
             var lens = _lenses[i];
             var aspect = plan.State(lens.Group, now);
             if (aspect == SignalAspect.FlashingAmber) blinking = true;
-            var colour = _icon[i] >= Icon.TramStop ? TramColour(lens.Role, aspect) : Colour(lens.Role, aspect, blinkOn);
+            var colour = _icon[i] >= Icon.TramTStop ? TramTColour(lens.Role, aspect, blinkOn)
+                : _icon[i] >= Icon.TramStop ? TramColour(lens.Role, aspect) : Colour(lens.Role, aspect, blinkOn);
+            if (_icon[i] >= Icon.TramTStop && aspect is SignalAspect.Amber or SignalAspect.RedAmber) blinking = true;
             // a yellow lens that also flashes with a flasher (#971: a bike head's during its green)
             if (lens.Flash >= 0 && plan.State(lens.Flash, now) == SignalAspect.FlashingAmber)
             {
@@ -340,6 +345,14 @@ void fragment() {
         SignalBuilder.Role.Amber => aspect == SignalAspect.Amber ? TramOn : TramOff,
         _ => aspect == SignalAspect.Green ? TramOn : TramOff,
     };
+
+    /// <summary>
+    /// Romandy's T head (#1057, the user): the bar across lit for red, flashing before green (the red-amber); the bar upright lit
+    /// for green, flashing before red (the amber).
+    /// </summary>
+    private static Color TramTColour(SignalBuilder.Role role, SignalAspect aspect, bool blinkOn) => role == SignalBuilder.Role.Red
+        ? aspect == SignalAspect.Red || aspect == SignalAspect.RedAmber && blinkOn ? TramOn : TramOff
+        : aspect == SignalAspect.Green || aspect == SignalAspect.Amber && blinkOn ? TramOn : TramOff;
 
     /// <summary>A flat lens facing +Z, built once per icon (main thread). Figures in lens radii.</summary>
     private static Mesh LensMesh(Icon key)
@@ -385,8 +398,8 @@ void fragment() {
                 foreach (var polygon in SignalGlyphs.Bike()) flat.Fan(polygon);   // two wheels, the diamond frame, saddle and bars
                 break;
             // a tram bar signal's lamps (#1057): white bars and a dot on the black of the housing
-            case Icon.TramStop: flat.Bar(Vector2.Right, 1.7f, 0.42f); break;
-            case Icon.TramGo: flat.Bar(Vector2.Up, 1.7f, 0.42f); break;
+            case Icon.TramStop or Icon.TramTStop: flat.Bar(Vector2.Right, 1.7f, 0.42f); break;
+            case Icon.TramGo or Icon.TramTGo: flat.Bar(Vector2.Up, 1.7f, 0.42f); break;
             case Icon.TramLeft: flat.Bar(new Vector2(-1f, 1f).Normalized(), 1.7f, 0.42f); break;
             case Icon.TramRight: flat.Bar(new Vector2(1f, 1f).Normalized(), 1.7f, 0.42f); break;
             case Icon.TramDot: flat.Disc(Vector2.Zero, 0.4f, 12); break;

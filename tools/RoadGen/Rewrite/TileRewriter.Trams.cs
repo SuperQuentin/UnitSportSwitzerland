@@ -355,11 +355,30 @@ public static partial class TileRewriter
     public const float TramStopHeight = 2.6f;
 
     /// <summary>The stops of <c>tram_stops.tsv</c> (#1057: <c>name, e, n</c>, a header row), LV95.</summary>
-    internal static List<(string Name, Vec2 At)> ReadTramStops(string path)
+    internal static List<(string Name, Vec2 At)> ReadTramStops(string path) => ReadStopFile(path);
+
+    /// <summary>
+    /// The tram stops of a region (#1057): OSM's (<c>osm_tram_stops.tsv</c> beside <paramref name="path"/>, from <c>--osm-overlay</c>:
+    /// <c>railway=tram_stop</c>, tram stop positions) and swissTLM3D's (<paramref name="path"/>, <c>--tram-stops</c>) where OSM has
+    /// none within <see cref="TramStopMerge"/> m: OSM's lie on the track. Either file may be missing.
+    /// </summary>
+    internal static List<(string Name, Vec2 At)> ReadAllTramStops(string path)
+    {
+        string osmPath = Path.Combine(Path.GetDirectoryName(path) ?? ".", "osm_tram_stops.tsv");
+        var osm = File.Exists(osmPath) ? ReadStopFile(osmPath) : [];
+        var tlm = File.Exists(path) ? ReadStopFile(path) : [];
+        return [.. osm, .. tlm.Where(t => !osm.Any(o => o.At.DistanceTo(t.At) < TramStopMerge))];
+    }
+
+    /// <summary>A swissTLM3D stop this close to an OSM one is the same stop (m).</summary>
+    private const double TramStopMerge = 25;
+
+    private static List<(string Name, Vec2 At)> ReadStopFile(string path)
     {
         var list = new List<(string, Vec2)>();
-        foreach (var line in File.ReadLines(path).Skip(1))
+        foreach (var line in File.ReadLines(path))
         {
+            if (line.StartsWith('#') || line.StartsWith("name\t", StringComparison.Ordinal)) continue;
             var f = line.Split('\t');
             if (f.Length >= 3 && double.TryParse(f[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double e)
                 && double.TryParse(f[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double n))

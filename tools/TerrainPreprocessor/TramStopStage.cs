@@ -17,6 +17,8 @@ public static class TramStopStage
     public const double Reach = 25;
 
     public const string FileName = "tram_stops.tsv";
+    /// <summary>OSM's tram stops (<c>railway=tram_stop</c>, tram stop positions), written by <c>--osm-overlay</c> beside it.</summary>
+    public const string OsmFileName = "osm_tram_stops.tsv";
 
     public static int Run(string outDir, string tlmPath)
     {

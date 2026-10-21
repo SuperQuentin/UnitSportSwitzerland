@@ -797,6 +797,14 @@ public static partial class TileRewriter
     private static bool ArrowPlates(string? canton) => canton == "VD";
 
     /// <summary>
+    /// Whether the canton's trams have the Romandy T head (#1057, the user: "in Romandy (Geneva, VD, etc) it's all in one head"):
+    /// Geneva, Vaud, Neuchâtel, Jura and Fribourg (mostly French-speaking; its German-speaking east is not told apart), Valais west
+    /// of the language border at Sierre (LV95 E 2 612 000, a straight cut). <paramref name="e"/>: the junction's E.
+    /// </summary>
+    public static bool RomandyTramHead(string? canton, double e) =>
+        canton is "GE" or "VD" or "NE" or "JU" or "FR" || canton == "VS" && e < 2_612_000;
+
+    /// <summary>
     /// The canton's colour for its signal poles and overhead structures (#1037, <see cref="SignalPlan.PoleColour"/>):
     /// Basel-Landschaft's anthracite (ATS LSA Aussenanlagen 2024), Bern's RAL 7042 (the city's Handbuch LSA 2025, taken for the
     /// canton); the others not checked keep RAL 7001. Add a canton here once it is known.

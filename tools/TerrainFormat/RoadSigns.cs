@@ -42,7 +42,7 @@ public static class RoadSigns
     /// <summary>A canton sign's plate (#1038, a test world's border): wide enough for its shield and two lines of name.</summary>
     public const float CantonSignWidth = 1.2f, CantonSignHeight = 0.6f;
 
-    /// <summary>A tram stop'"'"'s sign (#1057): an upright plate with the tram on it.</summary>
+    /// <summary>A tram stop's sign (#1057): an upright plate with the tram on it.</summary>
     public const float TramStopWidth = 0.45f, TramStopHeight = 0.6f;
 
     /// <summary>The cantons in the federal order (BFS numbers 1-26, as MapSetup bakes them into <c>switzerland.bin</c>).</summary>
