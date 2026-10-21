@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # iOS build (#1025, docs/notes/core/ios-build.md): Godot exports the Xcode project, xcodebuild compiles it, unsigned.
-# Usage: tools/ios-build.sh [--export-only]   (on a Mac with Xcode, .NET 8 and the Godot 4.7.2 mono export templates)
+# Usage: tools/ios-build.sh [--export-only] [--simulator]   (on a Mac with Xcode 26, .NET 9 and the Godot 4.7.2 mono export templates)
 # Godot refuses to export C# to iOS anywhere but macOS. The "iOS" preset comes from tools/ci/export_presets.cfg
 # and is added to the local (gitignored) export_presets.cfg when missing.
 # Output in test_output/ios/: UnitSportSwitzerland.xcodeproj, export.log, xcodebuild.log, and the .app under dd/.
 set -euo pipefail
-EXPORT_ONLY=0
+EXPORT_ONLY=0; SIMULATOR=0
 for a in "$@"; do case $a in
 --export-only) EXPORT_ONLY=1 ;; # stops after the Xcode project
+--simulator) SIMULATOR=1 ;; # the simulator slices get the game too (two more NativeAOT passes, ~45 min each on CI)
 *) echo "Unknown argument $a"; exit 2 ;;
 esac; done
 [ "$(uname)" = Darwin ] || { echo "iOS export of a C# project needs macOS (Godot: 'requires macOS')"; exit 1; }
@@ -25,6 +26,8 @@ elif ! grep -q '^name="iOS"$' export_presets.cfg; then
 fi
 
 rm -rf "$OUT"; mkdir -p "$OUT"
+# Godot always publishes the simulator slices as well; without --simulator they are empty stubs (UnitSportSwitzerland.csproj)
+[ $SIMULATOR = 1 ] || export UNITSPORT_IOS_DEVICE_ONLY=1
 "$GODOT" --headless --path . --import > "$OUT/import.log" 2>&1 || true
 # The path names the project: <NAME>.xcodeproj and <NAME>/ land beside it
 "$GODOT" --headless --verbose --path . --export-release iOS "$OUT/$NAME.ipa" 2>&1 | tee "$OUT/export.log" || true

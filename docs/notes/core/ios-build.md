@@ -7,7 +7,7 @@
 
 - `tools/ios-build.sh` (a Mac with Xcode 26 and .NET 9): adds the `iOS` preset from `tools/ci/export_presets.cfg` to the local `export_presets.cfg` when missing, exports the Xcode project (`application/export_project_only`), then `xcodebuild` builds it **unsigned** for `generic/platform=iOS`. Output and logs: `test_output/ios/` (`export.log`, `msbuild.log`, `xcodebuild.log`, the `.app` under `dd/`). `--export-only` stops after the Xcode project.
 - `.github/workflows/ios.yml` runs it on `macos-15` with Xcode 26 selected: by hand (`gh workflow run ios.yml`, once on `main`) or on a PR touching the iOS build files. Free (public repo). Not part of a release. The logs are the `ios-logs` artifact. Any push to such a PR cancels the running build and restarts it.
-- **Takes ~2.5 h.** Godot runs `dotnet publish` with NativeAOT three times (`ios-arm64`, `iossimulator-arm64`, `iossimulator-x64`), ~45 min each on the 3-core runner, at one or two cores most of the time. The job allows 5 h. The export prints nothing meanwhile: the workflow's watchdog lists the running `ilc`/`clang` every 5 min.
+- **Device only by default.** Godot's export always runs `dotnet publish` three times (`ios-arm64`, `iossimulator-arm64`, `iossimulator-x64`, hard-coded in GodotTools' `ExportPlugin`), each a NativeAOT pass of ~45 min on the 3-core runner. `tools/ios-build.sh` sets `UNITSPORT_IOS_DEVICE_ONLY=1`, and `UnitSportSwitzerland.csproj` then compiles no game code for an `iossimulator-*` RID: the simulator slice is an empty stub. `--simulator` builds it for real (~2.5 h on CI; the job allows 5 h). The export prints nothing meanwhile: the workflow's watchdog lists the running `ilc`/`clang` every 5 min.
 
 ## Walls hit, in order
 

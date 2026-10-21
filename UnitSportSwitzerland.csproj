@@ -54,6 +54,15 @@
     <PackageReference Include="ppy.SDL3-CS" Version="2026.722.0" />
   </ItemGroup>
 
+  <!-- Godot's iOS export always publishes the simulator slices too (iossimulator-arm64 and -x64, ~45 min of NativeAOT
+       each on the CI runner). tools/ios-build.sh sets UNITSPORT_IOS_DEVICE_ONLY unless asked for the simulator: those
+       publishes then compile no game code, and the simulator slice of the app is an empty stub. -->
+  <ItemGroup Condition=" '$(UNITSPORT_IOS_DEVICE_ONLY)' == '1' and $(RuntimeIdentifier.StartsWith('iossimulator')) ">
+    <Compile Remove="@(Compile)" />
+    <EmbeddedResource Remove="@(EmbeddedResource)" />
+    <ProjectReference Remove="@(ProjectReference)" />
+  </ItemGroup>
+
   <!-- SDL (steering wheel) never starts on a phone (SteeringWheel.Install), and the package's iOS library lands in
        the device folder as its simulator build, which fails the Xcode link: iOS ships without it. Below the
        Include, since Update only reaches items already defined. -->
