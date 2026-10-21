@@ -288,6 +288,9 @@ public partial class BrBotProbe : ChatProbe
 
     private static float Flat(Vector3 v) => new Vector2(v.X, v.Z).Length();
 
+    /// <summary>About what a teleport takes to land, s: a running bot is aimed at where it will be by then.</summary>
+    private const float TeleportLead = 1f;
+
     /// <summary>
     /// "zone 41 s: phase 1, 2 HP/s, me 512 m inside, Beat 498 m inside (health 100)": where the match's clock
     /// stands against the circles, for the log (#873: the zone used to finish the bots before the knife did).
@@ -316,14 +319,24 @@ public partial class BrBotProbe : ChatProbe
             if (Flat(body.GlobalPosition - me.GlobalPosition) > 1.9f || Mathf.Abs(body.GlobalPosition.Y - me.GlobalPosition.Y) > 0.8f)
             {
                 // a teleport lands a few frames later: wait until we really stand by it. A running bot is metres on
-                // by then: beside where it has got to again, four times in the same 6 s (one wait of 6 s used to
-                // land 30 m behind it, three times in a row, #1007)
+                // by then: where it is going, from its pace over the last look, a second ahead; four times in the same
+                // 6 s (one wait of 6 s used to land 30 m behind it, three times in a row, #1007)
+                var was = body.GlobalPosition;
+                ulong wasAt = Time.GetTicksMsec();
+                await Seconds(0.25);
                 for (int t = 0; t < 4 && BodyOf(id) is { } to; t++)
                 {
-                    var (e, n) = br.Origin!.ToLv95(to.GlobalPosition);
+                    var now = to.GlobalPosition;
+                    ulong at = Time.GetTicksMsec();
+                    var pace = ((now - was) with { Y = 0 }) / Mathf.Max(0.05f, (at - wasAt) / 1000f);
+                    (was, wasAt) = (now, at);
+                    var (e, n) = br.Origin!.ToLv95(now + pace * TeleportLead);
                     br.Teleport(e + 1.6, n, "next to the bot");
-                    if (await Until(() => BodyOf(id) is { } near && Flat(near.GlobalPosition - me.GlobalPosition) < 2.0f
-                        && Mathf.Abs(near.GlobalPosition.Y - me.GlobalPosition.Y) < 0.8f && me.IsOnFloor(), 1.5)) break;
+                    bool by = await Until(() => BodyOf(id) is { } near && Flat(near.GlobalPosition - me.GlobalPosition) < 2.0f
+                        && Mathf.Abs(near.GlobalPosition.Y - me.GlobalPosition.Y) < 0.8f && me.IsOnFloor(), 1.5);
+                    if (BodyOf(id) is { } seen)
+                        GD.Print(FormattableString.Invariant($"{Log} teleport {t}: the bot at {pace.Length():F1} m/s, {Flat(seen.GlobalPosition - me.GlobalPosition):F1} m off after"));
+                    if (by) break;
                 }
             }
             if (BodyOf(id) is not { } b) break;
