@@ -44,8 +44,11 @@ public partial class ConcertRig
         return _textureMaterials[texture] = m;
     }
 
-    /// <summary>The textures the pure PNG reader cannot read (JPEG, BMP, TGA, interlaced PNG): Godot's loaders, in the game only.</summary>
-    [System.Runtime.CompilerServices.ModuleInitializer]
+    /// <summary>
+    /// The textures the pure PNG reader cannot read (JPEG, BMP, TGA, interlaced PNG): Godot's loaders, in
+    /// the game only. <see cref="Core.Main"/> calls it, never a module initializer (#1010): Android's runtime
+    /// runs those as the assembly loads, before Godot's interop, and this class's static StringName crashed it.
+    /// </summary>
     internal static void UseGodotImages() => MvrImages.Fallback = GodotImage;
 
     private static (int W, int H, byte[] Rgb)? GodotImage(byte[] bytes)

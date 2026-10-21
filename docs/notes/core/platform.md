@@ -24,11 +24,13 @@
 
 ## Testing without a phone
 
-- **Emulator** (Pixel 3a API 34 x86_64, measured):
-  - It runs the arm64 APK through translation and joins a PC server at `10.0.2.2`. To make a test APK connect at boot, set `command_line/extra_args="-- --connect 10.0.2.2:<port> --name Phone"` in the local `export_presets.cfg`.
-  - Logs come from `adb logcat -s godot:*`.
-  - It is useless for the picture. Vulkan present fails on both host and SwiftShader GPUs, and SwiftShader GLES cannot link Godot's canvas shaders (`GL_MAX_FRAGMENT_UNIFORM_VECTORS` 261), so the screen stays black.
-  - It is also no guide to performance: one frame took 47 s under translation. Rendering and frame rate need a real phone.
+- **Emulator** (Pixel 3a API 34 x86_64, measured): the full recipe, from installing it to reading a native crash, is `core/android-emulator`. In short:
+  - The release APK (arm64 only) is no use there since .NET arrived: its runtime dies under x86 translation while loading the first assemblies. Build a test APK with `architectures/x86_64=true` and it runs natively.
+  - With `-gpu host` and the game started with `--rendering-driver opengl3 --rendering-method gl_compatibility`, the picture works: the title, the menus and the solo world all show (Oct 2026, #1010). Vulkan present still fails (SwiftShader and host), and SwiftShader GLES cannot link Godot's canvas shaders (`GL_MAX_FRAGMENT_UNIFORM_VECTORS` 261).
+  - It joins a PC server at `10.0.2.2`. To make a test APK connect at boot, set `command_line/extra_args="-- --connect 10.0.2.2:<port> --name Phone"` in the local `export_presets.cfg`, or pass the arguments at launch (`core/android-emulator`).
+  - Logs come from `adb logcat -s godot:*`. A .NET or native crash prints nothing there: its report goes to stderr. `core/android-emulator` routes stderr into logcat.
+  - It is no guide to performance. Rendering and frame rate need a real phone.
+- **What only Android catches** (#1010): a `[ModuleInitializer]` that touches a Godot type, and a read past the end of a native buffer (`core/android-emulator`).
 
 ## Phone performance (phase 4)
 
