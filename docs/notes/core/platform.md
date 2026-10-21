@@ -15,6 +15,7 @@
 - **Terrain:** `TerrainPaths.FindChunkDir` returns `user://terrain_chunks` on Android. On a phone, `res://` is inside the APK, where `System.IO` cannot read. The folder stays empty: tiles stream from the server into `user://chunk_cache`, and generated fill covers the rest.
 - **Self-update:** `UpdatePrompt.Attach` returns null. An APK cannot patch itself, and the releases page would offer a phone the desktop builds.
 - **SDL (steering wheel):** `SteeringWheel.Install` is skipped and the Wheel tab is hidden. On Android, SDL expects its own Java activity, so it could crash natively, past every C# catch.
+- **Pointer mode:** Godot stops applying mouse-mode changes once a finger has touched the screen, so the game asks `MouseCapture.Mode`, which remembers what it set (#1020, `core/touch-controls`).
 - **Key labels:** `InputHints.PhysicalLabel` never calls `DisplayServer.KeyboardGetLabelFromPhysical` on Android. That display server errors on every call.
 - **LAN discovery:**
   - Android drops incoming multicast unless a Wi-Fi MulticastLock is held. `LanDiscovery.Start` acquires it through `AndroidBridge.AcquireMulticast`, and `Stop` releases it, because it costs battery.
