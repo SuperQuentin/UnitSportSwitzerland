@@ -178,6 +178,11 @@ public sealed class GameSettings
     public bool TouchTapToUse { get; set; }
     /// <summary>Actions pinned from the More sheet, as "Mode:action" (two a mode at most).</summary>
     public List<string> TouchPins { get; set; } = new();
+    /// <summary>
+    /// The touch layout editor's moves, sizes and hidden controls (#1048), by
+    /// <see cref="TouchLayout.ModeKey"/> or <see cref="TouchLayout.SharedKey"/>.
+    /// </summary>
+    public Dictionary<string, TouchOverride> TouchOverrides { get; set; } = new();
 
     public bool InvertY { get; set; }
 
@@ -482,6 +487,10 @@ public sealed class GameSettings
         CacheGb = 0.5f;
     }
 
+    /// <summary>Writes the touch layout alone, as the editor's Done does (a command-line run's other values stay out).</summary>
+    public static void SaveTouchOverrides() =>
+        SaveOnly(nameof(TouchOverrides), JsonSerializer.SerializeToNode(Current.TouchOverrides, JsonOptions)!);
+
     public void Save()
     {
         try
@@ -554,6 +563,7 @@ public sealed class GameSettings
         TouchScale = Math.Clamp(TouchScale, 0.75f, TouchLayout.MaxScale);
         TouchOpacity = Math.Clamp(TouchOpacity, 0.2f, 1f);
         TouchPins ??= new();
+        TouchOverrides ??= new();
         MasterVolume = Math.Clamp(MasterVolume, 0f, 1f);
         SfxVolume = Math.Clamp(SfxVolume, 0f, 1f);
         AmbienceVolume = Math.Clamp(AmbienceVolume, 0f, 1f);

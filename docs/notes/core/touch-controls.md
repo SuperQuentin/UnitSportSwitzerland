@@ -20,6 +20,14 @@
 - **Size setting** 0.75 to 1.2 (`TouchLayout.MaxScale`): past 1.2 a 62 mm tall 16:9 phone has no room for the hotbar beside the buttons.
 - **`TouchLayoutTests`:** every mode and flag set on 16:9 to 22:9 phones (62 to 75 mm) and a 4:3 tablet, both hands, every size: no two controls overlap, all on screen, the hotbar clear of the buttons, nothing in the stick zone at size ≤ 1.
 
+## The layout editor (#1048)
+
+- **Two ways in, one `Core/TouchEditor`:** More › Edit layout edits the mode in play over the live game (the overlay feeds it its touches and draws nothing meanwhile); Settings › Controls › Touch layout (`Core/TouchLayoutScreen`, layer 45) edits any mode with a ◀ mode ▶ stepper (`TouchLayout.Fullest` flags) over a still backdrop, the game's overlay standing aside (`TouchLayoutScreen.IsOpen`). Its toolbar sits on the stick's side, where no mode has a control.
+- **Edits:** drag to move, the corner handle to resize (0.6 to 1.6×), Hide (the control leaves the screen and is still in More, a "Show …" button brings it back), Reset (this mode's own and the shared overrides of its controls), Cancel, Done.
+- **Overrides:** `GameSettings.TouchOverrides`, mm from the control's corner and a size factor (`TouchOverride`), keyed `Mode:id` (this mode only) or `*:id:Shape` (`TouchLayout.SharedKey`: every mode with that control, Jump on foot and in a fight, the top bar, the pedals). A mode's own beats the shared one. "Moves: all modes / this mode only" picks which is written. `TouchLayout.Apply` puts them on `For(mode, flags)`; `GameSettings.SaveTouchOverrides` writes that key alone.
+- **Refused drops:** `TouchLayout.Conflict` lays out every mode and every `FlagSets` variant that has the control, on this screen: a drop covering another control (Jump on the Run button that only the Run-button setting shows), leaving the screen or running under the hotbar puts the control back and says why.
+- **Labels fit their key** (`TouchControls.FitFont`): "Handbrake" in an 8 mm key.
+
 ## Pills, More, labels
 
 - **Hints name these controls (#1054):** `InputDevice.Touch` (`core/key-hints`): "Accelerate with [Gas]", "Steer with the stick". The drive layout has a Handbrake key and the ride layout a Hop key (A), because the ride cards name them.
@@ -46,7 +54,8 @@
 
 - The overlay shows, the mouse plays the finger (`Input.EmulateTouchFromMouse`), `MouseCapture` confines the pointer, menus at `GameShell.MobileUiScale` (1.15), `--mobile` whitelisted for the title (`--mobile --uishot out.png 4`).
 - **Check:** `--touchcheck --mobile --world fixture` (quick tier for `src/Core/Touch*`): from the spectator camera Walk; the stick walks (2.8 m), a 240 px drag turns 45.4°, Jump rises 0.93 m; More opens with Travel and without Jump, and closes; on a bike Pedal (5.1 m) and in a car Gas (6.7 m) move it; Get out; the "Get in the ae86 hatch" pill gets back in; in a plane the rocker gives RT 1.00 and 0.00 let go.
-  - Headless the canvas is 1001 px square, so the right buttons reach into the stick zone there: the check puts its thumb at the far left. No phone is that shape.
+  - Headless the window is a 1001 px square: the check makes it 2220 × 1080 (`GetWindow().Size`), a phone's shape, before it starts.
+  - It also drags Crouch 10 mm left in the in-game editor (Done, the key is there, the player's own layout put back) and steps the Settings editor to driving and cancels.
   - It waits 3 s in the spectator camera before Walk: earlier, the body drops where nothing is built and falls for ever.
   - `--touchshots <dir>` (windowed) saves a picture per mode.
 - **Menus on a phone:** `GameShell.MobileUiScale = 1.15` (1.3 overflowed the Multiplayer card). Hidden on a phone: the title's keyboard footer, the Window rows.

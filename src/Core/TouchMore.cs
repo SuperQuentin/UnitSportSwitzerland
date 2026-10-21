@@ -40,9 +40,13 @@ internal sealed class TouchMore
     /// <summary>A pill was held: pin or unpin it.</summary>
     public Action<Entry>? Held;
 
+    /// <summary>Not an input action: the entry that opens the layout editor (#1048).</summary>
+    public const string EditLayout = "touch_edit_layout";
+
     /// <summary>The actions every mode can reach from here.</summary>
     private static readonly (string Label, string Action)[] Always =
     {
+        ("Edit layout", EditLayout),
         ("Travel", PlayerInput.RideMenu),
         ("Creative / survival", PlayerInput.ToggleMode),
         ("Spectator camera", PlayerInput.Spectator),
@@ -149,6 +153,7 @@ internal sealed class TouchMore
 
     private bool Wanted(string action, Func<string, bool> onScreen)
     {
+        if (action == EditLayout) return _seen.Add(action);
         if (!InputMap.HasAction(action) || onScreen(action) || !_seen.Add(action)) return false;
         // a stick's axis is the stick, on screen or not: a tap could never hold it
         foreach (var e in InputMap.ActionGetEvents(action))

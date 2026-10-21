@@ -34,7 +34,13 @@ public partial class TouchCheck : Node
         _touch = touch;
     }
 
-    public override void _Ready() => _ = Run();
+    public override void _Ready()
+    {
+        // a phone's shape, 2220 × 1080, even headless (whose window is otherwise a 1001-pixel square
+        // no phone has: the right thumb's controls reach into the stick zone there)
+        if (DisplayServer.GetName() == "headless") GetWindow().Size = new Vector2I(2220, 1080);
+        _ = Run();
+    }
 
     public override void _Process(double delta)
     {
@@ -122,6 +128,44 @@ public partial class TouchCheck : Node
         Expect(!_touch.MoreOpen, "More did not close");
         await Seconds(1);
 
+        // the layout editor (#1048): Crouch dragged 10 mm left, Done, and the key is there (12 mm
+        // up, Jump would land on the Run button's place: refused); the player's own layout is put back after
+        var saved = GameSettings.Current.TouchOverrides.ToDictionary(kv => kv.Key, kv => kv.Value.Copy());
+        try
+        {
+            var crouchWas = _touch.CentreOf("crouch");
+            _touch.OpenEditor();
+            var editor = _touch.Editor ?? throw new InvalidOperationException("the editor did not open");
+            await Frame();
+            await Shot("3b-editor");
+            float left = 10f * editor.PxPerMm;
+            Touch(0, crouchWas, true);
+            for (int i = 1; i <= 6; i++)
+            {
+                Drag(0, crouchWas - new Vector2(left * i / 6, 0), new Vector2(-left / 6, 0));
+                await Frame();
+            }
+            Touch(0, crouchWas - new Vector2(left, 0), false);
+            await Frame();
+            if (editor.Note is { } note) GD.Print($"[touchcheck] editor says: {note}");
+            var done = editor.ButtonAt("Done") ?? throw new InvalidOperationException("the editor has no Done");
+            Touch(0, done, true);
+            await Frame();
+            Touch(0, done, false);
+            await Until(() => _touch.Editor == null ? this : null, 3, "the editor closed by Done");
+            await Seconds(0.5);
+            var crouchNow = _touch.CentreOf("crouch");
+            GD.Print($"[touchcheck] editor: Crouch moved {crouchWas.X - crouchNow.X:F0} px left ({left:F0} asked)");
+            Expect(Mathf.Abs(crouchWas.X - crouchNow.X - left) < 3 && Mathf.Abs(crouchWas.Y - crouchNow.Y) < 3,
+                $"the editor moved Crouch from {crouchWas} to {crouchNow}, not {left:F0} px left");
+        }
+        finally
+        {
+            GameSettings.Current.TouchOverrides = saved;
+            GameSettings.SaveTouchOverrides();
+        }
+        await Seconds(1);
+
         // a bike: Pedal moves it
         await Ride(me, RideKind.RoadBike, TouchMode.Ride, 1f);
         // a car: Gas drives it, Get out leaves it
@@ -155,6 +199,26 @@ public partial class TouchCheck : Node
         float after = Input.GetJoyAxis(TouchControls.Device, JoyAxis.TriggerRight);
         GD.Print($"[touchcheck] rocker: throttle trigger {rt:F2}, let go {after:F2}");
         Expect(rt > 0.9f && after < 0.05f, $"the rocker gave the trigger {rt:F2}, and {after:F2} let go");
+
+        // Settings › Touch layout (#1048): the editor opens on foot, ▶ steps to driving, and Cancel
+        // closes it with nothing kept
+        var before = GameSettings.Current.TouchOverrides.Count;
+        var screen = TouchLayoutScreen.Open(this);
+        await Frame();
+        await Frame();
+        var drive = screen.Editor.ButtonAt("▶") ?? throw new InvalidOperationException("the picker has no ▶");
+        Touch(0, drive, true);
+        await Frame();
+        Touch(0, drive, false);
+        await Frame();
+        Expect(screen.Editor.Mode == TouchMode.Drive, $"the picker did not switch to driving: {screen.Editor.Mode}");
+        await Shot("8-settings-editor");
+        var cancel = screen.Editor.ButtonAt("Cancel") ?? throw new InvalidOperationException("the editor has no Cancel");
+        Touch(0, cancel, true);
+        await Frame();
+        Touch(0, cancel, false);
+        await Until(() => IsInstanceValid(screen) && screen.IsInsideTree() ? null : this, 3, "the Settings editor closed by Cancel");
+        Expect(GameSettings.Current.TouchOverrides.Count == before, "Cancel kept something");
     }
 
     /// <summary>Into a ride, Gas held for 2.5 s: it moved at least <paramref name="metres"/>; then the brake.</summary>

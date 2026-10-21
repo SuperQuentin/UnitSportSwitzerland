@@ -101,6 +101,20 @@ public enum TouchFeel
 }
 
 /// <summary>
+/// A player's change to one control (#1048): where it sits (mm from its corner, as
+/// <see cref="TouchKey.Mm"/>), how big against its own size, or hidden (still in More).
+/// </summary>
+public sealed class TouchOverride
+{
+    public float X { get; set; }
+    public float Y { get; set; }
+    public float Size { get; set; } = 1f;
+    public bool Hidden { get; set; }
+
+    public TouchOverride Copy() => new() { X = X, Y = Y, Size = Size, Hidden = Hidden };
+}
+
+/// <summary>
 /// One on-screen control: where it sits, in millimetres from its corner (x inwards, y away from the
 /// edge), and how big it is, before the size setting.
 /// </summary>
@@ -262,6 +276,106 @@ public static class TouchLayout
             top("bag", "BAG", TouchSend.Act("inventory"), 49f, 8f, TouchFeel.NotWithHotbar);
         return k;
     }
+
+    /// <summary>Smallest and largest a control can be made in the editor, against its own size.</summary>
+    public const float MinOverrideSize = 0.6f, MaxOverrideSize = 1.6f;
+
+    /// <summary>The flag sets that change which controls a mode shows: every layout a mode can have.</summary>
+    public static readonly TouchFlags[] FlagSets =
+    {
+        TouchFlags.None, TouchFlags.ItemInHand, TouchFlags.ItemInHand | TouchFlags.RunButton,
+        TouchFlags.ItemInHand | TouchFlags.TapToUse, TouchFlags.Gears | TouchFlags.Clutch,
+        TouchFlags.Gears | TouchFlags.WorkMode, TouchFlags.Armed, TouchFlags.Airliner, TouchFlags.Ufo,
+        TouchFlags.Pigeon, TouchFlags.Wingsuit, TouchFlags.RunButton,
+    };
+
+    /// <summary>The flags that show the most of a mode's controls at once, for the editor's still view.</summary>
+    public static TouchFlags Fullest(TouchMode mode) => mode switch
+    {
+        TouchMode.Foot => TouchFlags.ItemInHand,
+        TouchMode.Drive => TouchFlags.Gears | TouchFlags.Clutch,
+        TouchMode.Fly or TouchMode.Hover => TouchFlags.Armed,
+        TouchMode.Glide => TouchFlags.Pigeon,
+        _ => TouchFlags.None,
+    };
+
+    /// <summary>An override for this control in this mode only.</summary>
+    public static string ModeKey(TouchMode mode, TouchKey key) => $"{mode}:{key.Id}";
+
+    /// <summary>
+    /// An override shared by every mode with the same control (same id and shape: Jump on foot and
+    /// in a fight, the top bar, the pedals), unless a mode has its own.
+    /// </summary>
+    public static string SharedKey(TouchKey key) => $"*:{key.Id}:{key.Shape}";
+
+    /// <summary>The override that applies to a control here: this mode's own, else the shared one, else null.</summary>
+    public static TouchOverride? OverrideFor(TouchMode mode, TouchKey key, IReadOnlyDictionary<string, TouchOverride>? overrides) =>
+        overrides == null ? null
+        : overrides.TryGetValue(ModeKey(mode, key), out var own) ? own
+        : overrides.TryGetValue(SharedKey(key), out var shared) ? shared : null;
+
+    /// <summary>The controls with the player's overrides applied: moved, resized, hidden ones left out.</summary>
+    public static List<TouchKey> Apply(List<TouchKey> keys, TouchMode mode, IReadOnlyDictionary<string, TouchOverride>? overrides)
+    {
+        if (overrides == null || overrides.Count == 0) return keys;
+        var result = new List<TouchKey>(keys.Count);
+        foreach (var key in keys)
+        {
+            if (OverrideFor(mode, key, overrides) is not { } o) result.Add(key);
+            else if (!o.Hidden)
+                result.Add(key with { Mm = new Vector2(o.X, o.Y), SizeMm = key.SizeMm * Math.Clamp(o.Size, MinOverrideSize, MaxOverrideSize) });
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// The first thing these overrides break on this screen, or null: in every mode and layout
+    /// variant that has the control <paramref name="id"/> (all of them when null), two controls
+    /// overlapping, one leaving the screen, or the hotbar running under one on foot.
+    /// </summary>
+    public static string? Conflict(IReadOnlyDictionary<string, TouchOverride> overrides, Rect2 safe, float pxPerMm, float scale,
+        bool leftHanded, string? id = null)
+    {
+        foreach (var mode in Enum.GetValues<TouchMode>())
+            foreach (var flags in FlagSets)
+            {
+                var all = For(mode, flags);
+                if (id != null && !all.Exists(k => k.Id == id)) continue;
+                var keys = Apply(all, mode, overrides);
+                var rects = keys.Select(k => Place(k, safe, pxPerMm, scale, leftHanded)).ToList();
+                var bar = mode == TouchMode.Foot ? Hotbar(safe, pxPerMm, scale, leftHanded, 6) : (Rect2?)null;
+                for (int i = 0; i < keys.Count; i++)
+                {
+                    if (id != null && keys[i].Id != id) continue;
+                    if (!safe.Encloses(rects[i])) return $"{keys[i].Label} would leave the screen";
+                    if (bar is { } b && b.Intersects(rects[i])) return $"{keys[i].Label} would cover the hotbar";
+                    for (int j = 0; j < keys.Count; j++)
+                        if (j != i && Overlap(keys[i], rects[i], keys[j], rects[j], gap: 0.5f * pxPerMm))
+                            return $"{keys[i].Label} would cover {keys[j].Label} ({ModeName(mode)})";
+                }
+            }
+        return null;
+    }
+
+    /// <summary>What the player calls a mode, for the editor.</summary>
+    public static string ModeName(TouchMode mode) => mode switch
+    {
+        TouchMode.Foot => "on foot",
+        TouchMode.Spectator => "fly camera",
+        TouchMode.CreativeFly => "creative flight",
+        TouchMode.Drive => "driving",
+        TouchMode.Ride => "bike",
+        TouchMode.Snow => "skis",
+        TouchMode.Dig => "digging",
+        TouchMode.Crane => "crane",
+        TouchMode.Fly => "plane",
+        TouchMode.Hover => "helicopter",
+        TouchMode.Glide => "gliding",
+        TouchMode.Passenger => "passenger",
+        TouchMode.Fight => "fist fight",
+        TouchMode.Aura => "aura battle",
+        _ => mode.ToString(),
+    };
 
     /// <summary>Whether the left stick is on screen (a passenger and an aura battle only look).</summary>
     public static bool HasStick(TouchMode mode) => mode is not (TouchMode.Passenger or TouchMode.Aura);
