@@ -70,15 +70,20 @@ public static class SignalTestRegion
     public const double TownPocketsE = 2911500;
     /// <summary>
     /// The canton row (#1038), LV95 N <see cref="BetweenN"/>: J2's town crossroads once per canton zone, at these E (the default
-    /// zone, Geneva, Vaud), on one main road across the borders.
+    /// zone, Geneva, Vaud, Basel-Landschaft, Bern), on one main road across the borders.
     /// </summary>
-    public const double CantonDefaultE = 2912500, CantonGenevaE = 2913500, CantonVaudE = 2914500;
+    public const double CantonDefaultE = 2912500, CantonGenevaE = 2913500, CantonVaudE = 2914500, CantonBaselLandE = 2915500, CantonBernE = 2916500;
     /// <summary>
-    /// The region's cantons (#1038), by kilometre tile: only those whose lights or poles differ (pedestrian heads, arrow plates;
-    /// <c>tools/traffic-signals</c>); every other tile is the default zone (the cantons not checked yet).
+    /// Overhead heads (#1037), LV95 E 2917500: a portal over a 4+4 artery (its left lanes beyond a mast arm's reach) on
+    /// <see cref="TwinRowN"/>'s tile row (N <see cref="PortalN"/>), and J6 again as a tram street (a span wire) on the canton row's.
+    /// </summary>
+    public const double OverheadE = 2917500, PortalN = 1321500;
+    /// <summary>
+    /// The region's cantons (#1038), by kilometre tile: only those whose lights or poles differ (pedestrian heads, arrow plates,
+    /// pole colours, #1037; <c>tools/traffic-signals</c>); every other tile is the default zone (the cantons not checked yet).
     /// </summary>
     public static readonly IReadOnlyDictionary<(int E, int N), string> CantonTiles =
-        new Dictionary<(int E, int N), string> { [(2913, 1323)] = "GE", [(2914, 1323)] = "VD" };
+        new Dictionary<(int E, int N), string> { [(2913, 1323)] = "GE", [(2914, 1323)] = "VD", [(2915, 1323)] = "BL", [(2916, 1323)] = "BE" };
     /// <summary>The border drawn on the ground (#1038): purple, as no Swiss marking is (bike crossings are red).</summary>
     public const uint BorderRgba = 0x8E3FB0FF;
     /// <summary>The ground band's half width (vertices within it take <see cref="CoverClass.Border"/>), the stripe across a carriageway.</summary>
@@ -109,7 +114,7 @@ public static class SignalTestRegion
 
     /// <summary>An OSM row over part of a line (#700): metres along it, and the lane columns it carries (turn lanes in the line's drawing direction).</summary>
     private sealed record OsmRow(double From, double To, string Lanes = "", string LanesFwd = "", string LanesBwd = "", string TurnFwd = "", string TurnBwd = "",
-        string BikeFwd = "", string BikeBwd = "");
+        string BikeFwd = "", string BikeBwd = "", bool Tram = false);
 
     /// <summary>An OSM <c>highway=crossing</c> node (#700) on a line, metres along it, with its <c>crossing=*</c> value.</summary>
     private sealed record CrossingNode(string LineId, double Along, string Value);
@@ -368,16 +373,44 @@ public static class SignalTestRegion
         // street J2's path layout, 2: BikePlanner.StrokeLayouts)
         {
             const double nb = BetweenN;
-            double[] at = [CantonDefaultE - 450, CantonDefaultE, CantonGenevaE, CantonVaudE, CantonVaudE + 450];
+            double[] at = [CantonDefaultE - 450, CantonDefaultE, CantonGenevaE, CantonVaudE, CantonBaselLandE, CantonBernE, CantonBernE + 450];
             for (int i = 0; i + 1 < at.Length; i++)
                 lines.Add(new Line($"CN{i}", "10m Strasse", "Durchgangsstrasse", "Kanton", [(at[i], nb), (at[i + 1], nb)], "secondary", "yes"));
-            foreach (var (name, id, e) in new[] { ("default", "CA", CantonDefaultE), ("GE", "CB", CantonGenevaE), ("VD", "CI", CantonVaudE) })
+            foreach (var (name, id, e) in new[] { ("default", "CA", CantonDefaultE), ("GE", "CB", CantonGenevaE), ("VD", "CI", CantonVaudE),
+                         ("BL", "CS", CantonBaselLandE), ("BE", "KA", CantonBernE) })
             {
                 Cross(id + "S", e, nb - 400, nb, "10m Strasse", "Verbindungsstrasse", "secondary", sidewalk: "yes");
                 Cross(id + "N", e, nb, nb + 400, "10m Strasse", "Verbindungsstrasse", "secondary", sidewalk: "yes");
                 junctions.Add(new Junction($"J12-canton-{name}", e, nb, $"J2's crossroads in {(name == "default" ? "the default zone" : name)}: the canton's heads and plates",
                     Arms("L|T|R", "L|T|R", "L|T|R", "L|T|R")));
             }
+        }
+
+        // 15. overhead heads (#1037): a 4+4 artery (OSM lanes=8, 24 m) whose turn:lanes left|through|through|through;right are
+        // assigned in place, across a 10 m road: its left lane lies beyond a mast arm's reach from the right kerb, so a portal; and
+        // J6 again with OSM's tram on the artery: its heads hang from a span wire (the cross roads as J6's)
+        {
+            const string Wide = "left|through|through|through;right";
+            lines.Add(new Line("POW", "10m Strasse", "Durchgangsstrasse", "Kanton", [(OverheadE - 450, PortalN), (OverheadE, PortalN)], "secondary",
+                Rows: [new OsmRow(0, 450, Lanes: "8", TurnFwd: Wide, TurnBwd: Wide)]));
+            lines.Add(new Line("POE", "10m Strasse", "Durchgangsstrasse", "Kanton", [(OverheadE, PortalN), (OverheadE + 450, PortalN)], "secondary",
+                Rows: [new OsmRow(0, 450, Lanes: "8", TurnFwd: Wide, TurnBwd: Wide)]));
+            Cross("POS", OverheadE, PortalN - 400, PortalN, "10m Strasse", "Verbindungsstrasse", "secondary");
+            Cross("PON", OverheadE, PortalN, PortalN + 400, "10m Strasse", "Verbindungsstrasse", "secondary");
+            junctions.Add(new Junction("J13-portal", OverheadE, PortalN, "a 4+4 artery, its lanes assigned in place: heads overhead on a portal",
+                Arms(null, null, null, null)));
+
+            const double nb = BetweenN;
+            lines.Add(new Line("TRW", "10m Strasse", "Durchgangsstrasse", "Kanton", [(OverheadE - 450, nb), (OverheadE, nb)], "secondary",
+                Rows: [new OsmRow(0, 450, Lanes: "4", TurnFwd: Arrows, TurnBwd: Arrows, Tram: true)]));
+            lines.Add(new Line("TRE", "10m Strasse", "Durchgangsstrasse", "Kanton", [(OverheadE, nb), (OverheadE + 450, nb)], "secondary",
+                Rows: [new OsmRow(0, 450, Lanes: "4", TurnFwd: Arrows, TurnBwd: Arrows, Tram: true)]));
+            lines.Add(new Line("TRS", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(OverheadE, nb - 400), (OverheadE, nb)], "secondary",
+                Rows: [new OsmRow(0, 400, TurnFwd: Arrows)]));
+            lines.Add(new Line("TRN", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(OverheadE, nb), (OverheadE, nb + 400)], "secondary",
+                Rows: [new OsmRow(0, 400, TurnBwd: Arrows)]));
+            junctions.Add(new Junction("J14-tram", OverheadE, nb, "J6 with trams on its artery: heads overhead on a span wire",
+                Arms("L|TR", "L|TR", "L|TR", "L|TR")));
         }
 
         junctions.Add(new Junction("J9-stagger-west", StaggerE + 300, TwinRowN, "staggered T's 24 m apart, both lit: the west one", Arms(null, null, null, null)));
@@ -778,7 +811,7 @@ public static class SignalTestRegion
         foreach (var line in lines.OrderBy(l => l.Uuid, StringComparer.Ordinal))
             foreach (var row in line.Rows ?? [new OsmRow(0, Length(line))])
                 sb.Append(inv, $"{line.Uuid}\t0\t{row.From:F1}\t{row.To:F1}\t{386000 + ++way}\t+\t{line.Highway}\t\t{row.Lanes}\t{row.LanesFwd}\t{row.LanesBwd}\t")
-                    .Append(inv, $"\t{line.Sidewalk}\t{line.Sidewalk}\t{line.Cycleway}\t{line.Cycleway}\t{row.TurnFwd}\t{row.TurnBwd}\t0\t0\t\t\t{row.BikeFwd}\t{row.BikeBwd}\n");
+                    .Append(inv, $"\t{line.Sidewalk}\t{line.Sidewalk}\t{line.Cycleway}\t{line.Cycleway}\t{row.TurnFwd}\t{row.TurnBwd}\t0\t{(row.Tram ? 1 : 0)}\t\t\t{row.BikeFwd}\t{row.BikeBwd}\n");
         File.WriteAllText(Path.Combine(tempDir, "osm_overlay.tsv"), sb.ToString());
     }
 

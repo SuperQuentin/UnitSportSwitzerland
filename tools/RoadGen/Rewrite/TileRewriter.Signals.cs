@@ -797,6 +797,18 @@ public static partial class TileRewriter
     private static bool ArrowPlates(string? canton) => canton == "VD";
 
     /// <summary>
+    /// The canton's colour for its signal poles and overhead structures (#1037, <see cref="SignalPlan.PoleColour"/>):
+    /// Basel-Landschaft's anthracite (ATS LSA Aussenanlagen 2024), Bern's RAL 7042 (the city's Handbuch LSA 2025, taken for the
+    /// canton); the others not checked keep RAL 7001. Add a canton here once it is known.
+    /// </summary>
+    private static SignalPoleColour PoleColour(string? canton) => canton switch
+    {
+        "BL" => SignalPoleColour.Anthracite,
+        "BE" => SignalPoleColour.TrafficGrey,
+        _ => SignalPoleColour.SilverGrey,
+    };
+
+    /// <summary>
     /// The canton of each kilometre tile, from MapSetup's committed <c>switzerland.bin</c>
     /// (<c>tools/MapSetup/CountryData.cs</c> writes it; this reads only the canton lattice and names),
     /// or a test world's own zones (<see cref="Of"/>).

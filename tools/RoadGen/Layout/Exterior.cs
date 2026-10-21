@@ -65,6 +65,8 @@ public sealed class ArmExterior
     public List<IslandPiece> Islands { get; } = new();
     public List<PoleSpot> Poles { get; } = new();
     public List<SignSpot> Signs { get; } = new();
+    /// <summary>A lit approach's heads over its lanes (#1037, <see cref="OverheadPlanner"/>); empty where its kerb heads do.</summary>
+    public List<OverheadSpot> Overhead { get; } = new();
     /// <summary>Where the arriving cars stop: the middle of their stop line (or bar, or row), m out from the mouth; null where none arrive.</summary>
     public double? CarStop { get; set; }
     /// <summary>Where the arriving riders stop at the lights; null without a riders' line.</summary>
@@ -80,6 +82,7 @@ public sealed class ArmExterior
         if (Refuge is { } r) sb.Append(inv, $"; refuge {r.From:F1}-{r.To:F1} m across {r.Left:F2}..{r.Right:F2}");
         foreach (var p in Poles) sb.Append(inv, $"; pole {(p.OnRefuge ? "refuge" : p.RightKerb ? "right" : "left")} at {p.Station:F1} m ({p.Flags})");
         foreach (var s in Signs) sb.Append(inv, $"; sign {s.Type} at {s.Station:F1} m");
+        if (Overhead.Count > 0) sb.Append("; overhead ").Append(string.Join(" ", Overhead.Select(o => string.Create(inv, $"{o.Moves}@{o.Offset:F2}"))));
         return sb.Append('\n').ToString();
     }
 }
@@ -101,6 +104,8 @@ public static class ExteriorPlanner
     /// (m; the old layout's rules, #350/#711, restored by #1000).
     /// </summary>
     public const double PoleBehindCrosswalk = 0.4, RiderLineBehindPole = 0.5, PoleAlong = 0.4;
+    /// <summary>A kerb pole's heads stand about this far out of the kerb, for <see cref="OverheadPlanner"/> (m; its first try, PoleClear).</summary>
+    public const double KerbHeadOut = 0.5;
     public const double RidersBehindCrosswalk = 0.5, RidersLineWidth = 0.3, AdvancedLine = 3.0, BikeBoxDepth = 4.0;
     public const double PocketBarFromMouth = 0.1;
     /// <summary>A give-way row stands this far out past the mouth (or what lies before it) and keeps this far off the lane edges.</summary>
@@ -406,6 +411,13 @@ public static class ExteriorPlanner
                 if (second) ex.Poles.Add(new PoleSpot(islandPole, RightKerb: false, OnRefuge: true, SignalPoleFlags.Second));
             }
             else ex.Poles.Add(new PoleSpot(poleAt, RightKerb: false, OnRefuge: false, (second ? SignalPoleFlags.Second : 0) | walk));
+            // heads over the lanes where a lane's own kerb head stands too far from it (#1037): the right kerb's and the left's (or
+            // the refuge's) a pole's clearance out of the kerb
+            var line = SectionAt(a, carFront + width * 0.5);
+            double? left = ex.Refuge is { } rf ? (rf.Left + rf.Right) * 0.5 : second ? line.CarriagewayLeft - KerbHeadOut : null;
+            bool sideRoad = signs?.Any(x => x.FacesArriving && x.Type == PointPropType.YieldSign) == true;
+            ex.Overhead.AddRange(OverheadPlanner.Heads(line, a.Normal.CarLanes(StripWay.In).Count(), line.CarriagewayRight + KerbHeadOut, left,
+                ex.Refuge is not null, sideRoad));
             return ex;
         }
         // without lights: a pocket's own bar, and on a yielding arm the give-way row across the arriving lanes
