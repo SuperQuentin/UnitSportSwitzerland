@@ -28,3 +28,12 @@
   pending start by the gap): replies already queued behind a stall are handled first. Seen on Android
   joining a server: 18 s and 65 s without a frame while joining (first-use JIT, slow frames), the 30 s
   timeout expiring answers the server had sent (instrumented: received and answered at once).
+- **The root cause on phones was a build cap of 0 (#1032).** `ChunkManager.PlayMaxConcurrentBuilds`
+  (the streaming cap) read `MobileMaxConcurrentBuilds` while it was still 0: C# runs static field
+  initializers in the order they are written, and the mobile cap was declared below. With the build
+  setting on auto (`MaxConcurrentBuilds = 0`, the phone default) a phone joining any server had no build
+  slot: no tile was built, so none was fetched, and the player stood on nothing below the coarse terrain.
+  Solo used `OfflineMaxConcurrentBuilds`, declared after it, and worked; a desktop with a saved explicit
+  `builds=N` never saw it (the override wins). Reproduce on desktop with `--mobile --builds 0`. Now the
+  mobile cap comes first and `MaxConcurrentBuilds` is never below 1. **Rule:** a static readonly field
+  that reads another one must be declared after it, or be a property.
