@@ -193,7 +193,6 @@ public partial class FishingVisuals : Node3D
     private static CylinderMesh? _stem;
 
     /// <summary>A red-topped float: a ball over a white stem.</summary>
-    [Showcase("Items", "Fishing float")]
     private static MeshInstance3D NewBobber()
     {
         // lit in the lit styles, flat in PS1 (#1069)
@@ -204,6 +203,18 @@ public partial class FishingVisuals : Node3D
         var b = new MeshInstance3D { Mesh = _top, MaterialOverride = _red, TopLevel = true, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
         b.AddChild(new MeshInstance3D { Mesh = _stem, MaterialOverride = _white, Position = new Vector3(0, -0.06f, 0) });
         return b;
+    }
+
+    /// <summary>The float in the model viewer, its stem's foot on the viewer's ground.</summary>
+    [Showcase("Items", "Fishing float")]
+    private static Node3D ShowcaseFloat()
+    {
+        var b = NewBobber();
+        b.TopLevel = false;
+        b.Position = new Vector3(0, 0.1f, 0);
+        var root = new Node3D();
+        root.AddChild(b);
+        return root;
     }
 
     private static StandardMaterial3D? _sprayMaterial;
