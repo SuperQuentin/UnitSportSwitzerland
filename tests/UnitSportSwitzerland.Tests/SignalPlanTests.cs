@@ -351,6 +351,17 @@ public class SignalPlanTests(ITestOutputHelper output)
         Assert.All(two.IslandWaits(), w => Assert.True(w.Wait <= two.Cycle * SignalPlan.IslandWaitShare + 0.1f, $"waits {w.Wait:F1} s of {two.Cycle:F1}"));
         // an island makes the cycle 3 s longer at most (the user)
         Assert.InRange(two.Cycle, 0, one.Cycle + SignalPlan.IslandGrowMost + 0.05f);
+        // and timed from conflict times too (Geneva: a stretch left the arriving half green all cycle, the plan invalid)
+        var conflicts = two.Conflicts();
+        int n = two.Groups.Count;
+        var times = new float[n, n];
+        for (int g = 0; g < n; g++)
+            for (int h = 0; h < n; h++)
+                times[g, h] = conflicts[g, h] == SignalPlan.Conflict.Hard ? (two.Groups[g].Kind == SignalGroupKind.Pedestrian ? 6f : 3f) : float.NaN;
+        bool timed = two.Retime(times);
+        output.WriteLine($"timed {timed}\n{two.Describe()}");
+        Assert.True(timed, "timed from conflict times");
+        Assert.All(two.IslandWaits(), w => Assert.True(w.Wait <= two.Cycle * SignalPlan.IslandWaitShare + 0.1f, $"timed: waits {w.Wait:F1} s of {two.Cycle:F1}"));
     }
 
     [Theory]

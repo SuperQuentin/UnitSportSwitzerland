@@ -982,13 +982,15 @@ public sealed class SignalPlan
                 int k = i;
                 while (n > 1 && phases[(k + 1) % n].Green.Contains(g) && (k + 1) % n != i) k = (k + 1) % n;
                 float to = start[k] + phases[k].GreenTime;
+                // (a green over the cycle's seam ends in the next one: before the early end below, which measures from its start, #1030:
+                // it took the end of a two-stage half's green for before its start and kept it green the whole cycle)
+                if (k < i) to += plan.Cycle;
                 // a slow group ending early (#979), its green never under the minimum
                 if (times is not null && n > 1 && shift[k].TryGetValue(g, out float sooner))
                 {
                     slowEnds?.Add((k, g, from, to));
                     to = Math.Max(from + MinGreen, to + MathF.Round(sooner, 1));
                 }
-                if (k < i) to += plan.Cycle;
                 // a bike leads its approach by up to BikeLead s, once whatever it conflicts with has cleared (without conflict
                 // times, and only where it leads, #979)
                 if (times is null && plan.Groups[g].Kind == SignalGroupKind.Bike && n > 1
@@ -1000,6 +1002,7 @@ public sealed class SignalPlan
                         .Select(plan.ClearanceOf).DefaultIfEmpty(-AllRed).Max();
                     from = Math.Max(from - BikeLead, prevEnd + clear + AllRed + RedAmberBike);
                 }
+
                 spans.Add((from, to));
             }
             plan.Groups[g].Intervals.Clear();

@@ -101,11 +101,16 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   makes each half green wherever its own conflicts allow, so at least whenever the kerb-to-kerb group would be: a walker
   never reaches the far kerb later. **The new constraint, the island wait**: the first walker of each half's green, either
   way, reaches the island at 1.2 m/s and waits at most `IslandWaitShare` a third of the cycle for the other half
-  (`SignalPlan.IslandWaits`); where not, `Stretch` takes the cheaper of: the phase in which the other half's green ended
-  while they walked holds on until they reach the island (+0.5 s), or the cycle grows (the phase letting them on taking it)
-  until the wait is within a third; up to 120 s (`Phase.Extra`, in `Build` and `Retime`); past that the check lists it.
-  Found on Geneva: the first walkers missed the other half by tenths of a second, and growing the cycle for a whole-cycle
-  wait took one junction from 64 to 177 s; holding the green costs 0-2 s (tier 0 `TwoStageCrossing_FromGeneva_...`). Heads: the right kerb's (main pole) shows the arriving half, the left kerb's the departing one, the island two back to
+  (`SignalPlan.IslandWaits`); where not because the other half's green ended while they walked, `Stretch` makes the phase
+  it ended in hold on until they reach the island (+0.5 s), its seconds taken from the phases sharing the cycle, the cycle
+  growing only where they are at their minimum and by `IslandGrowMost` 3 s at most (the user: an island should not make the
+  crossing longer); past that RoadGen plans the arm in one go as without the island (`ExteriorPlanner.OneStage`, counted in
+  the rewrite stats). Found on Geneva: the first walkers missed the other half by tenths of a second; growing the cycle for
+  a whole-cycle wait took one junction from 64 to 177 s (tier 0 `TwoStageCrossing_FromGeneva_...`, conflict-timed too). The
+  halves are measured as the walkers are timed (`ConflictTimes.WalkSpan`: past a path at the kerb), so the planner and
+  `--signal-check` agree. Fixed on the way (#979's code): a slow group's green over the cycle's seam had its early end
+  clamped before it moved into the next cycle, so it came out green the whole cycle and the plan fell back from conflict
+  times (3 Geneva two-stage junctions). `CTDBG2` now says why a plan is not timed from conflict times. Heads: the right kerb's (main pole) shows the arriving half, the left kerb's the departing one, the island two back to
   back (`SignalPoleFlags.ArrivingHalf | DepartingHalf`, the arriving one facing `PedHeading`, toward the right kerb) on
   the left repeater's pole where the arm has one, else on a pole of its own at the repeater's spot behind the zebra. The
   zebra leaves out the bars whose middle lies on the island (`ExteriorBar.Gap`): it reads as two crosswalks (the user).
