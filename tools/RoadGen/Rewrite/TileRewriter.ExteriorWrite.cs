@@ -60,7 +60,8 @@ public static partial class TileRewriter
             arms.Add(new SignalArm(a.Heading, approach, leaves, ins.Any(l => l.Moves == SignalMoves.Left), ins.Any(l => l.Moves == SignalMoves.Right),
                 Pedestrians: ex.Crosswalk is not null, BikeSignal: approach && (path || kerbside), SpeedKmh: urban ? 50 : 60,
                 CrossingM: (float)(mouth.CarriagewayWidth), Rank: (byte)Math.Clamp(info is { } i ? PriorityPlanner.Rank(i) / 4 : 1, 1, 255),
-                Banned: approach ? a.Wants.Banned : SignalMoves.None, BikeBetween: between, HalfInM: halfIn, HalfOutM: halfOut));
+                Banned: approach ? a.Wants.Banned : SignalMoves.None, BikeBetween: between, HalfInM: halfIn, HalfOutM: halfOut,
+                RiderBox: ex.Bars.Any(b => b.Kind == BarKind.BikeBox)));
         }
         if (arms.Count(x => x.In) < 2) return null;
         string? canton = cantons?.CodeAt(jp.Centre.X, jp.Centre.Y);
@@ -110,6 +111,7 @@ public static partial class TileRewriter
         }
         plan.ArrowPlates = ArrowPlates(canton);
         stats.TwoStage += arms.Count(x => x.TwoStage);
+        stats.RiderBoxes += Enumerable.Range(0, arms.Count).Count(k => arms[k].RiderBox && plan.Groups.Any(g => g.Kind == SignalGroupKind.Bike && g.Arm == k && g.Moves == SignalMoves.Left));
 
         float SampleAt(ArmPlan a, Vec2 p) => net.Links[a.LinkId].Tag is Source s ? s.SampleHeight(p) : 0f;
         var stops = new float[arms.Count * 3];

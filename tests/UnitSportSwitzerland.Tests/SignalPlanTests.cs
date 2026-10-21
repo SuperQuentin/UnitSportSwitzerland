@@ -352,6 +352,36 @@ public class SignalPlanTests(ITestOutputHelper output)
         Assert.InRange(two.Cycle, 0, one.Cycle + 2);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RidersInABikeBox_NeverEndBeforeTheCarsBehindThem(bool box)
+    {
+        // the riders turning left wait in a bike box in front of the pocket's cars: an early end of their green would have the
+        // cars run into them from behind; an early start is fine (the user). Their slow clearing (8 s against the cars' 3 s)
+        // ends a group of their own early only without a box.
+        var arms = new List<SignalArm> { Arm(N, true, true), Arm(E, true, true), Arm(S, true, true), Arm(W, true, true) };
+        arms[W] = arms[W] with { RiderLeft = true, RiderBox = box };
+        var plan = SignalPlan.Build(arms, 7);
+        int riders = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Bike && g.Arm == W && g.Moves == SignalMoves.Left);
+        int cars = Group(plan, SignalGroupKind.LeftArrow, W);
+        Assert.True(riders >= 0 && cars >= 0);
+        var conflicts = plan.Conflicts();
+        int n = plan.Groups.Count;
+        var times = new float[n, n];
+        for (int g = 0; g < n; g++)
+            for (int h = 0; h < n; h++)
+                times[g, h] = conflicts[g, h] == SignalPlan.Conflict.Hard ? (g == riders ? 8f : 3f) : float.NaN;
+        Assert.True(plan.Retime(times), "retimed");
+        AssertValid(plan);
+        float End(int g) => plan.Groups[g].Intervals.Where(v => v.Aspect == SignalAspect.Green).Select(v => v.To).First();
+        float Start(int g) => plan.Groups[g].Intervals.Where(v => v.Aspect == SignalAspect.Green).Select(v => v.From).First();
+        output.WriteLine($"riders green {Start(riders):F1}-{End(riders):F1}, cars {Start(cars):F1}-{End(cars):F1}");
+        if (box) Assert.True(End(riders) >= End(cars) - 0.05f, "the box's riders end before the cars behind them");
+        else Assert.True(End(riders) < End(cars) - 0.5f, "riders on their own lane end early to clear");
+        Assert.True(Start(riders) <= Start(cars) + 0.05f, "the riders never start after their cars");
+    }
+
     [Fact]
     public void TwoStageCrossing_RoundTripsItsHalves()
     {

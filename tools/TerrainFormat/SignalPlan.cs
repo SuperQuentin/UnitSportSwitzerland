@@ -66,7 +66,12 @@ public readonly record struct SignalArm(
     /// each half its own group; these are the halves' lengths (m), 0 for a crossing in one go. Not stored: the groups carry it.
     /// </summary>
     float HalfInM = 0,
-    float HalfOutM = 0)
+    float HalfOutM = 0,
+    /// <summary>
+    /// The riders turning left wait in a bike box (SSV 6.26), in front of the left pocket's cars: their group never ends before
+    /// those cars' (they would be hit from behind, the user); it may start before them. Not stored: only the timing reads it.
+    /// </summary>
+    bool RiderBox = false)
 {
     /// <summary>Whether its walkers cross in two stages, waiting on the island between (#1030).</summary>
     public bool TwoStage => Pedestrians && HalfInM > 0 && HalfOutM > 0;
@@ -868,7 +873,9 @@ public sealed class SignalPlan
         // walkers and riders clear slowly: with conflict times their green ends early enough that their clearing fits in the gap
         // the cars' set (the user, #979, as a walkers' green ends before the parallel cars'); by how much before the phase's end
         var shift = new Dictionary<int, float>[n];
-        bool Slow(int g) => plan.Groups[g].Kind is SignalGroupKind.Pedestrian or SignalGroupKind.Bike;
+        // (riders in a bike box end with the cars behind them, never before: not slow here, the user)
+        bool Slow(int g) => plan.Groups[g].Kind == SignalGroupKind.Pedestrian
+            || plan.Groups[g].Kind == SignalGroupKind.Bike && !(plan.Groups[g].Moves == SignalMoves.Left && plan.Arms[plan.Groups[g].Arm].RiderBox);
         bool Timed(int g, int h) => times is not null && conflicts[g, h] == Conflict.Hard && !float.IsNaN(times[g, h]);
         for (int i = 0; i < n; i++)
         {

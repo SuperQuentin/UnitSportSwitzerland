@@ -76,7 +76,10 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   clearing fits in the gap the cars set (never under 4 s of green; an early end held back by it is limited and the plan
   timed again). Riders following the cars' lights whose clearing would lengthen a car group's times by over 2 s get a bike
   group of their own (`LongRiders`; a riders' left turn: a bike group with the left arrow's phase, its head on the left
-  pole). The bike lead (Vorgrün) only where a car group turning across the riders goes green with them. A plan so timed
+  pole). **Riders in a bike box never end early** (the user, #1030's PR): they wait in front of the pocket's cars, so an
+  early end would have those cars run into them from behind; an early start (the lead) stays. `SignalArm.RiderBox` (not
+  stored: the arm's exterior has a `BarKind.BikeBox`) makes their left-turn group count with the cars in `Time` (not slow:
+  it sets the gap, its green ends with the phase). Test region: 7 such groups (`RidersInABikeBox_...` tier 0). The bike lead (Vorgrün) only where a car group turning across the riders goes green with them. A plan so timed
   carries `ConflictTimed` (flags bit 2): `Validate` then holds conflicting groups never green together (a green may begin
   in another's amber) and `KeepsTimes` every time. Layout (b)'s bike lane (`SignalArm.BikeBetween`, arm bit 7) no longer
   conflicts with its arm's right arrow. Test region: J1 74 -> 73 s, J2 86 -> 85 (bikes entering at 30 km/h, turning cars at 3 m/s²; walkers on the bike paths' squares: a riders' left turn holds the next walkers ~15 s), J5a/b 83/84 -> 74/75, J10 70 -> 71, the
@@ -98,9 +101,11 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   makes each half green wherever its own conflicts allow, so at least whenever the kerb-to-kerb group would be: a walker
   never reaches the far kerb later. **The new constraint, the island wait**: the first walker of each half's green, either
   way, reaches the island at 1.2 m/s and waits at most `IslandWaitShare` a third of the cycle for the other half
-  (`SignalPlan.IslandWaits`); where not, `Stretch` lengthens the phase in which the other half turns green for them (the
-  wait lies before it), the cycle with it, up to 120 s (`Phase.Extra`, in `Build` and `Retime`); past that the check lists
-  it. Heads: the right kerb's (main pole) shows the arriving half, the left kerb's the departing one, the island two back to
+  (`SignalPlan.IslandWaits`); where not, `Stretch` takes the cheaper of: the phase in which the other half's green ended
+  while they walked holds on until they reach the island (+0.5 s), or the cycle grows (the phase letting them on taking it)
+  until the wait is within a third; up to 120 s (`Phase.Extra`, in `Build` and `Retime`); past that the check lists it.
+  Found on Geneva: the first walkers missed the other half by tenths of a second, and growing the cycle for a whole-cycle
+  wait took one junction from 64 to 177 s; holding the green costs 0-2 s (tier 0 `TwoStageCrossing_FromGeneva_...`). Heads: the right kerb's (main pole) shows the arriving half, the left kerb's the departing one, the island two back to
   back (`SignalPoleFlags.ArrivingHalf | DepartingHalf`, the arriving one facing `PedHeading`, toward the right kerb) on
   the left repeater's pole where the arm has one, else on a pole of its own at the repeater's spot behind the zebra. The
   zebra leaves out the bars whose middle lies on the island (`ExteriorBar.Gap`): it reads as two crosswalks (the user).
