@@ -253,7 +253,7 @@ public partial class ConcertRig : Node3D
 
     private void BuildRig()
     {
-        var body = new StandardMaterial3D { AlbedoColor = new Color(0.08f, 0.08f, 0.09f), Roughness = 0.6f };
+        var body = Styles.StyleKit.Figure(new StandardMaterial3D { AlbedoColor = new Color(0.08f, 0.08f, 0.09f), Roughness = 0.6f });
         Multi("Heads", new BoxMesh { Size = new Vector3(0.45f, 0.55f, 0.45f) }, _heads.Length + _cells.Length, body, out _bodies);
         // the cones' far side only: half the fill of both, and a beam still shows from inside it
         var beamMat = Additive();

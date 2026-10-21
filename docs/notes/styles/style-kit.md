@@ -53,7 +53,12 @@ The plan and the prototype's results: `docs/plans/visual-styles.md` (issues #181
   client and never sends it to a server.
 - **`StyleKit.Figure`** shades the vertex-coloured standard material of avatars, vehicles, birds
   and items (`HumanMeshBuilder.Material`) for the style (Cartoon: toon), kept weakly and
-  restyled live like the shader materials. Any thread.
+  restyled live like the shader materials. Any thread. **Every lit solid built as a plain
+  `StandardMaterial3D` goes through it too** (title diorama, worn build pieces and their debris,
+  soot, crate planks, the burning bale and its smoke, concert kit, IKEA pylon, farm heaps, the VR
+  watch's case, the ride preview floor, feather puffs: #1068), or Cartoon draws it with Godot's
+  Lambert light. Give it a fresh material (or one cached per look), never a `Duplicate()` of a
+  shaded one: what it is given is the plain look PS1 goes back to.
 - **`StyleKit.Solid`** is `Figure` for a solid object's plain standard material that is not a
   figure (the smoke grenade's cloud, the fishing float, the BR Postauto stop): **unshaded in PS1**,
   as such things were, **lit** (toon in Cartoon) in the lit styles, restyled live (#1069). A new
