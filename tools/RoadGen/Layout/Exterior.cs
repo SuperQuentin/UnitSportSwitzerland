@@ -123,14 +123,9 @@ public static class ExteriorPlanner
     /// shorter than <see cref="MinIslandPiece"/> is left out.</summary>
     public const double CrosswalkCut = 0.15, MinIslandPiece = 0.8;
 
-    /// <summary>
-    /// An island piece from <paramref name="from"/> to <paramref name="to"/> within the exit's gore all along, from the
-    /// <paramref name="left"/>..<paramref name="right"/> it was planned at: as wide as the gore's narrowest station lets it (a
-    /// margin clear of both edges), ending where the gore gets narrower than an island; null where it is too narrow at once.
-    /// </summary>
     /// <summary>How far into the junction (a negative station, from <paramref name="from"/> toward <paramref name="to"/>) an island's tip
     /// may reach with every car's way through the core clear of it by half its width and <see cref="IslandCarClear"/>.</summary>
-    private static double ClearTip(JunctionPlan jp, ArmPlan a, double from, double to, double left, double right)
+    private static double ClearTip(JunctionPlan jp, ArmPlan a, double from, double to)
     {
         if (jp.Core is not { } core || a.Axis is not { } axis) return to;
         double m0 = core.Mouths.First(m => m.Arm == a.Arm).Station;
@@ -140,23 +135,34 @@ public static class ExteriorPlanner
             // the part from s to the mouth, as points along its edges and middle
             bool clear = true;
             for (double t = s; t <= to + 1e-6 && clear; t += 0.5)
+            {
+                if (IslandEdges(a, t) is not var (left, right)) continue;
                 foreach (double o in (ReadOnlySpan<double>)[left, (left + right) * 0.5, right])
                 {
                     var p = axis.At(m0 + t, o);
-                    if (cars.Any(c => Near(c.Centre, p) < c.Width * 0.5 + IslandCarClear)) { clear = false; break; }
+                    if (cars.Any(c => Gap(c, p) < IslandCarClear)) { clear = false; break; }
                 }
+            }
             if (clear) return s;
         }
         return to;
 
-        static double Near(List<Geometry.Vec2> line, Geometry.Vec2 p)
+        // how far a point stands outside a car's way: from its centre less half its width there, the width going from its start's
+        // to its end's along it (a turn narrowing into its exit lane, #1000: J7's right turn counted 3 m wide at the mouth)
+        static double Gap(Connector c, Geometry.Vec2 p)
         {
-            double best = double.MaxValue;
+            var line = c.Centre;
+            double total = 0;
+            for (int i = 1; i < line.Count; i++) total += line[i].DistanceTo(line[i - 1]);
+            double best = double.MaxValue, along = 0;
             for (int i = 1; i < line.Count; i++)
             {
                 var ab = line[i] - line[i - 1];
-                double l2 = ab.Dot(ab), t = l2 < 1e-12 ? 0 : Math.Clamp((p - line[i - 1]).Dot(ab) / l2, 0, 1);
-                best = Math.Min(best, (line[i - 1] + ab * t).DistanceTo(p));
+                double len = Math.Sqrt(ab.Dot(ab)), t = len < 1e-9 ? 0 : Math.Clamp((p - line[i - 1]).Dot(ab) / (len * len), 0, 1);
+                double f = total < 1e-9 ? 0 : (along + t * len) / total;
+                double half = (c.Width + (c.ToWidth - c.Width) * f) * 0.5;
+                best = Math.Min(best, (line[i - 1] + ab * t).DistanceTo(p) - half);
+                along += len;
             }
             return best;
         }
@@ -165,20 +171,37 @@ public static class ExteriorPlanner
     /// <summary>An island inside the junction keeps this far clear of a car's way beyond half its width (m): beside its lane, never in it (#1000).</summary>
     public const double IslandCarClear = 0.1;
 
-    private static (double Left, double Right, double To)? FitIsland(ArmPlan a, double from, double to, double left, double right)
+    /// <summary>
+    /// A lit arm's island's edges at station <paramref name="s"/> (#1000): the exit's gore, <see cref="RefugeMargin"/> in from both
+    /// edges, so the island tapers with it and stays beside the lanes all along (the user: sized to the gore's narrowest, it left
+    /// half a lane between it and the guide by the mouth); inside the junction the gore's at the mouth; null where the gore is
+    /// narrower than an island.
+    /// </summary>
+    public static (double Left, double Right)? IslandEdges(ArmPlan a, double s)
     {
-        double l = left, r = right, end = from;
+        if (ExitHatch(a, Math.Max(0, s)) is not { } h) return null;
+        double l = h.Left + RefugeMargin, r = h.Right - RefugeMargin;
+        return r - l >= RefugeMinWidth ? (l, r) : null;
+    }
+
+    /// <summary>
+    /// How far an island piece from <paramref name="from"/> toward <paramref name="to"/> runs within the gore (where it gets
+    /// narrower than an island it stops), with its edges at its start; null where it is too narrow at once.
+    /// </summary>
+    private static (double Left, double Right, double To)? FitIsland(ArmPlan a, double from, double to)
+    {
+        if (IslandEdges(a, from) is not { } first) return null;
+        double end = from;
         for (double s = Math.Max(0, from); ; s = Math.Min(to, s + 0.5))
         {
-            if (ExitHatch(a, s) is not { } h) break;
-            double nl = Math.Max(l, h.Left + RefugeMargin), nr = Math.Min(r, h.Right - RefugeMargin);
-            if (nr - nl < RefugeMinWidth) break;
-            (l, r, end) = (nl, nr, s);
+            if (IslandEdges(a, s) is null) break;
+            end = s;
             if (s >= to) break;
         }
         if (from < 0 && end <= 0) end = Math.Min(to, 0);
-        return end > from ? (l, r, end) : null;
+        return end > from ? (first.Left, first.Right, end) : null;
     }
+
     /// <summary>A 3.03 main-road sign stands this far out from the mouth.</summary>
     public const double MainSignOut = 3.0;
 
@@ -347,8 +370,8 @@ public static class ExteriorPlanner
             var walk = crosswalkAt is not null ? SignalPoleFlags.Pedestrian : 0;
             ex.Poles.Add(new PoleSpot(poleAt, RightKerb: true, OnRefuge: false, SignalPoleFlags.Main | walk));
             // the left repeater's island (the old layout's, #682; #1000): carried 3 m into the junction, split by the crosswalk (which
-            // runs level through it), behind it on to the gore past the cars' line, each piece as wide as the gore lets it be all
-            // along and rounded where it stands free; its pole ahead of every line: behind the crosswalk where there is one (seen
+            // runs level through it), behind it on to the gore past the cars' line, one island tapering with the gore
+            // (IslandEdges: its pieces line up, the user) and rounded where it stands free; its pole ahead of every line: behind the crosswalk where there is one (seen
             // from the lines, the user), else on the part inside the junction
             double islandPole = 0;
             var zebra = ex.Bars.FirstOrDefault(b => b.Kind == BarKind.Crosswalk);
@@ -359,19 +382,12 @@ public static class ExteriorPlanner
                     ? new[] { (From: -IslandInside, To: zebra.From - CrosswalkCut, RoundFrom: true, RoundTo: false), (zebra.To + CrosswalkCut, gore, false, true) }
                     : [(-IslandInside, gore, true, true)];
                 foreach (var (from, to, roundFrom, roundTo) in pieces)
-                    if (FitIsland(a, from, to, island.Left, island.Right) is var (l, r, end))
+                    if (FitIsland(a, from, to) is var (l, r, end))
                     {
                         // inside the junction no further than every car's way keeps clear of it (#1000: a left turn clipped the tip)
-                        double start = from < 0 ? ClearTip(jp, a, from, Math.Min(end, 0), l, r) : from;
+                        double start = from < 0 ? ClearTip(jp, a, from, Math.Min(end, 0)) : from;
                         if (end - start >= MinIslandPiece) ex.Islands.Add(new IslandPiece(start, end, l, r, roundFrom, roundTo || end < to - 1e-6));
                     }
-                // one island the crosswalk cuts: every piece as wide as the narrowest (the user)
-                if (ex.Islands.Count > 1)
-                {
-                    double l = ex.Islands.Max(x => x.Left), r = ex.Islands.Min(x => x.Right);
-                    if (r - l >= RefugeMinWidth)
-                        for (int i = 0; i < ex.Islands.Count; i++) ex.Islands[i] = ex.Islands[i] with { Left = l, Right = r };
-                }
                 if (zebra is not null) ex.Bars[ex.Bars.IndexOf(zebra)] = zebra with { Gap = null };
                 ex.Refuge = ex.Islands.Count == 0 ? null : island with { From = ex.Islands[0].From, To = ex.Islands[^1].To };
                 islandPole = zebra is not null ? zebra.To + PoleBehindCrosswalk : -IslandInside * 0.5 + gore * 0.1;

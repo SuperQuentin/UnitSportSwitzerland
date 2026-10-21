@@ -140,9 +140,9 @@ public static partial class TileRewriter
                 float lift;
                 if (p.OnRefuge && ex.Refuge is { } rf)
                 {
-                    // on the island piece it stands on (#1000), in its middle
-                    var piece = ex.Islands.FirstOrDefault(x => x.From <= p.Station && p.Station <= x.To);
-                    foot = P(p.Station, piece is not null ? (piece.Left + piece.Right) * 0.5 : (rf.Left + rf.Right) * 0.5);
+                    // in the middle of the island where it stands (#1000)
+                    var (il, ir) = ex.Islands.Count > 0 ? ExteriorPlanner.IslandEdges(a, p.Station) ?? (rf.Left, rf.Right) : (rf.Left, rf.Right);
+                    foot = P(p.Station, (il + ir) * 0.5);
                     lift = 0.12f;
                 }
                 else if (ClearFoot(p, ex, a, P, clear) is var (spot, kerbLift)) (foot, lift) = (spot, kerbLift);
@@ -379,9 +379,8 @@ public static partial class TileRewriter
             // a lit arm's island in its pieces, rounded where they stand free (#1000); else the refuge whole
             foreach (var piece in ex.Islands)
             {
-                var ring = IslandRing(piece).Select(q => P(q.S, q.O)).ToList();
-                var indices = new List<ushort>();
-                for (int i = 1; i + 1 < ring.Count; i++) indices.AddRange([(ushort)0, (ushort)i, (ushort)(i + 1)]);
+                var ring = IslandRing(piece, st => ExteriorPlanner.IslandEdges(a, st) ?? (piece.Left, piece.Right)).Select(q => P(q.S, q.O)).ToList();
+                var indices = Junctions.EarClip.Triangulate(ring).Select(i => (ushort)i).ToList();
                 Get(areas, tile).Add(new RoadAreaProp
                 {
                     Type = AreaPropType.Island, Variant = 2, Flags = PropFlags.Solid, Height = 0.12f,
@@ -457,31 +456,40 @@ public static partial class TileRewriter
     }
 
     /// <summary>
-    /// An island piece's outline (#1000) in its arm's stations and offsets, convex, going round: its two long sides, a half circle at
-    /// an end that stands free (as wide as the piece, no longer than half of it), square at one the crosswalk cuts.
+    /// An island piece's outline (#1000) in its arm's stations and offsets, going round: its two long sides along
+    /// <paramref name="edges"/> (the gore's, so it tapers with it), a half circle at an end that stands free (as wide as the piece
+    /// there, no longer than half of it), square at one the crosswalk cuts.
     /// </summary>
-    private static List<(double S, double O)> IslandRing(IslandPiece p)
+    private static List<(double S, double O)> IslandRing(IslandPiece p, Func<double, (double Left, double Right)> edges)
     {
-        double half = (p.Right - p.Left) * 0.5, mid = (p.Left + p.Right) * 0.5, r = Math.Min(half, (p.To - p.From) * 0.5);
-        double from = p.RoundFrom ? p.From + r : p.From, to = p.RoundTo ? p.To - r : p.To;
         const int Steps = 8;
+        double len = p.To - p.From;
+        var (fl, fr) = edges(p.From);
+        var (tl, tr) = edges(p.To);
+        double rFrom = p.RoundFrom ? Math.Min((fr - fl) * 0.5, len * 0.5) : 0, rTo = p.RoundTo ? Math.Min((tr - tl) * 0.5, len * 0.5) : 0;
+        double from = p.From + rFrom, to = p.To - rTo;
         var ring = new List<(double, double)>();
-        // along the left side, round the far end, back along the right side, round the near end
-        ring.Add((from, p.Left));
+        // along the left side, tapering with the gore, round the far end, back along the right side, round the near end
+        for (double s = from; s < to; s += 0.5) ring.Add((s, edges(s).Left));
+        var (el, er) = edges(to);
+        ring.Add((to, el));
         if (p.RoundTo)
-            for (int k = 0; k <= Steps; k++)
+            for (int k = 1; k < Steps; k++)
             {
                 double t = -Math.PI / 2 + Math.PI * k / Steps;
-                ring.Add((to + r * Math.Cos(t), mid + half * Math.Sin(t)));
+                ring.Add((to + rTo * Math.Cos(t), (el + er) * 0.5 + (er - el) * 0.5 * Math.Sin(t)));
             }
-        else ring.AddRange([(to, p.Left), (to, p.Right)]);
+        ring.Add((to, er));
+        for (double s = to - 0.5; s > from; s -= 0.5) ring.Add((s, edges(s).Right));
+        var (sl, sr) = edges(from);
+        ring.Add((from, sr));
         if (p.RoundFrom)
-            for (int k = 0; k <= Steps; k++)
+            for (int k = 1; k < Steps; k++)
             {
                 double t = Math.PI / 2 + Math.PI * k / Steps;
-                ring.Add((from + r * Math.Cos(t), mid + half * Math.Sin(t)));
+                ring.Add((from + rFrom * Math.Cos(t), (sl + sr) * 0.5 + (sr - sl) * 0.5 * Math.Sin(t)));
             }
-        else ring.AddRange([(from, p.Right), (from, p.Left)]);
+        if (Math.Abs(ring[0].Item2 - sl) > 1e-6 || Math.Abs(ring[0].Item1 - from) > 1e-6) ring.Add((from, sl));
         // (no point twice in a row, nor the first again at the end)
         var outline = ring.Where((q, i) => i == 0 || Math.Abs(q.Item1 - ring[i - 1].Item1) + Math.Abs(q.Item2 - ring[i - 1].Item2) > 1e-6).ToList();
         if (outline.Count > 1 && Math.Abs(outline[^1].Item1 - outline[0].Item1) + Math.Abs(outline[^1].Item2 - outline[0].Item2) < 1e-6) outline.RemoveAt(outline.Count - 1);

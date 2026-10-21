@@ -199,8 +199,10 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
                     for (int i = 0; i < path.PointCount; i++)
                     {
                         float x = path.Points[i * 3], z = path.Points[i * 3 + 2];
+                        // (its width going from its start's to its end's along it)
+                        double half = (path.Width + (path.ToWidth - path.Width) * i / Math.Max(1, path.PointCount - 1)) * 0.5;
                         double gap = Inside(v, n, x, z) ? -1 : Enumerable.Range(0, n).Min(k => Segment(x, z, v[k * 3], v[k * 3 + 2], v[(k + 1) % n * 3], v[(k + 1) % n * 3 + 2]));
-                        Assert.True(gap >= path.Width * 0.5 - 0.3, $"a {path.Move} car path {gap:F2} m from an island at LV95 {tile.Id.MinE + x:F1},{tile.Id.MaxN - z:F1} (half width {path.Width * 0.5:F2})");
+                        Assert.True(gap >= half - 0.3, $"a {path.Move} car path {gap:F2} m from an island at LV95 {tile.Id.MinE + x:F1},{tile.Id.MaxN - z:F1} (half width {half:F2})");
                     }
             }
         Assert.True(islands > 0);
