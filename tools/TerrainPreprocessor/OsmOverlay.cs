@@ -91,7 +91,7 @@ public static class OsmOverlay
         var result = Conflate(tlm, osm);
         // signals, bike boxes and via nodes inside the region box only (the 200 m margin is for the ways)
         bool Inside(double e, double n) => e >= minE && e <= maxE && n >= minN && n <= maxN;
-        var (nodeRows, nodeStats) = OsmNodes.Snap(tlm, osm, result.Rows, points.Where(p => Inside(p.E, p.N)).ToList(), relations,
+        var (nodeRows, nodeStats) = OsmNodes.Snap(tlm, osm, result.Rows, points.Where(p => Inside(p.E, p.N) && OsmNodes.IsRowNode(p.Tags)).ToList(), relations,
             id => position(id) is { } q && Inside(q.E, q.N) ? q : null);
         double total = clock.Elapsed.TotalSeconds;
 
@@ -100,6 +100,10 @@ public static class OsmOverlay
         string pbfName = Path.GetFileName(pbfPath), tlmName = Path.GetFileName(tlmGpkg);
         File.WriteAllText(outPath, Format(result.Rows, pbfName, tlmName, minE, minN, maxE, maxN));
         File.WriteAllText(Path.Combine(tempDir, OsmNodes.FileName), OsmNodes.Format(nodeRows, pbfName, tlmName, minE, minN, maxE, maxN));
+        // the tram stops (#1057): RoadGen merges them with swissTLM3D's (TramStopStage), OSM's position first
+        var tramStops = points.Where(p => Inside(p.E, p.N) && OsmNodes.IsTramStop(p.Tags)).OrderBy(p => p.E).ThenBy(p => p.N).ToList();
+        File.WriteAllText(Path.Combine(tempDir, TramStopStage.OsmFileName), "# (c) OpenStreetMap contributors, ODbL\nname\te\tn\n" + string.Concat(tramStops.Select(p =>
+            string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{p.Tags.GetValueOrDefault("name", "Stop").Replace('\t', ' ')}\t{p.E:F2}\t{p.N:F2}\n"))));
         long peak = Process.GetCurrentProcess().PeakWorkingSet64;
         string report = Report(result, tlm.Count, osm.Count)
             + OsmNodes.Report(nodeRows, nodeStats, Lines(result, x => x.TurnFwd != "" || x.TurnBwd != "")) + MedianProbe(tlm, osm)
@@ -107,7 +111,7 @@ public static class OsmOverlay
             + $"total {total:F1} s; peak working set {peak / 1048576.0:F0} MB\n";
         File.WriteAllText(Path.Combine(tempDir, ReportName), report);
         Console.WriteLine(report.Length > 6000 ? report[..6000] + "\n... (full report in " + ReportName + ")" : report);
-        Console.WriteLine($"OSM overlay: {result.Rows.Count} intervals -> {outPath}, {nodeRows.Count} node rows -> {OsmNodes.FileName}");
+        Console.WriteLine($"OSM overlay: {result.Rows.Count} intervals -> {outPath}, {nodeRows.Count} node rows -> {OsmNodes.FileName}, {tramStops.Count} tram stops -> {TramStopStage.OsmFileName}");
         return 0;
     }
 
@@ -169,7 +173,7 @@ public static class OsmOverlay
                                   || tags.GetValueOrDefault("railway") == "tram"),
             WayTags = TagKeys,
             KeepTaggedNode = OsmNodes.KeepNode,
-            NodeTags = OsmNodes.NodeTagKeys,
+            NodeTags = OsmNodes.ReadNodeTags,
             KeepRelation = OsmNodes.KeepRelation,
             RelationTags = OsmNodes.RelationTagKeys,
         });

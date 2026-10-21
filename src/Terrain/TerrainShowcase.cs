@@ -62,6 +62,7 @@ public static class TerrainShowcase
         PointPropType.TicketKiosk => 1.5f,
         PointPropType.CartShelter => 2.4f,
         PointPropType.CantonSign => RoadSigns.LowerEdge + RoadSigns.CantonSignHeight,
+        PointPropType.TramStop => 2.6f,
         _ => 2.2f,
     };
 
@@ -89,20 +90,29 @@ public static class TerrainShowcase
         // a two-stage crossing's island pole (#1030): the left repeater over two pedestrian heads back to back, one per half
         ("Two-stage island", () => TrafficLight(pedestrianAmber: true, island: true)),
         ("Two-stage island, Geneva", () => TrafficLight(pedestrianAmber: false, island: true)),
+        // the trams' bar head (#1057) beside the car heads: the bar across, the dot, the bar upright, lit on the clock
+        ("Tram", () => TrafficLight(pedestrianAmber: true, tram: true)),
+        // Romandy's T head (#1057, the user): the bar across over the bar upright, beside the car heads above the flasher
+        ("Tram, Romandy", () => TrafficLight(pedestrianAmber: false, tram: true, tramT: true)),
+        // trams going two ways (#1057, the user): a head per direction, its arrow on its plate; Romandy's packed beside the car heads
+        ("Tram, two ways", () => TrafficLight(pedestrianAmber: true, tram: true, tramTwo: true)),
+        ("Tram, Romandy, two ways", () => TrafficLight(pedestrianAmber: false, tram: true, tramT: true, tramTwo: true)),
     ];
 
     private static Node3D TrafficLight(bool pedestrianAmber, bool arrowPlates = false, bool rightOnRed = false, bool bikeHead = true,
-        SignalPoleColour colour = SignalPoleColour.SilverGrey, OverheadKind? overhead = null, bool island = false)
+        SignalPoleColour colour = SignalPoleColour.SilverGrey, OverheadKind? overhead = null, bool island = false, bool tram = false,
+        bool tramT = false, bool tramTwo = false)
     {
         var plan = SignalPlan.Build(
         [
             new SignalArm(0, true, true, LeftPocket: true, Pedestrians: true, BikeSignal: bikeHead, Rank: 2, BikeRightOnRed: rightOnRed,
-                HalfInM: island ? 4 : 0, HalfOutM: island ? 3.5f : 0),
+                HalfInM: island ? 4 : 0, HalfOutM: island ? 3.5f : 0, TramMoves: !tram ? SignalMoves.None : tramTwo ? SignalMoves.Left | SignalMoves.Through : SignalMoves.Through),
             new SignalArm(Math.PI / 2, true, true, Pedestrians: true),
             new SignalArm(Math.PI, true, true, LeftPocket: true, Pedestrians: true, Rank: 2),
             new SignalArm(-Math.PI / 2, true, true, Pedestrians: true),
         ], 353, pedestrianAmber);
         plan.ArrowPlates = arrowPlates;
+        plan.TramTHead = tramT;
         plan.PoleColour = colour;
         var tile = Tile();
         var signal = new RoadSignal
@@ -113,7 +123,7 @@ public static class TerrainShowcase
             {
                 island
                     ? new SignalPole(0, 0, 0, 0f, Mathf.Pi / 2, 0, SignalPoleFlags.Second | SignalPoleFlags.Pedestrian | SignalPoleFlags.ArrivingHalf | SignalPoleFlags.DepartingHalf)
-                    : new SignalPole(0, 0, 0, 0f, Mathf.Pi / 2, 0, SignalPoleFlags.Main | SignalPoleFlags.Pedestrian),
+                    : new SignalPole(0, 0, 0, 0f, Mathf.Pi / 2, 0, SignalPoleFlags.Main | SignalPoleFlags.Pedestrian | (tram ? SignalPoleFlags.Tram : 0)),
             },
         };
         // the heads face -Z, the driver's left is +X: the lanes to the pole's left

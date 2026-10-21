@@ -57,6 +57,8 @@ public static partial class TileRewriter
         string? RawDir = null,
         /// <summary><c>osm_overlay.tsv</c>; null or missing = no OSM attributes.</summary>
         string? OsmOverlay = null,
+        /// <summary><c>tram_stops.tsv</c> (#1057, the preprocessor's <c>--tram-stops</c>); null or missing = no tram stops.</summary>
+        string? TramStops = null,
         /// <summary>Leave rewritten tiles that have no raw input alone instead of refusing.</summary>
         bool SkipRewritten = false,
         /// <summary>
@@ -374,6 +376,8 @@ public static partial class TileRewriter
         private readonly RailingPlanner.Stats railings = new();
         private readonly ParkingStats parkingStats = new();
         private readonly Footprints buildings = new(inputs.Buildings);
+        /// <summary>The region's tram stops (#1057, <see cref="Options.TramStops"/>), none without the file.</summary>
+        private readonly List<(string Name, Vec2 At)> tramStops = options.TramStops is { } stopsPath ? ReadAllTramStops(stopsPath) : [];
 
         /// <summary>
         /// Rewrites one block: its tiles and a halo of <see cref="Options.Halo"/> read for context;
@@ -484,7 +488,9 @@ public static partial class TileRewriter
                     // (#711, the user's rule) a footpath joining a street connects to its sidewalk: no junction with it; a track too
                     // (#854, the user, Oct 18: near a junction it ends at the carriageway's edge, no arm of it)
                     IsFootpath: l => l.Tag is Source s && s.Segment.Class is RoadClass.Path or RoadClass.Track,
-                    IsCarRoad: l => l.Tag is Source s && PriorityPlanner.IsCarRoad(s.Segment.Class)));
+                    IsCarRoad: l => l.Tag is Source s && PriorityPlanner.IsCarRoad(s.Segment.Class),
+                    // tram tracks meeting at a switch run on through it uncut (#1057: a junction trimmed them back, a gap for the trams)
+                    ThroughNode: l => l.Tag is Source { Segment: { Class: RoadClass.Railway } t } && (t.Flags & RoadFlags.Tramway) != 0));
                 netStats.Priority.NearEndsJoined += result.NearEndsJoined;
                 // traffic lights: from OSM where the overlay covers a junction, else where two main
                 // roads cross in a dense core (#348)
@@ -861,6 +867,8 @@ public static partial class TileRewriter
                 if (layouts is not null && writtenNodes.Count > 0)
                     WriteLayouts(layouts, writtenNodes, result, layoutSegmentOf, finalPieces, layoutOutput, capOf, caps, writtenCaps, paint, layoutStation,
                         transitionsOf, islands, signs, signalRecords, approachRecords, cantons, netStats.Signals, netStats.LayoutWrite, coreCorners, pathEnds, bikeBridges, pathsOf, buildings);
+                // the tram stops' signs beside their tracks (#1057), where the preprocessor found stops (--tram-stops)
+                if (tramStops.Count > 0) EmitTramStops(tramStops, new TramNet(result), block, signs, netStats.LayoutWrite);
 
                 // the paths' paint on their final pieces, and the crossings at the junctions (#120)
                 var linkOf = new Dictionary<RoadSegment, int>(ReferenceEqualityComparer.Instance);

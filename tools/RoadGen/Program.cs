@@ -203,7 +203,7 @@ else if (args.Contains("--rewrite"))
         Measure: args.Contains("--measure"),
         AuditHeights: !args.Contains("--no-audit"),
         RawDir: RawRoads.DirFor(temp),
-        OsmOverlay: Path.Combine(temp, "osm_overlay.tsv"),
+        OsmOverlay: Path.Combine(temp, "osm_overlay.tsv"), TramStops: Path.Combine(temp, "tram_stops.tsv"),
         SkipRewritten: args.Contains("--skip-rewritten"),
         NewJunctions: ArgValue("--junctions") != "old", WriteJunctions: ArgValue("--junctions") is null or "write"), Console.WriteLine);
     }

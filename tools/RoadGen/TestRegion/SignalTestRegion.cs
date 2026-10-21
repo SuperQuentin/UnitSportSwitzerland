@@ -421,7 +421,34 @@ public static class SignalTestRegion
                 foreach (double way in (ReadOnlySpan<double>)[-1, 1])
                     boxes.Add(new Box(Math.Min(OverheadE + way * 9, OverheadE + way * 60), Math.Min(nb + side * 15, nb + side * 27),
                         Math.Max(OverheadE + way * 9, OverheadE + way * 60), Math.Max(nb + side * 15, nb + side * 27), 15));
-            junctions.Add(new Junction("J14-tram", OverheadE, nb, "J13's 4+4 artery with trams between houses: heads overhead on a span wire between facades",
+            // its tram (#1057): two tracks in the middle of the artery as TLM maps a tram line (each its own line, auf_strasse, 3.2 m
+            // apart), both drawn west to east: the trams keep right, the eastbound on the south track
+            // a branch 12 m east of the junction (the user: a head per direction): the westbound trams may turn left down the south
+            // arm, the northbound ones from it turn right onto the eastbound track, each curve round (E + 12, N - 12)
+            const double branch = OverheadE + 12;
+            foreach (var (id, side) in (ReadOnlySpan<(string, double)>)[("TTS", -1.6), ("TTN", 1.6)])
+            {
+                lines.Add(new Line(id + "W", "", "", "", [(OverheadE - 450, nb + side), (branch, nb + side)], "", Rail: RoadFlags.Tramway, OnStreet: true));
+                lines.Add(new Line(id + "E", "", "", "", [(branch, nb + side), (OverheadE + 450, nb + side)], "", Rail: RoadFlags.Tramway, OnStreet: true));
+            }
+            List<(double E, double N)> Arc(double radius)
+            {
+                var arc = new List<(double E, double N)>();
+                for (int k = 0; k <= 12; k++)
+                {
+                    double a = Math.PI / 2 * k / 12;   // from the east-west track round to the north-south one
+                    arc.Add((branch - radius * Math.Sin(a), nb - 12 + radius * Math.Cos(a)));
+                }
+                return arc;
+            }
+            var left = Arc(13.6);
+            left.Add((OverheadE - 1.6, nb - 400));
+            lines.Add(new Line("TTL", "", "", "", [.. left], "", Rail: RoadFlags.Tramway, OnStreet: true));
+            var right = Arc(10.4);
+            right.Reverse();
+            right.Insert(0, (OverheadE + 1.6, nb - 400));
+            lines.Add(new Line("TTR", "", "", "", [.. right], "", Rail: RoadFlags.Tramway, OnStreet: true));
+            junctions.Add(new Junction("J14-tram", OverheadE, nb,"J13's 4+4 artery with trams between houses: heads overhead on a span wire between facades",
                 Arms("L|T|T|TR", "L|T|T|TR", "L|TR", "L|TR")));
         }
 
@@ -486,6 +513,9 @@ public static class SignalTestRegion
         WritePlaces(chunkDir, design.Junctions);
         var roadTiles = WriteRawRoads(RawRoads.DirFor(tempDir), design.Lines);
         WriteOverlay(tempDir, design.Lines);
+        // J14's tram stops (#1057): two stops on the artery, 150 m either side of the junction, as swissTLM3D gives a stop: one point
+        File.WriteAllText(Path.Combine(tempDir, "tram_stops.tsv"), string.Create(CultureInfo.InvariantCulture,
+            $"name\te\tn\nJ14 west\t{OverheadE - 150:F2}\t{BetweenN:F2}\nJ14 east\t{OverheadE + 150:F2}\t{BetweenN:F2}\n"));
         WriteSignals(tempDir, design);
         string about = About(design);
         foreach (string dir in new[] { chunkDir, tempDir })
@@ -497,7 +527,8 @@ public static class SignalTestRegion
             + $"{design.Buildings.Count} buildings, {design.Junctions.Count} signal nodes; written in {clock.Elapsed.TotalSeconds:F1} s");
 
         var stats = TileRewriter.Run(chunkDir, roadTiles, new TileRewriter.Options(
-            RawDir: RawRoads.DirFor(tempDir), OsmOverlay: Path.Combine(tempDir, "osm_overlay.tsv"), NewJunctions: newJunctions, WriteJunctions: writeJunctions,
+            RawDir: RawRoads.DirFor(tempDir), OsmOverlay: Path.Combine(tempDir, "osm_overlay.tsv"), TramStops: Path.Combine(tempDir, "tram_stops.tsv"),
+            NewJunctions: newJunctions, WriteJunctions: writeJunctions,
             Cantons: TileRewriter.Cantons.Of(CantonTiles), Decorate: MarkBorders), log);
         log(stats.Network.Format(stats.TilesWritten));
         log("");
@@ -952,7 +983,7 @@ public static class SignalTestRegion
                 string dir = Compass(a.Heading);
                 seen.Add(dir);
                 string car = string.Join("|", a.Lanes.Where(l => l.Kind == ApproachLaneKind.Car).Select(l => Moves(l.Moves)));
-                string all = string.Join(" | ", a.Lanes.Select(l => (l.Kind == ApproachLaneKind.Bike ? "b" : "") + Moves(l.Moves)
+                string all = string.Join(" | ", a.Lanes.Select(l => l.Kind switch { ApproachLaneKind.Bike => "b", ApproachLaneKind.Tram => "tram:", _ => "" } + Moves(l.Moves)
                     + (l.StopBehind > 3.5f ? "[box]" : l.StopBehind > 0.01f ? "[adv]" : "")));
                 var arm = plan.Arms[a.SignalArm];
                 string designed = j.Design.GetValueOrDefault(dir) ?? "-";
@@ -1061,10 +1092,11 @@ public static class SignalTestRegion
             for (int g = 0; g < plan.Groups.Count; g++)
             {
                 var group = plan.Groups[g];
-                if (group.Kind is not (SignalGroupKind.Car or SignalGroupKind.LeftArrow or SignalGroupKind.RightArrow)) continue;
+                if (group.Kind is not (SignalGroupKind.Car or SignalGroupKind.LeftArrow or SignalGroupKind.RightArrow or SignalGroupKind.Tram)) continue;
                 var iv = group.Intervals.FirstOrDefault(x => x.From <= t && t < x.To);
                 if (iv.Aspect != SignalAspect.Green) continue;
-                green.Add(Compass(plan.Arms[group.Arm].Heading) + ":" + Moves(group.Moves) + (group.Kind == SignalGroupKind.Car ? "" : "^"));
+                green.Add(Compass(plan.Arms[group.Arm].Heading) + ":" + (group.Kind == SignalGroupKind.Tram ? "tram" : "") + Moves(group.Moves)
+                    + (group.Kind is SignalGroupKind.Car or SignalGroupKind.Tram ? "" : "^"));
             }
             string set = string.Join(" ", green.Order(StringComparer.Ordinal));
             if (set.Length == 0 || set == last) continue;

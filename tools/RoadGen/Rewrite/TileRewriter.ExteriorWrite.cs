@@ -31,7 +31,8 @@ public static partial class TileRewriter
 
     private static SignalPlan? WriteSignals(JunctionPlan jp, RoadGenResult result, Dictionary<TileId, List<RoadSignal>> signals,
         Dictionary<TileId, List<RoadApproach>> approaches, Cantons? cantons, SignalStats signalStats, LayoutWriteStats stats,
-        Dictionary<TileId, List<RoadPointProp>> signs, Func<Vec2, bool> clear, Func<Vec2, bool>? building = null)
+        Dictionary<TileId, List<RoadPointProp>> signs, Func<Vec2, bool> clear, Func<Vec2, bool>? building = null,
+        IReadOnlyDictionary<int, (SignalMoves Moves, double Lateral)>? trams = null)
     {
         var net = result.Network;
         var home = TileId.FromLv95(jp.Centre.X, jp.Centre.Y);
@@ -69,7 +70,8 @@ public static partial class TileRewriter
                 CrossingM: (float)(mouth.CarriagewayWidth), Rank: (byte)Math.Clamp(info is { } i ? PriorityPlanner.Rank(i) / 4 : 1, 1, 255),
                 Banned: approach ? a.Wants.Banned : SignalMoves.None, BikeBetween: between,
                 StorageM: Room(a.Length), LeftStorageM: Room(Run(PocketRules.Left)), RightStorageM: Room(Run(PocketRules.Right)),
-                HalfInM: halfIn, HalfOutM: halfOut, RiderBox: ex.Bars.Any(b => b.Kind == BarKind.BikeBox)));
+                HalfInM: halfIn, HalfOutM: halfOut, RiderBox: ex.Bars.Any(b => b.Kind == BarKind.BikeBox),
+                TramMoves: trams?.GetValueOrDefault(arms.Count).Moves ?? SignalMoves.None));
         }
         if (arms.Count(x => x.In) < 2) return null;
         string? canton = cantons?.CodeAt(jp.Centre.X, jp.Centre.Y);
@@ -129,9 +131,11 @@ public static partial class TileRewriter
         if (plan.Validate() is { Count: > 0 })
         {
             stats.SignalsInvalid++;
+            if (stats.InvalidAt.Count < 5) stats.InvalidAt.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{jp.Centre.X:F0},{jp.Centre.Y:F0}{(arms.Any(a => a.TramMoves != SignalMoves.None) ? " (trams)" : "")}: {plan.Validate()[0]}"));
             return null;
         }
         plan.ArrowPlates = ArrowPlates(canton);
+        plan.TramTHead = RomandyTramHead(canton, jp.Centre.X);
         stats.TwoStage += arms.Count(x => x.TwoStage);
         stats.RiderBoxes += Enumerable.Range(0, arms.Count).Count(k => arms[k].RiderBox && plan.Groups.Any(g => g.Kind == SignalGroupKind.Bike && g.Arm == k && g.Moves == SignalMoves.Left));
         plan.PoleColour = PoleColour(canton);
@@ -228,6 +232,21 @@ public static partial class TileRewriter
                         }
                 }
             }
+        }
+        // the trams' heads (#1057, the user: "pole only, repeated on both sides if repeater pole"): on the approach's main pole and on
+        // its repeater (the left kerb's or the refuge's) where it has one; on any of the arm's poles where it has neither
+        foreach (var (k, (moves, _)) in trams ?? new Dictionary<int, (SignalMoves, double)>())
+        {
+            if (moves == SignalMoves.None || plan.Groups.All(g => g.Kind != SignalGroupKind.Tram || g.Arm != k)) continue;
+            bool any = false;
+            for (int i = 0; i < poles.Count; i++)
+                if (poles[i].Arm == k && (poles[i].Flags & (SignalPoleFlags.Main | SignalPoleFlags.Second)) != 0)
+                {
+                    poles[i] = poles[i] with { Flags = poles[i].Flags | SignalPoleFlags.Tram };
+                    any = true;
+                }
+            if (!any && poles.FindIndex(p => p.Arm == k) is var at and >= 0) poles[at] = poles[at] with { Flags = poles[at].Flags | SignalPoleFlags.Tram };
+            stats.TramGroups += plan.Groups.Count(g => g.Kind == SignalGroupKind.Tram && g.Arm == k);
         }
         var centre = Local(home, [jp.Centre], p => SampleAt(jp.Arms[0], p), 0f);
         var record = new RoadSignal { X = centre[0], Y = centre[1], Z = centre[2], Stops = stops, Plan = plan, Poles = poles };

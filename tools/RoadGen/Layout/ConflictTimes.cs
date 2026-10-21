@@ -22,6 +22,15 @@ public static class ConflictTimes
     public const double CarClear = 10, CarEnter = 50 / 3.6, BikeClear = 4, BikeEnter = 30 / 3.6, WalkClear = 1.2, WalkEnter = 1.5;
     public const double CarLength = 6, BikeLength = 2, WalkLength = 0;
 
+    /// <summary>
+    /// A tram (#1057): it clears and enters a junction at 25 km/h (its switches and curves, as the game's trams take a core), and is a
+    /// long five-section one (42 m: it holds the conflict longest).
+    /// </summary>
+    public const double TramClear = 7, TramEnter = 7, TramLength = 42;
+
+    /// <summary>A three-section tram (26 m): the timing's second try where the long one takes the cycle past its maximum (#1057).</summary>
+    public const double TramShortLength = 26;
+
     /// <summary>A turning car at most the speed its path's radius allows as traffic drives it (<see cref="TurnSpeed"/>), never over this (m/s).</summary>
     public const double TurnMost = 10;
 
@@ -32,7 +41,7 @@ public static class ConflictTimes
     private const double MergeLength = 8;
 
     /// <summary>Who moves along a line.</summary>
-    public enum Mover : byte { Car, Bike, Walker }
+    public enum Mover : byte { Car, Bike, Walker, Tram }
 
     /// <summary>A walker's own width (m): one walker takes this much of the zebra, not all of it.</summary>
     public const double WalkBody = 0.5;
@@ -58,9 +67,9 @@ public static class ConflictTimes
     /// and each arm's crossing in its pedestrian group. <c>[ending, starting]</c>, NaN where no lines of the two meet.
     /// </summary>
     public static float[,] Of(JunctionPlan jp, SignalPlan plan, IEnumerable<Connector> rides, Func<Connector, int> groupOf,
-        Func<Line, bool>? keep = null, Func<Connector, List<Vec2>?>? laid = null)
+        Func<Line, bool>? keep = null, Func<Connector, List<Vec2>?>? laid = null, IReadOnlyList<Line>? trams = null)
     {
-        var lines = Lines(jp, plan, rides, groupOf, laid).Where(l => keep?.Invoke(l) ?? true).ToList();
+        var lines = Lines(jp, plan, rides, groupOf, laid, trams).Where(l => keep?.Invoke(l) ?? true).ToList();
         int n = plan.Groups.Count;
         var table = new float[n, n];
         for (int i = 0; i < n; i++)
@@ -145,7 +154,7 @@ public static class ConflictTimes
 
     /// <summary>The movements of a lit junction as lines from their stop lines (see <see cref="Of"/>).</summary>
     public static List<Line> Lines(JunctionPlan jp, SignalPlan plan, IEnumerable<Connector> rides, Func<Connector, int> groupOf,
-        Func<Connector, List<Vec2>?>? laid = null)
+        Func<Connector, List<Vec2>?>? laid = null, IReadOnlyList<Line>? trams = null)
     {
         var core = jp.Core!;
         var lines = new List<Line>();
@@ -188,6 +197,8 @@ public static class ConflictTimes
             lines.Add(new Line(g, Mover.Walker, [left, right], bar.To - bar.From, WalkClear, WalkEnter, WalkLength, plan.PassingTime(g)));
             lines.Add(new Line(g, Mover.Walker, [right, left], bar.To - bar.From, WalkClear, WalkEnter, WalkLength, plan.PassingTime(g)));
         }
+        // the trams' ways through the core, from their stop lines (#1057, TileRewriter.Trams)
+        if (trams is not null) lines.AddRange(trams);
         return lines;
 
         static double Min(double a, double b, double c) => Math.Max(0.5, Math.Min(a, Math.Min(b, c)));
