@@ -1,0 +1,66 @@
+# iOS build check (#1025, docs/notes/core/ios-build.md): Godot exports the Xcode project and xcodebuild compiles
+# it, unsigned. Godot exports C# to iOS only on macOS, hence the macOS runner (free: the repo is public).
+# Not part of a release: run by hand, or by a PR that touches the iOS build itself.
+name: iOS build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/ios.yml
+      - tools/ios-build.sh
+      - tools/ci/install-godot.sh
+      - tools/ci/export_presets.cfg
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      GODOT_VERSION: 4.7.2-stable
+      GODOT: ${{ github.workspace }}/.godot-ci/godot
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false # the LFS assets are excluded from every export
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+
+      - name: Cache Godot and its export templates
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .godot-ci
+            ~/Library/Application Support/Godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}-mono-macos
+
+      - name: Install Godot ${{ env.GODOT_VERSION }} mono
+        if: steps.godot-cache.outputs.cache-hit != 'true'
+        run: bash tools/ci/install-godot.sh
+
+      - name: Build
+        run: |
+          cp tools/ci/export_presets.cfg export_presets.cfg
+          xcodebuild -version
+          bash tools/ios-build.sh
+
+      - name: Keep the logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-logs
+          path: test_output/ios/*.log
+          if-no-files-found: ignore
