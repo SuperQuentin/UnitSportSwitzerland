@@ -488,7 +488,9 @@ public static partial class TileRewriter
                     // (#711, the user's rule) a footpath joining a street connects to its sidewalk: no junction with it; a track too
                     // (#854, the user, Oct 18: near a junction it ends at the carriageway's edge, no arm of it)
                     IsFootpath: l => l.Tag is Source s && s.Segment.Class is RoadClass.Path or RoadClass.Track,
-                    IsCarRoad: l => l.Tag is Source s && PriorityPlanner.IsCarRoad(s.Segment.Class)));
+                    IsCarRoad: l => l.Tag is Source s && PriorityPlanner.IsCarRoad(s.Segment.Class),
+                    // tram tracks meeting at a switch run on through it uncut (#1057: a junction trimmed them back, a gap for the trams)
+                    ThroughNode: l => l.Tag is Source { Segment: { Class: RoadClass.Railway } t } && (t.Flags & RoadFlags.Tramway) != 0));
                 netStats.Priority.NearEndsJoined += result.NearEndsJoined;
                 // traffic lights: from OSM where the overlay covers a junction, else where two main
                 // roads cross in a dense core (#348)

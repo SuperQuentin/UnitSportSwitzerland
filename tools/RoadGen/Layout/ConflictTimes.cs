@@ -28,6 +28,9 @@ public static class ConflictTimes
     /// </summary>
     public const double TramClear = 7, TramEnter = 7, TramLength = 42;
 
+    /// <summary>A three-section tram (26 m): the timing's second try where the long one takes the cycle past its maximum (#1057).</summary>
+    public const double TramShortLength = 26;
+
     /// <summary>A turning car at most the speed its path's radius allows as traffic drives it (<see cref="TurnSpeed"/>), never over this (m/s).</summary>
     public const double TurnMost = 10;
 

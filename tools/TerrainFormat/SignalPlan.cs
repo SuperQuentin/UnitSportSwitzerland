@@ -145,6 +145,9 @@ public sealed class SignalPlan
     /// way, the riders' lead instead (<see cref="BikeLead"/>, the user: "like for bikes").
     /// </summary>
     public const float TramLead = 1f;
+
+    /// <summary>Whether the trams lead (#1057; RoadGen turns it off where the leads would take the cycle past <see cref="MaxCycle"/>). Not stored.</summary>
+    public bool TramLeads { get; set; } = true;
     /// <summary>A pedestrian clears 2/3 of the crossing at this pace in the clearance time (2-8 s).</summary>
     public const float WalkSpeed = 1.2f;
     /// <summary>The green of a leading or lagging left-turn phase whose pocket's storage is unknown; the time the cycle budgets for one.</summary>
@@ -596,7 +599,14 @@ public sealed class SignalPlan
         foreach (int t in trams)
         {
             bool Free(Phase p) => p.Base.All(g => conflicts[t, g] != Conflict.Hard);
-            var with = phases.Where(p => Free(p) && p.Base.Any(g => plan.Groups[g].Arm == plan.Groups[t].Arm)).ToList();
+            // where its walkers would be green otherwise (nothing in the phase crossing them), a tram crossing them stays out of it:
+            // they would lose their green (a turning tram across the crosswalk it turns over)
+            bool Spares(Phase p) => !Enumerable.Range(0, plan.Groups.Count).Any(w => plan.Groups[w].Kind == SignalGroupKind.Pedestrian
+                && conflicts[t, w] == Conflict.Hard && p.Base.All(g => conflicts[w, g] != Conflict.Hard));
+            var own = phases.Where(p => Free(p) && p.Base.Any(g => plan.Groups[g].Arm == plan.Groups[t].Arm)).ToList();
+            var with = own.Where(Spares).ToList();
+            // (none spares them: every one but the last of its approach's, so its walkers keep that one)
+            if (with.Count == 0) with = own.Count > 1 ? own.Take(own.Count - 1).ToList() : own;
             if (with.Count == 0) with = phases.Where(Free).Take(1).ToList();
             foreach (var p in with) p.Base.Add(t);
         }
@@ -1013,7 +1023,7 @@ public sealed class SignalPlan
         // a tram leads its approach's cars starting with it by TramLead s; by the riders' lead where a car starting with it turns
         // across its way (permissive: the car gives way, the tram is in the conflict first; #1057, the user); 0 with no car starting
         float TramLeadOf(int tram, IEnumerable<int> starting) =>
-            plan.Groups[tram].Kind != SignalGroupKind.Tram ? 0f
+            plan.Groups[tram].Kind != SignalGroupKind.Tram || !plan.TramLeads ? 0f
             : starting.Any(h => plan.Groups[h].Kind == SignalGroupKind.Car && conflicts[tram, h] == Conflict.Permissive) ? BikeLead
             : starting.Any(h => plan.Groups[h].Kind == SignalGroupKind.Car && plan.Groups[h].Arm == plan.Groups[tram].Arm) ? TramLead : 0f;
         // the gap after each phase, and with conflict times each starting group's own wait after the phase's green ends
@@ -1060,7 +1070,7 @@ public sealed class SignalPlan
                     wait[i][h] = Math.Max(wait[i][h], wait[i][b] + BikeLead);
             // a tram leads (#1057, the user): the cars turning across its way starting with it wait the riders' lead after it, its
             // approach's other cars TramLead (only where the tram may go no later than they: else no lead)
-            foreach (int t in starting.Where(t => plan.Groups[t].Kind == SignalGroupKind.Tram))
+            foreach (int t in starting.Where(t => plan.TramLeads && plan.Groups[t].Kind == SignalGroupKind.Tram))
                 foreach (int h in starting.Where(h => plan.Groups[h].Kind == SignalGroupKind.Car))
                     if (conflicts[t, h] == Conflict.Permissive) wait[i][h] = Math.Max(wait[i][h], wait[i][t] + BikeLead);
                     else if (plan.Groups[h].Arm == plan.Groups[t].Arm && wait[i][t] <= wait[i][h] + 0.05f)

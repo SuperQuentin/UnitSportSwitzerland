@@ -423,8 +423,31 @@ public static class SignalTestRegion
                         Math.Max(OverheadE + way * 9, OverheadE + way * 60), Math.Max(nb + side * 15, nb + side * 27), 15));
             // its tram (#1057): two tracks in the middle of the artery as TLM maps a tram line (each its own line, auf_strasse, 3.2 m
             // apart), both drawn west to east: the trams keep right, the eastbound on the south track
+            // a branch 12 m east of the junction (the user: a head per direction): the westbound trams may turn left down the south
+            // arm, the northbound ones from it turn right onto the eastbound track, each curve round (E + 12, N - 12)
+            const double branch = OverheadE + 12;
             foreach (var (id, side) in (ReadOnlySpan<(string, double)>)[("TTS", -1.6), ("TTN", 1.6)])
-                lines.Add(new Line(id, "", "", "", [(OverheadE - 450, nb + side), (OverheadE + 450, nb + side)], "", Rail: RoadFlags.Tramway, OnStreet: true));
+            {
+                lines.Add(new Line(id + "W", "", "", "", [(OverheadE - 450, nb + side), (branch, nb + side)], "", Rail: RoadFlags.Tramway, OnStreet: true));
+                lines.Add(new Line(id + "E", "", "", "", [(branch, nb + side), (OverheadE + 450, nb + side)], "", Rail: RoadFlags.Tramway, OnStreet: true));
+            }
+            List<(double E, double N)> Arc(double radius)
+            {
+                var arc = new List<(double E, double N)>();
+                for (int k = 0; k <= 12; k++)
+                {
+                    double a = Math.PI / 2 * k / 12;   // from the east-west track round to the north-south one
+                    arc.Add((branch - radius * Math.Sin(a), nb - 12 + radius * Math.Cos(a)));
+                }
+                return arc;
+            }
+            var left = Arc(13.6);
+            left.Add((OverheadE - 1.6, nb - 400));
+            lines.Add(new Line("TTL", "", "", "", [.. left], "", Rail: RoadFlags.Tramway, OnStreet: true));
+            var right = Arc(10.4);
+            right.Reverse();
+            right.Insert(0, (OverheadE + 1.6, nb - 400));
+            lines.Add(new Line("TTR", "", "", "", [.. right], "", Rail: RoadFlags.Tramway, OnStreet: true));
             junctions.Add(new Junction("J14-tram", OverheadE, nb,"J13's 4+4 artery with trams between houses: heads overhead on a span wire between facades",
                 Arms("L|T|T|TR", "L|T|T|TR", "L|TR", "L|TR")));
         }

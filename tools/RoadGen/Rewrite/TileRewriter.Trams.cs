@@ -245,7 +245,7 @@ public static partial class TileRewriter
     /// The tram ways as conflict lines for the timing (#979, #1057): each from where its track crosses its approach's stop line,
     /// in its tram group; none for a way whose arm has no line or no tram group.
     /// </summary>
-    internal static List<ConflictTimes.Line> TramLines(JunctionPlan jp, SignalPlan plan, List<TramWay> ways)
+    internal static List<ConflictTimes.Line> TramLines(JunctionPlan jp, SignalPlan plan, List<TramWay> ways, double length = ConflictTimes.TramLength)
     {
         var lines = new List<ConflictTimes.Line>();
         foreach (var w in ways)
@@ -260,7 +260,7 @@ public static partial class TileRewriter
             if (ex?.CarStop is { } stop && TramStop(a, mouth, stop, w) is var (at, _)) points.Add(at);
             points.AddRange(w.Points);
             lines.Add(new ConflictTimes.Line(g, ConflictTimes.Mover.Tram, points, TramWidth + 0.2, ConflictTimes.TramClear, ConflictTimes.TramEnter,
-                ConflictTimes.TramLength, plan.PassingTime(g)));
+                length, plan.PassingTime(g)));
         }
         return lines;
     }
