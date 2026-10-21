@@ -124,17 +124,20 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     private HashSet<TileId> _available = new();
 
     /// <summary>
+    /// A phone (#63): half its cores, 2 to 4. They are big.LITTLE: more builds than big cores
+    /// only heat it and starve the main thread, and every build holds megabytes of grids.
+    /// <b>First of these fields</b> (#1032): static initializers run in the order they are
+    /// written, and declared below <see cref="PlayMaxConcurrentBuilds"/> it was still 0 there, so
+    /// a phone streaming from a server had no build slot at all and never got its ground.
+    /// </summary>
+    private static readonly int MobileMaxConcurrentBuilds = Math.Clamp(System.Environment.ProcessorCount / 2, 2, 4);
+
+    /// <summary>
     /// Tile builds allowed to run concurrently. Local disk could take far more, but the
     /// per-frame commit budget is the real limiter there, so a small number costs nothing
     /// locally and is what makes streaming usable.
     /// </summary>
     private static readonly int PlayMaxConcurrentBuilds = Platform.IsMobile ? MobileMaxConcurrentBuilds : 6;
-
-    /// <summary>
-    /// A phone (#63): half its cores, 2 to 4. They are big.LITTLE: more builds than big cores
-    /// only heat it and starve the main thread, and every build holds megabytes of grids.
-    /// </summary>
-    private static readonly int MobileMaxConcurrentBuilds = Math.Clamp(System.Environment.ProcessorCount / 2, 2, 4);
 
     /// <summary>
     /// Offline the disk and the CPU are the only limits, so use the cores that are there.
@@ -146,11 +149,12 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     private static readonly int LocalMaxConcurrentBuilds = Platform.IsMobile ? MobileMaxConcurrentBuilds
         : Math.Max(PlayMaxConcurrentBuilds, System.Environment.ProcessorCount);
 
-    private int MaxConcurrentBuilds =>
+    /// <summary>Never below one: with no slot, nothing is ever built or even fetched.</summary>
+    private int MaxConcurrentBuilds => Math.Max(1,
         OfflineMode ? OfflineMaxConcurrentBuilds
         : MaxConcurrentBuildsOverride > 0 ? MaxConcurrentBuildsOverride
         : Streaming?.Invoke() == true ? PlayMaxConcurrentBuilds
-        : LocalMaxConcurrentBuilds;
+        : LocalMaxConcurrentBuilds);
 
     private int _buildsInFlight;
 
