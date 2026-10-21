@@ -57,12 +57,62 @@ public abstract partial class ChatProbe : Node
         return true;
     }
 
-    /// <summary>The RESULT line, then quit after <paramref name="linger"/> seconds.</summary>
+    /// <summary>
+    /// The RESULT line, then quit: once every peer this probe heard from has said it finished too, and after
+    /// <paramref name="linger"/> seconds at most (#992). The linger keeps us up while a peer still checks our body
+    /// or waits for our last line; a fixed 1-2 s of it ended every net check. A probe with no chat prefix, or
+    /// one that never heard a peer, lingers as before.
+    /// </summary>
     protected async Task Finish(double linger)
     {
         GD.Print(_failures == 0 ? $"{Log} RESULT: ok" : $"{Log} RESULT: FAILED ({_failures})");
-        if (linger > 0) await Seconds(linger);
+        if (linger > 0)
+        {
+            if (_prefix.Length > 0 && Chat != null && _role.Length > 0 && Peers().Count > 0)
+            {
+                Say(FinishedWord);
+                await Until(() => Peers().All(p => HeardLine(p, FinishedWord)), linger);
+                await Until(() => false, FlushSeconds);   // our own last line and RPCs out (frames, not /speed)
+            }
+            else await Seconds(linger);
+        }
         GetTree().Quit(_failures == 0 ? 0 : 1);
+    }
+
+    private const string FinishedWord = "finished";
+    /// <summary>Loopback: a dozen frames carry the last reliable packets out before the process quits.</summary>
+    private const double FlushSeconds = 0.25;
+
+    /// <summary>The roles of the peers we heard (<c>"&lt;prefix&gt; &lt;role&gt; …"</c>), ours left out.</summary>
+    private HashSet<string> Peers()
+    {
+        var roles = new HashSet<string>();
+        string mark = _prefix + " ";
+        foreach (string line in _heard)
+        {
+            int at = line.IndexOf(mark, StringComparison.Ordinal);
+            if (at < 0) continue;
+            int start = at + mark.Length, end = line.IndexOf(' ', start);
+            if (end <= start) continue;
+            string role = line[start..end];
+            if (role != _role) roles.Add(role);
+        }
+        return roles;
+    }
+
+    private bool HeardLine(string role, string what) => _heard.Any(l => l.Contains($"{_prefix} {role} {what}"));
+
+    /// <summary>
+    /// Admin through <c>/login</c> (the server's <c>--admin-password</c>): waits for the grant rather than a fixed
+    /// pause (#992). False after a <see cref="Fail"/> when none came within <paramref name="seconds"/>.
+    /// </summary>
+    protected async Task<bool> LogIn(string password, double seconds = 10)
+    {
+        if (Permissions.IsAdmin) return true;
+        Chat!.Send($"/login {password}");
+        if (await Until(() => Permissions.IsAdmin, seconds)) return true;
+        Fail("not logged in as admin");
+        return false;
     }
 
     protected void Say(string what)
@@ -106,11 +156,7 @@ public abstract partial class ChatProbe : Node
     protected async Task<bool> SpeedUp(string password)
     {
         if (CmdArgs.Double("--checkspeed") is not double speed || speed <= 0) return true;
-        if (!Permissions.IsAdmin)
-        {
-            Chat!.Send($"/login {password}");
-            if (!await Until(() => Permissions.IsAdmin, 10)) { Fail("not logged in as admin"); return false; }
-        }
+        if (!await LogIn(password)) return false;
         Chat!.Send(FormattableString.Invariant($"/speed {speed}"));
         if (!await Until(() => Math.Abs(SimClock.Scale - speed) < 1e-6, 10)) { Fail($"/speed {speed} never applied"); return false; }
         GD.Print($"{Log} the simulation at {SimClock.Describe(speed)} (--checkspeed)");
@@ -136,9 +182,10 @@ public abstract partial class ChatProbe : Node
         if (!ok) _failures++;
     }
 
-    /// <summary>Logs the failure and quits with 1.</summary>
+    /// <summary>Logs the failure and quits with 1. Counted: a <see cref="Finish"/> after it no longer prints "RESULT: ok" last (#1006).</summary>
     protected virtual void Fail(string why)
     {
+        _failures++;
         GD.Print($"{Log} RESULT: FAILED {Dash} {why}");
         GetTree().Quit(1);
     }

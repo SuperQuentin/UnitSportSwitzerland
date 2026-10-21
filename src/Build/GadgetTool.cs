@@ -124,7 +124,7 @@ public partial class GadgetTool : Node
     public void Step(FootPlayer? player, ItemId held, bool aiming)
     {
         bool show = player != null && Gadgets.KindOf.TryGetValue(held, out _) && !Riding
-                    && (Input.MouseMode == Input.MouseModeEnum.Captured || AlwaysShow);
+                    && (MouseCapture.Mode == Input.MouseModeEnum.Captured || AlwaysShow);
         if (held != ItemId.Zipline) _zipStart = null;
         if (!show)
         {

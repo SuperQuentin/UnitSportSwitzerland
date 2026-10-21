@@ -104,7 +104,7 @@ public partial class ChatUi : CanvasLayer
         // the names a player completion asked for have arrived
         _chat.NamesReceived += () => Callable.From(() => { if (IsTyping) RefreshSuggestions(); }).CallDeferred();
 
-        Append("Press Enter to chat, / for commands.", ChatKind.System);
+        Append(Platform.IsMobile ? "CHAT (top right) to chat, / for commands." : "Press Enter to chat, / for commands.", ChatKind.System);
         // "--chatopen [seconds]" opens the input after that long, for screenshotting it against the floating lines
         if (CmdArgs.Has("--chatopen"))
             GetTree().CreateTimer(CmdArgs.Double("--chatopen") ?? 4).Timeout += () => OpenInput();
@@ -316,7 +316,7 @@ public partial class ChatUi : CanvasLayer
         ScrollToEnd();
 
         // The fly camera holds the pointer captured; typing needs it back.
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
     }
 

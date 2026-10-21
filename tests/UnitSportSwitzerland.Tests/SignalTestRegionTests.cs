@@ -50,6 +50,124 @@ public sealed class SignalTestRegionFixture : IDisposable
 public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixture<SignalTestRegionFixture>
 {
     [Fact]
+    public void J7s_east_crosswalk_crosses_its_wide_island_in_two_stages()
+    {
+        // #1030: the east arm's island (3.4 m at the zebra, from its exit hatch) holds walkers between the halves: each half a group
+        // of its own, its heads at its kerb and on the island back to back, its walkers' lines kerb to island, the first walker of
+        // each green on the island at most a third of the cycle, no zebra bar on the island
+        var j = region.Junction("J7");
+        var tile = region.Tile(j.E, j.N);
+        var signal = tile.Signals.Single();
+        var plan = signal.Plan;
+        Assert.Empty(plan.Validate());
+        Assert.True(plan.ConflictTimed);
+        int east = plan.Arms.FindIndex(a => Math.Abs(Math.IEEERemainder(a.Heading, 2 * Math.PI)) < 0.2);
+        var halves = Enumerable.Range(0, plan.Groups.Count).Where(g => plan.Groups[g].Kind == SignalGroupKind.Pedestrian && plan.Groups[g].Arm == east).ToList();
+        Assert.Equal([CrossingHalf.Arriving, CrossingHalf.Departing], halves.Select(g => plan.Groups[g].Half));
+        // only that arm: the others' crosswalks have no island
+        Assert.All(plan.Groups.Where(g => g.Kind == SignalGroupKind.Pedestrian && g.Arm != east), g => Assert.Equal(CrossingHalf.Whole, g.Half));
+
+        const SignalPoleFlags Both = SignalPoleFlags.ArrivingHalf | SignalPoleFlags.DepartingHalf;
+        var poles = signal.Poles.Where(p => p.Arm == east && (p.Flags & SignalPoleFlags.Pedestrian) != 0).ToList();
+        Assert.Equal(3, poles.Count);
+        var island = Assert.Single(poles, p => (p.Flags & Both) == Both);
+        var arriving = Assert.Single(poles, p => (p.Flags & Both) == SignalPoleFlags.ArrivingHalf);
+        var departing = Assert.Single(poles, p => (p.Flags & Both) == SignalPoleFlags.DepartingHalf);
+        Assert.True((arriving.Flags & SignalPoleFlags.Main) != 0, "the arriving half's head stands on the main pole");
+        // the island between the kerbs, its arriving head facing the way the departing kerb's does (toward the arriving kerb)
+        static float Across(SignalPole a, SignalPole b) => MathF.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Z - b.Z) * (a.Z - b.Z));
+        Assert.Equal(Across(arriving, departing), Across(arriving, island) + Across(island, departing), 0.2f);
+        Assert.Equal(0f, MathF.IEEERemainder(island.PedHeading - departing.PedHeading, 2 * MathF.PI), 0.05f);
+        Assert.Equal(MathF.PI, MathF.Abs(MathF.IEEERemainder(island.PedHeading - arriving.PedHeading, 2 * MathF.PI)), 0.05f);
+
+        // each half's walkers between its kerb and the island, both ways, shorter than the road
+        static float Length(RoadConflictLine l) => MathF.Sqrt(MathF.Pow(l.Points[^3] - l.Points[0], 2) + MathF.Pow(l.Points[^1] - l.Points[2], 2));
+        foreach (int g in halves)
+        {
+            var walks = signal.ConflictLines.Where(l => l.Group == g && l.Mover == ConflictMover.Walker).ToList();
+            Assert.Equal(2, walks.Count);
+            Assert.All(walks, l => Assert.InRange(Length(l), 2f, plan.Arms[east].CrossingM - 3f));
+        }
+        var waits = plan.IslandWaits(g => signal.ConflictLines.Where(l => l.Group == g && l.Mover == ConflictMover.Walker).Max(Length) / SignalPlan.WalkSpeed);
+        Assert.NotEmpty(waits);
+        Assert.All(waits, w => Assert.True(w.Wait <= plan.Cycle * SignalPlan.IslandWaitShare + 0.1f, $"waits {w.Wait:F1} s of {plan.Cycle:F1}"));
+
+        // the zebra (east arm: outward +X, the island pole just behind it) leaves the island bare (the user)
+        int bars = 0;
+        foreach (var paint in tile.Paint.Where(p => p.Type == PaintType.YellowSolid && p.Shape == PaintShape.Triangles))
+            for (int t = 0; t + 2 < paint.Indices.Length; t += 3)
+            {
+                float x = 0, z = 0;
+                for (int k = 0; k < 3; k++) { x += paint.Vertices[paint.Indices[t + k] * 3] / 3; z += paint.Vertices[paint.Indices[t + k] * 3 + 2] / 3; }
+                if (x < island.X - 4 || x > island.X || Math.Abs(z - island.Z) > 8) continue;
+                bars++;
+                Assert.True(Math.Abs(z - island.Z) > 1.5f, $"a zebra bar on the island, {z - island.Z:F2} m across from its pole");
+            }
+        Assert.True(bars > 0, "no zebra found");
+    }
+
+    [Fact]
+    public void Canton_row_differs_only_by_its_canton()
+    {
+        // #1038: J2's crossroads once per zone; Geneva's walkers' heads have two lenses, Vaud's heads arrow plates, Basel-Landschaft's
+        // and Bern's poles their colours (#1037), the rest alike
+        var plans = new[] { "default", "GE", "VD", "BL", "BE" }
+            .Select(c => SignalTestRegion.Junctions.Single(j => j.Name == $"J12-canton-{c}"))
+            .Select(j => region.Tile(j.E, j.N).Signals.Single().Plan).ToArray();
+        Assert.Equal((true, false), (plans[0].PedestrianAmber, plans[0].ArrowPlates));
+        Assert.Equal((false, false), (plans[1].PedestrianAmber, plans[1].ArrowPlates));
+        Assert.Equal((true, true), (plans[2].PedestrianAmber, plans[2].ArrowPlates));
+        Assert.Equal([SignalPoleColour.SilverGrey, SignalPoleColour.SilverGrey, SignalPoleColour.SilverGrey, SignalPoleColour.Anthracite,
+            SignalPoleColour.TrafficGrey], plans.Select(p => p.PoleColour));
+        Assert.All(plans, p => Assert.Equal((plans[0].Cycle, plans[0].Groups.Count), (p.Cycle, p.Groups.Count)));
+    }
+
+    [Fact]
+    public void Canton_borders_are_marked_where_roads_cross()
+    {
+        // #1038: the main road crosses four borders (#1037 added Basel-Landschaft and Bern): a stripe across it at each, and a sign
+        // each way standing in the canton it names, facing the traffic coming in across the border
+        var tiles = region.Tiles().Select(t => t.Tile).ToList();
+        Assert.Equal(4, tiles.Sum(t => t.Paint.Count(p => p.Rgba == SignalTestRegion.BorderRgba)));
+        var signs = tiles.SelectMany(t => t.PointProps.Where(p => p.Type == PointPropType.CantonSign).Select(p => (t.Id, Sign: p))).ToList();
+        Assert.Equal(8, signs.Count);
+        foreach (var (id, s) in signs)
+        {
+            double e = id.MinE + s.X, n = id.MaxN - s.Z, border = Math.Round(e / 1000) * 1000;
+            Assert.Equal(SignalTestRegion.CantonAt(e, n), RoadSigns.CantonCode(s.Variant));
+            double frontEast = -Math.Sin(s.Heading);   // heading 0 faces -Z (north)
+            Assert.True(Math.Sign(frontEast) == Math.Sign(border - e), $"the sign at E {e:F1} faces away from the border at {border}");
+        }
+    }
+
+    [Fact]
+    public void Wide_approaches_carry_their_heads_overhead()
+    {
+        // #1037: J6's 2+2 artery on mast arms, the 4+4 artery of J13 on portals, the same with trams (J14) on span wires; the
+        // 1+1 roads with pockets keep their kerb poles; every head 4.50-5.50 m over the road (5.50 m and up on a wire)
+        (OverheadKind Kind, int Count) At(string id)
+        {
+            var j = region.Junction(id);
+            var all = region.Tile(j.E, j.N).Signals.SelectMany(s => s.Overheads).ToList();
+            return (all.Select(o => o.Kind).DefaultIfEmpty().First(), all.Count);
+        }
+        Assert.Equal((OverheadKind.Arm, 2), At("J6"));
+        Assert.Equal((OverheadKind.Portal, 2), At("J13"));
+        Assert.Equal((OverheadKind.Span, 2), At("J14"));
+        Assert.Equal(0, At("J2").Count);
+        foreach (var (_, tile) in region.Tiles())
+            foreach (var s in tile.Signals)
+                foreach (var o in s.Overheads)
+                {
+                    Assert.NotEmpty(o.Heads);
+                    Assert.All(o.Heads, h => Assert.InRange(h.Along, 0.3f, o.Length));
+                    float lift = o.Bottom - s.Y;
+                    Assert.InRange(lift, o.Kind == OverheadKind.Span ? 5.4f : 4.4f, 6.2f);
+                    if (o.Kind is OverheadKind.Arm or OverheadKind.RefugeArm) Assert.True(o.Length <= 10.01f, $"an arm {o.Length:F1} m long");
+                }
+    }
+
+    [Fact]
     public void Riders_turning_left_go_with_the_left_arrow()
     {
         // #971, the user: a riders' left turn from the left-turn bike lane follows the left arrow, never the through green; where
@@ -160,6 +278,85 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
             }
             return best;
         }
+    }
+
+    [Fact]
+    public void J2s_poles_stand_by_the_crosswalk_past_every_stop_line()
+    {
+        // #1000, the user: the junction planner put the poles at the cars' line, behind the riders' line and box; beside a
+        // crosswalk they stand on its near side, nearer the junction than every line (#711)
+        var j = region.Junction("J2");
+        var signal = region.Tile(j.E, j.N).Signals.Single();
+        int checkedPoles = 0;
+        foreach (var pole in signal.Poles)
+        {
+            int k = pole.Arm;
+            if (float.IsNaN(signal.Stops[k * 3])) continue;
+            var (sx, sz) = (signal.Stops[k * 3] - signal.X, signal.Stops[k * 3 + 2] - signal.Z);
+            float len = MathF.Sqrt(sx * sx + sz * sz);
+            float stopAlong = len, poleAlong = ((pole.X - signal.X) * sx + (pole.Z - signal.Z) * sz) / len;
+            Assert.True(poleAlong < stopAlong - 0.3f, $"arm {k}'s pole {poleAlong:F1} m out, its cars' line {stopAlong:F1} m");
+            checkedPoles++;
+        }
+        Assert.True(checkedPoles >= 4);
+    }
+
+    [Fact]
+    public void No_car_path_crosses_a_repeater_island()
+    {
+        // #1000: the left repeater's island runs 3 m into the junction (the old layout's, #682); every car keeps clear of it, its
+        // path's half width and a little more off its kerb
+        int islands = 0;
+        foreach (var (_, tile) in region.Tiles())
+            foreach (var island in tile.AreaProps.Where(a => a.Type == AreaPropType.Island && a.Variant == 2))
+            {
+                islands++;
+                var v = island.Vertices;
+                int n = v.Length / 3;
+                foreach (var path in tile.JunctionPaths.Where(p => p.Kind == JunctionPathKind.Car))
+                    for (int i = 0; i < path.PointCount; i++)
+                    {
+                        float x = path.Points[i * 3], z = path.Points[i * 3 + 2];
+                        // (its width going from its start's to its end's along it)
+                        double half = (path.Width + (path.ToWidth - path.Width) * i / Math.Max(1, path.PointCount - 1)) * 0.5;
+                        double gap = Inside(v, n, x, z) ? -1 : Enumerable.Range(0, n).Min(k => Segment(x, z, v[k * 3], v[k * 3 + 2], v[(k + 1) % n * 3], v[(k + 1) % n * 3 + 2]));
+                        Assert.True(gap >= half - 0.3, $"a {path.Move} car path {gap:F2} m from an island at LV95 {tile.Id.MinE + x:F1},{tile.Id.MaxN - z:F1} (half width {half:F2})");
+                    }
+            }
+        Assert.True(islands > 0);
+
+        static bool Inside(float[] q, int n, float x, float z)
+        {
+            bool inside = false;
+            for (int i = 0, j = n - 1; i < n; j = i++)
+            {
+                float xi = q[i * 3], zi = q[i * 3 + 2], xj = q[j * 3], zj = q[j * 3 + 2];
+                if ((zi > z) != (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) inside = !inside;
+            }
+            return inside;
+        }
+        static double Segment(float x, float z, float ax, float az, float bx, float bz)
+        {
+            double dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz;
+            double t = l2 < 1e-9 ? 0 : Math.Clamp(((x - ax) * dx + (z - az) * dz) / l2, 0, 1);
+            return Math.Sqrt(Math.Pow(ax + dx * t - x, 2) + Math.Pow(az + dz * t - z, 2));
+        }
+    }
+
+    [Fact]
+    public void Priority_signs_at_lights_stand_on_their_main_poles()
+    {
+        // #1000 (the old layout's rule, #350/#711): an approach's priority sign for when the lights are off is on its main pole,
+        // not a post of its own; on a mast arm's or portal's post (#1037) out in front of its face, by its half width
+        int onPoles = 0;
+        foreach (var (_, tile) in region.Tiles())
+            foreach (var sign in tile.PointProps.Where(x => (x.Flags & PropFlags.OnSignalPole) != 0))
+            {
+                Assert.Contains(tile.Signals.SelectMany(g => g.Poles), p => (p.Flags & SignalPoleFlags.Main) != 0
+                    && Math.Abs(p.X - sign.X) < SignalOverhead.PostHalf && Math.Abs(p.Z - sign.Z) < SignalOverhead.PostHalf);
+                onPoles++;
+            }
+        Assert.True(onPoles > 0);
     }
 
     [Fact]

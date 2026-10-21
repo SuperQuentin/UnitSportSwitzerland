@@ -95,6 +95,7 @@ public partial class SoloScreen : Screen
         UiKit.SliderRow(right, "Traffic", 0, 150, 5, s.TrafficCars,
             v => GameSettings.Current.TrafficCars = (int)v, v => v <= 0 ? "off" : $"{v:F0} cars");
         UiKit.ToggleRow(right, "Trains", s.Trains, on => GameSettings.Current.Trains = on);
+        SettingsScreen.TrafficModeRows(right, s);
         // the sliders are wide in Settings; here two columns share the panel
         foreach (var row in left.GetChildren().Concat(right.GetChildren()).OfType<HBoxContainer>())
             if (row.GetChildCount() > 1 && row.GetChild(1) is Control c) c.CustomMinimumSize = new Vector2(200, 0);

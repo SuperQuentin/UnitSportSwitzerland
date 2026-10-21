@@ -165,6 +165,20 @@ public sealed class GameSettings
 
     /// <summary>Touch look (#63): camera turn per pixel of drag, as a multiple of the mouse's.</summary>
     public float TouchLookSpeed { get; set; } = 1.5f;
+
+    /// <summary>The phone's on-screen controls (#1043): size, 0.75..1.2 of their millimetres.</summary>
+    public float TouchScale { get; set; } = 1f;
+    /// <summary>How solid the on-screen controls are at rest, 0.2..1; a pressed one is always solid.</summary>
+    public float TouchOpacity { get; set; } = 0.45f;
+    /// <summary>The stick on the right, the buttons on the left.</summary>
+    public bool TouchLeftHanded { get; set; }
+    /// <summary>Pushing the stick past its ring runs; off, a Run button does.</summary>
+    public bool TouchRunPastRing { get; set; } = true;
+    /// <summary>A short tap on the world uses the item in hand, instead of a Use button.</summary>
+    public bool TouchTapToUse { get; set; }
+    /// <summary>Actions pinned from the More sheet, as "Mode:action" (two a mode at most).</summary>
+    public List<string> TouchPins { get; set; } = new();
+
     public bool InvertY { get; set; }
 
     /// <summary>Free fly moves on the ground plane, Space / Shift for height, like Minecraft (#1002); off, forward follows the look.</summary>
@@ -217,6 +231,17 @@ public sealed class GameSettings
     public bool Trains { get; set; } = true;
 
     /// <summary>
+    /// The traffic modes beyond cars and trains (#1060, tracking #1058): walkers (#1033) and riders (#1056) around the player in
+    /// daytime (fewer at night), trams on the street tracks (#1057). 0 by default, also once a mode has landed (the user's choice
+    /// for walkers, #1033); a mode's row shows in the settings once it lands (
+    /// <see cref="World.Traffic.WalkersReady"/>, <see cref="World.Traffic.RidersReady"/>, <see cref="World.Traffic.TramsReady"/>);
+    /// <c>--walkers N</c>, <c>--bikes N</c>, <c>--trams N</c> for one run.
+    /// </summary>
+    public int TrafficWalkers { get; set; }
+    public int TrafficRiders { get; set; }
+    public int Trams { get; set; }
+
+    /// <summary>
     /// Per occasion id: follow the calendar, hide its look, or force it (<see cref="Occasions.OccasionManager"/>).
     /// Absent means Auto.
     /// </summary>
@@ -238,7 +263,14 @@ public sealed class GameSettings
 
     /// <summary>How the world looks (<see cref="Styles.StyleKit"/>). Client-only, never replicated.</summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
-    public Styles.VisualStyle VisualStyle { get; set; } = Styles.VisualStyle.Ps1;
+    public Styles.VisualStyle VisualStyle { get; set; } = Styles.StyleKit.Default;
+
+    /// <summary>
+    /// The file has been through the move to Cartoon as the default (#849). Before it, every file
+    /// saved PS1 whether the player chose it or not, so a file without this flag that says PS1
+    /// is read as Cartoon once; a PS1 picked since is kept.
+    /// </summary>
+    public bool CartoonDefault { get; set; } = true;
 
     /// <summary>Camera shake strength, 0 (off) .. 1.</summary>
     public float ScreenShake { get; set; } = 1f;
@@ -408,6 +440,8 @@ public sealed class GameSettings
                 // before #261 the radios' volume lived in radio.cfg: carried over once
                 if (!text.Contains("\"musicVolume\"", StringComparison.OrdinalIgnoreCase) && OldRadioVolume() is float old)
                     loaded.MusicVolume = old;
+                if (!text.Contains("\"cartoonDefault\"", StringComparison.OrdinalIgnoreCase) && loaded.VisualStyle == Styles.VisualStyle.Ps1)
+                    loaded.VisualStyle = Styles.StyleKit.Default;
             }
             else if (OldRadioVolume() is float old) loaded.MusicVolume = old;
         }
@@ -515,6 +549,9 @@ public sealed class GameSettings
         VrRenderScale = Math.Clamp(VrRenderScale, MinVrRenderScale, MaxVrRenderScale);
         StickSensitivity = Math.Clamp(StickSensitivity, 0.2f, 3f);
         TouchLookSpeed = Math.Clamp(TouchLookSpeed, 0.3f, 4f);
+        TouchScale = Math.Clamp(TouchScale, 0.75f, TouchLayout.MaxScale);
+        TouchOpacity = Math.Clamp(TouchOpacity, 0.2f, 1f);
+        TouchPins ??= new();
         MasterVolume = Math.Clamp(MasterVolume, 0f, 1f);
         SfxVolume = Math.Clamp(SfxVolume, 0f, 1f);
         AmbienceVolume = Math.Clamp(AmbienceVolume, 0f, 1f);
@@ -522,6 +559,9 @@ public sealed class GameSettings
         DayLengthMinutes = Math.Clamp(DayLengthMinutes, 0f, 240f);
         StartHour = Math.Clamp(StartHour, 0f, 23.99f);
         TrafficCars = Math.Clamp(TrafficCars, 0, 150);
+        TrafficWalkers = Math.Clamp(TrafficWalkers, 0, 300);
+        TrafficRiders = Math.Clamp(TrafficRiders, 0, 150);
+        Trams = Math.Clamp(Trams, 0, 20);
         ScreenShake = Math.Clamp(ScreenShake, 0f, 1f);
         ReplayMinutes = Math.Clamp(ReplayMinutes, 0, 15);
         StickDeadzone = Math.Clamp(StickDeadzone, 0.05f, 0.5f);
@@ -612,6 +652,11 @@ public sealed class GameSettings
                 case "--time" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float hour):
                     StartHour = hour; DayLengthMinutes = 0; break;
                 case "--traffic" when int.TryParse(v, out int cars): TrafficCars = cars; break;
+                // the traffic modes (#1060): walkers, riders, trams for this run
+                case "--walkers" when int.TryParse(v, out int walkers): TrafficWalkers = walkers; break;
+                // (--bikes: --riders already counts a --drivecheck's racers)
+                case "--bikes" when int.TryParse(v, out int riders): TrafficRiders = riders; break;
+                case "--trams" when int.TryParse(v, out int trams): Trams = trams; break;
                 // first | third, or in a car's cockpit with (body) or without (bare) your own figure
                 case "--view":
                     ThirdPerson = v is not ("first" or "1st" or "body" or "bare");

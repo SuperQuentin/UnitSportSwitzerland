@@ -1,3 +1,4 @@
+using System.Linq;
 using Godot;
 using UnitSport.Core;
 using UnitSport.Vehicles;
@@ -362,6 +363,21 @@ public partial class DeckProbe : Node
     private double _stillFor;
     private float _localZ0;
 
+    /// <summary>
+    /// Where to walk for <paramref name="target"/> on the bus: out into the aisle first when b stands in a
+    /// seat bay off it, a row or more away. Swayed aft into the bay by the bus pulling away, b walked
+    /// straight at the door into a seat back and never got out (#1006).
+    /// </summary>
+    private static Vector3 ViaAisle(Node3D frame, FootPlayer me, Vector3 target)
+    {
+        const float aisle = 0.05f;
+        var to = frame.GlobalTransform.AffineInverse() * target;
+        var at = frame.GlobalTransform.AffineInverse() * me.GlobalPosition;
+        return Mathf.Abs(at.Z - to.Z) > 0.5f && Mathf.Abs(at.X - aisle) > 0.25f
+            ? frame.GlobalTransform * new Vector3(aisle, to.Y, at.Z)
+            : target;
+    }
+
     private void WalkTo(FootPlayer me, Vector3 target, float speed = 1f)
     {
         _target = target;
@@ -461,8 +477,9 @@ public partial class DeckProbe : Node
                 if (ParkedBus is not { } parked || parked.Visual is not { } pframe) return;
                 if (!_seen.Contains("pressed"))
                 {
-                    _target = OnBus(pframe, 1.195f - 0.45f, 0.3f, 5.06f);
-                    if (me.WalkControls == null) WalkTo(me, _target);
+                    var button = ViaAisle(pframe, me, OnBus(pframe, 1.195f - 0.45f, 0.3f, 5.06f));
+                    if (me.WalkControls == null) WalkTo(me, button);
+                    _target = button;
                 }
                 if (InStage > 4 && _seen.Add("pressed"))
                 {
@@ -476,7 +493,13 @@ public partial class DeckProbe : Node
                 if (ParkedBus is not { } at || at.Visual is not { } xframe) return;
                 var door = OnBus(xframe, 0.2f, 0.3f, 5.8f);
                 var outside = OnBus(xframe, 1.275f + 3f, 0.3f, 5.8f);
-                WalkTo(me, me.DeckOn != "" && (me.GlobalPosition - door).Length() > 0.5f && !_seen.Contains("at-door") ? door : outside);
+                WalkTo(me, me.DeckOn != "" && (me.GlobalPosition - door).Length() > 0.5f && !_seen.Contains("at-door") ? ViaAisle(xframe, me, door) : outside);
+                if (Mathf.PosMod(InStage, 1.0) < GetPhysicsProcessDeltaTime())
+                {
+                    var hits = string.Join(",", Enumerable.Range(0, me.GetSlideCollisionCount()).Select(i => me.GetSlideCollision(i) is var c
+                        && c.GetColliderShape() is CollisionShape3D cs ? $"{cs.Name}@{xframe.GlobalTransform.AffineInverse() * cs.GlobalPosition} {cs.Shape} n{c.GetNormal()}" : "?"));
+                    Log($"  exiting: at {me.DeckPos}, on '{me.DeckOn}', to {xframe.GlobalTransform.AffineInverse() * _target}, wants {me.WalkControls?.Invoke().Item1}, vel {me.Velocity}, floor {me.IsOnFloor()}, stunned {me.Stunned}, hits [{hits}], {me.WalkState}");
+                }
                 if ((me.GlobalPosition - door).Length() < 0.5f) _seen.Add("at-door");
                 if (me.DeckOn == "" && InStage > 1 && _seen.Add("out"))
                 {
@@ -514,8 +537,10 @@ public partial class DeckProbe : Node
         var local = rig.GlobalTransform.AffineInverse() * b.GlobalPosition;
         float off = local.DistanceTo(b.DeckPos);
         string key = $"drawn-{(bus.WorldVelocity.Length() > 5f ? "moving" : "still")}";
-        // a walking b is drawn a step behind (eased, and its spot comes 30 times a second)
-        float slack = b.WorldVelocity.Length() - bus.WorldVelocity.Length() > 0.5f ? 0.6f : 0.3f;
+        // a walking b is drawn a step behind (eased, and its spot comes 30 times a second); walking is
+        // b's speed against the bus's, not the difference of the two speeds: walking across a bus at
+        // 23 km/h added 0.15 m/s to b's, and its 0.32 m behind was held to a standing b's 0.3 (#1006)
+        float slack = (b.WorldVelocity - bus.WorldVelocity).Length() > 0.5f ? 0.6f : 0.3f;
         if (_seen.Add(key) || off > slack && _seen.Add(key + "-off"))
             Check(off < slack, $"b's copy drawn on the bus {off:F2} m from the spot it published, at {bus.WorldVelocity.Length() * 3.6f:F0} km/h");
     }

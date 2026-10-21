@@ -22,12 +22,13 @@ public partial class ControlsHelp : CanvasLayer
     public static ControlsHelp Create() => new() { Name = "ControlsHelp" };
 
     /// <summary>A row: what it does, and either an action or fixed labels (keyboard, pad) for things that are not one.</summary>
-    private readonly record struct Row(string What, string? Action = null, string? Keys = null, string? Pad = null);
+    internal readonly record struct Row(string What, string? Action = null, string? Keys = null, string? Pad = null);
 
     /// <summary>The four movement keys, as printed on this keyboard (Z Q S D on AZERTY).</summary>
     private const string Wasd = "{move_forward} {move_left} {move_back} {move_right}";
 
-    private static readonly (string Title, Row[] Rows)[] Groups =
+    /// <summary>Every control by group; also the phone's More sheet (#1043, <see cref="TouchMore"/>).</summary>
+    internal static readonly (string Title, Row[] Rows)[] Groups =
     {
         ("On foot", new Row[]
         {

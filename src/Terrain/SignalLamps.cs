@@ -51,7 +51,7 @@ public partial class SignalLamps : Node3D
         SignalBuilder.Shape.Square => lens.Role == SignalBuilder.Role.Red ? Icon.Standing : Icon.Walking,
         SignalBuilder.Shape.Bike => Icon.Bike,
         _ when lens.Role == SignalBuilder.Role.Flash => Icon.Round,
-        _ => SignalBuilder.ArrowMoves(plan, lens.Group) switch
+        _ => (lens.Arrow ?? SignalBuilder.ArrowMoves(plan, lens.Group)) switch
         {
             SignalMoves.Through => Icon.Straight,
             SignalMoves.Through | SignalMoves.Left => Icon.StraightLeft,

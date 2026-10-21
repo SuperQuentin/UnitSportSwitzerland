@@ -75,7 +75,8 @@ public static class SignalBuilder
     /// <summary>One lens: its instanced shape and transform (tile-local, +Z toward the viewer), which junction and group light it, and as what.</summary>
     /// <param name="Flash">A yellow lens that also flashes with this flasher group (#971: a bike head's, its riders turning right
     /// across a crossing green with them), -1 none.</param>
-    public readonly record struct Lens(Shape Shape, Transform3D Transform, int Junction, int Group, Role Role, int Flash = -1);
+    /// <param name="Arrow">A round lens's arrow when not its group's (#1037: an overhead head shows its own lanes' moves), null the group's.</param>
+    public readonly record struct Lens(Shape Shape, Transform3D Transform, int Junction, int Group, Role Role, int Flash = -1, SignalMoves? Arrow = null);
 
     /// <summary>A tile's lenses and the plans that light them.</summary>
     public sealed class Lamps
@@ -86,7 +87,7 @@ public static class SignalBuilder
 
     /// <summary>A head on a pole: its centre, the way it faces and its right as the viewer sees it, its group, its lenses.</summary>
     private readonly record struct Head(Vector3 Centre, Vector3 Front, Vector3 Right, int Group, Shape Shape, int Lenses, bool Flasher,
-        float Scale = 1f, bool SideBySide = false)
+        float Scale = 1f, bool SideBySide = false, SignalMoves? Arrow = null)
     {
         /// <summary>Half the housing's height.</summary>
         public float Half => SideBySide ? GenevaHalfHeight : Lenses * Pitch * Scale * 0.5f;
@@ -101,91 +102,298 @@ public static class SignalBuilder
     private static readonly Color GenevaGrey = new(0.70f, 0.72f, 0.74f);
     private static readonly Color Window = new(0.04f, 0.04f, 0.05f);
 
-    /// <summary>Appends every pole, housing and backboard of the tile to a road mesh under construction.</summary>
+    /// <summary>Appends every pole, housing and backboard of the tile, and its overhead structures (#1037), to a road mesh under construction.</summary>
     /// <param name="rounded">The plates' corners are rounded (Cartoon's mesh detail, #759).</param>
     public static void Append(RoadTile tile, List<Vector3> vertices, List<Color> colors, List<Vector2> uvs,
         List<Vector2> uv2s, List<int> indices, bool rounded = false)
     {
         foreach (var signal in tile.Signals)
+        {
+            var colour = PoleColourOf(signal.Plan.PoleColour).SrgbToLinear();
             foreach (var pole in signal.Poles)
             {
-                var heads = Heads(signal.Plan, pole);
+                var heads = PoleHeads(signal, pole);
                 var foot = new Vector3(pole.X, pole.Y, pole.Z);
                 float top = 0f;
                 foreach (var h in heads) top = Mathf.Max(top, h.Centre.Y - pole.Y + h.Half + BoardMargin);
-                Column(vertices, colors, uvs, uv2s, indices, foot, top);
+                // a mast arm's or portal's post stands on the pole and carries its heads: no pole beside it (#1037, the user)
+                if (!signal.Overheads.Any(o => o.StandsOn(pole.X, pole.Z)))
+                    Column(vertices, colors, uvs, uv2s, indices, foot, top, colour);
                 RightOnRedSign(vertices, colors, uvs, uv2s, indices, signal.Plan, pole, heads);   // #711
                 foreach (var h in heads)
                 {
-                    float half = h.Half, w = HeadWidth * h.Scale, depth = HeadDepth * h.Scale;
                     // a bracket from the pole into the back of the head's housing (not through to its face)
-                    var reach = h.Centre - h.Front * ((h.SideBySide ? GenevaDepth : depth) * 0.8f) - foot;
+                    var reach = h.Centre - h.Front * ((h.SideBySide ? GenevaDepth : HeadDepth * h.Scale) * 0.8f) - foot;
                     reach.Y = 0;
                     if (reach.Length() > PoleRadius * 2)
                         Tube(vertices, colors, uvs, uv2s, indices, Housing.SrgbToLinear(),
                             new Vector3(foot.X, h.Centre.Y, foot.Z), new Vector3(foot.X, h.Centre.Y, foot.Z) + reach, 0.025f);
-                    // the backboard (#759): a car head's plate flush with the housing's face, clear of it by
-                    // a hair, white in front and black behind (one face, PlateStyle); a bike head's only in
-                    // some cantons; a pedestrian head has none
-                    bool plates = signal.Plan.ArrowPlates;
-                    bool board = h.Shape != Shape.Square && (h.Shape != Shape.Bike || plates);
-                    float gap = BorderGap * h.Scale, band = BorderWidth * h.Scale, corner = rounded ? CornerRadius * h.Scale : 0f;
-                    // the arrow under the head: on the band run on below it where the canton does that,
-                    // on a small plate of its own under a bike head elsewhere
-                    var arrow = h.Shape == Shape.Bike || plates ? HeadMoves(signal.Plan, h) : SignalMoves.None;
-                    float panel = arrow != SignalMoves.None ? ArrowPanel * h.Scale : 0f;
-                    var face = h.Centre - h.Front * 0.002f;
-                    if (board)
-                    {
-                        BorderFrame(vertices, colors, uvs, uv2s, indices, WhitePlate.SrgbToLinear(), face,
-                            h.Right, w * 0.5f + gap, half + gap, band, corner, below: panel);
-                        if (panel > 0f)
-                            ArrowOn(vertices, colors, uvs, uv2s, indices, arrow, face + h.Front * 0.003f + Vector3.Down * (half + gap + (band + panel) * 0.5f),
-                                h.Right, (band + panel) * 0.5f * ArrowFill);
-                    }
-                    else if (panel > 0f)
-                    {
-                        // a bike head's own arrow plate, white with its back black, just below the housing
-                        float below = half + gap, height = panel + band;
-                        var at = face + Vector3.Down * (below + height * 0.5f);
-                        RoundedPlate(vertices, colors, uvs, uv2s, indices, WhitePlate.SrgbToLinear(), at, h.Right, w * 0.5f + gap, height * 0.5f, corner);
-                        ArrowOn(vertices, colors, uvs, uv2s, indices, arrow, at + h.Front * 0.003f, h.Right, height * 0.5f * ArrowFill);
-                    }
-                    if (h.SideBySide)
-                    {
-                        RoundedHousing(vertices, colors, uvs, uv2s, indices, h.Centre - h.Front * (GenevaDepth * 0.5f), h.Right, h.Front,
-                            GenevaHalfWidth, GenevaDepth * 0.5f, GenevaHalfHeight, CornerRadius, GenevaGrey);
-                        var window = Outline(GenevaHalfWidth - 0.025f, GenevaHalfHeight - 0.025f, CornerRadius * 0.6f, 2);
-                        var ring = new Vector3[window.Count];
-                        for (int i = 0; i < window.Count; i++)
-                            ring[window.Count - 1 - i] = h.Centre + h.Front * 0.003f + h.Right * window[i].X + Vector3.Up * window[i].Y;
-                        Polygon(vertices, colors, uvs, uv2s, indices, Window.SrgbToLinear(), ring);
-                        continue;
-                    }
-                    RoundedHousing(vertices, colors, uvs, uv2s, indices, h.Centre - h.Front * (depth * 0.5f), h.Right, h.Front,
-                        w * 0.5f, depth * 0.5f, half, CornerRadius * h.Scale);
-                    float pitch = Pitch * h.Scale;
-                    for (int k = 0; k < h.Lenses; k++)
-                        LensFittings(vertices, colors, uvs, uv2s, indices, h.Centre + Vector3.Up * (half - pitch * (k + 0.5f)),
-                            h.Right, h.Front, h.Scale, square: h.Shape == Shape.Square);
-                    if (h.Flasher)
-                    {
-                        // the flasher's own small housing beside the green, spaced as a head beside it (#759)
-                        var at = h.Centre + h.Right * HeadSpacing + Vector3.Down * (half - Pitch * 0.5f);
-                        RoundedHousing(vertices, colors, uvs, uv2s, indices, at - h.Front * (HeadDepth * 0.5f), h.Right, h.Front,
-                            HeadWidth * 0.5f, HeadDepth * 0.5f, Pitch * 0.5f, CornerRadius);
-                        LensFittings(vertices, colors, uvs, uv2s, indices, at, h.Right, h.Front, 1f, square: false);
-                        // held by a bracket from the side of its head's housing, behind the plates (#771)
-                        var back = h.Front * (HeadDepth * 0.6f);
-                        Tube(vertices, colors, uvs, uv2s, indices, Housing.SrgbToLinear(),
-                            at - h.Right * (HeadSpacing - w * 0.5f) - back, at - h.Right * (HeadWidth * 0.5f) - back, 0.025f);
-                        // its own white band, clear of the head's like the next head's
-                        if (board)
-                            BorderFrame(vertices, colors, uvs, uv2s, indices, WhitePlate.SrgbToLinear(), at - h.Front * 0.002f,
-                                h.Right, HeadWidth * 0.5f + gap, Pitch * 0.5f + gap, band, corner);
-                    }
+                    DrawHead(vertices, colors, uvs, uv2s, indices, signal.Plan, h, rounded, signal.Plan.ArrowPlates);
                 }
             }
+            foreach (var o in signal.Overheads)
+                Overhead(vertices, colors, uvs, uv2s, indices, signal.Plan, o, colour, rounded);
+        }
+    }
+
+    /// <summary>
+    /// A head's backboard, housing, lens fittings and flasher (#759). <paramref name="arrowsBelow"/>: the canton's plates run on
+    /// below car heads with their arrow (<see cref="SignalPlan.ArrowPlates"/>; an overhead head's arrow is on a plate above it).
+    /// </summary>
+    private static void DrawHead(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
+        SignalPlan plan, Head h, bool rounded, bool arrowsBelow)
+    {
+        float half = h.Half, w = HeadWidth * h.Scale, depth = HeadDepth * h.Scale;
+        // the backboard (#759): a car head's plate flush with the housing's face, clear of it by
+        // a hair, white in front and black behind (one face, PlateStyle); a bike head's only in
+        // some cantons; a pedestrian head has none
+        bool board = h.Shape != Shape.Square && (h.Shape != Shape.Bike || arrowsBelow);
+        float gap = BorderGap * h.Scale, band = BorderWidth * h.Scale, corner = rounded ? CornerRadius * h.Scale : 0f;
+        // the arrow under the head: on the band run on below it where the canton does that,
+        // on a small plate of its own under a bike head elsewhere
+        var arrow = h.Shape == Shape.Bike || arrowsBelow ? HeadMoves(plan, h) : SignalMoves.None;
+        float panel = arrow != SignalMoves.None ? ArrowPanel * h.Scale : 0f;
+        var face = h.Centre - h.Front * 0.002f;
+        if (board)
+        {
+            BorderFrame(vertices, colors, uvs, uv2s, indices, WhitePlate.SrgbToLinear(), face,
+                h.Right, w * 0.5f + gap, half + gap, band, corner, below: panel);
+            if (panel > 0f)
+                ArrowOn(vertices, colors, uvs, uv2s, indices, arrow, face + h.Front * 0.003f + Vector3.Down * (half + gap + (band + panel) * 0.5f),
+                    h.Right, (band + panel) * 0.5f * ArrowFill);
+        }
+        else if (panel > 0f)
+        {
+            // a bike head's own arrow plate, white with its back black, just below the housing
+            float below = half + gap, height = panel + band;
+            var at = face + Vector3.Down * (below + height * 0.5f);
+            RoundedPlate(vertices, colors, uvs, uv2s, indices, WhitePlate.SrgbToLinear(), at, h.Right, w * 0.5f + gap, height * 0.5f, corner);
+            ArrowOn(vertices, colors, uvs, uv2s, indices, arrow, at + h.Front * 0.003f, h.Right, height * 0.5f * ArrowFill);
+        }
+        if (h.SideBySide)
+        {
+            RoundedHousing(vertices, colors, uvs, uv2s, indices, h.Centre - h.Front * (GenevaDepth * 0.5f), h.Right, h.Front,
+                GenevaHalfWidth, GenevaDepth * 0.5f, GenevaHalfHeight, CornerRadius, GenevaGrey);
+            var window = Outline(GenevaHalfWidth - 0.025f, GenevaHalfHeight - 0.025f, CornerRadius * 0.6f, 2);
+            var ring = new Vector3[window.Count];
+            for (int i = 0; i < window.Count; i++)
+                ring[window.Count - 1 - i] = h.Centre + h.Front * 0.003f + h.Right * window[i].X + Vector3.Up * window[i].Y;
+            Polygon(vertices, colors, uvs, uv2s, indices, Window.SrgbToLinear(), ring);
+            return;
+        }
+        RoundedHousing(vertices, colors, uvs, uv2s, indices, h.Centre - h.Front * (depth * 0.5f), h.Right, h.Front,
+            w * 0.5f, depth * 0.5f, half, CornerRadius * h.Scale);
+        float pitch = Pitch * h.Scale;
+        for (int k = 0; k < h.Lenses; k++)
+            LensFittings(vertices, colors, uvs, uv2s, indices, h.Centre + Vector3.Up * (half - pitch * (k + 0.5f)),
+                h.Right, h.Front, h.Scale, square: h.Shape == Shape.Square);
+        if (h.Flasher)
+        {
+            // the flasher's own small housing beside the green, spaced as a head beside it (#759)
+            var at = h.Centre + h.Right * HeadSpacing + Vector3.Down * (half - Pitch * 0.5f);
+            RoundedHousing(vertices, colors, uvs, uv2s, indices, at - h.Front * (HeadDepth * 0.5f), h.Right, h.Front,
+                HeadWidth * 0.5f, HeadDepth * 0.5f, Pitch * 0.5f, CornerRadius);
+            LensFittings(vertices, colors, uvs, uv2s, indices, at, h.Right, h.Front, 1f, square: false);
+            // held by a bracket from the side of its head's housing, behind the plates (#771)
+            var back = h.Front * (HeadDepth * 0.6f);
+            Tube(vertices, colors, uvs, uv2s, indices, Housing.SrgbToLinear(),
+                at - h.Right * (HeadSpacing - w * 0.5f) - back, at - h.Right * (HeadWidth * 0.5f) - back, 0.025f);
+            // its own white band, clear of the head's like the next head's
+            if (board)
+                BorderFrame(vertices, colors, uvs, uv2s, indices, WhitePlate.SrgbToLinear(), at - h.Front * 0.002f,
+                    h.Right, HeadWidth * 0.5f + gap, Pitch * 0.5f + gap, band, corner);
+        }
+    }
+
+    // ---- overhead heads (#1037) --------------------------------------------------------------
+
+    /// <summary>
+    /// The canton's colour for its poles and overhead structures (#1037): RAL 7001 silver grey, Basel-Landschaft's anthracite
+    /// (DB703), Bern's RAL 7042 traffic grey A.
+    /// </summary>
+    private static Color PoleColourOf(SignalPoleColour colour) => colour switch
+    {
+        SignalPoleColour.Anthracite => new Color(0.28f, 0.29f, 0.30f),
+        SignalPoleColour.TrafficGrey => new Color(0.56f, 0.57f, 0.57f),
+        _ => PoleColour,
+    };
+
+    /// <summary>An overhead head's lenses are 300 mm (Bern, Basel-Landschaft): 1.5 times a kerb head's 200 mm.</summary>
+    private const float OverheadScale = 1.5f;
+    /// <summary>
+    /// Basel-Landschaft's mast arms and portals (drawings TZ-1205/1206/1208): posts and arms of one-piece square hollow sections,
+    /// RRW 300 the post and 300 x 200 the arm, hung this far above the heads' lane plates; past <see cref="TieFrom"/> m an arm
+    /// has a tie rod ("ab 7 m mit Abspannung") (m).
+    /// </summary>
+    private const float PostHalf = SignalOverhead.PostHalf, BeamHeight = 0.3f, BeamDepth = 0.2f, HangerGap = 0.25f, TieFrom = 7f;
+    /// <summary>A span wire hangs between two facades (#1037, the user: between buildings, never on poles), from a plate on each wall.</summary>
+    private const float WireRadius = 0.012f, WireSag = 0.25f, HangerHalf = 0.025f, WallPlate = 0.12f;
+    /// <summary>The heads an overhead structure carries, each over its lanes (with its record): a turn's arrow head, else the approach's main head.</summary>
+    private static List<(Head Head, OverheadHead Record)> OverheadHeads(SignalPlan plan, SignalOverhead o)
+    {
+        var heads = new List<(Head, OverheadHead)>();
+        var (front, right) = Frame(o.Heading);
+        var a = new Vector3(o.X, o.Y, o.Z);
+        var dir = new Vector3(o.EndX - o.X, 0f, o.EndZ - o.Z).Normalized();
+        float half = 1.5f * Pitch * OverheadScale;
+        foreach (var h in o.Heads)
+        {
+            var (group, shape) = OverheadGroup(plan, o.Arm, h.Moves);
+            if (group < 0) continue;
+            // on an arm or a portal mounted in front of the beam, its back a bracket's length off the beam's face (the user: mounted
+            // onto the arm, not hung); on a span wire under it
+            float ahead = o.Kind == OverheadKind.Span ? HeadDepth * OverheadScale * 0.5f : BeamDepth * 0.5f + MountGap + HeadDepth * OverheadScale;
+            var at = a + dir * h.Along + front * ahead;
+            // drawn as a pole's head (the user): where the canton's plates run on below the heads with their arrow, the plate's
+            // lower edge stays at the structure's
+            at.Y = o.Bottom + (BorderGap + BorderWidth + (plan.ArrowPlates ? ArrowPanel : 0f)) * OverheadScale + half;
+            // its round lenses show its own lanes' moves (the user, #1037: the head over the through lanes is not the kerb lane's
+            // through-and-right)
+            var arrow = shape == Shape.Circle ? LaneArrow(plan, o.Arm, h.Moves) : (SignalMoves?)null;
+            heads.Add((new Head(at, front, right, group, shape, 3, false, OverheadScale, Arrow: arrow), h));
+        }
+        return heads;
+    }
+
+    /// <summary>
+    /// The arrow over lanes making <paramref name="moves"/> (#1037): a ball where they make every move the approach has (or none is
+    /// known), else their moves, as <see cref="ArrowMoves"/> does for a group.
+    /// </summary>
+    private static SignalMoves LaneArrow(SignalPlan plan, int arm, SignalMoves moves)
+    {
+        var all = SignalMoves.None;
+        foreach (var g in plan.Groups)
+            if (g.Arm == arm && g.Kind is SignalGroupKind.Car or SignalGroupKind.LeftArrow or SignalGroupKind.RightArrow) all |= g.Moves;
+        moves &= all;
+        return moves == SignalMoves.None || moves == all || moves == (SignalMoves.Left | SignalMoves.Right) ? SignalMoves.None : moves;
+    }
+
+    /// <summary>The group and shape of an overhead head over lanes making <paramref name="moves"/>.</summary>
+    private static (int Group, Shape Shape) OverheadGroup(SignalPlan plan, int arm, SignalMoves moves)
+    {
+        if (moves == SignalMoves.Left && Find(plan, SignalGroupKind.LeftArrow, arm, SignalMoves.Left) is var l and >= 0) return (l, Shape.LeftArrow);
+        if (moves == SignalMoves.Right)
+        {
+            if (Find(plan, SignalGroupKind.RightArrow, arm, SignalMoves.Right) is var r and >= 0) return (r, Shape.RightArrow);
+            int lane = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Car && g.Arm == arm && g.Moves == SignalMoves.Right);
+            if (lane >= 0) return (lane, Shape.Circle);
+        }
+        return (MainCar(plan, arm), Shape.Circle);
+    }
+
+    /// <summary>A head mounted on an arm or beam stands this far off its face (m): the bracket between.</summary>
+    private const float MountGap = 0.04f;
+
+    /// <summary>The top of an overhead head's plate above the plates' lower edge.</summary>
+    private static float PlateTop(SignalPlan plan) =>
+        ((BorderGap + BorderWidth) * 2 + (plan.ArrowPlates ? ArrowPanel : 0f) + 3 * Pitch) * OverheadScale;
+
+    /// <summary>
+    /// An overhead structure and its heads (#1037): a mast arm (its post by the main pole or on the refuge, a tie rod past
+    /// <see cref="TieFrom"/> m), a portal (two posts, a beam), or a span wire between two facades; each head mounted on the front
+    /// of the arm or beam at its mid-height (hung from the wire), drawn as a pole's (the canton's plates and arrows).
+    /// </summary>
+    private static void Overhead(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
+        SignalPlan plan, SignalOverhead o, Color colour, bool rounded)
+    {
+        var a = new Vector3(o.X, o.Y, o.Z);
+        var b = new Vector3(o.EndX, o.EndY, o.EndZ);
+        var dir = new Vector3(b.X - a.X, 0f, b.Z - a.Z);
+        float length = dir.Length();
+        if (length < 0.5f) return;
+        dir /= length;
+        var depth = dir.Cross(Vector3.Up).Normalized();
+        var heads = OverheadHeads(plan, o);
+        // the beam's lower face: on an arm or portal the beam runs behind the heads' middle, a wire above their plates
+        float plateTop = o.Bottom + PlateTop(plan);
+        float beam = o.Kind == OverheadKind.Span || heads.Count == 0 ? plateTop + HangerGap : heads[0].Head.Centre.Y - BeamHeight * 0.5f;
+        Func<float, float> hangFrom;   // the underside of what carries a head, at a distance along the structure
+        if (o.Kind == OverheadKind.Span)
+        {
+            // the wire's lowest point just above the plates, its ends on a plate on each facade
+            float ends = beam + WireSag;
+            foreach (var (end, inward) in new[] { (a, dir), (b, -dir) })
+            {
+                var at = end; at.Y = ends;
+                Beam(vertices, colors, uvs, uv2s, indices, at - inward * 0.03f, at + inward * 0.03f, depth, WallPlate, WallPlate, Housing.SrgbToLinear());
+            }
+            float WireY(float along) { float t = Mathf.Clamp(along / length, 0f, 1f); return ends - 4f * WireSag * t * (1f - t); }
+            const int Pieces = 16;
+            for (int k = 0; k < Pieces; k++)
+            {
+                float d0 = length * k / Pieces, d1 = length * (k + 1) / Pieces;
+                var p0 = a + dir * d0; p0.Y = WireY(d0);
+                var p1 = a + dir * d1; p1.Y = WireY(d1);
+                Tube(vertices, colors, uvs, uv2s, indices, Housing.SrgbToLinear(), p0, p1, WireRadius);
+            }
+            hangFrom = WireY;
+        }
+        else
+        {
+            float beamTop = beam + BeamHeight;
+            Post(vertices, colors, uvs, uv2s, indices, a, beamTop, dir, depth, PostHalf, colour);
+            if (o.Kind == OverheadKind.Portal) Post(vertices, colors, uvs, uv2s, indices, b, beamTop, dir, depth, PostHalf, colour);
+            var start = a; start.Y = beam + BeamHeight * 0.5f;
+            var tip = a + dir * length; tip.Y = start.Y;
+            Beam(vertices, colors, uvs, uv2s, indices, start, tip, depth, BeamDepth * 0.5f, BeamHeight * 0.5f, colour);
+            // a long arm's tie rod, from the post above it to two thirds of its way
+            if (o.Kind is OverheadKind.Arm or OverheadKind.RefugeArm && length > TieFrom)
+            {
+                var from = a; from.Y = beamTop + 1.4f;
+                Post(vertices, colors, uvs, uv2s, indices, a, from.Y + 0.1f, dir, depth, PostHalf * 0.7f, colour);
+                var to = a + dir * (length * 0.66f); to.Y = beamTop;
+                Tube(vertices, colors, uvs, uv2s, indices, colour, from, to, 0.035f);
+            }
+            hangFrom = _ => beam;
+        }
+        var (front, _) = Frame(o.Heading);
+        foreach (var (h, record) in heads)
+        {
+            DrawHead(vertices, colors, uvs, uv2s, indices, plan, h, rounded, plan.ArrowPlates);
+            var on = a + dir * record.Along;
+            if (o.Kind == OverheadKind.Span)
+            {
+                // a hanger from the top of its plate up to the wire
+                on.Y = h.Centre.Y + h.Half + (BorderGap + BorderWidth) * OverheadScale;
+                Post(vertices, colors, uvs, uv2s, indices, on, hangFrom(record.Along), dir, depth, HangerHalf, Housing.SrgbToLinear(), sink: false);
+                continue;
+            }
+            // a bracket from the beam's face into the back of its housing
+            on.Y = h.Centre.Y;
+            Beam(vertices, colors, uvs, uv2s, indices, on + front * (BeamDepth * 0.5f - 0.01f), on + front * (BeamDepth * 0.5f + MountGap + 0.01f),
+                dir, 0.06f, 0.06f, Housing.SrgbToLinear());
+        }
+    }
+
+    /// <summary>A square post round <paramref name="foot"/> (sunk below it unless <paramref name="sink"/> is false) up to <paramref name="top"/>, capped.</summary>
+    private static void Post(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
+        Vector3 foot, float top, Vector3 along, Vector3 across, float half, Color colour, bool sink = true)
+    {
+        var c = new[] { along * half + across * half, -along * half + across * half, -along * half - across * half, along * half - across * half };
+        float bottom = foot.Y - (sink ? Sink : 0f);
+        for (int k = 0; k < 4; k++)
+        {
+            var p = c[k];
+            var q = c[(k + 1) % 4];
+            Polygon(vertices, colors, uvs, uv2s, indices, colour,
+                [new Vector3(foot.X + p.X, bottom, foot.Z + p.Z), new Vector3(foot.X + q.X, bottom, foot.Z + q.Z),
+                 new Vector3(foot.X + q.X, top, foot.Z + q.Z), new Vector3(foot.X + p.X, top, foot.Z + p.Z)]);
+        }
+        Polygon(vertices, colors, uvs, uv2s, indices, colour,
+            [new Vector3(foot.X + c[3].X, top, foot.Z + c[3].Z), new Vector3(foot.X + c[2].X, top, foot.Z + c[2].Z),
+             new Vector3(foot.X + c[1].X, top, foot.Z + c[1].Z), new Vector3(foot.X + c[0].X, top, foot.Z + c[0].Z)]);
+    }
+
+    /// <summary>A horizontal box from <paramref name="a"/> to <paramref name="b"/> (its axis), <paramref name="halfDepth"/> across and <paramref name="halfHeight"/> up and down.</summary>
+    private static void Beam(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
+        Vector3 a, Vector3 b, Vector3 across, float halfDepth, float halfHeight, Color colour)
+    {
+        var c = new[] { across * halfDepth + Vector3.Up * halfHeight, -across * halfDepth + Vector3.Up * halfHeight,
+            -across * halfDepth + Vector3.Down * halfHeight, across * halfDepth + Vector3.Down * halfHeight };
+        for (int k = 0; k < 4; k++)
+            Polygon(vertices, colors, uvs, uv2s, indices, colour, [a + c[k], b + c[k], b + c[(k + 1) % 4], a + c[(k + 1) % 4]]);
+        Polygon(vertices, colors, uvs, uv2s, indices, colour, [b + c[0], b + c[3], b + c[2], b + c[1]]);
+        Polygon(vertices, colors, uvs, uv2s, indices, colour, [a + c[0], a + c[1], a + c[2], a + c[3]]);
     }
 
     /// <summary>
@@ -248,7 +456,31 @@ public static class SignalBuilder
                     faces.Add(a0); faces.Add(b1); faces.Add(a1);
                 }
             }
+        // an overhead structure's posts (#1037): the arm, beam and wire are above any vehicle (SSV Art. 71: 4.50 m and up), a span
+        // wire's ends on facades
+        foreach (var signal in tile.Signals)
+            foreach (var o in signal.Overheads)
+            {
+                if (o.Kind == OverheadKind.Span) continue;
+                Box(new Vector3(o.X, o.Y, o.Z), PostHalf);
+                if (o.Kind == OverheadKind.Portal) Box(new Vector3(o.EndX, o.EndY, o.EndZ), PostHalf);
+            }
         return faces.ToArray();
+
+        void Box(Vector3 foot, float half)
+        {
+            const float H = 4f;
+            var c = new[] { new Vector3(half, 0, half), new Vector3(-half, 0, half), new Vector3(-half, 0, -half), new Vector3(half, 0, -half) };
+            for (int k = 0; k < 4; k++)
+            {
+                var a0 = foot + c[k] + Vector3.Down * Sink;
+                var b0 = foot + c[(k + 1) % 4] + Vector3.Down * Sink;
+                var a1 = foot + c[k] + Vector3.Up * H;
+                var b1 = foot + c[(k + 1) % 4] + Vector3.Up * H;
+                faces.Add(a0); faces.Add(b0); faces.Add(b1);
+                faces.Add(a0); faces.Add(b1); faces.Add(a1);
+            }
+        }
     }
 
     /// <summary>The tile's lenses, or null when it has no signal heads.</summary>
@@ -260,10 +492,11 @@ public static class SignalBuilder
         {
             int j = lamps.Plans.Count;
             lamps.Plans.Add(signal.Plan);
-            foreach (var pole in signal.Poles)
-                foreach (var h in Heads(signal.Plan, pole))
+            foreach (var h in signal.Poles.SelectMany(pole => PoleHeads(signal, pole)).Concat(signal.Overheads.SelectMany(o => OverheadHeads(signal.Plan, o).Select(x => x.Head))))
                 {
-                    var basis = new Basis(h.Right, Vector3.Up, h.Front);
+                    // a 300 mm overhead lens is the 200 mm lens scaled (a bike head's 100 mm has a mesh of its own)
+                    float lens = h.Shape == Shape.Bike ? 1f : h.Scale;
+                    var basis = new Basis(h.Right * lens, Vector3.Up * lens, h.Front);
                     var face = h.Front * 0.006f;
                     float pitch = Pitch * h.Scale, half = h.Half;
                     if (h.SideBySide)
@@ -281,7 +514,7 @@ public static class SignalBuilder
                         var at = h.Centre + Vector3.Up * (half - pitch * (k + 0.5f)) + face;
                         // a bike head's own yellow flashes during its green where its riders turn right across a crossing green with them (#971, the user)
                         int flash = h.Shape == Shape.Bike && role == Role.Amber ? Flasher(signal.Plan, h.Group) : -1;
-                        lamps.Lenses.Add(new Lens(h.Shape, new Transform3D(basis, at), j, h.Group, role, flash));
+                        lamps.Lenses.Add(new Lens(h.Shape, new Transform3D(basis, at), j, h.Group, role, flash, h.Arrow));
                     }
                     if (h.Flasher && Flasher(signal.Plan, h.Group) is int f and >= 0)
                     {
@@ -317,7 +550,7 @@ public static class SignalBuilder
         Shape.LeftArrow => SignalMoves.Left,
         Shape.RightArrow => SignalMoves.Right,
         Shape.Bike => plan.Groups[h.Group].Moves is var m and not SignalMoves.None ? m : SignalMoves.Through,
-        Shape.Circle => ArrowMoves(plan, h.Group),
+        Shape.Circle => h.Arrow ?? ArrowMoves(plan, h.Group),
         _ => SignalMoves.None,
     };
 
@@ -326,6 +559,15 @@ public static class SignalBuilder
         for (int g = 0; g < plan.Groups.Count; g++)
             if (plan.Groups[g].Kind == SignalGroupKind.Flasher && plan.Groups[g].Qualifies == group) return g;
         return -1;
+    }
+
+    /// <summary>A pole's heads, moved out onto the face of an overhead structure's post where one stands on the pole (#1037).</summary>
+    private static List<Head> PoleHeads(RoadSignal signal, SignalPole pole)
+    {
+        var heads = Heads(signal.Plan, pole);
+        if (!signal.Overheads.Any(o => o.StandsOn(pole.X, pole.Z))) return heads;
+        float shift = SignalOverhead.PostHalf - PoleRadius;
+        return heads.Select(h => h with { Centre = h.Centre + h.Front * shift }).ToList();
     }
 
     /// <summary>The heads a pole carries, from the plan's groups of its arm.</summary>
@@ -370,14 +612,36 @@ public static class SignalBuilder
         }
         if (ped)
         {
-            var (front, right) = Frame(pole.PedHeading);
-            int g = Find(plan, SignalGroupKind.Pedestrian, pole.Arm, SignalMoves.None);
             int lenses = plan.PedestrianAmber ? 3 : 2;
             bool geneva = !plan.PedestrianAmber;
-            var at = foot + front * InFront + Vector3.Up * (PedestrianLowerEdge + (geneva ? GenevaHalfHeight : lenses * Pitch * 0.5f));
-            heads.Add(new Head(at, front, right, g, Shape.Square, lenses, false, SideBySide: geneva));
+            // a two-stage crossing's heads show their half (#1030): the kerbs' their own, the island's two back to back, the
+            // arriving half's facing the pole's way
+            bool arriving = (pole.Flags & SignalPoleFlags.ArrivingHalf) != 0, departing = (pole.Flags & SignalPoleFlags.DepartingHalf) != 0;
+            var faces = new List<(int Group, float Heading)>(2);
+            if (arriving) faces.Add((Walkers(plan, pole.Arm, CrossingHalf.Arriving), pole.PedHeading));
+            if (departing) faces.Add((Walkers(plan, pole.Arm, CrossingHalf.Departing), pole.PedHeading + (arriving ? Mathf.Pi : 0f)));
+            if (faces.Count == 0) faces.Add((Find(plan, SignalGroupKind.Pedestrian, pole.Arm, SignalMoves.None), pole.PedHeading));
+            foreach (var (g, heading) in faces)
+            {
+                var (front, right) = Frame(heading);
+                var at = foot + front * InFront + Vector3.Up * (PedestrianLowerEdge + (geneva ? GenevaHalfHeight : lenses * Pitch * 0.5f));
+                heads.Add(new Head(at, front, right, g, Shape.Square, lenses, false, SideBySide: geneva));
+            }
         }
         return heads;
+    }
+
+    /// <summary>A crossing's pedestrian group for <paramref name="half"/> (#1030), else its only one (a crossing in one go).</summary>
+    private static int Walkers(SignalPlan plan, int arm, CrossingHalf half)
+    {
+        int any = -1;
+        for (int g = 0; g < plan.Groups.Count; g++)
+        {
+            if (plan.Groups[g].Kind != SignalGroupKind.Pedestrian || plan.Groups[g].Arm != arm) continue;
+            if (plan.Groups[g].Half == half) return g;
+            if (any < 0) any = g;
+        }
+        return any;
     }
 
     /// <summary>The approach's main-lane group: the one going straight, else its only car group.</summary>
@@ -411,10 +675,9 @@ public static class SignalBuilder
     // ---- geometry -------------------------------------------------------------------------
 
     private static void Column(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
-        Vector3 foot, float top)
+        Vector3 foot, float top, Color colour)
     {
         // a round pole with a cap a little wider than it (collision stays the square column)
-        var colour = PoleColour.SrgbToLinear();
         var ring = new Vector3[PoleSides];
         for (int k = 0; k < PoleSides; k++)
         {

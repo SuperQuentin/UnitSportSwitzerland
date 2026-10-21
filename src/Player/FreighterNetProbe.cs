@@ -55,8 +55,7 @@ public partial class FreighterNetProbe : ChatProbe
 
     private async Task RunA(FootPlayer me)
     {
-        Chat?.Send("/login test");
-        await Seconds(1.5);
+        if (!await LogIn("test")) return;
         bool ready = false;
         for (int i = 0; i < 40 && !ready; i++)
         {
@@ -66,17 +65,19 @@ public partial class FreighterNetProbe : ChatProbe
         if (!ready) { Fail("B never got ready"); return; }
 
         Expect(me.SetRide(RideKind.Freighter), "A takes a military freighter");
-        await Seconds(2);
+        await Until(() => me.Vehicle is Airliner j && j.State.OnGround, 5);
         if (me.Vehicle is not Airliner jet) { Fail("not an airliner"); return; }
         Input.ParseInputEvent(new InputEventAction { Action = PlayerInput.CarDoor, Pressed = true });
         Input.ParseInputEvent(new InputEventAction { Action = PlayerInput.CarDoor, Pressed = false });
-        await Seconds(0.5);
+        await Until(() => jet.DoorsOpen == RampAndCrew, 3);
+        await Seconds(0.5);   // the ramp swings down: no state of it to wait on headless, and B walks up it
         Expect(jet.DoorsOpen == RampAndCrew, $"G lowered the ramp and opened the crew door (doors {jet.DoorsOpen})");
         Say("ramp open");
         if (!await Heard("B", "seen ramp", 40)) Fail("B never saw the ramp");
 
         me.ExitVehicle();
-        await Seconds(2);
+        await Until(() => me.Ride == RideKind.OnFoot, 3);
+        await Seconds(2);   // the parked body settles with its ramp down before B walks up it (#992: a run without this failed)
         Expect(me.Ride == RideKind.OnFoot && await Until(() => Parked() is { BusDoors: RampAndCrew }, 10),
             $"A got out, it stands parked with the ramp down (doors {Parked()?.BusDoors})");
         // out of the way, beside the nose

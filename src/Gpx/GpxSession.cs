@@ -263,7 +263,7 @@ public partial class GpxSession : Node
         }
 
         _pendingFps = fps;
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
         _exportDialog.PopupCentered();
     }
 
@@ -283,7 +283,7 @@ public partial class GpxSession : Node
         }
 
         _hud.Visible = false;
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
     }
 
     private void EndExport()
@@ -363,7 +363,7 @@ public partial class GpxSession : Node
             AddChild(_dialog);
         }
         // the fly-cam captures the mouse; the dialog needs it back
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
         _dialog.PopupCentered();
     }
 

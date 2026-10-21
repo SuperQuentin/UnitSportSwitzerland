@@ -270,6 +270,8 @@ public partial class BrBotProbe : ChatProbe
             }
         }
 
+        // no knife left to swing: the results' 20 s at x4 again (#1007)
+        if (!await SpeedUp("brbots")) return;
         if (!await Until(() => br.State.Phase == BrPhase.Ended, 20)) { Expect(false, "the match ended"); return; }
         var end = br.State;
         Expect(end.Winner == br.Me, $"I won ({end.Find(end.Winner)?.Shown})");
@@ -287,6 +289,9 @@ public partial class BrBotProbe : ChatProbe
     }
 
     private static float Flat(Vector3 v) => new Vector2(v.X, v.Z).Length();
+
+    /// <summary>About what a teleport takes to land, s: a running bot is aimed at where it will be by then.</summary>
+    private const float TeleportLead = 1f;
 
     /// <summary>
     /// "zone 41 s: phase 1, 2 HP/s, me 512 m inside, Beat 498 m inside (health 100)": where the match's clock
@@ -315,11 +320,26 @@ public partial class BrBotProbe : ChatProbe
             // out of a knife's reach: beside it again (not on it: a remote body is solid, and its head is out of reach)
             if (Flat(body.GlobalPosition - me.GlobalPosition) > 1.9f || Mathf.Abs(body.GlobalPosition.Y - me.GlobalPosition.Y) > 0.8f)
             {
-                var (e, n) = br.Origin!.ToLv95(body.GlobalPosition);
-                br.Teleport(e + 1.6, n, "next to the bot");
-                // a teleport lands a few frames later: wait until we really stand by it (it walks on meanwhile)
-                await Until(() => BodyOf(id) is { } near && Flat(near.GlobalPosition - me.GlobalPosition) < 2.0f
-                    && Mathf.Abs(near.GlobalPosition.Y - me.GlobalPosition.Y) < 0.8f && me.IsOnFloor(), 6);
+                // a teleport lands a few frames later: wait until we really stand by it. A running bot is metres on
+                // by then: where it is going, from its pace over the last look, a second ahead; four times in the same
+                // 6 s (one wait of 6 s used to land 30 m behind it, three times in a row, #1007)
+                var was = body.GlobalPosition;
+                ulong wasAt = Time.GetTicksMsec();
+                await Seconds(0.25);
+                for (int t = 0; t < 4 && BodyOf(id) is { } to; t++)
+                {
+                    var now = to.GlobalPosition;
+                    ulong at = Time.GetTicksMsec();
+                    var pace = ((now - was) with { Y = 0 }) / Mathf.Max(0.05f, (at - wasAt) / 1000f);
+                    (was, wasAt) = (now, at);
+                    var (e, n) = br.Origin!.ToLv95(now + pace * TeleportLead);
+                    br.Teleport(e + 1.6, n, "next to the bot");
+                    bool by = await Until(() => BodyOf(id) is { } near && Flat(near.GlobalPosition - me.GlobalPosition) < 2.0f
+                        && Mathf.Abs(near.GlobalPosition.Y - me.GlobalPosition.Y) < 0.8f && me.IsOnFloor(), 1.5);
+                    if (BodyOf(id) is { } seen)
+                        GD.Print(FormattableString.Invariant($"{Log} teleport {t}: the bot at {pace.Length():F1} m/s, {Flat(seen.GlobalPosition - me.GlobalPosition):F1} m off after"));
+                    if (by) break;
+                }
             }
             if (BodyOf(id) is not { } b) break;
             var dir = (b.GlobalPosition + Vector3.Up * 1.1f - me.EyePosition).Normalized();

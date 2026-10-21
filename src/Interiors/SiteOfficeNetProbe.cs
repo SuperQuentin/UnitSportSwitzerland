@@ -108,7 +108,7 @@ public partial class SiteOfficeNetProbe : ChatProbe
             {
                 Say($"took {index} {first.Index}");
                 if (t == 0) GD.Print($"{Log} took {first.Stack.Id} x{first.Stack.Count} from the {layout.Furniture[index].Type} ({index})");
-                await Seconds(2);
+                await Until(() => _heard.Any(l => l.Contains("SO B done")) && _heard.Any(l => l.Contains("SO C done")), 2);
                 b |= _heard.Any(l => l.Contains("SO B done"));
                 c |= _heard.Any(l => l.Contains("SO C done"));
             }

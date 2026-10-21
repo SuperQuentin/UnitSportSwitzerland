@@ -68,7 +68,7 @@ public partial class SimonUi : CanvasLayer
         _what = what;
         _seq = sequence;
         _view.Visible = true;
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
         StartRound(1);
     }

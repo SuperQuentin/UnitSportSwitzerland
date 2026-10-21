@@ -100,6 +100,51 @@ public class SignalPlanTests(ITestOutputHelper output)
         Assert.InRange(plan.Cycle, 60, SignalPlan.MaxCycle);
     }
 
+    /// <summary>Seconds a group is green per cycle.</summary>
+    private static float GreenFor(SignalPlan plan, int g) =>
+        plan.Groups[g].Intervals.Where(iv => iv.Aspect == SignalAspect.Green).Sum(iv => iv.To - iv.From);
+
+    [Fact]
+    public void TurnPhase_ClearsItsPocketsQueue()
+    {
+        // #982: a turn phase's green clears its pocket's full queue, the start-up loss then a car per 6 m every 2 s
+        SignalArm Pocket(int i, float storage) => Arm(i, left: true) with { LeftStorageM = storage };
+        var shortPocket = SignalPlan.Build([Pocket(N, 18), Arm(E), Pocket(S, 18), Arm(W)]);
+        var longPocket = SignalPlan.Build([Pocket(N, 36), Arm(E), Pocket(S, 36), Arm(W)]);
+        AssertValid(shortPocket);
+        AssertValid(longPocket);
+        Assert.Equal(8f, GreenFor(shortPocket, Group(shortPocket, SignalGroupKind.LeftArrow, S)), 1);   // 2 + 3 cars x 2
+        Assert.Equal(14f, GreenFor(longPocket, Group(longPocket, SignalGroupKind.LeftArrow, S)), 1);    // 2 + 6 cars x 2
+        // what a pocket needs past the turn phase's budget lengthens the cycle; the through phases keep their green
+        Assert.Equal(2 * (14f - 8f), longPocket.Cycle - shortPocket.Cycle, 1);
+        Assert.Equal(GreenFor(shortPocket, Group(shortPocket, SignalGroupKind.Car, E)), GreenFor(longPocket, Group(longPocket, SignalGroupKind.Car, E)), 1);
+        // a turn lane the whole street long clears no more than the longest pocket holds
+        var lane = SignalPlan.Build([Pocket(N, 400), Arm(E), Pocket(S, 400), Arm(W)]);
+        Assert.Equal(SignalPlan.ClearingGreen(SignalPlan.MaxTurnStorage), GreenFor(lane, Group(lane, SignalGroupKind.LeftArrow, S)), 1);
+        // unknown storage: the budget alone
+        var unknown = SignalPlan.Build([Arm(N, left: true), Arm(E), Arm(S, left: true), Arm(W)]);
+        Assert.Equal(SignalPlan.TurnPhaseGreen, GreenFor(unknown, Group(unknown, SignalGroupKind.LeftArrow, S)), 1);
+    }
+
+    [Fact]
+    public void ShortStreets_CapTheirGreens_AndShortenTheCycle()
+    {
+        // #982: a phase gets no more green than clearing what its lanes store; the time it saves shortens the cycle (the user)
+        SignalArm Street(int i, float storage) => Arm(i) with { StorageM = storage };
+        var open = SignalPlan.Build([Arm(N), Arm(E), Arm(S), Arm(W)]);
+        var capped = SignalPlan.Build([Street(N, 300), Street(E, 24), Street(S, 300), Street(W, 24)]);
+        AssertValid(capped);
+        Assert.Equal(60, open.Cycle, 1);
+        int ew = Group(capped, SignalGroupKind.Car, E), ns = Group(capped, SignalGroupKind.Car, N);
+        Assert.Equal(10f, GreenFor(capped, ew), 1);   // 2 + 4 cars x 2
+        Assert.Equal(GreenFor(open, Group(open, SignalGroupKind.Car, N)), GreenFor(capped, ns), 1);
+        Assert.Equal(open.Cycle - (GreenFor(open, Group(open, SignalGroupKind.Car, E)) - 10f), capped.Cycle, 1);
+        // every street a car long: the minimum cycle, shared out
+        var tiny = SignalPlan.Build([Street(N, 6), Street(E, 6), Street(S, 6), Street(W, 6)]);
+        AssertValid(tiny);
+        Assert.Equal(SignalPlan.MinCycle, tiny.Cycle, 1);
+    }
+
     [Fact]
     public void NoPockets_BothDirectionsTogether_LeftsPermissive()
     {
@@ -260,6 +305,35 @@ public class SignalPlanTests(ITestOutputHelper output)
                 Assert.Equal(plan.State(g, t), p.State(g, t));
         Assert.Empty(p.Validate());
     }
+    [Fact]
+    public void RoadTile_RoundTripsTheOverheadsAndThePoleColour()
+    {
+        // #1037: the canton's pole colour in bits 3-5 of the plan's flag byte, the overhead structures in OVHD after SGNL
+        var plan = SignalPlan.Build([Arm(N, true, true), Arm(E), Arm(S, true), Arm(W)], seed: 7, pedestrianAmber: true);
+        plan.ArrowPlates = true;
+        plan.PoleColour = SignalPoleColour.TrafficGrey;
+        var signal = new RoadSignal { X = 5, Y = 400, Z = 6, Stops = new float[12], Plan = plan };
+        signal.Overheads.Add(new SignalOverhead
+        {
+            Kind = OverheadKind.Portal, Arm = 2, X = 1, Y = 400.1f, Z = 2, EndX = 13, EndY = 400.2f, EndZ = 2.5f, Bottom = 405, Heading = 1.5f,
+            Heads = [new OverheadHead(3.4f, SignalMoves.Through | SignalMoves.Right), new OverheadHead(9.4f, SignalMoves.Left)],
+        });
+        var tile = new RoadTile
+        {
+            Id = new TileId(2500, 1117),
+            Segments = [new RoadSegment { Class = RoadClass.Road, Width = 6, Points = [0, 400, 0, 10, 400, 0] }],
+            Signals = [signal],
+        };
+        using var ms = new MemoryStream();
+        RoadCodec.Encode(tile, ms);
+        ms.Position = 0;
+        var back = Assert.Single(RoadCodec.Decode(ms).Signals);
+        Assert.Equal((SignalPoleColour.TrafficGrey, true, true), (back.Plan.PoleColour, back.Plan.ArrowPlates, back.Plan.PedestrianAmber));
+        var o = Assert.Single(back.Overheads);
+        Assert.Equal((OverheadKind.Portal, (byte)2, 1f, 400.1f, 2f, 13f, 400.2f, 2.5f, 405f, 1.5f),
+            (o.Kind, o.Arm, o.X, o.Y, o.Z, o.EndX, o.EndY, o.EndZ, o.Bottom, o.Heading));
+        Assert.Equal(signal.Overheads[0].Heads, o.Heads);
+    }
     [Theory]
     [InlineData(187, -135, 45)]
     [InlineData(176, -37, 145)]
@@ -275,5 +349,165 @@ public class SignalPlanTests(ITestOutputHelper output)
         AssertValid(SignalPlan.Build([Deg(198, false, false), Deg(-84, true, true), Deg(5, false, true), Deg(95, true, false)]));
         // the same with a right pocket on the approach that can only turn right
         AssertValid(SignalPlan.Build([Deg(198, false, false), Deg(-84, true, true) with { RightPocket = true }, Deg(5, false, true), Deg(95, true, false)]));
+    }
+
+    /// <summary>A crossroads with every pocket, the east arm's walkers crossing its 10 m road in two stages (#1030), 3.5 m each way to the island.</summary>
+    private static SignalPlan TwoStageCrossroads(uint seed = 7) => SignalPlan.Build([Arm(N, true, true),
+        Arm(E, true, true) with { CrossingM = 10, HalfInM = 3.5f, HalfOutM = 3.5f }, Arm(S, true, true), Arm(W, true, true)], seed);
+
+    private static int Half(SignalPlan plan, int arm, CrossingHalf half) =>
+        plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Pedestrian && g.Arm == arm && g.Half == half);
+
+    [Fact]
+    public void TwoStageCrossing_EachHalfIsStoppedOnlyByItsOwnLanes_AndClearsOnlyItself()
+    {
+        var plan = TwoStageCrossroads();
+        AssertValid(plan);
+        int arriving = Half(plan, E, CrossingHalf.Arriving), departing = Half(plan, E, CrossingHalf.Departing);
+        Assert.True(arriving >= 0 && departing >= 0);
+        Assert.Equal(-1, Half(plan, E, CrossingHalf.Whole));
+        var c = plan.Conflicts();
+        // westbound traffic comes from the east arm (its approach), eastbound goes into it
+        // (the right arrow no phase carries here is a full green with its approach)
+        var westbound = Enumerable.Range(0, plan.Groups.Count).Where(g => plan.Groups[g].Arm == E
+            && plan.Groups[g].Kind is SignalGroupKind.Car or SignalGroupKind.LeftArrow or SignalGroupKind.RightArrow).ToList();
+        Assert.Equal(3, westbound.Count);
+        int ebCar = Group(plan, SignalGroupKind.Car, W);
+        foreach (int g in westbound)
+        {
+            Assert.Equal(SignalPlan.Conflict.Hard, c[arriving, g]);
+            Assert.Equal(SignalPlan.Conflict.None, c[departing, g]);
+        }
+        Assert.Equal(SignalPlan.Conflict.None, c[arriving, ebCar]);
+        Assert.Equal(SignalPlan.Conflict.Hard, c[departing, ebCar]);
+        // both halves green together, long enough to walk kerb to kerb at once (10 m at 1.2 m/s)
+        Assert.True(WhenGreen(plan, arriving, departing).Count * 0.1 >= 5, "the halves never green together");
+        // each half's clearance its own 3.5 m (2/3 at 1.2 m/s: the 2 s floor), not the whole road's 5.6 s
+        foreach (int g in (int[])[arriving, departing])
+            Assert.All(plan.Groups[g].Intervals.Where(iv => iv.Aspect == SignalAspect.Amber), iv => Assert.Equal(2f, iv.To - iv.From, 0.05f));
+    }
+
+    [Theory]
+    [InlineData(7u)]
+    [InlineData(99u)]
+    public void TwoStageCrossing_TheIslandWaitIsAtMostAThirdOfTheCycle(uint seed)
+    {
+        var plan = TwoStageCrossroads(seed);
+        AssertValid(plan);
+        var waits = plan.IslandWaits();
+        foreach (var w in waits) output.WriteLine($"group {w.Group} green {w.Green:F1}, on the island {w.Arrive:F1}, waits {w.Wait:F1} s for {w.Other}");
+        Assert.NotEmpty(waits);
+        Assert.All(waits, w => Assert.True(w.Wait <= plan.Cycle * SignalPlan.IslandWaitShare + 0.1f, $"waits {w.Wait:F1} s of a {plan.Cycle:F1} s cycle"));
+    }
+
+    /// <summary>
+    /// Two Geneva junctions (LV95 2499863,1118279 and 2499652,1118687, #1030) whose arm 3 crosses in two stages: their first
+    /// walkers missed the other half's green by tenths of a second, and the cycle grew to 177 s chasing the wait. Now that
+    /// green holds on for them: the waits within a third, the cycle (about) the one-stage plan's.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void TwoStageCrossing_FromGeneva_KeepsTheWaitWithoutLengtheningTheCycle(int which)
+    {
+        static SignalArm Deg(double d, bool i, bool o, float crossing, bool peds = true, bool left = false, byte rank = 18, bool bike = false) =>
+            new(d * Math.PI / 180, i, o, LeftPocket: left, Pedestrians: peds, BikeSignal: bike, CrossingM: crossing, Rank: rank);
+        List<SignalArm> arms = which == 0
+            ? [Deg(230, false, true, 10), Deg(-11, true, true, 13.2f, left: true), Deg(46, true, true, 10, rank: 2), Deg(168, true, true, 16.5f)]
+            : [Deg(-121, false, true, 8, peds: false), Deg(326, true, true, 13.5f, left: true, bike: true), Deg(59, true, true, 5.8f, rank: 2),
+                Deg(130, true, true, 12.1f, left: true, bike: true)];
+        var one = SignalPlan.Build(arms, 7);
+        arms[3] = arms[3] with { HalfInM = arms[3].CrossingM * 0.45f, HalfOutM = arms[3].CrossingM * 0.4f };
+        var two = SignalPlan.Build(arms, 7);
+        AssertValid(two);
+        output.WriteLine($"one stage {one.Cycle:F1} s, two stages {two.Cycle:F1} s");
+        foreach (var w in two.IslandWaits()) output.WriteLine($"group {w.Group} green {w.Green:F1}, on the island {w.Arrive:F1}, waits {w.Wait:F1} s");
+        Assert.All(two.IslandWaits(), w => Assert.True(w.Wait <= two.Cycle * SignalPlan.IslandWaitShare + 0.1f, $"waits {w.Wait:F1} s of {two.Cycle:F1}"));
+        // an island makes the cycle 3 s longer at most (the user)
+        Assert.InRange(two.Cycle, 0, one.Cycle + SignalPlan.IslandGrowMost + 0.05f);
+        // and timed from conflict times too (Geneva: a stretch left the arriving half green all cycle, the plan invalid)
+        var conflicts = two.Conflicts();
+        int n = two.Groups.Count;
+        var times = new float[n, n];
+        for (int g = 0; g < n; g++)
+            for (int h = 0; h < n; h++)
+                times[g, h] = conflicts[g, h] == SignalPlan.Conflict.Hard ? (two.Groups[g].Kind == SignalGroupKind.Pedestrian ? 6f : 3f) : float.NaN;
+        bool timed = two.Retime(times);
+        output.WriteLine($"timed {timed}\n{two.Describe()}");
+        Assert.True(timed, "timed from conflict times");
+        Assert.All(two.IslandWaits(), w => Assert.True(w.Wait <= two.Cycle * SignalPlan.IslandWaitShare + 0.1f, $"timed: waits {w.Wait:F1} s of {two.Cycle:F1}"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RidersInABikeBox_NeverEndBeforeTheCarsBehindThem(bool box)
+    {
+        // the riders turning left wait in a bike box in front of the pocket's cars: an early end of their green would have the
+        // cars run into them from behind; an early start is fine (the user). Their slow clearing (8 s against the cars' 3 s)
+        // ends a group of their own early only without a box.
+        var arms = new List<SignalArm> { Arm(N, true, true), Arm(E, true, true), Arm(S, true, true), Arm(W, true, true) };
+        arms[W] = arms[W] with { RiderLeft = true, RiderBox = box };
+        var plan = SignalPlan.Build(arms, 7);
+        int riders = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Bike && g.Arm == W && g.Moves == SignalMoves.Left);
+        int cars = Group(plan, SignalGroupKind.LeftArrow, W);
+        Assert.True(riders >= 0 && cars >= 0);
+        var conflicts = plan.Conflicts();
+        int n = plan.Groups.Count;
+        var times = new float[n, n];
+        for (int g = 0; g < n; g++)
+            for (int h = 0; h < n; h++)
+                times[g, h] = conflicts[g, h] == SignalPlan.Conflict.Hard ? (g == riders ? 8f : 3f) : float.NaN;
+        Assert.True(plan.Retime(times), "retimed");
+        AssertValid(plan);
+        float End(int g) => plan.Groups[g].Intervals.Where(v => v.Aspect == SignalAspect.Green).Select(v => v.To).First();
+        float Start(int g) => plan.Groups[g].Intervals.Where(v => v.Aspect == SignalAspect.Green).Select(v => v.From).First();
+        output.WriteLine($"riders green {Start(riders):F1}-{End(riders):F1}, cars {Start(cars):F1}-{End(cars):F1}");
+        if (box) Assert.True(End(riders) >= End(cars) - 0.05f, "the box's riders end before the cars behind them");
+        else Assert.True(End(riders) < End(cars) - 0.5f, "riders on their own lane end early to clear");
+        Assert.True(Start(riders) <= Start(cars) + 0.05f, "the riders never start after their cars");
+    }
+
+    /// <summary>
+    /// Geneva's 10-arm node at LV95 2500974,1117838 (#1030): split phasing ran its 9 approaches one by one, 5 s greens, to 157 s
+    /// once timed from conflict times. 120 s is the legal maximum (the user): approaches that never conflict share a phase.
+    /// </summary>
+    [Fact]
+    public void ManyArms_StayWithinTheLegalMaximum()
+    {
+        static SignalArm Deg(double d, bool i, float crossing, byte rank = 1, bool peds = false, float kmh = 60) =>
+            new(d * Math.PI / 180, i, true, Pedestrians: peds, CrossingM: crossing, Rank: rank, SpeedKmh: kmh);
+        var plan = SignalPlan.Build([Deg(211, true, 4.5f), Deg(214, true, 12, 34, true, 50), Deg(-54, true, 3), Deg(34, false, 13.5f, 34),
+            Deg(124, true, 3), Deg(34, true, 4.5f), Deg(33, true, 6, 2), Deg(125, true, 3), Deg(-56, true, 3), Deg(-147, true, 7.5f, 2, true, 50)], 7);
+        AssertValid(plan);
+        Assert.InRange(plan.Cycle, 0, SignalPlan.MaxCycle);
+        var conflicts = plan.Conflicts();
+        int n = plan.Groups.Count;
+        var times = new float[n, n];
+        for (int g = 0; g < n; g++)
+            for (int h = 0; h < n; h++)
+                times[g, h] = conflicts[g, h] == SignalPlan.Conflict.Hard ? (plan.Groups[g].Kind == SignalGroupKind.Pedestrian ? 9f : 5f) : float.NaN;
+        bool timed = plan.Retime(times);
+        output.WriteLine($"timed {timed}\n{plan.Describe()}");
+        AssertValid(plan);
+        Assert.InRange(plan.Cycle, 0, SignalPlan.MaxCycle);
+    }
+
+    [Fact]
+    public void TwoStageCrossing_RoundTripsItsHalves()
+    {
+        var plan = TwoStageCrossroads();
+        var tile = new RoadTile
+        {
+            Id = new TileId(2500, 1117),
+            Segments = [new RoadSegment { Class = RoadClass.Road, Width = 6, Points = [0, 400, 0, 10, 400, 0] }],
+            Signals = [new RoadSignal { X = 5, Y = 400.1f, Z = 6, Stops = new float[12], Plan = plan }],
+        };
+        using var ms = new MemoryStream();
+        RoadCodec.Encode(tile, ms);
+        ms.Position = 0;
+        var p = Assert.Single(RoadCodec.Decode(ms).Signals).Plan;
+        Assert.Equal(plan.Groups.Select(g => (g.Kind, g.Moves, g.Half)), p.Groups.Select(g => (g.Kind, g.Moves, g.Half)));
+        Assert.Empty(p.Validate());
     }
 }

@@ -180,8 +180,7 @@ public partial class AuraNetProbe : ChatProbe
         Expect(await Until(() => Auras.Watched == null, 15), "the battle over, nothing left to watch");
 
         // a bot: added by an admin, stepped up to, challenged; it takes it and performs
-        Chat?.Send("/login test");
-        await Seconds(1.0);
+        if (!await LogIn("test")) return;
         Chat?.Send("/bot add 1 hard");
         FootPlayer? bot = null;
         if (!Expect2(await Until(() => (bot = BotCopy()) != null && bot.BotName.Length > 0, 20), "a bot is here")) return;
@@ -191,34 +190,49 @@ public partial class AuraNetProbe : ChatProbe
         // the music's beat (#914): C carries a radio playing the server's default song, the chess
         // type beat it burns at start; the battle must keep that song's tempo and downbeat
         var lib = Audio.Cd.CdLibrary.Instance;
-        if (!Expect2(await Until(() => lib is { RatBeatId: >= 0 } && lib.Find(lib.RatBeatId) is { Bpm: > 1f }, 60), "the server's default song is in the library")) return;
-        var song = lib!.Find(lib.RatBeatId)!;
-        int slot = 0;
-        for (int i = 0; i < Inventory.Size; i++) if (_items.Inventory[i].IsEmpty) { slot = i; break; }
-        _items.Inventory.Put(slot, new ItemStack(ItemId.Radio, 1, new RadioPlay(song.Id, ClockSync.ServerNow, song.Duration).Encode()));
-        Expect(await Until(() => RadioPlay.Decode(me.HeldRadio) is { } p && p.CdId == song.Id, 5), $"C carries a radio playing '{song.Title}'");
-        await Seconds(1.0);
+        // the loopback server burns it with this machine's ffmpeg: without one it never comes, and the
+        // bot battle runs on its own beat (#1006)
+        Audio.Cd.CdInfo? song = null;
+        if (!Audio.Cd.CdBurner.FfmpegAvailable())
+            Expect(false, "the server's default song is in the library: ffmpeg is missing here, the server cannot burn it");
+        else
+        {
+            if (!Expect2(await Until(() => lib is { RatBeatId: >= 0 } && lib.Find(lib.RatBeatId) is { Bpm: > 1f }, 60), "the server's default song is in the library")) return;
+            var cd = song = lib!.Find(lib.RatBeatId)!;
+            int slot = 0;
+            for (int i = 0; i < Inventory.Size; i++) if (_items.Inventory[i].IsEmpty) { slot = i; break; }
+            _items.Inventory.Put(slot, new ItemStack(ItemId.Radio, 1, new RadioPlay(cd.Id, ClockSync.ServerNow, cd.Duration).Encode()));
+            Expect(await Until(() => RadioPlay.Decode(me.HeldRadio) is { } p && p.CdId == cd.Id, 5), $"C carries a radio playing '{cd.Title}'");
+            await Seconds(1.0);
+        }
 
         Chat?.Send($"/aura {bot.BotName}");
         if (!Expect2(await Until(() => Auras.Current != null, 15), $"the bot {bot.BotName} takes the battle at once")) return;
         var v = Auras.Current!;
-        float want = AuraRules.FoldBpm(song.Bpm);
-        GD.Print($"{Log} the battle runs at {v.Bpm:0.#} BPM ('{v.Music}'), the song at {song.Bpm:0.#}");
-        Expect(v.Music == song.Title, $"the battle keeps the beat of the song nearby ('{v.Music}')");
-        Expect(Math.Abs(v.Bpm - want) < 0.05f, $"at the song's tempo ({v.Bpm:0.##} BPM, want {want:0.##})");
-        double startedAt = RadioPlay.Decode(me.HeldRadio)!.Value.StartedAt;
-        if (!await Turn(v, 0, Opening, skipLast: false)) return;
-        // the bars count from the song's downbeat: the combo's start and first cut land on the song's beats
-        double songBeat = 60.0 / song.Bpm;
-        double OffGrid(double t)
+        if (song == null)
         {
-            double k = (t - startedAt - song.BeatOffset) / songBeat;
-            return Math.Abs(k - Math.Round(k)) * songBeat;
+            if (!await Turn(v, 0, Opening, skipLast: false)) return;
         }
-        double off0 = OffGrid(v.T0), off1 = OffGrid(AuraRules.CutAt(Opening, 0, v.T0, v.Beat));
-        GD.Print($"{Log} the combo started {off0 * 1000:0.#} ms and cut {off1 * 1000:0.#} ms off the song's beats; grades {string.Join(" ", v.History[0].Grades)}");
-        Expect(off0 < 0.01 && off1 < 0.01, "the combo runs on the song's beat grid");
-        Expect(Array.TrueForAll(v.History[0].Grades, g => g != AuraGrade.Miss), "cuts on the song's beat land");
+        else
+        {
+            float want = AuraRules.FoldBpm(song.Bpm);
+            GD.Print($"{Log} the battle runs at {v.Bpm:0.#} BPM ('{v.Music}'), the song at {song.Bpm:0.#}");
+            Expect(v.Music == song.Title, $"the battle keeps the beat of the song nearby ('{v.Music}')");
+            Expect(Math.Abs(v.Bpm - want) < 0.05f, $"at the song's tempo ({v.Bpm:0.##} BPM, want {want:0.##})");
+            double startedAt = RadioPlay.Decode(me.HeldRadio)!.Value.StartedAt;
+            if (!await Turn(v, 0, Opening, skipLast: false)) return;
+            // the bars count from the song's downbeat: the combo's start and first cut land on the song's beats
+            double songBeat = 60.0 / song.Bpm;
+            double OffGrid(double t)
+            {
+                double k = (t - startedAt - song.BeatOffset) / songBeat;
+                return Math.Abs(k - Math.Round(k)) * songBeat;
+            }
+            double off0 = OffGrid(v.T0), off1 = OffGrid(AuraRules.CutAt(Opening, 0, v.T0, v.Beat));
+            GD.Print($"{Log} the combo started {off0 * 1000:0.#} ms and cut {off1 * 1000:0.#} ms off the song's beats; grades {string.Join(" ", v.History[0].Grades)}");
+            Expect(off0 < 0.01 && off1 < 0.01, "the combo runs on the song's beat grid");
+            Expect(Array.TrueForAll(v.History[0].Grades, g => g != AuraGrade.Miss), "cuts on the song's beat land");
+        }
         if (!Expect2(await Until(() => v.Turn == 1 && v.Phase == AuraPhase.Perform, 30), "the bot plans its turn")) return;
         Expect(await Until(() => AuraRules.MoveOf(bot.AuraPose) != AuraMove.None, 10), "the bot's body strikes its moves");
         if (!Expect2(await Until(() => v.History.Count >= 2, 30), "the bot's turn is judged")) return;
@@ -238,9 +252,9 @@ public partial class AuraNetProbe : ChatProbe
     private async Task<bool> Turn(AuraManager.View v, int turn, AuraMove[] plan, bool skipLast)
     {
         if (!Expect2(await Until(() => v.Turn == turn && v.Phase == AuraPhase.Plan && v.MyTurn, 45), $"turn {turn + 1}: my plan")) return false;
-        await Seconds(1.0);
         // windowed (SHOTS=1): the planner as it opens, then the performance with its beat ring
         bool windowed = DisplayServer.GetName() != "headless";
+        if (windowed) await Seconds(1.0);
         if (windowed) GD.Print($"{Log} shot {Shot($"{_role}_plan{turn + 1}")}");
         Auras!.SendPlan(plan);
         if (!Expect2(await Until(() => v.Plan.Length == plan.Length && v.Turn == turn, 10), $"turn {turn + 1}: the plan is taken")) return false;

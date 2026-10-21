@@ -57,7 +57,7 @@ src/Core/ZFight          quick  --zfightcheck
 tests/zfight-baseline    quick  --zfightcheck
 src/Avatar/              quick  --emotecheck
 src/Player/EmoteWheel    quick  --emotewheelcheck --world fixture
-src/Core/TouchControls   quick  --touchcheck --mobile --world fixture
+src/Core/Touch           quick  --touchcheck --mobile --world fixture
 src/Core/PlayerInput.cs  quick  --touchcheck --mobile --world fixture
 src/Core/Platform.cs     quick  --touchcheck --mobile --world fixture
 src/Player/FootPlayer.cs quick  --emotewheelcheck --world fixture

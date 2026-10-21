@@ -1,7 +1,7 @@
 namespace UnitSport.Terrain.Format;
 
-/// <summary>Who moves along a conflict line (#979).</summary>
-public enum ConflictMover : byte { Car = 0, Bike = 1, Walker = 2 }
+/// <summary>Who moves along a conflict line (#979). <c>Tram</c>: room for #1057's tram movements (written by no stage yet, #1060).</summary>
+public enum ConflictMover : byte { Car = 0, Bike = 1, Walker = 2, Tram = 3 }
 
 /// <summary>
 /// A movement of a lit junction as its timing took it (#979, section <c>CPAR</c>): its line from its stop line (tile-local x, y, z,

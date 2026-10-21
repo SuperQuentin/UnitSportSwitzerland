@@ -47,6 +47,12 @@ public static class RoadCodec
     /// <summary>#979: the pairs of movements that set each signal group's green start (<see cref="RoadConflictPair"/>).</summary>
     public static readonly uint TagConflictPairs = FourCC("CPAR");
 
+    /// <summary>#1037: the overhead structures over wide approaches and their heads (<see cref="SignalOverhead"/>).</summary>
+    public static readonly uint TagOverheads = FourCC("OVHD");
+
+    /// <summary>#1052: overhead lines over electrified rail (<see cref="RoadCatenary"/>).</summary>
+    public static readonly uint TagCatenary = FourCC("CTNY");
+
     private static uint FourCC(string s) => BitConverter.ToUInt32(Encoding.ASCII.GetBytes(s));
 
     /// <param name="legacySections">Write the pre-#116b ATTR and PANT payloads (format self-check only).</param>
@@ -159,6 +165,10 @@ public static class RoadCodec
             sections.Add((TagJunctionPaths, Section(s => RoadJunctionPath.Write(s, tile.JunctionPaths, tile.Junctions))));
         if (tile.Signals.Any(s => s.ConflictPairs.Count > 0))
             sections.Add((TagConflictPairs, Section(s => RoadConflictPair.Write(s, tile.Signals))));
+        if (tile.CatenarySupports.Count > 0 || tile.CatenaryWires.Count > 0)
+            sections.Add((TagCatenary, Section(s => RoadCatenary.Write(s, tile.CatenarySupports, tile.CatenaryWires))));
+        if (tile.Signals.Any(s => s.Overheads.Count > 0))
+            sections.Add((TagOverheads, Section(s => SignalOverhead.Write(s, tile.Signals))));
 
         w.Write((uint)sections.Count);
         foreach (var (tag, payload) in sections)
@@ -343,6 +353,15 @@ public static class RoadCodec
                 {
                     // after SGNL in the file: the signals are read by now
                     if (!RoadConflictPair.Read(r, tile.Signals)) input.Position = end;
+                }
+                else if (tag == TagCatenary)
+                {
+                    if (!RoadCatenary.Read(r, tile.CatenarySupports, tile.CatenaryWires)) input.Position = end;
+                }
+                else if (tag == TagOverheads)
+                {
+                    // after SGNL in the file: the signals are read by now
+                    if (!SignalOverhead.Read(r, tile.Signals)) input.Position = end;
                 }
                 else if (tag == TagJunctionPaths)
                 {
