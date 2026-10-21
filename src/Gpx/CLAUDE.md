@@ -15,6 +15,7 @@ touches its topic; search with `grep -ril <word> docs/notes/gpx`.
 ## Commands
 
 - `android-gpx-picker` — Browse on Android is the system document picker (no permission, no MIME filter); `GpxPicker.Import` copies the `content://` file into `user://gpx` (#1027)
+- `open-with` — a .gpx opened with the game starts its replay: desktop launch argument + Open-with registration (Windows HKCU, Linux .desktop), Android intent filter from `addons/unitsport_android` (needs the Gradle build) read by `AndroidBridge.OpenedFile` (#1029)
 - `commands` — Commands: --bubble, --cinemamode, --cinemastats, --forceshot, --gpx, --lens, --path, --snap, --speed
 
 ## Gotchas
