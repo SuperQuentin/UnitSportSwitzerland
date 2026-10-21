@@ -32,8 +32,10 @@ public partial class SignalLamps : Node3D
     {
         Round, LeftArrow, RightArrow, Standing, Walking, Bike, Straight, StraightLeft, StraightRight,
         LeftArrowMask, RightArrowMask, StraightMask, StraightLeftMask, StraightRightMask,
+        // a tram bar signal's lamps (#1057): the bar across (stop), the dot (stop expected), the bar upright or slanted left or right (go)
+        TramStop, TramDot, TramGo, TramLeft, TramRight,
     }
-    private const int IconCount = 14;
+    private const int IconCount = 19;
     /// <summary>The arrows, and how many there are before their masks.</summary>
     private static readonly Icon[] Arrows = [Icon.LeftArrow, Icon.RightArrow, Icon.Straight, Icon.StraightLeft, Icon.StraightRight];
 
@@ -50,6 +52,13 @@ public partial class SignalLamps : Node3D
         SignalBuilder.Shape.RightArrow => Icon.RightArrow,
         SignalBuilder.Shape.Square => lens.Role == SignalBuilder.Role.Red ? Icon.Standing : Icon.Walking,
         SignalBuilder.Shape.Bike => Icon.Bike,
+        SignalBuilder.Shape.Tram => lens.Role switch
+        {
+            SignalBuilder.Role.Red => Icon.TramStop,
+            SignalBuilder.Role.Amber => Icon.TramDot,
+            // the bar the way its trams go: upright straight on (or several ways), slanted for a turn alone
+            _ => plan.Groups[lens.Group].Moves switch { SignalMoves.Left => Icon.TramLeft, SignalMoves.Right => Icon.TramRight, _ => Icon.TramGo },
+        },
         _ when lens.Role == SignalBuilder.Role.Flash => Icon.Round,
         _ => (lens.Arrow ?? SignalBuilder.ArrowMoves(plan, lens.Group)) switch
         {
@@ -292,7 +301,7 @@ void fragment() {
             var lens = _lenses[i];
             var aspect = plan.State(lens.Group, now);
             if (aspect == SignalAspect.FlashingAmber) blinking = true;
-            var colour = Colour(lens.Role, aspect, blinkOn);
+            var colour = _icon[i] >= Icon.TramStop ? TramColour(lens.Role, aspect) : Colour(lens.Role, aspect, blinkOn);
             // a yellow lens that also flashes with a flasher (#971: a bike head's during its green)
             if (lens.Flash >= 0 && plan.State(lens.Flash, now) == SignalAspect.FlashingAmber)
             {
@@ -318,6 +327,20 @@ void fragment() {
         _ => aspect == SignalAspect.FlashingAmber && blinkOn ? AmberOn : AmberOff,
     };
 
+    /// <summary>A tram lamp's white (#1057): lit, or dark on the black housing.</summary>
+    private static readonly Color TramOn = new(1.0f, 0.97f, 0.88f), TramOff = new(0.09f, 0.09f, 0.09f);
+
+    /// <summary>
+    /// A tram bar signal's lamp (#1057): the bar across on red and red-and-amber (stop), the dot on amber (stop expected: stop if
+    /// it can), the go bar on green.
+    /// </summary>
+    private static Color TramColour(SignalBuilder.Role role, SignalAspect aspect) => role switch
+    {
+        SignalBuilder.Role.Red => aspect is SignalAspect.Red or SignalAspect.RedAmber ? TramOn : TramOff,
+        SignalBuilder.Role.Amber => aspect == SignalAspect.Amber ? TramOn : TramOff,
+        _ => aspect == SignalAspect.Green ? TramOn : TramOff,
+    };
+
     /// <summary>A flat lens facing +Z, built once per icon (main thread). Figures in lens radii.</summary>
     private static Mesh LensMesh(Icon key)
     {
@@ -325,7 +348,7 @@ void fragment() {
         var icon = key;   // a mask draws its arrow's symbol: the cache stays under the mask
         float r = SignalBuilder.LensRadius;
         var flat = new Flat(icon == Icon.Bike ? r * 0.5f : r);   // a 100 mm bike lens (#351)
-        if (icon >= Icon.LeftArrowMask)
+        if (icon is >= Icon.LeftArrowMask and <= Icon.StraightRightMask)
         {
             // the lit disc, and the arrow dark in it, a hair in front
             flat.Disc(Vector2.Zero, 1f, 14);
@@ -361,6 +384,12 @@ void fragment() {
             case Icon.Bike:
                 foreach (var polygon in SignalGlyphs.Bike()) flat.Fan(polygon);   // two wheels, the diamond frame, saddle and bars
                 break;
+            // a tram bar signal's lamps (#1057): white bars and a dot on the black of the housing
+            case Icon.TramStop: flat.Bar(Vector2.Right, 1.7f, 0.42f); break;
+            case Icon.TramGo: flat.Bar(Vector2.Up, 1.7f, 0.42f); break;
+            case Icon.TramLeft: flat.Bar(new Vector2(-1f, 1f).Normalized(), 1.7f, 0.42f); break;
+            case Icon.TramRight: flat.Bar(new Vector2(1f, 1f).Normalized(), 1.7f, 0.42f); break;
+            case Icon.TramDot: flat.Disc(Vector2.Zero, 0.4f, 12); break;
             default: flat.Disc(Vector2.Zero, 1f, 10); break;
         }
         return Meshes[(int)key] = flat.Mesh();
@@ -404,6 +433,14 @@ void fragment() {
             var ring = new Vector2[n];
             for (int i = 0; i < n; i++) ring[i] = centre + r * new Vector2(Mathf.Cos(Mathf.Tau * i / n), Mathf.Sin(Mathf.Tau * i / n));
             Fan(ring);
+        }
+
+        /// <summary>A bar through the centre along <paramref name="dir"/>, <paramref name="length"/> long and <paramref name="width"/> wide, square-ended.</summary>
+        public void Bar(Vector2 dir, float length, float width)
+        {
+            var a = dir * (length * 0.5f);
+            var n = dir.Orthogonal() * (width * 0.5f);
+            Fan([-a - n, a - n, a + n, -a + n]);
         }
 
         /// <summary>A stroke with round ends, so strokes that meet join cleanly.</summary>
