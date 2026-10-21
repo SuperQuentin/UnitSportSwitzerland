@@ -303,9 +303,38 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   builds seven designed junctions (ideal with lanes / paths, mismatched room, a narrow arm, a T, a
   close pair) through this pipeline in ~2 s; the clean place to look at and test lights before
   Geneva (tier 0 `SignalTestRegionTests`, `--signal-check`, windowed `--trafficcheck` at each).
+- **Overhead heads** (#1037, plan `docs/plans/overhead-traffic-lights.md`). **Which approaches** (`Layout/Overhead.cs`,
+  `OverheadPlanner.Heads`, from `ExteriorPlanner.Plan`): only a street with 2+ lanes of its own toward the junction (its normal
+  section's in-lanes: a 2+2 artery, OSM `lanes:forward=2` and up), turn pockets not counted (the user, Oct 21 2026: counted, the
+  test region's 1+1 crossroads, ~20 m wide at the lights with both pockets and bike lanes, took heads overhead at 59 approaches,
+  45 as portals); then Stadt Bern's Handbuch LSA 2025 (Abb. 12-19): a lane's own kerb head (a left lane's on the left kerb or the
+  refuge, every other's on the right kerb) more than 6 m sideways, two lanes turning the same way, a side road (yields when off)
+  of 2+ lanes without a refuge, or 3+ lanes. One head per signal group (left-only lanes, right-only lanes, the rest) over the
+  middle of its lanes; with 3+ lanes the kerb lane keeps its kerb head alone, a right-only kerb lane always. The kerb poles keep
+  theirs. **What carries them** (`TileRewriter.ExteriorWrite.PlaceOverhead`), first that fits: a **span wire** on a tram street
+  (`Source.Line.Osm.Tram`: the overlay's `tram` column; the segment's attributes get the overlay only when written), between
+  posts by the main pole and at the far kerb; a **mast arm** from a post 0.4 m outside the main pole (the kerb heads keep their
+  place) when every head lies within 10 m (Basel-Landschaft: 3-4.5 m one lane, 5.5-7.5 m two, to 10 m with a tie rod past 7 m);
+  one **from the refuge** reaching right; else a **portal** to the far kerb (no case in the test region builds a refuge arm).
+  Lower edge of the plates 5.0 m over the road (SSV Art. 71: 4.50-5.50), 5.5 m on a wire. **Record**: section `OVHD`
+  (`SignalOverhead`, version 1; older readers skip it, a newer SGNL version would have made them drop every light): kind, arm,
+  post foot, far end (an arm's tip, a portal's or span's second foot), plates' lower edge, heading, heads (along the structure,
+  lane moves). **Drawn** (`SignalBuilder.Overhead`): square posts and arms (RRW 300, 300 x 200), a portal beam, round anchor poles
+  (8.5 m) and a sagging wire; heads at 1.5 x a kerb head (300 mm lenses: the lens transform scaled, a bike head's 100 mm keeps
+  its own mesh), the lanes' arrow on a white plate above each head (Basel-Landschaft: "über dem Signalgeber"), a hanger up to
+  the arm, beam or wire; collision on the posts and anchors only (4 m columns: everything above is over the 4 m vehicle limit).
+  Model viewer: "Traffic light - Mast arm / Portal / Span wire". Stats: the layout line's `overhead heads (#1037)`. Test region:
+  J6 arms, J7's 2+2 cross road arms, J13 portals, J14 span wires (`signal-test-region`); J7's double left (pockets on a 1+1
+  road) keeps its poles by the user's rule. Tier 0 `OverheadPlannerTests` (Bern's layouts), `SignalPlanTests` (OVHD round trip),
+  `SignalTestRegionTests.Wide_approaches_carry_their_heads_overhead`. Old layout (`--junctions old`): none.
+- **Pole colour per canton** (#1037, `SignalPlan.PoleColour`, bits 3-5 of the flag byte; RoadGen `PoleColour(canton)`): Basel-
+  Landschaft anthracite DB703 (ATS LSA Aussenanlagen 2024), Bern RAL 7042 (the city's Handbuch LSA 2025, taken for the canton),
+  the rest RAL 7001; poles and overhead structures. Model viewer: "Traffic light - Basel-Landschaft / Bern"; in game the canton
+  row's BL and BE zones. RAL 7042 is close to 7001: the difference is real, not a bug.
 - **Not done**: one record for a junction of several nodes (the internal links are only kept
   clean); OSM `turn:lanes` not read yet, restrictions only for the lane records (a left pocket is
   still built where the left turn is forbidden: 10 in Geneva); thin median (optional); crossings of divided roads
   (several nodes); 3-lane roads; at a compact junction a left + right pocket's mouth reaches into
   the next arm's sidewalk corner (it stands on the widening, over part of the crossing:
-  2499132,1116455); 300 mm overhead heads (#354); rejected poles are dropped, not moved along the kerb.
+  2499132,1116455); rejected poles are dropped, not moved along the kerb; overhead direction signs on portals, horizontal heads,
+  heads on house fronts, the tram wire itself (#1037's not done).

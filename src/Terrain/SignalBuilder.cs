@@ -75,7 +75,8 @@ public static class SignalBuilder
     /// <summary>One lens: its instanced shape and transform (tile-local, +Z toward the viewer), which junction and group light it, and as what.</summary>
     /// <param name="Flash">A yellow lens that also flashes with this flasher group (#971: a bike head's, its riders turning right
     /// across a crossing green with them), -1 none.</param>
-    public readonly record struct Lens(Shape Shape, Transform3D Transform, int Junction, int Group, Role Role, int Flash = -1);
+    /// <param name="Arrow">A round lens's arrow when not its group's (#1037: an overhead head shows its own lanes' moves), null the group's.</param>
+    public readonly record struct Lens(Shape Shape, Transform3D Transform, int Junction, int Group, Role Role, int Flash = -1, SignalMoves? Arrow = null);
 
     /// <summary>A tile's lenses and the plans that light them.</summary>
     public sealed class Lamps
@@ -86,7 +87,7 @@ public static class SignalBuilder
 
     /// <summary>A head on a pole: its centre, the way it faces and its right as the viewer sees it, its group, its lenses.</summary>
     private readonly record struct Head(Vector3 Centre, Vector3 Front, Vector3 Right, int Group, Shape Shape, int Lenses, bool Flasher,
-        float Scale = 1f, bool SideBySide = false)
+        float Scale = 1f, bool SideBySide = false, SignalMoves? Arrow = null)
     {
         /// <summary>Half the housing's height.</summary>
         public float Half => SideBySide ? GenevaHalfHeight : Lenses * Pitch * Scale * 0.5f;
@@ -241,9 +242,25 @@ public static class SignalBuilder
             if (group < 0) continue;
             var at = a + dir * h.Along + front * (HeadDepth * OverheadScale * 0.5f);
             at.Y = o.Bottom + (BorderGap + BorderWidth) * OverheadScale + half;
-            heads.Add((new Head(at, front, right, group, shape, 3, false, OverheadScale), h));
+            // its round lenses show its own lanes' moves (the user, #1037: the head over the through lanes is not the kerb lane's
+            // through-and-right)
+            var arrow = shape == Shape.Circle ? LaneArrow(plan, o.Arm, h.Moves) : (SignalMoves?)null;
+            heads.Add((new Head(at, front, right, group, shape, 3, false, OverheadScale, Arrow: arrow), h));
         }
         return heads;
+    }
+
+    /// <summary>
+    /// The arrow over lanes making <paramref name="moves"/> (#1037): a ball where they make every move the approach has (or none is
+    /// known), else their moves, as <see cref="ArrowMoves"/> does for a group.
+    /// </summary>
+    private static SignalMoves LaneArrow(SignalPlan plan, int arm, SignalMoves moves)
+    {
+        var all = SignalMoves.None;
+        foreach (var g in plan.Groups)
+            if (g.Arm == arm && g.Kind is SignalGroupKind.Car or SignalGroupKind.LeftArrow or SignalGroupKind.RightArrow) all |= g.Moves;
+        moves &= all;
+        return moves == SignalMoves.None || moves == all || moves == (SignalMoves.Left | SignalMoves.Right) ? SignalMoves.None : moves;
     }
 
     /// <summary>The group and shape of an overhead head over lanes making <paramref name="moves"/>.</summary>
@@ -495,7 +512,7 @@ public static class SignalBuilder
                         var at = h.Centre + Vector3.Up * (half - pitch * (k + 0.5f)) + face;
                         // a bike head's own yellow flashes during its green where its riders turn right across a crossing green with them (#971, the user)
                         int flash = h.Shape == Shape.Bike && role == Role.Amber ? Flasher(signal.Plan, h.Group) : -1;
-                        lamps.Lenses.Add(new Lens(h.Shape, new Transform3D(basis, at), j, h.Group, role, flash));
+                        lamps.Lenses.Add(new Lens(h.Shape, new Transform3D(basis, at), j, h.Group, role, flash, h.Arrow));
                     }
                     if (h.Flasher && Flasher(signal.Plan, h.Group) is int f and >= 0)
                     {

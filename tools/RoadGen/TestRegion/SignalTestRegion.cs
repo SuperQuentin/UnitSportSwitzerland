@@ -398,7 +398,7 @@ public static class SignalTestRegion
             Cross("POS", OverheadE, PortalN - 400, PortalN, "10m Strasse", "Verbindungsstrasse", "secondary");
             Cross("PON", OverheadE, PortalN, PortalN + 400, "10m Strasse", "Verbindungsstrasse", "secondary");
             junctions.Add(new Junction("J13-portal", OverheadE, PortalN, "a 4+4 artery, its lanes assigned in place: heads overhead on a portal",
-                Arms(null, null, null, null)));
+                Arms("L|T|T|TR", "L|T|T|TR", "L|T|R", "L|T|R")));
 
             const double nb = BetweenN;
             lines.Add(new Line("TRW", "10m Strasse", "Durchgangsstrasse", "Kanton", [(OverheadE - 450, nb), (OverheadE, nb)], "secondary",

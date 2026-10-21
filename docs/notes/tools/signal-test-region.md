@@ -49,19 +49,19 @@
   the main road's left pocket from the west splits its lead-in, so the north-west corner rounds a widened kerb. No
   designed junction (no lights, not in the table or the lane check).
 - **Canton zones** (#1038, the user's ask: show the canton differences side by side): the region declares its own cantons
-  per kilometre tile (`CantonTiles`: GE 2913/1323, VD 2914/1323; every other tile the default zone, the cantons not checked
-  yet), handed to the network stage as `TileRewriter.Options.Cantons` (`Cantons.Of`; real regions keep `switzerland.bin`'s).
+  per kilometre tile (`CantonTiles`: GE 2913/1323, VD 2914/1323, BL 2915/1323, BE 2916/1323 (their pole colours, #1037);
+  every other tile the default zone, the cantons not checked yet), handed to the network stage as `TileRewriter.Options.Cantons` (`Cantons.Of`; real regions keep `switzerland.bin`'s).
   Only cantons whose lights or poles differ get a zone (`traffic-signals`: Geneva's two-lens pedestrian heads, Vaud's arrow
-  plates); Basel-Landschaft and Bern come with #1037's mast colours. The **canton row** (N 1323500): J2's town crossroads
-  at E 2912500 (default), 2913500 (Geneva), 2914500 (Vaud) on one 10 m main road with sidewalks across both borders, built
-  alike (line ids `CN0-3`, `CA`/`CB`/`CI` picked so every street hashes to J2's path layout, 2: `BikePlanner.StrokeLayouts`
+  plates, Basel-Landschaft's anthracite and Bern's RAL 7042 poles). The **canton row** (N 1323500): J2's town crossroads
+  at E 2912500 (default), 2913500 (Geneva), 2914500 (Vaud), 2915500 (Basel-Landschaft), 2916500 (Bern) on one 10 m main road
+  with sidewalks across the borders, built alike (line ids `CN0-5`, `CA`/`CB`/`CI`/`CS`/`KA` picked so every street hashes to J2's path layout, 2: `BikePlanner.StrokeLayouts`
   hashes the street's smallest key); the junction table prints each plan's look (`2-lens peds`, `arrow plates`). **The
   border on the ground**: `CoverClass.Border` (purple) on the vertices within 1.5 m of every zone edge (the cover follows
   the terrain's blend up to the roads; a line painted at ground height would sink there), and where a carriageway crosses
   an edge (`Options.Decorate`, on each tile as it is written): a 0.5 m purple stripe across it and a canton sign each way
   (`PointPropType.CantonSign`, on the right of the traffic entering the canton, past the street's sides, facing it: a
   white plate, the canton's shield, its name as a `Label3D`; `RoadSignBuilder`). The run checks every crossing has its
-  stripe and two signs (`canton borders` line: 2 stripes, 4 signs). Found on the way: a street's sidewalks and paths stop
+  stripe and two signs (`canton borders` line: 4 stripes, 8 signs). Found on the way: a street's sidewalks and paths stop
   ~8 m either side of a tile seam (the twins' road at E 2911000 too: not from this).
 
 ## Junctions (designed vs built)
@@ -81,7 +81,9 @@ a bike box, `[adv]` an advanced bike line); the approach is named by where it co
 | J5a/J5b-pair | 2915470 / 2915530,1322500 | two crossroads 60 m apart, 6 m cross roads | between them a merged strip (#325): `L \| TR \| bTR` both ways; the other arms `L \|E `L | bL[adv] | T | R` (20+20 pocket, the right pocket reaching 8 m past the left's storage, #682)\| T \| R` | 99 s each |
 | J6-artery-in-place | 2916500,1322500 | #700: a 2+2 artery (OSM `lanes=4`, 12 m) across a 10 m road, turn:lanes `left\|through;right` on every approach | W, E `L \| TR` assigned in place (arrows, no widening, left phase); N, S `L \| bL \| TR \| bTR` (pocket from data, no right pocket) | 73 s |
 | J7-double-left | 2917500,1322500 | #700: the way before the lights `lanes:forward=3`, `left\|left\|through;right`; east way `through\|through;right`; cross road 2+2 | W `L \| L \| bL \| TR \| bTR` (double left, hatch one lane wide), E `TR` (no left pocket), N, S `LTR \| LTR`; dashed guides for the double left and the cross road's through lanes | 60 s |
-| J12-canton-default / -GE / -VD | 2912500 / 2913500 / 2914500,1323500 | #1038: J2 once per canton zone | as J2: every arm `L \| bL \| T \| R` + bike signal; Geneva two-lens pedestrian heads side by side, Vaud arrow plates | 85 s each, J2's phases |
+| J12-canton-default / -GE / -VD / -BL / -BE | 2912500 ... 2916500,1323500 | #1038: J2 once per canton zone | as J2: every arm `L \| bL \| T \| R` + bike signal; Geneva two-lens pedestrian heads side by side, Vaud arrow plates, BL anthracite and BE RAL 7042 poles (#1037) | 85 s each, J2's phases |
+| J13-portal | 2917500,1321500 | #1037: a 4+4 artery (OSM `lanes=8`, `left\|through\|through\|through;right` assigned in place) across a 10 m road | W, E `L \| T \| T \| TR \| bTR` under a portal (left and through heads; the kerb lane's on its pole); N, S `L \| bL \| T \| R \| bTR` | 77 s |
+| J14-tram | 2917500,1323500 | #1037: J6 with OSM `railway=tram` on its artery (the overlay's `tram` column) | as J6, W and E under span wires | 78 s |
 
 Rewrite numbers: 7 junctions (all from data), 27 approaches, 21 left pockets (storage 40 x18, 20
 x3, 2 merged), 21 right pockets (4 rejected), layout (a) 8, (b) 6, (b) forced 1, 19 left-turn

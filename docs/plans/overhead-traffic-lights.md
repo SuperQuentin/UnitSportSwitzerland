@@ -13,6 +13,14 @@ Part of #354 (more than one lane per direction). Kerb poles today: `tools/traffi
   (pedestrian heads, arrow plates, these colours) can be seen side by side: its own issue, a prerequisite for this plan's
   step 4 checks, not part of this plan.
 
+## Status (on the branch, Oct 21 2026)
+
+Built as planned, with one decision the first run forced: the rule counted a street's turn pockets as lanes, and the test
+region's 1+1 crossroads (~20 m kerb to kerb at the lights) took heads overhead at 59 approaches, 45 of them as portals. The user
+chose: **only streets with 2+ lanes of their own toward the junction**, pockets not counted (J7's double left on a 1+1 road keeps
+its poles). The record is a section of its own, `OVHD`, not SGNL version 3 (a newer SGNL version makes older readers drop every
+light). What was built and where: `tools/traffic-signals` ("Overhead heads", "Pole colour per canton").
+
 ## What Swiss sources say
 
 - **SSV Art. 71** (SR 741.21): the main head stands on the **right kerb**; it may be repeated **over its lane**, on the
