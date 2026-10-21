@@ -33,10 +33,10 @@ public static class CatenaryPlanner
     public sealed class Stats
     {
         public int Pieces, Cantilevers, Spans, WallEnds, MastEnds, Skipped;
-        public double WireKm;
+        public double WireKm, Ms;
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
-            $"    overhead lines (#1052): {Pieces:N0} electrified rail pieces, {WireKm:F2} km of contact wire, {Cantilevers:N0} cantilever masts, {Spans:N0} spans ({WallEnds:N0} ends on facades, {MastEnds:N0} on masts), {Skipped:N0} supports with no room");
+            $"    overhead lines (#1052): {Pieces:N0} electrified rail pieces, {WireKm:F2} km of contact wire, {Cantilevers:N0} cantilever masts, {Spans:N0} spans ({WallEnds:N0} ends on facades, {MastEnds:N0} on masts), {Skipped:N0} supports with no room; planning {Ms:N0} ms");
     }
 
     /// <summary>Electrified: rail at grade or on a bridge, neither a funicular nor disused (TLM has no electrification; nearly all Swiss rail is).</summary>
@@ -57,6 +57,7 @@ public static class CatenaryPlanner
     public static void Plan(IReadOnlyList<Rail> rails, IReadOnlyList<IReadOnlyList<Vec2>> tracks, Func<Vec2, bool> building, Func<Vec2, bool> clear,
         Dictionary<TileId, List<CatenarySupport>> supports, Dictionary<TileId, List<CatenaryWire>> wires, Stats stats)
     {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
         var near = new TrackGrid(tracks);
         foreach (var rail in rails)
         {
@@ -131,6 +132,7 @@ public static class CatenaryPlanner
                 }
             }
         }
+        stats.Ms += clock.Elapsed.TotalMilliseconds;
     }
 
     /// <summary>A span across a street at <paramref name="at"/>: to the first facade within reach each side, else to the first spot off the road.</summary>
