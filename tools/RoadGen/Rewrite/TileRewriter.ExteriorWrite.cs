@@ -54,6 +54,11 @@ public static partial class TileRewriter
                 && kerbLane.Moves != SignalMoves.Right;
             // the bike lane between the through lane and the right pocket (layout b): no conflict with that pocket's arrow (#979)
             bool between = a.HasRight && !kerbside && mouth.Strips.Any(x => x.Kind == StripKind.BikeLane && x.Way == StripWay.In && x.Moves != SignalMoves.Right && x.Moves != SignalMoves.Left);
+            // a two-stage crossing's halves (#1030): from where its walkers set off on the arriving side to the island, from the
+            // island to the departing side, as they are timed (ConflictTimes.WalkSpan)
+            var zebra = ex.Bars.FirstOrDefault(b => b.Kind == BarKind.Crosswalk);
+            var (halfIn, halfOut) = ex.StageIsland is var (il, ir) && zebra is not null && ConflictTimes.WalkSpan(a, zebra) is var (wf, wt)
+                ? ((float)(wt - ir), (float)(il - wf)) : (0f, 0f);
             // the queue each lane holds behind its line (#982): a pocket over its storage, a lane of the street's own (the through
             // lane, a turn lane from OSM's lanes) back along the street to the junction behind; at least a car
             double stop = ex.CarStop ?? 0;
@@ -63,7 +68,8 @@ public static partial class TileRewriter
                 Pedestrians: ex.Crosswalk is not null, BikeSignal: approach && (path || kerbside), SpeedKmh: urban ? 50 : 60,
                 CrossingM: (float)(mouth.CarriagewayWidth), Rank: (byte)Math.Clamp(info is { } i ? PriorityPlanner.Rank(i) / 4 : 1, 1, 255),
                 Banned: approach ? a.Wants.Banned : SignalMoves.None, BikeBetween: between,
-                StorageM: Room(a.Length), LeftStorageM: Room(Run(PocketRules.Left)), RightStorageM: Room(Run(PocketRules.Right))));
+                StorageM: Room(a.Length), LeftStorageM: Room(Run(PocketRules.Left)), RightStorageM: Room(Run(PocketRules.Right)),
+                HalfInM: halfIn, HalfOutM: halfOut, RiderBox: ex.Bars.Any(b => b.Kind == BarKind.BikeBox)));
         }
         if (arms.Count(x => x.In) < 2) return null;
         string? canton = cantons?.CodeAt(jp.Centre.X, jp.Centre.Y);
@@ -106,12 +112,28 @@ public static partial class TileRewriter
             for (int k = 0; k < arms.Count; k++) arms[k] = arms[k] with { BikeSignal = false };
             plan = SignalPlan.Build(arms, seed, amber);
         }
+
+        // a two-stage crossing whose island wait the cycle cannot keep (3 s longer at most) crosses in one go, as without the
+        // island: never worse (#1030, the user; Geneva: a junction at its minimum greens missed the far half by 0.7 s)
+        var oneStage = plan.IslandWaits().Where(w => w.Wait > plan.Cycle * SignalPlan.IslandWaitShare + 0.1f).Select(w => plan.Groups[w.Group].Arm).Distinct().ToList();
+        if (oneStage.Count > 0)
+        {
+            foreach (int k in oneStage)
+            {
+                arms[k] = arms[k] with { HalfInM = 0, HalfOutM = 0 };
+                ExteriorPlanner.OneStage(exterior[k]);
+            }
+            plan = SignalPlan.Build(arms, seed, amber);
+            stats.TwoStageDropped += oneStage.Count;
+        }
         if (plan.Validate() is { Count: > 0 })
         {
             stats.SignalsInvalid++;
             return null;
         }
         plan.ArrowPlates = ArrowPlates(canton);
+        stats.TwoStage += arms.Count(x => x.TwoStage);
+        stats.RiderBoxes += Enumerable.Range(0, arms.Count).Count(k => arms[k].RiderBox && plan.Groups.Any(g => g.Kind == SignalGroupKind.Bike && g.Arm == k && g.Moves == SignalMoves.Left));
         plan.PoleColour = PoleColour(canton);
 
         float SampleAt(ArmPlan a, Vec2 p) => net.Links[a.LinkId].Tag is Source s ? s.SampleHeight(p) : 0f;

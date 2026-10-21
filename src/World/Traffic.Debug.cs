@@ -120,10 +120,8 @@ public partial class Traffic
                     for (int i = 0; i + 1 < points.Length; i++, lines++)
                         if (!yields || i % 2 == 0) Ribbon(mesh, points[i] + Vector3.Up * DrawLift, points[i + 1] + Vector3.Up * DrawLift, c, 0.35f);
                 }
-                foreach (var (from, to, arm) in site.Walks)
+                foreach (var (from, to, _, group) in site.Walks)
                 {
-                    int group = Enumerable.Range(0, site.Plan.Groups.Count)
-                        .FirstOrDefault(g => site.Plan.Groups[g].Kind == SignalGroupKind.Pedestrian && site.Plan.Groups[g].Arm == arm, -1);
                     if (group >= 0 && LitColour(site.Plan.State(group, now)) is { } c)
                     {
                         Ribbon(mesh, from + Vector3.Up * DrawLift, to + Vector3.Up * DrawLift, c, 2.5f);
@@ -374,7 +372,8 @@ public partial class Traffic
     /// </summary>
     private static bool Crossing(SignalPlan plan, List<Stream> streams, int arm, double u)
     {
-        int g = plan.Groups.FindIndex(x => x.Kind == SignalGroupKind.Pedestrian && x.Arm == arm);
+        // (the half a car turning in crosses: the departing one of a two-stage crossing, #1030)
+        int g = plan.Groups.FindIndex(x => x.Kind == SignalGroupKind.Pedestrian && x.Arm == arm && x.Half != CrossingHalf.Arriving);
         if (g < 0) return false;
         double walk = 0;
         foreach (var s in streams)
@@ -414,7 +413,7 @@ public partial class Traffic
             // (and, where the plan lets it go across that arm's crossing with the walkers, a permissive conflict, for as long as
             // their trail is on it: their yellow and the red after it too; a protected turn the conflict times keep apart never, the user)
             var conflicts = _conflicts.GetValue(plan, p => p.Conflicts());
-            int walk = to < 0 ? -1 : plan.Groups.FindIndex(x => x.Kind == SignalGroupKind.Pedestrian && x.Arm == to);
+            int walk = to < 0 ? -1 : plan.Groups.FindIndex(x => x.Kind == SignalGroupKind.Pedestrian && x.Arm == to && x.Half != CrossingHalf.Arriving);
             // (on its yellow and red too: its last ones on it still give way, the user)
             bool yields = to >= 0 && (plan.YieldsAt(from, to, s.Turn, s.Group, now)
                 || walk >= 0 && conflicts[s.Group, walk] == SignalPlan.Conflict.Permissive && Crossing(plan, streams, to, u));

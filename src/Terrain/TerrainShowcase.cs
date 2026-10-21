@@ -86,14 +86,18 @@ public static class TerrainShowcase
         ("Mast arm", () => TrafficLight(pedestrianAmber: true, overhead: OverheadKind.Arm)),
         ("Portal", () => TrafficLight(pedestrianAmber: true, overhead: OverheadKind.Portal)),
         ("Span wire", () => TrafficLight(pedestrianAmber: true, overhead: OverheadKind.Span)),
+        // a two-stage crossing's island pole (#1030): the left repeater over two pedestrian heads back to back, one per half
+        ("Two-stage island", () => TrafficLight(pedestrianAmber: true, island: true)),
+        ("Two-stage island, Geneva", () => TrafficLight(pedestrianAmber: false, island: true)),
     ];
 
     private static Node3D TrafficLight(bool pedestrianAmber, bool arrowPlates = false, bool rightOnRed = false, bool bikeHead = true,
-        SignalPoleColour colour = SignalPoleColour.SilverGrey, OverheadKind? overhead = null)
+        SignalPoleColour colour = SignalPoleColour.SilverGrey, OverheadKind? overhead = null, bool island = false)
     {
         var plan = SignalPlan.Build(
         [
-            new SignalArm(0, true, true, LeftPocket: true, Pedestrians: true, BikeSignal: bikeHead, Rank: 2, BikeRightOnRed: rightOnRed),
+            new SignalArm(0, true, true, LeftPocket: true, Pedestrians: true, BikeSignal: bikeHead, Rank: 2, BikeRightOnRed: rightOnRed,
+                HalfInM: island ? 4 : 0, HalfOutM: island ? 3.5f : 0),
             new SignalArm(Math.PI / 2, true, true, Pedestrians: true),
             new SignalArm(Math.PI, true, true, LeftPocket: true, Pedestrians: true, Rank: 2),
             new SignalArm(-Math.PI / 2, true, true, Pedestrians: true),
@@ -105,7 +109,12 @@ public static class TerrainShowcase
         {
             Stops = new float[12],
             Plan = plan,
-            Poles = { new SignalPole(0, 0, 0, 0f, Mathf.Pi / 2, 0, SignalPoleFlags.Main | SignalPoleFlags.Pedestrian) },
+            Poles =
+            {
+                island
+                    ? new SignalPole(0, 0, 0, 0f, Mathf.Pi / 2, 0, SignalPoleFlags.Second | SignalPoleFlags.Pedestrian | SignalPoleFlags.ArrivingHalf | SignalPoleFlags.DepartingHalf)
+                    : new SignalPole(0, 0, 0, 0f, Mathf.Pi / 2, 0, SignalPoleFlags.Main | SignalPoleFlags.Pedestrian),
+            },
         };
         // the heads face -Z, the driver's left is +X: the lanes to the pole's left
         // (an arm's or portal's post on the pole, carrying its heads; a span wire from the facade 3 m outside it to one across the street)

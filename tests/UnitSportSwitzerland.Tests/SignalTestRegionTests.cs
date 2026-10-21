@@ -50,6 +50,63 @@ public sealed class SignalTestRegionFixture : IDisposable
 public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixture<SignalTestRegionFixture>
 {
     [Fact]
+    public void J7s_east_crosswalk_crosses_its_wide_island_in_two_stages()
+    {
+        // #1030: the east arm's island (3.4 m at the zebra, from its exit hatch) holds walkers between the halves: each half a group
+        // of its own, its heads at its kerb and on the island back to back, its walkers' lines kerb to island, the first walker of
+        // each green on the island at most a third of the cycle, no zebra bar on the island
+        var j = region.Junction("J7");
+        var tile = region.Tile(j.E, j.N);
+        var signal = tile.Signals.Single();
+        var plan = signal.Plan;
+        Assert.Empty(plan.Validate());
+        Assert.True(plan.ConflictTimed);
+        int east = plan.Arms.FindIndex(a => Math.Abs(Math.IEEERemainder(a.Heading, 2 * Math.PI)) < 0.2);
+        var halves = Enumerable.Range(0, plan.Groups.Count).Where(g => plan.Groups[g].Kind == SignalGroupKind.Pedestrian && plan.Groups[g].Arm == east).ToList();
+        Assert.Equal([CrossingHalf.Arriving, CrossingHalf.Departing], halves.Select(g => plan.Groups[g].Half));
+        // only that arm: the others' crosswalks have no island
+        Assert.All(plan.Groups.Where(g => g.Kind == SignalGroupKind.Pedestrian && g.Arm != east), g => Assert.Equal(CrossingHalf.Whole, g.Half));
+
+        const SignalPoleFlags Both = SignalPoleFlags.ArrivingHalf | SignalPoleFlags.DepartingHalf;
+        var poles = signal.Poles.Where(p => p.Arm == east && (p.Flags & SignalPoleFlags.Pedestrian) != 0).ToList();
+        Assert.Equal(3, poles.Count);
+        var island = Assert.Single(poles, p => (p.Flags & Both) == Both);
+        var arriving = Assert.Single(poles, p => (p.Flags & Both) == SignalPoleFlags.ArrivingHalf);
+        var departing = Assert.Single(poles, p => (p.Flags & Both) == SignalPoleFlags.DepartingHalf);
+        Assert.True((arriving.Flags & SignalPoleFlags.Main) != 0, "the arriving half's head stands on the main pole");
+        // the island between the kerbs, its arriving head facing the way the departing kerb's does (toward the arriving kerb)
+        static float Across(SignalPole a, SignalPole b) => MathF.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Z - b.Z) * (a.Z - b.Z));
+        Assert.Equal(Across(arriving, departing), Across(arriving, island) + Across(island, departing), 0.2f);
+        Assert.Equal(0f, MathF.IEEERemainder(island.PedHeading - departing.PedHeading, 2 * MathF.PI), 0.05f);
+        Assert.Equal(MathF.PI, MathF.Abs(MathF.IEEERemainder(island.PedHeading - arriving.PedHeading, 2 * MathF.PI)), 0.05f);
+
+        // each half's walkers between its kerb and the island, both ways, shorter than the road
+        static float Length(RoadConflictLine l) => MathF.Sqrt(MathF.Pow(l.Points[^3] - l.Points[0], 2) + MathF.Pow(l.Points[^1] - l.Points[2], 2));
+        foreach (int g in halves)
+        {
+            var walks = signal.ConflictLines.Where(l => l.Group == g && l.Mover == ConflictMover.Walker).ToList();
+            Assert.Equal(2, walks.Count);
+            Assert.All(walks, l => Assert.InRange(Length(l), 2f, plan.Arms[east].CrossingM - 3f));
+        }
+        var waits = plan.IslandWaits(g => signal.ConflictLines.Where(l => l.Group == g && l.Mover == ConflictMover.Walker).Max(Length) / SignalPlan.WalkSpeed);
+        Assert.NotEmpty(waits);
+        Assert.All(waits, w => Assert.True(w.Wait <= plan.Cycle * SignalPlan.IslandWaitShare + 0.1f, $"waits {w.Wait:F1} s of {plan.Cycle:F1}"));
+
+        // the zebra (east arm: outward +X, the island pole just behind it) leaves the island bare (the user)
+        int bars = 0;
+        foreach (var paint in tile.Paint.Where(p => p.Type == PaintType.YellowSolid && p.Shape == PaintShape.Triangles))
+            for (int t = 0; t + 2 < paint.Indices.Length; t += 3)
+            {
+                float x = 0, z = 0;
+                for (int k = 0; k < 3; k++) { x += paint.Vertices[paint.Indices[t + k] * 3] / 3; z += paint.Vertices[paint.Indices[t + k] * 3 + 2] / 3; }
+                if (x < island.X - 4 || x > island.X || Math.Abs(z - island.Z) > 8) continue;
+                bars++;
+                Assert.True(Math.Abs(z - island.Z) > 1.5f, $"a zebra bar on the island, {z - island.Z:F2} m across from its pole");
+            }
+        Assert.True(bars > 0, "no zebra found");
+    }
+
+    [Fact]
     public void Canton_row_differs_only_by_its_canton()
     {
         // #1038: J2's crossroads once per zone; Geneva's walkers' heads have two lenses, Vaud's heads arrow plates, Basel-Landschaft's

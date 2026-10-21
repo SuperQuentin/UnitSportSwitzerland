@@ -181,8 +181,11 @@ public sealed class SignalSite
     /// <summary>The riders' paths through it (#971, the debug drawing; riders are not traffic): their line (world) and group.</summary>
     public List<(Vector3[] Points, int Group, SignalMoves Move)> Rides { get; } = new();
 
-    /// <summary>Its crossings (#971, the debug drawing): kerb to kerb between the arm's pedestrian heads (world), and the arm.</summary>
-    public List<(Vector3 From, Vector3 To, int Arm)> Walks { get; } = new();
+    /// <summary>
+    /// Its crossings (#971, the debug drawing): kerb to kerb between the arm's pedestrian heads (world), the arm and the pedestrian
+    /// group; a two-stage crossing's halves each from its kerb to the island's edge (#1030: the island is no crossing).
+    /// </summary>
+    public List<(Vector3 From, Vector3 To, int Arm, int Group)> Walks { get; } = new();
 
     /// <summary>Its movements as its timing took them (#979, <c>CPAR</c>), their lines in world space, for the debug view's trails.</summary>
     public List<(RoadConflictLine Line, Vector3[] Points)> Lines { get; } = new();
@@ -194,7 +197,7 @@ public sealed class SignalSite
     {
         foreach (var (points, _, _) in Rides)
             for (int i = 0; i < points.Length; i++) points[i] = shift.Point(points[i]);
-        for (int i = 0; i < Walks.Count; i++) Walks[i] = (shift.Point(Walks[i].From), shift.Point(Walks[i].To), Walks[i].Arm);
+        for (int i = 0; i < Walks.Count; i++) Walks[i] = Walks[i] with { From = shift.Point(Walks[i].From), To = shift.Point(Walks[i].To) };
         // (the pairs' lines are these same arrays)
         foreach (var (_, points) in Lines)
             for (int i = 0; i < points.Length; i++) points[i] = shift.Point(points[i]);
@@ -473,7 +476,31 @@ public sealed class LaneGraph
                         float along = d.Dot(u), across = (d - u * along).Length();
                         if (along < 0.5f && -along < best && across < 15f) { best = -along; zebra = at; }
                     }
-                    sites[k].Walks.Add((a0 + u * (zebra - a0).Dot(u), b0 + u * (zebra - b0).Dot(u), arm.Key));
+                    Vector3 On(Vector3 p) => p + u * (zebra - p).Dot(u);
+                    int HalfOf(CrossingHalf half) => sg.Plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Pedestrian && g.Arm == arm.Key && g.Half == half);
+                    // a two-stage crossing (#1030): each half from its kerb's head to the island's edge, where its walkers' line ends
+                    const SignalPoleFlags Both = SignalPoleFlags.ArrivingHalf | SignalPoleFlags.DepartingHalf;
+                    var poles = arm.ToList();
+                    int island = poles.FindIndex(p => (p.Flags & Both) == Both);
+                    if (island >= 0 && HalfOf(CrossingHalf.Arriving) is var inHalf and >= 0 && HalfOf(CrossingHalf.Departing) is var outHalf and >= 0)
+                    {
+                        var middle = heads[island];
+                        foreach (var (half, walkers) in (ReadOnlySpan<(SignalPoleFlags, int)>)[(SignalPoleFlags.ArrivingHalf, inHalf), (SignalPoleFlags.DepartingHalf, outHalf)])
+                        {
+                            int kerb = poles.FindIndex(p => (p.Flags & Both) == half);
+                            if (kerb < 0) continue;
+                            var edge = middle;
+                            float nearest = float.MaxValue;
+                            foreach (var (line, points) in sites[k].Lines)
+                                if (line.Group == walkers && line.Mover == ConflictMover.Walker)
+                                    foreach (var end in (ReadOnlySpan<Vector3>)[points[0], points[^1]])
+                                        if (end.DistanceSquaredTo(middle) < nearest) (nearest, edge) = (end.DistanceSquaredTo(middle), end);
+                            sites[k].Walks.Add((On(heads[kerb]), On(edge), arm.Key, walkers));
+                        }
+                        continue;
+                    }
+                    int whole = sg.Plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Pedestrian && g.Arm == arm.Key);
+                    sites[k].Walks.Add((On(a0), On(b0), arm.Key, whole));
                 }
             }
             // the junction paths (#818 phase 5): each a one-way edge from the road end at its arm's mouth to the exit's; their ends meet

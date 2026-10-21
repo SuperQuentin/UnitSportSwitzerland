@@ -612,14 +612,36 @@ public static class SignalBuilder
         }
         if (ped)
         {
-            var (front, right) = Frame(pole.PedHeading);
-            int g = Find(plan, SignalGroupKind.Pedestrian, pole.Arm, SignalMoves.None);
             int lenses = plan.PedestrianAmber ? 3 : 2;
             bool geneva = !plan.PedestrianAmber;
-            var at = foot + front * InFront + Vector3.Up * (PedestrianLowerEdge + (geneva ? GenevaHalfHeight : lenses * Pitch * 0.5f));
-            heads.Add(new Head(at, front, right, g, Shape.Square, lenses, false, SideBySide: geneva));
+            // a two-stage crossing's heads show their half (#1030): the kerbs' their own, the island's two back to back, the
+            // arriving half's facing the pole's way
+            bool arriving = (pole.Flags & SignalPoleFlags.ArrivingHalf) != 0, departing = (pole.Flags & SignalPoleFlags.DepartingHalf) != 0;
+            var faces = new List<(int Group, float Heading)>(2);
+            if (arriving) faces.Add((Walkers(plan, pole.Arm, CrossingHalf.Arriving), pole.PedHeading));
+            if (departing) faces.Add((Walkers(plan, pole.Arm, CrossingHalf.Departing), pole.PedHeading + (arriving ? Mathf.Pi : 0f)));
+            if (faces.Count == 0) faces.Add((Find(plan, SignalGroupKind.Pedestrian, pole.Arm, SignalMoves.None), pole.PedHeading));
+            foreach (var (g, heading) in faces)
+            {
+                var (front, right) = Frame(heading);
+                var at = foot + front * InFront + Vector3.Up * (PedestrianLowerEdge + (geneva ? GenevaHalfHeight : lenses * Pitch * 0.5f));
+                heads.Add(new Head(at, front, right, g, Shape.Square, lenses, false, SideBySide: geneva));
+            }
         }
         return heads;
+    }
+
+    /// <summary>A crossing's pedestrian group for <paramref name="half"/> (#1030), else its only one (a crossing in one go).</summary>
+    private static int Walkers(SignalPlan plan, int arm, CrossingHalf half)
+    {
+        int any = -1;
+        for (int g = 0; g < plan.Groups.Count; g++)
+        {
+            if (plan.Groups[g].Kind != SignalGroupKind.Pedestrian || plan.Groups[g].Arm != arm) continue;
+            if (plan.Groups[g].Half == half) return g;
+            if (any < 0) any = g;
+        }
+        return any;
     }
 
     /// <summary>The approach's main-lane group: the one going straight, else its only car group.</summary>

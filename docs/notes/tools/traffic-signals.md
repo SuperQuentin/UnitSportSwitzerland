@@ -45,7 +45,10 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   same exit arm conflict); a turn sharing the main lane yields (permissive), arrows are protected
   only. Schemes: 4 arms in two roads: per road lead (its left pocket), both, lag (the other's
   pocket), each only if that pocket exists, the higher ranked road first; a T: main, main left +
-  its through, side; else split phasing. Then each phase takes the pedestrians, bikes and right
+  its through, side; else split phasing (each approach on its own; one none of whose movements conflict hard with a phase's goes
+  with it, #1030: Geneva's 10-arm node at 2500974,1117838 ran 9 phases to 157 s once timed from conflict times, now 107 s in
+  tier 0 `ManyArms_StayWithinTheLegalMaximum`). **120 s is the legal maximum** (the user): a conflict-timed plan past it is
+  not taken (`Retime`), and `--signal-check` fails on any cycle over it. Then each phase takes the pedestrians, bikes and right
   arrows nothing green stops; a right arrow no phase carries becomes a full green with its
   approach (+ flasher). The user's 6-phase table holds exactly (test `FullCrossroads_RunsTheSixPhases`).
   Correction found while building it: a T's side-road right overlap goes with the main left
@@ -76,7 +79,13 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   clearing fits in the gap the cars set (never under 4 s of green; an early end held back by it is limited and the plan
   timed again). Riders following the cars' lights whose clearing would lengthen a car group's times by over 2 s get a bike
   group of their own (`LongRiders`; a riders' left turn: a bike group with the left arrow's phase, its head on the left
-  pole). The bike lead (Vorgrün) only where a car group turning across the riders goes green with them. A plan so timed
+  pole). **Riders in a bike box never end early** (the user, #1030's PR): they wait in front of the pocket's cars, so an
+  early end would have those cars run into them from behind; an early start (the lead) stays. `SignalArm.RiderBox` (not
+  stored: the arm's exterior has a `BarKind.BikeBox`) makes their left-turn group count with the cars in `Time` (not slow:
+  it sets the gap, its green ends with the phase). Test region: 7 such groups, J6 78 -> 81 s for it (`RidersInABikeBox_...` tier 0).
+  Geneva centre with all of #1030 against main (246 lit junctions): longest cycle 150 -> 115 s, none over 120; 165 -> 211 timed
+  from conflict times; 195 cycles the same, 39 shorter, 12 longer (8 by 1 s; 2499106,1117630 78 -> 99 s, now timed from its
+  conflict times); the 5 two-stage junctions keep their cycles. The bike lead (Vorgrün) only where a car group turning across the riders goes green with them. A plan so timed
   carries `ConflictTimed` (flags bit 2): `Validate` then holds conflicting groups never green together (a green may begin
   in another's amber) and `KeepsTimes` every time. Layout (b)'s bike lane (`SignalArm.BikeBetween`, arm bit 7) no longer
   conflicts with its arm's right arrow. Test region: J1 74 -> 73 s, J2 86 -> 85 (bikes entering at 30 km/h, turning cars at 3 m/s²; walkers on the bike paths' squares: a riders' left turn holds the next walkers ~15 s), J5a/b 83/84 -> 74/75, J10 70 -> 71, the
@@ -88,6 +97,34 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   pairs of them (for each green start the ending group leaving it the least slack, for each green end the starting group it
   leaves the least, with the pair of lines that gives that time; `ConflictPairs`, region: 276) go in the tile (`CPAR`) for the debug view's
   `movers` (`core/debug-menu`).
+- **Two-stage crossings** (#1030, plan `docs/plans/two-stage-crossings.md` on `main`, the user's choices): where a lit arm's
+  island spans its zebra and is at least `ExteriorPlanner.TwoStageWidth` 2.0 m wide at it (`ArmExterior.StageIsland`), the
+  walkers cross in two stages: two pedestrian groups (`SignalGroup.Half`, stored in the group's moves byte: an older reader
+  takes a half as the arm's group), the **arriving** half (the approach's right kerb to the island, over the arriving lanes)
+  stopped only by the approach's own movements, the **departing** half (island to the left kerb) by those into the arm
+  (turning in: permissive, the flasher). Each half's clearance, flasher walk and conflict lines (`ConflictTimes.Lines`:
+  kerb, or the path beyond it, to the island's edge) cover its half (`SignalArm.HalfInM/HalfOutM`, not stored). `Expand`
+  makes each half green wherever its own conflicts allow, so at least whenever the kerb-to-kerb group would be: a walker
+  never reaches the far kerb later. **The new constraint, the island wait**: the first walker of each half's green, either
+  way, reaches the island at 1.2 m/s and waits at most `IslandWaitShare` a third of the cycle for the other half
+  (`SignalPlan.IslandWaits`); where not because the other half's green ended while they walked, `Stretch` makes the phase
+  it ended in hold on until they reach the island (+0.5 s), its seconds taken from the phases sharing the cycle, the cycle
+  growing only where they are at their minimum and by `IslandGrowMost` 3 s at most (the user: an island should not make the
+  crossing longer); past that RoadGen plans the arm in one go as without the island (`ExteriorPlanner.OneStage`, counted in
+  the rewrite stats). Found on Geneva: the first walkers missed the other half by tenths of a second; growing the cycle for
+  a whole-cycle wait took one junction from 64 to 177 s (tier 0 `TwoStageCrossing_FromGeneva_...`, conflict-timed too). The
+  halves are measured as the walkers are timed (`ConflictTimes.WalkSpan`: past a path at the kerb), so the planner and
+  `--signal-check` agree. Fixed on the way (#979's code): a slow group's green over the cycle's seam had its early end
+  clamped before it moved into the next cycle, so it came out green the whole cycle and the plan fell back from conflict
+  times (3 Geneva two-stage junctions). `CTDBG2` now says why a plan is not timed from conflict times. Heads: the right kerb's (main pole) shows the arriving half, the left kerb's the departing one, the island two back to
+  back (`SignalPoleFlags.ArrivingHalf | DepartingHalf`, the arriving one facing `PedHeading`, toward the right kerb) on
+  the left repeater's pole where the arm has one, else on a pole of its own at the repeater's spot behind the zebra. The
+  zebra leaves out the bars whose middle lies on the island (`ExteriorBar.Gap`): it reads as two crosswalks (the user).
+  Straight crossing, no stagger or visors (the user accepts the far half's head seen behind the island's). The debug view's
+  crossings run kerb to island edge per half (`SignalSite.Walks` carries the group). `--signal-check` counts two-stage
+  crossings and lists island waits over a third. Test region: J7's east arm (3.4 m island, halves 5.9 / 4.3 m; tier 0
+  `J7s_east_crosswalk_crosses_its_wide_island_in_two_stages`). Model viewer: "Traffic light - Two-stage island" (and
+  Geneva). Walkers and riders as movers: #1033.
 - **Timing**: yellow 3/4/5 s by speed (SN 640 837 via SRF), red+yellow 2 s (cars, secondary
   source BASt V 149) / 1 s (bikes), all-red 2 s fixed (SN 640 838 computes it per conflict,
   paywalled), min green 4 s, pedestrian green >= 5 s, pedestrian clearance 2/3 of the crossing

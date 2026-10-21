@@ -31,6 +31,9 @@
 - **Staggered T's** (#818 phase 5, `StaggerE` 2916500 on N 1321400, all in tile 2916 so no street runs on into another
   block): a 10 m main road with side roads alternately north and south: 24 m apart (two cores), 8 m apart (the cores overlap:
   old layout until they merge), and 300 m east 24 m apart with lights at both (J9: the street between is inside the lights).
+- **Two-stage crossing** (#1030, `traffic-signals`): J7's east arm, the only one whose island (3.4 m, over its exit hatch)
+  spans its zebra and is 2 m wide: its walkers cross in two halves, heads on the island. Top view:
+  `--shot 4514,522,-1.8,-90,0,6,out.png` with `--chunks test_output/signal-region --generated off`.
 - **Where**: tiles E 2910-2917 N 1321-1323 (24 tiles; J6/J7 #700 in 2916-2917), flat at 500 m, one 6 km rewrite block),
   outside Switzerland on purpose: no real tile, streamed or cached, shares an id. Manifest origin
   2913000,1322500 (shots' world x = E - 2913000, z = 1322500 - N). Junctions on one row, N 1322500,
