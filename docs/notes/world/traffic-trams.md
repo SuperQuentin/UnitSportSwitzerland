@@ -23,7 +23,7 @@ sections 9/7/9 m or five 8.6/6.4/8.6/6.4/8.6 m, 0.6 m apart, `GameSettings.Trams
 - Line speed 40 km/h in a street (embedded or a narrow town formation), 50 on its own bed, 25 through a core; curves at
   1.0 m/s² sideways read 140 m ahead; accelerates 1.0, service brake 1.2 (everything it plans for), up to 2.8 for what cuts in.
 - Follows what is on its track ahead (within 1.9 m of its line): trams, cars (it queues with them in a shared lane), players.
-- **Its light**: the path's tram group. Bar across (red) or red-amber: stop at the line; the dot (amber): stop if it can at 1.2,
+- **Its light**: the path's tram group (it leads its approach's cars: `tram-approaches`; the probe counts trams let go from red ahead of their cars). Bar across (red) or red-amber: stop at the line; the dot (amber): stop if it can at 1.2,
   else clear; go bar: go. `TramRedRuns` must stay 0.
 - **Stops**: brakes to stand with its front at the sign, doors 20 ± 6 s, then on (`ConditionalWeakTable` state, served once).
 - Spawned 300-1500 m out, no nearer than 120 m to another, its sections laid back along the track (`BackFill`); at the end of

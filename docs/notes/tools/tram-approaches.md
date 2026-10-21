@@ -15,6 +15,12 @@ The junction planner's cores (`junction-planner`) take the tram tracks running t
   with it (chords as cars), else the first phase that allows it, else a phase of its own; a car's left from a shared lane across
   it is permissive (the car gives way). Timed as a slow group (`Slow`: its long clearing ends its green early), its ways as
   conflict lines (`ConflictTimes.Mover.Tram`: clear and enter 7 m/s, 42 m long) from where its track crosses the cars' line.
+- **Leading signal** (the user: "a short leading signal (1 sec). If there is conflicting movements, add a longer leading signal,
+  like for bikes"): a tram group starts `SignalPlan.TramLead` 1 s before its approach's cars starting with it, the riders' lead
+  (`BikeLead` 3 s) before a car group starting with it that turns across its way (permissive); conflict-timed: those cars wait
+  that long after the tram (only where the tram may go no later than they); fixed-time: the phase change grows by it and the tram
+  starts that much early once what it crosses has cleared (each its clearance and all-red). The rewrite counts the tram groups
+  leading by 1-3 s, 3 s or more, or not at all (and where). J14: both lead by 3 s or more. Tier 0: `TramTests`.
 - **Aspects** (the tram bar signal, `SignalLamps`): red and red-amber = the bar across (stop), amber = the dot (stop expected),
   green = the bar upright, slanted left or right for a tram group that only turns. White lamps in a black housing of three.
 - **`LANE`**: a tram lane (`ApproachLaneKind.Tram`) on the lit approach's record where its track crosses the cars' line, left to
