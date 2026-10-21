@@ -514,8 +514,10 @@ public partial class DeckProbe : Node
         var local = rig.GlobalTransform.AffineInverse() * b.GlobalPosition;
         float off = local.DistanceTo(b.DeckPos);
         string key = $"drawn-{(bus.WorldVelocity.Length() > 5f ? "moving" : "still")}";
-        // a walking b is drawn a step behind (eased, and its spot comes 30 times a second)
-        float slack = b.WorldVelocity.Length() - bus.WorldVelocity.Length() > 0.5f ? 0.6f : 0.3f;
+        // a walking b is drawn a step behind (eased, and its spot comes 30 times a second); walking is
+        // b's speed against the bus's, not the difference of the two speeds: walking across a bus at
+        // 23 km/h added 0.15 m/s to b's, and its 0.32 m behind was held to a standing b's 0.3 (#1006)
+        float slack = (b.WorldVelocity - bus.WorldVelocity).Length() > 0.5f ? 0.6f : 0.3f;
         if (_seen.Add(key) || off > slack && _seen.Add(key + "-off"))
             Check(off < slack, $"b's copy drawn on the bus {off:F2} m from the spot it published, at {bus.WorldVelocity.Length() * 3.6f:F0} km/h");
     }
