@@ -140,7 +140,7 @@ public partial class BirdJournal : CanvasLayer
         Refresh();
         _panel.Visible = true;
         UiFocus.Set(this, true);
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
         _text.GrabFocus();
     }
 

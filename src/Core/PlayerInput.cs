@@ -261,7 +261,7 @@ public partial class PlayerInput : Node
     /// </summary>
     public static bool IsLookMotion(InputEventMouseMotion m) =>
         m.Device == TouchControls.Device
-        || Input.MouseMode == Input.MouseModeEnum.Captured && m.Device != InputEvent.DeviceIdEmulation;
+        || MouseCapture.Mode == Input.MouseModeEnum.Captured && m.Device != InputEvent.DeviceIdEmulation;
 
     /// <summary>Right-stick turn rate at full deflection and sensitivity 1, radians per second.</summary>
     public const float StickTurnRate = 3.0f;

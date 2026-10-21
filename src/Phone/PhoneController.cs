@@ -289,7 +289,7 @@ public partial class PhoneController : Node
         bool phone = _stage != Stage.Pocket && !(_stage is Stage.Open or Stage.Opening && _screens.Shown == PhoneScreens.Page.Camera);
         UiFocus.Set(this, _stage != Stage.Pocket);
         if (_blocked()) return;
-        if (phone) Input.MouseMode = Input.MouseModeEnum.Visible;
+        if (phone) MouseCapture.Mode = Input.MouseModeEnum.Visible;
         else MouseCapture.Capture();
     }
 
@@ -1041,7 +1041,7 @@ public partial class PhoneController : Node
         GetViewport().SetInputAsHandled();
         if (e is InputEventMouseMotion motion)
         {
-            if (Input.MouseMode == Input.MouseModeEnum.Captured && _player() is { } p)
+            if (MouseCapture.Mode == Input.MouseModeEnum.Captured && _player() is { } p)
             {
                 float rate = 0.0022f / _screens.Zoom;
                 p.LookYaw -= motion.Relative.X * rate;
