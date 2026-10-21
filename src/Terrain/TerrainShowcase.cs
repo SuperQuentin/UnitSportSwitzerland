@@ -159,30 +159,36 @@ public static class TerrainShowcase
         return node;
     }
 
-    /// <summary>Overhead lines (#1052): a tram's span between facades and between masts, its cantilever, a main line's pair.</summary>
+    /// <summary>Overhead lines (#1052): a tram's span between facades and between masts, its cantilever, its centre mast, a main line's pair.</summary>
     [Showcase("Terrain", "Overhead line")]
     private static IEnumerable<(string, Func<Node3D>)> OverheadLines() =>
     [
         ("Tram span on facades", () => OverheadLine(CatenaryLine.Tram, span: true, walls: true)),
         ("Tram span on masts", () => OverheadLine(CatenaryLine.Tram, span: true, walls: false)),
         ("Tram cantilever", () => OverheadLine(CatenaryLine.Tram, span: false, walls: false)),
+        ("Tram centre mast", () => OverheadLine(CatenaryLine.Tram, span: false, walls: false, centre: true)),
         ("Main line cantilevers", () => OverheadLine(CatenaryLine.Main, span: false, walls: false)),
     ];
 
     // a double track along X (tracks at z = -2.2 and +2.2, the rails' top at y 0), 40 m of wire, its supports at x = 0
-    private static Node3D OverheadLine(CatenaryLine line, bool span, bool walls)
+    private static Node3D OverheadLine(CatenaryLine line, bool span, bool walls, bool centre = false)
     {
         float wireY = (line == CatenaryLine.Tram ? 5.8f : 5.5f) + 0.18f;
         var tile = Tile();
         foreach (float z in (ReadOnlySpan<float>)[-2.2f, 2.2f])
         {
             tile.CatenaryWires.Add(new CatenaryWire { Line = line, Points = [-20f, wireY, z, 0f, wireY, z, 20f, wireY, z] });
-            if (!span)
+            if (!span && !centre)
                 tile.CatenarySupports.Add(new CatenarySupport
                 {
                     Kind = CatenarySupportKind.Cantilever, Line = line, AZ = z + MathF.Sign(z) * 3f, BZ = z, WireY = wireY, Over = [0f, z],
                 });
         }
+        if (centre)
+            tile.CatenarySupports.Add(new CatenarySupport
+            {
+                Kind = CatenarySupportKind.CentreMast, Line = line, BZ = -2.2f, WireY = wireY, Over = [0f, -2.2f, 0f, 2.2f],
+            });
         if (span)
             tile.CatenarySupports.Add(new CatenarySupport
             {

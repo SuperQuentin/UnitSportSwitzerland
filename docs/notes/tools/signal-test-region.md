@@ -65,7 +65,7 @@
   ~8 m either side of a tile seam (the twins' road at E 2911000 too: not from this).
 - **Rail row** (#1052, `RailN` 1324500, tile row N 1324 added): a 10 m town street E 2910100-2911900 with a double-track tram on
   it (TLM `auf_strasse`, embedded by #124), houses 10 m north of its axis for its western 800 m (the spans' facades), none south
-  (masts); a reserved single tram track E 2912100-2913900; a double-track main line from 2914100,1324300 through a 600 m curve
+  (masts); a reserved double tram track E 2912100-2913900 in open grass (centre masts); a double-track main line from 2914100,1324300 through a 600 m curve
   turning 30 degrees left. Rail lines are written as the extractor writes them (`Line.Rail` flags, `OnStreet`) and left out of
   the OSM overlay. Overhead lines: `catenary`.
 

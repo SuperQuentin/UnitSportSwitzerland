@@ -696,8 +696,12 @@ public static partial class TileRewriter
                 // overhead lines (#1052): masts off every carriageway and junction, spans to the facades
                 if (catenaryRails.Count > 0)
                 {
-                    var off = new PriorityPlanner.Clearance(result.Ribbons, result.Junctions);
-                    CatenaryPlanner.Plan(catenaryRails, railTracks, buildings.Contains, q => off.IsClear(q, 0.3), catenarySupports, catenaryWires, netStats.Catenary);
+                    // off the roads (not the rail lines: a centre mast stands between its tracks) and off every bike path (the user)
+                    var roads = result.Ribbons.Where(r => result.Network.Links[r.LinkId].Tag is not Source { Segment.Class: RoadClass.Railway });
+                    var off = new PriorityPlanner.Clearance(roads, result.Junctions);
+                    var onPath = BikePaths(output, streetPieces, 0.3);
+                    CatenaryPlanner.Plan(catenaryRails, railTracks, buildings.Contains, q => off.IsClear(q, 0.3) && !onPath(q), catenarySupports, catenaryWires,
+                        netStats.Catenary);
                 }
 
                 foreach (var junction in result.Junctions)

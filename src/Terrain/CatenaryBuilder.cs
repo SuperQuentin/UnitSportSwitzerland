@@ -34,7 +34,7 @@ public static class CatenaryBuilder
         var faces = new List<Vector3>();
         foreach (var s in tile.CatenarySupports)
         {
-            if (s.Kind == CatenarySupportKind.Cantilever || !s.AWall) Column(faces, new Vector3(s.AX, s.AY, s.AZ));
+            if (s.Kind is CatenarySupportKind.Cantilever or CatenarySupportKind.CentreMast || !s.AWall) Column(faces, new Vector3(s.AX, s.AY, s.AZ));
             if (s.Kind == CatenarySupportKind.Span && !s.BWall) Column(faces, new Vector3(s.BX, s.BY, s.BZ));
         }
         return faces.ToArray();
@@ -62,6 +62,23 @@ public static class CatenaryBuilder
         var wire = Copper.SrgbToLinear();
         var a = new Vector3(s.AX, s.AY, s.AZ);
         var b = new Vector3(s.BX, s.BY, s.BZ);
+        if (s.Kind == CatenarySupportKind.CentreMast)
+        {
+            // a mast between the tracks, an arm out to each over its wire, a brace under each
+            float armY = s.WireY + (main ? RoadCatenary.SystemHeight : RoadCatenary.TramHang);
+            Mast(m, a, armY + 0.6f, main, steel);
+            for (int i = 0; i + 1 < s.Over.Length; i += 2)
+            {
+                var over = new Vector3(s.Over[i], s.WireY, s.Over[i + 1]);
+                var d = new Vector3(over.X - a.X, 0f, over.Z - a.Z);
+                if (d.LengthSquared() < 0.01f) continue;
+                var tip = over + d.Normalized() * 0.4f;
+                m.Tube(steel, new Vector3(a.X, armY, a.Z), new Vector3(tip.X, armY, tip.Z), ArmRadius);
+                m.Tube(steel, new Vector3(a.X, armY - 0.9f, a.Z), new Vector3(a.X + d.X * 0.6f, armY, a.Z + d.Z * 0.6f), ArmRadius * 0.7f);
+                m.Tube(wire, new Vector3(over.X, armY, over.Z), over, WireRadius);
+            }
+            return;
+        }
         if (s.Kind == CatenarySupportKind.Cantilever)
         {
             // the mast up past the messenger (main) or the arm (tram); the arm out over the track, a brace under it

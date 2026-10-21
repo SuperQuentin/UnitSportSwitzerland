@@ -10,6 +10,8 @@ public enum CatenarySupportKind : byte
     Cantilever = 0,
     /// <summary>A span wire across a street between two anchors (a facade or a mast each), the contact wires hung from it.</summary>
     Span = 1,
+    /// <summary>A mast between a double track (A, its foot) with an arm out to each track (<see cref="CatenarySupport.Over"/>).</summary>
+    CentreMast = 2,
 }
 
 /// <summary>

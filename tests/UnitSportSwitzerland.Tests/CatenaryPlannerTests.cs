@@ -68,6 +68,31 @@ public class CatenaryPlannerTests
     }
 
     [Fact]
+    public void A_reserved_double_tram_track_in_the_open_gets_centre_masts()
+    {
+        // nothing built near: one mast on the centre line, an arm out to each track
+        var (supports, wires, stats) = Plan([Straight(0, 70, RoadFlags.Tramway | RoadFlags.DoubleTrack)]);
+        Assert.Equal(2, wires.Count);
+        Assert.Equal(3, stats.CentreMasts);
+        Assert.All(supports, s => Assert.Equal(CatenarySupportKind.CentreMast, s.Kind));
+        Assert.All(supports, s => Assert.Equal(500f, s.AZ, 2));
+        Assert.All(supports, s => Assert.Equal(4, s.Over.Length));
+    }
+
+    [Fact]
+    public void A_building_near_or_a_blocked_centre_line_keeps_masts_outside()
+    {
+        // a house 10 m north: no centre masts, masts outside the tracks instead
+        var (built, _, builtStats) = Plan([Straight(0, 70, RoadFlags.Tramway | RoadFlags.DoubleTrack)], building: p => p.Y > 1200510 && p.Y < 1200520);
+        Assert.Equal(0, builtStats.CentreMasts);
+        Assert.All(built, s => Assert.Equal(CatenarySupportKind.Cantilever, s.Kind));
+        // a bike path along the centre line (clear says no there): none on it
+        var (blocked, _, blockedStats) = Plan([Straight(0, 70, RoadFlags.Tramway | RoadFlags.DoubleTrack)], clear: p => Math.Abs(p.Y - 1200500) > 1);
+        Assert.Equal(0, blockedStats.CentreMasts);
+        Assert.All(blocked, s => Assert.True(Math.Abs(s.AZ - 500f) > 1));
+    }
+
+    [Fact]
     public void A_double_track_main_line_has_a_mast_outside_each_track_and_two_wires()
     {
         var (supports, wires, _) = Plan([Straight(0, 130, RoadFlags.DoubleTrack)]);

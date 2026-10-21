@@ -11,7 +11,8 @@ using UnitSport.Tools.RoadGen.Geometry;
 /// ±0.30 m of the track, L ≤ √(4.8·R)), so neighbouring tiles agree on them. On a street (track in the carriageway or in town
 /// paving) a span across it, anchored on the first facade within <see cref="SearchReach"/> each side, else on a mast at the first
 /// spot off every carriageway (the user's rule); elsewhere a cantilever mast <see cref="MastOut"/> out from each track, on the
-/// side away from a neighbouring track. Pure: buildings and carriageways come in as predicates.
+/// side away from a neighbouring track; a tram's own double track with no building near gets centre masts between its tracks.
+/// Pure: buildings and carriageways come in as predicates.
 /// </summary>
 public static class CatenaryPlanner
 {
@@ -24,6 +25,8 @@ public static class CatenaryPlanner
     public const float TramWire = 5.8f, MainWire = 5.5f, RailTop = 0.18f, GrooveTop = 0.02f;
     /// <summary>A cantilever mast stands this far out from its track; a span's anchors are looked for this far out, in steps; a mast keeps this clear of any track.</summary>
     public const double MastOut = 3.0, SearchReach = 15, SearchStep = 0.25, TrackClear = 2.0;
+    /// <summary>A reserved double tram track with no building this close either side gets centre masts (m; the user: a grassy tram track out of town).</summary>
+    public const double CentreOpen = 15;
     /// <summary>A contact wire's points stand this far apart along its track (m).</summary>
     public const double WireStep = 4.0;
 
@@ -32,11 +35,11 @@ public static class CatenaryPlanner
 
     public sealed class Stats
     {
-        public int Pieces, Cantilevers, Spans, SpansShared, WallEnds, MastEnds, Skipped;
+        public int Pieces, Cantilevers, CentreMasts, Spans, SpansShared, WallEnds, MastEnds, Skipped;
         public double WireKm, Ms;
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
-            $"    overhead lines (#1052): {Pieces:N0} electrified rail pieces, {WireKm:F2} km of contact wire, {Cantilevers:N0} cantilever masts, {Spans:N0} spans ({WallEnds:N0} ends on facades, {MastEnds:N0} on masts; {SpansShared:N0} times a track's wire hung from another track's span), {Skipped:N0} supports with no room; planning {Ms:N0} ms");
+            $"    overhead lines (#1052): {Pieces:N0} electrified rail pieces, {WireKm:F2} km of contact wire, {Cantilevers:N0} cantilever masts, {CentreMasts:N0} centre masts, {Spans:N0} spans ({WallEnds:N0} ends on facades, {MastEnds:N0} on masts; {SpansShared:N0} times a track's wire hung from another track's span), {Skipped:N0} supports with no room; planning {Ms:N0} ms");
     }
 
     /// <summary>Electrified: rail at grade or on a bridge, neither a funicular nor disused (TLM has no electrification; nearly all Swiss rail is).</summary>
@@ -109,6 +112,25 @@ public static class CatenaryPlanner
                 else
                 {
                     bool placed = false;
+                    // a tram on its own double track, nothing built near: one mast between the tracks, an arm out to each (the user)
+                    if (tram && offsets.Length == 2 && clear(at) && !Built(at, n, CentreOpen, building))
+                    {
+                        var over = new float[4];
+                        for (int i = 0; i < 2; i++)
+                        {
+                            var p = at + n * offsets[i];
+                            over[i * 2] = (float)(p.X - tile.MinE);
+                            over[i * 2 + 1] = (float)(tile.MaxN - p.Y);
+                        }
+                        Get(supports, tile).Add(new CatenarySupport
+                        {
+                            Kind = CatenarySupportKind.CentreMast, Line = line,
+                            AX = (float)(at.X - tile.MinE), AY = y, AZ = (float)(tile.MaxN - at.Y),
+                            BX = over[0], BY = y, BZ = over[1], WireY = wireY, Over = over,
+                        });
+                        stats.CentreMasts++;
+                        continue;
+                    }
                     foreach (float off in offsets)
                     {
                         // a double track's masts stand outside it; a single track's on the right unless a track is near there
@@ -200,6 +222,14 @@ public static class CatenaryPlanner
         stats.Spans++;
         stats.WallEnds += (aWall ? 1 : 0) + (bWall ? 1 : 0);
         stats.MastEnds += (aWall ? 0 : 1) + (bWall ? 0 : 1);
+    }
+
+    /// <summary>A building within <paramref name="reach"/> of <paramref name="at"/> on either side, across the track.</summary>
+    private static bool Built(Vec2 at, Vec2 n, double reach, Func<Vec2, bool> building)
+    {
+        for (double d = 0; d <= reach; d += 1.0)
+            if (building(at + n * d) || building(at - n * d)) return true;
+        return false;
     }
 
     /// <summary>Rail lines' edges in 10 m cells: whether a point lies within a distance of any (the lines are densified to centimetres).</summary>

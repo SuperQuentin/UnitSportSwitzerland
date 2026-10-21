@@ -440,14 +440,15 @@ public static class SignalTestRegion
             new("J3S", 6, "zebra"), new("J3D0", 294, "marked"), new("J3D1", 6, "unmarked"),
         };
         // 16. the rail row (#1052): overhead lines. A 10 m town street with a double-track tram on it (TLM auf_strasse), houses 5 m
-        // back from its north kerb for its western half (the spans' facades), none south (masts); a reserved single tram track on
+        // back from its north kerb for its western half (the spans' facades), none south (masts); a reserved double tram track (centre
+        // masts: nothing built near) on
         // its own; a double-track main line bending through a 600 m curve
         {
             const double rn = RailN;
             lines.Add(new Line("RS", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(2910100, rn), (2911900, rn)], "secondary", "yes"));
             lines.Add(new Line("RT", "", "", "", [(2910100, rn), (2911900, rn)], "", Rail: RoadFlags.Tramway | RoadFlags.DoubleTrack, OnStreet: true));
             boxes.Add(new Box(2910200, rn + 10, 2911000, rn + 24, 15));
-            lines.Add(new Line("RR", "", "", "", [(2912100, rn), (2913900, rn)], "", Rail: RoadFlags.Tramway));
+            lines.Add(new Line("RR", "", "", "", [(2912100, rn), (2913900, rn)], "", Rail: RoadFlags.Tramway | RoadFlags.DoubleTrack));
             var curve = new List<(double E, double N)> { (2914100, rn - 200), (2914500, rn - 200) };
             // a 600 m arc turning left by 30 degrees, then on straight
             for (int k = 1; k <= 30; k++)
