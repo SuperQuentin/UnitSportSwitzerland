@@ -78,9 +78,17 @@ public static class TerrainShowcase
         // riders may turn right on red (#711, signal 5.18): beside the bike head's red lamp, else the car head's
         ("Bike right on red", () => TrafficLight(pedestrianAmber: true, rightOnRed: true)),
         ("Bike right on red, no bike head", () => TrafficLight(pedestrianAmber: true, rightOnRed: true, bikeHead: false)),
+        // the canton's pole colour (#1037): Basel-Landschaft's anthracite, Bern's RAL 7042
+        ("Basel-Landschaft", () => TrafficLight(pedestrianAmber: true, colour: SignalPoleColour.Anthracite)),
+        ("Bern", () => TrafficLight(pedestrianAmber: true, colour: SignalPoleColour.TrafficGrey)),
+        // heads over the lanes (#1037): a mast arm over two lanes (a tie rod past 7 m), a portal over three, a tram street's span wire
+        ("Mast arm", () => TrafficLight(pedestrianAmber: true, overhead: OverheadKind.Arm)),
+        ("Portal", () => TrafficLight(pedestrianAmber: true, overhead: OverheadKind.Portal)),
+        ("Span wire", () => TrafficLight(pedestrianAmber: true, overhead: OverheadKind.Span)),
     ];
 
-    private static Node3D TrafficLight(bool pedestrianAmber, bool arrowPlates = false, bool rightOnRed = false, bool bikeHead = true)
+    private static Node3D TrafficLight(bool pedestrianAmber, bool arrowPlates = false, bool rightOnRed = false, bool bikeHead = true,
+        SignalPoleColour colour = SignalPoleColour.SilverGrey, OverheadKind? overhead = null)
     {
         var plan = SignalPlan.Build(
         [
@@ -90,13 +98,24 @@ public static class TerrainShowcase
             new SignalArm(-Math.PI / 2, true, true, Pedestrians: true),
         ], 353, pedestrianAmber);
         plan.ArrowPlates = arrowPlates;
+        plan.PoleColour = colour;
         var tile = Tile();
-        tile.Signals.Add(new RoadSignal
+        var signal = new RoadSignal
         {
             Stops = new float[12],
             Plan = plan,
             Poles = { new SignalPole(0, 0, 0, 0f, Mathf.Pi / 2, 0, SignalPoleFlags.Main | SignalPoleFlags.Pedestrian) },
-        });
+        };
+        // the heads face -Z, the driver's left is +X: the post just right of the pole, the lanes to its left
+        if (overhead is { } kind)
+            signal.Overheads.Add(new SignalOverhead
+            {
+                Kind = kind, Arm = 0, X = -0.4f, EndX = kind == OverheadKind.Arm ? 7.6f : 12f, Bottom = 5f,
+                Heads = kind == OverheadKind.Arm
+                    ? [new OverheadHead(3.6f, SignalMoves.Through | SignalMoves.Right), new OverheadHead(6.6f, SignalMoves.Left)]
+                    : [new OverheadHead(3.4f, SignalMoves.Through | SignalMoves.Right), new OverheadHead(6.4f, SignalMoves.Through), new OverheadHead(9.4f, SignalMoves.Left)],
+            });
+        tile.Signals.Add(signal);
         return RoadProps(tile);
     }
 

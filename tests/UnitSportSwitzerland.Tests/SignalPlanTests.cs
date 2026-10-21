@@ -260,6 +260,35 @@ public class SignalPlanTests(ITestOutputHelper output)
                 Assert.Equal(plan.State(g, t), p.State(g, t));
         Assert.Empty(p.Validate());
     }
+    [Fact]
+    public void RoadTile_RoundTripsTheOverheadsAndThePoleColour()
+    {
+        // #1037: the canton's pole colour in bits 3-5 of the plan's flag byte, the overhead structures in OVHD after SGNL
+        var plan = SignalPlan.Build([Arm(N, true, true), Arm(E), Arm(S, true), Arm(W)], seed: 7, pedestrianAmber: true);
+        plan.ArrowPlates = true;
+        plan.PoleColour = SignalPoleColour.TrafficGrey;
+        var signal = new RoadSignal { X = 5, Y = 400, Z = 6, Stops = new float[12], Plan = plan };
+        signal.Overheads.Add(new SignalOverhead
+        {
+            Kind = OverheadKind.Portal, Arm = 2, X = 1, Y = 400.1f, Z = 2, EndX = 13, EndY = 400.2f, EndZ = 2.5f, Bottom = 405, Heading = 1.5f,
+            Heads = [new OverheadHead(3.4f, SignalMoves.Through | SignalMoves.Right), new OverheadHead(9.4f, SignalMoves.Left)],
+        });
+        var tile = new RoadTile
+        {
+            Id = new TileId(2500, 1117),
+            Segments = [new RoadSegment { Class = RoadClass.Road, Width = 6, Points = [0, 400, 0, 10, 400, 0] }],
+            Signals = [signal],
+        };
+        using var ms = new MemoryStream();
+        RoadCodec.Encode(tile, ms);
+        ms.Position = 0;
+        var back = Assert.Single(RoadCodec.Decode(ms).Signals);
+        Assert.Equal((SignalPoleColour.TrafficGrey, true, true), (back.Plan.PoleColour, back.Plan.ArrowPlates, back.Plan.PedestrianAmber));
+        var o = Assert.Single(back.Overheads);
+        Assert.Equal((OverheadKind.Portal, (byte)2, 1f, 400.1f, 2f, 13f, 400.2f, 2.5f, 405f, 1.5f),
+            (o.Kind, o.Arm, o.X, o.Y, o.Z, o.EndX, o.EndY, o.EndZ, o.Bottom, o.Heading));
+        Assert.Equal(signal.Overheads[0].Heads, o.Heads);
+    }
     [Theory]
     [InlineData(187, -135, 45)]
     [InlineData(176, -37, 145)]
