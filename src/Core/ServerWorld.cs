@@ -47,6 +47,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Parties? _parties;
     private BattleRoyale.BrCrates? _brCrates;
     private Handshake? _handshake;
+    private ConsoleLink? _consoleLink;
 
     public override async void _Ready()
     {
@@ -245,6 +246,11 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _handshake = Handshake.CreateServer(_chat);
         _handshake.Accepted += OnPeerAccepted;
         AddChild(_handshake);
+        // the server's console from a client of any version, with the admin password (#1088)
+        _consoleLink = ConsoleLink.CreateServer(_chat, _handshake, _registry, QueryResponder.ParseServerName());
+        AddChild(_consoleLink);
+        // a deployed server installs a newer release by itself, once nobody plays (#1088)
+        if (ServerAutoUpdate.Create(_chat, _handshake) is { } autoUpdate) AddChild(autoUpdate);
 
         // invites (#840): World/Invites, one system every activity asks through; parties ride on it
         var invites = _invites = InviteService.CreateServer(_chat);
@@ -589,6 +595,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     {
         GD.Print($"[server] peer {id} disconnected");
         _handshake?.PeerLeft(id);
+        _consoleLink?.PeerLeft(id);
         // before the registry forgets its name and the body is freed: it lies down where it was (#644)
         _sleepers?.PeerLeft(id, _players!.GetNodeOrNull<Player.FootPlayer>(id.ToString()), _chat?.NameOfPeer(id) ?? "");
         _chat?.ReportDisconnect(id);

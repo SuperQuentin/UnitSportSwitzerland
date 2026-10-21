@@ -611,10 +611,17 @@ public partial class ChatManager : Node
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void NotifyKicked(string reason) => Kicked?.Invoke(reason);
 
+    /// <summary>
+    /// Server: every line the server's console shows (its replies, and everything said to everyone),
+    /// for the remote consoles (<see cref="ConsoleLink"/>, #1088).
+    /// </summary>
+    public event Action<string>? ConsoleOutput;
+
     /// <summary>Sends a line to everyone. Server only.</summary>
     public void Broadcast(string line, ChatKind kind)
     {
         GD.Print($"[chat] {line}");
+        ConsoleOutput?.Invoke(line);
         Rpc(MethodName.Deliver, line, (int)kind);
     }
 
@@ -625,6 +632,7 @@ public partial class ChatManager : Node
         if (peerId == ConsolePeerId)
         {
             GD.Print($"[console] {line}");
+            ConsoleOutput?.Invoke(line);
             return;
         }
 
@@ -1662,6 +1670,19 @@ public partial class ChatManager : Node
     }
 
     private readonly ServerUpdater _updater = new();
+    private bool _restarting;
+
+    /// <summary>Server: the release updater, shared by <c>/update</c> and the automatic check (<see cref="ServerAutoUpdate"/>).</summary>
+    public ServerUpdater Updater => _updater;
+
+    /// <summary>Server: <c>/update</c> came while a check was already running: restart as soon as it has a release.</summary>
+    public bool RestartRequested { get; set; }
+
+    /// <summary>Server: the connected players who are admins, for the update news (#1088).</summary>
+    public IEnumerable<long> AdminPeers => _registry?.Players.Where(p => p.IsAdmin).Select(p => p.PeerId) ?? [];
+
+    /// <summary>Server: how many players are connected (bots are not players).</summary>
+    public int PlayerCount => _registry?.Players.Count ?? 0;
 
     /// <summary>
     /// /update (#730): installs the newest GitHub release on a server started by <c>start-server.sh</c>.
@@ -1674,15 +1695,22 @@ public partial class ChatManager : Node
             ReplyTo(sender, "This server cannot update itself: only one started by tools/deploy-linux.sh can.", ChatKind.Error);
             return;
         }
+        if (_restarting)
+        {
+            ReplyTo(sender, "The server is already restarting for an update.", ChatKind.Error);
+            return;
+        }
         if (_updater.Busy)
         {
-            ReplyTo(sender, "An update is already under way.", ChatKind.Error);
+            // the automatic check (#1088) is looking or downloading: it restarts the server once it has the release
+            RestartRequested = true;
+            ReplyTo(sender, "A check is already under way: the server restarts as soon as the release is ready.", ChatKind.Private);
             return;
         }
 
         string current = (string)ProjectSettings.GetSetting("application/config/version", "");
         ReplyTo(sender, "Looking for a newer release...", ChatKind.Private);
-        _updater.Start(script, current, CmdArgs.Value("--updatefeed", notFlag: true) ?? UpdateInfo.ReleasesUrl,
+        _updater.Start(script, current, CmdArgs.Value("--updatefeed", notFlag: true) ?? UpdateInfo.ReleasesUrl, quiet: false,
             (line, everyone) =>
             {
                 if (everyone) Broadcast(line, ChatKind.Admin);
@@ -1692,8 +1720,10 @@ public partial class ChatManager : Node
     }
 
     /// <summary>The new release is unpacked: everyone out, then quit; <c>start-server.sh</c> starts it.</summary>
-    private void RestartForUpdate(string tag)
+    public void RestartForUpdate(string tag)
     {
+        if (_restarting) return;
+        _restarting = true;
         GD.Print($"[update] {tag} ready: kicking everyone and quitting");
         foreach (var player in _registry?.Players.ToList() ?? new())
             KickPeer(player.PeerId, $"The server is updating to {tag}. Update your game, then reconnect in a minute.");

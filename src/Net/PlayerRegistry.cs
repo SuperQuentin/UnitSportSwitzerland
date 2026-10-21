@@ -146,6 +146,9 @@ public sealed class PlayerRegistry
         return unique;
     }
 
+    /// <summary>The admin password, without elevating anyone: the remote console's check (<see cref="ConsoleLink"/>, #1088).</summary>
+    public bool PasswordMatches(string password) => _adminPassword is not null && FixedTimeEquals(password, _adminPassword);
+
     /// <summary>Checks a password and elevates the peer for this session only.</summary>
     public bool TryLogin(long peerId, string password)
     {
