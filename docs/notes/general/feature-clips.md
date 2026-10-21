@@ -12,7 +12,9 @@
   leaves whole files (ffmpeg finishes them when the pipe closes), only shorter. Easiest: film the whole probe once
   (`delay` 3, `seconds` 60), look at the MP4, then `tools/record-clip.sh trim <mp4> <start> <seconds> <name>`.
 - **Output**: `test_output/clips/<name>.gif` from source (`user://clips` in an export): 560 px wide, 12 fps,
-  128-colour palette per clip (`palettegen stats_mode=diff`, bayer dither 5): 0.2-0.6 MB/s of the PS1 look
+  128-colour palette per clip (`palettegen stats_mode=diff`), bayer dither scale 5 in PS1 and 3 in the lit styles
+  (#1070: at 5, Cartoon's sky gradient and the haze round the sun banded into rings; 3 is smooth for ~13% more
+  bytes, 256 colours at 5 still banded; `trim` uses 3, `BAYER=5` for a PS1 clip): 0.2-0.6 MB/s of the PS1 look
   (640 px at 15 fps was twice that, 1.1 MB/s inside the freighter's hold); keep release GIFs under ~10 s. Plus
   `<name>.mp4` (960 px, 30 fps, x264 crf 20) when the ffmpeg has libx264 (the chocolatey one does; the release's
   LGPL `bin/ffmpeg` does not, so an export writes the GIF only). Drag the MP4 or the GIF into a PR description.
