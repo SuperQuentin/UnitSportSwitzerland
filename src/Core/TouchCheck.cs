@@ -68,6 +68,12 @@ public partial class TouchCheck : Node
         Expect(_touch.Has("jump") && _touch.Has("crouch") && !_touch.Has("walk"), "on foot: not Jump and Crouch without Walk");
         await Seconds(1.5);
         await Shot("2-foot");
+        // hints name the on-screen controls (#1054)
+        Names("on foot", (PlayerInput.MoveForward, "the stick"), (PlayerInput.LookRight, "a drag"), (PlayerInput.Jump, "[Jump]"),
+            (PlayerInput.Teleport, "[MAP]"), (PlayerInput.RideMenu, "[More › Travel menu]"));
+        string walk = InputHints.Format("Walk with {move_forward} {move_left} {move_back} {move_right}.");
+        GD.Print($"[touchcheck] hint: {walk}");
+        Expect(walk == "Walk with the stick.", $"a WASD hint reads \"{walk}\" on touch");
 
         // the stick: a thumb pushed up walks forward. Far left, clear of the buttons even on the
         // square screen a headless run has (the stick's resting place is under them there)
@@ -160,6 +166,9 @@ public partial class TouchCheck : Node
         Expect(_touch.Has("gas") && _touch.Has("brake"), $"the {kind} has no pedals");
         await Seconds(1);
         await Shot(mode == TouchMode.Ride ? "4-bike" : "5-car");
+        if (mode == TouchMode.Ride) Names("on the bike", (PlayerInput.Throttle, "[Pedal]"), (PlayerInput.Jump, "[Hop]"));
+        else Names("in the car", (PlayerInput.Throttle, "[Gas]"), (PlayerInput.Brake, "[Brake]"), (PlayerInput.Jump, "[Handbrake]"),
+            (PlayerInput.MoveLeft, "the stick"));
         var from = me.GlobalPosition;
         var gas = _touch.CentreOf("gas");
         Touch(4, gas, true);
@@ -236,6 +245,17 @@ public partial class TouchCheck : Node
 
     private string Where() => $"mode {_touch.Mode}, overlay {TouchControls.Shown}, mouse {MouseCapture.Mode}, "
         + $"player at {_local()?.GlobalPosition}, on the floor {_local()?.IsOnFloor()}, moving {_local()?.Velocity}";
+
+    /// <summary>What hints call these actions here, against what the overlay shows.</summary>
+    private void Names(string where, params (string Action, string Expected)[] names)
+    {
+        foreach (var (action, expected) in names)
+        {
+            string label = InputHints.Label(action);
+            GD.Print($"[touchcheck] {where}: {action} is {label}");
+            Expect(label == expected, $"{where}: {action} is called \"{label}\", not \"{expected}\"");
+        }
+    }
 
     private void Expect(bool ok, string failure)
     {

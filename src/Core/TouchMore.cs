@@ -85,6 +85,19 @@ internal sealed class TouchMore
         return ride.Concat(mode).ToArray();
     }
 
+    /// <summary>The words More shows for an action in this mode, or null if it does not list it (#1054).</summary>
+    public static string? LabelFor(TouchState state, string action)
+    {
+        foreach (var prefix in GroupsFor(state))
+            foreach (var (title, rows) in ControlsHelp.Groups)
+                if (title.StartsWith(prefix, StringComparison.Ordinal))
+                    foreach (var row in rows)
+                        if (ActionOf(row) == action) return Short(row.What);
+        foreach (var (label, a) in Always)
+            if (a == action) return label;
+        return null;
+    }
+
     /// <summary>Opens the sheet over <paramref name="rect"/>; <paramref name="onScreen"/> says an action already has a control.</summary>
     public void Show(TouchState state, Func<string, bool> onScreen, Rect2 rect)
     {

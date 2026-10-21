@@ -191,12 +191,15 @@ public static class TouchLayout
                     round("gearup", "Gear +", TouchSend.Pad(JoyButton.RightShoulder), new Vector2(37f, 30f), 8f);
                     round("geardown", "Gear −", TouchSend.Pad(JoyButton.LeftShoulder), new Vector2(37f, 20f), 8f);
                 }
+                // the cards' "Handbrake: A" (#1054): a car's slide, a stop on a hill
+                round("handbrake", "Handbrake", TouchSend.Pad(JoyButton.A), new Vector2(49f, 20f), 8f);
                 if (has(TouchFlags.Clutch)) round("clutch", "Clutch", TouchSend.Pad(JoyButton.B), new Vector2(49f, 9f), 8f);
                 else if (has(TouchFlags.WorkMode)) round("work", "Work", TouchSend.Pad(JoyButton.B), new Vector2(49f, 9f), 8f);
                 break;
             case TouchMode.Ride:
                 pedals("Pedal");
                 round("tuck", "Tuck", TouchSend.Pad(JoyButton.X), new Vector2(37f, 9f), 8f);
+                round("hop", "Hop", TouchSend.Pad(JoyButton.A), new Vector2(37f, 20f), 8f);
                 break;
             case TouchMode.Snow:
                 round("jump", "Jump", TouchSend.Pad(JoyButton.A), Main, MainD, TouchFeel.Primary);

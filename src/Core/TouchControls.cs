@@ -25,6 +25,14 @@ public partial class TouchControls : CanvasLayer
     /// <summary>Whether the overlay is on screen now (prompts, rumble and look ask).</summary>
     public static bool Shown { get; private set; }
 
+    private static TouchControls? _current;
+
+    /// <summary>
+    /// Hints name the on-screen controls (#1054, <see cref="InputDevice.Touch"/>): the overlay exists
+    /// and no real pad is in hand. Menus too, though the overlay hides there.
+    /// </summary>
+    public static bool Hinting => _current is { _padInUse: false };
+
     /// <summary>What applies right now, as the prompt bar has it: labels the buttons and makes the pills.</summary>
     public Func<IEnumerable<(string Action, string Text)>>? Source { get; set; }
 
@@ -114,6 +122,8 @@ public partial class TouchControls : CanvasLayer
         GetViewport().SizeChanged += Relayout;
         _more.Tapped = MoreTapped;
         _more.Held = TogglePin;
+        _current = this;
+        PlayerInput.HintsChanged();
     }
 
     public override void _ExitTree()
@@ -121,6 +131,7 @@ public partial class TouchControls : CanvasLayer
         ReleaseAll();
         Shown = false;
         HotbarPlace = null;
+        if (_current == this) _current = null;
     }
 
     // ---- layout --------------------------------------------------------------------------
@@ -186,6 +197,8 @@ public partial class TouchControls : CanvasLayer
         _more.Hide();
         _labelTimer = 0;
         Relayout();
+        // what a hint calls a control follows the layout
+        PlayerInput.HintsChanged();
     }
 
     /// <summary>Where a control is drawn (for <see cref="TouchCheck"/>), by its id, or the middle of the screen.</summary>
@@ -480,10 +493,10 @@ public partial class TouchControls : CanvasLayer
             // a real pad in hand: get out of the way until the screen is touched again
             case InputEventJoypadButton b when b.Device != Device && b.Device != XR.XrPad.DeviceId:
             case InputEventJoypadMotion m when m.Device != Device && m.Device != XR.XrPad.DeviceId && Mathf.Abs(m.AxisValue) > 0.5f:
-                _padInUse = true;
+                PadInUse(true);
                 return;
             case InputEventScreenTouch t:
-                _padInUse = false;
+                PadInUse(false);
                 if (!Shown) return;
                 if (t.Pressed) Down(t.Index, t.Position);
                 else Up(t.Index);
@@ -494,6 +507,38 @@ public partial class TouchControls : CanvasLayer
                 GetViewport().SetInputAsHandled();
                 return;
         }
+    }
+
+    private void PadInUse(bool on)
+    {
+        if (on == _padInUse) return;
+        _padInUse = on;
+        PlayerInput.HintsChanged();
+    }
+
+    /// <summary>
+    /// What a hint calls the control that does an action here (#1054), or null: "[Gas]" for a key,
+    /// "the stick", "a drag", "[MAP]", "[More › Travel menu]".
+    /// </summary>
+    public static string? NameOf(string action) => _current?.ControlFor(action);
+
+    private string? ControlFor(string action)
+    {
+        if (!InputMap.HasAction(action)) return null;
+        bool stick = TouchLayout.HasStick(_state.Mode);
+        if (stick && OnLeftStick(action)) return "the stick";
+        if (stick && TouchLayout.StickRuns(_state.Mode) && (_state.Flags & TouchFlags.RunButton) == 0
+            && action is PlayerInput.Sprint or PlayerInput.FlyBoost)
+            return "the stick past its ring";
+        foreach (var k in _keys)
+            if (k.Spec.Shape != TouchShape.Top && !k.Hidden && BoundTo(action, k.Spec.Send))
+                return k.Spec.Shape == TouchShape.Stick ? $"the {k.Spec.Label} stick" : $"[{k.Spec.Label}]";
+        if (action is PlayerInput.LookLeft or PlayerInput.LookRight or PlayerInput.LookUp or PlayerInput.LookDown)
+            return "a drag";
+        if (action == PlayerInput.Inventory) return "[BAG]";
+        foreach (var k in _keys)
+            if (k.Spec.Shape == TouchShape.Top && BoundTo(action, k.Spec.Send)) return $"[{k.Spec.Label}]";
+        return TouchMore.LabelFor(_state, action) is { } more ? $"[More › {more}]" : null;
     }
 
     private float Margin => TouchLayout.HitMarginMm * _pxPerMm;

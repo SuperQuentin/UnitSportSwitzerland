@@ -801,8 +801,8 @@ public partial class PlayerFeel : Node3D
             _engineLabel.GrowHorizontal = Control.GrowDirection.Both;
             _engineLabel.GrowVertical = Control.GrowDirection.End;
             _engineLabel.HorizontalAlignment = HorizontalAlignment.Center;
-            // left of centre: the top bar's Get out reaches the middle on a 20:9 phone
-            _engineLabel.OffsetLeft = -200; _engineLabel.OffsetRight = -200; _engineLabel.OffsetTop = 16;
+            // a little left of centre: between the ride card (top left) and the top bar's Get out on a 20:9 phone
+            _engineLabel.OffsetLeft = -60; _engineLabel.OffsetRight = -60; _engineLabel.OffsetTop = 16;
         }
         _screen.AddChild(_engineLabel);
 

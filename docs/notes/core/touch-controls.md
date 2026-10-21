@@ -22,6 +22,8 @@
 
 ## Pills, More, labels
 
+- **Hints name these controls (#1054):** `InputDevice.Touch` (`core/key-hints`): "Accelerate with [Gas]", "Steer with the stick". The drive layout has a Handbrake key and the ride layout a Hop key (A), because the ride cards name them.
+
 - **Labels:** a mode key takes the text of the first prompt bound to its control ("Hold to wind up a cast", "Brake: snowplough"); a text too wide for the key goes under it.
 - **Pills** (cyan, right edge, above the keys, below the top bar): every prompt with no control of its own, the interact one (`interact_mount`) first, at most 4, then a second column. A pill keeps its slot while its prompt lasts and lingers 0.4 s after. It presses the action's first pad button, else its trigger, else the action. Some prompts have a home instead and never become pills (`TouchControls.Homed`): Inventory, Map, ToggleMode, Spectator, Quick menu, Help, Menu, "Travel", "Camera".
 - **More** (`Core/TouchMore`): the `ControlsHelp.Groups` of the mode (and of the ride: Trucks and buses, Airliners...), plus Travel, Creative, Spectator camera, Quick menu, Emotes, Drop item, Bird journal, All controls. Rows already on screen, and stick axes, are left out; a row whose keys are one `{action}` (cruise) counts as that action. Long rows are cut at the colon. A tap sends the action (a 0.6 s hold for a "(hold" row); a wheel (emotes, quick wheel) opens and the next finger aims it and lets go. A long press **pins** the row to the mode's pills (`GameSettings.TouchPins`, "Mode:action", two a mode). The sheet sits under the top bar, over the buttons' half; the stick stays live beside it.
