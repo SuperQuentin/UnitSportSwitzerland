@@ -71,7 +71,9 @@ public static class TransitionPaint
         var m = new TransitionMarkings();
         var st = t.Stations;
         int n = t.Strips.Count;
-        // a hatch striped only where it is big enough; a smaller one leaves the centre line alone
+        // a hatch striped only where it is big enough; a smaller one leaves the centre line alone. Striped hatches side by side (an
+        // exit's gore and a line-up hatch beside it) are one gore: one outline, one set of stripes across both (#1000, the user: two
+        // striped gores side by side); a sliver too small to stripe stays apart
         var striped = new bool[n];
         for (int k = 0; k < n; k++)
         {
@@ -81,6 +83,15 @@ public static class TransitionPaint
             for (int i = 0; i < st.Length; i++)
                 if (w[i] > 0.05 || (i > 0 && w[i - 1] > 0.05) || (i + 1 < st.Length && w[i + 1] > 0.05)) { from = Math.Min(from, st[i]); to = Math.Max(to, st[i]); }
             striped[k] = w.Max() >= HatchMinWidth && to - from >= HatchMinLength;
+        }
+        var gores = new List<(int From, int To)>();
+        for (int k = 0; k < n; k++)
+        {
+            if (!striped[k]) continue;
+            int last = k;
+            while (last + 1 < n && striped[last + 1]) last++;
+            gores.Add((k, last));
+            k = last;
         }
         bool Present(int k, int i) => Math.Max(t.Strips[k].Widths[i], t.Strips[k].Widths[i + 1]) > 1e-3;
         // a bike lane opening from the kerb-side lane: at the transition's outer end no car lane lies on its right
@@ -204,7 +215,7 @@ public static class TransitionPaint
         }
         foreach (var key in open.Keys.ToList()) Close(key, t.Length);
 
-        for (int k = 0; k < n; k++) if (striped[k]) Stripes(t, k, m.Stripes);
+        foreach (var (first, last) in gores) Stripes(t, first, last, m.Stripes);
         Marks(t, lights, m.Marks, nearStop);
         return m;
     }
@@ -224,6 +235,8 @@ public static class TransitionPaint
     {
         bool aHatch = a.Kind == StripKind.Hatch, bHatch = b.Kind == StripKind.Hatch;
         // a hatch's outline; one too small to stripe is no hatch: its centre-line side alone, solid
+        // (two striped hatches side by side are one gore: nothing between them)
+        if (aHatch && bHatch && aStriped && bStriped) return Style.None;
         if (aHatch || bHatch)
         {
             if ((aHatch && aStriped) || (bHatch && bStriped)) return Style.Solid;
@@ -253,15 +266,18 @@ public static class TransitionPaint
     /// lanes moving) lean toward the mouth at that edge, an exit hatch's (its edge along the departing lane moving) away from it,
     /// though the two are one strip; each a quad clipped to the hatch.
     /// </summary>
-    private static void Stripes(Transition t, int k, List<(int Strip, (double S, double O)[] Quad)> into)
+    private static void Stripes(Transition t, int k, int last, List<(int Strip, (double S, double O)[] Quad)> into)
     {
+        // the gore from strip k to strip last, as one
+        (double From, double To) SpanOf(double s) => (t.SpanAt(k, s).From, t.SpanAt(last, s).To);
+        double WidthOf(double s) { double w = 0; for (int j = k; j <= last; j++) w += t.WidthAt(j, s); return w; }
         double from = t.Stations[0], to = t.Length;
         double h = HatchStripe * Math.Sqrt(0.5);
         double fallback = k < t.Anchor ? 1 : -1;
         // the traffic beside an edge: the nearest car lane on that side, arriving (toward the mouth, s falling) or not
         bool? Arriving(int step, double s)
         {
-            for (int r = k + step; r >= 0 && r < t.Strips.Count; r += step)
+            for (int r = (step < 0 ? k : last) + step; r >= 0 && r < t.Strips.Count; r += step)
                 if (t.Strips[r].Strip.IsCarLane && t.WidthAt(r, s) > 0.05) return t.Strips[r].Strip.Way == StripWay.In;
             return null;
         }
@@ -270,8 +286,8 @@ public static class TransitionPaint
         {
             double a = Math.Max(from, c - 1), b = Math.Min(to, c + 1);
             if (b - a < 1e-3) return fallback;
-            var (l0, r0) = t.SpanAt(k, a);
-            var (l1, r1) = t.SpanAt(k, b);
+            var (l0, r0) = SpanOf(a);
+            var (l1, r1) = SpanOf(b);
             double left = Math.Abs(l1 - l0), right = Math.Abs(r1 - r0);
             if (Math.Max(left, right) < 1e-3) return fallback;
             // the end at the moving edge further along that traffic's way: an arriving lane's toward the mouth
@@ -285,12 +301,12 @@ public static class TransitionPaint
         {
             // where the line s = c + sigma * u (u metres from the hatch's left edge) leaves the hatch: u = width(s)
             double lo = 0, hi = 30;
-            double W(double u) { double s = c + sigma * u; return s < from || s > to ? -1 : t.WidthAt(k, s) - u; }
+            double W(double u) { double s = c + sigma * u; return s < from || s > to ? -1 : WidthOf(s) - u; }
             if (W(0) <= 0.02) return null;
-            if (!far) return (c, t.SpanAt(k, c).From);
+            if (!far) return (c, SpanOf(c).From);
             for (int it = 0; it < 40; it++) { double mid = (lo + hi) * 0.5; if (W(mid) > 0) lo = mid; else hi = mid; }
             double sEnd = c + sigma * lo;
-            return (sEnd, t.SpanAt(k, sEnd).From + lo);
+            return (sEnd, SpanOf(sEnd).From + lo);
         }
         for (double c = from + 0.6; c < to; c += HatchStep)
         {
