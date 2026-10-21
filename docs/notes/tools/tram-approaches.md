@@ -46,5 +46,16 @@ The junction planner's cores (`junction-planner`) take the tram tracks running t
   run, facing them; one per track and direction within 40 m. Geneva centre: 135 OSM + 81 TLM stops. Model viewer: "Road prop -
   TramStop".
 - **Test region**: J14 has two tracks 3.2 m apart in the artery (`TTS`, `TTN`, TLM-like, `OnStreet`) and stops 150 m either side.
-- **Numbers** (Geneva copy `D:\UnitSportSwitzerland\test1057\geneva`, from #1030's copy): 250 tram paths through 143 cores (90
-  at lights, 90 tram groups, 78 tram lanes), 32 tracks through a core not from arm to arm, 85 stop signs.
+- **Switches**: tram tracks meeting at a node of their own run through it uncut (`PipelineOptions.ThroughNode`, the junction
+  builder skips the node): a rail junction trimmed them back, a gap the trams could not cross (Geneva: 250 → 291 tram paths).
+- **120 s kept** (`LayoutWrite`, after `Retime`): where trams take a plan past the legal maximum, their leads go first, then the
+  plan is timed for a 26 m tram (`ConflictTimes.TramShortLength`), then for the cars' times alone (its trams out of the conflict
+  times); the rewrite counts and names them. A tram group stays out of the phases where it would take the walkers' green it crosses
+  (a turning tram over a crosswalk), keeping them at least one: J14's branch had grown a walkers' phase of its own (153 s).
+- **Cantons**: `TileRewriter.Cantons.Find` looks for `switzerland.bin` in `tools/MapCore` (it moved there with #515; it looked in
+  `MapSetup`, so real rewrites had no canton before #1057).
+- **Numbers** (Geneva copy `D:\UnitSportSwitzerland\test1057\geneva`, from #1030's copy): 291 tram paths through 153 cores (110
+  at lights), 108 tram groups (two approaches whose trams go two ways), 91 tram lanes, 54 tracks through a core not from arm to
+  arm, 102 stop signs; leads 32 by 1-3 s, 56 by 3 s or more, 20 none; 3 junctions without leads to stay within 120 s, 2 of them
+  with their trams out of the conflict times. Lights 243, 0 invalid, none over 120 s. Screenshot: a Romandy cluster at the pole
+  LV95 2500000,1117246 (`--shot 1.5,g3.8,12,2,0,30,out.png --origin 2500000,1117250`).
