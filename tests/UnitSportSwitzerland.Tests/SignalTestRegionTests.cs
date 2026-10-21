@@ -186,29 +186,40 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
     [Fact]
     public void No_car_path_crosses_a_repeater_island()
     {
-        // #1000: the left repeater's island runs 3 m into the junction (the old layout's, #682); no car's way through it
+        // #1000: the left repeater's island runs 3 m into the junction (the old layout's, #682); every car keeps clear of it, its
+        // path's half width and a little more off its kerb
         int islands = 0;
         foreach (var (_, tile) in region.Tiles())
-            foreach (var island in tile.AreaProps.Where(a => a.Type == AreaPropType.Island && a.Variant == 2 && a.Vertices.Length == 12))
+            foreach (var island in tile.AreaProps.Where(a => a.Type == AreaPropType.Island && a.Variant == 2))
             {
                 islands++;
                 var v = island.Vertices;
+                int n = v.Length / 3;
                 foreach (var path in tile.JunctionPaths.Where(p => p.Kind == JunctionPathKind.Car))
                     for (int i = 0; i < path.PointCount; i++)
-                        Assert.False(Inside(v, path.Points[i * 3], path.Points[i * 3 + 2]),
-                            $"a {path.Move} car path through the island at {path.Points[i * 3]:F1},{path.Points[i * 3 + 2]:F1}");
+                    {
+                        float x = path.Points[i * 3], z = path.Points[i * 3 + 2];
+                        double gap = Inside(v, n, x, z) ? -1 : Enumerable.Range(0, n).Min(k => Segment(x, z, v[k * 3], v[k * 3 + 2], v[(k + 1) % n * 3], v[(k + 1) % n * 3 + 2]));
+                        Assert.True(gap >= path.Width * 0.5 - 0.3, $"a {path.Move} car path {gap:F2} m from an island at LV95 {tile.Id.MinE + x:F1},{tile.Id.MaxN - z:F1} (half width {path.Width * 0.5:F2})");
+                    }
             }
         Assert.True(islands > 0);
 
-        static bool Inside(float[] q, float x, float z)
+        static bool Inside(float[] q, int n, float x, float z)
         {
             bool inside = false;
-            for (int i = 0, j = 3; i < 4; j = i++)
+            for (int i = 0, j = n - 1; i < n; j = i++)
             {
                 float xi = q[i * 3], zi = q[i * 3 + 2], xj = q[j * 3], zj = q[j * 3 + 2];
                 if ((zi > z) != (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) inside = !inside;
             }
             return inside;
+        }
+        static double Segment(float x, float z, float ax, float az, float bx, float bz)
+        {
+            double dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz;
+            double t = l2 < 1e-9 ? 0 : Math.Clamp(((x - ax) * dx + (z - az) * dz) / l2, 0, 1);
+            return Math.Sqrt(Math.Pow(ax + dx * t - x, 2) + Math.Pow(az + dz * t - z, 2));
         }
     }
 

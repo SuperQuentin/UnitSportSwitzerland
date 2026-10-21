@@ -138,13 +138,20 @@ public static partial class TileRewriter
                 // carriageway, junction, widening strip and building; none where nothing is clear
                 Vec2 foot;
                 float lift;
-                if (p.OnRefuge && ex.Refuge is { } rf) { foot = P(p.Station, (rf.Left + rf.Right) * 0.5); lift = 0.12f; }
+                if (p.OnRefuge && ex.Refuge is { } rf)
+                {
+                    // on the island piece it stands on (#1000), in its middle
+                    var piece = ex.Islands.FirstOrDefault(x => x.From <= p.Station && p.Station <= x.To);
+                    foot = P(p.Station, piece is not null ? (piece.Left + piece.Right) * 0.5 : (rf.Left + rf.Right) * 0.5);
+                    lift = 0.12f;
+                }
                 else if (ClearFoot(p, ex, a, P, clear) is var (spot, kerbLift)) (foot, lift) = (spot, kerbLift);
                 else { stats.PolesRejected++; continue; }
                 var local = Local(home, [foot], q => SampleAt(a, q), lift);
                 // car heads face the arriving drivers; a pedestrian head faces across its crossing
                 // the second pole carries the left arrow where a lane turns left only (the check: every such arm has one)
-                var flags = p.Flags | (!p.RightKerb && arms[k].LeftPocket ? SignalPoleFlags.Second : SignalPoleFlags.None);
+                // (on the island where there is one, the left kerb's pole keeping the walkers' head alone, #1000)
+                var flags = p.Flags | (!p.RightKerb && (p.OnRefuge || ex.Refuge is null) && arms[k].LeftPocket ? SignalPoleFlags.Second : SignalPoleFlags.None);
                 if (!arms[k].In) flags &= ~(SignalPoleFlags.Main | SignalPoleFlags.Second);
                 var pole = new SignalPole(local[0], local[1], local[2], Heading(u), Heading(p.RightKerb ? -right : right), (byte)k, flags);
                 poles.Add(pole);
@@ -369,7 +376,20 @@ public static partial class TileRewriter
                 }
                 stats.Bars++;
             }
-            if (ex.Refuge is { } rf)
+            // a lit arm's island in its pieces, rounded where they stand free (#1000); else the refuge whole
+            foreach (var piece in ex.Islands)
+            {
+                var ring = IslandRing(piece).Select(q => P(q.S, q.O)).ToList();
+                var indices = new List<ushort>();
+                for (int i = 1; i + 1 < ring.Count; i++) indices.AddRange([(ushort)0, (ushort)i, (ushort)(i + 1)]);
+                Get(areas, tile).Add(new RoadAreaProp
+                {
+                    Type = AreaPropType.Island, Variant = 2, Flags = PropFlags.Solid, Height = 0.12f,
+                    Vertices = Local(tile, ring, source.SampleHeight, 0f), Indices = indices.ToArray(),
+                });
+                stats.Refuges++;
+            }
+            if (ex.Islands.Count == 0 && ex.Refuge is { } rf)
             {
                 Get(areas, tile).Add(new RoadAreaProp
                 {
@@ -434,5 +454,37 @@ public static partial class TileRewriter
             }
         }
         return null;
+    }
+
+    /// <summary>
+    /// An island piece's outline (#1000) in its arm's stations and offsets, convex, going round: its two long sides, a half circle at
+    /// an end that stands free (as wide as the piece, no longer than half of it), square at one the crosswalk cuts.
+    /// </summary>
+    private static List<(double S, double O)> IslandRing(IslandPiece p)
+    {
+        double half = (p.Right - p.Left) * 0.5, mid = (p.Left + p.Right) * 0.5, r = Math.Min(half, (p.To - p.From) * 0.5);
+        double from = p.RoundFrom ? p.From + r : p.From, to = p.RoundTo ? p.To - r : p.To;
+        const int Steps = 8;
+        var ring = new List<(double, double)>();
+        // along the left side, round the far end, back along the right side, round the near end
+        ring.Add((from, p.Left));
+        if (p.RoundTo)
+            for (int k = 0; k <= Steps; k++)
+            {
+                double t = -Math.PI / 2 + Math.PI * k / Steps;
+                ring.Add((to + r * Math.Cos(t), mid + half * Math.Sin(t)));
+            }
+        else ring.AddRange([(to, p.Left), (to, p.Right)]);
+        if (p.RoundFrom)
+            for (int k = 0; k <= Steps; k++)
+            {
+                double t = Math.PI / 2 + Math.PI * k / Steps;
+                ring.Add((from + r * Math.Cos(t), mid + half * Math.Sin(t)));
+            }
+        else ring.AddRange([(from, p.Right), (from, p.Left)]);
+        // (no point twice in a row, nor the first again at the end)
+        var outline = ring.Where((q, i) => i == 0 || Math.Abs(q.Item1 - ring[i - 1].Item1) + Math.Abs(q.Item2 - ring[i - 1].Item2) > 1e-6).ToList();
+        if (outline.Count > 1 && Math.Abs(outline[^1].Item1 - outline[0].Item1) + Math.Abs(outline[^1].Item2 - outline[0].Item2) < 1e-6) outline.RemoveAt(outline.Count - 1);
+        return outline;
     }
 }
