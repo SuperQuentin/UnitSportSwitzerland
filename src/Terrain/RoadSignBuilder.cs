@@ -103,6 +103,11 @@ public static class RoadSignBuilder
         float sw = ShieldWidth * 0.5f, sh = ShieldHeight * 0.5f, shoulder = -sh + ShieldHeight * 0.35f;
         Vector3 At(float x, float y) => c + right * x + Vector3.Up * y;
         var (first, second, sideBySide) = Arms(RoadSigns.CantonCode(variant));
+        // a thin black outline behind the fields: Vaud's white half on the white plate
+        const float o = 0.012f;
+        Vector3 Out(float x, float y) => At(x, y) - front * 0.0005f;
+        Polygon(vertices, colors, uvs, uv2s, indices, Black.SrgbToLinear(),
+            [Out(-sw - o, sh + o), Out(sw + o, sh + o), Out(sw + o, shoulder), Out(0, -sh - o * 1.6f), Out(-sw - o, shoulder)]);
         if (sideBySide)
         {
             Polygon(vertices, colors, uvs, uv2s, indices, first.SrgbToLinear(), [At(-sw, sh), At(0, sh), At(0, -sh), At(-sw, shoulder)]);

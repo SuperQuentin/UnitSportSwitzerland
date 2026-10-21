@@ -82,7 +82,7 @@ public static class SignalTestRegion
     /// <summary>The border drawn on the ground (#1038): purple, as no Swiss marking is (bike crossings are red).</summary>
     public const uint BorderRgba = 0x8E3FB0FF;
     /// <summary>The ground band's half width (vertices within it take <see cref="CoverClass.Border"/>), the stripe across a carriageway.</summary>
-    private const double BorderBandHalf = 2.0;
+    private const double BorderBandHalf = 1.5;
     private const float BorderStripe = 0.5f;
     /// <summary>The ground, metres (as the fixture courses).</summary>
     public const double Ground = 500;
@@ -531,7 +531,7 @@ public static class SignalTestRegion
             for (int row = 0; row < CoverFormat.Size; row++)
                 for (int col = 0; col < CoverFormat.Size; col++)
                 {
-                    double e = id.MinE + 2.0 * col, n = id.MaxN - 2.0 * row;   // ChunkGrid's lattice: row 0 north, 2 m apart
+                    double e = id.MinE + ChunkFormat.SpacingM * col, n = id.MaxN - ChunkFormat.SpacingM * row;   // row 0 north
                     var (across, along) = b.AlongN ? (e, n) : (n, e);
                     if (Math.Abs(across - b.At) <= BorderBandHalf && along >= b.From - BorderBandHalf && along <= b.To + BorderBandHalf)
                         cells[row * CoverFormat.Size + col] = (byte)CoverClass.Border;
