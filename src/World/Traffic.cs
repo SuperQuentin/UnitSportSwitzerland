@@ -703,6 +703,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         target = Mathf.Min(target, LitLimit(car, edge));
         // a turn that gives way on its green: in to the conflict point, and wait there for a gap (#1046)
         target = Mathf.Min(target, GapWait(car, dt, obstacles));
+        // a zebra without lights a walker stands at or crosses: stop short of it (#1033; +∞ without walkers)
+        target = Mathf.Min(target, ZebraWait(car, dt));
 
         bool sampled = false;
         foreach (var (oPos, oVel) in obstacles)
