@@ -197,8 +197,8 @@ public sealed class SignalPlan
     public bool ArrowPlates { get; set; }
 
     /// <summary>
-    /// Romandy's tram head (#1057, the user): one T-shaped head the size of a car head, the bar across (stop) over the bar upright (go);
-    /// the upright one flashing before red (the amber), the one across flashing before green (the red-amber, longer than the cars':
+    /// Romandy's tram head (#1057, #1105 after the user's Geneva photo): a square head, a white dotted T in its round window, the
+    /// stroke across lit for stop, the stroke upright for go; the upright one flashing before red (the amber), the one across before green (the red-amber, longer than the cars':
     /// <see cref="TramRedAmberT"/>). Elsewhere the three-lamp bar head. Bit 6 of the byte that holds <see cref="PedestrianAmber"/>.
     /// </summary>
     public bool TramTHead { get; set; }

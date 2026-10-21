@@ -195,8 +195,8 @@ void fragment() {
         return _haloMesh = mesh;
     }
 
-    /// <summary>A car head's lens blooms and grows with distance; a pedestrian or bike lens does not.</summary>
-    private static bool Blooms(Icon icon) => icon is not (Icon.Standing or Icon.Walking or Icon.Bike);
+    /// <summary>A car head's lens blooms and grows with distance; a pedestrian or bike lens does not, nor Romandy's dotted tram T (#1105).</summary>
+    private static bool Blooms(Icon icon) => icon is not (Icon.Standing or Icon.Walking or Icon.Bike or Icon.TramTStop or Icon.TramTGo);
 
     private SignalPlan[] _plans = [];
     private SignalBuilder.Lens[] _lenses = [];
@@ -398,8 +398,12 @@ void fragment() {
                 foreach (var polygon in SignalGlyphs.Bike()) flat.Fan(polygon);   // two wheels, the diamond frame, saddle and bars
                 break;
             // a tram bar signal's lamps (#1057): white bars and a dot on the black of the housing
-            case Icon.TramStop or Icon.TramTStop: flat.Bar(Vector2.Right, 1.7f, 0.42f); break;
-            case Icon.TramGo or Icon.TramTGo: flat.Bar(Vector2.Up, 1.7f, 0.42f); break;
+            case Icon.TramStop: flat.Bar(Vector2.Right, 1.7f, 0.42f); break;
+            case Icon.TramGo: flat.Bar(Vector2.Up, 1.7f, 0.42f); break;
+            // Romandy's square head (#1105, the Geneva photo): a T of white dots in its window, the stroke across (stop) near its
+            // top, the stroke upright (go) down its middle from under it
+            case Icon.TramTStop: for (int k = 0; k < 7; k++) flat.Disc(new Vector2(-0.9f + 0.3f * k, 0.45f), 0.08f, 6); break;
+            case Icon.TramTGo: for (int k = 0; k < 6; k++) flat.Disc(new Vector2(0f, 0.15f - 0.22f * k), 0.08f, 6); break;
             case Icon.TramLeft: flat.Bar(new Vector2(-1f, 1f).Normalized(), 1.7f, 0.42f); break;
             case Icon.TramRight: flat.Bar(new Vector2(1f, 1f).Normalized(), 1.7f, 0.42f); break;
             case Icon.TramDot: flat.Disc(Vector2.Zero, 0.4f, 12); break;
