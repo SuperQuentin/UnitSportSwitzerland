@@ -258,18 +258,24 @@ public partial class Traffic
         };
         if (colour is not { } c) return 0;
         var up = Vector3.Up * DrawLift;
-        if (!yields)
-        {
-            for (int i = 0; i + 1 < e.Points.Length; i++) Ribbon(mesh, e.Points[i] + up, e.Points[i + 1] + up, c, 0.8f);
-            return e.Points.Length - 1;
-        }
-        // dashed: 1.5 m drawn, 1.5 m left out, along the path
         int n = 0;
-        for (float s = 0f; s < e.Length; s += 3f, n++)
+        if (!yields)
+            for (int i = 0; i + 1 < e.Points.Length; i++, n++) Ribbon(mesh, e.Points[i] + up, e.Points[i + 1] + up, c, 0.8f);
+        else
+            // dashed: 1.5 m drawn, 1.5 m left out, along the path
+            for (float s = 0f; s < e.Length; s += 3f, n++)
+            {
+                var (a, _) = e.Sample(s);
+                var (b, _) = e.Sample(Mathf.Min(s + 1.5f, e.Length));
+                Ribbon(mesh, a + up, b + up, c, 0.8f);
+            }
+        // where its cars wait for a gap (#1046): a white bar across the path where a waiting car's front stops
+        foreach (var y in path.Yields)
         {
-            var (a, _) = e.Sample(s);
-            var (b, _) = e.Sample(Mathf.Min(s + 1.5f, e.Length));
-            Ribbon(mesh, a + up, b + up, c, 0.8f);
+            var (p, dir) = e.Sample(Mathf.Max(0f, y.At - GapMargin));
+            var side = new Vector3(-dir.Z, 0f, dir.X).Normalized() * 1.4f;
+            Ribbon(mesh, p - side + up, p + side + up, Colors.White, 0.35f);
+            n++;
         }
         return n;
     }

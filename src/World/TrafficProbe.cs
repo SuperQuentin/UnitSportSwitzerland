@@ -183,6 +183,14 @@ public partial class TrafficProbe : Node
         GD.Print($"[trafficcheck] approaches: {lit} with lights, {pockets} with a pocket and no lights, {used.Count} driven through; "
             + $"stopped at red {_traffic.RedStops}, entered on red {_traffic.RedRuns} (cleared yellow {_traffic.AmberClears}), on green or without lights {_traffic.LinesCrossed}, "
             + $"left from a pocket {_traffic.PocketLefts}, permissive lefts that waited {_traffic.PermissiveWaits}, waited for room past {_traffic.RoomWaits}");
+        // #1046: how queues discharge (the time between two queued cars crossing their line, by place), and the turns that waited
+        // for a gap inside the junction
+        var places = Enumerable.Range(2, _traffic.HeadwaySum.Length - 2)
+            .Select(p => $"{(p == _traffic.HeadwaySum.Length - 1 ? $"{p}th+" : $"{p}{(p == 2 ? "nd" : p == 3 ? "rd" : "th")}")} "
+                + (_traffic.HeadwayCount[p] > 0 ? $"{_traffic.HeadwaySum[p] / _traffic.HeadwayCount[p]:F1} s ({_traffic.HeadwayCount[p]})" : "-"));
+        GD.Print($"[trafficcheck] queue discharge headways: {string.Join(", ", places)}; stood in a junction for a gap {_traffic.InsideWaits} "
+            + $"(longest {_traffic.LongestInsideWait:F1} s), left it on amber or red {_traffic.ClearedInside}, paths with points to give way at "
+            + $"{roads.Edges.Count(e => e.Path is { Yields.Length: > 0 })} of {roads.Paths}");
     }
 
     private static string Letters(SignalMoves m) =>
@@ -257,6 +265,12 @@ public partial class TrafficProbe : Node
     /// </summary>
     private void Capture()
     {
+        // the gap shot (#1046) while no queue is framed, or after its shots; the queue waits while it is framed
+        if (!_gapShot && (_capture is null || _captured >= CaptureAt.Length))
+        {
+            GapShot();
+            if (_gapFramed >= 0 && !_gapShot) return;
+        }
         if (_captured >= CaptureAt.Length || _traffic.Roads is not { } roads) return;
         double now = SignalLamps.Clock();
         if (_capture is null)
@@ -297,6 +311,33 @@ public partial class TrafficProbe : Node
         GD.Print($"[trafficcheck] capture {(saved ? "wrote" : "could not write")} {file}: {aspect} at {now - _greenAt:+0.0;-0.0} s from green, "
             + $"{standing} of {all} cars within {CaptureReach:F0} m standing, {_capture.GreenCrossings + _capture.AmberClears - _crossedBefore} crossed the line since");
         _captured++;
+    }
+
+    /// <summary>The gap shot (#1046): when it was framed (traffic-check time), done.</summary>
+    private double _gapFramed = -1;
+    private bool _gapShot;
+
+    /// <summary>
+    /// Before or after the queue's shots (#1046): a car standing, its light not red yet, in a junction near <c>--at</c> for a gap, from above with the lights' paths
+    /// drawn (the dashed path gives way, the white bar is where a waiting car's front stops), saved as <c>&lt;png&gt;_5_gap.png</c>.
+    /// </summary>
+    private void GapShot()
+    {
+        if (_gapShot) return;
+        if (_gapFramed < 0)
+        {
+            if (_traffic.StandingForGap(_spot, CaptureNear) is not { } car) return;
+            _traffic.ShowLights = true;
+            _camera.GlobalTransform = new Transform3D(Player.Flyer.Orient(Vector3.Down, Vector3.Forward, Vector3.Forward), car + Vector3.Up * 35f);
+            _gapFramed = _t;
+            GD.Print($"[trafficcheck] gap shot: a car standing for a gap at {Where(car)}");
+            return;
+        }
+        if (_t < _gapFramed + 0.5) return;
+        string file = _shot!.Replace(".png", "_5_gap.png");
+        GD.Print($"[trafficcheck] gap shot {(GetViewport().GetTexture().GetImage().SavePng(file) == Error.Ok ? "wrote" : "could not write")} {file}");
+        _traffic.ShowLights = false;
+        _gapShot = true;
     }
 
     private LaneGraph? _fedGraph;

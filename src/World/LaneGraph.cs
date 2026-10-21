@@ -167,7 +167,18 @@ public sealed class LaneEdge
 /// What traffic needs of a junction path (#818 phase 5): its move, where its lane lies at each end (metres right of a driver
 /// arriving on that arm, from the road's centreline), and the lights and group it goes on (null and -1 without lights).
 /// </summary>
-public sealed record JunctionPathInfo(SignalMoves Move, float FromOffset, float ToOffset, SignalSite? Site, int Group);
+public sealed record JunctionPathInfo(SignalMoves Move, float FromOffset, float ToOffset, SignalSite? Site, int Group)
+{
+    /// <summary>Where its cars give way to another movement on its green (#1046, <see cref="ConflictPoints"/>), nearest first.</summary>
+    public PathYield[] Yields { get; set; } = [];
+}
+
+/// <summary>
+/// A point on a junction path where its cars give way (#1046): along the path to where a car's body first enters the other
+/// movement's band and where it has left it (m), that movement's group and movers; for cars, their path and how far along it
+/// their body enters this path's lane.
+/// </summary>
+public sealed record PathYield(float At, float Out, int Group, ConflictMover Mover, LaneEdge? Edge, float Enter);
 
 /// <summary>
 /// A signalised junction as traffic sees it (#353): its plan (#349, shared with the lamps, a
@@ -238,6 +249,9 @@ public sealed class LaneApproach
     /// <summary>Per lane: cars that crossed the line in it, and the sum of how far right of their usual line they were then, m.</summary>
     public int[] Crossings { get; private init; } = [];
     public float[] OffsetSum { get; private init; } = [];
+    /// <summary>Per lane (#1046, queue discharge): when the last car that had stood at red crossed the line (traffic time, s), and its place in the queue.</summary>
+    public double[] LastDischarge { get; private init; } = [];
+    public int[] QueuePlace { get; private init; } = [];
 
     public static LaneApproach Make(ApproachLane[] lanes, SignalSite? site, int arm, SignalMoves banned, float centre, Vector3 outDir)
     {
@@ -263,6 +277,7 @@ public sealed class LaneApproach
         {
             Lanes = lanes, Site = site, Arm = arm, Banned = banned, LaneCentre = centre, Out = outDir,
             Parent = parent, MultiLane = cars > 1, Reach = reach, Crossings = new int[lanes.Length], OffsetSum = new float[lanes.Length],
+            LastDischarge = Enumerable.Repeat(double.NegativeInfinity, Math.Max(1, lanes.Length)).ToArray(), QueuePlace = new int[Math.Max(1, lanes.Length)],
         };
     }
 
@@ -478,6 +493,8 @@ public sealed class LaneGraph
             }
             // the junction paths (#818 phase 5): each a one-way edge from the road end at its arm's mouth to the exit's; their ends meet
             // those roads, so JoinTrimmedEnds leaves the junction to them. Cars only (riders are not traffic)
+            // (per lit junction, its movements for the points where its turning cars give way, #1046)
+            var ways = sites.Select(_ => new List<(ConflictWay Way, LaneEdge? Edge)>()).ToArray();
             foreach (var jpath in tile.JunctionPaths)
             {
                 // a riders' path at the lights: kept for the debug drawing only (#971)
@@ -487,6 +504,7 @@ public sealed class LaneGraph
                     for (int i = 0; i < ride.Length; i++)
                         ride[i] = origin.ToWorld(tile.Id.MinE + jpath.Points[i * 3], tile.Id.MaxN - jpath.Points[i * 3 + 2], jpath.Points[i * 3 + 1]);
                     sites[jpath.Signal].Rides.Add((ride, jpath.Group, jpath.Move));
+                    ways[jpath.Signal].Add((new ConflictWay(jpath.Points, jpath.Group, ConflictMover.Bike, jpath.Move, jpath.Width * 0.5f), null));
                 }
                 if (jpath.Kind != JunctionPathKind.Car || jpath.PointCount < 2) continue;
                 int n = jpath.PointCount;
@@ -509,7 +527,10 @@ public sealed class LaneGraph
                 g.Link(edge.KeyStart, edge, true);
                 g.Link(edge.KeyEnd, edge, false);
                 g.Paths++;
+                if (site is not null) ways[jpath.Signal].Add((new ConflictWay(jpath.Points, jpath.Group, ConflictMover.Car, jpath.Move, jpath.Width * 0.5f), edge));
             }
+            for (int k = 0; k < sites.Length; k++)
+                if (ways[k].Any(w => w.Edge is not null)) Yields(sites[k].Plan, tile.Signals[k].ConflictLines, ways[k]);
             // the lanes of every approach the tile records (#353), then any signalised approach it does not (an older tile)
             var recorded = new HashSet<(int, int)>();
             foreach (var r in tile.Approaches)
@@ -538,6 +559,27 @@ public sealed class LaneGraph
 
     /// <summary>The junction paths it holds (#818 phase 5).</summary>
     public int Paths { get; private set; }
+
+    /// <summary>Half the depth of a zebra (m): RoadGen paints them 3 m deep (<c>TileRewriter.Crossings</c>).</summary>
+    private const float ZebraHalf = 1.5f;
+
+    /// <summary>
+    /// The points where each car path of a lit junction gives way (#1046): its <paramref name="ways"/> (car paths with their edges,
+    /// riders' paths) and its walkers' lines (<c>CPAR</c>, #979; none in an older tile), all in the signal's tile's frame.
+    /// </summary>
+    private static void Yields(SignalPlan plan, List<RoadConflictLine> lines, List<(ConflictWay Way, LaneEdge? Edge)> ways)
+    {
+        foreach (var line in lines)
+            if (line.Mover == ConflictMover.Walker) ways.Add((new ConflictWay(line.Points, line.Group, ConflictMover.Walker, SignalMoves.None, ZebraHalf), null));
+        var all = ways.Select(w => w.Way).ToList();
+        var conflicts = plan.Conflicts();
+        for (int i = 0; i < ways.Count; i++)
+        {
+            if (ways[i].Edge is not { Path: { } path }) continue;
+            path.Yields = ConflictPoints.For(plan, conflicts, all, i)
+                .Select(y => new PathYield(y.At, y.Out, all[y.Other].Group, all[y.Other].Mover, ways[y.Other].Edge, y.Enter)).ToArray();
+        }
+    }
 
     /// <summary>Its edges that are a transition's pieces, whose lanes cars follow (#818 phase 5).</summary>
     public int Transitions { get; private set; }
