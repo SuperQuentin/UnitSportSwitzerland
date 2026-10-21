@@ -11,7 +11,9 @@ The junction planner's cores (`junction-planner`) take the tram tracks running t
   axis), offsets as the track lies right of its line (+ at the start, - at the end, the usual convention), width 2.4 m, the
   approach's tram group at lights, -1 without.
 - **Signal group** (`SignalGroupKind.Tram`, `SignalArm.TramMoves`, not stored): one per approach a tram enters by and per
-  direction its trams take there (left, straight, right: the user, a head per direction), added after every other group (plans
+  direction its trams take there (left, straight, right: the user, a head per direction; transit gets directional signals on a
+  single track, never combined: through can be go while left is stop, `OneTrackBranching_TimesEachDirectionOnItsOwn`, each
+  tram path takes its own direction's group by `TramGroup`), added after every other group (plans
   without trams keep their groups). Each joins its approach's phases where nothing in them conflicts hard with it (chords as
   cars), else the first phase that allows it, else a phase of its own; a car's left from a shared lane across it is permissive
   (the car gives way). Timed as a slow group (`Slow`: its long clearing ends its green early), its ways as conflict lines
@@ -24,12 +26,14 @@ The junction planner's cores (`junction-planner`) take the tram tracks running t
   leading by 1-3 s, 3 s or more, or not at all (and where). J14: both lead by 3 s or more. Tier 0: `TramTests`.
 - **Aspects and heads per canton** (the user, Oct 21 2026):
   - **Romandy** (`SignalPlan.TramTHead`, bit 6 of the plan's flag byte; `RomandyTramHead`: GE, VD, NE, JU, FR, VS west of
-    E 2 612 000 (the language border at Sierre as a straight cut; FR's German-speaking east is not told apart)): one T-shaped
-    head two lamps high, the bar across over the bar upright. Bar upright = go, bar across = stop, bar upright flashing = the
-    amber before red, bar across flashing = the red-amber before green, which lasts `TramRedAmberT` 5 s (the user: "way longer
-    than for cars"; no source found for the length). It stands beside the car heads on their right just above the main head's
-    flasher, several touching (`SignalBuilder.TramHeads`, a compact cluster), each its arrow on a plate on top where the approach's
-    trams go several ways. A tram's red-amber holds it at its line, so the fixed-time check does not count it as live.
+    E 2 612 000 (the language border at Sierre as a straight cut; FR's German-speaking east is not told apart)): a square black
+    face in a thin white frame, car-head size, one round lens area showing a white dotted T (#1105, after the Geneva photo
+    `File:Tram_signals_Geneva.JPG`, its two square heads at the pole's foot; the round TPG heads above are #1104). Vertical
+    stroke lit = go, horizontal stroke lit = stop, vertical flashing = the amber before red, horizontal flashing = the red-amber
+    before green, which lasts `TramRedAmberT` 5 s (the user: "way longer than for cars"; no source found for the length). A
+    small "tram detected" dot above the T is modelled, never lit; the dots never bloom (`SignalLamps.Blooms`), unlit ones dark
+    (`TramTOff`). The heads stand beside the car heads on their right just above the main head's flasher, touching
+    (`SignalBuilder.TramHeads`, `TramSquareStep`), each with a white plate below carrying its black arrow (always, one way too). A tram's red-amber holds it at its line, so the fixed-time check does not count it as live.
   - **Other cantons**: three white lamps in a black housing, beside the car heads on the road's side: red and red-amber = the bar
     across (stop; red-amber unverified, the user does not know its look), amber = the dot (stop expected), green = the bar
     upright, slanted for a group that only turns; its arrow on a plate below where its trams go several ways.
