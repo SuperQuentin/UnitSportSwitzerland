@@ -197,6 +197,8 @@ public partial class SettingsScreen : Screen
                     on => GameSettings.Current.TouchRunPastRing = on, "Off: a Run button");
                 UiKit.ToggleRow(rows, "Use items by tapping the world", s.TouchTapToUse,
                     on => GameSettings.Current.TouchTapToUse = on, "A short tap uses the item in hand; no Use button");
+                UiKit.ActionRow(rows, "Touch layout", "Edit", () => TouchLayoutScreen.Open(this),
+                    "Move, resize or hide each control, mode by mode (also More › Edit layout in game)");
             }
             UiKit.SliderRow(rows, "Stick deadzone", 0.05, 0.5, 0.01, s.StickDeadzone,
                 v => GameSettings.Current.StickDeadzone = (float)v, v => $"{v * 100:F0} %");

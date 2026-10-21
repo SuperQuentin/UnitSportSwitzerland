@@ -23,13 +23,7 @@ public class TouchLayoutTests
     public static IEnumerable<object[]> Layouts()
     {
         foreach (var mode in Enum.GetValues<TouchMode>())
-            foreach (var flags in new[]
-                     {
-                         TouchFlags.None, TouchFlags.ItemInHand, TouchFlags.ItemInHand | TouchFlags.RunButton,
-                         TouchFlags.ItemInHand | TouchFlags.TapToUse, TouchFlags.Gears | TouchFlags.Clutch,
-                         TouchFlags.Gears | TouchFlags.WorkMode, TouchFlags.Armed, TouchFlags.Airliner, TouchFlags.Ufo,
-                         TouchFlags.Pigeon, TouchFlags.Wingsuit, TouchFlags.RunButton,
-                     })
+            foreach (var flags in TouchLayout.FlagSets)
                 yield return new object[] { mode, flags };
     }
 
@@ -128,6 +122,52 @@ public class TouchLayoutTests
                 float smallest = Math.Min(key.SizeMm.X, key.SizeMm.Y) + 2 * TouchLayout.HitMarginMm;
                 Assert.True(smallest >= 9.5f, $"{mode} {key.Id}: {smallest:0.#} mm with its margin");
             }
+    }
+
+    [Fact]
+    public void AModesOwnOverrideBeatsTheSharedOneAndHiddenKeysGo()
+    {
+        var foot = TouchLayout.For(TouchMode.Foot, TouchFlags.None);
+        var jump = foot.First(k => k.Id == "jump");
+        var o = new Dictionary<string, TouchOverride>
+        {
+            [TouchLayout.SharedKey(jump)] = new() { X = 20, Y = 20, Size = 1.2f },
+            [TouchLayout.ModeKey(TouchMode.Fight, jump)] = new() { X = 30, Y = 30 },
+            [TouchLayout.SharedKey(foot.First(k => k.Id == "crouch"))] = new() { Hidden = true },
+        };
+        var applied = TouchLayout.Apply(foot, TouchMode.Foot, o);
+        var moved = applied.First(k => k.Id == "jump");
+        Assert.Equal(new Vector2(20, 20), moved.Mm);
+        Assert.Equal(jump.SizeMm.X * 1.2f, moved.SizeMm.X, 3);
+        Assert.DoesNotContain(applied, k => k.Id == "crouch");
+        // the shared move reaches the fist fight's Jump too, unless the fight has its own
+        var fight = TouchLayout.For(TouchMode.Fight, TouchFlags.None);
+        Assert.Equal(new Vector2(30, 30), TouchLayout.Apply(fight, TouchMode.Fight, o).First(k => k.Id == "jump").Mm);
+        // a size out of range is held to it
+        o[TouchLayout.SharedKey(jump)].Size = 9;
+        Assert.Equal(jump.SizeMm.X * TouchLayout.MaxOverrideSize, TouchLayout.Apply(foot, TouchMode.Foot, o).First(k => k.Id == "jump").SizeMm.X, 3);
+    }
+
+    [Fact]
+    public void ConflictNamesAMoveThatCoversAControl()
+    {
+        var safe = new Rect2(0, 0, 151, 68);
+        var foot = TouchLayout.For(TouchMode.Foot, TouchFlags.ItemInHand);
+        var jump = foot.First(k => k.Id == "jump");
+        var none = new Dictionary<string, TouchOverride>();
+        Assert.Null(TouchLayout.Conflict(none, safe, 1f, 1f, false));
+        // Jump onto Crouch (28, 8)
+        var onCrouch = new Dictionary<string, TouchOverride> { [TouchLayout.SharedKey(jump)] = new() { X = 28, Y = 8 } };
+        Assert.Contains("Crouch", TouchLayout.Conflict(onCrouch, safe, 1f, 1f, false, "jump"));
+        // off the screen
+        var off = new Dictionary<string, TouchOverride> { [TouchLayout.SharedKey(jump)] = new() { X = 2, Y = 2 } };
+        Assert.Contains("leave the screen", TouchLayout.Conflict(off, safe, 1f, 1f, false, "jump"));
+        // a free spot up the right edge is fine in every mode with Jump (foot, fight, snow...)
+        var free = new Dictionary<string, TouchOverride> { [TouchLayout.SharedKey(jump)] = new() { X = 60, Y = 40 } };
+        Assert.Null(TouchLayout.Conflict(free, safe, 1f, 1f, false, "jump"));
+        // hidden, it covers nothing
+        var hidden = new Dictionary<string, TouchOverride> { [TouchLayout.SharedKey(jump)] = new() { X = 28, Y = 8, Hidden = true } };
+        Assert.Null(TouchLayout.Conflict(hidden, safe, 1f, 1f, false, "jump"));
     }
 
     [Fact]
