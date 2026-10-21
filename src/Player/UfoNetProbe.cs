@@ -55,8 +55,7 @@ public partial class UfoNetProbe : ChatProbe
     private async Task RunA(FootPlayer me)
     {
         // an admin may park what it took from the menu (ServerWorld's MayPark): the script's server has a password
-        Chat?.Send("/login test");
-        await Seconds(1);
+        if (!await LogIn("test")) return;
         if (!await Heard("B", "ready", 60)) { Fail("B never got ready"); return; }
         var b = Other()!;
         // clear of B: a 9 m saucer is not taken on top of someone
@@ -100,7 +99,7 @@ public partial class UfoNetProbe : ChatProbe
 
         me.FlyControls = null;
         me.ExitVehicle();
-        await Seconds(1);
+        await Until(() => me.Ride == RideKind.OnFoot, 3);
         Expect(me.Ride == RideKind.OnFoot, "A got out");
         Say("out");
         if (!await Heard("B", "seenparked", 30)) Fail("B never saw it parked");
@@ -131,7 +130,7 @@ public partial class UfoNetProbe : ChatProbe
         Say("lifted");
         // walk out of the cone: let down gently, unhurt
         Input.ActionPress(PlayerInput.MoveRight);
-        await Seconds(6);
+        await Until(() => !me.InBeam, 10);
         Input.ActionRelease(PlayerInput.MoveRight);
         Expect(await Until(() => !me.InBeam && me.IsOnFloor(), 30), "walking out frees B: let down, on the ground");
         Expect(me.Health >= FootPlayer.MaxHealth, $"B landed unhurt (health {me.Health:F0})");

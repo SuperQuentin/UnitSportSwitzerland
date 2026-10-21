@@ -133,8 +133,7 @@ public partial class SteamerNetProbe : ChatProbe
 
     private async Task RunA(FootPlayer me)
     {
-        Chat?.Send("/login test");
-        await Seconds(1.5);
+        if (!await LogIn("test")) return;
         bool ready = false;
         for (int i = 0; i < 40 && !ready; i++)
         {
@@ -167,6 +166,8 @@ public partial class SteamerNetProbe : ChatProbe
         }
         Expect(steamer.Order == Telegraph.Max, $"the telegraph at {Telegraph.Name(steamer.Order)}");
         me.RideControls = () => new RideInput(0f, 0f, Mathf.Clamp(-3f * Mathf.AngleDifference(me.Rotation.Y, North), -1f, 1f), false);
+        // 30 s to full ahead, fixed: the paddles gain so slowly on a gamey sea that "under 2 % in 3 s" held at
+        // 5 km/h, a third of the 14.5 the sample is meant to ride at (#992)
         await Seconds(30);
         GD.Print(F($"{Log} under way at {me.BoatMotion.WaterSpeed * 3.6f:F1} km/h, pitch {Mathf.RadToDeg(me.BoatMotion.Pitch):F2}°, roll {Mathf.RadToDeg(me.BoatMotion.Roll):F2}°"));
 

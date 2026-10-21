@@ -117,7 +117,9 @@ public partial class ServerWorld : Node3D, IOriginContainer
 
         // Collision only around server-run bots (#837), within a few hundred metres of each: players'
         // proxies are plain anchors and keep coarse, collision-less tiles (net/lean-dedicated-server).
-        _chunks = new ChunkManager { Name = "Terrain", BuildMeshes = false, BuildCollision = true, CollisionByRadius = true };
+        // The fill follows the players (#937): each client fills round its own start, which can be anywhere
+        _chunks = new ChunkManager { Name = "Terrain", BuildMeshes = false, BuildCollision = true, CollisionByRadius = true,
+            FillFollowsAnchors = true };
         _chunks.Initialize(source, origin, manifest, null);
         // the bots' collision pieces (#837) commit within 2 ms a frame, not a client's 4: a server frame
         // carries every player's relays, and the build of a spread field landing at once is many pieces

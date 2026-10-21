@@ -113,7 +113,7 @@ public partial class SiteUpperNetProbe : ChatProbe
             {
                 Say($"took {index} {first.Index}");
                 if (t == 0) GD.Print($"{Log} took {first.Stack.Id} x{first.Stack.Count} from the {layout.Furniture[index].Type} ({index}) on floor {floor}");
-                await Seconds(2);
+                await Until(() => _heard.Any(l => l.Contains("SU B done")) && _heard.Any(l => l.Contains("SU C done")), 2);
                 b |= _heard.Any(l => l.Contains("SU B done"));
                 c |= _heard.Any(l => l.Contains("SU C done"));
             }
@@ -183,7 +183,7 @@ public partial class SiteUpperNetProbe : ChatProbe
                 bool outside = await Until(() => !me.Indoors, 6);
                 await Seconds(0.3);
                 Input.ActionRelease(PlayerInput.MoveForward);
-                await Seconds(1.0);
+                await Until(() => Mathf.Abs(me.GlobalPosition.Y - Deck()) < 0.6f && me.IsOnFloor(), 3);
                 Expect(outside, $"C walked out through {doorKey}");
                 Expect(Mathf.Abs(me.GlobalPosition.Y - Deck()) < 0.6f && me.IsOnFloor(),
                     $"C stands on the walkway after (y {me.GlobalPosition.Y:F2}, deck {Deck():F2})");

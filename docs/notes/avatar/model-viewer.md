@@ -5,6 +5,8 @@
   Up/Down (W/S, D-pad) switch category, drag orbits, wheel zooms; the camera fits the model's box
   corners to the view. A dev tool: keyboard and pad only, no VR way (`src/Avatar/ModelViewer.cs`).
 - `--modelsonly <text>` keeps only the models whose category or name holds it (any case), for a quick look or shot.
+- `--modelsclear` (with `--models,<dir>`): no backdrop, ground or header; each PNG cut out to the model's pixels on a
+  transparent background (`tools/web-people.sh`, the web page's people, #998).
 - `--modelsyaw <deg> [--modelspitch <deg>]` turns the viewer's camera round the model (0 behind it, 180 in front: `150`, `-15` shows a vehicle's nose in a PNG run).
 - `--models,<dir>` (e.g. `test_output/models`) writes one PNG per model, prints
   `[models] no viewer entry: <Class>` for builder classes that built nothing during the run, and a

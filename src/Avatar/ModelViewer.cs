@@ -38,6 +38,8 @@ public partial class ModelViewer : Node3D
     private MeshInstance3D? _patches;
     // --flicker (with --models,<dir>): each PNG is a FlickerShot, flickering pixels in magenta (#788)
     private readonly bool _flicker = CmdArgs.Has("--flicker");
+    // --modelsclear: no backdrop, ground or header, PNGs cut out to the model on a transparent background (the web page's people, #998)
+    private readonly bool _clear = CmdArgs.Has("--modelsclear");
     private readonly HashSet<Type> _covered = new();
 
     public static bool Requested() => CmdArgs.FlagWithShot("--models").Requested;
@@ -62,28 +64,30 @@ public partial class ModelViewer : Node3D
             Rotation = new Vector3(Mathf.DegToRad(-42), Mathf.DegToRad(-35), 0),
             LightEnergy = 1.1f,
         });
+        if (_clear) GetViewport().TransparentBg = true;
         AddChild(new WorldEnvironment
         {
             Environment = new Godot.Environment
             {
-                BackgroundMode = Godot.Environment.BGMode.Color,
+                BackgroundMode = _clear ? Godot.Environment.BGMode.ClearColor : Godot.Environment.BGMode.Color,
                 BackgroundColor = new Color(0.44f, 0.50f, 0.56f),
                 AmbientLightSource = Godot.Environment.AmbientSource.Color,
                 AmbientLightColor = new Color(0.55f, 0.58f, 0.62f),
                 AmbientLightEnergy = 0.85f,
             },
         });
-        AddChild(new MeshInstance3D
-        {
-            Mesh = new PlaneMesh { Size = new Vector2(400, 400) },
-            MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.34f, 0.38f, 0.31f) },
-        });
+        if (!_clear)
+            AddChild(new MeshInstance3D
+            {
+                Mesh = new PlaneMesh { Size = new Vector2(400, 400) },
+                MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.34f, 0.38f, 0.31f) },
+            });
 
         _camera = new Camera3D { Fov = 40, Current = true, Far = 2000 };
         AddChild(_camera);
 
         var ui = new CanvasLayer();
-        _label = new Label { Position = new Vector2(12, 8) };
+        _label = new Label { Position = new Vector2(12, 8), Visible = !_clear };
         ui.AddChild(_label);
         AddChild(ui);
 
@@ -314,6 +318,13 @@ public partial class ModelViewer : Node3D
                     shot.Heat.SavePng(file);
                     GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
                         $"[flicker] {entry.Category} / {entry.Name}: {shot.Flickering} px ({shot.Percent:0.00} %)"));
+                }
+                else if (_clear)
+                {
+                    // cut out: only the model's own pixels
+                    var image = GetViewport().GetTexture().GetImage();
+                    var used = image.GetUsedRect();
+                    (used.HasArea() ? image.GetRegion(used) : image).SavePng(file);
                 }
                 else
                     GetViewport().GetTexture().GetImage().SavePng(file);

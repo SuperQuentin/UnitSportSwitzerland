@@ -9,7 +9,8 @@
 # The seed is fixed (--brseed): the same region, zone, plane line and bots every run. BRSEED=0 draws one, BRPACE,
 # BOTLOG=1 (bot status every 5 s) and SERVER_ARGS go to the server.
 # At /speed 4 (A's --checkspeed, #931), unlike a faster --brpace: the falls, the zone and the probe's waits all
-# scale together, so the zone still never takes part. SPEED=1 runs it at normal speed.
+# scale together, so the zone still never takes part; x1 for the knife duels, x4 again for the results (#1007). SPEED=1
+# runs it at normal speed.
 #   GODOT=<exe> tools/brbotcheck.sh
 . "$(dirname "$0")/lib/twoclient.sh" brbots
 AT=2583250,1113250

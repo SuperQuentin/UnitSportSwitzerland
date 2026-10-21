@@ -207,7 +207,9 @@ public partial class PlayerFeel : Node3D
         var ride = _player.Ride;
         bool grounded = _player.IsOnFloor();
         float speed = _player.GroundSpeed;
-        float excite = _player.Vehicle is Flyer flyer
+        // creative flight (#1002) is getting about, not a rush: no speed lines, no shake
+        float excite = _player.CreativeFlying ? 0f
+            : _player.Vehicle is Flyer flyer
             ? Mathf.Clamp((speed - flyer.Thrill.Calm) / (flyer.Thrill.Fast - flyer.Thrill.Calm), 0f, 1.5f)
             : Excitement(ride, speed);
 

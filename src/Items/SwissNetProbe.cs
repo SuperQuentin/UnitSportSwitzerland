@@ -71,7 +71,7 @@ public partial class SwissNetProbe : ChatProbe
         for (int tries = 0; tries < 60 && !Said("B", "ready"); tries++)
         {
             Say(Fmt($"posA {at.E:F2} {at.N:F2} {at.Alt:F2}"));
-            await Seconds(2.5);
+            if (await Until(() => Said("B", "ready"), 2.5)) break;
         }
         if (!Said("B", "ready")) { Fail("B never got ready"); return; }
         Hurt(me);
@@ -92,7 +92,6 @@ public partial class SwissNetProbe : ChatProbe
         if (!await Until(() => Said("B", "in smoke"), 15)) { Fail("B never saw the smoke"); return; }
 
         Use(me, ItemId.Alphorn);
-        await Seconds(4.0);
         Say("horn");
         if (!await Until(() => Said("B", "heard"), 15)) Fail("B never heard the horn");
     }

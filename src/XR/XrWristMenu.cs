@@ -29,7 +29,7 @@ public partial class XrWristMenu : CanvasLayer
     private static readonly string[] Actions =
     {
         PlayerInput.RideMenu, PlayerInput.Inventory, PlayerInput.Teleport, PlayerInput.BirdJournal,
-        PlayerInput.DropItem, PlayerInput.ToggleMode, PlayerInput.Help,
+        PlayerInput.DropItem, PlayerInput.ToggleMode, PlayerInput.Spectator, PlayerInput.Help,
     };
 
     /// <summary>True when the wrist menu has an entry for <paramref name="action"/>.</summary>
@@ -95,7 +95,7 @@ public partial class XrWristMenu : CanvasLayer
     {
         if (IsOpen || !inWorld) return;
         bool looked = false;
-        if (left.GetHasTrackingData() && Input.MouseMode == Input.MouseModeEnum.Captured)
+        if (left.GetHasTrackingData() && MouseCapture.Mode == Input.MouseModeEnum.Captured)
         {
             var to = left.GlobalPosition - head.Origin;
             float d = to.Length();
@@ -144,13 +144,14 @@ public partial class XrWristMenu : CanvasLayer
         if (onFoot) Entry("Phone", PlayerInput.Phone);
         Entry("Bird journal", PlayerInput.BirdJournal);
         if (onFoot) Entry("Drop the item in hand", PlayerInput.DropItem);
-        Entry(player == null ? "Walk" : "Fly camera", PlayerInput.ToggleMode);
+        Entry(player == null ? "Walk" : player.Creative ? "Survival mode" : "Creative mode", PlayerInput.ToggleMode);
+        if (player != null) Entry("Spectator camera", PlayerInput.Spectator);
         Entry("Controls", PlayerInput.Help);
         Entry("Recentre the view", null, () => _rig.Recentre());
         Entry("Close", null, null);
 
         _panel.Visible = true;
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
     }
 

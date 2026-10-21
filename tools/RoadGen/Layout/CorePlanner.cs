@@ -957,6 +957,32 @@ public static class CorePlanner
     // ------------------------------------------------------------------ lines through the core
 
     /// <summary>
+    /// The guides past a lit arm's island (#1000, the user: missing; the old layout's, #682), once the exterior has laid it: the
+    /// left turn into an exit with an island led round it by its inner edge, the through guide past one no left-turn guide leads
+    /// into; none drawn twice. <see cref="Lines"/> sees only islands among an exit's strips, not the ones the exterior lays.
+    /// </summary>
+    internal static void IslandGuides(JunctionPlan jp)
+    {
+        if (!jp.Lights || jp.Core is not { } core) return;
+        var islands = jp.Exterior.Where(x => x.Refuge is not null).Select(x => x.Arm.Arm).ToHashSet();
+        if (islands.Count == 0) return;
+        var cars = core.Connectors.Where(c => c.Kind == ConnectorKind.Car).ToList();
+        bool Drawn(List<Vec2> edge) => core.Lines.Any(l => ReferenceEquals(l.Points, edge));
+        var leftInto = new HashSet<int>();
+        foreach (var from in jp.Arms)
+            if (cars.Where(c => c.FromArm == from.Arm && c.Move == SignalMoves.Left).OrderBy(c => c.FromOffset).FirstOrDefault() is { } left
+                && islands.Contains(left.ToArm))
+            {
+                leftInto.Add(left.ToArm);
+                if (!Drawn(left.Left)) core.Lines.Add(new CoreLine("left", left.Left, Dashed: true));
+            }
+        foreach (var from in jp.Arms)
+            if (cars.Where(c => c.FromArm == from.Arm && c.Move == SignalMoves.Through).OrderBy(c => c.FromOffset).FirstOrDefault() is { } t
+                && islands.Contains(t.ToArm) && !leftInto.Contains(t.ToArm) && !Drawn(t.Left))
+                core.Lines.Add(new CoreLine("through", t.Left, Dashed: true));
+    }
+
+    /// <summary>
     /// The lines painted through the core, each a connector's edge (the plan: never computed apart), chosen by the rules:
     /// the main road's centre line (between its two straight connectors) where the priority plan carries it through; its
     /// edge guides without lights (the outer connectors' right edges, dashed across a joining road); at the lights the

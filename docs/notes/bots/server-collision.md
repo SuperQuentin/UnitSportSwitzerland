@@ -18,6 +18,9 @@
     400 m away (`ChunkManager.CollisionHeld`). It comes back as a coarse grid on the next evaluation.
   - The ring key gains a reach key per radius-mode anchor (its 250 m cell, its look-ahead's, airborne),
     so the wanted set is recomputed when a bot crosses a cell, not every 0.1 s.
+- **Ground at all**: on a generated world the server's fill domain follows its anchors (#937,
+  `terrain/generated-fill`). Before, a bot in a match far from the default spawn found no tile under it
+  (`TryGetHeight` false, no state, no collision) and sank under its canopy to -500 m.
 - **What the collision is**: the client's own collision build, with no meshes.
   - Ground cells, road/bridge/kerb/wall pieces: the road tile is loaded for collision on a server,
     `roadsForBlend` `!BuildMeshes`.

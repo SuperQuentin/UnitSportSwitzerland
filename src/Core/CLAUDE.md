@@ -25,7 +25,8 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 - `chat-probe` — MP probes derive from `Core/ChatProbe`; quick self-checks go in `ClientWorld.QuickChecks`, camera-placing tools in the `tools` table (`placedByTool` derived), never a hand-kept list
 - `three-clocks` — Three clocks (#579): env time (`WorldClock`) rides sim speed (`GameClock`/`SimNow`), real time (`Core.RealClock`) bends to neither; read `RealClock.Now` as a deadline, never a delta (there is no `RealClock.Delta` on purpose)
 - `cmd-args` — Read the command line only via `CmdArgs.Has/Value/Float/Double/Int/FlagWithShot` (cached, InvariantCulture); never `OS.GetCmdlineUserArgs()` + `IndexOf` again (#221)
-- `platform` — `Platform.IsMobile` (Android/iOS or `--mobile`) and `CanSpawnProcesses` gate the phone client (#63): app-storage terrain, no updater/SDL/host/VR/Realistic+/ffmpeg, multicast lock via `AndroidBridge`; emulator joins but cannot render
+- `platform` — `Platform.IsMobile` (Android/iOS or `--mobile`) and `CanSpawnProcesses` gate the phone client (#63): app-storage terrain, no updater/SDL/host/VR/Realistic+/ffmpeg, multicast lock via `AndroidBridge`; emulator renders with an x86_64 test APK on GL Compatibility
+- `android-emulator` — running the game on an API 34 emulator without Android Studio: x86_64 test APK, root, args through `GodotApp`, stderr via `wrap.<pkg> logwrapper`, native faults; the two Android-only crashes of #1010 (module initializers, WAV loop ends)
 - `touch-controls` — `TouchControls`: the phone's on-screen virtual pad (device 8) labelled from the prompts, 1:1 look drag via `PlayerInput.IsLookMotion`, `--touchcheck`, `--mobile` desktop preview, menus at 1.15x (#63)
 - `data-usage` — Settings → Data (Low data, cache cap + Clear, Android data saver/metered via `DataWatch`), metered warning on join, `ChunkStreamer.SessionBytes`; measured 260 / 70 MB on arrival after the DormantVehicles yard fixes (#63)
 - `is-online` — "online?" is `NetLink.Online(this)`; never copy the `not OfflineMultiplayerPeer && Connected` check again
@@ -43,6 +44,7 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 
 - `never-capture-thing-player-controls` — Never capture "the thing the player controls" at startup
 - `footplayer-spectatorcamera-read-physical-keys` — `FootPlayer` and `SpectatorCamera` read PHYSICAL keys every frame
+- `held-keys` — `PlayerInput.HoldOff()` at a switch (Shift of Shift+T no longer sinks the spectator camera); Windows stuck keys released against `GetAsyncKeyState` by scan code (#1002)
 - `mode-owns-screen-drop-anchors` — A mode that owns the screen must drop the anchors of the mode it replaced
 - `never-default-world-origin-lv95` — Never default the world origin to LV95 0/0: Switzerland is 2.6 million metres from there, so float precision...
 - `menu-refuses-close-still-consume` — A menu that refuses to close must still CONSUME the key
