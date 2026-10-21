@@ -11,7 +11,7 @@ namespace UnitSport.Ui;
 ///
 /// <para>
 /// The link lives on its own branch of the tree with its own <see cref="SceneMultiplayer"/>
-/// (<c>/root/RemoteConsole/Main/World/ConsoleLink</c>, the swarm bots' trick), so the paths match the
+/// (<c>/root/RemoteConsole&lt;n&gt;/Main/World/ConsoleLink</c>, the swarm bots' trick), so the paths match the
 /// server's <c>/root/Main/World</c> and nothing of the game's world is needed.
 /// </para>
 /// </summary>
@@ -30,6 +30,7 @@ public partial class ServerConsoleScreen : Screen
     private Label _state = null!;
 
     private Node? _branch;
+    private int _links;
     private SceneMultiplayer? _api;
     private ConsoleLink? _link;
     private bool _open;
@@ -110,7 +111,7 @@ public partial class ServerConsoleScreen : Screen
     public override void _Process(double delta)
     {
         // nobody answered the first line: a server from before the link, or not there at all
-        if (_askedAt >= 0 && !_open && Time.GetTicksMsec() / 1000.0 - _askedAt > AnswerSeconds)
+        if (_askedAt >= 0 && !_open && RealClock.Now - _askedAt > AnswerSeconds)
         {
             _askedAt = -1;
             Print("No answer. The server is either older than the remote console (update it once over SSH: "
@@ -128,10 +129,13 @@ public partial class ServerConsoleScreen : Screen
         Passwords[_endpoint] = password;
 
         var (host, port) = NetworkManager.ParseEndpoint(_endpoint);
-        _api = new SceneMultiplayer();
+        var api = _api = new SceneMultiplayer();
+        // RPC paths are relative to the multiplayer's root, so each link has a branch of its own name: the last
+        // one may still be in the tree, freed a frame later (Close)
+        string root = $"{BranchName}{++_links}";
         // before the branch enters the tree: its nodes register with the multiplayer that owns their path
-        GetTree().SetMultiplayer(_api, "/root/" + BranchName);
-        _branch = new Node { Name = BranchName };
+        GetTree().SetMultiplayer(api, "/root/" + root);
+        _branch = new Node { Name = root };
         var main = new Node { Name = "Main" };
         var world = new Node { Name = "World" };
         _branch.AddChild(main);
@@ -149,20 +153,23 @@ public partial class ServerConsoleScreen : Screen
             Close();
             return;
         }
-        _api.MultiplayerPeer = peer;
-        _api.ConnectedToServer += () =>
+        api.MultiplayerPeer = peer;
+        api.ConnectedToServer += () =>
         {
+            if (api != _api) return;
             _link?.Send(password, "");   // opens the link; the server answers with who it is
-            _askedAt = Time.GetTicksMsec() / 1000.0;
+            _askedAt = RealClock.Now;
         };
-        _api.ConnectionFailed += () =>
+        api.ConnectionFailed += () =>
         {
+            if (api != _api) return;
             Print($"Could not reach {host}:{port}.");
             Close();
             SetState("unreachable", UiTheme.Bad);
         };
-        _api.ServerDisconnected += () =>
+        api.ServerDisconnected += () =>
         {
+            if (api != _api) return;
             Print("Disconnected.");
             Close();
             SetState("disconnected", UiTheme.TextDim);
@@ -240,17 +247,24 @@ public partial class ServerConsoleScreen : Screen
         _open = false;
         _askedAt = -1;
         if (_command != null) { _command.Editable = false; _send.Disabled = true; }
-        if (_api?.MultiplayerPeer is { } peer && peer is not OfflineMultiplayerPeer) peer.Close();
+        // Torn down a frame later: Close runs inside the multiplayer's own poll (ServerDisconnected), and closing its
+        // peer or unregistering it there crashed the windowed game (signal 11). Its callbacks check _api first.
+        var api = _api;
+        var branch = _branch;
+        var tree = IsInsideTree() ? GetTree() : null;
         _api = null;
         _link = null;
-        if (_branch != null && IsInstanceValid(_branch))
-        {
-            // out of the tree now, so the next connect's branch gets the same name (the RPC paths)
-            _branch.GetParent()?.RemoveChild(_branch);
-            _branch.QueueFree();
-            if (IsInsideTree()) GetTree().SetMultiplayer(null, "/root/" + BranchName);
-        }
         _branch = null;
+        if (api != null || branch != null)
+            Callable.From(() =>
+            {
+                if (api?.MultiplayerPeer is { } peer && peer is not OfflineMultiplayerPeer) peer.Close();
+                if (branch != null && IsInstanceValid(branch))
+                {
+                    tree?.SetMultiplayer(null, branch.GetPath());
+                    branch.QueueFree();
+                }
+            }).CallDeferred();
         if (_state != null) SetState("not connected", UiTheme.TextDim);
     }
 }

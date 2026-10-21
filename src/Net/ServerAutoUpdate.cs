@@ -67,7 +67,7 @@ public partial class ServerAutoUpdate : Node
         return null;
     }
 
-    private static double Now => Time.GetTicksMsec() / 1000.0;
+    private static double Now => RealClock.Now;   // a release feed and players leaving: real minutes, whatever /speed says
 
     public override void _Ready() => _nextCheck = Now + 30;   // the first check once the server has settled
 

@@ -40,7 +40,7 @@ public partial class ConsoleLink : Node
 
     public static ConsoleLink CreateClient() => new() { Name = NodeName };
 
-    private static double Now => Time.GetTicksMsec() / 1000.0;
+    private static double Now => Core.RealClock.Now;   // lockouts are a person's minute
 
     public override void _Ready()
     {

@@ -40,6 +40,7 @@ public partial class ConsoleLinkCheck : Node
         bool offered = await Wait(() => _shell.Top is MultiplayerScreen m && (button = Find(m, "Server console…")) != null, 90);
         Expect(offered, "the refusal banner offers the server's console");
         if (!offered) { Done(); return; }
+        await Shot("banner");
         button!.EmitSignal(BaseButton.SignalName.Pressed);
         ServerConsoleScreen? console = null;
         Expect(await Wait(() => (console = _shell.Top as ServerConsoleScreen) != null, 5), "the console screen opens");
@@ -64,8 +65,18 @@ public partial class ConsoleLinkCheck : Node
         console.Submit("say console-check-hello");
         Expect(await Wait(() => console.Output.Split('\n').Any(l => !l.StartsWith('>') && l.Contains("console-check-hello")), 10),
             "say comes back as the console sees it");
+        await Shot("console");
         GD.Print("[consolelink] output:\n" + console.Output);
         Done();
+    }
+
+    /// <summary>Windowed (<c>WINDOWED=1</c>): the screen as it is, in <c>test_output/consolelink_&lt;name&gt;.png</c>.</summary>
+    private async Task Shot(string name)
+    {
+        if (DisplayServer.GetName() == "headless") return;
+        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+        GetViewport().GetTexture().GetImage().SavePng($"res://test_output/consolelink_{name}.png");
+        GD.Print($"[consolelink] shot test_output/consolelink_{name}.png");
     }
 
     private static Button? Find(Node node, string text)

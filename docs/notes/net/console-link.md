@@ -15,7 +15,7 @@
   and these are what two versions share, as the handshake's three. A server from before #1088 has no node: the
   client hears nothing and says so after 6 s (update that server once over SSH).
 - **Client** (`Ui/ServerConsoleScreen`): password (kept in memory for the run, never saved), Connect, an output
-  pane and a command line (Up/Down history). The link lives on its own branch, `/root/RemoteConsole/Main/World`,
+  pane and a command line (Up/Down history). The link lives on its own branch, `/root/RemoteConsole<n>/Main/World` (a new name per link: the last one is freed a frame later, never inside its own poll, which crashed a windowed game),
   with its own `SceneMultiplayer` (the swarm bots' trick), so its paths match the server's `/root/Main/World`
   and no world is loaded. The server's other broadcasts and spawns reach that peer too and are dropped with
   "node not found" errors in the client log: harmless.
