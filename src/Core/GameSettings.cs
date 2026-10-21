@@ -165,6 +165,20 @@ public sealed class GameSettings
 
     /// <summary>Touch look (#63): camera turn per pixel of drag, as a multiple of the mouse's.</summary>
     public float TouchLookSpeed { get; set; } = 1.5f;
+
+    /// <summary>The phone's on-screen controls (#1043): size, 0.75..1.3 of their millimetres.</summary>
+    public float TouchScale { get; set; } = 1f;
+    /// <summary>How solid the on-screen controls are at rest, 0.2..1; a pressed one is always solid.</summary>
+    public float TouchOpacity { get; set; } = 0.45f;
+    /// <summary>The stick on the right, the buttons on the left.</summary>
+    public bool TouchLeftHanded { get; set; }
+    /// <summary>Pushing the stick past its ring runs; off, a Run button does.</summary>
+    public bool TouchRunPastRing { get; set; } = true;
+    /// <summary>A short tap on the world uses the item in hand, instead of a Use button.</summary>
+    public bool TouchTapToUse { get; set; }
+    /// <summary>Actions pinned from the More sheet, as "Mode:action" (two a mode at most).</summary>
+    public List<string> TouchPins { get; set; } = new();
+
     public bool InvertY { get; set; }
 
     /// <summary>Free fly moves on the ground plane, Space / Shift for height, like Minecraft (#1002); off, forward follows the look.</summary>
@@ -515,6 +529,9 @@ public sealed class GameSettings
         VrRenderScale = Math.Clamp(VrRenderScale, MinVrRenderScale, MaxVrRenderScale);
         StickSensitivity = Math.Clamp(StickSensitivity, 0.2f, 3f);
         TouchLookSpeed = Math.Clamp(TouchLookSpeed, 0.3f, 4f);
+        TouchScale = Math.Clamp(TouchScale, 0.75f, 1.3f);
+        TouchOpacity = Math.Clamp(TouchOpacity, 0.2f, 1f);
+        TouchPins ??= new();
         MasterVolume = Math.Clamp(MasterVolume, 0f, 1f);
         SfxVolume = Math.Clamp(SfxVolume, 0f, 1f);
         AmbienceVolume = Math.Clamp(AmbienceVolume, 0f, 1f);

@@ -48,6 +48,8 @@ namespace UnitSport.Items;
 public partial class InventoryUi : CanvasLayer
 {
     private const int SlotPx = 50;
+    /// <summary>A hotbar slot: a fingertip's size on a phone, which taps it (#1043).</summary>
+    private static int HotbarPx => Platform.IsMobile ? 76 : SlotPx;
     private const int PanelSlotPx = 52;
     private const int Gap = 6;
     private const int TrashSlot = -2;
@@ -124,6 +126,18 @@ public partial class InventoryUi : CanvasLayer
     public string? Readout { get; set; }
 
     public bool IsOpen => _panel.Visible;
+
+    /// <summary>The hotbar on screen, in canvas pixels, or null while it is hidden: the phone taps it (#1043).</summary>
+    public Rect2? HotbarRect => _hotbar.IsVisibleInTree() ? _hotbar.GetGlobalRect() : null;
+
+    /// <summary>The hotbar slot under a canvas point, or -1.</summary>
+    public int HotbarSlotAt(Vector2 point)
+    {
+        if (!_hotbar.IsVisibleInTree()) return -1;
+        for (int i = 0; i < _hotbarSlots.Length; i++)
+            if (_hotbarSlots[i].GetGlobalRect().HasPoint(point)) return i;
+        return -1;
+    }
     public bool WheelOpen => _wheel.Visible;
 
     public InventoryUi(ItemController items) => _items = items;
@@ -198,13 +212,13 @@ public partial class InventoryUi : CanvasLayer
 
     private void BuildHud()
     {
-        int width = Inventory.HotbarSize * SlotPx + (Inventory.HotbarSize - 1) * Gap;
+        int width = Inventory.HotbarSize * HotbarPx + (Inventory.HotbarSize - 1) * Gap;
         _hotbar = new HBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
         _hotbar.AddThemeConstantOverride("separation", Gap);
         _hotbar.SetAnchorsPreset(Control.LayoutPreset.CenterBottom);
         _hotbar.OffsetLeft = -width / 2f;
         _hotbar.OffsetRight = width / 2f;
-        _hotbar.OffsetTop = -14 - SlotPx;
+        _hotbar.OffsetTop = -14 - HotbarPx;
         _hotbar.OffsetBottom = -14;
         _root.AddChild(_hotbar);
 
@@ -213,8 +227,8 @@ public partial class InventoryUi : CanvasLayer
             var slot = new SlotButton
             {
                 Slot = i,
-                KeyHint = (i + 1).ToString(),
-                CustomMinimumSize = new Vector2(SlotPx, SlotPx),
+                KeyHint = Platform.IsMobile ? "" : (i + 1).ToString(),
+                CustomMinimumSize = new Vector2(HotbarPx, HotbarPx),
                 MouseFilter = Control.MouseFilterEnum.Ignore,
                 FocusMode = Control.FocusModeEnum.None,
             };
@@ -772,9 +786,11 @@ public partial class InventoryUi : CanvasLayer
                 int slot = SlotAt(b.Position);
                 if (slot == -1)
                 {
-                    // outside the panel with a stack on the cursor: it falls to the ground
+                    // outside the panel with a stack on the cursor: it falls to the ground; a finger's
+                    // stray tap puts it back instead, Drop is the card's button there (#1043)
                     if (b.ButtonIndex == MouseButton.Middle || Inv.Carried.IsEmpty || !OutsidePanel(b.Position)) return false;
-                    DropCarried(one: b.ButtonIndex == MouseButton.Right);
+                    if (b.Device == InputEvent.DeviceIdEmulation) PutBackCarried();
+                    else DropCarried(one: b.ButtonIndex == MouseButton.Right);
                     return true;
                 }
                 if (slot == TrashSlot)
@@ -832,7 +848,8 @@ public partial class InventoryUi : CanvasLayer
                     if (slot == -1 && _paintSlots.Count == 1 && OutsidePanel(b.Position))
                     {
                         EndPaint(commit: false);
-                        DropCarried(one: b.ButtonIndex == MouseButton.Right);
+                        if (b.Device == InputEvent.DeviceIdEmulation) PutBackCarried();
+                        else DropCarried(one: b.ButtonIndex == MouseButton.Right);
                     }
                     else EndPaint(commit: true);
                     return true;
@@ -843,13 +860,72 @@ public partial class InventoryUi : CanvasLayer
                     _pickedOnPress = -1;
                     if (slot == TrashSlot) Inv.Trash();
                     else if (slot >= 0 && slot != from) Inv.PrimaryClick(slot);   // dropped on another slot
-                    else if (slot == -1 && OutsidePanel(b.Position)) DropCarried(one: false);   // dragged off the panel
+                    else if (slot == -1 && OutsidePanel(b.Position))   // dragged off the panel
+                    {
+                        if (b.Device == InputEvent.DeviceIdEmulation) PutBackCarried();
+                        else DropCarried(one: false);
+                    }
                     return true;
                 }
                 return false;
             }
         }
         return false;
+    }
+
+    /// <summary>The carried stack goes back where it was picked from (#391), else into the pack.</summary>
+    private void PutBackCarried()
+    {
+        if (_carriedFrom >= 0 && Inv.IsOpen(_carriedFrom) && Inv[_carriedFrom].IsEmpty) Inv.PrimaryClick(_carriedFrom);
+        if (Inv.ReturnCarried() is { IsEmpty: false } left && !_items.DropStack(null, left)) Inv.Bin(left);
+        _carriedFrom = -1;
+        Refresh();
+    }
+
+    // a finger has no right button (#1043): a press held still on a slot is one
+    private InputEventMouseButton? _touchPress;
+    private double _touchPressAt;
+    private MouseButton _touchButton = MouseButton.Left;
+    private const double TouchLongPress = 0.45;
+    private const float TouchSlop = 14f;
+
+    /// <summary>
+    /// A finger on the panel (Godot's mouse from a touch): a press on a slot waits to see whether it
+    /// is held (a right click: half a stack, or one) or dragged or let go (a left click). True if
+    /// the event was taken here.
+    /// </summary>
+    private bool TouchPanelMouse(InputEvent e)
+    {
+        switch (e)
+        {
+            case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } b when b.Device == InputEvent.DeviceIdEmulation && SlotAt(b.Position) >= 0:
+                _touchPress = b;
+                _touchPressAt = Time.GetTicksMsec() / 1000.0;
+                _touchButton = MouseButton.Left;
+                _cursor = b.Position;
+                return true;
+            case InputEventMouseMotion m when _touchPress != null && m.Position.DistanceTo(_touchPress.Position) > TouchSlop:
+                FlushTouchPress(MouseButton.Left);
+                return false;
+            case InputEventMouseButton { Pressed: false, ButtonIndex: MouseButton.Left } b when b.Device == InputEvent.DeviceIdEmulation:
+                if (_touchPress != null) FlushTouchPress(MouseButton.Left);
+                if (_touchButton != MouseButton.Left)
+                {
+                    HandlePanelMouse(new InputEventMouseButton { Device = b.Device, Position = b.Position, ButtonIndex = _touchButton, Pressed = false });
+                    _touchButton = MouseButton.Left;
+                    return true;
+                }
+                return false;
+        }
+        return false;
+    }
+
+    private void FlushTouchPress(MouseButton button)
+    {
+        var press = _touchPress!;
+        _touchPress = null;
+        _touchButton = button;
+        HandlePanelMouse(new InputEventMouseButton { Device = press.Device, Position = press.Position, ButtonIndex = button, Pressed = true });
     }
 
     private void AddPaint(int slot)
@@ -916,12 +992,7 @@ public partial class InventoryUi : CanvasLayer
         {
             if (!e.IsPressed() || e.IsEcho()) return;
             if (e.IsActionPressed("ui_cancel") && !Inv.Carried.IsEmpty)
-            {
-                // Esc / B first puts the carried stack back where it was picked from (#391), then closes
-                if (_carriedFrom >= 0 && Inv.IsOpen(_carriedFrom) && Inv[_carriedFrom].IsEmpty) Inv.PrimaryClick(_carriedFrom);
-                if (Inv.ReturnCarried() is { IsEmpty: false } left && !_items.DropStack(null, left)) Inv.Bin(left);
-                _carriedFrom = -1;
-            }
+                PutBackCarried();   // Esc / B first puts the carried stack back (#391), then closes
             else if (e.IsActionPressed(PlayerInput.Inventory) || e.IsActionPressed(PlayerInput.Menu)
                      || e.IsActionPressed("ui_cancel"))
                 Close();
@@ -958,7 +1029,7 @@ public partial class InventoryUi : CanvasLayer
         if (_items.PhotoUi.Blocking) return;
         if (IsOpen)
         {
-            if (HandlePanelMouse(e)) GetViewport().SetInputAsHandled();
+            if (TouchPanelMouse(e) || HandlePanelMouse(e)) GetViewport().SetInputAsHandled();
             else if (e is InputEventKey { Pressed: true, Echo: false } k)
             {
                 // as in Minecraft, through the actions (#391): a slot key over a slot swaps it with
@@ -1009,6 +1080,13 @@ public partial class InventoryUi : CanvasLayer
         {
             Close();
             CloseWheel(false);
+        }
+
+        // a finger held still on a slot: the right click (#1043)
+        if (_touchPress != null && (!IsOpen || Time.GetTicksMsec() / 1000.0 - _touchPressAt >= TouchLongPress))
+        {
+            if (IsOpen) FlushTouchPress(MouseButton.Right);
+            else _touchPress = null;
         }
 
         ProcessCrafting(dt);

@@ -183,8 +183,21 @@ public partial class SettingsScreen : Screen
             UiKit.SliderRow(rows, "Stick look speed", 0.2, 3, 0.1, s.StickSensitivity,
                 v => GameSettings.Current.StickSensitivity = (float)v, v => $"{v:F1}x");
             if (Platform.IsMobile)
+            {
+                // the on-screen controls (#1043)
                 UiKit.SliderRow(rows, "Touch look speed", 0.3, 4, 0.1, s.TouchLookSpeed,
                     v => GameSettings.Current.TouchLookSpeed = (float)v, v => $"{v:F1}x");
+                UiKit.SliderRow(rows, "Button size", 0.75, 1.3, 0.05, s.TouchScale,
+                    v => GameSettings.Current.TouchScale = (float)v, v => $"{v * 100:F0} %");
+                UiKit.SliderRow(rows, "Button opacity", 0.2, 1, 0.05, s.TouchOpacity,
+                    v => GameSettings.Current.TouchOpacity = (float)v, v => $"{v * 100:F0} %");
+                UiKit.ToggleRow(rows, "Left-handed", s.TouchLeftHanded, on => GameSettings.Current.TouchLeftHanded = on,
+                    "The stick on the right, the buttons on the left");
+                UiKit.ToggleRow(rows, "Run by pushing the stick past its ring", s.TouchRunPastRing,
+                    on => GameSettings.Current.TouchRunPastRing = on, "Off: a Run button");
+                UiKit.ToggleRow(rows, "Use items by tapping the world", s.TouchTapToUse,
+                    on => GameSettings.Current.TouchTapToUse = on, "A short tap uses the item in hand; no Use button");
+            }
             UiKit.SliderRow(rows, "Stick deadzone", 0.05, 0.5, 0.01, s.StickDeadzone,
                 v => GameSettings.Current.StickDeadzone = (float)v, v => $"{v * 100:F0} %");
             UiKit.ToggleRow(rows, "Invert look Y", s.InvertY, on => GameSettings.Current.InvertY = on);
