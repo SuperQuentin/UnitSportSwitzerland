@@ -21,7 +21,12 @@ using UnitSport.Tools.RoadGen.Rewrite;
 public static class SignalTestRegion
 {
     /// <summary>Tiles written: a row of junction tiles (N 1322) with a flat tile row either side. Outside Switzerland on purpose: no real tile, cached or not, shares an id.</summary>
-    public const int MinTileE = 2910, MaxTileE = 2917, MinTileN = 1321, MaxTileN = 1323;
+    public const int MinTileE = 2910, MaxTileE = 2917, MinTileN = 1321, MaxTileN = 1324;
+    /// <summary>
+    /// The rail row (#1052), LV95 N <see cref="RailN"/>: a double-track tram in a town street (houses along its north side, none
+    /// south), a reserved single tram track, and a double-track main line with a 600 m curve, for their overhead lines.
+    /// </summary>
+    public const double RailN = 1324500;
     /// <summary>The junctions' row, LV95 N: the middle of the tile row N 1322.</summary>
     public const double RowN = 1322500;
     /// <summary>The T without lights in town (#711), LV95 E on <see cref="RowN"/>: a split lead-in from the west.</summary>
@@ -104,7 +109,8 @@ public static class SignalTestRegion
 
     /// <summary>One TLM line as the extractor would read it, with its OSM overlay row.</summary>
     private sealed record Line(string Id, string Objektart, string Verkehrsbedeutung, string Eigentuemer, (double E, double N)[] Points,
-        string Highway, string Sidewalk = "", string Cycleway = "", OsmRow[]? Rows = null, bool Divided = false, bool Ring = false)
+        string Highway, string Sidewalk = "", string Cycleway = "", OsmRow[]? Rows = null, bool Divided = false, bool Ring = false,
+        RoadFlags? Rail = null, bool OnStreet = false)
     {
         public string Uuid => "{386-" + Id + "}";
     }
@@ -433,6 +439,27 @@ public static class SignalTestRegion
             new("A13", 8, "zebra"), new("J7N", 8, "zebra"), new("A4", 592, "traffic_signals"),
             new("J3S", 6, "zebra"), new("J3D0", 294, "marked"), new("J3D1", 6, "unmarked"),
         };
+        // 16. the rail row (#1052): overhead lines. A 10 m town street with a double-track tram on it (TLM auf_strasse), houses 5 m
+        // back from its north kerb for its western half (the spans' facades), none south (masts); a reserved single tram track on
+        // its own; a double-track main line bending through a 600 m curve
+        {
+            const double rn = RailN;
+            lines.Add(new Line("RS", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(2910100, rn), (2911900, rn)], "secondary", "yes"));
+            lines.Add(new Line("RT", "", "", "", [(2910100, rn), (2911900, rn)], "", Rail: RoadFlags.Tramway | RoadFlags.DoubleTrack, OnStreet: true));
+            boxes.Add(new Box(2910200, rn + 10, 2911000, rn + 24, 15));
+            lines.Add(new Line("RR", "", "", "", [(2912100, rn), (2913900, rn)], "", Rail: RoadFlags.Tramway));
+            var curve = new List<(double E, double N)> { (2914100, rn - 200), (2914500, rn - 200) };
+            // a 600 m arc turning left by 30 degrees, then on straight
+            for (int k = 1; k <= 30; k++)
+            {
+                double a = k * Math.PI / 180;   // the centre 600 m north of the curve's start
+                curve.Add((2914500 + 600 * Math.Sin(a), rn - 200 + 600 - 600 * Math.Cos(a)));
+            }
+            curve.Add((curve[^1].E + 800 * Math.Cos(Math.PI / 6), curve[^1].N + 800 * Math.Sin(Math.PI / 6)));
+            lines.Add(new Line("RM", "", "", "", [.. curve.Where(c => c.N < (MaxTileN + 1) * 1000 - 50 && c.E < (MaxTileE + 1) * 1000 - 50)], "",
+                Rail: RoadFlags.DoubleTrack));
+        }
+
         return new Design(lines, boxes, junctions, crossings);
     }
 
@@ -693,14 +720,20 @@ public static class SignalTestRegion
         var segments = new SortedDictionary<(int E, int N), (List<RoadSegment> Segments, List<RawRoads.Key?> Keys)>();
         foreach (var line in lines)
         {
-            var cls = RoadFormat.ParseClass(line.Objektart);
-            var surface = RoadFormat.ParseSurface("Hart");
-            var flags = RoadFormat.ParseFlags(null, null, null, line.Divided ? "Wahr" : "Falsch");
-            var attr = new RoadAttributes(
-                Flags: RoadFormat.ParseAttrFlags(line.Ring ? "Wahr" : "Falsch", line.Eigentuemer),
-                Layer: RoadFormat.LayerFor("0", flags),
-                Priority: RoadFormat.PriorityFor(cls, line.Verkehrsbedeutung),
-                WidthCm: RoadFormat.NominalWidthCm(line.Objektart));
+            var cls = line.Rail is null ? RoadFormat.ParseClass(line.Objektart) : RoadClass.Railway;
+            var surface = line.Rail is null ? RoadFormat.ParseSurface("Hart") : RoadSurface.Unknown;
+            var flags = line.Rail ?? RoadFormat.ParseFlags(null, null, null, line.Divided ? "Wahr" : "Falsch");
+            // a rail line as the extractor writes it (#1052): its formation's width, auf_strasse
+            var attr = line.Rail is not null
+                ? new RoadAttributes(Flags: line.OnStreet ? RoadAttrFlags.OnStreet : RoadAttrFlags.None, Layer: RoadFormat.LayerFor(null, flags))
+                : new RoadAttributes(
+                    Flags: RoadFormat.ParseAttrFlags(line.Ring ? "Wahr" : "Falsch", line.Eigentuemer),
+                    Layer: RoadFormat.LayerFor("0", flags),
+                    Priority: RoadFormat.PriorityFor(cls, line.Verkehrsbedeutung),
+                    WidthCm: RoadFormat.NominalWidthCm(line.Objektart));
+            float width = line.Rail is not null
+                ? (flags & RoadFlags.DoubleTrack) != 0 ? 9.0f : (flags & RoadFlags.NarrowGauge) != 0 ? 3.6f : 4.6f
+                : RoadFormat.WidthFor(cls, flags);
             float y = (float)(Ground + DrapeOffset + (12 - (int)cls) * 0.012);
             double along = 0;
             foreach (var (tile, piece) in SplitAtTiles(line.Points))
@@ -716,7 +749,7 @@ public static class SignalTestRegion
                 if (!segments.TryGetValue((tile.E, tile.N), out var into)) segments[(tile.E, tile.N)] = into = (new(), new());
                 into.Segments.Add(new RoadSegment
                 {
-                    Class = cls, Surface = surface, Flags = flags, Width = RoadFormat.WidthFor(cls, flags), Points = pts, Attributes = attr,
+                    Class = cls, Surface = surface, Flags = flags, Width = width, Points = pts, Attributes = attr,
                 });
                 into.Keys.Add(new RawRoads.Key(line.Uuid, 0, along));
                 for (int i = 1; i < piece.Count; i++) along += Dist(piece[i - 1], piece[i]);
@@ -814,7 +847,7 @@ public static class SignalTestRegion
         sb.Append("uuid\tpart\tfrom_m\tto_m\tosm_way\tdir\thighway\toneway\tlanes\tlanes_fwd\tlanes_bwd\twidth"
             + "\tsidewalk_left\tsidewalk_right\tcycleway_left\tcycleway_right\tturn_lanes_fwd\tturn_lanes_bwd\troundabout\ttram\tmaxspeed_fwd\tmaxspeed_bwd\tbicycle_lanes_fwd\tbicycle_lanes_bwd\n");
         int way = 0;
-        foreach (var line in lines.OrderBy(l => l.Uuid, StringComparer.Ordinal))
+        foreach (var line in lines.Where(l => l.Rail is null).OrderBy(l => l.Uuid, StringComparer.Ordinal))
             foreach (var row in line.Rows ?? [new OsmRow(0, Length(line))])
                 sb.Append(inv, $"{line.Uuid}\t0\t{row.From:F1}\t{row.To:F1}\t{386000 + ++way}\t+\t{line.Highway}\t\t{row.Lanes}\t{row.LanesFwd}\t{row.LanesBwd}\t")
                     .Append(inv, $"\t{line.Sidewalk}\t{line.Sidewalk}\t{line.Cycleway}\t{line.Cycleway}\t{row.TurnFwd}\t{row.TurnBwd}\t0\t{(row.Tram ? 1 : 0)}\t\t\t{row.BikeFwd}\t{row.BikeBwd}\n");

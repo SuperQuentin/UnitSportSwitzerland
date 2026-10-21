@@ -480,6 +480,9 @@ public sealed class RoadTile
     public List<ParkingBay> Parking { get; init; } = new();
     /// <summary>Lane-to-lane paths through the tile's junction cores (#818 phase 5, #709, <c>JPTH</c>).</summary>
     public List<RoadJunctionPath> JunctionPaths { get; init; } = new();
+    /// <summary>#1052: overhead lines' supports and contact wires (section <c>CTNY</c>).</summary>
+    public List<CatenarySupport> CatenarySupports { get; init; } = new();
+    public List<CatenaryWire> CatenaryWires { get; init; } = new();
 }
 
 public static class RoadFormat
