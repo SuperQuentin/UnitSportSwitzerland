@@ -61,14 +61,14 @@ public sealed class Ufo : Flyer
     /// </summary>
     public override System.Collections.Generic.IEnumerable<(Transform3D Pose, Vector3 Centre, Vector3 Size)> ExtraBoxes()
     {
-        // the pad is 0.8 m across
-        const float pad = 0.4f;
+        // the pad is 0.8 m across, the hinge's block 0.5
+        const float pad = 0.4f, block = 0.25f;
         float top = UfoMeshBuilder.Belly + 0.1f;
         for (int i = 0; i < UfoRig.LegCount; i++)
         {
             var (hinge, foot) = UfoRig.LegDown(i);
-            var lo = new Vector3(Mathf.Min(hinge.X, foot.X) - pad, foot.Y, Mathf.Min(hinge.Z, foot.Z) - pad);
-            var hi = new Vector3(Mathf.Max(hinge.X, foot.X) + pad, top, Mathf.Max(hinge.Z, foot.Z) + pad);
+            var lo = new Vector3(Mathf.Min(hinge.X - block, foot.X - pad), foot.Y, Mathf.Min(hinge.Z - block, foot.Z - pad));
+            var hi = new Vector3(Mathf.Max(hinge.X + block, foot.X + pad), top, Mathf.Max(hinge.Z + block, foot.Z + pad));
             yield return (Transform3D.Identity, (lo + hi) * 0.5f, hi - lo);
         }
     }

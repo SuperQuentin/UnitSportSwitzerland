@@ -57,7 +57,8 @@
     - the helicopter's parked box is solid under its tail boom;
     - the paddle steamer's parked hull leaves out the paddle boxes (`end-`/`end+`; hidden until #738
       stopped a teleported mover dragging the steamer into the lane).
-    - the UFO's ramp is drawn only: a walker's head goes through its high end on the `side` lane (#1006).
+    - the UFO's ramp is drawn only: on the `side` lane a car goes through its low part and a walker's
+      head through its high end (#1006).
 - **Traps found on the way:**
   - **Read the lanes once the targets rest** (`Rested`, after the 1 s): a parked UFO that sank to its
     belly box was still 0.6 m up after 1 s, so what stood in a lane was read off the wrong height (#1006).

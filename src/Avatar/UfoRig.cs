@@ -44,13 +44,16 @@ public partial class UfoRig : Node3D
 
     /// <summary>
     /// Leg <paramref name="i"/> down, in the saucer's node space, as <see cref="Show"/> poses it: the
-    /// hinge under the belly and the bottom of the pad (the parked posts, <c>Ufo.ExtraBoxes</c>).
+    /// hinge under the belly and the bottom of the pad (the parked posts, <c>Ufo.ExtraBoxes</c>). The
+    /// leg mesh is built turned, <c>(−x, y, −z)</c>, like every <see cref="MeshScratch"/> mesh: its
+    /// authored foot is flipped too, or the pad lands inside the hinge circle instead of out on it.
     /// </summary>
     public static (Vector3 Hinge, Vector3 Pad) LegDown(int i)
     {
         float a = LegAngles[i];
         var hinge = AircraftMeshBuilder.Flip(new Vector3(Mathf.Sin(a) * LegHingeR, Belly + 0.02f, Mathf.Cos(a) * LegHingeR));
-        return (hinge, hinge + new Basis(Vector3.Up, a) * new Vector3(0, -(Belly - 0.08f), LegFootR - LegHingeR));
+        var foot = AircraftMeshBuilder.Flip(new Vector3(0, -(Belly - 0.08f), LegFootR - LegHingeR));
+        return (hinge, hinge + new Basis(Vector3.Up, a) * foot);
     }
 
     /// <summary>Lamp brightness steps: the chase head, two trailing, then the rest.</summary>
