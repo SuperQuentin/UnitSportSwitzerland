@@ -399,6 +399,8 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
         {
             var solid = tile.Paint.Where(p => p.Type == PaintType.WhiteSolid && p.Shape == PaintShape.Polyline).Select(p => Points(p.Vertices)).ToList();
             var meshes = tile.Paint.Where(p => p.Type == PaintType.Hatch).Select(p => Points(p.Vertices)).ToList();
+            // (a tram track's grooves cut the road's paint, #124: a stripe ending at the track's zone is cut there, #1057's J14 branch)
+            var grooves = tile.Paint.Where(p => p.Type == PaintType.RailGroove).Select(p => Points(p.Vertices)).ToList();
             foreach (var hatch in tile.Paint.Where(p => p.Type == PaintType.Hatch))
             {
                 hatches++;
@@ -459,7 +461,10 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
                     }
                     return best;
                 });
-                var loose = pts.FirstOrDefault(p => Off(p) > 0.35);
+                double OffGroove((double X, double Z) p) => grooves.Count == 0 ? double.MaxValue : grooves.Min(q => q.Count < 2 ? double.MaxValue
+                    : q.Zip(q.Skip(1)).Min(s => Math.Sqrt(Math.Pow(p.X - Math.Clamp(p.X, Math.Min(s.First.X, s.Second.X), Math.Max(s.First.X, s.Second.X)), 2)
+                        + Math.Pow(p.Z - Math.Clamp(p.Z, Math.Min(s.First.Z, s.Second.Z), Math.Max(s.First.Z, s.Second.Z)), 2))));
+                var loose = pts.FirstOrDefault(p => Off(p) > 0.35 && OffGroove(p) > 1.2);
                 Assert.True(loose == default, $"{path}: a hatch around ({mx:F0},{mz:F0}) has a stripe ending off its border at ({loose.X:F1},{loose.Z:F1})");
                 // the stripes start 0.6 m in and step 2.5 m, none where the hatch is under 0.3 m wide (its narrow tip, 0.3 / its width of a
                 // 20 m taper): a 20 m hatch's stripes reach over at least 20 - 2.5 - 2 x 0.6 m less that tip. Their ends lie up to 3 m in
