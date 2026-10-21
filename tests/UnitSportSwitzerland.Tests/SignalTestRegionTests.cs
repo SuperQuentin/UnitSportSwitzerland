@@ -50,6 +50,37 @@ public sealed class SignalTestRegionFixture : IDisposable
 public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixture<SignalTestRegionFixture>
 {
     [Fact]
+    public void Canton_row_differs_only_by_its_canton()
+    {
+        // #1038: J2's crossroads once per zone; Geneva's walkers' heads have two lenses, Vaud's heads arrow plates, the rest alike
+        var plans = new[] { "default", "GE", "VD" }
+            .Select(c => SignalTestRegion.Junctions.Single(j => j.Name == $"J12-canton-{c}"))
+            .Select(j => region.Tile(j.E, j.N).Signals.Single().Plan).ToArray();
+        Assert.Equal((true, false), (plans[0].PedestrianAmber, plans[0].ArrowPlates));
+        Assert.Equal((false, false), (plans[1].PedestrianAmber, plans[1].ArrowPlates));
+        Assert.Equal((true, true), (plans[2].PedestrianAmber, plans[2].ArrowPlates));
+        Assert.All(plans, p => Assert.Equal((plans[0].Cycle, plans[0].Groups.Count), (p.Cycle, p.Groups.Count)));
+    }
+
+    [Fact]
+    public void Canton_borders_are_marked_where_roads_cross()
+    {
+        // #1038: the main road crosses two borders: a stripe across it at each, and a sign each way standing in the canton it
+        // names, facing the traffic coming in across the border
+        var tiles = region.Tiles().Select(t => t.Tile).ToList();
+        Assert.Equal(2, tiles.Sum(t => t.Paint.Count(p => p.Rgba == SignalTestRegion.BorderRgba)));
+        var signs = tiles.SelectMany(t => t.PointProps.Where(p => p.Type == PointPropType.CantonSign).Select(p => (t.Id, Sign: p))).ToList();
+        Assert.Equal(4, signs.Count);
+        foreach (var (id, s) in signs)
+        {
+            double e = id.MinE + s.X, n = id.MaxN - s.Z, border = Math.Round(e / 1000) * 1000;
+            Assert.Equal(SignalTestRegion.CantonAt(e, n), RoadSigns.CantonCode(s.Variant));
+            double frontEast = -Math.Sin(s.Heading);   // heading 0 faces -Z (north)
+            Assert.True(Math.Sign(frontEast) == Math.Sign(border - e), $"the sign at E {e:F1} faces away from the border at {border}");
+        }
+    }
+
+    [Fact]
     public void Riders_turning_left_go_with_the_left_arrow()
     {
         // #971, the user: a riders' left turn from the left-turn bike lane follows the left arrow, never the through green; where
