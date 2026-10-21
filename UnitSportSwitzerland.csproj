@@ -22,6 +22,14 @@
     <TargetFramework>net9.0</TargetFramework>
   </PropertyGroup>
 
+  <!-- iOS (tools/ios-build.sh, #1025): NativeAOT puts more than 128 MB of code in one object, past the reach of an
+       ARM64 branch. .NET 8's ILCompiler links with the deprecated -ld_classic, which cannot bridge that; Xcode's
+       current linker inserts branch islands. Size-optimised code is smaller and compiles faster on the CI runner. -->
+  <PropertyGroup Condition=" '$(GodotTargetPlatform)' == 'ios' ">
+    <UseLdClassicXCodeLinker>false</UseLdClassicXCodeLinker>
+    <OptimizationPreference>Size</OptimizationPreference>
+  </PropertyGroup>
+
   <ItemGroup>
     <!-- Tiles churn through the large-object heap (1-4 MB grids, covers, collision maps), which
          the GC never compacts by default: the heap grows with fragmentation, not live data.

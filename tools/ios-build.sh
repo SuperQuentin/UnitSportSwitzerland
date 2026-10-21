@@ -30,7 +30,13 @@ rm -rf "$OUT"; mkdir -p "$OUT"
 "$GODOT" --headless --verbose --path . --export-release iOS "$OUT/$NAME.ipa" 2>&1 | tee "$OUT/export.log" || true
 # Godot keeps the dotnet publish (NativeAOT) log in its own folder: copied beside the others
 log=$(ls -t "$HOME/Library/Application Support/Godot/mono/build_logs"/*_ExportRelease/msbuild_log.txt 2>/dev/null | head -1) || true
-if [ -n "$log" ]; then cp "$log" "$OUT/msbuild.log"; grep -E ': error |error [A-Z]+[0-9]+:' "$OUT/msbuild.log" | sort -u | head -30 || true; fi
+# A failed publish still leaves an Xcode project (and a "successful" app) with no game library in it
+if [ -n "$log" ]; then cp "$log" "$OUT/msbuild.log"
+  if grep -qE ': error |error [A-Z]+[0-9]+:' "$OUT/msbuild.log"; then
+    echo "dotnet publish failed; full log in $OUT/msbuild.log"
+    grep -E ': error |error [A-Z]+[0-9]+:|^\s*Exec: (ld|clang): ' "$OUT/msbuild.log" | grep -v 'ld: warning' | sort -u | cut -c1-400 | head -30; exit 1
+  fi
+fi
 [ -d "$OUT/$NAME.xcodeproj" ] || { echo "Godot wrote no Xcode project; see $OUT/export.log"; grep -E 'ERROR|error' "$OUT/export.log" | head -20; exit 1; }
 echo "Xcode project: $OUT/$NAME.xcodeproj"
 [ $EXPORT_ONLY = 1 ] && exit 0
