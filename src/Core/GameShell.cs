@@ -175,6 +175,9 @@ public partial class GameShell : Node
             // "--autostart": straight into Explore through the loading screen, for screenshotting
             // it (and, with --menu, the pause menu once in)
             if (CmdArgs.Has("--autostart")) Callable.From(() => Launch(new WorldLaunch { Mode = GameMode.Explore })).CallDeferred();
+            // a .gpx opened with the game (#1029): straight into its replay
+            GpxOpenWith.Register();
+            if ((GpxOpenWith.FromArgs() ?? AndroidBridge.OpenedFile()) is { } opened) Callable.From(() => OpenGpx(opened)).CallDeferred();
         }
         if (CmdArgs.Has("--controls")) GetTree().CreateTimer(1.5).Timeout += () => _help.Open();
         if (UiShot() is { } shot) GetTree().CreateTimer(shot.Seconds).Timeout += () => SaveShot(shot.Path);
@@ -195,6 +198,37 @@ public partial class GameShell : Node
     {
         // closing the window while hosting must not leave the server behind
         if (what == NotificationWMCloseRequest) _hosted?.Stop();
+        // Android: "Open with" while the game runs comes back as a resume with a new intent
+        else if (what == NotificationApplicationResumed && !Direct && AndroidBridge.OpenedFile() is { } opened) OpenGpx(opened);
+    }
+
+    private string? _pendingGpx;
+
+    /// <summary>
+    /// A .gpx opened with the game from outside (#1029, <see cref="GpxOpenWith"/>): its replay starts at
+    /// once, after leaving a world in progress. An Android URI is copied into the GPX folder first.
+    /// </summary>
+    public void OpenGpx(string source)
+    {
+        string? path = source.Contains("://") ? Ui.GpxPicker.Import(source) : source;
+        if (path == null)
+        {
+            Modal.Inform(_menuRoot, "Not a GPX track", "The file opened with UnitSport is not a GPX track, or could not be read.");
+            return;
+        }
+        GD.Print($"[gpx] opened with the game: {path}");
+        var recent = GameSettings.Current.RecentGpx;
+        recent.Remove(path);
+        recent.Insert(0, path);
+        while (recent.Count > 10) recent.RemoveAt(recent.Count - 1);
+        GameSettings.Current.Save();
+        if (_state is State.Loading or State.InWorld or State.Leaving)
+        {
+            _pendingGpx = path;
+            LeaveWorld(null);
+            return;
+        }
+        Launch(new WorldLaunch { Mode = GameMode.GpxReplay, GpxPaths = new[] { path } });
     }
 
     /// <summary>
@@ -707,6 +741,14 @@ public partial class GameShell : Node
             _state = State.Title;
             GD.Print($"[shell] joining {again.Endpoint} again in world {again.World?.Id ?? WorldChoice.OpenId}");
             Launch(again);
+            return;
+        }
+        if (_pendingGpx is { } track)
+        {
+            // a .gpx opened with the game mid-session (#1029): its replay, as straight on
+            _pendingGpx = null;
+            _state = State.Title;
+            Launch(new WorldLaunch { Mode = GameMode.GpxReplay, GpxPaths = new[] { track } });
             return;
         }
         _loading.Close();
