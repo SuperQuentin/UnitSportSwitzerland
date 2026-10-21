@@ -51,6 +51,13 @@ jobs:
         if: steps.godot-cache.outputs.cache-hit != 'true'
         run: bash tools/ci/install-godot.sh
 
+      # Godot 4.7's iOS template links iOS 26 SDK symbols (CADynamicRange*, MTLTensorDomain): Xcode 16 cannot link it
+      - name: Pick Xcode 26
+        run: |
+          x=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$x" ] || { echo "No Xcode 26 on this runner:"; ls -d /Applications/Xcode*; exit 1; }
+          sudo xcode-select -s "$x"
+
       - name: Build
         timeout-minutes: 160 # leaves time to upload the logs
         run: |
