@@ -5,7 +5,9 @@
 # its screen and cheers (the crowd bonus); B breaks character on purpose (laughed first: A's bonus); B
 # answers (the answer bonus) while A keeps a straight face, then leaves its last cut (frozen); the
 # server must refuse A's forged presses and a nine-move plan; A forfeits and both see B win. C then
-# adds a bot, challenges it, and the bot plans and cuts its own combo.
+# adds a bot, challenges it, and the bot plans and cuts its own combo. ffmpeg on PATH (or in bin/):
+# the server burns the chess type beat C's radio plays; without it C fails that at once and
+# battles the bot on its own beat (#1006).
 #   tools/auranetcheck.sh            (GODOT = the editor executable, docs/notes/general/godot-exe.md)
 #   SHOTS=1 tools/auranetcheck.sh    (B and C windowed, for a look at the camera and the HUDs)
 . "$(dirname "$0")/lib/twoclient.sh" auranet

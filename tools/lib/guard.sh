@@ -1,6 +1,7 @@
 # Resource guard for heavy test runs (docs/notes/general/testing.md). Source it, then:
 #   guard_wait_ram <GB> [max_wait_s]   wait until that much RAM is free (fails after max_wait_s)
-#   guard_lock [max_wait_s] [max_hold_s]  take the machine-wide heavy-run lock, queueing behind others;
+#   guard_lock [max_wait_s] [max_hold_s]  take a slot of the machine-wide heavy-run lock (GUARD_SLOTS of them,
+#                                      #1008), queueing when all are held; sets GUARD_SLOT (0..);
 #                                      max_hold_s (default 3600) is how long you may keep it
 #   guard_unlock                       release it (put it in your EXIT trap)
 #   guard_status                       who holds the lock, since when, last heartbeat
@@ -25,6 +26,22 @@
 # Works in Git Bash on Windows, on Linux and on macOS (vm_stat). Never kills by name: only the PIDs it started.
 
 GUARD_LOCK_DIR=${GUARD_LOCK_DIR:-${TMPDIR:-${TEMP:-/tmp}}/unitsport-heavy.lock}
+# Slots (#1008): the heavy lock is GUARD_SLOTS directories, $GUARD_LOCK_DIR (slot 0) then $GUARD_LOCK_DIR.1,
+# .2 ...; guard_lock takes any free one and sets GUARD_SLOT. Default: one per 10 GB of RAM, 1 to 4 (32 GB: 3).
+# GUARD_SLOTS=1 is the old single lock, and a script from before #1008 only ever waits for slot 0.
+_guard_lock_base=${_guard_lock_base:-$GUARD_LOCK_DIR}
+_guard_total_gb() {
+  if [ -r /proc/meminfo ]; then awk '/^MemTotal:/ { print int($2 / 1048576) }' /proc/meminfo
+  elif [ "$(uname)" = Darwin ]; then echo $(( $(sysctl -n hw.memsize 2>/dev/null || echo 8589934592) / 1073741824 ))
+  else echo 8; fi
+}
+if [ -z "${GUARD_SLOTS:-}" ]; then
+  GUARD_SLOTS=$(( $(_guard_total_gb) / 10 ))
+  [ "$GUARD_SLOTS" -lt 1 ] && GUARD_SLOTS=1
+  [ "$GUARD_SLOTS" -gt 4 ] && GUARD_SLOTS=4
+fi
+GUARD_SLOT=${GUARD_SLOT:-0}
+_guard_slot_dir() { if [ "$1" = 0 ]; then echo "$_guard_lock_base"; else echo "$_guard_lock_base.$1"; fi; }
 GUARD_POLL=${GUARD_POLL:-10}
 GUARD_BEAT=${GUARD_BEAT:-10}
 GUARD_STALE=${GUARD_STALE:-45}
@@ -99,11 +116,34 @@ _guard_stale_reason() {
 }
 
 guard_status() {
-  if [ ! -d "$GUARD_LOCK_DIR" ]; then echo "[guard] lock free"; return 0; fi
-  local now; now=$(date +%s)
-  echo "[guard] held by PID $(_guard_lock_pid) ($(_guard_field what)) for $(( now - $(_guard_field started 2>/dev/null || echo "$now") ))s,"     "heartbeat $(( now - $(_guard_mtime "$GUARD_LOCK_DIR/beat") ))s ago${1:+}"
-  local why; why=$(_guard_stale_reason); [ -n "$why" ] && echo "[guard] STALE: $why"
+  local keep=$GUARD_LOCK_DIR s now held=0 why
+  now=$(date +%s)
+  for (( s = 0; s < GUARD_SLOTS; s++ )); do
+    GUARD_LOCK_DIR=$(_guard_slot_dir "$s")
+    [ -d "$GUARD_LOCK_DIR" ] || continue
+    held=$(( held + 1 ))
+    echo "[guard] slot $s/$GUARD_SLOTS held by PID $(_guard_lock_pid) ($(_guard_field what)) for $(( now - $(_guard_field started 2>/dev/null || echo "$now") ))s," \
+      "heartbeat $(( now - $(_guard_mtime "$GUARD_LOCK_DIR/beat") ))s ago"
+    why=$(_guard_stale_reason); [ -n "$why" ] && echo "[guard] STALE: $why"
+  done
+  GUARD_LOCK_DIR=$keep
+  [ "$held" = 0 ] && echo "[guard] lock free ($GUARD_SLOTS slots)"
   return 0
+}
+
+# takes slot dir $GUARD_LOCK_DIR if it is free, or stale (then taken over); true on success
+_guard_take_slot() {
+  mkdir "$GUARD_LOCK_DIR" 2>/dev/null && return 0
+  local why pid
+  why=$(_guard_stale_reason)
+  [ -n "$why" ] || return 1
+  pid=$(_guard_lock_pid)
+  # two waiters can both judge it stale; re-reading the pid first makes the race tiny, not zero
+  if [ "$(_guard_lock_pid)" = "$pid" ]; then
+    echo "[guard] removing stale lock (slot $s): $why" >&2
+    _guard_drop_lock
+  fi
+  mkdir "$GUARD_LOCK_DIR" 2>/dev/null
 }
 
 # this shell's PID, a subshell's too: BASHPID, or on bash 3.2 (macOS, no BASHPID) the parent of a
@@ -112,25 +152,23 @@ _guard_self_pid() { if [ -n "${BASHPID:-}" ]; then echo "$BASHPID"; else sh -c '
 _guard_my_pid=
 
 guard_lock() {
-  local max=${1:-3600} hold=${2:-3600} waited=0 why
-  while ! mkdir "$GUARD_LOCK_DIR" 2>/dev/null; do
-    why=$(_guard_stale_reason)
-    if [ -n "$why" ]; then
-      local pid; pid=$(_guard_lock_pid)
-      # ponytail: two waiters can both judge it stale; re-reading the pid first makes the race tiny, not zero
-      if [ "$(_guard_lock_pid)" = "$pid" ]; then
-        echo "[guard] removing stale lock: $why" >&2
-        _guard_drop_lock
-      fi
-      continue
-    fi
+  local max=${1:-3600} hold=${2:-3600} waited=0 s
+  while :; do
+    # the first free slot, slot 0 first: a lone run keeps today's lock and ports
+    for (( s = 0; s < GUARD_SLOTS; s++ )); do
+      GUARD_LOCK_DIR=$(_guard_slot_dir "$s")
+      _guard_take_slot && break 2
+    done
+    GUARD_LOCK_DIR=$_guard_lock_base
     if [ "$waited" -ge "$max" ]; then
-      echo "[guard] heavy-run lock still held after ${waited}s: $(guard_status | head -1)" >&2
+      echo "[guard] all $GUARD_SLOTS heavy-run slots still held after ${waited}s: $(guard_status | head -1)" >&2
       return 1
     fi
     [ $(( waited % 120 )) -eq 0 ] && guard_status >&2
     sleep 2; waited=$(( waited + 2 ))
   done
+  GUARD_SLOT=$s
+  export GUARD_SLOT
   _guard_self_pid > "$GUARD_LOCK_DIR/pid"
   _guard_my_pid=$(_guard_lock_pid)
   printf 'started=%s

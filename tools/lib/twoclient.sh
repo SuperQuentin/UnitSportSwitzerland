@@ -82,10 +82,26 @@ trap _tc_cleanup EXIT
 if [ -z "${GUARD_LOCK_HELD:-}" ]; then guard_lock 1800 "${TC_HOLD:-1500}" || exit 1; fi
 guard_wait_ram 4 600 || exit 1
 
+# Ports per slot (#1008): checks run side by side in different slots of the heavy lock, and every script has a
+# fixed PORT; the Godot runs here get --port N and 127.0.0.1:N / localhost:N moved by GUARD_SLOT * 1000, so slot
+# 0 keeps today's ports and no script's PORT line changes. TC_PORT_OFFSET for a port a script uses otherwise.
+TC_PORT_OFFSET=$(( ${GUARD_SLOT:-0} * 1000 ))
+_tc_ports() {
+  _tc_args=()
+  local a prev=
+  for a in "$@"; do
+    if [ "$prev" = --port ] && [[ $a =~ ^[0-9]+$ ]]; then a=$(( a + TC_PORT_OFFSET ))
+    elif [[ $a =~ ^(127\.0\.0\.1|localhost):([0-9]+)$ ]]; then a="${BASH_REMATCH[1]}:$(( BASH_REMATCH[2] + TC_PORT_OFFSET ))"
+    fi
+    _tc_args+=("$a"); prev=$a
+  done
+}
+
 tc_server() {
   local timeout_s=$1 wait_s=$2 log=$3 i
   shift 3
   : > "$log"
+  _tc_ports "$@"; set -- ${_tc_args[@]+"${_tc_args[@]}"}
   guard_run "$timeout_s" "$log" ${_tc_env[@]+"${_tc_env[@]}"} "$GODOT" --headless --path . -- "$@" &
   SERVER=$!
   _tc_servers+=("$SERVER")
@@ -104,10 +120,15 @@ tc_client() {
   shift 2
   [ "${1:-}" = --windowed ] && { headless=; shift; }
   [ -n "${WINDOWED:-}" ] && headless=
+  _tc_ports "$@"; set -- ${_tc_args[@]+"${_tc_args[@]}"}
   guard_run "$timeout_s" "$log" ${_tc_env[@]+"${_tc_env[@]}"} "$GODOT" $headless --path . -- "$@"
 }
 
-tc_godot() { local timeout_s=$1 log=$2; shift 2; guard_run "$timeout_s" "$log" ${_tc_env[@]+"${_tc_env[@]}"} "$GODOT" "$@"; }
+tc_godot() {
+  local timeout_s=$1 log=$2; shift 2
+  _tc_ports "$@"; set -- ${_tc_args[@]+"${_tc_args[@]}"}
+  guard_run "$timeout_s" "$log" ${_tc_env[@]+"${_tc_env[@]}"} "$GODOT" "$@"
+}
 
 tc_stop() { local p=${1:-$SERVER}; _guard_kill_tree "$p"; wait "$p" 2>/dev/null; return 0; }
 
