@@ -37,3 +37,15 @@ Decisions with the user before coding (Oct 21 2026, also on the issue):
 4. Notes: `tools/traffic-signals`, `tools/signal-test-region`.
 
 Bots: nothing (walkers on the island are not simulated yet).
+
+## Status (PR #1031)
+
+All four steps done. Built differently from the plan, from the user's review on the way:
+- **The stretch** holds on the phase in which the far half's green ended while the first walker walked (they missed it by
+  tenths of a second in Geneva), its seconds taken from the other phases; the cycle grows only where they are all at their
+  minimum, by 3 s at most; past that the arm crosses in one go (`ExteriorPlanner.OneStage`). Growing the cycle until the
+  wait fit a third of it took one Geneva junction from 64 to 177 s.
+- The halves are measured as the walkers are timed (past a path at the kerb), so the planner and the check agree.
+- Also in the PR: riders in a bike box never end before the cars behind them; 120 s, the legal maximum, enforced (split
+  phasing merges approaches that never conflict); #979's early end of a green over the cycle's seam fixed.
+- Follow-ups: #1033 (walkers and riders as movers), #1046 (queues start car by car, permissive turns wait in the junction).
