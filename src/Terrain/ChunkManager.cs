@@ -422,7 +422,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         WaterLayer? WaterLayer = null, SignalBuilder.Lamps? Lamps = null,
         ArrayMesh?[]? BuildingCells = null, Vector3[]? OccluderVertices = null, int[]? OccluderIndices = null,
         ArrayMesh? Sites = null, Construction.CraneRig[]? Cranes = null,
-        List<Construction.PitCut>? Pits = null);
+        List<Construction.PitCut>? Pits = null, RoadSignBuilder.Label[]? SignNames = null);
 
     private Material? _roadMaterial;
     private Material? _buildingMaterial;
@@ -1535,6 +1535,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     var node = EnsureNode(result.Id, state);
                     node.SetRoads(result.Roads);
                     node.SetSignalLamps(result.Lamps);
+                    node.SetSignNames(result.SignNames);
                 }
                 // tiles with no road data still count as done, so we stop re-requesting
                 state.HasRoads = true;
@@ -2211,6 +2212,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 
                 ArrayMesh? roads = null;
                 SignalBuilder.Lamps? lamps = null;   // traffic-light lenses (#350)
+                RoadSignBuilder.Label[]? signNames = null;   // canton signs' names (#1038)
                 RoadTile? roadTile = null;
                 if (wantRoads)
                 {
@@ -2227,6 +2229,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         ct.ThrowIfCancellationRequested();
                         roads = ChunkNode.ToArrayMesh(roadData, roadMaterial, RoadPaintBuilder.Build(roadTile));
                         lamps = SignalBuilder.BuildLamps(roadTile);
+                        signNames = RoadSignBuilder.Labels(roadTile);
                     }
                     // the piers and jetties standing in the tile (#377): one more surface
                     if (pierMaterial != null && PierMeshBuilder.Build(landings, id, grid, mesh: true, collision: false) is { Mesh: { } pierData })
@@ -2509,7 +2512,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     tailMesh, blendedCollision, roads, wantRoads,
                     holes, cover, buildings, buildingFaces, wantBuildings, trees, water,
                     bridgeCollision, stageMs, doors, bores, waterLayer, lamps,
-                    buildingCells, occluders?.Vertices, occluders?.Indices, siteMesh, craneRigs, plannedPits));
+                    buildingCells, occluders?.Vertices, occluders?.Indices, siteMesh, craneRigs, plannedPits, signNames));
             }
             catch (OperationCanceledException)
             {
