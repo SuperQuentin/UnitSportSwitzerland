@@ -157,6 +157,8 @@ run_one() { # tier check log: runs one check, its exit code
 # Up to TEST_JOBS checks at once (default: the heavy lock's slot count, GUARD_SLOTS), each in its own slot,
 # so its ports are moved by GUARD_SLOT * 1000 (tools/lib/twoclient.sh). Two scripts that write the same
 # logs (one execs the other) never run together, and the load test and the trailer run alone.
+# A job starts only with TEST_HEAVY_RAM_GB (6) free and TEST_JOB_STAGGER (40) s after the last one (its Godots grow
+# for that long), and one the RAM watchdog stopped runs again alone at the end: beside others it hit the floor.
 JOBS=${TEST_JOBS:-$GUARD_SLOTS}
 
 group_of() { # the twoclient name a script logs under (rampalong execs rampnet: both "rampnet"), or the check
@@ -171,7 +173,7 @@ group_of() { # the twoclient name a script logs under (rampalong execs rampnet: 
 alone() { case $1 in tools/loadtest.sh* | tools/trailer.sh*) return 0 ;; esac; return 1; }
 
 heavy_job() { # index tier check: one check in a slot of its own, its row in $OUT/.row.<index>
-  local i=$1 tier=$2 check=$3 log t0 res v=
+  local i=$1 tier=$2 check=$3 log t0 res v= ram=0
   trap guard_unlock EXIT
   log=$(log_of "$check")
   if ! guard_lock; then res="$(printf '%-30s %-8s %6s  %s' "$check" FAIL 0 "(lock)")"
@@ -181,40 +183,54 @@ heavy_job() { # index tier check: one check in a slot of its own, its row in $OU
     t0=$SECONDS
     run_one "$tier" "$check" "$log"
     v=$(verdict $? "$log")
+    # stopped by the RAM watchdog, not by what it checks: run again alone at the end
+    grep -aq "RAM floor\|MB free (floor" "$log" && ram=1
     res="$(printf '%-30s %-8s %6s  %s' "$check" "$v" $((SECONDS - t0)) "$log")"
-    echo "[test] $check: $v ($((SECONDS - t0))s, slot $GUARD_SLOT)"
+    echo "[test] $check: $v ($((SECONDS - t0))s, slot $GUARD_SLOT$([ $ram = 1 ] && echo ", stopped at the RAM floor"))"
   fi
-  printf '%s\n%s\n' "${v:-FAIL}" "$res" > "$OUT/.row.$i"   # verdict, then the table row
+  printf '%s\n%s\n%s\n' "${v:-FAIL}" "$res" "$ram" > "$OUT/.row.$i"   # verdict, table row, RAM-floor stop
 }
 
+# room for one more job: free RAM for it, and the last one started TEST_JOB_STAGGER s ago (40), so its Godots
+# have grown to their size before the next is weighed against what is left
+room() { [ $(( SECONDS - last_start )) -ge "${TEST_JOB_STAGGER:-40}" ] && [ "$(guard_free_mb)" -ge $(( ${TEST_HEAVY_RAM_GB:-6} * 1024 )) ]; }
+
 run_heavy() {
-  local i n=${#HEAVY[@]} pids=() groups=() k busy entry tier check g t0=$SECONDS
+  local i n=${#HEAVY[@]} pids=() groups=() k busy running entry tier check g t0=$SECONDS last_start=-999 again=()
   echo "[test] ${n} net/full checks, up to $JOBS at once"
   rm -f "$OUT"/.row.*
   for (( i = 0; i < n; i++ )); do
     entry=${HEAVY[$i]}; tier=${entry%% *}; check=${entry#* }; g=$(group_of "$check")
-    # wait for a free job, for the job of the same group, and for every job before one that runs alone
+    # wait for a free job and room for it, for the job of the same group, and for every job before one that runs alone
     while :; do
-      busy=0
+      busy=0; running=0
       for k in ${!pids[@]}; do
         if kill -0 "${pids[$k]}" 2>/dev/null; then
+          running=$(( running + 1 ))
           if alone "$check" || [ "${groups[$k]}" = "$g" ] || alone "${groups[$k]}"; then busy=$JOBS; fi
           busy=$(( busy + 1 ))
         else unset 'pids[k]' 'groups[k]'; fi
       done
-      [ "$busy" -lt "$JOBS" ] && break
-      guard_nap 0.5
+      [ "$busy" -lt "$JOBS" ] && { [ "$running" = 0 ] || room; } && break
+      guard_nap 1
     done
+    last_start=$SECONDS
     heavy_job "$i" "$tier" "$check" &
     pids+=($!); groups+=("$(alone "$check" && echo "$check" || echo "$g")")
   done
   wait
+  for (( i = 0; i < n; i++ )); do [ "$(sed -n 3p "$OUT/.row.$i" 2>/dev/null)" = 1 ] && again+=("$i"); done
+  for i in ${again[@]+"${again[@]}"}; do
+    entry=${HEAVY[$i]}
+    echo "[test] again, alone: ${entry#* } (stopped at the RAM floor beside the others)"
+    heavy_job "$i" "${entry%% *}" "${entry#* }"
+  done
   for (( i = 0; i < n; i++ )); do
     if [ -f "$OUT/.row.$i" ]; then ROWS+=("$(sed -n 2p "$OUT/.row.$i")"); [ "$(sed -n 1p "$OUT/.row.$i")" = PASS ] || FAILED=1
     else ROWS+=("$(printf '%-30s %-8s %6s  %s' "${HEAVY[$i]#* }" FAIL 0 "(no result)")"); FAILED=1; fi
   done
   rm -f "$OUT"/.row.*
-  echo "[test] the net/full checks took $((SECONDS - t0))s side by side"
+  echo "[test] the net/full checks took $((SECONDS - t0))s side by side (${#again[@]} run again alone)"
 }
 
 if [ ${#CHECKS[@]} -gt 0 ]; then

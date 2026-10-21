@@ -161,7 +161,10 @@ row uses `--car 4` (BNR32, grip). `narrow` puts the AE86 out against the trunks 
     `GUARD_SLOT * 1000`. Slot 0 keeps the scripts' own ports, and no `PORT=` line changes. A script that
     starts Godot itself adds the offset (`buildnetcheck`, netsmoke).
   - **`tools/test.sh net|full`** runs the heavy checks up to `TEST_JOBS` at once (default `GUARD_SLOTS`),
-    each job in its own slot, after a free-RAM check (`TEST_HEAVY_RAM_GB`, 6). The table keeps the map's
+    each job in its own slot. A job starts with `TEST_HEAVY_RAM_GB` (6) free and `TEST_JOB_STAGGER` (40) s
+    after the previous one, so that one has grown to its size first. A job the RAM watchdog stopped runs
+    again alone at the end. A first try at 4 GB and no stagger had 10 checks killed at the floor beside
+    another session's run, a qemu VM (8 GB) and an idle dotnet build server (3 GB). The table keeps the map's
     order. Two scripts logging under one twoclient name never run together (`rampalongnetcheck` execs
     `rampnetcheck`), and `loadtest.sh` / `trailer.sh` run alone.
   - `TEST_JOBS=1` is the old serial run, holding one slot throughout. `TEST_ONLY=net tools/test.sh full`
