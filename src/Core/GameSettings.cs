@@ -232,7 +232,8 @@ public sealed class GameSettings
 
     /// <summary>
     /// The traffic modes beyond cars and trains (#1060, tracking #1058): walkers (#1033) and riders (#1056) around the player in
-    /// daytime (fewer at night), trams on the street tracks (#1057). 0 until each mode lands (its row shows in the settings then:
+    /// daytime (fewer at night), trams on the street tracks (#1057). 0 by default, also once a mode has landed (the user's choice
+    /// for walkers, #1033); a mode's row shows in the settings once it lands (
     /// <see cref="World.Traffic.WalkersReady"/>, <see cref="World.Traffic.RidersReady"/>, <see cref="World.Traffic.TramsReady"/>);
     /// <c>--walkers N</c>, <c>--bikes N</c>, <c>--trams N</c> for one run.
     /// </summary>

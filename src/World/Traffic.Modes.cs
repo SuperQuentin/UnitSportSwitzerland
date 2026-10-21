@@ -397,7 +397,12 @@ public partial class Traffic
                 _crossers.Add(new Crosser(t.Units[i].GlobalPosition, t.Vel, MoverKind.Tram, ConflictMover.Tram, inLane, t.UnitHalf + 1f));
         }
         if (_crossers.Count > 1) _crossers.Sort(CrosserByX);
+        _crossersInLane = 0;
+        foreach (var c in _crossers) if (c.InLane) _crossersInLane++;
     }
+
+    /// <summary>How many of <see cref="_crossers"/> are in a car lane (walkers never are): with none, the cars follow none.</summary>
+    private int _crossersInLane;
 
     /// <summary>The first crosser at or east of <paramref name="x"/>.</summary>
     private int CrosserFrom(float x)
@@ -434,7 +439,7 @@ public partial class Traffic
     /// </summary>
     private float FollowCrossers(Vehicle car, Vector3 dir, Vector3 rightOf)
     {
-        if (_crossers.Count == 0) return float.MaxValue;
+        if (_crossersInLane == 0) return float.MaxValue;
         float target = float.MaxValue;
         for (int o = CrosserFrom(car.Head.X - GapWindow); o < _crossers.Count && _crossers[o].Pos.X <= car.Head.X + GapWindow; o++)
         {
