@@ -121,4 +121,48 @@ public class TramTests
             Assert.All(plan.Groups.Where(g => g.Kind == SignalGroupKind.Tram), g => Assert.Contains(g.Intervals, iv => iv.Aspect == SignalAspect.Green));
         }
     }
+
+    /// <summary>How long before <paramref name="s"/> time <paramref name="t"/> is, round the cycle.</summary>
+    private static float Ahead(SignalPlan plan, float s, float t) => ((s - t) % plan.Cycle + plan.Cycle) % plan.Cycle;
+
+    /// <summary>When each green of group <paramref name="g"/> starts, round the cycle (a green over the seam once).</summary>
+    private static List<float> Starts(SignalPlan plan, int g)
+    {
+        var v = plan.Groups[g].Intervals;
+        return v.Where((iv, k) => iv.Aspect == SignalAspect.Green && !(k == 0 && iv.From < 1e-3f && v[^1].Aspect == SignalAspect.Green))
+            .Select(iv => iv.From).ToList();
+    }
+
+    [Fact]
+    public void ATram_LeadsItsApproachsCars_ByASecond()
+    {
+        // the user: "a short leading signal (1 sec)"
+        var plan = Crossroads(SignalMoves.Through, SignalMoves.None);
+        Assert.Empty(plan.Validate());
+        int tram = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Tram);
+        int car = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Car && g.Arm == 0);
+        var trams = Starts(plan, tram);
+        foreach (float s in Starts(plan, car).Where(s => trams.Any(t => Ahead(plan, s, t) < 5)))
+            Assert.Contains(trams, t => Math.Abs(Ahead(plan, s, t) - SignalPlan.TramLead) < 0.05f);
+    }
+
+    [Fact]
+    public void ACarTurningAcrossTheTram_StartsTheRidersLeadAfterIt()
+    {
+        // the user: "if there is conflicting movements, add a longer leading signal, like for bikes": the oncoming left turns
+        var plan = SignalPlan.Build(
+        [
+            new SignalArm(0, true, true, Rank: 2),
+            new SignalArm(Math.PI / 2, true, true),
+            new SignalArm(Math.PI, true, true, Rank: 2, TramMoves: SignalMoves.Through),
+            new SignalArm(-Math.PI / 2, true, true),
+        ], 7);
+        Assert.Empty(plan.Validate());
+        int tram = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Tram);
+        int oncoming = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Car && g.Arm == 0);
+        var trams = Starts(plan, tram);
+        var cars = Starts(plan, oncoming);
+        Assert.NotEmpty(cars);
+        Assert.All(cars, s => Assert.Contains(trams, t => Ahead(plan, s, t) >= SignalPlan.BikeLead - 0.05f && Ahead(plan, s, t) < 6f));
+    }
 }

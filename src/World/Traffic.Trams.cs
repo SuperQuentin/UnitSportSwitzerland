@@ -222,6 +222,15 @@ public partial class Traffic
             SignalAspect.Amber => !tram.ClearingAmber && tram.Speed * tram.Speed / (2f * TramBrake) < room + 1f,
             _ => false,
         };
+        // let go from its red (the probe): ahead of its approach's cars (its lead) or with them
+        if (tram.AtRed && aspect == SignalAspect.Green)
+        {
+            int arm = site.Plan.Groups[group].Arm;
+            int car = site.Plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Car && g.Arm == arm);
+            if (car >= 0 && site.Plan.State(car, SignalLamps.Clock()) is SignalAspect.Red or SignalAspect.RedAmber) TramsLedCars++;
+            else TramsWithCars++;
+            tram.AtRed = false;
+        }
         if (aspect == SignalAspect.Amber) tram.ClearingAmber |= !stop;
         else tram.ClearingAmber = false;
         // its front over the line: once, counted (on red only while it does not clear the dot: a check, must stay 0)
@@ -338,6 +347,9 @@ public partial class Traffic
     public int TramRedStops { get; private set; }
     public int TramLinesCrossed { get; private set; }
     public int TramRedRuns { get; private set; }
+    /// <summary>Trams let go from their red while their approach's cars were still held (their lead, #1057), and with them.</summary>
+    public int TramsLedCars { get; private set; }
+    public int TramsWithCars { get; private set; }
 
     /// <summary>A tram standing at its red, first at its line (#1057, the probe's picture): its head and heading, or null.</summary>
     public (Vector3 Pos, Vector3 Dir)? TramAtRed()

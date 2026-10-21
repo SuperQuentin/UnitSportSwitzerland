@@ -47,7 +47,7 @@ public partial class TrafficProbe
         if (_kind != MoverKind.Tram && Core.GameSettings.Current.Trams == 0) return;
         GD.Print($"[trafficcheck] trams: {_traffic.TramsSpawned} spawned, {_traffic.GraphOf(MoverKind.Tram)?.Edges.Count ?? 0} track edges, "
             + $"{_traffic.GraphOf(MoverKind.Tram)?.TramPaths ?? 0} junction paths, {_traffic.GraphOf(MoverKind.Tram)?.TramStopCount ?? 0} stops ({_traffic.TramStopsServed} served); at their lights {_traffic.TramRedStops} stops at red, "
-            + $"{_traffic.TramLinesCrossed} lines crossed, {_traffic.TramRedRuns} crossed on red");
+            + $"{_traffic.TramLinesCrossed} lines crossed, {_traffic.TramRedRuns} crossed on red; let go from red ahead of their approach's cars {_traffic.TramsLedCars}, with them {_traffic.TramsWithCars}");
         if (_traffic.TramRedRuns > 0) failure ??= $"{_traffic.TramRedRuns} trams crossed their line on red";
     }
 }

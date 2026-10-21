@@ -415,4 +415,34 @@ public static partial class TileRewriter
             stats.TramStops++;
         }
     }
+
+    /// <summary>
+    /// How far each tram group of <paramref name="plan"/> leads the car groups starting with it (#1057, the user's leading signal):
+    /// counted by length (1 s, the riders' 3 s for a car turning across it, none), the junctions with none listed.
+    /// </summary>
+    private static void CountTramLeads(JunctionPlan jp, SignalPlan plan, LayoutWriteStats stats)
+    {
+        float Ahead(float s, float t) => ((s - t) % plan.Cycle + plan.Cycle) % plan.Cycle;
+        List<float> Starts(int g) => plan.Groups[g].Intervals.Where((iv, k) => iv.Aspect == SignalAspect.Green
+            && !(k == 0 && iv.From < 1e-3f && plan.Groups[g].Intervals[^1].Aspect == SignalAspect.Green)).Select(iv => iv.From).ToList();
+        for (int t = 0; t < plan.Groups.Count; t++)
+        {
+            if (plan.Groups[t].Kind != SignalGroupKind.Tram) continue;
+            var trams = Starts(t);
+            float most = 0;
+            // at each car green start while the tram is already green: since its own green started (its latest start before)
+            for (int h = 0; h < plan.Groups.Count; h++)
+                if (plan.Groups[h].Kind == SignalGroupKind.Car && trams.Count > 0)
+                    foreach (float s in Starts(h))
+                        if (plan.State(t, s - 0.05 - plan.Offset) == SignalAspect.Green)
+                            most = Math.Max(most, trams.Select(x => Ahead(s, x)).Min());
+            if (most >= SignalPlan.BikeLead - 0.05f) stats.TramLeadsLong++;
+            else if (most >= SignalPlan.TramLead - 0.05f) stats.TramLeads++;
+            else
+            {
+                stats.TramNoLead++;
+                if (stats.TramNoLeadAt.Count < 8) stats.TramNoLeadAt.Add(new Vec2(Math.Round(jp.Centre.X), Math.Round(jp.Centre.Y)));
+            }
+        }
+    }
 }
