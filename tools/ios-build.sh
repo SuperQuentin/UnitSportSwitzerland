@@ -27,7 +27,7 @@ fi
 rm -rf "$OUT"; mkdir -p "$OUT"
 "$GODOT" --headless --path . --import > "$OUT/import.log" 2>&1 || true
 # The path names the project: <NAME>.xcodeproj and <NAME>/ land beside it
-"$GODOT" --headless --path . --export-release iOS "$OUT/$NAME.ipa" 2>&1 | tee "$OUT/export.log" || true
+"$GODOT" --headless --verbose --path . --export-release iOS "$OUT/$NAME.ipa" 2>&1 | tee "$OUT/export.log" || true
 [ -d "$OUT/$NAME.xcodeproj" ] || { echo "Godot wrote no Xcode project; see $OUT/export.log"; grep -E 'ERROR|error' "$OUT/export.log" | head -20; exit 1; }
 echo "Xcode project: $OUT/$NAME.xcodeproj"
 [ $EXPORT_ONLY = 1 ] && exit 0

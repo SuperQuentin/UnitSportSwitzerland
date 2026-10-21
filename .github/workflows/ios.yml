@@ -52,9 +52,12 @@ jobs:
         run: bash tools/ci/install-godot.sh
 
       - name: Build
+        timeout-minutes: 45 # leaves time to upload the logs
         run: |
           cp tools/ci/export_presets.cfg export_presets.cfg
           xcodebuild -version
+          # the export prints nothing while dotnet publish / NativeAOT / Xcode tools run: show what is running
+          ( while sleep 120; do echo "--- running after $SECONDS s:"; ps -A -o pid,ppid,etime,%cpu,command | grep -E 'dotnet|ilc|Godot|xcrun|xcodebuild|clang|ld64|codesign|security' | grep -v grep | cut -c1-220; done ) &
           bash tools/ios-build.sh
 
       - name: Keep the logs
