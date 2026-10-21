@@ -36,8 +36,9 @@ The plan and the prototype's results: `docs/plans/visual-styles.md` (issues #181
   is the style's `Environment`, driven by `DayNight` as before.
 - **`MeshDetail`** (Low, High) goes into every tile build (`ChunkManager.Detail`, read once when a
   build starts) and on to `TerrainMeshBuilder.BuildSurfaceCore`, `BuildingMeshBuilder.Build`,
-  `WaterMeshBuilder.Build` and `ChunkNode.BuildTreeMeshes`. Only Low exists; a new builder takes
-  the parameter from day one. `RoadMeshBuilder` gets it after the road network stack (#114).
+  `WaterMeshBuilder.Build` and `ChunkNode.BuildTreeMeshes`. High (Cartoon) has trees, rounded
+  signal heads and building roof overhangs (`terrain/roof-overhangs`) of its own; a new builder
+  takes the parameter from day one. `RoadMeshBuilder` gets it after the road network stack (#114).
 - **Live restyle, "rebuild in place".** `StyleKit.Style` is the choice, `StyleKit.Applied` what
   the world shows. `StyleKit.Restyle()` re-points every live material's `Shader` in place (Godot
   keeps a material's parameters across a shader change, so fog, the sightline cut, occupancy and
@@ -54,10 +55,16 @@ The plan and the prototype's results: `docs/plans/visual-styles.md` (issues #181
   and items (`HumanMeshBuilder.Material`) for the style (Cartoon: toon), kept weakly and
   restyled live like the shader materials. Any thread. **Every lit solid built as a plain
   `StandardMaterial3D` goes through it too** (title diorama, worn build pieces and their debris,
-  soot, crate planks, the burning bale, concert kit, IKEA pylon, farm heaps: #1068), or Cartoon
-  draws it with Godot's Lambert light. Give it a fresh material (or one cached per look), never a
-  `Duplicate()` of a shaded one: what it is given is the plain look PS1 goes back to. Unshaded
-  glows, signs, beams, screens, transparent smoke and debug draw stay outside the kit.
+  soot, crate planks, the burning bale and its smoke, concert kit, IKEA pylon, farm heaps, the VR
+  watch's case, the ride preview floor, feather puffs: #1068), or Cartoon draws it with Godot's
+  Lambert light. Give it a fresh material (or one cached per look), never a `Duplicate()` of a
+  shaded one: what it is given is the plain look PS1 goes back to.
+- **`StyleKit.Solid`** is `Figure` for a solid object's plain standard material that is not a
+  figure (the smoke grenade's cloud, the fishing float, the BR Postauto stop): **unshaded in PS1**,
+  as such things were, **lit** (toon in Cartoon) in the lit styles, restyled live (#1069). A new
+  solid object takes it instead of `ShadingMode = Unshaded`; unshaded on its own material stays
+  for what is meant to be: glows and lamps, signs that light themselves, beams, screens and
+  mirrors, particle FX, placement ghosts, debug and UI, and line primitives (no normals).
 - **Saved settings from before #849** stored PS1 whether the player chose it or not: a
   `settings.json` without the `cartoonDefault` flag that says PS1 is read as Cartoon once
   (`GameSettings.Load`); a PS1 picked after that is saved with the flag and kept.

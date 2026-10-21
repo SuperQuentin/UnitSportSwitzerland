@@ -238,7 +238,8 @@ public sealed class GameSettings
     /// <c>--walkers N</c>, <c>--bikes N</c>, <c>--trams N</c> for one run.
     /// </summary>
     public int TrafficWalkers { get; set; }
-    public int TrafficRiders { get; set; }
+    /// <summary>Riders (#1056): 30 by day, like a town's cyclists around the cars' 35.</summary>
+    public int TrafficRiders { get; set; } = 30;
     public int Trams { get; set; }
 
     /// <summary>
@@ -474,6 +475,7 @@ public sealed class GameSettings
         Detail = DetailPreset.Low;
         RenderScale = 0.6f;
         TrafficCars = 10;
+        TrafficRiders = 8;
         CockpitMirrors = false;
         CommitBudgetMs = 3;
         MaxConcurrentBuilds = 0; // auto, which ChunkManager caps on a phone

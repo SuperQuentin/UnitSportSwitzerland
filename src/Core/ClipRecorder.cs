@@ -178,7 +178,10 @@ public partial class ClipRecorder : Node
     private bool StartEncoder()
     {
         _hasX264 ??= Encoders().Contains("libx264");
-        string gifChain = $"fps={GifFps},scale={GifWidth}:-2:flags=lanczos,split[g1][g2];[g1]palettegen=stats_mode=diff:max_colors=128[p];[g2][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle";
+        // 128 colours a clip; the bayer dither finer in the lit styles (#1070): at PS1's scale 5,
+        // Cartoon's sky gradients and the haze round the sun banded into rings (scale 3: ~13% more bytes)
+        int bayer = Styles.StyleKit.Applied == Styles.VisualStyle.Ps1 ? 5 : 3;
+        string gifChain = $"fps={GifFps},scale={GifWidth}:-2:flags=lanczos,split[g1][g2];[g1]palettegen=stats_mode=diff:max_colors=128[p];[g2][p]paletteuse=dither=bayer:bayer_scale={bayer}:diff_mode=rectangle";
         var start = new ProcessStartInfo(BundledTools.Resolve("ffmpeg"))
         {
             RedirectStandardInput = true,
