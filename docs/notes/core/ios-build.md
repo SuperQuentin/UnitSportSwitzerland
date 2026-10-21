@@ -9,6 +9,15 @@
 - `.github/workflows/ios.yml` runs it on `macos-15` with Xcode 26 selected: by hand (`gh workflow run ios.yml`, once on `main`) or on a PR touching the iOS build files. Free (public repo). Not part of a release. The logs are the `ios-logs` artifact. Any push to such a PR cancels the running build and restarts it.
 - **Device only by default.** Godot's export always runs `dotnet publish` three times (`ios-arm64`, `iossimulator-arm64`, `iossimulator-x64`, hard-coded in GodotTools' `ExportPlugin`), each a NativeAOT pass of ~45 min on the 3-core runner. `tools/ios-build.sh` sets `UNITSPORT_IOS_DEVICE_ONLY=1`, and `UnitSportSwitzerland.csproj` then compiles no game code for an `iossimulator-*` RID: the simulator slice is an empty stub. `--simulator` builds it for real (~2.5 h on CI; the job allows 5 h). The export prints nothing meanwhile: the workflow's watchdog lists the running `ilc`/`clang` every 5 min.
 
+## Installing on an iPhone from Windows: xtool (no Mac)
+
+- [xtool](https://github.com/xtool-org/xtool) (Linux/WSL) cannot build this game: it builds SwiftPM apps, Godot refuses the C# iOS export off macOS, and .NET blocks NativeAOT for iOS from a non-Mac host. It **can sign and install** an app built elsewhere: `xtool install <app or ipa>`, which needs only `xtool auth`, not its SDK or `Xcode.xip`.
+- So: the CI job builds `UnitSportSwitzerland-unsigned.ipa` (artifact `ios-unsigned-ipa`, 14 days; `gh run download <id> -n ios-unsigned-ipa`), and in WSL:
+  - `xtool` is the release AppImage (`~/xtool/xtool.AppImage` on the main PC, Ubuntu-22.04);
+  - the iPhone reaches WSL through [usbipd](https://learn.microsoft.com/en-us/windows/wsl/connect-usb) and `usbmuxd` (`sudo apt-get install usbmuxd`), or through iTunes on Windows if that gives `AFCClient.Error.muxError` (xtool's Linux install doc);
+  - `xtool auth`: an App Store Connect API key (paid program) or an Apple ID password (any account, private APIs: a throwaway Apple ID is safer). A free account's app expires after 7 days.
+  - Developer Mode on the iPhone (Settings → Privacy & Security), then `xtool install UnitSportSwitzerland-unsigned.ipa`.
+
 ## Walls hit, in order
 
 - **Only on macOS.** Elsewhere Godot refuses: `Exporting to an Apple Embedded platform when using C#/.NET is experimental and requires macOS.`

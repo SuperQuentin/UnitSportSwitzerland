@@ -67,6 +67,16 @@ jobs:
           ( while sleep 300; do echo "--- running after $SECONDS s:"; ps -A -o pid,ppid,etime,%cpu,command | grep -E 'dotnet publish|/ilc|Godot --|xcrun|xcodebuild|clang|ld-classic|ld64|codesign' | grep -v grep | cut -c1-220; done ) &
           bash tools/ios-build.sh
 
+      # Install it without a Mac: xtool (WSL) signs it with an Apple ID, `xtool install` (docs/notes/core/ios-build.md)
+      - name: Keep the unsigned ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-unsigned-ipa
+          path: test_output/ios/UnitSportSwitzerland-unsigned.ipa
+          if-no-files-found: ignore
+          compression-level: 0 # already a zip
+          retention-days: 14
+
       - name: Keep the logs
         if: always()
         uses: actions/upload-artifact@v4
