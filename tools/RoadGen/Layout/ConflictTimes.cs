@@ -180,9 +180,7 @@ public static class ConflictTimes
             var ex = jp.Exterior.FirstOrDefault(x => x.Arm == a);
             if (a.Axis is null || ex?.Bars.FirstOrDefault(b => b.Kind == BarKind.Crosswalk) is not { } bar) continue;
             var mouth = core.Mouths.First(m => m.Arm == a.Arm);
-            var section = ExteriorPlanner.SectionAt(a, 0);
-            double from = section.PathBand(right: false) is var (cl, wl) ? Math.Min(bar.Left, cl - wl * 0.5) : bar.Left;
-            double to = section.PathBand(right: true) is var (cr, wr) ? Math.Max(bar.Right, cr + wr * 0.5) : bar.Right;
+            var (from, to) = WalkSpan(a, bar);
             if (ex.StageIsland is var (il, ir))
                 (from, to) = plan.Groups[g].Half switch { CrossingHalf.Arriving => (ir, to), CrossingHalf.Departing => (from, il), _ => (from, to) };
             var left = a.Axis.At(mouth.Station + bar.Middle, from);
@@ -193,6 +191,19 @@ public static class ConflictTimes
         return lines;
 
         static double Min(double a, double b, double c) => Math.Max(0.5, Math.Min(a, Math.Min(b, c)));
+    }
+
+    /// <summary>
+    /// Where the walkers cross arm <paramref name="a"/> along its zebra <paramref name="bar"/> (offsets across the arm): from past
+    /// a separated path beside the left kerb to past the right's, as the zebra is painted. A two-stage crossing's halves are
+    /// measured from it too (#1030: its island wait as its walkers are timed).
+    /// </summary>
+    public static (double From, double To) WalkSpan(ArmPlan a, ExteriorBar bar)
+    {
+        var section = ExteriorPlanner.SectionAt(a, 0);
+        double from = section.PathBand(right: false) is var (cl, wl) ? Math.Min(bar.Left, cl - wl * 0.5) : bar.Left;
+        double to = section.PathBand(right: true) is var (cr, wr) ? Math.Max(bar.Right, cr + wr * 0.5) : bar.Right;
+        return (from, to);
     }
 
     /// <summary>The least radius along a line (m), from each three points in a row; a straight line's is infinite.</summary>

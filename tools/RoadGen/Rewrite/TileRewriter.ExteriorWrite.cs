@@ -54,9 +54,11 @@ public static partial class TileRewriter
                 && kerbLane.Moves != SignalMoves.Right;
             // the bike lane between the through lane and the right pocket (layout b): no conflict with that pocket's arrow (#979)
             bool between = a.HasRight && !kerbside && mouth.Strips.Any(x => x.Kind == StripKind.BikeLane && x.Way == StripWay.In && x.Moves != SignalMoves.Right && x.Moves != SignalMoves.Left);
-            // a two-stage crossing's halves (#1030): the zebra's arriving side to the island, the island to its departing side
+            // a two-stage crossing's halves (#1030): from where its walkers set off on the arriving side to the island, from the
+            // island to the departing side, as they are timed (ConflictTimes.WalkSpan)
             var zebra = ex.Bars.FirstOrDefault(b => b.Kind == BarKind.Crosswalk);
-            var (halfIn, halfOut) = ex.StageIsland is var (il, ir) && zebra is not null ? ((float)(zebra.Right - ir), (float)(il - zebra.Left)) : (0f, 0f);
+            var (halfIn, halfOut) = ex.StageIsland is var (il, ir) && zebra is not null && ConflictTimes.WalkSpan(a, zebra) is var (wf, wt)
+                ? ((float)(wt - ir), (float)(il - wf)) : (0f, 0f);
             arms.Add(new SignalArm(a.Heading, approach, leaves, ins.Any(l => l.Moves == SignalMoves.Left), ins.Any(l => l.Moves == SignalMoves.Right),
                 Pedestrians: ex.Crosswalk is not null, BikeSignal: approach && (path || kerbside), SpeedKmh: urban ? 50 : 60,
                 CrossingM: (float)(mouth.CarriagewayWidth), Rank: (byte)Math.Clamp(info is { } i ? PriorityPlanner.Rank(i) / 4 : 1, 1, 255),

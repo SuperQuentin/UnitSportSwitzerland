@@ -86,8 +86,9 @@ public static class SignalCheck
                     stageJunctions++;
                     // (a plan read from a tile has no half lengths: its walkers' lines give them, else half the road)
                     float Walk(int g) => s.ConflictLines.Where(l => l.Group == g && l.Mover == ConflictMover.Walker).Select(Length).DefaultIfEmpty(p.Arms[p.Groups[g].Arm].CrossingM * 0.5f).Max() / SignalPlan.WalkSpeed;
+                    bool lines = s.ConflictLines.Any(l => l.Mover == ConflictMover.Walker);
                     foreach (var w in p.IslandWaits(Walk).Where(w => w.Wait > p.Cycle * SignalPlan.IslandWaitShare + 0.1f))
-                        longWaits.Add(string.Create(c, $"    {where} arm {p.Groups[w.Group].Arm} {p.Groups[w.Group].Half}: {w.Wait:F1} s on the island, cycle {p.Cycle:F1} s"));
+                        longWaits.Add(string.Create(c, $"    {where} arm {p.Groups[w.Group].Arm} {p.Groups[w.Group].Half}: {w.Wait:F1} s on the island, cycle {p.Cycle:F1} s{(lines ? "" : " (not timed from conflict times: halves guessed as half the road)")}"));
                 }
                 if (list) log(string.Create(c, $"  {where}: {shape}, {p.Arms.Count(a => a.RightPocket)} right pockets, cycle {p.Cycle:F0} s, {p.Groups.Count} groups{(stages > 0 ? $", {stages} two-stage crossings" : "")}"));
                 if (at is not null)
