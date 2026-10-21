@@ -62,7 +62,8 @@ public partial class TouchControls : CanvasLayer
         public Rect2 Rect;
         public int Finger = -1;
         public ulong PressFrame;
-        public double GoneAt = -1;
+        /// <summary>When a pill whose prompt has gone disappears; −1 while its prompt lasts.</summary>
+        public double GoneUntil = -1;
     }
 
     private readonly List<Btn> _keys = new();
@@ -81,10 +82,10 @@ public partial class TouchControls : CanvasLayer
     private int _stickFinger = -1, _lookFinger = -1, _wheelFinger = -1, _hotFinger = -1;
     private Vector2 _stickOrigin, _stickAt;
     private bool _runHeld, _runLockArmed, _runLocked;
-    private double _lookDownAt;
+    private double _tapUntil;
     private float _lookTravel;
     private int _hotSlot = -1;
-    private double _hotDownAt;
+    private double _hotDropAt;
     private bool _hotDropped;
     private string? _wheelAction;
     private bool _padInUse;
@@ -96,7 +97,8 @@ public partial class TouchControls : CanvasLayer
     /// <summary>Whether this device should get the overlay at all.</summary>
     public static bool Wanted => Platform.IsMobile && (DisplayServer.GetName() != "headless" || TouchCheck.Requested);
 
-    private static double Now => Time.GetTicksMsec() / 1000.0;
+    /// <summary>Touch holds are real time (docs/notes/core/three-clocks.md): read as deadlines.</summary>
+    private static double Now => RealClock.Now;
 
     public override void _Ready()
     {
@@ -201,12 +203,12 @@ public partial class TouchControls : CanvasLayer
     public Vector2? PillOf(string action)
     {
         foreach (var p in _pills)
-            if (p.Action == action && p.GoneAt < 0) return p.Rect.GetCenter();
+            if (p.Action == action && p.GoneUntil < 0) return p.Rect.GetCenter();
         return null;
     }
 
     /// <summary>The pills' texts now, top to bottom (for <see cref="TouchCheck"/>).</summary>
-    public IEnumerable<string> PillTexts => _pills.Where(p => p.GoneAt < 0).Select(p => p.Text);
+    public IEnumerable<string> PillTexts => _pills.Where(p => p.GoneUntil < 0).Select(p => p.Text);
 
     /// <summary>Where the stick waits (for <see cref="TouchCheck"/>).</summary>
     public Vector2 StickHome => TouchLayout.StickHome(_safe, _pxPerMm, GameSettings.Current.TouchScale, _left);
@@ -257,7 +259,7 @@ public partial class TouchControls : CanvasLayer
 
         bool redraw = false;
         // a hotbar slot held: its item is dropped
-        if (_hotFinger >= 0 && !_hotDropped && now - _hotDownAt >= LongPress)
+        if (_hotFinger >= 0 && !_hotDropped && now >= _hotDropAt)
         {
             _hotDropped = true;
             Tap(TouchSend.Act(PlayerInput.Slots[_hotSlot]), 0.03);
@@ -402,17 +404,17 @@ public partial class TouchControls : CanvasLayer
             int i = _wanted.FindIndex(w => w.Action == p.Action);
             if (i >= 0)
             {
-                if (p.Text != _wanted[i].Text || p.GoneAt >= 0) changed = true;
+                if (p.Text != _wanted[i].Text || p.GoneUntil >= 0) changed = true;
                 p.Text = _wanted[i].Text;
-                p.GoneAt = -1;
+                p.GoneUntil = -1;
             }
-            else if (p.GoneAt < 0)
+            else if (p.GoneUntil < 0)
             {
-                p.GoneAt = now;
+                p.GoneUntil = now + PillLinger;
                 changed = true;
             }
         }
-        if (_pills.RemoveAll(p => p.GoneAt >= 0 && p.Finger < 0 && now - p.GoneAt > PillLinger) > 0) changed = true;
+        if (_pills.RemoveAll(p => p.GoneUntil >= 0 && p.Finger < 0 && now > p.GoneUntil) > 0) changed = true;
         foreach (var w in _wanted)
         {
             if (_pills.Count >= MaxPills) break;
@@ -518,7 +520,7 @@ public partial class TouchControls : CanvasLayer
                 return;
             }
         foreach (var p in _pills)
-            if (p.Finger < 0 && p.GoneAt < 0 && p.Rect.Grow(Margin).HasPoint(at))
+            if (p.Finger < 0 && p.GoneUntil < 0 && p.Rect.Grow(Margin).HasPoint(at))
             {
                 p.Finger = finger;
                 p.PressFrame = Engine.GetProcessFrames();
@@ -533,7 +535,7 @@ public partial class TouchControls : CanvasLayer
             {
                 _hotFinger = finger;
                 _hotSlot = slot;
-                _hotDownAt = now;
+                _hotDropAt = now + LongPress;
                 _hotDropped = false;
                 return;
             }
@@ -556,7 +558,7 @@ public partial class TouchControls : CanvasLayer
         if (_lookFinger < 0)
         {
             _lookFinger = finger;
-            _lookDownAt = now;
+            _tapUntil = now + TapUseSeconds;
             _lookTravel = 0;
         }
     }
@@ -664,7 +666,7 @@ public partial class TouchControls : CanvasLayer
             _lookFinger = -1;
             // a short still tap on the world uses the item in hand (the setting)
             if ((_state.Flags & TouchFlags.TapToUse) != 0 && (_state.Flags & TouchFlags.ItemInHand) != 0
-                && now - _lookDownAt < TapUseSeconds && _lookTravel < 2f * _pxPerMm)
+                && now < _tapUntil && _lookTravel < 2f * _pxPerMm)
                 Tap(TouchSend.Pad(JoyButton.RightShoulder));
         }
     }
@@ -951,7 +953,7 @@ public partial class TouchControls : CanvasLayer
         foreach (var p in _pills)
         {
             bool down = p.Finger >= 0;
-            var a = new Color(1, 1, 1, p.GoneAt >= 0 ? 0.4f : 1f);
+            var a = new Color(1, 1, 1, p.GoneUntil >= 0 ? 0.4f : 1f);
             Box(p.Rect, p.Rect.Size.Y / 2, down ? Fill(true) : CtxFill * a, Ctx * a, 2f);
             Text(p.Text, p.Rect, FontPx(2.6f), down ? Ink(true) : a);
         }
@@ -965,7 +967,7 @@ public partial class TouchControls : CanvasLayer
                 // the long press fills a ring round the slot about to be dropped
                 float slotW = bar.Size.X / Items.Inventory.HotbarSize;
                 var c = new Vector2(bar.Position.X + slotW * (_hotSlot + 0.5f), bar.GetCenter().Y);
-                float f = (float)Math.Clamp((Now - _hotDownAt) / LongPress, 0, 1);
+                float f = (float)Math.Clamp(1 - (_hotDropAt - Now) / LongPress, 0, 1);
                 _canvas.DrawArc(c, bar.Size.Y * 0.62f, -Mathf.Pi / 2, -Mathf.Pi / 2 + Mathf.Tau * f, 40, Amber, 4f, true);
             }
         }
@@ -974,7 +976,7 @@ public partial class TouchControls : CanvasLayer
             _more.Draw(_canvas, _font, _pxPerMm, Pinned, Box);
             if (_more.Holding && _more.PressedRect is { } held)
             {
-                float f = (float)Math.Clamp(_more.HeldFor(Now) / LongPress, 0, 1);
+                float f = _more.HeldFraction(Now);
                 _canvas.DrawRect(new Rect2(held.Position.X + held.Size.Y / 2, held.End.Y - 3, (held.Size.X - held.Size.Y) * f, 3), Ctx);
             }
         }

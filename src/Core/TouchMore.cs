@@ -25,7 +25,8 @@ internal sealed class TouchMore
     private float _scroll, _contentHeight;
     private int _finger = -1;
     private Vector2 _downAt;
-    private double _downTime;
+    private double _pinAt;
+    private const double PinHold = 0.5;
     private bool _dragged, _pressHandled;
     private Entry? _pressed;
 
@@ -199,7 +200,7 @@ internal sealed class TouchMore
         if (_finger >= 0) return;
         _finger = finger;
         _downAt = at;
-        _downTime = now;
+        _pinAt = now + PinHold;
         _dragged = false;
         _pressHandled = false;
         _pressed = EntryAt(at);
@@ -234,13 +235,14 @@ internal sealed class TouchMore
     /// <summary>A press held still for half a second pins the pill under it.</summary>
     public void Process(double now)
     {
-        if (_finger < 0 || _dragged || _pressHandled || _pressed == null || now - _downTime < 0.5) return;
+        if (_finger < 0 || _dragged || _pressHandled || _pressed == null || now < _pinAt) return;
         _pressHandled = true;
         Held?.Invoke(_pressed);
     }
 
     public bool Holding => _finger >= 0 && !_dragged && !_pressHandled && _pressed != null;
-    public double HeldFor(double now) => now - _downTime;
+    /// <summary>How far the press is towards a pin, 0..1.</summary>
+    public float HeldFraction(double now) => (float)Math.Clamp(1 - (_pinAt - now) / PinHold, 0, 1);
 
     /// <summary>Where the pill being pressed is drawn now, or null.</summary>
     public Rect2? PressedRect => _pressed is { } e ? new Rect2(e.Rect.Position - new Vector2(0, _scroll), e.Rect.Size) : null;
