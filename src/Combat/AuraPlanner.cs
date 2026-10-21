@@ -137,9 +137,9 @@ public partial class AuraPlanner : CanvasLayer
         _removeHeld = PlayerInput.Held(PlayerInput.AuraRemove);
         _suggestHeld = PlayerInput.Held(PlayerInput.AuraSuggest);
         _panel.Visible = true;
-        if (!XR.XrSession.Active && Input.MouseMode != Input.MouseModeEnum.Visible)
+        if (!XR.XrSession.Active && MouseCapture.Mode != Input.MouseModeEnum.Visible)
         {
-            Input.MouseMode = Input.MouseModeEnum.Visible;
+            MouseCapture.Mode = Input.MouseModeEnum.Visible;
             _freedMouse = true;
         }
         Refresh();

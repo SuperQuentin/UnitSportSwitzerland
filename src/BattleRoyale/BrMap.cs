@@ -81,7 +81,7 @@ public partial class BrMap : CanvasLayer
         UiFocus.Set(this, open);
         if (open)
         {
-            Input.MouseMode = Input.MouseModeEnum.Visible;
+            MouseCapture.Mode = Input.MouseModeEnum.Visible;
             _zoom = 1f;
             _pan = Vector2.Zero;
         }

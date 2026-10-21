@@ -63,7 +63,7 @@ public partial class UseAnimProbe : ChatProbe
         _items.UseSlot(me, 0);
         Say("drinking");
         await Burst("drink_1p", 8, 0.16);
-        await Seconds(0.5);
+        await Until(() => me.Health > hp && inv[0].Count == 1, 3);
         Expect(me.Health > hp, $"drinking healed ({hp:F0} -> {me.Health:F0})");
         Expect(inv[0].Count == 1, "one bottle was used up");
 
@@ -76,7 +76,7 @@ public partial class UseAnimProbe : ChatProbe
         _items.UseSlot(me, 5);
         Say("beer");
         await Burst("beer_1p", 6, 0.16);
-        await Seconds(0.8);
+        await Until(() => me.Health > beerHp && inv[5].Count == 1, 3);
         Expect(me.Health > beerHp, $"the beer healed ({beerHp:F0} -> {me.Health:F0})");
         Expect(inv[5].Count == 1, "one beer was used up");
 
@@ -111,17 +111,17 @@ public partial class UseAnimProbe : ChatProbe
         Expect(inv[1].Count == bars, "switching item cancelled the bite");
 
         // GPS held
-        await Seconds(1.0);
+        if (DisplayServer.GetName() != "headless") await Seconds(1.0);
         Shot("gps_1p");
 
         // hat in hand, then put on
         inv.Select(3);
-        await Seconds(1.0);
+        if (DisplayServer.GetName() != "headless") await Seconds(1.0);
         Shot("hat_hand_1p");
         _items.UseSlot(me, 3);
         Say("hat");
         await Burst("hat_up_1p", 6, 0.12);
-        await Seconds(1.0);
+        await Until(() => inv.Worn == ItemId.WitchHat, 3);
         Expect(inv.Worn == ItemId.WitchHat, "the hat is worn");
 
         // clothes (#251): one put on with Use (the head-height animation), the rest straight into their slots
@@ -130,7 +130,7 @@ public partial class UseAnimProbe : ChatProbe
         inv.Select(3);
         await Seconds(0.8);
         _items.UseSlot(me, 3);
-        await Seconds(1.2);
+        await Until(() => inv.WornIn(Avatar.WearSlot.Face).Id == Outfit[0], 4);
         Expect(inv.WornIn(Avatar.WearSlot.Face).Id == Outfit[0], "Use put the mask on");
         for (int i = 1; i < Outfit.Length; i++) inv.Wear(Inventory.HotbarSize + i);
         Expect(inv.Outfit.Bits == Dressed.Bits, "every piece is in its body slot");
@@ -170,30 +170,30 @@ public partial class UseAnimProbe : ChatProbe
         bool saw = false;
         // the drink
         Expect(await Until(() => Other() is { } a && a.DrawnArmPose == Avatar.ItemArmPose.Mouth && a.ItemAction == 2, 60), "A's drink is seen as ItemAction 2 / Mouth arm pose");
-        await Seconds(0.3);
+        if (DisplayServer.GetName() != "headless") await Seconds(0.3);
         Shot("drink_3p_remote");
         saw = await Until(() => Other() is { } a && a.ItemAction == 0, 5);
         Expect(saw, "ItemAction returns to 0 after the drink");
         // the beer (#716)
         Expect(await Until(() => Other() is { } a && a.DrawnArmPose == Avatar.ItemArmPose.Mouth && a.ItemAction == 2 && a.HeldItemId == (int)ItemId.BeerBottle, 30),
             "A's beer is seen as ItemAction 2 / Mouth arm pose with a BeerBottle held");
-        await Seconds(0.3);
+        if (DisplayServer.GetName() != "headless") await Seconds(0.3);
         Shot("beer_3p_remote");
         Expect(await Until(() => Other() is { } a && a.ItemAction == 0, 5), "ItemAction returns to 0 after the beer");
         Expect(await Until(() => Other() is { } a && a.HeadwearId == (int)Avatar.Headwear.WitchHat, 60), "A's hat arrived as Headwear.WitchHat");
-        await Seconds(0.5);
+        if (DisplayServer.GetName() != "headless") await Seconds(0.5);
         Shot("hat_on_3p_remote");
         // the clothes (#251): one replicated long, drawn here from it
         Expect(await Until(() => Other() is { } a && a.OutfitBits == Dressed.Bits, 60), "A's outfit arrived as OutfitBits");
         Expect(await Until(() => Other() is { } a && a.AppearanceBits == Chosen, 60), "A's chosen figure arrived as AppearanceBits");
-        await Seconds(0.8);
+        if (DisplayServer.GetName() != "headless") await Seconds(0.8);
         Shot("outfit_3p_remote");
         Say("seen");
         // A gets on a bike (#251): the remote cyclist wears the outfit, drawn in the figure shader
         Expect(await Until(() => Other() is { } a && a.RideKindId == (int)RideKind.RoadBike
             && a.FindChild("Rider", true, false) is MeshInstance3D { MaterialOverride: ShaderMaterial }, 60),
             "A's cyclist is drawn dressed");
-        await Seconds(0.8);
+        if (DisplayServer.GetName() != "headless") await Seconds(0.8);
         Shot("outfit_bike_3p_remote");
         Say("done");
     }

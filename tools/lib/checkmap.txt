@@ -20,6 +20,16 @@ src/Player/FootPlayer.cs  quick  --slopewalk --at 2563500,1112500 --systems terr
 src/Player/SlopeWalkProbe quick  --slopewalk --at 2563500,1112500 --systems terrain,generated
 # #833: first person keeps your figure for the shadow and the mirrors
 src/Player/FootPlayer.cs  quick  --ownbodycheck --world flat
+# #1002: creative mode, no damage, the double-jump flight
+src/Player/FootPlayer.cs  quick  --creativecheck --world flat
+src/Player/FootPlayer.Creative quick --creativecheck --world flat
+src/Player/CreativeCheck  quick  --creativecheck --world flat
+src/Core/ClientWorld.cs   quick  --creativecheck --world flat
+src/Core/ClientWorld.cs   quick  --spectatorcheck --world fixture
+src/Core/PlayerInput      quick  --spectatorcheck --world fixture
+src/Core/PlayerInput      quick  --creativecheck --world flat
+src/Core/SpectatorSwitchCheck quick --spectatorcheck --world fixture
+src/Player/SpectatorCamera quick --spectatorcheck --world fixture
 src/Player/FootPlayer.Fight quick --ownbodycheck --world flat
 src/Player/OwnBodyCheck   quick  --ownbodycheck --world flat
 src/Avatar/OwnBody       quick  --ownbodycheck --world flat

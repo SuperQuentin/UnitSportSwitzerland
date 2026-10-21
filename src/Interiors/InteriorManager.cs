@@ -72,8 +72,8 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     private const float BuildRange = 45f;
     /// <summary>A door with nobody this close to either side of it...</summary>
     private const float QuietRadius = 6f;
-    /// <summary>...for this long shuts by itself.</summary>
-    private const double QuietSeconds = 60;
+    /// <summary>...for this long shuts by itself: a minute, or the server's <c>--doorquiet s</c> (a check that parks behind a door, #1007).</summary>
+    private static readonly double QuietSeconds = CmdArgs.Float("--doorquiet") ?? 60;
 
     public static InteriorManager? Instance { get; private set; }
 

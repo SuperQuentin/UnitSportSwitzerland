@@ -59,3 +59,6 @@
   editor settings file picks both up. `setup-dotnet` installs 8.0.x and 9.0.x (the Android publish targets net9.0). The
   keystore comes from the repo secrets `ANDROID_KEYSTORE_BASE64` and `ANDROID_KEYSTORE_PASSWORD` plus the repo variable `ANDROID_KEYSTORE_USER` (the alias),
   decoded into `$RUNNER_TEMP`. Without them the release ships no APK and the notes say so. Details: `local-release`.
+  Since #1029 it is a **Gradle** build (`gpx/open-with`): `release.sh` installs the build template at export and turns
+  the Gradle daemon off. It needs Android platform 36 and build-tools 36.1.0; the Android Gradle plugin downloads what
+  the runner image lacks (its SDK licenses are accepted).

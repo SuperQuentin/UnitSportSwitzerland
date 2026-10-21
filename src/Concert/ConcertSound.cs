@@ -417,10 +417,6 @@ public partial class ConcertSound : Node3D
                 bytes[i * 4 + c * 2] = (byte)(v & 0xFF);
                 bytes[i * 4 + c * 2 + 1] = (byte)((v >> 8) & 0xFF);
             }
-        return new AudioStreamWav
-        {
-            Data = bytes, Format = AudioStreamWav.FormatEnum.Format16Bits, MixRate = Rate, Stereo = true,
-            LoopMode = AudioStreamWav.LoopModeEnum.Forward, LoopBegin = 0, LoopEnd = n,
-        };
+        return Audio.Dsp.LoopWav(bytes, stereo: true, Rate);
     }
 }

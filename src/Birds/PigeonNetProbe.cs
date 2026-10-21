@@ -55,11 +55,11 @@ public partial class PigeonNetProbe : ChatProbe
     {
         _items.Inventory.Add(ItemId.Shells, 7);
         int pack = PackTotal();
-        await Seconds(0.5);
+        await Until(() => _items.UsablePlayer == me && _items.Ui.ItemsActive, 3);
         Expect(_items.UsablePlayer == me && _items.Ui.ItemsActive, "on foot: items usable");
 
         me.SetRide(RideKind.Pigeon);
-        await Seconds(0.5);
+        await Until(() => me.Ride == RideKind.Pigeon && _items.UsablePlayer == null && !_items.Ui.ItemsActive && !_items.Ui.IsOpen, 3);
         Expect(me.Ride == RideKind.Pigeon, "A is a pigeon");
         Expect(_items.UsablePlayer == null && !_items.Ui.ItemsActive && !_items.Ui.IsOpen, "as a pigeon: no items, no hotbar, no inventory screen");
         Expect(PackTotal() == pack, $"items kept ({PackTotal()} of {pack})");
@@ -93,7 +93,7 @@ public partial class PigeonNetProbe : ChatProbe
 
         // landed and slowed to a walk: a person again
         Expect(await Until(() => me.SetRide(RideKind.OnFoot), 20), "back on foot");
-        await Seconds(0.5);
+        await Until(() => _items.UsablePlayer == me && _items.Ui.ItemsActive && PackTotal() == pack, 3);
         Expect(_items.UsablePlayer == me && _items.Ui.ItemsActive && PackTotal() == pack, $"a person again: items back ({PackTotal()} of {pack})");
         Say("done");
     }

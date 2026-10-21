@@ -9,7 +9,6 @@ PORT=${PORT:-7875}
 WORLD="--world fixture --chunks fixture:flat"
 tc_server 300 120 "$OUT/speednet_server.log" --server --port $PORT $WORLD --admin-password test
 tc_client 240 "$OUT/speednet_A.log" --connect 127.0.0.1:$PORT --name SpeedA $WORLD --speednet A & A=$!
-sleep 8
 tc_client 220 "$OUT/speednet_B.log" --connect 127.0.0.1:$PORT --name SpeedB $WORLD --speednet B & B=$!
 wait $A $B
 tc_stop

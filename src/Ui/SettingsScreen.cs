@@ -67,6 +67,10 @@ public partial class SettingsScreen : Screen
             }
             ScaleRow(rows, "3D resolution", s.RenderScale, v => GameSettings.Current.RenderScale = v);
             AntiAliasingRow(rows, s.AntiAliasing);
+            int[] imag = { 256, 512, 1024 };
+            UiKit.OptionRow(rows, "Concert screens", new[] { "Low (256x144)", "Medium (512x288)", "High (1024x576)" },
+                Math.Max(0, Array.IndexOf(imag, s.ConcertScreenWidth)), i => GameSettings.Current.ConcertScreenWidth = imag[i],
+                "The stadium screens' camera feed; higher is sharper and a little slower");
             // Realistic+ needs Forward+ through a relaunch, which a phone cannot do (#63)
             var styles = Styles.StyleKit.MenuStyles.Where(v => Platform.CanSpawnProcesses || !Styles.StyleKit.NeedsForwardPlus(v)).ToArray();
             var styleOption = UiKit.OptionRow(rows, "Visual style", styles.Select(Styles.StyleKit.Label).ToArray(),
@@ -184,6 +188,10 @@ public partial class SettingsScreen : Screen
             UiKit.SliderRow(rows, "Stick deadzone", 0.05, 0.5, 0.01, s.StickDeadzone,
                 v => GameSettings.Current.StickDeadzone = (float)v, v => $"{v * 100:F0} %");
             UiKit.ToggleRow(rows, "Invert look Y", s.InvertY, on => GameSettings.Current.InvertY = on);
+            UiKit.ToggleRow(rows, "Level flight", s.LevelFlight, on => GameSettings.Current.LevelFlight = on,
+                "Free fly moves flat, Space and Shift for height; off, forward follows the look");
+            UiKit.ToggleRow(rows, "Creative flight through walls", s.CreativeNoclip, on => GameSettings.Current.CreativeNoclip = on,
+                "Fly through the ground, walls and roofs in creative mode");
             UiKit.ToggleRow(rows, "Controller vibration", s.Vibration, on => GameSettings.Current.Vibration = on);
             UiKit.ActionRow(rows, "Every key and button", "Show controls", () => Shell.ShowControls(),
                 InputHints.Format("As bound on your keyboard and pad ({help})"));
@@ -261,6 +269,47 @@ public partial class SettingsScreen : Screen
 
     private int _about;
 
+    /// <summary>
+    /// Copies the log Godot writes (<c>debug/file_logging</c>, on for every platform since #1040) to a
+    /// file the player picks. The system dialog: on Android the document picker, which hands back a
+    /// <c>content://</c> URI that <c>Godot.FileAccess</c> writes, with no permission.
+    /// </summary>
+    private void SaveLog()
+    {
+        string log = ProjectSettings.GetSetting("debug/file_logging/log_path", "user://logs/godot.log").AsString();
+        string stamp = Time.GetDatetimeStringFromSystem(false, true).Replace(":", "").Replace(" ", "-");
+        var dialog = new FileDialog
+        {
+            FileMode = FileDialog.FileModeEnum.SaveFile,
+            Access = FileDialog.AccessEnum.Filesystem,
+            Title = "Save log file",
+            CurrentFile = $"unitsport-log-{stamp}.txt",
+            UseNativeDialog = true,
+            Size = new Vector2I(860, 580),
+        };
+        dialog.AddFilter("*.txt", "Text");
+        dialog.FileSelected += path =>
+        {
+            byte[] bytes = Godot.FileAccess.GetFileAsBytes(log);
+            using (var file = bytes.Length > 0 ? Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Write) : null)
+            {
+                if (file == null)
+                    Modal.Inform(this, "Log not saved", bytes.Length == 0
+                        ? $"There is no log at {log} yet."
+                        : $"Could not write the file ({Godot.FileAccess.GetOpenError()}).");
+                else
+                {
+                    file.StoreBuffer(bytes);
+                    Modal.Inform(this, "Log saved", $"{bytes.Length / 1024} KB of log written.");
+                }
+            }
+            dialog.QueueFree();
+        };
+        dialog.Canceled += dialog.QueueFree;
+        AddChild(dialog);
+        dialog.PopupCentered();
+    }
+
     /// <summary>The About tab, the licenses and data sources (<c>--licenses</c>, for screenshotting it).</summary>
     public void ShowLicenses() => Show(_about);
 
@@ -269,8 +318,16 @@ public partial class SettingsScreen : Screen
     /// from and credits, the OpenStreetMap overlay's ODbL among them), then what Godot itself
     /// requires, its licence text and the components built into it.
     /// </summary>
-    private static void LicenseRows(VBoxContainer rows)
+    private void LicenseRows(VBoxContainer rows)
     {
+        // the game's log, for a bug report from a phone (#1040): wherever the system picker points
+        rows.AddChild(UiKit.Section("Diagnostics"));
+        rows.AddChild(UiKit.Text("Save the game's log to send with a bug report: Downloads, Drive, wherever.",
+            UiTheme.FontSmall, UiTheme.TextDim, wrap: true));
+        var save = UiKit.Button("Save log file…");
+        save.Pressed += SaveLog;
+        rows.AddChild(save);
+
         foreach (var e in Licenses.All)
         {
             rows.AddChild(UiKit.Section(e.Name));

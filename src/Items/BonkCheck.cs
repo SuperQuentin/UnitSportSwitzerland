@@ -8,7 +8,7 @@ namespace UnitSport.Items;
 
 /// <summary>
 /// <c>tools/bonkcheck.sh</c> (#261): thrown things hitting a player, and a radio carried on the back,
-/// over a real connection: a headless dedicated server on a generated world and two headless clients.
+/// over a real connection: a headless dedicated server on the flat test world (REAL=1: a generated one) and two headless clients.
 ///
 /// <para>
 /// <c>--bonkcheck thrower</c> carries a playing radio in its pack (on its back), stands four metres
@@ -22,6 +22,12 @@ namespace UnitSport.Items;
 /// below <see cref="ThrowHits.Floor"/>, never be knocked out, and see the thrower's replicated
 /// <c>BackItemId</c> (a radio) and <c>HeldRadio</c> (playing).
 /// </para>
+///
+/// <para>
+/// The victim says in chat when it sees the radio on the back and when it is down to its sliver
+/// (<c>BK victim back</c>, <c>BK victim lowered</c>); the thrower takes its next step on that line (#992), the
+/// old 6 s each still the latest.
+/// </para>
 /// </summary>
 public partial class BonkCheck : Node
 {
@@ -34,6 +40,13 @@ public partial class BonkCheck : Node
     private int _step, _bonks;
     private float _lowest = float.MaxValue;
     private bool _sawBack, _knockedOut, _lowered;
+    /// <summary>Thrower: what the victim said it saw.</summary>
+    private readonly HashSet<string> _cues = new();
+    private bool _listening;
+    private const string CuePrefix = "BK victim ";
+
+    private ChatManager? Chat => GetParent().GetNodeOrNull<ChatManager>(ChatManager.NodeName);
+    private bool Cued(string what) => _cues.Contains(what);
 
     private BonkCheck(bool thrower, Func<FootPlayer?> local, Func<Node?> players, Inventory inventory)
     {
@@ -84,6 +97,15 @@ public partial class BonkCheck : Node
         if (!Multiplayer.HasMultiplayerPeer() || Multiplayer.MultiplayerPeer.GetConnectionStatus() != MultiplayerPeer.ConnectionStatus.Connected) return;
         _t += delta;
         if (_t > Timeout) { Finish(false, $"timed out at step {_step}, {_bonks} bonks"); return; }
+        if (_thrower && !_listening && Chat is { } chat)
+        {
+            _listening = true;
+            chat.LineReceived += (line, _) =>
+            {
+                int i = line.IndexOf(CuePrefix, StringComparison.Ordinal);
+                if (i >= 0) _cues.Add(line[(i + CuePrefix.Length)..].Trim());
+            };
+        }
         if (!_thrower && _doneAt >= 0 && _t - _doneAt > 1.5 && _local() is { } done) { Verdict(done); return; }
         if (_local() is not { } me || Other() is not { } other || !me.IsOnFloor()) return;
         if (_thrower) Throw(me, other);
@@ -104,8 +126,8 @@ public partial class BonkCheck : Node
                 _inventory.Select(Inventory.HotbarSize - 1);
                 Next();
                 break;
-            case 1 when at > 6:
-            case 3 when at > 6:
+            case 1 when at > 6 || Cued("back"):
+            case 3 when at > 6 || Cued("lowered"):
                 // four metres off, square on, then a hard throw at the chest
                 var away = (me.GlobalPosition - other.GlobalPosition) with { Y = 0 };
                 away = away.LengthSquared() > 0.01f ? away.Normalized() : Vector3.Forward;
@@ -140,6 +162,7 @@ public partial class BonkCheck : Node
         {
             _sawBack = true;
             GD.Print("[bonkcheck] victim: the thrower's radio is on its back, playing");
+            Chat?.Send(CuePrefix + "back");
         }
         if (_bonks >= 1 && !_lowered)
         {
@@ -148,6 +171,7 @@ public partial class BonkCheck : Node
             if (!(_lastDrop > 1f)) { Finish(false, $"the first hit took no health ({_lastDrop:F1})"); return; }
             me.TakeDamage(me.Health - 9f);
             GD.Print($"[bonkcheck] victim: down to {me.Health:F1} for the second");
+            Chat?.Send(CuePrefix + "lowered");
         }
         if (_bonks >= 2 && _doneAt < 0) _doneAt = _t;
     }

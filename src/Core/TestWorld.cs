@@ -72,11 +72,12 @@ public partial class TestWorld : Node3D
             : Collision.CollisionMatrixProbe.Requested() ? new Collision.CollisionMatrixProbe(origin)
             : Collision.CollisionSandbox.Requested() ? new Collision.CollisionSandbox(origin)
             : OwnBodyCheck.Requested ? new OwnBodyCheck()
+            : CreativeCheck.Requested ? new CreativeCheck()
             : Concert.ConcertWalkCheck.Requested ? new Concert.ConcertWalkCheck()
             : null;
         if (probe == null)
         {
-            GD.PushError("[testworld] no probe here runs on --world flat (--hitboxcheck, --synccheck, --moviecheck, --ride, --flycheck, --beamcheck, --forkliftcheck, --palletcheck, --shellwalkcheck, --cranecheck, --collidecheck, --collidesandbox, --ownbodycheck, --concertwalkcheck)");
+            GD.PushError("[testworld] no probe here runs on --world flat (--hitboxcheck, --synccheck, --moviecheck, --ride, --flycheck, --beamcheck, --forkliftcheck, --palletcheck, --shellwalkcheck, --cranecheck, --collidecheck, --collidesandbox, --ownbodycheck, --concertwalkcheck, --creativecheck)");
             GetTree().Quit(2);
             return;
         }

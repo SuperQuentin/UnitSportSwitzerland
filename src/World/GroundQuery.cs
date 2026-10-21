@@ -10,7 +10,8 @@ public static class GroundQuery
 {
     /// <summary>
     /// Whatever <paramref name="self"/> collides with (trees aside) on a ray from 3 m above
-    /// <paramref name="p"/> to 6 m below it, else the terrain's height, else <c>p.Y</c>. With
+    /// <paramref name="p"/> to 6 m below it, else the terrain's height (not under an interior, where it is the
+    /// street 3 km up), else <c>p.Y</c>. With
     /// <paramref name="pastPlayers"/>, a player on the ray is looked past (up to 4 of them): one
     /// standing in a parked bus by its front axle is not the road. A vehicle parked in a hold (a boat
     /// on its trailer, #463) is always looked past: cargo is never the ground of what carries it. Its
@@ -64,6 +65,9 @@ public static class GroundQuery
         }
         solid = hit.Count > 0;
         if (solid) return hit["position"].AsVector3().Y;
+        // an interior's terrain is the street 3 km overhead: a car's rear wheels still behind a garage's
+        // doorway read it, the tilt stood the car on its nose and its hull jammed under the lintel (#1007)
+        if (Interiors.InteriorManager.InInteriorSpace(p)) return p.Y;
         return terrain != null && terrain.TryGetHeight(p, out float g) ? g : p.Y;
     }
 

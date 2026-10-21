@@ -129,7 +129,7 @@ public partial class TouchControls : CanvasLayer
     {
         // in game = the pointer is held; a probe, --nocapture or headless (--touchcheck) run never
         // holds it, so it counts as in game
-        bool inGame = Input.MouseMode != Input.MouseModeEnum.Visible || MouseCapture.Disabled
+        bool inGame = MouseCapture.Mode != Input.MouseModeEnum.Visible || MouseCapture.Disabled
             || DisplayServer.GetName() == "headless";
         bool show = !_padInUse && inGame && !UiFocus.TextEntryActive;
         if (show != Shown)

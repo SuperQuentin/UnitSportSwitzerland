@@ -233,7 +233,7 @@ public partial class BuildTool : Node
     /// <summary>Called every frame by the item controller; a null player or no hammer in hand hides everything.</summary>
     public void Step(FootPlayer? player, bool active, bool aiming)
     {
-        if (player == null || !active || (Input.MouseMode != Input.MouseModeEnum.Captured && !AlwaysShow))
+        if (player == null || !active || (MouseCapture.Mode != Input.MouseModeEnum.Captured && !AlwaysShow))
         {
             _ghost.Visible = false;
             _hint.Visible = false;
