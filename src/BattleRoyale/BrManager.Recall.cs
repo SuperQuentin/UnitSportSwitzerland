@@ -204,7 +204,8 @@ public partial class BrManager
         {
             Mesh = new BoxMesh { Size = size },
             Position = at,
-            MaterialOverride = new StandardMaterial3D { AlbedoColor = c, ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded },
+            // lit in the lit styles (its lamp on it), flat in PS1 (#1069)
+            MaterialOverride = Styles.StyleKit.Solid(new StandardMaterial3D { AlbedoColor = c }),
         };
         root.AddChild(Box(new Vector3(0.08f, 2.6f, 0.08f), new Vector3(0, 1.3f, 0), new Color(0.35f, 0.35f, 0.38f)));
         root.AddChild(Box(new Vector3(0.9f, 0.6f, 0.06f), new Vector3(0, 2.4f, 0), new Color(1f, 0.8f, 0.0f)));          // Postauto yellow

@@ -53,6 +53,7 @@ public partial class FishingVisuals : Node3D
         AddChild(new MeshInstance3D
         {
             Mesh = _mesh, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            // the line stays unshaded in every style: a line primitive has no normals to light (#1069)
             MaterialOverride = new StandardMaterial3D
             {
                 ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
@@ -192,10 +193,12 @@ public partial class FishingVisuals : Node3D
     private static CylinderMesh? _stem;
 
     /// <summary>A red-topped float: a ball over a white stem.</summary>
+    [Showcase("Items", "Fishing float")]
     private static MeshInstance3D NewBobber()
     {
-        _red ??= new StandardMaterial3D { AlbedoColor = new Color(0.92f, 0.12f, 0.08f), ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded };
-        _white ??= new StandardMaterial3D { AlbedoColor = new Color(0.95f, 0.95f, 0.92f), ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded };
+        // lit in the lit styles, flat in PS1 (#1069)
+        _red ??= Styles.StyleKit.Solid(new StandardMaterial3D { AlbedoColor = new Color(0.92f, 0.12f, 0.08f) });
+        _white ??= Styles.StyleKit.Solid(new StandardMaterial3D { AlbedoColor = new Color(0.95f, 0.95f, 0.92f) });
         _top ??= new SphereMesh { Radius = 0.045f, Height = 0.09f, RadialSegments = 8, Rings = 4 };
         _stem ??= new CylinderMesh { TopRadius = 0.012f, BottomRadius = 0.02f, Height = 0.08f, RadialSegments = 6 };
         var b = new MeshInstance3D { Mesh = _top, MaterialOverride = _red, TopLevel = true, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
