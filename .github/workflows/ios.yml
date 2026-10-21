@@ -22,7 +22,7 @@ permissions:
 jobs:
   ios:
     runs-on: macos-15
-    timeout-minutes: 180 # NativeAOT (ilc) alone takes ~40 min on the 3-core runner
+    timeout-minutes: 300 # Godot runs NativeAOT three times (device, simulator arm64 and x64), ~45 min each
     env:
       GODOT_VERSION: 4.7.2-stable
       GODOT: ${{ github.workspace }}/.godot-ci/godot
@@ -59,7 +59,7 @@ jobs:
           sudo xcode-select -s "$x"
 
       - name: Build
-        timeout-minutes: 160 # leaves time to upload the logs
+        timeout-minutes: 280 # leaves time to upload the logs
         run: |
           cp tools/ci/export_presets.cfg export_presets.cfg
           xcodebuild -version
