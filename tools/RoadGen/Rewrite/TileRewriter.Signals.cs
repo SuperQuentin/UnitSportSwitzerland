@@ -850,8 +850,9 @@ public static partial class TileRewriter
             foreach (var start in new[] { AppContext.BaseDirectory, Environment.CurrentDirectory })
                 for (var dir = new DirectoryInfo(start); dir is not null; dir = dir.Parent)
                 {
-                    string path = Path.Combine(dir.FullName, "tools", "MapSetup", "switzerland.bin");
-                    if (File.Exists(path)) return Load(path);
+                    // (it moved to MapCore with #515: looked for in both, #1057 found the rewrite missed it)
+                    foreach (string project in (ReadOnlySpan<string>)["MapCore", "MapSetup"])
+                        if (Path.Combine(dir.FullName, "tools", project, "switzerland.bin") is var path && File.Exists(path)) return Load(path);
                 }
             return null;
         }
