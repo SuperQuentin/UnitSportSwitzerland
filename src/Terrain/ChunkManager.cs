@@ -2436,6 +2436,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         .. RoadWallBuilder.BuildCollisionFaces(roadTile), .. RailingBuilder.BuildCollisionFaces(roadTile),
                         .. IslandBuilder.BuildCollisionFaces(roadTile),   // roundabout islands (#122)
                         .. RoadSignBuilder.BuildCollisionFaces(roadTile),   // sign poles (#121)
+                        .. CatenaryBuilder.BuildCollisionFaces(roadTile),   // overhead line masts (#1052)
                         .. ParkingBuilder.BuildCollisionFaces(roadTile),   // car park props (#499)
                         .. SignalBuilder.BuildCollisionFaces(roadTile),     // traffic-light poles (#350)
                         .. RoadStreetBuilder.BuildCollisionFaces(roadTile)]);   // sidewalks and kerbs (#119)

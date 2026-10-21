@@ -107,6 +107,8 @@ public static partial class TileRewriter
         public string MaxBytesTile = "";
         public readonly PaintEmitter.Tally Paint = new();
         public readonly RailRoadOverlap.Tally Rail = new();
+        /// <summary>Overhead lines over electrified rail (#1052).</summary>
+        public readonly CatenaryPlanner.Stats Catenary = new();
         public readonly PriorityPlanner.Stats Priority = new();
         public readonly BikePlanner.Stats Bikes = new();
 
@@ -126,7 +128,7 @@ public static partial class TileRewriter
                     urban     {Urban:N0} ({UrbanKm:F1} km)   roundabout {Roundabout:N0}
                     OSM       {Osm:N0} ({OsmKm:F1} km) on {OsmTiles} tiles flagged OSM
                     bytes     {Bytes / 1024.0:F0} KB, {(double)Bytes / Math.Max(1, tiles) / 1024:F1} KB/tile, max {MaxBytes / 1024.0:F1} KB ({MaxBytesTile}), deflated on the wire {(double)DeflatedBytes / Math.Max(1, tiles) / 1024:F1} KB/tile
-                """) + "\n" + FormatParts(tiles) + "\n" + Paint.Format(tiles) + "\n" + Carriageways.Format() + "\n" + Roundabouts.Format() + "\n" + Rail.Format() + "\n" + Priority.Format() + "\n" + TurnLanes.Format() + "\n" + Signals.Format() + Lanes.Format() + "\n" + Bikes.Format()
+                """) + "\n" + FormatParts(tiles) + "\n" + Paint.Format(tiles) + "\n" + Carriageways.Format() + "\n" + Roundabouts.Format() + "\n" + Rail.Format() + "\n" + Catenary.Format() + "\n" + Priority.Format() + "\n" + TurnLanes.Format() + "\n" + Signals.Format() + Lanes.Format() + "\n" + Bikes.Format()
                 + (Layouts.Count > 0 ? "\n" + Layout.JunctionPlan.Summary(Layouts) + "\n" + Layout.JunctionPlan.CoreSummary(Layouts) + "\n" + Merge.Summary() + "\n" + Layout.JunctionPlan.TransitionSummary(Layouts) + (LayoutWrite.Junctions + LayoutWrite.Skipped > 0 ? "\n" + LayoutWrite.Format() : "") : "");
         }
     }
@@ -456,6 +458,8 @@ public static partial class TileRewriter
             var signalRecords = new Dictionary<TileId, List<RoadSignal>>();   // traffic lights (#348)
             var approachRecords = new Dictionary<TileId, List<RoadApproach>>();   // their lanes (#353)
             var bikeBridges = new Dictionary<TileId, List<(RoadAreaProp Band, List<Vec2> Ring)>>();   // paths through junctions (#120)
+            var catenarySupports = new Dictionary<TileId, List<CatenarySupport>>();   // overhead lines (#1052)
+            var catenaryWires = new Dictionary<TileId, List<CatenaryWire>>();
 
             // the full-res terrain of the block and its halo: the height audit and the walls (#125)
             var grids = LoadGrids(inputs.Grid, context);
@@ -587,6 +591,9 @@ public static partial class TileRewriter
                 var bandStreets = new StreetPlanner(facades, field, obstacles, new StreetPlanner.Stats(),
                     grids is null ? null : (e, n) => SampleGround(grids, e, n));
                 var bandPaint = new List<RoadPaint>();
+                // the block's electrified rail pieces as written, and every rail line (halo too) to keep masts off (#1052)
+                var catenaryRails = new List<CatenaryPlanner.Rail>();
+                var railTracks = new List<IReadOnlyList<Vec2>>();
 
                 for (int k = 0; k < plans.Count; k++)
                 {
@@ -594,6 +601,21 @@ public static partial class TileRewriter
                     // rails inside a carriageway (#124); halo rails too, their track zone may reach into the block
                     var pieces = source.Segment.Class == RoadClass.Railway
                         ? rails.Split(plan, source.SampleHeight, source.Segment, count: write) : null;
+                    if (source.Segment.Class == RoadClass.Railway)
+                    {
+                        railTracks.Add(plan);
+                        if (write && CatenaryPlanner.Electrified(source.Segment))
+                        {
+                            double fromM = source.Key is { } rk ? rk.FromM : 0;
+                            foreach (var piece in pieces ?? [new RailRoadOverlap.Piece(plan, plan.Select(source.SampleHeight).ToArray(), false)])
+                            {
+                                // a street: the track in a carriageway, or in town paving
+                                bool inStreet = piece.Embedded || IsTownTram(source.Segment, piece.Plan, field);
+                                catenaryRails.Add(new CatenaryPlanner.Rail(piece.Plan, piece.Height, source.Segment.Flags, inStreet, piece.Embedded,
+                                    fromM + source.AlongOf(piece.Plan[0]), source.Tile));
+                            }
+                        }
+                    }
                     bool band = !write && bandLinks.Contains(linkId);
                     if (!write && !band) continue;
                     var into = band ? bandOutput : output;
@@ -669,6 +691,17 @@ public static partial class TileRewriter
                         lanePaint.Add((segment, source.Tile, station, startsAtJunction, endsAtJunction));
                     if (track || attributes.Left.HasTrack || attributes.Right.HasTrack)
                         trackPaint.Add((segment, source.Tile, startsAtJunction, endsAtJunction));
+                }
+
+                // overhead lines (#1052): masts off every carriageway and junction, spans to the facades
+                if (catenaryRails.Count > 0)
+                {
+                    // off the roads (not the rail lines: a centre mast stands between its tracks) and off every bike path (the user)
+                    var roads = result.Ribbons.Where(r => result.Network.Links[r.LinkId].Tag is not Source { Segment.Class: RoadClass.Railway });
+                    var off = new PriorityPlanner.Clearance(roads, result.Junctions);
+                    var onPath = BikePaths(output, streetPieces, 0.3);
+                    CatenaryPlanner.Plan(catenaryRails, railTracks, buildings.Contains, q => off.IsClear(q, 0.3) && !onPath(q), catenarySupports, catenaryWires,
+                        netStats.Catenary);
                 }
 
                 foreach (var junction in result.Junctions)
@@ -940,6 +973,8 @@ public static partial class TileRewriter
                     Parking = parkBays.TryGetValue(id, out var pb) ? pb : new List<ParkingBay>(),   // #499
                     Transitions = Placed(id, transitionsOf.GetValueOrDefault(id), segments, netStats.LayoutWrite),   // #818
                     JunctionPaths = pathsOf.GetValueOrDefault(id) ?? [],   // #818 phase 5: the writer keeps those whose cap the tile holds
+                    CatenarySupports = catenarySupports.GetValueOrDefault(id) ?? [],   // #1052
+                    CatenaryWires = catenaryWires.GetValueOrDefault(id) ?? [],
                 };
                 rails.ClearTrackZones(tile.Paint, id);
                 built.Add(tile);

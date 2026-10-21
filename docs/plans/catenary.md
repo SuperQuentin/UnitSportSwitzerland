@@ -12,6 +12,9 @@
   buildings stand close on both sides, else on a catenary mast at the kerb (mixed where one side has a facade).
 - **Spacing**: about 30 m on straight tram track (Bern: spans at most 32 m), tighter on curves.
 - **Traffic lights** stay separate (#1037's facade span wires stay as they are).
+- **Centre masts** (added during the work): a tram on its own double track with no buildings near (a grassy track out of
+  town) gets one mast between the tracks.
+- **Bike paths**: no mast ever stands on a separated bike path.
 
 ## Reference values
 
