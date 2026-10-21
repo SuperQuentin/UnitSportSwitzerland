@@ -365,6 +365,13 @@ public static class ExteriorPlanner
                         double start = from < 0 ? ClearTip(jp, a, from, Math.Min(end, 0), l, r) : from;
                         if (end - start >= MinIslandPiece) ex.Islands.Add(new IslandPiece(start, end, l, r, roundFrom, roundTo || end < to - 1e-6));
                     }
+                // one island the crosswalk cuts: every piece as wide as the narrowest (the user)
+                if (ex.Islands.Count > 1)
+                {
+                    double l = ex.Islands.Max(x => x.Left), r = ex.Islands.Min(x => x.Right);
+                    if (r - l >= RefugeMinWidth)
+                        for (int i = 0; i < ex.Islands.Count; i++) ex.Islands[i] = ex.Islands[i] with { Left = l, Right = r };
+                }
                 if (zebra is not null) ex.Bars[ex.Bars.IndexOf(zebra)] = zebra with { Gap = null };
                 ex.Refuge = ex.Islands.Count == 0 ? null : island with { From = ex.Islands[0].From, To = ex.Islands[^1].To };
                 islandPole = zebra is not null ? zebra.To + PoleBehindCrosswalk : -IslandInside * 0.5 + gore * 0.1;
