@@ -135,7 +135,16 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
             GuiDisableInput = true,
             Size = new Vector2I(1832, 1920),   // the runtime overrides it with the eye size
         };
+        // "--xrsim --xrload": the headset drawn as a Quest 2's two eyes at Link's default (one
+        // picture of both eyes' pixels), so a frame-time check without a headset pays for it
+        if (XrSession.LoadTest)
+        {
+            _view.Size = new Vector2I(2 * 1832, 1920);
+            _view.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
+            _load = new double[3];
+        }
         AddChild(_view);
+        if (_load != null) RenderingServer.ViewportSetMeasureRenderTime(_view.GetViewportRid(), true);
         _origin = new XROrigin3D { Name = "Origin", Current = true };
         _view.AddChild(_origin);
         _camera = new XRCamera3D
@@ -239,6 +248,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         _camera.Far = Core.GameSettings.Current.CameraFar;
         ApplyQuality();
         ApplyHands();
+        XrSession.ApplyRefresh();
     }
 
     /// <summary>
@@ -269,9 +279,28 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
     /// <summary>The one-line notices (recentred, monitor view), on the monitor and the panel.</summary>
     internal XrNotice Notice { get; private set; } = null!;
 
+    /// <summary><c>--xrload</c>: frames, frame ms and headset GPU ms summed since the last report.</summary>
+    private double[]? _load;
+
+    /// <summary>Every 5 s under <c>--xrload</c>: the frame time and what the headset view cost the GPU.</summary>
+    private void ReportLoad(double delta)
+    {
+        if (_load == null) return;
+        _load[0]++;
+        _load[1] += delta * 1000.0;
+        _load[2] += RenderingServer.ViewportGetMeasuredRenderTimeGpu(_view.GetViewportRid());
+        if (_load[1] < 5000.0) return;
+        double n = _load[0];
+        GD.Print($"[xr] load: frame {_load[1] / n:F1} ms, headset gpu {_load[2] / n:F1} ms, "
+            + $"{RenderingServer.GetRenderingInfo(RenderingServer.RenderingInfo.TotalPrimitivesInFrame) / 1e6:F1} M prims, "
+            + $"physics {Engine.PhysicsTicksPerSecond} Hz");
+        Array.Clear(_load);
+    }
+
     public override void _Process(double delta)
     {
         float dt = (float)delta;
+        ReportLoad(delta);
         // the window's camera is the game's: the player's eye, a cockpit, the spectator, a shot
         var current = GetViewport().GetCamera3D();
         if (current != Anchor && current != null)
