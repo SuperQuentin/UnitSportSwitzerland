@@ -103,6 +103,13 @@ public static class ExteriorPlanner
     public const double RefugeMargin = 0.25, RefugeMinWidth = 1.2, RefugeBeyond = 1.0;
     /// <summary>A left repeater's island at the lights (#682, #854): from this far out past the mouth to this far past the cars' line.</summary>
     public const double IslandFromMouth = 0.5, IslandPastStop = 2.0;
+
+    /// <summary>
+    /// A lit arm's island carrying the left repeater runs this far into the junction past the mouth, its pole half of it in,
+    /// plus a tenth of the island's length on the arm (m; the old layout's islands, #682: the user, #1000, the pole in the
+    /// island's middle stood beside the riders waiting in the left pocket, who could not see its head).
+    /// </summary>
+    public const double IslandInside = 3.0;
     /// <summary>A 3.03 main-road sign stands this far out from the mouth.</summary>
     public const double MainSignOut = 3.0;
 
@@ -270,7 +277,15 @@ public static class ExteriorPlanner
             // pedestrian heads only where the arm has a crosswalk (#711; where OSM maps its crossings on other arms, none here)
             var walk = crosswalkAt is not null ? SignalPoleFlags.Pedestrian : 0;
             ex.Poles.Add(new PoleSpot(poleAt, RightKerb: true, OnRefuge: false, SignalPoleFlags.Main | walk));
-            ex.Poles.Add(new PoleSpot(ex.Refuge is { } rf ? (rf.From + rf.To) * 0.5 : poleAt, RightKerb: false, OnRefuge: ex.Refuge is not null,
+            // the left repeater's island carried into the junction, the pole on that part, ahead of every line (#682)
+            double islandPole = 0;
+            if (ex.Refuge is { } island)
+            {
+                double onArm = crosswalkAt is not null ? ex.Bars.First(b => b.Kind == BarKind.Crosswalk).From - 0.15 : island.To;
+                islandPole = -IslandInside * 0.5 + Math.Max(0, onArm) * 0.1;
+                ex.Refuge = island with { From = -IslandInside };
+            }
+            ex.Poles.Add(new PoleSpot(ex.Refuge is not null ? islandPole : poleAt, RightKerb: false, OnRefuge: ex.Refuge is not null,
                 (second ? SignalPoleFlags.Second : 0) | walk));
             return ex;
         }

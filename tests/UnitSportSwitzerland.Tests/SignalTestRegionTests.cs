@@ -184,6 +184,35 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
     }
 
     [Fact]
+    public void No_car_path_crosses_a_repeater_island()
+    {
+        // #1000: the left repeater's island runs 3 m into the junction (the old layout's, #682); no car's way through it
+        int islands = 0;
+        foreach (var (_, tile) in region.Tiles())
+            foreach (var island in tile.AreaProps.Where(a => a.Type == AreaPropType.Island && a.Variant == 2 && a.Vertices.Length == 12))
+            {
+                islands++;
+                var v = island.Vertices;
+                foreach (var path in tile.JunctionPaths.Where(p => p.Kind == JunctionPathKind.Car))
+                    for (int i = 0; i < path.PointCount; i++)
+                        Assert.False(Inside(v, path.Points[i * 3], path.Points[i * 3 + 2]),
+                            $"a {path.Move} car path through the island at {path.Points[i * 3]:F1},{path.Points[i * 3 + 2]:F1}");
+            }
+        Assert.True(islands > 0);
+
+        static bool Inside(float[] q, float x, float z)
+        {
+            bool inside = false;
+            for (int i = 0, j = 3; i < 4; j = i++)
+            {
+                float xi = q[i * 3], zi = q[i * 3 + 2], xj = q[j * 3], zj = q[j * 3 + 2];
+                if ((zi > z) != (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) inside = !inside;
+            }
+            return inside;
+        }
+    }
+
+    [Fact]
     public void Priority_signs_at_lights_stand_on_their_main_poles()
     {
         // #1000 (the old layout's rule, #350/#711): an approach's priority sign for when the lights are off is on its main pole,
