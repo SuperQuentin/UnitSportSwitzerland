@@ -24,7 +24,7 @@ public static class SignalTestRegion
     public const int MinTileE = 2910, MaxTileE = 2917, MinTileN = 1321, MaxTileN = 1324;
     /// <summary>
     /// The rail row (#1052), LV95 N <see cref="RailN"/>: a double-track tram in a town street (houses along its north side, none
-    /// south), a reserved single tram track, and a double-track main line with a 600 m curve, for their overhead lines.
+    /// south), a reserved double tram track, the same as two single tracks mapped apart (Geneva, #1094), and a double-track main line with a 600 m curve, for their overhead lines.
     /// </summary>
     public const double RailN = 1324500;
     /// <summary>The junctions' row, LV95 N: the middle of the tile row N 1322.</summary>
@@ -441,14 +441,16 @@ public static class SignalTestRegion
         };
         // 16. the rail row (#1052): overhead lines. A 10 m town street with a double-track tram on it (TLM auf_strasse), houses 5 m
         // back from its north kerb for its western half (the spans' facades), none south (masts); a reserved double tram track (centre
-        // masts: nothing built near) on
-        // its own; a double-track main line bending through a 600 m curve
+        // masts: nothing built near) on its own, and 60 m north of it the same as two single tracks 3.6 m apart, drawn in opposite
+        // directions (Geneva maps each tram track so, #1094); a double-track main line bending through a 600 m curve
         {
             const double rn = RailN;
             lines.Add(new Line("RS", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(2910100, rn), (2911900, rn)], "secondary", "yes"));
             lines.Add(new Line("RT", "", "", "", [(2910100, rn), (2911900, rn)], "", Rail: RoadFlags.Tramway | RoadFlags.DoubleTrack, OnStreet: true));
             boxes.Add(new Box(2910200, rn + 10, 2911000, rn + 24, 15));
             lines.Add(new Line("RR", "", "", "", [(2912100, rn), (2913900, rn)], "", Rail: RoadFlags.Tramway | RoadFlags.DoubleTrack));
+            lines.Add(new Line("RP1", "", "", "", [(2912100, rn + 58.2), (2913900, rn + 58.2)], "", Rail: RoadFlags.Tramway));
+            lines.Add(new Line("RP2", "", "", "", [(2913900, rn + 61.8), (2912100, rn + 61.8)], "", Rail: RoadFlags.Tramway));
             var curve = new List<(double E, double N)> { (2914100, rn - 200), (2914500, rn - 200) };
             // a 600 m arc turning left by 30 degrees, then on straight
             for (int k = 1; k <= 30; k++)
