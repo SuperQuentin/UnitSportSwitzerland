@@ -271,11 +271,12 @@ public partial class Traffic
             float target = kind == MoverKind.Walker ? StepWalker(m, dt) : StepRider(m, dt);
             m.Speed = Mathf.MoveToward(m.Speed, Mathf.Max(0f, target), (target > m.Speed ? 1.5f : 3f) * dt);
             var before = m.Head;
-            if (!m.Route.Advance(m.Speed * dt, m.Next)) m.Stuck += 5f;
+            bool ended = !m.Route.Advance(m.Speed * dt, m.Next);
             m.Route.Trim(look.Size.Z + 10f);
             PlaceMover(m);
             m.Vel = dt > 0f ? MathX.Flat(m.Head - before) / dt : Vector3.Zero;
-            m.Stuck = m.Speed < 0.1f && !m.Holding ? m.Stuck + dt : m.Stuck > 0f && m.Speed >= 0.1f ? 0f : m.Stuck;
+            // at the end of its way (no leg on): gone in a few ticks; standing without waiting on purpose: stuck
+            m.Stuck = ended ? m.Stuck + 5f : m.Speed < 0.1f && !m.Holding ? m.Stuck + dt : 0f;
         }
         for (int i = list.Count - 1; i >= 0; i--)
         {
