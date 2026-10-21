@@ -490,6 +490,9 @@ public static class SignalTestRegion
         WritePlaces(chunkDir, design.Junctions);
         var roadTiles = WriteRawRoads(RawRoads.DirFor(tempDir), design.Lines);
         WriteOverlay(tempDir, design.Lines);
+        // J14's tram stops (#1057): two stops on the artery, 150 m either side of the junction, as swissTLM3D gives a stop: one point
+        File.WriteAllText(Path.Combine(tempDir, "tram_stops.tsv"), string.Create(CultureInfo.InvariantCulture,
+            $"name\te\tn\nJ14 west\t{OverheadE - 150:F2}\t{BetweenN:F2}\nJ14 east\t{OverheadE + 150:F2}\t{BetweenN:F2}\n"));
         WriteSignals(tempDir, design);
         string about = About(design);
         foreach (string dir in new[] { chunkDir, tempDir })
@@ -501,7 +504,8 @@ public static class SignalTestRegion
             + $"{design.Buildings.Count} buildings, {design.Junctions.Count} signal nodes; written in {clock.Elapsed.TotalSeconds:F1} s");
 
         var stats = TileRewriter.Run(chunkDir, roadTiles, new TileRewriter.Options(
-            RawDir: RawRoads.DirFor(tempDir), OsmOverlay: Path.Combine(tempDir, "osm_overlay.tsv"), NewJunctions: newJunctions, WriteJunctions: writeJunctions,
+            RawDir: RawRoads.DirFor(tempDir), OsmOverlay: Path.Combine(tempDir, "osm_overlay.tsv"), TramStops: Path.Combine(tempDir, "tram_stops.tsv"),
+            NewJunctions: newJunctions, WriteJunctions: writeJunctions,
             Cantons: TileRewriter.Cantons.Of(CantonTiles), Decorate: MarkBorders), log);
         log(stats.Network.Format(stats.TilesWritten));
         log("");

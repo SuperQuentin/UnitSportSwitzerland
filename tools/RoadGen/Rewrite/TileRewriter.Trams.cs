@@ -29,36 +29,39 @@ public static partial class TileRewriter
     {
         /// <summary>The tracks as the trams run them (LV95), each with how far right of its line's centre it lies.</summary>
         public readonly List<(Vec2[] Points, double Offset)> Lines = new();
+        /// <summary>Each line's height at a point (its source line's, as the rewrite writes it).</summary>
+        public readonly List<Func<Vec2, float>> Height = new();
         private readonly Dictionary<(long, long), List<int>> _starts = new(), _ends = new();
 
         private const double Snap = 0.5;
 
         public TramNet(RoadGenResult result)
         {
-            var raw = new List<(Vec2[] Points, bool Double, RoadFlags Flags)>();
+            var raw = new List<(Vec2[] Points, bool Double, RoadFlags Flags, Func<Vec2, float> Height)>();
             foreach (var ribbon in result.Ribbons)
             {
                 if (ribbon.Stations.Count < 2 || result.Network.Links[ribbon.LinkId].Tag is not Source s) continue;
                 var seg = s.Segment;
                 if (seg.Class != RoadClass.Railway || (seg.Flags & RoadFlags.Tramway) == 0 || (seg.Flags & (RoadFlags.Disused | RoadFlags.Funicular)) != 0) continue;
-                raw.Add((ribbon.Stations.Select(x => x.Position).ToArray(), (seg.Flags & RoadFlags.DoubleTrack) != 0, seg.Flags));
+                raw.Add((ribbon.Stations.Select(x => x.Position).ToArray(), (seg.Flags & RoadFlags.DoubleTrack) != 0, seg.Flags, s.SampleHeight));
             }
             var ways = TramTracks.Directions(raw.Select(r => r.Points.Select(p => (p.X, p.Y)).ToArray()).ToList(), raw.Select(r => r.Double).ToList());
             for (int i = 0; i < raw.Count; i++)
             {
-                var (p, dbl, flags) = raw[i];
+                var (p, dbl, flags, height) = raw[i];
                 double offset = RoadFormat.TrackOffset(flags);
                 // a line of two tracks: each way on its right one; a single track its own way, or both
-                if (dbl) { Add(Shift(p, offset), offset); Add(Shift(p.Reverse().ToArray(), offset), offset); continue; }
-                if (ways[i] >= 0) Add(p, 0);
-                if (ways[i] <= 0) Add(p.Reverse().ToArray(), 0);
+                if (dbl) { Add(Shift(p, offset), offset, height); Add(Shift(p.Reverse().ToArray(), offset), offset, height); continue; }
+                if (ways[i] >= 0) Add(p, 0, height);
+                if (ways[i] <= 0) Add(p.Reverse().ToArray(), 0, height);
             }
         }
 
-        private void Add(Vec2[] points, double offset)
+        private void Add(Vec2[] points, double offset, Func<Vec2, float> height)
         {
             int i = Lines.Count;
             Lines.Add((points, offset));
+            Height.Add(height);
             Bin(_starts, points[0]).Add(i);
             Bin(_ends, points[^1]).Add(i);
         }
@@ -337,6 +340,79 @@ public static partial class TileRewriter
             var r = net.Lines[from].Points;
             for (int k = r.Length - 2; k >= 0; k--) before.Add(r[k]);
             l = from;
+        }
+    }
+
+    // ---- tram stops ----------------------------------------------------------------------------
+
+    /// <summary>A stop serves the tracks within this of its point (m): swissTLM3D's stop point lies on the platform or in the street.</summary>
+    private const double TramStopReach = 15;
+
+    /// <summary>A stop's sign stands this far right of its track's centre (m): past the tram's side, on the platform.</summary>
+    private const double TramStopAside = 2.6;
+
+    /// <summary>The sign's plate top over its foot (m).</summary>
+    public const float TramStopHeight = 2.6f;
+
+    /// <summary>The stops of <c>tram_stops.tsv</c> (#1057: <c>name, e, n</c>, a header row), LV95.</summary>
+    internal static List<(string Name, Vec2 At)> ReadTramStops(string path)
+    {
+        var list = new List<(string, Vec2)>();
+        foreach (var line in File.ReadLines(path).Skip(1))
+        {
+            var f = line.Split('\t');
+            if (f.Length >= 3 && double.TryParse(f[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double e)
+                && double.TryParse(f[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double n))
+                list.Add((f[0], new Vec2(e, n)));
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// A stop sign (#1057, <see cref="PointPropType.TramStop"/>) by every track a tram stop serves, each way its trams run: on the
+    /// trams' right, past their side, facing them; the game's trams stop with their front at it. Two stop points of one stop (one
+    /// per platform) give one sign per track: the nearer.
+    /// </summary>
+    private static void EmitTramStops(List<(string Name, Vec2 At)> stops, TramNet net, HashSet<TileId> block, Dictionary<TileId, List<RoadPointProp>> signs, LayoutWriteStats stats)
+    {
+        var best = new Dictionary<(int Line, int Stop), (double Distance, Vec2 At, Vec2 Dir, float Y)>();
+        var placed = new List<(Vec2 At, Vec2 Dir)>();
+        for (int s = 0; s < stops.Count; s++)
+        {
+            var at = stops[s].At;
+            for (int l = 0; l < net.Lines.Count; l++)
+            {
+                var p = net.Lines[l].Points;
+                double near = TramStopReach;
+                (Vec2 Q, Vec2 Dir)? hit = null;
+                for (int i = 0; i + 1 < p.Length; i++)
+                {
+                    var ab = p[i + 1] - p[i];
+                    double l2 = ab.LengthSquared;
+                    if (l2 < 1e-9) continue;
+                    double t = Math.Clamp((at - p[i]).Dot(ab) / l2, 0, 1);
+                    var q = p[i] + ab * t;
+                    double d = q.DistanceTo(at);
+                    if (d < near) (near, hit) = (d, (q, ab / Math.Sqrt(l2)));
+                }
+                if (hit is not var (point, dir)) continue;
+                best[(l, s)] = (near, point, dir, net.Height[l](point));
+            }
+        }
+        // per track, the nearest stop point; one sign per track and stop name within 40 m
+        foreach (var ((l, s), (_, q, dir, y)) in best.OrderBy(kv => kv.Value.Distance))
+        {
+            if (placed.Any(x => x.At.DistanceTo(q) < 40 && x.Dir.Dot(dir) > 0.7)) continue;
+            placed.Add((q, dir));
+            var foot = q - dir.Perp * TramStopAside;
+            var home = TileId.FromLv95(foot.X, foot.Y);
+            if (!block.Contains(home)) continue;
+            // facing the arriving trams: its front the way they come from (a prop's heading: 0 faces -Z, north)
+            var facing = -dir;
+            float heading = (float)Math.Atan2(-facing.X, facing.Y);
+            Get(signs, home).Add(new RoadPointProp(PointPropType.TramStop, 0, PropFlags.Solid,
+                (float)(foot.X - home.MinE), y, (float)(home.MaxN - foot.Y), heading, TramStopHeight));
+            stats.TramStops++;
         }
     }
 }

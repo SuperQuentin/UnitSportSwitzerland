@@ -26,7 +26,7 @@ public static class RoadSignBuilder
     /// <summary>The plate's face stands this far in front of the pole's axis, its back this far behind the face.</summary>
     private const float PlateOffset = RoadSigns.PoleDiameter * 0.5f + 0.01f, PlateThickness = 0.01f;
 
-    public static bool IsSign(RoadPointProp p) => p.Type is PointPropType.YieldSign or PointPropType.MainRoadSign or PointPropType.CantonSign;
+    public static bool IsSign(RoadPointProp p) => p.Type is PointPropType.YieldSign or PointPropType.MainRoadSign or PointPropType.CantonSign or PointPropType.TramStop;
 
     /// <summary>Appends every sign of the tile to a road mesh under construction.</summary>
     public static void Append(RoadTile tile, List<Vector3> vertices, List<Color> colors, List<Vector2> uvs,
@@ -53,7 +53,9 @@ public static class RoadSignBuilder
 
             var centre = foot + front * PlateOffset + Vector3.Up * ((top + bottom) * 0.5f);
             float side = RoadSigns.Side(p.Type, p.Variant), border = RoadSigns.Border(p.Type, p.Variant);
-            if (p.Type == PointPropType.CantonSign)
+            if (p.Type == PointPropType.TramStop)
+                TramStopPlate(vertices, colors, uvs, uv2s, indices, centre, front, right);
+            else if (p.Type == PointPropType.CantonSign)
                 CantonPlate(vertices, colors, uvs, uv2s, indices, p.Variant, centre, front, right);
             else if (p.Type == PointPropType.YieldSign)
             {
@@ -119,6 +121,33 @@ public static class RoadSignBuilder
             Polygon(vertices, colors, uvs, uv2s, indices, first.SrgbToLinear(), [At(-sw, 0), At(sw, 0), At(sw, sh), At(-sw, sh)]);
             Polygon(vertices, colors, uvs, uv2s, indices, second.SrgbToLinear(), [At(-sw, 0), At(-sw, shoulder), At(0, -sh), At(sw, shoulder), At(sw, 0)]);
         }
+    }
+
+    private static readonly Color StopGreen = new(0.05f, 0.42f, 0.24f), TramBlue = new(0.12f, 0.25f, 0.55f);
+
+    /// <summary>
+    /// A tram stop's sign (#1057): an upright white plate with a green edge, a blue tram on it (its body, windows, wheels and the
+    /// pantograph's bow). Low-poly, as the other signs.
+    /// </summary>
+    private static void TramStopPlate(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
+        Vector3 centre, Vector3 front, Vector3 right)
+    {
+        float w = RoadSigns.TramStopWidth * 0.5f, h = RoadSigns.TramStopHeight * 0.5f;
+        Vector3[] Rect(Vector3 c, float x0, float y0, float x1, float y1) =>
+            [c + right * x0 + Vector3.Up * y0, c + right * x1 + Vector3.Up * y0, c + right * x1 + Vector3.Up * y1, c + right * x0 + Vector3.Up * y1];
+        Polygon(vertices, colors, uvs, uv2s, indices, Back.SrgbToLinear(), Rect(centre - front * PlateThickness, -w, -h, w, h));
+        Polygon(vertices, colors, uvs, uv2s, indices, StopGreen.SrgbToLinear(), Rect(centre, -w, -h, w, h));
+        Polygon(vertices, colors, uvs, uv2s, indices, White.SrgbToLinear(), Rect(centre + front * 0.001f, -w + 0.03f, -h + 0.03f, w - 0.03f, h - 0.03f));
+        var c = centre + front * 0.002f;
+        var blue = TramBlue.SrgbToLinear();
+        Polygon(vertices, colors, uvs, uv2s, indices, blue, Rect(c, -0.16f, -0.12f, 0.16f, 0.08f));                 // the body
+        Polygon(vertices, colors, uvs, uv2s, indices, blue, Rect(c, -0.02f, 0.08f, 0.02f, 0.15f));                  // the pantograph
+        Polygon(vertices, colors, uvs, uv2s, indices, blue, Rect(c, -0.09f, 0.15f, 0.09f, 0.18f));                  // its bow
+        Polygon(vertices, colors, uvs, uv2s, indices, blue, Rect(c, -0.13f, -0.18f, -0.07f, -0.13f));               // the wheels
+        Polygon(vertices, colors, uvs, uv2s, indices, blue, Rect(c, 0.07f, -0.18f, 0.13f, -0.13f));
+        var white = White.SrgbToLinear();
+        foreach (float x in (ReadOnlySpan<float>)[-0.12f, -0.02f, 0.08f])
+            Polygon(vertices, colors, uvs, uv2s, indices, white, Rect(c + front * 0.001f, x, -0.02f, x + 0.07f, 0.05f));   // its windows
     }
 
     /// <summary>A canton's shield in two fields: Geneva's yellow and red side by side, Vaud's white over green; others grey.</summary>

@@ -29,6 +29,54 @@ public sealed partial class LaneGraph
     /// <summary>The tram paths (#1057) laid through junction cores in place of their tracks.</summary>
     public int TramPaths { get; private set; }
 
+    /// <summary>A tram stop on a track (#1057): its sign's spot along the track's drawing (m), and the way the trams it serves run.</summary>
+    public sealed record TramStop(LaneEdge Edge, float Arc, bool Forward);
+
+    /// <summary>Per track, its stops (#1057: RoadGen's <see cref="PointPropType.TramStop"/> signs beside it).</summary>
+    private readonly Dictionary<LaneEdge, List<TramStop>> _tramStops = new();
+
+    /// <summary>The stops on <paramref name="edge"/> (none: an empty list, shared).</summary>
+    public IReadOnlyList<TramStop> TramStopsOn(LaneEdge edge) => _tramStops.TryGetValue(edge, out var list) ? list : NoStops;
+    private static readonly List<TramStop> NoStops = new();
+
+    /// <summary>The tram stops it holds.</summary>
+    public int TramStopCount => _tramStops.Values.Sum(l => l.Count);
+
+    /// <summary>A stop sign serves the track within this of it (m): the sign stands 2.6 m right of its track's centre.</summary>
+    private const float TramStopSide = 4.5f;
+
+    /// <summary>
+    /// The tram stops (#1057): each stop sign the tiles hold, on the track beside it whose trams it faces (the sign on their right).
+    /// </summary>
+    private void FindTramStops(IReadOnlyList<RoadTile> tiles, OriginFrame origin)
+    {
+        foreach (var tile in tiles)
+            foreach (var p in tile.PointProps)
+            {
+                if (p.Type != PointPropType.TramStop) continue;
+                var at = origin.ToWorld(tile.Id.MinE + p.X, tile.Id.MaxN - p.Z, p.Y);
+                // the trams it serves come toward its face: they run along -front
+                var run = new Vector3(Mathf.Sin(p.Heading), 0f, Mathf.Cos(p.Heading));
+                TramStop? best = null;
+                float near = TramStopSide;
+                foreach (var e in Edges)
+                {
+                    if (e.Path is not null || TramCut(e, at, TramStopSide) is not { } s) continue;
+                    var (q, t) = e.Sample(s);
+                    float d = MathX.Flat(at - q).Length();
+                    bool forward = MathX.Flat(t).Dot(run) > 0f;
+                    if (d >= near || Mathf.Abs(MathX.Flat(t).Dot(run)) < 0.7f || (forward ? e.OneWay < 0 : e.OneWay > 0)) continue;
+                    // the sign on the trams' right
+                    var dir = forward ? t : -t;
+                    if (new Vector3(-dir.Z, 0f, dir.X).Dot(at - q) <= 0f) continue;
+                    (near, best) = (d, new TramStop(e, s, forward));
+                }
+                if (best is null) continue;
+                if (!_tramStops.TryGetValue(best.Edge, out var list)) _tramStops[best.Edge] = list = new();
+                list.Add(best);
+            }
+    }
+
     /// <summary>A tram path's end lies on its track's line within this (m): the track is cut there.</summary>
     private const float TramCutReach = 0.75f;
 
@@ -76,6 +124,7 @@ public sealed partial class LaneGraph
         var ways = TramTracks.Directions(lines, doubles);
         for (int i = 0; i < g.Edges.Count; i++) g.Edges[i].OneWay = ways[i];
         g.SpliceTramPaths(tiles, origin);
+        g.FindTramStops(tiles, origin);
         foreach (var e in g.Edges)
         {
             g.Link(e.KeyStart, e, true);
@@ -159,9 +208,9 @@ public sealed partial class LaneGraph
     }
 
     /// <summary>Where <paramref name="at"/> lies along a track (m), if within <see cref="TramCutReach"/> of it; null if not.</summary>
-    private static float? TramCut(LaneEdge e, Vector3 at)
+    private static float? TramCut(LaneEdge e, Vector3 at, float reach = TramCutReach)
     {
-        float best = TramCutReach, result = -1f;
+        float best = reach, result = -1f;
         for (int k = 0; k + 1 < e.Points.Length; k++)
         {
             var a = MathX.Flat(e.Points[k]);

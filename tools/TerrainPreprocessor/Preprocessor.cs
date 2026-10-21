@@ -134,6 +134,8 @@ public static partial class Preprocessor
         // boat landings and harbour jetties (#377): standalone with --landings, and after every water pass
         // run with --tlm (the piers stand on the beds and the still water)
         bool landingsOnly = false;
+        // tram stops (#1057): standalone with --tram-stops (needs --out and --tlm), into <out>_temp/tram_stops.tsv for RoadGen
+        bool tramStopsOnly = false;
         // --landings-file: write landings.json elsewhere (reading a live region without touching it)
         string? landingsFile = null;
         // airports (#422): stands and runways from swissTLM3D and OpenStreetMap (--osm <pbf>) over the built tiles
@@ -193,6 +195,7 @@ public static partial class Preprocessor
                 case "--horizon": horizonOnly = true; break;
                 case "--water": waterOnly = true; break;
                 case "--landings": landingsOnly = true; break;
+                case "--tram-stops": tramStopsOnly = true; break;
                 case "--landings-file": landingsFile = args[++i]; break;
                 case "--airports": airportsOnly = true; break;
                 case "--airports-file": airportsFile = args[++i]; break;
@@ -374,6 +377,17 @@ public static partial class Preprocessor
             SetStage("water");
             int wrc = WaterStage.Run(outDir, WaterOptions(), ct);
             return wrc != 0 || tlmGpkg == null ? wrc : LandingStage.Run(outDir, tlmGpkg);
+        }
+
+        // ---- tram stops (#1057): swissTLM3D stops beside the tram tracks, for RoadGen's rewrite -----
+        if (tramStopsOnly)
+        {
+            if (outDir == null || tlmGpkg == null)
+            {
+                Console.Error.WriteLine("--tram-stops requires --out <chunk dir> and --tlm <swisstlm3d .gpkg>");
+                return 2;
+            }
+            return TramStopStage.Run(outDir, tlmGpkg);
         }
 
         // ---- landings: piers and jetties from swissTLM3D over the built beds and water -------------

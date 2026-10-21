@@ -164,6 +164,14 @@ public partial class Traffic
                 float line = TramLight(tram, site, p.Group, along - (_tramLines?.TramStopBack(e) ?? 0f) - front, dt);
                 if (line < target) { target = line; holding = true; atRed = true; }
             }
+            // its stops (#1057): its front at the sign, the doors open a while
+            if (_tramLines is { } lines)
+                foreach (var stop in lines.TramStopsOn(e))
+                {
+                    if (stop.Forward != fwd) continue;
+                    float stopAt = TramAtStop(tram, stop, along + (fwd ? stop.Arc : e.Length - stop.Arc) - front, dt);
+                    if (stopAt < target) { target = stopAt; holding = true; }
+                }
             along += e.Length;
             if (i + 1 == route.Legs.Count) end = along;   // the end of the track it knows: it stops there
         }
@@ -224,6 +232,42 @@ public partial class Traffic
         if (!stop) return float.MaxValue;
         if (!tram.AtRed && toLine < 15f && tram.Speed < 0.5f) { tram.AtRed = true; TramRedStops++; }
         return TramStopWithin(room);
+    }
+
+    /// <summary>What a tram keeps between ticks (#1057): the stop it last served, how long its doors have been open at this one.</summary>
+    private sealed class TramState
+    {
+        public LaneGraph.TramStop? Served;
+        public float Dwell;
+    }
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<Vehicle, TramState> _tramState = new();
+
+    /// <summary>A tram's doors stay open this long at a stop (s), give or take <see cref="TramDwellSpread"/> by the tram.</summary>
+    private const float TramDwell = 20f, TramDwellSpread = 6f;
+
+    /// <summary>Stops a tram served (its doors opened and closed), for the probe.</summary>
+    public int TramStopsServed { get; private set; }
+
+    /// <summary>
+    /// A stop ahead of a tram (#1057), its sign <paramref name="toStop"/> m ahead of its front: the speed it may do. It brakes to
+    /// stand with its front at the sign, stands there its dwell, then goes on (the stop served); a stop it is already past is
+    /// left. +∞ where the stop does not hold it.
+    /// </summary>
+    private float TramAtStop(Vehicle tram, LaneGraph.TramStop stop, float toStop, float dt)
+    {
+        var state = _tramState.GetOrCreateValue(tram);
+        if (ReferenceEquals(state.Served, stop) || toStop < -3f) return float.MaxValue;
+        if (toStop < 2f && tram.Speed < 0.3f)
+        {
+            state.Dwell += dt;
+            float dwell = TramDwell + TramDwellSpread * ((tram.GetHashCode() & 0xff) / 127.5f - 1f);
+            if (state.Dwell < dwell) return 0f;
+            state.Served = stop;
+            state.Dwell = 0f;
+            TramStopsServed++;
+            return float.MaxValue;
+        }
+        return TramStopWithin(toStop - 0.3f);
     }
 
     /// <summary>Its front past its head section's centre (m): that section's half length.</summary>

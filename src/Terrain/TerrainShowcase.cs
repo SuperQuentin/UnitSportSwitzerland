@@ -62,6 +62,7 @@ public static class TerrainShowcase
         PointPropType.TicketKiosk => 1.5f,
         PointPropType.CartShelter => 2.4f,
         PointPropType.CantonSign => RoadSigns.LowerEdge + RoadSigns.CantonSignHeight,
+        PointPropType.TramStop => 2.6f,
         _ => 2.2f,
     };
 
