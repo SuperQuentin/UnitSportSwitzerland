@@ -224,7 +224,9 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   no board at all (user's review). Geneva's pedestrian head (the two-lens one, `!PedestrianAmber`,
   after the user's photo) is a light grey housing with one dark window, the red standing figure
   left and the green walking one right, side by side at 1.45 times a lens (`Head.SideBySide`);
-  the model viewer shows a Vaud and a Geneva pole.
+  the model viewer shows a Vaud and a Geneva pole. In game: the test region's canton row (#1038, `signal-test-region`),
+  the same crossroads in the default zone, Geneva and Vaud side by side; a canton whose lights get a rule of their own
+  gets a zone there (`CantonTiles`).
 - **Arrows in the round lenses** (#759, user: "when the ball would not allow every direction, a
   straight or combined arrow"): `SignalBuilder.ArrowMoves(plan, group)` gives a car group's moves
   when they are not every move its approach has (the union of the arm's Car, LeftArrow and

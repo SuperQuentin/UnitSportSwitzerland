@@ -36,13 +36,20 @@ public static class TerrainShowcase
     {
         foreach (var type in Enum.GetValues<PointPropType>().Where(t => t != PointPropType.None))
         {
-            byte variants = type == PointPropType.TicketBarrier ? (byte)2 : (byte)1;   // boom down, up
-            for (byte v = 0; v < variants; v++)
+            byte[] variants = type switch
             {
-                byte variant = v;
+                PointPropType.TicketBarrier => [0, 1],   // boom down, up
+                // the test region's zones (#1038): the default one, Geneva, Vaud
+                PointPropType.CantonSign => [0, RoadSigns.CantonVariant("GE"), RoadSigns.CantonVariant("VD")],
+                _ => [0],
+            };
+            foreach (byte variant in variants)
+            {
                 var tile = Tile(new RoadPointProp(type, variant, PropFlags.Solid, 0, 0, 0, 0f, PropHeight(type)));
                 if (Arrays(tile).Vertices.Length == 0) continue;   // a type no builder draws yet
-                yield return (variants > 1 ? $"{type} {variant}" : type.ToString(), () => RoadProps(tile));
+                string name = type == PointPropType.CantonSign ? $"{type} {RoadSigns.CantonCode(variant) ?? "default"}"
+                    : variants.Length > 1 ? $"{type} {variant}" : type.ToString();
+                yield return (name, () => RoadProps(tile));
             }
         }
     }
@@ -54,6 +61,7 @@ public static class TerrainShowcase
         PointPropType.TicketBarrier => 1.1f,
         PointPropType.TicketKiosk => 1.5f,
         PointPropType.CartShelter => 2.4f,
+        PointPropType.CantonSign => RoadSigns.LowerEdge + RoadSigns.CantonSignHeight,
         _ => 2.2f,
     };
 
@@ -115,6 +123,7 @@ public static class TerrainShowcase
         FogUniforms.Apply(material);
         var node = new MeshInstance3D { Mesh = ChunkNode.ToArrayMesh(Arrays(tile), material) };
         if (SignalBuilder.BuildLamps(tile) is { } lamps) node.AddChild(SignalLamps.Create(lamps));
+        foreach (var label in RoadSignBuilder.Labels(tile) ?? []) node.AddChild(RoadSignBuilder.Make(label));
         return node;
     }
 

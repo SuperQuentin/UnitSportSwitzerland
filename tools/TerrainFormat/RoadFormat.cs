@@ -335,6 +335,7 @@ public enum PointPropType : byte
     TicketBarrier = 5,   // a car park's boom and its housing (#499); Variant: 0 boom down, 1 up
     TicketKiosk = 6,     // the pay-and-display machine, or the entry column beside the boom (#499)
     CartShelter = 7,     // a shopping-trolley shelter at a big-box store (#499)
+    CantonSign = 8,      // a canton's border sign in a test world (#1038): its colours and name; Variant: RoadSigns.CantonVariant
 }
 
 /// <summary>A prop at one point: a sign on a pole. Y is its foot on the ground.</summary>
