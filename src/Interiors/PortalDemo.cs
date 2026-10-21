@@ -104,7 +104,7 @@ public partial class PortalDemo : Node3D
                 spots.Add(new DoorSpot(index, new Vector3(h.Center.X + x, 0, z), new Vector3(0, 0, south ? 1 : -1), h.DoorWidth, h.DoorHeight));
             }
         }
-        var mesh = BuildingMeshBuilder.Build(tile, spots.ToArray())!;
+        var mesh = BuildingMeshBuilder.Build(tile, spots.ToArray(), Styles.StyleKit.Detail)!;
         AddChild(new MeshInstance3D { Name = "Buildings", Mesh = ChunkNode.ToArrayMesh(mesh, buildingMaterial) });
 
         // D has people in it: more lit windows, figures behind the glass
@@ -184,8 +184,66 @@ public partial class PortalDemo : Node3D
                 },
             };
             var door = new DoorSpot(0, new Vector3(0, 0, 4.03f), new Vector3(0, 0, 1), 1.1f, 2.2f);
-            return new MeshInstance3D { Mesh = ChunkNode.ToArrayMesh(BuildingMeshBuilder.Build(tile, new[] { door })!, World(Styles.MaterialRole.Building)) };
+            return new MeshInstance3D { Mesh = ChunkNode.ToArrayMesh(BuildingMeshBuilder.Build(tile, new[] { door }, Styles.StyleKit.Detail)!, World(Styles.MaterialRole.Building)) };
         })));
+
+    /// <summary>
+    /// Roof shapes for the overhangs (#1067; <see cref="RoofOverhangs"/>, drawn with the style's
+    /// mesh detail, so only High shows them): a hipped roof, a terraced row whose middle house
+    /// stands taller (no verge over a neighbour's roof), and a lean-to shed against a house (no
+    /// overhang along the wall it leans on).
+    /// </summary>
+    [Showcase("Terrain", "Roof")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseRoofs()
+    {
+        Node3D Show(params Building[] solids)
+        {
+            var tile = new BuildingTile { Id = new TileId(0, 0), Buildings = solids.ToList() };
+            return new MeshInstance3D { Mesh = ChunkNode.ToArrayMesh(BuildingMeshBuilder.Build(tile, null, Styles.StyleKit.Detail)!, World(Styles.MaterialRole.Building)) };
+        }
+        Building House(float[] triangles, float top, BuildingKind kind = BuildingKind.House) =>
+            new() { Kind = kind, Floors = 2, MinY = 0, MaxY = top, Triangles = triangles };
+        yield return ("Hipped", () => Show(House(Hipped(Vector2.Zero, 12f, 9f, 6.2f, 9.5f), 9.5f)));
+        yield return ("Terraced row", () => Show(
+            House(Solid(new Vector2(-7f, 0f), 7f, 9f, 6.2f, 9f), 9f),
+            House(Solid(Vector2.Zero, 7f, 9f, 7.2f, 10.5f), 10.5f),
+            House(Solid(new Vector2(7f, 0f), 7f, 9f, 6.2f, 9f), 9f)));
+        yield return ("Lean-to", () => Show(
+            House(Solid(Vector2.Zero, 8f, 9f, 6.2f, 9f), 9f),
+            House(LeanTo(-4f - 3.5f, -4f, -3f, 3f, 2.6f, 4.2f), 4.2f, BuildingKind.Annex)));
+    }
+
+    /// <summary>A hipped house: four walls to the eave and four roof faces, the hips at 45 degrees in plan.</summary>
+    private static float[] Hipped(Vector2 c, float w, float d, float eave, float ridge)
+    {
+        float x0 = c.X - w / 2, x1 = c.X + w / 2, z0 = c.Y - d / 2, z1 = c.Y + d / 2, h = Mathf.Min(w, d) / 2;
+        var t = new List<float>();
+        void Tri(Vector3 a, Vector3 b, Vector3 e) { t.AddRange(new[] { a.X, a.Y, a.Z, e.X, e.Y, e.Z, b.X, b.Y, b.Z }); }
+        void Quad(Vector3 a, Vector3 b, Vector3 e, Vector3 f) { Tri(a, b, e); Tri(a, e, f); }
+        Quad(new(x0, 0, z1), new(x1, 0, z1), new(x1, eave, z1), new(x0, eave, z1));
+        Quad(new(x1, 0, z0), new(x0, 0, z0), new(x0, eave, z0), new(x1, eave, z0));
+        Quad(new(x0, 0, z0), new(x0, 0, z1), new(x0, eave, z1), new(x0, eave, z0));
+        Quad(new(x1, 0, z1), new(x1, 0, z0), new(x1, eave, z0), new(x1, eave, z1));
+        Quad(new(x0, eave, z1), new(x1, eave, z1), new(x1 - h, ridge, c.Y), new(x0 + h, ridge, c.Y));
+        Quad(new(x1, eave, z0), new(x0, eave, z0), new(x0 + h, ridge, c.Y), new(x1 - h, ridge, c.Y));
+        Tri(new(x0, eave, z0), new(x0, eave, z1), new(x0 + h, ridge, c.Y));
+        Tri(new(x1, eave, z1), new(x1, eave, z0), new(x1 - h, ridge, c.Y));
+        return t.ToArray();
+    }
+
+    /// <summary>A shed from x0 to x1 whose single roof face climbs from <paramref name="low"/> to <paramref name="high"/> at x1.</summary>
+    private static float[] LeanTo(float x0, float x1, float z0, float z1, float low, float high)
+    {
+        var t = new List<float>();
+        void Tri(Vector3 a, Vector3 b, Vector3 e) { t.AddRange(new[] { a.X, a.Y, a.Z, e.X, e.Y, e.Z, b.X, b.Y, b.Z }); }
+        void Quad(Vector3 a, Vector3 b, Vector3 e, Vector3 f) { Tri(a, b, e); Tri(a, e, f); }
+        Quad(new(x0, 0, z1), new(x1, 0, z1), new(x1, high, z1), new(x0, low, z1));
+        Quad(new(x1, 0, z0), new(x0, 0, z0), new(x0, low, z0), new(x1, high, z0));
+        Quad(new(x0, 0, z0), new(x0, 0, z1), new(x0, low, z1), new(x0, low, z0));
+        Quad(new(x1, 0, z1), new(x1, 0, z0), new(x1, high, z0), new(x1, high, z1));
+        Quad(new(x0, low, z0), new(x0, low, z1), new(x1, high, z1), new(x1, high, z0));
+        return t.ToArray();
+    }
 
     /// <summary>
     /// Castles (#859), one of each dress: a keep for every building tradition (on a real fortress of
@@ -200,7 +258,7 @@ public partial class PortalDemo : Node3D
             var node = new Node3D();
             node.AddChild(new MeshInstance3D
             {
-                Mesh = ChunkNode.ToArrayMesh(BuildingMeshBuilder.Build(tile, Array.Empty<DoorSpot>())!, World(Styles.MaterialRole.Building)),
+                Mesh = ChunkNode.ToArrayMesh(BuildingMeshBuilder.Build(tile, Array.Empty<DoorSpot>(), Styles.StyleKit.Detail)!, World(Styles.MaterialRole.Building)),
                 Position = new Vector3(-at.X, 0f, -at.Y),
             });
             return node;
@@ -273,7 +331,7 @@ public partial class PortalDemo : Node3D
                 Link = new GarageLink(k.Item1, k.Item2, 0f, new Vector2(1, 0)),
             };
             var node = new Node3D();
-            node.AddChild(new MeshInstance3D { Mesh = ChunkNode.ToArrayMesh(BuildingMeshBuilder.Build(tile, new[] { door })!, World(Styles.MaterialRole.Building)) });
+            node.AddChild(new MeshInstance3D { Mesh = ChunkNode.ToArrayMesh(BuildingMeshBuilder.Build(tile, new[] { door }, Styles.StyleKit.Detail)!, World(Styles.MaterialRole.Building)) });
             // the road it meets, so the link has something to join
             node.AddChild(new MeshInstance3D
             {

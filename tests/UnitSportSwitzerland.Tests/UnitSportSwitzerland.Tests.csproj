@@ -173,6 +173,7 @@
     <!-- site detection (#497) and landmark detection (#501): pure functions of a tile's
          bytes, Godot maths only -->
     <Compile Include="..\..\src\Terrain\BuildingTriangles.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\RoofOverhangs.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\PlanBox.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\BuildingTypes.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- building sites (#606): the planner, Godot maths only -->

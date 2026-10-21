@@ -36,8 +36,9 @@ The plan and the prototype's results: `docs/plans/visual-styles.md` (issues #181
   is the style's `Environment`, driven by `DayNight` as before.
 - **`MeshDetail`** (Low, High) goes into every tile build (`ChunkManager.Detail`, read once when a
   build starts) and on to `TerrainMeshBuilder.BuildSurfaceCore`, `BuildingMeshBuilder.Build`,
-  `WaterMeshBuilder.Build` and `ChunkNode.BuildTreeMeshes`. Only Low exists; a new builder takes
-  the parameter from day one. `RoadMeshBuilder` gets it after the road network stack (#114).
+  `WaterMeshBuilder.Build` and `ChunkNode.BuildTreeMeshes`. High (Cartoon) has trees, rounded
+  signal heads and building roof overhangs (`terrain/roof-overhangs`) of its own; a new builder
+  takes the parameter from day one. `RoadMeshBuilder` gets it after the road network stack (#114).
 - **Live restyle, "rebuild in place".** `StyleKit.Style` is the choice, `StyleKit.Applied` what
   the world shows. `StyleKit.Restyle()` re-points every live material's `Shader` in place (Godot
   keeps a material's parameters across a shader change, so fog, the sightline cut, occupancy and
