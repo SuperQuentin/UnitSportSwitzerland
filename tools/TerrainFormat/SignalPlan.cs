@@ -824,7 +824,6 @@ public sealed class SignalPlan
     }
 
     /// <param name="limits">How far a slow group may end early at a phase change at most (s, by phase and group): its minimum green.</param>
-
     /// <param name="slowEnds">Filled with each slow group's early-ended green: the phase change, the group, its green's start and the phase's end.</param>
     private static void Time(SignalPlan plan, List<Phase> phases, Conflict[,] conflicts, float[,]? times, bool early = true,
         Dictionary<(int Phase, int Group), float>? limits = null, List<(int Phase, int Group, float From, float End)>? slowEnds = null)
@@ -956,7 +955,6 @@ public sealed class SignalPlan
         // still on it: the last to step off as its green ended crosses it at the walking speed (the user, #979: it went off as the
         // walkers' green ended, with them still on the zebra)
         float Walk(int h) => plan.Groups[h].Kind == SignalGroupKind.Pedestrian ? plan.CrossingOf(h) / WalkSpeed : 0f;
-
         bool Active(int h, double t)
         {
             if (plan.State(h, t) == SignalAspect.Green) return true;
@@ -1143,7 +1141,6 @@ public enum SignalPoleFlags : byte
     /// <summary>With <see cref="Pedestrian"/>, its head shows the departing half of a two-stage crossing (#1030).</summary>
     DepartingHalf = 16,
 }
-
 
 /// <summary>
 /// A signal pole (#350), tile-local like the record it belongs to: its foot (on the sidewalk or

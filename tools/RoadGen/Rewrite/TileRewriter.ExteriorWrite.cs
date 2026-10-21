@@ -54,10 +54,13 @@ public static partial class TileRewriter
                 && kerbLane.Moves != SignalMoves.Right;
             // the bike lane between the through lane and the right pocket (layout b): no conflict with that pocket's arrow (#979)
             bool between = a.HasRight && !kerbside && mouth.Strips.Any(x => x.Kind == StripKind.BikeLane && x.Way == StripWay.In && x.Moves != SignalMoves.Right && x.Moves != SignalMoves.Left);
+            // a two-stage crossing's halves (#1030): the zebra's arriving side to the island, the island to its departing side
+            var zebra = ex.Bars.FirstOrDefault(b => b.Kind == BarKind.Crosswalk);
+            var (halfIn, halfOut) = ex.StageIsland is var (il, ir) && zebra is not null ? ((float)(zebra.Right - ir), (float)(il - zebra.Left)) : (0f, 0f);
             arms.Add(new SignalArm(a.Heading, approach, leaves, ins.Any(l => l.Moves == SignalMoves.Left), ins.Any(l => l.Moves == SignalMoves.Right),
                 Pedestrians: ex.Crosswalk is not null, BikeSignal: approach && (path || kerbside), SpeedKmh: urban ? 50 : 60,
                 CrossingM: (float)(mouth.CarriagewayWidth), Rank: (byte)Math.Clamp(info is { } i ? PriorityPlanner.Rank(i) / 4 : 1, 1, 255),
-                Banned: approach ? a.Wants.Banned : SignalMoves.None, BikeBetween: between));
+                Banned: approach ? a.Wants.Banned : SignalMoves.None, BikeBetween: between, HalfInM: halfIn, HalfOutM: halfOut));
         }
         if (arms.Count(x => x.In) < 2) return null;
         string? canton = cantons?.CodeAt(jp.Centre.X, jp.Centre.Y);
@@ -106,6 +109,7 @@ public static partial class TileRewriter
             return null;
         }
         plan.ArrowPlates = ArrowPlates(canton);
+        stats.TwoStage += arms.Count(x => x.TwoStage);
 
         float SampleAt(ArmPlan a, Vec2 p) => net.Links[a.LinkId].Tag is Source s ? s.SampleHeight(p) : 0f;
         var stops = new float[arms.Count * 3];

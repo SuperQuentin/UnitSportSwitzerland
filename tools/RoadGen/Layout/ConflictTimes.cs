@@ -170,17 +170,21 @@ public static class ConflictTimes
             else lines.Add(new Line(g, Mover.Bike, points, c.Width, BikeClear, BikeEnter, BikeLength, plan.PassingTime(g)));
         }
         // the walkers: along the middle of each arm's zebra, from either side: past the kerb across a separated path beside it, as
-        // the zebra is painted (the user: the riders on it cross the walkers too)
-        for (int k = 0; k < jp.Arms.Count; k++)
+        // the zebra is painted (the user: the riders on it cross the walkers too); a two-stage crossing's halves each between its
+        // kerb and the island (#1030)
+        for (int g = 0; g < plan.Groups.Count; g++)
         {
+            if (plan.Groups[g].Kind != SignalGroupKind.Pedestrian) continue;
+            int k = plan.Groups[g].Arm;
             var a = jp.Arms[k];
-            int g = plan.Groups.FindIndex(x => x.Kind == SignalGroupKind.Pedestrian && x.Arm == k);
-            if (g < 0 || a.Axis is null || jp.Exterior.FirstOrDefault(x => x.Arm == a)?.Bars.FirstOrDefault(b => b.Kind == BarKind.Crosswalk) is not { } bar)
-                continue;
+            var ex = jp.Exterior.FirstOrDefault(x => x.Arm == a);
+            if (a.Axis is null || ex?.Bars.FirstOrDefault(b => b.Kind == BarKind.Crosswalk) is not { } bar) continue;
             var mouth = core.Mouths.First(m => m.Arm == a.Arm);
             var section = ExteriorPlanner.SectionAt(a, 0);
             double from = section.PathBand(right: false) is var (cl, wl) ? Math.Min(bar.Left, cl - wl * 0.5) : bar.Left;
             double to = section.PathBand(right: true) is var (cr, wr) ? Math.Max(bar.Right, cr + wr * 0.5) : bar.Right;
+            if (ex.StageIsland is var (il, ir))
+                (from, to) = plan.Groups[g].Half switch { CrossingHalf.Arriving => (ir, to), CrossingHalf.Departing => (from, il), _ => (from, to) };
             var left = a.Axis.At(mouth.Station + bar.Middle, from);
             var right = a.Axis.At(mouth.Station + bar.Middle, to);
             lines.Add(new Line(g, Mover.Walker, [left, right], bar.To - bar.From, WalkClear, WalkEnter, WalkLength, plan.PassingTime(g)));
