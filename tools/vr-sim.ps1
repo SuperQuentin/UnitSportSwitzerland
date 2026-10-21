@@ -27,5 +27,5 @@ Write-Host "OpenXR runtime for this run: $json"
 
 $env:XR_RUNTIME_JSON = $json
 $project = Split-Path $PSScriptRoot -Parent
-& $Godot --xr-mode on --rendering-driver vulkan --path $project -- --vr @GameArgs
+& $Godot --xr-mode on --rendering-driver vulkan --rendering-method mobile --path $project -- --vr @GameArgs
 exit $LASTEXITCODE
