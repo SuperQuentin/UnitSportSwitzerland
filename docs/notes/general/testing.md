@@ -152,6 +152,23 @@ row uses `--car 4` (BNR32, grip). `narrow` puts the AE86 out against the trunks 
   with the owner's PID, `info` (start time, `max_hold`, what runs) and a `beat` file. Two `test.sh net`
   started together ran one after the other (46 s each, 104 s in all). The lock is per OS user temp
   dir: Git Bash and WSL do not see each other's lock.
+- **Slots: the net and full tiers run side by side (#1008).**
+  - The lock is `GUARD_SLOTS` directories: `unitsport-heavy.lock` is slot 0, then `.1`, `.2`. The default
+    is one slot per 10 GB of RAM, from 1 to 4 (3 on 32 GB).
+  - `guard_lock` takes the first free slot and sets `GUARD_SLOT`. A script from before #1008 only knows
+    slot 0.
+  - **Ports:** `tc_server`, `tc_client` and `tc_godot` move `--port N` and `127.0.0.1:N` by
+    `GUARD_SLOT * 1000`. Slot 0 keeps the scripts' own ports, and no `PORT=` line changes. A script that
+    starts Godot itself adds the offset (`buildnetcheck`, netsmoke).
+  - **`tools/test.sh net|full`** runs the heavy checks up to `TEST_JOBS` at once (default `GUARD_SLOTS`),
+    each job in its own slot. A job starts with `TEST_HEAVY_RAM_GB` (6) free and `TEST_JOB_STAGGER` (40) s
+    after the previous one, so that one has grown to its size first. A job the RAM watchdog stopped runs
+    again alone at the end. A first try at 4 GB and no stagger had 10 checks killed at the floor beside
+    another session's run, a qemu VM (8 GB) and an idle dotnet build server (3 GB). The table keeps the map's
+    order. Two scripts logging under one twoclient name never run together (`rampalongnetcheck` execs
+    `rampnetcheck`), and `loadtest.sh` / `trailer.sh` run alone.
+  - `TEST_JOBS=1` is the old serial run, holding one slot throughout. `TEST_ONLY=net tools/test.sh full`
+    runs every net row and nothing else.
 - **Stale locks are taken over at once, never waited out.** An ad-hoc lock once kept two agents
   waiting 20 min behind an owner that had died. Now a waiter takes the lock over when:
   - the owner PID is gone (`kill -0`);
@@ -162,7 +179,7 @@ row uses `--car 4` (BNR32, grip). `narrow` puts the AE86 out against the trunks 
 
   `tools/test.sh lock` (`guard_status`) shows who holds it, for how long, the last heartbeat and
   whether it is stale. A waiter prints the same every 2 min. `tools/lib/guard_selftest.sh` (in
-  `quick` for `tools/lib/`) checks the four cases: dead, stalled heartbeat, past max, live.
+  `quick` for `tools/lib/`) checks the four cases (dead, stalled heartbeat, past max, live) and that a second run takes slot 1 at once.
   Never write your own `mkdir` lock loop: source `guard.sh`.
 - Timeouts kill only the run's own process tree: `taskkill /T /PID <its winpid>` on Windows (the
   `_console.exe` wrapper starts the real Godot as a child), its process group on Linux. Never by name.
