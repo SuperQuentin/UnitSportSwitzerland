@@ -1,12 +1,12 @@
 # /update: the deployed server installs the newest release (#730, #1088)
 
-- **On command**: an admin (or the console, `update`, also from a client of any version through `net/console-link`)
+- **On command**: an admin (in game, through `net/console-link` from a client of any version, or the console, `update`)
   types `/update`: fetch, then everyone kicked and the restart.
 - **And by itself** (`Net/ServerAutoUpdate`, #1088): every 10 min (`--auto-update-minutes N`, first check 30 s after
   the start) and at once when the handshake refuses a client of a **newer** protocol (at most once a minute), the
   same check runs quietly (`quiet: true`: nothing said when up to date, a feed that is down only logged). A newer
   release is fetched while people play and waits in `ServerUpdater.ReadyTag`; the server restarts on it **only once
-  nobody is connected** (bots and console links do not count), never under a player. The connected admins are told
+  nobody is connected** (bots and players joined through the console do not count), never under a player. The connected admins are told
   once per release ("vX is out and downloaded… /update restarts it now"), and an admin who joins or logs in while it
   waits too (`PlayerInfo.AdminChanged`). A refused newer client reads that the server updates itself
   (`Handshake.NewerHint`). `/update` meanwhile restarts at once: on the waiting release without a second

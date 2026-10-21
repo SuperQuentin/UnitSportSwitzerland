@@ -5,13 +5,14 @@ namespace UnitSport.Ui;
 
 /// <summary>
 /// <c>godot --headless --path . -- --consolelinkcheck &lt;host:port&gt; --fakeprotocol 999 --world fixture</c>
-/// (driven by <c>tools/consolelinknetcheck.sh</c>, #1088): the remote console from the title, against a server
-/// started with <c>--admin-password test</c>.
+/// (driven by <c>tools/consolelinknetcheck.sh</c>, #1088): joining for the chat only, from the title, against a
+/// server started with <c>--admin-password test</c>.
 /// <list type="bullet">
 /// <item>Joining with another protocol is refused, and the Multiplayer screen's banner offers that server's console.</item>
-/// <item>A wrong password is answered and disconnected; the right one opens the link.</item>
-/// <item><c>who</c> is answered; the link outlives the handshake's hello timeout; <c>say</c> comes back as the
-/// console sees it.</item>
+/// <item>Opening it joins under this player's name with that name's rights: not an admin, so <c>/update</c> is
+/// refused; <c>/login</c> makes it one, and <c>/update</c> then runs (this server cannot update itself).</item>
+/// <item><c>/who</c> lists it as on the console; it outlives the handshake's hello timeout; a message is said to
+/// everyone under its name; <c>/tp</c> needs a body.</item>
 /// </list>
 /// Wall clock throughout: a server answers in real time, whatever <c>--fixed-fps</c> does.
 /// </summary>
@@ -46,25 +47,21 @@ public partial class ConsoleLinkCheck : Node
         Expect(await Wait(() => (console = _shell.Top as ServerConsoleScreen) != null, 5), "the console screen opens");
         if (console == null) { Done(); return; }
 
-        console.ConnectWith("wrong");
-        Expect(await Wait(() => console.Output.Contains("Wrong password."), 15), "a wrong password is refused");
-        Expect(await Wait(() => !console.IsOpen && console.Output.Contains("Disconnected."), 10), "and disconnected");
-
-        console.ConnectWith("test");
-        Expect(await Wait(() => console.IsOpen && console.Output.Contains("Connected to"), 15), "the right password opens the link");
+        Expect(await Wait(() => console.IsOpen && console.Output.Contains("as ConsoleCheck."), 15), "joined as ConsoleCheck, not an admin");
         if (!console.IsOpen) { Done(); return; }
 
-        int before = console.Output.Length;
-        console.Submit("who");
-        Expect(await Wait(() => console.Output.Length > before + "> who\n".Length, 10), "who is answered");
+        Expect(await Answer(console, "/update", "'/update' is an admin command."), "/update refused without the rights");
+        Expect(await Answer(console, "/login wrong", "Wrong password."), "a wrong /login refused");
+        Expect(await Answer(console, "/login test", "You are now an operator."), "/login makes it an admin");
+        Expect(await Answer(console, "/update", "This server cannot update itself"), "/update runs for an admin");
+        Expect(await Answer(console, "/who", "ConsoleCheck (admin) (console)"), "/who lists it, on the console");
 
         // the handshake kicks a peer that never says hello after 10 s: not this one
         await Wait(() => false, 13);
         Expect(console.IsOpen, "still connected after the hello timeout");
 
-        console.Submit("say console-check-hello");
-        Expect(await Wait(() => console.Output.Split('\n').Any(l => !l.StartsWith('>') && l.Contains("console-check-hello")), 10),
-            "say comes back as the console sees it");
+        Expect(await Answer(console, "hello-from-console", "ConsoleCheck: hello-from-console"), "a message is said to everyone");
+        Expect(await Answer(console, "/tp Nobody", "needs a body"), "/tp needs a body");
         await Shot("console");
         GD.Print("[consolelink] output:\n" + console.Output);
         Done();
@@ -77,6 +74,15 @@ public partial class ConsoleLinkCheck : Node
         await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
         GetViewport().GetTexture().GetImage().SavePng($"res://test_output/consolelink_{name}.png");
         GD.Print($"[consolelink] shot test_output/consolelink_{name}.png");
+    }
+
+    /// <summary>Sends <paramref name="line"/> and waits for a reply line holding <paramref name="expected"/>.</summary>
+    private async Task<bool> Answer(ServerConsoleScreen console, string line, string expected)
+    {
+        int from = console.Output.Length;
+        console.Submit(line);
+        return await Wait(() => console.Output.Length > from && console.Output[from..].Split('\n')
+            .Any(l => !l.StartsWith('>') && l.Contains(expected)), 10);
     }
 
     private static Button? Find(Node node, string text)

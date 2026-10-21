@@ -5,9 +5,10 @@ using UnitSport.Net;
 namespace UnitSport.Ui;
 
 /// <summary>
-/// A server's console from the menus (#1088): the admin password, then a command line and what the server's
-/// console shows. It talks through <see cref="ConsoleLink"/>, which skips the version check, so it reaches a
-/// server of any version since the link exists: the way to <c>update</c> a server this game is too new for.
+/// Joining a server for its chat and commands only (#1088): as if fully joined, under this player's name and with
+/// the rights that name has there, but with no body and no world. It talks through <see cref="ConsoleLink"/>,
+/// which skips the version check, so it reaches a server of any version since the link exists: the way to
+/// <c>/update</c> a server this game is too new for.
 ///
 /// <para>
 /// The link lives on its own branch of the tree with its own <see cref="SceneMultiplayer"/>
@@ -20,11 +21,8 @@ public partial class ServerConsoleScreen : Screen
     private const string BranchName = "RemoteConsole";
     private const double AnswerSeconds = 6;
 
-    /// <summary>The passwords typed this run, per server: asked once per game start, never saved.</summary>
-    private static readonly Dictionary<string, string> Passwords = new();
-
     private readonly string _endpoint;
-    private LineEdit _password = null!, _command = null!;
+    private LineEdit _command = null!;
     private Button _connect = null!, _send = null!;
     private RichTextLabel _output = null!;
     private Label _state = null!;
@@ -33,7 +31,8 @@ public partial class ServerConsoleScreen : Screen
     private int _links;
     private SceneMultiplayer? _api;
     private ConsoleLink? _link;
-    private bool _open;
+    private string _name = "";
+    private bool _open, _started;
     private double _askedAt = -1;
     private readonly List<string> _history = new();
     private int _historyAt;
@@ -48,21 +47,14 @@ public partial class ServerConsoleScreen : Screen
 
     public override void _Ready()
     {
-        var (body, header) = Framed("Server console", $"{_endpoint}  ·  admins: the server's own console, whatever its version", new Vector2(900, 580));
+        _name = Shell.PlayerName;
+        var (body, header) = Framed("Server console", $"{_endpoint}  ·  the chat and its commands, as {(_name.Length > 0 ? _name : "?")}, whatever the server's version",
+            new Vector2(900, 580));
         _state = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim);
         header.AddChild(_state);
-
-        var login = UiKit.HBox(8);
-        login.AddChild(UiKit.Text("Admin password", UiTheme.FontSmall, UiTheme.TextDim));
-        _password = new LineEdit { Secret = true, PlaceholderText = "the server's --admin-password", SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            Text = Passwords.GetValueOrDefault(_endpoint, "") };
-        Focusable(_password);
-        _password.TextSubmitted += _ => Connect();
-        login.AddChild(_password);
         _connect = UiKit.Button("Connect", primary: true);
         _connect.Pressed += Connect;
-        login.AddChild(_connect);
-        body.AddChild(login);
+        header.AddChild(_connect);
 
         _output = new RichTextLabel
         {
@@ -77,7 +69,7 @@ public partial class ServerConsoleScreen : Screen
         body.AddChild(outputPanel);
 
         var line = UiKit.HBox(8);
-        _command = new LineEdit { PlaceholderText = "update, who, say <text>, kick <name>, help…", SizeFlagsHorizontal = SizeFlags.ExpandFill, Editable = false };
+        _command = new LineEdit { PlaceholderText = "/update, /who, /login <password>, /help, or a message to everyone…", SizeFlagsHorizontal = SizeFlags.ExpandFill, Editable = false };
         Focusable(_command);
         _command.TextSubmitted += _ => SendLine();
         _command.GuiInput += OnCommandKey;
@@ -88,7 +80,8 @@ public partial class ServerConsoleScreen : Screen
         line.AddChild(_send);
         body.AddChild(line);
 
-        Print("Commands run as the server's own console, with operator rights. A server older than this console never answers.");
+        Print("You join the server's chat with no body: commands and messages as in game, with your rights there "
+            + "(an admin by name, or after /login). A server older than this never answers.");
         SetState("not connected", UiTheme.TextDim);
     }
 
@@ -100,8 +93,13 @@ public partial class ServerConsoleScreen : Screen
 
     public override void OnShown()
     {
-        if (_password.Text.Length == 0) _password.GrabFocus();
-        else _connect.GrabFocus();
+        _connect.GrabFocus();
+        // opening the console is joining it, the first time
+        if (!_started)
+        {
+            _started = true;
+            Connect();
+        }
     }
 
     public override void OnHidden() => Close();
@@ -114,7 +112,7 @@ public partial class ServerConsoleScreen : Screen
         if (_askedAt >= 0 && !_open && RealClock.Now - _askedAt > AnswerSeconds)
         {
             _askedAt = -1;
-            Print("No answer. The server is either older than the remote console (update it once over SSH: "
+            Print("No answer. The server is either older than the server console (update it once over SSH: "
                 + "tmux attach -t unitsport, then update), or not reachable.");
             Close();
             SetState("no answer", UiTheme.Bad);
@@ -123,10 +121,13 @@ public partial class ServerConsoleScreen : Screen
 
     private void Connect()
     {
-        string password = _password.Text;
-        if (password.Length == 0) { _password.GrabFocus(); return; }
+        if (_name.Length == 0)
+        {
+            Print("Choose your name on the Multiplayer screen first: the server knows you by it.");
+            return;
+        }
         Close();
-        Passwords[_endpoint] = password;
+        string name = _name;
 
         var (host, port) = NetworkManager.ParseEndpoint(_endpoint);
         var api = _api = new SceneMultiplayer();
@@ -157,7 +158,7 @@ public partial class ServerConsoleScreen : Screen
         api.ConnectedToServer += () =>
         {
             if (api != _api) return;
-            _link?.Send(password, "");   // opens the link; the server answers with who it is
+            _link?.Submit(name, "");   // joins; the server answers with who we are there
             _askedAt = RealClock.Now;
         };
         api.ConnectionFailed += () =>
@@ -201,7 +202,7 @@ public partial class ServerConsoleScreen : Screen
         _history.Add(line);
         _historyAt = _history.Count;
         Print("> " + line);
-        _link.Send(Passwords.GetValueOrDefault(_endpoint, ""), line);
+        _link.Submit(_name, line);
     }
 
     /// <summary>Up and Down walk the lines sent this session.</summary>
@@ -223,11 +224,6 @@ public partial class ServerConsoleScreen : Screen
     internal bool IsOpen => _open;
     internal string Output => _output.GetParsedText();
 
-    internal void ConnectWith(string password)
-    {
-        _password.Text = password;
-        Connect();
-    }
 
     internal void Submit(string line)
     {

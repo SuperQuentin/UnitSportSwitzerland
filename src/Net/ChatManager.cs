@@ -127,7 +127,8 @@ public partial class ChatManager : Node
     private void OnAdminChanged(PlayerInfo player)
     {
         if (player.PeerId == ConsolePeerId || _registry?.Find(player.PeerId) == null) return;
-        RpcId(player.PeerId, MethodName.AdminStatus, player.IsAdmin);
+        if (player.Bodiless) RemoteLine?.Invoke(player.PeerId, player.IsAdmin ? "You are an admin." : "You are no longer an admin.");
+        else RpcId(player.PeerId, MethodName.AdminStatus, player.IsAdmin);
     }
 
     /// <summary>
@@ -238,7 +239,7 @@ public partial class ChatManager : Node
     {
         if (_registry is null) return;
         RpcId(Multiplayer.GetRemoteSenderId(), MethodName.ReceiveNames,
-            _registry.Players.Select(p => p.Name).ToArray());
+            _registry.InWorld.Select(p => p.Name).ToArray());
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
@@ -612,17 +613,21 @@ public partial class ChatManager : Node
     private void NotifyKicked(string reason) => Kicked?.Invoke(reason);
 
     /// <summary>
-    /// Server: every line the server's console shows (its replies, and everything said to everyone),
-    /// for the remote consoles (<see cref="ConsoleLink"/>, #1088).
+    /// Server: a line for a player who joined through the server console (<see cref="PlayerInfo.Bodiless"/>,
+    /// #1088): <see cref="ConsoleLink"/> sends it, since that game may not share this node's RPCs.
     /// </summary>
-    public event Action<string>? ConsoleOutput;
+    public event Action<long, string>? RemoteLine;
+
+    private bool IsBodiless(long peerId) => _registry?.Find(peerId) is { Bodiless: true };
 
     /// <summary>Sends a line to everyone. Server only.</summary>
     public void Broadcast(string line, ChatKind kind)
     {
         GD.Print($"[chat] {line}");
-        ConsoleOutput?.Invoke(line);
         Rpc(MethodName.Deliver, line, (int)kind);
+        if (RemoteLine != null && _registry != null)
+            foreach (var player in _registry.Players)
+                if (player.Bodiless) RemoteLine(player.PeerId, line);
     }
 
     /// <summary>Sends a line to one peer. Server only.</summary>
@@ -632,7 +637,11 @@ public partial class ChatManager : Node
         if (peerId == ConsolePeerId)
         {
             GD.Print($"[console] {line}");
-            ConsoleOutput?.Invoke(line);
+            return;
+        }
+        if (IsBodiless(peerId))
+        {
+            RemoteLine?.Invoke(peerId, line);
             return;
         }
 
@@ -652,6 +661,33 @@ public partial class ChatManager : Node
 
         if (line.StartsWith('/')) line = line[1..];
         HandleCommand(ConsolePeerId, line);
+    }
+
+    /// <summary>
+    /// Server: a line from a player joined through the server console (<see cref="ConsoleLink"/>, #1088), as
+    /// <c>SubmitLine</c> takes one from a game: a command with '/', else said to everyone. The first one joins
+    /// that peer as <paramref name="name"/>, with no body, and the rights a join under that name gets
+    /// (<c>admins.json</c>, or <c>/login</c> after); <paramref name="joined"/> gets it then. A peer that joined
+    /// the game is not taken here.
+    /// </summary>
+    public void SubmitFromConsole(long peer, string name, string text, Action<PlayerInfo> joined)
+    {
+        if (_registry is null) return;
+        if (_registry.Find(peer) is not { } player)
+        {
+            player = _registry.Add(peer, bodiless: true);
+            _registry.Rename(peer, name);
+            joined(player);
+            Broadcast($"{player.Name} joined the server console", ChatKind.System);
+        }
+        else if (!player.Bodiless) return;   // a game's peer: it talks through SubmitLine
+
+        text = text.Trim();
+        if (text.Length == 0) return;
+        if (text.Length > MaxMessageLength) text = text[..MaxMessageLength];
+        GD.Print($"[console] {player.Name}: {text}");
+        if (text.StartsWith('/')) HandleCommand(peer, text[1..]);
+        else Say(peer, text);
     }
 
     // ---- server-side lifecycle --------------------------------------------------------
@@ -736,10 +772,18 @@ public partial class ChatManager : Node
     /// </summary>
     private bool RequiresAvatar(long sender, string verb)
     {
-        if (sender != ConsolePeerId) return true;
-
-        ReplyTo(sender, $"'/{verb}' needs a player; the console has no avatar.", ChatKind.Error);
-        return false;
+        if (sender == ConsolePeerId)
+        {
+            ReplyTo(sender, $"'/{verb}' needs a player; the console has no avatar.", ChatKind.Error);
+            return false;
+        }
+        // a player joined through the server console has rights but no body: /login yes, /tp no
+        if (verb != "login" && IsBodiless(sender))
+        {
+            ReplyTo(sender, $"'/{verb}' needs a body in the world; join the game for it.", ChatKind.Error);
+            return false;
+        }
+        return true;
     }
 
     private void HandleCommand(long sender, string command)
@@ -1682,7 +1726,7 @@ public partial class ChatManager : Node
     public IEnumerable<long> AdminPeers => _registry?.Players.Where(p => p.IsAdmin).Select(p => p.PeerId) ?? [];
 
     /// <summary>Server: how many players are connected (bots are not players).</summary>
-    public int PlayerCount => _registry?.Players.Count ?? 0;
+    public int PlayerCount => _registry?.InWorld.Count() ?? 0;
 
     /// <summary>
     /// /update (#730): installs the newest GitHub release on a server started by <c>start-server.sh</c>.
@@ -1738,7 +1782,9 @@ public partial class ChatManager : Node
     /// </summary>
     public void KickPeer(long peerId, string reason)
     {
-        RpcId(peerId, MethodName.NotifyKicked, reason);
+        // a player at the server console reads it through the link: its game may lack this node's RPCs
+        if (IsBodiless(peerId)) RemoteLine?.Invoke(peerId, $"Disconnected by the server: {reason}");
+        else RpcId(peerId, MethodName.NotifyKicked, reason);
         // Give the notification a moment to reach them before the socket closes under it.
         GetTree().CreateTimer(0.2).Timeout += () =>
         {
