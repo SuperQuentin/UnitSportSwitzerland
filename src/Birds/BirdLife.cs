@@ -1322,7 +1322,17 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
         puff.Gravity = Vector3.Zero;
         puff.Preprocess = 1.0;
         puff.Emitting = true;
-        return puff;
+        // the viewer frames a model by its meshes' box, and a particle node has none: an invisible
+        // 0.4 m box frames the puff
+        var root = new Node3D();
+        root.AddChild(puff);
+        root.AddChild(new MeshInstance3D
+        {
+            Mesh = new BoxMesh { Size = Vector3.One * 0.4f },
+            MaterialOverride = new StandardMaterial3D { Transparency = BaseMaterial3D.TransparencyEnum.Alpha, AlbedoColor = new Color(1, 1, 1, 0), ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded },
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+        });
+        return root;
     }
 
     private void Feathers(Vector3 at, Color a, Color b, int amount = 28, float speed = 2.8f)
