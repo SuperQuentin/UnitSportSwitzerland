@@ -281,7 +281,13 @@ public partial class ShopProbe : ChatProbe
             if (!interiors.IsOpen(doorKey)) me.TryInteract();
             open = await Until(() => interiors.Links.TryGetValue(doorKey, out var lk) && lk.Passable && lk.Swing >= 1f, 5 + attempt * 2);
         }
-        if (!open) { Fail($"the door {doorKey} never opened"); return false; }
+        if (!open)
+        {
+            interiors.Links.TryGetValue(doorKey, out var stuck);
+            Fail($"the door {doorKey} never opened (open here {interiors.IsOpen(doorKey)}, link {(stuck == null ? "none" : $"open {stuck.Open} swing {stuck.Swing:F2}")}, "
+                + $"{new Vector2(me.GlobalPosition.X - door.World.X, me.GlobalPosition.Z - door.World.Z).Length():F1} m from it, {me.GlobalPosition.Y - door.World.Y:F1} m up, on the floor {me.IsOnFloor()})");
+            return false;
+        }
         Input.ActionPress(PlayerInput.MoveForward);
         bool inside = await Until(() => me.Indoors && interiors.Current != null, 8);
         await Seconds(0.4);
