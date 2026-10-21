@@ -199,6 +199,23 @@ public sealed partial class LaneGraph
         };
     }
 
+    /// <summary>
+    /// How far out from an edge's line its way reaches at <paramref name="arc"/> (m): a transition's outermost strip, a street piece's
+    /// carriageway and widest side (sidewalk, path, verge), a way's half width; for <c>--trafficcheck</c>, whether riders keep to it.
+    /// </summary>
+    public static float RideReach(LaneEdge e, RideWay w, bool forward, float arc)
+    {
+        float len = Mathf.Max(e.Length, 1e-3f), reach = Mathf.Max(e.Width * 0.5f, 1f);
+        if (e.Transition is { } tr && tr.Strips.Count > 0)
+        {
+            double s = tr.Stations[^1] * Mathf.Clamp(forward ? arc : len - arc, 0f, len) / len;
+            reach = Mathf.Max(reach, Mathf.Max(Mathf.Abs(tr.SpanAt(0, s).From), Mathf.Abs(tr.SpanAt(tr.Strips.Count - 1, s).To)));
+        }
+        // (a transition without a side's bands: the piece's own sides, which RideLateral rides then)
+        if (w.Segment is { } seg) reach = Mathf.Max(reach, seg.Width * 0.5f + Mathf.Max(seg.Attributes.Left.Reach, seg.Attributes.Right.Reach));
+        return reach;
+    }
+
     /// <summary>A transition's strip a rider rides (its centre, m right of the drawing) at station <paramref name="s"/>; null for none.</summary>
     private static float? StripLateral(RoadTransition tr, bool forward, double s, RideSide side, SignalMoves turn)
     {

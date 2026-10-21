@@ -30,8 +30,10 @@ public partial class Traffic
         public LaneApproach? Approach;
         public float ToLine = float.MaxValue;
         public bool WasAtRed, Clearing;
-        /// <summary>How far it has ridden on its leg (m), for the probe's lateral check.</summary>
-        public float OnLeg;
+        /// <summary>The line it wanted when that last moved by 0.3 m, and how long since (s), for the probe's lateral check.</summary>
+        public float Want, Steady;
+        /// <summary>Moving over to its junction path's first lane (a mouth widened by a pocket may lie past the piece's own edge).</summary>
+        public bool LeadingIn;
     }
 
     /// <summary>What riders did, for <c>--trafficcheck --mover rider</c> (#1056).</summary>
@@ -43,6 +45,8 @@ public partial class Traffic
         /// <summary>The furthest a settled rider was from its line (m), and how many ticks over 1 m.</summary>
         public float LateralOff;
         public int LateralOver;
+        /// <summary>The furthest a rider was past its street's outer edge (its sides included), m (negative: always on it).</summary>
+        public float OffWay = float.MinValue;
     }
 
     public RiderCounts Riders { get; } = new();
@@ -106,12 +110,21 @@ public partial class Traffic
         target = Mathf.Min(target, follow);
 
         float want = RideTarget(m);
-        m.Lateral = Mathf.MoveToward(m.Lateral, want, (0.4f + 0.25f * m.Speed) * dt);
-        st.OnLeg += m.Speed * dt;
-        // --trafficcheck: where it rides, and how far from its line once settled on a street
+        // (far from it, as after turning round at a dead end on the other side of the street, it swings across faster)
+        m.Lateral = Mathf.MoveToward(m.Lateral, want, (0.4f + 0.25f * m.Speed + 0.4f * Mathf.Abs(want - m.Lateral)) * dt);
+        if (Mathf.Abs(want - st.Want) > 0.3f) (st.Want, st.Steady) = (want, 0f);
+        else st.Steady += dt;
+        // --trafficcheck: where it rides; whether it keeps to its way (never past the street's outer edge, its sides included,
+        // once 1.5 s on its leg and not moving over to its junction path: a junction path may start or end a little outside its
+        // piece, at a mouth widened by a pocket); how far from its line once that line has held still for 3 s
         int on = edge.Path is not null ? (way?.Bike is not null ? 4 : 5) : side == RideSide.None ? 0 : (int)side;
         Riders.On[Math.Clamp(on, 0, 5)]++;
-        if (edge.Path is null && st.OnLeg > 25f && m.Speed > 1f)
+        if (edge.Path is null && way is not null && st.Steady > 1.5f && !st.LeadingIn)
+        {
+            float past = Mathf.Abs(m.Lateral) - LaneGraph.RideReach(edge, way, m.Route.Forward, m.Route.Arc);
+            Riders.OffWay = Mathf.Max(Riders.OffWay, past);
+        }
+        if (edge.Path is null && st.Steady > 3f && m.Speed > 1f)
         {
             float off = Mathf.Abs(m.Lateral - want);
             Riders.LateralOff = Mathf.Max(Riders.LateralOff, off);
@@ -141,8 +154,9 @@ public partial class Traffic
                 to += legs[i].Edge.Length;
             }
         float lateral = LaneGraph.RideLateral(edge, way, forward, m.Route.Arc, path?.Move ?? SignalMoves.None);
-        if (path is not null && to < RideLeadIn)
-            lateral = Mathf.Lerp(lateral, path.FromOffset, Mathf.Clamp((RideLeadIn - to) / (RideLeadIn - 5f), 0f, 1f));
+        bool leading = path is not null && to < RideLeadIn;
+        if (leading) lateral = Mathf.Lerp(lateral, path!.FromOffset, Mathf.Clamp((RideLeadIn - to) / (RideLeadIn - 5f), 0f, 1f));
+        if (m.State is RiderState st) st.LeadingIn = leading;
         return lateral;
     }
 
@@ -158,7 +172,7 @@ public partial class Traffic
             var (pos, dir) = m.Route.At(0f);
             var right = new Vector3(-dir.Z, 0f, dir.X).Normalized();
             m.Lateral = Mathf.Clamp(MathX.Flat(m.Head - pos).Dot(right), -8f, 8f);
-            (st.Edge, st.Forward, st.OnLeg) = (m.Route.Edge, m.Route.Forward, 0f);
+            (st.Edge, st.Forward, st.Steady) = (m.Route.Edge, m.Route.Forward, 0f);
         }
         return m.Lateral;
     }
@@ -206,7 +220,7 @@ public partial class Traffic
     {
         var legs = m.Route.Legs;
         LaneApproach? approach = null;
-        float toLine = float.MaxValue, along = 0f;
+        float toLine = float.MaxValue, toEnd = 0f, along = 0f;
         int leg = -1;
         for (int i = m.Route.Leg; i < legs.Count && along < RideLook; i++)
         {
@@ -214,7 +228,7 @@ public partial class Traffic
             float rem = i == m.Route.Leg ? e.Length - m.Route.Arc : e.Length;
             if (e.Path is null && (f ? e.ApproachAtEnd : e.ApproachAtStart) is var (a, back))
             {
-                approach = a; toLine = along + rem - back; leg = i;
+                approach = a; toEnd = along + rem; toLine = toEnd - back; leg = i;
                 break;
             }
             along += rem;
@@ -232,7 +246,12 @@ public partial class Traffic
             if (legs[k].Edge.Path is { } p) { path = p; break; }
             if (legs[k].Edge.Length > PathGap) break;
         }
-        var turn = path?.Move ?? TurnOf(approach, WayPast(legs, leg));
+        // (without a junction path, where it is 20 m past the approach's end along its legs: an older junction's short pieces and
+        // links across it would read as straight on from their first metre)
+        var turn = path?.Move ?? TurnOf(approach, m.Route.At(-(toEnd + 20f)).Pos - (legs[leg].Forward ? legs[leg].Edge.Points[^1] : legs[leg].Edge.Points[0]));
+        // its own line: the bike lane's (an advanced stop line lies ahead of the cars')
+        toLine -= StopBehindFor(approach, turn);
+        st.ToLine = toLine;
         var plan = site.Plan;
         int group = path is { Site: { } ps, Group: >= 0 } && ps == site ? path.Group : BikeGroupFor(site, approach.Arm, turn);
         if (group < 0 || group >= plan.Groups.Count) return float.MaxValue;
@@ -259,7 +278,7 @@ public partial class Traffic
         if (!red && aspect != SignalAspect.Amber) { st.Clearing = false; return float.MaxValue; }
         // right on red (5.18): slowly round the corner, on its own way
         if (red && rightOnRed) return 3f;
-        float stopAt = toLine - StopBehindFor(approach, turn) - RiderLook.Size.Z * 0.5f - 0.3f;
+        float stopAt = toLine - RiderLook.Size.Z * 0.5f - 0.3f;
         bool cannotStop = m.Speed * m.Speed / (2f * RideBrake * 1.6f) > stopAt;
         if (st.Clearing && cannotStop || before >= RideLook && cannotStop
             || aspect == SignalAspect.Amber && m.Speed * m.Speed / (2f * RideBrake) > stopAt)
@@ -376,6 +395,43 @@ public partial class Traffic
 
     // ---- --trafficcheck ------------------------------------------------------------------------
 
+    private readonly List<(LaneEdge Edge, bool Forward)> _litInto = new();
+    private LaneGraph? _litIntoOf;
+
+    /// <summary>
+    /// <c>--trafficcheck --at ... --dense</c> with riders (#1056): one more rider on a ride edge leading into a lit approach within
+    /// <paramref name="within"/> m of <paramref name="at"/> (up to 40 m before its line), so riders reach its lights from every arm
+    /// and turn every way, while fewer than the density asks (the farthest go first once there are too many).
+    /// </summary>
+    public void SpawnRiderNear(Vector3 at, float within)
+    {
+        if (_rides is not { } g || _riders.Count >= Want(MoverKind.Rider, 0f)) return;
+        if (_litIntoOf != g)
+        {
+            _litIntoOf = g;
+            _litInto.Clear();
+            foreach (var e in g.Edges)
+                foreach (bool forward in (ReadOnlySpan<bool>)[true, false])
+                    if ((forward ? e.ApproachAtEnd : e.ApproachAtStart) is var (a, _) && a.Site is not null && MathX.Flat(a.Stop - at).Length() < within
+                        && LaneGraph.RideOf(e)?.Side(forward) is { } side && side != RideSide.None)
+                        _litInto.Add((e, forward));
+        }
+        if (_litInto.Count == 0) return;
+        var (edge, fwd) = _litInto[_rng.Next(_litInto.Count)];
+        float arc = Mathf.Max(0f, edge.Length - 15f - 25f * (float)_rng.NextDouble());
+        foreach (var o in _riders)
+            if (o.Route.Edge == edge && Mathf.Abs(o.Route.Arc - arc) < 4f) return;
+        var m = TakeMover(MoverKind.Rider);
+        m.Route = new Route(edge, fwd, arc);
+        m.Cruise = m.Speed = RiderLook.Cruise * (1f + RiderLook.Spread * (2f * (float)_rng.NextDouble() - 1f));
+        m.Lateral = 0f;
+        m.Habit = (uint)_rng.Next();
+        RiderSpawned(m);
+        PlaceMover(m);
+        m.Vel = Vector3.Zero;
+        _riders.Add(m);
+    }
+
     private readonly HashSet<Vehicle> _waitedForRider = new();
 
     /// <summary>
@@ -402,6 +458,21 @@ public partial class Traffic
                 break;
             }
         }
+    }
+
+    /// <summary>The loaded lights' approaches where riders may turn right on red (5.18, #711), and the first one's stop line (LV95), for the probe.</summary>
+    public (int Count, string? First) RightOnRedArms()
+    {
+        int n = 0;
+        string? first = null;
+        if (_roads is null) return (0, null);
+        foreach (var a in _roads.Approaches)
+            if (a.Site is { } site && a.Arm < site.Plan.Arms.Count && site.Plan.Arms[a.Arm].BikeRightOnRed)
+            {
+                n++;
+                if (first is null) { var (e, nn) = _origin.ToLv95(a.Stop); first = $"{e:F0},{nn:F0}"; }
+            }
+        return (n, first);
     }
 
     /// <summary>The ride graph's make-up (#1056, the probe): street pieces with a lane, with a path, with neither; ways; riders' and cars' junction paths.</summary>
