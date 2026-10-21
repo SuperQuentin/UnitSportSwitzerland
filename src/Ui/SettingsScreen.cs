@@ -228,6 +228,7 @@ public partial class SettingsScreen : Screen
             UiKit.SliderRow(rows, "Traffic", 0, 150, 5, s.TrafficCars,
                 v => GameSettings.Current.TrafficCars = (int)v, v => v <= 0 ? "off" : $"{v:F0} cars");
             UiKit.ToggleRow(rows, "Trains", s.Trains, on => GameSettings.Current.Trains = on);
+            TrafficModeRows(rows, s);
             UiKit.ToggleRow(rows, "Generated terrain", s.GeneratedFill, on => GameSettings.Current.GeneratedFill = on,
                 "Fills ground with no survey data, blended into the real tiles");
             rows.AddChild(UiKit.Spacer(6));
@@ -270,6 +271,24 @@ public partial class SettingsScreen : Screen
         _about = _tabs.Count - 1;
 
         Show(StartTab(names));
+    }
+
+    /// <summary>
+    /// The densities of the traffic modes beyond cars and trains (#1060): a row each once its mode has landed
+    /// (<see cref="World.Traffic.WalkersReady"/>, <see cref="World.Traffic.RidersReady"/>, <see cref="World.Traffic.TramsReady"/>,
+    /// each in its mode's own file), here and on the solo screen.
+    /// </summary>
+    public static void TrafficModeRows(Container rows, GameSettings s)
+    {
+        if (World.Traffic.WalkersReady)
+            UiKit.SliderRow(rows, "Pedestrians", 0, 300, 10, s.TrafficWalkers,
+                v => GameSettings.Current.TrafficWalkers = (int)v, v => v <= 0 ? "off" : $"{v:F0}");
+        if (World.Traffic.RidersReady)
+            UiKit.SliderRow(rows, "Bikes", 0, 150, 5, s.TrafficRiders,
+                v => GameSettings.Current.TrafficRiders = (int)v, v => v <= 0 ? "off" : $"{v:F0}");
+        if (World.Traffic.TramsReady)
+            UiKit.SliderRow(rows, "Trams", 0, 20, 1, s.Trams,
+                v => GameSettings.Current.Trams = (int)v, v => v <= 0 ? "off" : $"{v:F0}");
     }
 
     /// <summary>"--settings wheel" opens on that tab, for screenshotting it.</summary>

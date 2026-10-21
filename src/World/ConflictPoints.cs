@@ -27,6 +27,9 @@ public static class ConflictPoints
     /// <summary>A car's half width and a little (m): its body, not its lane, comes up to the other's band.</summary>
     public const float CarBody = 1f;
 
+    /// <summary>A tram's half width (#1057, room left by #1060): a 2.3-2.4 m low-floor car.</summary>
+    public const float TramBody = 1.2f;
+
     /// <summary>The lines are walked in steps of this (m).</summary>
     private const float Step = 0.5f;
 
@@ -66,8 +69,8 @@ public static class ConflictPoints
         return list;
     }
 
-    /// <summary>The width one mover takes about its own line (m): a car's or a rider's body, a walker's.</summary>
-    private static float OwnBody(ConflictWay w) => w.Mover switch { ConflictMover.Car => CarBody, ConflictMover.Bike => 0.5f, _ => 0.3f };
+    /// <summary>The width one mover takes about its own line (m): a car's, a rider's or a tram's body, a walker's.</summary>
+    private static float OwnBody(ConflictWay w) => w.Mover switch { ConflictMover.Car => CarBody, ConflictMover.Bike => 0.5f, ConflictMover.Tram => TramBody, _ => 0.3f };
 
     /// <summary>
     /// Where <paramref name="a"/>'s mover (<paramref name="aBody"/> m either side of its line) first comes into <paramref name="b"/>'s

@@ -231,6 +231,16 @@ public sealed class GameSettings
     public bool Trains { get; set; } = true;
 
     /// <summary>
+    /// The traffic modes beyond cars and trains (#1060, tracking #1058): walkers (#1033) and riders (#1056) around the player in
+    /// daytime (fewer at night), trams on the street tracks (#1057). 0 until each mode lands (its row shows in the settings then:
+    /// <see cref="World.Traffic.WalkersReady"/>, <see cref="World.Traffic.RidersReady"/>, <see cref="World.Traffic.TramsReady"/>);
+    /// <c>--walkers N</c>, <c>--bikes N</c>, <c>--trams N</c> for one run.
+    /// </summary>
+    public int TrafficWalkers { get; set; }
+    public int TrafficRiders { get; set; }
+    public int Trams { get; set; }
+
+    /// <summary>
     /// Per occasion id: follow the calendar, hide its look, or force it (<see cref="Occasions.OccasionManager"/>).
     /// Absent means Auto.
     /// </summary>
@@ -539,6 +549,9 @@ public sealed class GameSettings
         DayLengthMinutes = Math.Clamp(DayLengthMinutes, 0f, 240f);
         StartHour = Math.Clamp(StartHour, 0f, 23.99f);
         TrafficCars = Math.Clamp(TrafficCars, 0, 150);
+        TrafficWalkers = Math.Clamp(TrafficWalkers, 0, 300);
+        TrafficRiders = Math.Clamp(TrafficRiders, 0, 150);
+        Trams = Math.Clamp(Trams, 0, 20);
         ScreenShake = Math.Clamp(ScreenShake, 0f, 1f);
         ReplayMinutes = Math.Clamp(ReplayMinutes, 0, 15);
         StickDeadzone = Math.Clamp(StickDeadzone, 0.05f, 0.5f);
@@ -629,6 +642,11 @@ public sealed class GameSettings
                 case "--time" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float hour):
                     StartHour = hour; DayLengthMinutes = 0; break;
                 case "--traffic" when int.TryParse(v, out int cars): TrafficCars = cars; break;
+                // the traffic modes (#1060): walkers, riders, trams for this run
+                case "--walkers" when int.TryParse(v, out int walkers): TrafficWalkers = walkers; break;
+                // (--bikes: --riders already counts a --drivecheck's racers)
+                case "--bikes" when int.TryParse(v, out int riders): TrafficRiders = riders; break;
+                case "--trams" when int.TryParse(v, out int trams): Trams = trams; break;
                 // first | third, or in a car's cockpit with (body) or without (bare) your own figure
                 case "--view":
                     ThirdPerson = v is not ("first" or "1st" or "body" or "bare");

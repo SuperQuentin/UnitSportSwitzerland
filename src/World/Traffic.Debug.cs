@@ -65,7 +65,7 @@ public partial class Traffic
 
     private void StepDebugDraw(double dt)
     {
-        if (!ShowPaths && !ShowEndpoints && !EndpointsHeld && !ShowLights && !ShowMovers && !ShowTrails)
+        if (!ShowPaths && !ShowEndpoints && !EndpointsHeld && !ShowLights && !ShowMovers && !ShowTrails && !ShowModeGraphs)
         {
             if (_debugLines is not null) _debugLines.Visible = false;
             return;
@@ -97,6 +97,8 @@ public partial class Traffic
         int lines = 0;
         if (ShowPaths)
             foreach (var car in _cars) lines += DrawWay(mesh, car);
+        // the walkers', riders' and trams' ways and graphs (#1060)
+        if ((ShowPaths || ShowModeGraphs) && Focus?.Invoke() is { } view) lines += DrawModes(mesh, view);
         if (ShowEndpoints || EndpointsHeld)
             foreach (var s in _endpoints.Values) lines += DrawEndpoint(mesh, s);
         if (ShowLights && _roads is not null && Focus?.Invoke() is { } focus)
@@ -492,7 +494,7 @@ public partial class Traffic
     }
 
     private static (float Length, float Width) Size(ConflictMover who) =>
-        who switch { ConflictMover.Bike => (1.8f, 0.7f), ConflictMover.Walker => (0.7f, 0.7f), _ => (4.5f, 1.9f) };
+        who switch { ConflictMover.Bike => (1.8f, 0.7f), ConflictMover.Walker => (0.7f, 0.7f), ConflictMover.Tram => (30f, 2.4f), _ => (4.5f, 1.9f) };
 
     /// <summary>
     /// A mover drawn as its footprint, its front <paramref name="along"/> m along <paramref name="line"/> (before its start: on back

@@ -160,3 +160,5 @@
   same feed before and after): headways 2nd/3rd/4th/5th+ 1.4/1.2/1.2/0.8 s -> 2.4/2.1/1.7/1.2 s; 6 cars stood in the
   junction for an oncoming car (longest 9 s), no red run. The front car moves at 0.75-1.25 s and then accelerates at the
   usual 2.2 m/s² (3-4 m by 2.5 s after the green).
+- **Walkers, riders, trams** (#1058): the modes plug into this traffic through a shared base (#1060): their own graphs, box
+  movers, and the crossers list that `Coming` and the cars' following read: `traffic-modes`.
