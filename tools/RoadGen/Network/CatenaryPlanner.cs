@@ -38,11 +38,15 @@ public static class CatenaryPlanner
 
     public sealed class Stats
     {
-        public int Pieces, Cantilevers, CentreMasts, CentreMastsShared, Spans, SpansShared, WallEnds, MastEnds, Skipped;
+        public int Pieces, Cantilevers, CentreMasts, CentreMastsShared, LoneTram, TwinBuilt, Spans, SpansShared, WallEnds, MastEnds, Skipped;
         public double WireKm, Ms;
+        /// <summary>A few off-street single tram supports with no twin and with a twin but no centre mast (LV95), for a look.</summary>
+        public readonly List<Vec2> LoneAt = new(), BuiltAt = new();
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
-            $"    overhead lines (#1052): {Pieces:N0} electrified rail pieces, {WireKm:F2} km of contact wire, {Cantilevers:N0} cantilever masts, {CentreMasts:N0} centre masts ({CentreMastsShared:N0} times a single track's wire hung from its twin's), {Spans:N0} spans ({WallEnds:N0} ends on facades, {MastEnds:N0} on masts; {SpansShared:N0} times a track's wire hung from another track's span), {Skipped:N0} supports with no room; planning {Ms:N0} ms");
+            $"    overhead lines (#1052): {Pieces:N0} electrified rail pieces, {WireKm:F2} km of contact wire, {Cantilevers:N0} cantilever masts, {CentreMasts:N0} centre masts ({CentreMastsShared:N0} times a single track's wire hung from its twin's; off-street single tram supports: {LoneTram:N0} with no twin, {TwinBuilt:N0} with one but built near or blocked), {Spans:N0} spans ({WallEnds:N0} ends on facades, {MastEnds:N0} on masts; {SpansShared:N0} times a track's wire hung from another track's span), {Skipped:N0} supports with no room; planning {Ms:N0} ms")
+            + (LoneAt.Count + BuiltAt.Count == 0 ? "" : string.Create(CultureInfo.InvariantCulture,
+                $"\n      no twin at {string.Join(" ", LoneAt.Select(p => $"{p.X:F0},{p.Y:F0}"))}; twin but no centre mast at {string.Join(" ", BuiltAt.Select(p => $"{p.X:F0},{p.Y:F0}"))}"));
     }
 
     /// <summary>Electrified: rail at grade or on a bridge, neither a funicular nor disused (TLM has no electrification; nearly all Swiss rail is).</summary>
@@ -130,6 +134,7 @@ public static class CatenaryPlanner
                             continue;
                         }
                         twin = singles.Twin(at, dir, n, TwinMin, TwinMax);
+                        if (twin == 0) { stats.LoneTram++; if (stats.LoneAt.Count < 8 && stats.LoneTram % 25 == 1) stats.LoneAt.Add(at); }
                     }
                     var mid = at + n * (twin * 0.5);
                     float[] arms = twin != 0 ? [0f, (float)twin] : offsets;
@@ -152,6 +157,7 @@ public static class CatenaryPlanner
                         stats.CentreMasts++;
                         continue;
                     }
+                    if (twin != 0) { stats.TwinBuilt++; if (stats.BuiltAt.Count < 8 && stats.TwinBuilt % 25 == 1) stats.BuiltAt.Add(at); }
                     foreach (float off in offsets)
                     {
                         // a double track's masts stand outside it; a single track's on the right unless a track is near there
