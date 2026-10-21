@@ -21,3 +21,10 @@
   ramp, and `tools/hallcarnetcheck.sh`'s car bounced at the ramp's foot for good.
   - It now looks up first, from 1 m to 3 m above the point. A ceiling there and the ray starts just
     under it. Parked trains and dormant lorries in halls stand on the same query.
+- **Behind a doorway (#1007).** Where the ray hits nothing, `GroundQuery.Under` answers the
+  terrain's height. Under an interior that is the street 3.5 km overhead. A car turning just inside a
+  garage's doorway (the ramp along the facade, `tools/rampalongnetcheck.sh`) had its rear wheels
+  behind the interior's doorway, over no collision: the pitch went to its clamp, the hull jammed
+  under the lintel (hits at 2.35 m, normal down) and the car rocked there until the probe timed out.
+  - In interior space (`InteriorManager.InInteriorSpace`) the answer is now the point's own height,
+    a wheel over nothing standing level with the car.

@@ -14,6 +14,7 @@ touches its topic; search with `grep -ril <word> docs/notes/gpx`.
 
 ## Commands
 
+- `android-gpx-picker` — Browse on Android is the system document picker (no permission, no MIME filter); `GpxPicker.Import` copies the `content://` file into `user://gpx` (#1027)
 - `commands` — Commands: --bubble, --cinemamode, --cinemastats, --forceshot, --gpx, --lens, --path, --snap, --speed
 
 ## Gotchas

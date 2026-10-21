@@ -212,7 +212,7 @@ public partial class PhotoUi : CanvasLayer
         RefreshAlbum();
         _album.Visible = true;
         UiFocus.Set(this, true);
-        if (Input.MouseMode == Input.MouseModeEnum.Captured) Input.MouseMode = Input.MouseModeEnum.Visible;
+        if (MouseCapture.Mode == Input.MouseModeEnum.Captured) MouseCapture.Mode = Input.MouseModeEnum.Visible;
         (_grid.GetChildCount() > 0 ? _grid.GetChild(0).GetChild(0) as Control : null)?.GrabFocus();
     }
 

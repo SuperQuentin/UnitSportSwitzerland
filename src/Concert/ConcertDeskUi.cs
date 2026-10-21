@@ -276,7 +276,7 @@ public partial class ConcertDeskUi : CanvasLayer
         _stadium = rig.Event.Stadium.Name;
         _panel.Visible = true;
         RefreshRigs();
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
         Refresh();
         Callable.From(() => _first.GrabFocus()).CallDeferred();

@@ -32,6 +32,9 @@ public partial class SightingNetProbe : ChatProbe
     {
         _role = Role ?? "A";
         if (!await Joined(150)) { await Finish(0); return; }
+        // --checkspeed n (A only, tools/sightingnetcheck.sh): the scripted flights n times faster, x1 from just before
+        // a beam or a touchdown until what the physics did is checked (#1007)
+        if (!await SpeedUp("pw863")) { await Finish(0); return; }
         await Abduction();
         await Landing(Me!);
         await Finish(2.0);
@@ -63,6 +66,10 @@ public partial class SightingNetProbe : ChatProbe
         if (plan is not { } s) return;
         Expect(OccasionManager.Instance?.IsActive(OccasionIds.Ufo, OccasionFacets.Decorations) == true, "the server's ufo occasion runs here");
 
+        // the cow's lift and fall at x1
+        await At(s, SightingPath.AbductBeamOn - 2f);
+        if (!await SpeedBack()) return;
+
         await At(s, SightingPath.AbductBeamOn + 1f);
         Expect(TractorBeams.Active(GetTree()).Count > 0, "the sighting's beam is in this peer's tractor beams");
         (long Key, float Lift)? best = null;
@@ -77,6 +84,8 @@ public partial class SightingNetProbe : ChatProbe
 
         await At(s, SightingPath.AbductLeave + 6f);
         Expect(Farming.Herds.Instance?.InAir == 0, "the cow was set down again after the beam");
+        // the rest of its flight and the landing's approach fast again
+        await SpeedUp("pw863");
     }
 
     private async Task Landing(FootPlayer me)
@@ -84,6 +93,9 @@ public partial class SightingNetProbe : ChatProbe
         var plan = await PlanOf(SightingKind.Landing, 150);
         Expect(plan != null, "a landing was planned and sent");
         if (plan is not { } s || Sightings is not { } sightings) return;
+        // touchdown, the parked saucer and the boarding at x1
+        await At(s, SightingPath.LandTouch - 2f);
+        if (!await SpeedBack()) return;
         await At(s, SightingPath.BoardFrom + 3f);
         string name = UfoSightings.ParkedName(s.Id);
         bool parked = await Until(() => Vehicles.VehicleManager.Instance?.GetNodeOrNull<Vehicles.VehicleBody>(name) != null, 15);

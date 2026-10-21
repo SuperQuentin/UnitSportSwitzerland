@@ -14,7 +14,6 @@ tc_server 420 120 $OUT/locksync_server.log --server --port $PORT --lootepoch "$E
 tc_client 300 $OUT/locksync_a.log --windowed --connect 127.0.0.1:$PORT --name LockA --cache "$OUT/locksync_cache_a" \
     --at "$AT" --lootepoch "$EP" --locksynccheck A ${CH[@]+"${CH[@]}"} &
 A=$!
-sleep 3
 tc_client 300 $OUT/locksync_b.log --windowed --connect 127.0.0.1:$PORT --name LockB --cache "$OUT/locksync_cache_b" \
     --at "$AT" --lootepoch "$EP" --locksynccheck B ${CH[@]+"${CH[@]}"}
 wait $A

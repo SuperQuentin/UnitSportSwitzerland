@@ -1142,7 +1142,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
     {
         _spectator!.SetProcess(false);
         _spectator.SetProcessUnhandledInput(false);
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
     }
 
     /// <summary>
