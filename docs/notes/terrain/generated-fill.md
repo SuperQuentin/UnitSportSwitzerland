@@ -10,8 +10,13 @@
   doors, interiors, collision and gathering all work on it unchanged. Everything is a pure function
   of LV95 position, so seams are bit-identical and the stride-10 grid equals the decimated full one.
   **Ownership**: a tile is real if it is in `ChunkManager._available` (manifest + anything merged),
-  generated if not real and inside the **fill domain** — the spawn tile's box and the real set's
-  bounding box, each grown by 40 tiles (`FallbackChunkSource.FillRadiusTiles`); it only grows.
+  generated if not real and inside the **fill domain** (`Terrain/FillDomain`, pure, `FillDomainTests`) — the
+  spawn tile's box, the boxes it was asked to `Reach` since, and the real set's bounding box, each grown by
+  40 tiles (`FallbackChunkSource.FillRadiusTiles`); it only grows. **A server's domain follows its anchors**
+  (`ChunkManager.FillFollowsAnchors`, #937): a client fills round its own start (`--at`), the server round the
+  default spawn, so a player 170 km away (and the Battle Royale opened where they stand) had ground on their
+  side and none on the server's: no heights, 0 road points, and a bot dropped there sank through the world.
+  Now any player or bot outside the domain adds a 40-tile box round its tile (`[terrain] generated fill reaches`).
   `FallbackChunkSource` holds an immutable `Snapshot` (real set, domain, version) swapped by `SetReal`
   and read lock-free; the rings ask `IsAvailable = _available || Covers`. `_available`,
   `AvailableTiles` and `AvailableTileCount` stay **real only** — corridor surveys must never request

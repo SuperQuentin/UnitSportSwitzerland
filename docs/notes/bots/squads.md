@@ -31,7 +31,8 @@ Bots play duos, trios and squads, in bot-only teams and as team-mates of humans.
     for 4 s let every downed mate of a 30-bot match bleed out; now a revive loses only to an enemy at the
     mate's side (most downs happen mid-brawl);
   - Assist 60+ (a mate's fight within 200 m);
-  - Ping 55 (a human's ping, for 60 s or until reached);
+  - Ping 55 (a human's ping, for 60 s of the bot's own clock or until reached: on `SimNow` a server dropping frames at
+    /speed 4 gave the walk a third of that, #937);
   - Regroup 50-58 (past 60 m from the leader).
   - The zone and a fight in reach come first.
 - **Following:** a follower with nothing better to do walks back to its leader from 25 m.
@@ -53,11 +54,16 @@ Bots play duos, trios and squads, in bot-only teams and as team-mates of humans.
 - **Down:** a downed bot crawls (1.1 m/s, the body's own speed) to its nearest standing mate.
 - **Checks:**
   - `tools/brsquadcheck.sh` (`--brsquadcheck`, net, at `/speed 4` through `--checkspeed`: ~4.5 min, about 10 at
-    x1; failing on main since Oct 20 at the latest, #937): a duos match of A and one bot, alone on its side.
-    - Zürich on the generated world, which has the roads for the Postauto stops: a random region or the default
-      spawn may have none, and so may a run with the terrain drive asleep (`terrain_location.json ... does not
-      exist; falling back`).
+    x1): a duos match of A and one bot, alone on its side.
+    - A generated village (2642075/1129346, 173 buildings, ~600 road points in the match square, 4 stops with the
+      pinned `--brseed`, whose first circle is on its streets), 59 km
+      from the spawn, so the server's fill has to reach it (#937). It was Zürich, whose Postauto stops came from
+      the real tiles a `terrain_location.json` pointed at: on the generated world Zürich has 63 road points and no
+      stop, and before #937 the server had no ground there at all (the mate sank through the world).
     - Pace 4: the recall must fall in the looting phase, after the mate's minutes of flight to A.
+    - The stops come with the loot, read from the square's road tiles after GO; the probe waits up to 120 s for
+      them: on the generated world each tile goes through the road stage (2-9 s a village tile on the server), which
+      can outlast the drop (#937).
     - The mate jumps after A and lands near, takes A's dogtag to a stop (A recalled), regroups, goes to A's ping,
       and revives A.
   - `SPEED=4 BRMODE=trios BRBOTS=30 tools/brbotwatch.sh`: a whole team match of bots at full pace, 4 × faster
