@@ -107,6 +107,7 @@ codesign/codesign=1
 notarization/notarization=0'
 ensure_preset "Android" "Android" 'gradle_build/use_gradle_build=true
 gradle_build/export_format=0
+gradle_build/compress_native_libraries=true
 architectures/armeabi-v7a=false
 architectures/arm64-v8a=true
 architectures/x86=false
@@ -130,6 +131,9 @@ cp "$REPO/export_presets.cfg" .
 sed -i -E "s|^version/code=.*|version/code=$((MA*10000+MI*100+PA))|; s|^version/name=.*|version/name=\"$V\"|" export_presets.cfg
 # a preset made before #1029 still says no Gradle; only the Android preset has this key
 sed -i -E "s|^gradle_build/use_gradle_build=.*|gradle_build/use_gradle_build=true|" export_presets.cfg
+# ... nor packs its .so files (#1082): Gradle stores them uncompressed, 71 MB of the 126 MB APK
+grep -q '^gradle_build/compress_native_libraries=' export_presets.cfg   || sed -i -E "s|^gradle_build/use_gradle_build=.*|&\ngradle_build/compress_native_libraries=true|" export_presets.cfg
+sed -i -E "s|^gradle_build/compress_native_libraries=.*|gradle_build/compress_native_libraries=true|" export_presets.cfg
 
 # yt-dlp + its QuickJS runtime (else 403s) + ffmpeg (CD burning, GPX video export) ship in bin/ beside the
 # executable (BundledTools), one set per platform, cached in $OUT/tools/<platform>/ between releases; delete it to refresh
