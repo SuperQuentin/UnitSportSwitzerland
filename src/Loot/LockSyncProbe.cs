@@ -134,7 +134,7 @@ public partial class LockSyncProbe : ChatProbe
             if (!await Heard("A", "cracked", 120)) { Fail("A never cracked it"); return; }
             Expect(await Until(() => node.IsLockOpen(index) && loot.IsUnlocked(layout.Key, index), 5),
                 "B saw the door swing open without doing anything");
-            await Seconds(1.2);
+            if (DisplayServer.GetName() != "headless") await Seconds(1.2);
             Shot("open");
             Expect(me.TryInteract() && loot.IsOpen && !ui.IsOpen, "B searches it straight away, no dial");
             await Until(() => !loot.Waiting, 10);

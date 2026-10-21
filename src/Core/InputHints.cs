@@ -136,10 +136,14 @@ public static class InputHints
 
     // ------------------------------------------------------------------------------------
 
+    /// <summary>A chord's held keys, "Shift+" for Shift+T (#1002); empty for a plain key.</summary>
+    private static string Modifiers(InputEventKey k) =>
+        (k.CtrlPressed ? "Ctrl+" : "") + (k.AltPressed ? "Alt+" : "") + (k.ShiftPressed ? "Shift+" : "");
+
     private static string? KeyName(InputEvent e) => e switch
     {
-        InputEventKey k when k.PhysicalKeycode != Key.None => PhysicalLabel(k.PhysicalKeycode),
-        InputEventKey k when k.Keycode != Key.None => OS.GetKeycodeString(k.Keycode),
+        InputEventKey k when k.PhysicalKeycode != Key.None => Modifiers(k) + PhysicalLabel(k.PhysicalKeycode),
+        InputEventKey k when k.Keycode != Key.None => Modifiers(k) + OS.GetKeycodeString(k.Keycode),
         InputEventMouseButton m => m.ButtonIndex switch
         {
             MouseButton.Left => "LMB",

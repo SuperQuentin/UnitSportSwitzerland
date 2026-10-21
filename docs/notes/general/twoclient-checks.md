@@ -33,10 +33,11 @@
   office door near the spot" (#943). Done for every script whose `AT` is a generated-world place:
   `siteofficenetcheck`, `siteuppernetcheck`, `cranenetcheck`, `sitemachinenetcheck`,
   `sitepalletnetcheck`, `yardlootnetcheck`, `brsquadcheck` (generated Zürich) and `liftsynccheck`
-  (unless `CHUNKS=` asks for real data). Not done: the scripts at the default spawn
-  (2583250,1113250: birds, pigeon, pvp, plant, placed, gunshot, useanim, bots, br...), which test
-  things that work on any ground and some of which take real terrain on purpose (`SERVER_ARGS=`,
-  `REAL=1`, `CHUNKS=`), and those that look for the nearest generated works or shop from the spawn
+  (unless `CHUNKS=` asks for real data). The default-spawn scripts whose assertions no ground takes
+  part in boot the flat test world instead since #992 (pvp, plant, placed, gunshot, useanim, bonk,
+  gadgetnet, buildnet, switch, radio; `REAL=1` boots their old ground, `general/check-waits`). Not done:
+  the other scripts at the default spawn (2583250,1113250: birds, pigeon, bots, br...), some of which
+  take real terrain on purpose (`SERVER_ARGS=`, `REAL=1`, `CHUNKS=`), and those that look for the nearest generated works or shop from the spawn
   with no `AT` of their own (`baycheck`, `palletnetcheck`, `shopcheck`): from the main checkout they
   meet the real buildings round Riddes instead. Give one `NOTERRAIN` if it must see generated ground.
 

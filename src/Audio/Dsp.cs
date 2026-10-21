@@ -68,11 +68,28 @@ public static class Dsp
             float t = (float)i / fade;
             s[i] = raw[n + i] * (1 - t) + raw[i] * t;
         }
-        var wav = Encode(Normalise(s, 0.8f));
-        wav.LoopMode = AudioStreamWav.LoopModeEnum.Forward;
-        wav.LoopBegin = 0;
-        wav.LoopEnd = n;
-        return wav;
+        return LoopWav(Pcm16(Normalise(s, 0.8f)), stereo: false, Rate);
+    }
+
+    /// <summary>
+    /// A forward loop over 16-bit PCM (<paramref name="pcm"/>, whole frames, mono or interleaved
+    /// stereo). Godot mixes a loop up to <c>LoopEnd</c> inclusive (4.7 <c>audio_stream_wav.cpp</c>:
+    /// <c>end_limit = loop_end</c>), so the buffer carries one frame more, a copy of the first, and
+    /// <c>LoopEnd</c> is the frame count: that last read stays in the buffer and is the head the loop
+    /// wraps to. Ended at the frame count, every pass read a frame past the buffer, which on Android
+    /// is the guard page after a large allocation: the wind killed the game (#1010).
+    /// </summary>
+    public static AudioStreamWav LoopWav(byte[] pcm, bool stereo, int mixRate)
+    {
+        int frameBytes = stereo ? 4 : 2, frames = pcm.Length / frameBytes;
+        var data = new byte[frames * frameBytes + frameBytes];
+        Array.Copy(pcm, data, frames * frameBytes);
+        Array.Copy(pcm, 0, data, frames * frameBytes, frameBytes);
+        return new AudioStreamWav
+        {
+            Data = data, Format = AudioStreamWav.FormatEnum.Format16Bits, MixRate = mixRate, Stereo = stereo,
+            LoopMode = AudioStreamWav.LoopModeEnum.Forward, LoopBegin = 0, LoopEnd = frames,
+        };
     }
 
     public static AudioStreamWav OneShot(float seconds, int seed, Func<Random, int, float[]> make)
@@ -97,7 +114,8 @@ public static class Dsp
         return s;
     }
 
-    public static AudioStreamWav Encode(float[] s)
+    /// <summary>Mono float samples as 16-bit little-endian PCM.</summary>
+    public static byte[] Pcm16(float[] s)
     {
         var bytes = new byte[s.Length * 2];
         for (int i = 0; i < s.Length; i++)
@@ -106,9 +124,14 @@ public static class Dsp
             bytes[i * 2] = (byte)(v & 0xFF);
             bytes[i * 2 + 1] = (byte)((v >> 8) & 0xFF);
         }
+        return bytes;
+    }
+
+    public static AudioStreamWav Encode(float[] s)
+    {
         return new AudioStreamWav
         {
-            Data = bytes,
+            Data = Pcm16(s),
             Format = AudioStreamWav.FormatEnum.Format16Bits,
             MixRate = Rate,
             Stereo = false,

@@ -82,13 +82,16 @@ part the scale would distort.
 |---|---|---|
 | `fightnetcheck` | 36 s | 20-21 s (3 runs ok) |
 | `brbotcheck` (x4 until the bots land, then x1 for the knife) | 235 s | 140-154 s (2 runs ok) |
+| `brbotcheck`, #1007: x4 again for the results, the teleport leading a running bot | 130 s (#992) | 85-87 s (2 runs ok) |
+| `sightingnetcheck` (#1007: x4 for the scripted flights, x1 round the beam and the touchdown) | 139 s | 80-84 s (2 runs ok) |
 
 - **Survey of the 72 net/full scripts (estimates, Oct 2026).** Most spend their time on boot, tile
   loading, `sleep`s and chat handshakes, which leaves `/speed` little to save.
   - **Worth it, done:** `brbotcheck`, `fightnetcheck`, and `brsquadcheck` (already at x4 before #931; it
     fails at x4 on main as of Oct 20, the mate falling through the world under its canopy, #937).
   - **Maybe, with a physics risk:** only one wait at x4, then x1 again.
-    - `rampnetcheck`: the 66 s park wait in `GarageProbe`.
+    - `rampnetcheck`: the 66 s park wait in `GarageProbe`. Done without `/speed` (#1007): the server's `--doorquiet 8`
+      and a wait for the door to shut.
     - `steamernetcheck`: the 30 s full-ahead in `SteamerNetProbe`, but `Sample()` counts frames.
     - `racecheck`: the entry window and the countdown.
     - `palletnetcheck`, `holdnetcheck`, `hallcarnetcheck`, `botcheck`.

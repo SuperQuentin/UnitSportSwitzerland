@@ -505,7 +505,7 @@ public partial class ConcertBroadcast : CanvasLayer
             _cam = cam;
             if (Rig?.Cameras is { } c) c.Operating = cam;
             UiFocus.Set(this, true);
-            Input.MouseMode = Input.MouseModeEnum.Captured;
+            MouseCapture.Capture();
             _view.Texture = Rig?.Cameras.FinderTexture;
         }
         else if (mine == false && cam == _cam && stadium == _stadium)

@@ -93,8 +93,8 @@ public sealed class GameSettings
 
     /// <summary>
     /// Generate the terrain there is no data for, blended into the real tiles beside it
-    /// (<see cref="Terrain.FallbackChunkSource"/>). Off leaves void past the real region, and
-    /// no world at all on a copy with no terrain.
+    /// (<see cref="Terrain.FallbackChunkSource"/>). Off leaves void past the real region; offline on a
+    /// copy with no terrain it generates anyway, the only ground there is (#1002).
     /// </summary>
     public bool GeneratedFill { get; set; } = true;
 
@@ -128,6 +128,12 @@ public sealed class GameSettings
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public AntiAliasing AntiAliasing { get; set; } = AntiAliasing.Fxaa;
 
+    /// <summary>
+    /// The width of the concert screens' camera feed (IMAG, #996), 16:9: 256, 512 or 1024. Each is
+    /// another render of the bowl; the size costs less than the render itself.
+    /// </summary>
+    public int ConcertScreenWidth { get; set; } = 512;
+
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public PerfOverlayMode PerfOverlay { get; set; } = PerfOverlayMode.Off;
 
@@ -160,6 +166,12 @@ public sealed class GameSettings
     /// <summary>Touch look (#63): camera turn per pixel of drag, as a multiple of the mouse's.</summary>
     public float TouchLookSpeed { get; set; } = 1.5f;
     public bool InvertY { get; set; }
+
+    /// <summary>Free fly moves on the ground plane, Space / Shift for height, like Minecraft (#1002); off, forward follows the look.</summary>
+    public bool LevelFlight { get; set; } = true;
+
+    /// <summary>Creative flight (#1002) passes through the ground, walls and roofs instead of bumping into them.</summary>
+    public bool CreativeNoclip { get; set; }
 
     /// <summary>Stick travel ignored around centre. Worn pads drift, so it is a setting.</summary>
     public float StickDeadzone { get; set; } = 0.18f;
@@ -498,6 +510,7 @@ public sealed class GameSettings
         CommitBudgetMs = Math.Clamp(CommitBudgetMs, 1, 16);
         CacheGb = Math.Clamp(CacheGb, 0.1f, 20f);
         RenderScale = Math.Clamp(RenderScale, MinRenderScale, MaxRenderScale);
+        ConcertScreenWidth = ConcertScreenWidth switch { <= 384 => 256, <= 768 => 512, _ => 1024 };
         VrMsaa = VrMsaa switch { <= 0 => 0, <= 2 => 2, <= 4 => 4, _ => 8 };
         VrRenderScale = Math.Clamp(VrRenderScale, MinVrRenderScale, MaxVrRenderScale);
         StickSensitivity = Math.Clamp(StickSensitivity, 0.2f, 3f);

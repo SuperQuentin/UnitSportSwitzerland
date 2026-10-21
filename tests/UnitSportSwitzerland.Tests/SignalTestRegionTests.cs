@@ -163,6 +163,85 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
     }
 
     [Fact]
+    public void J2s_poles_stand_by_the_crosswalk_past_every_stop_line()
+    {
+        // #1000, the user: the junction planner put the poles at the cars' line, behind the riders' line and box; beside a
+        // crosswalk they stand on its near side, nearer the junction than every line (#711)
+        var j = region.Junction("J2");
+        var signal = region.Tile(j.E, j.N).Signals.Single();
+        int checkedPoles = 0;
+        foreach (var pole in signal.Poles)
+        {
+            int k = pole.Arm;
+            if (float.IsNaN(signal.Stops[k * 3])) continue;
+            var (sx, sz) = (signal.Stops[k * 3] - signal.X, signal.Stops[k * 3 + 2] - signal.Z);
+            float len = MathF.Sqrt(sx * sx + sz * sz);
+            float stopAlong = len, poleAlong = ((pole.X - signal.X) * sx + (pole.Z - signal.Z) * sz) / len;
+            Assert.True(poleAlong < stopAlong - 0.3f, $"arm {k}'s pole {poleAlong:F1} m out, its cars' line {stopAlong:F1} m");
+            checkedPoles++;
+        }
+        Assert.True(checkedPoles >= 4);
+    }
+
+    [Fact]
+    public void No_car_path_crosses_a_repeater_island()
+    {
+        // #1000: the left repeater's island runs 3 m into the junction (the old layout's, #682); every car keeps clear of it, its
+        // path's half width and a little more off its kerb
+        int islands = 0;
+        foreach (var (_, tile) in region.Tiles())
+            foreach (var island in tile.AreaProps.Where(a => a.Type == AreaPropType.Island && a.Variant == 2))
+            {
+                islands++;
+                var v = island.Vertices;
+                int n = v.Length / 3;
+                foreach (var path in tile.JunctionPaths.Where(p => p.Kind == JunctionPathKind.Car))
+                    for (int i = 0; i < path.PointCount; i++)
+                    {
+                        float x = path.Points[i * 3], z = path.Points[i * 3 + 2];
+                        // (its width going from its start's to its end's along it)
+                        double half = (path.Width + (path.ToWidth - path.Width) * i / Math.Max(1, path.PointCount - 1)) * 0.5;
+                        double gap = Inside(v, n, x, z) ? -1 : Enumerable.Range(0, n).Min(k => Segment(x, z, v[k * 3], v[k * 3 + 2], v[(k + 1) % n * 3], v[(k + 1) % n * 3 + 2]));
+                        Assert.True(gap >= half - 0.3, $"a {path.Move} car path {gap:F2} m from an island at LV95 {tile.Id.MinE + x:F1},{tile.Id.MaxN - z:F1} (half width {half:F2})");
+                    }
+            }
+        Assert.True(islands > 0);
+
+        static bool Inside(float[] q, int n, float x, float z)
+        {
+            bool inside = false;
+            for (int i = 0, j = n - 1; i < n; j = i++)
+            {
+                float xi = q[i * 3], zi = q[i * 3 + 2], xj = q[j * 3], zj = q[j * 3 + 2];
+                if ((zi > z) != (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) inside = !inside;
+            }
+            return inside;
+        }
+        static double Segment(float x, float z, float ax, float az, float bx, float bz)
+        {
+            double dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz;
+            double t = l2 < 1e-9 ? 0 : Math.Clamp(((x - ax) * dx + (z - az) * dz) / l2, 0, 1);
+            return Math.Sqrt(Math.Pow(ax + dx * t - x, 2) + Math.Pow(az + dz * t - z, 2));
+        }
+    }
+
+    [Fact]
+    public void Priority_signs_at_lights_stand_on_their_main_poles()
+    {
+        // #1000 (the old layout's rule, #350/#711): an approach's priority sign for when the lights are off is on its main pole,
+        // not a post of its own
+        int onPoles = 0;
+        foreach (var (_, tile) in region.Tiles())
+            foreach (var sign in tile.PointProps.Where(x => (x.Flags & PropFlags.OnSignalPole) != 0))
+            {
+                Assert.Contains(tile.Signals.SelectMany(g => g.Poles), p => (p.Flags & SignalPoleFlags.Main) != 0
+                    && Math.Abs(p.X - sign.X) < 0.01f && Math.Abs(p.Z - sign.Z) < 0.01f);
+                onPoles++;
+            }
+        Assert.True(onPoles > 0);
+    }
+
+    [Fact]
     public void Region_builds_with_the_designed_lanes_and_valid_plans()
     {
         Assert.True(region.Code == 0, string.Join("\n", region.Log.Where(l => l.StartsWith("J", StringComparison.Ordinal) || l.Contains("RESULT"))));

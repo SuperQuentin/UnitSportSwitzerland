@@ -48,8 +48,8 @@ public partial class HoldNetProbe : ChatProbe
             await Finish(0);
             return;
         }
-        Chat?.Send("/login test");   // both: B parks a car it conjured (admin-only-spawning)
-        await Seconds(1.5);
+        // both: B parks a car it conjured (admin-only-spawning)
+        if (!await LogIn("test")) { await Finish(0); return; }
         if (_role == "A") await RunA(Me!); else await RunB(Me!);
         await Finish(2.0);
     }
@@ -107,12 +107,17 @@ public partial class HoldNetProbe : ChatProbe
         if (!ready) { Fail("B never got ready"); return; }
 
         Expect(me.SetRide(RideKind.A320), "A takes an A320");
-        await Seconds(1);
+        await Until(() => me.Vehicle is Airliner j && j.State.OnGround, 5);
         if (me.Vehicle is not Airliner jet) { Fail("not an airliner"); return; }
+        // settled on its wheels first: 1 s after spawning it was once still coming down, the ramp
+        // refused to open, and both peers waited out every step after it (#1006)
+        await Until(() => jet.MayOpenDoors, 8);
         await ParkingBrake(jet, true);
         jet.ToggleDoor(HoldCheck.RampDoor);
-        Expect((jet.DoorsOpen >> HoldCheck.RampDoor & 1) != 0 && jet.State.ParkingBrake,
-            $"the ramp down, the parking brake on (doors {jet.DoorsOpen}, parking brake {jet.State.ParkingBrake}, on the ground {jet.State.OnGround}, may open {jet.MayOpenDoors})");
+        bool ramp = (jet.DoorsOpen >> HoldCheck.RampDoor & 1) != 0 && jet.State.ParkingBrake;
+        Expect(ramp, $"the ramp down, the parking brake on (doors {jet.DoorsOpen}, parking brake {jet.State.ParkingBrake}, on the ground {jet.State.OnGround}, may open {jet.MayOpenDoors})");
+        // nothing after drives into a shut hold: stop both peers now
+        if (!ramp) { Say("no hold"); Fail("the ramp never opened"); return; }
         await Seconds(1);
         Say("carrier");
 
@@ -195,7 +200,16 @@ public partial class HoldNetProbe : ChatProbe
         var parked = ParkedCar();
         Expect(there, $"A sees B's parked car carried by its aircraft ('{parked?.Carrier}')");
         if (parked == null) return;
+        // its spot once it rests: a parked vehicle is put down a hand's breadth up and drops onto the
+        // hold's floor, and a spot read as it appeared failed the taxi by 5.5 cm against 5 (#1006)
         var left = InFrame(me, parked.GlobalPosition);
+        double still = GameClock.Now + 0.5;
+        await Until(() =>
+        {
+            var now = InFrame(me, parked.GlobalPosition);
+            if (now.DistanceTo(left) > 0.002f) { left = now; still = GameClock.Now + 0.5; }
+            return GameClock.Now >= still;
+        }, 5);
         jet.ToggleDoor(HoldCheck.RampDoor);
         await ParkingBrake(jet, false);
         worst = 0f;
@@ -240,7 +254,9 @@ public partial class HoldNetProbe : ChatProbe
         me.PlaceAt(me.GlobalPosition + new Vector3(70f, 0f, 0f), 0f);
         await Seconds(1.5);
         Say("ready");
-        if (!await Heard("A", "carrier", 40)) { Fail("A never took its carrier"); return; }
+        // A says "no hold" when its ramp would not open: no use driving at it
+        bool Said(string what) => _heard.Any(l => l.Contains($"HN A {what}"));
+        if (!await Until(() => Said("carrier") || Said("no hold"), 40) || !Said("carrier")) { Fail("A never took its carrier"); return; }
         var a = Other(me);
         if (a == null) { Fail("no A here"); return; }
         await Until(() => a.Ride == RideKind.A320 && SectionFrameReady(a), 10);
@@ -313,7 +329,7 @@ public partial class HoldNetProbe : ChatProbe
         // the handbrake alone: a brake pedal at a standstill is reverse
         me.RideControls = () => new RideInput(0f, 0f, 0f, false, true);
         await Until(() => me.GroundSpeed < 0.2f, 10);
-        await Seconds(1);
+        await Until(() => me.IsOnFloor() && Mathf.Abs(InFrame(a, me.GlobalPosition).Y) < 0.3f, 4);
         var at = InFrame(a, me.GlobalPosition);
         Expect(outside && me.IsOnFloor() && Mathf.Abs(at.Y) < 0.3f, $"B reversed down the ramp, out on the ground behind it ({F(at)}, '{me.DeckOn}')");
         GD.Print($"{Log}   out: me {F(me.GlobalPosition)} A {F(a.GlobalPosition)} A's frame {F(FootPlayer.HoldFrame(a, 0).Origin)}");

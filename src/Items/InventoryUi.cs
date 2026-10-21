@@ -672,7 +672,7 @@ public partial class InventoryUi : CanvasLayer
         _catalogueButton.Visible = CatalogueUi.Allowed;
         OnDeviceChanged();
         Refresh();
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
         PlayerInput.FocusFirst(_panel);
     }

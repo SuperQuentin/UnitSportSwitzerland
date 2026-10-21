@@ -281,6 +281,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // however far it goes. Online too: positions on the wire are LV95, never world space.
         AddChild(new OriginShifter(origin, () => GetViewport().GetCamera3D()?.GlobalPosition, () => true));
 
+        // Offline with no terrain data, the generated fill is the whole world: with the setting off
+        // there would be no ground anywhere, and the body would hang where the fly camera left it.
+        // A --generated on the command line is a run's own choice and stands.
+        _fillForced = !hasLocalTerrain && !Launch.Networked && generated != null && !CmdArgs.Has("--generated");
+        if (_fillForced && !GameSettings.Current.GeneratedFill)
+            GD.Print("[world] generated terrain is off in the settings, but this copy has no terrain data: generating it anyway");
+
         if (!hasLocalTerrain && generated != null)
             GD.PushWarning(
                 "[world] no terrain data found, showing generated terrain. Generate the real one "
@@ -333,7 +340,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // source so a client never asks a server for one, and under the cache so a generated tile
         // is not generated twice. Built even when switched off, so the setting can turn it on.
         var fallback = generated == null ? null : new FallbackChunkSource(streamedSource, generated, startE, startN,
-            GameSettings.Current.GeneratedFill) { Log = s => GD.Print(s), HorizonCacheDir = TerrainPaths.FindCacheDir() };
+            FillOn) { Log = s => GD.Print(s), HorizonCacheDir = TerrainPaths.FindCacheDir() };
 
         // Outermost, so a tile decoded once is not decoded again when the rings drop it and pick
         // it back up — which a route that doubles back does constantly.
@@ -772,6 +779,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Concert.ConcertDeskProbe.Requested) AddChild(new Concert.ConcertDeskProbe(() => LocalPlayer));
         if (Concert.ConcertCamProbe.Requested) AddChild(new Concert.ConcertCamProbe(() => LocalPlayer, () => GetNodeOrNull<ChatManager>(ChatManager.NodeName)));
         if (Phone.PhoneProbe.Requested) AddChild(new Phone.PhoneProbe(() => LocalPlayer));
+        if (SpectatorSwitchCheck.Requested) AddChild(new SpectatorSwitchCheck(() => LocalPlayer, () => _spectator));
         if (Phone.PhoneVrProbe.Requested) AddChild(new Phone.PhoneVrProbe(() => LocalPlayer));
         if (Items.SparkleProbe.Requested) AddChild(new Items.SparkleProbe(() => LocalPlayer));
         if (Items.RadioFocusProbe.Requested) AddChild(new Items.RadioFocusProbe(() => LocalPlayer));
@@ -802,7 +810,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.UfoNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.ExcavatorNetProbe.Role != null || Items.SitePalletNetProbe.Role != null || Loot.YardLootNetProbe.Role != null || Terrain.Construction.CraneNetProbe.Role != null || Items.BedNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || Bots.BotProbe.Role != null || BattleRoyale.BrBotProbe.Requested || Bots.BotFilmProbe.Requested || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
-            || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
+            || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || SpectatorSwitchCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
             || World.ContainerNetProbe.Role != null
             || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null
             || Player.TractorNetProbe.Role != null || Farming.FarmProbe.Requested || Farming.HandFarmCheck.Requested || Farming.FarmNetProbe.Role != null || Farming.SellNetProbe.Role != null || Farming.CoopNetProbe.Role != null
@@ -1134,7 +1142,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
     {
         _spectator!.SetProcess(false);
         _spectator.SetProcessUnhandledInput(false);
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
     }
 
     /// <summary>
@@ -1299,6 +1307,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
     private static long CacheCapBytes => (long)(GameSettings.Current.CacheGb * 1024 * 1024 * 1024);
 
+    /// <summary>The generated fill is on regardless of its setting: offline with no terrain data, it is the only ground.</summary>
+    private bool _fillForced;
+    private bool FillOn => GameSettings.Current.GeneratedFill || _fillForced;
+
     private void OnSettingsChanged()
     {
         if (_chunkSource != null) _chunkSource.MaxCacheBytes = CacheCapBytes;
@@ -1306,7 +1318,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // before the terrain takes the settings: its rings and mesh detail are the style's
         if (StyleKit.Restyle()) ApplyStyle();
         _chunks?.ApplySettings(GameSettings.Current);
-        _chunks?.SetFallbackEnabled(GameSettings.Current.GeneratedFill);
+        _chunks?.SetFallbackEnabled(FillOn);
         if (_ambience != null) _ambience.Volume = Audio.SfxBus.SliderGain(GameSettings.Current.AmbienceVolume);
         SetCameraFar(GameSettings.Current.CameraFar);
         PublishAppearance();
@@ -1419,10 +1431,16 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
     private void Toast(string message) => _items?.Ui.Toast(message);
 
-    /// <summary>Boarding a Battle Royale on the fly camera (#425): back into the body, where it stands.</summary>
+    /// <summary>Boarding a Battle Royale on the fly camera (#425): back into the body, where it stands; out of creative mode.</summary>
     private void OnPermissionsChanged()
     {
         if (Permissions.InMatch && !_onFoot && _chunks != null && LocalPlayer is { } body) EnterFootMode(body, inPlace: true);
+        // nor in creative mode (#1002)
+        if ((Permissions.InMatch || _networked && !Permissions.CanTeleport) && LocalPlayer is { Creative: true } flyer)
+        {
+            flyer.Creative = false;
+            Toast("Survival mode.");
+        }
     }
 
     /// <summary>
@@ -1792,10 +1810,63 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         if (_rides is { IsOpen: true }) return;
 
+        // Shift+T: the spectator fly camera and back (#1002), told from T by exact matching
+        if (@event.IsActionPressed(PlayerInput.Spectator, exactMatch: true))
+        {
+            ToggleMode();
+            return;
+        }
+
         // T is also the fly camera: at a garage, in a stopped car, it tunes instead
         if (@event.IsActionPressed(PlayerInput.Tune) && _garage?.TryOpen() == true) return;
 
-        if (@event.IsActionPressed(PlayerInput.ToggleMode)) ToggleMode();
+        // a pad's D-pad down: a tap is T, a hold the spectator camera (_Process), as Back's hold is the quick menu
+        if (@event is InputEventJoypadButton && @event.IsAction(PlayerInput.ToggleMode))
+        {
+            if (@event.IsPressed()) _modePadAt = GameClock.Now;
+            else if (_modePadAt >= 0)
+            {
+                _modePadAt = -1;
+                ModeKey();
+            }
+            return;
+        }
+
+        if (@event.IsActionPressed(PlayerInput.ToggleMode, exactMatch: true)) ModeKey();
+    }
+
+    /// <summary>Pad D-pad down held this long is the spectator camera; a shorter press is T.</summary>
+    private const double ModePadHold = 0.4;
+    /// <summary>When the pad's D-pad down went down (game clock), while telling a tap from a hold; −1 when not.</summary>
+    private double _modePadAt = -1;
+
+    /// <summary>
+    /// T (#1002): creative mode on the body; on the fly camera (the start, a probe, Shift+T) back
+    /// into the body.
+    /// </summary>
+    private void ModeKey()
+    {
+        if (!_onFoot) ToggleMode();
+        else ToggleCreative();
+    }
+
+    /// <summary>
+    /// Creative mode on the body (#1002): no damage, a double jump to fly. Refused where the fly camera
+    /// is: in a Battle Royale match, and on a server without teleporting, since flying carries you.
+    /// </summary>
+    public void ToggleCreative()
+    {
+        if (LocalPlayer is not { } player) return;
+        if (!player.Creative)
+        {
+            if (Permissions.InMatch) { Toast("No creative mode in a Battle Royale match."); return; }
+            if (_networked && !Permissions.CanTeleport) { Toast("This server does not allow creative mode."); return; }
+        }
+        player.Creative = !player.Creative;
+        Toast(player.Creative
+            ? InputHints.Format("Creative mode: nothing hurts you. {jump} twice to fly, {jump} / {sprint} up and down.")
+            : "Survival mode.");
+        GD.Print($"[world] creative {(player.Creative ? "on" : "off")}");
     }
 
     private FootPlayer? LocalPlayer => _networked ? GetLocalNetPlayer() : _player;
@@ -2005,7 +2076,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 if (!Permissions.InMatch) yield return (PlayerInput.RideMenu, "Travel");
                 yield return (PlayerInput.Inventory, "Inventory");
                 yield return (PlayerInput.Teleport, "Map");
-                if (!Permissions.InMatch) yield return (PlayerInput.ToggleMode, "Fly camera");
+                if (!Permissions.InMatch)
+                {
+                    // a pad's spectator is a hold of the same button
+                    bool pad = InputHints.Pad && !InputHints.Vr;
+                    yield return (PlayerInput.ToggleMode, (p.Creative ? "Survival" : "Creative") + (pad ? ", hold: spectator" : ""));
+                    if (!pad) yield return (PlayerInput.Spectator, "Spectator");
+                }
             }
         }
         // the quick menu (#840): activities, invites and the rest, from anywhere
@@ -2022,6 +2099,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (_chunks != null && GetViewport().GetCamera3D() is { } cam)
             _chunks.SetView(cam);
         TrackLoading(delta);
+        if (_modePadAt >= 0 && GameClock.Now - _modePadAt >= ModePadHold)
+        {
+            _modePadAt = -1;
+            ToggleMode();
+        }
         if ((_appearanceIn -= delta) <= 0) { _appearanceIn = 0.25; PublishAppearance(); }
         if (GameClock.Fixed) GameClock.Pace(Stage != LoadStage.Ready || _chunks is { Settled: false });
         if (_pendingFoot != null && !SpawnPending && GroundUnderCamera)
@@ -2051,6 +2133,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
     public void ToggleMode()
     {
         if (_chunks == null || _spectator == null) return;
+        // the keys of the switch (Shift of Shift+T) must not sink the camera or sprint the body (#1002)
+        PlayerInput.HoldOff();
 
         // Replay owns the camera and has deliberately taken the exploring anchor off the
         // streamer; swapping underneath it would both steal the view and put a second
