@@ -123,14 +123,14 @@ grep -aE "^(Passed|Failed)!" "$OUT/unit.log" | tail -1
 # --- Godot tiers ------------------------------------------------------------------------------
 netsmoke() { # headless dedicated server on the flat fixture world + a headless client joining and leaving it
   local port=$(( ${TEST_PORT:-7821} + ${GUARD_SLOT:-0} * 1000 )) slog=$OUT/netsmoke_server.log
-  "$GODOT" --headless --path . -- --server --port "$port" --world fixture > "$slog" 2>&1 < /dev/null &
+  "$GODOT" --headless ${TC_MAX_FPS:+--max-fps $TC_MAX_FPS} --path . -- --server --port "$port" --world fixture > "$slog" 2>&1 < /dev/null &
   SERVER=$!
   for _ in $(seq 1 600); do
     grep -q "server listening" "$slog" 2>/dev/null && break
     kill -0 "$SERVER" 2>/dev/null || break
     guard_nap 0.2
   done
-  guard_run "$TIMEOUT" "$1" "$GODOT" --headless --path . -- --leavecheck connect "127.0.0.1:$port" --world fixture
+  guard_run "$TIMEOUT" "$1" "$GODOT" --headless ${TC_MAX_FPS:+--max-fps $TC_MAX_FPS} --path . -- --leavecheck connect "127.0.0.1:$port" --world fixture
   local code=$?
   _guard_kill_tree "$SERVER"
   wait "$SERVER" 2>/dev/null
@@ -148,7 +148,7 @@ run_one() { # tier check log: runs one check, its exit code
     @netsmoke) netsmoke "$log" ;;
     tools/*) guard_run "$TIMEOUT" "$log" bash $check ;;
     @realtime\ *) guard_run "$TIMEOUT" "$log" "$GODOT" --headless --path . -- ${check#@realtime } ;;
-    *) [ "$tier" = quick ] && eng=$FAST
+    *) if [ "$tier" = quick ]; then eng=$FAST; elif [ -n "${TC_MAX_FPS:-}" ]; then eng="--max-fps $TC_MAX_FPS"; fi
        guard_run "$TIMEOUT" "$log" "$GODOT" --headless $eng --path . -- $check ;;
   esac
 }
@@ -158,7 +158,8 @@ run_one() { # tier check log: runs one check, its exit code
 # so its ports are moved by GUARD_SLOT * 1000 (tools/lib/twoclient.sh). Two scripts that write the same
 # logs (one execs the other) never run together, and the load test and the trailer run alone.
 # A job starts only with TEST_HEAVY_RAM_GB (6) free and TEST_JOB_STAGGER (40) s after the last one (its Godots grow
-# for that long), and one the RAM watchdog stopped runs again alone at the end: beside others it hit the floor.
+# for that long). Beside others every headless Godot runs at TEST_MAX_FPS (60), and a check that failed or hit the RAM
+# floor runs again alone at the end, uncapped; a pass alone says it failed beside others (#1081).
 JOBS=${TEST_JOBS:-$GUARD_SLOTS}
 
 group_of() { # the twoclient name a script logs under (rampalong execs rampnet: both "rampnet"), or the check
@@ -215,15 +216,26 @@ run_heavy() {
       guard_nap 1
     done
     last_start=$SECONDS
-    heavy_job "$i" "$tier" "$check" &
+    # beside others, every headless Godot at TEST_MAX_FPS (60): one frame per physics tick, about half the CPU of
+    # an uncapped real-time run, the physics the same (#1081)
+    ( export TC_MAX_FPS=${TEST_MAX_FPS:-60}; heavy_job "$i" "$tier" "$check" ) &
     pids+=($!); groups+=("$(alone "$check" && echo "$check" || echo "$g")")
   done
   wait
-  for (( i = 0; i < n; i++ )); do [ "$(sed -n 3p "$OUT/.row.$i" 2>/dev/null)" = 1 ] && again+=("$i"); done
+  # stopped at the RAM floor, or failed beside others: again alone at the end, uncapped, as a serial run would (#1081).
+  # A pass alone is reported as one, saying it failed beside others; a fail alone is a fail. TEST_RETRY_ALONE=0: RAM only
+  local why
+  for (( i = 0; i < n; i++ )); do
+    [ "$(sed -n 3p "$OUT/.row.$i" 2>/dev/null)" = 1 ] && { again+=("$i"); continue; }
+    [ "${TEST_RETRY_ALONE:-1}" != 0 ] && [ -f "$OUT/.row.$i" ] && [ "$(sed -n 1p "$OUT/.row.$i")" != PASS ] && again+=("$i")
+  done
   for i in ${again[@]+"${again[@]}"}; do
     entry=${HEAVY[$i]}
-    echo "[test] again, alone: ${entry#* } (stopped at the RAM floor beside the others)"
-    heavy_job "$i" "${entry%% *}" "${entry#* }"
+    why="failed beside the others"; [ "$(sed -n 3p "$OUT/.row.$i")" = 1 ] && why="stopped at the RAM floor beside the others"
+    echo "[test] again, alone: ${entry#* } ($why)"
+    ( heavy_job "$i" "${entry%% *}" "${entry#* }" )   # a subshell: its EXIT trap must not replace the runner's
+    [ "$why" = "failed beside the others" ] && [ "$(sed -n 1p "$OUT/.row.$i")" = PASS ] &&
+      sed -i '2s|$|  (passed alone, failed beside others)|' "$OUT/.row.$i"
   done
   for (( i = 0; i < n; i++ )); do
     if [ -f "$OUT/.row.$i" ]; then ROWS+=("$(sed -n 2p "$OUT/.row.$i")"); [ "$(sed -n 1p "$OUT/.row.$i")" = PASS ] || FAILED=1
