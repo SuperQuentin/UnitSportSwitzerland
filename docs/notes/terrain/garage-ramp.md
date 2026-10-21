@@ -106,7 +106,7 @@ vehicles (`vehicles/hall-cars`) and the rule was loosened (the section "More gar
   `NearDoor` measures to the **doorway** (`InsideDoorAt`, ground level), so a car at the ramp's foot
   (14 m off, 2.7 m down) is within `ServerVehicleDoorReach` (16 m) only on the last stretch, and
   `OpenForVehicle` asks within `VehicleOpenReach` of it: a door that shut while the car was parked
-  below (`QuietSeconds`, 60 s) opens again as the car climbs to it.
+  below (`QuietSeconds`, 60 s, a server's `--doorquiet s`) opens again as the car climbs to it.
 - **Mesh** (`InteriorMeshBuilder.Ramp`): a solid wedge following the profile, the whole of it
   collision (a stair is steps over one collision plane); where it runs on into the car park a
   parapet (a metre over the surface) stands each side, in its own room the room's walls do. The
@@ -127,10 +127,12 @@ vehicles (`vehicles/hall-cars`) and the rule was loosened (the section "More gar
   are quick tier. `tools/rampnetcheck.sh` (net tier, two clients and a server on
   **`fixture:garage`**: three 80 x 18 m blocks on a street whose keys always roll a garage,
   `GarageRule.AlwaysRolls`, set by the fixture source on the server and every client) drives a car
-  in, down the ramp, parks it, waits a minute (the server shuts the door), gets out and in, and
+  in, down the ramp, parks it, gets out, waits for the server to shut the door (`--doorquiet 8` on the
+  check's server, a minute otherwise; the drive fails if it never shut, #1007), gets back in, and
   reverses up the ramp and out through the door; the watcher on the other client has to see the door
   open, the car inside and one level down. `GarageProbe` is `--garagecheck drive|watch --doorkind
-  Apartment --drive-m 20 --brake-m 24 --park-wait 66`; windowed it saves the driver's view going
+  Apartment --drive-m 16 --brake-m 20 --park-wait 30` (the most it waits for the door), the watcher ending
+  a second after the driver left; windowed it saves the driver's view going
   down (`test_output/garage_ramp_down_*.png`) and the watcher's through the doorway.
   `--flattour,out.png --block "a garage block"` walks the ramp (door, top, half way, foot, aisle).
 ## More garages (PR 3)
