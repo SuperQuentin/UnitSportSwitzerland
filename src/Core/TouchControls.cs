@@ -50,6 +50,7 @@ public partial class TouchControls : CanvasLayer
         public string Label = "";
         public string Prompt = "";
         public int Finger = -1;
+        public ulong PressFrame;
         public bool Locked, LockArmed, Hidden;
         public Vector2 Value;
     }
@@ -60,6 +61,7 @@ public partial class TouchControls : CanvasLayer
         public TouchSend Send;
         public Rect2 Rect;
         public int Finger = -1;
+        public ulong PressFrame;
         public double GoneAt = -1;
     }
 
@@ -87,7 +89,7 @@ public partial class TouchControls : CanvasLayer
     private string? _wheelAction;
     private bool _padInUse;
     private double _labelTimer;
-    private readonly List<(TouchSend Send, double At, bool Pressed)> _scheduled = new();
+    private readonly List<(TouchSend Send, double At, ulong Frame, bool Pressed)> _scheduled = new();
 
     public static TouchControls Create() => new() { Name = "TouchControls" };
 
@@ -236,11 +238,13 @@ public partial class TouchControls : CanvasLayer
             PlayerInput.HintsChanged();
         }
         double now = Now;
-        // in the order they were scheduled: a press before its release
+        // in the order they were scheduled: a press before its release, and never in the frame it
+        // was scheduled, or a slow frame (the emulator, a hitch) eats a tap a poller never sees
+        ulong frame = Engine.GetProcessFrames();
         for (int i = 0; i < _scheduled.Count; i++)
-            if (now >= _scheduled[i].At)
+            if (now >= _scheduled[i].At && frame >= _scheduled[i].Frame)
             {
-                var (send, _, pressed) = _scheduled[i];
+                var (send, _, _, pressed) = _scheduled[i];
                 _scheduled.RemoveAt(i--);
                 Send(send, pressed);
             }
@@ -517,6 +521,7 @@ public partial class TouchControls : CanvasLayer
             if (p.Finger < 0 && p.GoneAt < 0 && p.Rect.Grow(Margin).HasPoint(at))
             {
                 p.Finger = finger;
+                p.PressFrame = Engine.GetProcessFrames();
                 Send(p.Send, true);
                 Buzz();
                 return;
@@ -587,6 +592,7 @@ public partial class TouchControls : CanvasLayer
                     break;
                 }
                 if (k.Spec.Has(TouchFeel.Unlocks)) UnlockPedals();
+                k.PressFrame = Engine.GetProcessFrames();
                 Send(k.Spec.Send, true);
                 break;
         }
@@ -635,7 +641,7 @@ public partial class TouchControls : CanvasLayer
             if (p.Finger == finger)
             {
                 p.Finger = -1;
-                Send(p.Send, false);
+                Release(p.Send, p.PressFrame);
             }
         if (finger == _hotFinger)
         {
@@ -689,9 +695,16 @@ public partial class TouchControls : CanvasLayer
                     Buzz();
                     break;
                 }
-                Send(k.Spec.Send, false);
+                Release(k.Spec.Send, k.PressFrame);
                 break;
         }
+    }
+
+    /// <summary>Lets go of a press, a couple of frames late if it was this quick: a poller must see it down.</summary>
+    private void Release(TouchSend s, ulong pressFrame)
+    {
+        if (Engine.GetProcessFrames() >= pressFrame + 2) Send(s, false);
+        else Later(s, 0);
     }
 
     private void Drag(int finger, Vector2 at, Vector2 relative)
@@ -876,7 +889,8 @@ public partial class TouchControls : CanvasLayer
     }
 
     /// <summary>A release (or a press) a while from now.</summary>
-    private void Later(TouchSend s, double after, bool pressed = false) => _scheduled.Add((s, Now + after, pressed));
+    private void Later(TouchSend s, double after, bool pressed = false) =>
+        _scheduled.Add((s, Now + after, Engine.GetProcessFrames() + 2, pressed));
 
     private static void Buzz()
     {

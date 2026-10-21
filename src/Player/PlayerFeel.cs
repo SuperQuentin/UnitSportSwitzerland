@@ -796,11 +796,12 @@ public partial class PlayerFeel : Node3D
         _engineLabel.OffsetRight = -18; _engineLabel.OffsetBottom = -16;
         if (Core.Platform.IsMobile)
         {
-            // the pedals take the bottom right on a phone (#1043): the readout goes top left
-            _engineLabel.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
-            _engineLabel.GrowHorizontal = Control.GrowDirection.End;
+            // the pedals take the bottom right on a phone (#1043), the cards the top left: top centre
+            _engineLabel.SetAnchorsPreset(Control.LayoutPreset.CenterTop);
+            _engineLabel.GrowHorizontal = Control.GrowDirection.Both;
             _engineLabel.GrowVertical = Control.GrowDirection.End;
-            _engineLabel.OffsetLeft = 18; _engineLabel.OffsetTop = 16;
+            _engineLabel.HorizontalAlignment = HorizontalAlignment.Center;
+            _engineLabel.OffsetLeft = 0; _engineLabel.OffsetRight = 0; _engineLabel.OffsetTop = 16;
         }
         _screen.AddChild(_engineLabel);
 
