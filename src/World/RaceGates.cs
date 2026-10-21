@@ -14,7 +14,7 @@ public partial class RaceGates : Node3D, Core.IOriginContainer
 
     /// <summary>An air race's next gate and the finish behind it, in the model viewer (--models).</summary>
     [Core.Showcase("Rides", "Air race gates")]
-    private static Node3D ShowcaseGates() => Build(new[] { Vector3.Zero, new Vector3(0, 0, -50) }, 8f);
+    private static Node3D ShowcaseGates() => Build(new[] { new Vector3(0, 10, 0), new Vector3(0, 10, -50) }, 8f);
 
     public static RaceGates Build(Vector3[] gates, float radius)
     {
@@ -51,9 +51,6 @@ public partial class RaceGates : Node3D, Core.IOriginContainer
         }
     }
 
-    private static StandardMaterial3D Paint(Color c) => new()
-    {
-        AlbedoColor = c,
-        ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-    };
+    /// <summary>A ring's paint: lit in the lit styles, flat in PS1 (#1069).</summary>
+    private static StandardMaterial3D Paint(Color c) => Styles.StyleKit.Solid(new StandardMaterial3D { AlbedoColor = c });
 }

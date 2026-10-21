@@ -54,6 +54,12 @@ The plan and the prototype's results: `docs/plans/visual-styles.md` (issues #181
 - **`StyleKit.Figure`** shades the vertex-coloured standard material of avatars, vehicles, birds
   and items (`HumanMeshBuilder.Material`) for the style (Cartoon: toon), kept weakly and
   restyled live like the shader materials. Any thread.
+- **`StyleKit.Solid`** is `Figure` for a solid object's plain standard material that is not a
+  figure (the smoke grenade's cloud, the fishing float, the BR Postauto stop): **unshaded in PS1**,
+  as such things were, **lit** (toon in Cartoon) in the lit styles, restyled live (#1069). A new
+  solid object takes it instead of `ShadingMode = Unshaded`; unshaded on its own material stays
+  for what is meant to be: glows and lamps, signs that light themselves, beams, screens and
+  mirrors, particle FX, placement ghosts, debug and UI, and line primitives (no normals).
 - **Saved settings from before #849** stored PS1 whether the player chose it or not: a
   `settings.json` without the `cartoonDefault` flag that says PS1 is read as Cartoon once
   (`GameSettings.Load`); a PS1 picked after that is saved with the flag and kept.

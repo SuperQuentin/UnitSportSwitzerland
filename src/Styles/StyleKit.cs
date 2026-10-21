@@ -260,7 +260,7 @@ public static class StyleKit
 
     /// <summary>What a figure material was built with, for PS1 and for going back to it.</summary>
     private readonly record struct PlainFigure(BaseMaterial3D.DiffuseModeEnum Diffuse,
-        BaseMaterial3D.SpecularModeEnum Specular, float Roughness, bool Rim, float RimAmount, float RimTint);
+        BaseMaterial3D.SpecularModeEnum Specular, float Roughness, bool Rim, float RimAmount, float RimTint, bool Solid = false);
 
     private static readonly List<(System.WeakReference<StandardMaterial3D> Material, PlainFigure Plain)> Figures = new();
 
@@ -282,8 +282,29 @@ public static class StyleKit
         return m;
     }
 
+    /// <summary>
+    /// The plain standard material of a solid object that is not a figure (a smoke cloud, a
+    /// fishing float, a bus-stop sign): unshaded in PS1 as such things always were, lit and shaded
+    /// like a <see cref="Figure"/> in the lit styles, so it does not glow in a sunlit world (#1069).
+    /// Kept and restyled live like a figure. Glows, signs that light themselves, beams, screens,
+    /// debug and UI stay unshaded on their own material. Any thread.
+    /// </summary>
+    public static StandardMaterial3D Solid(StandardMaterial3D m)
+    {
+        var plain = new PlainFigure(m.DiffuseMode, m.SpecularMode, m.Roughness, m.RimEnabled, m.Rim, m.RimTint, Solid: true);
+        lock (Figures)
+        {
+            Figures.RemoveAll(f => !f.Material.TryGetTarget(out _));
+            Figures.Add((new System.WeakReference<StandardMaterial3D>(m), plain));
+        }
+        Shade(m, plain);
+        return m;
+    }
+
     private static void Shade(StandardMaterial3D m, PlainFigure plain)
     {
+        if (plain.Solid)
+            m.ShadingMode = StyleFinish == Finish.Flat ? BaseMaterial3D.ShadingModeEnum.Unshaded : BaseMaterial3D.ShadingModeEnum.PerPixel;
         if (StyleFinish == Finish.Realistic)
         {
             // one material for paint, cloth and skin alike: a compromise until the builders give
