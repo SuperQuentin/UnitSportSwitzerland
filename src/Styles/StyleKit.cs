@@ -56,9 +56,9 @@ public enum MaterialRole
 ///
 /// <para>
 /// Each style names a parent, and a role a style has no shader for resolves through the chain
-/// Realistic+ → Realistic− → Cartoon → PS1. PS1 is the base: the only complete style, with every
-/// role. A new visual is built once, in the base, and the other styles borrow it until they get
-/// their own. <c>--style-report</c> lists what each style borrows.
+/// Realistic+ → Realistic− → Cartoon and PS1 → Cartoon. Cartoon is the base and the default: the
+/// only complete style, with every role. A new visual is built once, in the base, and the other
+/// styles borrow it until they get their own. <c>--style-report</c> lists what each style borrows.
 /// </para>
 /// </summary>
 public static class StyleKit
@@ -70,6 +70,9 @@ public static class StyleKit
     public static VisualStyle Style => _session ?? GameSettings.Current.VisualStyle;
 
     private static VisualStyle? _session;
+
+    /// <summary>The style a new player starts in (#849), and what an unknown <c>--style</c> name gives.</summary>
+    public const VisualStyle Default = VisualStyle.Cartoon;
 
     /// <summary>
     /// Switches style for this session only, without saving it (<c>/style</c>): the saved setting
@@ -141,11 +144,11 @@ public static class StyleKit
     {
         VisualStyle.RealisticHigh => VisualStyle.RealisticLow,
         VisualStyle.RealisticLow => VisualStyle.Cartoon,
-        VisualStyle.Cartoon => VisualStyle.Ps1,
+        VisualStyle.Ps1 => VisualStyle.Cartoon,
         _ => null,
     };
 
-    private const VisualStyle Base = VisualStyle.Ps1;
+    private const VisualStyle Base = VisualStyle.Cartoon;
 
     /// <summary>Each style's own shaders. The base must have every role (<see cref="Report"/> checks).</summary>
     private static readonly Dictionary<VisualStyle, Dictionary<MaterialRole, string>> Shaders = new()
@@ -161,13 +164,14 @@ public static class StyleKit
             [MaterialRole.Prop] = "res://shaders/ps1_prop.gdshader",
             [MaterialRole.Interior] = "res://shaders/ps1_interior.gdshader",
             [MaterialRole.Path] = "res://shaders/ps1_path.gdshader",
-            [MaterialRole.Precip] = "res://shaders/ps1_snowfall.gdshader",
             [MaterialRole.Figure] = "res://shaders/avatar.gdshader",
         },
-        // snowfall stays PS1's; interiors are unshaded in every style (rooms float in the dark
-        // under the terrain, out of the sun) but lit by the hour and finished like the style (#388)
+        // interiors are unshaded in every style (rooms float in the dark under the terrain, out of
+        // the sun) but lit by the hour and finished like the style (#388); the snow is unshaded
+        // and the same in every style
         [VisualStyle.Cartoon] = new()
         {
+            [MaterialRole.Precip] = "res://shaders/snowfall.gdshader",
             [MaterialRole.Interior] = "res://shaders/cartoon_interior.gdshader",
             [MaterialRole.Terrain] = "res://shaders/cartoon_terrain.gdshader",
             [MaterialRole.Road] = "res://shaders/cartoon_road.gdshader",
@@ -179,7 +183,7 @@ public static class StyleKit
             [MaterialRole.Path] = "res://shaders/cartoon_path.gdshader",
             [MaterialRole.Figure] = "res://shaders/cartoon_avatar.gdshader",
         },
-        // prop and path borrow Cartoon's lit ones; snowfall stays PS1's
+        // prop, path and snowfall are Cartoon's
         [VisualStyle.RealisticLow] = new()
         {
             [MaterialRole.Interior] = "res://shaders/real_interior.gdshader",
@@ -456,9 +460,9 @@ public static class StyleKit
 
     private static readonly Dictionary<VisualStyle, Look> Looks = new()
     {
-        [VisualStyle.Ps1] = new(MeshDetail.Low, FinestStride: 1, Sun: false, Finish: Finish.Flat, TreeNear: 220f,
+        [VisualStyle.Ps1] = new(MeshDetail.Low, Sun: false, Finish: Finish.Flat),
+        [VisualStyle.Cartoon] = new(MeshDetail.High, FinestStride: 1, Sun: true, Finish: Finish.Cartoon, TreeNear: 220f,
             Effects: false, Photos: false),
-        [VisualStyle.Cartoon] = new(MeshDetail.High, Sun: true, Finish: Finish.Cartoon),
         // Textures carry the surface detail, so 2 m quads underfoot rather than 1 m: the
         // prototype's biggest geometry lever (Realistic-, Riddes, M1 Pro: ~25 -> 11-20 ms)
         // ...and 3D trees to 80 m only: an EZ-Tree is ~3k triangles against Cartoon's 50-120
@@ -680,7 +684,7 @@ public static class StyleKit
                 style = s;
                 return true;
             }
-        style = VisualStyle.Ps1;
+        style = Default;
         return false;
     }
 

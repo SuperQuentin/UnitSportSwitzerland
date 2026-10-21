@@ -6,7 +6,8 @@
 The plan and the prototype's results: `docs/plans/visual-styles.md` (issues #181, #212).
 
 - **`VisualStyle`** (`Ps1`, `Cartoon`, `RealisticLow`, `RealisticHigh`) is a client setting
-  (`GameSettings.VisualStyle`, `--style ps1|cartoon|real-|real+`). It is **never replicated**: the
+  (`GameSettings.VisualStyle`, `--style ps1|cartoon|real-|real+`), **Cartoon by default**
+  (`StyleKit.Default`, #849; an unknown `--style` name gives it too). It is **never replicated**: the
   server does not know it, and gameplay must not depend on it (hitboxes, seats and wheels come
   from the canonical dimensions, never from a style's mesh).
 - **`MaterialRole`** names what a material is for: terrain, road, building, tree, tree-far,
@@ -16,10 +17,12 @@ The plan and the prototype's results: `docs/plans/visual-styles.md` (issues #181
   **Never `GD.Load<Shader>("res://shaders/ps1_*")` in game code**: add a role instead. Screen
   effects (lens, zoom bubble, speed lines, XR vignette, door portal) are not world materials and
   stay outside the kit.
-- **Fallback chain:** Realistic+ → Realistic− → Cartoon → PS1. A style without its own shader
-  for a role borrows its parent's, recursively, down to PS1, the **base**: the only complete
-  style. A new visual is built once, in the base, and the other styles inherit it until they get
-  their own version. `StyleKit.Shaders` is an explicit table per style, not a file-name probe,
+- **Fallback chain:** Realistic+ → Realistic− → Cartoon, and PS1 → Cartoon. A style without its
+  own shader or look item borrows its parent's, recursively, down to Cartoon, the **base**: the
+  only complete style (#849; PS1 was the base before). A new visual is built once, in Cartoon,
+  and the other styles inherit it until they get their own version: PS1 shows a new lit Cartoon
+  shader until someone writes its unshaded wrapper. PS1 still has every role of its own today,
+  and sets only the look items that differ (low mesh detail, no sun, flat finish). `StyleKit.Shaders` is an explicit table per style, not a file-name probe,
   so `--style-report` can say exactly what is borrowed.
 - **`--style-report`** (headless, RESULT PASS/FAIL): fails if the base misses a role or a listed
   shader file does not exist, and prints for each style the roles it borrows and from where. That
@@ -50,6 +53,9 @@ The plan and the prototype's results: `docs/plans/visual-styles.md` (issues #181
 - **`StyleKit.Figure`** shades the vertex-coloured standard material of avatars, vehicles, birds
   and items (`HumanMeshBuilder.Material`) for the style (Cartoon: toon), kept weakly and
   restyled live like the shader materials. Any thread.
+- **Saved settings from before #849** stored PS1 whether the player chose it or not: a
+  `settings.json` without the `cartoonDefault` flag that says PS1 is read as Cartoon once
+  (`GameSettings.Load`); a PS1 picked after that is saved with the flag and kept.
 - **The settings menu's "Visual style"** (Video tab) saves the setting and ends a `/style`
   choice (`StyleKit.ChooseSetting`); it offers the styles in `StyleKit.MenuStyles`, those with a
   look of their own. Cartoon: `cartoon`.
