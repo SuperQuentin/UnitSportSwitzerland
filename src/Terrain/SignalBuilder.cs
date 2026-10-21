@@ -159,7 +159,7 @@ public static class SignalBuilder
             BorderFrame(vertices, colors, uvs, uv2s, indices, WhitePlate.SrgbToLinear(), face,
                 h.Right, w * 0.5f + gap, half + gap, band, corner, below: panel);
             if (panel > 0f)
-                ArrowOn(vertices, colors, uvs, uv2s, indices, arrow, face + h.Front * 0.003f + Vector3.Down * (half + gap + (band + panel) * 0.5f),
+                ArrowOn(vertices, colors, uvs, uv2s, indices, arrow, face + h.Front * 0.01f + Vector3.Down * (half + gap + (band + panel) * 0.5f),
                     h.Right, (band + panel) * 0.5f * ArrowFill);
         }
         else if (panel > 0f)
@@ -168,7 +168,7 @@ public static class SignalBuilder
             float below = half + gap, height = panel + band;
             var at = face + Vector3.Down * (below + height * 0.5f);
             RoundedPlate(vertices, colors, uvs, uv2s, indices, WhitePlate.SrgbToLinear(), at, h.Right, w * 0.5f + gap, height * 0.5f, corner);
-            ArrowOn(vertices, colors, uvs, uv2s, indices, arrow, at + h.Front * 0.003f, h.Right, height * 0.5f * ArrowFill);
+            ArrowOn(vertices, colors, uvs, uv2s, indices, arrow, at + h.Front * 0.01f, h.Right, height * 0.5f * ArrowFill);
         }
         if (h.SideBySide)
         {
@@ -177,7 +177,7 @@ public static class SignalBuilder
             var window = Outline(GenevaHalfWidth - 0.025f, GenevaHalfHeight - 0.025f, CornerRadius * 0.6f, 2);
             var ring = new Vector3[window.Count];
             for (int i = 0; i < window.Count; i++)
-                ring[window.Count - 1 - i] = h.Centre + h.Front * 0.003f + h.Right * window[i].X + Vector3.Up * window[i].Y;
+                ring[window.Count - 1 - i] = h.Centre + h.Front * 0.01f + h.Right * window[i].X + Vector3.Up * window[i].Y;
             Polygon(vertices, colors, uvs, uv2s, indices, Window.SrgbToLinear(), ring);
             return;
         }
@@ -735,7 +735,8 @@ public static class SignalBuilder
     {
         float r = LensRadius * scale, rim = RimWidth * scale;
         var rimColour = Rim.SrgbToLinear();
-        var ringAt = centre + front * 0.003f;
+        // a centimetre proud of the housing: 3 mm z-fought from across a junction (#1079)
+        var ringAt = centre + front * 0.01f;
         Vector3 Q(float x, float y, Vector3 at) => at + right * x + Vector3.Up * y;
         if (square)
         {

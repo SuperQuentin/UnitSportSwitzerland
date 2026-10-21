@@ -96,16 +96,17 @@ public static class RoadSignBuilder
             [c - right * hw + Vector3.Down * hh, c + right * hw + Vector3.Down * hh, c + right * hw + Vector3.Up * hh, c - right * hw + Vector3.Up * hh];
         Polygon(vertices, colors, uvs, uv2s, indices, Back.SrgbToLinear(), Rect(centre - front * PlateThickness, w, h));
         Polygon(vertices, colors, uvs, uv2s, indices, Black.SrgbToLinear(), Rect(centre, w, h));
-        Polygon(vertices, colors, uvs, uv2s, indices, White.SrgbToLinear(), Rect(centre + front * 0.001f, w - CantonEdge, h - CantonEdge));
+        Polygon(vertices, colors, uvs, uv2s, indices, White.SrgbToLinear(), Rect(centre + front * 0.01f, w - CantonEdge, h - CantonEdge));
 
         // the shield: straight sides down to a third of its height, then to a point
-        var c = centre + front * 0.002f + right * (-w + CantonMargin + ShieldWidth * 0.5f);
+        // a centimetre between layers, or they z-fight from a few metres away (#1079)
+        var c = centre + front * 0.03f + right * (-w + CantonMargin + ShieldWidth * 0.5f);
         float sw = ShieldWidth * 0.5f, sh = ShieldHeight * 0.5f, shoulder = -sh + ShieldHeight * 0.35f;
         Vector3 At(float x, float y) => c + right * x + Vector3.Up * y;
         var (first, second, sideBySide) = Arms(RoadSigns.CantonCode(variant));
         // a thin black outline behind the fields: Vaud's white half on the white plate
         const float o = 0.012f;
-        Vector3 Out(float x, float y) => At(x, y) - front * 0.0005f;
+        Vector3 Out(float x, float y) => At(x, y) - front * 0.01f;
         Polygon(vertices, colors, uvs, uv2s, indices, Black.SrgbToLinear(),
             [Out(-sw - o, sh + o), Out(sw + o, sh + o), Out(sw + o, shoulder), Out(0, -sh - o * 1.6f), Out(-sw - o, shoulder)]);
         if (sideBySide)
@@ -142,7 +143,7 @@ public static class RoadSignBuilder
             float w = RoadSigns.CantonSignWidth * 0.5f, middle = p.Height - RoadSigns.CantonSignHeight * 0.5f;
             // right of the shield: from its margin to the plate's edge less one
             float from = -w + 2 * CantonMargin + ShieldWidth, to = w - CantonMargin;
-            var at = foot + front * (PlateOffset + 0.004f) + Vector3.Up * middle + right * ((from + to) * 0.5f);
+            var at = foot + front * (PlateOffset + 0.02f) + Vector3.Up * middle + right * ((from + to) * 0.5f);
             (labels ??= new()).Add(new Label(at, front, RoadSigns.CantonName(p.Variant), to - from));
         }
         return labels?.ToArray();
