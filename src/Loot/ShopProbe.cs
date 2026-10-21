@@ -224,26 +224,40 @@ public partial class ShopProbe : ChatProbe
 
     /// <summary>A building with a PAUSA machine met on the way, if any.</summary>
     private (DoorIndex.Entry Door, InteriorLayout Layout)? _machine;
+    /// <summary>How long A keeps looking for a PAUSA machine while the door index fills, s.</summary>
+    private const double MachineSearch = 60;
 
     /// <summary>
     /// A's PAUSA machine, if one stood in a building it looked at (a shop or office lobby, one in
     /// five): one item for cash, which sticks (the server runs with <c>--shopstuck</c>), then a hit
-    /// frees it. Best effort: no machine near the shops is not a failure.
+    /// frees it. None found within <see cref="MachineSearch"/> fails, with what was looked at (#1017).
     /// </summary>
     private async Task Vending(FootPlayer me)
     {
-        if (_machine == null)
+        // the generated village round the shop has a handful of shops and works, and the nearest machine can be a km or two off:
+        // its tile's doors are indexed only once it has streamed in, so look again as the index fills (#1017)
+        var tried = new HashSet<string>();
+        double since = GameClock.Now;
+        while (_machine == null && GameClock.Now - since < MachineSearch)
         {
             var here = me.GlobalPosition;
-            foreach (var d in DoorIndex.All().Where(d => d.Kind is BuildingKind.Commercial or BuildingKind.Civic or BuildingKind.Industrial)
-                         .OrderBy(d => new Vector2(d.World.X - here.X, d.World.Z - here.Z).Length()).Take(60))
+            foreach (var d in DoorIndex.All().Where(d => d.Kind is BuildingKind.Commercial or BuildingKind.Civic or BuildingKind.Industrial && !tried.Contains(d.Key.ToString()))
+                         .OrderBy(d => new Vector2(d.World.X - here.X, d.World.Z - here.Z).Length()).Take(60).ToList())
             {
+                tried.Add(d.Key.ToString());
                 InteriorLayout? l = null;
                 try { l = await InteriorManager.Instance!.GetOrCreate(d.Key.ToString()); } catch { }
-                if (l != null && l.Key == d.Key.ToString() && l.Furniture.Any(f => f.Type == FurnitureType.VendingMachine)) { _machine = (d, l); break; }
+                // any door of the building: a second door (#498) leads into the same plan
+                if (l != null && l.Furniture.Any(f => f.Type == FurnitureType.VendingMachine)) { _machine = (d, l); break; }
             }
+            if (_machine == null) await Seconds(3.0);
         }
-        if (_machine is not { } m) { GD.Print($"{Log} no PAUSA machine in the 60 nearest buildings that may have one: skipped"); return; }
+        if (_machine is not { } m)
+        {
+            Expect(false, $"a PAUSA machine in one of the {tried.Count} commercial, civic and industrial doors indexed in {MachineSearch:F0} s ({DoorIndex.All().Count()} doors in all)");
+            return;
+        }
+        GD.Print($"{Log} found after {GameClock.Now - since:F1} s and {tried.Count} doors");
         GD.Print($"{Log} PAUSA machine in {m.Layout.Key} ({m.Layout.Kind})");
         if (!await WalkIn(me, m.Door)) return;
         var interiors = InteriorManager.Instance!;
@@ -270,6 +284,9 @@ public partial class ShopProbe : ChatProbe
 
     private async Task<bool> WalkIn(FootPlayer me, DoorIndex.Entry door)
     {
+        // the index's own entry, in today's frame: a copy found before an origin shift points a few km off,
+        // and B, just teleported 2 km to the shop, was put down 5 km away on a hillside (#1017)
+        door = DoorIndex.Find(door.Key) ?? door;
         var interiors = InteriorManager.Instance!;
         string doorKey = door.Key.ToString();
         var inward = -door.Outward;
