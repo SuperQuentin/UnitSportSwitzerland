@@ -30,6 +30,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | crouch_slide | Ctrl, C / B | ok: B, or crouch for real (#437) | keep |
 | interact_mount | E / Y | ok: Y; grip a door, an item, a radio, or reach out and grip what E would act on (#437) | keep |
 | sit on a stand's seat / stand up (#885) | E / Y on a stadium row; again, or walk off | ok: Y, or reach out and grip (`TryInteract(byHand)` sits before the dance); the stick stands up | keep |
+| export or import a concert rig as MVR (#941) | the desk's MVR row (Export MVR, the file picker, Import, Own rig, Folder) or `/concert export`, `/concert import <file>` | ok: the desk is a CanvasLayer on the VR panel (`XrUi`), the ray clicks the picker and the buttons | keep |
 | run a concert camera (#885) | `/concert camera take <n>` or the desk's Operate row; WASD / left stick along the rails, fly up/down rises, mouse / right stick looks, = - wheel / shoulders zoom, Enter / X cuts to it, Esc leaves | ok: the sticks and shoulders through `XrPad`; the viewfinder is a CanvasLayer, on the VR panel (`XrUi`) | new: a hand-held steadicam, gripped and aimed by the hand |
 | a concert's light desk (#885) | E / Y at the front-of-house console | ok: Y, or reach out and grip (`TryInteract(byHand)`); the screen is a CanvasLayer, on the VR panel (`XrUi`), the ray clicks | keep |
 | radio on / off (#725) | tap E (pointed) or tap Use (held) / tap Y or the Use button; hold either for the panel | ok: poke the radio's red key with a controller tip (`XrHands.PokeRadio`); grip still opens the panel | keep |
@@ -62,6 +63,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | build_turn, next piece | R, aim+wheel / D-pad ↑, LB+D-pad → | gap | **twist the hand** while aiming; R stick ←/→ steps the piece |
 | fishing rod: cast, strike, reel, wind in (#493) | hold LMB + let go, LMB, hold LMB, RMB / the same on RB, LB | ok: R trigger (hold, let go: cast; press: strike; hold: reel), L trigger winds in | gap: **flick the rod hand** to cast (release speed = distance), **crank the reel** with the left hand (R1, R4) |
 | bird_journal (birds and fish pages, #493) | J / — | ok: wrist menu (#437); the page buttons by pointer | keep |
+| traffic tool: place / open a generator (#971) | LMB / RB with the tool in hand | ok: R trigger (`use_item`, no new action); the window by the laser | keep |
 | farm by hand (#494) | LMB / RB with a hoe, seed or fertiliser in hand | ok: R trigger (`use_item`, no new action) | a hoe **swung down** at the ground |
 | harvest a ripe field cell (#494) | hold G / X | ok: hold X (`gather`, the gathering hold) | **grip and pull** the crop, like gather |
 
@@ -71,6 +73,15 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 |---|---|---|---|
 | throttle / brake / steer | W S A D / RT LT stick | ok: triggers; **wheel by grip** | keep |
 | tuck_boost / trick / boost | Shift F Q / X RB LB | ok: X, grips | keep |
+| skis: stride (#899): a press of forward, never a hold; skates on the flat, steps off snow | tap W / tap RT or flick L stick ↑ | ok: a **pole push** (`XrRig.UpdateSki`, a pulse per push) | keep |
+| ski lift (#912): board at a bottom station, on foot or on skis; let go of a drag lift | E / the pad's interact | ok: a **grip** reaching out at the station (`XrHands`, on skis too) | keep |
+| skis: hockey stop (#899): brake + turn pivots the skis across | S + A/D / LT + stick | ok: L trigger + head lean | keep |
+| skis and board: hop turn (#954): jump, then brake + turn in the air swings them across to stop | Space then S + A/D / A then LT + stick | ok: the pad's jump, then L trigger + head lean | keep |
+| skis: snowplough (#933): brake alone opens a V; slower than 5 m/s brake + turn too | S / LT | ok: L trigger | keep |
+| skis and board: schuss / straight-line (#933): hold, steering damped | Shift / X | ok: the **crouch** (`XrSession.SkiTuck`) | keep |
+| snowboard (#922): carve toe / heel edge, tuck | A/D, Shift / stick, LB | ok: the ski **body lean** and crouch (`XrRig.UpdateSki`, `SnowRide.Is`) | keep |
+| snowboard: push (#922): a press of forward, the free foot | tap W / tap RT | ok: the pad (no poles: the pole push is skis only) | keep |
+| snowboard: heel-side skid stop (#922) | S / LT | ok: L trigger | keep |
 | engine_toggle | Z / D-pad ↑ | ok: R stick ↑ | keep (R3) |
 | lights_toggle | L / D-pad → | ok: R stick → (#436) | keep |
 | cruise (speed regulator: car, truck, farm machine, motorbike, #494) | Y / hold D-pad → (a tap stays the lights) | ok: a **dash poke** in a car or truck (`XrCabControls`), or hold R stick → | keep |
@@ -141,6 +152,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | accept an invite (#840) | tap F2 / Start › first entry | ok: Menu tap › first entry, wrist menu › Invites | keep |
 | teleport (place search, BR map) | M / — | ok: wrist menu (#437), hand-held map with point and pull (#439) | keep |
 | help / debug | F1 F9 / — | help: wrist menu (#437); debug: gap | debug in the wrist menu for admins |
+| traffic endpoints (#971) | debug menu (F9): mouse / — | gap, as the rest of the debug menu | with the debug menu |
 | playtest_panel (Debug `--playtest`, #751) | F10 / L3 + R3 | ok: both stick clicks (XrPad), the panel on the XrUi screen; typing to Claude: gap (no keyboard) | the laser key grid planned for the chat |
 | playtest_note (Debug `--playtest-record`, #844) | F12 / panel › Note | ok: the panel's Note button (L3 + R3, XrPad) marks the moment with a screenshot; its text: gap (no keyboard) | the laser key grid planned for the chat |
 | playtest_topview / _scrub (#844) | Shift+F12, Ctrl+F12 / panel › Top view | ok: the panel's Top view button toggles it on the XrUi screen; zoom and scrub (Shift/Ctrl + wheel): keyboard only, a tuning aid | — |

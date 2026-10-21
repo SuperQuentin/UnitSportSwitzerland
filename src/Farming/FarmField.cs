@@ -131,7 +131,7 @@ public partial class FarmField : Node
         _storeDir = dirAt >= 0 && dirAt + 1 < args.Length ? Path.GetFullPath(args[dirAt + 1]) : ProjectSettings.GlobalizePath("user://farm");
         // --farmfresh (checks, with --farmdir): start from untouched fields
         if (dirAt >= 0 && Array.IndexOf(args, "--farmfresh") >= 0 && Directory.Exists(_storeDir)) Directory.Delete(_storeDir, true);
-        _month = FarmRules.MonthFromArgs(OS.GetCmdlineUserArgs(), DateTime.Now);
+        _month = FarmRules.MonthFromArgs(OS.GetCmdlineUserArgs(), Core.Calendar.Now);
         Multiplayer.PeerDisconnected += OnPeerGone;
         if (!_dedicated) ReadyDraw();
         GD.Print($"[farm] {(_dedicated ? "server" : "client")} ready, month {_month}");
@@ -176,7 +176,7 @@ public partial class FarmField : Node
             if (_wasOnline != null) ResetTiles();
             _wasOnline = online;
             _monthFromServer = false;
-            if (!online) _month = FarmRules.MonthFromArgs(OS.GetCmdlineUserArgs(), DateTime.Now);
+            if (!online) _month = FarmRules.MonthFromArgs(OS.GetCmdlineUserArgs(), Core.Calendar.Now);
         }
 
         _wantTimer -= delta;

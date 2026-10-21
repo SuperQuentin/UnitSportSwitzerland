@@ -53,7 +53,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     private readonly List<Bird> _birds = new();
     private readonly Dictionary<int, Bird> _byId = new();
     private int _nextId;
-    private readonly Random _rng = new();
+    private Random _rng = new();
     /// <summary>Tree tops per tile, relative to the tile's NW corner (so an origin shift leaves them be),
     /// bucketed in <see cref="TreeCell"/> m cells (a forest tile holds 100k+).</summary>
     private readonly Dictionary<TileId, Dictionary<(int, int), List<Vector3>>?> _trees = new();
@@ -104,7 +104,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     public IReadOnlyList<Bird> Birds => _birds;
 
     /// <summary>Calendar month used for presence and hunting seasons; <c>--birdmonth N</c> overrides it.</summary>
-    public int Month { get; set; } = DateTime.Now.Month;
+    public int Month { get; set; } = Core.Calendar.Month;
 
     /// <summary>False stops the automatic spawning (the probe places its own birds).</summary>
     public bool AutoSpawn { get; set; } = true;
@@ -127,12 +127,34 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     public override void _ExitTree()
     {
         if (Instance == this) Instance = null;
+        Core.RunSeeds.Reseeded -= OnReseeded;
     }
+
+    /// <summary>
+    /// A film's shot pinned its seeds (#924): this peer's birds go and come again from the shot's own
+    /// stream, so the birds of a shot never depend on the shots filmed before it or on how long its
+    /// ground took to stream in.
+    /// </summary>
+    private void OnReseeded()
+    {
+        if (!Authority) return;
+        for (int i = _birds.Count - 1; i >= 0; i--) RemoveAt(i);
+        _rng = Core.RunSeeds.Rng("birds");
+        _spawnTimer = _aerialTimer = 0;
+        _refill = true;
+    }
+
+    /// <summary>After a reseed: the next frame spawns a dozen at once, as a shot starts.</summary>
+    private bool _refill;
+
+    /// <summary>The stream a bird flushes from (the one every spawn draws from).</summary>
+    internal Random Rng => _rng;
 
     public override void _Ready()
     {
         Name = "Birds";
         if (Headless) return;
+        Core.RunSeeds.Reseeded += OnReseeded;
         Movie.ReplayWatch.Container(this);   // recorded for the movie studio (#775)
         Instance = this;
         Journal = new BirdJournal();
@@ -178,6 +200,11 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
 
         _spawnTimer -= delta;
         _callCooldown -= delta;
+        if (_refill && Authority && AutoSpawn)
+        {
+            _refill = false;
+            for (int i = 0; i < 12 && _birds.Count < Budget; i++) TrySpawn(focus);
+        }
         if (Authority && AutoSpawn && _spawnTimer <= 0 && _birds.Count < Budget)
         {
             _spawnTimer = 0.4;
@@ -1517,7 +1544,7 @@ public sealed class Bird
         var before = p;
         if (player is { } me && State is Mode.Ground or Mode.Perched or Mode.Swimming
             && p.DistanceTo(me) < FlushDistance)
-            Flush(me, Random.Shared);
+            Flush(me, life.Rng);
 
         float flap = 0f;
         switch (State)

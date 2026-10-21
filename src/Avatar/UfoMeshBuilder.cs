@@ -175,8 +175,9 @@ public static class UfoMeshBuilder
         // treads across, for a ramp people walk up
         for (int i = 1; i < 8; i++)
             s.Box(new Vector3(0, 0.005f, RampLength * i / 8f), new Vector3(RampWidth - 0.16f, 0.03f, 0.06f), Dark);
+        // the rails stop 1 cm short of the plate's ends: flush, their end faces lay in the plate's (#942)
         foreach (float x in new[] { -w, w })
-            s.Box(new Vector3(x, 0.02f, RampLength * 0.5f), new Vector3(0.08f, 0.16f, RampLength), Silver);
+            s.Box(new Vector3(x, 0.02f, RampLength * 0.5f), new Vector3(0.08f, 0.16f, RampLength - 0.02f), Silver);
         return s.Build();
     }
 

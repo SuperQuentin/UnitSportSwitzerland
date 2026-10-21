@@ -5,7 +5,7 @@ using UnitSport.Net;
 namespace UnitSport.Core;
 
 /// <summary>
-/// <c>--chatcheck</c>: tab completion, <c>/spawn</c> and <c>/time</c> parsing, and Up/Down through
+/// <c>--chatcheck</c>: tab completion, <c>/spawn</c> and <c>/time</c> parsing, <c>/stadium</c> and <c>/help</c>, and Up/Down through
 /// what was sent, offline and without a world.
 /// Prints each failure and a RESULT line; exits non-zero if any case is wrong.
 /// </summary>
@@ -28,7 +28,7 @@ public static class ChatCheck
         // commands
         ExpectTexts(completer, "/", ["/help ", "/who ", "/me ", "/city ", "/occasion ", "/spawn "], "offline command list");
         ExpectTexts(completer, "/sp", ["/spawn "], "command prefix");
-        ExpectTexts(completer, "/tp", [], "server-only command hidden offline");
+        ExpectTexts(completer, "/kic", [], "server-only command hidden offline");
 
         // items
         Expect(completer.Complete("/spawn ene").Any(s => s.Text == "/spawn EnergyBar"), "item prefix");
@@ -59,7 +59,7 @@ public static class ChatCheck
         Expect(completer.Complete("/sp").FirstOrDefault().Detail == "<item> [count]", "command arguments shown");
         Expect(completer.Usage("/spawn ") == "/spawn <item> [count]", "usage of a typed command");
         Expect(completer.Usage("/sp") == null, "no usage while the command is still typed");
-        Expect(completer.Usage("/tp x") == null, "no usage for a command hidden offline");
+        Expect(completer.Usage("/kick x") == null, "no usage for a command hidden offline");
 
         // parsing
         Expect(Parses("energybar", ItemId.EnergyBar, 1), "id name");
@@ -104,6 +104,8 @@ public static class ChatCheck
         ExpectTexts(completer, "/giv", [], "/give needs a server");
         ExpectTexts(completer, "/bank s", ["/bank set"], "bank verbs");
         Offline(host);
+
+        Venues(completer, host);
 
         History(host);
 
@@ -202,6 +204,49 @@ public static class ChatCheck
         chat.Send("/debug");
         Expect(debugOpened == 1, $"/debug opens the debug menu offline ({debugOpened}): {last}");
 
+        chat.QueueFree();
+    }
+
+    /// <summary>
+    /// <c>/stadium</c> (#994): its completion and its replies offline, <c>/tp</c> to coordinates,
+    /// <c>/concert</c>'s completion and the help built from the command table.
+    /// </summary>
+    private static void Venues(ChatCompleter completer, Node host)
+    {
+        // finding a venue is unit-tested (StadiumLookupTests); here, what the chat makes of it
+        ExpectTexts(completer, "/sta", ["/stadium "], "/stadium is offered offline");
+        ExpectTexts(completer, "/stadium ", ["/stadium list", "/stadium Stade de Genève"], "/stadium offers the list and the venues");
+        ExpectTexts(completer, "/stadium wank", ["/stadium Stadion Wankdorf"], "a venue completes from part of its name");
+        ExpectTexts(completer, "/stadium list a", ["/stadium list arena"], "the list's kinds complete");
+        ExpectTexts(completer, "/concert c", ["/concert cue", "/concert camera"], "/concert sub-commands complete");
+        ExpectTexts(completer, "/concert cue fl", ["/concert cue flames"], "/concert cues complete");
+        ExpectTexts(completer, "/concert input ", ["/concert input artnet", "/concert input osc"], "/concert input protocols complete");
+
+        var offline = ChatCompleter.Help(online: false, isAdmin: true).First();
+        Expect(offline.Contains("/stadium") && offline.Contains("/concert") && offline.Contains("/water") && !offline.Contains("/kick"), $"offline help: {offline}");
+        var player = ChatCompleter.Help(online: true, isAdmin: false).ToList();
+        Expect(player[0].Contains("/fight") && player[0].Contains("/stadium") && !player[0].Contains("/kick") && !player.Any(l => l.StartsWith("admin")), $"a player's help: {player[0]}");
+        var admin = ChatCompleter.Help(online: true, isAdmin: true).ToList();
+        Expect(admin.Any(l => l.StartsWith("admin:") && l.Contains("/kick") && l.Contains("/tp")), "an operator's help has the admin commands");
+
+        var chat = ChatManager.CreateClient();
+        host.AddChild(chat);
+        var lines = new List<string>();
+        chat.LineReceived += (line, _) => lines.Add(line);
+        chat.Send("/stadium list arena");
+        Expect(lines.Count == 1 && lines[0].StartsWith("Arenas (") && lines[0].Contains("Hallenstadion"), $"/stadium list arena offline: {string.Join(" | ", lines)}");
+        lines.Clear();
+        chat.Send("/stadium basel");
+        Expect(lines.Count == 1 && lines[0].Contains("could be") && lines[0].Contains("St. Jakobshalle"), $"an ambiguous venue lists its matches: {string.Join(" | ", lines)}");
+        lines.Clear();
+        chat.Send("/stadium letzigrund");
+        Expect(lines.Count == 2 && lines[0].Contains("tonight") && lines[1].Contains("Nothing to teleport"), $"a venue says what plays, then goes there: {string.Join(" | ", lines)}");
+        lines.Clear();
+        chat.Send("/tp 2600000 1200000");
+        Expect(lines.Count == 1 && lines[0].Contains("Nothing to teleport"), $"/tp to coordinates works offline: {string.Join(" | ", lines)}");
+        lines.Clear();
+        chat.Send("/tp Bob");
+        Expect(lines.Count == 1 && lines[0].Contains("multiplayer"), $"/tp to a player needs a server: {string.Join(" | ", lines)}");
         chat.QueueFree();
     }
 

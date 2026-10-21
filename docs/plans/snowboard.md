@@ -1,6 +1,6 @@
 # Snowboard (#922)
 
-Status: in progress (`feat/922-snowboard`, stacked on #919).
+Status: done in PR #923 (`feat/922-snowboard`, stacked on #919).
 
 A board mount on the ski physics (`SkiDynamics`, #899), riding what skis ride.
 

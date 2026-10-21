@@ -1,0 +1,24 @@
+{
+  "id": "move-motorbike",
+  "title": "Motorbike: lean, brake, wheelie",
+  "verdict": "validated",
+  "by": "Quentin Aellen",
+  "date": "2026-10-20T17:13Z",
+  "commit": "e6b105f8",
+  "coverHash": "a6cd17197083173b",
+  "covers": [
+    "src/Player/Motorbike.cs",
+    "src/Player/MotorbikeCatalog*.cs",
+    "src/Avatar/MotorbikeMeshBuilder.cs",
+    "!**/*Check.cs",
+    "!**/*Probe.cs"
+  ],
+  "notes": [
+    {
+      "date": "2026-10-20T17:13Z",
+      "by": "Quentin Aellen",
+      "verdict": "validated",
+      "text": ""
+    }
+  ]
+}

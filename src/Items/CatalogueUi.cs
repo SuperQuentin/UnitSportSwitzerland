@@ -55,7 +55,7 @@ public partial class CatalogueUi : CanvasLayer
 
     /// <summary>What the catalogue lists: everything but a photo, which is nothing without its print.</summary>
     private static IEnumerable<ItemDef> Listed() =>
-        ItemDefs.All.Where(d => d.Id is not (ItemId.None or ItemId.Photo));
+        ItemDefs.All.Where(d => d.Id is not (ItemId.None or ItemId.Photo or ItemId.TrafficTool));
 
     public override void _Ready()
     {

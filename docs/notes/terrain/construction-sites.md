@@ -117,12 +117,25 @@ village, `SiteBeyondEnd` (45 m) past the end the works is not at, its front wall
 
 `--constructioncheck --systems ui` (`ConstructionCheck`, a quick check like `--shapedcheck`, no
 world): plans the villages round the default spawn (13 sites within 12 km: 5 foundations, 3
-shells, 5 topped out), builds the tiles of up to three per phase and runs each through
-`SitePlans.For` with the tile's own roads. It asserts the phase (one further on is allowed where the
+shells, 5 topped out), and checks up to three per phase on the tiles **the game serves**:
+`FallbackChunkSource.GeneratedOnly` (the fill over no terrain under its cache, as a fresh clone
+and a `--generated-world` server read it) through `SitePlans.OfTile`, the server's own way in. It asserts the phase (one further on is allowed where the
 ground falls over 1 m), the storeys to come, the front facing `StreetNear`, nothing on a road or in
 a building (`SiteObstacles`), the hoarding, the office, at least one machine and crane reach, and
 that all three phases are built. It writes the plan views (`SitePlanSvg`) to
 `test_output/construction/generated.svg`. The issues after it extend it with what they draw.
+
+**Never the generator's raw tiles (#943).** It used to build `ProceduralWorld.BuildBuildings` /
+`BuildRoads` itself: the same buildings, but raw roads (3 segments on 2586_1115 where the served
+tile, through RoadGen's stage, `generated-roads-roadgen`, has 26), so `StreetNear` moved up to 12 m
+and every one of the 13 sites was laid out otherwise than in a game: the siteofficenetcheck site
+had "no room" for the gallery a game gives it. The check prints that difference (`planned otherwise
+on the generator's raw tiles`) and asserts that the sites `tools/siteofficenetcheck.sh` and
+`tools/siteuppernetcheck.sh` walk (`NetSites`) are planned as those scripts need (phase, containers,
+a cabin, the gallery). The site door baseline moved with it: rewritten on `main`'s code reading the
+served chain, identical on the branch. A new check of the generated world reads it through
+`GeneratedOnly` (or `FallbackChunkSource.Cached()` over its own inner source), never `ProceduralWorld`'s
+`Build*` directly, unless the raw tile is what it tests.
 `SitePlanSvg` turns into a PNG with headless Edge:
 `msedge --headless=new --screenshot=out.png --window-size=1560,1560 file:///.../generated.svg`.
 
@@ -317,8 +330,8 @@ and search.
   toilet cabin by its own door. A puts on the hard hat and hi-vis vest off the office's rail, and
   B and C see A wearing them (`OutfitBits`).
 - Pictures: `--shot-queue` with `i1.6` shots (through a door) at that site. Take the doors' world
-  positions from a probe's log: `--constructioncheck`'s `--at` is its own world's, a few metres off
-  the live one.
+  positions from `--constructioncheck`'s log (the served world's since #943; before, they were a few
+  metres off the live ones) or from a probe's.
 
 ## The gallery: the office's upper containers (#827)
 
@@ -330,7 +343,9 @@ and search.
   stood by the dressing later), roads and other buildings, the stair 0.15 m and the walkway 0.05 m
   inside the hoarding line. `ConstructionSite.GallerySide` (−1, +1, 0). Nothing placed before moves.
   **Coverage: 240 of the 566 real offices (42 %), 7 of the 13 generated ones round the spawn** (after
-  #619's pits; 45 % before). Where none fits the upper row stays closed.
+  #619's pits; 45 % before). Where none fits the upper row stays closed. The generated 7 are those
+  of the served tiles since #943 (2573_1107, 2575_1109, 2580_1112, 2586_1115, 2591_1117, 2592_1118,
+  2571_1104); the raw tiles the check read before also gave 7, but only three of the same sites.
 - **What it is** (`SiteOffices.Gallery`, site frame): a galvanised grating deck (`ShellPart.Grating`)
   0.8 m clear along the upper row's door end, its top the upper containers' floor and their doors'
   sill (ground + 2.6 m), 0.4 m over the ground doors' heads, on brackets out of the containers; a

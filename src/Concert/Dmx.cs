@@ -18,10 +18,17 @@ public enum Attr : byte
     Pump, Fan,
     // special effects: a safety arm and a fire, as an SFX controller lays them out
     Arm, Fire,
+    /// <summary>A channel the game does not drive (an imported fixture's macro, a 16-bit fine it ignores): kept so the offsets stay right.</summary>
+    Other,
 }
 
 /// <summary>How a fixture looks and moves; each has its own real channel layout.</summary>
-public enum FixtureKind : byte { Spot, Beam, Wash, Blinder, Strobe, PixelBar, Screen, Hazer, Flame, Co2, Confetti, Gerb, Airburst, LowFog }
+public enum FixtureKind : byte
+{
+    Spot, Beam, Wash, Blinder, Strobe, PixelBar, Screen, Hazer, Flame, Co2, Confetti, Gerb, Airburst, LowFog,
+    /// <summary>The crowd's LED wristbands (#986): an infrared moving head, a wide IR flood, the transmitter that drives every band.</summary>
+    IrHead, IrFlood, Wristbands,
+}
 
 /// <summary>
 /// A fixture type, as its manufacturer's manual lays out its DMX channels in one mode: modelled on
@@ -33,6 +40,19 @@ public sealed record FixtureType(string Name, FixtureKind Kind, Attr[] Channels,
     float BeamMin = 4f, float BeamMax = 40f)
 {
     public int Footprint => Channels.Length;
+
+    private int[]? _cells;
+
+    /// <summary>The offsets of the <see cref="Attr.Cell"/> channels, in order: a blinder's lamps, a pixel bar's R, G, B per cell.</summary>
+    public int[] CellOffsets => _cells ??= Enumerable.Range(0, Channels.Length).Where(i => Channels[i] == Attr.Cell).ToArray();
+
+    /// <summary>How many cells it lights: a pixel bar's RGB triples, a blinder's lamps, else one.</summary>
+    public int Cells => Kind switch
+    {
+        FixtureKind.PixelBar => Math.Max(1, CellOffsets.Length / 3),
+        FixtureKind.Blinder => Math.Max(1, CellOffsets.Length),
+        _ => 1,
+    };
 
     /// <summary>The offset of an attribute in the layout, or -1 (the first, for <see cref="Attr.Cell"/>).</summary>
     public int Offset(Attr a) => Array.IndexOf(Channels, a);
@@ -83,6 +103,28 @@ public sealed record FixtureType(string Name, FixtureKind Kind, Attr[] Channels,
     public static readonly FixtureType Airburst = Sfx("Pyro airburst 2ch", FixtureKind.Airburst);
     public static readonly FixtureType LowFog = new("Low fog 2ch", FixtureKind.LowFog, new[] { Attr.Pump, Attr.Fan }, PanRange: 0, TiltRange: 0);
 
+    // LED wristbands (#986), as PixMob's and Xylobands' shows run them: every band has an IR receiver
+    // and lights in the colour code of the strongest infrared it sees. The code rides R, G, B; the
+    // dimmer is the emitter's power (0 = off). Invisible beams: nothing is drawn but the bands.
+
+    /// <summary>An IR emitter on a moving yoke (a spot's motors): paints a spot of colour across the crowd.</summary>
+    public static readonly FixtureType IrHead = new("IR emitter head 10ch", FixtureKind.IrHead, new[]
+    {
+        Attr.Pan, Attr.PanFine, Attr.Tilt, Attr.TiltFine, Attr.PanTiltSpeed, Attr.Dimmer, Attr.Red, Attr.Green, Attr.Blue, Attr.Zoom,
+    }, BeamMin: 6f, BeamMax: 40f);
+
+    /// <summary>A fixed, wide IR flood: a whole stand at once.</summary>
+    public static readonly FixtureType IrFlood = new("IR flood 5ch", FixtureKind.IrFlood,
+        new[] { Attr.Dimmer, Attr.Red, Attr.Green, Attr.Blue, Attr.Zoom }, PanRange: 0, TiltRange: 0, BeamMin: 30f, BeamMax: 100f);
+
+    /// <summary>
+    /// The bands' transmitter ("all bands"): every band at once, in its colour, solid or with an effect
+    /// the bands play themselves (<see cref="Concert.Wristbands"/>: effect 0..63 solid, 64..127 a random
+    /// twinkle, 128..191 a random half flashing on each beat; rate the twinkle's speed).
+    /// </summary>
+    public static readonly FixtureType Wristbands = new("Wristband transmitter 6ch", FixtureKind.Wristbands,
+        new[] { Attr.Dimmer, Attr.Red, Attr.Green, Attr.Blue, Attr.Effect, Attr.Rate }, PanRange: 0, TiltRange: 0);
+
     /// <summary>A spot's or a beam's colour wheel, slot by slot (each slot is 8 DMX values wide).</summary>
     public static readonly Color[] Wheel =
     {
@@ -104,7 +146,12 @@ public sealed record FixtureType(string Name, FixtureKind Kind, Attr[] Channels,
 }
 
 /// <summary>Where a fixture hangs: which position of the rig it belongs to (a console's group).</summary>
-public enum RigGroup : byte { FrontTruss, MidTruss, BackTruss, Floor, Towers, Blinders, Strobes, PixelBars, Screens, Haze, Flames, Co2, Confetti, Gerbs, Airbursts, LowFog }
+public enum RigGroup : byte
+{
+    FrontTruss, MidTruss, BackTruss, Floor, Towers, Blinders, Strobes, PixelBars, Screens, Haze, Flames, Co2, Confetti, Gerbs, Airbursts, LowFog,
+    // the wristbands' emitters (#986), last: the groups before keep their numbers (cues send them)
+    IrHeads, IrFloods, Wristbands,
+}
 
 /// <summary>
 /// One fixture of the rig: its type, its group, where it hangs (stadium frame, metres over the pitch)
@@ -117,6 +164,15 @@ public sealed record Fixture(int Id, FixtureType Type, RigGroup Group, Vector3 P
     public Vector3 ScreenSize { get; init; }
     public int PixelsX { get; init; }
     public int PixelsY { get; init; }
+    /// <summary>
+    /// Where the beam points at pan and tilt centre, as a pan from <see cref="Home"/> and a tilt from
+    /// <see cref="Up"/> (degrees): an imported plot's focus point (#959); zero for ours.
+    /// </summary>
+    public float HomePan { get; init; }
+    public float HomeTilt { get; init; }
+    /// <summary>The fixture's pan or tilt runs the other way for the same DMX (an MVR's DMXInvertPan/Tilt, #959).</summary>
+    public bool InvertPan { get; init; }
+    public bool InvertTilt { get; init; }
 }
 
 /// <summary>
@@ -146,6 +202,27 @@ public sealed class DmxPatch
         _next = next + type.Footprint;
         Fixtures.Add(f);
         return f;
+    }
+
+    /// <summary>
+    /// Patches a fixture at a given universe and address (0-based), as an imported rig lays them out;
+    /// the universes grow to reach it, and later <see cref="Add"/>s go after the highest channel used.
+    /// </summary>
+    public Fixture AddAt(FixtureType type, RigGroup group, Vector3 position, Vector3 home, Vector3 up, int universe, int address)
+    {
+        while (Universes.Count <= universe) Universes.Add(new byte[Channels]);
+        var f = new Fixture(Fixtures.Count, type, group, position, home.Normalized(), up.Normalized(), universe, address);
+        Fixtures.Add(f);
+        if (universe == Universes.Count - 1) _next = Math.Max(_next, address + type.Footprint);
+        return f;
+    }
+
+    /// <summary>Unpatches everything (an imported rig takes the generated one's place).</summary>
+    public void Clear()
+    {
+        Fixtures.Clear();
+        Universes.Clear();
+        _next = 0;
     }
 
     /// <summary>Patches a screen (a media-server layer driving its pixels).</summary>

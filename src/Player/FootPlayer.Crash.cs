@@ -270,7 +270,9 @@ public partial class FootPlayer
         // half the crashes leave the body in the vehicle it breaks into, half send it on through: read
         // from the launch, which every peer has (Anim), so every copy picks the same; the owner flips
         // the coin and nudges the launch by a millimetre a second to say which (#751 playtest)
-        if (IsMultiplayerAuthority() && StaysIn(launch) != (_crashRng.Next(2) == 0)) launch.X += 0.001f;
+        // a film pins the coin (#924): the same crash goes the same way every render
+        var coin = RunSeeds.Pinned ? RunSeeds.Rng($"crash/{Name}") : _crashRng;
+        if (IsMultiplayerAuthority() && StaysIn(launch) != (coin.Next(2) == 0)) launch.X += 0.001f;
         bool staysIn = StaysIn(launch);
         _ragdoll = new Ragdoll(joints, launch, axis.Normalized() * spin, GetRid(), RagdollMask) { StaysIn = staysIn, PassesVehicles = passesVehicles };
         if (IsMultiplayerAuthority()) GD.Print($"[crash] thrown at {launch.Length():0.0} m/s, {(staysIn ? "stays in" : "goes through")} what it breaks into");

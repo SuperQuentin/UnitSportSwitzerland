@@ -75,7 +75,9 @@ public partial class ConcertCameras : Node3D
             HandleInputLocally = false, Msaa3D = Viewport.Msaa.Disabled,
         };
         AddChild(port);
-        var cam = new Camera3D { Name = "Camera", Far = 3000f };
+        // near past the rig's own kit (the lens hood ends 0.55 m out, a drone's rotors 0.68 m): the
+        // screens' feed never hides the body on air, and filmed the back of its hood as a black square
+        var cam = new Camera3D { Name = "Camera", Near = 0.7f, Far = 3000f };
         port.AddChild(cam);
         cam.MakeCurrent();
         return (port, cam);
@@ -243,8 +245,10 @@ public partial class ConcertCameras : Node3D
         if (finder) Aim(_finderCam, Pose(_rigs[Operating]), _rigs[Operating].Fov);
         // the screens' feed at half the frame rate: 256x144 on an LED wall does not need more
         _tick++;
-        var imagMode = !imag ? SubViewport.UpdateMode.Disabled : (_tick & 1) == 0 ? SubViewport.UpdateMode.Once : _imag.RenderTargetUpdateMode;
-        if (_imag.RenderTargetUpdateMode != imagMode) _imag.RenderTargetUpdateMode = imagMode;
+        // Once must be asked again every time: the server drops back to disabled after the render, but
+        // the property still reads Once, so comparing with it froze the feed on its first frame
+        if (imag && (_tick & 1) == 0) _imag.RenderTargetUpdateMode = SubViewport.UpdateMode.Once;
+        else if (!imag && _imag.RenderTargetUpdateMode != SubViewport.UpdateMode.Disabled) _imag.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
         Mode(_program, prog);
         Mode(_finder, finder);
         // an operator's own camera hides its body from its own lens

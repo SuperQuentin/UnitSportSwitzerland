@@ -61,6 +61,8 @@ public partial class PlaytestPanel : CanvasLayer
 
     public override void _Process(double delta)
     {
+        // open, it is there to be clicked: the world's start (or a menu closing) captures the pointer under it
+        if (IsOpen && Input.MouseMode == Input.MouseModeEnum.Captured) Input.MouseMode = Input.MouseModeEnum.Visible;
         if (_dirty) Refresh();
         // the "listening" dot follows time, not events: checked twice a second, drawn only on change
         if (Engine.GetProcessFrames() % 30 == 0) UpdateClaude();

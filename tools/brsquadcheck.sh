@@ -11,8 +11,9 @@
 AT=2642075,1129346   # a generated village of 173 buildings, 59 km from the spawn: the server's fill reaches it (#937)
 # the seed pins the zone: a first circle that misses the village's streets has no Postauto stop for the recall
 PORT=${PORT:-7837}
-tc_server 900 120 "$OUT/brsquad_server.log" --server --generated-world --port $PORT --no-query --admin-password brbots --brpace 4 --brseed ${BRSEED:-399749595} --botlog
-tc_client 800 "$OUT/brsquad_A.log" --connect 127.0.0.1:$PORT --name "BRSA" --cache "$OUT/brsquad_cache_A" --at "$AT" --view first --brsquadcheck --checkspeed 4
+# the generated world wherever it runs: no real tiles, even where terrain_location.json has some (#943)
+tc_server 900 120 "$OUT/brsquad_server.log" --server --generated-world "${NOTERRAIN[@]}" --port $PORT --no-query --admin-password brbots --brpace 4 --brseed ${BRSEED:-399749595} --botlog
+tc_client 800 "$OUT/brsquad_A.log" --connect 127.0.0.1:$PORT --name "BRSA" --cache "$OUT/brsquad_cache_A" --at "$AT" --view first --brsquadcheck --checkspeed 4 "${NOTERRAIN[@]}"
 tc_stop
 grep -h "\[brbots" "$OUT/brsquad_A.log" | grep -v " say "
 grep -h "^\[br\] \(revived\|recalled\|go\|recall stops\)\|revived a mate\|used a dogtag\|pinged an enemy\|took 1 Dogtag" "$OUT/brsquad_server.log" | head -20

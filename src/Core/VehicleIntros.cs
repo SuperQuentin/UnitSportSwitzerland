@@ -10,6 +10,7 @@ public enum VehicleIntroKind
     Trailer,
     /// <summary>The flying saucer (#861).</summary>
     Ufo,
+    Snowboard,
 }
 
 /// <summary>
@@ -60,9 +61,18 @@ public static class VehicleIntros
             new("Push with the poles: {throttle}", Throttle),
             new("Turn with {move_left} {move_right}: turning across the slope is how you slow down", Steer,
                 Pad: "Turn with {move_forward}: turning across the slope is how you slow down"),
-            new("Tuck for speed: hold {tuck_boost}", new[] { "tuck_boost" }),
-            new("Jump with {jump}", new[] { "jump" }),
+            new("Snowplough to slow down: {brake}", Brake),
+            new("Schuss: hold {tuck_boost} · jump with {jump}", new[] { "tuck_boost", "jump" }),
         }, "{ride_menu} takes them off when you stand still"),
+
+        new(VehicleIntroKind.Snowboard, "Snowboard", new IntroRow[]
+        {
+            new("Push with the free foot: tap {throttle}", Throttle),
+            new("Lean onto the toe or heel edge with {move_left} {move_right}", Steer,
+                Pad: "Lean onto the toe or heel edge with {move_forward}"),
+            new("Skid to a stop on the heel edge: {brake}", Brake),
+            new("Ollie with {jump}; land backwards and you ride switch", new[] { "jump" }),
+        }, "{ride_menu} takes it off when you stand still"),
 
         new(VehicleIntroKind.Car, "Car", new IntroRow[]
         {

@@ -6,14 +6,16 @@ namespace UnitSport.Concert;
 
 /// <summary>
 /// The audience of a concert (#885): people on the stadium's seats (<see cref="StadiumBuilder.Seats"/>)
-/// and standing on the pitch in front of the stage, as instances of one 36-triangle figure in a few
+/// and standing on the pitch in front of the stage, as instances of one 48-triangle figure in a few
 /// multimeshes, drawn by <c>shaders/concert/crowd.gdshader</c>: a shirt colour each, a hop on the
-/// beat as hard as the show goes, hands up in a chorus, and the rig's colour on them. Nobody is a
-/// node and nothing per person runs on the CPU: a frame sets four uniforms.
+/// beat as hard as the show goes, hands up in a chorus, the rig's colour on them, and an LED
+/// wristband each that the IR emitters light (<see cref="Wristbands"/>, #986). Nobody is a node and
+/// nothing per person runs on the CPU: a frame sets a few uniforms.
 ///
 /// <para>
 /// Seats behind an end or side stage are not sold. The floor is filled from the barrier back, densest
-/// at the front, never under the stage, its catwalk, the front-of-house riser or the delay towers.
+/// at the front, never under the stage, its catwalk, the front-of-house riser, the delay towers or an
+/// imported set's pieces on the floor (#974, <see cref="StagePlan.ObjectFootprints"/>).
 /// Only during the show (the rig says when); out past <see cref="Range"/> m it is not drawn.
 /// </para>
 /// </summary>
@@ -22,10 +24,12 @@ public partial class ConcertCrowd : Node3D
     /// <summary>One person in this many seats is drawn, and the share of the floor's places taken.</summary>
     private const int SeatSpacing = 2;
     private const float Occupancy = 0.8f, FloorSpacing = 1.3f;
+    private const int MaxFloor = 24000;
     private const float Range = 700f;
     private const int Batches = 4;
 
-    private static readonly StringName UBeat = "beat", UEnergy = "energy", UTint = "tint", UArms = "arms_up";
+    private static readonly StringName UBeat = "beat", UEnergy = "energy", UTint = "tint", UArms = "arms_up",
+        UIr = "ir", UIrCount = "ir_count", UBandsAll = "bands_all", UBandsEffect = "bands_effect";
 
     private readonly StagePlan _plan;
     private ShaderMaterial _material = null!;
@@ -36,6 +40,12 @@ public partial class ConcertCrowd : Node3D
         _plan = plan;
         Name = "Crowd";
     }
+
+    /// <summary>
+    /// The ground's height at a point of the venue's frame (#948): an open air's field as it lies, an
+    /// arena's raised floor; null for a stadium's pitch, level at 0.
+    /// </summary>
+    public Func<Vector2, float>? Ground { get; init; }
 
     public ConcertCrowd() : this(new StagePlan(ConcertPlanner.Plan(StadiumCatalog.Geneva, 1))) { }
 
@@ -77,6 +87,20 @@ public partial class ConcertCrowd : Node3D
         _material.SetShaderParameter(UArms, armsUp);
     }
 
+    /// <summary>The wristbands' emitters and transmitter (#986), sent only when they changed.</summary>
+    public void DriveBands(Wristbands bands)
+    {
+        if (!bands.Dirty) return;
+        bands.Dirty = false;
+        // a Variant of an array owns native memory: freed now, never left to the finalizer
+        Variant ir = bands.Emitters;
+        _material.SetShaderParameter(UIr, ir);
+        ir.Dispose();
+        _material.SetShaderParameter(UIrCount, bands.Count);
+        _material.SetShaderParameter(UBandsAll, bands.All);
+        _material.SetShaderParameter(UBandsEffect, bands.Effect);
+    }
+
     // ---- where they are -------------------------------------------------------------------------------
 
     private static readonly Color[] Shirts =
@@ -85,7 +109,8 @@ public partial class ConcertCrowd : Node3D
         new(0.2f, 0.2f, 0.22f), new(0.85f, 0.75f, 0.2f), new(0.25f, 0.45f, 0.25f), new(0.6f, 0.35f, 0.55f),
     };
 
-    private List<(Transform3D, Color)> Places()
+    /// <summary>Everyone's place and look (custom data), seats then floor; internal for <c>--concertcheck</c> (#985: none in a crew zone).</summary>
+    internal List<(Transform3D, Color)> Places()
     {
         var list = new List<(Transform3D, Color)>();
         var rng = new Random(_plan.Event.Seed ^ 0x5eed);
@@ -110,12 +135,14 @@ public partial class ConcertCrowd : Node3D
             Person(pos - new Vector3(0, 0.05f, 0), facing);
         }
 
-        // the floor: everyone looks at the stage; densest in front of it
+        // the floor: everyone looks at the stage; densest in front of it. A festival field is wide:
+        // spread out to at most MaxFloor people, as the eye counts a crowd from inside it
         var s = _plan.Event.Stadium;
-        for (float u = -s.FrontHalfU + 2; u < s.FrontHalfU - 2; u += FloorSpacing)
-            for (float v = -s.FrontHalfV + 2; v < s.FrontHalfV - 2; v += FloorSpacing)
+        float spacing = Math.Max(FloorSpacing, MathF.Sqrt(4f * s.FrontHalfU * s.FrontHalfV * 0.55f / MaxFloor));
+        for (float u = -s.FrontHalfU + 2; u < s.FrontHalfU - 2; u += spacing)
+            for (float v = -s.FrontHalfV + 2; v < s.FrontHalfV - 2; v += spacing)
             {
-                var p = new Vector2(u, v) + new Vector2((float)rng.NextDouble() - 0.5f, (float)rng.NextDouble() - 0.5f) * FloorSpacing * 0.7f;
+                var p = new Vector2(u, v) + new Vector2((float)rng.NextDouble() - 0.5f, (float)rng.NextDouble() - 0.5f) * spacing * 0.7f;
                 if (_plan.Blocked(p, 1.2f)) continue;
                 Vector2 toStage;
                 float density;
@@ -132,14 +159,18 @@ public partial class ConcertCrowd : Node3D
                     density = Mathf.Clamp(1.15f - ahead / 70f, 0.15f, 1f);
                 }
                 if (rng.NextDouble() > density) continue;
-                Person(new Vector3(p.X, 0, p.Y), toStage);
+                Person(new Vector3(p.X, Ground?.Invoke(p) ?? 0f, p.Y), toStage);
             }
         return list;
     }
 
     // ---- the figure ---------------------------------------------------------------------------------
 
-    /// <summary>Legs, a shirt, a head: three boxes, 36 triangles, the feet at the origin, facing −Z. Alpha 1 marks the shirt.</summary>
+    /// <summary>
+    /// Legs, a shirt, a head and a wristband: four boxes, 48 triangles, the feet at the origin, facing
+    /// −Z. Alpha 1 marks the shirt, 0.25 the band (on the right wrist, hanging by the hip; raised with
+    /// the hands in a chorus).
+    /// </summary>
     [Showcase("Concert", "Crowd figure")]
     private static ArrayMesh Figure()
     {
@@ -163,6 +194,7 @@ public partial class ConcertCrowd : Node3D
         Box(new Vector3(-0.17f, 0f, -0.1f), new Vector3(0.17f, 0.8f, 0.1f), new Color(0.12f, 0.13f, 0.18f, 0f));     // jeans
         Box(new Vector3(-0.22f, 0.8f, -0.13f), new Vector3(0.22f, 1.45f, 0.13f), new Color(1f, 1f, 1f, 1f));       // shirt
         Box(new Vector3(-0.1f, 1.47f, -0.11f), new Vector3(0.1f, 1.72f, 0.11f), new Color(0.78f, 0.6f, 0.48f, 0f)); // head
+        Box(new Vector3(0.22f, 0.78f, -0.06f), new Vector3(0.32f, 0.9f, 0.06f), new Color(0.1f, 0.1f, 0.11f, 0.25f));  // wristband
         using var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = v.ToArray();

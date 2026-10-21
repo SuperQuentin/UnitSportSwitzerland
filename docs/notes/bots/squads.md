@@ -61,6 +61,9 @@ Bots play duos, trios and squads, in bot-only teams and as team-mates of humans.
       the real tiles a `terrain_location.json` pointed at: on the generated world Zürich has 63 road points and no
       stop, and before #937 the server had no ground there at all (the mate sank through the world).
     - Pace 4: the recall must fall in the looting phase, after the mate's minutes of flight to A.
+    - The stops come with the loot, read from the square's road tiles after GO; the probe waits up to 120 s for
+      them: on the generated world each tile goes through the road stage (2-9 s a village tile on the server), which
+      can outlast the drop (#937).
     - The mate jumps after A and lands near, takes A's dogtag to a stop (A recalled), regroups, goes to A's ping,
       and revives A.
   - `SPEED=4 BRMODE=trios BRBOTS=30 tools/brbotwatch.sh`: a whole team match of bots at full pace, 4 × faster

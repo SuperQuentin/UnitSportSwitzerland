@@ -7,9 +7,10 @@ namespace UnitSport.Terrain.Construction;
 
 /// <summary>
 /// <c>--constructioncheck</c> (#607): the generated world's building sites end to end, without a
-/// world. The generator plans the villages round the default spawn and builds the tiles their sites
-/// stand in, and each site goes through <see cref="SitePlans.For"/> with the tile's own roads, the
-/// way a client and the server will. Asks: is it planned at the phase the generator meant, does it
+/// world. The generator plans the villages round the default spawn; the tiles their sites stand in
+/// are served through the chain a client and the server read (<see cref="FallbackChunkSource.GeneratedOnly"/>,
+/// so the roads have been through the stage, #943) and planned by <see cref="SitePlans.OfTile"/>,
+/// the server's own way in. Asks: is it planned at the phase the generator meant, does it
 /// face its street, does nothing of it stand on a road or in a building, does it have its office, a
 /// machine and, where it has cranes, cranes that reach every corner. All three phases must be built
 /// at least once. Writes the plan views to <c>test_output/construction/generated.svg</c>. Prints a
@@ -44,19 +45,19 @@ public static class ConstructionCheck
 
         var picks = planned.GroupBy(p => p.Phase)
             .SelectMany(g => g.OrderBy(p => Sq(p.E - e0) + Sq(p.N - n0)).Take(PerPhase)).ToList();
-        var tiles = new Dictionary<TileId, (BuildingTile? Tile, RoadTile? Roads, List<ConstructionSite> Sites)>();
+        // The world that is played (#943): every tile served through the chain a fresh clone's client
+        // and a --generated-world server serve, never the generator's raw tiles, whose roads have not
+        // been through the stage. On those, a site's yard was laid out round other roads.
+        var source = FallbackChunkSource.GeneratedOnly(world, e0, n0);
+        var tiles = new Dictionary<TileId, SitePlans.TileSites>();
+        SitePlans.TileSites TileOf(TileId id) => tiles.TryGetValue(id, out var t) ? t : tiles[id] = SitePlans.OfTile(source, id);
+        ChunkGrid GridOf(TileId id) => source.LoadChunkAsync(id).GetAwaiter().GetResult()!;
         var seen = new HashSet<SitePhase>();
         var drawn = new List<SitePlanSvg.Entry>();
         foreach (var p in picks)
         {
             var id = TileId.FromLv95(p.E, p.N);
-            if (!tiles.TryGetValue(id, out var t))
-            {
-                var bt = world.BuildBuildings(id);
-                var roads = world.BuildRoads(id);
-                t = (bt, roads, bt == null ? new() : SitePlans.For(bt, roads));
-                tiles[id] = t;
-            }
+            var t = TileOf(id);
             var want = (SitePhase)p.Phase;
             string what = $"a {want} site at {p.E:F0},{p.N:F0}";
             // the planned centre in the tile's frame (X east, Z south)
@@ -104,7 +105,7 @@ public static class ConstructionCheck
             // the pallets of bricks and cement a machine with tines can lift (#615): not a failure when none fit
             int pallets = SiteShellBuilder.Dressing(t.Tile, site, null).Pallets.Count;
             GD.Print($"[constructioncheck]      {what}: {pallets} pallet(s) of materials, {(ConstructionSites.MaterialsWayIn(site) ? "a way in for a machine" : "no way in for a machine")}");
-            Office(t.Tile, t.Roads, t.Sites, site, index, world.BuildGrid(id, 1), what, Expect);
+            Office(t.Tile, t.Roads, t.Sites, site, index, GridOf(id), what, Expect);
             foreach (var corner in site.Box.Corners())
                 if (site.Cranes.Count > 0 && !site.Cranes.Any(k => k.Base.DistanceTo(corner) <= k.JibLength))
                     Expect(false, $"{what}: no crane reaches the corner at {corner}");
@@ -115,7 +116,7 @@ public static class ConstructionCheck
             if (wantsPit) Expect(site.Pit != null, $"{what}: digs a pit");
             if (site.Pit is { } pit)
             {
-                var grid = world.BuildGrid(id, 1);
+                var grid = GridOf(id);
                 var (shell, dig) = SiteShellBuilder.Dig(t.Tile, site, grid);
                 var area = ConstructionSites.InPlan(site.Box, pit.Area);
                 int inPit = site.Zones.Count(z => z.Rect.Overlaps(area)) + site.Machines.Count(m => area.Contains(m.At))
@@ -141,25 +142,46 @@ public static class ConstructionCheck
         foreach (var phase in new[] { SitePhase.Foundations, SitePhase.Shell, SitePhase.ToppedOut })
             Expect(seen.Contains(phase), $"a {phase} site is built round the spawn");
 
-        // the gallery (#827): on how many of the sites round the spawn the planner found room for it
-        int all = 0, galleries = 0;
+        // the gallery (#827): on how many of the sites round the spawn the planner found room for it;
+        // and (#943) how many the generator's raw tiles, which this check read before, plan otherwise
+        int all = 0, galleries = 0, rawGalleries = 0, otherwise = 0;
         foreach (var p in planned)
         {
             var id = TileId.FromLv95(p.E, p.N);
-            if (!tiles.TryGetValue(id, out var t))
-            {
-                var bt = world.BuildBuildings(id);
-                var roads = world.BuildRoads(id);
-                t = (bt, roads, bt == null ? new() : SitePlans.For(bt, roads));
-                tiles[id] = t;
-            }
+            var t = TileOf(id);
             var at = new Vector2((float)(p.E - id.MinE), (float)(id.MaxN - p.N));
             if (t.Sites.FirstOrDefault(s => s.Box.Center.DistanceTo(at) < 1f) is not { } s1 || !s1.Zones.Any(z => z.Kind == SiteZoneKind.Office)) continue;
             all++;
             if (s1.GallerySide != 0) galleries++;
+            var rawTile = world.BuildBuildings(id);
+            var rawRoads = world.BuildRoads(id);
+            var raw = rawTile == null ? null : SitePlans.For(rawTile, rawRoads).FirstOrDefault(s => s.Key == s1.Key);
+            if (raw is { GallerySide: not 0 }) rawGalleries++;
+            if (raw != null && Digest(raw) == Digest(s1)) continue;
+            otherwise++;
+            GD.Print($"[constructioncheck]      {s1.Key} at {p.E:F0},{p.N:F0}: planned otherwise on the generator's raw tiles: "
+                + $"buildings {(rawTile != null && SameBuildings(rawTile, t.Tile!) ? "the same" : "differ")}, "
+                + $"{rawRoads?.Segments.Count ?? 0} raw road segment(s) against {t.Roads?.Segments.Count ?? 0} served, "
+                + $"street {BuildingFootprint.StreetNear(rawRoads, s1.Box.Center)} against {BuildingFootprint.StreetNear(t.Roads, s1.Box.Center)}, "
+                + $"gallery side {raw?.GallerySide.ToString() ?? "no site"} against {s1.GallerySide}");
         }
-        GD.Print($"[constructioncheck] the office gallery (#827): {galleries} of {all} generated site(s) with an office have one");
+        GD.Print($"[constructioncheck] the office gallery (#827): {galleries} of {all} generated site(s) with an office have one "
+            + $"(on the generator's raw tiles, which no peer is served: {rawGalleries}, {otherwise} site(s) planned otherwise)");
         Expect(galleries > 0, "at least one generated site round the spawn has its office gallery");
+
+        // the sites the net checks walk (#943): planned here as those scripts find them in a game
+        foreach (var (e, n, script, phase, containers) in NetSites)
+        {
+            var id = TileId.FromLv95(e, n);
+            var t = TileOf(id);
+            var near = t.Sites.Where(s => s.Box.Center.DistanceTo(new Vector2((float)(e - id.MinE), (float)(id.MaxN - n))) < 60f).ToList();
+            var office = near.Count == 1 && t.Tile != null ? SiteShellBuilder.Office(t.Tile, near[0], GridOf(id)) : null;
+            Expect(near.Count == 1 && near[0].Phase == phase && office != null && office.Rooms.Count >= containers
+                    && office.Toilets.Count > 0 && office.Gallery != null,
+                $"{script}'s site at {e:F0},{n:F0}: {(near.Count == 1 ? $"{near[0].Key}, {near[0].Phase}" : $"{near.Count} site(s)")}, "
+                + $"{office?.Rooms.Count ?? 0} container(s), {office?.Toilets.Count ?? 0} toilet cabin(s), {(office?.Gallery != null ? "its gallery" : "no gallery")} "
+                + $"(wanted {phase}, {containers}+ container(s), a cabin and the gallery)");
+        }
         if (GalleryScanDir() is { } scan) failures += GalleryScan(scan);
 
         string svg = System.IO.Path.Combine(dir, "generated.svg");
@@ -386,6 +408,36 @@ public static class ConstructionCheck
         foreach (var z in s.Zones) foreach (var c in z.Rect.Corners()) yield return c;
         foreach (var m in s.Machines) yield return m.At;
         foreach (var k in s.Cranes) if (!k.Inside) yield return k.Base;
+    }
+
+    /// <summary>
+    /// The generated sites <c>tools/siteofficenetcheck.sh</c> and <c>tools/siteuppernetcheck.sh</c> walk
+    /// (their <c>AT</c>), the phase each was picked at and the containers it needs (an office and a mess
+    /// room; an office): this check must see them as a game does. Each has its cabins and its gallery,
+    /// which the raw tiles this check once read did not give the first (#943).
+    /// </summary>
+    private static readonly (double E, double N, string Script, SitePhase Phase, int Containers)[] NetSites =
+    {
+        (2586561, 1115543, "siteofficenetcheck", SitePhase.Shell, 2),
+        (2591104, 1117808, "siteuppernetcheck", SitePhase.ToppedOut, 1),
+    };
+
+    /// <summary>Everything a site's plan places, as text: two plans are the same site when this is.</summary>
+    private static string Digest(ConstructionSite s) =>
+        $"{s.Phase} {s.Front} {s.Gate} {s.GateWidth} {s.Area} g{s.GallerySide} p{s.Pit}"
+        + string.Concat(s.Hoarding.Select(h => $" h{h.A}{h.B}"))
+        + string.Concat(s.Zones.Select(z => $" z{z.Kind}{z.Rect}"))
+        + string.Concat(s.Cranes.Select(k => $" k{k.Base}{k.Inside}{k.JibLength}"))
+        + string.Concat(s.Machines.Select(m => $" m{m.Role}{m.At}"));
+
+    /// <summary>Whether two building tiles hold the same bytes.</summary>
+    private static bool SameBuildings(BuildingTile a, BuildingTile b)
+    {
+        using var x = new System.IO.MemoryStream();
+        using var y = new System.IO.MemoryStream();
+        BuildingCodec.Encode(a, x);
+        BuildingCodec.Encode(b, y);
+        return x.ToArray().AsSpan().SequenceEqual(y.ToArray());
     }
 
     private static double Sq(double v) => v * v;

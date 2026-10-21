@@ -203,11 +203,13 @@ public static partial class TileRewriter
     /// <summary>
     /// Building footprints of a block, from the <c>.bldg</c> tiles beside the roads: a sign never
     /// stands inside a building. A point is inside when a triangle of the building covers it in
-    /// plan (the roof always does). Loaded lazily per tile.
+    /// plan (the roof always does). Loaded lazily per tile, each tile's buildings in <see cref="Cell"/> m cells (#854: a
+    /// junction's corner asks thousands of points; scanning every building of nine tiles made planning the cores slow).
     /// </summary>
     private sealed class Footprints(Func<TileId, BuildingTile?> source)
     {
-        private readonly Dictionary<TileId, List<(double MinX, double MinY, double MaxX, double MaxY, float[] Tris)>> _tiles = new();
+        private const double Cell = 25;
+        private readonly Dictionary<TileId, Dictionary<(int X, int Z), List<(double MinX, double MinY, double MaxX, double MaxY, float[] Tris)>>> _tiles = new();
 
         public bool Contains(Vec2 p)
         {
@@ -217,7 +219,8 @@ public static partial class TileRewriter
             {
                 var id = new TileId(at.E + de, at.N + dn);
                 double x = p.X - id.MinE, z = id.MaxN - p.Y;
-                foreach (var b in Load(id))
+                if (!Load(id).TryGetValue(((int)Math.Floor(x / Cell), (int)Math.Floor(z / Cell)), out var here)) continue;
+                foreach (var b in here)
                 {
                     if (x < b.MinX || x > b.MaxX || z < b.MinY || z > b.MaxY) continue;
                     for (int t = 0; t + 8 < b.Tris.Length; t += 9)
@@ -228,12 +231,12 @@ public static partial class TileRewriter
             return false;
         }
 
-        private List<(double MinX, double MinY, double MaxX, double MaxY, float[] Tris)> Load(TileId id)
+        private Dictionary<(int X, int Z), List<(double MinX, double MinY, double MaxX, double MaxY, float[] Tris)>> Load(TileId id)
         {
-            if (_tiles.TryGetValue(id, out var list)) return list;
-            _tiles[id] = list = new();
+            if (_tiles.TryGetValue(id, out var cells)) return cells;
+            _tiles[id] = cells = new();
             // a building tile that is missing or will not decode only loses this check
-            if (source(id) is not { } tile) return list;
+            if (source(id) is not { } tile) return cells;
             foreach (var b in tile.Buildings)
             {
                 double minX = double.MaxValue, minZ = double.MaxValue, maxX = double.MinValue, maxZ = double.MinValue;
@@ -242,9 +245,13 @@ public static partial class TileRewriter
                     minX = Math.Min(minX, b.Triangles[i]); maxX = Math.Max(maxX, b.Triangles[i]);
                     minZ = Math.Min(minZ, b.Triangles[i + 2]); maxZ = Math.Max(maxZ, b.Triangles[i + 2]);
                 }
-                list.Add((minX, minZ, maxX, maxZ, b.Triangles));
+                if (minX > maxX) continue;
+                var entry = (minX, minZ, maxX, maxZ, b.Triangles);
+                for (int cx = (int)Math.Floor(minX / Cell); cx <= (int)Math.Floor(maxX / Cell); cx++)
+                    for (int cz = (int)Math.Floor(minZ / Cell); cz <= (int)Math.Floor(maxZ / Cell); cz++)
+                        (cells.TryGetValue((cx, cz), out var list) ? list : cells[(cx, cz)] = []).Add(entry);
             }
-            return list;
+            return cells;
         }
 
         private static bool InTriangle(double px, double pz, double ax, double az, double bx, double bz, double cx, double cz)

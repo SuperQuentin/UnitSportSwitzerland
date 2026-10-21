@@ -38,7 +38,11 @@ Same verdicts in both modes except `--steamercheck` (default stage) and `--water
 - `ClockSync.LocalNow` is `GameClock.Now` under `GameClock.Fixed` (one process, nothing to sync
   with), so the waves, build growth, signals and BR timers keep pace with the physics.
 - `GameClock.Fixed` reads the process's own argv (`System.Environment.GetCommandLineArgs()`):
-  Godot removes the engine args it consumed from `OS.GetCmdlineArgs()`.
+  Godot removes the engine args it consumed from `OS.GetCmdlineArgs()`. On macOS the CLR Godot
+  hosts sees an empty argv, so until #924 `Fixed` was always false there: every `--fixed-fps` run
+  (the quick tier, the trailer's renders) kept `ClockSync` on the wall clock (herds, sightings,
+  signals ran at the speed the machine drew). It now reads the argv from the kernel
+  (`sysctl KERN_PROCARGS2`) when the CLR's is empty.
 - A check that must stay real time: start its map row's check with `@realtime`
   (`src/X quick @realtime --mycheck ...`). `TEST_REALTIME=1 tools/test.sh quick` runs the whole
   tier in real time, to tell a fixed-fps artefact from a real failure.

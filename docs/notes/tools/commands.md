@@ -12,6 +12,15 @@
   `--fresh` drops tiles from earlier runs. Numbers are read by a fixed-point scanner
   (`mantissa / 10^d` is one correctly rounded division, i.e. the same double `Utf8Parser` gives);
   the tool targets net9.0 for its zlib-ng inflate.
+- Tile fingerprint (#924): `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --manifest-hash`
+  adds each manifest tile's content hash (`hash`: SHA-256 over every `<kind>_E_N.*` file of the
+  tile, 16 hex digits, `TileFingerprint`) and the region files' (`shared`: horizon, places,
+  landings, airports) to `manifest.json` (`manifestVersion` 2; a version-1 manifest still loads,
+  with no hashes). Reads the tiles only. Every preprocessor pass that writes tiles ends with it
+  (`--no-hash` skips that), and MapSetup's last step runs it after RoadGen; incremental through
+  `<chunks>_temp/tile_hashes.tsv` (size + mtime per file): the first pass over the 2,698-tile map
+  reads its 10 GB, later ones only stat. The trailer director records the hashes of the tiles each
+  film touches (`trailer/render-pins`).
 - Coarse companion tiles (needed once for a region built before they existed; a normal build
   emits them): `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --coarse --jobs 8`
   — 6,699 tiles in 10 s, 3,207 MB read -> 33 MB written, every tile verified bit-identical.

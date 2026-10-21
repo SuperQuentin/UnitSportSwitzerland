@@ -135,6 +135,41 @@ public partial class ConcertDeskUi : CanvasLayer
         foreach (var (label, cmd) in new[] { ("Flames", "flames"), ("CO2", "co2"), ("Confetti", "confetti"), ("Gerbs", "gerbs"), ("Pyro", "pyro") })
             Btn(fx, label, () => Run($"/concert cue {cmd}"));
 
+        // a rig from a lighting tool, or this one out to it (#941): the files in the rig folder, so a pad
+        // or a VR hand picks one as easily as a mouse
+        Section(col, "Rig (MVR)");
+        var mvr = Row(col);
+        Btn(mvr, "Export MVR", () => { Run("/concert export"); RefreshRigs(); });
+        _rigFiles = new OptionButton { FocusMode = Control.FocusModeEnum.All, CustomMinimumSize = new Vector2(220, 0) };
+        mvr.AddChild(_rigFiles);
+        Btn(mvr, "Import", () =>
+        {
+            if (_rigFiles.Selected >= 0 && _rigFiles.GetItemText(_rigFiles.Selected) is { Length: > 0 } file && file != NoRig)
+                Run($"/concert import {file}{(_withBuilding?.ButtonPressed == true ? " venue" : "")}");
+        });
+        _withBuilding = new CheckBox { Text = "Building", FocusMode = Control.FocusModeEnum.All, TooltipText = "Bring the file's building round the set, when it fits the venue" };
+        mvr.AddChild(_withBuilding);
+        Btn(mvr, "Own rig", () => Run("/concert import off"));
+        Btn(mvr, "Folder", () =>
+        {
+            RefreshRigs();
+            OS.ShellShowInFileManager(ConcertMvrTool.FolderPath);
+        });
+        // MVR-xchange (#960): the same rigs live with lighting tools on the LAN, a button each so a pad
+        // or a VR hand drives it like the rest
+        var xr = Row(col);
+        _xchangeOn = Btn(xr, "Xchange on", () => Run(ConcertMvrTool.Station == null ? "/concert xchange on" : "/concert xchange off"));
+        Btn(xr, "Commit rig", () => Run("/concert xchange commit"));
+        _offers = new OptionButton { FocusMode = Control.FocusModeEnum.All, CustomMinimumSize = new Vector2(280, 0) };
+        xr.AddChild(_offers);
+        Btn(xr, "Pull", () =>
+        {
+            if (_offers.Selected >= 0 && _offers.Selected < _offerIds.Count) Run($"/concert xchange pull {_offerIds[_offers.Selected]}");
+        });
+        _xchange = Text(col, "", UiTheme.FontSmall, UiTheme.TextDim);
+        _xchange.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        _xchange.CustomMinimumSize = new Vector2(640, 0);
+
         Section(col, "Show input (this machine)");
         var input = Row(col);
         Btn(input, "Art-Net", () => Toggle("artnet", ConcertService.Instance?.Input?.ArtNetOn == true));
@@ -175,6 +210,52 @@ public partial class ConcertDeskUi : CanvasLayer
 
     private void Run(string command) => _chat()?.Send(command);
 
+    private Button _xchangeOn = null!;
+    private Label _xchange = null!;
+    private OptionButton _offers = null!;
+    private readonly List<string> _offerIds = new();
+    private string? _offersSeen;
+
+    /// <summary>The station's offers in the picker, rebuilt only when they changed.</summary>
+    private void RefreshXchange()
+    {
+        var x = ConcertMvrTool.Station;
+        string toggle = x == null ? "Xchange on" : "Xchange off";
+        if (_xchangeOn.Text != toggle) _xchangeOn.Text = toggle;
+        string status = x == null ? "MVR-xchange off: on, it trades rigs with grandMA3, Vectorworks, Capture on this LAN (group Default; /concert xchange on <group>)."
+            : ConcertMvrTool.XchangeStatus(0);
+        if (_xchange.Text != status) _xchange.Text = status;
+        var offers = x?.Offers() ?? Array.Empty<Mvr.MvrXchangeStation.Offer>();
+        string seen = offers.Length == 0 ? "" : $"{offers.Length}|{offers[^1].Commit.FileUuid}";
+        if (seen == _offersSeen) return;
+        _offersSeen = seen;
+        _offers.Clear();
+        _offerIds.Clear();
+        if (offers.Length == 0) _offers.AddItem("(nothing offered)");
+        foreach (var o in offers)
+        {
+            _offers.AddItem(ConcertMvrTool.OfferLabel(o));
+            _offerIds.Add(o.Commit.FileUuid);
+        }
+        _offers.Selected = offers.Length > 0 ? offers.Length - 1 : 0;
+    }
+
+    private OptionButton? _rigFiles;
+    /// <summary>Import the file's building too, when it fits the venue (#980).</summary>
+    private CheckBox? _withBuilding;
+    private const string NoRig = "(no .mvr in the folder)";
+
+    /// <summary>The rig folder's files in the picker, newest first.</summary>
+    private void RefreshRigs()
+    {
+        if (_rigFiles == null) return;
+        _rigFiles.Clear();
+        var files = ConcertMvrTool.Files();
+        if (files.Length == 0) _rigFiles.AddItem(NoRig);
+        foreach (var f in files) _rigFiles.AddItem(System.IO.Path.GetFileName(f));
+        _rigFiles.Selected = 0;
+    }
+
     private void Toggle(string what, bool on) => Run($"/concert input {what} {(on ? "off" : "on")}");
 
     /// <summary>Tap tempo: the mean of the last taps' intervals, sent once there are four.</summary>
@@ -194,6 +275,7 @@ public partial class ConcertDeskUi : CanvasLayer
         _rig = rig;
         _stadium = rig.Event.Stadium.Name;
         _panel.Visible = true;
+        RefreshRigs();
         Input.MouseMode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
         Refresh();
@@ -243,6 +325,7 @@ public partial class ConcertDeskUi : CanvasLayer
         string inp = input == null ? "Off. Turn a protocol on, then point Chataigne or TouchDesigner at this machine."
             : $"Art-Net {(input.ArtNetOn ? $"on ({input.ArtNetPackets})" : "off")} · sACN {(input.SacnOn ? $"on ({input.SacnPackets})" : "off")} · OSC {(input.OscOn ? $"on ({input.OscPackets})" : "off")}";
         if (_input.Text != inp) _input.Text = inp;
+        RefreshXchange();
         string hint = InputHints.Format("{ui_accept} press · {ui_cancel} close");
         if (_hint.Text != hint) _hint.Text = hint;
     }

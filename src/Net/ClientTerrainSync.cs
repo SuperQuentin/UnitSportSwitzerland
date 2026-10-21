@@ -43,6 +43,9 @@ public sealed partial class ClientTerrainSync : Node
     /// <summary>The server's landings (#377) arrived and are in the cache. Any thread.</summary>
     public event Action<LandingIndex>? LandingsReceived;
 
+    /// <summary>The lifts' OSM details arrived in the cache (#915): the lifts are rebuilt with them.</summary>
+    public event Action? RopewaysReceived;
+
     /// <summary>The far-horizon file arrived from the server and is in the cache.</summary>
     public event Action? HorizonReceived;
 
@@ -63,6 +66,7 @@ public sealed partial class ClientTerrainSync : Node
         if (!merged) return;
         await SyncPlacesAsync(ct).ConfigureAwait(false);
         await SyncLandingsAsync(ct).ConfigureAwait(false);
+        await SyncRopewaysAsync(ct).ConfigureAwait(false);
         await SyncHorizonAsync(ct).ConfigureAwait(false);
     }
 
@@ -180,6 +184,18 @@ public sealed partial class ClientTerrainSync : Node
     /// Pulls the server's landings (#377): the piers its world has, and where its steamer lies.
     /// A few KB; a server without them (or an older one) leaves the local ones, if any.
     /// </summary>
+    /// <summary>
+    /// Pulls the lifts' OSM details (#915): their types, speeds, seats and names. A server without
+    /// them leaves every lift as swissTLM3D gives it.
+    /// </summary>
+    private Task SyncRopewaysAsync(CancellationToken ct) =>
+        SyncFileAsync(AssetKind.Ropeways, RopewayInfoIndex.FileName, "ropeways",
+            "server has no ropeways.json; lifts keep their swissTLM3D kind and default speeds", ct, bytes =>
+            {
+                GD.Print($"[stream] ropeways received: {bytes.Length / 1024} KB");
+                RopewaysReceived?.Invoke();
+            });
+
     private Task SyncLandingsAsync(CancellationToken ct) =>
         SyncFileAsync(AssetKind.Landings, LandingIndex.FileName, "landings",
             "server has no landings; piers only where this client's own data has them", ct, bytes =>

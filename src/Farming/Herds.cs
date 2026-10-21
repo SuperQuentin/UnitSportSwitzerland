@@ -65,6 +65,8 @@ public partial class Herds : Node3D, IOriginContainer
         /// <summary>Where a cow in the air is drawn: eased toward the server's ~10 updates a second.</summary>
         public Vector3[] AirAt = [];
         public float AnchorGround = float.NaN;
+        /// <summary>The time its cows' walk is read from (<see cref="CowMotion.At"/> at now minus this): 0, or a staged herd's go (<see cref="Rewind"/>).</summary>
+        public double Epoch;
     }
 
     public Herds(ChunkManager? chunks, WorldOrigin origin, bool dedicated)
@@ -208,14 +210,40 @@ public partial class Herds : Node3D, IOriginContainer
     /// <summary>
     /// The trailer director's herd (#866): <paramref name="count"/> cows of <paramref name="breed"/>
     /// grazing round an LV95 point, on this peer only, until <see cref="Unstage"/>. Returns its handle.
+    /// <paramref name="seed"/> places and moves its cows; by default the run's staging count's, so a
+    /// film passes one of its own (the shot's, #924): the same herd whatever was staged before.
     /// </summary>
-    public int Stage(double e, double n, int count, CowBreed breed = CowBreed.Brown, float radius = 18f)
+    public int Stage(double e, double n, int count, CowBreed breed = CowBreed.Brown, float radius = 18f, uint? seed = null)
     {
         int index = _staged++;
-        var plan = HerdPlan.Staged(index, e, n, Math.Clamp(count, 1, 40), breed, radius, (uint)(index * 7 + 3));
+        var plan = HerdPlan.Staged(index, e, n, Math.Clamp(count, 1, 40), breed, radius, seed ?? (uint)(index * 7 + 3));
         var id = new TileId(int.MinValue + index, 0);
         _byTile[id] = new List<Live> { Add(plan) };
         return index;
+    }
+
+    /// <summary>
+    /// A staged herd's walk from its start again, from now (#924): the cows stand where they stood at
+    /// time 0 whatever the clock read when it was staged, so a film's shot shows the same grazing
+    /// however long its ground took to stream in. The director calls it as its actors are let go.
+    /// </summary>
+    public void Rewind(int handle)
+    {
+        if (_byTile.TryGetValue(new TileId(int.MinValue + handle, 0), out var list))
+            foreach (var h in list) h.Epoch = Now;
+    }
+
+    /// <summary>A staged herd's cows where they are now, LV95 and compass yaw (rad), for the director's track dump.</summary>
+    public IEnumerable<(double E, double N, float Alt, float Yaw)> StagedCows(int handle)
+    {
+        if (!_byTile.TryGetValue(new TileId(int.MinValue + handle, 0), out var list)) yield break;
+        double now = Now;
+        foreach (var h in list)
+            for (int i = 0; i < h.Cows.Length; i++)
+            {
+                var (e, n, alt, yaw, _, _) = Where(h, i, now);
+                yield return (e, n, alt, yaw);
+            }
     }
 
     /// <summary>Takes a staged herd away again.</summary>
@@ -234,7 +262,7 @@ public partial class Herds : Node3D, IOriginContainer
     private (double E, double N, float Alt, float Yaw, float Head, float Gait) Where(Live h, int i, double now)
     {
         var plan = h.Plan;
-        var pure = CowMotion.At(plan, i, now);
+        var pure = CowMotion.At(plan, i, now - h.Epoch);
         double pe = plan.E + pure.Offset.X, pn = plan.N + pure.Offset.Y;
         long key = h.Cows[i].Key;
         if (!_over.TryGetValue(key, out var o)) return (pe, pn, float.NaN, pure.Yaw, pure.Head, pure.Gait);
@@ -344,7 +372,7 @@ public partial class Herds : Node3D, IOriginContainer
     {
         var plan = cow.Herd.Plan;
         double now = Now;
-        var pure = CowMotion.At(plan, cow.Index, now);
+        var pure = CowMotion.At(plan, cow.Index, now - cow.Herd.Epoch);
         double de = plan.E + pure.Offset.X - o.E, dn = plan.N + pure.Offset.Y - o.N;
         var down = new Override
         {

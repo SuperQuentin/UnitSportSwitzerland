@@ -91,10 +91,12 @@ public static class CowMeshBuilder
             Lump(s, new Vector3(0, 0.08f, 0.18f), new Vector3(0.38f, 0.34f, 0.34f), face);
             Lump(s, new Vector3(0, -0.06f, 0.42f), new Vector3(0.30f, 0.30f, 0.36f), face, new Basis(Vector3.Right, -0.35f));
             Lump(s, new Vector3(0, -0.18f, 0.60f), new Vector3(0.30f, 0.22f, 0.20f), muzzle);
-            if (sim)   // a Simmental's red round the eyes
+            // a Simmental's red round the eyes, its side 1 cm inside the eyes' outer faces
+            // (#942: centred at 0.15 it lay 3-7 mm under them, black on red: a z-fight)
+            if (sim)
             {
-                Lump(s, new Vector3(-0.15f, 0.08f, 0.27f), new Vector3(0.10f, 0.14f, 0.16f), Red);
-                Lump(s, new Vector3(0.15f, 0.08f, 0.27f), new Vector3(0.10f, 0.14f, 0.16f), Red);
+                Lump(s, new Vector3(-0.14f, 0.08f, 0.27f), new Vector3(0.10f, 0.14f, 0.16f), Red);
+                Lump(s, new Vector3(0.14f, 0.08f, 0.27f), new Vector3(0.10f, 0.14f, 0.16f), Red);
             }
             // ears out to the side
             Lump(s, new Vector3(-0.29f, 0.10f, 0.14f), new Vector3(0.22f, 0.07f, 0.13f), ear, new Basis(Vector3.Forward, -0.3f));

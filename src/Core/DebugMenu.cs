@@ -170,6 +170,8 @@ public partial class DebugMenu : CanvasLayer
                 GameSettings.Current.Commit();
             });
 
+        AddTrafficSection(rows);
+
         rows.AddChild(UiKit.Spacer(6));
         rows.AddChild(UiKit.Section("Streaming"));
         Switch(rows, "freeze", "Freeze tile streaming", false, on => _chunks.FreezeRings = on,
@@ -362,6 +364,46 @@ public partial class DebugMenu : CanvasLayer
         if (_timeScaled) _askSpeed(SimClock.Normal);
         _timeScaled = false;
         _timePicker.Selected = Array.IndexOf(TimeScales, 1.0);
+        if (World.Traffic.Current is { } traffic) traffic.ShowPaths = traffic.ShowEndpoints = traffic.ShowLights = traffic.ShowMovers = traffic.ShowTrails = false;
+    }
+
+    // ------------------------------------------------------------------------------------
+    // traffic endpoints (#971)
+    // ------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Traffic (#971): each car's way, the lit paths and the endpoints drawn, and the traffic tool, an admin's held item that places,
+    /// edits and removes generators and destinations (<see cref="Items.TrafficTool"/>: the user, placing them from here was
+    /// impractical); all of them removed at once. They go to the server, which shares them with everyone's traffic.
+    /// </summary>
+    private void AddTrafficSection(VBoxContainer rows)
+    {
+        rows.AddChild(UiKit.Spacer(6));
+        rows.AddChild(UiKit.Section("Traffic"));
+        var grid = Grid(rows);
+        Switch(grid, "paths", "Vehicle paths", false, on => { if (World.Traffic.Current is { } t) t.ShowPaths = on; },
+            "Each car's way ahead: a generated car's way to its destination in that destination's colour,\n"
+            + "any other's next legs in grey.");
+        Switch(grid, "lights", "Green paths", false, on => { if (World.Traffic.Current is { } t) t.ShowLights = on; },
+            "The paths through lit junctions that may go now: green on green (dashed where they must give way),\n"
+            + "yellow on amber, none on red; the riders' paths thin and the crossings wide, by their own lights (#971).");
+        Switch(grid, "movers", "Timing movers", false, on => { if (World.Traffic.Current is { } t) t.ShowMovers = on; },
+            "At each phase change of the lights, the movers its timing was worked out for: the ending group's last one\n"
+            + "(red, past its line as its amber ends) and the starting group's first (dark green, from its line at green),\n"
+            + "meeting at the ringed conflict area just as the last one has left it (#979).");
+        Switch(grid, "trails", "Timing trails", false, on => { if (World.Traffic.Current is { } t) t.ShowTrails = on; },
+            "The timing movers' trails alone, in their lights' colours: the starting stream green from its line to its first one,\n"
+            + "the ending one yellow on amber, then red, ahead of its last one; they never overlap (#979).");
+        Switch(grid, "endpoints", "Traffic endpoints", false, on => { if (World.Traffic.Current is { } t) t.ShowEndpoints = on; },
+            "Generators (green), destinations (red), both (yellow): a post with an arrow along its heading,\n"
+            + "a destination's ring in the colour its cars' ways are drawn in. Always shown with the traffic tool in hand.");
+        var buttons = UiKit.HBox(6);
+        var tool = ActionButton("Traffic tool", () => Items.ItemController.Instance?.RunCommand?.Invoke("/spawn TrafficTool 1"));
+        tool.TooltipText = "Into your hands: Use on a road places a generator (its settings open), on a placed one opens it.\n"
+            + "Held, every generator and destination shows.";
+        buttons.AddChild(tool);
+        buttons.AddChild(ActionButton("Remove all endpoints", () => World.TrafficGenerators.Instance?.RequestRemove(0)));
+        rows.AddChild(buttons);
     }
 
     /// <summary>

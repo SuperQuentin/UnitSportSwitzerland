@@ -167,6 +167,13 @@ internal sealed class XrHands
             Buzz(hand, 0.45f, 0.05f);
             return;
         }
+        // a ski lift's station (#912), on skis too: grab the bar or the chair
+        if ((player.Lift != null || player.LiftInReach() != null) && player.TryLift())
+        {
+            hand.Busy = true;
+            Buzz(hand, 0.5f, 0.06f);
+            return;
+        }
         if (player is not { Ride: RideKind.OnFoot, RidingWith: 0 }) return;
         if (player.TryToggleCarDoor(at) || Interiors.InteriorManager.Instance?.TryDoorByHand(player, at) == true
             || TakeAt(at) || AtHip(hand, at) || ReachingOut(player, at))

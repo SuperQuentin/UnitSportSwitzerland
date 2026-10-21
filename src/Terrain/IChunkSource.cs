@@ -63,6 +63,12 @@ public interface IChunkSource
     Task<LandingIndex?> LoadLandingsAsync(CancellationToken ct = default) => Task.FromResult<LandingIndex?>(null);
 
     /// <summary>
+    /// The region's OSM aerialways (#915, <c>ropeways.json</c>): the lifts' types, speeds, seats and
+    /// names. Null when the region was built without them. Not tile-scoped: a client syncs it once.
+    /// </summary>
+    Task<RopewayInfoIndex?> LoadRopewayInfoAsync(CancellationToken ct = default) => Task.FromResult<RopewayInfoIndex?>(null);
+
+    /// <summary>
     /// The region's airports and their stands (#422, <c>airports.json</c>); null when the region has
     /// none. Only the deciding peer reads it (the server, or a client offline): it is not streamed.
     /// Decorators forward it.
@@ -73,4 +79,10 @@ public interface IChunkSource
     /// it like the cover (<c>AssetKind.Fields</c>).
     /// </summary>
     Task<List<FieldPolygon>?> LoadFieldsAsync(TileId id, CancellationToken ct = default) => Task.FromResult<List<FieldPolygon>?>(null);
+    /// <summary>
+    /// The tile's ski slopes (#887, <c>pistes_E_N.pst</c>, <see cref="PisteFormat"/>); null when no slope
+    /// touches the tile or the source has no slope layer. Decorators forward it; a network client
+    /// streams it (<c>AssetKind.Pistes</c>).
+    /// </summary>
+    Task<PisteTile?> LoadPistesAsync(TileId id, CancellationToken ct = default) => Task.FromResult<PisteTile?>(null);
 }

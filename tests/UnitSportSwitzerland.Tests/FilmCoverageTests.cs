@@ -50,6 +50,22 @@ public class FilmCoverageTests
     }
 
     [Fact]
+    public void Tiles_are_every_tile_round_the_points_once_and_the_missing_ones_among_them()
+    {
+        var points = new[]
+        {
+            new FilmCoverage.Need(2_600_500, 1_200_500, double.NaN, Eye: true),
+            new FilmCoverage.Need(2_600_600, 1_200_500, double.NaN, Eye: false),
+        };
+        var all = FilmCoverage.Tiles(points);
+        Assert.Equal(FilmCoverage.TilesNear(2_600_500, 1_200_500, FilmCoverage.Radius).Union(
+            FilmCoverage.TilesNear(2_600_600, 1_200_500, FilmCoverage.Radius)).Count(), all.Count);
+        var missing = FilmCoverage.Missing(points, (e, n) => (e, n) is (2600, 1200));
+        Assert.Equal(all.Count - 1, missing.Count);
+        Assert.All(missing, t => Assert.Contains(t, all));
+    }
+
+    [Fact]
     public void A_tile_abroad_is_allowed_and_counted_not_missing()
     {
         // a point by the border: tiles west of 2600 are "abroad" (no Swiss survey), none is built

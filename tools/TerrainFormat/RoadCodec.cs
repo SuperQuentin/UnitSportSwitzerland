@@ -35,8 +35,17 @@ public static class RoadCodec
     /// <summary>#353: the lanes of each approach with a pocket or traffic lights (<see cref="RoadApproach"/>).</summary>
     public static readonly uint TagApproaches = FourCC("LANE");
 
+    /// <summary>#818: transitions, each over one segment, with the lines along their strips (<see cref="RoadTransition"/>).</summary>
+    public static readonly uint TagTransitions = FourCC("TRNS");
+
     /// <summary>Marked parking bays (#499).</summary>
     public static readonly uint TagParking = FourCC("PARK");
+
+    /// <summary>#818 phase 5 (#709): lane-to-lane paths through junction cores (<see cref="RoadJunctionPath"/>).</summary>
+    public static readonly uint TagJunctionPaths = FourCC("JPTH");
+
+    /// <summary>#979: the pairs of movements that set each signal group's green start (<see cref="RoadConflictPair"/>).</summary>
+    public static readonly uint TagConflictPairs = FourCC("CPAR");
 
     private static uint FourCC(string s) => BitConverter.ToUInt32(Encoding.ASCII.GetBytes(s));
 
@@ -84,7 +93,7 @@ public static class RoadCodec
         else
         {
             sections.Add((TagAttributePalette, Section(s => WriteAttributePalette(s, tile))));
-            if (tile.Paint.Count > 0) sections.Add((TagPaintCompact, Section(s => WritePaint(s, tile))));
+            if (PaintOutsideTransitions(tile).Count > 0) sections.Add((TagPaintCompact, Section(s => WritePaint(s, tile))));
         }
         if (tile.PointProps.Count > 0)
             sections.Add((TagPointProps, Section(s =>
@@ -142,8 +151,14 @@ public static class RoadCodec
             sections.Add((TagSignals, Section(s => RoadSignal.Write(s, tile.Signals))));
         if (tile.Approaches.Count > 0)
             sections.Add((TagApproaches, Section(s => RoadApproach.Write(s, tile.Approaches))));
+        if (tile.Transitions.Count > 0)
+            sections.Add((TagTransitions, Section(s => RoadTransition.Write(s, tile.Transitions, tile.Segments, tile.Paint))));
         if (tile.Parking.Count > 0)
             sections.Add((TagParking, Section(s => ParkingBay.Write(s, tile.Parking))));
+        if (tile.JunctionPaths.Count > 0)
+            sections.Add((TagJunctionPaths, Section(s => RoadJunctionPath.Write(s, tile.JunctionPaths, tile.Junctions))));
+        if (tile.Signals.Any(s => s.ConflictPairs.Count > 0))
+            sections.Add((TagConflictPairs, Section(s => RoadConflictPair.Write(s, tile.Signals))));
 
         w.Write((uint)sections.Count);
         foreach (var (tag, payload) in sections)
@@ -200,6 +215,8 @@ public static class RoadCodec
 
         RoadAttributes[]? attributes = null;
         List<(int Paint, int Segment)>? references = null;
+        List<RoadTransition.Raw>? transitions = null;
+        List<RoadJunctionPath.Raw>? junctionPaths = null;
         var tile = new RoadTile
         {
             Id = id, Segments = new List<RoadSegment>((int)count), Junctions = junctions,
@@ -317,6 +334,21 @@ public static class RoadCodec
                     if (RoadApproach.Read(r) is { } approaches) tile.Approaches.AddRange(approaches);
                     else input.Position = end;
                 }
+                else if (tag == TagTransitions)
+                {
+                    transitions = RoadTransition.Read(r);
+                    if (transitions is null) input.Position = end;   // a newer section version: skipped whole
+                }
+                else if (tag == TagConflictPairs)
+                {
+                    // after SGNL in the file: the signals are read by now
+                    if (!RoadConflictPair.Read(r, tile.Signals)) input.Position = end;
+                }
+                else if (tag == TagJunctionPaths)
+                {
+                    junctionPaths = RoadJunctionPath.Read(r);
+                    if (junctionPaths is null) input.Position = end;   // a newer section version: skipped whole
+                }
                 else if (tag == TagParking)
                 {
                     if (ParkingBay.Read(r) is { } bays) tile.Parking.AddRange(bays);
@@ -345,7 +377,36 @@ public static class RoadCodec
                 var p = tile.Paint[pi];
                 tile.Paint[pi] = RoadPaint.AlongSegment(tile.Segments[si], p.Type, p.Rgba, p.Width, p.Dash, p.Gap, p.Offset, p.From, p.To, p.Variant);
             }
+        // transitions (#818) and their lines, rebuilt on their segments as the network stage built them
+        foreach (var tr in transitions ?? [])
+        {
+            if (tr.Segment >= tile.Segments.Count) throw new InvalidDataException($"Transition on segment {tr.Segment} of {tile.Segments.Count}");
+            var t = new RoadTransition { Segment = tile.Segments[tr.Segment], Stations = tr.Stations, Centre = tr.Centre, Anchor = tr.Anchor, Strips = tr.Strips };
+            tile.Transitions.Add(t);
+            foreach (var l in tr.Lines)
+                tile.Paint.Add(RoadPaint.AlongTransition(t, l.Boundary, l.Type, l.Rgba, l.Width, l.Dash, l.Gap, l.Offset, l.From, l.To));
+        }
+        // junction paths (#818 phase 5) on the tile's caps
+        if (junctionPaths is not null) tile.JunctionPaths.AddRange(RoadJunctionPath.Resolve(junctionPaths, tile.Junctions));
         return tile;
+    }
+
+    /// <summary>The tile's paint in the order a decoder gives it back: PNT2's, then each transition's lines (<c>TRNS</c>).</summary>
+    public static List<RoadPaint> PaintInFileOrder(RoadTile tile)
+    {
+        var order = PaintOutsideTransitions(tile);
+        if (tile.Transitions.Count == 0) return order;
+        order = order.ToList();
+        foreach (var t in tile.Transitions) order.AddRange(tile.Paint.Where(p => ReferenceEquals(p.Transition, t)));
+        return order;
+    }
+
+    /// <summary>The tile's paint but the lines along its own transitions (those go into <c>TRNS</c>).</summary>
+    private static List<RoadPaint> PaintOutsideTransitions(RoadTile tile)
+    {
+        if (tile.Transitions.Count == 0) return tile.Paint;
+        var mine = new HashSet<RoadTransition>(tile.Transitions, ReferenceEqualityComparer.Instance);
+        return tile.Paint.Where(p => p.Transition is null || !mine.Contains(p.Transition)).ToList();
     }
 
     private static void WriteLegacyAttributes(BinaryWriter s, RoadTile tile)
@@ -501,7 +562,8 @@ public static class RoadCodec
             if (!styles.TryGetValue(key, out int k)) { styles[key] = k = order.Count; order.Add(key); }
             return k;
         }
-        var ids = tile.Paint.Select(StyleOf).ToArray();
+        var paint = PaintOutsideTransitions(tile);
+        var ids = paint.Select(StyleOf).ToArray();
 
         s.Write7BitEncodedInt(order.Count);
         foreach (var st in order)
@@ -509,10 +571,10 @@ public static class RoadCodec
             s.Write((byte)st.Shape); s.Write((byte)st.Type); s.Write(st.Variant);
             s.Write(st.Rgba); s.Write(st.Width); s.Write(st.Dash); s.Write(st.Gap);
         }
-        s.Write7BitEncodedInt(tile.Paint.Count);
-        for (int k = 0; k < tile.Paint.Count; k++)
+        s.Write7BitEncodedInt(paint.Count);
+        for (int k = 0; k < paint.Count; k++)
         {
-            var p = tile.Paint[k];
+            var p = paint[k];
             // a reference to a segment this tile does not hold (replaced since) falls back to geometry
             if (p.Segment is { } seg && p.Shape == PaintShape.Polyline && segments.TryGetValue(seg, out int si))
             {

@@ -148,6 +148,28 @@ public sealed partial class FallbackChunkSource : IChunkSource
         return domain.Boxes[^1];
     }
 
+    /// <summary>
+    /// The fill wired as every peer serves it: under a <see cref="CachingChunkSource"/>, its blend and
+    /// its roads' halo (the stage's walls and density) reading neighbours through that cache. Without
+    /// <see cref="Neighbours"/> the halo reads the inner source, which has no generated buildings, so
+    /// the stage sees no walls round a generated tile. The client, the server and the checks that test the generated
+    /// world all build the chain here (#943).
+    /// </summary>
+    public CachingChunkSource Cached(long budgetBytes = 256L * 1024 * 1024)
+    {
+        var cache = new CachingChunkSource(this, budgetBytes);
+        Neighbours = cache;
+        return cache;
+    }
+
+    /// <summary>
+    /// The generated world with no terrain under it, as a fresh clone and a <c>--generated-world</c>
+    /// server serve it: what a check reads when it means to test the world that is played (#943),
+    /// never <see cref="ProceduralWorld"/>'s own raw tiles (their roads have not been through the stage).
+    /// </summary>
+    public static CachingChunkSource GeneratedOnly(ProceduralWorld world, double spawnE, double spawnN) =>
+        new FallbackChunkSource(EmptyChunkSource.Instance, world, spawnE, spawnN).Cached();
+
     // ---- IChunkSource ------------------------------------------------------------------------
 
     public Task<TerrainManifest> LoadManifestAsync(CancellationToken ct = default) =>
@@ -330,9 +352,14 @@ public sealed partial class FallbackChunkSource : IChunkSource
 
     public Task<LandingIndex?> LoadLandingsAsync(CancellationToken ct = default) => _inner.LoadLandingsAsync(ct);
 
+    public Task<RopewayInfoIndex?> LoadRopewayInfoAsync(CancellationToken ct = default) => _inner.LoadRopewayInfoAsync(ct);
+
     /// <summary>Farm fields (#494): the real tile's; a generated tile has none.</summary>
     public Task<List<FieldPolygon>?> LoadFieldsAsync(TileId id, CancellationToken ct = default) =>
         Covers(id) ? Task.FromResult<List<FieldPolygon>?>(null) : _inner.LoadFieldsAsync(id, ct);
+
+    public Task<PisteTile?> LoadPistesAsync(TileId id, CancellationToken ct = default) =>
+        Covers(id) ? Task.FromResult<PisteTile?>(null) : _inner.LoadPistesAsync(id, ct);
 
     public async Task<HorizonIndex?> LoadHorizonAsync(CancellationToken ct = default)
     {

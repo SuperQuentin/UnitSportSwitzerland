@@ -10,6 +10,13 @@ namespace UnitSport.Terrain.Stadiums;
 /// <param name="Step">Height of the tier's front wall above the walkway: the pitch wall, or the boxes' glazing.</param>
 public sealed record StadiumTier(int Rows, float RowDepth, float Riser, float Gap, float Step);
 
+/// <summary>
+/// What kind of concert venue a row is (#948): an open bowl round a pitch, an arena (the same bowl
+/// round a floor, under a closed roof), or an open-air ground (no bowl: a fenced field the stage is
+/// set up on, the crowd standing on the ground as it lies).
+/// </summary>
+public enum VenueKind { Stadium, Arena, OpenAir }
+
 /// <summary>Which straight side of the bowl, named as they lie when <see cref="StadiumSpec.AzimuthDeg"/> is 0.</summary>
 public enum StadiumSide { North, East, South, West }
 
@@ -31,6 +38,16 @@ public enum StadiumSide { North, East, South, West }
 public sealed record StadiumSpec
 {
     public required string Name { get; init; }
+    /// <summary>The town it is known by, for <c>/stadium</c> (#994): "Bern" finds Wankdorf and the PostFinance Arena.</summary>
+    public string Town { get; init; } = "";
+    public VenueKind Kind { get; init; } = VenueKind.Stadium;
+    /// <summary>
+    /// Where the main stage always stands (an open air's is where the festival builds it; an arena's
+    /// usually at one end), or null for the concert's own choice of layout.
+    /// </summary>
+    public StadiumSide? StageAt { get; init; }
+    /// <summary>The concert capacity (standing floor included), for the crowd and the record.</summary>
+    public int ConcertCapacity { get; init; }
     /// <summary>The centre spot, LV95 (from the pitch polygon's centroid).</summary>
     public required double E { get; init; }
     public required double N { get; init; }
@@ -112,6 +129,9 @@ public sealed record StadiumSpec
     public Color Facade { get; init; } = new(0.7f, 0.72f, 0.74f);
     public Color Plinth { get; init; } = new(0.42f, 0.42f, 0.43f);
     public Color SolarColor { get; init; } = new(0.12f, 0.14f, 0.2f);
+    /// <summary>An arena's floor (concrete over the ice for a concert), an open air's fence.</summary>
+    public Color ArenaFloor { get; init; } = new(0.2f, 0.2f, 0.22f);
+    public Color Fence { get; init; } = new(0.25f, 0.27f, 0.25f);
 
     public float Depth(StadiumSide side) => side switch
     {

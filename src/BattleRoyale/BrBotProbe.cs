@@ -146,7 +146,9 @@ public partial class BrBotProbe : ChatProbe
         await Seconds(5);   // its ride as this client sees it can say on foot a moment before the server's body lands
 
         // out: the mate takes A's dogtag to a Postauto stop and A is back
-        if (br.State.RecallPoints is not { Length: > 0 }) { Fail("no Postauto stops in this region: the recall is not tested"); return; }
+        // the stops come with the loot, read from the match square's road tiles after GO: on a generated world the server
+        // runs each through the road stage, which can outlast the mate's drop (#937)
+        if (!await Until(() => br.State.RecallPoints is { Length: > 0 }, 120)) { Fail("no Postauto stops in this region: the recall is not tested"); return; }
         me.TakeDamage(me.Health + 10f, 0, DamageCause.Other);
         Expect(await Until(() => me.Downed, 5), "A is down, not out (a mate stands)");
         for (int i = 0; i < 20 && br.MyEntry is { Alive: true }; i++) { me.TakeDamage(500f, 0, DamageCause.Other); await Seconds(0.5); }

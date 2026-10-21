@@ -15,8 +15,16 @@
   sides, both; the round gets the hung cube or nothing), an artist name and tour, a palette by genre,
   a tempo, the stage's size and the rig's counts (an EDM rig is beams and strobes, a ballad's spots
   and washes).
-- The stage stands all day; the show plays `StartHour`..`EndHour` of the game clock (20:30 to 23:30),
-  a walk-in look otherwise. `--concert N` plays seed N at any hour, `--concert off` puts on none.
+- The stage stands from `ConcertEvent.BuildHour` (08:00) to the show's end (#956); the show plays
+  `StartHour`..`EndHour` of the game clock (20:30 to 23:30), a walk-in look before. At the end the
+  director strikes the rig (stage, floor, crowd) and the stadium stands empty until the next day's
+  build (`ConcertDirector._Process`, every 2 s). `--concert N` plays seed N at any hour and a hosted
+  set stands whatever the hour; `--concert off` puts on none.
+- A stadium's pitch (not an arena's floor or an open air's field) is boarded for the crowd
+  (`ConcertFloor`, #956): 2 m protection panels inside the seating front's rounded corners, grass
+  left under the stage (`StagePlan.Grass`, the deck, its wings and its back). The terrain under a
+  pitch is not flat, so the director lays the floor 8 cm over its highest point (sampled every 4 m,
+  3 m off the stands, 1.2 m at most); one collision quad, and the crowd stands on it.
 
 ## The stage and the rig (`StagePlan`)
 
@@ -244,3 +252,16 @@
   for the sun only: for a lamp it is the range, and skipping it lit the whole district.
 - Check: `--concertcamcheck` (same tiles as the desk check, `--concert 13`, windowed for
   `test_output/concert/crew_*.png`): takes the dolly, runs it, zooms, takes the wire cam, climbs, Esc.
+
+## Songs by hand (#994)
+
+- `/concert song` (anyone): what plays at the venue nearest you, n/N, time into it, what comes next; `/concert song list`
+  the setlist numbered. `next|skip`, `prev` (back to this song's start after 5 s, else the one before), `restart`,
+  `<n|title words>`, `stop|play` (the PA silent, the desk makes its songs up), `auto` (back to the clock): the show's
+  operator on a hosted set, an admin on tonight's show; offline the player. Code: `ConcertService.Songs.cs`.
+- A cue is `SongCue(Index, At, Off)`: song `Index` of the setlist started at `At` on the shared clock and the set runs on
+  from it. `ConcertMusic.Position` (pure) puts it on the set's loop, the same on the server (which builds the setlist
+  from its own `CdLibrary`, no rig) and every peer. One per venue, `SongState` RPC (protocol 43), sent to late joiners;
+  hosting a set, releasing it or the operator leaving clears it (the index belongs to that set's setlist).
+- `/concert host <word>` is refused (it used to read the word as no seed and host a new random set each time:
+  `/concert host status`). `--concertcheck` covers the position math, `concertnetcheck` the refusal and the reply.

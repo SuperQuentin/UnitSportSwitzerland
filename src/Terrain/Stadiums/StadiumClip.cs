@@ -27,6 +27,9 @@ public static class StadiumClip
         List<Building>? clipped = null;
         foreach (var s in StadiumCatalog.All)
         {
+            // an open air keeps what stands on its ground (an airfield's hangars, a farm): only parked
+            // cars and trees make way (#948)
+            if (s.Kind == VenueKind.OpenAir) continue;
             var outline = StadiumBuilder.Outline(s, tile.Id);
             var (min, max) = Bounds(outline);
             // a building is stored by the tile holding its centre and may reach well past it

@@ -1,6 +1,7 @@
 using Godot;
 using UnitSport.Core;
 using UnitSport.Terrain.Format;
+using UnitSport.Terrain.Stadiums;
 
 namespace UnitSport.Net;
 
@@ -66,6 +67,9 @@ public partial class ChatManager : Node
     /// <summary>Adds a stack, dropping what does not fit on the ground; returns how many went nowhere. Falls back to a plain add.</summary>
     public Func<Items.ItemStack, int>? GiveOrDrop { get; set; }
     public PlaceSearchUi? PlaceSearch { get; set; }
+
+    /// <summary>Client-side: where this player is, for the nearest venue offline (<c>/stadium</c>).</summary>
+    public Func<GlobalPos?>? Here { get; set; }
 
     /// <summary>
     /// Client-side: nobody to ask — no server connection, so commands run here, on this machine,
@@ -164,7 +168,7 @@ public partial class ChatManager : Node
             return;
         }
         // a concert operator's show input and patch (#885): this machine's ports and files
-        if (Concert.ConcertService.RunLocal(text.Trim()) is { } show)
+        if (Concert.ConcertService.RunLocal(text.Trim(), line => LineReceived?.Invoke(line, ChatKind.Private)) is { } show)
         {
             LineReceived?.Invoke(show, ChatKind.Private);
             return;
@@ -385,9 +389,8 @@ public partial class ChatManager : Node
         switch (verb)
         {
             case "help":
-                Show("/help  /who  /me <action>  /city <town>  /spawn <item> [count]  /catalogue  /clear  /money <amount>  "
-                    + "/bank [set|add|take <amount>]  /occasion  /time  /speed  /seastate  /style  /debug  — Tab completes.", ChatKind.Private);
-                Show("Offline: the server commands (/race, /tp, /kick ...) need a multiplayer game.", ChatKind.Private);
+                foreach (string line in ChatCompleter.Help(online: false, isAdmin: true)) Show(line, ChatKind.Private);
+                Show("Offline: the server commands (/race, /tp <player>, /kick ...) need a multiplayer game.", ChatKind.Private);
                 return;
 
             case "who":
@@ -407,6 +410,25 @@ public partial class ChatManager : Node
                     Teleporter.TeleportTo(place.E, place.N, place.Name);
                     Show($"Teleported to {place.Name}", ChatKind.System);
                 }
+                return;
+
+            case "stadium" or "venue":
+            {
+                var (lines, venue, refused) = StadiumReply(rest, Here?.Invoke());
+                foreach (string line in lines) Show(line, refused ? ChatKind.Error : ChatKind.Private);
+                if (venue is not null)
+                {
+                    if (Teleporter?.TeleportTo(venue.E, venue.N, venue.Name) == true) Show($"Teleported to {venue.Name}", ChatKind.System);
+                    else Show("Nothing to teleport here.", ChatKind.Error);
+                }
+                return;
+            }
+
+            case "tp":
+                if (!AdminArgs.TryLv95(rest, out double tpE, out double tpN))
+                    Show("Offline: /tp <E> <N> (LV95, e.g. /tp 2600000 1200000); '/tp <player>' needs a multiplayer game.", ChatKind.Error);
+                else if (Teleporter?.TeleportTo(tpE, tpN) == true) Show($"Teleported to {tpE:F0} {tpN:F0}", ChatKind.System);
+                else Show("Nothing to teleport here.", ChatKind.Error);
                 return;
 
             case "spawn":
@@ -432,6 +454,11 @@ public partial class ChatManager : Node
 
             case "water":
                 Show(World.WaterField.Command(rest, GetViewport().GetCamera3D()?.GlobalPosition), ChatKind.Private);
+                return;
+
+            case "weather":
+                if (World.Snow.SnowService.Instance is not { } snowHere) Show("There is no ski weather in this world.", ChatKind.Error);
+                else Show(snowHere.Command(rest, mayChange: true, out bool weatherSet), weatherSet ? ChatKind.Admin : ChatKind.Private);
                 return;
 
             case "seastate":
@@ -479,7 +506,7 @@ public partial class ChatManager : Node
                 Show(Concert.ConcertService.Instance?.LocalCommand(string.Join(' ', parts[1..])) ?? "Concerts are not running.", ChatKind.Private);
                 return;
 
-            case "name" or "login" or "stream" or "race" or "fight" or "aura" or "say" or "admin" or "tp" or "bring" or "tpall" or "kick" or "pvp" or "br" or "update"
+            case "name" or "login" or "stream" or "race" or "fight" or "aura" or "say" or "admin" or "bring" or "tpall" or "kick" or "pvp" or "br" or "update"
                 or "invites" or "accept" or "decline" or "tpa" or "tphere" or "party":
                 Show($"'/{verb}' needs a multiplayer game.", ChatKind.Error);
                 return;
@@ -724,6 +751,8 @@ public partial class ChatManager : Node
             case "who": SendWho(sender); return;
             case "name": if (RequiresAvatar(sender, verb)) CommandName(sender, rest); return;
             case "city": if (RequiresAvatar(sender, verb)) CommandCity(sender, rest); return;
+            // the venues (#994): anyone lists them; going to one is a teleport like /city
+            case "stadium" or "venue": CommandStadium(sender, rest); return;
             case "login": if (RequiresAvatar(sender, verb)) CommandLogin(sender, rest); return;
             case "me":
                 if (rest.Length > 0) Broadcast($"* {NameOf(sender)} {Scrub(rest)}", ChatKind.System);
@@ -733,6 +762,8 @@ public partial class ChatManager : Node
             case "speed": CommandSpeed(sender, rest); return;
             // anyone may ask; setting it is an admin's (checked inside)
             case "seastate": CommandSeaState(sender, rest); return;
+            // anyone may ask; changing it is an admin's (#887)
+            case "weather": CommandWeather(sender, rest); return;
             // the water at a point as the server sees it (#299): a debug line, two peers compare it
             case "water":
                 ReplyTo(sender, World.WaterField.Command(rest,
@@ -847,23 +878,17 @@ public partial class ChatManager : Node
         }
     }
 
+    /// <summary>
+    /// <c>/help</c>: the commands this sender may run, from the completer's table (#994), so a new
+    /// command shows here the day it is added.
+    /// </summary>
     private void SendHelp(long sender)
     {
-        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /race start|duel|join|leave|list|npc  /fight <player>|accept|decline|leave  /aura <player>|accept|decline|leave  /br join|leave|team|invite|status  /tpa <player>  /tphere <player>  /party [invite|leave|kick]  /invites  /accept  /decline  /occasion  /time  /speed  /seastate  /clear  /transfer me <player>", ChatKind.Private);
+        foreach (string line in ChatCompleter.Help(online: true, IsAdmin(sender)))
+            ReplyTo(sender, line, ChatKind.Private);
 
         if (_registry?.LoginEnabled == true && !IsAdmin(sender))
             ReplyTo(sender, "/login <password>  — become an operator", ChatKind.Private);
-
-        if (IsAdmin(sender))
-            ReplyTo(sender,
-                "admin: /say <text>  /tp <player>  /bring <player>  /tpall <town>  "
-                + "/kick <player> [reason]  /update  /admin list|add <name>|remove <name>  "
-                + "/occasion start|stop <id>|auto  /spawn <item> [count]  /catalogue  /debug  "
-                + "/give <player> <item> [count]  /clear [player]  /transfer <from> <to>  /money <amount> [player]  /bot add [n] [easy|normal|hard]|arm <weapon>|fire|clear|list  "
-                + "/bank <player> [set|add|take <amount>]  "
-                + "/time set <hh:mm|noon|night...>|add <h>|speed <min>  /speed <0.05..8|normal>  "
-                + "/seastate <0..1|calm|chop|storm|gamey>  — Tab completes",
-                ChatKind.Private);
     }
 
     /// <summary>Client-side streaming stats, injected by ClientWorld.</summary>
@@ -1004,18 +1029,25 @@ public partial class ChatManager : Node
         return true;
     }
 
-    private void CommandCity(long sender, string query)
+    /// <summary>Whether a player may teleport themselves (<c>/city</c>, <c>/stadium</c>); tells them why not.</summary>
+    private bool MayTeleport(long sender)
     {
         if (BattleRoyale?.Playing(sender) == true)
         {
             ReplyTo(sender, "No teleporting out of a Battle Royale. /br leave to give up.", ChatKind.Error);
-            return;
+            return false;
         }
         if (Arrival is { FreeTeleport: false } && !IsAdmin(sender))
         {
             ReplyTo(sender, "This server does not allow teleporting. Walk, ride or fly there.", ChatKind.Error);
-            return;
+            return false;
         }
+        return true;
+    }
+
+    private void CommandCity(long sender, string query)
+    {
+        if (!MayTeleport(sender)) return;
         if (query.Length == 0)
         {
             ReplyTo(sender, "Usage: /city <town>", ChatKind.Error);
@@ -1025,6 +1057,49 @@ public partial class ChatManager : Node
         if (!TryFindPlace(sender, query, out var place)) return;
 
         RpcId(sender, MethodName.ForceTeleport, place.E, place.N, place.Name);
+    }
+
+    /// <summary>
+    /// <c>/stadium [list [kind] | &lt;name|town|#n&gt;]</c> (#994): the nearest venue and what plays there,
+    /// the numbered list, or a teleport to one, on the same terms as <c>/city</c>.
+    /// </summary>
+    private void CommandStadium(long sender, string rest)
+    {
+        var (lines, venue, failed) = StadiumReply(rest, _players?.GetNodeOrNull<Player.FootPlayer>(sender.ToString())?.Global);
+        foreach (string line in lines) ReplyTo(sender, line, failed ? ChatKind.Error : ChatKind.Private);
+        if (venue is null || !RequiresAvatar(sender, "stadium") || !MayTeleport(sender)) return;
+        RpcId(sender, MethodName.ForceTeleport, venue.E, venue.N, venue.Name);
+    }
+
+    /// <summary>
+    /// <c>/stadium</c>'s answer, the same on a server and offline: the lines to show, the venue to go
+    /// to (null: none), and whether it is a refusal. <paramref name="at"/> is where the asker stands.
+    /// </summary>
+    private static (List<string> Lines, StadiumSpec? Go, bool Failed) StadiumReply(string rest, GlobalPos? at)
+    {
+        string[] words = rest.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length > 0 && words[0].Equals("list", StringComparison.OrdinalIgnoreCase))
+        {
+            if (words.Length == 1) return ([.. StadiumLookup.List()], null, false);
+            if (StadiumLookup.TryKind(string.Concat(words[1..]), out var kind)) return ([.. StadiumLookup.List(kind)], null, false);
+            return (["Usage: /stadium list [stadium | arena | openair]"], null, true);
+        }
+
+        if (words.Length == 0)
+        {
+            if (at is not { } here) return ([.. StadiumLookup.List(), "/stadium <name | town | #n> to go to one."], null, false);
+            var (near, metres) = StadiumLookup.Nearest(here.E, here.N);
+            return ([$"Nearest venue: #{StadiumLookup.Number(near)} {StadiumLookup.Label(near)}, {StadiumLookup.Distance(metres)} away; "
+                + $"{Concert.ConcertService.ShowAt(near)}.", "/stadium list for all of them, /stadium <name | town | #n> to go to one."], null, false);
+        }
+
+        var found = StadiumLookup.Find(rest);
+        return found.Count switch
+        {
+            0 => ([$"No venue matching '{rest}'. /stadium list shows them all."], null, true),
+            1 => ([$"{StadiumLookup.Label(found[0])}: {Concert.ConcertService.ShowAt(found[0])}."], found[0], false),
+            _ => ([$"'{rest}' could be: " + string.Join(", ", found.Select(v => $"#{StadiumLookup.Number(v)} {StadiumLookup.Label(v)}"))], null, true),
+        };
     }
 
     private void CommandTeleportEveryone(long sender, string query)
@@ -1075,7 +1150,15 @@ public partial class ChatManager : Node
     {
         if (name.Length == 0)
         {
-            ReplyTo(sender, "Usage: /tp <player>", ChatKind.Error);
+            ReplyTo(sender, "Usage: /tp <player> | <E> <N>", ChatKind.Error);
+            return;
+        }
+
+        // an LV95 point (#994): what the F3 overlay and the swisstopo map show
+        if (AdminArgs.TryLv95(name, out double toE, out double toN))
+        {
+            if (RefusedInMatch(sender, sender)) return;
+            RpcId(sender, MethodName.ForceTeleport, toE, toN, $"{toE:F0} {toN:F0}");
             return;
         }
 
@@ -1193,6 +1276,26 @@ public partial class ChatManager : Node
         Broadcast(op != World.TimeOp.Speed ? $"{who} set the time to {World.TimeCommand.Format(hour)}"
             : speed > 0 ? $"{who} set the day to {World.TimeCommand.DescribeSpeed(speed)}"
             : $"{who} stopped the clock at {World.TimeCommand.Format(hour)}", ChatKind.Admin);
+    }
+
+    // ---- /weather (#887) ----------------------------------------------------------------------
+
+    /// <summary>Server <c>/weather</c>: the ski day's weather; an admin changes it for everyone.</summary>
+    private void CommandWeather(long sender, string arg)
+    {
+        if (World.Snow.SnowService.Instance is not { } snow)
+        {
+            ReplyTo(sender, "There is no ski weather on this server.", ChatKind.Error);
+            return;
+        }
+        string reply = snow.Command(arg, IsAdmin(sender), out bool changed);
+        if (!changed)
+        {
+            ReplyTo(sender, reply, ChatKind.Private);
+            return;
+        }
+        GD.Print($"[admin] {NameOf(sender)} set the weather: {arg}");
+        Broadcast($"{NameOf(sender)} changed the weather. {reply}", ChatKind.Admin);
     }
 
     // ---- /seastate (#299) ---------------------------------------------------------------------

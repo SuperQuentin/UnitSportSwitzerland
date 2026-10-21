@@ -691,7 +691,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// The replicated properties sent only when they change (ride, seat, items, clothes, …). The movie
     /// recorder (#638) keeps the same set as events: <c>--moviecheck</c> fails if the two drift apart.
     /// </summary>
-    public static readonly string[] OnChangeProperties = { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DanceId", ".:FightPose", ".:AuraPose", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down", ".:RadioVolume", ".:PhoneState" };
+    public static readonly string[] OnChangeProperties = { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DanceId", ".:FightPose", ".:AuraPose", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down", ".:RadioVolume", ".:PhoneState", ".:LiftLine", ".:LiftCarrier" };
 
     // --- figure animation ---
     private MeshInstance3D? _walker;
@@ -782,6 +782,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     /// <summary>Ground speed, m/s — for a speedometer, and for the trainer link later.</summary>
     public float RideSpeed => _motion.Speed;
+    /// <summary>The travel off the nose, rad (+ left): a skid, a drift, a hop turn landed across (#954).</summary>
+    public float RideSlip => _motion.Slip;
 
     // --- what the feel layer (PlayerFeel: sound, shake, particles, HUD) listens to ---
     /// <summary>Touched down; the argument is the downward speed that was arrested, m/s.</summary>
@@ -972,6 +974,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     /// <summary>A landing verdict or trick name to show; true for a good one.</summary>
     public event Action<string, bool>? Announced;
+
+    private bool _hopWanted;
+
+    /// <summary>
+    /// A ride's hop asked for by code, as Space asks for it (#954: a bot's or a probe's hop turn):
+    /// taken on this physics step if the ride is on the ground and can hop, else dropped.
+    /// </summary>
+    public void Hop() => _hopWanted = true;
 
     // --- vehicle state while driving, and the player's own health ---
     /// <summary>The engine of the vehicle being driven is running. Entering starts it.</summary>
@@ -1291,6 +1301,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // a passenger's host and seat (#158): drawn and moved from the host's copy on every peer
         replication.AddProperty(".:RidingWith");
         replication.AddProperty(".:SeatIndex");
+        // a ski lift's rider (#915): placed on its carrier from the clock on every peer
+        replication.AddProperty(".:LiftLine");
+        replication.AddProperty(".:LiftCarrier");
         replication.AddProperty(".:HeldItemId");
         replication.AddProperty(".:ItemAction");
         foreach (var prop in PoseProperties) replication.AddProperty(prop);
@@ -1561,7 +1574,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         else
         {
             _walker = null;
-            _visual = (_ride ?? CarSetups.Ride(kind, CarSetupId, TuningBits))?.BuildVisual(rider, new Avatar.Outfit(OutfitBits));
+            var drawn = _ride ?? CarSetups.Ride(kind, CarSetupId, TuningBits);
+            // a board's stance and switch (#922) come in the bits
+            if (drawn is Snowboard board) board.Bits = TuningBits;
+            _visual = drawn?.BuildVisual(rider, new Avatar.Outfit(OutfitBits));
         }
 
         if (_visual != null)
@@ -1690,6 +1706,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             NetYaw = Rotation.Y;
             NetTime = Time.GetTicksUsec() / 1e6;
             float dt = (float)delta;
+            UpdateLiftSeat();
             // an NPC or a bot reads no keys (#837): a server has no look actions at all
             if (!Npc) ApplyStickLook(dt);
             // walkable vehicles nearby: their decks where they are drawn, and this player with one it stands on
@@ -1809,9 +1826,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             }
             Rotation = new Vector3(0, yaw, 0);
         }
+        PlaceRemoteOnLift();
         RefreshVisual();
         AnimateRemote((float)delta);
         UpdateSeated();
+        UpdateLiftSeat();
         StepPhone((float)delta);
     }
 
@@ -2648,6 +2667,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (Ragdolled || Downed) return true;
         // in a fist fight (#495) or an aura battle (#907) the hands are busy
         if (InDuel) return true;
+        // a ski lift (#912): board at its bottom station, on foot or on skis; let go of a drag lift
+        if (TryLift()) return true;
         // on a crane's ladder nothing; at its controls, let go of them (#618)
         if (_craneAt != CraneSeat.None) return TryCrane() || true;
         // a walkable vehicle's passenger stands up into the aisle; any other gets out
@@ -3360,7 +3381,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         CarCd = "";
         // the parts and the doors belong to one car: changing car (the picker), getting out or a
         // wreck leaves them with that car
-        TuningBits = _ride is Car car ? car.Tuning.Pack() : 0;
+        // a board's stance (#922) rides in the same bits: the owner's setting, a remote copy's from its owner
+        if (_ride is Snowboard board) board.Bits = IsMultiplayerAuthority() && !Npc && !Bot ? (Core.GameSettings.Current.Goofy ? 1 : 0) : tuning;
+        TuningBits = _ride is Car car ? car.Tuning.Pack() : _ride is Snowboard stance ? stance.Bits : 0;
         CarSetupId = _ride is Car withSetup ? withSetup.Spec.SetupId : 0;
         DoorsOpen = 0;
         _shutDriverIn = 0f;
@@ -3639,7 +3662,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         if (Net.NetLink.Dropped(this)) return;   // freed with the link a frame later
         // held by the Battle Royale cargo plane (#207): it moves the body, nothing else does
-        if (Carried()) return;
+        if (Carried())
+        {
+            // a ski lift (#912) carries a rider who is still on skis: the chase camera keeps following
+            if (_lift != null && _ride != null) UpdateRideCamera((float)delta);
+            return;
+        }
         // drop onto the terrain surface once its height data is available
         if (!_placed && !Indoors)
         {
@@ -4523,11 +4551,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var input = RideInputNow();
 
         // skiing with the body in VR (#186): lean, pole and tuck on top of the sticks
-        if (_ride is Skis && XR.XrSession.Active && RideControls == null)
+        // on a board (#922) the lean and the crouch; it has no poles to push with
+        if (_ride is SnowRide && XR.XrSession.Active && RideControls == null)
             input = input with
             {
                 Steer = Mathf.Clamp(input.Steer + XR.XrSession.SkiSteer, -1f, 1f),
-                Throttle = Mathf.Max(input.Throttle, XR.XrSession.SkiPole),
+                Throttle = _ride is Skis ? Mathf.Max(input.Throttle, XR.XrSession.SkiPole) : input.Throttle,
                 Effort = input.Effort || XR.XrSession.SkiTuck,
             };
         // VR hands on the steering wheel (#243): the wheel's angle, as a real wheel's (#68)
@@ -4580,14 +4609,25 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // a motorbike's or a car's grip depends on what is under it (cached lookup: road, else cover).
         // Not for a stock race NPC car: its racing line is planned on tarmac grip and may put two
         // wheels on the verge. An NPC given a preset (#40) races on the ground it is built for.
-        var surface = (_ride is Motorbike or Truck || _ride is Car && (!Npc || CarSetupId != 0)) && Terrain != null
+        var surface = (_ride is Motorbike or Truck or SnowRide || _ride is Car && (!Npc || CarSetupId != 0)) && Terrain != null
             ? Audio.Surfaces.At(Terrain, GlobalPosition, Indoors, this) : Audio.Surface.Asphalt;
         // a tow behind another vehicle: less air to push (cars and motorbikes read it)
         Draft = onFloor && _ride is Car or Motorbike or Truck && _motion.Speed > 10f
             ? RideGround.DraftBehind(GlobalPosition, heading.Rotated(Vector3.Up, _motion.Slip), OtherVehicles()) : 0f;
         if (_ride is Truck driving) PrepareTruck(driving);
         else if (_ride is Car shifting) PrepareCar(shifting);
-        _ride!.Step(input, new RideGround(onFloor, grade, surface, Draft), dt, ref _motion);
+        var ground = new RideGround(onFloor, grade, surface, Draft);
+        if (_ride is SnowRide)
+        {
+            LookAtSnow(onFloor);
+            // gravity down the fall line, along and across the skis (#899)
+            var (along, across) = onFloor ? SkiDynamics.Slope(normal.X, normal.Y, normal.Z, heading.X, heading.Z) : (0f, 0f);
+            ground = ground with { SnowFriction = _snowFriction, SnowGrip = _snowGrip, SlopeAlong = along, SlopeAcross = across };
+        }
+        else Slope = null;
+        _ride!.Step(input, ground, dt, ref _motion);
+        // riding switch turns the rider round on every screen (#922)
+        if (_ride is Snowboard ridden && TuningBits != ridden.Bits) TuningBits = ridden.Bits;
         // a wheelie taken over the top (#410): the bike goes on its back, the rider off it
         if (_ride is Motorbike { LoopedOut: true })
         {
@@ -4638,7 +4678,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         heading = -GlobalTransform.Basis.Z with { Y = 0 };
         heading = heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector3.Forward;
 
-        // a drifting car travels at an angle to its nose; everything else has Slip = 0
+        // a drifting car, or skis in a skid (#899), travel at an angle to the nose; everything else has Slip = 0
         var travel = heading.Rotated(Vector3.Up, _motion.Slip);
         var velocity = Velocity;
         velocity.X = travel.X * _motion.Speed;
@@ -4649,8 +4689,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // every frame, and only from the ground - there is nothing to push against in the air.
         // Speed and heading are untouched: a hop carries the bike's momentum, it does not add any.
         bool spaceDown = !Npc && PlayerInput.Held(PlayerInput.Jump);
-        bool hop = spaceDown && !_jumpHeld && onFloor && _ride.CanHop;
+        bool hop = (spaceDown && !_jumpHeld || _hopWanted) && onFloor && _ride.CanHop;
         _jumpHeld = spaceDown;
+        _hopWanted = false;
         if (hop) { velocity.Y = RideJumpVelocity; Jumped?.Invoke(); }
         LastRideInput = input;
 
@@ -4716,7 +4757,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         // Landing mounted: the vertical speed the ground took, like the on-foot landing thump.
         bool nowOnFloor = IsOnFloor();
-        if (!nowOnFloor) _rideFall = Mathf.Max(_rideFall, -Velocity.Y);
+        if (!nowOnFloor)
+        {
+            _rideFall = Mathf.Max(_rideFall, -Velocity.Y);
+            _rideAirVelocity = Velocity;
+        }
         else if (!_rideWasOnFloor)
         {
             if (_rideFall > 1.5f)
@@ -4725,6 +4770,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 PlayerInput.Rumble(0.3f, Mathf.Clamp((_rideFall - 1.5f) / 6f, 0.1f, 1f), 0.15f);
             }
             if (_rideAir > 0.3f) GradeLanding();
+            if (_ride is SnowRide && _bailTimer <= 0f && _rideAir > 0.2f) LandSkis();
             _rideFall = 0f;
             _rideAir = 0f;
             _airPitch = _airSpin = 0f;
@@ -4870,9 +4916,22 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // view would hang level while the handlebars tip under it. The horizon itself takes
             // only part of that roll — all of it at 40° of lean is a recipe for seasickness.
             // the visual is rolled by Rotation.Z = Lean, i.e. about +Z
-            _camera.Position = new Basis(Vector3.Back, _motion.Lean) * _ride.FirstPersonEye;
+            var eyeAt = new Basis(Vector3.Back, _motion.Lean) * _ride.FirstPersonEye;
             // in VR the eye stays level and the head looks for itself: you lean with your body (#186)
-            _camera.Rotation = XR.XrSession.Active ? Vector3.Zero : new Vector3(_pitch, _lookYaw, _motion.Lean * 0.5f);
+            if (XR.XrSession.Active)
+            {
+                _camera.Position = eyeAt;
+                _camera.Rotation = Vector3.Zero;
+            }
+            else
+            {
+                // a trick turns the head with the body (#933): the spin and the flip as PoseRideVisual
+                // turns the figure, about the same point, so the view goes round with it
+                var trick = new Basis(Vector3.Up, _airSpin) * new Basis(Vector3.Right, _airPitch);
+                var pivot = Vector3.Up * 0.9f;
+                _camera.Position = trick * (eyeAt - pivot) + pivot;
+                _camera.Basis = trick * Basis.FromEuler(new Vector3(_pitch, _lookYaw, _motion.Lean * 0.5f));
+            }
             ApplyRideFov(dt);
             ShakeRideCamera();
             return;
@@ -4891,8 +4950,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         // both are local to the body, which is yaw-only, so the camera stays level
         var eye = new Vector3(0, _ride.EyeHeight, 0);
+        var (liftUp, liftBack) = LiftCamera;
+        // further back the faster it goes (#933, the skis), eased so a bump in speed does not pump the lens
+        _chaseStretch = Mathf.Lerp(_chaseStretch, _ride.ChaseStretch(_motion.Speed), MathX.Damp(1.5f, dt));
         var back = new Basis(Vector3.Up, orbit)
-            * new Vector3(0, _ride.ChaseHeight, _ride.ChaseDistance);
+            * new Vector3(0, _ride.ChaseHeight + liftUp + 0.25f * _chaseStretch, _ride.ChaseDistance + liftBack + _chaseStretch);
 
         // Pull in when the camera would sit inside the hillside. Alpine terrain climbs behind
         // you constantly, so without this half of every ascent is spent looking at the inside
@@ -4923,6 +4985,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         ApplyRideFov(dt);
         ShakeRideCamera();
     }
+
+    private float _chaseStretch;
 
     /// <summary>The ride camera's last tremble, rad (0 when still): what a check reads.</summary>
     public float RideShake { get; private set; }

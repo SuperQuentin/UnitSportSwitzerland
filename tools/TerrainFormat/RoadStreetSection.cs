@@ -72,6 +72,34 @@ public static class RoadStreetSection
         }
         if (side.SidewalkDm > 0)
             bands.Add((kerb > 0 ? StreetSurface.Sidewalk : StreetSurface.Paving, side.SidewalkDm / 10f, kerb));
+        return Of(bands, lowered);
+    }
+
+    /// <summary>
+    /// The profile of a transition's side at one point (#818): its band strips outward from the kerb, as wide as they are there
+    /// (a band zero wide keeps its points, so every point of the transition has a profile of the same shape), their heights from
+    /// the segment's side (its kerb, its path's kind). Null without any band.
+    /// </summary>
+    public static Profile? For(RoadSide side, IReadOnlyList<(StripKind Kind, float Width)> bands, bool lowered = false)
+    {
+        float kerb = side.KerbCm / 100f;
+        // a path the side does not name lies at the sidewalk's height
+        float path = side.Bike == BikeKind.TrackMid ? kerb * 0.5f : kerb;
+        var list = new List<(StreetSurface Surface, float Width, float Height)>(bands.Count);
+        foreach (var (kind, width) in bands)
+            list.Add(kind switch
+            {
+                StripKind.Verge => (StreetSurface.Verge, width, path),
+                StripKind.Path => (StreetSurface.Track, width, path),
+                StripKind.Buffer => (StreetSurface.Buffer, width, path),
+                _ => (kerb > 0 ? StreetSurface.Sidewalk : StreetSurface.Paving, width, kerb),
+            });
+        return Of(list, lowered);
+    }
+
+    /// <summary>The profile of bands laid outward from the carriageway's edge, each at its height; a kerb face wherever the height steps.</summary>
+    private static Profile? Of(List<(StreetSurface Surface, float Width, float Height)> bands, bool lowered)
+    {
         if (bands.Count == 0) return null;
 
         var d = new List<float> { 0f };
@@ -85,7 +113,10 @@ public static class RoadStreetSection
             if (Math.Abs(top - height) > 1e-4f)
             {
                 bool sloped = lowered || surface == StreetSurface.Track || (b > 0 && bands[b - 1].Surface == StreetSurface.Track);
-                float run = sloped ? Math.Min(SlopedKerbRun, width * 0.5f) : 0f;
+                // a band a transition closed (zero wide) leaves its slope the room of the bands after it at its height
+                float room = width;
+                for (int n = b + 1; room < 1e-3f && n < bands.Count && Math.Abs(bands[n].Height - top) < 1e-4f; n++) room += bands[n].Width;
+                float run = sloped ? Math.Min(SlopedKerbRun, room * 0.5f) : 0f;
                 d.Add(at + run); h.Add(top); s.Add(StreetSurface.Kerb);
             }
             d.Add(end); h.Add(top); s.Add(surface);

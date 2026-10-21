@@ -74,6 +74,15 @@ public abstract partial class ChatProbe : Node
     protected Task<bool> Heard(string role, string what, double seconds) =>
         Until(() => _heard.Any(l => l.Contains($"{_prefix} {role} {what}")), seconds);
 
+    /// <summary>What <paramref name="role"/> said from <paramref name="what"/> on (a line carrying a value), or null.</summary>
+    protected async Task<string?> HeardStarting(string role, string what, double seconds)
+    {
+        string key = $"{_prefix} {role} ";
+        string? found = null;
+        await Until(() => (found = _heard.FirstOrDefault(l => l.Contains(key + what))) != null, seconds);
+        return found?[(found.IndexOf(key, StringComparison.Ordinal) + key.Length)..];
+    }
+
     protected async Task<bool> Until(Func<bool> condition, double seconds)
     {
         double end = GameClock.Now + seconds;

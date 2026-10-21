@@ -50,6 +50,44 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   approach (+ flasher). The user's 6-phase table holds exactly (test `FullCrossroads_RunsTheSixPhases`).
   Correction found while building it: a T's side-road right overlap goes with the main left
   phase, not the main through (it would merge with the through traffic going its way).
+  **Riders turning right** (#971, the user): a bike group carries Right too where the approach turns right; that move keeps to
+  its own way round the corner (no car conflicts) and yields to the exit arm's crossing (permissive, so it shares the walkers'
+  green, `Expand`), which gives the bike group a flasher: the bike head's own yellow lens flashes during its green
+  (`SignalBuilder.Lens.Flash`, no lamp of its own). J2: on every arm. **Riders turning left** from the left-turn bike lane
+  go with the arm's left arrow (`WritePaths`' group; they went with the through green, across the oncoming traffic).
+- **Conflict times** (#979, plan `docs/plans/intergreen-times.md` on `main`): RoadGen times each lit plan from the conflict times
+  between its movements (`Layout/ConflictTimes`), not a fixed all-red. A green movement is a trail (the user): its path held
+  from when its first mover reaches a point to when its last (crossing its line as its amber ends) has left it, however many
+  enter between. A pair's time, from the end of the ending group's green to the start of the next one's, is at every point the
+  two trails share `amber + (clearing + length) / v_clear − entering / v_enter`, the worst point binding (`Meet`; the next
+  red-amber not counted, negative where the geometry allows; the timing clamps at 0), with the movements as laid: car and riders' junction
+  paths and riders' ways from their stop line (riders carried onto an exit's path on that way, as written), the walkers along
+  the zebra from either side, across a separated path beside the kerb as the zebra is painted (riders there cross them). At
+  each shared point: a mover is in another's band within half that band's width
+  plus half its own (a vehicle: its lane; a walker: 0.5 m, not the zebra, so it enters a lane in the middle of the crossing
+  later and leaves it sooner; a vehicle keeps clear of the whole zebra). Speeds: clearing car 10 m/s,
+  bike 4, walker 1.2; entering car at its arm's limit (13.9 at 50 km/h, SN 640 838; traffic keeps
+  to that limit at lights, `Traffic.LitLimit`), bike 8.3 (30 km/h: it depends on
+  the cyclist, the first may be a fast e-bike, the user), walker 1.5; lengths 6 / 2 / 0 m; capped by the arm's limit, a turning car
+  at `sqrt(3 · r)`, at most 10 m/s: `Terrain.Format.TurnSpeed`, the same the traffic cars slow to for a bend, so the lights are
+  timed for the cars that drive them (the user: the more realistic, and both the same; ~5.5 m/s round a 10 m right turn, ~7.7
+  round a 20 m left; SN 640 838 times turns at a flat 10 m/s, 7 on tight radii). Amber: the cars' by speed, the riders' 2 s, walkers none (the last steps off as their green ends: their yellow, or red on 2-lens heads, is the clearance for those already on the zebra, SN 640 837; the user, Oct 20 2026). `SignalPlan.Retime(table)` keeps the phases
+  and starts each group as soon as its own conflicts allow; walkers' and riders' greens end early enough that their
+  clearing fits in the gap the cars set (never under 4 s of green; an early end held back by it is limited and the plan
+  timed again). Riders following the cars' lights whose clearing would lengthen a car group's times by over 2 s get a bike
+  group of their own (`LongRiders`; a riders' left turn: a bike group with the left arrow's phase, its head on the left
+  pole). The bike lead (Vorgrün) only where a car group turning across the riders goes green with them. A plan so timed
+  carries `ConflictTimed` (flags bit 2): `Validate` then holds conflicting groups never green together (a green may begin
+  in another's amber) and `KeepsTimes` every time. Layout (b)'s bike lane (`SignalArm.BikeBetween`, arm bit 7) no longer
+  conflicts with its arm's right arrow. Test region: J1 74 -> 73 s, J2 86 -> 85 (bikes entering at 30 km/h, turning cars at 3 m/s²; walkers on the bike paths' squares: a riders' left turn holds the next walkers ~15 s), J5a/b 83/84 -> 74/75, J10 70 -> 71, the
+  rest at their scheme's target (the time saved goes to green). 168 real tiles: 16 of 19 timed from conflict times (3 keep
+  today's: their times not kept), 0 invalid. Debugging: `CTDBG=E,N` prints a junction's times over 4 s with the worst pair
+  of lines, `CTDBG2=1` with it each phase change's wait and the pair that sets it; `CTTABLE=E,N,file.json` writes the junction's table, groups,
+  conflicts and greens. A flasher stays on while its crossing's walkers are still on it (green end + kerb-to-kerb at 1.2 m/s).
+  The plans are read on the lights' clock, simulated time (`SignalLamps.Clock`): `/speed` runs them with the cars. Each plan's movements as timed (`RoadSignal.ConflictLines`, every one once; region: 291) and its tightest
+  pairs of them (for each green start the ending group leaving it the least slack, for each green end the starting group it
+  leaves the least, with the pair of lines that gives that time; `ConflictPairs`, region: 276) go in the tile (`CPAR`) for the debug view's
+  `movers` (`core/debug-menu`).
 - **Timing**: yellow 3/4/5 s by speed (SN 640 837 via SRF), red+yellow 2 s (cars, secondary
   source BASt V 149) / 1 s (bikes), all-red 2 s fixed (SN 640 838 computes it per conflict,
   paywalled), min green 4 s, pedestrian green >= 5 s, pedestrian clearance 2/3 of the crossing
