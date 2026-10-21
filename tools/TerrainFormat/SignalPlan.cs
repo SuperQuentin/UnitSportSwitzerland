@@ -25,6 +25,11 @@ public enum SignalGroupKind : byte
     Bike = 4,
     /// <summary>The flashing yellow lamp qualifying <see cref="SignalGroup.Qualifies"/>.</summary>
     Flasher = 5,
+    /// <summary>
+    /// The trams of an approach (#1057): a tram bar signal (white bars: across stop, upright or slanted go, a dot stop expected), its
+    /// moves the trams' through the junction. Green with its approach's phases where nothing it crosses is, else a phase of its own.
+    /// </summary>
+    Tram = 6,
 }
 
 /// <summary>Movements a group serves, as the approaching driver turns.</summary>
@@ -80,7 +85,12 @@ public readonly record struct SignalArm(
     /// The riders turning left wait in a bike box (SSV 6.26), in front of the left pocket's cars: their group never ends before
     /// those cars' (they would be hit from behind, the user); it may start before them. Not stored: only the timing reads it.
     /// </summary>
-    bool RiderBox = false)
+    bool RiderBox = false,
+    /// <summary>
+    /// The moves the trams make from this arm (#1057: its tram tracks into the junction, as RoadGen's tram ways through the core): a
+    /// tram group of their own. Not stored: the groups carry it.
+    /// </summary>
+    SignalMoves TramMoves = SignalMoves.None)
 {
     /// <summary>Whether its walkers cross in two stages, waiting on the island between (#1030).</summary>
     public bool TwoStage => Pedestrians && HalfInM > 0 && HalfOutM > 0;
@@ -553,12 +563,25 @@ public sealed class SignalPlan
                 plan.Add(SignalGroupKind.Pedestrian, a, SignalMoves.None, CrossingHalf.Departing);
             }
             else if (arms[a].Pedestrians) plan.Add(SignalGroupKind.Pedestrian, a, SignalMoves.None);
+        // the trams (#1057): a group of their own per approach, after the rest (a plan without trams keeps its groups as they were)
+        var trams = new List<int>();
+        for (int a = 0; a < arms.Count; a++)
+            if (arms[a].TramMoves != SignalMoves.None) trams.Add(plan.Add(SignalGroupKind.Tram, a, arms[a].TramMoves));
 
         var phases = Phases(plan, arms, car, left, right);
         var conflicts = plan.Conflicts();
         // a scheme that would run two crossing movements together (an odd shape): split phasing
         if (phases.Any(p => p.Base.Any(g => p.Base.Any(h => conflicts[g, h] == Conflict.Hard))))
             phases = Split(plan, arms);
+        // a tram group goes with its approach's phases where nothing there crosses it, else with any phase nothing crosses it in;
+        // where none, it gets one of its own below (a turning tram across the oncoming traffic)
+        foreach (int t in trams)
+        {
+            bool Free(Phase p) => p.Base.All(g => conflicts[t, g] != Conflict.Hard);
+            var with = phases.Where(p => Free(p) && p.Base.Any(g => plan.Groups[g].Arm == plan.Groups[t].Arm)).ToList();
+            if (with.Count == 0) with = phases.Where(Free).Take(1).ToList();
+            foreach (var p in with) p.Base.Add(t);
+        }
         Expand(plan, phases, conflicts);
 
         // a right arrow no phase can carry: a full green with its own approach (the flasher marks the pedestrians)
@@ -967,7 +990,8 @@ public sealed class SignalPlan
         // the cars' set (the user, #979, as a walkers' green ends before the parallel cars'); by how much before the phase's end
         var shift = new Dictionary<int, float>[n];
         // (riders in a bike box end with the cars behind them, never before: not slow here, the user)
-        bool Slow(int g) => plan.Groups[g].Kind == SignalGroupKind.Pedestrian
+        // (a tram is long and clears slowly too, #1057)
+        bool Slow(int g) => plan.Groups[g].Kind is SignalGroupKind.Pedestrian or SignalGroupKind.Tram
             || plan.Groups[g].Kind == SignalGroupKind.Bike && !(plan.Groups[g].Moves == SignalMoves.Left && plan.Arms[plan.Groups[g].Arm].RiderBox);
         bool Timed(int g, int h) => times is not null && conflicts[g, h] == Conflict.Hard && !float.IsNaN(times[g, h]);
         for (int i = 0; i < n; i++)
@@ -1308,6 +1332,8 @@ public enum SignalPoleFlags : byte
     ArrivingHalf = 8,
     /// <summary>With <see cref="Pedestrian"/>, its head shows the departing half of a two-stage crossing (#1030).</summary>
     DepartingHalf = 16,
+    /// <summary>Its arm's tram bar heads (#1057), on top of the pole facing the arriving trams; older readers ignore it.</summary>
+    Tram = 32,
 }
 
 /// <summary>

@@ -31,7 +31,8 @@ public static partial class TileRewriter
 
     private static SignalPlan? WriteSignals(JunctionPlan jp, RoadGenResult result, Dictionary<TileId, List<RoadSignal>> signals,
         Dictionary<TileId, List<RoadApproach>> approaches, Cantons? cantons, SignalStats signalStats, LayoutWriteStats stats,
-        Dictionary<TileId, List<RoadPointProp>> signs, Func<Vec2, bool> clear, Func<Vec2, bool>? building = null)
+        Dictionary<TileId, List<RoadPointProp>> signs, Func<Vec2, bool> clear, Func<Vec2, bool>? building = null,
+        IReadOnlyDictionary<int, (SignalMoves Moves, double Lateral)>? trams = null)
     {
         var net = result.Network;
         var home = TileId.FromLv95(jp.Centre.X, jp.Centre.Y);
@@ -69,7 +70,8 @@ public static partial class TileRewriter
                 CrossingM: (float)(mouth.CarriagewayWidth), Rank: (byte)Math.Clamp(info is { } i ? PriorityPlanner.Rank(i) / 4 : 1, 1, 255),
                 Banned: approach ? a.Wants.Banned : SignalMoves.None, BikeBetween: between,
                 StorageM: Room(a.Length), LeftStorageM: Room(Run(PocketRules.Left)), RightStorageM: Room(Run(PocketRules.Right)),
-                HalfInM: halfIn, HalfOutM: halfOut, RiderBox: ex.Bars.Any(b => b.Kind == BarKind.BikeBox)));
+                HalfInM: halfIn, HalfOutM: halfOut, RiderBox: ex.Bars.Any(b => b.Kind == BarKind.BikeBox),
+                TramMoves: trams?.GetValueOrDefault(arms.Count).Moves ?? SignalMoves.None));
         }
         if (arms.Count(x => x.In) < 2) return null;
         string? canton = cantons?.CodeAt(jp.Centre.X, jp.Centre.Y);
@@ -228,6 +230,18 @@ public static partial class TileRewriter
                         }
                 }
             }
+        }
+        // the trams' bar heads (#1057): on the pole on their track's side of the approach, the right kerb's where the track lies
+        // right of the axis, else the left one's (the refuge's); any of the arm's poles where that one is missing
+        foreach (var (k, (moves, lateral)) in trams ?? new Dictionary<int, (SignalMoves, double)>())
+        {
+            if (moves == SignalMoves.None || plan.Groups.All(g => g.Kind != SignalGroupKind.Tram || g.Arm != k)) continue;
+            var want = lateral >= 0 ? SignalPoleFlags.Main : SignalPoleFlags.Second;
+            int at = poles.FindIndex(p => p.Arm == k && (p.Flags & want) != 0);
+            if (at < 0) at = poles.FindIndex(p => p.Arm == k && (p.Flags & (SignalPoleFlags.Main | SignalPoleFlags.Second)) != 0);
+            if (at < 0) at = poles.FindIndex(p => p.Arm == k);
+            if (at >= 0) poles[at] = poles[at] with { Flags = poles[at].Flags | SignalPoleFlags.Tram };
+            stats.TramGroups++;
         }
         var centre = Local(home, [jp.Centre], p => SampleAt(jp.Arms[0], p), 0f);
         var record = new RoadSignal { X = centre[0], Y = centre[1], Z = centre[2], Stops = stops, Plan = plan, Poles = poles };
