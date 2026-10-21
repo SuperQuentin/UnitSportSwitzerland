@@ -102,7 +102,7 @@ tc_server() {
   shift 3
   : > "$log"
   _tc_ports "$@"; set -- ${_tc_args[@]+"${_tc_args[@]}"}
-  guard_run "$timeout_s" "$log" ${_tc_env[@]+"${_tc_env[@]}"} "$GODOT" --headless --path . -- "$@" &
+  guard_run "$timeout_s" "$log" ${_tc_env[@]+"${_tc_env[@]}"} "$GODOT" ${TC_MAX_FPS:+--max-fps $TC_MAX_FPS} --headless --path . -- "$@" &
   SERVER=$!
   _tc_servers+=("$SERVER")
   # every 0.2 s (#992): the clients start the moment it listens
@@ -121,7 +121,7 @@ tc_client() {
   [ "${1:-}" = --windowed ] && { headless=; shift; }
   [ -n "${WINDOWED:-}" ] && headless=
   _tc_ports "$@"; set -- ${_tc_args[@]+"${_tc_args[@]}"}
-  guard_run "$timeout_s" "$log" ${_tc_env[@]+"${_tc_env[@]}"} "$GODOT" $headless --path . -- "$@"
+  guard_run "$timeout_s" "$log" ${_tc_env[@]+"${_tc_env[@]}"} "$GODOT" ${TC_MAX_FPS:+--max-fps $TC_MAX_FPS} $headless --path . -- "$@"
 }
 
 tc_godot() {
