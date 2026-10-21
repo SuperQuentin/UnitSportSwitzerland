@@ -116,7 +116,8 @@ public partial class Handshake : Node
     public void Begin()
     {
         _clientWaited = 0;
-        RpcId(1, MethodName.Hello, Protocol);
+        // --fakeprotocol N: a client of another version, for the checks of a refusal (#1088)
+        RpcId(1, MethodName.Hello, Core.CmdArgs.Int("--fakeprotocol") ?? Protocol);
     }
 
     public override void _Process(double delta)

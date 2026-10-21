@@ -65,6 +65,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | build_turn, next piece | R, aim+wheel / D-pad ↑, LB+D-pad → | gap | **twist the hand** while aiming; R stick ←/→ steps the piece |
 | fishing rod: cast, strike, reel, wind in (#493) | hold LMB + let go, LMB, hold LMB, RMB / the same on RB, LB | ok: R trigger (hold, let go: cast; press: strike; hold: reel), L trigger winds in | gap: **flick the rod hand** to cast (release speed = distance), **crank the reel** with the left hand (R1, R4) |
 | bird_journal (birds and fish pages, #493) | J / — | ok: wrist menu (#437); the page buttons by pointer | keep |
+| server console (#1088, admins): Multiplayer › a server's console button, or the refusal banner | click / A on the focused button; the password and commands are typed | ok: the menu panel and the laser; typing needs a keyboard (an admin tool, no pad or VR way to type) | keep |
 | traffic tool: place / open a generator (#971) | LMB / RB with the tool in hand | ok: R trigger (`use_item`, no new action); the window by the laser | keep |
 | farm by hand (#494) | LMB / RB with a hoe, seed or fertiliser in hand | ok: R trigger (`use_item`, no new action) | a hoe **swung down** at the ground |
 | harvest a ripe field cell (#494) | hold G / X | ok: hold X (`gather`, the gathering hold) | **grip and pull** the crop, like gather |

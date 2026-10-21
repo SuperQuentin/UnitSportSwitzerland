@@ -13,4 +13,5 @@
   `/login`, `/admin`) makes the server's `ChatManager` send that client `AdminStatus`, which sets
   `Core/Permissions` so its menus can follow; `IsAdminPeer` exposes the check to other server
   systems. `NameAssigned` fires when a peer's name is set, for the bank, whose accounts are keyed
-  by it. `/update` (admin): installs the newest release on a deployed server (`net/server-update`).
+  by it. `/update` (admin): installs the newest release on a deployed server (`net/server-update`). The console
+  from a client of any version, with `--admin-password`: `net/console-link`.

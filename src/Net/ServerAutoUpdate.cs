@@ -47,7 +47,7 @@ public partial class ServerAutoUpdate : Node
     {
         if (CmdArgs.Has("--no-auto-update")) return Off("--no-auto-update");
         if (ServerUpdater.Script is not { } script) return Off("not started by start-server.sh");
-        string current = (string)ProjectSettings.GetSetting("application/config/version", "");
+        string current = ServerUpdater.RunningVersion;
         if (current.Length == 0) return Off("a local build, no release version");
         double minutes = CmdArgs.Value("--auto-update-minutes") is { } m
             && double.TryParse(m, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double v) && v > 0

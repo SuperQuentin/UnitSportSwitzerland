@@ -93,7 +93,7 @@ public partial class ConsoleLink : Node
             _linked.Add(peer);
             _handshake?.Exempt(peer);   // it will never say hello, and is not kicked for it
             GD.Print($"[console] remote console opened from {address} (peer {peer})");
-            string version = (string)ProjectSettings.GetSetting("application/config/version", "");
+            string version = ServerUpdater.RunningVersion;
             RpcId(peer, MethodName.Reply, $"Connected to {_serverName} ({(version.Length > 0 ? "v" + version : "a local build")}, "
                 + $"protocol {Handshake.Protocol}, {_chat.PlayerCount} playing). Commands run as the server console: help lists them.");
         }

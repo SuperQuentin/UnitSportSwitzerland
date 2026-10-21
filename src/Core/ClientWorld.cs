@@ -65,6 +65,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
     public float LoadFraction { get; private set; }
     public string LoadDetail { get; private set; } = "";
     public string? Failure { get; private set; }
+
+    /// <summary>The server speaks another protocol (<see cref="Handshake"/>): its console may still be reached (#1088).</summary>
+    public bool RefusedForVersion { get; private set; }
     private bool _bootDone, _connected, _disconnectReported;
     private double _loadClock, _terrainClock;
     private SpawnPoint? _spawn;
@@ -899,6 +902,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (World.ClockNetProbe.Role != null) AddChild(new World.ClockNetProbe(items));
         if (World.Ropeways.LiftNetProbe.Role != null) AddChild(new World.Ropeways.LiftNetProbe(items));
         if (SpeedNetProbe.Role != null) AddChild(new SpeedNetProbe(items));
+        if (AutoUpdateNetProbe.Role != null) AddChild(new AutoUpdateNetProbe(items));
         if (Net.SleeperProbe.Role != null) AddChild(new Net.SleeperProbe(items));
         if (Net.ArrivalProbe.Role != null) AddChild(new Net.ArrivalProbe(items));
         if (Net.TransferProbe.Role != null) AddChild(new Net.TransferProbe(items));
@@ -1624,6 +1628,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _handshake.Welcomed += OnWelcomed;
         _handshake.Refused += reason =>
         {
+            RefusedForVersion = true;
             GD.PushWarning($"[net] {reason}");
             Multiplayer.MultiplayerPeer?.Close();
             ReportDisconnect(reason);

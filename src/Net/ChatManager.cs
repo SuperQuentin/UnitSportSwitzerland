@@ -1708,7 +1708,7 @@ public partial class ChatManager : Node
             return;
         }
 
-        string current = (string)ProjectSettings.GetSetting("application/config/version", "");
+        string current = ServerUpdater.RunningVersion;
         ReplyTo(sender, "Looking for a newer release...", ChatKind.Private);
         _updater.Start(script, current, CmdArgs.Value("--updatefeed", notFlag: true) ?? UpdateInfo.ReleasesUrl, quiet: false,
             (line, everyone) =>

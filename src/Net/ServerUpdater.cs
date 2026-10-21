@@ -33,6 +33,11 @@ public sealed class ServerUpdater
     /// <summary>A release fetched and unpacked (<c>pending-update</c> written), waiting for a restart; null: none.</summary>
     public string? ReadyTag { get; private set; }
 
+    /// <summary>The release this server runs: <c>config/version</c>, stamped by a release; empty for a local build.
+    /// <c>--fakeversion</c> pretends, as on the client (<c>Ui/UpdatePrompt</c>), for the checks.</summary>
+    public static string RunningVersion =>
+        CmdArgs.Value("--fakeversion") ?? (string)ProjectSettings.GetSetting("application/config/version", "");
+
     /// <summary>The update script, or null when this server was not started by <c>start-server.sh</c>.</summary>
     public static string? Script =>
         System.Environment.GetEnvironmentVariable(ScriptEnv) is { Length: > 0 } path && File.Exists(path) ? path : null;
@@ -100,7 +105,9 @@ public sealed class ServerUpdater
     /// <summary>Runs the update script through bash; its exit code and last output line (the reason, on a failure).</summary>
     private static async Task<(int Code, string LastLine)> Exec(string script, params string[] args)
     {
-        var start = new ProcessStartInfo("bash") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+        // UNITSPORT_BASH: which bash, for a check on Windows, whose `bash` is WSL's from System32 before any PATH entry
+        string bash = System.Environment.GetEnvironmentVariable("UNITSPORT_BASH") is { Length: > 0 } b ? b : "bash";
+        var start = new ProcessStartInfo(bash) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
         start.ArgumentList.Add(script);
         foreach (string a in args) start.ArgumentList.Add(a);
         using var p = Process.Start(start) ?? throw new InvalidOperationException("bash did not start");

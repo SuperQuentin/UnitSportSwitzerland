@@ -40,6 +40,10 @@
   restarts it, then waits for the UDP port (about 30 s) and prints the log tail. **Ctrl-d in the console ends its stdin**:
   the server keeps running but reads no more commands until a restart. Inside the session `start-server.sh run`
   loops so the in-game `/update` can restart on a new release (`net/server-update`, `update-server.sh` installed beside it).
+- **Keeping it current** (#1088): a release-stamped server installs newer releases by itself once nobody plays
+  (`net/server-update`; a `--build` deploy has no version and stays as deployed). Put `--admin-password <pw>` in
+  `SERVER_ARGS`: it is what the remote console (`net/console-link`) asks, the way in when your game is newer than
+  the server.
 - **Terrain chunks** (the real set is ~111 GB in ~246k files, one flat directory): the source is MapSetup's
   `terrain_location.json` `"chunks"`, else `terrain_chunks/`, else `CHUNKS_SRC=`; run from the main checkout (worktrees have no tiles).
   Files whose name, size or mtime differ are copied (`--checksum` compares md5 instead: reads every byte on both sides).
