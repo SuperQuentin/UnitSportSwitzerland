@@ -382,6 +382,7 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   Landschaft anthracite DB703 (ATS LSA Aussenanlagen 2024), Bern RAL 7042 (the city's Handbuch LSA 2025, taken for the canton),
   the rest RAL 7001; poles and overhead structures. Model viewer: "Traffic light - Basel-Landschaft / Bern"; in game the canton
   row's BL and BE zones. RAL 7042 is close to 7001: the difference is real, not a bug.
+- **Trams** (#1057): a tram group per approach a tram track enters by, the tram bar heads beside the car heads: `tram-approaches`.
 - **Not done**: one record for a junction of several nodes (the internal links are only kept
   clean); OSM `turn:lanes` not read yet, restrictions only for the lane records (a left pocket is
   still built where the left turn is forbidden: 10 in Geneva); thin median (optional); crossings of divided roads

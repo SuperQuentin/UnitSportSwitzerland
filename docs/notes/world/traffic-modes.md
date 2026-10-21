@@ -76,3 +76,9 @@ returns no graph, so nothing spawns and the cars run exactly as before.
 
 See PR #1061: `--trafficcheck` on the signal test region (J7, fed by the endpoints) and on real terrain (Geneva, dense),
 headless at `--fixed-fps 60`, before and after: the same counts line for line.
+
+## Trams landed (#1057)
+
+`TramsReady` is true: `traffic-trams` (the graph, driving, lights and stops) and `tools/tram-approaches` (RoadGen's side).
+Shared code touched: `LaneGraph.Build` adds the tram paths at lights as conflict ways (cars give way to trams) and calls
+`TramYields` for the cars' paths of cores without lights.
