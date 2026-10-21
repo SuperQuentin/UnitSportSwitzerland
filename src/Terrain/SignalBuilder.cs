@@ -221,10 +221,11 @@ public static class SignalBuilder
     /// <summary>
     /// Basel-Landschaft's mast arms and portals (drawings TZ-1205/1206/1208): posts and arms of one-piece square hollow sections,
     /// RRW 300 the post and 300 x 200 the arm, hung this far above the heads' lane plates; past <see cref="TieFrom"/> m an arm
-    /// has a tie rod ("ab 7 m mit Abspannung"). A tram street's anchor poles carry a span wire with a little sag (m).
+    /// has a tie rod ("ab 7 m mit Abspannung") (m).
     /// </summary>
     private const float PostHalf = 0.15f, BeamHeight = 0.3f, BeamDepth = 0.2f, HangerGap = 0.25f, TieFrom = 7f;
-    private const float AnchorRadius = 0.13f, AnchorHeight = 8.5f, WireRadius = 0.012f, WireSag = 0.25f, HangerHalf = 0.025f;
+    /// <summary>A span wire hangs between two facades (#1037, the user: between buildings, never on poles), from a plate on each wall.</summary>
+    private const float WireRadius = 0.012f, WireSag = 0.25f, HangerHalf = 0.025f, WallPlate = 0.12f;
     /// <summary>The lane arrow over an overhead head, on a white plate of its own (Basel-Landschaft: "über dem Signalgeber"), this tall.</summary>
     private const float LanePlate = 0.45f;
 
@@ -281,7 +282,7 @@ public static class SignalBuilder
 
     /// <summary>
     /// An overhead structure and its heads (#1037): a mast arm (its post by the main pole or on the refuge, a tie rod past
-    /// <see cref="TieFrom"/> m), a portal (two posts, a beam), or a span wire between two anchor poles; each head hung from it
+    /// <see cref="TieFrom"/> m), a portal (two posts, a beam), or a span wire between two facades; each head hung from it
     /// with its lane arrow on a plate above it.
     /// </summary>
     private static void Overhead(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
@@ -299,11 +300,13 @@ public static class SignalBuilder
         Func<float, float> hangFrom;   // the underside of what carries a head, at a distance along the structure
         if (o.Kind == OverheadKind.Span)
         {
-            // the wire's lowest point just above the plates; the anchors a little higher than its ends
+            // the wire's lowest point just above the plates, its ends on a plate on each facade
             float ends = beam + WireSag;
-            float top = Mathf.Max(a.Y + AnchorHeight, ends + 0.4f);
-            Anchor(vertices, colors, uvs, uv2s, indices, a, top, colour);
-            Anchor(vertices, colors, uvs, uv2s, indices, b, Mathf.Max(b.Y + AnchorHeight, ends + 0.4f), colour);
+            foreach (var (end, inward) in new[] { (a, dir), (b, -dir) })
+            {
+                var at = end; at.Y = ends;
+                Beam(vertices, colors, uvs, uv2s, indices, at - inward * 0.03f, at + inward * 0.03f, depth, WallPlate, WallPlate, Housing.SrgbToLinear());
+            }
             float WireY(float along) { float t = Mathf.Clamp(along / length, 0f, 1f); return ends - 4f * WireSag * t * (1f - t); }
             const int Pieces = 16;
             for (int k = 0; k < Pieces; k++)
@@ -381,20 +384,6 @@ public static class SignalBuilder
         Polygon(vertices, colors, uvs, uv2s, indices, colour, [a + c[0], a + c[1], a + c[2], a + c[3]]);
     }
 
-    /// <summary>A span wire's anchor pole: a round mast from below <paramref name="foot"/> to <paramref name="top"/>.</summary>
-    private static void Anchor(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
-        Vector3 foot, float top, Color colour)
-    {
-        for (int k = 0; k < PoleSides; k++)
-        {
-            float a0 = Mathf.Tau * k / PoleSides, a1 = Mathf.Tau * (k + 1) / PoleSides;
-            var p = new Vector3(Mathf.Cos(a0), 0f, Mathf.Sin(a0)) * AnchorRadius;
-            var q = new Vector3(Mathf.Cos(a1), 0f, Mathf.Sin(a1)) * AnchorRadius;
-            Polygon(vertices, colors, uvs, uv2s, indices, colour,
-                [foot + p + Vector3.Down * Sink, foot + q + Vector3.Down * Sink, new Vector3(foot.X + q.X, top, foot.Z + q.Z), new Vector3(foot.X + p.X, top, foot.Z + p.Z)]);
-        }
-    }
-
     /// <summary>
     /// Signal 5.18 "right turn for cyclists permitted" (SSV Art. 69a, #711, the user's rule): a black square the size of a
     /// lens beside the red lamp, right against its visor in front of the white band, a yellow bike over a yellow arrow to the right. On the
@@ -455,13 +444,14 @@ public static class SignalBuilder
                     faces.Add(a0); faces.Add(b1); faces.Add(a1);
                 }
             }
-        // an overhead structure's posts (#1037): the arm, beam and wire are above any vehicle (SSV Art. 71: 4.50 m and up)
+        // an overhead structure's posts (#1037): the arm, beam and wire are above any vehicle (SSV Art. 71: 4.50 m and up), a span
+        // wire's ends on facades
         foreach (var signal in tile.Signals)
             foreach (var o in signal.Overheads)
             {
-                float half = o.Kind == OverheadKind.Span ? AnchorRadius : PostHalf;
-                Box(new Vector3(o.X, o.Y, o.Z), half);
-                if (o.Kind is OverheadKind.Portal or OverheadKind.Span) Box(new Vector3(o.EndX, o.EndY, o.EndZ), half);
+                if (o.Kind == OverheadKind.Span) continue;
+                Box(new Vector3(o.X, o.Y, o.Z), PostHalf);
+                if (o.Kind == OverheadKind.Portal) Box(new Vector3(o.EndX, o.EndY, o.EndZ), PostHalf);
             }
         return faces.ToArray();
 

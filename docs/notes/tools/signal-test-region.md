@@ -83,7 +83,7 @@ a bike box, `[adv]` an advanced bike line); the approach is named by where it co
 | J7-double-left | 2917500,1322500 | #700: the way before the lights `lanes:forward=3`, `left\|left\|through;right`; east way `through\|through;right`; cross road 2+2 | W `L \| L \| bL \| TR \| bTR` (double left, hatch one lane wide), E `TR` (no left pocket), N, S `LTR \| LTR`; dashed guides for the double left and the cross road's through lanes | 60 s |
 | J12-canton-default / -GE / -VD / -BL / -BE | 2912500 ... 2916500,1323500 | #1038: J2 once per canton zone | as J2: every arm `L \| bL \| T \| R` + bike signal; Geneva two-lens pedestrian heads side by side, Vaud arrow plates, BL anthracite and BE RAL 7042 poles (#1037) | 85 s each, J2's phases |
 | J13-portal | 2917500,1321500 | #1037: a 4+4 artery (OSM `lanes=8`, `left\|through\|through\|through;right` assigned in place) across a 10 m road | W, E `L \| T \| T \| TR \| bTR` under a portal (left and through heads; the kerb lane's on its pole); N, S `L \| bL \| T \| R \| bTR` | 77 s |
-| J14-tram | 2917500,1323500 | #1037: J6 with OSM `railway=tram` on its artery (the overlay's `tram` column) | as J6, W and E under span wires | 78 s |
+| J14-tram | 2917500,1323500 | #1037: J13's 4+4 artery with OSM `railway=tram` (the overlay's `tram` column) between houses 3 m back from both kerbs, J6's cross roads | W, E `L \| T \| T \| TR` (lanes narrowed to their least by the houses) under span wires from facade to facade; N, S `L \| TR` | see the run |
 
 Rewrite numbers: 7 junctions (all from data), 27 approaches, 21 left pockets (storage 40 x18, 20
 x3, 2 merged), 21 right pockets (4 rejected), layout (a) 8, (b) 6, (b) forced 1, 19 left-turn

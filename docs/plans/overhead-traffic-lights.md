@@ -18,7 +18,9 @@ Part of #354 (more than one lane per direction). Kerb poles today: `tools/traffi
 Built as planned, with one decision the first run forced: the rule counted a street's turn pockets as lanes, and the test
 region's 1+1 crossroads (~20 m kerb to kerb at the lights) took heads overhead at 59 approaches, 45 of them as portals. The user
 chose: **only streets with 2+ lanes of their own toward the junction**, pockets not counted (J7's double left on a 1+1 road keeps
-its poles). The record is a section of its own, `OVHD`, not SGNL version 3 (a newer SGNL version makes older readers drop every
+its poles). Span wires only where a tram street is too wide for a mast arm and buildings stand on both sides, from facade to facade, never
+on poles (the user: rare in Switzerland, used between buildings); a portal elsewhere. A tram catenary hung from span wires is
+its own issue. The record is a section of its own, `OVHD`, not SGNL version 3 (a newer SGNL version makes older readers drop every
 light). What was built and where: `tools/traffic-signals` ("Overhead heads", "Pole colour per canton").
 
 ## What Swiss sources say

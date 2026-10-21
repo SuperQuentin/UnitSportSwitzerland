@@ -81,7 +81,8 @@ public static class TerrainShowcase
         // the canton's pole colour (#1037): Basel-Landschaft's anthracite, Bern's RAL 7042
         ("Basel-Landschaft", () => TrafficLight(pedestrianAmber: true, colour: SignalPoleColour.Anthracite)),
         ("Bern", () => TrafficLight(pedestrianAmber: true, colour: SignalPoleColour.TrafficGrey)),
-        // heads over the lanes (#1037): a mast arm over two lanes (a tie rod past 7 m), a portal over three, a tram street's span wire
+        // heads over the lanes (#1037): a mast arm over two lanes (a tie rod past 7 m), a portal over three, a span wire between two
+        // facades where a tram street is too wide for an arm
         ("Mast arm", () => TrafficLight(pedestrianAmber: true, overhead: OverheadKind.Arm)),
         ("Portal", () => TrafficLight(pedestrianAmber: true, overhead: OverheadKind.Portal)),
         ("Span wire", () => TrafficLight(pedestrianAmber: true, overhead: OverheadKind.Span)),
@@ -107,16 +108,27 @@ public static class TerrainShowcase
             Poles = { new SignalPole(0, 0, 0, 0f, Mathf.Pi / 2, 0, SignalPoleFlags.Main | SignalPoleFlags.Pedestrian) },
         };
         // the heads face -Z, the driver's left is +X: the post just right of the pole, the lanes to its left
+        // (a span wire from the facade 2.6 m outside the pole to one across the street)
+        float from = overhead == OverheadKind.Span ? -3f : -0.4f;
         if (overhead is { } kind)
             signal.Overheads.Add(new SignalOverhead
             {
-                Kind = kind, Arm = 0, X = -0.4f, EndX = kind == OverheadKind.Arm ? 7.6f : 12f, Bottom = 5f,
+                Kind = kind, Arm = 0, X = from, EndX = kind switch { OverheadKind.Arm => 7.6f, OverheadKind.Span => 15f, _ => 12f }, Bottom = 5f,
                 Heads = kind == OverheadKind.Arm
-                    ? [new OverheadHead(3.6f, SignalMoves.Through | SignalMoves.Right), new OverheadHead(6.6f, SignalMoves.Left)]
-                    : [new OverheadHead(3.4f, SignalMoves.Through | SignalMoves.Right), new OverheadHead(6.4f, SignalMoves.Through), new OverheadHead(9.4f, SignalMoves.Left)],
+                    ? [new OverheadHead(3.6f - from - 0.4f, SignalMoves.Through | SignalMoves.Right), new OverheadHead(6.6f - from - 0.4f, SignalMoves.Left)]
+                    : [new OverheadHead(3.0f - from, SignalMoves.Through | SignalMoves.Right), new OverheadHead(6.0f - from, SignalMoves.Through),
+                       new OverheadHead(9.0f - from, SignalMoves.Left)],
             });
         tile.Signals.Add(signal);
-        return RoadProps(tile);
+        var node = RoadProps(tile);
+        if (overhead == OverheadKind.Span)
+            foreach (float x in (ReadOnlySpan<float>)[from - 0.5f, 15.5f])
+                node.AddChild(new MeshInstance3D
+                {
+                    Mesh = new BoxMesh { Size = new Vector3(1f, 9f, 8f) }, Position = new Vector3(x, 4.5f, 0f),
+                    MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.78f, 0.74f, 0.66f) },
+                });
+        return node;
     }
 
     private static RoadTile Tile(params RoadPointProp[] props)

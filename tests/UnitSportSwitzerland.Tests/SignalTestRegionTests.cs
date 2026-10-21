@@ -86,7 +86,7 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
     [Fact]
     public void Wide_approaches_carry_their_heads_overhead()
     {
-        // #1037: J6's 2+2 artery on mast arms, the 4+4 artery of J13 on portals, J6 again as a tram street (J14) on span wires; the
+        // #1037: J6's 2+2 artery on mast arms, the 4+4 artery of J13 on portals, the same with trams (J14) on span wires; the
         // 1+1 roads with pockets keep their kerb poles; every head 4.50-5.50 m over the road (5.50 m and up on a wire)
         (OverheadKind Kind, int Count) At(string id)
         {

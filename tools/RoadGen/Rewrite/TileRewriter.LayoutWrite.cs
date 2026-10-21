@@ -789,7 +789,7 @@ public static partial class TileRewriter
             WriteExterior(jp, result, segmentOf, finalPieces, paint, areas, signs, signalStats, stats);
             var capHere = capOfPlan.TryGetValue(jp, out var hc2) ? hc2.Cap : null;
             WriteCoreLines(jp, result, capHere, paint, stats);
-            var plan = jp.Lights ? WriteSignals(jp, result, signals, approaches, cantons, signalStats, stats, signs, PoleClear) : null;
+            var plan = jp.Lights ? WriteSignals(jp, result, signals, approaches, cantons, signalStats, stats, signs, PoleClear, buildings is null ? null : buildings.Contains) : null;
             short signalIndex = plan is null || !capOfPlan.TryGetValue(jp, out var hs) ? (short)-1 : (short)(Get(signals, hs.Home).Count - 1);
             if (capHere is not null && capOfPlan.TryGetValue(jp, out var hp))
                 WritePaths(jp, hp.Home, capHere, plan, signalIndex, jp.Core!.Connectors);

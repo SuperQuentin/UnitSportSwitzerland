@@ -31,7 +31,7 @@ public static partial class TileRewriter
 
     private static SignalPlan? WriteSignals(JunctionPlan jp, RoadGenResult result, Dictionary<TileId, List<RoadSignal>> signals,
         Dictionary<TileId, List<RoadApproach>> approaches, Cantons? cantons, SignalStats signalStats, LayoutWriteStats stats,
-        Dictionary<TileId, List<RoadPointProp>> signs, Func<Vec2, bool> clear)
+        Dictionary<TileId, List<RoadPointProp>> signs, Func<Vec2, bool> clear, Func<Vec2, bool>? building = null)
     {
         var net = result.Network;
         var home = TileId.FromLv95(jp.Centre.X, jp.Centre.Y);
@@ -184,7 +184,7 @@ public static partial class TileRewriter
                     && ClearFoot(new PoleSpot(ex.Poles[0].Station, RightKerb: false, OnRefuge: false, 0), ex, a, P, clear) is var (lf, lLift))
                     leftFoot = (lf, Local(home, [lf], q => SampleAt(a, q), lLift)[1]);
                 bool tram = net.Links[a.LinkId].Tag is Source { Line.Osm.Tram: true };   // OSM railway=tram along the arm
-                if (PlaceOverhead(ex, (byte)k, P, u, right, mainFoot, leftFoot, refugeFoot, tram, home, q => SampleAt(a, q), clear, stats) is { } o)
+                if (PlaceOverhead(ex, (byte)k, P, u, right, mainFoot, leftFoot, refugeFoot, tram, home, q => SampleAt(a, q), clear, building, stats) is { } o)
                     overheads.Add(o);
             }
         }
@@ -481,18 +481,30 @@ public static partial class TileRewriter
     /// wire higher (tram wires, Bern: 5.50-6.00 m) (m, #1037).
     /// </summary>
     private const double PostOut = 0.4, ArmReach = 10.0, ArmBeyond = 0.4;
+    /// <summary>A span wire's facades stand at most this far out from the kerb poles (m), looked for in steps of <see cref="FacadeStep"/>.</summary>
+    private const double FacadeReach = 8.0, FacadeStep = 0.25;
     private const float HeadLowerEdge = 5.0f, SpanLowerEdge = 5.5f;
 
     /// <summary>
-    /// The approach's overhead structure (#1037, <c>docs/plans/overhead-traffic-lights.md</c>), first that fits: a span wire on a
-    /// tram street, between posts by the main pole and at the far kerb; a mast arm from the post by the main pole, reaching left
-    /// over every head; one from the refuge reaching right; a portal from the main pole's post to the far kerb's. Each head over its
-    /// lanes (<see cref="OverheadSpot.Offset"/>), measured along the structure from its post. Null (counted) where none fits.
+    /// The approach's overhead structure (#1037, <c>docs/plans/overhead-traffic-lights.md</c>), first that fits: a mast arm from the
+    /// post by the main pole, reaching left over every head; one from the refuge reaching right; on a tram street between two
+    /// facades, a span wire anchored on their walls; else a portal from the main pole's post to the far kerb's. Span wires only where
+    /// an arm cannot reach, on tram streets, between buildings, never on poles (the user, Oct 21 2026: rare in Switzerland; Bern's
+    /// handbook mentions carriers hung from span points and heads on house fronts). Each head over its lanes
+    /// (<see cref="OverheadSpot.Offset"/>), measured along the structure from its post. Null (counted) where none fits.
     /// </summary>
     private static SignalOverhead? PlaceOverhead(ArmExterior ex, byte arm, Func<double, double, Vec2> P, Vec2 u, Vec2 right,
         (Vec2 Foot, float Y)? main, (Vec2 Foot, float Y)? left, (Vec2 Foot, float Y)? refuge, bool tram, TileId home,
-        Func<Vec2, float> height, Func<Vec2, bool> clear, LayoutWriteStats stats)
+        Func<Vec2, float> height, Func<Vec2, bool> clear, Func<Vec2, bool>? building, LayoutWriteStats stats)
     {
+        // the facade outward from a kerb pole: the last point before a building, within FacadeReach
+        Vec2? Facade(Vec2 from, Vec2 away)
+        {
+            if (building is null) return null;
+            for (double d = FacadeStep; d <= FacadeReach; d += FacadeStep)
+                if (building(from + away * d)) return from + away * (d - FacadeStep);
+            return null;
+        }
         if (main is not var (m, mY)) { stats.OverheadsRejected++; return null; }
         var origin = P(0, 0);
         double Off(Vec2 q) => (q - origin).Dot(right);
@@ -503,14 +515,15 @@ public static partial class TileRewriter
         double reach = heads.Max(h => Off(post) - h.Offset);
         OverheadKind kind;
         Vec2 end;
-        if (tram && left is var (l1, l1Y)) (kind, end, endY) = (OverheadKind.Span, Out(l1, right * -1), l1Y);
-        else if (reach + ArmBeyond <= ArmReach) (kind, end) = (OverheadKind.Arm, post - right * (reach + ArmBeyond));
+        if (reach + ArmBeyond <= ArmReach) (kind, end) = (OverheadKind.Arm, post - right * (reach + ArmBeyond));
         else if (refuge is var (r, rY) && r + u * PostOut is var rPost && heads.All(h => h.Offset > Off(rPost))
                  && heads.Max(h => h.Offset - Off(rPost)) + ArmBeyond <= ArmReach)
         {
             (kind, post, y, endY) = (OverheadKind.RefugeArm, rPost, rY, rY);
             end = post + right * (heads.Max(h => h.Offset - Off(rPost)) + ArmBeyond);
         }
+        else if (tram && left is var (lf, _) && Facade(m, right) is { } wallA && Facade(lf, right * -1) is { } wallB)
+            (kind, post, end, y, endY) = (OverheadKind.Span, wallA, wallB, height(wallA), height(wallB));
         else if (left is var (l2, l2Y)) (kind, end, endY) = (OverheadKind.Portal, Out(l2, right * -1), l2Y);
         else { stats.OverheadsRejected++; return null; }
 

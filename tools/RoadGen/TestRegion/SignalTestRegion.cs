@@ -388,7 +388,8 @@ public static class SignalTestRegion
 
         // 15. overhead heads (#1037): a 4+4 artery (OSM lanes=8, 24 m) whose turn:lanes left|through|through|through;right are
         // assigned in place, across a 10 m road: its left lane lies beyond a mast arm's reach from the right kerb, so a portal; and
-        // J6 again with OSM's tram on the artery: its heads hang from a span wire (the cross roads as J6's)
+        // the same artery with OSM's tram on it, between houses: a span wire from facade to facade where the portal would stand (the
+        // cross roads as J6's)
         {
             const string Wide = "left|through|through|through;right";
             lines.Add(new Line("POW", "10m Strasse", "Durchgangsstrasse", "Kanton", [(OverheadE - 450, PortalN), (OverheadE, PortalN)], "secondary",
@@ -402,15 +403,20 @@ public static class SignalTestRegion
 
             const double nb = BetweenN;
             lines.Add(new Line("TRW", "10m Strasse", "Durchgangsstrasse", "Kanton", [(OverheadE - 450, nb), (OverheadE, nb)], "secondary",
-                Rows: [new OsmRow(0, 450, Lanes: "4", TurnFwd: Arrows, TurnBwd: Arrows, Tram: true)]));
+                Rows: [new OsmRow(0, 450, Lanes: "8", TurnFwd: Wide, TurnBwd: Wide, Tram: true)]));
             lines.Add(new Line("TRE", "10m Strasse", "Durchgangsstrasse", "Kanton", [(OverheadE, nb), (OverheadE + 450, nb)], "secondary",
-                Rows: [new OsmRow(0, 450, Lanes: "4", TurnFwd: Arrows, TurnBwd: Arrows, Tram: true)]));
+                Rows: [new OsmRow(0, 450, Lanes: "8", TurnFwd: Wide, TurnBwd: Wide, Tram: true)]));
             lines.Add(new Line("TRS", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(OverheadE, nb - 400), (OverheadE, nb)], "secondary",
                 Rows: [new OsmRow(0, 400, TurnFwd: Arrows)]));
             lines.Add(new Line("TRN", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(OverheadE, nb), (OverheadE, nb + 400)], "secondary",
                 Rows: [new OsmRow(0, 400, TurnBwd: Arrows)]));
-            junctions.Add(new Junction("J14-tram", OverheadE, nb, "J6 with trams on its artery: heads overhead on a span wire",
-                Arms("L|TR", "L|TR", "L|TR", "L|TR")));
+            // houses 3 m back from both kerbs of the artery (12 m out), on both arms: the span wire's facades
+            foreach (double side in (ReadOnlySpan<double>)[-1, 1])
+                foreach (double way in (ReadOnlySpan<double>)[-1, 1])
+                    boxes.Add(new Box(Math.Min(OverheadE + way * 9, OverheadE + way * 60), Math.Min(nb + side * 15, nb + side * 27),
+                        Math.Max(OverheadE + way * 9, OverheadE + way * 60), Math.Max(nb + side * 15, nb + side * 27), 15));
+            junctions.Add(new Junction("J14-tram", OverheadE, nb, "J13's 4+4 artery with trams between houses: heads overhead on a span wire between facades",
+                Arms("L|T|T|TR", "L|T|T|TR", "L|TR", "L|TR")));
         }
 
         junctions.Add(new Junction("J9-stagger-west", StaggerE + 300, TwinRowN, "staggered T's 24 m apart, both lit: the west one", Arms(null, null, null, null)));
