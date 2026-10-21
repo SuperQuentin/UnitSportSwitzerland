@@ -223,7 +223,7 @@ public partial class Traffic
             _ => false,
         };
         // let go from its red (the probe): ahead of its approach's cars (its lead) or with them
-        if (tram.AtRed && aspect == SignalAspect.Green)
+        if (tram.AtRed && aspect == SignalAspect.Green && toLine < 15f)
         {
             int arm = site.Plan.Groups[group].Arm;
             int car = site.Plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Car && g.Arm == arm);
