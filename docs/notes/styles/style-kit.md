@@ -52,7 +52,12 @@ The plan and the prototype's results: `docs/plans/visual-styles.md` (issues #181
   client and never sends it to a server.
 - **`StyleKit.Figure`** shades the vertex-coloured standard material of avatars, vehicles, birds
   and items (`HumanMeshBuilder.Material`) for the style (Cartoon: toon), kept weakly and
-  restyled live like the shader materials. Any thread.
+  restyled live like the shader materials. Any thread. **Every lit solid built as a plain
+  `StandardMaterial3D` goes through it too** (title diorama, worn build pieces and their debris,
+  soot, crate planks, the burning bale, concert kit, IKEA pylon, farm heaps: #1068), or Cartoon
+  draws it with Godot's Lambert light. Give it a fresh material (or one cached per look), never a
+  `Duplicate()` of a shaded one: what it is given is the plain look PS1 goes back to. Unshaded
+  glows, signs, beams, screens, transparent smoke and debug draw stay outside the kit.
 - **Saved settings from before #849** stored PS1 whether the player chose it or not: a
   `settings.json` without the `cartoonDefault` flag that says PS1 is read as Cartoon once
   (`GameSettings.Load`); a PS1 picked after that is saved with the flag and kept.

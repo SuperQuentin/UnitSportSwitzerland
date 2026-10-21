@@ -266,9 +266,12 @@ public static class StyleKit
 
     /// <summary>
     /// The vertex-coloured standard material of avatars, vehicles, birds and items
-    /// (<c>Avatar/HumanMeshBuilder.Material</c>), shaded for the applied style: PS1's as built,
-    /// Cartoon's with a toon diffuse and a rim. Kept like the shader materials, so a restyle
-    /// reaches it. Any thread (mesh builders make figures on workers).
+    /// (<c>Avatar/HumanMeshBuilder.Material</c>), and any other lit solid built as a plain
+    /// <see cref="StandardMaterial3D"/> (the title diorama, build debris, soot, crate planks: #1068),
+    /// shaded for the applied style: PS1's as built, Cartoon's with a toon diffuse and a rim.
+    /// Kept like the shader materials, so a restyle reaches it. Pass it fresh, never a duplicate of
+    /// a shaded one: what it is given is its plain look. Any thread (mesh builders make figures on
+    /// workers).
     /// </summary>
     public static StandardMaterial3D Figure(StandardMaterial3D m)
     {

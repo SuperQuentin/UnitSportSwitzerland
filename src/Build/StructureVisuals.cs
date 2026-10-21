@@ -22,6 +22,7 @@ public partial class StructureVisuals : Node3D, Core.IOriginContainer
     private readonly HashSet<(long, Slot)> _legless = new();
     private double _sinceLegs;
     private static readonly StandardMaterial3D?[] Worn = new StandardMaterial3D?[4];
+    private static readonly StandardMaterial3D?[] Chips = new StandardMaterial3D?[4];
     private static readonly Random Rng = new();
 
     public StructureVisuals(Structures owner) => _owner = owner;
@@ -98,10 +99,16 @@ public partial class StructureVisuals : Node3D, Core.IOriginContainer
     private static StandardMaterial3D WornMaterial(int step)
     {
         if (Worn[step] is { } m) return m;
-        var mat = (StandardMaterial3D)ItemDefs.Material.Duplicate();
+        // built like ItemDefs.Material (a duplicate would carry the style's shading as its plain one)
         float k = 1f - 0.18f * step;
-        mat.AlbedoColor = new Color(k, k, k);
-        return Worn[step] = mat;
+        return Worn[step] = Styles.StyleKit.Figure(new StandardMaterial3D
+        {
+            VertexColorUseAsAlbedo = true,
+            AlbedoColor = new Color(k, k, k),
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.PerPixel,
+            SpecularMode = BaseMaterial3D.SpecularModeEnum.Disabled,
+            Roughness = 1f,
+        });
     }
 
     public override void _Process(double delta)
@@ -164,7 +171,7 @@ public partial class StructureVisuals : Node3D, Core.IOriginContainer
             AngularVelocityMin = -360f, AngularVelocityMax = 360f, EmissionShape = CpuParticles3D.EmissionShapeEnum.Box,
             EmissionBoxExtents = new Vector3(1f, 0.8f, 0.3f),
             Mesh = new BoxMesh { Size = m == BuildMaterial.Wood ? new Vector3(0.4f, 0.04f, 0.1f) : new Vector3(0.18f, 0.14f, 0.16f),
-                Material = new StandardMaterial3D { AlbedoColor = colour } },
+                Material = Chips[(int)m] ??= Styles.StyleKit.Figure(new StandardMaterial3D { AlbedoColor = colour }) },
             TopLevel = true,
         };
         AddChild(burst);

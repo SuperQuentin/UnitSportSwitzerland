@@ -842,18 +842,23 @@ public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity
         Explosion.Spawn(GetParent(), GlobalPosition + Vector3.Up * 1f);
     }
 
+    /// <summary>A burnt vehicle's paint: the figure material darkened, one for every wreck, shaded for the style.</summary>
+    private static StandardMaterial3D Soot => _soot ??= Styles.StyleKit.Figure(new StandardMaterial3D
+    {
+        VertexColorUseAsAlbedo = true,
+        AlbedoColor = new Color(0.2f, 0.18f, 0.16f),
+        ShadingMode = BaseMaterial3D.ShadingModeEnum.PerPixel,
+        SpecularMode = BaseMaterial3D.SpecularModeEnum.Disabled,
+        Roughness = 1f,
+    });
+    private static StandardMaterial3D? _soot;
+
     /// <summary>Burnt: the paint goes to soot, and the fire and smoke start.</summary>
     private void Char()
     {
         if (_charred || _visual == null) return;
         _charred = true;
-        var soot = new StandardMaterial3D
-        {
-            VertexColorUseAsAlbedo = true,
-            AlbedoColor = new Color(0.2f, 0.18f, 0.16f),
-            SpecularMode = BaseMaterial3D.SpecularModeEnum.Disabled,
-            Roughness = 1f,
-        };
+        var soot = Soot;
         foreach (var mesh in _visual.FindChildren("*", "MeshInstance3D", true, false).OfType<MeshInstance3D>().Append(_visual as MeshInstance3D))
             if (mesh != null) mesh.MaterialOverride = soot;
 

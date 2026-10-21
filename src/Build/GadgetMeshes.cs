@@ -40,6 +40,10 @@ public static class GadgetMeshes
         return body;
     }
 
+    /// <summary>The burning bale's blackened straw, lit like every solid (StyleKit.Figure).</summary>
+    private static StandardMaterial3D Charred => _charred ??= Styles.StyleKit.Figure(new StandardMaterial3D { AlbedoColor = new Color(0.12f, 0.1f, 0.08f) });
+    private static StandardMaterial3D? _charred;
+
     /// <summary>A hay hideout going up in flames (#359): fire, smoke and a flickering light, gone after 8 s.</summary>
     public static void Burn(Node parent, Transform3D at)
     {
@@ -70,7 +74,7 @@ public static class GadgetMeshes
         root.AddChild(smoke);
         root.AddChild(light);
         // the bale itself, blackening, for as long as it burns
-        root.AddChild(new MeshInstance3D { Mesh = Mesh(PlacedKind.HayHideout), MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.12f, 0.1f, 0.08f) } });
+        root.AddChild(new MeshInstance3D { Mesh = Mesh(PlacedKind.HayHideout), MaterialOverride = Charred });
         var tree = parent.GetTree();
         tree.CreateTimer(5.0).Timeout += () => { if (GodotObject.IsInstanceValid(flame)) flame.Emitting = false; };
         tree.CreateTimer(8.0).Timeout += () => { if (GodotObject.IsInstanceValid(root)) root.QueueFree(); };
