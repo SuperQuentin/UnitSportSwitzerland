@@ -205,6 +205,9 @@ void fragment() {{
     private SubViewport? _screenVp;
     private Label? _screenLabel;
     private MeshInstance3D? _screenQuad;
+    private Material? _screenNearest, _screenLinear;
+    /// <summary>The style the screen was sized and filtered for (#1070); it follows a restyle on the next frame.</summary>
+    private Styles.VisualStyle _screenStyle;
 
     /// <summary>Position and euler rotation (camera space, full scale) of a pose for the held item.</summary>
     private (Vector3 pos, Vector3 rot) PoseTransform(ViewPose pose)
@@ -520,16 +523,22 @@ void fragment() {{
         }
         if (_screenVp == null)
         {
-            _screenVp = new SubViewport { Size = new Vector2I(96, 84), RenderTargetUpdateMode = SubViewport.UpdateMode.Always, TransparentBg = false };
+            _screenVp = new SubViewport { RenderTargetUpdateMode = SubViewport.UpdateMode.Always, TransparentBg = false };
             var bg = new ColorRect { Color = new Color(0.62f, 0.78f, 0.55f) };
             bg.SetAnchorsPreset(Control.LayoutPreset.FullRect);
             _screenVp.AddChild(bg);
-            _screenLabel = new Label { Position = new Vector2(4, 3), Size = new Vector2(90, 78) };
-            _screenLabel.AddThemeFontSizeOverride("font_size", 13);
+            _screenLabel = new Label();
             _screenLabel.AddThemeColorOverride("font_color", new Color(0.08f, 0.16f, 0.08f));
-            _screenLabel.AddThemeConstantOverride("line_spacing", -2);
             _screenVp.AddChild(_screenLabel);
             AddChild(_screenVp);
+            StandardMaterial3D Face(BaseMaterial3D.TextureFilterEnum filter) => new()
+            {
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                AlbedoTexture = _screenVp.GetTexture(),
+                TextureFilter = filter,
+            };
+            _screenNearest = ForView(Face(BaseMaterial3D.TextureFilterEnum.Nearest));
+            _screenLinear = ForView(Face(BaseMaterial3D.TextureFilterEnum.Linear));
             _screenQuad = new MeshInstance3D
             {
                 Name = "GpsScreen",
@@ -537,18 +546,32 @@ void fragment() {{
                 Position = new Vector3(0, 0.075f, 0.0153f),
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
                 Layers = ViewmodelLayer,
-                MaterialOverride = ForView(new StandardMaterial3D
-                {
-                    ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-                    AlbedoTexture = _screenVp.GetTexture(),
-                    TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest,
-                }),
             };
             _viewmodel!.AddChild(_screenQuad);
+            _screenStyle = (Styles.VisualStyle)(-1);
         }
+        if (_screenStyle != Styles.StyleKit.Applied) StyleScreen();
         _screenVp.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
         _screenQuad!.Visible = _viewmodel!.Visible;
         if (_screenLabel != null && _screenLabel.Text != (ScreenText ?? "")) _screenLabel.Text = ScreenText ?? "";
+    }
+
+    /// <summary>
+    /// PS1: a 96x84 screen, nearest filtered, its pixels showing; the lit styles (#1070): twice the
+    /// pixels, the text drawn at twice the size, and linear filtering, so the readout is smooth
+    /// like the rest of the picture. Polled against <see cref="Styles.StyleKit.Applied"/>, which
+    /// both <c>/style</c> and the settings menu move.
+    /// </summary>
+    private void StyleScreen()
+    {
+        _screenStyle = Styles.StyleKit.Applied;
+        int k = _screenStyle == Styles.VisualStyle.Ps1 ? 1 : 2;
+        _screenVp!.Size = new Vector2I(96 * k, 84 * k);
+        _screenLabel!.Position = new Vector2(4 * k, 3 * k);
+        _screenLabel.Size = new Vector2(90 * k, 78 * k);
+        _screenLabel.AddThemeFontSizeOverride("font_size", 13 * k);
+        _screenLabel.AddThemeConstantOverride("line_spacing", -2 * k);
+        _screenQuad!.MaterialOverride = k == 1 ? _screenNearest : _screenLinear;
     }
 
     /// <summary>
