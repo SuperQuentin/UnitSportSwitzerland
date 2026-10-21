@@ -103,4 +103,22 @@ public class TramTests
         Assert.Equal(1, points[0].Other);
         Assert.True(tram >= 0 && conflicts[tram, tram] == SignalPlan.Conflict.None);
     }
+
+    [Fact]
+    public void TramsTurningEveryWay_EachGetAGreen()
+    {
+        // Geneva 2500039,1119621 had a tram group no phase could carry (#1057): every tram group is green somewhere, the plan valid
+        foreach (var moves in new[] { SignalMoves.Left, SignalMoves.Right, SignalMoves.Left | SignalMoves.Through })
+        {
+            var plan = SignalPlan.Build(
+            [
+                new SignalArm(0, true, true, Pedestrians: true, TramMoves: moves),
+                new SignalArm(Math.PI / 2, true, true, Pedestrians: true, TramMoves: moves),
+                new SignalArm(Math.PI, true, true, Pedestrians: true, TramMoves: moves),
+                new SignalArm(-Math.PI / 2, true, true, Pedestrians: true, TramMoves: moves),
+            ], 3);
+            Assert.Empty(plan.Validate());
+            Assert.All(plan.Groups.Where(g => g.Kind == SignalGroupKind.Tram), g => Assert.Contains(g.Intervals, iv => iv.Aspect == SignalAspect.Green));
+        }
+    }
 }

@@ -611,6 +611,14 @@ public sealed class SignalPlan
             phases.Add(extra);
             Expand(plan, phases, conflicts);
         }
+        // a tram group still never green (it crossed the other lonely groups too, #1057): a phase of its own each
+        foreach (int t in trams.Where(t => phases.All(p => !p.Green.Contains(t))).ToList())
+        {
+            var own = new Phase(0, MinGreen + 2);
+            own.Base.Add(t);
+            phases.Add(own);
+            Expand(plan, phases, conflicts);
+        }
 
         // flashers: beside a group whose turn shares a green with a pedestrian or bike group; the riders' too, turning right
         // across a crossing that is green with them (#971, the user)

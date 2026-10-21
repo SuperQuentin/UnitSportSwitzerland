@@ -131,6 +131,7 @@ public static partial class TileRewriter
         if (plan.Validate() is { Count: > 0 })
         {
             stats.SignalsInvalid++;
+            if (stats.InvalidAt.Count < 5) stats.InvalidAt.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{jp.Centre.X:F0},{jp.Centre.Y:F0}{(arms.Any(a => a.TramMoves != SignalMoves.None) ? " (trams)" : "")}: {plan.Validate()[0]}"));
             return null;
         }
         plan.ArrowPlates = ArrowPlates(canton);
