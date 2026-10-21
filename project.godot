@@ -30,7 +30,7 @@ project/assembly_name="UnitSportSwitzerland"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/godot_ai/plugin.cfg")
+enabled=PackedStringArray("res://addons/godot_ai/plugin.cfg", "res://addons/unitsport_android/plugin.cfg")
 
 [physics]
 
