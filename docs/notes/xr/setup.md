@@ -5,12 +5,15 @@
   multiview shader variants that stereo needs.
 - **Quest 2 over Link / Air Link.** Start the Meta Quest Link app, connect the headset, and make
   Meta the active OpenXR runtime (Link app → Settings → General → OpenXR runtime). Then run
-  `<godot> --xr-mode on --rendering-driver vulkan --path . -- --vr [--connect host:port]`.
-  Vulkan is the well-tested OpenXR path on Windows; the project default is d3d12.
+  `<godot> --xr-mode on --rendering-driver vulkan --rendering-method mobile --path . -- --vr [--connect host:port]`.
+  Vulkan is the well-tested OpenXR path on Windows; the project default is d3d12. **Name the method
+  too**: a `--rendering-driver` alone starts Godot on Forward+ whatever the project says (#1036); the
+  log's `Vulkan ... - Forward+` line shows it. `--xrstats` prints the frame, the headset's GPU time and
+  the eye size every 5 s.
 - **From the menus (the normal way).** Use Settings → Video → *VR mode*, or *Play in VR* / *Leave VR*
   on the title screen. Both ask first, save `GameSettings.VrMode`, and restart the game through
   `XrSession.Relaunch`, because OpenXR only comes up with the engine:
-  - Going into VR relaunches with `--xr-mode on --rendering-driver vulkan -- <same user args> --vr`.
+  - Going into VR relaunches with `--xr-mode on --rendering-driver vulkan --rendering-method mobile -- <same user args> --vr`.
   - Leaving VR relaunches with `--xr-mode off`.
   - Run from the editor binary (`godot --path .`), the relaunch passes `--path` too.
 
