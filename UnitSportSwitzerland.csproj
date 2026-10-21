@@ -32,11 +32,6 @@
     <OptimizationPreference>Size</OptimizationPreference>
     <IlcFoldIdenticalMethodBodies>true</IlcFoldIdenticalMethodBodies>
   </PropertyGroup>
-  <!-- SDL (steering wheel) never starts on a phone (SteeringWheel.Install), and the package's iOS library lands in
-       the device folder as its simulator build, which fails the Xcode link: iOS ships without it. -->
-  <ItemGroup Condition=" '$(GodotTargetPlatform)' == 'ios' ">
-    <PackageReference Update="ppy.SDL3-CS" ExcludeAssets="native" />
-  </ItemGroup>
 
   <ItemGroup>
     <!-- Tiles churn through the large-object heap (1-4 MB grids, covers, collision maps), which
@@ -57,6 +52,13 @@
          and WithCulture because MSBuild otherwise reads ".bin"-like infixes as a culture -->
     <EmbeddedResource Include="src/Terrain/swiss_relief.gz" LogicalName="swiss_relief.gz" WithCulture="false" />
     <PackageReference Include="ppy.SDL3-CS" Version="2026.722.0" />
+  </ItemGroup>
+
+  <!-- SDL (steering wheel) never starts on a phone (SteeringWheel.Install), and the package's iOS library lands in
+       the device folder as its simulator build, which fails the Xcode link: iOS ships without it. Below the
+       Include, since Update only reaches items already defined. -->
+  <ItemGroup Condition=" '$(GodotTargetPlatform)' == 'ios' ">
+    <PackageReference Update="ppy.SDL3-CS" ExcludeAssets="native" />
   </ItemGroup>
 
   <!-- The playtest suite (#751, docs/notes/general/playtest.md): an in-game MCP server Claude Code drives the
