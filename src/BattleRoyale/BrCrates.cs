@@ -540,6 +540,14 @@ public partial class BrCrates : Node3D, IOriginContainer
                 yield return ($"{style} (open)", () => ModelViewer.Shaded(open));
         }
         yield return ("Airdrop canopy", () => ModelViewer.Shaded(Canopy()));
+        yield return ("Planks of a crate shot open", () =>
+        {
+            var root = new Node3D();
+            var plank = new BoxMesh { Size = new Vector3(0.35f, 0.03f, 0.08f), Material = Planks };
+            for (int i = 0; i < 10; i++)
+                root.AddChild(new MeshInstance3D { Mesh = plank, Position = new Vector3((i % 4) * 0.3f - 0.45f, 0.015f + (i / 4) * 0.03f, (i % 3) * 0.15f - 0.15f), RotationDegrees = new Vector3(0, i * 37f, 0) });
+            return root;
+        });
     }
 
     /// <summary>

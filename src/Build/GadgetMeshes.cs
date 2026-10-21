@@ -104,6 +104,7 @@ public static class GadgetMeshes
                 yield return (kind.ToString(), () => ModelViewer.Shaded(Mesh(kind)));
         yield return ("Rope ladder", () => ModelViewer.Shaded(Ladder(Gadgets.LadderMax)));
         yield return ("Zipline, both posts", () => ModelViewer.Shaded(Zipline(new Vector3(0, 4f, 25f))));
+        yield return ("HayHideout (burning)", () => new MeshInstance3D { Mesh = Mesh(PlacedKind.HayHideout), MaterialOverride = Charred });
     }
 
     /// <summary>A gadget that looks the same wherever it is: cached per kind.</summary>

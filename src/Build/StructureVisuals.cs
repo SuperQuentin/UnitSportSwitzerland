@@ -155,15 +155,16 @@ public partial class StructureVisuals : Node3D, Core.IOriginContainer
         return true;
     }
 
+    private static Color DebrisColour(BuildMaterial m) => m switch
+    {
+        BuildMaterial.Stone => new Color(0.58f, 0.58f, 0.54f),
+        BuildMaterial.Metal => new Color(0.46f, 0.50f, 0.54f),
+        BuildMaterial.Sandbag => new Color(0.72f, 0.64f, 0.44f),
+        _ => new Color(0.60f, 0.42f, 0.24f),
+    };
+
     private void Debris(Vector3 at, BuildMaterial m)
     {
-        var colour = m switch
-        {
-            BuildMaterial.Stone => new Color(0.58f, 0.58f, 0.54f),
-            BuildMaterial.Metal => new Color(0.46f, 0.50f, 0.54f),
-            BuildMaterial.Sandbag => new Color(0.72f, 0.64f, 0.44f),
-            _ => new Color(0.60f, 0.42f, 0.24f),
-        };
         var burst = new CpuParticles3D
         {
             Emitting = true, OneShot = true, Amount = 22, Lifetime = 1.6f, Explosiveness = 1f,
@@ -171,12 +172,41 @@ public partial class StructureVisuals : Node3D, Core.IOriginContainer
             AngularVelocityMin = -360f, AngularVelocityMax = 360f, EmissionShape = CpuParticles3D.EmissionShapeEnum.Box,
             EmissionBoxExtents = new Vector3(1f, 0.8f, 0.3f),
             Mesh = new BoxMesh { Size = m == BuildMaterial.Wood ? new Vector3(0.4f, 0.04f, 0.1f) : new Vector3(0.18f, 0.14f, 0.16f),
-                Material = Chips[(int)m] ??= Styles.StyleKit.Figure(new StandardMaterial3D { AlbedoColor = colour }) },
+                Material = ChipMaterial(m) },
             TopLevel = true,
         };
         AddChild(burst);
         burst.GlobalPosition = at;
         GetTree().CreateTimer(2.2).Timeout += burst.QueueFree;
+    }
+
+    private static StandardMaterial3D ChipMaterial(BuildMaterial m) =>
+        Chips[(int)m] ??= Styles.StyleKit.Figure(new StandardMaterial3D { AlbedoColor = DebrisColour(m) });
+
+    /// <summary>The worn tints and a heap of debris chips (they only show in game when a piece is hit or breaks), in the model viewer.</summary>
+    [Core.Showcase("Build", "Wear")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseWear()
+    {
+        for (int step = 1; step < 4; step++)
+        {
+            int s = step;
+            yield return ($"Wall - Wood, worn {s}/3", () => new MeshInstance3D { Mesh = StructureMeshes.Mesh(PieceKind.Wall, BuildMaterial.Wood), MaterialOverride = WornMaterial(s) });
+        }
+        foreach (var m in Enum.GetValues<BuildMaterial>())
+            yield return ($"Debris - {m}", () =>
+            {
+                var root = new Node3D();
+                var size = m == BuildMaterial.Wood ? new Vector3(0.4f, 0.04f, 0.1f) : new Vector3(0.18f, 0.14f, 0.16f);
+                var rng = new Random(7);
+                for (int i = 0; i < 14; i++)
+                    root.AddChild(new MeshInstance3D
+                    {
+                        Mesh = new BoxMesh { Size = size, Material = ChipMaterial(m) },
+                        Position = new Vector3((float)rng.NextDouble() - 0.5f, size.Y * 0.5f, (float)rng.NextDouble() - 0.5f),
+                        RotationDegrees = new Vector3(0, (float)rng.NextDouble() * 360f, 0),
+                    });
+                return root;
+            });
     }
 
     private void Sound(Vector3 at, AudioStream stream, float pitch, float db)

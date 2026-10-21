@@ -853,6 +853,16 @@ public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity
     });
     private static StandardMaterial3D? _soot;
 
+    /// <summary>A burnt car (its paint gone to <see cref="Soot"/>), in the model viewer.</summary>
+    [Showcase("Cars", "Burnt")]
+    private static Node3D ShowcaseBurnt()
+    {
+        var visual = Rideable.Create((RideKind)CarCatalog.First)!.BuildParkedVisual(1);
+        foreach (var mesh in visual.FindChildren("*", "MeshInstance3D", true, false).OfType<MeshInstance3D>().Append(visual as MeshInstance3D))
+            if (mesh != null) mesh.MaterialOverride = Soot;
+        return visual;
+    }
+
     /// <summary>Burnt: the paint goes to soot, and the fire and smoke start.</summary>
     private void Char()
     {
