@@ -16,8 +16,13 @@ public sealed class WalkCrossing
     public int Group { get; init; } = -1;
     /// <summary>The island between a two-stage crossing's halves: walkers stand on it, it is no crossing.</summary>
     public bool Island { get; init; }
+    /// <summary>
+    /// An unmarked crossing over a side road at a junction with neither lights nor a zebra (the user's choice, #1033): walkers cross
+    /// on a gap in the cars, the cars do not yield.
+    /// </summary>
+    public bool Unmarked { get; init; }
     public bool Lit => Site is not null;
-    public bool Zebra => Site is null && !Island;
+    public bool Zebra => Site is null && !Island && !Unmarked;
     /// <summary>A zebra (main thread): the traffic clock when a walker last stood at it to cross or was on it; cars stop for it.</summary>
     public double Claimed = double.MinValue;
 }
@@ -48,6 +53,7 @@ public sealed partial class LaneGraph
     public int WalkPaths { get; private set; }
     public int WalkLit { get; private set; }
     public int WalkZebras { get; private set; }
+    public int WalkUnmarked { get; private set; }
     public int WalkIslands { get; private set; }
     public int WalkLinks { get; private set; }
     /// <summary>Crossings left out: an end found no walkway beyond its kerb.</summary>
@@ -71,6 +77,12 @@ public sealed partial class LaneGraph
 
     /// <summary>A crossing's end ties to a sidewalk this close; a dangling sidewalk end to a walkway this close (m).</summary>
     private const float CrossingReach = 6f, CornerReach = 30f, PathReach = 10f, IslandReach = 4.5f;
+
+    /// <summary>
+    /// An unmarked crossing (#1033) lies this far back from a side road's mouth (m), spans at most <see cref="UnmarkedSpan"/> m kerb
+    /// to kerb, and none is made within <see cref="UnmarkedClear"/> m of lights or a zebra (or of another).
+    /// </summary>
+    private const float UnmarkedBack = 3f, UnmarkedSpan = 14f, UnmarkedClear = 30f;
 
     /// <summary>A verge walkway out from a lit crossing with no walkway at its kerb runs this far along the arm (m).</summary>
     private const float StubLength = 40f;
@@ -232,6 +244,48 @@ public sealed partial class LaneGraph
                 islandOf[(pa, ea)] = (pb, eb);
                 islandOf[(pb, eb)] = (pa, ea);
             }
+        // ---- unmarked crossings (the user's choice, #1033): at a junction with neither lights nor a zebra, straight over each side
+        // road a little back from its mouth, sidewalk to sidewalk; the walkers cross on a gap, the cars do not yield
+        var marked = new List<Vector3>();
+        foreach (var site in roads.Signals)
+            foreach (var (line, points) in site.Lines)
+                if (points.Length > 0) marked.Add(points[0]);
+        for (int k = walkways; k < protos.Count; k++) marked.Add((protos[k].P[0] + protos[k].P[^1]) * 0.5f);
+        bool Clear(Vector3 p)
+        {
+            foreach (var m in marked)
+                if (MathX.FlatDistance(m, p) < UnmarkedClear) return false;
+            return true;
+        }
+        foreach (var e in roads.Edges)
+        {
+            if (e.Connector || e.Length < 2f * UnmarkedBack + 2f || (e.Flags & RoadFlags.Divided) != 0 || !Near(e.Points[0])) continue;
+            foreach (bool atEnd in (ReadOnlySpan<bool>)[false, true])
+            {
+                long key = atEnd ? e.KeyEnd : e.KeyStart;
+                // a junction's mouth: three ends meet, or a junction path or connector takes the road on
+                bool mouth = roads.Degree(key) >= 3 || roads.Incident(key).Any(o => o.Edge != e && o.Edge.Connector);
+                if (!mouth || !(e.Class >= RoadClass.Minor || roads.GivesWay(key, e))) continue;
+                var (at, tangent) = e.Sample(atEnd ? e.Length - UnmarkedBack : UnmarkedBack);
+                if (!Clear(at)) continue;
+                var t = MathX.Flat(tangent).Normalized();
+                var n = new Vector3(-t.Z, 0f, t.X);
+                float half = e.Width * 0.5f;
+                var right = NearestWalkway(at + n * half, CrossingReach, p => p.Kind is WalkKind.Sidewalk or WalkKind.Path, q => MathX.Flat(q - at).Dot(n) > half * 0.5f);
+                var left = NearestWalkway(at - n * half, CrossingReach, p => p.Kind is WalkKind.Sidewalk or WalkKind.Path, q => MathX.Flat(q - at).Dot(n) < -half * 0.5f);
+                if (right is not { } r || left is not { } l || MathX.FlatDistance(r.At, l.At) > UnmarkedSpan) continue;
+                // over this road only: no other carriageway in the way
+                bool other = false;
+                roadGrid.Visit(l.At, r.At, 0f, (p, q, owner, _) =>
+                {
+                    if (!other && owner != e && SegmentsCross(l.At, r.At, p, q, 0.2f)) other = true;
+                });
+                if (other) continue;
+                protos.Add(new WalkProto { P = [l.At, r.At], Kind = WalkKind.Crossing, Class = RoadClass.Path, Width = 2f, Crossing = new WalkCrossing { Unmarked = true } });
+                marked.Add(at);
+            }
+        }
+
         // ---- a lit crossing with no walkway at a kerb (a junction out of town): a walkway on the verge from there, out along the arm,
         // so walkers come to it (and round the corner to the next arm's, by the stray ends below)
         var stubs = new List<WalkProto>();
@@ -382,7 +436,9 @@ public sealed partial class LaneGraph
                 case WalkKind.Sidewalk: g.WalkSidewalks++; break;
                 case WalkKind.Path: g.WalkPaths++; break;
                 default:
-                    if (w.Crossing!.Lit) g.WalkLit++; else g.WalkZebras++;
+                    if (w.Crossing!.Lit) g.WalkLit++;
+                    else if (w.Crossing.Unmarked) g.WalkUnmarked++;
+                    else g.WalkZebras++;
                     break;
             }
             if (w.Splits.Count == 0) { Emit(w.P, w); continue; }

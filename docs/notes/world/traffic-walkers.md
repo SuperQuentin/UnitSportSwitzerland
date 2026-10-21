@@ -1,7 +1,8 @@
 # Traffic walkers (#1033)
 
 Pedestrians as orange boxes (`WalkerLook`, 0.5 x 1.7 x 0.4 m, 1.35 m/s +-25 %) on the shared base (`traffic-modes`): local and
-cosmetic per client, not replicated. Default density 60 (`GameSettings.TrafficWalkers`, 0..300, x0.3 at night), `--walkers N`.
+cosmetic per client, not replicated. Off by default, the user's choice (`GameSettings.TrafficWalkers` 0, 0..300 in Settings,
+x0.3 at night), `--walkers N`.
 Files: `World/LaneGraph.Walkers.cs` (the graph), `World/Traffic.Walkers.cs` (the rules), `World/TrafficProbe.Walkers.cs` (the check).
 
 ## The walk graph (`LaneGraph.BuildWalks`, worker thread, 3 x 3 km about the view's tile)
@@ -22,7 +23,9 @@ Files: `World/LaneGraph.Walkers.cs` (the graph), `World/Traffic.Walkers.cs` (the
 - **Verge walkways**: a lit crossing whose kerb has no walkway within 6 m (a junction out of town, J7 of the signal test region)
   gets a 40 m walkway out along its arm, away from the junction (shortened before any road it would cross), so walkers reach it.
 - Crossing edges are `Connector` (no spawns) and found by `LaneGraph.CrossingOf(edge)` (a weak table).
-- No crossing where neither lights nor a zebra are: a block's walkers stay on it (no informal crossings yet).
+- **Unmarked crossings** (the user's choice): at a junction mouth with neither lights nor a zebra within 30 m, straight over a
+  side arm (class Minor or lower, or giving way there; not divided) 3 m back from its mouth, sidewalk to sidewalk, at most 14 m,
+  over that road only (`WalkCrossing.Unmarked`). The cars do not yield there.
 
 ## Rules (`StepWalker`)
 
@@ -32,6 +35,8 @@ Files: `World/LaneGraph.Walkers.cs` (the graph), `World/Traffic.Walkers.cs` (the
 - **Zebra**: claims it (`WalkCrossing.Claimed`, the traffic clock) while it stands at it or is on it; waits only for a car on it
   or coming too fast to stop at 4 m/s2 (`CarAtZebra`). **Cars** (`ZebraWait`, one line in `StepCar`): a claimed zebra on their
   legs within 50 m makes them stop short of its 3 m band unless already too close to stop.
+- **Unmarked**: no claim; the walker waits until no car is on it, within 8 m of it moving, too fast to stop, or reaching it
+  sooner than its walk over plus 2 s (`CarAtZebra` with a gap).
 - **Permissive turns** (#1046): the cars wait for walkers on the crossing through the shared crossers (`CrosserComing`), no
   walker code.
 - Its line across the walkway: a little right of the middle, spread by its habit over the width, eased at 0.6 m/s.
@@ -39,16 +44,18 @@ Files: `World/LaneGraph.Walkers.cs` (the graph), `World/Traffic.Walkers.cs` (the
 ## Check
 
 `--trafficcheck --mover walker [--at E,N] [--walkers-near N]`: every 5 s a `walkers:` line (live, waiting, onto lit crossings,
-on red, on the clearance amber, waits at a red kerb / on an island / at a zebra, zebras crossed, car-seconds stood for zebras and
-at turns for walkers). With `--at` it also spawns walkers within 60 m of it (2 a second). Fails on a step onto a lit crossing at
+on red, on the clearance amber, waits at a red kerb / on an island / at a zebra, zebras crossed, car-seconds stood for zebras,
+unmarked crossed and waits for a gap, car-seconds at turns for walkers). With `--at` it also spawns walkers within 60 m of it (2 a second). Fails on a step onto a lit crossing at
 red. A walker cleared on green may reach the crossing in the pedestrian group's clearance amber (counted apart: the lights run
 on the simulated clock, the walkers on the frame's; at `--fixed-fps` the two drift).
 
 Measured (PR #1065, headless `--fixed-fps 60`):
 
-- Signal test region, J7 (`--at 2917500,1322500 --traffic 150 --dense --seconds 120 --walkers 120`): 152 onto lit crossings, 0 on
-  red, 1 on the clearance amber, 108 waits at a red kerb, 16 on J7's east island, cars stood at a turn for walkers 62 s.
-- Geneva rewrite (`D:/UnitSportSwitzerland/test1030/new5/chunks`, `--at 2499916,1118335 --walkers 200`): walk graph 21 306 edges
-  (8 366 sidewalks, 1 456 paths, 670 lit crossings with 16 islands, 41 zebras, 104 crossings left out with no walkway at an end);
-  87 onto lit crossings, 0 on red, 6 zebras crossed, cars stood 12 s for them. Car tick cost 2.8 -> 3.6 ms mean with 200 walkers
-  massed at `--at` (the cars' `FollowCrossers` scans every crosser in its X window, walkers included).
+- Signal test region, J7 (`--at 2917500,1322500 --traffic 150 --dense --seconds 120 --walkers 120`): walk graph 368 edges (38 lit
+  crossings, 2 islands, 5 unmarked); 159 onto lit crossings, 0 on red, 125 waits at a red kerb, 20 on J7's east island, cars stood
+  at a turn for walkers 153 s.
+- Geneva rewrite (`D:/UnitSportSwitzerland/test1030/new5/chunks`, `--at 2499916,1118335 --walkers 200`): walk graph 22 751 edges
+  (8 366 sidewalks, 1 456 paths, 670 lit crossings with 16 islands, 41 zebras, 488 unmarked, 104 crossings left out with no
+  walkway at an end); 101 onto lit crossings, 0 on red, 14 zebras crossed with cars standing 78 s for them, 28 unmarked crossed,
+  5 waits for a gap. Car tick cost 3.6 ms mean without walkers, 4.0 ms with 200 massed at `--at` (same machine, back to back;
+  `FollowCrossers` skips all when no crosser is in a lane).

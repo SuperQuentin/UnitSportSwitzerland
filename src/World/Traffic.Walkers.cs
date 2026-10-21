@@ -38,7 +38,7 @@ public partial class Traffic
         var around = tiles.Origin.ToWorld(e * 1000.0 + 500.0, n * 1000.0 + 500.0, 0.0);
         var g = LaneGraph.BuildWalks(tiles.Near, tiles.Origin, tiles.Roads, around, WalkReach);
         GD.Print($"[traffic] walk graph: {g.Edges.Count} edges from {g.WalkSidewalks} sidewalks, {g.WalkPaths} paths, {g.WalkLit} lit crossings "
-            + $"({g.WalkIslands} islands), {g.WalkZebras} zebras ({g.ZebraHits?.Count ?? 0} car edges they cross), {g.WalkLinks} links; {g.WalkDropped} crossings left out (no walkway at an end)");
+            + $"({g.WalkIslands} islands), {g.WalkZebras} zebras ({g.ZebraHits?.Count ?? 0} car edges they cross), {g.WalkUnmarked} unmarked, {g.WalkLinks} links; {g.WalkDropped} crossings left out (no walkway at an end)");
         return g.Edges.Count == 0 ? null : g;
     }
 
@@ -110,6 +110,11 @@ public partial class Traffic
             m.State = route.Edge;
             WalkerZebraCrossings++;
         }
+        else if (here is { Unmarked: true } && !ReferenceEquals(m.State, route.Edge))
+        {
+            m.State = route.Edge;
+            WalkerGapCrossings++;
+        }
 
         // the next crossing ahead (Wait: 1 while it is clear to go on to it, Group: which one)
         bool crossingAhead = false;
@@ -133,6 +138,9 @@ public partial class Traffic
                 go = c.Site!.Plan.State(c.Group, clock) == SignalAspect.Green 
                     && c.Site.Plan.UntilChange(c.Group, clock) > LastGreen + ahead / Mathf.Max(m.Speed, 0.7f);
             }
+            else if (c.Unmarked)
+                // no right of way: a gap long enough to walk over, with a margin
+                go = !CarAtZebra(edge, edge.Length / Mathf.Max(m.Cruise, 0.8f) + UnmarkedMargin);
             else
             {
                 c.Claimed = _now;
@@ -152,6 +160,7 @@ public partial class Traffic
                 {
                     if (here is { Island: true }) WalkerIslandWaits++;
                     else if (c.Lit) WalkerLitWaits++;
+                    else if (c.Unmarked) WalkerGapWaits++;
                     else WalkerZebraWaits++;
                 }
             }
@@ -172,11 +181,15 @@ public partial class Traffic
     /// <summary>A car brakes for a zebra at up to this (m/s²); one that would need more is committed and goes.</summary>
     private const float ZebraBrake = 4f;
 
+    /// <summary>A walker crossing a side road with no marking (#1033) wants the cars this many seconds further off than its walk over.</summary>
+    private const float UnmarkedMargin = 2f;
+
     /// <summary>
-    /// Whether a car is on the zebra <paramref name="zebra"/> or coming at it too fast to stop short of it (more than
-    /// <see cref="ZebraBrake"/>): the walker at it waits.
+    /// Whether a car is on the crossing <paramref name="zebra"/> or coming at it too fast to stop short of it (more than
+    /// <see cref="ZebraBrake"/>): the walker at it waits. With <paramref name="gap"/> (s, an unmarked crossing where the cars do not
+    /// yield): also any car reaching it sooner, or moving within 8 m of it (one turning in).
     /// </summary>
-    private bool CarAtZebra(LaneEdge zebra)
+    private bool CarAtZebra(LaneEdge zebra, float gap = 0f)
     {
         var a = zebra.Points[0];
         var b = zebra.Points[^1];
@@ -194,6 +207,7 @@ public partial class Traffic
             var car = _byX[o];
             var d = MathX.Flat(mid - car.Head);
             if (Mathf.Abs(mid.Y - car.Head.Y) > 4f) continue;
+            if (gap > 0f && car.Speed > 1f && d.Length() < half + 8f) return true;
             // within the zebra's length of its middle, across: on the road it spans
             if (Mathf.Abs(d.Dot(across)) > half + 1f) continue;
             float along = d.Dot(normal);
@@ -202,8 +216,9 @@ public partial class Traffic
             // on it (its body over the 3 m band)
             if (Mathf.Abs(toward) < CarFront + 1.5f) return true;
             if (toward < 0f) continue;
-            float gap = toward - CarFront - 1.5f;
-            if (car.Speed > 1f && car.Speed * car.Speed / (2f * ZebraBrake) > gap - 0.5f) return true;
+            float room = toward - CarFront - 1.5f;
+            if (car.Speed > 1f && car.Speed * car.Speed / (2f * ZebraBrake) > room - 0.5f) return true;
+            if (gap > 0f && car.Speed > 0.5f && room / car.Speed < gap) return true;
         }
         return false;
     }
@@ -239,7 +254,8 @@ public partial class Traffic
     // ---- --trafficcheck --mover walker ----------------------------------------------------------
 
     /// <summary>The walkers' counts for the check (#1033): steps onto a lit crossing (on a red; on the clearance amber, cleared on green), waits at a red kerb, on an island, at a zebra, zebras crossed.</summary>
-    public int WalkerLitStarts, WalkerRedStarts, WalkerAmberStarts, WalkerLitWaits, WalkerIslandWaits, WalkerZebraWaits, WalkerZebraCrossings;
+    public int WalkerLitStarts, WalkerRedStarts, WalkerAmberStarts, WalkerLitWaits, WalkerIslandWaits, WalkerZebraWaits, WalkerZebraCrossings,
+        WalkerGapCrossings, WalkerGapWaits;
 
     /// <summary>Car-seconds stood for a walker at a zebra (#1033).</summary>
     public double ZebraCarSeconds;

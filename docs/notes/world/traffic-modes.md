@@ -57,7 +57,7 @@ returns no graph, so nothing spawns and the cars run exactly as before.
 
 ## Settings and command line
 
-- `GameSettings.TrafficWalkers` (0..300, 60 since walkers landed: `traffic-walkers`), `TrafficRiders` (0..150), `Trams` (0..20), the others 0; `--walkers N`, `--bikes N`
+- `GameSettings.TrafficWalkers` (0..300, its row shows since walkers landed, still 0 by default: `traffic-walkers`), `TrafficRiders` (0..150), `Trams` (0..20), the others 0; `--walkers N`, `--bikes N`
   (`--riders` is the drivecheck's), `--trams N`; zeroed without the `traffic` system. The settings rows (World tab, solo
   screen: `SettingsScreen.TrafficModeRows`) show once `Traffic.WalkersReady` / `RidersReady` / `TramsReady` is true (each
   in its mode's file).

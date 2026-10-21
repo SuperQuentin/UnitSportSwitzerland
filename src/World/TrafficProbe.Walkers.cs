@@ -36,6 +36,7 @@ public partial class TrafficProbe
         return $"{_traffic.CountOf(MoverKind.Walker)} live ({holding} waiting, {standing} standing), onto lit crossings {_traffic.WalkerLitStarts} "
             + $"(on red {_traffic.WalkerRedStarts}, on the clearance amber {_traffic.WalkerAmberStarts}), waits at a red kerb {_traffic.WalkerLitWaits}, on an island {_traffic.WalkerIslandWaits}, "
             + $"at a zebra {_traffic.WalkerZebraWaits}; zebras crossed {_traffic.WalkerZebraCrossings}, cars stood for them {_traffic.ZebraCarSeconds:F0} s; "
+            + $"unmarked crossed {_traffic.WalkerGapCrossings}, waits for a gap {_traffic.WalkerGapWaits}; "
             + $"cars stood at a turn for walkers {_carsForWalkers:F0} s";
     }
 
