@@ -25,6 +25,7 @@
     <ProjectReference Include="..\..\tools\RoadGen\RoadGen.csproj" />
     <Compile Include="..\..\src\World\TimeCommand.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\ConflictPoints.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\World\MoverKind.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\Snow\SnowWeather.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\Snow\SnowModel.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\Snow\WeatherCommand.cs" Link="Game\%(Filename)%(Extension)" />

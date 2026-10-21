@@ -227,6 +227,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         var done = new HashSet<LaneEdge>();
         _roads?.Shift(shift, _origin.Frame, done);
         _rails?.Shift(shift, _origin.Frame, done);
+        ShiftModes(shift, done);
         foreach (var v in _cars.Concat(_trains))
         {
             // a vehicle may still be on an edge of an older graph
@@ -264,7 +265,9 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         _cars.Clear();
         _generatedLive = 0;
         _trains.Clear();
-        _roads = _rails = null;
+        ClearMovers();
+        _roads = _rails = _walks = _rides = _tramLines = null;
+        _modesBuilt = 0;
         _builtAround = null;
         _building = false;
     }
@@ -281,6 +284,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         _byBody.Clear();
         _cars.Clear();
         _trains.Clear();
+        ClearMovers();
         _rng = Core.RunSeeds.Rng("traffic");
         _spawnTimer = 0;
         _refill = true;
@@ -295,7 +299,9 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         int epoch = _epoch;
         var (e, n) = _origin.ToLv95(focus);
         var here = TileId.FromLv95(e, n);
-        if (_builtAround is { } b && b.E == here.E && b.N == here.N) return;
+        // (a mode wanted since the last build, its density raised from 0, rebuilds here too: #1060)
+        uint wanted = ModesWanted();
+        if (_builtAround is { } b && b.E == here.E && b.N == here.N && (wanted & ~_modesBuilt) == 0) return;
         _building = true;
         // one frame for the whole build: the origin may move while it runs (#185)
         var origin = _origin.Frame;
@@ -312,11 +318,15 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
                     }
                     catch (Exception) { /* no roads there */ }
                 }
-            var near = tiles.Where(t => Math.Abs(t.Id.E - here.E) <= 2 && Math.Abs(t.Id.N - here.N) <= 2);
+            var near = tiles.Where(t => Math.Abs(t.Id.E - here.E) <= 2 && Math.Abs(t.Id.N - here.N) <= 2).ToList();
             var roads = LaneGraph.Build(near, origin, IsCarRoad);
             int deadBefore = roads.DeadEnds;
             roads.JoinTrimmedEnds();
-            var rails = LaneGraph.Build(tiles, origin, IsRail);
+            var rails = LaneGraph.Build(tiles, origin, IsRail, MoverKind.Train);
+            // the modes' own graphs (#1060), each from its builder in its own file: none unless its density asks for movers
+            var (walks, rides, trams) = wanted == 0 ? default : BuildModeGraphs(new ModeTiles(tiles, near, origin, roads, rails), wanted);
+            if (walks is not null || rides is not null || trams is not null)
+                GD.Print($"[traffic] around {here}: {walks?.Edges.Count ?? 0} walk edges, {rides?.Edges.Count ?? 0} ride edges, {trams?.Edges.Count ?? 0} tram edges");
             int divided = roads.Edges.Count(x => (x.Flags & RoadFlags.Divided) != 0);
             int oriented = roads.Edges.Count(x => (x.Flags & RoadFlags.Divided) != 0 && x.OneWay != 0);
             int yielding = roads.Edges.Count(x => x.Yield != 0);
@@ -333,9 +343,15 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
                     var shift = _origin.Since(origin);
                     roads.Shift(shift, _origin.Frame, new());
                     rails.Shift(shift, _origin.Frame, new());
+                    // (a mode's graph may hold the roads' or rails' own edges: each moves once)
+                    var moved = new HashSet<LaneEdge>(roads.Edges.Concat(rails.Edges));
+                    walks?.Shift(shift, _origin.Frame, moved);
+                    rides?.Shift(shift, _origin.Frame, moved);
+                    trams?.Shift(shift, _origin.Frame, moved);
                 }
                 _roads = roads;
                 _rails = rails;
+                (_walks, _rides, _tramLines, _modesBuilt) = (walks, rides, trams, wanted);
                 _builtAround = here;
                 _building = false;
             }).CallDeferred();
@@ -381,6 +397,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         _byX.Clear();
         _byX.AddRange(_cars);
         _byX.Sort(ByX);
+        // the walkers, riders and trams where they are now, for the cars to mind (#1060; none without the modes)
+        CollectCrossers();
         DoubledNow = 0;
         _now += dt;
         foreach (var car in _cars) StepCar(car, dt, obstacles);
@@ -390,6 +408,10 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         _tickUs[_ticks++ % _tickUs.Length] = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - tick) * 1e6 / System.Diagnostics.Stopwatch.Frequency);
 
         Cull(_cars, focus, CarDespawn, GeneratorsOnly ? int.MaxValue : wantCars);
+        // the modes beyond cars and trains (#1060): walkers, riders, trams, each on its own graph
+        if (_walks is not null || _walkers.Count > 0) StepMovers(MoverKind.Walker, _walks, focus, dt, Want(MoverKind.Walker, night));
+        if (_rides is not null || _riders.Count > 0) StepMovers(MoverKind.Rider, _rides, focus, dt, Want(MoverKind.Rider, night));
+        if (_tramLines is not null || _trams.Count > 0) StepTrams(focus, dt, Want(MoverKind.Tram, night));
         StepDebugDraw(delta);
         Cull(_trains, focus, TrainDespawn, wantTrains);
     }
@@ -643,6 +665,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             // let one come at a queue at 50 km/h from 40 m, too late to stop (#854)
             target = Mathf.Min(target, Mathf.Sqrt(other.Speed * other.Speed + 2f * 4f * Mathf.Max(0f, along - QueueSpacing + 1f)));
         }
+        // and behind a rider or tram in its lane (#1060: the modes' crossers; +∞ without them)
+        target = Mathf.Min(target, FollowCrossers(car, dir, rightOf));
 
         float half = edge.Width * 0.5f, keep = KeepRight(edge, car.Route.Forward, car.Habit);
         bool twoWay = (edge.Flags & RoadFlags.Divided) == 0 && edge.OneWay == 0;
@@ -1362,7 +1386,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     /// <summary>
     /// Whether a mover the car on <paramref name="path"/> gives way to at <paramref name="y"/> is in the conflict or reaches it within
     /// <see cref="AcceptGap"/>: a car whose way goes onto that movement's path (by where its body comes into this car's lane), a
-    /// player or a racer at the conflict or closing on it. (The walkers and riders of #1033 belong here too.)
+    /// player or a racer at the conflict or closing on it, a walker, rider or tram of the point's kind (<see cref="CrosserComing"/>,
+    /// #1060: the modes' movers, from <see cref="_crossers"/>).
     /// </summary>
     private bool Coming(Vehicle car, LaneEdge path, PathYield y, List<(Vector3 Pos, Vector3 Vel)> obstacles)
     {
@@ -1376,6 +1401,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             float closing = (vel.X * d.X + vel.Z * d.Z) / dist;
             if (dist < GapLook && closing > 0.5f && (dist - zone) / closing < AcceptGap) return true;
         }
+        if (CrosserComing(at, zone, y.Mover)) return true;
         if (y.Edge is not { } other) return false;
         _xKey.Head.X = at.X - GapLook - 20f;
         int from = _byX.BinarySearch(_xKey, ByX);
@@ -1748,23 +1774,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         for (int k = 0; k < PathSteps; k++) train.Path[k] = train.Route.At(-train.Speed * 0.5f * (k + 1)).Pos;
     }
 
-    private (LaneEdge, bool)? NextRail((LaneEdge Edge, bool Forward) leg)
-    {
-        long key = leg.Forward ? leg.Edge.KeyEnd : leg.Edge.KeyStart;
-        var (_, dir) = leg.Edge.Sample(leg.Forward ? leg.Edge.Length : 0f);
-        if (!leg.Forward) dir = -dir;
-        // a train cannot take a set of points backwards: only lines that carry straight on
-        var options = _rails!.Leaving(key).Where(o => o.Edge != leg.Edge)
-            .Select(o =>
-            {
-                var (_, t) = o.Edge.Sample(o.Forward ? 0f : o.Edge.Length);
-                return (o, straight: (o.Forward ? t : -t).Dot(dir));
-            })
-            .Where(x => x.straight > 0.5f).ToList();
-        if (options.Count == 0) return null;
-        var pick = options[_rng.Next(options.Count)].o;
-        return (pick.Edge, pick.Forward);
-    }
+    // a train cannot take a set of points backwards: only lines that carry straight on (the rule on any graph, trams too: #1060)
+    private (LaneEdge, bool)? NextRail((LaneEdge Edge, bool Forward) leg) => NextTrack(_rails!, leg);
 
     // ---- bodies --------------------------------------------------------------------------
 
@@ -1796,6 +1807,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         _cars.Clear();
         _generatedLive = 0;
         _trains.Clear();
+        ClearMovers();
         _builtAround = null;
     }
 
@@ -1877,6 +1889,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         /// <summary>Placed on its lane at its first step.</summary>
         public bool Placed;
         public float Lift;
+        /// <summary>Half the distance between a unit's front and rear bogies (m); 0: a car's 1.4, a carriage's 8 (#1060: a tram section's own).</summary>
+        public float UnitHalf;
         public float Offset;
         public Vector3 Head;
         /// <summary>World velocity of the head (from where it was last step), for a racer's sensing.</summary>
@@ -1925,7 +1939,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             float lateral = right(Route.Edge);
             for (int i = 0; i < Units.Length; i++)
             {
-                float half = i == 0 && Units.Length == 1 ? 1.4f : 8f;
+                float half = UnitHalf > 0f ? UnitHalf : i == 0 && Units.Length == 1 ? 1.4f : 8f;
                 // each end on its own leg's line, at the offset that line has there: a junction path's line starts and ends on a
                 // lane, the road's is its centre, so across the join the offset changes by that lane's (#854: a car leaving a
                 // path turned across the exit while its front was on the road and its rear still on the path)

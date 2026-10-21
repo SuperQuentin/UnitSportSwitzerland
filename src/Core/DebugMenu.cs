@@ -364,7 +364,7 @@ public partial class DebugMenu : CanvasLayer
         if (_timeScaled) _askSpeed(SimClock.Normal);
         _timeScaled = false;
         _timePicker.Selected = Array.IndexOf(TimeScales, 1.0);
-        if (World.Traffic.Current is { } traffic) traffic.ShowPaths = traffic.ShowEndpoints = traffic.ShowLights = traffic.ShowMovers = traffic.ShowTrails = false;
+        if (World.Traffic.Current is { } traffic) traffic.ShowPaths = traffic.ShowEndpoints = traffic.ShowLights = traffic.ShowMovers = traffic.ShowTrails = traffic.ShowModeGraphs = false;
     }
 
     // ------------------------------------------------------------------------------------
@@ -397,6 +397,9 @@ public partial class DebugMenu : CanvasLayer
         Switch(grid, "endpoints", "Traffic endpoints", false, on => { if (World.Traffic.Current is { } t) t.ShowEndpoints = on; },
             "Generators (green), destinations (red), both (yellow): a post with an arrow along its heading,\n"
             + "a destination's ring in the colour its cars' ways are drawn in. Always shown with the traffic tool in hand.");
+        Switch(grid, "modegraphs", "Mode graphs", false, on => { if (World.Traffic.Current is { } t) t.ShowModeGraphs = on; },
+            "The walkers' (orange), riders' (green) and trams' (blue) lane graphs within 300 m (#1060);\n"
+            + "with Vehicle paths, each walker's, rider's and tram's way ahead in the same colours.");
         var buttons = UiKit.HBox(6);
         var tool = ActionButton("Traffic tool", () => Items.ItemController.Instance?.RunCommand?.Invoke("/spawn TrafficTool 1"));
         tool.TooltipText = "Into your hands: Use on a road places a generator (its settings open), on a placed one opens it.\n"

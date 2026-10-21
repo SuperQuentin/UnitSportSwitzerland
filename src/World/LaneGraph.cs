@@ -11,6 +11,12 @@ public sealed class LaneEdge
     /// <summary>Cumulative length to each point; <c>[^1]</c> is the whole edge.</summary>
     public required float[] Cumulative { get; init; }
     public RoadClass Class { get; init; }
+
+    /// <summary>
+    /// Who moves on it (#1060): <see cref="MoverKind.Car"/> on the roads and their junction paths, <see cref="MoverKind.Train"/>
+    /// on the railway; the walk, ride and tram graphs (#1033, #1056, #1057) give their own edges their kind.
+    /// </summary>
+    public MoverKind Kind { get; init; }
     public RoadFlags Flags { get; init; }
     public float Width { get; init; }
     public long KeyStart { get; init; }
@@ -359,7 +365,7 @@ public sealed class LaneApproach
 /// rebuild: keys are cells of the LV95 grid, so they do not change when the origin moves (#185).
 /// </para>
 /// </summary>
-public sealed class LaneGraph
+public sealed partial class LaneGraph
 {
     public List<LaneEdge> Edges { get; } = new();
 
@@ -374,6 +380,24 @@ public sealed class LaneGraph
 
     private LaneGraph(OriginFrame frame) => Frame = frame;
 
+    /// <summary>
+    /// An empty graph in <paramref name="origin"/>'s frame, for a mode's builder (#1060: the walk, ride and tram graphs of
+    /// <c>Traffic.Walkers</c>, <c>Riders</c>, <c>Trams</c>) to fill with <see cref="Add"/>, off the main thread like <see cref="Build"/>.
+    /// </summary>
+    public static LaneGraph Empty(OriginFrame origin) => new(origin);
+
+    /// <summary>
+    /// Adds an edge a mode built (#1060) and ties both its ends to whatever else meets there: give its <see cref="LaneEdge.KeyStart"/>
+    /// and <see cref="LaneEdge.KeyEnd"/> from <see cref="Key"/> on its LV95 ends, so it joins across tile seams and rebuilds.
+    /// </summary>
+    public LaneEdge Add(LaneEdge edge)
+    {
+        Edges.Add(edge);
+        Link(edge.KeyStart, edge, true);
+        Link(edge.KeyEnd, edge, false);
+        return edge;
+    }
+
     /// <summary>The traffic lights of the tiles it was built from (#353).</summary>
     public List<SignalSite> Signals { get; } = new();
 
@@ -381,14 +405,14 @@ public sealed class LaneGraph
     private const float StopReach = 15f;
 
     /// <summary>The snap cell of an LV95 point, laid out like world X/Z (east, then south).</summary>
-    private static long Key(double e, double n) =>
+    public static long Key(double e, double n) =>
         ((long)(int)Math.Round(e / Snap) << 32) ^ (uint)(int)Math.Round(-n / Snap);
 
     /// <summary>
     /// Builds in one origin frame, taken once by the caller (a worker must not read a live origin
     /// that may move under it). Shift the result if the origin has moved since.
     /// </summary>
-    public static LaneGraph Build(IEnumerable<RoadTile> tiles, OriginFrame origin, Func<RoadSegment, bool> keep)
+    public static LaneGraph Build(IEnumerable<RoadTile> tiles, OriginFrame origin, Func<RoadSegment, bool> keep, MoverKind kind = MoverKind.Car)
     {
         var g = new LaneGraph(origin);
         foreach (var tile in tiles)
@@ -429,7 +453,7 @@ public sealed class LaneGraph
                     OneWayLanes = Math.Max(1, (int)Math.Max(at.LanesForward, at.LanesBackward)),
                     LaneWidth = at.OneWay != 0 ? RoadCrossSection.LaneWidth(seg.Class)
                         : shared ? 0f : RoadCrossSection.TwoWayLaneWidth(seg.Width, leftBike, rightBike, back, fwd),
-                    Points = pts, Cumulative = cum, Class = seg.Class, Flags = seg.Flags,
+                    Points = pts, Cumulative = cum, Class = seg.Class, Flags = seg.Flags, Kind = kind,
                     Width = seg.Width, KeyStart = keyStart, KeyEnd = keyEnd,
                     OneWay = seg.Attributes.OneWay,
                     Yield = seg.Attributes.Flags & (RoadAttrFlags.YieldAtStart | RoadAttrFlags.YieldAtEnd),

@@ -546,7 +546,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (!Systems.On(Systems.Trains)) GameSettings.Current.Trains = false;   // this run only: not committed
         if (Systems.On(Systems.Traffic) || Systems.On(Systems.Trains))
         {
-            if (!Systems.On(Systems.Traffic)) GameSettings.Current.TrafficCars = 0;
+            // (the modes of #1060, walkers, riders and trams, are the traffic system's too)
+            if (!Systems.On(Systems.Traffic)) GameSettings.Current.TrafficCars = GameSettings.Current.TrafficWalkers = GameSettings.Current.TrafficRiders = GameSettings.Current.Trams = 0;
             var obstacles = new List<(Vector3 Pos, Vector3 Vel)>();
             _traffic = new World.Traffic(_chunks, origin)
             {
