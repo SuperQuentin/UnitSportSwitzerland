@@ -31,6 +31,9 @@ public partial class TouchControls : CanvasLayer
     /// <summary>What the player is doing: picks the layout.</summary>
     public Func<TouchState>? State { get; set; }
 
+    /// <summary>Where the hotbar goes on a phone, its bag's cell first (<see cref="Items.InventoryUi"/> reads it), or null.</summary>
+    public static Rect2? HotbarPlace { get; private set; }
+
     /// <summary>The mode on screen now (for <see cref="TouchCheck"/>).</summary>
     public TouchMode Mode => _state.Mode;
 
@@ -113,6 +116,7 @@ public partial class TouchControls : CanvasLayer
     {
         ReleaseAll();
         Shown = false;
+        HotbarPlace = null;
     }
 
     // ---- layout --------------------------------------------------------------------------
@@ -150,6 +154,7 @@ public partial class TouchControls : CanvasLayer
         Measure();
         foreach (var key in _keys)
             key.Rect = TouchLayout.Place(key.Spec, _safe, _pxPerMm, GameSettings.Current.TouchScale, _left);
+        HotbarPlace = TouchLayout.Hotbar(_safe, _pxPerMm, GameSettings.Current.TouchScale, _left, Items.Inventory.HotbarSize);
         LayoutPills();
         if (_more.Open) OpenMore();
         _canvas.QueueRedraw();
@@ -227,6 +232,7 @@ public partial class TouchControls : CanvasLayer
                 ReleaseAll();
                 _more.Hide();
             }
+            else _built = false;   // back from a menu: the settings may have changed size, side or flags
             PlayerInput.HintsChanged();
         }
         double now = Now;
@@ -904,13 +910,9 @@ public partial class TouchControls : CanvasLayer
 
     private int FontPx(float mm) => Math.Max(8, (int)(mm * _k));
 
-    /// <summary>The hotbar's own bag, left of its slots.</summary>
-    private static Rect2? BagRect(Items.InventoryUi ui)
-    {
-        if (ui.HotbarRect is not { } bar) return null;
-        float s = bar.Size.Y;
-        return new Rect2(bar.Position.X - s - 10, bar.Position.Y, s, s);
-    }
+    /// <summary>The hotbar's own bag: the first cell of its place.</summary>
+    private static Rect2? BagRect(Items.InventoryUi ui) =>
+        ui.HotbarRect != null && HotbarPlace is { } place ? new Rect2(place.Position, new Vector2(place.Size.Y, place.Size.Y)) : null;
 
     private static float Opacity => GameSettings.Current.TouchOpacity;
     private static Color Fill(bool down) => down ? new Color(1f, 0.78f, 0.3f, 0.92f) : new Color(0.06f, 0.07f, 0.09f, 0.85f * Opacity);
@@ -1048,7 +1050,8 @@ public partial class TouchControls : CanvasLayer
                 Text(_runLocked ? "running" : "lock run", box, FontPx(2f), lit ? Ink(true) : Amber);
             }
         }
-        else
+        // its word under the ring, unless the hotbar is there
+        else if (Items.ItemController.Instance?.Ui.HotbarRect == null)
             Text(TouchLayout.StickLabel(_state.Mode), new Rect2(origin.X - r, origin.Y + r + 0.5f * _k, 2 * r, 4f * _k), FontPx(2.2f),
                 new Color(1, 1, 1, 0.35f + 0.4f * Opacity));
     }

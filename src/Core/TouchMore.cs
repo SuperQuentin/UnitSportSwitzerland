@@ -153,6 +153,9 @@ internal sealed class TouchMore
         cut = what.IndexOf(": at ", StringComparison.Ordinal);
         if (cut > 0) what = what[..cut];
         what = what.Trim();
+        // too long: what comes before a colon names it ("Travel menu: mounts and vehicles")
+        cut = what.IndexOf(": ", StringComparison.Ordinal);
+        if (what.Length > 30 && cut >= 4) what = what[..cut];
         if (what.Length > 30) what = what[..29].TrimEnd() + "…";
         return what.Length == 0 ? what : char.ToUpperInvariant(what[0]) + what[1..];
     }

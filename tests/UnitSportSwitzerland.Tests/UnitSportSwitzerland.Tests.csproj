@@ -135,6 +135,7 @@
     <Compile Include="..\..\src\Loot\ShopLedger.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\SaveQueue.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\MathX.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\TouchLayout.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\ZFight.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Flicker.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Vehicles\CargoFit.cs" Link="Game\%(Filename)%(Extension)" />

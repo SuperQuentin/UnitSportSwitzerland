@@ -24,6 +24,9 @@ public partial class TouchCheck : Node
 
     public static bool Requested => CmdArgs.Has("--touchcheck");
 
+    /// <summary><c>--touchshots &lt;dir&gt;</c>: a picture of each mode's controls on the way (a windowed run).</summary>
+    private static readonly string? ShotDir = CmdArgs.Value("--touchshots");
+
     public TouchCheck(Func<FootPlayer?> local, TouchControls touch)
     {
         Name = "TouchCheck";
@@ -57,12 +60,14 @@ public partial class TouchCheck : Node
         // the fixture world starts in the fly camera: the spectator's Walk key lands on foot
         await Until(() => TouchControls.Shown && _touch.Mode == TouchMode.Spectator ? this : null, 20, "the overlay in the fly camera");
         Expect(_touch.Has("walk") && _touch.Has("up") && _touch.Has("down"), "the fly camera has no Walk, Up or Down");
+        await Shot("1-spectator");
         // the world settles under the camera first, or Walk drops the body where nothing is built yet
         await Seconds(3);
         await TapAt(_touch.CentreOf("walk"));
         var me = await Until(() => _local() is { } p && p.IsOnFloor() && _touch.Mode == TouchMode.Foot ? p : null, 30, "on foot");
         Expect(_touch.Has("jump") && _touch.Has("crouch") && !_touch.Has("walk"), "on foot: not Jump and Crouch without Walk");
         await Seconds(1.5);
+        await Shot("2-foot");
 
         // the stick: a thumb pushed up walks forward. Far left, clear of the buttons even on the
         // square screen a headless run has (the stick's resting place is under them there)
@@ -104,6 +109,7 @@ public partial class TouchCheck : Node
         // More: the sheet opens on the top bar's key, lists Travel, and closes on it again
         await TapAt(_touch.CentreOf("more"));
         Expect(_touch.MoreOpen, "More did not open");
+        await Shot("3-more");
         Expect(_touch.MoreEntryOf(PlayerInput.RideMenu) != null, "More has no Travel");
         Expect(_touch.MoreEntryOf(PlayerInput.Jump) == null, "More lists Jump, which has its own key");
         await TapAt(_touch.CentreOf("more"));
@@ -121,6 +127,7 @@ public partial class TouchCheck : Node
         // beside it, the prompts' "get in" becomes a pill, and the pill gets in
         var pill = await UntilAt(() => _touch.PillOf(PlayerInput.InteractMount), 10, "a get-in pill beside the car");
         GD.Print($"[touchcheck] pills by the car: {string.Join(" | ", _touch.PillTexts)}");
+        await Shot("6-pill");
         await TapAt(pill);
         await Until(() => _touch.Mode == TouchMode.Drive ? me : null, 10, "back in the car through the pill");
         await TapAt(_touch.CentreOf("exit"));
@@ -131,6 +138,7 @@ public partial class TouchCheck : Node
         Expect(me.SetRide(RideKind.Plane), "could not board the plane");
         await Until(() => _touch.Mode == TouchMode.Fly ? me : null, 5, "the plane's controls");
         Expect(_touch.Has("rocker"), "the plane has no rocker");
+        await Shot("7-plane");
         var rocker = _touch.CentreOf("rocker");
         Touch(3, rocker, true);
         Drag(3, rocker + new Vector2(0, -400), new Vector2(0, -400));
@@ -151,6 +159,7 @@ public partial class TouchCheck : Node
         await Until(() => _touch.Mode == mode ? me : null, 5, $"the {kind}'s controls ({mode})");
         Expect(_touch.Has("gas") && _touch.Has("brake"), $"the {kind} has no pedals");
         await Seconds(1);
+        await Shot(mode == TouchMode.Ride ? "4-bike" : "5-car");
         var from = me.GlobalPosition;
         var gas = _touch.CentreOf("gas");
         Touch(4, gas, true);
@@ -169,6 +178,16 @@ public partial class TouchCheck : Node
             Expect(me.SetRide(RideKind.OnFoot), $"could not get off the {kind}");
             await Until(() => _touch.Mode == TouchMode.Foot ? me : null, 5, "back on foot");
         }
+    }
+
+    private async Task Shot(string name)
+    {
+        if (ShotDir == null || DisplayServer.GetName() == "headless") return;
+        await Seconds(0.3);
+        DirAccess.MakeDirRecursiveAbsolute(ShotDir);
+        string path = $"{ShotDir}/{name}.png";
+        GetViewport().GetTexture().GetImage().SavePng(path);
+        GD.Print($"[touchcheck] shot {path}");
     }
 
     // ---- touches and time ----------------------------------------------------------------

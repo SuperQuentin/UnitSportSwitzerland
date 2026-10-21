@@ -124,15 +124,22 @@ public static class TouchLayout
     /// <summary>The floating stick's ring radius, mm.</summary>
     public const float StickRadiusMm = 12f;
     /// <summary>Where the stick waits until a thumb lands, mm from the bottom left (mirrored: right).</summary>
-    public static readonly Vector2 StickHomeMm = new(22f, 17f);
+    public static readonly Vector2 StickHomeMm = new(22f, 20f);
     /// <summary>A pill's height and the gap between pills, mm.</summary>
     public const float PillHeightMm = 7f, PillGapMm = 1.5f;
     /// <summary>Extra touch margin round every control, mm.</summary>
     public const float HitMarginMm = 2f;
 
-    // the right thumb's arc, mm from the bottom right corner
+    /// <summary>The largest size setting: past it a 16:9 phone has no room for the hotbar beside the buttons.</summary>
+    public const float MaxScale = 1.2f;
+    /// <summary>A hotbar cell on a phone, and the gap between cells, mm.</summary>
+    public const float HotbarSlotMm = 7.5f, HotbarGapMm = 0.6f;
+    /// <summary>How far the hotbar keeps from the right edge (the buttons' side), mm before the size setting.</summary>
+    public const float HotbarClearMm = 49f;
+
+    // the right thumb's arc, mm from the bottom right corner; Aim and Run stand above the hotbar's row
     private static readonly Vector2 Main = new(13.5f, 14.5f), Second = new(28f, 8f), Third = new(29f, 24f),
-        Fourth = new(43f, 11.5f), RunAt = new(43f, 25f);
+        Fourth = new(42f, 23f), RunAt = new(14f, 29f);
     private const float MainD = 13f, SecondD = 9.5f, ThirdD = 12f, FourthD = 9.5f;
 
     /// <summary>Every control of this mode, the top bar included.</summary>
@@ -151,7 +158,7 @@ public static class TouchLayout
         }
         void rocker(string label) =>
             k.Add(new TouchKey("rocker", label, TouchShape.Rocker, TouchSend.Rocker, TouchCorner.BottomRight,
-                new Vector2(10.5f, 22f), new Vector2(11f, 32f), TouchFeel.Primary));
+                new Vector2(10.5f, 21f), new Vector2(11f, 30f), TouchFeel.Primary));
         void rightStick(string label) =>
             k.Add(new TouchKey("rstick", label, TouchShape.Stick, TouchSend.RightStick, TouchCorner.BottomRight,
                 new Vector2(22f, 20f), new Vector2(2 * StickRadiusMm, 2 * StickRadiusMm)));
@@ -284,6 +291,20 @@ public static class TouchLayout
         float y = key.Corner == TouchCorner.TopRight ? safe.Position.Y + key.Mm.Y * k : safe.End.Y - key.Mm.Y * k;
         var size = key.SizeMm * k;
         return new Rect2(new Vector2(x, y) - size / 2, size);
+    }
+
+    /// <summary>
+    /// The hotbar on a phone, the bag's cell first: bottom centre, pushed off the buttons' side so it
+    /// stays clear of them, and inside the screen.
+    /// </summary>
+    public static Rect2 Hotbar(Rect2 safe, float pxPerMm, float scale, bool leftHanded, int slots)
+    {
+        int cells = slots + 1;
+        float s = HotbarSlotMm * pxPerMm, gap = HotbarGapMm * pxPerMm, w = cells * s + (cells - 1) * gap;
+        float clear = HotbarClearMm * pxPerMm * scale, centre = safe.GetCenter().X;
+        float x = leftHanded ? Mathf.Max(centre - w / 2, safe.Position.X + clear) : Mathf.Min(centre + w / 2, safe.End.X - clear) - w;
+        x = Mathf.Clamp(x, safe.Position.X, safe.End.X - w);
+        return new Rect2(x, safe.End.Y - pxPerMm - s, w, s);
     }
 
     /// <summary>The stick's waiting place, canvas pixels.</summary>

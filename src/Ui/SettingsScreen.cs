@@ -187,7 +187,7 @@ public partial class SettingsScreen : Screen
                 // the on-screen controls (#1043)
                 UiKit.SliderRow(rows, "Touch look speed", 0.3, 4, 0.1, s.TouchLookSpeed,
                     v => GameSettings.Current.TouchLookSpeed = (float)v, v => $"{v:F1}x");
-                UiKit.SliderRow(rows, "Button size", 0.75, 1.3, 0.05, s.TouchScale,
+                UiKit.SliderRow(rows, "Button size", 0.75, TouchLayout.MaxScale, 0.05, s.TouchScale,
                     v => GameSettings.Current.TouchScale = (float)v, v => $"{v * 100:F0} %");
                 UiKit.SliderRow(rows, "Button opacity", 0.2, 1, 0.05, s.TouchOpacity,
                     v => GameSettings.Current.TouchOpacity = (float)v, v => $"{v * 100:F0} %");

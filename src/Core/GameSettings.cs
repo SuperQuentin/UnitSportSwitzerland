@@ -166,7 +166,7 @@ public sealed class GameSettings
     /// <summary>Touch look (#63): camera turn per pixel of drag, as a multiple of the mouse's.</summary>
     public float TouchLookSpeed { get; set; } = 1.5f;
 
-    /// <summary>The phone's on-screen controls (#1043): size, 0.75..1.3 of their millimetres.</summary>
+    /// <summary>The phone's on-screen controls (#1043): size, 0.75..1.2 of their millimetres.</summary>
     public float TouchScale { get; set; } = 1f;
     /// <summary>How solid the on-screen controls are at rest, 0.2..1; a pressed one is always solid.</summary>
     public float TouchOpacity { get; set; } = 0.45f;
@@ -529,7 +529,7 @@ public sealed class GameSettings
         VrRenderScale = Math.Clamp(VrRenderScale, MinVrRenderScale, MaxVrRenderScale);
         StickSensitivity = Math.Clamp(StickSensitivity, 0.2f, 3f);
         TouchLookSpeed = Math.Clamp(TouchLookSpeed, 0.3f, 4f);
-        TouchScale = Math.Clamp(TouchScale, 0.75f, 1.3f);
+        TouchScale = Math.Clamp(TouchScale, 0.75f, TouchLayout.MaxScale);
         TouchOpacity = Math.Clamp(TouchOpacity, 0.2f, 1f);
         TouchPins ??= new();
         MasterVolume = Math.Clamp(MasterVolume, 0f, 1f);

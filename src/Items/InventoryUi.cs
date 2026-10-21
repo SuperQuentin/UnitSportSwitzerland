@@ -48,8 +48,6 @@ namespace UnitSport.Items;
 public partial class InventoryUi : CanvasLayer
 {
     private const int SlotPx = 50;
-    /// <summary>A hotbar slot: a fingertip's size on a phone, which taps it (#1043).</summary>
-    private static int HotbarPx => Platform.IsMobile ? 76 : SlotPx;
     private const int PanelSlotPx = 52;
     private const int Gap = 6;
     private const int TrashSlot = -2;
@@ -212,13 +210,13 @@ public partial class InventoryUi : CanvasLayer
 
     private void BuildHud()
     {
-        int width = Inventory.HotbarSize * HotbarPx + (Inventory.HotbarSize - 1) * Gap;
+        int width = Inventory.HotbarSize * SlotPx + (Inventory.HotbarSize - 1) * Gap;
         _hotbar = new HBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
         _hotbar.AddThemeConstantOverride("separation", Gap);
         _hotbar.SetAnchorsPreset(Control.LayoutPreset.CenterBottom);
         _hotbar.OffsetLeft = -width / 2f;
         _hotbar.OffsetRight = width / 2f;
-        _hotbar.OffsetTop = -14 - HotbarPx;
+        _hotbar.OffsetTop = -14 - SlotPx;
         _hotbar.OffsetBottom = -14;
         _root.AddChild(_hotbar);
 
@@ -228,7 +226,7 @@ public partial class InventoryUi : CanvasLayer
             {
                 Slot = i,
                 KeyHint = Platform.IsMobile ? "" : (i + 1).ToString(),
-                CustomMinimumSize = new Vector2(HotbarPx, HotbarPx),
+                CustomMinimumSize = new Vector2(SlotPx, SlotPx),
                 MouseFilter = Control.MouseFilterEnum.Ignore,
                 FocusMode = Control.FocusModeEnum.None,
             };
@@ -873,6 +871,33 @@ public partial class InventoryUi : CanvasLayer
         return false;
     }
 
+    private Rect2? _touchPlace;
+
+    /// <summary>
+    /// On a phone the touch controls say where the hotbar goes (#1043, <see cref="TouchLayout.Hotbar"/>):
+    /// fingertip cells, clear of the buttons, the bag's cell first (drawn by the controls); the cash
+    /// above it.
+    /// </summary>
+    private void PlaceForTouch()
+    {
+        if (TouchControls.HotbarPlace is not { } place || place == _touchPlace) return;
+        _touchPlace = place;
+        float s = place.Size.Y, gap = (place.Size.X - (Inventory.HotbarSize + 1) * s) / Inventory.HotbarSize;
+        float x0 = place.Position.X + s + gap;
+        _hotbar.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
+        _hotbar.AddThemeConstantOverride("separation", (int)gap);
+        _hotbar.OffsetLeft = x0;
+        _hotbar.OffsetTop = place.Position.Y;
+        _hotbar.OffsetRight = place.End.X;
+        _hotbar.OffsetBottom = place.End.Y;
+        foreach (var slot in _hotbarSlots) slot.CustomMinimumSize = new Vector2(s, s);
+        _cashHud.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
+        _cashHud.OffsetLeft = x0;
+        _cashHud.OffsetRight = x0 + 260;
+        _cashHud.OffsetTop = place.Position.Y - 52;
+        _cashHud.OffsetBottom = place.Position.Y - 4;
+    }
+
     /// <summary>The carried stack goes back where it was picked from (#391), else into the pack.</summary>
     private void PutBackCarried()
     {
@@ -1090,6 +1115,7 @@ public partial class InventoryUi : CanvasLayer
         }
 
         ProcessCrafting(dt);
+        PlaceForTouch();
         _hotbar.Visible = ItemsActive && !IsOpen && Scope == null;
         _cashHud.Visible = _hotbar.Visible;
         _readoutPanel.Visible = Readout != null && !IsOpen;
