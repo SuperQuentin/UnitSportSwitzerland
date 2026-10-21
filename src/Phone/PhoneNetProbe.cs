@@ -44,12 +44,12 @@ public partial class PhoneNetProbe : ChatProbe
         Say("out");
         Expect(await Heard("B", "seen out", 12), "B saw the phone out");
         phone.Open();
-        await Seconds(1.2);
+        await Until(() => phone.IsCovering, 3);
         Expect(phone.IsCovering, "A's screen covers the view");
         Say("open");
         Expect(await Heard("B", "seen open", 12), "B saw the phone open");
         phone.PutAway();
-        for (int i = 0; i < 40 && phone.IsOut; i++) await Seconds(0.1);
+        await Until(() => !phone.IsOut, 4);
         Expect(!phone.IsOut, "A put it away");
         Say("away");
         Expect(await Heard("B", "seen away", 12), "B saw it put away");

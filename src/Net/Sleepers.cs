@@ -221,6 +221,9 @@ public partial class Sleepers : Node
     /// <summary>Client: how many sleepers this client shows (checks).</summary>
     public int Count => _shown.Count;
 
+    /// <summary>Client: whether a sleeper of this name is shown (checks).</summary>
+    public bool Shows(string name) => _shown.Values.Any(s => s.Name == name);
+
     /// <summary>Client: where a shown sleeper lies, in world space (checks).</summary>
     public Vector3? AnyShown => _visuals.Values.FirstOrDefault(IsInstanceValid)?.GlobalPosition;
 

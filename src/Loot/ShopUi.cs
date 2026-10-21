@@ -106,7 +106,7 @@ public partial class ShopUi : CanvasLayer
         _buys.Text = type == ShopType.FarmCoop ? BuysText(type) + " " + Farming.CoopPanel.MarketLine(_key) : BuysText(type);
         _status.Text = "Cash under 20 CHF; from 20 CHF most shops take the card too (your bank account).";
         _panel.Visible = true;
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
         Bank.Instance?.Refresh();
         Rebuild();

@@ -180,7 +180,7 @@ public partial class XrUi : Node3D
         Pointing = false;
         _ray.Visible = false;
         _dot.Visible = false;
-        if (Input.MouseMode == Input.MouseModeEnum.Captured || !Aim(out var window))
+        if (MouseCapture.Mode == Input.MouseModeEnum.Captured || !Aim(out var window))
         {
             // a click held as the hand left the panel (or the menu closed) still has to come up
             if (_clickWas) Click(false, _lastPoint);

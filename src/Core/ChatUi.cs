@@ -316,7 +316,7 @@ public partial class ChatUi : CanvasLayer
         ScrollToEnd();
 
         // The fly camera holds the pointer captured; typing needs it back.
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
     }
 

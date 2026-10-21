@@ -83,7 +83,7 @@ public sealed partial class ClientTerrainSync : Node
     /// </summary>
     private async Task SyncHttpAsync(CancellationToken ct)
     {
-        var result = await _streamer.FetchAsync(AssetKind.HttpBase, new TileId(0, 0), ct).ConfigureAwait(false);
+        var result = await FetchPersistentAsync(AssetKind.HttpBase, "HTTP mirror address", ct).ConfigureAwait(false);
         if (result.Data is not { Length: > 0 } bytes) return;
 
         string url = Encoding.UTF8.GetString(bytes).Trim();
@@ -93,15 +93,35 @@ public sealed partial class ClientTerrainSync : Node
         GD.Print($"[stream] tiles from {http.BaseUrl} (HTTP), the game link as fallback");
     }
 
+    private const int PersistentAttempts = 6;
+
+    /// <summary>
+    /// A file the whole session depends on (the mirror address, the tile index), asked again with
+    /// backoff after a timeout, "busy" or "not connected yet" (#1032): one lost answer used to cost a
+    /// phone its terrain for the session. Only "not on this server" is final. Not tile-scoped, so any
+    /// TileId does as the request key.
+    /// </summary>
+    private async Task<AssetResult> FetchPersistentAsync(AssetKind kind, string what, CancellationToken ct)
+    {
+        var delay = TimeSpan.FromSeconds(2);
+        for (int attempt = 1; ; attempt++)
+        {
+            var result = await _streamer.FetchAsync(kind, new TileId(0, 0), ct).ConfigureAwait(false);
+            if (result.Data != null || result.PermanentlyMissing || attempt == PersistentAttempts || ct.IsCancellationRequested)
+                return result;
+            GD.Print($"[stream] no {what} yet (attempt {attempt} of {PersistentAttempts}); asking again in {delay.TotalSeconds:0} s");
+            try { await Task.Delay(delay, ct).ConfigureAwait(false); }
+            catch (OperationCanceledException) { return result; }
+            delay = TimeSpan.FromSeconds(Math.Min(delay.TotalSeconds * 2, 15));
+        }
+    }
+
     /// <summary>Fetches and adopts the server's tile index. False when there is nothing more to sync.</summary>
     private async Task<bool> SyncIndex(CancellationToken ct)
     {
         if (Synced) return false;
 
-        // The manifest is not tile-scoped, so any TileId will do as the request key.
-        byte[]? bytes = (await _streamer
-            .FetchAsync(AssetKind.Manifest, new TileId(0, 0), ct)
-            .ConfigureAwait(false)).Data;
+        byte[]? bytes = (await FetchPersistentAsync(AssetKind.Manifest, "terrain index", ct).ConfigureAwait(false)).Data;
 
         if (bytes is null)
         {

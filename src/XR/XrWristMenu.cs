@@ -95,7 +95,7 @@ public partial class XrWristMenu : CanvasLayer
     {
         if (IsOpen || !inWorld) return;
         bool looked = false;
-        if (left.GetHasTrackingData() && Input.MouseMode == Input.MouseModeEnum.Captured)
+        if (left.GetHasTrackingData() && MouseCapture.Mode == Input.MouseModeEnum.Captured)
         {
             var to = left.GlobalPosition - head.Origin;
             float d = to.Length();
@@ -151,7 +151,7 @@ public partial class XrWristMenu : CanvasLayer
         Entry("Close", null, null);
 
         _panel.Visible = true;
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
     }
 

@@ -56,7 +56,7 @@ public partial class TouchCheck : Node
             case 1: // on foot and on the ground: thumb down on the stick
                 if (_phaseT < 2 || !me.IsOnFloor())
                 {
-                    if (_phaseT > 10) Finish($"never on foot: overlay {TouchControls.Shown}, on floor {me.IsOnFloor()}, mouse {Input.MouseMode}");
+                    if (_phaseT > 10) Finish($"never on foot: overlay {TouchControls.Shown}, on floor {me.IsOnFloor()}, mouse {MouseCapture.Mode}");
                     return;
                 }
                 _from = me.GlobalPosition;
