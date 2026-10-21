@@ -91,6 +91,12 @@ public partial class Handshake : Node
     /// <summary>Client: the server refused, or never answered; the reason, for the player.</summary>
     public event Action<string>? Refused;
 
+    /// <summary>Server: a client of a newer protocol was refused: a newer release is out (#1088, <see cref="ServerAutoUpdate"/>).</summary>
+    public event Action? NewerPeerRefused;
+
+    /// <summary>Server: added to the refusal a newer client reads, e.g. that this server updates itself (#1088).</summary>
+    public Func<string?>? NewerHint { get; set; }
+
     public static Handshake CreateServer(ChatManager chat) => new() { Name = NodeName, _server = true, _chat = chat };
 
     public static Handshake CreateClient() => new() { Name = NodeName };
@@ -103,11 +109,15 @@ public partial class Handshake : Node
     /// <summary>Server: a peer left, accepted or not.</summary>
     public void PeerLeft(long peer) => _waiting.Remove(peer);
 
+    /// <summary>Server: a peer that will never say hello and must not be kicked for it: a remote console (<see cref="ConsoleLink"/>).</summary>
+    public void Exempt(long peer) => _waiting.Remove(peer);
+
     /// <summary>Client: connected; says which protocol this build speaks.</summary>
     public void Begin()
     {
         _clientWaited = 0;
-        RpcId(1, MethodName.Hello, Protocol);
+        // --fakeprotocol N: a client of another version, for the checks of a refusal (#1088)
+        RpcId(1, MethodName.Hello, Core.CmdArgs.Int("--fakeprotocol") ?? Protocol);
     }
 
     public override void _Process(double delta)
@@ -140,7 +150,10 @@ public partial class Handshake : Node
         {
             string newer = protocol < Protocol ? "a newer" : "an older";
             GD.Print($"[net] peer {peer} speaks protocol {protocol}, this server {Protocol}: refused");
-            RpcId(peer, MethodName.Refuse, $"This server runs {newer} version of the game (protocol {Protocol}, yours {protocol}).");
+            string reason = $"This server runs {newer} version of the game (protocol {Protocol}, yours {protocol}).";
+            if (protocol > Protocol && NewerHint?.Invoke() is { } hint) reason += " " + hint;
+            RpcId(peer, MethodName.Refuse, reason);
+            if (protocol > Protocol) NewerPeerRefused?.Invoke();
             var tree = GetTree();
             tree.CreateTimer(0.3).Timeout += () =>
             {

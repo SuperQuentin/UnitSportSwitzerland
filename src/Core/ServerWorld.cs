@@ -245,6 +245,10 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _handshake = Handshake.CreateServer(_chat);
         _handshake.Accepted += OnPeerAccepted;
         AddChild(_handshake);
+        // joining for the chat and commands only, from a client of any version (#1088)
+        AddChild(ConsoleLink.CreateServer(_chat, _handshake, QueryResponder.ParseServerName()));
+        // a deployed server installs a newer release by itself, once nobody plays (#1088)
+        if (ServerAutoUpdate.Create(_chat, _handshake) is { } autoUpdate) AddChild(autoUpdate);
 
         // invites (#840): World/Invites, one system every activity asks through; parties ride on it
         var invites = _invites = InviteService.CreateServer(_chat);
@@ -419,13 +423,13 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // and how full it is (Net/QueryResponder, docs/notes/net/server-query.md)
         if (QueryResponder.ParsePort(port) is { } queryPort)
             AddChild(new QueryResponder(queryPort, () => new ServerStatus(
-                name, port, registry?.Players.Count ?? 0, NetworkManager.MaxClients, version, world) { Wire = Handshake.Protocol },
+                name, port, registry?.InWorld.Count() ?? 0, NetworkManager.MaxClients, version, world) { Wire = Handshake.Protocol },
                 QueryResponder.ParseBind()));
         // the same, as a file the web page beside a deployed server reads (#740, docs/notes/net/status-page.md)
         if (StatusFile.ParsePath() is { } statusPath)
             AddChild(new StatusFile(statusPath, () => new StatusFileData(
-                name, version, world, port, registry?.Players.Count ?? 0, NetworkManager.MaxClients,
-                registry is null ? [] : registry.Players.Select(p => p.Name).Order(StringComparer.OrdinalIgnoreCase).ToArray())));
+                name, version, world, port, registry?.InWorld.Count() ?? 0, NetworkManager.MaxClients,
+                registry is null ? [] : registry.InWorld.Select(p => p.Name).Order(StringComparer.OrdinalIgnoreCase).ToArray())));
         // where everyone is, as a file the live map beside a deployed server reads (#896, docs/notes/net/live-map.md)
         if (LiveMapFile.ParsePath() is { } mapPath)
             AddChild(new LiveMapFile(mapPath, LiveMapPlayers));

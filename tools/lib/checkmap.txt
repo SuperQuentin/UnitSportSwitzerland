@@ -297,6 +297,15 @@ src/Net/Arrival          net    tools/worldpicknetcheck.sh
 src/Core/WorldChoice     net    tools/worldpicknetcheck.sh
 src/Ui/WorldPick         net    tools/worldpicknetcheck.sh
 src/Ui/MultiplayerScreen net    tools/worldpicknetcheck.sh
+src/Ui/MultiplayerScreen net    tools/consolelinknetcheck.sh
+src/Ui/ServerConsole     net    tools/consolelinknetcheck.sh
+src/Ui/ConsoleLinkCheck  net    tools/consolelinknetcheck.sh
+src/Net/ConsoleLink      net    tools/consolelinknetcheck.sh
+src/Net/Handshake        net    tools/consolelinknetcheck.sh
+src/Net/Handshake        net    tools/autoupdatenetcheck.sh
+src/Net/ServerAutoUpdate net    tools/autoupdatenetcheck.sh
+src/Net/ServerUpdater    net    tools/autoupdatenetcheck.sh
+src/Core/AutoUpdateNetPr net    tools/autoupdatenetcheck.sh
 src/Net/ChatManager      net    tools/transfercheck.sh
 src/Net/TransferProbe    net    tools/transfercheck.sh
 src/Core/ServerWorld     net    @netsmoke

@@ -95,7 +95,7 @@ public partial class GameShell : Node
             "--menu", "--fakeversion", "--updatefeed", "--updateaccept", "--settings", "--licenses", "--controls", "--tutorial",
             "--multiplayer", "--solo", "--map", "--landing", "--uishot", "--menucheck", "--mapcheck", "--leavecheck",
             "--leave-restart", "--mobile", "--autostart", "--wheellock", "--fakewheel", "--ffblog", "--vr", "--xrsim", "--vrmonitor", "--xrheadshot", "--xrwrist", "--xrprofile", "--xrcab", "--xrhands",
-            "--bubblecheck", "--worldpickcheck",
+            "--bubblecheck", "--worldpickcheck", "--consolelinkcheck", "--fakeprotocol",
         };
         foreach (string a in args)
             if (a.StartsWith("--") && Array.IndexOf(harmless, a) < 0) return false;
@@ -185,6 +185,7 @@ public partial class GameShell : Node
         if (Ui.MapCheck.Requested()) AddChild(new Ui.MapCheck(this));
         if (LeaveCheck.Requested()) AddChild(new LeaveCheck(this));
         if (WorldPickCheck.Requested()) AddChild(new WorldPickCheck(this));
+        if (ConsoleLinkCheck.Requested()) AddChild(new ConsoleLinkCheck(this));
     }
 
     public override void _ExitTree()
@@ -402,6 +403,16 @@ public partial class GameShell : Node
         return e;
     }
 
+    private string? _refusedEndpoint;
+
+    /// <summary>The server that just refused this game's version, handed to the Multiplayer screen once (#1088).</summary>
+    public string? TakeRefusedEndpoint()
+    {
+        string? e = _refusedEndpoint;
+        _refusedEndpoint = null;
+        return e;
+    }
+
     private void ShowTitle()
     {
         _state = State.Title;
@@ -461,6 +472,7 @@ public partial class GameShell : Node
     {
         if (_state is State.Loading or State.InWorld or State.Leaving) return;
         _launch = launch;
+        _refusedEndpoint = null;
         if (!launch.Hosted)
             _returnTo = launch.Mode == GameMode.Multiplayer ? "multiplayer" : "solo";
 
@@ -624,7 +636,12 @@ public partial class GameShell : Node
                     _rejoin = joined with { World = other.IsOpen ? null : other };
                     LeaveWorld(null);
                 }
-                else if (_world.Stage == LoadStage.Failed) LeaveWorld(_world.Failure ?? "The world could not be started.");
+                else if (_world.Stage == LoadStage.Failed)
+                {
+                    // another game version: the Multiplayer screen offers that server's console (#1088)
+                    _refusedEndpoint = _world.RefusedForVersion && _launch is { Mode: GameMode.Multiplayer, Hosted: false } refused ? refused.Endpoint : null;
+                    LeaveWorld(_world.Failure ?? "The world could not be started.");
+                }
                 break;
         }
     }

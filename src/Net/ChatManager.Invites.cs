@@ -39,7 +39,7 @@ public partial class ChatManager
     private InviteService? _invites;
 
     /// <summary>Server: the players online, past the handshake (invites go only to them).</summary>
-    public long[] OnlinePeers => _registry?.Players.Select(p => p.PeerId).Where(id => id > 0).ToArray() ?? Array.Empty<long>();
+    public long[] OnlinePeers => _registry?.InWorld.Select(p => p.PeerId).Where(id => id > 0).ToArray() ?? Array.Empty<long>();
 
     /// <summary>Server: parties (#840), wired by ServerWorld.</summary>
     public Parties? Parties { get; set; }

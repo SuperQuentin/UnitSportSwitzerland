@@ -45,7 +45,7 @@ public partial class MultiplayerScreen : Screen
         chip.AddChild(edit);
         header.AddChild(chip);
 
-        if (Shell.TakeError() is { } error) body.AddChild(_banner = Banner(error));
+        if (Shell.TakeError() is { } error) body.AddChild(_banner = Banner(error, Shell.TakeRefusedEndpoint()));
 
         var columns = UiKit.HBox(18);
         columns.SizeFlagsVertical = SizeFlags.ExpandFill;
@@ -205,10 +205,12 @@ public partial class MultiplayerScreen : Screen
             star.Pressed += () => { Shell.Book.SetFavorite(s.Endpoint, !s.Favorite); RebuildSaved(); };
             var edit = UiKit.IconButton(Icons.Pencil, "Edit", 30);
             edit.Pressed += () => EditServer(s);
+            var console = UiKit.IconButton(Icons.Terminal, "Server console (admins)", 30);
+            console.Pressed += () => Shell.Push(ServerConsoleScreen.Create(s.Endpoint));
             var remove = UiKit.IconButton(Icons.Trash, "Remove", 30);
             remove.Pressed += () => Modal.Confirm(this, "Remove server?", $"{s.Name} ({s.Endpoint}) is taken off your list.", "Remove",
                 () => { Shell.Book.Remove(s.Endpoint); RebuildSaved(); }, danger: true);
-            row.AddActions(star, edit, remove);
+            row.AddActions(star, edit, console, remove);
             _saved.AddChild(row);
             _savedRows[s.Endpoint] = row;
             _firstJoin ??= row.JoinButton;
@@ -253,7 +255,9 @@ public partial class MultiplayerScreen : Screen
                     Shell.Book.AddOrUpdate(new SavedServer { Name = name, Endpoint = endpoint, Favorite = true });
                     RebuildSaved();
                 };
-                row.AddActions(save);
+                var console = UiKit.IconButton(Icons.Terminal, "Server console (admins)", 30);
+                console.Pressed += () => Shell.Push(ServerConsoleScreen.Create(endpoint));
+                row.AddActions(save, console);
                 _lan.AddChild(row);
                 _lanRows[f.Endpoint] = row;
             }
@@ -392,12 +396,21 @@ public partial class MultiplayerScreen : Screen
             : (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
     }
 
-    private PanelContainer Banner(string message)
+    /// <param name="refused">The server that refused this game's version: an admin may open its console (#1088).</param>
+    private PanelContainer Banner(string message, string? refused)
     {
         var line = UiKit.HBox(10);
         var text = UiKit.Text(message, UiTheme.FontSmall, new Color(1, 0.86f, 0.84f), wrap: true);
         text.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         line.AddChild(text);
+        if (refused != null)
+        {
+            var console = UiKit.Button("Server console…");
+            console.TooltipText = "Admins: update the server from its console";
+            console.SizeFlagsVertical = SizeFlags.ShrinkCenter;
+            console.Pressed += () => Shell.Push(ServerConsoleScreen.Create(refused));
+            line.AddChild(console);
+        }
         var close = UiKit.IconButton(Icons.Close, "Dismiss", 28);
         line.AddChild(close);
         var panel = new PanelContainer();

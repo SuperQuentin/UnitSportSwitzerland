@@ -37,7 +37,8 @@ touches its topic; search with `grep -ril <word> docs/notes/net`.
 - `perf-interest-round` — `InterestService.Evaluate` reads each target once per round (`_at`/`_agl`/`_ride`), `Together` once per pair, cached `_sight`; nothing per pair from a node
 - `arrival` — The server decides where a joining player starts (`--spawn E,N`) and whether players may teleport (`--no-teleport`): `World/Arrival.Rules` on accept, the client's loading screen waits for it; `--at` still wins; `tools/arrivalcheck.sh` (#799)
 - `sleepers` — A player who leaves lies asleep where they were (saved), and wakes there on return; identity is a per-install ECDSA key proven on join, never the name (#644)
-- `server-update` — `/update` (admin, never automatic): newest GitHub release fetched while players play, then kick all and quit; `start-server.sh run` switches `current` and restarts (#730)
+- `server-update` — `/update` (admin): newest GitHub release fetched while players play, then kick all and quit; `start-server.sh run` switches `current` and restarts (#730); automatic every 10 min, restart only once empty, admins told (`ServerAutoUpdate`, #1088)
+- `console-link` — `World/ConsoleLink`: join for the chat only from a client of any version, no body, one's own name and rights (admins.json, /login), two RPCs that never change; Multiplayer › console button or the refusal banner (#1088)
 
 ## Commands
 
