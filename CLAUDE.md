@@ -17,6 +17,7 @@ occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new o
 `invariant-culture-floats` (French locale), `gdignore-data-dirs`, `godot-ai-mcp-tips`,
 `headless-exit-139` (read the RESULT line), `godot-exe`, `graphify` (optional),
 `worktrees` (main checkout stays on `main`), `local-release` (`tools/release.sh` builds and uploads a release, run by hand),
+`build-features` (`UNITSPORT_FEATURES`: an export leaves out the dev tools it does not list, e.g. the trailer studio; `#if TRAILER` at its call sites; the editor has all),
 `release-on-merge` (a merged PR releases on GitHub Actions; bursts coalesce into one release, at most one an hour),
 `feature-clips` (`/clip`, `tools/record-clip.sh`: GIFs of a feature, shown in the next release),
 `linux-deploy` (`tools/deploy-linux.sh` builds and deploys the Linux server over SSH),
