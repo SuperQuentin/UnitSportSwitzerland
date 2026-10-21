@@ -41,6 +41,9 @@ public partial class FootPlayer
     /// <summary>For checks: how many walkable vehicles' decks are built round this player now.</summary>
     public int DeckSetsBuilt => _decks.Count;
 
+    /// <summary>For checks: this player has built <paramref name="host"/>'s deck (its collision is here to stand on).</summary>
+    public bool HasDeckOf(Node3D host) => _decks.TryGetValue(KeyOf(host), out var set) && set.Host == host;
+
     /// <summary>For checks: the three seats nearest, with their distances, in the vehicle this player walks about in.</summary>
     public string SeatsNearHere()
     {

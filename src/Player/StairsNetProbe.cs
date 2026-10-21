@@ -91,7 +91,8 @@ public partial class StairsNetProbe : ChatProbe
         if (me.Vehicle is not Airstairs stairs) { Fail("not airstairs"); return; }
         await Seconds(1.5);
         Say("board");
-        if (!await Heard("B", "aboard", 40)) { Fail("B never got on the stairs"); return; }
+        if (!await Until(() => _heard.Any(l => l.Contains("SN B aboard") || l.Contains("SN B fell off")), 40)
+            || _heard.Any(l => l.Contains("SN B fell off"))) { Fail("B never got on the stairs"); return; }
 
         // drive at L2, let go: it docks and rises, B on the platform
         bool letGo = false;
@@ -140,15 +141,28 @@ public partial class StairsNetProbe : ChatProbe
         var ride = (Airstairs)a.RideModel!;
         // onto A's platform, a step behind the gate
         Vector3 Spot(float authoredZ) => FrameOf(a) * new Vector3(0f, AirstairsLayout.FloorAt(ride.Height, authoredZ) + 0.05f, -authoredZ);
+        // beside them on the ground until their deck is built here: put up there before it, B stood in
+        // the stairs' hull, was shoved out over the platform's front and fell, and the deck that came
+        // a few frames later caught it above the floor or under it (#1006)
+        me.PlaceAt(FrameOf(a) * new Vector3(3f, 0.3f, -3f), a.Rotation.Y);
+        if (!await Until(() => me.HasDeckOf(a), 10)) { Say("fell off"); Fail("A's stairs' deck never came"); return; }
         bool aboard = false;
         for (int i = 0; i < 300 && !aboard; i++)
         {
             if (i % 60 == 0) me.PlaceAt(Spot(3f), a.Rotation.Y);
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
-            aboard = me.Aboard && me.DeckOn == a.Name;
+            aboard = me.Aboard && me.DeckOn == a.Name && me.IsOnFloor();
         }
         Expect(aboard, $"B stands on A's stairs (deck '{me.DeckOn}', B's copy's platform {ride.Height:F2})");
         await Seconds(1);
+        // still on its feet up there: the rest is riding the platform, and one fallen through it
+        // waited out the drive and every step after
+        if (!(me.Aboard && me.DeckOn == a.Name && me.IsOnFloor()))
+        {
+            Say("fell off");
+            Fail($"B fell off A's platform: local {FrameOf(a).AffineInverse() * me.GlobalPosition}, deck '{me.DeckOn}', floor {me.IsOnFloor()}");
+            return;
+        }
         Say("aboard");
 
         // carried while A drives and docks; on the platform all the way
