@@ -459,8 +459,8 @@ public partial class DebugMenu : CanvasLayer
         // the two settings here may have changed in the Settings screen since
         _toggles["fill"].SetPressedNoSignal(GameSettings.Current.GeneratedFill);
         _perfPicker.Selected = (int)GameSettings.Current.PerfOverlay;
-        _mouseBefore = Input.MouseMode;
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        _mouseBefore = MouseCapture.Mode;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
     }
 
     public void Close()

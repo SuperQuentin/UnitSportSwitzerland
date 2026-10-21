@@ -123,7 +123,7 @@ internal sealed partial class XrMap : Node3D
     public void Update(FootPlayer? player)
     {
         if (!Visible) return;
-        if (player is not { Ride: RideKind.OnFoot, RidingWith: 0 } || Input.MouseMode != Input.MouseModeEnum.Captured)
+        if (player is not { Ride: RideKind.OnFoot, RidingWith: 0 } || Core.MouseCapture.Mode != Input.MouseModeEnum.Captured)
         {
             Visible = false;
             return;

@@ -49,7 +49,7 @@ public partial class EmoteNetProbe : ChatProbe
         foreach (int emote in Picks)
         {
             me.DanceId = FootPlayer.EmoteDanceBase + emote;
-            await Seconds(0.5);
+            await Until(() => me.DrawnDance is { } m && m.Move == HumanMeshBuilder.EmoteMoves + emote, 3);
             Expect(me.DrawnDance is { } d && d.Move == HumanMeshBuilder.EmoteMoves + emote, $"A draws {HumanMeshBuilder.EmoteName(emote)}");
             Say($"emote {emote}");
             Expect(await Heard("B", $"seen {emote}", 12), $"B saw {HumanMeshBuilder.EmoteName(emote)}");

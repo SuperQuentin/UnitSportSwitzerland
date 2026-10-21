@@ -198,8 +198,17 @@ public partial class GameShell : Node
     {
         // closing the window while hosting must not leave the server behind
         if (what == NotificationWMCloseRequest) _hosted?.Stop();
+        // Android's Back (button or edge swipe) is the phone's Esc (#1023): it closes what is open,
+        // or pauses. It never quits (application/config/quit_on_go_back=false); Quit is in the pause menu
+        else if (what == NotificationWMGoBackRequest) PressEscape();
         // Android: "Open with" while the game runs comes back as a resume with a new intent
         else if (what == NotificationApplicationResumed && !Direct && AndroidBridge.OpenedFile() is { } opened) OpenGpx(opened);
+    }
+
+    private static void PressEscape()
+    {
+        foreach (bool down in new[] { true, false })
+            Input.ParseInputEvent(new InputEventKey { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = down });
     }
 
     private string? _pendingGpx;
@@ -373,7 +382,7 @@ public partial class GameShell : Node
         bool open = _stack.Count > 0;
         _menuLayer.Visible = open;
         UiFocus.Set(this, open);
-        if (open) Input.MouseMode = Input.MouseModeEnum.Visible;
+        if (open) MouseCapture.Mode = Input.MouseModeEnum.Visible;
         else if (_state == State.InWorld) _world?.ResumeControl();
     }
 
@@ -403,7 +412,7 @@ public partial class GameShell : Node
         }
         ClearStack();
         Push(TitleScreen.Create());
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
     }
 
     public override void _UnhandledInput(InputEvent e)

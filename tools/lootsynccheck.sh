@@ -16,7 +16,6 @@ tc_server 300 120 $OUT/lootsync_server.log --server --port $PORT --lootepoch "$E
 tc_client 240 $OUT/lootsync_a.log --windowed --connect 127.0.0.1:$PORT --name LootA --cache "$OUT/lootsync_cache_a" \
     --at "$AT" --lootepoch "$EP" --lootsynccheck A ${CH[@]+"${CH[@]}"} &
 A=$!
-sleep 3
 tc_client 240 $OUT/lootsync_b.log --windowed --connect 127.0.0.1:$PORT --name LootB --cache "$OUT/lootsync_cache_b" \
     --at "$AT" --lootepoch "$EP" --lootsynccheck B ${CH[@]+"${CH[@]}"}
 wait $A

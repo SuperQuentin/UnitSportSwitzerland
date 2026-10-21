@@ -85,8 +85,6 @@ public partial class CraneNetProbe : ChatProbe
 
     private async Task RunA(FootPlayer me)
     {
-        Chat?.Send("/login test");
-        await Seconds(1.5);
         bool ready = false;
         for (int i = 0; i < 40 && !ready; i++)
         {
@@ -138,6 +136,7 @@ public partial class CraneNetProbe : ChatProbe
         Expect(me.TryInteract() && !me.CraneWorking, "E hangs the remote back up");
         Say($"released {F(crane.Last.Yaw)} {F(crane.Last.Trolley)} {F(crane.Last.HookY)}");
         if (!await Heard("B", "held seen", 30)) { Fail("B never saw it held"); return; }
+        if (!await LogIn("test")) return;   // admin is needed only for /speed
         Chat?.Send("/speed 8");
         if (!await Heard("B", "resumed seen", 90)) Fail("B never saw it back on its schedule");
         Chat?.Send("/speed 1");

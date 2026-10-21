@@ -8,7 +8,6 @@ PORT=${PORT:-7881}
 WORLD="--world fixture --chunks fixture:flat"
 tc_server 300 120 "$OUT/transfer_server.log" --server --port $PORT $WORLD
 tc_client 240 "$OUT/transfer_A.log" --connect 127.0.0.1:$PORT --name TransferA $WORLD --transfer A & A=$!
-sleep 8
 tc_client 220 "$OUT/transfer_B.log" --connect 127.0.0.1:$PORT --name TransferB $WORLD --transfer B & B=$!
 wait $A $B
 tc_stop

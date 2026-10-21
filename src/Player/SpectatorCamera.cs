@@ -42,7 +42,7 @@ public partial class SpectatorCamera : Camera3D
                     Speed = Mathf.Min(Speed * 1.25f, 3000f);
                 else if (button.ButtonIndex == MouseButton.WheelDown)
                     Speed = Mathf.Max(Speed / 1.25f, 2f);
-                else if (Input.MouseMode == Input.MouseModeEnum.Visible)
+                else if (Core.MouseCapture.Mode == Input.MouseModeEnum.Visible)
                     Core.MouseCapture.Capture();
                 break;
 
