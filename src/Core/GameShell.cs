@@ -195,6 +195,15 @@ public partial class GameShell : Node
     {
         // closing the window while hosting must not leave the server behind
         if (what == NotificationWMCloseRequest) _hosted?.Stop();
+        // Android's Back (button or edge swipe) is the phone's Esc (#1023): it closes what is open,
+        // or pauses. It never quits (application/config/quit_on_go_back=false); Quit is in the pause menu
+        else if (what == NotificationWMGoBackRequest) PressEscape();
+    }
+
+    private static void PressEscape()
+    {
+        foreach (bool down in new[] { true, false })
+            Input.ParseInputEvent(new InputEventKey { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = down });
     }
 
     /// <summary>
