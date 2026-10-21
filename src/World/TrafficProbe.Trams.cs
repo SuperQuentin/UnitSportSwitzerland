@@ -10,29 +10,30 @@ public partial class TrafficProbe
 {
     /// <summary>The picture of a tram at its red (windowed, <c>--trafficcheck,out.png --mover tram</c>): frames left before it is saved, -1 taken.</summary>
     private int _tramShot = int.MaxValue;
-    private Vector3 _tramEye, _tramLook;
+    private Vector3 _tramAt, _tramDir;
+    private int _tramView;
 
     partial void TramsTick(double delta)
     {
-        // windowed with a picture: once a tram stands first at its red, from behind it over its left, its line, bar head and junction ahead
+        // windowed with a picture: once a tram stands first at its red, two shots: from above behind it (its line, the junction),
+        // then from over its front looking on (its bar head, lit, beside the line)
         if (_kind == MoverKind.Tram && _shot != null && _tramShot >= 0)
         {
             if (_tramShot == int.MaxValue && _traffic.TramAtRed() is var (pos, dir))
-            {
-                var side = new Vector3(-dir.Z, 0f, dir.X);
-                _tramEye = pos - dir * 12f - side * 5f + Vector3.Up * 6f;
-                _tramLook = pos + dir * 22f + side * 4f + Vector3.Up * 3f;
-                _tramShot = 30;
-            }
+                (_tramAt, _tramDir, _tramShot, _tramView) = (pos, dir, 30, 0);
             if (_tramShot != int.MaxValue)
             {
-                _camera.GlobalTransform = new Transform3D(Player.Flyer.Orient(_tramLook - _tramEye, Vector3.Up, Vector3.Forward), _tramEye);
+                var side = new Vector3(-_tramDir.Z, 0f, _tramDir.X);
+                var (eye, look) = _tramView == 0
+                    ? (_tramAt - _tramDir * 16f + Vector3.Up * 10f, _tramAt + _tramDir * 18f + Vector3.Up * 2f)
+                    : (_tramAt + _tramDir * 1f + Vector3.Up * 4.2f, _tramAt + _tramDir * 14f + side * 3f + Vector3.Up * 3.2f);
+                _camera.GlobalTransform = new Transform3D(Player.Flyer.Orient(look - eye, Vector3.Up, Vector3.Forward), eye);
                 if (--_tramShot == 0)
                 {
-                    string path = _shot.Replace(".png", "_tram_red.png");
+                    string path = _shot.Replace(".png", _tramView == 0 ? "_tram_red.png" : "_tram_red_head.png");
                     GetViewport().GetTexture().GetImage().SavePng(path);
                     GD.Print($"[trafficcheck] wrote {path}: a tram at its red");
-                    _tramShot = -1;
+                    (_tramShot, _tramView) = _tramView == 0 ? (30, 1) : (-1, 2);
                 }
             }
         }
