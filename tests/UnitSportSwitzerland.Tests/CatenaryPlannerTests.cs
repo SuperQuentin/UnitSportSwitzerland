@@ -100,6 +100,19 @@ public class CatenaryPlannerTests
     }
 
     [Fact]
+    public void A_town_tram_on_its_own_bed_gets_centre_masts_but_one_in_the_carriageway_spans()
+    {
+        // town paving (Street) off the carriageway, nothing built near: centre masts; laid in the carriageway (Embedded): spans
+        var bed = new CatenaryPlanner.Rail([new Vec2(2600000, 1200500), new Vec2(2600070, 1200500)], [500f, 500f],
+            RoadFlags.Tramway | RoadFlags.DoubleTrack, true, false, 0, Tile);
+        Assert.Equal(3, Plan([bed]).Stats.CentreMasts);
+        var laid = bed with { Embedded = true };
+        var (_, _, stats) = Plan([laid], clear: p => Math.Abs(p.Y - 1200500) > 6);
+        Assert.Equal(0, stats.CentreMasts);
+        Assert.Equal(3, stats.Spans);
+    }
+
+    [Fact]
     public void A_building_near_or_a_blocked_centre_line_keeps_masts_outside()
     {
         // a house 10 m north: no centre masts, masts outside the tracks instead
