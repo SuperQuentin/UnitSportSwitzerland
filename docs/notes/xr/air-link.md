@@ -36,6 +36,10 @@ Measured with `--xrsim --xrload` (below), RTX 2080 Ti + Ryzen 5600X, a car on a 
 | VR detail Low + the monitor as above, physics 72 Hz | **10.4 ms** | 5.5 ms | 16.6 M (11.5 M on frames without the monitor) |
 | the same at 90 Hz | 10.7 ms | 6.1 ms | |
 
+These ran on Forward+: `--rendering-driver vulkan` alone does not keep the project's Mobile renderer
+(`setup`). On the headset itself, also Forward+, the same build took ~46 ms a frame (Oct 2026), so
+the desktop numbers are a floor, not a forecast: check a headset session with `--xrstats`.
+
 The cockpit mirrors cost ~2 ms more (three small renders in turn, `--mirrors off`); a 40 km
 horizon instead of 150 km takes ~1.5 ms off the headset's GPU. `--xrload` draws one mono picture of
 both eyes' pixels, not multiview stereo: on the headset expect more vertex work, not less.
