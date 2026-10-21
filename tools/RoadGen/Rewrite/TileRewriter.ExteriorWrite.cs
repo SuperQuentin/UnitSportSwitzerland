@@ -30,7 +30,8 @@ public static partial class TileRewriter
     private const float LongRiders = 2f;
 
     private static SignalPlan? WriteSignals(JunctionPlan jp, RoadGenResult result, Dictionary<TileId, List<RoadSignal>> signals,
-        Dictionary<TileId, List<RoadApproach>> approaches, Cantons? cantons, SignalStats signalStats, LayoutWriteStats stats)
+        Dictionary<TileId, List<RoadApproach>> approaches, Cantons? cantons, SignalStats signalStats, LayoutWriteStats stats,
+        Dictionary<TileId, List<RoadPointProp>> signs, Func<Vec2, bool> clear)
     {
         var net = result.Network;
         var home = TileId.FromLv95(jp.Centre.X, jp.Centre.Y);
@@ -131,28 +132,43 @@ public static partial class TileRewriter
             var right = axis.RightAt(m0);
             foreach (var p in ex.Poles)
             {
-                // the foot: on the sidewalk past a path (half a metre in), or on the refuge
-                var sec = ExteriorPlanner.SectionAt(a, p.Station);
-                double o;
+                // the foot (the old layout's PlacePole, #350/#711, restored by #1000): on the refuge; else half a metre out of the kerb,
+                // the main pole past the approach's path where that path stops at its own line (riders wait beside it, it is not
+                // between them and the road), never on a path; stepping out, then back along the arm, until clear of every
+                // carriageway, junction, widening strip and building; none where nothing is clear
+                Vec2 foot;
                 float lift;
-                if (p.OnRefuge && ex.Refuge is { } rf) { o = (rf.Left + rf.Right) * 0.5; lift = 0.12f; }
-                else
+                if (p.OnRefuge && ex.Refuge is { } rf)
                 {
-                    var bands = p.RightKerb ? sec.Strips.Skip(sec.LastCarriageway + 1).ToList() : sec.Strips.Take(Math.Max(0, sec.FirstCarriageway)).Reverse().ToList();
-                    double past = 0;
-                    foreach (var b in bands) { if (b.Kind == StripKind.Sidewalk) break; past += b.Width; }
-                    double d = past + 0.5;
-                    o = p.RightKerb ? sec.CarriagewayRight + d : sec.CarriagewayLeft - d;
-                    lift = (p.RightKerb ? sec.KerbRightCm : sec.KerbLeftCm) / 100f;
+                    // in the middle of the island where it stands (#1000)
+                    var (il, ir) = ex.Islands.Count > 0 ? ExteriorPlanner.IslandEdges(a, p.Station) ?? (rf.Left, rf.Right) : (rf.Left, rf.Right);
+                    foot = P(p.Station, (il + ir) * 0.5);
+                    lift = 0.12f;
                 }
-                var foot = P(p.Station, o);
+                else if (ClearFoot(p, ex, a, P, clear) is var (spot, kerbLift)) (foot, lift) = (spot, kerbLift);
+                else { stats.PolesRejected++; continue; }
                 var local = Local(home, [foot], q => SampleAt(a, q), lift);
                 // car heads face the arriving drivers; a pedestrian head faces across its crossing
                 // the second pole carries the left arrow where a lane turns left only (the check: every such arm has one)
-                var flags = p.Flags | (!p.RightKerb && arms[k].LeftPocket ? SignalPoleFlags.Second : SignalPoleFlags.None);
+                // (on the island where there is one, the left kerb's pole keeping the walkers' head alone, #1000)
+                var flags = p.Flags | (!p.RightKerb && (p.OnRefuge || ex.Refuge is null) && arms[k].LeftPocket ? SignalPoleFlags.Second : SignalPoleFlags.None);
                 if (!arms[k].In) flags &= ~(SignalPoleFlags.Main | SignalPoleFlags.Second);
-                poles.Add(new SignalPole(local[0], local[1], local[2], Heading(u), Heading(p.RightKerb ? -right : right), (byte)k, flags));
+                var pole = new SignalPole(local[0], local[1], local[2], Heading(u), Heading(p.RightKerb ? -right : right), (byte)k, flags);
+                poles.Add(pole);
                 stats.Poles++;
+                // the approach's priority signs for when the lights are off (#121) on its main pole: below the heads, or above them
+                // where a bike head takes the room below (the old layout's, #350/#711)
+                if ((flags & SignalPoleFlags.Main) == 0) continue;
+                bool bikeHead = plan.Groups.Any(g => g.Kind == SignalGroupKind.Bike && g.Arm == k && g.Moves != SignalMoves.Left);
+                bool pedHead = (flags & SignalPoleFlags.Pedestrian) != 0 && plan.Groups.Any(g => g.Kind == SignalGroupKind.Pedestrian && g.Arm == k);
+                foreach (var sign in ex.Signs.Where(x => x.OnMainPole))
+                {
+                    float top = bikeHead ? (pedHead ? CarHeadsTopAbovePedestrian : CarHeadsTop) + SignAboveHeads + RoadSigns.PlateHeight(sign.Type, sign.Variant)
+                        : SignOnPoleTop;
+                    Get(signs, home).Add(new RoadPointProp(sign.Type, sign.Variant, PropFlags.Solid | PropFlags.OnSignalPole, pole.X, pole.Y, pole.Z,
+                        pole.CarHeading, top));
+                    stats.SignsOnPoles++;
+                }
             }
         }
         var centre = Local(home, [jp.Centre], p => SampleAt(jp.Arms[0], p), 0f);
@@ -360,7 +376,19 @@ public static partial class TileRewriter
                 }
                 stats.Bars++;
             }
-            if (ex.Refuge is { } rf)
+            // a lit arm's island in its pieces, rounded where they stand free (#1000); else the refuge whole
+            foreach (var piece in ex.Islands)
+            {
+                var ring = IslandRing(piece, st => ExteriorPlanner.IslandEdges(a, st) ?? (piece.Left, piece.Right)).Select(q => P(q.S, q.O)).ToList();
+                var indices = Junctions.EarClip.Triangulate(ring).Select(i => (ushort)i).ToList();
+                Get(areas, tile).Add(new RoadAreaProp
+                {
+                    Type = AreaPropType.Island, Variant = 2, Flags = PropFlags.Solid, Height = 0.12f,
+                    Vertices = Local(tile, ring, source.SampleHeight, 0f), Indices = indices.ToArray(),
+                });
+                stats.Refuges++;
+            }
+            if (ex.Islands.Count == 0 && ex.Refuge is { } rf)
             {
                 Get(areas, tile).Add(new RoadAreaProp
                 {
@@ -372,6 +400,8 @@ public static partial class TileRewriter
             }
             foreach (var sign in ex.Signs)
             {
+                // (a lit approach's goes on its main pole: WriteSignals)
+                if (sign.OnMainPole) continue;
                 // beside the kerb, its plate clear of the carriageway, on the sidewalk where the side has one
                 var sec = ExteriorPlanner.SectionAt(a, sign.Station);
                 var side = sign.RightKerb ? rightSide : leftSide;
@@ -389,5 +419,80 @@ public static partial class TileRewriter
                 stats.Signs++;
             }
         }
+    }
+
+    /// <summary>
+    /// A pole's foot beside its kerb (the old layout's <c>PlacePole</c>, #350/#711, restored by #1000): <see cref="PoleClear"/> out of
+    /// the kerb, the main one past the approach's path where the arm has a crosswalk, never on a path, stepping out by
+    /// <see cref="PoleStep"/> up to <see cref="PoleTries"/> times, then <see cref="PoleBackStep"/> further out along the arm up to four
+    /// times, until <paramref name="clear"/> says the spot is clear; its kerb's lift; null when none is.
+    /// </summary>
+    private static (Vec2 Foot, float Lift)? ClearFoot(PoleSpot p, ArmExterior ex, ArmPlan a, Func<double, double, Vec2> at, Func<Vec2, bool> clear)
+    {
+        double r = RoadSigns.PoleDiameter * 0.5;
+        foreach (double back in (ReadOnlySpan<double>)[0, PoleBackStep, 2 * PoleBackStep, 3 * PoleBackStep, 4 * PoleBackStep])
+        {
+            var sec = ExteriorPlanner.SectionAt(a, p.Station + back);
+            var bands = p.RightKerb ? sec.Strips.Skip(sec.LastCarriageway + 1).ToList() : sec.Strips.Take(Math.Max(0, sec.FirstCarriageway)).Reverse().ToList();
+            // the side's path, out from the kerb
+            double from = 0, pathFrom = -1, pathTo = -1;
+            foreach (var b in bands)
+            {
+                if (b.Kind == StripKind.Sidewalk) break;
+                if (b.Kind == StripKind.Path && pathFrom < 0) (pathFrom, pathTo) = (from, from + b.Width);
+                from += b.Width;
+            }
+            bool pastPath = pathFrom >= 0 && ex.Crosswalk is not null && (p.Flags & SignalPoleFlags.Main) != 0;
+            double start = pastPath ? pathTo + PoleClear : PoleClear;
+            for (int k = 0; k < PoleTries; k++)
+            {
+                double off = start + k * PoleStep;
+                if (pathFrom >= 0 && off + r > pathFrom && off - r < pathTo) continue;
+                var foot = at(p.Station + back, p.RightKerb ? sec.CarriagewayRight + off : sec.CarriagewayLeft - off);
+                if (clear(foot)) return (foot, (p.RightKerb ? sec.KerbRightCm : sec.KerbLeftCm) / 100f);
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// An island piece's outline (#1000) in its arm's stations and offsets, going round: its two long sides along
+    /// <paramref name="edges"/> (the gore's, so it tapers with it), a half circle at an end that stands free (as wide as the piece
+    /// there, no longer than half of it), square at one the crosswalk cuts.
+    /// </summary>
+    private static List<(double S, double O)> IslandRing(IslandPiece p, Func<double, (double Left, double Right)> edges)
+    {
+        const int Steps = 8;
+        double len = p.To - p.From;
+        var (fl, fr) = edges(p.From);
+        var (tl, tr) = edges(p.To);
+        double rFrom = p.RoundFrom ? Math.Min((fr - fl) * 0.5, len * 0.5) : 0, rTo = p.RoundTo ? Math.Min((tr - tl) * 0.5, len * 0.5) : 0;
+        double from = p.From + rFrom, to = p.To - rTo;
+        var ring = new List<(double, double)>();
+        // along the left side, tapering with the gore, round the far end, back along the right side, round the near end
+        for (double s = from; s < to; s += 0.5) ring.Add((s, edges(s).Left));
+        var (el, er) = edges(to);
+        ring.Add((to, el));
+        if (p.RoundTo)
+            for (int k = 1; k < Steps; k++)
+            {
+                double t = -Math.PI / 2 + Math.PI * k / Steps;
+                ring.Add((to + rTo * Math.Cos(t), (el + er) * 0.5 + (er - el) * 0.5 * Math.Sin(t)));
+            }
+        ring.Add((to, er));
+        for (double s = to - 0.5; s > from; s -= 0.5) ring.Add((s, edges(s).Right));
+        var (sl, sr) = edges(from);
+        ring.Add((from, sr));
+        if (p.RoundFrom)
+            for (int k = 1; k < Steps; k++)
+            {
+                double t = Math.PI / 2 + Math.PI * k / Steps;
+                ring.Add((from + rFrom * Math.Cos(t), (sl + sr) * 0.5 + (sr - sl) * 0.5 * Math.Sin(t)));
+            }
+        if (Math.Abs(ring[0].Item2 - sl) > 1e-6 || Math.Abs(ring[0].Item1 - from) > 1e-6) ring.Add((from, sl));
+        // (no point twice in a row, nor the first again at the end)
+        var outline = ring.Where((q, i) => i == 0 || Math.Abs(q.Item1 - ring[i - 1].Item1) + Math.Abs(q.Item2 - ring[i - 1].Item2) > 1e-6).ToList();
+        if (outline.Count > 1 && Math.Abs(outline[^1].Item1 - outline[0].Item1) + Math.Abs(outline[^1].Item2 - outline[0].Item2) < 1e-6) outline.RemoveAt(outline.Count - 1);
+        return outline;
     }
 }
