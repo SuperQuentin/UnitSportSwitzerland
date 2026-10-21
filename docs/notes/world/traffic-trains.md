@@ -153,6 +153,9 @@
   Debug menu, Green paths: a white bar across each lit path where a waiting car's front stops. `--trafficcheck` prints the
   cars that stood in a junction for a gap, the longest wait, those that left on amber or red, and the paths with points;
   windowed with a picture, `<png>_5_gap` frames one standing (its light not red yet) from above with the paths drawn.
+  `--lights` keeps the Green paths view on through the run, for a clip: `tools/record-clip.sh permissive-left-j7 30 60
+  --trafficcheck --lights --cam-height 25 --chunks <region> --at 2917500,1322500 --generated off --traffic 300 --dense --feed
+  --feed-turns 2,1,1 --seconds 95`.
   Measured (signal test region, J7 `--at 2917500,1322500 --traffic 300 --dense --feed --feed-turns 2,1,1 --seconds 120`,
   same feed before and after): headways 2nd/3rd/4th/5th+ 1.4/1.2/1.2/0.8 s -> 2.4/2.1/1.7/1.2 s; 6 cars stood in the
   junction for an oncoming car (longest 9 s), no red run. The front car moves at 0.75-1.25 s and then accelerates at the

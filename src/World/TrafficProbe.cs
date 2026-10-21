@@ -57,6 +57,8 @@ public partial class TrafficProbe : Node
         // --feed (#353, the queue capture): as many cars as --traffic asks, past the settings' cap
         // of 150 (this run only, never saved)
         if (_feed) GameSettings.Current.TrafficCars = Math.Max(GameSettings.Current.TrafficCars, CmdArgs.Int("--traffic") ?? 300);
+        // --lights (#1046, for a clip): the lit paths drawn all along (debug menu, Green paths), the wait points with them
+        if (CmdArgs.Has("--lights")) _traffic.ShowLights = true;
     }
 
     public static (bool Requested, string? Shot) ParseArgs() => CmdArgs.FlagWithShot("--trafficcheck");
@@ -336,7 +338,7 @@ public partial class TrafficProbe : Node
         if (_t < _gapFramed + 0.5) return;
         string file = _shot!.Replace(".png", "_5_gap.png");
         GD.Print($"[trafficcheck] gap shot {(GetViewport().GetTexture().GetImage().SavePng(file) == Error.Ok ? "wrote" : "could not write")} {file}");
-        _traffic.ShowLights = false;
+        _traffic.ShowLights = CmdArgs.Has("--lights");
         _gapShot = true;
     }
 
