@@ -60,7 +60,28 @@ public readonly record struct SignalArm(
     /// The bike lane runs between the through lane and the right pocket (layout b, #351): the cars turning right cross it before
     /// the junction, not at the mouth, so the riders' green and the right arrow's are free to meet (#979). Bit 7 of the arm's byte.
     /// </summary>
-    bool BikeBetween = false);
+    bool BikeBetween = false,
+    /// <summary>
+    /// A two-stage crossing (#1030): the walkers cross the arriving lanes, kerb to island, and the departing ones, island to kerb,
+    /// each half its own group; these are the halves' lengths (m), 0 for a crossing in one go. Not stored: the groups carry it.
+    /// </summary>
+    float HalfInM = 0,
+    float HalfOutM = 0)
+{
+    /// <summary>Whether its walkers cross in two stages, waiting on the island between (#1030).</summary>
+    public bool TwoStage => Pedestrians && HalfInM > 0 && HalfOutM > 0;
+}
+
+/// <summary>Which part of its arm's crossing a pedestrian group serves (#1030).</summary>
+public enum CrossingHalf : byte
+{
+    /// <summary>Kerb to kerb, in one go.</summary>
+    Whole = 0,
+    /// <summary>Over the arriving lanes, the approach's right kerb to the island: stopped only by the approach's own movements.</summary>
+    Arriving = 1,
+    /// <summary>Over the departing lanes, the island to the left kerb: stopped by the movements into the arm.</summary>
+    Departing = 2,
+}
 
 public readonly record struct SignalInterval(SignalAspect Aspect, float From, float To);
 
@@ -71,6 +92,8 @@ public sealed class SignalGroup
     /// <summary>The approach it controls; for a pedestrian group, the arm it crosses.</summary>
     public int Arm { get; init; }
     public SignalMoves Moves { get; set; }
+    /// <summary>For a pedestrian group, the part of the crossing it serves (#1030; stored in the moves byte, which it leaves None).</summary>
+    public CrossingHalf Half { get; init; }
     /// <summary>For a <see cref="SignalGroupKind.Flasher"/>, the group whose green it qualifies; else -1.</summary>
     public int Qualifies { get; init; } = -1;
     /// <summary>The cycle, from 0 to <see cref="SignalPlan.Cycle"/>, in order and without gaps.</summary>
@@ -97,6 +120,12 @@ public sealed class SignalPlan
     /// <summary>The green of a leading or lagging left-turn phase.</summary>
     public const float TurnPhaseGreen = 5f;
     public const float MaxCycle = 120f;
+    /// <summary>
+    /// The first walker of a two-stage crossing's half waits on the island at most this share of the cycle for the other half
+    /// (#1030, the user); where the plan would keep them longer, the phase that lets them on gets longer (<see cref="Stretch"/>).
+    /// </summary>
+    public const float IslandWaitShare = 1f / 3f;
+    private const int StretchPasses = 8;
 
     // ---- the plan ----------------------------------------------------------------------------
 
@@ -143,28 +172,35 @@ public sealed class SignalPlan
         if (_phases is null || _conflicts is null || times.GetLength(0) != Groups.Count || times.GetLength(1) != Groups.Count) return false;
         ConflictTimes = times;
         ConflictTimed = true;
-        // a slow group's early end is held back by its minimum green: limit it to what that green leaves and time again (the phase
-        // change then waits for it); failing that, every group ends with its phase
-        var limits = new Dictionary<(int, int), float>();
-        for (int pass = 0; pass < 4; pass++)
+        foreach (var p in _phases) p.Extra = 0;
+        for (int stretch = 0; ; stretch++)
         {
-            var slowEnds = new List<(int Phase, int Group, float From, float End)>();
-            Time(this, _phases, _conflicts, times, true, limits, slowEnds);
-            if (KeepsTimes(times)) break;
-            bool more = false;
-            foreach (var (k, g, from, end) in slowEnds)
+            // a slow group's early end is held back by its minimum green: limit it to what that green leaves and time again (the
+            // phase change then waits for it); failing that, every group ends with its phase
+            var limits = new Dictionary<(int, int), float>();
+            for (int pass = 0; pass < 4; pass++)
             {
-                float most = Math.Max(0f, end - from - MinGreen);
-                if (most < limits.GetValueOrDefault((k, g), float.PositiveInfinity) - 0.05f) { limits[(k, g)] = most; more = true; }
+                var slowEnds = new List<(int Phase, int Group, float From, float End)>();
+                Time(this, _phases, _conflicts, times, true, limits, slowEnds);
+                if (KeepsTimes(times)) break;
+                bool more = false;
+                foreach (var (k, g, from, end) in slowEnds)
+                {
+                    float most = Math.Max(0f, end - from - MinGreen);
+                    if (most < limits.GetValueOrDefault((k, g), float.PositiveInfinity) - 0.05f) { limits[(k, g)] = most; more = true; }
+                }
+                if (!more) break;
             }
-            if (!more) break;
+            if (!KeepsTimes(times)) Time(this, _phases, _conflicts, times, early: false);
+            // the island waits kept (#1030): stretched, then timed again
+            if (stretch >= StretchPasses || !Stretch(this, _phases)) break;
         }
-        if (!KeepsTimes(times)) Time(this, _phases, _conflicts, times, early: false);
         Offset = Cycle <= 0 ? 0 : (Mix(_seed) % (uint)Math.Max(1, Cycle * 10)) / 10f;
         if (Validate().Count == 0 && KeepsTimes(times)) return true;
         ConflictTimes = null;
         ConflictTimed = false;
-        Time(this, _phases, _conflicts, null);
+        foreach (var p in _phases) p.Extra = 0;
+        TimeStretched(this, _phases, _conflicts);
         Offset = Cycle <= 0 ? 0 : (Mix(_seed) % (uint)Math.Max(1, Cycle * 10)) / 10f;
         return false;
     }
@@ -358,9 +394,11 @@ public sealed class SignalPlan
         {
             if (Groups[p].Kind != SignalGroupKind.Pedestrian) continue;
             int arm = Groups[p].Arm;
+            var half = Groups[p].Half;
             foreach (var m in moves)
             {
-                if (m.From != arm && m.To != arm) continue;
+                // a half crosses only its own lanes (#1030): the arriving half the approach's, the departing half those into the arm
+                if (m.From != arm && m.To != arm || half == CrossingHalf.Arriving && m.From != arm || half == CrossingHalf.Departing && m.To != arm) continue;
                 var g = Groups[m.Group];
                 // a car turning in, or riders turning right onto the path across this crossing (#971): they give way, by the flasher
                 bool turnsIn = m.To == arm && m.Turn != SignalMoves.Through && g.Kind == SignalGroupKind.Car || m.To == arm && RidesRight(m, g);
@@ -389,7 +427,7 @@ public sealed class SignalPlan
             if (other.Kind == SignalGroupKind.Flasher && other.Qualifies == group && turn != SignalMoves.Through
                 && State(h, t) == SignalAspect.FlashingAmber) return true;
             if (!Going(h)) continue;
-            if (other.Kind == SignalGroupKind.Pedestrian && other.Arm == to && turn != SignalMoves.Through
+            if (other.Kind == SignalGroupKind.Pedestrian && other.Arm == to && other.Half != CrossingHalf.Arriving && turn != SignalMoves.Through
                 && (g.Kind == SignalGroupKind.Car || g.Kind == SignalGroupKind.Bike && turn == SignalMoves.Right)) return true;
             if (other.Kind == SignalGroupKind.Bike && other.Arm == from && g.Kind == SignalGroupKind.Car && turn == SignalMoves.Right) return true;
         }
@@ -462,8 +500,14 @@ public sealed class SignalPlan
             if (arms[a].BikeSignal && (moves & SignalMoves.Through) != 0) plan.Add(SignalGroupKind.Bike, a, SignalMoves.Through | (moves & SignalMoves.Right));
             if (arms[a].RiderLeft && (moves & SignalMoves.Left) != 0) plan.Add(SignalGroupKind.Bike, a, SignalMoves.Left);
         }
+        // the walkers: kerb to kerb, or each half on its own where they wait on the island between (#1030)
         for (int a = 0; a < arms.Count; a++)
-            if (arms[a].Pedestrians) plan.Add(SignalGroupKind.Pedestrian, a, SignalMoves.None);
+            if (arms[a].TwoStage)
+            {
+                plan.Add(SignalGroupKind.Pedestrian, a, SignalMoves.None, CrossingHalf.Arriving);
+                plan.Add(SignalGroupKind.Pedestrian, a, SignalMoves.None, CrossingHalf.Departing);
+            }
+            else if (arms[a].Pedestrians) plan.Add(SignalGroupKind.Pedestrian, a, SignalMoves.None);
 
         var phases = Phases(plan, arms, car, left, right);
         var conflicts = plan.Conflicts();
@@ -514,15 +558,15 @@ public sealed class SignalPlan
             if (flashes) plan.Groups.Add(new SignalGroup { Kind = SignalGroupKind.Flasher, Arm = plan.Groups[g].Arm, Qualifies = g });
         }
 
-        Time(plan, phases, conflicts, null);
+        TimeStretched(plan, phases, conflicts);
         plan.Offset = plan.Cycle <= 0 ? 0 : (Mix(seed) % (uint)Math.Max(1, plan.Cycle * 10)) / 10f;
         (plan._phases, plan._conflicts, plan._seed) = (phases, conflicts, seed);
         return plan;
     }
 
-    private int Add(SignalGroupKind kind, int arm, SignalMoves moves)
+    private int Add(SignalGroupKind kind, int arm, SignalMoves moves, CrossingHalf half = CrossingHalf.Whole)
     {
-        Groups.Add(new SignalGroup { Kind = kind, Arm = arm, Moves = moves });
+        Groups.Add(new SignalGroup { Kind = kind, Arm = arm, Moves = moves, Half = half });
         return Groups.Count - 1;
     }
 
@@ -536,6 +580,10 @@ public sealed class SignalPlan
         /// <summary>A fixed green (a turn phase); 0: a share of what is left of the cycle.</summary>
         public readonly float FixedGreen = fixedGreen;
         public float GreenTime;
+        /// <summary>Green added to keep a two-stage crossing's island wait (#1030, <see cref="Stretch"/>).</summary>
+        public float Extra;
+        /// <summary>When its green starts in the cycle, as last timed.</summary>
+        public float Start;
     }
 
     private static List<Phase> Phases(SignalPlan plan, IReadOnlyList<SignalArm> arms, int[] car, int[] left, int[] right)
@@ -658,7 +706,7 @@ public sealed class SignalPlan
         var group = Groups[g];
         return group.Kind switch
         {
-            SignalGroupKind.Pedestrian => Math.Clamp(Arms[group.Arm].CrossingM * (2f / 3f) / WalkSpeed, 2f, 8f),
+            SignalGroupKind.Pedestrian => Math.Clamp(CrossingOf(g) * (2f / 3f) / WalkSpeed, 2f, 8f),
             SignalGroupKind.Bike => YellowBike,
             SignalGroupKind.Flasher => 0,
             _ => Yellow(Arms[group.Arm].SpeedKmh),
@@ -680,7 +728,103 @@ public sealed class SignalPlan
         _ => RedAmberCar,
     };
 
+    /// <summary>How far a pedestrian group's walkers cross (m): their half of a two-stage crossing (#1030), else kerb to kerb.</summary>
+    public float CrossingOf(int g)
+    {
+        var arm = Arms[Groups[g].Arm];
+        return Groups[g].Half switch
+        {
+            CrossingHalf.Arriving when arm.HalfInM > 0 => arm.HalfInM,
+            CrossingHalf.Departing when arm.HalfOutM > 0 => arm.HalfOutM,
+            _ => arm.CrossingM,
+        };
+    }
+
+    /// <summary>
+    /// A two-stage crossing's half's green (#1030) and its first walker on the island: they step off at <see cref="Green"/>, reach
+    /// the island at <see cref="Arrive"/> (plan time, s) and wait <see cref="Wait"/> s there for <see cref="Other"/>'s next green.
+    /// </summary>
+    public readonly record struct IslandWait(int Group, int Other, float Green, float Arrive, float Wait);
+
+    /// <summary>
+    /// The island waits of every half's every green (#1030, the user: its first walker's, either way): stepping off as it turns
+    /// green, on the island <paramref name="walk"/> s later (its half at <see cref="WalkSpeed"/> by default; a plan read from a tile
+    /// has no half lengths: its walkers' conflict lines give them), waiting there for the other half's next green, 0 where it is green.
+    /// </summary>
+    public List<IslandWait> IslandWaits(Func<int, float>? walk = null)
+    {
+        walk ??= g => CrossingOf(g) / WalkSpeed;
+        var list = new List<IslandWait>();
+        if (Cycle <= 0) return list;
+        for (int g = 0; g < Groups.Count; g++)
+        {
+            var x = Groups[g];
+            if (x.Kind != SignalGroupKind.Pedestrian || x.Half == CrossingHalf.Whole) continue;
+            int y = Groups.FindIndex(o => o.Kind == SignalGroupKind.Pedestrian && o.Arm == x.Arm && o.Half != CrossingHalf.Whole && o.Half != x.Half);
+            if (y < 0) continue;
+            var v = x.Intervals;
+            for (int i = 0; i < v.Count; i++)
+            {
+                // (a green over the cycle's seam from its piece before the seam)
+                if (v[i].Aspect != SignalAspect.Green || (v.Count > 1 && v[i].From < 1e-3f && v[^1].Aspect == SignalAspect.Green)) continue;
+                float arrive = v[i].From + walk(g);
+                list.Add(new IslandWait(g, y, v[i].From, arrive, UntilGreen(y, arrive)));
+            }
+        }
+        return list;
+    }
+
+    /// <summary>Seconds from plan time <paramref name="t"/> (the offset not added) until group <paramref name="g"/> is next green; 0 while it is.</summary>
+    private float UntilGreen(int g, float t)
+    {
+        float u = Wrap(t, Cycle), best = float.PositiveInfinity;
+        foreach (var iv in Groups[g].Intervals)
+        {
+            if (iv.Aspect != SignalAspect.Green) continue;
+            if (u >= iv.From && u < iv.To) return 0;
+            best = Math.Min(best, Wrap(iv.From - u, Cycle));
+        }
+        return best;
+    }
+
+    /// <summary>
+    /// Keeps the island waits (#1030, the user: stretch the greens): where a half's first walker waits on the island longer than
+    /// <see cref="IslandWaitShare"/> of the cycle, the phase in which the other half turns green for them gets that much longer
+    /// that the cycle grows to hold it (the wait itself lies before it, unchanged), never past <see cref="MaxCycle"/>. True where
+    /// it stretched one: time the plan again.
+    /// </summary>
+    private static bool Stretch(SignalPlan plan, List<Phase> phases)
+    {
+        float room = MaxCycle - plan.Cycle;
+        if (room < 0.1f) return false;
+        var over = plan.IslandWaits().Where(w => w.Wait > plan.Cycle * IslandWaitShare + 0.05f).ToList();
+        if (over.Count == 0) return false;
+        var worst = over.MaxBy(w => w.Wait);
+        // the phase carrying the other half's green as they wait: the first green for it whose green ends after it begins
+        float at = worst.Arrive + worst.Wait;
+        int k = -1;
+        float soonest = float.PositiveInfinity;
+        for (int i = 0; i < phases.Count; i++)
+        {
+            if (!phases[i].Green.Contains(worst.Other)) continue;
+            float d = Wrap(phases[i].Start + phases[i].GreenTime - at - 1e-3f, plan.Cycle);
+            if (d < soonest) (soonest, k) = (d, i);
+        }
+        if (k < 0) return false;
+        // the wait within a share of the cycle: the cycle at least the wait over that share
+        phases[k].Extra += MathF.Round(Math.Min(room, worst.Wait / IslandWaitShare - plan.Cycle + 0.1f), 1);
+        return true;
+    }
+
+    /// <summary>The fixed-time plan (<see cref="Time"/> without conflict times) with its island waits kept (<see cref="Stretch"/>).</summary>
+    private static void TimeStretched(SignalPlan plan, List<Phase> phases, Conflict[,] conflicts)
+    {
+        Time(plan, phases, conflicts, null);
+        for (int pass = 0; pass < StretchPasses && Stretch(plan, phases); pass++) Time(plan, phases, conflicts, null);
+    }
+
     /// <param name="limits">How far a slow group may end early at a phase change at most (s, by phase and group): its minimum green.</param>
+
     /// <param name="slowEnds">Filled with each slow group's early-ended green: the phase change, the group, its green's start and the phase's end.</param>
     private static void Time(SignalPlan plan, List<Phase> phases, Conflict[,] conflicts, float[,]? times, bool early = true,
         Dictionary<(int Phase, int Group), float>? limits = null, List<(int Phase, int Group, float From, float End)>? slowEnds = null)
@@ -753,7 +897,7 @@ public sealed class SignalPlan
             foreach (var p in phases)
             {
                 float need = p.Green.Where(g => plan.Groups[g].Kind == SignalGroupKind.Pedestrian).Select(_ => 5f).DefaultIfEmpty(MinGreen).Max();
-                p.GreenTime = MathF.Round(Math.Max(p.GreenTime, need), 1);
+                p.GreenTime = MathF.Round(Math.Max(p.GreenTime, need), 1) + p.Extra;
             }
             float total = phases.Sum(p => p.GreenTime) + inter.Sum();
             if (total <= MaxCycle || pass == 1) { cycle = total; break; }
@@ -764,6 +908,7 @@ public sealed class SignalPlan
         // phase i green from start[i] to start[i] + green; then its intergreen
         var start = new float[n];
         for (int i = 1; i < n; i++) start[i] = start[i - 1] + phases[i - 1].GreenTime + inter[i - 1];
+        for (int i = 0; i < n; i++) phases[i].Start = start[i];
 
         int groups = plan.Groups.Count;
         for (int g = 0; g < groups; g++)
@@ -810,7 +955,8 @@ public sealed class SignalPlan
         // flashers: on while their group is green and a pedestrian or bike group it yields to is green too, or a crossing's walkers are
         // still on it: the last to step off as its green ended crosses it at the walking speed (the user, #979: it went off as the
         // walkers' green ended, with them still on the zebra)
-        float Walk(int h) => plan.Groups[h].Kind == SignalGroupKind.Pedestrian ? plan.Arms[plan.Groups[h].Arm].CrossingM / WalkSpeed : 0f;
+        float Walk(int h) => plan.Groups[h].Kind == SignalGroupKind.Pedestrian ? plan.CrossingOf(h) / WalkSpeed : 0f;
+
         bool Active(int h, double t)
         {
             if (plan.State(h, t) == SignalAspect.Green) return true;
@@ -906,7 +1052,7 @@ public sealed class SignalPlan
         for (int g = 0; g < Groups.Count; g++)
         {
             var group = Groups[g];
-            sb.Append(c, $"  {g,2} {group.Kind,-10} arm {group.Arm} {(group.Kind == SignalGroupKind.Flasher ? $"of {group.Qualifies}" : group.Moves.ToString()),-20}");
+            sb.Append(c, $"  {g,2} {group.Kind,-10} arm {group.Arm} {(group.Kind == SignalGroupKind.Flasher ? $"of {group.Qualifies}" : group.Half != CrossingHalf.Whole ? group.Half.ToString() : group.Moves.ToString()),-20}");
             foreach (var iv in group.Intervals)
                 sb.Append(c, $" {Short(iv.Aspect)}{iv.From:F1}-{iv.To:F1}");
             sb.Append('\n');
@@ -989,7 +1135,15 @@ public enum SignalPoleFlags : byte
     Second = 2,
     /// <summary>A pedestrian head for the crossing of its arm, facing across.</summary>
     Pedestrian = 4,
+    /// <summary>
+    /// With <see cref="Pedestrian"/>, its head shows the arriving half of a two-stage crossing (#1030). With
+    /// <see cref="DepartingHalf"/> too, on the island: two heads back to back, the arriving half's facing <see cref="SignalPole.PedHeading"/>.
+    /// </summary>
+    ArrivingHalf = 8,
+    /// <summary>With <see cref="Pedestrian"/>, its head shows the departing half of a two-stage crossing (#1030).</summary>
+    DepartingHalf = 16,
 }
+
 
 /// <summary>
 /// A signal pole (#350), tile-local like the record it belongs to: its foot (on the sidewalk or
@@ -1057,7 +1211,8 @@ public sealed class RoadSignal
             {
                 w.Write((byte)g.Kind);
                 w.Write(checked((byte)g.Arm));
-                w.Write((byte)g.Moves);
+                // (a pedestrian group's moves are None: the byte carries its half, #1030; an older reader finds a half as the arm's group)
+                w.Write(g.Kind == SignalGroupKind.Pedestrian ? (byte)g.Half : (byte)g.Moves);
                 w.Write(checked((sbyte)g.Qualifies));
                 w.Write(checked((ushort)g.Intervals.Count));
                 foreach (var iv in g.Intervals)
@@ -1107,9 +1262,14 @@ public sealed class RoadSignal
             }
             for (int g = 0; g < groups; g++)
             {
+                var kind = (SignalGroupKind)r.ReadByte();
+                int arm = r.ReadByte();
+                byte moves = r.ReadByte();
+                bool walkers = kind == SignalGroupKind.Pedestrian;
                 var group = new SignalGroup
                 {
-                    Kind = (SignalGroupKind)r.ReadByte(), Arm = r.ReadByte(), Moves = (SignalMoves)r.ReadByte(), Qualifies = r.ReadSByte(),
+                    Kind = kind, Arm = arm, Moves = walkers ? SignalMoves.None : (SignalMoves)moves, Half = walkers ? (CrossingHalf)moves : CrossingHalf.Whole,
+                    Qualifies = r.ReadSByte(),
                 };
                 int count = r.ReadUInt16();
                 for (int i = 0; i < count; i++)

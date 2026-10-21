@@ -276,4 +276,71 @@ public class SignalPlanTests(ITestOutputHelper output)
         // the same with a right pocket on the approach that can only turn right
         AssertValid(SignalPlan.Build([Deg(198, false, false), Deg(-84, true, true) with { RightPocket = true }, Deg(5, false, true), Deg(95, true, false)]));
     }
+
+    /// <summary>A crossroads with every pocket, the east arm's walkers crossing its 10 m road in two stages (#1030), 3.5 m each way to the island.</summary>
+    private static SignalPlan TwoStageCrossroads(uint seed = 7) => SignalPlan.Build([Arm(N, true, true),
+        Arm(E, true, true) with { CrossingM = 10, HalfInM = 3.5f, HalfOutM = 3.5f }, Arm(S, true, true), Arm(W, true, true)], seed);
+
+    private static int Half(SignalPlan plan, int arm, CrossingHalf half) =>
+        plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Pedestrian && g.Arm == arm && g.Half == half);
+
+    [Fact]
+    public void TwoStageCrossing_EachHalfIsStoppedOnlyByItsOwnLanes_AndClearsOnlyItself()
+    {
+        var plan = TwoStageCrossroads();
+        AssertValid(plan);
+        int arriving = Half(plan, E, CrossingHalf.Arriving), departing = Half(plan, E, CrossingHalf.Departing);
+        Assert.True(arriving >= 0 && departing >= 0);
+        Assert.Equal(-1, Half(plan, E, CrossingHalf.Whole));
+        var c = plan.Conflicts();
+        // westbound traffic comes from the east arm (its approach), eastbound goes into it
+        // (the right arrow no phase carries here is a full green with its approach)
+        var westbound = Enumerable.Range(0, plan.Groups.Count).Where(g => plan.Groups[g].Arm == E
+            && plan.Groups[g].Kind is SignalGroupKind.Car or SignalGroupKind.LeftArrow or SignalGroupKind.RightArrow).ToList();
+        Assert.Equal(3, westbound.Count);
+        int ebCar = Group(plan, SignalGroupKind.Car, W);
+        foreach (int g in westbound)
+        {
+            Assert.Equal(SignalPlan.Conflict.Hard, c[arriving, g]);
+            Assert.Equal(SignalPlan.Conflict.None, c[departing, g]);
+        }
+        Assert.Equal(SignalPlan.Conflict.None, c[arriving, ebCar]);
+        Assert.Equal(SignalPlan.Conflict.Hard, c[departing, ebCar]);
+        // both halves green together, long enough to walk kerb to kerb at once (10 m at 1.2 m/s)
+        Assert.True(WhenGreen(plan, arriving, departing).Count * 0.1 >= 5, "the halves never green together");
+        // each half's clearance its own 3.5 m (2/3 at 1.2 m/s: the 2 s floor), not the whole road's 5.6 s
+        foreach (int g in (int[])[arriving, departing])
+            Assert.All(plan.Groups[g].Intervals.Where(iv => iv.Aspect == SignalAspect.Amber), iv => Assert.Equal(2f, iv.To - iv.From, 0.05f));
+    }
+
+    [Theory]
+    [InlineData(7u)]
+    [InlineData(99u)]
+    public void TwoStageCrossing_TheIslandWaitIsAtMostAThirdOfTheCycle(uint seed)
+    {
+        var plan = TwoStageCrossroads(seed);
+        AssertValid(plan);
+        var waits = plan.IslandWaits();
+        foreach (var w in waits) output.WriteLine($"group {w.Group} green {w.Green:F1}, on the island {w.Arrive:F1}, waits {w.Wait:F1} s for {w.Other}");
+        Assert.NotEmpty(waits);
+        Assert.All(waits, w => Assert.True(w.Wait <= plan.Cycle * SignalPlan.IslandWaitShare + 0.1f, $"waits {w.Wait:F1} s of a {plan.Cycle:F1} s cycle"));
+    }
+
+    [Fact]
+    public void TwoStageCrossing_RoundTripsItsHalves()
+    {
+        var plan = TwoStageCrossroads();
+        var tile = new RoadTile
+        {
+            Id = new TileId(2500, 1117),
+            Segments = [new RoadSegment { Class = RoadClass.Road, Width = 6, Points = [0, 400, 0, 10, 400, 0] }],
+            Signals = [new RoadSignal { X = 5, Y = 400.1f, Z = 6, Stops = new float[12], Plan = plan }],
+        };
+        using var ms = new MemoryStream();
+        RoadCodec.Encode(tile, ms);
+        ms.Position = 0;
+        var p = Assert.Single(RoadCodec.Decode(ms).Signals).Plan;
+        Assert.Equal(plan.Groups.Select(g => (g.Kind, g.Moves, g.Half)), p.Groups.Select(g => (g.Kind, g.Moves, g.Half)));
+        Assert.Empty(p.Validate());
+    }
 }
