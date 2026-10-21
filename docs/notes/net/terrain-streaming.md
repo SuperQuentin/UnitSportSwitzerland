@@ -19,3 +19,12 @@
   `<file>.part` was moved away by one under the other ("cache write failed ... .terrc.part", 19 in
   a 50 s cold stream). Now `<file>.<guid>.part`, moved over the target (same bytes, last wins),
   deleted if the write fails; eviction skips `.part` files still being written.
+- **A lost answer is not the end of the session (#1032).** The mirror address (`HttpBase`) and the tile
+  index (`Manifest`) are fetched by `ClientTerrainSync.FetchPersistentAsync`: a timeout, "busy" or "not
+  connected yet" is asked again with backoff (2, 4, 8, 15, 15 s, six attempts); only "not on this server"
+  is final. Before, one timed-out manifest left a phone (no local tiles) in mid-air for the whole session.
+  `ChunkStreamer` also starts a request's clock when the deferred RPC actually goes out, and stops it
+  while the client's frames stall (a gap of over 1 s between two `ExpireClientRequests` moves every
+  pending start by the gap): replies already queued behind a stall are handled first. Seen on Android
+  joining a server: 18 s and 65 s without a frame while joining (first-use JIT, slow frames), the 30 s
+  timeout expiring answers the server had sent (instrumented: received and answered at once).
