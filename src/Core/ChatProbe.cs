@@ -144,6 +144,25 @@ public abstract partial class ChatProbe : Node
         return true;
     }
 
+    /// <summary>
+    /// Until <paramref name="condition"/> has held for <paramref name="hold"/> s running, physics frame
+    /// by frame, at most <paramref name="seconds"/>: a state that reads true from construction (an
+    /// A320's "on the ground", put a metre up and dropping onto its wheels) passes a plain
+    /// <see cref="Until"/> on the first frame, before the settling it stood for (#1080).
+    /// </summary>
+    protected async Task<bool> UntilHeld(Func<bool> condition, double hold, double seconds)
+    {
+        double end = GameClock.Now + seconds, since = -1;
+        while (true)
+        {
+            if (!condition()) since = -1;
+            else if (since < 0) since = GameClock.Now;
+            if (since >= 0 && GameClock.Now - since >= hold) return true;
+            if (GameClock.Now > end) return false;
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+        }
+    }
+
     protected async Task Seconds(double s) => await ToSignal(GetTree().CreateTimer(s), SceneTreeTimer.SignalName.Timeout);
 
     /// <summary>
