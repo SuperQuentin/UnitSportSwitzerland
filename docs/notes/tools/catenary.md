@@ -20,11 +20,14 @@ Plan and decisions: `docs/plans/catenary.md`. What is built:
     that already crosses it within half a step instead of a span of its own (`SpansShared`).
   - **No mast on a bike path** (the user): every mast spot is also off each separated path band of the written street pieces
     (`TileRewriter.BikePaths`: out from the carriageway edge past the verge, `RoadSide`, 0.3 m either side, 10 m cells).
-  - **Centre masts** (the user: a grassy tram track out of town): a tram's own double track (not on a street) with no building
+  - **Centre masts** (the user: a tram separated from the road, no buildings nearby): a tram on a bed of its own (not laid in
+    the carriageway: town paving counts, #1094; checked before a span) as a double track with no building
     within 15 m either side (`CentreOpen`) and its centre line clear gets one mast between the tracks, an arm out to each. So do
     two single tram tracks off the street 2.5-5 m apart and parallel (`TwinMin`/`TwinMax`, #1094: Geneva maps each track as a
     line of its own): the first track to reach a spot puts the mast between them, the other's support within half a step hangs
     from it (`CentreMastsShared`).
+    Geneva's copy (city centre, Oct 2026): 14 centre masts, 690 spans; only ~90 tram supports lie off the carriageway there.
+    The log names a few supports with no twin and with one but no centre mast.
   - **Elsewhere**: a cantilever mast 3.0 m out from each track (a double track: one outside each), a single track's on its right
     unless the spot is on a road, in a building or within 2 m of any rail line (`TrackGrid`, 10 m cells: the lines are densified to
     centimetres and a scan of every point stalled the Geneva rewrite), then its left; none where neither fits (counted).
