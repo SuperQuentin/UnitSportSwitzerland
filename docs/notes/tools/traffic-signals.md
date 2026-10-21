@@ -309,9 +309,9 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   test region's 1+1 crossroads, ~20 m wide at the lights with both pockets and bike lanes, took heads overhead at 59 approaches,
   45 as portals); then Stadt Bern's Handbuch LSA 2025 (Abb. 12-19): a lane's own kerb head (a left lane's on the left kerb or the
   refuge, every other's on the right kerb) more than 6 m sideways, two lanes turning the same way, a side road (yields when off)
-  of 2+ lanes without a refuge, or 3+ lanes. One head per signal group (left-only lanes, right-only lanes, the rest) over the
-  middle of its lanes; with 3+ lanes the kerb lane keeps its kerb head alone, a right-only kerb lane always. The kerb poles keep
-  theirs. **What carries them** (`TileRewriter.ExteriorWrite.PlaceOverhead`), first that fits: a **mast arm** from a post 0.4 m
+  of 2+ lanes without a refuge, or 3+ lanes. Then a head over the middle of every lane, its lenses and plate showing that lane's
+  moves (the user: one light per lane; one head per group hung over the line between two lanes; Bern's Abb. 19 leaves the kerb
+  lane to its kerb head, here it gets one too). The kerb poles keep theirs. **What carries them** (`TileRewriter.ExteriorWrite.PlaceOverhead`), first that fits: a **mast arm** from a post 0.4 m
   outside the main pole (the kerb heads keep their place) when every head lies within 10 m (Basel-Landschaft: 3-4.5 m one lane,
   5.5-7.5 m two, to 10 m with a tie rod past 7 m); one **from the refuge** reaching right; on a tram street
   (`Source.Line.Osm.Tram`: the overlay's `tram` column; the segment's attributes get the overlay only when written) with a

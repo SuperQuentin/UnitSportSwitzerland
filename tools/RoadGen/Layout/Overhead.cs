@@ -26,9 +26,10 @@ public static class OverheadPlanner
     /// <summary>
     /// The approach's overhead heads, left to right; empty where its kerb heads do. Triggers: a lane further than
     /// <see cref="OwnHeadReach"/> from its own head; two lanes or more turning the same way (Bern Abb. 12, 13); a side road (it yields
-    /// when the lights are off) of two lanes or more without a refuge (Abb. 18); three lanes or more (Abb. 19). Then one head per
-    /// signal group (the left lanes, the right-only lanes, the rest), over the middle of its lanes; with three lanes or more the
-    /// kerb lane keeps its kerb head alone (Abb. 19), and a right-only kerb lane always does.
+    /// when the lights are off) of two lanes or more without a refuge (Abb. 18); three lanes or more (Abb. 19). Then a head over
+    /// the middle of every lane, showing that lane's moves (the user, Oct 21 2026: one light per lane; a head for two lanes hung
+    /// over the line between them; Bern: "Bei mehr als einem Fahrstreifen für einen Verkehrsstrom können ... weitere Signalgeber
+    /// notwendig werden"). Bern's Abb. 19 leaves the kerb lane to its kerb head; here it gets one too.
     /// </summary>
     /// <param name="sec">The approach's section at its cars' line.</param>
     /// <param name="streetLanes">The street's own lanes toward the junction (its normal section's), pockets not counted.</param>
@@ -47,15 +48,6 @@ public static class OverheadPlanner
         bool three = lanes.Count >= 3;
         if (!(far || doubleTurn || side || three)) return [];
 
-        int kerb = lanes.Count - 1;
-        var spots = new List<OverheadSpot>();
-        foreach (var group in lanes.Where((l, i) => !(i == kerb && kerb > 0 && (three || l.Moves == SignalMoves.Right)))
-                     .GroupBy(l => l.Moves is SignalMoves.Left or SignalMoves.Right ? l.Moves : SignalMoves.None))
-        {
-            var moves = SignalMoves.None;
-            foreach (var l in group) moves |= l.Moves;
-            spots.Add(new OverheadSpot(group.Average(l => l.Mid), moves));
-        }
-        return spots.OrderBy(s => s.Offset).ToList();
+        return lanes.Select(l => new OverheadSpot(l.Mid, l.Moves)).OrderBy(s => s.Offset).ToList();
     }
 }

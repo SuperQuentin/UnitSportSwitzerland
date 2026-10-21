@@ -57,19 +57,20 @@ public class OverheadPlannerTests
     }
 
     [Fact]
-    public void Three_lanes_left_and_through_overhead_the_kerb_lane_keeps_its_pole()
+    public void Three_lanes_one_head_over_each()
     {
-        // Abb. 19: three lanes on a side road with an island: the left arrow and the through head overhead, the kerb lane's below
+        // Abb. 19: three lanes on a side road with an island go overhead; a head over every lane (the user: one light per lane;
+        // Bern's figure leaves the kerb lane to its kerb head)
         var heads = Heads(2, 2, sideRoad: true, streetLanes: 3, L, T, T | R);
-        Assert.Equal([(1.5, L), (4.5, T)], heads.Select(h => (h.Offset, h.Moves)));
+        Assert.Equal([(1.5, L), (4.5, T), (7.5, T | R)], heads.Select(h => (h.Offset, h.Moves)));
     }
 
     [Fact]
-    public void A_double_left_has_one_head_over_both_lanes()
+    public void A_double_left_has_a_head_over_each_of_its_lanes()
     {
-        // Abb. 12: a turn on two lanes is repeated over the road, its head between them
+        // Abb. 12: a turn on two lanes is repeated over the road: over each lane, never between them on the line
         var heads = Heads(2, 0, sideRoad: false, streetLanes: 3, L, L, T | R);
-        Assert.Equal([(3.0, L)], heads.Select(h => (h.Offset, h.Moves)));
+        Assert.Equal([(1.5, L), (4.5, L), (7.5, T | R)], heads.Select(h => (h.Offset, h.Moves)));
     }
 
     [Fact]
@@ -80,9 +81,9 @@ public class OverheadPlannerTests
     }
 
     [Fact]
-    public void A_right_turn_lane_at_the_kerb_keeps_its_kerb_head()
+    public void Every_lane_has_its_head_the_right_turn_lane_too()
     {
         var heads = Heads(2, 0, sideRoad: false, streetLanes: 2, L, T, R);
-        Assert.DoesNotContain(heads, h => h.Moves == R);
+        Assert.Equal([(1.5, L), (4.5, T), (7.5, R)], heads.Select(h => (h.Offset, h.Moves)));
     }
 }

@@ -20,7 +20,8 @@ region's 1+1 crossroads (~20 m kerb to kerb at the lights) took heads overhead a
 chose: **only streets with 2+ lanes of their own toward the junction**, pockets not counted (J7's double left on a 1+1 road keeps
 its poles). Span wires only where a tram street is too wide for a mast arm and buildings stand on both sides, from facade to facade, never
 on poles (the user: rare in Switzerland, used between buildings); a portal elsewhere. A tram catenary hung from span wires is
-its own issue. The record is a section of its own, `OVHD`, not SGNL version 3 (a newer SGNL version makes older readers drop every
+its own issue. One head over every lane, not one per signal group between its lanes (the user, after J14's two straight
+lanes shared a head over their line). The record is a section of its own, `OVHD`, not SGNL version 3 (a newer SGNL version makes older readers drop every
 light). What was built and where: `tools/traffic-signals` ("Overhead heads", "Pole colour per canton").
 
 ## What Swiss sources say
