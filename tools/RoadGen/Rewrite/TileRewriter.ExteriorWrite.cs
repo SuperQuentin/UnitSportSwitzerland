@@ -54,10 +54,16 @@ public static partial class TileRewriter
                 && kerbLane.Moves != SignalMoves.Right;
             // the bike lane between the through lane and the right pocket (layout b): no conflict with that pocket's arrow (#979)
             bool between = a.HasRight && !kerbside && mouth.Strips.Any(x => x.Kind == StripKind.BikeLane && x.Way == StripWay.In && x.Moves != SignalMoves.Right && x.Moves != SignalMoves.Left);
+            // the queue each lane holds behind its line (#982): a pocket over its storage, a lane of the street's own (the through
+            // lane, a turn lane from OSM's lanes) back along the street to the junction behind; at least a car
+            double stop = ex.CarStop ?? 0;
+            float Room(double m) => approach ? (float)Math.Max(SignalPlan.CarSpacing, m - stop) : 0f;
+            double Run(PocketRule rule) => a.Openings.Where(o => rule.Owns(o.Id)).Select(o => o.Storage).DefaultIfEmpty(a.Length).Max();
             arms.Add(new SignalArm(a.Heading, approach, leaves, ins.Any(l => l.Moves == SignalMoves.Left), ins.Any(l => l.Moves == SignalMoves.Right),
                 Pedestrians: ex.Crosswalk is not null, BikeSignal: approach && (path || kerbside), SpeedKmh: urban ? 50 : 60,
                 CrossingM: (float)(mouth.CarriagewayWidth), Rank: (byte)Math.Clamp(info is { } i ? PriorityPlanner.Rank(i) / 4 : 1, 1, 255),
-                Banned: approach ? a.Wants.Banned : SignalMoves.None, BikeBetween: between));
+                Banned: approach ? a.Wants.Banned : SignalMoves.None, BikeBetween: between,
+                StorageM: Room(a.Length), LeftStorageM: Room(Run(PocketRules.Left)), RightStorageM: Room(Run(PocketRules.Right))));
         }
         if (arms.Count(x => x.In) < 2) return null;
         string? canton = cantons?.CodeAt(jp.Centre.X, jp.Centre.Y);
