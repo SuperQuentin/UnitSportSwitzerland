@@ -32,6 +32,8 @@ public partial class Main : Node
 
 	public override void _Ready()
 	{
+		// MVR textures Godot decodes: here, not in a module initializer (#1010, Android)
+		Concert.ConcertRig.UseGodotImages();
 		SetWindowTitle(GetWindow());
 		// --clip name,delay,seconds: films whatever follows, a probe or a shot queue (#487)
 		ClipRecorder.StartFromArgs(GetTree());
