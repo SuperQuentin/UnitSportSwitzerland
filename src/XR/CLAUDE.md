@@ -6,6 +6,7 @@ Index only: one line per note in `docs/notes/xr/<name>.md`. Read a note only whe
 touches its topic; search with `grep -ril <word> docs/notes/xr`.
 
 - `setup` — VR mode from the menus (Settings → Video, title *Play in VR*: saved and applied by relaunching), launching by hand (`--xr-mode on --rendering-driver vulkan -- --vr`), Meta as the OpenXR runtime, fallback with no headset, `--xrsim` for checks without a headset
+- `simulator` — VR with no headset: Meta XR Simulator through `tools/vr-sim.ps1` (XR_RUNTIME_JSON for one process, Link untouched); `--xrsim` for checks without any runtime
 - `rig` — `XrRig`: anchor = whichever camera the game made current; the loading space while a session loads (#1101); calibration and recentre; VR-aware player eyes (no bob, pitch or roll); head written back for aiming; snap turn; vignette
 - `controls` — `XrPad` controller-to-pad layout; triggers on foot vs mounted; the flight trigger gap; the `XrUi` panel and hand pointer; `XrHands` grabbing the steering wheel and doors
 - `real-hands` — `XrHand`: your own hands in the headset (skin, gloves, sleeve, build) on the grip pose; fingers per joint from OpenXR hand tracking or else the controller's grip / trigger / thumb touches; `--xrsim --xrhands --xrheadshot`
