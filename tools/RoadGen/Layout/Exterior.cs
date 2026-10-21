@@ -162,8 +162,8 @@ public static class ExteriorPlanner
         }
     }
 
-    /// <summary>An island inside the junction keeps this far clear of a car's way beyond half its width (m).</summary>
-    public const double IslandCarClear = 0.4;
+    /// <summary>An island inside the junction keeps this far clear of a car's way beyond half its width (m): beside its lane, never in it (#1000).</summary>
+    public const double IslandCarClear = 0.1;
 
     private static (double Left, double Right, double To)? FitIsland(ArmPlan a, double from, double to, double left, double right)
     {
