@@ -337,6 +337,7 @@
 78.2	Cars / BNR32 (parked)
 175.2	Cars / BNR34
 79.7	Cars / BNR34 (parked)
+68.9	Cars / Burnt
 937.2	Cars / CE9A Evo III
 848.3	Cars / CE9A Evo III (parked)
 848.8	Cars / CN9A Evo IV
