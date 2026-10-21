@@ -32,9 +32,9 @@
   Survey download: `python tools/swiss_data.py swissbathy3d --bbox E0 N0 E1 N1`.
 - Landings and jetties (#377, `world/landings`; also after every water pass given `--tlm`):
   `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --tlm <tlm.gpkg> --landings [--landings-file <path>]`
+  (reads the built `.terr`/`.water`/`.road`, writes `landings.json`; under a second).
 - Tram stops (#1057, `tram-approaches`): `dotnet run --project tools/TerrainPreprocessor -c Release -- --out <chunks> --tlm <tlm.gpkg> --tram-stops`
   writes `<chunks>_temp/tram_stops.tsv` (TLM stops within 25 m of a tram track); the next `RoadGen --rewrite` stands their signs.
-  (reads the built `.terr`/`.water`/`.road`, writes `landings.json`; under a second).
 - Airports (#422, `world/airports`): `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --tlm <tlm.gpkg> --osm <data>/osm/switzerland-YYMMDD.osm.pbf --airports [--airports-file <path>]`
   (reads the manifest, `.terr`, `.bldg` and the PBF, writes `airports.json`; seconds; the game: `--airports <file>` tries one out).
 - Buildings export (needs GDAL, install: `gdal-setup`): `python tools/export_buildings.py --bbox 2578500 1108500 2586500 1115500`
