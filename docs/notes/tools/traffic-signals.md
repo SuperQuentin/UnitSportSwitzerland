@@ -88,6 +88,27 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   pairs of them (for each green start the ending group leaving it the least slack, for each green end the starting group it
   leaves the least, with the pair of lines that gives that time; `ConflictPairs`, region: 276) go in the tile (`CPAR`) for the debug view's
   `movers` (`core/debug-menu`).
+- **Two-stage crossings** (#1030, plan `docs/plans/two-stage-crossings.md` on `main`, the user's choices): where a lit arm's
+  island spans its zebra and is at least `ExteriorPlanner.TwoStageWidth` 2.0 m wide at it (`ArmExterior.StageIsland`), the
+  walkers cross in two stages: two pedestrian groups (`SignalGroup.Half`, stored in the group's moves byte: an older reader
+  takes a half as the arm's group), the **arriving** half (the approach's right kerb to the island, over the arriving lanes)
+  stopped only by the approach's own movements, the **departing** half (island to the left kerb) by those into the arm
+  (turning in: permissive, the flasher). Each half's clearance, flasher walk and conflict lines (`ConflictTimes.Lines`:
+  kerb, or the path beyond it, to the island's edge) cover its half (`SignalArm.HalfInM/HalfOutM`, not stored). `Expand`
+  makes each half green wherever its own conflicts allow, so at least whenever the kerb-to-kerb group would be: a walker
+  never reaches the far kerb later. **The new constraint, the island wait**: the first walker of each half's green, either
+  way, reaches the island at 1.2 m/s and waits at most `IslandWaitShare` a third of the cycle for the other half
+  (`SignalPlan.IslandWaits`); where not, `Stretch` lengthens the phase in which the other half turns green for them (the
+  wait lies before it), the cycle with it, up to 120 s (`Phase.Extra`, in `Build` and `Retime`); past that the check lists
+  it. Heads: the right kerb's (main pole) shows the arriving half, the left kerb's the departing one, the island two back to
+  back (`SignalPoleFlags.ArrivingHalf | DepartingHalf`, the arriving one facing `PedHeading`, toward the right kerb) on
+  the left repeater's pole where the arm has one, else on a pole of its own at the repeater's spot behind the zebra. The
+  zebra leaves out the bars whose middle lies on the island (`ExteriorBar.Gap`): it reads as two crosswalks (the user).
+  Straight crossing, no stagger or visors (the user accepts the far half's head seen behind the island's). The debug view's
+  crossings run kerb to island edge per half (`SignalSite.Walks` carries the group). `--signal-check` counts two-stage
+  crossings and lists island waits over a third. Test region: J7's east arm (3.4 m island, halves 5.9 / 4.3 m; tier 0
+  `J7s_east_crosswalk_crosses_its_wide_island_in_two_stages`). Model viewer: "Traffic light - Two-stage island" (and
+  Geneva). Walkers and riders as movers: #1033.
 - **Timing**: yellow 3/4/5 s by speed (SN 640 837 via SRF), red+yellow 2 s (cars, secondary
   source BASt V 149) / 1 s (bikes), all-red 2 s fixed (SN 640 838 computes it per conflict,
   paywalled), min green 4 s, pedestrian green >= 5 s, pedestrian clearance 2/3 of the crossing
