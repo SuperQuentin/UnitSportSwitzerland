@@ -437,14 +437,15 @@ public partial class PalletNetProbe : Node
         await Seconds(1.5);
         string name = slot.NodeName;
         // asked while waiting, as a player's aim ray asks every frame (Wake itself asks the server again every
-        // 2 s): the server ignores a slot of a tile it is still building, and one ask 1.5 s after arriving at
-        // the works was lost that way on a loaded machine (#1085)
+        // 2 s): the server ignores a slot of a tile it has not built. Its generated fill follows the players
+        // (#951), so it starts on the works' tile only once we stand there and took 12-14 s for it; the one
+        // ask 1.5 s after arriving was lost, and 10 s was too short (#1085)
         bool woken = await Until(() =>
         {
             if (VehicleManager.Instance?.GetNodeOrNull(name) != null) return true;
             DormantVehicles.Instance!.Wake(slot);
             return false;
-        }, 10);
+        }, 30);
         Log(FormattableString.Invariant($"the site's forklift {name}: woken {woken}"));
         if (!woken) return false;
         await Seconds(0.5);
