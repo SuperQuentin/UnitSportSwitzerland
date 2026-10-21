@@ -346,13 +346,16 @@ void fragment() {
         _ => aspect == SignalAspect.Green ? TramOn : TramOff,
     };
 
+    /// <summary>Romandy's dark LEDs (#1105): almost the window's glass, the unlit stroke barely seen (the photo).</summary>
+    private static readonly Color TramTOff = new(0.035f, 0.035f, 0.04f);
+
     /// <summary>
-    /// Romandy's T head (#1057, the user): the bar across lit for red, flashing before green (the red-amber); the bar upright lit
-    /// for green, flashing before red (the amber).
+    /// Romandy's tram head (#1057, the user; #1105 its dotted T): the stroke across lit for red, flashing before green (the
+    /// red-amber); the stroke upright lit for green, flashing before red (the amber).
     /// </summary>
     private static Color TramTColour(SignalBuilder.Role role, SignalAspect aspect, bool blinkOn) => role == SignalBuilder.Role.Red
-        ? aspect == SignalAspect.Red || aspect == SignalAspect.RedAmber && blinkOn ? TramOn : TramOff
-        : aspect == SignalAspect.Green || aspect == SignalAspect.Amber && blinkOn ? TramOn : TramOff;
+        ? aspect == SignalAspect.Red || aspect == SignalAspect.RedAmber && blinkOn ? TramOn : TramTOff
+        : aspect == SignalAspect.Green || aspect == SignalAspect.Amber && blinkOn ? TramOn : TramTOff;
 
     /// <summary>A flat lens facing +Z, built once per icon (main thread). Figures in lens radii.</summary>
     private static Mesh LensMesh(Icon key)
