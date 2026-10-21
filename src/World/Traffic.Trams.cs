@@ -213,6 +213,7 @@ public partial class Traffic
     private float TramLight(Vehicle tram, SignalSite site, int group, float toLine, float dt)
     {
         if (toLine < -1f) return float.MaxValue;
+        _tramState.GetOrCreateValue(tram).ToLine = toLine;
         var aspect = site.Plan.State(group, SignalLamps.Clock());
         float room = toLine - TramLineMargin;
         bool stop = aspect switch
@@ -239,6 +240,8 @@ public partial class Traffic
     {
         public LaneGraph.TramStop? Served;
         public float Dwell;
+        /// <summary>How far its front was from the line of the light it last read (m).</summary>
+        public float ToLine = float.MaxValue;
     }
     private readonly System.Runtime.CompilerServices.ConditionalWeakTable<Vehicle, TramState> _tramState = new();
 
@@ -335,6 +338,14 @@ public partial class Traffic
     public int TramRedStops { get; private set; }
     public int TramLinesCrossed { get; private set; }
     public int TramRedRuns { get; private set; }
+
+    /// <summary>A tram standing at its red, first at its line (#1057, the probe's picture): its head and heading, or null.</summary>
+    public (Vector3 Pos, Vector3 Dir)? TramAtRed()
+    {
+        foreach (var t in _trams)
+            if (t.AtRed && t.Speed < 0.2f && _tramState.TryGetValue(t, out var s) && s.ToLine < 3f) return (t.Head, t.Route.At(0).Dir);
+        return null;
+    }
 
     /// <summary>The trams' top speed now (m/s).</summary>
     public float TramTopSpeed
