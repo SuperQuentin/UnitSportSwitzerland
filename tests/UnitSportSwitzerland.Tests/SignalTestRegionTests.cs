@@ -143,8 +143,9 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
     [Fact]
     public void Wide_approaches_carry_their_heads_overhead()
     {
-        // #1037: J6's 2+2 artery on mast arms, the 4+4 artery of J13 on portals, the same with trams (J14) on span wires; the
-        // 1+1 roads with pockets keep their kerb poles; every head 4.50-5.50 m over the road (5.50 m and up on a wire)
+        // #1037: J6's 2+2 artery on mast arms, the same with trams (J14) on span wires; the 1+1 roads with pockets keep their kerb
+        // poles; every head 4.50-5.50 m over the road (5.50 m and up on a wire). J13's 4+4 artery took portals while a head hung
+        // over every lane; its one cluster over the middle of the lanes (#1110) is within an arm's reach
         (OverheadKind Kind, int Count) At(string id)
         {
             var j = region.Junction(id);
@@ -152,7 +153,7 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
             return (all.Select(o => o.Kind).DefaultIfEmpty().First(), all.Count);
         }
         Assert.Equal((OverheadKind.Arm, 2), At("J6"));
-        Assert.Equal((OverheadKind.Portal, 2), At("J13"));
+        Assert.Equal((OverheadKind.Arm, 2), At("J13"));
         Assert.Equal((OverheadKind.Span, 2), At("J14"));
         Assert.Equal(0, At("J2").Count);
         foreach (var (_, tile) in region.Tiles())
@@ -160,6 +161,8 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
                 foreach (var o in s.Overheads)
                 {
                     Assert.NotEmpty(o.Heads);
+                    Assert.InRange(o.Heads.Count, 1, 3);
+                    Assert.True(o.Heads.Max(h => h.Along) - o.Heads.Min(h => h.Along) <= 2 * SignalOverhead.ClusterPitch + 0.01f, "one cluster");
                     Assert.All(o.Heads, h => Assert.InRange(h.Along, 0.3f, o.Length));
                     float lift = o.Bottom - s.Y;
                     Assert.InRange(lift, o.Kind == OverheadKind.Span ? 5.4f : 4.4f, 6.2f);
