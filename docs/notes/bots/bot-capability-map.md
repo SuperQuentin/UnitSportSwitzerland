@@ -53,6 +53,7 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | hammer, structure pieces, gadgets | — | `Build/` (client RPCs) | — | `Build` | gap: phase 2+ (building is a follow-up issue) |
 | thrown items (bonk) | — | `ItemEvents.RelayBonk` (client sender) | — | — | gap: later |
 | radio, camera, GPS, fishing, farm tools | — | — | — | — | n/a for a fighting bot (an ambient brain may want them) |
+| a radio's voice/music mix (#1153) | `RadioBody.Mix` / `FootPlayer.RadioMix` set directly | `RadioManager.SetMix` (server: set `Mix`) | — | — | n/a for a fighting bot; an ambient bot DJ could set it server-side |
 
 ## World, loot and vehicles
 

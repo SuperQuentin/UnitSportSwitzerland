@@ -85,3 +85,4 @@
   `SectionAt(cd, t, out index)`, `BeatInBar(cd, beatIndex)` (0 = bar start), `SampleBands`, `DropAt` (v2).
 - **Playback at runtime**: `AudioStreamOggVorbis.LoadFromFile` on the main thread (header only), on an
   `AudioStreamPlayer3D` in `RadioBody` — the first audio file the game plays; everything else is synthesised.
+- **v3 (#1153)**: the singer, the voice/music stems and their mix: `audio/cd-vocal`.

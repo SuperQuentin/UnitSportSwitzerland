@@ -376,6 +376,18 @@ public partial class ConcertRig : Node3D
         return h >= Event.StartHour && h < Event.EndHour;
     }
 
+    /// <summary>
+    /// The song's time as this listener hears it (#1153): the nearest hang's sound is late by its
+    /// distance, and the singer's lips must match what is heard, not what the desk reads. -1 between songs.
+    /// </summary>
+    private double HeardSongTime()
+    {
+        if (_music.SongTime < 0) return -1;
+        float delay = float.MaxValue;
+        foreach (var s in _music.Speakers) delay = MathF.Min(delay, s.Heard.Delay);
+        return _music.SongTime - (delay == float.MaxValue ? 0f : delay);
+    }
+
     public override void _Process(double delta)
     {
         double now = Net.ClockSync.ServerNow;
@@ -523,7 +535,7 @@ public partial class ConcertRig : Node3D
             if (!camera && !video) PaintScreen(_screens[s], _pixels[s], t);
         }
         // the artists dance and the cameras film only while someone can see it
-        if (near && (ShowOn() || ExternalLive)) _performers.Step(_strobeHz, _strobeT);
+        if (near && (ShowOn() || ExternalLive)) _performers.Step(_strobeHz, _strobeT, _music.Song, HeardSongTime(), dt);
         _cameras.ImagWanted = imag && near;
         _cameras.Step(now % 86400.0);
         if (near) _crew.Step(ShowOn() || ExternalLive, dt);

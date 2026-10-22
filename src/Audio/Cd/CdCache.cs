@@ -15,20 +15,22 @@ public static class CdCache
     /// <summary>Client-side copies, beside the streamed terrain (so <c>--cache</c> separates test clients).</summary>
     private static string CacheDirectory => Path.Combine(Core.TerrainPaths.FindCacheDir(), "cds");
 
-    private static readonly Dictionary<int, Task<string?>> InFlight = new();
+    private static readonly Dictionary<(int, int), Task<string?>> InFlight = new();
 
-    /// <summary>The Ogg for a CD if this machine already has it, else null.</summary>
-    public static string? LocalPath(int id)
+    /// <summary>The asset's part number for a stem (#1153, <see cref="AssetKind.Cd"/>'s <c>TileId.N</c>): 0 the CD itself.</summary>
+    public static int Part(CdStem? stem) => stem switch { CdStem.Voice => 1, CdStem.Music => 2, _ => 0 };
+
+    /// <summary>The Ogg for a CD (or one of its stems, #1153) if this machine already has it, else null.</summary>
+    public static string? LocalPath(int id, CdStem? stem = null)
     {
         if (CdLibrary.Instance is not { } lib) return null;
-        if (id < 0) return lib.PersonalPath(id);
+        string? path;
+        if (id < 0) path = lib.PersonalPath(id);
         // a client's own folder holds its offline burns, whose ids name other songs than the server's
-        if (lib.OwnsFiles)
-        {
-            string own = Path.Combine(CdLibrary.Directory, $"{id}.ogg");
-            return File.Exists(own) ? own : null;
-        }
-        return CachePath(id) is { } cached && File.Exists(cached) ? cached : null;
+        else if (lib.OwnsFiles) path = Path.Combine(CdLibrary.Directory, $"{id}.ogg");
+        else path = CachePath(id);
+        if (path != null && stem is { } s) path = CdBurner.StemPath(path, s);
+        return path != null && File.Exists(path) ? path : null;
     }
 
     /// <summary>
@@ -50,24 +52,26 @@ public static class CdCache
     /// down; the caller may ask again later. Safe to call from the main thread; the result is
     /// delivered on the thread pool.
     /// </summary>
-    public static Task<string?> FetchAsync(ChunkStreamer streamer, int id, CancellationToken ct = default)
+    public static Task<string?> FetchAsync(ChunkStreamer streamer, int id, CdStem? stem = null, CancellationToken ct = default)
     {
-        if (LocalPath(id) is { } here) return Task.FromResult<string?>(here);
+        if (LocalPath(id, stem) is { } here) return Task.FromResult<string?>(here);
+        var key = (id, Part(stem));
         lock (InFlight)
         {
-            if (InFlight.TryGetValue(id, out var running)) return running;
-            var task = Fetch(streamer, id, ct);
-            InFlight[id] = task;
-            _ = task.ContinueWith(_ => { lock (InFlight) InFlight.Remove(id); });
+            if (InFlight.TryGetValue(key, out var running)) return running;
+            var task = Fetch(streamer, id, stem, ct);
+            InFlight[key] = task;
+            _ = task.ContinueWith(_ => { lock (InFlight) InFlight.Remove(key); });
             return task;
         }
     }
 
-    private static async Task<string?> Fetch(ChunkStreamer streamer, int id, CancellationToken ct)
+    private static async Task<string?> Fetch(ChunkStreamer streamer, int id, CdStem? stem, CancellationToken ct)
     {
         // main thread: the list may change under the worker
-        if (CachePath(id) is not { } path) return null;
-        var result = await streamer.FetchAsync(AssetKind.Cd, new TileId(id, 0), ct);
+        if (CachePath(id) is not { } mix) return null;
+        string path = stem is { } s ? CdBurner.StemPath(mix, s) : mix;
+        var result = await streamer.FetchAsync(AssetKind.Cd, new TileId(id, Part(stem)), ct);
         if (result.Data is not { } bytes)
         {
             GD.Print($"[cd] CD {id} not received{(result.PermanentlyMissing ? " (the server does not have it)" : "")}");

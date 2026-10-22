@@ -131,7 +131,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the network rules' own self-checks: vision interest and remote interpolation
         (() => Has("--interestcheck"), () => Verdict("interestcheck", Interest.SelfCheck() & RemoteInterpolator.SelfCheck())),
         // the CD beat analyser's self-test: synthetic clicks at known tempos
-        (() => Has("--beatcheck"), () => Verdict("beatcheck", Audio.Cd.BeatAnalyzer.SelfCheck())),
+        (() => Has("--beatcheck"), () => Verdict("beatcheck", Audio.Cd.BeatAnalyzer.SelfCheck() & Audio.Cd.VocalSeparator.SelfCheck())),
+        // a real song's vocal separated both ways, written to test_output/vocal (#1153)
+        (() => Has("--vocalstem"), () => Verdict("vocalstem", Audio.Cd.CdBurner.VocalStemProbe(CmdArgs.Value("--vocalstem")))),
         // a VR player's hands packed into the pose and back (#439)
         (() => Has("--vrposecheck"), () => Verdict("vrposecheck", Player.FootPlayer.VrPoseSelfCheck())),
 #if PLAYTEST

@@ -91,6 +91,7 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware, IInterestEntity
             Settled = state.Settled,
             Length = state.Length,
             Volume = RadioLoudness.Clamp(state.Volume),
+            Mix = new Vector2(state.Voice, state.Music),
         };
         r.SetMultiplayerAuthority(state.Owner > 0 ? (int)state.Owner : 1);
         return r;
@@ -126,7 +127,7 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware, IInterestEntity
 
         // what plays: the server's word, reliably on change, and with the spawn for late joiners
         var play = new SceneReplicationConfig();
-        foreach (var prop in new[] { ".:CdId", ".:StartedAt", ".:Playing", ".:Length", ".:Mode", ".:Volume" })
+        foreach (var prop in new[] { ".:CdId", ".:StartedAt", ".:Playing", ".:Length", ".:Mode", ".:Volume", ".:Mix" })
         {
             play.AddProperty(prop);
             play.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
@@ -199,6 +200,8 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware, IInterestEntity
         _speaker.StartedAt = StartedAt;
         _speaker.On = Playing;
         _speaker.Volume = Volume;
+        _speaker.Voice = Mix.X;
+        _speaker.Music = Mix.Y;
         _speaker.Length = Length > 0 ? Length : Cd?.Duration ?? 0;
 
         // it bounces and sparkles to the music it is actually making (not while the CD is still downloading)
@@ -248,10 +251,13 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware, IInterestEntity
     }
 
     /// <summary>The state to respawn it from: where it is now, what it plays.</summary>
-    public RadioState Capture() => new(Name, Owner, _place.Global, Rotation.Y, Vector3.Zero, CdId, StartedAt, Playing, Settled, Length, Volume, _initial.Oid);
+    public RadioState Capture() => new(Name, Owner, _place.Global, Rotation.Y, Vector3.Zero, CdId, StartedAt, Playing, Settled, Length, Volume, _initial.Oid, Mix.X, Mix.Y);
 
     /// <summary>Its own volume, 0..1 (#734): the server's word, on the State synchronizer.</summary>
     [Export] public float Volume { get; set; } = RadioLoudness.Default;
+
+    /// <summary>Its voice/music mix (#1153): X the voice, Y the music, 0..1 each; set by its owner, the server's word for everyone.</summary>
+    [Export] public Vector2 Mix { get; set; } = Vector2.One;
 
     /// <summary>Which radio this is to the object containers (#689); 0 = not persisted.</summary>
     public long Oid => _initial.Oid;
