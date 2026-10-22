@@ -21,6 +21,12 @@ public partial class XrUi : Node3D
 {
     /// <summary>Panel width in metres, and how far ahead of the eyes it floats.</summary>
     private const float Width = 1.5f, Distance = 1.7f;
+    /// <summary>
+    /// The panel's pixels across on a standalone headset (#1112): it spans ~50 degrees, where a
+    /// Quest 2 has ~20 pixels a degree. Its Android window is 3664 wide, and drawing the 2D that big
+    /// (twice: the window and this panel) was half of a Quest 2's frame.
+    /// </summary>
+    private const float StandalonePixels = 1600f;
     /// <summary>The panel stays put until the head has turned this far from it, then glides round.</summary>
     private const float FollowAngle = 0.6f;
 
@@ -65,10 +71,14 @@ public partial class XrUi : Node3D
         var root = GetTree().Root;
         _size = root.GetVisibleRect().Size;
 
+        // the layout stays the root's (Size2DOverride); a standalone headset draws it smaller
+        var pixels = Platform.IsStandaloneVr && _size.X > StandalonePixels ? _size * (StandalonePixels / _size.X) : _size;
         _view = new SubViewport
         {
             Name = "UiView",
-            Size = (Vector2I)_size,
+            Size = (Vector2I)pixels,
+            Size2DOverride = (Vector2I)_size,
+            Size2DOverrideStretch = true,
             TransparentBg = true,
             Disable3D = true,
             World2D = root.World2D,
@@ -165,6 +175,10 @@ public partial class XrUi : Node3D
             }
         }
 
+        // nobody sees a standalone headset's window: it stops drawing (the panel shows its canvases)
+        if (Platform.IsStandaloneVr && _layer != null) RenderingServer.ViewportSetActive(root.GetViewportRid(), false);
+        GD.Print($"[xr] panel {_view.Size.X}x{_view.Size.Y} for a {_size.X}x{_size.Y} canvas");
+
         foreach (var node in AllNodes(root)) Redirect(node);
         GetTree().NodeAdded += Redirect;
     }
@@ -178,7 +192,7 @@ public partial class XrUi : Node3D
     /// <summary>The reticle in the panel's own pixels: a ring, filled while the trigger holds.</summary>
     private void DrawCursor()
     {
-        float r = _size.X / 160f;
+        float r = _size.X / 160f;   // in the canvas' units: the override scales it with the panel
         var colour = _clickWas ? UiTheme.Amber : UiTheme.AmberDim with { A = 0.85f };
         if (_clickWas) _cursor!.DrawCircle(Vector2.Zero, r, colour);
         else _cursor!.DrawArc(Vector2.Zero, r, 0f, Mathf.Tau, 24, colour, r * 0.35f, antialiased: true);
