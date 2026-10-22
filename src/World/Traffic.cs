@@ -630,7 +630,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     /// </summary>
     private void StepCar(Vehicle car, float dt, List<(Vector3 Pos, Vector3 Vel)> obstacles)
     {
-        car.Route.Plan(130f, leg => NextRoad(leg, car));
+        car.Route.Plan(ApproachLookAhead + 20f, leg => NextRoad(leg, car));
         var (pos, dir) = car.Route.At(0);
         var edge = car.Route.Edge;
         float cruise = CruiseSpeed(edge.Class);
@@ -1052,7 +1052,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     // ---- approaches: lanes and traffic lights (#353) -----------------------------------------
 
     /// <summary>A car finds the approach its route leads into this far ahead: its lanes start up to ~80 m before the line.</summary>
-    private const float ApproachLookAhead = 110f;
+    private const float ApproachLookAhead = 300f;
 
     /// <summary>How hard a car eases down to a lit junction's limit on its way to the line (m/s²).</summary>
     private const float LimitEase = 2f;
@@ -1106,6 +1106,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         for (int i = car.Route.Leg; i < legs.Count && along < ApproachLookAhead; i++)
         {
             var (e, f) = legs[i];
+            // (#1134: read from as far as 300 m, so a car settles in its lane early, but not past a junction before it)
+            if (i > car.Route.Leg && e.Path is not null) break;
             float rem = i == car.Route.Leg ? e.Length - car.Route.Arc : e.Length;
             if ((f ? e.ApproachAtEnd : e.ApproachAtStart) is var (a, back))
             {

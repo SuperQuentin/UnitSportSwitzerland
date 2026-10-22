@@ -116,6 +116,38 @@ public class RegionTrafficTests(SignalTestRegionFixture region) : IClassFixture<
     }
 
     [Fact]
+    public void A_route_through_J5a_and_J5b_is_fed_no_more_than_either_junction_passes_it()
+    {
+        // #1134, the user: "consider both junctions' capacity for paths that cross both": every route from a J5a arm through the
+        // strip to a J5b arm (through and turning) at most its movement's demand at J5a and at J5b
+        var endpoints = TrafficEndpointsFile.Read(Path.Combine(region.Dir, TrafficEndpointsFile.FileName)).Where(x => x.Mode == EndpointMode.Car).ToList();
+        var lights = SignalTestRegion.ReadLights(region.Dir, SignalTestRegion.Junctions);
+        var la = lights.Single(l => l.Name.StartsWith("J5a-")); var lb = lights.Single(l => l.Name.StartsWith("J5b-"));
+        var fa = SignalCapacity.Cars(la.Plan, k => la.Approaches.TryGetValue(k, out var x) ? x.Lanes : null);
+        var fb = SignalCapacity.Cars(lb.Plan, k => lb.Approaches.TryGetValue(k, out var x) ? x.Lanes : null);
+        int ArmOf(SignalTestRegion.Lights l, string compass) => Enumerable.Range(0, l.Plan.Arms.Count).Single(k => Compass(l.Plan.Arms[k].Heading) == compass);
+        int aEast = ArmOf(la, "E"), bWest = ArmOf(lb, "W");
+        int routes = 0;
+        foreach (var g in endpoints.Where(x => x.Junction == la.Name && x.Generates))
+            foreach (var (to, w) in g.Shares)
+            {
+                var d = endpoints.Single(x => x.Id == to);
+                if (d.Junction != lb.Name) continue;
+                float first = fa.Where(f => f.From == ArmOf(la, g.Arm) && f.To == aEast).Sum(f => f.PerMinute);
+                float second = fb.Where(f => f.From == bWest && f.To == ArmOf(lb, d.Arm)).Sum(f => f.PerMinute);
+                Assert.True(w <= Math.Min(first, second) + 0.01f, $"J5a {g.Arm} -> J5b {d.Arm}: {w:F2}/min over min({first:F2}, {second:F2})");
+                routes++;
+            }
+        Assert.True(routes >= 6, $"{routes} routes through both");
+    }
+
+    private static string Compass(double heading)
+    {
+        double deg = (heading * 180 / Math.PI % 360 + 360) % 360;
+        return deg < 45 || deg >= 315 ? "E" : deg < 135 ? "N" : deg < 225 ? "W" : "S";
+    }
+
+    [Fact]
     public void The_endpoints_file_reads_back_what_was_written()
     {
         string path = Path.Combine(Path.GetTempPath(), "unitsport-1134-" + Guid.NewGuid().ToString("N") + ".tsv");
