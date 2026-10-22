@@ -49,3 +49,30 @@ Geneva from SITG (4.41/4.42 and direction signs, `Portique` supports, the heads)
 `turn:lanes` / `destination` and an inference rule (a signalised approach with 3+ lanes, or 2+ lanes with differing
 `turn:lanes`, on a blue/green signed road or within ~1 km of a motorway junction; SSV colours). Geneva is the benchmark
 for the rule: run it with SITG ignored and compare with SITG's gantries.
+
+## Built (PR #1114, stacked on #1111)
+
+- **Data**: `TerrainPreprocessor --out <chunks> --sitg-signs [--force]` (`SitgSignStage`) fetches the canton's direction signs
+  (`CATEGORIE='Jalonnement'`), `Portique` and `Mât feux` supports and `3x300*` heads over the SITG REST services in the region's
+  box into `<temp>/sitg_signs.tsv` (header names the source and licence); kept unless `--force`. A minute.
+- **Where** (`TileRewriter.PlaceGantry`, from `WriteSignals` before the overhead heads): every lit approach with cars. In canton
+  Geneva with the file: where SITG has lane signs (4.41/4.42, grouped by support and way) within 60 m before the stop line's
+  middle (12 m past it), 15 m to the side, their readers' way within 35 deg (`SitgGantries.At`; `ORIENTATION` is the way the
+  readers drive, deg from north). SITG's head layer marks only 48 heads `3x300-portique` and misses the photos' Route de
+  Lausanne gantry: a gantry of lane signs at the lights is taken as lit (Geneva practice, from the user's photos). Elsewhere
+  `GantryRule` (below). A gantried approach gets no overhead cluster.
+- **What**: two square posts 0.8-1.2 m out of the signal poles' feet and 1.2-4.5 m before them (first clear), a beam; a sign
+  per run of lanes going the same way (`GantryLayout.Runs`, as wide as its lanes less 0.3 m, at most 5.6 m), its text from SITG
+  (`SignText.Parse`: `#` fields, pictograms in capitals and `OSR n.nn` numbers dropped, `AUTOROUTE`/`OSR 4.01` the motorway
+  symbol and green, 4.42 white, else blue; SITG lists a sign per lane, alike ones merged; more signs than runs: the 4.42 ones
+  dropped, then `Assign` by position), else OSM's `destination:lanes`/`destination` (overlay v4), else the two largest towns of
+  `places.json` within 30 deg of the lanes' way, 1.5-30 km; green where a motorway, expressway or ramp lies that way within
+  2 km, blue on a main road (`GantryFacts.MainRoad`: TLM importance, canton or confederation owner), white otherwise. Under
+  each sign a black band with each lane's white arrow and a horizontal head (three 200 mm lenses, red left).
+- **Format**: `GNTY` (`SignGantry`, version 1) after `SGNL`. **Drawn**: `SignalBuilder.Gantry.cs` (posts and beam in the
+  canton's pole colour, aluminium sign bodies, face and border, motorway symbol, band, arrows, flat heads; lenses into the tile's
+  lamps; collision on the posts only), destinations as `Label3D`s (`RoadSignBuilder.GantryLabels`). Model viewer: "Traffic
+  light - Gantry, lane signs / three signs" (the user's photos 1 and 2).
+- **Facts and benchmark**: every lit approach's facts go to `<temp>/gantry_facts.tsv` (stop line, way, lanes, street lanes,
+  lane ways, importance, owner, class, motorway distance, canton, what was built, SITG signs vs runs, rule vs SITG colours).
+  `RoadGen --gantry-benchmark <temp>` scores `GantryRule` on Geneva's approaches against SITG and sweeps its thresholds.
