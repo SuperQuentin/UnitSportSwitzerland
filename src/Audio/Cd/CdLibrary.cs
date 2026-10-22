@@ -239,7 +239,7 @@ public partial class CdLibrary : Node
     public void RemovePersonal(int id)
     {
         if (!_personal.Remove(id)) return;
-        foreach (string ext in new[] { ".ogg", ".json" })
+        foreach (string ext in new[] { ".ogg", ".json", ".voc.ogg", ".inst.ogg" })
         {
             try { File.Delete(Path.Combine(PersonalDirectory, $"{id}{ext}")); }
             catch (Exception e) { GD.PushWarning($"[cd] could not delete personal CD {id}: {e.Message}"); }
@@ -517,7 +517,7 @@ public partial class CdLibrary : Node
         {
             cds.Remove(cd.Id);
             any = true;
-            foreach (string ext in new[] { ".ogg", ".json" })
+            foreach (string ext in new[] { ".ogg", ".json", ".voc.ogg", ".inst.ogg" })
             {
                 try { File.Delete(Path.Combine(directory, $"{cd.Id}{ext}")); }
                 catch (Exception e) { GD.PushWarning($"[cd] could not delete fixture CD {cd.Id}{ext}: {e.Message}"); }

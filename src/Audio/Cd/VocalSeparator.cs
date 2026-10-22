@@ -31,16 +31,45 @@ public static class VocalSeparator
     public static string? ModelName { get; } =
         !Core.Platform.IsMobile && File.Exists(ModelPath) ? System.IO.Path.GetFileNameWithoutExtension(ModelFile) : null;
 
-    /// <summary>The vocal and what made it (<see cref="ModelName"/> or <see cref="Centre"/>).</summary>
-    public static (float[] Vocal, string Source) Separate(short[] stereo, CancellationToken ct, bool useModel = true)
+    /// <summary>
+    /// The vocal, mono at <see cref="CdBurner.AnalysisRate"/> for the analyser; what made it
+    /// (<see cref="ModelName"/> or <see cref="Centre"/>); and the vocal stem as played, interleaved
+    /// stereo 16-bit at 44.1 kHz like the input, for the voice/music mix (the instrumental is the
+    /// mix minus it, <see cref="Instrumental"/>).
+    /// </summary>
+    public static (float[] Vocal, string Source, short[] Stem) Separate(short[] stereo, CancellationToken ct, bool useModel = true)
     {
         if (useModel && ModelName is { } name)
         {
-            try { return (ToAnalysisRate(SeparateModel(stereo, ct)), name); }
+            try
+            {
+                var stem = SeparateModel(stereo, ct);
+                return (ToAnalysisRate(Mono(stem)), name, stem);
+            }
             catch (OperationCanceledException) { throw; }
             catch (Exception e) { GD.PushWarning($"[cd] vocal model failed, using the centre fallback: {e.Message}"); }
         }
-        return (ToAnalysisRate(SeparateCentre(stereo, ct)), Centre);
+        var centre = SeparateCentre(stereo, ct);
+        var both = new short[2 * centre.Length];
+        for (int i = 0; i < centre.Length; i++) both[2 * i] = both[2 * i + 1] = ToShort(centre[i]);
+        return (ToAnalysisRate(centre), Centre, both);
+    }
+
+    /// <summary>The mix with the vocal taken out, sample by sample: the instrumental stem.</summary>
+    public static short[] Instrumental(short[] mix, short[] vocal)
+    {
+        var inst = new short[Math.Min(mix.Length, vocal.Length)];
+        for (int i = 0; i < inst.Length; i++) inst[i] = (short)Math.Clamp(mix[i] - vocal[i], short.MinValue, short.MaxValue);
+        return inst;
+    }
+
+    private static short ToShort(float v) => (short)Math.Clamp(v * 32767f, -32768f, 32767f);
+
+    private static float[] Mono(short[] stereo)
+    {
+        var m = new float[stereo.Length / 2];
+        for (int i = 0; i < m.Length; i++) m[i] = (stereo[2 * i] + stereo[2 * i + 1]) / 65536f;
+        return m;
     }
 
     // ---- MDX-Net through ONNX Runtime ------------------------------------------------------------
@@ -50,9 +79,9 @@ public static class VocalSeparator
     /// of hop x (frames - 1) samples, each chunk's STFT (torch layout: periodic Hann, centred with
     /// reflect padding, channels L re, L im, R re, R im, the lowest <c>dim_f</c> bins, the three
     /// lowest zeroed) through the network, which answers the vocal's spectrogram; inverted, the
-    /// middle of each chunk kept. Returns the vocal, mono, at 44.1 kHz.
+    /// middle of each chunk kept. Returns the vocal, interleaved stereo 16-bit, at 44.1 kHz.
     /// </summary>
-    private static float[] SeparateModel(short[] stereo, CancellationToken ct)
+    private static short[] SeparateModel(short[] stereo, CancellationToken ct)
     {
         // all cores but two: a server burning a CD still has players to serve
         using var options = new SessionOptions
@@ -78,7 +107,7 @@ public static class VocalSeparator
         }
 
         var stft = new Stft(ModelFft, ModelHop);
-        var vocal = new float[n + pad];
+        var vocal = new short[2 * (n + pad)];
         var input4 = new float[4 * dimF * dimT];
         var answer = new float[4 * dimF * dimT];
         var spec = new DenseTensor<float>(input4, new[] { 1, 4, dimF, dimT });
@@ -100,9 +129,13 @@ public static class VocalSeparator
             stft.Inverse(answer, dimF, dimT, chunk, outL, outR);
             transform.Stop();
             int keep = Math.Min(gen, n + pad - start);
-            for (int i = 0; i < keep; i++) vocal[start + i] = 0.5f * (outL[trim + i] + outR[trim + i]);
+            for (int i = 0; i < keep; i++)
+            {
+                vocal[2 * (start + i)] = ToShort(outL[trim + i]);
+                vocal[2 * (start + i) + 1] = ToShort(outR[trim + i]);
+            }
         }
-        Array.Resize(ref vocal, n);
+        Array.Resize(ref vocal, 2 * n);
         GD.Print($"[cd] vocal model: network {network.Elapsed.TotalSeconds:F1} s, transforms {transform.Elapsed.TotalSeconds:F1} s");
         return vocal;
     }

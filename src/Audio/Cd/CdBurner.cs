@@ -83,7 +83,7 @@ public sealed class CdBurner
         var pcm = await DecodeMonoAsync(ogg, ct);
         if (pcm == null || pcm.Length < AnalysisRate) return null;
         var analysis = BeatAnalyzer.AnalyseFull(pcm, AnalysisRate, bpm, beatOffset).analysis;
-        return analysis == null ? null : await WithVocalAsync(analysis, ogg, bpm, ct);
+        return analysis == null ? null : await WithVocalAsync(analysis, ogg, bpm, ogg, ct);
     }
 
     /// <summary>
@@ -108,7 +108,7 @@ public sealed class CdBurner
             foreach (bool model in VocalSeparator.ModelName != null ? new[] { true, false } : new[] { false })
             {
                 var watch = Stopwatch.StartNew();
-                var (vocal, how) = VocalSeparator.Separate(stereo, CancellationToken.None, model);
+                var (vocal, how, _) = VocalSeparator.Separate(stereo, CancellationToken.None, model);
                 double sep = watch.Elapsed.TotalSeconds;
                 var r = VocalAnalyzer.Analyse(vocal, AnalysisRate, bpm);
                 double all = watch.Elapsed.TotalSeconds;
@@ -139,23 +139,58 @@ public sealed class CdBurner
         foreach (float v in x) w.Write((short)Math.Clamp(v * 32767f, -32768f, 32767f));
     }
 
+    /// <summary>The voice/music mix's stems beside a CD's Ogg (#1153): <c>&lt;id&gt;.voc.ogg</c> and <c>&lt;id&gt;.inst.ogg</c>.</summary>
+    public static string StemPath(string ogg, CdStem stem) =>
+        Path.Combine(Path.GetDirectoryName(ogg) ?? "", Path.GetFileNameWithoutExtension(ogg) + (stem == CdStem.Voice ? ".voc.ogg" : ".inst.ogg"));
+
     /// <summary>
     /// The block with the singer (#1153): the source decoded again to stereo 44.1 kHz, the vocal
-    /// separated (<see cref="VocalSeparator"/>) and analysed. The block as it was when ffmpeg fails.
+    /// separated (<see cref="VocalSeparator"/>) and analysed, and the two stems of the voice/music mix
+    /// written beside <paramref name="ogg"/> (the vocal, and the mix without it). The block as it was
+    /// when ffmpeg fails; without stems when their encoding does.
     /// </summary>
-    private static async Task<CdAnalysis> WithVocalAsync(CdAnalysis analysis, string source, float bpm, CancellationToken ct)
+    private static async Task<CdAnalysis> WithVocalAsync(CdAnalysis analysis, string source, float bpm, string ogg, CancellationToken ct)
     {
         var stereo = await DecodeStereoAsync(source, ct);
         if (stereo == null) return analysis;
-        return await Task.Run(() =>
+        var watch = Stopwatch.StartNew();
+        var (vocal, how, stem) = await Task.Run(() => VocalSeparator.Separate(stereo, ct), ct);
+        var result = VocalAnalyzer.Analyse(vocal, AnalysisRate, bpm);
+        bool stems = await EncodeStemAsync(stem, StemPath(ogg, CdStem.Voice), ct)
+            && await EncodeStemAsync(VocalSeparator.Instrumental(stereo, stem), StemPath(ogg, CdStem.Music), ct);
+        Godot.GD.Print($"[cd] vocal ({how}) in {watch.Elapsed.TotalSeconds:F1} s: {result.Rises.Length / 2} rise(s), "
+            + $"{result.Falls.Length / 2} fall(s), {result.Holds.Length / 2} long note(s), {result.VocalIns.Length} entr(ies){(stems ? ", stems written" : ", no stems")}");
+        return analysis.WithVocal(result, how, stems);
+    }
+
+    /// <summary>Interleaved stereo 44.1 kHz PCM to an Ogg like the CD's own, through a WAV beside it.</summary>
+    private static async Task<bool> EncodeStemAsync(short[] stereo, string ogg, CancellationToken ct)
+    {
+        string wav = ogg + ".part.wav";
+        try
         {
-            var watch = Stopwatch.StartNew();
-            var (vocal, how) = VocalSeparator.Separate(stereo, ct);
-            var result = VocalAnalyzer.Analyse(vocal, AnalysisRate, bpm);
-            Godot.GD.Print($"[cd] vocal ({how}) in {watch.Elapsed.TotalSeconds:F1} s: {result.Rises.Length / 2} rise(s), "
-                + $"{result.Falls.Length / 2} fall(s), {result.Holds.Length / 2} long note(s), {result.VocalIns.Length} entr(ies)");
-            return analysis.WithVocal(result, how);
-        }, ct);
+            using (var w = new BinaryWriter(File.Create(wav)))
+            {
+                int bytes = stereo.Length * 2;
+                w.Write("RIFF"u8); w.Write(36 + bytes); w.Write("WAVEfmt "u8);
+                w.Write(16); w.Write((short)1); w.Write((short)2); w.Write(VocalSeparator.Rate); w.Write(VocalSeparator.Rate * 4);
+                w.Write((short)4); w.Write((short)16);
+                w.Write("data"u8); w.Write(bytes);
+                var raw = new byte[bytes];
+                Buffer.BlockCopy(stereo, 0, raw, 0, bytes);
+                w.Write(raw);
+            }
+            return await EncodeOggAsync(wav, ogg, ct);
+        }
+        catch (IOException e)
+        {
+            Godot.GD.PushWarning($"[cd] could not write the stem {ogg}: {e.Message}");
+            return false;
+        }
+        finally
+        {
+            try { File.Delete(wav); } catch (IOException) { }
+        }
     }
 
     /// <summary>
@@ -194,11 +229,11 @@ public sealed class CdBurner
             var (bpm, offset, style, energy, analysis) =
                 BeatAnalyzer.AnalyseFull(pcm, AnalysisRate, Grid?.Bpm ?? 0f, Grid?.Offset ?? 0f);
             float duration = pcm.Length / (float)AnalysisRate;
+            string ogg = Path.Combine(CdDirectory, $"{id}.ogg");
             status.Report("Listening for the singer…");
-            if (analysis != null) analysis = await WithVocalAsync(analysis, source, bpm, ct);
+            if (analysis != null) analysis = await WithVocalAsync(analysis, source, bpm, ogg, ct);
 
             status.Report("Encoding…");
-            string ogg = Path.Combine(CdDirectory, $"{id}.ogg");
             if (!await EncodeOggAsync(source, ogg, ct))
             {
                 status.Report("ffmpeg could not encode the CD");

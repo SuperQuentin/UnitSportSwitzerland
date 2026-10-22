@@ -2,6 +2,9 @@ using System.Text.Json.Serialization;
 
 namespace UnitSport.Audio.Cd;
 
+/// <summary>The two halves of a CD's voice/music mix (#1153), each its own Ogg beside the CD.</summary>
+public enum CdStem { Voice, Music }
+
 /// <summary>What a stretch of a track feels like, from <see cref="BeatAnalyzer"/>. Stored as an int: append only.</summary>
 public enum SectionKind { Calm = 0, Groove = 1, Peak = 2, Chorus = 3 }
 
@@ -70,6 +73,9 @@ public sealed class CdAnalysis
     /// <summary>Where the voice comes back after at least two bars without it.</summary>
     [JsonPropertyName("vin")] public float[] VocalIns { get; init; } = Array.Empty<float>();
 
+    /// <summary>The voice and music stems were written beside the CD (<see cref="CdBurner.StemPath"/>): its mix can be changed.</summary>
+    [JsonPropertyName("st")] public bool Stems { get; init; }
+
     private byte[]? _env, _bands, _vocal;
 
     /// <summary>The decoded envelope, decoded once and kept (no allocation after the first call).</summary>
@@ -91,12 +97,12 @@ public sealed class CdAnalysis
     }
 
     /// <summary>This block with the singer added (v3), from <see cref="VocalAnalyzer"/> on what <paramref name="source"/> separated.</summary>
-    public CdAnalysis WithVocal(VocalAnalyzer.Result v, string source) => new()
+    public CdAnalysis WithVocal(VocalAnalyzer.Result v, string source, bool stems) => new()
     {
         Version = Version, Env = Env, Bands = Bands, Drops = Drops, BuildStarts = BuildStarts, Downbeat = Downbeat,
         SectionStarts = SectionStarts, SectionKinds = SectionKinds,
         Vocal = Convert.ToBase64String(v.Frames), VocalSource = source,
-        Rises = v.Rises, Falls = v.Falls, Holds = v.Holds, VocalIns = v.VocalIns,
+        Rises = v.Rises, Falls = v.Falls, Holds = v.Holds, VocalIns = v.VocalIns, Stems = stems,
     };
 
     /// <summary>The decoded <see cref="Vocal"/>, decoded once and kept.</summary>
@@ -120,7 +126,7 @@ public sealed class CdAnalysis
     {
         ["av"] = Version, ["env"] = Env, ["down"] = Downbeat, ["ss"] = SectionStarts, ["sk"] = SectionKinds,
         ["bands"] = Bands, ["drops"] = Drops, ["builds"] = BuildStarts,
-        ["voc"] = Vocal, ["vs"] = VocalSource, ["rises"] = Rises, ["falls"] = Falls, ["holds"] = Holds, ["vin"] = VocalIns,
+        ["voc"] = Vocal, ["vs"] = VocalSource, ["rises"] = Rises, ["falls"] = Falls, ["holds"] = Holds, ["vin"] = VocalIns, ["st"] = Stems,
     };
 
     /// <summary>Tolerates missing keys (an older or newer server).</summary>
@@ -140,6 +146,7 @@ public sealed class CdAnalysis
         Falls = d.TryGetValue("falls", out var fa) ? fa.AsFloat32Array() : Array.Empty<float>(),
         Holds = d.TryGetValue("holds", out var ho) ? ho.AsFloat32Array() : Array.Empty<float>(),
         VocalIns = d.TryGetValue("vin", out var vi) ? vi.AsFloat32Array() : Array.Empty<float>(),
+        Stems = d.TryGetValue("st", out var st) && st.AsBool(),
     };
 }
 
