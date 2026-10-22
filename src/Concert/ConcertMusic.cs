@@ -50,6 +50,9 @@ public partial class ConcertMusic : Node3D
 {
     /// <summary>Silence between two songs, s.</summary>
     public const double Gap = 6.0;
+
+    /// <summary>The PA's voice/music mix (#1153), the operator's (X the voice, Y the music): every hang plays it.</summary>
+    public Vector2 Mix { get; set; } = Vector2.One;
     private const int MaxSongs = 12;
     /// <summary>Full volume within this many metres of a PA hang, heard to the far end of the bowl.</summary>
     private const float Unit = 40f, Reach = 650f;
@@ -236,6 +239,8 @@ public partial class ConcertMusic : Node3D
             s.CdId = song.Id;
             s.SongStart = start;
             s.Length = song.Duration;
+            s.Voice = Mix.X;
+            s.Music = Mix.Y;
             s.On = true;
         }
 

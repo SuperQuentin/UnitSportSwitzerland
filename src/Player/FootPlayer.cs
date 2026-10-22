@@ -1330,6 +1330,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         replication.AddProperty(".:CarRadio");
         replication.AddProperty(".:CarCd");
         replication.AddProperty(".:RadioVolume");
+        replication.AddProperty(".:RadioMix");
         replication.AddProperty(".:PhoneState");
         if (Npc)
         {
