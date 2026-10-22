@@ -546,7 +546,7 @@
 382.9	Figures / Holding - TwoHandEye
 378.5	Figures / Pose - Boarding
 403.5	Figures / Pose - ClimbLeft
-373.6	Figures / Pose - Cycling
+382.9	Figures / Pose - Cycling
 96.1	Figures / Pose - Hanging
 2.8	Figures / Pose - Spread
 2.8	Figures / Pose - Standing
@@ -566,7 +566,7 @@
 96.1	Figures / Swim - Under
 90.4	Furniture / Amplifier
 4000	Furniture / Armchair
-2048	Furniture / Banner
+2047.9	Furniture / Banner
 7056	Furniture / BarrelStack
 29862	Furniture / Bathtub
 35448	Furniture / Bed
@@ -585,7 +585,7 @@
 17280	Furniture / DeskCounter
 3185.2	Furniture / DrumKit
 20	Furniture / Dryer
-2025.1	Furniture / FrontPew
+1909.6	Furniture / FrontPew
 360	Furniture / GuitarStand
 3421.7	Furniture / GunLocker
 24	Furniture / IroningBoard
@@ -969,8 +969,7 @@
 4.5	Rides / Parachute
 109.5	Rides / Paraglider
 75.6	Rides / Pigeon
-123.5	Rides / Road bike
-3.5	Rides / Road bike (parked)
+13.7	Rides / Road bike
 606.9	Rides / Skis
 115.4	Rides / Snowboard
 208.3	Rides / Telehandler
@@ -982,9 +981,9 @@
 9.5	Rides / Wingsuit
 295728	Terrain / Building site - a site office with its gallery, one stack (#827)
 591455.4	Terrain / Building site - a site office with its gallery, two stacks (#827)
-157090.4	Terrain / Building site - foundations, a block of four floors
-153701.8	Terrain / Building site - foundations, a house
-152483.5	Terrain / Building site - shell, a block of four floors
+157117.3	Terrain / Building site - foundations, a block of four floors
+153956.6	Terrain / Building site - foundations, a house
+152451.4	Terrain / Building site - shell, a block of four floors
 709075.2	Terrain / Building site - topped out, a house
 1957418	Terrain / Building site - topped out, a six-floor block
 91640	Terrain / Garage door - Sidewalk
@@ -998,19 +997,27 @@
 520	Terrain / Road prop - TicketKiosk
 3963.5	Terrain / Road prop - TramStop
 1872	Terrain / Road prop - YieldSign
-5134	Terrain / Traffic light - Bike right on red
-5134	Terrain / Traffic light - Bike right on red, no bike head
-5134	Terrain / Traffic light - Geneva
-5134	Terrain / Traffic light - Vaud
-5134	Terrain / Traffic light - Basel-Landschaft
-5134	Terrain / Traffic light - Bern
-25126.4	Terrain / Traffic light - Span wire
+6688.5	Terrain / Traffic light - Basel-Landschaft
+6688.5	Terrain / Traffic light - Bern
+6688.5	Terrain / Traffic light - Bike right on red
+6688.5	Terrain / Traffic light - Bike right on red, no bike head
+6688.5	Terrain / Traffic light - Flasher, arrow plate
+5134	Terrain / Traffic light - Flasher, bike plate
+4990.9	Terrain / Traffic light - Flasher, left turn on the left pole
+6688.5	Terrain / Traffic light - Flasher, pedestrian plate
+26966.2	Terrain / Traffic light - Gantry, lane signs
+29391.3	Terrain / Traffic light - Gantry, three signs
+6688.5	Terrain / Traffic light - Geneva
+6926	Terrain / Traffic light - Permissive left, arrow
+2218.2	Terrain / Traffic light - Permissive left, ball
+29391.3	Terrain / Traffic light - Span wire
+9202.7	Terrain / Traffic light - Tram
+6804.8	Terrain / Traffic light - Tram, Romandy
+6921.1	Terrain / Traffic light - Tram, Romandy, two ways
+12094.7	Terrain / Traffic light - Tram, two ways
 3702.7	Terrain / Traffic light - Two-stage island
 3702.7	Terrain / Traffic light - Two-stage island, Geneva
-7405.6	Terrain / Traffic light - Tram
-5235.7	Terrain / Traffic light - Tram, Romandy
-10042.4	Terrain / Traffic light - Tram, two ways
-5337.5	Terrain / Traffic light - Tram, Romandy, two ways
+6688.5	Terrain / Traffic light - Vaud
 42281.1	Trailer / Drognens dormitory
 344.1	Trucks and buses / Arocs 3240 8x4 mixer
 67.9	Trucks and buses / Arocs 3240 8x4 mixer (parked)
