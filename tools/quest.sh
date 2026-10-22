@@ -3,6 +3,7 @@
 # changes to tracked files) in a temporary worktree outside the project, so the 80 MB OpenXR vendors addon and the
 # Gradle build never land in it. Notes: docs/notes/xr/quest-standalone.md.
 # Usage: tools/quest.sh [--install] [--debug] [--out <apk>]   (Git Bash; GODOT=<console exe> to override)
+# QUEST_ENGINE_ARGS: engine arguments baked into the APK (e.g. --gpu-profile, a GPU time per render pass in the log).
 # --install: adb install -r on the connected headset, then start it. --debug: a debug export (signed with the editor's
 # debug keystore). A release export is signed with GODOT_ANDROID_KEYSTORE_RELEASE_PATH/_USER/_PASSWORD.
 # Needs what the phone APK needs (docs/notes/core/android-emulator.md): the 4.7.2 mono export templates, the Android
@@ -100,6 +101,7 @@ package/unique_name="$PACKAGE"
 package/name="UnitSport Switzerland"
 package/signed=true
 screen/immersive_mode=true
+command_line/extra_args="${QUEST_ENGINE_ARGS:-}"
 xr_features/xr_mode=1
 xr_features/enable_meta_plugin=true
 meta_xr_features/hand_tracking=1
