@@ -108,12 +108,17 @@ public static class TrafficModeMeshBuilder
         var skin = Skins[look / Bikes.Length % Skins.Length];
         var legs = new Color(0.12f, 0.12f, 0.14f);
         var s = new MeshScratch();
-        // the bike: wheels as thin square-ish discs, a diamond frame, bars, saddle
+        // the bike: octagon tyres with a spoke cross, a diamond frame, bars, saddle
         float r = 0.34f, wheelZ = 0.54f;
         var rear = new Vector3(0f, r, -wheelZ);
         var front = new Vector3(0f, r, wheelZ);
         foreach (var hub in new[] { rear, front })
-            s.Tube(hub - new Vector3(0.025f, 0, 0), hub + new Vector3(0.025f, 0, 0), r, Dark, 8);
+        {
+            s.Ring(hub, Vector3.Right, r - 0.07f, r, 0.05f, Dark, 8);                                // tyre
+            s.Box(hub, new Vector3(0.08f, 0.06f, 0.06f), Metal);                                     // hub
+            s.Box(hub, new Vector3(0.015f, 2f * r - 0.1f, 0.025f), Metal);                           // two spokes, a cross
+            s.Box(hub, new Vector3(0.015f, 0.025f, 2f * r - 0.1f), Metal);
+        }
         var crank = new Vector3(0f, 0.3f, -0.04f);
         var seat = new Vector3(0f, 0.86f, -0.24f);
         var head = new Vector3(0f, 0.88f, 0.38f);
