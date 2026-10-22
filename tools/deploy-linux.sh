@@ -291,6 +291,7 @@ if [ $S_NAKAMA = 1 ]; then
     key=$(rq "sed -n 's/^NAKAMA_SERVER_KEY=//p' $(qd "$NAKAMA_DIR/.env") 2>/dev/null || $SUDO -n sed -n 's/^NAKAMA_SERVER_KEY=//p' $(qd "$NAKAMA_DIR/.env")" | tr -d '
 ')
     echo "  account server for players: $NAKAMA_URL, server key ${key:-<in $NAKAMA_DIR/.env>}"
+    echo "  official server of a build: put both in assets/account-server.json (url, serverKey) before releasing"
     echo "  admin console: ssh -L 7351:127.0.0.1:7351 -p $DEPLOY_PORT_SSH $DEPLOY_HOST, then http://127.0.0.1:7351 (login in $NAKAMA_DIR/.env)"
   fi
 fi
