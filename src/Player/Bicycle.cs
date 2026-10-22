@@ -74,6 +74,20 @@ public sealed class Bicycle : Rideable
         _ => 0.0045f,
     };
 
+    /// <summary>The chain, the rings and the cassette, shifted for the rider as Di2's synchro shift does (#1124).</summary>
+    public BikeDrivetrain Gears { get; }
+
+    /// <summary>
+    /// The watts are a power meter's or a trainer's, not the keys': the cadence curve does not touch
+    /// them, because a real rider at 50 rpm making 250 W has already paid for the low cadence.
+    /// </summary>
+    public bool PowerMeasured { get; set; }
+
+    /// <summary>A cadence sensor's reading, rpm: the legs turn at it instead of the gear's (#1124).</summary>
+    public float? MeasuredCadence { get; set; }
+
+    public Bicycle() => Gears = new BikeDrivetrain(Spec);
+
     /// <summary>Steady effort, W. Roughly a fit rider's endurance power.</summary>
     public float RiderWatts { get; set; } = 180f;
 
@@ -128,6 +142,9 @@ public sealed class Bicycle : Rideable
 
     private float _cadence;
 
+    /// <summary>The cranks' rpm now: 0 freewheeling (the HUD, and the legs through <see cref="Animate"/>).</summary>
+    public float Cadence => _cadence;
+
     public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default) => Cyclist.Create(riderIndex, outfit);
 
     public override bool IsVehicle => true;
@@ -179,7 +196,12 @@ public sealed class Bicycle : Rideable
         float watts = input.Throttle * (arcade
             ? (input.Effort ? ArcadeSprintWatts : ArcadeWatts)
             : (input.Effort ? SprintWatts : RiderWatts));
-        float thrust = watts > 0
+        // the gear the chain is in sets the cadence, and the keys' watts fall off away from 90 rpm
+        bool pedalling = watts > 0f;
+        Gears.AutoShift(v, pedalling, dt);
+        float rpm = Gears.Cadence(v);
+        if (!PowerMeasured) watts *= BikeDrivetrain.PowerAtCadence(rpm);
+        float thrust = pedalling
             ? Mathf.Min(BikePhysics.DrivetrainEfficiency * watts / Mathf.Max(v, 0.5f), arcade ? ArcadeMaxThrust : MaxThrust)
             : 0f;
 
@@ -192,11 +214,9 @@ public sealed class Bicycle : Rideable
         // Letting the speed go negative would drive the whole model backwards through itself.
         motion.Speed = Mathf.Max(0f, v);
 
-        // Cadence for the crank animation, from a notional 6.2 m development — about a 50×17,
-        // the gear you would actually be in at cruising speed. The 112 rpm ceiling stands in
-        // for shifting up rather than modelling a cassette; without it a descent has the rider
-        // spinning at 300 rpm. Off the pedals the cranks stop, because a road bike freewheels.
-        _cadence = watts > 0 ? Mathf.Clamp(motion.Speed * 60f / 6.2f, 40f, 112f) : 0f;
+        // The legs turn with the chain: pedalling, the freewheel is engaged and the cranks go round at
+        // the gear's cadence (or the sensor's); off the pedals they stop, because a road bike freewheels.
+        _cadence = pedalling ? Mathf.Min(MeasuredCadence ?? rpm, 150f) : 0f;
     }
 
     public override void Animate(Node3D visual, in RideMotion motion, float dt)

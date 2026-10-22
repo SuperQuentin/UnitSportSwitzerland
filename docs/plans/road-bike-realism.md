@@ -38,8 +38,10 @@ friction circle, the wheelie and stoppie limits, and a spec catalogue to copy.
 
 ## Phases
 
-Status: 1 done (PR #1129), 2 done (PR #1130, stacked on it). 2 differs from the plan: the position is
-chosen automatically, so there is no new key yet, and the figure keeps the hoods pose.
+Status: 1 done (PR #1129), 2 done (PR #1130), 3 done (PR #1133), each stacked on the one before.
+2 differs from the plan: the position is chosen automatically, so there is no new key yet, and the
+figure keeps the hoods pose. 3 differs too: the shifting is automatic only. Manual shift buttons
+need their keyboard, pad and VR ways decided first.
 
 
 1. **Bike catalogue.**

@@ -37,4 +37,16 @@
   - Reference (500 m, tarmac, 180 W): 72.5 kg rider 32.9 km/h, the owner (120 kg) 29.6, 31.1 on the
     Grimsel, 24.4 on gravel, 33.6 a metre behind a wheel. In game, `--ride bike,60 --world flat
     --profile sim [--rider-kg 120]` (sea level) reads 32.1 / 28.3 km/h at 60 s, still settling.
-- Next phases (drivetrain, braking, steering dynamics): `docs/plans/road-bike-realism.md`.
+- **Gears** (`BikeDrivetrain`, pure, `BikeDrivetrainTests`; phase 3): the spec's rings and cassette.
+  `Bicycle.Gears` shifts itself, as Di2's synchro shift does.
+  - The rider's thumb is a cadence window: harder above 97 rpm, easier below 80, a cog every 0.25 s.
+  - It shifts only while pedalling: the chain cannot cross cogs while freewheeling.
+  - The ring changes on the inner ring from the 15 cog harder, and on the outer ring into the 23 cog
+    easier, with the rear moving two cogs back. 13 steps cover 36×28 to 52×11.
+  - Cadence = speed / development. The legs turn at it, freewheeling stops them, capped at 150 rpm.
+  - Key and pad watts × `PowerAtCadence`: 1 at 90 rpm, 0.86 at 60 and below, 0.75 at 130. So a
+    120 kg rider in 36×28 up 8% grinds at ~50 rpm and loses 14%.
+  - `Bicycle.PowerMeasured` (a trainer or power meter: no curve) and `MeasuredCadence` (the sensor
+    drives the legs) are the seams for #969 and #903.
+- HUD: `29 km/h    52×19    88 rpm`. `--ride bike,N` prints the gear, cadence and position every second.
+- Next phases (braking, steering dynamics): `docs/plans/road-bike-realism.md`.

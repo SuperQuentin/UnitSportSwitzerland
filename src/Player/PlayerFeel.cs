@@ -971,6 +971,13 @@ public partial class PlayerFeel : Node3D
                 AppendFarm(sb, t);
                 AppendCruise(sb);
             }
+            else if (_player.Vehicle is Bicycle bike)
+            {
+                // the Di2 junction box's view: the gear and the cadence (#1124)
+                var gears = bike.Gears;
+                sb.Append((int)(speed * 3.6f + 0.5f)).Append(" km/h    ").Append(gears.RingTeeth).Append('×').Append(gears.CogTeeth)
+                  .Append("    ").Append((int)(bike.Cadence + 0.5f)).Append(" rpm");
+            }
             else if (_player.Vehicle is Car c)
             {
                 sb.Append($"{speed * 3.6f:0} km/h    ");
