@@ -1,6 +1,6 @@
 # Traffic riders (#1056, tracking #1058)
 
-Bikes as cosmetic, local traffic on the shared base (`traffic-modes`): green 0.6 x 1.7 x 1.8 m boxes at 5 m/s +-25 %,
+Bikes as cosmetic, local traffic on the shared base (`traffic-modes`): blocky bike-and-rider models (#1147) in 0.6 x 1.7 x 1.8 m boxes at 5 m/s +-25 %,
 30 by day (`GameSettings.TrafficRiders`, 8 on a phone, x0.3 at night; `--bikes N`; Settings -> World "Bikes").
 
 ## Files

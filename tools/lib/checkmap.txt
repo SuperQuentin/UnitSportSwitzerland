@@ -797,3 +797,6 @@ src/Farming/CowMotion       net    tools/sightingnetcheck.sh
 src/Player/TractorBeams     net    tools/sightingnetcheck.sh
 src/Net/LiveMapFile      net    tools/livemapcheck.sh
 tools/deploy/web/map     net    tools/livemapcheck.sh
+# name tags over other players' heads, VR / MOBILE (#1136)
+src/Player/NameTag       net    tools/nametagnetcheck.sh
+src/Net/ChatManager      net    tools/nametagnetcheck.sh

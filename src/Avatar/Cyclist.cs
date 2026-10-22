@@ -20,15 +20,8 @@ namespace UnitSport.Avatar;
 /// </summary>
 public partial class Cyclist : Node3D
 {
-    private static readonly float ThighLength = 0.42f;
-    private static readonly float ShinLength = 0.40f;
-
-    /// <summary>Hip joint, matching the cycling rig and the saddle in <see cref="BikeMeshBuilder"/>.</summary>
-    private static readonly Vector3 HipCentre = new(0, 0.905f, -0.050f);
-
-    private static readonly Vector3 BottomBracket = new(0, 0.270f, -0.020f);
-    private const float CrankLength = 0.170f;
-    private const float PedalOffset = 0.070f;
+    /// <summary>The bike and the rider's fit to it (#1124): the hips, pedals and cranks all come from here.</summary>
+    private static Player.BikeFrame Frame => Player.BikeFrame.Default;
 
     private MeshInstance3D _cranks = null!;
     private readonly MeshInstance3D[] _legs = new MeshInstance3D[2];
@@ -43,6 +36,34 @@ public partial class Cyclist : Node3D
 
     private float _crankAngle;
     private float _cadenceRpm;
+    private MeshInstance3D? _front;
+    private float _steer;
+
+    /// <summary>
+    /// The bars' angle, rad, + to the rider's right (#1124): the fork, front wheel and bars turn
+    /// about the steering axis. The hands stay where the rig put them, so this is for the few degrees
+    /// a bike is steered at speed, not a walking-pace full lock.
+    /// </summary>
+    public float SteerAngle
+    {
+        get => _steer;
+        set
+        {
+            if (value == _steer) return;
+            _steer = value;
+            ApplySteer();
+        }
+    }
+
+    private void ApplySteer()
+    {
+        if (_front == null) return;
+        // facing +Z the rider's right is −X, and a positive turn about the steerer (up) swings the
+        // front toward +X: steering right is a negative angle
+        var pivot = Frame.HeadTop;
+        var turn = new Basis(Frame.SteererUp, -_steer);
+        _front.Transform = new Transform3D(turn, pivot - turn * pivot);
+    }
 
     /// <summary>
     /// Steps of a crank revolution the cranks and legs are drawn at (#221): both depend on the crank
@@ -114,9 +135,18 @@ public partial class Cyclist : Node3D
         AddChild(new MeshInstance3D
         {
             Name = "Bike",
-            Mesh = BikeMeshBuilder.Build(bikePalette, includeCranks: false),
+            Mesh = BikeMeshBuilder.Build(bikePalette, includeCranks: false, parts: BikeMeshBuilder.Parts.Rear),
             MaterialOverride = material,
         });
+        // the fork, front wheel and bars turn about the steering axis (#1124)
+        _front = new MeshInstance3D
+        {
+            Name = "Front",
+            Mesh = BikeMeshBuilder.Build(bikePalette, includeCranks: false, parts: BikeMeshBuilder.Parts.Front),
+            MaterialOverride = material,
+        };
+        AddChild(_front);
+        ApplySteer();
 
         // rider without legs: those are separate so they can be driven by the cranks
         _rider = new MeshInstance3D
@@ -195,19 +225,14 @@ public partial class Cyclist : Node3D
     /// </summary>
     private ArrayMesh BuildLeg(int i, float crankAngle)
     {
-        float angle = crankAngle + i * Mathf.Pi;
-        float side = i == 0 ? PedalOffset : -PedalOffset;
-
-        var hip = HipCentre + new Vector3(side * 1.28f, 0, 0);
-
-        // Sign matches BikeMeshBuilder.Cranks: a crank at the front travels downward next,
-        // because the bike faces +Z. The leg is solved from wherever the pedal is, so the
-        // two can only disagree if this expression does — hence the duplicated minus.
-        var pedal = BottomBracket + new Vector3(
-            side, -Mathf.Sin(angle) * CrankLength, Mathf.Cos(angle) * CrankLength);
+        int side = i == 0 ? 1 : -1;
+        var hip = Frame.LegHip(side);
+        // BikeFrame.Pedal carries the sign: a crank at the front travels downward next, because the
+        // bike faces +Z, and the cranks are drawn from the same call, so the two cannot disagree
+        var pedal = Frame.Pedal(crankAngle, side);
 
         // the knee leads the hip on a bicycle; +Z is forward in author space
-        var knee = Limb.Solve(hip, pedal, ThighLength, ShinLength, new Vector3(0, 0, 1));
+        var knee = Limb.Solve(hip, pedal, Player.BikeFrame.ThighLength, Player.BikeFrame.ShinLength, new Vector3(0, 0, 1));
 
         var scratch = new MeshScratch();
         using var smoothing = scratch.Smoothing(HumanMeshBuilder.SmoothFigures);

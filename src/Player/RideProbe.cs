@@ -330,6 +330,7 @@ public partial class RideProbe : Node
             GD.Print($"[ride] t={_elapsed,5:F1}s  v={_player.RideSpeed,5:F1} m/s "
                 + $"({_player.RideSpeed * 3.6f,5:F1} km/h)  alt={p.Y,7:F1}  clearance={clearance,5:F2}"
                 + (_player.Vehicle is Motorbike bike ? $"  on {bike.Surface}  gear {bike.Gear}" : "")
+                + (_player.Vehicle is Bicycle cycle ? $"  {cycle.Gears}  {cycle.Cadence,3:F0} rpm  {cycle.Position}{(cycle.RearLocked ? "  REAR LOCKED" : "")}" : "")
                 + (_player.Vehicle is Car car ? $"  on {(_chunks is { } c ? Audio.Surfaces.At(c, p, false) : Audio.Surface.Asphalt)}  gear {car.Gear}"
                     + $"  pitch {Mathf.RadToDeg(_player.BodyPose.Basis.GetEuler().X),5:F1}°  roll {Mathf.RadToDeg(_player.BodyPose.Basis.GetEuler().Z),5:F1}°" : "")
                 + (_player.Vehicle is Truck truck ? $"  on {(_chunks is { } tc ? Audio.Surfaces.At(tc, p, false) : Audio.Surface.Asphalt)}  gear {truck.GearLabel} {truck.Rpm:F0} rpm"

@@ -105,19 +105,23 @@ public readonly record struct RideInput(float Throttle, float Brake, float Steer
 /// </param>
 /// <param name="Surface">
 /// What the wheels are on (<see cref="Audio.Surfaces.At"/>: the road under them, else the cover).
-/// The motorbikes and cars read it, for grip (cars also for how rough it is); the default is tarmac.
+/// The motorbikes and cars read it, for grip (cars also for how rough it is), the road bike for its
+/// rolling resistance (#1124); the default is tarmac.
 /// </param>
 /// <param name="Draft">
 /// Share of the air drag taken away by a vehicle close ahead (slipstream, 0..<see cref="MaxDraft"/>);
-/// the cars and motorbikes read it. <see cref="DraftBehind"/> works it out.
+/// the cars and motorbikes read it. <see cref="DraftBehind"/> works it out; for the road bike,
+/// <see cref="WheelDraftBehind"/>.
 /// </param>
+/// <param name="Altitude">Metres above sea level, for the road bike's air density (#1124); 500 m, a Swiss valley floor, when nobody says.</param>
 /// <param name="SnowFriction">Skis: the slope's snow against a groomed run's friction (#887), 1 off a slope.</param>
 /// <param name="SlopeAlong">Skis: gravity's pull down the slope along the heading, m/s² (#899, <see cref="SkiDynamics.Slope"/>).</param>
 /// <param name="SlopeAcross">Skis: the same across the heading, + to the left.</param>
 /// <param name="SnowGrip">Skis: the slope's snow against a groomed run's edge grip (#887), 1 off a slope.</param>
 public readonly record struct RideGround(bool OnFloor, float Grade, Audio.Surface Surface = Audio.Surface.Asphalt, float Draft = 0f,
-    float SnowFriction = 1f, float SlopeAlong = 0f, float SlopeAcross = 0f, float SnowGrip = 1f)
+    float SnowFriction = 1f, float SlopeAlong = 0f, float SlopeAcross = 0f, float SnowGrip = 1f, float Altitude = 500f)
 {
+
     /// <summary>Drag taken away right behind another vehicle (2 m): a car in a tow loses 30-45%.</summary>
     public const float MaxDraft = 0.45f;
     /// <summary>The tow reaches this far back, m, and this far off the leader's axis, rad (±15°).</summary>
@@ -129,6 +133,31 @@ public readonly record struct RideGround(bool OnFloor, float Grade, Audio.Surfac
     /// and going the same way at 10 m/s or more — falling off linearly with the gap. Positions and
     /// velocities are what every peer has (a remote's replicated <c>WorldVelocity</c>).
     /// </summary>
+    /// <summary>A road bike nose to tail, m: wheelbase and both wheels (#1124).</summary>
+    public const float BikeLength = 1.66f;
+
+    /// <summary>
+    /// A cyclist's shelter at <paramref name="me"/> (#1124): the best of every rider or vehicle ahead
+    /// along <paramref name="travel"/> (flat, unit), level with it and going the same way at 4 m/s or
+    /// more, by the wheel-to-wheel gap and how far off its line (<see cref="BikePhysics.WheelDraft"/>).
+    /// Unlike a car's tow it works close in and at riding speed: half a wheel back is 40%.
+    /// The gap is measured as if the one ahead were a bike, so behind a car it reads a little long.
+    /// </summary>
+    public static float WheelDraftBehind(Vector3 me, Vector3 travel, List<(Vector3 At, Vector3 Velocity)> others)
+    {
+        float best = 0f;
+        foreach (var (at, vel) in others)
+        {
+            var rel = at - me;
+            if (Mathf.Abs(rel.Y) > 2f) continue;
+            float along = rel.X * travel.X + rel.Z * travel.Z;
+            if (along < BikeLength || vel.X * travel.X + vel.Z * travel.Z < 4f) continue;
+            float lateral = rel.X * travel.Z - rel.Z * travel.X;
+            best = Mathf.Max(best, BikePhysics.WheelDraft(along - BikeLength, lateral));
+        }
+        return best;
+    }
+
     public static float DraftBehind(Vector3 me, Vector3 travel, List<(Vector3 At, Vector3 Velocity)> others)
     {
         float best = 0f;
@@ -261,6 +290,12 @@ public abstract class Rideable
 
     /// <summary>Space hops (bike, skis). False on a car, where Space is the handbrake.</summary>
     public virtual bool CanHop => true;
+
+    /// <summary>
+    /// How long a lean-steered mount takes to answer the steering, s: 0 when the bank follows the
+    /// input at once (<see cref="SteerByLean"/>). The autopilot looks that much further ahead (#1124).
+    /// </summary>
+    public virtual float SteerLag => 0f;
 
     /// <summary>
     /// How far its steering wheel turns from lock to lock, radians; 0 for anything not steered by a

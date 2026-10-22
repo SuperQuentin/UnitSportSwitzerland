@@ -5,3 +5,5 @@
   one place a 0.52 m torso and a 0.58 m arm can both reach. Hand-placing those joints produced a
   rider lying horizontally in front of the bars; with the ends pinned, the middle is not a free
   choice.
+- Since #1124 the cycling rig is solved, not typed: `HumanMeshBuilder.CyclingRig` from `BikeFrame`'s
+  hip and hood points (`player/road-bike-spec`). A new frame moves the rider with it.

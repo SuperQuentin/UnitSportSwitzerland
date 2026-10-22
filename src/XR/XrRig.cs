@@ -48,6 +48,8 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
     private XRController3D _left = null!, _right = null!;
     private XrPad _pad = null!;
     private XrWristMenu _wrist = null!;
+    private XrWristRing _ring = null!;
+    private int? _ringShot;
     private XrCabControls _cab = null!;
     private XrTeleport _teleport = null!;
     private XrWatch _watch = null!;
@@ -69,6 +71,11 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
     private XrHands _hands = null!;
     private XrUi _ui = null!;
     private MeshInstance3D _vignette = null!;
+    private MeshInstance3D _space = null!;
+    private ShaderMaterial _spaceMat = null!;
+    /// <summary>In the loading space: the headset camera's world mask, kept to put back.</summary>
+    private bool _inSpace, _spaceShot;
+    private uint _worldCull;
     private ShaderMaterial _vignetteMat = null!;
 
     /// <summary>Tracking space → anchor: the inverse of the (yaw-only) head pose at the last recentre.</summary>
@@ -135,7 +142,16 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
             GuiDisableInput = true,
             Size = new Vector2I(1832, 1920),   // the runtime overrides it with the eye size
         };
+        // "--xrsim --xrload": the headset drawn as a Quest 2's two eyes at Link's default (one
+        // picture of both eyes' pixels), so a frame-time check without a headset pays for it
+        if (XrSession.LoadTest)
+        {
+            _view.Size = new Vector2I(2 * 1832, 1920);
+            _view.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
+        }
+        if (XrSession.Stats) _load = new double[3];
         AddChild(_view);
+        if (_load != null) RenderingServer.ViewportSetMeasureRenderTime(_view.GetViewportRid(), true);
         _origin = new XROrigin3D { Name = "Origin", Current = true };
         _view.AddChild(_origin);
         _camera = new XRCamera3D
@@ -182,6 +198,24 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         };
         _camera.AddChild(_vignette);
 
+        // the loading space (#1101): round the head while the world loads, in place of the world
+        _spaceMat = new ShaderMaterial
+        {
+            Shader = GD.Load<Shader>("res://shaders/xr_loading_space.gdshader"),
+            RenderPriority = (int)Material.RenderPriorityMin,
+        };
+        _space = new MeshInstance3D
+        {
+            Name = "LoadingSpace",
+            Mesh = new SphereMesh { Radius = 40f, Height = 80f, RadialSegments = 32, Rings = 16 },
+            MaterialOverride = _spaceMat,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            Visible = false,
+            Layers = XrSession.HeadsetOnlyLayer,
+        };
+        _camera.AddChild(_space);
+        _spaceShot = XrSession.Simulated && CmdArgs.Has("--xrspace");
+
         _pad = new XrPad(_left, _right);
         XrProfile.Watch();
         _hands = new XrHands(_left, _leftMarker, _right, _rightMarker);
@@ -189,12 +223,16 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         AddChild(_ui);
         _wrist = new XrWristMenu(this);
         AddChild(_wrist);
+        _ring = new XrWristRing(this, _wrist);
+        AddChild(_ring);
+        if (XrSession.Simulated) _ringShot = CmdArgs.Int("--xrring");
         _cab = new XrCabControls(_left, _right);
         AddChild(_cab);
         _teleport = new XrTeleport();
         AddChild(_teleport);
+        // on the drawn left hand's wrist, so it is where the hand is, the wheel's rim included (#1097)
         _watch = new XrWatch();
-        _left.AddChild(_watch);
+        _leftHand.AddChild(_watch);
         _map = new XrMap(_right);
         _left.AddChild(_map);
         _climb = new XrClimb(_left, _right);
@@ -239,6 +277,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         _camera.Far = Core.GameSettings.Current.CameraFar;
         ApplyQuality();
         ApplyHands();
+        XrSession.ApplyRefresh();
     }
 
     /// <summary>
@@ -269,9 +308,31 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
     /// <summary>The one-line notices (recentred, monitor view), on the monitor and the panel.</summary>
     internal XrNotice Notice { get; private set; } = null!;
 
+    /// <summary><c>--xrload</c>: frames, frame ms and headset GPU ms summed since the last report.</summary>
+    private double[]? _load;
+    private bool _eyesSaid;
+
+    /// <summary>Every 5 s under <c>--xrload</c>: the frame time and what the headset view cost the GPU.</summary>
+    private void ReportLoad(double delta)
+    {
+        if (_load == null) return;
+        _load[0]++;
+        _load[1] += delta * 1000.0;
+        _load[2] += RenderingServer.ViewportGetMeasuredRenderTimeGpu(_view.GetViewportRid());
+        if (_load[1] < 5000.0) return;
+        double n = _load[0];
+        if (!XrSession.Simulated && !_eyesSaid && XRServer.PrimaryInterface is { } xr && (_eyesSaid = true))
+            GD.Print($"[xr] eyes {xr.GetRenderTargetSize()} x{_view.Scaling3DScale:F2}, {RenderingServer.GetCurrentRenderingMethod()}, MSAA {_view.Msaa3D}");
+        GD.Print($"[xr] load: frame {_load[1] / n:F1} ms, headset gpu {_load[2] / n:F1} ms, "
+            + $"{RenderingServer.GetRenderingInfo(RenderingServer.RenderingInfo.TotalPrimitivesInFrame) / 1e6:F1} M prims, "
+            + $"physics {Engine.PhysicsTicksPerSecond} Hz");
+        Array.Clear(_load);
+    }
+
     public override void _Process(double delta)
     {
         float dt = (float)delta;
+        ReportLoad(delta);
         // the window's camera is the game's: the player's eye, a cockpit, the spectator, a shot
         var current = GetViewport().GetCamera3D();
         if (current != Anchor && current != null)
@@ -300,6 +361,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         if (!_calibrated && _trackedFor > 0.5f) Recentre();
 
         var player = Anchor?.GetParent() as FootPlayer;
+        ReseatOnRideChange(player);
         UpdateAnchor(player);
         var calibrated = _calib * head;
 
@@ -321,14 +383,19 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         _pad.RightGripBusy = _hands.RightBusy || rightClaimed;
         _pad.BodyStick = BodyFlight(player, dt);
         _map.Update(player);
-        _pad.Update(player, calibrated, uiActive: _ui.Pointing || _map.Pointing, dt);
-        _wrist.Watch(_camera.GlobalTransform, _left, player, InWorld, dt);
+        // the watch on the placed left hand, then the ring over it, aimed by the physical right hand
+        _watch.Tick(player, _leftHand.Visible, _leftHand.WatchSpot, dt);
+        // "--xrring <wedge>" with --xrsim: the ring held open before the eyes, that wedge lit, for a headset shot
+        if (_ringShot is int lit) _ring.ShowForShot(_camera.GlobalTransform, lit);
+        else _ring.Update(_camera.GlobalTransform, _watch.GlobalTransform, _watch.Visible, _leftHanded ? _left : _right, player, InWorld, dt);
+        _pad.SuppressRight = _ring.IsOpen;
+        _pad.Update(player, calibrated, uiActive: _ui.Pointing || _map.Pointing || _ring.HoldsTrigger, dt);
         UpdateHandAim();
         ShareHands(player);
-        _watch.Tick(player, _left.GetHasTrackingData(), dt);
         _ui.UpdatePanel(dt);
         UpdateSki(player, calibrated, dt);
         UpdateVignette(player, dt);
+        UpdateLoadingSpace();
 
         // the player aims and is heard from where its head really is
         if (player != null && Anchor != null)
@@ -508,6 +575,57 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
     /// </summary>
     public void Blink() => _blink = 1f;
 
+    private static readonly StringName EyeHeight = "eye_height";
+
+    /// <summary>
+    /// While a session loads (<see cref="Ui.LoadingScreen.Active"/>) the headset draws only what is
+    /// its own (the panel, the pointer, the hands, the watch) inside the loading space; the
+    /// half-streamed world comes in behind a blink when the load is done (#1101).
+    /// </summary>
+    private void UpdateLoadingSpace()
+    {
+        bool want = Ui.LoadingScreen.Active || _spaceShot;
+        if (want == _inSpace) return;
+        _inSpace = want;
+        if (want)
+        {
+            _worldCull = _camera.CullMask;
+            _camera.CullMask = XrSession.HeadsetOnlyLayer;
+            // the floor where yours is: the head's height in the tracking space, standing or sitting
+            _spaceMat.SetShaderParameter(EyeHeight, Mathf.Clamp(_camera.Transform.Origin.Y, 1.0f, 2.0f));
+        }
+        else
+        {
+            _camera.CullMask = _worldCull;
+            Blink();
+        }
+        _space.Visible = want;
+        GD.Print($"[xr] loading space {(want ? "on" : "off")}");
+    }
+
+    /// <summary>What the player was riding last frame (−1: no player yet), to see a seat change.</summary>
+    private (int Ride, long With) _seat = (-1, 0);
+
+    /// <summary>
+    /// Sitting down in a vehicle or getting out (playtest): your head, where it is now, goes onto
+    /// the new eye, the heading kept. A calibration taken standing put a seated eye 40 cm up through
+    /// the car's roof; one taken sitting put a walker's head as far down.
+    /// </summary>
+    private void ReseatOnRideChange(FootPlayer? player)
+    {
+        if (player == null) return;
+        var seat = ((int)player.Ride, player.RidingWith);
+        if (seat == _seat) return;
+        bool first = _seat.Ride < 0;
+        _seat = seat;
+        if (first || !_calibrated) return;
+        var head = _camera.Transform;
+        if (head.Origin == Vector3.Zero) return;   // not tracked
+        var yaw = _calib.AffineInverse().Basis;
+        _calib = new Transform3D(yaw, head.Origin).AffineInverse();
+        GD.Print($"[xr] reseated at head height {head.Origin.Y:F2} m ({player.Ride})");
+    }
+
     /// <summary>Takes where the head is now as the neutral pose: straight ahead, at the avatar's eye.</summary>
     public void Recentre()
     {
@@ -542,12 +660,14 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         // while perched or walking (PigeonSnap says no in the air)
         bool onFoot = player != null && player.Ride == RideKind.OnFoot && player.RidingWith == 0;
         int snapDegrees = Core.GameSettings.Current.VrSnapDegrees;
-        if (onFoot && snapDegrees == 0 && !_ui.Pointing)
+        // the wrist ring open (#1097): the right stick aims its wedges, it does not turn
+        bool turning = !_ui.Pointing && !_ring.IsOpen;
+        if (onFoot && snapDegrees == 0 && turning)
         {
             // smooth, past a small deadzone (#439)
             if (Mathf.Abs(stick.X) > 0.2f) player!.LookYaw -= stick.X * SmoothTurnRate * dt;
         }
-        else if ((onFoot || player?.Ride == RideKind.Pigeon) && Mathf.Abs(stick.X) > 0.7f && _snapArmed && !_ui.Pointing)
+        else if ((onFoot || player?.Ride == RideKind.Pigeon) && Mathf.Abs(stick.X) > 0.7f && _snapArmed && turning)
         {
             float turn = -Mathf.Sign(stick.X) * Mathf.DegToRad(snapDegrees == 0 ? 30 : snapDegrees);
             if (onFoot) player!.LookYaw += turn;

@@ -888,7 +888,7 @@ public partial class PhoneScreens : Node
         turn.FocusMode = Control.FocusModeEnum.None;
         side.AddChild(turn);
 
-        var hint = Big(InputHints.Pad ? "RT  shoot      LB RB  zoom      Y  selfie      B  back" : "Click / Enter  shoot      Wheel  zoom      F  selfie      Esc  back", 22, Ink);
+        var hint = Big(InputHints.Pad ? "L stick  walk      RT  shoot      LB RB  zoom      Y  selfie      B  back" : "WASD  walk      Click / Enter  shoot      Wheel  zoom      F  selfie      Esc  back", 22, Ink);
         hint.SetAnchorsPreset(Control.LayoutPreset.BottomWide);
         hint.OffsetTop = -54; hint.OffsetBottom = -20; hint.OffsetLeft = 40;
         page.AddChild(hint);

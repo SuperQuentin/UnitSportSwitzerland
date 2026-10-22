@@ -71,8 +71,9 @@ The full per-action design and rules: `xr/vr-action-map`.
   when both hands beat down faster than 1.6 m/s; the wingsuit, hands over 1 m apart, rolls toward
   the lower hand; under a canopy each hand pulled down past the shoulder is a brake (one turns,
   both slow and flare).
-- **Watch (#439, `XR/XrWatch`).** On the back of the left wrist (the controller's +X, where the
-  wrist-menu look aims): the world's time (`DayNight.Hour`), the altitude above the sea
+- **Watch (#439, `XR/XrWatch`).** On the drawn left hand's wrist (`XrHand.WatchSpot`, #1097): on the
+  back of the forearm 3.5 cm past the cuff, the dial out of the back of the hand (−X on the left), 12 toward
+  the fingers, so it is where the hand is, on the steering wheel's rim too. It shows the world's time (`DayNight.Hour`), the altitude above the sea
   (`FootPlayer.Global.Alt`) and the speed, a `Label3D` set twice a second and only on change. Hidden
   while the controller is untracked; headset only.
 - **Hand-held map (#439, `XR/XrMap`).** The wrist menu's *Map in your hand* (on foot) builds a relief of
@@ -87,8 +88,15 @@ The full per-action design and rules: `xr/vr-action-map`.
   moves. The newest hand carries; letting go with the last one releases with the push given (at
   most 6 m/s). 15 s of holding and the hands slip; standing rests them. A grip on rock is not
   also a grab or a shoulder.
-- **Wrist menu (#437, `XR/XrWristMenu`).** The back of the left wrist (the controller's +X) turned
-  toward the eyes, in view within 24° and 0.7 m, for 0.6 s opens a menu on the UI panel: travel,
+- **Radial menu over the watch (#1097, `XR/XrWristRing`).** Twist the left wrist to read the watch
+  (the dial facing the eyes, cosine > 0.55, in view within 29° and 0.65 m, for 0.35 s) and a ring of
+  eight wedges opens 12 cm over it, facing you: Travel, Inventory, Map, Phone, Hand map, Recentre,
+  Controls, More…. Aim with the right hand's ray, pull the trigger (a buzz on each new wedge).
+  Twisting the dial away (cosine < 0.15) or lowering it shuts the ring. Wedges that can't be used now
+  are faint, with the reason in the middle. While the ray is on it, the trigger is not a use. It is
+  `Ui/Radial` drawn into a 512 px SubViewport, redrawn only when the aimed wedge changes, on a quad
+  with no depth test (over the dashboard). `--xrsim --xrring <wedge>` holds it open before the eyes.
+- **Wrist menu (#437, `XR/XrWristMenu`).** The ring's *More…*: a list on the UI panel: travel,
   inventory, map, bird journal, drop the held item (on foot), fly camera / walk, controls,
   recentre. A pick taps the action (`XrPad.Tap`) after the menu has let the pointer go, so the
   screen it opens is the one the key opens. In the world only (`XrRig.InWorld`), never on the
