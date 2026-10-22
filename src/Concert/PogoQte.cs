@@ -32,6 +32,10 @@ public partial class PogoQte : CanvasLayer
         AddChild(_view);
     }
 
+    /// <summary>The judge, and whether the ring shows: for the probe.</summary>
+    internal PogoBeat Judge => _beat;
+    internal bool Showing => _view.Visible;
+
     /// <summary>The Pogo emote's <see cref="FootPlayer.DanceId"/>.</summary>
     public static int PogoDanceId
     {
@@ -80,7 +84,7 @@ public partial class PogoQte : CanvasLayer
     /// The beat count where this player's ears are in the song, and the beat's length: the song's
     /// clock less the loudest hang's delay and the output latency.
     /// </summary>
-    private static bool Heard(Items.RadioManager.Music m, out double beats, out double secondsPerBeat)
+    internal static bool Heard(Items.RadioManager.Music m, out double beats, out double secondsPerBeat)
     {
         beats = secondsPerBeat = 0;
         double late = AudioServer.GetOutputLatency();
@@ -143,7 +147,8 @@ public partial class PogoQte : CanvasLayer
 
         public override void _Draw()
         {
-            var c = new Vector2(Size.X * 0.5f, Size.Y * 0.72f);
+            // beside the dancer (the third-person body stands in the middle), clear of the hotbar
+            var c = new Vector2(Size.X * 0.5f + Mathf.Min(260f, Size.X * 0.22f), Size.Y * 0.58f);
             float phase = (float)(_beats - Math.Floor(_beats));
             const float target = 22f;
             // the ring closes onto the target on each beat, and the target flashes as it lands
