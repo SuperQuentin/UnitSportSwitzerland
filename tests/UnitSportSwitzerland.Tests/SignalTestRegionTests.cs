@@ -774,4 +774,26 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
         }
         Assert.Equal(expected, UnitSport.Tools.RoadGen.Rewrite.TileRewriter.RidersTurnRightFrom(new Section(strips, -3), crosswalk, ridersLine));
     }
+    [Fact]
+    public void Left_turn_bike_lanes_are_dashed_where_their_pocket_opens()
+    {
+        // #1165, the user: "The left turn bike lanes should be dashed at the start of the pocket opening, similar to the center
+        // running bike lane when a right pocket opens. This allows cars to cross it". J1: a left pocket and its left-turn bike lane on
+        // every arm; both of the bike lane's lines crossing dashes over the pocket's opening, out past the solid storage, and solid
+        // from the storage to the line
+        var j = region.Junction("J1");
+        var id = TileId.FromLv95(j.E, j.N);
+        double cx = j.E - id.MinE, cz = id.MaxN - j.N;
+        var tile = region.Tile(j.E, j.N);
+        var crossing = tile.Paint.Where(p => p.Type == PaintType.YellowDashed && Math.Abs(p.Dash - UnitSport.Tools.RoadGen.Network.BikePlanner.JunctionDash) < 1e-3)
+            .Select(p => Points(p.Vertices).Select(q => Math.Sqrt((q.X - cx) * (q.X - cx) + (q.Z - cz) * (q.Z - cz))).ToList())
+            .Where(d => d.Min() > 30).ToList();
+        // two lines on each of the four arms, each a few metres long
+        Assert.Equal(8, crossing.Count);
+        Assert.All(crossing, d => Assert.InRange(d.Max() - d.Min(), 2, 25));
+        // the lane's solid lines run from there to its line: the dashes are the opening's only
+        var solid = tile.Paint.Where(p => p.Type == PaintType.YellowSolid).Select(p => Points(p.Vertices)
+            .Select(q => Math.Sqrt((q.X - cx) * (q.X - cx) + (q.Z - cz) * (q.Z - cz))).ToList()).ToList();
+        Assert.All(crossing, d => Assert.Contains(solid, s => Math.Abs(s.Max() - d.Min()) < 1.0));
+    }
 }
