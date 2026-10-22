@@ -240,6 +240,9 @@ public static class SignalCheck
                     }
                     if (road is not null) break;
                 }
+                // a tram path's end lies on its track's line, its offset across the track's own way (#1161: a reservation's double
+                // line, not on a car lane, its way the path's own where the road beside it widens)
+                if (p.Kind == JunctionPathKind.Tram) (road, dx, dz) = (null, px, pz);
                 float len = MathF.Sqrt(dx * dx + dz * dz);
                 if (len < 1e-6f) continue;
                 (dx, dz) = (dx / len, dz / len);

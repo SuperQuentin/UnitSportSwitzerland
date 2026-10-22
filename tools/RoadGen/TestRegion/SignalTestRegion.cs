@@ -533,11 +533,12 @@ public static class SignalTestRegion
                 double a = Math.PI / 2 * k / 12;   // round (E - radius, N + radius) from the reservation to the cross road's axis
                 track.Add((ce - radius + radius * Math.Sin(a), cn + radius - radius * Math.Cos(a)));
             }
+            track.Add((ce, cn + 2 * radius));   // (straight on past the north mouth: the double line's end there would bend its offset)
             lines.Add(new Line("KTT", "", "", "", [.. track], "", Rail: RoadFlags.Tramway | RoadFlags.DoubleTrack));
             // (in the street two single tracks, as TLM maps them, each on from its track of the reservation's double line)
             foreach (var (id, side) in (ReadOnlySpan<(string, double)>)[("KTTNW", -RoadFormat.TrackOffset(RoadFlags.Tramway | RoadFlags.DoubleTrack)),
                          ("KTTNE", RoadFormat.TrackOffset(RoadFlags.Tramway | RoadFlags.DoubleTrack))])
-                lines.Add(new Line(id, "", "", "", [(ce + side, cn + radius), (ce + side, cn + arm)], "", Rail: RoadFlags.Tramway, OnStreet: true));
+                lines.Add(new Line(id, "", "", "", [(ce + side, cn + 2 * radius), (ce + side, cn + arm)], "", Rail: RoadFlags.Tramway, OnStreet: true));
             junctions.Add(new Junction("J17-tram-turning", ce, cn, "the divided road's tram turning off its reservation into the cross road's middle",
                 Arms(null, null, null, null), Signals: [(ce, cn - half), (ce, cn + half)]));
         }
