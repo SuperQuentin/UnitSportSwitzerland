@@ -116,7 +116,7 @@ internal sealed class XrPad
         // crouching for real slides (running) or dives (swimming), like B (#437); not while a menu
         // is open, where B is back
         bool crouched = onFoot && player != null && calibrated.Origin.Y < -CrouchDrop
-                        && Input.MouseMode == Input.MouseModeEnum.Captured;
+                        && Core.MouseCapture.Mode == Input.MouseModeEnum.Captured;
         RealCrouch = crouched;
         RightB = _right.IsButtonPressed("by_button");
         Button(JoyButton.B, RightB || crouched);

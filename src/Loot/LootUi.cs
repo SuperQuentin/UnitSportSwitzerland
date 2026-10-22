@@ -76,7 +76,7 @@ public partial class LootUi : CanvasLayer
     {
         _title.Text = char.ToUpperInvariant(what[0]) + what[1..];
         _panel.Visible = true;
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
         Refresh();
     }

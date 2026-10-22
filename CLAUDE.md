@@ -1,7 +1,8 @@
 # UnitSportSwitzerland
 
 Godot 4.7 C# multiplayer game: real swissALTI3D/swissTLM3D/GWR data -> `tools/TerrainPreprocessor` ->
-tiles in `terrain_chunks/` -> streamed by `src/Terrain/ChunkManager` -> low-poly PS1-style Switzerland,
+tiles in `terrain_chunks/` -> streamed by `src/Terrain/ChunkManager` -> low-poly Switzerland in the Cartoon
+style by default (PS1 and Realistic one setting away; new visuals are built in Cartoon first, `styles/style-kit`),
 on foot, mounted, driving or flying, over ENet multiplayer.
 
 ## Notes: read on demand, never up front
@@ -20,8 +21,9 @@ occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new o
 `feature-clips` (`/clip`, `tools/record-clip.sh`: GIFs of a feature, shown in the next release),
 `linux-deploy` (`tools/deploy-linux.sh` builds and deploys the Linux server over SSH),
 `twoclient-checks` (server + two-client `tools/*check.sh` go through `tools/lib/twoclient.sh`),
-`testing` (test tiers, `tools/test.sh unit|quick|net|full`, path-to-check map, resource guard),
+`testing` (test tiers, `tools/test.sh unit|quick|net|full`, path-to-check map, resource guard; heavy checks side by side in lock slots, `TEST_JOBS`),
 `fast-checks` (the quick tier runs `--fixed-fps 60`: time waits with `GameClock.Now`, wait for threads on the wall clock; net checks at `/speed` with `--checkspeed`),
+`check-waits` (wait for the event, never a fixed time: `Until`, `LogIn`, `Finish` ends with the peers, 0.2 s polls, `REAL=1` for the flat-world scripts),
 `dead-code-and-shared-helpers` (use `Terrain.Format.SwissProjection`, `TileId.ReadList`; prove a member unused before deleting it),
 `test-systems-optin` (every probe declares `--world flat|fixture` / `--systems`, the lightest that works; driving checks run on fixture courses),
 `perf-no-per-frame-allocations` (static `StringName`, no LINQ/strings/lists per frame, UI text and shader params only on change),

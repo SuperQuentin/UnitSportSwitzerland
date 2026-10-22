@@ -26,7 +26,7 @@ public static class RoadSignBuilder
     /// <summary>The plate's face stands this far in front of the pole's axis, its back this far behind the face.</summary>
     private const float PlateOffset = RoadSigns.PoleDiameter * 0.5f + 0.01f, PlateThickness = 0.01f;
 
-    public static bool IsSign(RoadPointProp p) => p.Type is PointPropType.YieldSign or PointPropType.MainRoadSign;
+    public static bool IsSign(RoadPointProp p) => p.Type is PointPropType.YieldSign or PointPropType.MainRoadSign or PointPropType.CantonSign or PointPropType.TramStop;
 
     /// <summary>Appends every sign of the tile to a road mesh under construction.</summary>
     public static void Append(RoadTile tile, List<Vector3> vertices, List<Color> colors, List<Vector2> uvs,
@@ -53,7 +53,11 @@ public static class RoadSignBuilder
 
             var centre = foot + front * PlateOffset + Vector3.Up * ((top + bottom) * 0.5f);
             float side = RoadSigns.Side(p.Type, p.Variant), border = RoadSigns.Border(p.Type, p.Variant);
-            if (p.Type == PointPropType.YieldSign)
+            if (p.Type == PointPropType.TramStop)
+                TramStopPlate(vertices, colors, uvs, uv2s, indices, centre, front, right);
+            else if (p.Type == PointPropType.CantonSign)
+                CantonPlate(vertices, colors, uvs, uv2s, indices, p.Variant, centre, front, right);
+            else if (p.Type == PointPropType.YieldSign)
             {
                 // on its tip: the inscribed circle's centre is two thirds of the height above the tip
                 float h = plate;
@@ -76,6 +80,122 @@ public static class RoadSignBuilder
             }
         }
     }
+
+    // a canton sign (#1038): the plate's edge, the margin round the shield and the text, the shield's size; the name's letters
+    private const float CantonEdge = 0.02f, CantonMargin = 0.05f, ShieldWidth = 0.24f, ShieldHeight = 0.30f;
+    private const int NameFontSize = 40;
+    private const float NamePixel = 0.0025f;
+
+    /// <summary>
+    /// A canton's border sign in a test world (#1038): a white plate with a black edge, the canton's shield on its left (Geneva
+    /// yellow and red side by side, Vaud white over green, the default zone grey), its name right of it (<see cref="Labels"/>).
+    /// </summary>
+    private static void CantonPlate(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
+        byte variant, Vector3 centre, Vector3 front, Vector3 right)
+    {
+        float w = RoadSigns.CantonSignWidth * 0.5f, h = RoadSigns.CantonSignHeight * 0.5f;
+        Vector3[] Rect(Vector3 c, float hw, float hh) =>
+            [c - right * hw + Vector3.Down * hh, c + right * hw + Vector3.Down * hh, c + right * hw + Vector3.Up * hh, c - right * hw + Vector3.Up * hh];
+        Polygon(vertices, colors, uvs, uv2s, indices, Back.SrgbToLinear(), Rect(centre - front * PlateThickness, w, h));
+        Polygon(vertices, colors, uvs, uv2s, indices, Black.SrgbToLinear(), Rect(centre, w, h));
+        Polygon(vertices, colors, uvs, uv2s, indices, White.SrgbToLinear(), Rect(centre + front * 0.01f, w - CantonEdge, h - CantonEdge));
+
+        // the shield: straight sides down to a third of its height, then to a point
+        // a centimetre between layers, or they z-fight from a few metres away (#1079)
+        var c = centre + front * 0.03f + right * (-w + CantonMargin + ShieldWidth * 0.5f);
+        float sw = ShieldWidth * 0.5f, sh = ShieldHeight * 0.5f, shoulder = -sh + ShieldHeight * 0.35f;
+        Vector3 At(float x, float y) => c + right * x + Vector3.Up * y;
+        var (first, second, sideBySide) = Arms(RoadSigns.CantonCode(variant));
+        // a thin black outline behind the fields: Vaud's white half on the white plate
+        const float o = 0.012f;
+        Vector3 Out(float x, float y) => At(x, y) - front * 0.01f;
+        Polygon(vertices, colors, uvs, uv2s, indices, Black.SrgbToLinear(),
+            [Out(-sw - o, sh + o), Out(sw + o, sh + o), Out(sw + o, shoulder), Out(0, -sh - o * 1.6f), Out(-sw - o, shoulder)]);
+        if (sideBySide)
+        {
+            Polygon(vertices, colors, uvs, uv2s, indices, first.SrgbToLinear(), [At(-sw, sh), At(0, sh), At(0, -sh), At(-sw, shoulder)]);
+            Polygon(vertices, colors, uvs, uv2s, indices, second.SrgbToLinear(), [At(0, sh), At(sw, sh), At(sw, shoulder), At(0, -sh)]);
+        }
+        else
+        {
+            Polygon(vertices, colors, uvs, uv2s, indices, first.SrgbToLinear(), [At(-sw, 0), At(sw, 0), At(sw, sh), At(-sw, sh)]);
+            Polygon(vertices, colors, uvs, uv2s, indices, second.SrgbToLinear(), [At(-sw, 0), At(-sw, shoulder), At(0, -sh), At(sw, shoulder), At(sw, 0)]);
+        }
+    }
+
+    private static readonly Color StopGreen = new(0.05f, 0.42f, 0.24f), TramBlue = new(0.12f, 0.25f, 0.55f);
+
+    /// <summary>
+    /// A tram stop's sign (#1057): an upright white plate with a green edge, a blue tram on it (its body, windows, wheels and the
+    /// pantograph's bow). Low-poly, as the other signs.
+    /// </summary>
+    private static void TramStopPlate(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
+        Vector3 centre, Vector3 front, Vector3 right)
+    {
+        float w = RoadSigns.TramStopWidth * 0.5f, h = RoadSigns.TramStopHeight * 0.5f;
+        Vector3[] Rect(Vector3 c, float x0, float y0, float x1, float y1) =>
+            [c + right * x0 + Vector3.Up * y0, c + right * x1 + Vector3.Up * y0, c + right * x1 + Vector3.Up * y1, c + right * x0 + Vector3.Up * y1];
+        Polygon(vertices, colors, uvs, uv2s, indices, Back.SrgbToLinear(), Rect(centre - front * PlateThickness, -w, -h, w, h));
+        Polygon(vertices, colors, uvs, uv2s, indices, StopGreen.SrgbToLinear(), Rect(centre, -w, -h, w, h));
+        Polygon(vertices, colors, uvs, uv2s, indices, White.SrgbToLinear(), Rect(centre + front * 0.001f, -w + 0.03f, -h + 0.03f, w - 0.03f, h - 0.03f));
+        var c = centre + front * 0.002f;
+        var blue = TramBlue.SrgbToLinear();
+        Polygon(vertices, colors, uvs, uv2s, indices, blue, Rect(c, -0.16f, -0.12f, 0.16f, 0.08f));                 // the body
+        Polygon(vertices, colors, uvs, uv2s, indices, blue, Rect(c, -0.02f, 0.08f, 0.02f, 0.15f));                  // the pantograph
+        Polygon(vertices, colors, uvs, uv2s, indices, blue, Rect(c, -0.09f, 0.15f, 0.09f, 0.18f));                  // its bow
+        Polygon(vertices, colors, uvs, uv2s, indices, blue, Rect(c, -0.13f, -0.18f, -0.07f, -0.13f));               // the wheels
+        Polygon(vertices, colors, uvs, uv2s, indices, blue, Rect(c, 0.07f, -0.18f, 0.13f, -0.13f));
+        var white = White.SrgbToLinear();
+        foreach (float x in (ReadOnlySpan<float>)[-0.12f, -0.02f, 0.08f])
+            Polygon(vertices, colors, uvs, uv2s, indices, white, Rect(c + front * 0.001f, x, -0.02f, x + 0.07f, 0.05f));   // its windows
+    }
+
+    /// <summary>A canton's shield in two fields: Geneva's yellow and red side by side, Vaud's white over green; others grey.</summary>
+    private static (Color First, Color Second, bool SideBySide) Arms(string? canton) => canton switch
+    {
+        "GE" => (Yellow, Red, true),
+        "VD" => (White, new Color(0.10f, 0.50f, 0.22f), false),
+        _ => (Back, Back, false),
+    };
+
+    /// <summary>A canton sign's name (#1038), tile-local: the middle of the text, the way the plate faces, the width it wraps to.</summary>
+    /// <param name="Ink">The letters' colour, black when null (#1110: white on a gantry's green or blue sign).</param>
+    /// <param name="Scale">The letters' size to a canton sign's (#1110: a gantry sign's are read from afar).</param>
+    public readonly record struct Label(Vector3 Position, Vector3 Front, string Text, float Width, Color? Ink = null, float Scale = 1f);
+
+    /// <summary>The names on the tile's canton signs (drawn as <see cref="Label3D"/>s beside the road mesh); null when it has none.</summary>
+    public static Label[]? Labels(RoadTile tile)
+    {
+        List<Label>? labels = null;
+        foreach (var p in tile.PointProps)
+        {
+            if (p.Type != PointPropType.CantonSign) continue;
+            var (foot, front, right) = Frame(p);
+            float w = RoadSigns.CantonSignWidth * 0.5f, middle = p.Height - RoadSigns.CantonSignHeight * 0.5f;
+            // right of the shield: from its margin to the plate's edge less one
+            float from = -w + 2 * CantonMargin + ShieldWidth, to = w - CantonMargin;
+            var at = foot + front * (PlateOffset + 0.02f) + Vector3.Up * middle + right * ((from + to) * 0.5f);
+            (labels ??= new()).Add(new Label(at, front, RoadSigns.CantonName(p.Variant), to - from));
+        }
+        return labels?.ToArray();
+    }
+
+    /// <summary>The destinations on the tile's gantry signs (#1110): white letters on green and blue, black on white, larger than a canton sign's.</summary>
+    public static Label[]? GantryLabels(RoadTile tile) =>
+        SignalBuilder.GantryTexts(tile)?.Select(t => new Label(t.Position, t.Front, t.Text, t.Width, t.Dark ? Black : GantryInk, GantryScale)).ToArray();
+
+    private static readonly Color GantryInk = new(0.97f, 0.97f, 0.97f);
+    private const float GantryScale = 2.6f;
+
+    /// <summary>A name as a node: black letters on the plate, wrapped to its width, seen from the front only.</summary>
+    public static Label3D Make(Label label) => new()
+    {
+        Text = label.Text, FontSize = NameFontSize, PixelSize = NamePixel * label.Scale, Modulate = label.Ink ?? Black, OutlineSize = 0,
+        AutowrapMode = TextServer.AutowrapMode.WordSmart, Width = label.Width / (NamePixel * label.Scale),
+        HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+        DoubleSided = false, AlphaCut = Label3D.AlphaCutMode.Discard,
+        Transform = new Transform3D(Basis.LookingAt(-label.Front, Vector3.Up), label.Position),
+    };
 
     /// <summary>Collision triangles for the poles: a closed square column from below the ground to the plate's top.</summary>
     public static Vector3[] BuildCollisionFaces(RoadTile tile)

@@ -775,7 +775,7 @@ public partial class RideUi : CanvasLayer
         Fit();
         _panel.Visible = true;
         _stage.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
         // open on the tab of what you are riding; a controller player drives the cards with the D-pad and A from there
         var current = ActivePlayer?.Invoke()?.Ride ?? RideKind.OnFoot;

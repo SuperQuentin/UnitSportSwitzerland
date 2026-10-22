@@ -22,6 +22,15 @@
     <TargetFramework>net9.0</TargetFramework>
   </PropertyGroup>
 
+  <!-- ... and the APK carries every .so of the publish folder (#1082): keep out SDL (the wheel never starts on a
+       phone), mono's debugger, hot-reload and tracing components (mono falls back to its built-in stubs) and
+       the runtime pack's static .a libraries, which Android never loads -->
+  <Target Name="DropUnusedAndroidNatives" AfterTargets="ComputeResolvedFilesToPublishList" Condition=" '$(GodotTargetPlatform)' == 'android' ">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition=" '%(Filename)%(Extension)' == 'libSDL3.so' or '%(Filename)' == 'libmono-component-debugger' or '%(Filename)' == 'libmono-component-hot_reload' or '%(Filename)' == 'libmono-component-diagnostics_tracing' or '%(Extension)' == '.a' " />
+    </ItemGroup>
+  </Target>
+
   <ItemGroup>
     <!-- Tiles churn through the large-object heap (1-4 MB grids, covers, collision maps), which
          the GC never compacts by default: the heap grows with fragmentation, not live data.

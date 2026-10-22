@@ -59,9 +59,12 @@ public partial class ModelViewer : Node3D
         }
         // screenshots are stills: no face caught mid-blink (#657)
         if (_shots != null) HumanMeshBuilder.FigureMaterial().SetShaderParameter(Face.FaceAnimator.IdleParam, 0f);
+        // --modelsfrontlight: the sun from behind the camera, a little above and to its side, on the faces the camera sees (#1105:
+        // a signal head's white plate read grey with its default light from behind)
+        bool front = CmdArgs.Has("--modelsfrontlight");
         AddChild(new DirectionalLight3D
         {
-            Rotation = new Vector3(Mathf.DegToRad(-42), Mathf.DegToRad(-35), 0),
+            Rotation = front ? new Vector3(Mathf.DegToRad(-30), _yaw + Mathf.DegToRad(25), 0) : new Vector3(Mathf.DegToRad(-42), Mathf.DegToRad(-35), 0),
             LightEnergy = 1.1f,
         });
         if (_clear) GetViewport().TransparentBg = true;
@@ -234,6 +237,13 @@ public partial class ModelViewer : Node3D
         }
         _target = box.GetCenter();
         _distance = Fit(box);
+        // --modelslook x,y,z,distance: the camera on that point of the model, from that far (a close clip of a part, #1105)
+        if (CmdArgs.Value("--modelslook")?.Split(',') is { Length: 4 } look)
+        {
+            float F(int i) => float.Parse(look[i], System.Globalization.CultureInfo.InvariantCulture);
+            _target = new Vector3(F(0), F(1), F(2));
+            _distance = F(3);
+        }
         string zfight = _zfight ? ZFightLine() : "";
 
         _label.Text = $"{_categories[_category].Name}  ({_category + 1}/{_categories.Count})   ›   " +

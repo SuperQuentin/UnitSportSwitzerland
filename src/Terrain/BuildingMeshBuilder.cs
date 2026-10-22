@@ -46,13 +46,13 @@ public static partial class BuildingMeshBuilder
     /// after the facades, with no windows (uv.y &lt; 0), so a tile's buildings and all their doors
     /// stay one surface and one draw call.
     /// </summary>
-    /// <param name="detail">The visual style's mesh detail; only <see cref="Styles.MeshDetail.Low"/> exists so far.</param>
+    /// <param name="detail">The visual style's mesh detail: <see cref="Styles.MeshDetail.High"/> adds the roof overhangs (#1067).</param>
     /// <param name="ground">The tile's terrain: given, a base standing a little above it gets a footing down to it.</param>
     public static MeshData? Build(BuildingTile tile, Interiors.DoorSpot[]? doors,
         Styles.MeshDetail detail = Styles.MeshDetail.Low, ChunkGrid? ground = null)
     {
         Core.ShowcaseTrace.Mark();
-        var data = Build(tile);
+        var data = Build(tile, detail);
         if (data == null) return null;
         var types = BuildingTypes.For(tile);
         bool castles = types.HasCastles;
@@ -200,7 +200,12 @@ public static partial class BuildingMeshBuilder
     /// </summary>
     public static bool Drawn(Building b) => b.Kind != BuildingKind.UnderConstruction;
 
-    public static MeshData? Build(BuildingTile tile)
+    /// <summary>
+    /// The tile's solids as one mesh. <see cref="Styles.MeshDetail.High"/> (Cartoon and the styles
+    /// above it) carries every pitched roof past its walls (<see cref="RoofOverhangs"/>, #1067);
+    /// Low (PS1) draws the surveyed solid alone. Collision is the solid either way.
+    /// </summary>
+    public static MeshData? Build(BuildingTile tile, Styles.MeshDetail detail = Styles.MeshDetail.Low)
     {
         var types = BuildingTypes.For(tile);
         // a ruin is drawn as its broken walls (AppendRuin), not as its surveyed solid
@@ -225,6 +230,9 @@ public static partial class BuildingMeshBuilder
         var roofSpans = new Dictionary<(int, int, int, int), (float Min, float Max)>();
         var runs = new List<WallRun>();
         int v = 0;
+        // High: the overhangs, appended after the solids; the tile's roofs from above, built on first need
+        var overhangs = detail == Styles.MeshDetail.High ? new FacadeSink() : null;
+        RoofCover? cover = null;
 
         for (int bi = 0; bi < tile.Buildings.Count; bi++)
         {
@@ -300,6 +308,14 @@ public static partial class BuildingMeshBuilder
                 float s1 = Mathf.Max(a.Dot(up), Mathf.Max(c.Dot(up), d.Dot(up)));
                 roofSpans[key] = roofSpans.TryGetValue(key, out var span)
                     ? (Mathf.Min(span.Min, s0), Mathf.Max(span.Max, s1)) : (s0, s1);
+            }
+            // High: the pitched roofs carried past the walls; each plane's tile courses (and its
+            // gutter) then measure from the overhang's edge. A castle, a tower's spire and a
+            // brand's box keep their own outline.
+            if (overhangs != null && roofSpans.Count > 0 && !castle && part != BuildingPart.Tower && type != BuildingType.Ikea)
+            {
+                cover ??= new RoofCover(tile, i => Drawn(tile.Buildings[i]) && !rebuilt[i]);
+                AppendOverhangs(RoofOverhangs.Plan(b, bi, RoofOverhangs.For(kind), cover), roofSpans, roof, wall, kind, overhangs);
             }
             // the flat roof's extent in the axis frame (along, across); most large flat roofs
             // have panels, a church never
@@ -416,6 +432,18 @@ public static partial class BuildingMeshBuilder
             }
         }
 
+        if (overhangs == null || overhangs.V.Count == 0) return new MeshData(vertices, colors, uvs, uv2s, frames);
+        int n = vertices.Length, extra = overhangs.V.Count;
+        Array.Resize(ref vertices, n + extra);
+        Array.Resize(ref colors, n + extra);
+        Array.Resize(ref uvs, n + extra);
+        Array.Resize(ref uv2s, n + extra);
+        Array.Resize(ref frames, (n + extra) * 4);
+        overhangs.V.CopyTo(vertices, n);
+        overhangs.C.CopyTo(colors, n);
+        overhangs.Uv.CopyTo(uvs, n);
+        overhangs.Uv2.CopyTo(uv2s, n);
+        overhangs.Frames.CopyTo(frames, n * 4);
         return new MeshData(vertices, colors, uvs, uv2s, frames);
     }
 
@@ -434,21 +462,8 @@ public static partial class BuildingMeshBuilder
     /// offset rounded, so the triangles of one roof face group together. The source TINs wind
     /// faces either way, so the normal is turned to face up.
     /// </summary>
-    private static bool PitchedRoof(Vector3 a, Vector3 c, Vector3 d, out Vector3 upSlope, out (int, int, int, int) key)
-    {
-        var n = (c - a).Cross(d - a);
-        upSlope = Vector3.Zero;
-        key = default;
-        float len = n.Length();
-        if (len < 1e-6f) return false;
-        n /= len;
-        if (n.Y < 0f) n = -n;
-        if (n.Y > 0.97f) return false;
-        upSlope = (Vector3.Up - n * n.Y).Normalized();
-        key = ((int)MathF.Round(n.X * 50f), (int)MathF.Round(n.Y * 50f), (int)MathF.Round(n.Z * 50f),
-            (int)MathF.Round(n.Dot(a) * 10f));
-        return true;
-    }
+    private static bool PitchedRoof(Vector3 a, Vector3 c, Vector3 d, out Vector3 upSlope, out (int, int, int, int) key) =>
+        RoofOverhangs.PitchedRoof(a, c, d, out _, out upSlope, out key);
 
     /// <summary>Flat roof area (square metres) from which a building carries solar panels.</summary>
     public const float SolarRoofArea = 250f;

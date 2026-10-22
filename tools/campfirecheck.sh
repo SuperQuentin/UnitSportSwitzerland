@@ -12,7 +12,7 @@ tc_server 1800 120 $OUT/campfire_server.log --server --port $PORT --world fixtur
 tc_client 300 $OUT/campfire_A.log --connect 127.0.0.1:$PORT --name FireA --campfirenet A --world fixture --traffic 0 &
 A=$!
 # B joins only once A's fire is lit: what it sees comes from the join snapshot
-for _ in $(seq 1 200); do grep -q "say lit" $OUT/campfire_A.log 2>/dev/null && break; kill -0 $A 2>/dev/null || break; sleep 1; done
+for _ in $(seq 1 400); do grep -q "say lit" $OUT/campfire_A.log 2>/dev/null && break; kill -0 $A 2>/dev/null || break; guard_nap 0.5; done
 tc_client 240 $OUT/campfire_B.log --connect 127.0.0.1:$PORT --name FireB --campfirenet B --world fixture --traffic 0
 wait $A
 code=0

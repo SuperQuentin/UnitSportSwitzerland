@@ -47,6 +47,7 @@ public partial class ChunkNode : Node3D
         if (_meshInstance != null) _meshInstance.Visible = Shows(TileLayers.Ground);
         if (_roadInstance != null) _roadInstance.Visible = Shows(TileLayers.Roads);
         if (_lamps != null) _lamps.Visible = Shows(TileLayers.Roads);
+        if (_signNames != null) _signNames.Visible = Shows(TileLayers.Roads);
         if (_buildingInstance != null) _buildingInstance.Visible = Shows(TileLayers.Buildings);
         if (_siteInstance != null) _siteInstance.Visible = Shows(TileLayers.Buildings);
         if (_siteCranes != null) _siteCranes.Visible = Shows(TileLayers.Buildings);
@@ -209,6 +210,19 @@ public partial class ChunkNode : Node3D
         AddChild(_lamps);
     }
 
+    private Node3D? _signNames;
+
+    /// <summary>The names on the tile's canton signs (#1038, a test world's borders), replaced with the roads; null removes them.</summary>
+    public void SetSignNames(RoadSignBuilder.Label[]? labels)
+    {
+        _signNames?.QueueFree();
+        _signNames = null;
+        if (labels == null) return;
+        _signNames = new Node3D { Name = "SignNames", Visible = Shows(TileLayers.Roads) };
+        foreach (var label in labels) _signNames.AddChild(RoadSignBuilder.Make(label));
+        AddChild(_signNames);
+    }
+
     private MeshInstance3D? _buildingInstance;
     private StaticBody3D? _buildingBody;
 
@@ -325,6 +339,7 @@ public partial class ChunkNode : Node3D
     public void ClearRoads()
     {
         SetSignalLamps(null);
+        SetSignNames(null);
         if (_roadInstance?.Mesh is not { } mesh) return;
         _roadInstance.Mesh = null;
         mesh.Dispose();

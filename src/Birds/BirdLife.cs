@@ -1292,23 +1292,53 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     private static AudioStreamWav CallFor(int pattern) => Calls.TryGetValue(pattern, out var c) ? c
         : Calls[pattern] = Dsp.Encode(Dsp.Normalise(AmbienceDsp.BirdCall(new Random(pattern * 977), AmbienceDsp.BirdPattern(pattern)), 0.8f));
 
+    /// <summary>The feathers' material: vertex colour on camera-facing quads, lit like every solid (StyleKit.Figure), one for every puff.</summary>
+    private static StandardMaterial3D FeatherMaterial => _feather ??= Styles.StyleKit.Figure(new StandardMaterial3D
+    {
+        VertexColorUseAsAlbedo = true, CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+        BillboardMode = BaseMaterial3D.BillboardModeEnum.Particles,
+    });
+    private static StandardMaterial3D? _feather;
+
+    /// <summary>A puff of feathers from <paramref name="a"/> to <paramref name="b"/>, not yet emitting.</summary>
+    private static CpuParticles3D FeatherPuff(Color a, Color b, int amount, float speed) => new()
+    {
+        OneShot = true, Amount = amount, Lifetime = 1.8, Explosiveness = 0.95f,
+        Mesh = new QuadMesh { Size = new Vector2(0.06f, 0.025f) },
+        Direction = Vector3.Up, Spread = 180f, InitialVelocityMin = 0.6f, InitialVelocityMax = speed,
+        Gravity = new Vector3(0, -0.7f, 0), DampingMin = 1.5f, DampingMax = 3f,
+        AngularVelocityMin = -360f, AngularVelocityMax = 360f,
+        ColorRamp = new Gradient { Colors = new[] { a, b } },
+        MaterialOverride = FeatherMaterial,
+    };
+
+    /// <summary>A feather puff, looping, in the model viewer (in game it is one burst when a bird is hit).</summary>
+    [Showcase("Birds", "Feather puff")]
+    private static Node3D ShowcaseFeathers()
+    {
+        var puff = FeatherPuff(new Color(0.55f, 0.55f, 0.6f), new Color(0.9f, 0.9f, 0.88f), 60, 1.2f);
+        puff.OneShot = false;
+        puff.Explosiveness = 0f;
+        puff.Gravity = Vector3.Zero;
+        puff.Preprocess = 1.0;
+        puff.Emitting = true;
+        // the viewer frames a model by its meshes' box, and a particle node has none: an invisible
+        // 0.4 m box frames the puff
+        var root = new Node3D();
+        root.AddChild(puff);
+        root.AddChild(new MeshInstance3D
+        {
+            Mesh = new BoxMesh { Size = Vector3.One * 0.4f },
+            MaterialOverride = new StandardMaterial3D { Transparency = BaseMaterial3D.TransparencyEnum.Alpha, AlbedoColor = new Color(1, 1, 1, 0), ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded },
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+        });
+        return root;
+    }
+
     private void Feathers(Vector3 at, Color a, Color b, int amount = 28, float speed = 2.8f)
     {
         if (Headless) return;
-        var puff = new CpuParticles3D
-        {
-            OneShot = true, Amount = amount, Lifetime = 1.8, Explosiveness = 0.95f,
-            Mesh = new QuadMesh { Size = new Vector2(0.06f, 0.025f) },
-            Direction = Vector3.Up, Spread = 180f, InitialVelocityMin = 0.6f, InitialVelocityMax = speed,
-            Gravity = new Vector3(0, -0.7f, 0), DampingMin = 1.5f, DampingMax = 3f,
-            AngularVelocityMin = -360f, AngularVelocityMax = 360f,
-            ColorRamp = new Gradient { Colors = new[] { a, b } },
-            MaterialOverride = new StandardMaterial3D
-            {
-                VertexColorUseAsAlbedo = true, CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-                BillboardMode = BaseMaterial3D.BillboardModeEnum.Particles,
-            },
-        };
+        var puff = FeatherPuff(a, b, amount, speed);
         AddChild(puff);
         puff.GlobalPosition = at;
         puff.Emitting = true;

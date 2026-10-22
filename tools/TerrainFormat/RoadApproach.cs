@@ -1,7 +1,7 @@
 namespace UnitSport.Terrain.Format;
 
-/// <summary>Who a lane of an approach is for (#353).</summary>
-public enum ApproachLaneKind : byte { Car = 0, Bike = 1 }
+/// <summary>Who a lane of an approach is for (#353); <c>Tram</c>: a tram track approaching the junction (#1057), in the road or on its own bed, its moves the trams' through it, stopping at the line where it crosses the track.</summary>
+public enum ApproachLaneKind : byte { Car = 0, Bike = 1, Tram = 2 }
 
 /// <summary>
 /// One lane of an approach (#353), as the network stage built it. Distances are metres before

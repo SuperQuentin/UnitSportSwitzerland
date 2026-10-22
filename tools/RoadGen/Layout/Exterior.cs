@@ -65,10 +65,17 @@ public sealed class ArmExterior
     public List<IslandPiece> Islands { get; } = new();
     public List<PoleSpot> Poles { get; } = new();
     public List<SignSpot> Signs { get; } = new();
+    /// <summary>A lit approach's heads over its lanes (#1037, <see cref="OverheadPlanner"/>); empty where its kerb heads do.</summary>
+    public List<OverheadSpot> Overhead { get; } = new();
     /// <summary>Where the arriving cars stop: the middle of their stop line (or bar, or row), m out from the mouth; null where none arrive.</summary>
     public double? CarStop { get; set; }
     /// <summary>Where the arriving riders stop at the lights; null without a riders' line.</summary>
     public double? RiderStop { get; set; }
+    /// <summary>
+    /// The island the crosswalk crosses where its walkers cross in two stages (#1030): its edges across the arm at the zebra, at
+    /// least <see cref="ExteriorPlanner.TwoStageWidth"/> apart; null where they cross in one go.
+    /// </summary>
+    public (double Left, double Right)? StageIsland { get; set; }
     /// <summary>The crosswalk's stations, null without one.</summary>
     public (double From, double To)? Crosswalk => Bars.FirstOrDefault(b => b.Kind == BarKind.Crosswalk) is { } c ? (c.From, c.To) : null;
 
@@ -78,8 +85,10 @@ public sealed class ArmExterior
         var sb = new StringBuilder("    exterior ");
         sb.Append(string.Join("; ", Bars.Select(b => string.Create(inv, $"{b.Kind} {b.From:F1}-{b.To:F1} m across {b.Left:F2}..{b.Right:F2}{(b.Gap is { } g ? $" (gap {g.Left:F2}..{g.Right:F2})" : "")}"))));
         if (Refuge is { } r) sb.Append(inv, $"; refuge {r.From:F1}-{r.To:F1} m across {r.Left:F2}..{r.Right:F2}");
+        if (StageIsland is { } st) sb.Append(inv, $"; two-stage over {st.Left:F2}..{st.Right:F2}");
         foreach (var p in Poles) sb.Append(inv, $"; pole {(p.OnRefuge ? "refuge" : p.RightKerb ? "right" : "left")} at {p.Station:F1} m ({p.Flags})");
         foreach (var s in Signs) sb.Append(inv, $"; sign {s.Type} at {s.Station:F1} m");
+        if (Overhead.Count > 0) sb.Append("; overhead ").Append(string.Join(" ", Overhead.Select(o => string.Create(inv, $"{o.Moves}@{o.Offset:F2}"))));
         return sb.Append('\n').ToString();
     }
 }
@@ -101,6 +110,8 @@ public static class ExteriorPlanner
     /// (m; the old layout's rules, #350/#711, restored by #1000).
     /// </summary>
     public const double PoleBehindCrosswalk = 0.4, RiderLineBehindPole = 0.5, PoleAlong = 0.4;
+    /// <summary>A kerb pole's heads stand about this far out of the kerb, for <see cref="OverheadPlanner"/> (m; its first try, PoleClear).</summary>
+    public const double KerbHeadOut = 0.5;
     public const double RidersBehindCrosswalk = 0.5, RidersLineWidth = 0.3, AdvancedLine = 3.0, BikeBoxDepth = 4.0;
     public const double PocketBarFromMouth = 0.1;
     /// <summary>A give-way row stands this far out past the mouth (or what lies before it) and keeps this far off the lane edges.</summary>
@@ -122,6 +133,32 @@ public static class ExteriorPlanner
     /// <summary>A lit arm's island stops this far short of its crosswalk on either side (m; the old layout's, #682), and a piece
     /// shorter than <see cref="MinIslandPiece"/> is left out.</summary>
     public const double CrosswalkCut = 0.15, MinIslandPiece = 0.8;
+
+    /// <summary>
+    /// An island at least this wide across the walking direction (m) holds walkers waiting between the two halves of a lit
+    /// crosswalk (#1030: VSS's usual waiting area, the user); a narrower one stays a refuge, crossed in one go.
+    /// </summary>
+    public const double TwoStageWidth = 2.0;
+
+    /// <summary>
+    /// An arm's crossing back in one go where its island wait cannot be kept without a longer cycle (#1030, the user: an island
+    /// never makes the crossing worse): no half heads, the island's pole the repeater's alone (none without one), the zebra
+    /// across the island as before.
+    /// </summary>
+    public static void OneStage(ArmExterior ex)
+    {
+        if (ex.StageIsland is null) return;
+        ex.StageIsland = null;
+        int z = ex.Bars.FindIndex(b => b.Kind == BarKind.Crosswalk);
+        if (z >= 0) ex.Bars[z] = ex.Bars[z] with { Gap = null };
+        const SignalPoleFlags Halves = SignalPoleFlags.ArrivingHalf | SignalPoleFlags.DepartingHalf;
+        for (int i = ex.Poles.Count - 1; i >= 0; i--)
+        {
+            var p = ex.Poles[i];
+            if (p.OnRefuge && (p.Flags & SignalPoleFlags.Second) == 0) ex.Poles.RemoveAt(i);
+            else ex.Poles[i] = p with { Flags = p.OnRefuge ? SignalPoleFlags.Second : p.Flags & ~Halves };
+        }
+    }
 
     /// <summary>How far into the junction (a negative station, from <paramref name="from"/> toward <paramref name="to"/>) an island's tip
     /// may reach with every car's way through the core clear of it by half its width and <see cref="IslandCarClear"/>.</summary>
@@ -398,6 +435,22 @@ public static class ExteriorPlanner
                     islandPole = Math.Clamp(islandPole, on.From + 0.3, Math.Max(on.From + 0.3, on.To - 0.3));
                 }
             }
+            // walkers waiting on an island spanning the zebra, wide enough at it, cross in two stages (#1030): each kerb's head shows
+            // its own half (the right kerb the arriving lanes'), the island two back to back, on the repeater's pole or one of its own
+            if (zebra is not null && ex.Refuge is { } stage && stage.From <= zebra.From && stage.To >= zebra.To
+                && (ex.Islands.Count > 0 ? IslandEdges(a, (zebra.From + zebra.To) * 0.5) ?? (stage.Left, stage.Right) : (stage.Left, stage.Right)) is var (sl, sr)
+                && sr - sl >= TwoStageWidth - 1e-6)
+            {
+                ex.StageIsland = (sl, sr);
+                // no bars over the island: the walkers wait there, it is no crossing (the user)
+                int z = ex.Bars.FindIndex(b => b.Kind == BarKind.Crosswalk);
+                ex.Bars[z] = ex.Bars[z] with { Gap = (sl, sr) };
+                ex.Poles[^1] = ex.Poles[^1] with { Flags = ex.Poles[^1].Flags | SignalPoleFlags.ArrivingHalf };
+                ex.Poles.Add(new PoleSpot(poleAt, RightKerb: false, OnRefuge: false, walk | SignalPoleFlags.DepartingHalf));
+                ex.Poles.Add(new PoleSpot(islandPole, RightKerb: false, OnRefuge: true,
+                    (second ? SignalPoleFlags.Second : 0) | walk | SignalPoleFlags.ArrivingHalf | SignalPoleFlags.DepartingHalf));
+                return ex;
+            }
             // the left kerb's pole for the walkers' head; the repeater on the island where there is one (#1000: the island's pole had
             // taken the left kerb's, its walkers' head with it)
             if (ex.Refuge is not null)
@@ -406,6 +459,13 @@ public static class ExteriorPlanner
                 if (second) ex.Poles.Add(new PoleSpot(islandPole, RightKerb: false, OnRefuge: true, SignalPoleFlags.Second));
             }
             else ex.Poles.Add(new PoleSpot(poleAt, RightKerb: false, OnRefuge: false, (second ? SignalPoleFlags.Second : 0) | walk));
+            // heads over the lanes where a lane's own kerb head stands too far from it (#1037): the right kerb's and the left's (or
+            // the refuge's) a pole's clearance out of the kerb
+            var line = SectionAt(a, carFront + width * 0.5);
+            double? left = ex.Refuge is { } rf ? (rf.Left + rf.Right) * 0.5 : second ? line.CarriagewayLeft - KerbHeadOut : null;
+            bool sideRoad = signs?.Any(x => x.FacesArriving && x.Type == PointPropType.YieldSign) == true;
+            ex.Overhead.AddRange(OverheadPlanner.Heads(line, a.Normal.CarLanes(StripWay.In).Count(), line.CarriagewayRight + KerbHeadOut, left,
+                ex.Refuge is not null, sideRoad));
             return ex;
         }
         // without lights: a pocket's own bar, and on a yielding arm the give-way row across the arriving lanes

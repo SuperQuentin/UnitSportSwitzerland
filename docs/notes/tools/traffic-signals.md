@@ -45,7 +45,10 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   same exit arm conflict); a turn sharing the main lane yields (permissive), arrows are protected
   only. Schemes: 4 arms in two roads: per road lead (its left pocket), both, lag (the other's
   pocket), each only if that pocket exists, the higher ranked road first; a T: main, main left +
-  its through, side; else split phasing. Then each phase takes the pedestrians, bikes and right
+  its through, side; else split phasing (each approach on its own; one none of whose movements conflict hard with a phase's goes
+  with it, #1030: Geneva's 10-arm node at 2500974,1117838 ran 9 phases to 157 s once timed from conflict times, now 107 s in
+  tier 0 `ManyArms_StayWithinTheLegalMaximum`). **120 s is the legal maximum** (the user): a conflict-timed plan past it is
+  not taken (`Retime`), and `--signal-check` fails on any cycle over it. Then each phase takes the pedestrians, bikes and right
   arrows nothing green stops; a right arrow no phase carries becomes a full green with its
   approach (+ flasher). The user's 6-phase table holds exactly (test `FullCrossroads_RunsTheSixPhases`).
   Correction found while building it: a T's side-road right overlap goes with the main left
@@ -71,12 +74,18 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   the cyclist, the first may be a fast e-bike, the user), walker 1.5; lengths 6 / 2 / 0 m; capped by the arm's limit, a turning car
   at `sqrt(3 · r)`, at most 10 m/s: `Terrain.Format.TurnSpeed`, the same the traffic cars slow to for a bend, so the lights are
   timed for the cars that drive them (the user: the more realistic, and both the same; ~5.5 m/s round a 10 m right turn, ~7.7
-  round a 20 m left; SN 640 838 times turns at a flat 10 m/s, 7 on tight radii). Amber: the cars' by speed, the riders' 2 s, walkers none (the last steps off as their green ends: their yellow, or red on 2-lens heads, is the clearance for those already on the zebra, SN 640 837; the user, Oct 20 2026). `SignalPlan.Retime(table)` keeps the phases
+  round a 20 m left; SN 640 838 times turns at a flat 10 m/s, 7 on tight radii). Amber: the cars' by speed, the trams' 5/6/7 s by speed (#1105), the riders' 2 s, walkers none (the last steps off as their green ends: their yellow, or red on 2-lens heads, is the clearance for those already on the zebra, SN 640 837; the user, Oct 20 2026). `SignalPlan.Retime(table)` keeps the phases
   and starts each group as soon as its own conflicts allow; walkers' and riders' greens end early enough that their
   clearing fits in the gap the cars set (never under 4 s of green; an early end held back by it is limited and the plan
   timed again). Riders following the cars' lights whose clearing would lengthen a car group's times by over 2 s get a bike
   group of their own (`LongRiders`; a riders' left turn: a bike group with the left arrow's phase, its head on the left
-  pole). The bike lead (Vorgrün) only where a car group turning across the riders goes green with them. A plan so timed
+  pole). **Riders in a bike box never end early** (the user, #1030's PR): they wait in front of the pocket's cars, so an
+  early end would have those cars run into them from behind; an early start (the lead) stays. `SignalArm.RiderBox` (not
+  stored: the arm's exterior has a `BarKind.BikeBox`) makes their left-turn group count with the cars in `Time` (not slow:
+  it sets the gap, its green ends with the phase). Test region: 7 such groups, J6 78 -> 81 s for it (`RidersInABikeBox_...` tier 0).
+  Geneva centre with all of #1030 against main (246 lit junctions): longest cycle 150 -> 115 s, none over 120; 165 -> 211 timed
+  from conflict times; 195 cycles the same, 39 shorter, 12 longer (8 by 1 s; 2499106,1117630 78 -> 99 s, now timed from its
+  conflict times); the 5 two-stage junctions keep their cycles. The bike lead (Vorgrün) only where a car group turning across the riders goes green with them. A plan so timed
   carries `ConflictTimed` (flags bit 2): `Validate` then holds conflicting groups never green together (a green may begin
   in another's amber) and `KeepsTimes` every time. Layout (b)'s bike lane (`SignalArm.BikeBetween`, arm bit 7) no longer
   conflicts with its arm's right arrow. Test region: J1 74 -> 73 s, J2 86 -> 85 (bikes entering at 30 km/h, turning cars at 3 m/s²; walkers on the bike paths' squares: a riders' left turn holds the next walkers ~15 s), J5a/b 83/84 -> 74/75, J10 70 -> 71, the
@@ -88,15 +97,53 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   pairs of them (for each green start the ending group leaving it the least slack, for each green end the starting group it
   leaves the least, with the pair of lines that gives that time; `ConflictPairs`, region: 276) go in the tile (`CPAR`) for the debug view's
   `movers` (`core/debug-menu`).
+- **Two-stage crossings** (#1030, plan `docs/plans/two-stage-crossings.md` on `main`, the user's choices): where a lit arm's
+  island spans its zebra and is at least `ExteriorPlanner.TwoStageWidth` 2.0 m wide at it (`ArmExterior.StageIsland`), the
+  walkers cross in two stages: two pedestrian groups (`SignalGroup.Half`, stored in the group's moves byte: an older reader
+  takes a half as the arm's group), the **arriving** half (the approach's right kerb to the island, over the arriving lanes)
+  stopped only by the approach's own movements, the **departing** half (island to the left kerb) by those into the arm
+  (turning in: permissive, the flasher). Each half's clearance, flasher walk and conflict lines (`ConflictTimes.Lines`:
+  kerb, or the path beyond it, to the island's edge) cover its half (`SignalArm.HalfInM/HalfOutM`, not stored). `Expand`
+  makes each half green wherever its own conflicts allow, so at least whenever the kerb-to-kerb group would be: a walker
+  never reaches the far kerb later. **The new constraint, the island wait**: the first walker of each half's green, either
+  way, reaches the island at 1.2 m/s and waits at most `IslandWaitShare` a third of the cycle for the other half
+  (`SignalPlan.IslandWaits`); where not because the other half's green ended while they walked, `Stretch` makes the phase
+  it ended in hold on until they reach the island (+0.5 s), its seconds taken from the phases sharing the cycle, the cycle
+  growing only where they are at their minimum and by `IslandGrowMost` 3 s at most (the user: an island should not make the
+  crossing longer); past that RoadGen plans the arm in one go as without the island (`ExteriorPlanner.OneStage`, counted in
+  the rewrite stats). Found on Geneva: the first walkers missed the other half by tenths of a second; growing the cycle for
+  a whole-cycle wait took one junction from 64 to 177 s (tier 0 `TwoStageCrossing_FromGeneva_...`, conflict-timed too). The
+  halves are measured as the walkers are timed (`ConflictTimes.WalkSpan`: past a path at the kerb), so the planner and
+  `--signal-check` agree. Fixed on the way (#979's code): a slow group's green over the cycle's seam had its early end
+  clamped before it moved into the next cycle, so it came out green the whole cycle and the plan fell back from conflict
+  times (3 Geneva two-stage junctions). `CTDBG2` now says why a plan is not timed from conflict times. Heads: the right kerb's (main pole) shows the arriving half, the left kerb's the departing one, the island two back to
+  back (`SignalPoleFlags.ArrivingHalf | DepartingHalf`, the arriving one facing `PedHeading`, toward the right kerb) on
+  the left repeater's pole where the arm has one, else on a pole of its own at the repeater's spot behind the zebra. The
+  zebra leaves out the bars whose middle lies on the island (`ExteriorBar.Gap`): it reads as two crosswalks (the user).
+  Straight crossing, no stagger or visors (the user accepts the far half's head seen behind the island's). The debug view's
+  crossings run kerb to island edge per half (`SignalSite.Walks` carries the group). `--signal-check` counts two-stage
+  crossings and lists island waits over a third. Test region: J7's east arm (3.4 m island, halves 5.9 / 4.3 m; tier 0
+  `J7s_east_crosswalk_crosses_its_wide_island_in_two_stages`). Model viewer: "Traffic light - Two-stage island" (and
+  Geneva). Walkers and riders as movers: #1033.
 - **Timing**: yellow 3/4/5 s by speed (SN 640 837 via SRF), red+yellow 2 s (cars, secondary
   source BASt V 149) / 1 s (bikes), all-red 2 s fixed (SN 640 838 computes it per conflict,
   paywalled), min green 4 s, pedestrian green >= 5 s, pedestrian clearance 2/3 of the crossing
   at 1.2 m/s (2-8 s) as yellow on 3-lens heads, red on 2-lens ones (Geneva, `PedestrianAmber`
   by canton from `tools/MapCore/switzerland.bin`, `Cantons`); bike lead green 3 s (the cars'
-  intergreen grows by it); turn phases 8 s; cycle ~60 s (2 phases), 75 (3-4), 90 (5-6), max 120,
-  greens split by rank. A group green in two phases in a row does not change. Offset: a hash of
+  intergreen grows by it); turn phases 5 s where the pocket's storage is unknown; cycle target 60 s (up to 4 phases), 70 (more),
+  min 30, max 120, greens split by rank, shaped by queue storage (below). A group green in two phases in a row does not change. Offset: a hash of
   the junction's LV95 metres (junctions are not coordinated, #356). `State(group, t)` with the
   server clock: every peer agrees, nothing is replicated.
+- **Queue storage** (#982, the user): `SignalArm.StorageM` / `LeftStorageM` / `RightStorageM` (not stored), from the planner
+  (`WriteSignals`): a pocket's storage (`Opening.Storage`), a lane of the street's own (through, or a turn lane from OSM's
+  lanes) the street's `Length`, both less the car stop's station, at least 6 m. A full queue clears in `ClearingGreen` =
+  2 s start-up loss + (storage / 6 m) x 2 s (saturation headway), at least 4 s. A turn phase's green is its pocket's
+  clearing time (at most `MaxTurnStorage` 40 m, the longest pocket: 20 m 8.7 s, 30 m 12 s, 40 m 15.3 s); the cycle budgets
+  5 s for it, so a longer one lengthens the cycle (the user's choice: the through phases keep their green). A shared phase's
+  green is capped at its base groups' longest clearing time (less the green that group has in the fixed phases beside it);
+  the time a cap saves shortens the cycle (the user), never under 30 s (shares stretched by weight). Unknown storage (0: the
+  old layout, tests, the game's showcases) times as before. Test region: 4-pocket crossroads 73-85 -> 102-111 s, J2-like
+  78 -> 117, Ts 60-64 -> 69-72; no cap binds there (its streets are long), one plan 63 -> 61.
 - **Checks**: `RoadGen --signal-check --chunks DIR [--at E,N] [--list]` validates every plan
   (no hard conflict live at once, red+yellow before green, yellow after, min green, every group
   served) and dumps one; `--priority-check` has the inference cases. Invalid plans are not written
@@ -214,7 +261,9 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   no board at all (user's review). Geneva's pedestrian head (the two-lens one, `!PedestrianAmber`,
   after the user's photo) is a light grey housing with one dark window, the red standing figure
   left and the green walking one right, side by side at 1.45 times a lens (`Head.SideBySide`);
-  the model viewer shows a Vaud and a Geneva pole.
+  the model viewer shows a Vaud and a Geneva pole. In game: the test region's canton row (#1038, `signal-test-region`),
+  the same crossroads in the default zone, Geneva and Vaud side by side; a canton whose lights get a rule of their own
+  gets a zone there (`CantonTiles`).
 - **Arrows in the round lenses** (#759, user: "when the ball would not allow every direction, a
   straight or combined arrow"): `SignalBuilder.ArrowMoves(plan, group)` gives a car group's moves
   when they are not every move its approach has (the union of the arm's Car, LeftArrow and
@@ -301,9 +350,117 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   builds seven designed junctions (ideal with lanes / paths, mismatched room, a narrow arm, a T, a
   close pair) through this pipeline in ~2 s; the clean place to look at and test lights before
   Geneva (tier 0 `SignalTestRegionTests`, `--signal-check`, windowed `--trafficcheck` at each).
+- **Overhead heads** (#1037, plan `docs/plans/overhead-traffic-lights.md`). **Which approaches** (`Layout/Overhead.cs`,
+  `OverheadPlanner.Heads`, from `ExteriorPlanner.Plan`): only a street with 2+ lanes of its own toward the junction (its normal
+  section's in-lanes: a 2+2 artery, OSM `lanes:forward=2` and up), turn pockets not counted (the user, Oct 21 2026: counted, the
+  test region's 1+1 crossroads, ~20 m wide at the lights with both pockets and bike lanes, took heads overhead at 59 approaches,
+  45 as portals); then Stadt Bern's Handbuch LSA 2025 (Abb. 12-19): a lane's own kerb head (a left lane's on the left kerb or the
+  refuge, every other's on the right kerb) more than 6 m sideways, two lanes turning the same way, a side road (yields when off)
+  of 2+ lanes without a refuge, or 3+ lanes. Then **one cluster over the middle of the approach's car lanes** (#1110, the user from
+  Geneva Street View, Oct 22 2026: "you usually don't get more than one light per direction overhead", like the main pole's
+  cluster; one per lane only for heads embedded in direction signs, `direction-signs`): a head per direction, left to right the
+  left-only lanes' (left arrow), the main head (every other lane, the union of their moves on its lenses) and the right-only
+  lanes', `SignalOverhead.ClusterPitch` (0.825 m: a kerb cluster's 0.55 m at 1.5 x) apart. The kerb poles keep theirs. (Before
+  #1110 a head hung over every lane: J13 took portals and J14 span wires; their clusters now sit within an arm's reach.) **What carries them** (`TileRewriter.ExteriorWrite.PlaceOverhead`), first that fits: a **mast arm** whose post stands on the
+  main pole (the user: no pole beside it; `SignalOverhead.StandsOn`: the pole's column is not drawn, its heads and its priority
+  signs stand out by the post's half width, `PostHalf`) when every head lies within 10 m (Basel-Landschaft: 3-4.5 m one lane,
+  5.5-7.5 m two, to 10 m with a tie rod past 7 m); one **from the refuge** (its post on the refuge's pole) reaching right; on a tram street
+  (`Source.Line.Osm.Tram`: the overlay's `tram` column; the segment's attributes get the overlay only when written) with a
+  building's facade within 8 m outward from both kerb poles (`Footprints`), a **span wire** from facade to facade, a plate on
+  each wall, no poles; else a **portal** from the main pole to the far kerb's pole, both its posts on them (no case in the test region builds a refuge arm). Span wires only
+  there (the user, Oct 21 2026: rare in Switzerland, used between buildings, never on poles; Bern's handbook mentions carriers
+  hung from span points and heads on house fronts). A tram catenary (its own issue) would carry them on its span wires.
+  Lower edge of the plates 5.0 m over the road (SSV Art. 71: 4.50-5.50), 5.5 m on a wire. **Record**: section `OVHD`
+  (`SignalOverhead`, version 1; older readers skip it, a newer SGNL version would have made them drop every light): kind, arm,
+  post foot, far end (an arm's tip, a portal's or span's second foot), plates' lower edge, heading, heads (along the structure,
+  lane moves). **Drawn** (`SignalBuilder.Overhead`): square posts and arms (RRW 300, 300 x 200), a portal beam, round anchor poles
+  a sagging wire between wall plates; heads at 1.5 x a kerb head (300 mm lenses: the lens transform scaled, a bike head's 100 mm keeps
+  its own mesh), each drawn as a pole's head (the user: no lane plate above, the canton's plates below as on its poles, a
+  lane's own arrow in its lenses and on such a plate), mounted on the front of the arm or beam at its mid-height by a bracket (the user: mounted, not hung), hung from a span wire by a hanger; collision on the posts and anchors only (4 m columns: everything above is over the 4 m vehicle limit).
+  Model viewer: "Traffic light - Mast arm / Portal / Span wire". Stats: the layout line's `overhead heads (#1037)`. Test region:
+  J6, J7's 2+2 cross road, J13 and J14 (J13 with trams, between houses) all on arms since #1110 (no case builds a portal or a
+  span wire now: the model viewer and `SignalPlanTests` keep them) (`signal-test-region`); J7's double left (pockets on a 1+1
+  road) keeps its poles by the user's rule. Tier 0 `OverheadPlannerTests` (Bern's layouts), `SignalPlanTests` (OVHD round trip),
+  `SignalTestRegionTests.Wide_approaches_carry_their_heads_overhead`. Old layout (`--junctions old`): none.
+- **Pole colour per canton** (#1037, `SignalPlan.PoleColour`, bits 3-5 of the flag byte; RoadGen `PoleColour(canton)`): Basel-
+  Landschaft anthracite DB703 (ATS LSA Aussenanlagen 2024), Bern RAL 7042 (the city's Handbuch LSA 2025, taken for the canton),
+  the rest RAL 7001; poles and overhead structures. Model viewer: "Traffic light - Basel-Landschaft / Bern"; in game the canton
+  row's BL and BE zones. RAL 7042 is close to 7001: the difference is real, not a bug.
+- **Flasher plates and permissive turns** (#1109, the user). Each flasher lamp has a white plate below it (its white band run
+  on down by `ArrowPanel`, below the lamp so a Romandy tram head over it still fits): a **walker** where its turns cross walkers
+  green with them (or still on the zebra after their green: a plan timed from conflict times may start the cars' green as the
+  walkers' ends), a **bike** where they cross a bike lane or way, the **arrow of the turn crossing both** where they cross both
+  (`SignalPlan.PlateOf(flasher, conflicts, turns)`). **A flasher stands where its turn's crossing is** (the user: "right flasher
+  here, left flasher on a pole next to the left crosswalk"): the right turn's lamp beside the head on the main pole, warning of
+  what the right turn crosses; the left turn's on a pole by the left crosswalk (`RoadSignal.LeftFlasherPole`, decided from the
+  poles in the tile): the approach's **left pole** (`Second`, at the corner the left turn sweeps past) beside its leftmost car
+  head, else the **main pole of the arm the left turn goes into** (it stands on that arm's arriving kerb, the same corner, by its
+  crosswalk), above that pole's own heads, facing this approach; with neither, both turns on the main pole's one lamp (a
+  double-headed arrow, `SignalGlyphs.Arrow(Left | Right)`, where both cross walkers and riders). Each lamp flashes for its own
+  turn's crossings only (`SideFlash`, a detached flasher; the plan's flasher where it warns of one side only). A car group whose
+  left gives way to oncoming cars or trams while green with them (`LeftGivesWayTo`: a left from a shared lane, the permissive
+  conflict of `Conflicts`) flashes: `LeftFlash` derives a detached flasher (on while the group and one it gives way to are
+  green). All derived from the stored plan, nothing stored: old tiles show it. How a head shows a permissive turn (the user): a
+  **ball** flashes its own yellow during the green (`Lens.Blink`, every pole and overhead ball); a **combined arrow** (straight
+  on and left beside a right lane) keeps its green and gets a flasher lamp on its **left** with a left-arrow plate (main pole);
+  an **uncombined arrow** (the turn alone: a right lane's head, an overhead left lane's) flashes its yellow arrow *in place of*
+  its green ("for flashing arrows it takes the place of the green arrow"), its green dark meanwhile, no lamp beside it
+  (`TurnFlash`). A pocket's left arrow is protected: never permissive. Found on the way: a head's flasher stood on the right
+  lane's head beside it: it now stands on the head's left where a head stands on its right, a permissive left's lamp beyond it,
+  the tram heads beyond both. `--signal-check` prints the counts (`--list`: where). Test region: lamps on the main pole 22, a left
+  pole 3, the crossing's pole 7; plates walker 6, bike 17, arrow 9; 6 balls flash (J3, J3b, J7), 1 combined arrow with a left
+  flasher (J3b south), 4 uncombined right arrows flash. Geneva centre (246 lit junctions, a rewrite copy): lamps main pole 441,
+  left pole 94, crossing's pole 182; plates walker 376, bike 82, arrow 259 (right 194, left 60, both 5: no pole by the left
+  crosswalk); 170 balls flash, 13 combined arrows with a left flasher, 29 uncombined right arrows. Tier 0
+  `SignalPlanTests.FlasherPlate_*` / `PermissiveLeft_*` / `ProtectedLeft_*`, `SignalBuilderTests.Permissive*` /
+  `LeftTurnsFlasher_StandsByTheLeftCrosswalk`, `SignalTestRegionTests.Flashers_say_what_they_warn_of_and_permissive_lefts_flash`.
+  Model viewer: "Traffic light - Flasher, pedestrian / bike / arrow plate", "Flasher, left turn on the left pole" (with another
+  approach's left-turn lamp over the main pole's heads, the crossing's pole case), "Permissive left, ball / arrow / uncombined
+  arrow".
+- **Far-side pole, one lamp per turn** (#1117, the user, after #1116; supersedes the placement and plate rules above where they
+  differ). Where the approach has no left pole, its left turn's lamp stands on the **far-side pole** of the arm it turns into
+  ("for a turn-into flasher, it should be on the far side pole"): that arm's kerb pole furthest from its main pole (its left pole
+  or a walkers' pole, never an island's), across the junction where the turning car arrives, **beside the pole on its side away
+  from that exit** (the user: "it's better if the far side lamp fit on the side of the pole, pointing away from the exit"; its own
+  heads stand out toward that exit's drivers), `SideReach` 0.42 m out from the pole's side (clear of a walkers' head in front of
+  it, Geneva's 0.21 m half width), level with a car head's green there, held from the pole, facing this approach turned 45 deg
+  toward the junction (the user: "angled a little bit more to the incoming traffic (45deg)", the turning cars coming in);
+  that arm's main pole (near corner) only where it has no other; with no pole there at all, on the head's own left on the main
+  pole (`RoadSignal.LeftFlasherPole`: `SecondPole`, `FarSidePole`, `NearSidePole`, `MainPole`). **One lamp per turn**, its plate
+  from everything that turn gives way to while green (`SignalPlan.TurnPlate`): walkers only a walker, riders only a bike,
+  anything else (a mix, or oncoming cars or trams, `LeftGivesWayTo`) the turn's arrow ("bike if only bike, pedestrian if only
+  pedestrian, arrow if mix of conflicts"); no lamp of its own for the oncoming cars: a left turn's lamp exists where it crosses
+  walkers or riders, or where a combined arrow shows it giving way, and flashes for all of them (`TurnFlash`). A ball still
+  flashes its own yellow for the oncoming cars; an uncombined arrow still flashes its yellow in place of its green, no lamp.
+  Found by the user: J3b's south approach (left and straight on, giving way to the oncoming north arm and crossing its bike lane)
+  had one lamp showing a bike; now the left arrow. Test region: lamps main pole 22, left pole 3, far-side pole 7; plates walker 6,
+  bike 12, arrow 14 (left 7, right 7). Geneva centre: lamps main pole 419, head's left 40, left pole 95, far-side pole 174,
+  near-side pole 16; plates walker 348, bike 60, arrow 336 (left 140, right 196); no double arrow left. Tier 0
+  `SignalBuilderTests.LeftTurnsFlasher_StandsByTheLeftCrosswalk` (far side, near side, left pole, none),
+  `SignalPlanTests.FlasherPlate_*`, `SignalTestRegionTests.Flashers_say_what_they_warn_of_and_permissive_lefts_flash` (J3b south).
+- **Every turn lane its own head, protected where the phases allow** (#1119, the user: "whenever there is a left turn only
+  lane at a light, it should get its own light, even if permissive. same for right turns"; "usually permissive lefts are pretty
+  rare in Switzerland, especially with a turn lane"; "even right turns with their own lanes are usually protected"). A T's stem
+  with a left and a right lane (no through) gets a left and a right arrow group and head (it had one group, a ball). A right
+  arrow no phase carries (its exit's walkers or riders green in every phase of its approach) now goes with its approach
+  **protected**, those walkers and riders held red in that phase, where they keep a green in another phase and it crosses no
+  two-stage half (its island wait past a third, #1030); no phase is added, the schemes hold (`FullCrossroads_RunsTheSixPhases`
+  unchanged). Else, as before, a full green giving way, its yellow arrow flashing in place of the green (#1109): a crossroads
+  without left pockets, whose exit walkers cross the cross road in the other phase (tier 0
+  `RightPocketWithoutOverlap_GoesWithItsApproachAndTheFlasher`). Left pockets stay protected (never permissive). Test region:
+  permissive right arrows 4 -> 1 (2910750,1321400 arm 0 left: its walkers have no other green), J3b 80 -> 79 s, J4's stem two
+  arrows; other cycles unchanged; `--trafficcheck` at J3 and J4: no red run. Geneva centre (rewrite copy, 246 lit junctions, 0
+  invalid): permissive right arrows 29 -> 28 (the rest: crossroads without a left pocket, their exit's walkers green in no other
+  phase: protecting them needs a phase, #1119 adds none), 13 cycles changed, 9 longer (42 -> 58, 37 -> 51, 45 -> 56, 75 -> 84,
+  80 -> 89 s, ...), 1 shorter, longest 115 s as before. Found on Geneva: a stem with a left and a right lane and no main lane
+  whose right arrow could not be protected was put with a main lane it no longer had (never green, plan not written; tier 0
+  `FromGeneva_AStemWithTwoLanes...`). Tier 0 `TeeStem_WithALeftAndARightLane_*`,
+  `RightPocket_ProtectedWithItsApproach_*`, `SignalTestRegionTests.Turn_lanes_have_their_own_heads_and_are_protected_where_the_phases_allow`.
+- **Trams** (#1057): a tram group per approach a tram track enters by, the tram bar heads beside the car heads: `tram-approaches`.
 - **Not done**: one record for a junction of several nodes (the internal links are only kept
   clean); OSM `turn:lanes` not read yet, restrictions only for the lane records (a left pocket is
   still built where the left turn is forbidden: 10 in Geneva); thin median (optional); crossings of divided roads
   (several nodes); 3-lane roads; at a compact junction a left + right pocket's mouth reaches into
   the next arm's sidewalk corner (it stands on the widening, over part of the crossing:
-  2499132,1116455); 300 mm overhead heads (#354); rejected poles are dropped, not moved along the kerb.
+  2499132,1116455); rejected poles are dropped, not moved along the kerb; overhead direction signs on portals, horizontal heads,
+  heads on house fronts, the tram wire itself (#1037's not done).

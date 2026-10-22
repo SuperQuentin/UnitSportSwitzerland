@@ -97,7 +97,7 @@ public static partial class Preprocessor
                 case "--io-jobs" when i + 1 < args.Count && int.TryParse(args[i + 1], out int n): ioJobs = n; i++; break;
                 case "--no-hash" or "--manifest-hash" or "--osm-check" or "--fields-check" or "--export-route-keys"
                     or "--dem-check" or "--rgealti-check" or "--dem-probe"
-                    or "--osm-overlay" or "--landings-file" or "--airports-file":
+                    or "--osm-overlay" or "--landings-file" or "--airports-file" or "--sitg-signs":
                     return false;
             }
         }
@@ -134,6 +134,9 @@ public static partial class Preprocessor
         // boat landings and harbour jetties (#377): standalone with --landings, and after every water pass
         // run with --tlm (the piers stand on the beds and the still water)
         bool landingsOnly = false;
+        // tram stops (#1057): standalone with --tram-stops (needs --out and --tlm), into <out>_temp/tram_stops.tsv for RoadGen
+        bool tramStopsOnly = false;
+        bool sitgSigns = false;   // #1110: canton Geneva's direction signs and gantries (SITG) for RoadGen
         // --landings-file: write landings.json elsewhere (reading a live region without touching it)
         string? landingsFile = null;
         // airports (#422): stands and runways from swissTLM3D and OpenStreetMap (--osm <pbf>) over the built tiles
@@ -193,6 +196,8 @@ public static partial class Preprocessor
                 case "--horizon": horizonOnly = true; break;
                 case "--water": waterOnly = true; break;
                 case "--landings": landingsOnly = true; break;
+                case "--tram-stops": tramStopsOnly = true; break;
+                case "--sitg-signs": sitgSigns = true; break;
                 case "--landings-file": landingsFile = args[++i]; break;
                 case "--airports": airportsOnly = true; break;
                 case "--airports-file": airportsFile = args[++i]; break;
@@ -374,6 +379,24 @@ public static partial class Preprocessor
             SetStage("water");
             int wrc = WaterStage.Run(outDir, WaterOptions(), ct);
             return wrc != 0 || tlmGpkg == null ? wrc : LandingStage.Run(outDir, tlmGpkg);
+        }
+
+        // ---- direction signs (#1110): SITG's signs, gantries and overhead heads in canton Geneva, for RoadGen's rewrite ----
+        if (sitgSigns)
+        {
+            if (outDir == null) { Console.Error.WriteLine("--sitg-signs requires --out <chunk dir>"); return 2; }
+            return SitgSignStage.Run(outDir, tempDir, force);
+        }
+
+        // ---- tram stops (#1057): swissTLM3D stops beside the tram tracks, for RoadGen's rewrite -----
+        if (tramStopsOnly)
+        {
+            if (outDir == null || tlmGpkg == null)
+            {
+                Console.Error.WriteLine("--tram-stops requires --out <chunk dir> and --tlm <swisstlm3d .gpkg>");
+                return 2;
+            }
+            return TramStopStage.Run(outDir, tlmGpkg);
         }
 
         // ---- landings: piers and jetties from swissTLM3D over the built beds and water -------------

@@ -349,7 +349,7 @@ public partial class CatalogueUi : CanvasLayer
         _panel.Visible = true;
         _status.Text = Permissions.Online ? "Online: the server checks each request." : "";
         UiFocus.Set(this, true);
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
         Bank.Instance?.Refresh();
         if (PlayerInput.LastDevice == InputDevice.Gamepad) PlayerInput.FocusFirst(_panel);
         else _search.CallDeferred(Control.MethodName.GrabFocus);

@@ -56,9 +56,9 @@ public enum MaterialRole
 ///
 /// <para>
 /// Each style names a parent, and a role a style has no shader for resolves through the chain
-/// Realistic+ → Realistic− → Cartoon → PS1. PS1 is the base: the only complete style, with every
-/// role. A new visual is built once, in the base, and the other styles borrow it until they get
-/// their own. <c>--style-report</c> lists what each style borrows.
+/// Realistic+ → Realistic− → Cartoon and PS1 → Cartoon. Cartoon is the base and the default: the
+/// only complete style, with every role. A new visual is built once, in the base, and the other
+/// styles borrow it until they get their own. <c>--style-report</c> lists what each style borrows.
 /// </para>
 /// </summary>
 public static class StyleKit
@@ -70,6 +70,9 @@ public static class StyleKit
     public static VisualStyle Style => _session ?? GameSettings.Current.VisualStyle;
 
     private static VisualStyle? _session;
+
+    /// <summary>The style a new player starts in (#849), and what an unknown <c>--style</c> name gives.</summary>
+    public const VisualStyle Default = VisualStyle.Cartoon;
 
     /// <summary>
     /// Switches style for this session only, without saving it (<c>/style</c>): the saved setting
@@ -141,11 +144,11 @@ public static class StyleKit
     {
         VisualStyle.RealisticHigh => VisualStyle.RealisticLow,
         VisualStyle.RealisticLow => VisualStyle.Cartoon,
-        VisualStyle.Cartoon => VisualStyle.Ps1,
+        VisualStyle.Ps1 => VisualStyle.Cartoon,
         _ => null,
     };
 
-    private const VisualStyle Base = VisualStyle.Ps1;
+    private const VisualStyle Base = VisualStyle.Cartoon;
 
     /// <summary>Each style's own shaders. The base must have every role (<see cref="Report"/> checks).</summary>
     private static readonly Dictionary<VisualStyle, Dictionary<MaterialRole, string>> Shaders = new()
@@ -161,13 +164,14 @@ public static class StyleKit
             [MaterialRole.Prop] = "res://shaders/ps1_prop.gdshader",
             [MaterialRole.Interior] = "res://shaders/ps1_interior.gdshader",
             [MaterialRole.Path] = "res://shaders/ps1_path.gdshader",
-            [MaterialRole.Precip] = "res://shaders/ps1_snowfall.gdshader",
             [MaterialRole.Figure] = "res://shaders/avatar.gdshader",
         },
-        // snowfall stays PS1's; interiors are unshaded in every style (rooms float in the dark
-        // under the terrain, out of the sun) but lit by the hour and finished like the style (#388)
+        // interiors are unshaded in every style (rooms float in the dark under the terrain, out of
+        // the sun) but lit by the hour and finished like the style (#388); the snow is unshaded
+        // and the same in every style
         [VisualStyle.Cartoon] = new()
         {
+            [MaterialRole.Precip] = "res://shaders/snowfall.gdshader",
             [MaterialRole.Interior] = "res://shaders/cartoon_interior.gdshader",
             [MaterialRole.Terrain] = "res://shaders/cartoon_terrain.gdshader",
             [MaterialRole.Road] = "res://shaders/cartoon_road.gdshader",
@@ -179,7 +183,7 @@ public static class StyleKit
             [MaterialRole.Path] = "res://shaders/cartoon_path.gdshader",
             [MaterialRole.Figure] = "res://shaders/cartoon_avatar.gdshader",
         },
-        // prop and path borrow Cartoon's lit ones; snowfall stays PS1's
+        // prop, path and snowfall are Cartoon's
         [VisualStyle.RealisticLow] = new()
         {
             [MaterialRole.Interior] = "res://shaders/real_interior.gdshader",
@@ -256,15 +260,18 @@ public static class StyleKit
 
     /// <summary>What a figure material was built with, for PS1 and for going back to it.</summary>
     private readonly record struct PlainFigure(BaseMaterial3D.DiffuseModeEnum Diffuse,
-        BaseMaterial3D.SpecularModeEnum Specular, float Roughness, bool Rim, float RimAmount, float RimTint);
+        BaseMaterial3D.SpecularModeEnum Specular, float Roughness, bool Rim, float RimAmount, float RimTint, bool Solid = false);
 
     private static readonly List<(System.WeakReference<StandardMaterial3D> Material, PlainFigure Plain)> Figures = new();
 
     /// <summary>
     /// The vertex-coloured standard material of avatars, vehicles, birds and items
-    /// (<c>Avatar/HumanMeshBuilder.Material</c>), shaded for the applied style: PS1's as built,
-    /// Cartoon's with a toon diffuse and a rim. Kept like the shader materials, so a restyle
-    /// reaches it. Any thread (mesh builders make figures on workers).
+    /// (<c>Avatar/HumanMeshBuilder.Material</c>), and any other lit solid built as a plain
+    /// <see cref="StandardMaterial3D"/> (the title diorama, build debris, soot, crate planks: #1068),
+    /// shaded for the applied style: PS1's as built, Cartoon's with a toon diffuse and a rim.
+    /// Kept like the shader materials, so a restyle reaches it. Pass it fresh, never a duplicate of
+    /// a shaded one: what it is given is its plain look. Any thread (mesh builders make figures on
+    /// workers).
     /// </summary>
     public static StandardMaterial3D Figure(StandardMaterial3D m)
     {
@@ -278,8 +285,29 @@ public static class StyleKit
         return m;
     }
 
+    /// <summary>
+    /// The plain standard material of a solid object that is not a figure (a smoke cloud, a
+    /// fishing float, a bus-stop sign): unshaded in PS1 as such things always were, lit and shaded
+    /// like a <see cref="Figure"/> in the lit styles, so it does not glow in a sunlit world (#1069).
+    /// Kept and restyled live like a figure. Glows, signs that light themselves, beams, screens,
+    /// debug and UI stay unshaded on their own material. Any thread.
+    /// </summary>
+    public static StandardMaterial3D Solid(StandardMaterial3D m)
+    {
+        var plain = new PlainFigure(m.DiffuseMode, m.SpecularMode, m.Roughness, m.RimEnabled, m.Rim, m.RimTint, Solid: true);
+        lock (Figures)
+        {
+            Figures.RemoveAll(f => !f.Material.TryGetTarget(out _));
+            Figures.Add((new System.WeakReference<StandardMaterial3D>(m), plain));
+        }
+        Shade(m, plain);
+        return m;
+    }
+
     private static void Shade(StandardMaterial3D m, PlainFigure plain)
     {
+        if (plain.Solid)
+            m.ShadingMode = StyleFinish == Finish.Flat ? BaseMaterial3D.ShadingModeEnum.Unshaded : BaseMaterial3D.ShadingModeEnum.PerPixel;
         if (StyleFinish == Finish.Realistic)
         {
             // one material for paint, cloth and skin alike: a compromise until the builders give
@@ -456,9 +484,9 @@ public static class StyleKit
 
     private static readonly Dictionary<VisualStyle, Look> Looks = new()
     {
-        [VisualStyle.Ps1] = new(MeshDetail.Low, FinestStride: 1, Sun: false, Finish: Finish.Flat, TreeNear: 220f,
+        [VisualStyle.Ps1] = new(MeshDetail.Low, Sun: false, Finish: Finish.Flat),
+        [VisualStyle.Cartoon] = new(MeshDetail.High, FinestStride: 1, Sun: true, Finish: Finish.Cartoon, TreeNear: 220f,
             Effects: false, Photos: false),
-        [VisualStyle.Cartoon] = new(MeshDetail.High, Sun: true, Finish: Finish.Cartoon),
         // Textures carry the surface detail, so 2 m quads underfoot rather than 1 m: the
         // prototype's biggest geometry lever (Realistic-, Riddes, M1 Pro: ~25 -> 11-20 ms)
         // ...and 3D trees to 80 m only: an EZ-Tree is ~3k triangles against Cartoon's 50-120
@@ -681,7 +709,7 @@ public static class StyleKit
                 style = s;
                 return true;
             }
-        style = VisualStyle.Ps1;
+        style = Default;
         return false;
     }
 

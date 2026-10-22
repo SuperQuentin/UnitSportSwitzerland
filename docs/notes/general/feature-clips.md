@@ -12,10 +12,20 @@
   leaves whole files (ffmpeg finishes them when the pipe closes), only shorter. Easiest: film the whole probe once
   (`delay` 3, `seconds` 60), look at the MP4, then `tools/record-clip.sh trim <mp4> <start> <seconds> <name>`.
 - **Output**: `test_output/clips/<name>.gif` from source (`user://clips` in an export): 560 px wide, 12 fps,
-  128-colour palette per clip (`palettegen stats_mode=diff`, bayer dither 5): 0.2-0.6 MB/s of the PS1 look
+  128-colour palette per clip (`palettegen stats_mode=diff`), bayer dither scale 5 in PS1 and 3 in the lit styles
+  (#1070: at 5, Cartoon's sky gradient and the haze round the sun banded into rings; 3 is smooth for ~13% more
+  bytes, 256 colours at 5 still banded; `trim` uses 3, `BAYER=5` for a PS1 clip): 0.2-0.6 MB/s of the PS1 look
   (640 px at 15 fps was twice that, 1.1 MB/s inside the freighter's hold); keep release GIFs under ~10 s. Plus
   `<name>.mp4` (960 px, 30 fps, x264 crf 20) when the ffmpeg has libx264 (the chocolatey one does; the release's
-  LGPL `bin/ffmpeg` does not, so an export writes the GIF only). Drag the MP4 or the GIF into a PR description.
+  LGPL `bin/ffmpeg` does not, so an export writes the GIF only), else libopenh264 at 6 Mb/s (#1105: Krita's ffmpeg,
+  `C:/Program Files/Krita (x64)/bin` put on PATH, where no chocolatey one is installed). Drag the MP4 or the GIF into a PR
+  description.
+- **`--clip-realtime`** (#1105): a slow frame fills every 1/30 s slot it took (the picture repeated) instead of one, so a
+  heavy scene (a busy junction at 10-27 fps) plays in the time it filmed; without it such a clip played up to 3x fast. E.g.
+  two cycles of the signal test region's J14: `SIZE=1280x720 tools/record-clip.sh j14-two-cycles 50 250 --clip-realtime
+  --chunks <region> --generated off --origin 2917500,1323500 --at 2917500,1323500 --trafficcheck --seconds 600 --shot-queue
+  <file with 34,g20,27,-28,50,900,x.png> --nohud --time 13 --style cartoon --traffic 150 --walkers 100 --bikes 50 --trams 6`
+  (`--trafficcheck --at` keeps the traffic and its feeders there; the shot queue's line holds the camera).
 - **How**: `Core/ClipRecorder` reads the last drawn frame back every 1/30 s, scales it and pipes raw RGB to
   ffmpeg (`BundledTools.Resolve`), which encodes both on its own core; frames are dropped, never queued without
   bound, when ffmpeg lags 2 s behind. Real time, unlike `Gpx/VideoExporter` (fixed steps, waits for tiles):
