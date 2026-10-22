@@ -312,7 +312,14 @@ public static partial class SignalBuilder
             float y = foot.Y + (walkers ? CarLowerEdgeAbovePedestrian : CarLowerEdge) + Pitch * 0.5f;
             float post = signal.Overheads.Any(o => o.StandsOn(pole.X, pole.Z)) ? SignalOverhead.PostHalf : PoleRadius;
             var spot = new Vector3(foot.X, y, foot.Z) + right * (side * (post + SideReach)) + front * (HeadDepth * 0.5f);
-            lamps.Add(new AwayLamp(spot, front, right, new Vector3(foot.X, y, foot.Z), spot - right * (side * HeadWidth * 0.5f) - front * (HeadDepth * 0.5f),
+            // on the far side, turned 45 deg from the approach toward the junction, to the turning traffic coming in (the user)
+            var (face, faceRight) = (front, right);
+            if (site == FlasherSite.FarSidePole)
+            {
+                face = (front - exit).Normalized();
+                faceRight = new Vector3(face.Z, 0f, -face.X);
+            }
+            lamps.Add(new AwayLamp(spot, face, faceRight, new Vector3(foot.X, y, foot.Z), spot - faceRight * (side * HeadWidth * 0.5f) - face * (HeadDepth * 0.5f),
                 index, g, blink, plate, arrow));
         }
         return lamps;

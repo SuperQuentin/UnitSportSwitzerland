@@ -423,7 +423,8 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   or a walkers' pole, never an island's), across the junction where the turning car arrives, **beside the pole on its side away
   from that exit** (the user: "it's better if the far side lamp fit on the side of the pole, pointing away from the exit"; its own
   heads stand out toward that exit's drivers), `SideReach` 0.42 m out from the pole's side (clear of a walkers' head in front of
-  it, Geneva's 0.21 m half width), level with a car head's green there, held from the pole, facing this approach;
+  it, Geneva's 0.21 m half width), level with a car head's green there, held from the pole, facing this approach turned 45 deg
+  toward the junction (the user: "angled a little bit more to the incoming traffic (45deg)", the turning cars coming in);
   that arm's main pole (near corner) only where it has no other; with no pole there at all, on the head's own left on the main
   pole (`RoadSignal.LeftFlasherPole`: `SecondPole`, `FarSidePole`, `NearSidePole`, `MainPole`). **One lamp per turn**, its plate
   from everything that turn gives way to while green (`SignalPlan.TurnPlate`): walkers only a walker, riders only a bike,
