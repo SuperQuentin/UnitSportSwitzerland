@@ -294,7 +294,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         return ok && kept;
     }
 
-    /// <summary>On foot: <see cref="PoseStride"/>, <see cref="PoseAir"/> or <see cref="PoseTucked"/>.</summary>
+    /// <summary>On foot: <see cref="PoseStride"/>, <see cref="PoseAir"/>, <see cref="PoseFall"/> or <see cref="PoseTucked"/>.</summary>
     [Export] public int PoseKind { get; set; }
 
     /// <summary>
@@ -504,6 +504,17 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public const int PoseStride = 0, PoseAir = 1, PoseTucked = 2;
     /// <summary>Hanging from a zipline; climbing a ladder, <c>Anim.X</c> = which half of the step (#359).</summary>
     public const int PoseHang = 4, PoseClimb = 5;
+    /// <summary>Falling from height (#1154): the arms windmill, each peer on its own clock.</summary>
+    public const int PoseFall = 7;
+
+    /// <summary>
+    /// Falling this fast (m/s, about a 4 m drop) the figure starts flailing, a little before a landing
+    /// hurts (11 m/s), until it lands.
+    /// </summary>
+    private const float FlailFallSpeed = 9f;
+
+    /// <summary>Seconds into the fall's windmill, on this peer's own clock (#1154).</summary>
+    private float _flailClock;
 
     /// <summary>
     /// The hat on the figure, as an <see cref="Avatar.Headwear"/> (occasions, #18). Replicated like
@@ -753,6 +764,23 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private const float ShoulderHeight = 1.55f;
     private const float ShoulderOffset = 0.55f;
     private const float ArmLength = 3.3f;
+
+    /// <summary>
+    /// The player's own zoom of the on-foot arm (#1149), Genshin's way: from <see cref="ZoomFar"/> in
+    /// to <see cref="ZoomFace"/>, where the pivot has climbed from the shoulder to the eyes and come in
+    /// off the shoulder, so the nearest stop frames the face (orbit round to the front to see it).
+    /// <see cref="_zoom"/> eases to <see cref="_zoomWant"/>; owner only, never sent.
+    /// </summary>
+    private float _zoomWant = ArmLength, _zoom = ArmLength;
+    private const float ZoomFace = 0.6f, ZoomFar = 8f, ZoomStep = 1.2f;
+    /// <summary>R3 held on a pad: the right stick's up and down zoom; let go without zooming, it is the view switch.</summary>
+    private bool _padZoomHeld, _padZoomed;
+
+    /// <summary>Steps the on-foot zoom in (<paramref name="steps"/> &gt; 0) or out, by a factor a step.</summary>
+    public void ZoomView(float steps) => _zoomWant = Mathf.Clamp(_zoomWant / Mathf.Pow(ZoomStep, steps), ZoomFace, ZoomFar);
+
+    /// <summary>The on-foot zoom's arm length, for a check.</summary>
+    public float ViewZoom => _zoom;
 
     /// <summary>How fast the body swings round to face the direction of travel, 1/s.</summary>
     private const float BodyTurnRate = 12f;
@@ -1107,6 +1135,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// true). Null: neither.
     /// </summary>
     public Func<(bool Jump, bool Crouch)>? FootActions { get; set; }
+
+    /// <summary>The jump key belongs to something else this frame (the concert pogo, #1150): no jump. Owner only.</summary>
+    public bool JumpTaken { get; set; }
 
     /// <summary>
     /// A bot (#837): a body the dedicated server runs itself (authority 1), an <see cref="Npc"/> with
@@ -2063,7 +2094,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
 
         // a fighter (#495) is drawn by the dance layer, which lays over the stride only, in the air too
-        PoseKind = InDuel ? PoseStride : _sliding ? PoseTucked : _airTime > 0.12f ? PoseAir : PoseStride;
+        PoseKind = InDuel ? PoseStride : _sliding ? PoseTucked
+            : _airTime > 0.12f ? (_fallSpeed > FlailFallSpeed ? PoseFall : PoseAir) : PoseStride;
         if (PoseKind == PoseStride) _stridePhase = Avatar.HumanMeshBuilder.AdvancePhase(_stridePhase, speed, dt);
         Anim = new Vector4(speed, _stridePhase, 0f, 0f);
 
@@ -2304,7 +2336,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             ? new((_walker.ToLocal(tip) / 0.004f).Round() * 0.004f,
                 (((_walker.GlobalBasis.Inverse() * way).Normalized()) / 0.05f).Round() * 0.05f)
             : null;
-        var key = new FootPoseKey(_walker, PoseKind, Mathf.Round(Anim.X * 100f), _stridePhase, arm, blend, dance, Hat, palette, smooth, vr, point);
+        // a fall's windmill runs on this peer's clock: nothing more is replicated than the pose kind
+        _flailClock = PoseKind == PoseFall ? _flailClock + dt : 0f;
+        float phase = PoseKind == PoseFall ? _flailClock : _stridePhase;
+        var key = new FootPoseKey(_walker, PoseKind, Mathf.Round(Anim.X * 100f), phase, arm, blend, dance, Hat, palette, smooth, vr, point);
         // the hand is placed from fresh mounts every time the pose changes, even while a throttled
         // mesh waits: what carries or aims an item stays exact (cheap: joint math, no mesh)
         if (key != _mountsKey)
@@ -2314,6 +2349,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             {
                 PoseTucked => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Tucked, arm, blend),
                 PoseAir => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Running, arm, blend),
+                PoseFall => Avatar.HumanMeshBuilder.MountsForFall(_flailClock, arm, blend),
                 PoseHang or PoseClimb => Avatar.HumanMeshBuilder.MountsForPose(CarriedFigure(), arm, blend),
                 PoseSit => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Standing, arm, blend),
                 _ => Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase, arm, blend, dance, vr),
@@ -2332,6 +2368,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                     : _slidePose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Tucked, hat: Hat),
                 PoseAir => armed ? Avatar.HumanMeshBuilder.BuildPosed(palette, Avatar.HumanPose.Running, arm, blend, Hat, _poseMesh ??= new ArrayMesh())
                     : _airPose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Running, hat: Hat),
+                PoseFall => Avatar.HumanMeshBuilder.BuildFalling(palette, _flailClock, arm, blend, Hat, _poseMesh ??= new ArrayMesh()),
                 PoseHang or PoseClimb => Avatar.HumanMeshBuilder.BuildPosed(palette, CarriedFigure(), arm, blend, Hat, _poseMesh ??= new ArrayMesh()),
                 // seated on a stand (#885): the figure round its hip, which BodyPose lifts
                 PoseSit => SeatedWalker(palette),
@@ -2537,7 +2574,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // A throw pulls the lens in close over the right shoulder (#206); lent from first person,
         // the arm grows out of the eye instead of shrinking from the chase distance.
         float tb = _throwBlend;
-        float height = Mathf.Lerp(_borrowedThird ? EyeHeight : Sitting ? _sitDrop + 0.55f : Mathf.Lerp(ShoulderHeight, 0.95f, _slideBlend), ThrowCamHeight, tb);
+        // the player's zoom (#1149): closer than the usual arm, the pivot climbs to the eyes and the
+        // shoulder offset goes, so the last metres close in on the face
+        _zoom = Mathf.Lerp(_zoom, _zoomWant, MathX.Damp(10f, dt));
+        float face = _borrowedThird ? 0f : Mathf.SmoothStep(0f, 1f, Mathf.Clamp((ArmLength - _zoom) / (ArmLength - ZoomFace), 0f, 1f));
+        float height = Mathf.Lerp(_borrowedThird ? EyeHeight : (Sitting ? _sitDrop + 0.55f : Mathf.Lerp(ShoulderHeight, 0.95f, _slideBlend))
+            + (EyeHeight - ShoulderHeight) * face, ThrowCamHeight, tb);
         float pivotTarget = GlobalPosition.Y + height;
         _pivotY = float.IsNaN(_pivotY) || Mathf.Abs(pivotTarget - _pivotY) > 6f
             ? pivotTarget
@@ -2555,11 +2597,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         // pulled back a little with speed, so a sprint and a slide feel like they cover ground
         float speed = MathX.FlatLength(Velocity);
-        float distance = Mathf.Lerp(_borrowedThird ? 0f : ArmLength + Mathf.Clamp(speed / RunSpeed, 0f, 1.6f) * 0.6f,
+        float distance = Mathf.Lerp(_borrowedThird ? 0f : _zoom + Mathf.Clamp(speed / RunSpeed, 0f, 1.6f) * 0.6f * (1f - face),
             GunAim ? GunCamDistance : ThrowCamDistance, tb);
 
         // over the right shoulder, or the left once swapped (#460): the swap slides across in an eighth of a second
-        float offset = Mathf.Lerp(_borrowedThird ? 0f : ShoulderOffset, GunAim ? GunCamOffset : ThrowCamOffset, tb);
+        float offset = Mathf.Lerp(_borrowedThird ? 0f : ShoulderOffset * (1f - face), GunAim ? GunCamOffset : ThrowCamOffset, tb);
         var shoulder = pivot + view.X * (offset * _shoulderSide);
         var wanted = shoulder + view.Z * distance;
 
@@ -2578,6 +2620,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var lens = new Transform3D(view, position);
         _camera.GlobalTransform = _armBlend > through ? across * lens : lens;
     }
+
+    /// <summary>Whether the player's zoom drives the camera now (#1149): on foot in third person, nothing borrowed, not in VR.</summary>
+    public bool ZoomsView => _ride == null && RidingWith == 0 && _thirdPerson && !_borrowedThird && !XR.XrSession.Active;
 
     /// <summary>Puts the on-foot camera over the other shoulder and saves the side (#460).</summary>
     public void SwapShoulder()
@@ -3388,6 +3433,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // into the sky by the solver
         if (kind != RideKind.OnFoot) LeaveDecksNow();
         LeaveWater();
+        DropPhoneBackdrop();
         _ride = CarSetups.Ride(kind, CarSetups.Clamp(setup), tuning);
         // a truck or bus from the picker comes with the load chosen there
         if (_ride is Truck picked && !Mathf.IsEqualApprox(picked.Load, NextLoad)) _ride = new Truck(picked.Spec, 0, NextLoad);
@@ -3471,6 +3517,27 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             || (GunAim && @event is InputEventJoypadButton && @event.IsActionPressed(PlayerInput.CameraToggle))))
         {
             SwapShoulder();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        // the on-foot camera's zoom (#1149): Shift + wheel, = / -
+        if (ZoomsView && (@event.IsActionPressed(PlayerInput.ViewZoomIn, true) || @event.IsActionPressed(PlayerInput.ViewZoomOut, true)))
+        {
+            ZoomView(@event.IsActionPressed(PlayerInput.ViewZoomIn, true) ? 1f : -1f);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+        // a pad's R3 on foot in third person: held, the right stick zooms (ApplyStickLook); let go
+        // without zooming, it switches the view as it always did
+        if (@event is InputEventJoypadButton && @event.IsAction(PlayerInput.CameraToggle) && !CraneWorking && (ZoomsView || _padZoomHeld))
+        {
+            if (@event.IsPressed()) { _padZoomHeld = true; _padZoomed = false; }
+            else if (_padZoomHeld)
+            {
+                _padZoomHeld = false;
+                if (!_padZoomed) ToggleView();
+            }
             GetViewport().SetInputAsHandled();
             return;
         }
@@ -3641,6 +3708,16 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // and a crane's operator hoists with it (#618)
         if (CraneWorking) return;
         var look = PlayerInput.LookRate;
+        // R3 held (#1149): the stick's up and down are the zoom, its sides still turn the view
+        if (_padZoomHeld)
+        {
+            if (Mathf.Abs(look.Y) > 0.1f)
+            {
+                ZoomView(-look.Y * dt * 1.6f);
+                _padZoomed = true;
+            }
+            look.Y = 0f;
+        }
         // on foot a steering wheel turns the view; mounted or seated it only steers
         if (_ride == null && RidingWith == 0) look.X += PlayerInput.WheelLookRate;
         look *= LookScale;
@@ -3808,6 +3885,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _jumpHeld = spaceDown;
         // downed (#475): a crawl, nothing more
         if (Downed) running = crouchHeld = spaceDown = jumpPressed = _sprintLatch = false;
+        // the concert pogo's beat (#1150): the press is the QTE's, the dance does the jumping
+        if (keys && JumpTaken) spaceDown = jumpPressed = false;
 
         bool crouchPressed = crouchHeld && !_crouchHeld;
         _crouchHeld = crouchHeld;

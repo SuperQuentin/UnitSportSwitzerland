@@ -749,6 +749,14 @@ public partial class ClientWorld : Node3D, IOriginContainer
         };
         AddChild(_teleporter);
 
+        // home-trainer trainings (#901): the hardware link, and the session the phone's Training app starts
+        var trainer = new Trainer.TrainerLink { Name = Trainer.TrainerLink.NodeName };
+        trainer.Said += Toast;
+        AddChild(trainer);
+        var training = new Trainer.TrainingSession(_chunks, origin, () => LocalPlayer);
+        training.Said += Toast;
+        AddChild(training);
+
         // M opens the teleport search over any town that has terrain
         _places = PlaceSearchUi.Create(_teleporter);
         AddChild(_places);
@@ -779,10 +787,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Audio.EarsProbe.Requested) AddChild(new Audio.EarsProbe(() => LocalPlayer));
         if (Items.RadioPanelProbe.Requested) AddChild(new Items.RadioPanelProbe(() => LocalPlayer));
         if (Player.EmoteWheelProbe.Requested) AddChild(new Player.EmoteWheelProbe(() => LocalPlayer));
+        if (Concert.PogoProbe.Requested) AddChild(new Concert.PogoProbe(() => LocalPlayer));
         if (Player.SitProbe.Requested) AddChild(new Player.SitProbe(() => LocalPlayer));
         if (Concert.ConcertDeskProbe.Requested) AddChild(new Concert.ConcertDeskProbe(() => LocalPlayer));
         if (Concert.ConcertCamProbe.Requested) AddChild(new Concert.ConcertCamProbe(() => LocalPlayer, () => GetNodeOrNull<ChatManager>(ChatManager.NodeName)));
         if (Phone.PhoneProbe.Requested) AddChild(new Phone.PhoneProbe(() => LocalPlayer));
+        if (Trainer.TrainingProbe.Requested && _chunks != null && _worldOrigin != null) AddChild(new Trainer.TrainingProbe(() => LocalPlayer, _chunks, _worldOrigin));
         if (SpectatorSwitchCheck.Requested) AddChild(new SpectatorSwitchCheck(() => LocalPlayer, () => _spectator));
         if (Phone.PhoneVrProbe.Requested) AddChild(new Phone.PhoneVrProbe(() => LocalPlayer));
         if (Items.SparkleProbe.Requested) AddChild(new Items.SparkleProbe(() => LocalPlayer));
@@ -836,6 +846,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(items);
         _items = items;
         AddChild(new Player.EmoteWheel(() => _onFoot ? LocalPlayer : null) { Name = "EmoteWheel" });
+        // the concert pogo (#1150): dancing at a show, jump on the beat
+        AddChild(new Concert.PogoQte(() => _onFoot ? LocalPlayer : null));
         // the quick menu (#840): hold F2 / pad Back for activities, invites, inventory, vehicles, map...
         var emotes = GetNodeOrNull<Player.EmoteWheel>("EmoteWheel");
         AddChild(new Ui.QuickMenu(() => MenuOpen?.Invoke() == true, () => _onFoot && LocalPlayer is { Ride: Player.RideKind.OnFoot, RidingWith: 0 },
