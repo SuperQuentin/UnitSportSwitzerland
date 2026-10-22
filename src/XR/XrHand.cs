@@ -143,10 +143,11 @@ internal sealed partial class XrHand : Node3D
         s.Tube(Vector3.Zero, new Vector3(0f, 0.77f, -0.64f) * 0.09f * k, 0.026f * k, 0.031f * k, look.Cuff, 7);
         _cuff.Mesh = s.Build();
         s.Clear();
-        // the forearm runs from the cuff along (0, 0.77, 0.64) as built (the tube is authored −Z); the back
-        // of the hand is away from the palm (−X on the left, +X on the right): 3.5 cm up the arm, on its skin
+        // the forearm runs from the cuff along (0, 0.77, 0.64) as built (the tube is authored −Z). The dial
+        // faces the side that is up with the controller held (the thumb's, a quarter turn round the arm from
+        // the back of the hand, −Z; playtest #1097), 3.5 cm up the arm, on its skin
         var arm = new Vector3(0f, 0.77f, 0.64f);
-        var back = new Vector3(_m, 0f, 0f);
+        var back = new Vector3(_m, 0f, 0f).Rotated(arm.Normalized(), -_m * Mathf.Pi / 2f);
         var dial = back;
         var twelve = -arm;
         WatchSpot = new Transform3D(new Basis(twelve.Cross(dial), twelve, dial),
