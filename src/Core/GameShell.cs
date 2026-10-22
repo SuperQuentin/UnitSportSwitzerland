@@ -94,7 +94,7 @@ public partial class GameShell : Node
             "--origin", "--style", "--tree-lod", "--tree-near", "--systems", "--world", "--appearance",
             "--menu", "--fakeversion", "--updatefeed", "--updateaccept", "--settings", "--licenses", "--controls", "--tutorial",
             "--multiplayer", "--solo", "--map", "--landing", "--uishot", "--menucheck", "--mapcheck", "--leavecheck",
-            "--leave-restart", "--mobile", "--quest", "--autostart", "--wheellock", "--fakewheel", "--ffblog", "--vr", "--xrsim", "--vrmonitor", "--xrheadshot", "--xrwrist", "--xrprofile", "--xrcab", "--xrhands",
+            "--leave-restart", "--mobile", "--quest", "--autostart", "--wheellock", "--fakewheel", "--ffblog", "--vr", "--xrsim", "--xrload", "--xrstats", "--vrhz", "--vrdetail", "--vrmonitor", "--xrheadshot", "--xrwrist", "--xrprofile", "--xrcab", "--xrhands",
             "--bubblecheck", "--worldpickcheck", "--consolelinkcheck", "--fakeprotocol",
         };
         foreach (string a in args)

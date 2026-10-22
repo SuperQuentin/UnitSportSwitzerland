@@ -80,6 +80,8 @@ public static class XrSession
         if (Simulated)
         {
             GD.Print("[xr] simulated: no headset, the rig's view on the monitor");
+            // a load test is paced like the headset: no desktop vsync holding it to the monitor
+            if (LoadTest) DisplayServer.WindowSetVsyncMode(DisplayServer.VSyncMode.Disabled);
             return Begin(root);
         }
 
@@ -98,22 +100,9 @@ public static class XrSession
         // view (XrMonitor). The headset paces the frames: a desktop vsync on top only adds a wait.
         DisplayServer.WindowSetVsyncMode(DisplayServer.VSyncMode.Disabled);
 
-        if (xr is OpenXRInterface openxr)
-        {
-            // 90 Hz when the runtime offers it (Quest 2 over Link does), else its best under that;
-            // 72 Hz on a standalone headset (#1112), the frame budget a Quest 2's own GPU can hold
-            float cap = Platform.IsStandaloneVr ? 72.5f : 90.5f, best = 0f;
-            foreach (var r in openxr.GetAvailableDisplayRefreshRates())
-            {
-                float hz = r.AsSingle();
-                if (hz <= cap && hz > best) best = hz;
-            }
-            if (best > 0f) openxr.DisplayRefreshRate = best;
-            // (OpenXR's own foveation is for the Compatibility renderer only: the headset viewport
-            // gets variable rate shading instead, XrRig.ApplyQuality)
-            GD.Print($"[xr] OpenXR on, {xr.GetName()} at {openxr.DisplayRefreshRate:F0} Hz");
-        }
-
+        // (OpenXR's own foveation is for the Compatibility renderer only: the headset viewport
+        // gets variable rate shading instead, XrRig.ApplyQuality)
+        GD.Print($"[xr] OpenXR on, {xr.GetName()}");
         return Begin(root);
     }
 
@@ -133,9 +122,60 @@ public static class XrSession
     /// <summary>True with <c>--xrsim</c>: VR mode with no headset, for checks on a desktop.</summary>
     public static bool Simulated { get; private set; }
 
+    /// <summary>
+    /// <c>--xrsim --xrload</c>: the simulated headset is drawn at a Quest 2's pixel count and the
+    /// monitor as in a real headset session, and the rig reports frame and GPU times, for
+    /// frame-time checks without a headset (docs/notes/xr/air-link.md).
+    /// </summary>
+    public static bool LoadTest => Simulated && CmdArgs.Has("--xrload");
+
+    /// <summary>
+    /// <c>--xrstats</c>, or a load test: the rig reports the frame and the headset's GPU time every 5 s,
+    /// and a real headset's eye size (#1036).
+    /// </summary>
+    public static bool Stats => LoadTest || CmdArgs.Has("--xrstats");
+
+    /// <summary>
+    /// The headset's refresh rate from <see cref="GameSettings.VrRefreshHz"/> (the nearest the
+    /// runtime offers at or under it, else its lowest), and physics ticking at that rate. Physics
+    /// at 60 under a 72 Hz headset moved the body, and the eye with it, on five frames in six (two
+    /// in three at 90): the whole view juddered while moving, at full frame rate (#1036). Called at
+    /// start and on a settings change; <c>--xrsim</c> takes the setting as the headset's rate.
+    /// </summary>
+    public static void ApplyRefresh()
+    {
+        if (!Active) return;
+        float want = GameSettings.Current.VrRefreshHz, hz = want;
+        if (!Simulated && XRServer.FindInterface("OpenXR") is OpenXRInterface openxr)
+        {
+            if (!_watchingRate)
+            {
+                // the runtime may refuse or delay a rate (the Link app's own choice): follow what it runs at
+                _watchingRate = true;
+                openxr.RefreshRateChanged += r => TickAt((float)r);
+            }
+            hz = VrRefresh.Pick(openxr.GetAvailableDisplayRefreshRates().Select(r => r.AsSingle()), want)
+                ?? openxr.DisplayRefreshRate;
+            if (hz > 0f && Math.Abs(openxr.DisplayRefreshRate - hz) > 0.5f) openxr.DisplayRefreshRate = hz;
+        }
+        TickAt(hz);
+    }
+
+    private static bool _watchingRate;
+
+    /// <summary>Physics at the headset's <paramref name="hz"/>: one tick a frame.</summary>
+    private static void TickAt(float hz)
+    {
+        int ticks = Mathf.RoundToInt(hz);
+        if (ticks <= 0 || ticks == Engine.PhysicsTicksPerSecond) return;
+        GameClock.SetTickRate(ticks);
+        GD.Print($"[xr] headset at {hz:F0} Hz, physics at {ticks} ticks a second");
+    }
+
     private static bool Begin(Node root)
     {
         Active = true;
+        ApplyRefresh();
         // the PS1 vertex snap and dither off (common/retro.gdshaderinc): the window's view too,
         // which in VR is a spectator's
         RenderingServer.GlobalShaderParameterSet("xr_smooth", true);
@@ -155,8 +195,10 @@ public static class XrSession
     public static bool Relaunch(bool vr, bool asked = false)
     {
         var args = new List<string>();
-        // Vulkan is the well-trodden OpenXR path on Windows (the project default is d3d12)
-        args.AddRange(vr ? new[] { "--xr-mode", "on", "--rendering-driver", "vulkan" } : new[] { "--xr-mode", "off" });
+        // Vulkan is the well-trodden OpenXR path on Windows (the project default is d3d12). The method
+        // has to be named too: a driver alone on the command line starts Godot on Forward+, not the
+        // project's Mobile, which cost a Quest 2 most of its frame (#1036); VR has no Forward+ effects anyway
+        args.AddRange(vr ? new[] { "--xr-mode", "on", "--rendering-driver", "vulkan", "--rendering-method", "mobile" } : new[] { "--xr-mode", "off" });
         // run from the editor binary (`godot --path .`): it has to be told the project again
         if (OS.HasFeature("editor")) args.AddRange(new[] { "--path", ProjectSettings.GlobalizePath("res://") });
         args.Add("--");

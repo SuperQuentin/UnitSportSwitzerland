@@ -19,11 +19,12 @@ public enum MonitorView
 
 /// <summary>
 /// The monitor view in VR (#186). The headset renders its own viewport (<see cref="XrRig"/>), so
-/// the window is free. In <see cref="MonitorView.FirstPerson"/> it shows the game's camera, which
-/// the rig moves to the head every frame. The two other views are drawn by cameras of their own in
-/// SubViewports on a full-window layer under every HUD, with the window's own 3D switched off so
-/// nothing is rendered twice. Each extra view is an extra render of the world on the GPU the
-/// headset needs, which is why Off exists.
+/// the window is free. Every view is drawn by cameras of its own in SubViewports on a full-window
+/// layer under every HUD, with the window's own 3D switched off. Each is an extra render of the
+/// world on the CPU and GPU the headset needs (in first person it doubled the frame, #1036), so
+/// they are drawn at half the window's resolution and half the frame rate: a spectator does not
+/// need 72 sharp frames a second, the headset does. Off draws nothing. With <c>--xrsim</c> alone
+/// the window is the only view and first person stays the window's own camera.
 /// </summary>
 public partial class XrMonitor : CanvasLayer
 {
@@ -31,6 +32,21 @@ public partial class XrMonitor : CanvasLayer
 
     /// <summary>Half the distance between the eyes, for the simulated (untracked) headset.</summary>
     private const float SimEye = 0.032f;
+
+    /// <summary>The monitor's views are drawn at the window's size divided by this.</summary>
+    private const int Shrink = 2;
+
+    /// <summary>The first-person view's field of view: the headset's own is far wider than a screen's.</summary>
+    private const float FirstPersonFov = 80f;
+
+    /// <summary>
+    /// Whether first person is drawn here, at the head, rather than by the window's own camera:
+    /// always with a headset, and with <c>--xrload</c> to measure it.
+    /// </summary>
+    private static bool OwnFirstPerson => !XrSession.Simulated || XrSession.LoadTest;
+
+    /// <summary>Counts frames: each view is drawn on every other one.</summary>
+    private ulong _frame;
 
     private readonly XrRig _rig;
     private readonly SubViewportContainer[] _boxes = new SubViewportContainer[2];
@@ -72,6 +88,7 @@ public partial class XrMonitor : CanvasLayer
                 SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
                 SizeFlagsVertical = Control.SizeFlags.ExpandFill,
                 MouseFilter = Control.MouseFilterEnum.Ignore,
+                StretchShrink = Shrink,
             };
             _views[i] = new SubViewport { GuiDisableInput = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled };
             _cams[i] = new Camera3D { Near = 0.05f, Current = true };
@@ -99,15 +116,17 @@ public partial class XrMonitor : CanvasLayer
         if (mode == _mode) return;
         _mode = mode;
 
-        bool own = _mode is MonitorView.BothEyes or MonitorView.ThirdPerson;
+        bool own = _mode is MonitorView.BothEyes or MonitorView.ThirdPerson
+            || _mode == MonitorView.FirstPerson && OwnFirstPerson;
         Visible = own;
-        // the window's camera only draws in first person; otherwise it would be a wasted render
-        GetTree().Root.Disable3D = _mode != MonitorView.FirstPerson;
+        // the window's own camera draws only for --xrsim's first person: otherwise a wasted render
+        GetTree().Root.Disable3D = own || _mode == MonitorView.Off;
         for (int i = 0; i < 2; i++)
         {
             bool on = own && (i == 0 || _mode == MonitorView.BothEyes);
             _boxes[i].Visible = on;
-            _views[i].RenderTargetUpdateMode = on ? SubViewport.UpdateMode.Always : SubViewport.UpdateMode.Disabled;
+            // drawn on demand, every other frame (_Process)
+            _views[i].RenderTargetUpdateMode = on ? SubViewport.UpdateMode.Once : SubViewport.UpdateMode.Disabled;
         }
 
         uint world = 0xFFFFFu & ~XrSession.HeadsetOnlyLayer & ~Interiors.DoorPortals.AllQuadLayers;
@@ -124,6 +143,11 @@ public partial class XrMonitor : CanvasLayer
             // as the headset sees it: no own body, the doorways as the window's camera draws them
             foreach (var c in _cams)
                 c.CullMask = (world | Interiors.DoorPortals.QuadLayers[0]) & ~XrSession.SpectatorOnlyLayer;
+            if (_mode == MonitorView.FirstPerson)
+            {
+                _cams[0].Projection = Camera3D.ProjectionType.Perspective;
+                _cams[0].Fov = FirstPersonFov;
+            }
         }
         GD.Print($"[xr] monitor view: {_mode}");
         // said on a change, not at start: the monitor view at start is the one that was chosen
@@ -145,6 +169,14 @@ public partial class XrMonitor : CanvasLayer
     {
         if (_mode == MonitorView.BothEyes) UpdateEyes();
         else if (_mode == MonitorView.ThirdPerson) UpdateChase((float)delta);
+        else if (_mode == MonitorView.FirstPerson && OwnFirstPerson) _cams[0].GlobalTransform = _rig.Head.GlobalTransform;
+        else return;
+
+        // half rate: one view every other frame, the two eyes taking turns, so Both eyes costs
+        // one render a frame instead of two and the others one every other frame
+        _frame++;
+        if (_mode == MonitorView.BothEyes) _views[_frame & 1].RenderTargetUpdateMode = SubViewport.UpdateMode.Once;
+        else if ((_frame & 1) == 0) _views[0].RenderTargetUpdateMode = SubViewport.UpdateMode.Once;
     }
 
     /// <summary>
