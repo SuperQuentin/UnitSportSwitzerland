@@ -18,7 +18,7 @@ public static class SignalCapacity
     /// <summary>The part of a turn's green it gives way: to oncoming cars (a left in a shared lane), to walkers or riders only.</summary>
     public const float YieldToCars = 0.4f, YieldToCrossers = 0.75f;
     /// <summary>Demand over capacity (the degree of saturation): queues form and clear within the green.</summary>
-    public const float Degree = 0.8f;
+    public const float Degree = 0.75f;
     /// <summary>A bike lane's saturation flow (bikes/h, ~1 a second), and the share of it the test world feeds: a believable few a minute.</summary>
     public const float BikeSaturation = 3600f, BikeShare = 0.08f;
     /// <summary>A bike group's start-up loss (s): riders get going quicker than cars.</summary>

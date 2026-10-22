@@ -88,7 +88,7 @@ public partial class TrafficProbe
                                 ? "LTR"[TurnIndex(g.Heading, d.Heading)].ToString() : byId.TryGetValue(x.Key.To, out var o) ? $"{labels[o.Id].Junction}:{labels[o.Id].Arm}" : "?")
                             .OrderBy(x => x.Key, StringComparer.Ordinal).Select(x => $"{x.Key} {x.Sum(y => y.Value)}"))
                         : string.Join(" ", to.Select(x => $"{(byId.TryGetValue(x.Key.To, out var d) ? labels[d.Id].Arm : "?")} {x.Value}"));
-                    arms.Add($"{labels[g.Id].Arm}{(_traffic.EndpointPlaced(g.Id) ? "" : " (on no way)")} {g.PerMinute * _traffic.GeneratorRate:0.0}/min: made {m}, arrived {a}{(where.Length > 0 ? $" ({where})" : "")}{(q > 0 ? $", {q} waiting" : "")}");
+                    arms.Add($"{labels[g.Id].Arm}{(_traffic.EndpointPlaced(g.Id) ? "" : " (on no way)")} {g.PerMinute * _traffic.GeneratorRate:0.0}/min: made {m}, arrived {a}{(where.Length > 0 ? $" ({where})" : "")}{(q > 0 ? $", {q} waiting" : "")}{(_traffic.NoWayBy.GetValueOrDefault(g.Id) is > 0 and var nw ? $", {nw} with no way" : "")}");
                 }
                 GD.Print($"[trafficcheck] {junction} {mode.ToString().ToLowerInvariant()}s: made {made}, arrived {arrived}, waiting {waiting}; {string.Join("; ", arms)}");
                 if (junction == _junction && mode == MoverKind.Car && made > 0 && arrived == 0)

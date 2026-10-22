@@ -46,7 +46,7 @@ public static partial class SignalTestRegion
                 var named = junctions.Where(j => Math.Abs(j.E - e) < 20 && Math.Abs(j.N - n) < 20).MinBy(j => Math.Abs(j.E - e) + Math.Abs(j.N - n));
                 var approaches = new Dictionary<int, RoadApproach>();
                 foreach (var a in tile.Approaches.Where(a => a.Signal == k)) approaches[a.SignalArm] = a;
-                list.Add(new Lights(named?.Name.Split('-')[0] ?? string.Create(CultureInfo.InvariantCulture, $"L{e:F0},{n:F0}"), e, n, s.Plan, approaches));
+                list.Add(new Lights(named?.Name ?? string.Create(CultureInfo.InvariantCulture, $"L{e:F0},{n:F0}"), e, n, s.Plan, approaches));
             }
         }
         return list;
@@ -236,14 +236,13 @@ public static partial class SignalTestRegion
             {
                 var arm = x.Lights.Plan.Arms[x.Arm];
                 var into = new Dictionary<int, float>();
-                float rate = 0;
                 foreach (var f in flows[x.Lights].Where(f => f.From == x.Arm))
-                {
-                    rate += f.PerMinute;
                     Spread(flows, ids, x.Lights, f.To, f.PerMinute, into, 0);
-                }
                 var shares = into.Where(s => s.Value > 1e-4f).OrderBy(s => s.Key).Select(s => (s.Key, s.Value)).ToArray();
-                bool generates = rate > 1e-3f && shares.Length > 0;
+                // (its rate: the demand that has a destination to go to; a movement into an arm with none, e.g. past lights too close
+                // by to have their own on the stretch and no way on found, is left out)
+                float rate = shares.Sum(s => s.Item2);
+                bool generates = rate > 1e-3f;
                 if (!generates && !arm.Out) continue;
                 list.Add(new RegionEndpoint(ids[(x.Lights, x.Arm)], mode, x.At.E, x.At.N, x.HeadingIn, generates, arm.Out,
                     generates ? rate : 0f, generates ? shares : [], x.Lights.Name, Compass(arm.Heading)));

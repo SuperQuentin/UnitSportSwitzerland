@@ -681,9 +681,11 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             // long red reaches past where the cars read the lights, and its back vanished after 20 s)
             if (other.Speed < 0.5f && along < QueueSpacing + 6f && (other.AtRed || other.Queued || other.GapWaiting || other.GapHeld)) queued = true;
         }
-        car.Queued = queued;
-        // and behind a rider or tram in its lane (#1060: the modes' crossers; +∞ without them)
-        target = Mathf.Min(target, FollowCrossers(car, dir, rightOf));
+        // and behind a rider or tram in its lane (#1060: the modes' crossers; +∞ without them): standing behind one, queued too
+        // (#1134: a tram at its stop, a rider at a red)
+        float behindCrosser = FollowCrossers(car, dir, rightOf);
+        car.Queued = queued || behindCrosser < 0.5f && car.Speed < 0.5f;
+        target = Mathf.Min(target, behindCrosser);
 
         float half = edge.Width * 0.5f, keep = KeepRight(edge, car.Route.Forward, car.Habit);
         bool twoWay = (edge.Flags & RoadFlags.Divided) == 0 && edge.OneWay == 0;
@@ -1671,7 +1673,14 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         }
         else if (options.Any(o => o.Edge.Path is not null)) options = options.Where(o => o.Edge.Path is not null).ToList();
         // a generated car on its way to a destination (#971): the next leg of it, where it may go there
-        if (car is not null && PlannedAfter(car, leg) is { } planned && options.Contains(planned)) return planned;
+        if (car is not null && PlannedAfter(car, leg) is { } planned && options.Contains(planned))
+        {
+            // (its way was found along one lane's path: where lanes side by side make the same move to the same exit, the car's
+            // habit picks one, as LaneFor does, so they all carry cars, #1134)
+            if (planned.Item1.Path is not { } p) return planned;
+            var same = options.Where(o => o.Edge.Path!.Move == p.Move && o.Edge.KeyEnd == planned.Item1.KeyEnd).OrderBy(o => o.Edge.Path!.FromOffset).ToList();
+            return same.Count > 1 ? same[(int)(car.Habit % (uint)same.Count)] : planned;
+        }
         if (options.Count == 0)
         {
             // a dead end — a real cul-de-sac, or the edge of what is loaded: turn round

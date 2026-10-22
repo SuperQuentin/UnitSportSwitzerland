@@ -117,6 +117,8 @@ public partial class Traffic
     public readonly Dictionary<(int From, int To), int> ArrivedBy = new();
     /// <summary>Movers each generator made (#1134, the probe's report).</summary>
     public readonly Dictionary<int, int> GeneratedBy = new();
+    /// <summary>Walkers or riders a generator did not make: no way on their graph to the destination drawn (#1134).</summary>
+    public readonly Dictionary<int, int> NoWayBy = new();
     /// <summary>Movers each generator still has waiting in its queue (#1134, the probe's report).</summary>
     public int QueuedAt(int id) => _endpoints.TryGetValue(id, out var s) ? s.Queue : 0;
     /// <summary>Whether an endpoint found its mode's graph (#1134, the probe's report: one on no road makes nothing).</summary>
@@ -273,15 +275,26 @@ public partial class Traffic
         float clear = look.Size.Z + 1.5f;
         foreach (var o in list)
             if (MathX.Flat(o.Head - s.At).LengthSquared() < clear * clear) return false;
+        Dictionary<(LaneEdge, bool), float>? goal = null;
+        if (share.To > 0 && _endpoints.TryGetValue(share.To, out var dest) && dest.Ep.Mode == kind && CostTo(dest) is { } cost)
+        {
+            // no way there on this mode's graph (a sidewalk with no crossing to the other, no corner round): none made, counted
+            if (!cost.ContainsKey((edge, forward)) && !(edge, forward).Equals((dest.Edge, !dest.Forward)))
+            {
+                NoWayBy[s.Ep.Id] = NoWayBy.GetValueOrDefault(s.Ep.Id) + 1;
+                s.Queue--;
+                return false;
+            }
+            goal = cost;
+        }
         var m = TakeMover(kind);
+        if (goal is not null) (m.ToId, m.Goal) = (share.To, goal);
         m.Route = new Route(edge, forward, forward ? s.Pos : edge.Length - s.Pos);
         m.Cruise = look.Cruise * (1f + look.Spread * (2f * (float)_rng.NextDouble() - 1f));
         m.Speed = m.Cruise;
         m.Lateral = 0f;
         m.Habit = (uint)_rng.Next();
         m.FromId = s.Ep.Id;
-        if (share.To > 0 && _endpoints.TryGetValue(share.To, out var dest) && dest.Ep.Mode == kind && CostTo(dest) is { } cost)
-            (m.ToId, m.Goal) = (share.To, cost);
         if (kind == MoverKind.Walker) WalkerSpawned(m); else RiderSpawned(m);
         PlaceMover(m);
         m.Vel = Vector3.Zero;
@@ -432,6 +445,9 @@ public partial class Traffic
     {
         if (car.Planned is not { } way) return null;
         int k = way.IndexOf(leg);
+        // a path beside the planned one, to the same exit (NextRoad's pick among lanes side by side)
+        if (k < 0 && leg.Edge.Path is not null)
+            k = way.FindIndex(w => w.Item1.Path is not null && w.Item1.KeyEnd == leg.Edge.KeyEnd && w.Item2 == leg.Forward);
         return k >= 0 && k + 1 < way.Count ? way[k + 1] : null;
     }
 

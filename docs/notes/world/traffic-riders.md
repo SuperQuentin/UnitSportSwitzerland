@@ -2,6 +2,7 @@
 
 Bikes as cosmetic, local traffic on the shared base (`traffic-modes`): green 0.6 x 1.7 x 1.8 m boxes at 5 m/s +-25 %,
 30 by day (`GameSettings.TrafficRiders`, 8 on a phone, x0.3 at night; `--bikes N`; Settings -> World "Bikes").
+In the test world riders come only from its bike generators (#1134, `traffic-generators`): no density spawn there.
 
 ## Files
 
