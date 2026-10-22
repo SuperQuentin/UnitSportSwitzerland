@@ -4,7 +4,7 @@ using UnitSport.Core;
 namespace UnitSport.Ui;
 
 /// <summary>
-/// Settings, in tabs: Video, Audio, Gameplay, Character, Vehicles, Controls, Wheel, World, Performance, About. Every
+/// Settings, in tabs: Video, Audio, Gameplay, Vehicles, Controls, Wheel, World, Performance, About. Every
 /// control writes straight into <see cref="GameSettings.Current"/> and commits, so the world
 /// re-applies itself live and the file is saved — there is no Apply button to forget. LB / RB
 /// (or Q / E) change tab. One instance serves the title screen and the in-game pause menu.
@@ -144,8 +144,6 @@ public partial class SettingsScreen : Screen
             }, "Look, walk, travel, the map and the fly camera, then each ride's controls the first time");
             if (Tutorial.Current != null) { replay.Text = "Playing"; replay.Disabled = true; }
         });
-
-        Tab("Character", CharacterPage.Fill);
 
         Tab("Vehicles", rows =>
         {

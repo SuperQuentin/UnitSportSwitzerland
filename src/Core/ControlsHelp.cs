@@ -59,6 +59,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Inventory", PlayerInput.Inventory, Pad: "{inventory} (tap)"),
             new("Gather stone, water, wood (hold)", PlayerInput.Gather),
             new("Bird journal", PlayerInput.BirdJournal),
+            new("Character: your figure (on foot)", PlayerInput.CharacterMenu, Pad: "{quick_menu} (hold) › Character, or {menu} › Character"),
         }),
         ("Quick menu and invites (#840)", new Row[]
         {
