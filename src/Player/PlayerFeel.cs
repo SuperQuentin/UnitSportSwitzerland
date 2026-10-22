@@ -794,7 +794,7 @@ public partial class PlayerFeel : Node3D
         _engineLabel.GrowHorizontal = Control.GrowDirection.Begin;
         _engineLabel.GrowVertical = Control.GrowDirection.Begin;
         _engineLabel.OffsetRight = -18; _engineLabel.OffsetBottom = -16;
-        if (Core.Platform.IsMobile)
+        if (Core.Platform.IsTouch)
         {
             // the pedals take the bottom right on a phone (#1043), the cards the top left: top centre
             _engineLabel.SetAnchorsPreset(Control.LayoutPreset.CenterTop);

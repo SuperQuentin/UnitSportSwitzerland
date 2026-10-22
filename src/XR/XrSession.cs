@@ -86,7 +86,9 @@ public static class XrSession
         var xr = XRServer.FindInterface("OpenXR");
         if (xr == null || !xr.IsInitialized())
         {
-            if (asked)
+            if (Platform.IsStandaloneVr)
+                GD.PushError("[xr] OpenXR did not start on this headset: the APK must be the Quest export (tools/quest.sh)");
+            else if (asked)
                 GD.PrintErr("[xr] OpenXR is not running. Start the headset runtime (Quest Link) and launch with "
                     + "`--xr-mode on --rendering-driver vulkan`, see docs/notes/xr/setup.md");
             return false;
@@ -98,12 +100,13 @@ public static class XrSession
 
         if (xr is OpenXRInterface openxr)
         {
-            // 90 Hz when the runtime offers it (Quest 2 over Link does), else its best under that
-            float best = 0f;
+            // 90 Hz when the runtime offers it (Quest 2 over Link does), else its best under that;
+            // 72 Hz on a standalone headset (#1112), the frame budget a Quest 2's own GPU can hold
+            float cap = Platform.IsStandaloneVr ? 72.5f : 90.5f, best = 0f;
             foreach (var r in openxr.GetAvailableDisplayRefreshRates())
             {
                 float hz = r.AsSingle();
-                if (hz <= 90.5f && hz > best) best = hz;
+                if (hz <= cap && hz > best) best = hz;
             }
             if (best > 0f) openxr.DisplayRefreshRate = best;
             // (OpenXR's own foveation is for the Compatibility renderer only: the headset viewport
