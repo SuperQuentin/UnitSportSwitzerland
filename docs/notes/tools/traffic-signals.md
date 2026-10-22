@@ -74,7 +74,7 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   the cyclist, the first may be a fast e-bike, the user), walker 1.5; lengths 6 / 2 / 0 m; capped by the arm's limit, a turning car
   at `sqrt(3 · r)`, at most 10 m/s: `Terrain.Format.TurnSpeed`, the same the traffic cars slow to for a bend, so the lights are
   timed for the cars that drive them (the user: the more realistic, and both the same; ~5.5 m/s round a 10 m right turn, ~7.7
-  round a 20 m left; SN 640 838 times turns at a flat 10 m/s, 7 on tight radii). Amber: the cars' by speed, the riders' 2 s, walkers none (the last steps off as their green ends: their yellow, or red on 2-lens heads, is the clearance for those already on the zebra, SN 640 837; the user, Oct 20 2026). `SignalPlan.Retime(table)` keeps the phases
+  round a 20 m left; SN 640 838 times turns at a flat 10 m/s, 7 on tight radii). Amber: the cars' by speed, the trams' 5/6/7 s by speed (#1105), the riders' 2 s, walkers none (the last steps off as their green ends: their yellow, or red on 2-lens heads, is the clearance for those already on the zebra, SN 640 837; the user, Oct 20 2026). `SignalPlan.Retime(table)` keeps the phases
   and starts each group as soon as its own conflicts allow; walkers' and riders' greens end early enough that their
   clearing fits in the gap the cars set (never under 4 s of green; an early end held back by it is limited and the plan
   timed again). Riders following the cars' lights whose clearing would lengthen a car group's times by over 2 s get a bike

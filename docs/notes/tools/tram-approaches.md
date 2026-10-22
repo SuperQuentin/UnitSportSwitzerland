@@ -16,7 +16,11 @@ The junction planner's cores (`junction-planner`) take the tram tracks running t
   tram path takes its own direction's group by `TramGroup`), added after every other group (plans
   without trams keep their groups). Each joins its approach's phases where nothing in them conflicts hard with it (chords as
   cars), else the first phase that allows it, else a phase of its own; a car's left from a shared lane across it is permissive
-  (the car gives way). Timed as a slow group (`Slow`: its long clearing ends its green early), its ways as conflict lines
+  (the car gives way). Its amber its own (`SignalPlan.TramYellow`, #1105, the user: "5s at 50, 6s at 60 and 7s above seems
+  fine"; no source): 5/6/7 s on the cars' speed bands, both heads, as its passing time (conflict times) and clearance (the gap
+  after its phase); a tram stops for it at its 1.2 m/s² service brake if it can, else clears. Geneva (#1105 rewrite, before/after): leads
+  32/56/20 -> 32/53/23 (1-3 s / 3 s+ / none), junctions without tram leads 3 -> 4 (2499810,1116702 new, its trams also out of
+  the conflict times), lights 243, 0 invalid, all within 120 s; the test region's J14 unchanged (119 s). Timed as a slow group (`Slow`: its long clearing ends its green early), its ways as conflict lines
   (`ConflictTimes.Mover.Tram`: clear and enter 7 m/s, 42 m long) from where its track crosses the cars' line.
 - **Leading signal** (the user: "a short leading signal (1 sec). If there is conflicting movements, add a longer leading signal,
   like for bikes"): a tram group starts `SignalPlan.TramLead` 1 s before its approach's cars starting with it, the riders' lead
