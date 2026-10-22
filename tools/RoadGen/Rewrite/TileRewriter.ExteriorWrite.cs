@@ -32,7 +32,7 @@ public static partial class TileRewriter
     private static SignalPlan? WriteSignals(JunctionPlan jp, RoadGenResult result, Dictionary<TileId, List<RoadSignal>> signals,
         Dictionary<TileId, List<RoadApproach>> approaches, Cantons? cantons, SignalStats signalStats, LayoutWriteStats stats,
         Dictionary<TileId, List<RoadPointProp>> signs, Func<Vec2, bool> clear, Func<Vec2, bool>? building = null,
-        IReadOnlyDictionary<int, (SignalMoves Moves, double Lateral)>? trams = null)
+        IReadOnlyDictionary<int, (SignalMoves Moves, double Lateral)>? trams = null, GantryContext? gantries = null)
     {
         var net = result.Network;
         var home = TileId.FromLv95(jp.Centre.X, jp.Centre.Y);
@@ -143,6 +143,7 @@ public static partial class TileRewriter
         var stops = new float[arms.Count * 3];
         var poles = new List<SignalPole>();
         var overheads = new List<SignalOverhead>();
+        var gantryList = new List<SignGantry>();
         var records = new List<(int Arm, Vec2 At, double Stop)>();
         for (int k = 0; k < arms.Count; k++)
         {
@@ -209,13 +210,21 @@ public static partial class TileRewriter
                     stats.SignsOnPoles++;
                 }
             }
-            // the heads over its lanes (#1037): on a mast arm, a portal or a tram street's span wire; the far kerb's foot found as a
-            // pole's where no pole stands there
+            // the far kerb's foot found as a pole's where no pole stands there: for an overhead structure or a gantry
+            if (arms[k].In && (ex.Overhead.Count > 0 || gantries is not null) && leftFoot is null && ex.Poles.Count > 0
+                && ClearFoot(new PoleSpot(ex.Poles[0].Station, RightKerb: false, OnRefuge: false, 0), ex, a, P, clear) is var (lf, lLift))
+                leftFoot = (lf, Local(home, [lf], q => SampleAt(a, q), lLift)[1]);
+            // a gantry of lane signs with a head in each lane's band (#1110): where SITG has one (Geneva) or the rule wants one; the
+            // approach then has no other overhead heads
+            if (arms[k].In && gantries is not null && ex.CarStop is { } gStop
+                && PlaceGantry(gantries, jp, ex, (byte)k, gStop, P, u, right, mainFoot, leftFoot, canton, net, home, q => SampleAt(a, q), clear, result, stats) is { } gantry)
+            {
+                gantryList.Add(gantry);
+                continue;
+            }
+            // the heads over its lanes (#1037): on a mast arm, a portal or a tram street's span wire
             if (arms[k].In && ex.Overhead.Count > 0)
             {
-                if (leftFoot is null && ex.Poles.Count > 0
-                    && ClearFoot(new PoleSpot(ex.Poles[0].Station, RightKerb: false, OnRefuge: false, 0), ex, a, P, clear) is var (lf, lLift))
-                    leftFoot = (lf, Local(home, [lf], q => SampleAt(a, q), lLift)[1]);
                 bool tram = net.Links[a.LinkId].Tag is Source { Line.Osm.Tram: true };   // OSM railway=tram along the arm
                 if (PlaceOverhead(ex, (byte)k, P, u, right, mainFoot, leftFoot, refugeFoot, tram, home, q => SampleAt(a, q), clear, building, stats) is { } o)
                 {
@@ -250,6 +259,7 @@ public static partial class TileRewriter
         var centre = Local(home, [jp.Centre], p => SampleAt(jp.Arms[0], p), 0f);
         var record = new RoadSignal { X = centre[0], Y = centre[1], Z = centre[2], Stops = stops, Plan = plan, Poles = poles };
         record.Overheads.AddRange(overheads);
+        record.Gantries.AddRange(gantryList);
         Get(signals, home).Add(record);
         short index = (short)(Get(signals, home).Count - 1);
         foreach (var (k, at, stop) in records)

@@ -15,7 +15,7 @@ namespace UnitSport.Terrain;
 /// arrow; a pedestrian head faces across the crossing, below the car heads. Sizes from SSV Art. 70/71
 /// and the Kanton Zürich Wegleitung LSA (docs/notes/tools/traffic-signals.md).
 /// </summary>
-public static class SignalBuilder
+public static partial class SignalBuilder
 {
     private static readonly Color PoleColour = new(0.55f, 0.59f, 0.62f);   // RAL 7001 silver grey
     private static readonly Color Housing = new(0.07f, 0.07f, 0.08f);      // RAL 9017 traffic black
@@ -161,6 +161,8 @@ public static class SignalBuilder
             }
             foreach (var o in signal.Overheads)
                 Overhead(vertices, colors, uvs, uv2s, indices, signal.Plan, o, colour, rounded);
+            foreach (var g in signal.Gantries)
+                Gantry(vertices, colors, uvs, uv2s, indices, signal.Plan, g, colour);   // #1110
         }
     }
 
@@ -610,6 +612,7 @@ public static class SignalBuilder
                 Box(new Vector3(o.X, o.Y, o.Z), PostHalf);
                 if (o.Kind == OverheadKind.Portal) Box(new Vector3(o.EndX, o.EndY, o.EndZ), PostHalf);
             }
+        foreach (var foot in GantryFeet(tile)) Box(foot, GantryPostHalf);   // a gantry's posts (#1110)
         return faces.ToArray();
 
         void Box(Vector3 foot, float half)
@@ -707,6 +710,8 @@ public static class SignalBuilder
                 lamps.Lenses.Add(new Lens(Shape.Circle, new Transform3D(new Basis(lamp.Right, Vector3.Up, lamp.Front), lamp.At + lamp.Front * 0.006f),
                     j, lamp.Group, Role.Flash, Blink: lamp.Blink, Plate: lamp.Plate, PlateArrow: lamp.Arrow));
         }
+        // the heads in the gantries' bands (#1110)
+        for (int j = 0; j < tile.Signals.Count; j++) GantryLenses(tile.Signals[j], j, lamps);
         return lamps.Lenses.Count == 0 ? null : lamps;
     }
 

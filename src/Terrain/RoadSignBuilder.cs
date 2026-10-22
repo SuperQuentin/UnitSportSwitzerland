@@ -159,7 +159,9 @@ public static class RoadSignBuilder
     };
 
     /// <summary>A canton sign's name (#1038), tile-local: the middle of the text, the way the plate faces, the width it wraps to.</summary>
-    public readonly record struct Label(Vector3 Position, Vector3 Front, string Text, float Width);
+    /// <param name="Ink">The letters' colour, black when null (#1110: white on a gantry's green or blue sign).</param>
+    /// <param name="Scale">The letters' size to a canton sign's (#1110: a gantry sign's are read from afar).</param>
+    public readonly record struct Label(Vector3 Position, Vector3 Front, string Text, float Width, Color? Ink = null, float Scale = 1f);
 
     /// <summary>The names on the tile's canton signs (drawn as <see cref="Label3D"/>s beside the road mesh); null when it has none.</summary>
     public static Label[]? Labels(RoadTile tile)
@@ -178,11 +180,18 @@ public static class RoadSignBuilder
         return labels?.ToArray();
     }
 
+    /// <summary>The destinations on the tile's gantry signs (#1110): white letters on green and blue, black on white, larger than a canton sign's.</summary>
+    public static Label[]? GantryLabels(RoadTile tile) =>
+        SignalBuilder.GantryTexts(tile)?.Select(t => new Label(t.Position, t.Front, t.Text, t.Width, t.Dark ? Black : GantryInk, GantryScale)).ToArray();
+
+    private static readonly Color GantryInk = new(0.97f, 0.97f, 0.97f);
+    private const float GantryScale = 2.6f;
+
     /// <summary>A name as a node: black letters on the plate, wrapped to its width, seen from the front only.</summary>
     public static Label3D Make(Label label) => new()
     {
-        Text = label.Text, FontSize = NameFontSize, PixelSize = NamePixel, Modulate = Black, OutlineSize = 0,
-        AutowrapMode = TextServer.AutowrapMode.WordSmart, Width = label.Width / NamePixel,
+        Text = label.Text, FontSize = NameFontSize, PixelSize = NamePixel * label.Scale, Modulate = label.Ink ?? Black, OutlineSize = 0,
+        AutowrapMode = TextServer.AutowrapMode.WordSmart, Width = label.Width / (NamePixel * label.Scale),
         HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
         DoubleSided = false, AlphaCut = Label3D.AlphaCutMode.Discard,
         Transform = new Transform3D(Basis.LookingAt(-label.Front, Vector3.Up), label.Position),
