@@ -1060,6 +1060,9 @@ public sealed class AutoPilot
     /// A rider: pure pursuit to a point ~0.8 s ahead on the line, the bank that arc needs
     /// (<c>tan φ = v²κ/g</c>) as the steering command, pedal/throttle to the profile, brakes over it.
     /// </summary>
+    /// <summary>Seconds of look-ahead per second of <see cref="Rideable.SteerLag"/>.</summary>
+    private const float LagLook = 2.5f;
+
     private RideInput Ride(float dt, bool go, IEnumerable<Other> others)
     {
         if (!go) return new RideInput(0f, 1f, 0f, false);
@@ -1074,7 +1077,11 @@ public sealed class AutoPilot
         float s0 = Along(D.Near, pos);
         CountVerge(dt);
         var line = Route.Line;
-        float look = Mathf.Clamp(v * 0.8f, 5f, 60f);
+        // a mount whose lean lags the steering (Sim's road bike, #1124) is aimed further on: its turns
+        // start with a countersteer, a moment's yaw the wrong way, and chasing a point 0.8 s ahead
+        // through that, it weaves down a straight. Looking further is how a rider steers it smoothly
+        float lag = Player.Vehicle?.SteerLag ?? 0f;
+        float look = Mathf.Clamp(v * (0.8f + LagLook * lag), 5f, 60f);
         var ahead = Aim(s0, look, D.Lateral);
         var travel = RaceRoute.Flat(new Basis(Vector3.Up, m.Yaw) * Vector3.Forward);
         var to = RaceRoute.Flat(ahead - pos);

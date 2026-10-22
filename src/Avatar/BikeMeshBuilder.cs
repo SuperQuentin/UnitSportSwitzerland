@@ -19,15 +19,24 @@ public static class BikeMeshBuilder
     private const float TyreThickness = 0.028f;
     private const float RimDepth = 0.032f;
 
-    public static ArrayMesh Build(BikePalette? palette = null, bool includeCranks = true, BikeFrame? frame = null)
+    /// <summary>Which of the bike to build: all of it, or the frame and the steered front apart, to turn the bars (#1124).</summary>
+    public enum Parts { All, Rear, Front }
+
+    /// <param name="parts">
+    /// <see cref="Parts.Front"/> is the fork, front wheel, stem and bars, still in bike space: turn it
+    /// about the steering axis (<see cref="BikeFrame.HeadTop"/>, <see cref="BikeFrame.SteererUp"/>).
+    /// </param>
+    public static ArrayMesh Build(BikePalette? palette = null, bool includeCranks = true, BikeFrame? frame = null, Parts parts = Parts.All)
     {
         var f = frame ?? BikeFrame.Default;
         var p = palette ?? f.Spec.Look;
         var s = new MeshScratch();
 
         bool disc = f.Spec.Brakes == BikeBrakes.Disc;
+        if (parts != Parts.Rear) Front(s, f, p, disc);
+        if (parts == Parts.Front) return s.Build();
+
         Wheel(s, f, f.RearAxle, p, disc ? 0.070f : 0f);
-        Wheel(s, f, f.FrontAxle, p, disc ? 0.080f : 0f);
 
         // main triangle: the top tube meets the head tube just under its top, the down tube just
         // over its bottom, as the carbon lay-up does
@@ -56,17 +65,22 @@ public static class BikeMeshBuilder
             s.Tube(stayTop + new Vector3(side * 0.25f, 0, 0), axle, 0.011f, 0.009f, p.Frame);
         }
 
+        Saddle(s, f, p);
+        if (includeCranks) Cranks(s, p, 0f, f);
+
+        return s.Build();
+    }
+
+    /// <summary>The steered part: fork, front wheel, stem and bars.</summary>
+    private static void Front(MeshScratch s, BikeFrame f, BikePalette p, bool disc)
+    {
+        Wheel(s, f, f.FrontAxle, p, disc ? 0.080f : 0f);
         // fork: a crown under the head tube, two blades down to the axle
         var crown = f.HeadBottom - f.SteererUp * 0.020f;
         s.Tube(crown + new Vector3(-0.040f, 0, 0), crown + new Vector3(0.040f, 0, 0), 0.018f, p.Frame);
         foreach (float side in new[] { -0.050f, 0.050f })
             s.Tube(crown + new Vector3(side * 0.85f, 0, 0), f.FrontAxle + new Vector3(side, 0, 0), 0.016f, 0.010f, p.Frame);
-
         Cockpit(s, f, p);
-        Saddle(s, f, p);
-        if (includeCranks) Cranks(s, p, 0f, f);
-
-        return s.Build();
     }
 
     /// <summary>

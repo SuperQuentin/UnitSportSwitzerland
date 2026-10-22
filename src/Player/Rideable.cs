@@ -292,6 +292,12 @@ public abstract class Rideable
     public virtual bool CanHop => true;
 
     /// <summary>
+    /// How long a lean-steered mount takes to answer the steering, s: 0 when the bank follows the
+    /// input at once (<see cref="SteerByLean"/>). The autopilot looks that much further ahead (#1124).
+    /// </summary>
+    public virtual float SteerLag => 0f;
+
+    /// <summary>
     /// How far its steering wheel turns from lock to lock, radians; 0 for anything not steered by a
     /// wheel. A vehicle with one takes a real steering wheel's angle directly (<see cref="RideInput.WheelAngle"/>).
     /// </summary>

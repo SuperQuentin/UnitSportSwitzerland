@@ -121,16 +121,6 @@ public sealed class Bicycle : Rideable
     /// </summary>
     private const float MaxLean = 0.75f;
 
-    /// <summary>
-    /// Cap on yaw rate. The physical limit <c>ω = g·tanφ/v</c> goes to infinity as the bike
-    /// slows, which is true of a real bike — you can turn it on the spot at walking pace — but
-    /// left uncapped a mouse-flick at 1 m/s spins the rider like a top.
-    /// </summary>
-    private const float MaxYawRate = 1.8f;
-
-    /// <summary>How quickly the rider rolls into a lean, 1/s — ~0.2 s to most of the way.</summary>
-    private const float BankResponse = 5.5f;
-
     // ---- the Game profile (Rideable.Arcade): a much fitter, braver rider on the same physics ----
     /// <summary>Cruise and sprint, W. 350 W holds ~40 km/h on the flat, 900 W sprints past 55.</summary>
     private const float ArcadeWatts = 350f, ArcadeSprintWatts = 900f;
@@ -186,9 +176,10 @@ public sealed class Bicycle : Rideable
         bool arcade = Arcade;
         float grip = Motorbike.SurfaceGrip(ground.Surface, BikePhysics.TyreGrip, 0f);
         float maxLean = arcade ? ArcadeMaxLean : Mathf.Min(MaxLean, BikePhysics.GripLean(grip, _accel));
-        SteerByLean(ref motion, input.Steer, v,
-            maxLean, arcade ? ArcadeMaxYawRate : MaxYawRate,
-            arcade ? ArcadeBankResponse : BankResponse, WalkingPace, dt);
+        if (arcade)
+            SteerByLean(ref motion, input.Steer, v, maxLean, ArcadeMaxYawRate, ArcadeBankResponse, WalkingPace, dt);
+        else
+            Balance(ref motion, input.Steer, v, maxLean, riderMass, dt);
 
         // --- the rider's position: sprinting on the drops, a fast descent tucked, else the hoods
         Position = input.Effort && input.Throttle > 0.05f ? RidingPosition.Drops
@@ -251,14 +242,57 @@ public sealed class Bicycle : Rideable
         _cadence = pedalling ? Mathf.Min(MeasuredCadence ?? rpm, 150f) : 0f;
     }
 
+    // ---- Sim's steering: the Whipple bicycle and its rider (#1124) ----
+    private RiderBalance? _balance;
+    private float _balanceMass = float.NaN;
+
+    /// <summary>Sim: the rider's lean takes ~2ζ/ω to answer, the time a damped spring's response lags its input.</summary>
+    public override float SteerLag => Arcade ? 0f : 2f * RiderBalance.LeanDamping / RiderBalance.LeanFrequency;
+
+    /// <summary>The bars' angle, rad, + to the rider's right: the rider's hands on the Whipple model's steer.</summary>
+    public float SteerAngle { get; private set; }
+
+    /// <summary>
+    /// Sim's steering: the input asks for a lean, the rider steers the bars to get there, and the bike
+    /// leans and turns as the Whipple equations for this frame and this rider say (<see cref="RiderBalance"/>).
+    /// Countersteer, the wobble at walking pace and the steadiness at speed all come out of them.
+    /// </summary>
+    private void Balance(ref RideMotion motion, float steer, float v, float maxLean, float riderMass, float dt)
+    {
+        // the rider's weight is in the matrices: a new one, a new model
+        if (_balance == null || riderMass != _balanceMass)
+        {
+            float was = _balance?.Roll ?? 0f;
+            _balance = new RiderBalance(new WhippleModel(WhippleParameters.For(Frame, riderMass, Kit)));
+            _balance.Reset(was);
+            _balanceMass = riderMass;
+        }
+        // the paper's signs: + right for roll, steer and yaw; Godot's yaw is + left and SteerByLean's
+        // bank takes the yaw's sign, so the game's lean is the paper's roll negated
+        float target = steer * maxLean;
+        float yaw = _balance.Step(v, target, maxLean, dt);
+        // the linearized model turns as tan φ ≈ φ: at 40° it would under-turn by 10%. A steady turn
+        // turns at g·tanφ/v whatever the equations' order, so the yaw is scaled to that
+        float roll = _balance.Roll;
+        if (Mathf.Abs(roll) > 0.01f) yaw *= Mathf.Tan(roll) / roll;
+
+        motion.Bank = -target;
+        motion.Lean = -roll;
+        motion.YawRate = -yaw;
+        motion.Yaw += motion.YawRate * dt;
+        SteerAngle = _balance.Steer;
+    }
+
     public override void Animate(Node3D visual, in RideMotion motion, float dt)
     {
-        if (visual is Cyclist cyclist) cyclist.CadenceRpm = _cadence;
+        if (visual is not Cyclist cyclist) return;
+        cyclist.CadenceRpm = _cadence;
+        cyclist.SteerAngle = Arcade ? 0f : SteerAngle;
     }
 
     /// <summary>Cadence, and the crank angle itself so a remote rider's legs are where the owner's are.</summary>
     public override Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight) =>
-        visual is Cyclist c ? new Vector4(c.CadenceRpm, c.CrankAngle, 0, 0) : default;
+        visual is Cyclist c ? new Vector4(c.CadenceRpm, c.CrankAngle, c.SteerAngle, 0) : default;
 
     private float _seenCrank = float.NaN;
 
@@ -266,6 +300,7 @@ public sealed class Bicycle : Rideable
     {
         if (visual is not Cyclist cyclist) return;
         cyclist.CadenceRpm = pose.X;
+        cyclist.SteerAngle = pose.Z;
         // a fresh angle is taken as-is; between updates the cadence turns it
         if (pose.Y != _seenCrank) cyclist.SetCrankAngle(_seenCrank = pose.Y);
     }

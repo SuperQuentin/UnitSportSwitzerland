@@ -36,6 +36,34 @@ public partial class Cyclist : Node3D
 
     private float _crankAngle;
     private float _cadenceRpm;
+    private MeshInstance3D? _front;
+    private float _steer;
+
+    /// <summary>
+    /// The bars' angle, rad, + to the rider's right (#1124): the fork, front wheel and bars turn
+    /// about the steering axis. The hands stay where the rig put them, so this is for the few degrees
+    /// a bike is steered at speed, not a walking-pace full lock.
+    /// </summary>
+    public float SteerAngle
+    {
+        get => _steer;
+        set
+        {
+            if (value == _steer) return;
+            _steer = value;
+            ApplySteer();
+        }
+    }
+
+    private void ApplySteer()
+    {
+        if (_front == null) return;
+        // facing +Z the rider's right is −X, and a positive turn about the steerer (up) swings the
+        // front toward +X: steering right is a negative angle
+        var pivot = Frame.HeadTop;
+        var turn = new Basis(Frame.SteererUp, -_steer);
+        _front.Transform = new Transform3D(turn, pivot - turn * pivot);
+    }
 
     /// <summary>
     /// Steps of a crank revolution the cranks and legs are drawn at (#221): both depend on the crank
@@ -107,9 +135,18 @@ public partial class Cyclist : Node3D
         AddChild(new MeshInstance3D
         {
             Name = "Bike",
-            Mesh = BikeMeshBuilder.Build(bikePalette, includeCranks: false),
+            Mesh = BikeMeshBuilder.Build(bikePalette, includeCranks: false, parts: BikeMeshBuilder.Parts.Rear),
             MaterialOverride = material,
         });
+        // the fork, front wheel and bars turn about the steering axis (#1124)
+        _front = new MeshInstance3D
+        {
+            Name = "Front",
+            Mesh = BikeMeshBuilder.Build(bikePalette, includeCranks: false, parts: BikeMeshBuilder.Parts.Front),
+            MaterialOverride = material,
+        };
+        AddChild(_front);
+        ApplySteer();
 
         // rider without legs: those are separate so they can be driven by the cranks
         _rider = new MeshInstance3D
