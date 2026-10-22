@@ -17,8 +17,14 @@ public sealed class OsmOverlayReader
         string LanesFwd, string LanesBwd, string Width, string SidewalkLeft, string SidewalkRight,
         string CyclewayLeft, string CyclewayRight, bool Roundabout, bool Tram,
         TurnMove[] TurnLanesFwd, TurnMove[] TurnLanesBwd, int MaxSpeedFwd = 0, int MaxSpeedBwd = 0,
-        string BikeLanesFwd = "", string BikeLanesBwd = "")
+        string BikeLanesFwd = "", string BikeLanesBwd = "", string DestFwd = "", string DestBwd = "", string DestLanesFwd = "", string DestLanesBwd = "")
     {
+        /// <summary>
+        /// The destinations OSM signs for traffic in TLM drawing order (forward) or against it (#1110, v4): the way's (<c>destination</c>,
+        /// <c>;</c> between them) and per lane (<c>destination:lanes</c>, <c>|</c> between lanes, left to right).
+        /// </summary>
+        public (string Way, string Lanes) Destinations(bool forward) => forward ? (DestFwd, DestLanesFwd) : (DestBwd, DestLanesBwd);
+
         /// <summary>The speed limit (km/h, #711) for traffic in TLM drawing order (forward) or against it, 0 where OSM has none.</summary>
         public int MaxSpeed(bool forward) => forward ? MaxSpeedFwd : MaxSpeedBwd;
     }

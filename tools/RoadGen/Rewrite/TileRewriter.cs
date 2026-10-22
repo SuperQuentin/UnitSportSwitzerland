@@ -290,6 +290,7 @@ public static partial class TileRewriter
         var blocks = GroupIntoBlocks(targets, options.BlockSize);
         // gantries of lane signs (#1110): SITG's in canton Geneva, the rule elsewhere
         var gantries = options.Gantries ? GantryContext.Load(options.SitgSigns, options.Places) : null;
+        if (gantries is not null) gantries.Overlay = overlay;
         if (gantries?.Sitg is { } sitg) log($"  SITG lane signs (#1110): {sitg.Gantries.Count:N0} gantries from {options.SitgSigns}");
 
         var session = new Session(options, new Inputs

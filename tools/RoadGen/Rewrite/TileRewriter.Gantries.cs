@@ -18,6 +18,8 @@ public sealed class GantryContext
     public SitgGantries? Sitg { get; init; }
     public GantryRule Rule { get; init; } = GantryRule.Default;
     public IReadOnlyList<Place> Places { get; init; } = [];
+    /// <summary>OSM's <c>destination</c> and <c>destination:lanes</c> (overlay v4) for the signs' text where SITG has none.</summary>
+    public UnitSport.Tools.RoadGen.Import.OsmOverlayReader? Overlay { get; set; }
     /// <summary>Every lit approach's facts, with what was built there (rows of <c>gantry_facts.tsv</c>).</summary>
     public ConcurrentQueue<string> Facts { get; } = new();
 
@@ -126,6 +128,7 @@ public static partial class TileRewriter
         if (sitgSigns is not null && sitgSigns.Count > runs.Count && sitgSigns.Count(s => s.Osr == "4.41") >= runs.Count)
             sitgSigns = sitgSigns.Where(s => s.Osr == "4.41").ToList();   // the minor roads' signs go first where too many
         var assign = sitgSigns is null ? null : SitgGantries.Assign(runs.Count, sitgSigns.Count);
+        var osm = sitgSigns is null ? OsmDestinations(ctx.Overlay, net.Links[a.LinkId], a.AtEnd) : null;
         var signs = new List<GantrySign>();
         var colours = new List<string>();
         for (int r = 0; r < runs.Count; r++)
@@ -141,7 +144,20 @@ public static partial class TileRewriter
                 colour = motorway ? SignColour.Green : s.Osr == "4.42" ? SignColour.White : SignColour.Blue;
                 lines = names.Count == 0 ? [] : names.Select((n, k) => k == 0 && motorway ? SignGantry.MotorwayMark + n : n).ToList();
             }
-            else (colour, lines) = Destinations(ctx, at, bearing, moves, facts, motorways);
+            else
+            {
+                (colour, lines) = Destinations(ctx, at, bearing, moves, facts, motorways);
+                // OSM's destinations where it maps them: the lane's own (destination:lanes, as many lanes as here), else the way's for
+                // the lanes straight on
+                string? named = osm is var (way, perLane) && perLane.Length == lanes.Count ? perLane[runs[r].From]
+                    : osm is var (way2, _) && (moves & SignalMoves.Through) != 0 && way2 != "" ? way2 : null;
+                if (!string.IsNullOrWhiteSpace(named))
+                {
+                    var names = named.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Take(3).ToList();
+                    lines = colour == SignColour.Green ? names.Select((n, k) => k == 0 ? SignGantry.MotorwayMark + n : n).ToList() : names;
+                    stats.GantrySignsOsm++;
+                }
+            }
             // the benchmark (#1110): the colour the rule's inference would give beside SITG's
             if (sitgSigns is not null) colours.Add($"{"BGW"[(int)Destinations(ctx, at, bearing, moves, facts, motorways).Item1]}{"BGW"[(int)colour]}");
             signs.Add(new GantrySign
@@ -162,6 +178,20 @@ public static partial class TileRewriter
             Arm = arm, Lit = true, X = fa[0], Y = fa[1], Z = fa[2], EndX = fb[0], EndY = fb[1], EndZ = fb[2],
             Bottom = road + GantryLowerEdge, Heading = Heading(u), Signs = signs,
         };
+    }
+
+    /// <summary>
+    /// OSM's destinations for the traffic arriving at the link's junction end (#1110, overlay v4): the way's (<c>;</c> between
+    /// names) and per lane, left to right; null where the row has neither.
+    /// </summary>
+    private static (string Way, string[] Lanes)? OsmDestinations(UnitSport.Tools.RoadGen.Import.OsmOverlayReader? overlay, RoadLink link, bool atEnd)
+    {
+        if (overlay is null || link.Tag is not Source { Key: { } key } source || source.Plan.Length < 2) return null;
+        double m = key.FromM + source.AlongOf(atEnd ? source.Plan[^1] : source.Plan[0]);
+        if (overlay.AtEnd(key.Uuid, key.Part, m, atEnd) is not { } row) return null;
+        var (way, lanes) = row.Destinations(atEnd);
+        if (way == "" && lanes == "") return null;
+        return (way, lanes == "" ? [] : lanes.Split('|'));
     }
 
     /// <summary>
