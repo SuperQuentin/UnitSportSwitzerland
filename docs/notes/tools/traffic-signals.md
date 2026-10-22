@@ -417,6 +417,45 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   Model viewer: "Traffic light - Flasher, pedestrian / bike / arrow plate", "Flasher, left turn on the left pole" (with another
   approach's left-turn lamp over the main pole's heads, the crossing's pole case), "Permissive left, ball / arrow / uncombined
   arrow".
+- **Far-side pole, one lamp per turn** (#1117, the user, after #1116; supersedes the placement and plate rules above where they
+  differ). Where the approach has no left pole, its left turn's lamp stands on the **far-side pole** of the arm it turns into
+  ("for a turn-into flasher, it should be on the far side pole"): that arm's kerb pole furthest from its main pole (its left pole
+  or a walkers' pole, never an island's), across the junction where the turning car arrives, **beside the pole on its side away
+  from that exit** (the user: "it's better if the far side lamp fit on the side of the pole, pointing away from the exit"; its own
+  heads stand out toward that exit's drivers), `SideReach` 0.42 m out from the pole's side (clear of a walkers' head in front of
+  it, Geneva's 0.21 m half width), level with a car head's green there, held from the pole, facing this approach turned 45 deg
+  toward the junction (the user: "angled a little bit more to the incoming traffic (45deg)", the turning cars coming in);
+  that arm's main pole (near corner) only where it has no other; with no pole there at all, on the head's own left on the main
+  pole (`RoadSignal.LeftFlasherPole`: `SecondPole`, `FarSidePole`, `NearSidePole`, `MainPole`). **One lamp per turn**, its plate
+  from everything that turn gives way to while green (`SignalPlan.TurnPlate`): walkers only a walker, riders only a bike,
+  anything else (a mix, or oncoming cars or trams, `LeftGivesWayTo`) the turn's arrow ("bike if only bike, pedestrian if only
+  pedestrian, arrow if mix of conflicts"); no lamp of its own for the oncoming cars: a left turn's lamp exists where it crosses
+  walkers or riders, or where a combined arrow shows it giving way, and flashes for all of them (`TurnFlash`). A ball still
+  flashes its own yellow for the oncoming cars; an uncombined arrow still flashes its yellow in place of its green, no lamp.
+  Found by the user: J3b's south approach (left and straight on, giving way to the oncoming north arm and crossing its bike lane)
+  had one lamp showing a bike; now the left arrow. Test region: lamps main pole 22, left pole 3, far-side pole 7; plates walker 6,
+  bike 12, arrow 14 (left 7, right 7). Geneva centre: lamps main pole 419, head's left 40, left pole 95, far-side pole 174,
+  near-side pole 16; plates walker 348, bike 60, arrow 336 (left 140, right 196); no double arrow left. Tier 0
+  `SignalBuilderTests.LeftTurnsFlasher_StandsByTheLeftCrosswalk` (far side, near side, left pole, none),
+  `SignalPlanTests.FlasherPlate_*`, `SignalTestRegionTests.Flashers_say_what_they_warn_of_and_permissive_lefts_flash` (J3b south).
+- **Every turn lane its own head, protected where the phases allow** (#1119, the user: "whenever there is a left turn only
+  lane at a light, it should get its own light, even if permissive. same for right turns"; "usually permissive lefts are pretty
+  rare in Switzerland, especially with a turn lane"; "even right turns with their own lanes are usually protected"). A T's stem
+  with a left and a right lane (no through) gets a left and a right arrow group and head (it had one group, a ball). A right
+  arrow no phase carries (its exit's walkers or riders green in every phase of its approach) now goes with its approach
+  **protected**, those walkers and riders held red in that phase, where they keep a green in another phase and it crosses no
+  two-stage half (its island wait past a third, #1030); no phase is added, the schemes hold (`FullCrossroads_RunsTheSixPhases`
+  unchanged). Else, as before, a full green giving way, its yellow arrow flashing in place of the green (#1109): a crossroads
+  without left pockets, whose exit walkers cross the cross road in the other phase (tier 0
+  `RightPocketWithoutOverlap_GoesWithItsApproachAndTheFlasher`). Left pockets stay protected (never permissive). Test region:
+  permissive right arrows 4 -> 1 (2910750,1321400 arm 0 left: its walkers have no other green), J3b 80 -> 79 s, J4's stem two
+  arrows; other cycles unchanged; `--trafficcheck` at J3 and J4: no red run. Geneva centre (rewrite copy, 246 lit junctions, 0
+  invalid): permissive right arrows 29 -> 28 (the rest: crossroads without a left pocket, their exit's walkers green in no other
+  phase: protecting them needs a phase, #1119 adds none), 13 cycles changed, 9 longer (42 -> 58, 37 -> 51, 45 -> 56, 75 -> 84,
+  80 -> 89 s, ...), 1 shorter, longest 115 s as before. Found on Geneva: a stem with a left and a right lane and no main lane
+  whose right arrow could not be protected was put with a main lane it no longer had (never green, plan not written; tier 0
+  `FromGeneva_AStemWithTwoLanes...`). Tier 0 `TeeStem_WithALeftAndARightLane_*`,
+  `RightPocket_ProtectedWithItsApproach_*`, `SignalTestRegionTests.Turn_lanes_have_their_own_heads_and_are_protected_where_the_phases_allow`.
 - **Trams** (#1057): a tram group per approach a tram track enters by, the tram bar heads beside the car heads: `tram-approaches`.
 - **Not done**: one record for a junction of several nodes (the internal links are only kept
   clean); OSM `turn:lanes` not read yet, restrictions only for the lane records (a left pocket is

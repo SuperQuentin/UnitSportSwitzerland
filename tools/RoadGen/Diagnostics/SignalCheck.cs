@@ -101,24 +101,26 @@ public static class SignalCheck
                 var conflicts = p.Conflicts();
                 for (int g = 0; g < p.Groups.Count; g++)
                 {
-                    // (an uncombined arrow's flasher has no lamp: its own yellow flashes, counted below; a left turn's crossings get a
-                    // lamp of their own on the pole by the left crosswalk, as SignalBuilder places it)
-                    if (p.Groups[g].Kind == SignalGroupKind.Flasher && p.Groups[p.Groups[g].Qualifies].Kind == SignalGroupKind.Car
-                        && !(p.Groups[p.Groups[g].Qualifies].Moves is SignalMoves.Left or SignalMoves.Right && ArrowShown(p, p.Groups[g].Qualifies)))
+                    // one lamp per turn, as SignalBuilder places them (#1109, #1117): the right turn's beside the head where it crosses
+                    // walkers or riders; the left turn's where it does, or a combined arrow shows it giving way to oncoming traffic, on a
+                    // pole by the left crosswalk, else on the head's left; an uncombined arrow none (its own yellow flashes, below)
+                    if (p.Groups[g].Kind == SignalGroupKind.Car && !(p.Groups[g].Moves is SignalMoves.Left or SignalMoves.Right && ArrowShown(p, g)))
                     {
-                        int q = p.Groups[g].Qualifies;
-                        var (pole, site) = s.LeftFlasherPole(q);
-                        bool away = pole >= 0 && site != FlasherSite.MainPole && p.PlateOf(g, conflicts, SignalMoves.Left).Plate != SignalPlate.None;
-                        foreach (var (turns, onPole) in away
-                            ? new[] { (SignalMoves.Right, "main pole"), (SignalMoves.Left, site == FlasherSite.SecondPole ? "left pole" : "crossing's pole") }
-                            : new[] { (SignalMoves.Left | SignalMoves.Right, "main pole") })
+                        int f = p.Groups.FindIndex(x => x.Kind == SignalGroupKind.Flasher && x.Qualifies == g);
+                        var (pole, site) = s.LeftFlasherPole(g);
+                        bool right = f >= 0 && p.Warns(f, SignalMoves.Right, conflicts);
+                        bool left = (p.Groups[g].Moves & SignalMoves.Left) != 0 && (f >= 0 && p.Warns(f, SignalMoves.Left, conflicts)
+                            || ArrowShown(p, g) && p.LeftGivesWayTo(g, conflicts).Count > 0);
+                        string leftPole = pole < 0 || site == FlasherSite.MainPole ? "main pole, the head's left"
+                            : site switch { FlasherSite.SecondPole => "left pole", FlasherSite.FarSidePole => "far-side pole", _ => "near-side pole" };
+                        foreach (var (turns, onPole, has) in new[] { (SignalMoves.Right, "main pole", right), (SignalMoves.Left, leftPole, left) })
                         {
-                            var (plate, arrow) = p.PlateOf(g, conflicts, turns);
-                            if (plate == SignalPlate.None) continue;
+                            if (!has) continue;
+                            var (plate, arrow) = p.TurnPlate(g, turns, conflicts);
                             string key = plate == SignalPlate.Arrow ? $"arrow {arrow}" : plate.ToString().ToLowerInvariant();
                             plates[key] = plates.GetValueOrDefault(key) + 1;
                             sites[onPole] = sites.GetValueOrDefault(onPole) + 1;
-                            if (list && (plate == SignalPlate.Arrow || onPole != "main pole")) leftAt.Add(string.Create(c, $"    {where} arm {p.Groups[q].Arm}: flasher of {p.Groups[q].Moves} on the {onPole}, plate {key}"));
+                            if (list && (plate == SignalPlate.Arrow || onPole != "main pole")) leftAt.Add(string.Create(c, $"    {where} arm {p.Groups[g].Arm}: {turns} lamp of {p.Groups[g].Moves} on the {onPole}, plate {key}"));
                         }
                     }
                     if (p.Groups[g].Kind != SignalGroupKind.Car) continue;
@@ -132,7 +134,7 @@ public static class SignalCheck
                     // (a ball flashes its yellow, a combined arrow with the left gets a flasher on its left)
                     bool arrowHead = ArrowShown(p, g), single = arrowHead && p.Groups[g].Moves == SignalMoves.Left;
                     if (single) singleLefts++; else if (arrowHead) arrowLefts++; else ballLefts++;
-                    if (list || leftAt.Count < 6) leftAt.Add(string.Create(c, $"    {where} arm {p.Groups[g].Arm} {p.Groups[g].Moves}: {(single ? "left arrow alone, its yellow flashes for its green" : arrowHead ? "combined arrow head, flasher on its left" : "ball, its yellow flashes")}"));
+                    if (list || leftAt.Count < 6) leftAt.Add(string.Create(c, $"    {where} arm {p.Groups[g].Arm} {p.Groups[g].Moves}: {(single ? "left arrow alone, its yellow flashes for its green" : arrowHead ? "combined arrow head, its left turn's lamp" : "ball, its yellow flashes")}"));
                 }
                 if (list) log(string.Create(c, $"  {where}: {shape}, {p.Arms.Count(a => a.RightPocket)} right pockets, cycle {p.Cycle:F0} s, {p.Groups.Count} groups{(stages > 0 ? $", {stages} two-stage crossings" : "")}{(p.ConflictTimed ? ", conflict-timed" : "")}{(s.Overheads.Count > 0 ? ", overhead: " + string.Join(" ", s.Overheads.Select(o => $"arm {o.Arm} {o.Kind} x{o.Heads.Count}")) : "")}"));
                 if (at is not null)
@@ -156,7 +158,7 @@ public static class SignalCheck
         log("  cycles s: " + string.Join(", ", cycles.Select(kv => $"{kv.Key} x{kv.Value}")));
         log(string.Create(c, $"  two-stage crossings (#1030): {stageArms} at {stageJunctions} junctions; island waits over a third of the cycle {longWaits.Count}"));
         foreach (var wait in longWaits.Take(list ? int.MaxValue : 10)) log(wait);
-        log(string.Create(c, $"  flasher plates (#1109): {(plates.Count == 0 ? "none" : string.Join(", ", plates.Select(kv => $"{kv.Key} x{kv.Value}")))}; permissive lefts: {ballLefts} balls flashing their yellow, {arrowLefts} combined arrow heads with a flasher on their left, {singleLefts} left arrows alone flashing their yellow for their green; right arrows alone flashing theirs: {singleRights} (pole heads; overhead lane heads not counted)"));
+        log(string.Create(c, $"  flasher plates (#1109): {(plates.Count == 0 ? "none" : string.Join(", ", plates.Select(kv => $"{kv.Key} x{kv.Value}")))}; permissive lefts: {ballLefts} balls flashing their yellow, {arrowLefts} combined arrow heads with a left-turn lamp, {singleLefts} left arrows alone flashing their yellow for their green; right arrows alone flashing theirs: {singleRights} (pole heads; overhead lane heads not counted)"));
         log("  flasher lamps by pole (#1109, a left turn's by the left crosswalk): " + (sites.Count == 0 ? "none" : string.Join(", ", sites.Select(kv => $"{kv.Key} x{kv.Value}"))));
         foreach (var l in leftAt) log(l);
         if (nearest is { } near) log(near.Text);
