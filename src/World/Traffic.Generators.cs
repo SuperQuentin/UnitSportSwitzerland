@@ -198,7 +198,9 @@ public partial class Traffic
             if (s.Graph is not null && OnGraph(s.Graph, ep.Mode, at, SnapReach, -heading) is var (outEdge, outPos, outTangent))
             {
                 s.OutEdge = outEdge;
-                s.OutPos = outPos;
+                // (not at its very end: a mover reaching an edge's end is on its next leg before it is past it; J3's west sidewalks
+                // are 19 m pieces that their endpoints snapped to the ends of, and no walker ever arrived)
+                s.OutPos = Mathf.Clamp(outPos, Mathf.Min(1f, outEdge.Length * 0.5f), Mathf.Max(outEdge.Length - 1f, outEdge.Length * 0.5f));
                 s.OutForward = outTangent.Dot(heading) >= 0f;
             }
             _endpoints[ep.Id] = s;
