@@ -76,3 +76,18 @@ for the rule: run it with SITG ignored and compare with SITG's gantries.
 - **Facts and benchmark**: every lit approach's facts go to `<temp>/gantry_facts.tsv` (stop line, way, lanes, street lanes,
   lane ways, importance, owner, class, motorway distance, canton, what was built, SITG signs vs runs, rule vs SITG colours).
   `RoadGen --gantry-benchmark <temp>` scores `GantryRule` on Geneva's approaches against SITG and sweeps its thresholds.
+
+## Benchmark (Oct 22 2026, 109 tiles E 2492-2504 N 1110-1125, copy `D:\UnitSportSwitzerland\test1110\geneva-wide`)
+
+- 1,153 lit approaches (1,149 in Geneva). SITG has 103 lane-sign gantries in the area; only 6 stand over one of them (within
+  60 m before the line: 7 approaches); 15 approaches have lane signs within 200 m before the line (the scored truth). The rest
+  are advance signs, or at lights the region does not infer (the user's photo 1, Route de Lausanne northbound, is one: no lit
+  approach there).
+- The user's plan (three lanes, or two going two ways; a main road or a motorway within 1 km): 2 hits, 13 misses, 216 false
+  (F1 0.02). The sweep's best, now `GantryRule.Default` (two lanes, from a 2+2 street, a main road within 300 m of a motorway,
+  expressway or ramp): 4 hits, 11 misses, 8 false (precision 33 %, recall 27 %, F1 0.30); strict truth 2 hits, 5 misses, 10
+  false. 14 of the 15 lie within 600 m of a motorway against 12 % of all lit approaches; the lane count barely helps: most of
+  them have one lane at the line in our model (SITG shows two signs over them: our lanes undercount there).
+- Where SITG builds them (4 gantries; 3 more wanted with no clear ground for a post): signs as many as the lane runs 2 of 4 (the
+  other 2: SITG has more signs); colours from the inference against SITG's 2 of 4 (1 of 4 with green at 2 km / 45 deg).
+- Small numbers: the rule is a fallback, not a measurement. Rerun with `RoadGen --rewrite` then `--gantry-benchmark <temp>`.
