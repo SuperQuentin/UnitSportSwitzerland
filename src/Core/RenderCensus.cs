@@ -43,7 +43,7 @@ public static class RenderCensus
         var sb = new StringBuilder("[census] triangles of visible meshes, by branch:\n");
         foreach (var (key, v) in sums.OrderByDescending(kv => kv.Value.Tris).Take(25))
             sb.Append(System.FormattableString.Invariant($"  {v.Tris / 1000.0,9:F0}k  {v.Nodes,6} nodes  {key}\n"));
-        sb.Append(System.FormattableString.Invariant($"  total {sums.Values.Sum(v => v.Tris) / 1e6:F2} M"));
+        sb.Append(System.FormattableString.Invariant($"  total {sums.Where(kv => !kv.Key.StartsWith('*')).Sum(kv => kv.Value.Tris) / 1e6:F2} M"));
         GD.Print(sb.ToString());
     }
 
@@ -64,6 +64,10 @@ public static class RenderCensus
             string key = string.Join('/', path.Take(Math.Min(CmdArgs.Int("--rendercensus", 2) ?? 3, path.Length - 1)));
             sums.TryGetValue(key, out var v);
             sums[key] = (v.Item1 + tris, v.Item2 + 1);
+            // and by what the mesh is, whatever tile it is in: its own name without numbers
+            string kind = "* " + System.Text.RegularExpressions.Regex.Replace(node.Name.ToString(), "[0-9_@]+", "") + $" ({node.GetClass()})";
+            sums.TryGetValue(kind, out v);
+            sums[kind] = (v.Item1 + tris, v.Item2 + 1);
         }
         foreach (var c in node.GetChildren()) Walk(c, root, sums);
     }

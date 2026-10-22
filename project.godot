@@ -200,6 +200,8 @@ portal_clip_plane_3={
 [xr]
 
 openxr/enabled.quest=true
+openxr/foveation_level.quest=3
+openxr/foveation_dynamic.quest=true
 openxr/extensions/meta/dynamic_resolution=false
 openxr/extensions/hand_tracking=true
 openxr/extensions/hand_tracking_unobstructed_data_source=true

@@ -585,7 +585,8 @@ public static class StyleKit
         }
         if (StyleFinish == Finish.Cartoon)
         {
-            env.BackgroundMode = Godot.Environment.BGMode.Sky;
+            // "--nosky": the flat background colour, to measure what the sky costs a headset (#1112)
+            if (!Core.CmdArgs.Has("--nosky")) env.BackgroundMode = Godot.Environment.BGMode.Sky;
             env.Sky = new Sky { SkyMaterial = new ProceduralSkyMaterial { SunAngleMax = 20f, SkyCurve = 0.12f } };
             env.TonemapMode = Godot.Environment.ToneMapper.Filmic;
             env.TonemapExposure = 1.05f;
