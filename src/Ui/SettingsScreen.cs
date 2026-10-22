@@ -65,8 +65,12 @@ public partial class SettingsScreen : Screen
                 SizeRow(rows, "Window size", WindowSizes(), s.WindowWidth, s.WindowHeight, "Keep current",
                     (w, h) => (GameSettings.Current.WindowWidth, GameSettings.Current.WindowHeight) = (w, h));
             }
-            ScaleRow(rows, "3D resolution", s.RenderScale, v => GameSettings.Current.RenderScale = v);
-            AntiAliasingRow(rows, s.AntiAliasing);
+            // a standalone headset's window draws no world (#1112): its picture is the VR rows' below
+            if (!Platform.IsStandaloneVr)
+            {
+                ScaleRow(rows, "3D resolution", s.RenderScale, v => GameSettings.Current.RenderScale = v);
+                AntiAliasingRow(rows, s.AntiAliasing);
+            }
             int[] imag = { 256, 512, 1024 };
             UiKit.OptionRow(rows, "Concert screens", new[] { "Low (256x144)", "Medium (512x288)", "High (1024x576)" },
                 Math.Max(0, Array.IndexOf(imag, s.ConcertScreenWidth)), i => GameSettings.Current.ConcertScreenWidth = imag[i],
@@ -86,7 +90,8 @@ public partial class SettingsScreen : Screen
                     styleOption.SetItemText(i, $"{Styles.StyleKit.Label(styles[i])} (in development)");
                     styleOption.SetItemDisabled(i, true);
                 }
-            UiKit.ToggleRow(rows, "VSync", s.VSync, on => GameSettings.Current.VSync = on);
+            if (!Platform.IsStandaloneVr) // the headset paces the frames
+                UiKit.ToggleRow(rows, "VSync", s.VSync, on => GameSettings.Current.VSync = on);
             UiKit.ToggleRow(rows, "Distance fog", s.Fog, on => GameSettings.Current.Fog = on, "Off by default: the far horizon is the point");
             UiKit.ToggleRow(rows, "Speed lines", s.SpeedLines, on => GameSettings.Current.SpeedLines = on, "Streaks at the screen edge at speed");
             // VR is a relaunch with OpenXR (#63); a standalone headset is always in it (#1112)

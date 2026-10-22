@@ -127,7 +127,8 @@ GRADLE_OPTS="${GRADLE_OPTS:-} -Dorg.gradle.daemon=false" \
   "$GODOT" --headless --path . --install-android-build-template "--export-$KIND" "Quest" "$OUT" || true
 [ -s "$OUT" ] || { echo "The export produced no APK"; exit 1; }
 # a failed dotnet publish still writes an APK, just without the game
-unzip -l "$OUT" | grep -q '/UnitSportSwitzerland\.dll$' || { echo "The APK has no UnitSportSwitzerland.dll"; exit 1; }
+# (counted, not grep -q: an early exit breaks unzip's pipe, which pipefail reports as a failure)
+[ "$(unzip -l "$OUT" | grep -c '/UnitSportSwitzerland\.dll$')" -gt 0 ] || { echo "The APK has no UnitSportSwitzerland.dll"; exit 1; }
 echo "Quest APK: $OUT ($(du -h "$OUT" | cut -f1))"
 
 if [ $INSTALL = 1 ]; then

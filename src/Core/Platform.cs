@@ -11,15 +11,16 @@ namespace UnitSport.Core;
 /// </summary>
 public static class Platform
 {
-    /// <summary>Android (or iOS), or a desktop run with <c>--mobile</c>.</summary>
+    /// <summary>Android (or iOS), or a desktop run with <c>--mobile</c> or <c>--quest</c>.</summary>
     public static readonly bool IsMobile =
-        OS.GetName() is "Android" or "iOS" || CmdArgs.Has("--mobile");
+        OS.GetName() is "Android" or "iOS" || CmdArgs.Has("--mobile") || CmdArgs.Has("--quest");
 
     /// <summary>
     /// A standalone headset (Meta Quest, #1112): the Android export with the <c>quest</c> feature
     /// (<c>tools/quest.sh</c>). It starts in VR and stays there; there is no touch screen and no monitor.
+    /// <c>--quest</c> makes a desktop run behave the same (with <c>--xrsim</c>, to check it without a headset).
     /// </summary>
-    public static readonly bool IsStandaloneVr = OS.HasFeature("quest");
+    public static readonly bool IsStandaloneVr = OS.HasFeature("quest") || CmdArgs.Has("--quest");
 
     /// <summary>A touch screen is the input: a phone (or <c>--mobile</c>), not a standalone headset.</summary>
     public static bool IsTouch => IsMobile && !IsStandaloneVr;

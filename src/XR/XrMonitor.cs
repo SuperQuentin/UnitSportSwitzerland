@@ -94,7 +94,8 @@ public partial class XrMonitor : CanvasLayer
         var s = Core.GameSettings.Current;
         foreach (var c in _cams) c.Far = s.CameraFar;
         // a standalone headset (#1112): nobody watches its window, so it renders no world at all
-        var mode = Platform.IsStandaloneVr ? MonitorView.Off : s.VrMonitor;
+        // (with --xrsim the window is the only view, so it keeps the first-person one)
+        var mode = Platform.IsStandaloneVr ? XrSession.Simulated ? MonitorView.FirstPerson : MonitorView.Off : s.VrMonitor;
         if (mode == _mode) return;
         _mode = mode;
 

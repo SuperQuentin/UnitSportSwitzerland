@@ -34,5 +34,9 @@ The same VR mode as over Link (`setup`, `rig`, `controls`), run on the headset's
   `XrSession.TryStart` finds it running. Nothing relaunches (Android cannot), and the VR toggles (title, Settings)
   are hidden: `CanSpawnProcesses` is false. Settings keeps the headset's own rows (resolution, MSAA, turning, comfort).
 - **72 Hz** (`XrSession`): the Quest 2's own GPU budget. Over Link it stays 90.
+- **Settings:** the window's 3D resolution, anti-aliasing and VSync rows are hidden too: the window draws no world.
+- **Without a headset:** `--quest` makes a desktop run a standalone headset (`IsStandaloneVr`, `IsMobile`), so
+  `<godot> --path . -- --xrsim --quest [--settings] --xrheadshot <png> 6` shows the panel as the Quest would. With
+  `--xrsim` the monitor stays first person, the window being the only view.
 - **No monitor.** `XrMonitor` forces `Off`, so the window renders no world, only the 2D the UI panel shares
   (`XrUi`). Nobody sees the headset's Android window.
