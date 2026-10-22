@@ -224,6 +224,21 @@ namespace UnitSport.Player
             return BottomBracket + new Vector3(side * PedalOffset, -Mathf.Sin(angle) * CrankLength, Mathf.Cos(angle) * CrankLength);
         }
 
+        /// <summary>
+        /// Where the rider and bike's weight sits, against the tyres' contact patches (#1124): the
+        /// combined centre of mass's distance behind the front contact, ahead of the rear one, and its
+        /// height. A seated rider's own centre is ~20 cm over the hip joints and ~12 cm ahead of them on
+        /// the hoods (segment tables, Winter); the bike's is just over the bottom bracket.
+        /// </summary>
+        public (float ToFront, float ToRear, float Height) Balance(float riderMass)
+        {
+            var rider = Hip + new Vector3(0, 0.20f, 0.12f);
+            var bike = BottomBracket + new Vector3(0, 0.18f, 0.08f);
+            float mb = Spec.Mass;
+            var cg = (rider * riderMass + bike * mb) / (riderMass + mb);
+            return (FrontAxle.Z - cg.Z, cg.Z - RearAxle.Z, cg.Y);
+        }
+
         /// <summary>A leg's hip joint, <paramref name="side"/> as <see cref="Pedal"/>'s.</summary>
         public Vector3 LegHip(int side) => Hip + new Vector3(side * HipHalfWidth, 0, 0);
     }

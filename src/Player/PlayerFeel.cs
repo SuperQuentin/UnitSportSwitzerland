@@ -602,7 +602,9 @@ public partial class PlayerFeel : Node3D
 
         // dust behind a slide, or a skidding back wheel
         bool slide = ride == RideKind.OnFoot && _player.IsSliding && grounded;
-        bool skid = ride == RideKind.RoadBike && grounded && input.Brake > 0.5f && speed > 4f;
+        // the rear tyre locked under the braking (#1124); Game's arcade brakes skid on any hard pull
+        bool skid = grounded && (_player.Vehicle is Bicycle { RearLocked: true }
+            || ride == RideKind.RoadBike && Rideable.Arcade && input.Brake > 0.5f && speed > 4f);
         _dust.Emitting = slide || skid;
         if (slide || skid) _dust.AmountRatio = Mathf.Clamp(speed / 10f, 0.2f, 1f);
     }
