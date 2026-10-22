@@ -29,6 +29,26 @@ public static partial class TileRewriter
     /// <summary>Riders following the cars' lights get a bike group of their own where they lengthen a conflict time by more than this (s, #979).</summary>
     private const float LongRiders = 2f;
 
+    /// <summary>
+    /// Where a tram lane crossing the stop line <paramref name="lateral"/> m right of the arm's axis lies beside the arriving car lanes
+    /// of <paramref name="mouth"/> (#1161, <see cref="SignalArm.TramSide"/>): -1 left of them all, +1 right, 0 among them.
+    /// </summary>
+    internal static sbyte TramSide(Section mouth, double lateral)
+    {
+        double x = mouth.CarriagewayLeft, left = double.NaN, right = double.NaN;
+        for (int k = Math.Max(0, mouth.FirstCarriageway); k < mouth.Strips.Count; k++)
+        {
+            var strip = mouth.Strips[k];
+            if (strip.IsCarLane && strip.Way == StripWay.In)
+            {
+                if (double.IsNaN(left)) left = x;
+                right = x + strip.Width;
+            }
+            x += strip.Width;
+        }
+        return double.IsNaN(left) ? (sbyte)0 : lateral < left ? (sbyte)-1 : lateral > right ? (sbyte)1 : (sbyte)0;
+    }
+
     private static SignalPlan? WriteSignals(JunctionPlan jp, RoadGenResult result, Dictionary<TileId, List<RoadSignal>> signals,
         Dictionary<TileId, List<RoadApproach>> approaches, Cantons? cantons, SignalStats signalStats, LayoutWriteStats stats,
         Dictionary<TileId, List<RoadPointProp>> signs, Func<Vec2, bool> clear, Func<Vec2, bool>? building = null,
@@ -71,7 +91,8 @@ public static partial class TileRewriter
                 Banned: approach ? a.Wants.Banned : SignalMoves.None, BikeBetween: between,
                 StorageM: Room(a.Length), LeftStorageM: Room(Run(PocketRules.Left)), RightStorageM: Room(Run(PocketRules.Right)),
                 HalfInM: halfIn, HalfOutM: halfOut, RiderBox: ex.Bars.Any(b => b.Kind == BarKind.BikeBox),
-                TramMoves: trams?.GetValueOrDefault(arms.Count).Moves ?? SignalMoves.None));
+                TramMoves: trams?.GetValueOrDefault(arms.Count).Moves ?? SignalMoves.None,
+                TramSide: trams is not null && trams.TryGetValue(arms.Count, out var tram) ? TramSide(mouth, tram.Lateral) : (sbyte)0));
         }
         if (arms.Count(x => x.In) < 2) return null;
         string? canton = cantons?.CodeAt(jp.Centre.X, jp.Centre.Y);

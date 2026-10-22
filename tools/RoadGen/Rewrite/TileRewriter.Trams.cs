@@ -107,6 +107,54 @@ public static partial class TileRewriter
     private const double TramStraightOn = 0.5;
 
     /// <summary>
+    /// A track on its own bed belongs to the arm it runs beside (#1161) within this of the carriageway's edge past the carriageway's
+    /// own width (m): a central reservation between a divided road's carriageways, a bed beside the road.
+    /// </summary>
+    internal const double TramBedMargin = 4.0;
+
+    /// <summary>...and runs this close to the arm's way (cos of the angle: 30 degrees).</summary>
+    private const double TramBedParallel = 0.87;
+
+    /// <summary>...crossing the core's outline this far inside (-) or outside (+) the arm's mouth along its axis (m).</summary>
+    private const double TramBedInside = 6, TramBedOutside = 20;
+
+    /// <summary>
+    /// The attach rule (#1161, the user: "isn't it just like a bike lane?") on one arm: a track crossing a core's outline at
+    /// <paramref name="p"/>, running <paramref name="dir"/>, beside the mouth <paramref name="left"/>-<paramref name="right"/>
+    /// (its carriageway's kerbs; <paramref name="outward"/> the arm's way out): how far it lies past the carriageway's edge (m), or
+    /// null where it does not belong to the arm: running the arm's way (into the junction where it enters, out where it leaves) and
+    /// where the arm carries cars that way (<paramref name="lanesThatWay"/>), within <see cref="TramBedMargin"/> past the
+    /// carriageway's width, across from the mouth.
+    /// </summary>
+    internal static double? Alongside(Vec2 left, Vec2 right, Vec2 outward, Vec2 p, Vec2 dir, bool entering, bool lanesThatWay)
+    {
+        if (!lanesThatWay || dir.Dot(entering ? -outward : outward) < TramBedParallel) return null;
+        double width = left.DistanceTo(right);
+        if (width < 1e-6) return null;
+        var across = (right - left) / width;
+        var mid = (left + right) * 0.5;
+        double along = (p - mid).Dot(outward);
+        if (along < -TramBedInside || along > TramBedOutside) return null;
+        double t = (p - left).Dot(across);
+        double gap = t < 0 ? -t : t > width ? t - width : 0;
+        return gap <= width + TramBedMargin ? gap : null;
+    }
+
+    /// <summary>The arm of <paramref name="jp"/> a track on its own bed runs beside where it crosses the core's outline (#1161), -1 none: the nearest.</summary>
+    private static int ArmAlongside(JunctionPlan jp, Vec2 p, Vec2 dir, bool entering)
+    {
+        int best = -1;
+        double near = double.MaxValue;
+        foreach (var m in jp.Core!.Mouths)
+        {
+            if (jp.Arms.FirstOrDefault(a => a.Arm == m.Arm) is not { Axis: { } axis } a || a.Internal) continue;
+            bool lanes = a.Mouth.CarLanes(entering ? StripWay.In : StripWay.Out).Any();
+            if (Alongside(m.Left, m.Right, axis.DirAt(m.Station), p, dir, entering, lanes) is double gap && gap < near) (near, best) = (gap, m.Arm);
+        }
+        return best;
+    }
+
+    /// <summary>
     /// Every way a tram takes through <paramref name="jp"/>'s core (see <see cref="TramWay"/>); ways that do not run from one arm's
     /// mouth to another's (a track across a corner, back out by the arm it came in by) are counted and left out.
     /// </summary>
@@ -116,8 +164,11 @@ public static partial class TileRewriter
         if (jp.Core is not { Outline.Count: >= 3 } core || net.Lines.Count == 0) return ways;
         var ring = core.Outline;
         double reach = ring.Max(p => p.DistanceTo(jp.Centre)) + 5;
-        var arms = jp.Arms.Select(a => new SignalArm(a.Heading, true, true)).ToList();
-        int MouthAt(Vec2 p)
+        // (a divided road's carriageways are two arms side by side, #1161: there an arm is a way out only where its cars leave by
+        // it, so a tram straight on beside them goes "through" to the carriageway leaving its way)
+        bool Twin(ArmPlan a) => jp.Arms.Any(b => b != a && Math.Abs(Math.IEEERemainder(b.Heading - a.Heading, 2 * Math.PI)) < Math.PI / 6);
+        var arms = jp.Arms.Select(a => new SignalArm(a.Heading, true, !Twin(a) || a.Mouth.CarLanes(StripWay.Out).Any())).ToList();
+        int MouthAt(Vec2 p, Vec2 dir, bool entering)
         {
             int best = -1;
             double near = TramMouthReach;
@@ -126,7 +177,7 @@ public static partial class TileRewriter
                 double d = Polyline.PointSegmentDistance(p, m.Left, m.Right);
                 if (d < near) (near, best) = (d, m.Arm);
             }
-            return best;
+            return best >= 0 ? best : ArmAlongside(jp, p, dir, entering);
         }
         for (int l = 0; l < net.Lines.Count; l++)
         {
@@ -142,7 +193,7 @@ public static partial class TileRewriter
                 foreach (var (points, last) in Trace(net, ring, l, i + 1, [entry], 0))
                 {
                     var exit = points[^1];
-                    int from = MouthAt(entry), to = MouthAt(exit);
+                    int from = MouthAt(entry, (p[i + 1] - p[i]).Normalized(), true), to = MouthAt(exit, (points[^1] - points[^2]).Normalized(), false);
                     if (from < 0 || to < 0 || from == to) { stats.TramWaysLeftOut++; continue; }
                     int fk = jp.Arms.FindIndex(a => a.Arm == from), tk = jp.Arms.FindIndex(a => a.Arm == to);
                     var move = SignalPlan.Turn(arms, fk, tk);
@@ -306,6 +357,20 @@ public static partial class TileRewriter
             result[k] = (had.Moves | w.Move, had.Moves == SignalMoves.None ? lateral : had.Lateral);
         }
         return result;
+    }
+
+    /// <summary>
+    /// Whether a tram track runs between two nodes <paramref name="a"/> and <paramref name="b"/> (#1161: within the circle the street
+    /// between them spans: across it, on a central reservation between a divided road's carriageways, or turning off it).
+    /// </summary>
+    internal static bool TramAcross(TramNet net, Vec2 a, Vec2 b)
+    {
+        double reach = a.DistanceTo(b) * 0.5;
+        var mid = (a + b) * 0.5;
+        foreach (var (p, _) in net.Lines)
+            for (int i = 0; i + 1 < p.Length; i++)
+                if (Polyline.PointSegmentDistance(mid, p[i], p[i + 1]) <= reach) return true;
+        return false;
     }
 
     /// <summary>Where segment <paramref name="a"/>-<paramref name="b"/> (from outside to inside) crosses the ring: bisected.</summary>

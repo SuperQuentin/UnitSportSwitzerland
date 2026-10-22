@@ -109,7 +109,13 @@ public readonly record struct SignalArm(
     /// The moves the trams make from this arm (#1057: its tram tracks into the junction, as RoadGen's tram ways through the core): a
     /// tram group of their own. Not stored: the groups carry it.
     /// </summary>
-    SignalMoves TramMoves = SignalMoves.None)
+    SignalMoves TramMoves = SignalMoves.None,
+    /// <summary>
+    /// Where its trams' lane lies beside its arriving car lanes (#1161): -1 left of them (a central reservation, a track in the
+    /// middle of the street), +1 right (a bed beside the road), 0 among them or none. The cars of a shared lane turning across it
+    /// give way to the tram, an arrow turning across it never shares its green. Not stored: the tram groups carry it.
+    /// </summary>
+    sbyte TramSide = 0)
 {
     /// <summary>Whether its walkers cross in two stages, waiting on the island between (#1030).</summary>
     public bool TwoStage => Pedestrians && HalfInM > 0 && HalfOutM > 0;
@@ -139,6 +145,8 @@ public sealed class SignalGroup
     public CrossingHalf Half { get; init; }
     /// <summary>For a <see cref="SignalGroupKind.Flasher"/>, the group whose green it qualifies; else -1.</summary>
     public int Qualifies { get; init; } = -1;
+    /// <summary>For a <see cref="SignalGroupKind.Tram"/> group, its lane's side of its approach's car lanes (<see cref="SignalArm.TramSide"/>, #1161; stored in the moves byte's bits 3-4).</summary>
+    public sbyte TramSide { get; set; }
     /// <summary>The cycle, from 0 to <see cref="SignalPlan.Cycle"/>, in order and without gaps.</summary>
     public List<SignalInterval> Intervals { get; init; } = new();
 }
@@ -482,6 +490,20 @@ public sealed class SignalPlan
             // a car turning in a shared lane across a bike's way yields to it (the flasher)
             bool bikeYield = bikes && (ga.Kind == SignalGroupKind.Bike ? Turning(b, gb) : Turning(a, ga));
             Set(a.Group, b.Group, yields || bikeYield ? Conflict.Permissive : Conflict.Hard);
+        }
+
+        // a tram lane beside its approach's car lanes (#1161, the user: "isn't it just like a bike lane?"): the cars turning across
+        // it from a shared lane give way to the tram (as to an oncoming one), an arrow or riders turning across it never go with it
+        for (int t = 0; t < n; t++)
+        {
+            if (Groups[t].Kind != SignalGroupKind.Tram || Groups[t].TramSide == 0) continue;
+            var across = Groups[t].TramSide < 0 ? SignalMoves.Left : SignalMoves.Right;
+            for (int h = 0; h < n; h++)
+            {
+                if (h == t || Groups[h].Arm != Groups[t].Arm || (Groups[h].Moves & across) == 0) continue;
+                if (Groups[h].Kind == SignalGroupKind.Car) Set(t, h, Conflict.Permissive);
+                else if (Groups[h].Kind is SignalGroupKind.LeftArrow or SignalGroupKind.RightArrow or SignalGroupKind.Bike) Set(t, h, Conflict.Hard);
+            }
         }
 
         // a bike lane beside a right-turn pocket: right-turning cars cross it (#351)
@@ -882,7 +904,11 @@ public sealed class SignalPlan
         var trams = new List<int>();
         for (int a = 0; a < arms.Count; a++)
             foreach (var move in (ReadOnlySpan<SignalMoves>)[SignalMoves.Left, SignalMoves.Through, SignalMoves.Right])
-                if ((arms[a].TramMoves & move) != 0) trams.Add(plan.Add(SignalGroupKind.Tram, a, move));
+                if ((arms[a].TramMoves & move) != 0)
+                {
+                    trams.Add(plan.Add(SignalGroupKind.Tram, a, move));
+                    plan.Groups[^1].TramSide = arms[a].TramSide;
+                }
 
         var phases = Phases(plan, arms, car, left, right);
         var conflicts = plan.Conflicts();
@@ -1828,7 +1854,9 @@ public sealed class RoadSignal
                 w.Write((byte)g.Kind);
                 w.Write(checked((byte)g.Arm));
                 // (a pedestrian group's moves are None: the byte carries its half, #1030; an older reader finds a half as the arm's group)
-                w.Write(g.Kind == SignalGroupKind.Pedestrian ? (byte)g.Half : (byte)g.Moves);
+                // (a tram group's side of its approach's cars in bits 3-4, #1161)
+                w.Write(g.Kind == SignalGroupKind.Pedestrian ? (byte)g.Half
+                    : (byte)((byte)g.Moves | (g.Kind == SignalGroupKind.Tram ? g.TramSide < 0 ? 8 : g.TramSide > 0 ? 16 : 0 : 0)));
                 w.Write(checked((sbyte)g.Qualifies));
                 w.Write(checked((ushort)g.Intervals.Count));
                 foreach (var iv in g.Intervals)
@@ -1888,7 +1916,8 @@ public sealed class RoadSignal
                 bool walkers = kind == SignalGroupKind.Pedestrian;
                 var group = new SignalGroup
                 {
-                    Kind = kind, Arm = arm, Moves = walkers ? SignalMoves.None : (SignalMoves)moves, Half = walkers ? (CrossingHalf)moves : CrossingHalf.Whole,
+                    Kind = kind, Arm = arm, Moves = walkers ? SignalMoves.None : (SignalMoves)(moves & 7), Half = walkers ? (CrossingHalf)moves : CrossingHalf.Whole,
+                    TramSide = kind != SignalGroupKind.Tram ? (sbyte)0 : (moves & 8) != 0 ? (sbyte)-1 : (moves & 16) != 0 ? (sbyte)1 : (sbyte)0,
                     Qualifies = r.ReadSByte(),
                 };
                 int count = r.ReadUInt16();

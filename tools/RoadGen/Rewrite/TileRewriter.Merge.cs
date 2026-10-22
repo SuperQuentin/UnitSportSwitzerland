@@ -47,6 +47,15 @@ public static partial class TileRewriter
                     if (a.Axis is not null && core.Mouths.FirstOrDefault(m => m.Arm == a.Arm) is { } mouth
                         && NodeShortOfMouth(result, a, mouth.Station) is int node && byNode.TryGetValue(node, out var q) && q != p)
                         joins.Add((p, q));
+        // a tram track across the street between two overlapping cores (#1161: on a central reservation between a divided road's
+        // carriageways): one junction, so its trams are an approach lane of the carriageway beside them, under one plan
+        TramNet? trams = null;
+        var planOfArm = plans.SelectMany(p => p.Arms.Select(a => (a, p))).ToDictionary(x => x.a, x => x.p);
+        foreach (var p in plans.Where(p => p.CoresOverlap))
+            foreach (var a in p.Arms.Where(a => a.Internal))
+                if (a.FarArm is { } f && planOfArm.TryGetValue(f, out var q2) && q2 != p
+                    && TramAcross(trams ??= new TramNet(result), p.Centre, q2.Centre))
+                    joins.Add((p, q2));
         var joined = joins.SelectMany(j => new[] { j.Item1, j.Item2 }).ToHashSet();
         var groups = JunctionPlan.OverlapGroups(plans, joins).Where(g => g.Any(p => p.CoresOverlap && p.CoreFails || joined.Contains(p))).ToList();
         stats.HeldApart += plans.Count(p => !p.Beyond && p.CoresOverlap && !p.CoreFails);
