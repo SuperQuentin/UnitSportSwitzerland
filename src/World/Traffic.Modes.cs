@@ -43,9 +43,10 @@ public partial class Traffic
         MoverKind.Tram => _tramLines, _ => null,
     };
 
-    /// <summary>The modes whose density asks for movers (bits): their graphs are built.</summary>
-    private static uint ModesWanted()
+    /// <summary>The modes whose density asks for movers (bits), in the test world those its endpoints make (#1134): their graphs are built.</summary>
+    private uint ModesWanted()
     {
+        if (GeneratorsOnly) return _endpointModes;
         var s = GameSettings.Current;
         return (s.TrafficWalkers > 0 ? Bit(MoverKind.Walker) : 0u) | (s.TrafficRiders > 0 ? Bit(MoverKind.Rider) : 0u)
             | (s.Trams > 0 ? Bit(MoverKind.Tram) : 0u);
@@ -108,6 +109,9 @@ public partial class Traffic
         public int Group = -1;
         public float Wait;
         public object? State;
+        /// <summary>The endpoint that made it and the destination it is going to (#1134), 0 none; its way there (<c>CostTo</c>), null at random.</summary>
+        public int FromId, ToId;
+        public Dictionary<(LaneEdge, bool), float>? Goal;
 
         public SlowMover(MoverKind kind, AnimatableBody3D body, CollisionShape3D shape, Func<SlowMover, (LaneEdge, bool), (LaneEdge, bool)?> next)
         {
@@ -175,6 +179,7 @@ public partial class Traffic
         m.Group = -1;
         m.State = null;
         m.Vel = Vector3.Zero;
+        (m.FromId, m.ToId, m.Goal) = (0, 0, null);
         return m;
     }
 
@@ -284,6 +289,7 @@ public partial class Traffic
             float d = MathX.Flat(m.Head - focus).Length();
             if (d > look.Despawn || m.Stuck > 30f || (list.Count > want && d > look.Despawn * 0.6f) || want == 0)
             {
+                if (m.Stuck > 30f) StuckDropped[(int)kind]++;
                 DropMover(m);
                 list.RemoveAt(i);
             }
@@ -338,13 +344,13 @@ public partial class Traffic
     /// <summary>The trams' tick (#1060): spawns (<c>SpawnTram</c>, four times a second while there are fewer than wanted), steps (<c>StepTram</c>), the cull.</summary>
     private void StepTrams(Vector3 focus, float dt, int want)
     {
-        if (_tramLines is { Edges.Count: > 0 } && (_tramTimer -= dt) <= 0)
+        if (!GeneratorsOnly && _tramLines is { Edges.Count: > 0 } && (_tramTimer -= dt) <= 0)
         {
             _tramTimer = 0.25;
             if (_trams.Count < want) SpawnTram(focus);
         }
         foreach (var t in _trams) StepTram(t, dt);
-        Cull(_trams, focus, TramLook.Despawn, want);
+        Cull(_trams, focus, TramLook.Despawn, GeneratorsOnly ? int.MaxValue : want);
     }
 
     /// <summary>

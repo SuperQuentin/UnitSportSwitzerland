@@ -355,12 +355,14 @@ public partial class Traffic
                 if (o.Edge.Path is not null) tier = Math.Min(tier, PathTier(o.Edge, kind, side));
             for (int i = options.Count - 1; i >= 0; i--)
                 if (options[i].Edge.Path is null || PathTier(options[i].Edge, kind, side) != tier) options.RemoveAt(i);
-            // one exit at random (straight on twice as likely), then the lane nearest the rider's line
+            // one exit at random (straight on twice as likely), or the one on its way to its destination (#1134); then the lane
+            // nearest the rider's line
             float total = 0f;
             foreach (var o in options) total += ExitWeight(o.Edge);
             float pick = (float)_rng.NextDouble() * total;
             long exit = options[^1].Edge.KeyEnd;
             foreach (var o in options) if ((pick -= ExitWeight(o.Edge)) <= 0f) { exit = o.Edge.KeyEnd; break; }
+            if (TowardGoal(m, options) is { } way) exit = way.Edge.KeyEnd;
             (LaneEdge, bool)? best = null;
             float bestGap = float.MaxValue;
             foreach (var o in options)
@@ -374,6 +376,7 @@ public partial class Traffic
         if (leg.Edge.Path is not null)
             for (int i = options.Count - 1; i >= 0 && options.Count > 1; i--)
                 if (options[i].Edge.Path is not null) options.RemoveAt(i);
+        if (TowardGoal(m, options) is { } toward) return toward;
         float sum = 0f;
         foreach (var o in options) sum += RoadWeight(o);
         float at = (float)_rng.NextDouble() * sum;

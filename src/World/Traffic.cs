@@ -387,7 +387,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             if (_trains.Count < wantTrains) SpawnTrain(focus);
         }
 
-        StepEndpoints(dt);
+        StepEndpoints(dt, focus);
 
         // one list for the traffic's life, refilled each tick (#221)
         var obstacles = _obstacles;
@@ -409,8 +409,11 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
 
         Cull(_cars, focus, CarDespawn, GeneratorsOnly ? int.MaxValue : wantCars);
         // the modes beyond cars and trains (#1060): walkers, riders, trams, each on its own graph
-        if (_walks is not null || _walkers.Count > 0) StepMovers(MoverKind.Walker, _walks, focus, dt, Want(MoverKind.Walker, night));
-        if (_rides is not null || _riders.Count > 0) StepMovers(MoverKind.Rider, _rides, focus, dt, Want(MoverKind.Rider, night));
+        // (the test world's walkers and riders come from its endpoints alone, #1134: no graph to spawn on, none culled for number)
+        if (_walks is not null || _walkers.Count > 0)
+            StepMovers(MoverKind.Walker, GeneratorsOnly ? null : _walks, focus, dt, GeneratorsOnly ? int.MaxValue : Want(MoverKind.Walker, night));
+        if (_rides is not null || _riders.Count > 0)
+            StepMovers(MoverKind.Rider, GeneratorsOnly ? null : _rides, focus, dt, GeneratorsOnly ? int.MaxValue : Want(MoverKind.Rider, night));
         if (_tramLines is not null || _trams.Count > 0) StepTrams(focus, dt, Want(MoverKind.Tram, night));
         StepDebugDraw(delta);
         Cull(_trains, focus, TrainDespawn, wantTrains);
@@ -442,6 +445,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             float d = new Vector2(v.Head.X - focus.X, v.Head.Z - focus.Z).Length();
             if (d > range || v.Stuck > 20f || (list.Count > want && d > range * 0.6f))
             {
+                if (v.Stuck > 20f) StuckDropped[list == _trams ? (int)MoverKind.Tram : list == _trains ? (int)MoverKind.Train : (int)MoverKind.Car]++;
                 foreach (var u in v.Units) _byBody.Remove(u.GetInstanceId());
                 if (v.FromEndpoint) _generatedLive--;
                 v.Free();
@@ -1504,6 +1508,21 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
                 if (c.Speed < 0.5f) standing++;
             }
         return (standing, all);
+    }
+
+    /// <summary>Movers dropped for standing still too long (cars 20 s, walkers and riders 30 s), by <see cref="MoverKind"/> (#1134, the probe).</summary>
+    public readonly int[] StuckDropped = new int[5];
+
+    /// <summary>
+    /// For the probe (#1134): the cars standing (under 0.5 m/s) on an approach within <paramref name="within"/> m before its line,
+    /// whatever their group.
+    /// </summary>
+    public int Standing(LaneApproach approach, float within)
+    {
+        int n = 0;
+        foreach (var c in _cars)
+            if (c.Approach == approach && c.ToLine > -2f && c.ToLine < within && c.Speed < 0.5f) n++;
+        return n;
     }
 
     /// <summary>Cars waiting at a red light now (#353).</summary>

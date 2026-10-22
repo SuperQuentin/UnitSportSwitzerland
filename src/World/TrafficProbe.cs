@@ -122,7 +122,9 @@ public partial class TrafficProbe : Node
         if (_t >= TickFrom && _t - delta < TickFrom) _traffic.ResetTickCost();
         // the test world (#971): its cars from a generator and destination on each arm of the junction, not --dense or --feed
         bool endpoints = _stay && _traffic.GeneratorsOnly;
-        if (endpoints && _placed && !_endpointsPlaced) PlaceEndpoints();
+        // (a world with its own endpoints runs them, #1134: the probe puts none unless --feed-turns asks for its demo split)
+        if (endpoints && _placed && !_endpointsPlaced && !WorldEndpoints) PlaceEndpoints();
+        if (WorldEndpoints && _placed) WorldTick(delta);
         // --dense: more of the traffic where the junction under test is (#353)
         if (_dense && !endpoints && (int)(_t * 4) != (int)((_t - delta) * 4)) _traffic.SpawnNear(_camera.GlobalPosition, NearSpawn);
         // --feed: a car into one of the junction's signalised approaches every 0.4 s (--feed-rate N a second), so queues form at its reds
@@ -148,7 +150,7 @@ public partial class TrafficProbe : Node
             GD.Print($"[trafficcheck] wrote {_shot}");
         if (_stay && _shot != null && _captured < CaptureAt.Length)
             GD.Print($"[trafficcheck] capture: {(_capture is null ? "no queue of " + CaptureQueue + " at a red near --at" : $"{_captured} of {CaptureAt.Length} shots")} before the end, run longer (--seconds)");
-        if (_endpointsPlaced) PrintEndpoints();
+        if (_endpointsPlaced || WorldEndpoints) PrintEndpoints();
         else if (_feed) GD.Print($"[trafficcheck] fed {_fedCars} cars into {_fed.Count} approaches near --at (fails {string.Join("/", _traffic.FeedFails)}), on average {(_nearSamples > 0 ? _nearSum / (float)_nearSamples : 0f):F0} cars within 80 m from 20 s"
             + (_feedTurns is null ? "" : $", moves taken L/T/R {_traffic.FedMoves[0]}/{_traffic.FedMoves[1]}/{_traffic.FedMoves[2]} ({_traffic.FedMovesMissed} not the one drawn)"));
         var (mean, p50, p99, ticks, cars) = _traffic.TickCost();
@@ -156,6 +158,7 @@ public partial class TrafficProbe : Node
         Approaches();
         // the modes (#1060): what --mover asked for moved, and each mode's own report (it may fail the run)
         string? modeFailure = ModesReport();
+        if (WorldEndpoints) modeFailure ??= WorldReport();
         bool ok = _maxCars > 0 && _maxSpeed > 2f && _wrongWay == 0 && _traffic.RedRuns == 0 && modeFailure is null;
         GD.Print(ok ? $"[trafficcheck] RESULT: ok (peak {_maxCars} cars, {_maxTrains} trains, none against a one-way, up to {_givingWay} giving way, "
                         + $"{_signalApproaches} signalised approaches, up to {_atRed} at red, {_traffic.RedStops} stops at red, {_traffic.LinesCrossed} stop lines crossed on green, no red run{ModesSummary()})"
