@@ -1,7 +1,7 @@
 # UnitSportSwitzerland
 
 A Godot 4.7 / C# multiplayer game that streams real Swiss geodata as a low-poly,
-PS1-styled world, and can replay GPX tracks on it as ghost races. The long-term goal is
+cartoon-styled world (PS1 and realistic looks one setting away), and can replay GPX tracks on it as ghost races. The long-term goal is
 for all of Switzerland to be navigable.
 
 Everything in the world is real: terrain from swissALTI3D, roads and railways from

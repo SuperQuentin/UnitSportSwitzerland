@@ -140,6 +140,10 @@ public partial class PalletNetProbe : Node
 
     private static float Yaw(Vector3 toward) => Mathf.Atan2(-toward.X, -toward.Z);
 
+    /// <summary>The other player here, the watcher: null once it has left.</summary>
+    private FootPlayer? Watcher(FootPlayer me) =>
+        GetTree().GetNodesInGroup(FootPlayer.Group).OfType<FootPlayer>().FirstOrDefault(p => p != me && !p.Npc);
+
     // ---- drive: A ---------------------------------------------------------------------------------
 
     private async Task<bool> Drive()
@@ -176,8 +180,11 @@ public partial class PalletNetProbe : Node
         var lineUp = Door().World + o * 12f;
         if (me.Terrain != null && me.Terrain.TryGetHeight(lineUp, out float lineGround)) lineUp.Y = lineGround + 0.3f;
         me.PlaceAt(lineUp, Yaw(-o));
-        // the watcher takes its place beside the bay meanwhile
-        await Seconds(6);
+        // the watcher takes its place beside the bay meanwhile: once its player stands there (and we on the ground,
+        // a second after the move), at most the 6 s this used to wait (#1007)
+        await Seconds(1);
+        await Until(() => me.IsOnFloor() && Watcher(me) is { } w
+            && new Vector2(w.GlobalPosition.X - Door().World.X, w.GlobalPosition.Z - Door().World.Z).Length() < 8f, 5);
 
         // ---- in through the bay -------------------------------------------------------------
         Log($"driving in, {Where(me)}");
@@ -260,7 +267,8 @@ public partial class PalletNetProbe : Node
         bool apron = await ForkApronPallet(me, fork);
         await Seconds(3);
         bool tele = apron && await ForkWithTelehandler(me);
-        await Seconds(6);
+        // the watcher quits on its RESULT: its player gone, it has seen all it needed (at most the old 6 s, #1007)
+        await Until(() => Watcher(me) == null, 6);
         return outside && carriedOut != 0 && down && set is { Altitude: > InteriorManager.InteriorBaseY + 1000f } && apron && tele
             && (_woke || !_liftSeen);
     }
@@ -340,7 +348,7 @@ public partial class PalletNetProbe : Node
         var parkedAt = me.GlobalPosition;
         float parkedYaw = me.Rotation.Y;
         me.ExitVehicle();
-        await Seconds(1);
+        await Until(() => me.Ride == RideKind.OnFoot, 3);
 
         // beside the sleeper on its step side, facing it
         var at = origin.ToWorld(slot.E, slot.N, slot.Height);
@@ -356,9 +364,14 @@ public partial class PalletNetProbe : Node
         // end up a vehicle with its sleeping copy gone.
         bool alreadyUp = VehicleManager.Instance?.GetNodeOrNull(slot.NodeName) != null;
         if (parked == null || !alreadyUp && !parked.Visible) { Log("the hall's forklift is not there to be woken"); return false; }
-        if (!alreadyUp) DormantVehicles.Instance!.Wake(slot);
-        bool woken = await Until(() => VehicleManager.Instance?.GetNodeOrNull(slot.NodeName) != null, 10);
-        await Seconds(0.5);
+        // asked while waiting, as the aim ray does: the server wakes it only once it knows we are inside (#1085)
+        bool woken = await Until(() =>
+        {
+            if (VehicleManager.Instance?.GetNodeOrNull(slot.NodeName) != null) return true;
+            DormantVehicles.Instance!.Wake(slot);
+            return false;
+        }, 10);
+        await Until(() => parked is { Visible: false }, 2);
         bool hidden = parked is { Visible: false };
         Log($"woken {woken}, the sleeping copy gone {hidden}");
         Log($"  (woken {(alreadyUp ? "by being aimed at on the way in" : "by the probe")}; solid {(parked?.GetNodeOrNull<DormantBody>("Body")?.GetChildren().OfType<CollisionShape3D>().Any(s => !s.Disabled) == true)})");
@@ -382,7 +395,7 @@ public partial class PalletNetProbe : Node
         // the watcher needs to see it driven
         await Seconds(3);
         me.ExitVehicle();
-        await Seconds(1);
+        await Until(() => me.Ride == RideKind.OnFoot, 3);
         if (moved < 1f || hallLift.Lift < 0.3f) return false;
 
         // back into the apron forklift, from its step side
@@ -422,9 +435,17 @@ public partial class PalletNetProbe : Node
         var look = at - stand;
         me.PlaceAt(stand, Mathf.Atan2(-look.X, -look.Z));
         await Seconds(1.5);
-        DormantVehicles.Instance!.Wake(slot);
         string name = slot.NodeName;
-        bool woken = await Until(() => VehicleManager.Instance?.GetNodeOrNull(name) != null, 10);
+        // asked while waiting, as a player's aim ray asks every frame (Wake itself asks the server again every
+        // 2 s): the server ignores a slot of a tile it has not built. Its generated fill follows the players
+        // (#951), so it starts on the works' tile only once we stand there and took 12-14 s for it; the one
+        // ask 1.5 s after arriving was lost, and 10 s was too short (#1085)
+        bool woken = await Until(() =>
+        {
+            if (VehicleManager.Instance?.GetNodeOrNull(name) != null) return true;
+            DormantVehicles.Instance!.Wake(slot);
+            return false;
+        }, 30);
         Log(FormattableString.Invariant($"the site's forklift {name}: woken {woken}"));
         if (!woken) return false;
         await Seconds(0.5);

@@ -57,6 +57,18 @@ public partial class TrafficProbe : Node
         // --feed (#353, the queue capture): as many cars as --traffic asks, past the settings' cap
         // of 150 (this run only, never saved)
         if (_feed) GameSettings.Current.TrafficCars = Math.Max(GameSettings.Current.TrafficCars, CmdArgs.Int("--traffic") ?? 300);
+        // --lights (#1046, for a clip): the lit paths drawn all along (debug menu, Green paths), the wait points with them
+        if (CmdArgs.Has("--lights")) _traffic.ShowLights = true;
+        // --mover walker|rider|tram (#1060): that mode chased and counted, at a density of its own if the settings ask for none
+        // (this run only); --mode-graphs draws the modes' graphs all along
+        var s = GameSettings.Current;
+        switch (_kind)
+        {
+            case MoverKind.Walker when s.TrafficWalkers == 0: s.TrafficWalkers = 80; break;
+            case MoverKind.Rider when s.TrafficRiders == 0: s.TrafficRiders = 40; break;
+            case MoverKind.Tram when s.Trams == 0: s.Trams = 4; break;
+        }
+        if (CmdArgs.Has("--mode-graphs")) _traffic.ShowModeGraphs = true;
     }
 
     public static (bool Requested, string? Shot) ParseArgs() => CmdArgs.FlagWithShot("--trafficcheck");
@@ -94,11 +106,12 @@ public partial class TrafficProbe : Node
             _placed = true;
         }
 
-        // from 20 s, chase a car (then from 32 s a train) so the picture has one in it
-        if (!_stay && _t > 20 && _traffic.Watch(_t > 32) is var (pos, dir))
+        // from 20 s, chase a car (then from 32 s a train) so the picture has one in it; with --mover (#1060) one of that kind all along
+        bool far = _kind is { } chased ? chased is MoverKind.Train or MoverKind.Tram : _t > 32;
+        if (!_stay && _t > 20 && (_kind is { } kind ? _traffic.WatchKind(kind) : _traffic.Watch(_t > 32)) is var (pos, dir))
         {
-            float back = _t > 32 ? 35f : 11f, up = _t > 32 ? 28f : 4f;
-            var eye = pos - dir * back + Vector3.Up * up + new Vector3(-dir.Z, 0, dir.X) * (_t > 32 ? 30f : 0f);
+            float back = far ? 35f : 11f, up = far ? 28f : 4f;
+            var eye = pos - dir * back + Vector3.Up * up + new Vector3(-dir.Z, 0, dir.X) * (far ? 30f : 0f);
             _camera.GlobalTransform = new Transform3D(
                 Player.Flyer.Orient(pos + dir * 6f - eye, Vector3.Up, Vector3.Forward), eye);
             if (_shot != null && Math.Abs(_t - 31) < delta)
@@ -123,6 +136,7 @@ public partial class TrafficProbe : Node
         _givingWay = Math.Max(_givingWay, _traffic.GivingWayCars);
         _atRed = Math.Max(_atRed, _traffic.AtRedCars);
         _signalApproaches = Math.Max(_signalApproaches, _traffic.SignalApproaches);
+        ModesTick(delta);
         if ((int)(_t / 5) != (int)((_t - delta) / 5))
             GD.Print($"[trafficcheck] t={_t:F0}s cars {_traffic.CarCount} (avg {_traffic.AverageCarSpeed * 3.6f:F0} km/h), "
                 + $"trains {_traffic.TrainCount} (avg {_traffic.AverageTrainSpeed * 3.6f:F0} km/h), "
@@ -140,9 +154,12 @@ public partial class TrafficProbe : Node
         var (mean, p50, p99, ticks, cars) = _traffic.TickCost();
         GD.Print($"[trafficcheck] tick cost from {TickFrom:F0} s (perf-traffic-tick): mean {mean:F0} us, p50 {p50:F0} us, p99 {p99:F0} us over {ticks} ticks, {cars:F0} cars on average");
         Approaches();
-        bool ok = _maxCars > 0 && _maxSpeed > 2f && _wrongWay == 0 && _traffic.RedRuns == 0;
+        // the modes (#1060): what --mover asked for moved, and each mode's own report (it may fail the run)
+        string? modeFailure = ModesReport();
+        bool ok = _maxCars > 0 && _maxSpeed > 2f && _wrongWay == 0 && _traffic.RedRuns == 0 && modeFailure is null;
         GD.Print(ok ? $"[trafficcheck] RESULT: ok (peak {_maxCars} cars, {_maxTrains} trains, none against a one-way, up to {_givingWay} giving way, "
-                        + $"{_signalApproaches} signalised approaches, up to {_atRed} at red, {_traffic.RedStops} stops at red, {_traffic.LinesCrossed} stop lines crossed on green, no red run)"
+                        + $"{_signalApproaches} signalised approaches, up to {_atRed} at red, {_traffic.RedStops} stops at red, {_traffic.LinesCrossed} stop lines crossed on green, no red run{ModesSummary()})"
+                    : modeFailure is not null ? $"[trafficcheck] RESULT: FAILED — {modeFailure}"
                     : _wrongWay > 0 ? $"[trafficcheck] RESULT: FAILED — up to {_wrongWay} cars against a one-way"
                     : _traffic.RedRuns > 0 ? $"[trafficcheck] RESULT: FAILED — {_traffic.RedRuns} cars crossed a stop line on red"
                     : "[trafficcheck] RESULT: FAILED — no moving traffic");
@@ -183,6 +200,14 @@ public partial class TrafficProbe : Node
         GD.Print($"[trafficcheck] approaches: {lit} with lights, {pockets} with a pocket and no lights, {used.Count} driven through; "
             + $"stopped at red {_traffic.RedStops}, entered on red {_traffic.RedRuns} (cleared yellow {_traffic.AmberClears}), on green or without lights {_traffic.LinesCrossed}, "
             + $"left from a pocket {_traffic.PocketLefts}, permissive lefts that waited {_traffic.PermissiveWaits}, waited for room past {_traffic.RoomWaits}");
+        // #1046: how queues discharge (the time between two queued cars crossing their line, by place), and the turns that waited
+        // for a gap inside the junction
+        var places = Enumerable.Range(2, _traffic.HeadwaySum.Length - 2)
+            .Select(p => $"{(p == _traffic.HeadwaySum.Length - 1 ? $"{p}th+" : $"{p}{(p == 2 ? "nd" : p == 3 ? "rd" : "th")}")} "
+                + (_traffic.HeadwayCount[p] > 0 ? $"{_traffic.HeadwaySum[p] / _traffic.HeadwayCount[p]:F1} s ({_traffic.HeadwayCount[p]})" : "-"));
+        GD.Print($"[trafficcheck] queue discharge headways: {string.Join(", ", places)}; stood in a junction for a gap {_traffic.InsideWaits} "
+            + $"(longest {_traffic.LongestInsideWait:F1} s), left it on amber or red {_traffic.ClearedInside}, paths with points to give way at "
+            + $"{roads.Edges.Count(e => e.Path is { Yields.Length: > 0 })} of {roads.Paths}");
     }
 
     private static string Letters(SignalMoves m) =>
@@ -257,6 +282,12 @@ public partial class TrafficProbe : Node
     /// </summary>
     private void Capture()
     {
+        // the gap shot (#1046) while no queue is framed, or after its shots; the queue waits while it is framed
+        if (!_gapShot && (_capture is null || _captured >= CaptureAt.Length))
+        {
+            GapShot();
+            if (_gapFramed >= 0 && !_gapShot) return;
+        }
         if (_captured >= CaptureAt.Length || _traffic.Roads is not { } roads) return;
         double now = SignalLamps.Clock();
         if (_capture is null)
@@ -297,6 +328,33 @@ public partial class TrafficProbe : Node
         GD.Print($"[trafficcheck] capture {(saved ? "wrote" : "could not write")} {file}: {aspect} at {now - _greenAt:+0.0;-0.0} s from green, "
             + $"{standing} of {all} cars within {CaptureReach:F0} m standing, {_capture.GreenCrossings + _capture.AmberClears - _crossedBefore} crossed the line since");
         _captured++;
+    }
+
+    /// <summary>The gap shot (#1046): when it was framed (traffic-check time), done.</summary>
+    private double _gapFramed = -1;
+    private bool _gapShot;
+
+    /// <summary>
+    /// Before or after the queue's shots (#1046): a car standing, its light not red yet, in a junction near <c>--at</c> for a gap, from above with the lights' paths
+    /// drawn (the dashed path gives way, the white bar is where a waiting car's front stops), saved as <c>&lt;png&gt;_5_gap.png</c>.
+    /// </summary>
+    private void GapShot()
+    {
+        if (_gapShot) return;
+        if (_gapFramed < 0)
+        {
+            if (_traffic.StandingForGap(_spot, CaptureNear) is not { } car) return;
+            _traffic.ShowLights = true;
+            _camera.GlobalTransform = new Transform3D(Player.Flyer.Orient(Vector3.Down, Vector3.Forward, Vector3.Forward), car + Vector3.Up * 35f);
+            _gapFramed = _t;
+            GD.Print($"[trafficcheck] gap shot: a car standing for a gap at {Where(car)}");
+            return;
+        }
+        if (_t < _gapFramed + 0.5) return;
+        string file = _shot!.Replace(".png", "_5_gap.png");
+        GD.Print($"[trafficcheck] gap shot {(GetViewport().GetTexture().GetImage().SavePng(file) == Error.Ok ? "wrote" : "could not write")} {file}");
+        _traffic.ShowLights = CmdArgs.Has("--lights");
+        _gapShot = true;
     }
 
     private LaneGraph? _fedGraph;

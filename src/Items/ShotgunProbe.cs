@@ -43,7 +43,7 @@ public partial class ShotgunProbe : ChatProbe
         for (int tries = 0; tries < 60 && !_heard.Any(l => l.Contains("PG B ready")); tries++)
         {
             Say(pos);   // B may join after the first line: repeat it until B answers
-            await Seconds(2.5);
+            if (await Until(() => _heard.Any(l => l.Contains("PG B ready")), 2.5)) break;
         }
         if (!_heard.Any(l => l.Contains("PG B ready"))) { Fail("B never joined"); return; }
         await Seconds(1.5);
@@ -55,7 +55,7 @@ public partial class ShotgunProbe : ChatProbe
         await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
         Shot("a_kick");
         Expect(CountOf(ItemId.Shells) == shells - 1, $"one shell spent, the second trigger pull refused while pumping ({shells} -> {CountOf(ItemId.Shells)})");
-        await Seconds(0.45);
+        if (DisplayServer.GetName() != "headless") await Seconds(0.45);
         Shot("a_pump");
         await Seconds(1.2);
         _items.UseSlot(me, gun);
@@ -82,16 +82,16 @@ public partial class ShotgunProbe : ChatProbe
         for (int tries = 0; tries < 30 && !_heard.Any(l => l.Contains("PG A fired")) && _events.Count == 0; tries++)
         {
             Say("ready");
-            await Seconds(1.0);
+            if (await Until(() => _heard.Any(l => l.Contains("PG A fired")) || _events.Count > 0, 1.0)) break;
         }
         // the first Shot event: catch the jolt, then the pump
         await Until(() => _events.Count > 0, 40);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
         Shot(side ? "s_kick" : "b_kick");
-        await Seconds(0.30);
+        if (DisplayServer.GetName() != "headless") await Seconds(0.30);
         Shot(side ? "s_pump" : "b_pump");
-        await Seconds(0.5);
+        if (DisplayServer.GetName() != "headless") await Seconds(0.5);
         Shot(side ? "s_after" : "b_after");
         await Until(() => _events.Count >= 2, 10);
         await Seconds(0.5);

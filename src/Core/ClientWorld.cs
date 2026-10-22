@@ -65,6 +65,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
     public float LoadFraction { get; private set; }
     public string LoadDetail { get; private set; } = "";
     public string? Failure { get; private set; }
+
+    /// <summary>The server speaks another protocol (<see cref="Handshake"/>): its console may still be reached (#1088).</summary>
+    public bool RefusedForVersion { get; private set; }
     private bool _bootDone, _connected, _disconnectReported;
     private double _loadClock, _terrainClock;
     private SpawnPoint? _spawn;
@@ -546,7 +549,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (!Systems.On(Systems.Trains)) GameSettings.Current.Trains = false;   // this run only: not committed
         if (Systems.On(Systems.Traffic) || Systems.On(Systems.Trains))
         {
-            if (!Systems.On(Systems.Traffic)) GameSettings.Current.TrafficCars = 0;
+            // (the modes of #1060, walkers, riders and trams, are the traffic system's too)
+            if (!Systems.On(Systems.Traffic)) GameSettings.Current.TrafficCars = GameSettings.Current.TrafficWalkers = GameSettings.Current.TrafficRiders = GameSettings.Current.Trams = 0;
             var obstacles = new List<(Vector3 Pos, Vector3 Vel)>();
             _traffic = new World.Traffic(_chunks, origin)
             {
@@ -887,6 +891,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Crafting.CampfireNetProbe.Role != null) AddChild(new Crafting.CampfireNetProbe(items));
         if (Player.SwimNetProbe.Role != null) AddChild(new Player.SwimNetProbe(items));
         if (Player.EmoteNetProbe.Role != null) AddChild(new Player.EmoteNetProbe(items));
+        if (Player.NameTagNetProbe.Role != null) AddChild(new Player.NameTagNetProbe(items));
         if (Occasions.SightingNetProbe.Role != null) AddChild(new Occasions.SightingNetProbe(items));
         if (Concert.ConcertNetProbe.Role != null) AddChild(new Concert.ConcertNetProbe(items));
         if (Phone.PhoneNetProbe.Role != null) AddChild(new Phone.PhoneNetProbe(items));
@@ -898,6 +903,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (World.ClockNetProbe.Role != null) AddChild(new World.ClockNetProbe(items));
         if (World.Ropeways.LiftNetProbe.Role != null) AddChild(new World.Ropeways.LiftNetProbe(items));
         if (SpeedNetProbe.Role != null) AddChild(new SpeedNetProbe(items));
+        if (AutoUpdateNetProbe.Role != null) AddChild(new AutoUpdateNetProbe(items));
         if (Net.SleeperProbe.Role != null) AddChild(new Net.SleeperProbe(items));
         if (Net.ArrivalProbe.Role != null) AddChild(new Net.ArrivalProbe(items));
         if (Net.TransferProbe.Role != null) AddChild(new Net.TransferProbe(items));
@@ -955,6 +961,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             var touch = TouchControls.Create();
             touch.Source = Prompts;
+            touch.State = TouchNow;
             AddChild(touch);
             if (TouchCheck.Requested) AddChild(new TouchCheck(() => LocalPlayer, touch));
         }
@@ -1142,7 +1149,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
     {
         _spectator!.SetProcess(false);
         _spectator.SetProcessUnhandledInput(false);
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
     }
 
     /// <summary>
@@ -1622,6 +1629,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _handshake.Welcomed += OnWelcomed;
         _handshake.Refused += reason =>
         {
+            RefusedForVersion = true;
             GD.PushWarning($"[net] {reason}");
             Multiplayer.MultiplayerPeer?.Close();
             ReportDisconnect(reason);
@@ -1963,6 +1971,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             }
             else if (p.Vehicle is { IsVehicle: true } vehicle)
             {
+                // the phone has no readout key to read it from (#1043): say it, first
+                if (p.SeatIndex == 0 && vehicle is IEngined && !p.EngineOn) yield return (PlayerInput.EngineToggle, "Start engine");
                 if (p.SeatIndex > 0) yield return (PlayerInput.TakeWheel, "Take the wheel");
                 // the engine and "get out" are on the vehicle readout in the same corner
                 yield return (PlayerInput.CameraToggle, "Camera");
@@ -2088,6 +2098,57 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the quick menu (#840): activities, invites and the rest, from anywhere
         yield return (PlayerInput.QuickMenu, "Quick menu");
         yield return (PlayerInput.Help, "All controls");
+    }
+
+    /// <summary>
+    /// What the phone's controls lay out for (#1043, docs/notes/core/touch-controls.md): the same
+    /// branches as <see cref="Prompts"/>, as a mode and its flags.
+    /// </summary>
+    private TouchState TouchNow()
+    {
+        if (Viewer is not { } p || !IsInstanceValid(p))
+        {
+            var shown = XR.XrSession.Anchor ?? GetViewport().GetCamera3D();
+            return new TouchState(shown == _spectator ? TouchMode.Spectator : TouchMode.Passenger, TouchFlags.None);
+        }
+        if (p.Lift != null || p.Host != null) return new TouchState(TouchMode.Passenger, TouchFlags.None);
+        if (p.CraneWorking) return new TouchState(TouchMode.Crane, TouchFlags.None);
+        var flags = TouchFlags.None;
+        if (!p.Aboard && p.Vehicle is { } ride)
+        {
+            string name = ride.GetType().Name;
+            if (ride.IsVehicle && p.SeatIndex > 0) return new TouchState(TouchMode.Passenger, flags, name);
+            if (Combat.CombatManager.Instance?.Armed == true) flags |= TouchFlags.Armed;
+            switch (ride)
+            {
+                case Airliner: return new TouchState(TouchMode.Fly, flags | TouchFlags.Airliner, name);
+                case Player.Plane: return new TouchState(TouchMode.Fly, flags, name);
+                case Ufo: return new TouchState(TouchMode.Hover, flags | TouchFlags.Ufo, name);
+                case Helicopter: return new TouchState(TouchMode.Hover, flags, name);
+                case Pigeon: return new TouchState(TouchMode.Glide, flags | TouchFlags.Pigeon, name);
+                case Wingsuit: return new TouchState(TouchMode.Glide, flags | TouchFlags.Wingsuit, name);
+                case Flyer: return new TouchState(TouchMode.Glide, flags, name);
+                case SnowRide: return new TouchState(TouchMode.Snow, flags, name);
+                case Bicycle or Motorbike: return new TouchState(TouchMode.Ride, flags, name);
+                case Excavator { Digging: true } or WheelLoader { Working: true } or Telehandler { Working: true }:
+                    return new TouchState(TouchMode.Dig, flags, name);
+                case Excavator or WheelLoader or Telehandler: flags |= TouchFlags.WorkMode; break;
+                case Car car when car.Gearbox != CarGearbox.Automatic:
+                    flags |= TouchFlags.Gears;
+                    if (car.Gearbox == CarGearbox.Manual) flags |= TouchFlags.Clutch;
+                    break;
+                case Truck truck when truck.EffectiveMode != HeavyShift.Automatic:
+                    flags |= TouchFlags.Gears;
+                    if (truck.EffectiveMode != HeavyShift.Sequential) flags |= TouchFlags.Clutch;
+                    break;
+            }
+            return new TouchState(ride.IsVehicle ? TouchMode.Drive : TouchMode.Ride, flags, name);
+        }
+        if (p.Fighting) return new TouchState(TouchMode.Fight, flags);
+        if (p.InAura) return new TouchState(TouchMode.Aura, flags);
+        if (Items.ItemController.Instance is { UsablePlayer: not null } items && !items.Inventory.Held.IsEmpty)
+            flags |= TouchFlags.ItemInHand;
+        return new TouchState(p.CreativeFlying ? TouchMode.CreativeFly : TouchMode.Foot, flags);
     }
 
     private Items.RadioUi? _radioUi;

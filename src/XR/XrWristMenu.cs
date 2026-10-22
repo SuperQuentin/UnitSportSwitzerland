@@ -110,7 +110,7 @@ public partial class XrWristMenu : CanvasLayer
         Entry("Close", null, null);
 
         _panel.Visible = true;
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
     }
 

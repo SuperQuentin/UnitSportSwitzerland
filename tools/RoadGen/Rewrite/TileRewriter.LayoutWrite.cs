@@ -20,10 +20,19 @@ public static partial class TileRewriter
     /// <summary>What the planner wrote, for the region report.</summary>
     public sealed class LayoutWriteStats
     {
-        public int Junctions, Skipped, Transitions, Pieces, Lines, Marks, Trimmed, Extended, Orphaned, CoreVertices, CapVertices, Bars, Refuges, Signs, Ramps, Signals, SignalsInvalid, Poles, CoreLines, BikeCrossings, PathCrossings, PathsCarried, PathsThrough, PathsCrossingInCorner, CornersLanded, Paths, PathsLeftOut, PathRides, SignalsRetimed, SignalsNotRetimed, RiderGroups, ConflictPairs, ConflictLines, InnerEmptied, Aprons, Fallbacks, RingsAsLaid, Caps, PolesRejected, SignsOnPoles;
+        public int Junctions, Skipped, Transitions, Pieces, Lines, Marks, Trimmed, Extended, Orphaned, CoreVertices, CapVertices, Bars, Refuges, Signs, Ramps, Signals, SignalsInvalid, Poles, CoreLines, BikeCrossings, PathCrossings, PathsCarried, PathsThrough, PathsCrossingInCorner, CornersLanded, Paths, PathsLeftOut, PathRides, SignalsRetimed, SignalsNotRetimed, RiderGroups, TwoStage, TwoStageDropped, RiderBoxes, ConflictPairs, ConflictLines, InnerEmptied, Aprons, Fallbacks, RingsAsLaid, Caps, PolesRejected, SignsOnPoles,
+            OverheadArms, OverheadRefugeArms, OverheadPortals, OverheadSpans, OverheadsRejected,
+            GantriesSitg, GantriesRule, GantrySigns, GantrySignsOsm, GantriesRejected,
+            TramCores, TramPaths, TramLitPaths, TramLanes, TramGroups, TramWaysLeftOut, TramStops, TramLeads, TramLeadsLong, TramNoLead, TramLeadsDropped, TramTimedShort, TramUntimed;
+        /// <summary>Junctions whose trams are not in the conflict times (#1057: the cycle past its maximum with them).</summary>
+        public readonly List<Vec2> TramUntimedAt = new();
+        /// <summary>Junctions with a tram group leading no car group (#1057).</summary>
+        public readonly List<Vec2> TramNoLeadAt = new();
         /// <summary>Written junctions with a transition (LV95), for the seam check and pictures.</summary>
         public readonly List<Vec2> WithTransitions = new();
         public readonly List<Vec2> OrphanedAt = new();
+        /// <summary>Where a plan came out invalid (up to five), and its first error.</summary>
+        public readonly List<string> InvalidAt = new();
         /// <summary>The merged cores written (#818 phase 5c) and their node counts.</summary>
         public readonly List<(Vec2 At, int Nodes)> MergedAt = new();
         /// <summary>The roundabouts written whole (#854).</summary>
@@ -32,7 +41,9 @@ public static partial class TileRewriter
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
             $"    junction planner written (#818 phase 3): {Junctions:N0} junctions as cores ({Aprons:N0} flush aprons of service roads; {Fallbacks:N0} plain cores where the planned one failed its checks, {RingsAsLaid:N0} rings written as laid, {Caps:N0} today's caps), {Skipped:N0} left to the old layout ({string.Join(", ", Why.Select(kv => $"{kv.Key} {kv.Value}"))}); ")
-            + string.Create(CultureInfo.InvariantCulture, $"{Transitions:N0} transitions over {Pieces:N0} pieces, {Lines:N0} lines and {Marks:N0} marks; arms trimmed to their mouth {Trimmed:N0}, run on to it {Extended:N0}; pieces lost by a later cut {Orphaned:N0}{(OrphanedAt.Count > 0 ? " (at " + string.Join("; ", OrphanedAt.Take(6).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")}; cap vertices {CapVertices:N0} of the cores' {CoreVertices:N0}; exterior: {Bars:N0} bars, {Refuges:N0} refuges, {Signs:N0} signs, {Ramps:N0} crosswalks with lowered kerbs; lights {Signals:N0} ({SignalsInvalid:N0} plans invalid, {SignalsRetimed:N0} timed from conflict times, {SignalsNotRetimed:N0} not, {RiderGroups:N0} with riders given a group of their own, {ConflictLines:N0} movements and {ConflictPairs:N0} pairs for the debug trails and movers (each green start's and end's tightest)), {Poles:N0} poles ({PolesRejected:N0} with no clear spot, {SignsOnPoles:N0} priority signs on them), {CoreLines:N0} lines through the cores, {BikeCrossings:N0} bike lanes through them, {PathCrossings:N0} path crossings ({PathsCarried:N0} ends carried to the kerb, {PathsCrossingInCorner:N0} of them crossing another in a corner: left to it), {PathsThrough:N0} paths carried along a kerb, {CornersLanded:N0} corners a path crossing ends on; paths for traffic (JPTH) {Paths:N0} ({PathRides:N0} riders' ways from path to path), left out {PathsLeftOut:N0}; merged cores written {MergedAt.Count:N0} (of {MergedAt.Sum(m => m.Nodes):N0} nodes{(MergedAt.Count > 0 ? "; at " + string.Join(" ", MergedAt.GroupBy(m => m.Nodes).OrderBy(g => g.Key).SelectMany(g => g.OrderBy(m => m.At.X).Take(4)).Select(m => string.Create(CultureInfo.InvariantCulture, $"{m.At.X:F0},{m.At.Y:F0}x{m.Nodes}"))) : "")}), streets under them {InnerEmptied:N0}; roundabouts written whole {RingsAt.Count:N0}{(RingsAt.Count > 0 ? " (at " + string.Join(" ", RingsAt.OrderBy(v => v.X).Take(8).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")} (#854)")
+            + string.Create(CultureInfo.InvariantCulture, $"{Transitions:N0} transitions over {Pieces:N0} pieces, {Lines:N0} lines and {Marks:N0} marks; arms trimmed to their mouth {Trimmed:N0}, run on to it {Extended:N0}; pieces lost by a later cut {Orphaned:N0}{(OrphanedAt.Count > 0 ? " (at " + string.Join("; ", OrphanedAt.Take(6).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")}; cap vertices {CapVertices:N0} of the cores' {CoreVertices:N0}; exterior: {Bars:N0} bars, {Refuges:N0} refuges, {Signs:N0} signs, {Ramps:N0} crosswalks with lowered kerbs; lights {Signals:N0} ({SignalsInvalid:N0} plans invalid, {SignalsRetimed:N0} timed from conflict times, {SignalsNotRetimed:N0} not, {RiderGroups:N0} with riders given a group of their own, {TwoStage:N0} crosswalks in two stages (#1030; {TwoStageDropped:N0} more crossing in one go, their island wait not kept within 3 s more cycle), {RiderBoxes:N0} riders' left-turn groups waiting in a bike box (never ending before the cars behind them), {ConflictLines:N0} movements and {ConflictPairs:N0} pairs for the debug trails and movers (each green start's and end's tightest)), {Poles:N0} poles ({PolesRejected:N0} with no clear spot, {SignsOnPoles:N0} priority signs on them), overhead heads (#1037) on {OverheadArms:N0} mast arms, {OverheadRefugeArms:N0} from refuges, {OverheadPortals:N0} portals, {OverheadSpans:N0} span wires ({OverheadsRejected:N0} with nothing to stand on), gantries of lane signs with heads in them (#1110) {GantriesSitg:N0} from SITG and {GantriesRule:N0} by the rule ({GantrySigns:N0} signs, {GantrySignsOsm:N0} of them named by OSM's destinations; {GantriesRejected:N0} wanted with no clear ground for a post), {CoreLines:N0} lines through the cores, {BikeCrossings:N0} bike lanes through them, {PathCrossings:N0} path crossings ({PathsCarried:N0} ends carried to the kerb, {PathsCrossingInCorner:N0} of them crossing another in a corner: left to it), {PathsThrough:N0} paths carried along a kerb, {CornersLanded:N0} corners a path crossing ends on; paths for traffic (JPTH) {Paths:N0} ({PathRides:N0} riders' ways from path to path), left out {PathsLeftOut:N0}; merged cores written {MergedAt.Count:N0} (of {MergedAt.Sum(m => m.Nodes):N0} nodes{(MergedAt.Count > 0 ? "; at " + string.Join(" ", MergedAt.GroupBy(m => m.Nodes).OrderBy(g => g.Key).SelectMany(g => g.OrderBy(m => m.At.X).Take(4)).Select(m => string.Create(CultureInfo.InvariantCulture, $"{m.At.X:F0},{m.At.Y:F0}x{m.Nodes}"))) : "")}), streets under them {InnerEmptied:N0}; roundabouts written whole {RingsAt.Count:N0}{(RingsAt.Count > 0 ? " (at " + string.Join(" ", RingsAt.OrderBy(v => v.X).Take(8).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")} (#854)")
+            + string.Create(CultureInfo.InvariantCulture, $"\n      trams (#1057): {TramPaths:N0} tram paths through {TramCores:N0} cores ({TramLitPaths:N0} at lights, {TramGroups:N0} tram groups, {TramLanes:N0} tram lanes on approaches), {TramWaysLeftOut:N0} tracks through a core not from one arm to another; {TramStops:N0} tram stop signs; tram groups leading the cars starting after them: {TramLeads:N0} by 1-3 s, {TramLeadsLong:N0} by 3 s or more, {TramNoLead:N0} not at all ({TramLeadsDropped:N0} junctions without tram leads: their cycle past 120 s with them; of those {TramTimedShort:N0} timed for a 26 m tram, {TramUntimed:N0} with their trams out of the conflict times{(TramUntimedAt.Count > 0 ? " at " + string.Join(" ", TramUntimedAt.Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) : "")}){(TramNoLeadAt.Count > 0 ? " (at " + string.Join(" ", TramNoLeadAt.Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")}")
+            + (InvalidAt.Count > 0 ? "\n      invalid plans at " + string.Join("; ", InvalidAt) : "")
             + (WithTransitions.Count > 0 ? "\n      with transitions at " + string.Join("; ", WithTransitions.Take(12).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) : "");
     }
 
@@ -350,7 +361,7 @@ public static partial class TileRewriter
         Dictionary<TileId, List<RoadSignal>> signals, Dictionary<TileId, List<RoadApproach>> approaches, Cantons? cantons, SignalStats signalStats, LayoutWriteStats stats,
         Dictionary<TileId, Dictionary<RoadJunction, List<CornerPlanner.CornerInput>>> coreCorners, Dictionary<TileId, List<CornerPlanner.PathEnd>> pathEnds,
         Dictionary<TileId, List<(RoadAreaProp Band, List<Vec2> Ring)>> bridges, Dictionary<TileId, List<RoadJunctionPath>> pathsOf,
-        Footprints? buildings = null)
+        Footprints? buildings = null, GantryContext? gantries = null)
     {
         // a signal pole's spot is clear of every road's carriageway, the cores, the widening strips and the buildings (the old
         // layout's PlacePole, #350/#711; #1000)
@@ -783,15 +794,24 @@ public static partial class TileRewriter
         }
 
         // 5. the exterior (phase 4): every arm's bars, refuge and signs
+        TramNet? tramNet = null;   // the block's tram tracks, read once a core has trams (#1057)
         foreach (var jp in mine)
         {
             WriteExterior(jp, result, segmentOf, finalPieces, paint, areas, signs, signalStats, stats);
             var capHere = capOfPlan.TryGetValue(jp, out var hc2) ? hc2.Cap : null;
             WriteCoreLines(jp, result, capHere, paint, stats);
-            var plan = jp.Lights ? WriteSignals(jp, result, signals, approaches, cantons, signalStats, stats, signs, PoleClear) : null;
+            // the trams' ways through the core (#1057): their approaches' tram groups, lanes and heads, their paths
+            var tramWays = capHere is null ? [] : TramWays(jp, tramNet ??= new TramNet(result), stats);
+            var plan = jp.Lights ? WriteSignals(jp, result, signals, approaches, cantons, signalStats, stats, signs, PoleClear, buildings is null ? null : buildings.Contains,
+                tramWays.Count > 0 ? TramArms(jp, tramWays) : null, gantries) : null;
             short signalIndex = plan is null || !capOfPlan.TryGetValue(jp, out var hs) ? (short)-1 : (short)(Get(signals, hs.Home).Count - 1);
+            if (plan is not null && tramWays.Count > 0) TramLanes(jp, tramWays, Get(approaches, TileId.FromLv95(jp.Centre.X, jp.Centre.Y)), signalIndex, stats);
+            var tramLines = plan is not null && tramWays.Count > 0 ? TramLines(jp, plan, tramWays) : null;
             if (capHere is not null && capOfPlan.TryGetValue(jp, out var hp))
+            {
                 WritePaths(jp, hp.Home, capHere, plan, signalIndex, jp.Core!.Connectors);
+                WriteTramPaths(jp, hp.Home, capHere, plan, signalIndex, tramWays, pathsOf, stats);
+            }
             var landings = new List<Vec2>();
             var rides = new List<Connector>();
             WriteBikeCrossings(jp, result, segmentOf, finalPieces, plan, capHere, paint, bridges, pathEnds, stats, landings, rides);
@@ -804,7 +824,7 @@ public static partial class TileRewriter
             // the lights timed from the conflict times between their movements, now that every way through is laid (#979)
             if (plan is not null && jp.Core is not null)
             {
-                var table = ConflictTimes.Of(jp, plan, rides, c => PathGroup(plan, jp.Arms.FindIndex(x => x.Arm == c.FromArm), c.Move, c.Kind), laid: c => OntoPath(jp, c)?.Way);
+                var table = ConflictTimes.Of(jp, plan, rides, c => PathGroup(plan, jp.Arms.FindIndex(x => x.Arm == c.FromArm), c.Move, c.Kind), laid: c => OntoPath(jp, c)?.Way, trams: tramLines);
                 bool dbgHere = Environment.GetEnvironmentVariable("CTDBG") is { } dbgAt && dbgAt.Split(',') is [var de, var dn]
                     && Math.Abs(jp.Centre.X - double.Parse(de, System.Globalization.CultureInfo.InvariantCulture)) < 20
                     && Math.Abs(jp.Centre.Y - double.Parse(dn, System.Globalization.CultureInfo.InvariantCulture)) < 20;
@@ -812,7 +832,7 @@ public static partial class TileRewriter
                 if (dbgHere && Environment.GetEnvironmentVariable("CTDBG2") is null)
                 {
                     string Name(int g) => $"{plan.Groups[g].Kind}/{plan.Groups[g].Moves}/a{plan.Groups[g].Arm}";
-                    var lines = ConflictTimes.Lines(jp, plan, rides, c => PathGroup(plan, jp.Arms.FindIndex(x => x.Arm == c.FromArm), c.Move, c.Kind), c => OntoPath(jp, c)?.Way);
+                    var lines = ConflictTimes.Lines(jp, plan, rides, c => PathGroup(plan, jp.Arms.FindIndex(x => x.Arm == c.FromArm), c.Move, c.Kind), c => OntoPath(jp, c)?.Way, tramLines);
                     for (int g = 0; g < plan.Groups.Count; g++)
                         for (int h = 0; h < plan.Groups.Count; h++)
                             if (!float.IsNaN(table[g, h]) && table[g, h] > 4)
@@ -825,13 +845,37 @@ public static partial class TileRewriter
                             }
                 }
                 bool retimed = plan.Retime(table);
+                // the legal maximum kept with trams (#1057): their leads dropped first ("when the plan allows"), then timed for a
+                // short tram (26 m, three sections), then for the cars' phases alone (their trams not in the conflict times)
+                if (tramWays.Count > 0 && (!retimed || plan.Cycle > SignalPlan.MaxCycle + 0.05f))
+                {
+                    plan.TramLeads = false;
+                    retimed = plan.Retime(table);
+                    stats.TramLeadsDropped++;
+                    if (!retimed || plan.Cycle > SignalPlan.MaxCycle + 0.05f)
+                    {
+                        tramLines = TramLines(jp, plan, tramWays, ConflictTimes.TramShortLength);
+                        table = ConflictTimes.Of(jp, plan, rides, c => PathGroup(plan, jp.Arms.FindIndex(x => x.Arm == c.FromArm), c.Move, c.Kind), laid: c => OntoPath(jp, c)?.Way, trams: tramLines);
+                        retimed = plan.Retime(table);
+                        stats.TramTimedShort++;
+                    }
+                    if (!retimed || plan.Cycle > SignalPlan.MaxCycle + 0.05f)
+                    {
+                        tramLines = null;
+                        table = ConflictTimes.Of(jp, plan, rides, c => PathGroup(plan, jp.Arms.FindIndex(x => x.Arm == c.FromArm), c.Move, c.Kind), laid: c => OntoPath(jp, c)?.Way);
+                        retimed = plan.Retime(table);
+                        stats.TramUntimed++;
+                        if (stats.TramUntimedAt.Count < 8) stats.TramUntimedAt.Add(new Vec2(Math.Round(jp.Centre.X), Math.Round(jp.Centre.Y)));
+                    }
+                }
+                if (tramWays.Count > 0) CountTramLeads(jp, plan, stats);
                 if (retimed) stats.SignalsRetimed++; else stats.SignalsNotRetimed++;
                 SignalPlan.DebugTiming = false;
                 // its movements and the pairs that set each green start and end, for the debug view's trails and movers (#979, the user)
                 if (retimed && signalIndex >= 0 && capOfPlan.TryGetValue(jp, out var hc))
                 {
                     var record = Get(signals, hc.Home)[signalIndex];
-                    var lines = ConflictTimes.Lines(jp, plan, rides, c => PathGroup(plan, jp.Arms.FindIndex(x => x.Arm == c.FromArm), c.Move, c.Kind), c => OntoPath(jp, c)?.Way);
+                    var lines = ConflictTimes.Lines(jp, plan, rides, c => PathGroup(plan, jp.Arms.FindIndex(x => x.Arm == c.FromArm), c.Move, c.Kind), c => OntoPath(jp, c)?.Way, tramLines);
                     var timedLines = new Dictionary<ConflictTimes.Line, RoadConflictLine>(ReferenceEqualityComparer.Instance);
                     foreach (var l in lines)
                         record.ConflictLines.Add(timedLines[l] = new RoadConflictLine

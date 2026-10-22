@@ -82,6 +82,17 @@ public partial class ChatManager : Node
 
     private string[] _playerNames = [];
 
+    /// <summary>
+    /// Client: every player's display name by peer id, as last sent by the server, for the tags over
+    /// their heads (<see cref="Player.NameTag"/>, #1136). Empty offline.
+    /// </summary>
+    public IReadOnlyDictionary<long, string> TagNames => _tagNames;
+
+    private readonly Dictionary<long, string> _tagNames = new();
+
+    /// <summary>Client: <see cref="TagNames"/> changed.</summary>
+    public event Action? TagNamesReceived;
+
     /// <summary>Raised on the client for every line to display.</summary>
     public event Action<string, ChatKind>? LineReceived;
 
@@ -127,7 +138,8 @@ public partial class ChatManager : Node
     private void OnAdminChanged(PlayerInfo player)
     {
         if (player.PeerId == ConsolePeerId || _registry?.Find(player.PeerId) == null) return;
-        RpcId(player.PeerId, MethodName.AdminStatus, player.IsAdmin);
+        if (player.Bodiless) RemoteLine?.Invoke(player.PeerId, player.IsAdmin ? "You are an admin." : "You are no longer an admin.");
+        else RpcId(player.PeerId, MethodName.AdminStatus, player.IsAdmin);
     }
 
     /// <summary>
@@ -238,7 +250,7 @@ public partial class ChatManager : Node
     {
         if (_registry is null) return;
         RpcId(Multiplayer.GetRemoteSenderId(), MethodName.ReceiveNames,
-            _registry.Players.Select(p => p.Name).ToArray());
+            _registry.InWorld.Select(p => p.Name).ToArray());
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
@@ -248,6 +260,23 @@ public partial class ChatManager : Node
         bool changed = !names.SequenceEqual(_playerNames);
         _playerNames = names;
         if (changed) NamesReceived?.Invoke();
+    }
+
+    /// <summary>Server: sends everyone the name of every player in the world, for their name tags (#1136).</summary>
+    private void SendTagNames()
+    {
+        if (_registry is null) return;
+        var players = _registry.InWorld.ToArray();
+        Rpc(MethodName.ReceiveTagNames, players.Select(p => p.PeerId).ToArray(), players.Select(p => p.Name).ToArray());
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void ReceiveTagNames(long[] peers, string[] names)
+    {
+        _tagNames.Clear();
+        for (int i = 0; i < peers.Length && i < names.Length; i++) _tagNames[peers[i]] = names[i];
+        TagNamesReceived?.Invoke();
     }
 
     /// <summary>Client: the server granted items (<c>/spawn</c>, an admin's choice); they go in this machine's inventory.</summary>
@@ -580,6 +609,7 @@ public partial class ChatManager : Node
 
         string assigned = _registry.Rename(sender, name);
         NameAssigned?.Invoke(sender);
+        SendTagNames();
         Broadcast($"{assigned} joined", ChatKind.System);
         ReplyTo(sender, "Type /help for commands.", ChatKind.Private);
     }
@@ -611,11 +641,22 @@ public partial class ChatManager : Node
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void NotifyKicked(string reason) => Kicked?.Invoke(reason);
 
+    /// <summary>
+    /// Server: a line for a player who joined through the server console (<see cref="PlayerInfo.Bodiless"/>,
+    /// #1088): <see cref="ConsoleLink"/> sends it, since that game may not share this node's RPCs.
+    /// </summary>
+    public event Action<long, string>? RemoteLine;
+
+    private bool IsBodiless(long peerId) => _registry?.Find(peerId) is { Bodiless: true };
+
     /// <summary>Sends a line to everyone. Server only.</summary>
     public void Broadcast(string line, ChatKind kind)
     {
         GD.Print($"[chat] {line}");
         Rpc(MethodName.Deliver, line, (int)kind);
+        if (RemoteLine != null && _registry != null)
+            foreach (var player in _registry.Players)
+                if (player.Bodiless) RemoteLine(player.PeerId, line);
     }
 
     /// <summary>Sends a line to one peer. Server only.</summary>
@@ -625,6 +666,11 @@ public partial class ChatManager : Node
         if (peerId == ConsolePeerId)
         {
             GD.Print($"[console] {line}");
+            return;
+        }
+        if (IsBodiless(peerId))
+        {
+            RemoteLine?.Invoke(peerId, line);
             return;
         }
 
@@ -646,6 +692,33 @@ public partial class ChatManager : Node
         HandleCommand(ConsolePeerId, line);
     }
 
+    /// <summary>
+    /// Server: a line from a player joined through the server console (<see cref="ConsoleLink"/>, #1088), as
+    /// <c>SubmitLine</c> takes one from a game: a command with '/', else said to everyone. The first one joins
+    /// that peer as <paramref name="name"/>, with no body, and the rights a join under that name gets
+    /// (<c>admins.json</c>, or <c>/login</c> after); <paramref name="joined"/> gets it then. A peer that joined
+    /// the game is not taken here.
+    /// </summary>
+    public void SubmitFromConsole(long peer, string name, string text, Action<PlayerInfo> joined)
+    {
+        if (_registry is null) return;
+        if (_registry.Find(peer) is not { } player)
+        {
+            player = _registry.Add(peer, bodiless: true);
+            _registry.Rename(peer, name);
+            joined(player);
+            Broadcast($"{player.Name} joined the server console", ChatKind.System);
+        }
+        else if (!player.Bodiless) return;   // a game's peer: it talks through SubmitLine
+
+        text = text.Trim();
+        if (text.Length == 0) return;
+        if (text.Length > MaxMessageLength) text = text[..MaxMessageLength];
+        GD.Print($"[console] {player.Name}: {text}");
+        if (text.StartsWith('/')) HandleCommand(peer, text[1..]);
+        else Say(peer, text);
+    }
+
     // ---- server-side lifecycle --------------------------------------------------------
 
     /// <summary>Called by <see cref="ServerWorld"/> when a peer drops.</summary>
@@ -655,6 +728,7 @@ public partial class ChatManager : Node
         if (_registry?.Find(peerId) is not { } player) return;
         _registry.Remove(peerId);
         Broadcast($"{player.Name} left", ChatKind.System);
+        SendTagNames();
     }
 
     // ---- commands ---------------------------------------------------------------------
@@ -728,10 +802,18 @@ public partial class ChatManager : Node
     /// </summary>
     private bool RequiresAvatar(long sender, string verb)
     {
-        if (sender != ConsolePeerId) return true;
-
-        ReplyTo(sender, $"'/{verb}' needs a player; the console has no avatar.", ChatKind.Error);
-        return false;
+        if (sender == ConsolePeerId)
+        {
+            ReplyTo(sender, $"'/{verb}' needs a player; the console has no avatar.", ChatKind.Error);
+            return false;
+        }
+        // a player joined through the server console has rights but no body: /login yes, /tp no
+        if (verb != "login" && IsBodiless(sender))
+        {
+            ReplyTo(sender, $"'/{verb}' needs a body in the world; join the game for it.", ChatKind.Error);
+            return false;
+        }
+        return true;
     }
 
     private void HandleCommand(long sender, string command)
@@ -936,6 +1018,7 @@ public partial class ChatManager : Node
         string assigned = _registry.Rename(sender, requested);
         if (assigned == previous) return;
         NameAssigned?.Invoke(sender);
+        SendTagNames();
 
         Broadcast($"{previous} is now {assigned}", ChatKind.System);
     }
@@ -1662,6 +1745,19 @@ public partial class ChatManager : Node
     }
 
     private readonly ServerUpdater _updater = new();
+    private bool _restarting;
+
+    /// <summary>Server: the release updater, shared by <c>/update</c> and the automatic check (<see cref="ServerAutoUpdate"/>).</summary>
+    public ServerUpdater Updater => _updater;
+
+    /// <summary>Server: <c>/update</c> came while a check was already running: restart as soon as it has a release.</summary>
+    public bool RestartRequested { get; set; }
+
+    /// <summary>Server: the connected players who are admins, for the update news (#1088).</summary>
+    public IEnumerable<long> AdminPeers => _registry?.Players.Where(p => p.IsAdmin).Select(p => p.PeerId) ?? [];
+
+    /// <summary>Server: how many players are connected (bots are not players).</summary>
+    public int PlayerCount => _registry?.InWorld.Count() ?? 0;
 
     /// <summary>
     /// /update (#730): installs the newest GitHub release on a server started by <c>start-server.sh</c>.
@@ -1674,15 +1770,22 @@ public partial class ChatManager : Node
             ReplyTo(sender, "This server cannot update itself: only one started by tools/deploy-linux.sh can.", ChatKind.Error);
             return;
         }
+        if (_restarting)
+        {
+            ReplyTo(sender, "The server is already restarting for an update.", ChatKind.Error);
+            return;
+        }
         if (_updater.Busy)
         {
-            ReplyTo(sender, "An update is already under way.", ChatKind.Error);
+            // the automatic check (#1088) is looking or downloading: it restarts the server once it has the release
+            RestartRequested = true;
+            ReplyTo(sender, "A check is already under way: the server restarts as soon as the release is ready.", ChatKind.Private);
             return;
         }
 
-        string current = (string)ProjectSettings.GetSetting("application/config/version", "");
+        string current = ServerUpdater.RunningVersion;
         ReplyTo(sender, "Looking for a newer release...", ChatKind.Private);
-        _updater.Start(script, current, CmdArgs.Value("--updatefeed", notFlag: true) ?? UpdateInfo.ReleasesUrl,
+        _updater.Start(script, current, CmdArgs.Value("--updatefeed", notFlag: true) ?? UpdateInfo.ReleasesUrl, quiet: false,
             (line, everyone) =>
             {
                 if (everyone) Broadcast(line, ChatKind.Admin);
@@ -1692,8 +1795,10 @@ public partial class ChatManager : Node
     }
 
     /// <summary>The new release is unpacked: everyone out, then quit; <c>start-server.sh</c> starts it.</summary>
-    private void RestartForUpdate(string tag)
+    public void RestartForUpdate(string tag)
     {
+        if (_restarting) return;
+        _restarting = true;
         GD.Print($"[update] {tag} ready: kicking everyone and quitting");
         foreach (var player in _registry?.Players.ToList() ?? new())
             KickPeer(player.PeerId, $"The server is updating to {tag}. Update your game, then reconnect in a minute.");
@@ -1708,7 +1813,9 @@ public partial class ChatManager : Node
     /// </summary>
     public void KickPeer(long peerId, string reason)
     {
-        RpcId(peerId, MethodName.NotifyKicked, reason);
+        // a player at the server console reads it through the link: its game may lack this node's RPCs
+        if (IsBodiless(peerId)) RemoteLine?.Invoke(peerId, $"Disconnected by the server: {reason}");
+        else RpcId(peerId, MethodName.NotifyKicked, reason);
         // Give the notification a moment to reach them before the socket closes under it.
         GetTree().CreateTimer(0.2).Timeout += () =>
         {

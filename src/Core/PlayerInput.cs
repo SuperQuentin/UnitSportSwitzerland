@@ -12,6 +12,11 @@ public enum InputDevice
     /// so pad-only behaviour holds); only <see cref="PlayerInput.HintDevice"/>, so prompts name them.
     /// </summary>
     VR,
+    /// <summary>
+    /// The phone's touch controls (#1054). Never <see cref="PlayerInput.LastDevice"/> (the overlay
+    /// plays a pad); only <see cref="PlayerInput.HintDevice"/>, so hints name the on-screen controls.
+    /// </summary>
+    Touch,
 }
 
 /// <summary>
@@ -261,7 +266,7 @@ public partial class PlayerInput : Node
     /// </summary>
     public static bool IsLookMotion(InputEventMouseMotion m) =>
         m.Device == TouchControls.Device
-        || Input.MouseMode == Input.MouseModeEnum.Captured && m.Device != InputEvent.DeviceIdEmulation;
+        || MouseCapture.Mode == Input.MouseModeEnum.Captured && m.Device != InputEvent.DeviceIdEmulation;
 
     /// <summary>Right-stick turn rate at full deflection and sensitivity 1, radians per second.</summary>
     public const float StickTurnRate = 3.0f;
@@ -290,7 +295,8 @@ public partial class PlayerInput : Node
     /// The device prompts name (#435): <see cref="InputDevice.VR"/> while the headset is on, where
     /// <see cref="LastDevice"/> stays Gamepad because the controllers replay as a pad.
     /// </summary>
-    public static InputDevice HintDevice => XR.XrSession.Active ? InputDevice.VR : _lastDevice;
+    public static InputDevice HintDevice => XR.XrSession.Active ? InputDevice.VR
+        : TouchControls.Hinting ? InputDevice.Touch : _lastDevice;
 
     /// <summary>
     /// What a control is called changed without a device switch (the VR controller was recognised,

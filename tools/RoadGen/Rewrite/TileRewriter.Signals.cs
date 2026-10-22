@@ -797,20 +797,48 @@ public static partial class TileRewriter
     private static bool ArrowPlates(string? canton) => canton == "VD";
 
     /// <summary>
+    /// Whether the canton's trams have the Romandy T head (#1057, the user: "in Romandy (Geneva, VD, etc) it's all in one head"):
+    /// Geneva, Vaud, Neuchâtel, Jura and Fribourg (mostly French-speaking; its German-speaking east is not told apart), Valais west
+    /// of the language border at Sierre (LV95 E 2 612 000, a straight cut). <paramref name="e"/>: the junction's E.
+    /// </summary>
+    public static bool RomandyTramHead(string? canton, double e) =>
+        canton is "GE" or "VD" or "NE" or "JU" or "FR" || canton == "VS" && e < 2_612_000;
+
+    /// <summary>
+    /// The canton's colour for its signal poles and overhead structures (#1037, <see cref="SignalPlan.PoleColour"/>):
+    /// Basel-Landschaft's anthracite (ATS LSA Aussenanlagen 2024), Bern's RAL 7042 (the city's Handbuch LSA 2025, taken for the
+    /// canton); the others not checked keep RAL 7001. Add a canton here once it is known.
+    /// </summary>
+    private static SignalPoleColour PoleColour(string? canton) => canton switch
+    {
+        "BL" => SignalPoleColour.Anthracite,
+        "BE" => SignalPoleColour.TrafficGrey,
+        _ => SignalPoleColour.SilverGrey,
+    };
+
+    /// <summary>
     /// The canton of each kilometre tile, from MapSetup's committed <c>switzerland.bin</c>
-    /// (<c>tools/MapSetup/CountryData.cs</c> writes it; this reads only the canton lattice and names).
+    /// (<c>tools/MapSetup/CountryData.cs</c> writes it; this reads only the canton lattice and names),
+    /// or a test world's own zones (<see cref="Of"/>).
     /// </summary>
     public sealed class Cantons
     {
         private const int MinE = 2480, MinN = 1070, Width = 360, Height = 230;
         private readonly byte[] _ids;
         private readonly List<string> _codes;
+        private readonly IReadOnlyDictionary<(int E, int N), string>? _tiles;
 
         private Cantons(byte[] ids, List<string> codes) { _ids = ids; _codes = codes; }
+
+        private Cantons(IReadOnlyDictionary<(int E, int N), string> tiles) { _ids = []; _codes = []; _tiles = tiles; }
+
+        /// <summary>A test world's cantons (#1038): the code of each kilometre tile listed, none elsewhere (the default zone).</summary>
+        public static Cantons Of(IReadOnlyDictionary<(int E, int N), string> tiles) => new(tiles);
 
         public string? CodeAt(double e, double n)
         {
             int te = (int)Math.Floor(e / 1000), tn = (int)Math.Floor(n / 1000);
+            if (_tiles is not null) return _tiles.GetValueOrDefault((te, tn));
             if (te < MinE || tn < MinN || te >= MinE + Width || tn >= MinN + Height) return null;
             int id = _ids[(tn - MinN) * Width + (te - MinE)];
             return id == 0 || id > _codes.Count ? null : _codes[id - 1];
@@ -822,8 +850,9 @@ public static partial class TileRewriter
             foreach (var start in new[] { AppContext.BaseDirectory, Environment.CurrentDirectory })
                 for (var dir = new DirectoryInfo(start); dir is not null; dir = dir.Parent)
                 {
-                    string path = Path.Combine(dir.FullName, "tools", "MapSetup", "switzerland.bin");
-                    if (File.Exists(path)) return Load(path);
+                    // (it moved to MapCore with #515: looked for in both, #1057 found the rewrite missed it)
+                    foreach (string project in (ReadOnlySpan<string>)["MapCore", "MapSetup"])
+                        if (Path.Combine(dir.FullName, "tools", project, "switzerland.bin") is var path && File.Exists(path)) return Load(path);
                 }
             return null;
         }

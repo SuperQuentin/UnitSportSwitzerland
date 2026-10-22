@@ -136,7 +136,7 @@ public partial class TrafficGeneratorUi : CanvasLayer
         if (_sliders.Count == 0) _shares.AddChild(UiKit.Text("No destination placed yet.", UiTheme.FontSmall, UiTheme.TextDim));
 
         _panel.Visible = true;
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
         Refresh();
         Percent();

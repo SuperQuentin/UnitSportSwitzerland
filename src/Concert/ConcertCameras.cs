@@ -98,7 +98,7 @@ public partial class ConcertCameras : Node3D
 
     private void BuildKit()
     {
-        _kit = new StandardMaterial3D { AlbedoColor = new Color(0.09f, 0.09f, 0.1f), Roughness = 0.5f };
+        _kit = Styles.StyleKit.Figure(new StandardMaterial3D { AlbedoColor = new Color(0.09f, 0.09f, 0.1f), Roughness = 0.5f });
         _bodies = new Node3D[_rigs.Count];
         _cables = new MeshInstance3D[_rigs.Count][];
         _arms = new MeshInstance3D[_rigs.Count];

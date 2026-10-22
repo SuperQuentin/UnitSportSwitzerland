@@ -367,7 +367,7 @@ public partial class AircraftCockpit : Node3D
     }
 
     private static StandardMaterial3D Lit(Color c) => new() { AlbedoColor = c, ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded };
-    private static readonly StandardMaterial3D LampOff = new() { AlbedoColor = new Color(0.05f, 0.05f, 0.055f), Roughness = 0.4f };
+    private static readonly StandardMaterial3D LampOff = Styles.StyleKit.Figure(new() { AlbedoColor = new Color(0.05f, 0.05f, 0.055f), Roughness = 0.4f });
     private static readonly StandardMaterial3D LampRed = Lit(new Color(1f, 0.12f, 0.08f)), LampAmber = Lit(new Color(1f, 0.6f, 0.05f)),
         LampGreen = Lit(new Color(0.15f, 1f, 0.3f)), LampSign = Lit(new Color(0.95f, 0.9f, 0.7f));
 

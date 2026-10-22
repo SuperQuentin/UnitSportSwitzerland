@@ -36,13 +36,20 @@ public static class TerrainShowcase
     {
         foreach (var type in Enum.GetValues<PointPropType>().Where(t => t != PointPropType.None))
         {
-            byte variants = type == PointPropType.TicketBarrier ? (byte)2 : (byte)1;   // boom down, up
-            for (byte v = 0; v < variants; v++)
+            byte[] variants = type switch
             {
-                byte variant = v;
+                PointPropType.TicketBarrier => [0, 1],   // boom down, up
+                // the test region's zones (#1038): the default one, Geneva, Vaud
+                PointPropType.CantonSign => [0, RoadSigns.CantonVariant("GE"), RoadSigns.CantonVariant("VD")],
+                _ => [0],
+            };
+            foreach (byte variant in variants)
+            {
                 var tile = Tile(new RoadPointProp(type, variant, PropFlags.Solid, 0, 0, 0, 0f, PropHeight(type)));
                 if (Arrays(tile).Vertices.Length == 0) continue;   // a type no builder draws yet
-                yield return (variants > 1 ? $"{type} {variant}" : type.ToString(), () => RoadProps(tile));
+                string name = type == PointPropType.CantonSign ? $"{type} {RoadSigns.CantonCode(variant) ?? "default"}"
+                    : variants.Length > 1 ? $"{type} {variant}" : type.ToString();
+                yield return (name, () => RoadProps(tile));
             }
         }
     }
@@ -54,6 +61,8 @@ public static class TerrainShowcase
         PointPropType.TicketBarrier => 1.1f,
         PointPropType.TicketKiosk => 1.5f,
         PointPropType.CartShelter => 2.4f,
+        PointPropType.CantonSign => RoadSigns.LowerEdge + RoadSigns.CantonSignHeight,
+        PointPropType.TramStop => 2.6f,
         _ => 2.2f,
     };
 
@@ -70,26 +79,126 @@ public static class TerrainShowcase
         // riders may turn right on red (#711, signal 5.18): beside the bike head's red lamp, else the car head's
         ("Bike right on red", () => TrafficLight(pedestrianAmber: true, rightOnRed: true)),
         ("Bike right on red, no bike head", () => TrafficLight(pedestrianAmber: true, rightOnRed: true, bikeHead: false)),
+        // the canton's pole colour (#1037): Basel-Landschaft's anthracite, Bern's RAL 7042
+        ("Basel-Landschaft", () => TrafficLight(pedestrianAmber: true, colour: SignalPoleColour.Anthracite)),
+        ("Bern", () => TrafficLight(pedestrianAmber: true, colour: SignalPoleColour.TrafficGrey)),
+        // heads over the lanes (#1037): a mast arm over two lanes (a tie rod past 7 m), a portal over three, a span wire between two
+        // facades where a tram street is too wide for an arm
+        ("Mast arm", () => TrafficLight(pedestrianAmber: true, overhead: OverheadKind.Arm)),
+        ("Portal", () => TrafficLight(pedestrianAmber: true, overhead: OverheadKind.Portal)),
+        ("Span wire", () => TrafficLight(pedestrianAmber: true, overhead: OverheadKind.Span)),
+        // a gantry of lane signs with a horizontal head in each lane's band (#1110, Geneva, the user's photos): a green sign over the
+        // left lane to the motorway and a blue one over two lanes straight on; three signs over three lanes, one white
+        ("Gantry, lane signs", () => TrafficLight(pedestrianAmber: false, gantry: 2)),
+        ("Gantry, three signs", () => TrafficLight(pedestrianAmber: false, gantry: 3)),
+        // a two-stage crossing's island pole (#1030): the left repeater over two pedestrian heads back to back, one per half
+        ("Two-stage island", () => TrafficLight(pedestrianAmber: true, island: true)),
+        ("Two-stage island, Geneva", () => TrafficLight(pedestrianAmber: false, island: true)),
+        // the trams' bar head (#1057) beside the car heads: the bar across, the dot, the bar upright, lit on the clock
+        ("Tram", () => TrafficLight(pedestrianAmber: true, tram: true)),
+        // Romandy's head (#1105, the user's photos): a one-lens car head module, a solid white T lit in its lens, packed against the car heads
+        ("Tram, Romandy", () => TrafficLight(pedestrianAmber: false, tram: true, tramT: true)),
+        // trams going two ways (#1057, the user): a head per direction, its arrow on its plate; Romandy's in a row on top of the car heads
+        ("Tram, two ways", () => TrafficLight(pedestrianAmber: true, tram: true, tramTwo: true)),
+        ("Tram, Romandy, two ways", () => TrafficLight(pedestrianAmber: false, tram: true, tramT: true, tramTwo: true)),
+        // the plate under the flasher (#1109, the user): its turns cross walkers, riders, or both (the arrow of the turn crossing both)
+        ("Flasher, pedestrian plate", () => TrafficLight(pedestrianAmber: true, bikeHead: false)),
+        ("Flasher, bike plate", () => TrafficLight(pedestrianAmber: true, peds: false)),
+        ("Flasher, arrow plate", () => TrafficLight(pedestrianAmber: true)),
+        // a permissive left (#1109, the user): no left pockets, the ball's yellow flashes while the oncoming cars are green; beside a
+        // right pocket the head shows straight on and left, an arrow: a flasher on its left with a left arrow on its plate
+        ("Permissive left, ball", () => TrafficLight(pedestrianAmber: true, bikeHead: false, leftPockets: false)),
+        // a ball whose turns both cross walkers (#1109, the user: "right flasher here, left flasher on a pole next to the left
+        // crosswalk"): the right turn's lamp beside the head, the left turn's on the approach's left pole across the road
+        ("Flasher, left turn on the left pole", () => TrafficLight(pedestrianAmber: true, bikeHead: false, leftPockets: false, leftPole: true)),
+        ("Permissive left, arrow", () => TrafficLight(pedestrianAmber: true, bikeHead: false, leftPockets: false, rightPocket: true)),
+        // an uncombined arrow (the turn alone) flashes its yellow in place of its green (#1109, the user): the mast arm's head over
+        // the left lane of an approach without a left pocket, the right lane's head beside the pole
+        ("Permissive left, uncombined arrow", () => TrafficLight(pedestrianAmber: true, bikeHead: false, leftPockets: false, rightPocket: true,
+            overhead: OverheadKind.Arm)),
     ];
 
-    private static Node3D TrafficLight(bool pedestrianAmber, bool arrowPlates = false, bool rightOnRed = false, bool bikeHead = true)
+    private static Node3D TrafficLight(bool pedestrianAmber, bool arrowPlates = false, bool rightOnRed = false, bool bikeHead = true,
+        SignalPoleColour colour = SignalPoleColour.SilverGrey, OverheadKind? overhead = null, bool island = false, bool tram = false,
+        bool tramT = false, bool tramTwo = false, bool peds = true, bool leftPockets = true, bool rightPocket = false, bool leftPole = false,
+        int gantry = 0)
     {
         var plan = SignalPlan.Build(
         [
-            new SignalArm(0, true, true, LeftPocket: true, Pedestrians: true, BikeSignal: bikeHead, Rank: 2, BikeRightOnRed: rightOnRed),
-            new SignalArm(Math.PI / 2, true, true, Pedestrians: true),
-            new SignalArm(Math.PI, true, true, LeftPocket: true, Pedestrians: true, Rank: 2),
-            new SignalArm(-Math.PI / 2, true, true, Pedestrians: true),
-        ], 353, pedestrianAmber);
+            new SignalArm(0, true, true, LeftPocket: leftPockets, RightPocket: rightPocket, Pedestrians: peds, BikeSignal: bikeHead, Rank: 2, BikeRightOnRed: rightOnRed,
+                HalfInM: island ? 4 : 0, HalfOutM: island ? 3.5f : 0, TramMoves: !tram ? SignalMoves.None : tramTwo ? SignalMoves.Left | SignalMoves.Through : SignalMoves.Through),
+            new SignalArm(Math.PI / 2, true, true, Pedestrians: peds),
+            new SignalArm(Math.PI, true, true, LeftPocket: leftPockets, Pedestrians: peds, Rank: 2),
+            new SignalArm(-Math.PI / 2, true, true, Pedestrians: peds),
+        ], 353, pedestrianAmber, tramT);
         plan.ArrowPlates = arrowPlates;
+        plan.PoleColour = colour;
         var tile = Tile();
-        tile.Signals.Add(new RoadSignal
+        var signal = new RoadSignal
         {
             Stops = new float[12],
             Plan = plan,
-            Poles = { new SignalPole(0, 0, 0, 0f, Mathf.Pi / 2, 0, SignalPoleFlags.Main | SignalPoleFlags.Pedestrian) },
-        });
-        return RoadProps(tile);
+            Poles =
+            {
+                island
+                    ? new SignalPole(0, 0, 0, 0f, Mathf.Pi / 2, 0, SignalPoleFlags.Second | SignalPoleFlags.Pedestrian | SignalPoleFlags.ArrivingHalf | SignalPoleFlags.DepartingHalf)
+                    : new SignalPole(0, 0, 0, 0f, Mathf.Pi / 2, 0, SignalPoleFlags.Main | SignalPoleFlags.Pedestrian | (tram ? SignalPoleFlags.Tram : 0)),
+            },
+        };
+        // the approach's left pole across a 7 m road (#1109: the left turn's flasher stands on it)
+        if (leftPole) signal.Poles.Add(new SignalPole(7f, 0, 0, 0f, -Mathf.Pi / 2, 0, SignalPoleFlags.Second));
+        // the heads face -Z, the driver's left is +X: the lanes to the pole's left
+        // (an arm's or portal's post on the pole, carrying its heads; a span wire from the facade 3 m outside it to one across the street)
+        float from = overhead == OverheadKind.Span ? -3f : 0f;
+        const float P = SignalOverhead.ClusterPitch;
+        if (overhead is { } kind)
+            signal.Overheads.Add(new SignalOverhead
+            {
+                Kind = kind, Arm = 0, X = from, EndX = kind switch { OverheadKind.Arm => 4.4f, OverheadKind.Span => 15f, _ => 12f }, Bottom = 5f,
+                // one cluster over the middle of the lanes, a head per direction (#1110): over two lanes the main head and the left
+                // arrow (an arm), over three the right arrow, the main head and the left arrow (a portal, a span wire)
+                Heads = kind == OverheadKind.Arm
+                    ? [new OverheadHead(3.5f - from - P * 0.5f, SignalMoves.Through | SignalMoves.Right), new OverheadHead(3.5f - from + P * 0.5f, SignalMoves.Left)]
+                    : [new OverheadHead(6.0f - from - P, SignalMoves.Right), new OverheadHead(6.0f - from, SignalMoves.Through),
+                       new OverheadHead(6.0f - from + P, SignalMoves.Left)],
+            });
+        if (gantry > 0) signal.Gantries.Add(ShowcaseGantry(gantry));
+        tile.Signals.Add(signal);
+        var node = RoadProps(tile);
+        if (overhead == OverheadKind.Span)
+            foreach (float x in (ReadOnlySpan<float>)[from - 0.5f, 15.5f])
+                node.AddChild(new MeshInstance3D
+                {
+                    Mesh = new BoxMesh { Size = new Vector3(1f, 9f, 8f) }, Position = new Vector3(x, 4.5f, 0f),
+                    MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.78f, 0.74f, 0.66f) },
+                });
+        return node;
+    }
+
+    /// <summary>
+    /// A gantry over the approach the pole serves (#1110): its posts 1 m out of the pole (the lanes to its left, +X) and 11.5 m
+    /// across; two signs over three lanes (the user's photo 1, Route de Lausanne) or a sign over each of three.
+    /// </summary>
+    private static SignGantry ShowcaseGantry(int signs)
+    {
+        const SignalMoves L = SignalMoves.Left, T = SignalMoves.Through, R = SignalMoves.Right;
+        const char M = SignGantry.MotorwayMark;
+        return new SignGantry
+        {
+            Arm = 0, Lit = true, X = -1f, EndX = 10.5f, Bottom = 5f,
+            Signs = signs == 2
+                ?
+                [
+                    new GantrySign { Along = 4.5f, Width = 5.4f, Colour = SignColour.Blue, Lines = ["Versoix", "Lausanne"], Lanes = [new(3f, T), new(6f, T)] },
+                    new GantrySign { Along = 9f, Width = 2.7f, Colour = SignColour.Green, Lines = [M + "Aéroport", "France", "Palexpo"], Lanes = [new(9f, L)] },
+                ]
+                :
+                [
+                    new GantrySign { Along = 3f, Width = 2.7f, Colour = SignColour.White, Lines = ["Vernier"], Lanes = [new(3f, R)] },
+                    new GantrySign { Along = 6f, Width = 2.7f, Colour = SignColour.Blue, Lines = ["France", "Vernier"], Lanes = [new(6f, T)] },
+                    new GantrySign { Along = 9f, Width = 2.7f, Colour = SignColour.Green, Lines = [M + "Lausanne", "Aéroport"], Lanes = [new(9f, L)] },
+                ],
+        };
     }
 
     private static RoadTile Tile(params RoadPointProp[] props)
@@ -106,6 +215,7 @@ public static class TerrainShowcase
         RoadSignBuilder.Append(tile, v, c, uv, uv2, ix);
         ParkingBuilder.Append(tile, v, c, uv, uv2, ix);
         SignalBuilder.Append(tile, v, c, uv, uv2, ix, rounded: StyleKit.Detail == MeshDetail.High);
+        CatenaryBuilder.Append(tile, v, c, uv, uv2, ix);
         return new RoadMeshBuilder.MeshData(v.ToArray(), c.ToArray(), uv.ToArray(), uv2.ToArray(), ix.ToArray());
     }
 
@@ -114,7 +224,68 @@ public static class TerrainShowcase
         var material = StyleKit.Material(MaterialRole.Road);
         FogUniforms.Apply(material);
         var node = new MeshInstance3D { Mesh = ChunkNode.ToArrayMesh(Arrays(tile), material) };
-        if (SignalBuilder.BuildLamps(tile) is { } lamps) node.AddChild(SignalLamps.Create(lamps));
+        if (SignalBuilder.BuildLamps(tile) is { } lamps)
+        {
+            var lit = SignalLamps.Create(lamps);
+            // --modelscycle <s>: the viewer runs a whole signal cycle in that long, for a clip of every lamp's states (#1105)
+            if (CmdArgs.Float("--modelscycle") is { } cycle && cycle > 0 && lit.LongestCycle > 0)
+            {
+                lit.PlanSpeed = lit.LongestCycle / cycle;
+                GD.Print($"[models] signal cycle {lit.LongestCycle:0.#} s run in {cycle:0.#} s ({lit.PlanSpeed:0.##}x)");
+            }
+            // --modelscyclefrom <s>: the plans start at that second of their time (a clip of a chosen part of the cycle, #1105)
+            if (CmdArgs.Float("--modelscyclefrom") is { } from)
+                lit.PlanShift = from - SignalLamps.Clock() * lit.PlanSpeed;
+            node.AddChild(lit);
+        }
+        foreach (var label in RoadSignBuilder.Labels(tile) ?? []) node.AddChild(RoadSignBuilder.Make(label));
+        foreach (var label in RoadSignBuilder.GantryLabels(tile) ?? []) node.AddChild(RoadSignBuilder.Make(label));   // #1110
+        return node;
+    }
+
+    /// <summary>Overhead lines (#1052): a tram's span between facades and between masts, its cantilever, its centre mast, a main line's pair.</summary>
+    [Showcase("Terrain", "Overhead line")]
+    private static IEnumerable<(string, Func<Node3D>)> OverheadLines() =>
+    [
+        ("Tram span on facades", () => OverheadLine(CatenaryLine.Tram, span: true, walls: true)),
+        ("Tram span on masts", () => OverheadLine(CatenaryLine.Tram, span: true, walls: false)),
+        ("Tram cantilever", () => OverheadLine(CatenaryLine.Tram, span: false, walls: false)),
+        ("Tram centre mast", () => OverheadLine(CatenaryLine.Tram, span: false, walls: false, centre: true)),
+        ("Main line cantilevers", () => OverheadLine(CatenaryLine.Main, span: false, walls: false)),
+    ];
+
+    // a double track along X (tracks at z = -2.2 and +2.2, the rails' top at y 0), 40 m of wire, its supports at x = 0
+    private static Node3D OverheadLine(CatenaryLine line, bool span, bool walls, bool centre = false)
+    {
+        float wireY = (line == CatenaryLine.Tram ? 5.8f : 5.5f) + 0.18f;
+        var tile = Tile();
+        foreach (float z in (ReadOnlySpan<float>)[-2.2f, 2.2f])
+        {
+            tile.CatenaryWires.Add(new CatenaryWire { Line = line, Points = [-20f, wireY, z, 0f, wireY, z, 20f, wireY, z] });
+            if (!span && !centre)
+                tile.CatenarySupports.Add(new CatenarySupport
+                {
+                    Kind = CatenarySupportKind.Cantilever, Line = line, AZ = z + MathF.Sign(z) * 3f, BZ = z, WireY = wireY, Over = [0f, z],
+                });
+        }
+        if (centre)
+            tile.CatenarySupports.Add(new CatenarySupport
+            {
+                Kind = CatenarySupportKind.CentreMast, Line = line, BZ = -2.2f, WireY = wireY, Over = [0f, -2.2f, 0f, 2.2f],
+            });
+        if (span)
+            tile.CatenarySupports.Add(new CatenarySupport
+            {
+                Kind = CatenarySupportKind.Span, Line = line, AZ = -9f, AWall = walls, BZ = 9f, BWall = walls, WireY = wireY, Over = [0f, -2.2f, 0f, 2.2f],
+            });
+        var node = RoadProps(tile);
+        if (walls)
+            foreach (float z in (ReadOnlySpan<float>)[-9.5f, 9.5f])
+                node.AddChild(new MeshInstance3D
+                {
+                    Mesh = new BoxMesh { Size = new Vector3(14f, 10f, 1f) }, Position = new Vector3(0f, 5f, z),
+                    MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.78f, 0.74f, 0.66f) },
+                });
         return node;
     }
 

@@ -5,10 +5,13 @@ public enum TutorialGoal { Look, Walk, RunJump, Ride, Camera, Map, Fly, Done }
 
 /// <summary>
 /// One step of the first-run tutorial (#517). The texts carry <c>{action}</c> placeholders that
-/// <see cref="InputHints"/> fills for the device in hand; <see cref="Pad"/> and <see cref="Vr"/>
-/// replace <see cref="Keys"/> where a pad or the headset needs other words (a stick, your head).
+/// <see cref="InputHints"/> fills for the device in hand; <see cref="Pad"/>, <see cref="Vr"/> and
+/// <see cref="Touch"/> replace <see cref="Keys"/> where a pad, the headset or the phone needs other
+/// words (a stick, your head, a drag). The phone falls back on the pad's words, whose placeholders
+/// name its on-screen controls.
 /// </summary>
-public sealed record TutorialStep(TutorialGoal Goal, string Title, string Keys, string? Pad = null, string? Vr = null);
+public sealed record TutorialStep(TutorialGoal Goal, string Title, string Keys, string? Pad = null, string? Vr = null,
+    string? Touch = null);
 
 /// <summary>
 /// What the player did since the current step began, fed by <see cref="Tutorial"/> every frame.
@@ -42,22 +45,26 @@ public static class TutorialSteps
         new(TutorialGoal.Look, "Welcome to Switzerland",
             "This is the real country, mountain by mountain. Move the mouse to look around.",
             Pad: "This is the real country, mountain by mountain. Look around with {look_right}.",
-            Vr: "This is the real country, mountain by mountain. Turn your head to look around."),
+            Vr: "This is the real country, mountain by mountain. Turn your head to look around.",
+            Touch: "This is the real country, mountain by mountain. Drag a finger on the right to look around."),
         new(TutorialGoal.Walk, "Walk",
             "Walk with {move_forward} {move_left} {move_back} {move_right}.",
             Pad: "Walk with {move_forward}."),
         new(TutorialGoal.RunJump, "Run and jump",
             "Hold {sprint} to run, press {jump} to jump. Walls and ledges can be climbed.",
-            Pad: "Press {sprint} to run, {jump} to jump. Walls and ledges can be climbed."),
+            Pad: "Press {sprint} to run, {jump} to jump. Walls and ledges can be climbed.",
+            Touch: "Push the stick past its ring to run, {jump} to jump. Walls and ledges can be climbed."),
         new(TutorialGoal.Ride, "Travel",
             "{ride_menu} opens the travel menu: bikes, skis, cars, motorbikes, trucks, boats and aircraft. Pick one and Ride.",
-            Pad: "{interact_mount} with nothing in front of you opens the travel menu: bikes, skis, cars, motorbikes, trucks, boats and aircraft. Pick one and Ride."),
+            Pad: "{interact_mount} with nothing in front of you opens the travel menu: bikes, skis, cars, motorbikes, trucks, boats and aircraft. Pick one and Ride.",
+            Touch: "{ride_menu} opens the travel menu: bikes, skis, cars, motorbikes, trucks, boats and aircraft. Pick one and Ride."),
         new(TutorialGoal.Camera, "Camera",
             "{camera_toggle} switches between first and third person, on foot and at the wheel. {interact_mount} gets out."),
         new(TutorialGoal.Map, "Go anywhere",
             "{teleport} opens the map: type a town, a peak or a lake and jump there."),
         new(TutorialGoal.Fly, "Fly over it",
-            "{toggle_mode} lifts you into the fly camera: {fly_up} / {fly_down} climb and sink. {toggle_mode} again lands you where you look."),
+            "{toggle_mode} lifts you into the fly camera: {fly_up} / {fly_down} climb and sink. {toggle_mode} again lands you where you look.",
+            Touch: "{spectator} lifts you into the fly camera: Up and Down climb and sink, Walk lands you where you look."),
         new(TutorialGoal.Done, "That's the basics",
             "{help} lists every control, {menu} opens the menu. Enjoy the country!"),
     };
@@ -74,9 +81,9 @@ public static class TutorialSteps
             _ => true,
         }).ToArray();
 
-    /// <summary>The text for the device in hand: the VR words, else the pad words, else the keyboard's.</summary>
-    public static string Body(TutorialStep step, bool pad, bool vr) =>
-        (vr ? step.Vr ?? step.Pad : pad ? step.Pad : null) ?? step.Keys;
+    /// <summary>The text for the device in hand: the VR or touch words, else the pad words, else the keyboard's.</summary>
+    public static string Body(TutorialStep step, bool pad, bool vr, bool touch = false) =>
+        (vr ? step.Vr ?? step.Pad : touch ? step.Touch ?? step.Pad : pad ? step.Pad : null) ?? step.Keys;
 
     /// <summary>Has the player done what <paramref name="goal"/> asks, since the step began?</summary>
     public static bool Met(TutorialGoal goal, in TutorialSignals s) => goal switch

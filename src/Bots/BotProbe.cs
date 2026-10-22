@@ -61,7 +61,7 @@ public partial class BotProbe : ChatProbe
 
         // walking on the server's collision: someone moved, and stands on the ground
         var start = bots.ToDictionary(b => b, b => b.Global);
-        await Seconds(8.0);
+        await Until(() => bots.Any(b => GodotObject.IsInstanceValid(b) && b.Global.DistanceTo(start[b]) > 1f), 12);
         var walker = bots.Where(GodotObject.IsInstanceValid).OrderByDescending(b => b.Global.DistanceTo(start[b])).First();
         float moved = (float)walker.Global.DistanceTo(start[walker]);
         Expect(moved > 1f, $"a bot walks here: {walker.Name} moved {moved:F1} m in 8 s");
@@ -118,6 +118,11 @@ public partial class BotProbe : ChatProbe
         bool parked = await Until(() => Vehicles.VehicleManager.Instance?.GetChildren().OfType<Vehicles.VehicleBody>()
             .Any(v => v.GlobalPosition.DistanceTo(me.GlobalPosition) < 12f) == true, 10);
         Expect(parked, "the car is parked beside A");
+        // 300 m north: along the village road (the goal is ahead of A, and wherever A faced after the
+        // shooting it was off the road, and the bot drove away from it; #1006)
+        me.Rotation = Vector3.Zero;
+        me.LookYaw = 0f;
+        await Seconds(0.5);
         Chat.Send("/bot drive 300");
         FootPlayer? driver = null;
         bool inCar = await Until(() => (driver = Bots().FirstOrDefault(b => b.Ride == carKind)) != null, 60);

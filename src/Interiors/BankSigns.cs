@@ -19,6 +19,9 @@ public partial class BankSigns : Node
     private StandardMaterial3D _plate = null!;
     private readonly Dictionary<Loot.ShopType, StandardMaterial3D> _shopPlates = new();
 
+    /// <summary>The bank's plate colour and the colour of its letters.</summary>
+    private static readonly Color BankPlate = new(0.10f, 0.20f, 0.36f), BankInk = new(0.98f, 0.84f, 0.38f);
+
     /// <summary>A shop's plate colour and the colour of its letters.</summary>
     private static (Color Plate, Color Text) ShopColors(Loot.ShopType t) => t switch
     {
@@ -39,11 +42,8 @@ public partial class BankSigns : Node
     private StandardMaterial3D Plate(Loot.ShopType t)
     {
         if (_shopPlates.TryGetValue(t, out var m)) return m;
-        return _shopPlates[t] = new StandardMaterial3D
-        {
-            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-            AlbedoColor = ShopColors(t).Plate,
-        };
+        // the plate lit in the lit styles, flat in PS1; its lettering stays unshaded (#1069)
+        return _shopPlates[t] = Styles.StyleKit.Solid(new StandardMaterial3D { AlbedoColor = ShopColors(t).Plate });
     }
 
     public BankSigns(ChunkManager chunks)
@@ -63,11 +63,7 @@ public partial class BankSigns : Node
 
     public override void _Ready()
     {
-        _plate = new StandardMaterial3D
-        {
-            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-            AlbedoColor = new Color(0.10f, 0.20f, 0.36f),
-        };
+        _plate = Styles.StyleKit.Solid(new StandardMaterial3D { AlbedoColor = BankPlate });
         _chunks.TileFurnished += OnFurnished;
         _chunks.TileUnfurnished += OnUnfurnished;
     }
@@ -91,39 +87,68 @@ public partial class BankSigns : Node
         {
             if (!(d.Bank || d.Shop != Loot.ShopType.None) || d.Width <= 0) continue;
             string text = d.Bank ? "BANK" : Loot.ShopTables.Name(d.Shop).ToUpperInvariant();
-            var ink = d.Bank ? new Color(0.98f, 0.84f, 0.38f) : ShopColors(d.Shop).Text;
+            var ink = d.Bank ? BankInk : ShopColors(d.Shop).Text;
             var outward = d.Outward with { Y = 0 };
             if (outward.LengthSquared() < 1e-4f) continue;
             outward = outward.Normalized();
             // +Z of the sign faces the street
             var basis = new Basis(Vector3.Up, Mathf.Atan2(outward.X, outward.Z));
             var at = d.Position + outward * 0.12f + Vector3.Up * (Math.Max(2.1f, d.Height) + 0.45f);
-            var sign = new Node3D { Transform = new Transform3D(basis, at) };
-            float w = Math.Max(Math.Max(1.6f, text.Length * 0.25f + 0.3f), d.Width + 0.6f);
-            sign.AddChild(new MeshInstance3D
-            {
-                Mesh = new BoxMesh { Size = new Vector3(w, 0.55f, 0.08f) },
-                MaterialOverride = d.Bank ? _plate : Plate(d.Shop),
-                VisibilityRangeEnd = DrawnM,
-            });
-            // lettering on both faces: whichever way the facade's outward runs, one reads from the street
-            foreach (float side in new[] { 1f, -1f })
-                sign.AddChild(new Label3D
-                {
-                    Text = text,
-                    FontSize = 96,
-                    PixelSize = 0.0035f,
-                    OutlineSize = 0,
-                    Modulate = ink,
-                    Shaded = false,
-                    DoubleSided = false,
-                    RenderPriority = 1,
-                    VisibilityRangeEnd = DrawnM,
-                    CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-                    Transform = new Transform3D(new Basis(Vector3.Up, side > 0 ? 0 : Mathf.Pi), new Vector3(0, 0, 0.06f * side)),
-                });
+            var sign = Sign(text, ink, d.Bank ? _plate : Plate(d.Shop), d.Width);
+            sign.Transform = new Transform3D(basis, at);
             root.AddChild(sign);
         }
         node.AddChild(root);
+    }
+
+    /// <summary>A sign's plate over a door <paramref name="doorWidth"/> wide, and its lettering on both faces; +Z faces the street.</summary>
+    private static Node3D Sign(string text, Color ink, StandardMaterial3D plate, float doorWidth)
+    {
+        var sign = new Node3D();
+        float w = Math.Max(Math.Max(1.6f, text.Length * 0.25f + 0.3f), doorWidth + 0.6f);
+        sign.AddChild(new MeshInstance3D
+        {
+            Mesh = new BoxMesh { Size = new Vector3(w, 0.55f, 0.08f) },
+            MaterialOverride = plate,
+            VisibilityRangeEnd = DrawnM,
+        });
+        // lettering on both faces: whichever way the facade's outward runs, one reads from the street
+        foreach (float side in new[] { 1f, -1f })
+            sign.AddChild(new Label3D
+            {
+                Text = text,
+                FontSize = 96,
+                PixelSize = 0.0035f,
+                OutlineSize = 0,
+                Modulate = ink,
+                Shaded = false,
+                DoubleSided = false,
+                RenderPriority = 1,
+                VisibilityRangeEnd = DrawnM,
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                Transform = new Transform3D(new Basis(Vector3.Up, side > 0 ? 0 : Mathf.Pi), new Vector3(0, 0, 0.06f * side)),
+            });
+        return sign;
+    }
+
+    /// <summary>The bank's sign and every shop's, in the model viewer (#1069), standing on its ground.</summary>
+    [Core.Showcase("Interiors", "Shop sign")]
+    private static IEnumerable<(string Name, Func<Node3D> Make)> ShowcaseSigns()
+    {
+        static Node3D Raised(Node3D sign)
+        {
+            sign.Position = new Vector3(0, 0.3f, 0);
+            var root = new Node3D();
+            root.AddChild(sign);
+            return root;
+        }
+        yield return ("Bank", () => Raised(Sign("BANK", BankInk, Styles.StyleKit.Solid(new StandardMaterial3D { AlbedoColor = BankPlate }), 1.2f)));
+        foreach (var t in Enum.GetValues<Loot.ShopType>())
+        {
+            if (t == Loot.ShopType.None) continue;
+            var (plate, ink) = ShopColors(t);
+            yield return (t.ToString(), () => Raised(Sign(Loot.ShopTables.Name(t).ToUpperInvariant(), ink,
+                Styles.StyleKit.Solid(new StandardMaterial3D { AlbedoColor = plate }), 1.2f)));
+        }
     }
 }

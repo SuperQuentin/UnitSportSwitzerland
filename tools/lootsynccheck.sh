@@ -2,11 +2,18 @@
 # Loot over loopback: a dedicated server and two clients search the SAME container in one building.
 # A takes a stack while B has it open; B's panel must drop it on its own, B taking it too must be
 # refused, B takes the rest, and every stack ends up in exactly one pack (src/Loot/LootSyncProbe).
-#   [CHUNKS=<terrain_chunks>] [GODOT=<exe>] tools/lootsynccheck.sh [epoch] [E,N]      (default: a random restock period, Riddes)
+#   CHUNKS=<terrain_chunks> [GODOT=<exe>] tools/lootsynccheck.sh [epoch] [E,N]      (default: a random restock period, Riddes)
 # The epoch must be one no earlier run emptied (the server remembers what was taken, in a fresh
 # test_output/userdata_lootsync per run unless USERDATA= says otherwise), and it must roll a
 # ground-floor container with two stacks; if it says there is none, run it again.
 . "$(dirname "$0")/lib/twoclient.sh" lootsync
+# the real map's server: without terrain data it never listens, and both clients waited out their joins (#1006)
+if [ -n "${CHUNKS:-}" ] && [ ! -f "$CHUNKS/manifest.json" ]; then
+  echo "[lootsynccheck] RESULT: FAILED (no terrain data in CHUNKS=$CHUNKS)"; exit 1
+fi
+if [ -z "${CHUNKS:-}${UNITSPORT_CHUNKS:-}" ] && [ ! -f terrain_location.json ] && [ ! -f terrain_chunks/manifest.json ]; then
+  echo "[lootsynccheck] RESULT: FAILED (needs real terrain round Riddes: CHUNKS=<terrain_chunks>)"; exit 1
+fi
 EP=${1:-$((700000 + RANDOM * 8 + RANDOM % 8))}
 AT=${2:-2583250,1113250}
 PORT=7792
@@ -16,7 +23,6 @@ tc_server 300 120 $OUT/lootsync_server.log --server --port $PORT --lootepoch "$E
 tc_client 240 $OUT/lootsync_a.log --windowed --connect 127.0.0.1:$PORT --name LootA --cache "$OUT/lootsync_cache_a" \
     --at "$AT" --lootepoch "$EP" --lootsynccheck A ${CH[@]+"${CH[@]}"} &
 A=$!
-sleep 3
 tc_client 240 $OUT/lootsync_b.log --windowed --connect 127.0.0.1:$PORT --name LootB --cache "$OUT/lootsync_cache_b" \
     --at "$AT" --lootepoch "$EP" --lootsynccheck B ${CH[@]+"${CH[@]}"}
 wait $A

@@ -347,6 +347,9 @@ public partial class BrCrates : Node3D, IOriginContainer
         s.Play();
     }
 
+    private static StandardMaterial3D Planks => _planks ??= Styles.StyleKit.Figure(new StandardMaterial3D { AlbedoColor = new Color(0.62f, 0.44f, 0.24f) });
+    private static StandardMaterial3D? _planks;
+
     /// <summary>Planks flying off a crate shot open.</summary>
     private void Splinters(Vector3 at)
     {
@@ -355,7 +358,7 @@ public partial class BrCrates : Node3D, IOriginContainer
             Emitting = true, OneShot = true, Amount = 18, Lifetime = 1.4f, Explosiveness = 1f,
             Direction = Vector3.Up, Spread = 70f, InitialVelocityMin = 3f, InitialVelocityMax = 6f, Gravity = new Vector3(0, -9.8f, 0),
             AngularVelocityMin = -400f, AngularVelocityMax = 400f,
-            Mesh = new BoxMesh { Size = new Vector3(0.35f, 0.03f, 0.08f), Material = new StandardMaterial3D { AlbedoColor = new Color(0.62f, 0.44f, 0.24f) } },
+            Mesh = new BoxMesh { Size = new Vector3(0.35f, 0.03f, 0.08f), Material = Planks },
             TopLevel = true,
         };
         AddChild(burst);
@@ -537,6 +540,14 @@ public partial class BrCrates : Node3D, IOriginContainer
                 yield return ($"{style} (open)", () => ModelViewer.Shaded(open));
         }
         yield return ("Airdrop canopy", () => ModelViewer.Shaded(Canopy()));
+        yield return ("Planks of a crate shot open", () =>
+        {
+            var root = new Node3D();
+            var plank = new BoxMesh { Size = new Vector3(0.35f, 0.03f, 0.08f), Material = Planks };
+            for (int i = 0; i < 10; i++)
+                root.AddChild(new MeshInstance3D { Mesh = plank, Position = new Vector3((i % 4) * 0.3f - 0.45f, 0.015f + (i / 4) * 0.03f, (i % 3) * 0.15f - 0.15f), RotationDegrees = new Vector3(0, i * 37f, 0) });
+            return root;
+        });
     }
 
     /// <summary>

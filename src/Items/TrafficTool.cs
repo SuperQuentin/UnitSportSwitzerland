@@ -128,7 +128,7 @@ public partial class TrafficTool : Node
             _hint.Visible = false;
             return;
         }
-        if (player == null || !active || _ui.IsOpen || Input.MouseMode != Input.MouseModeEnum.Captured)
+        if (player == null || !active || _ui.IsOpen || MouseCapture.Mode != Input.MouseModeEnum.Captured)
         {
             _ghost.Visible = false;
             _hint.Visible = false;

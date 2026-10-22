@@ -27,6 +27,13 @@ public sealed class PlayerInfo
     private bool _isAdmin;
 
     /// <summary>
+    /// Joined through the server console (<see cref="ConsoleLink"/>, #1088): a player with no body in the world,
+    /// whose game may speak another protocol. Its lines go through the link, never the chat's RPCs; it is not
+    /// counted as playing.
+    /// </summary>
+    public bool Bodiless { get; init; }
+
+    /// <summary>
     /// Any peer gaining or losing operator rights, however it happened (join, /login, /admin).
     /// The server's chat tells that client, which is how its menus learn what they may offer.
     /// </summary>
@@ -35,7 +42,7 @@ public sealed class PlayerInfo
     internal static void ResetEvents() => AdminChanged = null;
 
 
-    public override string ToString() => IsAdmin ? $"{Name} (admin)" : Name;
+    public override string ToString() => (IsAdmin ? $"{Name} (admin)" : Name) + (Bodiless ? " (console)" : "");
 }
 
 /// <summary>
@@ -86,6 +93,9 @@ public sealed class PlayerRegistry
     /// <summary>Everyone currently connected.</summary>
     public IReadOnlyCollection<PlayerInfo> Players => _players.Values;
 
+    /// <summary>Everyone with a body in the world: the console's players (<see cref="PlayerInfo.Bodiless"/>) left out.</summary>
+    public IEnumerable<PlayerInfo> InWorld => _players.Values.Where(p => !p.Bodiless);
+
     /// <summary>Names that are granted admin automatically on join.</summary>
     public IReadOnlyCollection<string> PersistentAdmins => _persistentAdmins;
 
@@ -111,9 +121,9 @@ public sealed class PlayerRegistry
     }
 
     /// <summary>Registers a peer. Called on connect, before a name is known.</summary>
-    public PlayerInfo Add(long peerId)
+    public PlayerInfo Add(long peerId, bool bodiless = false)
     {
-        var player = new PlayerInfo { PeerId = peerId, Name = $"Rider{peerId}" };
+        var player = new PlayerInfo { PeerId = peerId, Name = $"Rider{peerId}", Bodiless = bodiless };
         _players[peerId] = player;
         return player;
     }

@@ -11,6 +11,12 @@ public sealed class LaneEdge
     /// <summary>Cumulative length to each point; <c>[^1]</c> is the whole edge.</summary>
     public required float[] Cumulative { get; init; }
     public RoadClass Class { get; init; }
+
+    /// <summary>
+    /// Who moves on it (#1060): <see cref="MoverKind.Car"/> on the roads and their junction paths, <see cref="MoverKind.Train"/>
+    /// on the railway; the walk, ride and tram graphs (#1033, #1056, #1057) give their own edges their kind.
+    /// </summary>
+    public MoverKind Kind { get; init; }
     public RoadFlags Flags { get; init; }
     public float Width { get; init; }
     public long KeyStart { get; init; }
@@ -167,7 +173,18 @@ public sealed class LaneEdge
 /// What traffic needs of a junction path (#818 phase 5): its move, where its lane lies at each end (metres right of a driver
 /// arriving on that arm, from the road's centreline), and the lights and group it goes on (null and -1 without lights).
 /// </summary>
-public sealed record JunctionPathInfo(SignalMoves Move, float FromOffset, float ToOffset, SignalSite? Site, int Group);
+public sealed record JunctionPathInfo(SignalMoves Move, float FromOffset, float ToOffset, SignalSite? Site, int Group)
+{
+    /// <summary>Where its cars give way to another movement on its green (#1046, <see cref="ConflictPoints"/>), nearest first.</summary>
+    public PathYield[] Yields { get; set; } = [];
+}
+
+/// <summary>
+/// A point on a junction path where its cars give way (#1046): along the path to where a car's body first enters the other
+/// movement's band and where it has left it (m), that movement's group and movers; for cars, their path and how far along it
+/// their body enters this path's lane.
+/// </summary>
+public sealed record PathYield(float At, float Out, int Group, ConflictMover Mover, LaneEdge? Edge, float Enter);
 
 /// <summary>
 /// A signalised junction as traffic sees it (#353): its plan (#349, shared with the lamps, a
@@ -181,8 +198,11 @@ public sealed class SignalSite
     /// <summary>The riders' paths through it (#971, the debug drawing; riders are not traffic): their line (world) and group.</summary>
     public List<(Vector3[] Points, int Group, SignalMoves Move)> Rides { get; } = new();
 
-    /// <summary>Its crossings (#971, the debug drawing): kerb to kerb between the arm's pedestrian heads (world), and the arm.</summary>
-    public List<(Vector3 From, Vector3 To, int Arm)> Walks { get; } = new();
+    /// <summary>
+    /// Its crossings (#971, the debug drawing): kerb to kerb between the arm's pedestrian heads (world), the arm and the pedestrian
+    /// group; a two-stage crossing's halves each from its kerb to the island's edge (#1030: the island is no crossing).
+    /// </summary>
+    public List<(Vector3 From, Vector3 To, int Arm, int Group)> Walks { get; } = new();
 
     /// <summary>Its movements as its timing took them (#979, <c>CPAR</c>), their lines in world space, for the debug view's trails.</summary>
     public List<(RoadConflictLine Line, Vector3[] Points)> Lines { get; } = new();
@@ -194,7 +214,7 @@ public sealed class SignalSite
     {
         foreach (var (points, _, _) in Rides)
             for (int i = 0; i < points.Length; i++) points[i] = shift.Point(points[i]);
-        for (int i = 0; i < Walks.Count; i++) Walks[i] = (shift.Point(Walks[i].From), shift.Point(Walks[i].To), Walks[i].Arm);
+        for (int i = 0; i < Walks.Count; i++) Walks[i] = Walks[i] with { From = shift.Point(Walks[i].From), To = shift.Point(Walks[i].To) };
         // (the pairs' lines are these same arrays)
         foreach (var (_, points) in Lines)
             for (int i = 0; i < points.Length; i++) points[i] = shift.Point(points[i]);
@@ -238,6 +258,9 @@ public sealed class LaneApproach
     /// <summary>Per lane: cars that crossed the line in it, and the sum of how far right of their usual line they were then, m.</summary>
     public int[] Crossings { get; private init; } = [];
     public float[] OffsetSum { get; private init; } = [];
+    /// <summary>Per lane (#1046, queue discharge): when the last car that had stood at red crossed the line (traffic time, s), and its place in the queue.</summary>
+    public double[] LastDischarge { get; private init; } = [];
+    public int[] QueuePlace { get; private init; } = [];
 
     public static LaneApproach Make(ApproachLane[] lanes, SignalSite? site, int arm, SignalMoves banned, float centre, Vector3 outDir)
     {
@@ -263,6 +286,7 @@ public sealed class LaneApproach
         {
             Lanes = lanes, Site = site, Arm = arm, Banned = banned, LaneCentre = centre, Out = outDir,
             Parent = parent, MultiLane = cars > 1, Reach = reach, Crossings = new int[lanes.Length], OffsetSum = new float[lanes.Length],
+            LastDischarge = Enumerable.Repeat(double.NegativeInfinity, Math.Max(1, lanes.Length)).ToArray(), QueuePlace = new int[Math.Max(1, lanes.Length)],
         };
     }
 
@@ -341,7 +365,7 @@ public sealed class LaneApproach
 /// rebuild: keys are cells of the LV95 grid, so they do not change when the origin moves (#185).
 /// </para>
 /// </summary>
-public sealed class LaneGraph
+public sealed partial class LaneGraph
 {
     public List<LaneEdge> Edges { get; } = new();
 
@@ -356,6 +380,24 @@ public sealed class LaneGraph
 
     private LaneGraph(OriginFrame frame) => Frame = frame;
 
+    /// <summary>
+    /// An empty graph in <paramref name="origin"/>'s frame, for a mode's builder (#1060: the walk, ride and tram graphs of
+    /// <c>Traffic.Walkers</c>, <c>Riders</c>, <c>Trams</c>) to fill with <see cref="Add"/>, off the main thread like <see cref="Build"/>.
+    /// </summary>
+    public static LaneGraph Empty(OriginFrame origin) => new(origin);
+
+    /// <summary>
+    /// Adds an edge a mode built (#1060) and ties both its ends to whatever else meets there: give its <see cref="LaneEdge.KeyStart"/>
+    /// and <see cref="LaneEdge.KeyEnd"/> from <see cref="Key"/> on its LV95 ends, so it joins across tile seams and rebuilds.
+    /// </summary>
+    public LaneEdge Add(LaneEdge edge)
+    {
+        Edges.Add(edge);
+        Link(edge.KeyStart, edge, true);
+        Link(edge.KeyEnd, edge, false);
+        return edge;
+    }
+
     /// <summary>The traffic lights of the tiles it was built from (#353).</summary>
     public List<SignalSite> Signals { get; } = new();
 
@@ -363,14 +405,14 @@ public sealed class LaneGraph
     private const float StopReach = 15f;
 
     /// <summary>The snap cell of an LV95 point, laid out like world X/Z (east, then south).</summary>
-    private static long Key(double e, double n) =>
+    public static long Key(double e, double n) =>
         ((long)(int)Math.Round(e / Snap) << 32) ^ (uint)(int)Math.Round(-n / Snap);
 
     /// <summary>
     /// Builds in one origin frame, taken once by the caller (a worker must not read a live origin
     /// that may move under it). Shift the result if the origin has moved since.
     /// </summary>
-    public static LaneGraph Build(IEnumerable<RoadTile> tiles, OriginFrame origin, Func<RoadSegment, bool> keep)
+    public static LaneGraph Build(IEnumerable<RoadTile> tiles, OriginFrame origin, Func<RoadSegment, bool> keep, MoverKind kind = MoverKind.Car)
     {
         var g = new LaneGraph(origin);
         foreach (var tile in tiles)
@@ -411,7 +453,7 @@ public sealed class LaneGraph
                     OneWayLanes = Math.Max(1, (int)Math.Max(at.LanesForward, at.LanesBackward)),
                     LaneWidth = at.OneWay != 0 ? RoadCrossSection.LaneWidth(seg.Class)
                         : shared ? 0f : RoadCrossSection.TwoWayLaneWidth(seg.Width, leftBike, rightBike, back, fwd),
-                    Points = pts, Cumulative = cum, Class = seg.Class, Flags = seg.Flags,
+                    Points = pts, Cumulative = cum, Class = seg.Class, Flags = seg.Flags, Kind = kind,
                     Width = seg.Width, KeyStart = keyStart, KeyEnd = keyEnd,
                     OneWay = seg.Attributes.OneWay,
                     Yield = seg.Attributes.Flags & (RoadAttrFlags.YieldAtStart | RoadAttrFlags.YieldAtEnd),
@@ -427,6 +469,7 @@ public sealed class LaneGraph
         }
         g.OrientDivided();
         var matched = new Dictionary<(LaneEdge, bool), float>();
+        var unlit = new List<(RoadJunctionPath, LaneEdge)>();   // car paths of cores without lights (#1057: they give way to trams)
         foreach (var tile in tiles)
         {
             var sites = new SignalSite[tile.Signals.Count];
@@ -473,11 +516,37 @@ public sealed class LaneGraph
                         float along = d.Dot(u), across = (d - u * along).Length();
                         if (along < 0.5f && -along < best && across < 15f) { best = -along; zebra = at; }
                     }
-                    sites[k].Walks.Add((a0 + u * (zebra - a0).Dot(u), b0 + u * (zebra - b0).Dot(u), arm.Key));
+                    Vector3 On(Vector3 p) => p + u * (zebra - p).Dot(u);
+                    int HalfOf(CrossingHalf half) => sg.Plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Pedestrian && g.Arm == arm.Key && g.Half == half);
+                    // a two-stage crossing (#1030): each half from its kerb's head to the island's edge, where its walkers' line ends
+                    const SignalPoleFlags Both = SignalPoleFlags.ArrivingHalf | SignalPoleFlags.DepartingHalf;
+                    var poles = arm.ToList();
+                    int island = poles.FindIndex(p => (p.Flags & Both) == Both);
+                    if (island >= 0 && HalfOf(CrossingHalf.Arriving) is var inHalf and >= 0 && HalfOf(CrossingHalf.Departing) is var outHalf and >= 0)
+                    {
+                        var middle = heads[island];
+                        foreach (var (half, walkers) in (ReadOnlySpan<(SignalPoleFlags, int)>)[(SignalPoleFlags.ArrivingHalf, inHalf), (SignalPoleFlags.DepartingHalf, outHalf)])
+                        {
+                            int kerb = poles.FindIndex(p => (p.Flags & Both) == half);
+                            if (kerb < 0) continue;
+                            var edge = middle;
+                            float nearest = float.MaxValue;
+                            foreach (var (line, points) in sites[k].Lines)
+                                if (line.Group == walkers && line.Mover == ConflictMover.Walker)
+                                    foreach (var end in (ReadOnlySpan<Vector3>)[points[0], points[^1]])
+                                        if (end.DistanceSquaredTo(middle) < nearest) (nearest, edge) = (end.DistanceSquaredTo(middle), end);
+                            sites[k].Walks.Add((On(heads[kerb]), On(edge), arm.Key, walkers));
+                        }
+                        continue;
+                    }
+                    int whole = sg.Plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Pedestrian && g.Arm == arm.Key);
+                    sites[k].Walks.Add((On(a0), On(b0), arm.Key, whole));
                 }
             }
             // the junction paths (#818 phase 5): each a one-way edge from the road end at its arm's mouth to the exit's; their ends meet
             // those roads, so JoinTrimmedEnds leaves the junction to them. Cars only (riders are not traffic)
+            // (per lit junction, its movements for the points where its turning cars give way, #1046)
+            var ways = sites.Select(_ => new List<(ConflictWay Way, LaneEdge? Edge)>()).ToArray();
             foreach (var jpath in tile.JunctionPaths)
             {
                 // a riders' path at the lights: kept for the debug drawing only (#971)
@@ -487,7 +556,11 @@ public sealed class LaneGraph
                     for (int i = 0; i < ride.Length; i++)
                         ride[i] = origin.ToWorld(tile.Id.MinE + jpath.Points[i * 3], tile.Id.MaxN - jpath.Points[i * 3 + 2], jpath.Points[i * 3 + 1]);
                     sites[jpath.Signal].Rides.Add((ride, jpath.Group, jpath.Move));
+                    ways[jpath.Signal].Add((new ConflictWay(jpath.Points, jpath.Group, ConflictMover.Bike, jpath.Move, jpath.Width * 0.5f), null));
                 }
+                // a tram path at the lights (#1057): its trams are a movement the turning cars give way to; the trams drive it (BuildTrams)
+                if (jpath.Kind == JunctionPathKind.Tram && jpath.PointCount >= 2 && jpath.Signal >= 0 && jpath.Signal < sites.Length)
+                    ways[jpath.Signal].Add((new ConflictWay(jpath.Points, jpath.Group, ConflictMover.Tram, jpath.Move, jpath.Width * 0.5f), null));
                 if (jpath.Kind != JunctionPathKind.Car || jpath.PointCount < 2) continue;
                 int n = jpath.PointCount;
                 var pts = new Vector3[n];
@@ -509,7 +582,14 @@ public sealed class LaneGraph
                 g.Link(edge.KeyStart, edge, true);
                 g.Link(edge.KeyEnd, edge, false);
                 g.Paths++;
+                if (site is not null) ways[jpath.Signal].Add((new ConflictWay(jpath.Points, jpath.Group, ConflictMover.Car, jpath.Move, jpath.Width * 0.5f), edge));
+                else unlit.Add((jpath, edge));
             }
+            for (int k = 0; k < sites.Length; k++)
+                if (ways[k].Any(w => w.Edge is not null)) Yields(sites[k].Plan, tile.Signals[k].ConflictLines, ways[k]);
+            // without lights its cars give way to its trams (#1057)
+            TramYields(tile, unlit);
+            unlit.Clear();
             // the lanes of every approach the tile records (#353), then any signalised approach it does not (an older tile)
             var recorded = new HashSet<(int, int)>();
             foreach (var r in tile.Approaches)
@@ -538,6 +618,27 @@ public sealed class LaneGraph
 
     /// <summary>The junction paths it holds (#818 phase 5).</summary>
     public int Paths { get; private set; }
+
+    /// <summary>Half the depth of a zebra (m): RoadGen paints them 3 m deep (<c>TileRewriter.Crossings</c>).</summary>
+    private const float ZebraHalf = 1.5f;
+
+    /// <summary>
+    /// The points where each car path of a lit junction gives way (#1046): its <paramref name="ways"/> (car paths with their edges,
+    /// riders' paths) and its walkers' lines (<c>CPAR</c>, #979; none in an older tile), all in the signal's tile's frame.
+    /// </summary>
+    private static void Yields(SignalPlan plan, List<RoadConflictLine> lines, List<(ConflictWay Way, LaneEdge? Edge)> ways)
+    {
+        foreach (var line in lines)
+            if (line.Mover == ConflictMover.Walker) ways.Add((new ConflictWay(line.Points, line.Group, ConflictMover.Walker, SignalMoves.None, ZebraHalf), null));
+        var all = ways.Select(w => w.Way).ToList();
+        var conflicts = plan.Conflicts();
+        for (int i = 0; i < ways.Count; i++)
+        {
+            if (ways[i].Edge is not { Path: { } path }) continue;
+            path.Yields = ConflictPoints.For(plan, conflicts, all, i)
+                .Select(y => new PathYield(y.At, y.Out, all[y.Other].Group, all[y.Other].Mover, ways[y.Other].Edge, y.Enter)).ToArray();
+        }
+    }
 
     /// <summary>Its edges that are a transition's pieces, whose lanes cars follow (#818 phase 5).</summary>
     public int Transitions { get; private set; }

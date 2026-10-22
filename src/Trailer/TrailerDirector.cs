@@ -543,7 +543,7 @@ public partial class TrailerDirector : Node
         body.AddChild(new MeshInstance3D
         {
             Mesh = new BoxMesh { Size = prop.Size },
-            MaterialOverride = new StandardMaterial3D { AlbedoColor = prop.Colour, Roughness = 0.9f },
+            MaterialOverride = Styles.StyleKit.Figure(new StandardMaterial3D { AlbedoColor = prop.Colour, Roughness = 0.9f }),
         });
         AddChild(body);
         float b = Mathf.DegToRad(bearing);

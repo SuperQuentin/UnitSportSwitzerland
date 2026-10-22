@@ -119,7 +119,7 @@ internal sealed partial class XrWristRing : Node3D
         var to = head.Origin - watch.Origin;
         float d = to.Length();
         float facing = d > 0.01f ? watch.Basis.Z.Normalized().Dot(to / d) : 0f;
-        bool free = inWorld && watchShown && !_list.IsOpen && Input.MouseMode == Input.MouseModeEnum.Captured;
+        bool free = inWorld && watchShown && !_list.IsOpen && MouseCapture.Mode == Input.MouseModeEnum.Captured;
 
         if (IsOpen)
         {

@@ -502,7 +502,7 @@ public partial class RadioUi : CanvasLayer
         _volume.Editable = target != Target.Church;
         if (!_burning) ShowStatus("", UiTheme.TextDim, 0);
         _panel.Visible = true;
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
         Rebuild();   // hidden in the player, but Play with nothing on starts its first row
         UpdateNow();

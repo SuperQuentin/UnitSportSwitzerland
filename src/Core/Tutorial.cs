@@ -215,7 +215,7 @@ public partial class Tutorial : CanvasLayer
         var step = _steps[_index];
         _title.Text = step.Title;
         _count.Text = $"{_index + 1} / {_steps.Count}";
-        _body.Text = InputHints.Format(TutorialSteps.Body(step, InputHints.Pad, InputHints.Vr));
+        _body.Text = InputHints.Format(TutorialSteps.Body(step, InputHints.Pad, InputHints.Vr, InputHints.Touch));
         _foot.Text = step.Goal == TutorialGoal.Done ? "" : InputHints.Format("Tutorial  ·  {menu} › Skip tutorial");
         _shownProgress = -1;
     }

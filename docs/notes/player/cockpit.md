@@ -24,7 +24,8 @@
 - **HUD**: in the cockpit the speed/gear/rpm readout and the rev bar go (the dials show them)
   unless `CockpitHud` is on; tyre and brake wear, which the dash has no gauge for, stay.
 - **Mirrors** (`CabMirrors`, shared by `CarRig` and `HeavyRig`, setting on by default, `--mirrors on|off`): rear-view and both
-  door mirrors, each a `SubViewport` 48 px tall (PS1 look, nearest filtering) rendering from the
+  door mirrors, each a `SubViewport` 48 px tall with nearest filtering in PS1, 128 px (80 on a phone,
+  `Platform.IsMobile`) with linear filtering in the lit styles (#1070, following a restyle live), rendering from the
   **eye's reflection** in the mirror plane, looking square through it (along its normal) with an
   off-axis frustum (`SetFrustum`) framing exactly the glass, so the near plane IS the glass; the
   quad flips U. A camera aimed at the mirror's middle had its near plane square to the line of

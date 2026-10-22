@@ -40,6 +40,9 @@ public static class OsmOverlay
         "turn:lanes", "turn:lanes:forward", "turn:lanes:backward",
         "maxspeed", "maxspeed:forward", "maxspeed:backward",
         "bicycle:lanes", "bicycle:lanes:forward", "bicycle:lanes:backward",
+        // the signs' destinations (#1110): where the way leads, per lane
+        "destination", "destination:forward", "destination:backward",
+        "destination:lanes", "destination:lanes:forward", "destination:lanes:backward",
     ];
 
     private static readonly HashSet<string> IgnoredHighways =
@@ -58,7 +61,7 @@ public static class OsmOverlay
         string OneWay, string Lanes, string LanesFwd, string LanesBwd, string Width,
         string SidewalkLeft, string SidewalkRight, string CyclewayLeft, string CyclewayRight,
         string TurnFwd, string TurnBwd, bool Roundabout, bool Tram, string MaxSpeedFwd = "", string MaxSpeedBwd = "",
-        string BikeFwd = "", string BikeBwd = "");
+        string BikeFwd = "", string BikeBwd = "", string DestFwd = "", string DestBwd = "", string DestLanesFwd = "", string DestLanesBwd = "");
 
     public sealed record Conflict(string Uuid, int Part, double From, double To, long Way, double E, double N, string Reason);
 
@@ -91,7 +94,7 @@ public static class OsmOverlay
         var result = Conflate(tlm, osm);
         // signals, bike boxes and via nodes inside the region box only (the 200 m margin is for the ways)
         bool Inside(double e, double n) => e >= minE && e <= maxE && n >= minN && n <= maxN;
-        var (nodeRows, nodeStats) = OsmNodes.Snap(tlm, osm, result.Rows, points.Where(p => Inside(p.E, p.N)).ToList(), relations,
+        var (nodeRows, nodeStats) = OsmNodes.Snap(tlm, osm, result.Rows, points.Where(p => Inside(p.E, p.N) && OsmNodes.IsRowNode(p.Tags)).ToList(), relations,
             id => position(id) is { } q && Inside(q.E, q.N) ? q : null);
         double total = clock.Elapsed.TotalSeconds;
 
@@ -100,6 +103,10 @@ public static class OsmOverlay
         string pbfName = Path.GetFileName(pbfPath), tlmName = Path.GetFileName(tlmGpkg);
         File.WriteAllText(outPath, Format(result.Rows, pbfName, tlmName, minE, minN, maxE, maxN));
         File.WriteAllText(Path.Combine(tempDir, OsmNodes.FileName), OsmNodes.Format(nodeRows, pbfName, tlmName, minE, minN, maxE, maxN));
+        // the tram stops (#1057): RoadGen merges them with swissTLM3D's (TramStopStage), OSM's position first
+        var tramStops = points.Where(p => Inside(p.E, p.N) && OsmNodes.IsTramStop(p.Tags)).OrderBy(p => p.E).ThenBy(p => p.N).ToList();
+        File.WriteAllText(Path.Combine(tempDir, TramStopStage.OsmFileName), "# (c) OpenStreetMap contributors, ODbL\nname\te\tn\n" + string.Concat(tramStops.Select(p =>
+            string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{p.Tags.GetValueOrDefault("name", "Stop").Replace('\t', ' ')}\t{p.E:F2}\t{p.N:F2}\n"))));
         long peak = Process.GetCurrentProcess().PeakWorkingSet64;
         string report = Report(result, tlm.Count, osm.Count)
             + OsmNodes.Report(nodeRows, nodeStats, Lines(result, x => x.TurnFwd != "" || x.TurnBwd != "")) + MedianProbe(tlm, osm)
@@ -107,7 +114,7 @@ public static class OsmOverlay
             + $"total {total:F1} s; peak working set {peak / 1048576.0:F0} MB\n";
         File.WriteAllText(Path.Combine(tempDir, ReportName), report);
         Console.WriteLine(report.Length > 6000 ? report[..6000] + "\n... (full report in " + ReportName + ")" : report);
-        Console.WriteLine($"OSM overlay: {result.Rows.Count} intervals -> {outPath}, {nodeRows.Count} node rows -> {OsmNodes.FileName}");
+        Console.WriteLine($"OSM overlay: {result.Rows.Count} intervals -> {outPath}, {nodeRows.Count} node rows -> {OsmNodes.FileName}, {tramStops.Count} tram stops -> {TramStopStage.OsmFileName}");
         return 0;
     }
 
@@ -169,7 +176,7 @@ public static class OsmOverlay
                                   || tags.GetValueOrDefault("railway") == "tram"),
             WayTags = TagKeys,
             KeepTaggedNode = OsmNodes.KeepNode,
-            NodeTags = OsmNodes.NodeTagKeys,
+            NodeTags = OsmNodes.ReadNodeTags,
             KeepRelation = OsmNodes.KeepRelation,
             RelationTags = OsmNodes.RelationTagKeys,
         });
@@ -341,6 +348,14 @@ public static class OsmOverlay
         if (fwdBike == "" && osmDir == 1) fwdBike = t.GetValueOrDefault("bicycle:lanes", "");
         if (bwdBike == "" && osmDir == -1) bwdBike = t.GetValueOrDefault("bicycle:lanes", "");
 
+        // the destinations (#1110), read as turn:lanes is: the plain key for the way's one direction of traffic
+        string fwdDest = t.GetValueOrDefault("destination:forward", ""), bwdDest = t.GetValueOrDefault("destination:backward", "");
+        if (fwdDest == "" && osmDir != -1) fwdDest = t.GetValueOrDefault("destination", "");
+        if (bwdDest == "" && osmDir == -1) bwdDest = t.GetValueOrDefault("destination", "");
+        string fwdDestLanes = t.GetValueOrDefault("destination:lanes:forward", ""), bwdDestLanes = t.GetValueOrDefault("destination:lanes:backward", "");
+        if (fwdDestLanes == "" && osmDir == 1) fwdDestLanes = t.GetValueOrDefault("destination:lanes", "");
+        if (bwdDestLanes == "" && osmDir == -1) bwdDestLanes = t.GetValueOrDefault("destination:lanes", "");
+
         string sl = Side("sidewalk", "left"), sr = Side("sidewalk", "right");
         string cl = Side("cycleway", "left"), cr = Side("cycleway", "right");
         int tramCount = 0;
@@ -356,7 +371,8 @@ public static class OsmOverlay
             // the speed limit per direction (#711): maxspeed:forward/backward where OSM splits it, else maxspeed
             OsmSpeed.Kmh(t.GetValueOrDefault(same ? "maxspeed:forward" : "maxspeed:backward") ?? t.GetValueOrDefault("maxspeed")),
             OsmSpeed.Kmh(t.GetValueOrDefault(same ? "maxspeed:backward" : "maxspeed:forward") ?? t.GetValueOrDefault("maxspeed")),
-            same ? fwdBike : bwdBike, same ? bwdBike : fwdBike);
+            same ? fwdBike : bwdBike, same ? bwdBike : fwdBike,
+            same ? fwdDest : bwdDest, same ? bwdDest : fwdDest, same ? fwdDestLanes : bwdDestLanes, same ? bwdDestLanes : fwdDestLanes);
     }
 
     private static string Int(string? v) => int.TryParse(v, NumberStyles.None, CultureInfo.InvariantCulture, out int n) ? n.ToString(CultureInfo.InvariantCulture) : "";
@@ -372,19 +388,21 @@ public static class OsmOverlay
     // ---- output --------------------------------------------------------------------------------
 
     public const string Header = "uuid\tpart\tfrom_m\tto_m\tosm_way\tdir\thighway\toneway\tlanes\tlanes_fwd\tlanes_bwd\twidth"
-        + "\tsidewalk_left\tsidewalk_right\tcycleway_left\tcycleway_right\tturn_lanes_fwd\tturn_lanes_bwd\troundabout\ttram\tmaxspeed_fwd\tmaxspeed_bwd\tbicycle_lanes_fwd\tbicycle_lanes_bwd";
+        + "\tsidewalk_left\tsidewalk_right\tcycleway_left\tcycleway_right\tturn_lanes_fwd\tturn_lanes_bwd\troundabout\ttram\tmaxspeed_fwd\tmaxspeed_bwd\tbicycle_lanes_fwd\tbicycle_lanes_bwd"
+        + "\tdestination_fwd\tdestination_bwd\tdestination_lanes_fwd\tdestination_lanes_bwd";
 
     public static string Format(List<Row> rows, string pbfName, string tlmName, double minE, double minN, double maxE, double maxN)
     {
         var sb = new StringBuilder();
         sb.Append(CultureInfo.InvariantCulture,
-            $"# osm_overlay v3 osm={pbfName} tlm={tlmName} bbox={minE:F0},{minN:F0},{maxE:F0},{maxN:F0} (c) OpenStreetMap contributors, ODbL\n");
+            $"# osm_overlay v4 osm={pbfName} tlm={tlmName} bbox={minE:F0},{minN:F0},{maxE:F0},{maxN:F0} (c) OpenStreetMap contributors, ODbL\n");
         sb.Append(Header).Append('\n');
         foreach (var r in rows)
             sb.Append(CultureInfo.InvariantCulture,
                 $"{r.Uuid}\t{r.Part}\t{r.From:F1}\t{r.To:F1}\t{r.Way}\t{(r.SameDir ? '+' : '-')}\t{Clean(r.Highway)}\t{r.OneWay}\t{r.Lanes}\t{r.LanesFwd}\t{r.LanesBwd}\t{r.Width}"
                 + $"\t{Clean(r.SidewalkLeft)}\t{Clean(r.SidewalkRight)}\t{Clean(r.CyclewayLeft)}\t{Clean(r.CyclewayRight)}"
-                + $"\t{Clean(r.TurnFwd)}\t{Clean(r.TurnBwd)}\t{(r.Roundabout ? 1 : 0)}\t{(r.Tram ? 1 : 0)}\t{r.MaxSpeedFwd}\t{r.MaxSpeedBwd}\t{Clean(r.BikeFwd)}\t{Clean(r.BikeBwd)}\n");
+                + $"\t{Clean(r.TurnFwd)}\t{Clean(r.TurnBwd)}\t{(r.Roundabout ? 1 : 0)}\t{(r.Tram ? 1 : 0)}\t{r.MaxSpeedFwd}\t{r.MaxSpeedBwd}\t{Clean(r.BikeFwd)}\t{Clean(r.BikeBwd)}"
+                + $"\t{Clean(r.DestFwd)}\t{Clean(r.DestBwd)}\t{Clean(r.DestLanesFwd)}\t{Clean(r.DestLanesBwd)}\n");
         return sb.ToString();
     }
 

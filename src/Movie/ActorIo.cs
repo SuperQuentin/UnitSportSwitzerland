@@ -18,7 +18,7 @@ public static class ActorIo
         "RideKindId", "CarSetupId", "TuningBits", "DoorsOpen", "TrailerCode", "RidingWith", "SeatIndex", "DeckOn",
         "DeckSection", "HeldItemId", "ItemAction", "PoseKind", "HeadwearId", "OutfitBits", "AppearanceBits", "DanceId",
         "FightPose", "HeldRadio", "BackItemId", "CarRadio", "CarCd", "Down", "RadioVolume", "PhoneState",
-        "AuraPose", "LiftLine", "LiftCarrier",
+        "AuraPose", "LiftLine", "LiftCarrier", "DeviceKind",
     };
 
     public const int RideKind = 0, RidingWith = 5;
@@ -63,6 +63,7 @@ public static class ActorIo
         n[23] = p.PhoneState;
         n[24] = p.AuraPose;
         n[25] = p.LiftLine; n[26] = p.LiftCarrier;
+        n[27] = p.DeviceKind;
         s.Str[7] = p.DeckOn; s.Str[17] = p.HeldRadio; s.Str[20] = p.CarCd;
     }
 
@@ -84,6 +85,7 @@ public static class ActorIo
         p.AuraPose = n.Length > 24 ? (int)n[24] : 0;
         p.LiftLine = n.Length > 25 ? (int)n[25] : 0;
         p.LiftCarrier = n.Length > 26 ? (int)n[26] : 0;
+        p.DeviceKind = n.Length > 27 ? (int)n[27] : 0;
         if (p.DeckOn != s.Str[7]) p.DeckOn = s.Str[7];
         if (p.HeldRadio != s.Str[17]) p.HeldRadio = s.Str[17];
         if (p.CarCd != s.Str[20]) p.CarCd = s.Str[20];

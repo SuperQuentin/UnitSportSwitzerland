@@ -531,6 +531,15 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     [Export] public int AppearanceBits { get; set; }
 
+    /// <summary>What the player plays on, shown on their <see cref="NameTag"/> (#1136).</summary>
+    public const int DeviceDesktop = 0, DeviceVr = 1, DeviceMobile = 2;
+
+    /// <summary>
+    /// <see cref="DeviceDesktop"/>, <see cref="DeviceVr"/> or <see cref="DeviceMobile"/>: set by the
+    /// owner every frame (a headset can start mid-game), replicated on change.
+    /// </summary>
+    [Export] public int DeviceKind { get; set; }
+
     private int _visualAppearance;
 
     /// <summary>The figure's colours with what it wears: the jersey of whoever owns it, the clothes it has on.</summary>
@@ -691,7 +700,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// The replicated properties sent only when they change (ride, seat, items, clothes, …). The movie
     /// recorder (#638) keeps the same set as events: <c>--moviecheck</c> fails if the two drift apart.
     /// </summary>
-    public static readonly string[] OnChangeProperties = { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DanceId", ".:FightPose", ".:AuraPose", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down", ".:RadioVolume", ".:PhoneState", ".:LiftLine", ".:LiftCarrier" };
+    public static readonly string[] OnChangeProperties = { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DeviceKind", ".:DanceId", ".:FightPose", ".:AuraPose", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down", ".:RadioVolume", ".:PhoneState", ".:LiftLine", ".:LiftCarrier" };
 
     // --- figure animation ---
     private MeshInstance3D? _walker;
@@ -1145,6 +1154,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private float _bobPhase;
     private float _bobStrength;
     private float _landingDip;
+    private const float DipStep = 1f / 60f;
     private float _landingVelocity;
     private bool _wasOnFloor = true;
     private float _fallSpeed;
@@ -1310,6 +1320,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         replication.AddProperty(".:HeadwearId");
         replication.AddProperty(".:OutfitBits");
         replication.AddProperty(".:AppearanceBits");
+        replication.AddProperty(".:DeviceKind");
         replication.AddProperty(".:DanceId");
         replication.AddProperty(".:FightPose");
         replication.AddProperty(".:AuraPose");
@@ -1511,6 +1522,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (!Net.NetworkManager.DedicatedServer) AddChild(new Items.HeldItemVisual(this) { Name = "HeldItem" });
         // a bot is marked over its head on every client (#837)
         if (Bot && !Net.NetworkManager.DedicatedServer) AddChild(new Bots.BotTag(this));
+        // everyone else in sight carries their name, and VR / MOBILE, over their head (#1136)
+        else if (!Npc && !Puppet && !IsMultiplayerAuthority() && !Net.NetworkManager.DedicatedServer) AddChild(new NameTag(this));
 
         if (IsMultiplayerAuthority() && !Npc && _interest != null)
             Callable.From(() => _interest.ReportView(Core.GameSettings.Current.CameraFar, BaseFov)).CallDeferred();
@@ -1702,6 +1715,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             if (Origin is { } origin) NetGlobal = origin.ToGlobal(Position);
             // the cockpits' altimeters (#421) read the height over the sea of this world's y = 0
             if (!Npc) Avatar.AircraftCockpit.WorldAltitude = Origin is { } sea ? (float)sea.ToGlobal(Vector3.Zero).Alt : 0f;
+            if (!Npc) DeviceKind = XR.XrSession.Active ? DeviceVr : Core.Platform.IsMobile ? DeviceMobile : DeviceDesktop;
             NetVel = Velocity;
             NetYaw = Rotation.Y;
             NetTime = Time.GetTicksUsec() / 1e6;
@@ -4539,8 +4553,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>The controls of a ground ride this step: a script's (<see cref="RideControls"/>), else the pedals, stick and wheel.</summary>
     private RideInput RideInputNow()
     {
+        // a script or a bot drives: no stick read (a dedicated server has no input actions, and a bot's
+        // drive printed four InputMap errors with their stacks every physics frame, #1006)
+        if (RideControls is { } scripted) return scripted();
         var stick = PlayerInput.Move;
-        return RideControls?.Invoke() ?? new RideInput(
+        return new RideInput(
             Throttle: Mathf.Max(PlayerInput.Strength(PlayerInput.Throttle), Mathf.Max(0f, -stick.Y)),
             Brake: Mathf.Max(PlayerInput.Strength(PlayerInput.Brake), Mathf.Max(0f, stick.Y)),
             Steer: SteerInput(),
@@ -4558,7 +4575,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (WaterPhysics(dt)) return;
         // Triggers are analog, and the vehicles already take 0..1: half a trigger is half the
         // watts. Pushing the stick forward or back does the same, for anyone who expects it to.
-        var stick = PlayerInput.Move;
+        var stick = RideControls == null ? PlayerInput.Move : Vector2.Zero;
         var input = RideInputNow();
 
         // skiing with the body in VR (#186): lean, pole and tuck on top of the sticks
@@ -5237,9 +5254,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         _wasOnFloor = onFloor;
 
-        // critically damped spring back to rest
-        _landingVelocity += -_landingDip * 90f * dt - _landingVelocity * 13f * dt;
-        _landingDip += _landingVelocity * dt;
+        // a damped spring back to rest, in steps of at most 1/60 s: one step of a whole frame went
+        // unstable past 0.15 s (any frame at /speed 8), and the camera flew off to NaN (#1006)
+        for (float left = Mathf.Min(dt, 1f); left > 0f; left -= DipStep)
+        {
+            float h = Mathf.Min(left, DipStep);
+            _landingVelocity += -_landingDip * 90f * h - _landingVelocity * 13f * h;
+            _landingDip += _landingVelocity * h;
+        }
 
         // vertical bob is double-frequency (two footfalls per stride), lateral is single
         float bobUp = Mathf.Sin(_bobPhase * 2f) * 0.045f * _bobStrength;
