@@ -3,9 +3,13 @@
 - **Inventory** (`src/Items/`): `Inventory` is pure data — a 6-slot hotbar plus a 27-slot pack (more with a bag: the `bags` note),
   stacks (`ItemStack(Id, Count, Data)`: `Data` is optional per-instance data, a photo id; stacks
   only merge when `SameKind` = same Id and same Data, in every cursor op, `Add(ItemStack)` and
-  `Room(id, data)`), `Changed` — saved to `user://inventory.json` by item **name** plus `Data` when set (`ToJson`/`FromJson`; old saves without it load as
+  `Room(id, data)`), `Changed` — saved by item **name** plus `Data` when set (`ToJson`/`FromJson`; old saves without it load as
   plain stacks; a starter kit when absent).
   Local only, never replicated; what is in the hand is, as `FootPlayer.HeldItemId`, so others see it.
+  **One save per server** (#1100): `user://inventory.json` offline, `user://inventory/servers/<host>_<port>.json`
+  keyed by the endpoint when `WorldLaunch.Networked` (`Inventory.Load(serverKey)`, called from `ClientWorld._Ready`
+  with `Launch.Endpoint`) — the bank account was already per server, by player name, so the pocket items and
+  cash backing it are too, instead of one save shared by every server ever joined.
   `ItemController` (owned by `ClientWorld`, player resolved per frame, falling back to whoever owns
   the current camera so probes work) does the items: binoculars (Aim → 9° FOV, `ScopeView` puts
   third person at the eye), camera (Aim frames, Use saves `user://photos/*.png` after

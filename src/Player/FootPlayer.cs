@@ -531,6 +531,15 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     [Export] public int AppearanceBits { get; set; }
 
+    /// <summary>What the player plays on, shown on their <see cref="NameTag"/> (#1136).</summary>
+    public const int DeviceDesktop = 0, DeviceVr = 1, DeviceMobile = 2;
+
+    /// <summary>
+    /// <see cref="DeviceDesktop"/>, <see cref="DeviceVr"/> or <see cref="DeviceMobile"/>: set by the
+    /// owner every frame (a headset can start mid-game), replicated on change.
+    /// </summary>
+    [Export] public int DeviceKind { get; set; }
+
     private int _visualAppearance;
 
     /// <summary>The figure's colours with what it wears: the jersey of whoever owns it, the clothes it has on.</summary>
@@ -691,7 +700,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// The replicated properties sent only when they change (ride, seat, items, clothes, …). The movie
     /// recorder (#638) keeps the same set as events: <c>--moviecheck</c> fails if the two drift apart.
     /// </summary>
-    public static readonly string[] OnChangeProperties = { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DanceId", ".:FightPose", ".:AuraPose", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down", ".:RadioVolume", ".:PhoneState", ".:LiftLine", ".:LiftCarrier" };
+    public static readonly string[] OnChangeProperties = { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DeviceKind", ".:DanceId", ".:FightPose", ".:AuraPose", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down", ".:RadioVolume", ".:PhoneState", ".:LiftLine", ".:LiftCarrier" };
 
     // --- figure animation ---
     private MeshInstance3D? _walker;
@@ -1311,6 +1320,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         replication.AddProperty(".:HeadwearId");
         replication.AddProperty(".:OutfitBits");
         replication.AddProperty(".:AppearanceBits");
+        replication.AddProperty(".:DeviceKind");
         replication.AddProperty(".:DanceId");
         replication.AddProperty(".:FightPose");
         replication.AddProperty(".:AuraPose");
@@ -1512,6 +1522,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (!Net.NetworkManager.DedicatedServer) AddChild(new Items.HeldItemVisual(this) { Name = "HeldItem" });
         // a bot is marked over its head on every client (#837)
         if (Bot && !Net.NetworkManager.DedicatedServer) AddChild(new Bots.BotTag(this));
+        // everyone else in sight carries their name, and VR / MOBILE, over their head (#1136)
+        else if (!Npc && !Puppet && !IsMultiplayerAuthority() && !Net.NetworkManager.DedicatedServer) AddChild(new NameTag(this));
 
         if (IsMultiplayerAuthority() && !Npc && _interest != null)
             Callable.From(() => _interest.ReportView(Core.GameSettings.Current.CameraFar, BaseFov)).CallDeferred();
@@ -1703,6 +1715,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             if (Origin is { } origin) NetGlobal = origin.ToGlobal(Position);
             // the cockpits' altimeters (#421) read the height over the sea of this world's y = 0
             if (!Npc) Avatar.AircraftCockpit.WorldAltitude = Origin is { } sea ? (float)sea.ToGlobal(Vector3.Zero).Alt : 0f;
+            if (!Npc) DeviceKind = XR.XrSession.Active ? DeviceVr : Core.Platform.IsMobile ? DeviceMobile : DeviceDesktop;
             NetVel = Velocity;
             NetYaw = Rotation.Y;
             NetTime = Time.GetTicksUsec() / 1e6;
@@ -4624,14 +4637,18 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // a motorbike's or a car's grip depends on what is under it (cached lookup: road, else cover).
         // Not for a stock race NPC car: its racing line is planned on tarmac grip and may put two
         // wheels on the verge. An NPC given a preset (#40) races on the ground it is built for.
-        var surface = (_ride is Motorbike or Truck or SnowRide || _ride is Car && (!Npc || CarSetupId != 0)) && Terrain != null
+        var surface = (_ride is Motorbike or Truck or SnowRide or Bicycle || _ride is Car && (!Npc || CarSetupId != 0)) && Terrain != null
             ? Audio.Surfaces.At(Terrain, GlobalPosition, Indoors, this) : Audio.Surface.Asphalt;
         // a tow behind another vehicle: less air to push (cars and motorbikes read it)
         Draft = onFloor && _ride is Car or Motorbike or Truck && _motion.Speed > 10f
-            ? RideGround.DraftBehind(GlobalPosition, heading.Rotated(Vector3.Up, _motion.Slip), OtherVehicles()) : 0f;
+            ? RideGround.DraftBehind(GlobalPosition, heading.Rotated(Vector3.Up, _motion.Slip), OtherVehicles())
+            // a wheel to follow (#1124): close in, and from riding speed
+            : onFloor && _ride is Bicycle && _motion.Speed > 4f ? RideGround.WheelDraftBehind(GlobalPosition, heading, OtherVehicles()) : 0f;
         if (_ride is Truck driving) PrepareTruck(driving);
         else if (_ride is Car shifting) PrepareCar(shifting);
         var ground = new RideGround(onFloor, grade, surface, Draft);
+        // the air thins with height: the same watts go ~6% faster over the Grimsel than in Bern (#1124)
+        if (_ride is Bicycle) ground = ground with { Altitude = Origin is { } sea ? (float)sea.ToGlobal(GlobalPosition).Alt : GlobalPosition.Y };
         if (_ride is SnowRide)
         {
             LookAtSnow(onFloor);

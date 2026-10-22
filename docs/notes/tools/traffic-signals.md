@@ -417,6 +417,27 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   Model viewer: "Traffic light - Flasher, pedestrian / bike / arrow plate", "Flasher, left turn on the left pole" (with another
   approach's left-turn lamp over the main pole's heads, the crossing's pole case), "Permissive left, ball / arrow / uncombined
   arrow".
+- **Far-side pole, one lamp per turn** (#1117, the user, after #1116; supersedes the placement and plate rules above where they
+  differ). Where the approach has no left pole, its left turn's lamp stands on the **far-side pole** of the arm it turns into
+  ("for a turn-into flasher, it should be on the far side pole"): that arm's kerb pole furthest from its main pole (its left pole
+  or a walkers' pole, never an island's), across the junction where the turning car arrives, **beside the pole on its side away
+  from that exit** (the user: "it's better if the far side lamp fit on the side of the pole, pointing away from the exit"; its own
+  heads stand out toward that exit's drivers), `SideReach` 0.42 m out from the pole's side (clear of a walkers' head in front of
+  it, Geneva's 0.21 m half width), level with a car head's green there, held from the pole, facing this approach turned 45 deg
+  toward the junction (the user: "angled a little bit more to the incoming traffic (45deg)", the turning cars coming in);
+  that arm's main pole (near corner) only where it has no other; with no pole there at all, on the head's own left on the main
+  pole (`RoadSignal.LeftFlasherPole`: `SecondPole`, `FarSidePole`, `NearSidePole`, `MainPole`). **One lamp per turn**, its plate
+  from everything that turn gives way to while green (`SignalPlan.TurnPlate`): walkers only a walker, riders only a bike,
+  anything else (a mix, or oncoming cars or trams, `LeftGivesWayTo`) the turn's arrow ("bike if only bike, pedestrian if only
+  pedestrian, arrow if mix of conflicts"); no lamp of its own for the oncoming cars: a left turn's lamp exists where it crosses
+  walkers or riders, or where a combined arrow shows it giving way, and flashes for all of them (`TurnFlash`). A ball still
+  flashes its own yellow for the oncoming cars; an uncombined arrow still flashes its yellow in place of its green, no lamp.
+  Found by the user: J3b's south approach (left and straight on, giving way to the oncoming north arm and crossing its bike lane)
+  had one lamp showing a bike; now the left arrow. Test region: lamps main pole 22, left pole 3, far-side pole 7; plates walker 6,
+  bike 12, arrow 14 (left 7, right 7). Geneva centre: lamps main pole 419, head's left 40, left pole 95, far-side pole 174,
+  near-side pole 16; plates walker 348, bike 60, arrow 336 (left 140, right 196); no double arrow left. Tier 0
+  `SignalBuilderTests.LeftTurnsFlasher_StandsByTheLeftCrosswalk` (far side, near side, left pole, none),
+  `SignalPlanTests.FlasherPlate_*`, `SignalTestRegionTests.Flashers_say_what_they_warn_of_and_permissive_lefts_flash` (J3b south).
 - **Every turn lane its own head, protected where the phases allow** (#1119, the user: "whenever there is a left turn only
   lane at a light, it should get its own light, even if permissive. same for right turns"; "usually permissive lefts are pretty
   rare in Switzerland, especially with a turn lane"; "even right turns with their own lanes are usually protected"). A T's stem

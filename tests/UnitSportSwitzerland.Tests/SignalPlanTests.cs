@@ -521,12 +521,14 @@ public class SignalPlanTests(ITestOutputHelper output)
     [Fact]
     public void FlasherPlate_WalkersOnly_APedestrian()
     {
-        // no bikes: the northbound turns cross only the crossings green with them
+        // no bikes: the northbound right turn crosses only the east crossing green with it: a walker. Its left turn crosses the west
+        // one and gives way to the oncoming cars: a mix, the turn's arrow (#1117, the user: "bike if only bike, pedestrian if only
+        // pedestrian, arrow if mix of conflicts")
         var plan = SignalPlan.Build([Arm(N), Arm(E), Arm(S), Arm(W)]);
         int nb = Group(plan, SignalGroupKind.Car, S);
-        var (plate, arrow) = plan.PlateOf(FlasherOf(plan, nb));
-        Assert.Equal(SignalPlate.Pedestrian, plate);
-        Assert.NotEqual(SignalMoves.None, arrow & (SignalMoves.Left | SignalMoves.Right));
+        Assert.Equal((SignalPlate.Pedestrian, SignalMoves.Right), plan.PlateOf(FlasherOf(plan, nb), turns: SignalMoves.Right));
+        Assert.Equal((SignalPlate.Arrow, SignalMoves.Left), plan.PlateOf(FlasherOf(plan, nb), turns: SignalMoves.Left));
+        Assert.Equal((SignalPlate.Arrow, SignalMoves.Left), plan.TurnPlate(nb, SignalMoves.Left));
         // not a flasher, or a bike group's (its own yellow, no lamp): no plate
         Assert.Equal(SignalPlate.None, plan.PlateOf(nb).Plate);
     }
@@ -559,10 +561,12 @@ public class SignalPlanTests(ITestOutputHelper output)
     [Fact]
     public void FlasherPlate_RidersOnly_ABike()
     {
-        // walkers on no arm: what the turns cross is the riders' way
+        // walkers on no arm: the right turn crosses only the riders' way, a bike; the left turn crosses the oncoming riders and gives
+        // way to the oncoming cars: a mix, its arrow (#1117)
         var plan = SignalPlan.Build([Arm(N, peds: false, bike: true), Arm(E, peds: false, bike: true), Arm(S, peds: false, bike: true), Arm(W, peds: false, bike: true)]);
         int nb = Group(plan, SignalGroupKind.Car, S);
-        Assert.Equal(SignalPlate.Bike, plan.PlateOf(FlasherOf(plan, nb)).Plate);
+        Assert.Equal(SignalPlate.Bike, plan.PlateOf(FlasherOf(plan, nb), turns: SignalMoves.Right).Plate);
+        Assert.Equal((SignalPlate.Arrow, SignalMoves.Left), plan.PlateOf(FlasherOf(plan, nb), turns: SignalMoves.Left));
     }
 
     [Fact]
