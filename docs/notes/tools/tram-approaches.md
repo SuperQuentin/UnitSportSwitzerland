@@ -26,14 +26,19 @@ The junction planner's cores (`junction-planner`) take the tram tracks running t
   leading by 1-3 s, 3 s or more, or not at all (and where). J14: both lead by 3 s or more. Tier 0: `TramTests`.
 - **Aspects and heads per canton** (the user, Oct 21 2026):
   - **Romandy** (`SignalPlan.TramTHead`, bit 6 of the plan's flag byte; `RomandyTramHead`: GE, VD, NE, JU, FR, VS west of
-    E 2 612 000 (the language border at Sierre as a straight cut; FR's German-speaking east is not told apart)): a square black
-    face in a thin white frame, car-head size, one round lens area showing a white dotted T (#1105, after the Geneva photo
-    `File:Tram_signals_Geneva.JPG`, its two square heads at the pole's foot; the round TPG heads above are #1104). Vertical
-    stroke lit = go, horizontal stroke lit = stop, vertical flashing = the amber before red, horizontal flashing = the red-amber
-    before green, which lasts `TramRedAmberT` 5 s (the user: "way longer than for cars"; no source found for the length). A
-    small "tram detected" dot above the T is modelled, never lit; the dots never bloom (`SignalLamps.Blooms`), unlit ones dark
-    (`TramTOff`). The heads stand beside the car heads on their right just above the main head's flasher, touching
-    (`SignalBuilder.TramHeads`, `TramSquareStep`), each with a white plate below carrying its black arrow (always, one way too). A tram's red-amber holds it at its line, so the fixed-time check does not count it as live.
+    E 2 612 000 (the language border at Sierre as a straight cut; FR's German-speaking east is not told apart)): a one-lens car
+    head module (#1105, the user's photos: `File:Tram_signals_Geneva.JPG`'s two square heads at the pole's foot, and two more;
+    the round TPG heads are #1104): the car head's white plate, black housing, visor and 200 mm lens, the lens dark with a
+    solid white T lit in it (`SignalLamps` `TramTStop`/`TramTGo`). Vertical stroke lit = go, horizontal stroke lit = stop,
+    vertical flashing = the amber before red, horizontal flashing = the red-amber before green, which lasts `TramRedAmberT` 5 s
+    (the user: "way longer than for cars"; no source found for the length). The unlit stroke a shade off the lens (`TramTOff`),
+    no bloom; a small "tram detected" dot above the T, modelled, never lit. Packed plate against plate with the car heads
+    (`SignalBuilder.RomandyTramHeads`, `TramPack`, no arm): beside them on their right, level with their lower half, where
+    there is one or more than there are car heads (photo 1); else, or where the main head's flasher holds that side, in a row
+    on top of them ending over the main head, each its arrow plate between it and the car head below (photo 2). The arrow
+    plate only where the approach's trams go several ways. A tram-only pole (repeater, pole-only placement): the same modules
+    side by side, level with a car head's lower half. A tram's red-amber holds it at its line, so the fixed-time check does
+    not count it as live.
   - **Other cantons**: three white lamps in a black housing, beside the car heads on the road's side: red and red-amber = the bar
     across (stop; red-amber unverified, the user does not know its look), amber = the dot (stop expected), green = the bar
     upright, slanted for a group that only turns; its arrow on a plate below where its trams go several ways.
