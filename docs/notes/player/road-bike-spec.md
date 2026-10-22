@@ -64,4 +64,26 @@
   - No wet roads: the game has no rain yet.
   - In game: `--ride bike,45 --brake-at 40 --profile sim --rider-kg 120` drops 26.6 → 6.5 km/h in
     the first second, `REAR LOCKED` in the trace.
-- Next phase (steering dynamics): `docs/plans/road-bike-realism.md`.
+- **Steering: the Whipple bicycle, Sim only** (`BikeDynamics.cs`, `BikeDynamicsTests`; phase 5).
+  Game keeps `SteerByLean`.
+  - `WhippleModel` holds the Meijaard et al. 2007 matrices (M, C1, K0, K2). The unit test holds
+    them to the paper's published benchmark values.
+  - `WhippleParameters.For(frame, riderMass)` fills them from the Addict: head 72°, trail 64 mm,
+    wheelbase 0.98 m, the wheels' inertia, and the rider's mass and centre of mass (the body's
+    inertia is the benchmark's scaled by mass).
+  - `RiderBalance`: the input asks for a lean (+ right, the paper's signs). The rider sets the steer
+    that holds the present lean, plus a spring toward the wanted one (6 rad/s, ζ 0.85: 63% in
+    0.3 s). The arms are an 18 rad/s servo; the roll row is integrated at 1/360 s.
+  - **Countersteer comes out of the equations**: to lean right the bars go left first (tested at 5
+    and 12 m/s). The steer a lean needs falls as 1/v², which is why a fast bike is steady.
+  - Below 1.5 m/s the bars steer directly and the bike is held upright (walking or wheeling it).
+  - Large leans: the linear model turns as φ, not tan φ, so the yaw is scaled by tan φ/φ.
+  - The bars are drawn turning: `BikeMeshBuilder.Parts.Front` about the steering axis,
+    `Cyclist.SteerAngle`. Replicated in `WritePose`'s Z.
+- **The autopilot on it** (`Rideable.SteerLag`, `AutoPilot.LagLook`): a countersteered turn starts
+  with a moment's yaw the wrong way, so chasing a point 0.8 s ahead weaves down a straight. Predicting
+  the heading by the yaw rate made it worse: it feeds that wrong-way yaw back. Looking 2.5 × the lag
+  further ahead fixed it.
+  - `--drivecheck --mount 1 --traffic 0 --seconds 240 --chunks fixture:hairpin --profile sim`:
+    131.8 s (old steering 134.1), no impacts, mean 0.48 m off the line, 58 m off tarmac (old 31).
+- Next phase (rider physiology): `docs/plans/road-bike-realism.md`.
