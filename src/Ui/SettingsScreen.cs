@@ -143,6 +143,9 @@ public partial class SettingsScreen : Screen
                 replay.Disabled = true;
             }, "Look, walk, travel, the map and the fly camera, then each ride's controls the first time");
             if (Tutorial.Current != null) { replay.Text = "Playing"; replay.Disabled = true; }
+            // the first-run welcome (#1131): name, figure and account, again
+            UiKit.ActionRow(rows, "Welcome", "Show again", () => Shell.Push(WelcomeScreen.Create()),
+                "The first-launch pages: your name, your figure, your account");
         });
 
         Tab("Account", AccountPage.Fill);

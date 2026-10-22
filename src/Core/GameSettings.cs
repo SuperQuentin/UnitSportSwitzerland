@@ -327,6 +327,13 @@ public sealed class GameSettings
     public string PlayerName { get; set; } = "";
 
     /// <summary>
+    /// The first-run welcome (#1131, <see cref="Ui.WelcomeScreen"/>) was finished or skipped. True by default, so a
+    /// settings file from before the welcome never shows it; <see cref="Load"/> sets it false when there is no file
+    /// yet (a fresh install), and the welcome saves false as it opens, so quitting half-way shows it again.
+    /// </summary>
+    public bool FirstRunDone { get; set; } = true;
+
+    /// <summary>
     /// The first-run tutorial (#517, <see cref="Tutorial"/>) was finished or skipped. Off until
     /// then; Settings › Gameplay turns it off again to replay it.
     /// </summary>
@@ -436,6 +443,8 @@ public sealed class GameSettings
         // a phone's first launch starts from its own defaults (#63); a saved file keeps what it says
         var loaded = new GameSettings();
         if (Platform.IsMobile && !Godot.FileAccess.FileExists(File)) loaded.UsePhoneDefaults();
+        // a fresh install: the welcome (#1131) runs before the title
+        if (!Godot.FileAccess.FileExists(File)) loaded.FirstRunDone = false;
         try
         {
             if (Godot.FileAccess.FileExists(File))
