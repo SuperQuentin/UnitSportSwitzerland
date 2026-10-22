@@ -100,7 +100,9 @@ public static class SignalCheck
                 var conflicts = p.Conflicts();
                 for (int g = 0; g < p.Groups.Count; g++)
                 {
-                    if (p.Groups[g].Kind == SignalGroupKind.Flasher && p.PlateOf(g, conflicts) is var (plate, arrow) && plate != SignalPlate.None)
+                    // (an uncombined arrow's flasher has no lamp: its own yellow flashes, counted below)
+                    if (p.Groups[g].Kind == SignalGroupKind.Flasher && p.PlateOf(g, conflicts) is var (plate, arrow) && plate != SignalPlate.None
+                        && !(p.Groups[p.Groups[g].Qualifies].Moves is SignalMoves.Left or SignalMoves.Right && ArrowShown(p, p.Groups[g].Qualifies)))
                     {
                         string key = plate == SignalPlate.Arrow ? $"arrow {arrow}" : plate.ToString().ToLowerInvariant();
                         plates[key] = plates.GetValueOrDefault(key) + 1;
@@ -108,7 +110,11 @@ public static class SignalCheck
                     }
                     if (p.Groups[g].Kind != SignalGroupKind.Car) continue;
                     // (as SignalBuilder shows it: an uncombined arrow, the turn alone, flashes its yellow in place of its green)
-                    if (p.Groups[g].Moves == SignalMoves.Right && ArrowShown(p, g) && p.TurnFlash(g, SignalMoves.Right, conflicts) is not null) singleRights++;
+                    if (p.Groups[g].Moves == SignalMoves.Right && ArrowShown(p, g) && p.TurnFlash(g, SignalMoves.Right, conflicts) is not null)
+                    {
+                        singleRights++;
+                        if (list) leftAt.Add(string.Create(c, $"    {where} arm {p.Groups[g].Arm} Right: right arrow alone, its yellow flashes for its green"));
+                    }
                     if (p.LeftGivesWayTo(g, conflicts).Count == 0) continue;
                     // (a ball flashes its yellow, a combined arrow with the left gets a flasher on its left)
                     bool arrowHead = ArrowShown(p, g), single = arrowHead && p.Groups[g].Moves == SignalMoves.Left;
