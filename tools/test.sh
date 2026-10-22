@@ -119,6 +119,10 @@ t0=$SECONDS
 guard_run "$TIMEOUT" "$OUT/unit.log" dotnet test tests/UnitSportSwitzerland.Tests
 record "unit (dotnet test)" "$(verdict $? "$OUT/unit.log")" $((SECONDS - t0)) "$OUT/unit.log"
 grep -aE "^(Passed|Failed)!" "$OUT/unit.log" | tail -1
+# RideLink (#901, tools/RideLink): the trainer library's own tests (parsers, the FTMS handshake, the router)
+t0=$SECONDS
+guard_run "$TIMEOUT" "$OUT/ridelink.log" dotnet test tools/RideLink/tests/RideLink.Tests
+record "unit RideLink (dotnet test)" "$(verdict $? "$OUT/ridelink.log")" $((SECONDS - t0)) "$OUT/ridelink.log"
 
 # --- Godot tiers ------------------------------------------------------------------------------
 netsmoke() { # headless dedicated server on the flat fixture world + a headless client joining and leaving it

@@ -121,6 +121,13 @@
   the master (0.6 + 0.4 level); the gap is a blackout. A held section or a blackout from the operator
   still wins. No CDs: the desk makes its songs up as before.
 - Anyone within 160 m of the stadium dances to it (E): `ConcertRig.MusicNear` in `RadioManager.NearestMusic`.
+- **Pogo QTE** (#1150, `PogoQte` HUD, `PogoBeat` judge, tier 0 `PogoBeatTests`): while dancing at a
+  concert a ring closes on each beat **as heard** (the loudest hang's `Heard.Delay` plus
+  `AudioServer.GetOutputLatency()` off the song clock). `{jump}` within 70 ms is Perfect, 140 ms Good
+  (never more than 0.4 beat a side), else Miss; twice on one beat is a Miss. A hit sets `DanceId` to
+  the Pogo emote (replicated: every peer pogos on the song clock's beat, as the lights do); two beats
+  let go by in a row set it back to 1. `FootPlayer.JumpTaken` keeps the press from also jumping.
+  Combo and best combo are this screen's only. Space / pad A / VR pad A; F1 row; bots: `bot-capability-map`.
 
 - The song's finer bands (`MusicMoment.Snare/Hat/Bass/Bright/Build/SinceDrop`, CD analysis v2,
   `docs/notes/audio/cd-beat.md`) ride over the section's look (`LightDesk.Accents`): a snare pops the

@@ -30,6 +30,7 @@ public static class OriginCheck
         Lanes();
         Wire();
         Tree(host);
+        TrafficDebug(host);
         await Physics(host);
         GD.Print($"[origincheck] RESULT {(_failures == 0 ? "PASS" : $"FAIL ({_failures})")}");
         host.GetTree().Quit(_failures == 0 ? 0 : 1);
@@ -234,6 +235,28 @@ public static class OriginCheck
                 $"{n.GetType().Name} {n.Name} stays where it was ({origin.ToGlobal(n.GlobalPosition).HorizontalDistanceTo(at):F2} m off)");
 
         root.QueueFree();
+        shifter.QueueFree();
+    }
+
+    /// <summary>
+    /// The traffic's debug lines (#979 trails, #971 paths) are drawn each time in the current frame's world space: a shift moves
+    /// their node with the rest of the traffic's children, so the next drawing must put it back at the identity, or every line
+    /// lies a shift away (the user: the trails broke after moving on).
+    /// </summary>
+    private static void TrafficDebug(Node host)
+    {
+        var origin = new WorldOrigin(2_600_000, 1_200_000);
+        var shifter = new OriginShifter(origin, () => null, () => true) { StepM = 100 };
+        host.AddChild(shifter);
+        var traffic = new Traffic(null!, origin) { ShowTrails = true };
+        host.AddChild(traffic);
+        traffic.DrawDebugNow();
+        Expect(traffic.DebugLines is { } lines && lines.Transform == Transform3D.Identity, "traffic debug lines drawn at the identity");
+        shifter.ShiftTo(2_601_000, 1_200_000);
+        traffic.DrawDebugNow();
+        Expect(traffic.DebugLines is { } moved && moved.Transform == Transform3D.Identity,
+            $"traffic debug lines back at the identity after a shift ({traffic.DebugLines?.Transform.Origin})");
+        traffic.QueueFree();
         shifter.QueueFree();
     }
 
