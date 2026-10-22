@@ -39,6 +39,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | ride_menu | R / Y with nothing near | ok: Y, wrist menu (#437) | keep |
 | car_door / gather | G / X (tap / hold) | ok: X; doors by grip | gather = **grip and pull** the resource |
 | emote_wheel | B / D-pad ↑ | ok: hold R stick ↑, aim with the right hand (#437) | keep |
+| on-foot camera zoom (#1149): far out down to the face | Shift + wheel, = - / hold R3 + right stick up/down (a tap of R3 still switches the view) | n/a: VR is first person (#186), the head is the camera | keep |
+| phone camera app: walk while it is open (#1149) | WASD, Space / left stick, A | ok: the body already walks with the phone out in VR (#920) | keep |
 | phone (#889): out, quick action, open, back | ↑, ← → Enter, ↑, Esc ↓ / quick menu › Phone, D-pad A, D-pad ↑, B | ok (#920): grip at the left front pocket or wrist menu › Phone; the real index tip taps, drags and swipes the glass, or the right ray and trigger press from afar (`XrPhone`); the free hand swings it open, X opens / folds, B back / away; the arm aims the camera app, the holding trigger shoots, the right trigger (ray off the phone) steps the zoom, turned round it is a selfie; raised to the eyes it travels (a blink after 3 s), to an ear it answers; let go it goes home to the pocket | keep |
 | challenge / accept a fist fight (#495) | E / Y, looking at the player | ok: Y, or reach out and grip | keep |
 | fight step / jump / crouch (#495) | A D, W Space, S Ctrl / L stick, A | ok: L stick towards / away, A, crouch for real (`XrPad.RealCrouch`) | room-scale stepping |

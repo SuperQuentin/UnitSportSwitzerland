@@ -128,7 +128,6 @@ public partial class Traffic
     private readonly List<SlowMover> _walkers = new(), _riders = new();
     private readonly Stack<SlowMover> _walkerPool = new(), _riderPool = new();
     private double _walkerTimer, _riderTimer;
-    private readonly Dictionary<MoverKind, (BoxMesh Mesh, StandardMaterial3D Material)> _boxLooks = new();
 
     private List<SlowMover> MoversOf(MoverKind kind) => kind == MoverKind.Walker ? _walkers : _riders;
 
@@ -143,22 +142,15 @@ public partial class Traffic
     private const float BikeWheelbase = 1.1f;
 
     /// <summary>
-    /// A solid box for a mode's unit (#1060, every new mover is a box for now): its mesh and material shared per kind, its collision
-    /// box the same size, standing on the ground (its origin at the bottom, -Z forward like the cars). For a tram, one per section.
+    /// A mode's unit (#1060): its blocky model (<see cref="Avatar.TrafficModeMeshBuilder"/>, #1147: shared per look, with its lamps
+    /// if any) and a collision box of <paramref name="size"/>, standing on the ground (its origin at the bottom, -Z forward like
+    /// the cars). For a tram, one per section.
     /// </summary>
-    private AnimatableBody3D BoxUnit(MoverKind kind, Vector3 size, float drawn, out CollisionShape3D shape)
+    private AnimatableBody3D BoxUnit(MoverKind kind, Vector3 size, float drawn, out CollisionShape3D shape, Mesh body, Mesh? lamps = null)
     {
-        var look = LookOf(kind);
-        if (!_boxLooks.TryGetValue(kind, out var shared))
-            _boxLooks[kind] = shared = (new BoxMesh { Size = Vector3.One },
-                new StandardMaterial3D { AlbedoColor = look.Colour, Roughness = 0.9f });
         var node = new AnimatableBody3D { SyncToPhysics = false, Name = kind.ToString() };
-        // (one shared unit cube, scaled per unit: a tram's sections differ in length)
-        node.AddChild(new MeshInstance3D
-        {
-            Mesh = shared.Mesh, MaterialOverride = shared.Material, VisibilityRangeEnd = drawn,
-            Scale = new Vector3(size.X, size.Y, size.Z), Position = new Vector3(0f, size.Y * 0.5f, 0f),
-        });
+        node.AddChild(new MeshInstance3D { Mesh = body, MaterialOverride = _bodyMaterial, VisibilityRangeEnd = drawn });
+        if (lamps is not null) node.AddChild(new MeshInstance3D { Mesh = lamps, MaterialOverride = _lampMaterial, VisibilityRangeEnd = drawn });
         shape = new CollisionShape3D { Shape = new BoxShape3D { Size = size }, Position = new Vector3(0f, size.Y * 0.5f, 0f) };
         node.AddChild(shape);
         return node;
@@ -176,7 +168,8 @@ public partial class Traffic
         else
         {
             var look = LookOf(kind);
-            var body = BoxUnit(kind, look.Size, look.Drawn, out var shape);
+            var body = BoxUnit(kind, look.Size, look.Drawn, out var shape, kind == MoverKind.Walker
+                ? Avatar.TrafficModeMeshBuilder.Walker(_rng.Next()) : Avatar.TrafficModeMeshBuilder.Rider(_rng.Next()));
             AddChild(body);
             m = new SlowMover(kind, body, shape, NextMover);
         }
@@ -345,13 +338,16 @@ public partial class Traffic
     {
         var offsets = new float[lengths.Length];
         var units = new Node3D[lengths.Length];
+        int livery = _rng.Next();
         float back = 0f;
         for (int i = 0; i < lengths.Length; i++)
         {
             offsets[i] = back + lengths[i] * 0.5f;
             back += lengths[i] + gap;
             var size = new Vector3(TramLook.Size.X, TramLook.Size.Y, lengths[i]);
-            units[i] = BoxUnit(MoverKind.Tram, size, TramLook.Drawn, out _);
+            var (body, lamps) = Avatar.TrafficModeMeshBuilder.TramSection(livery, lengths[i], i == 0, i == lengths.Length - 1,
+                i == lengths.Length / 2, i > 0);
+            units[i] = BoxUnit(MoverKind.Tram, size, TramLook.Drawn, out _, body, lamps);
             units[i].Name = $"Tram{i}";
         }
         var route = new Route(edge, forward, forward ? arc : edge.Length - arc);

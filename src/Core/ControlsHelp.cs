@@ -42,6 +42,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Travel menu: mounts and vehicles", PlayerInput.RideMenu, Pad: "{interact_mount} (nothing near)"),
             new("First / third person (driving: chase, cockpit, cockpit without your body)", PlayerInput.CameraToggle),
             new("Camera over the other shoulder", PlayerInput.SwapShoulder, Pad: "R3 (aiming a gun)"),
+            new("Third person: camera zoom in / out, down to the face", Keys: "{view_zoom_in} / {view_zoom_out}", Pad: "R3 (hold) + right stick ↑ ↓"),
             new("Base jump: jump again while falling", PlayerInput.Jump),
         }),
         ("Items", new Row[]
