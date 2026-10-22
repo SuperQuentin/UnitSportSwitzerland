@@ -540,6 +540,18 @@ public class SignalPlanTests(ITestOutputHelper output)
         var (plate, arrow) = plan.PlateOf(FlasherOf(plan, nb));
         Assert.Equal(SignalPlate.Arrow, plate);
         Assert.Equal(SignalMoves.Left | SignalMoves.Right, arrow);
+        // each turn's own lamp (#1109, the user: "right flasher here, left flasher on a pole next to the left crosswalk"): its own
+        // arrow, flashing only for its own crossings
+        int f = FlasherOf(plan, nb);
+        Assert.Equal((SignalPlate.Arrow, SignalMoves.Right), plan.PlateOf(f, turns: SignalMoves.Right));
+        Assert.Equal((SignalPlate.Arrow, SignalMoves.Left), plan.PlateOf(f, turns: SignalMoves.Left));
+        var left = plan.SideFlash(f, SignalMoves.Left)!;
+        var right = plan.SideFlash(f, SignalMoves.Right)!;
+        for (double t = 0.05; t < plan.Cycle; t += 0.1)
+        {
+            bool any = plan.State(f, t) == SignalAspect.FlashingAmber;
+            Assert.Equal(any, plan.State(left, t) == SignalAspect.FlashingAmber || plan.State(right, t) == SignalAspect.FlashingAmber);
+        }
     }
 
     [Fact]

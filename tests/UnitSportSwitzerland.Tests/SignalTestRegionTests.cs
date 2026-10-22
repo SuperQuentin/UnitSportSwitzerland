@@ -647,7 +647,10 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
         var j3b = region.Junction("J3b");
         var tile3b = region.Tile(j3b.E, j3b.N);
         var lamps3b = UnitSport.Terrain.SignalBuilder.BuildLamps(tile3b)!;
-        var leftFlasher = Assert.Single(lamps3b.Lenses, l => l.Role == UnitSport.Terrain.SignalBuilder.Role.Flash && l.Blink is not null);
+        var leftFlasher = Assert.Single(lamps3b.Lenses, l => l.Role == UnitSport.Terrain.SignalBuilder.Role.Flash && l.Blink is not null
+            && l.Blink.Qualifies == l.Group && lamps3b.Plans[0].LeftGivesWayTo(l.Group).Count > 0 && l is { Plate: SignalPlate.Arrow, PlateArrow: SignalMoves.Left });
+        // and its left turn's lamp for the bike way it crosses, on the approach's left pole: one more lamp of its group, a bike on its plate
+        Assert.Contains(lamps3b.Lenses, l => l.Group == leftFlasher.Group && l.Role == UnitSport.Terrain.SignalBuilder.Role.Flash && l.Plate == SignalPlate.Bike);
         Assert.Equal(SignalMoves.Left | SignalMoves.Through, UnitSport.Terrain.SignalBuilder.ArrowMoves(lamps3b.Plans[0], leftFlasher.Group));
         Assert.DoesNotContain(lamps3b.Lenses, l => l.Group == leftFlasher.Group && l.Role == UnitSport.Terrain.SignalBuilder.Role.Amber && l.Blink is not null);
         var j3 = region.Junction("J3");
