@@ -2602,7 +2602,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     }
 
     /// <summary>Whether the player's zoom drives the camera now (#1149): on foot in third person, nothing borrowed, not in VR.</summary>
-    private bool ZoomsView => _ride == null && RidingWith == 0 && _thirdPerson && !_borrowedThird && !XR.XrSession.Active;
+    public bool ZoomsView => _ride == null && RidingWith == 0 && _thirdPerson && !_borrowedThird && !XR.XrSession.Active;
 
     /// <summary>Puts the on-foot camera over the other shoulder and saves the side (#460).</summary>
     public void SwapShoulder()
