@@ -461,6 +461,13 @@ public partial class SettingsScreen : Screen
             i => GameSettings.Current.VrRenderScale = scales[i], "Of the eye size the headset asks for. Lower it if the picture stutters");
         UiKit.ToggleRow(rows, "VR foveated rendering", GameSettings.Current.VrFoveation, on => GameSettings.Current.VrFoveation = on,
             "Coarser shading towards the edge of each eye (GPUs with variable rate shading)");
+        // frame pacing and triangles (#1036, docs/notes/xr/air-link.md)
+        int[] rates = GameSettings.VrRefreshRates;
+        UiKit.OptionRow(rows, "VR refresh rate", rates.Select(hz => $"{hz} Hz").ToArray(),
+            Math.Max(0, Array.IndexOf(rates, GameSettings.Current.VrRefreshHz)), i => GameSettings.Current.VrRefreshHz = rates[i],
+            "72 Hz holds steady over Air Link; higher only if the frame keeps up");
+        UiKit.OptionRow(rows, "VR terrain detail", new[] { "Low", "Medium", "High" }, (int)GameSettings.Current.VrDetail,
+            i => GameSettings.Current.VrDetail = (DetailPreset)i, "The headset's own Detail. Low draws a third of Medium's triangles");
         // comfort (#439, docs/notes/xr/rig.md)
         int[] snaps = { 0, 15, 30, 45 };
         UiKit.OptionRow(rows, "VR turning", new[] { "Smooth", "Snap 15°", "Snap 30°", "Snap 45°" },
