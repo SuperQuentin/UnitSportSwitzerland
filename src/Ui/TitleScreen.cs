@@ -31,7 +31,7 @@ public partial class TitleScreen : Screen
         column.Alignment = BoxContainer.AlignmentMode.Center;
         AddChild(column);
 
-        var name = UiKit.Text("UnitSport", 58, Colors.White, bold: true);
+        var name = UiKit.Text("UnitSport", 58, bold: true);
         name.AddThemeConstantOverride("line_spacing", -8);
         column.AddChild(name);
         var country = UiKit.Text("SWITZERLAND", 16, UiTheme.Amber);
@@ -101,7 +101,7 @@ public partial class TitleScreen : Screen
     private static Button Entry(Container into, string text, Action pressed, bool dim = false)
     {
         var b = UiKit.MenuButton(text, dim ? 17 : 22);
-        if (dim) b.AddThemeColorOverride("font_color", UiTheme.TextDim);
+        if (dim) UiKit.DimFont(b);
         b.Pressed += pressed;
         into.AddChild(b);
         return b;
@@ -118,13 +118,15 @@ public partial class TitleScreen : Screen
     /// <summary>A left-to-right shade so text stays readable over the 3D backdrop.</summary>
     internal static TextureRect SideShade(float left, float width)
     {
+        var Ground = Skins.MenuSkin.Role("ground");
         var shade = new TextureRect
         {
             Texture = new GradientTexture2D
             {
                 Gradient = new Gradient
                 {
-                    Colors = new[] { new Color(0.02f, 0.025f, 0.04f, left), new Color(0.02f, 0.025f, 0.04f, left * 0.6f), new Color(0.02f, 0.025f, 0.04f, 0) },
+                    // the skin's ground (#1135): cream under Alpine's ink, indigo under Night Arcade's
+                    Colors = new[] { new Color(Ground, left), new Color(Ground, left * 0.6f), new Color(Ground, 0) },
                     Offsets = new[] { 0f, 0.45f, 1f },
                 },
                 FillFrom = new Vector2(0, 0), FillTo = new Vector2(1, 0),

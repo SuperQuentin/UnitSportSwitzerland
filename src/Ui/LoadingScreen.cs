@@ -36,7 +36,7 @@ public partial class LoadingScreen : CanvasLayer
 
     public override void _Ready()
     {
-        _root = new Control { Theme = UiTheme.Get(), Visible = false, MouseFilter = Control.MouseFilterEnum.Stop };
+        _root = new Control { Theme = Skins.MenuSkin.Theme(), Visible = false, MouseFilter = Control.MouseFilterEnum.Stop };
         _root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         AddChild(_root);
 

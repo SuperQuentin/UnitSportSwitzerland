@@ -28,7 +28,7 @@ public partial class PauseScreen : Screen
         column.Alignment = BoxContainer.AlignmentMode.Center;
         AddChild(column);
 
-        column.AddChild(UiKit.Text("Paused", 44, Colors.White, bold: true));
+        column.AddChild(UiKit.Text("Paused", 44, bold: true));
         column.AddChild(UiKit.Text(Shell.SessionLine(), UiTheme.FontSmall, UiTheme.Amber));
         column.AddChild(UiKit.Spacer(26));
 
@@ -81,7 +81,7 @@ public partial class PauseScreen : Screen
     private static Button Entry(Container into, string text, Action pressed, bool dim = false)
     {
         var b = UiKit.MenuButton(text, dim ? 17 : 21);
-        if (dim) b.AddThemeColorOverride("font_color", UiTheme.TextDim);
+        if (dim) UiKit.DimFont(b);
         b.Pressed += pressed;
         into.AddChild(b);
         return b;

@@ -1,0 +1,39 @@
+{
+  "about": "Alpine Sticker (#1135): the day skin. A new skin is a copy of this file with its own id (docs/notes/ui/menu-skins.md).",
+  "id": "alpine",
+  "name": "Alpine",
+  "night": false,
+  "font": "baloo2",
+  "colors": {
+    "ground": "#FFF7EC",
+    "card": "#FFFFFF",
+    "cardEdge": "#3A2A22",
+    "ink": "#3A2A22",
+    "inkDim": "#6E5444",
+    "inkFaint": "#86685A",
+    "accent": "#D63A42",
+    "onAccent": "#FFFFFF",
+    "accent2": "#FFD75E",
+    "control": "#FFFBF5",
+    "controlHover": "#FFF1DA",
+    "controlPressed": "#FFE4B8",
+    "good": "#25784A",
+    "warn": "#A85E00",
+    "bad": "#B8212B",
+    "hairline": "#3A2A2240",
+    "shadow": "#3A2A22FF",
+    "controlEdge": "#3A2A2252"
+  },
+  "shape": {
+    "radius": 22,
+    "controlRadius": 14,
+    "outline": 4,
+    "controlOutline": 2,
+    "shadowX": 4,
+    "shadowY": 6,
+    "shadowSize": 0,
+    "controlShadow": true,
+    "hoverScale": 0.05,
+    "hoverTilt": 2.5
+  }
+}
