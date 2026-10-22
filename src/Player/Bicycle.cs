@@ -28,8 +28,20 @@ public sealed class Bicycle : Rideable
     public override string Blurb => "{throttle} pedal, {tuck_boost} sprint, {brake} brake, {move_left}/{move_right} steer — climbs cost you";
 
     // ---- the rider and the machine ----
-    /// <summary>Rider, bike, bottles and kit.</summary>
-    private const float Mass = 82f;
+    /// <summary>The bike under the rider: the owner's Scott Addict RC 15 (#1124).</summary>
+    public BicycleSpec Spec { get; } = BicycleCatalog.Default;
+
+    /// <summary>Bottles, tools and a saddle bag, kg.</summary>
+    private const float Kit = 1.5f;
+
+    /// <summary>The Game profile's rider, kg: 82 with bike and bottles, whatever the settings say.</summary>
+    private const float ArcadeRiderMass = 72.5f;
+
+    /// <summary>
+    /// Rider, bike, bottles and kit, kg. Sim takes the rider's own weight from the settings, the
+    /// number a home trainer's watts have to lift up a Swiss pass; Game keeps the reference rider.
+    /// </summary>
+    private float Mass => (Arcade ? ArcadeRiderMass : Core.GameSettings.Current.RiderMass) + Spec.Mass + Kit;
 
     /// <summary>Drag area on the hoods, m². A tucked pro is nearer 0.24; this is a fit amateur.</summary>
     private const float DragArea = 0.32f;
@@ -105,6 +117,7 @@ public sealed class Bicycle : Rideable
     public override void Step(in RideInput input, in RideGround ground, float dt, ref RideMotion motion)
     {
         float v = motion.Speed;
+        float mass = Mass;
 
         // --- steering ---------------------------------------------------------------
         // A bicycle changes direction by leaning, so the turn radius grows with speed: the
@@ -119,7 +132,7 @@ public sealed class Bicycle : Rideable
         if (!ground.OnFloor)
         {
             // airborne off a lip: no thrust, no rolling resistance, just air
-            v -= 0.5f * AirDensity * DragArea * v * v / Mass * dt;
+            v -= 0.5f * AirDensity * DragArea * v * v / mass * dt;
             motion.Speed = Mathf.Max(0f, v);
             return;
         }
@@ -132,9 +145,9 @@ public sealed class Bicycle : Rideable
         float thrust = watts > 0 ? Mathf.Min(watts / Mathf.Max(v, 0.5f), arcade ? ArcadeMaxThrust : MaxThrust) : 0f;
 
         float drag = 0.5f * AirDensity * DragArea * v * v;
-        float rolling = RollingResistance * Mass * Gravity;
+        float rolling = RollingResistance * mass * Gravity;
 
-        float accel = (thrust - drag - rolling) / Mass + SlopeAccel(ground.Grade);
+        float accel = (thrust - drag - rolling) / mass + SlopeAccel(ground.Grade);
         v += accel * dt;
 
         if (input.Brake > 0.01f) v -= input.Brake * (arcade ? ArcadeBrakeDecel : BrakeDecel) * dt;

@@ -1,153 +1,140 @@
 using Godot;
+using UnitSport.Player;
 
 namespace UnitSport.Avatar;
 
-public sealed record BikePalette(Color Frame, Color Accent, Color Tyre, Color Rim, Color Saddle)
-{
-    public static readonly BikePalette Default = new(
-        Frame: new Color(0.12f, 0.42f, 0.68f),
-        Accent: new Color(0.85f, 0.86f, 0.88f),
-        Tyre: new Color(0.10f, 0.10f, 0.11f),
-        Rim: new Color(0.62f, 0.63f, 0.65f),
-        Saddle: new Color(0.09f, 0.09f, 0.10f));
-
-    public static BikePalette ForRider(int index) => Default with
-    {
-        Frame = Color.FromHsv((index * 0.37f + 0.5f) % 1f, 0.55f, 0.72f),
-    };
-}
-
 /// <summary>
-/// A road bike at real proportions: 700c wheels, a 56 cm-ish diamond frame, drop bars.
+/// A road bike built from its maker's geometry chart (#1124): <see cref="BikeFrame"/> turns a
+/// <see cref="BicycleSpec"/>'s stack, reach, angles, chainstay and fork offset into points, and this
+/// draws tubes between them. Nothing is placed by eye, because a bike is a shape everybody knows,
+/// and the saddle and bars have to be where the rider's hips and hands are, or the cyclist floats.
 ///
 /// <para>
-/// The numbers are actual bicycle geometry rather than eyeballed ones, because a bike is a
-/// shape everybody knows. Wheelbase 0.99 m, bottom bracket 0.27 m off the ground, 73° head and
-/// seat angles, saddle at 0.90 m. Getting those wrong is instantly visible even in a few
-/// hundred triangles — and the saddle height in particular has to agree with the rider's hip in
-/// <see cref="HumanMeshBuilder"/>, or the cyclist floats above the machine.
-/// </para>
-///
-/// <para>
-/// Built facing +Z, origin on the ground between the wheels, so it drops straight into the
-/// world beside a <see cref="HumanPose.Cycling"/> figure with no offset.
+/// Built facing +Z, origin on the ground with the bottom bracket 2 cm behind it, so it drops
+/// straight into the world beside a <see cref="HumanPose.Cycling"/> figure with no offset.
 /// </para>
 /// </summary>
 public static class BikeMeshBuilder
 {
-    // ---- geometry, metres ----
-    public const float WheelRadius = 0.337f;     // 700x25c
-    private const float TyreThickness = 0.026f;
-    private const float RearAxleZ = -0.415f;
-    private const float FrontAxleZ = 0.575f;
-    private const float BottomBracketY = 0.270f;
-    private const float BottomBracketZ = -0.020f;
+    private const float TyreThickness = 0.028f;
+    private const float RimDepth = 0.032f;
 
-    /// <summary>Saddle top. The rider's hip sits here in the cycling pose.</summary>
-    public const float SaddleY = 0.900f;
-    private const float SaddleZ = -0.055f;
-
-    /// <summary>Where the hands go. Matches the cycling rig's wrists.</summary>
-    public const float DropsY = 0.885f;
-    public const float DropsZ = 0.790f;
-
-    private static readonly Vector3 BottomBracket = new(0, BottomBracketY, BottomBracketZ);
-    private static readonly Vector3 RearAxle = new(0, WheelRadius, RearAxleZ);
-    private static readonly Vector3 FrontAxle = new(0, WheelRadius, FrontAxleZ);
-    private static readonly Vector3 SeatTop = new(0, SaddleY - 0.035f, SaddleZ);
-    private static readonly Vector3 HeadTop = new(0, 0.845f, 0.545f);
-    private static readonly Vector3 HeadBottom = new(0, 0.640f, 0.610f);
-
-    public static ArrayMesh Build(BikePalette? palette = null, bool includeCranks = true)
+    public static ArrayMesh Build(BikePalette? palette = null, bool includeCranks = true, BikeFrame? frame = null)
     {
-        var p = palette ?? BikePalette.Default;
+        var f = frame ?? BikeFrame.Default;
+        var p = palette ?? f.Spec.Look;
         var s = new MeshScratch();
 
-        Wheel(s, RearAxle, p);
-        Wheel(s, FrontAxle, p);
+        bool disc = f.Spec.Brakes == BikeBrakes.Disc;
+        Wheel(s, f, f.RearAxle, p, disc ? 0.070f : 0f);
+        Wheel(s, f, f.FrontAxle, p, disc ? 0.080f : 0f);
 
-        // main triangle
-        s.Tube(BottomBracket, SeatTop, 0.026f, 0.020f, p.Frame);            // seat tube
-        s.Tube(BottomBracket, HeadBottom, 0.030f, 0.024f, p.Frame);         // down tube
-        s.Tube(SeatTop, HeadTop, 0.023f, 0.021f, p.Frame);                  // top tube
-        s.Tube(HeadBottom, HeadTop, 0.026f, p.Accent);                      // head tube
+        // main triangle: the top tube meets the head tube just under its top, the down tube just
+        // over its bottom, as the carbon lay-up does
+        var topTubeFront = f.HeadTop - f.SteererUp * 0.020f;
+        var downTubeFront = f.HeadBottom + f.SteererUp * 0.025f;
+        s.Tube(f.BottomBracket, f.SeatCluster, 0.020f, 0.017f, p.Frame);              // seat tube
+        s.Tube(f.SeatCluster, topTubeFront, 0.017f, 0.019f, p.Frame);                // top tube
+        s.Tube(f.HeadBottom - f.SteererUp * 0.010f, f.HeadTop, 0.025f, 0.021f, p.Frame);   // tapered head tube
+        s.Tube(f.BottomBracket - new Vector3(0.045f, 0, 0), f.BottomBracket + new Vector3(0.045f, 0, 0), 0.024f, p.Frame);
 
-        // rear triangle, doubled either side of the wheel
-        foreach (float side in new[] { -0.055f, 0.055f })
+        // the down tube, its middle the maker's name: one band of lettering at PS1 resolution. Three
+        // tubes end to end, not a band laid over one, which would z-fight the tube under it
+        var dt = downTubeFront - f.BottomBracket;
+        float DownTubeRadius(float t) => Mathf.Lerp(0.028f, 0.022f, t);
+        s.Tube(f.BottomBracket, f.BottomBracket + dt * 0.38f, DownTubeRadius(0f), DownTubeRadius(0.38f), p.Frame);
+        s.Tube(f.BottomBracket + dt * 0.38f, f.BottomBracket + dt * 0.78f, DownTubeRadius(0.38f), DownTubeRadius(0.78f), p.Decal);
+        s.Tube(f.BottomBracket + dt * 0.78f, downTubeFront, DownTubeRadius(0.78f), DownTubeRadius(1f), p.Frame);
+
+        // rear triangle, doubled either side of the wheel; the stays meet the seat tube a little
+        // under the top tube
+        var stayTop = f.SeatCluster - f.SeatUp * 0.035f;
+        foreach (float side in new[] { -0.062f, 0.062f })
         {
-            var axle = RearAxle + new Vector3(side, 0, 0);
-            s.Tube(BottomBracket + new Vector3(side * 0.6f, 0, 0), axle, 0.017f, 0.011f, p.Frame);
-            s.Tube(SeatTop + new Vector3(side * 0.35f, 0, 0), axle, 0.014f, 0.010f, p.Frame);
+            var axle = f.RearAxle + new Vector3(side, 0, 0);
+            s.Tube(f.BottomBracket + new Vector3(side * 0.55f, 0, 0), axle, 0.014f, 0.010f, p.Frame);
+            s.Tube(stayTop + new Vector3(side * 0.25f, 0, 0), axle, 0.011f, 0.009f, p.Frame);
         }
 
-        // fork: two blades from the crown down to the axle
-        foreach (float side in new[] { -0.048f, 0.048f })
-            s.Tube(HeadBottom + new Vector3(side * 0.5f, -0.02f, 0),
-                FrontAxle + new Vector3(side, 0, 0), 0.017f, 0.011f, p.Accent);
+        // fork: a crown under the head tube, two blades down to the axle
+        var crown = f.HeadBottom - f.SteererUp * 0.020f;
+        s.Tube(crown + new Vector3(-0.040f, 0, 0), crown + new Vector3(0.040f, 0, 0), 0.018f, p.Frame);
+        foreach (float side in new[] { -0.050f, 0.050f })
+            s.Tube(crown + new Vector3(side * 0.85f, 0, 0), f.FrontAxle + new Vector3(side, 0, 0), 0.016f, 0.010f, p.Frame);
 
-        Handlebars(s, p);
-        Saddle(s, p);
-        if (includeCranks) Cranks(s, p, 0f);
+        Cockpit(s, f, p);
+        Saddle(s, f, p);
+        if (includeCranks) Cranks(s, p, 0f, f);
 
         return s.Build();
     }
 
     /// <summary>
-    /// Tyre, rim and a handful of spokes. Sixteen segments is the point where a wheel stops
-    /// reading as a polygon at riding distance; the spokes are four crossed tubes rather than
-    /// thirty-two, because past a few metres they are one grey haze either way.
+    /// Tyre, a carbon rim, a handful of spokes and, on a disc bike, the rotor on the side away
+    /// from the chain. Sixteen segments is the point where a wheel stops reading as a polygon at
+    /// riding distance; four crossed spokes, because past a few metres thirty-two are one haze.
     /// </summary>
-    private static void Wheel(MeshScratch s, Vector3 axle, BikePalette p)
+    private static void Wheel(MeshScratch s, BikeFrame f, Vector3 axle, BikePalette p, float rotor)
     {
-        s.Ring(axle, Vector3.Right, WheelRadius - TyreThickness, WheelRadius, 0.025f, p.Tyre);
-        s.Ring(axle, Vector3.Right, WheelRadius - 0.055f, WheelRadius - TyreThickness, 0.019f, p.Rim);
+        float r = f.WheelRadius;
+        s.Ring(axle, Vector3.Right, r - TyreThickness, r, 0.028f, p.Tyre);
+        s.Ring(axle, Vector3.Right, r - TyreThickness - RimDepth, r - TyreThickness, 0.020f, p.Rim);
 
         for (int i = 0; i < 4; i++)
         {
             float angle = Mathf.Pi * i / 4f;
-            var radial = new Vector3(0, Mathf.Cos(angle), Mathf.Sin(angle)) * (WheelRadius - 0.05f);
-            s.Tube(axle - radial, axle + radial, 0.005f, p.Rim, 3);
+            var radial = new Vector3(0, Mathf.Cos(angle), Mathf.Sin(angle)) * (r - TyreThickness - RimDepth + 0.004f);
+            s.Tube(axle - radial, axle + radial, 0.004f, p.Accent, 3);
         }
 
-        s.Tube(axle - new Vector3(0.045f, 0, 0), axle + new Vector3(0.045f, 0, 0), 0.018f, p.Accent, 6);
-    }
-
-    private static void Handlebars(MeshScratch s, BikePalette p)
-    {
-        var stemFront = new Vector3(0, HeadTop.Y + 0.020f, HeadTop.Z + 0.095f);
-        s.Tube(HeadTop, stemFront, 0.019f, 0.016f, p.Accent);
-
-        // the tops, then a drop on each side — the curve is three straight tubes, which at this
-        // resolution is indistinguishable from a bend and a great deal cheaper
-        var barL = stemFront + new Vector3(-0.195f, 0, 0);
-        var barR = stemFront + new Vector3(0.195f, 0, 0);
-        s.Tube(barL, barR, 0.014f, p.Accent);
-
-        foreach (var bar in new[] { barL, barR })
-        {
-            float side = Mathf.Sign(bar.X);
-            var hood = bar + new Vector3(0, 0.010f, 0.105f);
-            var bend = hood + new Vector3(0, -0.075f, 0.035f);
-            var drop = new Vector3(bar.X + side * 0.005f, DropsY - 0.012f, DropsZ);
-
-            s.Tube(bar, hood, 0.014f, 0.013f, p.Accent);
-            s.Tube(hood, bend, 0.013f, p.Frame);       // lever body
-            s.Tube(bend, drop, 0.013f, 0.012f, p.Accent);
-        }
-    }
-
-    private static void Saddle(MeshScratch s, BikePalette p)
-    {
-        s.Box(new Vector3(0, SaddleY - 0.012f, SaddleZ - 0.020f),
-            new Vector3(0.115f, 0.028f, 0.150f), p.Saddle);
-        s.Tube(new Vector3(0, SaddleY - 0.020f, SaddleZ + 0.055f),
-            new Vector3(0, SaddleY - 0.010f, SaddleZ + 0.130f), 0.035f, 0.016f, p.Saddle, 5);
+        s.Tube(axle - new Vector3(0.055f, 0, 0), axle + new Vector3(0.055f, 0, 0), 0.016f, p.Accent, 6);
+        if (rotor > 0f)
+            s.Ring(axle + new Vector3(0.048f, 0, 0), Vector3.Right, rotor - 0.018f, rotor, 0.003f, new Color(0.62f, 0.63f, 0.65f), 12);
     }
 
     /// <summary>
-    /// Chainring, cranks and pedals at <paramref name="crankAngle"/> radians. Zero puts the
-    /// right crank forward and level, which is where the cycling rig's right foot is, and
-    /// <b>increasing the angle pedals forwards</b>.
+    /// Spacers, stem and a drop bar, from the fit's points: tops across at the clamp, forward to
+    /// the hoods, the lever down, and the drop curving back. Each curve is two straight tubes,
+    /// which at this resolution is indistinguishable from a bend.
+    /// </summary>
+    private static void Cockpit(MeshScratch s, BikeFrame f, BikePalette p)
+    {
+        s.Tube(f.HeadTop, f.StemBase + f.SteererUp * 0.02f, 0.017f, p.Accent);
+        s.Tube(f.StemBase + f.SteererUp * 0.01f, f.BarClamp, 0.018f, 0.016f, p.Accent);
+
+        float half = f.Hood.X;
+        s.Tube(f.BarClamp + new Vector3(-half + 0.02f, 0, 0), f.BarClamp + new Vector3(half - 0.02f, 0, 0), 0.0135f, p.Accent);
+
+        foreach (float side in new[] { -1f, 1f })
+        {
+            var corner = f.BarClamp + new Vector3(side * half, 0, 0.025f);
+            var hood = f.Hood with { X = side * half };
+            var leverFoot = hood + new Vector3(0, -0.080f, 0.020f);
+            var drop = f.Drop with { X = side * half };
+            var dropBottom = new Vector3(side * half, drop.Y + 0.030f, leverFoot.Z + 0.005f);
+
+            s.Tube(f.BarClamp + new Vector3(side * (half - 0.02f), 0, 0), corner, 0.0135f, p.Accent);
+            s.Tube(corner, hood - new Vector3(0, 0.020f, 0.020f), 0.0135f, p.Accent);
+            s.Tube(hood + new Vector3(0, 0.005f, -0.030f), leverFoot, 0.016f, 0.010f, p.Accent);  // hood and lever
+            s.Tube(hood - new Vector3(0, 0.020f, 0.020f), dropBottom, 0.0135f, p.Accent);
+            s.Tube(dropBottom, drop, 0.0135f, p.Accent);
+        }
+    }
+
+    private static void Saddle(MeshScratch s, BikeFrame f, BikePalette p)
+    {
+        float railY = f.SaddleTop.Y - 0.030f;
+        var postTop = f.SeatCluster + f.SeatUp * ((railY - f.SeatCluster.Y) / f.SeatUp.Y);
+        s.Tube(f.SeatCluster, postTop, 0.014f, p.Frame);
+        s.Box(new Vector3(0, f.SaddleTop.Y - 0.012f, f.SaddleTop.Z - 0.015f), new Vector3(0.130f, 0.026f, 0.150f), p.Saddle);
+        s.Tube(new Vector3(0, f.SaddleTop.Y - 0.018f, f.SaddleTop.Z + 0.055f),
+            new Vector3(0, f.SaddleTop.Y - 0.010f, f.SaddleTop.Z + 0.135f), 0.035f, 0.014f, p.Saddle, 5);
+    }
+
+    /// <summary>
+    /// Chainrings, cranks and pedals at <paramref name="crankAngle"/> radians. Zero puts the +X
+    /// crank forward and level, which is where the cycling rig's "R" foot is, and <b>increasing the
+    /// angle pedals forwards</b> (<see cref="BikeFrame.Pedal"/>).
     ///
     /// <para>
     /// That sign is the whole reason this is spelled out. The bike faces +Z, so driving it
@@ -157,26 +144,27 @@ public static class BikeMeshBuilder
     /// anyone who has ridden a bike.
     /// </para>
     /// </summary>
-    public static void Cranks(MeshScratch s, BikePalette p, float crankAngle)
+    public static void Cranks(MeshScratch s, BikePalette p, float crankAngle, BikeFrame? frame = null)
     {
-        // Chainring on the rider's right — the drive side, on every road bike ever made.
-        // Facing +Z in author space the rider's right is −X, not +X, which is the sort of thing
-        // that is invisible until someone who rides looks at it from the correct side.
-        s.Ring(BottomBracket - new Vector3(0.055f, 0, 0), Vector3.Right, 0.075f, 0.098f, 0.004f,
-            p.Accent, 12);
-        s.Tube(BottomBracket - new Vector3(0.060f, 0, 0), BottomBracket + new Vector3(0.060f, 0, 0),
-            0.020f, p.Accent, 6);
+        var f = frame ?? BikeFrame.Default;
+        var bb = f.BottomBracket;
 
-        for (int i = 0; i < 2; i++)
+        // Chainrings on the rider's right — the drive side, on every road bike ever made. Facing +Z
+        // in author space the rider's right is −X, not +X. A ring's pitch radius is teeth × ½" / 2π.
+        float ringX = -0.058f;
+        foreach (int teeth in f.Spec.Chainrings)
         {
-            float angle = crankAngle + i * Mathf.Pi;
-            float side = i == 0 ? 0.070f : -0.070f;
-            var hub = BottomBracket + new Vector3(side, 0, 0);
-            var pedal = hub + new Vector3(0, -Mathf.Sin(angle) * 0.170f, Mathf.Cos(angle) * 0.170f);
+            float radius = teeth * 0.0127f / Mathf.Tau;
+            s.Ring(bb + new Vector3(ringX, 0, 0), Vector3.Right, radius - 0.016f, radius + 0.003f, 0.003f, p.Accent, 12);
+            ringX += 0.006f;
+        }
 
-            s.Tube(hub, pedal, 0.012f, 0.010f, p.Frame, 4);
-            s.Box(pedal + new Vector3(Mathf.Sign(side) * 0.020f, 0, 0),
-                new Vector3(0.055f, 0.014f, 0.075f), p.Saddle);
+        for (int side = 1; side >= -1; side -= 2)
+        {
+            var pedal = f.Pedal(crankAngle, side);
+            var hub = bb + new Vector3(pedal.X, 0, 0);
+            s.Tube(hub, pedal, 0.012f, 0.010f, p.Accent, 4);
+            s.Box(pedal + new Vector3(side * 0.020f, 0, 0), new Vector3(0.055f, 0.014f, 0.075f), p.Saddle);
         }
     }
 
@@ -184,7 +172,7 @@ public static class BikeMeshBuilder
     public static ArrayMesh BuildCranks(BikePalette? palette = null, float crankAngle = 0f)
     {
         var s = new MeshScratch();
-        Cranks(s, palette ?? BikePalette.Default, crankAngle);
+        Cranks(s, palette ?? BikeFrame.Default.Spec.Look, crankAngle);
         return s.Build();
     }
 }

@@ -115,6 +115,8 @@ public partial class SettingsScreen : Screen
         {
             UiKit.OptionRow(rows, "Movement", new[] { "Game (arcade)", "Simulation (real physics)" }, (int)s.RideProfile,
                 i => GameSettings.Current.RideProfile = (RideProfile)i);
+            UiKit.SliderRow(rows, "Rider weight", 40, 160, 1, s.RiderMass, v => GameSettings.Current.RiderMass = (float)v,
+                v => $"{v:F0} kg", $"You in your kit; the Simulation road bike adds its own {Player.BicycleCatalog.Default.Mass:F1} kg");
             UiKit.ToggleRow(rows, "Third-person view", s.ThirdPerson, on => GameSettings.Current.ThirdPerson = on,
                 "Over the shoulder on foot, chase view mounted (V in game)");
             UiKit.ToggleRow(rows, "Speech bubbles", s.ChatBubbles, on => GameSettings.Current.ChatBubbles = on,
