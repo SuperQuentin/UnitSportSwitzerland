@@ -104,4 +104,77 @@ public static class BikePhysics
         }
         return lo;
     }
+
+    /// <summary>Peak friction of a road tyre on dry tarmac: 0.8-1.0 measured; the rest is <c>Motorbike.SurfaceGrip</c>'s table.</summary>
+    public const float TyreGrip = 0.9f;
+
+    /// <summary>A locked tyre slides at this share of its peak grip.</summary>
+    public const float SlidingShare = 0.8f;
+
+    /// <summary>How much of the lever pull goes to the front: a rider who knows the front brake stops a bike.</summary>
+    public const float FrontBias = 0.7f;
+
+    /// <summary>
+    /// How close to going over the bars the rider lets the front brake take them: they feel the rear
+    /// go light and ease off, as the motorbike's rider does at the stoppie point.
+    /// </summary>
+    public const float PitchMargin = 0.95f;
+
+    /// <summary>
+    /// Both levers fully pulled, as a deceleration in g: hydraulic discs lock a wheel with two
+    /// fingers; rim calipers need a hand and still give less.
+    /// </summary>
+    public static float LeverStrength(BikeBrakes brakes) => brakes == BikeBrakes.Disc ? 1.1f : 0.9f;
+
+    /// <summary>One braking step's outcome.</summary>
+    /// <param name="Decel">m/s².</param>
+    /// <param name="RearLocked">The rear tyre is sliding: the rear went light under the front's braking.</param>
+    /// <param name="PitchLimited">The front was held back at the over-the-bars point.</param>
+    public readonly record struct BrakeResult(float Decel, bool RearLocked, bool PitchLimited);
+
+    /// <summary>
+    /// Front and rear brakes on a bicycle (#1124). The lever pull goes <see cref="FrontBias"/> to the
+    /// front; braking moves the load forward by <c>a·h/L</c>, so the rear tyre's grip shrinks as the
+    /// stop gets harder until it locks and slides; the front is capped by its own grip and by
+    /// the pitch-over point <c>a = g·x_f/h</c>, about 0.6 g for a seated rider (Wilson, Bicycling
+    /// Science). No bike stops harder than that on two wheels, whatever its brakes.
+    /// </summary>
+    /// <param name="lever">0..1, both levers together.</param>
+    /// <param name="grip">Peak friction of the tyres on this ground.</param>
+    /// <param name="strength"><see cref="LeverStrength"/>.</param>
+    /// <param name="toFront">Centre of mass behind the front contact, m.</param>
+    /// <param name="toRear">Centre of mass ahead of the rear contact, m.</param>
+    /// <param name="height">Centre of mass height, m.</param>
+    public static BrakeResult Brake(float lever, float grip, float strength, float toFront, float toRear, float height)
+    {
+        float wheelbase = toFront + toRear;
+        float pitch = PitchMargin * Gravity * toFront / height;
+        float wantFront = lever * FrontBias * strength * Gravity;
+        float wantRear = lever * (1f - FrontBias) * strength * Gravity;
+        float a = 0f;
+        bool locked = false, pitched = false;
+        // the load split depends on the deceleration it produces: damped rounds settle it to 0.01%
+        for (int i = 0; i < 14; i++)
+        {
+            float frontLoad = Mathf.Clamp((toRear + a / Gravity * height) / wheelbase, 0f, 1f);
+            float rearGrip = grip * Gravity * (1f - frontLoad);
+            float front = Mathf.Min(wantFront, grip * Gravity * frontLoad);
+            locked = lever > 0.02f && wantRear > rearGrip;
+            float rear = locked ? SlidingShare * rearGrip : wantRear;
+            float next = front + rear;
+            pitched = next > pitch;
+            a = 0.5f * (a + Mathf.Min(next, pitch));
+        }
+        return new BrakeResult(a, locked, pitched);
+    }
+
+    /// <summary>
+    /// The lean the tyres hold after braking or accelerating takes its share of the friction circle,
+    /// radians: <c>tan φ ≤ √(μ² − (a/g)²)</c>. Braking hard stands the bike up.
+    /// </summary>
+    public static float GripLean(float grip, float accel)
+    {
+        float used = Mathf.Min(Mathf.Abs(accel) / Gravity, grip * 0.95f);
+        return Mathf.Atan(Mathf.Sqrt(grip * grip - used * used));
+    }
 }

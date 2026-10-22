@@ -49,4 +49,19 @@
   - `Bicycle.PowerMeasured` (a trainer or power meter: no curve) and `MeasuredCadence` (the sensor
     drives the legs) are the seams for #969 and #903.
 - HUD: `29 km/h    52×19    88 rpm`. `--ride bike,N` prints the gear, cadence and position every second.
-- Next phases (braking, steering dynamics): `docs/plans/road-bike-realism.md`.
+- **Braking and grip, Sim only** (`BikePhysics.Brake`, `GripLean`, `BikeFrame.Balance`,
+  `BikeBrakingTests`; phase 4). Game keeps its arcade 7.5 m/s² brake and 0.88 rad lean.
+  - The lever goes 70% front. Braking moves the load forward by `a·h/L`, so the rear grip shrinks
+    until it locks and slides at 0.8 of peak (`Bicycle.RearLocked`, the feel layer's dust).
+  - The front is capped by its grip and at 0.95 of the pitch-over point `g·x_f/h`.
+  - The centre of mass: rider 20 cm over the hips and 12 cm ahead; bike over the bottom bracket.
+    The owner is 37% front at 1.06 m, so the limit is ~0.57 g.
+  - A full pull stops from 50 km/h in ~17 m. On gravel (μ 0.65) it is still pitch-limited, with the
+    rear locking sooner. On grass (0.5) the tyres give out first.
+  - Discs pull 1.1 g at the lever, rims 0.9.
+  - Lean = `min(43°, atan √(μ² − (a/g)²))` (μ = `Motorbike.SurfaceGrip`, tarmac 0.9): 42° dry,
+    ~37° braking at half a g, 33° on gravel.
+  - No wet roads: the game has no rain yet.
+  - In game: `--ride bike,45 --brake-at 40 --profile sim --rider-kg 120` drops 26.6 → 6.5 km/h in
+    the first second, `REAR LOCKED` in the trace.
+- Next phase (steering dynamics): `docs/plans/road-bike-realism.md`.

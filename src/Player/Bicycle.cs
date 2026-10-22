@@ -86,7 +86,14 @@ public sealed class Bicycle : Rideable
     /// <summary>A cadence sensor's reading, rpm: the legs turn at it instead of the gear's (#1124).</summary>
     public float? MeasuredCadence { get; set; }
 
-    public Bicycle() => Gears = new BikeDrivetrain(Spec);
+    /// <summary>Every point of the bike and the rider's fit to it: the centre of mass for braking.</summary>
+    public BikeFrame Frame { get; }
+
+    public Bicycle()
+    {
+        Gears = new BikeDrivetrain(Spec);
+        Frame = Spec == BicycleCatalog.Default ? BikeFrame.Default : new BikeFrame(Spec);
+    }
 
     /// <summary>Steady effort, W. Roughly a fit rider's endurance power.</summary>
     public float RiderWatts { get; set; } = 180f;
@@ -101,7 +108,11 @@ public sealed class Bicycle : Rideable
     /// </summary>
     private const float MaxThrust = 260f;
 
-    private const float BrakeDecel = 5.2f;       // dry tarmac, both brakes, short of a stoppie
+    /// <summary>The rear tyre is sliding under hard braking (#1124): the skid the feel layer shows.</summary>
+    public bool RearLocked { get; private set; }
+
+    /// <summary>Last step's acceleration along the road, m/s²: what the friction circle has left for leaning.</summary>
+    private float _accel;
 
     // ---- steering ----
     /// <summary>
@@ -170,9 +181,13 @@ public sealed class Bicycle : Rideable
         // same handlebar input that flicks you round a bollard at 5 km/h is a long sweeping
         // bend at 50. Modelling it the other way — a fixed turn rate — is what makes vehicles
         // in games feel like they are on rails.
+        // Sim's lean is what the tyres hold on this ground after braking or pedalling took its share
+        // of the friction circle (#1124): gravel gives ~33°, a hard stop stands the bike up.
         bool arcade = Arcade;
+        float grip = Motorbike.SurfaceGrip(ground.Surface, BikePhysics.TyreGrip, 0f);
+        float maxLean = arcade ? ArcadeMaxLean : Mathf.Min(MaxLean, BikePhysics.GripLean(grip, _accel));
         SteerByLean(ref motion, input.Steer, v,
-            arcade ? ArcadeMaxLean : MaxLean, arcade ? ArcadeMaxYawRate : MaxYawRate,
+            maxLean, arcade ? ArcadeMaxYawRate : MaxYawRate,
             arcade ? ArcadeBankResponse : BankResponse, WalkingPace, dt);
 
         // --- the rider's position: sprinting on the drops, a fast descent tucked, else the hoods
@@ -208,7 +223,24 @@ public sealed class Bicycle : Rideable
         float resisting = BikePhysics.ResistingForce(v, mass, dragArea, ground.Draft, RollingResistance(ground.Surface), air, ground.Grade);
         v += (thrust - resisting) / inertia * dt;
 
-        if (input.Brake > 0.01f) v -= input.Brake * (arcade ? ArcadeBrakeDecel : BrakeDecel) * dt;
+        // Sim: front and rear brakes, the load moving forward, the rear locking, the over-the-bars
+        // point (#1124). Game keeps its arcade stopping power.
+        RearLocked = false;
+        float braking = 0f;
+        if (input.Brake > 0.01f && v > 0f)
+        {
+            if (arcade) braking = input.Brake * ArcadeBrakeDecel;
+            else
+            {
+                var (toFront, toRear, height) = Frame.Balance(riderMass);
+                var brake = BikePhysics.Brake(input.Brake, grip, BikePhysics.LeverStrength(Spec.Brakes), toFront, toRear, height);
+                braking = brake.Decel;
+                RearLocked = brake.RearLocked && v > 1f;
+            }
+            v -= braking * dt;
+        }
+        // what the tyres are asked for along the road: the pedals' push, or the brakes
+        _accel = thrust / inertia - braking;
 
         // A bicycle does not roll backwards down a hill; it stops and you put a foot down.
         // Letting the speed go negative would drive the whole model backwards through itself.
