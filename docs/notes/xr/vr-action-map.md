@@ -29,6 +29,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | jump | Space / A | ok: A | keep |
 | crouch_slide | Ctrl, C / B | ok: B, or crouch for real (#437) | keep |
 | interact_mount | E / Y | ok: Y; grip a door, an item, a radio, or reach out and grip what E would act on (#437) | keep |
+| concert pogo QTE (#1150): dancing at a concert, jump on the beat | Space / A | ok: the pad's A (`jump`); the ring is a CanvasLayer like the other HUDs | keep |
 | sit on a stand's seat / stand up (#885) | E / Y on a stadium row; again, or walk off | ok: Y, or reach out and grip (`TryInteract(byHand)` sits before the dance); the stick stands up | keep |
 | export or import a concert rig as MVR (#941) | the desk's MVR row (Export MVR, the file picker, Import, Own rig, Folder) or `/concert export`, `/concert import <file>` | ok: the desk is a CanvasLayer on the VR panel (`XrUi`), the ray clicks the picker and the buttons | keep |
 | run a concert camera (#885) | `/concert camera take <n>` or the desk's Operate row; WASD / left stick along the rails, fly up/down rises, mouse / right stick looks, = - wheel / shoulders zoom, Enter / X cuts to it, Esc leaves | ok: the sticks and shoulders through `XrPad`; the viewfinder is a CanvasLayer, on the VR panel (`XrUi`) | new: a hand-held steadicam, gripped and aimed by the hand |

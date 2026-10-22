@@ -43,6 +43,7 @@ public partial class ControlsHelp : CanvasLayer
             new("First / third person (driving: chase, cockpit, cockpit without your body)", PlayerInput.CameraToggle),
             new("Camera over the other shoulder", PlayerInput.SwapShoulder, Pad: "R3 (aiming a gun)"),
             new("Base jump: jump again while falling", PlayerInput.Jump),
+            new("Pogo at a concert: dancing, jump on the beat", PlayerInput.Jump),
         }),
         ("Items", new Row[]
         {
