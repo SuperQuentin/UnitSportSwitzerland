@@ -65,6 +65,11 @@ src/Phone/               quick  --phonecheck --world fixture --photo-dir test_ou
 src/Player/FootPlayer    quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
 src/Core/Teleporter      quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
 src/Phone/               quick  --phonevrcheck --xrsim --world fixture
+src/Trainer/             quick  --trainingcheck --trainer-sim --world fixture --chunks fixture:hairpin
+src/Phone/               quick  --trainingcheck --trainer-sim --world fixture --chunks fixture:hairpin
+tools/RideLink/          quick  --trainingcheck --trainer-sim --world fixture --chunks fixture:hairpin
+src/Trainer/             quick  --trainingcheck junctions --trainer-sim --world fixture --chunks fixture:junction --traffic 0
+src/Gpx/RoadNetwork      quick  --trainingcheck junctions --trainer-sim --world fixture --chunks fixture:junction --traffic 0
 src/XR/XrPhone           quick  --phonevrcheck --xrsim --world fixture
 src/Avatar/              quick  --cockpitcheck
 src/Core/Chat            quick  --chatcheck
@@ -83,6 +88,9 @@ src/Terrain/Stadiums/     quick --stadiumcheck --systems ui
 # #885: concerts: the generator's events, rigs, patches and stages, and the desk's DMX
 src/Concert/             quick --concertcheck --systems ui
 src/Concert/             quick --concertwalkcheck --world flat
+# #1150: the concert pogo QTE: jump on the beat, the Pogo emote on and off
+src/Concert/Pogo         quick --pogocheck --world fixture
+src/Player/FootPlayer.cs quick --pogocheck --world fixture
 src/Concert/             net   tools/concertnetcheck.sh
 # #608: a body walks every storey of hand-made sites' shells, on their real collision
 src/Terrain/Construction/ quick --shellwalkcheck --world flat

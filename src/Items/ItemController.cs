@@ -383,6 +383,10 @@ public partial class ItemController : Node
             // aiming an optic or gun: the wheel is not a hotbar scroll, but it is still not left to leak elsewhere
             GetViewport().SetInputAsHandled();
         }
+        else if (PlayerInput.IsZoomWheel(e))
+        {
+            // Shift + wheel is the camera's zoom (#1149): left for the player
+        }
         else if (e.IsActionPressed(PlayerInput.NextItem))
         {
             _inventory.Cycle(+1);

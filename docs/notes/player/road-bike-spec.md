@@ -86,4 +86,34 @@
   further ahead fixed it.
   - `--drivecheck --mount 1 --traffic 0 --seconds 240 --chunks fixture:hairpin --profile sim`:
     131.8 s (old steering 134.1), no impacts, mean 0.48 m off the line, 58 m off tarmac (old 31).
-- Next phase (rider physiology): `docs/plans/road-bike-realism.md`.
+- **The rider's body, Sim only** (`RiderPhysiology`, `RiderPhysiologyTests`; phase 6).
+  - Critical power: `GameSettings.RiderCriticalPower`, Settings → Gameplay → Threshold power,
+    `--rider-cp`, default 240 W. The reserve W′ is 20 kJ.
+  - Above CP the watts over drain W′. Below it, Skiba's differential model refills it,
+    `dW′/dt = (W′ − W′bal)·(CP − P)/W′`.
+  - Keys and pad watts are held to `Available`: all of it while the reserve lasts, fading to CP over
+    its last 8%. A 520 W sprint on a 240 W threshold lasts ~71 s.
+  - Measured watts (`PowerMeasured`) only drain the reserve shown.
+  - Heart rate eases to `TargetHeartRate`: rest + (max − rest) × (0.15 + 0.75·P/CP + 0.1 × the
+    reserve spent). 60/185 by default, rising with τ 25 s, falling with τ 45 s. A strap
+    (`MeasuredHeartRate`) overrides it.
+  - HUD: `… rpm    148 bpm`, and the Game boost bar shows W′ in Sim. `--ride bike,N` prints both.
+- **Standing** (`RidingPosition.Standing`, phase 6): pedalling up more than 8% under 70 rpm. CdA
+  ×1.15, and the keys' cadence curve floors at 0.95, since the rider's weight turns a cadence seated
+  legs cannot.
+- **Poses per position** (`BikeFrame.Fit`, `HumanMeshBuilder.BuildCyclist`, `Cyclist.RidingPose`):
+  each solved from the bike's points, as the hoods pose is.
+  - Drops: hands on the drops, 12.5 cm lower.
+  - Tuck: hips on the saddle's nose, hands on the tops by the stem. The back is set at 12°
+    (`RiderRig`'s `backAngle`) and the elbows fold to the bars: shortening the reach instead pushed
+    the shoulder *up*.
+  - Standing: hips 7 cm up and 15 cm forward, arms long. The bike rocks ±7° once a crank turn, away
+    from the pushing pedal, and the rider counter-rocks 70% of it.
+  - A pose shows after 0.3 s held, then **blends** there over 0.45 s, smoothstepped
+    (`HumanMeshBuilder.BuildCyclistBlend` lerps the two solved rigs joint by joint). The rider is
+    rebuilt into one mesh per rider only while a blend runs. A newer request waits for it to land.
+    The pedalling legs follow the moving hips, built in place (not cached) during the blend. The
+    first-person eye glides to the new pose's (τ 0.15 s). The legs' crank-step cache is keyed by
+    position too. `FirstPersonEye` follows the pose.
+  - Replicated in `WritePose`'s W.
+  - The model viewer's "Road bike riding position" shows all four.

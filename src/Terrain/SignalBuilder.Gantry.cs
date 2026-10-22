@@ -95,22 +95,23 @@ public static partial class SignalBuilder
                 hang.Y = g.Bottom;
                 Post(vertices, colors, uvs, uv2s, indices, hang, beamY, dir, across, 0.04f, colour, sink: false);
             }
-            // the face: a border (white, black round a white sign) and the field inside it
-            var face = body + front * (SignDepth * 0.5f + 0.004f);
+            // the face: a border (white, black round a white sign) and the field inside it, each layer 1 cm out from the one
+            // under it (4 mm fought over 2-3 m² a gantry: zfight's gap is 8 mm)
+            var face = body + front * (SignDepth * 0.5f + 0.01f);
             var rim = s.Colour == SignColour.White ? Housing : WhitePlate;
             Plate(vertices, colors, uvs, uv2s, indices, rim.SrgbToLinear(), face, front, right, w, h * 0.5f);
-            Plate(vertices, colors, uvs, uv2s, indices, FaceOf(s.Colour).SrgbToLinear(), face + front * 0.004f, front, right, w - SignBorder, h * 0.5f - SignBorder);
+            Plate(vertices, colors, uvs, uv2s, indices, FaceOf(s.Colour).SrgbToLinear(), face + front * 0.01f, front, right, w - SignBorder, h * 0.5f - SignBorder);
             // the motorway symbol on a white square before the first line (SSV 4.01)
             if (s.Lines.Count > 0 && s.Lines[0].StartsWith(SignGantry.MotorwayMark))
             {
-                var at = face + front * 0.008f + Vector3.Up * (h * 0.5f - SignMargin * 0.5f - SignLine * 0.5f) - right * (w - SignBorder - 0.3f);
+                var at = face + front * 0.02f + Vector3.Up * (h * 0.5f - SignMargin * 0.5f - SignLine * 0.5f) - right * (w - SignBorder - 0.3f);
                 MotorwaySymbol(vertices, colors, uvs, uv2s, indices, at, front, right, 0.17f);
             }
             // each lane: its white arrow and its head in the band
             foreach (var lane in s.Lanes)
             {
                 var c = BandFace(g, lane.Along);
-                WhiteArrow(vertices, colors, uvs, uv2s, indices, lane.Moves, c + front * 0.004f + right * BandArrowAt, right, BandArrow);
+                WhiteArrow(vertices, colors, uvs, uv2s, indices, lane.Moves, c + front * 0.01f + right * BandArrowAt, right, BandArrow);
                 if (!g.Lit) continue;
                 var head = c + right * BandHeadAt;
                 RoundedHousing(vertices, colors, uvs, uv2s, indices, head + front * (HeadDepth * 0.5f), right, front,
@@ -127,7 +128,7 @@ public static partial class SignalBuilder
     {
         Plate(vertices, colors, uvs, uv2s, indices, WhitePlate.SrgbToLinear(), at, front, right, half, half);
         var green = SignGreen.SrgbToLinear();
-        var on = at + front * 0.003f;
+        var on = at + front * 0.01f;
         Plate(vertices, colors, uvs, uv2s, indices, green, on + Vector3.Up * (half * 0.45f), front, right, half * 0.8f, half * 0.12f);
         foreach (float x in (ReadOnlySpan<float>)[-0.5f, 0.5f])
             Plate(vertices, colors, uvs, uv2s, indices, green, on + right * (half * x) - Vector3.Up * (half * 0.15f), front, right, half * 0.1f, half * 0.6f);

@@ -344,8 +344,12 @@ public partial class ConcertRig : Node3D
     /// The concert playing round a point, for the dances (<see cref="Items.RadioManager.NearestMusic"/>):
     /// anyone in the bowl dances to it, on its beat.
     /// </summary>
+    /// <summary>A probe's stand-in for a playing show (<c>--pogocheck</c>, #1150); null in a game.</summary>
+    internal static Func<Vector3, Items.RadioManager.Music?>? ProbeMusic;
+
     public static Items.RadioManager.Music? MusicNear(Vector3 point, float within = 160f)
     {
+        if (ProbeMusic?.Invoke(point) is { } probe) return probe;
         foreach (var rig in Live.Values)
         {
             if (!IsInstanceValid(rig) || rig._music?.Song is not { } song) continue;
