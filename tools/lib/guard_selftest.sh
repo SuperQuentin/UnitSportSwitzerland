@@ -3,7 +3,7 @@
 # stopped, or which is held past its max is taken over at once; a live lock is waited for.
 # Usage: bash tools/lib/guard_selftest.sh   -> prints RESULT: ok / RESULT: FAILED
 cd "$(dirname "$0")/../.." || exit 1
-export GUARD_LOCK_DIR="${TMPDIR:-${TEMP:-/tmp}}/unitsport-guard-selftest.$$.lock" GUARD_BEAT=1 GUARD_STALE=4
+export GUARD_LOCK_DIR="${TMPDIR:-${TEMP:-/tmp}}/unitsport-guard-selftest.$$.lock" GUARD_BEAT=1 GUARD_STALE=4 GUARD_SLOTS=1
 . tools/lib/guard.sh
 fails=0
 check() { if eval "$2"; then echo "ok   $1"; else echo "FAIL $1"; fails=$((fails + 1)); fi; }
@@ -29,6 +29,13 @@ kill $over 2>/dev/null; wait $over 2>/dev/null
 t=$(took)
 check "live lock waited for (${t}s)" '[ "$t" -ge 4 ] && [ "$t" -le 12 ]'
 wait $live 2>/dev/null
+
+# 4b. slots (#1008): with two, a second run takes slot 1 at once while slot 0 is held, and says so
+( guard_lock; sleep 6; guard_unlock ) & live=$!; sleep 1
+t0=$SECONDS; slot=$( GUARD_SLOTS=2; guard_lock 30 > /dev/null 2>&1 && echo "$GUARD_SLOT"; guard_unlock )
+check "a second slot taken at once (slot $slot, $(( SECONDS - t0 ))s)" '[ "$slot" = 1 ] && [ $(( SECONDS - t0 )) -le 3 ]'
+wait $live 2>/dev/null
+GUARD_LOCK_DIR=$_guard_lock_base; ( GUARD_SLOTS=2; GUARD_LOCK_DIR=$(_guard_slot_dir 1); _guard_drop_lock )
 
 # 5. RAM watchdog: with the floor above the machine's free RAM, guard_run kills the run (and its
 #    child) within a few seconds and returns 137; guard_watch does the same for a PID it watches

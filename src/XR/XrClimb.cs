@@ -46,7 +46,7 @@ internal sealed class XrClimb
 
     public void Update(FootPlayer? player, float dt)
     {
-        bool can = player != null && Input.MouseMode == Input.MouseModeEnum.Captured
+        bool can = player != null && Core.MouseCapture.Mode == Input.MouseModeEnum.Captured
                    && (player.Ride == RideKind.OnFoot && player.RidingWith == 0 || _hanging != null && player == _player);
         if (!can || player != _player)
         {

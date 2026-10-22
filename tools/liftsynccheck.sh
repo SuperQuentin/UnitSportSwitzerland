@@ -16,7 +16,6 @@ tc_server 420 120 $OUT/liftsync_server.log --server --port $PORT ${GEN[@]+"${GEN
 tc_client 360 $OUT/liftsync_a.log --connect 127.0.0.1:$PORT --name LiftA --cache "$OUT/liftsync_cache_a" \
     --at "$AT" --traffic 0 --liftsynccheck A ${CH[@]+"${CH[@]}"} ${NT[@]+"${NT[@]}"} &
 A=$!
-sleep 3
 tc_client 360 $OUT/liftsync_b.log --connect 127.0.0.1:$PORT --name LiftB --cache "$OUT/liftsync_cache_b" \
     --at "$AT" --traffic 0 --liftsynccheck B ${CH[@]+"${CH[@]}"} ${NT[@]+"${NT[@]}"}
 wait $A

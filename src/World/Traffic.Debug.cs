@@ -65,7 +65,7 @@ public partial class Traffic
 
     private void StepDebugDraw(double dt)
     {
-        if (!ShowPaths && !ShowEndpoints && !EndpointsHeld && !ShowLights && !ShowMovers && !ShowTrails)
+        if (!ShowPaths && !ShowEndpoints && !EndpointsHeld && !ShowLights && !ShowMovers && !ShowTrails && !ShowModeGraphs)
         {
             if (_debugLines is not null) _debugLines.Visible = false;
             return;
@@ -97,6 +97,8 @@ public partial class Traffic
         int lines = 0;
         if (ShowPaths)
             foreach (var car in _cars) lines += DrawWay(mesh, car);
+        // the walkers', riders' and trams' ways and graphs (#1060)
+        if ((ShowPaths || ShowModeGraphs) && Focus?.Invoke() is { } view) lines += DrawModes(mesh, view);
         if (ShowEndpoints || EndpointsHeld)
             foreach (var s in _endpoints.Values) lines += DrawEndpoint(mesh, s);
         if (ShowLights && _roads is not null && Focus?.Invoke() is { } focus)
@@ -120,10 +122,8 @@ public partial class Traffic
                     for (int i = 0; i + 1 < points.Length; i++, lines++)
                         if (!yields || i % 2 == 0) Ribbon(mesh, points[i] + Vector3.Up * DrawLift, points[i + 1] + Vector3.Up * DrawLift, c, 0.35f);
                 }
-                foreach (var (from, to, arm) in site.Walks)
+                foreach (var (from, to, _, group) in site.Walks)
                 {
-                    int group = Enumerable.Range(0, site.Plan.Groups.Count)
-                        .FirstOrDefault(g => site.Plan.Groups[g].Kind == SignalGroupKind.Pedestrian && site.Plan.Groups[g].Arm == arm, -1);
                     if (group >= 0 && LitColour(site.Plan.State(group, now)) is { } c)
                     {
                         Ribbon(mesh, from + Vector3.Up * DrawLift, to + Vector3.Up * DrawLift, c, 2.5f);
@@ -258,18 +258,24 @@ public partial class Traffic
         };
         if (colour is not { } c) return 0;
         var up = Vector3.Up * DrawLift;
-        if (!yields)
-        {
-            for (int i = 0; i + 1 < e.Points.Length; i++) Ribbon(mesh, e.Points[i] + up, e.Points[i + 1] + up, c, 0.8f);
-            return e.Points.Length - 1;
-        }
-        // dashed: 1.5 m drawn, 1.5 m left out, along the path
         int n = 0;
-        for (float s = 0f; s < e.Length; s += 3f, n++)
+        if (!yields)
+            for (int i = 0; i + 1 < e.Points.Length; i++, n++) Ribbon(mesh, e.Points[i] + up, e.Points[i + 1] + up, c, 0.8f);
+        else
+            // dashed: 1.5 m drawn, 1.5 m left out, along the path
+            for (float s = 0f; s < e.Length; s += 3f, n++)
+            {
+                var (a, _) = e.Sample(s);
+                var (b, _) = e.Sample(Mathf.Min(s + 1.5f, e.Length));
+                Ribbon(mesh, a + up, b + up, c, 0.8f);
+            }
+        // where its cars wait for a gap (#1046): a white bar across the path where a waiting car's front stops
+        foreach (var y in path.Yields)
         {
-            var (a, _) = e.Sample(s);
-            var (b, _) = e.Sample(Mathf.Min(s + 1.5f, e.Length));
-            Ribbon(mesh, a + up, b + up, c, 0.8f);
+            var (p, dir) = e.Sample(Mathf.Max(0f, y.At - GapMargin));
+            var side = new Vector3(-dir.Z, 0f, dir.X).Normalized() * 1.4f;
+            Ribbon(mesh, p - side + up, p + side + up, Colors.White, 0.35f);
+            n++;
         }
         return n;
     }
@@ -374,7 +380,8 @@ public partial class Traffic
     /// </summary>
     private static bool Crossing(SignalPlan plan, List<Stream> streams, int arm, double u)
     {
-        int g = plan.Groups.FindIndex(x => x.Kind == SignalGroupKind.Pedestrian && x.Arm == arm);
+        // (the half a car turning in crosses: the departing one of a two-stage crossing, #1030)
+        int g = plan.Groups.FindIndex(x => x.Kind == SignalGroupKind.Pedestrian && x.Arm == arm && x.Half != CrossingHalf.Arriving);
         if (g < 0) return false;
         double walk = 0;
         foreach (var s in streams)
@@ -414,7 +421,7 @@ public partial class Traffic
             // (and, where the plan lets it go across that arm's crossing with the walkers, a permissive conflict, for as long as
             // their trail is on it: their yellow and the red after it too; a protected turn the conflict times keep apart never, the user)
             var conflicts = _conflicts.GetValue(plan, p => p.Conflicts());
-            int walk = to < 0 ? -1 : plan.Groups.FindIndex(x => x.Kind == SignalGroupKind.Pedestrian && x.Arm == to);
+            int walk = to < 0 ? -1 : plan.Groups.FindIndex(x => x.Kind == SignalGroupKind.Pedestrian && x.Arm == to && x.Half != CrossingHalf.Arriving);
             // (on its yellow and red too: its last ones on it still give way, the user)
             bool yields = to >= 0 && (plan.YieldsAt(from, to, s.Turn, s.Group, now)
                 || walk >= 0 && conflicts[s.Group, walk] == SignalPlan.Conflict.Permissive && Crossing(plan, streams, to, u));
@@ -487,7 +494,7 @@ public partial class Traffic
     }
 
     private static (float Length, float Width) Size(ConflictMover who) =>
-        who switch { ConflictMover.Bike => (1.8f, 0.7f), ConflictMover.Walker => (0.7f, 0.7f), _ => (4.5f, 1.9f) };
+        who switch { ConflictMover.Bike => (1.8f, 0.7f), ConflictMover.Walker => (0.7f, 0.7f), ConflictMover.Tram => (30f, 2.4f), _ => (4.5f, 1.9f) };
 
     /// <summary>
     /// A mover drawn as its footprint, its front <paramref name="along"/> m along <paramref name="line"/> (before its start: on back

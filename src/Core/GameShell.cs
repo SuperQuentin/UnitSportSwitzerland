@@ -95,7 +95,7 @@ public partial class GameShell : Node
             "--menu", "--fakeversion", "--updatefeed", "--updateaccept", "--settings", "--licenses", "--controls", "--tutorial",
             "--multiplayer", "--solo", "--map", "--landing", "--uishot", "--menucheck", "--mapcheck", "--leavecheck",
             "--leave-restart", "--mobile", "--autostart", "--wheellock", "--fakewheel", "--ffblog", "--vr", "--xrsim", "--xrload", "--xrstats", "--vrhz", "--vrdetail", "--vrmonitor", "--xrheadshot", "--xrwrist", "--xrprofile", "--xrcab", "--xrhands",
-            "--bubblecheck", "--worldpickcheck",
+            "--bubblecheck", "--worldpickcheck", "--consolelinkcheck", "--fakeprotocol",
         };
         foreach (string a in args)
             if (a.StartsWith("--") && Array.IndexOf(harmless, a) < 0) return false;
@@ -175,6 +175,9 @@ public partial class GameShell : Node
             // "--autostart": straight into Explore through the loading screen, for screenshotting
             // it (and, with --menu, the pause menu once in)
             if (CmdArgs.Has("--autostart")) Callable.From(() => Launch(new WorldLaunch { Mode = GameMode.Explore })).CallDeferred();
+            // a .gpx opened with the game (#1029): straight into its replay
+            GpxOpenWith.Register();
+            if ((GpxOpenWith.FromArgs() ?? AndroidBridge.OpenedFile()) is { } opened) Callable.From(() => OpenGpx(opened)).CallDeferred();
         }
         if (CmdArgs.Has("--controls")) GetTree().CreateTimer(1.5).Timeout += () => _help.Open();
         if (UiShot() is { } shot) GetTree().CreateTimer(shot.Seconds).Timeout += () => SaveShot(shot.Path);
@@ -182,6 +185,7 @@ public partial class GameShell : Node
         if (Ui.MapCheck.Requested()) AddChild(new Ui.MapCheck(this));
         if (LeaveCheck.Requested()) AddChild(new LeaveCheck(this));
         if (WorldPickCheck.Requested()) AddChild(new WorldPickCheck(this));
+        if (ConsoleLinkCheck.Requested()) AddChild(new ConsoleLinkCheck(this));
     }
 
     public override void _ExitTree()
@@ -195,6 +199,46 @@ public partial class GameShell : Node
     {
         // closing the window while hosting must not leave the server behind
         if (what == NotificationWMCloseRequest) _hosted?.Stop();
+        // Android's Back (button or edge swipe) is the phone's Esc (#1023): it closes what is open,
+        // or pauses. It never quits (application/config/quit_on_go_back=false); Quit is in the pause menu
+        else if (what == NotificationWMGoBackRequest) PressEscape();
+        // Android: "Open with" while the game runs comes back as a resume with a new intent
+        else if (what == NotificationApplicationResumed && !Direct && AndroidBridge.OpenedFile() is { } opened) OpenGpx(opened);
+    }
+
+    private static void PressEscape()
+    {
+        foreach (bool down in new[] { true, false })
+            Input.ParseInputEvent(new InputEventKey { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = down });
+    }
+
+    private string? _pendingGpx;
+
+    /// <summary>
+    /// A .gpx opened with the game from outside (#1029, <see cref="GpxOpenWith"/>): its replay starts at
+    /// once, after leaving a world in progress. An Android URI is copied into the GPX folder first.
+    /// </summary>
+    public void OpenGpx(string source)
+    {
+        string? path = source.Contains("://") ? Ui.GpxPicker.Import(source) : source;
+        if (path == null)
+        {
+            Modal.Inform(_menuRoot, "Not a GPX track", "The file opened with UnitSport is not a GPX track, or could not be read.");
+            return;
+        }
+        GD.Print($"[gpx] opened with the game: {path}");
+        var recent = GameSettings.Current.RecentGpx;
+        recent.Remove(path);
+        recent.Insert(0, path);
+        while (recent.Count > 10) recent.RemoveAt(recent.Count - 1);
+        GameSettings.Current.Save();
+        if (_state is State.Loading or State.InWorld or State.Leaving)
+        {
+            _pendingGpx = path;
+            LeaveWorld(null);
+            return;
+        }
+        Launch(new WorldLaunch { Mode = GameMode.GpxReplay, GpxPaths = new[] { path } });
     }
 
     /// <summary>
@@ -339,7 +383,7 @@ public partial class GameShell : Node
         bool open = _stack.Count > 0;
         _menuLayer.Visible = open;
         UiFocus.Set(this, open);
-        if (open) Input.MouseMode = Input.MouseModeEnum.Visible;
+        if (open) MouseCapture.Mode = Input.MouseModeEnum.Visible;
         else if (_state == State.InWorld) _world?.ResumeControl();
     }
 
@@ -359,6 +403,16 @@ public partial class GameShell : Node
         return e;
     }
 
+    private string? _refusedEndpoint;
+
+    /// <summary>The server that just refused this game's version, handed to the Multiplayer screen once (#1088).</summary>
+    public string? TakeRefusedEndpoint()
+    {
+        string? e = _refusedEndpoint;
+        _refusedEndpoint = null;
+        return e;
+    }
+
     private void ShowTitle()
     {
         _state = State.Title;
@@ -369,7 +423,7 @@ public partial class GameShell : Node
         }
         ClearStack();
         Push(TitleScreen.Create());
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
     }
 
     public override void _UnhandledInput(InputEvent e)
@@ -418,6 +472,7 @@ public partial class GameShell : Node
     {
         if (_state is State.Loading or State.InWorld or State.Leaving) return;
         _launch = launch;
+        _refusedEndpoint = null;
         if (!launch.Hosted)
             _returnTo = launch.Mode == GameMode.Multiplayer ? "multiplayer" : "solo";
 
@@ -581,7 +636,12 @@ public partial class GameShell : Node
                     _rejoin = joined with { World = other.IsOpen ? null : other };
                     LeaveWorld(null);
                 }
-                else if (_world.Stage == LoadStage.Failed) LeaveWorld(_world.Failure ?? "The world could not be started.");
+                else if (_world.Stage == LoadStage.Failed)
+                {
+                    // another game version: the Multiplayer screen offers that server's console (#1088)
+                    _refusedEndpoint = _world.RefusedForVersion && _launch is { Mode: GameMode.Multiplayer, Hosted: false } refused ? refused.Endpoint : null;
+                    LeaveWorld(_world.Failure ?? "The world could not be started.");
+                }
                 break;
         }
     }
@@ -707,6 +767,14 @@ public partial class GameShell : Node
             _state = State.Title;
             GD.Print($"[shell] joining {again.Endpoint} again in world {again.World?.Id ?? WorldChoice.OpenId}");
             Launch(again);
+            return;
+        }
+        if (_pendingGpx is { } track)
+        {
+            // a .gpx opened with the game mid-session (#1029): its replay, as straight on
+            _pendingGpx = null;
+            _state = State.Title;
+            Launch(new WorldLaunch { Mode = GameMode.GpxReplay, GpxPaths = new[] { track } });
             return;
         }
         _loading.Close();

@@ -33,6 +33,12 @@ public static class OsmNodes
         "traffic_signals:sound", "traffic_signals:vibration", "cycleway", "cycleway:left", "cycleway:right", "cycleway:both",
     ];
 
+    /// <summary>Tags read for the tram stops (#1057): never in the rows' <c>tags</c> column.</summary>
+    public static readonly HashSet<string> TramStopKeys = ["railway", "public_transport", "tram", "name"];
+
+    /// <summary>Every node tag the PBF read keeps: the rows' and the tram stops'.</summary>
+    public static readonly HashSet<string> ReadNodeTags = [.. NodeTagKeys, .. TramStopKeys];
+
     public static readonly HashSet<string> RelationTagKeys = ["type", "restriction", "restriction:motorcar", "except"];
 
     private static readonly HashSet<string> RestrictionValues =
@@ -57,7 +63,14 @@ public static class OsmNodes
     /// <summary>A pedestrian crossing on a road (#700): <c>highway=crossing</c>, its kind in <c>crossing=*</c> (zebra, marked, uncontrolled, unmarked, traffic_signals).</summary>
     public static bool IsCrossing(Dictionary<string, string> t) => t.GetValueOrDefault("highway") == "crossing";
 
-    public static bool KeepNode(Dictionary<string, string> t) => IsSignal(t) || IsAsl(t) || IsCrossing(t);
+    /// <summary>A tram stop (#1057): <c>railway=tram_stop</c>, or a stop position for trams.</summary>
+    public static bool IsTramStop(Dictionary<string, string> t) =>
+        t.GetValueOrDefault("railway") == "tram_stop" || t.GetValueOrDefault("public_transport") == "stop_position" && t.GetValueOrDefault("tram") == "yes";
+
+    /// <summary>A node the rows are made of: a signal, a bike box, a crossing.</summary>
+    public static bool IsRowNode(Dictionary<string, string> t) => IsSignal(t) || IsAsl(t) || IsCrossing(t);
+
+    public static bool KeepNode(Dictionary<string, string> t) => IsRowNode(t) || IsTramStop(t);
 
     public static bool KeepRelation(Dictionary<string, string> t) => t.GetValueOrDefault("type") == "restriction";
 
@@ -216,7 +229,7 @@ public static class OsmNodes
 
     /// <summary><c>k=v;k=v</c> sorted by key; a <c>;</c> inside a value becomes <c>,</c>.</summary>
     private static string TagString(Dictionary<string, string> t) =>
-        string.Join(';', t.OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => kv.Key + "=" + Clean(kv.Value).Replace(';', ',')));
+        string.Join(';', t.Where(kv => NodeTagKeys.Contains(kv.Key)).OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => kv.Key + "=" + Clean(kv.Value).Replace(';', ',')));
 
     private static string Clean(string v) => v.Replace('\t', ' ').Replace('\n', ' ');
 

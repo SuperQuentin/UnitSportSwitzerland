@@ -41,15 +41,21 @@ public partial class ShopProbe : ChatProbe
 
     private static ShopService Shops => ShopService.Instance!;
 
+    /// <summary>The failure, told to the other client too: A waits for B's answer for minutes otherwise (#1006).</summary>
+    protected override void Fail(string why)
+    {
+        base.Fail(why);
+        Say("failed");
+    }
+
     // ---- A: buys a slot empty, pays by card, sells back -----------------------------------------
 
     private async Task RunA()
     {
         var me = Me!;
         var bank = Bank.Instance!;
-        Chat!.Send("/login shopcheck");
-        await Seconds(2.0);
-        Chat.Send("/bank me set 1000");
+        if (!await LogIn("shopcheck")) return;
+        Chat!.Send("/bank me set 1000");
         if (!await Until(() => bank.Balance == 1000, 20)) { Fail($"the account was not set to 1000 (it says {bank.Balance})"); return; }
         Expect(bank.Balance == 1000, "1000 CHF on the account");
 
@@ -101,8 +107,12 @@ public partial class ShopProbe : ChatProbe
             Expect(Shops.LastOutcome == BuyOutcome.Sold && bank.Balance == before - card.Price && _items.Inventory.Cash == cash,
                 $"the account paid ({before} -> {bank.Balance}), the pocket did not ({cash} -> {_items.Inventory.Cash})");
             // ask again: the balance must be the server's, not this client's sums
+            bool answered = false;
+            void OnBalance(long _) => answered = true;
+            bank.BalanceChanged += OnBalance;
             bank.Refresh();
-            await Seconds(2.0);
+            await Until(() => answered, 5);
+            bank.BalanceChanged -= OnBalance;
             Expect(bank.Balance == before - card.Price, $"the server's account says {bank.Balance}");
         }
 
@@ -123,7 +133,7 @@ public partial class ShopProbe : ChatProbe
         Expect(!Shops.Sell(never.Id, 1), $"the {layout.Shop} does not buy {never.Id}");
         Shot("bought");
         me.TryInteract();   // closes the shop
-        await Seconds(0.5);
+        await Until(() => !Shops.IsOpen, 2);
         Expect(!Shops.IsOpen, "E closes it");
         await Vending(me);
 
@@ -131,13 +141,13 @@ public partial class ShopProbe : ChatProbe
         var (e, n) = _origin.ToLv95(d.World);
         string news = string.Create(System.Globalization.CultureInfo.InvariantCulture,
             $"soldout {layout.Key} {counter} {line.Slot} {e:F1} {n:F1}");
-        bool seen = false;
-        for (int i = 0; i < 150 && !seen; i++)
+        bool seen = false, failed = false;
+        for (int i = 0; i < 150 && !seen && !failed; i++)
         {
             Say(news);
-            seen = await Heard("B", "seen", 2);
+            await Until(() => (seen = _heard.Any(l => l.Contains("SH B seen"))) || (failed = _heard.Any(l => l.Contains("SH B failed"))), 2);
         }
-        Expect(seen, "B saw it");
+        Expect(seen, failed ? "B saw it (B failed on the way)" : "B saw it");
         if (seen) Expect(_heard.Any(l => l.Contains("SH B seen ok")), "B saw the slot sold out");
     }
 
@@ -206,7 +216,7 @@ public partial class ShopProbe : ChatProbe
                 if (l.Shop is ShopType.None or ShopType.Grocery or ShopType.Kiosk) continue;
                 return (d, l);
             }
-            await Seconds(3.0);
+            await Until(() => DoorIndex.All().Any(d => d.Kind == BuildingKind.Commercial && !tried.Contains(d.Key.ToString())), 3.0);
         }
         Fail($"no shop taking the card among {tried.Count} commercial doors");
         return (null, null);
@@ -214,26 +224,40 @@ public partial class ShopProbe : ChatProbe
 
     /// <summary>A building with a PAUSA machine met on the way, if any.</summary>
     private (DoorIndex.Entry Door, InteriorLayout Layout)? _machine;
+    /// <summary>How long A keeps looking for a PAUSA machine while the door index fills, s.</summary>
+    private const double MachineSearch = 60;
 
     /// <summary>
     /// A's PAUSA machine, if one stood in a building it looked at (a shop or office lobby, one in
     /// five): one item for cash, which sticks (the server runs with <c>--shopstuck</c>), then a hit
-    /// frees it. Best effort: no machine near the shops is not a failure.
+    /// frees it. None found within <see cref="MachineSearch"/> fails, with what was looked at (#1017).
     /// </summary>
     private async Task Vending(FootPlayer me)
     {
-        if (_machine == null)
+        // the generated village round the shop has a handful of shops and works, and the nearest machine can be a km or two off:
+        // its tile's doors are indexed only once it has streamed in, so look again as the index fills (#1017)
+        var tried = new HashSet<string>();
+        double since = GameClock.Now;
+        while (_machine == null && GameClock.Now - since < MachineSearch)
         {
             var here = me.GlobalPosition;
-            foreach (var d in DoorIndex.All().Where(d => d.Kind is BuildingKind.Commercial or BuildingKind.Civic or BuildingKind.Industrial)
-                         .OrderBy(d => new Vector2(d.World.X - here.X, d.World.Z - here.Z).Length()).Take(60))
+            foreach (var d in DoorIndex.All().Where(d => d.Kind is BuildingKind.Commercial or BuildingKind.Civic or BuildingKind.Industrial && !tried.Contains(d.Key.ToString()))
+                         .OrderBy(d => new Vector2(d.World.X - here.X, d.World.Z - here.Z).Length()).Take(60).ToList())
             {
+                tried.Add(d.Key.ToString());
                 InteriorLayout? l = null;
                 try { l = await InteriorManager.Instance!.GetOrCreate(d.Key.ToString()); } catch { }
-                if (l != null && l.Key == d.Key.ToString() && l.Furniture.Any(f => f.Type == FurnitureType.VendingMachine)) { _machine = (d, l); break; }
+                // any door of the building: a second door (#498) leads into the same plan
+                if (l != null && l.Furniture.Any(f => f.Type == FurnitureType.VendingMachine)) { _machine = (d, l); break; }
             }
+            if (_machine == null) await Seconds(3.0);
         }
-        if (_machine is not { } m) { GD.Print($"{Log} no PAUSA machine in the 60 nearest buildings that may have one: skipped"); return; }
+        if (_machine is not { } m)
+        {
+            Expect(false, $"a PAUSA machine in one of the {tried.Count} commercial, civic and industrial doors indexed in {MachineSearch:F0} s ({DoorIndex.All().Count()} doors in all)");
+            return;
+        }
+        GD.Print($"{Log} found after {GameClock.Now - since:F1} s and {tried.Count} doors");
         GD.Print($"{Log} PAUSA machine in {m.Layout.Key} ({m.Layout.Kind})");
         if (!await WalkIn(me, m.Door)) return;
         var interiors = InteriorManager.Instance!;
@@ -260,6 +284,9 @@ public partial class ShopProbe : ChatProbe
 
     private async Task<bool> WalkIn(FootPlayer me, DoorIndex.Entry door)
     {
+        // the index's own entry, in today's frame: a copy found before an origin shift points a few km off,
+        // and B, just teleported 2 km to the shop, was put down 5 km away on a hillside (#1017)
+        door = DoorIndex.Find(door.Key) ?? door;
         var interiors = InteriorManager.Instance!;
         string doorKey = door.Key.ToString();
         var inward = -door.Outward;
@@ -274,7 +301,13 @@ public partial class ShopProbe : ChatProbe
             if (!interiors.IsOpen(doorKey)) me.TryInteract();
             open = await Until(() => interiors.Links.TryGetValue(doorKey, out var lk) && lk.Passable && lk.Swing >= 1f, 5 + attempt * 2);
         }
-        if (!open) { Fail($"the door {doorKey} never opened"); return false; }
+        if (!open)
+        {
+            interiors.Links.TryGetValue(doorKey, out var stuck);
+            Fail($"the door {doorKey} never opened (open here {interiors.IsOpen(doorKey)}, link {(stuck == null ? "none" : $"open {stuck.Open} swing {stuck.Swing:F2}")}, "
+                + $"{new Vector2(me.GlobalPosition.X - door.World.X, me.GlobalPosition.Z - door.World.Z).Length():F1} m from it, {me.GlobalPosition.Y - door.World.Y:F1} m up, on the floor {me.IsOnFloor()})");
+            return false;
+        }
         Input.ActionPress(PlayerInput.MoveForward);
         bool inside = await Until(() => me.Indoors && interiors.Current != null, 8);
         await Seconds(0.4);

@@ -469,7 +469,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         {
             case RideKind.Pigeon:
                 // both wings beat down together, from about the shoulders
-                if (vl < -1.6f && vr < -1.6f && _flapCooldown <= 0f && Input.MouseMode == Input.MouseModeEnum.Captured)
+                if (vl < -1.6f && vr < -1.6f && _flapCooldown <= 0f && MouseCapture.Mode == Input.MouseModeEnum.Captured)
                 {
                     _flapCooldown = 0.3f;
                     XrPad.Tap(Core.PlayerInput.Jump);

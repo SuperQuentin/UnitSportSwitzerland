@@ -35,8 +35,9 @@
   land on. With every hit counted, the craft settled onto its own cargo and followed it down.
 - **The body** is a capsule of radius 3 m and height 6 m, with its origin at the legs' feet, so it
   reaches 2.2 m under the belly even with the legs folded. Crash at 24 m/s.
-  - Parked, its collision is the hull box only (`ParkedBox`, from 2.25 m up), so a person walks
-    under the belly.
+  - Parked, its collision is the hull box (`ParkedBox`, from 2.25 m up), so a person walks under
+    the belly, and a post round each leg (`ExtraBoxes`, from `UfoRig.LegDown`) that it stands on.
+    With the box alone it sank 2.25 m into the ground (#1006). The ramp is drawn only.
   - E gets in at the ramp's foot (`EntryPoint`). Getting out on the ground puts you at the ramp's
     foot (`Rideable.ExitSpot`, `FootPlayer.ClearStandAt`), else beside it (`FindExit`).
   - Two seats under the dome (`Seats`). The pilot is drawn (the `Hanging` pose, hands on overhead

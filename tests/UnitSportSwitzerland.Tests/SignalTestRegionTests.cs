@@ -50,6 +50,127 @@ public sealed class SignalTestRegionFixture : IDisposable
 public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixture<SignalTestRegionFixture>
 {
     [Fact]
+    public void J7s_east_crosswalk_crosses_its_wide_island_in_two_stages()
+    {
+        // #1030: the east arm's island (3.4 m at the zebra, from its exit hatch) holds walkers between the halves: each half a group
+        // of its own, its heads at its kerb and on the island back to back, its walkers' lines kerb to island, the first walker of
+        // each green on the island at most a third of the cycle, no zebra bar on the island
+        var j = region.Junction("J7");
+        var tile = region.Tile(j.E, j.N);
+        var signal = tile.Signals.Single();
+        var plan = signal.Plan;
+        Assert.Empty(plan.Validate());
+        Assert.True(plan.ConflictTimed);
+        int east = plan.Arms.FindIndex(a => Math.Abs(Math.IEEERemainder(a.Heading, 2 * Math.PI)) < 0.2);
+        var halves = Enumerable.Range(0, plan.Groups.Count).Where(g => plan.Groups[g].Kind == SignalGroupKind.Pedestrian && plan.Groups[g].Arm == east).ToList();
+        Assert.Equal([CrossingHalf.Arriving, CrossingHalf.Departing], halves.Select(g => plan.Groups[g].Half));
+        // only that arm: the others' crosswalks have no island
+        Assert.All(plan.Groups.Where(g => g.Kind == SignalGroupKind.Pedestrian && g.Arm != east), g => Assert.Equal(CrossingHalf.Whole, g.Half));
+
+        const SignalPoleFlags Both = SignalPoleFlags.ArrivingHalf | SignalPoleFlags.DepartingHalf;
+        var poles = signal.Poles.Where(p => p.Arm == east && (p.Flags & SignalPoleFlags.Pedestrian) != 0).ToList();
+        Assert.Equal(3, poles.Count);
+        var island = Assert.Single(poles, p => (p.Flags & Both) == Both);
+        var arriving = Assert.Single(poles, p => (p.Flags & Both) == SignalPoleFlags.ArrivingHalf);
+        var departing = Assert.Single(poles, p => (p.Flags & Both) == SignalPoleFlags.DepartingHalf);
+        Assert.True((arriving.Flags & SignalPoleFlags.Main) != 0, "the arriving half's head stands on the main pole");
+        // the island between the kerbs, its arriving head facing the way the departing kerb's does (toward the arriving kerb)
+        static float Across(SignalPole a, SignalPole b) => MathF.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Z - b.Z) * (a.Z - b.Z));
+        Assert.Equal(Across(arriving, departing), Across(arriving, island) + Across(island, departing), 0.2f);
+        Assert.Equal(0f, MathF.IEEERemainder(island.PedHeading - departing.PedHeading, 2 * MathF.PI), 0.05f);
+        Assert.Equal(MathF.PI, MathF.Abs(MathF.IEEERemainder(island.PedHeading - arriving.PedHeading, 2 * MathF.PI)), 0.05f);
+
+        // each half's walkers between its kerb and the island, both ways, shorter than the road
+        static float Length(RoadConflictLine l) => MathF.Sqrt(MathF.Pow(l.Points[^3] - l.Points[0], 2) + MathF.Pow(l.Points[^1] - l.Points[2], 2));
+        foreach (int g in halves)
+        {
+            var walks = signal.ConflictLines.Where(l => l.Group == g && l.Mover == ConflictMover.Walker).ToList();
+            Assert.Equal(2, walks.Count);
+            Assert.All(walks, l => Assert.InRange(Length(l), 2f, plan.Arms[east].CrossingM - 3f));
+        }
+        var waits = plan.IslandWaits(g => signal.ConflictLines.Where(l => l.Group == g && l.Mover == ConflictMover.Walker).Max(Length) / SignalPlan.WalkSpeed);
+        Assert.NotEmpty(waits);
+        Assert.All(waits, w => Assert.True(w.Wait <= plan.Cycle * SignalPlan.IslandWaitShare + 0.1f, $"waits {w.Wait:F1} s of {plan.Cycle:F1}"));
+
+        // the zebra (east arm: outward +X, the island pole just behind it) leaves the island bare (the user)
+        int bars = 0;
+        foreach (var paint in tile.Paint.Where(p => p.Type == PaintType.YellowSolid && p.Shape == PaintShape.Triangles))
+            for (int t = 0; t + 2 < paint.Indices.Length; t += 3)
+            {
+                float x = 0, z = 0;
+                for (int k = 0; k < 3; k++) { x += paint.Vertices[paint.Indices[t + k] * 3] / 3; z += paint.Vertices[paint.Indices[t + k] * 3 + 2] / 3; }
+                if (x < island.X - 4 || x > island.X || Math.Abs(z - island.Z) > 8) continue;
+                bars++;
+                Assert.True(Math.Abs(z - island.Z) > 1.5f, $"a zebra bar on the island, {z - island.Z:F2} m across from its pole");
+            }
+        Assert.True(bars > 0, "no zebra found");
+    }
+
+    [Fact]
+    public void Canton_row_differs_only_by_its_canton()
+    {
+        // #1038: J2's crossroads once per zone; Geneva's walkers' heads have two lenses, Vaud's heads arrow plates, Basel-Landschaft's
+        // and Bern's poles their colours (#1037), the rest alike
+        var plans = new[] { "default", "GE", "VD", "BL", "BE" }
+            .Select(c => SignalTestRegion.Junctions.Single(j => j.Name == $"J12-canton-{c}"))
+            .Select(j => region.Tile(j.E, j.N).Signals.Single().Plan).ToArray();
+        Assert.Equal((true, false), (plans[0].PedestrianAmber, plans[0].ArrowPlates));
+        Assert.Equal((false, false), (plans[1].PedestrianAmber, plans[1].ArrowPlates));
+        Assert.Equal((true, true), (plans[2].PedestrianAmber, plans[2].ArrowPlates));
+        Assert.Equal([SignalPoleColour.SilverGrey, SignalPoleColour.SilverGrey, SignalPoleColour.SilverGrey, SignalPoleColour.Anthracite,
+            SignalPoleColour.TrafficGrey], plans.Select(p => p.PoleColour));
+        Assert.All(plans, p => Assert.Equal((plans[0].Cycle, plans[0].Groups.Count), (p.Cycle, p.Groups.Count)));
+    }
+
+    [Fact]
+    public void Canton_borders_are_marked_where_roads_cross()
+    {
+        // #1038: the main road crosses four borders (#1037 added Basel-Landschaft and Bern): a stripe across it at each, and a sign
+        // each way standing in the canton it names, facing the traffic coming in across the border
+        var tiles = region.Tiles().Select(t => t.Tile).ToList();
+        Assert.Equal(4, tiles.Sum(t => t.Paint.Count(p => p.Rgba == SignalTestRegion.BorderRgba)));
+        var signs = tiles.SelectMany(t => t.PointProps.Where(p => p.Type == PointPropType.CantonSign).Select(p => (t.Id, Sign: p))).ToList();
+        Assert.Equal(8, signs.Count);
+        foreach (var (id, s) in signs)
+        {
+            double e = id.MinE + s.X, n = id.MaxN - s.Z, border = Math.Round(e / 1000) * 1000;
+            Assert.Equal(SignalTestRegion.CantonAt(e, n), RoadSigns.CantonCode(s.Variant));
+            double frontEast = -Math.Sin(s.Heading);   // heading 0 faces -Z (north)
+            Assert.True(Math.Sign(frontEast) == Math.Sign(border - e), $"the sign at E {e:F1} faces away from the border at {border}");
+        }
+    }
+
+    [Fact]
+    public void Wide_approaches_carry_their_heads_overhead()
+    {
+        // #1037: J6's 2+2 artery on mast arms; the 1+1 roads with pockets keep their kerb poles; every head 4.50-5.50 m over the
+        // road (5.50 m and up on a wire). J13's 4+4 artery took portals and J14 (the same with trams, between houses) span wires
+        // while a head hung over every lane; their one cluster over the middle of the lanes (#1110) is within an arm's reach
+        (OverheadKind Kind, int Count) At(string id)
+        {
+            var j = region.Junction(id);
+            var all = region.Tile(j.E, j.N).Signals.SelectMany(s => s.Overheads).ToList();
+            return (all.Select(o => o.Kind).DefaultIfEmpty().First(), all.Count);
+        }
+        Assert.Equal((OverheadKind.Arm, 2), At("J6"));
+        Assert.Equal((OverheadKind.Arm, 2), At("J13"));
+        Assert.Equal((OverheadKind.Arm, 2), At("J14"));
+        Assert.Equal(0, At("J2").Count);
+        foreach (var (_, tile) in region.Tiles())
+            foreach (var s in tile.Signals)
+                foreach (var o in s.Overheads)
+                {
+                    Assert.NotEmpty(o.Heads);
+                    Assert.InRange(o.Heads.Count, 1, 3);
+                    Assert.True(o.Heads.Max(h => h.Along) - o.Heads.Min(h => h.Along) <= 2 * SignalOverhead.ClusterPitch + 0.01f, "one cluster");
+                    Assert.All(o.Heads, h => Assert.InRange(h.Along, 0.3f, o.Length));
+                    float lift = o.Bottom - s.Y;
+                    Assert.InRange(lift, o.Kind == OverheadKind.Span ? 5.4f : 4.4f, 6.2f);
+                    if (o.Kind is OverheadKind.Arm or OverheadKind.RefugeArm) Assert.True(o.Length <= 10.01f, $"an arm {o.Length:F1} m long");
+                }
+    }
+
+    [Fact]
     public void Riders_turning_left_go_with_the_left_arrow()
     {
         // #971, the user: a riders' left turn from the left-turn bike lane follows the left arrow, never the through green; where
@@ -229,13 +350,13 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
     public void Priority_signs_at_lights_stand_on_their_main_poles()
     {
         // #1000 (the old layout's rule, #350/#711): an approach's priority sign for when the lights are off is on its main pole,
-        // not a post of its own
+        // not a post of its own; on a mast arm's or portal's post (#1037) out in front of its face, by its half width
         int onPoles = 0;
         foreach (var (_, tile) in region.Tiles())
             foreach (var sign in tile.PointProps.Where(x => (x.Flags & PropFlags.OnSignalPole) != 0))
             {
                 Assert.Contains(tile.Signals.SelectMany(g => g.Poles), p => (p.Flags & SignalPoleFlags.Main) != 0
-                    && Math.Abs(p.X - sign.X) < 0.01f && Math.Abs(p.Z - sign.Z) < 0.01f);
+                    && Math.Abs(p.X - sign.X) < SignalOverhead.PostHalf && Math.Abs(p.Z - sign.Z) < SignalOverhead.PostHalf);
                 onPoles++;
             }
         Assert.True(onPoles > 0);
@@ -281,6 +402,8 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
         {
             var solid = tile.Paint.Where(p => p.Type == PaintType.WhiteSolid && p.Shape == PaintShape.Polyline).Select(p => Points(p.Vertices)).ToList();
             var meshes = tile.Paint.Where(p => p.Type == PaintType.Hatch).Select(p => Points(p.Vertices)).ToList();
+            // (a tram track's grooves cut the road's paint, #124: a stripe ending at the track's zone is cut there, #1057's J14 branch)
+            var grooves = tile.Paint.Where(p => p.Type == PaintType.RailGroove).Select(p => Points(p.Vertices)).ToList();
             foreach (var hatch in tile.Paint.Where(p => p.Type == PaintType.Hatch))
             {
                 hatches++;
@@ -341,7 +464,10 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
                     }
                     return best;
                 });
-                var loose = pts.FirstOrDefault(p => Off(p) > 0.35);
+                double OffGroove((double X, double Z) p) => grooves.Count == 0 ? double.MaxValue : grooves.Min(q => q.Count < 2 ? double.MaxValue
+                    : q.Zip(q.Skip(1)).Min(s => Math.Sqrt(Math.Pow(p.X - Math.Clamp(p.X, Math.Min(s.First.X, s.Second.X), Math.Max(s.First.X, s.Second.X)), 2)
+                        + Math.Pow(p.Z - Math.Clamp(p.Z, Math.Min(s.First.Z, s.Second.Z), Math.Max(s.First.Z, s.Second.Z)), 2))));
+                var loose = pts.FirstOrDefault(p => Off(p) > 0.35 && OffGroove(p) > 1.2);
                 Assert.True(loose == default, $"{path}: a hatch around ({mx:F0},{mz:F0}) has a stripe ending off its border at ({loose.X:F1},{loose.Z:F1})");
                 // the stripes start 0.6 m in and step 2.5 m, none where the hatch is under 0.3 m wide (its narrow tip, 0.3 / its width of a
                 // 20 m taper): a 20 m hatch's stripes reach over at least 20 - 2.5 - 2 x 0.6 m less that tip. Their ends lie up to 3 m in
@@ -479,5 +605,112 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
         // J5: the merged strip's shared straight + right lane turns across its own bike lane
         Assert.True(Red("J5a", 25) >= 1, "J5a: no red where the TR lane turns right across the bike lane");
         Assert.True(Red("J5b", 25) >= 1, "J5b: no red where the TR lane turns right across the bike lane");
+    }
+
+    [Fact]
+    public void Flashers_say_what_they_warn_of_and_permissive_lefts_flash()
+    {
+        // #1109, the user: a plate under each flasher lamp (a pedestrian, a bike, the arrow of a turn crossing both); a left from a
+        // shared lane giving way to the oncoming cars flashes its ball's yellow, or, shown by an arrow, has a flasher on its left
+        var plates = new Dictionary<SignalPlate, int>();
+        int balls = 0, arrows = 0;
+        foreach (var (_, tile) in region.Tiles())
+            foreach (var s in tile.Signals)
+            {
+                var p = s.Plan;
+                for (int g = 0; g < p.Groups.Count; g++)
+                {
+                    if (p.Groups[g].Kind != SignalGroupKind.Flasher) continue;
+                    var (plate, arrow) = p.PlateOf(g);
+                    plates[plate] = plates.GetValueOrDefault(plate) + 1;
+                    // a car group's lamp always says something; a bike group's flashes its own yellow, no lamp
+                    Assert.Equal(p.Groups[p.Groups[g].Qualifies].Kind == SignalGroupKind.Car, plate != SignalPlate.None);
+                    if (plate == SignalPlate.Arrow) Assert.Equal(SignalMoves.None, arrow & SignalMoves.Through);
+                }
+                for (int g = 0; g < p.Groups.Count; g++)
+                {
+                    if (p.LeftGivesWayTo(g).Count == 0) continue;
+                    if (UnitSport.Terrain.SignalBuilder.ArrowMoves(p, g) == SignalMoves.None) balls++; else arrows++;
+                }
+            }
+        Assert.True(plates.GetValueOrDefault(SignalPlate.Pedestrian) > 0 && plates.GetValueOrDefault(SignalPlate.Bike) > 0
+            && plates.GetValueOrDefault(SignalPlate.Arrow) > 0, string.Join(", ", plates.Select(kv => $"{kv.Key} {kv.Value}")));
+        Assert.True(balls > 0 && arrows > 0, $"balls {balls}, arrows {arrows}");
+
+        // J7's right turns cross walkers and riders: a mix, the right arrow
+        var j7 = region.Junction("J7");
+        var p7 = region.Tile(j7.E, j7.N).Signals.Single().Plan;
+        Assert.Contains(Enumerable.Range(0, p7.Groups.Count), g => p7.PlateOf(g, turns: SignalMoves.Right) is (SignalPlate.Arrow, SignalMoves.Right));
+
+        // J3b's south approach: straight on and left beside its right pocket's own group, an arrow head, its left giving way: the
+        // flasher on its left, its yellow steady; J3's ball heads flash theirs
+        var j3b = region.Junction("J3b");
+        var tile3b = region.Tile(j3b.E, j3b.N);
+        var lamps3b = UnitSport.Terrain.SignalBuilder.BuildLamps(tile3b)!;
+        // (#1117, the user's bug: its left turn gives way to the oncoming north arm and crosses the north bike lane, and its one lamp
+        // showed a bike: a mix, so the turn's arrow, one lamp for both, on the approach's left pole)
+        var p3b = lamps3b.Plans[0];
+        int south = Enumerable.Range(0, p3b.Groups.Count).Single(g => p3b.Groups[g] is { Kind: SignalGroupKind.Car, Moves: SignalMoves.Left | SignalMoves.Through });
+        Assert.NotEmpty(p3b.LeftGivesWayTo(south));
+        var leftFlasher = Assert.Single(lamps3b.Lenses, l => l.Group == south && l.Role == UnitSport.Terrain.SignalBuilder.Role.Flash);
+        Assert.Equal((SignalPlate.Arrow, SignalMoves.Left), (leftFlasher.Plate, leftFlasher.PlateArrow));
+        Assert.Equal((SignalPlate.Arrow, SignalMoves.Left), p3b.TurnPlate(south, SignalMoves.Left));
+        var pole = tile3b.Signals.Single().LeftFlasherPole(south);
+        Assert.Equal(FlasherSite.SecondPole, pole.Site);
+        Assert.Equal(SignalMoves.Left | SignalMoves.Through, UnitSport.Terrain.SignalBuilder.ArrowMoves(lamps3b.Plans[0], leftFlasher.Group));
+        Assert.DoesNotContain(lamps3b.Lenses, l => l.Group == leftFlasher.Group && l.Role == UnitSport.Terrain.SignalBuilder.Role.Amber && l.Blink is not null);
+        var j3 = region.Junction("J3");
+        var lamps3 = UnitSport.Terrain.SignalBuilder.BuildLamps(region.Tile(j3.E, j3.N))!;
+        Assert.Contains(lamps3.Lenses, l => l.Role == UnitSport.Terrain.SignalBuilder.Role.Amber && l.Blink is not null);
+    }
+
+    [Fact]
+    public void Turn_lanes_have_their_own_heads_and_are_protected_where_the_phases_allow()
+    {
+        // #1119, the user: "whenever there is a left turn only lane at a light, it should get its own light ... same for right
+        // turns"; "usually permissive lefts are pretty rare in Switzerland"; "even right turns with their own lanes are usually
+        // protected". Every pocket has a group and head of its own; lefts are protected; a right pocket no phase carries is
+        // protected with its own approach where the walkers and riders it crosses keep a green elsewhere
+        int lefts = 0, rights = 0, permissive = 0;
+        foreach (var (_, tile) in region.Tiles())
+            foreach (var s in tile.Signals)
+            {
+                var p = s.Plan;
+                var c = p.Conflicts();
+                var lamps = UnitSport.Terrain.SignalBuilder.BuildLamps(tile)!;
+                for (int a = 0; a < p.Arms.Count; a++)
+                {
+                    if (!p.Arms[a].In) continue;
+                    var turns = SignalMoves.None;
+                    for (int to = 0; to < p.Arms.Count; to++) if (to != a && p.Arms[to].Out) turns |= SignalPlan.Turn(p.Arms, a, to);
+                    if (p.Arms[a].LeftPocket && (turns & SignalMoves.Left) != 0 && turns != SignalMoves.Left)
+                    {
+                        int l = p.Groups.FindIndex(g => g.Kind == SignalGroupKind.LeftArrow && g.Arm == a);
+                        Assert.True(l >= 0, $"LV95 {tile.Id.MinE + s.X:F0},{tile.Id.MaxN - s.Z:F0} arm {a}: no left arrow group; turns {turns}; {string.Join(", ", p.Groups.Where(g => g.Arm == a).Select(g => $"{g.Kind} {g.Moves}"))}");
+                        Assert.Empty(p.LeftGivesWayTo(l));
+                        Assert.Contains(lamps.Lenses, x => x.Group == l && x.Shape == UnitSport.Terrain.SignalBuilder.Shape.LeftArrow);
+                        lefts++;
+                    }
+                    if (p.Arms[a].RightPocket && (turns & SignalMoves.Right) != 0 && turns != SignalMoves.Right)
+                    {
+                        int r = p.Groups.FindIndex(g => g.Arm == a && (g.Kind == SignalGroupKind.RightArrow || g is { Kind: SignalGroupKind.Car, Moves: SignalMoves.Right }));
+                        Assert.True(r >= 0, $"arm {a}: no right-turn group");
+                        Assert.Contains(lamps.Lenses, x => x.Group == r && x.Role == UnitSport.Terrain.SignalBuilder.Role.Green);
+                        rights++;
+                        if (p.Groups[r].Kind == SignalGroupKind.Car) { permissive++; continue; }
+                        // protected: nothing it crosses green with it
+                        for (int h = 0; h < p.Groups.Count; h++)
+                            if (c[r, h] == SignalPlan.Conflict.Hard)
+                                Assert.DoesNotContain(Enumerable.Range(0, (int)(p.Cycle * 10)).Select(k => k * 0.1),
+                                    t => p.State(r, t) == SignalAspect.Green && p.State(h, t) == SignalAspect.Green);
+                    }
+                }
+            }
+        Assert.True(lefts > 0 && rights > 0, $"lefts {lefts}, rights {rights}");
+        // J3's east right pocket ran across the walkers before: protected now; one is left giving way (its walkers have no other green)
+        var j3 = region.Junction("J3");
+        var p3 = region.Tile(j3.E, j3.N).Signals.Single().Plan;
+        Assert.DoesNotContain(p3.Groups, g => g is { Kind: SignalGroupKind.Car, Moves: SignalMoves.Right });
+        Assert.Equal(1, permissive);
     }
 }

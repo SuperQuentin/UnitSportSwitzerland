@@ -6,7 +6,8 @@
 The plan and the prototype's results: `docs/plans/visual-styles.md` (issues #181, #212).
 
 - **`VisualStyle`** (`Ps1`, `Cartoon`, `RealisticLow`, `RealisticHigh`) is a client setting
-  (`GameSettings.VisualStyle`, `--style ps1|cartoon|real-|real+`). It is **never replicated**: the
+  (`GameSettings.VisualStyle`, `--style ps1|cartoon|real-|real+`), **Cartoon by default**
+  (`StyleKit.Default`, #849; an unknown `--style` name gives it too). It is **never replicated**: the
   server does not know it, and gameplay must not depend on it (hitboxes, seats and wheels come
   from the canonical dimensions, never from a style's mesh).
 - **`MaterialRole`** names what a material is for: terrain, road, building, tree, tree-far,
@@ -16,10 +17,12 @@ The plan and the prototype's results: `docs/plans/visual-styles.md` (issues #181
   **Never `GD.Load<Shader>("res://shaders/ps1_*")` in game code**: add a role instead. Screen
   effects (lens, zoom bubble, speed lines, XR vignette, door portal) are not world materials and
   stay outside the kit.
-- **Fallback chain:** Realistic+ → Realistic− → Cartoon → PS1. A style without its own shader
-  for a role borrows its parent's, recursively, down to PS1, the **base**: the only complete
-  style. A new visual is built once, in the base, and the other styles inherit it until they get
-  their own version. `StyleKit.Shaders` is an explicit table per style, not a file-name probe,
+- **Fallback chain:** Realistic+ → Realistic− → Cartoon, and PS1 → Cartoon. A style without its
+  own shader or look item borrows its parent's, recursively, down to Cartoon, the **base**: the
+  only complete style (#849; PS1 was the base before). A new visual is built once, in Cartoon,
+  and the other styles inherit it until they get their own version: PS1 shows a new lit Cartoon
+  shader until someone writes its unshaded wrapper. PS1 still has every role of its own today,
+  and sets only the look items that differ (low mesh detail, no sun, flat finish). `StyleKit.Shaders` is an explicit table per style, not a file-name probe,
   so `--style-report` can say exactly what is borrowed.
 - **`--style-report`** (headless, RESULT PASS/FAIL): fails if the base misses a role or a listed
   shader file does not exist, and prints for each style the roles it borrows and from where. That
@@ -33,8 +36,9 @@ The plan and the prototype's results: `docs/plans/visual-styles.md` (issues #181
   is the style's `Environment`, driven by `DayNight` as before.
 - **`MeshDetail`** (Low, High) goes into every tile build (`ChunkManager.Detail`, read once when a
   build starts) and on to `TerrainMeshBuilder.BuildSurfaceCore`, `BuildingMeshBuilder.Build`,
-  `WaterMeshBuilder.Build` and `ChunkNode.BuildTreeMeshes`. Only Low exists; a new builder takes
-  the parameter from day one. `RoadMeshBuilder` gets it after the road network stack (#114).
+  `WaterMeshBuilder.Build` and `ChunkNode.BuildTreeMeshes`. High (Cartoon) has trees, rounded
+  signal heads and building roof overhangs (`terrain/roof-overhangs`) of its own; a new builder
+  takes the parameter from day one. `RoadMeshBuilder` gets it after the road network stack (#114).
 - **Live restyle, "rebuild in place".** `StyleKit.Style` is the choice, `StyleKit.Applied` what
   the world shows. `StyleKit.Restyle()` re-points every live material's `Shader` in place (Godot
   keeps a material's parameters across a shader change, so fog, the sightline cut, occupancy and
@@ -49,7 +53,21 @@ The plan and the prototype's results: `docs/plans/visual-styles.md` (issues #181
   client and never sends it to a server.
 - **`StyleKit.Figure`** shades the vertex-coloured standard material of avatars, vehicles, birds
   and items (`HumanMeshBuilder.Material`) for the style (Cartoon: toon), kept weakly and
-  restyled live like the shader materials. Any thread.
+  restyled live like the shader materials. Any thread. **Every lit solid built as a plain
+  `StandardMaterial3D` goes through it too** (title diorama, worn build pieces and their debris,
+  soot, crate planks, the burning bale and its smoke, concert kit, IKEA pylon, farm heaps, the VR
+  watch's case, the ride preview floor, feather puffs: #1068), or Cartoon draws it with Godot's
+  Lambert light. Give it a fresh material (or one cached per look), never a `Duplicate()` of a
+  shaded one: what it is given is the plain look PS1 goes back to.
+- **`StyleKit.Solid`** is `Figure` for a solid object's plain standard material that is not a
+  figure (the smoke grenade's cloud, the fishing float, the BR Postauto stop): **unshaded in PS1**,
+  as such things were, **lit** (toon in Cartoon) in the lit styles, restyled live (#1069). A new
+  solid object takes it instead of `ShadingMode = Unshaded`; unshaded on its own material stays
+  for what is meant to be: glows and lamps, signs that light themselves, beams, screens and
+  mirrors, particle FX, placement ghosts, debug and UI, and line primitives (no normals).
+- **Saved settings from before #849** stored PS1 whether the player chose it or not: a
+  `settings.json` without the `cartoonDefault` flag that says PS1 is read as Cartoon once
+  (`GameSettings.Load`); a PS1 picked after that is saved with the flag and kept.
 - **The settings menu's "Visual style"** (Video tab) saves the setting and ends a `/style`
   choice (`StyleKit.ChooseSetting`); it offers the styles in `StyleKit.MenuStyles`, those with a
   look of their own. Cartoon: `cartoon`.

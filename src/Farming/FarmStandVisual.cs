@@ -67,11 +67,11 @@ public static class FarmStandVisual
     public static Node3D Visual(PlacedObject o) => new FarmStandNode(o.Id);
 
     /// <summary>The heaps' shared material: vertex colour times the instance's albedo.</summary>
-    internal static StandardMaterial3D HeapMaterial(Color tint) => new()
+    internal static StandardMaterial3D HeapMaterial(Color tint) => Styles.StyleKit.Figure(new()
     {
         AlbedoColor = tint,
         ShadingMode = BaseMaterial3D.ShadingModeEnum.PerVertex,
-    };
+    });
 
     internal static ArrayMesh Heap => HeapMesh();
 }

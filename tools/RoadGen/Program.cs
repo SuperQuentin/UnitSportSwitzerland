@@ -164,6 +164,11 @@ else if (ArgValue("--compare-v2") is { } v2Dir)
 {
     return V2Compare.Run(v2Dir, ArgValue("--chunks") ?? "terrain_chunks", Console.WriteLine);
 }
+else if (ArgValue("--gantry-benchmark") is { } benchTemp)
+{
+    // #1110: the gantry inference rule against SITG's real gantries, from a rewrite's gantry_facts.tsv
+    return UnitSport.Tools.RoadGen.Diagnostics.GantryBenchmark.Run(benchTemp, Console.WriteLine);
+}
 else if (args.Contains("--rewrite"))
 {
     string chunks = ArgValue("--chunks") ?? "terrain_chunks";
@@ -203,8 +208,10 @@ else if (args.Contains("--rewrite"))
         Measure: args.Contains("--measure"),
         AuditHeights: !args.Contains("--no-audit"),
         RawDir: RawRoads.DirFor(temp),
-        OsmOverlay: Path.Combine(temp, "osm_overlay.tsv"),
+        OsmOverlay: Path.Combine(temp, "osm_overlay.tsv"), TramStops: Path.Combine(temp, "tram_stops.tsv"),
         SkipRewritten: args.Contains("--skip-rewritten"),
+        SitgSigns: args.Contains("--no-sitg") ? null : Path.Combine(temp, "sitg_signs.tsv"), Places: Path.Combine(chunks, "places.json"),
+        GantryFacts: Path.Combine(temp, "gantry_facts.tsv"), Gantries: !args.Contains("--no-gantries"),
         NewJunctions: ArgValue("--junctions") != "old", WriteJunctions: ArgValue("--junctions") is null or "write"), Console.WriteLine);
     }
     catch (TileRewriter.AlreadyRewrittenException e)

@@ -57,6 +57,9 @@ public sealed class JunctionBuilder
 
     public JunctionBuilder(JunctionOptions? options = null) => _options = options ?? new JunctionOptions();
 
+    /// <summary>A node whose every line this holds for is no junction: its lines meet there uncut (#1057: a tram switch).</summary>
+    public Func<RoadLink, bool>? ThroughNode { get; init; }
+
     /// <summary>
     /// Whether the corner between an arm's left edge and the next arm's right edge (counter-clockwise) is tight (#700): no
     /// traffic turns right from the first arm into the second, so the kerb need not round it. Null: no tight corners.
@@ -80,6 +83,7 @@ public sealed class JunctionBuilder
         foreach (var node in net.Nodes)
         {
             if (!node.IsJunction) continue;
+            if (ThroughNode is { } through && node.Approaches.All(a => through(net.Links[a.LinkId]))) continue;
             var p = Plan(net, node);
             if (p is not null) pending.Add(p);
         }

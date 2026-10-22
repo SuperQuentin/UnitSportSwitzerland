@@ -3,13 +3,15 @@
 # a herd south-west of the spawn) runs the ufo occasion and plans an abduction, then a landing. Both
 # clients must get the same plans, see the same cow lifted by the beam and set down again; A boards
 # the landed saucer (a parked UFO, E at its ramp) and B sees A flying it, the sighting's saucer taken.
+# A runs the scripted flights at /speed 4 (--checkspeed, #1007), x1 from 2 s before the beam until the cow is down
+# and from 2 s before touchdown on: the lift, the fall, the parked saucer and the boarding at normal speed. SPEED=1.
 #   tools/sightingnetcheck.sh            (GODOT = the editor executable, docs/notes/general/godot-exe.md)
 #   SHOTS=1 tools/sightingnetcheck.sh    (B windowed: its view in test_output/sightingnet_B_*.png)
 . "$(dirname "$0")/lib/twoclient.sh" sightingnet
 PORT=${SIGHTING_PORT:-7863}
 WORLD="--world fixture"
-tc_server 420 120 $OUT/sightingnet_server.log --server --port $PORT $WORLD --occasion ufo --sighting abduction,landing
-tc_client 380 $OUT/sightingnet_A.log --connect 127.0.0.1:$PORT --name SpotterA $WORLD --sightingnet A &
+tc_server 420 120 $OUT/sightingnet_server.log --server --port $PORT $WORLD --occasion ufo --sighting abduction,landing --admin-password pw863
+tc_client 380 $OUT/sightingnet_A.log --connect 127.0.0.1:$PORT --name SpotterA $WORLD --sightingnet A --checkspeed ${SPEED:-4} &
 A=$!
 WIN=; [ -n "${SHOTS:-}" ] && WIN="--windowed --windowed-shots --time 22 --style cartoon"
 mkdir -p "$OUT/userdata_sightingnet_B"

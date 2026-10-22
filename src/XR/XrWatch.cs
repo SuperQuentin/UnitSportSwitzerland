@@ -19,8 +19,8 @@ internal sealed partial class XrWatch : Node3D
         Name = "Watch";
         // on the back of the wrist (the controller's +X, the left hand's outside), face out
         Transform = new Transform3D(new Basis(Vector3.Up, Mathf.Pi / 2), new Vector3(0.035f, 0.0f, 0.06f));
-        var steel = new StandardMaterial3D { AlbedoColor = new Color(0.72f, 0.74f, 0.76f), Metallic = 0.6f, Roughness = 0.35f };
-        var strap = new StandardMaterial3D { AlbedoColor = new Color(0.12f, 0.11f, 0.1f) };
+        var steel = Styles.StyleKit.Figure(new StandardMaterial3D { AlbedoColor = new Color(0.72f, 0.74f, 0.76f), Metallic = 0.6f, Roughness = 0.35f });
+        var strap = Styles.StyleKit.Figure(new StandardMaterial3D { AlbedoColor = new Color(0.12f, 0.11f, 0.1f) });
         AddChild(new MeshInstance3D
         {
             Mesh = new CylinderMesh { TopRadius = 0.021f, BottomRadius = 0.021f, Height = 0.008f, RadialSegments = 16 },
@@ -63,6 +63,18 @@ internal sealed partial class XrWatch : Node3D
             MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.85f, 0.1f, 0.1f), ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded },
             Layers = XrSession.HeadsetOnlyLayer,
         });
+    }
+
+    /// <summary>The watch in the model viewer, moved off the headset-only layer so the viewer's camera sees it.</summary>
+    [Core.Showcase("Figures", "VR watch")]
+    private static Node3D ShowcaseWatch()
+    {
+        var watch = new XrWatch();
+        watch.Ready += () =>
+        {
+            foreach (var v in watch.FindChildren("*", "VisualInstance3D", true, false).OfType<VisualInstance3D>()) v.Layers = 1;
+        };
+        return watch;
     }
 
     /// <summary>Twice a second: the time, the altitude above the sea and the speed, set only when they change.</summary>

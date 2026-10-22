@@ -81,7 +81,7 @@ public partial class RideStage : SubViewport
             _floor = new MeshInstance3D
             {
                 Mesh = disc,
-                MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.16f, 0.17f, 0.2f), Roughness = 0.85f },
+                MaterialOverride = Styles.StyleKit.Figure(new StandardMaterial3D { AlbedoColor = new Color(0.16f, 0.17f, 0.2f), Roughness = 0.85f }),
             };
             AddChild(_floor);
         }

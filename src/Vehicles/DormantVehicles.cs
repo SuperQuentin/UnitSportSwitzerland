@@ -1075,7 +1075,13 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     {
         if (HallForklifts.BuildingOf(owner) is { } hall) { ServerWakeHall(hall, ordinal, peer, car: false); return; }
         if (HallCarRule.BuildingOf(owner) is { } garage) { ServerWakeHall(garage, ordinal, peer, car: true); return; }
-        if (Find(owner, ordinal) is not { } slot) return;
+        if (Find(owner, ordinal) is not { } slot)
+        {
+            // not worked out here (yet): a client that has just arrived can see a slot of a tile the server is still
+            // building. It asks again every AskAgainSeconds while it aims at it (#1085)
+            GD.Print($"[dormant] wake of {owner} #{ordinal} from peer {peer}: no such slot here (yet)");
+            return;
+        }
         if (_awake.Contains(KeyOf(slot))) return;
         // No "woken" broadcast (#560). Every peer drops its dormant copy when the vehicle node enters
         // its tree (OnVehicleAdded): the very frame the live one is drawn. A broadcast sent at once

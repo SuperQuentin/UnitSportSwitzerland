@@ -159,7 +159,7 @@ public partial class PlaceSearchUi : CanvasLayer
         if (open)
         {
             // the fly-cam holds the mouse captured; typing needs it released
-            Input.MouseMode = Input.MouseModeEnum.Visible;
+            MouseCapture.Mode = Input.MouseModeEnum.Visible;
             _query.Clear();
             _hint.Text = Permissions.CanTeleport ? "Enter to jump   Esc to close"
                 : "This server does not allow teleporting   Esc to close";

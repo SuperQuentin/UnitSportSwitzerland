@@ -101,7 +101,7 @@ public partial class FarmStandUi : CanvasLayer
             ? "Passers-by buy over time and pay into the honesty box. Shift-click stocks the whole stack."
             : "Self-service: take what you want and pay into the box. Shift-click buys 5.";
         _panel.Visible = true;
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
         Rebuild();
     }

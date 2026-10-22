@@ -114,7 +114,7 @@ internal sealed class XrHands
                 hand.AtLeftHip = -1f;
                 if (hand.OnWheel) LetGo(hand, buzz: false);
                 if (hand.EmptySqueeze && hand.Speed > FlingSpeed && player is { Ride: RideKind.OnFoot, RidingWith: 0 }
-                    && Input.MouseMode == Input.MouseModeEnum.Captured)
+                    && Core.MouseCapture.Mode == Input.MouseModeEnum.Captured)
                     XrPad.Tap(Core.PlayerInput.DropItem);
                 hand.EmptySqueeze = false;
             }
@@ -192,7 +192,7 @@ internal sealed class XrHands
     /// </summary>
     private bool AtHip(Hand hand, Vector3 at)
     {
-        if (Input.MouseMode != Input.MouseModeEnum.Captured) return false;
+        if (Core.MouseCapture.Mode != Input.MouseModeEnum.Captured) return false;
         var local = _head.AffineInverse() * at;
         if (local.Y > -HipDrop || Mathf.Abs(local.X) < HipSide) return false;
         if (local.X > 0f) XrPad.Tap(Core.PlayerInput.NextItem);
@@ -210,7 +210,7 @@ internal sealed class XrHands
     /// </summary>
     private bool ReachingOut(FootPlayer player, Vector3 at)
     {
-        if (Input.MouseMode != Input.MouseModeEnum.Captured) return false;
+        if (Core.MouseCapture.Mode != Input.MouseModeEnum.Captured) return false;
         var to = at - _head.Origin;
         if (to.Length() < ReachOut || (-_head.Basis.Z).Dot(to.Normalized()) < 0.5f) return false;
         return player.TryInteract(byHand: true);
@@ -226,7 +226,7 @@ internal sealed class XrHands
     private static void PokeRadio(Hand hand)
     {
         if (Items.RadioManager.Instance is not { } radios || !hand.Ctl.GetHasTrackingData()
-            || Input.MouseMode != Input.MouseModeEnum.Captured) return;
+            || Core.MouseCapture.Mode != Input.MouseModeEnum.Captured) return;
         var tip = hand.Ctl.GlobalPosition;
         Items.RadioBody? nearest = null;
         float best = float.MaxValue;
@@ -250,7 +250,7 @@ internal sealed class XrHands
     /// <summary>A dropped item at the hand goes into the inventory; a radio there opens its panel.</summary>
     private static bool TakeAt(Vector3 at)
     {
-        if (Input.MouseMode != Input.MouseModeEnum.Captured) return false;   // a menu is open
+        if (Core.MouseCapture.Mode != Input.MouseModeEnum.Captured) return false;   // a menu is open
         Node3D? best = null;
         float bestD = TakeReach;
         if (Items.DroppedItems.Instance is { } dropped)

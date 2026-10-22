@@ -12,12 +12,18 @@ config_version=5
 
 config/name="UnitSportSwitzerland"
 run/main_scene="res://scenes/Main.tscn"
+run/flush_stdout_on_print=true
 config/features=PackedStringArray("4.7", "C#", "Mobile")
 config/icon="res://icon.svg"
+config/quit_on_go_back=false
 
 [autoload]
 
 _mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
+
+[debug]
+
+file_logging/enable_file_logging=true
 
 [display]
 
@@ -30,7 +36,7 @@ project/assembly_name="UnitSportSwitzerland"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/godot_ai/plugin.cfg")
+enabled=PackedStringArray("res://addons/godot_ai/plugin.cfg", "res://addons/unitsport_android/plugin.cfg")
 
 [physics]
 

@@ -102,6 +102,7 @@ public class ClockDisciplineTests
         ["src/Combat/AuraManager.Music.cs"] = "presentation: a radio's CD position, which an aura battle takes its beat from (#914)",
         ["src/Combat/AuraWatchHud.cs"] = "presentation: the move a watched aura battle is on, on its shared beat (#914)",
         ["src/Items/RadioBody.cs"] = "presentation: a placed radio's CD position and groove",
+        ["src/Concert/ConcertService.Songs.cs"] = "presentation: /concert song reads where the setlist is on the shared clock the music plays to",
         ["src/Concert/ConcertService.cs"] = "presentation: an operator's cue is stamped with the shared clock, so every peer's light show keeps the same beat",
         ["src/Concert/ConcertBeatDebug.cs"] = "presentation: the beat debug window scrolls its own history in real time",
         ["src/Concert/Mvr/Mdns.cs"] = "plumbing: mDNS answers at most once a second, real time on its receive thread",

@@ -70,7 +70,9 @@ public partial class BankProbe : ChatProbe
         GD.Print($"{Log} bank {door.Key} at {door.World}, counter #{counter}, vault safe #{safe}");
         if (counter < 0 || safe < 0) { Fail("the bank has no counter or no vault safe"); return; }
 
-        // in the street, in front of the door: the sign is up, and no deposit goes through out here
+        // in the street, in front of the door: the sign is up, and no deposit goes through out here.
+        // The index's entry, in today's frame: a copy from before an origin shift points kilometres off (#1090)
+        door = DoorIndex.Find(door.Key) ?? door;
         var inward = -door.Outward;
         me.LeaveInterior(door.World + door.Outward * 4.5f + Vector3.Up * 0.3f, Mathf.Atan2(-inward.X, -inward.Z));
         me.Velocity = Vector3.Zero;
@@ -269,6 +271,8 @@ public partial class BankProbe : ChatProbe
 
     private async Task<bool> WalkIn(FootPlayer me, InteriorManager interiors, DoorIndex.Entry door)
     {
+        // the index's own entry, in today's frame: a copy from before an origin shift points kilometres off (#1090)
+        door = DoorIndex.Find(door.Key) ?? door;
         string doorKey = door.Key.ToString();
         var inward = -door.Outward;
         if (me.Indoors) interiors.Leave(me);

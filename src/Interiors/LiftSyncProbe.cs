@@ -96,7 +96,7 @@ public partial class LiftSyncProbe : ChatProbe
         for (int tries = 0; tries < 40 && !both; tries++) { Say("cabin"); both = await Heard(other, "cabin", 2); }
         if (!both) { Fail($"{other} never got into the cabin"); return; }
         Say("cabin");
-        await Seconds(1.5);
+        if (DisplayServer.GetName() != "headless") await Seconds(1.5);
         Shot("cabin");
 
         float rise = plan.FloorY(topFloor) - plan.FloorY(ground);
@@ -106,7 +106,7 @@ public partial class LiftSyncProbe : ChatProbe
             var picker = interiors.Picker;
             Expect(pressed && picker is { IsOpen: true }, "E in the cabin opens the floor list");
             if (picker is not { IsOpen: true }) { Fail("no floor list"); return; }
-            await Seconds(0.4);
+            if (DisplayServer.GetName() != "headless") await Seconds(0.4);
             Shot("panel");
             picker.Press(topFloor);
         }
@@ -115,14 +115,13 @@ public partial class LiftSyncProbe : ChatProbe
         if (!rode) { Fail($"still at {me.GlobalPosition.Y - startY:F1} m"); return; }
         Say("up");
         if (!await Heard(other, "up", 30)) { Fail($"{other} never arrived"); return; }
-        await Seconds(2.0);
         // and each sees the other up there: the relayed body follows the jump
         bool seen = await Until(() => Others(interiors).Any(o => Math.Abs(o.GlobalPosition.Y - me.GlobalPosition.Y) < 1.0f
-            && o.GlobalPosition.DistanceTo(me.GlobalPosition) < 3f), 8);
+            && o.GlobalPosition.DistanceTo(me.GlobalPosition) < 3f), 10);
         Expect(seen, $"{_role} sees {other} in the cabin on the top floor");
         var ride = interiors.LiftOf(plan, 0);
         Expect(ride.At(ClockSync.SimNow) == topFloor, $"the cabin is at {InteriorManager.FloorName(plan, topFloor)} for {_role}");
-        await Seconds(1.0);
+        if (DisplayServer.GetName() != "headless") await Seconds(1.0);
         Shot("arrived");
 
         // the locked flat door on this floor
@@ -180,7 +179,7 @@ public partial class LiftSyncProbe : ChatProbe
             if (!await Heard("A", "cracked", 120)) { Fail("A never cracked it"); return; }
             Expect(await Until(() => !interiors.InnerDoorLocked(plan, flatDoor) && node.InnerSwing(flatDoor) >= 1f, 6),
                 "B saw it unlocked and swung open without doing anything");
-            await Seconds(0.5);
+            if (DisplayServer.GetName() != "headless") await Seconds(0.5);
             Shot("flatdoor_open");
             // square in front of it: a landing has the elevator's call button beside a flat's door,
             // and E works whichever is nearer
@@ -238,7 +237,8 @@ public partial class LiftSyncProbe : ChatProbe
     /// <summary>From just outside the door: open it unless it stands open, and walk through.</summary>
     private async Task<bool> WalkIn(FootPlayer me, InteriorManager interiors, DoorIndex.Entry door)
     {
-        door = DoorIndex.All().Where(d => d.Key.Equals(door.Key)).Select(d => (DoorIndex.Entry?)d).FirstOrDefault() ?? door;
+        // the index's own entry, in today's frame: a copy from before an origin shift points kilometres off (#1090)
+        door = DoorIndex.Find(door.Key) ?? door;
         string doorKey = door.Key.ToString();
         var inward = -door.Outward;
         me.LeaveInterior(door.World + door.Outward * 1.2f + Vector3.Up * 0.3f, Mathf.Atan2(-inward.X, -inward.Z));
