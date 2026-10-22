@@ -475,8 +475,10 @@ public partial class SettingsScreen : Screen
             Math.Max(0, Array.IndexOf(rates, GameSettings.Current.VrRefreshHz)), i => GameSettings.Current.VrRefreshHz = rates[i],
             Platform.IsStandaloneVr ? "72 Hz is what a Quest 2 holds; 60 flickers a little but buys time"
                 : "72 Hz holds steady over Air Link; higher only if the frame keeps up");
-        UiKit.OptionRow(rows, "VR terrain detail", new[] { "Low", "Medium", "High" }, (int)GameSettings.Current.VrDetail,
-            i => GameSettings.Current.VrDetail = (DetailPreset)i, "The headset's own Detail. Low draws a third of Medium's triangles");
+        DetailPreset[] vrDetails = { DetailPreset.VeryLow, DetailPreset.Low, DetailPreset.Medium, DetailPreset.High };
+        UiKit.OptionRow(rows, "VR terrain detail", new[] { "Very low", "Low", "Medium", "High" },
+            Math.Max(0, Array.IndexOf(vrDetails, GameSettings.Current.VrDetail)), i => GameSettings.Current.VrDetail = vrDetails[i],
+            "The headset's own Detail. Low draws a third of Medium's triangles, Very low a quarter of Low's");
         // comfort (#439, docs/notes/xr/rig.md)
         int[] snaps = { 0, 15, 30, 45 };
         UiKit.OptionRow(rows, "VR turning", new[] { "Smooth", "Snap 15°", "Snap 30°", "Snap 45°" },

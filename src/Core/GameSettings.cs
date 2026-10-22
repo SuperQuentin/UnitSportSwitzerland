@@ -18,6 +18,8 @@ public enum DetailPreset
     Low = 0,
     Medium = 1,
     High = 2,
+    /// <summary>Under Low, for a standalone headset's GPU (#1112): offered in VR only.</summary>
+    VeryLow = 3,
 }
 
 /// <summary>How the game window occupies the screen.</summary>
@@ -501,6 +503,8 @@ public sealed class GameSettings
         CommitBudgetMs = 3;
         MaxConcurrentBuilds = 0; // auto, which ChunkManager caps on a phone
         CacheGb = 0.5f;
+        // a Quest 2's GPU first sorts every triangle into tiles: Low's 1.5 M near the player held it to 10 fps (#1112)
+        if (Platform.IsStandaloneVr) VrDetail = DetailPreset.VeryLow;
     }
 
     /// <summary>Writes the touch layout alone, as the editor's Done does (a command-line run's other values stay out).</summary>

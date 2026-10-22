@@ -44,7 +44,7 @@ public static class RenderCensus
         if (tris > 0)
         {
             var path = root.GetPathTo(node).ToString().Split('/');
-            string key = string.Join('/', path.Take(Math.Min(3, path.Length - 1)));
+            string key = string.Join('/', path.Take(Math.Min(CmdArgs.Int("--rendercensus", 2) ?? 3, path.Length - 1)));
             sums.TryGetValue(key, out var v);
             sums[key] = (v.Item1 + tris, v.Item2 + 1);
         }

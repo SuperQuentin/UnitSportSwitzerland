@@ -81,6 +81,8 @@ public sealed class LodPolicy
     {
         (Ring[] inner, int roads, int buildings) = detail switch
         {
+            // a standalone headset (#1112): 4 m quads underfoot (125k triangles, Low's were 500k), 10 m on the neighbours
+            DetailPreset.VeryLow => (new Ring[] { new(0, 4), new(1, 10), new(3, 20) }, 1, 1),
             DetailPreset.Low => (new Ring[] { new(0, 2), new(1, 4), new(2, 10), new(5, 20) }, 2, 1),
             DetailPreset.High => (new Ring[] { new(1, 1), new(3, 2), new(5, 4), new(8, 10), new(12, 20) }, 6, 5),
             // Rings by screen-space error: a ring-d tile is at least (d-1) km away, where an
