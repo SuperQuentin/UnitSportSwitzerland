@@ -20,4 +20,21 @@
   not change with the setting. The default totals the old 82 kg, so `--ride bike`'s references hold.
 - Every rider's bike is the catalogue's look (`BikePalette.ForRider`). Riders are told apart by their kit.
   Choosing a bike per player, and replicating that choice, is for when a second bike exists.
+- **Longitudinal physics** (`BikePhysics`, pure, `BikePhysicsTests`; phase 2):
+  - The equation is `(m + I/r²)·a = η·P/v − ½ρ·CdA·(1 − draft)·v² − Crr·m·g·cosθ − m·g·sinθ`.
+  - Wheel inertia: `BicycleSpec.WheelInertia`, 0.15 kg·m², which adds 1.3 kg.
+  - η = 0.975, applied to every watt. A hub-measuring trainer already counts the chain, so it is
+    charged twice until RideLink says which device the watts come from.
+  - ρ from the standard atmosphere at the rider's LV95 altitude, 15 °C at sea level (no weather yet).
+  - Crr by `RideGround.Surface` (`Bicycle.RollingResistance`): the bike now asks `Surfaces.At` like
+    the motorbike does.
+  - CdA = 0.32 × (rider kg / 72.5)^0.425 × position.
+  - **Position is automatic, no key**: hoods, drops (×0.88) while sprinting, tuck (×0.75) freewheeling
+    downhill above 40 km/h, eased over 0.5 s. The figure does not change pose yet.
+  - **Wheel draft** (`RideGround.WheelDraftBehind`): from 4 m/s, by wheel-to-wheel gap and lateral
+    offset — 40% at 0.5 m, 35% at 1 m, 21% at 3 m, 0 past 15 m or 0.6 m aside. Cars keep their
+    2-25 m tow.
+  - Reference (500 m, tarmac, 180 W): 72.5 kg rider 32.9 km/h, the owner (120 kg) 29.6, 31.1 on the
+    Grimsel, 24.4 on gravel, 33.6 a metre behind a wheel. In game, `--ride bike,60 --world flat
+    --profile sim [--rider-kg 120]` (sea level) reads 32.1 / 28.3 km/h at 60 s, still settling.
 - Next phases (drivetrain, braking, steering dynamics): `docs/plans/road-bike-realism.md`.

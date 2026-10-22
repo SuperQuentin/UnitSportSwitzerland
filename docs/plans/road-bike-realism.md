@@ -38,6 +38,10 @@ friction circle, the wheelie and stoppie limits, and a spec catalogue to copy.
 
 ## Phases
 
+Status: 1 done (PR #1129), 2 done (PR #1130, stacked on it). 2 differs from the plan: the position is
+chosen automatically, so there is no new key yet, and the figure keeps the hoods pose.
+
+
 1. **Bike catalogue.**
    - `BicycleSpec` + `BicycleCatalog`, as `MotorbikeSpec`: geometry, bike mass, wheel size and
      inertia, chainrings and cassette, brake type, CdA per position, look.

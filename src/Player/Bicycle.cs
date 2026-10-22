@@ -7,11 +7,13 @@ namespace UnitSport.Player;
 /// A road bike, ridden on the real power equation rather than an arcade speed cap.
 ///
 /// <para>
-/// <c>m·a = P/v − ½ρ·CdA·v² − Crr·m·g·cosθ − m·g·sinθ</c>. Every term is a measured cycling
-/// quantity, so the numbers that come out are the numbers a rider would recognise: 180 W holds
-/// 32 km/h on the flat, the same 180 W climbs an 8% ramp at 10 km/h, and freewheeling down that
-/// ramp settles at 62 km/h. None of those were tuned — they fall out of the equation, which is
-/// the reason for using it.
+/// <c>(m + I/r²)·a = η·P/v − ½ρ·CdA·(1 − draft)·v² − Crr·m·g·cosθ − m·g·sinθ</c> (<see cref="BikePhysics"/>,
+/// #1124). Every term is a measured cycling quantity, so the numbers that come out are the numbers a
+/// rider would recognise: for the 72.5 kg reference rider at 500 m, 180 W holds 33 km/h on the flat,
+/// the same 180 W climbs an 8% ramp at 9 km/h, and a tucked descent of that ramp settles at 75 km/h.
+/// None of those were tuned — they fall out of the equation, which is the reason for using it. The
+/// air thins with altitude, the tyres roll harder off tarmac, the drag area is the rider's own size
+/// and position, and a wheel ahead shelters.
 /// </para>
 ///
 /// <para>
@@ -38,15 +40,39 @@ public sealed class Bicycle : Rideable
     private const float ArcadeRiderMass = 72.5f;
 
     /// <summary>
-    /// Rider, bike, bottles and kit, kg. Sim takes the rider's own weight from the settings, the
-    /// number a home trainer's watts have to lift up a Swiss pass; Game keeps the reference rider.
+    /// The rider in kit, kg. Sim takes the rider's own weight from the settings, the number a home
+    /// trainer's watts have to lift up a Swiss pass; Game keeps the reference rider.
     /// </summary>
-    private float Mass => (Arcade ? ArcadeRiderMass : Core.GameSettings.Current.RiderMass) + Spec.Mass + Kit;
+    private static float RiderMass => Arcade ? ArcadeRiderMass : Core.GameSettings.Current.RiderMass;
 
-    /// <summary>Drag area on the hoods, m². A tucked pro is nearer 0.24; this is a fit amateur.</summary>
-    private const float DragArea = 0.32f;
-    private const float AirDensity = 1.20f;      // ~15 °C at 500 m; Swiss valley floor
-    private const float RollingResistance = 0.005f;   // good tyres on tarmac
+    /// <summary>Where the rider's hands are now: chosen from what they are doing (#1124), no key of its own.</summary>
+    public RidingPosition Position { get; private set; }
+
+    /// <summary>The drag area's position factor, eased: getting down on the drops takes a moment.</summary>
+    private float _positionFactor = 1f;
+    private const float PositionChangeTime = 0.5f;
+
+    /// <summary>Freewheeling downhill above this, m/s (40 km/h), the rider tucks.</summary>
+    private const float TuckSpeed = 11f;
+
+    /// <summary>
+    /// Rolling resistance on what is under the tyres (#1124): a 28 mm road tyre at road pressure.
+    /// Tarmac 0.0045 (roller drum measurements of good tyres), a gravel lane 0.012, a forest track
+    /// 0.015, grass 0.03 and snow 0.05: a road bike crosses a meadow, it does not ride it.
+    /// </summary>
+    public static float RollingResistance(Audio.Surface surface) => surface switch
+    {
+        Audio.Surface.Asphalt or Audio.Surface.Indoor => 0.0045f,
+        Audio.Surface.Wood => 0.006f,
+        Audio.Surface.Rock => 0.010f,
+        Audio.Surface.Gravel => 0.012f,
+        Audio.Surface.Forest => 0.015f,
+        Audio.Surface.Ice => 0.008f,
+        Audio.Surface.Grass => 0.030f,
+        Audio.Surface.Snow => 0.050f,
+        Audio.Surface.Water => 0.150f,
+        _ => 0.0045f,
+    };
 
     /// <summary>Steady effort, W. Roughly a fit rider's endurance power.</summary>
     public float RiderWatts { get; set; } = 180f;
@@ -117,7 +143,10 @@ public sealed class Bicycle : Rideable
     public override void Step(in RideInput input, in RideGround ground, float dt, ref RideMotion motion)
     {
         float v = motion.Speed;
-        float mass = Mass;
+        float riderMass = RiderMass;
+        float mass = riderMass + Spec.Mass + Kit;
+        // the wheels' spin is mass to speed up and slow down, but not weight on the tyres or the hill
+        float inertia = mass + Spec.WheelEffectiveMass;
 
         // --- steering ---------------------------------------------------------------
         // A bicycle changes direction by leaning, so the turn radius grows with speed: the
@@ -129,10 +158,18 @@ public sealed class Bicycle : Rideable
             arcade ? ArcadeMaxLean : MaxLean, arcade ? ArcadeMaxYawRate : MaxYawRate,
             arcade ? ArcadeBankResponse : BankResponse, WalkingPace, dt);
 
+        // --- the rider's position: sprinting on the drops, a fast descent tucked, else the hoods
+        Position = input.Effort && input.Throttle > 0.05f ? RidingPosition.Drops
+            : ground.OnFloor && input.Throttle < 0.05f && v > TuckSpeed && ground.Grade < -0.02f ? RidingPosition.Tuck
+            : RidingPosition.Hoods;
+        _positionFactor += (BikePhysics.PositionFactor(Position) - _positionFactor) * (1f - Mathf.Exp(-dt / PositionChangeTime));
+        float dragArea = BikePhysics.DragArea(riderMass, RidingPosition.Hoods) * _positionFactor;
+        float air = BikePhysics.AirDensity(ground.Altitude);
+
         if (!ground.OnFloor)
         {
             // airborne off a lip: no thrust, no rolling resistance, just air
-            v -= 0.5f * AirDensity * DragArea * v * v / mass * dt;
+            v -= 0.5f * air * dragArea * v * v / inertia * dt;
             motion.Speed = Mathf.Max(0f, v);
             return;
         }
@@ -142,13 +179,12 @@ public sealed class Bicycle : Rideable
         float watts = input.Throttle * (arcade
             ? (input.Effort ? ArcadeSprintWatts : ArcadeWatts)
             : (input.Effort ? SprintWatts : RiderWatts));
-        float thrust = watts > 0 ? Mathf.Min(watts / Mathf.Max(v, 0.5f), arcade ? ArcadeMaxThrust : MaxThrust) : 0f;
+        float thrust = watts > 0
+            ? Mathf.Min(BikePhysics.DrivetrainEfficiency * watts / Mathf.Max(v, 0.5f), arcade ? ArcadeMaxThrust : MaxThrust)
+            : 0f;
 
-        float drag = 0.5f * AirDensity * DragArea * v * v;
-        float rolling = RollingResistance * mass * Gravity;
-
-        float accel = (thrust - drag - rolling) / mass + SlopeAccel(ground.Grade);
-        v += accel * dt;
+        float resisting = BikePhysics.ResistingForce(v, mass, dragArea, ground.Draft, RollingResistance(ground.Surface), air, ground.Grade);
+        v += (thrust - resisting) / inertia * dt;
 
         if (input.Brake > 0.01f) v -= input.Brake * (arcade ? ArcadeBrakeDecel : BrakeDecel) * dt;
 

@@ -4624,14 +4624,18 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // a motorbike's or a car's grip depends on what is under it (cached lookup: road, else cover).
         // Not for a stock race NPC car: its racing line is planned on tarmac grip and may put two
         // wheels on the verge. An NPC given a preset (#40) races on the ground it is built for.
-        var surface = (_ride is Motorbike or Truck or SnowRide || _ride is Car && (!Npc || CarSetupId != 0)) && Terrain != null
+        var surface = (_ride is Motorbike or Truck or SnowRide or Bicycle || _ride is Car && (!Npc || CarSetupId != 0)) && Terrain != null
             ? Audio.Surfaces.At(Terrain, GlobalPosition, Indoors, this) : Audio.Surface.Asphalt;
         // a tow behind another vehicle: less air to push (cars and motorbikes read it)
         Draft = onFloor && _ride is Car or Motorbike or Truck && _motion.Speed > 10f
-            ? RideGround.DraftBehind(GlobalPosition, heading.Rotated(Vector3.Up, _motion.Slip), OtherVehicles()) : 0f;
+            ? RideGround.DraftBehind(GlobalPosition, heading.Rotated(Vector3.Up, _motion.Slip), OtherVehicles())
+            // a wheel to follow (#1124): close in, and from riding speed
+            : onFloor && _ride is Bicycle && _motion.Speed > 4f ? RideGround.WheelDraftBehind(GlobalPosition, heading, OtherVehicles()) : 0f;
         if (_ride is Truck driving) PrepareTruck(driving);
         else if (_ride is Car shifting) PrepareCar(shifting);
         var ground = new RideGround(onFloor, grade, surface, Draft);
+        // the air thins with height: the same watts go ~6% faster over the Grimsel than in Bern (#1124)
+        if (_ride is Bicycle) ground = ground with { Altitude = Origin is { } sea ? (float)sea.ToGlobal(GlobalPosition).Alt : GlobalPosition.Y };
         if (_ride is SnowRide)
         {
             LookAtSnow(onFloor);
