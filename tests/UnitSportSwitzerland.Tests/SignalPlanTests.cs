@@ -662,4 +662,52 @@ public class SignalPlanTests(ITestOutputHelper output)
         AssertValid(plan);
         Assert.Contains(plan.Groups, g => g is { Kind: SignalGroupKind.LeftArrow, Arm: 3 });
     }
+    [Fact]
+    public void RightTurnBikeLane_HasItsOwnGroup_ProtectedWithTheRightArrow()
+    {
+        // #1165, the user: "right turn only bike lanes should get their own light". Left pockets everywhere: the right arrows are
+        // protected (#1119); the riders' own right-turn lane at the kerb (layout b) goes with its approach's right arrow, protected
+        // too, and the through riders' group goes straight on only
+        var plan = SignalPlan.Build([Arm(N, true, true), Arm(E, true, true),
+            Arm(S, true, true, bike: true) with { RiderRight = true, BikeBetween = true }, Arm(W, true, true)]);
+        AssertValid(plan);
+        var bikes = plan.Groups.Where(g => g.Kind == SignalGroupKind.Bike && g.Arm == S).ToList();
+        Assert.Equal(2, bikes.Count);
+        Assert.Contains(bikes, g => g.Moves == SignalMoves.Through);
+        int riders = plan.Groups.FindIndex(g => g is { Kind: SignalGroupKind.Bike, Moves: SignalMoves.Right } && g.Arm == S);
+        int right = Group(plan, SignalGroupKind.RightArrow, S);
+        Assert.True(riders >= 0 && right >= 0);
+        var c = plan.Conflicts();
+        Assert.Equal(SignalPlan.Conflict.None, c[riders, right]);
+        Assert.NotEmpty(WhenGreen(plan, riders));
+        Assert.NotEmpty(WhenGreen(plan, riders, right));
+        // protected: never green with the walkers across its exit, no flasher
+        Assert.Empty(WhenGreen(plan, riders, Group(plan, SignalGroupKind.Pedestrian, E)));
+        Assert.DoesNotContain(plan.Groups, g => g.Kind == SignalGroupKind.Flasher && g.Qualifies == riders);
+        // the paths' group (RoadGen's PathGroup, the riders' BikeGroupFor): the right-only group for a right turn
+        Assert.Equal(riders, plan.Groups.FindIndex(g => g.Arm == S && g.Kind == SignalGroupKind.Bike && (g.Moves & SignalMoves.Right) != 0));
+    }
+
+    [Fact]
+    public void RightTurnBikeLane_WithAPermissiveRightTurn_GivesWayToTheExitsWalkers()
+    {
+        // no left pockets: the right pocket's arrow finds no protected phase and goes with its approach giving way (#1109); the
+        // riders' right turn with it, their own yellow flashing
+        var plan = SignalPlan.Build([Arm(N), Arm(E), Arm(S, right: true) with { RiderRight = true, BikeBetween = true }, Arm(W)]);
+        AssertValid(plan);
+        int riders = plan.Groups.FindIndex(g => g is { Kind: SignalGroupKind.Bike, Moves: SignalMoves.Right } && g.Arm == S);
+        Assert.True(riders >= 0);
+        Assert.DoesNotContain(plan.Groups, g => g.Kind == SignalGroupKind.Bike && g.Arm == S && g.Moves != SignalMoves.Right);
+        Assert.NotEmpty(WhenGreen(plan, riders, Group(plan, SignalGroupKind.Pedestrian, E)));
+        Assert.Contains(plan.Groups, g => g.Kind == SignalGroupKind.Flasher && g.Qualifies == riders);
+    }
+
+    [Fact]
+    public void SharedBikeLane_KeepsTheCombinedGroup()
+    {
+        var plan = SignalPlan.Build([Arm(N, true, true), Arm(E, true, true), Arm(S, true, true, bike: true), Arm(W, true, true)]);
+        AssertValid(plan);
+        var bike = Assert.Single(plan.Groups, g => g.Kind == SignalGroupKind.Bike && g.Arm == S);
+        Assert.Equal(SignalMoves.Through | SignalMoves.Right, bike.Moves);
+    }
 }
