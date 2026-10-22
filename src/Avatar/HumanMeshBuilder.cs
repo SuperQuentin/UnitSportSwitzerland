@@ -453,11 +453,16 @@ public static partial class HumanMeshBuilder
     /// side plane. Low clip-ons far ahead fold the torso down onto the tank; a high wide bar sits it up.
     /// The knees follow from the pegs by the same two-bone solve.
     /// </summary>
-    private static Rig RiderRig(Vector3 seat, Vector3 grip, Vector3 peg)
+    /// <param name="reachShare">How much of the arm's length reaches the grip: less folds the elbows.</param>
+    /// <param name="backAngle">
+    /// The back's angle above level, rad, when the rider sets it rather than the reach (a cyclist's
+    /// tuck, #1124): the shoulder goes there and the elbows fold to whatever reaches the grip.
+    /// </param>
+    private static Rig RiderRig(Vector3 seat, Vector3 grip, Vector3 peg, float reachShare = 0.8f, float backAngle = float.NaN)
     {
         const float torso = 0.48f, shoulderHalf = 0.175f;
         var hip = seat + new Vector3(0, 0.09f, 0);   // the hip joint rides a pelvis above the seat foam
-        float reach = 0.8f * (UpperArmLength + ForearmLength);
+        float reach = reachShare * (UpperArmLength + ForearmLength);
         float dx = Mathf.Abs(grip.X) - shoulderHalf;
         float armPlanar = Mathf.Sqrt(Mathf.Max(0.01f, reach * reach - dx * dx));
 
@@ -467,7 +472,8 @@ public static partial class HumanMeshBuilder
         var to = g - h;
         float d = Mathf.Max(to.Length(), 1e-3f);
         Vector2 shoulder;
-        if (d >= torso + armPlanar) shoulder = h + to / d * torso;   // out of reach: stretched toward the bars
+        if (!float.IsNaN(backAngle)) shoulder = h + new Vector2(Mathf.Sin(backAngle), Mathf.Cos(backAngle)) * torso;
+        else if (d >= torso + armPlanar) shoulder = h + to / d * torso;   // out of reach: stretched toward the bars
         else
         {
             float along = (d * d + torso * torso - armPlanar * armPlanar) / (2f * d);
@@ -513,7 +519,7 @@ public static partial class HumanMeshBuilder
             TorsoLean: 0f);
     }
 
-    private static Rig? _cyclingRig;
+    private static readonly Rig?[] _cyclingRigs = new Rig?[4];
 
     /// <summary>
     /// The cyclist, fitted to the road bike (<see cref="Player.BikeFrame"/>, #1124). The three contact
@@ -523,17 +529,34 @@ public static partial class HumanMeshBuilder
     /// Placing these joints by hand once produced a rider lying flat in front of the bars: with the
     /// ends pinned, the middle is not a free choice.
     /// </summary>
-    private static Rig CyclingRig => _cyclingRig ??= SolveCyclingRig(Player.BikeFrame.Default);
+    private static Rig CyclingRig => CyclingRigFor(Player.RidingPosition.Hoods);
 
-    private static Rig SolveCyclingRig(Player.BikeFrame frame)
+    /// <summary>The cyclist in each riding position, solved the same way from <see cref="Player.BikeFrame.Fit"/>.</summary>
+    private static Rig CyclingRigFor(Player.RidingPosition position) =>
+        _cyclingRigs[(int)position] ??= SolveCyclingRig(Player.BikeFrame.Default, position);
+
+    /// <summary>A cyclist in <paramref name="position"/> (#1124): legs left out for <see cref="Cyclist"/> to pedal.</summary>
+    public static ArrayMesh BuildCyclist(HumanPalette palette, Player.RidingPosition position, bool includeLegs = false,
+        bool helmet = true, ArrayMesh? into = null)
     {
+        var scratch = ScratchFor(into);
+        AppendRig(scratch, palette, CyclingRigFor(position), includeLegs, helmet);
+        return into == null ? scratch.Build() : scratch.BuildInto(into);
+    }
+
+    /// <summary>Camera mounts (the eye for first person) of a cyclist in <paramref name="position"/>.</summary>
+    public static GaitMounts MountsForCyclist(Player.RidingPosition position) => MountsForRig(CyclingRigFor(position));
+
+    private static Rig SolveCyclingRig(Player.BikeFrame frame, Player.RidingPosition position)
+    {
+        var fit = frame.Fit(position);
         // the pelvis sits 1.5 cm over the leg joints, as on every other rig; RiderRig lifts its seat 9 cm
-        var pelvis = frame.Hip + new Vector3(0, 0.015f, -0.005f);
-        var upper = RiderRig(pelvis - new Vector3(0, 0.09f, 0), frame.Wrist, frame.Pedal(0f, 1));
+        var pelvis = fit.Hip + new Vector3(0, 0.015f, -0.005f);
+        var upper = RiderRig(pelvis - new Vector3(0, 0.09f, 0), fit.Wrist, frame.Pedal(0f, 1), fit.Reach, fit.Back);
 
         (Vector3 Hip, Vector3 Knee, Vector3 Ankle, Vector3 Toe) Leg(int side)
         {
-            var hip = frame.LegHip(side);
+            var hip = frame.LegHip(side, position);
             var pedal = frame.Pedal(0f, side);
             // the same solve as Cyclist's pedalling legs, so the still figure and the moving one agree
             var knee = Limb.Solve(hip, pedal, Player.BikeFrame.ThighLength, Player.BikeFrame.ShinLength, new Vector3(0, 0, 1));

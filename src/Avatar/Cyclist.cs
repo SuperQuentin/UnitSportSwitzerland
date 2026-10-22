@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using Godot;
 
 namespace UnitSport.Avatar;
@@ -39,6 +41,31 @@ public partial class Cyclist : Node3D
     private MeshInstance3D? _front;
     private float _steer;
 
+    // ---- the riding position (#1124) ----
+    /// <summary>Everything that rocks under a standing rider: the bike, the rider, the cranks and legs.</summary>
+    private Node3D? _sway;
+    private Player.RidingPosition _position, _wantPosition;
+    private float _wantFor, _swayAmp;
+
+    /// <summary>A new position shows once it has been asked for this long, s: a rider does not flick between them.</summary>
+    private const float PositionHold = 0.3f;
+
+    /// <summary>
+    /// How far the bike rocks under a standing rider, rad (~7°): toward the side away from the pushing
+    /// pedal, once a crank turn, the rider's upper body staying more upright than the bike.
+    /// </summary>
+    private const float StandingSway = 0.12f, RiderCounterSway = 0.7f;
+
+    /// <summary>
+    /// The rider's position (#1124): hands on the hoods, on the drops, tucked on the tops, or standing.
+    /// The pose is solved from the bike's contact points (<see cref="Player.BikeFrame.Fit"/>).
+    /// </summary>
+    public Player.RidingPosition RidingPose
+    {
+        get => _position;
+        set => _wantPosition = value;
+    }
+
     /// <summary>
     /// The bars' angle, rad, + to the rider's right (#1124): the fork, front wheel and bars turn
     /// about the steering axis. The hands stay where the rig put them, so this is for the few degrees
@@ -75,7 +102,7 @@ public partial class Cyclist : Node3D
     // ponytail: one entry set per distinct palette, never evicted; a few hundred tiny meshes per
     // colour scheme. Evict by palette if riders with unique colours ever come by the thousand.
     private static readonly Dictionary<(BikePalette, int), ArrayMesh> CrankSteps = new();
-    private static readonly Dictionary<(HumanPalette, int, int, bool), ArrayMesh> LegSteps = new();
+    private static readonly Dictionary<(HumanPalette, int, int, bool, Player.RidingPosition), ArrayMesh> LegSteps = new();
     private int _shownStep = -1;
     /// <summary>Whether the rider and legs shown were built smooth (<see cref="HumanMeshBuilder.SmoothFigures"/>).</summary>
     private bool _riderSmooth;
@@ -108,6 +135,21 @@ public partial class Cyclist : Node3D
         _bikePalette = BikePalette.ForRider(riderIndex),
     };
 
+    /// <summary>The rider in each position, pedalling (#1124): the model viewer's way to see them side by side.</summary>
+    [Core.Showcase("Rides", "Road bike riding position")]
+    private static IEnumerable<(string Name, Func<Node3D> Make)> ShowcasePositions()
+    {
+        foreach (var position in new[] { Player.RidingPosition.Hoods, Player.RidingPosition.Drops,
+                     Player.RidingPosition.Tuck, Player.RidingPosition.Standing })
+            yield return (position.ToString(), () =>
+            {
+                var c = Create(4);
+                c._position = c._wantPosition = position;
+                c.CadenceRpm = position == Player.RidingPosition.Standing ? 60f : 85f;
+                return c;
+            });
+    }
+
     /// <summary>
     /// A rider whose colour comes from an existing tint rather than a rider index.
     ///
@@ -132,7 +174,9 @@ public partial class Cyclist : Node3D
         // clothes may carry a finish, and the face is drawn, only by the figure shader (#251, #394)
         Material material = HumanMeshBuilder.FigureMaterial();
 
-        AddChild(new MeshInstance3D
+        _sway = new Node3D { Name = "Sway" };
+        AddChild(_sway);
+        _sway.AddChild(new MeshInstance3D
         {
             Name = "Bike",
             Mesh = BikeMeshBuilder.Build(bikePalette, includeCranks: false, parts: BikeMeshBuilder.Parts.Rear),
@@ -145,26 +189,26 @@ public partial class Cyclist : Node3D
             Mesh = BikeMeshBuilder.Build(bikePalette, includeCranks: false, parts: BikeMeshBuilder.Parts.Front),
             MaterialOverride = material,
         };
-        AddChild(_front);
+        _sway.AddChild(_front);
         ApplySteer();
 
         // rider without legs: those are separate so they can be driven by the cranks
         _rider = new MeshInstance3D
         {
             Name = "Rider",
-            Mesh = HumanMeshBuilder.Build(_palette, HumanPose.Cycling, includeLegs: false, helmet: true),
+            Mesh = HumanMeshBuilder.BuildCyclist(_palette, _position),
             MaterialOverride = material,
         };
         _riderSmooth = HumanMeshBuilder.SmoothFigures;
-        AddChild(_rider);
+        _sway.AddChild(_rider);
 
         _cranks = new MeshInstance3D { Name = "Cranks", MaterialOverride = material };
-        AddChild(_cranks);
+        _sway.AddChild(_cranks);
 
         for (int i = 0; i < 2; i++)
         {
             _legs[i] = new MeshInstance3D { Name = i == 0 ? "LegR" : "LegL", MaterialOverride = material };
-            AddChild(_legs[i]);
+            _sway.AddChild(_legs[i]);
         }
 
         UpdateLegs();
@@ -176,10 +220,11 @@ public partial class Cyclist : Node3D
         if (HumanMeshBuilder.SmoothFigures != _riderSmooth)
         {
             _riderSmooth = HumanMeshBuilder.SmoothFigures;
-            _rider.Mesh = HumanMeshBuilder.Build(_palette, HumanPose.Cycling, includeLegs: false, helmet: true);
+            _rider.Mesh = HumanMeshBuilder.BuildCyclist(_palette, _position);
             _shownStep = -1;
             UpdateLegs();
         }
+        UpdatePosition((float)delta);
         // a skirt streams back in the wind of the ride (#251): measured from the bike's own motion
         if (Flutters)
         {
@@ -188,14 +233,41 @@ public partial class Cyclist : Node3D
             if (key != _riderWindKey)
             {
                 _riderWindKey = key;
-                _rider.Mesh = HumanMeshBuilder.Build(_palette with { Wind = wind }, HumanPose.Cycling,
-                    includeLegs: false, helmet: true, into: _riderMesh ??= new ArrayMesh());
+                _rider.Mesh = HumanMeshBuilder.BuildCyclist(_palette with { Wind = wind }, _position,
+                    into: _riderMesh ??= new ArrayMesh());
             }
         }
         if (_cadenceRpm <= 0.01f) return;
 
         _crankAngle = Mathf.Wrap(_crankAngle + (float)(_cadenceRpm / 60.0 * Mathf.Tau * delta), 0f, Mathf.Tau);
         UpdateLegs();
+    }
+
+    /// <summary>
+    /// The riding position's pose, once it has been asked for <see cref="PositionHold"/>: the rider is
+    /// built again (only then, not per frame), and the legs from the new hips. Standing, the bike rocks
+    /// with the cranks.
+    /// </summary>
+    private void UpdatePosition(float dt)
+    {
+        _wantFor = _wantPosition == _position ? 0f : _wantFor + dt;
+        if (_wantFor >= PositionHold)
+        {
+            _position = _wantPosition;
+            _wantFor = 0f;
+            _riderWindKey = new Vector3(float.NaN, 0, 0);
+            _rider.Mesh = HumanMeshBuilder.BuildCyclist(_palette, _position);
+            _shownStep = -1;
+            UpdateLegs();
+        }
+        if (_sway == null) return;
+        float target = _position == Player.RidingPosition.Standing && _cadenceRpm > 1f ? StandingSway : 0f;
+        _swayAmp += (target - _swayAmp) * (1f - Mathf.Exp(-dt / 0.3f));
+        // the +X pedal pushes down from its front (0) to the bottom (π): the bike leans to −X under it,
+        // which is a positive turn about the forward axis
+        float sway = _swayAmp * Mathf.Sin(_crankAngle);
+        _sway.Rotation = new Vector3(0, 0, sway);
+        _rider.Rotation = new Vector3(0, 0, -RiderCounterSway * sway);
     }
 
     /// <summary>
@@ -213,7 +285,7 @@ public partial class Cyclist : Node3D
         _cranks.Mesh = cranks;
         for (int i = 0; i < 2; i++)
         {
-            var key = (_palette, i, step, HumanMeshBuilder.SmoothFigures);
+            var key = (_palette, i, step, HumanMeshBuilder.SmoothFigures, _position);
             if (!LegSteps.TryGetValue(key, out var leg)) LegSteps[key] = leg = BuildLeg(i, stepAngle);
             _legs[i].Mesh = leg;
         }
@@ -226,7 +298,7 @@ public partial class Cyclist : Node3D
     private ArrayMesh BuildLeg(int i, float crankAngle)
     {
         int side = i == 0 ? 1 : -1;
-        var hip = Frame.LegHip(side);
+        var hip = Frame.LegHip(side, _position);
         // BikeFrame.Pedal carries the sign: a crank at the front travels downward next, because the
         // bike faces +Z, and the cranks are drawn from the same call, so the two cannot disagree
         var pedal = Frame.Pedal(crankAngle, side);
