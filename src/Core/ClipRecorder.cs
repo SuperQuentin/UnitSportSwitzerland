@@ -35,6 +35,9 @@ public partial class ClipRecorder : Node
 
     private const double DefaultSeconds = 10, MaxSeconds = 60, ChatDelay = 2;
 
+    /// <summary><c>--clip-realtime</c>: a slow frame fills every 1/30 s slot it took (repeated), the clip keeps the wall clock's pace.</summary>
+    private static readonly bool RealTime = CmdArgs.Has("--clip-realtime");
+
     /// <summary>The longest <c>--clip</c> from the command line (#971: a demo of several traffic light cycles); the chat's stays at <see cref="MaxSeconds"/>.</summary>
     private const double MaxCommandSeconds = 600;
 
@@ -151,8 +154,15 @@ public partial class ClipRecorder : Node
         _elapsed += delta;
         _sinceFrame += delta;
         if (_frames > 0 && _sinceFrame < 1.0 / Fps) return;
-        // a slow frame takes one picture, not a burst of the same one
-        _sinceFrame = _frames > 0 ? System.Math.Min(_sinceFrame - 1.0 / Fps, 1.0 / Fps) : 0;
+        // a slow frame takes one picture, not a burst of the same one; --clip-realtime: as many as the slots it took, so the clip
+        // plays in the time it filmed (#1105: a busy junction rendered at 10 fps played three times too fast)
+        int copies = 1;
+        if (_frames > 0 && RealTime)
+        {
+            copies = System.Math.Max(1, (int)(_sinceFrame * Fps));
+            _sinceFrame -= copies / (double)Fps;
+        }
+        else _sinceFrame = _frames > 0 ? System.Math.Min(_sinceFrame - 1.0 / Fps, 1.0 / Fps) : 0;
 
         var image = GetViewport().GetTexture().GetImage();
         if (_size == default)
@@ -170,14 +180,21 @@ public partial class ClipRecorder : Node
         image.Convert(Image.Format.Rgb8);
         if (image.GetSize() != _size) image.Resize(_size.X, _size.Y, Image.Interpolation.Bilinear);
         // full: ffmpeg is behind, drop this frame rather than stall the game
-        if (_queue!.Writer.TryWrite(image.GetData())) _frames++;
+        var bytes = image.GetData();
+        for (int k = 0; k < copies; k++)
+            if (_queue!.Writer.TryWrite(bytes)) _frames++;
 
         if (_pipeError != null || _elapsed >= _seconds) Stop();
     }
 
     private bool StartEncoder()
     {
-        _hasX264 ??= Encoders().Contains("libx264");
+        // libx264, else Cisco's libopenh264 (Krita's ffmpeg on Windows has only that, #1105), else a GIF alone
+        string encoders = Encoders();
+        _hasX264 ??= encoders.Contains("libx264") || encoders.Contains("libopenh264");
+        string[] h264 = encoders.Contains("libx264")
+            ? ["-c:v", "libx264", "-preset", "medium", "-crf", "20"]
+            : ["-c:v", "libopenh264", "-b:v", "6M"];
         // 128 colours a clip; the bayer dither finer in the lit styles (#1070): at PS1's scale 5,
         // Cartoon's sky gradients and the haze round the sun banded into rings (scale 3: ~13% more bytes)
         int bayer = Styles.StyleKit.Applied == Styles.VisualStyle.Ps1 ? 5 : 3;
@@ -195,8 +212,8 @@ public partial class ClipRecorder : Node
         if (_hasX264 == true)
         {
             foreach (string a in new[] { "-filter_complex", $"[0:v]split[v][g];[g]{gifChain}[gif]",
-                         "-map", "[v]", "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart", _mp4Path,
-                         "-map", "[gif]", "-loop", "0", _gifPath })
+                         "-map", "[v]" }.Concat(h264).Concat(new[] { "-pix_fmt", "yuv420p", "-movflags", "+faststart", _mp4Path,
+                         "-map", "[gif]", "-loop", "0", _gifPath }))
                 start.ArgumentList.Add(a);
         }
         else
@@ -244,7 +261,7 @@ public partial class ClipRecorder : Node
             finally { try { stdin.Close(); } catch (System.Exception) { } }
         });
         GD.Print($"[clip] recording {_name}: {_size.X}x{_size.Y} at {Fps} fps for {_seconds:F0} s -> {_gifPath}"
-            + (_hasX264 == true ? " and .mp4" : " (no libx264 in this ffmpeg: GIF only)"));
+            + (_hasX264 == true ? " and .mp4" : " (no libx264 or libopenh264 in this ffmpeg: GIF only)"));
         return true;
     }
 

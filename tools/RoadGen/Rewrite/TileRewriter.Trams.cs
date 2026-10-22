@@ -205,7 +205,7 @@ public static partial class TileRewriter
     }
 
     /// <summary>The tram group of plan arm <paramref name="k"/> for <paramref name="move"/> (#1057), -1 none.</summary>
-    internal static int TramGroup(SignalPlan? plan, int k, SignalMoves move) =>
+    public static int TramGroup(SignalPlan? plan, int k, SignalMoves move) =>
         plan is null ? -1 : plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Tram && g.Arm == k && (g.Moves & move) != 0);
 
     /// <summary>

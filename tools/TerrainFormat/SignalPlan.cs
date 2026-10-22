@@ -137,6 +137,12 @@ public sealed class SignalPlan
     /// <summary>Yellow by speed limit: 3 s up to 50 km/h, 4 s at 60, 5 s from 70 (SN 640 837).</summary>
     public static float Yellow(float speedKmh) => speedKmh <= 50.5f ? 3f : speedKmh <= 60.5f ? 4f : 5f;
 
+    /// <summary>
+    /// A tram group's amber (#1105, the user: "5s at 50, 6s at 60 and 7s above seems fine"; no source): the cars' speed bands, a
+    /// tram's 1.2 m/s² service brake needing longer to stop or clear than a car's. Its passing time and clearance too.
+    /// </summary>
+    public static float TramYellow(float speedKmh) => speedKmh <= 50.5f ? 5f : speedKmh <= 60.5f ? 6f : 7f;
+
     public const float RedAmberCar = 2f, RedAmberBike = 1f, YellowBike = 2f;
     public const float MinGreen = 4f, AllRed = 2f, AllRedAfterArrow = 1f, BikeLead = 3f;
     /// <summary>
@@ -197,8 +203,8 @@ public sealed class SignalPlan
     public bool ArrowPlates { get; set; }
 
     /// <summary>
-    /// Romandy's tram head (#1057, the user): one T-shaped head the size of a car head, the bar across (stop) over the bar upright (go);
-    /// the upright one flashing before red (the amber), the one across flashing before green (the red-amber, longer than the cars':
+    /// Romandy's tram head (#1057, #1105 after the user's Geneva photo): a square head, a white dotted T in its round window, the
+    /// stroke across lit for stop, the stroke upright for go; the upright one flashing before red (the amber), the one across before green (the red-amber, longer than the cars':
     /// <see cref="TramRedAmberT"/>). Elsewhere the three-lamp bar head. Bit 6 of the byte that holds <see cref="PedestrianAmber"/>.
     /// </summary>
     public bool TramTHead { get; set; }
@@ -545,9 +551,11 @@ public sealed class SignalPlan
     /// goes with its own approach and turns across the pedestrians with the flasher.
     /// </summary>
     /// <param name="seed">A stable number for the junction (e.g. its LV95 key): the cycle offset.</param>
-    public static SignalPlan Build(IReadOnlyList<SignalArm> arms, uint seed = 0, bool pedestrianAmber = true)
+    /// <param name="tramTHead">Romandy's tram heads (<see cref="TramTHead"/>), set before the timing: their red-amber is
+    /// <see cref="TramRedAmberT"/> (#1105: set after, it never applied).</param>
+    public static SignalPlan Build(IReadOnlyList<SignalArm> arms, uint seed = 0, bool pedestrianAmber = true, bool tramTHead = false)
     {
-        var plan = new SignalPlan { PedestrianAmber = pedestrianAmber };
+        var plan = new SignalPlan { PedestrianAmber = pedestrianAmber, TramTHead = tramTHead };
         plan.Arms.AddRange(arms);
         var car = new int[arms.Count];
         var left = new int[arms.Count];
@@ -825,6 +833,7 @@ public sealed class SignalPlan
     {
         SignalGroupKind.Pedestrian or SignalGroupKind.Flasher => 0,
         SignalGroupKind.Bike => YellowBike,
+        SignalGroupKind.Tram => TramYellow(Arms[Groups[g].Arm].SpeedKmh),
         _ => Yellow(Arms[Groups[g].Arm].SpeedKmh),
     };
 
@@ -855,6 +864,7 @@ public sealed class SignalPlan
             SignalGroupKind.Pedestrian => Math.Clamp(CrossingOf(g) * (2f / 3f) / WalkSpeed, 2f, 8f),
             SignalGroupKind.Bike => YellowBike,
             SignalGroupKind.Flasher => 0,
+            SignalGroupKind.Tram => TramYellow(Arms[group.Arm].SpeedKmh),
             _ => Yellow(Arms[group.Arm].SpeedKmh),
         };
     }

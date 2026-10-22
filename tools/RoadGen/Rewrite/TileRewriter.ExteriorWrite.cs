@@ -75,16 +75,16 @@ public static partial class TileRewriter
         }
         if (arms.Count(x => x.In) < 2) return null;
         string? canton = cantons?.CodeAt(jp.Centre.X, jp.Centre.Y);
-        bool amber = PedestrianAmber(canton);
+        bool amber = PedestrianAmber(canton), tramT = RomandyTramHead(canton, jp.Centre.X);
         uint seed = (uint)(long)Math.Round(jp.Centre.X) * 73856093u ^ (uint)(long)Math.Round(jp.Centre.Y) * 19349663u;
-        var plan = SignalPlan.Build(arms, seed, amber);
+        var plan = SignalPlan.Build(arms, seed, amber, tramT);
         // a kerbside bike lane keeps its signal only where a phase holds the right arrow while its riders go; a bike group that
         // finds no phase goes without its signal, not the junction without its plan (as the old layout)
         for (int k = 0; k < arms.Count; k++)
             if (arms[k].BikeSignal && !plan.ThroughWithRightHeld(k) && exterior[k].Arm.HasRight)
             {
                 arms[k] = arms[k] with { BikeSignal = false };
-                plan = SignalPlan.Build(arms, seed, amber);
+                plan = SignalPlan.Build(arms, seed, amber, tramT);
             }
         // riders who follow the cars' lights (a bike lane with no signal of its own, a left-turn bike lane) and whose slow clearing
         // would lengthen their cars' conflict times by more than LongRiders get a bike group of their own, which can end earlier
@@ -107,12 +107,12 @@ public static partial class TileRewriter
                 if (c.Move == SignalMoves.Left && !arms[k].RiderLeft) { arms[k] = arms[k] with { RiderLeft = true }; rebuild = true; }
                 else if (c.Move != SignalMoves.Left && !arms[k].BikeSignal) { arms[k] = arms[k] with { BikeSignal = true }; rebuild = true; }
             }
-            if (rebuild) { plan = SignalPlan.Build(arms, seed, amber); stats.RiderGroups++; }
+            if (rebuild) { plan = SignalPlan.Build(arms, seed, amber, tramT); stats.RiderGroups++; }
         }
         if (plan.Validate().Any(e => e.Contains("(Bike arm")))
         {
             for (int k = 0; k < arms.Count; k++) arms[k] = arms[k] with { BikeSignal = false };
-            plan = SignalPlan.Build(arms, seed, amber);
+            plan = SignalPlan.Build(arms, seed, amber, tramT);
         }
 
         // a two-stage crossing whose island wait the cycle cannot keep (3 s longer at most) crosses in one go, as without the
@@ -125,7 +125,7 @@ public static partial class TileRewriter
                 arms[k] = arms[k] with { HalfInM = 0, HalfOutM = 0 };
                 ExteriorPlanner.OneStage(exterior[k]);
             }
-            plan = SignalPlan.Build(arms, seed, amber);
+            plan = SignalPlan.Build(arms, seed, amber, tramT);
             stats.TwoStageDropped += oneStage.Count;
         }
         if (plan.Validate() is { Count: > 0 })
@@ -135,7 +135,6 @@ public static partial class TileRewriter
             return null;
         }
         plan.ArrowPlates = ArrowPlates(canton);
-        plan.TramTHead = RomandyTramHead(canton, jp.Centre.X);
         stats.TwoStage += arms.Count(x => x.TwoStage);
         stats.RiderBoxes += Enumerable.Range(0, arms.Count).Count(k => arms[k].RiderBox && plan.Groups.Any(g => g.Kind == SignalGroupKind.Bike && g.Arm == k && g.Moves == SignalMoves.Left));
         plan.PoleColour = PoleColour(canton);

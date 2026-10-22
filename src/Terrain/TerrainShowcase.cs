@@ -92,9 +92,9 @@ public static class TerrainShowcase
         ("Two-stage island, Geneva", () => TrafficLight(pedestrianAmber: false, island: true)),
         // the trams' bar head (#1057) beside the car heads: the bar across, the dot, the bar upright, lit on the clock
         ("Tram", () => TrafficLight(pedestrianAmber: true, tram: true)),
-        // Romandy's T head (#1057, the user): the bar across over the bar upright, beside the car heads above the flasher
+        // Romandy's head (#1105, the user's photos): a one-lens car head module, a solid white T lit in its lens, packed against the car heads
         ("Tram, Romandy", () => TrafficLight(pedestrianAmber: false, tram: true, tramT: true)),
-        // trams going two ways (#1057, the user): a head per direction, its arrow on its plate; Romandy's packed beside the car heads
+        // trams going two ways (#1057, the user): a head per direction, its arrow on its plate; Romandy's in a row on top of the car heads
         ("Tram, two ways", () => TrafficLight(pedestrianAmber: true, tram: true, tramTwo: true)),
         ("Tram, Romandy, two ways", () => TrafficLight(pedestrianAmber: false, tram: true, tramT: true, tramTwo: true)),
     ];
@@ -110,9 +110,8 @@ public static class TerrainShowcase
             new SignalArm(Math.PI / 2, true, true, Pedestrians: true),
             new SignalArm(Math.PI, true, true, LeftPocket: true, Pedestrians: true, Rank: 2),
             new SignalArm(-Math.PI / 2, true, true, Pedestrians: true),
-        ], 353, pedestrianAmber);
+        ], 353, pedestrianAmber, tramT);
         plan.ArrowPlates = arrowPlates;
-        plan.TramTHead = tramT;
         plan.PoleColour = colour;
         var tile = Tile();
         var signal = new RoadSignal
@@ -173,7 +172,20 @@ public static class TerrainShowcase
         var material = StyleKit.Material(MaterialRole.Road);
         FogUniforms.Apply(material);
         var node = new MeshInstance3D { Mesh = ChunkNode.ToArrayMesh(Arrays(tile), material) };
-        if (SignalBuilder.BuildLamps(tile) is { } lamps) node.AddChild(SignalLamps.Create(lamps));
+        if (SignalBuilder.BuildLamps(tile) is { } lamps)
+        {
+            var lit = SignalLamps.Create(lamps);
+            // --modelscycle <s>: the viewer runs a whole signal cycle in that long, for a clip of every lamp's states (#1105)
+            if (CmdArgs.Float("--modelscycle") is { } cycle && cycle > 0 && lit.LongestCycle > 0)
+            {
+                lit.PlanSpeed = lit.LongestCycle / cycle;
+                GD.Print($"[models] signal cycle {lit.LongestCycle:0.#} s run in {cycle:0.#} s ({lit.PlanSpeed:0.##}x)");
+            }
+            // --modelscyclefrom <s>: the plans start at that second of their time (a clip of a chosen part of the cycle, #1105)
+            if (CmdArgs.Float("--modelscyclefrom") is { } from)
+                lit.PlanShift = from - SignalLamps.Clock() * lit.PlanSpeed;
+            node.AddChild(lit);
+        }
         foreach (var label in RoadSignBuilder.Labels(tile) ?? []) node.AddChild(RoadSignBuilder.Make(label));
         return node;
     }
