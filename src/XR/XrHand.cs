@@ -70,6 +70,13 @@ internal sealed partial class XrHand : Node3D
 
     private float _k = 1f;
 
+    /// <summary>
+    /// Where a watch sits on this hand's wrist (#1097), in the hand's frame: on the back of the
+    /// forearm just past the cuff's start, the dial (+Z) out of the back of the hand, 12 (+Y) toward
+    /// the fingers. Follows the build's hand scale.
+    /// </summary>
+    public Transform3D WatchSpot { get; private set; }
+
     /// <summary>Whether the last <see cref="Drive"/> read the fingers from hand tracking.</summary>
     public bool Tracked { get; private set; }
 
@@ -136,6 +143,15 @@ internal sealed partial class XrHand : Node3D
         s.Tube(Vector3.Zero, new Vector3(0f, 0.77f, -0.64f) * 0.09f * k, 0.026f * k, 0.031f * k, look.Cuff, 7);
         _cuff.Mesh = s.Build();
         s.Clear();
+        // the forearm runs from the cuff along (0, 0.77, 0.64) as built (the tube is authored −Z). The dial
+        // faces the side that is up with the controller held (the thumb's, a quarter turn round the arm from
+        // the back of the hand, −Z; playtest #1097), 3.5 cm up the arm, on its skin
+        var arm = new Vector3(0f, 0.77f, 0.64f);
+        var back = new Vector3(_m, 0f, 0f).Rotated(arm.Normalized(), -_m * Mathf.Pi / 2f);
+        var dial = back;
+        var twelve = -arm;
+        WatchSpot = new Transform3D(new Basis(twelve.Cross(dial), twelve, dial),
+            _cuff.Position + (arm * 0.035f + back * 0.03f) * k);
 
         for (int f = 0; f < 5; f++)
         {

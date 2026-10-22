@@ -6,8 +6,8 @@ using UnitSport.Ui;
 namespace UnitSport.XR;
 
 /// <summary>
-/// The wrist menu (#437): look at the back of your left wrist for a moment, as at a watch, and a
-/// short menu opens on the UI panel, for what has no button on the controllers: the travel picker,
+/// The wrist menu (#437): the full list behind the radial menu over the watch (<see cref="XrWristRing"/>,
+/// its <i>More…</i> wedge, #1097), opened on the UI panel, for what has no button on the controllers: the travel picker,
 /// the inventory, the map, the bird journal, the controls, the fly camera, dropping the held item,
 /// recentring. Point and pull the trigger to pick; B, the menu button or a pick closes it.
 ///
@@ -18,13 +18,6 @@ namespace UnitSport.XR;
 /// </summary>
 public partial class XrWristMenu : CanvasLayer
 {
-    /// <summary>The wrist held in view this long opens the menu, s.</summary>
-    private const float Dwell = 0.6f;
-    /// <summary>The wrist counts as looked at within this angle of the view's centre, radians.</summary>
-    private const float LookCone = 0.42f;
-    /// <summary>And no further from the eyes than this, m.</summary>
-    private const float Near = 0.7f;
-
     /// <summary>The actions the menu presses: a prompt for one with no controller input names the wrist.</summary>
     private static readonly string[] Actions =
     {
@@ -38,10 +31,6 @@ public partial class XrWristMenu : CanvasLayer
     private readonly XrRig _rig;
     private PanelContainer _panel = null!;
     private VBoxContainer _entries = null!;
-    private float _looked;
-    /// <summary>Opened (or closed) with the wrist in view: it has to leave the view before it opens again.</summary>
-    private bool _rearm = true;
-
     public bool IsOpen => _panel.Visible;
 
     public XrWristMenu(XrRig rig) => _rig = rig;
@@ -89,38 +78,8 @@ public partial class XrWristMenu : CanvasLayer
         if (i + 1 < picks.Length) GetTree().CreateTimer(2.0).Timeout += () => PickNext(picks, i + 1);
     }
 
-    /// <summary>Once a frame, from the rig: opens the menu when the left wrist is looked at.</summary>
-    /// <param name="inWorld">Not the title's backdrop: the title and its screens have their own menus.</param>
-    public void Watch(Transform3D head, XRController3D left, FootPlayer? player, bool inWorld, float dt)
-    {
-        if (IsOpen || !inWorld) return;
-        bool looked = false;
-        if (left.GetHasTrackingData() && MouseCapture.Mode == Input.MouseModeEnum.Captured)
-        {
-            var to = left.GlobalPosition - head.Origin;
-            float d = to.Length();
-            // in front of the eyes and near, and the back of the wrist (the controller's +X, the
-            // left hand's outside) turned up toward them, as when reading a watch
-            looked = d < Near && d > 0.1f && (-head.Basis.Z).AngleTo(to) < LookCone
-                     && left.GlobalBasis.X.Dot(-to / d) > 0.4f;
-        }
-        if (!looked)
-        {
-            _looked = 0f;
-            _rearm = true;
-            return;
-        }
-        if (!_rearm) return;
-        _looked += dt;
-        if (_looked >= Dwell)
-        {
-            _rearm = false;
-            Open(player);
-            left.TriggerHapticPulse("haptic", 0.0, 0.3, 0.04, 0.0);
-        }
-    }
-
-    private void Open(FootPlayer? player)
+    /// <summary>Opens the list on the UI panel, with the entries <paramref name="player"/> can use now.</summary>
+    public void Open(FootPlayer? player)
     {
         foreach (var child in _entries.GetChildren())
         {
