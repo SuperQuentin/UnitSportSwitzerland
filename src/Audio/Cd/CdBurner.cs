@@ -87,6 +87,59 @@ public sealed class CdBurner
     }
 
     /// <summary>
+    /// <c>--vocalstem &lt;audio file&gt;</c> (#1153): separates the file both ways (the model when it
+    /// is here, and the centre fallback), writes each vocal as a WAV and its 20 Hz lanes as CSV to
+    /// <c>test_output/vocal/</c> to listen to and plot, and prints what the analyser found and how
+    /// long it took. True when every pass gave a vocal with some singing in it.
+    /// </summary>
+    public static bool VocalStemProbe(string? file)
+    {
+        if (file == null || !File.Exists(file)) { Godot.GD.PrintErr($"[vocalstem] no file '{file}'"); return false; }
+        return Task.Run(async () =>
+        {
+            var stereo = await DecodeStereoAsync(file, CancellationToken.None);
+            var mono = await DecodeMonoAsync(file, CancellationToken.None);
+            if (stereo == null || mono == null) { Godot.GD.PrintErr("[vocalstem] ffmpeg could not decode it"); return false; }
+            float bpm = BeatAnalyzer.AnalyseFull(mono, AnalysisRate, 0f, 0f).bpm;
+            string dir = Path.Combine(Godot.ProjectSettings.GlobalizePath("res://"), "test_output", "vocal");
+            Directory.CreateDirectory(dir);
+            string name = Path.GetFileNameWithoutExtension(file);
+            bool ok = true;
+            foreach (bool model in VocalSeparator.ModelName != null ? new[] { true, false } : new[] { false })
+            {
+                var watch = Stopwatch.StartNew();
+                var (vocal, how) = VocalSeparator.Separate(stereo, CancellationToken.None, model);
+                double sep = watch.Elapsed.TotalSeconds;
+                var r = VocalAnalyzer.Analyse(vocal, AnalysisRate, bpm);
+                double all = watch.Elapsed.TotalSeconds;
+                WriteWav(Path.Combine(dir, $"{name}_{how}.wav"), vocal, AnalysisRate);
+                var csv = new StringBuilder().AppendLine("t,level,syllable,vowel,pitch");
+                for (int o = 0; o < r.Frames.Length / 4; o++)
+                    csv.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                        $"{o / (float)CdAnalysis.EnvRate:F2},{r.Frames[4 * o]},{r.Frames[4 * o + 1]},{r.Frames[4 * o + 2]},{r.Frames[4 * o + 3]}"));
+                File.WriteAllText(Path.Combine(dir, $"{name}_{how}.csv"), csv.ToString());
+                int sung = 0, voiced = 0;
+                for (int o = 0; o < r.Frames.Length / 4; o++) { if (r.Frames[4 * o] > 0) sung++; if (r.Frames[4 * o + 3] > 0) voiced++; }
+                int frames = Math.Max(1, r.Frames.Length / 4);
+                Godot.GD.Print($"[vocalstem] {how}: separated in {sep:F1} s, analysed in {all - sep:F1} s; sung {100f * sung / frames:F0} %, "
+                    + $"pitched {100f * voiced / frames:F0} %; {r.Rises.Length / 2} rise(s) {r.Falls.Length / 2} fall(s) "
+                    + $"{r.Holds.Length / 2} long note(s) {r.VocalIns.Length} entr(ies) at bpm {bpm:F0}");
+                ok &= sung > 0;
+            }
+            return ok;
+        }).GetAwaiter().GetResult();
+    }
+
+    private static void WriteWav(string path, float[] x, int rate)
+    {
+        using var w = new BinaryWriter(File.Create(path));
+        w.Write("RIFF"u8); w.Write(36 + x.Length * 2); w.Write("WAVEfmt "u8);
+        w.Write(16); w.Write((short)1); w.Write((short)1); w.Write(rate); w.Write(rate * 2); w.Write((short)2); w.Write((short)16);
+        w.Write("data"u8); w.Write(x.Length * 2);
+        foreach (float v in x) w.Write((short)Math.Clamp(v * 32767f, -32768f, 32767f));
+    }
+
+    /// <summary>
     /// The block with the singer (#1153): the source decoded again to stereo 44.1 kHz, the vocal
     /// separated (<see cref="VocalSeparator"/>) and analysed. The block as it was when ffmpeg fails.
     /// </summary>

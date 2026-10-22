@@ -19,7 +19,7 @@ public static class VocalAnalyzer
     public const float RunSemitones = 4f, RunMin = 0.5f, RunMax = 8f;
 
     /// <summary>A long note: within this many semitones of its mean for at least <see cref="HoldMin"/> s.</summary>
-    public const float HoldSpread = 0.6f, HoldMin = 1.2f;
+    public const float HoldSpread = 1f, HoldMin = 1.2f;   // a held note with vibrato swings about a semitone
 
     /// <summary>Gap in the singing, s, bridged inside one phrase.</summary>
     private const float PhraseGap = 0.25f;
@@ -40,7 +40,7 @@ public static class VocalAnalyzer
         float binHz = rate / (float)Win;
         int f1a = (int)(300 / binHz), f1b = (int)(900 / binHz), f2a = (int)(1500 / binHz), f2b = (int)(3000 / binHz);
         int va = (int)(300 / binHz), vb = (int)(4000 / binHz);
-        var diff = new float[(int)(rate / MinHz) + 2];
+        var yin = new YinScratch((int)(rate / MinHz) + 2);
 
         for (int f = 0; f < frames; f++)
         {
@@ -66,7 +66,7 @@ public static class VocalAnalyzer
             }
             flux[f] = fl;
             vowel[f] = MathF.Log((e2 / (f2b - f2a + 1) + 1e-3f) / (e1 / (f1b - f1a + 1) + 1e-3f));
-            hz[f] = rms[f] > 2e-3f ? Yin(vocal, s, rate, diff) : 0f;   // silence has no pitch, and YIN is the costly part
+            hz[f] = rms[f] > 2e-3f ? Yin(vocal, s, rate, yin) : 0f;   // silence has no pitch
         }
 
         // per-track references: the loud vocal (99th percentile), the vowel's spread
@@ -219,21 +219,50 @@ public static class VocalAnalyzer
         return ins.ToArray();
     }
 
-    /// <summary>YIN (de Cheveigné & Kawahara 2002) on one window: the fundamental in Hz, or 0 when not periodic enough.</summary>
-    private static float Yin(float[] x, int s, int rate, float[] d)
+    /// <summary>YIN's buffers: the difference, the window's running energy, one 2048-point transform.</summary>
+    private sealed class YinScratch(int lags)
     {
+        public const int M = 2 * Win;
+        public readonly float[] D = new float[lags], Energy = new float[Win + 1], Re = new float[M], Im = new float[M];
+    }
+
+    /// <summary>
+    /// YIN (de Cheveigné & Kawahara 2002) on one window: the fundamental in Hz, or 0 when not periodic
+    /// enough. The difference sum (x_i - x_i+tau)^2 is taken as two energies minus twice the
+    /// correlation, and the correlation through one FFT: the window's head (a) and the whole window
+    /// (b) packed as a + ib, split by symmetry, conj(A) B transformed back.
+    /// </summary>
+    private static float Yin(float[] x, int s, int rate, YinScratch y)
+    {
+        float[] d = y.D, en = y.Energy, re = y.Re, im = y.Im;
         int tMin = (int)(rate / MaxHz), tMax = Math.Min(d.Length - 1, Win / 2);
-        int w = Win - tMax;
+        int w = Win - tMax, m = YinScratch.M;
+        en[0] = 0f;
+        for (int i = 0; i < Win; i++) en[i + 1] = en[i] + x[s + i] * x[s + i];
+        Array.Clear(re);
+        Array.Clear(im);
+        for (int i = 0; i < Win; i++)
+        {
+            if (i < w) re[i] = x[s + i];
+            im[i] = x[s + i];
+        }
+        Fft.Forward(re, im);
+        // P = conj(A) B for k and m-k at once, stored conjugated for the inverse through Forward
+        for (int k = 0; k <= m / 2; k++)
+        {
+            int j = (m - k) % m;
+            float ar = 0.5f * (re[k] + re[j]), ai = 0.5f * (im[k] - im[j]);
+            float br = 0.5f * (im[k] + im[j]), bi = -0.5f * (re[k] - re[j]);
+            float pr = ar * br + ai * bi, pi = ar * bi - ai * br;
+            re[k] = pr; im[k] = -pi;
+            re[j] = pr; im[j] = pi;   // conj(P[k]) = P[m-k] for a real correlation, then conjugated
+        }
+        Fft.Forward(re, im);
         d[0] = 1f;
         float run = 0f;
         for (int tau = 1; tau <= tMax; tau++)
         {
-            float sum = 0f;
-            for (int i = 0; i < w; i++)
-            {
-                float v = x[s + i] - x[s + i + tau];
-                sum += v * v;
-            }
+            float sum = Math.Max(0f, en[w] + (en[tau + w] - en[tau]) - 2f * re[tau] / m);
             run += sum;
             d[tau] = run > 0f ? sum * tau / run : 1f;   // cumulative mean normalised difference
         }

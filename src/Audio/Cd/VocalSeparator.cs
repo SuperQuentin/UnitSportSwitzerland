@@ -32,9 +32,9 @@ public static class VocalSeparator
         !Core.Platform.IsMobile && File.Exists(ModelPath) ? System.IO.Path.GetFileNameWithoutExtension(ModelFile) : null;
 
     /// <summary>The vocal and what made it (<see cref="ModelName"/> or <see cref="Centre"/>).</summary>
-    public static (float[] Vocal, string Source) Separate(short[] stereo, CancellationToken ct)
+    public static (float[] Vocal, string Source) Separate(short[] stereo, CancellationToken ct, bool useModel = true)
     {
-        if (ModelName is { } name)
+        if (useModel && ModelName is { } name)
         {
             try { return (ToAnalysisRate(SeparateModel(stereo, ct)), name); }
             catch (OperationCanceledException) { throw; }
@@ -54,7 +54,12 @@ public static class VocalSeparator
     /// </summary>
     private static float[] SeparateModel(short[] stereo, CancellationToken ct)
     {
-        using var options = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL };
+        // all cores but two: a server burning a CD still has players to serve
+        using var options = new SessionOptions
+        {
+            GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL,
+            IntraOpNumThreads = Math.Max(1, System.Environment.ProcessorCount - 2),
+        };
         using var session = new InferenceSession(ModelPath, options);
         string input = session.InputMetadata.Keys.First();
         int[] shape = session.InputMetadata[input].Dimensions;
@@ -74,24 +79,91 @@ public static class VocalSeparator
 
         var stft = new Stft(ModelFft, ModelHop);
         var vocal = new float[n + pad];
-        var spec = new DenseTensor<float>(new[] { 1, 4, dimF, dimT });
+        var input4 = new float[4 * dimF * dimT];
+        var answer = new float[4 * dimF * dimT];
+        var spec = new DenseTensor<float>(input4, new[] { 1, 4, dimF, dimT });
         var outL = new float[chunk];
         var outR = new float[chunk];
+        var transform = new System.Diagnostics.Stopwatch();
+        var network = new System.Diagnostics.Stopwatch();
         for (int start = 0; start < n + pad; start += gen)
         {
             ct.ThrowIfCancellationRequested();
-            stft.Forward(l, r, start, chunk, spec, dimF, dimT);
-            for (int c = 0; c < 4; c++)
-                for (int k = 0; k < 3; k++)
-                    for (int f = 0; f < dimT; f++) spec[0, c, k, f] = 0f;
+            transform.Start();
+            stft.Forward(l, r, start, chunk, input4, dimF, dimT);
+            transform.Stop();
+            network.Start();
             using var results = session.Run(new[] { NamedOnnxValue.CreateFromTensor(input, spec) });
-            var answer = results.First().AsTensor<float>();
+            results.First().AsTensor<float>().ToDenseTensor().Buffer.Span.CopyTo(answer);
+            network.Stop();
+            transform.Start();
             stft.Inverse(answer, dimF, dimT, chunk, outL, outR);
+            transform.Stop();
             int keep = Math.Min(gen, n + pad - start);
             for (int i = 0; i < keep; i++) vocal[start + i] = 0.5f * (outL[trim + i] + outR[trim + i]);
         }
         Array.Resize(ref vocal, n);
+        GD.Print($"[cd] vocal model: network {network.Elapsed.TotalSeconds:F1} s, transforms {transform.Elapsed.TotalSeconds:F1} s");
         return vocal;
+    }
+
+    /// <summary>
+    /// <c>--beatcheck</c> part (#1153): a chunk of a chord through the model's STFT and back, without
+    /// the network in between, comes back as it went in (the torch layout, Bluestein and the
+    /// overlap-add agree); and the centre fallback keeps a centre-panned tone and drops one panned hard left.
+    /// </summary>
+    public static bool SelfCheck()
+    {
+        bool ok = true;
+        const int dimT = 32, dimF = ModelFft / 2 + 1;
+        int chunk = ModelHop * (dimT - 1);
+        var l = new float[chunk];
+        var r = new float[chunk];
+        for (int i = 0; i < chunk; i++)
+        {
+            double t = i / (double)Rate;
+            l[i] = (float)(0.3 * Math.Sin(2 * Math.PI * 220 * t) + 0.2 * Math.Sin(2 * Math.PI * 1375 * t));
+            r[i] = (float)(0.25 * Math.Sin(2 * Math.PI * 330 * t + 1) + 0.1 * Math.Sin(2 * Math.PI * 5000 * t));
+        }
+        var stft = new Stft(ModelFft, ModelHop);
+        var spec = new float[4 * dimF * dimT];
+        stft.Forward(l, r, 0, chunk, spec, dimF, dimT);
+        var ol = new float[chunk];
+        var or = new float[chunk];
+        stft.Inverse(spec, dimF, dimT, chunk, ol, or);
+        double err = 0;
+        for (int i = 0; i < chunk; i++) err = Math.Max(err, Math.Max(Math.Abs(ol[i] - l[i]), Math.Abs(or[i] - r[i])));
+        // the three lowest bins are zeroed on the way in, as UVR does: a 220 Hz tone barely feels it
+        Check(err < 0.02, $"model STFT round trip, max error {err:F4}");
+
+        // centre fallback: 440 Hz in the middle, 1 kHz hard left; the vocal keeps the first only
+        int n = Rate * 2;
+        var stereo = new short[2 * n];
+        for (int i = 0; i < n; i++)
+        {
+            double t = i / (double)Rate;
+            double mid = 0.3 * Math.Sin(2 * Math.PI * 440 * t), left = 0.3 * Math.Sin(2 * Math.PI * 1000 * t);
+            stereo[2 * i] = (short)((mid + left) * 32767);
+            stereo[2 * i + 1] = (short)(mid * 32767);
+        }
+        var v = SeparateCentre(stereo, CancellationToken.None);
+        double keep = Band(v, 440), drop = Band(v, 1000);
+        Check(keep > 0.1 && drop < 0.2 * keep, $"centre fallback keeps the centre ({keep:F3}) over the side ({drop:F3})");
+        return ok;
+
+        void Check(bool cond, string what)
+        {
+            GD.Print($"[vocalcheck] {(cond ? "ok  " : "FAIL")} {what}");
+            ok &= cond;
+        }
+
+        // amplitude of one frequency in the middle second (a plain DFT bin)
+        static double Band(float[] x, double hz)
+        {
+            double c = 0, s = 0;
+            for (int i = Rate / 2; i < Rate * 3 / 2; i++) { c += x[i] * Math.Cos(2 * Math.PI * hz * i / Rate); s += x[i] * Math.Sin(2 * Math.PI * hz * i / Rate); }
+            return 2 * Math.Sqrt(c * c + s * s) / Rate;
+        }
     }
 
     // ---- centre-pan fallback -----------------------------------------------------------------------
@@ -172,7 +244,14 @@ public static class VocalSeparator
     private sealed class Stft
     {
         private readonly int _n, _hop, _m;
-        private readonly float[] _win, _chirpRe, _chirpIm, _kernRe, _kernIm, _aRe, _aIm, _xRe, _xIm;
+        private readonly float[] _win, _chirpRe, _chirpIm, _kernRe, _kernIm;
+        private float[] _framesL = Array.Empty<float>(), _framesR = Array.Empty<float>();
+
+        /// <summary>One thread's buffers: the frame (x) and the Bluestein convolution (a).</summary>
+        private sealed class Scratch(int n, int m)
+        {
+            public readonly float[] XRe = new float[n], XIm = new float[n], ARe = new float[m], AIm = new float[m];
+        }
 
         public Stft(int n, int hop)
         {
@@ -198,35 +277,34 @@ public static class VocalSeparator
                 if (i > 0) { _kernRe[_m - i] = _chirpRe[i]; _kernIm[_m - i] = -_chirpIm[i]; }
             }
             Fft.Forward(_kernRe, _kernIm);
-            _aRe = new float[_m];
-            _aIm = new float[_m];
-            _xRe = new float[n];
-            _xIm = new float[n];
         }
 
-        /// <summary>X[k] = sum x[j] e^(-2 pi i jk/n) of (_xRe, _xIm), in place, any n.</summary>
-        private void Dft()
+        private Scratch NewScratch() => new(_n, _m);
+
+        /// <summary>X[k] = sum x[j] e^(-2 pi i jk/n) of the scratch's x, in place, any n.</summary>
+        private void Dft(Scratch s)
         {
-            Array.Clear(_aRe);
-            Array.Clear(_aIm);
+            float[] xRe = s.XRe, xIm = s.XIm, aRe = s.ARe, aIm = s.AIm;
+            Array.Clear(aRe);
+            Array.Clear(aIm);
             for (int i = 0; i < _n; i++)
             {
-                _aRe[i] = _xRe[i] * _chirpRe[i] - _xIm[i] * _chirpIm[i];
-                _aIm[i] = _xRe[i] * _chirpIm[i] + _xIm[i] * _chirpRe[i];
+                aRe[i] = xRe[i] * _chirpRe[i] - xIm[i] * _chirpIm[i];
+                aIm[i] = xRe[i] * _chirpIm[i] + xIm[i] * _chirpRe[i];
             }
-            Fft.Forward(_aRe, _aIm);
+            Fft.Forward(aRe, aIm);
             for (int i = 0; i < _m; i++)
             {
-                float r = _aRe[i] * _kernRe[i] - _aIm[i] * _kernIm[i];
-                float im = _aRe[i] * _kernIm[i] + _aIm[i] * _kernRe[i];
-                _aRe[i] = r; _aIm[i] = -im;   // conj: the inverse through the forward transform
+                float r = aRe[i] * _kernRe[i] - aIm[i] * _kernIm[i];
+                float im = aRe[i] * _kernIm[i] + aIm[i] * _kernRe[i];
+                aRe[i] = r; aIm[i] = -im;   // conj: the inverse through the forward transform
             }
-            Fft.Forward(_aRe, _aIm);
+            Fft.Forward(aRe, aIm);
             for (int i = 0; i < _n; i++)
             {
-                float cr = _aRe[i] / _m, ci = -_aIm[i] / _m;
-                _xRe[i] = cr * _chirpRe[i] - ci * _chirpIm[i];
-                _xIm[i] = cr * _chirpIm[i] + ci * _chirpRe[i];
+                float cr = aRe[i] / _m, ci = -aIm[i] / _m;
+                xRe[i] = cr * _chirpRe[i] - ci * _chirpIm[i];
+                xIm[i] = cr * _chirpIm[i] + ci * _chirpRe[i];
             }
         }
 
@@ -239,55 +317,75 @@ public static class VocalSeparator
             return j < x.Length ? x[j] : 0f;
         }
 
-        public void Forward(float[] l, float[] r, int start, int len, DenseTensor<float> spec, int dimF, int dimT)
+        /// <summary>
+        /// One chunk into the model's input, laid out [channel][bin][frame]; the three lowest bins
+        /// zeroed as UVR does. Frames run on all cores: each writes its own column.
+        /// </summary>
+        public void Forward(float[] l, float[] r, int start, int len, float[] spec, int dimF, int dimT)
         {
+            int plane = dimF * dimT;
             int half = _n / 2;
-            for (int f = 0; f < dimT; f++)
+            Parallel.For(0, dimT, NewScratch, (f, _, s) =>
             {
                 int c = f * _hop - half;
                 for (int i = 0; i < _n; i++)
                 {
-                    _xRe[i] = At(l, start, len, c + i) * _win[i];
-                    _xIm[i] = At(r, start, len, c + i) * _win[i];
+                    s.XRe[i] = At(l, start, len, c + i) * _win[i];
+                    s.XIm[i] = At(r, start, len, c + i) * _win[i];
                 }
-                Dft();
+                Dft(s);
                 for (int k = 0; k < dimF; k++)
                 {
-                    int j = (_n - k) % _n;
-                    spec[0, 0, k, f] = 0.5f * (_xRe[k] + _xRe[j]);
-                    spec[0, 1, k, f] = 0.5f * (_xIm[k] - _xIm[j]);
-                    spec[0, 2, k, f] = 0.5f * (_xIm[k] + _xIm[j]);
-                    spec[0, 3, k, f] = -0.5f * (_xRe[k] - _xRe[j]);
+                    int j = (_n - k) % _n, at = k * dimT + f;
+                    bool low = k < 3;
+                    spec[at] = low ? 0f : 0.5f * (s.XRe[k] + s.XRe[j]);
+                    spec[plane + at] = low ? 0f : 0.5f * (s.XIm[k] - s.XIm[j]);
+                    spec[2 * plane + at] = low ? 0f : 0.5f * (s.XIm[k] + s.XIm[j]);
+                    spec[3 * plane + at] = low ? 0f : -0.5f * (s.XRe[k] - s.XRe[j]);
                 }
-            }
+                return s;
+            }, _ => { });
         }
 
-        public void Inverse(Tensor<float> spec, int dimF, int dimT, int len, float[] outL, float[] outR)
+        /// <summary>The network's answer back to the chunk's two channels: frames inverted on all cores, then overlap-added in order.</summary>
+        public void Inverse(float[] spec, int dimF, int dimT, int len, float[] outL, float[] outR)
         {
-            int half = _n / 2;
+            int half = _n / 2, plane = dimF * dimT;
+            if (_framesL.Length != dimT * _n) { _framesL = new float[dimT * _n]; _framesR = new float[dimT * _n]; }
+            float[] framesL = _framesL, framesR = _framesR;
+            Parallel.For(0, dimT, NewScratch, (f, _, s) =>
+            {
+                Array.Clear(s.XRe);
+                Array.Clear(s.XIm);
+                // Z = L + iR over the full, Hermitian spectrum; bins past dim_f stay zero
+                for (int k = 0; k < dimF && k <= half; k++)
+                {
+                    int at = k * dimT + f;
+                    float lr = spec[at], li = spec[plane + at], rr = spec[2 * plane + at], ri = spec[3 * plane + at];
+                    if (k == 0 || k == half) { li = 0f; ri = 0f; }
+                    s.XRe[k] = lr - ri; s.XIm[k] = li + rr;
+                    if (k > 0 && k < half) { int j = _n - k; s.XRe[j] = lr + ri; s.XIm[j] = -li + rr; }
+                }
+                // inverse = conj(DFT(conj(Z))) / n
+                for (int i = 0; i < _n; i++) s.XIm[i] = -s.XIm[i];
+                Dft(s);
+                for (int i = 0; i < _n; i++)
+                {
+                    framesL[f * _n + i] = s.XRe[i] / _n * _win[i];
+                    framesR[f * _n + i] = -s.XIm[i] / _n * _win[i];
+                }
+                return s;
+            }, _ => { });
             var sum = new float[len + _n];
             var sumR = new float[len + _n];
             var norm = new float[len + _n];
             for (int f = 0; f < dimT; f++)
             {
-                Array.Clear(_xRe);
-                Array.Clear(_xIm);
-                // Z = L + iR over the full, Hermitian spectrum; bins past dim_f stay zero
-                for (int k = 0; k < dimF && k <= half; k++)
-                {
-                    float lr = spec[0, 0, k, f], li = spec[0, 1, k, f], rr = spec[0, 2, k, f], ri = spec[0, 3, k, f];
-                    if (k == 0 || k == half) { li = 0f; ri = 0f; }
-                    _xRe[k] = lr - ri; _xIm[k] = li + rr;
-                    if (k > 0 && k < half) { int j = _n - k; _xRe[j] = lr + ri; _xIm[j] = -li + rr; }
-                }
-                // inverse = conj(DFT(conj(Z))) / n
-                for (int i = 0; i < _n; i++) _xIm[i] = -_xIm[i];
-                Dft();
                 int c = f * _hop;
                 for (int i = 0; i < _n; i++)
                 {
-                    sum[c + i] += _xRe[i] / _n * _win[i];
-                    sumR[c + i] += -_xIm[i] / _n * _win[i];
+                    sum[c + i] += framesL[f * _n + i];
+                    sumR[c + i] += framesR[f * _n + i];
                     norm[c + i] += _win[i] * _win[i];
                 }
             }
