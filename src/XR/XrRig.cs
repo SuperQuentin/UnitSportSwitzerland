@@ -281,6 +281,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
 
     /// <summary><c>--xrload</c>: frames, frame ms and headset GPU ms summed since the last report.</summary>
     private double[]? _load;
+    private bool _eyesSaid;
 
     /// <summary>Every 5 s under <c>--xrload</c>: the frame time and what the headset view cost the GPU.</summary>
     private void ReportLoad(double delta)
@@ -291,7 +292,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         _load[2] += RenderingServer.ViewportGetMeasuredRenderTimeGpu(_view.GetViewportRid());
         if (_load[1] < 5000.0) return;
         double n = _load[0];
-        if (!XrSession.Simulated && XRServer.PrimaryInterface is { } xr)
+        if (!XrSession.Simulated && !_eyesSaid && XRServer.PrimaryInterface is { } xr && (_eyesSaid = true))
             GD.Print($"[xr] eyes {xr.GetRenderTargetSize()} x{_view.Scaling3DScale:F2}, {RenderingServer.GetCurrentRenderingMethod()}, MSAA {_view.Msaa3D}");
         GD.Print($"[xr] load: frame {_load[1] / n:F1} ms, headset gpu {_load[2] / n:F1} ms, "
             + $"{RenderingServer.GetRenderingInfo(RenderingServer.RenderingInfo.TotalPrimitivesInFrame) / 1e6:F1} M prims, "
