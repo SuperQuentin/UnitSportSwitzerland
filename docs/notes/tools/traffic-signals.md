@@ -420,8 +420,10 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
 - **Far-side pole, one lamp per turn** (#1117, the user, after #1116; supersedes the placement and plate rules above where they
   differ). Where the approach has no left pole, its left turn's lamp stands on the **far-side pole** of the arm it turns into
   ("for a turn-into flasher, it should be on the far side pole"): that arm's kerb pole furthest from its main pole (its left pole
-  or a walkers' pole, never an island's), across the junction where the turning car arrives, above that pole's heads (theirs face
-  that arm's approach, its walkers' head at car-head height: above, it hits none and is seen over them), facing this approach;
+  or a walkers' pole, never an island's), across the junction where the turning car arrives, **beside the pole on its side away
+  from that exit** (the user: "it's better if the far side lamp fit on the side of the pole, pointing away from the exit"; its own
+  heads stand out toward that exit's drivers), `SideReach` 0.42 m out from the pole's side (clear of a walkers' head in front of
+  it, Geneva's 0.21 m half width), level with a car head's green there, held from the pole, facing this approach;
   that arm's main pole (near corner) only where it has no other; with no pole there at all, on the head's own left on the main
   pole (`RoadSignal.LeftFlasherPole`: `SecondPole`, `FarSidePole`, `NearSidePole`, `MainPole`). **One lamp per turn**, its plate
   from everything that turn gives way to while green (`SignalPlan.TurnPlate`): walkers only a walker, riders only a bike,

@@ -266,10 +266,12 @@ public static partial class SignalBuilder
     /// <summary>
     /// The left turns' flasher lamps (#1109) on the poles by the crosswalks they cross: on the approach's left pole beside its
     /// leftmost car head, level with its green; on the far-side pole of the arm the left turn goes into (#1117: across the
-    /// junction, where the turning car arrives; that arm's main pole where it has none), above that pole's own heads (they face
-    /// that arm's approach, its walkers' head at a car head's height: above, the lamp hits none and is seen over them), facing
-    /// this one's drivers.
+    /// junction, where the turning car arrives; that arm's main pole where it has none), beside that pole on its side away from
+    /// that arm (its own heads stand out toward that arm's drivers), at a car head's height, facing this one's drivers.
     /// </summary>
+    /// <summary>A far-side lamp's centre stands this far out from its pole's side (m): its plate clear of a walkers' head in front of the pole (Geneva's 0.21 m half width).</summary>
+    private const float SideReach = 0.42f;
+
     private static List<AwayLamp> AwayLamps(RoadSignal signal)
     {
         var lamps = new List<AwayLamp>();
@@ -301,14 +303,17 @@ public static partial class SignalBuilder
                     index, g, blink, plate, arrow));
                 continue;
             }
-            // above the pole's own heads (any facing), its plate clear of them, held from the pole
-            float top = foot.Y + CarLowerEdge;
-            foreach (var h in heads)
-                if (h.Shape != Shape.Bike) top = Mathf.Max(top, h.Centre.Y + h.Half + BorderGap + BorderWidth + (plan.ArrowPlates ? ArrowPanel : 0f));
-            float y = top + 0.05f + ArrowPanel + BorderWidth + BorderGap + Pitch * 0.5f;
-            float out_ = InFront + (signal.Overheads.Any(o => o.StandsOn(pole.X, pole.Z)) ? SignalOverhead.PostHalf - PoleRadius : 0f);
-            var spot = new Vector3(foot.X, y, foot.Z) + front * out_;
-            lamps.Add(new AwayLamp(spot, front, right, new Vector3(foot.X, y, foot.Z), spot - front * (HeadDepth * 0.8f), index, g, blink, plate, arrow));
+            // beside the pole on its side away from the exit the turn goes into (the user: "it's better if the far side lamp fit on the
+            // side of the pole, pointing away from the exit"): its own heads stand out toward that exit's drivers, its walkers' head
+            // across; at the height of a car head's green, held from the pole
+            var exit = new Vector3((float)Math.Cos(plan.Arms[pole.Arm].Heading), 0f, -(float)Math.Sin(plan.Arms[pole.Arm].Heading));
+            float side = exit.Dot(right) > 0f ? -1f : 1f;
+            bool walkers = heads.Any(h => h.Shape == Shape.Square);
+            float y = foot.Y + (walkers ? CarLowerEdgeAbovePedestrian : CarLowerEdge) + Pitch * 0.5f;
+            float post = signal.Overheads.Any(o => o.StandsOn(pole.X, pole.Z)) ? SignalOverhead.PostHalf : PoleRadius;
+            var spot = new Vector3(foot.X, y, foot.Z) + right * (side * (post + SideReach)) + front * (HeadDepth * 0.5f);
+            lamps.Add(new AwayLamp(spot, front, right, new Vector3(foot.X, y, foot.Z), spot - right * (side * HeadWidth * 0.5f) - front * (HeadDepth * 0.5f),
+                index, g, blink, plate, arrow));
         }
         return lamps;
     }

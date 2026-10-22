@@ -211,13 +211,15 @@ public class SignalBuilderTests
         Assert.Equal(2, mine.Count);
         var left = Assert.Single(mine, l => l.Transform.Origin.X < 497);
         var right = Assert.Single(mine, l => l.Transform.Origin.X > 505);
-        // the left one faces the northbound drivers (south, +Z), on the west arm's far pole, over that pole's heads (theirs face
-        // east and north: its car heads' top lens at 3.35 + 0.9 m), each flashing for its own turn's crossing
+        // the left one faces the northbound drivers (south, +Z), beside the west arm's far pole on its side away from the west exit
+        // (east of it, the user: "on the side of the pole, pointing away from the exit"), at a car head's green height (the pole has
+        // a walkers' head: 3.35 m + half a lens pitch), clear of that pole's own lenses; each flashing for its own turn's crossing
         Assert.True(left.Transform.Basis.Z.Z > 0.99f, $"faces {left.Transform.Basis.Z}");
-        Assert.True(Math.Abs(left.Transform.Origin.Z - 494) < 0.6f && Math.Abs(left.Transform.Origin.X - 494) < 0.6f, $"at {left.Transform.Origin}");
-        float farTop = lamps.Lenses.Where(l => l.Group != nb && Math.Abs(l.Transform.Origin.Z - 494) < 1f && Math.Abs(l.Transform.Origin.X - 494) < 1f)
-            .Max(l => l.Transform.Origin.Y);
-        Assert.True(left.Transform.Origin.Y > farTop + 0.4f, $"lamp at {left.Transform.Origin.Y}, the pole's top lens at {farTop}");
+        Assert.True(Math.Abs(left.Transform.Origin.Z - 494) < 0.3f && left.Transform.Origin.X > 494.3f && left.Transform.Origin.X < 494.8f, $"at {left.Transform.Origin}");
+        Assert.Equal(400.1f + 3.35f + 0.15f, left.Transform.Origin.Y, 2);
+        var poleLenses = lamps.Lenses.Where(l => l.Group != nb && Math.Abs(l.Transform.Origin.Z - 494) < 1f && Math.Abs(l.Transform.Origin.X - 494) < 1f).ToList();
+        Assert.NotEmpty(poleLenses);
+        Assert.All(poleLenses, l => Assert.True((l.Transform.Origin - left.Transform.Origin).Length() > 0.3f, $"lens at {l.Transform.Origin}"));
         Assert.NotNull(left.Blink);
         Assert.NotNull(right.Blink);
         Assert.NotSame(left.Blink, right.Blink);
