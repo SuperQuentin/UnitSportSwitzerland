@@ -668,7 +668,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             if (along > -1f && along < 1f && car.Habit < other.Habit && (d - dir * along).Length() < 1f) DoubledNow++;
             // (#1134: two standing body on body, the probe's overlap watch)
             if (car.Speed < 0.3f && other.Speed < 0.3f && Mathf.Abs(d.Dot(dir)) < 3.5f && Mathf.Abs(d.Dot(rightOf)) < 1.7f && Mathf.Abs(d.Y) < 3f)
-                overlapping = true;
+                (overlapping, car.OverlapWith) = (true, other);
             if (along > -1f && along < 1f && (along > 0f || car.Habit < other.Habit)) along = 1f;
             // in the way: within a body's width of its line now, or of the lane it is heading for at the line. One for a turn pocket
             // eases over only in the last metres and met the car standing in it from the side, on top of it (#854). One coming
@@ -680,7 +680,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             // side by side, each in the other's way (#1134, the user: two cars at a lane split, one moving over into the other's lane,
             // both stopped for good): only one gives way. The one changing lanes yields to the one keeping its lane; both or neither
             // changing, the lower habit yields. The other drives on as if it were not there
-            if (along < 5f && (-d).Dot(other.Route.At(0).Dir) > -1f)
+            // (side by side only, in two lanes: in one lane the one behind always waits, else the one ahead was driven into, as at J5b)
+            if (along < 5f && Mathf.Abs(across) > 1.2f && (-d).Dot(other.Route.At(0).Dir) > -1f)
             {
                 bool meMoving = Mathf.Abs(car.LaneWanted - car.Lane) > 0.05f, otherMoving = Mathf.Abs(other.LaneWanted - other.Lane) > 0.05f;
                 bool iYield = meMoving != otherMoving ? meMoving : car.Habit < other.Habit;
@@ -705,8 +706,9 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         if (car.Overlap > OverlapFails && OverlapLongest <= OverlapFails)
         {
             var (oe, on) = _origin.ToLv95(car.Head);
-            GD.Print($"[traffic] two cars body on body for {OverlapFails:F0} s at {oe:F0},{on:F0}: lane {car.Lane:F1} wanted {car.LaneWanted:F1}, strip {car.Strip}, "
-                + $"at red {car.AtRed}, queued {car.Queued}, room-held {car.RoomHeld}, edge {edge.Class}{(edge.Transition is not null ? " transition" : "")}{(edge.Path is not null ? " path" : "")}");
+            string Who(Vehicle v) => $"lane {v.Lane:F1}/{v.LaneWanted:F1} idx {v.LaneIndex} strip {v.Strip} turn {v.Turn} red {v.AtRed} q {v.Queued} edge {v.Route.Edge.GetHashCode() % 10000} {(v.Route.Forward ? "f" : "b")} arc {v.Route.Arc:F1}{(v.Route.Edge.Path is not null ? " path" : "")}{(v.Route.Edge.Transition is not null ? " trans" : "")} habit {v.Habit % 1000}";
+            var w = car.OverlapWith;
+            GD.Print($"[traffic] two cars body on body for {OverlapFails:F0} s at {oe:F0},{on:F0}: A {Who(car)}; B {(w is null ? "-" : Who(w))}; d along {(w is null ? 0 : (w.Head - car.Head).Dot(dir)):F2} across {(w is null ? 0 : (w.Head - car.Head).Dot(rightOf)):F2}");
         }
         OverlapLongest = Mathf.Max(OverlapLongest, car.Overlap);
         target = Mathf.Min(target, behindCrosser);
@@ -2100,6 +2102,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         public bool NarrowHeld;
         /// <summary>How long it has stood body on body with another standing car (s, #1134).</summary>
         public float Overlap;
+        public Vehicle? OverlapWith;
         /// <summary>The lane change under way (m right of its line; NaN none) and the metres driven since the last began (#1134).</summary>
         public float StepTarget = float.NaN, SinceStep = 1000f;
         /// <summary>How long it has stood at its line on green, and whether that was logged (#1134, the J1 diagnosis).</summary>
