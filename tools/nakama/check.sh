@@ -4,26 +4,12 @@
 # (no Docker there). Prints RESULT: PASS or RESULT: FAIL <why> as its last line.
 set -euo pipefail
 cd "$(dirname "$0")"
-OUT=../../test_output/nakama-check; mkdir -p "$OUT"
-ENV="$OUT/.env"; P=unitsport-check; API=http://127.0.0.1:17350
-rand() { od -An -tx1 -N"$1" /dev/urandom | tr -d ' \n'; }
-HTTP_KEY=$(rand 24); SERVER_KEY=$(rand 24)
-cat > "$ENV" <<EOF
-POSTGRES_PASSWORD=$(rand 24)
-NAKAMA_SERVER_KEY=$SERVER_KEY
-NAKAMA_HTTP_KEY=$HTTP_KEY
-NAKAMA_CONSOLE_USER=admin
-NAKAMA_CONSOLE_PASSWORD=$(rand 24)
-NAKAMA_ENCRYPTION_KEY=$(rand 24)
-NAKAMA_PORT=17350
-NAKAMA_CONSOLE_PORT=17351
-EOF
-dc() { docker compose -p $P --env-file "$ENV" "$@"; }
-cleanup() { dc logs nakama > "$OUT/nakama.log" 2>&1 || true; dc down -v > /dev/null 2>&1 || true; }
-trap cleanup EXIT
+OUT=../../test_output/nakama-check
+. ./throwaway.sh
 fail() { echo "RESULT: FAIL $*"; exit 1; }
-
-dc up -d --wait > "$OUT/up.log" 2>&1 || fail "stack did not come up healthy (test_output/nakama-check/up.log)"
+rand() { _nk_rand "$1"; }
+nk_up unitsport-check 17350 17351 "$OUT" || fail "stack did not come up healthy (test_output/nakama-check/up.log)"
+API=$NK_API HTTP_KEY=$NK_HTTP_KEY SERVER_KEY=$NK_SERVER_KEY
 
 # call METHOD PATH [BODY] [CURL ARGS...]: prints "<status> <body>"
 call() { local m=$1 p=$2 b=${3:-}; shift 3 || shift $#

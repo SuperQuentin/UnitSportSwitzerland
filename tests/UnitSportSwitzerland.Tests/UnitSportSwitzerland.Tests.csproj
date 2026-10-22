@@ -71,6 +71,7 @@
     <Compile Include="..\..\src\Terrain\Stadiums\StadiumLookup.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Net\PlayerKey.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Net\SleeperBook.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Net\Accounts\AccountRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Net\Invites\InviteBook.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Net\Invites\PartyBook.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\XR\XrControlNames.cs" Link="Game\%(Filename)%(Extension)" />

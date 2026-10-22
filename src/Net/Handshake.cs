@@ -72,7 +72,8 @@ public partial class Handshake : Node
     /// 43: World/Concerts SongState: a venue's setlist moved by hand, /concert song (#994).
     /// 44: World/TrafficGenerators (AskSet, AskRemove; Set, Remove, Snapshot) (#971).
     /// 45: World/Arrival Rules carries the server's world, a test world picked in the menus (#999).
-    public const int Protocol = 45;
+    /// 46: World/Accounts (Ask, Present, Welcome, Refuse): the account step after this check (#1123).
+    public const int Protocol = 46;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

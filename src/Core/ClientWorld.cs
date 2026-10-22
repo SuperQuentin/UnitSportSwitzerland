@@ -36,6 +36,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private CachingChunkSource? _cache;
     private ClientTerrainSync? _terrainSync;
     private Handshake? _handshake;
+    private Net.Accounts.AccountGate? _accountGate;
     private WorldOrigin? _worldOrigin;
     private ShaderMaterial[] _worldMaterials = Array.Empty<ShaderMaterial>();
     private WorldEnvironment? _worldEnvironment;
@@ -1625,7 +1626,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         // the version check comes first: nothing else is sent before the server welcomes us
         _handshake = Handshake.CreateClient();
-        _handshake.Welcomed += OnWelcomed;
+        _handshake.Welcomed += () => GD.Print($"[world] the server speaks protocol {Handshake.Protocol}");
         _handshake.Refused += reason =>
         {
             RefusedForVersion = true;
@@ -1634,6 +1635,17 @@ public partial class ClientWorld : Node3D, IOriginContainer
             ReportDisconnect(reason);
         };
         AddChild(_handshake);
+        // then the account step (#1123, World/Accounts): this player joins for real only once the server admits it
+        _accountGate = Net.Accounts.AccountGate.CreateClient();
+        _accountGate.Welcomed += _ => OnWelcomed();
+        _accountGate.Refused += reason =>
+        {
+            GD.PushWarning($"[net] {reason}");
+            Multiplayer.MultiplayerPeer?.Close();
+            ReportDisconnect(reason);
+        };
+        AddChild(_accountGate);
+        if (Net.Accounts.AccountProbe.Expect != null) AddChild(new Net.Accounts.AccountProbe(_accountGate));
 
         // before any player arrives: each one's synchronizer asks it whom to send to
         InterestService.CreateClient(this);
@@ -1670,11 +1682,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _handshake?.Begin();
     }
 
-    /// <summary>The server speaks this client's protocol (<see cref="Handshake"/>): join for real.</summary>
+    /// <summary>The server speaks this client's protocol (<see cref="Handshake"/>) and admitted its account (<see cref="Net.Accounts.AccountGate"/>): join for real.</summary>
     private void OnWelcomed()
     {
-        GD.Print($"[world] the server speaks protocol {Handshake.Protocol}");
-
         // The server assigns the final name — it deduplicates and sanitises — so this is
         // a request, not a claim.
         string requested = Launch.PlayerName;

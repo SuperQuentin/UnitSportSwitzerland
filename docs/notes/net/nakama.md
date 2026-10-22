@@ -49,8 +49,8 @@
   - Watts are still the rider's own word, as in Zwift.
 - **Accounts**: a rider's Nakama user is created on their first result, with their **PlayerKey fingerprint as the
   custom id** (`nk.authenticateCustom`, 6 to 128 characters of `[A-Za-z0-9_-]`).
-  - **Open for deliverable 4**: a fingerprint is public, so a client must not log in with it directly. Its session
-    has to come through the race server, which checked the key when the player joined (`net/sleepers`).
+  - A player's own session comes from their own sign-in (`net/accounts`, #1123), never from the public
+    fingerprint.
 - **Check**: `tools/nakama/check.sh` prints `RESULT: PASS|FAIL`.
   - It runs on its own compose project (`-p unitsport-check`, ports 17350 and 17351, random keys) and deletes it
     afterwards, so it never touches the stack `up.sh` runs.

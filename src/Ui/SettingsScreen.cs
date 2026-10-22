@@ -147,6 +147,8 @@ public partial class SettingsScreen : Screen
 
         Tab("Character", CharacterPage.Fill);
 
+        Tab("Account", AccountPage.Fill);
+
         Tab("Vehicles", rows =>
         {
             rows.AddChild(UiKit.Section("Wear"));

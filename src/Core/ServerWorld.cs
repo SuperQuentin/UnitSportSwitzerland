@@ -47,6 +47,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Parties? _parties;
     private BattleRoyale.BrCrates? _brCrates;
     private Handshake? _handshake;
+    private Net.Accounts.AccountGate? _accountGate;
 
     public override async void _Ready()
     {
@@ -62,6 +63,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
             }
             GD.Print($"[server] test world {testWorld.Id}: {testWorld.Title}");
         }
+        // the account step of a join (#1123): checked before anything is loaded, so a typo never serves a world
+        if (ParseAccounts() is not { } accounts) { GetTree().Quit(1); return; }
         string chunkDir = TerrainPaths.FindChunkDir();
         // a test course built in code instead of the map (#221, Core/Systems): the same as the clients'
         IChunkSource local = Systems.FixtureCourse is { } course
@@ -243,8 +246,13 @@ public partial class ServerWorld : Node3D, IOriginContainer
 
         // nothing goes to a peer before it has said which protocol it speaks (World/Handshake)
         _handshake = Handshake.CreateServer(_chat);
-        _handshake.Accepted += OnPeerAccepted;
         AddChild(_handshake);
+        // then the account step (#1123, World/Accounts): off admits at once, optional or required ask for an account
+        _accountGate = Net.Accounts.AccountGate.CreateServer(accounts.Mode, accounts.Url);
+        _handshake.Accepted += _accountGate.Check;
+        _accountGate.Admitted += OnPeerAccepted;
+        AddChild(_accountGate);
+        GD.Print($"[server] accounts {accounts.Mode.ToString().ToLowerInvariant()}{(accounts.Mode == Net.Accounts.ServerAccounts.Off ? "" : " on " + accounts.Url)}");
         // joining for the chat and commands only, from a client of any version (#1088)
         AddChild(ConsoleLink.CreateServer(_chat, _handshake, QueryResponder.ParseServerName()));
         // a deployed server installs a newer release by itself, once nobody plays (#1088)
@@ -555,6 +563,28 @@ public partial class ServerWorld : Node3D, IOriginContainer
     }
 
     /// <summary>The peer speaks this server's protocol (<see cref="Handshake"/>): its player, and the world's state.</summary>
+    /// <summary>
+    /// <c>--accounts off|optional|required</c> (default off) and <c>--nakama-url</c>, the account server players
+    /// sign in to (#1123, docs/notes/net/accounts.md); null after saying what is wrong.
+    /// </summary>
+    private static (Net.Accounts.ServerAccounts Mode, string Url)? ParseAccounts()
+    {
+        string? arg = CmdArgs.Value("--accounts");
+        if (arg != null && Net.Accounts.AccountRules.Parse(arg) == null)
+        {
+            GD.PushError($"[server] --accounts {arg}: use off, optional or required");
+            return null;
+        }
+        var mode = Net.Accounts.AccountRules.Parse(arg) ?? Net.Accounts.ServerAccounts.Off;
+        string url = Net.Accounts.AccountRules.NormalizeUrl(CmdArgs.Value("--nakama-url"));
+        if (mode != Net.Accounts.ServerAccounts.Off && url.Length == 0)
+        {
+            GD.PushError($"[server] --accounts {arg} needs --nakama-url <the account server, e.g. http://127.0.0.1:7350>");
+            return null;
+        }
+        return (mode, url);
+    }
+
     private void OnPeerAccepted(long id)
     {
         GD.Print($"[server] peer {id} speaks protocol {Handshake.Protocol}");
@@ -593,6 +623,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     {
         GD.Print($"[server] peer {id} disconnected");
         _handshake?.PeerLeft(id);
+        _accountGate?.PeerLeft(id);
         // before the registry forgets its name and the body is freed: it lies down where it was (#644)
         _sleepers?.PeerLeft(id, _players!.GetNodeOrNull<Player.FootPlayer>(id.ToString()), _chat?.NameOfPeer(id) ?? "");
         _chat?.ReportDisconnect(id);
