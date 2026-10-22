@@ -18,7 +18,23 @@ public readonly record struct SongCue(int Index, double At, bool Off);
 
 public readonly record struct MusicMoment(ShowSection Section, float Beat, float Kick, float Level, int SectionBar, bool LastSection, float Burst,
     float Snare = 0f, float Hat = 0f, float Bass = 0.5f, float Bright = 0.5f, float Build = 0f, float SinceDrop = float.PositiveInfinity,
-    bool HasBands = false, bool Finale = false);
+    bool HasBands = false, bool Finale = false, MelodyMoment Melody = default);
+
+/// <summary>
+/// The singer at this moment (#1153, <see cref="CdAnalysisRuntime.SampleVocal"/>/<see cref="CdAnalysisRuntime.MelodyAt"/>):
+/// <see cref="Vocal"/> level 0..1, <see cref="Rise"/> +1 up a climbing run .. -1 down a falling one,
+/// <see cref="Hold"/> 0..1 through a long note, <see cref="SinceIn"/> s since the voice came back,
+/// <see cref="Pitch"/> the sung MIDI note (0 unvoiced). Default (no vocal analysis): nothing sung.
+/// </summary>
+public readonly record struct MelodyMoment(bool Has, float Vocal, float Rise, float Hold, float SinceIn, float Pitch)
+{
+    public static MelodyMoment Of(CdInfo song, double t)
+    {
+        if (!CdAnalysisRuntime.SampleVocal(song, t, out float vocal, out _, out _, out float pitch)) return default;
+        CdAnalysisRuntime.MelodyAt(song, t, out float rise, out float hold, out float since);
+        return new MelodyMoment(true, vocal, rise, hold, since, pitch);
+    }
+}
 
 /// <summary>
 /// A concert's music (#885): a setlist of the server's CDs (<see cref="CdLibrary"/>), chosen and
@@ -241,8 +257,9 @@ public partial class ConcertMusic : Node3D
         float beat = g.Beat + g.Phase;
         bool bands = CdAnalysisRuntime.SampleBands(song, t, out float snare, out float hat, out float bass, out float bright);
         CdAnalysisRuntime.DropAt(song, t, out float since, out float build);
+        var melody = MelodyMoment.Of(song, t);
         return Moment = bands
-            ? new MusicMoment(section, beat, g.Kick, g.Level, bar, last, g.Burst, snare, hat, bass, bright, build, since, true)
-            : new MusicMoment(section, beat, g.Kick, g.Level, bar, last, g.Burst);
+            ? new MusicMoment(section, beat, g.Kick, g.Level, bar, last, g.Burst, snare, hat, bass, bright, build, since, true, Melody: melody)
+            : new MusicMoment(section, beat, g.Kick, g.Level, bar, last, g.Burst, Melody: melody);
     }
 }
