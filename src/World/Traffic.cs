@@ -658,14 +658,17 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             if (other == car) continue;
             var d = other.Head - car.Head;
             float along = d.Dot(dir);
-            if (Mathf.Abs(along) < 5f && Mathf.Abs(easing) > 0.05f && d.Dot(rightOf) is var beside && Mathf.Abs(beside) < 2.2f
-                && Mathf.Sign(beside) == Mathf.Sign(easing) && Mathf.Abs(d.Y) < 3f && other.Route.At(0).Dir.Dot(dir) > 0.3f)
+            // (#1134, the user's two cars at a lane split: also one coming up behind in the lane it moves into, close enough to be
+            // driven into: it waits for a gap that holds it, from 8 m behind to 6 m ahead of it)
+            if (along > -8f && along < 6f && Mathf.Abs(easing) > 0.05f && d.Dot(rightOf) is var beside && Mathf.Abs(beside) < 3.2f
+                && Mathf.Sign(beside) == Mathf.Sign(easing) && Mathf.Abs(beside) > 0.4f && Mathf.Abs(d.Y) < 3f && other.Route.At(0).Dir.Dot(dir) > 0.3f)
                 sideTaken = Mathf.Sign(easing);
             // closer than a metre: the one behind (on one spot, the one with the lower habit) waits as if the other were just
             // ahead. Skipping it, as it did, a car that got that close drove on through the queue, or the two as one (#854)
             if (along > -1f && along < 1f && car.Habit < other.Habit && (d - dir * along).Length() < 1f) DoubledNow++;
             // (#1134: two standing body on body, the probe's overlap watch)
-            if (car.Speed < 0.3f && other.Speed < 0.3f && MathX.Flat(d).LengthSquared() < 2.5f * 2.5f && Mathf.Abs(d.Y) < 3f) overlapping = true;
+            if (car.Speed < 0.3f && other.Speed < 0.3f && Mathf.Abs(d.Dot(dir)) < 3.5f && Mathf.Abs(d.Dot(rightOf)) < 1.7f && Mathf.Abs(d.Y) < 3f)
+                overlapping = true;
             if (along > -1f && along < 1f && (along > 0f || car.Habit < other.Habit)) along = 1f;
             // in the way: within a body's width of its line now, or of the lane it is heading for at the line. One for a turn pocket
             // eases over only in the last metres and met the car standing in it from the side, on top of it (#854). One coming
@@ -699,6 +702,12 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         float behindCrosser = FollowCrossers(car, dir, rightOf);
         car.Queued = queued || behindCrosser < 0.5f && car.Speed < 0.5f;
         car.Overlap = overlapping ? car.Overlap + dt : 0f;
+        if (car.Overlap > OverlapFails && OverlapLongest <= OverlapFails)
+        {
+            var (oe, on) = _origin.ToLv95(car.Head);
+            GD.Print($"[traffic] two cars body on body for {OverlapFails:F0} s at {oe:F0},{on:F0}: lane {car.Lane:F1} wanted {car.LaneWanted:F1}, strip {car.Strip}, "
+                + $"at red {car.AtRed}, queued {car.Queued}, room-held {car.RoomHeld}, edge {edge.Class}{(edge.Transition is not null ? " transition" : "")}{(edge.Path is not null ? " path" : "")}");
+        }
         OverlapLongest = Mathf.Max(OverlapLongest, car.Overlap);
         target = Mathf.Min(target, behindCrosser);
 
