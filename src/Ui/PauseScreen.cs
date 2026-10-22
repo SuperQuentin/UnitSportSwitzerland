@@ -28,7 +28,9 @@ public partial class PauseScreen : Screen
         column.Alignment = BoxContainer.AlignmentMode.Center;
         AddChild(column);
 
-        column.AddChild(UiKit.Text("Paused", 44, bold: true));
+        var paused = UiKit.Text("Paused", 48);
+        UiKit.Display(paused);   // the skin's title face (#1135)
+        column.AddChild(paused);
         column.AddChild(UiKit.Text(Shell.SessionLine(), UiTheme.FontSmall, UiTheme.Amber));
         column.AddChild(UiKit.Spacer(26));
 
