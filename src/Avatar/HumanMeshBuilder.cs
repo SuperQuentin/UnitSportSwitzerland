@@ -1132,7 +1132,8 @@ public static partial class HumanMeshBuilder
             HipL: new(-0.088f, 0.930f, 0), KneeL: new(-0.095f, 0.520f, 0.230f),
             AnkleL: new(-0.100f, 0.130f, 0.115f), ToeL: new(-0.100f, 0.055f, 0.290f),
             HipR: new(0.088f, 0.930f, 0), KneeR: new(0.095f, 0.500f, -0.180f),
-            AnkleR: new(0.100f, 0.190f, -0.330f), ToeR: new(0.100f, 0.230f, -0.480f),
+            // the trailing foot hangs pointed, toe down and forward of the heel, never kinked back up
+            AnkleR: new(0.100f, 0.190f, -0.330f), ToeR: new(0.100f, 0.035f, -0.245f),
             TorsoLean: -0.12f),
 
         // Derived from the bike, not eyeballed (#1124): CyclingRig.
