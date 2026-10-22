@@ -754,6 +754,23 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private const float ShoulderOffset = 0.55f;
     private const float ArmLength = 3.3f;
 
+    /// <summary>
+    /// The player's own zoom of the on-foot arm (#1149), Genshin's way: from <see cref="ZoomFar"/> in
+    /// to <see cref="ZoomFace"/>, where the pivot has climbed from the shoulder to the eyes and come in
+    /// off the shoulder, so the nearest stop frames the face (orbit round to the front to see it).
+    /// <see cref="_zoom"/> eases to <see cref="_zoomWant"/>; owner only, never sent.
+    /// </summary>
+    private float _zoomWant = ArmLength, _zoom = ArmLength;
+    private const float ZoomFace = 0.6f, ZoomFar = 8f, ZoomStep = 1.2f;
+    /// <summary>R3 held on a pad: the right stick's up and down zoom; let go without zooming, it is the view switch.</summary>
+    private bool _padZoomHeld, _padZoomed;
+
+    /// <summary>Steps the on-foot zoom in (<paramref name="steps"/> &gt; 0) or out, by a factor a step.</summary>
+    public void ZoomView(float steps) => _zoomWant = Mathf.Clamp(_zoomWant / Mathf.Pow(ZoomStep, steps), ZoomFace, ZoomFar);
+
+    /// <summary>The on-foot zoom's arm length, for a check.</summary>
+    public float ViewZoom => _zoom;
+
     /// <summary>How fast the body swings round to face the direction of travel, 1/s.</summary>
     private const float BodyTurnRate = 12f;
 
@@ -2537,7 +2554,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // A throw pulls the lens in close over the right shoulder (#206); lent from first person,
         // the arm grows out of the eye instead of shrinking from the chase distance.
         float tb = _throwBlend;
-        float height = Mathf.Lerp(_borrowedThird ? EyeHeight : Sitting ? _sitDrop + 0.55f : Mathf.Lerp(ShoulderHeight, 0.95f, _slideBlend), ThrowCamHeight, tb);
+        // the player's zoom (#1149): closer than the usual arm, the pivot climbs to the eyes and the
+        // shoulder offset goes, so the last metres close in on the face
+        _zoom = Mathf.Lerp(_zoom, _zoomWant, MathX.Damp(10f, dt));
+        float face = _borrowedThird ? 0f : Mathf.SmoothStep(0f, 1f, Mathf.Clamp((ArmLength - _zoom) / (ArmLength - ZoomFace), 0f, 1f));
+        float height = Mathf.Lerp(_borrowedThird ? EyeHeight : (Sitting ? _sitDrop + 0.55f : Mathf.Lerp(ShoulderHeight, 0.95f, _slideBlend))
+            + (EyeHeight - ShoulderHeight) * face, ThrowCamHeight, tb);
         float pivotTarget = GlobalPosition.Y + height;
         _pivotY = float.IsNaN(_pivotY) || Mathf.Abs(pivotTarget - _pivotY) > 6f
             ? pivotTarget
@@ -2555,11 +2577,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         // pulled back a little with speed, so a sprint and a slide feel like they cover ground
         float speed = MathX.FlatLength(Velocity);
-        float distance = Mathf.Lerp(_borrowedThird ? 0f : ArmLength + Mathf.Clamp(speed / RunSpeed, 0f, 1.6f) * 0.6f,
+        float distance = Mathf.Lerp(_borrowedThird ? 0f : _zoom + Mathf.Clamp(speed / RunSpeed, 0f, 1.6f) * 0.6f * (1f - face),
             GunAim ? GunCamDistance : ThrowCamDistance, tb);
 
         // over the right shoulder, or the left once swapped (#460): the swap slides across in an eighth of a second
-        float offset = Mathf.Lerp(_borrowedThird ? 0f : ShoulderOffset, GunAim ? GunCamOffset : ThrowCamOffset, tb);
+        float offset = Mathf.Lerp(_borrowedThird ? 0f : ShoulderOffset * (1f - face), GunAim ? GunCamOffset : ThrowCamOffset, tb);
         var shoulder = pivot + view.X * (offset * _shoulderSide);
         var wanted = shoulder + view.Z * distance;
 
@@ -2578,6 +2600,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var lens = new Transform3D(view, position);
         _camera.GlobalTransform = _armBlend > through ? across * lens : lens;
     }
+
+    /// <summary>Whether the player's zoom drives the camera now (#1149): on foot in third person, nothing borrowed, not in VR.</summary>
+    private bool ZoomsView => _ride == null && RidingWith == 0 && _thirdPerson && !_borrowedThird && !XR.XrSession.Active;
 
     /// <summary>Puts the on-foot camera over the other shoulder and saves the side (#460).</summary>
     public void SwapShoulder()
@@ -3475,6 +3500,27 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
 
+        // the on-foot camera's zoom (#1149): Shift + wheel, = / -
+        if (ZoomsView && (@event.IsActionPressed(PlayerInput.ViewZoomIn, true) || @event.IsActionPressed(PlayerInput.ViewZoomOut, true)))
+        {
+            ZoomView(@event.IsActionPressed(PlayerInput.ViewZoomIn, true) ? 1f : -1f);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+        // a pad's R3 on foot in third person: held, the right stick zooms (ApplyStickLook); let go
+        // without zooming, it switches the view as it always did
+        if (@event is InputEventJoypadButton && @event.IsAction(PlayerInput.CameraToggle) && !CraneWorking && (ZoomsView || _padZoomHeld))
+        {
+            if (@event.IsPressed()) { _padZoomHeld = true; _padZoomed = false; }
+            else if (_padZoomHeld)
+            {
+                _padZoomHeld = false;
+                if (!_padZoomed) ToggleView();
+            }
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
         // at a crane's controls the view switch is its hook camera (#618, WorkCrane)
         if (@event.IsActionPressed(PlayerInput.CameraToggle) && !@event.IsEcho() && !CraneWorking)
         {
@@ -3641,6 +3687,16 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // and a crane's operator hoists with it (#618)
         if (CraneWorking) return;
         var look = PlayerInput.LookRate;
+        // R3 held (#1149): the stick's up and down are the zoom, its sides still turn the view
+        if (_padZoomHeld)
+        {
+            if (Mathf.Abs(look.Y) > 0.1f)
+            {
+                ZoomView(-look.Y * dt * 1.6f);
+                _padZoomed = true;
+            }
+            look.Y = 0f;
+        }
         // on foot a steering wheel turns the view; mounted or seated it only steers
         if (_ride == null && RidingWith == 0) look.X += PlayerInput.WheelLookRate;
         look *= LookScale;
