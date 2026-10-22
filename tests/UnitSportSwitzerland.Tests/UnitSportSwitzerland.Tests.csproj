@@ -66,6 +66,9 @@
     <Compile Include="..\..\src\Concert\ConcertAcoustics.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Audio\Cd\CdUploadRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Audio\Cd\CdScanner.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Audio\Cd\CdCommand.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Audio\Cd\VocalAnalyzer.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Audio\Fft.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\ClockSave.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\TutorialSteps.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\VehicleIntros.cs" Link="Game\%(Filename)%(Extension)" />

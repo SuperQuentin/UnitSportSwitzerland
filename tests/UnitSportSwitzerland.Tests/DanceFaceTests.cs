@@ -22,6 +22,21 @@ public class DanceFaceTests
     }
 
     [Fact]
+    public void A_cd_with_a_singer_moves_the_lips_on_the_voice_not_the_kick()
+    {
+        DanceHearing H(float voice, float syllable, float vowel, float kick = 0f, int section = 1) =>
+            new(0, section, 0.8f, kick, 0f, 0f, 1, 2, 0, voice, syllable, vowel);
+        var singing = DanceFace.Target(H(1f, 1f, 0.8f), 0u);   // seed 0: a singer personality
+        var quiet = DanceFace.Target(H(0f, 0f, 0f, kick: 1f), 0u);
+        Assert.True(singing.Jaw > quiet.Jaw + 0.4f);          // the voice opens it, a kick without a voice does not
+        Assert.True(singing.Wide > 0.3f);                     // "ee"
+        Assert.True(DanceFace.Target(H(1f, 1f, -0.8f), 0u).Wide < -0.3f);   // "oo"
+        // someone else mumbles a verse and sings the chorus
+        Assert.True(DanceFace.Target(H(1f, 1f, 0f), 1u).Jaw < singing.Jaw);
+        Assert.True(DanceFace.Target(H(1f, 1f, 0f, section: 3), 1u).Jaw > DanceFace.Target(H(1f, 1f, 0f), 1u).Jaw);
+    }
+
+    [Fact]
     public void A_chorus_sings_oh_and_ee_on_alternate_beats()
     {
         Assert.True(At(0, 3, beat: 0).Wide < 0f);

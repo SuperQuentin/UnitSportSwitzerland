@@ -8,6 +8,9 @@ namespace UnitSport.Audio.Cd;
 /// </summary>
 public static class VocalAnalyzer
 {
+    /// <summary>Frames a second of the result: <see cref="CdAnalysis.EnvRate"/>, kept here so the analyser links into the tests without Godot.</summary>
+    public const int FrameRate = 20;
+
     public sealed record Result(byte[] Frames, float[] Rises, float[] Falls, float[] Holds, float[] VocalIns);
 
     private const int Win = 1024, Hop = 220;           // at 22.05 kHz: 46 ms window, ~10 ms hop
@@ -89,8 +92,8 @@ public static class VocalAnalyzer
         float onsetRef = Math.Max(1e-6f, Percentile(onset, 0.99f));
 
         // down to EnvRate: max level and onset, median pitch over voiced 10 ms frames, mean vowel
-        double perOut = rate / (double)CdAnalysis.EnvRate / Hop;
-        int outN = (int)(vocal.Length / (double)rate * CdAnalysis.EnvRate);
+        double perOut = rate / (double)FrameRate / Hop;
+        int outN = (int)(vocal.Length / (double)rate * FrameRate);
         var bytes = new byte[outN * 4];
         var pitch = new float[outN];
         var level = new float[outN];
@@ -144,8 +147,8 @@ public static class VocalAnalyzer
         var r = new List<float>();
         var fl = new List<float>();
         var h = new List<float>();
-        float dt = 1f / CdAnalysis.EnvRate;
-        int gap = (int)(PhraseGap * CdAnalysis.EnvRate);
+        float dt = 1f / FrameRate;
+        int gap = (int)(PhraseGap * FrameRate);
         int n = pitch.Length, i = 0;
         while (i < n)
         {
@@ -206,7 +209,7 @@ public static class VocalAnalyzer
     public static float[] Entries(float[] level, float bpm)
     {
         float bars2 = bpm > 0f ? 8f * 60f / bpm : 4f;
-        float dt = 1f / CdAnalysis.EnvRate;
+        float dt = 1f / FrameRate;
         var ins = new List<float>();
         float lastSung = float.NegativeInfinity;
         for (int o = 0; o < level.Length; o++)
