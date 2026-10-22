@@ -34,14 +34,17 @@ public static class BikeMeshBuilder
         var topTubeFront = f.HeadTop - f.SteererUp * 0.020f;
         var downTubeFront = f.HeadBottom + f.SteererUp * 0.025f;
         s.Tube(f.BottomBracket, f.SeatCluster, 0.020f, 0.017f, p.Frame);              // seat tube
-        s.Tube(f.BottomBracket, downTubeFront, 0.028f, 0.022f, p.Frame);              // down tube
         s.Tube(f.SeatCluster, topTubeFront, 0.017f, 0.019f, p.Frame);                // top tube
         s.Tube(f.HeadBottom - f.SteererUp * 0.010f, f.HeadTop, 0.025f, 0.021f, p.Frame);   // tapered head tube
         s.Tube(f.BottomBracket - new Vector3(0.045f, 0, 0), f.BottomBracket + new Vector3(0.045f, 0, 0), 0.024f, p.Frame);
 
-        // the maker's name down the down tube: one band of lettering at PS1 resolution
+        // the down tube, its middle the maker's name: one band of lettering at PS1 resolution. Three
+        // tubes end to end, not a band laid over one, which would z-fight the tube under it
         var dt = downTubeFront - f.BottomBracket;
-        s.Tube(f.BottomBracket + dt * 0.38f, f.BottomBracket + dt * 0.78f, 0.0262f, 0.0235f, p.Decal);
+        float DownTubeRadius(float t) => Mathf.Lerp(0.028f, 0.022f, t);
+        s.Tube(f.BottomBracket, f.BottomBracket + dt * 0.38f, DownTubeRadius(0f), DownTubeRadius(0.38f), p.Frame);
+        s.Tube(f.BottomBracket + dt * 0.38f, f.BottomBracket + dt * 0.78f, DownTubeRadius(0.38f), DownTubeRadius(0.78f), p.Decal);
+        s.Tube(f.BottomBracket + dt * 0.78f, downTubeFront, DownTubeRadius(0.78f), DownTubeRadius(1f), p.Frame);
 
         // rear triangle, doubled either side of the wheel; the stays meet the seat tube a little
         // under the top tube
