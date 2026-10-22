@@ -7,8 +7,8 @@ namespace UnitSport.Terrain;
 /// Gantries of lane signs with heads in them (#1110, <c>docs/notes/tools/direction-signs.md</c>; Geneva, the user's photos):
 /// two square posts and a beam over the approach, a sign over each run of lanes (green to a motorway, blue on main roads, white on
 /// others, SSV Art. 51-53), under each sign a black band with each lane's white arrow and, on a lit gantry, a horizontal head
-/// beside it (SSV Art. 70: red on the left, green on the right). The destinations are <see cref="Label3D"/>s
-/// (<see cref="GantryLabels"/>); the lenses are the tile's (<see cref="GantryLenses"/>).
+/// beside it (SSV Art. 70: red on the left, green on the right). The destinations are Label3Ds
+/// (<see cref="GantryTexts"/>); the lenses are the tile's (<see cref="GantryLenses"/>).
 /// </summary>
 public static partial class SignalBuilder
 {
@@ -159,20 +159,23 @@ public static partial class SignalBuilder
         }
     }
 
-    /// <summary>The destinations on the tile's gantry signs (#1110), a line each: white on green and blue, black on white.</summary>
-    public static RoadSignBuilder.Label[]? GantryLabels(RoadTile tile)
+    /// <summary>A line of a gantry sign's destinations (#1110), tile-local: its middle, the way the sign faces, the text, the width it fits in, dark letters (on a white sign).</summary>
+    public readonly record struct GantryText(Vector3 Position, Vector3 Front, string Text, float Width, bool Dark);
+
+    /// <summary>The destinations on the tile's gantry signs (#1110), a line each (drawn as <c>Label3D</c>s by <c>RoadSignBuilder.GantryLabels</c>); null when none.</summary>
+    public static List<GantryText>? GantryTexts(RoadTile tile)
     {
-        List<RoadSignBuilder.Label>? labels = null;
+        List<GantryText>? texts = null;
         foreach (var signal in tile.Signals)
             foreach (var g in signal.Gantries)
             {
                 var (a, dir, _, front, right) = GantryFrame(g);
                 foreach (var s in g.Signs)
                 {
-                    float h = SignHeight(s), w = s.Width * 0.5f;
+                    float h = SignHeight(s);
+                    // in front of the face by more than the road material's depth pull
                     var face = a + dir * s.Along + front * (SignOut + SignDepth + 0.05f);
                     float topY = g.Bottom + BandHeight + h - SignMargin * 0.5f;
-                    var ink = s.Colour == SignColour.White ? new Color(0.08f, 0.08f, 0.08f) : new Color(0.97f, 0.97f, 0.97f);
                     for (int i = 0; i < s.Lines.Count; i++)
                     {
                         string text = s.Lines[i].TrimStart(SignGantry.MotorwayMark);
@@ -181,11 +184,11 @@ public static partial class SignalBuilder
                         float shift = i == 0 && s.Lines[i].StartsWith(SignGantry.MotorwayMark) ? 0.25f : 0f;
                         var at = face + right * shift;
                         at.Y = topY - SignLine * (i + 0.5f);
-                        (labels ??= new()).Add(new RoadSignBuilder.Label(at, front, text, s.Width - 2 * SignBorder - 0.1f - shift * 2, ink, 2.6f));
+                        (texts ??= new()).Add(new GantryText(at, front, text, s.Width - 2 * SignBorder - 0.1f - shift * 2, s.Colour == SignColour.White));
                     }
                 }
             }
-        return labels?.ToArray();
+        return texts;
     }
 
     /// <summary>A gantry's two posts for the collision (#1110): everything above them is over the 4 m vehicle limit.</summary>

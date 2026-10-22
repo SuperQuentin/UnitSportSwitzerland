@@ -180,6 +180,13 @@ public static class RoadSignBuilder
         return labels?.ToArray();
     }
 
+    /// <summary>The destinations on the tile's gantry signs (#1110): white letters on green and blue, black on white, larger than a canton sign's.</summary>
+    public static Label[]? GantryLabels(RoadTile tile) =>
+        SignalBuilder.GantryTexts(tile)?.Select(t => new Label(t.Position, t.Front, t.Text, t.Width, t.Dark ? Black : GantryInk, GantryScale)).ToArray();
+
+    private static readonly Color GantryInk = new(0.97f, 0.97f, 0.97f);
+    private const float GantryScale = 2.6f;
+
     /// <summary>A name as a node: black letters on the plate, wrapped to its width, seen from the front only.</summary>
     public static Label3D Make(Label label) => new()
     {

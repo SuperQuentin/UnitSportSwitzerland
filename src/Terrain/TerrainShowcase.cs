@@ -239,7 +239,7 @@ public static class TerrainShowcase
             node.AddChild(lit);
         }
         foreach (var label in RoadSignBuilder.Labels(tile) ?? []) node.AddChild(RoadSignBuilder.Make(label));
-        foreach (var label in SignalBuilder.GantryLabels(tile) ?? []) node.AddChild(RoadSignBuilder.Make(label));   // #1110
+        foreach (var label in RoadSignBuilder.GantryLabels(tile) ?? []) node.AddChild(RoadSignBuilder.Make(label));   // #1110
         return node;
     }
 

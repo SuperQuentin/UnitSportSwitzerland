@@ -62,8 +62,8 @@ public sealed record GantryRule(int MinLanes = 3, int MinTurnLanes = 2, int MinT
 /// </summary>
 public static class SignText
 {
-    /// <summary>Lower-case words that keep a destination going ("Route du lac", "Zone industrielle"), as do words after them.</summary>
-    private static readonly HashSet<string> Joiners = new(StringComparer.Ordinal)
+    /// <summary>Articles and prepositions that keep a destination going ("Route du lac", "Les Tuileries"), as lower-case words do.</summary>
+    private static readonly HashSet<string> Joiners = new(StringComparer.OrdinalIgnoreCase)
         { "de", "du", "des", "la", "le", "les", "l'", "d'", "sur", "sous", "en", "et", "am", "an", "bei", "im" };
 
     /// <summary>The motorway symbol: the word or the SSV number.</summary>
@@ -102,7 +102,8 @@ public static class SignText
                     continue;
                 }
                 bool capital = char.IsUpper(t[0]);
-                bool joined = current.Count > 0 && (Joiners.Contains(current[^1]) || current[^1].EndsWith('\''));
+                // after an article or a preposition, also one ending a hyphenated word ("Les Tuileries", "Genève-La Praille")
+                bool joined = current.Count > 0 && (Joiners.Contains(current[^1][(current[^1].LastIndexOf('-') + 1)..]) || current[^1].EndsWith('\''));
                 if (capital && !joined) Flush();
                 current.Add(t);
             }
