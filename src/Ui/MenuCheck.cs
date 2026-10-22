@@ -5,9 +5,9 @@ namespace UnitSport.Ui;
 
 /// <summary>
 /// <c>godot --headless --path . -- --menucheck</c>: boots to the title screen, then walks the
-/// menus with real input events — Esc on the title (consumed, title stays), Settings and back,
+/// menus with real input events — Esc on the title (consumed, title stays), Settings and back, Character and back,
 /// Play solo and back with pad B — starts Explore behind the loading screen, opens and closes the
-/// pause menu with Esc and pad Start / B, and leaves to the title again. Each step waits for its
+/// pause menu with Esc and pad Start / B, the Character menu with P on foot (#1127), and leaves to the title again. Each step waits for its
 /// condition (with a timeout); non-zero exit on the first that fails.
 /// </summary>
 public partial class MenuCheck : Node
@@ -35,6 +35,8 @@ public partial class MenuCheck : Node
         (() => _shell.Push(SettingsScreen.Create()), Top<SettingsScreen>, 1, "settings open"),
         (() => Pad(JoyButton.RightShoulder), Top<SettingsScreen>, 0.5, "RB changes tab"),
         (Esc, Top<TitleScreen>, 1, "Esc from settings goes back to the title"),
+        (() => _shell.Push(CharacterScreen.Create()), Top<CharacterScreen>, 1, "character opens from the title"),
+        (Esc, Top<TitleScreen>, 1, "Esc from character goes back to the title"),
         (() => _shell.Push(SoloScreen.Create()), Top<SoloScreen>, 1, "play solo opens"),
         (() => Pad(JoyButton.B), Top<TitleScreen>, 1, "pad B goes back"),
         (() => _shell.Launch(new WorldLaunch { Mode = GameMode.Explore }), () => _shell.InWorld, 120, "Explore loads behind the loading screen"),
@@ -42,6 +44,8 @@ public partial class MenuCheck : Node
         (Esc, Top<PauseScreen>, 1, "Esc opens the pause menu"),
         (Esc, () => _shell.Top == null, 1, "Esc closes it"),
         (() => { }, () => _shell.Top == null, 1.5, "and it stays closed"),
+        (() => Press(Key.P), Top<CharacterScreen>, 5, "P on foot opens the character menu"),
+        (Esc, () => _shell.Top == null, 1, "Esc closes the character menu"),
         (() => Pad(JoyButton.Start), Top<PauseScreen>, 1, "pad Start opens it"),
         (() => Pad(JoyButton.B), () => _shell.Top == null, 1, "pad B closes it"),
         (Esc, Top<PauseScreen>, 1, "Esc opens it again"),
@@ -86,6 +90,12 @@ public partial class MenuCheck : Node
     {
         foreach (bool down in new[] { true, false })
             Input.ParseInputEvent(new InputEventKey { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = down });
+    }
+
+    private static void Press(Key key)
+    {
+        foreach (bool down in new[] { true, false })
+            Input.ParseInputEvent(new InputEventKey { Keycode = key, PhysicalKeycode = key, Pressed = down });
     }
 
     private static void Pad(JoyButton button)

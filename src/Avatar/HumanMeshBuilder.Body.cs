@@ -46,7 +46,7 @@ public enum HairStyle
 
 /// <summary>
 /// Who a figure is, as opposed to what it wears (#394): build, face, eye colour, skin tone, hair
-/// style and hair colour. A player chooses it in Settings → Character (<c>GameSettings.AppearanceBits</c>) and it replicates
+/// style and hair colour. A player chooses it in the Character menu (<c>GameSettings.AppearanceBits</c>) and it replicates
 /// packed in one int (<c>FootPlayer.AppearanceBits</c>); everyone else gets one from a seed.
 /// Indices into <see cref="SkinTones"/>, <see cref="EyeColours"/> and <see cref="HairColours"/>:
 /// append to those tables only, a packed value must mean the same figure on every peer.
@@ -60,7 +60,7 @@ public readonly record struct Appearance(BodyBuild Build, int Face, int Eyes, in
         new("8fd16a"), new("bcbab2"), new("ad8fe0"), new("5cc8bc"),
     };
 
-    /// <summary>What Settings → Character shows for each <see cref="SkinTones"/> entry (same order).</summary>
+    /// <summary>What the Character menu shows for each <see cref="SkinTones"/> entry (same order).</summary>
     public static readonly string[] SkinNames =
         { "Tone 1", "Tone 2", "Tone 3", "Tone 4", "Tone 5", "Tone 6", "Tone 7", "Tone 8", "Alien green", "Alien grey", "Alien violet", "Alien teal" };
 
@@ -78,10 +78,10 @@ public readonly record struct Appearance(BodyBuild Build, int Face, int Eyes, in
         new("d8b860"), new("e8e2cf"), new("8a8a8a"), new("33b8bc"), new("1f6fbf"), new("e86aa8"),
     };
 
-    /// <summary>What Settings → Character shows for each <see cref="EyeColours"/> entry (same order).</summary>
+    /// <summary>What the Character menu shows for each <see cref="EyeColours"/> entry (same order).</summary>
     public static readonly string[] EyeNames = { "Brown", "Blue", "Green", "Violet", "Red", "Amber", "Grey", "Black" };
 
-    /// <summary>What Settings → Character shows for each <see cref="HairColours"/> entry (same order).</summary>
+    /// <summary>What the Character menu shows for each <see cref="HairColours"/> entry (same order).</summary>
     public static readonly string[] HairColourNames =
         { "Black", "Dark brown", "Brown", "Auburn", "Red", "Ginger", "Blonde", "Platinum", "Grey", "Teal", "Blue", "Pink" };
 

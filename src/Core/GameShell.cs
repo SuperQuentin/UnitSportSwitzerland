@@ -93,7 +93,7 @@ public partial class GameShell : Node
             "--traffic", "--at", "--mirrors", "--tyrewear", "--brakewear", "--gearbox", "--airliner", "--perflog",
             "--origin", "--style", "--tree-lod", "--tree-near", "--systems", "--world", "--appearance",
             "--menu", "--fakeversion", "--updatefeed", "--updateaccept", "--settings", "--licenses", "--controls", "--tutorial",
-            "--multiplayer", "--solo", "--map", "--landing", "--uishot", "--menucheck", "--mapcheck", "--leavecheck",
+            "--multiplayer", "--solo", "--map", "--character", "--landing", "--uishot", "--menucheck", "--mapcheck", "--leavecheck",
             "--leave-restart", "--mobile", "--autostart", "--wheellock", "--fakewheel", "--ffblog", "--vr", "--xrsim", "--vrmonitor", "--xrheadshot", "--xrwrist", "--xrprofile", "--xrcab", "--xrhands",
             "--bubblecheck", "--worldpickcheck", "--consolelinkcheck", "--fakeprotocol",
         };
@@ -171,6 +171,8 @@ public partial class GameShell : Node
             else if (CmdArgs.Has("--multiplayer")) Push(MultiplayerScreen.Create());
             else if (CmdArgs.Has("--solo")) Push(SoloScreen.Create());
             else if (CmdArgs.Has("--map")) Push(Ui.MapScreen.Create());
+            // "--character": the figure editor (#1127), for screenshotting it
+            else if (CmdArgs.Has("--character")) Push(CharacterScreen.Create());
             else if (CmdArgs.Has("--landing")) LaunchVia(new WorldLaunch { Mode = GameMode.Explore });
             // "--autostart": straight into Explore through the loading screen, for screenshotting
             // it (and, with --menu, the pause menu once in)

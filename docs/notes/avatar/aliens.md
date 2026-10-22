@@ -3,7 +3,7 @@
 
 # Aliens (#880): a look anyone can wear, presets for the films
 
-- **Parts, each a normal appearance option** (Settings → Character, saved, replicated in
+- **Parts, each a normal appearance option** (the Character menu, saved, replicated in
   `AppearanceBits`): `BodyBuild.Alien` (thin limbs, narrow shoulders, `Physique.Head` 1.38 and
   `Dome` 1: the head's `Alien` profile, wide over the brow, a small pointed chin, no ears), skin tones
   8-11 (`Aliens.Green/Grey/Violet/Teal`, named in `Appearance.SkinNames`), faces 16-18 (`visitor`,
@@ -34,5 +34,5 @@
   when set (`FootPlayer.RefreshVisual`), so race NPCs and trailer actors are unchanged. Nothing new a
   bot does, so no row in `bots/bot-capability-map`.
 - **Check**: model viewer category **Aliens** (`--models,<dir> --modelsonly alien --modelsyaw 165
-  --style cartoon`), Figures → Build → Alien, Clothes; `--outfitcheck`; Settings → Character with
+  --style cartoon`), Figures → Build → Alien, Clothes; `--outfitcheck`; the Character menu with
   `--settings character --appearance zorp --uishot <png> 5` (`--appearance` is this run's only, never saved).

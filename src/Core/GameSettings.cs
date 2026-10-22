@@ -340,7 +340,7 @@ public sealed class GameSettings
 
     /// <summary>
     /// The player's figure (#394): <see cref="Avatar.Appearance.Pack"/>ed, 0 until one is chosen in
-    /// Settings → Character (#806; till then the figure comes from the player's network id).
+    /// the Character menu (#806; till then the figure comes from the player's network id).
     /// Saved alone with <see cref="SaveOnly"/>; <c>ClientWorld.PublishAppearance</c> puts it on the player.
     /// </summary>
     public int AppearanceBits { get; set; }

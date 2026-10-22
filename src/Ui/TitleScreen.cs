@@ -55,6 +55,8 @@ public partial class TitleScreen : Screen
         Entry(column, "Multiplayer", () => Shell.Push(MultiplayerScreen.Create()));
         // The map of Switzerland: what terrain is downloaded, and how to get more (#515)
         Entry(column, "Map", () => Shell.Push(MapScreen.Create()));
+        // the figure editor (#1127), its own menu rather than a Settings tab
+        Entry(column, "Character", () => Shell.Push(CharacterScreen.Create()));
         Entry(column, "Settings", () => Shell.Push(SettingsScreen.Create()));
         // VR (#186): a restart either way, after a confirmation
         if (Platform.CanSpawnProcesses) // a restart with OpenXR (#63)

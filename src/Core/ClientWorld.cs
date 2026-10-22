@@ -1334,7 +1334,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private double _appearanceIn;
 
     /// <summary>
-    /// The figure chosen in Settings → Character (#394, #806) onto this peer's own player, which
+    /// The figure chosen in the Character menu (#394, #806) onto this peer's own player, which
     /// replicates it (<see cref="FootPlayer.AppearanceBits"/>). Right away on a settings change,
     /// and every 0.25 s for a player that just spawned or respawned (or a probe's in-memory set).
     /// </summary>
@@ -1801,6 +1801,15 @@ public partial class ClientWorld : Node3D, IOriginContainer
             return;
         }
         if (_places is { IsOpen: true }) return;
+
+        // the Character menu (#1127): P on foot; mounted, P is the radio's previous station
+        if (@event.IsActionPressed(PlayerInput.CharacterMenu) && !UiFocus.TextEntryActive
+            && _onFoot && LocalPlayer is { Ride: Player.RideKind.OnFoot, RidingWith: 0 })
+        {
+            GetViewport().SetInputAsHandled();
+            Ui.CharacterScreen.Open();
+            return;
+        }
 
         // replay owns the screen and its own keys (R there snaps to roads)
         if (_gpx is { Active: true }) return;
