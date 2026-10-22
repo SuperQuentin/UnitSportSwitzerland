@@ -109,7 +109,11 @@
     the shoulder *up*.
   - Standing: hips 7 cm up and 15 cm forward, arms long. The bike rocks ±7° once a crank turn, away
     from the pushing pedal, and the rider counter-rocks 70% of it.
-  - A pose shows after 0.3 s held, rebuilt only then. The legs' crank-step cache is keyed by
+  - A pose shows after 0.3 s held, then **blends** there over 0.45 s, smoothstepped
+    (`HumanMeshBuilder.BuildCyclistBlend` lerps the two solved rigs joint by joint). The rider is
+    rebuilt into one mesh per rider only while a blend runs. A newer request waits for it to land.
+    The pedalling legs follow the moving hips, built in place (not cached) during the blend. The
+    first-person eye glides to the new pose's (τ 0.15 s). The legs' crank-step cache is keyed by
     position too. `FirstPersonEye` follows the pose.
   - Replicated in `WritePose`'s W.
   - The model viewer's "Road bike riding position" shows all four.

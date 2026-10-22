@@ -550,6 +550,29 @@ public static partial class HumanMeshBuilder
         return into == null ? scratch.Build() : scratch.BuildInto(into);
     }
 
+    /// <summary>
+    /// A cyclist part way from <paramref name="from"/> to <paramref name="to"/> (#1124): every joint
+    /// eased between the two solved poses, <paramref name="t"/> 0..1, so a rider sinks onto the drops
+    /// or rises out of the saddle instead of jumping there.
+    /// </summary>
+    public static ArrayMesh BuildCyclistBlend(HumanPalette palette, Player.RidingPosition from, Player.RidingPosition to,
+        float t, ArrayMesh? into = null)
+    {
+        var scratch = ScratchFor(into);
+        AppendRig(scratch, palette, Lerp(CyclingRigFor(from), CyclingRigFor(to), t), includeLegs: false, helmet: true);
+        return into == null ? scratch.Build() : scratch.BuildInto(into);
+    }
+
+    /// <summary>Two rigs blended joint by joint.</summary>
+    private static Rig Lerp(Rig a, Rig b, float t) => new(
+        a.HeadTop.Lerp(b.HeadTop, t), a.HeadBase.Lerp(b.HeadBase, t), a.Neck.Lerp(b.Neck, t), a.Chest.Lerp(b.Chest, t),
+        a.Waist.Lerp(b.Waist, t), a.Hip.Lerp(b.Hip, t),
+        a.ShoulderL.Lerp(b.ShoulderL, t), a.ElbowL.Lerp(b.ElbowL, t), a.WristL.Lerp(b.WristL, t),
+        a.ShoulderR.Lerp(b.ShoulderR, t), a.ElbowR.Lerp(b.ElbowR, t), a.WristR.Lerp(b.WristR, t),
+        a.HipL.Lerp(b.HipL, t), a.KneeL.Lerp(b.KneeL, t), a.AnkleL.Lerp(b.AnkleL, t), a.ToeL.Lerp(b.ToeL, t),
+        a.HipR.Lerp(b.HipR, t), a.KneeR.Lerp(b.KneeR, t), a.AnkleR.Lerp(b.AnkleR, t), a.ToeR.Lerp(b.ToeR, t),
+        Mathf.Lerp(a.TorsoLean, b.TorsoLean, t), a.HandDir.Lerp(b.HandDir, t), a.PointDirR.Lerp(b.PointDirR, t));
+
     /// <summary>Camera mounts (the eye for first person) of a cyclist in <paramref name="position"/>.</summary>
     public static GaitMounts MountsForCyclist(Player.RidingPosition position) => MountsForRig(CyclingRigFor(position));
 
