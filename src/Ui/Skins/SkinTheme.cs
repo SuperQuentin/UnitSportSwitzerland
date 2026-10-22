@@ -15,12 +15,13 @@ public static class SkinTheme
         Bad = "BadLabel", Section = "SectionLabel";
 
     /// <summary>Control variations.</summary>
-    public const string MenuButton = "MenuEntryButton", Primary = "PrimaryButton", Icon = "IconButton", Card = "CardPanel", Page = "PagePanel";
+    public const string MenuButton = "MenuEntryButton", Primary = "PrimaryButton", Icon = "IconButton", Card = "CardPanel", Page = "PagePanel",
+        Tab = "TabButton";
 
     /// <summary>The theme type holding the juice numbers (<see cref="Juice"/>).</summary>
     public const string JuiceType = "Juice";
 
-    private static FontFile? _baloo;
+    private static FontFile? _saira, _sairaCondensed;
 
     public static Color C(SkinData s, string role)
     {
@@ -28,21 +29,33 @@ public static class SkinTheme
         return new Color(r, g, b, a);
     }
 
-    private static (Font Regular, Font Bold) Fonts(SkinData s)
+    /// <summary>The skin's text, bold and display faces (the display face sets big titles: the logo, a page's name).</summary>
+    public static (Font Regular, Font Bold, Font Display) Fonts(SkinData s)
     {
-        if (s.Font == "baloo2" && (_baloo ??= ResourceLoader.Load<FontFile>("res://assets/fonts/Baloo2-Variable.ttf")) is { } baloo)
+        if (s.Font == "saira" && (_saira ??= ResourceLoader.Load<FontFile>("res://assets/fonts/Saira-Variable.ttf")) is { } saira
+            && (_sairaCondensed ??= ResourceLoader.Load<FontFile>("res://assets/fonts/SairaCondensed-ExtraBold.ttf")) is { } condensed)
         {
             var weight = TextServerManager.GetPrimaryInterface().NameToTag("weight");
-            return (new FontVariation { BaseFont = baloo, VariationOpentype = new Godot.Collections.Dictionary { { weight, 500 } } },
-                    new FontVariation { BaseFont = baloo, VariationOpentype = new Godot.Collections.Dictionary { { weight, 750 } } });
+            // the condensed titles lean as the controls do: an oblique made from the upright face
+            var lean = new Transform2D(1, s.Shape.Skew > 0 ? 0.2f : 0, 0, 1, 0, 0);   // Godot: (1, slant, 0, 1, 0, 0) is an oblique
+            return (new FontVariation { BaseFont = saira, VariationOpentype = new Godot.Collections.Dictionary { { weight, 500 } } },
+                    new FontVariation { BaseFont = saira, VariationOpentype = new Godot.Collections.Dictionary { { weight, 650 } } },
+                    new FontVariation { BaseFont = condensed, VariationTransform = lean });
         }
-        return (UiTheme.Font, UiTheme.Bold);
+        return (UiTheme.Font, UiTheme.Bold, UiTheme.Bold);
     }
 
     /// <summary>A box of the skin's shape: fill, outline, and its shadow (hard when offset, a glow when blurred).</summary>
-    private static StyleBoxFlat Box(SkinData s, Color fill, int radius, int marginH, int marginV, Color? edge = null, int outline = 0, bool shadow = false)
+    private static StyleBoxFlat Box(SkinData s, Color fill, int radius, int marginH, int marginV, Color? edge = null, int outline = 0, bool shadow = false, bool slant = false)
     {
         var b = UiTheme.Flat(fill, radius, marginH, marginV, edge, outline);
+        if (slant && s.Shape.Skew > 0)
+        {
+            // a parallelogram: the box leans, its content stays upright; a little more room at the sides for the lean
+            b.Skew = new Vector2(s.Shape.Skew, 0);
+            b.ContentMarginLeft += 6;
+            b.ContentMarginRight += 6;
+        }
         // the default 1 px anti-aliasing shows the fill as a halo outside a thick outline at the corners
         b.AntiAliasingSize = 0.5f;
         if (shadow && (s.Shape.ShadowSize > 0 || s.Shape.ShadowX != 0 || s.Shape.ShadowY != 0))
@@ -58,7 +71,7 @@ public static class SkinTheme
     /// <summary>The whole theme of a menu skin.</summary>
     public static Theme Build(SkinData s)
     {
-        var (regular, bold) = Fonts(s);
+        var (regular, bold, display) = Fonts(s);
         var sh = s.Shape;
         Color ink = C(s, "ink"), inkFaint = C(s, "inkFaint"), inkDim = C(s, "inkDim"), accent = C(s, "accent"),
             onAccent = C(s, "onAccent"), edge = C(s, "controlEdge"), card = C(s, "card"), hairline = C(s, "hairline"),
@@ -73,14 +86,14 @@ public static class SkinTheme
         t.SetStylebox("panel", "PanelContainer", panel);
         t.SetStylebox("panel", "Panel", panel);
 
-        var focus = UiTheme.Flat(new Color(0, 0, 0, 0), sh.ControlRadius, 14, 8, accent, Mathf.Max(2, sh.ControlOutline));
+        var focus = Box(s, new Color(0, 0, 0, 0), sh.ControlRadius, 14, 8, accent, Mathf.Max(2, sh.ControlOutline), slant: true);
         foreach (string type in new[] { "Button", "OptionButton", "MenuButton" })
         {
-            t.SetStylebox("normal", type, Box(s, control, sh.ControlRadius, 14, 8, edge, sh.ControlOutline));
-            t.SetStylebox("hover", type, Box(s, hover, sh.ControlRadius, 14, 8, edge, sh.ControlOutline));
-            t.SetStylebox("pressed", type, Box(s, pressed, sh.ControlRadius, 14, 8, edge, sh.ControlOutline));
-            t.SetStylebox("hover_pressed", type, Box(s, pressed, sh.ControlRadius, 14, 8, edge, sh.ControlOutline));
-            t.SetStylebox("disabled", type, Box(s, new Color(control, control.A * 0.5f), sh.ControlRadius, 14, 8, new Color(edge, edge.A * 0.4f), sh.ControlOutline));
+            t.SetStylebox("normal", type, Box(s, control, sh.ControlRadius, 14, 8, edge, sh.ControlOutline, slant: true));
+            t.SetStylebox("hover", type, Box(s, hover, sh.ControlRadius, 14, 8, edge, sh.ControlOutline, slant: true));
+            t.SetStylebox("pressed", type, Box(s, pressed, sh.ControlRadius, 14, 8, edge, sh.ControlOutline, slant: true));
+            t.SetStylebox("hover_pressed", type, Box(s, pressed, sh.ControlRadius, 14, 8, edge, sh.ControlOutline, slant: true));
+            t.SetStylebox("disabled", type, Box(s, new Color(control, control.A * 0.5f), sh.ControlRadius, 14, 8, new Color(edge, edge.A * 0.4f), sh.ControlOutline, slant: true));
             t.SetStylebox("focus", type, focus);
         }
         foreach (string type in new[] { "Button", "OptionButton", "CheckButton", "CheckBox", "MenuButton" })
@@ -103,10 +116,19 @@ public static class SkinTheme
             t.SetStylebox("focus", type, UiTheme.Flat(new Color(0, 0, 0, 0), sh.ControlRadius, 4, 4, accent, 2));
         }
         var off = new Color(inkFaint, 0.45f);
-        t.SetIcon("checked", "CheckButton", UiTheme.Pill(true, accent, off, onAccent, card));
-        t.SetIcon("unchecked", "CheckButton", UiTheme.Pill(false, accent, off, onAccent, card));
-        t.SetIcon("checked_disabled", "CheckButton", UiTheme.Pill(true, accent, off, onAccent, card));
-        t.SetIcon("unchecked_disabled", "CheckButton", UiTheme.Pill(false, accent, off, onAccent, card));
+        if (sh.Skew > 0)
+        {
+            // a slanted switch: a parallelogram track, a square knob
+            foreach (var (name, on) in new[] { ("checked", true), ("unchecked", false), ("checked_disabled", true), ("unchecked_disabled", false) })
+                t.SetIcon(name, "CheckButton", UiTheme.SlantSwitch(on, accent, control.Lightened(0.08f), onAccent, inkFaint, sh.Skew));
+        }
+        else
+        {
+            t.SetIcon("checked", "CheckButton", UiTheme.Pill(true, accent, off, onAccent, card));
+            t.SetIcon("unchecked", "CheckButton", UiTheme.Pill(false, accent, off, onAccent, card));
+            t.SetIcon("checked_disabled", "CheckButton", UiTheme.Pill(true, accent, off, onAccent, card));
+            t.SetIcon("unchecked_disabled", "CheckButton", UiTheme.Pill(false, accent, off, onAccent, card));
+        }
         t.SetIcon("checked", "CheckBox", UiTheme.Tick(true, accent, inkDim, onAccent));
         t.SetIcon("unchecked", "CheckBox", UiTheme.Tick(false, accent, inkDim, onAccent));
 
@@ -123,9 +145,9 @@ public static class SkinTheme
         t.SetIcon("checked", "PopupMenu", UiTheme.Dot(accent, 8));
         t.SetIcon("unchecked", "PopupMenu", UiTheme.Dot(new Color(1, 1, 1, 0), 8));
 
-        var field = Box(s, control, sh.ControlRadius, 12, 8, edge, sh.ControlOutline);
+        var field = Box(s, control, sh.ControlRadius, 12, 8, edge, sh.ControlOutline, slant: true);
         t.SetStylebox("normal", "LineEdit", field);
-        t.SetStylebox("focus", "LineEdit", Box(s, control, sh.ControlRadius, 12, 8, accent, Mathf.Max(2, sh.ControlOutline)));
+        t.SetStylebox("focus", "LineEdit", Box(s, control, sh.ControlRadius, 12, 8, accent, Mathf.Max(2, sh.ControlOutline), slant: true));
         t.SetStylebox("read_only", "LineEdit", field);
         t.SetColor("font_color", "LineEdit", ink);
         t.SetColor("font_placeholder_color", "LineEdit", inkFaint);
@@ -164,13 +186,14 @@ public static class SkinTheme
         t.SetStylebox("panel", "TooltipPanel", Box(s, card, sh.ControlRadius, 10, 6, edge, Mathf.Max(1, sh.ControlOutline)));
         t.SetColor("font_color", "TooltipLabel", ink);
 
-        AddVariations(t, s, bold);
+        AddVariations(t, s, bold, display);
         return t;
     }
 
     /// <summary>The variations <see cref="UiKit"/> uses, in the skin's colours and shapes.</summary>
-    public static void AddVariations(Theme t, SkinData s, Font bold)
+    public static void AddVariations(Theme t, SkinData s, Font bold, Font? display = null)
     {
+        display ??= bold;
         var sh = s.Shape;
         Color ink = C(s, "ink"), accent = C(s, "accent"), onAccent = C(s, "onAccent"), edge = C(s, "cardEdge"), card = C(s, "card"),
             hover = C(s, "controlHover"), pressed = C(s, "controlPressed"), soft = C(s, "controlEdge");
@@ -184,32 +207,40 @@ public static class SkinTheme
         t.SetColor("font_color", Section, C(s, "inkDim"));
         t.SetFont("font", Section, new FontVariation { BaseFont = bold, SpacingGlyph = 2 });
         t.SetFontSize("font_size", Section, UiTheme.FontTiny);
-        // what UiKit.Text(bold: true) asks its theme for
+        // what UiKit.Text(bold: true) asks its theme for, and the big titles' face (the logo, a page's name)
         t.SetFont("bold_font", "Label", bold);
+        t.SetFont("display_font", "Label", display);
+        t.SetConstant("display_uppercase", "Label", sh.DisplayUppercase ? 1 : 0);
 
         // the big menu entry: clear at rest, a sticker or a tint under the pointer, an accent bar at its left
         t.SetTypeVariation(MenuButton, "Button");
-        var rest = UiTheme.Flat(new Color(0, 0, 0, 0), sh.ControlRadius, 18, 8, new Color(soft, 0), sh.ControlOutline);
-        var lit = Box(s, hover, sh.ControlRadius, 18, 8, soft, sh.ControlOutline);
-        var down = Box(s, pressed, sh.ControlRadius, 18, 8, soft, sh.ControlOutline);
+        // a filling skin: a faint bar at rest that fills with the accent under the pointer, its text dark on it
+        // (no vertical margin when filled: a condensed display face already carries a tall line)
+        var rest = sh.MenuFill ? Box(s, new Color(1, 1, 1, 0.04f), sh.ControlRadius, 18, 0, slant: true)
+            : UiTheme.Flat(new Color(0, 0, 0, 0), sh.ControlRadius, 18, 8, new Color(soft, 0), sh.ControlOutline);
+        var lit = sh.MenuFill ? Box(s, accent, sh.ControlRadius, 18, 0, slant: true) : Box(s, hover, sh.ControlRadius, 18, 8, soft, sh.ControlOutline);
+        var down = sh.MenuFill ? Box(s, accent.Darkened(0.15f), sh.ControlRadius, 18, 0, slant: true) : Box(s, pressed, sh.ControlRadius, 18, 8, soft, sh.ControlOutline);
         t.SetStylebox("normal", MenuButton, rest);
         t.SetStylebox("hover", MenuButton, lit);
         t.SetStylebox("pressed", MenuButton, down);
         t.SetStylebox("hover_pressed", MenuButton, down);
         t.SetStylebox("focus", MenuButton, new StyleBoxEmpty());
         t.SetStylebox("disabled", MenuButton, rest);
-        t.SetFont("font", MenuButton, bold);
-        foreach (string c in new[] { "font_color", "font_focus_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color" })
-            t.SetColor(c, MenuButton, ink);
-        t.SetColor("accent_bar", MenuButton, accent);
+        t.SetFont("font", MenuButton, sh.MenuFill ? display : bold);
+        t.SetColor("font_color", MenuButton, ink);
+        foreach (string c in new[] { "font_focus_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color" })
+            t.SetColor(c, MenuButton, sh.MenuFill ? onAccent : ink);
+        // the filled entry is its own marker: no bar at its edge
+        t.SetColor("accent_bar", MenuButton, sh.MenuFill ? new Color(accent, 0) : accent);
+        if (sh.MenuFill) t.SetStylebox("focus", MenuButton, lit);
 
         t.SetTypeVariation(Primary, "Button");
-        t.SetStylebox("normal", Primary, Box(s, accent, sh.ControlRadius, 18, 8, edge, sh.ControlOutline, shadow: sh.ControlShadow));
-        t.SetStylebox("hover", Primary, Box(s, accent.Lightened(0.12f), sh.ControlRadius, 18, 8, edge, sh.ControlOutline, shadow: sh.ControlShadow));
-        t.SetStylebox("pressed", Primary, Box(s, accent.Darkened(0.1f), sh.ControlRadius, 18, 8, edge, sh.ControlOutline));
-        t.SetStylebox("hover_pressed", Primary, Box(s, accent.Darkened(0.1f), sh.ControlRadius, 18, 8, edge, sh.ControlOutline));
-        t.SetStylebox("focus", Primary, UiTheme.Flat(new Color(0, 0, 0, 0), sh.ControlRadius, 18, 8, ink, 2));
-        t.SetStylebox("disabled", Primary, UiTheme.Flat(new Color(accent, 0.25f), sh.ControlRadius, 18, 8));
+        t.SetStylebox("normal", Primary, Box(s, accent, sh.ControlRadius, 18, 8, edge, sh.ControlOutline, shadow: sh.ControlShadow, slant: true));
+        t.SetStylebox("hover", Primary, Box(s, accent.Lightened(0.12f), sh.ControlRadius, 18, 8, edge, sh.ControlOutline, shadow: sh.ControlShadow, slant: true));
+        t.SetStylebox("pressed", Primary, Box(s, accent.Darkened(0.1f), sh.ControlRadius, 18, 8, edge, sh.ControlOutline, slant: true));
+        t.SetStylebox("hover_pressed", Primary, Box(s, accent.Darkened(0.1f), sh.ControlRadius, 18, 8, edge, sh.ControlOutline, slant: true));
+        t.SetStylebox("focus", Primary, Box(s, new Color(0, 0, 0, 0), sh.ControlRadius, 18, 8, ink, 2, slant: true));
+        t.SetStylebox("disabled", Primary, Box(s, new Color(accent, 0.25f), sh.ControlRadius, 18, 8, slant: true));
         foreach (string c in new[] { "font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color" })
             t.SetColor(c, Primary, onAccent);
         t.SetColor("font_disabled_color", Primary, new Color(onAccent, 0.6f));
@@ -226,6 +257,23 @@ public static class SkinTheme
         t.SetColor("icon_hover_color", Icon, ink);
         t.SetColor("icon_focus_color", Icon, ink);
         t.SetColor("icon_pressed_color", Icon, accent);
+
+        // a page's tabs: a slanted tab fills with the accent; a square skin underlines the chosen one
+        t.SetTypeVariation(Tab, "Button");
+        var tabRest = Box(s, new Color(0, 0, 0, 0), 6, 14, 6, slant: true);
+        var tabOn = sh.Skew > 0 ? Box(s, accent, 0, 14, 6, slant: true) : UiTheme.Flat(new Color(accent, 0.12f), 6, 14, 6);
+        if (sh.Skew <= 0) { tabOn.BorderColor = accent; tabOn.BorderWidthBottom = 3; }
+        t.SetStylebox("normal", Tab, tabRest);
+        t.SetStylebox("hover", Tab, Box(s, new Color(accent, 0.10f), sh.Skew > 0 ? 0 : 6, 14, 6, slant: true));
+        t.SetStylebox("pressed", Tab, tabOn);
+        t.SetStylebox("hover_pressed", Tab, tabOn);
+        t.SetStylebox("focus", Tab, Box(s, new Color(0, 0, 0, 0), 6, 14, 6, new Color(accent, 0.7f), 1, slant: true));
+        t.SetColor("font_color", Tab, C(s, "inkDim"));
+        t.SetColor("font_hover_color", Tab, ink);
+        t.SetColor("font_focus_color", Tab, ink);
+        t.SetColor("font_pressed_color", Tab, sh.Skew > 0 ? onAccent : accent);
+        t.SetColor("font_hover_pressed_color", Tab, sh.Skew > 0 ? onAccent : accent);
+        if (sh.Skew > 0) t.SetFont("font", Tab, display);
 
         t.SetTypeVariation(Card, "PanelContainer");
         t.SetStylebox("panel", Card, Box(s, card, sh.Radius, 18, 18, edge, sh.Outline, shadow: sh.ControlShadow));

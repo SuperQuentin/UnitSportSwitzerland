@@ -95,7 +95,7 @@ public sealed class GameSettings
     /// The menus' look (#1135, <see cref="Ui.Skins.MenuSkin"/>): "auto" (the day skin by day, the night skin by night)
     /// or a skin's id (a file in <c>assets/skins/</c> or <c>user://skins/</c>).
     /// </summary>
-    public string MenuSkin { get; set; } = Ui.Skins.SkinRules.Auto;
+    public string MenuSkin { get; set; } = Ui.Skins.MenuSkin.SportId;
     public string MenuSkinDay { get; set; } = Ui.Skins.MenuSkin.DayDefault;
     public string MenuSkinNight { get; set; } = Ui.Skins.MenuSkin.NightDefault;
 

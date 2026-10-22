@@ -18,7 +18,7 @@ namespace UnitSport.Ui.Skins;
 /// </summary>
 public static class MenuSkin
 {
-    public const string ClassicId = "classic", DayDefault = "alpine", NightDefault = "night-arcade";
+    public const string ClassicId = "classic", SportId = "sport", DayDefault = SportId, NightDefault = SportId;
 
     private static Dictionary<string, SkinData>? _skins;
     private static readonly Dictionary<string, Theme> Themes = new();

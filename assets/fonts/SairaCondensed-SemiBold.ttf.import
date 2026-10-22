@@ -2,13 +2,13 @@
 
 importer="font_data_dynamic"
 type="FontFile"
-uid="uid://c6pprmssef1ao"
-path="res://.godot/imported/Baloo2-Variable.ttf-f45e5b5782461f2943e35949edc2002b.fontdata"
+uid="uid://d0kcadl3elwpu"
+path="res://.godot/imported/SairaCondensed-SemiBold.ttf-0872b5f9088098043892003c2a84efa9.fontdata"
 
 [deps]
 
-source_file="res://assets/fonts/Baloo2-Variable.ttf"
-dest_files=["res://.godot/imported/Baloo2-Variable.ttf-f45e5b5782461f2943e35949edc2002b.fontdata"]
+source_file="res://assets/fonts/SairaCondensed-SemiBold.ttf"
+dest_files=["res://.godot/imported/SairaCondensed-SemiBold.ttf-0872b5f9088098043892003c2a84efa9.fontdata"]
 
 [params]
 

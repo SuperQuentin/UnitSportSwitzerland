@@ -50,7 +50,9 @@ public abstract partial class Screen : Control
         header.AddChild(back);
         var titles = UiKit.VBox(0);
         titles.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        titles.AddChild(UiKit.Text(title, 26, UiTheme.Text, bold: true));
+        var name = UiKit.Text(title, 30);
+        UiKit.Display(name);
+        titles.AddChild(name);
         if (subtitle != null) titles.AddChild(UiKit.Text(subtitle, UiTheme.FontSmall, UiTheme.TextDim));
         header.AddChild(titles);
         column.AddChild(header);

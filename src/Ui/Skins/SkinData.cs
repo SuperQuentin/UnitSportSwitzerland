@@ -39,7 +39,7 @@ public sealed class SkinData
     public bool Night { get; set; }
     public Dictionary<string, string> Colors { get; set; } = new();
     public SkinShape Shape { get; set; } = new();
-    /// <summary><c>system</c> (the machine's sans) or <c>baloo2</c> (bundled, rounded).</summary>
+    /// <summary><c>system</c> (the machine's sans) or <c>saira</c> (bundled: Saira, and Saira Condensed for titles).</summary>
     public string Font { get; set; } = "system";
 
     private static readonly JsonSerializerOptions Json = new()
@@ -73,7 +73,7 @@ public sealed class SkinData
         }
         foreach (string role in OptionalRoles.Keys)
             if (Colors.TryGetValue(role, out var hex) && Rgba(hex) == null) return $"colour '{role}': '{hex}' is not #RRGGBB or #RRGGBBAA";
-        if (Font is not ("system" or "baloo2")) return $"font '{Font}': system or baloo2";
+        if (Font is not ("system" or "saira")) return $"font '{Font}': system or saira";
         return Shape.Problem();
     }
 
@@ -120,8 +120,16 @@ public sealed class SkinShape
     /// <summary>On hover a control tilts by this much, degrees.</summary>
     public float HoverTilt { get; set; }
 
+    /// <summary>Buttons, fields, tabs and menu entries lean by this much (0.22: a slanted sports-game look); 0 keeps them square.</summary>
+    public float Skew { get; set; }
+    /// <summary>A menu entry under the pointer fills with the accent (its text in <c>onAccent</c>); else a light tint.</summary>
+    public bool MenuFill { get; set; }
+    /// <summary>Big titles (the logo, a page's name) in capitals.</summary>
+    public bool DisplayUppercase { get; set; }
+
     public string? Problem() =>
-        Radius is < 0 or > 40 || ControlRadius is < 0 or > 40 ? "radius: 0 to 40"
+        Skew is < 0 or > 0.5f ? "skew: 0 to 0.5"
+        : Radius is < 0 or > 40 || ControlRadius is < 0 or > 40 ? "radius: 0 to 40"
         : Outline is < 0 or > 8 || ControlOutline is < 0 or > 8 ? "outline: 0 to 8"
         : Math.Abs(ShadowX) > 16 || Math.Abs(ShadowY) > 16 || ShadowSize is < 0 or > 60 ? "shadow: offsets to 16, size to 60"
         : HoverScale is < 0 or > 0.2f || Math.Abs(HoverTilt) > 8 ? "hover: scale 0 to 0.2, tilt to 8 degrees"

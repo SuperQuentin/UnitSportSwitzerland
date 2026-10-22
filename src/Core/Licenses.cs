@@ -49,6 +49,11 @@ public static class Licenses
             "https://godotengine.org/license",
             "This game uses Godot Engine, available under the MIT license. "
             + "Copyright (c) 2014-present Godot Engine contributors. Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur."),
+        new("Saira and Saira Condensed",
+            "The menus' text and titles (the Low-poly Sport menu look)",
+            "SIL Open Font License 1.1",
+            "https://openfontlicense.org",
+            "Copyright 2016-2020 The Saira Project Authors (https://github.com/Omnibus-Type/Saira)"),
         new("Godot logo (project icon)",
             "Window and application icon",
             "CC BY 4.0",

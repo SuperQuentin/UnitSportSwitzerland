@@ -51,6 +51,17 @@ public static class UiKit
         };
     }
 
+    /// <summary>A big title in its theme's display face (#1135): the logo, a page's name; in capitals when the skin says so.</summary>
+    public static void Display(Label l)
+    {
+        l.AddThemeFontOverride("font", UiTheme.Bold);
+        l.Ready += () =>
+        {
+            if (l.HasThemeFont("display_font", "Label")) l.AddThemeFontOverride("font", l.GetThemeFont("display_font", "Label"));
+            if (l.GetThemeConstant("display_uppercase", "Label") == 1) l.Uppercase = true;
+        };
+    }
+
     /// <summary>A button's text in its theme's dim colour (a secondary entry: Quit, an inactive tab).</summary>
     public static void DimFont(Button b)
     {

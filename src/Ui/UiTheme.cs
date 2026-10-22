@@ -264,6 +264,28 @@ public static class UiTheme
         return ImageTexture.CreateFromImage(img);
     }
 
+    /// <summary>A slanted on/off switch (#1135, a skin with a skew): a parallelogram track and a square knob.</summary>
+    internal static ImageTexture SlantSwitch(bool on, Color accent, Color offTrack, Color knobOn, Color knobOff, float skew)
+    {
+        const int w = 52, h = 26, knob = 18;
+        var img = Image.CreateEmpty(w, h, false, Image.Format.Rgba8);
+        float lean = skew * h, body = w - lean;
+        float knobX = on ? body - knob - 4 : 4;
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                float px = x + 0.5f, py = y + 0.5f;
+                float u = px - lean * (1 - py / h);   // the column in the unslanted box
+                float a = Mathf.Clamp(Mathf.Min(u, body - u) + 0.5f, 0, 1);
+                var c = new Color(on ? accent : offTrack, a);
+                float k = Mathf.Min(Mathf.Min(u - knobX, knobX + knob - u), Mathf.Min(py - (h - knob) / 2f, (h + knob) / 2f - py));
+                float ak = Mathf.Clamp(k + 0.5f, 0, 1);
+                if (ak > 0) c = c.Lerp(on ? knobOn : knobOff, ak) with { A = Mathf.Max(c.A, ak) };
+                img.SetPixel(x, y, c);
+            }
+        return ImageTexture.CreateFromImage(img);
+    }
+
     /// <summary>A rounded square tick box.</summary>
     internal static ImageTexture Tick(bool on, Color accent, Color edge, Color mark)
     {

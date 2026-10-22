@@ -32,19 +32,8 @@ public partial class SettingsScreen : Screen
         {
             names.Add(name);
             var b = new Button { Text = name, ToggleMode = true, ButtonGroup = group, FocusMode = FocusModeEnum.All, CustomMinimumSize = new Vector2(0, 36) };
-            // the menu skin's accent (#1135): an underline and a light tint, no box
-            var accent = Skins.MenuSkin.Role("accent");
-            var normal = UiTheme.Flat(new Color(0, 0, 0, 0), 6, 14, 6);
-            var on = UiTheme.Flat(new Color(accent, 0.12f), 6, 14, 6);
-            on.BorderColor = accent; on.BorderWidthBottom = 3;
-            b.AddThemeStyleboxOverride("normal", normal);
-            b.AddThemeStyleboxOverride("hover", UiTheme.Flat(new Color(accent, 0.06f), 6, 14, 6));
-            b.AddThemeStyleboxOverride("pressed", on);
-            b.AddThemeStyleboxOverride("hover_pressed", on);
-            b.AddThemeStyleboxOverride("focus", UiTheme.Flat(new Color(0, 0, 0, 0), 6, 14, 6, new Color(accent, 0.6f), 1));
-            UiKit.DimFont(b);
-            b.AddThemeColorOverride("font_pressed_color", accent);
-            b.AddThemeColorOverride("font_hover_pressed_color", accent);
+            // the menu skin's tab (#1135): a slanted tab fills with the accent, a square one is underlined
+            b.ThemeTypeVariation = Skins.SkinTheme.Tab;
             int index = _tabs.Count;
             b.Toggled += pressed => { if (pressed) Show(index); };
             tabRow.AddChild(b);

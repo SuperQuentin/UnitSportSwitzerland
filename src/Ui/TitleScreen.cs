@@ -17,6 +17,7 @@ public partial class TitleScreen : Screen
     private Button _first = null!;
     private UpdatePrompt? _update;
     private Button _updateEntry = null!;
+    private Container? _entries;
 
     public static TitleScreen Create() => new() { Name = "Title" };
 
@@ -24,6 +25,8 @@ public partial class TitleScreen : Screen
     {
         AddChild(SideShade(0.92f, 0.62f));
 
+        var skin = Skins.MenuSkin.Current;
+        bool slanted = skin.Shape.Skew > 0;
         var column = UiKit.VBox(6);
         column.SetAnchorsPreset(LayoutPreset.LeftWide);
         // centred above the footer, so a shown "Update to" entry does not push Quit onto it
@@ -31,21 +34,20 @@ public partial class TitleScreen : Screen
         column.Alignment = BoxContainer.AlignmentMode.Center;
         AddChild(column);
 
-        var name = UiKit.Text("UnitSport", 58, bold: true);
-        name.AddThemeConstantOverride("line_spacing", -8);
+        // the logo: the skin's display face (#1135), a condensed italic in capitals for Low-poly Sport
+        var name = UiKit.Text("UnitSport", slanted ? 78 : 58);
+        UiKit.Display(name);
+        name.AddThemeConstantOverride("line_spacing", -12);
         column.AddChild(name);
-        var country = UiKit.Text("SWITZERLAND", 16, UiTheme.Amber);
-        country.AddThemeFontOverride("font", new FontVariation { BaseFont = UiTheme.Bold, SpacingGlyph = 7 });
-        column.AddChild(country);
-
-        var occasion = OccasionLine();
-        column.AddChild(UiKit.Spacer(occasion != null ? 10 : 34));
-        if (occasion != null)
-        {
-            var o = UiKit.Text(occasion, UiTheme.FontSmall, new Color(0.98f, 0.58f, 0.22f));
-            column.AddChild(o);
-            column.AddChild(UiKit.Spacer(16));
-        }
+        var countryRow = UiKit.HBox(14);
+        var country = UiKit.Text("SWITZERLAND", slanted ? 18 : 16, UiTheme.Amber);
+        country.AddThemeFontOverride("font", new FontVariation { BaseFont = UiTheme.Bold, SpacingGlyph = slanted ? 8 : 7 });
+        country.SizeFlagsVertical = SizeFlags.ShrinkCenter;
+        countryRow.AddChild(country);
+        // the skin's second accent as a slanted dash beside the name
+        if (slanted) countryRow.AddChild(Dash(Skins.MenuSkin.Role("accent2"), skin.Shape.Skew));
+        column.AddChild(countryRow);
+        column.AddChild(UiKit.Spacer(slanted ? 24 : 34));
 
         // hidden until the update check finds a newer release (#845); one press updates, no questions
         _updateEntry = Entry(column, "", PressUpdate);
@@ -63,15 +65,19 @@ public partial class TitleScreen : Screen
         Entry(column, "Controls", () => Shell.ShowControls());
         column.AddChild(UiKit.Spacer(8));
         Entry(column, "Quit", () => Shell.Quit(), dim: true);
+        _entries = column;
 
-        // footer: version and the way back to here
+        // the occasion of the day (Halloween, Christmas...): a card at the bottom right
+        if (OccasionLine() is { } occasion) AddChild(OccasionCard(occasion, slanted));
+
+        // footer: the keys on the left, the version on the right
         var foot = UiKit.HBox(18);
         foot.SetAnchorsPreset(LayoutPreset.BottomWide);
-        foot.OffsetLeft = 72; foot.OffsetBottom = -26; foot.OffsetTop = -50;
-        string version = (string)ProjectSettings.GetSetting("application/config/version", "");
-        foot.AddChild(UiKit.Text(version.Length > 0 ? $"v{version}" : "development build", UiTheme.FontTiny, UiTheme.TextFaint));
+        foot.OffsetLeft = 72; foot.OffsetRight = -64; foot.OffsetBottom = -26; foot.OffsetTop = -50;
         if (!Platform.IsMobile) // keyboard hints, and the room Quit needs on a phone's shorter canvas (#63)
-            foot.AddChild(UiKit.Text(InputHints.Format("{help} all controls  ·  F11 fullscreen"), UiTheme.FontTiny, UiTheme.TextFaint));
+            foot.AddChild(UiKit.Text(InputHints.Format("{help} all controls  ·  F11 fullscreen"), UiTheme.FontSmall, UiTheme.TextDim));
+        string version = (string)ProjectSettings.GetSetting("application/config/version", "");
+        foot.AddChild(UiKit.Text(version.Length > 0 ? $"v{version}" : "development build", UiTheme.FontSmall, UiTheme.TextFaint));
         AddChild(foot);
 
         _jingle = new AudioStreamPlayer { Bus = Audio.SfxBus.Name, VolumeDb = -6 };
@@ -100,7 +106,9 @@ public partial class TitleScreen : Screen
 
     private static Button Entry(Container into, string text, Action pressed, bool dim = false)
     {
-        var b = UiKit.MenuButton(text, dim ? 17 : 22);
+        bool slanted = Skins.MenuSkin.Current.Shape.Skew > 0;
+        var b = UiKit.MenuButton(text, dim ? (slanted ? 20 : 17) : (slanted ? 25 : 22));
+        if (slanted) b.CustomMinimumSize = new Vector2(0, dim ? 40 : 48);
         if (dim) UiKit.DimFont(b);
         b.Pressed += pressed;
         into.AddChild(b);
@@ -110,6 +118,63 @@ public partial class TitleScreen : Screen
     public override void OnShown()
     {
         _first.CallDeferred(Control.MethodName.GrabFocus);
+        Callable.From(SlideIn).CallDeferred();
+    }
+
+    /// <summary>The entries slide in one after another (#1135), once laid out; none of it with Reduce motion.</summary>
+    private void SlideIn()
+    {
+        if (_entries == null || GameSettings.Current.ReduceMotion || Skins.MenuSkin.Current.Shape.Skew <= 0) return;
+        int i = 0;
+        foreach (var child in _entries.GetChildren())
+        {
+            if (child is not Button { Visible: true } b) continue;
+            var at = b.Position;
+            b.Position = at - new Vector2(16, 0);
+            b.Modulate = new Color(1, 1, 1, 0);
+            var tween = b.CreateTween().SetParallel().SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
+            tween.TweenProperty(b, "position", at, 0.32).SetDelay(i * 0.05);
+            tween.TweenProperty(b, "modulate:a", 1f, 0.32).SetDelay(i * 0.05);
+            i++;
+        }
+    }
+
+    /// <summary>A short slanted bar in <paramref name="color"/>: the skin's dash beside the logo.</summary>
+    private static Control Dash(Color color, float skew)
+    {
+        var box = new StyleBoxFlat { BgColor = color, Skew = new Vector2(skew * 2.5f, 0), AntiAliasing = true };
+        var p = new Panel { CustomMinimumSize = new Vector2(70, 6), SizeFlagsVertical = SizeFlags.ShrinkCenter, MouseFilter = MouseFilterEnum.Ignore };
+        p.AddThemeStyleboxOverride("panel", box);
+        return p;
+    }
+
+    /// <summary>The occasion running now, as a card at the bottom right ("Now on").</summary>
+    private static Control OccasionCard(string occasion, bool slanted)
+    {
+        var body = UiKit.VBox(2);
+        var head = UiKit.Text("NOW ON", UiTheme.FontSmall);
+        UiKit.Display(head);
+        head.AddThemeColorOverride("font_color", Skins.MenuSkin.Role("accent2"));
+        body.AddChild(head);
+        // "NOW ON" says it is running: the card names it only
+        body.AddChild(UiKit.Text(occasion.Replace(" is on", ""), UiTheme.FontBody, bold: true, wrap: true));
+        var card = UiKit.Card(body, margin: 16);
+        if (slanted)
+            card.Ready += () =>
+            {
+                if (card.GetThemeStylebox("panel").Duplicate() is StyleBoxFlat box)
+                {
+                    box.Skew = new Vector2(Skins.MenuSkin.Current.Shape.Skew * 0.5f, 0);
+                    box.ContentMarginLeft += 10; box.ContentMarginRight += 10;
+                    card.AddThemeStyleboxOverride("panel", box);
+                }
+            };
+        card.CustomMinimumSize = new Vector2(300, 0);
+        card.SetAnchorsPreset(LayoutPreset.BottomRight);
+        card.GrowHorizontal = GrowDirection.Begin;
+        card.GrowVertical = GrowDirection.Begin;
+        card.OffsetRight = -64; card.OffsetBottom = -96;
+        return card;
     }
 
     /// <summary>Nothing behind the title: Esc stays here.</summary>
