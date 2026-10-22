@@ -713,4 +713,43 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
         Assert.DoesNotContain(p3.Groups, g => g is { Kind: SignalGroupKind.Car, Moves: SignalMoves.Right });
         Assert.Equal(1, permissive);
     }
+    [Fact]
+    public void J10s_right_turn_bike_lanes_have_their_own_group_and_are_marked_round_the_corner()
+    {
+        // #1165, the user: "right turn only bike lanes should get their own light instead of the single combined one", and
+        // "markings through intersection as well". J10: every arm's bike right-turn lane at the kerb (layout b from OSM)
+        var j = region.Junction("J10");
+        var tile = region.Tile(j.E, j.N);
+        var plan = tile.Signals.Single().Plan;
+        var groups = Enumerable.Range(0, plan.Groups.Count).Where(g => plan.Groups[g] is { Kind: SignalGroupKind.Bike, Moves: SignalMoves.Right }).ToList();
+        Assert.Equal(4, groups.Count);
+        Assert.Equal(4, groups.Select(g => plan.Groups[g].Arm).Distinct().Count());
+        // the riders turning right ride on it (their written way's group)
+        var rights = tile.JunctionPaths.Where(p => p.Kind == JunctionPathKind.Bike && p.Move == SignalMoves.Right && p.Signal == 0).ToList();
+        Assert.Equal(4, rights.Count);
+        Assert.All(rights, p => Assert.Contains((int)p.Group, groups));
+        // each way round the corner has yellow dashed edges along it: within its half width plus a line of its centre all along
+        var dashed = tile.Paint.Where(p => p.Type == PaintType.YellowDashed).Select(p => Points(p.Vertices)).ToList();
+        foreach (var r in rights)
+        {
+            var way = Points(r.Points);
+            double reach = Math.Max(r.Width, r.ToWidth) * 0.5 + 0.2;
+            bool Along(List<(double X, double Z)> line) => line.Count >= 2
+                && line.All(q => way.Min(w => Math.Sqrt((w.X - q.X) * (w.X - q.X) + (w.Z - q.Z) * (w.Z - q.Z))) < reach);
+            Assert.True(dashed.Count(Along) >= 2, $"right-turn way from arm {plan.Groups[r.Group].Arm}: {dashed.Count(Along)} dashed edges along it");
+        }
+    }
+
+    [Fact]
+    public void Riders_turn_right_on_red_where_they_have_a_line_and_the_street_on_the_right_carries_them_on()
+    {
+        // #711 (SSV Art. 69a, signal 5.18), ported to the junction planner (#1165): J2's paths on every arm, a crosswalk on each,
+        // paths on the departing side of every street
+        var j2 = region.Junction("J2");
+        var plan = region.Tile(j2.E, j2.N).Signals.Single().Plan;
+        Assert.All(plan.Arms.Where(a => a.In), a => Assert.True(a.BikeRightOnRed));
+        // J10: the riders' own right-turn lanes
+        var j10 = region.Junction("J10");
+        Assert.All(region.Tile(j10.E, j10.N).Signals.Single().Plan.Arms.Where(a => a.In), a => Assert.True(a.BikeRightOnRed));
+    }
 }
