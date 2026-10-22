@@ -42,8 +42,19 @@ public static class Account
     public static event Action? Changed;
 
     public static AccountMode Mode => _current.Mode;
-    public static string Url => _current.Url;
-    public static string ServerKey => _current.ServerKey;
+    /// <summary>The account server: the one set under Advanced, else the build's official one (<see cref="Official"/>).</summary>
+    public static string Url => _current.Url.Length > 0 ? _current.Url : Official.Url;
+    public static string ServerKey => _current.Url.Length > 0 ? _current.ServerKey : Official.ServerKey;
+
+    /// <summary>
+    /// The official account server this build signs in to (#1123): <c>res://assets/account-server.json</c>,
+    /// <c>{"url": "...", "serverKey": "..."}</c>, filled in once Nakama is deployed (<c>tools/deploy-linux.sh --nakama</c>
+    /// prints both). The server key is not a secret: every client carries it. Empty: the player sets one under Advanced.
+    /// </summary>
+    public static (string Url, string ServerKey) Official { get; } = LoadOfficial();
+
+    /// <summary>A server set under Advanced, not the official one.</summary>
+    public static bool CustomServer => _current.Url.Length > 0 && !AccountRules.SameServer(_current.Url, Official.Url);
     public static string Email => _current.Email;
     public static string Username => _current.Username;
 
@@ -52,7 +63,7 @@ public static class Account
 
     /// <summary>One line for the settings page and the menus.</summary>
     public static string Status => _current.Mode == AccountMode.Offline ? "Offline: no account"
-        : SignedIn ? $"Online as {_current.Username} on {_current.Url}"
+        : SignedIn ? $"Online as {_current.Username} on {Url}"
         : "Online, not signed in";
 
     public static void SetMode(AccountMode mode)
@@ -67,8 +78,10 @@ public static class Account
     {
         url = AccountRules.NormalizeUrl(url);
         serverKey = serverKey.Trim();
+        // the official server again: stored empty, so a later build's new official address is followed
+        if (url.Length == 0 || (AccountRules.SameServer(url, Official.Url) && serverKey == Official.ServerKey)) url = serverKey = "";
         if (url == _current.Url && serverKey == _current.ServerKey) return;
-        if (!AccountRules.SameServer(url, _current.Url)) ForgetSession();
+        if (!AccountRules.SameServer(url.Length > 0 ? url : Official.Url, Url)) ForgetSession();
         _current.Url = url;
         _current.ServerKey = serverKey;
         Save();
@@ -77,11 +90,11 @@ public static class Account
     /// <summary>Signs in, or makes the account first (<paramref name="create"/>); null on success, else what went wrong.</summary>
     public static async Task<string?> SignIn(string email, string password, bool create, string? username = null)
     {
-        if (_current.Url.Length == 0) return "Set the account server first.";
+        if (Url.Length == 0) return "This build names no account server: set one under Advanced.";
         try
         {
-            var session = await NakamaRest.SignIn(_current.Url, _current.ServerKey, email.Trim(), password, create, username);
-            var account = await NakamaRest.Account(_current.Url, session.Token)
+            var session = await NakamaRest.SignIn(Url, ServerKey, email.Trim(), password, create, username);
+            var account = await NakamaRest.Account(Url, session.Token)
                 ?? throw new NakamaException("The account server refused its own new session.");
             _current.Mode = AccountMode.Online;
             _current.Email = email.Trim();
@@ -94,7 +107,7 @@ public static class Account
         catch (NakamaException e) { return e.Message; }
         catch (Exception e) when (e is JsonException or InvalidOperationException or System.Collections.Generic.KeyNotFoundException)
         {
-            return $"The account server at {_current.Url} did not answer as a Nakama server does.";
+            return $"The account server at {Url} did not answer as a Nakama server does.";
         }
     }
 
@@ -110,13 +123,13 @@ public static class Account
     /// </summary>
     public static async Task<string> TokenFor(string server)
     {
-        if (_current.Mode != AccountMode.Online || !AccountRules.SameServer(server, _current.Url)) return "";
+        if (_current.Mode != AccountMode.Online || !AccountRules.SameServer(server, Url)) return "";
         if (AccountRules.Fresh(_current.Token, DateTimeOffset.UtcNow, TimeSpan.FromMinutes(1))) return _current.Token;
         if (_current.RefreshToken.Length > 0)
         {
             try
             {
-                var s = await NakamaRest.Refresh(_current.Url, _current.ServerKey, _current.RefreshToken);
+                var s = await NakamaRest.Refresh(Url, ServerKey, _current.RefreshToken);
                 _current.Token = s.Token;
                 if (s.RefreshToken.Length > 0) _current.RefreshToken = s.RefreshToken;
                 Save();
@@ -133,6 +146,25 @@ public static class Account
     private static void ForgetSession()
     {
         _current.Token = _current.RefreshToken = _current.Username = "";
+    }
+
+    private static (string, string) LoadOfficial()
+    {
+        const string path = "res://assets/account-server.json";
+        try
+        {
+            if (!Godot.FileAccess.FileExists(path)) return ("", "");
+            using var doc = JsonDocument.Parse(Godot.FileAccess.GetFileAsString(path));
+            var root = doc.RootElement;
+            string url = root.TryGetProperty("url", out var u) ? u.GetString() ?? "" : "";
+            string key = root.TryGetProperty("serverKey", out var k) ? k.GetString() ?? "" : "";
+            return (AccountRules.NormalizeUrl(url), key.Trim());
+        }
+        catch (JsonException e)
+        {
+            GD.PushWarning($"[accounts] {path} unreadable: {e.Message}");
+            return ("", "");
+        }
     }
 
     private static AccountFile Load()
