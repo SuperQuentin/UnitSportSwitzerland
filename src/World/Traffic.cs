@@ -942,8 +942,17 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         car.Route.Trim(90f);   // the road behind it too: whoever is closing from behind is found on it
         float pull = car.Startle > 0f ? Mathf.Clamp(car.Pull + 0.12f * Mathf.Sin(car.Startle * 14f), 0f, maxPull) : car.Pull;
         // lane changes (#353): following a taper at its speed, else over ~2.5 s; after the line back to its usual line
-        if (sideTaken == 0f || Mathf.Sign(car.LaneWanted - car.Lane) != sideTaken)
-            car.Lane = Mathf.MoveToward(car.Lane, car.LaneWanted, 0.35f * car.Speed * dt);
+        // (#1134, the user: one lane at a time, the changes spaced, planned ahead: LaneChoice.Aim)
+        float aim = LaneChoice.Aim(car.Lane, car.LaneWanted, car.StepTarget, car.SinceStep, car.ToLine, out bool steps);
+        if (steps)
+        {
+            if (Mathf.Abs(aim - car.Lane) > LaneChoice.LaneWidth * 1.4f) MultiLaneJumps++;
+            (car.StepTarget, car.SinceStep) = (aim, 0f);
+            LaneChanges++;
+        }
+        car.SinceStep += car.Speed * dt;
+        if (sideTaken == 0f || Mathf.Sign(aim - car.Lane) != sideTaken)
+            car.Lane = Mathf.MoveToward(car.Lane, aim, 0.35f * car.Speed * dt);
         float lane = car.Lane;
         car.Place(e => KeepRight(e, car.Route.Forward, car.Habit) + pull + lane);
         car.Vel = dt > 0f ? MathX.Flat(car.Head - before) / dt : Vector3.Zero;
@@ -1404,6 +1413,34 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     public float OverlapLongest { get; private set; }
     public const float OverlapFails = 15f;
 
+    /// <summary>Lane changes begun, and those that crossed more than one lane at once (#1134: must stay 0).</summary>
+    public int LaneChanges { get; private set; }
+    public int MultiLaneJumps { get; private set; }
+
+    /// <summary>
+    /// Of the paths side by side to one exit with one move (<paramref name="same"/>), the one a car takes (#1134, LaneChoice.Pick): the
+    /// lane with the fewest cars already heading for it, biased to the side its next turn after the junction lies on.
+    /// </summary>
+    private (LaneEdge, bool) PickLane(List<(LaneEdge Edge, bool Forward)> same, Vehicle? car)
+    {
+        if (same.Count == 1) return same[0];
+        var lanes = new List<(float Offset, int Queued)>(same.Count);
+        foreach (var o in same)
+        {
+            int queued = 0;
+            foreach (var c in _cars) if (ReferenceEquals(c.PathAhead, o.Edge.Path)) queued++;
+            lanes.Add((o.Edge.Path!.FromOffset, queued));
+        }
+        var next = SignalMoves.None;
+        if (car?.Planned is { } way)
+        {
+            int at = way.FindIndex(w => w.Item1.Path is not null && w.Item1.KeyEnd == same[0].Edge.KeyEnd);
+            for (int k = at + 1; at >= 0 && k < way.Count; k++)
+                if (way[k].Item1.Path is { } p) { next = p.Move; break; }
+        }
+        return same[LaneChoice.Pick(lanes, next, car?.Habit ?? 0u)];
+    }
+
     /// <summary>Green stands logged so far (#1134).</summary>
     private int GreenStandsLogged;
 
@@ -1836,7 +1873,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             // habit picks one, as LaneFor does, so they all carry cars, #1134)
             if (planned.Item1.Path is not { } p) return planned;
             var same = options.Where(o => o.Edge.Path!.Move == p.Move && o.Edge.KeyEnd == planned.Item1.KeyEnd).OrderBy(o => o.Edge.Path!.FromOffset).ToList();
-            return same.Count > 1 ? same[(int)(car.Habit % (uint)same.Count)] : planned;
+            return same.Count > 1 ? PickLane(same, car) : planned;
         }
         if (options.Count == 0)
         {
@@ -1865,8 +1902,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             float sum = exits.Sum(ExitWeight), at = (float)_rng.NextDouble() * sum;
             var exit = exits[^1];
             foreach (var g in exits) { at -= ExitWeight(g); if (at <= 0) { exit = g; break; } }
-            float line = KeepRight(leg.Edge, leg.Forward, car?.Habit ?? 0u);
-            return exit.MinBy(o => Mathf.Abs(o.Edge.Path!.FromOffset - line));
+            return PickLane(exit, car);
         }
         float Weight((LaneEdge Edge, bool) o) =>
             Mathf.Abs((int)o.Edge.Class - (int)leg.Edge.Class) <= 1 ? 4f : 1f;
@@ -2062,6 +2098,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         public bool NarrowHeld;
         /// <summary>How long it has stood body on body with another standing car (s, #1134).</summary>
         public float Overlap;
+        /// <summary>The lane change under way (m right of its line; NaN none) and the metres driven since the last began (#1134).</summary>
+        public float StepTarget = float.NaN, SinceStep = 1000f;
         /// <summary>How long it has stood at its line on green, and whether that was logged (#1134, the J1 diagnosis).</summary>
         public float GreenStand;
         public bool GreenStandLogged;

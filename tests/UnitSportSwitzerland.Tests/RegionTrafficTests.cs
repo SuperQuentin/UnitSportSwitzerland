@@ -212,3 +212,54 @@ public class BoxRuleTests(SignalTestRegionFixture region) : IClassFixture<Signal
         Assert.False(read[1].AllowBlock);
     }
 }
+
+
+/// <summary>Lane choice and lane changes (#1134, <see cref="LaneChoice"/>).</summary>
+public class LaneChoiceTests
+{
+    [Fact]
+    public void Two_through_lanes_fill_evenly()
+    {
+        var queued = new[] { 0, 0 };
+        for (int car = 0; car < 20; car++)
+        {
+            int k = LaneChoice.Pick([(3f, queued[0]), (6f, queued[1])], SignalMoves.None, (uint)car * 2654435761u);
+            queued[k]++;
+        }
+        Assert.Equal(10, queued[0]);
+        Assert.Equal(10, queued[1]);
+    }
+
+    [Fact]
+    public void A_car_turning_left_next_prefers_the_left_lane_unless_it_is_much_longer()
+    {
+        Assert.Equal(0, LaneChoice.Pick([(3f, 2), (6f, 2)], SignalMoves.Left, 0));
+        Assert.Equal(1, LaneChoice.Pick([(3f, 2), (6f, 2)], SignalMoves.Right, 0));
+        // the left lane two cars longer: the right one after all
+        Assert.Equal(1, LaneChoice.Pick([(3f, 4), (6f, 2)], SignalMoves.Left, 0));
+    }
+
+    [Fact]
+    public void Lanes_change_one_at_a_time_and_spaced()
+    {
+        // three lanes over, far from the line: one lane now
+        float aim = LaneChoice.Aim(0f, -9.6f, float.NaN, 1000f, float.MaxValue, out bool starts);
+        Assert.True(starts);
+        Assert.Equal(-LaneChoice.LaneWidth, aim, 3);
+        // that change under way: carried on, no new one
+        aim = LaneChoice.Aim(-1f, -9.6f, -LaneChoice.LaneWidth, 10f, float.MaxValue, out starts);
+        Assert.False(starts);
+        Assert.Equal(-LaneChoice.LaneWidth, aim, 3);
+        // done, but only 10 m since: it keeps its lane
+        aim = LaneChoice.Aim(-LaneChoice.LaneWidth, -9.6f, -LaneChoice.LaneWidth, 10f, float.MaxValue, out starts);
+        Assert.False(starts);
+        Assert.Equal(-LaneChoice.LaneWidth, aim, 3);
+        // the line near: it goes on at once, still one lane
+        aim = LaneChoice.Aim(-LaneChoice.LaneWidth, -9.6f, -LaneChoice.LaneWidth, 10f, 40f, out starts);
+        Assert.True(starts);
+        Assert.Equal(-2 * LaneChoice.LaneWidth, aim, 3);
+        // a taper's small drift: followed at once
+        Assert.Equal(0.6f, LaneChoice.Aim(0f, 0.6f, float.NaN, 0f, 100f, out starts), 3);
+        Assert.False(starts);
+    }
+}
