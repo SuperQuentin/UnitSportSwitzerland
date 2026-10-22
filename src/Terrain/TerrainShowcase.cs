@@ -128,14 +128,17 @@ public static class TerrainShowcase
         // the heads face -Z, the driver's left is +X: the lanes to the pole's left
         // (an arm's or portal's post on the pole, carrying its heads; a span wire from the facade 3 m outside it to one across the street)
         float from = overhead == OverheadKind.Span ? -3f : 0f;
+        const float P = SignalOverhead.ClusterPitch;
         if (overhead is { } kind)
             signal.Overheads.Add(new SignalOverhead
             {
-                Kind = kind, Arm = 0, X = from, EndX = kind switch { OverheadKind.Arm => 7.6f, OverheadKind.Span => 15f, _ => 12f }, Bottom = 5f,
+                Kind = kind, Arm = 0, X = from, EndX = kind switch { OverheadKind.Arm => 4.4f, OverheadKind.Span => 15f, _ => 12f }, Bottom = 5f,
+                // one cluster over the middle of the lanes, a head per direction (#1110): over two lanes the main head and the left
+                // arrow (an arm), over three the right arrow, the main head and the left arrow (a portal, a span wire)
                 Heads = kind == OverheadKind.Arm
-                    ? [new OverheadHead(3.6f - from - 0.4f, SignalMoves.Through | SignalMoves.Right), new OverheadHead(6.6f - from - 0.4f, SignalMoves.Left)]
-                    : [new OverheadHead(3.0f - from, SignalMoves.Through | SignalMoves.Right), new OverheadHead(6.0f - from, SignalMoves.Through),
-                       new OverheadHead(9.0f - from, SignalMoves.Left)],
+                    ? [new OverheadHead(3.5f - from - P * 0.5f, SignalMoves.Through | SignalMoves.Right), new OverheadHead(3.5f - from + P * 0.5f, SignalMoves.Left)]
+                    : [new OverheadHead(6.0f - from - P, SignalMoves.Right), new OverheadHead(6.0f - from, SignalMoves.Through),
+                       new OverheadHead(6.0f - from + P, SignalMoves.Left)],
             });
         tile.Signals.Add(signal);
         var node = RoadProps(tile);

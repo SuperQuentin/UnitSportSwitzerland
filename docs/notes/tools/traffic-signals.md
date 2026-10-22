@@ -356,9 +356,12 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   test region's 1+1 crossroads, ~20 m wide at the lights with both pockets and bike lanes, took heads overhead at 59 approaches,
   45 as portals); then Stadt Bern's Handbuch LSA 2025 (Abb. 12-19): a lane's own kerb head (a left lane's on the left kerb or the
   refuge, every other's on the right kerb) more than 6 m sideways, two lanes turning the same way, a side road (yields when off)
-  of 2+ lanes without a refuge, or 3+ lanes. Then a head over the middle of every lane, its lenses and plate showing that lane's
-  moves (the user: one light per lane; one head per group hung over the line between two lanes; Bern's Abb. 19 leaves the kerb
-  lane to its kerb head, here it gets one too). The kerb poles keep theirs. **What carries them** (`TileRewriter.ExteriorWrite.PlaceOverhead`), first that fits: a **mast arm** whose post stands on the
+  of 2+ lanes without a refuge, or 3+ lanes. Then **one cluster over the middle of the approach's car lanes** (#1110, the user from
+  Geneva Street View, Oct 22 2026: "you usually don't get more than one light per direction overhead", like the main pole's
+  cluster; one per lane only for heads embedded in direction signs, `direction-signs`): a head per direction, left to right the
+  left-only lanes' (left arrow), the main head (every other lane, the union of their moves on its lenses) and the right-only
+  lanes', `SignalOverhead.ClusterPitch` (0.825 m: a kerb cluster's 0.55 m at 1.5 x) apart. The kerb poles keep theirs. (Before
+  #1110 a head hung over every lane: J13 took portals and J14 span wires; their clusters now sit within an arm's reach.) **What carries them** (`TileRewriter.ExteriorWrite.PlaceOverhead`), first that fits: a **mast arm** whose post stands on the
   main pole (the user: no pole beside it; `SignalOverhead.StandsOn`: the pole's column is not drawn, its heads and its priority
   signs stand out by the post's half width, `PostHalf`) when every head lies within 10 m (Basel-Landschaft: 3-4.5 m one lane,
   5.5-7.5 m two, to 10 m with a tie rod past 7 m); one **from the refuge** (its post on the refuge's pole) reaching right; on a tram street
@@ -375,7 +378,8 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   its own mesh), each drawn as a pole's head (the user: no lane plate above, the canton's plates below as on its poles, a
   lane's own arrow in its lenses and on such a plate), mounted on the front of the arm or beam at its mid-height by a bracket (the user: mounted, not hung), hung from a span wire by a hanger; collision on the posts and anchors only (4 m columns: everything above is over the 4 m vehicle limit).
   Model viewer: "Traffic light - Mast arm / Portal / Span wire". Stats: the layout line's `overhead heads (#1037)`. Test region:
-  J6 arms, J7's 2+2 cross road arms, J13 portals, J14 (J13 with trams, between houses) span wires (`signal-test-region`); J7's double left (pockets on a 1+1
+  J6, J7's 2+2 cross road, J13 and J14 (J13 with trams, between houses) all on arms since #1110 (no case builds a portal or a
+  span wire now: the model viewer and `SignalPlanTests` keep them) (`signal-test-region`); J7's double left (pockets on a 1+1
   road) keeps its poles by the user's rule. Tier 0 `OverheadPlannerTests` (Bern's layouts), `SignalPlanTests` (OVHD round trip),
   `SignalTestRegionTests.Wide_approaches_carry_their_heads_overhead`. Old layout (`--junctions old`): none.
 - **Pole colour per canton** (#1037, `SignalPlan.PoleColour`, bits 3-5 of the flag byte; RoadGen `PoleColour(canton)`): Basel-
