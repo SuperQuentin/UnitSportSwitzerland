@@ -33,9 +33,11 @@ The junction planner's cores (`junction-planner`) take the tram tracks running t
     vertical flashing = the amber before red, horizontal flashing = the red-amber before green, which lasts `TramRedAmberT` 5 s
     (the user: "way longer than for cars"; no source found for the length). The unlit stroke a shade off the lens (`TramTOff`),
     no bloom; a small "tram detected" dot above the T, modelled, never lit. Packed plate against plate with the car heads
-    (`SignalBuilder.RomandyTramHeads`, `TramPack`, no arm): beside them on their right, level with their lower half, where
-    there is one or more than there are car heads (photo 1); else, or where the main head's flasher holds that side, in a row
-    on top of them ending over the main head, each its arrow plate between it and the car head below (photo 2). The arrow
+    (`SignalBuilder.RomandyTramHeads`, `TramPack`, no arm): beside them on their right where there is one (level with their
+    lower half, photo 1; over the main head's flasher where it has one: the user, "there is still space for one transit
+    head") or more than there are car heads, up to `TramColumn` 2 without a flasher, stacked in a column down their side (the
+    user: "stacked vertically"); else in a row on top of them ending over the main head, each its arrow plate between it and
+    the car head below (photo 2). The arrow
     plate only where the approach's trams go several ways. A tram-only pole (repeater, pole-only placement): the same modules
     side by side, level with a car head's lower half. A tram's red-amber holds it at its line, so the fixed-time check does
     not count it as live.

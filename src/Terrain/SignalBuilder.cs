@@ -33,6 +33,8 @@ public static class SignalBuilder
     private const float TramDetectRadius = 0.1f, TramDetectAt = 0.66f;
     /// <summary>Romandy's tram head to the next one or to its car head, plate against plate (#1105: packed, no gap).</summary>
     private const float TramPack = HeadWidth + 2f * (BorderGap + BorderWidth);
+    /// <summary>Romandy's tram heads a column beside the car heads holds, about their height (#1105); more go on top of them.</summary>
+    private const int TramColumn = 2;
     private static readonly Color TramLens = new(0.05f, 0.05f, 0.06f), TramDetect = new(0.22f, 0.22f, 0.24f);
     /// <summary>
     /// A car head's plate (#759, from a photo of a Swiss junction and the user's review): a white
@@ -697,10 +699,11 @@ public static class SignalBuilder
 
     /// <summary>
     /// Romandy's tram heads on a pole with car heads (#1105, the user's photos), one-lens car head modules packed against the
-    /// <paramref name="cars"/> car heads (the main one <paramref name="centre"/>-th from the left): beside them on their right, level
-    /// with their lower half and plate against plate, where there is one or more than there are car heads (photo 1); otherwise,
-    /// or where the main head's flasher holds that side, in a row right on top of them ending over the main head, each its arrow
-    /// plate between it and the car head under it (photo 2).
+    /// <paramref name="cars"/> car heads (the main one <paramref name="centre"/>-th from the left): beside them on their right, plate
+    /// against plate, where there is one (level with their lower half, photo 1; over the main head's flasher where it has one) or
+    /// more than there are car heads, up to <see cref="TramColumn"/> without a flasher (a column down their side, the user);
+    /// otherwise in a row right on top of them ending over the main head, each its arrow plate between it and the car head under
+    /// it (photo 2).
     /// </summary>
     private static void RomandyTramHeads(SignalPlan plan, SignalPole pole, List<Head> heads, Vector3 foot, Vector3 front, Vector3 right,
         float lower, int cars, int centre)
@@ -711,17 +714,27 @@ public static class SignalBuilder
         for (int g = 0; g < plan.Groups.Count; g++)
             if (plan.Groups[g].Kind == SignalGroupKind.Tram && plan.Groups[g].Arm == pole.Arm) trams.Add(g);
         if (trams.Count == 0) return;
-        if ((trams.Count == 1 || trams.Count > cars) && !heads.Any(h => h.Flasher))
+        float frame = BorderGap + BorderWidth, panel = trams.Count > 1 ? ArrowPanel : 0f;
+        bool flasher = heads.Any(h => h.Flasher);
+        if (flasher && trams.Count == 1)
         {
-            for (int k = 0; k < trams.Count; k++)
-            {
-                var at = foot + front * InFront + right * ((cars - 1 - centre) * HeadSpacing + (k + 1) * TramPack) + Vector3.Up * (lower + Pitch);
-                heads.Add(new Head(at, front, right, trams[k], Shape.TramT, 1, false));
-            }
+            // one beside the main head over its flasher, plate on plate, still touching the car head (the user: "if there is a
+            // flasher, there is still space for one transit head")
+            heads.Add(new Head(foot + front * InFront + right * TramPack + Vector3.Up * (lower + 1.5f * Pitch + 2f * frame + 0.01f),
+                front, right, trams[0], Shape.TramT, 1, false));
             return;
         }
-        // the car heads' plates' top, then the tram plate's foot on it: its band, its arrow panel (several ways), its band
-        float frame = BorderGap + BorderWidth, panel = trams.Count > 1 ? ArrowPanel : 0f;
+        if (!flasher && (trams.Count == 1 || trams.Count > cars) && trams.Count <= TramColumn)
+        {
+            // beside: one level with the car heads' lower half (photo 1), several in a column against their side, its top level
+            // with theirs, one module (head, its plate's bands and arrow panel) under the next (the user)
+            float side = (cars - 1 - centre) * HeadSpacing + TramPack, from = trams.Count == 1 ? lower + Pitch : lower + 2.5f * Pitch;
+            for (int k = 0; k < trams.Count; k++)
+                heads.Add(new Head(foot + front * InFront + right * side + Vector3.Up * (from - k * (Pitch + 2f * frame + panel)),
+                    front, right, trams[k], Shape.TramT, 1, false));
+            return;
+        }
+        // on top: the car heads' plates' top, then the tram plate's foot on it: its band, its arrow panel (several ways), its band
         float y = lower + 3f * Pitch + frame + 0.01f + panel + frame + Pitch * 0.5f;
         // (the last over the main head, the others over the heads on its left while there are some)
         int first = Math.Min(trams.Count - 1, centre);
