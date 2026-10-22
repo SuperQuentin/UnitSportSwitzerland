@@ -30,8 +30,10 @@ The same VR mode as over Link (`setup`, `rig`, `controls`), run on the headset's
   **`Platform.IsTouch`** (= mobile and not standalone VR) gates what only a touch screen wants: the touch overlay, the
   finger-sized menus (`MobileUiScale`), the touch rows in Settings, the confined pointer, the chat hint and the
   engine label's phone place.
-- **OpenXR from the engine's start.** The export's XR mode makes Godot start with `--xr_mode_openxr`, so
-  `XrSession.TryStart` finds it running. Nothing relaunches (Android cannot), and the VR toggles (title, Settings)
+- **OpenXR from the engine's start.** The export's XR mode (`--xr_mode_openxr`) only makes the app a VR one on the
+  Android side: the engine itself starts OpenXR only with `xr/openxr/enabled` (off: desktop runs never load it) or
+  `--xr-mode on`, which the preset's `command_line/extra_args` passes. Without it the headset showed the loading dots
+  forever and the log said `OpenXR did not start on this headset`. With it `XrSession.TryStart` finds OpenXR running. Nothing relaunches (Android cannot), and the VR toggles (title, Settings)
   are hidden: `CanSpawnProcesses` is false. Settings keeps the headset's own rows (resolution, MSAA, turning, comfort).
 - **Refresh rate:** the VR one of Link (`air-link`, `VrRefreshHz`, Settings → Video → VR refresh rate), applied
   live with physics ticking at it. 72 by default, the Quest 2's own GPU budget; a standalone headset also offers 60
