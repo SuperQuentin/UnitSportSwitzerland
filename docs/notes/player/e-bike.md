@@ -4,7 +4,7 @@
   `RoadBike` 1, the Samedi `EBike` 203 (protocol 47). The choice replicates as the ride kind, as the
   motorbikes' does, and a parked e-bike stays one (`VehicleState` keeps the kind). The picker's
   **Bicycles** tab lists the catalogue; the road bike also stays among the Mounts. A new bicycle is a
-  new `RideKind`, a catalogue entry and a line in `Rideable.Create`.
+  new `RideKind` and a catalogue entry (`Rideable.Create` builds any `BicycleCatalog.For` kind).
 - **The low frame**: `MoustacheSamediOpen` (`RideKind.EBikeOpen` 204, Moustache's "Open"), the same spec `with`
   `FrameStyle = BikeFrameStyle.LowFrame`. The mesh drops the top tube for a low tube from the head tube
   to the seat tube over the motor. Its chart and weight are assumed to be the diamond's, so the fit is

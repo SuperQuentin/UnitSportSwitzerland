@@ -225,8 +225,9 @@ public static class BikeMeshBuilder
         {
             // the headlight on a bracket ahead of the crown, its lens forward
             var lamp = crown + new Vector3(0, -0.010f, 0.075f);
-            s.Box(lamp, new Vector3(0.055f, 0.040f, 0.045f), Alloy);
-            s.Box(lamp + new Vector3(0, 0, 0.0245f), new Vector3(0.042f, 0.028f, 0.004f), HeadLens);
+            // the lens a 1 cm slab ahead of the housing, never a sheet laid on its face (#1159: 4 mm fought)
+            s.Box(lamp - new Vector3(0, 0, 0.005f), new Vector3(0.055f, 0.040f, 0.035f), Alloy);
+            s.Box(lamp + new Vector3(0, 0, 0.0175f), new Vector3(0.042f, 0.028f, 0.010f), HeadLens);
         }
         RiserCockpit(s, f, p);
     }
@@ -316,8 +317,9 @@ public static class BikeMeshBuilder
         if (light)
         {
             var lamp = new Vector3(0, y - 0.020f, back - 0.012f);
-            s.Box(lamp, new Vector3(0.070f, 0.030f, 0.020f), Alloy);
-            s.Box(lamp + new Vector3(0, 0, -0.0105f), new Vector3(0.060f, 0.022f, 0.002f), TailLens);
+            // the lens an 8 mm slab behind the housing (#1159: a 2 mm sheet 1.5 mm off its face fought)
+            s.Box(lamp + new Vector3(0, 0, 0.004f), new Vector3(0.070f, 0.030f, 0.012f), Alloy);
+            s.Box(lamp - new Vector3(0, 0, 0.006f), new Vector3(0.060f, 0.022f, 0.008f), TailLens);
         }
     }
 
