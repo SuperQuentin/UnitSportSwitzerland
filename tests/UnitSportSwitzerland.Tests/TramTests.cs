@@ -177,6 +177,75 @@ public class TramTests
         Assert.All(trams, g => Assert.Contains(g.Intervals, iv => iv.Aspect == SignalAspect.Green));
     }
 
+    [Fact]
+    public void OneTrackBranching_TimesEachDirectionOnItsOwn()
+    {
+        // the user (#1105): transit gets a signal per direction on a single lane, never one combined group. One track from the
+        // east branching straight on and left: the straight tram goes with its cars while the left one still waits for the
+        // oncoming cars, so there is a time with through on go and left on stop
+        var plan = Crossroads(SignalMoves.Left | SignalMoves.Through, SignalMoves.None);
+        int through = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Tram && g.Moves == SignalMoves.Through);
+        int left = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Tram && g.Moves == SignalMoves.Left);
+        Assert.True(through >= 0 && left >= 0 && through != left);
+        Assert.Equal(plan.Groups[through].Arm, plan.Groups[left].Arm);
+        Assert.Contains(plan.Groups[left].Intervals, iv => iv.Aspect == SignalAspect.Green);
+        bool apart = false;
+        for (double s = 0.05; s < plan.Cycle; s += 0.1)
+            apart |= plan.State(through, s - plan.Offset) == SignalAspect.Green && plan.State(left, s - plan.Offset) == SignalAspect.Red;
+        Assert.True(apart, "through on go while left is on stop");
+        // and a tram path picks its own direction's group, not the first one of the track
+        Assert.Equal(through, UnitSport.Tools.RoadGen.Rewrite.TileRewriter.TramGroup(plan, 0, SignalMoves.Through));
+        Assert.Equal(left, UnitSport.Tools.RoadGen.Rewrite.TileRewriter.TramGroup(plan, 0, SignalMoves.Left));
+    }
+
+    [Theory]
+    [InlineData(50, 5f)]
+    [InlineData(60, 6f)]
+    [InlineData(80, 7f)]
+    public void ATramsAmber_IsLongerThanACars_ByTheApproachsSpeed(int kmh, float amber)
+    {
+        // the user (#1105): "5s at 50, 6s at 60 and 7s above"; both heads, the cars' own amber unchanged (3/4/5 s)
+        foreach (bool romandy in new[] { false, true })
+        {
+            var plan = SignalPlan.Build(
+            [
+                new SignalArm(0, true, true, Pedestrians: true, Rank: 2, SpeedKmh: kmh, TramMoves: SignalMoves.Through),
+                new SignalArm(Math.PI / 2, true, true, Pedestrians: true, SpeedKmh: kmh),
+                new SignalArm(Math.PI, true, true, Pedestrians: true, Rank: 2, SpeedKmh: kmh),
+                new SignalArm(-Math.PI / 2, true, true, Pedestrians: true, SpeedKmh: kmh),
+            ], 1105, tramTHead: romandy);
+            Assert.Empty(plan.Validate());
+            int tram = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Tram);
+            int car = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Car && g.Arm == 0);
+            float Amber(int g) => plan.Groups[g].Intervals.Where(iv => iv.Aspect == SignalAspect.Amber).Sum(iv => iv.To - iv.From);
+            Assert.Equal(amber, Amber(tram), 0.05f);
+            Assert.Equal(SignalPlan.Yellow(kmh), Amber(car), 0.05f);
+            Assert.Equal(amber, plan.PassingTime(tram));
+            Assert.True(plan.Cycle <= SignalPlan.MaxCycle);
+        }
+    }
+
+    [Fact]
+    public void RomandysTramRedAmber_IsTheLongOne()
+    {
+        // the user: the flashing bar across before go lasts "way longer than for cars" (#1105: the head's flag reached the plan only
+        // after its timing, so it stayed a car's 2 s)
+        foreach (bool romandy in new[] { false, true })
+        {
+            var plan = SignalPlan.Build(
+            [
+                new SignalArm(0, true, true, Pedestrians: true, Rank: 2, TramMoves: SignalMoves.Through),
+                new SignalArm(Math.PI / 2, true, true, Pedestrians: true),
+                new SignalArm(Math.PI, true, true, Pedestrians: true, Rank: 2),
+                new SignalArm(-Math.PI / 2, true, true, Pedestrians: true),
+            ], 1105, tramTHead: romandy);
+            Assert.Equal(romandy, plan.TramTHead);
+            var tram = plan.Groups.First(g => g.Kind == SignalGroupKind.Tram);
+            float redAmber = tram.Intervals.Where(iv => iv.Aspect == SignalAspect.RedAmber).Sum(iv => iv.To - iv.From);
+            Assert.Equal(romandy ? SignalPlan.TramRedAmberT : 2f, redAmber, 0.05f);
+        }
+    }
+
     [Theory]
     [InlineData("GE", 2_500_000, true)]
     [InlineData("VD", 2_530_000, true)]

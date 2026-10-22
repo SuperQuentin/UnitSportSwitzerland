@@ -32,7 +32,7 @@ public static partial class TileRewriter
     private static SignalPlan? WriteSignals(JunctionPlan jp, RoadGenResult result, Dictionary<TileId, List<RoadSignal>> signals,
         Dictionary<TileId, List<RoadApproach>> approaches, Cantons? cantons, SignalStats signalStats, LayoutWriteStats stats,
         Dictionary<TileId, List<RoadPointProp>> signs, Func<Vec2, bool> clear, Func<Vec2, bool>? building = null,
-        IReadOnlyDictionary<int, (SignalMoves Moves, double Lateral)>? trams = null)
+        IReadOnlyDictionary<int, (SignalMoves Moves, double Lateral)>? trams = null, GantryContext? gantries = null)
     {
         var net = result.Network;
         var home = TileId.FromLv95(jp.Centre.X, jp.Centre.Y);
@@ -75,16 +75,16 @@ public static partial class TileRewriter
         }
         if (arms.Count(x => x.In) < 2) return null;
         string? canton = cantons?.CodeAt(jp.Centre.X, jp.Centre.Y);
-        bool amber = PedestrianAmber(canton);
+        bool amber = PedestrianAmber(canton), tramT = RomandyTramHead(canton, jp.Centre.X);
         uint seed = (uint)(long)Math.Round(jp.Centre.X) * 73856093u ^ (uint)(long)Math.Round(jp.Centre.Y) * 19349663u;
-        var plan = SignalPlan.Build(arms, seed, amber);
+        var plan = SignalPlan.Build(arms, seed, amber, tramT);
         // a kerbside bike lane keeps its signal only where a phase holds the right arrow while its riders go; a bike group that
         // finds no phase goes without its signal, not the junction without its plan (as the old layout)
         for (int k = 0; k < arms.Count; k++)
             if (arms[k].BikeSignal && !plan.ThroughWithRightHeld(k) && exterior[k].Arm.HasRight)
             {
                 arms[k] = arms[k] with { BikeSignal = false };
-                plan = SignalPlan.Build(arms, seed, amber);
+                plan = SignalPlan.Build(arms, seed, amber, tramT);
             }
         // riders who follow the cars' lights (a bike lane with no signal of its own, a left-turn bike lane) and whose slow clearing
         // would lengthen their cars' conflict times by more than LongRiders get a bike group of their own, which can end earlier
@@ -107,12 +107,12 @@ public static partial class TileRewriter
                 if (c.Move == SignalMoves.Left && !arms[k].RiderLeft) { arms[k] = arms[k] with { RiderLeft = true }; rebuild = true; }
                 else if (c.Move != SignalMoves.Left && !arms[k].BikeSignal) { arms[k] = arms[k] with { BikeSignal = true }; rebuild = true; }
             }
-            if (rebuild) { plan = SignalPlan.Build(arms, seed, amber); stats.RiderGroups++; }
+            if (rebuild) { plan = SignalPlan.Build(arms, seed, amber, tramT); stats.RiderGroups++; }
         }
         if (plan.Validate().Any(e => e.Contains("(Bike arm")))
         {
             for (int k = 0; k < arms.Count; k++) arms[k] = arms[k] with { BikeSignal = false };
-            plan = SignalPlan.Build(arms, seed, amber);
+            plan = SignalPlan.Build(arms, seed, amber, tramT);
         }
 
         // a two-stage crossing whose island wait the cycle cannot keep (3 s longer at most) crosses in one go, as without the
@@ -125,7 +125,7 @@ public static partial class TileRewriter
                 arms[k] = arms[k] with { HalfInM = 0, HalfOutM = 0 };
                 ExteriorPlanner.OneStage(exterior[k]);
             }
-            plan = SignalPlan.Build(arms, seed, amber);
+            plan = SignalPlan.Build(arms, seed, amber, tramT);
             stats.TwoStageDropped += oneStage.Count;
         }
         if (plan.Validate() is { Count: > 0 })
@@ -135,7 +135,6 @@ public static partial class TileRewriter
             return null;
         }
         plan.ArrowPlates = ArrowPlates(canton);
-        plan.TramTHead = RomandyTramHead(canton, jp.Centre.X);
         stats.TwoStage += arms.Count(x => x.TwoStage);
         stats.RiderBoxes += Enumerable.Range(0, arms.Count).Count(k => arms[k].RiderBox && plan.Groups.Any(g => g.Kind == SignalGroupKind.Bike && g.Arm == k && g.Moves == SignalMoves.Left));
         plan.PoleColour = PoleColour(canton);
@@ -144,6 +143,7 @@ public static partial class TileRewriter
         var stops = new float[arms.Count * 3];
         var poles = new List<SignalPole>();
         var overheads = new List<SignalOverhead>();
+        var gantryList = new List<SignGantry>();
         var records = new List<(int Arm, Vec2 At, double Stop)>();
         for (int k = 0; k < arms.Count; k++)
         {
@@ -210,13 +210,21 @@ public static partial class TileRewriter
                     stats.SignsOnPoles++;
                 }
             }
-            // the heads over its lanes (#1037): on a mast arm, a portal or a tram street's span wire; the far kerb's foot found as a
-            // pole's where no pole stands there
+            // the far kerb's foot found as a pole's where no pole stands there: for an overhead structure or a gantry
+            if (arms[k].In && (ex.Overhead.Count > 0 || gantries is not null) && leftFoot is null && ex.Poles.Count > 0
+                && ClearFoot(new PoleSpot(ex.Poles[0].Station, RightKerb: false, OnRefuge: false, 0), ex, a, P, clear) is var (lf, lLift))
+                leftFoot = (lf, Local(home, [lf], q => SampleAt(a, q), lLift)[1]);
+            // a gantry of lane signs with a head in each lane's band (#1110): where SITG has one (Geneva) or the rule wants one; the
+            // approach then has no other overhead heads
+            if (arms[k].In && gantries is not null && ex.CarStop is { } gStop
+                && PlaceGantry(gantries, jp, ex, (byte)k, gStop, P, u, right, mainFoot, leftFoot, canton, net, home, q => SampleAt(a, q), clear, result, stats) is { } gantry)
+            {
+                gantryList.Add(gantry);
+                continue;
+            }
+            // the heads over its lanes (#1037): on a mast arm, a portal or a tram street's span wire
             if (arms[k].In && ex.Overhead.Count > 0)
             {
-                if (leftFoot is null && ex.Poles.Count > 0
-                    && ClearFoot(new PoleSpot(ex.Poles[0].Station, RightKerb: false, OnRefuge: false, 0), ex, a, P, clear) is var (lf, lLift))
-                    leftFoot = (lf, Local(home, [lf], q => SampleAt(a, q), lLift)[1]);
                 bool tram = net.Links[a.LinkId].Tag is Source { Line.Osm.Tram: true };   // OSM railway=tram along the arm
                 if (PlaceOverhead(ex, (byte)k, P, u, right, mainFoot, leftFoot, refugeFoot, tram, home, q => SampleAt(a, q), clear, building, stats) is { } o)
                 {
@@ -251,6 +259,7 @@ public static partial class TileRewriter
         var centre = Local(home, [jp.Centre], p => SampleAt(jp.Arms[0], p), 0f);
         var record = new RoadSignal { X = centre[0], Y = centre[1], Z = centre[2], Stops = stops, Plan = plan, Poles = poles };
         record.Overheads.AddRange(overheads);
+        record.Gantries.AddRange(gantryList);
         Get(signals, home).Add(record);
         short index = (short)(Get(signals, home).Count - 1);
         foreach (var (k, at, stop) in records)

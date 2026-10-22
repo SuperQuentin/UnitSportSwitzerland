@@ -7,7 +7,8 @@ namespace UnitSport.Tests;
 /// <summary>
 /// Which approaches get heads over their lanes (#1037, <see cref="OverheadPlanner"/>): Stadt Bern's Handbuch LSA (2025) layouts
 /// Abb. 12-19 as cases, on 3 m lanes, the kerb heads half a metre out of the kerb; only on a street with 2+ lanes of its own
-/// toward the junction (the user's choice).
+/// toward the junction (the user's choice). The heads form one cluster over the middle of the approach's lanes, a head per
+/// direction (#1110, the user: no more than one light per direction overhead), <see cref="SignalOverhead.ClusterPitch"/> apart.
 /// </summary>
 public class OverheadPlannerTests
 {
@@ -33,12 +34,18 @@ public class OverheadPlannerTests
         return OverheadPlanner.Heads(sec, streetLanes, right, leftHead, island > 0, sideRoad);
     }
 
+    /// <summary>The heads as (offset to the centimetre, moves).</summary>
+    private static List<(double, SignalMoves)> Cluster(List<OverheadSpot> heads) => heads.Select(h => (Math.Round(h.Offset, 2), h.Moves)).ToList();
+
+    private const double P = SignalOverhead.ClusterPitch;
+
     [Fact]
     public void Main_road_two_lanes_without_island_both_heads_over_the_lanes()
     {
-        // Abb. 14: a 2+2 main road, its left lane's head across both oncoming lanes: the left arrow and the main head overhead
+        // Abb. 14: a 2+2 main road, its left lane's head across both oncoming lanes: the left arrow and the main head overhead, side
+        // by side over the middle of the two lanes (3 m)
         var heads = Heads(2, 0, sideRoad: false, streetLanes: 2, L, T | R);
-        Assert.Equal([(1.5, L), (4.5, T | R)], heads.Select(h => (h.Offset, h.Moves)));
+        Assert.Equal([(Math.Round(3 - P / 2, 2), L), (Math.Round(3 + P / 2, 2), T | R)], Cluster(heads));
     }
 
     [Fact]
@@ -57,20 +64,20 @@ public class OverheadPlannerTests
     }
 
     [Fact]
-    public void Three_lanes_one_head_over_each()
+    public void Three_lanes_one_head_per_direction_over_their_middle()
     {
-        // Abb. 19: three lanes on a side road with an island go overhead; a head over every lane (the user: one light per lane;
-        // Bern's figure leaves the kerb lane to its kerb head)
+        // Abb. 19: three lanes on a side road with an island go overhead; the through and the through-and-right lane share the main
+        // head (#1110: one light per direction), the left arrow beside it, over the middle of the lanes (4.5 m)
         var heads = Heads(2, 2, sideRoad: true, streetLanes: 3, L, T, T | R);
-        Assert.Equal([(1.5, L), (4.5, T), (7.5, T | R)], heads.Select(h => (h.Offset, h.Moves)));
+        Assert.Equal([(Math.Round(4.5 - P / 2, 2), L), (Math.Round(4.5 + P / 2, 2), T | R)], Cluster(heads));
     }
 
     [Fact]
-    public void A_double_left_has_a_head_over_each_of_its_lanes()
+    public void A_double_left_has_one_left_head_in_the_cluster()
     {
-        // Abb. 12: a turn on two lanes is repeated over the road: over each lane, never between them on the line
+        // Abb. 12: a turn on two lanes is repeated over the road; one head for the direction, not one per lane (#1110)
         var heads = Heads(2, 0, sideRoad: false, streetLanes: 3, L, L, T | R);
-        Assert.Equal([(1.5, L), (4.5, L), (7.5, T | R)], heads.Select(h => (h.Offset, h.Moves)));
+        Assert.Equal([(Math.Round(4.5 - P / 2, 2), L), (Math.Round(4.5 + P / 2, 2), T | R)], Cluster(heads));
     }
 
     [Fact]
@@ -81,9 +88,10 @@ public class OverheadPlannerTests
     }
 
     [Fact]
-    public void Every_lane_has_its_head_the_right_turn_lane_too()
+    public void Every_direction_has_its_head_the_right_turn_too()
     {
+        // left, through and right lanes: three heads side by side, the main one over the middle
         var heads = Heads(2, 0, sideRoad: false, streetLanes: 2, L, T, R);
-        Assert.Equal([(1.5, L), (4.5, T), (7.5, R)], heads.Select(h => (h.Offset, h.Moves)));
+        Assert.Equal([(Math.Round(4.5 - P, 2), L), (4.5, T), (Math.Round(4.5 + P, 2), R)], Cluster(heads));
     }
 }

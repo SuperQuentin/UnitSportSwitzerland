@@ -143,8 +143,9 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
     [Fact]
     public void Wide_approaches_carry_their_heads_overhead()
     {
-        // #1037: J6's 2+2 artery on mast arms, the 4+4 artery of J13 on portals, the same with trams (J14) on span wires; the
-        // 1+1 roads with pockets keep their kerb poles; every head 4.50-5.50 m over the road (5.50 m and up on a wire)
+        // #1037: J6's 2+2 artery on mast arms; the 1+1 roads with pockets keep their kerb poles; every head 4.50-5.50 m over the
+        // road (5.50 m and up on a wire). J13's 4+4 artery took portals and J14 (the same with trams, between houses) span wires
+        // while a head hung over every lane; their one cluster over the middle of the lanes (#1110) is within an arm's reach
         (OverheadKind Kind, int Count) At(string id)
         {
             var j = region.Junction(id);
@@ -152,14 +153,16 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
             return (all.Select(o => o.Kind).DefaultIfEmpty().First(), all.Count);
         }
         Assert.Equal((OverheadKind.Arm, 2), At("J6"));
-        Assert.Equal((OverheadKind.Portal, 2), At("J13"));
-        Assert.Equal((OverheadKind.Span, 2), At("J14"));
+        Assert.Equal((OverheadKind.Arm, 2), At("J13"));
+        Assert.Equal((OverheadKind.Arm, 2), At("J14"));
         Assert.Equal(0, At("J2").Count);
         foreach (var (_, tile) in region.Tiles())
             foreach (var s in tile.Signals)
                 foreach (var o in s.Overheads)
                 {
                     Assert.NotEmpty(o.Heads);
+                    Assert.InRange(o.Heads.Count, 1, 3);
+                    Assert.True(o.Heads.Max(h => h.Along) - o.Heads.Min(h => h.Along) <= 2 * SignalOverhead.ClusterPitch + 0.01f, "one cluster");
                     Assert.All(o.Heads, h => Assert.InRange(h.Along, 0.3f, o.Length));
                     float lift = o.Bottom - s.Y;
                     Assert.InRange(lift, o.Kind == OverheadKind.Span ? 5.4f : 4.4f, 6.2f);
@@ -602,5 +605,112 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
         // J5: the merged strip's shared straight + right lane turns across its own bike lane
         Assert.True(Red("J5a", 25) >= 1, "J5a: no red where the TR lane turns right across the bike lane");
         Assert.True(Red("J5b", 25) >= 1, "J5b: no red where the TR lane turns right across the bike lane");
+    }
+
+    [Fact]
+    public void Flashers_say_what_they_warn_of_and_permissive_lefts_flash()
+    {
+        // #1109, the user: a plate under each flasher lamp (a pedestrian, a bike, the arrow of a turn crossing both); a left from a
+        // shared lane giving way to the oncoming cars flashes its ball's yellow, or, shown by an arrow, has a flasher on its left
+        var plates = new Dictionary<SignalPlate, int>();
+        int balls = 0, arrows = 0;
+        foreach (var (_, tile) in region.Tiles())
+            foreach (var s in tile.Signals)
+            {
+                var p = s.Plan;
+                for (int g = 0; g < p.Groups.Count; g++)
+                {
+                    if (p.Groups[g].Kind != SignalGroupKind.Flasher) continue;
+                    var (plate, arrow) = p.PlateOf(g);
+                    plates[plate] = plates.GetValueOrDefault(plate) + 1;
+                    // a car group's lamp always says something; a bike group's flashes its own yellow, no lamp
+                    Assert.Equal(p.Groups[p.Groups[g].Qualifies].Kind == SignalGroupKind.Car, plate != SignalPlate.None);
+                    if (plate == SignalPlate.Arrow) Assert.Equal(SignalMoves.None, arrow & SignalMoves.Through);
+                }
+                for (int g = 0; g < p.Groups.Count; g++)
+                {
+                    if (p.LeftGivesWayTo(g).Count == 0) continue;
+                    if (UnitSport.Terrain.SignalBuilder.ArrowMoves(p, g) == SignalMoves.None) balls++; else arrows++;
+                }
+            }
+        Assert.True(plates.GetValueOrDefault(SignalPlate.Pedestrian) > 0 && plates.GetValueOrDefault(SignalPlate.Bike) > 0
+            && plates.GetValueOrDefault(SignalPlate.Arrow) > 0, string.Join(", ", plates.Select(kv => $"{kv.Key} {kv.Value}")));
+        Assert.True(balls > 0 && arrows > 0, $"balls {balls}, arrows {arrows}");
+
+        // J7's right turns cross walkers and riders: a mix, the right arrow
+        var j7 = region.Junction("J7");
+        var p7 = region.Tile(j7.E, j7.N).Signals.Single().Plan;
+        Assert.Contains(Enumerable.Range(0, p7.Groups.Count), g => p7.PlateOf(g, turns: SignalMoves.Right) is (SignalPlate.Arrow, SignalMoves.Right));
+
+        // J3b's south approach: straight on and left beside its right pocket's own group, an arrow head, its left giving way: the
+        // flasher on its left, its yellow steady; J3's ball heads flash theirs
+        var j3b = region.Junction("J3b");
+        var tile3b = region.Tile(j3b.E, j3b.N);
+        var lamps3b = UnitSport.Terrain.SignalBuilder.BuildLamps(tile3b)!;
+        // (#1117, the user's bug: its left turn gives way to the oncoming north arm and crosses the north bike lane, and its one lamp
+        // showed a bike: a mix, so the turn's arrow, one lamp for both, on the approach's left pole)
+        var p3b = lamps3b.Plans[0];
+        int south = Enumerable.Range(0, p3b.Groups.Count).Single(g => p3b.Groups[g] is { Kind: SignalGroupKind.Car, Moves: SignalMoves.Left | SignalMoves.Through });
+        Assert.NotEmpty(p3b.LeftGivesWayTo(south));
+        var leftFlasher = Assert.Single(lamps3b.Lenses, l => l.Group == south && l.Role == UnitSport.Terrain.SignalBuilder.Role.Flash);
+        Assert.Equal((SignalPlate.Arrow, SignalMoves.Left), (leftFlasher.Plate, leftFlasher.PlateArrow));
+        Assert.Equal((SignalPlate.Arrow, SignalMoves.Left), p3b.TurnPlate(south, SignalMoves.Left));
+        var pole = tile3b.Signals.Single().LeftFlasherPole(south);
+        Assert.Equal(FlasherSite.SecondPole, pole.Site);
+        Assert.Equal(SignalMoves.Left | SignalMoves.Through, UnitSport.Terrain.SignalBuilder.ArrowMoves(lamps3b.Plans[0], leftFlasher.Group));
+        Assert.DoesNotContain(lamps3b.Lenses, l => l.Group == leftFlasher.Group && l.Role == UnitSport.Terrain.SignalBuilder.Role.Amber && l.Blink is not null);
+        var j3 = region.Junction("J3");
+        var lamps3 = UnitSport.Terrain.SignalBuilder.BuildLamps(region.Tile(j3.E, j3.N))!;
+        Assert.Contains(lamps3.Lenses, l => l.Role == UnitSport.Terrain.SignalBuilder.Role.Amber && l.Blink is not null);
+    }
+
+    [Fact]
+    public void Turn_lanes_have_their_own_heads_and_are_protected_where_the_phases_allow()
+    {
+        // #1119, the user: "whenever there is a left turn only lane at a light, it should get its own light ... same for right
+        // turns"; "usually permissive lefts are pretty rare in Switzerland"; "even right turns with their own lanes are usually
+        // protected". Every pocket has a group and head of its own; lefts are protected; a right pocket no phase carries is
+        // protected with its own approach where the walkers and riders it crosses keep a green elsewhere
+        int lefts = 0, rights = 0, permissive = 0;
+        foreach (var (_, tile) in region.Tiles())
+            foreach (var s in tile.Signals)
+            {
+                var p = s.Plan;
+                var c = p.Conflicts();
+                var lamps = UnitSport.Terrain.SignalBuilder.BuildLamps(tile)!;
+                for (int a = 0; a < p.Arms.Count; a++)
+                {
+                    if (!p.Arms[a].In) continue;
+                    var turns = SignalMoves.None;
+                    for (int to = 0; to < p.Arms.Count; to++) if (to != a && p.Arms[to].Out) turns |= SignalPlan.Turn(p.Arms, a, to);
+                    if (p.Arms[a].LeftPocket && (turns & SignalMoves.Left) != 0 && turns != SignalMoves.Left)
+                    {
+                        int l = p.Groups.FindIndex(g => g.Kind == SignalGroupKind.LeftArrow && g.Arm == a);
+                        Assert.True(l >= 0, $"LV95 {tile.Id.MinE + s.X:F0},{tile.Id.MaxN - s.Z:F0} arm {a}: no left arrow group; turns {turns}; {string.Join(", ", p.Groups.Where(g => g.Arm == a).Select(g => $"{g.Kind} {g.Moves}"))}");
+                        Assert.Empty(p.LeftGivesWayTo(l));
+                        Assert.Contains(lamps.Lenses, x => x.Group == l && x.Shape == UnitSport.Terrain.SignalBuilder.Shape.LeftArrow);
+                        lefts++;
+                    }
+                    if (p.Arms[a].RightPocket && (turns & SignalMoves.Right) != 0 && turns != SignalMoves.Right)
+                    {
+                        int r = p.Groups.FindIndex(g => g.Arm == a && (g.Kind == SignalGroupKind.RightArrow || g is { Kind: SignalGroupKind.Car, Moves: SignalMoves.Right }));
+                        Assert.True(r >= 0, $"arm {a}: no right-turn group");
+                        Assert.Contains(lamps.Lenses, x => x.Group == r && x.Role == UnitSport.Terrain.SignalBuilder.Role.Green);
+                        rights++;
+                        if (p.Groups[r].Kind == SignalGroupKind.Car) { permissive++; continue; }
+                        // protected: nothing it crosses green with it
+                        for (int h = 0; h < p.Groups.Count; h++)
+                            if (c[r, h] == SignalPlan.Conflict.Hard)
+                                Assert.DoesNotContain(Enumerable.Range(0, (int)(p.Cycle * 10)).Select(k => k * 0.1),
+                                    t => p.State(r, t) == SignalAspect.Green && p.State(h, t) == SignalAspect.Green);
+                    }
+                }
+            }
+        Assert.True(lefts > 0 && rights > 0, $"lefts {lefts}, rights {rights}");
+        // J3's east right pocket ran across the walkers before: protected now; one is left giving way (its walkers have no other green)
+        var j3 = region.Junction("J3");
+        var p3 = region.Tile(j3.E, j3.N).Signals.Single().Plan;
+        Assert.DoesNotContain(p3.Groups, g => g is { Kind: SignalGroupKind.Car, Moves: SignalMoves.Right });
+        Assert.Equal(1, permissive);
     }
 }

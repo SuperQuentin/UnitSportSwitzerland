@@ -15,7 +15,7 @@ namespace UnitSport.Terrain;
 /// arrow; a pedestrian head faces across the crossing, below the car heads. Sizes from SSV Art. 70/71
 /// and the Kanton Zürich Wegleitung LSA (docs/notes/tools/traffic-signals.md).
 /// </summary>
-public static class SignalBuilder
+public static partial class SignalBuilder
 {
     private static readonly Color PoleColour = new(0.55f, 0.59f, 0.62f);   // RAL 7001 silver grey
     private static readonly Color Housing = new(0.07f, 0.07f, 0.08f);      // RAL 9017 traffic black
@@ -26,8 +26,16 @@ public static class SignalBuilder
     /// <summary>Lens pitch and the 200 mm lens drawn a little smaller than its housing's cell.</summary>
     public const float Pitch = 0.3f, LensRadius = 0.09f;
     private const float HeadWidth = 0.3f, HeadDepth = 0.22f, BoardMargin = 0.1f, BoardThickness = 0.02f;
-    /// <summary>Romandy's tram T head (#1057): its crossbar's half width (m), its lamps' bars as long as it allows.</summary>
-    private const float TramTHalfWidth = 0.27f, TramTBar = 2.6f, TramTStem = 1.4f;
+    /// <summary>
+    /// Romandy's tram head (#1105, the user's photos): a one-lens car head module, its lens dark with the white T lit in it; the
+    /// small "tram detected" dot above the T (its radius and height in lens radii), never lit.
+    /// </summary>
+    private const float TramDetectRadius = 0.1f, TramDetectAt = 0.66f;
+    /// <summary>Romandy's tram head to the next one or to its car head, plate against plate (#1105: packed, no gap).</summary>
+    private const float TramPack = HeadWidth + 2f * (BorderGap + BorderWidth);
+    /// <summary>Romandy's tram heads a column beside the car heads holds, about their height (#1105); more go on top of them.</summary>
+    private const int TramColumn = 2;
+    private static readonly Color TramLens = new(0.05f, 0.05f, 0.06f), TramDetect = new(0.22f, 0.22f, 0.24f);
     /// <summary>
     /// A car head's plate (#759, from a photo of a Swiss junction and the user's review): a white
     /// band <see cref="BorderWidth"/> wide all round, black behind, flush with the housing's face
@@ -79,7 +87,12 @@ public static class SignalBuilder
     /// <param name="Flash">A yellow lens that also flashes with this flasher group (#971: a bike head's, its riders turning right
     /// across a crossing green with them), -1 none.</param>
     /// <param name="Arrow">A round lens's arrow when not its group's (#1037: an overhead head shows its own lanes' moves), null the group's.</param>
-    public readonly record struct Lens(Shape Shape, Transform3D Transform, int Junction, int Group, Role Role, int Flash = -1, SignalMoves? Arrow = null);
+    /// <param name="Blink">A permissive turn's flashing yellow (#1109, <see cref="SignalPlan.LeftFlash"/>, <see cref="SignalPlan.TurnFlash"/>):
+    /// a ball head's yellow lens flashes with it, and the lamp left of a combined arrow head; an uncombined arrow's yellow flashes
+    /// and its green stays dark meanwhile; null none.</param>
+    /// <param name="Plate">A flasher lamp's plate (#1109): what it warns of; <paramref name="PlateArrow"/> its arrow.</param>
+    public readonly record struct Lens(Shape Shape, Transform3D Transform, int Junction, int Group, Role Role, int Flash = -1, SignalMoves? Arrow = null,
+        SignalGroup? Blink = null, SignalPlate Plate = SignalPlate.None, SignalMoves PlateArrow = SignalMoves.None);
 
     /// <summary>A tile's lenses and the plans that light them.</summary>
     public sealed class Lamps
@@ -88,9 +101,16 @@ public static class SignalBuilder
         public readonly List<Lens> Lenses = new();
     }
 
-    /// <summary>A head on a pole: its centre, the way it faces and its right as the viewer sees it, its group, its lenses.</summary>
+    /// <summary>
+    /// A head on a pole: its centre, the way it faces and its right as the viewer sees it, its group, its lenses; its flasher on its
+    /// right and that flasher's plate (#1109), and the flasher on its left of a permissive left shown by an arrow (#1109); where
+    /// each flasher stands, in head spacings to the head's right (negative: its left).
+    /// </summary>
     private readonly record struct Head(Vector3 Centre, Vector3 Front, Vector3 Right, int Group, Shape Shape, int Lenses, bool Flasher,
-        float Scale = 1f, bool SideBySide = false, SignalMoves? Arrow = null)
+        float Scale = 1f, bool SideBySide = false, SignalMoves? Arrow = null, SignalPlate Plate = SignalPlate.None,
+        SignalMoves PlateArrow = SignalMoves.None, bool LeftFlasher = false, float FlasherSide = 1f, float LeftSide = -1f,
+        SignalGroup? FlasherBlink = null, SignalPlate LeftPlate = SignalPlate.None, SignalMoves LeftPlateArrow = SignalMoves.None,
+        SignalGroup? LeftBlink = null)
     {
         /// <summary>Half the housing's height.</summary>
         public float Half => SideBySide ? GenevaHalfHeight : Lenses * Pitch * Scale * 0.5f;
@@ -113,12 +133,18 @@ public static class SignalBuilder
         foreach (var signal in tile.Signals)
         {
             var colour = PoleColourOf(signal.Plan.PoleColour).SrgbToLinear();
+            var away = AwayLamps(signal);
+            foreach (var lamp in away)
+                FlasherLamp(vertices, colors, uvs, uv2s, indices, lamp.At, lamp.Front, lamp.Right, lamp.BracketA, lamp.BracketB, lamp.Plate,
+                    lamp.Arrow, true, rounded ? CornerRadius : 0f);
             foreach (var pole in signal.Poles)
             {
                 var heads = PoleHeads(signal, pole);
                 var foot = new Vector3(pole.X, pole.Y, pole.Z);
                 float top = 0f;
                 foreach (var h in heads) top = Mathf.Max(top, h.Centre.Y - pole.Y + h.Half + BoardMargin);
+                foreach (var lamp in away)
+                    if (lamp.Pole == signal.Poles.IndexOf(pole)) top = Mathf.Max(top, lamp.At.Y - pole.Y + Pitch * 0.5f + BoardMargin);
                 // a mast arm's or portal's post stands on the pole and carries its heads: no pole beside it (#1037, the user)
                 if (!signal.Overheads.Any(o => o.StandsOn(pole.X, pole.Z)))
                     Column(vertices, colors, uvs, uv2s, indices, foot, top, colour);
@@ -136,6 +162,8 @@ public static class SignalBuilder
             }
             foreach (var o in signal.Overheads)
                 Overhead(vertices, colors, uvs, uv2s, indices, signal.Plan, o, colour, rounded);
+            foreach (var g in signal.Gantries)
+                Gantry(vertices, colors, uvs, uv2s, indices, signal.Plan, g, colour);   // #1110
         }
     }
 
@@ -150,23 +178,16 @@ public static class SignalBuilder
         // the backboard (#759): a car head's plate flush with the housing's face, clear of it by
         // a hair, white in front and black behind (one face, PlateStyle); a bike head's only in
         // some cantons; a pedestrian head has none
-        bool board = h.Shape is not (Shape.Square or Shape.Tram or Shape.TramT) && (h.Shape != Shape.Bike || arrowsBelow);
-        float gap = BorderGap * h.Scale, band = BorderWidth * h.Scale, corner = rounded ? CornerRadius * h.Scale : 0f;
+        // (Romandy's tram head is a car head module, its plate too: #1105)
+        bool board = h.Shape is not (Shape.Square or Shape.Tram) && (h.Shape != Shape.Bike || arrowsBelow);
+        float gap = BorderGap * h.Scale, band = BorderWidth * h.Scale,
+            corner = rounded ? CornerRadius * h.Scale : 0f;
         // the arrow under the head: on the band run on below it where the canton does that,
         // on a small plate of its own under a bike head elsewhere
-        // (a tram head's where its approach's trams go more than one way: one head per direction, #1057, the user)
+        // (a tram head's where its approach's trams go more than one way: one head per direction, #1057, the user; Romandy's always)
         var arrow = h.Shape is Shape.Bike or Shape.Tram or Shape.TramT || arrowsBelow ? HeadMoves(plan, h) : SignalMoves.None;
         float panel = arrow != SignalMoves.None ? ArrowPanel * h.Scale : 0f;
         var face = h.Centre - h.Front * 0.002f;
-        if (h.Shape == Shape.TramT && panel > 0f)
-        {
-            // Romandy's T head: its arrow plate on top of the crossbar (the flasher is below it), as wide
-            float height = panel + band;
-            var at = face + Vector3.Up * (half + gap + height * 0.5f);
-            RoundedPlate(vertices, colors, uvs, uv2s, indices, WhitePlate.SrgbToLinear(), at, h.Right, TramTHalfWidth, height * 0.5f, corner);
-            ArrowOn(vertices, colors, uvs, uv2s, indices, arrow, at + h.Front * 0.003f, h.Right, height * 0.5f * ArrowFill);
-            panel = 0f;
-        }
         if (board)
         {
             BorderFrame(vertices, colors, uvs, uv2s, indices, WhitePlate.SrgbToLinear(), face,
@@ -194,39 +215,170 @@ public static class SignalBuilder
             Polygon(vertices, colors, uvs, uv2s, indices, Window.SrgbToLinear(), ring);
             return;
         }
-        if (h.Shape == Shape.TramT)
-        {
-            // Romandy's tram head (#1057): a T, the crossbar a lamp high and nearly two heads wide over a stem a head wide
-            var back = h.Centre - h.Front * (depth * 0.5f);
-            RoundedHousing(vertices, colors, uvs, uv2s, indices, back + Vector3.Up * (Pitch * 0.5f), h.Right, h.Front,
-                TramTHalfWidth, depth * 0.5f, Pitch * 0.5f, CornerRadius);
-            RoundedHousing(vertices, colors, uvs, uv2s, indices, back - Vector3.Up * (Pitch * 0.5f), h.Right, h.Front,
-                w * 0.5f, depth * 0.5f, Pitch * 0.5f, CornerRadius);
-            return;
-        }
         RoundedHousing(vertices, colors, uvs, uv2s, indices, h.Centre - h.Front * (depth * 0.5f), h.Right, h.Front,
             w * 0.5f, depth * 0.5f, half, CornerRadius * h.Scale);
         float pitch = Pitch * h.Scale;
         for (int k = 0; k < h.Lenses; k++)
             LensFittings(vertices, colors, uvs, uv2s, indices, h.Centre + Vector3.Up * (half - pitch * (k + 0.5f)),
                 h.Right, h.Front, h.Scale, square: h.Shape == Shape.Square);
-        if (h.Flasher)
+        if (h.Shape == Shape.TramT)
         {
-            // the flasher's own small housing beside the green, spaced as a head beside it (#759)
-            var at = h.Centre + h.Right * HeadSpacing + Vector3.Down * (half - Pitch * 0.5f);
-            RoundedHousing(vertices, colors, uvs, uv2s, indices, at - h.Front * (HeadDepth * 0.5f), h.Right, h.Front,
-                HeadWidth * 0.5f, HeadDepth * 0.5f, Pitch * 0.5f, CornerRadius);
-            LensFittings(vertices, colors, uvs, uv2s, indices, at, h.Right, h.Front, 1f, square: false);
-            // held by a bracket from the side of its head's housing, behind the plates (#771)
-            var back = h.Front * (HeadDepth * 0.6f);
-            Tube(vertices, colors, uvs, uv2s, indices, Housing.SrgbToLinear(),
-                at - h.Right * (HeadSpacing - w * 0.5f) - back, at - h.Right * (HeadWidth * 0.5f) - back, 0.025f);
-            // its own white band, clear of the head's like the next head's
-            if (board)
-                BorderFrame(vertices, colors, uvs, uv2s, indices, WhitePlate.SrgbToLinear(), at - h.Front * 0.002f,
-                    h.Right, HeadWidth * 0.5f + gap, Pitch * 0.5f + gap, band, corner);
+            // Romandy's tram head (#1105): its lens dark, the T's solid strokes lit in it (SignalLamps), and over the T the small
+            // "tram detected" dot, unlit (the lights run on fixed cycles)
+            float r = LensRadius * h.Scale;
+            Polygon(vertices, colors, uvs, uv2s, indices, TramLens.SrgbToLinear(), Circle(h.Centre + h.Front * 0.003f, h.Right, r, 16));
+            Polygon(vertices, colors, uvs, uv2s, indices, TramDetect.SrgbToLinear(),
+                Circle(h.Centre + h.Front * 0.008f + Vector3.Up * (TramDetectAt * r), h.Right, TramDetectRadius * r, 8));
         }
+        if (h.Flasher)
+            FlasherLamp(vertices, colors, uvs, uv2s, indices, h, h.FlasherSide, h.Plate, h.PlateArrow, board, corner);
+        // the left turn's lamp on the head's left where no pole stands by the left crosswalk (#1109, #1117)
+        if (h.LeftFlasher)
+            FlasherLamp(vertices, colors, uvs, uv2s, indices, h, h.LeftSide, h.LeftPlate, h.LeftPlateArrow, board, corner);
     }
+
+    /// <summary>
+    /// A flasher lamp of a left turn on its own (#1109, the user: "right flasher here, left flasher on a pole next to the left
+    /// crosswalk"): where it stands (<see cref="RoadSignal.LeftFlasherPole"/>), facing the approach, its bracket, what lights it.
+    /// </summary>
+    private readonly record struct AwayLamp(Vector3 At, Vector3 Front, Vector3 Right, Vector3 BracketA, Vector3 BracketB, int Pole, int Group,
+        SignalGroup Blink, SignalPlate Plate, SignalMoves Arrow);
+
+    /// <summary>
+    /// Whether car group <paramref name="g"/>'s left turn has a lamp (#1109, #1117, one lamp per turn): where it crosses walkers or
+    /// riders while green, or, shown by a combined arrow (a ball flashes its own yellow, an uncombined arrow its yellow in place of
+    /// its green), where it gives way to oncoming traffic.
+    /// </summary>
+    private static bool HasLeftLamp(SignalPlan plan, int g, SignalPlan.Conflict[,] conflicts)
+    {
+        if (plan.Groups[g].Kind != SignalGroupKind.Car || (plan.Groups[g].Moves & SignalMoves.Left) == 0) return false;
+        var shown = ArrowMoves(plan, g);
+        if (shown is SignalMoves.Left or SignalMoves.Right) return false;
+        int f = Flasher(plan, g);
+        if (f >= 0 && plan.Warns(f, SignalMoves.Left, conflicts)) return true;
+        return shown != SignalMoves.None && (shown & SignalMoves.Left) != 0 && plan.LeftGivesWayTo(g, conflicts).Count > 0;
+    }
+
+    /// <summary>Whether car group <paramref name="g"/>'s left-turn lamp stands on a pole by the left crosswalk (#1109, #1117).</summary>
+    private static bool LeftAway(RoadSignal signal, int g, SignalPlan.Conflict[,] conflicts) =>
+        HasLeftLamp(signal.Plan, g, conflicts) && signal.LeftFlasherPole(g) is { Pole: >= 0, Site: not FlasherSite.MainPole };
+
+    /// <summary>
+    /// The left turns' flasher lamps (#1109) on the poles by the crosswalks they cross: on the approach's left pole beside its
+    /// leftmost car head, level with its green; on the far-side pole of the arm the left turn goes into (#1117: across the
+    /// junction, where the turning car arrives; that arm's main pole where it has none), beside that pole on its side away from
+    /// that arm (its own heads stand out toward that arm's drivers), at a car head's height, facing this one's drivers.
+    /// </summary>
+    /// <summary>A far-side lamp's centre stands this far out from its pole's side (m): its plate clear of a walkers' head in front of the pole (Geneva's 0.21 m half width).</summary>
+    private const float SideReach = 0.42f;
+
+    private static List<AwayLamp> AwayLamps(RoadSignal signal)
+    {
+        var lamps = new List<AwayLamp>();
+        var plan = signal.Plan;
+        SignalPlan.Conflict[,]? conflicts = null;
+        for (int g = 0; g < plan.Groups.Count; g++)
+        {
+            if (plan.Groups[g].Kind != SignalGroupKind.Car) continue;
+            conflicts ??= plan.Conflicts();
+            if (!LeftAway(signal, g, conflicts) || plan.TurnFlash(g, SignalMoves.Left, conflicts) is not { } blink) continue;
+            var (plate, arrow) = plan.TurnPlate(g, SignalMoves.Left, conflicts);
+            var (index, site) = signal.LeftFlasherPole(g);
+            var pole = signal.Poles[index];
+            int arm = plan.Groups[g].Arm;
+            int main = signal.Poles.FindIndex(p => p.Arm == arm && (p.Flags & SignalPoleFlags.Main) != 0);
+            float heading = site == FlasherSite.SecondPole ? pole.CarHeading
+                : main >= 0 ? signal.Poles[main].CarHeading : (float)(plan.Arms[arm].Heading - Math.PI / 2);
+            var (front, right) = Frame(heading);
+            var foot = new Vector3(pole.X, pole.Y, pole.Z);
+            var heads = PoleHeads(signal, pole);
+            var back = front * (HeadDepth * 0.6f);
+            var row = heads.Where(h => h.Lenses == 3 && h.Shape is Shape.Circle or Shape.LeftArrow or Shape.RightArrow && h.Front.Dot(front) > 0.9f).ToList();
+            if (site == FlasherSite.SecondPole && row.Count > 0)
+            {
+                // beside the leftmost car head as the driver sees them, held from its side
+                var head = row.MinBy(h => h.Centre.Dot(right));
+                var at = FlasherAt(head, -1f);
+                lamps.Add(new AwayLamp(at, front, right, at + right * (HeadSpacing - HeadWidth * 0.5f) - back, at + right * (HeadWidth * 0.5f) - back,
+                    index, g, blink, plate, arrow));
+                continue;
+            }
+            // beside the pole on its side away from the exit the turn goes into (the user: "it's better if the far side lamp fit on the
+            // side of the pole, pointing away from the exit"): its own heads stand out toward that exit's drivers, its walkers' head
+            // across; at the height of a car head's green, held from the pole
+            var exit = new Vector3((float)Math.Cos(plan.Arms[pole.Arm].Heading), 0f, -(float)Math.Sin(plan.Arms[pole.Arm].Heading));
+            float side = exit.Dot(right) > 0f ? -1f : 1f;
+            bool walkers = heads.Any(h => h.Shape == Shape.Square);
+            float y = foot.Y + (walkers ? CarLowerEdgeAbovePedestrian : CarLowerEdge) + Pitch * 0.5f;
+            float post = signal.Overheads.Any(o => o.StandsOn(pole.X, pole.Z)) ? SignalOverhead.PostHalf : PoleRadius;
+            var spot = new Vector3(foot.X, y, foot.Z) + right * (side * (post + SideReach)) + front * (HeadDepth * 0.5f);
+            // on the far side, turned 45 deg from the approach toward the junction, to the turning traffic coming in (the user)
+            var (face, faceRight) = (front, right);
+            if (site == FlasherSite.FarSidePole)
+            {
+                face = (front - exit).Normalized();
+                faceRight = new Vector3(face.Z, 0f, -face.X);
+            }
+            lamps.Add(new AwayLamp(spot, face, faceRight, new Vector3(foot.X, y, foot.Z), spot - faceRight * (side * HeadWidth * 0.5f) - face * (HeadDepth * 0.5f),
+                index, g, blink, plate, arrow));
+        }
+        return lamps;
+    }
+
+    /// <summary>Where a head's flasher lamp is: level with its green, <paramref name="side"/> head spacings to its right (negative: its left).</summary>
+    private static Vector3 FlasherAt(Head h, float side) => h.Centre + h.Right * (side * HeadSpacing) + Vector3.Down * (h.Half - Pitch * 0.5f);
+
+    /// <summary>
+    /// A flasher lamp beside head <paramref name="h"/> (#759, #771): its own small housing spaced as a head beside it, held by a
+    /// bracket from the side of the head's housing, its own white band; that band run on below it as a plate saying what it warns
+    /// of (#1109, the user: a pedestrian, a bike, or the turn's arrow where it crosses both), under the lamp so a Romandy tram
+    /// head over it still fits (#1105).
+    /// </summary>
+    private static void FlasherLamp(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
+        Head h, float side, SignalPlate plate, SignalMoves arrow, bool board, float corner)
+    {
+        var at = FlasherAt(h, side);
+        float w = HeadWidth * h.Scale;
+        // behind the plates (#771)
+        var back = h.Front * (HeadDepth * 0.6f);
+        float sign = Mathf.Sign(side);
+        FlasherLamp(vertices, colors, uvs, uv2s, indices, at, h.Front, h.Right, at - h.Right * (side * HeadSpacing - sign * w * 0.5f) - back,
+            at - h.Right * (sign * HeadWidth * 0.5f) - back, plate, arrow, board, corner);
+    }
+
+    /// <summary>A flasher lamp at <paramref name="at"/> facing <paramref name="front"/>, its bracket from <paramref name="bracketA"/> to <paramref name="bracketB"/>, its plate below it.</summary>
+    private static void FlasherLamp(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
+        Vector3 at, Vector3 front, Vector3 right, Vector3 bracketA, Vector3 bracketB, SignalPlate plate, SignalMoves arrow, bool board, float corner)
+    {
+        var h = (Front: front, Right: right);
+        RoundedHousing(vertices, colors, uvs, uv2s, indices, at - h.Front * (HeadDepth * 0.5f), h.Right, h.Front,
+            HeadWidth * 0.5f, HeadDepth * 0.5f, Pitch * 0.5f, CornerRadius);
+        LensFittings(vertices, colors, uvs, uv2s, indices, at, h.Right, h.Front, 1f, square: false);
+        Tube(vertices, colors, uvs, uv2s, indices, Housing.SrgbToLinear(), bracketA, bracketB, 0.025f);
+        float panel = plate != SignalPlate.None ? ArrowPanel : 0f;
+        var face = at - h.Front * 0.002f;
+        if (board)
+            BorderFrame(vertices, colors, uvs, uv2s, indices, WhitePlate.SrgbToLinear(), face,
+                h.Right, HeadWidth * 0.5f + BorderGap, Pitch * 0.5f + BorderGap, BorderWidth, corner, below: panel);
+        else if (panel > 0f)
+            RoundedPlate(vertices, colors, uvs, uv2s, indices, WhitePlate.SrgbToLinear(),
+                face + Vector3.Down * (Pitch * 0.5f + BorderGap + (BorderWidth + panel) * 0.5f), h.Right, HeadWidth * 0.5f + BorderGap,
+                (BorderWidth + panel) * 0.5f, corner);
+        if (panel <= 0f) return;
+        // the symbol in the plate's lower part, black, 1 cm proud of it (#876)
+        float room = (BorderWidth + panel) * 0.5f;
+        var centre = face + h.Front * 0.01f + Vector3.Down * (Pitch * 0.5f + BorderGap + room);
+        var glyph = plate switch
+        {
+            SignalPlate.Pedestrian => SignalGlyphs.Walker(),
+            SignalPlate.Bike => SignalGlyphs.Bike(),
+            _ => SignalGlyphs.Arrow(arrow),
+        };
+        GlyphOn(vertices, colors, uvs, uv2s, indices, glyph, centre, h.Right, room * (plate == SignalPlate.Arrow ? ArrowFill : PlateFigureFill));
+    }
+
+    /// <summary>A figure on a flasher's plate (#1109): the walker or the bike this much of the plate's half height to a lens radius.</summary>
+    private const float PlateFigureFill = 1f;
 
     // ---- overhead heads (#1037) --------------------------------------------------------------
 
@@ -488,6 +640,7 @@ public static class SignalBuilder
                 Box(new Vector3(o.X, o.Y, o.Z), PostHalf);
                 if (o.Kind == OverheadKind.Portal) Box(new Vector3(o.EndX, o.EndY, o.EndZ), PostHalf);
             }
+        foreach (var foot in GantryFeet(tile)) Box(foot, GantryPostHalf);   // a gantry's posts (#1110)
         return faces.ToArray();
 
         void Box(Vector3 foot, float half)
@@ -515,6 +668,22 @@ public static class SignalBuilder
         {
             int j = lamps.Plans.Count;
             lamps.Plans.Add(signal.Plan);
+            // the permissive lefts' flashing yellow (#1109), derived from the plan once per group
+            var leftFlash = new Dictionary<int, SignalGroup?>();
+            SignalPlan.Conflict[,]? conflicts = null;
+            SignalGroup? LeftFlashOf(int g)
+            {
+                if (leftFlash.TryGetValue(g, out var done)) return done;
+                conflicts ??= signal.Plan.Conflicts();
+                return leftFlash[g] = signal.Plan.LeftFlash(g, conflicts);
+            }
+            var turnFlash = new Dictionary<(int, SignalMoves), SignalGroup?>();
+            SignalGroup? TurnFlashOf(int g, SignalMoves turn)
+            {
+                if (turnFlash.TryGetValue((g, turn), out var done)) return done;
+                conflicts ??= signal.Plan.Conflicts();
+                return turnFlash[(g, turn)] = signal.Plan.TurnFlash(g, turn, conflicts);
+            }
             foreach (var h in signal.Poles.SelectMany(pole => PoleHeads(signal, pole)).Concat(signal.Overheads.SelectMany(o => OverheadHeads(signal.Plan, o).Select(x => x.Head))))
                 {
                     // a 300 mm overhead lens is the 200 mm lens scaled (a bike head's 100 mm has a mesh of its own)
@@ -532,11 +701,10 @@ public static class SignalBuilder
                     }
                     if (h.Shape == Shape.TramT)
                     {
-                        // Romandy's T (#1057): the bar across the crossbar's width (stop), the bar upright the stem's height (go)
-                        lamps.Lenses.Add(new Lens(h.Shape, new Transform3D(new Basis(h.Right * TramTBar, Vector3.Up, h.Front), h.Centre + Vector3.Up * (Pitch * 0.5f) + face),
-                            j, h.Group, Role.Red));
-                        lamps.Lenses.Add(new Lens(h.Shape, new Transform3D(new Basis(h.Right, Vector3.Up * TramTStem, h.Front), h.Centre - Vector3.Up * (Pitch * 0.5f) + face),
-                            j, h.Group, Role.Green));
+                        // Romandy's head (#1105): the T's two solid strokes in its one lens, each its own lamp: the bar across (stop)
+                        // and the bar upright under it (go), in lens radii (SignalLamps)
+                        lamps.Lenses.Add(new Lens(h.Shape, new Transform3D(basis, h.Centre + face), j, h.Group, Role.Red));
+                        lamps.Lenses.Add(new Lens(h.Shape, new Transform3D(basis, h.Centre + face), j, h.Group, Role.Green));
                         continue;
                     }
                     for (int k = 0; k < h.Lenses; k++)
@@ -546,15 +714,29 @@ public static class SignalBuilder
                         var at = h.Centre + Vector3.Up * (half - pitch * (k + 0.5f)) + face;
                         // a bike head's own yellow flashes during its green where its riders turn right across a crossing green with them (#971, the user)
                         int flash = h.Shape == Shape.Bike && role == Role.Amber ? Flasher(signal.Plan, h.Group) : -1;
-                        lamps.Lenses.Add(new Lens(h.Shape, new Transform3D(basis, at), j, h.Group, role, flash, h.Arrow));
+                        // a ball head's own yellow flashes during its green while its left gives way to oncoming traffic (#1109, the user)
+                        // an uncombined arrow's yellow flashes in place of its green while its turn gives way (#1109, the user)
+                        var shown = h.Shape == Shape.Circle && h.Lenses == 3 ? h.Arrow ?? ArrowMoves(signal.Plan, h.Group) : SignalMoves.Left | SignalMoves.Right;
+                        var blink = shown == SignalMoves.None && role == Role.Amber ? LeftFlashOf(h.Group)
+                            : shown is SignalMoves.Left or SignalMoves.Right && role is Role.Amber or Role.Green ? TurnFlashOf(h.Group, shown)
+                            : null;
+                        lamps.Lenses.Add(new Lens(h.Shape, new Transform3D(basis, at), j, h.Group, role, flash, h.Arrow, blink));
                     }
-                    if (h.Flasher && Flasher(signal.Plan, h.Group) is int f and >= 0)
-                    {
-                        var at = h.Centre + h.Right * HeadSpacing + Vector3.Down * (half - Pitch * 0.5f) + face;
-                        lamps.Lenses.Add(new Lens(Shape.Circle, new Transform3D(basis, at), j, f, Role.Flash));
-                    }
+                    if (h.Flasher && h.FlasherBlink is { } side)
+                        lamps.Lenses.Add(new Lens(Shape.Circle, new Transform3D(basis, FlasherAt(h, h.FlasherSide) + face), j, h.Group, Role.Flash, Blink: side,
+                            Plate: h.Plate, PlateArrow: h.PlateArrow));
+                    // the left turn's lamp on the head's left, lit by its own crossings and oncoming traffic (#1109, #1117), not its group
+                    if (h.LeftFlasher && h.LeftBlink is { } lf)
+                        lamps.Lenses.Add(new Lens(Shape.Circle, new Transform3D(basis, FlasherAt(h, h.LeftSide) + face), j, h.Group, Role.Flash, Blink: lf,
+                            Plate: h.LeftPlate, PlateArrow: h.LeftPlateArrow));
                 }
+            // the left turns' flashers on the poles by their crosswalks (#1109)
+            foreach (var lamp in AwayLamps(signal))
+                lamps.Lenses.Add(new Lens(Shape.Circle, new Transform3D(new Basis(lamp.Right, Vector3.Up, lamp.Front), lamp.At + lamp.Front * 0.006f),
+                    j, lamp.Group, Role.Flash, Blink: lamp.Blink, Plate: lamp.Plate, PlateArrow: lamp.Arrow));
         }
+        // the heads in the gantries' bands (#1110)
+        for (int j = 0; j < tile.Signals.Count; j++) GantryLenses(tile.Signals[j], j, lamps);
         return lamps.Lenses.Count == 0 ? null : lamps;
     }
 
@@ -598,15 +780,16 @@ public static class SignalBuilder
     /// <summary>A pole's heads, moved out onto the face of an overhead structure's post where one stands on the pole (#1037).</summary>
     private static List<Head> PoleHeads(RoadSignal signal, SignalPole pole)
     {
-        var heads = Heads(signal.Plan, pole);
+        var heads = Heads(signal, pole);
         if (!signal.Overheads.Any(o => o.StandsOn(pole.X, pole.Z))) return heads;
         float shift = SignalOverhead.PostHalf - PoleRadius;
         return heads.Select(h => h with { Centre = h.Centre + h.Front * shift }).ToList();
     }
 
     /// <summary>The heads a pole carries, from the plan's groups of its arm.</summary>
-    private static List<Head> Heads(SignalPlan plan, SignalPole pole)
+    private static List<Head> Heads(RoadSignal signal, SignalPole pole)
     {
+        var plan = signal.Plan;
         var heads = new List<Head>();
         var foot = new Vector3(pole.X, pole.Y, pole.Z);
         bool ped = (pole.Flags & SignalPoleFlags.Pedestrian) != 0 && Find(plan, SignalGroupKind.Pedestrian, pole.Arm, SignalMoves.None) >= 0;
@@ -635,17 +818,48 @@ public static class SignalBuilder
                 heads.Add(new Head(foot + front * (PoleRadius + BoardThickness + HeadDepth * BikeScale + 0.01f)
                     + Vector3.Up * (BikeLowerEdge + 1.5f * Pitch * BikeScale), front, right, bike, Shape.Bike, 3, false, BikeScale));
             int centre = Math.Max(0, row.FindIndex(r => r.Group == car));
+            SignalPlan.Conflict[,]? conflicts = null;
+            int leftLamps = 0;   // flasher lamps left of the leftmost head
             for (int i = 0; i < row.Count; i++)
             {
                 var (g, shape) = row[i];
                 var at = foot + front * InFront + right * ((i - centre) * HeadSpacing)
                     + Vector3.Up * (lower + 1.5f * Pitch);
-                bool flasher = main && Flasher(plan, g) >= 0;
-                heads.Add(new Head(at, front, right, g, shape, 3, flasher));
+                // an uncombined arrow (the turn alone) flashes its own yellow in place of its green (#1109, the user): no lamp beside it
+                bool single = shape == Shape.Circle && ArrowMoves(plan, g) is SignalMoves.Left or SignalMoves.Right;
+                // one lamp per turn (#1109, #1117, the user), its plate a walker, a bike, or the turn's arrow for a mix (oncoming cars
+                // count): the right turn's beside the head; the left turn's on a pole by the left crosswalk (AwayLamps), else on the
+                // head's left (the leftmost head: a left pocket's arrow would have taken the left)
+                int f = main && !single ? Flasher(plan, g) : -1;
+                var (plate, plateArrow, leftPlate, leftArrow) = (SignalPlate.None, SignalMoves.None, SignalPlate.None, SignalMoves.None);
+                SignalGroup? fBlink = null, leftBlink = null;
+                bool leftOf = false;
+                if (main && !single && shape == Shape.Circle)
+                {
+                    conflicts ??= plan.Conflicts();
+                    if (f >= 0 && plan.Warns(f, SignalMoves.Right, conflicts))
+                    {
+                        (plate, plateArrow) = plan.TurnPlate(g, SignalMoves.Right, conflicts);
+                        fBlink = plan.TurnFlash(g, SignalMoves.Right, conflicts);
+                    }
+                    leftOf = i == 0 && HasLeftLamp(plan, g, conflicts) && !LeftAway(signal, g, conflicts)
+                        && (leftBlink = plan.TurnFlash(g, SignalMoves.Left, conflicts)) is not null;
+                    if (leftOf) (leftPlate, leftArrow) = plan.TurnPlate(g, SignalMoves.Left, conflicts);
+                }
+                if (fBlink is null) f = -1;
+                // beside its green on its right, or on its left where the next head stands there (a right lane's or arrow's head: they
+                // overlapped, #1109); a permissive left's flasher beyond it
+                float side = i < row.Count - 1 ? -1f : 1f;
+                float leftSide = f >= 0 && side < 0 ? -2f : -1f;
+                if (i == 0) leftLamps = (leftOf ? 1 : 0) + (f >= 0 && side < 0 ? 1 : 0);
+                heads.Add(new Head(at, front, right, g, shape, 3, f >= 0, Plate: plate, PlateArrow: plateArrow, LeftFlasher: leftOf,
+                    FlasherSide: side, LeftSide: leftSide, FlasherBlink: fBlink, LeftPlate: leftPlate, LeftPlateArrow: leftArrow, LeftBlink: leftBlink));
             }
             // the trams' heads (#1057) beside the car heads on the road's side: left of the main pole's, right of the second's
-            // (Romandy's T head beside the car heads on their right, just above the main head's flasher, the user)
-            TramHeads(plan, pole, heads, foot, front, right, lower, plan.TramTHead || !main ? row.Count - centre : -(centre + 1), plan.TramTHead || !main ? 1 : -1);
+            // (Romandy's packed against the car heads, beside or above them: #1105)
+            if (plan.TramTHead) RomandyTramHeads(plan, pole, heads, foot, front, right, lower, row.Count, centre);
+            // (left of a left flasher, #1109)
+            else TramHeads(plan, pole, heads, foot, front, right, lower, !main ? row.Count - centre : -(centre + 1 + leftLamps), !main ? 1 : -1);
         }
         else if ((pole.Flags & SignalPoleFlags.Tram) != 0)
         {
@@ -684,16 +898,65 @@ public static class SignalBuilder
         if ((pole.Flags & SignalPoleFlags.Tram) == 0) return;
         // (one head per direction, left to right as the tram driver sees them: laid outward from the pole either way)
         int count = plan.Groups.Count;
+        bool t = plan.TramTHead;
+        // (Romandy's one-lens heads on a pole of their own: side by side as car heads, level with a car head's lower half, #1105)
+        float x = slot * HeadSpacing;
         for (int k = 0; k < count; k++)
         {
             int g = step > 0 ? k : count - 1 - k;
             if (plan.Groups[g].Kind != SignalGroupKind.Tram || plan.Groups[g].Arm != pole.Arm) continue;
-            // Romandy's T head (#1057, the user): one head two lamps high, the bar across over the bar upright, level with the car
-            // heads' upper two lamps
-            bool t = plan.TramTHead;
-            var at = foot + front * InFront + right * (slot * HeadSpacing) + Vector3.Up * (lower + (t ? 2f : 1.5f) * Pitch);
-            heads.Add(new Head(at, front, right, g, t ? Shape.TramT : Shape.Tram, t ? 2 : 3, false));
-            slot += step;
+            var at = foot + front * InFront + right * x + Vector3.Up * (lower + (t ? 1f : 1.5f) * Pitch);
+            heads.Add(t ? new Head(at, front, right, g, Shape.TramT, 1, false) : new Head(at, front, right, g, Shape.Tram, 3, false));
+            x += step * (t ? TramPack : HeadSpacing);
+        }
+    }
+
+    /// <summary>
+    /// Romandy's tram heads on a pole with car heads (#1105, the user's photos), one-lens car head modules packed against the
+    /// <paramref name="cars"/> car heads (the main one <paramref name="centre"/>-th from the left): beside them on their right, plate
+    /// against plate, where there is one (level with their lower half, photo 1; over the main head's flasher where it has one) or
+    /// more than there are car heads, up to <see cref="TramColumn"/> without a flasher (a column down their side, the user);
+    /// otherwise in a row right on top of them ending over the main head, each its arrow plate between it and the car head under
+    /// it (photo 2).
+    /// </summary>
+    private static void RomandyTramHeads(SignalPlan plan, SignalPole pole, List<Head> heads, Vector3 foot, Vector3 front, Vector3 right,
+        float lower, int cars, int centre)
+    {
+        if ((pole.Flags & SignalPoleFlags.Tram) == 0) return;
+        var trams = new List<int>(3);
+        // left to right as the tram driver sees them (the plan adds an arm's tram groups left, through, right)
+        for (int g = 0; g < plan.Groups.Count; g++)
+            if (plan.Groups[g].Kind == SignalGroupKind.Tram && plan.Groups[g].Arm == pole.Arm) trams.Add(g);
+        if (trams.Count == 0) return;
+        float frame = BorderGap + BorderWidth, panel = trams.Count > 1 ? ArrowPanel : 0f;
+        // (a flasher on the right of the rightmost car head: one on a head's left stands where nothing goes, #1109)
+        bool flasher = heads.Any(h => h.Flasher && h.FlasherSide > 0);
+        if (flasher && trams.Count == 1)
+        {
+            // one beside the main head over its flasher, plate on plate, still touching the car head (the user: "if there is a
+            // flasher, there is still space for one transit head"; beside the rightmost head where a right lane's stands right of it)
+            heads.Add(new Head(foot + front * InFront + right * ((cars - 1 - centre) * HeadSpacing + TramPack) + Vector3.Up * (lower + 1.5f * Pitch + 2f * frame + 0.01f),
+                front, right, trams[0], Shape.TramT, 1, false));
+            return;
+        }
+        if (!flasher && (trams.Count == 1 || trams.Count > cars) && trams.Count <= TramColumn)
+        {
+            // beside: one level with the car heads' lower half (photo 1), several in a column against their side, its top level
+            // with theirs, one module (head, its plate's bands and arrow panel) under the next (the user)
+            float side = (cars - 1 - centre) * HeadSpacing + TramPack, from = trams.Count == 1 ? lower + Pitch : lower + 2.5f * Pitch;
+            for (int k = 0; k < trams.Count; k++)
+                heads.Add(new Head(foot + front * InFront + right * side + Vector3.Up * (from - k * (Pitch + 2f * frame + panel)),
+                    front, right, trams[k], Shape.TramT, 1, false));
+            return;
+        }
+        // on top: the car heads' plates' top, then the tram plate's foot on it: its band, its arrow panel (several ways), its band
+        float y = lower + 3f * Pitch + frame + 0.01f + panel + frame + Pitch * 0.5f;
+        // (the last over the main head, the others over the heads on its left while there are some)
+        int first = Math.Min(trams.Count - 1, centre);
+        for (int k = 0; k < trams.Count; k++)
+        {
+            var at = foot + front * InFront + right * ((k - first) * HeadSpacing) + Vector3.Up * y;   // over its car head
+            heads.Add(new Head(at, front, right, trams[k], Shape.TramT, 1, false));
         }
     }
 
@@ -796,6 +1059,18 @@ public static class SignalBuilder
     /// at <paramref name="centre"/>, and the visor over it: an arc over the top and down the
     /// sides, open below, longest at the crown and flaring a little toward its mouth.
     /// </summary>
+    /// <summary>A disc facing the way <paramref name="right"/> and up make, clockwise from the front.</summary>
+    private static Vector3[] Circle(Vector3 centre, Vector3 right, float r, int n)
+    {
+        var ring = new Vector3[n];
+        for (int i = 0; i < n; i++)
+        {
+            float a = -Mathf.Tau * i / n;
+            ring[i] = centre + right * (r * Mathf.Cos(a)) + Vector3.Up * (r * Mathf.Sin(a));
+        }
+        return ring;
+    }
+
     private static void LensFittings(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
         Vector3 centre, Vector3 right, Vector3 front, float scale, bool square)
     {
@@ -889,10 +1164,15 @@ public static class SignalBuilder
 
     /// <summary>The black arrow of <paramref name="moves"/> (<see cref="SignalGlyphs"/>), <paramref name="size"/> metres to a lens radius, round <paramref name="centre"/>.</summary>
     private static void ArrowOn(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
-        SignalMoves moves, Vector3 centre, Vector3 right, float size)
+        SignalMoves moves, Vector3 centre, Vector3 right, float size) =>
+        GlyphOn(vertices, colors, uvs, uv2s, indices, SignalGlyphs.Arrow(moves), centre, right, size);
+
+    /// <summary>A black glyph (<see cref="SignalGlyphs"/>), <paramref name="size"/> metres to a lens radius, round <paramref name="centre"/>.</summary>
+    private static void GlyphOn(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
+        List<Vector2[]> glyph, Vector3 centre, Vector3 right, float size)
     {
         var colour = Housing.SrgbToLinear();
-        foreach (var polygon in SignalGlyphs.Arrow(moves))
+        foreach (var polygon in glyph)
         {
             var ring = new Vector3[polygon.Length];
             for (int i = 0; i < polygon.Length; i++) ring[i] = centre + right * (polygon[i].X * size) + Vector3.Up * (polygon[i].Y * size);

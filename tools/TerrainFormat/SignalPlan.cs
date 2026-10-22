@@ -32,6 +32,25 @@ public enum SignalGroupKind : byte
     Tram = 6,
 }
 
+/// <summary>
+/// The white plate under a flasher lamp (#1109, the user): a pedestrian where its turns cross a walkers' crossing green with
+/// them, a bike where they cross a bike lane or way, the turns' arrow where they cross both.
+/// </summary>
+public enum SignalPlate : byte { None = 0, Pedestrian = 1, Bike = 2, Arrow = 3 }
+
+/// <summary>Where a left turn's flasher stands (#1109, <see cref="RoadSignal.LeftFlasherPole"/>).</summary>
+public enum FlasherSite : byte
+{
+    /// <summary>The approach's own main pole, with the right turns' lamp (no pole by the left crosswalk).</summary>
+    MainPole = 0,
+    /// <summary>The approach's left pole.</summary>
+    SecondPole = 1,
+    /// <summary>The far-side pole of the arm the left turn goes into, across the junction from the driver (#1117).</summary>
+    FarSidePole = 2,
+    /// <summary>That arm's main pole, at the near corner, where it has no pole on its far side.</summary>
+    NearSidePole = 3,
+}
+
 /// <summary>Movements a group serves, as the approaching driver turns.</summary>
 [Flags]
 public enum SignalMoves : byte { None = 0, Left = 1, Through = 2, Right = 4 }
@@ -137,6 +156,12 @@ public sealed class SignalPlan
     /// <summary>Yellow by speed limit: 3 s up to 50 km/h, 4 s at 60, 5 s from 70 (SN 640 837).</summary>
     public static float Yellow(float speedKmh) => speedKmh <= 50.5f ? 3f : speedKmh <= 60.5f ? 4f : 5f;
 
+    /// <summary>
+    /// A tram group's amber (#1105, the user: "5s at 50, 6s at 60 and 7s above seems fine"; no source): the cars' speed bands, a
+    /// tram's 1.2 m/s² service brake needing longer to stop or clear than a car's. Its passing time and clearance too.
+    /// </summary>
+    public static float TramYellow(float speedKmh) => speedKmh <= 50.5f ? 5f : speedKmh <= 60.5f ? 6f : 7f;
+
     public const float RedAmberCar = 2f, RedAmberBike = 1f, YellowBike = 2f;
     public const float MinGreen = 4f, AllRed = 2f, AllRedAfterArrow = 1f, BikeLead = 3f;
     /// <summary>
@@ -197,8 +222,8 @@ public sealed class SignalPlan
     public bool ArrowPlates { get; set; }
 
     /// <summary>
-    /// Romandy's tram head (#1057, the user): one T-shaped head the size of a car head, the bar across (stop) over the bar upright (go);
-    /// the upright one flashing before red (the amber), the one across flashing before green (the red-amber, longer than the cars':
+    /// Romandy's tram head (#1057, #1105 after the user's Geneva photo): a square head, a white dotted T in its round window, the
+    /// stroke across lit for stop, the stroke upright for go; the upright one flashing before red (the amber), the one across before green (the red-amber, longer than the cars':
     /// <see cref="TramRedAmberT"/>). Elsewhere the three-lamp bar head. Bit 6 of the byte that holds <see cref="PedestrianAmber"/>.
     /// </summary>
     public bool TramTHead { get; set; }
@@ -306,9 +331,12 @@ public sealed class SignalPlan
     }
 
     /// <summary>The aspect of a group at server time <paramref name="t"/> (seconds).</summary>
-    public SignalAspect State(int group, double t)
+    public SignalAspect State(int group, double t) => State(Groups[group], t);
+
+    /// <summary>The aspect of <paramref name="group"/> (one of this plan's, or a detached one like <see cref="LeftFlash"/>'s) at server time <paramref name="t"/>.</summary>
+    public SignalAspect State(SignalGroup group, double t)
     {
-        var list = Groups[group].Intervals;
+        var list = group.Intervals;
         if (list.Count == 0 || Cycle <= 0) return SignalAspect.Off;
         double c = (t + Offset) % Cycle;
         if (c < 0) c += Cycle;
@@ -322,9 +350,12 @@ public sealed class SignalPlan
     }
 
     /// <summary>Seconds from <paramref name="t"/> until the group's aspect next changes (a lamp builder sleeps until then).</summary>
-    public double UntilChange(int group, double t)
+    public double UntilChange(int group, double t) => UntilChange(Groups[group], t);
+
+    /// <summary>Seconds from <paramref name="t"/> until <paramref name="group"/>'s aspect next changes (a detached group too).</summary>
+    public double UntilChange(SignalGroup group, double t)
     {
-        var list = Groups[group].Intervals;
+        var list = group.Intervals;
         if (list.Count <= 1 || Cycle <= 0) return double.PositiveInfinity;
         double c = ((t + Offset) % Cycle + Cycle) % Cycle;
         foreach (var iv in list)
@@ -524,6 +555,266 @@ public sealed class SignalPlan
     /// <summary>Riders turning right (#971): on their own way round the corner, across only the exit's crossing.</summary>
     private static bool RidesRight(Movement m, SignalGroup g) => g.Kind == SignalGroupKind.Bike && m.Turn == SignalMoves.Right;
 
+    // ---- what a flasher warns of, and the lefts that give way (#1109) --------------------------
+
+    /// <summary>
+    /// The white plate under a flasher lamp of car group <paramref name="flasher"/>'s <paramref name="turns"/> (#1109, #1117, the
+    /// user: "bike if only bike, pedestrian if only pedestrian, arrow if mix of conflicts"): <see cref="TurnPlate"/>. A bike
+    /// group's flasher is its head's own yellow lens, no lamp and no plate (#971).
+    /// </summary>
+    public (SignalPlate Plate, SignalMoves Arrow) PlateOf(int flasher, Conflict[,]? conflicts = null,
+        SignalMoves turns = SignalMoves.Left | SignalMoves.Right)
+    {
+        var fl = Groups[flasher];
+        if (fl.Kind != SignalGroupKind.Flasher || fl.Qualifies < 0 || fl.Qualifies >= Groups.Count) return (SignalPlate.None, SignalMoves.None);
+        return TurnPlate(fl.Qualifies, turns, conflicts);
+    }
+
+    /// <summary>
+    /// The plate of the lamp warning car group <paramref name="g"/>'s <paramref name="turns"/> (#1117, the user): everything those
+    /// turns give way to while green, walkers and riders across them (its flasher's, <see cref="Watched"/>) and, for a left, the
+    /// oncoming cars or trams (<see cref="LeftGivesWayTo"/>); a walker where that is walkers only, a bike where riders only, else
+    /// (a mix, or oncoming traffic) the arrow of the turns giving way. One lamp per turn: no lamp of its own for the oncoming cars.
+    /// </summary>
+    public (SignalPlate Plate, SignalMoves Arrow) TurnPlate(int g, SignalMoves turns, Conflict[,]? conflicts = null)
+    {
+        if (Groups[g].Kind != SignalGroupKind.Car) return (SignalPlate.None, SignalMoves.None);
+        conflicts ??= Conflicts();
+        int f = Groups.FindIndex(x => x.Kind == SignalGroupKind.Flasher && x.Qualifies == g);
+        var watch = f >= 0 ? Watched(f, conflicts, turns) : [];
+        bool walkers = watch.Any(w => Groups[w.Group].Kind == SignalGroupKind.Pedestrian);
+        bool riders = watch.Any(w => Groups[w.Group].Kind == SignalGroupKind.Bike);
+        bool cars = (turns & Groups[g].Moves & SignalMoves.Left) != 0 && LeftGivesWayTo(g, conflicts).Count > 0;
+        var across = watch.Aggregate(SignalMoves.None, (m, w) => m | w.Across) | (cars ? SignalMoves.Left : SignalMoves.None);
+        int kinds = (walkers ? 1 : 0) + (riders ? 1 : 0) + (cars ? 1 : 0);
+        if (kinds == 0) return (SignalPlate.None, SignalMoves.None);
+        if (kinds == 1 && !cars) return (walkers ? SignalPlate.Pedestrian : SignalPlate.Bike, across);
+        return (SignalPlate.Arrow, across);
+    }
+
+    /// <summary>Whether car group <paramref name="flasher"/>'s flasher warns its <paramref name="turns"/> of walkers or riders (#1109).</summary>
+    public bool Warns(int flasher, SignalMoves turns, Conflict[,]? conflicts = null) => Watched(flasher, conflicts, turns).Count > 0;
+
+    /// <summary>
+    /// The walkers' and riders' groups a car group's flasher warns its <paramref name="turns"/> of (#1109), with the turns crossing
+    /// each: those green with it, or still on the crossing after their green (#979; a plan timed from conflict times may start the
+    /// cars' green as the walkers' ends); any it gives way to where none is. A crossing the geometry gives no turn for counts for
+    /// every turn of the group.
+    /// </summary>
+    private List<(int Group, SignalMoves Across)> Watched(int flasher, Conflict[,]? conflicts, SignalMoves turns)
+    {
+        var watch = new List<(int, SignalMoves)>();
+        var fl = Groups[flasher];
+        if (fl.Kind != SignalGroupKind.Flasher || fl.Qualifies < 0 || fl.Qualifies >= Groups.Count) return watch;
+        int g = fl.Qualifies;
+        if (Groups[g].Kind != SignalGroupKind.Car) return watch;
+        conflicts ??= Conflicts();
+        var moves = Movements();
+        bool any = Enumerable.Range(0, Groups.Count).Any(h => Warned(g, h, conflicts, together: true));
+        for (int h = 0; h < Groups.Count; h++)
+        {
+            if (!Warned(g, h, conflicts, together: any)) continue;
+            var across = TurnsAcross(g, h, moves);
+            if (across == SignalMoves.None) across = Groups[g].Moves & ~SignalMoves.Through;
+            if ((across & turns) != SignalMoves.None) watch.Add((h, across & turns));
+        }
+        return watch;
+    }
+
+    /// <summary>
+    /// The part of a car group's flasher that warns its <paramref name="turns"/> (#1109, the user: "right flasher here, left flasher
+    /// on a pole next to the left crosswalk"): the flasher itself where it warns of nothing else, else a detached flasher on while
+    /// the group is green and a crossing of those turns has walkers or riders on it; null where those turns cross none.
+    /// </summary>
+    public SignalGroup? SideFlash(int flasher, SignalMoves turns, Conflict[,]? conflicts = null)
+    {
+        conflicts ??= Conflicts();
+        var watch = Watched(flasher, conflicts, turns);
+        if (watch.Count == 0) return null;
+        if (Watched(flasher, conflicts, SignalMoves.Left | SignalMoves.Right).Count == watch.Count) return Groups[flasher];
+        int g = Groups[flasher].Qualifies;
+        float Walk(int h) => Groups[h].Kind == SignalGroupKind.Pedestrian ? CrossingOf(h) / WalkSpeed : 0f;
+        bool Active(int h, double t)
+        {
+            if (State(h, t) == SignalAspect.Green) return true;
+            float walk = Walk(h);
+            if (walk <= 0) return false;
+            double u = ((t + Offset) % Cycle + Cycle) % Cycle;
+            foreach (var iv in Groups[h].Intervals)
+                if (iv.Aspect == SignalAspect.Green && ((u - iv.To) % Cycle + Cycle) % Cycle < walk) return true;
+            return false;
+        }
+        var cuts = new SortedSet<float> { 0, Cycle };
+        foreach (var iv in Groups[g].Intervals) { cuts.Add(iv.From); cuts.Add(iv.To); }
+        foreach (var (h, _) in watch)
+            foreach (var iv in Groups[h].Intervals)
+            {
+                cuts.Add(iv.From);
+                cuts.Add(iv.To);
+                if (iv.Aspect == SignalAspect.Green && Walk(h) > 0) cuts.Add((iv.To + Walk(h)) % Cycle);
+            }
+        var flash = new SignalGroup { Kind = SignalGroupKind.Flasher, Arm = Groups[g].Arm, Qualifies = g };
+        var list = flash.Intervals;
+        float prev = -1;
+        foreach (float c in cuts)
+        {
+            if (prev >= 0 && c > prev)
+            {
+                double mid = (prev + c) * 0.5 - Offset;
+                bool on = State(g, mid) == SignalAspect.Green && watch.Any(w => Active(w.Group, mid));
+                var aspect = on ? SignalAspect.FlashingAmber : SignalAspect.Off;
+                if (list.Count > 0 && list[^1].Aspect == aspect) list[^1] = list[^1] with { To = c };
+                else list.Add(new SignalInterval(aspect, prev, c));
+            }
+            prev = c;
+        }
+        return flash;
+    }
+
+    private bool Warned(int g, int h, Conflict[,] conflicts, bool together) =>
+        conflicts[g, h] == Conflict.Permissive && Groups[h].Kind is SignalGroupKind.Pedestrian or SignalGroupKind.Bike
+        && (!together || GreenTogether(g, h, Groups[h].Kind == SignalGroupKind.Pedestrian ? CrossingOf(h) / WalkSpeed : 0f));
+
+    /// <summary>The turns of car group <paramref name="g"/> that cross group <paramref name="h"/> (walkers or riders), by <see cref="Conflicts"/>' rules.</summary>
+    private SignalMoves TurnsAcross(int g, int h, List<Movement> moves)
+    {
+        var other = Groups[h];
+        var turns = SignalMoves.None;
+        foreach (var a in moves)
+        {
+            if (a.Group != g || a.Turn == SignalMoves.Through) continue;
+            if (other.Kind == SignalGroupKind.Pedestrian)
+            {
+                // a car turning into the crossed arm
+                if (a.To == other.Arm && other.Half != CrossingHalf.Arriving) turns |= a.Turn;
+                continue;
+            }
+            foreach (var b in moves)
+                if (b.Group == h && b.From != a.From && !RidesRight(b, other) && Meet(a, b)) turns |= a.Turn;
+            // a kerbside bike lane beside the cars of its own approach: the right turn crosses it (#351)
+            if (other.Arm == Groups[g].Arm && !Arms[other.Arm].BikeBetween && a.Turn == SignalMoves.Right) turns |= SignalMoves.Right;
+        }
+        return turns;
+    }
+
+    /// <summary>Whether two movements cross or end on the same arm (<see cref="Conflicts"/>' chords).</summary>
+    private bool Meet(Movement a, Movement b)
+    {
+        const double Lane = 0.08;
+        return a.To == b.To || Crosses(Arms[a.From].Heading + Lane, Arms[a.To].Heading - Lane, Arms[b.From].Heading + Lane, Arms[b.To].Heading - Lane);
+    }
+
+    /// <summary>
+    /// The groups car group <paramref name="g"/>'s left turn gives way to while green with them (#1109): the oncoming cars (and
+    /// trams) it crosses or merges with, as a left from a shared lane does (<see cref="Conflicts"/>: permissive). Empty for a
+    /// protected left.
+    /// </summary>
+    public List<int> LeftGivesWayTo(int g, Conflict[,]? conflicts = null)
+    {
+        var to = new List<int>();
+        var group = Groups[g];
+        if (group.Kind != SignalGroupKind.Car || (group.Moves & SignalMoves.Left) == 0) return to;
+        conflicts ??= Conflicts();
+        var moves = Movements();
+        foreach (var a in moves)
+        {
+            if (a.Group != g || a.Turn != SignalMoves.Left) continue;
+            foreach (var b in moves)
+            {
+                if (b.Group == g || b.From == a.From || b.Turn == SignalMoves.Left || Groups[b.Group].Kind == SignalGroupKind.Bike
+                    || conflicts[g, b.Group] != Conflict.Permissive || to.Contains(b.Group) || !Meet(a, b)) continue;
+                if (GreenTogether(g, b.Group)) to.Add(b.Group);
+            }
+        }
+        return to;
+    }
+
+    /// <summary>
+    /// The flashing yellow of a permissive left (#1109, the user): a detached flasher (not one of <see cref="Groups"/>), flashing
+    /// while car group <paramref name="g"/> is green and a group its left gives way to (<see cref="LeftGivesWayTo"/>) is green
+    /// too; null where its left never gives way. Read with <see cref="State(SignalGroup, double)"/>. Derived from the plan, not
+    /// stored: every peer derives the same.
+    /// </summary>
+    public SignalGroup? LeftFlash(int g, Conflict[,]? conflicts = null)
+    {
+        var watch = LeftGivesWayTo(g, conflicts);
+        if (watch.Count == 0 || Cycle <= 0) return null;
+        var cuts = new SortedSet<float> { 0, Cycle };
+        foreach (int h in watch.Append(g))
+            foreach (var iv in Groups[h].Intervals) { cuts.Add(iv.From); cuts.Add(iv.To); }
+        var flash = new SignalGroup { Kind = SignalGroupKind.Flasher, Arm = Groups[g].Arm, Qualifies = g };
+        var list = flash.Intervals;
+        float prev = -1;
+        foreach (float c in cuts)
+        {
+            if (prev >= 0 && c > prev)
+            {
+                double mid = (prev + c) * 0.5 - Offset;
+                bool on = State(g, mid) == SignalAspect.Green && watch.Any(h => State(h, mid) == SignalAspect.Green);
+                var aspect = on ? SignalAspect.FlashingAmber : SignalAspect.Off;
+                if (list.Count > 0 && list[^1].Aspect == aspect) list[^1] = list[^1] with { To = c };
+                else list.Add(new SignalInterval(aspect, prev, c));
+            }
+            prev = c;
+        }
+        return list.Any(iv => iv.Aspect == SignalAspect.FlashingAmber) ? flash : null;
+    }
+
+    /// <summary>
+    /// What car group <paramref name="g"/>'s <paramref name="turn"/> (one turn or both) flashes for (#1109, #1117): its lamp, or a head
+    /// showing it alone (an uncombined arrow: "for flashing arrows it takes the place of the green arrow", the user): a detached
+    /// flasher on while that turn gives way, to the
+    /// oncoming cars (<see cref="LeftFlash"/>) or to walkers or riders across it (the group's <see cref="SignalGroupKind.Flasher"/>,
+    /// where its plate's turns hold it); null where it never does.
+    /// </summary>
+    public SignalGroup? TurnFlash(int g, SignalMoves turn, Conflict[,]? conflicts = null)
+    {
+        conflicts ??= Conflicts();
+        var parts = new List<SignalGroup>(2);
+        if ((turn & SignalMoves.Left) != 0 && LeftFlash(g, conflicts) is { } left) parts.Add(left);
+        int f = Groups.FindIndex(x => x.Kind == SignalGroupKind.Flasher && x.Qualifies == g);
+        if (f >= 0 && SideFlash(f, turn, conflicts) is { } side) parts.Add(side);
+        if (parts.Count <= 1) return parts.Count == 0 ? null : parts[0];
+        // either: on wherever one is
+        var cuts = new SortedSet<float> { 0, Cycle };
+        foreach (var part in parts)
+            foreach (var iv in part.Intervals) { cuts.Add(iv.From); cuts.Add(iv.To); }
+        var flash = new SignalGroup { Kind = SignalGroupKind.Flasher, Arm = Groups[g].Arm, Qualifies = g };
+        float prev = -1;
+        foreach (float c in cuts)
+        {
+            if (prev >= 0 && c > prev)
+            {
+                double mid = (prev + c) * 0.5 - Offset;
+                var aspect = parts.Any(x => State(x, mid) == SignalAspect.FlashingAmber) ? SignalAspect.FlashingAmber : SignalAspect.Off;
+                var list = flash.Intervals;
+                if (list.Count > 0 && list[^1].Aspect == aspect) list[^1] = list[^1] with { To = c };
+                else list.Add(new SignalInterval(aspect, prev, c));
+            }
+            prev = c;
+        }
+        return flash;
+    }
+
+    /// <summary>Whether two groups are ever green at the same time, <paramref name="h"/>'s green running on <paramref name="after"/> s (round the cycle).</summary>
+    private bool GreenTogether(int g, int h, float after = 0f)
+    {
+        foreach (var a in Groups[g].Intervals)
+        {
+            if (a.Aspect != SignalAspect.Green) continue;
+            foreach (var b in Groups[h].Intervals)
+            {
+                if (b.Aspect != SignalAspect.Green) continue;
+                for (int k = -1; k <= 1; k++)
+                {
+                    float shift = k * Cycle;
+                    if (Math.Min(a.To, b.To + after + shift) - Math.Max(a.From, b.From + shift) > 1e-3) return true;
+                }
+            }
+        }
+        return false;
+    }
+
     /// <summary>Whether chord (a1, a2) crosses chord (b1, b2) on a circle: their ends interleave.</summary>
     private static bool Crosses(double a1, double a2, double b1, double b2)
     {
@@ -545,9 +836,11 @@ public sealed class SignalPlan
     /// goes with its own approach and turns across the pedestrians with the flasher.
     /// </summary>
     /// <param name="seed">A stable number for the junction (e.g. its LV95 key): the cycle offset.</param>
-    public static SignalPlan Build(IReadOnlyList<SignalArm> arms, uint seed = 0, bool pedestrianAmber = true)
+    /// <param name="tramTHead">Romandy's tram heads (<see cref="TramTHead"/>), set before the timing: their red-amber is
+    /// <see cref="TramRedAmberT"/> (#1105: set after, it never applied).</param>
+    public static SignalPlan Build(IReadOnlyList<SignalArm> arms, uint seed = 0, bool pedestrianAmber = true, bool tramTHead = false)
     {
-        var plan = new SignalPlan { PedestrianAmber = pedestrianAmber };
+        var plan = new SignalPlan { PedestrianAmber = pedestrianAmber, TramTHead = tramTHead };
         plan.Arms.AddRange(arms);
         var car = new int[arms.Count];
         var left = new int[arms.Count];
@@ -563,10 +856,12 @@ public sealed class SignalPlan
                 if (to != a && arms[to].Out) moves |= Turn(arms, a, to);
             // what the approach may not do (#700): none of its groups shows it, unless that leaves it nothing
             if ((moves & ~arms[a].Banned) != SignalMoves.None) moves &= ~arms[a].Banned;
-            // pockets get their own arrows only beside a main lane: an approach whose every
-            // movement a pocket would take (a right turn out, say) is one group
+            // a pocket gets its own arrow (#1119, the user: "whenever there is a left turn only lane at a light, it should get its own
+            // light ... same for right turns"), a T's stem with a left and a right lane too, no main lane then; an approach whose one
+            // movement a pocket takes (a right turn out, say) is one group
             var pockets = (arms[a].LeftPocket ? SignalMoves.Left : 0) | (arms[a].RightPocket ? SignalMoves.Right : 0);
-            var main = (moves & ~pockets) == SignalMoves.None ? moves : moves & ~pockets;
+            var main = (moves & ~pockets) != SignalMoves.None ? moves & ~pockets
+                : moves is SignalMoves.Left or SignalMoves.Right or SignalMoves.Through ? moves : SignalMoves.None;
             if ((moves & pockets & SignalMoves.Left) != 0 && main != moves) left[a] = plan.Add(SignalGroupKind.LeftArrow, a, SignalMoves.Left);
             if ((moves & pockets & SignalMoves.Right) != 0 && main != moves) right[a] = plan.Add(SignalGroupKind.RightArrow, a, SignalMoves.Right);
             if (main != SignalMoves.None) car[a] = plan.Add(SignalGroupKind.Car, a, main);
@@ -612,16 +907,43 @@ public sealed class SignalPlan
         }
         Expand(plan, phases, conflicts);
 
-        // a right arrow no phase can carry: a full green with its own approach (the flasher marks the pedestrians)
+        // a right arrow no phase carries: protected, green with its own approach, where the walkers and riders it crosses keep a
+        // green in another phase (#1119, the user: "even right turns with their own lanes are usually protected"; no phase added,
+        // the schemes hold); else a full green with its approach, giving way to them (its yellow arrow flashes, #1109)
+        bool Lonely(int g) => phases.All(p => !p.Green.Contains(g));
+        // the arms whose two halves are green in one phase
+        IEnumerable<int> Halves() => Enumerable.Range(0, arms.Count).Where(a => phases.Any(p =>
+            p.Green.Any(g => plan.Groups[g] is { Kind: SignalGroupKind.Pedestrian, Half: CrossingHalf.Arriving } && plan.Groups[g].Arm == a)
+            && p.Green.Any(g => plan.Groups[g] is { Kind: SignalGroupKind.Pedestrian, Half: CrossingHalf.Departing } && plan.Groups[g].Arm == a)));
+        bool Fits(int r, List<Phase> with)
+        {
+            if (with.Any(p => p.Base.Any(g => conflicts[r, g] == Conflict.Hard))) return false;
+            // (across a two-stage crossing's half: held red there, its walkers wait on the island past a third of the cycle, #1030)
+            if (Enumerable.Range(0, plan.Groups.Count).Any(g => plan.Groups[g].Half != CrossingHalf.Whole && conflicts[r, g] == Conflict.Hard)) return false;
+            var before = Enumerable.Range(0, plan.Groups.Count).Where(Lonely).ToHashSet();
+            var halves = Halves().ToList();
+            foreach (var p in with) p.Base.Add(r);
+            Expand(plan, phases, conflicts);
+            // (and a two-stage crossing's halves still green together where they were: a walker crosses in one go, #1030)
+            if (!Lonely(r) && Enumerable.Range(0, plan.Groups.Count).All(g => g == r || !Lonely(g) || before.Contains(g))
+                && halves.All(Halves().Contains)) return true;
+            foreach (var p in with) p.Base.Remove(r);
+            Expand(plan, phases, conflicts);
+            return false;
+        }
         bool changed = false;
         for (int a = 0; a < arms.Count; a++)
         {
             int r = right[a];
             if (r < 0 || phases.Any(p => p.Green.Contains(r))) continue;
+            // (its approach's main lane, or its left arrow on a stem with no main lane, #1119)
+            int lane = car[a] >= 0 ? car[a] : left[a];
+            var own = lane < 0 ? [] : phases.Where(p => p.Green.Contains(lane)).ToList();
+            if (own.Count > 0 && (Fits(r, own) || own.Any(p => Fits(r, [p])))) continue;
             plan.Groups[r].Kind = SignalGroupKind.Car;
             changed = true;
-            foreach (var p in phases)
-                if (car[a] >= 0 && p.Green.Contains(car[a])) p.Base.Add(r);
+            foreach (var p in own) p.Base.Add(r);
+            // (no lane of its own approach anywhere: a phase of its own below, as a lonely group)
         }
         if (changed)
         {
@@ -825,6 +1147,7 @@ public sealed class SignalPlan
     {
         SignalGroupKind.Pedestrian or SignalGroupKind.Flasher => 0,
         SignalGroupKind.Bike => YellowBike,
+        SignalGroupKind.Tram => TramYellow(Arms[Groups[g].Arm].SpeedKmh),
         _ => Yellow(Arms[Groups[g].Arm].SpeedKmh),
     };
 
@@ -855,6 +1178,7 @@ public sealed class SignalPlan
             SignalGroupKind.Pedestrian => Math.Clamp(CrossingOf(g) * (2f / 3f) / WalkSpeed, 2f, 8f),
             SignalGroupKind.Bike => YellowBike,
             SignalGroupKind.Flasher => 0,
+            SignalGroupKind.Tram => TramYellow(Arms[group.Arm].SpeedKmh),
             _ => Yellow(Arms[group.Arm].SpeedKmh),
         };
     }
@@ -1427,10 +1751,46 @@ public sealed class RoadSignal
     public List<SignalPole> Poles { get; init; } = new();
     /// <summary>Its approaches' overhead structures (#1037, section <c>OVHD</c>).</summary>
     public List<SignalOverhead> Overheads { get; } = new();
+    /// <summary>Its approaches' gantries with lane signs (#1110, section <c>GNTY</c>).</summary>
+    public List<SignGantry> Gantries { get; } = new();
     /// <summary>Its movements as its timing took them, each once (#979, section <c>CPAR</c>, for the debug view's trails).</summary>
     public List<RoadConflictLine> ConflictLines { get; } = new();
     /// <summary>The pairs of those lines that set its groups' green starts and ends (#979, <c>CPAR</c>, for the debug view's movers).</summary>
     public List<RoadConflictPair> ConflictPairs { get; } = new();
+
+    /// <summary>
+    /// The pole a car group's left-turn flasher stands on (#1109, the user: "left flasher on a pole next to the left crosswalk"):
+    /// the approach's left pole (<see cref="SignalPoleFlags.Second"/>, at the corner the left turn sweeps past), else the
+    /// far-side pole of the arm the left turn goes into (#1117, the user: "for a turn-into flasher, it should be on the far side
+    /// pole"): across the junction from the driver, at the corner the turning car arrives by, the one of that arm's kerb poles
+    /// furthest from its main pole (its left pole, or a walkers' pole; an island's not), else that arm's main pole (the near
+    /// corner), else the approach's own main pole (with the right turns' flasher); -1 with no pole.
+    /// </summary>
+    public (int Pole, FlasherSite Site) LeftFlasherPole(int group)
+    {
+        int arm = Plan.Groups[group].Arm;
+        int second = Poles.FindIndex(p => p.Arm == arm && (p.Flags & SignalPoleFlags.Second) != 0);
+        if (second >= 0) return (second, FlasherSite.SecondPole);
+        foreach (var m in Plan.Movements())
+        {
+            if (m.Group != group || m.Turn != SignalMoves.Left) continue;
+            int near = Poles.FindIndex(p => p.Arm == m.To && (p.Flags & SignalPoleFlags.Main) != 0);
+            int far = -1;
+            float best = 0;
+            const SignalPoleFlags Island = SignalPoleFlags.ArrivingHalf | SignalPoleFlags.DepartingHalf;
+            for (int k = 0; k < Poles.Count; k++)
+            {
+                var q = Poles[k];
+                if (q.Arm != m.To || k == near || (q.Flags & Island) == Island) continue;
+                // (from the near corner's pole where there is one, else from the junction's centre)
+                float dx = q.X - (near >= 0 ? Poles[near].X : X), dz = q.Z - (near >= 0 ? Poles[near].Z : Z);
+                if (dx * dx + dz * dz > best) { best = dx * dx + dz * dz; far = k; }
+            }
+            if (far >= 0) return (far, FlasherSite.FarSidePole);
+            if (near >= 0) return (near, FlasherSite.NearSidePole);
+        }
+        return (Poles.FindIndex(p => p.Arm == arm && (p.Flags & SignalPoleFlags.Main) != 0), FlasherSite.MainPole);
+    }
 
     /// <summary>2 adds the poles (#350); 1 is still read.</summary>
     public const byte SectionVersion = 2;

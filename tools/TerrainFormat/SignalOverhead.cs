@@ -43,6 +43,12 @@ public sealed class SignalOverhead
     /// </summary>
     public const float PostHalf = 0.15f;
 
+    /// <summary>
+    /// The spacing of an overhead cluster's heads side by side (m, #1110): a kerb cluster's 0.55 m at the overhead heads' 1.5
+    /// times scale (300 mm lenses), so their plates stand clear of each other as on the main pole.
+    /// </summary>
+    public const float ClusterPitch = 0.825f;
+
     /// <summary>The post stands on this pole foot (tile-local): foot A of an arm or portal, or a portal's second foot.</summary>
     public bool StandsOn(float x, float z) =>
         Kind != OverheadKind.Span && ((X - x) * (X - x) + (Z - z) * (Z - z) < 1e-4f

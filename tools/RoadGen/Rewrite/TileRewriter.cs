@@ -74,7 +74,13 @@ public static partial class TileRewriter
         /// <summary>The canton of each tile; null = <c>switzerland.bin</c>'s (<see cref="Cantons.Find"/>). A test world's own zones (#1038).</summary>
         Cantons? Cantons = null,
         /// <summary>Called on each tile as it is about to be written (#1038: a test world's border marks); null = none.</summary>
-        Action<RoadTile>? Decorate = null);
+        Action<RoadTile>? Decorate = null,
+        /// <summary>
+        /// Gantries of lane signs (#1110): <c>sitg_signs.tsv</c> (the preprocessor's <c>--sitg-signs</c>; null or missing: the rule
+        /// everywhere), the region's <c>places.json</c> (the signs' destinations) and where to write every lit approach's facts
+        /// (<c>gantry_facts.tsv</c>, for <c>--gantry-benchmark</c>); <see cref="Gantries"/> false: none at all.
+        /// </summary>
+        string? SitgSigns = null, string? Places = null, string? GantryFacts = null, bool Gantries = true);
 
     public sealed record Stats(
         int TilesRead, int TilesWritten, int Junctions, int SegmentsWritten, int SegmentsDropped,
@@ -282,6 +288,10 @@ public static partial class TileRewriter
 
         var wanted = new HashSet<TileId>(targets);
         var blocks = GroupIntoBlocks(targets, options.BlockSize);
+        // gantries of lane signs (#1110): SITG's in canton Geneva, the rule elsewhere
+        var gantries = options.Gantries ? GantryContext.Load(options.SitgSigns, options.Places) : null;
+        if (gantries is not null) gantries.Overlay = overlay;
+        if (gantries?.Sitg is { } sitg) log($"  SITG lane signs (#1110): {sitg.Gantries.Count:N0} gantries from {options.SitgSigns}");
 
         var session = new Session(options, new Inputs
         {
@@ -290,6 +300,7 @@ public static partial class TileRewriter
             Buildings = id => Facades.Read(chunkDir, id),
             Parking = id => RawParking.Read(parkDir, id),
             Overlay = overlay, Cantons = cantons, SignalSites = signalSites, Restrictions = restrictions, Crossings = crossingNodes,
+            Gantries = gantries,
         });
 
         int blockIndex = 0;
@@ -318,6 +329,7 @@ public static partial class TileRewriter
                 log($"  block {blockIndex}/{blocks.Count}  {session.TilesWritten} tiles, {session.JunctionCount} junctions");
         }
 
+        if (gantries is not null && options.GantryFacts is { } factsPath && !options.DryRun) gantries.WriteFacts(factsPath);
         return session.Finish(log);
     }
 
@@ -348,6 +360,8 @@ public static partial class TileRewriter
         internal SignalSites? SignalSites { get; init; }
         internal Restrictions? Restrictions { get; init; }
         internal CrossingNodes? Crossings { get; init; }
+        /// <summary>The gantries' data and rule (#1110); null = no gantries.</summary>
+        public GantryContext? Gantries { get; init; }
     }
 
     /// <summary>
@@ -866,7 +880,8 @@ public static partial class TileRewriter
                 // the junction planner's junctions written (#818 phase 3): cores, trims, transitions and their paint
                 if (layouts is not null && writtenNodes.Count > 0)
                     WriteLayouts(layouts, writtenNodes, result, layoutSegmentOf, finalPieces, layoutOutput, capOf, caps, writtenCaps, paint, layoutStation,
-                        transitionsOf, islands, signs, signalRecords, approachRecords, cantons, netStats.Signals, netStats.LayoutWrite, coreCorners, pathEnds, bikeBridges, pathsOf, buildings);
+                        transitionsOf, islands, signs, signalRecords, approachRecords, cantons, netStats.Signals, netStats.LayoutWrite, coreCorners, pathEnds, bikeBridges, pathsOf, buildings,
+                        inputs.Gantries);
                 // the tram stops' signs beside their tracks (#1057), where the preprocessor found stops (--tram-stops)
                 if (tramStops.Count > 0) EmitTramStops(tramStops, new TramNet(result), block, signs, netStats.LayoutWrite);
 
