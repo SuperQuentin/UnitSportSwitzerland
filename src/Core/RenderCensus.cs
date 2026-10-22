@@ -44,6 +44,10 @@ public static class RenderCensus
         foreach (var (key, v) in sums.OrderByDescending(kv => kv.Value.Tris).Take(25))
             sb.Append(System.FormattableString.Invariant($"  {v.Tris / 1000.0,9:F0}k  {v.Nodes,6} nodes  {key}\n"));
         sb.Append(System.FormattableString.Invariant($"  total {sums.Where(kv => !kv.Key.StartsWith('*')).Sum(kv => kv.Value.Tris) / 1e6:F2} M"));
+        // every other picture of the world drawn each frame (portals, mirrors, cameras): each is a whole render
+        foreach (var v in root.FindChildren("*", nameof(SubViewport), true, false).OfType<SubViewport>())
+            if (!v.Disable3D && v.RenderTargetUpdateMode != SubViewport.UpdateMode.Disabled)
+                sb.Append(System.FormattableString.Invariant($"\n  3D view {root.GetPathTo(v)} {v.Size.X}x{v.Size.Y} {v.RenderTargetUpdateMode} msaa {v.Msaa3D}"));
         GD.Print(sb.ToString());
     }
 
