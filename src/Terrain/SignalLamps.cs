@@ -218,6 +218,15 @@ void fragment() {
     /// </summary>
     public static Func<double> Clock { get; set; } = () => Net.ClockSync.SimNow;
 
+    /// <summary>
+    /// How fast the plans run against <see cref="Clock"/> (the model viewer's <c>--modelscycle</c>, #1105: a whole cycle in a short
+    /// clip); the blinking keeps its own pace.
+    /// </summary>
+    public double PlanSpeed { get; set; } = 1;
+
+    /// <summary>The longest cycle of the lamps' plans (s).</summary>
+    public float LongestCycle => _plans.Length == 0 ? 0f : _plans.Max(p => p.Cycle);
+
     public static SignalLamps Create(SignalBuilder.Lamps lamps)
     {
         var node = new SignalLamps { Name = "SignalLamps" };
@@ -298,25 +307,26 @@ void fragment() {
         var plan = _plans[j];
         var (start, count) = _byJunction[j];
         bool blinkOn = (long)Math.Floor(now / BlinkHalf) % 2 == 0, blinking = false;
+        double t = now * PlanSpeed;
         double until = double.PositiveInfinity;
         for (int i = start; i < start + count; i++)
         {
             var lens = _lenses[i];
-            var aspect = plan.State(lens.Group, now);
+            var aspect = plan.State(lens.Group, t);
             if (aspect == SignalAspect.FlashingAmber) blinking = true;
             var colour = _icon[i] >= Icon.TramTStop ? TramTColour(lens.Role, aspect, blinkOn)
                 : _icon[i] >= Icon.TramStop ? TramColour(lens.Role, aspect) : Colour(lens.Role, aspect, blinkOn);
             if (_icon[i] >= Icon.TramTStop && aspect is SignalAspect.Amber or SignalAspect.RedAmber) blinking = true;
             // a yellow lens that also flashes with a flasher (#971: a bike head's during its green)
-            if (lens.Flash >= 0 && plan.State(lens.Flash, now) == SignalAspect.FlashingAmber)
+            if (lens.Flash >= 0 && plan.State(lens.Flash, t) == SignalAspect.FlashingAmber)
             {
                 blinking = true;
                 if (blinkOn) colour = AmberOn;
-                until = Math.Min(until, plan.UntilChange(lens.Flash, now));
+                until = Math.Min(until, plan.UntilChange(lens.Flash, t) / PlanSpeed);
             }
             _multi[(int)_icon[i]]!.SetInstanceColor(_slot[i], colour);
             if (_haloSlot[i] >= 0) _halos!.SetInstanceColor(_haloSlot[i], colour);   // dark lenses do not bloom
-            until = Math.Min(until, plan.UntilChange(lens.Group, now));
+            until = Math.Min(until, plan.UntilChange(lens.Group, t) / PlanSpeed);
         }
         if (blinking) until = Math.Min(until, BlinkHalf - (now % BlinkHalf));
         // a hair past the change, never a busy loop on a rounding edge

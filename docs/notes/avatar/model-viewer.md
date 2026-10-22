@@ -8,6 +8,11 @@
 - `--modelsclear` (with `--models,<dir>`): no backdrop, ground or header; each PNG cut out to the model's pixels on a
   transparent background (`tools/web-people.sh`, the web page's people, #998).
 - `--modelsyaw <deg> [--modelspitch <deg>]` turns the viewer's camera round the model (0 behind it, 180 in front: `150`, `-15` shows a vehicle's nose in a PNG run).
+- `--modelslook x,y,z,distance` points the camera at that point of the model from that far (a close look at a part, e.g. a
+  signal cluster: `0.35,4.35,0,4.3`). `--modelscycle <s>` runs a traffic light's signal plan through a whole cycle in that
+  many seconds (`SignalLamps.PlanSpeed`; the blinking keeps its pace), for a clip of every lamp's states (#1105:
+  `tools/record-clip.sh romandy-tram-cluster 4 30 --models --modelsonly "Traffic light - Tram, Romandy, two" --modelsyaw 180
+  --modelspitch 5 --modelscycle 30 --modelslook 0.35,4.35,0,4.3 --style cartoon`).
 - `--models,<dir>` (e.g. `test_output/models`) writes one PNG per model, prints
   `[models] no viewer entry: <Class>` for builder classes that built nothing during the run, and a
   `[models] RESULT: ok` line (FAILED when a model throws). Run it windowed: headless renders nothing.

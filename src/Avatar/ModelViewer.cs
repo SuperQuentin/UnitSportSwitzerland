@@ -234,6 +234,13 @@ public partial class ModelViewer : Node3D
         }
         _target = box.GetCenter();
         _distance = Fit(box);
+        // --modelslook x,y,z,distance: the camera on that point of the model, from that far (a close clip of a part, #1105)
+        if (CmdArgs.Value("--modelslook")?.Split(',') is { Length: 4 } look)
+        {
+            float F(int i) => float.Parse(look[i], System.Globalization.CultureInfo.InvariantCulture);
+            _target = new Vector3(F(0), F(1), F(2));
+            _distance = F(3);
+        }
         string zfight = _zfight ? ZFightLine() : "";
 
         _label.Text = $"{_categories[_category].Name}  ({_category + 1}/{_categories.Count})   ›   " +

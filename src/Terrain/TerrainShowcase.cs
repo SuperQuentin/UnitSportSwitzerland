@@ -173,7 +173,17 @@ public static class TerrainShowcase
         var material = StyleKit.Material(MaterialRole.Road);
         FogUniforms.Apply(material);
         var node = new MeshInstance3D { Mesh = ChunkNode.ToArrayMesh(Arrays(tile), material) };
-        if (SignalBuilder.BuildLamps(tile) is { } lamps) node.AddChild(SignalLamps.Create(lamps));
+        if (SignalBuilder.BuildLamps(tile) is { } lamps)
+        {
+            var lit = SignalLamps.Create(lamps);
+            // --modelscycle <s>: the viewer runs a whole signal cycle in that long, for a clip of every lamp's states (#1105)
+            if (CmdArgs.Float("--modelscycle") is { } cycle && cycle > 0 && lit.LongestCycle > 0)
+            {
+                lit.PlanSpeed = lit.LongestCycle / cycle;
+                GD.Print($"[models] signal cycle {lit.LongestCycle:0.#} s run in {cycle:0.#} s ({lit.PlanSpeed:0.##}x)");
+            }
+            node.AddChild(lit);
+        }
         foreach (var label in RoadSignBuilder.Labels(tile) ?? []) node.AddChild(RoadSignBuilder.Make(label));
         return node;
     }

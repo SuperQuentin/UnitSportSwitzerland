@@ -177,7 +177,12 @@ public partial class ClipRecorder : Node
 
     private bool StartEncoder()
     {
-        _hasX264 ??= Encoders().Contains("libx264");
+        // libx264, else Cisco's libopenh264 (Krita's ffmpeg on Windows has only that, #1105), else a GIF alone
+        string encoders = Encoders();
+        _hasX264 ??= encoders.Contains("libx264") || encoders.Contains("libopenh264");
+        string[] h264 = encoders.Contains("libx264")
+            ? ["-c:v", "libx264", "-preset", "medium", "-crf", "20"]
+            : ["-c:v", "libopenh264", "-b:v", "6M"];
         // 128 colours a clip; the bayer dither finer in the lit styles (#1070): at PS1's scale 5,
         // Cartoon's sky gradients and the haze round the sun banded into rings (scale 3: ~13% more bytes)
         int bayer = Styles.StyleKit.Applied == Styles.VisualStyle.Ps1 ? 5 : 3;
@@ -195,8 +200,8 @@ public partial class ClipRecorder : Node
         if (_hasX264 == true)
         {
             foreach (string a in new[] { "-filter_complex", $"[0:v]split[v][g];[g]{gifChain}[gif]",
-                         "-map", "[v]", "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart", _mp4Path,
-                         "-map", "[gif]", "-loop", "0", _gifPath })
+                         "-map", "[v]" }.Concat(h264).Concat(new[] { "-pix_fmt", "yuv420p", "-movflags", "+faststart", _mp4Path,
+                         "-map", "[gif]", "-loop", "0", _gifPath }))
                 start.ArgumentList.Add(a);
         }
         else
@@ -244,7 +249,7 @@ public partial class ClipRecorder : Node
             finally { try { stdin.Close(); } catch (System.Exception) { } }
         });
         GD.Print($"[clip] recording {_name}: {_size.X}x{_size.Y} at {Fps} fps for {_seconds:F0} s -> {_gifPath}"
-            + (_hasX264 == true ? " and .mp4" : " (no libx264 in this ffmpeg: GIF only)"));
+            + (_hasX264 == true ? " and .mp4" : " (no libx264 or libopenh264 in this ffmpeg: GIF only)"));
         return true;
     }
 

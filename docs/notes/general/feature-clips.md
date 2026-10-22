@@ -17,7 +17,9 @@
   bytes, 256 colours at 5 still banded; `trim` uses 3, `BAYER=5` for a PS1 clip): 0.2-0.6 MB/s of the PS1 look
   (640 px at 15 fps was twice that, 1.1 MB/s inside the freighter's hold); keep release GIFs under ~10 s. Plus
   `<name>.mp4` (960 px, 30 fps, x264 crf 20) when the ffmpeg has libx264 (the chocolatey one does; the release's
-  LGPL `bin/ffmpeg` does not, so an export writes the GIF only). Drag the MP4 or the GIF into a PR description.
+  LGPL `bin/ffmpeg` does not, so an export writes the GIF only), else libopenh264 at 6 Mb/s (#1105: Krita's ffmpeg,
+  `C:/Program Files/Krita (x64)/bin` put on PATH, where no chocolatey one is installed). Drag the MP4 or the GIF into a PR
+  description.
 - **How**: `Core/ClipRecorder` reads the last drawn frame back every 1/30 s, scales it and pipes raw RGB to
   ffmpeg (`BundledTools.Resolve`), which encodes both on its own core; frames are dropped, never queued without
   bound, when ffmpeg lags 2 s behind. Real time, unlike `Gpx/VideoExporter` (fixed steps, waits for tiles):
