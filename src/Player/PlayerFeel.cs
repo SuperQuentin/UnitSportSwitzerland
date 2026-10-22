@@ -242,7 +242,7 @@ public partial class PlayerFeel : Node3D
     {
         var (calm, fast) = ride switch
         {
-            RideKind.RoadBike or RideKind.EBike => (9f, 18f),    // 32 → 65 km/h
+            _ when BicycleCatalog.IsBicycle(ride) => (9f, 18f),    // 32 → 65 km/h
             RideKind.Skis or RideKind.Snowboard => (9f, 22f),        // 32 → 80 km/h
             _ when CarCatalog.IsCar(ride) => (15f, 40f),   // 54 → 144 km/h
             _ when MotorbikeCatalog.IsMotorbike(ride) => (15f, 45f),   // 54 → 162 km/h
@@ -1062,7 +1062,7 @@ public partial class PlayerFeel : Node3D
         UpdateHint(dt, ride);
 
         // the boost meter, only where boost exists: mounted, Game profile
-        _boostBar.Visible = ride is RideKind.RoadBike or RideKind.EBike or RideKind.Skis or RideKind.Snowboard && Rideable.Arcade;
+        _boostBar.Visible = (BicycleCatalog.IsBicycle(ride) || ride is RideKind.Skis or RideKind.Snowboard) && Rideable.Arcade;
         _boostBar.Value = _player.BoostMeter;
         _boostBar.Modulate = _player.Boosting ? new Color(1.6f, 1.6f, 1.6f) : Colors.White;
 

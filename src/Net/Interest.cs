@@ -44,7 +44,7 @@ public static class Interest
     public static float SizeOf(RideKind kind) => kind switch
     {
         RideKind.OnFoot or RideKind.Skis or RideKind.Snowboard => 1.8f,
-        RideKind.RoadBike or RideKind.EBike => 1.9f,
+        _ when Player.BicycleCatalog.IsBicycle(kind) => 1.9f,
         RideKind.Wingsuit => 2.0f,
         RideKind.Parachute => 8f,
         RideKind.Paraglider => 11f,

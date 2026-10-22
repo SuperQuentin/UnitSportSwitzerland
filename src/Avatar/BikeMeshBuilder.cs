@@ -144,7 +144,19 @@ public static class BikeMeshBuilder
         var topTubeFront = f.HeadTop - f.SteererUp * 0.030f;
         var downTubeFront = f.HeadBottom + f.SteererUp * 0.030f;
         s.Tube(f.BottomBracket + f.SeatUp * 0.06f, f.SeatCluster, 0.020f, 0.018f, p.Frame);   // seat tube, from over the motor
-        s.Tube(f.SeatCluster, topTubeFront, 0.022f, 0.024f, p.Frame);                         // top tube
+        if (f.Spec.FrameStyle == BikeFrameStyle.LowFrame)
+        {
+            // the Open frame: no top tube; a second tube leaves the head tube under the top tube's place,
+            // runs down alongside the battery and sweeps into the seat tube just over the motor, the
+            // seat tube's lower half thickened where it carries the saddle's load alone
+            var from = f.HeadTop - f.SteererUp * 0.075f;
+            var to = f.BottomBracket + f.SeatUp * 0.17f;
+            var bend = from + (to - from) * 0.55f + new Vector3(0, -0.085f, 0);
+            s.Tube(from, bend, 0.024f, 0.023f, p.Frame);
+            s.Tube(bend, to, 0.023f, 0.025f, p.Frame);
+            s.Tube(f.BottomBracket + f.SeatUp * 0.06f, f.BottomBracket + f.SeatUp * 0.24f, 0.024f, 0.022f, p.Frame);
+        }
+        else s.Tube(f.SeatCluster, topTubeFront, 0.022f, 0.024f, p.Frame);                    // top tube
         s.Tube(f.HeadBottom - f.SteererUp * 0.015f, f.HeadTop + f.SteererUp * 0.005f, 0.030f, 0.026f, p.Frame);   // tapered head tube
 
         // the down tube holds the battery: oval and fat, the name on its middle as three tubes end to end

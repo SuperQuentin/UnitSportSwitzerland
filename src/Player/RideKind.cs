@@ -60,5 +60,7 @@ public enum RideKind
     /// <summary>An electric bike (#1159): a <c>Bicycle</c> on <c>BicycleCatalog.MoustacheSamedi</c>.
     /// Every catalogue bicycle is its own kind; ask <c>BicycleCatalog.IsBicycle</c>, not <c>== RoadBike</c>.</summary>
     EBike = 203,
-    // The next other mount is 204.
+    /// <summary>The same e-bike with a low frame (#1159): <c>BicycleCatalog.MoustacheSamediOpen</c>.</summary>
+    EBikeOpen = 204,
+    // The next other mount is 205.
 }

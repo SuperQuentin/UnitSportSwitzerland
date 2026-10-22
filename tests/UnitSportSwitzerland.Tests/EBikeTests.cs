@@ -26,6 +26,20 @@ public class EBikeTests
     }
 
     [Fact]
+    public void The_low_frame_is_the_same_bike_otherwise()
+    {
+        var open = BicycleCatalog.MoustacheSamediOpen;
+        Assert.Equal(RideKind.EBikeOpen, open.Kind);
+        Assert.Equal(BikeFrameStyle.LowFrame, open.FrameStyle);
+        Assert.Equal(BikeFrameStyle.Diamond, Samedi.FrameStyle);
+        Assert.Same(Samedi.Assist, open.Assist);
+        // the same seat tube and cockpit: the rider sits exactly where they do on the diamond
+        var fit = new BikeFrame(open);
+        Assert.Equal(Frame.Hip, fit.Hip);
+        Assert.Equal(Frame.Wrist, fit.Wrist);
+    }
+
+    [Fact]
     public void Derived_wheelbase_matches_the_chart()
     {
         Assert.InRange(Frame.Wheelbase, Samedi.Geometry.Wheelbase - 0.015f, Samedi.Geometry.Wheelbase + 0.015f);

@@ -141,6 +141,7 @@ public partial class RideProbe : Node
         {
             "bike" or "roadbike" => RideKind.RoadBike,
             "ebike" or "e-bike" or "samedi" => RideKind.EBike,
+            "ebike-open" or "open" => RideKind.EBikeOpen,
             "skis" or "ski" => RideKind.Skis,
             "snowboard" or "board" => RideKind.Snowboard,
             "r1" => (RideKind)MotorbikeCatalog.First,

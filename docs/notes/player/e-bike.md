@@ -1,12 +1,16 @@
-# E-bike: the Moustache Samedi 28.4, and choosing a bicycle (#1159)
+# E-bike: the Moustache Samedi 28.4, its low frame, and choosing a bicycle (#1159)
 
 - **Choosing**: every `BicycleCatalog` entry carries its own `RideKind` (`BicycleSpec.Kind`): the Scott is
   `RoadBike` 1, the Samedi `EBike` 203 (protocol 47). The choice replicates as the ride kind, as the
   motorbikes' does, and a parked e-bike stays one (`VehicleState` keeps the kind). The picker's
   **Bicycles** tab lists the catalogue; the road bike also stays among the Mounts. A new bicycle is a
   new `RideKind`, a catalogue entry and a line in `Rideable.Create`.
-- **"Is it a bicycle"**: `BicycleCatalog.IsBicycle(kind)`, never `== RideKind.RoadBike` (feel, interest size,
-  race pace). `BicycleCatalog.For(kind)` gives the spec. `RideKind` is in its own file
+- **The low frame**: `MoustacheSamediOpen` (`RideKind.EBikeOpen` 204, Moustache's "Open"), the same spec `with`
+  `FrameStyle = BikeFrameStyle.LowFrame`. The mesh drops the top tube for a low tube from the head tube
+  to the seat tube over the motor. Its chart and weight are assumed to be the diamond's, so the fit is
+  identical. The picker calls it "E-bike (low frame)". Say "low frame", never a gendered name.
+- **"Is it a bicycle"**: `BicycleCatalog.IsBicycle(kind)` (= `For(kind) != null`), never `== RideKind.RoadBike` (feel, interest
+  size, race pace): a new catalogue bike needs no edit there. `BicycleCatalog.For(kind)` gives the spec. `RideKind` is in its own file
   (`src/Player/RideKind.cs`) so the unit tests compile the catalogue.
 - **The bike**: Samedi 28.4 (2025), M/47, metallic red: Bosch Performance Line Smart (75 N·m), 625 Wh,
   CUES 1×10 11-39 on a 38 t ring, 170 mm cranks, Big Apple 700×50C, NEX-E25 63 mm fork, suspension post,

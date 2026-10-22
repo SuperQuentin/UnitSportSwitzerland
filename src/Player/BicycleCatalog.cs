@@ -46,6 +46,13 @@ namespace UnitSport.Player
         public const float FadeBand = 1f / 3.6f;
     }
 
+    /// <summary>
+    /// The main frame (#1159): a diamond's top tube from the head tube to the seat cluster, or a
+    /// low frame (Moustache's "Open") whose second tube runs low from the head tube to the
+    /// seat tube just over the motor, so a leg steps over it rather than swinging over the saddle.
+    /// </summary>
+    public enum BikeFrameStyle { Diamond, LowFrame }
+
     /// <summary>What a city or trekking bike carries that a road bike does not (#1159): drawn by <c>BikeMeshBuilder</c>.</summary>
     /// <param name="SuspensionFork">Travel, m; 0 a rigid fork.</param>
     public sealed record BikeKit(bool Rack, bool Fenders, bool Lights, bool Kickstand, float SuspensionFork, bool SuspensionSeatpost);
@@ -88,6 +95,9 @@ namespace UnitSport.Player
     {
         /// <summary>The motor, on a pedelec (#1159); null on a bike the legs alone drive.</summary>
         public ElectricAssist? Assist { get; init; }
+
+        /// <summary>Diamond or low frame (#1159).</summary>
+        public BikeFrameStyle FrameStyle { get; init; } = BikeFrameStyle.Diamond;
 
         /// <summary>Rack, fenders, lights, suspension (#1159); null on a bare road bike.</summary>
         public BikeKit? Kit { get; init; }
@@ -196,8 +206,23 @@ namespace UnitSport.Player
             Kit = new BikeKit(Rack: true, Fenders: true, Lights: true, Kickstand: true, SuspensionFork: 0.063f, SuspensionSeatpost: true),
         };
 
+        /// <summary>
+        /// The Samedi 28.4 <b>Open</b> (2025), the low frame (#1159): the same motor,
+        /// battery, parts and colour, the top tube swapped for a low one from the head tube to the seat
+        /// tube. <b>Assumed</b>: the diamond's chart and weight, Moustache printing the Open's from its
+        /// script too; its seat tube is the same length, so the fit is the same.
+        /// </summary>
+        public static readonly BicycleSpec MoustacheSamediOpen = MoustacheSamedi with
+        {
+            Name = "Moustache Samedi 28.4 Open (2025)",
+            Kind = RideKind.EBikeOpen,
+            FrameStyle = BikeFrameStyle.LowFrame,
+            Label = "E-bike (low frame)",
+            Blurb = "Moustache Samedi 28.4 Open, red, low frame: step through it, the motor helps up to 25 km/h",
+        };
+
         /// <summary>Append-only: each entry's <see cref="BicycleSpec.Kind"/> is replicated.</summary>
-        public static readonly BicycleSpec[] All = { AddictRc15, MoustacheSamedi };
+        public static readonly BicycleSpec[] All = { AddictRc15, MoustacheSamedi, MoustacheSamediOpen };
 
         public static BicycleSpec Default => All[0];
 
@@ -210,7 +235,7 @@ namespace UnitSport.Player
         }
 
         /// <summary>A bicycle of any make (#1159): what "is this a bike" asks, never <c>== RideKind.RoadBike</c>.</summary>
-        public static bool IsBicycle(RideKind kind) => kind is RideKind.RoadBike or RideKind.EBike;
+        public static bool IsBicycle(RideKind kind) => For(kind) != null;
     }
 
     /// <summary>

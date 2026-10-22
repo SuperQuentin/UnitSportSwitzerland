@@ -73,7 +73,7 @@ public partial class Handshake : Node
     /// 44: World/TrafficGenerators (AskSet, AskRemove; Set, Remove, Snapshot) (#971).
     /// 45: World/Arrival Rules carries the server's world, a test world picked in the menus (#999).
     /// 46: name tags (#1136): FootPlayer.DeviceKind replicated, World/Chat ReceiveTagNames (sorts after NotifyKicked).
-    /// 47: the e-bike (#1159): RideKind.EBike 203, a second catalogue bicycle.
+    /// 47: the e-bike (#1159): RideKind.EBike 203 and its low-frame EBikeOpen 204, catalogue bicycles.
     public const int Protocol = 47;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>

@@ -489,7 +489,7 @@ public abstract class Rideable
     public static Rideable? Create(RideKind kind) => kind switch
     {
         RideKind.RoadBike => new Bicycle(),
-        RideKind.EBike => new Bicycle(BicycleCatalog.MoustacheSamedi),
+        _ when BicycleCatalog.For(kind) is { } bicycle => new Bicycle(bicycle),
         RideKind.Skis => new Skis(),
         RideKind.Snowboard => new Snowboard(),
         RideKind.Wingsuit => new Wingsuit(),
