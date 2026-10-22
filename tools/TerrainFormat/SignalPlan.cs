@@ -39,7 +39,17 @@ public enum SignalGroupKind : byte
 public enum SignalPlate : byte { None = 0, Pedestrian = 1, Bike = 2, Arrow = 3 }
 
 /// <summary>Where a left turn's flasher stands (#1109, <see cref="RoadSignal.LeftFlasherPole"/>).</summary>
-public enum FlasherSite : byte { MainPole = 0, SecondPole = 1, CrossingPole = 2 }
+public enum FlasherSite : byte
+{
+    /// <summary>The approach's own main pole, with the right turns' lamp (no pole by the left crosswalk).</summary>
+    MainPole = 0,
+    /// <summary>The approach's left pole.</summary>
+    SecondPole = 1,
+    /// <summary>The far-side pole of the arm the left turn goes into, across the junction from the driver (#1117).</summary>
+    FarSidePole = 2,
+    /// <summary>That arm's main pole, at the near corner, where it has no pole on its far side.</summary>
+    NearSidePole = 3,
+}
 
 /// <summary>Movements a group serves, as the approaching driver turns.</summary>
 [Flags]
@@ -1730,9 +1740,11 @@ public sealed class RoadSignal
 
     /// <summary>
     /// The pole a car group's left-turn flasher stands on (#1109, the user: "left flasher on a pole next to the left crosswalk"):
-    /// the approach's left pole (<see cref="SignalPoleFlags.Second"/>, at the corner the left turn sweeps past), else the main pole
-    /// of the arm the left turn goes into (it stands on that arm's arriving kerb, the same corner, by its crosswalk), else the
-    /// approach's own main pole (with the right turns' flasher); -1 with no pole.
+    /// the approach's left pole (<see cref="SignalPoleFlags.Second"/>, at the corner the left turn sweeps past), else the
+    /// far-side pole of the arm the left turn goes into (#1117, the user: "for a turn-into flasher, it should be on the far side
+    /// pole"): across the junction from the driver, at the corner the turning car arrives by, the one of that arm's kerb poles
+    /// furthest from its main pole (its left pole, or a walkers' pole; an island's not), else that arm's main pole (the near
+    /// corner), else the approach's own main pole (with the right turns' flasher); -1 with no pole.
     /// </summary>
     public (int Pole, FlasherSite Site) LeftFlasherPole(int group)
     {
@@ -1742,8 +1754,20 @@ public sealed class RoadSignal
         foreach (var m in Plan.Movements())
         {
             if (m.Group != group || m.Turn != SignalMoves.Left) continue;
-            int at = Poles.FindIndex(p => p.Arm == m.To && (p.Flags & SignalPoleFlags.Main) != 0);
-            if (at >= 0) return (at, FlasherSite.CrossingPole);
+            int near = Poles.FindIndex(p => p.Arm == m.To && (p.Flags & SignalPoleFlags.Main) != 0);
+            int far = -1;
+            float best = 0;
+            const SignalPoleFlags Island = SignalPoleFlags.ArrivingHalf | SignalPoleFlags.DepartingHalf;
+            for (int k = 0; k < Poles.Count; k++)
+            {
+                var q = Poles[k];
+                if (q.Arm != m.To || k == near || (q.Flags & Island) == Island) continue;
+                // (from the near corner's pole where there is one, else from the junction's centre)
+                float dx = q.X - (near >= 0 ? Poles[near].X : X), dz = q.Z - (near >= 0 ? Poles[near].Z : Z);
+                if (dx * dx + dz * dz > best) { best = dx * dx + dz * dz; far = k; }
+            }
+            if (far >= 0) return (far, FlasherSite.FarSidePole);
+            if (near >= 0) return (near, FlasherSite.NearSidePole);
         }
         return (Poles.FindIndex(p => p.Arm == arm && (p.Flags & SignalPoleFlags.Main) != 0), FlasherSite.MainPole);
     }

@@ -110,7 +110,7 @@ public static class SignalCheck
                         var (pole, site) = s.LeftFlasherPole(q);
                         bool away = pole >= 0 && site != FlasherSite.MainPole && p.PlateOf(g, conflicts, SignalMoves.Left).Plate != SignalPlate.None;
                         foreach (var (turns, onPole) in away
-                            ? new[] { (SignalMoves.Right, "main pole"), (SignalMoves.Left, site == FlasherSite.SecondPole ? "left pole" : "crossing's pole") }
+                            ? new[] { (SignalMoves.Right, "main pole"), (SignalMoves.Left, site switch { FlasherSite.SecondPole => "left pole", FlasherSite.FarSidePole => "far-side pole", _ => "near-side pole" }) }
                             : new[] { (SignalMoves.Left | SignalMoves.Right, "main pole") })
                         {
                             var (plate, arrow) = p.PlateOf(g, conflicts, turns);

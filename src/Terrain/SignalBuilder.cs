@@ -249,8 +249,10 @@ public static partial class SignalBuilder
 
     /// <summary>
     /// The left turns' flasher lamps (#1109) on the poles by the crosswalks they cross: on the approach's left pole beside its
-    /// leftmost car head, level with its green; on the main pole of the arm the left turn goes into, above that pole's own heads
-    /// (they face its own approach), facing this one's drivers.
+    /// leftmost car head, level with its green; on the far-side pole of the arm the left turn goes into (#1117: across the
+    /// junction, where the turning car arrives; that arm's main pole where it has none), above that pole's own heads (they face
+    /// that arm's approach, its walkers' head at a car head's height: above, the lamp hits none and is seen over them), facing
+    /// this one's drivers.
     /// </summary>
     private static List<AwayLamp> AwayLamps(RoadSignal signal)
     {
