@@ -117,3 +117,65 @@ public class RegionTrafficTests(SignalTestRegionFixture region) : IClassFixture<
         finally { File.Delete(path); }
     }
 }
+
+/// <summary>
+/// Don't block the box (#1134, <see cref="BoxRule"/>): a car enters only with room on its exit past the cars on it or committed to
+/// it, unless its approach or its exit arm is flagged <c>AllowBlock</c>; the flags survive the tile format.
+/// </summary>
+public class BoxRuleTests(SignalTestRegionFixture region) : IClassFixture<SignalTestRegionFixture>
+{
+    [Fact]
+    public void The_strip_between_J5a_and_J5b_holds_as_many_cars_as_fit_and_no_more()
+    {
+        // eastbound out of J5a: the strip from J5a's core (its east arm's stop line, where the westbound stand) to J5b's west stop line
+        var a = region.Junction("J5a");
+        var b = region.Junction("J5b");
+        var tile = region.Tile(a.E, a.N);
+        var id = TileId.FromLv95(a.E, a.N);
+        (double E, double N) At(RoadApproach x) => (id.MinE + x.X, id.MaxN - x.Z);
+        var stops = tile.Approaches.Where(x => x.Signal >= 0).Select(At).Where(p => Math.Abs(p.N - a.N) < 8).ToList();
+        double from = stops.Where(p => p.E > a.E && p.E < (a.E + b.E) / 2).Min(p => p.E);
+        double to = stops.Where(p => p.E < b.E && p.E > (a.E + b.E) / 2).Max(p => p.E);
+        float storage = (float)(to - from);
+        Assert.InRange(storage, 20f, 100f);
+        int fit = (int)(storage / BoxRule.CarRoom);
+        Assert.True(BoxRule.Fits(storage, fit - 1));
+        Assert.False(BoxRule.Fits(storage, fit));
+        // a flag on the approach or on the exit lets the next one in anyway
+        Assert.True(BoxRule.Fits(storage, fit, approachAllows: true));
+        Assert.True(BoxRule.Fits(storage, fit, exitAllows: true));
+        // a long free exit is free up to the reach
+        Assert.True(BoxRule.Fits(1000f, (int)(BoxRule.Reach / BoxRule.CarRoom) - 1));
+        Assert.False(BoxRule.Fits(1000f, (int)(BoxRule.Reach / BoxRule.CarRoom)));
+    }
+
+    [Fact]
+    public void AllowBlock_on_an_approach_and_on_an_arm_survives_the_tile_format()
+    {
+        var src = region.Tile(region.Junction("J1").E, region.Junction("J1").N);
+        var signal = src.Signals.Single();
+        var plan = signal.Plan;
+        plan.Arms[1] = plan.Arms[1] with { AllowBlock = true };
+        var approaches = src.Approaches.Select((x, i) => i == 0 ? new RoadApproach
+        {
+            X = x.X, Y = x.Y, Z = x.Z, Heading = x.Heading, Signal = x.Signal, SignalArm = x.SignalArm, Banned = SignalMoves.Left,
+            LaneCentre = x.LaneCentre, Lanes = x.Lanes, AllowBlock = true,
+        } : x).ToList();
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            RoadSignal.Write(w, src.Signals);
+            RoadApproach.Write(w, approaches);
+        }
+        ms.Position = 0;
+        using var r = new BinaryReader(ms);
+        var signals = RoadSignal.Read(r)!;
+        var read = RoadApproach.Read(r)!;
+        Assert.True(signals[0].Plan.Arms[1].AllowBlock);
+        Assert.Equal(plan.Arms[1].Rank, signals[0].Plan.Arms[1].Rank);
+        Assert.False(signals[0].Plan.Arms[0].AllowBlock);
+        Assert.True(read[0].AllowBlock);
+        Assert.Equal(SignalMoves.Left, read[0].Banned);
+        Assert.False(read[1].AllowBlock);
+    }
+}

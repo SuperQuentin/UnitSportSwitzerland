@@ -681,7 +681,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             // long red reaches past where the cars read the lights, and its back vanished after 20 s)
             // (truly ahead, not one on the same spot: two on one spot each reading the other as ahead would hold each other
             // queued for good, where being dropped as stuck untangles them)
-            if (other.Speed < 0.5f && d.Dot(dir) > 2f && along < QueueSpacing + 6f && (other.AtRed || other.Queued || other.GapWaiting || other.GapHeld)) queued = true;
+            if (other.Speed < 0.5f && d.Dot(dir) > 2f && along < QueueSpacing + 6f && (other.AtRed || other.RoomHeld || other.Queued || other.GapWaiting || other.GapHeld)) queued = true;
         }
         // and behind a rider or tram in its lane (#1060: the modes' crossers; +∞ without them): standing behind one, queued too
         // (#1134: a tram at its stop, a rider at a red)
@@ -875,7 +875,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         // there; the green it gives way to ends too). A car held by the lights (a red, a wait at the line) in a queue does not
         // turn round either
         bool atLights = lights < float.MaxValue;
-        car.Stuck = car.Speed < 0.3f && !stopFor && !hold && !car.AtRed && !car.Queued && !car.GapWaiting && !car.GapHeld ? car.Stuck + dt : 0f;
+        car.Stuck = car.Speed < 0.3f && !stopFor && !hold && !car.AtRed && !car.RoomHeld && !car.Queued && !car.GapWaiting && !car.GapHeld ? car.Stuck + dt : 0f;
         car.Holding = hold;
         car.Yield = yield;
         car.Stale = blocked && car.Speed < 0.3f && !atLights ? car.Stale + dt : 0f;
@@ -1042,7 +1042,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     /// </summary>
     private float Approach(Vehicle car)
     {
-        car.AtRed = false;
+        car.AtRed = car.RoomHeld = false;
         // the next approach on its route within reach: it may be a short edge after another (a
         // split line, a junction just before), read before the car is on it
         LaneApproach? approach = null;
@@ -1178,8 +1178,9 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             }
             // a queue does not block the junction: no entering it without room past it (only while it
             // can still stop calmly; one already too close goes)
-            if (toLine < RoomLook && car.Speed * car.Speed / 8f < Mathf.Max(stopAt, 0f) + 0.5f && !RoomPast(car, leg, toEnd))
+            if (toLine < RoomLook && car.Speed * car.Speed / 8f < Mathf.Max(stopAt, 0f) + 0.5f && !RoomPast(car, approach, leg, toEnd))
             {
+                car.RoomHeld = true;
                 if (!car.WaitedRoom) { car.WaitedRoom = true; approach.RoomWaits++; RoomWaits++; }
                 return StopWithin(stopAt);
             }
@@ -1279,11 +1280,13 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
 
     /// <summary>
     /// Whether there is room for a car past the junction its leg <paramref name="leg"/> ends at
-    /// (<paramref name="toEnd"/> m ahead): no car standing on its way out within a car's length of
-    /// the junction, going its way.
+    /// (<paramref name="toEnd"/> m ahead), the box rule (#1134, <see cref="BoxRule"/>, the user): its exit, from the core up to the
+    /// next stop line or junction (as far as its way is planned; <see cref="BoxRule.Reach"/> at most), holds it past every car
+    /// on it going its way and every car in the core committed to it. An approach or exit arm flagged <c>AllowBlock</c> lets it go.
     /// </summary>
-    private bool RoomPast(Vehicle car, int leg, float toEnd)
+    private bool RoomPast(Vehicle car, LaneApproach approach, int leg, float toEnd)
     {
+        if (approach.AllowBlock) return true;
         var legs = car.Route.Legs;
         float across = 0f;
         int i = leg + 1;
@@ -1295,20 +1298,47 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             across += e.Length;
         }
         if (i >= legs.Count) return true;
-        var (p, dir) = car.Route.At(-(toEnd + across + 6f));
-        _xKey.Head.X = p.X - 8f;
-        int from = _byX.BinarySearch(_xKey, ByX);
-        for (int o = from < 0 ? ~from : from; o < _byX.Count && _byX[o].Head.X <= p.X + 8f; o++)
+        var (exitAt, exitDir) = car.Route.At(-(toEnd + across + 1f));
+        // the exit arm it drives into: the site's arm whose way out is its way
+        if (approach.Site is { } site)
         {
-            var other = _byX[o];
-            if (other == car || other.Speed > 2f) continue;
-            var d = other.Head - p;
-            if (d.X * d.X + d.Z * d.Z > 7f * 7f || Mathf.Abs(d.Y) > 3f) continue;
-            if (other.Route.At(0).Dir.Dot(dir) < 0.5f) continue;
-            return false;
+            int arm = -1;
+            float best = 0.7f;
+            for (int k = 0; k < site.Out.Length; k++)
+                if (site.Out[k].Dot(exitDir) is var dot && dot > best) (best, arm) = (dot, k);
+            if (arm >= 0 && arm < site.Plan.Arms.Count && site.Plan.Arms[arm].AllowBlock) return true;
         }
-        return true;
+        // its exit's room: the road legs past the core up to the next stop line or junction, as far as its way is planned
+        _exitLegs.Clear();
+        float storage = 0f;
+        bool open = true;
+        for (int k = i; k < legs.Count && storage < BoxRule.Reach; k++)
+        {
+            var (e, f) = legs[k];
+            if (e.Connector || e.Path is not null) { open = false; break; }
+            _exitLegs.Add(legs[k]);
+            if ((f ? e.ApproachAtEnd : e.ApproachAtStart) is var (_, back)) { storage += Mathf.Max(0f, e.Length - back); open = false; break; }
+            storage += e.Length;
+        }
+        if (open) storage = BoxRule.Reach;   // its way planned no further: free beyond
+        // the cars on it going its way within that room, and those in the core heading onto it
+        int ahead = 0;
+        float reach = Mathf.Min(storage, BoxRule.Reach) + 10f;
+        foreach (var other in _cars)
+        {
+            if (other == car || MathX.Flat(other.Head - exitAt).LengthSquared() > reach * reach) continue;
+            var olegs = other.Route.Legs;
+            bool counts = _exitLegs.Contains((other.Route.Edge, other.Route.Forward));
+            if (!counts && (other.Route.Edge.Connector || other.Route.Edge.Path is not null))
+                for (int k = other.Route.Leg + 1; k < olegs.Count && k <= other.Route.Leg + 4 && !counts; k++)
+                    counts = _exitLegs.Contains(olegs[k]);
+            if (counts) ahead++;
+        }
+        return BoxRule.Fits(storage, ahead);
     }
+
+    /// <summary>The legs of an exit being measured (<see cref="RoomPast"/>), one set for the traffic's life.</summary>
+    private readonly HashSet<(LaneEdge, bool)> _exitLegs = new();
 
     /// <summary>Whether a car comes the other way through a signalised junction: on the opposite approach, near its line and moving.</summary>
     private bool Oncoming(Vehicle car, SignalSite site, int arm)
@@ -1902,6 +1932,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         public bool GivingWay;
         /// <summary>Stopping for a red light (#353), clearing a yellow, has stopped for this red; waited to turn left across oncoming traffic, waited for room past the junction.</summary>
         public bool AtRed, ClearingAmber, WasAtRed, WaitedPermissive, WaitedRoom;
+        /// <summary>Waiting at its line on green for room past the junction (#1134, the box rule): not stuck, and the cars behind it queue.</summary>
+        public bool RoomHeld;
         /// <summary>
         /// Held for a gap on a junction path (#1046): past its line, short of a point in the junction; at its line behind the cars
         /// waiting there; the path, and how long it has stood in the junction (s). How long it has been let go standing (s).
