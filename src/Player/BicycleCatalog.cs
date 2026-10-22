@@ -52,10 +52,17 @@ namespace UnitSport.Player
     /// <summary>One bicycle: a real model, size and build (#1124).</summary>
     /// <param name="Mass">The bike alone, kg, pedals on.</param>
     /// <param name="TyreWidth">As on the sidewall, metres (28 mm = 0.028).</param>
+    /// <param name="WheelInertia">Both wheels' moment of inertia with tyres and rotors, kg·m²: a 700c road wheel is 0.06-0.09.</param>
     public sealed record BicycleSpec(
         string Name, string Size, float Mass, float TyreWidth, BicycleGeometry Geometry,
-        int[] Chainrings, int[] Cassette, string Groupset, BikeBrakes Brakes, BikePalette Look)
+        int[] Chainrings, int[] Cassette, string Groupset, BikeBrakes Brakes, BikePalette Look, float WheelInertia = 0.15f)
     {
+        /// <summary>
+        /// What the spinning wheels add to the mass being accelerated, kg: I/r². Every kilo at the rim
+        /// counts about twice, which is why light wheels matter and a light frame much less.
+        /// </summary>
+        public float WheelEffectiveMass => WheelInertia / (WheelRadius * WheelRadius);
+
         /// <summary>A 622 mm (700c) bead seat with the tyre's height on it: about the width, for a road tyre.</summary>
         public float WheelRadius => 0.311f + TyreWidth;
 
