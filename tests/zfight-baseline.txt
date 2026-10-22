@@ -996,6 +996,7 @@
 483.8	Terrain / Road prop - ParkingSign
 344	Terrain / Road prop - TicketBarrier 0
 520	Terrain / Road prop - TicketKiosk
+3963.5	Terrain / Road prop - TramStop
 1872	Terrain / Road prop - YieldSign
 5134	Terrain / Traffic light - Bike right on red
 5134	Terrain / Traffic light - Bike right on red, no bike head
@@ -1006,6 +1007,10 @@
 25126.4	Terrain / Traffic light - Span wire
 3702.7	Terrain / Traffic light - Two-stage island
 3702.7	Terrain / Traffic light - Two-stage island, Geneva
+7405.6	Terrain / Traffic light - Tram
+5235.7	Terrain / Traffic light - Tram, Romandy
+10042.4	Terrain / Traffic light - Tram, two ways
+5337.5	Terrain / Traffic light - Tram, Romandy, two ways
 42281.1	Trailer / Drognens dormitory
 344.1	Trucks and buses / Arocs 3240 8x4 mixer
 67.9	Trucks and buses / Arocs 3240 8x4 mixer (parked)
