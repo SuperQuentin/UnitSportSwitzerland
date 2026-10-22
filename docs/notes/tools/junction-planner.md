@@ -51,9 +51,13 @@ off, `--junctions new` plans and reports without writing.
   of the pocket (id 125), where there is plenty of room: it is the first thing the room order gives up (step 1); then
   they **share the right pocket** (`Strip.SharedWithBikes`: a bike connector from it in phase 5, no bike symbol in it). J1: kerbside on every arm (every arm turns left).
   **OSM's `bicycle:lanes` wins** (the user, #854, as `turn:lanes` does): a `designated` lane with a car lane right of it is
-  (b), one that is last is (a) (`BikeLaneBetween`, overlay v3). (b)'s right-turn bike lane at the kerb gets no bike signal
-  (its riders turn with the pocket's cars; it held the right arrow back before), so in (b) **the right turn goes with the
-  through green** (J10: 70 s, rights in the through phases; J1 74 s with the arrows apart). Real tiles: no overlay carries
+  (b), one that is last is (a) (`BikeLaneBetween`, overlay v3). (b)'s right-turn bike lane at the kerb gets **a bike group
+  and head of its own, right only** (#1165, `SignalArm.RiderRight`; before, no bike signal: as part of the through riders'
+  group it held the right arrow back), green with its approach's right turn (`traffic-signals`), so in (b) **the right turn goes with the
+  through green** (J10: 70 s, rights in the through phases; J1 74 s with the arrows apart). Its way round the corner is
+  marked through the core as the lanes straight on are (`WriteBikeCrossings` 1b, #1165). **A left-turn bike lane's lines
+  are crossing dashes where its pocket opens** (#1165, the user: cars cross it into the pocket there, as the centre-running
+  lane where a right pocket opens; no red), solid again along the storage (`TransitionPaint`; J1: 8 stretches, ~10 m each). Real tiles: no overlay carries
   the tag yet (v2), the 168 tiles unchanged.
 - **One pocket rule** (the user's generalization, Oct 13): `Layout/PocketRules` holds the left and right pocket as one rule
   with a table (move, side, speed condition, sizes, ids, most lanes from data, room step). What a pocket displaces follows
