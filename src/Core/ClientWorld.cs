@@ -749,6 +749,14 @@ public partial class ClientWorld : Node3D, IOriginContainer
         };
         AddChild(_teleporter);
 
+        // home-trainer trainings (#901): the hardware link, and the session the phone's Training app starts
+        var trainer = new Trainer.TrainerLink { Name = Trainer.TrainerLink.NodeName };
+        trainer.Said += Toast;
+        AddChild(trainer);
+        var training = new Trainer.TrainingSession(_chunks, origin, () => LocalPlayer);
+        training.Said += Toast;
+        AddChild(training);
+
         // M opens the teleport search over any town that has terrain
         _places = PlaceSearchUi.Create(_teleporter);
         AddChild(_places);
@@ -784,6 +792,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Concert.ConcertDeskProbe.Requested) AddChild(new Concert.ConcertDeskProbe(() => LocalPlayer));
         if (Concert.ConcertCamProbe.Requested) AddChild(new Concert.ConcertCamProbe(() => LocalPlayer, () => GetNodeOrNull<ChatManager>(ChatManager.NodeName)));
         if (Phone.PhoneProbe.Requested) AddChild(new Phone.PhoneProbe(() => LocalPlayer));
+        if (Trainer.TrainingProbe.Requested && _chunks != null && _worldOrigin != null) AddChild(new Trainer.TrainingProbe(() => LocalPlayer, _chunks, _worldOrigin));
         if (SpectatorSwitchCheck.Requested) AddChild(new SpectatorSwitchCheck(() => LocalPlayer, () => _spectator));
         if (Phone.PhoneVrProbe.Requested) AddChild(new Phone.PhoneVrProbe(() => LocalPlayer));
         if (Items.SparkleProbe.Requested) AddChild(new Items.SparkleProbe(() => LocalPlayer));

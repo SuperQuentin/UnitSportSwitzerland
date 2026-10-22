@@ -165,6 +165,13 @@ public partial class PlayerInput : Node
     /// <summary>The travel picker (<see cref="Player.RideUi"/>): mounts, equipment and, for an admin, vehicles.</summary>
     public const string RideMenu = "ride_menu";
     /// <summary>
+    /// A home-trainer training (#901): back to the GPX course from a road off it, turn round, ERG on/off and its
+    /// target ±10 W. Keys only: a pad and VR have the same as buttons in the phone's Training app (no pad
+    /// button is free on a bike); the turn at a junction is the steering.
+    /// </summary>
+    public const string RideRejoin = "ride_rejoin", RideUTurn = "ride_uturn", RideErg = "ride_erg",
+        RidePowerUp = "ride_power_up", RidePowerDown = "ride_power_down";
+    /// <summary>
     /// The pad's analog triggers alone, 0..1, for code that wants the pull itself (flight's lever,
     /// the GPX camera). Through the input map rather than <c>Input.GetJoyAxis(0, …)</c>, so any
     /// pad works, and so do the VR controllers, which replay as a pad (#436).
@@ -671,6 +678,12 @@ public partial class PlayerInput : Node
         // the picker when there is nothing to interact with (ClientWorld).
         Bind(InteractMount, Keys(Key.E), Button(JoyButton.Y));
         Bind(RideMenu, Keys(Key.R));
+        // every letter is taken: the keys beside Enter and the page keys, which no ride uses
+        Bind(RideRejoin, Keys(Key.Pageup));
+        Bind(RideUTurn, Keys(Key.Pagedown));
+        Bind(RideErg, Keys(Key.Backslash));
+        Bind(RidePowerUp, Keys(Key.Bracketright));
+        Bind(RidePowerDown, Keys(Key.Bracketleft));
         Bind(EngineToggle, Keys(Key.Z), Button(JoyButton.DpadUp));
         Bind(CameraToggle, Keys(Key.V), Button(JoyButton.RightStick));
         // a concert's camera (#885): the operator's zoom on the wheel and the shoulders (nothing else

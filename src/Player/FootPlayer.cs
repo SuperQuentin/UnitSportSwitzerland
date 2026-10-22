@@ -3433,6 +3433,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // into the sky by the solver
         if (kind != RideKind.OnFoot) LeaveDecksNow();
         LeaveWater();
+        DropPhoneBackdrop();
         _ride = CarSetups.Ride(kind, CarSetups.Clamp(setup), tuning);
         // a truck or bus from the picker comes with the load chosen there
         if (_ride is Truck picked && !Mathf.IsEqualApprox(picked.Load, NextLoad)) _ride = new Truck(picked.Spec, 0, NextLoad);
