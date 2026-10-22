@@ -11,8 +11,11 @@ public readonly record struct WayPoint(double E, double N, double H, int Node = 
 /// <summary>A road leaving a junction: its first node, its bearing (degrees, negative left), and whether the way takes it.</summary>
 public readonly record struct Branch(int First, double Bearing, bool Taken);
 
-/// <summary>A junction ahead on the way: its node, how far along the way, and the roads out of it, leftmost first.</summary>
-public sealed record Junction(int Node, double Arc, IReadOnlyList<Branch> Branches)
+/// <summary>
+/// A junction ahead on the way: its node, how far along the way, the roads out of it (leftmost first), and the
+/// direction the rider comes in (E, N, unit).
+/// </summary>
+public sealed record Junction(int Node, double Arc, IReadOnlyList<Branch> Branches, double InE = 0, double InN = 1)
 {
     /// <summary>The branch the way takes, or -1 (the way leaves the roads here: a course ridden as recorded).</summary>
     public int Taken => Branches.ToList().FindIndex(b => b.Taken);
@@ -115,7 +118,8 @@ public static class JunctionChoice
             if (branches[i].Bearing - branches[i - 1].Bearing < Same)
                 branches.RemoveAt(branches[i].Taken ? i - 1 : i);
         if (branches.Count < 2) return null;   // a bend, or one road with a stub: not a choice
-        return new Junction(node, at, branches);
+        double inLen = Length(dirIn);
+        return new Junction(node, at, branches, dirIn.Item1 / inLen, dirIn.Item2 / inLen);
     }
 
     /// <summary>

@@ -13,7 +13,8 @@
 | HUD | built | watts, rpm, bpm, speed, grades, km, climbing left, time |
 | Junction choice, Rejoin, U-turn | built (PR #1142) | not the edge sequence of design 1: junctions are read off the road network's walking graph along whatever the bike rides (`JunctionChoice`) |
 | ERG button | built (PR #1142) | `\`, ±10 W `[` `]`; pad and VR through the Training app |
-| Ride through traffic, arrows on the road | next | a queued car stops the bike; the arrows are HUD text |
+| Junction arrows | built (PR on `feat/901-arrows`) | a row of arrows over the junction, the road taken lit |
+| Ride through traffic | next | a queued car stops the bike |
 | FTP test hookup | after #903 | `Bicycle.PowerMeasured = TrainerLink.PowerLive` |
 | Group rides | later | phase 4 |
 

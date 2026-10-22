@@ -62,6 +62,8 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
     public Junction? NextJunction { get; private set; }
     /// <summary>Metres from the rider to <see cref="NextJunction"/>.</summary>
     public double JunctionIn => NextJunction is { } j && _wayArc.Count > 0 ? j.Arc - _wayArc[_near] : 0;
+    /// <summary>The next junction's arrows on the road; null before the first junction.</summary>
+    public JunctionArrows? Arrows => _arrows;
     /// <summary>A turn asked for the next junction: -1 left, +1 right, 0 none.</summary>
     public int TurnAsked { get; private set; }
     /// <summary>The way's flat length ahead of the rider: where the pilot stops if nothing is added.</summary>
@@ -82,6 +84,7 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
 
     private Course? _course;
     private RoadNetwork? _net;
+    private JunctionArrows? _arrows;
     private List<WayPoint> _way = new();
     private List<double> _wayArc = new();
     private CourseProfile? _wayProfile;
@@ -263,6 +266,7 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
         State = _course != null ? Phase.Ready : Phase.Idle;
         Status = $"Training {why} at {Along / 1000:0.0} km.";
         ShowHud(false);
+        _arrows?.Show(null, null, _origin);
         GD.Print($"[training] {why} at {Along:0} m after {RideSeconds:0} s");
     }
 
@@ -370,6 +374,7 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
             Said?.Invoke(Status);
             GD.Print($"[training] RESULT finished {Along:0} m in {RideSeconds:0} s{avg}");
             ShowHud(false);
+            _arrows?.Show(null, null, _origin);
             // the pilot rides on, past the line, and stops; then the bike is the rider's
             GetTree().CreateTimer(6.0).Timeout += () => { if (State == Phase.Finished && _player() is { } p) p.RideControls = null; };
             return;
@@ -377,7 +382,11 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
         UpdateHud(me);
     }
 
-    public void OnOriginShifted(OriginShift shift) => _route?.Follow(_origin.Frame);
+    public void OnOriginShifted(OriginShift shift)
+    {
+        _route?.Follow(_origin.Frame);
+        _arrows?.Forget();   // placed again in the new frame on the next look
+    }
 
     // ---------------------------------------------------------------- the way: the course, or roads off it
 
@@ -537,6 +546,8 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
         {
             _junctionAt = RideSeconds + 0.2;
             NextJunction = JunctionChoice.Next(g, _way, _wayArc, _near, _wayArc[_near], LookAhead);
+            if (_arrows == null) AddChild(_arrows = new JunctionArrows());
+            _arrows.Show(NextJunction, g, _origin);
         }
         if (TurnAsked == 0 || NextJunction is not { } j) return;
         int side = TurnAsked;
