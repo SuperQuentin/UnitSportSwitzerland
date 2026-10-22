@@ -109,3 +109,6 @@ tools/deploy.env
 
 # the editor writes a default OpenXR action map when VR is on; nothing uses it, the game maps controllers in code (XrPad, XrHands)
 /openxr_action_map.tres
+
+# Nakama keys (#1121): tools/nakama/up.sh writes them; never committed
+/tools/nakama/.env
