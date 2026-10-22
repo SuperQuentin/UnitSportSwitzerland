@@ -92,9 +92,9 @@ public static class TerrainShowcase
         ("Two-stage island, Geneva", () => TrafficLight(pedestrianAmber: false, island: true)),
         // the trams' bar head (#1057) beside the car heads: the bar across, the dot, the bar upright, lit on the clock
         ("Tram", () => TrafficLight(pedestrianAmber: true, tram: true)),
-        // Romandy's T head (#1057, the user): the bar across over the bar upright, beside the car heads above the flasher
+        // Romandy's head (#1105, the user's photos): a one-lens car head module, a solid white T lit in its lens, packed against the car heads
         ("Tram, Romandy", () => TrafficLight(pedestrianAmber: false, tram: true, tramT: true)),
-        // trams going two ways (#1057, the user): a head per direction, its arrow on its plate; Romandy's packed beside the car heads
+        // trams going two ways (#1057, the user): a head per direction, its arrow on its plate; Romandy's in a row on top of the car heads
         ("Tram, two ways", () => TrafficLight(pedestrianAmber: true, tram: true, tramTwo: true)),
         ("Tram, Romandy, two ways", () => TrafficLight(pedestrianAmber: false, tram: true, tramT: true, tramTwo: true)),
     ];

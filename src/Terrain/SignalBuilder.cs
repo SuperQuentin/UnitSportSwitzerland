@@ -27,13 +27,13 @@ public static class SignalBuilder
     public const float Pitch = 0.3f, LensRadius = 0.09f;
     private const float HeadWidth = 0.3f, HeadDepth = 0.22f, BoardMargin = 0.1f, BoardThickness = 0.02f;
     /// <summary>
-    /// Romandy's square tram head (#1105, the Geneva photo): a 0.4 m square face (a car head's width scaled by
-    /// <see cref="TramSquareScale"/>), its round window's radius, the arrow plate's height below its frame (m); heads touch.
+    /// Romandy's tram head (#1105, the user's photos): a one-lens car head module, its lens dark with the white T lit in it; the
+    /// small "tram detected" dot above the T (its radius and height in lens radii), never lit.
     /// </summary>
-    private const float TramSquareScale = 4f / 3f, TramSquareWindow = 0.15f, TramSquarePanel = 0.17f;
-    /// <summary>One square head to the next, frame against frame (m).</summary>
-    private const float TramSquareGap = 0.01f, TramSquareBand = 0.04f, TramSquareStep = 0.4f + 2f * (TramSquareGap + TramSquareBand);
-    private static readonly Color TramWindow = new(0.13f, 0.13f, 0.14f), TramDetect = new(0.32f, 0.32f, 0.34f);
+    private const float TramDetectRadius = 0.1f, TramDetectAt = 0.66f;
+    /// <summary>Romandy's tram head to the next one or to its car head, plate against plate (#1105: packed, no gap).</summary>
+    private const float TramPack = HeadWidth + 2f * (BorderGap + BorderWidth);
+    private static readonly Color TramLens = new(0.05f, 0.05f, 0.06f), TramDetect = new(0.22f, 0.22f, 0.24f);
     /// <summary>
     /// A car head's plate (#759, from a photo of a Swiss junction and the user's review): a white
     /// band <see cref="BorderWidth"/> wide all round, black behind, flush with the housing's face
@@ -156,16 +156,15 @@ public static class SignalBuilder
         // the backboard (#759): a car head's plate flush with the housing's face, clear of it by
         // a hair, white in front and black behind (one face, PlateStyle); a bike head's only in
         // some cantons; a pedestrian head has none
-        // (Romandy's square tram head has its white frame, run on below it with its arrow: #1105, the Geneva photo)
-        bool board = h.Shape is not (Shape.Square or Shape.Tram) && (h.Shape != Shape.Bike || arrowsBelow || h.Shape == Shape.TramT);
-        // (Romandy's square tram head: a thin white frame close round its face, #1105)
-        float gap = h.Shape == Shape.TramT ? TramSquareGap : BorderGap * h.Scale, band = h.Shape == Shape.TramT ? TramSquareBand : BorderWidth * h.Scale,
+        // (Romandy's tram head is a car head module, its plate too: #1105)
+        bool board = h.Shape is not (Shape.Square or Shape.Tram) && (h.Shape != Shape.Bike || arrowsBelow);
+        float gap = BorderGap * h.Scale, band = BorderWidth * h.Scale,
             corner = rounded ? CornerRadius * h.Scale : 0f;
         // the arrow under the head: on the band run on below it where the canton does that,
         // on a small plate of its own under a bike head elsewhere
         // (a tram head's where its approach's trams go more than one way: one head per direction, #1057, the user; Romandy's always)
         var arrow = h.Shape is Shape.Bike or Shape.Tram or Shape.TramT || arrowsBelow ? HeadMoves(plan, h) : SignalMoves.None;
-        float panel = arrow != SignalMoves.None ? (h.Shape == Shape.TramT ? TramSquarePanel : ArrowPanel * h.Scale) : 0f;
+        float panel = arrow != SignalMoves.None ? ArrowPanel * h.Scale : 0f;
         var face = h.Centre - h.Front * 0.002f;
         if (board)
         {
@@ -194,36 +193,21 @@ public static class SignalBuilder
             Polygon(vertices, colors, uvs, uv2s, indices, Window.SrgbToLinear(), ring);
             return;
         }
-        if (h.Shape == Shape.TramT)
-        {
-            // Romandy's tram head (#1105, the Geneva photo): a square black housing, one round dark window in its face where the
-            // white dotted T lights (its lenses: SignalLamps), and above the T a small dot ("tram detected": unlit, the lights
-            // run on fixed cycles)
-            RoundedHousing(vertices, colors, uvs, uv2s, indices, h.Centre - h.Front * (depth * 0.5f), h.Right, h.Front,
-                w * 0.5f, depth * 0.5f, half, CornerRadius);
-            var window = new Vector3[16];
-            for (int i = 0; i < window.Length; i++)
-            {
-                float a = -Mathf.Tau * i / window.Length;   // clockwise from the front
-                window[i] = h.Centre + h.Front * 0.003f + h.Right * (TramSquareWindow * Mathf.Cos(a)) + Vector3.Up * (TramSquareWindow * Mathf.Sin(a));
-            }
-            Polygon(vertices, colors, uvs, uv2s, indices, TramWindow.SrgbToLinear(), window);
-            var dot = new Vector3[8];
-            var dotAt = h.Centre + h.Front * 0.005f + Vector3.Up * (TramSquareWindow * 0.82f);
-            for (int i = 0; i < dot.Length; i++)
-            {
-                float a = -Mathf.Tau * i / dot.Length;
-                dot[i] = dotAt + h.Right * (0.015f * Mathf.Cos(a)) + Vector3.Up * (0.015f * Mathf.Sin(a));
-            }
-            Polygon(vertices, colors, uvs, uv2s, indices, TramDetect.SrgbToLinear(), dot);
-            return;
-        }
         RoundedHousing(vertices, colors, uvs, uv2s, indices, h.Centre - h.Front * (depth * 0.5f), h.Right, h.Front,
             w * 0.5f, depth * 0.5f, half, CornerRadius * h.Scale);
         float pitch = Pitch * h.Scale;
         for (int k = 0; k < h.Lenses; k++)
             LensFittings(vertices, colors, uvs, uv2s, indices, h.Centre + Vector3.Up * (half - pitch * (k + 0.5f)),
                 h.Right, h.Front, h.Scale, square: h.Shape == Shape.Square);
+        if (h.Shape == Shape.TramT)
+        {
+            // Romandy's tram head (#1105): its lens dark, the T's solid strokes lit in it (SignalLamps), and over the T the small
+            // "tram detected" dot, unlit (the lights run on fixed cycles)
+            float r = LensRadius * h.Scale;
+            Polygon(vertices, colors, uvs, uv2s, indices, TramLens.SrgbToLinear(), Circle(h.Centre + h.Front * 0.003f, h.Right, r, 16));
+            Polygon(vertices, colors, uvs, uv2s, indices, TramDetect.SrgbToLinear(),
+                Circle(h.Centre + h.Front * 0.008f + Vector3.Up * (TramDetectAt * r), h.Right, TramDetectRadius * r, 8));
+        }
         if (h.Flasher)
         {
             // the flasher's own small housing beside the green, spaced as a head beside it (#759)
@@ -546,11 +530,10 @@ public static class SignalBuilder
                     }
                     if (h.Shape == Shape.TramT)
                     {
-                        // Romandy's square head (#1105): the T's two strokes in its window, each its own lamp, dotted: the bar across
-                        // (stop) and the bar upright under it (go); drawn in lens radii (SignalLamps), at the head's own size
-                        var t = new Basis(h.Right * TramSquareScale, Vector3.Up * TramSquareScale, h.Front);
-                        lamps.Lenses.Add(new Lens(h.Shape, new Transform3D(t, h.Centre + face), j, h.Group, Role.Red));
-                        lamps.Lenses.Add(new Lens(h.Shape, new Transform3D(t, h.Centre + face), j, h.Group, Role.Green));
+                        // Romandy's head (#1105): the T's two solid strokes in its one lens, each its own lamp: the bar across (stop)
+                        // and the bar upright under it (go), in lens radii (SignalLamps)
+                        lamps.Lenses.Add(new Lens(h.Shape, new Transform3D(basis, h.Centre + face), j, h.Group, Role.Red));
+                        lamps.Lenses.Add(new Lens(h.Shape, new Transform3D(basis, h.Centre + face), j, h.Group, Role.Green));
                         continue;
                     }
                     for (int k = 0; k < h.Lenses; k++)
@@ -597,8 +580,7 @@ public static class SignalBuilder
         Shape.RightArrow => SignalMoves.Right,
         Shape.Bike => plan.Groups[h.Group].Moves is var m and not SignalMoves.None ? m : SignalMoves.Through,
         // a tram head shows its direction where its approach's trams have more than one (#1057)
-        Shape.TramT => plan.Groups[h.Group].Moves,   // Romandy: each head its arrow (#1105, the Geneva photo)
-        Shape.Tram => plan.Groups.Count(g => g.Kind == SignalGroupKind.Tram && g.Arm == plan.Groups[h.Group].Arm) > 1 ? plan.Groups[h.Group].Moves : SignalMoves.None,
+        Shape.Tram or Shape.TramT => plan.Groups.Count(g => g.Kind == SignalGroupKind.Tram && g.Arm == plan.Groups[h.Group].Arm) > 1 ? plan.Groups[h.Group].Moves : SignalMoves.None,
         Shape.Circle => h.Arrow ?? ArrowMoves(plan, h.Group),
         _ => SignalMoves.None,
     };
@@ -659,8 +641,9 @@ public static class SignalBuilder
                 heads.Add(new Head(at, front, right, g, shape, 3, flasher));
             }
             // the trams' heads (#1057) beside the car heads on the road's side: left of the main pole's, right of the second's
-            // (Romandy's square heads beside the car heads on their right, #1105)
-            TramHeads(plan, pole, heads, foot, front, right, lower, plan.TramTHead || !main ? row.Count - centre : -(centre + 1), plan.TramTHead || !main ? 1 : -1);
+            // (Romandy's packed against the car heads, beside or above them: #1105)
+            if (plan.TramTHead) RomandyTramHeads(plan, pole, heads, foot, front, right, lower, row.Count, centre);
+            else TramHeads(plan, pole, heads, foot, front, right, lower, !main ? row.Count - centre : -(centre + 1), !main ? 1 : -1);
         }
         else if ((pole.Flags & SignalPoleFlags.Tram) != 0)
         {
@@ -700,16 +683,52 @@ public static class SignalBuilder
         // (one head per direction, left to right as the tram driver sees them: laid outward from the pole either way)
         int count = plan.Groups.Count;
         bool t = plan.TramTHead;
-        // Romandy's square heads (#1105, the Geneva photo): touching side by side, the first beside the car heads (past the main
-        // head's flasher), level with their upper lamps, each its arrow plate below
-        float x = slot * HeadSpacing + (t && heads.Any(h => h.Flasher) ? HeadWidth * 0.5f + TramSquareStep * 0.5f + 0.02f : 0f);
+        // (Romandy's one-lens heads on a pole of their own: side by side as car heads, level with a car head's lower half, #1105)
+        float x = slot * HeadSpacing;
         for (int k = 0; k < count; k++)
         {
             int g = step > 0 ? k : count - 1 - k;
             if (plan.Groups[g].Kind != SignalGroupKind.Tram || plan.Groups[g].Arm != pole.Arm) continue;
-            var at = foot + front * InFront + right * x + Vector3.Up * (lower + (t ? 2f : 1.5f) * Pitch);
-            heads.Add(t ? new Head(at, front, right, g, Shape.TramT, 1, false, TramSquareScale) : new Head(at, front, right, g, Shape.Tram, 3, false));
-            x += step * (t ? TramSquareStep : HeadSpacing);
+            var at = foot + front * InFront + right * x + Vector3.Up * (lower + (t ? 1f : 1.5f) * Pitch);
+            heads.Add(t ? new Head(at, front, right, g, Shape.TramT, 1, false) : new Head(at, front, right, g, Shape.Tram, 3, false));
+            x += step * (t ? TramPack : HeadSpacing);
+        }
+    }
+
+    /// <summary>
+    /// Romandy's tram heads on a pole with car heads (#1105, the user's photos), one-lens car head modules packed against the
+    /// <paramref name="cars"/> car heads (the main one <paramref name="centre"/>-th from the left): beside them on their right, level
+    /// with their lower half and plate against plate, where there is one or more than there are car heads (photo 1); otherwise,
+    /// or where the main head's flasher holds that side, in a row right on top of them ending over the main head, each its arrow
+    /// plate between it and the car head under it (photo 2).
+    /// </summary>
+    private static void RomandyTramHeads(SignalPlan plan, SignalPole pole, List<Head> heads, Vector3 foot, Vector3 front, Vector3 right,
+        float lower, int cars, int centre)
+    {
+        if ((pole.Flags & SignalPoleFlags.Tram) == 0) return;
+        var trams = new List<int>(3);
+        // left to right as the tram driver sees them (the plan adds an arm's tram groups left, through, right)
+        for (int g = 0; g < plan.Groups.Count; g++)
+            if (plan.Groups[g].Kind == SignalGroupKind.Tram && plan.Groups[g].Arm == pole.Arm) trams.Add(g);
+        if (trams.Count == 0) return;
+        if ((trams.Count == 1 || trams.Count > cars) && !heads.Any(h => h.Flasher))
+        {
+            for (int k = 0; k < trams.Count; k++)
+            {
+                var at = foot + front * InFront + right * ((cars - 1 - centre) * HeadSpacing + (k + 1) * TramPack) + Vector3.Up * (lower + Pitch);
+                heads.Add(new Head(at, front, right, trams[k], Shape.TramT, 1, false));
+            }
+            return;
+        }
+        // the car heads' plates' top, then the tram plate's foot on it: its band, its arrow panel (several ways), its band
+        float frame = BorderGap + BorderWidth, panel = trams.Count > 1 ? ArrowPanel : 0f;
+        float y = lower + 3f * Pitch + frame + 0.01f + panel + frame + Pitch * 0.5f;
+        // (the last over the main head, the others over the heads on its left while there are some)
+        int first = Math.Min(trams.Count - 1, centre);
+        for (int k = 0; k < trams.Count; k++)
+        {
+            var at = foot + front * InFront + right * ((k - first) * HeadSpacing) + Vector3.Up * y;   // over its car head
+            heads.Add(new Head(at, front, right, trams[k], Shape.TramT, 1, false));
         }
     }
 
@@ -812,6 +831,18 @@ public static class SignalBuilder
     /// at <paramref name="centre"/>, and the visor over it: an arc over the top and down the
     /// sides, open below, longest at the crown and flaring a little toward its mouth.
     /// </summary>
+    /// <summary>A disc facing the way <paramref name="right"/> and up make, clockwise from the front.</summary>
+    private static Vector3[] Circle(Vector3 centre, Vector3 right, float r, int n)
+    {
+        var ring = new Vector3[n];
+        for (int i = 0; i < n; i++)
+        {
+            float a = -Mathf.Tau * i / n;
+            ring[i] = centre + right * (r * Mathf.Cos(a)) + Vector3.Up * (r * Mathf.Sin(a));
+        }
+        return ring;
+    }
+
     private static void LensFittings(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
         Vector3 centre, Vector3 right, Vector3 front, float scale, bool square)
     {

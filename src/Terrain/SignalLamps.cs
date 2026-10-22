@@ -346,8 +346,8 @@ void fragment() {
         _ => aspect == SignalAspect.Green ? TramOn : TramOff,
     };
 
-    /// <summary>Romandy's dark LEDs (#1105): almost the window's glass, the unlit stroke barely seen (the photo).</summary>
-    private static readonly Color TramTOff = new(0.035f, 0.035f, 0.04f);
+    /// <summary>Romandy's dark LEDs (#1105): a shade off the dark lens, the unlit stroke faintly seen (the photos).</summary>
+    private static readonly Color TramTOff = new(0.055f, 0.055f, 0.06f);
 
     /// <summary>
     /// Romandy's tram head (#1057, the user; #1105 its dotted T): the stroke across lit for red, flashing before green (the
@@ -403,10 +403,10 @@ void fragment() {
             // a tram bar signal's lamps (#1057): white bars and a dot on the black of the housing
             case Icon.TramStop: flat.Bar(Vector2.Right, 1.7f, 0.42f); break;
             case Icon.TramGo: flat.Bar(Vector2.Up, 1.7f, 0.42f); break;
-            // Romandy's square head (#1105, the Geneva photo): a T of white dots in its window, the stroke across (stop) near its
-            // top, the stroke upright (go) down its middle from under it
-            case Icon.TramTStop: for (int k = 0; k < 7; k++) flat.Disc(new Vector2(-0.9f + 0.3f * k, 0.45f), 0.08f, 6); break;
-            case Icon.TramTGo: for (int k = 0; k < 6; k++) flat.Disc(new Vector2(0f, 0.15f - 0.22f * k), 0.08f, 6); break;
+            // Romandy's head (#1105, the user's photos): a solid white T in its lens, the stroke across (stop) above its centre,
+            // the stroke upright (go) down its middle from under it
+            case Icon.TramTStop: flat.Fan([new(-0.74f, 0.18f), new(0.74f, 0.18f), new(0.74f, 0.4f), new(-0.74f, 0.4f)]); break;
+            case Icon.TramTGo: flat.Fan([new(-0.11f, -0.9f), new(0.11f, -0.9f), new(0.11f, 0.13f), new(-0.11f, 0.13f)]); break;
             case Icon.TramLeft: flat.Bar(new Vector2(-1f, 1f).Normalized(), 1.7f, 0.42f); break;
             case Icon.TramRight: flat.Bar(new Vector2(1f, 1f).Normalized(), 1.7f, 0.42f); break;
             case Icon.TramDot: flat.Disc(Vector2.Zero, 0.4f, 12); break;
