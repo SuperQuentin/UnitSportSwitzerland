@@ -110,7 +110,7 @@ public static partial class TileRewriter
     /// A track on its own bed belongs to the arm it runs beside (#1161) within this of the carriageway's edge past the carriageway's
     /// own width (m): a central reservation between a divided road's carriageways, a bed beside the road.
     /// </summary>
-    internal const double TramBedMargin = 4.0;
+    public const double TramBedMargin = 4.0;
 
     /// <summary>...and runs this close to the arm's way (cos of the angle: 30 degrees).</summary>
     private const double TramBedParallel = 0.87;
@@ -126,7 +126,7 @@ public static partial class TileRewriter
     /// where the arm carries cars that way (<paramref name="lanesThatWay"/>), within <see cref="TramBedMargin"/> past the
     /// carriageway's width, across from the mouth.
     /// </summary>
-    internal static double? Alongside(Vec2 left, Vec2 right, Vec2 outward, Vec2 p, Vec2 dir, bool entering, bool lanesThatWay)
+    public static double? Alongside(Vec2 left, Vec2 right, Vec2 outward, Vec2 p, Vec2 dir, bool entering, bool lanesThatWay)
     {
         if (!lanesThatWay || dir.Dot(entering ? -outward : outward) < TramBedParallel) return null;
         double width = left.DistanceTo(right);

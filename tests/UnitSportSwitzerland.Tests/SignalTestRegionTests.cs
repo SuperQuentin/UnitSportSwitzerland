@@ -113,7 +113,9 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
         // and Bern's poles their colours (#1037), the rest alike
         var plans = new[] { "default", "GE", "VD", "BL", "BE" }
             .Select(c => SignalTestRegion.Junctions.Single(j => j.Name == $"J12-canton-{c}"))
-            .Select(j => region.Tile(j.E, j.N).Signals.Single().Plan).ToArray();
+            // (the nearest: the Geneva and Vaud tiles hold J16-J18 too, #1161)
+            .Select(j => region.Tile(j.E, j.N).Signals.MinBy(s => Math.Abs(s.X - (j.E - TileId.FromLv95(j.E, j.N).MinE))
+                + Math.Abs(s.Z - (TileId.FromLv95(j.E, j.N).MaxN - j.N)))!.Plan).ToArray();
         Assert.Equal((true, false), (plans[0].PedestrianAmber, plans[0].ArrowPlates));
         Assert.Equal((false, false), (plans[1].PedestrianAmber, plans[1].ArrowPlates));
         Assert.Equal((true, true), (plans[2].PedestrianAmber, plans[2].ArrowPlates));
@@ -138,6 +140,46 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
             double frontEast = -Math.Sin(s.Heading);   // heading 0 faces -Z (north)
             Assert.True(Math.Sign(frontEast) == Math.Sign(border - e), $"the sign at E {e:F1} faces away from the border at {border}");
         }
+    }
+
+    [Theory]
+    [InlineData("J16", "W:T-1 E:T-1")]
+    [InlineData("J17", "W:L-1 N:R0")]
+    [InlineData("J18", "W:T-1 E:T-1")]
+    public void Trams_on_their_own_bed_are_an_approach_lane_of_the_carriageway_beside_them(string id, string trams)
+    {
+        // #1161: the divided road's two nodes are one junction (the tram between them), its reservation's tracks attach to the
+        // carriageway they run beside: a tram group per approach and direction, its side of the cars, a tram lane on the approach's
+        // LANE record left of its cars, lit tram paths; Romandy heads (Geneva, Vaud)
+        var j = region.Junction(id);
+        var tile = region.Tile(j.E, j.N);
+        var home = TileId.FromLv95(j.E, j.N);
+        float x = (float)(j.E - home.MinE), z = (float)(home.MaxN - j.N);
+        int index = Enumerable.Range(0, tile.Signals.Count).MinBy(i => MathF.Abs(tile.Signals[i].X - x) + MathF.Abs(tile.Signals[i].Z - z));
+        var signal = tile.Signals[index];
+        Assert.True(MathF.Abs(signal.X - x) < 8 && MathF.Abs(signal.Z - z) < 8, "one junction at the pair's middle");
+        var plan = signal.Plan;
+        Assert.Empty(plan.Validate());
+        Assert.True(plan.TramTHead);
+        Assert.InRange(plan.Cycle, 30, 120);
+        string Compass(int arm) => (Math.IEEERemainder(plan.Arms[arm].Heading, 2 * Math.PI) * 180 / Math.PI) switch
+        {
+            > -45 and <= 45 => "E", > 45 and <= 135 => "N", > -135 and <= -45 => "S", _ => "W",
+        };
+        var groups = plan.Groups.Where(g => g.Kind == SignalGroupKind.Tram)
+            .Select(g => $"{Compass(g.Arm)}:{Section.MovesName(g.Moves)}{g.TramSide}").Order().ToList();
+        Assert.Equal(trams.Split(' ').Order(), groups);
+        // every tram group green somewhere; its tram lane on its approach's record, left of the cars where it runs on the reservation
+        foreach (var g in plan.Groups.Where(g => g.Kind == SignalGroupKind.Tram))
+        {
+            Assert.Contains(g.Intervals, iv => iv.Aspect == SignalAspect.Green);
+            var record = tile.Approaches.Single(a => a.Signal == index && a.SignalArm == g.Arm);
+            var lane = Assert.Single(record.Lanes, l => l.Kind == ApproachLaneKind.Tram);
+            if (g.TramSide < 0) Assert.True(record.Lanes.Where(l => l.Kind == ApproachLaneKind.Car).All(l => l.Offset > lane.Offset + 2));
+        }
+        var paths = tile.JunctionPaths.Where(p => p.Kind == JunctionPathKind.Tram && p.Signal == index).ToList();
+        Assert.Equal(groups.Count, paths.Count);
+        Assert.All(paths, p => Assert.Equal(SignalGroupKind.Tram, plan.Groups[p.Group].Kind));
     }
 
     [Fact]
