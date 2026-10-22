@@ -143,9 +143,9 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
     [Fact]
     public void Wide_approaches_carry_their_heads_overhead()
     {
-        // #1037: J6's 2+2 artery on mast arms, the same with trams (J14) on span wires; the 1+1 roads with pockets keep their kerb
-        // poles; every head 4.50-5.50 m over the road (5.50 m and up on a wire). J13's 4+4 artery took portals while a head hung
-        // over every lane; its one cluster over the middle of the lanes (#1110) is within an arm's reach
+        // #1037: J6's 2+2 artery on mast arms; the 1+1 roads with pockets keep their kerb poles; every head 4.50-5.50 m over the
+        // road (5.50 m and up on a wire). J13's 4+4 artery took portals and J14 (the same with trams, between houses) span wires
+        // while a head hung over every lane; their one cluster over the middle of the lanes (#1110) is within an arm's reach
         (OverheadKind Kind, int Count) At(string id)
         {
             var j = region.Junction(id);
@@ -154,7 +154,7 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
         }
         Assert.Equal((OverheadKind.Arm, 2), At("J6"));
         Assert.Equal((OverheadKind.Arm, 2), At("J13"));
-        Assert.Equal((OverheadKind.Span, 2), At("J14"));
+        Assert.Equal((OverheadKind.Arm, 2), At("J14"));
         Assert.Equal(0, At("J2").Count);
         foreach (var (_, tile) in region.Tiles())
             foreach (var s in tile.Signals)
