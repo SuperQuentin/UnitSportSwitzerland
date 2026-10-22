@@ -16,6 +16,11 @@ The junction planner's cores (`junction-planner`) take the tram tracks running t
   cars leave by it. **One junction**: two overlapping cores (`junction-planner` 5c) with a tram track within the circle the street
   between their nodes spans (`TramAcross`: across it on the reservation, or turning off it) merge, as a group failing its checks
   does (`TileRewriter.Merge`): one plan for both carriageways and the tram, not two plans each blind to the other's trams.
+  Geneva (#1161, `D:\UnitSportSwitzerland\test1161`, the 25 tiles of `test348\geneva` rewritten by main and by this): tracks
+  through a core not from arm to arm 54 -> 34, tram paths 272 -> 280 (lit 105 -> 117), tram groups 103 -> 110, tram lanes 86 ->
+  95, lights 235 -> 233 (pairs merged), 0 invalid, none over 120 s; junctions with their trams out of the conflict times 2 -> 7,
+  approaches without a main pole 52 -> 63 (merged cores: open). Test region tram `--trafficcheck` at J16 (8 trams, 300 cars,
+  180 s): 7 lines crossed, 0 on red, no car red run. The signal check takes a tram path's end offset across its own track's way.
 - **Its side of the cars** (`SignalArm.TramSide`, `SignalGroup.TramSide`, stored in a tram group's moves byte, bits 3-4): -1 where
   its lane crosses the stop line left of every arriving car lane (a reservation, a track in the street's middle beside a shared
   lane), +1 right of them (a bed beside the road), 0 among them. Conflicts (`SignalPlan.Conflicts`, which the chords never saw: one
