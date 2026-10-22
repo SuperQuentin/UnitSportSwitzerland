@@ -657,4 +657,54 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
         var lamps3 = UnitSport.Terrain.SignalBuilder.BuildLamps(region.Tile(j3.E, j3.N))!;
         Assert.Contains(lamps3.Lenses, l => l.Role == UnitSport.Terrain.SignalBuilder.Role.Amber && l.Blink is not null);
     }
+
+    [Fact]
+    public void Turn_lanes_have_their_own_heads_and_are_protected_where_the_phases_allow()
+    {
+        // #1119, the user: "whenever there is a left turn only lane at a light, it should get its own light ... same for right
+        // turns"; "usually permissive lefts are pretty rare in Switzerland"; "even right turns with their own lanes are usually
+        // protected". Every pocket has a group and head of its own; lefts are protected; a right pocket no phase carries is
+        // protected with its own approach where the walkers and riders it crosses keep a green elsewhere
+        int lefts = 0, rights = 0, permissive = 0;
+        foreach (var (_, tile) in region.Tiles())
+            foreach (var s in tile.Signals)
+            {
+                var p = s.Plan;
+                var c = p.Conflicts();
+                var lamps = UnitSport.Terrain.SignalBuilder.BuildLamps(tile)!;
+                for (int a = 0; a < p.Arms.Count; a++)
+                {
+                    if (!p.Arms[a].In) continue;
+                    var turns = SignalMoves.None;
+                    for (int to = 0; to < p.Arms.Count; to++) if (to != a && p.Arms[to].Out) turns |= SignalPlan.Turn(p.Arms, a, to);
+                    if (p.Arms[a].LeftPocket && (turns & SignalMoves.Left) != 0 && turns != SignalMoves.Left)
+                    {
+                        int l = p.Groups.FindIndex(g => g.Kind == SignalGroupKind.LeftArrow && g.Arm == a);
+                        Assert.True(l >= 0, $"LV95 {tile.Id.MinE + s.X:F0},{tile.Id.MaxN - s.Z:F0} arm {a}: no left arrow group; turns {turns}; {string.Join(", ", p.Groups.Where(g => g.Arm == a).Select(g => $"{g.Kind} {g.Moves}"))}");
+                        Assert.Empty(p.LeftGivesWayTo(l));
+                        Assert.Contains(lamps.Lenses, x => x.Group == l && x.Shape == UnitSport.Terrain.SignalBuilder.Shape.LeftArrow);
+                        lefts++;
+                    }
+                    if (p.Arms[a].RightPocket && (turns & SignalMoves.Right) != 0 && turns != SignalMoves.Right)
+                    {
+                        int r = p.Groups.FindIndex(g => g.Arm == a && (g.Kind == SignalGroupKind.RightArrow || g is { Kind: SignalGroupKind.Car, Moves: SignalMoves.Right }));
+                        Assert.True(r >= 0, $"arm {a}: no right-turn group");
+                        Assert.Contains(lamps.Lenses, x => x.Group == r && x.Role == UnitSport.Terrain.SignalBuilder.Role.Green);
+                        rights++;
+                        if (p.Groups[r].Kind == SignalGroupKind.Car) { permissive++; continue; }
+                        // protected: nothing it crosses green with it
+                        for (int h = 0; h < p.Groups.Count; h++)
+                            if (c[r, h] == SignalPlan.Conflict.Hard)
+                                Assert.DoesNotContain(Enumerable.Range(0, (int)(p.Cycle * 10)).Select(k => k * 0.1),
+                                    t => p.State(r, t) == SignalAspect.Green && p.State(h, t) == SignalAspect.Green);
+                    }
+                }
+            }
+        Assert.True(lefts > 0 && rights > 0, $"lefts {lefts}, rights {rights}");
+        // J3's east right pocket ran across the walkers before: protected now; one is left giving way (its walkers have no other green)
+        var j3 = region.Junction("J3");
+        var p3 = region.Tile(j3.E, j3.N).Signals.Single().Plan;
+        Assert.DoesNotContain(p3.Groups, g => g is { Kind: SignalGroupKind.Car, Moves: SignalMoves.Right });
+        Assert.Equal(1, permissive);
+    }
 }

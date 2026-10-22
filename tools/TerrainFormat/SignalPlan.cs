@@ -826,10 +826,12 @@ public sealed class SignalPlan
                 if (to != a && arms[to].Out) moves |= Turn(arms, a, to);
             // what the approach may not do (#700): none of its groups shows it, unless that leaves it nothing
             if ((moves & ~arms[a].Banned) != SignalMoves.None) moves &= ~arms[a].Banned;
-            // pockets get their own arrows only beside a main lane: an approach whose every
-            // movement a pocket would take (a right turn out, say) is one group
+            // a pocket gets its own arrow (#1119, the user: "whenever there is a left turn only lane at a light, it should get its own
+            // light ... same for right turns"), a T's stem with a left and a right lane too, no main lane then; an approach whose one
+            // movement a pocket takes (a right turn out, say) is one group
             var pockets = (arms[a].LeftPocket ? SignalMoves.Left : 0) | (arms[a].RightPocket ? SignalMoves.Right : 0);
-            var main = (moves & ~pockets) == SignalMoves.None ? moves : moves & ~pockets;
+            var main = (moves & ~pockets) != SignalMoves.None ? moves & ~pockets
+                : moves is SignalMoves.Left or SignalMoves.Right or SignalMoves.Through ? moves : SignalMoves.None;
             if ((moves & pockets & SignalMoves.Left) != 0 && main != moves) left[a] = plan.Add(SignalGroupKind.LeftArrow, a, SignalMoves.Left);
             if ((moves & pockets & SignalMoves.Right) != 0 && main != moves) right[a] = plan.Add(SignalGroupKind.RightArrow, a, SignalMoves.Right);
             if (main != SignalMoves.None) car[a] = plan.Add(SignalGroupKind.Car, a, main);
@@ -875,12 +877,37 @@ public sealed class SignalPlan
         }
         Expand(plan, phases, conflicts);
 
-        // a right arrow no phase can carry: a full green with its own approach (the flasher marks the pedestrians)
+        // a right arrow no phase carries: protected, green with its own approach, where the walkers and riders it crosses keep a
+        // green in another phase (#1119, the user: "even right turns with their own lanes are usually protected"; no phase added,
+        // the schemes hold); else a full green with its approach, giving way to them (its yellow arrow flashes, #1109)
+        bool Lonely(int g) => phases.All(p => !p.Green.Contains(g));
+        // the arms whose two halves are green in one phase
+        IEnumerable<int> Halves() => Enumerable.Range(0, arms.Count).Where(a => phases.Any(p =>
+            p.Green.Any(g => plan.Groups[g] is { Kind: SignalGroupKind.Pedestrian, Half: CrossingHalf.Arriving } && plan.Groups[g].Arm == a)
+            && p.Green.Any(g => plan.Groups[g] is { Kind: SignalGroupKind.Pedestrian, Half: CrossingHalf.Departing } && plan.Groups[g].Arm == a)));
+        bool Fits(int r, List<Phase> with)
+        {
+            if (with.Any(p => p.Base.Any(g => conflicts[r, g] == Conflict.Hard))) return false;
+            // (across a two-stage crossing's half: held red there, its walkers wait on the island past a third of the cycle, #1030)
+            if (Enumerable.Range(0, plan.Groups.Count).Any(g => plan.Groups[g].Half != CrossingHalf.Whole && conflicts[r, g] == Conflict.Hard)) return false;
+            var before = Enumerable.Range(0, plan.Groups.Count).Where(Lonely).ToHashSet();
+            var halves = Halves().ToList();
+            foreach (var p in with) p.Base.Add(r);
+            Expand(plan, phases, conflicts);
+            // (and a two-stage crossing's halves still green together where they were: a walker crosses in one go, #1030)
+            if (!Lonely(r) && Enumerable.Range(0, plan.Groups.Count).All(g => g == r || !Lonely(g) || before.Contains(g))
+                && halves.All(Halves().Contains)) return true;
+            foreach (var p in with) p.Base.Remove(r);
+            Expand(plan, phases, conflicts);
+            return false;
+        }
         bool changed = false;
         for (int a = 0; a < arms.Count; a++)
         {
             int r = right[a];
             if (r < 0 || phases.Any(p => p.Green.Contains(r))) continue;
+            var own = car[a] < 0 ? [] : phases.Where(p => p.Green.Contains(car[a])).ToList();
+            if (own.Count > 0 && (Fits(r, own) || own.Any(p => Fits(r, [p])))) continue;
             plan.Groups[r].Kind = SignalGroupKind.Car;
             changed = true;
             foreach (var p in phases)
