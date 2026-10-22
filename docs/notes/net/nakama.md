@@ -61,8 +61,9 @@
   `docker compose -p unitsport-nakama exec postgres pg_dump -U postgres nakama > nakama.sql` in `tools/nakama/`.
 - **Upgrade**: bump the image tag in `docker-compose.yml`, then run `up.sh`. Migrations run at start. Read the
   Nakama release notes for breaking runtime API changes first.
+- **On the Linux host**: `tools/deploy-linux.sh --nakama`, or `NAKAMA=1` for every full deploy
+  (`general/linux-deploy`). The host's `.env` is made there once and never overwritten.
 - **Not yet**:
-  - `deploy-linux.sh --nakama`;
   - the C# client (`NakamaClient` NuGet) and the race server's `NakamaRaceResults`;
   - events as tournaments.
   - These are deliverables 2 to 4 of the plan.
