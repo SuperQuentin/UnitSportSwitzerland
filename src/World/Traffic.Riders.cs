@@ -350,6 +350,9 @@ public partial class Traffic
             // which paths: the kind its side leads into (a lane's bike path, a path's way), else any riders' own, else the cars'
             var side = LaneGraph.RideOf(leg.Edge)?.Side(leg.Forward) ?? RideSide.Road;
             var kind = side == RideSide.Track ? JunctionPathKind.Path : JunctionPathKind.Bike;
+            // a rider from an endpoint (#1134): the move on its shortest way to its destination, by any path's (its own kind's may
+            // end elsewhere than the cars' its way was found along)
+            var wanted = TowardGoal(m, options)?.Edge.Path?.Move;
             int tier = 3;
             foreach (var o in options)
                 if (o.Edge.Path is not null) tier = Math.Min(tier, PathTier(o.Edge, kind, side));
@@ -362,7 +365,9 @@ public partial class Traffic
             float pick = (float)_rng.NextDouble() * total;
             long exit = options[^1].Edge.KeyEnd;
             foreach (var o in options) if ((pick -= ExitWeight(o.Edge)) <= 0f) { exit = o.Edge.KeyEnd; break; }
-            if (TowardGoal(m, options) is { } way) exit = way.Edge.KeyEnd;
+            if (wanted is { } move)
+                foreach (var o in options)
+                    if (o.Edge.Path!.Move == move) { exit = o.Edge.KeyEnd; break; }
             (LaneEdge, bool)? best = null;
             float bestGap = float.MaxValue;
             foreach (var o in options)

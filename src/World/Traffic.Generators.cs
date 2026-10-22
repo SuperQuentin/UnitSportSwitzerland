@@ -380,9 +380,16 @@ public partial class Traffic
         {
             if (d > dist[leg]) continue;
             long start = leg.Forward ? leg.Edge.KeyStart : leg.Edge.KeyEnd;
+            // as a mover may go on (NextRide, Onward): a road arriving where junction paths start takes one of them, and a path
+            // ends on a road; so no road into a road there, no path into a path
+            bool pathsHere = false;
+            foreach (var o in graph.Leaving(start))
+                if (o.Edge.Path is not null) { pathsHere = true; break; }
             foreach (var before in graph.Entering(start))
             {
                 if (before.Edge == leg.Edge) continue;
+                bool fromPath = before.Edge.Path is not null, toPath = leg.Edge.Path is not null;
+                if (fromPath && toPath || !fromPath && !toPath && pathsHere) continue;
                 float nd = d + before.Edge.Length;
                 if (dist.TryGetValue(before, out float known) && known <= nd) continue;
                 dist[before] = nd;

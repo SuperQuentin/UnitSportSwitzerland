@@ -445,7 +445,15 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             float d = new Vector2(v.Head.X - focus.X, v.Head.Z - focus.Z).Length();
             if (d > range || v.Stuck > 20f || (list.Count > want && d > range * 0.6f))
             {
-                if (v.Stuck > 20f) StuckDropped[list == _trams ? (int)MoverKind.Tram : list == _trains ? (int)MoverKind.Train : (int)MoverKind.Car]++;
+                if (v.Stuck > 20f)
+                {
+                    int kind = list == _trams ? (int)MoverKind.Tram : list == _trains ? (int)MoverKind.Train : (int)MoverKind.Car;
+                    if (StuckDropped[kind]++ < 12 && v.FromEndpoint)
+                    {
+                        var (se, sn) = _origin.ToLv95(v.Head);
+                        GD.Print($"[traffic] dropped a stuck {(MoverKind)kind} from endpoint #{v.FromId} at {se:F0},{sn:F0} ({v.Route.Edge.Class}, to #{v.ToId})");
+                    }
+                }
                 foreach (var u in v.Units) _byBody.Remove(u.GetInstanceId());
                 if (v.FromEndpoint) _generatedLive--;
                 v.Free();
@@ -643,6 +651,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         var rightOf = new Vector3(-dir.Z, 0f, dir.X).Normalized();   // right of its way, as Vehicle.Place offsets the lane
         // a car alongside on the side it is easing over to (#854): it holds its line until there is room, or it slid onto it
         float sideTaken = 0f, easing = car.LaneWanted - car.Lane;
+        bool queued = false;
         for (int o = from < 0 ? ~from : from; o < _byX.Count && _byX[o].Head.X <= car.Head.X + GapWindow; o++)
         {
             var other = _byX[o];
@@ -668,7 +677,11 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             // and no faster than it can still shed before the gap (4 m/s², under the 6 it brakes at): the line above alone
             // let one come at a queue at 50 km/h from 40 m, too late to stop (#854)
             target = Mathf.Min(target, Mathf.Sqrt(other.Speed * other.Speed + 2f * 4f * Mathf.Max(0f, along - QueueSpacing + 1f)));
+            // standing right behind one that waits (a red, a gap, a queue of its own): queued, not stuck (#1134: a queue behind a
+            // long red reaches past where the cars read the lights, and its back vanished after 20 s)
+            if (other.Speed < 0.5f && along < QueueSpacing + 6f && (other.AtRed || other.Queued || other.GapWaiting || other.GapHeld)) queued = true;
         }
+        car.Queued = queued;
         // and behind a rider or tram in its lane (#1060: the modes' crossers; +∞ without them)
         target = Mathf.Min(target, FollowCrossers(car, dir, rightOf));
 
@@ -858,7 +871,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         // there; the green it gives way to ends too). A car held by the lights (a red, a wait at the line) in a queue does not
         // turn round either
         bool atLights = lights < float.MaxValue;
-        car.Stuck = car.Speed < 0.3f && !stopFor && !hold && !car.AtRed && !car.GapWaiting && !car.GapHeld ? car.Stuck + dt : 0f;
+        car.Stuck = car.Speed < 0.3f && !stopFor && !hold && !car.AtRed && !car.Queued && !car.GapWaiting && !car.GapHeld ? car.Stuck + dt : 0f;
         car.Holding = hold;
         car.Yield = yield;
         car.Stale = blocked && car.Speed < 0.3f && !atLights ? car.Stale + dt : 0f;
@@ -1902,6 +1915,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         public List<(LaneEdge, bool)>? Planned;
         /// <summary>Made by a traffic endpoint (#971): counted against <see cref="Traffic.MaxGenerated"/>.</summary>
         public bool FromEndpoint;
+        /// <summary>Standing right behind a car that waits (at a red, for a gap, queued itself): not stuck (#1134).</summary>
+        public bool Queued;
         public int FromId;
         /// <summary>The destination a generated car is on its way to (#971), 0 none.</summary>
         public int ToId;

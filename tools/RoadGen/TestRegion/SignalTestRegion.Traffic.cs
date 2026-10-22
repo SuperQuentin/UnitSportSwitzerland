@@ -119,8 +119,8 @@ public static partial class SignalTestRegion
             path.Add(At[at]);
             for (int guard = 0; guard < 10000; guard++)
             {
-                if (length >= reach) return (path, null);
                 if (stop(at) || Degree(at) != 2) return (path, at);
+                if (length >= reach) return (path, null);
                 long on = Next[at][0] == prev ? Next[at][1] : Next[at][0];
                 length += Dist(At[at], At[on]);
                 (prev, at) = (at, on);
@@ -203,7 +203,7 @@ public static partial class SignalTestRegion
                     }
                     else at = Math.Min(ArmReach, length / 2 - 10);
                 }
-                else at = stopAt is null ? ArmReach : Math.Max(length / 2, length - 15);
+                else at = stopAt is null ? ArmReach : Math.Min(ArmReach, Math.Max(length / 2, length - 15));
                 var (p, h) = Along(path, at);
                 ends[(l, arm)] = new ArmEnd(l, arm, p, (float)Math.IEEERemainder(h + Math.PI, 2 * Math.PI), joins, width);
             }
@@ -256,49 +256,32 @@ public static partial class SignalTestRegion
     }
 
     /// <summary>
-    /// The walkers' endpoints (#1134): one at each corner of a junction with crossings, on the sidewalk of the corner's arm
-    /// (counter-clockwise of it) <see cref="CornerOut"/> m out, its walkers sent over the two crossings either side of the corner
-    /// (half of each crossing's walkers, <see cref="SignalCapacity.Walkers"/>) to the corners beyond.
+    /// The walkers' endpoints (#1134): on each arm with a crossing, one on either sidewalk <see cref="CornerOut"/> m out (by the
+    /// corners), each sending its half of the crossing's walkers (<see cref="SignalCapacity.Walkers"/>) over it to the other. The
+    /// walk graph has no way round a corner from one arm's sidewalk to the next arm's (the region's corners are paths for riders):
+    /// a walker's way is the crossing in front of it, a two-stage one's island included (J7's east arm).
     /// </summary>
     private static int Corners(IReadOnlyList<Lights> lights, Dictionary<(Lights, int), ArmEnd> ends, List<RegionEndpoint> list, int nextId)
     {
         foreach (var l in lights)
-        {
-            var crossings = SignalCapacity.Walkers(l.Plan);
-            if (crossings.Count == 0) continue;
-            // the arms counter-clockwise from east; corner k lies between arm k and the next one counter-clockwise
-            var arms = Enumerable.Range(0, l.Plan.Arms.Count).Where(k => ends.ContainsKey((l, k)))
-                .OrderBy(k => (l.Plan.Arms[k].Heading % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI)).ToList();
-            if (arms.Count < 2) continue;
-            var ids = new int[arms.Count];
-            var spots = new ((double E, double N) At, float Heading)?[arms.Count];
-            for (int c = 0; c < arms.Count; c++)
+            foreach (var (arm, perMinute) in SignalCapacity.Walkers(l.Plan).OrderBy(x => x.Key))
             {
-                var end = ends[(l, arms[c])];
-                double h = l.Plan.Arms[arms[c]].Heading;
-                double length = Dist((l.E, l.N), end.At) * (end.Joins is null ? 2 : 1);
-                double out_ = Math.Min(CornerOut, length / 2 - 4);
+                if (!ends.TryGetValue((l, arm), out var end)) continue;
+                double h = l.Plan.Arms[arm].Heading;
+                // (an arm into the next lights close by: the sidewalks between them, halfway at most)
+                double room = Dist((l.E, l.N), end.At) * (end.Joins is null ? 2 : 1);
+                double out_ = Math.Min(CornerOut, room / 2 - 4);
                 if (out_ < 8) continue;
-                // counter-clockwise of the arm's way out: its left
-                double side = end.Width;
-                var at = (l.E + Math.Cos(h) * out_ - Math.Sin(h) * side, l.N + Math.Sin(h) * out_ + Math.Cos(h) * side);
-                spots[c] = (at, (float)Math.IEEERemainder(h + Math.PI, 2 * Math.PI));
-                ids[c] = nextId++;
+                int left = nextId++, right = nextId++;
+                foreach (var (id, other, side, name) in new[] { (left, right, 1.0, "left"), (right, left, -1.0, "right") })
+                {
+                    // left of the arm's way out: counter-clockwise of it
+                    double d = side * end.Width;
+                    var at = (E: l.E + Math.Cos(h) * out_ - Math.Sin(h) * d, N: l.N + Math.Sin(h) * out_ + Math.Cos(h) * d);
+                    list.Add(new RegionEndpoint(id, EndpointMode.Walker, at.E, at.N, (float)Math.IEEERemainder(h + Math.PI, 2 * Math.PI),
+                        perMinute > 0, true, perMinute / 2, [(other, 1f)], l.Name, Compass(h) + " " + name));
+                }
             }
-            for (int c = 0; c < arms.Count; c++)
-            {
-                if (spots[c] is not { } spot) continue;
-                int prev = (c + arms.Count - 1) % arms.Count, next = (c + 1) % arms.Count;
-                var into = new Dictionary<int, float>();
-                // over this corner's arm (arm c) to the corner before; over the next arm to the corner after
-                if (crossings.TryGetValue(arms[c], out float fa) && spots[prev] is not null && prev != c) into[ids[prev]] = into.GetValueOrDefault(ids[prev]) + fa / 2;
-                if (crossings.TryGetValue(arms[next], out float fb) && spots[next] is not null && next != c) into[ids[next]] = into.GetValueOrDefault(ids[next]) + fb / 2;
-                float rate = into.Values.Sum();
-                var shares = into.Where(s => s.Value > 0).OrderBy(s => s.Key).Select(s => (s.Key, s.Value)).ToArray();
-                list.Add(new RegionEndpoint(ids[c], EndpointMode.Walker, spot.At.E, spot.At.N, spot.Heading, rate > 0, true, rate, shares,
-                    l.Name, Compass(l.Plan.Arms[arms[c]].Heading) + Compass(l.Plan.Arms[arms[next]].Heading)));
-            }
-        }
         return nextId;
     }
 
