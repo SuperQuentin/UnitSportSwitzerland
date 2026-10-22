@@ -20,6 +20,12 @@
   LGPL `bin/ffmpeg` does not, so an export writes the GIF only), else libopenh264 at 6 Mb/s (#1105: Krita's ffmpeg,
   `C:/Program Files/Krita (x64)/bin` put on PATH, where no chocolatey one is installed). Drag the MP4 or the GIF into a PR
   description.
+- **`--clip-realtime`** (#1105): a slow frame fills every 1/30 s slot it took (the picture repeated) instead of one, so a
+  heavy scene (a busy junction at 10-27 fps) plays in the time it filmed; without it such a clip played up to 3x fast. E.g.
+  two cycles of the signal test region's J14: `SIZE=1280x720 tools/record-clip.sh j14-two-cycles 50 250 --clip-realtime
+  --chunks <region> --generated off --origin 2917500,1323500 --at 2917500,1323500 --trafficcheck --seconds 600 --shot-queue
+  <file with 34,g20,27,-28,50,900,x.png> --nohud --time 13 --style cartoon --traffic 150 --walkers 100 --bikes 50 --trams 6`
+  (`--trafficcheck --at` keeps the traffic and its feeders there; the shot queue's line holds the camera).
 - **How**: `Core/ClipRecorder` reads the last drawn frame back every 1/30 s, scales it and pipes raw RGB to
   ffmpeg (`BundledTools.Resolve`), which encodes both on its own core; frames are dropped, never queued without
   bound, when ffmpeg lags 2 s behind. Real time, unlike `Gpx/VideoExporter` (fixed steps, waits for tiles):

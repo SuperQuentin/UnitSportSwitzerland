@@ -35,6 +35,9 @@ public partial class ClipRecorder : Node
 
     private const double DefaultSeconds = 10, MaxSeconds = 60, ChatDelay = 2;
 
+    /// <summary><c>--clip-realtime</c>: a slow frame fills every 1/30 s slot it took (repeated), the clip keeps the wall clock's pace.</summary>
+    private static readonly bool RealTime = CmdArgs.Has("--clip-realtime");
+
     /// <summary>The longest <c>--clip</c> from the command line (#971: a demo of several traffic light cycles); the chat's stays at <see cref="MaxSeconds"/>.</summary>
     private const double MaxCommandSeconds = 600;
 
@@ -151,8 +154,15 @@ public partial class ClipRecorder : Node
         _elapsed += delta;
         _sinceFrame += delta;
         if (_frames > 0 && _sinceFrame < 1.0 / Fps) return;
-        // a slow frame takes one picture, not a burst of the same one
-        _sinceFrame = _frames > 0 ? System.Math.Min(_sinceFrame - 1.0 / Fps, 1.0 / Fps) : 0;
+        // a slow frame takes one picture, not a burst of the same one; --clip-realtime: as many as the slots it took, so the clip
+        // plays in the time it filmed (#1105: a busy junction rendered at 10 fps played three times too fast)
+        int copies = 1;
+        if (_frames > 0 && RealTime)
+        {
+            copies = System.Math.Max(1, (int)(_sinceFrame * Fps));
+            _sinceFrame -= copies / (double)Fps;
+        }
+        else _sinceFrame = _frames > 0 ? System.Math.Min(_sinceFrame - 1.0 / Fps, 1.0 / Fps) : 0;
 
         var image = GetViewport().GetTexture().GetImage();
         if (_size == default)
@@ -170,7 +180,9 @@ public partial class ClipRecorder : Node
         image.Convert(Image.Format.Rgb8);
         if (image.GetSize() != _size) image.Resize(_size.X, _size.Y, Image.Interpolation.Bilinear);
         // full: ffmpeg is behind, drop this frame rather than stall the game
-        if (_queue!.Writer.TryWrite(image.GetData())) _frames++;
+        var bytes = image.GetData();
+        for (int k = 0; k < copies; k++)
+            if (_queue!.Writer.TryWrite(bytes)) _frames++;
 
         if (_pipeError != null || _elapsed >= _seconds) Stop();
     }
