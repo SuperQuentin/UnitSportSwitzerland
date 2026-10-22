@@ -12,7 +12,7 @@
   the `[traffic]` line ends with a one-way fingerprint to compare two peers. A `Route` grows legs at junctions and trims behind: a car is one unit on it,
   a train a locomotive + carriages at fixed offsets, which keeps a train on one line through points
   (trains only take legs that carry straight on). Cars keep right on undivided roads, slow for
-  bends (2.5 m/s² lateral) and for the car or player ahead. Density: Settings → Time of day (`TrafficCars`,
+  bends (3 m/s² lateral, `Terrain.Format.TurnSpeed`, the same the lights are timed for, #979) and for the car or player ahead. Density: Settings → Time of day (`TrafficCars`,
   35, ~half at night; `Trains`); `--traffic N`. Check: `<godot> --path . -- --trafficcheck[,out.png]
   [--time h]` — 40 s over the nearest motorway, chases a car then a train, fails if nothing moved.
 - **Junction ends joined** (`LaneGraph.JoinTrimmedEnds`, #85): the road generator trims roads back from
@@ -92,3 +92,73 @@
   `CHUNKS=<Geneva copy> JUNCTION=2499901,1118599` (the real record, 16 groups): 40 instants over
   4 changes, identical, skew 3.1 ms.
 - Around a race the cars behave like drivers who see it coming: `traffic-and-races`.
+- **Junction paths** (#818 phase 5, `junction-planner`): where a tile has `JPTH`, cars drive each junction core on its paths
+  (`LaneEdge.Path`) instead of `JoinTrimmedEnds`' straight connector: lane chosen from the path, a 40 m lead-in onto its lane where
+  no `LANE` record steers, the line handed over at both ends (`Traffic.HandOver`). `--trafficcheck` prints paths taken and the
+  sideways steps onto them.
+- **Transition lanes** (#818 phase 5d): an edge built from a transition's piece keeps its `TRNS` record (`LaneEdge.Transition`).
+  On it a car follows one strip (`Vehicle.Strip`, the strip id stable along the arm): the one at the mouth nearest the path
+  ahead's first lane, carried back over the transition's pieces (`StripAt`), or after a path the one its exit lane lies in. Its
+  line is the strip's centre at its station (`LaneAt`); a lane opening or closing under 2.5 m takes it between it and the lane
+  it branches from or merges into, so a pocket opening never jumps. Overrides the `LANE` taper rule and the 40 m lead-in there.
+  Between two pieces of a street the car's line is rebased (the pieces' usual lines differ), and a spawned car starts on its
+  lane (`Vehicle.Placed`). Test region, `--dense --feed` 60 s at J1, J2, J7, the town T, the staggered pairs: no step over 1 m
+  onto a path (the largest 0.49 m; 15 over 1 m at the town T before), no red run.
+- **Following, no cars on one spot** (#854, the user saw "double cars" and cars through queues): a car looks 70 m ahead
+  (`FollowLook`; 40 was under the 37 m it takes to stop from 75 km/h) and never asks for more than 4 m/s² of braking (the gap
+  rule alone did); a car closer than 1 m ahead still counts (skipped, the pair drove as one or through the queue), on one spot
+  the lower `Habit` waits; it sees the queue on the lane it heads for (`Vehicle.LaneAim`, the lane at the line before it eases
+  over), not only its current line, and holds a lane change while a car is alongside on that side; no spawn within 30 m of a
+  car (`SpawnClear`); the line is where its front stops (`CarFront` 2.5 m). `--trafficcheck` prints **cars on one spot**
+  (pairs within 1 m, most in a tick): J1 `--dense --feed` 90 s from 106 to 0. The probe's fed cars start 120 m+ out (out of
+  the camera's view), its extra cars too (`ProbeSpawnMin`).
+- **Cars steer, never slide** (#854, the user): a car's rear follows the trail of its front (`Vehicle.Trail`, a ring of the
+  front's points every 0.25 m; the rear goes by the route only until the trail is a car long, after a spawn, a turn round or
+  a jump over 3 m), so a lane change, a pull over or a road widening turns the body. Sideways moves only while it rolls (lane
+  0.35 m per metre travelled, pull scaled to 3 m/s: a standing car slid over before). From one road piece to the next it keeps
+  its place (`HandOver`, was only where a transition steers): it jumped over where a road widens.
+- **Fed cars where there is room** (`SpawnInto`): six spots tried; refused only within 8 m of a car or with one coming up behind
+  within 30 m, and it starts no faster than it can brake from for one ahead (the 30 m round any car let few in): J10 fed 36 ->
+  130 cars in 90 s, 30 -> 42 within 80 m. `--feed-rate N` cars a second (2.5); the probe prints the average within 80 m.
+- **Lights past a short piece** (#971, J2): where a short road piece (under 12 m, `PathGap`: J2's 4 m over the crosswalk)
+  lies between an approach's end and its path, a car looks past it for the path ahead (its move, lane and group: 12 of 40 cars
+  at J2 waited for one group and drove another, left turns on the through green), `RoomPast` measures across it, and
+  `GiveWay` leaves the yield on it to the lights (a car past its line on green gave way to the cross road's cars at their red,
+  for good: the south and north heads stood on the zebra). **Amber**: a car clears it only if it reaches its line before the
+  red with 0.5 s to spare at the speed it will have (the bend's ahead if lower), else it stops if it can; one clearing goes on
+  only while it still cannot stop hard (it was kept until its next green: 15 of 28 crossed on red at J2, now 0). The probe
+  prints the crossings on red while clearing.
+- **`--feed-turns L,T,R`** (#854, demos): weights for the fed cars' moves (`1,2,3`: a sixth left, a third straight, half
+  right); each draws one and takes a path with it at its junction (`Vehicle.Wants`); the probe prints the moves taken.
+- **Queues start car by car** (#1046, the user watching the timing trails: a queue moved off as one train of cars): a
+  standing car (under 0.5 m/s, `StartSpeed`) that is let go (its green, the car ahead moving off) starts its driver's
+  `Reaction` + 0.25 s later (0.75-1.25 s, `Vehicle.Starting`), so the start-up wave runs back along the queue. The lights'
+  conflict times assume the first car entering at its arm's limit from its line (`ConflictTimes`): a later start is on the
+  safe side. `--trafficcheck` prints the **queue discharge headways** (between two cars that stood at red crossing their
+  lane's line on green, by place in the queue: 2nd, 3rd, 4th, 5th and later; over 6 s apart is a new queue).
+- **Permissive turns wait at the conflict point** (#1046): at load each car junction path at a lit junction gets its
+  `JunctionPathInfo.Yields` (`World/ConflictPoints`, unit-tested in `ConflictPointsTests`): where the path first meets a
+  movement it gives way to by `SignalPlan.Conflicts`' rules (a shared lane's left to oncoming cars not turning left, a shared
+  lane's turn across a bike way or into a crossing), from the other cars' `JPTH` paths, the riders' `JPTH` paths and the
+  walkers' `CPAR` lines (a zebra 3 m deep); `At`/`Out` along the path (the car's body, 1 m, in the other's band), `Enter`
+  along the other car's path. On green the turning car drives in to 1 m short of the first point a mover is coming to and
+  waits there (`GapWait`): a car on its way onto that path reaching where its body enters this lane within 4.5 s
+  (`AcceptGap`), or in it; a player or racer at the conflict or closing on it (#1033's walkers and riders join in `Coming`).
+  It never stands in an earlier band it has not passed (it waits short of that one), goes once the gap comes, and past its
+  line it clears on amber or red. As many as fit: one still before its line goes in only if it would stand fully past it
+  behind those waiting (`GapHeld` otherwise, at the line). A wait inside is not stuck (it vanished there). Where the path has
+  no points (an older tile without `JPTH`), the old rule holds: a left from a shared lane waits at the line (`Oncoming`).
+  A car on the movement it gives way to counts only if its light lets it in (green, or an amber it clears) or it can no longer
+  stop short of the path: lefts first waited a whole green for oncoming cars 90 m out, on their way to their red.
+  Debug menu, Green paths: a white bar across each lit path where a waiting car's front stops. `--trafficcheck` prints the
+  cars that stood in a junction for a gap, the longest wait, those that left on amber or red, and the paths with points;
+  windowed with a picture, `<png>_5_gap` frames one standing (its light not red yet) from above with the paths drawn.
+  `--lights` keeps the Green paths view on through the run, for a clip: `tools/record-clip.sh permissive-left-j7 30 60
+  --trafficcheck --lights --cam-height 25 --chunks <region> --at 2917500,1322500 --generated off --traffic 300 --dense --feed
+  --feed-turns 2,1,1 --seconds 95`.
+  Measured (signal test region, J7 `--at 2917500,1322500 --traffic 300 --dense --feed --feed-turns 2,1,1 --seconds 120`,
+  same feed before and after): headways 2nd/3rd/4th/5th+ 1.4/1.2/1.2/0.8 s -> 2.4/2.1/1.7/1.2 s; 6 cars stood in the
+  junction for an oncoming car (longest 9 s), no red run. The front car moves at 0.75-1.25 s and then accelerates at the
+  usual 2.2 m/s² (3-4 m by 2.5 s after the green).
+- **Walkers, riders, trams** (#1058): the modes plug into this traffic through a shared base (#1060): their own graphs, box
+  movers, and the crossers list that `Coming` and the cars' following read: `traffic-modes`.

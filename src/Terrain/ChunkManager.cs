@@ -124,17 +124,20 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     private HashSet<TileId> _available = new();
 
     /// <summary>
+    /// A phone (#63): half its cores, 2 to 4. They are big.LITTLE: more builds than big cores
+    /// only heat it and starve the main thread, and every build holds megabytes of grids.
+    /// <b>First of these fields</b> (#1032): static initializers run in the order they are
+    /// written, and declared below <see cref="PlayMaxConcurrentBuilds"/> it was still 0 there, so
+    /// a phone streaming from a server had no build slot at all and never got its ground.
+    /// </summary>
+    private static readonly int MobileMaxConcurrentBuilds = Math.Clamp(System.Environment.ProcessorCount / 2, 2, 4);
+
+    /// <summary>
     /// Tile builds allowed to run concurrently. Local disk could take far more, but the
     /// per-frame commit budget is the real limiter there, so a small number costs nothing
     /// locally and is what makes streaming usable.
     /// </summary>
     private static readonly int PlayMaxConcurrentBuilds = Platform.IsMobile ? MobileMaxConcurrentBuilds : 6;
-
-    /// <summary>
-    /// A phone (#63): half its cores, 2 to 4. They are big.LITTLE: more builds than big cores
-    /// only heat it and starve the main thread, and every build holds megabytes of grids.
-    /// </summary>
-    private static readonly int MobileMaxConcurrentBuilds = Math.Clamp(System.Environment.ProcessorCount / 2, 2, 4);
 
     /// <summary>
     /// Offline the disk and the CPU are the only limits, so use the cores that are there.
@@ -146,11 +149,12 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     private static readonly int LocalMaxConcurrentBuilds = Platform.IsMobile ? MobileMaxConcurrentBuilds
         : Math.Max(PlayMaxConcurrentBuilds, System.Environment.ProcessorCount);
 
-    private int MaxConcurrentBuilds =>
+    /// <summary>Never below one: with no slot, nothing is ever built or even fetched.</summary>
+    private int MaxConcurrentBuilds => Math.Max(1,
         OfflineMode ? OfflineMaxConcurrentBuilds
         : MaxConcurrentBuildsOverride > 0 ? MaxConcurrentBuildsOverride
         : Streaming?.Invoke() == true ? PlayMaxConcurrentBuilds
-        : LocalMaxConcurrentBuilds;
+        : LocalMaxConcurrentBuilds);
 
     private int _buildsInFlight;
 
@@ -422,7 +426,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         WaterLayer? WaterLayer = null, SignalBuilder.Lamps? Lamps = null,
         ArrayMesh?[]? BuildingCells = null, Vector3[]? OccluderVertices = null, int[]? OccluderIndices = null,
         ArrayMesh? Sites = null, Construction.CraneRig[]? Cranes = null,
-        List<Construction.PitCut>? Pits = null);
+        List<Construction.PitCut>? Pits = null, RoadSignBuilder.Label[]? SignNames = null);
 
     private Material? _roadMaterial;
     private Material? _buildingMaterial;
@@ -817,6 +821,28 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         Horizon?.Reload();
         GD.Print($"[terrain] generated fill {(snap.Enabled ? "on" : "off")}: "
             + $"{_available.Count} real tiles, domain {snap.Bounds}");
+    }
+
+    /// <summary>
+    /// The dedicated server's mode (#937): the generated fill's domain grows round every anchor that
+    /// stands outside it (<see cref="FallbackChunkSource.Reach"/>). A client fills round its own start, so
+    /// a player who started 170 km from the server's spawn (<c>--at</c>), and the Battle Royale opened
+    /// where they stand, had ground on their side and none on the server's: no heights, no road points,
+    /// and a bot dropped there sank through the world. Off on clients.
+    /// </summary>
+    public bool FillFollowsAnchors { get; set; }
+
+    /// <summary>Grows the fill round the anchors outside it, and drops the void tiles it now covers.</summary>
+    private void ReachFill()
+    {
+        if (_fallback is not { Current.Enabled: true } fallback) return;
+        foreach (var anchor in _anchors)
+        {
+            if (!GodotObject.IsInstanceValid(anchor)) continue;
+            if (fallback.Reach(_origin!.TileAt(anchor.GlobalPosition)) is not { } box) continue;
+            ReplaceTiles(id => box.Contains(id) && !_available.Contains(id));
+            GD.Print($"[terrain] generated fill reaches {box} round {anchor.Name}");
+        }
     }
 
     /// <summary>
@@ -1513,6 +1539,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     var node = EnsureNode(result.Id, state);
                     node.SetRoads(result.Roads);
                     node.SetSignalLamps(result.Lamps);
+                    node.SetSignNames(result.SignNames);
                 }
                 // tiles with no road data still count as done, so we stop re-requesting
                 state.HasRoads = true;
@@ -1759,6 +1786,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 
     private void EvaluateRings()
     {
+        if (FillFollowsAnchors) ReachFill();
         if (RingKeyChanged())
         {
             _orderedView = null;
@@ -2188,6 +2216,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 
                 ArrayMesh? roads = null;
                 SignalBuilder.Lamps? lamps = null;   // traffic-light lenses (#350)
+                RoadSignBuilder.Label[]? signNames = null;   // canton signs' names (#1038)
                 RoadTile? roadTile = null;
                 if (wantRoads)
                 {
@@ -2204,6 +2233,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         ct.ThrowIfCancellationRequested();
                         roads = ChunkNode.ToArrayMesh(roadData, roadMaterial, RoadPaintBuilder.Build(roadTile));
                         lamps = SignalBuilder.BuildLamps(roadTile);
+                        signNames = RoadSignBuilder.Labels(roadTile);
+                        if (RoadSignBuilder.GantryLabels(roadTile) is { } gantryNames) signNames = [.. signNames ?? [], .. gantryNames];   // #1110
                     }
                     // the piers and jetties standing in the tile (#377): one more surface
                     if (pierMaterial != null && PierMeshBuilder.Build(landings, id, grid, mesh: true, collision: false) is { Mesh: { } pierData })
@@ -2406,6 +2437,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         .. RoadWallBuilder.BuildCollisionFaces(roadTile), .. RailingBuilder.BuildCollisionFaces(roadTile),
                         .. IslandBuilder.BuildCollisionFaces(roadTile),   // roundabout islands (#122)
                         .. RoadSignBuilder.BuildCollisionFaces(roadTile),   // sign poles (#121)
+                        .. CatenaryBuilder.BuildCollisionFaces(roadTile),   // overhead line masts (#1052)
                         .. ParkingBuilder.BuildCollisionFaces(roadTile),   // car park props (#499)
                         .. SignalBuilder.BuildCollisionFaces(roadTile),     // traffic-light poles (#350)
                         .. RoadStreetBuilder.BuildCollisionFaces(roadTile)]);   // sidewalks and kerbs (#119)
@@ -2486,7 +2518,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     tailMesh, blendedCollision, roads, wantRoads,
                     holes, cover, buildings, buildingFaces, wantBuildings, trees, water,
                     bridgeCollision, stageMs, doors, bores, waterLayer, lamps,
-                    buildingCells, occluders?.Vertices, occluders?.Indices, siteMesh, craneRigs, plannedPits));
+                    buildingCells, occluders?.Vertices, occluders?.Indices, siteMesh, craneRigs, plannedPits, signNames));
             }
             catch (OperationCanceledException)
             {

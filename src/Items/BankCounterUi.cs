@@ -93,7 +93,7 @@ public partial class BankCounterUi : CanvasLayer
         _node = node;
         _desk = desk;
         _panel.Visible = true;
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
         Bank.Instance?.Refresh();
         Refresh();

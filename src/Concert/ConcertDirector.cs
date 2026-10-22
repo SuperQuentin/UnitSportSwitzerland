@@ -192,7 +192,11 @@ public partial class ConcertDirector : Node
         }
         else if (s.Kind == VenueKind.Arena) ground = _ => StadiumBuilder.FloorLift;
         float floorTop = s.Kind == VenueKind.Stadium ? FloorTop(node, frame, s) : 0f;
-        var rig = new ConcertRig(e) { Name = NodeName, Transform = frame, ForceLive = hosted || ForcedSeed is >= 0, Ground = ground, FloorTop = floorTop };
+        var rig = new ConcertRig(e)
+        {
+            Name = NodeName, Transform = frame, ForceLive = hosted || ForcedSeed is >= 0, Ground = ground, FloorTop = floorTop,
+            Imported = hosted ? ConcertService.Instance?.RigFor(index) : null,
+        };
         node.AddChild(rig);
         ConcertService.Instance?.ApplyCues(index, rig);
     }

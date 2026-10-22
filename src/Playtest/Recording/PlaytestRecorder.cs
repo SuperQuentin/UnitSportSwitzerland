@@ -59,6 +59,8 @@ public partial class PlaytestRecorder : Node
     public TraceRing Ring { get; } = new((int)(Rate * RingSeconds));
     public Dictionary<int, TraceEntity> Entities { get; } = new();
     public List<TopNote> Notes { get; } = new();
+    /// <summary>The world's tiles, for the top view's ground (#851); null when there are none to draw.</summary>
+    public GroundSpec? Ground { get; }
 
     private TraceWriter? _trace;
     private StreamWriter? _events, _notes;
@@ -89,8 +91,10 @@ public partial class PlaytestRecorder : Node
 
     /// <param name="origin">Where the world's origin is (objects other than vehicles are placed through it).</param>
     /// <param name="local">The local player, on a client: its notes are stamped with its position.</param>
-    public PlaytestRecorder(bool server, Func<WorldOrigin?> origin, Func<FootPlayer?>? local = null, ChatManager? chat = null)
+    /// <param name="ground">The world's tiles, for the top view's ground (#851), and how to find them again offline.</param>
+    public PlaytestRecorder(bool server, Func<WorldOrigin?> origin, Func<FootPlayer?>? local = null, ChatManager? chat = null, GroundSpec? ground = null)
     {
+        Ground = ground;
         Name = "PlaytestRecorder";
         _server = server;
         _origin = origin;
@@ -143,8 +147,13 @@ public partial class PlaytestRecorder : Node
             if (RecorderCheck.Requested) AddChild(new RecorderCheck(this));
             if (RecorderNetCheck.Requested) AddChild(new RecorderNetCheck(this));
         }
-        Event("session", ("what", "start"), ("role", _server ? "server" : "client"), ("wall", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)),
-            ("commit", Git("rev-parse", "--short", "HEAD")), ("args", string.Join(' ', CmdArgs.All)));
+        (string, object?)[] start =
+        [
+            ("what", "start"), ("role", _server ? "server" : "client"), ("wall", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)),
+            ("commit", Git("rev-parse", "--short", "HEAD")), ("args", string.Join(' ', CmdArgs.All)),
+            .. Ground is { } g ? TopViewImage.Describe(g.Spec, (g.StartE, g.StartN)) : [],
+        ];
+        Event("session", start);
         GD.Print($"[playtest] recording the session to {Dir}");
         // the movie studio's recording of the same session, to watch a moment again in 3D (#775)
         if (!_server && !CmdArgs.Has("--playtest-nomovie") && ReplayRecorder.Instance is { } replay && replay.StartSession()) _movie = true;
@@ -594,7 +603,7 @@ public partial class PlaytestRecorder : Node
     }
 
     /// <summary>A note's top view: the ring's 10 s either side of it, centred on it, as a PNG beside its screenshot.</summary>
-    private void RenderNoteTop(int id, double t, EN? at)
+    private void RenderNoteTop(int id, double t, EN? at, bool exiting = false)
     {
         double w = SessionReport.NoteWindow;
         var frames = Ring.Window(t - w, t + w);
@@ -619,20 +628,36 @@ public partial class PlaytestRecorder : Node
             Frames = frames, Entities = Entities, T0 = t - w, T1 = t + w, At = t, Around = at, Radius = radius, Notes = Notes,
         });
         shapes.Title = $"note {id} at {t.ToString("0.0", CultureInfo.InvariantCulture)} s (±{w:0} s)";
-        var err = SavePng(TopViewSvg.Render(shapes, 800, pixelText: true), Path.Combine(Dir, $"notes/{id:000}_top.png"));
-        if (err != Error.Ok) GD.PushWarning($"[playtest] note {id}'s top view not drawn: {err}");
+        string path = Path.Combine(Dir, $"notes/{id:000}_top.png");
+        // the ground is read off the main thread (a client online streams it); the game quitting cannot wait for it
+        if (exiting || Ground?.Source == null) Saved(TopViewImage.Save(shapes, null, NotePx, path));
+        else _ = WithGround(shapes, NotePx, ground => Saved(TopViewImage.Save(shapes, ground, NotePx, path)));
+
+        void Saved(Error err)
+        {
+            if (err != Error.Ok) GD.PushWarning($"[playtest] note {id}'s top view not drawn: {err}");
+        }
     }
 
-    /// <summary>An SVG rasterised by Godot (ThorVG, works headless) and saved as a PNG.</summary>
-    public static Error SavePng(string svg, string path)
+    private const int NotePx = 800;
+
+    /// <summary>Reads the ground under <paramref name="shapes"/> on a worker, then runs <paramref name="then"/> on the main thread, with null if there is none (or it took over 10 s).</summary>
+    private async Task WithGround(TopViewShapes shapes, int px, Action<TopGround?> then)
     {
-        var image = new Image();
-        var err = image.LoadSvgFromString(svg, 1f);
-        return err == Error.Ok ? image.SavePng(path) : err;
+        TopGround? ground = null;
+        if (Ground?.Source is { } source)
+            try
+            {
+                var load = Task.Run(() => TopViewGround.LoadAsync(source, shapes.Min, shapes.Side, px));
+                if (await Task.WhenAny(load, Task.Delay(10_000)) == load && load.Result.Tiles > 0) ground = load.Result;
+            }
+            catch (Exception e) { GD.PushWarning($"[playtest] top view ground: {e.GetBaseException().Message}"); }
+        // back on the main thread: Godot's synchronisation context resumes the await there
+        then(ground);
     }
 
-    /// <summary>A top view straight from memory or the files, as PNG bytes (MCP <c>topview</c>).</summary>
-    public byte[]? TopView(double t0, double t1, double? at, EN? around, double? radius, int px)
+    /// <summary>A top view straight from memory or the files, as PNG bytes (MCP <c>topview</c>), over its ground.</summary>
+    public async Task<byte[]?> TopView(double t0, double t1, double? at, EN? around, double? radius, int px)
     {
         List<TraceFrame> frames;
         IReadOnlyDictionary<int, TraceEntity> entities = Entities;
@@ -648,8 +673,9 @@ public partial class PlaytestRecorder : Node
         {
             Frames = frames, Entities = entities, T0 = t0, T1 = t1, At = at, Around = around, Radius = radius, Notes = Notes,
         });
-        var image = new Image();
-        return image.LoadSvgFromString(TopViewSvg.Render(shapes, px, pixelText: true), 1f) == Error.Ok ? image.SavePngToBuffer() : null;
+        byte[]? png = null;
+        await WithGround(shapes, px, ground => png = TopViewImage.Render(shapes, ground, px)?.SavePngToBuffer());
+        return png;
     }
 
     // ---- the end -------------------------------------------------------------------------
@@ -666,7 +692,7 @@ public partial class PlaytestRecorder : Node
         _finished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         if (_trace == null) { _finished.SetResult(); return _finished.Task; }
         DescribeWaiting(Now, force: true);
-        foreach (var (id, t, at) in _awaitingTop) RenderNoteTop(id, t, at);
+        foreach (var (id, t, at) in _awaitingTop) RenderNoteTop(id, t, at, exiting);
         _awaitingTop.Clear();
         if (_perf is { Recording: true } perf) perf.Stop();
         if (_movie && !exiting && ReplayRecorder.Instance is { Recording: true } replay)

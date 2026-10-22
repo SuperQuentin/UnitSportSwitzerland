@@ -65,6 +65,13 @@ public static class InputHints
             if (XR.XrHands.Gesture(action) is { } gesture) return gesture;
             if (XR.XrWristMenu.Reaches(action)) return "Wrist";
         }
+        else if (device == InputDevice.Touch)
+        {
+            // the on-screen control (#1054), else the pad's name, which a pill or More still reaches
+            if (TouchControls.NameOf(action) is { } touch) return touch;
+            foreach (var e in events)
+                if (PadName(e) is { } pad) return pad;
+        }
         else if (device == InputDevice.Gamepad)
         {
             foreach (var e in events)
@@ -83,6 +90,9 @@ public static class InputHints
 
     /// <summary>True when the VR controllers are what hints name.</summary>
     public static bool Vr => PlayerInput.HintDevice == InputDevice.VR;
+
+    /// <summary>True when the phone's on-screen controls are what hints name (#1054).</summary>
+    public static bool Touch => PlayerInput.HintDevice == InputDevice.Touch;
 
     private static readonly Dictionary<(JoyButton, InputDevice, bool), string> Buttons = new();
 
@@ -120,7 +130,9 @@ public static class InputHints
 
     /// <summary>
     /// Replaces each <c>{action}</c> by that action's binding, bare ("Hold {aim_item} to look"
-    /// becomes "Hold RMB to look"). Braces that name no action are left as they are.
+    /// becomes "Hold RMB to look"). Braces that name no action are left as they are. The same label
+    /// twice in a row, with only spaces or a slash between, is printed once: WASD on a pad is one
+    /// stick, not "Left stick Left stick Left stick Left stick" (#1054).
     /// </summary>
     public static string Format(string text) => Format(text, PlayerInput.HintDevice);
 
@@ -130,16 +142,32 @@ public static class InputHints
         if (Formatted.TryGetValue(key, out var done)) return done;
         // ponytail: some texts carry numbers (loot toasts), so the cache is simply dropped when it grows
         if (Formatted.Count > 256) Formatted.Clear();
-        return Formatted[key] =
-            Placeholder.Replace(text, m => InputMap.HasAction(m.Groups[1].Value) ? Label(m.Groups[1].Value, device) : m.Value);
+        var sb = new System.Text.StringBuilder(text.Length);
+        int last = 0;
+        string? previous = null;
+        foreach (Match m in Placeholder.Matches(text))
+        {
+            string name = m.Groups[1].Value;
+            if (!InputMap.HasAction(name)) continue;
+            string label = Label(name, device), between = text[last..m.Index];
+            bool repeat = label == previous && between.Trim(' ', '/').Length == 0;
+            if (!repeat) sb.Append(between).Append(label);
+            last = m.Index + m.Length;
+            previous = label;
+        }
+        return Formatted[key] = sb.Append(text, last, text.Length - last).ToString();
     }
 
     // ------------------------------------------------------------------------------------
 
+    /// <summary>A chord's held keys, "Shift+" for Shift+T (#1002); empty for a plain key.</summary>
+    private static string Modifiers(InputEventKey k) =>
+        (k.CtrlPressed ? "Ctrl+" : "") + (k.AltPressed ? "Alt+" : "") + (k.ShiftPressed ? "Shift+" : "");
+
     private static string? KeyName(InputEvent e) => e switch
     {
-        InputEventKey k when k.PhysicalKeycode != Key.None => PhysicalLabel(k.PhysicalKeycode),
-        InputEventKey k when k.Keycode != Key.None => OS.GetKeycodeString(k.Keycode),
+        InputEventKey k when k.PhysicalKeycode != Key.None => Modifiers(k) + PhysicalLabel(k.PhysicalKeycode),
+        InputEventKey k when k.Keycode != Key.None => Modifiers(k) + OS.GetKeycodeString(k.Keycode),
         InputEventMouseButton m => m.ButtonIndex switch
         {
             MouseButton.Left => "LMB",

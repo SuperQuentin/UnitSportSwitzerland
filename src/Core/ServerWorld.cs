@@ -29,6 +29,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Interiors.InteriorManager? _interiors;
     private WorldOrigin? _origin;
     private Items.PlacedObjects? _placed;
+    private World.TrafficGenerators? _trafficEndpoints;
     private Farming.FarmStands? _farmStands;
     private Net.Sleepers? _sleepers;
     private Net.Arrival? _arrival;
@@ -50,6 +51,17 @@ public partial class ServerWorld : Node3D, IOriginContainer
     public override async void _Ready()
     {
         if (ServerStats.Requested) AddChild(new ServerStats { Name = "ServerStats" });
+        // --test-world (#999, a game hosted from the menu on a test world): its tiles, course and saves
+        if ((WorldChoice.Active = WorldChoice.FromArgs()) is { } testWorld)
+        {
+            if (await System.Threading.Tasks.Task.Run(testWorld.Prepare) is { } why)
+            {
+                GD.PushError($"[server] {why}");
+                GetTree().Quit(1);
+                return;
+            }
+            GD.Print($"[server] test world {testWorld.Id}: {testWorld.Title}");
+        }
         string chunkDir = TerrainPaths.FindChunkDir();
         // a test course built in code instead of the map (#221, Core/Systems): the same as the clients'
         IChunkSource local = Systems.FixtureCourse is { } course
@@ -105,7 +117,9 @@ public partial class ServerWorld : Node3D, IOriginContainer
 
         // Collision only around server-run bots (#837), within a few hundred metres of each: players'
         // proxies are plain anchors and keep coarse, collision-less tiles (net/lean-dedicated-server).
-        _chunks = new ChunkManager { Name = "Terrain", BuildMeshes = false, BuildCollision = true, CollisionByRadius = true };
+        // The fill follows the players (#937): each client fills round its own start, which can be anywhere
+        _chunks = new ChunkManager { Name = "Terrain", BuildMeshes = false, BuildCollision = true, CollisionByRadius = true,
+            FillFollowsAnchors = true };
         _chunks.Initialize(source, origin, manifest, null);
         // the bots' collision pieces (#837) commit within 2 ms a frame, not a client's 4: a server frame
         // carries every player's relays, and the build of a spread field landing at once is many pieces
@@ -222,13 +236,19 @@ public partial class ServerWorld : Node3D, IOriginContainer
         AddChild(_chat);
 #if PLAYTEST
         // the playtest recorder (#844): the authoritative positions, for the top view's server-vs-client lines
-        if (Playtest.Recording.PlaytestRecorder.Requested) AddChild(new Playtest.Recording.PlaytestRecorder(server: true, () => origin));
+        if (Playtest.Recording.PlaytestRecorder.Requested)
+            AddChild(new Playtest.Recording.PlaytestRecorder(server: true, () => origin, ground: new Playtest.TopView.GroundSpec(null,
+                Systems.FixtureCourse is { } fixtureCourse ? Systems.FixturePrefix + fixtureCourse : chunkDir, SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N)));
 #endif
 
         // nothing goes to a peer before it has said which protocol it speaks (World/Handshake)
         _handshake = Handshake.CreateServer(_chat);
         _handshake.Accepted += OnPeerAccepted;
         AddChild(_handshake);
+        // joining for the chat and commands only, from a client of any version (#1088)
+        AddChild(ConsoleLink.CreateServer(_chat, _handshake, QueryResponder.ParseServerName()));
+        // a deployed server installs a newer release by itself, once nobody plays (#1088)
+        if (ServerAutoUpdate.Create(_chat, _handshake) is { } autoUpdate) AddChild(autoUpdate);
 
         // invites (#840): World/Invites, one system every activity asks through; parties ride on it
         var invites = _invites = InviteService.CreateServer(_chat);
@@ -296,6 +316,9 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Items.PhotoTransfer.Create(this, server: true);
         _placed = Items.PlacedObjects.Create(this, origin, server: true);
         _placed.NameOf = _chat.NameOfPeer;
+        // traffic endpoints (#971): admins set them, every client runs them on its own traffic
+        _trafficEndpoints = World.TrafficGenerators.Create(this, server: true);
+        _trafficEndpoints.IsAdmin = _chat.IsAdminPeer;
         // where a new player starts, and whether players may teleport (#799): the server's call
         _arrival = Net.Arrival.CreateServer(this);
         _chat.Arrival = _arrival;
@@ -393,19 +416,20 @@ public partial class ServerWorld : Node3D, IOriginContainer
 
         string name = QueryResponder.ParseServerName();
         string version = (string)ProjectSettings.GetSetting("application/config/version", "");
-        string world = manifest.Tiles.Count > 0 ? "real" : "generated";
+        // a test world says which (#999): joining clients load it
+        string world = WorldChoice.Active?.Id ?? (manifest.Tiles.Count > 0 ? "real" : "generated");
         var registry = _registry;
         // status queries on port + 1: LAN lists find this server, saved lists show it is up
         // and how full it is (Net/QueryResponder, docs/notes/net/server-query.md)
         if (QueryResponder.ParsePort(port) is { } queryPort)
             AddChild(new QueryResponder(queryPort, () => new ServerStatus(
-                name, port, registry?.Players.Count ?? 0, NetworkManager.MaxClients, version, world) { Wire = Handshake.Protocol },
+                name, port, registry?.InWorld.Count() ?? 0, NetworkManager.MaxClients, version, world) { Wire = Handshake.Protocol },
                 QueryResponder.ParseBind()));
         // the same, as a file the web page beside a deployed server reads (#740, docs/notes/net/status-page.md)
         if (StatusFile.ParsePath() is { } statusPath)
             AddChild(new StatusFile(statusPath, () => new StatusFileData(
-                name, version, world, port, registry?.Players.Count ?? 0, NetworkManager.MaxClients,
-                registry is null ? [] : registry.Players.Select(p => p.Name).Order(StringComparer.OrdinalIgnoreCase).ToArray())));
+                name, version, world, port, registry?.InWorld.Count() ?? 0, NetworkManager.MaxClients,
+                registry is null ? [] : registry.InWorld.Select(p => p.Name).Order(StringComparer.OrdinalIgnoreCase).ToArray())));
         // where everyone is, as a file the live map beside a deployed server reads (#896, docs/notes/net/live-map.md)
         if (LiveMapFile.ParsePath() is { } mapPath)
             AddChild(new LiveMapFile(mapPath, LiveMapPlayers));
@@ -548,6 +572,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Farming.Herds.Instance?.SendTo(id);
         Occasions.UfoSightings.Instance?.SendTo(id);
         _placed?.SendTo(id);
+        _trafficEndpoints?.SendTo(id);
         _farmStands?.SendTo(id);
         _sleepers?.SendTo(id);
         _pallets?.SendTo(id);

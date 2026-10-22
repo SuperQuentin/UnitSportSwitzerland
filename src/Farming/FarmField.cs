@@ -128,7 +128,7 @@ public partial class FarmField : Node
         // --farmdir: the checks keep their cells out of the real user://farm
         var args = OS.GetCmdlineUserArgs();
         int dirAt = Array.IndexOf(args, "--farmdir");
-        _storeDir = dirAt >= 0 && dirAt + 1 < args.Length ? Path.GetFullPath(args[dirAt + 1]) : ProjectSettings.GlobalizePath("user://farm");
+        _storeDir = dirAt >= 0 && dirAt + 1 < args.Length ? Path.GetFullPath(args[dirAt + 1]) : ProjectSettings.GlobalizePath(Core.WorldChoice.SavePath("user://farm"));
         // --farmfresh (checks, with --farmdir): start from untouched fields
         if (dirAt >= 0 && Array.IndexOf(args, "--farmfresh") >= 0 && Directory.Exists(_storeDir)) Directory.Delete(_storeDir, true);
         _month = FarmRules.MonthFromArgs(OS.GetCmdlineUserArgs(), Core.Calendar.Now);

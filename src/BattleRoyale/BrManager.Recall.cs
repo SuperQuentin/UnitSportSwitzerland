@@ -204,12 +204,16 @@ public partial class BrManager
         {
             Mesh = new BoxMesh { Size = size },
             Position = at,
-            MaterialOverride = new StandardMaterial3D { AlbedoColor = c, ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded },
+            // lit in the lit styles (its lamp on it), flat in PS1 (#1069)
+            MaterialOverride = Styles.StyleKit.Solid(new StandardMaterial3D { AlbedoColor = c }),
         };
         root.AddChild(Box(new Vector3(0.08f, 2.6f, 0.08f), new Vector3(0, 1.3f, 0), new Color(0.35f, 0.35f, 0.38f)));
         root.AddChild(Box(new Vector3(0.9f, 0.6f, 0.06f), new Vector3(0, 2.4f, 0), new Color(1f, 0.8f, 0.0f)));          // Postauto yellow
         root.AddChild(Box(new Vector3(0.5f, 0.18f, 0.07f), new Vector3(0, 2.42f, 0), new Color(0.1f, 0.1f, 0.1f)));       // the horn stripe
-        root.AddChild(new OmniLight3D { Position = new Vector3(0, 2.9f, 0), LightColor = new Color(1f, 0.85f, 0.3f), LightEnergy = 1.5f, OmniRange = 8f });
+        // dim: the plate is lit by the sun in the lit styles, and a bright lamp half a metre over it
+        // burnt its yellow out (#1069); PS1 draws the plate and the world unshaded, so only a
+        // player standing under it sees the difference there
+        root.AddChild(new OmniLight3D { Position = new Vector3(0, 2.9f, 0), LightColor = new Color(1f, 0.85f, 0.3f), LightEnergy = 0.15f, OmniRange = 8f });
         return root;
     }
 }

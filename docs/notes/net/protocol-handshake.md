@@ -21,3 +21,7 @@
 - The status query carries it too (`ServerStatus.Wire`, 0 from older servers): the Multiplayer
   screen marks a server of another version in red ("other game version").
 - Swarm bots (`--swarm`) shake hands like a client.
+- A peer that never says hello on purpose, the remote console (`net/console-link`), is `Exempt`ed from the
+  timeout. Refusing a **newer** client raises `NewerPeerRefused` (the automatic update checks at once,
+  `net/server-update`) and appends `NewerHint` to the reason; only the reason's text changed, not the RPCs.
+- `--fakeprotocol N` on a client says N in its hello: a client of another version, for the checks (#1088).

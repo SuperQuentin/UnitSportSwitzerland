@@ -43,4 +43,26 @@
   the viewport, Space, Esc (not the pause menu), `/debug`, clay through a `/style` restyle and back.
   `tools/debugcheck.sh` (net): a server with `--admin-password`; refused, `/login`, offered,
   `/admin remove`, every tool off. The view picker is set through `ItemSelected`, not its popup.
+- **Traffic** (#971, `world/traffic-generators`): `paths` draws every car's way ahead on the lanes it drives (a generated
+  car's to its destination in that destination's colour), `endpoints` the traffic endpoints. "Traffic tool" hands an admin
+  the held tool that places, edits and removes generators and destinations (`items/traffic-tool`); "Remove all endpoints";
+  they go to the server and everyone's traffic. Example: `--debugview paths,endpoints`. `lights` draws the paths through
+  lit junctions that may go now (within 400 m): solid green on green with absolute priority, dashed green on green where they
+  must yield (`SignalPlan.YieldsAt`: a flasher on a turn, oncoming cars for a left from a shared lane, a crossing or bike lane
+  green across it; straight on keeps its priority), yellow on amber; none on red. The riders' paths (`JPTH` of kind Bike, thin)
+  and the crossings (wide, kerb to kerb between the arm's pedestrian heads, on the zebra's yellow paint) by their own groups
+  (`SignalSite.Rides`, `Walks`). Separated bike paths have no riders' paths yet (the core planner lays them from painted lanes).
+  `movers` (#979) shows, at each phase change of the lights within 400 m, the tightest pair of each green's start and of each
+  green's end on the plan's clock, as trails, each shown with its line only while it moves: the ending group's last car / bike / walker (red, crossing its stop line
+  as its amber ends, at its clearing speed, until it has left its line's end, its trail held ahead of it), the starting group's first (dark green,
+  from its line at green at its entering speed to its line's end, its trail behind it back to its line; a crossing's walkers from both kerbs at once), their lines faint
+  and the conflict area ringed in white: the green one reaches the ring just as the red one has left it (`SignalSite.Pairs`, from `CPAR`).
+  `trails` (#979) draws only the trails, one per movement the timing took (`SignalSite.Lines`) through each of its greens: grown from its line at
+  green at its entering speed, closed behind its last mover from its amber's end at its clearing speed, in its group's light
+  now (green, yellow on amber, red), so a trail whose green ends before it reaches its exit turns yellow then red as it is; no
+  movers, lines or rings (a red-amber shows nothing), see-through over the cars, dashed (on yellow and red too: its last ones still give way) where it must yield as the
+  green paths (`SignalPlan.YieldsAt`, its turn read off the line's first and last stretches), and where the plan lets it
+  cross an exit's crossing with its walkers (a permissive conflict: riders turning right) for as long as walkers are on it
+  (their green to the last across, through their yellow and red); a protected turn, kept apart by the times, never.
+  Trails and movers redraw every frame, the other tools five times a second. The debug lines' material is alpha-blended.
 - **Z-fighting** overlay (`zfight`) and **Flicker shot** button (`--debugview flicker`): `general/zfight` (#788).

@@ -65,6 +65,7 @@ public static class CoverPalette
             CoverClass.PavedArea => new Color(0.36f, 0.36f, 0.35f),
             CoverClass.TownPaving => new Color(0.50f, 0.50f, 0.48f),   // stone and concrete slabs
             CoverClass.TunnelRoof => new Color(0.60f, 0.60f, 0.57f),   // poured concrete
+            CoverClass.Border => new Color(0.56f, 0.25f, 0.69f),       // a test world's canton border (#1038), the stripes' purple
             _ => OpenGround(altitude),
         };
 

@@ -14,12 +14,26 @@
   (VS Code: `data: signal test region`). Raw input goes to `DIR_temp`. A directory is cleared only
   if it holds `signal_test_region.txt` (the command's marker), so it never wipes real data. Prints
   the junction table and `[testregion] RESULT: ok` when every designed approach got its lanes.
-- **Play it**: VS Code `run: signal test region` (rebuilds it, then the game windowed at a junction
+- **Play it**: from the menus, Play solo or Host a game, World: Traffic lights region (the game builds its own copy, `core/test-worlds`); or VS Code `run: signal test region` (rebuilds it, then the game windowed at a junction
   picked from a list, `--traffic 150 --generated off`), or
   `<godot> --path . -- --chunks test_output/signal-region --at 2910475,1322475 --traffic 150 --generated off`.
   `--generated off`: outside Switzerland the generated fill has no relief to follow. Tab (or
   `--goto J3`) finds the junctions: `places.json` names them (towns with no buildings, so no
   occasion or town sound picks them).
+- **A lane arm through a tracks' node** (#818, `ShortArmE` 2914000 on the twins' row N 1321400): a town T without lights, a
+  3 m lane from the south whose first link ends 7 m out where two tracks branch off (on the main road's own path band). The
+  planner's core puts the lane's mouth past that node: the lane is trimmed to it along the run-on street (it left a hole
+  before `ArmAxis.StationPast`).
+- **The divided-road T** (#818, `DividedTeeE` 2915300 on N 1321400): the real junction 2619795,1264700 moved here as it is
+  (points shifted by 295505.6, 56695.2): 6 m west of the T the main road divides into two 2.2 m carriageways
+  (`Line.Divided`: TLM `richtungsgetrennt`) joined by a 1.5 m `Verbindung`. Both #818 cases stay on the old layout (a road
+  joins short of a mouth).
+- **Staggered T's** (#818 phase 5, `StaggerE` 2916500 on N 1321400, all in tile 2916 so no street runs on into another
+  block): a 10 m main road with side roads alternately north and south: 24 m apart (two cores), 8 m apart (the cores overlap:
+  old layout until they merge), and 300 m east 24 m apart with lights at both (J9: the street between is inside the lights).
+- **Two-stage crossing** (#1030, `traffic-signals`): J7's east arm, the only one whose island (3.4 m, over its exit hatch)
+  spans its zebra and is 2 m wide: its walkers cross in two halves, heads on the island. Top view:
+  `--shot 4514,522,-1.8,-90,0,6,out.png` with `--chunks test_output/signal-region --generated off`.
 - **Where**: tiles E 2910-2917 N 1321-1323 (24 tiles; J6/J7 #700 in 2916-2917), flat at 500 m, one 6 km rewrite block),
   outside Switzerland on purpose: no real tile, streamed or cached, shares an id. Manifest origin
   2913000,1322500 (shots' world x = E - 2913000, z = 1322500 - N). Junctions on one row, N 1322500,
@@ -37,6 +51,26 @@
 - **Unlit town T** (#711, `unify-junctions`): 2911750 (`TownTeeE`, in J2's tile), a 6 m road gives way from the north;
   the main road's left pocket from the west splits its lead-in, so the north-west corner rounds a widened kerb. No
   designed junction (no lights, not in the table or the lane check).
+- **Canton zones** (#1038, the user's ask: show the canton differences side by side): the region declares its own cantons
+  per kilometre tile (`CantonTiles`: GE 2913/1323, VD 2914/1323, BL 2915/1323, BE 2916/1323 (their pole colours, #1037);
+  every other tile the default zone, the cantons not checked yet), handed to the network stage as `TileRewriter.Options.Cantons` (`Cantons.Of`; real regions keep `switzerland.bin`'s).
+  Only cantons whose lights or poles differ get a zone (`traffic-signals`: Geneva's two-lens pedestrian heads, Vaud's arrow
+  plates, Basel-Landschaft's anthracite and Bern's RAL 7042 poles). The **canton row** (N 1323500): J2's town crossroads
+  at E 2912500 (default), 2913500 (Geneva), 2914500 (Vaud), 2915500 (Basel-Landschaft), 2916500 (Bern) on one 10 m main road
+  with sidewalks across the borders, built alike (line ids `CN0-5`, `CA`/`CB`/`CI`/`CS`/`KA` picked so every street hashes to J2's path layout, 2: `BikePlanner.StrokeLayouts`
+  hashes the street's smallest key); the junction table prints each plan's look (`2-lens peds`, `arrow plates`). **The
+  border on the ground**: `CoverClass.Border` (purple) on the vertices within 1.5 m of every zone edge (the cover follows
+  the terrain's blend up to the roads; a line painted at ground height would sink there), and where a carriageway crosses
+  an edge (`Options.Decorate`, on each tile as it is written): a 0.5 m purple stripe across it and a canton sign each way
+  (`PointPropType.CantonSign`, on the right of the traffic entering the canton, past the street's sides, facing it: a
+  white plate, the canton's shield, its name as a `Label3D`; `RoadSignBuilder`). The run checks every crossing has its
+  stripe and two signs (`canton borders` line: 4 stripes, 8 signs). Found on the way: a street's sidewalks and paths stop
+  ~8 m either side of a tile seam (the twins' road at E 2911000 too: not from this).
+- **Rail row** (#1052, `RailN` 1324500, tile row N 1324 added): a 10 m town street E 2910100-2911900 with a double-track tram on
+  it (TLM `auf_strasse`, embedded by #124), houses 10 m north of its axis for its western 800 m (the spans' facades), none south
+  (masts); a reserved double tram track E 2912100-2913900 in open grass (centre masts), and 60 m north of it the same as two single tracks 3.6 m apart drawn in opposite directions (#1094); a double-track main line from 2914100,1324300 through a 600 m curve
+  turning 30 degrees left. Rail lines are written as the extractor writes them (`Line.Rail` flags, `OnStreet`) and left out of
+  the OSM overlay. Overhead lines: `catenary`.
 
 ## Junctions (designed vs built)
 
@@ -45,14 +79,19 @@ a bike box, `[adv]` an advanced bike line); the approach is named by where it co
 
 | Junction | LV95 | Design | Built | Cycle, phases |
 |---|---|---|---|---|
-| J1-ideal-lanes | 2910500,1322500 | two 10 m roads, room everywhere; painted lanes; the north road is `cycleway=shared_lane` | W `L[box] \| bL \| T \| bT \| R` (layout b), E and S `L \|E `L | bL[adv] | T | R` (20+20 pocket, the right pocket reaching 8 m past the left's storage, #682)\| T \| R \| bTR` + bike signal (layout a), N `L \| bL[adv] \| T \| R` | 100 s, lead/both/lag per road (10 phases) |
-| J2-ideal-paths | 2911500,1322500 | the same in town (OSM sidewalks): separated paths | every arm `L[adv] \| bL \| TR` + bike signal: no right pocket in town (50 km/h, #711); square red crossings | 88 s |
-| J3-mismatch | 2912500,1322500 | W long, its last metres in town (the houses beside the north road give it sidewalks); E houses 1.5 m from the kerb from 68 m out; N houses 1 m from the kerb; S a 6 m road 52 m to a T | W `L[adv] \| bL \| TR` (in town: no right pocket, #711), E `L[adv] \| bL \| T \| R` (20+20 pocket, the right pocket reaching 8 m past the left's storage, #682), N `LTR` (building), S `LT \| R \| bTR` (too short for a left pocket, a 10+15 right one fits) | 60 s, main road lead/both/lag, then N + S together |
+| J1-ideal-lanes | 2910500,1322500 | two 10 m roads, room everywhere; painted lanes; the north road is `cycleway=shared_lane` | every arm `L \| bL \| T \| R \| bTR` + bike signal (layout a: every arm turns left, `junction-planner`) | 74 s, the right arrows apart from the through green (10 phases) |
+| J10-between-lanes | 2910500,1323500 | J1 a tile north (#854), OSM `bicycle:lanes=no\|no\|designated\|no` on every approach | every arm `L \| bL \| T \| bT \| R \| bR` (layout b from data, a right-turn bike lane at the kerb), no bike signal | 70 s, each right turn with its through green |
+| J11-town-pockets | 2911500,1323500 | J2 a tile north (#971), OSM `turn:lanes=left\|through\|right` on every approach | every arm `L \| bL \| T \| R` + bike signal (the pockets from data) | 86 s |
+| J2-ideal-paths | 2911500,1322500 | the same in town (OSM sidewalks): separated paths | every arm `L \| bL \| T \| R` + bike signal: right pockets at the lights in town too (#971); square red crossings | 86 s |
+| J3-mismatch | 2912500,1322500 | W long, its last metres in town (the houses beside the north road give it sidewalks); E houses 1.5 m from the kerb from 68 m out; N houses 1 m from the kerb; S a 6 m road 52 m to a T | W `L \| bL \| T \| R` (a right pocket at the lights in town, #971), E `L \| bL \| T \| R \| bTR` (20+20 pocket, the right pocket reaching 8 m past the left's storage, #682), N `LTR` (building), S `LT \| R \| bTR` as the old layout builds it, `LTR \| bTR` from the planner (52 m: its right pocket gives way to the exit the west arm's needs, `PlannerDesign`) | 60 s, main road lead/both/lag, then N + S together |
 | J3b-narrow-arm | 2913500,1322500 | an 8 m road, a 6 m road S, a 4 m road N | W `L[box] \| bL \| T \| bT \| R` (box: the 4 m road has no bike lane), E `L | bL[adv] | T | R` (20+20 pocket, the right pocket reaching 8 m past the left's storage, #682)\| bL[adv] \| T \| bT \| R`, N `LTR` (no pockets on that class), S `LT \| R \| bTR` (no lane out on the 4 m road: "no main road out") | 75 s |
 | J4-tee | 2914500,1322500 | T, stem south | W `T \| bT \| R`, E `L | bL[adv] | T | R` (20+20 pocket, the right pocket reaching 8 m past the left's storage, #682)\| bL[adv] \| T \| bT`, S `L \| bL \| R` | 75 s: main, main left + its through, side |
 | J5a/J5b-pair | 2915470 / 2915530,1322500 | two crossroads 60 m apart, 6 m cross roads | between them a merged strip (#325): `L \| TR \| bTR` both ways; the other arms `L \|E `L | bL[adv] | T | R` (20+20 pocket, the right pocket reaching 8 m past the left's storage, #682)\| T \| R` | 99 s each |
 | J6-artery-in-place | 2916500,1322500 | #700: a 2+2 artery (OSM `lanes=4`, 12 m) across a 10 m road, turn:lanes `left\|through;right` on every approach | W, E `L \| TR` assigned in place (arrows, no widening, left phase); N, S `L \| bL \| TR \| bTR` (pocket from data, no right pocket) | 73 s |
 | J7-double-left | 2917500,1322500 | #700: the way before the lights `lanes:forward=3`, `left\|left\|through;right`; east way `through\|through;right`; cross road 2+2 | W `L \| L \| bL \| TR \| bTR` (double left, hatch one lane wide), E `TR` (no left pocket), N, S `LTR \| LTR`; dashed guides for the double left and the cross road's through lanes | 60 s |
+| J12-canton-default / -GE / -VD / -BL / -BE | 2912500 ... 2916500,1323500 | #1038: J2 once per canton zone | as J2: every arm `L \| bL \| T \| R` + bike signal; Geneva two-lens pedestrian heads side by side, Vaud arrow plates, BL anthracite and BE RAL 7042 poles (#1037) | 85 s each, J2's phases |
+| J13-portal | 2917500,1321500 | #1037: a 4+4 artery (OSM `lanes=8`, `left\|through\|through\|through;right` assigned in place) across a 10 m road | W, E `L \| T \| T \| TR \| bTR` under a mast arm since #1110 (a portal before; one cluster over the lanes' middle: the left arrow and the main head); N, S `L \| bL \| T \| R \| bTR` | 77 s |
+| J14-tram | 2917500,1323500 | #1037: J13's 4+4 artery with OSM `railway=tram` (the overlay's `tram` column) between houses 3 m back from both kerbs, J6's cross roads; #1057: two TLM-like tram tracks 3.2 m apart in its middle (tram groups, lanes and paths, `tram-approaches`), tram stops 150 m either side | W, E `L \| T \| T \| TR` (lanes narrowed to their least by the houses) under a mast arm since #1110 (span wires from facade to facade before); N, S `L \| TR` | see the run |
 
 Rewrite numbers: 7 junctions (all from data), 27 approaches, 21 left pockets (storage 40 x18, 20
 x3, 2 merged), 21 right pockets (4 rejected), layout (a) 8, (b) 6, (b) forced 1, 19 left-turn

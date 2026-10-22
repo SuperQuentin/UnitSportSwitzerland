@@ -21,6 +21,9 @@ uniform float fog_end = 8000.0;
 uniform vec3 fog_color : source_color = vec3(0.72, 0.78, 0.86);
 // 0 steady (fairy lights), 1 a candle
 uniform float flicker = 1.0;
+// an imported 3D file's texture (#973, ConcertRig.Objects), times the vertex colour; small and
+// nearest-filtered, the PS1 look. Unset (every other prop) it is white and changes nothing.
+uniform sampler2D albedo_texture : source_color, filter_nearest, repeat_enable, hint_default_white;
 
 varying vec3 world_pos;
 varying float seed;
@@ -41,7 +44,7 @@ void fragment() {
 
     float mask = COLOR.a;
     // an unlit lamp by day is the dark hollow it really is
-    vec3 col = COLOR.rgb * mix(1.0, 0.18, mask);
+    vec3 col = COLOR.rgb * texture(albedo_texture, UV).rgb * mix(1.0, 0.18, mask);
 #ifndef STYLE_LIT
     float ndl = clamp(dot(n, normalize(world_sun_dir)), 0.0, 1.0);
     col *= retro_steps(ndl, 4.0) * 0.5 + 0.5;

@@ -1,0 +1,23 @@
+{
+  "id": "move-helicopter",
+  "title": "Helicopter: hover and land",
+  "verdict": "validated",
+  "by": "Quentin Aellen",
+  "date": "2026-10-20T17:12Z",
+  "commit": "e6b105f8",
+  "coverHash": "341bca6654e7e19b",
+  "covers": [
+    "src/Player/Flight.cs",
+    "src/Avatar/AircraftMeshBuilder.cs",
+    "!**/*Check.cs",
+    "!**/*Probe.cs"
+  ],
+  "notes": [
+    {
+      "date": "2026-10-20T17:12Z",
+      "by": "Quentin Aellen",
+      "verdict": "validated",
+      "text": ""
+    }
+  ]
+}

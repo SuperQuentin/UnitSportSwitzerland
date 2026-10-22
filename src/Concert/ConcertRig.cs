@@ -67,13 +67,19 @@ public partial class ConcertRig : Node3D
     private OmniLight3D? _crowdLight;
     private float _haze;
     private ConcertCrowd? _crowd;
+    private Wristbands? _bands;
+    /// <summary>The crowd's wristbands, read from the IR emitters (#986); null without a crowd.</summary>
+    public Wristbands? Bands => _bands;
     private ConcertSfx _sfx = null!;
     private ConcertMusic _music = null!;
     private ConcertPa _pa = null!;
     private ConcertCameras _cameras = null!;
     private ConcertPerformers _performers = null!;
+    private ConcertCrew _crew = null!;
     private MeshInstance3D[] _feeds = Array.Empty<MeshInstance3D>();
     private MultiMeshInstance3D[] _pixelNodes = Array.Empty<MultiMeshInstance3D>();
+    /// <summary>An imported screen's own video source where it plays here (#975); null shows the show's content.</summary>
+    private ConcertScreenVideo?[] _videos = Array.Empty<ConcertScreenVideo?>();
     public ConcertCameras Cameras => _cameras;
     public ConcertMusic Music => _music;
     private float _energy;
@@ -110,6 +116,9 @@ public partial class ConcertRig : Node3D
 
     public ConcertRig() : this(ConcertPlanner.Plan(StadiumCatalog.Geneva, 1)) { }
 
+    /// <summary>An imported rig to build in place of the generated one (#941), set before it enters the tree.</summary>
+    public Mvr.RigData? Imported { get; init; }
+
     /// <summary>The ground's height at a point of the venue's frame (an open air's slope, an arena's floor), set by the director (#948).</summary>
     public Func<Vector2, float>? Ground { get; init; }
 
@@ -120,8 +129,10 @@ public partial class ConcertRig : Node3D
     {
         _plan = new StagePlan(Event);
         if (Ground != null && Event.Stadium.Kind == VenueKind.OpenAir) _plan.Lift(Ground);
+        if (Imported != null) _plan.UseRig(Imported);
         _desk = new LightDesk(_plan);
         BuildStage();
+        BuildObjects();
         var fx = _plan.Patch.Fixtures;
         _heads = fx.Where(f => f.Type.Kind is FixtureKind.Spot or FixtureKind.Beam or FixtureKind.Wash).ToArray();
         _reach = _heads.Select(f => f.Type.Kind == FixtureKind.Wash ? BeamLength * 0.55f : BeamLength).ToArray();
@@ -129,6 +140,7 @@ public partial class ConcertRig : Node3D
         _panV = new float[_heads.Length]; _tiltV = new float[_heads.Length];
         _ray = new RayCast3D { Name = "BeamRay", Enabled = false, HitBackFaces = true, HitFromInside = false };
         AddChild(_ray);
+        // the stage's own body is excepted; an imported set's (ObjectsBody) is not: beams stop on it (#974)
         if (_stageBody != null) _ray.AddException(_stageBody);
         _cells = fx.Where(f => f.Type.Kind is FixtureKind.Blinder or FixtureKind.Strobe or FixtureKind.PixelBar).ToArray();
         _screens = fx.Where(f => f.Type.Kind == FixtureKind.Screen).ToArray();
@@ -138,9 +150,14 @@ public partial class ConcertRig : Node3D
         AddChild(_performers);
         _cameras = new ConcertCameras(_plan, _desk);
         AddChild(_cameras);
+        // the crew at front of house and behind the cameras (#985)
+        _crew = new ConcertCrew(_plan, _desk, _cameras) { FloorTop = Event.Stadium.Kind == VenueKind.Stadium ? FloorTop : 0f };
+        AddChild(_crew);
         // the music from the PA: the setlist on the shared clock, read for the desk
-        _music = new ConcertMusic(Event, _plan.PaHangs.ToArray());
+        _music = new ConcertMusic(Event, _plan);
         AddChild(_music);
+        // the stadium round the PA and the crowd's voice, for this machine's ears (#984)
+        AddChild(new ConcertSound(Event, _music));
         _pa = new ConcertPa(_plan);
         AddChild(_pa);
         // pyro, CO2, confetti, fog: fixtures of the rig like the rest
@@ -153,9 +170,10 @@ public partial class ConcertRig : Node3D
             var floor = FloorTop;
             _crowd = new ConcertCrowd(_plan) { Visible = false, Ground = Ground ?? (Event.Stadium.Kind == VenueKind.Stadium ? _ => floor : null) };
             AddChild(_crowd);
+            _bands = new Wristbands(_plan.Patch);
         }
         Live[Event.Stadium.Name] = this;
-        GD.Print($"[concert] {Event}: {fx.Count} fixtures, {_plan.Patch.Universes.Count} universes ({_plan.Patch.ChannelsUsed} channels)");
+        GD.Print($"[concert] {Event}: {fx.Count} fixtures, {_plan.Patch.Universes.Count} universes ({_plan.Patch.ChannelsUsed} channels){(BodiesDrawn > 0 ? $", {BodiesDrawn} with their own GDTF bodies" : "")}");
     }
 
     // ---- the stage ----------------------------------------------------------------------------------
@@ -235,7 +253,7 @@ public partial class ConcertRig : Node3D
 
     private void BuildRig()
     {
-        var body = new StandardMaterial3D { AlbedoColor = new Color(0.08f, 0.08f, 0.09f), Roughness = 0.6f };
+        var body = Styles.StyleKit.Figure(new StandardMaterial3D { AlbedoColor = new Color(0.08f, 0.08f, 0.09f), Roughness = 0.6f });
         Multi("Heads", new BoxMesh { Size = new Vector3(0.45f, 0.55f, 0.45f) }, _heads.Length + _cells.Length, body, out _bodies);
         // the cones' far side only: half the fill of both, and a beam still shows from inside it
         var beamMat = Additive();
@@ -254,11 +272,14 @@ public partial class ConcertRig : Node3D
             _bodies.SetInstanceTransform(_heads.Length + i, new Transform3D(basis, f.Position));
             _bodies.SetInstanceColor(_heads.Length + i, Colors.White);
         }
+        BuildBodies();   // imported fixtures' own GDTF bodies in place of the box (#961)
 
         // the screens: a grid of pixels each, facing out
         _pixels = new MultiMesh[_screens.Length];
         _pixelNodes = new MultiMeshInstance3D[_screens.Length];
         _feeds = new MeshInstance3D[_screens.Length];
+        _videos = new ConcertScreenVideo?[_screens.Length];
+        var videoRows = ConcertScreenVideo.Rows(Imported);
         var screenMat = new StandardMaterial3D { ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, VertexColorUseAsAlbedo = true, DisableFog = true };
         for (int s = 0; s < _screens.Length; s++)
         {
@@ -280,6 +301,12 @@ public partial class ConcertRig : Node3D
                 Mesh = new QuadMesh { Size = new Vector2(f.ScreenSize.X, f.ScreenSize.Y) }, MaterialOverride = feed,
             };
             AddChild(_feeds[s]);
+            if (s < videoRows.Length && ConcertScreenVideo.For(videoRows[s], f) is { } video)
+            {
+                video.Position = f.Position;
+                video.Basis = Facing(-f.Home);
+                AddChild(_videos[s] = video);
+            }
             for (int y = 0; y < f.PixelsY; y++)
                 for (int x = 0; x < f.PixelsX; x++)
                     _pixels[s].SetInstanceTransform(y * f.PixelsX + x, new Transform3D(Basis.Identity,
@@ -301,7 +328,7 @@ public partial class ConcertRig : Node3D
         AddChild(_crowdLight);
     }
 
-    private static int CellsOf(Fixture f) => f.Type.Kind switch { FixtureKind.Blinder => 4, FixtureKind.PixelBar => 8, _ => 1 };
+    private static int CellsOf(Fixture f) => f.Type.Cells;
 
     /// <summary>A basis whose −Z looks along <paramref name="dir"/> (what a screen or a cell faces).</summary>
     private static Basis Facing(Vector3 dir)
@@ -368,8 +395,10 @@ public partial class ConcertRig : Node3D
         for (int i = 0; i < _heads.Length; i++)
         {
             var f = _heads[i];
-            float wantPan = (p.Get16(f, Attr.Pan, Attr.PanFine) - 0.5f) * f.Type.PanRange;
-            float wantTilt = (p.Get16(f, Attr.Tilt, Attr.TiltFine) - 0.5f) * f.Type.TiltRange;
+            float pan01 = p.Get16(f, Attr.Pan, Attr.PanFine), tilt01 = p.Get16(f, Attr.Tilt, Attr.TiltFine);
+            // an inverted head turns the other way for the same DMX (#959)
+            float wantPan = ((f.InvertPan ? 1f - pan01 : pan01) - 0.5f) * f.Type.PanRange;
+            float wantTilt = ((f.InvertTilt ? 1f - tilt01 : tilt01) - 0.5f) * f.Type.TiltRange;
             if (!_motorsSet) { _pan[i] = wantPan; _tilt[i] = wantTilt; continue; }
             // degrees a second, and a second squared: a beam head is quick, a wash a heavier yoke
             (float v, float a) = f.Type.Kind switch { FixtureKind.Beam => (300f, 1800f), FixtureKind.Spot => (220f, 1100f), _ => (160f, 700f) };
@@ -385,14 +414,7 @@ public partial class ConcertRig : Node3D
             int i = _rayNext++ % _heads.Length;
             var f = _heads[i];
             float max = f.Type.Kind == FixtureKind.Wash ? BeamLength * 0.55f : BeamLength;
-            var dir = Direction(i);
-            _ray.Position = f.Position + dir * 0.4f;
-            _ray.TargetPosition = _ray.Basis.Inverse() * (dir * max);
-            _ray.ForceRaycastUpdate();
-            float reach = _ray.IsColliding() ? _ray.GlobalPosition.DistanceTo(_ray.GetCollisionPoint()) / Scale.X + 0.4f : max;
-            // the venue's own walls and roof, whether or not its collision is built (it is only near a body)
-            reach = Math.Min(reach, VenueReach(f.Position, dir, max));
-            _reach[i] = Mathf.Lerp(_reach[i], reach, 0.6f);
+            _reach[i] = Mathf.Lerp(_reach[i], BeamReach(f.Position, Direction(i), max), 0.6f);
         }
 
         int glow = 0;
@@ -401,22 +423,28 @@ public partial class ConcertRig : Node3D
         {
             var f = _heads[i];
             var dir = Direction(i);
-            float dim = p.Get01(f, Attr.Dimmer) * Shutter(f, t) * master;
+            // no dimmer channel (an imported LED par): its colours carry the level
+            float dim = (f.Type.Offset(Attr.Dimmer) >= 0 ? p.Get01(f, Attr.Dimmer) : 1f) * Shutter(f, t) * master;
             var col = ColorOf(f);
             float zoom = p.Get01(f, Attr.Zoom);
             float angle = Mathf.DegToRad(Mathf.Lerp(f.Type.BeamMin, f.Type.BeamMax, zoom));
             float len = _reach[i];
             float radius = len * MathF.Tan(angle / 2);
-            // the head turns with its beam
-            _bodies.SetInstanceTransform(i, new Transform3D(Facing(dir), f.Position));
-            _bodies.SetInstanceColor(i, Colors.White);
+            // the head turns with its beam; a GDTF body's yoke and head turn, its beam leaves the lens (#961)
+            var from = f.Position;
+            if (_bodied[i]) from = PoseBody(i);
+            else
+            {
+                _bodies.SetInstanceTransform(i, new Transform3D(Facing(dir), f.Position));
+                _bodies.SetInstanceColor(i, Colors.White);
+            }
             // the cone: Y down the beam, X and Z its radius
             var side = dir.Cross(Mathf.Abs(dir.Y) > 0.95f ? Vector3.Right : Vector3.Up).Normalized();
             var other = side.Cross(dir).Normalized();
-            _beams.SetInstanceTransform(i, new Transform3D(new Basis(side * radius, -dir * len, other * radius), f.Position));
+            _beams.SetInstanceTransform(i, new Transform3D(new Basis(side * radius, -dir * len, other * radius), from));
             float strength = f.Type.Kind switch { FixtureKind.Beam => 0.6f, FixtureKind.Spot => 0.27f, _ => 0.1f };
             _beams.SetInstanceColor(i, (col * (dim * strength * haze)) with { A = 1f });
-            _glows.SetInstanceTransform(glow, new Transform3D(Basis.FromScale(Vector3.One * (f.Type.Kind == FixtureKind.Wash ? 1.4f : 0.9f)), f.Position + dir * 0.35f));
+            _glows.SetInstanceTransform(glow, new Transform3D(Basis.FromScale(Vector3.One * (f.Type.Kind == FixtureKind.Wash ? 1.4f : 0.9f)), from + dir * (_bodied[i] ? 0.05f : 0.35f)));
             _glows.SetInstanceColor(glow++, (col * dim) with { A = 1f });
             if (f.Type.Kind == FixtureKind.Wash) washSum += col * dim;
             else beamSum += col * dim;
@@ -434,12 +462,18 @@ public partial class ConcertRig : Node3D
                 float size;
                 if (f.Type.Kind == FixtureKind.PixelBar)
                 {
-                    col = new Color(p.Get(f, c * 3) / 255f, p.Get(f, c * 3 + 1) / 255f, p.Get(f, c * 3 + 2) / 255f);
+                    var co = f.Type.CellOffsets;
+                    float own = f.Type.Offset(Attr.Dimmer) >= 0 ? p.Get01(f, Attr.Dimmer) : 1f;
+                    col = co.Length >= c * 3 + 3
+                        ? new Color(p.Get(f, co[c * 3]) / 255f, p.Get(f, co[c * 3 + 1]) / 255f, p.Get(f, co[c * 3 + 2]) / 255f) * own
+                        : Colors.Black;
                     size = 0.5f;
                 }
                 else if (f.Type.Kind == FixtureKind.Blinder)
                 {
-                    col = new Color(1f, 0.78f, 0.45f) * (p.Get(f, c) / 255f);   // tungsten
+                    var co = f.Type.CellOffsets;
+                    float own = f.Type.Offset(Attr.Dimmer) >= 0 ? p.Get01(f, Attr.Dimmer) : 1f;
+                    col = new Color(1f, 0.78f, 0.45f) * (c < co.Length ? p.Get(f, co[c]) / 255f * own : 0f);   // tungsten
                     size = 1.3f;
                 }
                 else
@@ -469,23 +503,26 @@ public partial class ConcertRig : Node3D
         }
         _screenFlash = _strobeHz <= 0f ? -1f : flash ? 1f : 0f;
         bool imag = false;
+        bool near = GetViewport()?.GetCamera3D() is { } eye && eye.GlobalPosition.DistanceTo(GlobalPosition) < 900f;
         for (int s = 0; s < _screens.Length; s++)
         {
-            bool camera = p.Get(_screens[s], _screens[s].Type.Offset(Attr.Clip)) / 32 == LightDesk.CameraClip && p.Get01(_screens[s], Attr.Dimmer) > 0.05f;
+            // an imported screen's own source (#975) over the show's content while it plays
+            bool video = _videos[s] is { } v && v.Step(near, p.Get01(_screens[s], Attr.Dimmer) * feedLevel);
+            bool camera = !video && p.Get(_screens[s], _screens[s].Type.Offset(Attr.Clip)) / 32 == LightDesk.CameraClip && p.Get01(_screens[s], Attr.Dimmer) > 0.05f;
             if (_feeds[s].Visible != camera)
             {
                 _feeds[s].Visible = camera;
-                _pixelNodes[s].Visible = !camera;
                 if (camera && _feeds[s].MaterialOverride is StandardMaterial3D m) m.AlbedoTexture = _cameras.ImagTexture;
             }
+            if (_pixelNodes[s].Visible != (!camera && !video)) _pixelNodes[s].Visible = !camera && !video;
             imag |= camera;
-            if (!camera) PaintScreen(_screens[s], _pixels[s], t);
+            if (!camera && !video) PaintScreen(_screens[s], _pixels[s], t);
         }
         // the artists dance and the cameras film only while someone can see it
-        bool near = GetViewport()?.GetCamera3D() is { } eye && eye.GlobalPosition.DistanceTo(GlobalPosition) < 900f;
         if (near && (ShowOn() || ExternalLive)) _performers.Step(_strobeHz, _strobeT);
         _cameras.ImagWanted = imag && near;
         _cameras.Step(now % 86400.0);
+        if (near) _crew.Step(ShowOn() || ExternalLive, dt);
         // the PA bounces on the kick
         if (near)
         {
@@ -510,6 +547,11 @@ public partial class ConcertRig : Node3D
             _crowdLight.LightEnergy = 0.6f * Math.Min(1f, b.R + b.G + b.B);
         }
         DriveCrowd(washSum + beamSum);
+        if (_bands != null && _crowd is { Visible: true })
+        {
+            _bands.Step(dt, GlobalTransform);
+            _crowd.DriveBands(_bands);
+        }
     }
 
     /// <summary>The audience follows the show: how hard it dances by section, the rig's colour on it.</summary>
@@ -538,10 +580,13 @@ public partial class ConcertRig : Node3D
     }
 
     /// <summary>The beam's direction from 16-bit pan and tilt: tilt tips it from the yoke's axis towards the fixture's home side, pan turns that about the axis.</summary>
-    private Vector3 Direction(int i)
+    private Vector3 Direction(int i) => Direction(_heads[i], _pan[i], _tilt[i]);
+
+    /// <summary>A head's beam with its motors at <paramref name="panDeg"/>, <paramref name="tiltDeg"/> (the IR heads' too, <see cref="Wristbands"/>).</summary>
+    public static Vector3 Direction(Fixture f, float panDeg, float tiltDeg)
     {
-        var f = _heads[i];
-        float pan = Mathf.DegToRad(_pan[i]), tilt = Mathf.DegToRad(_tilt[i]);
+        // an imported plot's focus point is the beam at pan and tilt centre (#959)
+        float pan = Mathf.DegToRad(panDeg + f.HomePan), tilt = Mathf.DegToRad(tiltDeg + f.HomeTilt);
         var up = f.Up;
         var fwd = (f.Home - up * f.Home.Dot(up));
         fwd = fwd.LengthSquared() < 1e-6f ? up.Cross(Vector3.Right).Normalized() : fwd.Normalized();

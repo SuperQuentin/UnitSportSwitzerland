@@ -15,6 +15,9 @@
 - **Terrain:** `TerrainPaths.FindChunkDir` returns `user://terrain_chunks` on Android. On a phone, `res://` is inside the APK, where `System.IO` cannot read. The folder stays empty: tiles stream from the server into `user://chunk_cache`, and generated fill covers the rest.
 - **Self-update:** `UpdatePrompt.Attach` returns null. An APK cannot patch itself, and the releases page would offer a phone the desktop builds.
 - **SDL (steering wheel):** `SteeringWheel.Install` is skipped and the Wheel tab is hidden. On Android, SDL expects its own Java activity, so it could crash natively, past every C# catch.
+- **The log, from a phone (#1040):** Godot's file logging is on for every platform (`debug/file_logging/enable_file_logging`, its default left it off on mobile), with `application/run/flush_stdout_on_print` so a mid-session copy has the last lines. Settings → About → "Save log file…" copies `user://logs/godot.log` through the system save dialog (Android: the document picker, a `content://` file `Godot.FileAccess` writes, no permission), so a tester away from a PC can send it.
+- **Pointer mode:** Godot stops applying mouse-mode changes once a finger has touched the screen, so the game asks `MouseCapture.Mode`, which remembers what it set (#1020, `core/touch-controls`).
+- **Back button:** Android's Back (button or edge swipe) is the phone's Esc (#1023): `application/config/quit_on_go_back=false`, and `GameShell` turns `NOTIFICATION_WM_GO_BACK_REQUEST` into an Esc press and release, so it closes the open menu or panel, or pauses in game. It never quits; Quit is in the pause menu. Godot's default quit the game from any screen.
 - **Key labels:** `InputHints.PhysicalLabel` never calls `DisplayServer.KeyboardGetLabelFromPhysical` on Android. That display server errors on every call.
 - **LAN discovery:**
   - Android drops incoming multicast unless a Wi-Fi MulticastLock is held. `LanDiscovery.Start` acquires it through `AndroidBridge.AcquireMulticast`, and `Stop` releases it, because it costs battery.
@@ -24,11 +27,13 @@
 
 ## Testing without a phone
 
-- **Emulator** (Pixel 3a API 34 x86_64, measured):
-  - It runs the arm64 APK through translation and joins a PC server at `10.0.2.2`. To make a test APK connect at boot, set `command_line/extra_args="-- --connect 10.0.2.2:<port> --name Phone"` in the local `export_presets.cfg`.
-  - Logs come from `adb logcat -s godot:*`.
-  - It is useless for the picture. Vulkan present fails on both host and SwiftShader GPUs, and SwiftShader GLES cannot link Godot's canvas shaders (`GL_MAX_FRAGMENT_UNIFORM_VECTORS` 261), so the screen stays black.
-  - It is also no guide to performance: one frame took 47 s under translation. Rendering and frame rate need a real phone.
+- **Emulator** (Pixel 3a API 34 x86_64, measured): the full recipe, from installing it to reading a native crash, is `core/android-emulator`. In short:
+  - The release APK (arm64 only) is no use there since .NET arrived: its runtime dies under x86 translation while loading the first assemblies. Build a test APK with `architectures/x86_64=true` and it runs natively.
+  - With `-gpu host` and the game started with `--rendering-driver opengl3 --rendering-method gl_compatibility`, the picture works: the title, the menus and the solo world all show (Oct 2026, #1010). Vulkan present still fails (SwiftShader and host), and SwiftShader GLES cannot link Godot's canvas shaders (`GL_MAX_FRAGMENT_UNIFORM_VECTORS` 261).
+  - It joins a PC server at `10.0.2.2`. To make a test APK connect at boot, set `command_line/extra_args="-- --connect 10.0.2.2:<port> --name Phone"` in the local `export_presets.cfg`, or pass the arguments at launch (`core/android-emulator`).
+  - Logs come from `adb logcat -s godot:*`. A .NET or native crash prints nothing there: its report goes to stderr. `core/android-emulator` routes stderr into logcat.
+  - It is no guide to performance. Rendering and frame rate need a real phone.
+- **What only Android catches** (#1010): a `[ModuleInitializer]` that touches a Godot type, and a read past the end of a native buffer (`core/android-emulator`).
 
 ## Phone performance (phase 4)
 

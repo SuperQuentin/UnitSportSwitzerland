@@ -41,6 +41,7 @@ public static class StreetView
 
         int segments = 0, sides = 0, tracks = 0;
         var bikes = new StringBuilder();
+        var paths = new StringBuilder();
         var roads = new StringBuilder();
         var walks = new StringBuilder();
         var walls = new StringBuilder();
@@ -80,8 +81,10 @@ public static class StreetView
                 }
             }
 
-            foreach (var seg in tile.Segments)
+            var transitions = SegmentSections.TransitionsOf(tile);
+            for (int si = 0; si < tile.Segments.Count; si++)
             {
+                var seg = tile.Segments[si];
                 if (seg.PointCount < 2 || RoadFormat.IsAerial(seg.Class) || RoadFormat.IsWall(seg.Class)) continue;
                 var pts = new (double E, double N)[seg.PointCount];
                 for (int i = 0; i < seg.PointCount; i++) pts[i] = (id.MinE + seg.Points[i * 3], id.MaxN - seg.Points[i * 3 + 2]);
@@ -89,41 +92,49 @@ public static class StreetView
                 bool tunnel = (seg.Flags & RoadFlags.Tunnel) != 0;
                 string colour = RoadFormat.IsWatercourse(seg.Class) ? "#7fb2e0" : bridge ? "#5a5a8a" : tunnel ? "#d070d0" : seg.Class == RoadClass.Railway ? "#6b5a4a"
                     : seg.Class >= RoadClass.Track ? "#c9b48a" : "#9a9a9a";
-                double half = Math.Max(seg.Width, seg.Attributes.WidthCm / 100.0) * 0.5;
-                roads.Append(c, $"<path d=\"{Offset(pts, 0, X, Y)}\" stroke=\"{colour}\" stroke-width=\"{(2 * half * PxPerM):F1}\" fill=\"none\" stroke-linejoin=\"round\"/>");
+                // the section at each point, as the game builds it (SegmentSections: a transition's own, #818)
+                var sections = SegmentSections.Of(seg, transitions[si]);
+                if (sections.Varies)
+                    roads.Append(c, $"<path d=\"{Offset(pts, i => sections.RibbonLeft[i], X, Y)}{Offset(pts, i => sections.RibbonRight[i], X, Y, reverse: true)}Z\" fill=\"{colour}\"/>");
+                else
+                {
+                    double half = Math.Max(seg.Width, seg.Attributes.WidthCm / 100.0) * 0.5;
+                    roads.Append(c, $"<path d=\"{Offset(pts, 0, X, Y)}\" stroke=\"{colour}\" stroke-width=\"{(2 * half * PxPerM):F1}\" fill=\"none\" stroke-linejoin=\"round\"/>");
+                }
                 segments++;
 
                 var a = seg.Attributes;
                 foreach (bool right in (ReadOnlySpan<bool>)[false, true])
                 {
                     var side = right ? a.Right : a.Left;
+                    var profiles = right ? sections.RightProfile : sections.LeftProfile;
                     double sign = right ? 1 : -1;
-                    // a path's bands first, then the sidewalk behind them, past a turn lane's widening (#120)
-                    // past a turn lane's widening the bands ramp with it, point by point, as the game builds them (RoadStreetBuilder)
-                    var along = RoadStreetSection.Fractions(seg);
-                    double Shift(int i) => side.ShiftAt(along[i]);
-                    string Strip(double from, double width, string fill) =>
-                        string.Create(c, $"<path d=\"{Offset(pts, i => sign * (half + Shift(i) + from), X, Y)}{Offset(pts, i => sign * (half + Shift(i) + from + width), X, Y, reverse: true)}Z\" fill=\"{fill}\"/>");
-                    double inner = 0;
-                    if (side.HasTrack)
+                    if (profiles[0] is not { } shape)
                     {
-                        void Band(double from, double width, string fill) => walks.Append(Strip(from, width, fill));
-                        double verge = side.VergeDm / 10.0, path = side.BikeDm / 10.0, buffer = side.BufferDm / 10.0;
-                        if (verge > 0) Band(inner, verge, "#7caa4a");
-                        Band(inner + verge, path, LayoutColours[Rewrite.TileRewriter.LayoutOf(side)]);
-                        if (buffer > 0) Band(inner + verge + path, buffer, "#7caa4a");
-                        inner += verge + path + buffer;
-                        tracks++;
+                        if (a.Has(RoadAttrFlags.Urban))
+                            walks.Append(c, $"<path d=\"{Offset(pts, i => sign * ((right ? sections.SideRight[i] : -sections.SideLeft[i]) + 0.15), X, Y)}\" stroke=\"#d9534f\" stroke-width=\"1\" fill=\"none\" stroke-dasharray=\"4 3\"/>");
+                        continue;
                     }
-                    if (side.SidewalkDm > 0)
+                    // every piece of the profile but its kerb faces, point by point (a turn lane's widening pushes it out, #120)
+                    double Start(int i) => right ? sections.SideRight[i] : -sections.SideLeft[i];
+                    for (int k = 0; k + 1 < shape.Count; k++)
                     {
-                        double w = side.SidewalkDm / 10.0;
-                        string fill = side.KerbCm == 0 ? "#b9a6d6" : w < 1.5 ? "#d9534f" : w <= 2.5 ? "#d8c08a" : "#f0a040";
-                        walks.Append(Strip(inner, w, fill));
-                        sides++;
+                        var surface = shape.Surface[k];
+                        if (surface == StreetSurface.Kerb) continue;
+                        int kk = k;
+                        double width = profiles.Max(p => p!.D[kk + 1] - p.D[kk]);
+                        if (width < 0.01) continue;
+                        string fill = surface switch
+                        {
+                            StreetSurface.Verge or StreetSurface.Buffer => "#7caa4a",
+                            StreetSurface.Track => LayoutColours[Math.Max(1, Rewrite.TileRewriter.LayoutOf(side))],
+                            StreetSurface.Paving => "#b9a6d6",
+                            _ => width < 1.5 ? "#d9534f" : width <= 2.5 ? "#d8c08a" : "#f0a040",
+                        };
+                        walks.Append(c, $"<path d=\"{Offset(pts, i => sign * (Start(i) + profiles[i]!.D[kk]), X, Y)}{Offset(pts, i => sign * (Start(i) + profiles[i]!.D[kk + 1]), X, Y, reverse: true)}Z\" fill=\"{fill}\"/>");
+                        if (surface == StreetSurface.Track) tracks++;
+                        if (surface is StreetSurface.Sidewalk or StreetSurface.Paving) sides++;
                     }
-                    else if (a.Has(RoadAttrFlags.Urban))
-                        walks.Append(c, $"<path d=\"{Offset(pts, sign * (half + 0.15), X, Y)}\" stroke=\"#d9534f\" stroke-width=\"1\" fill=\"none\" stroke-dasharray=\"4 3\"/>");
                 }
             }
 
@@ -212,6 +223,17 @@ public static class StreetView
                 }
             }
 
+            // the junction paths (#818, #971): cars white, riders on a bike lane yellow, riders from path to path cyan; a dot at the start
+            foreach (var jp in tile.JunctionPaths)
+            {
+                var v = jp.Points;
+                var pts = new (double E, double N)[jp.PointCount];
+                for (int i = 0; i < pts.Length; i++) pts[i] = (id.MinE + v[i * 3], id.MaxN - v[i * 3 + 2]);
+                string colour = jp.Kind switch { JunctionPathKind.Bike => "#f1c40f", JunctionPathKind.Path => "#00bcd4", _ => "#ffffff" };
+                paths.Append(c, $"<path d=\"{Offset(pts, 0, X, Y)}\" stroke=\"{colour}\" stroke-width=\"{(jp.Kind == JunctionPathKind.Car ? 1.2 : 2):F1}\" fill=\"none\" opacity=\"0.9\"/>");
+                paths.Append(c, $"<circle cx=\"{X(pts[0].E)}\" cy=\"{Y(pts[0].N)}\" r=\"2.5\" fill=\"{colour}\"/>");
+            }
+
             foreach (var prop in tile.LinearProps)
             {
                 var pts = new (double E, double N)[prop.PointCount];
@@ -223,6 +245,7 @@ public static class StreetView
         svg.Append("<g>").Append(roads).Append("</g>\n");
         svg.Append("<g>").Append(walks).Append("</g>\n");
         svg.Append("<g>").Append(bikes).Append("</g>\n");
+        svg.Append("<g>").Append(paths).Append("</g>\n");
         svg.Append("<g fill=\"#222\" stroke=\"#222\" stroke-width=\"1\">").Append(walls).Append("</g>\n");
         svg.Append(c, $"<text x=\"8\" y=\"20\" font-family=\"sans-serif\" font-size=\"16\">LV95 {e:F0},{n:F0}, {size:F0} m; {segments} segments, {sides} sidewalk sides, {tracks} bike path sides</text>\n");
         svg.Append("</svg>\n");

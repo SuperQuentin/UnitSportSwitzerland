@@ -22,12 +22,14 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 |---|---|---|---|---|---|
 | walk, run | `WalkControls` (wish, run) | the body's physics on the server's collision | its own position | `MoveTo` (phase 2) | ok |
 | jump, crouch, slide | `FootActions` (jump, crouch) | the body | — | `MoveTo` (jumps low walls; no slide yet) | ok |
+| creative mode: invincible, flying (#1002) | `WalkControls` steers the flight; the take-off reads the jump key | — (a client toggle on the owner's body) | — | — | n/a: a player's own mode, never a bot's |
 | mantle a ledge | jump at a wall (`FootActions`) | the body | knee and head rays | `MoveTo` | ok |
 | face / aim | `LookYaw`, `LookPitch`, `SquareToView` (`BotIntent.FaceYaw`) | the body | — | `Engage` | ok |
 | swim | `WalkControls` overrides the stroke | the body | — | `MoveTo` | gap: dive and climb-out read keys (`FootPlayer.Swim`, `limp` for an Npc); landings avoid water (a follow-up) |
 | knocked out, down, revived, out | — | `TakeDamage`, `TryGoDown`, `ReviveInPlace`, `FinishDowned` on the server | — | — | ok |
 | run over by a vehicle | — | `KnockedByVehicle` | — | — | gap: skipped for an Npc (`FootPlayer.Crash`), and players' proxies have no physics body on the server: a knock from `PlayerSnapshot` positions, a follow-up (`vehicles`) |
 | sit on a stand's seat, stand up (#885) | `WalkControls`: a wish over 0.3, once let go, stands up | `FootPlayer.TrySit` / `StandUpFromSeat` on its body (owner-written pose, no RPC) | `StadiumSeats.At(E, N)` (pure, the catalog) | none yet: `MoveTo` a row, then `TrySit` (concert spectators, plan phase 7) | gap: no brain sits; the seams are there |
+| import a concert rig from MVR (#941) | — | `ConcertService.SendRig` (`AskRig` RPC; empty for the set's own) | `ConcertService.RigFor` | none | n/a: an operator's tool; a server's console can host and import |
 | run a concert camera (#885) | — | `ConcertService.AskCamera` / `SendCamera` / `CutTo` (`AskOperate`, `CamState` RPCs) | `ConcertRig.Live`, `CameraRig.For` | none | n/a: the auto director runs every camera nobody operates |
 | run a concert's light desk, host a set (#885) | — | `ConcertService.Command` (`/concert host|cue|release`), the desk's buttons are those commands | `ConcertRig.Live` | none | n/a: an operator's job; a server could host a set from the console (`/concert` from the console peer) |
 | get down from a roof | — | the body (a jump off it) | its height over the ground | `MoveTo` | gap: a bot landed on a roof walks along it and never comes down (seen in `tools/botfilm.sh`); landing spots should avoid roofs, or `MoveTo` should drop off a low edge (#842) |

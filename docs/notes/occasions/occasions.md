@@ -37,7 +37,7 @@
   **Christmas** is almost entirely shader-side: `world_snow` whitens up-facing terrain, roofs,
   crowns and road *edges* (carriageways are ploughed), `world_lights` draws coloured bulbs along
   the eaves in `ps1_building` (no geometry) and lights more windows; falling snow is one static
-  mesh of 4k quads that `ps1_snowfall.gdshader` drops and wraps round the camera in **world**
+  mesh of 4k quads that `snowfall.gdshader` drops and wraps round the camera in **world**
   space, offset by `world_origin_offset` so a floating-origin shift does not reshuffle the flakes
   (the 60 m box divides its 9.6 km period, `core/floating-origin`) (`OccasionPrecip`, zero CPU per frame; the shader draws nothing for a camera
   under -2000 m, i.e. indoors, per camera so a door portal looking out still shows it). Props are a 12 m fir per town

@@ -88,8 +88,8 @@ public partial class NoteTaker : CanvasLayer
     {
         _shot = Grab(GetViewport());
         _t = _recorder.Now;
-        _mouseBefore = Input.MouseMode;
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        _mouseBefore = MouseCapture.Mode;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
         _panel.Visible = true;
         _box.Text = "";
         _box.GrabFocus();

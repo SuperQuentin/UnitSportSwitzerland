@@ -54,6 +54,10 @@ if (args.Length == 0 || args.Contains("--help") || args.Contains("-h"))
           --test-region DIR     the traffic-lights test region (#386): flat tiles, designed junctions, OSM signal
                                  nodes, then the network stage; prints the junction table (--temp DIR: raw input,
                                  default DIR_temp). Clears DIR first, only if this command wrote it
+          --junctions old       (--rewrite, --test-region) the old junction layout only (#818: the planner writes the junctions by
+                                 default, the old layout the ones it cannot); --junctions new plans them without writing;
+                                 --debug-junction E,N prints the plan of the junction there (--junction-svg FILE draws it); --junction-failures FILE
+                                 describes every core failing a check
           --compare-v2 V2DIR --chunks V3DIR
                                  v3 tiles against a v2 build of the same region: same geometry,
                                  one-way agreement with the runtime inference, bytes per tile
@@ -142,7 +146,15 @@ else if (args.Contains("--signal-check"))
 }
 else if (ArgValue("--test-region") is { } regionDir)
 {
-    return UnitSport.Tools.RoadGen.TestRegion.SignalTestRegion.Run(regionDir, ArgValue("--temp"), Console.WriteLine);
+    DebugJunctionArg();
+    if (ArgValue("--debug-street") is { } dbgStreet)
+    {
+        var en = dbgStreet.Split(',');
+        UnitSport.Tools.RoadGen.Network.StreetPlanner.Debug = UnitSport.Tools.RoadGen.Network.CornerPlanner.Debug =
+            (double.Parse(en[0], CultureInfo.InvariantCulture), double.Parse(en[1], CultureInfo.InvariantCulture));
+    }
+    return UnitSport.Tools.RoadGen.TestRegion.SignalTestRegion.Run(regionDir, ArgValue("--temp"), Console.WriteLine,
+        newJunctions: ArgValue("--junctions") != "old", writeJunctions: ArgValue("--junctions") is null or "write");
 }
 else if (args.Contains("--priority-check"))
 {
@@ -152,6 +164,11 @@ else if (ArgValue("--compare-v2") is { } v2Dir)
 {
     return V2Compare.Run(v2Dir, ArgValue("--chunks") ?? "terrain_chunks", Console.WriteLine);
 }
+else if (ArgValue("--gantry-benchmark") is { } benchTemp)
+{
+    // #1110: the gantry inference rule against SITG's real gantries, from a rewrite's gantry_facts.tsv
+    return UnitSport.Tools.RoadGen.Diagnostics.GantryBenchmark.Run(benchTemp, Console.WriteLine);
+}
 else if (args.Contains("--rewrite"))
 {
     string chunks = ArgValue("--chunks") ?? "terrain_chunks";
@@ -159,6 +176,7 @@ else if (args.Contains("--rewrite"))
     double dividedScale = double.Parse(ArgValue("--divided-scale") ?? "1.0", CultureInfo.InvariantCulture);
     bool dryRun = args.Contains("--dry-run");
     UnitSport.Tools.RoadGen.Network.CrossSectionPlanner.ShiftCarriageways = !args.Contains("--no-shift");
+    DebugJunctionArg();
     if (ArgValue("--debug-street") is { } dbg)
     {
         var en = dbg.Split(',');
@@ -190,8 +208,11 @@ else if (args.Contains("--rewrite"))
         Measure: args.Contains("--measure"),
         AuditHeights: !args.Contains("--no-audit"),
         RawDir: RawRoads.DirFor(temp),
-        OsmOverlay: Path.Combine(temp, "osm_overlay.tsv"),
-        SkipRewritten: args.Contains("--skip-rewritten")), Console.WriteLine);
+        OsmOverlay: Path.Combine(temp, "osm_overlay.tsv"), TramStops: Path.Combine(temp, "tram_stops.tsv"),
+        SkipRewritten: args.Contains("--skip-rewritten"),
+        SitgSigns: args.Contains("--no-sitg") ? null : Path.Combine(temp, "sitg_signs.tsv"), Places: Path.Combine(chunks, "places.json"),
+        GantryFacts: Path.Combine(temp, "gantry_facts.tsv"), Gantries: !args.Contains("--no-gantries"),
+        NewJunctions: ArgValue("--junctions") != "old", WriteJunctions: ArgValue("--junctions") is null or "write"), Console.WriteLine);
     }
     catch (TileRewriter.AlreadyRewrittenException e)
     {
@@ -295,6 +316,16 @@ void RunCase(string name, Func<RoadNetwork> build, Func<Vec2, double>? height)
             : $"overlap {was:N1} m² -> {now:N1} m² ({100 * (1 - now / was):F1}% removed)";
     Console.WriteLine($"  VERDICT: {verdict}; "
                       + $"worst turn {before.Report.WorstTurn:F1}° -> {generated.Report.WorstTurn:F1}°");
+}
+
+void DebugJunctionArg()
+{
+    TileRewriter.JunctionFailures = ArgValue("--junction-failures");
+    TileRewriter.JunctionList = ArgValue("--junction-list");
+    if (ArgValue("--debug-junction") is not { } at) return;
+    var en = at.Split(',');
+    TileRewriter.DebugJunction = (double.Parse(en[0], CultureInfo.InvariantCulture), double.Parse(en[1], CultureInfo.InvariantCulture));
+    TileRewriter.JunctionSvg = ArgValue("--junction-svg");
 }
 
 string? ArgValue(string flag)

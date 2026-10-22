@@ -1,0 +1,30 @@
+{
+  "id": "collide-car-bus-side",
+  "title": "Car into the side of a bus",
+  "verdict": "failed",
+  "by": "Quentin Aellen",
+  "date": "2026-10-20T17:06Z",
+  "commit": "e6b105f8",
+  "coverHash": "543ad15c77287e76",
+  "covers": [
+    "src/Vehicles/VehicleBody*.cs",
+    "src/Vehicles/VehicleManager.cs",
+    "src/Vehicles/Explosion.cs",
+    "src/Player/FootPlayer.Crash.cs",
+    "src/Player/Rideable.cs",
+    "!**/*Check.cs",
+    "!**/*Probe.cs",
+    "src/Player/Car.cs",
+    "src/Player/CarCatalog.cs",
+    "src/Player/Truck*.cs",
+    "src/Player/Heavy*.cs"
+  ],
+  "notes": [
+    {
+      "date": "2026-10-20T17:06Z",
+      "by": "Quentin Aellen",
+      "verdict": "failed",
+      "text": "nothing append when going trought the bus at max speed"
+    }
+  ]
+}

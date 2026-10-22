@@ -152,6 +152,31 @@ p.sub { color: var(--muted); max-width: 56ch; margin: 0; font-size: 18px; }
 .note { color: var(--dim); font-size: 13px; margin: 14px 0 0; }
 .note code { color: var(--muted); }
 
+/* people (media/people-<n>.webp, tools/web-people.sh): a crowd in the sections' margins, and the lineup */
+section.block > .wrap { position: relative; z-index: 1; }
+.crowd { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.crowd img { position: absolute; bottom: 0; height: var(--h, 260px); width: auto; opacity: .22; filter: saturate(.7) drop-shadow(0 20px 30px rgba(0,0,0,.6));
+             will-change: transform; }
+.crowd img.l { left: max(8px, calc(50% - 760px)); } .crowd img.r { right: max(8px, calc(50% - 760px)); }
+@media (max-width: 1279px) { .crowd img { opacity: .1; } }
+@media (max-width: 759px) { .crowd { display: none; } }
+.styles { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 26px; }
+.styles button { font: inherit; font-size: 14px; font-weight: 650; cursor: pointer; padding: 7px 15px; border-radius: 99px; color: var(--muted);
+                 border: 1px solid var(--line); background: rgba(255,255,255,.04); transition: background .2s, color .2s; }
+.styles button[aria-pressed="true"] { color: #fff; background: linear-gradient(135deg, var(--glow), var(--rose)); border-color: transparent; }
+.lineup { position: relative; display: flex; align-items: flex-end; gap: 6px; margin-top: 34px; padding: 30px 16px 0; overflow-x: auto;
+          scroll-snap-type: x proximity; scrollbar-width: thin; }
+.lineup::after { content: ""; position: absolute; left: 0; right: 0; bottom: 34px; height: 2px; background: linear-gradient(90deg, transparent, var(--glow), var(--rose), transparent);
+                 box-shadow: 0 0 24px 4px rgba(255,122,69,.35); pointer-events: none; }
+.person { flex: 0 0 auto; scroll-snap-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; margin: 0; transition: opacity .4s, filter .4s; }
+.person img { height: calc(var(--h, 1) * clamp(150px, 22vw, 250px)); width: auto; transform-origin: 50% 100%;
+              animation: idle 3.2s ease-in-out infinite alternate; animation-delay: var(--d, 0s); transition: transform .35s var(--ease); }
+.person:hover img { transform: translateY(-10px) scale(1.06); animation-play-state: paused; }
+@keyframes idle { to { transform: translateY(-5px) rotate(var(--sw, 1deg)); } }
+.person figcaption { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; padding: 3px 9px; border-radius: 99px;
+                     background: rgba(255,255,255,.07); border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.person.off { opacity: .14; filter: grayscale(1); }
+
 footer { margin-top: 110px; padding: 32px 0 48px; border-top: 1px solid var(--line); color: var(--dim); font-size: 14px; }
 footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: space-between; }
 
@@ -162,7 +187,7 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   .hero video, .reveal { animation: none; transition: none; transform: none; opacity: 1; }
-  .dot.on, .trailer .play, .scroll-hint::after, .names li { animation: none; }
+  .dot.on, .trailer .play, .scroll-hint::after, .names li, .person img { animation: none; }
   #snow { display: none; }
 }
 </style>
@@ -172,7 +197,7 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: 
 <nav id="nav">
   <div class="wrap">
     <a class="brand" href="#top"><i><svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true"><path d="M13 4h6v9h9v6h-9v9h-6v-9H4v-6h9z" fill="#fff"/></svg></i>UnitSport</a>
-    <div class="links"><a href="#features">Features</a><a href="#trailer">Trailer</a><a href="map.html">Live map</a><a href="#join">Join</a></div>
+    <div class="links"><a href="#features">Features</a><a href="#people">People</a><a href="#trailer">Trailer</a><a href="map.html">Live map</a><a href="#join">Join</a></div>
     <a class="btn hot small cta" href="#join">Play free</a>
   </div>
 </nav>
@@ -217,9 +242,21 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: 
       <div class="reveal">
         <span class="kicker">What you can do</span>
         <h2 class="title">A country-sized playground</h2>
-        <p class="sub">Not a map inspired by Switzerland: the real one, streamed in as you travel, shared live with everyone on the server.</p>
+        <p class="sub">Not a map inspired by Switzerland: the real one, streamed in as you travel, shared live with everyone on the server. Drive it, fly it, ski it, build on it, throw a concert in it, film it.</p>
       </div>
       <div id="feature-list"></div>
+    </div>
+  </section>
+
+  <section class="block" id="people" hidden>
+    <div class="wrap">
+      <div class="reveal">
+        <span class="kicker">Everyone</span>
+        <h2 class="title">Be anyone. Pick your look.</h2>
+        <p class="sub">A character creator with faces, builds, hair and a wardrobe from hard hats to galaxy dresses, dances on the emote wheel, aliens too. And the whole game in the style you like: PS1, Cartoon, Realistic or Realistic+, switched live.</p>
+        <div class="styles" id="styles" role="group" aria-label="Show a visual style"></div>
+      </div>
+      <div class="lineup reveal" id="lineup"></div>
     </div>
   </section>
 
@@ -227,11 +264,12 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: 
     <div class="wrap">
       <div class="reveal">
         <span class="kicker">Trailer</span>
-        <h2 class="title">Four friends and a fondue</h2>
-        <p class="sub">A sunset fondue on the Gornergrat, and everyone getting there their own way. Filmed entirely in the game.</p>
+        <h2 class="title" id="trailer-title">Four friends and a fondue</h2>
+        <p class="sub" id="trailer-sub">A sunset fondue on the Gornergrat, and everyone getting there their own way. Filmed entirely in the game.</p>
+        <div class="styles" id="trailer-tabs" role="group" aria-label="Pick a trailer"></div>
       </div>
       <div class="trailer reveal" id="trailer-box">
-        <img src="media/trailer.jpg" alt="" onerror="this.remove()">
+        <img id="trailer-poster" src="media/trailer.jpg" alt="" onerror="this.hidden = true">
         <button type="button" id="play" aria-label="Play the trailer"><span class="play"><svg width="30" height="30" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 1.5l9.5 5.5L3 12.5z" fill="#fff"/></svg></span></button>
       </div>
       <p class="credit">Music: “Voxel Revolution” by Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0.</p>
@@ -274,19 +312,23 @@ const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // ---------- features (media/<key>.mp4 + .jpg from tools/web-media.sh) ----------
 const FEATURES = [
-  ["real", "Real data", "Built from the real survey", "swisstopo's elevation model, roads, rivers and every building's footprint, turned into a low-poly country you can cross end to end.", ["swissALTI3D", "swissTLM3D", "Every village"]],
-  ["drive", "On wheels", "Every road is drivable", "Mountain passes, motorways and village lanes, with traffic. Cars, buses, motorbikes, bikes: take the Tremola's hairpins or get stuck at the Gotthard.", ["Cars & buses", "Motorbikes", "Bikes"]],
+  ["real", "Real data", "Built from the real survey", "swisstopo's elevation model, roads, rivers and every building's footprint, turned into a low-poly country you can cross end to end, castles and all, over the border to the French shore of Lake Geneva.", ["swissALTI3D", "swissTLM3D", "Every village", "Castles"]],
+  ["drive", "On wheels", "Every road is drivable", "Mountain passes, motorways and village lanes, with traffic and traffic lights. Cars, trucks, buses, go-karts, army 6x6s, motorbikes and bikes: take the Tremola's hairpins with a wheel, paddles or an H-shifter.", ["Cars & trucks", "Go-karts", "Motorbikes", "Wheel & shifter"]],
   ["fly", "In the air", "Take off and look down", "Planes, helicopters, wingsuits and paragliders. Follow the Aletsch glacier at low level or jump out over the Matterhorn at sunset.", ["Planes", "Helicopters", "Wingsuit", "Paraglider"]],
   ["water", "On water", "Lakes that move", "Boats and jet skis on Lake Geneva, steamers past Chillon, swimming when you fall in.", ["Boats", "Jet skis", "Swimming"]],
-  ["snow", "On snow", "Skis on every slope", "Above the snow line the mountains are yours: ski down from the glaciers wherever the terrain lets you.", ["Skiing", "Glaciers", "Peaks"]],
-  ["together", "Together", "Better with friends", "Meet up anywhere in the country, chat, ride along as a passenger, dance, cook a fondue at the top. Day turns to night for everyone at once.", ["Live multiplayer", "Chat", "Day & night"]],
+  ["snow", "On snow", "Real slopes, real lifts", "Ski or snowboard the real pistes, with a daily snow state: carve, skid, hop-turn, race. Ride the actual chairlifts and gondolas back up on their real ropeways.", ["Skiing", "Snowboard", "Ski lifts", "Races"]],
+  ["build", "At work", "Every building site works", "The country's real construction sites have their machines: excavators, wheel loaders, telehandlers, tippers, a roller and a tower crane. Dig, lift the pallets, tip the skip.", ["Excavator", "Tower crane", "Telehandler", "Tipper"]],
+  ["concert", "On stage", "Stadium concerts", "Live shows in real venues, from the Stade de Genève to open-air grounds: a DMX rig, lasers and pyro on the beat, a crowd with LED wristbands, cameras on the big screens. Run the light desk, or bring your own grandMA3 rig over MVR.", ["Light desk", "Live cameras", "MVR / GDTF", "Wristbands"]],
+  ["battle", "Battle royale", "Drop in, squad up", "Leave the freighter's ramp in a wingsuit, land, loot and fight as a squad. Bots drop, loot, drive and revive like players, so a match fills up at any hour.", ["Squads", "Bots", "Loot", "Revive"]],
+  ["studio", "Movie studio", "Film what you play", "The studio records the whole world: cut it on a timeline with several cameras, transitions and music, and export the video with its sound. Chat shows up as comic speech bubbles.", ["Replay", "Timeline", "Multi-camera", "Export"]],
+  ["together", "Together", "Better with friends", "Meet up anywhere in the country, chat, ride along as a passenger, dance from the emote wheel, put a CD in a radio, cook a fondue at the top. In VR with your own hands, or on the couch with a pad.", ["Live multiplayer", "Dances", "Radios", "VR"]],
 ];
 const list = $("feature-list");
 FEATURES.forEach(([key, tag, title, text, chips], i) => {
   const row = document.createElement("article");
   row.className = "feature reveal";
   row.innerHTML = `<div class="shot"><img alt="" loading="lazy"><video muted loop playsinline preload="none"></video><span class="tag"></span></div>
-    <div><span class="num">0${i + 1}</span><h3></h3><p></p><ul class="chips"></ul></div>`;
+    <div><span class="num">${String(i + 1).padStart(2, "0")}</span><h3></h3><p></p><ul class="chips"></ul></div>`;
   const img = row.querySelector("img"), vid = row.querySelector("video");
   img.src = `media/${key}.jpg`; img.onerror = () => img.remove();
   vid.dataset.src = `media/${key}.mp4`;
@@ -296,6 +338,67 @@ FEATURES.forEach(([key, tag, title, text, chips], i) => {
   for (const c of chips) { const li = document.createElement("li"); li.textContent = c; row.querySelector(".chips").append(li); }
   list.append(row);
 });
+
+// ---------- people: media/people-<n>.webp in tools/web-people.sh's order (style, look, height in the frame) ----------
+const STYLES = { ps1: "PS1", cartoon: "Cartoon", "real-": "Realistic", "real+": "Realistic+" };
+const PEOPLE = [
+  ["ps1", "YMCA", 1.08], ["cartoon", "Galaxy dress", 1], ["real-", "Lolita dress", 1], ["real+", "Gothic robe", 1],
+  ["cartoon", "Cheer", 1.08], ["ps1", "Hard hat", 1], ["real+", "Walking", 1], ["real-", "Selfie", .97],
+  ["real-", "T-step", .97], ["real+", "Doll skirt", 1], ["ps1", "Schuss", .78], ["cartoon", "Zib, waving", 1.05],
+  ["real+", "Stripes", 1], ["cartoon", "Snowboard", .9], ["real-", "TAZ 90", 1], ["ps1", "Zorp, the robot", 1.05],
+];
+(() => {
+  const lineup = $("lineup"); let loaded = 0;
+  const people = PEOPLE.map(([style, look, h], i) => {
+    const fig = document.createElement("figure");
+    fig.className = "person"; fig.dataset.style = style;
+    fig.style.setProperty("--h", h); fig.style.setProperty("--d", (-i * .37).toFixed(2) + "s"); fig.style.setProperty("--sw", (i % 2 ? -1 : 1) + "deg");
+    const img = new Image(); img.alt = `${look}, ${STYLES[style]} style`; img.src = `media/people-${i}.webp`;
+    img.onload = () => { if (!loaded++) $("people").hidden = false; };   // the section shows once a figure is there
+    img.onerror = () => fig.remove();
+    const cap = document.createElement("figcaption"); cap.textContent = STYLES[style];
+    fig.append(img, cap); lineup.append(fig);
+    return fig;
+  });
+  for (const key of ["all", ...Object.keys(STYLES)]) {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = key === "all" ? "All styles" : STYLES[key]; b.setAttribute("aria-pressed", key === "all");
+    b.onclick = () => {
+      $("styles").querySelectorAll("button").forEach(o => o.setAttribute("aria-pressed", o === b));
+      people.forEach(p => p.classList.toggle("off", key !== "all" && p.dataset.style !== key));
+    };
+    $("styles").append(b);
+  }
+  // the crowd: a figure in each margin of the other sections, a pair every ~900 px down a tall one, drifting slower than the page
+  const drifting = []; let j = 0;
+  [...document.querySelectorAll("section.block")].filter(s => s.id !== "people").forEach(sec => {
+    const crowd = document.createElement("div"); crowd.className = "crowd"; crowd.setAttribute("aria-hidden", "true");
+    const pairs = Math.max(1, Math.round(sec.offsetHeight / 900));
+    for (let k = 0; k < pairs; k++)
+      for (const side of ["l", "r"]) {
+        const i = (j++ * 5 + 3) % PEOPLE.length, img = new Image();
+        img.alt = ""; img.className = side; img.loading = "lazy"; img.src = `media/people-${i}.webp`; img.onerror = () => img.remove();
+        img.style.setProperty("--h", Math.round(PEOPLE[i][2] * (side === "l" ? 300 : 250)) + "px");
+        img.style.bottom = ((k + (side === "l" ? .1 : .45)) / pairs * 100).toFixed(1) + "%";
+        img.dataset.depth = side === "l" ? .12 : .07;
+        crowd.append(img); drifting.push(img);
+      }
+    sec.prepend(crowd);
+  });
+  if (calm) return;
+  let queued = false;
+  addEventListener("scroll", () => {
+    if (queued) return; queued = true;
+    requestAnimationFrame(() => {
+      queued = false;
+      for (const img of drifting) {
+        const r = img.parentElement.getBoundingClientRect();
+        if (r.bottom < 0 || r.top > innerHeight) continue;
+        img.style.transform = `translateY(${(r.top + r.height / 2 - innerHeight / 2) * img.dataset.depth}px)`;
+      }
+    });
+  }, { passive: true });
+})();
 
 // reveal on scroll; feature clips load when near and play only while visible
 const seen = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add("in"); seen.unobserve(e.target); } }), { threshold: .15 });
@@ -353,10 +456,27 @@ addEventListener("scroll", () => {
   })(0);
 })();
 
-// ---------- trailer: loads only on click ----------
-$("play").addEventListener("click", () => {
+// ---------- trailers: media/trailer.mp4 (the story) and media/showcase.mp4, each loaded only on click ----------
+const TRAILERS = [
+  ["trailer", "The story", "Four friends and a fondue", "A sunset fondue on the Gornergrat, and everyone getting there their own way. Filmed entirely in the game."],
+  ["showcase", "The showcase", "One country, every way to move", "Passes, lakes, glaciers, building sites, a battle royale drop and a race on the Furka, one feature a shot. Filmed entirely in the game."],
+];
+const poster = $("trailer-poster"), playBtn = $("play");
+let film = TRAILERS[0];
+TRAILERS.forEach(t => {
+  const b = document.createElement("button"); b.type = "button"; b.textContent = t[1]; b.setAttribute("aria-pressed", t === film);
+  b.onclick = () => {
+    film = t;
+    $("trailer-title").textContent = t[2]; $("trailer-sub").textContent = t[3];
+    $("trailer-tabs").querySelectorAll("button").forEach(o => o.setAttribute("aria-pressed", o === b));
+    $("trailer-box").replaceChildren(poster, playBtn);   // a playing film stops when the other is picked
+    poster.hidden = false; poster.src = `media/${t[0]}.jpg`;
+  };
+  $("trailer-tabs").append(b);
+});
+playBtn.addEventListener("click", () => {
   const v = document.createElement("video");
-  v.src = "media/trailer.mp4"; v.controls = true; v.autoplay = true; v.playsInline = true;
+  v.src = `media/${film[0]}.mp4`; v.controls = true; v.autoplay = true; v.playsInline = true;
   v.onerror = () => location.href = "https://github.com/" + REPO;
   $("trailer-box").replaceChildren(v);
 });

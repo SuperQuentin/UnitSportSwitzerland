@@ -66,8 +66,7 @@ public partial class TractorNetProbe : ChatProbe
 
     private async Task RunA(FootPlayer me)
     {
-        Chat?.Send("/login test");
-        await Seconds(1.5);
+        if (!await LogIn("test")) return;
         bool ready = false;
         for (int i = 0; i < 40 && !ready; i++)
         {
@@ -113,7 +112,7 @@ public partial class TractorNetProbe : ChatProbe
         if (!await Heard("B", "seen tipper", 20)) Fail("B did not see the trailer's load");
 
         me.ExitVehicle();
-        await Seconds(3);
+        await Until(() => me.Ride == RideKind.OnFoot, 3);
         Say("parked tipper");
         if (!await Heard("B", "seen parked tipper", 20)) Fail("B did not see the parked trailer's load");
 
@@ -207,7 +206,7 @@ public partial class TractorNetProbe : ChatProbe
         var binBody = bt.Train.Bodies[bt.SectionCount - 1];
         var binMiddle = bin * new Vector3(0f, 0f, binBody.Spec.Length * 0.5f - binBody.CgAt);
         me.ExitVehicle();
-        await Seconds(2);
+        await Until(() => me.Ride == RideKind.OnFoot, 3);
         float yaw = bin.Basis.GetEuler().Y;
         var spoutLocal = Avatar.FarmMeshBuilder.AugerSpout(Combine.Sections[0] is { } s0 ? new HeavyTrain.Body(s0, 0f).CgAt : 0f);
         var at = binMiddle - new Basis(Vector3.Up, yaw) * (spoutLocal with { Y = 0 });
@@ -276,8 +275,7 @@ public partial class TractorNetProbe : ChatProbe
 
     private async Task LogisticsB(FootPlayer me)
     {
-        Chat?.Send("/login test");
-        await Seconds(1.5);
+        if (!await LogIn("test")) return;
         if (Coop() is not { } door) { Fail("B has no stand-in co-op (--farmcoop)"); return; }
         // 75 m out in front of the co-op's door (it faces south), facing it
         me.PlaceAt(door.World + new Vector3(0f, 0.5f, 75f), 0f);

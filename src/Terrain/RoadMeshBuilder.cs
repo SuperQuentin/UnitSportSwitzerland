@@ -36,6 +36,8 @@ public static class RoadMeshBuilder
             AppendJunction(junction, vertices, colors, uvs, uv2s, indices);
 
         var joins = FindTypeJoins(tile);
+        // a transition's piece (#818) has its own edges per point, and no type join: its ends are its sections'
+        var transitions = SegmentSections.TransitionsOf(tile);
         // the network stage's tiles carry their markings as paint (RoadPaintBuilder), not stripes
         bool painted = (tile.Flags & RoadTileFlags.Network) != 0;
 
@@ -59,7 +61,9 @@ public static class RoadMeshBuilder
 
             // a rail embedded in a carriageway (#124) is the road's RailGroove paint: no ballast, no raised rails
             if (seg.Class == RoadClass.Railway && seg.Attributes.Has(RoadAttrFlags.Embedded)) continue;
-            AppendSegment(seg, joins[i], painted, vertices, colors, uvs, uv2s, indices);
+            var sections = transitions[i] is { } tr ? SegmentSections.Of(seg, tr) : null;
+            AppendSegment(seg, sections is null ? joins[i] : default, sections,
+                painted, vertices, colors, uvs, uv2s, indices);
             // a town tram's track lies in paving (#119): its grooves are paint, no raised rails
             if (seg.Class == RoadClass.Railway && !seg.Attributes.Has(RoadAttrFlags.PavedBed))
                 AppendRails(seg, vertices, colors, uvs, uv2s, indices);
@@ -73,6 +77,7 @@ public static class RoadMeshBuilder
         IslandBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);     // roundabout islands (#122)
         PavementBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);   // turn lane widenings (#123)
         RoadSignBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);   // junction signs (#121)
+        CatenaryBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);   // overhead lines (#1052)
         ParkingBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);    // car park barrier, kiosk, shelter, P (#499)
         SignalBuilder.Append(tile, vertices, colors, uvs, uv2s, indices, rounded: detail == Styles.MeshDetail.High);   // traffic-light poles and heads (#350)
         RoadStreetBuilder.Append(tile, vertices, colors, uvs, uv2s, indices); // sidewalks (#119)
@@ -536,7 +541,7 @@ public static class RoadMeshBuilder
             ends[key] = (segment, atStart, 1);
     }
 
-    private static void AppendSegment(RoadSegment seg, in RoadJoin join, bool painted, List<Vector3> vertices,
+    private static void AppendSegment(RoadSegment seg, in RoadJoin join, SegmentSections? sections, bool painted, List<Vector3> vertices,
         List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices)
     {
         int n = seg.PointCount;
@@ -602,10 +607,13 @@ public static class RoadMeshBuilder
                 vertexColor = join.EndColour.Lerp(color, t);
             }
 
-            var side = new Vector3(-forward.Z, 0, forward.X) * vertexHalf;
+            // the edges: a transition's own per point (#818; the tucks take their end's), else the half width either way
+            var across = new Vector3(-forward.Z, 0, forward.X);
+            int point = Math.Clamp(i - 1, 0, seg.PointCount - 1);
+            float leftEdge = sections?.RibbonLeft[point] ?? -vertexHalf, rightEdge = sections?.RibbonRight[point] ?? vertexHalf;
             var p = pts[i] + new Vector3(0, lift, 0);
-            vertices.Add(p - side);
-            vertices.Add(p + side);
+            vertices.Add(p + across * leftEdge);
+            vertices.Add(p + across * rightEdge);
             colors.Add(vertexColor);
             colors.Add(vertexColor);
             uvs.Add(new Vector2(along[i], -1f));

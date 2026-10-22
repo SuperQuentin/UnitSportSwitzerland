@@ -38,6 +38,8 @@ public partial class ModelViewer : Node3D
     private MeshInstance3D? _patches;
     // --flicker (with --models,<dir>): each PNG is a FlickerShot, flickering pixels in magenta (#788)
     private readonly bool _flicker = CmdArgs.Has("--flicker");
+    // --modelsclear: no backdrop, ground or header, PNGs cut out to the model on a transparent background (the web page's people, #998)
+    private readonly bool _clear = CmdArgs.Has("--modelsclear");
     private readonly HashSet<Type> _covered = new();
 
     public static bool Requested() => CmdArgs.FlagWithShot("--models").Requested;
@@ -57,33 +59,38 @@ public partial class ModelViewer : Node3D
         }
         // screenshots are stills: no face caught mid-blink (#657)
         if (_shots != null) HumanMeshBuilder.FigureMaterial().SetShaderParameter(Face.FaceAnimator.IdleParam, 0f);
+        // --modelsfrontlight: the sun from behind the camera, a little above and to its side, on the faces the camera sees (#1105:
+        // a signal head's white plate read grey with its default light from behind)
+        bool front = CmdArgs.Has("--modelsfrontlight");
         AddChild(new DirectionalLight3D
         {
-            Rotation = new Vector3(Mathf.DegToRad(-42), Mathf.DegToRad(-35), 0),
+            Rotation = front ? new Vector3(Mathf.DegToRad(-30), _yaw + Mathf.DegToRad(25), 0) : new Vector3(Mathf.DegToRad(-42), Mathf.DegToRad(-35), 0),
             LightEnergy = 1.1f,
         });
+        if (_clear) GetViewport().TransparentBg = true;
         AddChild(new WorldEnvironment
         {
             Environment = new Godot.Environment
             {
-                BackgroundMode = Godot.Environment.BGMode.Color,
+                BackgroundMode = _clear ? Godot.Environment.BGMode.ClearColor : Godot.Environment.BGMode.Color,
                 BackgroundColor = new Color(0.44f, 0.50f, 0.56f),
                 AmbientLightSource = Godot.Environment.AmbientSource.Color,
                 AmbientLightColor = new Color(0.55f, 0.58f, 0.62f),
                 AmbientLightEnergy = 0.85f,
             },
         });
-        AddChild(new MeshInstance3D
-        {
-            Mesh = new PlaneMesh { Size = new Vector2(400, 400) },
-            MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.34f, 0.38f, 0.31f) },
-        });
+        if (!_clear)
+            AddChild(new MeshInstance3D
+            {
+                Mesh = new PlaneMesh { Size = new Vector2(400, 400) },
+                MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.34f, 0.38f, 0.31f) },
+            });
 
         _camera = new Camera3D { Fov = 40, Current = true, Far = 2000 };
         AddChild(_camera);
 
         var ui = new CanvasLayer();
-        _label = new Label { Position = new Vector2(12, 8) };
+        _label = new Label { Position = new Vector2(12, 8), Visible = !_clear };
         ui.AddChild(_label);
         AddChild(ui);
 
@@ -230,6 +237,13 @@ public partial class ModelViewer : Node3D
         }
         _target = box.GetCenter();
         _distance = Fit(box);
+        // --modelslook x,y,z,distance: the camera on that point of the model, from that far (a close clip of a part, #1105)
+        if (CmdArgs.Value("--modelslook")?.Split(',') is { Length: 4 } look)
+        {
+            float F(int i) => float.Parse(look[i], System.Globalization.CultureInfo.InvariantCulture);
+            _target = new Vector3(F(0), F(1), F(2));
+            _distance = F(3);
+        }
         string zfight = _zfight ? ZFightLine() : "";
 
         _label.Text = $"{_categories[_category].Name}  ({_category + 1}/{_categories.Count})   ›   " +
@@ -314,6 +328,13 @@ public partial class ModelViewer : Node3D
                     shot.Heat.SavePng(file);
                     GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
                         $"[flicker] {entry.Category} / {entry.Name}: {shot.Flickering} px ({shot.Percent:0.00} %)"));
+                }
+                else if (_clear)
+                {
+                    // cut out: only the model's own pixels
+                    var image = GetViewport().GetTexture().GetImage();
+                    var used = image.GetUsedRect();
+                    (used.HasArea() ? image.GetRegion(used) : image).SavePng(file);
                 }
                 else
                     GetViewport().GetTexture().GetImage().SavePng(file);

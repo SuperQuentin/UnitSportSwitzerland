@@ -44,6 +44,12 @@ public partial class GameShell : Node
     private ClientWorld? _world;
     private WorldLaunch? _launch;
     private HostedServer? _hosted;
+    /// <summary>The test world the hosted server plays (#999), null for the open world.</summary>
+    private WorldChoice? _hostedWorld;
+    /// <summary>A join to start again once the world is torn down: the server plays another world (#999).</summary>
+    private WorldLaunch? _rejoin;
+    /// <summary>Counts Host calls, so a build finishing after a cancel and a new Host starts nothing (#999).</summary>
+    private int _hostCalls;
     private ServerQuery? _hostProbe;
     private double _hostWait, _sinceHostProbe;
     private string? _error;
@@ -89,7 +95,7 @@ public partial class GameShell : Node
             "--menu", "--fakeversion", "--updatefeed", "--updateaccept", "--settings", "--licenses", "--controls", "--tutorial",
             "--multiplayer", "--solo", "--map", "--landing", "--uishot", "--menucheck", "--mapcheck", "--leavecheck",
             "--leave-restart", "--mobile", "--autostart", "--wheellock", "--fakewheel", "--ffblog", "--vr", "--xrsim", "--vrmonitor", "--xrheadshot", "--xrwrist", "--xrprofile", "--xrcab", "--xrhands",
-            "--bubblecheck",
+            "--bubblecheck", "--worldpickcheck", "--consolelinkcheck", "--fakeprotocol",
         };
         foreach (string a in args)
             if (a.StartsWith("--") && Array.IndexOf(harmless, a) < 0) return false;
@@ -169,12 +175,17 @@ public partial class GameShell : Node
             // "--autostart": straight into Explore through the loading screen, for screenshotting
             // it (and, with --menu, the pause menu once in)
             if (CmdArgs.Has("--autostart")) Callable.From(() => Launch(new WorldLaunch { Mode = GameMode.Explore })).CallDeferred();
+            // a .gpx opened with the game (#1029): straight into its replay
+            GpxOpenWith.Register();
+            if ((GpxOpenWith.FromArgs() ?? AndroidBridge.OpenedFile()) is { } opened) Callable.From(() => OpenGpx(opened)).CallDeferred();
         }
         if (CmdArgs.Has("--controls")) GetTree().CreateTimer(1.5).Timeout += () => _help.Open();
         if (UiShot() is { } shot) GetTree().CreateTimer(shot.Seconds).Timeout += () => SaveShot(shot.Path);
         if (MenuCheck.Requested()) AddChild(new MenuCheck(this));
         if (Ui.MapCheck.Requested()) AddChild(new Ui.MapCheck(this));
         if (LeaveCheck.Requested()) AddChild(new LeaveCheck(this));
+        if (WorldPickCheck.Requested()) AddChild(new WorldPickCheck(this));
+        if (ConsoleLinkCheck.Requested()) AddChild(new ConsoleLinkCheck(this));
     }
 
     public override void _ExitTree()
@@ -188,6 +199,46 @@ public partial class GameShell : Node
     {
         // closing the window while hosting must not leave the server behind
         if (what == NotificationWMCloseRequest) _hosted?.Stop();
+        // Android's Back (button or edge swipe) is the phone's Esc (#1023): it closes what is open,
+        // or pauses. It never quits (application/config/quit_on_go_back=false); Quit is in the pause menu
+        else if (what == NotificationWMGoBackRequest) PressEscape();
+        // Android: "Open with" while the game runs comes back as a resume with a new intent
+        else if (what == NotificationApplicationResumed && !Direct && AndroidBridge.OpenedFile() is { } opened) OpenGpx(opened);
+    }
+
+    private static void PressEscape()
+    {
+        foreach (bool down in new[] { true, false })
+            Input.ParseInputEvent(new InputEventKey { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = down });
+    }
+
+    private string? _pendingGpx;
+
+    /// <summary>
+    /// A .gpx opened with the game from outside (#1029, <see cref="GpxOpenWith"/>): its replay starts at
+    /// once, after leaving a world in progress. An Android URI is copied into the GPX folder first.
+    /// </summary>
+    public void OpenGpx(string source)
+    {
+        string? path = source.Contains("://") ? Ui.GpxPicker.Import(source) : source;
+        if (path == null)
+        {
+            Modal.Inform(_menuRoot, "Not a GPX track", "The file opened with UnitSport is not a GPX track, or could not be read.");
+            return;
+        }
+        GD.Print($"[gpx] opened with the game: {path}");
+        var recent = GameSettings.Current.RecentGpx;
+        recent.Remove(path);
+        recent.Insert(0, path);
+        while (recent.Count > 10) recent.RemoveAt(recent.Count - 1);
+        GameSettings.Current.Save();
+        if (_state is State.Loading or State.InWorld or State.Leaving)
+        {
+            _pendingGpx = path;
+            LeaveWorld(null);
+            return;
+        }
+        Launch(new WorldLaunch { Mode = GameMode.GpxReplay, GpxPaths = new[] { path } });
     }
 
     /// <summary>
@@ -332,7 +383,7 @@ public partial class GameShell : Node
         bool open = _stack.Count > 0;
         _menuLayer.Visible = open;
         UiFocus.Set(this, open);
-        if (open) Input.MouseMode = Input.MouseModeEnum.Visible;
+        if (open) MouseCapture.Mode = Input.MouseModeEnum.Visible;
         else if (_state == State.InWorld) _world?.ResumeControl();
     }
 
@@ -352,6 +403,16 @@ public partial class GameShell : Node
         return e;
     }
 
+    private string? _refusedEndpoint;
+
+    /// <summary>The server that just refused this game's version, handed to the Multiplayer screen once (#1088).</summary>
+    public string? TakeRefusedEndpoint()
+    {
+        string? e = _refusedEndpoint;
+        _refusedEndpoint = null;
+        return e;
+    }
+
     private void ShowTitle()
     {
         _state = State.Title;
@@ -362,7 +423,7 @@ public partial class GameShell : Node
         }
         ClearStack();
         Push(TitleScreen.Create());
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        MouseCapture.Mode = Input.MouseModeEnum.Visible;
     }
 
     public override void _UnhandledInput(InputEvent e)
@@ -411,6 +472,7 @@ public partial class GameShell : Node
     {
         if (_state is State.Loading or State.InWorld or State.Leaving) return;
         _launch = launch;
+        _refusedEndpoint = null;
         if (!launch.Hosted)
             _returnTo = launch.Mode == GameMode.Multiplayer ? "multiplayer" : "solo";
 
@@ -426,7 +488,8 @@ public partial class GameShell : Node
         Callable.From(() => GetParent().AddChild(world)).CallDeferred();
     }
 
-    public void Join(string endpoint, string? serverName = null)
+    /// <param name="world">The server's test world, from its status reply (#999); null: the open world, or unknown.</param>
+    public void Join(string endpoint, string? serverName = null, WorldChoice? world = null)
     {
         // a metered connection (#63): say what streaming costs before it starts, once per session
         if (GameSettings.Current.WarnMetered && DataWatch.Metered && !GameSettings.Current.LowDataActive && !_meteredAsked)
@@ -436,9 +499,9 @@ public partial class GameShell : Node
                 "You are on mobile data or a hotspot. The world streams from the server: about "
                 + $"{StreamEstimate.ArrivalMb} MB on arrival, and more as you travel. Low data streams "
                 + $"only the nearest tiles (about {StreamEstimate.ArrivalLowMb} MB on arrival).",
-                ("Use Low data", () => { GameSettings.Current.Data = DataPreset.Low; GameSettings.Current.Commit(); Join(endpoint, serverName); }),
-                ("Join anyway", () => Join(endpoint, serverName)),
-                ("Never ask", () => { GameSettings.Current.WarnMetered = false; GameSettings.Current.Commit(); Join(endpoint, serverName); }));
+                ("Use Low data", () => { GameSettings.Current.Data = DataPreset.Low; GameSettings.Current.Commit(); Join(endpoint, serverName, world); }),
+                ("Join anyway", () => Join(endpoint, serverName, world)),
+                ("Never ask", () => { GameSettings.Current.WarnMetered = false; GameSettings.Current.Commit(); Join(endpoint, serverName, world); }));
             return;
         }
         GameSettings.Current.LastHost = endpoint;
@@ -449,26 +512,65 @@ public partial class GameShell : Node
             Endpoint = endpoint,
             PlayerName = PlayerName,
             ServerName = serverName,
+            World = world is { IsOpen: false } ? world : null,
         });
     }
 
     /// <summary>"Host a game": starts the server process, then joins it once it answers.</summary>
     /// <param name="spawn">Where every player starts on it (#799), LV95 metres.</param>
     /// <param name="teleport">Players who are not admins may teleport.</param>
-    public void Host(string name, int port, bool lanVisible, (double E, double N)? spawn = null, bool teleport = true)
+    /// <param name="world">A test world to serve (#999); null: the open world.</param>
+    public void Host(string name, int port, bool lanVisible, (double E, double N)? spawn = null, bool teleport = true, WorldChoice? world = null)
     {
         if (_state != State.Title) return;
+        _hostedWorld = world is { IsOpen: false } ? world : null;
+        if (_hostedWorld is { Prepared: false } unbuilt)
+        {
+            // the traffic lights region is built here first (#999): the server would spend its start on it
+            _returnTo = "multiplayer";
+            _state = State.Starting;
+            ClearStack();
+            _loading.Begin($"Hosting {name}");
+            _loading.Report("Starting your server", 0.01f, WorldChoice.PreparingDetail);
+            PrepareThenHost(unbuilt, ++_hostCalls, name, port, lanVisible, spawn, teleport);
+            return;
+        }
         _hosted = new HostedServer(name, port);
-        if (_hosted.Start(lanVisible, spawn, teleport) is { } err)
+        if (_hosted.Start(lanVisible, spawn, teleport, _hostedWorld) is { } err)
         {
             _hosted = null;
             Modal.Inform(_menuRoot, "Could not host", err);
             return;
         }
+        WaitForHosted(name);
+    }
+
+    private async void PrepareThenHost(WorldChoice world, int call, string name, int port, bool lanVisible, (double E, double N)? spawn, bool teleport)
+    {
+        string? err = await System.Threading.Tasks.Task.Run(world.Prepare);
+        if (call != _hostCalls || _state != State.Starting || _hosted != null) return;   // cancelled while it built
+        if (err == null)
+        {
+            _hosted = new HostedServer(name, port);
+            if ((err = _hosted.Start(lanVisible, spawn, teleport, world)) == null)
+            {
+                WaitForHosted(name);
+                return;
+            }
+        }
+        ReturnWithError(err);
+    }
+
+    /// <summary>The server process runs: the loading screen waits until it answers (<see cref="PollHost"/>).</summary>
+    private void WaitForHosted(string name)
+    {
         _returnTo = "multiplayer";
-        _state = State.Starting;
-        ClearStack();
-        _loading.Begin($"Hosting {name}");
+        if (_state != State.Starting)
+        {
+            _state = State.Starting;
+            ClearStack();
+            _loading.Begin($"Hosting {name}");
+        }
         _loading.Report("Starting your server", 0.02f, "");
         _hostProbe = new ServerQuery();
         _hostProbe.Start();
@@ -505,6 +607,7 @@ public partial class GameShell : Node
                 PlayerName = PlayerName,
                 Hosted = true,
                 HostToken = _hosted.HostToken,
+                World = _hostedWorld,
                 ServerName = _hosted.Name,
             });
             return;
@@ -527,7 +630,18 @@ public partial class GameShell : Node
             case State.Loading when _world != null && IsInstanceValid(_world):
                 _loading.Report(StageText(_world.Stage), Overall(_world), _world.LoadDetail);
                 if (_world.Stage == LoadStage.Ready) FinishLoading();
-                else if (_world.Stage == LoadStage.Failed) LeaveWorld(_world.Failure ?? "The world could not be started.");
+                else if (_world.Stage == LoadStage.Failed && _world.ServerPlays is { } other && _launch is { Mode: GameMode.Multiplayer, Hosted: false } joined)
+                {
+                    // the server plays another world than the list said (#999): join again in that one
+                    _rejoin = joined with { World = other.IsOpen ? null : other };
+                    LeaveWorld(null);
+                }
+                else if (_world.Stage == LoadStage.Failed)
+                {
+                    // another game version: the Multiplayer screen offers that server's console (#1088)
+                    _refusedEndpoint = _world.RefusedForVersion && _launch is { Mode: GameMode.Multiplayer, Hosted: false } refused ? refused.Endpoint : null;
+                    LeaveWorld(_world.Failure ?? "The world could not be started.");
+                }
                 break;
         }
     }
@@ -646,6 +760,23 @@ public partial class GameShell : Node
 
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        if (_rejoin is { } again)
+        {
+            // straight on behind the loading screen, no title in between
+            _rejoin = null;
+            _state = State.Title;
+            GD.Print($"[shell] joining {again.Endpoint} again in world {again.World?.Id ?? WorldChoice.OpenId}");
+            Launch(again);
+            return;
+        }
+        if (_pendingGpx is { } track)
+        {
+            // a .gpx opened with the game mid-session (#1029): its replay, as straight on
+            _pendingGpx = null;
+            _state = State.Title;
+            Launch(new WorldLaunch { Mode = GameMode.GpxReplay, GpxPaths = new[] { track } });
+            return;
+        }
         _loading.Close();
         ShowTitle();
         // a deliberate leave lands on the title; a failure goes back to where the session was

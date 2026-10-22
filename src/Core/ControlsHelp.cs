@@ -22,12 +22,13 @@ public partial class ControlsHelp : CanvasLayer
     public static ControlsHelp Create() => new() { Name = "ControlsHelp" };
 
     /// <summary>A row: what it does, and either an action or fixed labels (keyboard, pad) for things that are not one.</summary>
-    private readonly record struct Row(string What, string? Action = null, string? Keys = null, string? Pad = null);
+    internal readonly record struct Row(string What, string? Action = null, string? Keys = null, string? Pad = null);
 
     /// <summary>The four movement keys, as printed on this keyboard (Z Q S D on AZERTY).</summary>
     private const string Wasd = "{move_forward} {move_left} {move_back} {move_right}";
 
-    private static readonly (string Title, Row[] Rows)[] Groups =
+    /// <summary>Every control by group; also the phone's More sheet (#1043, <see cref="TouchMore"/>).</summary>
+    internal static readonly (string Title, Row[] Rows)[] Groups =
     {
         ("On foot", new Row[]
         {
@@ -277,9 +278,12 @@ public partial class ControlsHelp : CanvasLayer
             new("Plane throttle up / down", Keys: "{sprint} / {crouch_slide}", Pad: "{throttle} / {brake}"),
             new("Guns (armed aircraft)", PlayerInput.Fire),
         }),
-        ("Fly camera", new Row[]
+        ("Creative mode and fly camera", new Row[]
         {
-            new("Fly camera / walk", PlayerInput.ToggleMode),
+            new("Creative mode / survival", PlayerInput.ToggleMode),
+            new("Spectator fly camera / back (wheel: speed)", PlayerInput.Spectator, Pad: "hold {toggle_mode}"),
+            new("Creative: take off / land", Keys: "{jump} {jump}", Pad: "{jump} {jump}"),
+            new("Creative: up / down", Keys: "{jump} / {sprint}", Pad: "{jump} / {crouch_slide}"),
             new("Up", PlayerInput.FlyUp),
             new("Down", PlayerInput.FlyDown),
             new("Fast", PlayerInput.FlyBoost),

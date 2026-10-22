@@ -4,23 +4,24 @@ using UnitSport.Terrain.Format;
 namespace UnitSport.Tools.Preprocessor;
 
 /// <summary>
-/// <c>--rgealti-check</c> (#936): compares RGE ALTI with the swissALTI3D tiles already built where both
-/// exist (swissALTI3D reaches a few km into France). Prints the median height offset — the value to
-/// pass as <c>--rgealti-dz</c> (IGN69 vs LN02) — and the residual for horizontal shifts of up to 2 m,
-/// which should be smallest at zero if the projection is right. Reads only, writes nothing.
+/// <c>--dem-check</c> (#936, #965): compares a neighbour's DEM with the swissALTI3D tiles already built
+/// where both exist (swissALTI3D reaches a few km past the border). Prints the median height offset —
+/// the value to give that DEM as its dz (IGN69, DHHN2016, GHA, Genova 1942 vs LN02) — and the residual
+/// for horizontal shifts of up to 2 m, which should be smallest at zero if the projection is right.
+/// Reads only, writes nothing.
 /// </summary>
-public static class RgeAltiCheck
+public static class ForeignDemCheck
 {
     private const int Step = 10;     // one vertex in ten each way
     private const double MaxShift = 2, ShiftStep = 0.5;
 
-    public static int Run(RgeAlti france, string outDir, int minE, int minN, int maxE, int maxN, int jobs)
+    public static int Run(ForeignDem dem, string outDir, int minE, int minN, int maxE, int maxN, int jobs)
     {
         string mPath = Path.Combine(outDir, "manifest.json");
         if (!File.Exists(mPath)) { Console.Error.WriteLine($"no manifest in {outDir}"); return 1; }
         var built = TerrainManifest.FromJson(File.ReadAllText(mPath)).Tiles.Select(t => t.Id).ToHashSet();
-        var overlap = france.TilesIn(minE, minN, maxE, maxN, new HashSet<TileId>()).Where(built.Contains).ToList();
-        Console.WriteLine($"RGE ALTI check: {overlap.Count} Swiss tiles with French data under them");
+        var overlap = dem.TilesIn(minE, minN, maxE, maxN, new HashSet<TileId>()).Where(built.Contains).ToList();
+        Console.WriteLine($"DEM check {dem.Name}: {overlap.Count} Swiss tiles with its data under them");
         if (overlap.Count == 0) return 1;
 
         int shifts = (int)(2 * MaxShift / ShiftStep) + 1;
@@ -39,19 +40,18 @@ public static class RgeAltiCheck
             var q = new double[sum.Length];
             var c = new long[sum.Length];
             var mine = new List<float>();
-            (int X, int Y) key = (int.MinValue, 0);
-            TiffFloat? tile = null;
+            var cur = new ForeignDem.Cursor();
             for (int j = Step; j < 1000; j += Step)
                 for (int i = Step; i < 1000; i += Step)
                 {
                     double e = id.MinE + i, n = id.MaxN - j;
                     double swiss = g.SampleHeight(e, n);
-                    var (x, y) = RgeAlti.Lv95ToLambert93(e, n);
+                    var (x, y) = DemProjection.FromLv95(dem.Crs, e, n);
                     for (int sy = 0; sy < shifts; sy++)
                         for (int sx = 0; sx < shifts; sx++)
                         {
                             double dx = -MaxShift + sx * ShiftStep, dy = -MaxShift + sy * ShiftStep;
-                            double fr = france.Sample(x + dx, y + dy, ref key, ref tile);
+                            double fr = dem.Sample(x + dx, y + dy, ref cur);
                             if (double.IsNaN(fr)) continue;
                             double d = swiss - fr;
                             if (Math.Abs(d) > 20) continue; // lake surface vs bed, a data hole: not a datum
@@ -74,16 +74,16 @@ public static class RgeAltiCheck
         if (all.Length == 0) { Console.Error.WriteLine("no overlapping samples"); return 1; }
         double median = all[all.Length / 2];
         double p10 = all[all.Length / 10], p90 = all[all.Length * 9 / 10];
-        Console.WriteLine($"  {all.Length} samples: swiss - french median {median:+0.000;-0.000} m (p10 {p10:+0.00;-0.00}, p90 {p90:+0.00;-0.00})");
+        Console.WriteLine($"  {all.Length} samples: swiss - theirs median {median:+0.000;-0.000} m (p10 {p10:+0.00;-0.00}, p90 {p90:+0.00;-0.00})");
 
         // per tile, for where the two models disagree (written next to the tiles' temp dir)
-        string report = Path.Combine(outDir.TrimEnd('/', '\\') + "_temp", "rgealti_check.tsv");
+        string report = Path.Combine(outDir.TrimEnd('/', '\\') + "_temp", $"dem_check_{dem.Crs}.tsv");
         Directory.CreateDirectory(Path.GetDirectoryName(report)!);
         File.WriteAllLines(report, new[] { "E\tN\tsamples\tmedian\tp10\tp90" }.Concat(perTile.OrderBy(t => t.Id.N).ThenBy(t => t.Id.E)
             .Select(t => FormattableString.Invariant($"{t.Id.E}\t{t.Id.N}\t{t.N}\t{t.Median:F2}\t{t.P10:F2}\t{t.P90:F2}"))));
         Console.WriteLine($"  per tile: {report}");
 
-        Console.WriteLine("  residual std (m) by French shift dx (columns) / dy (rows):");
+        Console.WriteLine("  residual std (m) by their shift dx (columns) / dy (rows):");
         int best = 0;
         for (int sy = 0; sy < shifts; sy++)
         {
@@ -100,7 +100,7 @@ public static class RgeAltiCheck
             Console.WriteLine(line.ToString());
         }
         Console.WriteLine($"  best shift dx {-MaxShift + best % shifts * ShiftStep:+0.0;-0.0}, dy {-MaxShift + best / shifts * ShiftStep:+0.0;-0.0} m"
-            + $" -> pass --rgealti-dz {median.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}");
+            + $" -> dz {median.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}");
         return 0;
     }
 }

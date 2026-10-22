@@ -40,12 +40,33 @@ public static class GadgetMeshes
         return body;
     }
 
+    /// <summary>The burning bale's blackened straw, lit like every solid (StyleKit.Figure).</summary>
+    private static StandardMaterial3D Charred => _charred ??= Styles.StyleKit.Figure(new StandardMaterial3D { AlbedoColor = new Color(0.12f, 0.1f, 0.08f) });
+    private static StandardMaterial3D? _charred;
+
     /// <summary>A hay hideout going up in flames (#359): fire, smoke and a flickering light, gone after 8 s.</summary>
     public static void Burn(Node parent, Transform3D at)
     {
-        var root = new Node3D { Name = "HayFire", TopLevel = true };
+        var (root, flame) = Fire();
+        root.TopLevel = true;
         parent.AddChild(root);
         root.GlobalTransform = at;
+        var tree = parent.GetTree();
+        tree.CreateTimer(5.0).Timeout += () => { if (GodotObject.IsInstanceValid(flame)) flame.Emitting = false; };
+        tree.CreateTimer(8.0).Timeout += () => { if (GodotObject.IsInstanceValid(root)) root.QueueFree(); };
+    }
+
+    /// <summary>The burning bale's smoke: translucent, lit like every solid (StyleKit.Figure).</summary>
+    private static StandardMaterial3D Smoke => _smoke ??= Styles.StyleKit.Figure(new StandardMaterial3D
+    {
+        AlbedoColor = new Color(0.25f, 0.24f, 0.22f, 0.6f), Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+    });
+    private static StandardMaterial3D? _smoke;
+
+    /// <summary>The fire, smoke, light and blackened bale of <see cref="Burn"/>, at the origin.</summary>
+    private static (Node3D Root, CpuParticles3D Flame) Fire()
+    {
+        var root = new Node3D { Name = "HayFire" };
         var flame = new CpuParticles3D
         {
             Amount = 60, Lifetime = 1.1f, Direction = Vector3.Up, Spread = 25f, InitialVelocityMin = 1.5f, InitialVelocityMax = 3.5f,
@@ -60,20 +81,15 @@ public static class GadgetMeshes
         {
             Amount = 30, Lifetime = 4f, Direction = Vector3.Up, Spread = 15f, InitialVelocityMin = 1f, InitialVelocityMax = 2f,
             Gravity = new Vector3(0.4f, 1f, 0), Position = Vector3.Up * 1.8f, ScaleAmountMin = 1.5f, ScaleAmountMax = 3f,
-            Mesh = new BoxMesh { Size = Vector3.One * 0.5f, Material = new StandardMaterial3D
-            {
-                AlbedoColor = new Color(0.25f, 0.24f, 0.22f, 0.6f), Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-            } },
+            Mesh = new BoxMesh { Size = Vector3.One * 0.5f, Material = Smoke },
         };
         var light = new OmniLight3D { LightColor = new Color(1f, 0.6f, 0.25f), LightEnergy = 3f, OmniRange = 9f, Position = Vector3.Up * 1.2f };
         root.AddChild(flame);
         root.AddChild(smoke);
         root.AddChild(light);
         // the bale itself, blackening, for as long as it burns
-        root.AddChild(new MeshInstance3D { Mesh = Mesh(PlacedKind.HayHideout), MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.12f, 0.1f, 0.08f) } });
-        var tree = parent.GetTree();
-        tree.CreateTimer(5.0).Timeout += () => { if (GodotObject.IsInstanceValid(flame)) flame.Emitting = false; };
-        tree.CreateTimer(8.0).Timeout += () => { if (GodotObject.IsInstanceValid(root)) root.QueueFree(); };
+        root.AddChild(new MeshInstance3D { Mesh = Mesh(PlacedKind.HayHideout), MaterialOverride = Charred });
+        return (root, flame);
     }
 
     /// <summary>The mesh of a placed gadget: a zipline is drawn per object (its cable runs to the other post).</summary>
@@ -100,6 +116,12 @@ public static class GadgetMeshes
                 yield return (kind.ToString(), () => ModelViewer.Shaded(Mesh(kind)));
         yield return ("Rope ladder", () => ModelViewer.Shaded(Ladder(Gadgets.LadderMax)));
         yield return ("Zipline, both posts", () => ModelViewer.Shaded(Zipline(new Vector3(0, 4f, 25f))));
+        yield return ("HayHideout (burning)", () =>
+        {
+            var (root, _) = Fire();
+            foreach (var p in root.GetChildren().OfType<CpuParticles3D>()) { p.Preprocess = 3.0; p.Emitting = true; }
+            return root;
+        });
     }
 
     /// <summary>A gadget that looks the same wherever it is: cached per kind.</summary>

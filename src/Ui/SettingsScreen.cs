@@ -67,6 +67,10 @@ public partial class SettingsScreen : Screen
             }
             ScaleRow(rows, "3D resolution", s.RenderScale, v => GameSettings.Current.RenderScale = v);
             AntiAliasingRow(rows, s.AntiAliasing);
+            int[] imag = { 256, 512, 1024 };
+            UiKit.OptionRow(rows, "Concert screens", new[] { "Low (256x144)", "Medium (512x288)", "High (1024x576)" },
+                Math.Max(0, Array.IndexOf(imag, s.ConcertScreenWidth)), i => GameSettings.Current.ConcertScreenWidth = imag[i],
+                "The stadium screens' camera feed; higher is sharper and a little slower");
             // Realistic+ needs Forward+ through a relaunch, which a phone cannot do (#63)
             var styles = Styles.StyleKit.MenuStyles.Where(v => Platform.CanSpawnProcesses || !Styles.StyleKit.NeedsForwardPlus(v)).ToArray();
             var styleOption = UiKit.OptionRow(rows, "Visual style", styles.Select(Styles.StyleKit.Label).ToArray(),
@@ -179,11 +183,30 @@ public partial class SettingsScreen : Screen
             UiKit.SliderRow(rows, "Stick look speed", 0.2, 3, 0.1, s.StickSensitivity,
                 v => GameSettings.Current.StickSensitivity = (float)v, v => $"{v:F1}x");
             if (Platform.IsMobile)
+            {
+                // the on-screen controls (#1043)
                 UiKit.SliderRow(rows, "Touch look speed", 0.3, 4, 0.1, s.TouchLookSpeed,
                     v => GameSettings.Current.TouchLookSpeed = (float)v, v => $"{v:F1}x");
+                UiKit.SliderRow(rows, "Button size", 0.75, TouchLayout.MaxScale, 0.05, s.TouchScale,
+                    v => GameSettings.Current.TouchScale = (float)v, v => $"{v * 100:F0} %");
+                UiKit.SliderRow(rows, "Button opacity", 0.2, 1, 0.05, s.TouchOpacity,
+                    v => GameSettings.Current.TouchOpacity = (float)v, v => $"{v * 100:F0} %");
+                UiKit.ToggleRow(rows, "Left-handed", s.TouchLeftHanded, on => GameSettings.Current.TouchLeftHanded = on,
+                    "The stick on the right, the buttons on the left");
+                UiKit.ToggleRow(rows, "Run by pushing the stick past its ring", s.TouchRunPastRing,
+                    on => GameSettings.Current.TouchRunPastRing = on, "Off: a Run button");
+                UiKit.ToggleRow(rows, "Use items by tapping the world", s.TouchTapToUse,
+                    on => GameSettings.Current.TouchTapToUse = on, "A short tap uses the item in hand; no Use button");
+                UiKit.ActionRow(rows, "Touch layout", "Edit", () => TouchLayoutScreen.Open(this),
+                    "Move, resize or hide each control, mode by mode (also More › Edit layout in game)");
+            }
             UiKit.SliderRow(rows, "Stick deadzone", 0.05, 0.5, 0.01, s.StickDeadzone,
                 v => GameSettings.Current.StickDeadzone = (float)v, v => $"{v * 100:F0} %");
             UiKit.ToggleRow(rows, "Invert look Y", s.InvertY, on => GameSettings.Current.InvertY = on);
+            UiKit.ToggleRow(rows, "Level flight", s.LevelFlight, on => GameSettings.Current.LevelFlight = on,
+                "Free fly moves flat, Space and Shift for height; off, forward follows the look");
+            UiKit.ToggleRow(rows, "Creative flight through walls", s.CreativeNoclip, on => GameSettings.Current.CreativeNoclip = on,
+                "Fly through the ground, walls and roofs in creative mode");
             UiKit.ToggleRow(rows, "Controller vibration", s.Vibration, on => GameSettings.Current.Vibration = on);
             UiKit.ActionRow(rows, "Every key and button", "Show controls", () => Shell.ShowControls(),
                 InputHints.Format("As bound on your keyboard and pad ({help})"));
@@ -207,6 +230,7 @@ public partial class SettingsScreen : Screen
             UiKit.SliderRow(rows, "Traffic", 0, 150, 5, s.TrafficCars,
                 v => GameSettings.Current.TrafficCars = (int)v, v => v <= 0 ? "off" : $"{v:F0} cars");
             UiKit.ToggleRow(rows, "Trains", s.Trains, on => GameSettings.Current.Trains = on);
+            TrafficModeRows(rows, s);
             UiKit.ToggleRow(rows, "Generated terrain", s.GeneratedFill, on => GameSettings.Current.GeneratedFill = on,
                 "Fills ground with no survey data, blended into the real tiles");
             rows.AddChild(UiKit.Spacer(6));
@@ -251,6 +275,24 @@ public partial class SettingsScreen : Screen
         Show(StartTab(names));
     }
 
+    /// <summary>
+    /// The densities of the traffic modes beyond cars and trains (#1060): a row each once its mode has landed
+    /// (<see cref="World.Traffic.WalkersReady"/>, <see cref="World.Traffic.RidersReady"/>, <see cref="World.Traffic.TramsReady"/>,
+    /// each in its mode's own file), here and on the solo screen.
+    /// </summary>
+    public static void TrafficModeRows(Container rows, GameSettings s)
+    {
+        if (World.Traffic.WalkersReady)
+            UiKit.SliderRow(rows, "Pedestrians", 0, 300, 10, s.TrafficWalkers,
+                v => GameSettings.Current.TrafficWalkers = (int)v, v => v <= 0 ? "off" : $"{v:F0}");
+        if (World.Traffic.RidersReady)
+            UiKit.SliderRow(rows, "Bikes", 0, 150, 5, s.TrafficRiders,
+                v => GameSettings.Current.TrafficRiders = (int)v, v => v <= 0 ? "off" : $"{v:F0}");
+        if (World.Traffic.TramsReady)
+            UiKit.SliderRow(rows, "Trams", 0, 20, 1, s.Trams,
+                v => GameSettings.Current.Trams = (int)v, v => v <= 0 ? "off" : $"{v:F0}");
+    }
+
     /// <summary>"--settings wheel" opens on that tab, for screenshotting it.</summary>
     private static int StartTab(List<string> names)
     {
@@ -261,6 +303,47 @@ public partial class SettingsScreen : Screen
 
     private int _about;
 
+    /// <summary>
+    /// Copies the log Godot writes (<c>debug/file_logging</c>, on for every platform since #1040) to a
+    /// file the player picks. The system dialog: on Android the document picker, which hands back a
+    /// <c>content://</c> URI that <c>Godot.FileAccess</c> writes, with no permission.
+    /// </summary>
+    private void SaveLog()
+    {
+        string log = ProjectSettings.GetSetting("debug/file_logging/log_path", "user://logs/godot.log").AsString();
+        string stamp = Time.GetDatetimeStringFromSystem(false, true).Replace(":", "").Replace(" ", "-");
+        var dialog = new FileDialog
+        {
+            FileMode = FileDialog.FileModeEnum.SaveFile,
+            Access = FileDialog.AccessEnum.Filesystem,
+            Title = "Save log file",
+            CurrentFile = $"unitsport-log-{stamp}.txt",
+            UseNativeDialog = true,
+            Size = new Vector2I(860, 580),
+        };
+        dialog.AddFilter("*.txt", "Text");
+        dialog.FileSelected += path =>
+        {
+            byte[] bytes = Godot.FileAccess.GetFileAsBytes(log);
+            using (var file = bytes.Length > 0 ? Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Write) : null)
+            {
+                if (file == null)
+                    Modal.Inform(this, "Log not saved", bytes.Length == 0
+                        ? $"There is no log at {log} yet."
+                        : $"Could not write the file ({Godot.FileAccess.GetOpenError()}).");
+                else
+                {
+                    file.StoreBuffer(bytes);
+                    Modal.Inform(this, "Log saved", $"{bytes.Length / 1024} KB of log written.");
+                }
+            }
+            dialog.QueueFree();
+        };
+        dialog.Canceled += dialog.QueueFree;
+        AddChild(dialog);
+        dialog.PopupCentered();
+    }
+
     /// <summary>The About tab, the licenses and data sources (<c>--licenses</c>, for screenshotting it).</summary>
     public void ShowLicenses() => Show(_about);
 
@@ -269,8 +352,16 @@ public partial class SettingsScreen : Screen
     /// from and credits, the OpenStreetMap overlay's ODbL among them), then what Godot itself
     /// requires, its licence text and the components built into it.
     /// </summary>
-    private static void LicenseRows(VBoxContainer rows)
+    private void LicenseRows(VBoxContainer rows)
     {
+        // the game's log, for a bug report from a phone (#1040): wherever the system picker points
+        rows.AddChild(UiKit.Section("Diagnostics"));
+        rows.AddChild(UiKit.Text("Save the game's log to send with a bug report: Downloads, Drive, wherever.",
+            UiTheme.FontSmall, UiTheme.TextDim, wrap: true));
+        var save = UiKit.Button("Save log file…");
+        save.Pressed += SaveLog;
+        rows.AddChild(save);
+
         foreach (var e in Licenses.All)
         {
             rows.AddChild(UiKit.Section(e.Name));

@@ -232,9 +232,12 @@
 - The rigs, placed from the stage (`CameraRig.For`): FOH long lens, pit dolly and side track (ground
   rails), wire cam (a box under the roof, four cables to its inner corners), jib, steadicam, crowd,
   wide FOH, wide far stand, drone, artist POV. Each moves on its own when nobody runs it (`Auto`).
-- Three SubViewports sharing the world: IMAG (256x144, on the LED screens when the screen clip is
+- Three SubViewports sharing the world: IMAG (on the LED screens when the screen clip is
   `LightDesk.CameraClip`), program (1280x720) and the operator's viewfinder. They render only when
-  wanted and near (900 m).
+  wanted and near (900 m). IMAG's size is the Video setting "Concert screens" (256/512/1024 wide, 16:9,
+  512 by default; #996), or `/concert imag <64..1920>|auto` for the run, client-local; it resizes live.
+- Their cameras' near plane is 0.7 m, past the rig's own kit (hood 0.55 m, drone rotors 0.68 m): the
+  on-air body is hidden only while the program renders, and IMAG filmed its own hood as a black square.
 - The auto director cuts on the music's bars (calm 8, groove 4, chorus 2, peak 1). Every other cut
   goes to a camera someone runs. `/concert cue ... camera <n|auto>` and OSC `/concert/camera` pick one.
 - Crew: `/concert camera take <n>|leave|list` (and the desk's Operate row). The server keeps who runs
@@ -252,3 +255,16 @@
   for the sun only: for a lamp it is the range, and skipping it lit the whole district.
 - Check: `--concertcamcheck` (same tiles as the desk check, `--concert 13`, windowed for
   `test_output/concert/crew_*.png`): takes the dolly, runs it, zooms, takes the wire cam, climbs, Esc.
+
+## Songs by hand (#994)
+
+- `/concert song` (anyone): what plays at the venue nearest you, n/N, time into it, what comes next; `/concert song list`
+  the setlist numbered. `next|skip`, `prev` (back to this song's start after 5 s, else the one before), `restart`,
+  `<n|title words>`, `stop|play` (the PA silent, the desk makes its songs up), `auto` (back to the clock): the show's
+  operator on a hosted set, an admin on tonight's show; offline the player. Code: `ConcertService.Songs.cs`.
+- A cue is `SongCue(Index, At, Off)`: song `Index` of the setlist started at `At` on the shared clock and the set runs on
+  from it. `ConcertMusic.Position` (pure) puts it on the set's loop, the same on the server (which builds the setlist
+  from its own `CdLibrary`, no rig) and every peer. One per venue, `SongState` RPC (protocol 43), sent to late joiners;
+  hosting a set, releasing it or the operator leaving clears it (the index belongs to that set's setlist).
+- `/concert host <word>` is refused (it used to read the word as no seed and host a new random set each time:
+  `/concert host status`). `--concertcheck` covers the position math, `concertnetcheck` the refusal and the reply.

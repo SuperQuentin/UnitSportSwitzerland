@@ -57,6 +57,18 @@ public partial class TrafficProbe : Node
         // --feed (#353, the queue capture): as many cars as --traffic asks, past the settings' cap
         // of 150 (this run only, never saved)
         if (_feed) GameSettings.Current.TrafficCars = Math.Max(GameSettings.Current.TrafficCars, CmdArgs.Int("--traffic") ?? 300);
+        // --lights (#1046, for a clip): the lit paths drawn all along (debug menu, Green paths), the wait points with them
+        if (CmdArgs.Has("--lights")) _traffic.ShowLights = true;
+        // --mover walker|rider|tram (#1060): that mode chased and counted, at a density of its own if the settings ask for none
+        // (this run only); --mode-graphs draws the modes' graphs all along
+        var s = GameSettings.Current;
+        switch (_kind)
+        {
+            case MoverKind.Walker when s.TrafficWalkers == 0: s.TrafficWalkers = 80; break;
+            case MoverKind.Rider when s.TrafficRiders == 0: s.TrafficRiders = 40; break;
+            case MoverKind.Tram when s.Trams == 0: s.Trams = 4; break;
+        }
+        if (CmdArgs.Has("--mode-graphs")) _traffic.ShowModeGraphs = true;
     }
 
     public static (bool Requested, string? Shot) ParseArgs() => CmdArgs.FlagWithShot("--trafficcheck");
@@ -68,11 +80,12 @@ public partial class TrafficProbe : Node
         // with --at (#353) the camera stays over that point, so the traffic lives around it
         if (!_placed && _stay && _traffic.Roads is { } near)
         {
-            // looking down on the junction from 45 m up, 15 m south of it
+            // looking down on the junction from 45 m up (--cam-height H, #971: more of the arms' queues in view), a third of that south
             var at = _camera.GlobalPosition;
             var ground = near.Edges.SelectMany(e => e.Points).MinBy(p => new Vector2(p.X - at.X, p.Z - at.Z).LengthSquared());
             var spot = new Vector3(at.X, ground.Y, at.Z);
-            var eye = spot + new Vector3(0f, 45f, 15f);
+            float height = CmdArgs.Float("--cam-height") ?? 45f;
+            var eye = spot + new Vector3(0f, height, height / 3f);
             _camera.GlobalTransform = new Transform3D(Player.Flyer.Orient(spot - eye, Vector3.Up, Vector3.Forward), eye);
             _spot = spot;
             _placed = true;
@@ -93,11 +106,12 @@ public partial class TrafficProbe : Node
             _placed = true;
         }
 
-        // from 20 s, chase a car (then from 32 s a train) so the picture has one in it
-        if (!_stay && _t > 20 && _traffic.Watch(_t > 32) is var (pos, dir))
+        // from 20 s, chase a car (then from 32 s a train) so the picture has one in it; with --mover (#1060) one of that kind all along
+        bool far = _kind is { } chased ? chased is MoverKind.Train or MoverKind.Tram : _t > 32;
+        if (!_stay && _t > 20 && (_kind is { } kind ? _traffic.WatchKind(kind) : _traffic.Watch(_t > 32)) is var (pos, dir))
         {
-            float back = _t > 32 ? 35f : 11f, up = _t > 32 ? 28f : 4f;
-            var eye = pos - dir * back + Vector3.Up * up + new Vector3(-dir.Z, 0, dir.X) * (_t > 32 ? 30f : 0f);
+            float back = far ? 35f : 11f, up = far ? 28f : 4f;
+            var eye = pos - dir * back + Vector3.Up * up + new Vector3(-dir.Z, 0, dir.X) * (far ? 30f : 0f);
             _camera.GlobalTransform = new Transform3D(
                 Player.Flyer.Orient(pos + dir * 6f - eye, Vector3.Up, Vector3.Forward), eye);
             if (_shot != null && Math.Abs(_t - 31) < delta)
@@ -106,10 +120,15 @@ public partial class TrafficProbe : Node
 
         if (_stay && _shot != null && _placed && _t > CaptureFrom) Capture();
         if (_t >= TickFrom && _t - delta < TickFrom) _traffic.ResetTickCost();
+        // the test world (#971): its cars from a generator and destination on each arm of the junction, not --dense or --feed
+        bool endpoints = _stay && _traffic.GeneratorsOnly;
+        if (endpoints && _placed && !_endpointsPlaced) PlaceEndpoints();
         // --dense: more of the traffic where the junction under test is (#353)
-        if (_dense && (int)(_t * 4) != (int)((_t - delta) * 4)) _traffic.SpawnNear(_camera.GlobalPosition, NearSpawn);
-        // --feed: a car into one of the junction's signalised approaches every 0.4 s, so queues form at its reds
-        if (_feed && _placed && (int)(_t * 2.5) != (int)((_t - delta) * 2.5)) Feed();
+        if (_dense && !endpoints && (int)(_t * 4) != (int)((_t - delta) * 4)) _traffic.SpawnNear(_camera.GlobalPosition, NearSpawn);
+        // --feed: a car into one of the junction's signalised approaches every 0.4 s (--feed-rate N a second), so queues form at its reds
+        if (_feed && !endpoints && _placed && (int)(_t * _feedRate) != (int)((_t - delta) * _feedRate)) Feed();
+        // the cars about the junction, once the feed has filled it (#854)
+        if ((_feed || endpoints) && _placed && _t > 20 && (int)_t != (int)(_t - delta)) { _nearSum += _traffic.CarsWithin(_spot, 80f); _nearSamples++; }
         _maxCars = Math.Max(_maxCars, _traffic.CarCount);
         _maxTrains = Math.Max(_maxTrains, _traffic.TrainCount);
         _maxSpeed = Math.Max(_maxSpeed, _traffic.AverageCarSpeed);
@@ -117,24 +136,30 @@ public partial class TrafficProbe : Node
         _givingWay = Math.Max(_givingWay, _traffic.GivingWayCars);
         _atRed = Math.Max(_atRed, _traffic.AtRedCars);
         _signalApproaches = Math.Max(_signalApproaches, _traffic.SignalApproaches);
+        ModesTick(delta);
         if ((int)(_t / 5) != (int)((_t - delta) / 5))
             GD.Print($"[trafficcheck] t={_t:F0}s cars {_traffic.CarCount} (avg {_traffic.AverageCarSpeed * 3.6f:F0} km/h), "
                 + $"trains {_traffic.TrainCount} (avg {_traffic.AverageTrainSpeed * 3.6f:F0} km/h), "
                 + $"one-way edges {_traffic.OneWayEdges}, cars against one-way {_traffic.WrongWayCars}, giving way {_traffic.GivingWayCars}, "
-                + $"signalised approaches {_traffic.SignalApproaches}, at red {_traffic.AtRedCars}, stops at red {_traffic.RedStops}, lines crossed {_traffic.LinesCrossed}, red runs {_traffic.RedRuns}");
+                + $"signalised approaches {_traffic.SignalApproaches}, at red {_traffic.AtRedCars}, stops at red {_traffic.RedStops}, lines crossed {_traffic.LinesCrossed}, red runs {_traffic.RedRuns} (crossed on red clearing an amber {_traffic.ClearedOnRed}), junction paths taken {_traffic.PathEntries} (step onto {_traffic.PathStepIn:F2} m, {_traffic.PathStepsOver1m} over 1 m, off {_traffic.PathStepOut:F2} m), transition lanes followed {_traffic.TransitionFollows} (pieces {_traffic.TransitionPieces}), cars on one spot {_traffic.DoubledNow} (most {_traffic.DoubledMost})");
 
         if (_t < _seconds) return;
         if (_shot != null && GetViewport().GetTexture().GetImage().SavePng(_shot) == Error.Ok)
             GD.Print($"[trafficcheck] wrote {_shot}");
         if (_stay && _shot != null && _captured < CaptureAt.Length)
             GD.Print($"[trafficcheck] capture: {(_capture is null ? "no queue of " + CaptureQueue + " at a red near --at" : $"{_captured} of {CaptureAt.Length} shots")} before the end, run longer (--seconds)");
-        if (_feed) GD.Print($"[trafficcheck] fed {_fedCars} cars into {_fed.Count} approaches near --at");
+        if (_endpointsPlaced) PrintEndpoints();
+        else if (_feed) GD.Print($"[trafficcheck] fed {_fedCars} cars into {_fed.Count} approaches near --at (fails {string.Join("/", _traffic.FeedFails)}), on average {(_nearSamples > 0 ? _nearSum / (float)_nearSamples : 0f):F0} cars within 80 m from 20 s"
+            + (_feedTurns is null ? "" : $", moves taken L/T/R {_traffic.FedMoves[0]}/{_traffic.FedMoves[1]}/{_traffic.FedMoves[2]} ({_traffic.FedMovesMissed} not the one drawn)"));
         var (mean, p50, p99, ticks, cars) = _traffic.TickCost();
         GD.Print($"[trafficcheck] tick cost from {TickFrom:F0} s (perf-traffic-tick): mean {mean:F0} us, p50 {p50:F0} us, p99 {p99:F0} us over {ticks} ticks, {cars:F0} cars on average");
         Approaches();
-        bool ok = _maxCars > 0 && _maxSpeed > 2f && _wrongWay == 0 && _traffic.RedRuns == 0;
+        // the modes (#1060): what --mover asked for moved, and each mode's own report (it may fail the run)
+        string? modeFailure = ModesReport();
+        bool ok = _maxCars > 0 && _maxSpeed > 2f && _wrongWay == 0 && _traffic.RedRuns == 0 && modeFailure is null;
         GD.Print(ok ? $"[trafficcheck] RESULT: ok (peak {_maxCars} cars, {_maxTrains} trains, none against a one-way, up to {_givingWay} giving way, "
-                        + $"{_signalApproaches} signalised approaches, up to {_atRed} at red, {_traffic.RedStops} stops at red, {_traffic.LinesCrossed} stop lines crossed on green, no red run)"
+                        + $"{_signalApproaches} signalised approaches, up to {_atRed} at red, {_traffic.RedStops} stops at red, {_traffic.LinesCrossed} stop lines crossed on green, no red run{ModesSummary()})"
+                    : modeFailure is not null ? $"[trafficcheck] RESULT: FAILED — {modeFailure}"
                     : _wrongWay > 0 ? $"[trafficcheck] RESULT: FAILED — up to {_wrongWay} cars against a one-way"
                     : _traffic.RedRuns > 0 ? $"[trafficcheck] RESULT: FAILED — {_traffic.RedRuns} cars crossed a stop line on red"
                     : "[trafficcheck] RESULT: FAILED — no moving traffic");
@@ -175,6 +200,14 @@ public partial class TrafficProbe : Node
         GD.Print($"[trafficcheck] approaches: {lit} with lights, {pockets} with a pocket and no lights, {used.Count} driven through; "
             + $"stopped at red {_traffic.RedStops}, entered on red {_traffic.RedRuns} (cleared yellow {_traffic.AmberClears}), on green or without lights {_traffic.LinesCrossed}, "
             + $"left from a pocket {_traffic.PocketLefts}, permissive lefts that waited {_traffic.PermissiveWaits}, waited for room past {_traffic.RoomWaits}");
+        // #1046: how queues discharge (the time between two queued cars crossing their line, by place), and the turns that waited
+        // for a gap inside the junction
+        var places = Enumerable.Range(2, _traffic.HeadwaySum.Length - 2)
+            .Select(p => $"{(p == _traffic.HeadwaySum.Length - 1 ? $"{p}th+" : $"{p}{(p == 2 ? "nd" : p == 3 ? "rd" : "th")}")} "
+                + (_traffic.HeadwayCount[p] > 0 ? $"{_traffic.HeadwaySum[p] / _traffic.HeadwayCount[p]:F1} s ({_traffic.HeadwayCount[p]})" : "-"));
+        GD.Print($"[trafficcheck] queue discharge headways: {string.Join(", ", places)}; stood in a junction for a gap {_traffic.InsideWaits} "
+            + $"(longest {_traffic.LongestInsideWait:F1} s), left it on amber or red {_traffic.ClearedInside}, paths with points to give way at "
+            + $"{roads.Edges.Count(e => e.Path is { Yields.Length: > 0 })} of {roads.Paths}");
     }
 
     private static string Letters(SignalMoves m) =>
@@ -249,6 +282,12 @@ public partial class TrafficProbe : Node
     /// </summary>
     private void Capture()
     {
+        // the gap shot (#1046) while no queue is framed, or after its shots; the queue waits while it is framed
+        if (!_gapShot && (_capture is null || _captured >= CaptureAt.Length))
+        {
+            GapShot();
+            if (_gapFramed >= 0 && !_gapShot) return;
+        }
         if (_captured >= CaptureAt.Length || _traffic.Roads is not { } roads) return;
         double now = SignalLamps.Clock();
         if (_capture is null)
@@ -291,14 +330,53 @@ public partial class TrafficProbe : Node
         _captured++;
     }
 
+    /// <summary>The gap shot (#1046): when it was framed (traffic-check time), done.</summary>
+    private double _gapFramed = -1;
+    private bool _gapShot;
+
+    /// <summary>
+    /// Before or after the queue's shots (#1046): a car standing, its light not red yet, in a junction near <c>--at</c> for a gap, from above with the lights' paths
+    /// drawn (the dashed path gives way, the white bar is where a waiting car's front stops), saved as <c>&lt;png&gt;_5_gap.png</c>.
+    /// </summary>
+    private void GapShot()
+    {
+        if (_gapShot) return;
+        if (_gapFramed < 0)
+        {
+            if (_traffic.StandingForGap(_spot, CaptureNear) is not { } car) return;
+            _traffic.ShowLights = true;
+            _camera.GlobalTransform = new Transform3D(Player.Flyer.Orient(Vector3.Down, Vector3.Forward, Vector3.Forward), car + Vector3.Up * 35f);
+            _gapFramed = _t;
+            GD.Print($"[trafficcheck] gap shot: a car standing for a gap at {Where(car)}");
+            return;
+        }
+        if (_t < _gapFramed + 0.5) return;
+        string file = _shot!.Replace(".png", "_5_gap.png");
+        GD.Print($"[trafficcheck] gap shot {(GetViewport().GetTexture().GetImage().SavePng(file) == Error.Ok ? "wrote" : "could not write")} {file}");
+        _traffic.ShowLights = CmdArgs.Has("--lights");
+        _gapShot = true;
+    }
+
     private LaneGraph? _fedGraph;
     private List<LaneApproach> _fed = new();
     private int _fedCars, _feedTurn;
 
     /// <summary>
+    /// <c>--feed-turns L,T,R</c> (#854, for a demo): how the fed cars share left, straight on and right (weights, e.g. <c>1,2,3</c>);
+    /// none, as the traffic picks. Each fed car draws its move and takes a path with it at the junction it is fed into.
+    /// </summary>
+    private readonly float[]? _feedTurns = CmdArgs.Value("--feed-turns") is { } w
+        && w.Split(',').Select(x => float.TryParse(x, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float f) ? f : -1f).ToArray() is { Length: 3 } t
+        && t.All(f => f >= 0f) && t.Sum() > 0f ? t : null;
+    private readonly Random _feedRng = new(854);
+    /// <summary><c>--feed-rate N</c> (#854): cars fed a second (2.5).</summary>
+    private readonly double _feedRate = CmdArgs.Double("--feed-rate") ?? 2.5;
+    private int _nearSum, _nearSamples;
+
+    /// <summary>
     /// <c>--feed</c> (#353, for the capture, not the game's traffic): one more car on the road into
-    /// one of the signalised approaches within 60 m of <c>--at</c>, in turn, 40-250 m before its
-    /// line and routed through it (<see cref="Traffic.SpawnInto"/>).
+    /// one of the signalised approaches within 60 m of <c>--at</c>, in turn, 120-300 m before its
+    /// line and routed through it (<see cref="Traffic.SpawnInto"/>), turning as <c>--feed-turns</c> shares the moves.
     /// </summary>
     private void Feed()
     {
@@ -309,7 +387,64 @@ public partial class TrafficProbe : Node
             _fed = roads.Approaches.Where(a => a.Site is not null && new Vector2(a.Stop.X - _spot.X, a.Stop.Z - _spot.Z).Length() < 60f).ToList();
             GD.Print($"[trafficcheck] feeding {_fed.Count} signalised approaches near --at");
         }
-        if (_fed.Count > 0 && _traffic.SpawnInto(_fed[_feedTurn++ % _fed.Count], 40f, 250f)) _fedCars++;
+        // (from 120 m before the line: out of the camera's view, #854)
+        if (_fed.Count > 0 && _traffic.SpawnInto(_fed[_feedTurn++ % _fed.Count], 120f, 300f, FeedMove())) _fedCars++;
+    }
+
+    private bool _endpointsPlaced;
+    /// <summary>The endpoints put on the arms, by id: their heading in (LV95 radians).</summary>
+    private readonly Dictionary<int, float> _armHeadings = new();
+
+    /// <summary>
+    /// The test world (#971, the user): a generator and destination on each arm of the junction near <c>--at</c>, at the arm's far
+    /// end, <see cref="TrafficGenerators.DefaultPerMinute"/> cars a minute each (<c>--traffic-rate</c> scales them). With
+    /// <c>--feed-turns L,T,R</c> each sends its cars to the other arms' destinations by the turn that takes (the user: the demo's
+    /// split is a share of destinations), else at random.
+    /// </summary>
+    private void PlaceEndpoints()
+    {
+        if (_traffic.Generators is not { } list || _traffic.ArmEnds(_spot) is not { Count: > 0 } ends) return;
+        _endpointsPlaced = true;
+        int first = list.NextId;
+        foreach (var (e, n, h) in ends)
+            list.RequestSet(new TrafficEndpoint(0, e, n, h, Generates: true, Destination: true, TrafficGenerators.DefaultPerMinute));
+        for (int i = 0; i < ends.Count; i++) _armHeadings[first + i] = ends[i].Heading;
+        if (_feedTurns is { } w)
+            for (int i = 0; i < ends.Count; i++)
+            {
+                var shares = Enumerable.Range(0, ends.Count).Where(j => j != i)
+                    .Select(j => new TrafficShare(first + j, w[TurnIndex(ends[i].Heading, ends[j].Heading)])).Where(x => x.Weight > 0f).ToArray();
+                var (e, n, h) = ends[i];
+                list.RequestSet(new TrafficEndpoint(first + i, e, n, h, true, true, TrafficGenerators.DefaultPerMinute, shares));
+            }
+        GD.Print($"[trafficcheck] endpoints on {ends.Count} arms near --at, {TrafficGenerators.DefaultPerMinute * _traffic.GeneratorRate:0.#} cars a minute each"
+            + (_feedTurns is { } t ? $", shares by turn L/T/R {t[0]:0.#}/{t[1]:0.#}/{t[2]:0.#}" : ""));
+    }
+
+    /// <summary>The turn (0 left, 1 straight on, 2 right) from an arm whose traffic heads <paramref name="inHeading"/> into the junction to one whose heads <paramref name="otherIn"/>.</summary>
+    private static int TurnIndex(float inHeading, float otherIn)
+    {
+        float delta = Mathf.Wrap(otherIn + Mathf.Pi - inHeading, -Mathf.Pi, Mathf.Pi);
+        return Mathf.Abs(delta) < Mathf.Pi / 4f ? 1 : delta > 0f ? 0 : 2;
+    }
+
+    private void PrintEndpoints()
+    {
+        var turns = new int[3];
+        foreach (var ((from, to), count) in _traffic.ArrivedBy)
+            if (_armHeadings.TryGetValue(from, out float a) && _armHeadings.TryGetValue(to, out float b) && from != to)
+                turns[TurnIndex(a, b)] += count;
+        GD.Print($"[trafficcheck] endpoints: {_traffic.Generated} cars made, {_traffic.Arrived} arrived (L/T/R {turns[0]}/{turns[1]}/{turns[2]}), "
+            + $"{_traffic.Queued} waiting in the queues, {_traffic.Unrouted} with no way found; on average "
+            + $"{(_nearSamples > 0 ? _nearSum / (float)_nearSamples : 0f):F0} cars within 80 m from 20 s");
+    }
+
+    /// <summary>The move the next fed car wants (<see cref="_feedTurns"/>), none without <c>--feed-turns</c>.</summary>
+    private SignalMoves FeedMove()
+    {
+        if (_feedTurns is not { } w) return SignalMoves.None;
+        float at = (float)_feedRng.NextDouble() * w.Sum();
+        return (at -= w[0]) < 0f ? SignalMoves.Left : at - w[1] < 0f ? SignalMoves.Through : SignalMoves.Right;
     }
 
     /// <summary>Seconds from <paramref name="now"/> until the group shows green, if it does within a few changes.</summary>

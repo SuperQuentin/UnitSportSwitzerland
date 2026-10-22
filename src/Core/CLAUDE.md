@@ -9,23 +9,25 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 
 - `free-cursor` — Tap Alt in game frees the mouse, MMO style (#654, `Core/CursorToggle`): a tap not a chord, a world click recaptures, never touches a pointer a menu owns
 - `modes` — Modes: (`GameMode`, `Core/WorldLaunch`): Explore / GpxReplay / Multiplayer, picked on the title screen or by --connect/--gpx; Esc = pause menu
+- `test-worlds` — World picker (#999, `Core/WorldChoice`, `Ui/WorldPicker`): open world or a test world (traffic lights region built in-game, fixture courses) on Play solo and Host; `Active` overrides chunks/course/generated; saves via `WorldChoice.SavePath` under `user://worlds/<id>/`; status `World` + Arrival rules (protocol 45) make joiners follow; `--test-world`, `--worldpickcheck`, `tools/worldpicknetcheck.sh`
 - `ground-start` — Explore from the menus starts on foot on open ground (#517, `Core/GroundStart`): waits for building collision, ring search for dry, open-sky, room-to-stand; command-line runs keep the fly camera
 - `steering-wheel` — Steering wheel: (`Core/SteeringWheel`, #68): SDL3 wheel and pedals, 1:1 direct steering, force feedback (aligning, soft lock, road, engine, knocks), paddles, H-shifter lever and clutch travel (#290), Godot's copy of the device ignored, versioned presets + Settings → Wheel tab
 - `input` — Input: (`Core/PlayerInput`): every gameplay control is a named `InputMap` action registered in code at boot...
 - `settings` — Settings: (`Core/GameSettings`, `Ui/SettingsScreen` tabs, `user://settings.json`): render distance in tile rings (6..40,...
 - `performance-overlay` — Performance overlay: (`Core/PerfOverlay`, F3 cycles Off / FPS / Detailed, saved as `GameSettings.PerfOverlay`, also...
-- `debug-menu` — Debug menu (`Core/DebugMenu`, **F9** / `/debug`, offline or admin, #339): tile boundaries by stride, world origin, terrain layers, wireframe / clay / vertex colours / overdraw, freeze streaming, camera readout; `--debugview`; `--debugcheck`, `tools/debugcheck.sh`
+- `debug-menu` — Debug menu (`Core/DebugMenu`, **F9** / `/debug`, offline or admin, #339): tile boundaries by stride, world origin, terrain layers, wireframe / clay / vertex colours / overdraw, freeze streaming, camera readout, traffic paths and endpoints (#971), green paths, timing movers and trails (#979); `--debugview`; `--debugcheck`, `tools/debugcheck.sh`
 - `session-perf-log` — Session perf log: (`Core/PerfRecorder`, F4 start/stop, `--perflog [seconds]` from boot, Settings -> "Open folder"):...
 - `teleport` — Teleport: (`Core/Teleporter`): resolves *what to move* at the moment of the jump, not at construction. Flying camera...
 - `input-conventions` — How Minecraft / ARC Raiders / Valorant / Fortnite / Rust / Tarkov pick keys, inventory gestures, look-at interaction, radio UIs; our rules (E only on the pointed thing, every gameplay key an action)
-- `key-hints` — Key hints: (`Core/InputHints`): never type a key into a UI string; bindings named for the device in hand (keyboard, pad, or the detected VR controller, #435), prompt bar, F1...
+- `key-hints` — Key hints: (`Core/InputHints`): never type a key into a UI string; bindings named for the device in hand (keyboard, pad, the detected VR controller #435, or the phone's on-screen controls #1054), prompt bar, F1...
 - `permissions` — Permissions: (`Core/Permissions`): what the menus may offer; online, spawning a vehicle is an admin's...
 - `licenses` — Licenses page: (`Core/Licenses`, Settings > About tab, `--licenses`): every data source and bundled component with its attribution and link, plus Godot's notices...
 - `chat-probe` — MP probes derive from `Core/ChatProbe`; quick self-checks go in `ClientWorld.QuickChecks`, camera-placing tools in the `tools` table (`placedByTool` derived), never a hand-kept list
 - `three-clocks` — Three clocks (#579): env time (`WorldClock`) rides sim speed (`GameClock`/`SimNow`), real time (`Core.RealClock`) bends to neither; read `RealClock.Now` as a deadline, never a delta (there is no `RealClock.Delta` on purpose)
 - `cmd-args` — Read the command line only via `CmdArgs.Has/Value/Float/Double/Int/FlagWithShot` (cached, InvariantCulture); never `OS.GetCmdlineUserArgs()` + `IndexOf` again (#221)
-- `platform` — `Platform.IsMobile` (Android/iOS or `--mobile`) and `CanSpawnProcesses` gate the phone client (#63): app-storage terrain, no updater/SDL/host/VR/Realistic+/ffmpeg, multicast lock via `AndroidBridge`; emulator joins but cannot render
-- `touch-controls` — `TouchControls`: the phone's on-screen virtual pad (device 8) labelled from the prompts, 1:1 look drag via `PlayerInput.IsLookMotion`, `--touchcheck`, `--mobile` desktop preview, menus at 1.15x (#63)
+- `platform` — `Platform.IsMobile` (Android/iOS or `--mobile`) and `CanSpawnProcesses` gate the phone client (#63): app-storage terrain, no updater/SDL/host/VR/Realistic+/ffmpeg, multicast lock via `AndroidBridge`; emulator renders with an x86_64 test APK on GL Compatibility
+- `android-emulator` — running the game on an API 34 emulator without Android Studio: x86_64 test APK, root, args through `GodotApp`, stderr via `wrap.<pkg> logwrapper`, native faults; the two Android-only crashes of #1010 (module initializers, WAV loop ends)
+- `touch-controls` — `TouchControls` (#63, #1043, editor #1048): a virtual pad (device 8) drawn by mode (`TouchLayout`, mm, tier-0 tested), pills from the prompts, More sheet from F1 (`TouchMore`), hotbar placed clear of the buttons, run/gas locks, 1:1 look drag via `PlayerInput.IsLookMotion`, `--touchcheck` (`--touchshots`), `--mobile` preview
 - `data-usage` — Settings → Data (Low data, cache cap + Clear, Android data saver/metered via `DataWatch`), metered warning on join, `ChunkStreamer.SessionBytes`; measured 260 / 70 MB on arrival after the DormantVehicles yard fixes (#63)
 - `is-online` — "online?" is `NetLink.Online(this)`; never copy the `not OfflineMultiplayerPeer && Connected` check again
 - `floating-origin` — Floating origin (#185): world space follows the camera, online too (each peer its own origin, LV95 on the wire); keep `GlobalPos` or handle `IOriginShiftAware`; containers; `Follow` for shared point lists; Jolt kinematic teleport; the renderer across a shift (SDFGI, shadows, particles, snow); `--origincheck`, `--originstress`
@@ -42,6 +44,7 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 
 - `never-capture-thing-player-controls` — Never capture "the thing the player controls" at startup
 - `footplayer-spectatorcamera-read-physical-keys` — `FootPlayer` and `SpectatorCamera` read PHYSICAL keys every frame
+- `held-keys` — `PlayerInput.HoldOff()` at a switch (Shift of Shift+T no longer sinks the spectator camera); Windows stuck keys released against `GetAsyncKeyState` by scan code (#1002)
 - `mode-owns-screen-drop-anchors` — A mode that owns the screen must drop the anchors of the mode it replaced
 - `never-default-world-origin-lv95` — Never default the world origin to LV95 0/0: Switzerland is 2.6 million metres from there, so float precision...
 - `menu-refuses-close-still-consume` — A menu that refuses to close must still CONSUME the key

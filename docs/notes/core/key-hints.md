@@ -22,5 +22,15 @@
     `InputHints.Keyboard(Key)`; `InputHints.Pad` / `Vr` pick between a pad and a mouse wording.
   - F1's second column is **VR** (green) in the headset; its vehicle groups are named as mounted
     (`XrPad.AssumeShoulders`). Full per-action VR design: `xr/vr-action-map`.
+  - **Touch (#1054)**, a fourth hint device: while the phone's overlay is in use and no real pad is
+    (`TouchControls.Hinting`; `LastDevice` stays Gamepad), `HintDevice` is `Touch` and a label is
+    the on-screen control (`TouchControls.NameOf`): "[Gas]", "the stick", "a drag", "the stick past
+    its ring", "[MAP]", "[BAG]", else the More entry ("[More › Travel menu]"), else the pad's name.
+    Names follow the layout (a mode change calls `HintsChanged`). `Button(JoyButton)` keeps the pad's
+    name: a menu's button is its own, not the overlay's. Texts may carry a touch wording
+    (`TutorialStep.Touch`, falling back on the pad's); `InputHints.Touch` says it is on.
+  - **Repeated labels print once:** `Format` drops a placeholder whose label equals the one just
+    printed with only spaces or a slash between, so WASD is "Left stick" (pad), "the stick" (touch),
+    not four of them.
   - Still typed by hand, on purpose: keyboard-only tools (chat, F3/F4 perf, F11, GPX replay, video
     export, the wheel binding panel, `/spawn` Tab).

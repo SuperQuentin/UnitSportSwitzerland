@@ -26,7 +26,7 @@ namespace UnitSport.Net;
 public partial class Sleepers : Node
 {
     public const string NodeName = "Sleepers";
-    private const string StorePath = "user://sleepers/server.json";
+    private static string StorePath => Core.WorldChoice.SavePath("user://sleepers/server.json");
     private const string KeyPath = "user://identity.key";
 
     /// <summary>How flat a sleeper lies: the knocked-out body's angle (<c>FootPlayer.PublishFootPose</c>).</summary>
@@ -220,6 +220,9 @@ public partial class Sleepers : Node
 
     /// <summary>Client: how many sleepers this client shows (checks).</summary>
     public int Count => _shown.Count;
+
+    /// <summary>Client: whether a sleeper of this name is shown (checks).</summary>
+    public bool Shows(string name) => _shown.Values.Any(s => s.Name == name);
 
     /// <summary>Client: where a shown sleeper lies, in world space (checks).</summary>
     public Vector3? AnyShown => _visuals.Values.FirstOrDefault(IsInstanceValid)?.GlobalPosition;

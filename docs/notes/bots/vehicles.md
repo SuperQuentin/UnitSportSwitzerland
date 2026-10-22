@@ -20,12 +20,15 @@
   - `GetIn`: walk to its door (`EntryPoint`), claim, take.
   - `Towards(goal)`: plan the first time with `RaceRoute.BuildAsync(source, origin, at, smallest: Minor,
     toward: goal)`, off the main thread (minor roads and up, no stairs or tunnels), then drive with
-    `AutoPilot.For(route, body)`. It returns Arrived within 45 m of the goal (or half that from the
-    route's end) and Failed with no route or stuck under 1 m/s for 6 s.
+    `AutoPilot.For(route, body)`. It returns Arrived within 45 m of the goal, once past the route's
+    point nearest the goal (the route runs on past it, up to 8 km: a goal off the road was never
+    reached, #1006; when that point is the first, no road leads nearer and it walks), or half 45 m from
+    the route's end; Failed with no route or stuck under 1 m/s for 6 s. "got out (why)" in the log.
   - `GetOut`: the pilot's `Finished` (it brakes and pulls over), then `ExitVehicle` once under 1.5 m/s.
     The car is parked again where it stopped, for anyone.
   - The director wires `body.RideControls = BotDriving.Controls(bot)`: the pilot, else the handbrake.
-    A null `RideControls` would read the keys.
+    A null `RideControls` would read the keys; with one set, `FootPlayer` reads no stick (a dedicated
+    server has no input actions: a drive printed four InputMap errors with their stacks per frame, #1006).
   - `BotHands.Fire`/`Use` refuse while mounted, as a player's items are on foot only.
 - **BR** (`BrBrain`): a trip over 300 m sends it to take a vehicle.
   - **Which**: one in sight within 150 m, else the last one it saw (every 1.5 s it notes the nearest in
@@ -39,8 +42,8 @@
     (then it walks for 30 s), or with an enemy within 80 m (nobody shoots from the wheel).
 - **Free roam**: `/bot drive [metres]` (admin, `DriveBrain`) sends every bot to a point that far ahead
   of the sender, by car or bike if one is in sight. `tools/botcheck.sh` checks it: A parks a car beside
-  the bots, a bot takes it, drives 120+ m along a 189-point route, gets out, and the car is parked
-  again.
+  the bots, faces north along the village road, a bot takes it, drives 120+ m, gets out, and the car is
+  parked again.
 - **Not yet**:
   - running a bot over: `KnockedByVehicle` skips an Npc, and players' proxies have no physics body on
     the server;

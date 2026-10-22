@@ -46,6 +46,9 @@ public partial class CollisionMatrixProbe : Node3D
         public required Aabb Local;
         /// <summary>The target's drawn triangles in its own frame, three vertices each.</summary>
         public required List<Vector3> Tris;
+        /// <summary>The mesh drawing each of <see cref="Tris"/>' triangles, and those of them in the lane.</summary>
+        public required List<string> Parts;
+        public string InWayParts = "";
         /// <summary>Along the travel and across it; the lane's offset across from the drawn centre.</summary>
         public required Vector3 Dir, Across;
         public required float Offset;
@@ -78,12 +81,12 @@ public partial class CollisionMatrixProbe : Node3D
         var runs = new List<Run>();
         foreach (var t in targets)
         {
-            var (drawn, tris) = LocalDrawn(t);
+            var (drawn, tris, parts) = LocalDrawn(t);
             foreach (var m in movers)
                 foreach (var (lane, dir, across, offset) in Lanes(drawn))
                     runs.Add(new Run
                     {
-                        Target = t, Mover = m, Kind = kinds[m], Size = sizes[m], Local = drawn, Tris = tris,
+                        Target = t, Mover = m, Kind = kinds[m], Size = sizes[m], Local = drawn, Tris = tris, Parts = parts,
                         Lane = lane, Dir = dir, Across = across, Offset = offset,
                     });
         }
@@ -112,13 +115,17 @@ public partial class CollisionMatrixProbe : Node3D
     }
 
     /// <summary>What a target draws, in its own frame: built off the tree, measured and kept.</summary>
-    private (Aabb, List<Vector3>) LocalDrawn(CollisionTarget t)
+    private (Aabb, List<Vector3>, List<string>) LocalDrawn(CollisionTarget t)
     {
         var node = t.Drawn?.Invoke() ?? t.Build(_origin, Transform3D.Identity);
-        var box = Avatar.MeshBounds.Of(node);
-        var tris = CollisionTargets.DrawnTriangles(node);
+        var parts = new List<string>();
+        var tris = CollisionTargets.DrawnTriangles(node, parts);
+        // the lanes are laid over what is shown: with the UFO's hidden beam cone counted, its box was
+        // 36 m across and the off-centre lanes ran 12 m out, past it (#1011)
+        var box = tris.Count == 0 ? Avatar.MeshBounds.Of(node) : new Aabb(tris[0], Vector3.Zero);
+        foreach (var v in tris) box = box.Expand(v);
         node.Free();
-        return (box, tris);
+        return (box, tris, parts);
     }
 
     private static IEnumerable<(string, Vector3, Vector3, float)> Lanes(Aabb drawn)
@@ -157,8 +164,10 @@ public partial class CollisionMatrixProbe : Node3D
             r.Root.GlobalPosition = centre;
             r.Body = CollisionTargets.Spawn(r.Target, r.Root, _origin, new Transform3D(Basis.Identity, centre));
         }
-        // a parked vehicle drops the hand's breadth it was put up by, and settles
+        // a parked vehicle drops the hand's breadth it was put up by, and settles: what is in a lane is
+        // read from where it rests (a parked UFO was still 0.6 m up after 1 s, #1006)
         await Seconds(1.0);
+        await Rested(batch, 5.0);
 
         foreach (var r in batch)
         {
@@ -167,7 +176,10 @@ public partial class CollisionMatrixProbe : Node3D
             var c = drawn.GetCenter();
             float half = Mathf.Abs(drawn.Size.Dot(r.Dir)) * 0.5f;
             var aim = new Vector3(c.X, 0, c.Z) + r.Across * r.Offset;
-            r.InWay = CollisionTargets.Crosses(r.Tris.Select(v => xf * v).ToList(), Corridor(aim, r.Across, r.Size));
+            var crossing = CollisionTargets.Crossing(r.Tris.Select(v => xf * v).ToList(), Corridor(aim, r.Across, r.Size)).ToList();
+            r.InWay = crossing.Count > 0;
+            // what stood in the lane, for a ghost's line
+            r.InWayParts = string.Join(", ", crossing.Select(i => r.Parts[i]).Distinct().Take(3));
             r.Start = aim - r.Dir * (half + RunUp) + Vector3.Up * (TestWorld.GroundY + 1.2f);
             r.Far = RunUp + 2f * half + Beyond;
 
@@ -257,6 +269,7 @@ public partial class CollisionMatrixProbe : Node3D
         foreach (var r in runs)
             GD.Print($"[collide] {(r.Ok ? "ok  " : "FAIL")} {r.Target.Key,-48} {r.Mover,-6} {r.Lane,-6} {r.Outcome}{(r.Rise > 0.5f ? $", up {r.Rise:F1} m" : "")}"
                 + (r.First != "" && r.First != r.Outcome ? $"  (flaky: {r.First} the first time)" : "")
+                + (r.Outcome == "ghost" ? $"  (drawn in the lane: {r.InWayParts})" : "")
                 + (r.Gap is { } gap && r.Outcome is "ghost" or "invisible wall" ? $"  (known gap: {gap.Why})" : ""));
         var failed = runs.Where(r => !r.Ok).Select(r => $"{r.Target.Name} {r.Mover} {r.Lane} {r.Outcome}").ToList();
         // a gap line whose every run now behaves: fixed, take it out
@@ -280,6 +293,23 @@ public partial class CollisionMatrixProbe : Node3D
         var lo = -along * 1e4f + across * (aim.Dot(across) - m.Width * 0.5f) + Vector3.Up * (TestWorld.GroundY + m.Low);
         var hi = along * 1e4f + across * (aim.Dot(across) + m.Width * 0.5f) + Vector3.Up * (TestWorld.GroundY + m.High);
         return new Aabb(lo, hi - lo);
+    }
+
+    /// <summary>Until no target has moved a millimetre for a quarter second, at most <paramref name="max"/> s.</summary>
+    private async Task Rested(List<Run> batch, double max)
+    {
+        double end = GameClock.Now + max, still = GameClock.Now + 0.25;
+        var was = batch.Select(r => r.Body!.GlobalPosition).ToArray();
+        while (GameClock.Now < end && GameClock.Now < still)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+            for (int i = 0; i < batch.Count; i++)
+            {
+                var now = batch[i].Body!.GlobalPosition;
+                if (now.DistanceSquaredTo(was[i]) > 1e-6f) still = GameClock.Now + 0.25;
+                was[i] = now;
+            }
+        }
     }
 
     private async Task Seconds(double s)

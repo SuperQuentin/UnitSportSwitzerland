@@ -64,8 +64,7 @@ public partial class SitePalletNetProbe : ChatProbe
 
     private async Task RunA(FootPlayer me)
     {
-        Chat?.Send("/login test");
-        await Seconds(1.5);
+        if (!await LogIn("test")) return;
         bool ready = false;
         for (int i = 0; i < 40 && !ready; i++)
         {

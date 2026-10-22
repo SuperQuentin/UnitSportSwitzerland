@@ -13,8 +13,8 @@ namespace UnitSport.Concert;
 /// every peer, favouring a camera somebody operates.
 ///
 /// <para>
-/// Renders, each only while something shows it: a small one (256 x 144, nearest) for the screens'
-/// camera clip (IMAG), the program (1280 x 720) for the program view and NDI, and this player's
+/// Renders, each only while something shows it: a small one (the Concert screens setting, 256 to
+/// 1024 wide, nearest; <c>/concert imag</c> overrides it for the run) for the screens' camera clip (IMAG), the program (1280 x 720) for the program view and NDI, and this player's
 /// viewfinder while operating a camera. SubViewports sharing the world, as the wall mirrors are.
 /// </para>
 /// </summary>
@@ -40,6 +40,10 @@ public partial class ConcertCameras : Node3D
     public int Operating { get; set; } = -1;
 
     public bool ImagWanted { get; set; }
+    /// <summary><c>/concert imag &lt;width&gt;</c>: this run's IMAG width over the setting, 0 to follow it (#996).</summary>
+    public static int ImagOverride;
+    public static int ImagWidth => ImagOverride > 0 ? ImagOverride : Core.GameSettings.Current.ConcertScreenWidth;
+    private static Vector2I ImagSize => new(ImagWidth, ImagWidth * 9 / 16);
     private int _tick;
     public static int ProgramWanted;
 
@@ -59,7 +63,7 @@ public partial class ConcertCameras : Node3D
     public override void _Ready()
     {
         _rigs = CameraRig.For(_plan);
-        (_imag, _imagCam) = Port("Imag", new Vector2I(256, 144));
+        (_imag, _imagCam) = Port("Imag", ImagSize);
         // the screens' feed sees the bowl, not the country: a second render of the whole world cost as much as the concert
         _imagCam.Far = 450f;
         (_program, _programCam) = Port("Program", new Vector2I(1280, 720));
@@ -75,7 +79,9 @@ public partial class ConcertCameras : Node3D
             HandleInputLocally = false, Msaa3D = Viewport.Msaa.Disabled,
         };
         AddChild(port);
-        var cam = new Camera3D { Name = "Camera", Far = 3000f };
+        // near past the rig's own kit (the lens hood ends 0.55 m out, a drone's rotors 0.68 m): the
+        // screens' feed never hides the body on air, and filmed the back of its hood as a black square
+        var cam = new Camera3D { Name = "Camera", Near = 0.7f, Far = 3000f };
         port.AddChild(cam);
         cam.MakeCurrent();
         return (port, cam);
@@ -92,7 +98,7 @@ public partial class ConcertCameras : Node3D
 
     private void BuildKit()
     {
-        _kit = new StandardMaterial3D { AlbedoColor = new Color(0.09f, 0.09f, 0.1f), Roughness = 0.5f };
+        _kit = Styles.StyleKit.Figure(new StandardMaterial3D { AlbedoColor = new Color(0.09f, 0.09f, 0.1f), Roughness = 0.5f });
         _bodies = new Node3D[_rigs.Count];
         _cables = new MeshInstance3D[_rigs.Count][];
         _arms = new MeshInstance3D[_rigs.Count];
@@ -243,8 +249,11 @@ public partial class ConcertCameras : Node3D
         if (finder) Aim(_finderCam, Pose(_rigs[Operating]), _rigs[Operating].Fov);
         // the screens' feed at half the frame rate: 256x144 on an LED wall does not need more
         _tick++;
-        var imagMode = !imag ? SubViewport.UpdateMode.Disabled : (_tick & 1) == 0 ? SubViewport.UpdateMode.Once : _imag.RenderTargetUpdateMode;
-        if (_imag.RenderTargetUpdateMode != imagMode) _imag.RenderTargetUpdateMode = imagMode;
+        // Once must be asked again every time: the server drops back to disabled after the render, but
+        // the property still reads Once, so comparing with it froze the feed on its first frame
+        if (imag && _imag.Size.X != ImagWidth) _imag.Size = ImagSize;
+        if (imag && (_tick & 1) == 0) _imag.RenderTargetUpdateMode = SubViewport.UpdateMode.Once;
+        else if (!imag && _imag.RenderTargetUpdateMode != SubViewport.UpdateMode.Disabled) _imag.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
         Mode(_program, prog);
         Mode(_finder, finder);
         // an operator's own camera hides its body from its own lens
@@ -253,6 +262,16 @@ public partial class ConcertCameras : Node3D
             bool hide = i == Operating || i == OnAir && prog;
             if (_bodies[i].Visible == hide) _bodies[i].Visible = !hide;
         }
+    }
+
+    /// <summary><c>/concert imag [width|auto]</c>: the screens' feed size for this run, live; client-local.</summary>
+    public static string ImagCommand(string[] a)
+    {
+        if (a.Length == 0) return $"Concert screens feed: {ImagSize.X}x{ImagSize.Y} ({(ImagOverride > 0 ? "/concert imag" : "setting")}). /concert imag <64..1920>|auto";
+        if (a[0] == "auto") ImagOverride = 0;
+        else if (int.TryParse(a[0], out int w) && w >= 64 && w <= 1920) ImagOverride = w & ~15;
+        else return "/concert imag <64..1920>|auto";
+        return $"Concert screens feed: {ImagSize.X}x{ImagSize.Y}.";
     }
 
     private Transform3D Pose(CameraRig r) => GlobalTransform * new Transform3D(r.Basis, r.Position);

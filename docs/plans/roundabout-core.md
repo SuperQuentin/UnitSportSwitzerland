@@ -48,3 +48,10 @@ writer, `JPTH` and the game take it as any core.
 5. Checks: the test region gets a mini, a compact and a large roundabout; `--signal-check` (paths on their lanes),
    `--kerb-check`, `--priority-check`, `--trafficcheck` at the Riddes ring (no car against the ring's way), renders
    against SWISSIMAGE for the user.
+
+## Status (Oct 19 2026, on `feat/854-junction-old-layout-zero`)
+
+- Steps 1, 3, 4 and 5 done: every real ring is tight (outer radius 5-15 m), so step 2 (large rings as T's) is left for
+  when one appears. Splitter islands also where TLM draws no tip (an 8 m island on every two-way arm of a compact ring). The
+  test region's compact and mini rings are written, signal/kerb/priority checks pass; 168 real tiles: 43 of 81 rings written, 661 junctions left to the old layout (760 before); kerb check 16, path ends off their lane 51.
+- Not yet: path crossings on the arms; the user's look against SWISSIMAGE.

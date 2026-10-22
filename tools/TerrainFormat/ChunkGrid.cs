@@ -3,11 +3,11 @@ namespace UnitSport.Terrain.Format;
 /// <summary>
 /// Decoded terrain chunk: an immutable grid of quantized heights.
 /// Row 0 is the NORTH edge, rows go south; column 0 is the WEST edge, columns go east.
-/// Vertex (col, row) sits at LV95 E = tileE*1000 + 2*col, N = (tileN+1)*1000 - 2*row.
+/// Vertex (col, row) sits at LV95 E = tileE*1000 + col*<see cref="ChunkFormat.SpacingM"/>, N = (tileN+1)*1000 - row*SpacingM (1 m).
 ///
 /// <para>
-/// A grid may be held at full resolution (<see cref="Stride"/> 1, 501x501) or decimated — the
-/// horizon rings mesh one vertex in twenty, so carrying the other 399 costs 490 KB per tile to
+/// A grid may be held at full resolution (<see cref="Stride"/> 1, 1001x1001) or decimated — the
+/// horizon rings mesh one vertex in twenty, so carrying the other 399 costs 2 MB per tile to
 /// throw away. Column and row indices are always expressed at <b>full resolution</b> whatever the
 /// grid holds, so every caller reads the same coordinates it always did; only the values in
 /// between stop being available.

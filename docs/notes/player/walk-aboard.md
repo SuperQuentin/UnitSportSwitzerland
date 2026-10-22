@@ -80,8 +80,10 @@
   falls over.
 - **The vehicle vanishing underfoot**: its driver got out, so it is a parked vehicle (or another
   host's) a round trip later. A walker on it is carried on at its last speed (`_deckWait`) and
-  boards its new form, whose velocity starts from the one it publishes (measured after). There is a
-  ~0.4 m jump along the aisle at that moment.
+  boards its new form, whose velocity starts from the one it publishes (measured after). It is put
+  back on the spot it had in the vehicle (`_handoverSpot`, #1006): carried on with no deck to collide
+  with, it came down on the new one up to 1.6 m aft, between two rows of seats, and stayed jammed
+  there (decknetcheck's b "could not get out", one run in two).
 - **Back at the wheel of a parked bus** (#323): the claim takes the parked body out of the physics at
   once (`VehicleBody.Retire`: no layer, hidden; online the server's despawn can come after the
   grant), and `EnterVehicle` drops the decks itself (`FreeDeck` zeroes their layer before the
@@ -150,6 +152,5 @@
 - **Getting into a vehicle leaves the decks at once** (`LeaveDecksNow` in `ApplyRide`): the deck bodies
   used to go at the next frame, and for a physics step the steamer just taken from its own deck had its
   hull inside that deck's boxes (and the walker's mask was still the deck layer): the solver shot it into the sky.
-- **Limits**: buses, the steamer, the A320 and the military freighter (#420: its ramp is a `DoorStep` slope to the ground, its troop seats face across with `SeatAnchor.Yaw`, see `airliners`); no hand on a pole is drawn; the ~0.4 m jump when the vehicle changes hands
-  under a walker; a rolling parked train's trailer boxes take its pose only once it is at rest (#173).
+- **Limits**: buses, the steamer, the A320 and the military freighter (#420: its ramp is a `DoorStep` slope to the ground, its troop seats face across with `SeatAnchor.Yaw`, see `airliners`); no hand on a pole is drawn; a rolling parked train's trailer boxes take its pose only once it is at rest (#173).
 - **Vehicles in holds** (#418): a deck's `CargoBays` carry ground vehicles driven into them the same way (decks built for drivers too, `DeckOn`/`DeckPos` for the vehicle): see the vehicles note `vehicles-in-holds`.

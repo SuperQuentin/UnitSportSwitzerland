@@ -68,6 +68,15 @@ public partial class ConcertService : Node
     }
 
     private readonly Dictionary<int, Hosted> _hosted = new();
+
+    /// <summary>
+    /// The rig imported on a hosted set (#941), packed as it travels and unpacked once: the server's
+    /// (checked when the operator sends it), mirrored on every client, dropped with the set.
+    /// </summary>
+    private readonly Dictionary<int, (byte[] Packed, Mvr.RigData Rig)> _rigs = new();
+
+    /// <summary>The imported rig of a stadium's hosted set, or null for the generated one.</summary>
+    public Mvr.RigData? RigFor(int stadium) => _rigs.TryGetValue(stadium, out var r) ? r.Rig : null;
     /// <summary>Who operates which camera, by stadium and camera: the server's, mirrored on every client.</summary>
     private readonly Dictionary<(int Stadium, int Cam), long> _crew = new();
 
@@ -90,6 +99,7 @@ public partial class ConcertService : Node
     public override void _ExitTree()
     {
         Input?.Dispose();
+        ConcertMvrTool.Xchange(new[] { "off" }, null);
         if (Instance == this) Instance = null;
     }
 
@@ -100,6 +110,16 @@ public partial class ConcertService : Node
     /// <summary>The seed hosted at a stadium, or null for tonight's.</summary>
     public int? SeedFor(int stadium) => _hosted.TryGetValue(stadium, out var h) && h.Seed >= 0 ? h.Seed : null;
 
+    /// <summary>What plays at a venue today, for <c>/stadium</c> (#994): a hosted set, or tonight's show and its hours.</summary>
+    public static string ShowAt(StadiumSpec venue)
+    {
+        if (Instance?.SeedFor(Array.IndexOf(StadiumCatalog.All, venue)) is { } seed)
+            return $"set {seed} hosted now, {ConcertPlanner.Plan(venue, seed).Artist}";
+        var e = ConcertPlanner.Tonight(venue, Core.Calendar.Now.Date);
+        static string Clock(float hour) => $"{(int)hour:00}:{(int)Math.Round(hour % 1 * 60):00}";
+        return $"tonight {Clock(e.StartHour)}-{Clock(e.EndHour)}, {e.Artist} ({e.Genre})";
+    }
+
     /// <summary>The cues in force at a stadium, if a set is hosted there.</summary>
     public (int Held, bool Blackout, float Master)? CuesOf(int stadium) =>
         _hosted.TryGetValue(stadium, out var h) ? (h.Held, h.Blackout, h.Master) : null;
@@ -109,6 +129,7 @@ public partial class ConcertService : Node
     /// <summary>The cues in force, put on a rig as it is built (a tile loaded after they came).</summary>
     public void ApplyCues(int stadium, ConcertRig rig)
     {
+        rig.Music.Cue = SongCueOf(stadium);
         if (!_hosted.TryGetValue(stadium, out var h)) return;
         var d = rig.Desk;
         d.HeldSection = h.Held >= 0 ? (ShowSection)h.Held : null;
@@ -146,13 +167,18 @@ public partial class ConcertService : Node
         var parts = rest.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         int stadium = at is { } p ? StadiumNear(p) : 0;
         string name = StadiumCatalog.All[stadium].Name;
-        switch (parts.Length == 0 ? "status" : parts[0])
+        switch (parts.Length == 0 ? "status" : parts[0].ToLowerInvariant())
         {
             case "host":
-                int seed = parts.Length > 1 && int.TryParse(parts[1], out int s) ? s : Random.Shared.Next(1, 100000);
+                // a word that is not a seed ("/concert host status") was a new random set every time (#994)
+                if (parts.Length > 2 || (parts.Length == 2 && !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out _)))
+                    return $"'{string.Join(' ', parts[1..])}' is not a set number: /concert host [seed], no seed for a random set.";
+                int seed = parts.Length == 2 ? int.Parse(parts[1], CultureInfo.InvariantCulture) : Random.Shared.Next(1, 100000);
                 return ServeHost(sender, stadium, seed, admin);
             case "release":
                 return ServeRelease(sender, stadium, admin);
+            case "song" or "songs":
+                return SongCommand(sender, stadium, parts[1..], admin);
             case "cue":
                 // the operator's cues by hand: what OSC and the desk screen send
                 if (!_hosted.TryGetValue(stadium, out var hc) || hc.Seed < 0) return "Host a set first ('/concert host [seed]').";
@@ -178,14 +204,14 @@ public partial class ConcertService : Node
                     case "pyro": ServeCue(stadium, (int)CueKind.Fx, (int)RigGroup.Airbursts, when); return "Airbursts!";
                     default:
                         if (Enum.TryParse<ShowSection>(what, true, out var sec)) { ServeCue(stadium, (int)CueKind.Section, (int)sec, when); return $"Held: {sec}."; }
-                        return "/concert cue go | calm|groove|chorus|peak|blackout | release | bpm <n> | master <0..1> | flames|co2|confetti|gerbs|pyro | camera <1..8|auto>";
+                        return "/concert cue go | calm|groove|chorus|peak|blackout | release | bpm <n> | master <0..1> | flames|co2|confetti|gerbs|pyro | camera <1..11|auto>";
                 }
             case "status":
                 return _hosted.TryGetValue(stadium, out var h) && h.Seed >= 0
                     ? $"{name}: set {h.Seed} ({ConcertPlanner.Plan(StadiumCatalog.All[stadium], h.Seed).Artist}), operator {h.Operator}"
                     : $"{name}: tonight's show; '/concert host [seed]' takes it";
             default:
-                return "/concert host [seed] | release | status; on your own game: /concert input artnet|sacn|osc on|off, /concert patch";
+                return "/concert host [seed] | release | status | song [list | next | prev | <n | title> | stop | play | auto]; on your own game: /concert input artnet|sacn|osc on|off, /concert patch";
         }
     }
 
@@ -195,6 +221,8 @@ public partial class ConcertService : Node
         if (_hosted.TryGetValue(stadium, out var h) && h.Operator != 0 && h.Operator != sender)
             return $"Someone else ({h.Operator}) runs that show; '/concert release' first.";
         _hosted[stadium] = new Hosted { Seed = seed, Operator = sender };
+        SetRig(stadium, Array.Empty<byte>());   // a new set starts on its own rig
+        SetSongs(stadium, null);                // and its own setlist from the top of the clock
         Announce(stadium);
         var e = ConcertPlanner.Plan(StadiumCatalog.All[stadium], seed);
         return $"You host set {seed} at {e.Stadium.Name}: {e}";
@@ -205,6 +233,8 @@ public partial class ConcertService : Node
         if (!_hosted.TryGetValue(stadium, out var h) || h.Seed < 0) return "No set is hosted there.";
         if (h.Operator != sender && !admin) return "Only its operator or an admin can release it.";
         _hosted.Remove(stadium);
+        SetRig(stadium, Array.Empty<byte>());
+        SetSongs(stadium, null);
         Announce(stadium);
         return "Released: tonight's show is back.";
     }
@@ -225,7 +255,10 @@ public partial class ConcertService : Node
     /// <summary>Server: what a joining player must know (<c>ServerWorld.OnPeerAccepted</c>).</summary>
     public void SendTo(long peer)
     {
+        // the rig before the set, so the joiner builds the stage once with it
+        foreach (var (stadium, r) in _rigs) RpcId(peer, MethodName.RigSet, stadium, r.Packed);
         foreach (int stadium in _hosted.Keys) SendState(peer, stadium);
+        SendSongsTo(peer);
         foreach (var ((stadium, cam), op) in _crew) RpcId(peer, MethodName.Operated, stadium, cam, op);
     }
 
@@ -309,8 +342,68 @@ public partial class ConcertService : Node
         foreach (var stadium in _hosted.Where(kv => kv.Value.Operator == peer).Select(kv => kv.Key).ToList())
         {
             _hosted.Remove(stadium);
+            SetRig(stadium, Array.Empty<byte>());
+            SetSongs(stadium, null);
             Announce(stadium);
         }
+    }
+
+    // ---- an imported rig (#941) ------------------------------------------------------------------------
+
+    /// <summary>Client: the operator sends a rig for their set (empty: back to the set's own); the reply comes in the chat.</summary>
+    public string SendRig(int stadium, byte[] packed)
+    {
+        if (Online)
+        {
+            RpcId(1, MethodName.AskRig, stadium, packed);
+            return "Sending the rig to the server...";
+        }
+        return ServeRig(1, stadium, packed);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void AskRig(int stadium, byte[] packed)
+    {
+        if (!_server) return;
+        long sender = Multiplayer.GetRemoteSenderId();
+        Chat?.Tell(sender, ServeRig(sender, stadium, packed), ChatKind.Private);
+    }
+
+    /// <summary>Server: only the set's operator puts a rig on it, and only one that checks out.</summary>
+    private string ServeRig(long sender, int stadium, byte[] packed)
+    {
+        if (stadium < 0 || stadium >= StadiumCatalog.All.Length) return "No such stadium.";
+        if (!_hosted.TryGetValue(stadium, out var h) || h.Seed < 0) return "Host a set first ('/concert host [seed]').";
+        if (h.Operator != sender) return "Only the show's operator changes its rig.";
+        if (packed.Length == 0)
+        {
+            SetRig(stadium, packed);
+            return "The set's own rig is back.";
+        }
+        if (Mvr.RigData.Unpack(packed, out string? error) is not { } rig) return $"Rig refused: {error}.";
+        SetRig(stadium, packed);
+        return $"Rig {rig.Source}: {rig.Fixtures.Count} fixtures of {rig.Types.Count} types on the stage.";
+    }
+
+    /// <summary>Server (and offline): a stadium's rig changed, told to everyone; the stage is built again with it.</summary>
+    private void SetRig(int stadium, byte[] packed)
+    {
+        if (packed.Length == 0 && !_rigs.ContainsKey(stadium)) return;
+        foreach (int peer in Peers()) RpcId(peer, MethodName.RigSet, stadium, packed);
+        RigSet(stadium, packed);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RigSet(int stadium, byte[] packed)
+    {
+        if (packed.Length == 0) _rigs.Remove(stadium);
+        else if (Mvr.RigData.Unpack(packed, out string? error) is { } rig) _rigs[stadium] = (packed, rig);
+        else
+        {
+            GD.PushWarning($"[concert] a rig from the server did not read: {error}");
+            return;
+        }
+        if (SeedFor(stadium) != null) GetParent()?.GetNodeOrNull<ConcertDirector>(nameof(ConcertDirector))?.Rebuild(stadium);
     }
 
     private IEnumerable<int> Peers() => Online && Multiplayer.IsServer() ? Multiplayer.GetPeers() : Array.Empty<int>();
@@ -374,7 +467,7 @@ public partial class ConcertService : Node
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void State(int stadium, int seed, long op, int held, bool blackout, float master, float bpm, double bpmAt, int camera)
     {
-        if (seed < 0) _hosted.Remove(stadium);
+        if (seed < 0) { _hosted.Remove(stadium); _rigs.Remove(stadium); }
         else _hosted[stadium] = new Hosted { Seed = seed, Operator = op, Held = held, Blackout = blackout, Master = master, Bpm = bpm, BpmAt = bpmAt, Camera = camera };
         ApplyState(stadium);
     }
@@ -413,8 +506,8 @@ public partial class ConcertService : Node
 
     // ---- the operator's input ----------------------------------------------------------------------
 
-    /// <summary>Client-local <c>/concert input|patch</c>: the operator's own ports and files; null when the line is not ours.</summary>
-    public static string? RunLocal(string text)
+    /// <summary>Client-local <c>/concert input|patch</c>: the operator's own ports and files; null when the line is not ours. <paramref name="say"/> takes what comes later (MVR-xchange).</summary>
+    public static string? RunLocal(string text, Action<string>? say = null)
     {
         if (!text.StartsWith("/concert ", StringComparison.OrdinalIgnoreCase)) return null;
         var parts = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -424,7 +517,13 @@ public partial class ConcertService : Node
             "input" => svc.InputCommand(parts.Skip(2).ToArray()),
             "patch" => svc.ExportPatch(),
             "view" or "ndi" or "snap" or "camera" => ConcertBroadcast.Instance?.Command(parts.Skip(1).ToArray()) ?? "The broadcast is not running here.",
+            "imag" => ConcertCameras.ImagCommand(parts.Skip(2).ToArray()),
             "debug" => ConcertBeatDebug.Instance?.Command(parts.Skip(1).ToArray()) ?? "The beat debug window is not here.",
+            "export" => ConcertMvrTool.Export(),
+            "import" => ConcertMvrTool.Import(string.Join(' ', parts.Skip(2))),
+            "rigs" => ConcertMvrTool.List(),
+            "videos" => ConcertMvrTool.Videos(string.Join(' ', parts.Skip(2))),
+            "xchange" => ConcertMvrTool.Xchange(parts.Skip(2).ToArray(), say),
             _ => null,   // host, release, status: the server's
         };
     }
@@ -474,6 +573,7 @@ public partial class ConcertService : Node
 
     public override void _Process(double delta)
     {
+        ConcertMvrTool.Pump();
         if (_server || Input == null) return;
         int stadium = LocalStadium();
         double now = RealClock.Now;

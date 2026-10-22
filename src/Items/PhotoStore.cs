@@ -57,7 +57,7 @@ public static class PhotoStore
 
     public static string LocalDir => Path.Combine(Root, "photos", "polaroid");
     public static string CacheDir => Path.Combine(Root, "photo_cache");
-    public static string ServerDir => ProjectSettings.GlobalizePath("user://placed/photos");
+    public static string ServerDir => ProjectSettings.GlobalizePath(Core.WorldChoice.SavePath("user://placed/photos"));
 
     /// <summary>A photo id: 16 lowercase hex characters, the start of the SHA-256 of the JPEG.</summary>
     public static bool IsValidId(string? id) =>

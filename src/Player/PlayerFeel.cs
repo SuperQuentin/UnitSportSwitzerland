@@ -207,7 +207,9 @@ public partial class PlayerFeel : Node3D
         var ride = _player.Ride;
         bool grounded = _player.IsOnFloor();
         float speed = _player.GroundSpeed;
-        float excite = _player.Vehicle is Flyer flyer
+        // creative flight (#1002) is getting about, not a rush: no speed lines, no shake
+        float excite = _player.CreativeFlying ? 0f
+            : _player.Vehicle is Flyer flyer
             ? Mathf.Clamp((speed - flyer.Thrill.Calm) / (flyer.Thrill.Fast - flyer.Thrill.Calm), 0f, 1.5f)
             : Excitement(ride, speed);
 
@@ -792,6 +794,16 @@ public partial class PlayerFeel : Node3D
         _engineLabel.GrowHorizontal = Control.GrowDirection.Begin;
         _engineLabel.GrowVertical = Control.GrowDirection.Begin;
         _engineLabel.OffsetRight = -18; _engineLabel.OffsetBottom = -16;
+        if (Core.Platform.IsMobile)
+        {
+            // the pedals take the bottom right on a phone (#1043), the cards the top left: top centre
+            _engineLabel.SetAnchorsPreset(Control.LayoutPreset.CenterTop);
+            _engineLabel.GrowHorizontal = Control.GrowDirection.Both;
+            _engineLabel.GrowVertical = Control.GrowDirection.End;
+            _engineLabel.HorizontalAlignment = HorizontalAlignment.Center;
+            // a little left of centre: between the ride card (top left) and the top bar's Get out on a 20:9 phone
+            _engineLabel.OffsetLeft = -60; _engineLabel.OffsetRight = -60; _engineLabel.OffsetTop = 16;
+        }
         _screen.AddChild(_engineLabel);
 
         // What the next button does, while it matters: the base jump chain has no menu, so a
@@ -1023,9 +1035,16 @@ public partial class PlayerFeel : Node3D
         if (_engineLabel.Visible)
         {
             var sb = _engineText.Clear();
+            // on a phone the keys are the touch controls' own buttons and pills, so no key names
+            bool touch = Core.TouchControls.Shown;
             if (vehicle!.HasEngine)
-                sb.Append(_player.EngineOn ? "ENGINE ON  " : "ENGINE OFF  ").Append('[').Append(Core.InputHints.Label(Core.PlayerInput.EngineToggle)).Append("]\n");
-            sb.Append($"DAMAGE {100f - _player.VehicleHealth / vehicle.MaxHealth * 100f:0}%    [{Core.InputHints.Label(Core.PlayerInput.InteractMount)}] get out");
+            {
+                sb.Append(_player.EngineOn ? "ENGINE ON" : "ENGINE OFF");
+                if (!touch) sb.Append("  [").Append(Core.InputHints.Label(Core.PlayerInput.EngineToggle)).Append(']');
+                sb.Append('\n');
+            }
+            sb.Append($"DAMAGE {100f - _player.VehicleHealth / vehicle.MaxHealth * 100f:0}%");
+            if (!touch) sb.Append("    [").Append(Core.InputHints.Label(Core.PlayerInput.InteractMount)).Append("] get out");
             SetText(_engineLabel, sb, ref _engineShown);
         }
 
