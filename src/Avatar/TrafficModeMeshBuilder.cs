@@ -83,14 +83,14 @@ public static class TrafficModeMeshBuilder
         var s = new MeshScratch();
         foreach (float x in new[] { -0.09f, 0.09f })
         {
-            s.Box(new Vector3(x, 0.05f, 0.03f), new Vector3(0.15f, 0.1f, 0.26f), Dark);                // shoe
+            s.Box(new Vector3(x, 0.05f, 0.03f), new Vector3(0.17f, 0.1f, 0.26f), Dark);                // shoe
             s.Box(new Vector3(x, 0.47f, 0f), new Vector3(0.14f, 0.78f, 0.16f), legs);                 // leg, into the hips
             s.Box(new Vector3(x * 2.28f, 1.1f, 0f), new Vector3(0.08f, 0.56f, 0.12f), top);            // arm
-            s.Box(new Vector3(x * 2.28f, 0.79f, 0f), new Vector3(0.09f, 0.1f, 0.1f), skin);           // hand
+            s.Box(new Vector3(x * 2.28f, 0.79f, 0f), new Vector3(0.1f, 0.1f, 0.1f), skin);           // hand
         }
         s.Box(new Vector3(0f, 1.1f, 0f), new Vector3(0.34f, 0.6f, 0.22f), top);                       // torso
-        s.Box(new Vector3(0f, 1.5f, 0.01f), new Vector3(0.2f, 0.24f, 0.2f), skin);                   // head
-        s.Box(new Vector3(0f, 1.645f, -0.01f), new Vector3(0.22f, 0.09f, 0.22f), hair);              // hair
+        s.Box(new Vector3(0f, 1.5f, 0f), new Vector3(0.2f, 0.24f, 0.2f), skin);                   // head
+        s.Box(new Vector3(0f, 1.645f, -0.02f), new Vector3(0.22f, 0.09f, 0.22f), hair);              // hair
         return s.Build();
     }
 
@@ -115,24 +115,33 @@ public static class TrafficModeMeshBuilder
         foreach (var hub in new[] { rear, front })
         {
             s.Ring(hub, Vector3.Right, r - 0.07f, r, 0.05f, Dark, 8);                                // tyre
-            s.Box(hub, new Vector3(0.08f, 0.06f, 0.06f), Metal);                                     // hub
+            s.Box(hub, new Vector3(0.14f, 0.06f, 0.06f), Metal);                                     // hub
             s.Box(hub, new Vector3(0.015f, 2f * r - 0.1f, 0.025f), Metal);                           // two spokes, a cross
             s.Box(hub, new Vector3(0.015f, 0.025f, 2f * r - 0.1f), Metal);
         }
         var crank = new Vector3(0f, 0.3f, -0.04f);
         var seat = new Vector3(0f, 0.86f, -0.24f);
         var head = new Vector3(0f, 0.88f, 0.38f);
-        Bar(s, rear, crank, 0.035f, frame);
-        Bar(s, rear, seat, 0.03f, frame);
+        foreach (float x in new[] { -0.035f, 0.035f })
+        {
+            Bar(s, rear + new Vector3(x, 0f, 0f), crank + new Vector3(x, 0f, 0f), 0.025f, frame);       // chain stays
+            Bar(s, rear + new Vector3(x, 0f, 0f), seat + new Vector3(x, 0f, 0f), 0.025f, frame);        // seat stays
+        }
         Bar(s, crank, seat, 0.04f, frame);
-        Bar(s, crank, head, 0.045f, frame);
+        Bar(s, crank, head, 0.05f, frame);
         Bar(s, seat, head, 0.04f, frame);
-        Bar(s, head, front, 0.04f, Metal);                                                            // fork
-        Bar(s, head, head + new Vector3(0f, 0.16f, 0.03f), 0.035f, Metal);                            // stem
+        foreach (float x in new[] { -0.04f, 0.04f })
+            Bar(s, head + new Vector3(x, -0.05f, 0f), front + new Vector3(x, 0f, 0f), 0.03f, Metal);  // fork legs
+        Bar(s, head, head + new Vector3(0f, 0.16f, 0.03f), 0.06f, Metal);                             // stem
+        // lugs over the joints (the bars' ends meet inside them)
+        s.Box(seat, new Vector3(0.07f, 0.07f, 0.07f), frame);
+        s.Box(head, new Vector3(0.08f, 0.14f, 0.08f), frame);
+        s.Box(crank, new Vector3(0.07f, 0.08f, 0.08f), Metal);
         var bars = head + new Vector3(0f, 0.16f, 0.03f);
-        s.Box(bars, new Vector3(0.5f, 0.035f, 0.035f), Dark);                                       // handlebar
+        s.Box(bars, new Vector3(0.5f, 0.04f, 0.04f), Dark);                                       // handlebar
         s.Box(seat + new Vector3(0f, 0.04f, 0.02f), new Vector3(0.12f, 0.05f, 0.22f), Dark);        // saddle
-        s.Box(crank, new Vector3(0.3f, 0.04f, 0.1f), Metal);                                         // pedals
+        foreach (float x in new[] { -0.12f, 0.12f })
+            s.Box(crank + new Vector3(x, 0f, 0f), new Vector3(0.1f, 0.04f, 0.11f), Dark);           // pedals
         // the rider: sitting, leaning to the bars
         var hip = seat + new Vector3(0f, 0.12f, 0f);
         var shoulder = new Vector3(0f, 1.36f, 0.12f);
@@ -142,10 +151,10 @@ public static class TrafficModeMeshBuilder
             var foot = new Vector3(x * 1.4f, 0.33f, -0.02f);
             Limb(s, hip + new Vector3(x, 0f, 0f), knee, 0.13f, 0.14f, legs);
             Limb(s, knee, foot, 0.11f, 0.12f, legs);
-            s.Box(foot + new Vector3(0f, -0.02f, 0.04f), new Vector3(0.11f, 0.08f, 0.22f), Dark);   // shoe
+            s.Box(foot + new Vector3(0f, -0.02f, 0.04f), new Vector3(0.15f, 0.08f, 0.22f), Dark);   // shoe
             var hand = bars + new Vector3(x * 2.4f, 0.03f, 0f);
             Limb(s, shoulder + new Vector3(x * 2f, -0.03f, 0f), hand, 0.08f, 0.09f, jersey);         // arm
-            s.Box(hand, new Vector3(0.08f, 0.07f, 0.08f), skin);                                     // glove
+            s.Box(hand, new Vector3(0.12f, 0.08f, 0.12f), skin);                                     // glove
         }
         Limb(s, hip, shoulder, 0.34f, 0.2f, jersey);                                                  // torso
         var neck = shoulder + new Vector3(0f, 0.14f, 0.06f);
@@ -199,7 +208,7 @@ public static class TrafficModeMeshBuilder
             {
                 bool atDoor = length > 8f ? Mathf.Abs(Mathf.Abs(z) - doorZ) < 1.0f : Mathf.Abs(z) < 1.0f;
                 if (!atDoor)
-                    s.Box(new Vector3(side * (wid * 0.5f + 0.02f), (winLow + winHigh) * 0.5f, z), new Vector3(0.04f, winHigh - winLow, 0.12f), body);
+                    s.Box(new Vector3(side * (wid * 0.5f + 0.02f), (winLow + winHigh) * 0.5f, z), new Vector3(0.04f, winHigh - winLow + 0.04f, 0.12f), body);
             }
         }
         // the cab ends: a low nose, a raked windscreen over it, a destination board above
@@ -207,7 +216,7 @@ public static class TrafficModeMeshBuilder
         {
             if (!cab) continue;
             float end = dir * half;
-            s.Box(new Vector3(0f, (floor + winLow) * 0.5f + 0.05f, end - dir * 0.375f), new Vector3(wid - 0.1f, winLow - floor + 0.1f, 0.75f), body);
+            s.Box(new Vector3(0f, (floor + winLow) * 0.5f + 0.06f, end - dir * 0.375f), new Vector3(wid - 0.1f, winLow - floor + 0.08f, 0.75f), body);
             s.Box(new Vector3(0f, 0.55f, end - dir * 0.28f), new Vector3(wid - 0.06f, 0.3f, 0.6f), band);
             s.Box(new Vector3(0f, (winLow + roof - 0.45f) * 0.5f, end - dir * 0.45f), new Vector3(wid - 0.15f, roof - 0.45f - winLow, 0.1f), Glass,
                 new Basis(Vector3.Right, -dir * 0.15f));
