@@ -531,6 +531,31 @@ public static partial class HumanMeshBuilder
     /// </summary>
     private static Rig CyclingRig => _cyclingRig ??= SolveCyclingRig(Player.BikeFrame.Default);
 
+    private static readonly Dictionary<Player.BikeFrame, Rig> CyclingRigs = new();
+
+    /// <summary>The cyclist fitted to <paramref name="frame"/> (#1159): sat up on a riser bar, stretched on a road bike's hoods.</summary>
+    private static Rig CyclingRigFor(Player.BikeFrame frame)
+    {
+        if (frame == Player.BikeFrame.Default) return CyclingRig;
+        lock (CyclingRigs)
+        {
+            if (!CyclingRigs.TryGetValue(frame, out var rig)) CyclingRigs[frame] = rig = SolveCyclingRig(frame);
+            return rig;
+        }
+    }
+
+    /// <summary><see cref="HumanPose.Cycling"/> on another bike than the default (#1159).</summary>
+    public static ArrayMesh BuildCyclist(HumanPalette palette, Player.BikeFrame frame, bool includeLegs = true,
+        bool helmet = false, ArrayMesh? into = null)
+    {
+        var scratch = ScratchFor(into);
+        AppendRig(scratch, palette, CyclingRigFor(frame), includeLegs, helmet);
+        return into == null ? scratch.Build() : scratch.BuildInto(into);
+    }
+
+    /// <summary>The mounts (eye, hands) of the cyclist on <paramref name="frame"/> (#1159).</summary>
+    public static GaitMounts MountsForCyclist(Player.BikeFrame frame) => MountsForRig(CyclingRigFor(frame));
+
     private static Rig SolveCyclingRig(Player.BikeFrame frame)
     {
         // the pelvis sits 1.5 cm over the leg joints, as on every other rig; RiderRig lifts its seat 9 cm

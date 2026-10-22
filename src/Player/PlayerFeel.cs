@@ -242,7 +242,7 @@ public partial class PlayerFeel : Node3D
     {
         var (calm, fast) = ride switch
         {
-            RideKind.RoadBike => (9f, 18f),    // 32 → 65 km/h
+            RideKind.RoadBike or RideKind.EBike => (9f, 18f),    // 32 → 65 km/h
             RideKind.Skis or RideKind.Snowboard => (9f, 22f),        // 32 → 80 km/h
             _ when CarCatalog.IsCar(ride) => (15f, 40f),   // 54 → 144 km/h
             _ when MotorbikeCatalog.IsMotorbike(ride) => (15f, 45f),   // 54 → 162 km/h
@@ -289,7 +289,7 @@ public partial class PlayerFeel : Node3D
         var input = _player.LastRideInput;
 
         // tyres: roar with speed, only while they touch something
-        bool bike = ride == RideKind.RoadBike;
+        bool bike = BicycleCatalog.IsBicycle(ride);
         var car = _player.Vehicle as Car;
         bool motor = _player.Vehicle is IEngined;
         SetLoop(_tyre, bike && grounded ? Mathf.Clamp(speed / 14f, 0f, 1f) * 0.55f
@@ -604,7 +604,7 @@ public partial class PlayerFeel : Node3D
         bool slide = ride == RideKind.OnFoot && _player.IsSliding && grounded;
         // the rear tyre locked under the braking (#1124); Game's arcade brakes skid on any hard pull
         bool skid = grounded && (_player.Vehicle is Bicycle { RearLocked: true }
-            || ride == RideKind.RoadBike && Rideable.Arcade && input.Brake > 0.5f && speed > 4f);
+            || BicycleCatalog.IsBicycle(ride) && Rideable.Arcade && input.Brake > 0.5f && speed > 4f);
         _dust.Emitting = slide || skid;
         if (slide || skid) _dust.AmountRatio = Mathf.Clamp(speed / 10f, 0.2f, 1f);
     }
@@ -979,6 +979,8 @@ public partial class PlayerFeel : Node3D
                 var gears = bike.Gears;
                 sb.Append((int)(speed * 3.6f + 0.5f)).Append(" km/h    ").Append(gears.RingTeeth).Append('×').Append(gears.CogTeeth)
                   .Append("    ").Append((int)(bike.Cadence + 0.5f)).Append(" rpm");
+                // the e-bike's display (#1159): what the motor is adding
+                if (bike.Spec.Assist != null) sb.Append("    +").Append((int)(bike.MotorWatts + 0.5f)).Append(" W");
             }
             else if (_player.Vehicle is Car c)
             {
@@ -1060,7 +1062,7 @@ public partial class PlayerFeel : Node3D
         UpdateHint(dt, ride);
 
         // the boost meter, only where boost exists: mounted, Game profile
-        _boostBar.Visible = ride is RideKind.RoadBike or RideKind.Skis or RideKind.Snowboard && Rideable.Arcade;
+        _boostBar.Visible = ride is RideKind.RoadBike or RideKind.EBike or RideKind.Skis or RideKind.Snowboard && Rideable.Arcade;
         _boostBar.Value = _player.BoostMeter;
         _boostBar.Modulate = _player.Boosting ? new Color(1.6f, 1.6f, 1.6f) : Colors.White;
 

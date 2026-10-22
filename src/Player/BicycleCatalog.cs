@@ -27,6 +27,29 @@ namespace UnitSport.Player
 {
     public enum BikeBrakes { Rim, Disc }
 
+    /// <summary>The bar the hands are on (#1159): a road bike's drops, or a trekking bike's swept riser bar.</summary>
+    public enum BikeBar { Drop, Riser }
+
+    /// <summary>
+    /// A pedelec's mid motor (#1159): it adds <see cref="Support"/> × the rider's own watts, up to its
+    /// torque at the cranks and its peak power, and stops helping at <see cref="CutOff"/> (25 km/h,
+    /// the Swiss "slow e-bike" that needs no plate).
+    /// </summary>
+    /// <param name="Torque">At the cranks, N·m (the maker's figure).</param>
+    /// <param name="PeakWatts">The motor's short-term most, W.</param>
+    /// <param name="Support">The assist mode's factor: Bosch Eco 0.6, Tour 1.4, Sport 2.25, Turbo 3.4.</param>
+    /// <param name="CutOff">Assist off at, m/s.</param>
+    /// <param name="BatteryWh">The battery, Wh (described, not drained yet).</param>
+    public sealed record ElectricAssist(string Motor, float Torque, float PeakWatts, float Support, float CutOff, float BatteryWh)
+    {
+        /// <summary>The help fades over the last km/h before the cut-off, as the Bosch firmware does.</summary>
+        public const float FadeBand = 1f / 3.6f;
+    }
+
+    /// <summary>What a city or trekking bike carries that a road bike does not (#1159): drawn by <c>BikeMeshBuilder</c>.</summary>
+    /// <param name="SuspensionFork">Travel, m; 0 a rigid fork.</param>
+    public sealed record BikeKit(bool Rack, bool Fenders, bool Lights, bool Kickstand, float SuspensionFork, bool SuspensionSeatpost);
+
     /// <summary>
     /// A frame's geometry as the maker's chart prints it, metres and degrees, plus the cockpit it
     /// is built with (#1124). The chart's numbers are what is typed; every point of the bike is
@@ -43,20 +66,41 @@ namespace UnitSport.Player
     /// <param name="Spacers">Headset cap and spacers under the stem.</param>
     /// <param name="BarReach">Bar clamp forward to the hoods.</param>
     /// <param name="BarDrop">Tops down to the drops.</param>
-    /// <param name="BarWidth">Centre to centre at the hoods.</param>
+    /// <param name="BarWidth">Centre to centre at the hoods, or at the grips on a riser bar.</param>
+    /// <param name="Bar">A riser bar (#1159) reads <paramref name="BarReach"/> as the grips' sweep (negative: back
+    /// toward the rider) and <paramref name="BarDrop"/> as their rise above the clamp.</param>
     public sealed record BicycleGeometry(
         float Stack, float Reach, float HeadAngle, float SeatAngle, float HeadTube, float SeatTube,
         float Chainstay, float BbDrop, float ForkOffset, float Wheelbase, float CrankLength,
-        float StemLength, float StemAngle, float Spacers, float BarReach, float BarDrop, float BarWidth);
+        float StemLength, float StemAngle, float Spacers, float BarReach, float BarDrop, float BarWidth,
+        BikeBar Bar = BikeBar.Drop);
 
     /// <summary>One bicycle: a real model, size and build (#1124).</summary>
     /// <param name="Mass">The bike alone, kg, pedals on.</param>
     /// <param name="TyreWidth">As on the sidewall, metres (28 mm = 0.028).</param>
     /// <param name="WheelInertia">Both wheels' moment of inertia with tyres and rotors, kg·m²: a 700c road wheel is 0.06-0.09.</param>
+    /// <param name="Kind">The ride it is (#1159): one <see cref="RideKind"/> per catalogue bike, so the choice replicates as the ride.</param>
+    /// <param name="DragArea">The 72.5 kg reference rider's CdA on it, m²: 0.32 on a road bike's hoods, ~0.5 sat up on a trekking bike.</param>
     public sealed record BicycleSpec(
         string Name, string Size, float Mass, float TyreWidth, BicycleGeometry Geometry,
-        int[] Chainrings, int[] Cassette, string Groupset, BikeBrakes Brakes, BikePalette Look, float WheelInertia = 0.15f)
+        int[] Chainrings, int[] Cassette, string Groupset, BikeBrakes Brakes, BikePalette Look, float WheelInertia = 0.15f,
+        RideKind Kind = RideKind.RoadBike, float DragArea = BikePhysics.ReferenceDragArea)
     {
+        /// <summary>The motor, on a pedelec (#1159); null on a bike the legs alone drive.</summary>
+        public ElectricAssist? Assist { get; init; }
+
+        /// <summary>Rack, fenders, lights, suspension (#1159); null on a bare road bike.</summary>
+        public BikeKit? Kit { get; init; }
+
+        /// <summary>The picker's and the HUD's name.</summary>
+        public string Label { get; init; } = "Road bike";
+
+        /// <summary>The picker's line under the name.</summary>
+        public string Blurb { get; init; } = "";
+
+        /// <summary>Sat up on a riser bar: no drops to get down on, no tuck.</summary>
+        public bool Upright => Geometry.Bar == BikeBar.Riser;
+
         /// <summary>
         /// What the spinning wheels add to the mass being accelerated, kg: I/r². Every kilo at the rim
         /// counts about twice, which is why light wheels matter and a light frame much less.
@@ -101,11 +145,72 @@ namespace UnitSport.Player
                 Accent: new Color(0.16f, 0.16f, 0.17f),
                 Tyre: new Color(0.07f, 0.07f, 0.075f),
                 Rim: new Color(0.06f, 0.06f, 0.065f),
-                Saddle: new Color(0.05f, 0.05f, 0.055f)) { Decal = new Color(0.80f, 0.80f, 0.82f) });
+                Saddle: new Color(0.05f, 0.05f, 0.055f)) { Decal = new Color(0.80f, 0.80f, 0.82f) })
+        {
+            Label = "Road bike",
+            Blurb = "Scott Addict RC 15, 8 kg of carbon: your legs and nothing else",
+        };
 
-        public static readonly BicycleSpec[] All = { AddictRc15 };
+        /// <summary>
+        /// Moustache Samedi 28.4 (2025), size M (47), metallic red glossy (#1159): a trekking pedelec.
+        /// Bosch Performance Line Smart System, 75 N·m, assist to 25 km/h, PowerTube 625 Wh in the down
+        /// tube; Shimano CUES 10-speed, 11-39; 170 mm cranks; Schwalbe Big Apple 700×50C; SR Suntour
+        /// NEX-E25 fork (63 mm); a suspension seatpost (40 mm); hydraulic discs (Shimano MT200, 180/160);
+        /// aluminium rack, fenders, battery-powered lights (AXA NXT, Spanninga), kickstand; 27.2 kg.
+        /// <para>
+        /// The parts list is the 2025 dealer sheet's (pedali.de); the riser bar's 80 mm rise is the
+        /// Samedi 28's. <b>Assumed</b>, because Moustache only prints its chart from the shop page's
+        /// script: a trekking frame's stack 625, reach 400, head 69.5°, seat 73.5°, head tube 160,
+        /// chainstay 475 (a Bosch motor's long stays), BB drop 65, fork offset 50 (the 700c NEX's),
+        /// which derive a 1133 mm wheelbase and 82 mm of trail; a 38 t ring (Bosch's stock sprocket);
+        /// a 70 mm +25° stem on 30 mm of spacers; 580 mm between the grips, swept back 90 mm.
+        /// Sport mode (225%) is the one assist level, with no key to change it.
+        /// </para>
+        /// </summary>
+        public static readonly BicycleSpec MoustacheSamedi = new(
+            Name: "Moustache Samedi 28.4 (2025)", Size: "M/47", Mass: 27.2f, TyreWidth: 0.050f,
+            Geometry: new BicycleGeometry(
+                Stack: 0.625f, Reach: 0.400f, HeadAngle: 69.5f, SeatAngle: 73.5f, HeadTube: 0.160f, SeatTube: 0.47f,
+                Chainstay: 0.475f, BbDrop: 0.065f, ForkOffset: 0.050f, Wheelbase: 1.133f, CrankLength: 0.170f,
+                StemLength: 0.070f, StemAngle: 25f, Spacers: 0.030f, BarReach: -0.090f, BarDrop: 0.080f, BarWidth: 0.58f,
+                Bar: BikeBar.Riser),
+            Chainrings: new[] { 38 },
+            Cassette: new[] { 11, 13, 15, 18, 21, 24, 28, 32, 36, 39 },
+            Groupset: "Shimano CUES U6020 10-speed, hydraulic disc",
+            Brakes: BikeBrakes.Disc,
+            Look: new BikePalette(
+                Frame: new Color(0.62f, 0.05f, 0.07f),
+                Accent: new Color(0.13f, 0.13f, 0.14f),
+                Tyre: new Color(0.09f, 0.09f, 0.09f),
+                Rim: new Color(0.11f, 0.11f, 0.12f),
+                Saddle: new Color(0.16f, 0.12f, 0.10f)) { Decal = new Color(0.90f, 0.90f, 0.88f) },
+            // two 700c wheels with 50 mm balloon tyres, 32 spokes and rotors: ~2.4 kg each, most at the rim
+            WheelInertia: 0.26f,
+            Kind: RideKind.EBike,
+            DragArea: 0.50f)
+        {
+            Label = "E-bike",
+            Blurb = "Moustache Samedi 28.4, red: a Bosch motor helps your legs up to 25 km/h",
+            Assist = new ElectricAssist("Bosch Performance Line Smart System", Torque: 75f, PeakWatts: 600f, Support: 2.25f,
+                CutOff: 25f / 3.6f, BatteryWh: 625f),
+            Kit = new BikeKit(Rack: true, Fenders: true, Lights: true, Kickstand: true, SuspensionFork: 0.063f, SuspensionSeatpost: true),
+        };
+
+        /// <summary>Append-only: each entry's <see cref="BicycleSpec.Kind"/> is replicated.</summary>
+        public static readonly BicycleSpec[] All = { AddictRc15, MoustacheSamedi };
 
         public static BicycleSpec Default => All[0];
+
+        /// <summary>The catalogue bike a ride kind is, or null (#1159).</summary>
+        public static BicycleSpec? For(RideKind kind)
+        {
+            foreach (var spec in All)
+                if (spec.Kind == kind) return spec;
+            return null;
+        }
+
+        /// <summary>A bicycle of any make (#1159): what "is this a bike" asks, never <c>== RideKind.RoadBike</c>.</summary>
+        public static bool IsBicycle(RideKind kind) => kind is RideKind.RoadBike or RideKind.EBike;
     }
 
     /// <summary>
@@ -152,7 +257,7 @@ namespace UnitSport.Player
         /// <summary>Top of the stem's steerer clamp.</summary>
         public Vector3 StemBase { get; }
         public Vector3 BarClamp { get; }
-        /// <summary>The +X hood's top; the other is mirrored.</summary>
+        /// <summary>The +X hood's top, or the +X grip's middle on a riser bar; the other is mirrored.</summary>
         public Vector3 Hood { get; }
         /// <summary>The +X drop's end.</summary>
         public Vector3 Drop { get; }
@@ -168,6 +273,18 @@ namespace UnitSport.Player
         public float Trail { get; }
 
         public static BikeFrame Default { get; } = new(BicycleCatalog.Default);
+
+        private static readonly System.Collections.Generic.Dictionary<BicycleSpec, BikeFrame> Frames = new() { [BicycleCatalog.Default] = Default };
+
+        /// <summary>One frame per catalogue bike, shared (#1159): the rig and the meshes are cached on it.</summary>
+        public static BikeFrame For(BicycleSpec spec)
+        {
+            lock (Frames)
+            {
+                if (!Frames.TryGetValue(spec, out var frame)) Frames[spec] = frame = new BikeFrame(spec);
+                return frame;
+            }
+        }
 
         public BikeFrame(BicycleSpec spec)
         {
@@ -208,9 +325,19 @@ namespace UnitSport.Player
             // square to the steerer, forward, then the stem's own angle: −6° on a 72° head is ~12° up
             float stem = Mathf.DegToRad(90f - g.HeadAngle + g.StemAngle);
             BarClamp = StemBase + SteererUp * 0.02f + new Vector3(0, Mathf.Sin(stem), Mathf.Cos(stem)) * g.StemLength;
-            Hood = BarClamp + new Vector3(g.BarWidth / 2f, 0.030f, g.BarReach - 0.005f);
-            Drop = BarClamp + new Vector3(g.BarWidth / 2f, -g.BarDrop, g.BarReach * 0.4f);
-            Wrist = Hood + new Vector3(0, 0.025f, -0.025f);
+            if (g.Bar == BikeBar.Riser)
+            {
+                // a riser bar (#1159): the grips up and swept back; "Hood" is the grip's middle, no drops
+                Hood = BarClamp + new Vector3(g.BarWidth / 2f, g.BarDrop, g.BarReach);
+                Drop = Hood;
+                Wrist = Hood + new Vector3(0, 0.020f, -0.010f);
+            }
+            else
+            {
+                Hood = BarClamp + new Vector3(g.BarWidth / 2f, 0.030f, g.BarReach - 0.005f);
+                Drop = BarClamp + new Vector3(g.BarWidth / 2f, -g.BarDrop, g.BarReach * 0.4f);
+                Wrist = Hood + new Vector3(0, 0.025f, -0.025f);
+            }
         }
 
         /// <summary>

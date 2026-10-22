@@ -38,6 +38,13 @@ public static class BikeMeshBuilder
 
         Wheel(s, f, f.RearAxle, p, disc ? 0.070f : 0f);
 
+        if (f.Spec.Assist != null || f.Spec.Kit != null)
+        {
+            TrekkingFrame(s, f, p);
+            if (includeCranks) Cranks(s, p, 0f, f);
+            return s.Build();
+        }
+
         // main triangle: the top tube meets the head tube just under its top, the down tube just
         // over its bottom, as the carbon lay-up does
         var topTubeFront = f.HeadTop - f.SteererUp * 0.020f;
@@ -75,6 +82,11 @@ public static class BikeMeshBuilder
     private static void Front(MeshScratch s, BikeFrame f, BikePalette p, bool disc)
     {
         Wheel(s, f, f.FrontAxle, p, disc ? 0.080f : 0f);
+        if (f.Spec.Kit is { } kit)
+        {
+            TrekkingFront(s, f, p, kit);
+            return;
+        }
         // fork: a crown under the head tube, two blades down to the axle
         var crown = f.HeadBottom - f.SteererUp * 0.020f;
         s.Tube(crown + new Vector3(-0.040f, 0, 0), crown + new Vector3(0.040f, 0, 0), 0.018f, p.Frame);
@@ -91,19 +103,227 @@ public static class BikeMeshBuilder
     private static void Wheel(MeshScratch s, BikeFrame f, Vector3 axle, BikePalette p, float rotor)
     {
         float r = f.WheelRadius;
-        s.Ring(axle, Vector3.Right, r - TyreThickness, r, 0.028f, p.Tyre);
-        s.Ring(axle, Vector3.Right, r - TyreThickness - RimDepth, r - TyreThickness, 0.020f, p.Rim);
+        // a road tyre is drawn 28 mm whatever it is; a balloon tyre (#1159) as wide and tall as its sidewall says,
+        // on a shallow aluminium rim
+        bool balloon = f.Spec.TyreWidth > 0.040f;
+        float tyre = balloon ? f.Spec.TyreWidth * 0.9f : TyreThickness;
+        float rimDepth = balloon ? 0.020f : RimDepth;
+        s.Ring(axle, Vector3.Right, r - tyre, r, balloon ? f.Spec.TyreWidth : 0.028f, p.Tyre);
+        s.Ring(axle, Vector3.Right, r - tyre - rimDepth, r - tyre, balloon ? 0.026f : 0.020f, p.Rim);
 
         for (int i = 0; i < 4; i++)
         {
             float angle = Mathf.Pi * i / 4f;
-            var radial = new Vector3(0, Mathf.Cos(angle), Mathf.Sin(angle)) * (r - TyreThickness - RimDepth + 0.004f);
+            var radial = new Vector3(0, Mathf.Cos(angle), Mathf.Sin(angle)) * (r - tyre - rimDepth + 0.004f);
             s.Tube(axle - radial, axle + radial, 0.004f, p.Accent, 3);
         }
 
         s.Tube(axle - new Vector3(0.055f, 0, 0), axle + new Vector3(0.055f, 0, 0), 0.016f, p.Accent, 6);
         if (rotor > 0f)
             s.Ring(axle + new Vector3(0.048f, 0, 0), Vector3.Right, rotor - 0.018f, rotor, 0.003f, new Color(0.62f, 0.63f, 0.65f), 12);
+    }
+
+    // ---- a trekking pedelec (#1159): the Moustache Samedi's aluminium frame, motor, battery and kit ----
+
+    /// <summary>Black anodised aluminium: rack, fenders, stem, the motor's cover.</summary>
+    private static readonly Color Alloy = new(0.10f, 0.10f, 0.11f);
+    private static readonly Color MotorGrey = new(0.20f, 0.21f, 0.22f);
+    private static readonly Color Stanchion = new(0.70f, 0.71f, 0.72f);
+    private static readonly Color HeadLens = new(1.00f, 0.97f, 0.85f);
+    private static readonly Color TailLens = new(0.85f, 0.04f, 0.04f);
+
+    /// <summary>
+    /// The frame of a trekking e-bike: hydroformed tubes half as fat again as a road bike's, the down
+    /// tube fatter still round the PowerTube battery inside it with the maker's name along it, a mid
+    /// motor under the bottom bracket, then the rack, the rear fender and light, the comfort saddle on
+    /// a suspension post, and the kickstand folded along the left chainstay.
+    /// </summary>
+    private static void TrekkingFrame(MeshScratch s, BikeFrame f, BikePalette p)
+    {
+        var kit = f.Spec.Kit;
+        var topTubeFront = f.HeadTop - f.SteererUp * 0.030f;
+        var downTubeFront = f.HeadBottom + f.SteererUp * 0.030f;
+        s.Tube(f.BottomBracket + f.SeatUp * 0.06f, f.SeatCluster, 0.020f, 0.018f, p.Frame);   // seat tube, from over the motor
+        s.Tube(f.SeatCluster, topTubeFront, 0.022f, 0.024f, p.Frame);                         // top tube
+        s.Tube(f.HeadBottom - f.SteererUp * 0.015f, f.HeadTop + f.SteererUp * 0.005f, 0.030f, 0.026f, p.Frame);   // tapered head tube
+
+        // the down tube holds the battery: oval and fat, the name on its middle as three tubes end to end
+        var bb = f.BottomBracket + new Vector3(0, 0.02f, 0.06f);
+        var dt = downTubeFront - bb;
+        float Radius(float t) => Mathf.Lerp(0.040f, 0.032f, t);
+        s.Tube(bb, bb + dt * 0.30f, Radius(0f), Radius(0.30f), p.Frame, 8);
+        s.Tube(bb + dt * 0.30f, bb + dt * 0.72f, Radius(0.30f), Radius(0.72f), p.Decal, 8);
+        s.Tube(bb + dt * 0.72f, downTubeFront, Radius(0.72f), Radius(1f), p.Frame, 8);
+
+        // the Bosch motor: a cast housing under and ahead of the cranks, its cover along the down tube
+        var down = dt.Normalized();
+        var side = Vector3.Right;
+        var up = down.Cross(side).Normalized();
+        if (up.Y < 0) up = -up;
+        var basis = new Basis(up.Cross(down), up, down);   // right-handed, or the faces turn inside out
+        s.RoundedBox(f.BottomBracket + down * 0.035f - up * 0.015f, new Vector3(0.095f, 0.13f, 0.17f), MotorGrey, basis);
+
+        // rear triangle: chainstays off the motor's mounts, seatstays to a little under the top tube
+        var stayTop = f.SeatCluster - f.SeatUp * 0.045f;
+        foreach (float x in new[] { -0.066f, 0.066f })
+        {
+            var axle = f.RearAxle + new Vector3(x, 0, 0);
+            s.Tube(f.BottomBracket + new Vector3(x * 0.6f, 0.01f, -0.04f), axle, 0.017f, 0.012f, p.Frame);
+            s.Tube(stayTop + new Vector3(x * 0.3f, 0, 0), axle, 0.013f, 0.011f, p.Frame);
+        }
+
+        if (kit is { Kickstand: true })
+            // folded along the left (+X, away from the chain) chainstay, its foot at the back
+            s.Tube(f.BottomBracket + new Vector3(0.050f, -0.030f, -0.070f), f.RearAxle + new Vector3(0.085f, -0.050f, 0.130f), 0.010f, 0.008f, Alloy, 4);
+
+        if (kit is { Rack: true }) Rack(s, f, stayTop, kit.Lights);
+        if (kit is { Fenders: true }) Fender(s, f.RearAxle, f.WheelRadius, 30f, -110f, f.Spec.TyreWidth);
+        ComfortSaddle(s, f, p, kit is { SuspensionSeatpost: true });
+    }
+
+    /// <summary>
+    /// The steered part of a trekking bike: a suspension fork (crown, silver stanchions into black
+    /// lowers), the front fender, the headlight on the crown, and the riser bar.
+    /// </summary>
+    private static void TrekkingFront(MeshScratch s, BikeFrame f, BikePalette p, BikeKit kit)
+    {
+        var crown = f.HeadBottom - f.SteererUp * 0.030f;
+        s.Tube(crown + new Vector3(-0.060f, 0, 0), crown + new Vector3(0.060f, 0, 0), 0.024f, Alloy, 6);
+        // the fork's line from the crown to the axle; on a suspension fork the lowers take its bottom half
+        foreach (float x in new[] { -0.058f, 0.058f })
+        {
+            var top = crown + new Vector3(x, 0, 0);
+            var axle = f.FrontAxle + new Vector3(x, 0, 0);
+            if (kit.SuspensionFork > 0f)
+            {
+                var knee = top + (axle - top) * 0.42f;
+                s.Tube(top, knee, 0.017f, Stanchion, 6);
+                s.Tube(knee - (axle - top).Normalized() * 0.02f, axle, 0.024f, 0.016f, Alloy, 6);
+            }
+            else s.Tube(top, axle, 0.018f, 0.012f, p.Frame);
+        }
+        // the fork's brace over the tyre, between the lowers' tops
+        if (kit.SuspensionFork > 0f)
+        {
+            var brace = crown + (f.FrontAxle - crown) * 0.45f + new Vector3(0, 0.02f, 0.025f);
+            s.Tube(brace + new Vector3(-0.058f, 0, 0), brace + new Vector3(0.058f, 0, 0), 0.012f, Alloy, 4);
+        }
+        if (kit.Fenders) Fender(s, f.FrontAxle, f.WheelRadius, 75f, -50f, f.Spec.TyreWidth);
+        if (kit.Lights)
+        {
+            // the headlight on a bracket ahead of the crown, its lens forward
+            var lamp = crown + new Vector3(0, -0.010f, 0.075f);
+            s.Box(lamp, new Vector3(0.055f, 0.040f, 0.045f), Alloy);
+            s.Box(lamp + new Vector3(0, 0, 0.0245f), new Vector3(0.042f, 0.028f, 0.004f), HeadLens);
+        }
+        RiserCockpit(s, f, p);
+    }
+
+    /// <summary>
+    /// A swept riser bar on a short rising stem: the bar rises from the clamp and bends back to the
+    /// grips at the fit's hand points, black grips, brake levers ahead of them and the Bosch remote and
+    /// display by the left grip.
+    /// </summary>
+    private static void RiserCockpit(MeshScratch s, BikeFrame f, BikePalette p)
+    {
+        s.Tube(f.HeadTop, f.StemBase + f.SteererUp * 0.02f, 0.019f, Alloy);
+        s.Tube(f.StemBase + f.SteererUp * 0.01f, f.BarClamp, 0.020f, 0.018f, Alloy);
+        s.Box(f.BarClamp + new Vector3(0, 0.035f, -0.010f), new Vector3(0.055f, 0.012f, 0.040f), Alloy);   // the display, on the clamp
+
+        float half = f.Hood.X;
+        var rise = f.Hood.Y - f.BarClamp.Y;
+        var sweep = f.Hood.Z - f.BarClamp.Z;
+        s.Tube(f.BarClamp + new Vector3(-0.045f, 0, 0), f.BarClamp + new Vector3(0.045f, 0, 0), 0.016f, Alloy);
+        foreach (float x in new[] { -1f, 1f })
+        {
+            var root = f.BarClamp + new Vector3(x * 0.045f, 0, 0);
+            var bend = f.BarClamp + new Vector3(x * 0.15f, rise * 0.75f, sweep * 0.15f);
+            var gripIn = new Vector3(x * (half - 0.065f), f.Hood.Y, f.Hood.Z + 0.020f);
+            var gripOut = new Vector3(x * (half + 0.060f), f.Hood.Y - 0.004f, f.Hood.Z - 0.016f);
+            s.Tube(root, bend, 0.0135f, Alloy);
+            s.Tube(bend, gripIn, 0.0125f, Alloy);
+            s.Tube(gripIn, gripOut, 0.0175f, p.Saddle);   // the grip
+            // the brake lever: from its clamp at the grip's inside forward and out over the grip
+            var lever = gripIn + new Vector3(x * 0.012f, 0.008f, 0.012f);
+            s.Tube(lever, lever + new Vector3(x * 0.085f, -0.012f, 0.055f), 0.006f, 0.005f, Alloy, 4);
+        }
+        // the Bosch remote at the left grip (the rider's left is +X)
+        s.Box(new Vector3(half - 0.085f, f.Hood.Y + 0.012f, f.Hood.Z + 0.014f), new Vector3(0.030f, 0.020f, 0.028f), Alloy);
+    }
+
+    /// <summary>
+    /// A fender over a wheel, from <paramref name="fromDeg"/> to <paramref name="toDeg"/> about the axle
+    /// (0 straight up, positive forward), drawn as thin plates a little wider than the tyre, with one
+    /// stay to the axle at its back end.
+    /// </summary>
+    private static void Fender(MeshScratch s, Vector3 axle, float wheelRadius, float fromDeg, float toDeg, float tyreWidth)
+    {
+        const int Segments = 9;
+        float radius = wheelRadius + 0.022f;
+        float width = tyreWidth + 0.016f;
+        Vector3 At(float deg)
+        {
+            float a = Mathf.DegToRad(deg);
+            return axle + new Vector3(0, Mathf.Cos(a), Mathf.Sin(a)) * radius;
+        }
+        for (int i = 0; i < Segments; i++)
+        {
+            var a = At(Mathf.Lerp(fromDeg, toDeg, i / (float)Segments));
+            var b = At(Mathf.Lerp(fromDeg, toDeg, (i + 1) / (float)Segments));
+            var along = (b - a).Normalized();
+            var outward = ((a + b) * 0.5f - axle).Normalized();
+            s.Box((a + b) * 0.5f, new Vector3(width, 0.004f, (b - a).Length() + 0.002f), Alloy,
+                new Basis(outward.Cross(along), outward, along));   // right-handed, or the plates face inward
+        }
+        var end = At(toDeg + 12f);
+        foreach (float x in new[] { -1f, 1f })
+            s.Tube(axle + new Vector3(x * 0.060f, 0, 0), end + new Vector3(x * width / 2f, 0, 0), 0.0035f, Alloy, 3);
+    }
+
+    /// <summary>
+    /// The rack over the back wheel: a platform of two rails and cross bars at the top of the fender,
+    /// held from the seatstays' top and on struts down to the axle, the tail light on its back end.
+    /// </summary>
+    private static void Rack(MeshScratch s, BikeFrame f, Vector3 stayTop, bool light)
+    {
+        float y = f.RearAxle.Y + f.WheelRadius + 0.075f;
+        float front = stayTop.Z - 0.030f;
+        float back = f.RearAxle.Z - 0.160f;
+        const float Half = 0.060f;
+        foreach (float x in new[] { -Half, Half })
+        {
+            s.Tube(new Vector3(x, y, front), new Vector3(x, y, back), 0.0065f, Alloy, 4);           // rail
+            s.Tube(new Vector3(x, y, back + 0.020f), f.RearAxle + new Vector3(x * 1.2f, 0.010f, -0.010f), 0.0065f, Alloy, 4);   // strut
+            s.Tube(new Vector3(x, y, front), stayTop + new Vector3(x * 0.6f, -0.010f, -0.010f), 0.005f, Alloy, 4);   // to the seatstays
+        }
+        for (int i = 0; i <= 3; i++)
+        {
+            float z = Mathf.Lerp(front, back, i / 3f);
+            s.Tube(new Vector3(-Half, y, z), new Vector3(Half, y, z), 0.005f, Alloy, 4);
+        }
+        if (light)
+        {
+            var lamp = new Vector3(0, y - 0.020f, back - 0.012f);
+            s.Box(lamp, new Vector3(0.070f, 0.030f, 0.020f), Alloy);
+            s.Box(lamp + new Vector3(0, 0, -0.0105f), new Vector3(0.060f, 0.022f, 0.002f), TailLens);
+        }
+    }
+
+    /// <summary>A sat-up rider's wide, padded saddle on a fat post; on a suspension post, its black sliding top.</summary>
+    private static void ComfortSaddle(MeshScratch s, BikeFrame f, BikePalette p, bool suspension)
+    {
+        float railY = f.SaddleTop.Y - 0.045f;
+        var postTop = f.SeatCluster + f.SeatUp * ((railY - f.SeatCluster.Y) / f.SeatUp.Y);
+        if (suspension)
+        {
+            var mid = f.SeatCluster + (postTop - f.SeatCluster) * 0.55f;
+            s.Tube(f.SeatCluster, mid, 0.0158f, Stanchion, 6);
+            s.Tube(mid, postTop, 0.019f, 0.017f, Alloy, 6);
+        }
+        else s.Tube(f.SeatCluster, postTop, 0.0158f, Stanchion, 6);
+        s.RoundedBox(new Vector3(0, f.SaddleTop.Y - 0.022f, f.SaddleTop.Z - 0.035f), new Vector3(0.190f, 0.045f, 0.170f), p.Saddle);
+        s.Tube(new Vector3(0, f.SaddleTop.Y - 0.024f, f.SaddleTop.Z + 0.040f),
+            new Vector3(0, f.SaddleTop.Y - 0.016f, f.SaddleTop.Z + 0.120f), 0.055f, 0.020f, p.Saddle, 6);
     }
 
     /// <summary>
@@ -183,10 +403,11 @@ public static class BikeMeshBuilder
     }
 
     /// <summary>Just the cranks and pedals, so they can be spun as their own node.</summary>
-    public static ArrayMesh BuildCranks(BikePalette? palette = null, float crankAngle = 0f)
+    public static ArrayMesh BuildCranks(BikePalette? palette = null, float crankAngle = 0f, BikeFrame? frame = null)
     {
         var s = new MeshScratch();
-        Cranks(s, palette ?? BikeFrame.Default.Spec.Look, crankAngle);
+        var f = frame ?? BikeFrame.Default;
+        Cranks(s, palette ?? f.Spec.Look, crankAngle, f);
         return s.Build();
     }
 }

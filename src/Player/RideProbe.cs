@@ -140,6 +140,7 @@ public partial class RideProbe : Node
         return name switch
         {
             "bike" or "roadbike" => RideKind.RoadBike,
+            "ebike" or "e-bike" or "samedi" => RideKind.EBike,
             "skis" or "ski" => RideKind.Skis,
             "snowboard" or "board" => RideKind.Snowboard,
             "r1" => (RideKind)MotorbikeCatalog.First,
