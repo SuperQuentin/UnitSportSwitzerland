@@ -1,6 +1,6 @@
 # Trams (#1057)
 
-Cosmetic, local per client like the cars (`traffic-trains`, base `traffic-modes`): solid blue boxes (2.4 x 3.4 m), three
+Cosmetic, local per client like the cars (`traffic-trains`, base `traffic-modes`): blocky low-floor sections (#1147, `TrafficModeMeshBuilder.TramSection`) in 2.4 x 3.4 m boxes, three
 sections 9/7/9 m or five 8.6/6.4/8.6/6.4/8.6 m, 0.6 m apart, `GameSettings.Trams` (0..20, Settings → World), `--trams N`.
 
 ## Graph (`World/LaneGraph.Trams.cs`, `LaneGraph.BuildTrams`)
