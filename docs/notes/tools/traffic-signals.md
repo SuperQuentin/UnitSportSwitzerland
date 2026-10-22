@@ -417,6 +417,24 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   Model viewer: "Traffic light - Flasher, pedestrian / bike / arrow plate", "Flasher, left turn on the left pole" (with another
   approach's left-turn lamp over the main pole's heads, the crossing's pole case), "Permissive left, ball / arrow / uncombined
   arrow".
+- **Every turn lane its own head, protected where the phases allow** (#1119, the user: "whenever there is a left turn only
+  lane at a light, it should get its own light, even if permissive. same for right turns"; "usually permissive lefts are pretty
+  rare in Switzerland, especially with a turn lane"; "even right turns with their own lanes are usually protected"). A T's stem
+  with a left and a right lane (no through) gets a left and a right arrow group and head (it had one group, a ball). A right
+  arrow no phase carries (its exit's walkers or riders green in every phase of its approach) now goes with its approach
+  **protected**, those walkers and riders held red in that phase, where they keep a green in another phase and it crosses no
+  two-stage half (its island wait past a third, #1030); no phase is added, the schemes hold (`FullCrossroads_RunsTheSixPhases`
+  unchanged). Else, as before, a full green giving way, its yellow arrow flashing in place of the green (#1109): a crossroads
+  without left pockets, whose exit walkers cross the cross road in the other phase (tier 0
+  `RightPocketWithoutOverlap_GoesWithItsApproachAndTheFlasher`). Left pockets stay protected (never permissive). Test region:
+  permissive right arrows 4 -> 1 (2910750,1321400 arm 0 left: its walkers have no other green), J3b 80 -> 79 s, J4's stem two
+  arrows; other cycles unchanged; `--trafficcheck` at J3 and J4: no red run. Geneva centre (rewrite copy, 246 lit junctions, 0
+  invalid): permissive right arrows 29 -> 28 (the rest: crossroads without a left pocket, their exit's walkers green in no other
+  phase: protecting them needs a phase, #1119 adds none), 13 cycles changed, 9 longer (42 -> 58, 37 -> 51, 45 -> 56, 75 -> 84,
+  80 -> 89 s, ...), 1 shorter, longest 115 s as before. Found on Geneva: a stem with a left and a right lane and no main lane
+  whose right arrow could not be protected was put with a main lane it no longer had (never green, plan not written; tier 0
+  `FromGeneva_AStemWithTwoLanes...`). Tier 0 `TeeStem_WithALeftAndARightLane_*`,
+  `RightPocket_ProtectedWithItsApproach_*`, `SignalTestRegionTests.Turn_lanes_have_their_own_heads_and_are_protected_where_the_phases_allow`.
 - **Trams** (#1057): a tram group per approach a tram track enters by, the tram bar heads beside the car heads: `tram-approaches`.
 - **Not done**: one record for a junction of several nodes (the internal links are only kept
   clean); OSM `turn:lanes` not read yet, restrictions only for the lane records (a left pocket is

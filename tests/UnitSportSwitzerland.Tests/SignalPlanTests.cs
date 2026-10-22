@@ -179,7 +179,9 @@ public class SignalPlanTests(ITestOutputHelper output)
     [Fact]
     public void RightPocketWithoutOverlap_GoesWithItsApproachAndTheFlasher()
     {
-        // no left pocket anywhere: no leading phase for the right arrows to overlap
+        // no left pocket anywhere: no leading phase for the right arrows to overlap; protected with its approach, the east arm's
+        // walkers it crosses would be green in no phase (they cross the east-west traffic in the other): the one case it stays
+        // permissive (#1119, without adding a phase)
         var plan = SignalPlan.Build([Arm(N), Arm(E), Arm(S, right: true), Arm(W)]);
         AssertValid(plan);
         Assert.DoesNotContain(plan.Groups, g => g.Kind == SignalGroupKind.RightArrow);
@@ -604,5 +606,56 @@ public class SignalPlanTests(ITestOutputHelper output)
             Assert.Empty(plan.LeftGivesWayTo(g));
             Assert.Null(plan.LeftFlash(g));
         }
+    }
+
+    [Fact]
+    public void TeeStem_WithALeftAndARightLane_EachTurnItsOwnGroup_Protected()
+    {
+        // #1119, the user: every turn-only lane its own light. The stem (south) has a left and a right pocket and no through: a left
+        // arrow and a right arrow, no ball for both; both protected in the side phase
+        var plan = SignalPlan.Build([Arm(E, left: true), Arm(S, left: true, right: true), Arm(W, right: true)]);
+        AssertValid(plan);
+        Assert.Equal(-1, Group(plan, SignalGroupKind.Car, 1));
+        int l = Group(plan, SignalGroupKind.LeftArrow, 1), r = Group(plan, SignalGroupKind.RightArrow, 1);
+        Assert.True(l >= 0 && r >= 0);
+        var c = plan.Conflicts();
+        foreach (int g in (int[])[l, r])
+        {
+            Assert.NotEmpty(WhenGreen(plan, g));
+            for (int h = 0; h < plan.Groups.Count; h++)
+                if (c[g, h] != SignalPlan.Conflict.None) Assert.Empty(WhenGreen(plan, g, h));
+        }
+    }
+
+    [Fact]
+    public void RightPocket_ProtectedWithItsApproach_WhereItsWalkersKeepAnotherGreen()
+    {
+        // #1119, the user: "even right turns with their own lanes are usually protected". Left pockets on the north-south road
+        // give it a lead phase in which the east arm's walkers (across the northbound right turn's exit) are green: the right
+        // arrow no phase carried before goes with its approach, the walkers red meanwhile, green in the lead
+        var plan = SignalPlan.Build([Arm(N, left: true), Arm(E), Arm(S, left: true, right: true), Arm(W)]);
+        AssertValid(plan);
+        int r = plan.Groups.FindIndex(g => g.Arm == S && (g.Kind == SignalGroupKind.RightArrow || g is { Kind: SignalGroupKind.Car, Moves: SignalMoves.Right }));
+        Assert.Equal(SignalGroupKind.RightArrow, plan.Groups[r].Kind);
+        var c = plan.Conflicts();
+        Assert.NotEmpty(WhenGreen(plan, r));
+        for (int h = 0; h < plan.Groups.Count; h++)
+            if (c[r, h] == SignalPlan.Conflict.Hard) Assert.Empty(WhenGreen(plan, r, h));
+        Assert.NotEmpty(WhenGreen(plan, Group(plan, SignalGroupKind.Pedestrian, E)));
+    }
+
+    [Fact]
+    public void FromGeneva_AStemWithTwoLanesWhoseRightTurnCannotBeProtected_StillGoesGreen()
+    {
+        // LV95 2499873,1117528 (#1119): a one-way in and a stem with a left and a right lane; the right arrow, held off the walkers
+        // it crosses in no phase, gives way with the stem's left arrow (its plan was written invalid: the right turn never green)
+        double D(double deg) => deg * Math.PI / 180;
+        var plan = SignalPlan.Build([
+            new SignalArm(D(-154), false, true, Pedestrians: true, CrossingM: 10, Rank: 18),
+            new SignalArm(D(-64), true, false, Pedestrians: true, CrossingM: 8, Rank: 18),
+            new SignalArm(D(27), false, true, Pedestrians: true, CrossingM: 8, Rank: 2),
+            new SignalArm(D(116), true, true, LeftPocket: true, RightPocket: true, Pedestrians: true, CrossingM: 9.5f, Rank: 2)]);
+        AssertValid(plan);
+        Assert.Contains(plan.Groups, g => g is { Kind: SignalGroupKind.LeftArrow, Arm: 3 });
     }
 }
