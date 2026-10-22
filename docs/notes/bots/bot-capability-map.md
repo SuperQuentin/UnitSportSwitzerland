@@ -75,6 +75,7 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | UFO beam, ramp / legs, lights (#861) | `Ufo.SetBeam` / `SetRamp` / `SetLegs` / `SetLights`, or the `FlightInput` edges `Beam` / `Hatch` / `Lights` | the beam acts on every peer from the pilot's replicated pose (`TractorBeams`): the server lifts what it owns, so a bot's beam needs nothing more | — | — | gap: no skill uses it |
 | be lifted by a UFO's beam (#861) | `WalkControls`: a bot standing still is lifted, a walking one is let down (`FootPlayer.BeamPhysics`, run on the bot's server body) | the body | a beam in view: the pilot's pose (`Ufo.BeamOn(Anim)`), cone `TractorBeamMath.InCone` | `MoveTo` (walk out) | a sighting's beam: `BotUfo.React` runs out from under it (#863); a player's saucer: gap |
 | a UFO sighting: look up, wave, run from a beam (#863) | `BotIntent.FaceYaw`/`Pitch`, `Wish` + `Run`, `DanceId` (wave) | — (the sightings are the server's) | the plans, `UfoSightings.Nearest` (300 m) | `BotUfo.React` (`WanderBrain`; `BrBrain` roaming, looting, investigating) | ok |
+| pogo at a concert (#1150) | `DanceId` = `PogoQte.PogoDanceId` (the Pogo emote) on the server body | — (`DanceId` replicates from the server for a bot) | `ConcertRig.MusicNear` | — | gap: no skill dances; the QTE and its score are a player's screen only (n/a for a bot) |
 | board a landed sighting saucer and fly it (#863) | — | the parked UFO's `RequestClaim`, like any parked vehicle | the plans | — | gap: bots cannot fly a UFO yet (#861) |
 
 ## Battle Royale

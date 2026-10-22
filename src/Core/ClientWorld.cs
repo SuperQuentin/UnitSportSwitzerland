@@ -779,6 +779,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Audio.EarsProbe.Requested) AddChild(new Audio.EarsProbe(() => LocalPlayer));
         if (Items.RadioPanelProbe.Requested) AddChild(new Items.RadioPanelProbe(() => LocalPlayer));
         if (Player.EmoteWheelProbe.Requested) AddChild(new Player.EmoteWheelProbe(() => LocalPlayer));
+        if (Concert.PogoProbe.Requested) AddChild(new Concert.PogoProbe(() => LocalPlayer));
         if (Player.SitProbe.Requested) AddChild(new Player.SitProbe(() => LocalPlayer));
         if (Concert.ConcertDeskProbe.Requested) AddChild(new Concert.ConcertDeskProbe(() => LocalPlayer));
         if (Concert.ConcertCamProbe.Requested) AddChild(new Concert.ConcertCamProbe(() => LocalPlayer, () => GetNodeOrNull<ChatManager>(ChatManager.NodeName)));
@@ -836,6 +837,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(items);
         _items = items;
         AddChild(new Player.EmoteWheel(() => _onFoot ? LocalPlayer : null) { Name = "EmoteWheel" });
+        // the concert pogo (#1150): dancing at a show, jump on the beat
+        AddChild(new Concert.PogoQte(() => _onFoot ? LocalPlayer : null));
         // the quick menu (#840): hold F2 / pad Back for activities, invites, inventory, vehicles, map...
         var emotes = GetNodeOrNull<Player.EmoteWheel>("EmoteWheel");
         AddChild(new Ui.QuickMenu(() => MenuOpen?.Invoke() == true, () => _onFoot && LocalPlayer is { Ride: Player.RideKind.OnFoot, RidingWith: 0 },
