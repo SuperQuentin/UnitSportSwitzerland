@@ -48,6 +48,13 @@
   - **U-turn** (PgDn): `PlaceAt` the rider stopped and turned round on the nearest road node, then
     the road back, straight on.
   - A dead end: the way ends there and the pilot stops; the HUD says to turn round.
+- **Arrows** (`JunctionArrows`, `[Showcase("Training", "Junction arrow")]`): the next junction's roads
+  as a row of 3 m chevrons standing 3.6 m over its node, facing the rider coming in (`Junction.InE/InN`),
+  leftmost on the left, each rolled to its road's bearing (straight on points up). The road taken is
+  lit orange, the others pale. Set when the junction or the road taken changes, never per frame.
+  - **Gotcha**: `MeshScratch` authors facing +Z and its `Build` turns a half turn about Y. An arrow
+    authored toward -Z came out pointing backwards (upside down once stood up).
+  - Lying flat on the road they could not be seen: foreshortened and hidden behind the rider.
 - **Power**: with measured power arriving, `Bicycle.RiderWatts` is the reading and the throttle is
   held. Without, the keys pedal (throttle, brake, sprint) as on any ride. The session forces the
   Sim profile and restores it at the end.
@@ -97,15 +104,15 @@
   - Windowed it writes `test_output/training_1_app.png` and `training_2_ride_*.png`.
 - **Check**: `--trainingcheck junctions --trainer-sim --world fixture --chunks fixture:junction --traffic 0`
   (quick). A course east along the main road past the T:
-  - the T found 121 m ahead with its roads; left taken (the kerb's curve, -35°), 60 m up the side
+  - the T found 121 m ahead with its roads, its arrows over it (straight on lit, then the left one);
+    left taken (the kerb's curve, -35°), 60 m up the side
     road, off the course;
   - turn round, Rejoin: 0.1 km back onto the course east of the T;
   - ERG on at 240 W, +10 W, off: the rig's trainer decodes each (`Mode`, `TargetWatts`);
   - finished, worst 1.6 m off the way.
   - `--traffic 0`: a car queued at the T stopped the bike dead (the ride does not ghost through
     traffic yet).
-- **Not yet**: riding through traffic (a car in the way stops the bike), arrows drawn on the road,
-  loading roads beyond the course's 1 km margin (off there, the way ends), the elevation profile,
+- **Not yet**: riding through traffic (a car in the way stops the bike), loading roads beyond the course's 1 km margin (off there, the way ends), the elevation profile,
   the FTP test's `PowerMeasured` (#903), ANT+ (no USB stick yet). RideLink's WinRT path has not met a
   real trainer.
 - **Devices**:

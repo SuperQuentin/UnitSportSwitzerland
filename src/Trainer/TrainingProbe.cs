@@ -212,12 +212,25 @@ public partial class TrainingProbe : Node
         Check(j != null && j.Taken >= 0 && JunctionChoice.Pick(j, -1) >= 0,
             $"a junction ahead at x {X() + session.JunctionIn:0} with a road left: {(j == null ? "none" : string.Join(", ", j.Branches.Select(b => $"{b.Bearing:0}{(b.Taken ? "*" : "")}")))}");
         Check(session.OnCourse, $"on the course before it");
+        // its arrows: a row over the junction, one per road, the one taken lit and pointing up (straight on)
+        await Wait(0.3);
+        var arrows = session.Arrows?.Showing.ToList() ?? new();
+        var jAt = j == null ? Vector3.Zero : _origin.ToWorld(e0 + Tee, n0, main[0].Height[0]);
+        Check(j != null && arrows.Count == j.Branches.Count && arrows.All(a => RaceRoute.Flat(a.At - jAt).Length() < 30f && a.At.Y - jAt.Y is > 2f and < 5f),
+            $"{arrows.Count} arrows over the T: {string.Join(", ", arrows.Select(a => FormattableString.Invariant($"{RaceRoute.Flat(a.At - jAt).Length():0} m from it, {a.At.Y - jAt.Y:0.0} m up{(a.Taken ? " lit" : "")}")))}");
+        Check(arrows.Count(a => a.Taken) == 1 && arrows.First(a => a.Taken).Points.Y > 0.9f, $"the lit one points up: straight on");
         session.Choose(-1);
+        await Wait(0.5);
+        arrows = session.Arrows?.Showing.ToList() ?? new();
+        var lit = arrows.FirstOrDefault(a => a.Taken);
+        Check(arrows.Count(a => a.Taken) == 1 && lit.Points.Z < -0.3f, $"left chosen: the lit arrow leans left, north (up {lit.Points.Y:0.00}, north {-lit.Points.Z:0.00})");
         Shot("training_j1_left.png");
         float worst = 0;
+        bool near = false;
         for (int i = 0; i < 600 && Y() < 60; i++)
         {
             await Wait(0.1);
+            if (!near && X() > Tee - 50) { near = true; Shot("training_j1b_arrows.png"); }
             worst = Mathf.Max(worst, session.OffCourse);
             if (i % 20 == 0) Log(FormattableString.Invariant($"  at x {X():0.0} y {Y():0.0}, {me.RideSpeed * 3.6f:0} km/h, way left {session.WayLeft:0} m, {session.OffCourse:0.0} m off it"));
         }
