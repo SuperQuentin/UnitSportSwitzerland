@@ -59,7 +59,9 @@ public sealed class SitgGantries
     /// <paramref name="bearing"/>: within <see cref="Upstream"/> m before the line (or <see cref="Behind"/> past it),
     /// <see cref="Side"/> m to the side, facing the same way; the nearest along the way. Null where none.
     /// </summary>
-    public SitgGantry? At(double e, double n, double bearing)
+    /// <param name="upstream">How far before the line a gantry may stand (m): <see cref="Upstream"/> for one over the line, more for the
+    /// benchmark's looser truth (an approach Geneva signs lane by lane at all).</param>
+    public SitgGantry? At(double e, double n, double bearing, double upstream = Upstream, double side = Side)
     {
         double rad = bearing * Math.PI / 180, de = Math.Sin(rad), dn = Math.Cos(rad);
         SitgGantry? best = null;
@@ -67,8 +69,8 @@ public sealed class SitgGantries
         foreach (var g in Gantries)
         {
             if (TurnBetween(g.Bearing, bearing) > Turn) continue;
-            double along = (g.E - e) * de + (g.N - n) * dn, side = (g.E - e) * dn - (g.N - n) * de;
-            if (along < -Upstream || along > Behind || Math.Abs(side) > Side) continue;
+            double along = (g.E - e) * de + (g.N - n) * dn, off = (g.E - e) * dn - (g.N - n) * de;
+            if (along < -upstream || along > Behind || Math.Abs(off) > side) continue;
             if (Math.Abs(along) < bestAlong) (best, bestAlong) = (g, Math.Abs(along));
         }
         return best;

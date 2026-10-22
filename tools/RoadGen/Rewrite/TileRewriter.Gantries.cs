@@ -34,7 +34,8 @@ public sealed class GantryContext
     /// <summary>Writes the facts (<c>gantry_facts.tsv</c>), sorted so two runs give the same file.</summary>
     public void WriteFacts(string path)
     {
-        var rows = Facts.ToList();
+        // (a junction in two blocks' halos is planned in both: once)
+        var rows = Facts.Distinct().ToList();
         rows.Sort(StringComparer.Ordinal);
         File.WriteAllLines(path, new[] { "# gantry_facts v1: every lit approach (#1110); built: none, rule, sitg",
             GantryFacts.Header + "\tcanton\tbuilt\truns\tsitg_signs\tcolours (rule, SITG)" }.Concat(rows));

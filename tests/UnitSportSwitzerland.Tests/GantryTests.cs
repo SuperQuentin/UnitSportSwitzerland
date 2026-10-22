@@ -33,13 +33,24 @@ public class GantryTests
     [Fact]
     public void The_rule_wants_wide_or_split_approaches_on_main_roads_or_near_a_motorway()
     {
-        var rule = new GantryRule(MinLanes: 3, MinTurnLanes: 2, MinTurnSets: 2, MinStreetLanes: 2, MotorwayReach: 1000);
+        var rule = new GantryRule(MinLanes: 3, MinTurnLanes: 2, MinTurnSets: 2, MinStreetLanes: 2, MotorwayReach: 1000, NeedsBoth: false);
         Assert.True(rule.Wants(Facts(3, 2, 2, owner: 1)));          // a cantonal 2+2 road widened to three lanes
         Assert.False(rule.Wants(Facts(3, 1, 3, owner: 1)));         // a 1+1 road with its pockets
         Assert.False(rule.Wants(Facts(3, 2, 2)));                   // a communal road far from a motorway
         Assert.True(rule.Wants(Facts(2, 2, 2, motorway: 400)));     // two lanes going two ways by a motorway
         Assert.False(rule.Wants(Facts(2, 2, 1, motorway: 400)));    // two lanes straight on
         Assert.False(new GantryRule(NeedsBoth: true).Wants(Facts(3, 2, 2, owner: 1)));   // main road, but far from a motorway
+    }
+
+    [Fact]
+    public void The_tuned_rule_gantries_main_roads_by_a_motorway_only()
+    {
+        // the benchmark's best on Geneva (#1110): two lanes from a 2+2 main road within 300 m of a motorway, expressway or ramp
+        var rule = GantryRule.Default;
+        Assert.True(rule.Wants(Facts(2, 2, 1, owner: 1, motorway: 250)));
+        Assert.False(rule.Wants(Facts(4, 2, 3, owner: 1, motorway: 450)));   // a big city approach away from motorways
+        Assert.False(rule.Wants(Facts(2, 2, 2, motorway: 100)));             // a communal road by a motorway
+        Assert.False(rule.Wants(Facts(3, 1, 3, owner: 1, motorway: 100)));   // a 1+1 road with its pockets
     }
 
     [Fact]

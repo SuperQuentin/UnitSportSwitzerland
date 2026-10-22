@@ -13,6 +13,9 @@ using UnitSport.Tools.RoadGen.Layout;
 /// </summary>
 public static class GantryBenchmark
 {
+    /// <summary>The scored truth: SITG lane signs this far before the approach's line, this far to its side (m).</summary>
+    public const double LooseUpstream = 200, LooseSide = 25;
+
     private sealed record Row(GantryFacts Facts, string Canton, string Built, int Runs, int SitgSigns, string Colours);
 
     public static int Run(string temp, Action<string> log)
@@ -22,7 +25,7 @@ public static class GantryBenchmark
         var sitg = SitgGantries.Load(sitgPath);
         if (sitg is null) { log($"no {sitgPath}: run TerrainPreprocessor --sitg-signs first"); return 1; }
         var rows = new List<Row>();
-        foreach (var line in File.ReadLines(factsPath))
+        foreach (var line in File.ReadLines(factsPath).Distinct())
         {
             if (line.StartsWith('#') || line.StartsWith("e\t", StringComparison.Ordinal)) continue;
             var f = line.Split('\t');
@@ -31,10 +34,15 @@ public static class GantryBenchmark
             int.TryParse(f[13], out int signs);
             rows.Add(new Row(facts, f[10], f[11], runs, signs, f[14]));
         }
-        var ge = rows.Where(r => r.Canton == "GE").ToList();
-        var truth = ge.Select(r => sitg.At(r.Facts.E, r.Facts.N, r.Facts.Bearing) is not null).ToList();
+        // the canton where the rewrite had none (switzerland.bin not found from where it ran)
+        var cantons = UnitSport.Tools.RoadGen.Rewrite.TileRewriter.Cantons.Find();
+        var ge = rows.Where(r => (r.Canton != "" ? r.Canton : cantons?.CodeAt(r.Facts.E, r.Facts.N)) == "GE").ToList();
+        var strict = ge.Select(r => sitg.At(r.Facts.E, r.Facts.N, r.Facts.Bearing) is not null).ToList();
+        // the looser truth: lane signs over the approach within LooseUpstream m before its line (Geneva signs it lane by lane)
+        var loose = ge.Select(r => sitg.At(r.Facts.E, r.Facts.N, r.Facts.Bearing, LooseUpstream, LooseSide) is not null).ToList();
+        var truth = loose;
         var c = CultureInfo.InvariantCulture;
-        log(string.Create(c, $"lit approaches: {rows.Count:N0} ({ge.Count:N0} in canton Geneva); with SITG lane signs over them: {truth.Count(t => t):N0}"));
+        log(string.Create(c, $"lit approaches: {rows.Count:N0} ({ge.Count:N0} in canton Geneva); with SITG lane signs over the line (60 m before it): {strict.Count(t => t):N0}; within {LooseUpstream:F0} m before it (the truth scored): {loose.Count(t => t):N0}"));
         // SITG's gantries near the region's lights, matched or not
         var matched = new HashSet<SitgGantry>();
         foreach (var r in ge) if (sitg.At(r.Facts.E, r.Facts.N, r.Facts.Bearing) is { } g) matched.Add(g);
@@ -61,15 +69,21 @@ public static class GantryBenchmark
             double p = tp + fp == 0 ? 0 : tp / (double)(tp + fp), rc = tp + fn == 0 ? 0 : tp / (double)(tp + fn), f1 = p + rc == 0 ? 0 : 2 * p * rc / (p + rc);
             return string.Create(c, $"hits {tp,3}  misses {fn,3}  false {fp,4}  precision {p:P0}  recall {rc:P0}  F1 {f1:F2}   {rule}");
         }
-        log("the rule (default):");
+        log("the user's plan (three lanes, or two going two ways; a main road or a motorway within 1 km), against the scored truth:");
+        log("  " + Line(new GantryRule(3, 2, 2, 1, 1000, false)));
+        log("the rule (default, tuned), against the scored truth:");
         log("  " + Line(GantryRule.Default));
+        truth = strict;
+        log("... and against lane signs over the line only:");
+        log("  " + Line(GantryRule.Default));
+        truth = loose;
 
         var sweep = new List<(double F1, GantryRule Rule)>();
-        foreach (int minLanes in (int[])[2, 3, 4, 5])
+        foreach (int minLanes in (int[])[1, 2, 3, 4])
             foreach (int turnLanes in (int[])[2, 3, 99])
                 foreach (int turnSets in (int[])[2, 3])
                     foreach (int street in (int[])[1, 2])
-                        foreach (double reach in (double[])[0, 300, 600, 1000, 1500, 2500])
+                        foreach (double reach in (double[])[0, 200, 300, 400, 600, 1000, 1500])
                             foreach (bool both in (bool[])[false, true])
                             {
                                 if (turnLanes == 99 && turnSets == 3) continue;

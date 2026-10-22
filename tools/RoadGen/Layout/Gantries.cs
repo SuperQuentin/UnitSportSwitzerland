@@ -37,9 +37,14 @@ public sealed record GantryFacts(double E, double N, double Bearing, int Lanes, 
 /// <see cref="MinTurnLanes"/> or more whose lanes go <see cref="MinTurnSets"/> different ways or more; from a street of
 /// <see cref="MinStreetLanes"/> lanes of its own or more; on a main road (signed blue) or within <see cref="MotorwayReach"/> m
 /// of a motorway, an expressway or a ramp (where <see cref="NeedsBoth"/>: on a main road and that close).
+/// The defaults are the benchmark's best (Oct 22 2026, 109 Geneva tiles, 1,153 lit approaches, 15 with SITG lane signs within
+/// 200 m before their line): two lanes or more, from a street of two lanes, on a main road within 300 m of a motorway, expressway
+/// or ramp; 4 hits, 11 misses, 8 false placements (F1 0.30), where the user's plan (three lanes, or two going two ways, on a main
+/// road or within 1 km of a motorway) placed 220 for 2 hits. The motorway's nearness is what tells them apart: 14 of the 15
+/// within 600 m, against 12 % of all lit approaches (the user: "really only used near highway intersections").
 /// </summary>
-public sealed record GantryRule(int MinLanes = 3, int MinTurnLanes = 2, int MinTurnSets = 2, int MinStreetLanes = 1,
-    double MotorwayReach = 1000, bool NeedsBoth = false)
+public sealed record GantryRule(int MinLanes = 2, int MinTurnLanes = 99, int MinTurnSets = 2, int MinStreetLanes = 2,
+    double MotorwayReach = 300, bool NeedsBoth = true)
 {
     public static readonly GantryRule Default = new();
 
