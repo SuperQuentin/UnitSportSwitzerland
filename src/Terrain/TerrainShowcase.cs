@@ -105,6 +105,10 @@ public static class TerrainShowcase
         // right pocket the head shows straight on and left, an arrow: a flasher on its left with a left arrow on its plate
         ("Permissive left, ball", () => TrafficLight(pedestrianAmber: true, bikeHead: false, leftPockets: false)),
         ("Permissive left, arrow", () => TrafficLight(pedestrianAmber: true, bikeHead: false, leftPockets: false, rightPocket: true)),
+        // an uncombined arrow (the turn alone) flashes its yellow in place of its green (#1109, the user): the mast arm's head over
+        // the left lane of an approach without a left pocket, the right lane's head beside the pole
+        ("Permissive left, uncombined arrow", () => TrafficLight(pedestrianAmber: true, bikeHead: false, leftPockets: false, rightPocket: true,
+            overhead: OverheadKind.Arm)),
     ];
 
     private static Node3D TrafficLight(bool pedestrianAmber, bool arrowPlates = false, bool rightOnRed = false, bool bikeHead = true,

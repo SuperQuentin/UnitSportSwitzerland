@@ -31,7 +31,7 @@ public static class SignalCheck
         // the flashers' plates and the permissive lefts (#1109): plates by kind, ball heads flashing their yellow, arrow heads with a
         // flasher on their left
         var plates = new SortedDictionary<string, int>(StringComparer.Ordinal);
-        int ballLefts = 0, arrowLefts = 0;
+        int ballLefts = 0, arrowLefts = 0, singleLefts = 0, singleRights = 0;
         var leftAt = new List<string>();
         var nearLanes = new List<(double Distance, string Text)>();   // lane records within 60 m of --at
         double atE = 0, atN = 0;
@@ -106,11 +106,14 @@ public static class SignalCheck
                         plates[key] = plates.GetValueOrDefault(key) + 1;
                         if (list && plate == SignalPlate.Arrow) leftAt.Add(string.Create(c, $"    {where} arm {p.Groups[g].Arm}: flasher of {p.Groups[p.Groups[g].Qualifies].Moves}, plate {key}"));
                     }
-                    if (p.Groups[g].Kind != SignalGroupKind.Car || p.LeftGivesWayTo(g, conflicts).Count == 0) continue;
-                    // (as SignalBuilder shows it: a ball flashes its yellow, an arrow with the left gets a flasher on its left)
-                    bool arrowHead = ArrowShown(p, g);
-                    if (arrowHead) arrowLefts++; else ballLefts++;
-                    if (list || leftAt.Count < 6) leftAt.Add(string.Create(c, $"    {where} arm {p.Groups[g].Arm} {p.Groups[g].Moves}: {(arrowHead ? "arrow head, flasher on its left" : "ball, its yellow flashes")}"));
+                    if (p.Groups[g].Kind != SignalGroupKind.Car) continue;
+                    // (as SignalBuilder shows it: an uncombined arrow, the turn alone, flashes its yellow in place of its green)
+                    if (p.Groups[g].Moves == SignalMoves.Right && ArrowShown(p, g) && p.TurnFlash(g, SignalMoves.Right, conflicts) is not null) singleRights++;
+                    if (p.LeftGivesWayTo(g, conflicts).Count == 0) continue;
+                    // (a ball flashes its yellow, a combined arrow with the left gets a flasher on its left)
+                    bool arrowHead = ArrowShown(p, g), single = arrowHead && p.Groups[g].Moves == SignalMoves.Left;
+                    if (single) singleLefts++; else if (arrowHead) arrowLefts++; else ballLefts++;
+                    if (list || leftAt.Count < 6) leftAt.Add(string.Create(c, $"    {where} arm {p.Groups[g].Arm} {p.Groups[g].Moves}: {(single ? "left arrow alone, its yellow flashes for its green" : arrowHead ? "combined arrow head, flasher on its left" : "ball, its yellow flashes")}"));
                 }
                 if (list) log(string.Create(c, $"  {where}: {shape}, {p.Arms.Count(a => a.RightPocket)} right pockets, cycle {p.Cycle:F0} s, {p.Groups.Count} groups{(stages > 0 ? $", {stages} two-stage crossings" : "")}{(p.ConflictTimed ? ", conflict-timed" : "")}{(s.Overheads.Count > 0 ? ", overhead: " + string.Join(" ", s.Overheads.Select(o => $"arm {o.Arm} {o.Kind} x{o.Heads.Count}")) : "")}"));
                 if (at is not null)
@@ -134,7 +137,7 @@ public static class SignalCheck
         log("  cycles s: " + string.Join(", ", cycles.Select(kv => $"{kv.Key} x{kv.Value}")));
         log(string.Create(c, $"  two-stage crossings (#1030): {stageArms} at {stageJunctions} junctions; island waits over a third of the cycle {longWaits.Count}"));
         foreach (var wait in longWaits.Take(list ? int.MaxValue : 10)) log(wait);
-        log(string.Create(c, $"  flasher plates (#1109): {(plates.Count == 0 ? "none" : string.Join(", ", plates.Select(kv => $"{kv.Key} x{kv.Value}")))}; permissive lefts: {ballLefts} balls flashing their yellow, {arrowLefts} arrow heads with a flasher on their left"));
+        log(string.Create(c, $"  flasher plates (#1109): {(plates.Count == 0 ? "none" : string.Join(", ", plates.Select(kv => $"{kv.Key} x{kv.Value}")))}; permissive lefts: {ballLefts} balls flashing their yellow, {arrowLefts} combined arrow heads with a flasher on their left, {singleLefts} left arrows alone flashing their yellow for their green; right arrows alone flashing theirs: {singleRights} (pole heads; overhead lane heads not counted)"));
         foreach (var l in leftAt) log(l);
         if (nearest is { } near) log(near.Text);
         log(string.Create(c, $"  lane records (#353): {lanes.Approaches} approaches ({lanes.Signalised} signalised, every signalised approach has one: {lanes.Missing == 0}), {lanes.Lanes} lanes, banned turns on {lanes.Banned}, bad {lanes.Bad}"));

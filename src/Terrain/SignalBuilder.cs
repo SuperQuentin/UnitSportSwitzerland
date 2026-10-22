@@ -87,8 +87,9 @@ public static class SignalBuilder
     /// <param name="Flash">A yellow lens that also flashes with this flasher group (#971: a bike head's, its riders turning right
     /// across a crossing green with them), -1 none.</param>
     /// <param name="Arrow">A round lens's arrow when not its group's (#1037: an overhead head shows its own lanes' moves), null the group's.</param>
-    /// <param name="Blink">A permissive left's flashing yellow (#1109, <see cref="SignalPlan.LeftFlash"/>): a ball head's yellow lens
-    /// flashes with it, and the lamp left of an arrow head; null none.</param>
+    /// <param name="Blink">A permissive turn's flashing yellow (#1109, <see cref="SignalPlan.LeftFlash"/>, <see cref="SignalPlan.TurnFlash"/>):
+    /// a ball head's yellow lens flashes with it, and the lamp left of a combined arrow head; an uncombined arrow's yellow flashes
+    /// and its green stays dark meanwhile; null none.</param>
     public readonly record struct Lens(Shape Shape, Transform3D Transform, int Junction, int Group, Role Role, int Flash = -1, SignalMoves? Arrow = null,
         SignalGroup? Blink = null);
 
@@ -568,6 +569,13 @@ public static class SignalBuilder
                 conflicts ??= signal.Plan.Conflicts();
                 return leftFlash[g] = signal.Plan.LeftFlash(g, conflicts);
             }
+            var turnFlash = new Dictionary<(int, SignalMoves), SignalGroup?>();
+            SignalGroup? TurnFlashOf(int g, SignalMoves turn)
+            {
+                if (turnFlash.TryGetValue((g, turn), out var done)) return done;
+                conflicts ??= signal.Plan.Conflicts();
+                return turnFlash[(g, turn)] = signal.Plan.TurnFlash(g, turn, conflicts);
+            }
             foreach (var h in signal.Poles.SelectMany(pole => PoleHeads(signal, pole)).Concat(signal.Overheads.SelectMany(o => OverheadHeads(signal.Plan, o).Select(x => x.Head))))
                 {
                     // a 300 mm overhead lens is the 200 mm lens scaled (a bike head's 100 mm has a mesh of its own)
@@ -599,8 +607,11 @@ public static class SignalBuilder
                         // a bike head's own yellow flashes during its green where its riders turn right across a crossing green with them (#971, the user)
                         int flash = h.Shape == Shape.Bike && role == Role.Amber ? Flasher(signal.Plan, h.Group) : -1;
                         // a ball head's own yellow flashes during its green while its left gives way to oncoming traffic (#1109, the user)
-                        var blink = h.Shape == Shape.Circle && role == Role.Amber && h.Lenses == 3
-                            && (h.Arrow ?? ArrowMoves(signal.Plan, h.Group)) == SignalMoves.None ? LeftFlashOf(h.Group) : null;
+                        // an uncombined arrow's yellow flashes in place of its green while its turn gives way (#1109, the user)
+                        var shown = h.Shape == Shape.Circle && h.Lenses == 3 ? h.Arrow ?? ArrowMoves(signal.Plan, h.Group) : SignalMoves.Left | SignalMoves.Right;
+                        var blink = shown == SignalMoves.None && role == Role.Amber ? LeftFlashOf(h.Group)
+                            : shown is SignalMoves.Left or SignalMoves.Right && role is Role.Amber or Role.Green ? TurnFlashOf(h.Group, shown)
+                            : null;
                         lamps.Lenses.Add(new Lens(h.Shape, new Transform3D(basis, at), j, h.Group, role, flash, h.Arrow, blink));
                     }
                     if (h.Flasher && Flasher(signal.Plan, h.Group) is int f and >= 0)
@@ -697,12 +708,14 @@ public static class SignalBuilder
                 var (g, shape) = row[i];
                 var at = foot + front * InFront + right * ((i - centre) * HeadSpacing)
                     + Vector3.Up * (lower + 1.5f * Pitch);
-                int f = main ? Flasher(plan, g) : -1;
+                // an uncombined arrow (the turn alone) flashes its own yellow in place of its green (#1109, the user): no lamp beside it
+                bool single = shape == Shape.Circle && ArrowMoves(plan, g) is SignalMoves.Left or SignalMoves.Right;
+                int f = main && !single ? Flasher(plan, g) : -1;
                 // its plate (#1109): what the flasher warns of
                 var (plate, plateArrow) = f >= 0 ? plan.PlateOf(f, conflicts ??= plan.Conflicts()) : (SignalPlate.None, SignalMoves.None);
                 // a permissive left on an arrow head (#1109, the user): no flashing yellow in the arrow, a flasher on its left (the
                 // leftmost head: a left pocket's arrow would have taken the left)
-                bool leftOf = main && i == 0 && shape == Shape.Circle && (ArrowMoves(plan, g) & SignalMoves.Left) != 0
+                bool leftOf = main && i == 0 && shape == Shape.Circle && !single && (ArrowMoves(plan, g) & SignalMoves.Left) != 0
                     && plan.LeftGivesWayTo(g, conflicts ??= plan.Conflicts()).Count > 0;
                 // beside its green on its right, or on its left where the next head stands there (a right lane's or arrow's head: they
                 // overlapped, #1109); a permissive left's flasher beyond it

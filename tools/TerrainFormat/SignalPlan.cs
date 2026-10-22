@@ -666,6 +666,41 @@ public sealed class SignalPlan
         return list.Any(iv => iv.Aspect == SignalAspect.FlashingAmber) ? flash : null;
     }
 
+    /// <summary>
+    /// What a head showing <paramref name="turn"/> alone (an uncombined arrow) of car group <paramref name="g"/> flashes (#1109, the
+    /// user: "for flashing arrows it takes the place of the green arrow"): a detached flasher on while that turn gives way, to the
+    /// oncoming cars (<see cref="LeftFlash"/>) or to walkers or riders across it (the group's <see cref="SignalGroupKind.Flasher"/>,
+    /// where its plate's turns hold it); null where it never does.
+    /// </summary>
+    public SignalGroup? TurnFlash(int g, SignalMoves turn, Conflict[,]? conflicts = null)
+    {
+        conflicts ??= Conflicts();
+        var parts = new List<SignalGroup>(2);
+        if (turn == SignalMoves.Left && LeftFlash(g, conflicts) is { } left) parts.Add(left);
+        int f = Groups.FindIndex(x => x.Kind == SignalGroupKind.Flasher && x.Qualifies == g);
+        if (f >= 0 && (PlateOf(f, conflicts).Arrow & turn) != 0) parts.Add(Groups[f]);
+        if (parts.Count <= 1) return parts.Count == 0 ? null : parts[0];
+        // either: on wherever one is
+        var cuts = new SortedSet<float> { 0, Cycle };
+        foreach (var part in parts)
+            foreach (var iv in part.Intervals) { cuts.Add(iv.From); cuts.Add(iv.To); }
+        var flash = new SignalGroup { Kind = SignalGroupKind.Flasher, Arm = Groups[g].Arm, Qualifies = g };
+        float prev = -1;
+        foreach (float c in cuts)
+        {
+            if (prev >= 0 && c > prev)
+            {
+                double mid = (prev + c) * 0.5 - Offset;
+                var aspect = parts.Any(x => State(x, mid) == SignalAspect.FlashingAmber) ? SignalAspect.FlashingAmber : SignalAspect.Off;
+                var list = flash.Intervals;
+                if (list.Count > 0 && list[^1].Aspect == aspect) list[^1] = list[^1] with { To = c };
+                else list.Add(new SignalInterval(aspect, prev, c));
+            }
+            prev = c;
+        }
+        return flash;
+    }
+
     /// <summary>Whether two groups are ever green at the same time, <paramref name="h"/>'s green running on <paramref name="after"/> s (round the cycle).</summary>
     private bool GreenTogether(int g, int h, float after = 0f)
     {
