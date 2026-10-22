@@ -1567,6 +1567,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(new Combat.AuraHud());
         AddChild(new Combat.AuraPlanner());
         AddChild(new Combat.AuraWatchHud());
+        // Concert (#1150): jump on the beat to pogo
+        AddChild(new Concert.PogoQte(() => LocalPlayer));
 
         // World/BattleRoyale (#177): the match HUD, the zone, the drop and the way back
         var br = BattleRoyale.BrManager.CreateClient(_worldOrigin!);
