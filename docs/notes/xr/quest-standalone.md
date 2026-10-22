@@ -40,3 +40,12 @@ The same VR mode as over Link (`setup`, `rig`, `controls`), run on the headset's
   `--xrsim` the monitor stays first person, the window being the only view.
 - **No monitor.** `XrMonitor` forces `Off`, so the window renders no world, only the 2D the UI panel shares
   (`XrUi`). Nobody sees the headset's Android window.
+
+## Measuring on the headset
+
+- **Frame time:** the perf overlay and the recorder (F4, `--perflog`, `core/` PerfRecorder) time the headset's own
+  viewport in VR (`XrRig.HeadsetView`), not the window's, so their GPU column is the eyes' render.
+- **Getting the logs off:** `user://` is the app's internal storage. Only a `--debug` export is debuggable, so
+  `adb shell run-as ch.unitsport.switzerland.quest ls files/perf_logs` (then `cat` each file) works on it, never on a
+  release one. `adb logcat -s godot:*` works on both.
+- **Meta's own view:** OVR Metrics Tool (from the Meta Horizon Store) overlays FPS, GPU and CPU levels and GPU %.

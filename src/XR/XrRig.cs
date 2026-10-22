@@ -39,6 +39,8 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
 
     /// <summary>The headset camera and tracking origin, for the monitor's eye views.</summary>
     internal XRCamera3D Head => _camera;
+    /// <summary>The headset's own viewport: what the GPU spends a VR frame on (PerfRecorder times it).</summary>
+    internal SubViewport HeadsetView => _view;
     internal XROrigin3D Origin => _origin;
 
     private SubViewport _view = null!;
