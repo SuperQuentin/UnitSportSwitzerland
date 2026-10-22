@@ -87,6 +87,10 @@ public static class TerrainShowcase
         ("Mast arm", () => TrafficLight(pedestrianAmber: true, overhead: OverheadKind.Arm)),
         ("Portal", () => TrafficLight(pedestrianAmber: true, overhead: OverheadKind.Portal)),
         ("Span wire", () => TrafficLight(pedestrianAmber: true, overhead: OverheadKind.Span)),
+        // a gantry of lane signs with a horizontal head in each lane's band (#1110, Geneva, the user's photos): a green sign over the
+        // left lane to the motorway and a blue one over two lanes straight on; three signs over three lanes, one white
+        ("Gantry, lane signs", () => TrafficLight(pedestrianAmber: false, gantry: 2)),
+        ("Gantry, three signs", () => TrafficLight(pedestrianAmber: false, gantry: 3)),
         // a two-stage crossing's island pole (#1030): the left repeater over two pedestrian heads back to back, one per half
         ("Two-stage island", () => TrafficLight(pedestrianAmber: true, island: true)),
         ("Two-stage island, Geneva", () => TrafficLight(pedestrianAmber: false, island: true)),
@@ -116,7 +120,8 @@ public static class TerrainShowcase
 
     private static Node3D TrafficLight(bool pedestrianAmber, bool arrowPlates = false, bool rightOnRed = false, bool bikeHead = true,
         SignalPoleColour colour = SignalPoleColour.SilverGrey, OverheadKind? overhead = null, bool island = false, bool tram = false,
-        bool tramT = false, bool tramTwo = false, bool peds = true, bool leftPockets = true, bool rightPocket = false, bool leftPole = false)
+        bool tramT = false, bool tramTwo = false, bool peds = true, bool leftPockets = true, bool rightPocket = false, bool leftPole = false,
+        int gantry = 0)
     {
         var plan = SignalPlan.Build(
         [
@@ -157,6 +162,7 @@ public static class TerrainShowcase
                     : [new OverheadHead(6.0f - from - P, SignalMoves.Right), new OverheadHead(6.0f - from, SignalMoves.Through),
                        new OverheadHead(6.0f - from + P, SignalMoves.Left)],
             });
+        if (gantry > 0) signal.Gantries.Add(ShowcaseGantry(gantry));
         tile.Signals.Add(signal);
         var node = RoadProps(tile);
         if (overhead == OverheadKind.Span)
@@ -167,6 +173,32 @@ public static class TerrainShowcase
                     MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.78f, 0.74f, 0.66f) },
                 });
         return node;
+    }
+
+    /// <summary>
+    /// A gantry over the approach the pole serves (#1110): its posts 1 m out of the pole (the lanes to its left, +X) and 11.5 m
+    /// across; two signs over three lanes (the user's photo 1, Route de Lausanne) or a sign over each of three.
+    /// </summary>
+    private static SignGantry ShowcaseGantry(int signs)
+    {
+        const SignalMoves L = SignalMoves.Left, T = SignalMoves.Through, R = SignalMoves.Right;
+        const char M = SignGantry.MotorwayMark;
+        return new SignGantry
+        {
+            Arm = 0, Lit = true, X = -1f, EndX = 10.5f, Bottom = 5f,
+            Signs = signs == 2
+                ?
+                [
+                    new GantrySign { Along = 4.5f, Width = 5.4f, Colour = SignColour.Blue, Lines = ["Versoix", "Lausanne"], Lanes = [new(3f, T), new(6f, T)] },
+                    new GantrySign { Along = 9f, Width = 2.7f, Colour = SignColour.Green, Lines = [M + "Aéroport", "France", "Palexpo"], Lanes = [new(9f, L)] },
+                ]
+                :
+                [
+                    new GantrySign { Along = 3f, Width = 2.7f, Colour = SignColour.White, Lines = ["Vernier"], Lanes = [new(3f, R)] },
+                    new GantrySign { Along = 6f, Width = 2.7f, Colour = SignColour.Blue, Lines = ["France", "Vernier"], Lanes = [new(6f, T)] },
+                    new GantrySign { Along = 9f, Width = 2.7f, Colour = SignColour.Green, Lines = [M + "Lausanne", "Aéroport"], Lanes = [new(9f, L)] },
+                ],
+        };
     }
 
     private static RoadTile Tile(params RoadPointProp[] props)
@@ -207,6 +239,7 @@ public static class TerrainShowcase
             node.AddChild(lit);
         }
         foreach (var label in RoadSignBuilder.Labels(tile) ?? []) node.AddChild(RoadSignBuilder.Make(label));
+        foreach (var label in SignalBuilder.GantryLabels(tile) ?? []) node.AddChild(RoadSignBuilder.Make(label));   // #1110
         return node;
     }
 
