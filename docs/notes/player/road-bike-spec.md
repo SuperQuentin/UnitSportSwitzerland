@@ -100,4 +100,16 @@
   - HUD: `… rpm    148 bpm`, and the Game boost bar shows W′ in Sim. `--ride bike,N` prints both.
 - **Standing** (`RidingPosition.Standing`, phase 6): pedalling up more than 8% under 70 rpm. CdA
   ×1.15, and the keys' cadence curve floors at 0.95, since the rider's weight turns a cadence seated
-  legs cannot. The figure does not change pose.
+  legs cannot.
+- **Poses per position** (`BikeFrame.Fit`, `HumanMeshBuilder.BuildCyclist`, `Cyclist.RidingPose`):
+  each solved from the bike's points, as the hoods pose is.
+  - Drops: hands on the drops, 12.5 cm lower.
+  - Tuck: hips on the saddle's nose, hands on the tops by the stem. The back is set at 12°
+    (`RiderRig`'s `backAngle`) and the elbows fold to the bars: shortening the reach instead pushed
+    the shoulder *up*.
+  - Standing: hips 7 cm up and 15 cm forward, arms long. The bike rocks ±7° once a crank turn, away
+    from the pushing pedal, and the rider counter-rocks 70% of it.
+  - A pose shows after 0.3 s held, rebuilt only then. The legs' crank-step cache is keyed by
+    position too. `FirstPersonEye` follows the pose.
+  - Replicated in `WritePose`'s W.
+  - The model viewer's "Road bike riding position" shows all four.

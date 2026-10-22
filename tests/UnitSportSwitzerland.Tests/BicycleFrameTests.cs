@@ -72,4 +72,21 @@ public class BicycleFrameTests
         Assert.Equal(BikeBrakes.Disc, spec.Brakes);
         Assert.InRange(spec.Circumference, 2.12f, 2.15f);   // 700×28c rolls ~2.136 m
     }
+
+    [Fact]
+    public void Each_riding_position_moves_the_hips_and_hands_the_way_riders_do()
+    {
+        var hoods = Frame.Fit(RidingPosition.Hoods);
+        var drops = Frame.Fit(RidingPosition.Drops);
+        var tuck = Frame.Fit(RidingPosition.Tuck);
+        var standing = Frame.Fit(RidingPosition.Standing);
+        Assert.True(drops.Wrist.Y < hoods.Wrist.Y - 0.10f, "the drops are lower");
+        Assert.True(tuck.Hip.Z > hoods.Hip.Z + 0.05f, "tucked on the saddle's nose");
+        Assert.True(tuck.Wrist.Z < hoods.Wrist.Z, "hands back on the tops");
+        Assert.InRange(Mathf.RadToDeg(tuck.Back), 5f, 20f);
+        Assert.True(standing.Hip.Y > hoods.Hip.Y + 0.05f && standing.Hip.Z > hoods.Hip.Z + 0.10f, "off the saddle, forward");
+        // standing, the leg is near straight at the bottom of the stroke, never stretched past it by more than a few cm
+        float reach = Frame.LegHip(1, RidingPosition.Standing).DistanceTo(Frame.Pedal(Mathf.Pi / 2f, 1));
+        Assert.InRange(reach, BikeFrame.ThighLength + BikeFrame.ShinLength - 0.05f, BikeFrame.ThighLength + BikeFrame.ShinLength + 0.04f);
+    }
 }

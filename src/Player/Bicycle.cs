@@ -141,9 +141,16 @@ public sealed class Bicycle : Rideable
     /// <summary>Below this the bike is being wheeled, not ridden, and steering is direct.</summary>
     private const float WalkingPace = 1.2f;
 
-    /// <summary>The figure's own eye, so first person sits where the drawn head is looking from.</summary>
-    public override Vector3 FirstPersonEye { get; } = HumanMeshBuilder.MountsForPose(HumanPose.Cycling).Eye
-        + new Vector3(0, 0, -0.06f);   // just proud of the face, so the head never fills the lens
+    /// <summary>
+    /// The figure's own eye, so first person sits where the drawn head is looking from: lower on the
+    /// drops, lowest tucked, up and forward standing (#1124).
+    /// </summary>
+    public override Vector3 FirstPersonEye => Eyes[(int)Position];
+
+    private static readonly Vector3[] Eyes = System.Array.ConvertAll(
+        new[] { RidingPosition.Hoods, RidingPosition.Drops, RidingPosition.Tuck, RidingPosition.Standing },
+        p => HumanMeshBuilder.MountsForCyclist(p).Eye
+            + new Vector3(0, 0, -0.06f));   // just proud of the face, so the head never fills the lens
 
     public override float EyeHeight => 1.48f;
     public override float ChaseDistance => 3.9f;
@@ -310,11 +317,12 @@ public sealed class Bicycle : Rideable
         if (visual is not Cyclist cyclist) return;
         cyclist.CadenceRpm = _cadence;
         cyclist.SteerAngle = Arcade ? 0f : SteerAngle;
+        cyclist.RidingPose = Position;
     }
 
     /// <summary>Cadence, and the crank angle itself so a remote rider's legs are where the owner's are.</summary>
     public override Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight) =>
-        visual is Cyclist c ? new Vector4(c.CadenceRpm, c.CrankAngle, c.SteerAngle, 0) : default;
+        visual is Cyclist c ? new Vector4(c.CadenceRpm, c.CrankAngle, c.SteerAngle, (int)c.RidingPose) : default;
 
     private float _seenCrank = float.NaN;
 
@@ -323,6 +331,7 @@ public sealed class Bicycle : Rideable
         if (visual is not Cyclist cyclist) return;
         cyclist.CadenceRpm = pose.X;
         cyclist.SteerAngle = pose.Z;
+        cyclist.RidingPose = (RidingPosition)Mathf.Clamp(Mathf.RoundToInt(pose.W), 0, (int)RidingPosition.Standing);
         // a fresh angle is taken as-is; between updates the cadence turns it
         if (pose.Y != _seenCrank) cyclist.SetCrankAngle(_seenCrank = pose.Y);
     }
