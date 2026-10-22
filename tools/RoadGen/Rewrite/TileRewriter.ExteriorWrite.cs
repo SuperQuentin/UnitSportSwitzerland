@@ -29,6 +29,38 @@ public static partial class TileRewriter
     /// <summary>Riders following the cars' lights get a bike group of their own where they lengthen a conflict time by more than this (s, #979).</summary>
     private const float LongRiders = 2f;
 
+    /// <summary>
+    /// Riders may turn right on red (the user's rule, #711: SSV Art. 69a, signal 5.18; the old layout's, ported to the junction
+    /// planner for #1165) where the approach gives them a line of their own (a path at the kerb beside a crosswalk, or a bike lane at
+    /// the kerb that turns right, ahead of the cars' line: a kerbside lane or the riders' own right-turn lane) and the street directly
+    /// on the right carries riders away on the side they join (a departing bike lane or path).
+    /// </summary>
+    private static void RidersRightOnRed(JunctionPlan jp, List<SignalArm> arms, List<ArmExterior> exterior, LayoutWriteStats stats)
+    {
+        for (int k = 0; k < arms.Count; k++)
+        {
+            if (!arms[k].In) continue;
+            var ex = exterior[k];
+            var mouth = ex.Arm.Mouth;
+            int last = mouth.LastCarriageway;
+            bool path = ex.Crosswalk is not null && mouth.Strips.Skip(last + 1).Any(x => x.Kind == StripKind.Path);
+            bool lane = ex.RiderStop is not null && last >= 0
+                && mouth.Strips[last] is { Kind: StripKind.BikeLane, Way: StripWay.In } kerb && (kerb.Moves & SignalMoves.Right) != 0;
+            if (!path && !lane) continue;
+            int target = -1;
+            double sharpest = 0;
+            for (int j = 0; j < arms.Count; j++)
+            {
+                if (j == k || !arms[j].Out || SignalPlan.Turn(arms, k, j) != SignalMoves.Right) continue;
+                double delta = Math.IEEERemainder(arms[j].Heading - (arms[k].Heading + Math.PI), 2 * Math.PI);
+                if (target < 0 || delta < sharpest) (target, sharpest) = (j, delta);
+            }
+            if (target < 0 || exterior[target].Arm.InsideLights || !exterior[target].Arm.Mouth.CarriesBikesAway) continue;
+            arms[k] = arms[k] with { BikeRightOnRed = true };
+            stats.RidersRightOnRed++;
+        }
+    }
+
     private static SignalPlan? WriteSignals(JunctionPlan jp, RoadGenResult result, Dictionary<TileId, List<RoadSignal>> signals,
         Dictionary<TileId, List<RoadApproach>> approaches, Cantons? cantons, SignalStats signalStats, LayoutWriteStats stats,
         Dictionary<TileId, List<RoadPointProp>> signs, Func<Vec2, bool> clear, Func<Vec2, bool>? building = null,
@@ -76,6 +108,7 @@ public static partial class TileRewriter
                 TramMoves: trams?.GetValueOrDefault(arms.Count).Moves ?? SignalMoves.None, RiderRight: riderRight));
         }
         if (arms.Count(x => x.In) < 2) return null;
+        RidersRightOnRed(jp, arms, exterior, stats);
         string? canton = cantons?.CodeAt(jp.Centre.X, jp.Centre.Y);
         bool amber = PedestrianAmber(canton), tramT = RomandyTramHead(canton, jp.Centre.X);
         uint seed = (uint)(long)Math.Round(jp.Centre.X) * 73856093u ^ (uint)(long)Math.Round(jp.Centre.Y) * 19349663u;

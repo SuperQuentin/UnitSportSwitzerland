@@ -93,8 +93,11 @@ public static partial class SignalBuilder
     /// a ball head's yellow lens flashes with it, and the lamp left of a combined arrow head; an uncombined arrow's yellow flashes
     /// and its green stays dark meanwhile; null none.</param>
     /// <param name="Plate">A flasher lamp's plate (#1109): what it warns of; <paramref name="PlateArrow"/> its arrow.</param>
+    /// <param name="AmberGreen">The green position holds an amber lens (#1165, the user): an arrow head (or a bike head with an arrow)
+    /// whose turn gives way all through its green flashes it with <paramref name="Blink"/> in place of a green; its middle yellow
+    /// keeps its steady transition (<see cref="PermissiveThroughout"/>).</param>
     public readonly record struct Lens(Shape Shape, Transform3D Transform, int Junction, int Group, Role Role, int Flash = -1, SignalMoves? Arrow = null,
-        SignalGroup? Blink = null, SignalPlate Plate = SignalPlate.None, SignalMoves PlateArrow = SignalMoves.None);
+        SignalGroup? Blink = null, SignalPlate Plate = SignalPlate.None, SignalMoves PlateArrow = SignalMoves.None, bool AmberGreen = false);
 
     /// <summary>A tile's lenses and the plans that light them.</summary>
     public sealed class Lamps
@@ -711,16 +714,30 @@ public static partial class SignalBuilder
                         lamps.Lenses.Add(new Lens(h.Shape, new Transform3D(basis, h.Centre + face), j, h.Group, Role.Green));
                         continue;
                     }
+                    var shown = h.Shape == Shape.Circle && h.Lenses == 3 ? h.Arrow ?? ArrowMoves(signal.Plan, h.Group) : SignalMoves.Left | SignalMoves.Right;
+                    // an arrow head whose turn gives way all through its green (#1165, the user: "make its green light a flashing amber
+                    // (not the middle light, this stays as the transitional light)"): an amber lens in the green's place, flashing; a
+                    // bike head turning one way only too, with its riders' flasher
+                    int riders = h.Shape == Shape.Bike && h.Lenses == 3 && signal.Plan.Groups[h.Group].Moves is SignalMoves.Left or SignalMoves.Right
+                        ? Flasher(signal.Plan, h.Group) : -1;
+                    var always = riders >= 0 ? signal.Plan.Groups[riders]
+                        : shown is SignalMoves.Left or SignalMoves.Right ? TurnFlashOf(h.Group, shown) : null;
+                    if (always is not null && !PermissiveThroughout(signal.Plan, h.Group, always)) always = null;
                     for (int k = 0; k < h.Lenses; k++)
                     {
                         // top down: red, (yellow), green
                         var role = h.Lenses == 2 ? (k == 0 ? Role.Red : Role.Green) : (Role)k;
                         var at = h.Centre + Vector3.Up * (half - pitch * (k + 0.5f)) + face;
+                        if (always is not null)
+                        {
+                            lamps.Lenses.Add(new Lens(h.Shape, new Transform3D(basis, at), j, h.Group, role, Arrow: h.Arrow,
+                                Blink: role == Role.Green ? always : null, AmberGreen: role == Role.Green));
+                            continue;
+                        }
                         // a bike head's own yellow flashes during its green where its riders turn right across a crossing green with them (#971, the user)
                         int flash = h.Shape == Shape.Bike && role == Role.Amber ? Flasher(signal.Plan, h.Group) : -1;
                         // a ball head's own yellow flashes during its green while its left gives way to oncoming traffic (#1109, the user)
                         // an uncombined arrow's yellow flashes in place of its green while its turn gives way (#1109, the user)
-                        var shown = h.Shape == Shape.Circle && h.Lenses == 3 ? h.Arrow ?? ArrowMoves(signal.Plan, h.Group) : SignalMoves.Left | SignalMoves.Right;
                         var blink = shown == SignalMoves.None && role == Role.Amber ? LeftFlashOf(h.Group)
                             : shown is SignalMoves.Left or SignalMoves.Right && role is Role.Amber or Role.Green ? TurnFlashOf(h.Group, shown)
                             : null;
@@ -742,6 +759,23 @@ public static partial class SignalBuilder
         // the heads in the gantries' bands (#1110)
         for (int j = 0; j < tile.Signals.Count; j++) GantryLenses(tile.Signals[j], j, lamps);
         return lamps.Lenses.Count == 0 ? null : lamps;
+    }
+
+    /// <summary>
+    /// Whether group <paramref name="g"/>'s turn gives way all through its green (#1165): <paramref name="flash"/> (its turn's
+    /// flasher, cut at the group's interval ends) flashes over every moment of every green; false where it is never green.
+    /// </summary>
+    public static bool PermissiveThroughout(SignalPlan plan, int g, SignalGroup flash)
+    {
+        bool any = false;
+        foreach (var iv in plan.Groups[g].Intervals)
+        {
+            if (iv.Aspect != SignalAspect.Green || iv.To - iv.From < 1e-3f) continue;
+            any = true;
+            foreach (var f in flash.Intervals)
+                if (Math.Min(f.To, iv.To) - Math.Max(f.From, iv.From) > 1e-3f && f.Aspect != SignalAspect.FlashingAmber) return false;
+        }
+        return any;
     }
 
     /// <summary>

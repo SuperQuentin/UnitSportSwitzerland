@@ -85,6 +85,8 @@ public static class TerrainShowcase
         ("Bike right-turn head, Vaud plates", () => TrafficLight(pedestrianAmber: true, arrowPlates: true, rightPocket: true, riderRight: true)),
         ("Bike right-turn head alone", () => TrafficLight(pedestrianAmber: true, bikeHead: false, rightPocket: true, riderRight: true)),
         ("Bike right-turn head, right on red", () => TrafficLight(pedestrianAmber: true, rightOnRed: true, rightPocket: true, riderRight: true)),
+        // giving way to the exit's walkers all through its green (#1165, the user): an amber lens in the green's place, flashing
+        ("Bike right-turn head, giving way", () => TrafficLight(pedestrianAmber: true, bikeHead: false, leftPockets: false, rightPocket: true, riderRight: true)),
         // the canton's pole colour (#1037): Basel-Landschaft's anthracite, Bern's RAL 7042
         ("Basel-Landschaft", () => TrafficLight(pedestrianAmber: true, colour: SignalPoleColour.Anthracite)),
         ("Bern", () => TrafficLight(pedestrianAmber: true, colour: SignalPoleColour.TrafficGrey)),
@@ -118,8 +120,9 @@ public static class TerrainShowcase
         // crosswalk"): the right turn's lamp beside the head, the left turn's on the approach's left pole across the road
         ("Flasher, left turn on the left pole", () => TrafficLight(pedestrianAmber: true, bikeHead: false, leftPockets: false, leftPole: true)),
         ("Permissive left, arrow", () => TrafficLight(pedestrianAmber: true, bikeHead: false, leftPockets: false, rightPocket: true)),
-        // an uncombined arrow (the turn alone) flashes its yellow in place of its green (#1109, the user): the mast arm's head over
-        // the left lane of an approach without a left pocket, the right lane's head beside the pole
+        // an uncombined arrow (the turn alone) giving way all through its green: an amber lens in the green's place, flashing, its
+        // middle yellow steady (#1165, the user; was #1109's middle yellow): the mast arm's head over the left lane of an approach
+        // without a left pocket, the right lane's head beside the pole
         ("Permissive left, uncombined arrow", () => TrafficLight(pedestrianAmber: true, bikeHead: false, leftPockets: false, rightPocket: true,
             overhead: OverheadKind.Arm)),
     ];
