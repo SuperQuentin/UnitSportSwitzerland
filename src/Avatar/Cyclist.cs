@@ -20,15 +20,8 @@ namespace UnitSport.Avatar;
 /// </summary>
 public partial class Cyclist : Node3D
 {
-    private static readonly float ThighLength = 0.42f;
-    private static readonly float ShinLength = 0.40f;
-
-    /// <summary>Hip joint, matching the cycling rig and the saddle in <see cref="BikeMeshBuilder"/>.</summary>
-    private static readonly Vector3 HipCentre = new(0, 0.905f, -0.050f);
-
-    private static readonly Vector3 BottomBracket = new(0, 0.270f, -0.020f);
-    private const float CrankLength = 0.170f;
-    private const float PedalOffset = 0.070f;
+    /// <summary>The bike and the rider's fit to it (#1124): the hips, pedals and cranks all come from here.</summary>
+    private static Player.BikeFrame Frame => Player.BikeFrame.Default;
 
     private MeshInstance3D _cranks = null!;
     private readonly MeshInstance3D[] _legs = new MeshInstance3D[2];
@@ -195,19 +188,14 @@ public partial class Cyclist : Node3D
     /// </summary>
     private ArrayMesh BuildLeg(int i, float crankAngle)
     {
-        float angle = crankAngle + i * Mathf.Pi;
-        float side = i == 0 ? PedalOffset : -PedalOffset;
-
-        var hip = HipCentre + new Vector3(side * 1.28f, 0, 0);
-
-        // Sign matches BikeMeshBuilder.Cranks: a crank at the front travels downward next,
-        // because the bike faces +Z. The leg is solved from wherever the pedal is, so the
-        // two can only disagree if this expression does — hence the duplicated minus.
-        var pedal = BottomBracket + new Vector3(
-            side, -Mathf.Sin(angle) * CrankLength, Mathf.Cos(angle) * CrankLength);
+        int side = i == 0 ? 1 : -1;
+        var hip = Frame.LegHip(side);
+        // BikeFrame.Pedal carries the sign: a crank at the front travels downward next, because the
+        // bike faces +Z, and the cranks are drawn from the same call, so the two cannot disagree
+        var pedal = Frame.Pedal(crankAngle, side);
 
         // the knee leads the hip on a bicycle; +Z is forward in author space
-        var knee = Limb.Solve(hip, pedal, ThighLength, ShinLength, new Vector3(0, 0, 1));
+        var knee = Limb.Solve(hip, pedal, Player.BikeFrame.ThighLength, Player.BikeFrame.ShinLength, new Vector3(0, 0, 1));
 
         var scratch = new MeshScratch();
         using var smoothing = scratch.Smoothing(HumanMeshBuilder.SmoothFigures);

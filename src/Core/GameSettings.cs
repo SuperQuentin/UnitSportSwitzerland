@@ -203,6 +203,12 @@ public sealed class GameSettings
 
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public RideProfile RideProfile { get; set; } = RideProfile.Game;
+    /// <summary>
+    /// The rider's weight in kit, kg (#1124): with the bike's, the mass the Simulation road bike's
+    /// watts have to move, so a home-trainer rider's real weight sets their speed up a climb. The
+    /// default keeps the reference rider (82 kg with the bike and bottles).
+    /// </summary>
+    public float RiderMass { get; set; } = 72.5f;
     /// <summary>Cars' tyres wear with the sliding they do and lose grip (off by default).</summary>
     public bool TyreWear { get; set; }
     /// <summary>Cars' brakes heat up and fade, and their pads wear (off by default).</summary>
@@ -626,6 +632,8 @@ public sealed class GameSettings
                 case "--commit" when double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out double c):
                     CommitBudgetMs = c; break;
                 case "--profile" when Enum.TryParse<RideProfile>(v, true, out var rp): RideProfile = rp; break;
+                case "--rider-kg" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float kg):
+                    RiderMass = Mathf.Clamp(kg, 30f, 200f); break;
                 case "--tyrewear": TyreWear = v is "on" or "1" or "true"; break;
                 case "--brakewear": BrakeWear = v is "on" or "1" or "true"; break;
                 case "--boardwalkable": BoardWalkableFromOutside = v is "on" or "1" or "true"; break;

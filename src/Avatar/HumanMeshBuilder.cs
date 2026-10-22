@@ -513,6 +513,41 @@ public static partial class HumanMeshBuilder
             TorsoLean: 0f);
     }
 
+    private static Rig? _cyclingRig;
+
+    /// <summary>
+    /// The cyclist, fitted to the road bike (<see cref="Player.BikeFrame"/>, #1124). The three contact
+    /// points are the bike's — the hips on the saddle the fit put up the seat tube, the hands on the
+    /// hoods, the feet on the pedals (the "R" foot forward and level) — and the torso is then the
+    /// seated rider's solve: the shoulder is the one place the back and a bent arm can both reach.
+    /// Placing these joints by hand once produced a rider lying flat in front of the bars: with the
+    /// ends pinned, the middle is not a free choice.
+    /// </summary>
+    private static Rig CyclingRig => _cyclingRig ??= SolveCyclingRig(Player.BikeFrame.Default);
+
+    private static Rig SolveCyclingRig(Player.BikeFrame frame)
+    {
+        // the pelvis sits 1.5 cm over the leg joints, as on every other rig; RiderRig lifts its seat 9 cm
+        var pelvis = frame.Hip + new Vector3(0, 0.015f, -0.005f);
+        var upper = RiderRig(pelvis - new Vector3(0, 0.09f, 0), frame.Wrist, frame.Pedal(0f, 1));
+
+        (Vector3 Hip, Vector3 Knee, Vector3 Ankle, Vector3 Toe) Leg(int side)
+        {
+            var hip = frame.LegHip(side);
+            var pedal = frame.Pedal(0f, side);
+            // the same solve as Cyclist's pedalling legs, so the still figure and the moving one agree
+            var knee = Limb.Solve(hip, pedal, Player.BikeFrame.ThighLength, Player.BikeFrame.ShinLength, new Vector3(0, 0, 1));
+            return (hip, knee, pedal + new Vector3(0, 0.03f, -0.03f), pedal + new Vector3(0, 0, 0.09f));
+        }
+        var l = Leg(-1);
+        var r = Leg(1);
+        return upper with
+        {
+            HipL = l.Hip, KneeL = l.Knee, AnkleL = l.Ankle, ToeL = l.Toe,
+            HipR = r.Hip, KneeR = r.Knee, AnkleR = r.Ankle, ToeR = r.Toe,
+        };
+    }
+
     // ---- a car's driver (Avatar/CarCabin: the seat, wheel and pedals come from the car) ----
 
     /// <summary>Hip to shoulders along the back, seated.</summary>
@@ -1100,25 +1135,8 @@ public static partial class HumanMeshBuilder
             AnkleR: new(0.100f, 0.190f, -0.330f), ToeR: new(0.100f, 0.230f, -0.480f),
             TorsoLean: -0.12f),
 
-        // Derived from the bike, not eyeballed. The three contact points are fixed — hips on
-        // the saddle (0.92 m), hands on the drops (0.885 m, 0.79 m forward) — and the shoulder
-        // is then the one place a 0.52 m torso and a 0.58 m arm can both reach, which puts it
-        // 0.335 m above the saddle and 0.40 m forward. Hand-placing these instead produced a
-        // rider lying horizontally in front of the bars: with the ends pinned, the middle is
-        // not a free choice.
-        HumanPose.Cycling => new Rig(
-            HeadTop: new(0, 1.345f, 0.470f), HeadBase: new(0, 1.245f, 0.375f),
-            Neck: new(0, 1.215f, 0.335f), Chest: new(0, 1.130f, 0.245f),
-            Waist: new(0, 1.020f, 0.095f), Hip: new(0, 0.920f, -0.055f),
-            ShoulderL: new(-0.170f, 1.235f, 0.400f), ElbowL: new(-0.185f, 1.020f, 0.575f),
-            WristL: new(-0.190f, 0.885f, 0.780f),
-            ShoulderR: new(0.170f, 1.235f, 0.400f), ElbowR: new(0.185f, 1.020f, 0.575f),
-            WristR: new(0.190f, 0.885f, 0.780f),
-            HipL: new(-0.090f, 0.905f, -0.050f), KneeL: new(-0.100f, 0.690f, 0.240f),
-            AnkleL: new(-0.100f, 0.375f, 0.140f), ToeL: new(-0.100f, 0.345f, 0.280f),
-            HipR: new(0.090f, 0.905f, -0.050f), KneeR: new(0.100f, 0.560f, 0.155f),
-            AnkleR: new(0.100f, 0.240f, 0.020f), ToeR: new(0.100f, 0.220f, 0.160f),
-            TorsoLean: 0f),
+        // Derived from the bike, not eyeballed (#1124): CyclingRig.
+        HumanPose.Cycling => CyclingRig,
 
         // Same discipline as the cycling rig: the torso is laid along a 45° line from the hip
         // and the joints fall where its own length puts them, rather than being placed by eye.
