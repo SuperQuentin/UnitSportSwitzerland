@@ -54,6 +54,7 @@ public sealed class ChatCompleter
         ("weather", false, true, "[snow <cm> | fall <cm> | temp <°C> | clear | cloudy | reroll | hold | auto]"),
         ("water", false, true, "[E N]"),
         ("stadium", false, true, "[list [stadium | arena | openair] | <name | town | #n>]"),
+        ("cd", false, true, "[analysis | reanalyse [stale | all | <id>]]"),
         ("style", false, true, "[ps1 | cartoon | real- | real+ | rebuild]"),
         ("clip", false, true, "start <name> [seconds] [delay] | stop"),
         ("spawn", true, true, "<item> [count]"),

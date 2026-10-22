@@ -490,6 +490,10 @@ public partial class ChatManager : Node
                 else Show(snowHere.Command(rest, mayChange: true, out bool weatherSet), weatherSet ? ChatKind.Admin : ChatKind.Private);
                 return;
 
+            case "cd" or "cds":
+                Show(Audio.Cd.CdLibrary.Instance?.Command(rest, mayChange: true) ?? "There are no CDs here.", ChatKind.Private);
+                return;
+
             case "seastate":
                 if (parts.Length == 1) Show($"The sea is {World.SeaStateCommand.Describe(World.WaterField.SeaState)}.", ChatKind.Private);
                 else if (World.SeaStateCommand.TryParse(rest, out float sea, out string seaError))
@@ -844,6 +848,10 @@ public partial class ChatManager : Node
             case "speed": CommandSpeed(sender, rest); return;
             // anyone may ask; setting it is an admin's (checked inside)
             case "seastate": CommandSeaState(sender, rest); return;
+            // CD analysis versions (#1153): anyone may ask, re-analysing is an admin's
+            case "cd" or "cds":
+                ReplyTo(sender, Audio.Cd.CdLibrary.Instance?.Command(rest, IsAdmin(sender)) ?? "There are no CDs on this server.", ChatKind.Private);
+                return;
             // anyone may ask; changing it is an admin's (#887)
             case "weather": CommandWeather(sender, rest); return;
             // the water at a point as the server sees it (#299): a debug line, two peers compare it

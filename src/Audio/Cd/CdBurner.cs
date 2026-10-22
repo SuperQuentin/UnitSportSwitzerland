@@ -82,7 +82,27 @@ public sealed class CdBurner
     {
         var pcm = await DecodeMonoAsync(ogg, ct);
         if (pcm == null || pcm.Length < AnalysisRate) return null;
-        return BeatAnalyzer.AnalyseFull(pcm, AnalysisRate, bpm, beatOffset).analysis;
+        var analysis = BeatAnalyzer.AnalyseFull(pcm, AnalysisRate, bpm, beatOffset).analysis;
+        return analysis == null ? null : await WithVocalAsync(analysis, ogg, bpm, ct);
+    }
+
+    /// <summary>
+    /// The block with the singer (#1153): the source decoded again to stereo 44.1 kHz, the vocal
+    /// separated (<see cref="VocalSeparator"/>) and analysed. The block as it was when ffmpeg fails.
+    /// </summary>
+    private static async Task<CdAnalysis> WithVocalAsync(CdAnalysis analysis, string source, float bpm, CancellationToken ct)
+    {
+        var stereo = await DecodeStereoAsync(source, ct);
+        if (stereo == null) return analysis;
+        return await Task.Run(() =>
+        {
+            var watch = Stopwatch.StartNew();
+            var (vocal, how) = VocalSeparator.Separate(stereo, ct);
+            var result = VocalAnalyzer.Analyse(vocal, AnalysisRate, bpm);
+            Godot.GD.Print($"[cd] vocal ({how}) in {watch.Elapsed.TotalSeconds:F1} s: {result.Rises.Length / 2} rise(s), "
+                + $"{result.Falls.Length / 2} fall(s), {result.Holds.Length / 2} long note(s), {result.VocalIns.Length} entr(ies)");
+            return analysis.WithVocal(result, how);
+        }, ct);
     }
 
     /// <summary>
@@ -121,6 +141,8 @@ public sealed class CdBurner
             var (bpm, offset, style, energy, analysis) =
                 BeatAnalyzer.AnalyseFull(pcm, AnalysisRate, Grid?.Bpm ?? 0f, Grid?.Offset ?? 0f);
             float duration = pcm.Length / (float)AnalysisRate;
+            status.Report("Listening for the singer…");
+            if (analysis != null) analysis = await WithVocalAsync(analysis, source, bpm, ct);
 
             status.Report("Encoding…");
             string ogg = Path.Combine(CdDirectory, $"{id}.ogg");
@@ -206,6 +228,22 @@ public sealed class CdBurner
         var pcm = new float[n];
         for (int i = 0; i < n; i++)
             pcm[i] = BitConverter.ToInt16(bytes, i * 2) / 32768f;
+        return pcm;
+    }
+
+    /// <summary>Interleaved stereo 44.1 kHz 16-bit PCM off ffmpeg's stdout, for <see cref="VocalSeparator"/> (a mono file comes out as two equal channels).</summary>
+    private static async Task<short[]?> DecodeStereoAsync(string source, CancellationToken ct)
+    {
+        using var raw = new MemoryStream();
+        int code = await RunAsync("ffmpeg", new[]
+        {
+            "-nostdin", "-loglevel", "error",
+            "-i", source, "-t", MaxSeconds.ToString(),
+            "-vn", "-ac", "2", "-ar", VocalSeparator.Rate.ToString(), "-f", "s16le", "-",
+        }, null, raw, ct);
+        if (code != 0 || raw.Length < 4) return null;
+        var pcm = new short[raw.Length / 2];
+        Buffer.BlockCopy(raw.GetBuffer(), 0, pcm, 0, pcm.Length * 2);
         return pcm;
     }
 

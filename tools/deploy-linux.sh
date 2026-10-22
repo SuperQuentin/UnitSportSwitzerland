@@ -140,7 +140,7 @@ fi
 # --- 3. host setup: packages, .NET, dirs, mDNS, firewall, cron -----------------------------
 if [ $S_SETUP = 1 ]; then
   say "Host setup$([ $DRY = 1 ] && echo ' (report only)')"
-  rdir=$(tar -C tools/deploy -cf - remote-setup.sh unitsport.service.xml Caddyfile | rq 'd=$(mktemp -d) && tar -xf - -C "$d" && echo "$d"')
+  rdir=$(tar -C tools/deploy -cf - remote-setup.sh get-vocal-model.sh unitsport.service.xml Caddyfile | rq 'd=$(mktemp -d) && tar -xf - -C "$d" && echo "$d"')
   envs="DRY=$DRY TARGET_USER=\$(id -un) DEPLOY_DIR=$(qd "$DEPLOY_DIR") CHUNKS_DIR=$(qd "$CHUNKS_DIR") GAME_PORT=$GAME_PORT"
   envs+=" SSH_PORT=$DEPLOY_PORT_SSH WEB_PORTS=$(qd "$WEB_PORTS") MDNS_NAME=$(qd "$MDNS_NAME") VERSION=$(qd "$VERSION")"
   envs+=" DOTNET_MAJOR=$DOTNET_MAJOR NEED_DOTNET=$NEED_DOTNET HERE=$rdir"
