@@ -386,6 +386,37 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   Landschaft anthracite DB703 (ATS LSA Aussenanlagen 2024), Bern RAL 7042 (the city's Handbuch LSA 2025, taken for the canton),
   the rest RAL 7001; poles and overhead structures. Model viewer: "Traffic light - Basel-Landschaft / Bern"; in game the canton
   row's BL and BE zones. RAL 7042 is close to 7001: the difference is real, not a bug.
+- **Flasher plates and permissive turns** (#1109, the user). Each flasher lamp has a white plate below it (its white band run
+  on down by `ArrowPanel`, below the lamp so a Romandy tram head over it still fits): a **walker** where its turns cross walkers
+  green with them (or still on the zebra after their green: a plan timed from conflict times may start the cars' green as the
+  walkers' ends), a **bike** where they cross a bike lane or way, the **arrow of the turn crossing both** where they cross both
+  (`SignalPlan.PlateOf(flasher, conflicts, turns)`). **A flasher stands where its turn's crossing is** (the user: "right flasher
+  here, left flasher on a pole next to the left crosswalk"): the right turn's lamp beside the head on the main pole, warning of
+  what the right turn crosses; the left turn's on a pole by the left crosswalk (`RoadSignal.LeftFlasherPole`, decided from the
+  poles in the tile): the approach's **left pole** (`Second`, at the corner the left turn sweeps past) beside its leftmost car
+  head, else the **main pole of the arm the left turn goes into** (it stands on that arm's arriving kerb, the same corner, by its
+  crosswalk), above that pole's own heads, facing this approach; with neither, both turns on the main pole's one lamp (a
+  double-headed arrow, `SignalGlyphs.Arrow(Left | Right)`, where both cross walkers and riders). Each lamp flashes for its own
+  turn's crossings only (`SideFlash`, a detached flasher; the plan's flasher where it warns of one side only). A car group whose
+  left gives way to oncoming cars or trams while green with them (`LeftGivesWayTo`: a left from a shared lane, the permissive
+  conflict of `Conflicts`) flashes: `LeftFlash` derives a detached flasher (on while the group and one it gives way to are
+  green). All derived from the stored plan, nothing stored: old tiles show it. How a head shows a permissive turn (the user): a
+  **ball** flashes its own yellow during the green (`Lens.Blink`, every pole and overhead ball); a **combined arrow** (straight
+  on and left beside a right lane) keeps its green and gets a flasher lamp on its **left** with a left-arrow plate (main pole);
+  an **uncombined arrow** (the turn alone: a right lane's head, an overhead left lane's) flashes its yellow arrow *in place of*
+  its green ("for flashing arrows it takes the place of the green arrow"), its green dark meanwhile, no lamp beside it
+  (`TurnFlash`). A pocket's left arrow is protected: never permissive. Found on the way: a head's flasher stood on the right
+  lane's head beside it: it now stands on the head's left where a head stands on its right, a permissive left's lamp beyond it,
+  the tram heads beyond both. `--signal-check` prints the counts (`--list`: where). Test region: lamps on the main pole 22, a left
+  pole 3, the crossing's pole 7; plates walker 6, bike 17, arrow 9; 6 balls flash (J3, J3b, J7), 1 combined arrow with a left
+  flasher (J3b south), 4 uncombined right arrows flash. Geneva centre (246 lit junctions, a rewrite copy): lamps main pole 441,
+  left pole 94, crossing's pole 182; plates walker 376, bike 82, arrow 259 (right 194, left 60, both 5: no pole by the left
+  crosswalk); 170 balls flash, 13 combined arrows with a left flasher, 29 uncombined right arrows. Tier 0
+  `SignalPlanTests.FlasherPlate_*` / `PermissiveLeft_*` / `ProtectedLeft_*`, `SignalBuilderTests.Permissive*` /
+  `LeftTurnsFlasher_StandsByTheLeftCrosswalk`, `SignalTestRegionTests.Flashers_say_what_they_warn_of_and_permissive_lefts_flash`.
+  Model viewer: "Traffic light - Flasher, pedestrian / bike / arrow plate", "Flasher, left turn on the left pole" (with another
+  approach's left-turn lamp over the main pole's heads, the crossing's pole case), "Permissive left, ball / arrow / uncombined
+  arrow".
 - **Trams** (#1057): a tram group per approach a tram track enters by, the tram bar heads beside the car heads: `tram-approaches`.
 - **Not done**: one record for a junction of several nodes (the internal links are only kept
   clean); OSM `turn:lanes` not read yet, restrictions only for the lane records (a left pocket is

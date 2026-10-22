@@ -25,7 +25,31 @@ public static class SignalGlyphs
             case SignalMoves.Through | SignalMoves.Right: StraightAndTurn(into, 1); break;
             case SignalMoves.Left: Turn(into, -1); break;
             case SignalMoves.Right: Turn(into, 1); break;
+            // both turns, one shaft with a head each end: a flasher's plate where its left and right turns cross walkers and riders
+            // (#1109); no lens shows it
+            case SignalMoves.Left | SignalMoves.Right:
+                into.Add([new(-1f, 0f), new(-0.45f, -0.6f), new(-0.45f, 0.6f)]);
+                into.Add([new(1f, 0f), new(0.45f, 0.6f), new(0.45f, -0.6f)]);
+                into.Add([new(-0.5f, -0.22f), new(0.5f, -0.22f), new(0.5f, 0.22f), new(-0.5f, 0.22f)]);
+                break;
         }
+        return into;
+    }
+
+    /// <summary>
+    /// A walking figure striding to the right, in units of a lens radius: lit in a pedestrian head's green and yellow lens
+    /// (#759), black on a flasher's plate (#1109).
+    /// </summary>
+    public static List<Vector2[]> Walker()
+    {
+        var into = new List<Vector2[]>();
+        into.Add(Disc(new(0.08f, 0.66f), 0.17f, 10));
+        Line(into, new(0.04f, 0.44f), new(-0.04f, -0.08f), 0.27f);
+        Line(into, new(0.02f, 0.36f), new(0.32f, 0.04f), 0.1f);
+        Line(into, new(0.02f, 0.36f), new(-0.3f, 0.1f), 0.1f);
+        Line(into, new(-0.04f, -0.1f), new(0.36f, -0.84f), 0.14f);
+        Line(into, new(-0.04f, -0.1f), new(-0.12f, -0.44f), 0.14f);
+        Line(into, new(-0.12f, -0.44f), new(-0.4f, -0.82f), 0.14f);
         return into;
     }
 

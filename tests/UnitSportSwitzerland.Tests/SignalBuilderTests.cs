@@ -97,4 +97,125 @@ public class SignalBuilderTests
         var second = Lamps(left: true, right: true, pedAmber: true, SignalPoleFlags.Second, bike: true);
         Assert.DoesNotContain(second.Lenses, l => l.Shape == SignalBuilder.Shape.Bike);
     }
+
+    [Fact]
+    public void PermissiveLeft_OnABall_FlashesTheHeadsOwnYellow()
+    {
+        // #1109: no pockets, the ball's left gives way to the oncoming cars: its yellow lens flashes with that, no lamp beside it
+        foreach (var flags in new[] { SignalPoleFlags.Main, SignalPoleFlags.Second })
+        {
+            var lamps = Lamps(left: false, right: false, pedAmber: true, flags);
+            var amber = Assert.Single(lamps.Lenses, l => l.Shape == SignalBuilder.Shape.Circle && l.Role == SignalBuilder.Role.Amber);
+            Assert.NotNull(amber.Blink);
+            Assert.Equal(amber.Group, amber.Blink!.Qualifies);
+            // (the east approach's left turn has its lamp on this pole, by the south crosswalk it crosses: not this head's)
+            // (on the left pole, the head's left turn's lamp for the west crosswalk: a walker on its plate)
+            Assert.DoesNotContain(lamps.Lenses, l => l.Group == amber.Group && l.Role == SignalBuilder.Role.Flash && l.Plate == SignalPlate.Arrow);
+        }
+        // a left pocket's arrow is protected: nothing flashes for it
+        var pockets = Lamps(left: true, right: true, pedAmber: true, SignalPoleFlags.Main);
+        Assert.DoesNotContain(pockets.Lenses, l => l.Blink is not null);
+    }
+
+    [Fact]
+    public void PermissiveLeft_OnACombinedArrow_AFlasherOnItsLeft()
+    {
+        // #1109: a right pocket going with its approach leaves the main head straight on and left, an arrow: its yellow stays, a
+        // flasher stands on its left, lit by the left's flashing; on the main pole only
+        var lamps = Lamps(left: false, right: true, pedAmber: true, SignalPoleFlags.Main);
+        var plan = lamps.Plans[0];
+        var main = lamps.Lenses.First(l => l.Shape == SignalBuilder.Shape.Circle && l.Role == SignalBuilder.Role.Green
+            && (plan.Groups[l.Group].Moves & SignalMoves.Left) != 0);
+        Assert.Equal(SignalMoves.Left | SignalMoves.Through, SignalBuilder.ArrowMoves(plan, main.Group));
+        Assert.DoesNotContain(lamps.Lenses, l => l.Group == main.Group && l.Role is SignalBuilder.Role.Amber or SignalBuilder.Role.Green && l.Blink is not null);
+        var left = Assert.Single(lamps.Lenses, l => l.Group == main.Group && l.Role == SignalBuilder.Role.Flash && l.Blink is not null
+            && l is { Plate: SignalPlate.Arrow, PlateArrow: SignalMoves.Left });
+        // on its left as the driver sees it (west, a smaller X), level with its green
+        Assert.True(left.Transform.Origin.X < main.Transform.Origin.X - 0.5f, $"left flasher at {left.Transform.Origin.X}, head at {main.Transform.Origin.X}");
+        Assert.Equal(main.Transform.Origin.Y, left.Transform.Origin.Y, 3);
+        var second = Lamps(left: false, right: true, pedAmber: true, SignalPoleFlags.Second);
+        Assert.DoesNotContain(second.Lenses, l => l.Role == SignalBuilder.Role.Flash && l.Plate == SignalPlate.Arrow);
+    }
+
+    [Fact]
+    public void PermissiveTurn_OnAnUncombinedArrow_FlashesItsYellowForItsGreen()
+    {
+        // #1109, the user: "for flashing arrows it takes the place of the green arrow". The right lane's head beside the main one
+        // shows the right arrow alone; its turn crosses the walkers: its green and yellow carry the flashing, no lamp beside it
+        var lamps = Lamps(left: false, right: true, pedAmber: true, SignalPoleFlags.Main);
+        var plan = lamps.Plans[0];
+        int lane = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Car && g.Arm == 2 && g.Moves == SignalMoves.Right);
+        Assert.Equal(SignalMoves.Right, SignalBuilder.ArrowMoves(plan, lane));
+        var green = Assert.Single(lamps.Lenses, l => l.Group == lane && l.Role == SignalBuilder.Role.Green);
+        var amber = Assert.Single(lamps.Lenses, l => l.Group == lane && l.Role == SignalBuilder.Role.Amber);
+        Assert.NotNull(green.Blink);
+        Assert.Same(green.Blink, amber.Blink);
+        int flasher = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Flasher && g.Qualifies == lane);
+        Assert.DoesNotContain(lamps.Lenses, l => l.Role == SignalBuilder.Role.Flash && l.Group == flasher);
+        // flashing only during its green
+        for (double t = 0.05; t < plan.Cycle; t += 0.1)
+            Assert.True(plan.State(green.Blink!, t - plan.Offset) != SignalAspect.FlashingAmber || plan.State(lane, t - plan.Offset) == SignalAspect.Green);
+    }
+
+    [Fact]
+    public void PermissiveLeft_OnAnUncombinedOverheadArrow_FlashesItsYellowForItsGreen()
+    {
+        // an overhead head over the left lane of an approach without a left pocket: the left arrow alone, its left giving way
+        var arms = Enumerable.Range(0, 4).Select(i => new SignalArm(Headings[i], true, true, Pedestrians: true)).ToList();
+        var plan = SignalPlan.Build(arms);
+        var signal = new RoadSignal { X = 500, Y = 400, Z = 500, Stops = new float[12], Plan = plan };
+        signal.Overheads.Add(new SignalOverhead
+        {
+            Kind = OverheadKind.Arm, Arm = 2, X = 505, Y = 400.1f, Z = 512, EndX = 498, EndY = 400.1f, EndZ = 512, Bottom = 405f,
+            Heading = (float)Math.PI, Heads = [new OverheadHead(4f, SignalMoves.Left)],
+        });
+        var tile = new RoadTile { Id = new TileId(2500, 1117), Segments = [], Signals = [signal] };
+        var lamps = SignalBuilder.BuildLamps(tile)!;
+        var green = Assert.Single(lamps.Lenses, l => l.Role == SignalBuilder.Role.Green);
+        Assert.Equal(SignalMoves.Left, green.Arrow);
+        Assert.NotNull(green.Blink);
+        Assert.Contains(Enumerable.Range(0, (int)(plan.Cycle * 10)).Select(k => k * 0.1),
+            t => plan.State(green.Blink!, t) == SignalAspect.FlashingAmber);
+    }
+
+    [Fact]
+    public void LeftTurnsFlasher_StandsByTheLeftCrosswalk()
+    {
+        // #1109, the user: "right flasher here, left flasher on a pole next to the left crosswalk". No pockets: the northbound ball
+        // turns right across the east crossing and left across the west one. Without a left pole of its own, the left turn's lamp
+        // stands on the west arm's main pole (the south-west corner, by the west crosswalk), facing the northbound drivers
+        var arms = Enumerable.Range(0, 4).Select(i => new SignalArm(Headings[i], true, true, Pedestrians: true)).ToList();
+        var plan = SignalPlan.Build(arms);
+        SignalBuilder.Lamps Build(params SignalPole[] poles) => SignalBuilder.BuildLamps(new RoadTile
+        {
+            Id = new TileId(2500, 1117), Segments = [],
+            Signals = [new RoadSignal { X = 500, Y = 400, Z = 500, Stops = new float[12], Plan = plan, Poles = [.. poles] }],
+        })!;
+        var southMain = new SignalPole(505, 400.1f, 512, (float)Math.PI, (float)(Math.PI / 2), 2, SignalPoleFlags.Main);
+        var westMain = new SignalPole(494, 400.1f, 506, (float)(Math.PI / 2), 0f, 3, SignalPoleFlags.Main);
+        int nb = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Car && g.Arm == 2);
+        int f = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Flasher && g.Qualifies == nb);
+        Assert.Equal(SignalPlate.Pedestrian, plan.PlateOf(f, turns: SignalMoves.Left).Plate);
+        Assert.Equal(SignalPlate.Pedestrian, plan.PlateOf(f, turns: SignalMoves.Right).Plate);
+        var lamps = Build(southMain, westMain);
+        var mine = lamps.Lenses.Where(l => l.Role == SignalBuilder.Role.Flash && l.Group == nb).ToList();
+        Assert.Equal(2, mine.Count);
+        var left = Assert.Single(mine, l => l.Transform.Origin.X < 497);
+        var right = Assert.Single(mine, l => l.Transform.Origin.X > 505);
+        // the left one faces the northbound drivers (south, +Z), on the west pole, each flashing for its own turn's crossing
+        Assert.True(left.Transform.Basis.Z.Z > 0.99f, $"faces {left.Transform.Basis.Z}");
+        Assert.True(Math.Abs(left.Transform.Origin.Z - 506) < 0.6f, $"at {left.Transform.Origin}");
+        Assert.NotNull(left.Blink);
+        Assert.NotNull(right.Blink);
+        Assert.NotSame(left.Blink, right.Blink);
+        // with a left pole of its own, the lamp stands there, left of its car head
+        var southSecond = new SignalPole(495, 400.1f, 512, (float)Math.PI, -(float)(Math.PI / 2), 2, SignalPoleFlags.Second);
+        var withSecond = Build(southMain, westMain, southSecond);
+        var onSecond = Assert.Single(withSecond.Lenses, l => l.Role == SignalBuilder.Role.Flash && l.Group == nb && l.Transform.Origin.X < 497);
+        var secondHead = withSecond.Lenses.Where(l => l.Group == nb && l.Role == SignalBuilder.Role.Green && l.Transform.Origin.X < 500).Single();
+        Assert.True(onSecond.Transform.Origin.X < secondHead.Transform.Origin.X - 0.5f && Math.Abs(onSecond.Transform.Origin.Z - secondHead.Transform.Origin.Z) < 0.01f);
+        // no pole by the left crosswalk: both turns on the main pole's one lamp, as before
+        var alone = Build(southMain);
+        Assert.Single(alone.Lenses, l => l.Role == SignalBuilder.Role.Flash && l.Group == f);
+    }
 }

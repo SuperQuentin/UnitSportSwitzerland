@@ -97,19 +97,34 @@ public static class TerrainShowcase
         // trams going two ways (#1057, the user): a head per direction, its arrow on its plate; Romandy's in a row on top of the car heads
         ("Tram, two ways", () => TrafficLight(pedestrianAmber: true, tram: true, tramTwo: true)),
         ("Tram, Romandy, two ways", () => TrafficLight(pedestrianAmber: false, tram: true, tramT: true, tramTwo: true)),
+        // the plate under the flasher (#1109, the user): its turns cross walkers, riders, or both (the arrow of the turn crossing both)
+        ("Flasher, pedestrian plate", () => TrafficLight(pedestrianAmber: true, bikeHead: false)),
+        ("Flasher, bike plate", () => TrafficLight(pedestrianAmber: true, peds: false)),
+        ("Flasher, arrow plate", () => TrafficLight(pedestrianAmber: true)),
+        // a permissive left (#1109, the user): no left pockets, the ball's yellow flashes while the oncoming cars are green; beside a
+        // right pocket the head shows straight on and left, an arrow: a flasher on its left with a left arrow on its plate
+        ("Permissive left, ball", () => TrafficLight(pedestrianAmber: true, bikeHead: false, leftPockets: false)),
+        // a ball whose turns both cross walkers (#1109, the user: "right flasher here, left flasher on a pole next to the left
+        // crosswalk"): the right turn's lamp beside the head, the left turn's on the approach's left pole across the road
+        ("Flasher, left turn on the left pole", () => TrafficLight(pedestrianAmber: true, bikeHead: false, leftPockets: false, leftPole: true)),
+        ("Permissive left, arrow", () => TrafficLight(pedestrianAmber: true, bikeHead: false, leftPockets: false, rightPocket: true)),
+        // an uncombined arrow (the turn alone) flashes its yellow in place of its green (#1109, the user): the mast arm's head over
+        // the left lane of an approach without a left pocket, the right lane's head beside the pole
+        ("Permissive left, uncombined arrow", () => TrafficLight(pedestrianAmber: true, bikeHead: false, leftPockets: false, rightPocket: true,
+            overhead: OverheadKind.Arm)),
     ];
 
     private static Node3D TrafficLight(bool pedestrianAmber, bool arrowPlates = false, bool rightOnRed = false, bool bikeHead = true,
         SignalPoleColour colour = SignalPoleColour.SilverGrey, OverheadKind? overhead = null, bool island = false, bool tram = false,
-        bool tramT = false, bool tramTwo = false)
+        bool tramT = false, bool tramTwo = false, bool peds = true, bool leftPockets = true, bool rightPocket = false, bool leftPole = false)
     {
         var plan = SignalPlan.Build(
         [
-            new SignalArm(0, true, true, LeftPocket: true, Pedestrians: true, BikeSignal: bikeHead, Rank: 2, BikeRightOnRed: rightOnRed,
+            new SignalArm(0, true, true, LeftPocket: leftPockets, RightPocket: rightPocket, Pedestrians: peds, BikeSignal: bikeHead, Rank: 2, BikeRightOnRed: rightOnRed,
                 HalfInM: island ? 4 : 0, HalfOutM: island ? 3.5f : 0, TramMoves: !tram ? SignalMoves.None : tramTwo ? SignalMoves.Left | SignalMoves.Through : SignalMoves.Through),
-            new SignalArm(Math.PI / 2, true, true, Pedestrians: true),
-            new SignalArm(Math.PI, true, true, LeftPocket: true, Pedestrians: true, Rank: 2),
-            new SignalArm(-Math.PI / 2, true, true, Pedestrians: true),
+            new SignalArm(Math.PI / 2, true, true, Pedestrians: peds),
+            new SignalArm(Math.PI, true, true, LeftPocket: leftPockets, Pedestrians: peds, Rank: 2),
+            new SignalArm(-Math.PI / 2, true, true, Pedestrians: peds),
         ], 353, pedestrianAmber, tramT);
         plan.ArrowPlates = arrowPlates;
         plan.PoleColour = colour;
@@ -125,6 +140,8 @@ public static class TerrainShowcase
                     : new SignalPole(0, 0, 0, 0f, Mathf.Pi / 2, 0, SignalPoleFlags.Main | SignalPoleFlags.Pedestrian | (tram ? SignalPoleFlags.Tram : 0)),
             },
         };
+        // the approach's left pole across a 7 m road (#1109: the left turn's flasher stands on it)
+        if (leftPole) signal.Poles.Add(new SignalPole(7f, 0, 0, 0f, -Mathf.Pi / 2, 0, SignalPoleFlags.Second));
         // the heads face -Z, the driver's left is +X: the lanes to the pole's left
         // (an arm's or portal's post on the pole, carrying its heads; a span wire from the facade 3 m outside it to one across the street)
         float from = overhead == OverheadKind.Span ? -3f : 0f;

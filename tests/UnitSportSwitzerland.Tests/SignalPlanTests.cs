@@ -510,4 +510,99 @@ public class SignalPlanTests(ITestOutputHelper output)
         Assert.Equal(plan.Groups.Select(g => (g.Kind, g.Moves, g.Half)), p.Groups.Select(g => (g.Kind, g.Moves, g.Half)));
         Assert.Empty(p.Validate());
     }
+
+    // ---- flasher plates and permissive lefts (#1109) ----------------------------------------------
+
+    private static int FlasherOf(SignalPlan plan, int group) =>
+        plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Flasher && g.Qualifies == group);
+
+    [Fact]
+    public void FlasherPlate_WalkersOnly_APedestrian()
+    {
+        // no bikes: the northbound turns cross only the crossings green with them
+        var plan = SignalPlan.Build([Arm(N), Arm(E), Arm(S), Arm(W)]);
+        int nb = Group(plan, SignalGroupKind.Car, S);
+        var (plate, arrow) = plan.PlateOf(FlasherOf(plan, nb));
+        Assert.Equal(SignalPlate.Pedestrian, plate);
+        Assert.NotEqual(SignalMoves.None, arrow & (SignalMoves.Left | SignalMoves.Right));
+        // not a flasher, or a bike group's (its own yellow, no lamp): no plate
+        Assert.Equal(SignalPlate.None, plan.PlateOf(nb).Plate);
+    }
+
+    [Fact]
+    public void FlasherPlate_WalkersAndRiders_TheArrowOfTheTurnsCrossingBoth()
+    {
+        // a kerbside bike signal on every approach: the right turn crosses the riders beside it and the right arm's walkers, the
+        // left turn the oncoming riders and the left arm's walkers: both ways on the plate (one turn alone: the test region's J7)
+        var plan = SignalPlan.Build([Arm(N, bike: true), Arm(E, bike: true), Arm(S, bike: true), Arm(W, bike: true)]);
+        AssertValid(plan);
+        int nb = Group(plan, SignalGroupKind.Car, S);
+        var (plate, arrow) = plan.PlateOf(FlasherOf(plan, nb));
+        Assert.Equal(SignalPlate.Arrow, plate);
+        Assert.Equal(SignalMoves.Left | SignalMoves.Right, arrow);
+        // each turn's own lamp (#1109, the user: "right flasher here, left flasher on a pole next to the left crosswalk"): its own
+        // arrow, flashing only for its own crossings
+        int f = FlasherOf(plan, nb);
+        Assert.Equal((SignalPlate.Arrow, SignalMoves.Right), plan.PlateOf(f, turns: SignalMoves.Right));
+        Assert.Equal((SignalPlate.Arrow, SignalMoves.Left), plan.PlateOf(f, turns: SignalMoves.Left));
+        var left = plan.SideFlash(f, SignalMoves.Left)!;
+        var right = plan.SideFlash(f, SignalMoves.Right)!;
+        for (double t = 0.05; t < plan.Cycle; t += 0.1)
+        {
+            bool any = plan.State(f, t) == SignalAspect.FlashingAmber;
+            Assert.Equal(any, plan.State(left, t) == SignalAspect.FlashingAmber || plan.State(right, t) == SignalAspect.FlashingAmber);
+        }
+    }
+
+    [Fact]
+    public void FlasherPlate_RidersOnly_ABike()
+    {
+        // walkers on no arm: what the turns cross is the riders' way
+        var plan = SignalPlan.Build([Arm(N, peds: false, bike: true), Arm(E, peds: false, bike: true), Arm(S, peds: false, bike: true), Arm(W, peds: false, bike: true)]);
+        int nb = Group(plan, SignalGroupKind.Car, S);
+        Assert.Equal(SignalPlate.Bike, plan.PlateOf(FlasherOf(plan, nb)).Plate);
+    }
+
+    [Fact]
+    public void PermissiveLeft_FromASharedLane_FlashesWhileTheOncomingCarsAreGreen()
+    {
+        var plan = SignalPlan.Build([Arm(N), Arm(E), Arm(S), Arm(W)]);
+        int nb = Group(plan, SignalGroupKind.Car, S), sb = Group(plan, SignalGroupKind.Car, N);
+        Assert.Contains(sb, plan.LeftGivesWayTo(nb));
+        var flash = plan.LeftFlash(nb);
+        Assert.NotNull(flash);
+        // flashing only during its green, and whenever its green and the oncoming one's are on together
+        for (double t = 0.05; t < plan.Cycle; t += 0.1)
+        {
+            bool on = plan.State(flash!, t - plan.Offset) == SignalAspect.FlashingAmber;
+            bool both = plan.State(nb, t - plan.Offset) == SignalAspect.Green && plan.State(sb, t - plan.Offset) == SignalAspect.Green;
+            Assert.True(!on || plan.State(nb, t - plan.Offset) == SignalAspect.Green, $"flashing outside its green at {t:F1}");
+            Assert.True(!both || on, $"not flashing at {t:F1} with the oncoming cars green");
+        }
+        // derived from the plan as stored: the same after a round trip through the tile
+        var tile = new RoadTile
+        {
+            Id = new TileId(2500, 1117),
+            Segments = [new RoadSegment { Class = RoadClass.Road, Width = 6, Points = [0, 400, 0, 10, 400, 0] }],
+            Signals = [new RoadSignal { X = 5, Y = 400.1f, Z = 6, Stops = new float[12], Plan = plan }],
+        };
+        using var ms = new MemoryStream();
+        RoadCodec.Encode(tile, ms);
+        ms.Position = 0;
+        var back = Assert.Single(RoadCodec.Decode(ms).Signals).Plan;
+        Assert.Equal(flash!.Intervals, back.LeftFlash(nb)!.Intervals);
+        Assert.Equal(plan.PlateOf(FlasherOf(plan, nb)), back.PlateOf(FlasherOf(back, nb)));
+    }
+
+    [Fact]
+    public void ProtectedLeft_NeverFlashes()
+    {
+        // the left pockets' arrows are protected, and the main lanes beside them do not turn left
+        var plan = SignalPlan.Build([Arm(N, true, true), Arm(E, true, true), Arm(S, true, true), Arm(W, true, true)], seed: 7);
+        for (int g = 0; g < plan.Groups.Count; g++)
+        {
+            Assert.Empty(plan.LeftGivesWayTo(g));
+            Assert.Null(plan.LeftFlash(g));
+        }
+    }
 }
