@@ -80,6 +80,8 @@ public static partial class SignalBuilder
     /// #711: 1.05 m was below it).
     /// </summary>
     private const float BikeScale = 0.5f, BikeLowerEdge = 1.2f;
+    /// <summary>The riders' right-turn head (#1165) stands this far right of the through riders' head: a housing and a hand between.</summary>
+    private const float BikeRightBeside = HeadWidth * BikeScale + 0.06f;
 
     public enum Role : byte { Red, Amber, Green, Flash }
 
@@ -584,7 +586,9 @@ public static partial class SignalBuilder
         Head? on = null;
         foreach (var h in heads)
         {
-            if (h.Shape == Shape.Bike) { on = h; break; }
+            // (the riders' right-turn head where there is one, right of the through riders', #1165)
+            if (h.Shape == Shape.Bike) { if (on is not { Shape: Shape.Bike } b || (h.Centre - b.Centre).Dot(h.Right) > 0) on = h; continue; }
+            if (on is { Shape: Shape.Bike }) continue;
             if (h.Shape is Shape.Square or Shape.Tram or Shape.TramT) continue;
             if (on is not { } best || (h.Centre - foot).Dot(h.Right) > (best.Centre - foot).Dot(best.Right)) on = h;
         }
@@ -812,11 +816,15 @@ public static partial class SignalBuilder
                 else if (rightLane >= 0 && rightLane != car) row.Add((rightLane, Shape.Circle));
             }
             // the bike head (#351), low, in front of the pole, facing the approach: on the main pole the riders going straight on and
-            // right; the riders turning left with a group of their own (#979, the user) on the left pole, its arrow on its plate
-            int bike = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Bike && g.Arm == pole.Arm && (main ? g.Moves != SignalMoves.Left : g.Moves == SignalMoves.Left));
-            if (bike >= 0)
-                heads.Add(new Head(foot + front * (PoleRadius + BoardThickness + HeadDepth * BikeScale + 0.01f)
-                    + Vector3.Up * (BikeLowerEdge + 1.5f * Pitch * BikeScale), front, right, bike, Shape.Bike, 3, false, BikeScale));
+            // right; the riders turning left with a group of their own (#979, the user) on the left pole, its arrow on its plate; the
+            // riders' own right-turn lane's (#1165) on the main pole too, right of the through riders' head where there is one
+            int bike = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Bike && g.Arm == pole.Arm
+                && (main ? (g.Moves & SignalMoves.Through) != 0 : g.Moves == SignalMoves.Left));
+            int bikeRight = main ? plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Bike && g.Arm == pole.Arm && g.Moves == SignalMoves.Right) : -1;
+            var bikeAt = foot + front * (PoleRadius + BoardThickness + HeadDepth * BikeScale + 0.01f) + Vector3.Up * (BikeLowerEdge + 1.5f * Pitch * BikeScale);
+            if (bike >= 0) heads.Add(new Head(bikeAt, front, right, bike, Shape.Bike, 3, false, BikeScale));
+            if (bikeRight >= 0)
+                heads.Add(new Head(bikeAt + right * (bike >= 0 ? BikeRightBeside : 0f), front, right, bikeRight, Shape.Bike, 3, false, BikeScale));
             int centre = Math.Max(0, row.FindIndex(r => r.Group == car));
             SignalPlan.Conflict[,]? conflicts = null;
             int leftLamps = 0;   // flasher lamps left of the leftmost head

@@ -109,7 +109,14 @@ public readonly record struct SignalArm(
     /// The moves the trams make from this arm (#1057: its tram tracks into the junction, as RoadGen's tram ways through the core): a
     /// tram group of their own. Not stored: the groups carry it.
     /// </summary>
-    SignalMoves TramMoves = SignalMoves.None)
+    SignalMoves TramMoves = SignalMoves.None,
+    /// <summary>
+    /// The riders turning right have a bike lane of their own at the kerb (layout (b)'s right-turn bike lane, #1165, the user: "right
+    /// turn only bike lanes should get their own light"): a bike group of their own, right only, with the right arrow's phase where
+    /// it is protected (#1119), else giving way across the exit's crossing (its yellow flashing, #1109); the through riders' group
+    /// then goes straight on only. Not stored: the groups carry it.
+    /// </summary>
+    bool RiderRight = false)
 {
     /// <summary>Whether its walkers cross in two stages, waiting on the island between (#1030).</summary>
     public bool TwoStage => Pedestrians && HalfInM > 0 && HalfOutM > 0;
@@ -484,10 +491,11 @@ public sealed class SignalPlan
             Set(a.Group, b.Group, yields || bikeYield ? Conflict.Permissive : Conflict.Hard);
         }
 
-        // a bike lane beside a right-turn pocket: right-turning cars cross it (#351)
+        // a bike lane beside a right-turn pocket: right-turning cars cross it (#351); not the riders' own right-turn lane at the
+        // kerb, turning beside them (#1165)
         for (int g = 0; g < n; g++)
         {
-            if (Groups[g].Kind != SignalGroupKind.Bike) continue;
+            if (Groups[g].Kind != SignalGroupKind.Bike || Groups[g].Moves == SignalMoves.Right) continue;
             if (Arms[Groups[g].Arm].BikeBetween) continue;
             for (int h = 0; h < n; h++)
                 if (Groups[h].Arm == Groups[g].Arm && Groups[h].Kind == SignalGroupKind.RightArrow) Set(g, h, Conflict.Hard);
@@ -534,7 +542,8 @@ public sealed class SignalPlan
             if (!Going(h)) continue;
             if (other.Kind == SignalGroupKind.Pedestrian && other.Arm == to && other.Half != CrossingHalf.Arriving && turn != SignalMoves.Through
                 && (g.Kind == SignalGroupKind.Car || g.Kind == SignalGroupKind.Bike && turn == SignalMoves.Right)) return true;
-            if (other.Kind == SignalGroupKind.Bike && other.Arm == from && g.Kind == SignalGroupKind.Car && turn == SignalMoves.Right) return true;
+            if (other.Kind == SignalGroupKind.Bike && other.Arm == from && other.Moves != SignalMoves.Right && g.Kind == SignalGroupKind.Car
+                && turn == SignalMoves.Right) return true;
         }
         // riders turning right keep to their own way round the corner: only the exit's crossing above stops them
         if (g.Kind == SignalGroupKind.Bike && turn == SignalMoves.Right) return false;
@@ -692,7 +701,8 @@ public sealed class SignalPlan
             foreach (var b in moves)
                 if (b.Group == h && b.From != a.From && !RidesRight(b, other) && Meet(a, b)) turns |= a.Turn;
             // a kerbside bike lane beside the cars of its own approach: the right turn crosses it (#351)
-            if (other.Arm == Groups[g].Arm && !Arms[other.Arm].BikeBetween && a.Turn == SignalMoves.Right) turns |= SignalMoves.Right;
+            if (other.Arm == Groups[g].Arm && !Arms[other.Arm].BikeBetween && other.Moves != SignalMoves.Right && a.Turn == SignalMoves.Right)
+                turns |= SignalMoves.Right;
         }
         return turns;
     }
@@ -865,9 +875,13 @@ public sealed class SignalPlan
             if ((moves & pockets & SignalMoves.Left) != 0 && main != moves) left[a] = plan.Add(SignalGroupKind.LeftArrow, a, SignalMoves.Left);
             if ((moves & pockets & SignalMoves.Right) != 0 && main != moves) right[a] = plan.Add(SignalGroupKind.RightArrow, a, SignalMoves.Right);
             if (main != SignalMoves.None) car[a] = plan.Add(SignalGroupKind.Car, a, main);
-            // the riders go straight on, and turn right beside the cars on their own way (#971: from a path onto the next arm's)
-            if (arms[a].BikeSignal && (moves & SignalMoves.Through) != 0) plan.Add(SignalGroupKind.Bike, a, SignalMoves.Through | (moves & SignalMoves.Right));
+            // the riders go straight on, and turn right beside the cars on their own way (#971: from a path onto the next arm's),
+            // unless a right-turn bike lane of their own takes them (#1165): a group of its own, after the rest
+            bool riderRight = arms[a].RiderRight && (moves & SignalMoves.Right) != 0;
+            if (arms[a].BikeSignal && (moves & SignalMoves.Through) != 0)
+                plan.Add(SignalGroupKind.Bike, a, SignalMoves.Through | (riderRight ? SignalMoves.None : moves & SignalMoves.Right));
             if (arms[a].RiderLeft && (moves & SignalMoves.Left) != 0) plan.Add(SignalGroupKind.Bike, a, SignalMoves.Left);
+            if (riderRight) plan.Add(SignalGroupKind.Bike, a, SignalMoves.Right);
         }
         // the walkers: kerb to kerb, or each half on its own where they wait on the island between (#1030)
         for (int a = 0; a < arms.Count; a++)
@@ -1121,7 +1135,7 @@ public sealed class SignalPlan
             foreach (var kind in (ReadOnlySpan<SignalGroupKind>)[SignalGroupKind.Pedestrian, SignalGroupKind.Bike, SignalGroupKind.RightArrow])
                 for (int g = 0; g < plan.Groups.Count; g++)
                 {
-                    if (plan.Groups[g].Kind != kind || phase.Green.Contains(g)) continue;
+                    if (plan.Groups[g].Kind != kind || phase.Green.Contains(g) || RidesRightOnly(plan.Groups[g])) continue;
                     bool protectedOnly = kind == SignalGroupKind.RightArrow;
                     // a bike goes with its own approach's main lane; its riders turning left with its left arrow (#979)
                     bool riderLeft = plan.Groups[g].Moves == SignalMoves.Left;
@@ -1134,7 +1148,34 @@ public sealed class SignalPlan
                             && (plan.Groups[h].Kind == SignalGroupKind.Car || kind == SignalGroupKind.Bike && plan.Groups[h].Kind == SignalGroupKind.Pedestrian))))
                         phase.Green.Add(g);
                 }
+            // the riders' own right turn last (#1165): with its approach's right turn, wherever that is green
+            for (int g = 0; g < plan.Groups.Count; g++)
+                if (RidesRightOnly(plan.Groups[g]) && RidersRightGreen(plan, phase, conflicts, g)) phase.Green.Add(g);
         }
+    }
+
+    /// <summary>A bike group of the riders' own right-turn lane (#1165): right only.</summary>
+    private static bool RidesRightOnly(SignalGroup g) => g.Kind == SignalGroupKind.Bike && g.Moves == SignalMoves.Right;
+
+    /// <summary>
+    /// Whether the riders' own right turn (a bike group turning right only, #1165) goes green in a phase: with its approach's right
+    /// turn green there, protected as a right arrow is (nothing it crosses green), else giving way to the walkers across the exit
+    /// as the cars turning right beside them do (the flasher).
+    /// </summary>
+    private static bool RidersRightGreen(SignalPlan plan, Phase phase, Conflict[,] conflicts, int g)
+    {
+        var group = plan.Groups[g];
+        bool arrow = false, any = false;
+        foreach (int h in phase.Green)
+        {
+            var other = plan.Groups[h];
+            if (other.Arm != group.Arm || (other.Moves & SignalMoves.Right) == 0 || other.Kind is not (SignalGroupKind.Car or SignalGroupKind.RightArrow)) continue;
+            any = true;
+            arrow |= other.Kind == SignalGroupKind.RightArrow;
+        }
+        if (!any) return false;
+        return phase.Green.All(h => conflicts[g, h] == Conflict.None || !arrow && conflicts[g, h] == Conflict.Permissive
+            && plan.Groups[h].Kind is SignalGroupKind.Car or SignalGroupKind.Pedestrian);
     }
 
     // ---- timing ------------------------------------------------------------------------------
