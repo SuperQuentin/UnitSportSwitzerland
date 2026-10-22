@@ -110,9 +110,8 @@ public static class TerrainShowcase
             new SignalArm(Math.PI / 2, true, true, Pedestrians: true),
             new SignalArm(Math.PI, true, true, LeftPocket: true, Pedestrians: true, Rank: 2),
             new SignalArm(-Math.PI / 2, true, true, Pedestrians: true),
-        ], 353, pedestrianAmber);
+        ], 353, pedestrianAmber, tramT);
         plan.ArrowPlates = arrowPlates;
-        plan.TramTHead = tramT;
         plan.PoleColour = colour;
         var tile = Tile();
         var signal = new RoadSignal
@@ -182,6 +181,9 @@ public static class TerrainShowcase
                 lit.PlanSpeed = lit.LongestCycle / cycle;
                 GD.Print($"[models] signal cycle {lit.LongestCycle:0.#} s run in {cycle:0.#} s ({lit.PlanSpeed:0.##}x)");
             }
+            // --modelscyclefrom <s>: the plans start at that second of their time (a clip of a chosen part of the cycle, #1105)
+            if (CmdArgs.Float("--modelscyclefrom") is { } from)
+                lit.PlanShift = from - SignalLamps.Clock() * lit.PlanSpeed;
             node.AddChild(lit);
         }
         foreach (var label in RoadSignBuilder.Labels(tile) ?? []) node.AddChild(RoadSignBuilder.Make(label));

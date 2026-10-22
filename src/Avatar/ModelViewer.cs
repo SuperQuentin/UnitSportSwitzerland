@@ -59,9 +59,12 @@ public partial class ModelViewer : Node3D
         }
         // screenshots are stills: no face caught mid-blink (#657)
         if (_shots != null) HumanMeshBuilder.FigureMaterial().SetShaderParameter(Face.FaceAnimator.IdleParam, 0f);
+        // --modelsfrontlight: the sun from behind the camera, a little above and to its side, on the faces the camera sees (#1105:
+        // a signal head's white plate read grey with its default light from behind)
+        bool front = CmdArgs.Has("--modelsfrontlight");
         AddChild(new DirectionalLight3D
         {
-            Rotation = new Vector3(Mathf.DegToRad(-42), Mathf.DegToRad(-35), 0),
+            Rotation = front ? new Vector3(Mathf.DegToRad(-30), _yaw + Mathf.DegToRad(25), 0) : new Vector3(Mathf.DegToRad(-42), Mathf.DegToRad(-35), 0),
             LightEnergy = 1.1f,
         });
         if (_clear) GetViewport().TransparentBg = true;

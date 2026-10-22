@@ -224,6 +224,9 @@ void fragment() {
     /// </summary>
     public double PlanSpeed { get; set; } = 1;
 
+    /// <summary>Added to the plans' time after <see cref="PlanSpeed"/> (the viewer's <c>--modelscyclefrom</c>: a clip from a chosen moment).</summary>
+    public double PlanShift { get; set; }
+
     /// <summary>The longest cycle of the lamps' plans (s).</summary>
     public float LongestCycle => _plans.Length == 0 ? 0f : _plans.Max(p => p.Cycle);
 
@@ -307,7 +310,7 @@ void fragment() {
         var plan = _plans[j];
         var (start, count) = _byJunction[j];
         bool blinkOn = (long)Math.Floor(now / BlinkHalf) % 2 == 0, blinking = false;
-        double t = now * PlanSpeed;
+        double t = now * PlanSpeed + PlanShift;
         double until = double.PositiveInfinity;
         for (int i = start; i < start + count; i++)
         {

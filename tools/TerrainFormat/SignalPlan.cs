@@ -545,9 +545,11 @@ public sealed class SignalPlan
     /// goes with its own approach and turns across the pedestrians with the flasher.
     /// </summary>
     /// <param name="seed">A stable number for the junction (e.g. its LV95 key): the cycle offset.</param>
-    public static SignalPlan Build(IReadOnlyList<SignalArm> arms, uint seed = 0, bool pedestrianAmber = true)
+    /// <param name="tramTHead">Romandy's tram heads (<see cref="TramTHead"/>), set before the timing: their red-amber is
+    /// <see cref="TramRedAmberT"/> (#1105: set after, it never applied).</param>
+    public static SignalPlan Build(IReadOnlyList<SignalArm> arms, uint seed = 0, bool pedestrianAmber = true, bool tramTHead = false)
     {
-        var plan = new SignalPlan { PedestrianAmber = pedestrianAmber };
+        var plan = new SignalPlan { PedestrianAmber = pedestrianAmber, TramTHead = tramTHead };
         plan.Arms.AddRange(arms);
         var car = new int[arms.Count];
         var left = new int[arms.Count];

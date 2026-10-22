@@ -198,6 +198,27 @@ public class TramTests
         Assert.Equal(left, UnitSport.Tools.RoadGen.Rewrite.TileRewriter.TramGroup(plan, 0, SignalMoves.Left));
     }
 
+    [Fact]
+    public void RomandysTramRedAmber_IsTheLongOne()
+    {
+        // the user: the flashing bar across before go lasts "way longer than for cars" (#1105: the head's flag reached the plan only
+        // after its timing, so it stayed a car's 2 s)
+        foreach (bool romandy in new[] { false, true })
+        {
+            var plan = SignalPlan.Build(
+            [
+                new SignalArm(0, true, true, Pedestrians: true, Rank: 2, TramMoves: SignalMoves.Through),
+                new SignalArm(Math.PI / 2, true, true, Pedestrians: true),
+                new SignalArm(Math.PI, true, true, Pedestrians: true, Rank: 2),
+                new SignalArm(-Math.PI / 2, true, true, Pedestrians: true),
+            ], 1105, tramTHead: romandy);
+            Assert.Equal(romandy, plan.TramTHead);
+            var tram = plan.Groups.First(g => g.Kind == SignalGroupKind.Tram);
+            float redAmber = tram.Intervals.Where(iv => iv.Aspect == SignalAspect.RedAmber).Sum(iv => iv.To - iv.From);
+            Assert.Equal(romandy ? SignalPlan.TramRedAmberT : 2f, redAmber, 0.05f);
+        }
+    }
+
     [Theory]
     [InlineData("GE", 2_500_000, true)]
     [InlineData("VD", 2_530_000, true)]

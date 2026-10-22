@@ -31,7 +31,8 @@ The junction planner's cores (`junction-planner`) take the tram tracks running t
     the round TPG heads are #1104): the car head's white plate, black housing, visor and 200 mm lens, the lens dark with a
     solid white T lit in it (`SignalLamps` `TramTStop`/`TramTGo`). Vertical stroke lit = go, horizontal stroke lit = stop,
     vertical flashing = the amber before red, horizontal flashing = the red-amber before green, which lasts `TramRedAmberT` 5 s
-    (the user: "way longer than for cars"; no source found for the length). The unlit stroke a shade off the lens (`TramTOff`),
+    (the user: "way longer than for cars"; no source found for the length; `SignalPlan.Build(..., tramTHead)` sets the flag
+    before the timing: set after it, as until #1105, the 5 s never applied). The unlit stroke a shade off the lens (`TramTOff`),
     no bloom; a small "tram detected" dot above the T, modelled, never lit. Packed plate against plate with the car heads
     (`SignalBuilder.RomandyTramHeads`, `TramPack`, no arm): beside them on their right where there is one (level with their
     lower half, photo 1; over the main head's flasher where it has one: the user, "there is still space for one transit
