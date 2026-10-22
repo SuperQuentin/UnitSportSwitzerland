@@ -67,7 +67,7 @@ for the rule: run it with SITG ignored and compare with SITG's gantries.
   symbol and green, 4.42 white, else blue; SITG lists a sign per lane, alike ones merged; more signs than runs: the 4.42 ones
   dropped, then `Assign` by position), else OSM's `destination:lanes`/`destination` (overlay v4), else the two largest towns of
   `places.json` within 30 deg of the lanes' way, 1.5-30 km; green where a motorway, expressway or ramp lies that way within
-  2 km, blue on a main road (`GantryFacts.MainRoad`: TLM importance, canton or confederation owner), white otherwise. Under
+  800 m (30 deg), blue on a main road (`GantryFacts.MainRoad`: TLM importance, canton or confederation owner), white otherwise. Under
   each sign a black band with each lane's white arrow and a horizontal head (three 200 mm lenses, red left).
 - **Format**: `GNTY` (`SignGantry`, version 1) after `SGNL`. **Drawn**: `SignalBuilder.Gantry.cs` (posts and beam in the
   canton's pole colour, aluminium sign bodies, face and border, motorway symbol, band, arrows, flat heads; lenses into the tile's

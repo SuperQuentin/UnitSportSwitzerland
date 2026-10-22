@@ -14,6 +14,8 @@ public static partial class SignalBuilder
 {
     /// <summary>The black band under a sign: its height, and a lane's arrow and head in it, side by side about the lane's middle (m).</summary>
     private const float BandHeight = 0.55f, BandArrowAt = -0.42f, BandHeadAt = 0.3f, BandArrow = 0.2f;
+    /// <summary>The band reaches this far either side of a lane's middle (m): past its arrow and its head.</summary>
+    private const float BandLaneHalf = 0.95f;
     /// <summary>A sign's height for its lines: a margin and a line each (m); its depth, its white border.</summary>
     private const float SignMargin = 0.4f, SignLine = 0.42f, SignDepth = 0.08f, SignBorder = 0.06f;
     /// <summary>The gantry's beam over the signs (a square box) and its posts (m).</summary>
@@ -78,8 +80,14 @@ public static partial class SignalBuilder
             var body = mid + front * (SignOut + SignDepth * 0.5f);
             body.Y = g.Bottom + BandHeight + h * 0.5f;
             Beam(vertices, colors, uvs, uv2s, indices, body - right * w, body + right * w, front, SignDepth * 0.5f, h * 0.5f, back);
-            var band = body; band.Y = g.Bottom + BandHeight * 0.5f;
-            Beam(vertices, colors, uvs, uv2s, indices, band - right * w, band + right * w, front, SignDepth * 0.5f, BandHeight * 0.5f, black);
+            // the band runs under the sign and on over every lane of it (a sign is at most GantryLayout.MaxWidth wide; its lanes may
+            // spread wider): each lane's arrow and head stay in it
+            float from = s.Along - w, to = s.Along + w;
+            foreach (var lane in s.Lanes) { from = Mathf.Min(from, lane.Along - BandLaneHalf); to = Mathf.Max(to, lane.Along + BandLaneHalf); }
+            var band = a + dir * ((from + to) * 0.5f) + front * (SignOut + SignDepth * 0.5f);
+            band.Y = g.Bottom + BandHeight * 0.5f;
+            Beam(vertices, colors, uvs, uv2s, indices, band - dir * ((to - from) * 0.5f), band + dir * ((to - from) * 0.5f), front,
+                SignDepth * 0.5f, BandHeight * 0.5f, black);
             // hangers from the beam down the sign's back
             foreach (float side in (ReadOnlySpan<float>)[-0.7f, 0.7f])
             {

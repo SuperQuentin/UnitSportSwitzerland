@@ -112,7 +112,7 @@ public class GantryTests
             Signs =
             [
                 new GantrySign { Along = 4.5f, Width = 5.4f, Colour = SignColour.Blue, Lines = ["Versoix", "Lausanne"], Lanes = [new(3f, T), new(6f, T)] },
-                new GantrySign { Along = 9f, Width = 2.7f, Colour = SignColour.Green, Lines = [SignGantry.MotorwayMark + "Aéroport"], Lanes = [new(9f, L | R)] },
+                new GantrySign { Along = 9f, Width = 2.7f, Colour = SignColour.Green, Lines = [SignGantry.MotorwayMark + "Aéroport", "Genève"], Lanes = [new(9f, L | R)] },
             ],
         });
         var tile = new RoadTile { Id = new TileId(2500, 1123), Segments = new() };
@@ -126,6 +126,7 @@ public class GantryTests
         Assert.Equal(11f, g.Length, 3);
         Assert.Equal(["Versoix", "Lausanne"], g.Signs[0].Lines);
         Assert.Equal(SignColour.Green, g.Signs[1].Colour);
+        Assert.Equal([SignGantry.MotorwayMark + "Aéroport", "Genève"], g.Signs[1].Lines);   // UTF-8 in an ASCII file
         Assert.Equal(signal.Gantries[0].Signs[0].Lanes, g.Signs[0].Lanes);
         Assert.Equal(L | R, g.Signs[1].Lanes[0].Moves);
     }

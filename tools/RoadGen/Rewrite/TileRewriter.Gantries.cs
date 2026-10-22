@@ -50,8 +50,9 @@ public static partial class TileRewriter
     private const float GantryLowerEdge = 5.0f;
     /// <summary>A sign's destination is a town ahead within this angle of its lanes' way (deg), this near and far (m).</summary>
     private const double PlaceCone = 30, PlaceNear = 1500, PlaceFar = 30000;
-    /// <summary>A sign is green where a motorway, an expressway or a ramp lies within this of its lanes' way (deg) and this near (m).</summary>
-    private const double MotorwayCone = 45, MotorwayNear = 2000;
+    /// <summary>A sign is green where a motorway, an expressway or a ramp lies within this of its lanes' way (deg) and this near (m; 45 deg and 2 km
+    /// made 3 of SITG's 4 blue and white signs green on the Geneva benchmark).</summary>
+    private const double MotorwayCone = 30, MotorwayNear = 800;
 
     /// <summary>The block's motorway, expressway and ramp points (LV95), for the rule's distance and the signs' colour.</summary>
     private static readonly ConditionalWeakTable<RoadGenResult, List<Vec2>> MotorwayPoints = new();

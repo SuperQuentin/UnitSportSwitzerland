@@ -89,7 +89,8 @@ public static class SitgSignStage
                 + "&outFields=" + string.Join(',', layer.Fields)
                 + string.Create(c, $"&geometry={minE:F0},{minN:F0},{maxE:F0},{maxN:F0}&geometryType=esriGeometryEnvelope&inSR=2056&outSR=2056")
                 + string.Create(c, $"&orderByFields=OBJECTID&resultOffset={offset}&resultRecordCount={Page}&f=json");
-            using var doc = JsonDocument.Parse(http.GetStringAsync(url).GetAwaiter().GetResult());
+            // UTF-8 whatever the response says (the service names no charset: "Genève" came back as "Gen?ve")
+            using var doc = JsonDocument.Parse(http.GetByteArrayAsync(url).GetAwaiter().GetResult());
             if (doc.RootElement.TryGetProperty("error", out var error)) throw new InvalidOperationException($"SITG {layer.Path}: {error}");
             var features = doc.RootElement.GetProperty("features");
             int count = 0;

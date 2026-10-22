@@ -56,7 +56,7 @@ public sealed class SignGantry
 
     /// <summary>
     /// Writes every signal's gantries: <c>version u8</c>; <c>count varint</c>, per gantry <c>signal varint, arm u8, lit u8,
-    /// x y z, end x y z, bottom, heading f32, signs u8</c>, per sign <c>along, width f32, colour u8, lines u8 (string each),
+    /// x y z, end x y z, bottom, heading f32, signs u8</c>, per sign <c>along, width f32, colour u8, lines u8 (each a varint byte count and its UTF-8),
     /// lanes u8</c>, per lane <c>along f32, moves u8</c>.
     /// </summary>
     public static void Write(BinaryWriter w, IReadOnlyList<RoadSignal> signals)
@@ -77,7 +77,13 @@ public sealed class SignGantry
                     w.Write(s.Width);
                     w.Write((byte)s.Colour);
                     w.Write(checked((byte)s.Lines.Count));
-                    foreach (var line in s.Lines) w.Write(line);
+                    // UTF-8 whatever the writer's encoding (the road file's is ASCII: "Genève" came back "Gen?ve")
+                    foreach (var line in s.Lines)
+                    {
+                        var bytes = System.Text.Encoding.UTF8.GetBytes(line);
+                        w.Write7BitEncodedInt(bytes.Length);
+                        w.Write(bytes);
+                    }
                     w.Write(checked((byte)s.Lanes.Count));
                     foreach (var l in s.Lanes) { w.Write(l.Along); w.Write((byte)l.Moves); }
                 }
@@ -102,7 +108,7 @@ public sealed class SignGantry
                 float along = r.ReadSingle(), width = r.ReadSingle();
                 var colour = (SignColour)r.ReadByte();
                 var lines = new List<string>();
-                for (int l = r.ReadByte(); l > 0; l--) lines.Add(r.ReadString());
+                for (int l = r.ReadByte(); l > 0; l--) lines.Add(System.Text.Encoding.UTF8.GetString(r.ReadBytes(r.Read7BitEncodedInt())));
                 var lanes = new List<GantryLane>();
                 for (int l = r.ReadByte(); l > 0; l--) lanes.Add(new GantryLane(r.ReadSingle(), (SignalMoves)r.ReadByte()));
                 signs.Add(new GantrySign { Along = along, Width = width, Colour = colour, Lines = lines, Lanes = lanes });
