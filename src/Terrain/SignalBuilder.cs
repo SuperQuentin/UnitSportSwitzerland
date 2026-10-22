@@ -101,11 +101,12 @@ public static class SignalBuilder
 
     /// <summary>
     /// A head on a pole: its centre, the way it faces and its right as the viewer sees it, its group, its lenses; its flasher on its
-    /// right and that flasher's plate (#1109), and the flasher on its left of a permissive left shown by an arrow (#1109).
+    /// right and that flasher's plate (#1109), and the flasher on its left of a permissive left shown by an arrow (#1109); where
+    /// each flasher stands, in head spacings to the head's right (negative: its left).
     /// </summary>
     private readonly record struct Head(Vector3 Centre, Vector3 Front, Vector3 Right, int Group, Shape Shape, int Lenses, bool Flasher,
         float Scale = 1f, bool SideBySide = false, SignalMoves? Arrow = null, SignalPlate Plate = SignalPlate.None,
-        SignalMoves PlateArrow = SignalMoves.None, bool LeftFlasher = false)
+        SignalMoves PlateArrow = SignalMoves.None, bool LeftFlasher = false, float FlasherSide = 1f, float LeftSide = -1f)
     {
         /// <summary>Half the housing's height.</summary>
         public float Half => SideBySide ? GenevaHalfHeight : Lenses * Pitch * Scale * 0.5f;
@@ -218,13 +219,13 @@ public static class SignalBuilder
                 Circle(h.Centre + h.Front * 0.008f + Vector3.Up * (TramDetectAt * r), h.Right, TramDetectRadius * r, 8));
         }
         if (h.Flasher)
-            FlasherLamp(vertices, colors, uvs, uv2s, indices, h, 1f, h.Plate, h.PlateArrow, board, corner);
+            FlasherLamp(vertices, colors, uvs, uv2s, indices, h, h.FlasherSide, h.Plate, h.PlateArrow, board, corner);
         // a permissive left shown by an arrow (#1109, the user): its own flasher on its left, a left arrow on its plate
         if (h.LeftFlasher)
-            FlasherLamp(vertices, colors, uvs, uv2s, indices, h, -1f, SignalPlate.Arrow, SignalMoves.Left, board, corner);
+            FlasherLamp(vertices, colors, uvs, uv2s, indices, h, h.LeftSide, SignalPlate.Arrow, SignalMoves.Left, board, corner);
     }
 
-    /// <summary>Where a head's flasher lamp is: level with its green, a head's spacing to its right (<paramref name="side"/> 1) or left (-1).</summary>
+    /// <summary>Where a head's flasher lamp is: level with its green, <paramref name="side"/> head spacings to its right (negative: its left).</summary>
     private static Vector3 FlasherAt(Head h, float side) => h.Centre + h.Right * (side * HeadSpacing) + Vector3.Down * (h.Half - Pitch * 0.5f);
 
     /// <summary>
@@ -243,8 +244,9 @@ public static class SignalBuilder
         LensFittings(vertices, colors, uvs, uv2s, indices, at, h.Right, h.Front, 1f, square: false);
         // behind the plates (#771)
         var back = h.Front * (HeadDepth * 0.6f);
+        float sign = Mathf.Sign(side);
         Tube(vertices, colors, uvs, uv2s, indices, Housing.SrgbToLinear(),
-            at - h.Right * (side * (HeadSpacing - w * 0.5f)) - back, at - h.Right * (side * HeadWidth * 0.5f) - back, 0.025f);
+            at - h.Right * (side * HeadSpacing - sign * w * 0.5f) - back, at - h.Right * (sign * HeadWidth * 0.5f) - back, 0.025f);
         float panel = plate != SignalPlate.None ? ArrowPanel : 0f;
         var face = at - h.Front * 0.002f;
         if (board)
@@ -268,7 +270,7 @@ public static class SignalBuilder
     }
 
     /// <summary>A figure on a flasher's plate (#1109): the walker or the bike this much of the plate's half height to a lens radius.</summary>
-    private const float PlateFigureFill = 0.85f;
+    private const float PlateFigureFill = 1f;
 
     // ---- overhead heads (#1037) --------------------------------------------------------------
 
@@ -602,10 +604,10 @@ public static class SignalBuilder
                         lamps.Lenses.Add(new Lens(h.Shape, new Transform3D(basis, at), j, h.Group, role, flash, h.Arrow, blink));
                     }
                     if (h.Flasher && Flasher(signal.Plan, h.Group) is int f and >= 0)
-                        lamps.Lenses.Add(new Lens(Shape.Circle, new Transform3D(basis, FlasherAt(h, 1f) + face), j, f, Role.Flash));
+                        lamps.Lenses.Add(new Lens(Shape.Circle, new Transform3D(basis, FlasherAt(h, h.FlasherSide) + face), j, f, Role.Flash));
                     // an arrow head's permissive left: the lamp on its left (#1109), lit by the derived flasher, not its group
                     if (h.LeftFlasher && LeftFlashOf(h.Group) is { } lf)
-                        lamps.Lenses.Add(new Lens(Shape.Circle, new Transform3D(basis, FlasherAt(h, -1f) + face), j, h.Group, Role.Flash, Blink: lf));
+                        lamps.Lenses.Add(new Lens(Shape.Circle, new Transform3D(basis, FlasherAt(h, h.LeftSide) + face), j, h.Group, Role.Flash, Blink: lf));
                 }
         }
         return lamps.Lenses.Count == 0 ? null : lamps;
@@ -689,7 +691,7 @@ public static class SignalBuilder
                     + Vector3.Up * (BikeLowerEdge + 1.5f * Pitch * BikeScale), front, right, bike, Shape.Bike, 3, false, BikeScale));
             int centre = Math.Max(0, row.FindIndex(r => r.Group == car));
             SignalPlan.Conflict[,]? conflicts = null;
-            bool leftFlash = false;
+            int leftLamps = 0;   // flasher lamps left of the leftmost head
             for (int i = 0; i < row.Count; i++)
             {
                 var (g, shape) = row[i];
@@ -702,14 +704,19 @@ public static class SignalBuilder
                 // leftmost head: a left pocket's arrow would have taken the left)
                 bool leftOf = main && i == 0 && shape == Shape.Circle && (ArrowMoves(plan, g) & SignalMoves.Left) != 0
                     && plan.LeftGivesWayTo(g, conflicts ??= plan.Conflicts()).Count > 0;
-                leftFlash |= leftOf;
-                heads.Add(new Head(at, front, right, g, shape, 3, f >= 0, Plate: plate, PlateArrow: plateArrow, LeftFlasher: leftOf));
+                // beside its green on its right, or on its left where the next head stands there (a right lane's or arrow's head: they
+                // overlapped, #1109); a permissive left's flasher beyond it
+                float side = i < row.Count - 1 ? -1f : 1f;
+                float leftSide = f >= 0 && side < 0 ? -2f : -1f;
+                if (i == 0) leftLamps = (leftOf ? 1 : 0) + (f >= 0 && side < 0 ? 1 : 0);
+                heads.Add(new Head(at, front, right, g, shape, 3, f >= 0, Plate: plate, PlateArrow: plateArrow, LeftFlasher: leftOf,
+                    FlasherSide: side, LeftSide: leftSide));
             }
             // the trams' heads (#1057) beside the car heads on the road's side: left of the main pole's, right of the second's
             // (Romandy's packed against the car heads, beside or above them: #1105)
             if (plan.TramTHead) RomandyTramHeads(plan, pole, heads, foot, front, right, lower, row.Count, centre);
             // (left of a left flasher, #1109)
-            else TramHeads(plan, pole, heads, foot, front, right, lower, !main ? row.Count - centre : -(centre + 1 + (leftFlash ? 1 : 0)), !main ? 1 : -1);
+            else TramHeads(plan, pole, heads, foot, front, right, lower, !main ? row.Count - centre : -(centre + 1 + leftLamps), !main ? 1 : -1);
         }
         else if ((pole.Flags & SignalPoleFlags.Tram) != 0)
         {
@@ -779,12 +786,13 @@ public static class SignalBuilder
             if (plan.Groups[g].Kind == SignalGroupKind.Tram && plan.Groups[g].Arm == pole.Arm) trams.Add(g);
         if (trams.Count == 0) return;
         float frame = BorderGap + BorderWidth, panel = trams.Count > 1 ? ArrowPanel : 0f;
-        bool flasher = heads.Any(h => h.Flasher);
+        // (a flasher on the right of the rightmost car head: one on a head's left stands where nothing goes, #1109)
+        bool flasher = heads.Any(h => h.Flasher && h.FlasherSide > 0);
         if (flasher && trams.Count == 1)
         {
             // one beside the main head over its flasher, plate on plate, still touching the car head (the user: "if there is a
-            // flasher, there is still space for one transit head")
-            heads.Add(new Head(foot + front * InFront + right * TramPack + Vector3.Up * (lower + 1.5f * Pitch + 2f * frame + 0.01f),
+            // flasher, there is still space for one transit head"; beside the rightmost head where a right lane's stands right of it)
+            heads.Add(new Head(foot + front * InFront + right * ((cars - 1 - centre) * HeadSpacing + TramPack) + Vector3.Up * (lower + 1.5f * Pitch + 2f * frame + 0.01f),
                 front, right, trams[0], Shape.TramT, 1, false));
             return;
         }
