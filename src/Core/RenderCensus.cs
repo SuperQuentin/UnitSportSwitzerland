@@ -14,6 +14,16 @@ public static class RenderCensus
 {
     public static void Install(Node root)
     {
+        // "--overdraw": the window draws how many times each pixel was shaded (Godot's overdraw view)
+        // (and the headset's, which comes up a frame later)
+        if (CmdArgs.Has("--overdraw"))
+        {
+            root.GetViewport().DebugDraw = Viewport.DebugDrawEnum.Overdraw;
+            root.GetTree().CreateTimer(1).Timeout += () =>
+            {
+                if (XR.XrSession.Rig is { } rig) rig.HeadsetView.DebugDraw = Viewport.DebugDrawEnum.Overdraw;
+            };
+        }
         // "--hidenodes A,B": hides every node whose name contains one of them, again each second
         // (tiles come and go), to measure what a part of the scene costs the GPU
         if (CmdArgs.Value("--hidenodes") is { } list)
@@ -21,6 +31,17 @@ public static class RenderCensus
             string[] names = list.Split(',', StringSplitOptions.RemoveEmptyEntries);
             var timer = new Godot.Timer { WaitTime = 1, Autostart = true };
             timer.Timeout += () => Hide(root.GetTree().Root, names);
+            root.AddChild(timer);
+        }
+        // "--hideui": every 2D layer hidden, each second, to measure what the 2D costs a headset
+        if (CmdArgs.Has("--hideui"))
+        {
+            var timer = new Godot.Timer { WaitTime = 1, Autostart = true };
+            timer.Timeout += () =>
+            {
+                foreach (var l in root.GetTree().Root.FindChildren("*", nameof(CanvasLayer), true, false).OfType<CanvasLayer>())
+                    l.Visible = false;
+            };
             root.AddChild(timer);
         }
         double? at = CmdArgs.Double("--rendercensus");
