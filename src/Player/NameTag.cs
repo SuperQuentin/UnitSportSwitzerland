@@ -24,9 +24,14 @@ public partial class NameTag : Label3D
     {
         _body = body;
         Name = "NameTag";
+        // the same size on screen near or far: a world-sized name is unreadable past a few metres
+        FixedSize = true;
         FontSize = 32;
-        PixelSize = 0.006f;
-        OutlineSize = 8;
+        PixelSize = 0.0014f;
+        OutlineSize = 10;
+        OutlineModulate = new Color(0f, 0f, 0f, 0.85f);   // white on a pale sky needs a dark rim
+        VerticalAlignment = VerticalAlignment.Bottom;     // the lines grow up from the head, never down over it
+        AlphaCut = AlphaCutMode.OpaquePrepass;
         Billboard = BaseMaterial3D.BillboardModeEnum.Enabled;
         Shaded = false;
         VisibilityRangeEnd = 60f;

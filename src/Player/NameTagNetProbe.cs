@@ -56,20 +56,23 @@ public partial class NameTagNetProbe : ChatProbe
             $"A's copy wears \"TaggerA / MOBILE\" (shows \"{Tag()?.Text}\")");
         if (Copy() is { } a && Tag() is { } t)
             Expect(t.GlobalPosition.Y > a.GlobalPosition.Y + 1.8f, $"the tag is over A's head ({t.GlobalPosition.Y - a.GlobalPosition.Y:F2} m over the feet)");
-        ShotOfA("B_tag");
+        await ShotOfA("B_tag");
         Say("seen");
         if (!await Heard("A", "renamed", 20)) { Fail("A never renamed"); return; }
         Expect(await Until(() => Tag() is { Text: "TaggerA2\nMOBILE" }, 10), $"A's tag follows /name (shows \"{Tag()?.Text}\")");
         Say("seen renamed");
     }
 
-    /// <summary>Windowed (<c>SHOTS=1</c>): turn to A's copy and save the view.</summary>
-    private void ShotOfA(string name)
+    /// <summary>Windowed (<c>SHOTS=1</c>): step back from A's copy (both spawn side by side), turn to it and save the view.</summary>
+    private async Task ShotOfA(string name)
     {
         if (DisplayServer.GetName() == "headless" || Copy() is not { } a || Me is not { } me) return;
+        me.GlobalPosition = a.GlobalPosition + new Vector3(0, 0.5f, 5f);
+        await Seconds(1.0);
         var to = a.GlobalPosition + Vector3.Up * 1.4f - (me.GlobalPosition + Vector3.Up * 1.68f);
         me.LookYaw = Mathf.Atan2(-to.X, -to.Z);
         me.LookPitch = Mathf.Atan2(to.Y, new Vector2(to.X, to.Z).Length());
+        await Seconds(0.5);
         GD.Print($"{Log} shot {Shot(name)}");
     }
 
