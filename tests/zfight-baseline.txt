@@ -547,6 +547,7 @@
 378.5	Figures / Pose - Boarding
 403.5	Figures / Pose - ClimbLeft
 382.9	Figures / Pose - Cycling
+96.1	Figures / Pose - Falling
 96.1	Figures / Pose - Hanging
 2.8	Figures / Pose - Spread
 2.8	Figures / Pose - Standing
