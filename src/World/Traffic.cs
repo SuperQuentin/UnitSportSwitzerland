@@ -679,7 +679,9 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             target = Mathf.Min(target, Mathf.Sqrt(other.Speed * other.Speed + 2f * 4f * Mathf.Max(0f, along - QueueSpacing + 1f)));
             // standing right behind one that waits (a red, a gap, a queue of its own): queued, not stuck (#1134: a queue behind a
             // long red reaches past where the cars read the lights, and its back vanished after 20 s)
-            if (other.Speed < 0.5f && along < QueueSpacing + 6f && (other.AtRed || other.Queued || other.GapWaiting || other.GapHeld)) queued = true;
+            // (truly ahead, not one on the same spot: two on one spot each reading the other as ahead would hold each other
+            // queued for good, where being dropped as stuck untangles them)
+            if (other.Speed < 0.5f && d.Dot(dir) > 2f && along < QueueSpacing + 6f && (other.AtRed || other.Queued || other.GapWaiting || other.GapHeld)) queued = true;
         }
         // and behind a rider or tram in its lane (#1060: the modes' crossers; +∞ without them): standing behind one, queued too
         // (#1134: a tram at its stop, a rider at a red)
@@ -889,7 +891,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
 
         var before = car.Head;
         var (legEdge, legForward) = (car.Route.Edge, car.Route.Forward);
-        if (!car.Route.Advance(car.Speed * dt, leg => NextRoad(leg, car))) car.Stuck += 5f;
+        // (at the end of its way: dropped this tick, queued or not, #1134)
+        if (!car.Route.Advance(car.Speed * dt, leg => NextRoad(leg, car))) car.Stuck += 21f;
         if (car.Route.Edge != legEdge) HandOver(car, legEdge, legForward);
         car.Route.Trim(90f);   // the road behind it too: whoever is closing from behind is found on it
         float pull = car.Startle > 0f ? Mathf.Clamp(car.Pull + 0.12f * Mathf.Sin(car.Startle * 14f), 0f, maxPull) : car.Pull;

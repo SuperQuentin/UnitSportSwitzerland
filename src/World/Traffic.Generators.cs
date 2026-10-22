@@ -94,6 +94,13 @@ public partial class Traffic
         public LaneEdge? Edge;
         public bool Forward;
         public float Pos;
+        /// <summary>
+        /// Where it takes movers as a destination (#1134): the edge they may drive out on (a divided road's other carriageway, a
+        /// one-way's: not the one its movers start on), its heading's way along it, where.
+        /// </summary>
+        public LaneEdge? OutEdge;
+        public bool OutForward;
+        public float OutPos;
         /// <summary>Where it stands (world).</summary>
         public Vector3 At;
         public double Due;
@@ -122,7 +129,7 @@ public partial class Traffic
     /// <summary>Movers each generator still has waiting in its queue (#1134, the probe's report).</summary>
     public int QueuedAt(int id) => _endpoints.TryGetValue(id, out var s) ? s.Queue : 0;
     /// <summary>Whether an endpoint found its mode's graph (#1134, the probe's report: one on no road makes nothing).</summary>
-    public bool EndpointPlaced(int id) => _endpoints.TryGetValue(id, out var s) && s.Edge is not null;
+    public bool EndpointPlaced(int id) => _endpoints.TryGetValue(id, out var s) && (s.Edge ?? s.OutEdge) is not null;
     private int _generatedLive;
 
     /// <summary>Called by the list's <see cref="TrafficGenerators.Changed"/>: the endpoints are snapped again on the next tick.</summary>
@@ -180,12 +187,19 @@ public partial class Traffic
             if (old.TryGetValue(ep.Id, out var was)) (s.Due, s.Queue) = (was.Due, was.Queue);
             var at = _origin.ToWorld(ep.E, ep.N, 0);
             var heading = new Vector3(Mathf.Cos(ep.Heading), 0f, -Mathf.Sin(ep.Heading));
-            if (s.Graph is not null && OnGraph(s.Graph, ep.Mode, at, SnapReach) is var (edge, pos, tangent))
+            // its movers start on an edge they may drive along its heading, and leave on one they may drive against it
+            if (s.Graph is not null && OnGraph(s.Graph, ep.Mode, at, SnapReach, heading) is var (edge, pos, tangent))
             {
                 s.Edge = edge;
                 s.Pos = pos;
                 s.Forward = tangent.Dot(heading) >= 0f;
                 s.At = edge.Sample(pos).Pos;
+            }
+            if (s.Graph is not null && OnGraph(s.Graph, ep.Mode, at, SnapReach, -heading) is var (outEdge, outPos, outTangent))
+            {
+                s.OutEdge = outEdge;
+                s.OutPos = outPos;
+                s.OutForward = outTangent.Dot(heading) >= 0f;
             }
             _endpoints[ep.Id] = s;
         }
@@ -193,13 +207,13 @@ public partial class Traffic
 
     /// <summary>The road edge nearest <paramref name="at"/> (plan view) within <paramref name="reach"/> m: where along it, and its direction there.</summary>
     public (LaneEdge Edge, float Pos, Vector3 Tangent)? OnRoad(Vector3 at, float reach) =>
-        _roads is null ? null : OnGraph(_roads, MoverKind.Car, at, reach);
+        _roads is null ? null : OnGraph(_roads, MoverKind.Car, at, reach, null);
 
     /// <summary>
     /// The edge of <paramref name="graph"/> nearest <paramref name="at"/> (plan view) within <paramref name="reach"/> m that a mover
     /// of <paramref name="kind"/> may start on (no link, no junction path; a rider's one it may ride): where along it, its direction.
     /// </summary>
-    private static (LaneEdge Edge, float Pos, Vector3 Tangent)? OnGraph(LaneGraph graph, MoverKind kind, Vector3 at, float reach)
+    private static (LaneEdge Edge, float Pos, Vector3 Tangent)? OnGraph(LaneGraph graph, MoverKind kind, Vector3 at, float reach, Vector3? way)
     {
         (LaneEdge, float, Vector3)? best = null;
         float bestD = reach * reach;
@@ -214,6 +228,8 @@ public partial class Traffic
                 var ab = new Vector2(p[i + 1].X, p[i + 1].Z) - a;
                 float len2 = ab.LengthSquared();
                 if (len2 < 1e-6f) continue;
+                // (one that may be driven <paramref name="way"/> only, where asked)
+                if (way is { } w && e.OneWay != 0 && (p[i + 1] - p[i]).Dot(w) * e.OneWay <= 0f) continue;
                 float t = Mathf.Clamp((new Vector2(at.X, at.Z) - a).Dot(ab) / len2, 0f, 1f);
                 float d = (a + ab * t - new Vector2(at.X, at.Z)).LengthSquared();
                 if (d >= bestD) continue;
@@ -279,7 +295,7 @@ public partial class Traffic
         if (share.To > 0 && _endpoints.TryGetValue(share.To, out var dest) && dest.Ep.Mode == kind && CostTo(dest) is { } cost)
         {
             // no way there on this mode's graph (a sidewalk with no crossing to the other, no corner round): none made, counted
-            if (!cost.ContainsKey((edge, forward)) && !(edge, forward).Equals((dest.Edge, !dest.Forward)))
+            if (!cost.ContainsKey((edge, forward)) && !(edge, forward).Equals((dest.OutEdge, !dest.OutForward)))
             {
                 NoWayBy[s.Ep.Id] = NoWayBy.GetValueOrDefault(s.Ep.Id) + 1;
                 s.Queue--;
@@ -343,9 +359,9 @@ public partial class Traffic
     {
         if (from.Ways.TryGetValue((to, forward), out var cached)) return cached;
         List<(LaneEdge, bool)>? way = null;
-        if (_endpoints.TryGetValue(to, out var dest) && dest.Edge is { } destEdge && dest.Ep.Destination)
+        if (_endpoints.TryGetValue(to, out var dest) && dest.OutEdge is { } destEdge && dest.Ep.Destination)
         {
-            var goal = (destEdge, !dest.Forward);
+            var goal = (destEdge, !dest.OutForward);
             var start = (from.Edge!, forward);
             var dist = new Dictionary<(LaneEdge, bool), float> { [start] = 0f };
             var back = new Dictionary<(LaneEdge, bool), (LaneEdge, bool)>();
@@ -383,8 +399,8 @@ public partial class Traffic
     private Dictionary<(LaneEdge, bool), float>? CostTo(EndpointState dest)
     {
         if (dest.CostTo is not null) return dest.CostTo;
-        if (dest.Edge is not { } edge || dest.Graph is not { } graph || !dest.Ep.Destination) return null;
-        var goal = (edge, !dest.Forward);
+        if (dest.OutEdge is not { } edge || dest.Graph is not { } graph || !dest.Ep.Destination) return null;
+        var goal = (edge, !dest.OutForward);
         var dist = new Dictionary<(LaneEdge, bool), float> { [goal] = 0f };
         var open = new PriorityQueue<(LaneEdge Edge, bool Forward), float>();
         open.Enqueue(goal, 0f);
@@ -478,10 +494,10 @@ public partial class Traffic
         var edge = route.Edge;
         foreach (var s in _endpoints.Values)
         {
-            if (!s.Ep.Destination || s.Ep.Mode != kind || s.Edge != edge || route.Forward == s.Forward) continue;
+            if (!s.Ep.Destination || s.Ep.Mode != kind || s.OutEdge != edge || route.Forward == s.OutForward) continue;
             // driving out (against the endpoint's heading): past it once its place along the edge is beyond the endpoint's
             float pos = route.Forward ? route.Arc : edge.Length - route.Arc;
-            if (route.Forward ? pos >= s.Pos : pos <= s.Pos) return s.Ep.Id;
+            if (route.Forward ? pos >= s.OutPos : pos <= s.OutPos) return s.Ep.Id;
         }
         return 0;
     }
@@ -490,7 +506,7 @@ public partial class Traffic
     private void TakeArrived()
     {
         bool any = false;
-        foreach (var s in _endpoints.Values) any |= s.Ep.Destination && s.Edge is not null;
+        foreach (var s in _endpoints.Values) any |= s.Ep.Destination && s.OutEdge is not null;
         if (!any) return;
         for (int i = _cars.Count - 1; i >= 0; i--)
         {
