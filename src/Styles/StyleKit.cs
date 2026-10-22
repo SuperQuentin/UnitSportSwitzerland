@@ -659,6 +659,12 @@ public static class StyleKit
     /// </summary>
     public static float Dusk(float sunElevationDeg) => Mathf.Clamp(1f - (sunElevationDeg - 2f) / 18f, 0f, 1f);
 
+    /// <summary>The sun's shadow cascades: 4, or <c>--shadows off|1|2|4</c> to measure their cost (#1112).</summary>
+    private static readonly int ShadowSplits = Core.CmdArgs.Value("--shadows") switch
+    {
+        "off" or "0" => 0, "1" => 1, "2" => 2, _ => 4,
+    };
+
     /// <summary>
     /// The applied style's sun, or null when it has none (PS1: the shaders light themselves from
     /// <c>world_sun_dir</c>). <c>World/DayNight</c> points and colours it every frame.
@@ -667,10 +673,15 @@ public static class StyleKit
         ? new DirectionalLight3D
         {
             Name = "Sun",
-            ShadowEnabled = true,
+            ShadowEnabled = ShadowSplits > 0,
             // about the 3D trees' reach (the billboards beyond cast none), in cascades of 10, 40,
             // 140 and 400 m: the default 40 m first one left a sawtooth on every near shadow
-            DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits,
+            DirectionalShadowMode = ShadowSplits switch
+            {
+                1 => DirectionalLight3D.ShadowMode.Orthogonal,
+                2 => DirectionalLight3D.ShadowMode.Parallel2Splits,
+                _ => DirectionalLight3D.ShadowMode.Parallel4Splits,
+            },
             DirectionalShadowMaxDistance = 400f,
             DirectionalShadowSplit1 = 0.025f,
             DirectionalShadowSplit2 = 0.1f,

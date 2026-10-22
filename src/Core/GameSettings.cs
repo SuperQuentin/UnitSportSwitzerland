@@ -705,6 +705,11 @@ public sealed class GameSettings
                 // the headset's refresh rate and terrain detail (#1036), for frame-time checks
                 case "--vrhz" when int.TryParse(v, out int hz): VrRefreshHz = hz; break;
                 case "--vrdetail" when Enum.TryParse<DetailPreset>(v, true, out var vd): VrDetail = vd; break;
+                // the headset's picture, for frame-time checks on a Quest (#1112)
+                case "--vrmsaa" when int.TryParse(v, out int ms): VrMsaa = ms; break;
+                case "--vrscale" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float vs):
+                    VrRenderScale = Math.Clamp(vs, MinVrRenderScale, MaxVrRenderScale); break;
+                case "--vrfoveation": VrFoveation = v is "on" or "1" or "true"; break;
                 case "--vsync": VSync = v is "on" or "1" or "true"; break;
                 // a film's render profile sets the picture itself (#924, tools/trailer.sh RENDER), never the player's file
                 case "--render-scale" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float rs):
