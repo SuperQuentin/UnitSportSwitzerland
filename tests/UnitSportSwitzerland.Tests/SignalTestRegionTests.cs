@@ -637,20 +637,26 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
             && plates.GetValueOrDefault(SignalPlate.Arrow) > 0, string.Join(", ", plates.Select(kv => $"{kv.Key} {kv.Value}")));
         Assert.True(balls > 0 && arrows > 0, $"balls {balls}, arrows {arrows}");
 
-        // J7's flashers: one turn crosses both, its arrow alone
+        // J7's right turns cross walkers and riders: a mix, the right arrow
         var j7 = region.Junction("J7");
         var p7 = region.Tile(j7.E, j7.N).Signals.Single().Plan;
-        Assert.Contains(Enumerable.Range(0, p7.Groups.Count), g => p7.PlateOf(g) is (SignalPlate.Arrow, SignalMoves.Left or SignalMoves.Right));
+        Assert.Contains(Enumerable.Range(0, p7.Groups.Count), g => p7.PlateOf(g, turns: SignalMoves.Right) is (SignalPlate.Arrow, SignalMoves.Right));
 
         // J3b's south approach: straight on and left beside its right pocket's own group, an arrow head, its left giving way: the
         // flasher on its left, its yellow steady; J3's ball heads flash theirs
         var j3b = region.Junction("J3b");
         var tile3b = region.Tile(j3b.E, j3b.N);
         var lamps3b = UnitSport.Terrain.SignalBuilder.BuildLamps(tile3b)!;
-        var leftFlasher = Assert.Single(lamps3b.Lenses, l => l.Role == UnitSport.Terrain.SignalBuilder.Role.Flash && l.Blink is not null
-            && l.Blink.Qualifies == l.Group && lamps3b.Plans[0].LeftGivesWayTo(l.Group).Count > 0 && l is { Plate: SignalPlate.Arrow, PlateArrow: SignalMoves.Left });
-        // and its left turn's lamp for the bike way it crosses, on the approach's left pole: one more lamp of its group, a bike on its plate
-        Assert.Contains(lamps3b.Lenses, l => l.Group == leftFlasher.Group && l.Role == UnitSport.Terrain.SignalBuilder.Role.Flash && l.Plate == SignalPlate.Bike);
+        // (#1117, the user's bug: its left turn gives way to the oncoming north arm and crosses the north bike lane, and its one lamp
+        // showed a bike: a mix, so the turn's arrow, one lamp for both, on the approach's left pole)
+        var p3b = lamps3b.Plans[0];
+        int south = Enumerable.Range(0, p3b.Groups.Count).Single(g => p3b.Groups[g] is { Kind: SignalGroupKind.Car, Moves: SignalMoves.Left | SignalMoves.Through });
+        Assert.NotEmpty(p3b.LeftGivesWayTo(south));
+        var leftFlasher = Assert.Single(lamps3b.Lenses, l => l.Group == south && l.Role == UnitSport.Terrain.SignalBuilder.Role.Flash);
+        Assert.Equal((SignalPlate.Arrow, SignalMoves.Left), (leftFlasher.Plate, leftFlasher.PlateArrow));
+        Assert.Equal((SignalPlate.Arrow, SignalMoves.Left), p3b.TurnPlate(south, SignalMoves.Left));
+        var pole = tile3b.Signals.Single().LeftFlasherPole(south);
+        Assert.Equal(FlasherSite.SecondPole, pole.Site);
         Assert.Equal(SignalMoves.Left | SignalMoves.Through, UnitSport.Terrain.SignalBuilder.ArrowMoves(lamps3b.Plans[0], leftFlasher.Group));
         Assert.DoesNotContain(lamps3b.Lenses, l => l.Group == leftFlasher.Group && l.Role == UnitSport.Terrain.SignalBuilder.Role.Amber && l.Blink is not null);
         var j3 = region.Junction("J3");

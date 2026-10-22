@@ -109,8 +109,13 @@ public class SignalBuilderTests
             Assert.NotNull(amber.Blink);
             Assert.Equal(amber.Group, amber.Blink!.Qualifies);
             // (the east approach's left turn has its lamp on this pole, by the south crosswalk it crosses: not this head's)
-            // (on the left pole, the head's left turn's lamp for the west crosswalk: a walker on its plate)
-            Assert.DoesNotContain(lamps.Lenses, l => l.Group == amber.Group && l.Role == SignalBuilder.Role.Flash && l.Plate == SignalPlate.Arrow);
+            // one lamp per turn (#1117): the right turn's for the east crossing (a walker) beside the head on the main pole, the left
+            // turn's for the west crossing and the oncoming cars (a mix: its arrow), on the head's left (no pole by the west
+            // crosswalk here) or on the left pole beside its head; none of its own for the oncoming cars
+            var mine = lamps.Lenses.Where(l => l.Group == amber.Group && l.Role == SignalBuilder.Role.Flash).Select(l => (l.Plate, l.PlateArrow)).ToList();
+            if (flags == SignalPoleFlags.Main)
+                Assert.Equal([(SignalPlate.Pedestrian, SignalMoves.Right), (SignalPlate.Arrow, SignalMoves.Left)], mine.OrderBy(x => x.PlateArrow == SignalMoves.Left));
+            else Assert.Equal([(SignalPlate.Arrow, SignalMoves.Left)], mine);
         }
         // a left pocket's arrow is protected: nothing flashes for it
         var pockets = Lamps(left: true, right: true, pedAmber: true, SignalPoleFlags.Main);
@@ -134,7 +139,8 @@ public class SignalBuilderTests
         Assert.True(left.Transform.Origin.X < main.Transform.Origin.X - 0.5f, $"left flasher at {left.Transform.Origin.X}, head at {main.Transform.Origin.X}");
         Assert.Equal(main.Transform.Origin.Y, left.Transform.Origin.Y, 3);
         var second = Lamps(left: false, right: true, pedAmber: true, SignalPoleFlags.Second);
-        Assert.DoesNotContain(second.Lenses, l => l.Role == SignalBuilder.Role.Flash && l.Plate == SignalPlate.Arrow);
+        // (an approach's left pole carries its left turn's lamp, #1117: the same one, not a second)
+        Assert.Single(second.Lenses, l => l.Group == main.Group && l.Role == SignalBuilder.Role.Flash && l.Plate == SignalPlate.Arrow);
     }
 
     [Fact]
@@ -197,7 +203,8 @@ public class SignalBuilderTests
         var westSecond = new SignalPole(494, 400.1f, 494, (float)(Math.PI / 2), (float)Math.PI, 3, SignalPoleFlags.Second | SignalPoleFlags.Pedestrian);
         int nb = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Car && g.Arm == 2);
         int f = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Flasher && g.Qualifies == nb);
-        Assert.Equal(SignalPlate.Pedestrian, plan.PlateOf(f, turns: SignalMoves.Left).Plate);
+        // (the left turn also gives way to the oncoming cars: a mix, its arrow, #1117)
+        Assert.Equal((SignalPlate.Arrow, SignalMoves.Left), plan.PlateOf(f, turns: SignalMoves.Left));
         Assert.Equal(SignalPlate.Pedestrian, plan.PlateOf(f, turns: SignalMoves.Right).Plate);
         var lamps = Build(southMain, westMain, westSecond);
         var mine = lamps.Lenses.Where(l => l.Role == SignalBuilder.Role.Flash && l.Group == nb).ToList();
@@ -224,8 +231,12 @@ public class SignalBuilderTests
         var near = Build(southMain, westMain);
         var onNear = Assert.Single(near.Lenses, l => l.Role == SignalBuilder.Role.Flash && l.Group == nb && l.Transform.Origin.X < 497);
         Assert.True(Math.Abs(onNear.Transform.Origin.Z - 506) < 0.6f, $"at {onNear.Transform.Origin}");
-        // no pole by the left crosswalk: both turns on the main pole's one lamp, as before
+        // no pole by the left crosswalk: the left turn's lamp on the head's left, the right turn's on its right (one lamp per turn)
         var alone = Build(southMain);
-        Assert.Single(alone.Lenses, l => l.Role == SignalBuilder.Role.Flash && l.Group == f);
+        var both = alone.Lenses.Where(l => l.Role == SignalBuilder.Role.Flash && l.Group == nb).OrderBy(l => l.Transform.Origin.X).ToList();
+        Assert.Equal(2, both.Count);
+        Assert.Equal((SignalPlate.Arrow, SignalMoves.Left), (both[0].Plate, both[0].PlateArrow));
+        Assert.Equal(SignalPlate.Pedestrian, both[1].Plate);
+        Assert.True(both[0].Transform.Origin.X < 505 && both[1].Transform.Origin.X > 505);
     }
 }
