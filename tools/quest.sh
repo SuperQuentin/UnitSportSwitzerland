@@ -50,8 +50,8 @@ cd "$WT"
 
 # The Quest preset: a Gradle build (the vendors addon is Android AAR plugins), XR mode OpenXR with Meta's loader,
 # its own package beside the phone's, and the "quest" feature (Core/Platform.IsStandaloneVr)
-# XR mode OpenXR only makes the app a VR one on the Android side: the engine starts OpenXR only with
-# xr/openxr/enabled (off, for desktop runs) or --xr-mode on, which the extra args pass
+# XR mode OpenXR only makes the app a VR one on the Android side; project.godot's openxr/enabled.quest override
+# (the base setting stays off for desktop runs) bundles the OpenXR loader and starts OpenXR in the engine
 cp "$PRESETS" export_presets.cfg
 n=$(grep -c '^\[preset\.[0-9]*\]$' export_presets.cfg)
 excl=$(sed -n 's/^exclude_filter="\(.*\)"$/\1/p' export_presets.cfg | head -1)
@@ -100,7 +100,6 @@ package/unique_name="$PACKAGE"
 package/name="UnitSport Switzerland"
 package/signed=true
 screen/immersive_mode=true
-command_line/extra_args="--xr-mode on"
 xr_features/xr_mode=1
 xr_features/enable_meta_plugin=true
 meta_xr_features/hand_tracking=1
@@ -137,5 +136,5 @@ echo "Quest APK: $OUT ($(du -h "$OUT" | cut -f1))"
 if [ $INSTALL = 1 ]; then
   ADB=${ADB:-$(command -v adb || echo "${LOCALAPPDATA:-}/Android/Sdk/platform-tools/adb.exe")}
   "$ADB" install -r "$OUT"
-  "$ADB" shell am start -n "$PACKAGE/com.godot.game.GodotApp"
+  "$ADB" shell am start -n "$PACKAGE/com.godot.game.GodotAppLauncher"   # GodotApp itself is not exported
 fi
