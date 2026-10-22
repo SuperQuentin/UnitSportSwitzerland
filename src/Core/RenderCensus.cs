@@ -14,9 +14,26 @@ public static class RenderCensus
 {
     public static void Install(Node root)
     {
+        // "--hidenodes A,B": hides every node whose name contains one of them, again each second
+        // (tiles come and go), to measure what a part of the scene costs the GPU
+        if (CmdArgs.Value("--hidenodes") is { } list)
+        {
+            string[] names = list.Split(',', StringSplitOptions.RemoveEmptyEntries);
+            var timer = new Godot.Timer { WaitTime = 1, Autostart = true };
+            timer.Timeout += () => Hide(root.GetTree().Root, names);
+            root.AddChild(timer);
+        }
         double? at = CmdArgs.Double("--rendercensus");
         if (at == null && !CmdArgs.Has("--rendercensus")) return;
         root.GetTree().CreateTimer(at ?? 30).Timeout += () => Print(root.GetTree().Root);
+    }
+
+    private static void Hide(Node node, string[] names)
+    {
+        if (node is Node3D n3 && n3.Visible)
+            foreach (var name in names)
+                if (node.Name.ToString().Contains(name)) { n3.Visible = false; return; }
+        foreach (var c in node.GetChildren()) Hide(c, names);
     }
 
     private static void Print(Node root)

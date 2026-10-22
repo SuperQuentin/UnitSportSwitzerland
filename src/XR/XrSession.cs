@@ -100,8 +100,14 @@ public static class XrSession
         // view (XrMonitor). The headset paces the frames: a desktop vsync on top only adds a wait.
         DisplayServer.WindowSetVsyncMode(DisplayServer.VSyncMode.Disabled);
 
-        // (OpenXR's own foveation is for the Compatibility renderer only: the headset viewport
-        // gets variable rate shading instead, XrRig.ApplyQuality)
+        // Meta's fixed foveation on a standalone headset (#1112): the Mobile renderer draws it with
+        // a fragment density map; over Link the headset viewport's VRS does it (XrRig.ApplyQuality)
+        if (Platform.IsStandaloneVr && xr is OpenXRInterface fov && fov.IsFoveationSupported())
+        {
+            fov.FoveationLevel = CmdArgs.Int("--foveation") ?? (GameSettings.Current.VrFoveation ? 3 : 0);
+            fov.FoveationDynamic = true;
+            GD.Print($"[xr] foveation level {fov.FoveationLevel}, dynamic");
+        }
         GD.Print($"[xr] OpenXR on, {xr.GetName()}");
         return Begin(root);
     }
