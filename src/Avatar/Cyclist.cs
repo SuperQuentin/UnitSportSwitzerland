@@ -47,6 +47,16 @@ public partial class Cyclist : Node3D
     private Player.RidingPosition _position, _wantPosition;
     private float _wantFor, _swayAmp;
 
+    /// <summary>The pose being left while <see cref="_blend"/> runs from 0 to 1 toward <see cref="_position"/>.</summary>
+    private Player.RidingPosition _from;
+    private float _blend = 1f;
+    /// <summary>The pedalling legs while a blend moves their hips: built in place, not cached.</summary>
+    private readonly ArrayMesh?[] _blendLegs = new ArrayMesh?[2];
+    private Vector3 _windNow;
+
+    /// <summary>A change of position takes this long, s: a rider sinks onto the drops in about half a second.</summary>
+    private const float BlendTime = 0.45f;
+
     /// <summary>A new position shows once it has been asked for this long, s: a rider does not flick between them.</summary>
     private const float PositionHold = 0.3f;
 
@@ -144,7 +154,7 @@ public partial class Cyclist : Node3D
             yield return (position.ToString(), () =>
             {
                 var c = Create(4);
-                c._position = c._wantPosition = position;
+                c._position = c._wantPosition = c._from = position;
                 c.CadenceRpm = position == Player.RidingPosition.Standing ? 60f : 85f;
                 return c;
             });
@@ -220,7 +230,7 @@ public partial class Cyclist : Node3D
         if (HumanMeshBuilder.SmoothFigures != _riderSmooth)
         {
             _riderSmooth = HumanMeshBuilder.SmoothFigures;
-            _rider.Mesh = HumanMeshBuilder.BuildCyclist(_palette, _position);
+            RebuildRider();
             _shownStep = -1;
             UpdateLegs();
         }
@@ -233,8 +243,8 @@ public partial class Cyclist : Node3D
             if (key != _riderWindKey)
             {
                 _riderWindKey = key;
-                _rider.Mesh = HumanMeshBuilder.BuildCyclist(_palette with { Wind = wind }, _position,
-                    into: _riderMesh ??= new ArrayMesh());
+                _windNow = wind;
+                RebuildRider();
             }
         }
         if (_cadenceRpm <= 0.01f) return;
@@ -250,15 +260,25 @@ public partial class Cyclist : Node3D
     /// </summary>
     private void UpdatePosition(float dt)
     {
-        _wantFor = _wantPosition == _position ? 0f : _wantFor + dt;
-        if (_wantFor >= PositionHold)
+        if (_blend < 1f)
         {
-            _position = _wantPosition;
-            _wantFor = 0f;
-            _riderWindKey = new Vector3(float.NaN, 0, 0);
-            _rider.Mesh = HumanMeshBuilder.BuildCyclist(_palette, _position);
+            // mid-change: every joint eases toward the new pose; a newer request waits for it to land
+            _blend = Mathf.Min(1f, _blend + dt / BlendTime);
+            if (_blend >= 1f) _from = _position;
+            RebuildRider();
             _shownStep = -1;
             UpdateLegs();
+        }
+        else
+        {
+            _wantFor = _wantPosition == _position ? 0f : _wantFor + dt;
+            if (_wantFor >= PositionHold)
+            {
+                _from = _position;
+                _position = _wantPosition;
+                _wantFor = 0f;
+                _blend = 0f;
+            }
         }
         if (_sway == null) return;
         float target = _position == Player.RidingPosition.Standing && _cadenceRpm > 1f ? StandingSway : 0f;
@@ -269,6 +289,28 @@ public partial class Cyclist : Node3D
         _sway.Rotation = new Vector3(0, 0, sway);
         _rider.Rotation = new Vector3(0, 0, -RiderCounterSway * sway);
     }
+
+    /// <summary>How far through the change of pose, eased in and out: 1 when settled.</summary>
+    private float BlendShown => _blend >= 1f ? 1f : Mathf.SmoothStep(0f, 1f, _blend);
+
+    /// <summary>
+    /// The rider in the pose shown now (settled, or part way through a change), in the wind of the
+    /// ride when the clothes flutter. Into one mesh kept per rider: only on a change, never per frame
+    /// while settled.
+    /// </summary>
+    private void RebuildRider()
+    {
+        if (_rider == null) return;
+        var palette = Flutters ? _palette with { Wind = _windNow } : _palette;
+        _rider.Mesh = _blend >= 1f
+            ? HumanMeshBuilder.BuildCyclist(palette, _position, into: _riderMesh ??= new ArrayMesh())
+            : HumanMeshBuilder.BuildCyclistBlend(palette, _from, _position, BlendShown, into: _riderMesh ??= new ArrayMesh());
+    }
+
+    /// <summary>A leg's hip joint in the pose shown now, part way between two while they blend.</summary>
+    private Vector3 LegHipShown(int side) => _blend >= 1f
+        ? Frame.LegHip(side, _position)
+        : Frame.LegHip(side, _from).Lerp(Frame.LegHip(side, _position), BlendShown);
 
     /// <summary>
     /// Puts the cranks and both legs at the current crank angle's <see cref="Steps"/> step,
@@ -285,6 +327,12 @@ public partial class Cyclist : Node3D
         _cranks.Mesh = cranks;
         for (int i = 0; i < 2; i++)
         {
+            // a blend moves the hips every frame for half a second: those legs are built in place, not kept
+            if (_blend < 1f)
+            {
+                _legs[i].Mesh = BuildLeg(i, stepAngle, _blendLegs[i] ??= new ArrayMesh());
+                continue;
+            }
             var key = (_palette, i, step, HumanMeshBuilder.SmoothFigures, _position);
             if (!LegSteps.TryGetValue(key, out var leg)) LegSteps[key] = leg = BuildLeg(i, stepAngle);
             _legs[i].Mesh = leg;
@@ -295,10 +343,10 @@ public partial class Cyclist : Node3D
     /// One leg, solved from where its pedal is: the knee stays exactly on the circle the pedal
     /// describes.
     /// </summary>
-    private ArrayMesh BuildLeg(int i, float crankAngle)
+    private ArrayMesh BuildLeg(int i, float crankAngle, ArrayMesh? into = null)
     {
         int side = i == 0 ? 1 : -1;
-        var hip = Frame.LegHip(side, _position);
+        var hip = LegHipShown(side);
         // BikeFrame.Pedal carries the sign: a crank at the front travels downward next, because the
         // bike faces +Z, and the cranks are drawn from the same call, so the two cannot disagree
         var pedal = Frame.Pedal(crankAngle, side);
@@ -312,13 +360,13 @@ public partial class Cyclist : Node3D
         {
             // dressed (#251): stockings, boots and trousers on the pedalling leg, the foot along the pedal
             HumanMeshBuilder.AppendLeg(scratch, _palette, hip, knee, pedal + new Vector3(0, 0.03f, -0.03f), pedal + new Vector3(0, 0, 0.09f));
-            return scratch.Build();
+            return into == null ? scratch.Build() : scratch.BuildInto(into);
         }
         scratch.Tube(hip, knee, 0.088f, 0.062f, _palette.Shorts, 6);
         scratch.Tube(knee, pedal, 0.062f, 0.042f, _palette.Skin, 6);
         scratch.Box(pedal, new Vector3(0.058f, 0.045f, 0.115f), _palette.Shoes);
 
-        return scratch.Build();
+        return into == null ? scratch.Build() : scratch.BuildInto(into);
     }
 
 }

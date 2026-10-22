@@ -145,7 +145,10 @@ public sealed class Bicycle : Rideable
     /// The figure's own eye, so first person sits where the drawn head is looking from: lower on the
     /// drops, lowest tucked, up and forward standing (#1124).
     /// </summary>
-    public override Vector3 FirstPersonEye => Eyes[(int)Position];
+    public override Vector3 FirstPersonEye => _eye;
+
+    /// <summary>The eye now: it glides to the new pose's as the drawn rider blends there (<see cref="Animate"/>).</summary>
+    private Vector3 _eye = Eyes[0];
 
     private static readonly Vector3[] Eyes = System.Array.ConvertAll(
         new[] { RidingPosition.Hoods, RidingPosition.Drops, RidingPosition.Tuck, RidingPosition.Standing },
@@ -318,6 +321,8 @@ public sealed class Bicycle : Rideable
         cyclist.CadenceRpm = _cadence;
         cyclist.SteerAngle = Arcade ? 0f : SteerAngle;
         cyclist.RidingPose = Position;
+        // the camera follows the head the rider is drawn with: it starts moving when the pose does
+        _eye = _eye.Lerp(Eyes[(int)cyclist.RidingPose], 1f - Mathf.Exp(-dt / 0.15f));
     }
 
     /// <summary>Cadence, and the crank angle itself so a remote rider's legs are where the owner's are.</summary>
