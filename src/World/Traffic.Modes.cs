@@ -112,6 +112,9 @@ public partial class Traffic
         /// <summary>The endpoint that made it and the destination it is going to (#1134), 0 none; its way there (<c>CostTo</c>), null at random.</summary>
         public int FromId, ToId;
         public Dictionary<(LaneEdge, bool), float>? Goal;
+        /// <summary>A rider's rear wheel (#1134, as a car's rear axle): it trails the front at the wheelbase, the box laid between.</summary>
+        public Vector3 Rear;
+        public bool RearSet;
 
         public SlowMover(MoverKind kind, AnimatableBody3D body, CollisionShape3D shape, Func<SlowMover, (LaneEdge, bool), (LaneEdge, bool)?> next)
         {
@@ -135,6 +138,9 @@ public partial class Traffic
     };
 
     private static readonly StringName DisabledName = "disabled";
+
+    /// <summary>A bike's wheelbase (m, #1134): its rear wheel trails the front by this.</summary>
+    private const float BikeWheelbase = 1.1f;
 
     /// <summary>
     /// A solid box for a mode's unit (#1060, every new mover is a box for now): its mesh and material shared per kind, its collision
@@ -179,7 +185,7 @@ public partial class Traffic
         m.Group = -1;
         m.State = null;
         m.Vel = Vector3.Zero;
-        (m.FromId, m.ToId, m.Goal) = (0, 0, null);
+        (m.FromId, m.ToId, m.Goal, m.RearSet) = (0, 0, null, false);
         return m;
     }
 
@@ -226,8 +232,22 @@ public partial class Traffic
         var side = new Vector3(-dir.Z, 0f, dir.X).Normalized();
         var at = pos + side * lateral;
         var flat = new Vector3(dir.X, 0f, dir.Z);
+        var place = at;
+        // a rider (#1134, the user: as the cars): its front wheel on its line, the rear trailing it at the wheelbase, the bike laid
+        // rear to front, so it turns into its way instead of sliding sideways when its line moves over
+        if (m.Kind == MoverKind.Rider && flat.LengthSquared() > 1e-6f)
+        {
+            var rear = m.RearSet ? m.Rear : at - flat.Normalized() * BikeWheelbase;
+            var toFront = MathX.Flat(at - rear);
+            if (toFront.LengthSquared() < 1e-4f) toFront = flat;
+            toFront = toFront.Normalized();
+            m.Rear = at - toFront * BikeWheelbase;
+            m.RearSet = true;
+            flat = toFront;
+            place = at - toFront * (BikeWheelbase * 0.5f);
+        }
         var basis = flat.LengthSquared() > 1e-6f ? Player.Flyer.Orient(flat.Normalized(), Vector3.Up, Vector3.Forward) : m.Body.GlobalBasis;
-        m.Body.GlobalTransform = new Transform3D(basis, at);
+        m.Body.GlobalTransform = new Transform3D(basis, place);
         m.Head = at;
     }
 

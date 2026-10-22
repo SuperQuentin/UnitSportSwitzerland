@@ -681,7 +681,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             // long red reaches past where the cars read the lights, and its back vanished after 20 s)
             // (truly ahead, not one on the same spot: two on one spot each reading the other as ahead would hold each other
             // queued for good, where being dropped as stuck untangles them)
-            if (other.Speed < 0.5f && d.Dot(dir) > 2f && along < QueueSpacing + 6f && (other.AtRed || other.RoomHeld || other.Queued || other.GapWaiting || other.GapHeld)) queued = true;
+            if (other.Speed < 0.5f && d.Dot(dir) > 2f && along < QueueSpacing + 6f && (other.AtRed || other.RoomHeld || other.NarrowHeld || other.Queued || other.GapWaiting || other.GapHeld)) queued = true;
         }
         // and behind a rider or tram in its lane (#1060: the modes' crossers; +∞ without them): standing behind one, queued too
         // (#1134: a tram at its stop, a rider at a red)
@@ -863,6 +863,14 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         if (racerRight) wantPull = Mathf.Min(wantPull, car.Pull);
         // a queue starts car by car (#1046): a standing car let go (its light turns green, the car ahead moves off) starts its
         // driver's reaction time later, so a queue stretches out as it discharges (it moved off as one train of cars)
+        // one carriageway too narrow for two cars side by side (#1134, the user): not into it while one comes the other way on it or
+        // is about to; it waits at the stretch's end (before the junction's core where the stretch starts past one)
+        car.NarrowHeld = false;
+        if (NarrowAhead(car) is { } narrowStop)
+        {
+            target = Mathf.Min(target, StopWithin(narrowStop));
+            car.NarrowHeld = car.Speed < 0.5f;
+        }
         if (car.Speed < StartSpeed)
         {
             if (target <= StartSpeed) car.Starting = 0f;
@@ -875,9 +883,24 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         // there; the green it gives way to ends too). A car held by the lights (a red, a wait at the line) in a queue does not
         // turn round either
         bool atLights = lights < float.MaxValue;
-        car.Stuck = car.Speed < 0.3f && !stopFor && !hold && !car.AtRed && !car.RoomHeld && !car.Queued && !car.GapWaiting && !car.GapHeld ? car.Stuck + dt : 0f;
+        car.Stuck = car.Speed < 0.3f && !stopFor && !hold && !car.AtRed && !car.RoomHeld && !car.NarrowHeld && !car.Queued && !car.GapWaiting && !car.GapHeld ? car.Stuck + dt : 0f;
         car.Holding = hold;
         car.Yield = yield;
+        // (#1134, J1: why a car stands at its line through a green) logged a few times, with what holds it
+        if (car.Approach is { Site: { } gs } && car.Group >= 0 && car.ToLine < 4f && car.ToLine > -1f && car.Speed < 0.3f
+            && gs.Plan.State(car.Group, SignalLamps.Clock()) == SignalAspect.Green)
+        {
+            car.GreenStand += dt;
+            if (car.GreenStand > 12f && !car.GreenStandLogged && GreenStandsLogged++ < 12)
+            {
+                car.GreenStandLogged = true;
+                var (ge, gn) = _origin.ToLv95(car.Head);
+                GD.Print($"[traffic] a car stands 12 s at its line on green at {ge:F0},{gn:F0}: turn {car.Turn}, lane {car.LaneIndex}, room-held {car.RoomHeld}, "
+                    + $"narrow-held {car.NarrowHeld}, queued {car.Queued}, gap waiting {car.GapWaiting}/{car.GapHeld}, holding {hold}, stop-for {stopFor}, "
+                    + $"waited permissive {car.WaitedPermissive}, target {target:F1}, next legs {string.Join(" > ", car.Route.Legs.Skip(car.Route.Leg).Take(4).Select(l => $"{l.Item1.Class}{(l.Item1.Path is not null ? "/path" : l.Item1.Connector ? "/link" : "")} {l.Item1.Length:F0}m w{l.Item1.Width:F1}"))}");
+            }
+        }
+        else car.GreenStand = 0f;
         car.Stale = blocked && car.Speed < 0.3f && !atLights ? car.Stale + dt : 0f;
         if (car.Stale > 5f && twoWay)
         {
@@ -1287,6 +1310,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     private bool RoomPast(Vehicle car, LaneApproach approach, int leg, float toEnd)
     {
         if (approach.AllowBlock) return true;
+        // its way planned past the core to the exit's end, so the exit is measured, not guessed free (#1134)
+        car.Route.Plan(toEnd + 40f + BoxRule.Reach, l => NextRoad(l, car));
         var legs = car.Route.Legs;
         float across = 0f;
         int i = leg + 1;
@@ -1335,6 +1360,64 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             if (counts) ahead++;
         }
         return BoxRule.Fits(storage, ahead);
+    }
+
+    /// <summary>Green stands logged so far (#1134).</summary>
+    private int GreenStandsLogged;
+
+    /// <summary>A carriageway narrower than this holds no two cars side by side (m): two 1.9 m cars and 0.6 m between them (#1134).</summary>
+    public const float TwoCarsWide = 4.4f;
+
+    private static bool Narrow(LaneEdge e) =>
+        !e.Connector && e.Path is null && e.OneWay == 0 && (e.Flags & RoadFlags.Divided) == 0 && e.Width < TwoCarsWide && e.Length > 6f;
+
+    /// <summary>
+    /// The one-carriageway stretch rule (#1134): where a car's way within 60 m leads into a two-way edge too narrow for two cars side
+    /// by side (<see cref="TwoCarsWide"/>) and a car is on it the other way, or nearer to it the other way (the lower habit first on a
+    /// tie), how far it may still go: to the stretch's start, or to the start of the junction's core before it. Null: it goes. A car
+    /// on the stretch or in a core goes on: whoever is on it first has it.
+    /// </summary>
+    private float? NarrowAhead(Vehicle car)
+    {
+        var cur = car.Route.Edge;
+        if (Narrow(cur) || cur.Path is not null || cur.Connector) return null;
+        var legs = car.Route.Legs;
+        float along = cur.Length - car.Route.Arc, coreAt = -1f;
+        for (int i = car.Route.Leg + 1; i < legs.Count && along < 60f; i++)
+        {
+            var (e, f) = legs[i];
+            if (e.Connector || e.Path is not null) { if (coreAt < 0f) coreAt = along; along += e.Length; continue; }
+            if (Narrow(e))
+            {
+                float entry = coreAt >= 0f ? coreAt : along;
+                return NarrowTaken(car, e, f, entry) ? Mathf.Max(0f, entry - 2f) : null;
+            }
+            coreAt = -1f;
+            along += e.Length;
+        }
+        return null;
+    }
+
+    /// <summary>Whether a car is on <paramref name="e"/> against <paramref name="f"/>, or about to enter it that way before <paramref name="car"/> (<paramref name="entry"/> m off).</summary>
+    private bool NarrowTaken(Vehicle car, LaneEdge e, bool f, float entry)
+    {
+        foreach (var other in _cars)
+        {
+            if (other == car || MathX.Flat(other.Head - car.Head).LengthSquared() > (e.Length + 80f) * (e.Length + 80f)) continue;
+            if (other.Route.Edge == e) { if (other.Route.Forward != f) return true; continue; }
+            var olegs = other.Route.Legs;
+            float d = other.Route.Edge.Length - other.Route.Arc;
+            for (int k = other.Route.Leg + 1; k < olegs.Count && k <= other.Route.Leg + 4 && d < 60f; k++)
+            {
+                if (olegs[k].Item1 == e)
+                {
+                    if (olegs[k].Item2 != f && (d < entry || d == entry && other.Habit < car.Habit)) return true;
+                    break;
+                }
+                d += olegs[k].Item1.Length;
+            }
+        }
+        return false;
     }
 
     /// <summary>The legs of an exit being measured (<see cref="RoomPast"/>), one set for the traffic's life.</summary>
@@ -1934,6 +2017,11 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         public bool AtRed, ClearingAmber, WasAtRed, WaitedPermissive, WaitedRoom;
         /// <summary>Waiting at its line on green for room past the junction (#1134, the box rule): not stuck, and the cars behind it queue.</summary>
         public bool RoomHeld;
+        /// <summary>Waiting before a one-carriageway stretch while one comes the other way (#1134): not stuck, the cars behind queue.</summary>
+        public bool NarrowHeld;
+        /// <summary>How long it has stood at its line on green, and whether that was logged (#1134, the J1 diagnosis).</summary>
+        public float GreenStand;
+        public bool GreenStandLogged;
         /// <summary>
         /// Held for a gap on a junction path (#1046): past its line, short of a point in the junction; at its line behind the cars
         /// waiting there; the path, and how long it has stood in the junction (s). How long it has been let go standing (s).
