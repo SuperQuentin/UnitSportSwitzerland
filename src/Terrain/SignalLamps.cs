@@ -327,6 +327,16 @@ void fragment() {
                 if (blinkOn) colour = AmberOn;
                 until = Math.Min(until, plan.UntilChange(lens.Flash, t) / PlanSpeed);
             }
+            // a permissive left's flashing yellow (#1109): a ball head's own yellow lens, or the lamp left of an arrow head
+            if (lens.Blink is { } blink)
+            {
+                if (plan.State(blink, t) == SignalAspect.FlashingAmber)
+                {
+                    blinking = true;
+                    if (blinkOn) colour = AmberOn;
+                }
+                until = Math.Min(until, plan.UntilChange(blink, t) / PlanSpeed);
+            }
             _multi[(int)_icon[i]]!.SetInstanceColor(_slot[i], colour);
             if (_haloSlot[i] >= 0) _halos!.SetInstanceColor(_haloSlot[i], colour);   // dark lenses do not bloom
             until = Math.Min(until, plan.UntilChange(lens.Group, t) / PlanSpeed);
@@ -401,14 +411,8 @@ void fragment() {
                 flat.Line(new(0.09f, -0.12f), new(0.1f, -0.84f), 0.14f);
                 break;
             case Icon.Walking:
-                // the green figure, striding to the right
-                flat.Disc(new(0.08f, 0.66f), 0.17f, 10);
-                flat.Line(new(0.04f, 0.44f), new(-0.04f, -0.08f), 0.27f);
-                flat.Line(new(0.02f, 0.36f), new(0.32f, 0.04f), 0.1f);
-                flat.Line(new(0.02f, 0.36f), new(-0.3f, 0.1f), 0.1f);
-                flat.Line(new(-0.04f, -0.1f), new(0.36f, -0.84f), 0.14f);
-                flat.Line(new(-0.04f, -0.1f), new(-0.12f, -0.44f), 0.14f);
-                flat.Line(new(-0.12f, -0.44f), new(-0.4f, -0.82f), 0.14f);
+                // the green figure, striding to the right (shared with a flasher's plate, #1109)
+                foreach (var polygon in SignalGlyphs.Walker()) flat.Fan(polygon);
                 break;
             case Icon.Bike:
                 foreach (var polygon in SignalGlyphs.Bike()) flat.Fan(polygon);   // two wheels, the diamond frame, saddle and bars
