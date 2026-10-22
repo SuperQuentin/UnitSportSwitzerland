@@ -1,6 +1,6 @@
 # Traffic walkers (#1033)
 
-Pedestrians as orange boxes (`WalkerLook`, 0.5 x 1.7 x 0.4 m, 1.35 m/s +-25 %) on the shared base (`traffic-modes`): local and
+Pedestrians as blocky figures (`TrafficModeMeshBuilder.Walker`, #1147; `WalkerLook`, 0.5 x 1.7 x 0.4 m, 1.35 m/s +-25 %) on the shared base (`traffic-modes`): local and
 cosmetic per client, not replicated. Off by default, the user's choice (`GameSettings.TrafficWalkers` 0, 0..300 in Settings,
 x0.3 at night), `--walkers N`.
 Files: `World/LaneGraph.Walkers.cs` (the graph), `World/Traffic.Walkers.cs` (the rules), `World/TrafficProbe.Walkers.cs` (the check).

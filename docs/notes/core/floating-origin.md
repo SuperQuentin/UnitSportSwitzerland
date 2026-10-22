@@ -23,6 +23,9 @@
   under a Node3D must be a container; `--originstress` warns when it moves a node at exactly the
   identity that has spatial children. UI and `OwnWorld3D` viewports are skipped, but handlers
   under them are still called (the GPX zoom inset is a `CanvasLayer`).
+  A mesh rebuilt from world points under a container (the traffic's debug lines, `ImmediateMesh`) is
+  moved by a shift like any child: put its node back at the identity each time it is redrawn in the
+  new frame, or every line lies a shift away (the trails "broke after moving on", `--origincheck`).
 - **Worker threads take `origin.Frame` once** (an immutable `OriginFrame`) and work in it; the
   main thread maps the result with `origin.Since(frame)` (`Traffic`'s lane graphs, `RaceRoute`).
   Reading the live origin twice from a worker can straddle a shift.

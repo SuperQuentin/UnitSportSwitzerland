@@ -4,7 +4,9 @@
   args (minus the `--chunks`/`--cache` paths), so parallel test windows can be told apart.
   Agents launching windowed runs pass `--title "<issue> <what is tested>"`.
 - Spawn elsewhere: `<godot> --path . -- --at <lv95E>,<lv95N>` (default: Riddes,
-  2583250/1113250), or `--goto <town>` to name it instead of looking up coordinates.
+  2583250/1113250), or `--goto <town>` to name it instead of looking up coordinates. Either boots straight into the
+  world, no title screen (`GameShell.UseTitle`; `--at` was on its harmless list and left the player on the menus);
+  `--test-world <id>` does too, at the world's start unless `--at` says otherwise.
   `SpawnPoint` drops the camera to ground + 220 m once the chunk beneath it streams in — the
   height cannot be known at boot.
 - Screenshot without the editor: `<godot> --path . -- --shot x,y,z,pitchDeg,yawDeg,seconds,out.png`
