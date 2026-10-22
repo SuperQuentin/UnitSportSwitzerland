@@ -906,12 +906,14 @@ public sealed class SignalPlan
         {
             int r = right[a];
             if (r < 0 || phases.Any(p => p.Green.Contains(r))) continue;
-            var own = car[a] < 0 ? [] : phases.Where(p => p.Green.Contains(car[a])).ToList();
+            // (its approach's main lane, or its left arrow on a stem with no main lane, #1119)
+            int lane = car[a] >= 0 ? car[a] : left[a];
+            var own = lane < 0 ? [] : phases.Where(p => p.Green.Contains(lane)).ToList();
             if (own.Count > 0 && (Fits(r, own) || own.Any(p => Fits(r, [p])))) continue;
             plan.Groups[r].Kind = SignalGroupKind.Car;
             changed = true;
-            foreach (var p in phases)
-                if (car[a] >= 0 && p.Green.Contains(car[a])) p.Base.Add(r);
+            foreach (var p in own) p.Base.Add(r);
+            // (no lane of its own approach anywhere: a phase of its own below, as a lonely group)
         }
         if (changed)
         {

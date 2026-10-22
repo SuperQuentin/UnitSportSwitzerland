@@ -643,4 +643,19 @@ public class SignalPlanTests(ITestOutputHelper output)
             if (c[r, h] == SignalPlan.Conflict.Hard) Assert.Empty(WhenGreen(plan, r, h));
         Assert.NotEmpty(WhenGreen(plan, Group(plan, SignalGroupKind.Pedestrian, E)));
     }
+
+    [Fact]
+    public void FromGeneva_AStemWithTwoLanesWhoseRightTurnCannotBeProtected_StillGoesGreen()
+    {
+        // LV95 2499873,1117528 (#1119): a one-way in and a stem with a left and a right lane; the right arrow, held off the walkers
+        // it crosses in no phase, gives way with the stem's left arrow (its plan was written invalid: the right turn never green)
+        double D(double deg) => deg * Math.PI / 180;
+        var plan = SignalPlan.Build([
+            new SignalArm(D(-154), false, true, Pedestrians: true, CrossingM: 10, Rank: 18),
+            new SignalArm(D(-64), true, false, Pedestrians: true, CrossingM: 8, Rank: 18),
+            new SignalArm(D(27), false, true, Pedestrians: true, CrossingM: 8, Rank: 2),
+            new SignalArm(D(116), true, true, LeftPocket: true, RightPocket: true, Pedestrians: true, CrossingM: 9.5f, Rank: 2)]);
+        AssertValid(plan);
+        Assert.Contains(plan.Groups, g => g is { Kind: SignalGroupKind.LeftArrow, Arm: 3 });
+    }
 }
