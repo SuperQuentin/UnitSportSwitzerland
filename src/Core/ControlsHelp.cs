@@ -131,6 +131,14 @@ public partial class ControlsHelp : CanvasLayer
             new("Open / shut the car door you are at", PlayerInput.CarDoor),
             new("Get out", PlayerInput.InteractMount),
         }),
+        ("Home-trainer training (phone › Training)", new Row[]
+        {
+            new("Next junction: take the road to the left / right", Keys: "{move_left} {move_right}", Pad: "{move_left} {move_right}"),
+            new("Back to the course from a road off it", PlayerInput.RideRejoin, Pad: "phone › Training › Rejoin"),
+            new("Turn round", PlayerInput.RideUTurn, Pad: "phone › Training › Turn round"),
+            new("ERG on / off (the trainer holds a power)", PlayerInput.RideErg, Pad: "phone › Training › ERG"),
+            new("ERG target +10 W / -10 W", Keys: "{ride_power_up} {ride_power_down}", Pad: "phone › Training › +10 W / -10 W"),
+        }),
         ("Stadiums", new Row[]
         {
             new("On a stand's row: sit down; again, or walk off, to stand up", PlayerInput.InteractMount),

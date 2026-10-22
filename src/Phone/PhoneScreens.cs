@@ -708,7 +708,7 @@ public partial class PhoneScreens : Node
             : link.Devices.Count > 0 ? $"{devices}\nNo power yet: pedal. Difficulty {link.Difficulty}%"
             : $"No trainer: the keys pedal. Difficulty {link.Difficulty}%");
 
-        string shape = $"{phase}|{session.CanStart}|{string.Join(",", link.Prefs.Recent)}|{link.Scanning}|{link.Difficulty}|{link.Prefs.Devices.Count}|"
+        string shape = $"{phase}|{session.CanStart}|{session.OnCourse}|{link.Erg}|{link.ErgWhyNot}|{string.Join(",", link.Prefs.Recent)}|{link.Scanning}|{link.Difficulty}|{link.Prefs.Devices.Count}|"
             + string.Join(",", link.Found.Select(f => f.Id)) + "|" + string.Join(",", link.Devices.Keys);
         if (shape == _trShown && !force) return;
         _trShown = shape;
@@ -722,6 +722,24 @@ public partial class PhoneScreens : Node
         else if (session.CanStart) row.AddChild(Small("Start training", go, session.Start));
         row.AddChild(Small("Import GPX...", new Color(0.20f, 0.42f, 0.80f), session.Browse));
         _trActions.AddChild(row);
+        if (phase == Trainer.TrainingSession.Phase.Riding)
+        {
+            // what the keys do while riding, for a pad and VR, which have no button left on a bike
+            var ride = UiKit.HBox(10);
+            if (!session.OnCourse) ride.AddChild(Small("Rejoin", go, session.Rejoin));
+            ride.AddChild(Small("Turn round", grey, session.UTurn));
+            ride.AddChild(Small("Left", grey, () => session.Choose(-1)));
+            ride.AddChild(Small("Right", grey, () => session.Choose(1)));
+            _trActions.AddChild(ride);
+            var erg = UiKit.HBox(10);
+            erg.AddChild(Small(link.Erg ? "ERG off" : "ERG", link.ErgWhyNot == null || link.Erg ? go : grey, () => link.SetErg(!link.Erg)));
+            if (link.Erg)
+            {
+                erg.AddChild(Small("-10 W", grey, () => link.StepErg(-1)));
+                erg.AddChild(Small("+10 W", grey, () => link.StepErg(1)));
+            }
+            _trActions.AddChild(erg);
+        }
 
         Clear(_trRecent);
         foreach (var path in link.Prefs.Recent.Where(p => p != session.CoursePath).Take(4))

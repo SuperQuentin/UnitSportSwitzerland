@@ -98,6 +98,19 @@ public sealed partial class TrainerLink : Node
     /// <summary>The grade last sent to the trainer, after the difficulty; null when none was.</summary>
     public double? GradeSent => _grade.Sent;
 
+    /// <summary>
+    /// ERG (off by default, the plan's design 3): the trainer holds <see cref="ErgTarget"/> watts whatever the
+    /// road, and no grade is sent. Off, the trainer is back in SIM with the road's grade at once.
+    /// </summary>
+    public bool Erg { get; private set; }
+    public int ErgTarget { get; private set; }
+    /// <summary>Why ERG cannot be switched on now, or null when it can.</summary>
+    public string? ErgWhyNot => _engine?.Router.PrimaryTrainer is not { } t ? "no trainer connected"
+        : !t.Capabilities.SupportsErg ? "this trainer has no ERG mode" : null;
+    /// <summary>The rider's power over the last ~3 s: ERG starts on the 10 W step above it.</summary>
+    public double RecentWatts { get; private set; }
+    public const int ErgStep = 10, ErgMin = 50, ErgMax = 1500;
+
     /// <summary>A sentence for the HUD: a connection made or lost, a control write refused or clamped.</summary>
     public event Action<string>? Said;
 
@@ -143,7 +156,63 @@ public sealed partial class TrainerLink : Node
         {
             _controlAsked = true;
             Run(() => trainer.RequestControlAsync(), "control");
+            if (Erg) SendErg();   // a trainer reconnected in ERG gets its target back
         }
+        // ~3 s of power, an exponential average: what ERG starts from
+        if (PowerLive) RecentWatts += (_watts - RecentWatts) * Math.Min(1.0, delta / 3.0);
+    }
+
+    /// <summary>ERG on (at the 10 W step above the last 3 s of power) or off (SIM, the grade sent again at once).</summary>
+    public void SetErg(bool on)
+    {
+        if (on == Erg) return;
+        if (on)
+        {
+            if (ErgWhyNot is { } why) { Say($"No ERG: {why}."); return; }
+            Erg = true;
+            ErgTarget = Math.Clamp((int)Math.Ceiling(RecentWatts / ErgStep) * ErgStep, ErgMin, ErgMax);
+            if (ErgTarget <= RecentWatts) ErgTarget += ErgStep;
+            SendErg();
+            Say($"ERG on: {ErgTarget} W.");
+        }
+        else
+        {
+            Erg = false;
+            _grade.Reset();   // the next FeedGrade sends the road at once
+            Say("ERG off: the road's grade again (SIM).");
+        }
+    }
+
+    /// <summary>ERG's target up or down by <paramref name="steps"/> × 10 W; nothing outside ERG.</summary>
+    public void StepErg(int steps)
+    {
+        if (!Erg) { Say("ERG is off: the road sets the effort."); return; }
+        ErgTarget = Math.Clamp(ErgTarget + steps * ErgStep, ErgMin, ErgMax);
+        SendErg();
+    }
+
+    private void SendErg()
+    {
+        if (_engine?.Router.PrimaryTrainer is not { } trainer) return;
+        int asked = ErgTarget;
+        Task.Run(async () =>
+        {
+            try
+            {
+                var r = await trainer.SetTargetPowerAsync(asked);
+                _main.Enqueue(() =>
+                {
+                    if (!r.Success) { Say($"Trainer refused {asked} W: {r.Message}"); return; }
+                    // RideLink clamps to the trainer's advertised range and says what it sent
+                    if (r.AppliedValue is { } sent && (int)Math.Round(sent) != asked && Erg && ErgTarget == asked)
+                    {
+                        ErgTarget = (int)Math.Round(sent);
+                        Say($"{asked} W is beyond this trainer: {ErgTarget} W.");
+                    }
+                });
+            }
+            catch (Exception e) { _main.Enqueue(() => Say($"Trainer ERG: {e.Message}")); }
+        });
     }
 
     private List<IDeviceTransport> Transports()
@@ -265,7 +334,7 @@ public sealed partial class TrainerLink : Node
     /// <summary>The road's grade under the rider (a fraction), sent to the trainer as SIM when the feed says so.</summary>
     public void FeedGrade(double roadGrade)
     {
-        if (_engine?.Router.PrimaryTrainer is not { } trainer) return;
+        if (Erg || _engine?.Router.PrimaryTrainer is not { } trainer) return;
         if (_grade.Next(roadGrade, RealClock.Now) is not { } grade) return;
         // Crr as the game's bike rolls (Bicycle.RollingResistance), so the trainer and the game agree on the road
         Run(() => trainer.SetSimulationAsync(new SimulationParameters(grade, RollingResistanceCoefficient: 0.005)), "grade");
@@ -274,6 +343,7 @@ public sealed partial class TrainerLink : Node
     /// <summary>The trainer back to flat, at the end of a training.</summary>
     public void Flat()
     {
+        Erg = false;
         _grade.Reset();
         if (_engine?.Router.PrimaryTrainer is { } trainer)
             Run(() => trainer.SetSimulationAsync(new SimulationParameters(0, RollingResistanceCoefficient: 0.005)), "flat");
