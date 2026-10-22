@@ -96,6 +96,26 @@ public class RegionTrafficTests(SignalTestRegionFixture region) : IClassFixture<
     }
 
     [Fact]
+    public void J5a_feeds_the_strip_to_J5b_no_more_than_J5b_lets_out_of_it()
+    {
+        // #1134: everything J5a's generators send on through the 100 m strip is capped at what J5b's west approach discharges
+        var endpoints = TrafficEndpointsFile.Read(Path.Combine(region.Dir, TrafficEndpointsFile.FileName));
+        var a = region.Junction("J5a");
+        var b = region.Junction("J5b");
+        var toB = endpoints.Where(x => x.Mode == EndpointMode.Car && x.Junction == b.Name).Select(x => x.Id).ToHashSet();
+        float fed = endpoints.Where(x => x.Mode == EndpointMode.Car && x.Junction == a.Name)
+            .Sum(x => x.Shares.Where(s => toB.Contains(s.To)).Sum(s => s.Weight));
+        var lb = SignalTestRegion.ReadLights(region.Dir, SignalTestRegion.Junctions).Single(l => l.Name == b.Name);
+        var flows = SignalCapacity.Cars(lb.Plan, k => lb.Approaches.TryGetValue(k, out var x) ? x.Lanes : null);
+        int west = Enumerable.Range(0, lb.Plan.Arms.Count).MinBy(k => Math.Cos(lb.Plan.Arms[k].Heading));
+        float discharge = flows.Where(f => f.From == west).Sum(f => f.PerMinute);
+        Assert.True(fed > 0f);
+        Assert.True(fed <= discharge + 0.05f, $"fed {fed:F2}/min into the strip, it passes {discharge:F2}/min");
+        Assert.Equal(1f, SignalCapacity.StretchShare(5f, 10f));
+        Assert.Equal(0.5f, SignalCapacity.StretchShare(20f, 10f), 3);
+    }
+
+    [Fact]
     public void The_endpoints_file_reads_back_what_was_written()
     {
         string path = Path.Combine(Path.GetTempPath(), "unitsport-1134-" + Guid.NewGuid().ToString("N") + ".tsv");
@@ -147,6 +167,19 @@ public class BoxRuleTests(SignalTestRegionFixture region) : IClassFixture<Signal
         // a long free exit is free up to the reach
         Assert.True(BoxRule.Fits(1000f, (int)(BoxRule.Reach / BoxRule.CarRoom) - 1));
         Assert.False(BoxRule.Fits(1000f, (int)(BoxRule.Reach / BoxRule.CarRoom)));
+    }
+
+    [Fact]
+    public void The_exit_is_walked_leg_by_leg_until_one_more_car_fits()
+    {
+        // the last leg before the next line full, room on an earlier one: it goes
+        Assert.True(BoxRule.Fits([(12f, 0), (30f, 4)], openBeyond: false));
+        // room only on the leg after a full one: the room is added up in order, it goes
+        Assert.True(BoxRule.Fits([(15f, 2), (20f, 0)], openBeyond: false));
+        // every leg full up to the line: it waits
+        Assert.False(BoxRule.Fits([(15f, 2), (30f, 4), (8f, 1)], openBeyond: false));
+        // full as far as its way is planned, the road going on: free beyond
+        Assert.True(BoxRule.Fits([(15f, 2)], openBeyond: true));
     }
 
     [Fact]

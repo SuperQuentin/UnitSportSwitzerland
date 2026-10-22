@@ -228,6 +228,10 @@ public static partial class SignalTestRegion
             var onward = flows[next].Where(f => f.From == arm).ToList();
             float sum = onward.Sum(f => f.PerMinute);
             if (sum <= 0) return;
+            // (the short stretch between them passes no more than the next lights let out of it: everything fed into it from these
+            // lights, every arm's movements into it together, capped at that, SignalCapacity.StretchShare)
+            float inflow = flows[l].Where(f => f.To == to).Sum(f => f.PerMinute);
+            weight *= SignalCapacity.StretchShare(inflow, sum);
             foreach (var f in onward) Spread(flows, ids, next, f.To, weight * f.PerMinute / sum, into, depth + 1);
         }
 

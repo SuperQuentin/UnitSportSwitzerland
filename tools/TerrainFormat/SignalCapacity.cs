@@ -26,6 +26,14 @@ public static class SignalCapacity
     /// <summary>Walkers a minute per metre of crossing at a full green, both ways together (a believable few a minute per crossing).</summary>
     public const float WalkersPerMetre = 0.6f;
 
+    /// <summary>
+    /// The share of the demand into a short stretch between two lights that the stretch can pass (#1134, J5a/J5b): what the next
+    /// lights let out of it (their demand from that approach, already at the degree of saturation) over everything fed into it
+    /// (every movement of the lights before into it); 1 where it passes all.
+    /// </summary>
+    public static float StretchShare(float inflowPerMinute, float dischargePerMinute) =>
+        inflowPerMinute <= dischargePerMinute || inflowPerMinute <= 0f ? 1f : dischargePerMinute / inflowPerMinute;
+
     /// <summary>A movement's demand: from arm <see cref="From"/> to <see cref="To"/>, a minute.</summary>
     public readonly record struct Flow(int From, int To, SignalMoves Turn, float PerMinute);
 

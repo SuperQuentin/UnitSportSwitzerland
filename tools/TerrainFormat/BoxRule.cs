@@ -19,4 +19,23 @@ public static class BoxRule
     /// </summary>
     public static bool Fits(float storageM, int ahead, bool approachAllows = false, bool exitAllows = false) =>
         approachAllows || exitAllows || Math.Min(storageM, Reach) - ahead * CarRoom >= CarRoom;
+
+    /// <summary>
+    /// Leg by leg from the core (the user: "look forward through all nodes until it either finds enough space or the stop line"): each
+    /// span's room (m) less <see cref="CarRoom"/> for each car on it, added up in order; it fits as soon as the room so far holds one more,
+    /// or (<paramref name="openBeyond"/>: its way is planned no further than these spans and the road goes on) at their end, where it is
+    /// free. Cars on a later span take no room from an earlier one; a span over-full borrows from the room before it.
+    /// </summary>
+    public static bool Fits(IReadOnlyList<(float Room, int Cars)> spans, bool openBeyond)
+    {
+        float free = 0f, walked = 0f;
+        foreach (var (room, cars) in spans)
+        {
+            free += room - cars * CarRoom;
+            walked += room;
+            if (free >= CarRoom) return true;
+            if (walked >= Reach) return false;
+        }
+        return openBeyond && free > -CarRoom * 0.5f;
+    }
 }

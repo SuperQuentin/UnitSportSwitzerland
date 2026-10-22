@@ -1315,11 +1315,12 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         var legs = car.Route.Legs;
         float across = 0f;
         int i = leg + 1;
-        // across the junction: its paths or connectors, and a short road piece before one (the crosswalk's at J2, #971)
+        // across the junction: its paths or connectors (#818's cores are paths), and a short road piece before one (the crosswalk's
+        // at J2, #971)
         for (; i < legs.Count; i++)
         {
             var e = legs[i].Edge;
-            if (!e.Connector && !(e.Length <= PathGap && i + 1 < legs.Count && legs[i + 1].Edge.Connector)) break;
+            if (!e.Connector && e.Path is null && !(e.Length <= PathGap && i + 1 < legs.Count && (legs[i + 1].Edge.Connector || legs[i + 1].Edge.Path is not null))) break;
             across += e.Length;
         }
         if (i >= legs.Count) return true;
@@ -1333,34 +1334,46 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
                 if (site.Out[k].Dot(exitDir) is var dot && dot > best) (best, arm) = (dot, k);
             if (arm >= 0 && arm < site.Plan.Arms.Count && site.Plan.Arms[arm].AllowBlock) return true;
         }
-        // its exit's room: the road legs past the core up to the next stop line or junction, as far as its way is planned
-        _exitLegs.Clear();
-        float storage = 0f;
+        // its exit, leg by leg from the core (the user: "look forward through all nodes until it either finds enough space or the
+        // stop line"): each leg's road up to the next stop line or junction, less the cars on it going its way (those in the core
+        // heading onto it on the first), until one more car fits; a way planned no further than the room found is free beyond
+        _exitRoom.Clear();
+        float measured = 0f;
         bool open = true;
-        for (int k = i; k < legs.Count && storage < BoxRule.Reach; k++)
+        for (int k = i; k < legs.Count && measured < BoxRule.Reach; k++)
         {
             var (e, f) = legs[k];
             if (e.Connector || e.Path is not null) { open = false; break; }
-            _exitLegs.Add(legs[k]);
-            if ((f ? e.ApproachAtEnd : e.ApproachAtStart) is var (_, back)) { storage += Mathf.Max(0f, e.Length - back); open = false; break; }
-            storage += e.Length;
+            float room = e.Length;
+            bool line = false;
+            if ((f ? e.ApproachAtEnd : e.ApproachAtStart) is var (_, back)) (line, room) = (true, Mathf.Max(0f, e.Length - back));
+            _exitRoom.Add((legs[k], room, 0));
+            measured += room;
+            if (line) { open = false; break; }
         }
-        if (open) storage = BoxRule.Reach;   // its way planned no further: free beyond
-        // the cars on it going its way within that room, and those in the core heading onto it
-        int ahead = 0;
-        float reach = Mathf.Min(storage, BoxRule.Reach) + 10f;
+        if (_exitRoom.Count == 0) return open;
+        float reach = measured + 10f;
         foreach (var other in _cars)
         {
             if (other == car || MathX.Flat(other.Head - exitAt).LengthSquared() > reach * reach) continue;
-            var olegs = other.Route.Legs;
-            bool counts = _exitLegs.Contains((other.Route.Edge, other.Route.Forward));
-            if (!counts && (other.Route.Edge.Connector || other.Route.Edge.Path is not null))
-                for (int k = other.Route.Leg + 1; k < olegs.Count && k <= other.Route.Leg + 4 && !counts; k++)
-                    counts = _exitLegs.Contains(olegs[k]);
-            if (counts) ahead++;
+            int at = _exitRoom.FindIndex(x => x.Leg == (other.Route.Edge, other.Route.Forward));
+            if (at < 0 && (other.Route.Edge.Connector || other.Route.Edge.Path is not null))
+            {
+                var olegs = other.Route.Legs;
+                for (int k = other.Route.Leg + 1; k < olegs.Count && k <= other.Route.Leg + 4; k++)
+                    if (_exitRoom.FindIndex(x => x.Leg == olegs[k]) is >= 0 and var onto) { at = onto; break; }
+                if (at > 0) at = 0;   // (committed from the core: it stands at the exit's start first)
+            }
+            if (at >= 0) _exitRoom[at] = _exitRoom[at] with { Cars = _exitRoom[at].Cars + 1 };
         }
-        return BoxRule.Fits(storage, ahead);
+        _exitSpans.Clear();
+        foreach (var x in _exitRoom) _exitSpans.Add((x.Room, x.Cars));
+        return BoxRule.Fits(_exitSpans, open);
     }
+
+    /// <summary>The legs of an exit being measured, each its room and the cars on it (<see cref="RoomPast"/>), one list for the traffic's life.</summary>
+    private readonly List<(( LaneEdge, bool) Leg, float Room, int Cars)> _exitRoom = new();
+    private readonly List<(float Room, int Cars)> _exitSpans = new();
 
     /// <summary>Green stands logged so far (#1134).</summary>
     private int GreenStandsLogged;
@@ -1420,8 +1433,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         return false;
     }
 
-    /// <summary>The legs of an exit being measured (<see cref="RoomPast"/>), one set for the traffic's life.</summary>
-    private readonly HashSet<(LaneEdge, bool)> _exitLegs = new();
+
 
     /// <summary>Whether a car comes the other way through a signalised junction: on the opposite approach, near its line and moving.</summary>
     private bool Oncoming(Vehicle car, SignalSite site, int arm)
