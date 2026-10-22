@@ -36,9 +36,16 @@ public static class XrProfile
     {
         if (_forced) return;
         XRServer.Singleton.TrackerAdded -= OnTrackerAdded;
-        foreach (var hand in Hands)
-            if (XRServer.GetTracker(hand) is XRPositionalTracker t) t.ProfileChanged -= OnProfileChanged;
+        foreach (var t in Hooked)
+            if (GodotObject.IsInstanceValid(t)) t.ProfileChanged -= OnProfileChanged;
+        Hooked.Clear();
     }
+
+    /// <summary>
+    /// The trackers listened to: removing a handler a Godot signal does not hold logs an error, so
+    /// each is connected once rather than removed and added again (seen on a Quest, #1112).
+    /// </summary>
+    private static readonly HashSet<XRPositionalTracker> Hooked = new();
 
     private static void OnTrackerAdded(StringName name, long type)
     {
@@ -48,8 +55,7 @@ public static class XrProfile
     private static void Hook(XRTracker? tracker)
     {
         if (tracker is not XRPositionalTracker t) return;
-        t.ProfileChanged -= OnProfileChanged;
-        t.ProfileChanged += OnProfileChanged;
+        if (Hooked.Add(t)) t.ProfileChanged += OnProfileChanged;
         OnProfileChanged(t.Profile);
     }
 

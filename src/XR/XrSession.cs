@@ -153,6 +153,9 @@ public static class XrSession
                 // the runtime may refuse or delay a rate (the Link app's own choice): follow what it runs at
                 _watchingRate = true;
                 openxr.RefreshRateChanged += r => TickAt((float)r);
+                // a rate asked before the session runs is dropped: a Quest then runs its system rate
+                // (90 there, #1112), so ask again once it has begun
+                openxr.SessionBegun += ApplyRefresh;
             }
             hz = VrRefresh.Pick(openxr.GetAvailableDisplayRefreshRates().Select(r => r.AsSingle()), want)
                 ?? openxr.DisplayRefreshRate;
