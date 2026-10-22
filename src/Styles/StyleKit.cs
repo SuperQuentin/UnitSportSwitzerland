@@ -339,6 +339,10 @@ public static class StyleKit
     private static void Configure(ShaderMaterial m, MaterialRole role, VisualStyle style)
     {
         var (from, path) = Resolve(style, role);
+        // a standalone headset's water never reads the scene's depth (#1112, shaders/body/water.gdshaderinc)
+        if (role == MaterialRole.Water && Core.Platform.IsStandaloneVr
+            && (path.EndsWith("ps1_water.gdshader") || path.EndsWith("cartoon_water.gdshader")))
+            path = path.Replace(".gdshader", "_standalone.gdshader");
         var shader = GD.Load<Shader>(path);
         if (m.Shader != shader) m.Shader = shader;
         // PS1's finish (shaders/common/retro.gdshaderinc) belongs to PS1: off wherever another
