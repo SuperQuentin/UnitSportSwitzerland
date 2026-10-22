@@ -606,4 +606,52 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
         Assert.True(Red("J5a", 25) >= 1, "J5a: no red where the TR lane turns right across the bike lane");
         Assert.True(Red("J5b", 25) >= 1, "J5b: no red where the TR lane turns right across the bike lane");
     }
+
+    [Fact]
+    public void Flashers_say_what_they_warn_of_and_permissive_lefts_flash()
+    {
+        // #1109, the user: a plate under each flasher lamp (a pedestrian, a bike, the arrow of a turn crossing both); a left from a
+        // shared lane giving way to the oncoming cars flashes its ball's yellow, or, shown by an arrow, has a flasher on its left
+        var plates = new Dictionary<SignalPlate, int>();
+        int balls = 0, arrows = 0;
+        foreach (var (_, tile) in region.Tiles())
+            foreach (var s in tile.Signals)
+            {
+                var p = s.Plan;
+                for (int g = 0; g < p.Groups.Count; g++)
+                {
+                    if (p.Groups[g].Kind != SignalGroupKind.Flasher) continue;
+                    var (plate, arrow) = p.PlateOf(g);
+                    plates[plate] = plates.GetValueOrDefault(plate) + 1;
+                    // a car group's lamp always says something; a bike group's flashes its own yellow, no lamp
+                    Assert.Equal(p.Groups[p.Groups[g].Qualifies].Kind == SignalGroupKind.Car, plate != SignalPlate.None);
+                    if (plate == SignalPlate.Arrow) Assert.Equal(SignalMoves.None, arrow & SignalMoves.Through);
+                }
+                for (int g = 0; g < p.Groups.Count; g++)
+                {
+                    if (p.LeftGivesWayTo(g).Count == 0) continue;
+                    if (UnitSport.Terrain.SignalBuilder.ArrowMoves(p, g) == SignalMoves.None) balls++; else arrows++;
+                }
+            }
+        Assert.True(plates.GetValueOrDefault(SignalPlate.Pedestrian) > 0 && plates.GetValueOrDefault(SignalPlate.Bike) > 0
+            && plates.GetValueOrDefault(SignalPlate.Arrow) > 0, string.Join(", ", plates.Select(kv => $"{kv.Key} {kv.Value}")));
+        Assert.True(balls > 0 && arrows > 0, $"balls {balls}, arrows {arrows}");
+
+        // J7's flashers: one turn crosses both, its arrow alone
+        var j7 = region.Junction("J7");
+        var p7 = region.Tile(j7.E, j7.N).Signals.Single().Plan;
+        Assert.Contains(Enumerable.Range(0, p7.Groups.Count), g => p7.PlateOf(g) is (SignalPlate.Arrow, SignalMoves.Left or SignalMoves.Right));
+
+        // J3b's south approach: straight on and left beside its right pocket's own group, an arrow head, its left giving way: the
+        // flasher on its left, its yellow steady; J3's ball heads flash theirs
+        var j3b = region.Junction("J3b");
+        var tile3b = region.Tile(j3b.E, j3b.N);
+        var lamps3b = UnitSport.Terrain.SignalBuilder.BuildLamps(tile3b)!;
+        var leftFlasher = Assert.Single(lamps3b.Lenses, l => l.Role == UnitSport.Terrain.SignalBuilder.Role.Flash && l.Blink is not null);
+        Assert.Equal(SignalMoves.Left | SignalMoves.Through, UnitSport.Terrain.SignalBuilder.ArrowMoves(lamps3b.Plans[0], leftFlasher.Group));
+        Assert.DoesNotContain(lamps3b.Lenses, l => l.Group == leftFlasher.Group && l.Role == UnitSport.Terrain.SignalBuilder.Role.Amber && l.Blink is not null);
+        var j3 = region.Junction("J3");
+        var lamps3 = UnitSport.Terrain.SignalBuilder.BuildLamps(region.Tile(j3.E, j3.N))!;
+        Assert.Contains(lamps3.Lenses, l => l.Role == UnitSport.Terrain.SignalBuilder.Role.Amber && l.Blink is not null);
+    }
 }

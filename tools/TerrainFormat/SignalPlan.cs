@@ -558,11 +558,13 @@ public sealed class SignalPlan
         var moves = Movements();
         bool walkers = false, riders = false;
         SignalMoves acrossWalkers = SignalMoves.None, acrossRiders = SignalMoves.None;
+        // what the lamp flashes for: the walkers and riders green with it, or still on the crossing after their green (#979; a plan
+        // timed from conflict times may start the cars' green as the walkers' ends); any it gives way to where none is
+        bool any = Enumerable.Range(0, Groups.Count).Any(h => Warned(g, h, conflicts, together: true));
         for (int h = 0; h < Groups.Count; h++)
         {
             var other = Groups[h];
-            if (conflicts[g, h] != Conflict.Permissive || other.Kind is not (SignalGroupKind.Pedestrian or SignalGroupKind.Bike) || !GreenTogether(g, h))
-                continue;
+            if (!Warned(g, h, conflicts, together: any)) continue;
             if (other.Kind == SignalGroupKind.Pedestrian) { walkers = true; acrossWalkers |= TurnsAcross(g, h, moves); }
             else { riders = true; acrossRiders |= TurnsAcross(g, h, moves); }
         }
@@ -574,6 +576,10 @@ public sealed class SignalPlan
         if (turns == SignalMoves.None) turns = Groups[g].Moves & ~SignalMoves.Through;
         return (SignalPlate.Arrow, turns);
     }
+
+    private bool Warned(int g, int h, Conflict[,] conflicts, bool together) =>
+        conflicts[g, h] == Conflict.Permissive && Groups[h].Kind is SignalGroupKind.Pedestrian or SignalGroupKind.Bike
+        && (!together || GreenTogether(g, h, Groups[h].Kind == SignalGroupKind.Pedestrian ? CrossingOf(h) / WalkSpeed : 0f));
 
     /// <summary>The turns of car group <paramref name="g"/> that cross group <paramref name="h"/> (walkers or riders), by <see cref="Conflicts"/>' rules.</summary>
     private SignalMoves TurnsAcross(int g, int h, List<Movement> moves)
@@ -660,14 +666,21 @@ public sealed class SignalPlan
         return list.Any(iv => iv.Aspect == SignalAspect.FlashingAmber) ? flash : null;
     }
 
-    /// <summary>Whether two groups are ever green at the same time.</summary>
-    private bool GreenTogether(int g, int h)
+    /// <summary>Whether two groups are ever green at the same time, <paramref name="h"/>'s green running on <paramref name="after"/> s (round the cycle).</summary>
+    private bool GreenTogether(int g, int h, float after = 0f)
     {
         foreach (var a in Groups[g].Intervals)
         {
             if (a.Aspect != SignalAspect.Green) continue;
             foreach (var b in Groups[h].Intervals)
-                if (b.Aspect == SignalAspect.Green && Math.Min(a.To, b.To) - Math.Max(a.From, b.From) > 1e-3) return true;
+            {
+                if (b.Aspect != SignalAspect.Green) continue;
+                for (int k = -1; k <= 1; k++)
+                {
+                    float shift = k * Cycle;
+                    if (Math.Min(a.To, b.To + after + shift) - Math.Max(a.From, b.From + shift) > 1e-3) return true;
+                }
+            }
         }
         return false;
     }

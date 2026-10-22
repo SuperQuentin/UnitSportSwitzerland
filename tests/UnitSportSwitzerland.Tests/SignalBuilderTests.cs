@@ -97,4 +97,41 @@ public class SignalBuilderTests
         var second = Lamps(left: true, right: true, pedAmber: true, SignalPoleFlags.Second, bike: true);
         Assert.DoesNotContain(second.Lenses, l => l.Shape == SignalBuilder.Shape.Bike);
     }
+
+    [Fact]
+    public void PermissiveLeft_OnABall_FlashesTheHeadsOwnYellow()
+    {
+        // #1109: no pockets, the ball's left gives way to the oncoming cars: its yellow lens flashes with that, no lamp beside it
+        foreach (var flags in new[] { SignalPoleFlags.Main, SignalPoleFlags.Second })
+        {
+            var lamps = Lamps(left: false, right: false, pedAmber: true, flags);
+            var amber = Assert.Single(lamps.Lenses, l => l.Shape == SignalBuilder.Shape.Circle && l.Role == SignalBuilder.Role.Amber);
+            Assert.NotNull(amber.Blink);
+            Assert.Equal(amber.Group, amber.Blink!.Qualifies);
+            Assert.DoesNotContain(lamps.Lenses, l => l.Role == SignalBuilder.Role.Flash && l.Blink is not null);
+        }
+        // a left pocket's arrow is protected: nothing flashes for it
+        var pockets = Lamps(left: true, right: true, pedAmber: true, SignalPoleFlags.Main);
+        Assert.DoesNotContain(pockets.Lenses, l => l.Blink is not null);
+    }
+
+    [Fact]
+    public void PermissiveLeft_OnAnArrow_AFlasherOnItsLeft()
+    {
+        // #1109: a right pocket going with its approach leaves the main head straight on and left, an arrow: its yellow stays, a
+        // flasher stands on its left, lit by the left's flashing; on the main pole only
+        var lamps = Lamps(left: false, right: true, pedAmber: true, SignalPoleFlags.Main);
+        var plan = lamps.Plans[0];
+        var main = lamps.Lenses.First(l => l.Shape == SignalBuilder.Shape.Circle && l.Role == SignalBuilder.Role.Green
+            && (plan.Groups[l.Group].Moves & SignalMoves.Left) != 0);
+        Assert.Equal(SignalMoves.Left | SignalMoves.Through, SignalBuilder.ArrowMoves(plan, main.Group));
+        Assert.DoesNotContain(lamps.Lenses, l => l.Role == SignalBuilder.Role.Amber && l.Blink is not null);
+        var left = Assert.Single(lamps.Lenses, l => l.Role == SignalBuilder.Role.Flash && l.Blink is not null);
+        Assert.Equal(main.Group, left.Group);
+        // on its left as the driver sees it (west, a smaller X), level with its green
+        Assert.True(left.Transform.Origin.X < main.Transform.Origin.X - 0.5f, $"left flasher at {left.Transform.Origin.X}, head at {main.Transform.Origin.X}");
+        Assert.Equal(main.Transform.Origin.Y, left.Transform.Origin.Y, 3);
+        var second = Lamps(left: false, right: true, pedAmber: true, SignalPoleFlags.Second);
+        Assert.DoesNotContain(second.Lenses, l => l.Role == SignalBuilder.Role.Flash);
+    }
 }

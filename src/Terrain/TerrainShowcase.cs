@@ -97,19 +97,27 @@ public static class TerrainShowcase
         // trams going two ways (#1057, the user): a head per direction, its arrow on its plate; Romandy's in a row on top of the car heads
         ("Tram, two ways", () => TrafficLight(pedestrianAmber: true, tram: true, tramTwo: true)),
         ("Tram, Romandy, two ways", () => TrafficLight(pedestrianAmber: false, tram: true, tramT: true, tramTwo: true)),
+        // the plate under the flasher (#1109, the user): its turns cross walkers, riders, or both (the arrow of the turn crossing both)
+        ("Flasher, pedestrian plate", () => TrafficLight(pedestrianAmber: true, bikeHead: false)),
+        ("Flasher, bike plate", () => TrafficLight(pedestrianAmber: true, peds: false)),
+        ("Flasher, arrow plate", () => TrafficLight(pedestrianAmber: true)),
+        // a permissive left (#1109, the user): no left pockets, the ball's yellow flashes while the oncoming cars are green; beside a
+        // right pocket the head shows straight on and left, an arrow: a flasher on its left with a left arrow on its plate
+        ("Permissive left, ball", () => TrafficLight(pedestrianAmber: true, bikeHead: false, leftPockets: false)),
+        ("Permissive left, arrow", () => TrafficLight(pedestrianAmber: true, bikeHead: false, leftPockets: false, rightPocket: true)),
     ];
 
     private static Node3D TrafficLight(bool pedestrianAmber, bool arrowPlates = false, bool rightOnRed = false, bool bikeHead = true,
         SignalPoleColour colour = SignalPoleColour.SilverGrey, OverheadKind? overhead = null, bool island = false, bool tram = false,
-        bool tramT = false, bool tramTwo = false)
+        bool tramT = false, bool tramTwo = false, bool peds = true, bool leftPockets = true, bool rightPocket = false)
     {
         var plan = SignalPlan.Build(
         [
-            new SignalArm(0, true, true, LeftPocket: true, Pedestrians: true, BikeSignal: bikeHead, Rank: 2, BikeRightOnRed: rightOnRed,
+            new SignalArm(0, true, true, LeftPocket: leftPockets, RightPocket: rightPocket, Pedestrians: peds, BikeSignal: bikeHead, Rank: 2, BikeRightOnRed: rightOnRed,
                 HalfInM: island ? 4 : 0, HalfOutM: island ? 3.5f : 0, TramMoves: !tram ? SignalMoves.None : tramTwo ? SignalMoves.Left | SignalMoves.Through : SignalMoves.Through),
-            new SignalArm(Math.PI / 2, true, true, Pedestrians: true),
-            new SignalArm(Math.PI, true, true, LeftPocket: true, Pedestrians: true, Rank: 2),
-            new SignalArm(-Math.PI / 2, true, true, Pedestrians: true),
+            new SignalArm(Math.PI / 2, true, true, Pedestrians: peds),
+            new SignalArm(Math.PI, true, true, LeftPocket: leftPockets, Pedestrians: peds, Rank: 2),
+            new SignalArm(-Math.PI / 2, true, true, Pedestrians: peds),
         ], 353, pedestrianAmber, tramT);
         plan.ArrowPlates = arrowPlates;
         plan.PoleColour = colour;
