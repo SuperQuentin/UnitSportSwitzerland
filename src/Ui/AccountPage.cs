@@ -5,7 +5,7 @@ namespace UnitSport.Ui;
 
 /// <summary>
 /// Settings → Account (#1123): play offline (no account, the default) or online, signed in to an account server
-/// (Nakama: its address and server key, then email and password). Saved in <c>user://account.json</c> by
+/// (Nakama: its address and server key, then email and password). Saved in <c>user://online_account.json</c> by
 /// <see cref="Account"/>, never the password. A server that requires an account refuses an offline player with a
 /// reason that points here.
 /// </summary>

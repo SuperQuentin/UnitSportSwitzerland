@@ -7,7 +7,7 @@ using UnitSport.Core;
 
 namespace UnitSport.Net.Accounts;
 
-/// <summary>What <c>user://account.json</c> holds: never the password, only the tokens it bought.</summary>
+/// <summary>What <c>user://online_account.json</c> holds: never the password, only the tokens it bought.</summary>
 public sealed class AccountFile
 {
     public AccountMode Mode { get; set; } = AccountMode.Offline;
@@ -22,7 +22,7 @@ public sealed class AccountFile
 
 /// <summary>
 /// This install's account (#1123): offline (the default) or signed in to a Nakama account server. Kept in
-/// <c>user://account.json</c>, apart from <c>settings.json</c>, so its tokens never travel with a settings file.
+/// <c>user://online_account.json</c>, apart from <c>settings.json</c>, so its tokens never travel with a settings file.
 /// A server asks for it after the version check (<see cref="AccountGate"/>); <see cref="TokenFor"/> answers.
 /// <para>
 /// <c>--account-email E --account-password P [--account-url U] [--account-key K]</c> signs in (making the account
@@ -31,7 +31,7 @@ public sealed class AccountFile
 /// </summary>
 public static class Account
 {
-    private const string File = "user://account.json";
+    private const string File = "user://online_account.json";
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true, Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } };
 
     private static AccountFile _current = Load();

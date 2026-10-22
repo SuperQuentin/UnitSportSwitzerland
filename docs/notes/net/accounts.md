@@ -10,8 +10,9 @@
 - **Online** means signed in to an account server, a Nakama (`net/nakama`).
   - The player sets its address (`http://host:7350`) and server key (not a secret), then signs in by email and
     password, or creates the account with an optional name for the scoreboards.
-  - The password is never stored. Sign-in keeps the session and refresh tokens in **`user://account.json`**
+  - The password is never stored. Sign-in keeps the session and refresh tokens in **`user://online_account.json`**
     (`Net/Accounts/Account`), apart from `settings.json`, so tokens never travel with a shared settings file.
+    It is not `user://account.json`: that one is the offline bank's (`items/cash-account`).
   - **Sign out** forgets them. Changing the account server forgets the session of the old one.
 - `Account.TokenFor(server)` hands out the session token only to a server whose accounts live on the account
   server the player is signed in to.
@@ -21,6 +22,9 @@
 
 ## Server: `--accounts off|optional|required` and `--nakama-url <url>`
 
+- **Deploy**: `ACCOUNTS=optional|required` in `tools/deploy.env` adds `--accounts … --nakama-url $NAKAMA_URL` to the
+  server's start line. `NAKAMA_URL` defaults to `http://<DEPLOY_HOST>:7350`, the address players type
+  (`general/linux-deploy`).
 - **off** is the default, and is used by every other net check and by servers hosted from the menu. The account
   step admits at once.
 - **optional**: a player signed in to this server's account server joins with the account checked; any other
