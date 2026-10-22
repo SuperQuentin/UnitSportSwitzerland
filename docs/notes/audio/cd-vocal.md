@@ -42,7 +42,7 @@
   `<id>.inst.ogg` (the mix minus it) beside the CD (`CdBurner.StemPath`), deleted with it.
   `RadioSpeaker.Voice/Music` (0..1): at 1/1 the CD plays as burnt; otherwise the stems play in one
   `AudioStreamSynchronized` (sample-locked, a level per stream, changed live), fetched lazily over
-  `AssetKind.Cd` with `TileId.N` 1 (voice) / 2 (music), cached beside the CD (protocol 47). The CD
+  `AssetKind.Cd` with `TileId.N` 1 (voice) / 2 (music), cached beside the CD (protocol 48). The CD
   plays on while they arrive; a server without them leaves the CD as burnt.
   - Who sets it, everyone hears it: a world radio's owner (the thrower; anyone for an unowned one),
     `RadioBody.Mix` replicated, `RadioManager.SetMix` checked on the server; the hand's radio and the

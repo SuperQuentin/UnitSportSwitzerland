@@ -18,8 +18,8 @@
 - **Mass**: Sim is `GameSettings.RiderMass` (Settings → Gameplay → Rider weight, `--rider-kg`, default
   72.5) + the spec's mass + 1.5 kg of bottles. Game keeps the 72.5 kg reference rider, so its feel does
   not change with the setting. The default totals the old 82 kg, so `--ride bike`'s references hold.
-- Every rider's bike is the catalogue's look (`BikePalette.ForRider`). Riders are told apart by their kit.
-  Choosing a bike per player, and replicating that choice, is for when a second bike exists.
+- Every rider's road bike is the catalogue's look (`BikePalette.ForRider`). Riders are told apart by their kit.
+  Choosing a bike: each catalogue bike is its own `RideKind`, picked from the Bicycles tab (#1159, `player/e-bike`).
 - **Longitudinal physics** (`BikePhysics`, pure, `BikePhysicsTests`; phase 2):
   - The equation is `(m + I/r²)·a = η·P/v − ½ρ·CdA·(1 − draft)·v² − Crr·m·g·cosθ − m·g·sinθ`.
   - Wheel inertia: `BicycleSpec.WheelInertia`, 0.15 kg·m², which adds 1.3 kg.

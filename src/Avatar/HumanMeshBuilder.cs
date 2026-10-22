@@ -537,16 +537,30 @@ public static partial class HumanMeshBuilder
     /// </summary>
     private static Rig CyclingRig => CyclingRigFor(Player.RidingPosition.Hoods);
 
-    /// <summary>The cyclist in each riding position, solved the same way from <see cref="Player.BikeFrame.Fit"/>.</summary>
-    private static Rig CyclingRigFor(Player.RidingPosition position) =>
-        _cyclingRigs[(int)position] ??= SolveCyclingRig(Player.BikeFrame.Default, position);
+    private static readonly Dictionary<(Player.BikeFrame, Player.RidingPosition), Rig> OtherBikeRigs = new();
 
-    /// <summary>A cyclist in <paramref name="position"/> (#1124): legs left out for <see cref="Cyclist"/> to pedal.</summary>
+    /// <summary>
+    /// The cyclist in each riding position, solved the same way from <see cref="Player.BikeFrame.Fit"/>,
+    /// on <paramref name="frame"/> (#1159: sat up on a riser bar), the road bike when null.
+    /// </summary>
+    private static Rig CyclingRigFor(Player.RidingPosition position, Player.BikeFrame? frame = null)
+    {
+        if (frame == null || frame == Player.BikeFrame.Default)
+            return _cyclingRigs[(int)position] ??= SolveCyclingRig(Player.BikeFrame.Default, position);
+        lock (OtherBikeRigs)
+        {
+            if (!OtherBikeRigs.TryGetValue((frame, position), out var rig))
+                OtherBikeRigs[(frame, position)] = rig = SolveCyclingRig(frame, position);
+            return rig;
+        }
+    }
+
+    /// <summary>A cyclist in <paramref name="position"/> (#1124) on <paramref name="frame"/> (#1159): legs left out for <see cref="Cyclist"/> to pedal.</summary>
     public static ArrayMesh BuildCyclist(HumanPalette palette, Player.RidingPosition position, bool includeLegs = false,
-        bool helmet = true, ArrayMesh? into = null)
+        bool helmet = true, ArrayMesh? into = null, Player.BikeFrame? frame = null)
     {
         var scratch = ScratchFor(into);
-        AppendRig(scratch, palette, CyclingRigFor(position), includeLegs, helmet);
+        AppendRig(scratch, palette, CyclingRigFor(position, frame), includeLegs, helmet);
         return into == null ? scratch.Build() : scratch.BuildInto(into);
     }
 
@@ -556,10 +570,10 @@ public static partial class HumanMeshBuilder
     /// or rises out of the saddle instead of jumping there.
     /// </summary>
     public static ArrayMesh BuildCyclistBlend(HumanPalette palette, Player.RidingPosition from, Player.RidingPosition to,
-        float t, ArrayMesh? into = null)
+        float t, ArrayMesh? into = null, Player.BikeFrame? frame = null)
     {
         var scratch = ScratchFor(into);
-        AppendRig(scratch, palette, Lerp(CyclingRigFor(from), CyclingRigFor(to), t), includeLegs: false, helmet: true);
+        AppendRig(scratch, palette, Lerp(CyclingRigFor(from, frame), CyclingRigFor(to, frame), t), includeLegs: false, helmet: true);
         return into == null ? scratch.Build() : scratch.BuildInto(into);
     }
 
@@ -574,7 +588,8 @@ public static partial class HumanMeshBuilder
         Mathf.Lerp(a.TorsoLean, b.TorsoLean, t), a.HandDir.Lerp(b.HandDir, t), a.PointDirR.Lerp(b.PointDirR, t));
 
     /// <summary>Camera mounts (the eye for first person) of a cyclist in <paramref name="position"/>.</summary>
-    public static GaitMounts MountsForCyclist(Player.RidingPosition position) => MountsForRig(CyclingRigFor(position));
+    public static GaitMounts MountsForCyclist(Player.RidingPosition position, Player.BikeFrame? frame = null) =>
+        MountsForRig(CyclingRigFor(position, frame));
 
     private static Rig SolveCyclingRig(Player.BikeFrame frame, Player.RidingPosition position)
     {

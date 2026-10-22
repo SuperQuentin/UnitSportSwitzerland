@@ -22,8 +22,8 @@ namespace UnitSport.Avatar;
 /// </summary>
 public partial class Cyclist : Node3D
 {
-    /// <summary>The bike and the rider's fit to it (#1124): the hips, pedals and cranks all come from here.</summary>
-    private static Player.BikeFrame Frame => Player.BikeFrame.Default;
+    /// <summary>The bike and the rider's fit to it (#1124): the hips, pedals and cranks all come from here; per bike since #1159.</summary>
+    private Player.BikeFrame Frame { get; init; } = Player.BikeFrame.Default;
 
     private MeshInstance3D _cranks = null!;
     private readonly MeshInstance3D[] _legs = new MeshInstance3D[2];
@@ -111,8 +111,8 @@ public partial class Cyclist : Node3D
     private const int Steps = 128;
     // ponytail: one entry set per distinct palette, never evicted; a few hundred tiny meshes per
     // colour scheme. Evict by palette if riders with unique colours ever come by the thousand.
-    private static readonly Dictionary<(BikePalette, int), ArrayMesh> CrankSteps = new();
-    private static readonly Dictionary<(HumanPalette, int, int, bool, Player.RidingPosition), ArrayMesh> LegSteps = new();
+    private static readonly Dictionary<(Player.BikeFrame, BikePalette, int), ArrayMesh> CrankSteps = new();
+    private static readonly Dictionary<(Player.BikeFrame, HumanPalette, int, int, bool, Player.RidingPosition), ArrayMesh> LegSteps = new();
     private int _shownStep = -1;
     /// <summary>Whether the rider and legs shown were built smooth (<see cref="HumanMeshBuilder.SmoothFigures"/>).</summary>
     private bool _riderSmooth;
@@ -137,12 +137,13 @@ public partial class Cyclist : Node3D
         UpdateLegs();
     }
 
-    /// <summary>A rider on their own bike, in <paramref name="outfit"/> (#251).</summary>
-    public static Cyclist Create(int riderIndex = 0, Outfit outfit = default) => new()
+    /// <summary>A rider on their own bike, in <paramref name="outfit"/> (#251), on <paramref name="bike"/> (#1159; the road bike by default).</summary>
+    public static Cyclist Create(int riderIndex = 0, Outfit outfit = default, Player.BicycleSpec? bike = null) => new()
     {
         Name = "Cyclist",
         _palette = HumanPalette.ForRider(riderIndex) with { Outfit = outfit },
-        _bikePalette = BikePalette.ForRider(riderIndex),
+        _bikePalette = bike?.Look ?? BikePalette.ForRider(riderIndex),
+        Frame = bike == null ? Player.BikeFrame.Default : Player.BikeFrame.For(bike),
     };
 
     /// <summary>The rider in each position, pedalling (#1124): the model viewer's way to see them side by side.</summary>
@@ -189,14 +190,14 @@ public partial class Cyclist : Node3D
         _sway.AddChild(new MeshInstance3D
         {
             Name = "Bike",
-            Mesh = BikeMeshBuilder.Build(bikePalette, includeCranks: false, parts: BikeMeshBuilder.Parts.Rear),
+            Mesh = BikeMeshBuilder.Build(bikePalette, includeCranks: false, frame: Frame, parts: BikeMeshBuilder.Parts.Rear),
             MaterialOverride = material,
         });
         // the fork, front wheel and bars turn about the steering axis (#1124)
         _front = new MeshInstance3D
         {
             Name = "Front",
-            Mesh = BikeMeshBuilder.Build(bikePalette, includeCranks: false, parts: BikeMeshBuilder.Parts.Front),
+            Mesh = BikeMeshBuilder.Build(bikePalette, includeCranks: false, frame: Frame, parts: BikeMeshBuilder.Parts.Front),
             MaterialOverride = material,
         };
         _sway.AddChild(_front);
@@ -206,7 +207,7 @@ public partial class Cyclist : Node3D
         _rider = new MeshInstance3D
         {
             Name = "Rider",
-            Mesh = HumanMeshBuilder.BuildCyclist(_palette, _position),
+            Mesh = HumanMeshBuilder.BuildCyclist(_palette, _position, frame: Frame),
             MaterialOverride = material,
         };
         _riderSmooth = HumanMeshBuilder.SmoothFigures;
@@ -303,8 +304,8 @@ public partial class Cyclist : Node3D
         if (_rider == null) return;
         var palette = Flutters ? _palette with { Wind = _windNow } : _palette;
         _rider.Mesh = _blend >= 1f
-            ? HumanMeshBuilder.BuildCyclist(palette, _position, into: _riderMesh ??= new ArrayMesh())
-            : HumanMeshBuilder.BuildCyclistBlend(palette, _from, _position, BlendShown, into: _riderMesh ??= new ArrayMesh());
+            ? HumanMeshBuilder.BuildCyclist(palette, _position, frame: Frame, into: _riderMesh ??= new ArrayMesh())
+            : HumanMeshBuilder.BuildCyclistBlend(palette, _from, _position, BlendShown, into: _riderMesh ??= new ArrayMesh(), frame: Frame);
     }
 
     /// <summary>A leg's hip joint in the pose shown now, part way between two while they blend.</summary>
@@ -322,8 +323,8 @@ public partial class Cyclist : Node3D
         if (step == _shownStep || _cranks == null) return;
         _shownStep = step;
         float stepAngle = step * Mathf.Tau / Steps;
-        if (!CrankSteps.TryGetValue((_bikePalette, step), out var cranks))
-            CrankSteps[(_bikePalette, step)] = cranks = BikeMeshBuilder.BuildCranks(_bikePalette, stepAngle);
+        if (!CrankSteps.TryGetValue((Frame, _bikePalette, step), out var cranks))
+            CrankSteps[(Frame, _bikePalette, step)] = cranks = BikeMeshBuilder.BuildCranks(_bikePalette, stepAngle, Frame);
         _cranks.Mesh = cranks;
         for (int i = 0; i < 2; i++)
         {
@@ -333,7 +334,7 @@ public partial class Cyclist : Node3D
                 _legs[i].Mesh = BuildLeg(i, stepAngle, _blendLegs[i] ??= new ArrayMesh());
                 continue;
             }
-            var key = (_palette, i, step, HumanMeshBuilder.SmoothFigures, _position);
+            var key = (Frame, _palette, i, step, HumanMeshBuilder.SmoothFigures, _position);
             if (!LegSteps.TryGetValue(key, out var leg)) LegSteps[key] = leg = BuildLeg(i, stepAngle);
             _legs[i].Mesh = leg;
         }

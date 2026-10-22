@@ -25,13 +25,15 @@ namespace UnitSport.Player;
 /// </summary>
 public sealed class Bicycle : Rideable
 {
-    public override RideKind Kind => RideKind.RoadBike;
-    public override string Label => "Road bike";
-    public override string Blurb => "{throttle} pedal, {tuck_boost} sprint, {brake} brake, {move_left}/{move_right} steer — climbs cost you";
+    public override RideKind Kind => Spec.Kind;
+    public override string Label => Spec.Label;
+    public override string Blurb => Spec.Assist != null
+        ? "{throttle} pedal, {tuck_boost} pedal hard, {brake} brake, {move_left}/{move_right} steer — the motor helps to 25 km/h"
+        : "{throttle} pedal, {tuck_boost} sprint, {brake} brake, {move_left}/{move_right} steer — climbs cost you";
 
     // ---- the rider and the machine ----
-    /// <summary>The bike under the rider: the owner's Scott Addict RC 15 (#1124).</summary>
-    public BicycleSpec Spec { get; } = BicycleCatalog.Default;
+    /// <summary>The bike under the rider: a catalogue bike, the owner's Scott Addict RC 15 by default (#1124, #1159).</summary>
+    public BicycleSpec Spec { get; }
 
     /// <summary>Bottles, tools and a saddle bag, kg.</summary>
     private const float Kit = 1.5f;
@@ -98,11 +100,22 @@ public sealed class Bicycle : Rideable
     /// <summary>Every point of the bike and the rider's fit to it: the centre of mass for braking.</summary>
     public BikeFrame Frame { get; }
 
-    public Bicycle()
+    public Bicycle() : this(BicycleCatalog.Default) { }
+
+    public Bicycle(BicycleSpec spec)
     {
+        Spec = spec;
         Gears = new BikeDrivetrain(Spec);
-        Frame = Spec == BicycleCatalog.Default ? BikeFrame.Default : new BikeFrame(Spec);
+        Frame = BikeFrame.For(Spec);
+        // the eye in each position on this bike's own fit (#1159), just proud of the face so the head never fills the lens
+        _eyes = System.Array.ConvertAll(
+            new[] { RidingPosition.Hoods, RidingPosition.Drops, RidingPosition.Tuck, RidingPosition.Standing },
+            p => HumanMeshBuilder.MountsForCyclist(p, Frame).Eye + new Vector3(0, 0, -0.06f));
+        _eye = _eyes[0];
     }
+
+    /// <summary>What the motor is adding at the cranks now, W (#1159): 0 on a bike without one.</summary>
+    public float MotorWatts { get; private set; }
 
     /// <summary>Steady effort, W. Roughly a fit rider's endurance power.</summary>
     public float RiderWatts { get; set; } = 180f;
@@ -148,12 +161,9 @@ public sealed class Bicycle : Rideable
     public override Vector3 FirstPersonEye => _eye;
 
     /// <summary>The eye now: it glides to the new pose's as the drawn rider blends there (<see cref="Animate"/>).</summary>
-    private Vector3 _eye = Eyes[0];
+    private Vector3 _eye;
 
-    private static readonly Vector3[] Eyes = System.Array.ConvertAll(
-        new[] { RidingPosition.Hoods, RidingPosition.Drops, RidingPosition.Tuck, RidingPosition.Standing },
-        p => HumanMeshBuilder.MountsForCyclist(p).Eye
-            + new Vector3(0, 0, -0.06f));   // just proud of the face, so the head never fills the lens
+    private readonly Vector3[] _eyes;
 
     public override float EyeHeight => 1.48f;
     public override float ChaseDistance => 3.9f;
@@ -165,14 +175,14 @@ public sealed class Bicycle : Rideable
     /// <summary>The cranks' rpm now: 0 freewheeling (the HUD, and the legs through <see cref="Animate"/>).</summary>
     public float Cadence => _cadence;
 
-    public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default) => Cyclist.Create(riderIndex, outfit);
+    public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default) => Cyclist.Create(riderIndex, outfit, Spec);
 
     public override bool IsVehicle => true;
 
     public override Node3D BuildParkedVisual(int riderIndex) => new MeshInstance3D
     {
         Name = "Bike",
-        Mesh = BikeMeshBuilder.Build(BikePalette.ForRider(riderIndex)),
+        Mesh = BikeMeshBuilder.Build(Spec.Look, frame: Frame),
         MaterialOverride = HumanMeshBuilder.Material(),
     };
 
@@ -201,13 +211,13 @@ public sealed class Bicycle : Rideable
             Balance(ref motion, input.Steer, v, maxLean, riderMass, dt);
 
         // --- the rider's position: sprinting on the drops, a fast descent tucked, out of the saddle
-        // grinding up a ramp, else the hoods
-        Position = input.Effort && input.Throttle > 0.05f ? RidingPosition.Drops
-            : ground.OnFloor && input.Throttle < 0.05f && v > TuckSpeed && ground.Grade < -0.02f ? RidingPosition.Tuck
+        // grinding up a ramp, else the hoods; sat up on a riser bar there are no drops and no tuck (#1159)
+        Position = !Spec.Upright && input.Effort && input.Throttle > 0.05f ? RidingPosition.Drops
+            : !Spec.Upright && ground.OnFloor && input.Throttle < 0.05f && v > TuckSpeed && ground.Grade < -0.02f ? RidingPosition.Tuck
             : ground.OnFloor && input.Throttle > 0.05f && ground.Grade > StandingGrade && Gears.Cadence(v) < StandingCadence ? RidingPosition.Standing
             : RidingPosition.Hoods;
         _positionFactor += (BikePhysics.PositionFactor(Position) - _positionFactor) * (1f - Mathf.Exp(-dt / PositionChangeTime));
-        float dragArea = BikePhysics.DragArea(riderMass, RidingPosition.Hoods) * _positionFactor;
+        float dragArea = BikePhysics.DragArea(riderMass, RidingPosition.Hoods, Spec.DragArea) * _positionFactor;
         float air = BikePhysics.AirDensity(ground.Altitude);
 
         if (!ground.OnFloor)
@@ -216,6 +226,7 @@ public sealed class Bicycle : Rideable
             v -= 0.5f * air * dragArea * v * v / inertia * dt;
             if (!arcade) Body.Step(0f, dt, MeasuredHeartRate);
             motion.Speed = Mathf.Max(0f, v);
+            MotorWatts = 0f;
             return;
         }
 
@@ -243,7 +254,15 @@ public sealed class Bicycle : Rideable
             ? Mathf.Min(BikePhysics.DrivetrainEfficiency * watts / Mathf.Max(v, 0.5f), arcade ? ArcadeMaxThrust : MaxThrust)
             : 0f;
 
-        float resisting = BikePhysics.ResistingForce(v, mass, dragArea, ground.Draft, RollingResistance(ground.Surface), air, ground.Grade);
+        // the motor (#1159): its watts on top of the legs', through the same chain, and at the wheel no
+        // more than its torque through this gear can push
+        MotorWatts = Spec.Assist is { } assist && pedalling ? BikePhysics.AssistWatts(assist, watts, rpm, v) : 0f;
+        if (MotorWatts > 0f)
+            thrust += Mathf.Min(BikePhysics.DrivetrainEfficiency * MotorWatts / Mathf.Max(v, 0.5f),
+                Spec.Assist!.Torque / (Gears.Ratio * Spec.WheelRadius));
+
+        float rolling = RollingResistance(ground.Surface) * BikePhysics.TyreWidthFactor(ground.Surface is Audio.Surface.Asphalt or Audio.Surface.Indoor or Audio.Surface.Wood, Spec.TyreWidth);
+        float resisting = BikePhysics.ResistingForce(v, mass, dragArea, ground.Draft, rolling, air, ground.Grade);
         v += (thrust - resisting) / inertia * dt;
 
         // Sim: front and rear brakes, the load moving forward, the rear locking, the over-the-bars
@@ -322,7 +341,7 @@ public sealed class Bicycle : Rideable
         cyclist.SteerAngle = Arcade ? 0f : SteerAngle;
         cyclist.RidingPose = Position;
         // the camera follows the head the rider is drawn with: it starts moving when the pose does
-        _eye = _eye.Lerp(Eyes[(int)cyclist.RidingPose], 1f - Mathf.Exp(-dt / 0.15f));
+        _eye = _eye.Lerp(_eyes[(int)cyclist.RidingPose], 1f - Mathf.Exp(-dt / 0.15f));
     }
 
     /// <summary>Cadence, and the crank angle itself so a remote rider's legs are where the owner's are.</summary>

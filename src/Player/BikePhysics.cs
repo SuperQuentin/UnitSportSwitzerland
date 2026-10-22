@@ -181,4 +181,35 @@ public static class BikePhysics
         float used = Mathf.Min(Mathf.Abs(accel) / Gravity, grip * 0.95f);
         return Mathf.Atan(Mathf.Sqrt(grip * grip - used * used));
     }
+
+    /// <summary>
+    /// What a pedelec's motor adds at the cranks, W (#1159): <see cref="ElectricAssist.Support"/> × the
+    /// rider's watts, no more than its torque at this cadence nor its peak, and nothing without
+    /// pedalling. The help fades over the last km/h to the cut-off and is gone past it, so on the flat
+    /// the bike settles at 25 km/h and only the legs take it faster.
+    /// </summary>
+    /// <param name="riderWatts">The rider's own power at the cranks.</param>
+    /// <param name="cadence">rpm; the torque limit is torque × ω, so a grinding crank gets less.</param>
+    /// <param name="speed">m/s.</param>
+    public static float AssistWatts(ElectricAssist assist, float riderWatts, float cadence, float speed)
+    {
+        if (riderWatts <= 0f || cadence <= 0f) return 0f;
+        float fade = Mathf.Clamp((assist.CutOff - speed) / ElectricAssist.FadeBand, 0f, 1f);
+        // a crank barely turning still gets the torque of a 30 rpm push: the motor reads pedal force, not just cadence
+        float torqueLimit = assist.Torque * Mathf.Max(cadence, 30f) / 60f * Mathf.Tau;
+        return Mathf.Min(Mathf.Min(assist.Support * riderWatts, torqueLimit), assist.PeakWatts) * fade;
+    }
+
+    /// <summary>
+    /// A wider tyre at its lower pressure on a surface's rolling resistance from a 28 mm
+    /// road tyre's (#1159): on smooth tarmac a 50 mm touring balloon's heavier casing rolls ~1/3 harder
+    /// (0.0045 → 0.006, roller drum tests of the Big Apple), off it the wider, softer tyre sinks less and
+    /// skips less, so gravel and forest roll easier as √(28 / width).
+    /// </summary>
+    /// <param name="smooth">Tarmac, a floor or boards; anything else is rough.</param>
+    public static float TyreWidthFactor(bool smooth, float tyreWidth)
+    {
+        float wider = Mathf.Max(tyreWidth, 0.023f) / 0.028f;
+        return smooth ? 1f + 0.33f * (tyreWidth - 0.028f) / 0.022f : 1f / Mathf.Sqrt(wider);
+    }
 }

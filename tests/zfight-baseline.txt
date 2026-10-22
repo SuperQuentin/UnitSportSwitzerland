@@ -959,6 +959,10 @@
 64	Rides / Airstairs (parked)
 305.3	Rides / Compact roller
 270.6	Rides / Compact roller (parked)
+143.5	Rides / E-bike
+113.5	Rides / E-bike (low frame)
+43.2	Rides / E-bike (low frame) (parked)
+43.2	Rides / E-bike (parked)
 718.5	Rides / Excavator
 271	Rides / Excavator (parked)
 450.1	Rides / Forklift
