@@ -651,7 +651,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         var rightOf = new Vector3(-dir.Z, 0f, dir.X).Normalized();   // right of its way, as Vehicle.Place offsets the lane
         // a car alongside on the side it is easing over to (#854): it holds its line until there is room, or it slid onto it
         float sideTaken = 0f, easing = car.LaneWanted - car.Lane;
-        bool queued = false;
+        bool queued = false, overlapping = false;
         for (int o = from < 0 ? ~from : from; o < _byX.Count && _byX[o].Head.X <= car.Head.X + GapWindow; o++)
         {
             var other = _byX[o];
@@ -664,6 +664,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             // closer than a metre: the one behind (on one spot, the one with the lower habit) waits as if the other were just
             // ahead. Skipping it, as it did, a car that got that close drove on through the queue, or the two as one (#854)
             if (along > -1f && along < 1f && car.Habit < other.Habit && (d - dir * along).Length() < 1f) DoubledNow++;
+            // (#1134: two standing body on body, the probe's overlap watch)
+            if (car.Speed < 0.3f && other.Speed < 0.3f && MathX.Flat(d).LengthSquared() < 2.5f * 2.5f && Mathf.Abs(d.Y) < 3f) overlapping = true;
             if (along > -1f && along < 1f && (along > 0f || car.Habit < other.Habit)) along = 1f;
             // in the way: within a body's width of its line now, or of the lane it is heading for at the line. One for a turn pocket
             // eases over only in the last metres and met the car standing in it from the side, on top of it (#854). One coming
@@ -672,6 +674,15 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             if (along < 1f || along > FollowLook || Mathf.Abs(d.Y) > 3f
                 || Mathf.Abs(across) > AheadWidth && Mathf.Abs(across - toward) > AheadWidth) continue;
             if (other.Route.At(0).Dir.Dot(dir) < 0.3f) continue;
+            // side by side, each in the other's way (#1134, the user: two cars at a lane split, one moving over into the other's lane,
+            // both stopped for good): only one gives way. The one changing lanes yields to the one keeping its lane; both or neither
+            // changing, the lower habit yields. The other drives on as if it were not there
+            if (along < 5f && (-d).Dot(other.Route.At(0).Dir) > -1f)
+            {
+                bool meMoving = Mathf.Abs(car.LaneWanted - car.Lane) > 0.05f, otherMoving = Mathf.Abs(other.LaneWanted - other.Lane) > 0.05f;
+                bool iYield = meMoving != otherMoving ? meMoving : car.Habit < other.Habit;
+                if (!iYield) continue;
+            }
             // standing 7.5 m apart, middle to middle: about 2.5 m between bumpers, as a queue stands (#971: 9 m left 4.5 m)
             target = Mathf.Min(target, Mathf.Max(0f, other.Speed + (along - QueueSpacing) * 0.6f));
             // and no faster than it can still shed before the gap (4 m/s², under the 6 it brakes at): the line above alone
@@ -687,6 +698,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         // (#1134: a tram at its stop, a rider at a red)
         float behindCrosser = FollowCrossers(car, dir, rightOf);
         car.Queued = queued || behindCrosser < 0.5f && car.Speed < 0.5f;
+        car.Overlap = overlapping ? car.Overlap + dt : 0f;
+        OverlapLongest = Mathf.Max(OverlapLongest, car.Overlap);
         target = Mathf.Min(target, behindCrosser);
 
         float half = edge.Width * 0.5f, keep = KeepRight(edge, car.Route.Forward, car.Habit);
@@ -1375,6 +1388,13 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     private readonly List<(( LaneEdge, bool) Leg, float Room, int Cars)> _exitRoom = new();
     private readonly List<(float Room, int Cars)> _exitSpans = new();
 
+    /// <summary>
+    /// The longest two standing cars have stood body on body (heads under 2.5 m apart, s, #1134): the probe fails over
+    /// <see cref="OverlapFails"/> (two cars that block each other for good).
+    /// </summary>
+    public float OverlapLongest { get; private set; }
+    public const float OverlapFails = 15f;
+
     /// <summary>Green stands logged so far (#1134).</summary>
     private int GreenStandsLogged;
 
@@ -2031,6 +2051,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         public bool RoomHeld;
         /// <summary>Waiting before a one-carriageway stretch while one comes the other way (#1134): not stuck, the cars behind queue.</summary>
         public bool NarrowHeld;
+        /// <summary>How long it has stood body on body with another standing car (s, #1134).</summary>
+        public float Overlap;
         /// <summary>How long it has stood at its line on green, and whether that was logged (#1134, the J1 diagnosis).</summary>
         public float GreenStand;
         public bool GreenStandLogged;

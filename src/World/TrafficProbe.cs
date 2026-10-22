@@ -159,6 +159,9 @@ public partial class TrafficProbe : Node
         // the modes (#1060): what --mover asked for moved, and each mode's own report (it may fail the run)
         string? modeFailure = ModesReport();
         if (WorldEndpoints) modeFailure ??= WorldReport();
+        // (#1134) two cars standing body on body for good
+        GD.Print($"[trafficcheck] cars standing body on body: longest {_traffic.OverlapLongest:F1} s (fails over {Traffic.OverlapFails:F0} s)");
+        if (_traffic.OverlapLongest > Traffic.OverlapFails) modeFailure ??= $"two cars stood body on body for {_traffic.OverlapLongest:F0} s";
         bool ok = _maxCars > 0 && _maxSpeed > 2f && _wrongWay == 0 && _traffic.RedRuns == 0 && modeFailure is null;
         GD.Print(ok ? $"[trafficcheck] RESULT: ok (peak {_maxCars} cars, {_maxTrains} trains, none against a one-way, up to {_givingWay} giving way, "
                         + $"{_signalApproaches} signalised approaches, up to {_atRed} at red, {_traffic.RedStops} stops at red, {_traffic.LinesCrossed} stop lines crossed on green, no red run{ModesSummary()})"
