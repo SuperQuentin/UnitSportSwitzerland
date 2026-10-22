@@ -38,7 +38,7 @@ friction circle, the wheelie and stoppie limits, and a spec catalogue to copy.
 
 ## Phases
 
-Status: 1 done (PR #1129), 2 done (PR #1130), 3 done (PR #1133), 4 done (PR #1143), 5 done (PR #1144), each stacked on the one before.
+Status: 1 done (PR #1129), 2 done (PR #1130), 3 done (PR #1133), 4 done (PR #1143), 5 done (PR #1144), 6 in progress, each stacked on the one before.
 2 differs from the plan: the position is chosen automatically, so there is no new key yet, and the
 figure keeps the hoods pose. 3 differs too: the shifting is automatic only. Manual shift buttons
 need their keyboard, pad and VR ways decided first. 4 is Sim only (Game keeps its arcade brakes),

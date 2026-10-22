@@ -86,4 +86,18 @@
   further ahead fixed it.
   - `--drivecheck --mount 1 --traffic 0 --seconds 240 --chunks fixture:hairpin --profile sim`:
     131.8 s (old steering 134.1), no impacts, mean 0.48 m off the line, 58 m off tarmac (old 31).
-- Next phase (rider physiology): `docs/plans/road-bike-realism.md`.
+- **The rider's body, Sim only** (`RiderPhysiology`, `RiderPhysiologyTests`; phase 6).
+  - Critical power: `GameSettings.RiderCriticalPower`, Settings → Gameplay → Threshold power,
+    `--rider-cp`, default 240 W. The reserve W′ is 20 kJ.
+  - Above CP the watts over drain W′. Below it, Skiba's differential model refills it,
+    `dW′/dt = (W′ − W′bal)·(CP − P)/W′`.
+  - Keys and pad watts are held to `Available`: all of it while the reserve lasts, fading to CP over
+    its last 8%. A 520 W sprint on a 240 W threshold lasts ~71 s.
+  - Measured watts (`PowerMeasured`) only drain the reserve shown.
+  - Heart rate eases to `TargetHeartRate`: rest + (max − rest) × (0.15 + 0.75·P/CP + 0.1 × the
+    reserve spent). 60/185 by default, rising with τ 25 s, falling with τ 45 s. A strap
+    (`MeasuredHeartRate`) overrides it.
+  - HUD: `… rpm    148 bpm`, and the Game boost bar shows W′ in Sim. `--ride bike,N` prints both.
+- **Standing** (`RidingPosition.Standing`, phase 6): pedalling up more than 8% under 70 rpm. CdA
+  ×1.15, and the keys' cadence curve floors at 0.95, since the rider's weight turns a cadence seated
+  legs cannot. The figure does not change pose.
