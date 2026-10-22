@@ -813,10 +813,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (World.AirportCheck.Requested) AddChild(new World.AirportCheck(() => LocalPlayer));
 
         // The inventory is this machine's, not the player node's: it outlives a respawn or a
-        // reconnect, and the player it acts on is resolved per frame like the picker's. A check gets
-        // a scratch one, the starter kit never saved: the player's user://inventory.json is neither
-        // changed by it nor fills up and fails it with "No room" (#932). Every verification tool
-        // (placedByTool) does; the probes started further down are listed.
+        // reconnect, and the player it acts on is resolved per frame like the picker's. One save per
+        // server (Launch.Networked), the shared offline one otherwise (#1100). A check gets a
+        // scratch one, the starter kit never saved: the player's own save is neither changed by it
+        // nor fills up and fails it with "No room" (#932). Every verification tool (placedByTool)
+        // does; the probes started further down are listed.
         var inventory = placedByTool || Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
             || Net.TransferProbe.Role != null || Items.SwissNetProbe.Role != null || Player.AuraNetProbe.Role != null || Items.BeatFieldProbe.Requested || Player.TractorCheck.Role != null
             || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Interiors.LiftSyncProbe.Role != null || Interiors.HallCarProbe.Role != null || Loot.BankProbe.Role != null
@@ -827,7 +828,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || World.ContainerNetProbe.Role != null
             || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null
             || Player.TractorNetProbe.Role != null || Farming.FarmProbe.Requested || Farming.HandFarmCheck.Requested || Farming.FarmNetProbe.Role != null || Farming.SellNetProbe.Role != null || Farming.CoopNetProbe.Role != null
-            ? Items.Inventory.Scratch() : Items.Inventory.Load();
+            ? Items.Inventory.Scratch() : Items.Inventory.Load(Launch.Networked ? Launch.Endpoint : null);
         if (Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null) Crafting.CampfireProbe.Stock(inventory);
         if (Items.PlantProbe.Role != null) inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.SwissFlag, 1));   // on the hotbar for --hold
         if (Items.ShotgunProbe.Role != null) { inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.Shotgun, 1)); inventory.Add(Items.ItemId.Shells, 25); }   // on the hotbar for --hold
@@ -900,6 +901,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Crafting.CampfireNetProbe.Role != null) AddChild(new Crafting.CampfireNetProbe(items));
         if (Player.SwimNetProbe.Role != null) AddChild(new Player.SwimNetProbe(items));
         if (Player.EmoteNetProbe.Role != null) AddChild(new Player.EmoteNetProbe(items));
+        if (Player.NameTagNetProbe.Role != null) AddChild(new Player.NameTagNetProbe(items));
         if (Occasions.SightingNetProbe.Role != null) AddChild(new Occasions.SightingNetProbe(items));
         if (Concert.ConcertNetProbe.Role != null) AddChild(new Concert.ConcertNetProbe(items));
         if (Phone.PhoneNetProbe.Role != null) AddChild(new Phone.PhoneNetProbe(items));

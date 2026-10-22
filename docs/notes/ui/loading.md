@@ -16,5 +16,7 @@
 - **Frames to draw**: `ClientWorld._Ready` yields a frame (`Breathe`) at a few points when launched
   from the title, with an `IsInsideTree()` check after each await (Cancel may free the world
   mid-build). Command-line runs do not yield, so the probes see the old build order.
+- **In VR** the screen is on the headset's panel, so `LoadingScreen.Active` also puts the headset in
+  its loading space until the world is ready (`xr/rig`, #1101).
 - **Failure** (connection refused, timeout, kicked during the load) sets `Stage = Failed`; the shell
   leaves the world and shows the reason on the Multiplayer screen's banner (a dialog for solo).

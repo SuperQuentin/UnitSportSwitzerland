@@ -25,7 +25,7 @@ public partial class XrUi : Node3D
     private const float FollowAngle = 0.6f;
 
     /// <summary>Screen-effect layers that mean nothing on a floating panel (speed lines, flashes).</summary>
-    private static readonly HashSet<string> Hidden = new() { "FeelScreen", "LensLayer", XrMonitor.LayerName };
+    private static readonly HashSet<string> Hidden = new() { "FeelScreen", "LensLayer" };
 
     private readonly XRCamera3D _head;
     private readonly XRController3D _hand;
@@ -148,7 +148,8 @@ public partial class XrUi : Node3D
     /// </summary>
     private void Redirect(Node node)
     {
-        if (node is not CanvasLayer layer || Hidden.Contains(layer.Name) || layer.CustomViewport != null) return;
+        // the monitor by its type: it is added under another name and renamed in its _Ready, after this ran (#1036)
+        if (node is not CanvasLayer layer || layer is XrMonitor || Hidden.Contains(layer.Name) || layer.CustomViewport != null) return;
         var view = _view.GetViewportRid();
         var canvas = layer.GetCanvas();
         RenderingServer.ViewportAttachCanvas(view, canvas);

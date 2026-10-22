@@ -82,6 +82,17 @@ public partial class ChatManager : Node
 
     private string[] _playerNames = [];
 
+    /// <summary>
+    /// Client: every player's display name by peer id, as last sent by the server, for the tags over
+    /// their heads (<see cref="Player.NameTag"/>, #1136). Empty offline.
+    /// </summary>
+    public IReadOnlyDictionary<long, string> TagNames => _tagNames;
+
+    private readonly Dictionary<long, string> _tagNames = new();
+
+    /// <summary>Client: <see cref="TagNames"/> changed.</summary>
+    public event Action? TagNamesReceived;
+
     /// <summary>Raised on the client for every line to display.</summary>
     public event Action<string, ChatKind>? LineReceived;
 
@@ -249,6 +260,23 @@ public partial class ChatManager : Node
         bool changed = !names.SequenceEqual(_playerNames);
         _playerNames = names;
         if (changed) NamesReceived?.Invoke();
+    }
+
+    /// <summary>Server: sends everyone the name of every player in the world, for their name tags (#1136).</summary>
+    private void SendTagNames()
+    {
+        if (_registry is null) return;
+        var players = _registry.InWorld.ToArray();
+        Rpc(MethodName.ReceiveTagNames, players.Select(p => p.PeerId).ToArray(), players.Select(p => p.Name).ToArray());
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void ReceiveTagNames(long[] peers, string[] names)
+    {
+        _tagNames.Clear();
+        for (int i = 0; i < peers.Length && i < names.Length; i++) _tagNames[peers[i]] = names[i];
+        TagNamesReceived?.Invoke();
     }
 
     /// <summary>Client: the server granted items (<c>/spawn</c>, an admin's choice); they go in this machine's inventory.</summary>
@@ -581,6 +609,7 @@ public partial class ChatManager : Node
 
         string assigned = _registry.Rename(sender, name);
         NameAssigned?.Invoke(sender);
+        SendTagNames();
         Broadcast($"{assigned} joined", ChatKind.System);
         ReplyTo(sender, "Type /help for commands.", ChatKind.Private);
     }
@@ -699,6 +728,7 @@ public partial class ChatManager : Node
         if (_registry?.Find(peerId) is not { } player) return;
         _registry.Remove(peerId);
         Broadcast($"{player.Name} left", ChatKind.System);
+        SendTagNames();
     }
 
     // ---- commands ---------------------------------------------------------------------
@@ -988,6 +1018,7 @@ public partial class ChatManager : Node
         string assigned = _registry.Rename(sender, requested);
         if (assigned == previous) return;
         NameAssigned?.Invoke(sender);
+        SendTagNames();
 
         Broadcast($"{previous} is now {assigned}", ChatKind.System);
     }

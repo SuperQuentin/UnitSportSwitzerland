@@ -7,11 +7,13 @@ namespace UnitSport.Player;
 /// A road bike, ridden on the real power equation rather than an arcade speed cap.
 ///
 /// <para>
-/// <c>m·a = P/v − ½ρ·CdA·v² − Crr·m·g·cosθ − m·g·sinθ</c>. Every term is a measured cycling
-/// quantity, so the numbers that come out are the numbers a rider would recognise: 180 W holds
-/// 32 km/h on the flat, the same 180 W climbs an 8% ramp at 10 km/h, and freewheeling down that
-/// ramp settles at 62 km/h. None of those were tuned — they fall out of the equation, which is
-/// the reason for using it.
+/// <c>(m + I/r²)·a = η·P/v − ½ρ·CdA·(1 − draft)·v² − Crr·m·g·cosθ − m·g·sinθ</c> (<see cref="BikePhysics"/>,
+/// #1124). Every term is a measured cycling quantity, so the numbers that come out are the numbers a
+/// rider would recognise: for the 72.5 kg reference rider at 500 m, 180 W holds 33 km/h on the flat,
+/// the same 180 W climbs an 8% ramp at 9 km/h, and a tucked descent of that ramp settles at 75 km/h.
+/// None of those were tuned — they fall out of the equation, which is the reason for using it. The
+/// air thins with altitude, the tyres roll harder off tarmac, the drag area is the rider's own size
+/// and position, and a wheel ahead shelters.
 /// </para>
 ///
 /// <para>
@@ -28,13 +30,70 @@ public sealed class Bicycle : Rideable
     public override string Blurb => "{throttle} pedal, {tuck_boost} sprint, {brake} brake, {move_left}/{move_right} steer — climbs cost you";
 
     // ---- the rider and the machine ----
-    /// <summary>Rider, bike, bottles and kit.</summary>
-    private const float Mass = 82f;
+    /// <summary>The bike under the rider: the owner's Scott Addict RC 15 (#1124).</summary>
+    public BicycleSpec Spec { get; } = BicycleCatalog.Default;
 
-    /// <summary>Drag area on the hoods, m². A tucked pro is nearer 0.24; this is a fit amateur.</summary>
-    private const float DragArea = 0.32f;
-    private const float AirDensity = 1.20f;      // ~15 °C at 500 m; Swiss valley floor
-    private const float RollingResistance = 0.005f;   // good tyres on tarmac
+    /// <summary>Bottles, tools and a saddle bag, kg.</summary>
+    private const float Kit = 1.5f;
+
+    /// <summary>The Game profile's rider, kg: 82 with bike and bottles, whatever the settings say.</summary>
+    private const float ArcadeRiderMass = 72.5f;
+
+    /// <summary>
+    /// The rider in kit, kg. Sim takes the rider's own weight from the settings, the number a home
+    /// trainer's watts have to lift up a Swiss pass; Game keeps the reference rider.
+    /// </summary>
+    private static float RiderMass => Arcade ? ArcadeRiderMass : Core.GameSettings.Current.RiderMass;
+
+    /// <summary>Where the rider's hands are now: chosen from what they are doing (#1124), no key of its own.</summary>
+    public RidingPosition Position { get; private set; }
+
+    /// <summary>The drag area's position factor, eased: getting down on the drops takes a moment.</summary>
+    private float _positionFactor = 1f;
+    private const float PositionChangeTime = 0.5f;
+
+    /// <summary>Freewheeling downhill above this, m/s (40 km/h), the rider tucks.</summary>
+    private const float TuckSpeed = 11f;
+
+    /// <summary>
+    /// Rolling resistance on what is under the tyres (#1124): a 28 mm road tyre at road pressure.
+    /// Tarmac 0.0045 (roller drum measurements of good tyres), a gravel lane 0.012, a forest track
+    /// 0.015, grass 0.03 and snow 0.05: a road bike crosses a meadow, it does not ride it.
+    /// </summary>
+    public static float RollingResistance(Audio.Surface surface) => surface switch
+    {
+        Audio.Surface.Asphalt or Audio.Surface.Indoor => 0.0045f,
+        Audio.Surface.Wood => 0.006f,
+        Audio.Surface.Rock => 0.010f,
+        Audio.Surface.Gravel => 0.012f,
+        Audio.Surface.Forest => 0.015f,
+        Audio.Surface.Ice => 0.008f,
+        Audio.Surface.Grass => 0.030f,
+        Audio.Surface.Snow => 0.050f,
+        Audio.Surface.Water => 0.150f,
+        _ => 0.0045f,
+    };
+
+    /// <summary>The chain, the rings and the cassette, shifted for the rider as Di2's synchro shift does (#1124).</summary>
+    public BikeDrivetrain Gears { get; }
+
+    /// <summary>
+    /// The watts are a power meter's or a trainer's, not the keys': the cadence curve does not touch
+    /// them, because a real rider at 50 rpm making 250 W has already paid for the low cadence.
+    /// </summary>
+    public bool PowerMeasured { get; set; }
+
+    /// <summary>A cadence sensor's reading, rpm: the legs turn at it instead of the gear's (#1124).</summary>
+    public float? MeasuredCadence { get; set; }
+
+    /// <summary>Every point of the bike and the rider's fit to it: the centre of mass for braking.</summary>
+    public BikeFrame Frame { get; }
+
+    public Bicycle()
+    {
+        Gears = new BikeDrivetrain(Spec);
+        Frame = Spec == BicycleCatalog.Default ? BikeFrame.Default : new BikeFrame(Spec);
+    }
 
     /// <summary>Steady effort, W. Roughly a fit rider's endurance power.</summary>
     public float RiderWatts { get; set; } = 180f;
@@ -49,7 +108,11 @@ public sealed class Bicycle : Rideable
     /// </summary>
     private const float MaxThrust = 260f;
 
-    private const float BrakeDecel = 5.2f;       // dry tarmac, both brakes, short of a stoppie
+    /// <summary>The rear tyre is sliding under hard braking (#1124): the skid the feel layer shows.</summary>
+    public bool RearLocked { get; private set; }
+
+    /// <summary>Last step's acceleration along the road, m/s²: what the friction circle has left for leaning.</summary>
+    private float _accel;
 
     // ---- steering ----
     /// <summary>
@@ -57,16 +120,6 @@ public sealed class Bicycle : Rideable
     /// a nervous commuter's, and at 50 km/h it made a hairpin need the whole road.
     /// </summary>
     private const float MaxLean = 0.75f;
-
-    /// <summary>
-    /// Cap on yaw rate. The physical limit <c>ω = g·tanφ/v</c> goes to infinity as the bike
-    /// slows, which is true of a real bike — you can turn it on the spot at walking pace — but
-    /// left uncapped a mouse-flick at 1 m/s spins the rider like a top.
-    /// </summary>
-    private const float MaxYawRate = 1.8f;
-
-    /// <summary>How quickly the rider rolls into a lean, 1/s — ~0.2 s to most of the way.</summary>
-    private const float BankResponse = 5.5f;
 
     // ---- the Game profile (Rideable.Arcade): a much fitter, braver rider on the same physics ----
     /// <summary>Cruise and sprint, W. 350 W holds ~40 km/h on the flat, 900 W sprints past 55.</summary>
@@ -90,6 +143,9 @@ public sealed class Bicycle : Rideable
 
     private float _cadence;
 
+    /// <summary>The cranks' rpm now: 0 freewheeling (the HUD, and the legs through <see cref="Animate"/>).</summary>
+    public float Cadence => _cadence;
+
     public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default) => Cyclist.Create(riderIndex, outfit);
 
     public override bool IsVehicle => true;
@@ -105,21 +161,38 @@ public sealed class Bicycle : Rideable
     public override void Step(in RideInput input, in RideGround ground, float dt, ref RideMotion motion)
     {
         float v = motion.Speed;
+        float riderMass = RiderMass;
+        float mass = riderMass + Spec.Mass + Kit;
+        // the wheels' spin is mass to speed up and slow down, but not weight on the tyres or the hill
+        float inertia = mass + Spec.WheelEffectiveMass;
 
         // --- steering ---------------------------------------------------------------
         // A bicycle changes direction by leaning, so the turn radius grows with speed: the
         // same handlebar input that flicks you round a bollard at 5 km/h is a long sweeping
         // bend at 50. Modelling it the other way — a fixed turn rate — is what makes vehicles
         // in games feel like they are on rails.
+        // Sim's lean is what the tyres hold on this ground after braking or pedalling took its share
+        // of the friction circle (#1124): gravel gives ~33°, a hard stop stands the bike up.
         bool arcade = Arcade;
-        SteerByLean(ref motion, input.Steer, v,
-            arcade ? ArcadeMaxLean : MaxLean, arcade ? ArcadeMaxYawRate : MaxYawRate,
-            arcade ? ArcadeBankResponse : BankResponse, WalkingPace, dt);
+        float grip = Motorbike.SurfaceGrip(ground.Surface, BikePhysics.TyreGrip, 0f);
+        float maxLean = arcade ? ArcadeMaxLean : Mathf.Min(MaxLean, BikePhysics.GripLean(grip, _accel));
+        if (arcade)
+            SteerByLean(ref motion, input.Steer, v, maxLean, ArcadeMaxYawRate, ArcadeBankResponse, WalkingPace, dt);
+        else
+            Balance(ref motion, input.Steer, v, maxLean, riderMass, dt);
+
+        // --- the rider's position: sprinting on the drops, a fast descent tucked, else the hoods
+        Position = input.Effort && input.Throttle > 0.05f ? RidingPosition.Drops
+            : ground.OnFloor && input.Throttle < 0.05f && v > TuckSpeed && ground.Grade < -0.02f ? RidingPosition.Tuck
+            : RidingPosition.Hoods;
+        _positionFactor += (BikePhysics.PositionFactor(Position) - _positionFactor) * (1f - Mathf.Exp(-dt / PositionChangeTime));
+        float dragArea = BikePhysics.DragArea(riderMass, RidingPosition.Hoods) * _positionFactor;
+        float air = BikePhysics.AirDensity(ground.Altitude);
 
         if (!ground.OnFloor)
         {
             // airborne off a lip: no thrust, no rolling resistance, just air
-            v -= 0.5f * AirDensity * DragArea * v * v / Mass * dt;
+            v -= 0.5f * air * dragArea * v * v / inertia * dt;
             motion.Speed = Mathf.Max(0f, v);
             return;
         }
@@ -129,35 +202,97 @@ public sealed class Bicycle : Rideable
         float watts = input.Throttle * (arcade
             ? (input.Effort ? ArcadeSprintWatts : ArcadeWatts)
             : (input.Effort ? SprintWatts : RiderWatts));
-        float thrust = watts > 0 ? Mathf.Min(watts / Mathf.Max(v, 0.5f), arcade ? ArcadeMaxThrust : MaxThrust) : 0f;
+        // the gear the chain is in sets the cadence, and the keys' watts fall off away from 90 rpm
+        bool pedalling = watts > 0f;
+        Gears.AutoShift(v, pedalling, dt);
+        float rpm = Gears.Cadence(v);
+        if (!PowerMeasured) watts *= BikeDrivetrain.PowerAtCadence(rpm);
+        float thrust = pedalling
+            ? Mathf.Min(BikePhysics.DrivetrainEfficiency * watts / Mathf.Max(v, 0.5f), arcade ? ArcadeMaxThrust : MaxThrust)
+            : 0f;
 
-        float drag = 0.5f * AirDensity * DragArea * v * v;
-        float rolling = RollingResistance * Mass * Gravity;
+        float resisting = BikePhysics.ResistingForce(v, mass, dragArea, ground.Draft, RollingResistance(ground.Surface), air, ground.Grade);
+        v += (thrust - resisting) / inertia * dt;
 
-        float accel = (thrust - drag - rolling) / Mass + SlopeAccel(ground.Grade);
-        v += accel * dt;
-
-        if (input.Brake > 0.01f) v -= input.Brake * (arcade ? ArcadeBrakeDecel : BrakeDecel) * dt;
+        // Sim: front and rear brakes, the load moving forward, the rear locking, the over-the-bars
+        // point (#1124). Game keeps its arcade stopping power.
+        RearLocked = false;
+        float braking = 0f;
+        if (input.Brake > 0.01f && v > 0f)
+        {
+            if (arcade) braking = input.Brake * ArcadeBrakeDecel;
+            else
+            {
+                var (toFront, toRear, height) = Frame.Balance(riderMass);
+                var brake = BikePhysics.Brake(input.Brake, grip, BikePhysics.LeverStrength(Spec.Brakes), toFront, toRear, height);
+                braking = brake.Decel;
+                RearLocked = brake.RearLocked && v > 1f;
+            }
+            v -= braking * dt;
+        }
+        // what the tyres are asked for along the road: the pedals' push, or the brakes
+        _accel = thrust / inertia - braking;
 
         // A bicycle does not roll backwards down a hill; it stops and you put a foot down.
         // Letting the speed go negative would drive the whole model backwards through itself.
         motion.Speed = Mathf.Max(0f, v);
 
-        // Cadence for the crank animation, from a notional 6.2 m development — about a 50×17,
-        // the gear you would actually be in at cruising speed. The 112 rpm ceiling stands in
-        // for shifting up rather than modelling a cassette; without it a descent has the rider
-        // spinning at 300 rpm. Off the pedals the cranks stop, because a road bike freewheels.
-        _cadence = watts > 0 ? Mathf.Clamp(motion.Speed * 60f / 6.2f, 40f, 112f) : 0f;
+        // The legs turn with the chain: pedalling, the freewheel is engaged and the cranks go round at
+        // the gear's cadence (or the sensor's); off the pedals they stop, because a road bike freewheels.
+        _cadence = pedalling ? Mathf.Min(MeasuredCadence ?? rpm, 150f) : 0f;
+    }
+
+    // ---- Sim's steering: the Whipple bicycle and its rider (#1124) ----
+    private RiderBalance? _balance;
+    private float _balanceMass = float.NaN;
+
+    /// <summary>Sim: the rider's lean takes ~2ζ/ω to answer, the time a damped spring's response lags its input.</summary>
+    public override float SteerLag => Arcade ? 0f : 2f * RiderBalance.LeanDamping / RiderBalance.LeanFrequency;
+
+    /// <summary>The bars' angle, rad, + to the rider's right: the rider's hands on the Whipple model's steer.</summary>
+    public float SteerAngle { get; private set; }
+
+    /// <summary>
+    /// Sim's steering: the input asks for a lean, the rider steers the bars to get there, and the bike
+    /// leans and turns as the Whipple equations for this frame and this rider say (<see cref="RiderBalance"/>).
+    /// Countersteer, the wobble at walking pace and the steadiness at speed all come out of them.
+    /// </summary>
+    private void Balance(ref RideMotion motion, float steer, float v, float maxLean, float riderMass, float dt)
+    {
+        // the rider's weight is in the matrices: a new one, a new model
+        if (_balance == null || riderMass != _balanceMass)
+        {
+            float was = _balance?.Roll ?? 0f;
+            _balance = new RiderBalance(new WhippleModel(WhippleParameters.For(Frame, riderMass, Kit)));
+            _balance.Reset(was);
+            _balanceMass = riderMass;
+        }
+        // the paper's signs: + right for roll, steer and yaw; Godot's yaw is + left and SteerByLean's
+        // bank takes the yaw's sign, so the game's lean is the paper's roll negated
+        float target = steer * maxLean;
+        float yaw = _balance.Step(v, target, maxLean, dt);
+        // the linearized model turns as tan φ ≈ φ: at 40° it would under-turn by 10%. A steady turn
+        // turns at g·tanφ/v whatever the equations' order, so the yaw is scaled to that
+        float roll = _balance.Roll;
+        if (Mathf.Abs(roll) > 0.01f) yaw *= Mathf.Tan(roll) / roll;
+
+        motion.Bank = -target;
+        motion.Lean = -roll;
+        motion.YawRate = -yaw;
+        motion.Yaw += motion.YawRate * dt;
+        SteerAngle = _balance.Steer;
     }
 
     public override void Animate(Node3D visual, in RideMotion motion, float dt)
     {
-        if (visual is Cyclist cyclist) cyclist.CadenceRpm = _cadence;
+        if (visual is not Cyclist cyclist) return;
+        cyclist.CadenceRpm = _cadence;
+        cyclist.SteerAngle = Arcade ? 0f : SteerAngle;
     }
 
     /// <summary>Cadence, and the crank angle itself so a remote rider's legs are where the owner's are.</summary>
     public override Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight) =>
-        visual is Cyclist c ? new Vector4(c.CadenceRpm, c.CrankAngle, 0, 0) : default;
+        visual is Cyclist c ? new Vector4(c.CadenceRpm, c.CrankAngle, c.SteerAngle, 0) : default;
 
     private float _seenCrank = float.NaN;
 
@@ -165,6 +300,7 @@ public sealed class Bicycle : Rideable
     {
         if (visual is not Cyclist cyclist) return;
         cyclist.CadenceRpm = pose.X;
+        cyclist.SteerAngle = pose.Z;
         // a fresh angle is taken as-is; between updates the cadence turns it
         if (pose.Y != _seenCrank) cyclist.SetCrankAngle(_seenCrank = pose.Y);
     }

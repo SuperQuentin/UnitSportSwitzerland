@@ -26,6 +26,12 @@ public partial class LoadingScreen : CanvasLayer
 
     public bool IsOpen => _root.Visible;
 
+    /// <summary>
+    /// From <see cref="Begin"/> until <see cref="Finish"/> or <see cref="Close"/>: a session is being
+    /// built. The headset shows its loading space meanwhile, not the half-streamed world (#1101).
+    /// </summary>
+    public static bool Active { get; private set; }
+
     public LoadingScreen()
     {
         Name = "LoadingScreen";
@@ -102,6 +108,7 @@ public partial class LoadingScreen : CanvasLayer
         _cancel.Disabled = false;
         NextJoke(instant: true);
         _root.Visible = true;
+        Active = true;
         _root.Modulate = Colors.White;
         _cancel.CallDeferred(Control.MethodName.GrabFocus);
     }
@@ -119,13 +126,18 @@ public partial class LoadingScreen : CanvasLayer
     {
         _target = 1;
         _cancel.Disabled = true;
+        Active = false;
         var tw = CreateTween().SetIgnoreTimeScale(true);
         tw.TweenInterval(0.25f);
         tw.TweenProperty(_root, "modulate:a", 0f, 0.45f);
         tw.TweenCallback(Callable.From(() => _root.Visible = false));
     }
 
-    public void Close() => _root.Visible = false;
+    public void Close()
+    {
+        _root.Visible = false;
+        Active = false;
+    }
 
     public override void _Process(double delta)
     {

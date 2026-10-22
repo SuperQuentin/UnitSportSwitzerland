@@ -30,6 +30,11 @@
     <Compile Include="..\..\src\World\Snow\SnowModel.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\Snow\WeatherCommand.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\SkiDynamics.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- the road bike spec and the fit derived from it (#1124): Godot maths only -->
+    <Compile Include="..\..\src\Player\BicycleCatalog.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Player\BikePhysics.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Player\BikeDrivetrain.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Player\BikeDynamics.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\SnowPose.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\Snow\PisteCourse.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\Ropeways\Ropeway.cs" Link="Game\%(Filename)%(Extension)" />
@@ -156,6 +161,7 @@
     <Compile Include="..\..\src\Player\AirReserve.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\Wading.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\CmdArgs.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\XR\VrRefresh.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\PigeonFlight.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the flying saucer (#861): its hover flight and the tractor beam, Godot maths only -->
     <Compile Include="..\..\src\Player\UfoFlight.cs" Link="Game\%(Filename)%(Extension)" />
