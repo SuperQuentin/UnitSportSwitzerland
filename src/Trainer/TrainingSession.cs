@@ -75,6 +75,10 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
     private const double SpliceAfter = 20;
     /// <summary>A road within this many metres of a course point, going its way, is the course.</summary>
     private const double CourseReach = 3;
+    /// <summary>The width of road the pilot's line may use, metres.</summary>
+    private const float RideWidth = 2.5f;
+    /// <summary>Metres of way laid behind its start (<see cref="BuildRoute"/>).</summary>
+    private const double RunUp = 8;
 
     private Course? _course;
     private RoadNetwork? _net;
@@ -391,10 +395,21 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
     /// <summary>The pilot's route from <see cref="_way"/>, its lengths and profile; the rider is at its start.</summary>
     private void BuildRoute()
     {
+        // a run-up behind the first point: a race's speed profile starts from a standing start there, and a
+        // rider held to 0 m/s on it crept for 18 s before reaching the second point
+        if (_way.Count >= 2)
+        {
+            var (a, b) = (_way[0], _way[1]);
+            double len = Math.Sqrt((b.E - a.E) * (b.E - a.E) + (b.N - a.N) * (b.N - a.N));
+            if (len > 0.1)
+                _way.Insert(0, a with { E = a.E - (b.E - a.E) / len * RunUp, N = a.N - (b.N - a.N) / len * RunUp, Node = -1 });
+        }
         _wayArc = JunctionChoice.Arcs(_way);
         _wayProfile = new CourseProfile(_way.Select((p, i) => (_wayArc[i], p.H)).ToList());
         var world = _way.Select(p => _origin.ToWorld(p.E, p.N, p.H)).ToList();
-        _route = RaceRoute.FromPoints(world, world.Select(_ => 6f).ToList(), Terrain.Format.RoadClass.Road, _origin.Frame);
+        // narrow: the pilot's line keeps within a metre of the road's centre instead of racing across it,
+        // which cut a junction's kerb into the corner's posts
+        _route = RaceRoute.FromPoints(world, world.Select(_ => RideWidth).ToList(), Terrain.Format.RoadClass.Road, _origin.Frame);
         _near = 0;
         _wayEnded = false;
         NextJunction = null;

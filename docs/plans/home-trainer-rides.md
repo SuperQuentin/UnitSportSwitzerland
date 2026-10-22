@@ -11,8 +11,9 @@
 | Trainer link | built | RideLink in `tools/RideLink/`, `TrainerLink`, scan / connect / reconnect, watts → `RiderWatts`, the windows TFM through `tools/RideLink/Game.props` |
 | SIM grade | built | `CourseProfile.GradeAt` (40 m window) × difficulty, ≤ 1 Hz, ≥ 0.2% |
 | HUD | built | watts, rpm, bpm, speed, grades, km, climbing left, time |
-| Junction choice, Rejoin | next | needs the edge sequence from `TrackMatcher` (design 1 below) |
-| ERG button | next | design 3 below |
+| Junction choice, Rejoin, U-turn | built (PR #1142) | not the edge sequence of design 1: junctions are read off the road network's walking graph along whatever the bike rides (`JunctionChoice`) |
+| ERG button | built (PR #1142) | `\`, ±10 W `[` `]`; pad and VR through the Training app |
+| Ride through traffic, arrows on the road | next | a queued car stops the bike; the arrows are HUD text |
 | FTP test hookup | after #903 | `Bicycle.PowerMeasured = TrainerLink.PowerLive` |
 | Group rides | later | phase 4 |
 

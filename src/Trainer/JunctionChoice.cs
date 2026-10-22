@@ -43,6 +43,9 @@ public static class JunctionChoice
     /// <summary>The way's own direction within this many degrees of a road is that road.</summary>
     private const double TakenCone = 40;
 
+    /// <summary>Roads out of a junction closer than this many degrees are one road.</summary>
+    private const double Same = 12;
+
     /// <summary>
     /// The first junction on <paramref name="way"/> after <paramref name="fromArc"/> m (the rider) and before
     /// <paramref name="ahead"/> m more, or null. <paramref name="arc"/> is the way's cumulative length.
@@ -100,11 +103,18 @@ public static class JunctionChoice
         for (int i = 0; i < all.Count; i++)
             if (all[i].Back < BackCone && (came < 0 || all[i].Back < all[came].Back)) came = i;
         if (came >= 0) all.RemoveAt(came);
-        if (all.Count < 2) return null;   // a bend with a stub, not a choice
+        // a road doubling straight back is a U-turn, which the rider has a key for, not a junction's road
+        all.RemoveAll(b => Math.Abs(b.Bearing) > 160);
         int taken = -1;
         for (int i = 0; i < all.Count; i++)
             if (all[i].Out < TakenCone && (taken < 0 || all[i].Out < all[taken].Out)) taken = i;
         var branches = all.Select((b, i) => new Branch(b.First, b.Bearing, i == taken)).OrderBy(b => b.Bearing).ToList();
+        // roads that leave in the same direction are one road to the rider: a kerb's curve leaves its road
+        // tangentially, so its first vertices share the road's nodes, and it only splits off a few metres on
+        for (int i = branches.Count - 1; i > 0; i--)
+            if (branches[i].Bearing - branches[i - 1].Bearing < Same)
+                branches.RemoveAt(branches[i].Taken ? i - 1 : i);
+        if (branches.Count < 2) return null;   // a bend, or one road with a stub: not a choice
         return new Junction(node, at, branches);
     }
 

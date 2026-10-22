@@ -15,6 +15,7 @@ namespace UnitSport.Trainer;
 /// session, connects the rig, starts, and rides it to the end. The checks: the course snaps, the
 /// bike rides on the rig's watts, stays on the road without anyone steering, and the trainer is
 /// sent the road's grade halved by the 50% difficulty. Read the <c>[trainingcheck]</c> lines.
+/// <c>--trainingcheck junctions</c> on <c>fixture:junction</c>: the turns, the way back and ERG (<see cref="RunJunctions"/>).
 /// </summary>
 public partial class TrainingProbe : Node
 {
@@ -78,6 +79,12 @@ public partial class TrainingProbe : Node
         if (me == null || session == null || link == null || _chunks.Source is not { } source)
         {
             Finish($"missing: player {me != null}, session {session != null}, link {link != null}, terrain {_chunks.Source != null}");
+            return;
+        }
+
+        if (CmdArgs.Value("--trainingcheck", notFlag: true) == "junctions")
+        {
+            await RunJunctions(me, session, link, source);
             return;
         }
 
@@ -154,6 +161,106 @@ public partial class TrainingProbe : Node
         // 7% down at 50% difficulty: about -3.5%, as the trainer itself decoded it from the wire
         Check(minSent < -0.02 && minSent > -0.05, $"the descent sent as SIM at half: steepest {minSent * 100:0.0}%");
         Check(trainer != null && Math.Abs(minFelt - minSent) < 0.002, $"the trainer decoded the same off the wire: steepest {minFelt * 100:0.0}%");
+        Finish();
+    }
+
+    /// <summary>
+    /// <c>--trainingcheck junctions --trainer-sim --world fixture --chunks fixture:junction</c>: a course east
+    /// along the fixture's main road past its T junction. At the T the rider takes the road left (the steering's
+    /// intent, <see cref="TrainingSession.Choose"/>), turns round on it, asks for the way back
+    /// (<see cref="TrainingSession.Rejoin"/>), and finishes on the course. On the way, ERG on, +10 W and off,
+    /// read back from the rig's trainer.
+    /// </summary>
+    private async Task RunJunctions(FootPlayer me, TrainingSession session, TrainerLink link, IChunkSource source)
+    {
+        // the fixture's main road: the Major class, east-west; the T is 700 m along it
+        var at = _origin.ToGlobal(me.GlobalPosition);
+        var net = await Gpx.RoadNetwork.LoadAsync(source, at.E - 2500, at.N - 2500, at.E + 2500, at.N + 2500, pad: 0);
+        var main = net.Edges.Where(e => e.Class == RoadClass.Major).ToList();
+        if (main.Count == 0) { Finish("no main road on the junction fixture"); return; }
+        double e0 = main.Min(e => e.E.Min()), n0 = main[0].N[0];
+        const double From = 560, To = 1150, Tee = 700;
+        string path = ProjectSettings.GlobalizePath("res://test_output/training/junctions.gpx");
+        System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
+        var gpx = new StringBuilder("<?xml version=\"1.0\"?>\n<gpx version=\"1.1\" creator=\"trainingcheck\"><trk><name>Fixture junction</name><type>cycling</type><trkseg>\n");
+        for (double x = From; x <= To; x += 8)
+        {
+            var (lat, lon) = SwissProjection.ToWgs84(e0 + x, n0);
+            gpx.Append(CultureInfo.InvariantCulture, $"<trkpt lat=\"{lat:0.0000000}\" lon=\"{lon:0.0000000}\"><ele>{main[0].Height[0]:0.0}</ele></trkpt>\n");
+        }
+        gpx.Append("</trkseg></trk></gpx>\n");
+        System.IO.File.WriteAllText(path, gpx.ToString());
+
+        link.Scan(2);
+        await Wait(3);
+        foreach (var d in link.Found.ToList()) link.Connect(d);
+        for (int i = 0; i < 100 && !(link.PowerLive && link.HasTrainer); i++) await Wait(0.1);
+        Check(link.PowerLive && link.HasTrainer, $"the rig connected ({link.Watts} W)");
+        session.Load(path);
+        for (int i = 0; i < 300 && session.State == TrainingSession.Phase.Loading; i++) await Wait(0.1);
+        Check(session.State == TrainingSession.Phase.Ready, $"the course loaded: {session.Status}");
+        session.Start();
+        for (int i = 0; i < 300 && session.State != TrainingSession.Phase.Riding; i++) await Wait(0.1);
+        Check(session.State == TrainingSession.Phase.Riding, $"riding ({session.State})");
+
+        double X() => _origin.ToGlobal(me.GlobalPosition).E - e0;
+        double Y() => _origin.ToGlobal(me.GlobalPosition).N - n0;
+
+        // the T in sight: its roads, straight on taken
+        for (int i = 0; i < 300 && session.NextJunction == null; i++) await Wait(0.1);
+        var j = session.NextJunction;
+        Check(j != null && j.Taken >= 0 && JunctionChoice.Pick(j, -1) >= 0,
+            $"a junction ahead at x {X() + session.JunctionIn:0} with a road left: {(j == null ? "none" : string.Join(", ", j.Branches.Select(b => $"{b.Bearing:0}{(b.Taken ? "*" : "")}")))}");
+        Check(session.OnCourse, $"on the course before it");
+        session.Choose(-1);
+        Shot("training_j1_left.png");
+        float worst = 0;
+        for (int i = 0; i < 600 && Y() < 60; i++)
+        {
+            await Wait(0.1);
+            worst = Mathf.Max(worst, session.OffCourse);
+            if (i % 20 == 0) Log(FormattableString.Invariant($"  at x {X():0.0} y {Y():0.0}, {me.RideSpeed * 3.6f:0} km/h, way left {session.WayLeft:0} m, {session.OffCourse:0.0} m off it"));
+        }
+        Check(Y() >= 60 && Math.Abs(X() - Tee) < 15, $"took the road left: at x {X():0}, y {Y():0} (worst {worst:0.0} m off the way)");
+        Check(!session.OnCourse, $"off the course on it");
+        Shot("training_j2_off.png");
+
+        // turn round, then the way back
+        session.UTurn();
+        await Wait(0.5);
+        Check(me.RideSpeed < 1f, $"turned round: stopped ({me.RideSpeed * 3.6f:0} km/h)");
+        session.Rejoin();
+        Check(session.Rejoining, $"on the way back to the course");
+        for (int i = 0; i < 600 && !session.OnCourse; i++)
+        {
+            await Wait(0.1);
+            worst = Mathf.Max(worst, session.OffCourse);
+            if (i % 20 == 0) Log(FormattableString.Invariant($"  back at x {X():0.0} y {Y():0.0}, {me.RideSpeed * 3.6f:0} km/h, way left {session.WayLeft:0} m, {session.OffCourse:0.0} m off it"));
+        }
+        Check(session.OnCourse && X() > Tee, $"back on the course east of the T: x {X():0}, y {Y():0}, at {session.Along:0} m of it");
+
+        // ERG on the way to the finish: on at the step above the rider's power, +10 W, off back to SIM
+        var trainer = link.SimRig?.Devices.OfType<RideLink.Simulation.SimulatedTrainer>().FirstOrDefault();
+        link.SetErg(true);
+        await Wait(1.5);
+        Check(link.Erg && link.ErgTarget is >= 230 and <= 250 && trainer?.Mode == RideLink.Capabilities.ControlMode.Erg && trainer.TargetWatts == link.ErgTarget,
+            $"ERG on at {link.ErgTarget} W; the trainer holds {trainer?.TargetWatts} W ({trainer?.Mode})");
+        int was = link.ErgTarget;
+        link.StepErg(1);
+        await Wait(1.5);
+        Check(link.ErgTarget == was + 10 && trainer?.TargetWatts == was + 10, $"+10 W: {link.ErgTarget} W, the trainer {trainer?.TargetWatts} W");
+        link.SetErg(false);
+        await Wait(2);
+        Check(!link.Erg && trainer?.Mode == RideLink.Capabilities.ControlMode.Simulation && link.GradeSent != null,
+            $"ERG off: the trainer back in {trainer?.Mode}, grade {link.GradeSent * 100:0.0}% sent");
+
+        for (int i = 0; i < 900 && session.State == TrainingSession.Phase.Riding; i++)
+        {
+            await Wait(0.1);
+            worst = Mathf.Max(worst, session.OffCourse);
+        }
+        Check(session.State == TrainingSession.Phase.Finished, $"finished: {session.Status}");
+        Check(worst < 4f, $"held on the way throughout: worst {worst:0.0} m off it");
         Finish();
     }
 }
