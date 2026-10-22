@@ -30,7 +30,16 @@ public partial class XrUi : Node3D
     private readonly XRCamera3D _head;
     private readonly XRController3D _hand;
     private SubViewport _view = null!;
+    /// <summary>
+    /// Where the panel is (and, without a composition layer, the panel itself). With a headset the
+    /// picture goes on <see cref="_layer"/> instead: the compositor draws it at its own resolution,
+    /// so text stays sharp; drawn into the 3D frame it was resampled at the eyes' resolution and
+    /// unreadable on a Quest (#1112).
+    /// </summary>
     private MeshInstance3D _panel = null!;
+    private OpenXRCompositionLayerQuad? _layer;
+    /// <summary>The reticle drawn into the panel's picture when it is a layer (a 3D one would be under it).</summary>
+    private Control? _cursor;
     private MeshInstance3D _ray = null!;
     private MeshInstance3D _dot = null!;
     private StandardMaterial3D _panelMat = null!;
@@ -127,11 +136,53 @@ public partial class XrUi : Node3D
         };
         AddChild(_dot);
 
+        // the panel as a composition layer of its own, child of the tracking origin as OpenXR wants;
+        // in front of the world like the NoDepthTest quad. Not with --xrsim: no compositor there
+        if (!XrSession.Simulated && _head.GetParent() is XROrigin3D origin)
+        {
+            _layer = new OpenXRCompositionLayerQuad
+            {
+                Name = "UiLayer",
+                LayerViewport = _view,
+                QuadSize = ((QuadMesh)_panel.Mesh).Size,
+                SortOrder = 1,
+                AlphaBlend = true,
+            };
+            origin.AddChild(_layer);
+            if (_layer.IsNativelySupported())
+            {
+                _panel.Visible = false;
+                var cursorLayer = new CanvasLayer { Name = "XrCursor", Layer = 128, CustomViewport = _view };
+                _cursor = new Control { Name = "Reticle", MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
+                _cursor.Draw += DrawCursor;
+                cursorLayer.AddChild(_cursor);
+                AddChild(cursorLayer);
+            }
+            else
+            {
+                _layer.QueueFree();
+                _layer = null;
+            }
+        }
+
         foreach (var node in AllNodes(root)) Redirect(node);
         GetTree().NodeAdded += Redirect;
     }
 
-    public override void _ExitTree() => GetTree().NodeAdded -= Redirect;
+    public override void _ExitTree()
+    {
+        GetTree().NodeAdded -= Redirect;
+        _layer?.QueueFree();
+    }
+
+    /// <summary>The reticle in the panel's own pixels: a ring, filled while the trigger holds.</summary>
+    private void DrawCursor()
+    {
+        float r = _size.X / 160f;
+        var colour = _clickWas ? UiTheme.Amber : UiTheme.AmberDim with { A = 0.85f };
+        if (_clickWas) _cursor!.DrawCircle(Vector2.Zero, r, colour);
+        else _cursor!.DrawArc(Vector2.Zero, r, 0f, Mathf.Tau, 24, colour, r * 0.35f, antialiased: true);
+    }
 
     private static IEnumerable<Node> AllNodes(Node n)
     {
@@ -172,6 +223,7 @@ public partial class XrUi : Node3D
         var centre = eye.Origin + forward * Distance + Vector3.Down * 0.12f;
         // the quad faces +Z: turn it so its front looks back at the eyes
         _panel.GlobalTransform = new Transform3D(new Basis(Vector3.Up, _yaw), centre);
+        if (_layer != null) _layer.GlobalTransform = _panel.GlobalTransform;
 
         UpdatePointer();
     }
@@ -181,6 +233,7 @@ public partial class XrUi : Node3D
         Pointing = false;
         _ray.Visible = false;
         _dot.Visible = false;
+        if (_cursor != null) _cursor.Visible = false;
         if (MouseCapture.Mode == Input.MouseModeEnum.Captured || !Aim(out var window))
         {
             // a click held as the hand left the panel (or the menu closed) still has to come up
@@ -238,9 +291,18 @@ public partial class XrUi : Node3D
             Basis.LookingAt(dir, Vector3.Up) * new Basis(Vector3.Right, -Mathf.Pi / 2f) * Basis.FromScale(new Vector3(1f, length, 1f)),
             from + dir * length * 0.5f);
         // the reticle sits on the panel; pressed, it fills to the full amber, as a pressed button does
-        _dot.Visible = true;
-        _dot.GlobalPosition = hit;
-        _dotMat.AlbedoColor = _clickWas ? UiTheme.Amber : UiTheme.AmberDim with { A = 0.75f };
+        if (_cursor != null)
+        {
+            _cursor.Visible = true;
+            _cursor.Position = uv * _size;
+            _cursor.QueueRedraw();
+        }
+        else
+        {
+            _dot.Visible = true;
+            _dot.GlobalPosition = hit;
+            _dotMat.AlbedoColor = _clickWas ? UiTheme.Amber : UiTheme.AmberDim with { A = 0.75f };
+        }
 
         // a point on the panel is a point on the root canvas; the root's stretch takes it to the window
         window = GetTree().Root.GetFinalTransform() * (uv * _size);
