@@ -83,6 +83,15 @@ public sealed class Bicycle : Rideable
     /// </summary>
     public bool PowerMeasured { get; set; }
 
+    /// <summary>A chest strap's reading, bpm: the body's heart rate is it instead of the model's (#1124).</summary>
+    public float? MeasuredHeartRate { get; set; }
+
+    /// <summary>The rider's threshold, reserve and heart rate (#1124): Sim only.</summary>
+    public RiderPhysiology Body { get; } = new(Core.GameSettings.Current.RiderCriticalPower);
+
+    /// <summary>Up a ramp steeper than this, grinding under this cadence, the rider stands (#1124).</summary>
+    private const float StandingGrade = 0.08f, StandingCadence = 70f;
+
     /// <summary>A cadence sensor's reading, rpm: the legs turn at it instead of the gear's (#1124).</summary>
     public float? MeasuredCadence { get; set; }
 
@@ -181,9 +190,11 @@ public sealed class Bicycle : Rideable
         else
             Balance(ref motion, input.Steer, v, maxLean, riderMass, dt);
 
-        // --- the rider's position: sprinting on the drops, a fast descent tucked, else the hoods
+        // --- the rider's position: sprinting on the drops, a fast descent tucked, out of the saddle
+        // grinding up a ramp, else the hoods
         Position = input.Effort && input.Throttle > 0.05f ? RidingPosition.Drops
             : ground.OnFloor && input.Throttle < 0.05f && v > TuckSpeed && ground.Grade < -0.02f ? RidingPosition.Tuck
+            : ground.OnFloor && input.Throttle > 0.05f && ground.Grade > StandingGrade && Gears.Cadence(v) < StandingCadence ? RidingPosition.Standing
             : RidingPosition.Hoods;
         _positionFactor += (BikePhysics.PositionFactor(Position) - _positionFactor) * (1f - Mathf.Exp(-dt / PositionChangeTime));
         float dragArea = BikePhysics.DragArea(riderMass, RidingPosition.Hoods) * _positionFactor;
@@ -193,6 +204,7 @@ public sealed class Bicycle : Rideable
         {
             // airborne off a lip: no thrust, no rolling resistance, just air
             v -= 0.5f * air * dragArea * v * v / inertia * dt;
+            if (!arcade) Body.Step(0f, dt, MeasuredHeartRate);
             motion.Speed = Mathf.Max(0f, v);
             return;
         }
@@ -206,7 +218,17 @@ public sealed class Bicycle : Rideable
         bool pedalling = watts > 0f;
         Gears.AutoShift(v, pedalling, dt);
         float rpm = Gears.Cadence(v);
-        if (!PowerMeasured) watts *= BikeDrivetrain.PowerAtCadence(rpm);
+        // out of the saddle the rider's weight turns a low cadence that seated legs cannot
+        if (!PowerMeasured) watts *= Position == RidingPosition.Standing ? Mathf.Max(BikeDrivetrain.PowerAtCadence(rpm), 0.95f) : BikeDrivetrain.PowerAtCadence(rpm);
+        // Sim: the rider's body (#1124). Keys and pad are held to what the reserve allows; a power meter's
+        // watts are the rider's real legs, already spent, and only drain the reserve shown
+        if (!arcade)
+        {
+            float cp = Core.GameSettings.Current.RiderCriticalPower;
+            if (cp != Body.CriticalPower) Body.Set(cp, Body.WPrime);
+            if (!PowerMeasured) watts = Body.Available(watts);
+            Body.Step(watts, dt, MeasuredHeartRate);
+        }
         float thrust = pedalling
             ? Mathf.Min(BikePhysics.DrivetrainEfficiency * watts / Mathf.Max(v, 0.5f), arcade ? ArcadeMaxThrust : MaxThrust)
             : 0f;

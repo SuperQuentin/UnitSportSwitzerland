@@ -35,6 +35,7 @@
     <Compile Include="..\..\src\Player\BikePhysics.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\BikeDrivetrain.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\BikeDynamics.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Player\RiderPhysiology.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\SnowPose.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\Snow\PisteCourse.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\Ropeways\Ropeway.cs" Link="Game\%(Filename)%(Extension)" />
