@@ -3,7 +3,7 @@ using Godot;
 namespace UnitSport.Player;
 
 /// <summary>Where the rider's hands are, and so how much air they push (#1124).</summary>
-public enum RidingPosition { Hoods, Drops, Tuck }
+public enum RidingPosition { Hoods, Drops, Tuck, Standing }
 
 /// <summary>
 /// The road bike's longitudinal physics, pure (#1124): the power equation's every term as a cycling
@@ -39,11 +39,15 @@ public static class BikePhysics
     /// </summary>
     public const float FrontalAreaMassExponent = 0.425f;
 
-    /// <summary>Hoods 1, drops 0.88, a descender's tuck 0.75 of the hoods' drag area (wind-tunnel ratios, Blocken 2018).</summary>
+    /// <summary>
+    /// Hoods 1, drops 0.88, a descender's tuck 0.75, out of the saddle 1.15 of the hoods' drag area
+    /// (wind-tunnel ratios, Blocken 2018; standing is taller and wider).
+    /// </summary>
     public static float PositionFactor(RidingPosition position) => position switch
     {
         RidingPosition.Drops => 0.88f,
         RidingPosition.Tuck => 0.75f,
+        RidingPosition.Standing => 1.15f,
         _ => 1f,
     };
 

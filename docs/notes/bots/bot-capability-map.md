@@ -76,6 +76,7 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | UFO beam, ramp / legs, lights (#861) | `Ufo.SetBeam` / `SetRamp` / `SetLegs` / `SetLights`, or the `FlightInput` edges `Beam` / `Hatch` / `Lights` | the beam acts on every peer from the pilot's replicated pose (`TractorBeams`): the server lifts what it owns, so a bot's beam needs nothing more | — | — | gap: no skill uses it |
 | be lifted by a UFO's beam (#861) | `WalkControls`: a bot standing still is lifted, a walking one is let down (`FootPlayer.BeamPhysics`, run on the bot's server body) | the body | a beam in view: the pilot's pose (`Ufo.BeamOn(Anim)`), cone `TractorBeamMath.InCone` | `MoveTo` (walk out) | a sighting's beam: `BotUfo.React` runs out from under it (#863); a player's saucer: gap |
 | a UFO sighting: look up, wave, run from a beam (#863) | `BotIntent.FaceYaw`/`Pitch`, `Wish` + `Run`, `DanceId` (wave) | — (the sightings are the server's) | the plans, `UfoSightings.Nearest` (300 m) | `BotUfo.React` (`WanderBrain`; `BrBrain` roaming, looting, investigating) | ok |
+| pogo at a concert (#1150) | `DanceId` = `PogoQte.PogoDanceId` (the Pogo emote) on the server body | — (`DanceId` replicates from the server for a bot) | `ConcertRig.MusicNear` | — | gap: no skill dances; the QTE and its score are a player's screen only (n/a for a bot) |
 | board a landed sighting saucer and fly it (#863) | — | the parked UFO's `RequestClaim`, like any parked vehicle | the plans | — | gap: bots cannot fly a UFO yet (#861) |
 
 ## Battle Royale
@@ -84,6 +85,8 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 |---|---|---|---|---|---|
 | join the field | — | `BrManager.BoardBots` at GO | — | — | ok (aboard the plane) |
 | the phone (#889): calls, travel, activities from its apps | — | none of its own: its apps send the same invites, teleport requests and activity commands | — | — | n/a |
+| home-trainer training (#901): the phone's Training app | `RideControls` (the lean `AutoPilot`) | none: client-side, the local rider's GPX and trainer | — | — | n/a (a bot has no trainer; it already rides routes through the same pilot) |
+| training: a road at a junction, Rejoin, U-turn, ERG (#901) | `TrainingSession.Choose` / `Rejoin` / `UTurn`, `TrainerLink.SetErg` / `StepErg` (methods, never raw keys) | none: client-side | — | — | n/a until group rides (phase 4): the junction logic (`JunctionChoice`) is pure and would serve a server-run rider |
 | invites, parties, teleport requests (#840) | — | none: never offered (`InviteService` skips negative ids); a bot joins through `BoardBots` | — | — | n/a |
 | board the plane, jump | — | `BrManager.BoardBots`, `BotJump`, `BotPlane` (push-out) | its landing spot and jump time, chosen at GO | `BrBrain.Drop` | ok |
 | the zone's damage, and running from it | — | `BrManager.BotZone` | the zone (state, as a player's HUD) | `BrBrain` zone (`BrTactics.ZoneRunNeeded`) | ok |

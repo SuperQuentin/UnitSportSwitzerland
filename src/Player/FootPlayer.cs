@@ -1136,6 +1136,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     public Func<(bool Jump, bool Crouch)>? FootActions { get; set; }
 
+    /// <summary>The jump key belongs to something else this frame (the concert pogo, #1150): no jump. Owner only.</summary>
+    public bool JumpTaken { get; set; }
+
     /// <summary>
     /// A bot (#837): a body the dedicated server runs itself (authority 1), an <see cref="Npc"/> with
     /// no race driver. Set from the spawn data on every peer, before the node enters the tree: clients
@@ -3430,6 +3433,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // into the sky by the solver
         if (kind != RideKind.OnFoot) LeaveDecksNow();
         LeaveWater();
+        DropPhoneBackdrop();
         _ride = CarSetups.Ride(kind, CarSetups.Clamp(setup), tuning);
         // a truck or bus from the picker comes with the load chosen there
         if (_ride is Truck picked && !Mathf.IsEqualApprox(picked.Load, NextLoad)) _ride = new Truck(picked.Spec, 0, NextLoad);
@@ -3881,6 +3885,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _jumpHeld = spaceDown;
         // downed (#475): a crawl, nothing more
         if (Downed) running = crouchHeld = spaceDown = jumpPressed = _sprintLatch = false;
+        // the concert pogo's beat (#1150): the press is the QTE's, the dance does the jumping
+        if (keys && JumpTaken) spaceDown = jumpPressed = false;
 
         bool crouchPressed = crouchHeld && !_crouchHeld;
         _crouchHeld = crouchHeld;

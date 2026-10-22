@@ -975,6 +975,10 @@
 109.5	Rides / Paraglider
 75.6	Rides / Pigeon
 13.7	Rides / Road bike
+7	Rides / Road bike riding position - Hoods
+7	Rides / Road bike riding position - Drops
+7.1	Rides / Road bike riding position - Tuck
+2.8	Rides / Road bike riding position - Standing
 606.9	Rides / Skis
 115.4	Rides / Snowboard
 208.3	Rides / Telehandler

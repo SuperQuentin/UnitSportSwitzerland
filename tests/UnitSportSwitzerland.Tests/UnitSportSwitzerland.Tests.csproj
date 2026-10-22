@@ -36,11 +36,13 @@
     <Compile Include="..\..\src\Player\BikePhysics.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\BikeDrivetrain.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\BikeDynamics.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Player\RiderPhysiology.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\SnowPose.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\Snow\PisteCourse.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\Ropeways\Ropeway.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Concert\Protocols\ShowProtocols.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Concert\Dmx.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Concert\PogoBeat.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Concert\Mvr\RigData.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Concert\Mvr\Gdtf.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Concert\Mvr\Mvr.cs" Link="Game\%(Filename)%(Extension)" />
@@ -93,6 +95,9 @@
     <Compile Include="..\..\src\Crafting\CampfireClock.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\FarmTables.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\FarmRules.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Trainer\CourseProfile.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Trainer\JunctionChoice.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Gpx\WalkGraph.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\FieldCells.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\FieldTile.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\Face\FaceGenome.cs" Link="Game\Face\%(Filename)%(Extension)" />

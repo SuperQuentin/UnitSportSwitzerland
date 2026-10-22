@@ -981,6 +981,8 @@ public partial class PlayerFeel : Node3D
                   .Append("    ").Append((int)(bike.Cadence + 0.5f)).Append(" rpm");
                 // the e-bike's display (#1159): what the motor is adding
                 if (bike.Spec.Assist != null) sb.Append("    +").Append((int)(bike.MotorWatts + 0.5f)).Append(" W");
+                // and the rider's body in Sim: the heart rate (the reserve is the bar under it)
+                if (!Rideable.Arcade) sb.Append("    ").Append((int)(bike.Body.HeartRate + 0.5f)).Append(" bpm");
             }
             else if (_player.Vehicle is Car c)
             {
@@ -1062,8 +1064,10 @@ public partial class PlayerFeel : Node3D
         UpdateHint(dt, ride);
 
         // the boost meter, only where boost exists: mounted, Game profile
-        _boostBar.Visible = (BicycleCatalog.IsBicycle(ride) || ride is RideKind.Skis or RideKind.Snowboard) && Rideable.Arcade;
-        _boostBar.Value = _player.BoostMeter;
+        _boostBar.Visible = (BicycleCatalog.IsBicycle(ride) || ride is RideKind.Skis or RideKind.Snowboard) && Rideable.Arcade
+            || _player.Vehicle is Bicycle && !Rideable.Arcade;
+        // in Sim the road bike's bar is the rider's reserve above threshold, W′ (#1124)
+        _boostBar.Value = _player.Vehicle is Bicycle cycling && !Rideable.Arcade ? cycling.Body.WFraction : _player.BoostMeter;
         _boostBar.Modulate = _player.Boosting ? new Color(1.6f, 1.6f, 1.6f) : Colors.White;
 
         if (_popupLife > 0)

@@ -281,6 +281,17 @@ public partial class FootPlayer
     }
 
     /// <summary>A dark sheet on the lens just beyond the phone: the world goes, the phone and its rim stay.</summary>
+    /// <summary>
+    /// The backdrop off at once. It eases out only in the phone's own camera step, which runs on
+    /// foot: a mount taken within its 0.4 s fade (a training mounts the bike as soon as the trip to
+    /// its start lands, #901) left the dark sheet on the riding camera for good.
+    /// </summary>
+    private void DropPhoneBackdrop()
+    {
+        _backdropShown = 0f;
+        if (_backdrop != null) _backdrop.Visible = false;
+    }
+
     private void ShowBackdrop(float want, float dt)
     {
         _backdropShown = Mathf.MoveToward(_backdropShown, want, dt / 0.4f);

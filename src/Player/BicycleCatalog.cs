@@ -391,7 +391,30 @@ namespace UnitSport.Player
             return (FrontAxle.Z - cg.Z, cg.Z - RearAxle.Z, cg.Y);
         }
 
-        /// <summary>A leg's hip joint, <paramref name="side"/> as <see cref="Pedal"/>'s.</summary>
+        /// <summary>A leg's hip joint, <paramref name="side"/> as <see cref="Pedal"/>'s, seated on the hoods.</summary>
         public Vector3 LegHip(int side) => Hip + new Vector3(side * HipHalfWidth, 0, 0);
+
+        /// <summary>A leg's hip joint in <paramref name="position"/>: off the saddle standing, on its nose tucked.</summary>
+        public Vector3 LegHip(int side, RidingPosition position) => Fit(position).Hip + new Vector3(side * HipHalfWidth, 0, 0);
+
+        /// <summary>
+        /// Where the rider's hips and hands are in <paramref name="position"/> (#1124), and how far their
+        /// arms reach out of their full length, or the back's angle when the rider sets that instead:
+        /// what the rider's pose is solved from.
+        /// <list type="bullet">
+        /// <item>Hoods: the fit's saddle point and the hood tops, elbows a little bent.</item>
+        /// <item>Drops: hands 12.5 cm lower on the drops, the hips a centimetre forward: the back comes down.</item>
+        /// <item>Tuck: on the saddle's nose, hands on the tops by the stem, the back near flat (12°), elbows folded.</item>
+        /// <item>Standing: hips up and forward over the bottom bracket, arms long on the hoods.</item>
+        /// </list>
+        /// </summary>
+        public (Vector3 Hip, Vector3 Wrist, float Reach, float Back) Fit(RidingPosition position) => position switch
+        {
+            RidingPosition.Drops => (Hip + new Vector3(0, 0, 0.01f), Drop + new Vector3(0, 0.02f, -0.02f), 0.8f, float.NaN),
+            RidingPosition.Tuck => (Hip + new Vector3(0, -0.005f, 0.07f),
+                new Vector3(0.10f, BarClamp.Y + 0.02f, BarClamp.Z - 0.01f), 0.8f, Mathf.DegToRad(12f)),
+            RidingPosition.Standing => (Hip + new Vector3(0, 0.07f, 0.15f), Wrist, 0.88f, float.NaN),
+            _ => (Hip, Wrist, 0.8f, float.NaN),
+        };
     }
 }

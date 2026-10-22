@@ -29,6 +29,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | jump | Space / A | ok: A | keep |
 | crouch_slide | Ctrl, C / B | ok: B, or crouch for real (#437) | keep |
 | interact_mount | E / Y | ok: Y; grip a door, an item, a radio, or reach out and grip what E would act on (#437) | keep |
+| concert pogo QTE (#1150): dancing at a concert, jump on the beat | Space / A | ok: the pad's A (`jump`); the ring is a CanvasLayer like the other HUDs | keep |
 | sit on a stand's seat / stand up (#885) | E / Y on a stadium row; again, or walk off | ok: Y, or reach out and grip (`TryInteract(byHand)` sits before the dance); the stick stands up | keep |
 | export or import a concert rig as MVR (#941) | the desk's MVR row (Export MVR, the file picker, Import, Own rig, Folder) or `/concert export`, `/concert import <file>` | ok: the desk is a CanvasLayer on the VR panel (`XrUi`), the ray clicks the picker and the buttons | keep |
 | run a concert camera (#885) | `/concert camera take <n>` or the desk's Operate row; WASD / left stick along the rails, fly up/down rises, mouse / right stick looks, = - wheel / shoulders zoom, Enter / X cuts to it, Esc leaves | ok: the sticks and shoulders through `XrPad`; the viewfinder is a CanvasLayer, on the VR panel (`XrUi`) | new: a hand-held steadicam, gripped and aimed by the hand |
@@ -42,6 +43,9 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | on-foot camera zoom (#1149): far out down to the face | Shift + wheel, = - / hold R3 + right stick up/down (a tap of R3 still switches the view) | n/a: VR is first person (#186), the head is the camera | keep |
 | phone camera app: walk while it is open (#1149) | WASD, Space / left stick, A | ok: the body already walks with the phone out in VR (#920) | keep |
 | phone (#889): out, quick action, open, back | ↑, ← → Enter, ↑, Esc ↓ / quick menu › Phone, D-pad A, D-pad ↑, B | ok (#920): grip at the left front pocket or wrist menu › Phone; the real index tip taps, drags and swipes the glass, or the right ray and trigger press from afar (`XrPhone`); the free hand swings it open, X opens / folds, B back / away; the arm aims the camera app, the holding trigger shoots, the right trigger (ray off the phone) steps the zoom, turned round it is a selfie; raised to the eyes it travels (a blink after 3 s), to an ear it answers; let go it goes home to the pocket | keep |
+| phone › Training app (#901): import, search, connect, start / stop | the phone's own navigation (Enter, Esc) / D-pad A B | ok: the phone's poke and ray, as every app (the OS file picker shows on the desktop) | keep |
+| training: the next junction's road left / right (#901) | A D / left stick | ok: the stick, as steering; the Training app's Left / Right by poke | keep |
+| training: ride_rejoin, ride_uturn, ride_erg, ride_power_up / down (#901) | PgUp PgDn \ ] [ / the Training app's buttons (no pad button is free on a bike) | ok: the Training app's Rejoin, Turn round, ERG, ±10 W by poke | a wrist-menu row if riders want it without the phone |
 | challenge / accept a fist fight (#495) | E / Y, looking at the player | ok: Y, or reach out and grip | keep |
 | fight step / jump / crouch (#495) | A D, W Space, S Ctrl / L stick, A | ok: L stick towards / away, A, crouch for real (`XrPad.RealCrouch`) | room-scale stepping |
 | fight_punch / fight_kick (#495) | LMB J, RMB K / X RB, Y LB | ok: R / L trigger | **punch and kick for real** (hand speed, R4) |
