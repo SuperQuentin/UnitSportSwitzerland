@@ -32,21 +32,33 @@ public static partial class TileRewriter
     /// <summary>
     /// Riders may turn right on red (the user's rule, #711: SSV Art. 69a, signal 5.18; the old layout's, ported to the junction
     /// planner for #1165) where the approach gives them a line of their own (a path at the kerb beside a crosswalk, or a bike lane at
-    /// the kerb that turns right, ahead of the cars' line: a kerbside lane or the riders' own right-turn lane) and the street directly
-    /// on the right carries riders away on the side they join (a departing bike lane or path).
+    /// the kerb that turns right, ahead of the cars' line: a kerbside lane or the riders' own right-turn lane; or, with no bike lane,
+    /// a right-turn lane of the cars' at the kerb, which the riders turn from: the user) and the street directly on the right carries
+    /// riders away on the side they join (a departing bike lane or path).
     /// </summary>
+    /// <summary>
+    /// Whether an approach (its <paramref name="mouth"/>) gives riders turning right a place of their own to do it from on red (#711,
+    /// #1165): a path at the kerb beside a crosswalk, a bike lane at the kerb turning right with its riders' line, or, with no bike
+    /// lane turning right, a right-turn car lane at the kerb.
+    /// </summary>
+    public static bool RidersTurnRightFrom(Section mouth, bool crosswalk, bool ridersLine)
+    {
+        int last = mouth.LastCarriageway;
+        if (last < 0) return false;
+        bool path = crosswalk && mouth.Strips.Skip(last + 1).Any(x => x.Kind == StripKind.Path);
+        bool lane = ridersLine && mouth.Strips[last] is { Kind: StripKind.BikeLane, Way: StripWay.In } kerb && (kerb.Moves & SignalMoves.Right) != 0;
+        bool pocket = mouth.Strips[last] is { Kind: StripKind.CarLane, Way: StripWay.In, Moves: SignalMoves.Right }
+            && !mouth.Strips.Any(x => x is { Kind: StripKind.BikeLane, Way: StripWay.In } && (x.Moves & SignalMoves.Right) != 0);
+        return path || lane || pocket;
+    }
+
     private static void RidersRightOnRed(JunctionPlan jp, List<SignalArm> arms, List<ArmExterior> exterior, LayoutWriteStats stats)
     {
         for (int k = 0; k < arms.Count; k++)
         {
             if (!arms[k].In) continue;
             var ex = exterior[k];
-            var mouth = ex.Arm.Mouth;
-            int last = mouth.LastCarriageway;
-            bool path = ex.Crosswalk is not null && mouth.Strips.Skip(last + 1).Any(x => x.Kind == StripKind.Path);
-            bool lane = ex.RiderStop is not null && last >= 0
-                && mouth.Strips[last] is { Kind: StripKind.BikeLane, Way: StripWay.In } kerb && (kerb.Moves & SignalMoves.Right) != 0;
-            if (!path && !lane) continue;
+            if (!RidersTurnRightFrom(ex.Arm.Mouth, ex.Crosswalk is not null, ex.RiderStop is not null)) continue;
             int target = -1;
             double sharpest = 0;
             for (int j = 0; j < arms.Count; j++)

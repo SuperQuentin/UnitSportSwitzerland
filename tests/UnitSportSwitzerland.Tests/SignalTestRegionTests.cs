@@ -752,4 +752,26 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
         var j10 = region.Junction("J10");
         Assert.All(region.Tile(j10.E, j10.N).Signals.Single().Plan.Arms.Where(a => a.In), a => Assert.True(a.BikeRightOnRed));
     }
+    [Theory]
+    // (the user, #1165: "an approach with only a right-turn car lane and no bike lane should get the rtor sign tho")
+    [InlineData("L|T|R", false, false, true)]
+    [InlineData("L|TR", false, false, false)]
+    [InlineData("L|T|R|bTR", false, true, true)]
+    [InlineData("L|T|R|bR", false, true, true)]
+    [InlineData("L|T|bT|R", false, true, true)]
+    [InlineData("L|T|R|bT", false, true, false)]
+    [InlineData("L|TR|path", true, false, true)]
+    [InlineData("L|TR|path", false, false, false)]
+    public void Riders_turn_right_on_red_from_a_place_of_their_own(string lanes, bool crosswalk, bool ridersLine, bool expected)
+    {
+        var strips = new List<Strip> { new(StripKind.CarLane, 3, StripWay.Out) };
+        foreach (var l in lanes.Split('|'))
+        {
+            var moves = (l.Contains('L') ? SignalMoves.Left : 0) | (l.Contains('T') ? SignalMoves.Through : 0) | (l.Contains('R') ? SignalMoves.Right : 0);
+            strips.Add(l == "path" ? new Strip(StripKind.Path, 2)
+                : l.StartsWith('b') ? new Strip(StripKind.BikeLane, 1.5, StripWay.In, moves)
+                : new Strip(StripKind.CarLane, 3, StripWay.In, moves));
+        }
+        Assert.Equal(expected, UnitSport.Tools.RoadGen.Rewrite.TileRewriter.RidersTurnRightFrom(new Section(strips, -3), crosswalk, ridersLine));
+    }
 }
