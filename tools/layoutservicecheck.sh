@@ -43,7 +43,7 @@ ID=$(echo "$C" | sed -n 's/.*"id":\([0-9]*\).*/\1/p')
 [ "$(curl -s -o /dev/null -w '%{http_code}' "${H[@]}" -b "$OUT/admin.jar" -d "{\"egid\":$EGID,\"e\":2594004.3,\"n\":1120149.1}" "$URL/api/claims")" = 409 ] \
   || fail "a second open claim on the same building"
 
-# a 2 m room on a spot inside the real outline (the box's middle can be a courtyard), on each floor
+# a 2 m room on a spot inside the real outline (the box's middle can be a courtyard)
 CL=$(curl -sf -b "$OUT/owner.jar" "$URL/api/claims/$ID") || fail "read the claim"
 read -r X0 Z0 X1 Z1 < <(echo "$CL" | python -c '
 import json,sys
@@ -60,9 +60,9 @@ for i in range(-60,61):
         x,z=i*0.5,j*0.5
         if all(inside(x+dx,z+dz) for dx in (0,1,2) for dz in (0,1,2)): print(x,z,x+2,z+2); sys.exit()
 ') || fail "no 2 m spot inside the outline"
-FLOORS=$(echo "$CL" | grep -o '"level":[-0-9]*' | sed 's/"level"://' | tr '
-' ' ')
-FL=""; for f in $FLOORS; do FL="$FL{\"level\":$f,\"rooms\":[{\"x0\":$X0,\"z0\":$Z0,\"x1\":$X1,\"z1\":$Z1,\"type\":\"Living\"}],\"openings\":[{\"kind\":\"window\",\"x0\":$X0,\"z0\":$Z0,\"x1\":$(awk -v a="$X0" 'BEGIN{print a+1}'),\"z1\":$Z0}]},"; done
+# the ground floor only: one room with a front door and a window
+D0=$(awk -v a="$X0" 'BEGIN{print a+0.5}'); D1=$(awk -v a="$X0" 'BEGIN{print a+1.4}')
+FL="{\"level\":0,\"rooms\":[{\"x0\":$X0,\"z0\":$Z0,\"x1\":$X1,\"z1\":$Z1,\"type\":\"Living\"}],\"openings\":[{\"kind\":\"window\",\"x0\":$X0,\"z0\":$Z0,\"x1\":$(awk -v a="$X0" 'BEGIN{print a+1}'),\"z1\":$Z0},{\"kind\":\"door\",\"x0\":$D0,\"z0\":$Z1,\"x1\":$D1,\"z1\":$Z1}]},"
 BODY="{\"layout\":{\"storeyHeight\":2.7,\"floors\":[${FL%,}]},\"plan\":{\"scale\":0.01}}"
 S=$(curl -sf -X PUT "${H[@]}" -b "$OUT/owner.jar" -d "$BODY" "$URL/api/claims/$ID/layout") || fail "save"
 echo "$S" | grep -q '"problems":\[\]' || fail "the saved layout has problems: $S"

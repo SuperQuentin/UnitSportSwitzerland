@@ -122,8 +122,71 @@ public sealed class HouseLayout
                     err.Add($"{sn}: not inside one room");
             }
         }
+        if (err.Count == 0) Reach(err);
         return err;
     }
+
+    /// <summary>
+    /// Every room can be walked to from the street, as the game's interior validator demands: through a
+    /// door on an outer wall of the ground floor, then doors, arches and stairs.
+    /// </summary>
+    private void Reach(List<string> err)
+    {
+        var reached = new HashSet<(int Level, int Room)>();
+        var queue = new Queue<(int, int)>();
+        void Add(int level, int room) { if (room >= 0 && reached.Add((level, room))) queue.Enqueue((level, room)); }
+
+        var links = new Dictionary<(int, int), List<(int, int)>>();
+        void Link((int, int) a, (int, int) b)
+        {
+            (links.TryGetValue(a, out var la) ? la : links[a] = new()).Add(b);
+            (links.TryGetValue(b, out var lb) ? lb : links[b] = new()).Add(a);
+        }
+        bool front = false;
+        foreach (var f in Floors)
+        {
+            foreach (var o in f.Openings.Where(o => o.Kind is "door" or "arch"))
+            {
+                var on = Enumerable.Range(0, f.Rooms.Count).Where(i => OnEdge(f.Rooms[i], o)).ToList();
+                if (on.Count >= 2) Link((f.Level, on[0]), (f.Level, on[1]));
+                else if (on.Count == 1 && o.Kind == "door" && f.Level == 0) { front = true; Add(0, on[0]); }
+            }
+            var above = Floors.FirstOrDefault(g => g.Level == f.Level + 1);
+            for (int i = 0; i < f.Stairs.Count; i++)
+            {
+                var s = f.Stairs[i];
+                var (tx, tz) = s.TopEnd();
+                int from = RoomAt(f, (s.X0 + s.X1) / 2, (s.Z0 + s.Z1) / 2), to = above == null ? -1 : RoomAt(above, tx, tz);
+                if (to < 0) err.Add($"floor {f.Level}, stair {i + 1}: arrives outside any room of floor {f.Level + 1}");
+                else if (from >= 0) Link((f.Level, from), (f.Level + 1, to));
+            }
+        }
+        if (!front) { err.Add("no front door: put a door on an outer wall of the ground floor"); return; }
+        while (queue.Count > 0)
+        {
+            var at = queue.Dequeue();
+            if (links.TryGetValue(at, out var next)) foreach (var n in next) Add(n.Item1, n.Item2);
+        }
+        foreach (var f in Floors)
+            for (int i = 0; i < f.Rooms.Count; i++)
+                if (!reached.Contains((f.Level, i)))
+                    err.Add($"floor {f.Level}, room {i + 1} ({f.Rooms[i].Type}): no way in, add a door or an arch");
+    }
+
+    /// <summary>The room of the floor holding the point, -1 for none.</summary>
+    public static int RoomAt(HouseFloor f, double x, double z)
+    {
+        for (int i = 0; i < f.Rooms.Count; i++)
+        {
+            var r = f.Rooms[i];
+            if (x >= r.X0 - 0.01 && x <= r.X1 + 0.01 && z >= r.Z0 - 0.01 && z <= r.Z1 + 0.01) return i;
+        }
+        return -1;
+    }
+
+    /// <summary>A short, stable fingerprint of the layout: a stored interior planned from another one is stale.</summary>
+    public string Hash() =>
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(ToJson())))[..12];
 
     private static bool Coords(double x0, double z0, double x1, double z1) =>
         double.IsFinite(x0) && double.IsFinite(z0) && double.IsFinite(x1) && double.IsFinite(z1)
@@ -209,4 +272,100 @@ public sealed class HouseStair
     public double X1 { get; set; }
     public double Z1 { get; set; }
     public string Up { get; set; } = "+z";
+
+    /// <summary>Where it arrives on the floor above: the middle of its top end, a little inside.</summary>
+    public (double X, double Z) TopEnd()
+    {
+        double cx = (X0 + X1) / 2, cz = (Z0 + Z1) / 2;
+        return Up switch
+        {
+            "+x" => (X1 - 0.1, cz),
+            "-x" => (X0 + 0.1, cz),
+            "-z" => (cx, Z0 + 0.1),
+            _ => (cx, Z1 - 0.1),
+        };
+    }
+}
+
+/// <summary>
+/// The approved layouts the game uses (#1186): <c>house-layouts.json</c>, written by the layout service on every
+/// approval or withdrawal, read by whoever plans interiors (the server; an offline game too). Re-read when the file
+/// changes, checked at most every few seconds, so an approval reaches the buildings planned from then on.
+/// </summary>
+public static class HouseLayouts
+{
+    private static readonly object Gate = new();
+    private static Dictionary<uint, (HouseLayout Layout, string Hash)> _byEgid = new();
+    private static string? _path;
+    private static DateTime _stamp;
+    private static long _checked = long.MinValue;
+
+    /// <summary>Problems worth a line in the log (a bad file); the game points it at its own logger.</summary>
+    public static Action<string>? Warn { get; set; }
+
+    /// <summary>The file to read; null for none.</summary>
+    public static string? Path
+    {
+        get => _path;
+        set { lock (Gate) { _path = value; _stamp = default; _checked = long.MinValue; _byEgid = new(); } }
+    }
+
+    /// <summary>The approved layout of a building, or null.</summary>
+    public static HouseLayout? For(uint egid)
+    {
+        if (egid == 0) return null;
+        lock (Gate) { Refresh(); return _byEgid.TryGetValue(egid, out var e) ? e.Layout : null; }
+    }
+
+    /// <summary>The fingerprint of a building's approved layout, "" when it has none.</summary>
+    public static string HashFor(uint egid)
+    {
+        if (egid == 0) return "";
+        lock (Gate) { Refresh(); return _byEgid.TryGetValue(egid, out var e) ? e.Hash : ""; }
+    }
+
+    /// <summary>Uses these layouts instead of a file (checks and tests).</summary>
+    public static void Set(IEnumerable<HouseLayout> layouts)
+    {
+        lock (Gate)
+        {
+            _path = null;
+            _byEgid = layouts.ToDictionary(l => l.Egid, l => (l, l.Hash()));
+        }
+    }
+
+    /// <summary>The layouts of an export file's text, by EGID; a layout that breaks the rules is left out.</summary>
+    public static Dictionary<uint, HouseLayout> Parse(string json, Action<string>? warn = null)
+    {
+        var all = new Dictionary<uint, HouseLayout>();
+        using var doc = JsonDocument.Parse(json);
+        if (!doc.RootElement.TryGetProperty("layouts", out var list)) return all;
+        foreach (var e in list.EnumerateArray())
+        {
+            var l = e.Deserialize<HouseLayout>(HouseLayout.Json);
+            if (l == null) continue;
+            var problems = l.Validate(null);
+            if (problems.Count > 0) { warn?.Invoke($"house layout {l.Egid}: {problems[0]}"); continue; }
+            all[l.Egid] = l;
+        }
+        return all;
+    }
+
+    private static void Refresh()
+    {
+        if (_path == null || Environment.TickCount64 - _checked < 5000) return;
+        _checked = Environment.TickCount64;
+        try
+        {
+            var stamp = File.Exists(_path) ? File.GetLastWriteTimeUtc(_path) : default;
+            if (stamp == _stamp) return;
+            _stamp = stamp;
+            _byEgid = stamp == default ? new()
+                : Parse(File.ReadAllText(_path), Warn).ToDictionary(kv => kv.Key, kv => (kv.Value, kv.Value.Hash()));
+        }
+        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
+        {
+            Warn?.Invoke($"house layouts {_path}: {ex.Message}");
+        }
+    }
 }

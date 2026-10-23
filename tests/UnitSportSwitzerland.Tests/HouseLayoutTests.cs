@@ -84,6 +84,7 @@ public class HouseLayoutTests
                 [
                     new HouseOpening { Kind = "door", X0 = 0, Z0 = -1, X1 = 0, Z1 = 0 },     // inner door
                     new HouseOpening { Kind = "window", X0 = -4, Z0 = 4, X1 = -2, Z1 = 4 },  // facade window
+                    new HouseOpening { Kind = "door", X0 = -3, Z0 = -4, X1 = -2, Z1 = -4 },  // front door
                 ],
                 Stairs = [new HouseStair { X0 = 4, Z0 = 0, X1 = 5, Z1 = 3.5, Up = "+z" }],
             },
@@ -119,6 +120,42 @@ public class HouseLayoutTests
         Assert.Contains("not on a room's wall", err);
         Assert.Contains("outside the building", err);
         Assert.Contains("no floor above", err);
+    }
+
+    [Fact]
+    public void Every_room_needs_a_way_in()
+    {
+        var l = Good();
+        l.Floors[0].Openings.RemoveAt(0);                     // the kitchen's door
+        var err = string.Join("\n", l.Validate(Footprint));
+        Assert.Contains("room 2 (Kitchen): no way in", err);
+        Assert.Contains("room 1 (Bedroom): no way in", err);  // its only way up is the kitchen's stair
+
+        l = Good();
+        l.Floors[0].Openings.RemoveAt(2);                     // no front door
+        Assert.Contains("no front door", string.Join("\n", l.Validate(Footprint)));
+
+        l = Good();
+        l.Floors[1].Rooms[0].X1 = 4;                          // the stair now arrives outside the bedroom
+        Assert.Contains("arrives outside any room", string.Join("\n", l.Validate(Footprint)));
+    }
+
+    [Fact]
+    public void The_export_file_is_read_by_egid_and_bad_layouts_are_left_out()
+    {
+        var bad = Good();
+        bad.Egid = 7;
+        bad.Floors[0].Rooms.Clear();
+        string json = "{\"version\":1,\"layouts\":[" + Good().ToJson() + "," + bad.ToJson() + "]}";
+        var warned = new List<string>();
+        var all = HouseLayouts.Parse(json, warned.Add);
+        Assert.True(all.ContainsKey(42));
+        Assert.False(all.ContainsKey(7));
+        Assert.Single(warned);
+        HouseLayouts.Set(all.Values);
+        Assert.Equal(Good().Hash(), HouseLayouts.HashFor(42));
+        Assert.Equal("", HouseLayouts.HashFor(7));
+        HouseLayouts.Set([]);
     }
 
     [Fact]
