@@ -43,14 +43,15 @@ off, `--junctions new` plans and reports without writing.
   and right goes by its straight-on move). Built in phase 4. Short of room the left-turn bike lane goes
   early (step 2); the through one **survives when possible**: it goes with the painted ones, last (step 8). J1 N gets one;
   J3 E keeps it with the short pockets; J3 N has room for a pocket or the bike lane: the pocket goes (LTR, as designed).
-- **A lone kerbside bike lane serves every move, into a bike box** (the user, #1184, J8 N: "a short bike lane leading into a
-  bike box, serving all movements"): at the lights, where the kerbside lane is the approach's only arriving bike lane and
-  riders' moves the cars make get no lane of their own (no left-turn bike lane, no right pocket shared with them), the lane
-  takes them all (J8 N `bR` -> `bLR`, a T's main road `bT` -> `bLT`, a one-lane approach `bTR` -> `bLTR`) and ends in a bike
-  box, the cars' line set back for it (`BikeStops`, step `4 lone bike lane`). The box reaches the nearest car lane making each
-  of its moves (`ExteriorPlanner.BikeBoxes`). Where a turn bike lane exists, today's layout stays. Signals: one bike group
-  with every move (`SignalArm.RiderAll`, `SignalPlan.BoxRiders`, `traffic-signals`). Test region: 21 approaches (J3 and J3b N/S,
-  J4 S, J6 E/W, J7 N/S, J8 N, J9 x2, J13/J14/J16/J17 E/W, J18 E); the core's left bike guide stays a left-turn lane's.
+- **A lone turn-only kerbside bike lane serves every move, into a bike box** (the user, #1184, J8 N: "a short bike lane
+  leading into a bike box, serving all movements"): at the lights, where the kerbside lane is the approach's only arriving
+  bike lane, would be turn-only (no straight on: a T's stem) and riders' moves the cars make get no lane of their own (no
+  left-turn bike lane, no right pocket shared with them), the lane takes them all (J8 N `bR` -> `bLR`) and ends in a bike box,
+  the cars' line set back for it (`BikeStops`, step `4 lone bike lane`). The box reaches the nearest car lane making each of
+  its moves (`ExteriorPlanner.BikeBoxes`). A lane straight on (`bT`, `bTR`) keeps its advanced line or box and its groups (the
+  user's call on #1185: only turn-only lanes); where a turn bike lane exists, today's layout stays. Signals: one bike group
+  with every move (`SignalArm.RiderAll`, `SignalPlan.BoxRiders`, `traffic-signals`). Test region: 4 approaches (J4 S, J8 N,
+  J9 x2), no cycle changed; the core's left bike guide stays a left-turn lane's.
 - **Bike lane beside a right pocket** (the user, Oct 13): without lights always between it and the through lane (layout b);
   at the lights (b) only where the traffic arriving from the arm the pocket turns into cannot turn left (one-way out,
   forbidden, no lane shows it), else kerbside (a), painted or added. Replaces #351's coin flip (`NeedsOf.BikeBetween`, kept
