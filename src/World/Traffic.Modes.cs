@@ -459,7 +459,7 @@ public partial class Traffic
     /// The speed a car may still do behind the crossers in its lane ahead (#1060: a rider on a road with no bike lane, a tram
     /// sharing it): the car-following rule of <see cref="StepCar"/> with the crosser's own length. +∞ with none.
     /// </summary>
-    private float FollowCrossers(Vehicle car, Vector3 dir, Vector3 rightOf)
+    private float FollowCrossers(Vehicle car, Vector3 dir, Vector3 rightOf, bool narrowPass = false)
     {
         if (_crossersInLane == 0) return float.MaxValue;
         float target = float.MaxValue;
@@ -470,12 +470,33 @@ public partial class Traffic
             var d = c.Pos - car.Head;
             float along = d.Dot(dir);
             if (along < 0.5f || along > FollowLook || Mathf.Abs(d.Y) > 3f || Mathf.Abs(d.Dot(rightOf)) > AheadWidth) continue;
+            // (#1180) not one on the far side of its body, coming the other way or standing: it is passed, not followed (on a narrow
+            // road a rider coming the other way between two cars held them both, and itself, for good)
+            if (c.Vel.Dot(dir) < 0.3f && d.Dot(rightOf) < (narrowPass ? -0.3f : -(NarrowPass.HalfBody + c.Half + 0.2f))) continue;
             float speed = Mathf.Max(0f, c.Vel.Dot(dir));
             float gap = along - CarFront - c.Half - 1.5f;
             target = Mathf.Min(target, Mathf.Max(0f, speed + gap * 0.6f));
             target = Mathf.Min(target, Mathf.Sqrt(speed * speed + 2f * 4f * Mathf.Max(0f, gap)));
         }
         return target;
+    }
+
+    /// <summary>
+    /// A rider or walker in the road coming the other way on a narrow carriageway (#1180): met as a car is, the car moving over and
+    /// crawling past (<see cref="NarrowPass"/>); the nearest within <see cref="NarrowPass.Look"/> m, tail past by 6 m.
+    /// </summary>
+    private void MeetCrossers(Vehicle car, Vector3 dir, Vector3 rightOf, ref float meetAhead, ref float meetAcross)
+    {
+        if (_crossersInLane == 0) return;
+        for (int o = CrosserFrom(car.Head.X - NarrowPass.Look); o < _crossers.Count && _crossers[o].Pos.X <= car.Head.X + NarrowPass.Look; o++)
+        {
+            var c = _crossers[o];
+            if (!c.InLane || c.Vel.Dot(dir) > 0.3f) continue;
+            var d = c.Pos - car.Head;
+            float along = d.Dot(dir), across = d.Dot(rightOf);
+            if (along < -6f || along > NarrowPass.Look || along >= meetAhead || Mathf.Abs(d.Y) > 3f || across > -0.3f || across < -4f) continue;
+            (meetAhead, meetAcross) = (along, across);
+        }
     }
 
     // ---- --trafficcheck and the debug view ------------------------------------------------------

@@ -734,7 +734,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         }
         // and behind a rider or tram in its lane (#1060: the modes' crossers; +∞ without them): standing behind one, queued too
         // (#1134: a tram at its stop, a rider at a red)
-        float behindCrosser = FollowCrossers(car, dir, rightOf);
+        float behindCrosser = FollowCrossers(car, dir, rightOf, squeezes);
         car.Queued = queued || behindCrosser < 0.5f && car.Speed < 0.5f;
         car.Overlap = overlapping ? car.Overlap + dt : 0f;
         if (car.Overlap > OverlapFails && OverlapLongest <= OverlapFails)
@@ -757,13 +757,18 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         float wantPull = 0f, makeWay = float.MaxValue;
         // meeting one on a narrow carriageway (#1180, the user): a crawl, over to the right edge (wheels on the verge or the kerb by
         // what it takes) until the two bodies pass with room between; back to its line once its tail is past
+        if (squeezes) MeetCrossers(car, dir, rightOf, ref meetAhead, ref meetAcross);
         if (meetAhead < float.MaxValue)
         {
             float centre = NarrowPass.Centre(edge.Width, keep, -(mine + meetAcross));
             maxPull = Mathf.Max(maxPull, centre - keep);
             wantPull = centre - keep;
             target = Mathf.Min(target, NarrowPass.Approach(edge.Width, centre, meetAhead));
-            if (!car.Squeezing) NarrowPasses++;
+            if (!car.Squeezing && ++NarrowPasses <= 20)
+            {
+                var (pe, pn) = _origin.ToLv95(car.Head);
+                GD.Print($"[traffic] narrow pass (#1180) at {pe:F0},{pn:F0}, t {Core.GameClock.Now:F1}: {edge.Width:F1} m road, one coming {meetAhead:F0} m ahead, over to {centre:F2} m right of the middle at {NarrowPass.Crawl(edge.Width, centre) * 3.6f:F0} km/h");
+            }
             car.Squeezing = true;
         }
         else car.Squeezing = false;
