@@ -258,7 +258,7 @@ public partial class SettingsScreen : Screen
                 };
                 rows.AddChild(phone);
             }
-            UiKit.SliderRow(rows, "Render distance", GameSettings.MinRings, GameSettings.MaxRings, 1,
+            UiKit.SliderRow(rows, "Render distance", GameSettings.MinRingsHere, GameSettings.MaxRings, 1,
                 s.RenderDistanceRings, v => GameSettings.Current.RenderDistanceRings = (int)v, RingsText);
             UiKit.OptionRow(rows, "Detail", new[] { "Low", "Medium", "High" }, (int)s.Detail,
                 i => GameSettings.Current.Detail = (DetailPreset)i);

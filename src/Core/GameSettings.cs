@@ -82,6 +82,11 @@ public sealed class GameSettings
     /// <summary>Tile rings of real terrain around each anchor (Chebyshev radius in km).</summary>
     public int RenderDistanceRings { get; set; } = 15;
     public const int MinRings = 6, MaxRings = 40;
+    /// <summary>
+    /// The fewest rings this device may load: 3 on a standalone headset (#1112), where every tile is a
+    /// draw call a Quest 2 replays in each of its screen bins; the horizon's merged blocks cover the rest.
+    /// </summary>
+    public static int MinRingsHere => Platform.IsStandaloneVr ? 3 : MinRings;
 
     /// <summary>How far the 100 m horizon lattice is drawn, in km. 0 turns it off.</summary>
     public int HorizonKm { get; set; } = 60;
@@ -569,7 +574,7 @@ public sealed class GameSettings
 
     private void Clamp()
     {
-        RenderDistanceRings = Math.Clamp(RenderDistanceRings, MinRings, MaxRings);
+        RenderDistanceRings = Math.Clamp(RenderDistanceRings, MinRingsHere, MaxRings);
         HorizonKm = Math.Clamp(HorizonKm, 0, MaxHorizonKm);
         MaxConcurrentBuilds = Math.Clamp(MaxConcurrentBuilds, 0, MaxBuildsCap);
         CommitBudgetMs = Math.Clamp(CommitBudgetMs, 1, 16);

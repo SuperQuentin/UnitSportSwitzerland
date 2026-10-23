@@ -297,6 +297,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
             GD.Print($"[xr] eyes {xr.GetRenderTargetSize()} x{_view.Scaling3DScale:F2}, {RenderingServer.GetCurrentRenderingMethod()}, MSAA {_view.Msaa3D}");
         GD.Print($"[xr] load: frame {_load[1] / n:F1} ms, headset gpu {_load[2] / n:F1} ms, "
             + $"{RenderingServer.GetRenderingInfo(RenderingServer.RenderingInfo.TotalPrimitivesInFrame) / 1e6:F1} M prims, "
+            + $"{RenderingServer.GetRenderingInfo(RenderingServer.RenderingInfo.TotalDrawCallsInFrame)} draws, "
             + $"physics {Engine.PhysicsTicksPerSecond} Hz");
         Array.Clear(_load);
     }
