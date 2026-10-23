@@ -106,8 +106,8 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   in place of the through, left and #1165 right-only ones; one bike head), read back from the group alone by `SignalPlan.BoxRiders`
   (a bike group turning left and another way): never slow (ends with its cars), and turning left it gives way to the oncoming
   traffic, to the walkers it turns across and to a tram beside it as the cars behind it do (permissive). Test region: 23
-  groups; cycles J3 74 -> 84, J3b 79 -> 89, J16/J17 62 -> 70 s (their slow clearing now sets the gaps); J7 and J18 fall back to
-  untimed plans (a group's clearing to a walkers' start two phases on is not timed: `Time` looks at one phase change). Geneva
+  groups; cycles J3 74 -> 84, J3b 79 -> 89, J16/J17 62 -> 70 s (their slow clearing now sets the gaps); its clearing is also
+  timed to a start two phase changes on (`Time`: at least the least green and that gap between); J18 still falls back to an untimed plan. Geneva
   centre: 282 approaches, 225 groups; timed 222 -> 217 of 240; over 120 s at minimum greens 4 -> 5.
   Geneva centre with all of #1030 against main (246 lit junctions): longest cycle 150 -> 115 s, none over 120; 165 -> 211 timed
   from conflict times; 195 cycles the same, 39 shorter, 12 longer (8 by 1 s; 2499106,1117630 78 -> 99 s, now timed from its

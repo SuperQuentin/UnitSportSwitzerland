@@ -1555,6 +1555,13 @@ public sealed class SignalPlan
                         Math.Min(0f, starting.Where(h => Timed(g, h)).Select(h => gap - times[g, h]).DefaultIfEmpty(0f).Min()));
             foreach (int h in starting)
                 wait[i][h] = ending.Where(g => Timed(g, h)).Select(g => Math.Max(0f, shift[i].GetValueOrDefault(g) + times[g, h])).DefaultIfEmpty(0f).Max();
+            // riders leaving a bike box clear slowly and never end early (#1184): one whose green ended a phase change before still
+            // clearing where this one starts, with at least the least green and that change's gap between (none known yet: 0)
+            int before = (i - 1 + n) % n;
+            if (before != i)
+                foreach (int g in phases[before].Green.Where(g => BoxRiders(plan.Groups[g]) && !phases[i].Green.Contains(g) && !next.Green.Contains(g)))
+                    foreach (int h in starting.Where(h => Timed(g, h)))
+                        wait[i][h] = Math.Max(wait[i][h], times[g, h] - MinGreen - (before < i ? inter[before] : 0f));
             foreach (int b in starting.Where(b => Leads(b, starting)))
                 foreach (int h in starting.Where(h => plan.Groups[h].Kind == SignalGroupKind.Car && conflicts[b, h] == Conflict.Permissive))
                     wait[i][h] = Math.Max(wait[i][h], wait[i][b] + BikeLead);
