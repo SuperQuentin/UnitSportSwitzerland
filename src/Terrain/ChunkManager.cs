@@ -788,14 +788,19 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// <summary>
     /// Occlusion culling on the main view (#553) while the buildings are occluders: off in VR (two
     /// eyes, one occlusion buffer) and while a sightline cut dissolves the buildings in the way.
-    /// The portal cameras' viewports never cull: they stand inside the walls.
+    /// Except on a standalone headset (#1112), where it goes on the headset's own viewport: culled
+    /// from between the eyes, an edge seen by one eye only may pop a few centimetres early, and a
+    /// street's façades hide a city a Quest 2 could not draw. The portal cameras' viewports never
+    /// cull: they stand inside the walls.
     /// </summary>
     public void ApplyOcclusion()
     {
         if (!IsInsideTree()) return;
-        bool on = OcclusionCells && !_cutting && !XR.XrSession.Active;
+        bool standaloneVr = XR.XrSession.Active && Platform.IsStandaloneVr && XR.XrSession.Rig != null;
+        bool on = OcclusionCells && !_cutting && (!XR.XrSession.Active || standaloneVr);
         if (on) ProjectSettings.SetSetting("rendering/occlusion_culling/use_occlusion_culling", true);
-        GetViewport().UseOcclusionCulling = on;
+        if (standaloneVr) XR.XrSession.Rig!.HeadsetView.UseOcclusionCulling = on;
+        else GetViewport().UseOcclusionCulling = on;
     }
 
     /// <summary>Main thread: a tile has just come into the streamed rings (nothing is built yet).</summary>
