@@ -122,6 +122,9 @@ public static partial class TileRewriter
     /// <summary>An island's own pole for a middle stage stands this far out along the arm past its zebra's edge (m).</summary>
     private const double IslandPoleBack = 1.2;
 
+    /// <summary>A leaving carriageway's crossing's own pole stands this far out of its kerb (m).</summary>
+    private const double KerbPoleOut = 0.5;
+
     /// <summary>The unlit middle stages of each signal written (#1176): their walkers' lines go with the signal's, no group (255).</summary>
     internal static readonly System.Runtime.CompilerServices.ConditionalWeakTable<SignalPlan, List<(Vec2 A, Vec2 B)>> UnlitStages = new();
 
@@ -431,6 +434,32 @@ public static partial class TileRewriter
                 poles.Add(new SignalPole(local[0], local[1], local[2], Heading(a.Axis.DirAt(m0)), Heading(-a.Axis.RightAt(m0)), (byte)arm,
                     SignalPoleFlags.Pedestrian | SignalPoleFlags.MiddleStage));
                 stats.Poles++;
+            }
+        }
+        // a leaving carriageway's crossing (a divided road's exit, a one-way street out, #1179: "they 'cover' the tram tracks, but not
+        // one of the exit roads"): its walkers' heads at both ends, each facing the walkers about to cross from the other, where no
+        // pole of its stands there (an arm with no approach has none of its own)
+        for (int k = 0; k < arms.Count; k++)
+        {
+            if (arms[k].In || !arms[k].Pedestrians || !plan.Groups.Any(g => g is { Kind: SignalGroupKind.Pedestrian, Half: CrossingHalf.Whole } && g.Arm == k)) continue;
+            var a = jp.Arms[k];
+            double m0 = jp.Core!.Mouths.First(m => m.Arm == a.Arm).Station;
+            foreach (bool left in (ReadOnlySpan<bool>)[true, false])
+            {
+                if (ConflictTimes.Crosswalk(jp, a, left) is not var (sm, half, kerb)) continue;
+                var end = a.Axis!.At(sm, kerb);
+                bool has = poles.Any(q => q.Arm == k && (q.Flags & SignalPoleFlags.Pedestrian) != 0
+                    && new Vec2(q.X + home.MinE, home.MaxN - q.Z).DistanceTo(end) < half + IslandPoleBack + 2.5);
+                if (has) continue;
+                // (on a tram reservation's refuge, its own ground: in from its kerb)
+                bool refuge = !left && areas is not null && stageOf.Values.Any(v => v.Twin == k);
+                var foot = a.Axis.At(sm + half + IslandPoleBack, left ? kerb - KerbPoleOut : kerb + KerbPoleOut);
+                if (!refuge && !clear(foot)) continue;
+                var local = Local(home, [foot], q => SampleAt(a, q), 0.12f);
+                var right = a.Axis.RightAt(m0);
+                poles.Add(new SignalPole(local[0], local[1], local[2], Heading(a.Axis.DirAt(m0)), Heading(left ? right : -right), (byte)k, SignalPoleFlags.Pedestrian));
+                stats.Poles++;
+                stats.ExitCrossingPoles++;
             }
         }
         if (unlitStages.Count > 0) UnlitStages.AddOrUpdate(plan, unlitStages);

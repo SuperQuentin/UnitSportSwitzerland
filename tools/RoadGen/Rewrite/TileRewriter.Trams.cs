@@ -23,7 +23,8 @@ public static partial class TileRewriter
     /// how far right of its line's centre that track lies at each end (a line mapped with two tracks), and its track before the
     /// entry, outward (for its stop line).
     /// </summary>
-    internal sealed record TramWay(int FromArm, int ToArm, SignalMoves Move, List<Vec2> Points, double FromOffset, double ToOffset, List<Vec2> Before);
+    internal sealed record TramWay(int FromArm, int ToArm, SignalMoves Move, List<Vec2> Points, double FromOffset, double ToOffset, List<Vec2> Before,
+        bool Paved = true);
 
     /// <summary>A block's tram tracks, each the way its trams run (both ways where it carries both): for the cores' tram ways.</summary>
     internal sealed class TramNet
@@ -32,37 +33,41 @@ public static partial class TileRewriter
         public readonly List<(Vec2[] Points, double Offset)> Lines = new();
         /// <summary>Each line's height at a point (its source line's, as the rewrite writes it).</summary>
         public readonly List<Func<Vec2, float>> Height = new();
+        /// <summary>Whether each line runs in a paved surface (in a street, embedded), not on a ballast or grass bed (#1158's stop line).</summary>
+        public readonly List<bool> Paved = new();
         private readonly Dictionary<(long, long), List<int>> _starts = new(), _ends = new();
 
         private const double Snap = 0.5;
 
         public TramNet(RoadGenResult result)
         {
-            var raw = new List<(Vec2[] Points, bool Double, RoadFlags Flags, Func<Vec2, float> Height)>();
+            var raw = new List<(Vec2[] Points, bool Double, RoadFlags Flags, Func<Vec2, float> Height, RoadAttrFlags Attrs)>();
             foreach (var ribbon in result.Ribbons)
             {
                 if (ribbon.Stations.Count < 2 || result.Network.Links[ribbon.LinkId].Tag is not Source s) continue;
                 var seg = s.Segment;
                 if (seg.Class != RoadClass.Railway || (seg.Flags & RoadFlags.Tramway) == 0 || (seg.Flags & (RoadFlags.Disused | RoadFlags.Funicular)) != 0) continue;
-                raw.Add((ribbon.Stations.Select(x => x.Position).ToArray(), (seg.Flags & RoadFlags.DoubleTrack) != 0, seg.Flags, s.SampleHeight));
+                raw.Add((ribbon.Stations.Select(x => x.Position).ToArray(), (seg.Flags & RoadFlags.DoubleTrack) != 0, seg.Flags, s.SampleHeight, seg.Attributes.Flags));
             }
             var ways = TramTracks.Directions(raw.Select(r => r.Points.Select(p => (p.X, p.Y)).ToArray()).ToList(), raw.Select(r => r.Double).ToList());
             for (int i = 0; i < raw.Count; i++)
             {
-                var (p, dbl, flags, height) = raw[i];
+                var (p, dbl, flags, height, attrs) = raw[i];
                 double offset = RoadFormat.TrackOffset(flags);
                 // a line of two tracks: each way on its right one; a single track its own way, or both
-                if (dbl) { Add(Shift(p, offset), offset, height); Add(Shift(p.Reverse().ToArray(), offset), offset, height); continue; }
-                if (ways[i] >= 0) Add(p, 0, height);
-                if (ways[i] <= 0) Add(p.Reverse().ToArray(), 0, height);
+                bool paved = TramStopLinePainted(attrs);
+                if (dbl) { Add(Shift(p, offset), offset, height, paved); Add(Shift(p.Reverse().ToArray(), offset), offset, height, paved); continue; }
+                if (ways[i] >= 0) Add(p, 0, height, paved);
+                if (ways[i] <= 0) Add(p.Reverse().ToArray(), 0, height, paved);
             }
         }
 
-        private void Add(Vec2[] points, double offset, Func<Vec2, float> height)
+        private void Add(Vec2[] points, double offset, Func<Vec2, float> height, bool paved)
         {
             int i = Lines.Count;
             Lines.Add((points, offset));
             Height.Add(height);
+            Paved.Add(paved);
             Bin(_starts, points[0]).Add(i);
             Bin(_ends, points[^1]).Add(i);
         }
@@ -199,7 +204,7 @@ public static partial class TileRewriter
                     int fk = jp.Arms.FindIndex(a => a.Arm == from), tk = jp.Arms.FindIndex(a => a.Arm == to);
                     var move = SignalPlan.Turn(arms, fk, tk);
                     double toOffset = net.Lines[last].Offset;
-                    ways.Add(new TramWay(from, to, move, Polyline.Simplify(points, 0.02), offset, -toOffset, before));
+                    ways.Add(new TramWay(from, to, move, Polyline.Simplify(points, 0.02), offset, -toOffset, before, net.Paved[l]));
                 }
             }
         }
@@ -296,6 +301,12 @@ public static partial class TileRewriter
     /// <summary>A tram's stop line reaches this far past the tram's sides (m, #1155).</summary>
     internal const double TramStopLineOver = 0.2;
 
+    /// <summary>
+    /// Whether a tram track of these flags gets its stop line painted (#1158, the user: "tram stop line shouldn't be drawn on
+    /// non-concreted tracks"): one in a street (TLM auf_strasse) or embedded in a carriageway, not one on its own ballast or grass bed.
+    /// </summary>
+    public static bool TramStopLinePainted(RoadAttrFlags attrs) => (attrs & (RoadAttrFlags.OnStreet | RoadAttrFlags.Embedded | RoadAttrFlags.PavedBed)) != 0;
+
     /// <summary>A tram's stop line from <paramref name="p0"/> to <paramref name="p1"/> (LV95) at height <paramref name="y"/> (#1155): white, the cars' line's width, <see cref="RoadPaint.OverTrack"/>.</summary>
     internal static RoadPaint TramStopLine(TileId tile, Vec2 p0, Vec2 p1, float y) => new()
     {
@@ -346,7 +357,9 @@ public static partial class TileRewriter
             if (TramStop(a, mouth, stop, w) is not var (stopAt, lateral)) continue;
             // its own stop line across its track (#1155, the user: "the stopline should be drawn for trams"): white as the cars', the
             // cars' line's width, centred where the track crosses that line, as wide as a tram and a hand either side
-            if (paint is not null)
+            // (only on a paved track: none on a ballast or grass bed, the user: "tram stop line shouldn't be drawn on non-concreted
+            // tracks"; the trams stop there all the same)
+            if (paint is not null && w.Paved)
             {
                 var axis = a.Axis!;
                 var right = axis.RightAt(mouth + stop);

@@ -248,6 +248,47 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
         Assert.All(waits, w => Assert.True(w.Wait <= plan.Cycle * SignalPlan.IslandWaitShare + 0.1f, $"{w.Wait:F1} s on an island, cycle {plan.Cycle:F1} s"));
     }
 
+    [Fact]
+    public void Every_stage_of_J19s_crossings_has_a_walkers_head_facing_it_from_both_ends()
+    {
+        // #1179, the user: "the pedestrian lights ... 'cover' the tram tracks, but not one of the exit roads": each stage (the arriving
+        // carriageway, the tracks, the leaving carriageway) shows its own group on a pole at either end, facing each way
+        var (_, _, signal) = SignalOf("J19");
+        var plan = signal.Plan;
+        foreach (int m in Enumerable.Range(0, plan.Groups.Count).Where(g => plan.Groups[g].Half == CrossingHalf.Middle))
+        {
+            int arm = plan.Groups[m].Arm, twin = plan.Twin(arm);
+            var stages = new List<(string Name, List<float> Faces)>
+            {
+                ("arriving carriageway", signal.Poles.Where(p => p.Arm == arm && (p.Flags & SignalPoleFlags.Pedestrian) != 0).Select(p => p.PedHeading).ToList()),
+                ("tracks", signal.Poles.Where(p => (p.Arm == arm || p.Arm == twin) && (p.Flags & SignalPoleFlags.MiddleStage) != 0).Select(p => p.PedHeading + MathF.PI).ToList()),
+                ("leaving carriageway", signal.Poles.Where(p => p.Arm == twin && (p.Flags & SignalPoleFlags.Pedestrian) != 0).Select(p => p.PedHeading).ToList()),
+            };
+            foreach (var (name, faces) in stages)
+                Assert.True(faces.Any(a => faces.Any(b => MathF.Cos(a - b) < -0.9f)), $"arm {arm} {name}: heads facing {string.Join(", ", faces.Select(f => (f * 180 / MathF.PI).ToString("F0")))} deg");
+        }
+    }
+
+    [Fact]
+    public void A_tram_stop_line_is_painted_only_on_a_paved_track()
+    {
+        // #1179, the user: "tram stop line shouldn't be drawn on non-concreted tracks": J14's tracks in the street get theirs, J16's on
+        // the reservation's ballast none (its trams stop at the same place)
+        int Lines(string id)
+        {
+            var j = region.Junction(id);
+            var home = TileId.FromLv95(j.E, j.N);
+            float x = (float)(j.E - home.MinE), z = (float)(home.MaxN - j.N);
+            return region.Tile(j.E, j.N).Paint.Count(p => p.Type == PaintType.StopLine && p.Variant == RoadPaint.OverTrack
+                && MathF.Abs(p.Vertices[0] - x) < 40 && MathF.Abs(p.Vertices[2] - z) < 40);
+        }
+        Assert.True(Lines("J14") > 0);
+        Assert.Equal(0, Lines("J16"));
+        Assert.True(UnitSport.Tools.RoadGen.Rewrite.TileRewriter.TramStopLinePainted(RoadAttrFlags.OnStreet));
+        Assert.True(UnitSport.Tools.RoadGen.Rewrite.TileRewriter.TramStopLinePainted(RoadAttrFlags.PavedBed));
+        Assert.False(UnitSport.Tools.RoadGen.Rewrite.TileRewriter.TramStopLinePainted(RoadAttrFlags.None));
+    }
+
     [Theory]
     [InlineData("J19")]
     [InlineData("J20")]
