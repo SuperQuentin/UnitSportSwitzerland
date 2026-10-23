@@ -4,4 +4,5 @@ render_mode cull_disabled;
 #define STYLE_LIT
 #define STYLE_CARTOON
 #define NO_DISCARD
+#define STANDALONE
 #include "res://shaders/body/terrain.gdshaderinc"

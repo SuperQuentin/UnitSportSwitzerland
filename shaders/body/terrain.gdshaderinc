@@ -219,7 +219,12 @@ void fragment() {
 #ifdef STYLE_CARTOON
     // big painted patches of lighter and darker ground
     vec2 paint_xz = pattern_xz(world_pos);
+#ifdef STANDALONE
+    // (only the big patches: the 9 m ones are a few pixels on a headset's display)
+    col *= mix(0.9, 1.1, style_paint_noise(paint_xz / 38.0) * 0.6 + 0.2);
+#else
     col *= mix(0.9, 1.1, style_paint_noise(paint_xz / 38.0) * 0.6 + style_paint_noise(paint_xz / 9.0) * 0.4);
+#endif
 #endif
     ALBEDO = col;
     NORMAL = style_view_normal(VIEW_MATRIX, n);
