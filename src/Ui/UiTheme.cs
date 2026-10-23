@@ -3,8 +3,9 @@ using Godot;
 namespace UnitSport.Ui;
 
 /// <summary>
-/// The one look of every menu: dark glass panels, thin hairlines, an amber accent. Built in code
-/// once and shared, so no menu carries its own copy of a stylebox again.
+/// The HUD's look: dark glass panels, thin hairlines, an amber accent. Built in code once and shared. The menu pages
+/// take a skin instead (#1135, <see cref="Skins.MenuSkin"/>), whose theme defines the same variations
+/// (<see cref="Skins.SkinTheme"/>), so <see cref="UiKit"/> builds for either.
 ///
 /// <para>
 /// Set on the menu roots only (title, solo, multiplayer, settings, pause, loading, modals). The
@@ -82,7 +83,8 @@ public static class UiTheme
     {
         var l = new Label { Text = text };
         if (fontSize > 0) l.AddThemeFontSizeOverride("font_size", fontSize);
-        l.AddThemeColorOverride("font_color", Amber);
+        // the accent of the theme above: amber on a HUD, the skin's in a menu (#1135)
+        l.ThemeTypeVariation = Skins.SkinTheme.Accent;
         return l;
     }
 
@@ -147,15 +149,17 @@ public static class UiTheme
             t.SetStylebox("hover", type, Flat(new Color(1, 1, 1, 0.05f), 8, 4, 4));
             t.SetStylebox("hover_pressed", type, Flat(new Color(1, 1, 1, 0.05f), 8, 4, 4));
         }
-        t.SetIcon("checked", "CheckButton", Pill(true));
-        t.SetIcon("unchecked", "CheckButton", Pill(false));
-        t.SetIcon("checked_disabled", "CheckButton", Pill(true));
-        t.SetIcon("unchecked_disabled", "CheckButton", Pill(false));
-        t.SetIcon("checked", "CheckBox", Tick(true));
-        t.SetIcon("unchecked", "CheckBox", Tick(false));
+        var knobOn = new Color(0.08f, 0.08f, 0.1f);
+        var knobOff = new Color(0.85f, 0.87f, 0.9f);
+        t.SetIcon("checked", "CheckButton", Pill(true, Amber, new Color(1, 1, 1, 0.16f), knobOn, knobOff));
+        t.SetIcon("unchecked", "CheckButton", Pill(false, Amber, new Color(1, 1, 1, 0.16f), knobOn, knobOff));
+        t.SetIcon("checked_disabled", "CheckButton", Pill(true, Amber, new Color(1, 1, 1, 0.16f), knobOn, knobOff));
+        t.SetIcon("unchecked_disabled", "CheckButton", Pill(false, Amber, new Color(1, 1, 1, 0.16f), knobOn, knobOff));
+        t.SetIcon("checked", "CheckBox", Tick(true, Amber, new Color(1, 1, 1, 0.35f), knobOn));
+        t.SetIcon("unchecked", "CheckBox", Tick(false, Amber, new Color(1, 1, 1, 0.35f), knobOn));
 
         // --- dropdown and its popup
-        t.SetIcon("arrow", "OptionButton", Chevron());
+        t.SetIcon("arrow", "OptionButton", Chevron(TextDim));
         var popup = GlassPanel(0.97f, 10, 6);
         popup.ShadowSize = 14;
         t.SetStylebox("panel", "PopupMenu", popup);
@@ -218,6 +222,16 @@ public static class UiTheme
         t.SetStylebox("panel", "TooltipPanel", Flat(new Color(0.04f, 0.05f, 0.06f, 0.96f), 6, 10, 6, Hairline, 1));
         t.SetColor("font_color", "TooltipLabel", Text);
 
+        // the variations UiKit asks for (#1135): the menu skins define the same names in their own colours
+        Skins.SkinTheme.AddVariations(t, Skins.MenuSkin.Classic(), Bold);
+        // the HUD's look as it was: a lighter, unshadowed card, and white menu entries under the pointer
+        t.SetStylebox("panel", Skins.SkinTheme.Card, Flat(new Color(0.10f, 0.115f, 0.14f, 0.55f), 12, 18, 18, new Color(1, 1, 1, 0.07f), 1));
+        foreach (string c in new[] { "font_focus_color", "font_hover_color" }) t.SetColor(c, Skins.SkinTheme.MenuButton, Colors.White);
+        t.SetStylebox("hover", Skins.SkinTheme.MenuButton, Flat(new Color(1, 1, 1, 0.06f), 8, 18, 8));
+        t.SetStylebox("pressed", Skins.SkinTheme.MenuButton, Flat(new Color(1, 1, 1, 0.10f), 8, 18, 8));
+        t.SetStylebox("hover_pressed", Skins.SkinTheme.MenuButton, Flat(new Color(1, 1, 1, 0.10f), 8, 18, 8));
+        t.SetStylebox("focus", Skins.SkinTheme.Primary, Flat(new Color(0, 0, 0, 0), 8, 18, 8, Colors.White, 2));
+
         _theme = t;
         return t;
     }
@@ -225,12 +239,12 @@ public static class UiTheme
     // ---- small textures drawn at startup: no image assets -------------------------------------
 
     /// <summary>The on/off pill of a toggle.</summary>
-    private static ImageTexture Pill(bool on)
+    internal static ImageTexture Pill(bool on, Color accent, Color offTrack, Color knobOn, Color knobOff)
     {
         const int w = 38, h = 22;
         var img = Image.CreateEmpty(w, h, false, Image.Format.Rgba8);
-        var track = on ? Amber : new Color(1, 1, 1, 0.16f);
-        var knob = on ? new Color(0.08f, 0.08f, 0.1f) : new Color(0.85f, 0.87f, 0.9f);
+        var track = on ? accent : offTrack;
+        var knob = on ? knobOn : knobOff;
         float r = h / 2f;
         float knobX = on ? w - r : r;
         for (int y = 0; y < h; y++)
@@ -250,8 +264,30 @@ public static class UiTheme
         return ImageTexture.CreateFromImage(img);
     }
 
+    /// <summary>A slanted on/off switch (#1135, a skin with a skew): a parallelogram track and a square knob.</summary>
+    internal static ImageTexture SlantSwitch(bool on, Color accent, Color offTrack, Color knobOn, Color knobOff, float skew)
+    {
+        const int w = 52, h = 26, knob = 18;
+        var img = Image.CreateEmpty(w, h, false, Image.Format.Rgba8);
+        float lean = skew * h, body = w - lean;
+        float knobX = on ? body - knob - 4 : 4;
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                float px = x + 0.5f, py = y + 0.5f;
+                float u = px - lean * (1 - py / h);   // the column in the unslanted box
+                float a = Mathf.Clamp(Mathf.Min(u, body - u) + 0.5f, 0, 1);
+                var c = new Color(on ? accent : offTrack, a);
+                float k = Mathf.Min(Mathf.Min(u - knobX, knobX + knob - u), Mathf.Min(py - (h - knob) / 2f, (h + knob) / 2f - py));
+                float ak = Mathf.Clamp(k + 0.5f, 0, 1);
+                if (ak > 0) c = c.Lerp(on ? knobOn : knobOff, ak) with { A = Mathf.Max(c.A, ak) };
+                img.SetPixel(x, y, c);
+            }
+        return ImageTexture.CreateFromImage(img);
+    }
+
     /// <summary>A rounded square tick box.</summary>
-    private static ImageTexture Tick(bool on)
+    internal static ImageTexture Tick(bool on, Color accent, Color edge, Color mark)
     {
         const int s = 18;
         var img = Image.CreateEmpty(s, s, false, Image.Format.Rgba8);
@@ -264,13 +300,13 @@ public static class UiTheme
                 float d = new Vector2(qx, qy).Length() - 3.5f;
                 float a = Mathf.Clamp(0.5f - d, 0, 1);
                 float border = Mathf.Clamp(0.5f - Mathf.Abs(d + 0.75f) + 0.75f, 0, 1);
-                Color c = on ? new Color(Amber, a) : new Color(1, 1, 1, 0.35f * border * a);
+                Color c = on ? new Color(accent, a) : new Color(edge, edge.A * border * a);
                 img.SetPixel(x, y, c);
             }
         if (on)
         {
             // the tick itself
-            var dark = new Color(0.08f, 0.08f, 0.1f);
+            var dark = mark;
             void Seg(Vector2 a, Vector2 b)
             {
                 for (float t = 0; t <= 1; t += 0.02f)
@@ -308,7 +344,7 @@ public static class UiTheme
     }
 
     /// <summary>The dropdown's down chevron.</summary>
-    private static ImageTexture Chevron()
+    internal static ImageTexture Chevron(Color color)
     {
         const int w = 12, h = 8;
         var img = Image.CreateEmpty(w, h, false, Image.Format.Rgba8);
@@ -320,7 +356,7 @@ public static class UiTheme
                 float d1 = DistSeg(new Vector2(px, py), new Vector2(1.5f, 2), new Vector2(6, 6.5f));
                 float d2 = DistSeg(new Vector2(px, py), new Vector2(6, 6.5f), new Vector2(10.5f, 2));
                 float a = Mathf.Clamp(1.4f - Mathf.Min(d1, d2), 0, 1);
-                img.SetPixel(x, y, new Color(TextDim, a));
+                img.SetPixel(x, y, new Color(color, a));
             }
         return ImageTexture.CreateFromImage(img);
     }

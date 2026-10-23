@@ -22,7 +22,7 @@ public partial class Modal : Control
     private static Modal Build(Control host, string title, string? message, out VBoxContainer body)
     {
         Current?.QueueFree();
-        var m = new Modal { Name = "Modal", Theme = UiTheme.Get(), MouseFilter = MouseFilterEnum.Stop };
+        var m = new Modal { Name = "Modal", Theme = Skins.MenuSkin.Theme(), MouseFilter = MouseFilterEnum.Stop };
         m.SetAnchorsPreset(LayoutPreset.FullRect);
         m._previousFocus = host.GetViewport().GuiGetFocusOwner();
 
@@ -35,7 +35,7 @@ public partial class Modal : Control
         m.AddChild(centre);
 
         var panel = new PanelContainer { CustomMinimumSize = new Vector2(440, 0) };
-        panel.AddThemeStyleboxOverride("panel", UiTheme.GlassPanel(0.96f, 14, 26));
+        panel.ThemeTypeVariation = Skins.SkinTheme.Page;
         centre.AddChild(panel);
         body = UiKit.VBox(12);
         panel.AddChild(body);

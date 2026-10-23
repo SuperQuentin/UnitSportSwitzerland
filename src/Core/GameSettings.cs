@@ -92,6 +92,17 @@ public sealed class GameSettings
     public bool Fog { get; set; }
 
     /// <summary>
+    /// The menus' look (#1135, <see cref="Ui.Skins.MenuSkin"/>): "auto" (the day skin by day, the night skin by night)
+    /// or a skin's id (a file in <c>assets/skins/</c> or <c>user://skins/</c>).
+    /// </summary>
+    public string MenuSkin { get; set; } = Ui.Skins.MenuSkin.SportId;
+    public string MenuSkinDay { get; set; } = Ui.Skins.MenuSkin.DayDefault;
+    public string MenuSkinNight { get; set; } = Ui.Skins.MenuSkin.NightDefault;
+
+    /// <summary>No hover tilts, pops or ambient animation in the menus (#1135): plain fades only.</summary>
+    public bool ReduceMotion { get; set; }
+
+    /// <summary>
     /// Generate the terrain there is no data for, blended into the real tiles beside it
     /// (<see cref="Terrain.FallbackChunkSource"/>). Off leaves void past the real region; offline on a
     /// copy with no terrain it generates anyway, the only ground there is (#1002).

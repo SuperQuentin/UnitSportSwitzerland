@@ -15,7 +15,8 @@ public abstract partial class Screen : Control
     {
         SetAnchorsPreset(LayoutPreset.FullRect);
         MouseFilter = MouseFilterEnum.Ignore;
-        Theme = UiTheme.Get();
+        // the menu skin of the moment (#1135): day or night, Alpine, Night Arcade, Classic...
+        Theme = Skins.MenuSkin.Theme();
     }
 
     /// <summary>Called each time the page comes to the front.</summary>
@@ -37,8 +38,7 @@ public abstract partial class Screen : Control
         centre.SetAnchorsPreset(LayoutPreset.FullRect);
         AddChild(centre);
 
-        var panel = new PanelContainer { CustomMinimumSize = size };
-        panel.AddThemeStyleboxOverride("panel", UiTheme.GlassPanel(0.86f, 16, 26));
+        var panel = new PanelContainer { CustomMinimumSize = size, ThemeTypeVariation = Skins.SkinTheme.Page };
         centre.AddChild(panel);
 
         var column = UiKit.VBox(14);
@@ -50,7 +50,9 @@ public abstract partial class Screen : Control
         header.AddChild(back);
         var titles = UiKit.VBox(0);
         titles.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        titles.AddChild(UiKit.Text(title, 26, UiTheme.Text, bold: true));
+        var name = UiKit.Text(title, 30);
+        UiKit.Display(name);
+        titles.AddChild(name);
         if (subtitle != null) titles.AddChild(UiKit.Text(subtitle, UiTheme.FontSmall, UiTheme.TextDim));
         header.AddChild(titles);
         column.AddChild(header);

@@ -51,7 +51,7 @@ public partial class WelcomeScreen : Screen
 
         var foot = UiKit.HBox(10);
         var skip = UiKit.Button("Skip the welcome");
-        skip.AddThemeColorOverride("font_color", UiTheme.TextDim);
+        UiKit.DimFont(skip);
         skip.Pressed += Finish;
         foot.AddChild(skip);
         foot.AddChild(UiKit.Spacer(expand: true));

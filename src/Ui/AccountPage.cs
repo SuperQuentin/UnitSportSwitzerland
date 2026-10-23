@@ -117,7 +117,7 @@ public static class AccountPage
         var fold = UiKit.Button((none ? "▾" : "▸") + " Advanced: account server");
         fold.Flat = true;
         fold.Alignment = HorizontalAlignment.Left;
-        fold.AddThemeColorOverride("font_color", UiTheme.TextDim);
+        UiKit.DimFont(fold);
         into.AddChild(fold);
         var box = UiKit.VBox(4);
         box.Visible = none || Account.CustomServer;
