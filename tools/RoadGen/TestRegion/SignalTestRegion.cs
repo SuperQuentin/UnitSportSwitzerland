@@ -656,7 +656,7 @@ public static partial class SignalTestRegion
         // in an exit and an entry ramp at the south end of a 2+2 main road (OSM lanes=4); north of it the main road crosses two
         // 2+2 roads at lights, J21 80 m and J22 260 m from the ramps (between them the approaches widen over 50 and 30 m: the plain half keeps the link 2+2;
         // 160 m between the two left J22's northbound right pocket without its lane in LANE) (the rule: two lanes at the line, a 2+2 street, a main road
-        // within 300 m of a motorway or ramp). Every approach widens to left|through|right over its last 90 m, and OSM names each
+        // within 300 m of a motorway or ramp). Every approach widens to left|through|right (the outer ones over their last 90 m), and OSM names each
         // lane's destinations (invented towns): the signs green toward the motorway (the rule: a motorway that way within 800 m),
         // blue on the others (cantonal roads)
         {
