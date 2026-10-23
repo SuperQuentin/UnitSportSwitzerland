@@ -43,9 +43,10 @@ public partial class Traffic
         MoverKind.Tram => _tramLines, _ => null,
     };
 
-    /// <summary>The modes whose density asks for movers (bits): their graphs are built.</summary>
-    private static uint ModesWanted()
+    /// <summary>The modes whose density asks for movers (bits), in the test world those its endpoints make (#1134): their graphs are built.</summary>
+    private uint ModesWanted()
     {
+        if (GeneratorsOnly) return _endpointModes;
         var s = GameSettings.Current;
         return (s.TrafficWalkers > 0 ? Bit(MoverKind.Walker) : 0u) | (s.TrafficRiders > 0 ? Bit(MoverKind.Rider) : 0u)
             | (s.Trams > 0 ? Bit(MoverKind.Tram) : 0u);
@@ -108,6 +109,12 @@ public partial class Traffic
         public int Group = -1;
         public float Wait;
         public object? State;
+        /// <summary>The endpoint that made it and the destination it is going to (#1134), 0 none; its way there (<c>CostTo</c>), null at random.</summary>
+        public int FromId, ToId;
+        public Dictionary<(LaneEdge, bool), float>? Goal;
+        /// <summary>A rider's rear wheel (#1134, as a car's rear axle): it trails the front at the wheelbase, the box laid between.</summary>
+        public Vector3 Rear;
+        public bool RearSet;
 
         public SlowMover(MoverKind kind, AnimatableBody3D body, CollisionShape3D shape, Func<SlowMover, (LaneEdge, bool), (LaneEdge, bool)?> next)
         {
@@ -121,7 +128,6 @@ public partial class Traffic
     private readonly List<SlowMover> _walkers = new(), _riders = new();
     private readonly Stack<SlowMover> _walkerPool = new(), _riderPool = new();
     private double _walkerTimer, _riderTimer;
-    private readonly Dictionary<MoverKind, (BoxMesh Mesh, StandardMaterial3D Material)> _boxLooks = new();
 
     private List<SlowMover> MoversOf(MoverKind kind) => kind == MoverKind.Walker ? _walkers : _riders;
 
@@ -132,23 +138,19 @@ public partial class Traffic
 
     private static readonly StringName DisabledName = "disabled";
 
+    /// <summary>A bike's wheelbase (m, #1134): its rear wheel trails the front by this.</summary>
+    private const float BikeWheelbase = 1.1f;
+
     /// <summary>
-    /// A solid box for a mode's unit (#1060, every new mover is a box for now): its mesh and material shared per kind, its collision
-    /// box the same size, standing on the ground (its origin at the bottom, -Z forward like the cars). For a tram, one per section.
+    /// A mode's unit (#1060): its blocky model (<see cref="Avatar.TrafficModeMeshBuilder"/>, #1147: shared per look, with its lamps
+    /// if any) and a collision box of <paramref name="size"/>, standing on the ground (its origin at the bottom, -Z forward like
+    /// the cars). For a tram, one per section.
     /// </summary>
-    private AnimatableBody3D BoxUnit(MoverKind kind, Vector3 size, float drawn, out CollisionShape3D shape)
+    private AnimatableBody3D BoxUnit(MoverKind kind, Vector3 size, float drawn, out CollisionShape3D shape, Mesh body, Mesh? lamps = null)
     {
-        var look = LookOf(kind);
-        if (!_boxLooks.TryGetValue(kind, out var shared))
-            _boxLooks[kind] = shared = (new BoxMesh { Size = Vector3.One },
-                new StandardMaterial3D { AlbedoColor = look.Colour, Roughness = 0.9f });
         var node = new AnimatableBody3D { SyncToPhysics = false, Name = kind.ToString() };
-        // (one shared unit cube, scaled per unit: a tram's sections differ in length)
-        node.AddChild(new MeshInstance3D
-        {
-            Mesh = shared.Mesh, MaterialOverride = shared.Material, VisibilityRangeEnd = drawn,
-            Scale = new Vector3(size.X, size.Y, size.Z), Position = new Vector3(0f, size.Y * 0.5f, 0f),
-        });
+        node.AddChild(new MeshInstance3D { Mesh = body, MaterialOverride = _bodyMaterial, VisibilityRangeEnd = drawn });
+        if (lamps is not null) node.AddChild(new MeshInstance3D { Mesh = lamps, MaterialOverride = _lampMaterial, VisibilityRangeEnd = drawn });
         shape = new CollisionShape3D { Shape = new BoxShape3D { Size = size }, Position = new Vector3(0f, size.Y * 0.5f, 0f) };
         node.AddChild(shape);
         return node;
@@ -166,7 +168,8 @@ public partial class Traffic
         else
         {
             var look = LookOf(kind);
-            var body = BoxUnit(kind, look.Size, look.Drawn, out var shape);
+            var body = BoxUnit(kind, look.Size, look.Drawn, out var shape, kind == MoverKind.Walker
+                ? Avatar.TrafficModeMeshBuilder.Walker(_rng.Next()) : Avatar.TrafficModeMeshBuilder.Rider(_rng.Next()));
             AddChild(body);
             m = new SlowMover(kind, body, shape, NextMover);
         }
@@ -175,6 +178,7 @@ public partial class Traffic
         m.Group = -1;
         m.State = null;
         m.Vel = Vector3.Zero;
+        (m.FromId, m.ToId, m.Goal, m.RearSet) = (0, 0, null, false);
         return m;
     }
 
@@ -221,8 +225,22 @@ public partial class Traffic
         var side = new Vector3(-dir.Z, 0f, dir.X).Normalized();
         var at = pos + side * lateral;
         var flat = new Vector3(dir.X, 0f, dir.Z);
+        var place = at;
+        // a rider (#1134, the user: as the cars): its front wheel on its line, the rear trailing it at the wheelbase, the bike laid
+        // rear to front, so it turns into its way instead of sliding sideways when its line moves over
+        if (m.Kind == MoverKind.Rider && flat.LengthSquared() > 1e-6f)
+        {
+            var rear = m.RearSet ? m.Rear : at - flat.Normalized() * BikeWheelbase;
+            var toFront = MathX.Flat(at - rear);
+            if (toFront.LengthSquared() < 1e-4f) toFront = flat;
+            toFront = toFront.Normalized();
+            m.Rear = at - toFront * BikeWheelbase;
+            m.RearSet = true;
+            flat = toFront;
+            place = at - toFront * (BikeWheelbase * 0.5f);
+        }
         var basis = flat.LengthSquared() > 1e-6f ? Player.Flyer.Orient(flat.Normalized(), Vector3.Up, Vector3.Forward) : m.Body.GlobalBasis;
-        m.Body.GlobalTransform = new Transform3D(basis, at);
+        m.Body.GlobalTransform = new Transform3D(basis, place);
         m.Head = at;
     }
 
@@ -284,6 +302,7 @@ public partial class Traffic
             float d = MathX.Flat(m.Head - focus).Length();
             if (d > look.Despawn || m.Stuck > 30f || (list.Count > want && d > look.Despawn * 0.6f) || want == 0)
             {
+                if (m.Stuck > 30f) StuckDropped[(int)kind]++;
                 DropMover(m);
                 list.RemoveAt(i);
             }
@@ -319,13 +338,16 @@ public partial class Traffic
     {
         var offsets = new float[lengths.Length];
         var units = new Node3D[lengths.Length];
+        int livery = _rng.Next();
         float back = 0f;
         for (int i = 0; i < lengths.Length; i++)
         {
             offsets[i] = back + lengths[i] * 0.5f;
             back += lengths[i] + gap;
             var size = new Vector3(TramLook.Size.X, TramLook.Size.Y, lengths[i]);
-            units[i] = BoxUnit(MoverKind.Tram, size, TramLook.Drawn, out _);
+            var (body, lamps) = Avatar.TrafficModeMeshBuilder.TramSection(livery, lengths[i], i == 0, i == lengths.Length - 1,
+                i == lengths.Length / 2, i > 0);
+            units[i] = BoxUnit(MoverKind.Tram, size, TramLook.Drawn, out _, body, lamps);
             units[i].Name = $"Tram{i}";
         }
         var route = new Route(edge, forward, forward ? arc : edge.Length - arc);
@@ -338,13 +360,13 @@ public partial class Traffic
     /// <summary>The trams' tick (#1060): spawns (<c>SpawnTram</c>, four times a second while there are fewer than wanted), steps (<c>StepTram</c>), the cull.</summary>
     private void StepTrams(Vector3 focus, float dt, int want)
     {
-        if (_tramLines is { Edges.Count: > 0 } && (_tramTimer -= dt) <= 0)
+        if (!GeneratorsOnly && _tramLines is { Edges.Count: > 0 } && (_tramTimer -= dt) <= 0)
         {
             _tramTimer = 0.25;
             if (_trams.Count < want) SpawnTram(focus);
         }
         foreach (var t in _trams) StepTram(t, dt);
-        Cull(_trams, focus, TramLook.Despawn, want);
+        Cull(_trams, focus, TramLook.Despawn, GeneratorsOnly ? int.MaxValue : want);
     }
 
     /// <summary>
@@ -437,7 +459,7 @@ public partial class Traffic
     /// The speed a car may still do behind the crossers in its lane ahead (#1060: a rider on a road with no bike lane, a tram
     /// sharing it): the car-following rule of <see cref="StepCar"/> with the crosser's own length. +∞ with none.
     /// </summary>
-    private float FollowCrossers(Vehicle car, Vector3 dir, Vector3 rightOf)
+    private float FollowCrossers(Vehicle car, Vector3 dir, Vector3 rightOf, bool narrowPass = false)
     {
         if (_crossersInLane == 0) return float.MaxValue;
         float target = float.MaxValue;
@@ -448,12 +470,33 @@ public partial class Traffic
             var d = c.Pos - car.Head;
             float along = d.Dot(dir);
             if (along < 0.5f || along > FollowLook || Mathf.Abs(d.Y) > 3f || Mathf.Abs(d.Dot(rightOf)) > AheadWidth) continue;
+            // (#1180) not one on the far side of its body, coming the other way or standing: it is passed, not followed (on a narrow
+            // road a rider coming the other way between two cars held them both, and itself, for good)
+            if (c.Vel.Dot(dir) < 0.3f && d.Dot(rightOf) < (narrowPass ? -0.3f : -(NarrowPass.HalfBody + c.Half + 0.2f))) continue;
             float speed = Mathf.Max(0f, c.Vel.Dot(dir));
             float gap = along - CarFront - c.Half - 1.5f;
             target = Mathf.Min(target, Mathf.Max(0f, speed + gap * 0.6f));
             target = Mathf.Min(target, Mathf.Sqrt(speed * speed + 2f * 4f * Mathf.Max(0f, gap)));
         }
         return target;
+    }
+
+    /// <summary>
+    /// A rider or walker in the road coming the other way on a narrow carriageway (#1180): met as a car is, the car moving over and
+    /// crawling past (<see cref="NarrowPass"/>); the nearest within <see cref="NarrowPass.Look"/> m, tail past by 6 m.
+    /// </summary>
+    private void MeetCrossers(Vehicle car, Vector3 dir, Vector3 rightOf, ref float meetAhead, ref float meetAcross)
+    {
+        if (_crossersInLane == 0) return;
+        for (int o = CrosserFrom(car.Head.X - NarrowPass.Look); o < _crossers.Count && _crossers[o].Pos.X <= car.Head.X + NarrowPass.Look; o++)
+        {
+            var c = _crossers[o];
+            if (!c.InLane || c.Vel.Dot(dir) > 0.3f) continue;
+            var d = c.Pos - car.Head;
+            float along = d.Dot(dir), across = d.Dot(rightOf);
+            if (along < -6f || along > NarrowPass.Look || along >= meetAhead || Mathf.Abs(d.Y) > 3f || across > -0.3f || across < -4f) continue;
+            (meetAhead, meetAcross) = (along, across);
+        }
     }
 
     // ---- --trafficcheck and the debug view ------------------------------------------------------

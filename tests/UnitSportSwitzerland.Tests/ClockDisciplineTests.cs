@@ -63,6 +63,8 @@ public class ClockDisciplineTests
 
         // ---- plumbing: real whatever the world is doing ----
         ["src/Net/Handshake.cs"] = "plumbing: the protocol handshake times out in real time",
+        ["src/Net/Accounts/AccountGate.cs"] = "plumbing: the account step times out in real time, as the handshake before it (#1123)",
+        ["src/Net/Accounts/Account.cs"] = "plumbing: a Nakama session token runs out at a Unix time (#1123)",
         ["src/Net/ServerStats.cs"] = "plumbing: the stats sampling window",
         ["src/Net/Swarm.cs"] = "plumbing: a load tool that measures frame times, so it wants the engine's own delta",
         ["src/Net/StatusFile.cs"] = "plumbing: Unix stamps a web page compares with its own clock",
@@ -105,6 +107,7 @@ public class ClockDisciplineTests
         ["src/Items/RadioBody.cs"] = "presentation: a placed radio's CD position and groove",
         ["src/Concert/ConcertService.Songs.cs"] = "presentation: /concert song reads where the setlist is on the shared clock the music plays to",
         ["src/Concert/ConcertService.cs"] = "presentation: an operator's cue is stamped with the shared clock, so every peer's light show keeps the same beat",
+        ["src/Concert/PogoQte.cs"] = "presentation: the pogo QTE judges a press against the beat of the music as heard, which plays on the shared clock in real time",
         ["src/Concert/ConcertBeatDebug.cs"] = "presentation: the beat debug window scrolls its own history in real time",
         ["src/Concert/Mvr/Mdns.cs"] = "plumbing: mDNS answers at most once a second, real time on its receive thread",
         ["src/Concert/Mvr/MvrXchangeStation.cs"] = "plumbing: an MVR-xchange station retries a silent peer after 30 s of real time, on a socket task",

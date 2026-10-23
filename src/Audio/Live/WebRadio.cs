@@ -181,6 +181,10 @@ public partial class WebRadio : Node
         speaker.StartedAt = play.StartedAt;
         speaker.Length = play.Length;
         speaker.Volume = node is FootPlayer driver ? driver.RadioVolume : Items.RadioLoudness.Default;
+        // the driver's mix (#1153); a parked car plays its CD as burnt, as at its default volume
+        var mix = node is FootPlayer d ? d.RadioMix : Vector2.One;
+        speaker.Voice = mix.X;
+        speaker.Music = mix.Y;
         speaker.On = true;
     }
 

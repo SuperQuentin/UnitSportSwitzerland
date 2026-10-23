@@ -520,10 +520,18 @@ public static partial class TileRewriter
         return new ArmAxis(points);
     }
 
+    /// <summary>The planner's step naming an arm whose lone bike lane serves every riders' move into a box (#1184).</summary>
+    internal const string LoneBikeStep = "4 lone bike lane: all moves, into a box";
+
     /// <summary>
     /// Where every arriving bike lane's riders stop at the lights (the user's rule, the same for the three moves): at an
     /// advanced line where the street their move goes into carries their way on (a departing bike lane or path), else in a
     /// bike box. A lane for several moves (kerbside, straight on and right) goes by its straight-on move.
+    /// A lone kerbside bike lane that would be turn-only (no straight on: a T's stem, J8 N's right-only one) while its riders'
+    /// other moves get no lane of their own (no left-turn bike lane, no pocket shared with them) serves them all and leads into
+    /// a bike box (the user, #1184: "a short bike lane leading into a bike box, serving all movements"; only turn-only lanes:
+    /// a lane straight on keeps its advanced line or box): riders wait in front of the cars and leave every way from it. Riders
+    /// turning left take the car lane (#1192) unless the car lane the bike lane leads into turns left too (a single lane).
     /// </summary>
     private static void BikeStops(JunctionPlan jp)
     {
@@ -531,10 +539,28 @@ public static partial class TileRewriter
         {
             var strips = a.Mouth.Strips.ToList();
             bool changed = false;
+            var lone = strips.Select((x, k) => (x, k)).Where(p => p.x.Kind == StripKind.BikeLane && p.x.Way == StripWay.In).ToList();
+            if (lone.Count == 1 && lone[0].k == a.Mouth.LastCarriageway && lone[0].x.Moves != SignalMoves.None
+                && (lone[0].x.Moves & SignalMoves.Through) == 0)
+            {
+                var cars = strips.Where(x => x.IsCarLane && x.Way == StripWay.In).Aggregate(SignalMoves.None, (m, x) => m | x.Moves);
+                var served = lone[0].x.Moves | (strips.Any(x => x.SharedWithBikes) ? SignalMoves.Right : SignalMoves.None);
+                // riders turning left take the car lane (the user, #1192: "bikes turning left take the car lane"): only where the car
+                // lane beside the bike lane, the one it leads into, turns left too (a single lane, J8 N's LR) does its box serve them
+                int beside = strips.FindLastIndex(lone[0].k, x => x.IsCarLane && x.Way == StripWay.In);
+                if (beside < 0 || (strips[beside].Moves != SignalMoves.None && (strips[beside].Moves & SignalMoves.Left) == 0)) cars &= ~SignalMoves.Left;
+                var missing = cars & ~served;
+                if (missing != SignalMoves.None)
+                {
+                    strips[lone[0].k] = lone[0].x with { Moves = lone[0].x.Moves | missing, Stop = BikeStop.Box };
+                    if (!a.Steps.Contains(LoneBikeStep)) a.Steps.Add(LoneBikeStep);
+                    changed = true;
+                }
+            }
             for (int k = 0; k < strips.Count; k++)
             {
                 var s = strips[k];
-                if (s.Kind != StripKind.BikeLane || s.Way != StripWay.In || s.Moves == SignalMoves.None) continue;
+                if (s.Kind != StripKind.BikeLane || s.Way != StripWay.In || s.Moves == SignalMoves.None || s.Stop == BikeStop.Box) continue;
                 var move = (s.Moves & SignalMoves.Through) != 0 ? SignalMoves.Through : (s.Moves & SignalMoves.Left) != 0 ? SignalMoves.Left : SignalMoves.Right;
                 bool carries = a.Toward.TryGetValue(move, out int to) && jp.Arms.FirstOrDefault(x => x.Arm == to) is { } dest && dest.Normal.CarriesBikesAway;
                 // a box only where the bike lane lies beside a car lane making its riders' move, the lane the box covers (the user,

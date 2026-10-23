@@ -231,6 +231,7 @@ public enum PaintType : byte
     SharkTooth = 5,
     Arrow = 6,        // Variant: PaintArrow bits
     BikeSymbol = 7,
+    /// <summary>A stop line across lanes; <see cref="RoadPaint.OverTrack"/> as its variant: a tram's, across its track (#1155), kept by the groove cut.</summary>
     StopLine = 8,
     GiveWayLine = 9,
     RailGroove = 10,
@@ -259,6 +260,12 @@ public sealed class RoadPaint
     public PaintShape Shape { get; init; }
     public PaintType Type { get; init; }
     public byte Variant { get; init; }
+
+    /// <summary>
+    /// <see cref="Variant"/> of a <see cref="PaintType.StopLine"/> painted across a tram track (#1155, the user: "the stopline should be
+    /// drawn for trams"): the track zone's cut of the road's paint leaves it.
+    /// </summary>
+    public const byte OverTrack = 1;
     /// <summary>RGBA8, R in the high byte.</summary>
     public uint Rgba { get; init; }
     /// <summary>Line width in metres (polyline only).</summary>

@@ -75,6 +75,15 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     /// <summary>...for this long shuts by itself: a minute, or the server's <c>--doorquiet s</c> (a check that parks behind a door, #1007).</summary>
     private static readonly double QuietSeconds = CmdArgs.Float("--doorquiet") ?? 60;
 
+    // houses drawn by their owners and approved on the web (#1186): "--house-layouts <path>", else
+    // UNITSPORT_HOUSE_LAYOUTS; whoever plans interiors reads it (the server, an offline game)
+    static InteriorManager()
+    {
+        HouseLayouts.Warn = m => GD.PushWarning("[interior] " + m);
+        HouseLayouts.Path = CmdArgs.Value("--house-layouts", notFlag: true)
+            ?? (System.Environment.GetEnvironmentVariable("UNITSPORT_HOUSE_LAYOUTS") is { Length: > 0 } env ? env : null);
+    }
+
     public static InteriorManager? Instance { get; private set; }
 
     public IChunkSource? Source { get; set; }

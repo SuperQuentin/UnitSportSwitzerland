@@ -142,7 +142,8 @@ public static class AssetStream
         AssetKind.Trees => TreeFormat.FileName(id),
         AssetKind.Buildings => BuildingFormat.FileName(id),
         AssetKind.Holes => HoleFormat.FileName(id),
-        AssetKind.Cd => $"{id.E}.ogg",
+        // N picks the file (#1153): 0 the CD, 1 its voice stem, 2 its music stem
+        AssetKind.Cd => id.N switch { 1 => $"{id.E}.voc.ogg", 2 => $"{id.E}.inst.ogg", _ => $"{id.E}.ogg" },
         AssetKind.Water => WaterFormat.FileName(id),
         AssetKind.Landings => LandingIndex.FileName,
         AssetKind.HttpBase => "",

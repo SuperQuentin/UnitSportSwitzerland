@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!-- The house layout service (#1186): claims, drawn layouts and their review, behind Caddy at /api/.
+       docs/notes/net/house-layouts.md. Published self-contained for linux-x64 by tools/deploy-linux.sh. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>UnitSport.LayoutService</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+    <PackageReference Include="Npgsql" Version="8.0.3" />
+    <ProjectReference Include="..\TerrainFormat\TerrainFormat.csproj" />
+  </ItemGroup>
+
+</Project>

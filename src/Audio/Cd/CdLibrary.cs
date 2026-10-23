@@ -148,6 +148,18 @@ public partial class CdLibrary : Node
     private readonly ConcurrentQueue<(int Id, bool Personal, CdAnalysis? Analysis, bool NoFfmpeg)> _reanalysed = new();
     private bool _reanalysing, _noFfmpeg;
 
+    /// <summary>
+    /// Stops this library's re-analysis when it leaves the tree (#1169): a world left behind used to
+    /// keep separating its CD on a worker, and every join queued another beside it.
+    /// </summary>
+    private readonly CancellationTokenSource _backfillStop = new();
+
+    /// <summary>
+    /// One vocal separation in the process at a time (#1169), across every library: the network takes
+    /// gigabytes while it runs, and a library just left may not have reached its next cancellation point.
+    /// </summary>
+    private static readonly SemaphoreSlim OneAnalysis = new(1, 1);
+
     /// <summary>What a queued burn of this process marks its CD with (a default link, the bundled beat).</summary>
     private readonly Dictionary<string, string> _sources = new();
 
@@ -174,6 +186,7 @@ public partial class CdLibrary : Node
 
     public override void _ExitTree()
     {
+        _backfillStop.Cancel();
         if (_server) Multiplayer.PeerConnected -= SendAll;
         if (Instance == this) Instance = null;
     }
@@ -239,7 +252,7 @@ public partial class CdLibrary : Node
     public void RemovePersonal(int id)
     {
         if (!_personal.Remove(id)) return;
-        foreach (string ext in new[] { ".ogg", ".json" })
+        foreach (string ext in new[] { ".ogg", ".json", ".voc.ogg", ".inst.ogg" })
         {
             try { File.Delete(Path.Combine(PersonalDirectory, $"{id}{ext}")); }
             catch (Exception e) { GD.PushWarning($"[cd] could not delete personal CD {id}: {e.Message}"); }
@@ -403,10 +416,50 @@ public partial class CdLibrary : Node
     /// </summary>
     private void QueueBackfill()
     {
+        // a headless client is a check, never a player (#1169): it would separate the user's own CDs
+        // for minutes, gigabytes at a time, and rewrite them; '/cd reanalyse' still queues them by hand
+        if (!_server && DisplayServer.GetName() == "headless")
+        {
+            GD.Print("[cd] headless client: no analysis backfill at start");
+            return;
+        }
         if (Owns)
             foreach (var cd in _all.Values) if (CdAnalysis.IsStale(cd)) _stale.Enqueue((cd.Id, false));
         foreach (var cd in _personal.Values) if (CdAnalysis.IsStale(cd)) _stale.Enqueue((cd.Id, true));
         if (_stale.Count > 0) GD.Print($"[cd] analysing {_stale.Count} older CD(s) again");
+    }
+
+    /// <summary>
+    /// <c>/cd</c> (#1153), where the library lives: reports which analyser version each CD carries,
+    /// or queues CDs for the backfill: the stale ones, all, or one id (forced even when current,
+    /// e.g. after the vocal model arrived). Queuing is an admin's online.
+    /// </summary>
+    public string Command(string args, bool mayChange)
+    {
+        if (!CdCommand.TryParse(args, out var op, out int id, out string error)) return error;
+        var cds = (Owns ? _all.Values.Select(c => (c, false)) : Enumerable.Empty<(CdInfo, bool)>())
+            .Concat(_personal.Values.Select(c => (c, true))).ToList();
+        if (op == CdCommand.Op.Report)
+            return CdCommand.Describe(cds.Select(c => (c.Item1.Analysis?.Version ?? 0, c.Item1.Analysis?.VocalSource ?? "")),
+                CdAnalysis.CurrentVersion, _reanalysing, _stale.Count);
+        if (!mayChange) return "Re-analysing CDs is an admin command.";
+        if (_noFfmpeg) return "ffmpeg is missing here: CDs cannot be analysed again.";
+        int queued = 0;
+        foreach (var (cd, personal) in cds)
+        {
+            bool want = op switch
+            {
+                CdCommand.Op.All => true,
+                CdCommand.Op.One => cd.Id == id,
+                _ => CdAnalysis.IsStale(cd),
+            };
+            if (!want || _stale.Contains((cd.Id, personal))) continue;
+            _stale.Enqueue((cd.Id, personal));
+            queued++;
+        }
+        if (op == CdCommand.Op.One && queued == 0 && !_stale.Any(s => s.Id == id)) return $"No CD {id} here.";
+        GD.Print($"[cd] /cd queued {queued} CD(s) for analysis v{CdAnalysis.CurrentVersion}");
+        return $"Queued {queued} CD(s) for analysis v{CdAnalysis.CurrentVersion} ({_stale.Count} waiting). '/cd analysis' shows progress.";
     }
 
     /// <summary>Decodes one CD's Ogg on a worker and analyses it on its stored grid; the result comes back through <see cref="_reanalysed"/>.</summary>
@@ -418,13 +471,22 @@ public partial class CdLibrary : Node
         if (!File.Exists(ogg)) return;
         _reanalysing = true;
         float bpm = cd.Bpm, offset = cd.BeatOffset;
+        var stop = _backfillStop.Token;
         Task.Run(async () =>
         {
             CdAnalysis? analysis = null;
             bool noFfmpeg = false;
-            try { analysis = await CdBurner.ReanalyseAsync(ogg, bpm, offset, CancellationToken.None); }
+            bool held = false;
+            try
+            {
+                await OneAnalysis.WaitAsync(stop);
+                held = true;
+                analysis = await CdBurner.ReanalyseAsync(ogg, bpm, offset, stop);
+            }
+            catch (OperationCanceledException) { GD.Print($"[cd] analysis of CD {id} stopped: the library left"); }
             catch (System.ComponentModel.Win32Exception) { noFfmpeg = true; }   // ffmpeg missing: skip quietly
             catch (Exception e) { GD.Print($"[cd] could not analyse CD {id} again: {e.Message}"); }
+            finally { if (held) OneAnalysis.Release(); }
             _reanalysed.Enqueue((id, personal, analysis, noFfmpeg));
         });
     }
@@ -442,7 +504,7 @@ public partial class CdLibrary : Node
         SaveIndex(dir, list);
         try { Core.JsonStore.Save(Path.Combine(dir, $"{id}.json"), cd, CdInfo.Json); }
         catch (Exception e) { GD.PushWarning($"[cd] could not save CD {id}: {e.Message}"); }
-        GD.Print($"[cd] CD {id} analysed again: {analysis.SectionStarts.Length} section(s), downbeat {analysis.Downbeat}");
+        GD.Print($"[cd] CD {id} analysed again (v{analysis.Version}, vocal {analysis.VocalSource}): {analysis.SectionStarts.Length} section(s), downbeat {analysis.Downbeat}");
         Changed?.Invoke();
         // Added replaces a listed id on the clients
         if (!personal && _server && Online) Rpc(MethodName.Added, cd.ToDict());
@@ -484,7 +546,7 @@ public partial class CdLibrary : Node
         {
             cds.Remove(cd.Id);
             any = true;
-            foreach (string ext in new[] { ".ogg", ".json" })
+            foreach (string ext in new[] { ".ogg", ".json", ".voc.ogg", ".inst.ogg" })
             {
                 try { File.Delete(Path.Combine(directory, $"{cd.Id}{ext}")); }
                 catch (Exception e) { GD.PushWarning($"[cd] could not delete fixture CD {cd.Id}{ext}: {e.Message}"); }

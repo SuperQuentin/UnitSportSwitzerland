@@ -4,7 +4,7 @@ using UnitSport.Core;
 namespace UnitSport.Ui;
 
 /// <summary>
-/// The in-game Esc menu: Resume, Settings, Controls (Skip tutorial while it runs), Leave to the main menu, Quit. It does not
+/// The in-game Esc menu: Resume, Character, Settings, Controls (Skip tutorial while it runs), Leave to the main menu, Quit. It does not
 /// stop the world — online nothing can, and one rule is simpler than two — but it takes the
 /// pointer and holds the movement keys while open. Esc / Start / B resumes.
 /// </summary>
@@ -60,6 +60,7 @@ public partial class PauseScreen : Screen
                 Shell.Push(Movie.MovieStudio.Create(world));
             });
         }
+        Entry(column, "Character", () => Shell.Push(CharacterScreen.Create()));
         Entry(column, "Settings", () => Shell.Push(SettingsScreen.Create()));
         Entry(column, "Controls", () => Shell.ShowControls());
         if (Tutorial.Current is { } tutorial)

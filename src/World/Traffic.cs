@@ -387,7 +387,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             if (_trains.Count < wantTrains) SpawnTrain(focus);
         }
 
-        StepEndpoints(dt);
+        StepEndpoints(dt, focus);
 
         // one list for the traffic's life, refilled each tick (#221)
         var obstacles = _obstacles;
@@ -409,8 +409,11 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
 
         Cull(_cars, focus, CarDespawn, GeneratorsOnly ? int.MaxValue : wantCars);
         // the modes beyond cars and trains (#1060): walkers, riders, trams, each on its own graph
-        if (_walks is not null || _walkers.Count > 0) StepMovers(MoverKind.Walker, _walks, focus, dt, Want(MoverKind.Walker, night));
-        if (_rides is not null || _riders.Count > 0) StepMovers(MoverKind.Rider, _rides, focus, dt, Want(MoverKind.Rider, night));
+        // (the test world's walkers and riders come from its endpoints alone, #1134: no graph to spawn on, none culled for number)
+        if (_walks is not null || _walkers.Count > 0)
+            StepMovers(MoverKind.Walker, GeneratorsOnly ? null : _walks, focus, dt, GeneratorsOnly ? int.MaxValue : Want(MoverKind.Walker, night));
+        if (_rides is not null || _riders.Count > 0)
+            StepMovers(MoverKind.Rider, GeneratorsOnly ? null : _rides, focus, dt, GeneratorsOnly ? int.MaxValue : Want(MoverKind.Rider, night));
         if (_tramLines is not null || _trams.Count > 0) StepTrams(focus, dt, Want(MoverKind.Tram, night));
         StepDebugDraw(delta);
         Cull(_trains, focus, TrainDespawn, wantTrains);
@@ -442,6 +445,15 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             float d = new Vector2(v.Head.X - focus.X, v.Head.Z - focus.Z).Length();
             if (d > range || v.Stuck > 20f || (list.Count > want && d > range * 0.6f))
             {
+                if (v.Stuck > 20f)
+                {
+                    int kind = list == _trams ? (int)MoverKind.Tram : list == _trains ? (int)MoverKind.Train : (int)MoverKind.Car;
+                    if (StuckDropped[kind]++ < 12 && v.FromEndpoint)
+                    {
+                        var (se, sn) = _origin.ToLv95(v.Head);
+                        GD.Print($"[traffic] dropped a stuck {(MoverKind)kind} from endpoint #{v.FromId} at {se:F0},{sn:F0} ({v.Route.Edge.Class}, to #{v.ToId})");
+                    }
+                }
                 foreach (var u in v.Units) _byBody.Remove(u.GetInstanceId());
                 if (v.FromEndpoint) _generatedLive--;
                 v.Free();
@@ -596,6 +608,12 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
 
     /// <summary>How far a car's front stands before its middle (m): half a van's 5 m.</summary>
     private const float CarFront = 2.5f;
+
+    /// <summary>Two cars' lines further apart than this are in two lanes (m): a body's 1.9 m and a little (#1172, the box rule's lanes).</summary>
+    private const float LaneApart = 2.0f;
+
+    /// <summary>Two cars whose middles are closer than this along the way are side by side (m), not one behind the other (#1172).</summary>
+    private const float SideBySide = 2.0f;
     private readonly Vehicle _xKey = new(0f);
 
     /// <summary>This car's road from 80 m behind to 120 m ahead, every 4 m (<see cref="Behind"/> is the index of the car).</summary>
@@ -618,7 +636,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     /// </summary>
     private void StepCar(Vehicle car, float dt, List<(Vector3 Pos, Vector3 Vel)> obstacles)
     {
-        car.Route.Plan(130f, leg => NextRoad(leg, car));
+        car.Route.Plan(ApproachLookAhead + 20f, leg => NextRoad(leg, car));
         var (pos, dir) = car.Route.At(0);
         var edge = car.Route.Edge;
         float cruise = CruiseSpeed(edge.Class);
@@ -639,34 +657,95 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         var rightOf = new Vector3(-dir.Z, 0f, dir.X).Normalized();   // right of its way, as Vehicle.Place offsets the lane
         // a car alongside on the side it is easing over to (#854): it holds its line until there is room, or it slid onto it
         float sideTaken = 0f, easing = car.LaneWanted - car.Lane;
+        bool queued = false, overlapping = false;
+        // the nearest car ahead in its way that stands or crawls: the tail of the queue it joins (#1172: its lane changes are planned to
+        // end there, not at the line; a car only moves over while it rolls, so one that reached the tail first kept its lane)
+        float tailAhead = float.MaxValue;
+        // the nearest car coming the other way on a narrow carriageway the two pass on, moved over (#1180): how far ahead, and how
+        // far right of this car it is (its middle's)
+        bool squeezes = Narrow(edge) && NarrowPass.Fits(edge.Width);
+        float meetAhead = float.MaxValue, meetAcross = 0f;
         for (int o = from < 0 ? ~from : from; o < _byX.Count && _byX[o].Head.X <= car.Head.X + GapWindow; o++)
         {
             var other = _byX[o];
             if (other == car) continue;
             var d = other.Head - car.Head;
             float along = d.Dot(dir);
-            if (Mathf.Abs(along) < 5f && Mathf.Abs(easing) > 0.05f && d.Dot(rightOf) is var beside && Mathf.Abs(beside) < 2.2f
-                && Mathf.Sign(beside) == Mathf.Sign(easing) && Mathf.Abs(d.Y) < 3f && other.Route.At(0).Dir.Dot(dir) > 0.3f)
+            // (until its tail is past: its body beside this one's from 6 m ahead to 6 m behind)
+            if (squeezes && along > -6f && along < NarrowPass.Look && along < meetAhead && Mathf.Abs(d.Y) < 3f
+                && d.Dot(rightOf) is var meetSide && meetSide < 0.5f && meetSide > -(edge.Width + 2f) && other.Route.At(0).Dir.Dot(dir) < -0.7f)
+                (meetAhead, meetAcross) = (along, meetSide);
+            // (#1134, the user's two cars at a lane split: also one coming up behind in the lane it moves into, close enough to be
+            // driven into: it waits for a gap that holds it, from 8 m behind to 6 m ahead of it)
+            if (along > -8f && along < 6f && Mathf.Abs(easing) > 0.05f && d.Dot(rightOf) is var beside && Mathf.Abs(beside) < 3.2f
+                && Mathf.Sign(beside) == Mathf.Sign(easing) && Mathf.Abs(beside) > 0.4f && Mathf.Abs(d.Y) < 3f && other.Route.At(0).Dir.Dot(dir) > 0.3f)
                 sideTaken = Mathf.Sign(easing);
             // closer than a metre: the one behind (on one spot, the one with the lower habit) waits as if the other were just
             // ahead. Skipping it, as it did, a car that got that close drove on through the queue, or the two as one (#854)
             if (along > -1f && along < 1f && car.Habit < other.Habit && (d - dir * along).Length() < 1f) DoubledNow++;
+            // (#1134: two standing body on body, the probe's overlap watch)
+            if (car.Speed < 0.3f && other.Speed < 0.3f && Mathf.Abs(d.Dot(dir)) < 3.5f && Mathf.Abs(d.Dot(rightOf)) < 1.7f && Mathf.Abs(d.Y) < 3f)
+                (overlapping, car.OverlapWith) = (true, other);
+            // (#1172) the first time one rolls onto a car ahead of it, body on body: what each was doing then
+            if (car.Speed >= 0.3f && d.Dot(dir) > 0f && d.Dot(dir) < 4f && Mathf.Abs(d.Dot(rightOf)) < 1.7f && Mathf.Abs(d.Y) < 3f && other.Route.At(0).Dir.Dot(dir) > 0.3f
+                && !car.ContactLogged && ContactsLogged < 40)
+            {
+                car.ContactLogged = true;
+                ContactsLogged++;
+                var (ce, cn) = _origin.ToLv95(car.Head);
+                GD.Print($"[traffic] contact at {ce:F0},{cn:F0}: behind v {car.Speed:F1} lane {car.Lane:F2}/{car.LaneWanted:F2}/aim {car.LaneAim:F2} step {car.StepTarget:F2} idx {car.LaneIndex} strip {car.Strip} turn {car.Turn} habit {car.Habit % 1000} edge {car.Route.Edge.GetHashCode() % 10000} arc {car.Route.Arc:F1}"
+                    + $"; ahead v {other.Speed:F1} lane {other.Lane:F2}/{other.LaneWanted:F2}/aim {other.LaneAim:F2} idx {other.LaneIndex} strip {other.Strip} turn {other.Turn} habit {other.Habit % 1000} edge {other.Route.Edge.GetHashCode() % 10000} arc {other.Route.Arc:F1}"
+                    + $"; along {d.Dot(dir):F2} across {d.Dot(rightOf):F2} dirdot {other.Route.At(0).Dir.Dot(dir):F2} t {Core.GameClock.Now:F1}");
+            }
             if (along > -1f && along < 1f && (along > 0f || car.Habit < other.Habit)) along = 1f;
             // in the way: within a body's width of its line now, or of the lane it is heading for at the line. One for a turn pocket
             // eases over only in the last metres and met the car standing in it from the side, on top of it (#854). One coming
             // the other way is not in the way, by its direction below
+            // (#1172) or of where its lane takes it by the time it gets there: one easing over onto a lane where a car stands (a pocket
+            // not open yet rides the through lane, a transition's strip leads onto it) saw it only once within 2 m of its line, 12 m
+            // short of it at 40 km/h, and stopped on top of it; or one ahead on a bend or a junction path, measured across its heading now)
             float across = d.Dot(rightOf), toward = car.LaneAim - car.Lane;
-            if (along < 1f || along > FollowLook || Mathf.Abs(d.Y) > 3f
-                || Mathf.Abs(across) > AheadWidth && Mathf.Abs(across - toward) > AheadWidth) continue;
-            if (other.Route.At(0).Dir.Dot(dir) < 0.3f) continue;
+            if (along < 1f || along > FollowLook || Mathf.Abs(d.Y) > 3f || other.Route.At(0).Dir.Dot(dir) < 0.3f
+                || Mathf.Abs(across) > AheadWidth && Mathf.Abs(across - toward) > AheadWidth
+                   && !OnLineAhead(car, other.Head, d.Length())) continue;
+            // side by side, each in the other's way (#1134, the user: two cars at a lane split, one moving over into the other's lane,
+            // both stopped for good): only one gives way. The one changing lanes yields to the one keeping its lane; both or neither
+            // changing, the lower habit yields. The other drives on as if it were not there
+            // (side by side only, in two lanes: in one lane the one behind always waits, else the one ahead was driven into, as at J5b;
+            // #1172: and truly beside, middle within SideBySide m of middle: one whose middle is further ahead goes first, the one behind
+            // waits. Read up to 5 m, a car ignored one 2-4 m ahead of it as it merged in or two junction paths joined, and drove onto it)
+            if (d.Dot(dir) < SideBySide && Mathf.Abs(across) > 1.2f && (-d).Dot(other.Route.At(0).Dir) > -1f)
+            {
+                bool meMoving = Mathf.Abs(car.LaneWanted - car.Lane) > 0.05f, otherMoving = Mathf.Abs(other.LaneWanted - other.Lane) > 0.05f;
+                bool iYield = meMoving != otherMoving ? meMoving : car.Habit < other.Habit;
+                if (!iYield) continue;
+            }
             // standing 7.5 m apart, middle to middle: about 2.5 m between bumpers, as a queue stands (#971: 9 m left 4.5 m)
             target = Mathf.Min(target, Mathf.Max(0f, other.Speed + (along - QueueSpacing) * 0.6f));
             // and no faster than it can still shed before the gap (4 m/s², under the 6 it brakes at): the line above alone
             // let one come at a queue at 50 km/h from 40 m, too late to stop (#854)
             target = Mathf.Min(target, Mathf.Sqrt(other.Speed * other.Speed + 2f * 4f * Mathf.Max(0f, along - QueueSpacing + 1f)));
+            if (other.Speed < 2f) tailAhead = Mathf.Min(tailAhead, along);
+            // standing right behind one that waits (a red, a gap, a queue of its own): queued, not stuck (#1134: a queue behind a
+            // long red reaches past where the cars read the lights, and its back vanished after 20 s)
+            // (truly ahead, not one on the same spot: two on one spot each reading the other as ahead would hold each other
+            // queued for good, where being dropped as stuck untangles them)
+            if (other.Speed < 0.5f && d.Dot(dir) > 2f && along < QueueSpacing + 6f && (other.AtRed || other.RoomHeld || other.NarrowHeld || other.Queued || other.GapWaiting || other.GapHeld)) queued = true;
         }
-        // and behind a rider or tram in its lane (#1060: the modes' crossers; +∞ without them)
-        target = Mathf.Min(target, FollowCrossers(car, dir, rightOf));
+        // and behind a rider or tram in its lane (#1060: the modes' crossers; +∞ without them): standing behind one, queued too
+        // (#1134: a tram at its stop, a rider at a red)
+        float behindCrosser = FollowCrossers(car, dir, rightOf, squeezes);
+        car.Queued = queued || behindCrosser < 0.5f && car.Speed < 0.5f;
+        car.Overlap = overlapping ? car.Overlap + dt : 0f;
+        if (car.Overlap > OverlapFails && OverlapLongest <= OverlapFails)
+        {
+            var (oe, on) = _origin.ToLv95(car.Head);
+            string Who(Vehicle v) => $"lane {v.Lane:F1}/{v.LaneWanted:F1} idx {v.LaneIndex} strip {v.Strip} turn {v.Turn} red {v.AtRed} q {v.Queued} edge {v.Route.Edge.GetHashCode() % 10000} {(v.Route.Forward ? "f" : "b")} arc {v.Route.Arc:F1}{(v.Route.Edge.Path is not null ? " path" : "")}{(v.Route.Edge.Transition is not null ? " trans" : "")} habit {v.Habit % 1000}";
+            var w = car.OverlapWith;
+            GD.Print($"[traffic] two cars body on body for {OverlapFails:F0} s at {oe:F0},{on:F0}: A {Who(car)}; B {(w is null ? "-" : Who(w))}; d along {(w is null ? 0 : (w.Head - car.Head).Dot(dir)):F2} across {(w is null ? 0 : (w.Head - car.Head).Dot(rightOf)):F2}");
+        }
+        OverlapLongest = Mathf.Max(OverlapLongest, car.Overlap);
+        target = Mathf.Min(target, behindCrosser);
 
         float half = edge.Width * 0.5f, keep = KeepRight(edge, car.Route.Forward, car.Habit);
         bool twoWay = (edge.Flags & RoadFlags.Divided) == 0 && edge.OneWay == 0;
@@ -676,6 +755,23 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         float maxPull = twoWay ? Mathf.Max(0f, half - 0.95f - keep) : 0f;
         float mine = keep + car.Pull;   // this car's centre, right of the centreline
         float wantPull = 0f, makeWay = float.MaxValue;
+        // meeting one on a narrow carriageway (#1180, the user): a crawl, over to the right edge (wheels on the verge or the kerb by
+        // what it takes) until the two bodies pass with room between; back to its line once its tail is past
+        if (squeezes) MeetCrossers(car, dir, rightOf, ref meetAhead, ref meetAcross);
+        if (meetAhead < float.MaxValue)
+        {
+            float centre = NarrowPass.Centre(edge.Width, keep, -(mine + meetAcross));
+            maxPull = Mathf.Max(maxPull, centre - keep);
+            wantPull = centre - keep;
+            target = Mathf.Min(target, NarrowPass.Approach(edge.Width, centre, meetAhead));
+            if (!car.Squeezing && ++NarrowPasses <= 20)
+            {
+                var (pe, pn) = _origin.ToLv95(car.Head);
+                GD.Print($"[traffic] narrow pass (#1180) at {pe:F0},{pn:F0}, t {Core.GameClock.Now:F1}: {edge.Width:F1} m road, one coming {meetAhead:F0} m ahead, over to {centre:F2} m right of the middle at {NarrowPass.Crawl(edge.Width, centre) * 3.6f:F0} km/h");
+            }
+            car.Squeezing = true;
+        }
+        else car.Squeezing = false;
         bool yield = false, hold = false, blocked = false, stopFor = false;
         (Vector3 At, float Distance, bool Yields)? junction = null;
         bool junctionLooked = false;
@@ -698,7 +794,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         FollowTransition(car);
         // a car just spawned starts on the lane it would be in (#818 phase 5: else one spawned close to a junction reaches its path
         // off its lane); after that it eases
-        if (!car.Placed) (car.Lane, car.Placed) = (car.LaneWanted, true);
+        bool first = !car.Placed;
+        if (first) (car.Lane, car.Placed) = (car.LaneWanted, true);
         target = Mathf.Min(target, lights);
         target = Mathf.Min(target, LitLimit(car, edge));
         // a turn that gives way on its green: in to the conflict point, and wait there for a gap (#1046)
@@ -842,6 +939,14 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         if (racerRight) wantPull = Mathf.Min(wantPull, car.Pull);
         // a queue starts car by car (#1046): a standing car let go (its light turns green, the car ahead moves off) starts its
         // driver's reaction time later, so a queue stretches out as it discharges (it moved off as one train of cars)
+        // one carriageway too narrow for two cars side by side (#1134, the user): not into it while one comes the other way on it or
+        // is about to; it waits at the stretch's end (before the junction's core where the stretch starts past one)
+        car.NarrowHeld = false;
+        if (NarrowAhead(car) is { } narrowStop)
+        {
+            target = Mathf.Min(target, StopWithin(narrowStop));
+            car.NarrowHeld = car.Speed < 0.5f;
+        }
         if (car.Speed < StartSpeed)
         {
             if (target <= StartSpeed) car.Starting = 0f;
@@ -854,9 +959,24 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         // there; the green it gives way to ends too). A car held by the lights (a red, a wait at the line) in a queue does not
         // turn round either
         bool atLights = lights < float.MaxValue;
-        car.Stuck = car.Speed < 0.3f && !stopFor && !hold && !car.AtRed && !car.GapWaiting && !car.GapHeld ? car.Stuck + dt : 0f;
+        car.Stuck = car.Speed < 0.3f && !stopFor && !hold && !car.AtRed && !car.RoomHeld && !car.NarrowHeld && !car.Queued && !car.GapWaiting && !car.GapHeld ? car.Stuck + dt : 0f;
         car.Holding = hold;
         car.Yield = yield;
+        // (#1134, J1: why a car stands at its line through a green) logged a few times, with what holds it
+        if (car.Approach is { Site: { } gs } && car.Group >= 0 && car.ToLine < 4f && car.ToLine > -1f && car.Speed < 0.3f
+            && gs.Plan.State(car.Group, SignalLamps.Clock()) == SignalAspect.Green)
+        {
+            car.GreenStand += dt;
+            if (car.GreenStand > 12f && !car.GreenStandLogged && GreenStandsLogged++ < 12)
+            {
+                car.GreenStandLogged = true;
+                var (ge, gn) = _origin.ToLv95(car.Head);
+                GD.Print($"[traffic] a car stands 12 s at its line on green at {ge:F0},{gn:F0}: turn {car.Turn}, lane {car.LaneIndex}, room-held {car.RoomHeld}, "
+                    + $"narrow-held {car.NarrowHeld}, queued {car.Queued}, gap waiting {car.GapWaiting}/{car.GapHeld}, holding {hold}, stop-for {stopFor}, "
+                    + $"waited permissive {car.WaitedPermissive}, target {target:F1}, next legs {string.Join(" > ", car.Route.Legs.Skip(car.Route.Leg).Take(4).Select(l => $"{l.Item1.Class}{(l.Item1.Path is not null ? "/path" : l.Item1.Connector ? "/link" : "")} {l.Item1.Length:F0}m w{l.Item1.Width:F1}"))}");
+            }
+        }
+        else car.GreenStand = 0f;
         car.Stale = blocked && car.Speed < 0.3f && !atLights ? car.Stale + dt : 0f;
         if (car.Stale > 5f && twoWay)
         {
@@ -870,16 +990,28 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
 
         var before = car.Head;
         var (legEdge, legForward) = (car.Route.Edge, car.Route.Forward);
-        if (!car.Route.Advance(car.Speed * dt, leg => NextRoad(leg, car))) car.Stuck += 5f;
+        // (at the end of its way: dropped this tick, queued or not, #1134)
+        if (!car.Route.Advance(car.Speed * dt, leg => NextRoad(leg, car))) car.Stuck += 21f;
         if (car.Route.Edge != legEdge) HandOver(car, legEdge, legForward);
         car.Route.Trim(90f);   // the road behind it too: whoever is closing from behind is found on it
         float pull = car.Startle > 0f ? Mathf.Clamp(car.Pull + 0.12f * Mathf.Sin(car.Startle * 14f), 0f, maxPull) : car.Pull;
         // lane changes (#353): following a taper at its speed, else over ~2.5 s; after the line back to its usual line
-        if (sideTaken == 0f || Mathf.Sign(car.LaneWanted - car.Lane) != sideTaken)
-            car.Lane = Mathf.MoveToward(car.Lane, car.LaneWanted, 0.35f * car.Speed * dt);
+        // (#1134, the user: one lane at a time, the changes spaced, planned ahead: LaneChoice.Aim)
+        float planTo = Mathf.Min(car.ToLine, tailAhead - QueueSpacing);
+        float aim = LaneChoice.Aim(car.Lane, car.LaneWanted, car.StepTarget, car.SinceStep, planTo, out bool steps);
+        if (steps)
+        {
+            if (Mathf.Abs(aim - car.Lane) > LaneChoice.LaneWidth * 1.4f) MultiLaneJumps++;
+            (car.StepTarget, car.SinceStep) = (aim, 0f);
+            LaneChanges++;
+        }
+        car.SinceStep += car.Speed * dt;
+        if (sideTaken == 0f || Mathf.Sign(aim - car.Lane) != sideTaken)
+            car.Lane = Mathf.MoveToward(car.Lane, aim, 0.35f * car.Speed * dt);
         float lane = car.Lane;
         car.Place(e => KeepRight(e, car.Route.Forward, car.Habit) + pull + lane);
         car.Vel = dt > 0f ? MathX.Flat(car.Head - before) / dt : Vector3.Zero;
+        if (first && car.FromEndpoint) CheckStart(car);
         // where its lane takes it, 0.5 s apart at this speed: a racer reads it to see it coming out of a side road
         for (int k = 0; k < PathSteps; k++) car.Path[k] = car.Route.At(-car.Speed * 0.5f * (k + 1)).Pos;
     }
@@ -976,7 +1108,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     // ---- approaches: lanes and traffic lights (#353) -----------------------------------------
 
     /// <summary>A car finds the approach its route leads into this far ahead: its lanes start up to ~80 m before the line.</summary>
-    private const float ApproachLookAhead = 110f;
+    private const float ApproachLookAhead = 300f;
 
     /// <summary>How hard a car eases down to a lit junction's limit on its way to the line (m/s²).</summary>
     private const float LimitEase = 2f;
@@ -1016,11 +1148,11 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     /// red and yellow, it stops half a metre short of its lane's stop line; yellow, it stops if it
     /// can at <see cref="AmberBrake"/>, else goes; green, it goes, unless it turns left across
     /// oncoming traffic from a shared lane, or there is no room for it past the junction. +∞ when
-    /// nothing holds it.
+    /// nothing holds it. With <paramref name="laneOnly"/> only its lane (<see cref="StartLine"/>: no lights read, nothing counted).
     /// </summary>
-    private float Approach(Vehicle car)
+    private float Approach(Vehicle car, bool laneOnly = false)
     {
-        car.AtRed = false;
+        car.AtRed = car.RoomHeld = false;
         // the next approach on its route within reach: it may be a short edge after another (a
         // split line, a junction just before), read before the car is on it
         LaneApproach? approach = null;
@@ -1030,6 +1162,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         for (int i = car.Route.Leg; i < legs.Count && along < ApproachLookAhead; i++)
         {
             var (e, f) = legs[i];
+            // (#1134: read from as far as 300 m, so a car settles in its lane early, but not past a junction before it)
+            if (i > car.Route.Leg && e.Path is not null) break;
             float rem = i == car.Route.Leg ? e.Length - car.Route.Arc : e.Length;
             if ((f ? e.ApproachAtEnd : e.ApproachAtStart) is var (a, back))
             {
@@ -1106,7 +1240,13 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             float centre = approach.LaneCentre - KeepRight(car.Route.Edge, car.Route.Forward, car.Habit);
             car.LaneWanted = centre * onto + approach.Lateral(car.LaneIndex, d);
             car.LaneAim = centre + approach.Lateral(car.LaneIndex, 0f);
+            // (#1172) on a road that already has its lane here (an artery's lanes run on before the record's 24 m of them): straight to
+            // it, not to the original lane's centre first. Upstream every car rode its usual line, so a queue longer than the record
+            // stood in one or two lanes (J13's west arm: L 0, T 5, T 9, TR 20 at its longest)
+            if (HasLane(car.Route.Edge, car.Route.Forward, KeepRight(car.Route.Edge, car.Route.Forward, car.Habit) + car.LaneAim))
+                car.LaneWanted = car.LaneAim;
         }
+        if (laneOnly) return float.MaxValue;
         bool crossed = before > 0f && before < float.MaxValue && toLine <= 0f;
         bool pocketLeft = car.Turn == SignalMoves.Left && car.LaneIndex >= 0 && approach.Parent[car.LaneIndex] >= 0
             && approach.Lanes[car.LaneIndex].Moves == SignalMoves.Left;
@@ -1156,8 +1296,9 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             }
             // a queue does not block the junction: no entering it without room past it (only while it
             // can still stop calmly; one already too close goes)
-            if (toLine < RoomLook && car.Speed * car.Speed / 8f < Mathf.Max(stopAt, 0f) + 0.5f && !RoomPast(car, leg, toEnd))
+            if (toLine < RoomLook && car.Speed * car.Speed / 8f < Mathf.Max(stopAt, 0f) + 0.5f && !RoomPast(car, approach, leg, toEnd))
             {
+                car.RoomHeld = true;
                 if (!car.WaitedRoom) { car.WaitedRoom = true; approach.RoomWaits++; RoomWaits++; }
                 return StopWithin(stopAt);
             }
@@ -1257,36 +1398,227 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
 
     /// <summary>
     /// Whether there is room for a car past the junction its leg <paramref name="leg"/> ends at
-    /// (<paramref name="toEnd"/> m ahead): no car standing on its way out within a car's length of
-    /// the junction, going its way.
+    /// (<paramref name="toEnd"/> m ahead), the box rule (#1134, <see cref="BoxRule"/>, the user): its exit, from the core up to the
+    /// next stop line or junction (as far as its way is planned; <see cref="BoxRule.Reach"/> at most), holds it past every car
+    /// on it going its way and every car in the core committed to it. An approach or exit arm flagged <c>AllowBlock</c> lets it go.
     /// </summary>
-    private bool RoomPast(Vehicle car, int leg, float toEnd)
+    private bool RoomPast(Vehicle car, LaneApproach approach, int leg, float toEnd)
     {
+        if (approach.AllowBlock) return true;
+        // its way planned past the core to the exit's end, so the exit is measured, not guessed free (#1134)
+        car.Route.Plan(toEnd + 40f + BoxRule.Reach, l => NextRoad(l, car));
         var legs = car.Route.Legs;
         float across = 0f;
         int i = leg + 1;
-        // across the junction: its paths or connectors, and a short road piece before one (the crosswalk's at J2, #971)
+        // across the junction: its paths or connectors (#818's cores are paths), and a short road piece before one (the crosswalk's
+        // at J2, #971)
         for (; i < legs.Count; i++)
         {
             var e = legs[i].Edge;
-            if (!e.Connector && !(e.Length <= PathGap && i + 1 < legs.Count && legs[i + 1].Edge.Connector)) break;
+            if (!e.Connector && e.Path is null && !(e.Length <= PathGap && i + 1 < legs.Count && (legs[i + 1].Edge.Connector || legs[i + 1].Edge.Path is not null))) break;
             across += e.Length;
         }
         if (i >= legs.Count) return true;
-        var (p, dir) = car.Route.At(-(toEnd + across + 6f));
-        _xKey.Head.X = p.X - 8f;
-        int from = _byX.BinarySearch(_xKey, ByX);
-        for (int o = from < 0 ? ~from : from; o < _byX.Count && _byX[o].Head.X <= p.X + 8f; o++)
+        var (exitAt, exitDir) = car.Route.At(-(toEnd + across + 1f));
+        // the exit arm it drives into: the site's arm whose way out is its way
+        if (approach.Site is { } site)
         {
-            var other = _byX[o];
-            if (other == car || other.Speed > 2f) continue;
-            var d = other.Head - p;
-            if (d.X * d.X + d.Z * d.Z > 7f * 7f || Mathf.Abs(d.Y) > 3f) continue;
-            if (other.Route.At(0).Dir.Dot(dir) < 0.5f) continue;
-            return false;
+            int arm = -1;
+            float best = 0.7f;
+            for (int k = 0; k < site.Out.Length; k++)
+                if (site.Out[k].Dot(exitDir) is var dot && dot > best) (best, arm) = (dot, k);
+            if (arm >= 0 && arm < site.Plan.Arms.Count && site.Plan.Arms[arm].AllowBlock) return true;
         }
-        return true;
+        // its exit, leg by leg from the core (the user: "look forward through all nodes until it either finds enough space or the
+        // stop line"): each leg's road up to the next stop line or junction, less the cars on it going its way (those in the core
+        // heading onto it on the first), until one more car fits; a way planned no further than the room found is free beyond
+        _exitRoom.Clear();
+        float measured = 0f;
+        bool open = true;
+        LaneApproach? lineAt = null;
+        int lineLeg = -1;
+        for (int k = i; k < legs.Count && measured < BoxRule.Reach; k++)
+        {
+            var (e, f) = legs[k];
+            if (e.Connector || e.Path is not null) { open = false; break; }
+            float room = e.Length;
+            bool line = false;
+            if ((f ? e.ApproachAtEnd : e.ApproachAtStart) is var (lineApproach, back)) (line, room, lineAt, lineLeg) = (true, Mathf.Max(0f, e.Length - back), lineApproach, k);
+            _exitRoom.Add((legs[k], room, 0));
+            measured += room;
+            if (line) { open = false; break; }
+        }
+        if (_exitRoom.Count == 0) return open;
+        // the lane it will stand in at that line, chosen as Approach will choose it there: the lane its junction path past it starts
+        // from, else the one whose arrows show its turn
+        int myLane = -1;
+        if (lineAt is { MultiLane: true })
+        {
+            for (int k = lineLeg + 1; k < legs.Count && myLane < 0; k++)
+            {
+                if (legs[k].Edge.Path is { } p) myLane = lineAt.LaneNearest(p.FromOffset);
+                else if (legs[k].Edge.Length > PathGap) break;
+            }
+            if (myLane < 0) myLane = lineAt.LaneFor(TurnOf(lineAt, WayPast(legs, lineLeg)), car.Habit);
+        }
+        float reach = measured + 10f;
+        foreach (var other in _cars)
+        {
+            if (other == car || MathX.Flat(other.Head - exitAt).LengthSquared() > reach * reach) continue;
+            int at = _exitRoom.FindIndex(x => x.Leg == (other.Route.Edge, other.Route.Forward));
+            if (at < 0 && (other.Route.Edge.Connector || other.Route.Edge.Path is not null))
+            {
+                var olegs = other.Route.Legs;
+                for (int k = other.Route.Leg + 1; k < olegs.Count && k <= other.Route.Leg + 4; k++)
+                    if (_exitRoom.FindIndex(x => x.Leg == olegs[k]) is >= 0 and var onto) { at = onto; break; }
+                if (at > 0) at = 0;   // (committed from the core: it stands at the exit's start first)
+            }
+            // (#1172) on an exit whose next approach has lanes side by side, only the cars in the lane this car will stand in: a car
+            // in the other lane takes none of its room (the strip from J5a to J5b, a left pocket beside the through lane: each car
+            // counted 7.5 m of the one lane, the strip "filled" at half its cars)
+            if (at >= 0 && myLane >= 0 && other.Approach == lineAt && other.LaneIndex >= 0 && other.Route.Edge.Path is null && !other.Route.Edge.Connector
+                && Mathf.Max(0f, other.ToLine) is var od && Mathf.Abs(lineAt!.Lateral(other.LaneIndex, od) - lineAt.Lateral(myLane, od)) > LaneApart) continue;
+            if (at >= 0) _exitRoom[at] = _exitRoom[at] with { Cars = _exitRoom[at].Cars + 1 };
+        }
+        _exitSpans.Clear();
+        foreach (var x in _exitRoom) _exitSpans.Add((x.Room, x.Cars));
+        return BoxRule.Fits(_exitSpans, open);
     }
+
+    /// <summary>The legs of an exit being measured, each its room and the cars on it (<see cref="RoomPast"/>), one list for the traffic's life.</summary>
+    private readonly List<(( LaneEdge, bool) Leg, float Room, int Cars)> _exitRoom = new();
+    private readonly List<(float Room, int Cars)> _exitSpans = new();
+
+    /// <summary>
+    /// The longest two standing cars have stood body on body (heads under 2.5 m apart, s, #1134): the probe fails over
+    /// <see cref="OverlapFails"/> (two cars that block each other for good).
+    /// </summary>
+    public float OverlapLongest { get; private set; }
+    public const float OverlapFails = 15f;
+
+    /// <summary>
+    /// Generated cars that started, where their lane put them, too fast to stop behind a car ahead in it even braking hard (#1195: the
+    /// probe fails on any; they stop on its last car).
+    /// </summary>
+    public int HotStarts { get; private set; }
+
+    /// <summary>A generated car on its first step, placed on its lane (#1195): whether it can still stop behind the car ahead on its way.</summary>
+    private void CheckStart(Vehicle car)
+    {
+        var (_, dir) = car.Route.At(0);
+        var right = new Vector3(-dir.Z, 0f, dir.X).Normalized();
+        foreach (var other in _cars)
+        {
+            if (other == car) continue;
+            var d = other.Head - car.Head;
+            float along = d.Dot(dir);
+            if (along <= 0f || along > FollowLook || Mathf.Abs(d.Y) > 3f || other.Route.At(0).Dir.Dot(dir) < 0.3f) continue;
+            // in its way as StepCar follows: by its line now, or on its route's line where its lane takes it (a strip opening)
+            if (Mathf.Abs(d.Dot(right)) > AheadWidth && !OnLineAhead(car, other.Head, d.Length())) continue;
+            // bodies touch at a car's length apart; it brakes at 6 m/s²
+            if (car.Speed * car.Speed <= other.Speed * other.Speed + 2f * 6f * Mathf.Max(0f, along - 2f * CarFront)) continue;
+            if (++HotStarts <= 5)
+            {
+                var (e, n) = _origin.ToLv95(car.Head);
+                GD.Print($"[traffic] a car started too fast behind one in its lane (#1195) at {e:F0},{n:F0}: v {car.Speed:F1}, {along:F1} m behind one at {other.Speed:F1}, lane {car.Lane:F2} strip {car.Strip}, t {Core.GameClock.Now:F1}");
+            }
+            return;
+        }
+    }
+
+    /// <summary>Lane changes begun, and those that crossed more than one lane at once (#1134: must stay 0).</summary>
+    public int LaneChanges { get; private set; }
+    public int MultiLaneJumps { get; private set; }
+
+    /// <summary>
+    /// Of the paths side by side to one exit with one move (<paramref name="same"/>), the one a car takes (#1134, LaneChoice.Pick): the
+    /// lane with the fewest cars already heading for it, biased to the side its next turn after the junction lies on.
+    /// </summary>
+    private (LaneEdge, bool) PickLane(List<(LaneEdge Edge, bool Forward)> same, Vehicle? car)
+    {
+        if (same.Count == 1) return same[0];
+        var lanes = new List<(float Offset, int Queued)>(same.Count);
+        foreach (var o in same)
+        {
+            int queued = 0;
+            foreach (var c in _cars) if (ReferenceEquals(c.PathAhead, o.Edge.Path)) queued++;
+            lanes.Add((o.Edge.Path!.FromOffset, queued));
+        }
+        var next = SignalMoves.None;
+        if (car?.Planned is { } way)
+        {
+            int at = way.FindIndex(w => w.Item1.Path is not null && w.Item1.KeyEnd == same[0].Edge.KeyEnd);
+            for (int k = at + 1; at >= 0 && k < way.Count; k++)
+                if (way[k].Item1.Path is { } p) { next = p.Move; break; }
+        }
+        return same[LaneChoice.Pick(lanes, next, car?.Habit ?? 0u)];
+    }
+
+    /// <summary>Green stands logged so far (#1134).</summary>
+    private int GreenStandsLogged, ContactsLogged;
+
+    /// <summary>Cars that passed one coming the other way on a narrow carriageway, moved over at a crawl (#1180).</summary>
+    public int NarrowPasses { get; private set; }
+
+    /// <summary>A carriageway narrower than this holds no two cars side by side (m): two 1.9 m cars and 0.6 m between them (#1134).</summary>
+    public const float TwoCarsWide = 4.4f;
+
+    private static bool Narrow(LaneEdge e) =>
+        !e.Connector && e.Path is null && e.OneWay == 0 && (e.Flags & RoadFlags.Divided) == 0 && e.Width < TwoCarsWide && e.Length > 6f;
+
+    /// <summary>
+    /// The one-carriageway stretch rule (#1134): where a car's way within 60 m leads into a two-way edge too narrow for two cars side
+    /// by side (<see cref="TwoCarsWide"/>) and a car is on it the other way, or nearer to it the other way (the lower habit first on a
+    /// tie), how far it may still go: to the stretch's start, or to the start of the junction's core before it. Null: it goes. A car
+    /// on the stretch or in a core goes on: whoever is on it first has it. Since #1180 only on a road under
+    /// <see cref="NarrowPass.MinWidth"/>: on a wider one the two pass each other, moved over at a crawl.
+    /// </summary>
+    private float? NarrowAhead(Vehicle car)
+    {
+        var cur = car.Route.Edge;
+        if (Narrow(cur) || cur.Path is not null || cur.Connector) return null;
+        var legs = car.Route.Legs;
+        float along = cur.Length - car.Route.Arc, coreAt = -1f;
+        for (int i = car.Route.Leg + 1; i < legs.Count && along < 60f; i++)
+        {
+            var (e, f) = legs[i];
+            if (e.Connector || e.Path is not null) { if (coreAt < 0f) coreAt = along; along += e.Length; continue; }
+            if (Narrow(e))
+            {
+                float entry = coreAt >= 0f ? coreAt : along;
+                // (where the two pass each other moved over, #1180, nobody waits: only a road too narrow even for that)
+                if (NarrowPass.Fits(e.Width)) return null;
+                return NarrowTaken(car, e, f, entry) ? Mathf.Max(0f, entry - 2f) : null;
+            }
+            coreAt = -1f;
+            along += e.Length;
+        }
+        return null;
+    }
+
+    /// <summary>Whether a car is on <paramref name="e"/> against <paramref name="f"/>, or about to enter it that way before <paramref name="car"/> (<paramref name="entry"/> m off).</summary>
+    private bool NarrowTaken(Vehicle car, LaneEdge e, bool f, float entry)
+    {
+        foreach (var other in _cars)
+        {
+            if (other == car || MathX.Flat(other.Head - car.Head).LengthSquared() > (e.Length + 80f) * (e.Length + 80f)) continue;
+            if (other.Route.Edge == e) { if (other.Route.Forward != f) return true; continue; }
+            var olegs = other.Route.Legs;
+            float d = other.Route.Edge.Length - other.Route.Arc;
+            for (int k = other.Route.Leg + 1; k < olegs.Count && k <= other.Route.Leg + 4 && d < 60f; k++)
+            {
+                if (olegs[k].Item1 == e)
+                {
+                    if (olegs[k].Item2 != f && (d < entry || d == entry && other.Habit < car.Habit)) return true;
+                    break;
+                }
+                d += olegs[k].Item1.Length;
+            }
+        }
+        return false;
+    }
+
+
 
     /// <summary>Whether a car comes the other way through a signalised junction: on the opposite approach, near its line and moving.</summary>
     private bool Oncoming(Vehicle car, SignalSite site, int arm)
@@ -1506,6 +1838,43 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         return (standing, all);
     }
 
+    /// <summary>Movers dropped for standing still too long (cars 20 s, walkers and riders 30 s), by <see cref="MoverKind"/> (#1134, the probe).</summary>
+    public readonly int[] StuckDropped = new int[5];
+
+    /// <summary>
+    /// For the probe (#1134): the cars standing (under 0.5 m/s) on an approach within <paramref name="within"/> m before its line,
+    /// whatever their group.
+    /// </summary>
+    public int Standing(LaneApproach approach, float within)
+    {
+        int n = 0;
+        foreach (var c in _cars)
+            if (c.Approach == approach && c.ToLine > -2f && c.ToLine < within && c.Speed < 0.5f) n++;
+        return n;
+    }
+
+    /// <summary>
+    /// <see cref="Standing"/> by the lane each car stands in (#1172, the probe: lanes filling evenly): the lane whose centre where it
+    /// stands is nearest its line (before a pocket opens, the lane it branches from; a lane the road has there already, at its place), into <paramref name="counts"/> (one per lane of the approach).
+    /// </summary>
+    public void StandingByLane(LaneApproach approach, float within, int[] counts)
+    {
+        Array.Clear(counts);
+        foreach (var c in _cars)
+        {
+            if (c.Approach != approach || c.ToLine <= -2f || c.ToLine >= within || c.Speed >= 0.5f) continue;
+            float off = c.Lane - (approach.LaneCentre - KeepRight(c.Route.Edge, c.Route.Forward, c.Habit));
+            int best = -1;
+            float bestGap = float.MaxValue, d = Mathf.Max(0f, c.ToLine);
+            for (int k = 0; k < approach.Lanes.Length; k++)
+                if (approach.Lanes[k].Kind == ApproachLaneKind.Car
+                    && Mathf.Min(Mathf.Abs(approach.Lateral(k, d) - off),
+                        HasLane(c.Route.Edge, c.Route.Forward, approach.LaneCentre + approach.Lanes[k].Offset) ? Mathf.Abs(approach.Lanes[k].Offset - off) : float.MaxValue)
+                       + (approach.Parent[k] >= 0 ? 0.01f : 0f) is var gap && gap < bestGap) (best, bestGap) = (k, gap);
+            if (best >= 0 && best < counts.Length) counts[best]++;
+        }
+    }
+
     /// <summary>Cars waiting at a red light now (#353).</summary>
     public int AtRedCars => _cars.Count(c => c.AtRed);
     /// <summary>Signalised approaches in the road graph (#353).</summary>
@@ -1551,6 +1920,22 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
 
     /// <summary>Cars stopped or slowing at a side road's Wartelinie for main-road traffic right now.</summary>
     public int GivingWayCars => _cars.Count(c => c.GivingWay);
+
+    /// <summary>
+    /// Whether edge <paramref name="e"/>, driven <paramref name="forward"/>, has a car lane of that way whose centre lies within 1 m of
+    /// <paramref name="right"/> m right of its centreline (#1172).
+    /// </summary>
+    private static bool HasLane(LaneEdge e, bool forward, float right)
+    {
+        if (e.Path is not null || e.Connector || e.LaneWidth <= 0f) return false;
+        bool oneWay = e.OneWay != 0;
+        if ((e.Flags & RoadFlags.Divided) != 0 && !oneWay) return false;
+        int lanes = oneWay ? e.OneWayLanes : forward ? e.LanesFwd : e.LanesBwd;
+        float first = oneWay ? e.RightLane : forward ? e.RightLaneFwd : e.RightLaneBwd;
+        for (int k = 0; k < lanes; k++)
+            if (Mathf.Abs(first - k * e.LaneWidth - right) < 1f) return true;
+        return false;
+    }
 
     /// <summary>
     /// Right-hand traffic: an undivided road is shared, so each car keeps to the rightmost lane of its
@@ -1600,11 +1985,80 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     }
 
     /// <summary>
+    /// Where a car starting on <paramref name="route"/> will stand on its first step (#1195), m right of the road's line: its usual line,
+    /// or the lane its approach or the transition's strip puts it on at once (<c>Placed</c>: a car just spawned starts on the lane it would
+    /// be in). Read through a car with no body (lanes only: no lights read, nothing counted); its plan stays on the route.
+    /// </summary>
+    private float StartLine(Route route, uint habit, List<(LaneEdge, bool)>? planned)
+    {
+        var car = new Vehicle(route, 0f, Array.Empty<float>(), Array.Empty<Node3D>()) { Habit = habit, Planned = planned };
+        route.Plan(ApproachLookAhead + 20f, leg => NextRoad(leg, car));
+        Approach(car, laneOnly: true);
+        FollowTransition(car, count: false);
+        return KeepRight(route.Edge, route.Forward, habit) + car.LaneWanted;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="at"/> lies on this car's way <paramref name="ahead"/> m on (#1172): its route's line at that distance (round
+    /// a bend, along a junction path), and across it anywhere from where the car drives now to the lane it will be in there
+    /// (<see cref="LineAhead"/>), with <see cref="AheadWidth"/> either side: its lane lags the one it wants, so it may still be anywhere
+    /// between the two when it gets there.
+    /// </summary>
+    private static bool OnLineAhead(Vehicle car, Vector3 at, float ahead)
+    {
+        var (p, t, leg) = car.Route.AtLeg(-ahead);
+        var side = new Vector3(-t.Z, 0f, t.X).Normalized();
+        var r = MathX.Flat(at - p);
+        if (Mathf.Abs(r.Dot(t)) > 4f) return false;
+        var (edge, forward) = (car.Route.Edge, car.Route.Forward);
+        float now = edge.Path is not null ? car.Lane : KeepRight(edge, forward, car.Habit) + car.Pull + car.Lane;
+        float then = LineAhead(car, leg, ahead);
+        float lat = r.Dot(side);
+        return lat >= Mathf.Min(now, then) - AheadWidth && lat <= Mathf.Max(now, then) + AheadWidth;
+    }
+
+    /// <summary>
+    /// Where a car will drive on leg <paramref name="leg"/> of its route, <paramref name="ahead"/> m on, m right of that leg's line (#1172),
+    /// as <see cref="Approach"/> and <see cref="FollowTransition"/> will set its lane there: on a junction path the path's line; on a
+    /// transition's piece (this one or one ahead) the strip it follows at that station (a pocket not open yet rides the through lane);
+    /// else its approach lane there, or its wanted line on this piece, or the next piece's usual line.
+    /// </summary>
+    private static float LineAhead(Vehicle car, int leg, float ahead)
+    {
+        var legs = car.Route.Legs;
+        var (e, f) = legs[leg];
+        bool here = leg == car.Route.Leg;
+        if (e.Path is not null) return here ? car.LaneWanted : 0f;
+        if (e.Transition is not null)
+        {
+            float s = car.Route.Arc + ahead;
+            for (int i = car.Route.Leg; i < leg; i++) s -= legs[i].Edge.Length;
+            int strip = here ? car.Strip : -1;
+            for (int i = leg + 1; strip < 0 && i < legs.Count; i++)
+            {
+                if (legs[i].Edge.Path is { } path) { strip = legs[i - 1].Edge.StripAt(legs[i - 1].Forward, atTravelEnd: true, path.FromOffset); break; }
+                if (legs[i].Edge.Transition is null) break;
+            }
+            if (strip >= 0 && e.LaneAt(f, Mathf.Clamp(s, 0f, e.Length), strip) is { } lane) return lane;
+        }
+        var (edge, forward) = (car.Route.Edge, car.Route.Forward);
+        if (edge.Path is null && car.Approach is { MultiLane: true } a && car.LaneIndex >= 0 && car.ToLine < float.MaxValue)
+        {
+            float keep = KeepRight(edge, forward, car.Habit);
+            if (HasLane(edge, forward, keep + car.LaneAim)) return keep + car.LaneAim;
+            float d = Mathf.Max(0f, car.ToLine - ahead);
+            float onto = Mathf.Clamp((a.Reach + 15f - d) / 15f, 0f, 1f);
+            return a.LaneCentre * onto + keep * (1f - onto) + a.Lateral(car.LaneIndex, d);
+        }
+        return here ? KeepRight(e, f, car.Habit) + car.Pull + car.LaneWanted : KeepRight(e, f, car.Habit);
+    }
+
+    /// <summary>
     /// On a transition's piece (#818 phase 5): the car follows its own lane from station to station, the one its path ahead
     /// starts from at the mouth (carried back over the transition's pieces before it), or the one the path behind ended on;
     /// while it opens or closes, between it and the lane it branches from or merges into. Overrides the lane record and the lead-in there.
     /// </summary>
-    private void FollowTransition(Vehicle car)
+    private void FollowTransition(Vehicle car, bool count = true)
     {
         var (edge, forward) = (car.Route.Edge, car.Route.Forward);
         if (edge.Transition is null || edge.Path is not null) { car.Strip = -1; return; }
@@ -1616,7 +2070,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             {
                 var (mouth, mouthForward) = legs[i - 1];
                 int strip = mouth.StripAt(mouthForward, atTravelEnd: true, path.FromOffset);
-                if (strip >= 0 && car.Strip < 0) TransitionFollows++;
+                if (strip >= 0 && car.Strip < 0 && count) TransitionFollows++;
                 car.Strip = strip;
                 break;
             }
@@ -1639,7 +2093,14 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         }
         else if (options.Any(o => o.Edge.Path is not null)) options = options.Where(o => o.Edge.Path is not null).ToList();
         // a generated car on its way to a destination (#971): the next leg of it, where it may go there
-        if (car is not null && PlannedAfter(car, leg) is { } planned && options.Contains(planned)) return planned;
+        if (car is not null && PlannedAfter(car, leg) is { } planned && options.Contains(planned))
+        {
+            // (its way was found along one lane's path: where lanes side by side make the same move to the same exit, the car's
+            // habit picks one, as LaneFor does, so they all carry cars, #1134)
+            if (planned.Item1.Path is not { } p) return planned;
+            var same = options.Where(o => o.Edge.Path!.Move == p.Move && o.Edge.KeyEnd == planned.Item1.KeyEnd).OrderBy(o => o.Edge.Path!.FromOffset).ToList();
+            return same.Count > 1 ? PickLane(same, car) : planned;
+        }
         if (options.Count == 0)
         {
             // a dead end — a real cul-de-sac, or the edge of what is loaded: turn round
@@ -1667,8 +2128,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             float sum = exits.Sum(ExitWeight), at = (float)_rng.NextDouble() * sum;
             var exit = exits[^1];
             foreach (var g in exits) { at -= ExitWeight(g); if (at <= 0) { exit = g; break; } }
-            float line = KeepRight(leg.Edge, leg.Forward, car?.Habit ?? 0u);
-            return exit.MinBy(o => Mathf.Abs(o.Edge.Path!.FromOffset - line));
+            return PickLane(exit, car);
         }
         float Weight((LaneEdge Edge, bool) o) =>
             Mathf.Abs((int)o.Edge.Class - (int)leg.Edge.Class) <= 1 ? 4f : 1f;
@@ -1858,6 +2318,20 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         public bool GivingWay;
         /// <summary>Stopping for a red light (#353), clearing a yellow, has stopped for this red; waited to turn left across oncoming traffic, waited for room past the junction.</summary>
         public bool AtRed, ClearingAmber, WasAtRed, WaitedPermissive, WaitedRoom;
+        /// <summary>Waiting at its line on green for room past the junction (#1134, the box rule): not stuck, and the cars behind it queue.</summary>
+        public bool RoomHeld;
+        /// <summary>Waiting before a one-carriageway stretch while one comes the other way (#1134): not stuck, the cars behind queue.</summary>
+        public bool NarrowHeld;
+        /// <summary>Passing one coming the other way on a narrow carriageway, moved over at a crawl (#1180).</summary>
+        public bool Squeezing;
+        /// <summary>How long it has stood body on body with another standing car (s, #1134).</summary>
+        public float Overlap;
+        public Vehicle? OverlapWith;
+        /// <summary>The lane change under way (m right of its line; NaN none) and the metres driven since the last began (#1134).</summary>
+        public float StepTarget = float.NaN, SinceStep = 1000f;
+        /// <summary>How long it has stood at its line on green, and whether that was logged (#1134, the J1 diagnosis).</summary>
+        public float GreenStand;
+        public bool GreenStandLogged, ContactLogged;
         /// <summary>
         /// Held for a gap on a junction path (#1046): past its line, short of a point in the junction; at its line behind the cars
         /// waiting there; the path, and how long it has stood in the junction (s). How long it has been let go standing (s).
@@ -1883,6 +2357,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         public List<(LaneEdge, bool)>? Planned;
         /// <summary>Made by a traffic endpoint (#971): counted against <see cref="Traffic.MaxGenerated"/>.</summary>
         public bool FromEndpoint;
+        /// <summary>Standing right behind a car that waits (at a red, for a gap, queued itself): not stuck (#1134).</summary>
+        public bool Queued;
         public int FromId;
         /// <summary>The destination a generated car is on its way to (#971), 0 none.</summary>
         public int ToId;

@@ -36,6 +36,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private CachingChunkSource? _cache;
     private ClientTerrainSync? _terrainSync;
     private Handshake? _handshake;
+    private Net.Accounts.AccountGate? _accountGate;
     private WorldOrigin? _worldOrigin;
     private ShaderMaterial[] _worldMaterials = Array.Empty<ShaderMaterial>();
     private WorldEnvironment? _worldEnvironment;
@@ -131,7 +132,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the network rules' own self-checks: vision interest and remote interpolation
         (() => Has("--interestcheck"), () => Verdict("interestcheck", Interest.SelfCheck() & RemoteInterpolator.SelfCheck())),
         // the CD beat analyser's self-test: synthetic clicks at known tempos
-        (() => Has("--beatcheck"), () => Verdict("beatcheck", Audio.Cd.BeatAnalyzer.SelfCheck())),
+        (() => Has("--beatcheck"), () => Verdict("beatcheck", Audio.Cd.BeatAnalyzer.SelfCheck() & Audio.Cd.VocalSeparator.SelfCheck())),
+        // a real song's vocal separated both ways, written to test_output/vocal (#1153)
+        (() => Has("--vocalstem"), () => Verdict("vocalstem", Audio.Cd.CdBurner.VocalStemProbe(CmdArgs.Value("--vocalstem")))),
         // a VR player's hands packed into the pose and back (#439)
         (() => Has("--vrposecheck"), () => Verdict("vrposecheck", Player.FootPlayer.VrPoseSelfCheck())),
 #if PLAYTEST
@@ -192,6 +195,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             MouseCapture.Disabled = true;
             AddChild(new Interiors.IkeaProbe { Name = "IkeaProbe" });
+            return;
+        }
+        // a house drawn on the web is the interior the game plans (#1186)
+        if (Interiors.HouseLayoutCheck.Requested)
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.HouseLayoutCheck { Name = "HouseLayoutCheck" });
             return;
         }
         // whether a block of flats' stairwells can be climbed, from their collision (#571)
@@ -574,7 +584,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             _traffic.Generators = endpoints;
             endpoints.Changed += _traffic.EndpointsChanged;
-            _traffic.GeneratorsOnly = System.IO.File.Exists(System.IO.Path.Combine(TerrainPaths.FindChunkDir(), "signal_test_region.txt"));
+            string chunkDir = TerrainPaths.FindChunkDir();
+            _traffic.GeneratorsOnly = System.IO.File.Exists(System.IO.Path.Combine(chunkDir, "signal_test_region.txt"));
+            // the world's own endpoints (#1134: the test region's generators and destinations on every lit junction), every peer
+            // reading the same file
+            _traffic.LoadWorldEndpoints(Terrain.Format.TrafficEndpointsFile.Read(System.IO.Path.Combine(chunkDir, Terrain.Format.TrafficEndpointsFile.FileName)));
             _traffic.GeneratorRate = (float)(CmdArgs.Double("--traffic-rate") ?? 1.0);
         }
         if (Systems.On(Systems.Npcs) && World.NpcWatch.FromArgs() is { } npcWatch) AddChild(npcWatch);
@@ -749,6 +763,14 @@ public partial class ClientWorld : Node3D, IOriginContainer
         };
         AddChild(_teleporter);
 
+        // home-trainer trainings (#901): the hardware link, and the session the phone's Training app starts
+        var trainer = new Trainer.TrainerLink { Name = Trainer.TrainerLink.NodeName };
+        trainer.Said += Toast;
+        AddChild(trainer);
+        var training = new Trainer.TrainingSession(_chunks, origin, () => LocalPlayer);
+        training.Said += Toast;
+        AddChild(training);
+
         // M opens the teleport search over any town that has terrain
         _places = PlaceSearchUi.Create(_teleporter);
         AddChild(_places);
@@ -779,10 +801,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Audio.EarsProbe.Requested) AddChild(new Audio.EarsProbe(() => LocalPlayer));
         if (Items.RadioPanelProbe.Requested) AddChild(new Items.RadioPanelProbe(() => LocalPlayer));
         if (Player.EmoteWheelProbe.Requested) AddChild(new Player.EmoteWheelProbe(() => LocalPlayer));
+        if (Concert.PogoProbe.Requested) AddChild(new Concert.PogoProbe(() => LocalPlayer));
         if (Player.SitProbe.Requested) AddChild(new Player.SitProbe(() => LocalPlayer));
         if (Concert.ConcertDeskProbe.Requested) AddChild(new Concert.ConcertDeskProbe(() => LocalPlayer));
         if (Concert.ConcertCamProbe.Requested) AddChild(new Concert.ConcertCamProbe(() => LocalPlayer, () => GetNodeOrNull<ChatManager>(ChatManager.NodeName)));
         if (Phone.PhoneProbe.Requested) AddChild(new Phone.PhoneProbe(() => LocalPlayer));
+        if (Trainer.TrainingProbe.Requested && _chunks != null && _worldOrigin != null) AddChild(new Trainer.TrainingProbe(() => LocalPlayer, _chunks, _worldOrigin));
         if (SpectatorSwitchCheck.Requested) AddChild(new SpectatorSwitchCheck(() => LocalPlayer, () => _spectator));
         if (Phone.PhoneVrProbe.Requested) AddChild(new Phone.PhoneVrProbe(() => LocalPlayer));
         if (Items.SparkleProbe.Requested) AddChild(new Items.SparkleProbe(() => LocalPlayer));
@@ -804,10 +828,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (World.AirportCheck.Requested) AddChild(new World.AirportCheck(() => LocalPlayer));
 
         // The inventory is this machine's, not the player node's: it outlives a respawn or a
-        // reconnect, and the player it acts on is resolved per frame like the picker's. A check gets
-        // a scratch one, the starter kit never saved: the player's user://inventory.json is neither
-        // changed by it nor fills up and fails it with "No room" (#932). Every verification tool
-        // (placedByTool) does; the probes started further down are listed.
+        // reconnect, and the player it acts on is resolved per frame like the picker's. One save per
+        // server (Launch.Networked), the shared offline one otherwise (#1100). A check gets a
+        // scratch one, the starter kit never saved: the player's own save is neither changed by it
+        // nor fills up and fails it with "No room" (#932). Every verification tool (placedByTool)
+        // does; the probes started further down are listed.
         var inventory = placedByTool || Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
             || Net.TransferProbe.Role != null || Items.SwissNetProbe.Role != null || Player.AuraNetProbe.Role != null || Items.BeatFieldProbe.Requested || Player.TractorCheck.Role != null
             || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Interiors.LiftSyncProbe.Role != null || Interiors.HallCarProbe.Role != null || Loot.BankProbe.Role != null
@@ -818,7 +843,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || World.ContainerNetProbe.Role != null
             || Interiors.SiteOfficeNetProbe.Role != null || Interiors.SiteUpperNetProbe.Role != null
             || Player.TractorNetProbe.Role != null || Farming.FarmProbe.Requested || Farming.HandFarmCheck.Requested || Farming.FarmNetProbe.Role != null || Farming.SellNetProbe.Role != null || Farming.CoopNetProbe.Role != null
-            ? Items.Inventory.Scratch() : Items.Inventory.Load();
+            ? Items.Inventory.Scratch() : Items.Inventory.Load(Launch.Networked ? Launch.Endpoint : null);
         if (Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null) Crafting.CampfireProbe.Stock(inventory);
         if (Items.PlantProbe.Role != null) inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.SwissFlag, 1));   // on the hotbar for --hold
         if (Items.ShotgunProbe.Role != null) { inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.Shotgun, 1)); inventory.Add(Items.ItemId.Shells, 25); }   // on the hotbar for --hold
@@ -835,6 +860,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(items);
         _items = items;
         AddChild(new Player.EmoteWheel(() => _onFoot ? LocalPlayer : null) { Name = "EmoteWheel" });
+        // the concert pogo (#1150): dancing at a show, jump on the beat
+        AddChild(new Concert.PogoQte(() => _onFoot ? LocalPlayer : null));
         // the quick menu (#840): hold F2 / pad Back for activities, invites, inventory, vehicles, map...
         var emotes = GetNodeOrNull<Player.EmoteWheel>("EmoteWheel");
         AddChild(new Ui.QuickMenu(() => MenuOpen?.Invoke() == true, () => _onFoot && LocalPlayer is { Ride: Player.RideKind.OnFoot, RidingWith: 0 },
@@ -891,6 +918,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Crafting.CampfireNetProbe.Role != null) AddChild(new Crafting.CampfireNetProbe(items));
         if (Player.SwimNetProbe.Role != null) AddChild(new Player.SwimNetProbe(items));
         if (Player.EmoteNetProbe.Role != null) AddChild(new Player.EmoteNetProbe(items));
+        if (Player.NameTagNetProbe.Role != null) AddChild(new Player.NameTagNetProbe(items));
+        if (Player.EBikeNetProbe.Role != null) AddChild(new Player.EBikeNetProbe(items));
         if (Occasions.SightingNetProbe.Role != null) AddChild(new Occasions.SightingNetProbe(items));
         if (Concert.ConcertNetProbe.Role != null) AddChild(new Concert.ConcertNetProbe(items));
         if (Phone.PhoneNetProbe.Role != null) AddChild(new Phone.PhoneNetProbe(items));
@@ -1333,7 +1362,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private double _appearanceIn;
 
     /// <summary>
-    /// The figure chosen in Settings → Character (#394, #806) onto this peer's own player, which
+    /// The figure chosen in the Character menu (#394, #806) onto this peer's own player, which
     /// replicates it (<see cref="FootPlayer.AppearanceBits"/>). Right away on a settings change,
     /// and every 0.25 s for a player that just spawned or respawned (or a probe's in-memory set).
     /// </summary>
@@ -1625,7 +1654,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         // the version check comes first: nothing else is sent before the server welcomes us
         _handshake = Handshake.CreateClient();
-        _handshake.Welcomed += OnWelcomed;
+        _handshake.Welcomed += () => GD.Print($"[world] the server speaks protocol {Handshake.Protocol}");
         _handshake.Refused += reason =>
         {
             RefusedForVersion = true;
@@ -1634,6 +1663,17 @@ public partial class ClientWorld : Node3D, IOriginContainer
             ReportDisconnect(reason);
         };
         AddChild(_handshake);
+        // then the account step (#1123, World/Accounts): this player joins for real only once the server admits it
+        _accountGate = Net.Accounts.AccountGate.CreateClient();
+        _accountGate.Welcomed += _ => OnWelcomed();
+        _accountGate.Refused += reason =>
+        {
+            GD.PushWarning($"[net] {reason}");
+            Multiplayer.MultiplayerPeer?.Close();
+            ReportDisconnect(reason);
+        };
+        AddChild(_accountGate);
+        if (Net.Accounts.AccountProbe.Expect != null) AddChild(new Net.Accounts.AccountProbe(_accountGate));
 
         // before any player arrives: each one's synchronizer asks it whom to send to
         InterestService.CreateClient(this);
@@ -1670,11 +1710,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _handshake?.Begin();
     }
 
-    /// <summary>The server speaks this client's protocol (<see cref="Handshake"/>): join for real.</summary>
+    /// <summary>The server speaks this client's protocol (<see cref="Handshake"/>) and admitted its account (<see cref="Net.Accounts.AccountGate"/>): join for real.</summary>
     private void OnWelcomed()
     {
-        GD.Print($"[world] the server speaks protocol {Handshake.Protocol}");
-
         // The server assigns the final name — it deduplicates and sanitises — so this is
         // a request, not a claim.
         string requested = Launch.PlayerName;
@@ -1791,6 +1829,15 @@ public partial class ClientWorld : Node3D, IOriginContainer
             return;
         }
         if (_places is { IsOpen: true }) return;
+
+        // the Character menu (#1127): P on foot; mounted, P is the radio's previous station
+        if (@event.IsActionPressed(PlayerInput.CharacterMenu) && !UiFocus.TextEntryActive
+            && _onFoot && LocalPlayer is { Ride: Player.RideKind.OnFoot, RidingWith: 0 })
+        {
+            GetViewport().SetInputAsHandled();
+            Ui.CharacterScreen.Open();
+            return;
+        }
 
         // replay owns the screen and its own keys (R there snaps to roads)
         if (_gpx is { Active: true }) return;

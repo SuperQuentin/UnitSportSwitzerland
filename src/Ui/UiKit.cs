@@ -192,6 +192,22 @@ public static class UiKit
     }
 
     /// <summary>
+    /// A text field. It holds the keyboard while focused (<see cref="Core.UiFocus"/>), so typing never walks the
+    /// player; <paramref name="secret"/> hides what is typed (a password).
+    /// </summary>
+    public static LineEdit TextRow(Container into, string name, string text, string placeholder, string? hint = null, bool secret = false)
+    {
+        var row = Row(name, hint);
+        var edit = new LineEdit { Text = text, PlaceholderText = placeholder, Secret = secret, CustomMinimumSize = new Vector2(ControlWidth, 36) };
+        edit.FocusEntered += () => Core.UiFocus.Set(edit, true);
+        edit.FocusExited += () => Core.UiFocus.Set(edit, false);
+        edit.TreeExiting += () => Core.UiFocus.Set(edit, false);
+        row.AddChild(edit);
+        into.AddChild(row);
+        return edit;
+    }
+
+    /// <summary>
     /// A slider with its value written beside it. The world re-applies only once the drag is let
     /// go, so dragging the render distance does not start forty ring evaluations; keyboard and
     /// pad steps (which never raise DragEnded) commit at once.

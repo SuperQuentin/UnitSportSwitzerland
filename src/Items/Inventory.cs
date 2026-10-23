@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Godot;
 using UnitSport.Avatar;
+using UnitSport.Net;
 
 namespace UnitSport.Items;
 
@@ -55,10 +56,18 @@ public readonly record struct ItemStack(ItemId Id, int Count, string? Data = nul
 /// </para>
 ///
 /// <para>
-/// Local to this machine and saved to <c>user://inventory.json</c>. It is never sent: nothing in
-/// the game can take an item from another player, so a server-side inventory would be authority
-/// over something nobody contests. What is in the hand is replicated separately, as
-/// <see cref="Player.FootPlayer.HeldItemId"/>, because that one other players can see.
+/// Local to this machine and never sent: nothing in the game can take an item from another
+/// player, so a server-side inventory would be authority over something nobody contests. What is
+/// in the hand is replicated separately, as <see cref="Player.FootPlayer.HeldItemId"/>, because
+/// that one other players can see.
+/// </para>
+///
+/// <para>
+/// <b>One save per server.</b> Saved to <c>user://inventory.json</c> offline, or, online, to
+/// <c>user://inventory/servers/&lt;host&gt;_&lt;port&gt;.json</c> keyed by the server's endpoint
+/// (<see cref="Load"/>): the bank account is already per server (one player name's balance per
+/// server, <see cref="Bank"/>), so the pocket items and cash that back it are too, rather than one
+/// save shared by every server ever joined.
 /// </para>
 /// </summary>
 public sealed class Inventory
@@ -78,7 +87,10 @@ public sealed class Inventory
     /// <summary>The last slot of all (<see cref="WearSlot.Hands"/>).</summary>
     public const int LastSlot = FirstWearSlot + Outfit.SlotCount - 1;
 
-    private const string File = "user://inventory.json";
+    private const string DefaultFile = "user://inventory.json";
+
+    /// <summary>Where this instance saves: <see cref="DefaultFile"/>, or a server's own file (<see cref="Load"/>).</summary>
+    private string _file = DefaultFile;
 
     private ItemStack[] _slots = new ItemStack[LastSlot + 1];
     private int _batch;
@@ -912,24 +924,39 @@ public sealed class Inventory
         public string? Data { get; set; }
     }
 
-    /// <summary>The saved inventory, or a fresh starter kit when there is none (or it is unreadable).</summary>
-    public static Inventory Load()
+    /// <summary>
+    /// The saved inventory, or a fresh starter kit when there is none (or it is unreadable).
+    /// <paramref name="serverKey"/> is the server's endpoint ("host" or "host:port") for an online
+    /// session, keying its own save; null (offline/explore) loads the shared <see cref="DefaultFile"/>.
+    /// </summary>
+    public static Inventory Load(string? serverKey = null)
     {
+        string path = FileFor(serverKey);
         try
         {
-            using var f = Godot.FileAccess.FileExists(File)
-                ? Godot.FileAccess.Open(File, Godot.FileAccess.ModeFlags.Read)
+            using var f = Godot.FileAccess.FileExists(path)
+                ? Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Read)
                 : null;
-            if (f != null && FromJson(f.GetAsText()) is { } loaded) return loaded;
+            if (f != null && FromJson(f.GetAsText()) is { } loaded) { loaded._file = path; return loaded; }
         }
         catch (Exception e)
         {
-            GD.PushWarning($"[inventory] could not read {File}: {e.Message}; starting fresh");
+            GD.PushWarning($"[inventory] could not read {path}: {e.Message}; starting fresh");
         }
 
-        var inv = new Inventory();
+        var inv = new Inventory { _file = path };
         inv.GiveStarterKit();
         return inv;
+    }
+
+    /// <summary>The save path for a server key: the shared offline file for null, else that server's own.</summary>
+    private static string FileFor(string? serverKey)
+    {
+        if (serverKey == null) return DefaultFile;
+        var (host, port) = NetworkManager.ParseEndpoint(serverKey);
+        string safe = string.Concat($"{host}_{port}".ToLowerInvariant()
+            .Select(c => char.IsLetterOrDigit(c) || c is '-' or '.' ? c : '_'));
+        return $"user://inventory/servers/{safe}.json";
     }
 
     /// <summary>
@@ -1020,8 +1047,8 @@ public sealed class Inventory
     private void Save()
     {
         if (!Persist || _lent != null) return;
-        try { Core.JsonStore.Save(File, ToData(), SaveJson); }
-        catch (Exception e) { GD.PushWarning($"[inventory] could not write {File}: {e.Message}"); }
+        try { Core.JsonStore.Save(_file, ToData(), SaveJson); }
+        catch (Exception e) { GD.PushWarning($"[inventory] could not write {_file}: {e.Message}"); }
     }
 
     private static readonly JsonSerializerOptions SaveJson = new()

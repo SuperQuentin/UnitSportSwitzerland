@@ -145,6 +145,12 @@ public partial class PlayerInput : Node
     public const string CamCut = "cam_cut";
     /// <summary>On foot: the camera over the other shoulder (#460). A pad swaps with R3 while aiming a gun.</summary>
     public const string SwapShoulder = "swap_shoulder";
+    /// <summary>
+    /// On foot in third person: the camera arm in and out (#1149), from far off down to the face.
+    /// Shift + wheel (the plain wheel is the hotbar), = / -; a pad holds R3 and pushes the right stick.
+    /// </summary>
+    public const string ViewZoomIn = "view_zoom_in";
+    public const string ViewZoomOut = "view_zoom_out";
     public const string ToggleMode = "toggle_mode";
     /// <summary>The spectator fly camera and back (#1002): Shift+T; a pad holds D-pad down (<c>ClientWorld</c>), VR the wrist menu.</summary>
     public const string Spectator = "spectator";
@@ -158,6 +164,13 @@ public partial class PlayerInput : Node
     public const string CarDoor = "car_door";
     /// <summary>The travel picker (<see cref="Player.RideUi"/>): mounts, equipment and, for an admin, vehicles.</summary>
     public const string RideMenu = "ride_menu";
+    /// <summary>
+    /// A home-trainer training (#901): back to the GPX course from a road off it, turn round, ERG on/off and its
+    /// target ±10 W. Keys only: a pad and VR have the same as buttons in the phone's Training app (no pad
+    /// button is free on a bike); the turn at a junction is the steering.
+    /// </summary>
+    public const string RideRejoin = "ride_rejoin", RideUTurn = "ride_uturn", RideErg = "ride_erg",
+        RidePowerUp = "ride_power_up", RidePowerDown = "ride_power_down";
     /// <summary>
     /// The pad's analog triggers alone, 0..1, for code that wants the pull itself (flight's lever,
     /// the GPX camera). Through the input map rather than <c>Input.GetJoyAxis(0, …)</c>, so any
@@ -235,6 +248,9 @@ public partial class PlayerInput : Node
     public const string PrevItem = "prev_item";
     /// <summary>Opens the field journal of birds seen and bagged (<see cref="Birds.BirdJournal"/>).</summary>
     public const string BirdJournal = "bird_journal";
+
+    /// <summary>Opens the Character menu, the figure editor (<see cref="Ui.CharacterScreen"/>, #1127). On foot only: P is the radio's previous station in a vehicle.</summary>
+    public const string CharacterMenu = "character_menu";
     /// <summary>The hammer in hand (#359): turns the piece; with Aim, changes its material. R, or D-pad up on a pad.</summary>
     public const string BuildTurn = "build_turn";
 
@@ -665,6 +681,12 @@ public partial class PlayerInput : Node
         // the picker when there is nothing to interact with (ClientWorld).
         Bind(InteractMount, Keys(Key.E), Button(JoyButton.Y));
         Bind(RideMenu, Keys(Key.R));
+        // every letter is taken: the keys beside Enter and the page keys, which no ride uses
+        Bind(RideRejoin, Keys(Key.Pageup));
+        Bind(RideUTurn, Keys(Key.Pagedown));
+        Bind(RideErg, Keys(Key.Backslash));
+        Bind(RidePowerUp, Keys(Key.Bracketright));
+        Bind(RidePowerDown, Keys(Key.Bracketleft));
         Bind(EngineToggle, Keys(Key.Z), Button(JoyButton.DpadUp));
         Bind(CameraToggle, Keys(Key.V), Button(JoyButton.RightStick));
         // a concert's camera (#885): the operator's zoom on the wheel and the shoulders (nothing else
@@ -674,6 +696,10 @@ public partial class PlayerInput : Node
         Bind(CamCut, Keys(Key.Enter), Button(JoyButton.X));
         // H only couples or sounds a horn in a vehicle; on foot it is the other shoulder (#460)
         Bind(SwapShoulder, Keys(Key.H), Mouse(MouseButton.Middle));
+        // the on-foot camera's zoom (#1149): Shift + wheel, since the plain wheel is the hotbar's
+        // (Ctrl is crouch, Alt the free cursor; Shift standing still does nothing)
+        Bind(ViewZoomIn, Keys(Key.Equal), ShiftWheel(MouseButton.WheelUp));
+        Bind(ViewZoomOut, Keys(Key.Minus), ShiftWheel(MouseButton.WheelDown));
         Bind(ToggleMode, Keys(Key.T), Button(JoyButton.DpadDown));
         Bind(Spectator, new InputEvent[] { new InputEventKey { PhysicalKeycode = Key.T, ShiftPressed = true } });
         // The place search is a map in all but drawing, so it sits on M. A pad can open it but
@@ -739,6 +765,9 @@ public partial class PlayerInput : Node
         for (int s = 0; s < Slots.Length; s++) Bind(Slots[s], Keys(Key.Key1 + s));
         Bind(PrevItem, Mouse(MouseButton.WheelUp));
         Bind(BirdJournal, Keys(Key.J));
+        // the Character menu (#1127): P on foot (in a vehicle it is the radio's previous station, so the world reads it
+        // only on foot); no pad button is free on foot, so a pad and VR open it from the quick menu or the pause menu
+        Bind(CharacterMenu, Keys(Key.P));
         // R is the travel picker on foot, D-pad up the engine in a vehicle: with the hammer in hand
         // the item controller takes either first (Build.BuildTool)
         Bind(BuildTurn, Keys(Key.R), Button(JoyButton.DpadUp));
@@ -769,6 +798,16 @@ public partial class PlayerInput : Node
 
     private static InputEvent[] Mouse(MouseButton b) =>
         new InputEvent[] { new InputEventMouseButton { ButtonIndex = b } };
+
+    private static InputEvent[] ShiftWheel(MouseButton b) =>
+        new InputEvent[] { new InputEventMouseButton { ButtonIndex = b, ShiftPressed = true } };
+
+    /// <summary>
+    /// Shift + wheel: the on-foot camera's zoom (#1149), not a hotbar step. The wheel's own actions
+    /// still match it (Godot matches a modifier-less binding whatever is held), so the hotbar asks.
+    /// </summary>
+    public static bool IsZoomWheel(InputEvent e) =>
+        e is InputEventMouseButton { ShiftPressed: true, ButtonIndex: MouseButton.WheelUp or MouseButton.WheelDown };
 
     private static InputEvent[] Button(JoyButton b) =>
         new InputEvent[] { new InputEventJoypadButton { ButtonIndex = b, Device = -1 } };

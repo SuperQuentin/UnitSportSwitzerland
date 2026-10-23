@@ -126,6 +126,24 @@ public static partial class TileRewriter
             stats.BikeCrossings++;
         }
 
+        // 1b. right-turn bike lanes round the corner (#1165, the user: "right turn only bike lanes should get markings through
+        // intersection as well"): the riders' own right-turn lane at the kerb, along its connector (their JPTH way) into the
+        // exit, marked as the lanes straight on are, where the exit carries the riders on
+        foreach (var c in core.Connectors.Where(c => c.Kind == ConnectorKind.Bike && c.Move == SignalMoves.Right))
+        {
+            var from = jp.Arms.FirstOrDefault(x => x.Arm == c.FromArm);
+            if (from?.Mouth.Strips.FirstOrDefault(x => x.Id == c.FromId) is not { Kind: StripKind.BikeLane, Way: StripWay.In, Moves: SignalMoves.Right }) continue;
+            if (jp.Arms.FirstOrDefault(x => x.Arm == c.ToArm) is not { Normal.CarriesBikesAway: true }) continue;
+            if (c.Centre.Count < 2) continue;
+            Line(ClipToCore(Inset(c.Left, lw * 0.5)), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
+            Line(ClipToCore(Inset(c.Right, -lw * 0.5)), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
+            double length = Length(c.Centre);
+            if (plan is not null)
+                foreach (var (f, t) in RedRuns(Conflicts(c.Centre, GroupOf(c.FromArm, SignalMoves.Right, bike: true)).Select(h => h.At / length).ToList()))
+                    Line(ClipToCore(Cut(c.Centre, f * length, t * length)), PaintType.BikeCrossing, PaintEmitter.Red, (float)(Math.Min(c.Width, c.ToWidth) - 1.5 * lw - 2 * RedInset), 0);
+            stats.BikeRightTurns++;
+        }
+
         var carriedSides = new List<(TileId Home, List<(RoadAreaProp Band, List<Vec2> Ring)> Bands)>();
         // 2. paths straight on, along the path's curve from one arm's path to the other's: each arm's side carried on from its
         // mouth to the kerb (PathsToKerb: every band to where it meets the carriageway, a sloped kerb there, the corners beside

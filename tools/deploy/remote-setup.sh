@@ -57,6 +57,15 @@ else
   rm -rf "$tmp"
 fi
 
+# --- vocal model for CD analysis (#1153): fetched here, never shipped ------------------
+home=$(getent passwd "$TARGET_USER" | cut -d: -f6)
+udata="$home/.local/share/godot/app_userdata/UnitSportSwitzerland"
+if [ "$DRY" = 1 ]; then echo "  [dry] get-vocal-model.sh $udata"
+# the user makes the folders (the game writes there too), root fetches from its own temp dir
+elif runuser -u "$TARGET_USER" -- mkdir -p "$udata/models" && bash "$HERE/get-vocal-model.sh" "$udata" >/dev/null \
+  && chown -R "$TARGET_USER": "$udata/models"; then ok "vocal model" "$udata/models"
+else echo "  vocal model                  WARN download failed; CDs use the centre-pan fallback"; fi
+
 # --- .NET runtime (only when the export does not bundle it) ----------------
 if [ "$NEED_DOTNET" = 1 ]; then
   if command -v dotnet >/dev/null && dotnet --list-runtimes | grep -q "Microsoft.NETCore.App $DOTNET_MAJOR\."; then
@@ -95,6 +104,9 @@ if [ "${TILES:-1}" = 1 ]; then
   if [ "${TILES_PRECOMPRESS:-1}" = 1 ]; then serve=$'file_server {\n\t\t\tprecompressed gzip\n\t\t}'
   else serve=$'encode gzip\n\t\tfile_server'; fi
   new=$(<"$HERE/Caddyfile"); new=${new//@TILES_SITE@/"$TILES_SITE"}; new=${new//@CHUNKS_DIR@/"$CHUNKS_DIR"}; new=${new//@WEB_DIR@/"$DEPLOY_DIR/web"}; new=${new//@COMPRESS@/"$serve"}
+  new=${new//@LAYOUTS_PORT@/"${LAYOUTS_PORT:-5080}"}
+  if [ -n "${LAYOUTS_TRUSTED_PROXIES:-}" ]; then global=$'{\n\tservers {\n\t\ttrusted_proxies static '"$LAYOUTS_TRUSTED_PROXIES"$'\n\t}\n}'; else global=""; fi
+  new=${new//@GLOBAL@/"$global"}
   cf=/etc/caddy/Caddyfile
   if [ "$DRY" = 1 ]; then echo "  [dry] write $cf (site $TILES_SITE, /tiles/ -> $CHUNKS_DIR)"
   elif [ "$(cat "$cf" 2>/dev/null)" != "$new" ]; then printf '%s\n' "$new" > "$cf"; fi

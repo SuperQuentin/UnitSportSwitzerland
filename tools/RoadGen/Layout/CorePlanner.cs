@@ -1020,7 +1020,9 @@ public static class CorePlanner
             if (rules.Has(JunctionRule.LeftTurnGuides))
             {
                 var lefts = mine.Where(c => c.Move == SignalMoves.Left).OrderBy(c => c.FromOffset).ToList();
-                var bike = core.Connectors.FirstOrDefault(c => c.Kind == ConnectorKind.Bike && c.FromArm == arm.Arm && c.Move == SignalMoves.Left);
+                // (a left-turn bike lane's: not a lone lane's riders leaving a bike box every way, #1184)
+                var bike = core.Connectors.FirstOrDefault(c => c.Kind == ConnectorKind.Bike && c.FromArm == arm.Arm && c.Move == SignalMoves.Left
+                    && arm.Mouth.Strips.Any(x => x.Id == c.FromId && x.Kind == StripKind.BikeLane && x.Moves == SignalMoves.Left));
                 // the inner guide only where a raised island stands on the exit; the outer one only beside a bike lane turning left too,
                 // as the guide between two left lanes (the user, Oct 17)
                 if (lefts.Count > 0 && HasRaisedIsland(arms[index[lefts[0].ToArm]]))

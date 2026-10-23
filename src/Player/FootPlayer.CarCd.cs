@@ -20,6 +20,12 @@ public partial class FootPlayer
     /// </summary>
     [Export] public float RadioVolume { get; set; } = Items.RadioLoudness.Default;
 
+    /// <summary>
+    /// The voice/music mix of the radio in the hand and the car's stereo (#1153): X the voice, Y the
+    /// music, 0..1 each. Written by the owner, replicated on change, carried along like the volume.
+    /// </summary>
+    [Export] public Vector2 RadioMix { get; set; } = Vector2.One;
+
     /// <summary>The CD this body's vehicle plays, or null when it drives none or plays no CD.</summary>
     public RadioPlay? PlayingCarCd => RidingWith == 0 && CarCd.Length > 0 && HasCarRadio((RideKind)RideKindId) ? RadioPlay.Decode(CarCd) : null;
 

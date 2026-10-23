@@ -27,7 +27,7 @@ public partial class TitleScreen : Screen
 
         var skin = Skins.MenuSkin.Current;
         bool slanted = skin.Shape.Skew > 0;
-        var column = UiKit.VBox(6);
+        var column = UiKit.VBox(slanted ? 5 : 6);
         column.SetAnchorsPreset(LayoutPreset.LeftWide);
         // centred above the footer, so a shown "Update to" entry does not push Quit onto it
         column.OffsetLeft = 72; column.OffsetRight = 72 + 380; column.OffsetTop = 0; column.OffsetBottom = -50;
@@ -35,7 +35,7 @@ public partial class TitleScreen : Screen
         AddChild(column);
 
         // the logo: the skin's display face (#1135), a condensed italic in capitals for Low-poly Sport
-        var name = UiKit.Text("UnitSport", slanted ? 78 : 58);
+        var name = UiKit.Text("UnitSport", slanted ? 72 : 58);
         UiKit.Display(name);
         name.AddThemeConstantOverride("line_spacing", -12);
         column.AddChild(name);
@@ -47,7 +47,7 @@ public partial class TitleScreen : Screen
         // the skin's second accent as a slanted dash beside the name
         if (slanted) countryRow.AddChild(Dash(Skins.MenuSkin.Role("accent2"), skin.Shape.Skew));
         column.AddChild(countryRow);
-        column.AddChild(UiKit.Spacer(slanted ? 24 : 34));
+        column.AddChild(UiKit.Spacer(slanted ? 18 : 34));
 
         // hidden until the update check finds a newer release (#845); one press updates, no questions
         _updateEntry = Entry(column, "", PressUpdate);
@@ -57,6 +57,8 @@ public partial class TitleScreen : Screen
         Entry(column, "Multiplayer", () => Shell.Push(MultiplayerScreen.Create()));
         // The map of Switzerland: what terrain is downloaded, and how to get more (#515)
         Entry(column, "Map", () => Shell.Push(MapScreen.Create()));
+        // the figure editor (#1127), its own menu rather than a Settings tab
+        Entry(column, "Character", () => Shell.Push(CharacterScreen.Create()));
         Entry(column, "Settings", () => Shell.Push(SettingsScreen.Create()));
         // VR (#186): a restart either way, after a confirmation
         if (Platform.CanSpawnProcesses) // a restart with OpenXR (#63)
@@ -107,8 +109,8 @@ public partial class TitleScreen : Screen
     private static Button Entry(Container into, string text, Action pressed, bool dim = false)
     {
         bool slanted = Skins.MenuSkin.Current.Shape.Skew > 0;
-        var b = UiKit.MenuButton(text, dim ? (slanted ? 20 : 17) : (slanted ? 25 : 22));
-        if (slanted) b.CustomMinimumSize = new Vector2(0, dim ? 40 : 48);
+        var b = UiKit.MenuButton(text, dim ? (slanted ? 19 : 17) : (slanted ? 23 : 22));
+        if (slanted) b.CustomMinimumSize = new Vector2(0, dim ? 36 : 42);
         if (dim) UiKit.DimFont(b);
         b.Pressed += pressed;
         into.AddChild(b);

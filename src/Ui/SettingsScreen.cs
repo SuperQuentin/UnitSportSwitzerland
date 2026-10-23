@@ -4,7 +4,7 @@ using UnitSport.Core;
 namespace UnitSport.Ui;
 
 /// <summary>
-/// Settings, in tabs: Video, Audio, Gameplay, Character, Vehicles, Controls, Wheel, World, Performance, About. Every
+/// Settings, in tabs: Video, Audio, Gameplay, Vehicles, Controls, Wheel, World, Performance, About. Every
 /// control writes straight into <see cref="GameSettings.Current"/> and commits, so the world
 /// re-applies itself live and the file is saved — there is no Apply button to forget. LB / RB
 /// (or Q / E) change tab. One instance serves the title screen and the in-game pause menu.
@@ -109,6 +109,10 @@ public partial class SettingsScreen : Screen
         {
             UiKit.OptionRow(rows, "Movement", new[] { "Game (arcade)", "Simulation (real physics)" }, (int)s.RideProfile,
                 i => GameSettings.Current.RideProfile = (RideProfile)i);
+            UiKit.SliderRow(rows, "Rider weight", 40, 160, 1, s.RiderMass, v => GameSettings.Current.RiderMass = (float)v,
+                v => $"{v:F0} kg", $"You in your kit; the Simulation road bike adds its own {Player.BicycleCatalog.Default.Mass:F1} kg");
+            UiKit.SliderRow(rows, "Threshold power", 100, 450, 5, s.RiderCriticalPower, v => GameSettings.Current.RiderCriticalPower = (float)v,
+                v => $"{v:F0} W", "What you hold for an hour (your FTP / 0.95); above it a Simulation sprint drains your reserve");
             UiKit.ToggleRow(rows, "Third-person view", s.ThirdPerson, on => GameSettings.Current.ThirdPerson = on,
                 "Over the shoulder on foot, chase view mounted (V in game)");
             UiKit.ToggleRow(rows, "Speech bubbles", s.ChatBubbles, on => GameSettings.Current.ChatBubbles = on,
@@ -137,9 +141,12 @@ public partial class SettingsScreen : Screen
                 replay.Disabled = true;
             }, "Look, walk, travel, the map and the fly camera, then each ride's controls the first time");
             if (Tutorial.Current != null) { replay.Text = "Playing"; replay.Disabled = true; }
+            // the first-run welcome (#1131): name, figure and account, again
+            UiKit.ActionRow(rows, "Welcome", "Show again", () => Shell.Push(WelcomeScreen.Create()),
+                "The first-launch pages: your name, your figure, your account");
         });
 
-        Tab("Character", CharacterPage.Fill);
+        Tab("Account", AccountPage.Fill);
 
         Tab("Vehicles", rows =>
         {
@@ -482,6 +489,13 @@ public partial class SettingsScreen : Screen
             i => GameSettings.Current.VrRenderScale = scales[i], "Of the eye size the headset asks for. Lower it if the picture stutters");
         UiKit.ToggleRow(rows, "VR foveated rendering", GameSettings.Current.VrFoveation, on => GameSettings.Current.VrFoveation = on,
             "Coarser shading towards the edge of each eye (GPUs with variable rate shading)");
+        // frame pacing and triangles (#1036, docs/notes/xr/air-link.md)
+        int[] rates = GameSettings.VrRefreshRates;
+        UiKit.OptionRow(rows, "VR refresh rate", rates.Select(hz => $"{hz} Hz").ToArray(),
+            Math.Max(0, Array.IndexOf(rates, GameSettings.Current.VrRefreshHz)), i => GameSettings.Current.VrRefreshHz = rates[i],
+            "72 Hz holds steady over Air Link; higher only if the frame keeps up");
+        UiKit.OptionRow(rows, "VR terrain detail", new[] { "Low", "Medium", "High" }, (int)GameSettings.Current.VrDetail,
+            i => GameSettings.Current.VrDetail = (DetailPreset)i, "The headset's own Detail. Low draws a third of Medium's triangles");
         // comfort (#439, docs/notes/xr/rig.md)
         int[] snaps = { 0, 15, 30, 45 };
         UiKit.OptionRow(rows, "VR turning", new[] { "Smooth", "Snap 15°", "Snap 30°", "Snap 45°" },

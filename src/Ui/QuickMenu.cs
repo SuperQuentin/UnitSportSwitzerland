@@ -7,7 +7,7 @@ namespace UnitSport.Ui;
 /// <summary>
 /// The quick menu (#840): a ring, drawn as the emote wheel is (<see cref="Radial"/>), with the ways
 /// into everything that is not walking about: Activities, Invites, Inventory, Vehicles, Map, Phone, Emotes,
-/// Bird journal, Controls. Docs: <c>docs/notes/ui/quick-menu.md</c>.
+/// Bird journal, Character, Controls. Docs: <c>docs/notes/ui/quick-menu.md</c>.
 /// <list type="bullet">
 /// <item>Keyboard: hold F2, aim with the mouse, let go (a click picks too). A tap opens it until a
 /// pick, unless an invite is on screen: then the tap accepts it, and Shift+F2 declines it.</item>
@@ -63,6 +63,8 @@ public partial class QuickMenu : CanvasLayer
             new("Emotes", () => emotes() is { CanOpen: true } ? null : "Not now",
                 () => emotes()?.Open(latched: true), () => Key(PlayerInput.EmoteWheel)),
             new("Bird journal", () => null, () => Press(PlayerInput.BirdJournal), () => Key(PlayerInput.BirdJournal)),
+            // the figure editor (#1127): from anywhere here, mounted too (only the key is on foot only)
+            new("Character", () => null, () => Callable.From(CharacterScreen.Open).CallDeferred(), () => Key(PlayerInput.CharacterMenu)),
             new("Controls", () => null, () => Press(PlayerInput.Help), () => Key(PlayerInput.Help)),
         };
     }

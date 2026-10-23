@@ -80,8 +80,13 @@
   (`CdBurner.ReanalyseAsync`, stored grid), `.json` + `library.json` rewritten, the server re-sends
   it with `Added` (a listed id is replaced). No ffmpeg: stops quietly. Separate from the burn queue,
   so a `--cdfixture` never waits. Bump `CurrentVersion` when the analyser changes.
+  - **Bounded** (#1169): one separation in the process at a time (`OneAnalysis`), cancelled when its
+    library leaves the tree (a left world kept separating, and every join queued another: a test client
+    joining four times reached 7.6 GB and the guard killed `@netsmoke`); a **headless client** queues no
+    backfill at start (it is a check; it would rewrite the user's CDs), `/cd reanalyse` still does.
 - **Runtime** (`CdAnalysisRuntime`, allocation free, env decoded once per block): `Sample(cd, t, out
   level, out kick)` (t = seconds into the file; kick holds the previous frame fading),
   `SectionAt(cd, t, out index)`, `BeatInBar(cd, beatIndex)` (0 = bar start), `SampleBands`, `DropAt` (v2).
 - **Playback at runtime**: `AudioStreamOggVorbis.LoadFromFile` on the main thread (header only), on an
   `AudioStreamPlayer3D` in `RadioBody` — the first audio file the game plays; everything else is synthesised.
+- **v3 (#1153)**: the singer, the voice/music stems and their mix: `audio/cd-vocal`.

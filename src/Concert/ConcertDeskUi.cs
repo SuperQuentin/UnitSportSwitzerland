@@ -27,7 +27,7 @@ public partial class ConcertDeskUi : CanvasLayer
     private readonly Func<ChatManager?> _chat;
     private PanelContainer _panel = null!;
     private Label _title = null!, _status = null!, _input = null!, _hint = null!;
-    private HSlider _master = null!;
+    private HSlider _master = null!, _voice = null!, _music = null!;
     private Button _first = null!;
     private ConcertRig? _rig;
     private string? _stadium;
@@ -110,6 +110,11 @@ public partial class ConcertDeskUi : CanvasLayer
         _master = new HSlider { MinValue = 0, MaxValue = 1, Step = 0.05, Value = 1, CustomMinimumSize = new Vector2(220, 0), FocusMode = Control.FocusModeEnum.All };
         _master.DragEnded += changed => { if (changed) Run(FormattableString.Invariant($"/concert cue master {_master.Value:F2}")); };
         tempo.AddChild(_master);
+
+        // the PA's mix (#1153): the singer and the band, for everyone at the show
+        var mix = Row(col);
+        _voice = Fader(mix, "Voice", "voice");
+        _music = Fader(mix, "Music", "music");
 
         Section(col, "Cameras");
         var cams = Row(col);
@@ -209,6 +214,23 @@ public partial class ConcertDeskUi : CanvasLayer
     }
 
     private void Run(string command) => _chat()?.Send(command);
+
+    /// <summary>
+    /// A labelled 0..1 fader that cues <c>/concert cue &lt;cue&gt; &lt;value&gt;</c>: when a mouse drag ends,
+    /// and at each step of a pad's or the keyboard's left/right (no drag then).
+    /// </summary>
+    private HSlider Fader(Container row, string label, string cue)
+    {
+        Text(row, label, UiTheme.FontSmall, UiTheme.TextDim);
+        var fader = new HSlider { MinValue = 0, MaxValue = 1, Step = 0.05, Value = 1, CustomMinimumSize = new Vector2(180, 0), FocusMode = Control.FocusModeEnum.All };
+        bool dragging = false;
+        void Send() => Run(FormattableString.Invariant($"/concert cue {cue} {fader.Value:F2}"));
+        fader.DragStarted += () => dragging = true;
+        fader.DragEnded += changed => { dragging = false; if (changed) Send(); };
+        fader.ValueChanged += _ => { if (!dragging) Send(); };
+        row.AddChild(fader);
+        return fader;
+    }
 
     private Button _xchangeOn = null!;
     private Label _xchange = null!;
