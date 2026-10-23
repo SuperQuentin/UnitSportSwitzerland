@@ -62,6 +62,13 @@ varying vec3 world_pos;
 varying vec3 local_vertex;
 // the mesh's normal, smoothed over a few metres (TerrainMeshBuilder.SmoothNormal), world space
 varying vec3 smooth_n;
+#if defined(STANDALONE) && defined(STYLE_CARTOON)
+#define VERTEX_FINISH
+// a standalone headset (#1112): the ground's colour finished per vertex (rock, grade, paint), not per
+// pixel; the paint's patches are 38 m wide and the vertices 4 m apart, and a Quest 2 has a few
+// million pixels a frame to shade against a hundred thousand vertices
+varying vec3 v_col;
+#endif
 
 void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -85,6 +92,16 @@ void vertex() {
 #ifdef STYLE_REAL
     // a tile's mesh runs from its NW corner, x east and z south, 1000 m each: the photo's frame
     tile_uv = clamp(VERTEX.xz / 1000.0, vec2(0.0), vec2(1.0));
+#endif
+#ifdef VERTEX_FINISH
+    {
+        vec3 c = COLOR.rgb;
+        float vertex_rock = smoothstep(0.62, 0.38, normalize(smooth_n).y);
+        c = mix(c, vec3(0.30, 0.28, 0.26), vertex_rock * 0.75);
+        c = style_grade(c);
+        c *= mix(0.9, 1.1, style_paint_noise(pattern_xz(world_pos) / 38.0) * 0.6 + 0.2);
+        v_col = c;
+    }
 #endif
     POSITION = retro_snap(PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0));
 }
@@ -114,7 +131,11 @@ void fragment() {
     n = normalize(mix(n, sn, smoothstep(0.8, 0.55, sn.y)));
 #endif
 
+#ifdef VERTEX_FINISH
+    vec3 col = v_col;
+#else
     vec3 col = COLOR.rgb;
+#endif
 
     // Surface patterns. COLOR.a carries a pattern code in quarter steps (CoverPalette /
     // SurfacePattern). All of them run on world axes rather than the feature's true
@@ -209,7 +230,9 @@ void fragment() {
         }
     }
 #else
+#ifndef VERTEX_FINISH
     col = mix(col, vec3(0.30, 0.28, 0.26), rockiness * 0.75);
+#endif
 #endif
 
     // ski slopes (#887): their snow, by the hour's state, over whatever the cover was
@@ -225,10 +248,10 @@ void fragment() {
 #ifndef LITE_NO_OCCASION
     col = occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX));
 #endif
-#ifndef LITE_NO_PAINT
+#if !defined(LITE_NO_PAINT) && !defined(VERTEX_FINISH)
     col = style_grade(col);
 #endif
-#if defined(STYLE_CARTOON) && !defined(LITE_NO_PAINT)
+#if defined(STYLE_CARTOON) && !defined(LITE_NO_PAINT) && !defined(VERTEX_FINISH)
     // big painted patches of lighter and darker ground
     vec2 paint_xz = pattern_xz(world_pos);
 #ifdef STANDALONE
