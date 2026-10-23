@@ -6,7 +6,7 @@ using FaceGenome = UnitSport.Avatar.Face.FaceGenome;
 namespace UnitSport.Ui;
 
 /// <summary>
-/// Settings → Character (#806, was the inventory's Body row of #394): who your figure is, one
+/// The Character menu's page (#1127, <see cref="CharacterScreen"/>; a Settings tab from #806, the inventory's Body row in #394): who your figure is, one
 /// option per part (build, face, eyes, skin, hair, its colour) beside a small turning preview.
 /// Each change packs <see cref="GameSettings.AppearanceBits"/>, tells the world
 /// (<see cref="GameSettings.Changed"/>: <c>ClientWorld.PublishAppearance</c> puts it on your
@@ -23,7 +23,8 @@ public static class CharacterPage
         var left = UiKit.VBox(0);
         left.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         split.AddChild(left);
-        var preview = new FigurePreview();
+        // told what to show before it enters the tree: on a page shown at once it builds its world right there
+        var preview = new FigurePreview { Shown = () => Current(rows) };
         split.AddChild(preview);
 
         var a = Current(rows);
@@ -39,7 +40,6 @@ public static class CharacterPage
             }, i == 0 ? "Everyone online sees the figure you choose" : null, Commit);
         }
         Tint(options, a);
-        preview.Shown = () => Current(rows);
         // the network id (and with it the figure of someone who never chose) changes on joining a server
         rows.VisibilityChanged += () =>
         {
@@ -104,7 +104,7 @@ public static class CharacterPage
 }
 
 /// <summary>
-/// The figure on a turntable in its own small world: a SubViewport built while the Character tab
+/// The figure on a turntable in its own small world: a SubViewport built while the Character menu
 /// is on screen and freed as soon as it is not, so the menu costs nothing elsewhere. It draws with
 /// the shared figure material as it is (no face_idle change, unlike <see cref="AvatarPreview"/>).
 /// </summary>

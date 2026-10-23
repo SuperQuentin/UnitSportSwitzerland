@@ -248,6 +248,9 @@ public partial class PlayerInput : Node
     public const string PrevItem = "prev_item";
     /// <summary>Opens the field journal of birds seen and bagged (<see cref="Birds.BirdJournal"/>).</summary>
     public const string BirdJournal = "bird_journal";
+
+    /// <summary>Opens the Character menu, the figure editor (<see cref="Ui.CharacterScreen"/>, #1127). On foot only: P is the radio's previous station in a vehicle.</summary>
+    public const string CharacterMenu = "character_menu";
     /// <summary>The hammer in hand (#359): turns the piece; with Aim, changes its material. R, or D-pad up on a pad.</summary>
     public const string BuildTurn = "build_turn";
 
@@ -762,6 +765,9 @@ public partial class PlayerInput : Node
         for (int s = 0; s < Slots.Length; s++) Bind(Slots[s], Keys(Key.Key1 + s));
         Bind(PrevItem, Mouse(MouseButton.WheelUp));
         Bind(BirdJournal, Keys(Key.J));
+        // the Character menu (#1127): P on foot (in a vehicle it is the radio's previous station, so the world reads it
+        // only on foot); no pad button is free on foot, so a pad and VR open it from the quick menu or the pause menu
+        Bind(CharacterMenu, Keys(Key.P));
         // R is the travel picker on foot, D-pad up the engine in a vehicle: with the hammer in hand
         // the item controller takes either first (Build.BuildTool)
         Bind(BuildTurn, Keys(Key.R), Button(JoyButton.DpadUp));

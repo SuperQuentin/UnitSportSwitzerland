@@ -54,6 +54,7 @@ internal sealed class TouchMore
         ("Emotes", PlayerInput.EmoteWheel),
         ("Drop item", PlayerInput.DropItem),
         ("Bird journal", PlayerInput.BirdJournal),
+        ("Character", PlayerInput.CharacterMenu),
         ("All controls", PlayerInput.Help),
     };
 

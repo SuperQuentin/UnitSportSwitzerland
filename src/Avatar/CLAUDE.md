@@ -22,7 +22,7 @@ touches its topic; search with `grep -ril <word> docs/notes/avatar`.
 - `item-arm-poses` — Held items pose the arms (ItemArmPose, replicated ItemAction) and the held mesh follows the hand basis
 - `body-shape` — The figure's body (#394): builds (`Physique`), lofted trunk (`Torso`, spine 0-4) and head (`Head`), limb `Zones`/`LimbBand`, hands, boots, hair and `HairCover`; no allocation per rebuild; `--bodies` pages
 - `procedural-faces` — Pixel faces (#657, was the #394 atlas): `FaceGenome` in the band's UV2 (decode with round), SDF shader, blink in the shader, `FaceState` as instance uniforms via `FaceAnimator`; every figure mesh needs `FigureMaterial`
-- `appearance` — Who a figure is (#394): `Appearance` packed in `FootPlayer.AppearanceBits` from `GameSettings`, chosen in Settings → Character, `Register`/`ForRider` registry for rides, seeds for NPCs and ghosts
+- `appearance` — Who a figure is (#394): `Appearance` packed in `FootPlayer.AppearanceBits` from `GameSettings`, chosen in the Character menu, `Register`/`ForRider` registry for rides, seeds for NPCs and ghosts
 - `aliens` — Aliens (#880): `BodyBuild.Alien`, alien skins 8-11 and faces 16-18 (`EyeShape.Alien`), antennae and the silver suit, `Aliens` presets (Zorp, Zib, Gleeb…) for films, sightings and the odd bot; `--appearance zorp`
 - `clothing` — Clothes (#251): Garments catalog, WearSlot, Outfit bits (OutfitBits), AppendDressed from the rig, draped skirts (HangSkirt + MeshScratch.Drape, #671), finishes in vertex alpha + FigureMaterial/avatar.gdshader; `--outfitcheck`, `--avatars … --outfits`
 
