@@ -65,6 +65,21 @@ varying vec3 smooth_n;
 
 void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+#ifdef NO_DISCARD
+    // a standalone headset (#1112): no discard anywhere in the terrain, which turned a Quest's early
+    // depth rejection off for every draw after it. The horizon goes under the real tiles instead:
+    // a lattice vertex whose four neighbouring tiles are all covered sinks out of sight
+    if (use_cover) {
+        float covered = 1.0;
+        for (int i = 0; i < 4; i++) {
+            vec2 probe = world_pos.xz + vec2(i < 2 ? -1.0 : 1.0, (i & 1) == 0 ? -1.0 : 1.0);
+            vec2 uv = (probe - cover_origin) / cover_extent;
+            covered *= (uv == clamp(uv, vec2(0.0), vec2(1.0)) && textureLod(detail_cover, uv, 0.0).r > 0.5) ? 1.0 : 0.0;
+        }
+        VERTEX.y -= covered * 400.0;
+        world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+    }
+#endif
     local_vertex = VERTEX;
     smooth_n = (MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz;
 #ifdef STYLE_REAL
@@ -76,6 +91,7 @@ void vertex() {
 
 
 void fragment() {
+#ifndef NO_DISCARD
     if (portal_clipped(world_pos, CAMERA_POSITION_WORLD)) {
         discard;
     }
@@ -85,6 +101,7 @@ void fragment() {
             discard;
         }
     }
+#endif
     vec3 n = facet_normal(VERTEX, INV_VIEW_MATRIX);
     if (n.y < 0.0) {
         n = -n;
