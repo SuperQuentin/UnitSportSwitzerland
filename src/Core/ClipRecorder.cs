@@ -260,7 +260,7 @@ public partial class ClipRecorder : Node
             catch (System.Exception e) { _pipeError = e.Message; }
             finally { try { stdin.Close(); } catch (System.Exception) { } }
         });
-        GD.Print($"[clip] t={Time.GetTicksMsec()} recording {_name}: {_size.X}x{_size.Y} at {Fps} fps for {_seconds:F0} s -> {_gifPath}"
+        GD.Print($"[clip] t={(long)(RealClock.Now * 1000)} recording {_name}: {_size.X}x{_size.Y} at {Fps} fps for {_seconds:F0} s -> {_gifPath}"
             + (_hasX264 == true ? " and .mp4" : " (no libx264 or libopenh264 in this ffmpeg: GIF only)"));
         return true;
     }

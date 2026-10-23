@@ -27,8 +27,8 @@
   <file with 34,g20,27,-28,50,900,x.png> --nohud --time 13 --style cartoon --traffic 150 --walkers 100 --bikes 50 --trams 6`
   (`--trafficcheck --at` keeps the traffic and its feeders there; the shot queue's line holds the camera).
 - **Camera moves**: a `--shot-queue` of glides (`x,g20,z,pitch,yaw,seconds,~ease`, `core/commands`) flies the camera
-  while it films; one still shot first settles the tiles. `[clip] t=` and each `[glide] t=` log the tick, so a glide's
-  place in the MP4 is its tick less the clip's (with `--clip-realtime`). A flythrough of the signal test region, cut from
+  while it films; one still shot first settles the tiles. `[clip] t=` and each `[glide] t=` log `RealClock.Now` in ms, so a glide's
+  place in the MP4 is its time less the clip's (with `--clip-realtime`). A flythrough of the signal test region, cut from
   five such takes with crossfades and caption PNGs (Krita's ffmpeg has no text filter), fit 2:39 at 960x540 in 7.9 MB
   (libopenh264 395 kb/s).
 - **How**: `Core/ClipRecorder` reads the last drawn frame back every 1/30 s, scales it and pipes raw RGB to

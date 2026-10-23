@@ -41,7 +41,7 @@
   queue it last; it fails after 40 s without a door or an interior.
   A line whose path is `~ease`, `~lin`, `~in` or `~out` is a **glide**: the camera moves from the last line's pose to its
   own over its seconds (eased as named; yaw the short way round; a `g` height lerped above the ground), no picture, no wait
-  for tiles: camera moves for a `--clip` (each logs `[glide] t=<ticks ms>`, as `[clip] t=` logs the clip's start).
+  for tiles: camera moves for a `--clip` (each logs `[glide] t=<RealClock ms>`, as `[clip] t=` logs the clip's start).
   A line `shift dE,dN` moves the floating origin by that many metres (LV95 E, N) with the camera
   still, then logs the CPU and GPU time of the 120 frames after it against the 30 before (#185):
   what a shift costs the renderer. Time it with no shot right after it (saving a PNG stalls the

@@ -198,8 +198,8 @@ public partial class ShotRunner : Node
         {
             _shot = shot;
             _elapsed = 0;
-            // the tick, so a clip's log can be matched to its frames (ClipRecorder logs its start the same way)
-            GD.Print($"[glide] t={Time.GetTicksMsec()} {shot.OutPath} to {shot.Position.X:F0},{shot.Position.Z:F0} in {shot.SettleSeconds:F1} s");
+            // the real time, so a clip's log can be matched to its frames (ClipRecorder logs its start the same way)
+            GD.Print($"[glide] t={(long)(RealClock.Now * 1000)} {shot.OutPath} to {shot.Position.X:F0},{shot.Position.Z:F0} in {shot.SettleSeconds:F1} s");
             return;
         }
         _shot = shot;
