@@ -100,6 +100,10 @@ public static partial class SignalTestRegion
     public const double TurningTramE = 2914760, TurningTramN = 1323760;
     /// <summary>J18 (#1161): a T off the divided road, its tram straight through on the reservation (Vaud tile, south-west quarter).</summary>
     public const double TeeTramE = 2914230, TeeTramN = 1323230;
+    /// <summary>J19 (#1176): J16 in town, its crossings in three stages, an island either side of the tracks (Geneva tile, south-east quarter).</summary>
+    public const double IslandTramE = 2913760, IslandTramN = 1323240;
+    /// <summary>J20 (#1176): J19 with the tracks' stage unlit, walkers giving way to the trams (Geneva tile, north-west quarter).</summary>
+    public const double UnlitTramE = 2913240, UnlitTramN = 1323760;
     /// <summary>
     /// The region's cantons (#1038), by kilometre tile: only those whose lights or poles differ (pedestrian heads, arrow plates,
     /// pole colours, #1037; <c>tools/traffic-signals</c>); every other tile is the default zone (the cantons not checked yet).
@@ -141,7 +145,7 @@ public static partial class SignalTestRegion
         string BikeFwd = "", string BikeBwd = "", bool Tram = false);
 
     /// <summary>An OSM <c>highway=crossing</c> node (#700) on a line, metres along it, with its <c>crossing=*</c> value.</summary>
-    private sealed record CrossingNode(string LineId, double Along, string Value);
+    private sealed record CrossingNode(string LineId, double Along, string Value, string? Tags = null);
 
     private sealed record Design(List<Line> Lines, List<Box> Buildings, List<Junction> Junctions, List<CrossingNode> Crossings);
 
@@ -614,16 +618,43 @@ public static partial class SignalTestRegion
                 Arms(null, null, null, null), Signals: [(ce, cn - half), (ce, cn + half)]));
         }
 
+        // J19 and J20 (#1176, the user: "a multi step crossing with islands on both sides of the center running tram lanes"): J16 in
+        // town (sidewalks on every road), a crossing over the divided road in three stages, carriageway, the tracks between two
+        // islands, carriageway; J20 the same with the tracks' stage unlit, its walkers giving way to the trams. Geneva tile, its
+        // south-east and north-west quarters
+        foreach (var (id, ce, cn, unlit) in new[] { ("IT", IslandTramE, IslandTramN, false), ("UT", UnlitTramE, UnlitTramN, true) })
+        {
+            const double arm = 180, half = 8;
+            DividedRoad(id, ce, cn, arm, half, "yes");
+            // (the cross road one lane each way, its turns shared with the through traffic as OSM's turn:lanes says: its turns into the
+            // divided road give way to the walkers there, whose crossings then go with the cross road's phase too)
+            const string shared = "left;through;right";
+            lines.Add(new Line(id + "S", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(ce, cn - arm), (ce, cn - half)], "secondary", "yes",
+                Rows: [new OsmRow(0, arm - half, Lanes: "2", TurnFwd: shared)]));
+            lines.Add(new Line(id + "M", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(ce, cn - half), (ce, cn + half)], "secondary", "yes"));
+            lines.Add(new Line(id + "N", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(ce, cn + half), (ce, cn + arm)], "secondary", "yes",
+                Rows: [new OsmRow(0, arm - half, Lanes: "2", TurnBwd: shared)]));
+            lines.Add(new Line(id + "T", "", "", "", [(ce - arm, cn), (ce + arm, cn)], "", Rail: RoadFlags.Tramway | RoadFlags.DoubleTrack));
+            // (J20: OSM's walkers' crossing of the tracks either side of the junction, uncontrolled: its middle stages unlit)
+            if (unlit)
+                foreach (double along in (ReadOnlySpan<double>)[arm - 12, arm + 12])
+                    crossings.Add(new CrossingNode(id + "T", along, "uncontrolled", "railway=tram_crossing;crossing=uncontrolled"));
+            junctions.Add(new Junction(unlit ? "J20-tram-unlit-middle" : "J19-tram-islands", ce, cn,
+                unlit ? "J19 with the crossing's middle stage over the tracks unlit: its walkers give way to the trams"
+                    : "a divided road in town, its tram on the reservation: the crossings in three stages, an island either side of the tracks",
+                Arms(null, null, null, null), Signals: [(ce, cn - half), (ce, cn + half)]));
+        }
+
         return new Design(lines, boxes, junctions, crossings);
 
         // a main road of two one-way carriageways (TLM richtungsgetrennt) 2 x half apart, east and west of (e, n), node at each
         // carriageway's crossing of the cross road (#1161)
-        void DividedRoad(string id, double e, double n, double arm, double half)
+        void DividedRoad(string id, double e, double n, double arm, double half, string sidewalk = "")
         {
-            lines.Add(new Line(id + "Wb", "6m Strasse", "Durchgangsstrasse", "Kanton", [(e + arm, n + half), (e, n + half)], "secondary", Divided: true));
-            lines.Add(new Line(id + "Wa", "6m Strasse", "Durchgangsstrasse", "Kanton", [(e, n + half), (e - arm, n + half)], "secondary", Divided: true));
-            lines.Add(new Line(id + "Ea", "6m Strasse", "Durchgangsstrasse", "Kanton", [(e - arm, n - half), (e, n - half)], "secondary", Divided: true));
-            lines.Add(new Line(id + "Eb", "6m Strasse", "Durchgangsstrasse", "Kanton", [(e, n - half), (e + arm, n - half)], "secondary", Divided: true));
+            lines.Add(new Line(id + "Wb", "6m Strasse", "Durchgangsstrasse", "Kanton", [(e + arm, n + half), (e, n + half)], "secondary", sidewalk, Divided: true));
+            lines.Add(new Line(id + "Wa", "6m Strasse", "Durchgangsstrasse", "Kanton", [(e, n + half), (e - arm, n + half)], "secondary", sidewalk, Divided: true));
+            lines.Add(new Line(id + "Ea", "6m Strasse", "Durchgangsstrasse", "Kanton", [(e - arm, n - half), (e, n - half)], "secondary", sidewalk, Divided: true));
+            lines.Add(new Line(id + "Eb", "6m Strasse", "Durchgangsstrasse", "Kanton", [(e, n - half), (e + arm, n - half)], "secondary", sidewalk, Divided: true));
         }
     }
 
@@ -1058,7 +1089,7 @@ public static partial class SignalTestRegion
             var (e, nn) = PointAlong(line, c.Along);
             bool atEnd = length - c.Along < c.Along;
             var end = atEnd ? line.Points[^1] : line.Points[0];
-            sb.Append(inv, $"crossing\t{++crossingId}\t{e:F1}\t{nn:F1}\t{line.Uuid}\t0\t{c.Along:F1}\tapproach\t{(atEnd ? "end" : "start")}\t{end.E:F1}\t{end.N:F1}\t\t{c.Value}\t\t\t\thighway=crossing;crossing={c.Value}\n");
+            sb.Append(inv, $"crossing\t{++crossingId}\t{e:F1}\t{nn:F1}\t{line.Uuid}\t0\t{c.Along:F1}\tapproach\t{(atEnd ? "end" : "start")}\t{end.E:F1}\t{end.N:F1}\t\t{c.Value}\t\t\t\t{c.Tags ?? "highway=crossing;crossing=" + c.Value}\n");
         }
         File.WriteAllText(Path.Combine(tempDir, OsmNodesReader.FileName), sb.ToString());
     }

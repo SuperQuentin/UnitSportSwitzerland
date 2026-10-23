@@ -10,6 +10,8 @@ public enum ConflictMover : byte { Car = 0, Bike = 1, Walker = 2, Tram = 3 }
 /// </summary>
 public sealed class RoadConflictLine
 {
+    /// <summary>A walkers' line of no group (#1176): an unlit middle stage over the trams' reservation, its walkers giving way to the trams.</summary>
+    public const byte NoGroup = 255;
     public byte Group { get; init; }
     public ConflictMover Mover { get; init; }
     public float ClearSpeed { get; init; }

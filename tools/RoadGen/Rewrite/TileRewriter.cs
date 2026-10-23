@@ -283,6 +283,9 @@ public static partial class TileRewriter
         var signalSites = SignalSites.From(osmNodes);
         var restrictions = Restrictions.From(osmNodes);   // turns forbidden at an approach (#353)
         var crossingNodes = CrossingNodes.From(osmNodes);   // pedestrian crossings (#700)
+        // walkers' crossings over a tram track left without lights (#1176: OSM railway=tram_crossing, crossing=uncontrolled)
+        UncontrolledTramCrossings = osmNodes is null ? [] : osmNodes.All.Where(e => e.Kind == OsmNodesReader.NodeKind.Crossing
+            && e.Value == "uncontrolled" && e.Tags.GetValueOrDefault("railway") == "tram_crossing").Select(e => new Vec2(e.E, e.N)).ToList();
         if (signalSites is not null) log($"  OSM traffic signals: {signalSites.Count:N0} junction signals");
         if (overlay is not null) log($"  OSM overlay: {overlay.RowCount:N0} rows from {options.OsmOverlay}");
 
@@ -884,6 +887,8 @@ public static partial class TileRewriter
                         inputs.Gantries);
                 // the tram stops' signs beside their tracks (#1057), where the preprocessor found stops (--tram-stops)
                 if (tramStops.Count > 0) EmitTramStops(tramStops, new TramNet(result), block, signs, netStats.LayoutWrite);
+                // the tram beds the walkers' crossings at lights cross, paved under them (#1179)
+                PaveTrackCrossings(output, signalRecords, paint, rails, netStats.LayoutWrite);
 
                 // the paths' paint on their final pieces, and the crossings at the junctions (#120)
                 var linkOf = new Dictionary<RoadSegment, int>(ReferenceEqualityComparer.Instance);
@@ -999,7 +1004,7 @@ public static partial class TileRewriter
                     CatenarySupports = catenarySupports.GetValueOrDefault(id) ?? [],   // #1052
                     CatenaryWires = catenaryWires.GetValueOrDefault(id) ?? [],
                 };
-                rails.ClearTrackZones(tile.Paint, id);
+                rails.ClearTrackZones(tile.Paint, id, tile.Signals.Select(s => (s.X, s.Z)).ToList());
                 built.Add(tile);
             }
             return built;

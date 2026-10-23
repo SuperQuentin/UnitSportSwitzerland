@@ -48,10 +48,11 @@ public static partial class TileRewriter
                         && NodeShortOfMouth(result, a, mouth.Station) is int node && byNode.TryGetValue(node, out var q) && q != p)
                         joins.Add((p, q));
         // a tram track across the street between two overlapping cores (#1161: on a central reservation between a divided road's
-        // carriageways): one junction, so its trams are an approach lane of the carriageway beside them, under one plan
+        // carriageways; #1176: under 30 m apart, overlapping or not): one junction, so its trams are an approach lane of the
+        // carriageway beside them, under one plan
         TramNet? trams = null;
         var planOfArm = plans.SelectMany(p => p.Arms.Select(a => (a, p))).ToDictionary(x => x.a, x => x.p);
-        foreach (var p in plans.Where(p => p.CoresOverlap))
+        foreach (var p in plans.Where(p => p.Arms.Any(a => a.Internal)))
             foreach (var a in p.Arms.Where(a => a.Internal))
                 if (a.FarArm is { } f && planOfArm.TryGetValue(f, out var q2) && q2 != p
                     && TramAcross(trams ??= new TramNet(result), p.Centre, q2.Centre))
