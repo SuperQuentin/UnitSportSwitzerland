@@ -25,6 +25,8 @@ namespace UnitSport.Core;
 /// last in a queue: the door is left open.
 /// A line starting with '/' is typed into the chat between two shots (<c>/style cartoon</c>,
 /// <c>/time set 19:30</c>), so one launch can picture a live change.
+/// A line whose path is "~ease", "~lin", "~in" or "~out" is a glide: the camera moves there from the last line's pose over
+/// its seconds, no picture taken (camera moves for a clip, <see cref="IsGlide"/>).
 /// "shift dE,dN" moves the floating origin by that many metres with the camera still (#185), then
 /// logs the CPU and GPU time of the frames after it against the frames before: what a shift costs
 /// the renderer (SDFGI relights, <c>docs/notes/core/floating-origin.md</c>). Shots before and
@@ -175,8 +177,31 @@ public partial class ShotRunner : Node
         return true;
     }
 
+    // a glide (a queued line whose path is "~ease", "~lin", "~in" or "~out"): from the last pose aimed
+    private Vector3 _lastPos, _glideFrom;
+    private float _lastPitch, _lastYaw, _lastAbove = 30f, _glideFromPitch, _glideFromYaw, _glideFromAbove;
+
+    /// <summary>
+    /// A glide moves the camera from the last queued pose to this one over its seconds (eased as its path names), writing
+    /// no picture and waiting for no tiles: camera moves for a clip filmed with <c>--clip</c>. Its "g" height is lerped above
+    /// the ground under the camera, so a glide over a slope follows it.
+    /// </summary>
+    private static bool IsGlide(Shot s) => s.OutPath.StartsWith('~');
+
     private void Aim(Shot shot)
     {
+        bool glide = IsGlide(shot);
+        if (glide) (_glideFrom, _glideFromPitch, _glideFromYaw, _glideFromAbove) = (_lastPos, _lastPitch, _lastYaw, _lastAbove);
+        (_lastPos, _lastPitch, _lastYaw) = (shot.Position, shot.PitchDeg, shot.YawDeg);
+        if (shot.AboveGround is { } above) _lastAbove = above;
+        if (glide)
+        {
+            _shot = shot;
+            _elapsed = 0;
+            // the tick, so a clip's log can be matched to its frames (ClipRecorder logs its start the same way)
+            GD.Print($"[glide] t={Time.GetTicksMsec()} {shot.OutPath} to {shot.Position.X:F0},{shot.Position.Z:F0} in {shot.SettleSeconds:F1} s");
+            return;
+        }
         _shot = shot;
         _elapsed = 0;
         _completeFor = 0;
@@ -197,6 +222,11 @@ public partial class ShotRunner : Node
         _camera.Current = true;
         // every frame: a panel opened since (the start menu, a toast) would land in the picture
         if (_hideHud) HideHud();
+        if (IsGlide(_shot!.Value))
+        {
+            Glide(delta);
+            return;
+        }
         if (_shot!.Value.Inside is { } inside && !_through)
         {
             GoInside(inside, delta);
@@ -223,6 +253,33 @@ public partial class ShotRunner : Node
         {
             _done = true;
             GetTree().Quit(ok ? 0 : 1);
+        }
+    }
+
+    /// <summary>One frame of a glide (<see cref="IsGlide"/>).</summary>
+    private void Glide(double delta)
+    {
+        var g = _shot!.Value;
+        _elapsed += delta;
+        float t = g.SettleSeconds <= 0 ? 1f : Mathf.Clamp((float)(_elapsed / g.SettleSeconds), 0f, 1f);
+        float k = g.OutPath == "~ease" ? t * t * (3f - 2f * t) : g.OutPath == "~in" ? t * t : g.OutPath == "~out" ? 1f - (1f - t) * (1f - t) : t; // "~lin"
+        var p = _glideFrom.Lerp(g.Position, k);
+        float pitch = Mathf.Lerp(_glideFromPitch, g.PitchDeg, k);
+        float yaw = _glideFromYaw + Mathf.Wrap(g.YawDeg - _glideFromYaw, -180f, 180f) * k; // the short way round
+        var world = _origin != null && _start != null ? _origin.Since(_start).Point(p) : p;
+        if (g.AboveGround is { } to)
+        {
+            // above the ground: hold the height until the ground under the camera has streamed in
+            float y = _camera.Position.Y;
+            if (GroundHeight?.Invoke(world) is { } ground) y = ground + Mathf.Lerp(_glideFromAbove, to, k);
+            world = world with { Y = y };
+        }
+        _camera.Position = world;
+        _camera.Rotation = new Vector3(Mathf.DegToRad(pitch), Mathf.DegToRad(yaw), 0);
+        if (t >= 1f)
+        {
+            _lastYaw = yaw;
+            _shot = null;
         }
     }
 
