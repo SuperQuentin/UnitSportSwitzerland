@@ -10,7 +10,7 @@ namespace UnitSport.Core;
 /// their path under the root, biggest first. Rough on purpose: whole meshes, ignoring culling and LOD
 /// ranges, which is enough to say whether the terrain, the horizon or the props are the bulk.
 /// </summary>
-public static class RenderCensus
+public static partial class RenderCensus
 {
     public static void Install(Node root)
     {
@@ -33,6 +33,10 @@ public static class RenderCensus
             timer.Timeout += () => Hide(root.GetTree().Root, names);
             root.AddChild(timer);
         }
+        // "--hidetoggle A,B": those nodes hidden and shown again in turns of 5 s, the headset's GPU time averaged
+        // per state: what a part of the scene costs, measured in one run (between runs a Quest varies by 2 ms)
+        if (CmdArgs.Value("--hidetoggle") is { } toggled)
+            root.AddChild(new HideToggle(toggled.Split(',', StringSplitOptions.RemoveEmptyEntries)));
         // "--hideui": every 2D layer hidden, each second, to measure what the 2D costs a headset
         if (CmdArgs.Has("--hideui"))
         {
@@ -49,12 +53,42 @@ public static class RenderCensus
         root.GetTree().CreateTimer(at ?? 30).Timeout += () => Print(root.GetTree().Root);
     }
 
-    private static void Hide(Node node, string[] names)
+    private static void Hide(Node node, string[] names, bool hide = true)
     {
-        if (node is Node3D n3 && n3.Visible)
+        if (node is Node3D n3 && n3.Visible == hide)
             foreach (var name in names)
-                if (node.Name.ToString().Contains(name)) { n3.Visible = false; return; }
-        foreach (var c in node.GetChildren()) Hide(c, names);
+                if (node.Name.ToString().Contains(name)) { n3.Visible = !hide; return; }
+        foreach (var c in node.GetChildren()) Hide(c, names, hide);
+    }
+
+    private sealed partial class HideToggle(string[] names) : Node
+    {
+        private const double Turn = 5, Settle = 1;
+        private double _clock;
+        private bool _hidden;
+        private readonly double[] _sum = new double[2];
+        private readonly int[] _count = new int[2];
+        private int _turns;
+
+        public override void _Process(double delta)
+        {
+            if (XR.XrSession.Rig?.HeadsetView is not { } view) return;
+            _clock += delta;
+            int state = _hidden ? 1 : 0;
+            if (_clock > Settle)
+            {
+                _sum[state] += RenderingServer.ViewportGetMeasuredRenderTimeGpu(view.GetViewportRid());
+                _count[state]++;
+            }
+            if (_clock < Turn) return;
+            _clock = 0;
+            _hidden = !_hidden;
+            // tiles come and go: the whole tree each turn
+            Hide(GetTree().Root, names, _hidden);
+            if (++_turns % 4 == 0 && _count[0] > 0 && _count[1] > 0)
+                GD.Print(System.FormattableString.Invariant(
+                    $"[hidetoggle] {string.Join(',', names)}: shown {_sum[0] / _count[0]:F2} ms, hidden {_sum[1] / _count[1]:F2} ms, saves {_sum[0] / _count[0] - _sum[1] / _count[1]:F2} ms ({_count[0]}/{_count[1]} frames)"));
+        }
     }
 
     private static void Print(Node root)

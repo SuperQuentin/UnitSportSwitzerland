@@ -94,7 +94,7 @@ public partial class GameShell : Node
             "--origin", "--style", "--tree-lod", "--tree-near", "--systems", "--world", "--appearance",
             "--menu", "--fakeversion", "--updatefeed", "--updateaccept", "--settings", "--licenses", "--controls", "--tutorial",
             "--multiplayer", "--solo", "--map", "--landing", "--uishot", "--menucheck", "--mapcheck", "--leavecheck",
-            "--leave-restart", "--mobile", "--quest", "--autostart", "--wheellock", "--fakewheel", "--ffblog", "--vr", "--xrsim", "--xrload", "--xrstats", "--vrhz", "--vrdetail", "--vrmsaa", "--vrscale", "--vrfoveation", "--shadows", "--rendercensus", "--hidenodes", "--foveation", "--nosky", "--overdraw", "--hideui", "--plainterrain", "--litterrain", "--terrainvariant", "--vrmult", "--vrfloor", "--verticallod", "--buildingrings", "--vrmonitor", "--xrheadshot", "--xrwrist", "--xrprofile", "--xrcab", "--xrhands",
+            "--leave-restart", "--mobile", "--quest", "--autostart", "--wheellock", "--fakewheel", "--ffblog", "--vr", "--xrsim", "--xrload", "--xrstats", "--vrhz", "--vrdetail", "--vrmsaa", "--vrscale", "--vrfoveation", "--shadows", "--rendercensus", "--hidenodes", "--hidetoggle", "--foveation", "--nosky", "--overdraw", "--hideui", "--plainterrain", "--litterrain", "--terrainvariant", "--vrmult", "--vrfloor", "--verticallod", "--buildingrings", "--vrmonitor", "--xrheadshot", "--xrwrist", "--xrprofile", "--xrcab", "--xrhands",
             "--bubblecheck", "--worldpickcheck", "--consolelinkcheck", "--fakeprotocol",
         };
         foreach (string a in args)
