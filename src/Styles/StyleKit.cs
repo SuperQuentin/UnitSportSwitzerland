@@ -224,6 +224,24 @@ public static class StyleKit
         return m;
     }
 
+    /// <summary>
+    /// Whether the roads, buildings and water draw before the ground (a standalone headset, #1112); settable to
+    /// measure it (<c>--hidetoggle @order</c>), which moves every live material of those roles at once.
+    /// </summary>
+    public static bool CoverFirst
+    {
+        get => _coverFirst;
+        set
+        {
+            _coverFirst = value;
+            lock (Live)
+                foreach (var (weak, role) in Live)
+                    if (role is MaterialRole.Road or MaterialRole.Building or MaterialRole.Water && weak.TryGetTarget(out var m))
+                        m.RenderPriority = value ? -1 : 0;
+        }
+    }
+    private static bool _coverFirst = Core.Platform.IsStandaloneVr;
+
     /// <summary>Every material handed out that is still alive, and its role.</summary>
     private static readonly List<(System.WeakReference<ShaderMaterial> Material, MaterialRole Role)> Live = new();
 
@@ -357,7 +375,7 @@ public static class StyleKit
         if (Core.Platform.IsStandaloneVr && role is MaterialRole.Tree or MaterialRole.TreeFar) m.RenderPriority = 2;
         // and what covers the ground goes before it: the roads on it, the buildings in front of it and the (opaque)
         // water over the lake bed, so the ground's costly pixels under them are rejected instead of shaded twice
-        if (Core.Platform.IsStandaloneVr && role is MaterialRole.Road or MaterialRole.Building or MaterialRole.Water) m.RenderPriority = -1;
+        if (CoverFirst && role is MaterialRole.Road or MaterialRole.Building or MaterialRole.Water) m.RenderPriority = -1;
         switch (role)
         {
             case MaterialRole.Tree:

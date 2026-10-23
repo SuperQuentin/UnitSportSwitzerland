@@ -35,7 +35,8 @@ public static partial class RenderCensus
         }
         // "--hidetoggle A,B": those nodes hidden and shown again in turns of 5 s, the headset's GPU time averaged
         // per state: what a part of the scene costs, measured in one run (between runs a Quest varies by 2 ms).
-        // Besides node names: @shadows (the sun's shadows off), @sky (a plain colour behind), @msaa (the headset's off)
+        // Besides node names: @shadows (the sun's shadows off), @sky (a plain colour behind), @msaa (the headset's off),
+        // @order (the ground drawn first again, StyleKit.CoverFirst)
         if (CmdArgs.Value("--hidetoggle") is { } toggled)
             root.AddChild(new HideToggle(toggled.Split(',', StringSplitOptions.RemoveEmptyEntries)));
         // "--hideui": every 2D layer hidden, each second, to measure what the 2D costs a headset
@@ -78,6 +79,7 @@ public static partial class RenderCensus
                 if (off) (_background, env.BackgroundMode) = (env.BackgroundMode, Godot.Environment.BGMode.Color);
                 else env.BackgroundMode = _background;
             }
+            if (names.Contains("@order")) Styles.StyleKit.CoverFirst = !off;
             if (names.Contains("@msaa"))
             {
                 if (off) (_msaa, view.Msaa3D) = (view.Msaa3D, Viewport.Msaa.Disabled);
