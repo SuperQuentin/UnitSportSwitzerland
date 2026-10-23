@@ -48,6 +48,10 @@ git diff HEAD --binary | (cd "$WT" && git apply --allow-empty)
 [ -z "$(git ls-files --others --exclude-standard)" ] || echo "WARNING: untracked files are not in the build: $(git ls-files --others --exclude-standard | head -5 | tr '\n' ' ')"
 cp -r "$ADDON" "$WT/addons/"
 cd "$WT"
+# the vendors plugin's Application SpaceWarp extension, registered at start; the game switches it (XR/XrSession,
+# Settings → VR SpaceWarp). Here, not in project.godot: the setting is the plugin's, which only this build has
+grep -q '^\[xr\]$' project.godot || { echo "project.godot has no [xr] section"; exit 1; }
+sed -i '/^\[xr\]$/a openxr/extensions/meta/application_space_warp=true' project.godot
 
 # The Quest preset: a Gradle build (the vendors addon is Android AAR plugins), XR mode OpenXR with Meta's loader,
 # its own package beside the phone's, and the "quest" feature (Core/Platform.IsStandaloneVr)

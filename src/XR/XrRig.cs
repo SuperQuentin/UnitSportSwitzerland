@@ -287,6 +287,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         ApplyQuality();
         ApplyHands();
         XrSession.ApplyRefresh();
+        XrSession.ApplySpaceWarp();
     }
 
     /// <summary>
@@ -379,6 +380,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         var player = Anchor?.GetParent() as FootPlayer;
         ReseatOnRideChange(player);
         UpdateAnchor(player);
+        SkipWarpOnJump();
         var calibrated = _calib * head;
 
         HandleSticks(player, calibrated, dt);
@@ -590,6 +592,24 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
     /// in plain sight is a lurch; one that jumps behind a blink reads as a teleport.
     /// </summary>
     public void Blink() => _blink = 1f;
+
+    /// <summary>
+    /// The origin moving further than anything travels in a frame, or turning further than a head does, is a cut: a
+    /// snap turn, a teleport, a seat change or the world's origin moving (#1112). SpaceWarp makes no frame across it.
+    /// </summary>
+    private void SkipWarpOnJump()
+    {
+        if (!XrSession.SpaceWarp) return;
+        var now = _origin.GlobalTransform;
+        if (now.Origin.DistanceTo(_warpLast.Origin) > WarpJumpM
+            || now.Basis.GetRotationQuaternion().AngleTo(_warpLast.Basis.GetRotationQuaternion()) > WarpTurnRad)
+            XrSession.SkipSpaceWarpFrame();
+        _warpLast = now;
+    }
+
+    private Transform3D _warpLast;
+    /// <summary>An airliner covers 7 m a frame at 36 fps; a snap turn is 30° at least.</summary>
+    private const float WarpJumpM = 20f, WarpTurnRad = 0.35f;
 
     private static readonly StringName EyeHeight = "eye_height";
 

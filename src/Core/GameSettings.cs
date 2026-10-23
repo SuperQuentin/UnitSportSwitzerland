@@ -414,6 +414,11 @@ public sealed class GameSettings
     /// <summary>Foveated rendering: coarser shading towards the edge of each eye (variable rate shading).</summary>
     public bool VrFoveation { get; set; } = true;
     /// <summary>
+    /// A standalone headset's Application SpaceWarp (#1112): the game renders every other frame and the headset makes
+    /// the one between from the motion it is given, so a frame has twice the time (XR/XrSession.ApplySpaceWarp).
+    /// </summary>
+    public bool VrSpaceWarp { get; set; } = true;
+    /// <summary>
     /// The headset's refresh rate, Hz: 60, 72, 80, 90 or 120 (the nearest the runtime offers). Physics
     /// ticks at it in VR, so every frame moves the view once. 72 by default: a Quest 2 over Air
     /// Link holds 72 far more often than 90, and each frame gets more of the stream's bitrate (#1036);
@@ -754,6 +759,7 @@ public sealed class GameSettings
                 case "--vrscale" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float vs):
                     VrRenderScale = Math.Clamp(vs, MinVrRenderScale, MaxVrRenderScale); break;
                 case "--vrfoveation": VrFoveation = v is "on" or "1" or "true"; break;
+                case "--spacewarp": VrSpaceWarp = v is "on" or "1" or "true"; break;
                 case "--vrfloor" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float vf):
                     VrResolutionFloor = Math.Clamp(vf, MinVrResolutionFloor, 1f); break;
                 case "--vsync": VSync = v is "on" or "1" or "true"; break;

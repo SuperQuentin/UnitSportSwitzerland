@@ -485,6 +485,9 @@ public partial class SettingsScreen : Screen
         }
         UiKit.ToggleRow(rows, "VR foveated rendering", GameSettings.Current.VrFoveation, on => GameSettings.Current.VrFoveation = on,
             "Coarser shading towards the edge of each eye (GPUs with variable rate shading)");
+        if (Platform.IsStandaloneVr)
+            UiKit.ToggleRow(rows, "VR SpaceWarp", GameSettings.Current.VrSpaceWarp, on => GameSettings.Current.VrSpaceWarp = on,
+                "The game draws every other frame and the headset makes the one between: smooth at half the work, edges can wobble");
         // frame pacing and triangles (#1036, docs/notes/xr/air-link.md)
         int[] rates = GameSettings.VrRefreshRates;
         UiKit.OptionRow(rows, "VR refresh rate", rates.Select(hz => $"{hz} Hz").ToArray(),

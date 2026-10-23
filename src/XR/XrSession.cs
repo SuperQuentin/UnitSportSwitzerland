@@ -199,6 +199,37 @@ public static class XrSession
 
     private static bool _watchingRate;
 
+    /// <summary>Whether Application SpaceWarp runs (#1112): the game renders at half the headset's rate.</summary>
+    public static bool SpaceWarp { get; private set; }
+
+    private static readonly StringName SpaceWarpName = "OpenXRFbSpaceWarpExtension", SetSpaceWarp = "set_space_warp_enabled",
+        SpaceWarpOn = "is_enabled", SkipSpaceWarp = "skip_space_warp_frame";
+
+    /// <summary>
+    /// Meta's Application SpaceWarp on a standalone headset, as <see cref="GameSettings.VrSpaceWarp"/> says (#1112): the
+    /// vendors plugin's extension, on in the Quest build's project settings (tools/quest.sh), switched here. The game
+    /// then renders every other frame with motion vectors and the runtime makes the one between.
+    /// </summary>
+    public static void ApplySpaceWarp()
+    {
+        if (!Active || Simulated || !Engine.HasSingleton(SpaceWarpName)) return;
+        var ext = Engine.GetSingleton(SpaceWarpName);
+        bool want = Platform.IsStandaloneVr && GameSettings.Current.VrSpaceWarp;
+        ext.Call(SetSpaceWarp, want);
+        bool on = ext.Call(SpaceWarpOn).AsBool();
+        if (on != SpaceWarp) GD.Print($"[xr] SpaceWarp {(on ? "on" : "off")}");
+        SpaceWarp = on;
+    }
+
+    /// <summary>
+    /// No frame made between this one and the last (#1112): the view jumped (a teleport, a snap turn, the world's
+    /// origin moved), and a frame made from motion across the jump would smear.
+    /// </summary>
+    public static void SkipSpaceWarpFrame()
+    {
+        if (SpaceWarp) Engine.GetSingleton(SpaceWarpName).Call(SkipSpaceWarp);
+    }
+
     /// <summary>Physics at the headset's <paramref name="hz"/>: one tick a frame.</summary>
     private static void TickAt(float hz)
     {
@@ -212,6 +243,7 @@ public static class XrSession
     {
         Active = true;
         ApplyRefresh();
+        ApplySpaceWarp();
         // the PS1 vertex snap and dither off (common/retro.gdshaderinc): the window's view too,
         // which in VR is a spectator's
         RenderingServer.GlobalShaderParameterSet("xr_smooth", true);

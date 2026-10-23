@@ -47,7 +47,8 @@ public partial class XrDynamicResolution : Node
         // the last measured frame's GPU time, smoothed over a few frames so one hitch does not jolt it
         double gpu = RenderingServer.ViewportGetMeasuredRenderTimeGpu(_view.GetViewportRid());
         if (gpu > 0) _gpuAverage = _gpuAverage <= 0 ? gpu : _gpuAverage + (gpu - _gpuAverage) * 0.25;
-        double budget = 1000.0 / Mathf.Max(30f, _xr.DisplayRefreshRate);
+        // under SpaceWarp the game renders every other frame: two of the headset's frames each
+        double budget = 1000.0 / Mathf.Max(30f, _xr.DisplayRefreshRate) * (XrSession.SpaceWarp ? 2 : 1);
         if (_gpuAverage > budget * ShrinkAbove) _scale -= ShrinkStep;
         else if (_gpuAverage < budget * GrowBelow) _scale += GrowStep;
         _scale = Mathf.Clamp(_scale, floor, 1f);
