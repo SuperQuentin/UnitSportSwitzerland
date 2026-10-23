@@ -105,7 +105,10 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   **A lone bike lane into a box** (#1184, `junction-planner`): one bike group with every move of the approach (`SignalArm.RiderAll`,
   in place of the through, left and #1165 right-only ones; one bike head), read back from the group alone by `SignalPlan.BoxRiders`
   (a bike group turning left and another way): never slow (ends with its cars), and turning left it gives way to the oncoming
-  traffic, to the walkers it turns across and to a tram beside it as the cars behind it do (permissive). Its clearing is also
+  traffic, to the walkers it turns across and to a tram beside it as the cars behind it do (permissive). Who gives way (#1192):
+  `Conflicts()` is symmetric, so flashers (their creation, `Warned`, `Retime`'s timing) ask `SignalPlan.GivesWayTo(g, h)`: a car
+  group yields to riders only where one of its turns crosses their way (or its right turn their lane beside it), box riders where
+  their left crosses; the oncoming through cars had a flasher with no plate (J21 from the ramps, `signal-test-region`). Its clearing is also
   timed to a start two phase changes on (`Time`: at least the least green and that gap between; it ends with its cars, so
   its slow clearing sets the gaps: the rule's first, wider form lengthened J3 74 -> 84 s). Test region: 4 groups (the T stems),
   cycles unchanged. Geneva centre: 59 approaches, 48 groups; 222 of 240 timed as on main; 2502325,1118596 125 -> 136 s.
