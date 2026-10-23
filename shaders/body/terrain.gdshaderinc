@@ -153,7 +153,9 @@ void fragment() {
     }
 
     // a running occasion's snow lies on whatever faces up; the rock test below still bares cliffs
+#ifndef LITE_NO_OCCASION
     col = occasion_snow(col, n, 1.0);
+#endif
 
     // steep faces read as bare rock whatever the mapped cover says
     float rockiness = smoothstep(0.62, 0.38, n.y);
@@ -220,9 +222,13 @@ void fragment() {
 
 #ifdef STYLE_LIT
     // valley mist of a running occasion; a no-op on an ordinary day
+#ifndef LITE_NO_OCCASION
     col = occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX));
+#endif
+#ifndef LITE_NO_PAINT
     col = style_grade(col);
-#ifdef STYLE_CARTOON
+#endif
+#if defined(STYLE_CARTOON) && !defined(LITE_NO_PAINT)
     // big painted patches of lighter and darker ground
     vec2 paint_xz = pattern_xz(world_pos);
 #ifdef STANDALONE
@@ -235,7 +241,9 @@ void fragment() {
     ALBEDO = col;
     NORMAL = style_view_normal(VIEW_MATRIX, n);
     ROUGHNESS = rough;
+#ifndef LITE_NO_EMISSION
     EMISSION = col * door_light(world_pos, n);
+#endif
 #else
     float ndl = clamp(dot(n, normalize(world_sun_dir)), 0.0, 1.0);
     // cliffs get a harder light ramp so faceting reads as rock rather than soft ground
