@@ -17,8 +17,11 @@ namespace UnitSport.Avatar.Face;
 /// <param name="Beat">The beat count from the bar's one, for alternating shapes.</param>
 /// <param name="Bar">The bar count, for the once-in-a-while gestures.</param>
 /// <param name="Floor">0 standing, 1 a breakdance power move or footwork, 2 the freeze.</param>
+/// <param name="Voice">The singer's level now, 0..1 (#1153); -1 when the CD has no vocal analysis.</param>
+/// <param name="Syllable">A sung syllable's onset, 0..1, decaying.</param>
+/// <param name="Vowel">-1 "oo" .. +1 "ee".</param>
 public readonly record struct DanceHearing(int Style, int Section, float Level, float Kick, float BarKick, float Burst,
-    int Beat, int Bar, int Floor);
+    int Beat, int Bar, int Floor, float Voice = -1f, float Syllable = 0f, float Vowel = 0f);
 
 /// <summary>
 /// A dancing face (#728): the expression follows the music instead of one fixed "happy". Calm
@@ -81,6 +84,11 @@ public static class DanceFace
                 break;
         }
 
+        // the song's own singer (#1153): the mouth follows the voice instead of the kick. A singer
+        // personality mouths every line, the others join the chorus and mumble the rest
+        if (h.Voice >= 0f && h.Floor == 0)
+            Sing(ref s, h.Voice, h.Syllable, h.Vowel, singer || h.Section == 3 ? 1f : 0.35f);
+
         // the bar's one lifts the brows; a hit narrows the eyes a little
         s.Brow = Math.Clamp(s.Brow + 0.35f * Clamp01(h.BarKick), -1f, 1f);
         s.Squint = Clamp01(s.Squint + 0.15f * kick);
@@ -107,6 +115,19 @@ public static class DanceFace
         // nearly silent: the face rests
         if (level < 0.06f && h.Floor == 0) s = FaceState.Lerp(s, Calm(), 0.7f);
         return s;
+    }
+
+    /// <summary>
+    /// Lip sync from a CD's vocal (#1153), shared by dancers and the concert's singer: the jaw opens
+    /// with the voice and pops on each syllable, the lips round for "oo" and spread for "ee";
+    /// <paramref name="amount"/> 1 sings the line, less mouths it. Silence closes the mouth.
+    /// </summary>
+    public static void Sing(ref FaceState s, float voice, float syllable, float vowel, float amount)
+    {
+        float v = Clamp01(voice), open = v * (0.35f + 0.65f * Clamp01(syllable));
+        s.Jaw = Math.Clamp(amount * (0.08f + 0.75f * open), 0f, 1f);
+        if (v > 0.02f) s.Wide = Math.Clamp(vowel, -1f, 1f) * (0.4f + 0.6f * amount);
+        s.Brow = Math.Clamp(s.Brow + 0.3f * amount * v, -1f, 1f);
     }
 
     private static FaceState Calm()

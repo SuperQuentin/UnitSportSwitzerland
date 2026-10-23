@@ -37,6 +37,8 @@ public partial class TrafficProbe
             + $"(on red {_traffic.WalkerRedStarts}, on the clearance amber {_traffic.WalkerAmberStarts}), waits at a red kerb {_traffic.WalkerLitWaits}, on an island {_traffic.WalkerIslandWaits}, "
             + $"at a zebra {_traffic.WalkerZebraWaits}; zebras crossed {_traffic.WalkerZebraCrossings}, cars stood for them {_traffic.ZebraCarSeconds:F0} s; "
             + $"unmarked crossed {_traffic.WalkerGapCrossings}, waits for a gap {_traffic.WalkerGapWaits}; "
+            + $"unlit stages over tram tracks crossed {_traffic.WalkerTramGapCrossings}, waits for the trams {_traffic.WalkerTramWaits}, "
+            + $"stepped on with a tram within its braking distance {_traffic.WalkerTramCloseSteps} (#1176); "
             + $"cars stood at a turn for walkers {_carsForWalkers:F0} s";
     }
 
@@ -46,5 +48,7 @@ public partial class TrafficProbe
         GD.Print($"[trafficcheck] walkers: {WalkerCounts()}");
         if (failure is null && _traffic.WalkerRedStarts > 0)
             failure = $"{_traffic.WalkerRedStarts} walkers stepped onto a lit crossing at red";
+        if (failure is null && _traffic.WalkerTramCloseSteps > 0)
+            failure = $"{_traffic.WalkerTramCloseSteps} walkers stepped onto an unlit stage over tram tracks with a tram within its braking distance";
     }
 }

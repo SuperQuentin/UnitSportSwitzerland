@@ -144,10 +144,12 @@ public class SignalBuilderTests
     }
 
     [Fact]
-    public void PermissiveTurn_OnAnUncombinedArrow_FlashesItsYellowForItsGreen()
+    public void PermissiveTurn_OnAnUncombinedArrow_GivingWayAllThroughItsGreen_AnAmberLensInTheGreensPlace()
     {
-        // #1109, the user: "for flashing arrows it takes the place of the green arrow". The right lane's head beside the main one
-        // shows the right arrow alone; its turn crosses the walkers: its green and yellow carry the flashing, no lamp beside it
+        // #1109, the user: "for flashing arrows it takes the place of the green arrow"; #1165, the user: "when an arrow signal ... is
+        // only ever permissive in the light cycle, make its green light a flashing amber (not the middle light, this stays as the
+        // transitional light)". The right lane's head beside the main one shows the right arrow alone; its turn crosses the
+        // walkers all through its green: an amber lens in the green's place flashes, the middle yellow steady, no lamp beside it
         var lamps = Lamps(left: false, right: true, pedAmber: true, SignalPoleFlags.Main);
         var plan = lamps.Plans[0];
         int lane = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Car && g.Arm == 2 && g.Moves == SignalMoves.Right);
@@ -155,7 +157,11 @@ public class SignalBuilderTests
         var green = Assert.Single(lamps.Lenses, l => l.Group == lane && l.Role == SignalBuilder.Role.Green);
         var amber = Assert.Single(lamps.Lenses, l => l.Group == lane && l.Role == SignalBuilder.Role.Amber);
         Assert.NotNull(green.Blink);
-        Assert.Same(green.Blink, amber.Blink);
+        Assert.True(green.AmberGreen);
+        Assert.True(SignalBuilder.PermissiveThroughout(plan, lane, green.Blink!));
+        Assert.Null(amber.Blink);
+        Assert.False(amber.AmberGreen);
+        Assert.Equal(-1, amber.Flash);
         int flasher = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Flasher && g.Qualifies == lane);
         Assert.DoesNotContain(lamps.Lenses, l => l.Role == SignalBuilder.Role.Flash && l.Group == flasher);
         // flashing only during its green
@@ -180,6 +186,8 @@ public class SignalBuilderTests
         var green = Assert.Single(lamps.Lenses, l => l.Role == SignalBuilder.Role.Green);
         Assert.Equal(SignalMoves.Left, green.Arrow);
         Assert.NotNull(green.Blink);
+        // (the oncoming cars are green all through its green: an amber lens in the green's place, #1165)
+        Assert.True(green.AmberGreen);
         Assert.Contains(Enumerable.Range(0, (int)(plan.Cycle * 10)).Select(k => k * 0.1),
             t => plan.State(green.Blink!, t) == SignalAspect.FlashingAmber);
     }
@@ -241,5 +249,58 @@ public class SignalBuilderTests
         Assert.Equal((SignalPlate.Arrow, SignalMoves.Left), (both[0].Plate, both[0].PlateArrow));
         Assert.Equal(SignalPlate.Pedestrian, both[1].Plate);
         Assert.True(both[0].Transform.Origin.X < 505 && both[1].Transform.Origin.X > 505);
+    }
+    private static (SignalBuilder.Lamps Lamps, SignalPlan Plan) RiderRightLamps(bool leftPockets, bool throughBike)
+    {
+        // #1165: the south approach's riders have a right-turn bike lane of their own at the kerb (layout b)
+        var arms = Enumerable.Range(0, 4).Select(i => new SignalArm(Headings[i], true, true, leftPockets, i == 2 || leftPockets, Pedestrians: true,
+            BikeSignal: i == 2 && throughBike, RiderRight: i == 2, BikeBetween: i == 2, BikeRightOnRed: i == 2)).ToList();
+        var plan = SignalPlan.Build(arms);
+        var tile = new RoadTile
+        {
+            Id = new TileId(2500, 1117),
+            Segments = [],
+            Signals = [new RoadSignal { X = 500, Y = 400, Z = 500, Stops = new float[12], Plan = plan,
+                Poles = [new SignalPole(505, 400.1f, 512, (float)Math.PI, (float)(Math.PI / 2), 2, SignalPoleFlags.Main | SignalPoleFlags.Pedestrian)] }],
+        };
+        return (SignalBuilder.BuildLamps(tile)!, plan);
+    }
+
+    [Fact]
+    public void RightTurnBikeLane_ItsOwnHead_RightOfTheThroughRidersHead()
+    {
+        // #1165, the user: "right turn only bike lanes should get their own light instead of the single combined one"
+        var (lamps, plan) = RiderRightLamps(leftPockets: true, throughBike: true);
+        int through = plan.Groups.FindIndex(g => g is { Kind: SignalGroupKind.Bike, Arm: 2, Moves: SignalMoves.Through });
+        int right = plan.Groups.FindIndex(g => g is { Kind: SignalGroupKind.Bike, Arm: 2, Moves: SignalMoves.Right });
+        Assert.True(through >= 0 && right >= 0);
+        var a = lamps.Lenses.Where(l => l.Shape == SignalBuilder.Shape.Bike && l.Group == through).ToList();
+        var b = lamps.Lenses.Where(l => l.Shape == SignalBuilder.Shape.Bike && l.Group == right).ToList();
+        Assert.Equal(3, a.Count);
+        Assert.Equal(3, b.Count);
+        // on the through head's right as the riders see it; level, side by side, apart
+        var along = b[0].Transform.Origin - a[0].Transform.Origin;
+        Assert.InRange(along.Dot(a[0].Transform.Basis.X.Normalized()), 0.15f, 0.4f);
+        Assert.Equal(a[0].Transform.Origin.Y, b[0].Transform.Origin.Y, 3);
+        // protected with the right arrow: a green lens
+        Assert.DoesNotContain(b, l => l.AmberGreen);
+    }
+
+    [Fact]
+    public void RightTurnBikeHead_GivingWayAllThroughItsGreen_AnAmberLensInTheGreensPlace()
+    {
+        // #1165: no left pockets, the right turn gives way to the exit's walkers; the riders' right-turn head alone (no through
+        // riders' signal: they follow the cars), its green lens amber and flashing with the riders' flasher, its middle steady
+        var (lamps, plan) = RiderRightLamps(leftPockets: false, throughBike: false);
+        int right = plan.Groups.FindIndex(g => g is { Kind: SignalGroupKind.Bike, Arm: 2, Moves: SignalMoves.Right });
+        var lenses = lamps.Lenses.Where(l => l.Shape == SignalBuilder.Shape.Bike).ToList();
+        Assert.Equal(3, lenses.Count);
+        Assert.All(lenses, l => Assert.Equal(right, l.Group));
+        var green = Assert.Single(lenses, l => l.Role == SignalBuilder.Role.Green);
+        Assert.True(green.AmberGreen);
+        Assert.NotNull(green.Blink);
+        var amber = Assert.Single(lenses, l => l.Role == SignalBuilder.Role.Amber);
+        Assert.Equal(-1, amber.Flash);
+        Assert.Null(amber.Blink);
     }
 }

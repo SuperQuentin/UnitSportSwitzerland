@@ -118,11 +118,15 @@ public partial class TrafficProbe : Node
                 GetViewport().GetTexture().GetImage().SavePng(_shot.Replace(".png", "_car.png"));
         }
 
+        // --merge (#1172): the merge scenario alone, its own end
+        if (_merge) { MergeTick(); return; }
         if (_stay && _shot != null && _placed && _t > CaptureFrom) Capture();
         if (_t >= TickFrom && _t - delta < TickFrom) _traffic.ResetTickCost();
         // the test world (#971): its cars from a generator and destination on each arm of the junction, not --dense or --feed
         bool endpoints = _stay && _traffic.GeneratorsOnly;
-        if (endpoints && _placed && !_endpointsPlaced) PlaceEndpoints();
+        // (a world with its own endpoints runs them, #1134: the probe puts none unless --feed-turns asks for its demo split)
+        if (endpoints && _placed && !_endpointsPlaced && !WorldEndpoints) PlaceEndpoints();
+        if (WorldEndpoints && _placed) WorldTick(delta);
         // --dense: more of the traffic where the junction under test is (#353)
         if (_dense && !endpoints && (int)(_t * 4) != (int)((_t - delta) * 4)) _traffic.SpawnNear(_camera.GlobalPosition, NearSpawn);
         // --feed: a car into one of the junction's signalised approaches every 0.4 s (--feed-rate N a second), so queues form at its reds
@@ -148,7 +152,7 @@ public partial class TrafficProbe : Node
             GD.Print($"[trafficcheck] wrote {_shot}");
         if (_stay && _shot != null && _captured < CaptureAt.Length)
             GD.Print($"[trafficcheck] capture: {(_capture is null ? "no queue of " + CaptureQueue + " at a red near --at" : $"{_captured} of {CaptureAt.Length} shots")} before the end, run longer (--seconds)");
-        if (_endpointsPlaced) PrintEndpoints();
+        if (_endpointsPlaced || WorldEndpoints) PrintEndpoints();
         else if (_feed) GD.Print($"[trafficcheck] fed {_fedCars} cars into {_fed.Count} approaches near --at (fails {string.Join("/", _traffic.FeedFails)}), on average {(_nearSamples > 0 ? _nearSum / (float)_nearSamples : 0f):F0} cars within 80 m from 20 s"
             + (_feedTurns is null ? "" : $", moves taken L/T/R {_traffic.FedMoves[0]}/{_traffic.FedMoves[1]}/{_traffic.FedMoves[2]} ({_traffic.FedMovesMissed} not the one drawn)"));
         var (mean, p50, p99, ticks, cars) = _traffic.TickCost();
@@ -156,6 +160,12 @@ public partial class TrafficProbe : Node
         Approaches();
         // the modes (#1060): what --mover asked for moved, and each mode's own report (it may fail the run)
         string? modeFailure = ModesReport();
+        if (WorldEndpoints) modeFailure ??= WorldReport();
+        // (#1134) two cars standing body on body for good
+        GD.Print($"[trafficcheck] cars standing body on body: longest {_traffic.OverlapLongest:F1} s (fails over {Traffic.OverlapFails:F0} s); "
+            + $"lane changes {_traffic.LaneChanges} ({_traffic.LaneChanges / (float)Math.Max(1, _traffic.Generated):F2} a generated car), across more than one lane at once {_traffic.MultiLaneJumps}; passed one coming on a narrow road, moved over at a crawl (#1180) {_traffic.NarrowPasses}");
+        if (_traffic.MultiLaneJumps > 0) modeFailure ??= $"{_traffic.MultiLaneJumps} lane changes across more than one lane at once";
+        if (_traffic.OverlapLongest > Traffic.OverlapFails) modeFailure ??= $"two cars stood body on body for {_traffic.OverlapLongest:F0} s";
         bool ok = _maxCars > 0 && _maxSpeed > 2f && _wrongWay == 0 && _traffic.RedRuns == 0 && modeFailure is null;
         GD.Print(ok ? $"[trafficcheck] RESULT: ok (peak {_maxCars} cars, {_maxTrains} trains, none against a one-way, up to {_givingWay} giving way, "
                         + $"{_signalApproaches} signalised approaches, up to {_atRed} at red, {_traffic.RedStops} stops at red, {_traffic.LinesCrossed} stop lines crossed on green, no red run{ModesSummary()})"
@@ -190,7 +200,7 @@ public partial class TrafficProbe : Node
             string perLane = !a.MultiLane ? ""
                 : ", at the line " + string.Join(", ", a.Lanes.Select((l, i) => (l, i)).Where(x => x.l.Kind == ApproachLaneKind.Car)
                     .Select(x => $"{Letters(x.l.Moves)} {a.Crossings[x.i]}{(a.Crossings[x.i] > 0 ? $" at {a.OffsetSum[x.i] / a.Crossings[x.i]:+0.0;-0.0} m" : "")}"))
-                  + $" (lane {string.Join("/", a.Lanes.Where(l => l.Kind == ApproachLaneKind.Car).Select(l => $"{l.Offset:+0.0;-0.0}"))} m from the original lane), worst lag {a.LaneError:F2} m";
+                  + $" (lane {string.Join("/", a.Lanes.Where(l => l.Kind == ApproachLaneKind.Car).Select(l => $"{l.Offset:+0.0;-0.0}"))} m from the original lane, from {string.Join("/", a.Lanes.Where(l => l.Kind == ApproachLaneKind.Car).Select(l => $"{l.TaperFrom:F0}"))} m before the line), worst lag {a.LaneError:F2} m";
             GD.Print($"[trafficcheck] approach {where} arm {heading:F0} deg, {(a.Site is null ? "no lights" : "lights")}, lanes {lanes}"
                 + $"{(a.Banned != 0 ? $", no {Letters(a.Banned)}" : "")}, {new Vector2(a.Stop.X - at.X, a.Stop.Z - at.Z).Length():F0} m away: "
                 + $"stopped at red {a.RedStops}, entered on red {a.RedRuns} (cleared yellow {a.AmberClears}), {(a.Site is null ? "crossed" : "on green")} {a.GreenCrossings}, "

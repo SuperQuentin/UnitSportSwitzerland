@@ -12,6 +12,9 @@ namespace UnitSport.World;
 public partial class TrafficProbe
 {
     private bool RidersOn => _kind == MoverKind.Rider || GameSettings.Current.TrafficRiders > 0;
+    private int _riderShot = int.MaxValue;
+    private Vector3 _riderAt, _riderDir;
+    private Transform3D _riderView;
 
     partial void RidersTick(double delta)
     {
@@ -19,6 +22,27 @@ public partial class TrafficProbe
         _traffic.RiderProbeTick();
         // --dense: riders come into the junction too, twice a second (and those far away make room)
         if (_dense && _placed && (int)(_t * 2) != (int)((_t - delta) * 2)) _traffic.SpawnRiderNear(_camera.GlobalPosition, 120f);
+        // with a picture: the traced rider turning left from the car lane (#1192) at its red, from behind it, then the camera back
+        if (_shot != null && _riderShot >= 0)
+        {
+            if (_placed) _traffic.CarLeftNear ??= _spot;
+            if (_riderShot == int.MaxValue && _traffic.CarLeftAtRed() is var (pos, dir))
+                (_riderAt, _riderDir, _riderShot, _riderView) = (pos, dir, 30, _camera.GlobalTransform);
+            if (_riderShot != int.MaxValue)
+            {
+                var side = new Vector3(-_riderDir.Z, 0f, _riderDir.X);
+                var eye = _riderAt - _riderDir * 9f + side * 2.5f + Vector3.Up * 2.6f;
+                _camera.GlobalTransform = new Transform3D(Player.Flyer.Orient(_riderAt + _riderDir * 14f + Vector3.Up * 2f - eye, Vector3.Up, Vector3.Forward), eye);
+                if (--_riderShot == 0)
+                {
+                    string path = _shot.Replace(".png", "_rider_left.png");
+                    GetViewport().GetTexture().GetImage().SavePng(path);
+                    GD.Print($"[trafficcheck] wrote {path}: a rider turning left from the car lane at its red (#1192)");
+                    _camera.GlobalTransform = _riderView;
+                    _riderShot = -1;
+                }
+            }
+        }
     }
 
     partial void RidersReport(ref string? failure)
@@ -35,6 +59,9 @@ public partial class TrafficProbe
         GD.Print($"[trafficcheck] riders at the lights: {r.RedStops} stops at red, {r.RedRuns} red runs, {r.AmberClears} amber clears, "
             + $"{r.GreenCrossings} green crossings ({r.Leads} on the bike lead green, {r.BikeLefts} lefts on a bike group), {r.RightOnRed} rights on red (5.18, at {ror.Count} approaches{(ror.First is { } at ? $", first {at}" : "")}); "
             + $"cars waiting for a rider at a permissive turn {r.CarsWaited}; past their street's edge most {Math.Max(0f, r.OffWay):F2} m; settled off their line most {r.LateralOff:F2} m ({r.LateralOver} ticks over 1 m)");
+        if (_traffic.CarLeft is { Found: true } cl)
+            GD.Print(System.FormattableString.Invariant($"[trafficcheck] a rider turning left from its bike lane by the car lane (#1192): its path seen {cl.SeenAt:F0} m before it, lane at {cl.LaneLateral:F1} m, path from {cl.PathOffset:F1} m; ")
+                + System.FormattableString.Invariant($"55 m before {cl.At55:F1}, 30 m {cl.At30:F1}, 10 m {cl.At10:F1}; stopped at red {cl.StoppedAtRed}; crossed on {cl.Crossed ?? "-"}"));
         if (r.RedRuns > 0) failure ??= $"{r.RedRuns} riders ran a red";
         else if (r.OffWay > 0.5f) failure ??= $"a rider rode {r.OffWay:F1} m past its street's edge";
     }

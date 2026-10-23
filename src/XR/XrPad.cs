@@ -51,6 +51,9 @@ internal sealed class XrPad
     /// <summary>The teleport arc is up (#439): the left stick aims it and does not walk.</summary>
     public bool SuppressMove { get; set; }
 
+    /// <summary>The right stick and A belong to a menu in the world this frame (the wrist ring, #1097): not the pad's.</summary>
+    public bool SuppressRight { get; set; }
+
     /// <summary>The arms flying (#438, <see cref="XrRig"/>): added to the left stick, up +y.</summary>
     public Vector2 BodyStick { get; set; }
 
@@ -119,7 +122,7 @@ internal sealed class XrPad
         }
 
         // --- face buttons ---
-        Button(JoyButton.A, _right.IsButtonPressed(XrPad.Inputs.AxButton));
+        Button(JoyButton.A, !SuppressRight && _right.IsButtonPressed(XrPad.Inputs.AxButton));
         // crouching for real slides (running) or dives (swimming), like B (#437); not while a menu
         // is open, where B is back
         bool crouched = onFoot && player != null && calibrated.Origin.Y < -CrouchDrop
@@ -134,7 +137,7 @@ internal sealed class XrPad
         // --- right stick: on foot, up / down are the two D-pad directions that matter most (left /
         // right snap-turn, XrRig); mounted, where the head is the look, it is the whole D-pad (#436):
         // up engine, right lights, left roof / horn / couple / speedbrake, down tune ---
-        var r = _right.GetVector2(XrPad.Inputs.Primary);
+        var r = SuppressRight ? Vector2.Zero : _right.GetVector2(XrPad.Inputs.Primary);
         // the stronger axis only, so a diagonal never presses two directions
         bool vertical = Mathf.Abs(r.Y) >= Mathf.Abs(r.X);
         // a crane's hoist is the right stick's Y (#618): back raises, as on a pad; ← stays the hook (couple)

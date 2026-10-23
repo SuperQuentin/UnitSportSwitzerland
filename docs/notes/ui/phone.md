@@ -122,6 +122,14 @@
   server with Join / Leave (`RaceManager.RequestRows` once a second, rebuilt on change), "Start a 2 km
   race here"; the **Menu** app still opens the full Activities screen.
 
+## Walking with the camera app (#1149)
+
+- Once the phone is **open** on the camera app (`Stage.Open`, not while it opens), `Grip` drops
+  `UiFocus`: WASD / the left stick walk, Space / A jump (held, read by the body), the right stick looks;
+  the body squares to the view (the phone's `_throwBlend`). The phone keeps every event in
+  `CameraInput`: shutter on click / Enter / RT (no longer Space, E, A), zoom on the wheel, ↑ ↓, LB RB
+  (no longer W S). Folded and on every other app the body stands as before.
+
 ## Photos, wallpapers, selfies (the third pass)
 
 - **Keys lead the finger**: WASD / the arrows no longer swipe: the finger hovers over what is selected

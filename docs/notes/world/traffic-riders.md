@@ -1,7 +1,8 @@
 # Traffic riders (#1056, tracking #1058)
 
-Bikes as cosmetic, local traffic on the shared base (`traffic-modes`): green 0.6 x 1.7 x 1.8 m boxes at 5 m/s +-25 %,
+Bikes as cosmetic, local traffic on the shared base (`traffic-modes`): blocky bike-and-rider models (#1147) in 0.6 x 1.7 x 1.8 m boxes at 5 m/s +-25 %,
 30 by day (`GameSettings.TrafficRiders`, 8 on a phone, x0.3 at night; `--bikes N`; Settings -> World "Bikes").
+In the test world riders come only from its bike generators (#1134, `traffic-generators`): no density spawn there.
 
 ## Files
 
@@ -34,10 +35,17 @@ Bikes as cosmetic, local traffic on the shared base (`traffic-modes`): green 0.6
   path's first lane (`FromOffset`). On a new leg it carries on from where it is and eases (faster when far: a U-turn).
 - **Next leg** (`NextRide`): arriving where junction paths start, one of them: the riders' own of its kind (a lane's `Bike`,
   a path's `Path`), else any riders' own, else the cars' (from the lane nearest its line); a rider in the car lane takes the
-  cars'. One exit at random, straight on twice as likely. Off a path, its road. Elsewhere ways with a lane or path 3x as
+  cars'. One exit at random, straight on twice as likely; the kind of path is chosen for that exit (#1192, the user: "bikes
+  turning left take the car lane"): an exit its own paths miss (a left with no left-turn bike lane or box) by the cars' path,
+  moving over to its lane over the last 55 m (`RideLeadInCar`, 30 m into its own) and following that lane's lights.
+  Probe (#1192): `--trafficcheck ... --mover rider --ride-turns L,T,R` (riders' turn weights, destinations ignored) `--ride-trace
+  DEG` (bearing) traces the first rider within 100 m of `--at` turning left on the cars' path who stands at its red: its lateral
+  55/30/10 m before the path, the group it crossed on, and a picture `<png>_rider_left.png`. J21 S (2912500,1320380, `--ride-trace
+  0`, 330 s): from 6.6 m to 3.3 m at 30 m and 0.8 m at 10 m (its riders start 41 m out: no bikes off the ramps), stood at red,
+  crossed on the LeftArrow. Long dense runs there (330 s, `--traffic 300`) fail "two cars body on body" on main too (185 s). Off a path, its road. Elsewhere ways with a lane or path 3x as
   likely; never straight back but at a dead end.
-- **Lights** (`RideLights`): its group is its path's (a bike group, a left-turn bike lane's own phase #979, the lead green
-  are in the plan) or the arm's bike group of its move, else the cars'. Its line is its bike lane's (`StopBehind`: an
+- **Lights** (`RideLights`): its group is its path's (a bike group, a left-turn bike lane's own phase #979, a right-turn bike lane's own group #1165, the lead
+  green are in the plan; a lone lane's box group with every move #1184) or the arm's bike group of its move, else the cars'. Its line is its bike lane's (`StopBehind`: an
   advanced stop line lies ahead of the cars', #351; a bike box lies in front of the cars' line). Red: stops (2.5 m/s²),
   `Holding`. Amber: stops if it can. **Right on red** where the arm has `BikeRightOnRed` (5.18, #711): goes at 3 m/s.
   Without a junction path the turn is read 20 m past the approach's end along its legs.
