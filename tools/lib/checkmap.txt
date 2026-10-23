@@ -296,6 +296,12 @@ src/Core/GameSettings    quick  --exitcheck --world fixture
 src/Core/SimClock        net    tools/speednetcheck.sh
 src/Core/SpeedNetProbe   net    tools/speednetcheck.sh
 src/Net/ClockSync        net    tools/speednetcheck.sh
+# #262, #1200: the admin item, money and vehicle commands, /despawn, from a client against a server (fixture)
+src/Items/EconomyProbe   net    tools/econcheck.sh
+src/Net/AdminArgs        net    tools/econcheck.sh
+src/Items/DroppedItems   net    tools/econcheck.sh
+src/Vehicles/VehicleManager net tools/econcheck.sh
+src/Core/Chat            net    tools/econcheck.sh
 src/Net/                 net    @netsmoke
 src/Net/Sleeper          net    tools/sleepercheck.sh
 src/Net/PlayerKey        net    tools/sleepercheck.sh
