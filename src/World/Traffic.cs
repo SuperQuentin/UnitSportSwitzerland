@@ -661,12 +661,20 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         // the nearest car ahead in its way that stands or crawls: the tail of the queue it joins (#1172: its lane changes are planned to
         // end there, not at the line; a car only moves over while it rolls, so one that reached the tail first kept its lane)
         float tailAhead = float.MaxValue;
+        // the nearest car coming the other way on a narrow carriageway the two pass on, moved over (#1180): how far ahead, and how
+        // far right of this car it is (its middle's)
+        bool squeezes = Narrow(edge) && NarrowPass.Fits(edge.Width);
+        float meetAhead = float.MaxValue, meetAcross = 0f;
         for (int o = from < 0 ? ~from : from; o < _byX.Count && _byX[o].Head.X <= car.Head.X + GapWindow; o++)
         {
             var other = _byX[o];
             if (other == car) continue;
             var d = other.Head - car.Head;
             float along = d.Dot(dir);
+            // (until its tail is past: its body beside this one's from 6 m ahead to 6 m behind)
+            if (squeezes && along > -6f && along < NarrowPass.Look && along < meetAhead && Mathf.Abs(d.Y) < 3f
+                && d.Dot(rightOf) is var meetSide && meetSide < 0.5f && meetSide > -(edge.Width + 2f) && other.Route.At(0).Dir.Dot(dir) < -0.7f)
+                (meetAhead, meetAcross) = (along, meetSide);
             // (#1134, the user's two cars at a lane split: also one coming up behind in the lane it moves into, close enough to be
             // driven into: it waits for a gap that holds it, from 8 m behind to 6 m ahead of it)
             if (along > -8f && along < 6f && Mathf.Abs(easing) > 0.05f && d.Dot(rightOf) is var beside && Mathf.Abs(beside) < 3.2f
@@ -726,7 +734,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         }
         // and behind a rider or tram in its lane (#1060: the modes' crossers; +∞ without them): standing behind one, queued too
         // (#1134: a tram at its stop, a rider at a red)
-        float behindCrosser = FollowCrossers(car, dir, rightOf);
+        float behindCrosser = FollowCrossers(car, dir, rightOf, squeezes);
         car.Queued = queued || behindCrosser < 0.5f && car.Speed < 0.5f;
         car.Overlap = overlapping ? car.Overlap + dt : 0f;
         if (car.Overlap > OverlapFails && OverlapLongest <= OverlapFails)
@@ -747,6 +755,23 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         float maxPull = twoWay ? Mathf.Max(0f, half - 0.95f - keep) : 0f;
         float mine = keep + car.Pull;   // this car's centre, right of the centreline
         float wantPull = 0f, makeWay = float.MaxValue;
+        // meeting one on a narrow carriageway (#1180, the user): a crawl, over to the right edge (wheels on the verge or the kerb by
+        // what it takes) until the two bodies pass with room between; back to its line once its tail is past
+        if (squeezes) MeetCrossers(car, dir, rightOf, ref meetAhead, ref meetAcross);
+        if (meetAhead < float.MaxValue)
+        {
+            float centre = NarrowPass.Centre(edge.Width, keep, -(mine + meetAcross));
+            maxPull = Mathf.Max(maxPull, centre - keep);
+            wantPull = centre - keep;
+            target = Mathf.Min(target, NarrowPass.Approach(edge.Width, centre, meetAhead));
+            if (!car.Squeezing && ++NarrowPasses <= 20)
+            {
+                var (pe, pn) = _origin.ToLv95(car.Head);
+                GD.Print($"[traffic] narrow pass (#1180) at {pe:F0},{pn:F0}, t {Core.GameClock.Now:F1}: {edge.Width:F1} m road, one coming {meetAhead:F0} m ahead, over to {centre:F2} m right of the middle at {NarrowPass.Crawl(edge.Width, centre) * 3.6f:F0} km/h");
+            }
+            car.Squeezing = true;
+        }
+        else car.Squeezing = false;
         bool yield = false, hold = false, blocked = false, stopFor = false;
         (Vector3 At, float Distance, bool Yields)? junction = null;
         bool junctionLooked = false;
@@ -1499,6 +1524,9 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     /// <summary>Green stands logged so far (#1134).</summary>
     private int GreenStandsLogged, ContactsLogged;
 
+    /// <summary>Cars that passed one coming the other way on a narrow carriageway, moved over at a crawl (#1180).</summary>
+    public int NarrowPasses { get; private set; }
+
     /// <summary>A carriageway narrower than this holds no two cars side by side (m): two 1.9 m cars and 0.6 m between them (#1134).</summary>
     public const float TwoCarsWide = 4.4f;
 
@@ -1509,7 +1537,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     /// The one-carriageway stretch rule (#1134): where a car's way within 60 m leads into a two-way edge too narrow for two cars side
     /// by side (<see cref="TwoCarsWide"/>) and a car is on it the other way, or nearer to it the other way (the lower habit first on a
     /// tie), how far it may still go: to the stretch's start, or to the start of the junction's core before it. Null: it goes. A car
-    /// on the stretch or in a core goes on: whoever is on it first has it.
+    /// on the stretch or in a core goes on: whoever is on it first has it. Since #1180 only on a road under
+    /// <see cref="NarrowPass.MinWidth"/>: on a wider one the two pass each other, moved over at a crawl.
     /// </summary>
     private float? NarrowAhead(Vehicle car)
     {
@@ -1524,6 +1553,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             if (Narrow(e))
             {
                 float entry = coreAt >= 0f ? coreAt : along;
+                // (where the two pass each other moved over, #1180, nobody waits: only a road too narrow even for that)
+                if (NarrowPass.Fits(e.Width)) return null;
                 return NarrowTaken(car, e, f, entry) ? Mathf.Max(0f, entry - 2f) : null;
             }
             coreAt = -1f;
@@ -2244,6 +2275,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         public bool RoomHeld;
         /// <summary>Waiting before a one-carriageway stretch while one comes the other way (#1134): not stuck, the cars behind queue.</summary>
         public bool NarrowHeld;
+        /// <summary>Passing one coming the other way on a narrow carriageway, moved over at a crawl (#1180).</summary>
+        public bool Squeezing;
         /// <summary>How long it has stood body on body with another standing car (s, #1134).</summary>
         public float Overlap;
         public Vehicle? OverlapWith;

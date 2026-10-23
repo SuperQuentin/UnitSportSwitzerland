@@ -190,3 +190,16 @@
     2917470,1321500`, its north approach L | T): both past in 48 s (a red on the way), closest 1.38 of a body.
   - The probe logs a car's first contact with one ahead going its way (`[traffic] contact at`, both cars' lanes, strips, turns; at
     most 40), and per lit approach with lanes the queue's split by lane at its longest (`longest N standing (by lane L 3 | T 5 ...)`).
+- **Two cars meeting on a narrow road pass, moved over** (#1180, the user: "have the two oncoming cars slow down a lot and shift a
+  bit out of the road to pass each other (doesn't need much)"): on a two-way carriageway under 4.4 m (`TwoCarsWide`, #1134) a car
+  with one coming the other way within 45 m (`NarrowPass.Look`; a rider or walker in the road counts too, `MeetCrossers`) brakes
+  gently to a crawl, 15 km/h with room to spare down to 8 km/h with none (`NarrowPass.Crawl`), and moves over to its right edge,
+  its side up to 0.8 m past the tarmac (verge or kerb, `Overhang`), until the bodies are 0.5 m apart (`NarrowPass.Centre`: a car
+  standing at a red keeps its line, the one passing it goes further over alone, 1.4 m right of the middle on a 4 m road); back to
+  its line once the other's tail is 6 m past. #1134's one-at-a-time hold (`NarrowAhead`) stays only under 3 m (`MinWidth`). A
+  rider or walker standing or coming the other way on the far side of a car's body is passed, not followed (`FollowCrossers`: on
+  J8's north road a rider between two oncoming cars held all three for good). Not handled: a wall or building at the edge (no
+  data there). Tier 0 `NarrowPassTests`; `--trafficcheck` counts the passes and logs the first 20 (`narrow pass (#1180)`).
+  Measured, signal test region 400 s: J8 gridlocked from ~250 s before (cars arrived 95 of 194, east queue at its shortest per
+  cycle 0 0 0 6 31, FAILED), after 223 of 257, every queue at 0 at its shortest each cycle, ok; J3b 91 arrived with the east
+  queue 0 6 28 28 in the run with only the cars squeezing, after 246 of 308, every queue clearing, ok.

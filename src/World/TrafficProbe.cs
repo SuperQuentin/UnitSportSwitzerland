@@ -163,7 +163,7 @@ public partial class TrafficProbe : Node
         if (WorldEndpoints) modeFailure ??= WorldReport();
         // (#1134) two cars standing body on body for good
         GD.Print($"[trafficcheck] cars standing body on body: longest {_traffic.OverlapLongest:F1} s (fails over {Traffic.OverlapFails:F0} s); "
-            + $"lane changes {_traffic.LaneChanges} ({_traffic.LaneChanges / (float)Math.Max(1, _traffic.Generated):F2} a generated car), across more than one lane at once {_traffic.MultiLaneJumps}");
+            + $"lane changes {_traffic.LaneChanges} ({_traffic.LaneChanges / (float)Math.Max(1, _traffic.Generated):F2} a generated car), across more than one lane at once {_traffic.MultiLaneJumps}; passed one coming on a narrow road, moved over at a crawl (#1180) {_traffic.NarrowPasses}");
         if (_traffic.MultiLaneJumps > 0) modeFailure ??= $"{_traffic.MultiLaneJumps} lane changes across more than one lane at once";
         if (_traffic.OverlapLongest > Traffic.OverlapFails) modeFailure ??= $"two cars stood body on body for {_traffic.OverlapLongest:F0} s";
         bool ok = _maxCars > 0 && _maxSpeed > 2f && _wrongWay == 0 && _traffic.RedRuns == 0 && modeFailure is null;
