@@ -134,7 +134,9 @@ void fragment() {
 
     // Snow (a running occasion): carriageways are ploughed, so it lies only along the edges;
     // ballast holds it between the sleepers.
+#ifndef LITE_NO_OCCASION
     col = occasion_snow_amount(col, s == 4 ? 0.65 : s == 6 ? 0.3 : smoothstep(0.7, 1.0, abs(lat)) * 0.85 + 0.08);
+#endif
 
     // a road under a ski slope (#887) is the run in winter: the slope's snow over it, paint and
     // all; the signals' poles and heads (7, 8) stand out of it
@@ -151,7 +153,10 @@ void fragment() {
         n = -n;
     }
     // valley mist of a running occasion; a no-op on an ordinary day
-    col = style_grade(occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX)));
+#ifndef LITE_NO_OCCASION
+    col = occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX));
+#endif
+    col = style_grade(col);
     ALBEDO = col;
     NORMAL = style_view_normal(VIEW_MATRIX, n);
 #ifdef STYLE_REAL
@@ -159,7 +164,9 @@ void fragment() {
 #else
     ROUGHNESS = rough;
 #endif
+#ifndef LITE_NO_EMISSION
     EMISSION = col * door_light(world_pos, vec3(0.0, 1.0, 0.0));
+#endif
 #else
     // under a slope the road is lit as the terrain's snow round it is (terrain.gdshaderinc), or it
     // shows as a brighter ribbon through the run

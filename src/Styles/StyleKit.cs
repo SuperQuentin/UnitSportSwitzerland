@@ -355,6 +355,9 @@ public static class StyleKit
         // a standalone headset (#1112): the trees' dissolve discards, which turns a Quest's early depth
         // rejection off for every draw after it, so they go last (opaque draws sort by priority first)
         if (Core.Platform.IsStandaloneVr && role is MaterialRole.Tree or MaterialRole.TreeFar) m.RenderPriority = 2;
+        // and what covers the ground goes before it: the roads on it, the buildings in front of it and the (opaque)
+        // water over the lake bed, so the ground's costly pixels under them are rejected instead of shaded twice
+        if (Core.Platform.IsStandaloneVr && role is MaterialRole.Road or MaterialRole.Building or MaterialRole.Water) m.RenderPriority = -1;
         switch (role)
         {
             case MaterialRole.Tree:
