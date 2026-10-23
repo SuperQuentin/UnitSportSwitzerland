@@ -50,6 +50,7 @@ public static partial class RenderCensus
             };
             root.AddChild(timer);
         }
+        if (SoakCheck.Requested()) root.AddChild(new SoakCheck());
         double? at = CmdArgs.Double("--rendercensus");
         if (at == null && !CmdArgs.Has("--rendercensus")) return;
         root.GetTree().CreateTimer(at ?? 30).Timeout += () => Print(root.GetTree().Root);
