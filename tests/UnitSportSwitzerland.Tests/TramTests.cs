@@ -1,4 +1,6 @@
 using UnitSport.Terrain.Format;
+using UnitSport.Tools.RoadGen.Geometry;
+using UnitSport.Tools.RoadGen.Rewrite;
 using UnitSport.World;
 using Xunit;
 
@@ -255,4 +257,163 @@ public class TramTests
     [InlineData(null, 2_500_000, false)]
     public void RomandyHasTheTHead(string? canton, double e, bool t) =>
         Assert.Equal(t, UnitSport.Tools.RoadGen.Rewrite.TileRewriter.RomandyTramHead(canton, e));
+
+    // ---- tram lanes on their own bed (#1161) ---------------------------------------------------
+
+    /// <summary>
+    /// The west arm's mouth of an east-west road (its carriageway 3.3 m wide, 7 m south of the junction's centre: a divided road's
+    /// eastbound one), and a track crossing the core's outline at <paramref name="n"/> m north of the centre, running east (in).
+    /// </summary>
+    private static double? BesideTheWestArm(double n, bool entering = true, bool lanes = true, double headingDeg = 0)
+    {
+        var left = new Vec2(-12, -7 + 1.65);
+        var right = new Vec2(-12, -7 - 1.65);
+        var dir = new Vec2(Math.Cos(headingDeg * Math.PI / 180), Math.Sin(headingDeg * Math.PI / 180));
+        return TileRewriter.Alongside(left, right, new Vec2(-1, 0), new Vec2(-10, n), entering ? dir : dir * -1, entering, lanes);
+    }
+
+    [Fact]
+    public void ATrackOnTheCentralReservation_BelongsToTheCarriagewayBesideIt()
+    {
+        // the eastbound track of a double track between carriageways 14 m apart: 3.75 m past the carriageway's left kerb
+        Assert.Equal(3.75, BesideTheWestArm(-1.6)!.Value, 3);
+        // leaving by it, its way out: only where the arm's cars leave that way too
+        Assert.NotNull(BesideTheWestArm(-1.6, entering: false));
+        Assert.Null(BesideTheWestArm(-1.6, lanes: false));
+    }
+
+    [Fact]
+    public void ATrackOnABedBesideTheRoad_BelongsToTheArm()
+    {
+        // 2 m past the right kerb, a bed of its own beside the road
+        Assert.Equal(2, BesideTheWestArm(-7 - 1.65 - 2)!.Value, 3);
+    }
+
+    [Fact]
+    public void ATrackTooFarAway_OrAcrossTheArm_DoesNotBelongToIt()
+    {
+        // past the carriageway's width and the bed's margin
+        Assert.Null(BesideTheWestArm(-7 + 1.65 + 3.3 + TileRewriter.TramBedMargin + 0.5));
+        // crossing the arm's way (a tram across the street, not along it)
+        Assert.Null(BesideTheWestArm(-1.6, headingDeg: 90));
+        Assert.Null(BesideTheWestArm(-1.6, headingDeg: 40));
+        Assert.NotNull(BesideTheWestArm(-1.6, headingDeg: 25));
+    }
+
+    /// <summary>A crossroads whose east-west approaches have their trams straight on, left of their cars (a central reservation).</summary>
+    private static SignalPlan Reserved(bool leftPockets) => SignalPlan.Build(
+    [
+        new SignalArm(0, true, true, LeftPocket: leftPockets, Rank: 2, TramMoves: SignalMoves.Through, TramSide: -1),
+        new SignalArm(Math.PI / 2, true, true),
+        new SignalArm(Math.PI, true, true, LeftPocket: leftPockets, Rank: 2, TramMoves: SignalMoves.Through, TramSide: -1),
+        new SignalArm(-Math.PI / 2, true, true),
+    ], 1161);
+
+    [Fact]
+    public void ACarTurningLeftAcrossItsOwnApproachsReservedTram_GivesWayToIt()
+    {
+        // a shared lane's left turn crosses the tram on the reservation beside it: the car gives way (the tram never), they share
+        // the green and the tram leads them; the tram's side is the group's
+        var plan = Reserved(leftPockets: false);
+        Assert.Empty(plan.Validate());
+        var conflicts = plan.Conflicts();
+        for (int arm = 0; arm <= 2; arm += 2)
+        {
+            int tram = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Tram && g.Arm == arm);
+            int car = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Car && g.Arm == arm);
+            Assert.Equal(-1, plan.Groups[tram].TramSide);
+            Assert.Equal(SignalPlan.Conflict.Permissive, conflicts[tram, car]);
+            bool together = false;
+            for (double s = 0.05; s < plan.Cycle; s += 0.1)
+                together |= plan.State(tram, s) == SignalAspect.Green && plan.State(car, s) == SignalAspect.Green;
+            Assert.True(together, $"arm {arm}: the tram is green with its cars");
+        }
+    }
+
+    [Fact]
+    public void ALeftArrowAcrossItsOwnApproachsReservedTram_NeverSharesItsGreen()
+    {
+        var plan = Reserved(leftPockets: true);
+        Assert.Empty(plan.Validate());
+        var conflicts = plan.Conflicts();
+        int tram = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Tram && g.Arm == 0);
+        int arrow = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.LeftArrow && g.Arm == 0);
+        Assert.Equal(SignalPlan.Conflict.Hard, conflicts[tram, arrow]);
+        for (double s = 0.05; s < plan.Cycle; s += 0.1)
+            Assert.False(plan.State(tram, s) == SignalAspect.Green && plan.State(arrow, s) == SignalAspect.Green, $"at {s:F1} s");
+        // a tram among its cars (in the street, side 0) is as before: no conflict with its own approach
+        var street = SignalPlan.Build(
+        [
+            new SignalArm(0, true, true, LeftPocket: true, Rank: 2, TramMoves: SignalMoves.Through),
+            new SignalArm(Math.PI / 2, true, true),
+            new SignalArm(Math.PI, true, true, LeftPocket: true, Rank: 2),
+            new SignalArm(-Math.PI / 2, true, true),
+        ], 1161);
+        int t2 = street.Groups.FindIndex(g => g.Kind == SignalGroupKind.Tram);
+        int a2 = street.Groups.FindIndex(g => g.Kind == SignalGroupKind.LeftArrow && g.Arm == 0);
+        Assert.Equal(SignalPlan.Conflict.None, street.Conflicts()[t2, a2]);
+    }
+
+    [Fact]
+    public void ATramHead_StandsRightOfItsStopLine_OnTheReservationWhereThereIsRoom()
+    {
+        // #1161, the user: "at least on the right of the stop line, the closer the better (if there is an island)". A carriageway
+        // from -1.65 to 3.15 m: a track 4.8 m left of the axis (a reservation between it and the cars) gets a pole 1.7 m right of it
+        Assert.Equal(-4.8 + TileRewriter.TramPoleAside, TileRewriter.TramPoleSpot(-1.65, 3.15, -4.8)!.Value, 3);
+        // a bed beside the road, right of the cars: its pole beyond it, off the road
+        Assert.Equal(6 + TileRewriter.TramPoleAside, TileRewriter.TramPoleSpot(-1.65, 3.15, 6)!.Value, 3);
+        // no room: a reservation too narrow (the spot within half a metre of the kerb), a track in the street: the kerb pole then
+        Assert.Null(TileRewriter.TramPoleSpot(-1.65, 3.15, -3.5));
+        Assert.Null(TileRewriter.TramPoleSpot(-5, 5, -1.6));
+    }
+
+
+    /// <summary>
+    /// A crossroads with left pockets (40 m each: their turn phases' fixed greens clear a full queue) and walkers on every arm, timed
+    /// from conflict times of <paramref name="seconds"/> between every pair that never shares a green (#1161).
+    /// </summary>
+    private static SignalPlan TimedWithConflicts(float seconds)
+    {
+        var plan = SignalPlan.Build(
+        [
+            new SignalArm(0, true, true, LeftPocket: true, Pedestrians: true, LeftStorageM: 40, StorageM: 200),
+            new SignalArm(Math.PI / 2, true, true, LeftPocket: true, Pedestrians: true, LeftStorageM: 40, StorageM: 200),
+            new SignalArm(Math.PI, true, true, LeftPocket: true, Pedestrians: true, LeftStorageM: 40, StorageM: 200),
+            new SignalArm(-Math.PI / 2, true, true, LeftPocket: true, Pedestrians: true, LeftStorageM: 40, StorageM: 200),
+        ], 1161);
+        int n = plan.Groups.Count;
+        var conflicts = plan.Conflicts();
+        var times = new float[n, n];
+        for (int g = 0; g < n; g++)
+            for (int h = 0; h < n; h++)
+                times[g, h] = conflicts[g, h] == SignalPlan.Conflict.Hard ? seconds : float.NaN;
+        Assert.True(plan.Retime(times));
+        Assert.Empty(plan.Validate());
+        Assert.True(plan.KeepsTimes(times));
+        return plan;
+    }
+
+    [Fact]
+    public void APlanOverTheMaximum_IsSqueezedTo120s_ItsConflictTimesKept()
+    {
+        // #1161, the user: "squeeze to 120s": its turn phases' queue-clearing greens shrink toward the minimum, the conflict times stay
+        var plan = TimedWithConflicts(12);
+        Assert.True(plan.Squeezed);
+        Assert.True(plan.ConflictTimed);
+        Assert.False(plan.Overflows);
+        Assert.InRange(plan.Cycle, 100, SignalPlan.MaxCycle);
+        // (with short conflict times the greens keep what they want)
+        Assert.False(TimedWithConflicts(4).Squeezed);
+    }
+
+    [Fact]
+    public void APlanStillOverTheMaximumWithEveryGreenAtItsMinimum_IsKeptAndReported()
+    {
+        // "...and then only allow overflow but report until 1120 lands": the plan as it is, conflict-timed, over 120 s
+        var plan = TimedWithConflicts(24);
+        Assert.True(plan.ConflictTimed);
+        Assert.True(plan.Overflows);
+        Assert.True(plan.Cycle > SignalPlan.MaxCycle);
+        Assert.Equal(6, plan.PhaseCount);
+    }
 }

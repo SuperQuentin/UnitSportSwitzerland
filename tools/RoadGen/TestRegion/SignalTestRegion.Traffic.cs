@@ -26,7 +26,13 @@ public static partial class SignalTestRegion
     public const float TramHeadwayMinutes = 6f;
 
     /// <summary>A lit junction as built: its centre (LV95), plan, approaches by arm, and name (the design's, else its place).</summary>
-    public sealed record Lights(string Name, double E, double N, SignalPlan Plan, Dictionary<int, RoadApproach> Approaches);
+    /// <remarks><paramref name="StopsAt"/>: each approach's stop line middle (LV95), to tell which node of a junction of several
+    /// (a divided road's carriageways, #1161) an arm leaves from.</remarks>
+    public sealed record Lights(string Name, double E, double N, SignalPlan Plan, Dictionary<int, RoadApproach> Approaches,
+        IReadOnlyDictionary<int, (double E, double N)>? StopsAt = null);
+
+    /// <summary>A junction's nodes lie this close to its centre (m): a divided road's two carriageways crossing a road (#1161).</summary>
+    public const double MemberReach = 15;
 
     /// <summary>Where an arm's road leads: its endpoint (if any), or the lights it joins (a cluster).</summary>
     private sealed record ArmEnd(Lights Lights, int Arm, (double E, double N) At, float HeadingIn, (Lights Lights, int Arm)? Joins, double Width);
@@ -46,7 +52,8 @@ public static partial class SignalTestRegion
                 var named = junctions.Where(j => Math.Abs(j.E - e) < 20 && Math.Abs(j.N - n) < 20).MinBy(j => Math.Abs(j.E - e) + Math.Abs(j.N - n));
                 var approaches = new Dictionary<int, RoadApproach>();
                 foreach (var a in tile.Approaches.Where(a => a.Signal == k)) approaches[a.SignalArm] = a;
-                list.Add(new Lights(named?.Name ?? string.Create(CultureInfo.InvariantCulture, $"L{e:F0},{n:F0}"), e, n, s.Plan, approaches));
+                var stops = approaches.ToDictionary(x => x.Key, x => (E: tile.Id.MinE + (double)x.Value.X, N: tile.Id.MaxN - (double)x.Value.Z));
+                list.Add(new Lights(named?.Name ?? string.Create(CultureInfo.InvariantCulture, $"L{e:F0},{n:F0}"), e, n, s.Plan, approaches, stops));
             }
         }
         return list;
@@ -147,6 +154,28 @@ public static partial class SignalTestRegion
         return (path[^1], 0);
     }
 
+    /// <summary>An arm's name: where it points, and "in" or "out" where a divided road's other carriageway points the same way (#1161).</summary>
+    private static string ArmName(SignalPlan plan, int arm)
+    {
+        string name = Compass(plan.Arms[arm].Heading);
+        bool twin = Enumerable.Range(0, plan.Arms.Count).Any(k => k != arm && Compass(plan.Arms[k].Heading) == name);
+        return twin ? name + (plan.Arms[arm].In ? " in" : " out") : name;
+    }
+
+    /// <summary>How far <paramref name="p"/> lies from a polyline (m).</summary>
+    private static double DistToPath(List<(double E, double N)> path, (double E, double N) p)
+    {
+        double best = double.MaxValue;
+        for (int i = 0; i + 1 < path.Count; i++)
+        {
+            var (a, b) = (path[i], path[i + 1]);
+            double dx = b.E - a.E, dn = b.N - a.N, len2 = dx * dx + dn * dn;
+            double t = len2 < 1e-9 ? 0 : Math.Clamp(((p.E - a.E) * dx + (p.N - a.N) * dn) / len2, 0, 1);
+            best = Math.Min(best, Dist((a.E + dx * t, a.N + dn * t), p));
+        }
+        return best;
+    }
+
     private static double PathLength(List<(double E, double N)> path)
     {
         double s = 0;
@@ -166,19 +195,43 @@ public static partial class SignalTestRegion
     private static List<RegionEndpoint> Endpoints(IReadOnlyList<Lights> lights, List<Line> lines, Action<string>? log)
     {
         var roads = new LineGraph(lines.Where(l => l.Rail is null).Select(l => l.Points));
+        // each junction's nodes: its node, or a junction of several (#1161: a divided road's carriageways, merged into one core,
+        // its centre between them) every road node within MemberReach of its centre where three roads or more meet
         var centres = new Dictionary<long, Lights>();
+        var members = new Dictionary<Lights, List<long>>();
         foreach (var l in lights)
-            if (roads.Nearest((l.E, l.N), 6) is { } k) centres[k] = l;
-            else log?.Invoke($"[testregion] traffic: {l.Name} is on no designed road node, no endpoints");
+        {
+            var near = roads.At.Where(x => Dist(x.Value, (l.E, l.N)) < MemberReach && roads.Degree(x.Key) >= 3).Select(x => x.Key).ToList();
+            if (roads.Nearest((l.E, l.N), 6) is { } k && (near.Count < 2 || roads.Degree(k) >= 3 && Dist(roads.At[k], (l.E, l.N)) < 1)) near = [k];
+            if (near.Count == 0) { log?.Invoke($"[testregion] traffic: {l.Name} is on no designed road node, no endpoints"); continue; }
+            members[l] = near;
+            foreach (long m in near) centres[m] = l;
+        }
 
         // where each arm leads
         var ends = new Dictionary<(Lights, int), ArmEnd>();
-        foreach (var (node, l) in centres)
-            for (int arm = 0; arm < l.Plan.Arms.Count; arm++)
+        foreach (var (l, nodes) in members)
+        {
+            // (which node an arm leaves from where there are several: the one whose road passes its stop line, the arriving arms first;
+            // a leaving one by a road no arriving arm took)
+            var taken = new HashSet<(long, long)>();
+            foreach (int arm in Enumerable.Range(0, l.Plan.Arms.Count).OrderBy(k => l.StopsAt?.ContainsKey(k) == true ? 0 : 1))
             {
                 var a = l.Plan.Arms[arm];
                 if (!a.In && !a.Out) continue;
-                var (path, stopAt) = roads.Walk(node, a.Heading, ArmReach, k => centres.ContainsKey(k));
+                List<(double E, double N)> path = [];
+                long? stopAt = null;
+                double bestFit = double.MaxValue;
+                foreach (long node in nodes)
+                {
+                    var walk = roads.Walk(node, a.Heading, ArmReach, k => centres.ContainsKey(k));
+                    if (walk.Path.Count < 2 || walk.StopAt is { } st && nodes.Contains(st)) continue;
+                    var first = (node, NodeKey(walk.Path[1]));
+                    if (nodes.Count > 1 && taken.Contains(first)) continue;
+                    double fit = l.StopsAt?.TryGetValue(arm, out var stop) == true ? DistToPath(walk.Path, stop) : Dist(roads.At[node], (l.E, l.N));
+                    if (fit < bestFit) (bestFit, path, stopAt) = (fit, walk.Path, walk.StopAt);
+                }
+                if (path.Count >= 2) taken.Add((NodeKey(path[0]), NodeKey(path[1])));
                 double length = PathLength(path);
                 if (path.Count < 2) { log?.Invoke($"[testregion] traffic: {l.Name} arm {Compass(a.Heading)} follows no designed road"); continue; }
                 double width = l.Approaches.TryGetValue(arm, out var ap) ? 3.5 * ap.Lanes.Count(x => x.Kind == ApproachLaneKind.Car) + 4 : 8;
@@ -207,6 +260,7 @@ public static partial class SignalTestRegion
                 var (p, h) = Along(path, at);
                 ends[(l, arm)] = new ArmEnd(l, arm, p, (float)Math.IEEERemainder(h + Math.PI, 2 * Math.PI), joins, width);
             }
+        }
 
         var list = new List<RegionEndpoint>();
         int nextId = 1;
@@ -249,7 +303,7 @@ public static partial class SignalTestRegion
                 bool generates = rate > 1e-3f;
                 if (!generates && !arm.Out) continue;
                 list.Add(new RegionEndpoint(ids[(x.Lights, x.Arm)], mode, x.At.E, x.At.N, x.HeadingIn, generates, arm.Out,
-                    generates ? rate : 0f, generates ? shares : [], x.Lights.Name, Compass(arm.Heading)));
+                    generates ? rate : 0f, generates ? shares : [], x.Lights.Name, ArmName(x.Lights.Plan, x.Arm)));
             }
         // ids of endpoints not written (an arm with nothing in or out) are simply unused
 

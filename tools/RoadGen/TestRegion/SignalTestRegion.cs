@@ -84,6 +84,15 @@ public static partial class SignalTestRegion
     /// </summary>
     public const double OverheadE = 2917500, PortalN = 1321500;
     /// <summary>
+    /// Reserved tram track (#1161): J16, a divided road with its double track on its own bed between the carriageways across a cross
+    /// road, in the Geneva tile's north-east quarter (Romandy heads).
+    /// </summary>
+    public const double ReservedTramE = 2913760, ReservedTramN = 1323760;
+    /// <summary>J17 (#1161): the divided road's tram turning off its reservation into the cross road (Vaud tile, north-east quarter).</summary>
+    public const double TurningTramE = 2914760, TurningTramN = 1323760;
+    /// <summary>J18 (#1161): a T off the divided road, its tram straight through on the reservation (Vaud tile, south-west quarter).</summary>
+    public const double TeeTramE = 2914230, TeeTramN = 1323230;
+    /// <summary>
     /// The region's cantons (#1038), by kilometre tile: only those whose lights or poles differ (pedestrian heads, arrow plates,
     /// pole colours, #1037; <c>tools/traffic-signals</c>); every other tile is the default zone (the cantons not checked yet).
     /// </summary>
@@ -105,7 +114,8 @@ public static partial class SignalTestRegion
     private const double DrapeOffset = 0.35, MaxDrapeSpacing = 4.0;
 
     /// <summary>A signalised junction of the region: what it is for and the car lanes each approach is designed to get (left to right, "|" between lanes; null = not designed, reported only).</summary>
-    public sealed record Junction(string Name, double E, double N, string Case, IReadOnlyDictionary<string, string?> Design);
+    public sealed record Junction(string Name, double E, double N, string Case, IReadOnlyDictionary<string, string?> Design,
+        (double E, double N)[]? Signals = null);
 
     /// <summary>One TLM line as the extractor would read it, with its OSM overlay row.</summary>
     private sealed record Line(string Id, string Objektart, string Verkehrsbedeutung, string Eigentuemer, (double E, double N)[] Points,
@@ -490,7 +500,83 @@ public static partial class SignalTestRegion
                 Rail: RoadFlags.DoubleTrack));
         }
 
+        // 17. reserved tram track (#1161, the user: "isn't it just like a bike lane?"): J16, a main road of two one-way carriageways
+        // 14 m apart (TLM richtungsgetrennt) with a double tram track on its own bed between them, straight through a 10 m cross
+        // road; in the Geneva zone's north-east quarter (Romandy heads)
+        {
+            const double ce = ReservedTramE, cn = ReservedTramN, arm = 180, half = 7;
+            lines.Add(new Line("RTWb", "6m Strasse", "Durchgangsstrasse", "Kanton", [(ce + arm, cn + half), (ce, cn + half)], "secondary", Divided: true));
+            lines.Add(new Line("RTWa", "6m Strasse", "Durchgangsstrasse", "Kanton", [(ce, cn + half), (ce - arm, cn + half)], "secondary", Divided: true));
+            lines.Add(new Line("RTEa", "6m Strasse", "Durchgangsstrasse", "Kanton", [(ce - arm, cn - half), (ce, cn - half)], "secondary", Divided: true));
+            lines.Add(new Line("RTEb", "6m Strasse", "Durchgangsstrasse", "Kanton", [(ce, cn - half), (ce + arm, cn - half)], "secondary", Divided: true));
+            lines.Add(new Line("RTS", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(ce, cn - arm), (ce, cn - half)], "secondary"));
+            lines.Add(new Line("RTM", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(ce, cn - half), (ce, cn + half)], "secondary"));
+            lines.Add(new Line("RTN", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(ce, cn + half), (ce, cn + arm)], "secondary"));
+            lines.Add(new Line("RTT", "", "", "", [(ce - arm, cn), (ce + arm, cn)], "", Rail: RoadFlags.Tramway | RoadFlags.DoubleTrack));
+            junctions.Add(new Junction("J16-reserved-tram", ce, cn, "a divided road with its tram on its own bed between the carriageways, straight through",
+                Arms(null, null, null, null), Signals: [(ce, cn - half), (ce, cn + half)]));
+        }
+
+        // J17 (#1161): the same divided road, its tram on the reservation turning left at the junction onto the cross road, where it
+        // runs in the street's middle (embedded); the trams from the north turn right onto the reservation. In the Vaud tile's
+        // north-east quarter (Romandy heads)
+        {
+            const double ce = TurningTramE, cn = TurningTramN, arm = 180, half = 7, radius = 15;
+            DividedRoad("KT", ce, cn, arm, half);
+            lines.Add(new Line("KTS", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(ce, cn - arm), (ce, cn - half)], "secondary"));
+            lines.Add(new Line("KTM", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(ce, cn - half), (ce, cn + half)], "secondary"));
+            lines.Add(new Line("KTN", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(ce, cn + half), (ce, cn + arm)], "secondary",
+                Rows: [new OsmRow(0, arm - half, Tram: true)]));
+            // two single tracks as TLM maps them (Geneva, #1094), TrackOffset either side of the line: from the reservation round
+            // (E - radius, N + radius) to the cross road's axis and on up its middle (embedded there)
+            var line = new List<(double E, double N)> { (ce - arm, cn) };
+            for (int k = 0; k <= 12; k++)
+            {
+                double a = Math.PI / 2 * k / 12;
+                line.Add((ce - radius + radius * Math.Sin(a), cn + radius - radius * Math.Cos(a)));
+            }
+            line.Add((ce, cn + 2 * radius));
+            double off = RoadFormat.TrackOffset(RoadFlags.Tramway | RoadFlags.DoubleTrack);
+            foreach (var (id, side) in (ReadOnlySpan<(string, double)>)[("KTTR", 1.0), ("KTTL", -1.0)])
+            {
+                // (right of the line's way: the eastbound, then northbound track; left: the trams the other way)
+                var track = new List<(double E, double N)>();
+                for (int i = 0; i < line.Count; i++)
+                {
+                    var (p0, p1) = (line[Math.Max(0, i - 1)], line[Math.Min(line.Count - 1, i + 1)]);
+                    double dx = p1.E - p0.E, dn = p1.N - p0.N, len = Math.Sqrt(dx * dx + dn * dn);
+                    track.Add((line[i].E + dn / len * off * side, line[i].N - dx / len * off * side));
+                }
+                lines.Add(new Line(id, "", "", "", [.. track], "", Rail: RoadFlags.Tramway));
+                lines.Add(new Line(id + "N", "", "", "", [track[^1], (ce + off * side, cn + arm)], "", Rail: RoadFlags.Tramway, OnStreet: true));
+            }
+            junctions.Add(new Junction("J17-tram-turning", ce, cn, "the divided road's tram turning off its reservation into the cross road's middle",
+                Arms(null, null, null, null), Signals: [(ce, cn - half), (ce, cn + half)]));
+        }
+
+        // J18 (#1161): a T, the divided road's tram straight through on its reservation, the side road from the south across the
+        // reservation to the far carriageway; in the Vaud tile's south-west quarter
+        {
+            const double ce = TeeTramE, cn = TeeTramN, arm = 180, half = 7;
+            DividedRoad("LT", ce, cn, arm, half);
+            lines.Add(new Line("LTS", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(ce, cn - arm), (ce, cn - half)], "secondary"));
+            lines.Add(new Line("LTM", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(ce, cn - half), (ce, cn + half)], "secondary"));
+            lines.Add(new Line("LTT", "", "", "", [(ce - arm, cn), (ce + arm, cn)], "", Rail: RoadFlags.Tramway | RoadFlags.DoubleTrack));
+            junctions.Add(new Junction("J18-tram-tee", ce, cn, "a T off the divided road, its tram straight through on the reservation",
+                Arms(null, null, null, null), Signals: [(ce, cn - half), (ce, cn + half)]));
+        }
+
         return new Design(lines, boxes, junctions, crossings);
+
+        // a main road of two one-way carriageways (TLM richtungsgetrennt) 2 x half apart, east and west of (e, n), node at each
+        // carriageway's crossing of the cross road (#1161)
+        void DividedRoad(string id, double e, double n, double arm, double half)
+        {
+            lines.Add(new Line(id + "Wb", "6m Strasse", "Durchgangsstrasse", "Kanton", [(e + arm, n + half), (e, n + half)], "secondary", Divided: true));
+            lines.Add(new Line(id + "Wa", "6m Strasse", "Durchgangsstrasse", "Kanton", [(e, n + half), (e - arm, n + half)], "secondary", Divided: true));
+            lines.Add(new Line(id + "Ea", "6m Strasse", "Durchgangsstrasse", "Kanton", [(e - arm, n - half), (e, n - half)], "secondary", Divided: true));
+            lines.Add(new Line(id + "Eb", "6m Strasse", "Durchgangsstrasse", "Kanton", [(e, n - half), (e + arm, n - half)], "secondary", Divided: true));
+        }
     }
 
     // ---- build ---------------------------------------------------------------------------------
@@ -900,14 +986,15 @@ public static partial class SignalTestRegion
         var inv = CultureInfo.InvariantCulture;
         var rows = new List<(string Uuid, string Text)>();
         long id = 386100;
-        foreach (var j in design.Junctions)
+        // (a junction of several nodes, #1161: a node on each)
+        foreach (var (je, jn) in design.Junctions.SelectMany(j => j.Signals ?? [(j.E, j.N)]))
         {
             // the line ending (else starting) at the junction
-            var (line, atEnd) = design.Lines.Select(l => (l, true)).FirstOrDefault(x => Dist(x.l.Points[^1], (j.E, j.N)) < 0.01);
-            if (line is null) (line, atEnd) = (design.Lines.First(l => Dist(l.Points[0], (j.E, j.N)) < 0.01), false);
+            var (line, atEnd) = design.Lines.Select(l => (l, true)).FirstOrDefault(x => Dist(x.l.Points[^1], (je, jn)) < 0.01);
+            if (line is null) (line, atEnd) = (design.Lines.First(l => Dist(l.Points[0], (je, jn)) < 0.01), false);
             double along = atEnd ? Length(line) : 0;
             rows.Add((line.Uuid, string.Create(inv,
-                $"signal\t{++id}\t{j.E:F1}\t{j.N:F1}\t{line.Uuid}\t0\t{along:F1}\tnode\t{(atEnd ? "end" : "start")}\t{j.E:F1}\t{j.N:F1}\t\t\t\t\t\thighway=traffic_signals\n")));
+                $"signal\t{++id}\t{je:F1}\t{jn:F1}\t{line.Uuid}\t0\t{along:F1}\tnode\t{(atEnd ? "end" : "start")}\t{je:F1}\t{jn:F1}\t\t\t\t\t\thighway=traffic_signals\n")));
         }
         var sb = new StringBuilder();
         sb.Append(inv, $"# osm_nodes v1 {FileTag} bbox={MinTileE * 1000},{MinTileN * 1000},{(MaxTileE + 1) * 1000},{(MaxTileN + 1) * 1000} synthetic (#386)\n");

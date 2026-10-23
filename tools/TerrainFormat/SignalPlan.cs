@@ -111,6 +111,12 @@ public readonly record struct SignalArm(
     /// </summary>
     SignalMoves TramMoves = SignalMoves.None,
     /// <summary>
+    /// Where its trams' lane lies beside its arriving car lanes (#1161): -1 left of them (a central reservation, a track in the
+    /// middle of the street), +1 right (a bed beside the road), 0 among them or none. The cars of a shared lane turning across it
+    /// give way to the tram, an arrow turning across it never shares its green. Not stored: the tram groups carry it.
+    /// </summary>
+    sbyte TramSide = 0,
+    /// <summary>
     /// Cars may drive into this arm's exit without room on it for them (#1134, the user: "allow block intersection"): the box rule
     /// (<see cref="BoxRule"/>) is off for cars heading out here. Bit 7 of the rank byte (ranks stay under 128); nothing sets it yet.
     /// </summary>
@@ -144,6 +150,8 @@ public sealed class SignalGroup
     public CrossingHalf Half { get; init; }
     /// <summary>For a <see cref="SignalGroupKind.Flasher"/>, the group whose green it qualifies; else -1.</summary>
     public int Qualifies { get; init; } = -1;
+    /// <summary>For a <see cref="SignalGroupKind.Tram"/> group, its lane's side of its approach's car lanes (<see cref="SignalArm.TramSide"/>, #1161; stored in the moves byte's bits 3-4).</summary>
+    public sbyte TramSide { get; set; }
     /// <summary>The cycle, from 0 to <see cref="SignalPlan.Cycle"/>, in order and without gaps.</summary>
     public List<SignalInterval> Intervals { get; init; } = new();
 }
@@ -183,6 +191,16 @@ public sealed class SignalPlan
     /// <summary>The green of a leading or lagging left-turn phase whose pocket's storage is unknown; the time the cycle budgets for one.</summary>
     public const float TurnPhaseGreen = 5f;
     public const float MinCycle = 30f, MaxCycle = 120f;
+    /// <summary>
+    /// Whether the cycle runs past <see cref="MaxCycle"/> even with every green squeezed to its minimum (#1161, the user: "squeeze
+    /// to 120s, and then only allow overflow but report until 1120 lands"): too many phases. Kept as it is (no group dropped from
+    /// the timing, no lead dropped) and reported. Not stored: <see cref="Cycle"/> tells.
+    /// </summary>
+    public bool Overflows => Cycle > MaxCycle + 0.05f;
+    /// <summary>Whether the last timing had to squeeze its greens below what they wanted to stay within <see cref="MaxCycle"/> (#1161). Not stored.</summary>
+    public bool Squeezed { get; private set; }
+    /// <summary>The phases of the plan as built (0 for a plan read from a tile: the groups' intervals carry it). Not stored.</summary>
+    public int PhaseCount => _phases?.Count ?? 0;
     /// <summary>
     /// The first walker of a two-stage crossing's half waits on the island at most this share of the cycle for the other half
     /// (#1030, the user); where the plan would keep them longer, the phase that lets them on gets longer (<see cref="Stretch"/>).
@@ -298,8 +316,8 @@ public sealed class SignalPlan
             if (stretch >= StretchPasses || (last = Stretch(this, _phases)) is null) break;
         }
         Offset = Cycle <= 0 ? 0 : (Mix(_seed) % (uint)Math.Max(1, Cycle * 10)) / 10f;
-        // (never past the legal maximum, the user)
-        if (Validate().Count == 0 && KeepsTimes(times) && Cycle <= MaxCycle + 0.05f) return true;
+        // (past the legal maximum only where every green is at its minimum: kept and reported, #1161)
+        if (Validate().Count == 0 && KeepsTimes(times)) return true;
         if (DebugTiming) Console.WriteLine($"[tr] not timed from conflict times: {string.Join("; ", Validate().Take(3).DefaultIfEmpty("valid"))}, times kept {KeepsTimes(times)}, cycle {Cycle:F1} s\n{Describe()}");
         ConflictTimes = null;
         ConflictTimed = false;
@@ -487,6 +505,20 @@ public sealed class SignalPlan
             // a car turning in a shared lane across a bike's way yields to it (the flasher)
             bool bikeYield = bikes && (ga.Kind == SignalGroupKind.Bike ? Turning(b, gb) : Turning(a, ga));
             Set(a.Group, b.Group, yields || bikeYield ? Conflict.Permissive : Conflict.Hard);
+        }
+
+        // a tram lane beside its approach's car lanes (#1161, the user: "isn't it just like a bike lane?"): the cars turning across
+        // it from a shared lane give way to the tram (as to an oncoming one), an arrow or riders turning across it never go with it
+        for (int t = 0; t < n; t++)
+        {
+            if (Groups[t].Kind != SignalGroupKind.Tram || Groups[t].TramSide == 0) continue;
+            var across = Groups[t].TramSide < 0 ? SignalMoves.Left : SignalMoves.Right;
+            for (int h = 0; h < n; h++)
+            {
+                if (h == t || Groups[h].Arm != Groups[t].Arm || (Groups[h].Moves & across) == 0) continue;
+                if (Groups[h].Kind == SignalGroupKind.Car) Set(t, h, Conflict.Permissive);
+                else if (Groups[h].Kind is SignalGroupKind.LeftArrow or SignalGroupKind.RightArrow or SignalGroupKind.Bike) Set(t, h, Conflict.Hard);
+            }
         }
 
         // a bike lane beside a right-turn pocket: right-turning cars cross it (#351)
@@ -887,7 +919,11 @@ public sealed class SignalPlan
         var trams = new List<int>();
         for (int a = 0; a < arms.Count; a++)
             foreach (var move in (ReadOnlySpan<SignalMoves>)[SignalMoves.Left, SignalMoves.Through, SignalMoves.Right])
-                if ((arms[a].TramMoves & move) != 0) trams.Add(plan.Add(SignalGroupKind.Tram, a, move));
+                if ((arms[a].TramMoves & move) != 0)
+                {
+                    trams.Add(plan.Add(SignalGroupKind.Tram, a, move));
+                    plan.Groups[^1].TramSide = arms[a].TramSide;
+                }
 
         var phases = Phases(plan, arms, car, left, right);
         var conflicts = plan.Conflicts();
@@ -1455,6 +1491,28 @@ public sealed class SignalPlan
             if (total <= MaxCycle || pass == 1) { cycle = total; break; }
             cycle = MaxCycle;
         }
+        // still over the maximum (#1161, the user: "squeeze to 120s, and then only allow overflow but report"): every green down
+        // toward its minimum (4 s, a walkers' 5 s), the fixed turn phases' queue-clearing greens and the island stretches' extra
+        // included, by what each has above it; the intergreens (conflict times, leads) stay. Past that the plan overflows
+        plan.Squeezed = false;
+        if (cycle > MaxCycle + 0.05f)
+        {
+            float Floor(Phase p) => p.Green.Any(g => plan.Groups[g].Kind == SignalGroupKind.Pedestrian) ? 5f : MinGreen;
+            float room = phases.Sum(p => Math.Max(0f, p.GreenTime - Floor(p)));
+            if (room > 0.05f)
+            {
+                float cut = Math.Min(1f, (cycle - MaxCycle) / room);
+                foreach (var p in phases)
+                {
+                    float above = Math.Max(0f, p.GreenTime - Floor(p));
+                    // (a tenth of a second down: the cycle never rounds past the maximum)
+                    p.GreenTime = MathF.Max(Floor(p), MathF.Floor((p.GreenTime - above * cut) * 10f) / 10f);
+                    p.Extra = Math.Min(p.Extra, p.GreenTime);
+                }
+                cycle = phases.Sum(p => p.GreenTime) + inter.Sum();
+                plan.Squeezed = true;
+            }
+        }
         // every phase short (#982): never under the minimum cycle, the shares stretched by weight (the fixed phases where none is shared)
         if (cycle < MinCycle && n > 1)
         {
@@ -1833,7 +1891,9 @@ public sealed class RoadSignal
                 w.Write((byte)g.Kind);
                 w.Write(checked((byte)g.Arm));
                 // (a pedestrian group's moves are None: the byte carries its half, #1030; an older reader finds a half as the arm's group)
-                w.Write(g.Kind == SignalGroupKind.Pedestrian ? (byte)g.Half : (byte)g.Moves);
+                // (a tram group's side of its approach's cars in bits 3-4, #1161)
+                w.Write(g.Kind == SignalGroupKind.Pedestrian ? (byte)g.Half
+                    : (byte)((byte)g.Moves | (g.Kind == SignalGroupKind.Tram ? g.TramSide < 0 ? 8 : g.TramSide > 0 ? 16 : 0 : 0)));
                 w.Write(checked((sbyte)g.Qualifies));
                 w.Write(checked((ushort)g.Intervals.Count));
                 foreach (var iv in g.Intervals)
@@ -1894,7 +1954,8 @@ public sealed class RoadSignal
                 bool walkers = kind == SignalGroupKind.Pedestrian;
                 var group = new SignalGroup
                 {
-                    Kind = kind, Arm = arm, Moves = walkers ? SignalMoves.None : (SignalMoves)moves, Half = walkers ? (CrossingHalf)moves : CrossingHalf.Whole,
+                    Kind = kind, Arm = arm, Moves = walkers ? SignalMoves.None : (SignalMoves)(moves & 7), Half = walkers ? (CrossingHalf)moves : CrossingHalf.Whole,
+                    TramSide = kind != SignalGroupKind.Tram ? (sbyte)0 : (moves & 8) != 0 ? (sbyte)-1 : (moves & 16) != 0 ? (sbyte)1 : (sbyte)0,
                     Qualifies = r.ReadSByte(),
                 };
                 int count = r.ReadUInt16();

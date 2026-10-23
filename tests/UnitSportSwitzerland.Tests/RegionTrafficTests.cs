@@ -71,7 +71,7 @@ public class RegionTrafficTests(SignalTestRegionFixture region) : IClassFixture<
         var lights = Lights();
         // every lit junction generates cars (but a cluster's arms into its partner)
         foreach (var l in lights)
-            Assert.Contains(endpoints, x => x.Junction == l.Name && x.Mode == EndpointMode.Car && x.Generates);
+            Assert.True(endpoints.Any(x => x.Junction == l.Name && x.Mode == EndpointMode.Car && x.Generates), $"{l.Name} generates no cars");
         // one per junction, arm and mode
         foreach (var g in endpoints.Where(x => x.Mode is EndpointMode.Car or EndpointMode.Bike).GroupBy(x => (x.Junction, x.Arm, x.Mode)))
             Assert.Single(g);

@@ -47,6 +47,20 @@ public static partial class TileRewriter
                     if (a.Axis is not null && core.Mouths.FirstOrDefault(m => m.Arm == a.Arm) is { } mouth
                         && NodeShortOfMouth(result, a, mouth.Station) is int node && byNode.TryGetValue(node, out var q) && q != p)
                         joins.Add((p, q));
+        // a tram track across the street between two overlapping cores (#1161: on a central reservation between a divided road's
+        // carriageways): one junction, so its trams are an approach lane of the carriageway beside them, under one plan
+        TramNet? trams = null;
+        var planOfArm = plans.SelectMany(p => p.Arms.Select(a => (a, p))).ToDictionary(x => x.a, x => x.p);
+        foreach (var p in plans.Where(p => p.CoresOverlap))
+            foreach (var a in p.Arms.Where(a => a.Internal))
+                if (a.FarArm is { } f && planOfArm.TryGetValue(f, out var q2) && q2 != p
+                    && TramAcross(trams ??= new TramNet(result), p.Centre, q2.Centre))
+                {
+                    joins.Add((p, q2));
+                    if (p.Beyond || p.Node > q2.Node) continue;
+                    stats.ForTrams++;
+                    if (stats.ForTramsAt.Count < 30) stats.ForTramsAt.Add(new Vec2(Math.Round((p.Centre.X + q2.Centre.X) / 2), Math.Round((p.Centre.Y + q2.Centre.Y) / 2)));
+                }
         var joined = joins.SelectMany(j => new[] { j.Item1, j.Item2 }).ToHashSet();
         var groups = JunctionPlan.OverlapGroups(plans, joins).Where(g => g.Any(p => p.CoresOverlap && p.CoreFails || joined.Contains(p))).ToList();
         stats.HeldApart += plans.Count(p => !p.Beyond && p.CoresOverlap && !p.CoreFails);
@@ -251,11 +265,13 @@ public static partial class TileRewriter
     /// <summary>The merges of a region (#818 phase 5c).</summary>
     public sealed class MergeStats
     {
-        public int Merged, Members, HeldApart, Rings, ByMembers, Regrown;
+        public int Merged, Members, HeldApart, Rings, ByMembers, Regrown, ForTrams;
         public readonly Dictionary<string, int> Why = new();
+        /// <summary>Pairs joined for a tram between them (#1161), where (the first few).</summary>
+        public readonly List<Vec2> ForTramsAt = new();
 
         public string Summary() =>
-            $"    merged cores (#818 phase 5c): {Merged:N0} of {Members:N0} junctions ({ByMembers:N0} laid member by member, #854; grown again {Regrown:N0} times where a merged core reached another junction; {HeldApart:N0} overlapping ones laid apart, held at half the street between); tight roundabouts laid whole {Rings:N0} (#854)"
+            $"    merged cores (#818 phase 5c): {Merged:N0} of {Members:N0} junctions ({ByMembers:N0} laid member by member, #854; grown again {Regrown:N0} times where a merged core reached another junction; {HeldApart:N0} overlapping ones laid apart, held at half the street between); tight roundabouts laid whole {Rings:N0} (#854); pairs joined for a tram between them {ForTrams:N0} (#1161{(ForTramsAt.Count > 0 ? ": " + string.Join(" ", ForTramsAt.Select(v => FormattableString.Invariant($"{v.X:F0},{v.Y:F0}"))) : "")})"
             + (Why.Count > 0 ? $"; not merged: {string.Join(", ", Why.OrderBy(w => w.Key).Select(w => $"{w.Key} {w.Value:N0}"))}" : "");
     }
 }
