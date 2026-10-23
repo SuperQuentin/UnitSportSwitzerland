@@ -293,32 +293,35 @@ public static class ExteriorPlanner
     private static bool CarIn(Strip x) => x.IsCarLane && x.Way == StripWay.In;
 
     /// <summary>
-    /// The bike boxes in front of an approach's cars (the user, Oct 17): one per bike lane stopping at a box, over that lane and
-    /// the car lanes up to the nearest one making its riders' move (not the whole approach), two merged only where they touch.
+    /// The bike boxes in front of an approach's cars (the user, Oct 17, #1192: "a bike box is only present in front of the lane the
+    /// bike lane accesses"): one per bike lane stopping at a box, over that lane and the car lane beside it that it leads into (the
+    /// one making its riders' move, else the one beside it; a lone lane serving every move, #1184, its kerbside neighbour: riders
+    /// turning left wait there and cross when it turns green), two merged only where they touch.
     /// </summary>
     private static List<(double Left, double Right)> BikeBoxes(Section sec)
     {
-        var cars = sec.Strips.Select((x, k) => (x, k)).Where(p => CarIn(p.x)).Select(p => (Span: sec.Span(p.k), p.x.Moves)).ToList();
         var boxes = new List<(double Left, double Right)>();
         for (int k = 0; k < sec.Strips.Count; k++)
         {
             var x = sec.Strips[k];
             if (!BikeIn(x) || x.Stop != BikeStop.Box) continue;
             var (bl, br) = sec.Span(k);
-            double mid = (bl + br) * 0.5;
-            // a lane by its straight-on move; one whose riders also turn left from the box (a lone lane serving every move, #1184)
-            // reaches the nearest car lane making each of its moves
-            var first = (x.Moves & SignalMoves.Through) != 0 ? SignalMoves.Through : (x.Moves & SignalMoves.Left) != 0 ? SignalMoves.Left : SignalMoves.Right;
-            var all = (x.Moves & SignalMoves.Left) != 0 && x.Moves != SignalMoves.Left ? x.Moves : first;
-            var box = (L: bl, R: br);
-            foreach (var move in (ReadOnlySpan<SignalMoves>)[SignalMoves.Left, SignalMoves.Through, SignalMoves.Right])
+            var move = (x.Moves & SignalMoves.Through) != 0 ? SignalMoves.Through : (x.Moves & SignalMoves.Left) != 0 ? SignalMoves.Left : SignalMoves.Right;
+            // the car lanes beside it (the nearest either way, past a line or a hatch)
+            int Beside(int step)
             {
-                if ((all & move) == 0) continue;
-                var lane = cars.Where(c => c.Moves == SignalMoves.None || (c.Moves & move) != 0)
-                    .OrderBy(c => Math.Abs((c.Span.From + c.Span.To) * 0.5 - mid)).Select(c => ((double From, double To)?)c.Span).FirstOrDefault()
-                    ?? cars.OrderBy(c => Math.Abs((c.Span.From + c.Span.To) * 0.5 - mid)).Select(c => ((double From, double To)?)c.Span).FirstOrDefault();
-                if (lane is { } c0) box = (Math.Min(box.L, c0.From), Math.Max(box.R, c0.To));
+                for (int j = k + step; j >= 0 && j < sec.Strips.Count; j += step)
+                    if (CarIn(sec.Strips[j])) return j;
+                    else if (sec.Strips[j].Kind == StripKind.BikeLane || sec.Strips[j].IsCarLane) return -1;
+                return -1;
             }
+            int left = Beside(-1), right = Beside(1);
+            bool Makes(int j) => j >= 0 && (sec.Strips[j].Moves == SignalMoves.None || (sec.Strips[j].Moves & move) != 0);
+            // a lone lane serving every move (#1184) leads into its kerbside neighbour, whatever that lane makes
+            bool all = (x.Moves & SignalMoves.Left) != 0 && x.Moves != SignalMoves.Left;
+            int lane = all ? (left >= 0 ? left : right) : Makes(left) ? left : Makes(right) ? right : left >= 0 ? left : right;
+            var box = (L: bl, R: br);
+            if (lane >= 0 && sec.Span(lane) is var (cl, cr)) box = (Math.Min(bl, cl), Math.Max(br, cr));
             boxes.Add(box);
         }
         boxes.Sort((p, q) => p.Left.CompareTo(q.Left));

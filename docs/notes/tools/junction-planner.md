@@ -47,10 +47,14 @@ off, `--junctions new` plans and reports without writing.
   leading into a bike box, serving all movements"): at the lights, where the kerbside lane is the approach's only arriving
   bike lane, would be turn-only (no straight on: a T's stem) and riders' moves the cars make get no lane of their own (no
   left-turn bike lane, no right pocket shared with them), the lane takes them all (J8 N `bR` -> `bLR`) and ends in a bike box,
-  the cars' line set back for it (`BikeStops`, step `4 lone bike lane`). The box reaches the nearest car lane making each of
-  its moves (`ExteriorPlanner.BikeBoxes`). A lane straight on (`bT`, `bTR`) keeps its advanced line or box and its groups (the
+  the cars' line set back for it (`BikeStops`, step `4 lone bike lane`). **Riders turning left take the car lane** (the user,
+  #1192): the lone lane takes the left only where the car lane it leads into turns left too (a single lane, J8 N's `LR`, J9);
+  beside a separate left-turn lane it serves straight on and right (J21 S `bTR`, its own bike group; J4 S stays `bR`), and its
+  left-turners ride in the left-turn lane with the cars. **A box only in front of the lane the bike lane leads into** (the user,
+  #1192; every box): over the bike lane and the car lane beside it, the one making its riders' move, else its neighbour
+  (`ExteriorPlanner.BikeBoxes`; before, it reached the nearest lane making each move: J21 S's spanned all three). A lane straight on (`bT`, `bTR`) keeps its advanced line or box and its groups (the
   user's call on #1185: only turn-only lanes); where a turn bike lane exists, today's layout stays. Signals: one bike group
-  with every move (`SignalArm.RiderAll`, `SignalPlan.BoxRiders`, `traffic-signals`). Test region: 4 approaches (J4 S, J8 N,
+  with every move (`SignalArm.RiderAll`, `SignalPlan.BoxRiders`, `traffic-signals`). Test region: 3 approaches (J8 N,
   J9 x2), no cycle changed; the core's left bike guide stays a left-turn lane's.
 - **Bike lane beside a right pocket** (the user, Oct 13): without lights always between it and the through lane (layout b);
   at the lights (b) only where the traffic arriving from the arm the pocket turns into cannot turn left (one-way out,

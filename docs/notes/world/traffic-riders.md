@@ -35,7 +35,9 @@ In the test world riders come only from its bike generators (#1134, `traffic-gen
   path's first lane (`FromOffset`). On a new leg it carries on from where it is and eases (faster when far: a U-turn).
 - **Next leg** (`NextRide`): arriving where junction paths start, one of them: the riders' own of its kind (a lane's `Bike`,
   a path's `Path`), else any riders' own, else the cars' (from the lane nearest its line); a rider in the car lane takes the
-  cars'. One exit at random, straight on twice as likely. Off a path, its road. Elsewhere ways with a lane or path 3x as
+  cars'. One exit at random, straight on twice as likely; the kind of path is chosen for that exit (#1192, the user: "bikes
+  turning left take the car lane"): an exit its own paths miss (a left with no left-turn bike lane or box) by the cars' path,
+  moving over to its lane over the last 55 m (`RideLeadInCar`, 30 m into its own) and following that lane's lights. Off a path, its road. Elsewhere ways with a lane or path 3x as
   likely; never straight back but at a dead end.
 - **Lights** (`RideLights`): its group is its path's (a bike group, a left-turn bike lane's own phase #979, a right-turn bike lane's own group #1165, the lead
   green are in the plan; a lone lane's box group with every move #1184) or the arm's bike group of its move, else the cars'. Its line is its bike lane's (`StopBehind`: an

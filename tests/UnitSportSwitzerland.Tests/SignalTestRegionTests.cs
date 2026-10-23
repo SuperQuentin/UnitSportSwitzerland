@@ -88,6 +88,30 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
         Assert.Equal(24, region.Tiles().Sum(t => t.Tile.Signals.Sum(s => s.Gantries.Sum(g => g.Signs.Count))));
     }
 
+    /// <summary>
+    /// #1192 (the user: "a bike box is only present in front of the lane the bike lane accesses", "bikes turning left take the car
+    /// lane"): J21's approach from the ramps, three car lanes and a lone kerbside bike lane, gives its riders straight on and right
+    /// (`bTR`, its own bike group, no box riders turning left: they take the left-turn lane); J8's stem, one car lane `LR`, keeps
+    /// its lone lane serving every move into the box in front of that lane (one bike group turning left and right).
+    /// </summary>
+    [Fact]
+    public void Lone_bike_lane_serves_left_turners_only_in_front_of_a_lane_turning_left()
+    {
+        var j21 = region.Junction("J21");
+        var id = TileId.FromLv95(j21.E, j21.N);
+        var south = region.Tile(j21.E, j21.N).Approaches.Single(a => a.Signal >= 0 && Math.Abs(id.MinE + a.X - j21.E) < 15
+            && id.MaxN - a.Z < j21.N - 5 && id.MaxN - a.Z > j21.N - 60);
+        var bikes = south.Lanes.Where(l => l.Kind == ApproachLaneKind.Bike).ToList();
+        Assert.Single(bikes);
+        Assert.Equal(SignalMoves.Through | SignalMoves.Right, bikes[0].Moves);
+        var plan = region.SignalAt(j21.E, j21.N).Plan;
+        Assert.DoesNotContain(plan.Groups, g => SignalPlan.BoxRiders(g));
+        Assert.Contains(plan.Groups, g => g.Kind == SignalGroupKind.Bike && g.Arm == south.SignalArm && g.Moves == (SignalMoves.Through | SignalMoves.Right));
+
+        var j8 = region.Junction("J8");
+        Assert.Contains(region.SignalAt(j8.E, j8.N).Plan.Groups, g => SignalPlan.BoxRiders(g) && g.Moves == (SignalMoves.Left | SignalMoves.Right));
+    }
+
     [Fact]
     public void J7s_east_crosswalk_crosses_its_wide_island_in_two_stages()
     {
