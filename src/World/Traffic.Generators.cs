@@ -264,9 +264,14 @@ public partial class Traffic
         float arc = forward ? s.Pos : edge.Length - s.Pos;
         var route = new Route(edge, forward, arc);
         var (spot, dir) = route.At(0f);
+        // (#1172) where the car will stand, its usual line off the road's centre: on J13's 4+4 artery that is 7-10 m off, so a queue
+        // standing at the generator was never "within 8 m" of the centre and cars started 4 m behind its last car, at 25 km/h
+        uint habit = (uint)_rng.Next();
+        spot += new Vector3(-dir.Z, 0f, dir.X).Normalized() * KeepRight(edge, forward, habit);
         if (RoomFor(spot, dir, CruiseSpeed(edge.Class) * 0.8f) is not { } speed) return false;
         AddCar(route);
         var car = _cars[^1];
+        car.Habit = habit;
         car.Speed = speed;
         car.Planned = way;
         car.FromEndpoint = true;
