@@ -65,6 +65,29 @@ public static class RenderCensus
         foreach (var (key, v) in sums.OrderByDescending(kv => kv.Value.Tris).Take(25))
             sb.Append(System.FormattableString.Invariant($"  {v.Tris / 1000.0,9:F0}k  {v.Nodes,6} nodes  {key}\n"));
         sb.Append(System.FormattableString.Invariant($"  total {sums.Where(kv => !kv.Key.StartsWith('*')).Sum(kv => kv.Value.Tris) / 1e6:F2} M"));
+        // what the physics engine carries each tick: bodies by kind (awake or asleep), areas that watch overlaps
+        var phys = new Dictionary<string, int>();
+        foreach (var n in root.FindChildren("*", nameof(CollisionObject3D), true, false))
+        {
+            string kind = n switch
+            {
+                RigidBody3D rb => rb.Sleeping || rb.Freeze ? $"{n.GetClass()} asleep/frozen" : $"{n.GetClass()} awake",
+                Area3D a => a.Monitoring || a.Monitorable ? $"Area3D monitoring={a.Monitoring} monitorable={a.Monitorable}" : "Area3D idle",
+                _ => n.GetClass(),
+            };
+            phys[kind] = phys.GetValueOrDefault(kind) + 1;
+        }
+        foreach (var (kind, count) in phys.OrderByDescending(kv => kv.Value))
+            sb.Append(System.FormattableString.Invariant($"\n  physics {count,5}  {kind}"));
+        // where the areas are
+        var areas = new Dictionary<string, int>();
+        foreach (var n in root.FindChildren("*", nameof(Area3D), true, false))
+        {
+            string owner = System.Text.RegularExpressions.Regex.Replace(n.GetParent()?.Name.ToString() ?? "", "[0-9_@]+", "") + "/" + System.Text.RegularExpressions.Regex.Replace(n.Name.ToString(), "[0-9_@]+", "");
+            areas[owner] = areas.GetValueOrDefault(owner) + 1;
+        }
+        foreach (var (owner, count) in areas.OrderByDescending(kv => kv.Value).Take(10))
+            sb.Append(System.FormattableString.Invariant($"\n  area {count,5}  {owner}"));
         // every other picture of the world drawn each frame (portals, mirrors, cameras): each is a whole render
         foreach (var v in root.FindChildren("*", nameof(SubViewport), true, false).OfType<SubViewport>())
             if (!v.Disable3D && v.RenderTargetUpdateMode != SubViewport.UpdateMode.Disabled)
