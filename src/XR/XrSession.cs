@@ -108,6 +108,12 @@ public static class XrSession
             fov.FoveationDynamic = true;
             GD.Print($"[xr] foveation level {fov.FoveationLevel}, dynamic");
         }
+        // "--vrmult 0.85": the eye buffers' size against the runtime's recommendation (a frame-time check)
+        if (xr is OpenXRInterface mult && CmdArgs.Double("--vrmult") is double m)
+        {
+            mult.RenderTargetSizeMultiplier = m;
+            GD.Print($"[xr] render target x{m:F2}");
+        }
         GD.Print($"[xr] OpenXR on, {xr.GetName()}");
         return Begin(root);
     }
