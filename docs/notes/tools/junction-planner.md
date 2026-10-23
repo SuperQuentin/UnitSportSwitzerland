@@ -43,6 +43,19 @@ off, `--junctions new` plans and reports without writing.
   and right goes by its straight-on move). Built in phase 4. Short of room the left-turn bike lane goes
   early (step 2); the through one **survives when possible**: it goes with the painted ones, last (step 8). J1 N gets one;
   J3 E keeps it with the short pockets; J3 N has room for a pocket or the bike lane: the pocket goes (LTR, as designed).
+- **A lone turn-only kerbside bike lane serves every move, into a bike box** (the user, #1184, J8 N: "a short bike lane
+  leading into a bike box, serving all movements"): at the lights, where the kerbside lane is the approach's only arriving
+  bike lane, would be turn-only (no straight on: a T's stem) and riders' moves the cars make get no lane of their own (no
+  left-turn bike lane, no right pocket shared with them), the lane takes them all (J8 N `bR` -> `bLR`) and ends in a bike box,
+  the cars' line set back for it (`BikeStops`, step `4 lone bike lane`). **Riders turning left take the car lane** (the user,
+  #1192): the lone lane takes the left only where the car lane it leads into turns left too (a single lane, J8 N's `LR`, J9);
+  beside a separate left-turn lane it serves straight on and right (J21 S `bTR`, its own bike group; J4 S stays `bR`), and its
+  left-turners ride in the left-turn lane with the cars. **A box only in front of the lane the bike lane leads into** (the user,
+  #1192; every box): over the bike lane and the car lane beside it, the one making its riders' move, else its neighbour
+  (`ExteriorPlanner.BikeBoxes`; before, it reached the nearest lane making each move: J21 S's spanned all three). A lane straight on (`bT`, `bTR`) keeps its advanced line or box and its groups (the
+  user's call on #1185: only turn-only lanes); where a turn bike lane exists, today's layout stays. Signals: one bike group
+  with every move (`SignalArm.RiderAll`, `SignalPlan.BoxRiders`, `traffic-signals`). Test region: 3 approaches (J8 N,
+  J9 x2), no cycle changed; the core's left bike guide stays a left-turn lane's.
 - **Bike lane beside a right pocket** (the user, Oct 13): without lights always between it and the through lane (layout b);
   at the lights (b) only where the traffic arriving from the arm the pocket turns into cannot turn left (one-way out,
   forbidden, no lane shows it), else kerbside (a), painted or added. Replaces #351's coin flip (`NeedsOf.BikeBetween`, kept
@@ -51,9 +64,13 @@ off, `--junctions new` plans and reports without writing.
   of the pocket (id 125), where there is plenty of room: it is the first thing the room order gives up (step 1); then
   they **share the right pocket** (`Strip.SharedWithBikes`: a bike connector from it in phase 5, no bike symbol in it). J1: kerbside on every arm (every arm turns left).
   **OSM's `bicycle:lanes` wins** (the user, #854, as `turn:lanes` does): a `designated` lane with a car lane right of it is
-  (b), one that is last is (a) (`BikeLaneBetween`, overlay v3). (b)'s right-turn bike lane at the kerb gets no bike signal
-  (its riders turn with the pocket's cars; it held the right arrow back before), so in (b) **the right turn goes with the
-  through green** (J10: 70 s, rights in the through phases; J1 74 s with the arrows apart). Real tiles: no overlay carries
+  (b), one that is last is (a) (`BikeLaneBetween`, overlay v3). (b)'s right-turn bike lane at the kerb gets **a bike group
+  and head of its own, right only** (#1165, `SignalArm.RiderRight`; before, no bike signal: as part of the through riders'
+  group it held the right arrow back), green with its approach's right turn (`traffic-signals`), so in (b) **the right turn goes with the
+  through green** (J10: 70 s, rights in the through phases; J1 74 s with the arrows apart). Its way round the corner is
+  marked through the core as the lanes straight on are (`WriteBikeCrossings` 1b, #1165). **A left-turn bike lane's lines
+  are crossing dashes where its pocket opens** (#1165, the user: cars cross it into the pocket there, as the centre-running
+  lane where a right pocket opens; no red), solid again along the storage (`TransitionPaint`; J1: 8 stretches, ~10 m each). Real tiles: no overlay carries
   the tag yet (v2), the 168 tiles unchanged.
 - **One pocket rule** (the user's generalization, Oct 13): `Layout/PocketRules` holds the left and right pocket as one rule
   with a table (move, side, speed condition, sizes, ids, most lanes from data, room step). What a pocket displaces follows
@@ -183,7 +200,8 @@ off, `--junctions new` plans and reports without writing.
   where each side starts and its profile; an ordinary segment's is constant (`ShiftAt` a case of it), a `TRNS` piece's varies.
   `RoadMeshBuilder.AppendSegment` (edges per point, no type join on a transition), `RoadStreetBuilder` (a profile per point, one
   shape; a varying side simplified on every profile line), the road blend (`Line`: edges per piece, so the heightfield collision
-  holds the carriageway), `KerbCheck` and `--street-svg` all read it. Ordinary streets: kerb and seam checks identical to main.
+  holds the carriageway), `KerbCheck`, `--street-svg` and the debug menu's lane plan (#1181, `core/debug-menu`: every
+  strip from above by kind, arrows, mouth labels) all read it. Ordinary streets: kerb and seam checks identical to main.
 - **Measured** (Oct 14 2026): test region 10 of 13 junctions written (2 a street beyond the block, 1 its partner), 30 transitions
   over 32 pieces, 0 decoded differently, kerb check ok, seams as before. Sion 423 of 1,017 written (546 multi-node, 24 a check, 12
   beyond the block, 9 partners, 3 a path joins), 83 transitions over 142 pieces, 0 decoded differently, no piece lost (a piece

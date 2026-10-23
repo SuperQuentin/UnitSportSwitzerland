@@ -16,6 +16,9 @@
 - Where players start and whether they may teleport (`net/arrival`, #799): `--spawn E,N` (LV95,
   default Riddes), `--no-teleport` (only admins jump: no place search, no `/city`, the fly camera
   brings you back to your body).
+- Online accounts (`net/accounts`, #1123): `--accounts off|optional|required` (default off) with `--nakama-url <url>`
+  (the account server, `tools/nakama/up.sh`). Required refuses a player who is not signed in to that account server.
+  A client signs in for a command-line run with `--account-email E --account-password P --account-url U --account-key K`.
 - `--player-status`: one `[server] player <id> at <pos>, ground ...` line per player every 5 s
   (off by default: each `GD.Print` costs ms on Windows, see `net/load-testing`).
 - Deploying the server to a Linux host (tmux console, cron, firewall, mDNS): `general/linux-deploy`.

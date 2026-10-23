@@ -34,7 +34,10 @@
 - **Two-stage crossing** (#1030, `traffic-signals`): J7's east arm, the only one whose island (3.4 m, over its exit hatch)
   spans its zebra and is 2 m wide: its walkers cross in two halves, heads on the island. Top view:
   `--shot 4514,522,-1.8,-90,0,6,out.png` with `--chunks test_output/signal-region --generated off`.
-- **Where**: tiles E 2910-2917 N 1321-1323 (24 tiles; J6/J7 #700 in 2916-2917), flat at 500 m, one 6 km rewrite block),
+- **Its traffic** (#1134): the build writes `traffic_endpoints.tsv` (generators and destinations for cars, riders, walkers and
+  trams on every lit junction, rates from what its lights pass) and logs a line of rates per junction; details and the formula:
+  `world/traffic-generators`.
+- **Where**: tiles E 2910-2917 N 1320-1324 (40 tiles; N 1320 since #1189, N 1324 the rail row; J6/J7 #700 in 2916-2917), flat at 500 m, one 6 km rewrite block),
   outside Switzerland on purpose: no real tile, streamed or cached, shares an id. Manifest origin
   2913000,1322500 (shots' world x = E - 2913000, z = 1322500 - N). Junctions on one row, N 1322500,
   1 km apart (each in its own tile, arms within it: a pocket never meets a seam).
@@ -71,6 +74,17 @@
   (masts); a reserved double tram track E 2912100-2913900 in open grass (centre masts), and 60 m north of it the same as two single tracks 3.6 m apart drawn in opposite directions (#1094); a double-track main line from 2914100,1324300 through a 600 m curve
   turning 30 degrees left. Rail lines are written as the extractor writes them (`Line.Rail` flags, `OnStreet`) and left out of
   the OSM overlay. Overhead lines: `catenary`.
+- **Direction-sign gantries** (#1189, `direction-signs`): tile row N 1320 at E 2912500 (`GantryE`): a short motorway from
+  the tile's south edge (two `Autobahn` carriageways, owner Bund) ends in an `Ausfahrt` and an `Einfahrt` meeting a 2+2
+  cantonal road's south end at N 1320300; J21 (N 1320380) and J22 (N 1320560) cross 2+2 cantonal roads at lights, all within
+  `GantryRule.Default`'s 300 m of the ramps: **8 gantries, 24 signs**, every approach `L | T | R` with a sign and a horizontal
+  head per lane, OSM `destination:lanes` naming invented towns (Seldwyla N, Güllen E, Brunnwil W, Bergwiler;Talheim S): green
+  with the motorway symbol toward the motorway (south), blue elsewhere. The region writes overlay v4 (destinations) and
+  `gantry_facts.tsv` in its temp dir. J21 is 80 m from the ramps on purpose: with 160 m between J21 and J22, J22's northbound
+  `LANE` record lost its right lane (`--signal-check`: "right pocket without its lane"). J21's approach from the ramps has a lone bike
+  lane (`bTR` into a box over its right lane only; its left-turners take the left-turn lane, #1192, `junction-planner`); as `bLTR`
+  it gave the north arm's through group a flasher with no plate (fixed in #1192, `traffic-signals`). Front-lit shot: `--origin
+  2912500,1320380 --time 17`, `--shot -45,g1.6,5,3,-90,4,out.png` (J21's eastbound gantry).
 
 ## Junctions (designed vs built)
 
@@ -80,7 +94,7 @@ a bike box, `[adv]` an advanced bike line); the approach is named by where it co
 | Junction | LV95 | Design | Built | Cycle, phases |
 |---|---|---|---|---|
 | J1-ideal-lanes | 2910500,1322500 | two 10 m roads, room everywhere; painted lanes; the north road is `cycleway=shared_lane` | every arm `L \| bL \| T \| R \| bTR` + bike signal (layout a: every arm turns left, `junction-planner`) | 74 s, the right arrows apart from the through green (10 phases) |
-| J10-between-lanes | 2910500,1323500 | J1 a tile north (#854), OSM `bicycle:lanes=no\|no\|designated\|no` on every approach | every arm `L \| bL \| T \| bT \| R \| bR` (layout b from data, a right-turn bike lane at the kerb), no bike signal | 70 s, each right turn with its through green |
+| J10-between-lanes | 2910500,1323500 | J1 a tile north (#854), OSM `bicycle:lanes=no\|no\|designated\|no` on every approach | every arm `L \| bL \| T \| bT \| R \| bR` (layout b from data, a right-turn bike lane at the kerb with a group and head of its own, #1165, marked round the corner) | 70 s, each right turn with its through green |
 | J11-town-pockets | 2911500,1323500 | J2 a tile north (#971), OSM `turn:lanes=left\|through\|right` on every approach | every arm `L \| bL \| T \| R` + bike signal (the pockets from data) | 86 s |
 | J2-ideal-paths | 2911500,1322500 | the same in town (OSM sidewalks): separated paths | every arm `L \| bL \| T \| R` + bike signal: right pockets at the lights in town too (#971); square red crossings | 86 s |
 | J3-mismatch | 2912500,1322500 | W long, its last metres in town (the houses beside the north road give it sidewalks); E houses 1.5 m from the kerb from 68 m out; N houses 1 m from the kerb; S a 6 m road 52 m to a T | W `L \| bL \| T \| R` (a right pocket at the lights in town, #971), E `L \| bL \| T \| R \| bTR` (20+20 pocket, the right pocket reaching 8 m past the left's storage, #682), N `LTR` (building), S `LT \| R \| bTR` as the old layout builds it, `LTR \| bTR` from the planner (52 m: its right pocket gives way to the exit the west arm's needs, `PlannerDesign`) | 60 s, main road lead/both/lag, then N + S together |
@@ -92,6 +106,13 @@ a bike box, `[adv]` an advanced bike line); the approach is named by where it co
 | J12-canton-default / -GE / -VD / -BL / -BE | 2912500 ... 2916500,1323500 | #1038: J2 once per canton zone | as J2: every arm `L \| bL \| T \| R` + bike signal; Geneva two-lens pedestrian heads side by side, Vaud arrow plates, BL anthracite and BE RAL 7042 poles (#1037) | 85 s each, J2's phases |
 | J13-portal | 2917500,1321500 | #1037: a 4+4 artery (OSM `lanes=8`, `left\|through\|through\|through;right` assigned in place) across a 10 m road | W, E `L \| T \| T \| TR \| bTR` under a mast arm since #1110 (a portal before; one cluster over the lanes' middle: the left arrow and the main head); N, S `L \| bL \| T \| R \| bTR` | 77 s |
 | J14-tram | 2917500,1323500 | #1037: J13's 4+4 artery with OSM `railway=tram` (the overlay's `tram` column) between houses 3 m back from both kerbs, J6's cross roads; #1057: two TLM-like tram tracks 3.2 m apart in its middle (tram groups, lanes and paths, `tram-approaches`), tram stops 150 m either side | W, E `L \| T \| T \| TR` (lanes narrowed to their least by the houses) under a mast arm since #1110 (span wires from facade to facade before); N, S `L \| TR` | see the run |
+| J15-geneva-tram | 2913230,1323230 | #1155: J14's 4+4 artery, its tram and branch (stops 100 m either side) inside the Geneva zone's tile, arms 200 m, no houses | W, E `L \| T \| T \| TR` (E with `tram:LT`), N, S `L \| TR`; Romandy tram heads; the westbound trams straight on and left from one track, each direction its own group | 118 s |
+| J16-reserved-tram | 2913760,1323760 | #1161: a divided road (two one-way 6 m carriageways 14 m apart, TLM richtungsgetrennt) with a double tram track on its central reservation, across a 10 m road; Geneva tile; a signal node on each carriageway's node (`Junction.Signals`) | one merged junction: W, E `tram:T \| LTR \| bTR` (the tram lane left of the cars, its group's side -1: the cars' lefts give way to it), N, S `L \| bL \| T \| bT \| R \| bR`; Romandy T heads | 62 s |
+| J17-tram-turning | 2914760,1323760 | #1161: J16's road, its tram turning left off the reservation into the cross road's middle (embedded); Vaud tile | W `tram:L \| LTR`, N `L \| tram:R \| bL \| T \| ...` (the trams from the north turn right onto the reservation) | 62 s |
+| J18-tram-tee | 2914230,1323230 | #1161: a T off J16's road, from the south across the reservation; its tram straight through; Vaud tile | W `tram:T \| TR`, E `tram:T \| LT` (the lefts across the reservation give way to the tram), S `L \| R` | 60 s |
+| J19-tram-islands | 2913760,1323240 | #1176/#1179: J16 in town (sidewalks, carriageways 16 m apart, the cross road one shared lane each way): the crossings over the divided road in three stages, carriageway, the tracks between two paved refuges (lit, a group of its own stopped only by the trams; the bed paved under it), carriageway; Geneva tile | W, E `tram:T \| LTR`, N, S `LTR`; two middle-stage groups, heads at both ends of every stage, island waits at most 16.3 s | 60 s |
+| J20-tram-unlit-middle | 2913240,1323760 | #1176/#1179: J19 with OSM's `railway=tram_crossing` + `crossing=uncontrolled` on the tracks either side: the middle stages unlit (no stripes), walkers give way to the trams | as J19, no middle-stage group | 60 s |
+| J21-gantry-near / J22-gantry-far | 2912500,1320380 / 2912500,1320560 | #1189: 2+2 cantonal roads 80 / 260 m from a motorway's ramps, every approach widened to `left\|through\|right` with OSM `destination:lanes` | every arm `L \| bL \| T \| R \| bR` (J21 S `L \| T \| R \| bTR`, the box over R only); a gantry on each of the 8 approaches, a sign and horizontal head per lane, the lanes toward the motorway green | ~110 s |
 
 Rewrite numbers: 7 junctions (all from data), 27 approaches, 21 left pockets (storage 40 x18, 20
 x3, 2 merged), 21 right pockets (4 rejected), layout (a) 8, (b) 6, (b) forced 1, 19 left-turn

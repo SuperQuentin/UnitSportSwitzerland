@@ -43,9 +43,23 @@ public partial class RadioSpeaker : AudioStreamPlayer3D, IMusicSpeaker
     public int LoadedCd { get; private set; }
     public double LoadedLength { get; private set; }
 
-    private string? _path;
-    private int _pathFor, _fetching, _failed;
+    private readonly Dictionary<(int Id, int Part), string> _have = new();
+    private (int Id, int Part) _fetching = (0, -1);
+    private int _pathFor, _failed, _stemsFailed;
     private double _sinceSeek, _failedAt;
+
+    /// <summary>
+    /// The voice/music mix (#1153), 0..1 each, everyone's like <see cref="Volume"/>: at 1 and 1 the
+    /// CD plays as burnt; otherwise its two stems play in step (<see cref="AudioStreamSynchronized"/>),
+    /// each at its own level. A CD without stems (or a server that has none) plays as burnt.
+    /// </summary>
+    public float Voice { get; set; } = 1f;
+    public float Music { get; set; } = 1f;
+
+    /// <summary>The stems are in the player (rather than the CD as burnt). For the probes.</summary>
+    public bool LoadedStems { get; private set; }
+
+    private float _sentVoice = float.NaN, _sentMusic = float.NaN;
 
     // the listener's own level is the Music bus (Settings -> Audio -> Music, #261), applied by the
     // bus; this radio's own volume (#734) is its gain and reach below, the same for everyone
@@ -114,6 +128,9 @@ public partial class RadioSpeaker : AudioStreamPlayer3D, IMusicSpeaker
             Silence();
             if (!TryLoad()) return;
         }
+        // the mix left 1/1 (or came back): the stems take over once here, the CD plays on until then
+        else if (LoadedStems != WantsStems(CdId) && TryLoad()) Silence();
+        ApplyMix();
 
         if (!Playing)
         {
@@ -137,49 +154,105 @@ public partial class RadioSpeaker : AudioStreamPlayer3D, IMusicSpeaker
         HeardPosition = double.NaN;
     }
 
-    /// <summary>Puts the CD's Ogg in the player, fetching it from the server first if need be.</summary>
+    /// <summary>Whether CD <paramref name="id"/> should play from its stems: a mix other than 1/1 and stems to play.</summary>
+    private bool WantsStems(int id) => (MathF.Abs(Voice - 1f) > 0.01f || MathF.Abs(Music - 1f) > 0.01f)
+        && _stemsFailed != id && CdLibrary.Instance?.Find(id) is { Analysis.Stems: true };
+
+    /// <summary>Each stem's level, only when it changed; the synchronized stream reads it as it mixes.</summary>
+    private void ApplyMix()
+    {
+        if (!LoadedStems || Stream is not AudioStreamSynchronized sync || (Voice == _sentVoice && Music == _sentMusic)) return;
+        _sentVoice = Voice;
+        _sentMusic = Music;
+        sync.SetSyncStreamVolume(0, Db(Music));
+        sync.SetSyncStreamVolume(1, Db(Voice));
+    }
+
+    private static float Db(float gain) => gain <= 0.001f ? -80f : 20f * MathF.Log10(gain);
+
+    /// <summary>
+    /// Puts the CD's Ogg in the player, or its two stems (#1153) when the mix asks for them,
+    /// fetching from the server first if need be. False while something is still on its way.
+    /// </summary>
     private bool TryLoad()
     {
         int id = CdId;
         if (_pathFor != id)
         {
-            _path = null;
+            _have.Clear();
             _pathFor = id;
         }
-        if (_path == null)
+        bool stems = WantsStems(id);
+        string? mix = null, music = null, voice = null;
+        if (stems)
         {
-            if (_fetching == id) return false;
-            if (_failed == id && Time.GetTicksMsec() / 1000.0 - _failedAt < RetryAfter) return false;
-            if (CdCache.LocalPath(id) is { } here) _path = here;
-            else
+            music = Need(id, CdStem.Music);
+            voice = Need(id, CdStem.Voice);
+            if (music == null || voice == null) return false;
+        }
+        else if ((mix = Need(id, null)) == null) return false;
+
+        AudioStream stream;
+        if (stems)
+        {
+            var m = AudioStreamOggVorbis.LoadFromFile(music);
+            var v = AudioStreamOggVorbis.LoadFromFile(voice);
+            if (m == null || v == null) { _stemsFailed = id; _have.Clear(); return false; }
+            m.Loop = v.Loop = false;
+            var sync = new AudioStreamSynchronized { StreamCount = 2 };
+            sync.SetSyncStream(0, m);
+            sync.SetSyncStream(1, v);
+            stream = sync;
+            LoadedLength = m.GetLength();
+        }
+        else
+        {
+            var ogg = AudioStreamOggVorbis.LoadFromFile(mix);
+            if (ogg == null)
             {
-                // someone else's personal CD: no file anywhere we could ask for
-                if (id < 0 || Streamer() is not { } streamer) { Fail(id); return false; }
-                _fetching = id;
-                _ = CdCache.FetchAsync(streamer, id).ContinueWith(t => Callable.From(() =>
-                {
-                    if (!IsInstanceValid(this)) return;
-                    if (_fetching == id) _fetching = 0;
-                    if (t.Result is { } path) { if (_pathFor == id) _path = path; }
-                    else Fail(id);
-                }).CallDeferred());
+                GD.PushWarning($"[cd] could not load {mix}");
+                _have.Clear();
+                Fail(id);
                 return false;
             }
+            ogg.Loop = false;
+            stream = ogg;
+            LoadedLength = ogg.GetLength();
         }
-        var stream = AudioStreamOggVorbis.LoadFromFile(_path);
-        if (stream == null)
-        {
-            GD.PushWarning($"[cd] could not load {_path}");
-            _path = null;
-            Fail(id);
-            return false;
-        }
-        stream.Loop = false;
         Stream = stream;
         LoadedCd = id;
-        LoadedLength = stream.GetLength();
-        GD.Print($"[radio] speaker {GetParent()?.Name} loaded CD {id} ({LoadedLength:F1} s)");
+        LoadedStems = stems;
+        _sentVoice = _sentMusic = float.NaN;
+        GD.Print($"[radio] speaker {GetParent()?.Name} loaded CD {id}{(stems ? FormattableString.Invariant($" as stems (voice {Voice:F2}, music {Music:F2})") : "")} ({LoadedLength:F1} s)");
         return true;
+    }
+
+    /// <summary>The file of CD <paramref name="id"/> (or a stem of it) if here, else starts fetching it and answers null.</summary>
+    private string? Need(int id, CdStem? stem)
+    {
+        var key = (id, CdCache.Part(stem));
+        if (_have.TryGetValue(key, out var path)) return path;
+        if (_fetching == key) return null;
+        if (stem == null && _failed == id && Time.GetTicksMsec() / 1000.0 - _failedAt < RetryAfter) return null;
+        if (CdCache.LocalPath(id, stem) is { } here) return _have[key] = here;
+        // someone else's personal CD: no file anywhere we could ask for
+        if (id < 0 || Streamer() is not { } streamer)
+        {
+            if (stem == null) Fail(id);
+            else _stemsFailed = id;
+            return null;
+        }
+        _fetching = key;
+        _ = CdCache.FetchAsync(streamer, id, stem).ContinueWith(t => Callable.From(() =>
+        {
+            if (!IsInstanceValid(this)) return;
+            if (_fetching == key) _fetching = (0, -1);
+            if (t.Result is { } got) { if (_pathFor == id) _have[key] = got; }
+            // a server without this CD's stems: the CD plays as burnt
+            else if (stem == null) Fail(id);
+            else _stemsFailed = id;
+        }).CallDeferred());
+        return null;
     }
 
     private void Fail(int id)

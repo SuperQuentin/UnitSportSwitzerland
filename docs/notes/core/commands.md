@@ -4,7 +4,9 @@
   args (minus the `--chunks`/`--cache` paths), so parallel test windows can be told apart.
   Agents launching windowed runs pass `--title "<issue> <what is tested>"`.
 - Spawn elsewhere: `<godot> --path . -- --at <lv95E>,<lv95N>` (default: Riddes,
-  2583250/1113250), or `--goto <town>` to name it instead of looking up coordinates.
+  2583250/1113250), or `--goto <town>` to name it instead of looking up coordinates. Either boots straight into the
+  world, no title screen (`GameShell.UseTitle`; `--at` was on its harmless list and left the player on the menus);
+  `--test-world <id>` does too, at the world's start unless `--at` says otherwise.
   `SpawnPoint` drops the camera to ground + 220 m once the chunk beneath it streams in — the
   height cannot be known at boot.
 - Screenshot without the editor: `<godot> --path . -- --shot x,y,z,pitchDeg,yawDeg,seconds,out.png`
@@ -37,6 +39,9 @@
   as asked, carried into the rooms (`InteriorManager.OpenDoorForCamera`/`CameraInside`). Stand
   2-3 m from a house looking at it to look into its ground floor. The door is left open, so
   queue it last; it fails after 40 s without a door or an interior.
+  A line whose path is `~ease`, `~lin`, `~in` or `~out` is a **glide**: the camera moves from the last line's pose to its
+  own over its seconds (eased as named; yaw the short way round; a `g` height lerped above the ground), no picture, no wait
+  for tiles: camera moves for a `--clip` (each logs `[glide] t=<RealClock ms>`, as `[clip] t=` logs the clip's start).
   A line `shift dE,dN` moves the floating origin by that many metres (LV95 E, N) with the camera
   still, then logs the CPU and GPU time of the 120 frames after it against the 30 before (#185):
   what a shift costs the renderer. Time it with no shot right after it (saving a PNG stalls the
@@ -48,7 +53,7 @@
   server's own world space (the server never shifts): `--server --origin 3583250,1113250` runs a
   generated world 1,000 km from the server's origin, the check that nothing on the server depends on it.
 - `--debugcheck`: the debug menu driven through input (`debug-menu`), headless with `--systems ui`, RESULT ok/FAILED; online through `tools/debugcheck.sh`.
-- `--debugview a,b,...`: debug menu tools on from boot (`debug-menu`): `open`, `tiles`, `labels`, `origin`, `freeze`, `no<layer>`, `wireframe` / `clay` / `colours` / `overdraw`.
+- `--debugview a,b,...`: debug menu tools on from boot (`debug-menu`): `open`, `tiles`, `labels`, `origin`, `lanes` (lane plan), `freeze`, `no<layer>`, `wireframe` / `clay` / `colours` / `overdraw`.
 - `--nocapture`: never grab the mouse (`Core/MouseCapture`). Every probe and tool run implies it,
   so a check running in a window leaves the pointer to whoever is using the machine.
 - `--chatcheck`: chat tab completion, `/spawn` parsing and Up/Down history (a real `ChatUi`), headless, RESULT PASS/FAIL (`Core/ChatCheck`).

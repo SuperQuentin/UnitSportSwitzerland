@@ -48,6 +48,12 @@ public sealed class RoadApproach
     public SignalMoves Banned { get; init; }
 
     /// <summary>
+    /// Its cars may enter the junction without room past it for them (#1134, the user: "allow block intersection"): the box rule
+    /// (<see cref="BoxRule"/>) is off for them. Bit 3 of the banned-turns byte (an older reader ignores it); nothing sets it yet.
+    /// </summary>
+    public bool AllowBlock { get; init; }
+
+    /// <summary>
     /// The original approach lane's centre, metres right of the road's centre line (the segment
     /// the game drives along): the lanes' offsets are from it.
     /// </summary>
@@ -69,7 +75,7 @@ public sealed class RoadApproach
             w.Write(a.Heading);
             w.Write(a.Signal);
             w.Write(a.SignalArm);
-            w.Write((byte)a.Banned);
+            w.Write((byte)((byte)a.Banned & 7 | (a.AllowBlock ? 8 : 0)));
             w.Write(a.LaneCentre);
             w.Write(checked((byte)a.Lanes.Count));
             foreach (var l in a.Lanes)
@@ -93,7 +99,8 @@ public sealed class RoadApproach
             float x = r.ReadSingle(), y = r.ReadSingle(), z = r.ReadSingle(), heading = r.ReadSingle();
             short signal = r.ReadInt16();
             byte arm = r.ReadByte();
-            var banned = (SignalMoves)r.ReadByte();
+            byte bannedByte = r.ReadByte();
+            var banned = (SignalMoves)(bannedByte & 7);
             float centre = r.ReadSingle();
             int count = r.ReadByte();
             var lanes = new List<ApproachLane>(count);
@@ -105,6 +112,7 @@ public sealed class RoadApproach
             list.Add(new RoadApproach
             {
                 X = x, Y = y, Z = z, Heading = heading, Signal = signal, SignalArm = arm, Banned = banned, LaneCentre = centre, Lanes = lanes,
+                AllowBlock = (bannedByte & 8) != 0,
             });
         }
         return list;

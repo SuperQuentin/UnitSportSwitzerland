@@ -53,6 +53,25 @@ public partial class PhoneProbe : Node
         await Wait(1.0);
         Shot("phone_0_before.png");
 
+        // the camera's own zoom (#1149): Shift + wheel in to the face, the hotbar left as it was; - back out
+        if (me.ZoomsView)
+        {
+            int inHand = me.HeldItemId;
+            for (int i = 0; i < 12; i++) await Wheel(MouseButton.WheelUp, shift: true, 0.05);
+            await Wait(0.8);
+            Check(me.ViewZoom < 0.7f, $"Shift + wheel zooms in to the face ({me.ViewZoom:F2} m)");
+            Check(me.HeldItemId == inHand, $"and does not step the hotbar ({inHand} -> {me.HeldItemId})");
+            Shot("phone_0b_zoom_back.png");
+            me.LookYaw += Mathf.Pi;
+            await Wait(0.6);
+            Shot("phone_0c_zoom_face.png");
+            me.LookYaw -= Mathf.Pi;
+            for (int i = 0; i < 9; i++) await Key(Godot.Key.Minus, 0.05);
+            await Wait(0.8);
+            Check(me.ViewZoom > 2.8f, $"- zooms back out ({me.ViewZoom:F2} m)");
+        }
+        else Log("skip (first person: the zoom is third person's)");
+
         // out of the pocket, folded: in both hands, the camera over the shoulder
         await Press(PlayerInput.Phone, 0.3);
         Check(phone.IsOut, "Up takes the phone out");
@@ -116,6 +135,12 @@ public partial class PhoneProbe : Node
             Check(Mathf.Abs(tilt - Mathf.RadToDeg(me.LookPitch)) < 12f, $"raised level with the view, the horizon level ({tilt:F0}° against a {Mathf.RadToDeg(me.LookPitch):F0}° pitch)");
         }
         Shot("phone_8_camera.png");
+        // open on the camera app the body walks (#1149): W held carries it forward, the phone still up
+        var still = me.GlobalPosition;
+        await Hold(Godot.Key.W, 1.0);
+        await Wait(0.3);
+        Check(me.GlobalPosition.DistanceTo(still) > 0.5f, $"W walks with the camera app open ({me.GlobalPosition.DistanceTo(still):F2} m)");
+        Check(me.PhoneState == FootPlayer.PhoneCameraState, $"and the camera app stays up (state {me.PhoneState})");
         await Key(Godot.Key.Enter, 1.5);
         Shoots(phone.LastPhoto != null && Items.PhotoStore.Has(phone.LastPhoto), $"Enter takes a photo into the album ({phone.LastPhoto})");
         Save(phone.Screens.Inner, "phone_8_camera_screen.png");
@@ -214,6 +239,20 @@ public partial class PhoneProbe : Node
     {
         foreach (bool down in new[] { true, false })
             Input.ParseInputEvent(new InputEventKey { Keycode = key, PhysicalKeycode = key, Pressed = down });
+        await Wait(after);
+    }
+
+    private async Task Hold(Key key, double seconds)
+    {
+        Input.ParseInputEvent(new InputEventKey { Keycode = key, PhysicalKeycode = key, Pressed = true });
+        await Wait(seconds);
+        Input.ParseInputEvent(new InputEventKey { Keycode = key, PhysicalKeycode = key, Pressed = false });
+    }
+
+    private async Task Wheel(MouseButton button, bool shift, double after)
+    {
+        foreach (bool down in new[] { true, false })
+            Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = button, Pressed = down, ShiftPressed = shift });
         await Wait(after);
     }
 

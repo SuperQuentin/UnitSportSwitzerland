@@ -45,7 +45,7 @@ public partial class Traffic
     private const float TramSight = 140f;
 
     /// <summary>It stops this far behind what stands ahead on its track (m); its front this far short of its stop line.</summary>
-    private const float TramStandOff = 3f, TramLineMargin = 0.8f;
+    private const float TramStandOff = 3f, TramLineMargin = 0.5f;   // (0.5: its front at its painted stop line's middle less half a metre, #1155)
 
     /// <summary>Something is on a tram's line within this much of its track's centre (m): the tram's half width and a margin.</summary>
     private const float TramReach = 1.9f;

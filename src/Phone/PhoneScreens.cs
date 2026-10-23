@@ -18,7 +18,7 @@ namespace UnitSport.Phone;
 /// </summary>
 public partial class PhoneScreens : Node
 {
-    public enum Page { Home, Map, Contacts, Camera, Activities, Photos, Photo, Travel }
+    public enum Page { Home, Map, Contacts, Camera, Activities, Photos, Photo, Travel, Training }
 
     /// <summary>One quick action on the cover: its label and, when it is a call, who and what.</summary>
     public readonly record struct Quick(string Label, string? Detail = null, Color? Tint = null);
@@ -90,6 +90,11 @@ public partial class PhoneScreens : Node
     private VBoxContainer _actBr = null!, _actRaces = null!;
     private Label _actBrTitle = null!, _actBrSub = null!;
     private string _actShown = "";
+    // the Training app (#901)
+    private Control _training = null!;
+    private Label _trCourse = null!, _trStatus = null!, _trTrainer = null!;
+    private VBoxContainer _trActions = null!, _trRecent = null!, _trDevices = null!;
+    private string _trShown = "";
     private double _actRefreshAt;
     private RaceManager? _races;
     private Label _homeClock = null!, _homeDate = null!, _travelTitle = null!, _travelDots = null!, _travelNote = null!, _zoomLabel = null!;
@@ -361,6 +366,7 @@ public partial class PhoneScreens : Node
         _map = Page_(BuildMap());
         _contacts = Page_(BuildContacts());
         _activities = Page_(BuildActivities());
+        _training = Page_(BuildTraining());
         _photos = Page_(BuildPhotos());
         _photo = Page_(BuildPhoto());
         (_innerRing, _innerRingBox) = Ring(40f);
@@ -395,6 +401,7 @@ public partial class PhoneScreens : Node
         row.AddChild(Tile("Photos", "Your album; set a photo as a wallpaper", new Color(0.86f, 0.30f, 0.45f), () => ShowPage(Page.Photos)));
         row.AddChild(Tile("Activities", "Join a Battle Royale or a race", new Color(0.82f, 0.38f, 0.16f), () => ShowPage(Page.Activities)));
         row.AddChild(Tile("Menu", "The full Activities menu: set up a race, a Battle Royale", new Color(0.50f, 0.30f, 0.62f), () => ActivitiesPicked?.Invoke()));
+        row.AddChild(Tile("Training", "Ride a GPX course on your home trainer, the road's grade on the trainer", new Color(0.10f, 0.55f, 0.58f), () => ShowPage(Page.Training)));
         col.AddChild(row);
         col.AddChild(UiKit.Spacer(expand: true));
         col.AddChild(Hint("open", "put the phone away"));
@@ -622,7 +629,7 @@ public partial class PhoneScreens : Node
     /// <summary>The list a swipe at <paramref name="at"/> (the inner screen's pixels) scrolls, or null.</summary>
     public ScrollContainer? ScrollAt(Vector2 at)
     {
-        foreach (var page in new[] { _map, _contacts, _activities, _photos })
+        foreach (var page in new[] { _map, _contacts, _activities, _photos, _training })
         {
             if (!page.Visible) continue;
             var found = FindScroll(page, at);
@@ -640,6 +647,128 @@ public partial class PhoneScreens : Node
         }
         return null;
     }
+
+    /// <summary>
+    /// The Training app (#901): a GPX course to ride on the home trainer, the trainer itself, and Start.
+    /// The page talks to <see cref="Trainer.TrainingSession"/> and <see cref="Trainer.TrainerLink"/>
+    /// directly: both are the local client's, nothing here goes over the network.
+    /// </summary>
+    private Control BuildTraining()
+    {
+        var col = UiKit.VBox(10);
+        col.AddChild(Title("Training"));
+        var scroll = new ScrollContainer { SizeFlagsVertical = Control.SizeFlags.ExpandFill, HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
+        var list = UiKit.VBox(12);
+        list.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        list.AddChild(Big("Course", 26, InkDim));
+        _trCourse = Big("", 30);
+        _trCourse.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        list.AddChild(_trCourse);
+        _trStatus = Big("", 22, InkDim);
+        _trStatus.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        list.AddChild(_trStatus);
+        _trActions = UiKit.VBox(6);
+        list.AddChild(_trActions);
+        _trRecent = UiKit.VBox(6);
+        list.AddChild(_trRecent);
+        list.AddChild(UiKit.Spacer(6));
+        list.AddChild(Big("Trainer", 26, InkDim));
+        _trTrainer = Big("", 24);
+        _trTrainer.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        list.AddChild(_trTrainer);
+        _trDevices = UiKit.VBox(6);
+        list.AddChild(_trDevices);
+        scroll.AddChild(list);
+        col.AddChild(scroll);
+        col.AddChild(Hint("choose", "back"));
+        return col;
+    }
+
+    /// <summary>The Training app's lists, rebuilt only when what they show changes; the labels are set as they go.</summary>
+    private void RefreshTraining(bool force)
+    {
+        var session = Trainer.TrainingSession.Instance;
+        var link = Trainer.TrainerLink.Instance;
+        if (session == null || link == null)
+        {
+            SetText(_trCourse, "Not in this game");
+            SetText(_trStatus, "Trainings are ridden in a world: start or join one first.");
+            return;
+        }
+        var phase = session.State;
+        SetText(_trCourse, session.CourseName is { } name
+            ? FormattableString.Invariant($"{name} · {session.CourseKm:0.0} km · {session.CourseAscent:0} m up")
+            : "No course");
+        SetText(_trStatus, session.Status);
+        string devices = string.Join(", ", link.Devices.Values.Select(d => $"{d.Name} {d.State}"));
+        string cadence = link.Cadence is { } c ? FormattableString.Invariant($" · {c:0} rpm") : "";
+        string heart = link.HeartRate is { } hr ? $" · {hr} bpm" : "";
+        SetText(_trTrainer, !link.Available ? "No Bluetooth on this build (Windows only): the keys pedal."
+            : link.PowerLive ? $"{devices}\n{link.Watts} W{cadence}{heart} · difficulty {link.Difficulty}%"
+            : link.Devices.Count > 0 ? $"{devices}\nNo power yet: pedal. Difficulty {link.Difficulty}%"
+            : $"No trainer: the keys pedal. Difficulty {link.Difficulty}%");
+
+        string shape = $"{phase}|{session.CanStart}|{session.OnCourse}|{link.Erg}|{link.ErgWhyNot}|{string.Join(",", link.Prefs.Recent)}|{link.Scanning}|{link.Difficulty}|{link.Prefs.Devices.Count}|"
+            + string.Join(",", link.Found.Select(f => f.Id)) + "|" + string.Join(",", link.Devices.Keys);
+        if (shape == _trShown && !force) return;
+        _trShown = shape;
+
+        var go = new Color(0.10f, 0.55f, 0.58f);
+        var grey = new Color(0.45f, 0.45f, 0.5f);
+        Clear(_trActions);
+        var row = UiKit.HBox(10);
+        bool riding = phase is Trainer.TrainingSession.Phase.Travelling or Trainer.TrainingSession.Phase.Mounting or Trainer.TrainingSession.Phase.Riding;
+        if (riding) row.AddChild(Small("Stop training", new Color(0.75f, 0.25f, 0.22f), () => session.Stop()));
+        else if (session.CanStart) row.AddChild(Small("Start training", go, session.Start));
+        row.AddChild(Small("Import GPX...", new Color(0.20f, 0.42f, 0.80f), session.Browse));
+        _trActions.AddChild(row);
+        if (phase == Trainer.TrainingSession.Phase.Riding)
+        {
+            // what the keys do while riding, for a pad and VR, which have no button left on a bike
+            var ride = UiKit.HBox(10);
+            if (!session.OnCourse) ride.AddChild(Small("Rejoin", go, session.Rejoin));
+            ride.AddChild(Small("Turn round", grey, session.UTurn));
+            ride.AddChild(Small("Left", grey, () => session.Choose(-1)));
+            ride.AddChild(Small("Right", grey, () => session.Choose(1)));
+            _trActions.AddChild(ride);
+            var erg = UiKit.HBox(10);
+            erg.AddChild(Small(link.Erg ? "ERG off" : "ERG", link.ErgWhyNot == null || link.Erg ? go : grey, () => link.SetErg(!link.Erg)));
+            if (link.Erg)
+            {
+                erg.AddChild(Small("-10 W", grey, () => link.StepErg(-1)));
+                erg.AddChild(Small("+10 W", grey, () => link.StepErg(1)));
+            }
+            _trActions.AddChild(erg);
+        }
+
+        Clear(_trRecent);
+        foreach (var path in link.Prefs.Recent.Where(p => p != session.CoursePath).Take(4))
+        {
+            var b = Row("Ride again: " + System.IO.Path.GetFileNameWithoutExtension(path));
+            b.Pressed += () => session.Load(path);
+            _trRecent.AddChild(b);
+        }
+
+        Clear(_trDevices);
+        if (link.Available)
+        {
+            var tools = UiKit.HBox(10);
+            tools.AddChild(Small(link.Scanning ? "Searching..." : "Search", go, () => link.Scan()));
+            if (link.Prefs.Devices.Count > 0) tools.AddChild(Small("Reconnect", grey, link.Reconnect));
+            tools.AddChild(Small("Easier", grey, () => link.Difficulty -= 10));
+            tools.AddChild(Small("Harder", grey, () => link.Difficulty += 10));
+            _trDevices.AddChild(tools);
+            foreach (var d in link.Found.Where(f => !link.Devices.ContainsKey(f.Id)))
+            {
+                var found = d;
+                var b = Row(Trainer.TrainerLink.Describe(found));
+                b.Pressed += () => link.Connect(found);
+                _trDevices.AddChild(b);
+            }
+        }
+        if (Inner.GuiGetFocusOwner() == null || !_training.IsAncestorOf(Inner.GuiGetFocusOwner())) Callable.From(() => FocusFirst(_training)).CallDeferred();
+    }
+
 
     /// <summary>The Photos app: the album's shots, newest first, as a grid.</summary>
     private Control BuildPhotos()
@@ -759,7 +888,7 @@ public partial class PhoneScreens : Node
         turn.FocusMode = Control.FocusModeEnum.None;
         side.AddChild(turn);
 
-        var hint = Big(InputHints.Pad ? "RT  shoot      LB RB  zoom      Y  selfie      B  back" : "Click / Enter  shoot      Wheel  zoom      F  selfie      Esc  back", 22, Ink);
+        var hint = Big(InputHints.Pad ? "L stick  walk      RT  shoot      LB RB  zoom      Y  selfie      B  back" : "WASD  walk      Click / Enter  shoot      Wheel  zoom      F  selfie      Esc  back", 22, Ink);
         hint.SetAnchorsPreset(Control.LayoutPreset.BottomWide);
         hint.OffsetTop = -54; hint.OffsetBottom = -20; hint.OffsetLeft = 40;
         page.AddChild(hint);
@@ -822,6 +951,7 @@ public partial class PhoneScreens : Node
         _photos.Visible = page == Page.Photos;
         _photo.Visible = page == Page.Photo;
         _travel.Visible = page == Page.Travel;
+        _training.Visible = page == Page.Training;
         switch (page)
         {
             case Page.Home:
@@ -847,6 +977,10 @@ public partial class PhoneScreens : Node
             case Page.Photo:
                 Callable.From(() => FocusFirst(_photo)).CallDeferred();
                 break;
+            case Page.Training:
+                _trShown = "";
+                RefreshTraining(force: true);
+                break;
             case Page.Activities:
                 _actShown = "";
                 _actRefreshAt = 0;
@@ -869,6 +1003,7 @@ public partial class PhoneScreens : Node
             _homeDate.Text = date;
         }
         if (Shown == Page.Activities) RefreshActivities(force: false);
+        if (Shown == Page.Training) RefreshTraining(force: false);
         if (Shown == Page.Travel) SetText(_travelDots, ((int)(RealClock.Now * 3) % 3) switch { 0 => "●  ○  ○", 1 => "○  ●  ○", _ => "○  ○  ●" });
         if (_flash.Color.A > 0f) _flash.Color = new Color(1, 1, 1, Mathf.MoveToward(_flash.Color.A, 0f, dt / 0.35f));
     }

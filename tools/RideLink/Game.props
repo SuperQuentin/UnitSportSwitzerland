@@ -1,0 +1,24 @@
+<Project>
+  <!--
+    Home trainers in the game (#901, docs/plans/home-trainer-rides.md), imported by UnitSportSwitzerland.csproj.
+    RideLink's Bluetooth transport is WinRT, so a Windows build targets the Windows TFM and gets TRAINER_BLE;
+    other platforms ride on keys or the simulated trainer. Kept out of the csproj itself because Godot's
+    import rewrites the csproj and drops a TargetFramework it does not expect (that is what left
+    UnitSportSwitzerland.csproj.old behind).
+  -->
+  <PropertyGroup Condition=" '$(GodotTargetPlatform)' == 'windows' ">
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <!-- releases are built on Linux (#1170): without this, dotnet refuses a Windows TFM there (NETSDK1100) -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <DefineConstants>$(DefineConstants);TRAINER_BLE</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)src\RideLink\RideLink.csproj" />
+    <ProjectReference Include="$(MSBuildThisFileDirectory)src\RideLink.Simulation\RideLink.Simulation.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition=" '$(GodotTargetPlatform)' == 'windows' ">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)src\RideLink.Bluetooth.Windows\RideLink.Bluetooth.Windows.csproj" />
+  </ItemGroup>
+</Project>

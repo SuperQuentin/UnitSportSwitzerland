@@ -91,3 +91,5 @@ for the rule: run it with SITG ignored and compare with SITG's gantries.
 - Where SITG builds them (4 gantries; 3 more wanted with no clear ground for a post): signs as many as the lane runs 2 of 4 (the
   other 2: SITG has more signs); colours from the inference against SITG's 2 of 4 (1 of 4 with green at 2 km / 45 deg).
 - Small numbers: the rule is a fallback, not a measurement. Rerun with `RoadGen --rewrite` then `--gantry-benchmark <temp>`.
+- **Fixed** (#1189): `OsmOverlayReader` dropped the v4 `destination*` columns, so no sign was ever named by OSM; read now.
+  The signal test region's J21/J22 (`signal-test-region`) show the rule's gantries with OSM-named signs.

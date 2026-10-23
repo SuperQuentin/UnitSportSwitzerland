@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>RideLink.Ant</RootNamespace>
+    <Description>
+      ANT+ profile layer for RideLink: channel configuration, data-page parsing and FE-C
+      control pages, behind an IAntChannelHost seam so the licence-gated ANT Managed Library
+      is an adapter rather than a dependency.
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RideLink\RideLink.csproj" />
+  </ItemGroup>
+
+</Project>

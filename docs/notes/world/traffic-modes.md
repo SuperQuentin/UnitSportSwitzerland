@@ -2,7 +2,7 @@
 
 The shared base the modes beyond cars and trains plug into: walkers (#1033), riders (#1056), trams (#1057). Like the cars
 (`traffic-trains`): local and cosmetic per client, solid, a density each, rebuilt as the view enters a new tile. Every new
-mover is a solid coloured box for now. The base adds no mode behaviour: each density is 0 by default and every builder
+mover collides as a solid box and looks like a blocky low-poly model (#1147, below). The base adds no mode behaviour: each density is 0 by default and every builder
 returns no graph, so nothing spawns and the cars run exactly as before.
 
 ## Files: one per mode, the shared part apart
@@ -28,7 +28,8 @@ returns no graph, so nothing spawns and the cars run exactly as before.
 
 ## Walkers and riders: `SlowMover`
 
-- One box (`BoxUnit`: shared unit-cube mesh scaled, shared material per kind, `AnimatableBody3D` named by kind) on a
+- One unit (`BoxUnit`: the model's shared mesh under the cars' `_bodyMaterial`, its lamps if any under `_lampMaterial`,
+  a collision box of the `MoverLook` size, `AnimatableBody3D` named by kind) on a
   `Route`; `Lateral` m right of its edge's line; `Holding` (waiting on purpose, never culled as stuck), `InLane` (in a car
   lane: cars follow it), `Group`, `Wait`, `State` free for the mode. Pooled (hidden, collision off) when dropped.
 - `MoverLook` per kind (size, colour, cruise ± spread, spawn ring `Near` / `SpawnMin`-`SpawnMax`, `Despawn`, `Drawn`):
@@ -82,3 +83,15 @@ headless at `--fixed-fps 60`, before and after: the same counts line for line.
 `TramsReady` is true: `traffic-trams` (the graph, driving, lights and stops) and `tools/tram-approaches` (RoadGen's side).
 Shared code touched: `LaneGraph.Build` adds the tram paths at lights as conflict ways (cars give way to trams) and calls
 `TramYields` for the cars' paths of cores without lights.
+
+## Models (#1147)
+
+- `Avatar/TrafficModeMeshBuilder.cs`, the traffic cars' style (`TrafficMeshBuilder`): a few vertex-coloured boxes each,
+  authored +Z forward (built facing -Z), origin at the bottom middle, inside the mover's collision box.
+  `Walker(look)` (8 clothes x 4 skins, hair), `Rider(look)` (octagon tyres, spoke cross, bar frame, rider leaning to the bars,
+  helmet; 6 bike/jersey x 4 skins), `TramSection(livery, length, cabFront, cabBack, pantograph, bellows)` (low skirt, window
+  band, pair doors, cab noses with raked windscreens, head/tail and destination lamps, a bellows over the 0.6 m gangway, the
+  pantograph on the middle section; liveries Geneva, Geneva older, Zurich, Basel). Cached per key: one mesh per look.
+- A pooled walker/rider keeps the look it was built with (`_rng` at creation); a tram draws one livery for all its sections.
+- No animation (no leg swing): nothing per frame. Model viewer: Traffic (`Walker`, `Walkers, looks`, `Rider`, `Riders, looks`,
+  `Tram, <livery>`, `Tram section, front cab`).
