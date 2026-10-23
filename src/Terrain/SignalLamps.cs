@@ -328,13 +328,17 @@ void fragment() {
                 until = Math.Min(until, plan.UntilChange(lens.Flash, t) / PlanSpeed);
             }
             // a permissive turn's flashing yellow (#1109): a ball head's own yellow lens, the lamp left of a combined arrow head, an
-            // uncombined arrow's yellow in place of its green (the user: "it takes the place of the green arrow")
+            // uncombined arrow's yellow in place of its green (the user: "it takes the place of the green arrow"); a head whose turn
+            // gives way all through its green its amber lens in the green's place (#1165)
+            if (lens.AmberGreen) colour = AmberOff;
             if (lens.Blink is { } blink)
             {
                 if (plan.State(blink, t) == SignalAspect.FlashingAmber)
                 {
                     blinking = true;
-                    if (lens.Role == SignalBuilder.Role.Green) colour = GreenOff;
+                    // (an amber lens in the green's place, #1165: flashing for the green it replaces)
+                    if (lens.AmberGreen) colour = blinkOn ? AmberOn : AmberOff;
+                    else if (lens.Role == SignalBuilder.Role.Green) colour = GreenOff;
                     else if (blinkOn) colour = AmberOn;
                 }
                 until = Math.Min(until, plan.UntilChange(blink, t) / PlanSpeed);

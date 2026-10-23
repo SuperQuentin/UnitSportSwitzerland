@@ -726,7 +726,8 @@ public partial class RaceManager : Node, IOriginShiftAware
     private static float SlowPace(int mount) => mount switch
     {
         (int)RideKind.OnFoot or (int)RideKind.Skis or (int)RideKind.Snowboard or Open => 2f,
-        (int)RideKind.RoadBike or (int)RideKind.Paraglider => 4f,
+        (int)RideKind.Paraglider => 4f,
+        _ when BicycleCatalog.IsBicycle((RideKind)mount) => 4f,
         (int)RideKind.Plane => 25f,
         (int)RideKind.Helicopter or (int)RideKind.Wingsuit => 15f,
         _ => 10f,   // cars, motorbikes
@@ -823,7 +824,8 @@ public partial class RaceManager : Node, IOriginShiftAware
     private static float MaxPace(int mount) => (RideKind)mount switch
     {
         RideKind.OnFoot => 14f,
-        RideKind.RoadBike or RideKind.Skis or RideKind.Snowboard => 45f,
+        RideKind.Skis or RideKind.Snowboard => 45f,
+        var bike when BicycleCatalog.IsBicycle(bike) => 45f,
         RideKind.Paraglider or RideKind.Wingsuit or RideKind.Parachute => 70f,
         RideKind.Helicopter or RideKind.Plane => 120f,
         _ => 125f,   // cars and motorbikes: 450 km/h

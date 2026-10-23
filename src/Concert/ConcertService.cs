@@ -10,7 +10,7 @@ using UnitSport.Terrain.Stadiums;
 namespace UnitSport.Concert;
 
 /// <summary>What an operator's cue does to the desk on every peer.</summary>
-public enum CueKind : byte { Go = 0, Section = 1, Bpm = 2, Blackout = 3, Master = 4, Fx = 5, Camera = 6 }
+public enum CueKind : byte { Go = 0, Section = 1, Bpm = 2, Blackout = 3, Master = 4, Fx = 5, Camera = 6, Voice = 7, Music = 8 }
 
 /// <summary>
 /// Hosting a set and running it live (#885), at <c>World/Concerts</c> on the server and every client.
@@ -63,6 +63,8 @@ public partial class ConcertService : Node
         public int Held = -1;
         public bool Blackout;
         public float Master = 1f, Bpm;
+        /// <summary>The PA's voice/music mix (#1153), 0..1 each.</summary>
+        public float Voice = 1f, Music = 1f;
         public int Camera = -1;
         public double BpmAt;
     }
@@ -120,6 +122,17 @@ public partial class ConcertService : Node
         return $"tonight {Clock(e.StartHour)}-{Clock(e.EndHour)}, {e.Artist} ({e.Genre})";
     }
 
+    /// <summary>
+    /// <c>/concert join</c> (#1173): the venues with a set hosted now, nearest <paramref name="at"/> first
+    /// (catalog order without a position); empty when nobody hosts.
+    /// </summary>
+    public List<StadiumSpec> HostedVenues(GlobalPos? at)
+    {
+        var venues = _hosted.Where(kv => kv.Value.Seed >= 0 && kv.Key >= 0 && kv.Key < StadiumCatalog.All.Length)
+            .OrderBy(kv => kv.Key).Select(kv => StadiumCatalog.All[kv.Key]);
+        return at is { } p ? [.. venues.OrderBy(v => p.HorizontalDistanceTo(new GlobalPos(v.E, v.N, 0)))] : [.. venues];
+    }
+
     /// <summary>The cues in force at a stadium, if a set is hosted there.</summary>
     public (int Held, bool Blackout, float Master)? CuesOf(int stadium) =>
         _hosted.TryGetValue(stadium, out var h) ? (h.Held, h.Blackout, h.Master) : null;
@@ -136,6 +149,7 @@ public partial class ConcertService : Node
         d.Blackout = h.Blackout;
         d.Master = h.Master;
         d.Camera = h.Camera;
+        rig.Music.Mix = new Vector2(h.Voice, h.Music);
         if (h.Bpm > 0) d.SetTempo(h.Bpm, h.BpmAt % 86400.0);
     }
 
@@ -192,6 +206,9 @@ public partial class ConcertService : Node
                     case "bpm": ServeCue(stadium, (int)CueKind.Bpm, arg, when); return $"Tempo {arg:F0}.";
                     case "blackout": ServeCue(stadium, (int)CueKind.Blackout, parts.Length > 2 ? arg : (hc.Blackout ? 0 : 1), when); return "Blackout.";
                     case "master": ServeCue(stadium, (int)CueKind.Master, arg, when); return $"Master {arg:F2}.";
+                    // the PA's mix (#1153): the singer and the band, on CDs burnt with their stems
+                    case "voice": ServeCue(stadium, (int)CueKind.Voice, arg, when); return $"Voice {arg:F2}.";
+                    case "music": ServeCue(stadium, (int)CueKind.Music, arg, when); return $"Music {arg:F2}.";
                     case "release": ServeCue(stadium, (int)CueKind.Section, -1, when); return "The song runs the sections again.";
                     case "camera":
                         int cam = parts.Length > 2 && int.TryParse(parts[2], out int n) ? n - 1 : -1;
@@ -204,14 +221,14 @@ public partial class ConcertService : Node
                     case "pyro": ServeCue(stadium, (int)CueKind.Fx, (int)RigGroup.Airbursts, when); return "Airbursts!";
                     default:
                         if (Enum.TryParse<ShowSection>(what, true, out var sec)) { ServeCue(stadium, (int)CueKind.Section, (int)sec, when); return $"Held: {sec}."; }
-                        return "/concert cue go | calm|groove|chorus|peak|blackout | release | bpm <n> | master <0..1> | flames|co2|confetti|gerbs|pyro | camera <1..11|auto>";
+                        return "/concert cue go | calm|groove|chorus|peak|blackout | release | bpm <n> | master <0..1> | voice <0..1> | music <0..1> | flames|co2|confetti|gerbs|pyro | camera <1..11|auto>";
                 }
             case "status":
                 return _hosted.TryGetValue(stadium, out var h) && h.Seed >= 0
                     ? $"{name}: set {h.Seed} ({ConcertPlanner.Plan(StadiumCatalog.All[stadium], h.Seed).Artist}), operator {h.Operator}"
                     : $"{name}: tonight's show; '/concert host [seed]' takes it";
             default:
-                return "/concert host [seed] | release | status | song [list | next | prev | <n | title> | stop | play | auto]; on your own game: /concert input artnet|sacn|osc on|off, /concert patch";
+                return "/concert join | host [seed] | release | status | song [list | next | prev | <n | title> | stop | play | auto]; on your own game: /concert input artnet|sacn|osc on|off, /concert patch";
         }
     }
 
@@ -249,7 +266,7 @@ public partial class ConcertService : Node
     private void SendState(long peer, int stadium)
     {
         var h = _hosted.GetValueOrDefault(stadium) ?? new Hosted();
-        RpcId(peer, MethodName.State, stadium, h.Seed, h.Operator, h.Held, h.Blackout, h.Master, h.Bpm, h.BpmAt, h.Camera);
+        RpcId(peer, MethodName.State, stadium, h.Seed, h.Operator, h.Held, h.Blackout, h.Master, h.Bpm, h.BpmAt, h.Camera, new Vector2(h.Voice, h.Music));
     }
 
     /// <summary>Server: what a joining player must know (<c>ServerWorld.OnPeerAccepted</c>).</summary>
@@ -436,6 +453,8 @@ public partial class ConcertService : Node
             case CueKind.Bpm: h.Bpm = value; h.BpmAt = at; break;
             case CueKind.Blackout: h.Blackout = value > 0.5f; break;
             case CueKind.Master: h.Master = Math.Clamp(value, 0f, 1f); break;
+            case CueKind.Voice: h.Voice = Math.Clamp(value, 0f, 1f); break;
+            case CueKind.Music: h.Music = Math.Clamp(value, 0f, 1f); break;
             case CueKind.Camera: h.Camera = value < 0 ? -1 : Math.Clamp((int)value, 0, ConcertCameras.Names.Length - 1); break;
             case CueKind.Fx:
                 // a shot of an effect: not state, a moment; every peer fires it at that instant
@@ -465,10 +484,14 @@ public partial class ConcertService : Node
     // ---- the clients ------------------------------------------------------------------------------
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void State(int stadium, int seed, long op, int held, bool blackout, float master, float bpm, double bpmAt, int camera)
+    private void State(int stadium, int seed, long op, int held, bool blackout, float master, float bpm, double bpmAt, int camera, Vector2 mix)
     {
         if (seed < 0) { _hosted.Remove(stadium); _rigs.Remove(stadium); }
-        else _hosted[stadium] = new Hosted { Seed = seed, Operator = op, Held = held, Blackout = blackout, Master = master, Bpm = bpm, BpmAt = bpmAt, Camera = camera };
+        else _hosted[stadium] = new Hosted
+        {
+            Seed = seed, Operator = op, Held = held, Blackout = blackout, Master = master, Bpm = bpm, BpmAt = bpmAt, Camera = camera,
+            Voice = mix.X, Music = mix.Y,
+        };
         ApplyState(stadium);
     }
 

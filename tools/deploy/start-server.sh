@@ -24,6 +24,8 @@ if [ "${1-}" = run ]; then
   exit 0
 fi
 
+# the house layout service (#1186), its own session: started here so cron and every deploy bring it up too
+[ -x "$DIR/start-layouts.sh" ] && "$DIR/start-layouts.sh"
 tmux has-session -t "$SESSION" 2>/dev/null && { echo "already running (tmux attach -t $SESSION)"; exit 0; }
 # a fetch whose server was then stopped from outside (a deploy, a reboot): that start decides the build, not it
 rm -f "$DIR/pending-update"

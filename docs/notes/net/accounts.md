@@ -40,7 +40,7 @@
 - A mode other than off with no `--nakama-url`, or an unknown mode, stops the server at start with the reason,
   before any world loads.
 
-## The account step (`Net/Accounts/AccountGate`, `World/Accounts`, protocol 46)
+## The account step (`Net/Accounts/AccountGate`, `World/Accounts`, protocol 49)
 
 - It runs right after the version check (`Handshake`), whose RPCs never change.
 - With `off`, the server sends `Welcome("")` at once.

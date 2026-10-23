@@ -179,7 +179,9 @@ public class SignalPlanTests(ITestOutputHelper output)
     [Fact]
     public void RightPocketWithoutOverlap_GoesWithItsApproachAndTheFlasher()
     {
-        // no left pocket anywhere: no leading phase for the right arrows to overlap
+        // no left pocket anywhere: no leading phase for the right arrows to overlap; protected with its approach, the east arm's
+        // walkers it crosses would be green in no phase (they cross the east-west traffic in the other): the one case it stays
+        // permissive (#1119, without adding a phase)
         var plan = SignalPlan.Build([Arm(N), Arm(E), Arm(S, right: true), Arm(W)]);
         AssertValid(plan);
         Assert.DoesNotContain(plan.Groups, g => g.Kind == SignalGroupKind.RightArrow);
@@ -468,6 +470,67 @@ public class SignalPlanTests(ITestOutputHelper output)
         Assert.True(Start(riders) <= Start(cars) + 0.05f, "the riders never start after their cars");
     }
 
+    [Fact]
+    public void LoneBikeLaneIntoABox_OneRidersGroupWithEveryMove()
+    {
+        // #1184 (the user, J8 N): a T's stem with one bike lane serving its riders' left and right into a bike box: one bike group
+        // with both moves (no right-only one), going with the stem's cars, never ending before them (the riders wait in front)
+        var arms = new List<SignalArm> { Arm(N) with { RiderAll = true, RiderBox = true, RiderRight = true }, Arm(E), Arm(W) };
+        var plan = SignalPlan.Build(arms, 7);
+        AssertValid(plan);
+        var riders = plan.Groups.Select((g, k) => (g, k)).Where(p => p.g.Kind == SignalGroupKind.Bike && p.g.Arm == 0).ToList();
+        Assert.Single(riders);
+        Assert.Equal(SignalMoves.Left | SignalMoves.Right, riders[0].g.Moves);
+        Assert.True(SignalPlan.BoxRiders(riders[0].g));
+        int box = riders[0].k, cars = Group(plan, SignalGroupKind.Car, 0);
+        Assert.NotEmpty(WhenGreen(plan, box, cars));
+        var conflicts = plan.Conflicts();
+        int n = plan.Groups.Count;
+        var times = new float[n, n];
+        for (int g = 0; g < n; g++)
+            for (int h = 0; h < n; h++)
+                times[g, h] = conflicts[g, h] == SignalPlan.Conflict.Hard ? (g == box ? 8f : 3f) : float.NaN;
+        Assert.True(plan.Retime(times), "retimed");
+        AssertValid(plan);
+        float End(int g) => plan.Groups[g].Intervals.Where(v => v.Aspect == SignalAspect.Green).Select(v => v.To).First();
+        Assert.True(End(box) >= End(cars) - 0.05f, "the box's riders end before the cars behind them");
+
+        // on a crossroads the box's riders turning left give way to the oncoming traffic as the cars behind them do: they share
+        // the oncoming cars' green; turning they give way to the walkers too
+        var cross = new List<SignalArm> { Arm(N) with { RiderAll = true, RiderBox = true }, Arm(E), Arm(S), Arm(W) };
+        var four = SignalPlan.Build(cross, 7);
+        AssertValid(four);
+        int all = four.Groups.FindIndex(g => g.Kind == SignalGroupKind.Bike && g.Arm == N);
+        Assert.Equal(SignalMoves.Left | SignalMoves.Through | SignalMoves.Right, four.Groups[all].Moves);
+        Assert.NotEmpty(WhenGreen(four, all, Group(four, SignalGroupKind.Car, S)));
+        Assert.Equal(SignalPlan.Conflict.Permissive, four.Conflicts()[all, Group(four, SignalGroupKind.Pedestrian, E)]);
+    }
+
+    /// <summary>
+    /// #1192 (J21 in the test region, its approach from the ramps): a lone bike lane into a box on one arm, both pockets on every
+    /// arm, so the oncoming arm's car group goes straight on only. The box's riders turning left give way to those through cars
+    /// (a permissive pair), but the through cars give way to nobody: no flasher beside them (it had one with nothing on its plate).
+    /// Every car flasher left warns its turns of someone.
+    /// </summary>
+    [Fact]
+    public void BoxRidersTurningLeft_GiveTheOncomingThroughCarsNoFlasher()
+    {
+        var plan = SignalPlan.Build([Arm(N, true, true), Arm(E, true, true), Arm(S, true, true) with { RiderAll = true, RiderBox = true },
+            Arm(W, true, true)], 7);
+        AssertValid(plan);
+        int box = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Bike && g.Arm == S);
+        Assert.True(SignalPlan.BoxRiders(plan.Groups[box]));
+        int through = Group(plan, SignalGroupKind.Car, N);
+        Assert.Equal(SignalMoves.Through, plan.Groups[through].Moves);
+        var conflicts = plan.Conflicts();
+        Assert.Equal(SignalPlan.Conflict.Permissive, conflicts[box, through]);
+        Assert.False(plan.GivesWayTo(through, box, conflicts));
+        Assert.DoesNotContain(plan.Groups, g => g.Kind == SignalGroupKind.Flasher && g.Qualifies == through);
+        for (int f = 0; f < plan.Groups.Count; f++)
+            if (plan.Groups[f].Kind == SignalGroupKind.Flasher && plan.Groups[plan.Groups[f].Qualifies].Kind == SignalGroupKind.Car)
+                Assert.NotEqual(SignalPlate.None, plan.PlateOf(f).Plate);
+    }
+
     /// <summary>
     /// Geneva's 10-arm node at LV95 2500974,1117838 (#1030): split phasing ran its 9 approaches one by one, 5 s greens, to 157 s
     /// once timed from conflict times. 120 s is the legal maximum (the user): approaches that never conflict share a phase.
@@ -519,12 +582,14 @@ public class SignalPlanTests(ITestOutputHelper output)
     [Fact]
     public void FlasherPlate_WalkersOnly_APedestrian()
     {
-        // no bikes: the northbound turns cross only the crossings green with them
+        // no bikes: the northbound right turn crosses only the east crossing green with it: a walker. Its left turn crosses the west
+        // one and gives way to the oncoming cars: a mix, the turn's arrow (#1117, the user: "bike if only bike, pedestrian if only
+        // pedestrian, arrow if mix of conflicts")
         var plan = SignalPlan.Build([Arm(N), Arm(E), Arm(S), Arm(W)]);
         int nb = Group(plan, SignalGroupKind.Car, S);
-        var (plate, arrow) = plan.PlateOf(FlasherOf(plan, nb));
-        Assert.Equal(SignalPlate.Pedestrian, plate);
-        Assert.NotEqual(SignalMoves.None, arrow & (SignalMoves.Left | SignalMoves.Right));
+        Assert.Equal((SignalPlate.Pedestrian, SignalMoves.Right), plan.PlateOf(FlasherOf(plan, nb), turns: SignalMoves.Right));
+        Assert.Equal((SignalPlate.Arrow, SignalMoves.Left), plan.PlateOf(FlasherOf(plan, nb), turns: SignalMoves.Left));
+        Assert.Equal((SignalPlate.Arrow, SignalMoves.Left), plan.TurnPlate(nb, SignalMoves.Left));
         // not a flasher, or a bike group's (its own yellow, no lamp): no plate
         Assert.Equal(SignalPlate.None, plan.PlateOf(nb).Plate);
     }
@@ -557,10 +622,12 @@ public class SignalPlanTests(ITestOutputHelper output)
     [Fact]
     public void FlasherPlate_RidersOnly_ABike()
     {
-        // walkers on no arm: what the turns cross is the riders' way
+        // walkers on no arm: the right turn crosses only the riders' way, a bike; the left turn crosses the oncoming riders and gives
+        // way to the oncoming cars: a mix, its arrow (#1117)
         var plan = SignalPlan.Build([Arm(N, peds: false, bike: true), Arm(E, peds: false, bike: true), Arm(S, peds: false, bike: true), Arm(W, peds: false, bike: true)]);
         int nb = Group(plan, SignalGroupKind.Car, S);
-        Assert.Equal(SignalPlate.Bike, plan.PlateOf(FlasherOf(plan, nb)).Plate);
+        Assert.Equal(SignalPlate.Bike, plan.PlateOf(FlasherOf(plan, nb), turns: SignalMoves.Right).Plate);
+        Assert.Equal((SignalPlate.Arrow, SignalMoves.Left), plan.PlateOf(FlasherOf(plan, nb), turns: SignalMoves.Left));
     }
 
     [Fact]
@@ -604,5 +671,104 @@ public class SignalPlanTests(ITestOutputHelper output)
             Assert.Empty(plan.LeftGivesWayTo(g));
             Assert.Null(plan.LeftFlash(g));
         }
+    }
+
+    [Fact]
+    public void TeeStem_WithALeftAndARightLane_EachTurnItsOwnGroup_Protected()
+    {
+        // #1119, the user: every turn-only lane its own light. The stem (south) has a left and a right pocket and no through: a left
+        // arrow and a right arrow, no ball for both; both protected in the side phase
+        var plan = SignalPlan.Build([Arm(E, left: true), Arm(S, left: true, right: true), Arm(W, right: true)]);
+        AssertValid(plan);
+        Assert.Equal(-1, Group(plan, SignalGroupKind.Car, 1));
+        int l = Group(plan, SignalGroupKind.LeftArrow, 1), r = Group(plan, SignalGroupKind.RightArrow, 1);
+        Assert.True(l >= 0 && r >= 0);
+        var c = plan.Conflicts();
+        foreach (int g in (int[])[l, r])
+        {
+            Assert.NotEmpty(WhenGreen(plan, g));
+            for (int h = 0; h < plan.Groups.Count; h++)
+                if (c[g, h] != SignalPlan.Conflict.None) Assert.Empty(WhenGreen(plan, g, h));
+        }
+    }
+
+    [Fact]
+    public void RightPocket_ProtectedWithItsApproach_WhereItsWalkersKeepAnotherGreen()
+    {
+        // #1119, the user: "even right turns with their own lanes are usually protected". Left pockets on the north-south road
+        // give it a lead phase in which the east arm's walkers (across the northbound right turn's exit) are green: the right
+        // arrow no phase carried before goes with its approach, the walkers red meanwhile, green in the lead
+        var plan = SignalPlan.Build([Arm(N, left: true), Arm(E), Arm(S, left: true, right: true), Arm(W)]);
+        AssertValid(plan);
+        int r = plan.Groups.FindIndex(g => g.Arm == S && (g.Kind == SignalGroupKind.RightArrow || g is { Kind: SignalGroupKind.Car, Moves: SignalMoves.Right }));
+        Assert.Equal(SignalGroupKind.RightArrow, plan.Groups[r].Kind);
+        var c = plan.Conflicts();
+        Assert.NotEmpty(WhenGreen(plan, r));
+        for (int h = 0; h < plan.Groups.Count; h++)
+            if (c[r, h] == SignalPlan.Conflict.Hard) Assert.Empty(WhenGreen(plan, r, h));
+        Assert.NotEmpty(WhenGreen(plan, Group(plan, SignalGroupKind.Pedestrian, E)));
+    }
+
+    [Fact]
+    public void FromGeneva_AStemWithTwoLanesWhoseRightTurnCannotBeProtected_StillGoesGreen()
+    {
+        // LV95 2499873,1117528 (#1119): a one-way in and a stem with a left and a right lane; the right arrow, held off the walkers
+        // it crosses in no phase, gives way with the stem's left arrow (its plan was written invalid: the right turn never green)
+        double D(double deg) => deg * Math.PI / 180;
+        var plan = SignalPlan.Build([
+            new SignalArm(D(-154), false, true, Pedestrians: true, CrossingM: 10, Rank: 18),
+            new SignalArm(D(-64), true, false, Pedestrians: true, CrossingM: 8, Rank: 18),
+            new SignalArm(D(27), false, true, Pedestrians: true, CrossingM: 8, Rank: 2),
+            new SignalArm(D(116), true, true, LeftPocket: true, RightPocket: true, Pedestrians: true, CrossingM: 9.5f, Rank: 2)]);
+        AssertValid(plan);
+        Assert.Contains(plan.Groups, g => g is { Kind: SignalGroupKind.LeftArrow, Arm: 3 });
+    }
+    [Fact]
+    public void RightTurnBikeLane_HasItsOwnGroup_ProtectedWithTheRightArrow()
+    {
+        // #1165, the user: "right turn only bike lanes should get their own light". Left pockets everywhere: the right arrows are
+        // protected (#1119); the riders' own right-turn lane at the kerb (layout b) goes with its approach's right arrow, protected
+        // too, and the through riders' group goes straight on only
+        var plan = SignalPlan.Build([Arm(N, true, true), Arm(E, true, true),
+            Arm(S, true, true, bike: true) with { RiderRight = true, BikeBetween = true }, Arm(W, true, true)]);
+        AssertValid(plan);
+        var bikes = plan.Groups.Where(g => g.Kind == SignalGroupKind.Bike && g.Arm == S).ToList();
+        Assert.Equal(2, bikes.Count);
+        Assert.Contains(bikes, g => g.Moves == SignalMoves.Through);
+        int riders = plan.Groups.FindIndex(g => g is { Kind: SignalGroupKind.Bike, Moves: SignalMoves.Right } && g.Arm == S);
+        int right = Group(plan, SignalGroupKind.RightArrow, S);
+        Assert.True(riders >= 0 && right >= 0);
+        var c = plan.Conflicts();
+        Assert.Equal(SignalPlan.Conflict.None, c[riders, right]);
+        Assert.NotEmpty(WhenGreen(plan, riders));
+        Assert.NotEmpty(WhenGreen(plan, riders, right));
+        // protected: never green with the walkers across its exit, no flasher
+        Assert.Empty(WhenGreen(plan, riders, Group(plan, SignalGroupKind.Pedestrian, E)));
+        Assert.DoesNotContain(plan.Groups, g => g.Kind == SignalGroupKind.Flasher && g.Qualifies == riders);
+        // the paths' group (RoadGen's PathGroup, the riders' BikeGroupFor): the right-only group for a right turn
+        Assert.Equal(riders, plan.Groups.FindIndex(g => g.Arm == S && g.Kind == SignalGroupKind.Bike && (g.Moves & SignalMoves.Right) != 0));
+    }
+
+    [Fact]
+    public void RightTurnBikeLane_WithAPermissiveRightTurn_GivesWayToTheExitsWalkers()
+    {
+        // no left pockets: the right pocket's arrow finds no protected phase and goes with its approach giving way (#1109); the
+        // riders' right turn with it, their own yellow flashing
+        var plan = SignalPlan.Build([Arm(N), Arm(E), Arm(S, right: true) with { RiderRight = true, BikeBetween = true }, Arm(W)]);
+        AssertValid(plan);
+        int riders = plan.Groups.FindIndex(g => g is { Kind: SignalGroupKind.Bike, Moves: SignalMoves.Right } && g.Arm == S);
+        Assert.True(riders >= 0);
+        Assert.DoesNotContain(plan.Groups, g => g.Kind == SignalGroupKind.Bike && g.Arm == S && g.Moves != SignalMoves.Right);
+        Assert.NotEmpty(WhenGreen(plan, riders, Group(plan, SignalGroupKind.Pedestrian, E)));
+        Assert.Contains(plan.Groups, g => g.Kind == SignalGroupKind.Flasher && g.Qualifies == riders);
+    }
+
+    [Fact]
+    public void SharedBikeLane_KeepsTheCombinedGroup()
+    {
+        var plan = SignalPlan.Build([Arm(N, true, true), Arm(E, true, true), Arm(S, true, true, bike: true), Arm(W, true, true)]);
+        AssertValid(plan);
+        var bike = Assert.Single(plan.Groups, g => g.Kind == SignalGroupKind.Bike && g.Arm == S);
+        Assert.Equal(SignalMoves.Through | SignalMoves.Right, bike.Moves);
     }
 }

@@ -276,7 +276,8 @@ public partial class PhoneController : Node
 
     /// <summary>
     /// Who has the keys and the mouse: with the phone out, the phone (the body stands, the cursor
-    /// shows); in the camera app, the mouse looks (the phone films where the view points).
+    /// shows); in the camera app, the mouse looks (the phone films where the view points), and once
+    /// the phone is open in it the body walks too (#1149): WASD, the stick, Space (opening, it stands).
     /// </summary>
     private void Grip()
     {
@@ -287,7 +288,7 @@ public partial class PhoneController : Node
             return;
         }
         bool phone = _stage != Stage.Pocket && !(_stage is Stage.Open or Stage.Opening && _screens.Shown == PhoneScreens.Page.Camera);
-        UiFocus.Set(this, _stage != Stage.Pocket);
+        UiFocus.Set(this, _stage != Stage.Pocket && !(_stage == Stage.Open && _screens.Shown == PhoneScreens.Page.Camera));
         if (_blocked()) return;
         if (phone) MouseCapture.Mode = Input.MouseModeEnum.Visible;
         else MouseCapture.Capture();
@@ -347,6 +348,7 @@ public partial class PhoneController : Node
                 break;
             case Stage.Opening when _fold >= 1f && _cover == coverWant:
                 _stage = Stage.Open;
+                Grip();
                 break;
             case Stage.Closing when _cover <= 0f && _camApp <= 0f && _fold <= 0.05f:
                 _stage = Stage.Folded;
@@ -1053,11 +1055,13 @@ public partial class PhoneController : Node
         if (e.IsActionPressed("ui_cancel") || e.IsActionPressed(PlayerInput.Menu) || e is InputEventKey { PhysicalKeycode: Key.Escape }) Back();
         else if (e is InputEventMouseButton { ButtonIndex: MouseButton.Right } || e is InputEventKey { PhysicalKeycode: Key.F or Key.Tab }
                  || e is InputEventJoypadButton { ButtonIndex: JoyButton.Y }) SetSelfie(!_selfie);
-        else if (e is InputEventMouseButton { ButtonIndex: MouseButton.Left } || IsSelect(e) || e.IsActionPressed(PlayerInput.TriggerRight)) _ = TakePhoto();
+        // WASD, Space and the pad's A walk and jump the body (#1149, read held by it): not the phone's
+        else if (e is InputEventMouseButton { ButtonIndex: MouseButton.Left } || e is InputEventKey { PhysicalKeycode: Key.Enter or Key.KpEnter }
+                 || e.IsActionPressed(PlayerInput.TriggerRight)) _ = TakePhoto();
         else if (e is InputEventMouseButton { ButtonIndex: MouseButton.WheelUp } || e is InputEventJoypadButton { ButtonIndex: JoyButton.RightShoulder }
-                 || e is InputEventKey { PhysicalKeycode: Key.W or Key.Up }) Zoom(1);
+                 || e is InputEventKey { PhysicalKeycode: Key.Up }) Zoom(1);
         else if (e is InputEventMouseButton { ButtonIndex: MouseButton.WheelDown } || e is InputEventJoypadButton { ButtonIndex: JoyButton.LeftShoulder }
-                 || e is InputEventKey { PhysicalKeycode: Key.S or Key.Down }) Zoom(-1);
+                 || e is InputEventKey { PhysicalKeycode: Key.Down }) Zoom(-1);
     }
 
     private void Zoom(int step)

@@ -106,9 +106,10 @@ public sealed class LodPolicy
     /// <summary>
     /// The player's table. Low data (#63) takes the Low table within <see cref="GameSettings.LowDataRings"/>:
     /// full tiles (~0.5 MB each, more with buildings) only in the nearest rings, the 5 KB coarse
-    /// companions out to the cap, and the horizon past it.
+    /// companions out to the cap, and the horizon past it. In VR the preset is the headset's own
+    /// (<see cref="GameSettings.VrDetail"/>, #1036).
     /// </summary>
     public static LodPolicy FromSettings(GameSettings s) => s.LowDataActive
         ? Create(DetailPreset.Low, Math.Min(s.RenderDistanceRings, GameSettings.LowDataRings), Styles.StyleKit.FinestStride)
-        : Create(s.Detail, s.RenderDistanceRings, Styles.StyleKit.FinestStride);
+        : Create(XR.XrSession.Active ? s.VrDetail : s.Detail, s.RenderDistanceRings, Styles.StyleKit.FinestStride);
 }
