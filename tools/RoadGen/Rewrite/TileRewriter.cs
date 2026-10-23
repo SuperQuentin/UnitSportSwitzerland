@@ -283,6 +283,9 @@ public static partial class TileRewriter
         var signalSites = SignalSites.From(osmNodes);
         var restrictions = Restrictions.From(osmNodes);   // turns forbidden at an approach (#353)
         var crossingNodes = CrossingNodes.From(osmNodes);   // pedestrian crossings (#700)
+        // walkers' crossings over a tram track left without lights (#1176: OSM railway=tram_crossing, crossing=uncontrolled)
+        UncontrolledTramCrossings = osmNodes is null ? [] : osmNodes.All.Where(e => e.Kind == OsmNodesReader.NodeKind.Crossing
+            && e.Value == "uncontrolled" && e.Tags.GetValueOrDefault("railway") == "tram_crossing").Select(e => new Vec2(e.E, e.N)).ToList();
         if (signalSites is not null) log($"  OSM traffic signals: {signalSites.Count:N0} junction signals");
         if (overlay is not null) log($"  OSM overlay: {overlay.RowCount:N0} rows from {options.OsmOverlay}");
 

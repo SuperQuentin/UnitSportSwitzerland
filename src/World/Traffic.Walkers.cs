@@ -115,6 +115,13 @@ public partial class Traffic
             m.State = route.Edge;
             WalkerGapCrossings++;
         }
+        else if (here is { TramYield: true } && !ReferenceEquals(m.State, route.Edge))
+        {
+            m.State = route.Edge;
+            WalkerTramGapCrossings++;
+            // (a tram within its braking distance of the crossing as the walker steps on: the check's count, #1176)
+            if (TramAtCrossing(route.Edge, 0f, braking: true)) WalkerTramCloseSteps++;
+        }
 
         // the next crossing ahead (Wait: 1 while it is clear to go on to it, Group: which one)
         bool crossingAhead = false;
@@ -141,6 +148,9 @@ public partial class Traffic
             else if (c.Unmarked)
                 // no right of way: a gap long enough to walk over, with a margin
                 go = !CarAtZebra(edge, edge.Length / Mathf.Max(m.Cruise, 0.8f) + UnmarkedMargin);
+            else if (c.TramYield)
+                // the trams have priority (#1176, #1115): a gap in them long enough to walk over, with a margin
+                go = !TramAtCrossing(edge, edge.Length / Mathf.Max(m.Cruise, 0.8f) + UnmarkedMargin);
             else
             {
                 c.Claimed = _now;
@@ -161,6 +171,7 @@ public partial class Traffic
                     if (here is { Island: true }) WalkerIslandWaits++;
                     else if (c.Lit) WalkerLitWaits++;
                     else if (c.Unmarked) WalkerGapWaits++;
+                    else if (c.TramYield) WalkerTramWaits++;
                     else WalkerZebraWaits++;
                 }
             }
@@ -201,6 +212,58 @@ public partial class Traffic
     /// <see cref="ZebraBrake"/>): the walker at it waits. With <paramref name="gap"/> (s, an unmarked crossing where the cars do not
     /// yield): also any car reaching it sooner, or moving within 8 m of it (one turning in).
     /// </summary>
+    /// <summary>
+    /// Whether a tram is on the crossing <paramref name="crossing"/> (its body within a tram's half width plus a metre of it) or
+    /// reaches it within <paramref name="gap"/> s (#1176: walkers give way to trams at an unlit stage over their tracks);
+    /// <paramref name="braking"/>: or could not stop short of it at its service brake.
+    /// </summary>
+    private const float TramBodyLength = 44f;
+
+    private bool TramAtCrossing(LaneEdge crossing, float gap, bool braking = false)
+    {
+        var a = crossing.Points[0];
+        var b = crossing.Points[^1];
+        foreach (var t in _trams)
+        {
+            if (Mathf.Abs(t.Head.Y - a.Y) > 4f) continue;
+            // its body: the head and the points laid back along its track
+            float d = DistanceToSegmentFlat(t.Head, a, b);
+            for (float back = 4f; back <= TramBodyLength && d > 2.2f; back += 4f) d = Mathf.Min(d, DistanceToSegmentFlat(t.Route.At(-back).Pos, a, b));
+            if (d < 2.2f) return true;
+            if (t.Speed < 0.5f) continue;
+            // coming at it: along its way, how far its head is from the crossing's line
+            var dir = MathX.Flat(t.Vel).Normalized();
+            if (dir.LengthSquared() < 0.5f) continue;
+            float toward = TowardCrossing(t.Head, dir, a, b);
+            if (toward < 0f || toward > 120f) continue;
+            if (gap > 0f && toward / t.Speed < gap) return true;
+            if (braking && t.Speed * t.Speed / (2f * TramBrake) > toward - 1f) return true;
+        }
+        return false;
+    }
+
+    /// <summary>How far along <paramref name="dir"/> from <paramref name="p"/> the line through a-b lies (m), -1 where it never meets it or misses the segment by more than 3 m.</summary>
+    private static float TowardCrossing(Vector3 p, Vector3 dir, Vector3 a, Vector3 b)
+    {
+        var ab = MathX.Flat(b - a);
+        var n = new Vector3(-ab.Z, 0f, ab.X);
+        float denom = dir.Dot(n);
+        if (Mathf.Abs(denom) < 1e-4f) return -1f;
+        float t = MathX.Flat(a - p).Dot(n) / denom;
+        if (t < 0f) return -1f;
+        var hit = MathX.Flat(p + dir * t);
+        return DistanceToSegmentFlat(hit, a, b) > 3f ? -1f : t;
+    }
+
+    private static float DistanceToSegmentFlat(Vector3 p, Vector3 a, Vector3 b)
+    {
+        var ab = MathX.Flat(b - a);
+        var ap = MathX.Flat(p - a);
+        float len2 = ab.LengthSquared();
+        float t = len2 < 1e-6f ? 0f : Mathf.Clamp(ap.Dot(ab) / len2, 0f, 1f);
+        return (ap - ab * t).Length();
+    }
+
     private bool CarAtZebra(LaneEdge zebra, float gap = 0f)
     {
         var a = zebra.Points[0];
@@ -267,7 +330,7 @@ public partial class Traffic
 
     /// <summary>The walkers' counts for the check (#1033): steps onto a lit crossing (on a red; on the clearance amber, cleared on green), waits at a red kerb, on an island, at a zebra, zebras crossed.</summary>
     public int WalkerLitStarts, WalkerRedStarts, WalkerAmberStarts, WalkerLitWaits, WalkerIslandWaits, WalkerZebraWaits, WalkerZebraCrossings,
-        WalkerGapCrossings, WalkerGapWaits;
+        WalkerGapCrossings, WalkerGapWaits, WalkerTramGapCrossings, WalkerTramWaits, WalkerTramCloseSteps;
 
     /// <summary>Car-seconds stood for a walker at a zebra (#1033).</summary>
     public double ZebraCarSeconds;

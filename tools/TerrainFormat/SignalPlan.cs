@@ -127,7 +127,13 @@ public readonly record struct SignalArm(
     /// Cars may drive into this arm's exit without room on it for them (#1134, the user: "allow block intersection"): the box rule
     /// (<see cref="BoxRule"/>) is off for cars heading out here. Bit 7 of the rank byte (ranks stay under 128); nothing sets it yet.
     /// </summary>
-    bool AllowBlock = false)
+    bool AllowBlock = false,
+    /// <summary>
+    /// The length (m) of a lit middle stage over its tram tracks (#1176): this arriving carriageway's crossing goes on from the
+    /// island beyond its kerb over the tracks on the central reservation to the island of the divided road's other carriageway;
+    /// a pedestrian group of its own (<see cref="CrossingHalf.Middle"/>) stopped only by the trams over it. 0 none. Not stored.
+    /// </summary>
+    float MiddleM = 0)
 {
     /// <summary>Whether its walkers cross in two stages, waiting on the island between (#1030).</summary>
     public bool TwoStage => Pedestrians && HalfInM > 0 && HalfOutM > 0;
@@ -142,6 +148,12 @@ public enum CrossingHalf : byte
     Arriving = 1,
     /// <summary>Over the departing lanes, the island to the left kerb: stopped by the movements into the arm.</summary>
     Departing = 2,
+    /// <summary>
+    /// The middle stage of a crossing over a divided road with its tram on the central reservation (#1176): from the island beside
+    /// this (arriving) carriageway over the tracks to the island beside the other's; stopped only by the trams crossing it (from
+    /// this arm, into its twin, the other carriageway pointing the same way).
+    /// </summary>
+    Middle = 3,
 }
 
 public readonly record struct SignalInterval(SignalAspect Aspect, float From, float To);
@@ -545,6 +557,14 @@ public sealed class SignalPlan
             if (Groups[p].Kind != SignalGroupKind.Pedestrian) continue;
             int arm = Groups[p].Arm;
             var half = Groups[p].Half;
+            // a middle stage over the trams' reservation (#1176): only the trams crossing it, from its arm or into its twin
+            if (half == CrossingHalf.Middle)
+            {
+                int twin = Twin(arm);
+                foreach (var m in moves)
+                    if (Groups[m.Group].Kind == SignalGroupKind.Tram && (m.From == arm || m.To == twin)) Set(p, m.Group, Conflict.Hard);
+                continue;
+            }
             foreach (var m in moves)
             {
                 // a half crosses only its own lanes (#1030): the arriving half the approach's, the departing half those into the arm
@@ -556,6 +576,14 @@ public sealed class SignalPlan
             }
         }
         return c;
+    }
+
+    /// <summary>The divided road's other carriageway beside arm <paramref name="arm"/> (#1176): an arm within 30 degrees of it, -1 none.</summary>
+    public int Twin(int arm)
+    {
+        for (int k = 0; k < Arms.Count; k++)
+            if (k != arm && Math.Abs(Math.IEEERemainder(Arms[k].Heading - Arms[arm].Heading, 2 * Math.PI)) < Math.PI / 6) return k;
+        return -1;
     }
 
     private static bool Turning(Movement m, SignalGroup g) => m.Turn != SignalMoves.Through && g.Kind == SignalGroupKind.Car;
@@ -928,6 +956,9 @@ public sealed class SignalPlan
                 plan.Add(SignalGroupKind.Pedestrian, a, SignalMoves.None, CrossingHalf.Departing);
             }
             else if (arms[a].Pedestrians) plan.Add(SignalGroupKind.Pedestrian, a, SignalMoves.None);
+        // the middle stages over the trams' reservation, island to island (#1176)
+        for (int a = 0; a < arms.Count; a++)
+            if (arms[a].MiddleM > 0) plan.Add(SignalGroupKind.Pedestrian, a, SignalMoves.None, CrossingHalf.Middle);
         // the trams (#1057): a group of their own per approach and direction (the user: one head per direction, its arrow on its
         // plate), after the rest (a plan without trams keeps its groups as they were)
         var trams = new List<int>();
@@ -1289,6 +1320,7 @@ public sealed class SignalPlan
         {
             CrossingHalf.Arriving when arm.HalfInM > 0 => arm.HalfInM,
             CrossingHalf.Departing when arm.HalfOutM > 0 => arm.HalfOutM,
+            CrossingHalf.Middle when arm.MiddleM > 0 => arm.MiddleM,
             _ => arm.CrossingM,
         };
     }
@@ -1825,6 +1857,11 @@ public enum SignalPoleFlags : byte
     DepartingHalf = 16,
     /// <summary>Its arm's tram bar heads (#1057), on top of the pole facing the arriving trams; older readers ignore it.</summary>
     Tram = 32,
+    /// <summary>
+    /// With <see cref="Pedestrian"/>, on an island beside the trams' reservation (#1176): a second head, back to back with the
+    /// crossing's, for the middle stage over the tracks (<see cref="CrossingHalf.Middle"/>), facing <see cref="SignalPole.PedHeading"/> + 180°.
+    /// </summary>
+    MiddleStage = 64,
 }
 
 /// <summary>

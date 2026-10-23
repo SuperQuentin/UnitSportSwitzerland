@@ -919,6 +919,9 @@ public static partial class SignalBuilder
             if (arriving) faces.Add((Walkers(plan, pole.Arm, CrossingHalf.Arriving), pole.PedHeading));
             if (departing) faces.Add((Walkers(plan, pole.Arm, CrossingHalf.Departing), pole.PedHeading + (arriving ? Mathf.Pi : 0f)));
             if (faces.Count == 0) faces.Add((Find(plan, SignalGroupKind.Pedestrian, pole.Arm, SignalMoves.None), pole.PedHeading));
+            // on an island by the trams' reservation, back to back with it: the middle stage's over the tracks (#1176)
+            if ((pole.Flags & SignalPoleFlags.MiddleStage) != 0 && MiddleStage(plan, pole.Arm) is int middle and >= 0)
+                faces.Add((middle, pole.PedHeading + Mathf.Pi));
             foreach (var (g, heading) in faces)
             {
                 var (front, right) = Frame(heading);
@@ -1000,6 +1003,14 @@ public static partial class SignalBuilder
             var at = foot + front * InFront + right * ((k - first) * HeadSpacing) + Vector3.Up * y;   // over its car head
             heads.Add(new Head(at, front, right, trams[k], Shape.TramT, 1, false));
         }
+    }
+
+    /// <summary>The middle stage's group over the trams' reservation beside arm <paramref name="arm"/> (#1176): its own, or its twin's; -1 none.</summary>
+    private static int MiddleStage(SignalPlan plan, int arm)
+    {
+        for (int g = 0; g < plan.Groups.Count; g++)
+            if (plan.Groups[g] is { Kind: SignalGroupKind.Pedestrian, Half: CrossingHalf.Middle } m && (m.Arm == arm || plan.Twin(m.Arm) == arm)) return g;
+        return -1;
     }
 
     /// <summary>A crossing's pedestrian group for <paramref name="half"/> (#1030), else its only one (a crossing in one go).</summary>
