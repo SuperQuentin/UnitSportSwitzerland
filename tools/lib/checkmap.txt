@@ -819,3 +819,8 @@ src/Player/Bicycle        net    tools/ebikenetcheck.sh
 src/Player/BicycleCatalog net    tools/ebikenetcheck.sh
 src/Avatar/Cyclist        net    tools/ebikenetcheck.sh
 src/Player/EBikeNetProbe  net    tools/ebikenetcheck.sh
+# #1198: what the Android export packs (the .NET publish, no Godot): no dead natives (ONNX's .aar), a size budget
+UnitSportSwitzerland.csproj  quick  tools/apksizecheck.sh
+tools/ci/export_presets.cfg  quick  tools/apksizecheck.sh
+tools/release.sh             quick  tools/apksizecheck.sh
+tools/apksizecheck.sh        quick  tools/apksizecheck.sh
