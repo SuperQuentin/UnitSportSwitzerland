@@ -909,7 +909,8 @@ public partial class ItemController : Node
             var held = play ?? RadioPlay.DecodeAny(stack.Data);
             for (int i = 0; i < stack.Count; i++)
                 RadioManager.Instance!.Throw(new RadioState("", 0, _origin.ToGlobal(origin + Vector3.Up * (0.25f * i)), yaw, velocity,
-                    held?.CdId ?? 0, play?.StartedAt ?? 0, play != null, false, held?.Length ?? 0, player.RadioVolume));
+                    held?.CdId ?? 0, play?.StartedAt ?? 0, play != null, false, held?.Length ?? 0, player.RadioVolume,
+                    Voice: player.RadioMix.X, Music: player.RadioMix.Y));
             return;
         }
         var right = ahead.Cross(Vector3.Up);
@@ -977,9 +978,11 @@ public partial class ItemController : Node
         Highlight.Point(null);
         Play(SfxSynth.Tick, 1.9f);
         float volume = radio.Volume;
+        var mix = radio.Mix;
         manager.PickUp(radio, () =>
         {
             player.RadioVolume = volume;   // it plays on in the hand as loud as it was (#734)
+            player.RadioMix = mix;         // and mixed as it was (#1153)
             Give(new ItemStack(ItemId.Radio, 1, playing));
             InHand(ItemId.Radio, playing);
             Play(SfxSynth.Chime, 1.8f);

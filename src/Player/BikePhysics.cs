@@ -3,7 +3,7 @@ using Godot;
 namespace UnitSport.Player;
 
 /// <summary>Where the rider's hands are, and so how much air they push (#1124).</summary>
-public enum RidingPosition { Hoods, Drops, Tuck }
+public enum RidingPosition { Hoods, Drops, Tuck, Standing }
 
 /// <summary>
 /// The road bike's longitudinal physics, pure (#1124): the power equation's every term as a cycling
@@ -39,11 +39,15 @@ public static class BikePhysics
     /// </summary>
     public const float FrontalAreaMassExponent = 0.425f;
 
-    /// <summary>Hoods 1, drops 0.88, a descender's tuck 0.75 of the hoods' drag area (wind-tunnel ratios, Blocken 2018).</summary>
+    /// <summary>
+    /// Hoods 1, drops 0.88, a descender's tuck 0.75, out of the saddle 1.15 of the hoods' drag area
+    /// (wind-tunnel ratios, Blocken 2018; standing is taller and wider).
+    /// </summary>
     public static float PositionFactor(RidingPosition position) => position switch
     {
         RidingPosition.Drops => 0.88f,
         RidingPosition.Tuck => 0.75f,
+        RidingPosition.Standing => 1.15f,
         _ => 1f,
     };
 
@@ -176,5 +180,44 @@ public static class BikePhysics
     {
         float used = Mathf.Min(Mathf.Abs(accel) / Gravity, grip * 0.95f);
         return Mathf.Atan(Mathf.Sqrt(grip * grip - used * used));
+    }
+
+    /// <summary>
+    /// What a pedelec's motor adds at the cranks, W (#1159): <paramref name="support"/> (the assist
+    /// level's, <see cref="ElectricAssist.Support"/>) × the rider's watts, no more than its torque at
+    /// this cadence nor its peak, and nothing without pedalling. The help fades over the last km/h to
+    /// the cut-off and is gone past it, so on the flat the bike settles at 25 km/h and only the legs
+    /// take it faster.
+    /// </summary>
+    /// <param name="riderWatts">The rider's own power at the cranks.</param>
+    /// <param name="cadence">rpm; the torque limit is torque × ω, so a grinding crank gets less.</param>
+    /// <param name="speed">m/s.</param>
+    public static float AssistWatts(ElectricAssist assist, float support, float riderWatts, float cadence, float speed)
+    {
+        if (riderWatts <= 0f || cadence <= 0f || support <= 0f) return 0f;
+        float fade = Mathf.Clamp((assist.CutOff - speed) / ElectricAssist.FadeBand, 0f, 1f);
+        // a crank barely turning still gets the torque of a 30 rpm push: the motor reads pedal force, not just cadence
+        float torqueLimit = assist.Torque * Mathf.Max(cadence, 30f) / 60f * Mathf.Tau;
+        return Mathf.Min(Mathf.Min(support * riderWatts, torqueLimit), assist.PeakWatts) * fade;
+    }
+
+    /// <summary>
+    /// What <paramref name="motorWatts"/> at the cranks for <paramref name="dt"/> s takes out of the
+    /// battery, Wh (#1167): the motor's output over <see cref="ElectricAssist.Efficiency"/>.
+    /// </summary>
+    public static float BatteryDrawWh(float motorWatts, float dt) =>
+        Mathf.Max(motorWatts, 0f) / ElectricAssist.Efficiency * dt / 3600f;
+
+    /// <summary>
+    /// A wider tyre at its lower pressure on a surface's rolling resistance from a 28 mm
+    /// road tyre's (#1159): on smooth tarmac a 50 mm touring balloon's heavier casing rolls ~1/3 harder
+    /// (0.0045 → 0.006, roller drum tests of the Big Apple), off it the wider, softer tyre sinks less and
+    /// skips less, so gravel and forest roll easier as √(28 / width).
+    /// </summary>
+    /// <param name="smooth">Tarmac, a floor or boards; anything else is rough.</param>
+    public static float TyreWidthFactor(bool smooth, float tyreWidth)
+    {
+        float wider = Mathf.Max(tyreWidth, 0.023f) / 0.028f;
+        return smooth ? 1f + 0.33f * (tyreWidth - 0.028f) / 0.022f : 1f / Mathf.Sqrt(wider);
     }
 }

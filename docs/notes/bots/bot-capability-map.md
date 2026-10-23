@@ -53,6 +53,7 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | hammer, structure pieces, gadgets | — | `Build/` (client RPCs) | — | `Build` | gap: phase 2+ (building is a follow-up issue) |
 | thrown items (bonk) | — | `ItemEvents.RelayBonk` (client sender) | — | — | gap: later |
 | radio, camera, GPS, fishing, farm tools | — | — | — | — | n/a for a fighting bot (an ambient brain may want them) |
+| a radio's voice/music mix (#1153) | `RadioBody.Mix` / `FootPlayer.RadioMix` set directly | `RadioManager.SetMix` (server: set `Mix`) | — | — | n/a for a fighting bot; an ambient bot DJ could set it server-side |
 
 ## World, loot and vehicles
 
@@ -66,6 +67,7 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | dropped items | — | `DroppedItems.RequestPickUp` (RPC, replies `RpcId`) | — | `Loot` | gap: a server claim that returns the stack (a follow-up) |
 | parked car, motorbike, bike: get in, drive, get out | `RideControls` (`BotDriving.Controls`: `AutoPilot`) | `VehicleManager.ServerClaim`, `FootPlayer.TakeVehicle`, `ExitVehicle` with the server's `Park` | in sight within 150 m (`BotDriving.Spot`) | `BotDriving`; `BrBrain` for trips over 300 m | ok (`vehicles`) |
 | mounts from the ride menu | — | `RideUi` (refused in a match anyway) | — | — | n/a in BR |
+| e-bike (#1159): the Moustache Samedi and its low frame, motor to 25 km/h | `RideControls`, as the road bike (the assist reads the same pedalling) | none needed: owner-authoritative, `RideKind.EBike` / `EBikeOpen` from `Rideable.Create`; a parked one through the vehicle rows above (its battery and mode in the parked flags, #1167) | as any parked bike | `AutoPilot` as on the road bike; the assist mode by `Bicycle.CycleAssist` / `Level`, the charge in `Charge` | ok outside BR; no bot chooses a bicycle model or an assist mode yet (it rides in Tour) |
 | snowboard (#922): ride a slope, push, skid stop, switch | `RideControls` (`RideInput`: throttle presses, brake, steer, jump for the ollie) | none needed: owner-authoritative like the skis, `RideKind.Snowboard` from `Rideable.Create` | the slopes (`PisteIndex`) | `AutoPilot` (`SnowRide.Is`: presses to push, `MeasureLean` on snow) | ok outside BR, like skis |
 | ski a slope (#887): its snow, its wear | `RideControls` on skis (`AutoPilot` already drives them for races) | the body's ride physics; `SnowService` counts a bot's metres on a slope like a player's | `SnowService.TryAt` / `PisteIndex.At` on the server | — | gap: no brain skis yet (the slopes and their state are ready for one) |
 | skis: stride on the flat and off snow, skid stop (#899) | `RideControls` throttle pulses (`AutoPilot` presses ~4 times a second while it wants speed on skis) | the body's ride physics (`SkiDynamics`) | — | `AutoPilot` (races) | ok for race NPCs; gap: no brain skis yet |
@@ -84,6 +86,8 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 |---|---|---|---|---|---|
 | join the field | — | `BrManager.BoardBots` at GO | — | — | ok (aboard the plane) |
 | the phone (#889): calls, travel, activities from its apps | — | none of its own: its apps send the same invites, teleport requests and activity commands | — | — | n/a |
+| home-trainer training (#901): the phone's Training app | `RideControls` (the lean `AutoPilot`) | none: client-side, the local rider's GPX and trainer | — | — | n/a (a bot has no trainer; it already rides routes through the same pilot) |
+| training: a road at a junction, Rejoin, U-turn, ERG (#901) | `TrainingSession.Choose` / `Rejoin` / `UTurn`, `TrainerLink.SetErg` / `StepErg` (methods, never raw keys) | none: client-side | — | — | n/a until group rides (phase 4): the junction logic (`JunctionChoice`) is pure and would serve a server-run rider |
 | invites, parties, teleport requests (#840) | — | none: never offered (`InviteService` skips negative ids); a bot joins through `BoardBots` | — | — | n/a |
 | board the plane, jump | — | `BrManager.BoardBots`, `BotJump`, `BotPlane` (push-out) | its landing spot and jump time, chosen at GO | `BrBrain.Drop` | ok |
 | the zone's damage, and running from it | — | `BrManager.BotZone` | the zone (state, as a player's HUD) | `BrBrain` zone (`BrTactics.ZoneRunNeeded`) | ok |

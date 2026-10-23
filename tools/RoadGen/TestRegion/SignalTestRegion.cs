@@ -18,7 +18,7 @@ using UnitSport.Tools.RoadGen.Rewrite;
 /// design leaves (arm length, buildings, road class). Region and junctions:
 /// docs/notes/tools/signal-test-region.md.
 /// </summary>
-public static class SignalTestRegion
+public static partial class SignalTestRegion
 {
     /// <summary>Tiles written: a row of junction tiles (N 1322) with a flat tile row either side. Outside Switzerland on purpose: no real tile, cached or not, shares an id.</summary>
     public const int MinTileE = 2910, MaxTileE = 2917, MinTileN = 1321, MaxTileN = 1324;
@@ -608,6 +608,9 @@ public static class SignalTestRegion
         log(stats.Network.Format(stats.TilesWritten));
         log("");
         int bad = Report(chunkDir, design.Junctions, log) + BorderReport(chunkDir, log);
+        // its traffic (#1134): generators and destinations on every lit junction, rates from what the lights pass
+        log("");
+        if (WriteTraffic(chunkDir, design.Junctions, design.Lines, log).Count == 0) bad++;
         int planned = 0;
         if (newJunctions)
         {

@@ -34,6 +34,9 @@
 - **Two-stage crossing** (#1030, `traffic-signals`): J7's east arm, the only one whose island (3.4 m, over its exit hatch)
   spans its zebra and is 2 m wide: its walkers cross in two halves, heads on the island. Top view:
   `--shot 4514,522,-1.8,-90,0,6,out.png` with `--chunks test_output/signal-region --generated off`.
+- **Its traffic** (#1134): the build writes `traffic_endpoints.tsv` (generators and destinations for cars, riders, walkers and
+  trams on every lit junction, rates from what its lights pass) and logs a line of rates per junction; details and the formula:
+  `world/traffic-generators`.
 - **Where**: tiles E 2910-2917 N 1321-1323 (24 tiles; J6/J7 #700 in 2916-2917), flat at 500 m, one 6 km rewrite block),
   outside Switzerland on purpose: no real tile, streamed or cached, shares an id. Manifest origin
   2913000,1322500 (shots' world x = E - 2913000, z = 1322500 - N). Junctions on one row, N 1322500,

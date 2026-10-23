@@ -117,6 +117,8 @@ public partial class SettingsScreen : Screen
                 i => GameSettings.Current.RideProfile = (RideProfile)i);
             UiKit.SliderRow(rows, "Rider weight", 40, 160, 1, s.RiderMass, v => GameSettings.Current.RiderMass = (float)v,
                 v => $"{v:F0} kg", $"You in your kit; the Simulation road bike adds its own {Player.BicycleCatalog.Default.Mass:F1} kg");
+            UiKit.SliderRow(rows, "Threshold power", 100, 450, 5, s.RiderCriticalPower, v => GameSettings.Current.RiderCriticalPower = (float)v,
+                v => $"{v:F0} W", "What you hold for an hour (your FTP / 0.95); above it a Simulation sprint drains your reserve");
             UiKit.ToggleRow(rows, "Third-person view", s.ThirdPerson, on => GameSettings.Current.ThirdPerson = on,
                 "Over the shoulder on foot, chase view mounted (V in game)");
             UiKit.ToggleRow(rows, "Speech bubbles", s.ChatBubbles, on => GameSettings.Current.ChatBubbles = on,

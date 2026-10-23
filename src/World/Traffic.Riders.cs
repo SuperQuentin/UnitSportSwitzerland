@@ -350,17 +350,24 @@ public partial class Traffic
             // which paths: the kind its side leads into (a lane's bike path, a path's way), else any riders' own, else the cars'
             var side = LaneGraph.RideOf(leg.Edge)?.Side(leg.Forward) ?? RideSide.Road;
             var kind = side == RideSide.Track ? JunctionPathKind.Path : JunctionPathKind.Bike;
+            // a rider from an endpoint (#1134): the move on its shortest way to its destination, by any path's (its own kind's may
+            // end elsewhere than the cars' its way was found along)
+            var wanted = TowardGoal(m, options)?.Edge.Path?.Move;
             int tier = 3;
             foreach (var o in options)
                 if (o.Edge.Path is not null) tier = Math.Min(tier, PathTier(o.Edge, kind, side));
             for (int i = options.Count - 1; i >= 0; i--)
                 if (options[i].Edge.Path is null || PathTier(options[i].Edge, kind, side) != tier) options.RemoveAt(i);
-            // one exit at random (straight on twice as likely), then the lane nearest the rider's line
+            // one exit at random (straight on twice as likely), or the one on its way to its destination (#1134); then the lane
+            // nearest the rider's line
             float total = 0f;
             foreach (var o in options) total += ExitWeight(o.Edge);
             float pick = (float)_rng.NextDouble() * total;
             long exit = options[^1].Edge.KeyEnd;
             foreach (var o in options) if ((pick -= ExitWeight(o.Edge)) <= 0f) { exit = o.Edge.KeyEnd; break; }
+            if (wanted is { } move)
+                foreach (var o in options)
+                    if (o.Edge.Path!.Move == move) { exit = o.Edge.KeyEnd; break; }
             (LaneEdge, bool)? best = null;
             float bestGap = float.MaxValue;
             foreach (var o in options)
@@ -374,6 +381,7 @@ public partial class Traffic
         if (leg.Edge.Path is not null)
             for (int i = options.Count - 1; i >= 0 && options.Count > 1; i--)
                 if (options[i].Edge.Path is not null) options.RemoveAt(i);
+        if (TowardGoal(m, options) is { } toward) return toward;
         float sum = 0f;
         foreach (var o in options) sum += RoadWeight(o);
         float at = (float)_rng.NextDouble() * sum;

@@ -25,13 +25,15 @@ namespace UnitSport.Player;
 /// </summary>
 public sealed class Bicycle : Rideable
 {
-    public override RideKind Kind => RideKind.RoadBike;
-    public override string Label => "Road bike";
-    public override string Blurb => "{throttle} pedal, {tuck_boost} sprint, {brake} brake, {move_left}/{move_right} steer — climbs cost you";
+    public override RideKind Kind => Spec.Kind;
+    public override string Label => Spec.Label;
+    public override string Blurb => Spec.Assist != null
+        ? "{throttle} pedal, {tuck_boost} pedal hard, {brake} brake, {move_left}/{move_right} steer, {engine_toggle} assist level — the motor helps to 25 km/h"
+        : "{throttle} pedal, {tuck_boost} sprint, {brake} brake, {move_left}/{move_right} steer — climbs cost you";
 
     // ---- the rider and the machine ----
-    /// <summary>The bike under the rider: the owner's Scott Addict RC 15 (#1124).</summary>
-    public BicycleSpec Spec { get; } = BicycleCatalog.Default;
+    /// <summary>The bike under the rider: a catalogue bike, the owner's Scott Addict RC 15 by default (#1124, #1159).</summary>
+    public BicycleSpec Spec { get; }
 
     /// <summary>Bottles, tools and a saddle bag, kg.</summary>
     private const float Kit = 1.5f;
@@ -83,16 +85,74 @@ public sealed class Bicycle : Rideable
     /// </summary>
     public bool PowerMeasured { get; set; }
 
+    /// <summary>A chest strap's reading, bpm: the body's heart rate is it instead of the model's (#1124).</summary>
+    public float? MeasuredHeartRate { get; set; }
+
+    /// <summary>The rider's threshold, reserve and heart rate (#1124): Sim only.</summary>
+    public RiderPhysiology Body { get; } = new(Core.GameSettings.Current.RiderCriticalPower);
+
+    /// <summary>Up a ramp steeper than this, grinding under this cadence, the rider stands (#1124).</summary>
+    private const float StandingGrade = 0.08f, StandingCadence = 70f;
+
     /// <summary>A cadence sensor's reading, rpm: the legs turn at it instead of the gear's (#1124).</summary>
     public float? MeasuredCadence { get; set; }
 
     /// <summary>Every point of the bike and the rider's fit to it: the centre of mass for braking.</summary>
     public BikeFrame Frame { get; }
 
-    public Bicycle()
+    public Bicycle() : this(BicycleCatalog.Default) { }
+
+    public Bicycle(BicycleSpec spec)
     {
+        Spec = spec;
         Gears = new BikeDrivetrain(Spec);
-        Frame = Spec == BicycleCatalog.Default ? BikeFrame.Default : new BikeFrame(Spec);
+        Frame = BikeFrame.For(Spec);
+        if (Spec.Assist is { } motor) { Level = motor.StartLevel; BatteryWh = motor.BatteryWh; }
+        // the eye in each position on this bike's own fit (#1159), just proud of the face so the head never fills the lens
+        _eyes = System.Array.ConvertAll(
+            new[] { RidingPosition.Hoods, RidingPosition.Drops, RidingPosition.Tuck, RidingPosition.Standing },
+            p => HumanMeshBuilder.MountsForCyclist(p, Frame).Eye + new Vector3(0, 0, -0.06f));
+        _eye = _eyes[0];
+    }
+
+    /// <summary>What the motor is adding at the cranks now, W (#1159): 0 on a bike without one.</summary>
+    public float MotorWatts { get; private set; }
+
+    /// <summary>The remote's mode (#1167): Off on a bike without a motor.</summary>
+    public AssistLevel Level { get; set; }
+
+    /// <summary>What is left in the battery, Wh (#1167): 0 on a bike without one.</summary>
+    public float BatteryWh { get; set; }
+
+    /// <summary>The battery's charge, 0..1 (#1167): the display's percent and what a parked bike keeps.</summary>
+    public float Charge => Spec.Assist is { } a ? BatteryWh / a.BatteryWh : 0f;
+
+    /// <summary>
+    /// The remote's button (#1167, <c>engine_toggle</c>): one mode up, Turbo round to Off. A bot or a
+    /// probe calls it as the key does. False on a bike without a motor.
+    /// </summary>
+    public bool CycleAssist()
+    {
+        if (Spec.Assist == null) return false;
+        Level = ElectricAssist.Next(Level);
+        return true;
+    }
+
+    /// <summary>Set in <see cref="VehicleState.Flags"/> by an e-bike that parks: the charge in <c>Load</c> is its own (#1167).</summary>
+    public const int ParkedBattery = 1 << 4;
+
+    /// <summary>The mode and the battery's mark, for a parked e-bike's <c>VehicleState.Flags</c> (#1167).</summary>
+    public int PackFlags() => Spec.Assist == null ? 0 : (int)Level | ParkedBattery;
+
+    /// <summary>
+    /// A parked e-bike's mode and charge back (#1167). A state from before the battery, or a fresh one,
+    /// has no <see cref="ParkedBattery"/> mark and keeps the full battery and the start mode.
+    /// </summary>
+    public void UnpackFlags(int flags, float charge)
+    {
+        if (Spec.Assist is not { } a || (flags & ParkedBattery) == 0) return;
+        Level = (AssistLevel)Mathf.Clamp(flags & 7, 0, (int)AssistLevel.Turbo);
+        BatteryWh = Mathf.Clamp(charge, 0f, 1f) * a.BatteryWh;
     }
 
     /// <summary>Steady effort, W. Roughly a fit rider's endurance power.</summary>
@@ -132,9 +192,16 @@ public sealed class Bicycle : Rideable
     /// <summary>Below this the bike is being wheeled, not ridden, and steering is direct.</summary>
     private const float WalkingPace = 1.2f;
 
-    /// <summary>The figure's own eye, so first person sits where the drawn head is looking from.</summary>
-    public override Vector3 FirstPersonEye { get; } = HumanMeshBuilder.MountsForPose(HumanPose.Cycling).Eye
-        + new Vector3(0, 0, -0.06f);   // just proud of the face, so the head never fills the lens
+    /// <summary>
+    /// The figure's own eye, so first person sits where the drawn head is looking from: lower on the
+    /// drops, lowest tucked, up and forward standing (#1124).
+    /// </summary>
+    public override Vector3 FirstPersonEye => _eye;
+
+    /// <summary>The eye now: it glides to the new pose's as the drawn rider blends there (<see cref="Animate"/>).</summary>
+    private Vector3 _eye;
+
+    private readonly Vector3[] _eyes;
 
     public override float EyeHeight => 1.48f;
     public override float ChaseDistance => 3.9f;
@@ -146,14 +213,14 @@ public sealed class Bicycle : Rideable
     /// <summary>The cranks' rpm now: 0 freewheeling (the HUD, and the legs through <see cref="Animate"/>).</summary>
     public float Cadence => _cadence;
 
-    public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default) => Cyclist.Create(riderIndex, outfit);
+    public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default) => Cyclist.Create(riderIndex, outfit, Spec);
 
     public override bool IsVehicle => true;
 
     public override Node3D BuildParkedVisual(int riderIndex) => new MeshInstance3D
     {
         Name = "Bike",
-        Mesh = BikeMeshBuilder.Build(BikePalette.ForRider(riderIndex)),
+        Mesh = BikeMeshBuilder.Build(Spec.Look, frame: Frame),
         MaterialOverride = HumanMeshBuilder.Material(),
     };
 
@@ -181,19 +248,23 @@ public sealed class Bicycle : Rideable
         else
             Balance(ref motion, input.Steer, v, maxLean, riderMass, dt);
 
-        // --- the rider's position: sprinting on the drops, a fast descent tucked, else the hoods
-        Position = input.Effort && input.Throttle > 0.05f ? RidingPosition.Drops
-            : ground.OnFloor && input.Throttle < 0.05f && v > TuckSpeed && ground.Grade < -0.02f ? RidingPosition.Tuck
+        // --- the rider's position: sprinting on the drops, a fast descent tucked, out of the saddle
+        // grinding up a ramp, else the hoods; sat up on a riser bar there are no drops and no tuck (#1159)
+        Position = !Spec.Upright && input.Effort && input.Throttle > 0.05f ? RidingPosition.Drops
+            : !Spec.Upright && ground.OnFloor && input.Throttle < 0.05f && v > TuckSpeed && ground.Grade < -0.02f ? RidingPosition.Tuck
+            : ground.OnFloor && input.Throttle > 0.05f && ground.Grade > StandingGrade && Gears.Cadence(v) < StandingCadence ? RidingPosition.Standing
             : RidingPosition.Hoods;
         _positionFactor += (BikePhysics.PositionFactor(Position) - _positionFactor) * (1f - Mathf.Exp(-dt / PositionChangeTime));
-        float dragArea = BikePhysics.DragArea(riderMass, RidingPosition.Hoods) * _positionFactor;
+        float dragArea = BikePhysics.DragArea(riderMass, RidingPosition.Hoods, Spec.DragArea) * _positionFactor;
         float air = BikePhysics.AirDensity(ground.Altitude);
 
         if (!ground.OnFloor)
         {
             // airborne off a lip: no thrust, no rolling resistance, just air
             v -= 0.5f * air * dragArea * v * v / inertia * dt;
+            if (!arcade) Body.Step(0f, dt, MeasuredHeartRate);
             motion.Speed = Mathf.Max(0f, v);
+            MotorWatts = 0f;
             return;
         }
 
@@ -206,12 +277,33 @@ public sealed class Bicycle : Rideable
         bool pedalling = watts > 0f;
         Gears.AutoShift(v, pedalling, dt);
         float rpm = Gears.Cadence(v);
-        if (!PowerMeasured) watts *= BikeDrivetrain.PowerAtCadence(rpm);
+        // out of the saddle the rider's weight turns a low cadence that seated legs cannot
+        if (!PowerMeasured) watts *= Position == RidingPosition.Standing ? Mathf.Max(BikeDrivetrain.PowerAtCadence(rpm), 0.95f) : BikeDrivetrain.PowerAtCadence(rpm);
+        // Sim: the rider's body (#1124). Keys and pad are held to what the reserve allows; a power meter's
+        // watts are the rider's real legs, already spent, and only drain the reserve shown
+        if (!arcade)
+        {
+            float cp = Core.GameSettings.Current.RiderCriticalPower;
+            if (cp != Body.CriticalPower) Body.Set(cp, Body.WPrime);
+            if (!PowerMeasured) watts = Body.Available(watts);
+            Body.Step(watts, dt, MeasuredHeartRate);
+        }
         float thrust = pedalling
             ? Mathf.Min(BikePhysics.DrivetrainEfficiency * watts / Mathf.Max(v, 0.5f), arcade ? ArcadeMaxThrust : MaxThrust)
             : 0f;
 
-        float resisting = BikePhysics.ResistingForce(v, mass, dragArea, ground.Draft, RollingResistance(ground.Surface), air, ground.Grade);
+        // the motor (#1159): its watts on top of the legs', through the same chain, and at the wheel no
+        // more than its torque through this gear can push
+        // the remote's mode, and nothing once the battery is flat (#1167)
+        MotorWatts = Spec.Assist is { } assist && pedalling && BatteryWh > 0f
+            ? BikePhysics.AssistWatts(assist, ElectricAssist.Support(Level), watts, rpm, v) : 0f;
+        if (MotorWatts > 0f) BatteryWh = Mathf.Max(0f, BatteryWh - BikePhysics.BatteryDrawWh(MotorWatts, dt));
+        if (MotorWatts > 0f)
+            thrust += Mathf.Min(BikePhysics.DrivetrainEfficiency * MotorWatts / Mathf.Max(v, 0.5f),
+                Spec.Assist!.Torque / (Gears.Ratio * Spec.WheelRadius));
+
+        float rolling = RollingResistance(ground.Surface) * BikePhysics.TyreWidthFactor(ground.Surface is Audio.Surface.Asphalt or Audio.Surface.Indoor or Audio.Surface.Wood, Spec.TyreWidth);
+        float resisting = BikePhysics.ResistingForce(v, mass, dragArea, ground.Draft, rolling, air, ground.Grade);
         v += (thrust - resisting) / inertia * dt;
 
         // Sim: front and rear brakes, the load moving forward, the rear locking, the over-the-bars
@@ -288,11 +380,14 @@ public sealed class Bicycle : Rideable
         if (visual is not Cyclist cyclist) return;
         cyclist.CadenceRpm = _cadence;
         cyclist.SteerAngle = Arcade ? 0f : SteerAngle;
+        cyclist.RidingPose = Position;
+        // the camera follows the head the rider is drawn with: it starts moving when the pose does
+        _eye = _eye.Lerp(_eyes[(int)cyclist.RidingPose], 1f - Mathf.Exp(-dt / 0.15f));
     }
 
     /// <summary>Cadence, and the crank angle itself so a remote rider's legs are where the owner's are.</summary>
     public override Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight) =>
-        visual is Cyclist c ? new Vector4(c.CadenceRpm, c.CrankAngle, c.SteerAngle, 0) : default;
+        visual is Cyclist c ? new Vector4(c.CadenceRpm, c.CrankAngle, c.SteerAngle, (int)c.RidingPose) : default;
 
     private float _seenCrank = float.NaN;
 
@@ -301,6 +396,7 @@ public sealed class Bicycle : Rideable
         if (visual is not Cyclist cyclist) return;
         cyclist.CadenceRpm = pose.X;
         cyclist.SteerAngle = pose.Z;
+        cyclist.RidingPose = (RidingPosition)Mathf.Clamp(Mathf.RoundToInt(pose.W), 0, (int)RidingPosition.Standing);
         // a fresh angle is taken as-is; between updates the cadence turns it
         if (pose.Y != _seenCrank) cyclist.SetCrankAngle(_seenCrank = pose.Y);
     }

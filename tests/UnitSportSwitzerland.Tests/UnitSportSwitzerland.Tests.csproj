@@ -32,9 +32,11 @@
     <Compile Include="..\..\src\Player\SkiDynamics.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the road bike spec and the fit derived from it (#1124): Godot maths only -->
     <Compile Include="..\..\src\Player\BicycleCatalog.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Player\RideKind.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\BikePhysics.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\BikeDrivetrain.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\BikeDynamics.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Player\RiderPhysiology.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\SnowPose.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\Snow\PisteCourse.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\Ropeways\Ropeway.cs" Link="Game\%(Filename)%(Extension)" />
@@ -67,6 +69,9 @@
     <Compile Include="..\..\src\Concert\ConcertAcoustics.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Audio\Cd\CdUploadRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Audio\Cd\CdScanner.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Audio\Cd\CdCommand.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Audio\Cd\VocalAnalyzer.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Audio\Fft.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\ClockSave.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\TutorialSteps.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\VehicleIntros.cs" Link="Game\%(Filename)%(Extension)" />
@@ -93,6 +98,9 @@
     <Compile Include="..\..\src\Crafting\CampfireClock.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\FarmTables.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\FarmRules.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Trainer\CourseProfile.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Trainer\JunctionChoice.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Gpx\WalkGraph.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\FieldCells.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\FieldTile.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\Face\FaceGenome.cs" Link="Game\Face\%(Filename)%(Extension)" />

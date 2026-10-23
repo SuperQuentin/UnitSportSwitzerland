@@ -115,7 +115,12 @@ public readonly record struct SignalArm(
     /// middle of the street), +1 right (a bed beside the road), 0 among them or none. The cars of a shared lane turning across it
     /// give way to the tram, an arrow turning across it never shares its green. Not stored: the tram groups carry it.
     /// </summary>
-    sbyte TramSide = 0)
+    sbyte TramSide = 0,
+    /// <summary>
+    /// Cars may drive into this arm's exit without room on it for them (#1134, the user: "allow block intersection"): the box rule
+    /// (<see cref="BoxRule"/>) is off for cars heading out here. Bit 7 of the rank byte (ranks stay under 128); nothing sets it yet.
+    /// </summary>
+    bool AllowBlock = false)
 {
     /// <summary>Whether its walkers cross in two stages, waiting on the island between (#1030).</summary>
     public bool TwoStage => Pedestrians && HalfInM > 0 && HalfOutM > 0;
@@ -1877,7 +1882,7 @@ public sealed class RoadSignal
                     | (a.BikeRightOnRed ? ArmBits.BikeRightOnRed : 0) | (a.BikeBetween ? ArmBits.BikeBetween : 0);
                 w.Write((byte)bits);
                 w.Write((byte)Math.Clamp(MathF.Round(a.SpeedKmh), 0, 255));
-                w.Write(a.Rank);
+                w.Write((byte)(a.Rank & 0x7F | (a.AllowBlock ? 0x80 : 0)));
                 w.Write((ushort)Math.Clamp(MathF.Round(a.CrossingM * 10), 0, ushort.MaxValue));
                 w.Write(s.Stops[i * 3]); w.Write(s.Stops[i * 3 + 1]); w.Write(s.Stops[i * 3 + 2]);
             }
@@ -1937,7 +1942,8 @@ public sealed class RoadSignal
                 float crossing = r.ReadUInt16() / 10f;
                 plan.Arms.Add(new SignalArm(heading, bits.HasFlag(ArmBits.In), bits.HasFlag(ArmBits.Out), bits.HasFlag(ArmBits.LeftPocket),
                     bits.HasFlag(ArmBits.RightPocket), bits.HasFlag(ArmBits.Pedestrians), bits.HasFlag(ArmBits.Bike), speed, crossing, rank,
-                    BikeRightOnRed: bits.HasFlag(ArmBits.BikeRightOnRed), BikeBetween: bits.HasFlag(ArmBits.BikeBetween)));
+                    BikeRightOnRed: bits.HasFlag(ArmBits.BikeRightOnRed), BikeBetween: bits.HasFlag(ArmBits.BikeBetween))
+                    { Rank = (byte)(rank & 0x7F), AllowBlock = (rank & 0x80) != 0 });
                 stops[i * 3] = r.ReadSingle(); stops[i * 3 + 1] = r.ReadSingle(); stops[i * 3 + 2] = r.ReadSingle();
             }
             for (int g = 0; g < groups; g++)
