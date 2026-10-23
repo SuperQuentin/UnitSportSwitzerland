@@ -10,19 +10,25 @@ namespace UnitSport.Interiors;
 /// bedrooms, bathroom) through <see cref="HouseLayouts"/>; the real generator must plan it, the game's validator
 /// pass it, the mesh build. A layout that does not fit (turned 45 degrees off the box) leaves the generated
 /// interior; withdrawing a layout makes the stored plan stale. No world; prints a RESULT line.
+/// <c>--houselayoutcheck &lt;house-layouts.json&gt; --chunks &lt;dir&gt;</c> plans every layout of an export on its real
+/// building from the tiles instead, and fails on any the game would not use. The plans are written as SVG to
+/// <c>test_output/houselayout/</c>.
 /// </summary>
 public partial class HouseLayoutCheck : Node
 {
     public static bool Requested => CmdArgs.Has("--houselayoutcheck");
 
     private int _failures;
+    private const string Out = "test_output/houselayout";
     private readonly List<string> _warned = new();
 
     public override void _Ready()
     {
         HouseLayouts.Warn = m => { _warned.Add(m); GD.Print("[houselayout] warned: " + m); };
-        foreach (float turn in new[] { 0f, 30f, 90f })
-            House(turn);
+        if (CmdArgs.Value("--houselayoutcheck", notFlag: true) is { } file) Export(file, CmdArgs.Value("--chunks", notFlag: true) ?? "terrain_chunks");
+        else
+            foreach (float turn in new[] { 0f, 30f, 90f })
+                House(turn);
         HouseLayouts.Set([]);
         GD.Print($"[houselayout] RESULT: {(_failures == 0 ? "ok" : $"FAILED ({_failures})")}");
         GetTree().Quit(_failures == 0 ? 0 : 1);
@@ -64,6 +70,7 @@ public partial class HouseLayoutCheck : Node
         try { InteriorMeshBuilder.Build(l); }
         catch (Exception ex) { Check(false, $"{at}: the mesh builder threw {ex.GetType().Name}: {ex.Message}"); }
         Check(l.Matches(b, l.Group), $"{at}: the stored plan is stale at once");
+        Svg($"box_turned_{turnDeg:F0}", l);
 
         // withdrawn: the stored plan no longer matches, so the building is planned again, generated
         HouseLayouts.Set([]);
@@ -80,6 +87,51 @@ public partial class HouseLayoutCheck : Node
         Check(kept != null && kept.House == "", $"{at}: a layout 45 degrees off the box was used");
         Check(_warned.Any(w => w.Contains("not used")), $"{at}: a refused layout says nothing in the log");
         GD.Print($"[houselayout] {at}: {l.Floors.Sum(f => f.Rooms.Count)} rooms, {l.Furniture.Count} pieces, entry at {l.EntryX:F1}");
+    }
+
+    /// <summary>Every layout of an export file planned on its own building, from the tiles in <paramref name="chunks"/>.</summary>
+    private void Export(string file, string chunks)
+    {
+        var all = HouseLayouts.Parse(System.IO.File.ReadAllText(file), m => Check(false, m));
+        Check(all.Count > 0, $"no layout in {file}");
+        foreach (var h in all.Values)
+        {
+            HouseLayouts.Set([h]);
+            _warned.Clear();
+            var at = TileId.FromLv95(h.E, h.N);
+            bool found = false;
+            for (int de = -1; de <= 1 && !found; de++)
+            for (int dn = -1; dn <= 1 && !found; dn++)
+            {
+                var id = new TileId(at.E + de, at.N + dn);
+                var path = System.IO.Path.Combine(chunks, BuildingFormat.FileName(id));
+                if (!System.IO.File.Exists(path)) continue;
+                BuildingTile tile;
+                using (var st = System.IO.File.OpenRead(path)) tile = BuildingCodec.Decode(st);
+                int i = tile.Buildings.FindIndex(b => b.Egid == h.Egid);
+                if (i < 0) continue;
+                found = true;
+                var l = InteriorGenerator.Generate(tile, i, null, null);
+                string what = $"EGID {h.Egid} ({id}_{i})";
+                Check(l != null && l.House == h.Hash(), $"{what}: not planned from its layout: {string.Join("; ", _warned)}");
+                if (l != null && l.House != "")
+                {
+                    var problems = InteriorValidator.Validate(l);
+                    Check(problems.Count == 0, $"{what}: {string.Join("; ", problems.Take(4))}");
+                    try { InteriorMeshBuilder.Build(l); }
+                    catch (Exception ex) { Check(false, $"{what}: the mesh builder threw {ex.Message}"); }
+                    Svg($"egid_{h.Egid}", l);
+                    GD.Print($"[houselayout] {what}: {l.Floors.Count} floors, {l.Floors.Sum(f => f.Rooms.Count)} rooms, box {l.Width:F1} x {l.Depth:F1}, entry at {l.EntryX:F1}");
+                }
+            }
+            Check(found, $"EGID {h.Egid}: no building carries it in {chunks}");
+        }
+    }
+
+    private static void Svg(string name, InteriorLayout l)
+    {
+        System.IO.Directory.CreateDirectory(Out);
+        System.IO.File.WriteAllText(System.IO.Path.Combine(Out, name + ".svg"), InteriorValidator.ToSvg(l));
     }
 
     /// <summary>The house's layout in its outline's frame: x along its 12 m, z across its 8 m.</summary>

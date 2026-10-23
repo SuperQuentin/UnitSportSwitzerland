@@ -168,7 +168,8 @@ public static partial class InteriorGenerator
         var ground = l.Floors[l.Below];
         float ew = l.EntryWidth;
         var fronts = ground.Rooms.Where(r => Math.Abs(r.Z0 + hd) < 0.02f && r.Width >= ew + 0.4f).ToList();
-        if (fronts.Count == 0) { why = "no ground floor room on the front wall, where the door leads in"; return false; }
+        if (fronts.Count == 0 && ReachFront(ground, hd, ew, fp.EntryX, clear) is { } reached) fronts.Add(reached);
+        if (fronts.Count == 0) { why = "no ground floor room can be reached from the front wall, where the door leads in"; return false; }
         var drawn = userDoors.Where(d => d.Floor == l.Below)
             .Select(d => (d.Center, Room: fronts.FirstOrDefault(r => d.Center >= r.X0 && d.Center <= r.X1)))
             .FirstOrDefault(d => d.Room != null);
@@ -182,6 +183,34 @@ public static partial class InteriorGenerator
         });
         l.House = h.Hash();
         return true;
+    }
+
+    /// <summary>
+    /// When no ground floor room stands on the front wall (the drawing covers part of a big building, or an L-shaped
+    /// house turns its empty corner to the street): the room nearest the front, grown onto the wall when it is close,
+    /// else joined to it by an entrance passage straight from the wall. The interior lives behind the door's portal, so
+    /// the entry may stand anywhere along the front wall. The room the entry then opens into, or null when nothing fits.
+    /// </summary>
+    private static RoomPlan? ReachFront(FloorPlan ground, float hd, float ew, float wantX, float clear)
+    {
+        const float GrowUpTo = 1.5f;
+        float lane = Math.Max(ew + 0.4f, 1.4f);
+        foreach (var r in ground.Rooms.Where(r => r.Width >= lane).OrderBy(r => r.Z0))
+        {
+            float x = Fit(wantX, r.X0 + lane / 2, r.X1 - lane / 2);
+            bool Free(RectPlan s) => !ground.Rooms.Any(o => o != r && s.Overlaps(new RectPlan(o.X0, o.Z0, o.X1, o.Z1), 0.02f));
+            if (r.Z0 + hd <= GrowUpTo && Free(new RectPlan(r.X0, -hd, r.X1, r.Z0))) { r.Z0 = -hd; return r; }
+            var passage = new RectPlan(x - lane / 2, -hd, x + lane / 2, r.Z0);
+            if (r.Z0 + hd < 1.0f || !Free(passage)) continue;
+            var hall = new RoomPlan { X0 = passage.X0, Z0 = passage.Z0, X1 = passage.X1, Z1 = passage.Z1, Type = RoomType.Corridor };
+            int hi = ground.Rooms.Count, ri = ground.Rooms.IndexOf(r);
+            float top = Math.Min(2.1f, clear - 0.15f), w = Math.Min(InnerDoor, lane - 0.3f);
+            hall.Openings.Add(new OpeningPlan { Side = Side.Back, Center = x, Width = w, Bottom = 0, Top = top, Kind = OpeningKind.Door, Other = ri });
+            r.Openings.Add(new OpeningPlan { Side = Side.Front, Center = x, Width = w, Bottom = 0, Top = top, Kind = OpeningKind.Door, Other = hi });
+            ground.Rooms.Add(hall);
+            return hall;
+        }
+        return null;
     }
 
     /// <summary>The side of the room whose wall holds the segment (along X at z = line, or along Z at x = line), or null.</summary>
