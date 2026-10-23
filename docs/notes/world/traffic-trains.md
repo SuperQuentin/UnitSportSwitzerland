@@ -178,7 +178,12 @@
     20). A car whose lane at the line is a lane of the road where it drives now goes straight to it.
   - **A generator's room where the car will be**: `RoomFor` measured from the road's centre; on the 4+4 artery the lanes are 7-10 m
     off it, so cars started 4 m behind a queue standing at the generator (#1137's cars "dropped 24 m past the artery generators").
-    Now from the car's usual line (its habit drawn first).
+    Now from the car's usual line (its habit drawn first). #1195: and from where its lane puts it at once (`StartLine`: `Approach`'s
+    lane part and `FollowTransition` read through a car with no body; a car is `Placed` on its approach lane or a transition's strip
+    on its first step, up to 4 m off its usual line). The generator between J21 and J22 starts cars 9 m into a transition: the J21
+    queue in strip 4 stood 6.5 m beside the usual line, past `RoomFor`'s 6 m, so a car started at 60 km/h 22 m behind its last car and
+    stood on it (the J21 rider run `--mover rider --ride-turns 5,1,1 --seconds 330 --dense` failed in most runs, from 57 s). The probe
+    fails on any generated car that starts too fast to stop behind one on its way (`HotStarts`, `[traffic] a car started too fast`).
   - **The box rule by lane** (`RoomPast`): on an exit whose next approach has lanes side by side, a car on it counts against the
     entering car's room only where its lane (`Lateral` at its distance from that line) lies within 2 m of the lane the entering car
     will take there (its path's, else `LaneFor` its turn). A car in the other lane (the J5a/J5b strip's L beside its TR) took 7.5 m
