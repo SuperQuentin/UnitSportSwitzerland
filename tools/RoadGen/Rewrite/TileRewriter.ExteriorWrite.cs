@@ -116,6 +116,9 @@ public static partial class TileRewriter
 
     private const double UncontrolledReach = 12;
 
+    /// <summary>A refuge between a carriageway and the tram bed (#1179): at most and at least this wide (m), and running on this far past its crosswalk either way (room for its pole).</summary>
+    private const double RefugeMost = 4, RefugeLeast = 1.5, RefugeBeyond = 2.5;
+
     /// <summary>An island's own pole for a middle stage stands this far out along the arm from the stage's end (m): beside the zebra.</summary>
     private const double IslandPoleBack = 2;
 
@@ -125,7 +128,8 @@ public static partial class TileRewriter
     private static SignalPlan? WriteSignals(JunctionPlan jp, RoadGenResult result, Dictionary<TileId, List<RoadSignal>> signals,
         Dictionary<TileId, List<RoadApproach>> approaches, Cantons? cantons, SignalStats signalStats, LayoutWriteStats stats,
         Dictionary<TileId, List<RoadPointProp>> signs, Func<Vec2, bool> clear, Func<Vec2, bool>? building = null,
-        IReadOnlyDictionary<int, (SignalMoves Moves, double Lateral)>? trams = null, GantryContext? gantries = null)
+        IReadOnlyDictionary<int, (SignalMoves Moves, double Lateral)>? trams = null, GantryContext? gantries = null,
+        Dictionary<TileId, List<RoadAreaProp>>? areas = null)
     {
         var net = result.Network;
         var home = TileId.FromLv95(jp.Centre.X, jp.Centre.Y);
@@ -238,7 +242,9 @@ public static partial class TileRewriter
 
         // a two-stage crossing whose island wait the cycle cannot keep (3 s longer at most) crosses in one go, as without the
         // island: never worse (#1030, the user; Geneva: a junction at its minimum greens missed the far half by 0.7 s)
-        var oneStage = plan.IslandWaits().Where(w => w.Wait > plan.Cycle * SignalPlan.IslandWaitShare + 0.1f).Select(w => plan.Groups[w.Group].Arm).Distinct().ToList();
+        // (a two-stage crossing's halves: a tram reservation's stages, #1176, keep theirs, reported)
+        var oneStage = plan.IslandWaits().Where(w => w.Wait > plan.Cycle * SignalPlan.IslandWaitShare + 0.1f
+            && plan.Groups[w.Group].Half is CrossingHalf.Arriving or CrossingHalf.Departing).Select(w => plan.Groups[w.Group].Arm).Distinct().ToList();
         if (oneStage.Count > 0)
         {
             foreach (int k in oneStage)
@@ -426,6 +432,34 @@ public static partial class TileRewriter
             }
         }
         if (unlitStages.Count > 0) UnlitStages.AddOrUpdate(plan, unlitStages);
+        // the refuges the stages meet on (#1179, the user: paved, kerbed, the walkers' waits on them): on the reservation beside each
+        // carriageway's crosswalk, from its kerb to the tram bed's clearance, raised either side of the crosswalk, flush across it
+        if (areas is not null)
+            foreach (var (k, (twin, sa, sb)) in stageOf)
+            {
+                double kerbToKerb = sa.DistanceTo(sb) + 2 * ConflictTimes.IslandIn;
+                double width = Math.Min(RefugeMost, (kerbToKerb - 2 * (RoadFormat.TrackOffset(RoadFlags.Tramway | RoadFlags.DoubleTrack) + TramPoleAside)) / 2);
+                if (width < RefugeLeast) continue;
+                foreach (var (arm, left) in (ReadOnlySpan<(int, bool)>)[(k, true), (twin, false)])
+                {
+                    var a = jp.Arms[arm];
+                    if (ConflictTimes.Crosswalk(jp, a, left) is not var (sm, half, kerb)) continue;
+                    double o0 = left ? kerb - width : kerb, o1 = left ? kerb : kerb + width;
+                    double reach = half + RefugeBeyond;
+                    var refugeHome = TileId.FromLv95(a.Axis!.At(sm, (o0 + o1) / 2).X, a.Axis.At(sm, (o0 + o1) / 2).Y);
+                    foreach (var (s0, s1, raised) in (ReadOnlySpan<(double, double, bool)>)[(sm - reach, sm - half, true), (sm - half, sm + half, false), (sm + half, sm + reach, true)])
+                    {
+                        var ring = new[] { a.Axis.At(s0, o0), a.Axis.At(s1, o0), a.Axis.At(s1, o1), a.Axis.At(s0, o1) };
+                        Get(areas, refugeHome).Add(new RoadAreaProp
+                        {
+                            Type = raised ? AreaPropType.Island : AreaPropType.Pavement, Variant = (byte)(raised ? 2 : 0),
+                            Flags = raised ? PropFlags.Solid : PropFlags.None, Height = raised ? 0.12f : 0f,
+                            Vertices = Local(refugeHome, ring, q => SampleAt(a, q), 0f), Indices = [0, 1, 2, 0, 2, 3],
+                        });
+                    }
+                    stats.StageRefuges++;
+                }
+            }
         var centre = Local(home, [jp.Centre], p => SampleAt(jp.Arms[0], p), 0f);
         var record = new RoadSignal { X = centre[0], Y = centre[1], Z = centre[2], Stops = stops, Plan = plan, Poles = poles };
         record.Overheads.AddRange(overheads);

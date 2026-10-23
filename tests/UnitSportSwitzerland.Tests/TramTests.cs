@@ -449,4 +449,21 @@ public class TramTests
                 Assert.All(Enumerable.Range(0, plan.Groups.Count).Where(g => plan.Groups[g].Kind == SignalGroupKind.Tram),
                     g => Assert.NotEqual(SignalAspect.Green, plan.State(g, t)));
     }
+
+    [Fact]
+    public void AZebraWithoutLights_HasNoStripesOverTheTramTracks()
+    {
+        // #1179, the user: "a crossing who never has priority shouldn't get yellow stripes anyways": its walkers give way to the
+        // trams there; three bars at x 0, 2 and 4, a track zone around x 2
+        static float[] Bar(float x) => [x - 0.25f, 0, 0, x - 0.25f, 0, 3, x + 0.25f, 0, 3, x + 0.25f, 0, 0];
+        var zebra = new RoadPaint { Shape = PaintShape.Triangles, Type = PaintType.YellowSolid, Vertices = [.. Bar(0), .. Bar(2), .. Bar(4)],
+            Indices = [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 8, 9, 10, 8, 10, 11] };
+        bool Track(float x, float z) => MathF.Abs(x - 2) < 1;
+        var cut = UnitSport.Tools.RoadGen.Network.RailRoadOverlap.ZebraOffTracks(zebra, Track, null);
+        Assert.NotNull(cut);
+        Assert.Equal(24, cut!.Vertices.Length);
+        Assert.Equal(12, cut.Indices.Length);
+        // at lights its walkers' green stops the trams: it keeps them
+        Assert.Null(UnitSport.Tools.RoadGen.Network.RailRoadOverlap.ZebraOffTracks(zebra, Track, [(2f, 10f)]));
+    }
 }

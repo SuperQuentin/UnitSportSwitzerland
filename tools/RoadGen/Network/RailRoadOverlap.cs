@@ -354,7 +354,45 @@ public sealed class RailRoadOverlap
     /// embedded piece seen so far, halo included. A dashed line resumes on its next dash so the
     /// pattern keeps its phase (it starts with a dash at the polyline's first vertex).
     /// </summary>
-    public void ClearTrackZones(List<RoadPaint> paint, TileId tile)
+    /// <remarks>
+    /// A zebra without lights (#1179, the user: "a crossing who never has priority shouldn't get yellow stripes anyways"): its
+    /// walkers give way to the trams over the tracks, so its bars over a track zone go too; a crosswalk at lights within
+    /// <see cref="LitReach"/> of one of <paramref name="lights"/> (tile-local x, z) keeps them (its walkers' green stops the trams).
+    /// </remarks>
+    /// <summary>A crosswalk this close to a signal's centre is one at lights (m).</summary>
+    private const float LitReach = 40f;
+
+    /// <summary>
+    /// A zebra's bars (yellow quads, four corners each) less those whose middle lies in a track zone (#1179), null where it is no
+    /// zebra, lies at lights, or loses none.
+    /// </summary>
+    public static RoadPaint? ZebraOffTracks(RoadPaint p, Func<float, float, bool> inZone, IReadOnlyList<(float X, float Z)>? lights)
+    {
+        if (p.Type != PaintType.YellowSolid || p.Shape != PaintShape.Triangles || p.Vertices.Length < 12 || p.Vertices.Length % 12 != 0) return null;
+        var v = p.Vertices;
+        int bars = v.Length / 12;
+        float mx = 0, mz = 0;
+        for (int k = 0; k < bars * 4; k++) { mx += v[k * 3]; mz += v[k * 3 + 2]; }
+        (mx, mz) = (mx / (bars * 4), mz / (bars * 4));
+        if (lights?.Any(l => (l.X - mx) * (l.X - mx) + (l.Z - mz) * (l.Z - mz) < LitReach * LitReach) == true) return null;
+        var keep = new List<float>();
+        int dropped = 0;
+        for (int b = 0; b < bars; b++)
+        {
+            float cx = 0, cz = 0;
+            for (int c = 0; c < 4; c++) { cx += v[(b * 4 + c) * 3] / 4; cz += v[(b * 4 + c) * 3 + 2] / 4; }
+            if (inZone(cx, cz)) { dropped++; continue; }
+            for (int f = 0; f < 12; f++) keep.Add(v[b * 12 + f]);
+        }
+        if (dropped == 0) return null;
+        int kept = keep.Count / 12;
+        var indices = new ushort[kept * 6];
+        for (int b = 0; b < kept; b++)
+            for (int f = 0; f < 6; f++) indices[b * 6 + f] = (ushort)(b * 4 + (ushort)(f switch { 0 => 0, 1 => 1, 2 => 2, 3 => 0, 4 => 2, _ => 3 }));
+        return new RoadPaint { Shape = p.Shape, Type = p.Type, Variant = p.Variant, Rgba = p.Rgba, Width = p.Width, Vertices = keep.ToArray(), Indices = indices };
+    }
+
+    public void ClearTrackZones(List<RoadPaint> paint, TileId tile, IReadOnlyList<(float X, float Z)>? lights = null)
     {
         if (_zones.Count == 0 || paint.Count == 0) return;
         var near = _zones.Where(z => z.Line.Any(p =>
@@ -373,6 +411,11 @@ public sealed class RailRoadOverlap
         for (int pi = paint.Count - 1; pi >= 0; pi--)
         {
             var paintLine = paint[pi];
+            if (ZebraOffTracks(paintLine, InZone, lights) is { } zebra)
+            {
+                if (zebra.Vertices.Length == 0) paint.RemoveAt(pi); else paint[pi] = zebra;
+                continue;
+            }
             if (paintLine.Shape != PaintShape.Polyline || paintLine.Type == PaintType.RailGroove) continue;
             // (a tram's own stop line across its track, #1155)
             if (paintLine.Type == PaintType.StopLine && paintLine.Variant == RoadPaint.OverTrack) continue;

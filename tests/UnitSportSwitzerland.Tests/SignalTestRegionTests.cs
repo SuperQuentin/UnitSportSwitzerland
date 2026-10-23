@@ -239,6 +239,37 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
         }
         // a middle stage's head on each island, back to back with its carriageway crossing's
         Assert.Equal(4, signal.Poles.Count(p => (p.Flags & SignalPoleFlags.MiddleStage) != 0));
+        // #1179: a walker reaching an island waits at most a third of the cycle for the next stage, either way (the first walker
+        // of every green, its stage at the walkers' pace along its line)
+        float Walk(int g) => signal.ConflictLines.Where(l => l.Group == g && l.Mover == ConflictMover.Walker)
+            .Select(l => MathF.Sqrt(MathF.Pow(l.Points[^3] - l.Points[0], 2) + MathF.Pow(l.Points[^1] - l.Points[2], 2))).DefaultIfEmpty(0f).Max() / SignalPlan.WalkSpeed;
+        var waits = plan.IslandWaits(Walk).Where(w => middles.Contains(w.Group) || middles.Contains(w.Other)).ToList();
+        Assert.Equal(8, waits.Select(w => (w.Group, w.Other)).Distinct().Count());
+        Assert.All(waits, w => Assert.True(w.Wait <= plan.Cycle * SignalPlan.IslandWaitShare + 0.1f, $"{w.Wait:F1} s on an island, cycle {plan.Cycle:F1} s"));
+    }
+
+    [Theory]
+    [InlineData("J19")]
+    [InlineData("J20")]
+    public void The_islands_beside_the_tram_reservation_are_paved_refuges(string id)
+    {
+        // #1179: on the reservation beside each carriageway's crosswalk, raised (kerbed) either side of it and flush across it (the
+        // sloped kerbs), room for the pole; four crossings' ends (two each side of the junction): four raised pairs, four flush
+        var j = region.Junction(id);
+        var areas = region.Tile(j.E, j.N).AreaProps;
+        var home = TileId.FromLv95(j.E, j.N);
+        float x = (float)(j.E - home.MinE), z = (float)(home.MaxN - j.N);
+        bool Near(RoadAreaProp a) => MathF.Abs(a.Vertices[0] - x) < 25 && MathF.Abs(a.Vertices[2] - z) < 25;
+        var raised = areas.Where(a => a.Type == AreaPropType.Island && a.Variant == 2 && a.Height > 0.1f && Near(a)).ToList();
+        var flush = areas.Where(a => a.Type == AreaPropType.Pavement && Near(a)).ToList();
+        Assert.True(raised.Count >= 8, $"{raised.Count} raised refuge pieces");
+        Assert.True(flush.Count >= 4, $"{flush.Count} flush cuts");
+        // each piece at least 1.5 m across (a walker and a pole)
+        foreach (var a in raised.Concat(flush))
+        {
+            float w = MathF.Sqrt(MathF.Pow(a.Vertices[6] - a.Vertices[3], 2) + MathF.Pow(a.Vertices[8] - a.Vertices[5], 2));
+            Assert.True(w >= 1.5f, $"a refuge piece {w:F2} m wide");
+        }
     }
 
     [Fact]

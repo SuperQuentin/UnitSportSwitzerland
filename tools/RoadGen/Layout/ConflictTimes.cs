@@ -241,16 +241,12 @@ public static class ConflictTimes
     /// </summary>
     public static (Vec2 A, Vec2 B)? MiddleStage(JunctionPlan jp, ArmPlan inArm, ArmPlan outArm)
     {
-        if (jp.Core is not { } core || inArm.Axis is null || outArm.Axis is null) return null;
+        if (jp.Core is null || inArm.Axis is null || outArm.Axis is null) return null;
         (Vec2 Kerb, Vec2 Out)? End(ArmPlan a, bool left)
         {
-            var ex = jp.Exterior.FirstOrDefault(x => x.Arm == a);
-            if (ex?.Bars.FirstOrDefault(b => b.Kind == BarKind.Crosswalk) is not { } bar) return null;
-            var mouth = core.Mouths.First(m => m.Arm == a.Arm);
-            var (from, to) = WalkSpan(a, bar);
-            double s = mouth.Station + bar.Middle;
-            var kerb = a.Axis!.At(s, left ? from : to);
-            var beyond = a.Axis.At(s, left ? from - 1 : to + 1);
+            if (Crosswalk(jp, a, left) is not var (s, _, o)) return null;
+            var kerb = a.Axis!.At(s, o);
+            var beyond = a.Axis.At(s, left ? o - 1 : o + 1);
             return (kerb, (beyond - kerb).Normalized());
         }
         // (the arriving carriageway's left kerb, the leaving one's right: the reservation's sides as their drivers see them)
@@ -259,6 +255,19 @@ public static class ConflictTimes
         var dir = (kb - ka).Normalized();
         if (dir.Dot(da) < 0.8 || (-dir).Dot(db) < 0.8) return null;
         return (ka + dir * IslandIn, kb - dir * IslandIn);
+    }
+
+    /// <summary>
+    /// Where arm <paramref name="a"/>'s crosswalk lies (#1176): its middle's station along the arm's axis, half its width along it,
+    /// and the offset of its <paramref name="left"/> (else right) end, where its walkers' line ends; null without one.
+    /// </summary>
+    public static (double Station, double Half, double Kerb)? Crosswalk(JunctionPlan jp, ArmPlan a, bool left)
+    {
+        var ex = jp.Exterior.FirstOrDefault(x => x.Arm == a);
+        if (jp.Core is not { } core || a.Axis is null || ex?.Bars.FirstOrDefault(b => b.Kind == BarKind.Crosswalk) is not { } bar) return null;
+        var mouth = core.Mouths.First(m => m.Arm == a.Arm);
+        var (from, to) = WalkSpan(a, bar);
+        return (mouth.Station + bar.Middle, (bar.To - bar.From) * 0.5, left ? from : to);
     }
 
     /// <summary>The least radius along a line (m), from each three points in a row; a straight line's is infinite.</summary>

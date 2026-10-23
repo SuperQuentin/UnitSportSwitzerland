@@ -1345,13 +1345,9 @@ public sealed class SignalPlan
         walk ??= g => CrossingOf(g) / WalkSpeed;
         var list = new List<IslandWait>();
         if (Cycle <= 0) return list;
-        for (int g = 0; g < Groups.Count; g++)
+        foreach (var (g, y) in StagePairs())
         {
-            var x = Groups[g];
-            if (x.Kind != SignalGroupKind.Pedestrian || x.Half == CrossingHalf.Whole) continue;
-            int y = Groups.FindIndex(o => o.Kind == SignalGroupKind.Pedestrian && o.Arm == x.Arm && o.Half != CrossingHalf.Whole && o.Half != x.Half);
-            if (y < 0) continue;
-            var v = x.Intervals;
+            var v = Groups[g].Intervals;
             for (int i = 0; i < v.Count; i++)
             {
                 // (a green over the cycle's seam from its piece before the seam)
@@ -1361,6 +1357,33 @@ public sealed class SignalPlan
             }
         }
         return list;
+    }
+
+    /// <summary>
+    /// Each stage of a crossing and the stage a walker on the island it ends on goes on by: a two-stage crossing's halves either
+    /// way (#1030); a crossing over a tram reservation (#1176), each carriageway's crossing into the middle stage over the tracks
+    /// and the middle stage into each carriageway's crossing.
+    /// </summary>
+    private IEnumerable<(int From, int To)> StagePairs()
+    {
+        for (int g = 0; g < Groups.Count; g++)
+        {
+            var x = Groups[g];
+            if (x.Kind != SignalGroupKind.Pedestrian) continue;
+            if (x.Half is CrossingHalf.Arriving or CrossingHalf.Departing)
+            {
+                int y = Groups.FindIndex(o => o.Kind == SignalGroupKind.Pedestrian && o.Arm == x.Arm && o.Half is CrossingHalf.Arriving or CrossingHalf.Departing && o.Half != x.Half);
+                if (y >= 0) yield return (g, y);
+            }
+            else if (x.Half == CrossingHalf.Middle && Twin(x.Arm) is int twin and >= 0)
+                foreach (int arm in new[] { x.Arm, twin })
+                {
+                    int whole = Groups.FindIndex(o => o is { Kind: SignalGroupKind.Pedestrian, Half: CrossingHalf.Whole } && o.Arm == arm);
+                    if (whole < 0) continue;
+                    yield return (whole, g);
+                    yield return (g, whole);
+                }
+        }
     }
 
     /// <summary>Seconds from plan time <paramref name="t"/> (the offset not added) until group <paramref name="g"/> is next green; 0 while it is.</summary>

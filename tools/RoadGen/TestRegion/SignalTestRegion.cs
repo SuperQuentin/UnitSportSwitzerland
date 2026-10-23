@@ -626,9 +626,14 @@ public static partial class SignalTestRegion
         {
             const double arm = 180, half = 8;
             DividedRoad(id, ce, cn, arm, half, "yes");
-            lines.Add(new Line(id + "S", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(ce, cn - arm), (ce, cn - half)], "secondary", "yes"));
+            // (the cross road one lane each way, its turns shared with the through traffic as OSM's turn:lanes says: its turns into the
+            // divided road give way to the walkers there, whose crossings then go with the cross road's phase too)
+            const string shared = "left;through;right";
+            lines.Add(new Line(id + "S", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(ce, cn - arm), (ce, cn - half)], "secondary", "yes",
+                Rows: [new OsmRow(0, arm - half, Lanes: "2", TurnFwd: shared)]));
             lines.Add(new Line(id + "M", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(ce, cn - half), (ce, cn + half)], "secondary", "yes"));
-            lines.Add(new Line(id + "N", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(ce, cn + half), (ce, cn + arm)], "secondary", "yes"));
+            lines.Add(new Line(id + "N", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(ce, cn + half), (ce, cn + arm)], "secondary", "yes",
+                Rows: [new OsmRow(0, arm - half, Lanes: "2", TurnBwd: shared)]));
             lines.Add(new Line(id + "T", "", "", "", [(ce - arm, cn), (ce + arm, cn)], "", Rail: RoadFlags.Tramway | RoadFlags.DoubleTrack));
             // (J20: OSM's walkers' crossing of the tracks either side of the junction, uncontrolled: its middle stages unlit)
             if (unlit)

@@ -1002,7 +1002,7 @@ public static partial class TileRewriter
                     CatenarySupports = catenarySupports.GetValueOrDefault(id) ?? [],   // #1052
                     CatenaryWires = catenaryWires.GetValueOrDefault(id) ?? [],
                 };
-                rails.ClearTrackZones(tile.Paint, id);
+                rails.ClearTrackZones(tile.Paint, id, tile.Signals.Select(s => (s.X, s.Z)).ToList());
                 built.Add(tile);
             }
             return built;
