@@ -656,7 +656,9 @@ public static partial class SignalTestRegion
         // in an exit and an entry ramp at the south end of a 2+2 main road (OSM lanes=4); north of it the main road crosses two
         // 2+2 roads at lights, J21 80 m and J22 260 m from the ramps (between them the approaches widen over 50 and 30 m: the plain half keeps the link 2+2;
         // 160 m between the two left J22's northbound right pocket without its lane in LANE) (the rule: two lanes at the line, a 2+2 street, a main road
-        // within 300 m of a motorway or ramp). Every approach widens to left|through|right (the outer ones over their last 90 m), and OSM names each
+        // within 300 m of a motorway or ramp). Every approach but the one from the ramps (left|through;right: three lanes there left it a lone bike lane into
+        // a box, whose riders' left gave the opposite through group a flasher with nothing to say, #1184) widens to left|through|right
+        // (the outer ones over their last 90 m), and OSM names each
         // lane's destinations (invented towns): the signs green toward the motorway (the rule: a motorway that way within 800 m),
         // blue on the others (cantonal roads)
         {
@@ -677,7 +679,7 @@ public static partial class SignalTestRegion
                 lines.Add(new Line(id, "10m Strasse", "Durchgangsstrasse", "Kanton", [a, b], "primary", Rows: rows));
             // the main road: from the ramps north to J21 (northbound into J21), J22 south to J21 (northbound into J22, southbound
             // into J21; drawn so, the northbound approach to J22 keeps its right lane), J22 north (southbound into J22)
-            Road("GM0", (ge, gr), (ge, g1), Plain(0, 20), ToEnd(20, g1 - gr, $"{West}|{North}|{East}"));
+            Road("GM0", (ge, gr), (ge, g1), new OsmRow(0, g1 - gr, Lanes: "4", TurnFwd: "left|through;right", DestLanesFwd: $"{West}|{North};{East}"));
             Road("GM1", (ge, g2), (ge, g1), ToStart(0, 50, $"{West}|{North}|{East}"), Plain(50, g2 - g1 - 30), ToEnd(g2 - g1 - 30, g2 - g1, $"{East}|{South}|{West}"));
             Road("GM2", (ge, g2), (ge, g2 + 380), ToStart(0, widen, $"{East}|{South}|{West}"), Plain(widen, 380));
             // the cross roads, west to east: eastbound into the junction on the west arm, westbound on the east arm

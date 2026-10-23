@@ -56,6 +56,38 @@ public sealed class SignalTestRegionFixture : IDisposable
 /// </summary>
 public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixture<SignalTestRegionFixture>
 {
+    /// <summary>
+    /// #1189: J21 and J22, 2+2 roads beside a motorway's ramps, get a lit gantry by the rule (#1110) on every approach: a sign and a
+    /// head per lane (left, through, right; J21's approach from the ramps left, through-right), named from OSM's destination:lanes;
+    /// green with the motorway symbol only on the lanes heading south toward the motorway, the others blue. The other junctions get
+    /// none (no motorway near).
+    /// </summary>
+    [Fact]
+    public void Gantry_junctions_get_a_lit_gantry_per_approach_green_toward_the_motorway()
+    {
+        foreach (var id in new[] { "J21", "J22" })
+        {
+            var j = region.Junction(id);
+            var gantries = region.SignalAt(j.E, j.N).Gantries;
+            Assert.Equal(4, gantries.Count);
+            foreach (var g in gantries)
+            {
+                Assert.True(g.Lit);
+                Assert.All(g.Signs, s => Assert.Single(s.Lanes));
+                Assert.All(g.Signs, s => Assert.NotEmpty(s.Lines));
+                var moves = g.Signs.Select(s => s.Lanes[0].Moves).ToList();
+                Assert.True(moves.SequenceEqual([SignalMoves.Left, SignalMoves.Through, SignalMoves.Right])
+                    || moves.SequenceEqual([SignalMoves.Left, SignalMoves.Through | SignalMoves.Right]), string.Join(" | ", moves));
+            }
+            var green = gantries.SelectMany(g => g.Signs).Where(s => s.Colour == SignColour.Green).ToList();
+            Assert.NotEmpty(green);
+            Assert.All(green, s => Assert.StartsWith(SignGantry.MotorwayMark + "Bergwiler", s.Lines[0]));
+            Assert.Contains(gantries.SelectMany(g => g.Signs), s => s.Colour == SignColour.Blue && s.Lines.SequenceEqual(["Seldwyla"]));
+        }
+        Assert.Equal(8, region.Tiles().Sum(t => t.Tile.Signals.Sum(s => s.Gantries.Count)));
+        Assert.Equal(23, region.Tiles().Sum(t => t.Tile.Signals.Sum(s => s.Gantries.Sum(g => g.Signs.Count))));
+    }
+
     [Fact]
     public void J7s_east_crosswalk_crosses_its_wide_island_in_two_stages()
     {
