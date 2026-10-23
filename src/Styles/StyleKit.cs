@@ -344,6 +344,7 @@ public static class StyleKit
             && (path.EndsWith("ps1_water.gdshader") || path.EndsWith("cartoon_water.gdshader")))
             path = path.Replace(".gdshader", "_standalone.gdshader");
         if (role == MaterialRole.Terrain && Core.CmdArgs.Has("--plainterrain")) path = "res://shaders/debug_plain_terrain.gdshader";
+        if (role == MaterialRole.Terrain && Core.CmdArgs.Has("--litterrain")) path = "res://shaders/debug_lit_terrain.gdshader";
         // and its terrain has no discard (shaders/body/terrain.gdshaderinc, NO_DISCARD)
         if (role == MaterialRole.Terrain && Core.Platform.IsStandaloneVr && path.EndsWith("cartoon_terrain.gdshader"))
             path = path.Replace(".gdshader", "_standalone.gdshader");
