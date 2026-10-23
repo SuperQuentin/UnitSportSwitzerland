@@ -97,6 +97,8 @@ public partial class Herds
         h.GroundAt = new Vector2[n];
         h.HeadPitch = new float[n];
         h.HeadYaw = new float[n];
+        h.BodyBuffer = new float[n * 12];
+        h.HeadBuffer = new float[n * 12];
         h.WasAir = new bool[n];
         h.AirAt = new Vector3[n];
         Array.Fill(h.Ground, float.NaN);
@@ -180,10 +182,22 @@ public partial class Herds
             else if (gait > 0.5f)
                 local.Y += Mathf.Abs(Mathf.Sin((float)now * 4.2f + i)) * 0.035f;   // the walk's gentle bob
 
-            bodies.SetInstanceTransform(i, new Transform3D(basis, local));
+            Pack(h.BodyBuffer, i, new Transform3D(basis, local));
             var headBasis = basis * new Basis(Vector3.Up, h.HeadYaw[i] + headShake) * new Basis(Vector3.Right, -h.HeadPitch[i]);
-            heads.SetInstanceTransform(i, new Transform3D(headBasis, local + basis * CowMeshBuilder.Neck));
+            Pack(h.HeadBuffer, i, new Transform3D(headBasis, local + basis * CowMeshBuilder.Neck));
         }
+        // one engine call a mesh, not one a cow: across the engine boundary each costs more than the pose (#1112)
+        bodies.Buffer = h.BodyBuffer;
+        heads.Buffer = h.HeadBuffer;
+    }
+
+    /// <summary>A transform into a MultiMesh buffer: 12 floats, the basis' rows each followed by the origin's coordinate.</summary>
+    private static void Pack(float[] buffer, int index, Transform3D t)
+    {
+        int o = index * 12;
+        buffer[o] = t.Basis.X.X; buffer[o + 1] = t.Basis.Y.X; buffer[o + 2] = t.Basis.Z.X; buffer[o + 3] = t.Origin.X;
+        buffer[o + 4] = t.Basis.X.Y; buffer[o + 5] = t.Basis.Y.Y; buffer[o + 6] = t.Basis.Z.Y; buffer[o + 7] = t.Origin.Y;
+        buffer[o + 8] = t.Basis.X.Z; buffer[o + 9] = t.Basis.Y.Z; buffer[o + 10] = t.Basis.Z.Z; buffer[o + 11] = t.Origin.Z;
     }
 
     // ---- sounds -----------------------------------------------------------------------------------

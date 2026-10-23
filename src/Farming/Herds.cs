@@ -61,6 +61,8 @@ public partial class Herds : Node3D, IOriginContainer
         public float[] Ground = [];
         public Vector2[] GroundAt = [];
         public float[] HeadPitch = [], HeadYaw = [];
+        /// <summary>The bodies' and heads' instance transforms, 12 floats each, sent in one call a pose.</summary>
+        public float[] BodyBuffer = [], HeadBuffer = [];
         public bool[] WasAir = [];
         /// <summary>Where a cow in the air is drawn: eased toward the server's ~10 updates a second.</summary>
         public Vector3[] AirAt = [];
