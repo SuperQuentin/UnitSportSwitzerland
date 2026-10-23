@@ -451,6 +451,20 @@ public class TramTests
     }
 
     [Fact]
+    public void ACrossingOverABallastBed_PavesTheTrackUnderIt()
+    {
+        // #1179, the user: "a crossing should always cross concreted tracks, not raw tracks": a 3 m crossing across a track along x,
+        // at x 10: the track paved from 7.5 to 12.5 m (half its band and a margin either side), the rest its own bed
+        var track = new List<Vec2> { new(0, 0), new(30, 0) };
+        var runs = TileRewriter.PavedUnder(track, [(new Vec2(10, -5), new Vec2(10, 5))]);
+        var run = Assert.Single(runs);
+        Assert.Equal(10 - 1.5 - TileRewriter.PavedMargin, run.From, 0);
+        Assert.Equal(10 + 1.5 + TileRewriter.PavedMargin, run.To, 0);
+        // a crossing that never reaches it paves nothing
+        Assert.Empty(TileRewriter.PavedUnder(track, [(new Vec2(10, 6), new Vec2(10, 16))]));
+    }
+
+    [Fact]
     public void AZebraWithoutLights_HasNoStripesOverTheTramTracks()
     {
         // #1179, the user: "a crossing who never has priority shouldn't get yellow stripes anyways": its walkers give way to the

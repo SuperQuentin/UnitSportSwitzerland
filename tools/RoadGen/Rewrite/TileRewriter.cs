@@ -887,6 +887,8 @@ public static partial class TileRewriter
                         inputs.Gantries);
                 // the tram stops' signs beside their tracks (#1057), where the preprocessor found stops (--tram-stops)
                 if (tramStops.Count > 0) EmitTramStops(tramStops, new TramNet(result), block, signs, netStats.LayoutWrite);
+                // the tram beds the walkers' crossings at lights cross, paved under them (#1179)
+                PaveTrackCrossings(output, signalRecords, paint, rails, netStats.LayoutWrite);
 
                 // the paths' paint on their final pieces, and the crossings at the junctions (#120)
                 var linkOf = new Dictionary<RoadSegment, int>(ReferenceEqualityComparer.Instance);

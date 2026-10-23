@@ -301,6 +301,97 @@ public static partial class TileRewriter
     /// <summary>A tram's stop line reaches this far past the tram's sides (m, #1155).</summary>
     internal const double TramStopLineOver = 0.2;
 
+    /// <summary>A track is paved this far either side of a walkers' crossing's band (m).</summary>
+    public const double PavedMargin = 0.5;
+
+    /// <summary>A walkers' crossing's band across its line (m): a zebra's 3 m.</summary>
+    private const double CrossingBand = 3;
+
+    /// <summary>
+    /// The stretches of a track (its points, LV95) under walkers' crossings (#1179, the user: "a crossing should always cross
+    /// concreted tracks, not raw tracks"): each, as arcs along the track, where it lies within half the crossing's band plus
+    /// <see cref="PavedMargin"/> of a crossing's line (A to B); merged where they touch.
+    /// </summary>
+    public static List<(double From, double To)> PavedUnder(IReadOnlyList<Vec2> track, IEnumerable<(Vec2 A, Vec2 B)> crossings)
+    {
+        var lines = crossings.ToList();
+        var runs = new List<(double From, double To)>();
+        double reach = CrossingBand * 0.5 + PavedMargin, along = 0, from = -1;
+        const double step = 0.25;
+        bool Under(Vec2 p) => lines.Any(c => Polyline.PointSegmentDistance(p, c.A, c.B) < reach);
+        for (int i = 0; i + 1 < track.Count; i++)
+        {
+            double len = track[i].DistanceTo(track[i + 1]);
+            int n = Math.Max(1, (int)Math.Ceiling(len / step));
+            for (int k = i == 0 ? 0 : 1; k <= n; k++)
+            {
+                double s = along + len * k / n;
+                bool under = Under(Vec2.Lerp(track[i], track[i + 1], (double)k / n));
+                if (under && from < 0) from = s;
+                else if (!under && from >= 0) { runs.Add((from, s)); from = -1; }
+            }
+            along += len;
+        }
+        if (from >= 0) runs.Add((from, along));
+        return runs;
+    }
+
+    /// <summary>
+    /// Paves the tram beds under the walkers' crossings at lights (#1179): every tram track on its own bed (not embedded, not a
+    /// paved bed already) that a crossing's walkers' line crosses is cut there, the piece under it a paved bed (flush, its rails as
+    /// grooves), so walkers never cross a raw ballast bed; the trams' way is unchanged (the pieces join end to end).
+    /// </summary>
+    private static void PaveTrackCrossings(Dictionary<TileId, List<RoadSegment>> output, Dictionary<TileId, List<RoadSignal>> signals,
+        Dictionary<TileId, List<RoadPaint>> paint, Network.RailRoadOverlap rails, LayoutWriteStats stats)
+    {
+        var crossings = new List<(Vec2 A, Vec2 B)>();
+        foreach (var (tile, list) in signals)
+            foreach (var s in list)
+                foreach (var l in s.ConflictLines.Where(l => l.Mover == ConflictMover.Walker && l.Points.Length >= 6))
+                    crossings.Add((new Vec2(tile.MinE + l.Points[0], tile.MaxN - l.Points[2]), new Vec2(tile.MinE + l.Points[^3], tile.MaxN - l.Points[^1])));
+        if (crossings.Count == 0) return;
+        foreach (var (tile, segments) in output)
+            for (int i = segments.Count - 1; i >= 0; i--)
+            {
+                var seg = segments[i];
+                if (seg.Class != RoadClass.Railway || (seg.Flags & RoadFlags.Tramway) == 0
+                    || (seg.Attributes.Flags & (RoadAttrFlags.Embedded | RoadAttrFlags.PavedBed)) != 0 || seg.PointCount < 2) continue;
+                var plan = Enumerable.Range(0, seg.PointCount).Select(k => new Vec2(tile.MinE + seg.Points[k * 3], tile.MaxN - seg.Points[k * 3 + 2])).ToList();
+                var near = crossings.Where(c => plan.Any(p => p.DistanceTo((c.A + c.B) * 0.5) < c.A.DistanceTo(c.B) + 10)).ToList();
+                if (near.Count == 0) continue;
+                var runs = PavedUnder(plan, near);
+                if (runs.Count == 0) continue;
+                double length = Polyline.Length(plan);
+                var parts = new List<(double From, double To, bool Paved)>();
+                double at = 0;
+                foreach (var (f, t) in runs)
+                {
+                    if (f > at + 0.05) parts.Add((at, f, false));
+                    parts.Add((Math.Max(at, f), t, true));
+                    at = t;
+                }
+                if (at < length - 0.05) parts.Add((at, length, false));
+                segments.RemoveAt(i);
+                int insertAt = i;
+                foreach (var (f, t, paved) in parts)
+                {
+                    var points = Network.StreetPlanner.Slice(seg, f, t >= length - 0.05 ? double.PositiveInfinity : t);
+                    if (points.Length < 6) continue;
+                    var piece = new RoadSegment
+                    {
+                        Class = seg.Class, Surface = seg.Surface, Flags = seg.Flags, Width = seg.Width, Points = points,
+                        Attributes = paved ? seg.Attributes with { Flags = seg.Attributes.Flags | RoadAttrFlags.PavedBed } : seg.Attributes,
+                    };
+                    segments.Insert(insertAt++, piece);
+                    if (!paved) continue;
+                    var piecePlan = Enumerable.Range(0, points.Length / 3).Select(k => new Vec2(tile.MinE + points[k * 3], tile.MaxN - points[k * 3 + 2])).ToList();
+                    var heights = Enumerable.Range(0, points.Length / 3).Select(k => points[k * 3 + 1]).ToArray();
+                    rails.EmitGrooves(new Network.RailRoadOverlap.Piece(piecePlan, heights, false), piece, tile, Get(paint, tile), ownHeight: true);
+                    stats.TrackCrossingsPaved++;
+                }
+            }
+    }
+
     /// <summary>
     /// Whether a tram track of these flags gets its stop line painted (#1158, the user: "tram stop line shouldn't be drawn on
     /// non-concreted tracks"): one in a street (TLM auf_strasse) or embedded in a carriageway, not one on its own ballast or grass bed.

@@ -248,24 +248,61 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
         Assert.All(waits, w => Assert.True(w.Wait <= plan.Cycle * SignalPlan.IslandWaitShare + 0.1f, $"{w.Wait:F1} s on an island, cycle {plan.Cycle:F1} s"));
     }
 
-    [Fact]
-    public void Every_stage_of_J19s_crossings_has_a_walkers_head_facing_it_from_both_ends()
+    [Theory]
+    [InlineData("J19", true)]
+    [InlineData("J20", false)]
+    public void Every_lit_stage_of_the_tram_reservation_crossings_has_its_group_and_a_head_facing_it_from_both_ends(string id, bool middleLit)
     {
-        // #1179, the user: "the pedestrian lights ... 'cover' the tram tracks, but not one of the exit roads": each stage (the arriving
-        // carriageway, the tracks, the leaving carriageway) shows its own group on a pole at either end, facing each way
-        var (_, _, signal) = SignalOf("J19");
+        // #1179, the user: "the pedestrian lights ... 'cover' the tram tracks, but not one of the exit roads", and at J20 "it looks
+        // like the crossing over the exit lane is unlit too": each carriageway stage (arriving, leaving) has its walkers' group and
+        // shows it on a pole at either end, facing each way; the tracks' stage too where lit (J19), none where unlit (J20)
+        var (_, _, signal) = SignalOf(id);
         var plan = signal.Plan;
-        foreach (int m in Enumerable.Range(0, plan.Groups.Count).Where(g => plan.Groups[g].Half == CrossingHalf.Middle))
+        var reserved = plan.Groups.Where(g => g is { Kind: SignalGroupKind.Tram, TramSide: < 0 }).Select(g => g.Arm).Distinct().ToList();
+        Assert.Equal(2, reserved.Count);
+        foreach (int arm in reserved)
         {
-            int arm = plan.Groups[m].Arm, twin = plan.Twin(arm);
+            int twin = plan.Twin(arm);
+            Assert.True(twin >= 0);
+            bool Whole(int a) => plan.Groups.Any(g => g is { Kind: SignalGroupKind.Pedestrian, Half: CrossingHalf.Whole } && g.Arm == a);
+            Assert.True(Whole(arm) && Whole(twin), $"arm {arm} or its twin {twin} without its walkers' group");
+            int middle = plan.Groups.FindIndex(g => g.Half == CrossingHalf.Middle && g.Arm == arm);
+            Assert.Equal(middleLit, middle >= 0);
             var stages = new List<(string Name, List<float> Faces)>
             {
                 ("arriving carriageway", signal.Poles.Where(p => p.Arm == arm && (p.Flags & SignalPoleFlags.Pedestrian) != 0).Select(p => p.PedHeading).ToList()),
-                ("tracks", signal.Poles.Where(p => (p.Arm == arm || p.Arm == twin) && (p.Flags & SignalPoleFlags.MiddleStage) != 0).Select(p => p.PedHeading + MathF.PI).ToList()),
                 ("leaving carriageway", signal.Poles.Where(p => p.Arm == twin && (p.Flags & SignalPoleFlags.Pedestrian) != 0).Select(p => p.PedHeading).ToList()),
             };
+            if (middleLit)
+                stages.Add(("tracks", signal.Poles.Where(p => (p.Arm == arm || p.Arm == twin) && (p.Flags & SignalPoleFlags.MiddleStage) != 0).Select(p => p.PedHeading + MathF.PI).ToList()));
+            else Assert.DoesNotContain(signal.Poles, p => (p.Arm == arm || p.Arm == twin) && (p.Flags & SignalPoleFlags.MiddleStage) != 0);
             foreach (var (name, faces) in stages)
                 Assert.True(faces.Any(a => faces.Any(b => MathF.Cos(a - b) < -0.9f)), $"arm {arm} {name}: heads facing {string.Join(", ", faces.Select(f => (f * 180 / MathF.PI).ToString("F0")))} deg");
+        }
+    }
+
+    [Theory]
+    [InlineData("J19")]
+    [InlineData("J20")]
+    public void The_tram_bed_is_paved_under_the_crossings(string id)
+    {
+        // #1179, the user: "a crossing should always cross concreted tracks, not raw tracks": the reservation's track is a paved bed
+        // (flush, its rails as grooves) under each side's crossing, its own bed (ballast) between
+        var j = region.Junction(id);
+        var tile = region.Tile(j.E, j.N);
+        var home = TileId.FromLv95(j.E, j.N);
+        float x = (float)(j.E - home.MinE), z = (float)(home.MaxN - j.N);
+        var near = tile.Segments.Where(s => s.Class == RoadClass.Railway && Enumerable.Range(0, s.PointCount)
+            .Any(k => MathF.Abs(s.Points[k * 3] - x) < 30 && MathF.Abs(s.Points[k * 3 + 2] - z) < 30)).ToList();
+        var paved = near.Where(s => (s.Attributes.Flags & RoadAttrFlags.PavedBed) != 0).ToList();
+        Assert.Equal(2, paved.Count);
+        Assert.Contains(near, s => (s.Attributes.Flags & (RoadAttrFlags.PavedBed | RoadAttrFlags.Embedded)) == 0);
+        foreach (var s in paved)
+        {
+            float length = 0;
+            for (int k = 1; k < s.PointCount; k++)
+                length += MathF.Sqrt(MathF.Pow(s.Points[k * 3] - s.Points[k * 3 - 3], 2) + MathF.Pow(s.Points[k * 3 + 2] - s.Points[k * 3 - 1], 2));
+            Assert.InRange(length, 3f, 8f);
         }
     }
 
