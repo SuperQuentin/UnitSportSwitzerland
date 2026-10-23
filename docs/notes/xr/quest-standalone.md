@@ -79,6 +79,6 @@ The same VR mode as over Link (`setup`, `rig`, `controls`), run on the headset's
   reached across the street of an L or a ring). No fade there: Godot's dithers with a discard. Instead the near
   buildings' windows fade into the wall by 210 m (`building.gdshaderinc`), so the windowless stand-in takes over
   unseen. Road paint stops at `ChunkNode.PaintToM`.
-- **Application SpaceWarp** works (`--spacewarp on`: `XrSession.ApplySpaceWarp`, the extension registered by
+- **Application SpaceWarp** works (`--spacewarp on` on a `QUEST_SPACEWARP=1 tools/quest.sh` build: `XrSession.ApplySpaceWarp`; registered and switched off, the extension crashed the game as the session began. Registered by
   `tools/quest.sh`) but is off: a black patch flashed in the left eye, and the made frames felt less smooth than the
   headset's own reprojection of a slower game. Motion vectors also cost ~5 ms a rendered frame.
