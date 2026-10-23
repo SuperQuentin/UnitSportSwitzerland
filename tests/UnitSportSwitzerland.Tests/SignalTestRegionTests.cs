@@ -1052,7 +1052,9 @@ public class TramStopLineTests(SignalTestRegionFixture region) : IClassFixture<S
     [Fact]
     public void Every_tram_lane_at_lights_has_its_stop_line_across_its_track_on_the_cars_line()
     {
-        int lanes = 0;
+        // (#1179, the user: "tram stop line shouldn't be drawn on non-concreted tracks": only where its track is paved, in the street
+        // or on a paved bed; none on a reservation's ballast)
+        int lanes = 0, unpaved = 0;
         foreach (var (_, tile) in region.Tiles())
         {
             var lines = tile.Paint.Where(p => p.Type == PaintType.StopLine && p.Variant == RoadPaint.OverTrack).ToList();
@@ -1061,6 +1063,10 @@ public class TramStopLineTests(SignalTestRegionFixture region) : IClassFixture<S
                 // the arriving driver's way in (tile-local x east, z south): the arm's heading points out
                 double inE = -Math.Cos(a.Heading), inN = -Math.Sin(a.Heading);
                 int trams = a.Lanes.Count(l => l.Kind == ApproachLaneKind.Tram);
+                bool paved = tile.Segments.Any(s => s.Class == RoadClass.Railway
+                    && (s.Attributes.Flags & (RoadAttrFlags.OnStreet | RoadAttrFlags.Embedded | RoadAttrFlags.PavedBed)) != 0
+                    && Enumerable.Range(0, s.PointCount).Any(k => Math.Abs(s.Points[k * 3] - a.X) < 15 && Math.Abs(s.Points[k * 3 + 2] - a.Z) < 15));
+                if (!paved) { unpaved += trams; trams = 0; }
                 lanes += trams;
                 // on the cars' line (the record's stop, the line's middle) within 0.3 m along, beside it within 15 m: one per tram lane
                 var on = lines.Where(p =>
@@ -1077,6 +1083,7 @@ public class TramStopLineTests(SignalTestRegionFixture region) : IClassFixture<S
                 }
             }
         }
-        Assert.True(lanes >= 8, $"{lanes} tram lanes at lights");
+        Assert.True(lanes >= 4, $"{lanes} tram lanes at lights on a paved track");
+        Assert.True(unpaved >= 4, $"{unpaved} tram lanes at lights on a ballast bed");
     }
 }
