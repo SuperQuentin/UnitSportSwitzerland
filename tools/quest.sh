@@ -128,8 +128,10 @@ dotnet build UnitSportSwitzerland.csproj -c Release
 "$GODOT" --headless --path . --import || true
 grep -q godotopenxrvendors .godot/extension_list.cfg || { echo "The vendors addon did not register"; exit 1; }
 mkdir -p "$(dirname "$OUT")"; rm -f "$OUT"
+# not headless: the Shader Baker (shader_baker/enabled) bakes the material shaders into the APK only with the
+# Mobile renderer up; without them a Quest compiled a city's shaders on their first draw (a 5 s freeze)
 GRADLE_OPTS="${GRADLE_OPTS:-} -Dorg.gradle.daemon=false" \
-  "$GODOT" --headless --path . --install-android-build-template "--export-$KIND" "Quest" "$OUT" || true
+  "$GODOT" --rendering-driver vulkan --rendering-method mobile --path . --install-android-build-template "--export-$KIND" "Quest" "$OUT" || true
 [ -s "$OUT" ] || { echo "The export produced no APK"; exit 1; }
 # a failed dotnet publish still writes an APK, just without the game
 # (counted, not grep -q: an early exit breaks unzip's pipe, which pipefail reports as a failure)
