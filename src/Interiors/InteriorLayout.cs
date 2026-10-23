@@ -464,14 +464,16 @@ public sealed class InteriorLayout
 
     /// <summary>
     /// <see cref="HouseLayout.Hash"/> of the owner-drawn layout it was planned from (#1186), "" for a generated plan:
-    /// an approval, a new version or a withdrawal makes a stored plan stale.
+    /// an approval, a new version or a withdrawal makes a stored plan stale. Null on a generated plan and then left out
+    /// of the JSON, so a generated plan's bytes are what they were before (the door baseline hashes them).
     /// </summary>
-    public string House { get; set; } = "";
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? House { get; set; }
 
     public bool Matches(Building b, string group) =>
         Version == CurrentVersion && TriangleCount == b.TriangleCount && Group == group
         && Math.Abs(MinY - b.MinY) < 0.01f && Math.Abs(MaxY - b.MaxY) < 0.01f
-        && House == HouseLayouts.HashFor(b.Egid);
+        && (House ?? "") == HouseLayouts.HashFor(b.Egid);
 
     /// <summary>Height of a floor's surface in the interior frame: the ground floor is 0, a cellar below it.</summary>
     public float FloorY(int floor) => (floor - Below) * StoreyHeight;

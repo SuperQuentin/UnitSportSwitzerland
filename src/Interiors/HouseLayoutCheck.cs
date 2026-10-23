@@ -76,7 +76,7 @@ public partial class HouseLayoutCheck : Node
         HouseLayouts.Set([]);
         Check(!l.Matches(b, l.Group), $"{at}: a stored plan outlives its withdrawn layout");
         var plain = InteriorGenerator.Generate(tile, 0, null, null);
-        Check(plain != null && plain.House == "", $"{at}: a building without a layout is not generated as before");
+        Check(plain != null && plain.House == null, $"{at}: a building without a layout is not generated as before");
 
         // a layout a good way off the box is refused, and the generated interior stays
         var skewed = Layout(o);
@@ -84,7 +84,7 @@ public partial class HouseLayoutCheck : Node
         HouseLayouts.Set([skewed]);
         _warned.Clear();
         var kept = InteriorGenerator.Generate(tile, 0, null, null);
-        Check(kept != null && kept.House == "", $"{at}: a layout 45 degrees off the box was used");
+        Check(kept != null && kept.House == null, $"{at}: a layout 45 degrees off the box was used");
         Check(_warned.Any(w => w.Contains("not used")), $"{at}: a refused layout says nothing in the log");
         GD.Print($"[houselayout] {at}: {l.Floors.Sum(f => f.Rooms.Count)} rooms, {l.Furniture.Count} pieces, entry at {l.EntryX:F1}");
     }
@@ -114,7 +114,7 @@ public partial class HouseLayoutCheck : Node
                 var l = InteriorGenerator.Generate(tile, i, null, null);
                 string what = $"EGID {h.Egid} ({id}_{i})";
                 Check(l != null && l.House == h.Hash(), $"{what}: not planned from its layout: {string.Join("; ", _warned)}");
-                if (l != null && l.House != "")
+                if (l != null && l.House != null)
                 {
                     var problems = InteriorValidator.Validate(l);
                     Check(problems.Count == 0, $"{what}: {string.Join("; ", problems.Take(4))}");
