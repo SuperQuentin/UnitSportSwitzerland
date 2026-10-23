@@ -10,7 +10,7 @@ namespace UnitSport.Terrain;
 /// <summary>
 /// The debug menu's lane plan (#1181, <c>--debugview lanes</c>): the junction planner's cross-sections seen from above. Every
 /// street, transition piece and junction core near the camera is drawn as its strips, coloured by kind (<see cref="Kind"/>,
-/// the legend on screen); the arriving lanes' moves as arrows near their mouth; at each approach's mouth a label of its strips
+/// the legend top right); the arriving lanes' moves as arrows near their mouth; at each transition's mouth and each <c>LANE</c> approach a label of its strips
 /// left to right as the arriving driver sees them (<c>walk | path | verge ‖ out | L | T | TR | bTR ‖ walk</c>) under the
 /// <c>LANE</c> record's own line (<c>L | bL | T | R | bTR</c>, as the test region's log).
 ///
@@ -34,6 +34,8 @@ public partial class LanePlanDebug : Node3D, IOriginShiftAware
     private const float MoveToRebuild = 300f;
     private const double PollSeconds = 0.5;
     private const int MaxLabels = 96;
+    /// <summary>Labels stand this far out along the arm from its mouth, past the arrows.</summary>
+    private const float LabelOut = 14f;
     /// <summary>Above the street's own points, so the drawing reads over the kerbs from any angle.</summary>
     private const float Lift = 0.4f;
 
@@ -99,6 +101,11 @@ public partial class LanePlanDebug : Node3D, IOriginShiftAware
     public int StripQuads { get; private set; }
     public int MouthLabels { get; private set; }
     public int Arrows { get; private set; }
+    /// <summary>How many times it has been drawn, and whether its legend is on screen.</summary>
+    public int Builds { get; private set; }
+    public bool LegendShown => _legend is { Visible: true };
+    /// <summary>Triangles now in the mesh (0 once switched off).</summary>
+    public int Triangles { get; private set; }
 
     private MeshInstance3D _mesh = null!;
     private ArrayMesh _arrays = null!;
@@ -212,6 +219,7 @@ public partial class LanePlanDebug : Node3D, IOriginShiftAware
     private void Clear()
     {
         _arrays?.ClearSurfaces();
+        Triangles = 0;
         foreach (var l in _labels) l.Visible = false;
         StripQuads = MouthLabels = Arrows = 0;
     }
@@ -234,10 +242,11 @@ public partial class LanePlanDebug : Node3D, IOriginShiftAware
     }
 
     /// <summary>A junction core's triangles in the build's frame, with their box.</summary>
-    private readonly record struct Core(Vector3[] Tris, Rect2 Box);
+    private readonly record struct Core(Vector3[] Tris, Rect2 Box, Vector3 Centre);
 
     /// <summary>A mouth: where a street meets a junction core.</summary>
-    private readonly record struct Mouth(Vector3 At, Vector3 Outward, string Strips);
+    /// <summary><paramref name="Planned"/>: a transition's end, as the junction planner wrote it.</summary>
+    private readonly record struct Mouth(Vector3 At, Vector3 Outward, string Strips, bool Planned);
 
     private readonly List<Core> _cores = new();
     private readonly List<Mouth> _mouths = new();
@@ -245,6 +254,7 @@ public partial class LanePlanDebug : Node3D, IOriginShiftAware
     private void Build()
     {
         _built = true;
+        Builds++;
         Transform = Transform3D.Identity;
         foreach (var layer in _layers) layer.Clear();
         _cores.Clear();
@@ -318,7 +328,7 @@ public partial class LanePlanDebug : Node3D, IOriginShiftAware
             minX = Math.Min(minX, p.X); maxX = Math.Max(maxX, p.X);
             minZ = Math.Min(minZ, p.Z); maxZ = Math.Max(maxZ, p.Z);
         }
-        _cores.Add(new Core(tris, new Rect2(minX, minZ, maxX - minX, maxZ - minZ)));
+        _cores.Add(new Core(tris, new Rect2(minX, minZ, maxX - minX, maxZ - minZ), new Vector3((minX + maxX) * 0.5f, 0, (minZ + maxZ) * 0.5f)));
     }
 
     /// <summary>A street end on (or within a metre of) a junction core.</summary>
@@ -369,6 +379,12 @@ public partial class LanePlanDebug : Node3D, IOriginShiftAware
 
         var strips = transition != null ? TransitionStrips(transition, samples) : PlainStrips(seg, samples, at);
         bool mouthStart = OnCore(centre[0]), mouthEnd = OnCore(centre[^1]);
+        // which way along the drawing the junction this point belongs to lies: the mouth nearer it, else the nearest core
+        var towards = new sbyte[n];
+        for (int k = 0; k < n; k++)
+            towards[k] = mouthStart || mouthEnd
+                ? (sbyte)(mouthEnd && (!mouthStart || samples[k] > length * 0.5f) ? 1 : -1)
+                : NearestCoreAhead(centre[k], Along(centre, k));
 
         var layers = _layers;
         foreach (var st in strips)
@@ -380,16 +396,16 @@ public partial class LanePlanDebug : Node3D, IOriginShiftAware
                 float f0 = st.From[k], t0 = st.To[k], f1 = st.From[k + 1], t1 = st.To[k + 1];
                 if (kerb) { f0 -= 0.12f; t0 += 0.12f; f1 -= 0.12f; t1 += 0.12f; }
                 if (t0 - f0 < 0.01f && t1 - f1 < 0.01f) continue;
-                var c0 = StripColour(st, samples[k], length, mouthStart, mouthEnd);
-                var c1 = StripColour(st, samples[k + 1], length, mouthStart, mouthEnd);
+                var c0 = StripColour(st, towards[k]);
+                var c1 = StripColour(st, towards[k + 1]);
                 Quad(layer, centre[k] + right[k] * f0, centre[k] + right[k] * t0, centre[k + 1] + right[k + 1] * t1, centre[k + 1] + right[k + 1] * f1,
                     c0, c0, c1, c1);
                 StripQuads++;
             }
         }
 
-        if (mouthEnd) AddMouth(strips, n - 1, centre[^1], right[^1], -Along(centre, n - 1), +1);
-        if (mouthStart) AddMouth(strips, 0, centre[0], right[0], Along(centre, 0), -1);
+        if (mouthEnd) AddMouth(strips, n - 1, centre[^1], right[^1], -Along(centre, n - 1), +1, transition != null);
+        if (mouthStart) AddMouth(strips, 0, centre[0], right[0], Along(centre, 0), -1, transition != null);
     }
 
     /// <summary>Unit direction along the drawing at sample <paramref name="k"/>.</summary>
@@ -426,13 +442,31 @@ public partial class LanePlanDebug : Node3D, IOriginShiftAware
         return (point, right);
     }
 
-    private static Color StripColour(Strip st, float s, float length, bool mouthStart, bool mouthEnd)
+    /// <summary>+1 when the nearest junction core (within <see cref="CoreReach"/>) lies ahead along the drawing, -1 behind, 0 none.</summary>
+    private sbyte NearestCoreAhead(Vector3 p, Vector3 along)
+    {
+        float best = CoreReach * CoreReach;
+        sbyte result = 0;
+        foreach (var c in _cores)
+        {
+            var d = c.Centre - p;
+            d.Y = 0;
+            float d2 = d.LengthSquared();
+            if (d2 >= best) continue;
+            best = d2;
+            result = (sbyte)(d.Dot(along) >= 0 ? 1 : -1);
+        }
+        return result;
+    }
+
+    private const float CoreReach = 400f;
+
+    /// <summary>A car lane arriving (its traffic heads for the junction <paramref name="towards"/> says), leaving, or neither.</summary>
+    private static Color StripColour(Strip st, sbyte towards)
     {
         if (st.Kind != Kind.CarIn) return ColourOf(st.Kind);
-        if (st.Travel == 0 || (!mouthStart && !mouthEnd)) return ColourOf(Kind.CarBoth);
-        // arriving: its traffic heads for the junction nearer this point
-        bool towardsEnd = mouthEnd && (!mouthStart || s > length * 0.5f);
-        bool arriving = towardsEnd ? st.Travel > 0 : st.Travel < 0;
+        if (st.Travel == 0 || towards == 0) return ColourOf(Kind.CarBoth);
+        bool arriving = st.Travel == towards;
         if (!arriving) return ColourOf(Kind.CarOut);
         bool pocket = st.Opening || (st.Moves != SignalMoves.None && (st.Moves & SignalMoves.Through) == 0);
         return ColourOf(pocket ? Kind.Pocket : Kind.CarIn);
@@ -571,7 +605,7 @@ public partial class LanePlanDebug : Node3D, IOriginShiftAware
     /// A street's end on a junction core: the moves of its arriving lanes as arrows, and its strips left to right as the
     /// arriving driver sees them. <paramref name="way"/> +1: the mouth is at the drawing's end (arriving is along it).
     /// </summary>
-    private void AddMouth(List<Strip> strips, int k, Vector3 at, Vector3 right, Vector3 outward, int way)
+    private void AddMouth(List<Strip> strips, int k, Vector3 at, Vector3 right, Vector3 outward, int way, bool planned)
     {
         var tokens = new List<(string Text, bool Carriageway)>();
         // seen driving in: along the drawing (way +1) the strips' order, against it reversed
@@ -610,7 +644,7 @@ public partial class LanePlanDebug : Node3D, IOriginShiftAware
             if (q > 0) sb.Append(tokens[q].Carriageway != tokens[q - 1].Carriageway ? " ‖ " : " | ");
             sb.Append(tokens[q].Text);
         }
-        _mouths.Add(new Mouth(at, outward, sb.ToString()));
+        _mouths.Add(new Mouth(at, outward, sb.ToString(), planned));
     }
 
     public static string Moves(SignalMoves m) =>
@@ -673,14 +707,16 @@ public partial class LanePlanDebug : Node3D, IOriginShiftAware
                 text = "LANE " + lanes + "\n" + text;
                 break;
             }
-            var place = m.At + m.Outward * 9f;
+            // a plain street's end (a driveway, a side street) only where an approach record stops: its section is drawn anyway
+            if (!m.Planned && ReferenceEquals(text, m.Strips)) continue;
+            var place = m.At + m.Outward * LabelOut;
             texts.Add((place, text, new Vector2(place.X, place.Z).DistanceTo(eye)));
         }
         for (int q = 0; q < _approaches.Count; q++)
         {
             if (used[q]) continue;
             var (at, lanes, outward) = _approaches[q];
-            var place = at + outward * 9f;
+            var place = at + outward * LabelOut;
             texts.Add((place, "LANE " + lanes, new Vector2(place.X, place.Z).DistanceTo(eye)));
         }
         _approaches.Clear();
@@ -697,8 +733,8 @@ public partial class LanePlanDebug : Node3D, IOriginShiftAware
                     Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
                     NoDepthTest = true,
                     FixedSize = true,
-                    PixelSize = 0.0005f,
-                    FontSize = 26,
+                    PixelSize = 0.0010f,
+                    FontSize = 24,
                     OutlineSize = 8,
                     Modulate = Colors.White,
                     OutlineModulate = new Color(0, 0, 0, 0.9f),
@@ -726,7 +762,7 @@ public partial class LanePlanDebug : Node3D, IOriginShiftAware
     private void AddArrow(Vector3 tip, Vector3 forward, Vector3 right, float scale, SignalMoves moves, Color colour)
     {
         var layer = _layers[LayerArrows];
-        scale = Math.Max(0.45f, scale);
+        scale = Math.Max(0.6f, scale);
         float shaft = 0.18f * scale, head = 0.65f * scale;
         var f = forward * scale;
         var r = right * scale;
@@ -769,9 +805,10 @@ public partial class LanePlanDebug : Node3D, IOriginShiftAware
     private void AddTram(RoadSegment seg, Vector3 b)
     {
         var at = SegmentSections.Stations(seg);
-        float half = Math.Min(seg.Width, 3f) * 0.5f;
-        var colour = ColourOf(Kind.Tram);
-        var layer = _layers[LayerStrips];
+        // the track itself (a metre-gauge pair of rails), see-through over the lane it runs in
+        const float half = 0.75f;
+        var colour = ColourOf(Kind.Tram) with { A = 0.75f };
+        var layer = _layers[LayerKerbs];
         var (p0, r0) = PointAt(seg, at, at[0], b);
         for (int k = 1; k < seg.PointCount; k++)
         {
@@ -794,6 +831,7 @@ public partial class LanePlanDebug : Node3D, IOriginShiftAware
     private void Upload()
     {
         _arrays.ClearSurfaces();
+        Triangles = 0;
         for (int i = 0; i < _layers.Length; i++)
         {
             var layer = _layers[i];
@@ -804,6 +842,7 @@ public partial class LanePlanDebug : Node3D, IOriginShiftAware
             arrays[(int)Mesh.ArrayType.Color] = layer.Colours.ToArray();
             _arrays.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
             _arrays.SurfaceSetMaterial(_arrays.GetSurfaceCount() - 1, Materials[i]);
+            Triangles += layer.Points.Count / 3;
         }
         GD.Print(string.Create(CultureInfo.InvariantCulture,
             $"[lanes] drawn round {_builtE:F0},{_builtN:F0}: {_tiles.Count} tiles, {StripQuads} strip quads, {_mouths.Count} mouths ({MouthLabels} labelled), {Arrows} arrows"));
@@ -816,11 +855,10 @@ public partial class LanePlanDebug : Node3D, IOriginShiftAware
         var panel = new PanelContainer { Theme = UiTheme.Get(), MouseFilter = Control.MouseFilterEnum.Ignore };
         panel.AddThemeStyleboxOverride("panel", UiTheme.GlassPanel(0.82f, 10, 10));
         panel.AnchorLeft = panel.AnchorRight = 1;
-        panel.AnchorTop = panel.AnchorBottom = 1;
+        panel.AnchorTop = panel.AnchorBottom = 0;
         panel.GrowHorizontal = Control.GrowDirection.Begin;
-        panel.GrowVertical = Control.GrowDirection.Begin;
         panel.OffsetRight = -16;
-        panel.OffsetBottom = -16;
+        panel.OffsetTop = 16;
         var rows = UiKit.VBox(2);
         rows.MouseFilter = Control.MouseFilterEnum.Ignore;
         panel.AddChild(rows);

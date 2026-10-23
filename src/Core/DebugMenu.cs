@@ -136,7 +136,7 @@ public partial class DebugMenu : CanvasLayer
             + "Rescanned as the camera moves; the places are in the log. Flicker shot below catches the rest.");
         Switch(overlays, "lanes", "Lane plan", false, on => _lanes.On = on,
             "The junction planner's cross-sections within 650 m, seen from above (#1181): every street, transition and core\n"
-            + "as its strips coloured by kind (legend bottom right), the arriving lanes' moves as arrows, and at each\n"
+            + "as its strips coloured by kind (legend top right), the arriving lanes' moves as arrows, and at each\n"
             + "approach's mouth its strips left to right as the arriving driver sees them, under its LANE record.");
 
         rows.AddChild(UiKit.Spacer(6));
