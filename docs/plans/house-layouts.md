@@ -75,3 +75,5 @@ room edges, with openings cut in them. The editor draws exactly that, so no new 
 2. Done: the override in `InteriorGenerator.Generate`, `--houselayoutcheck` on a box house turned three ways.
 3. Done: Caddy `/api/*` and `houses.html`; the service in a tmux loop (`start-layouts.sh`) like the game server
    rather than a systemd unit, so a deploy needs no sudo to restart it; `deploy-linux.sh` publish + upload. Not deployed yet.
+4. Done (asked after the first review): rooms are polygons, with a ruler, wall lengths, typed lengths and two-point plan
+   alignment; the game cuts polygons into joined strips around a core. Exact angled walls in the game: #1197.
