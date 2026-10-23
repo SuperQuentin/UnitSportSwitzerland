@@ -139,6 +139,10 @@ public static partial class TileRewriter
             // the bike lane between the through lane and the right pocket (layout b): no conflict with that pocket's arrow (#979)
             bool between = a.HasRight && !kerbside && mouth.Strips.Any(x => x.Kind == StripKind.BikeLane && x.Way == StripWay.In && x.Moves != SignalMoves.Right && x.Moves != SignalMoves.Left);
             bool riderRight = approach && mouth.Strips.Any(x => x is { Kind: StripKind.BikeLane, Way: StripWay.In, Moves: SignalMoves.Right });
+            // a lone bike lane serving all the riders' moves into a bike box (#1184): one bike group with them all
+            var bikesIn = mouth.Strips.Where(x => x is { Kind: StripKind.BikeLane, Way: StripWay.In }).ToList();
+            bool riderAll = approach && bikesIn.Count == 1 && bikesIn[0].Stop == BikeStop.Box
+                && (bikesIn[0].Moves & SignalMoves.Left) != 0 && bikesIn[0].Moves != SignalMoves.Left;
             // a two-stage crossing's halves (#1030): from where its walkers set off on the arriving side to the island, from the
             // island to the departing side, as they are timed (ConflictTimes.WalkSpan)
             var zebra = ex.Bars.FirstOrDefault(b => b.Kind == BarKind.Crosswalk);
@@ -150,13 +154,14 @@ public static partial class TileRewriter
             float Room(double m) => approach ? (float)Math.Max(SignalPlan.CarSpacing, m - stop) : 0f;
             double Run(PocketRule rule) => a.Openings.Where(o => rule.Owns(o.Id)).Select(o => o.Storage).DefaultIfEmpty(a.Length).Max();
             arms.Add(new SignalArm(a.Heading, approach, leaves, ins.Any(l => l.Moves == SignalMoves.Left), ins.Any(l => l.Moves == SignalMoves.Right),
-                Pedestrians: ex.Crosswalk is not null, BikeSignal: approach && (path || kerbside), SpeedKmh: urban ? 50 : 60,
+                Pedestrians: ex.Crosswalk is not null, BikeSignal: approach && (path || kerbside) && !riderAll, SpeedKmh: urban ? 50 : 60,
                 CrossingM: (float)(mouth.CarriagewayWidth), Rank: (byte)Math.Clamp(info is { } i ? PriorityPlanner.Rank(i) / 4 : 1, 1, 255),
                 Banned: approach ? a.Wants.Banned : SignalMoves.None, BikeBetween: between,
                 StorageM: Room(a.Length), LeftStorageM: Room(Run(PocketRules.Left)), RightStorageM: Room(Run(PocketRules.Right)),
                 HalfInM: halfIn, HalfOutM: halfOut, RiderBox: ex.Bars.Any(b => b.Kind == BarKind.BikeBox),
                 TramMoves: trams?.GetValueOrDefault(arms.Count).Moves ?? SignalMoves.None,
-                TramSide: trams is not null && trams.TryGetValue(arms.Count, out var tram) ? TramSide(mouth, tram.Lateral) : (sbyte)0, RiderRight: riderRight));
+                TramSide: trams is not null && trams.TryGetValue(arms.Count, out var tram) ? TramSide(mouth, tram.Lateral) : (sbyte)0, RiderRight: riderRight,
+                RiderAll: riderAll));
         }
         if (arms.Count(x => x.In) < 2) return null;
         RidersRightOnRed(jp, arms, exterior, stats);
@@ -202,7 +207,7 @@ public static partial class TileRewriter
             // (the riders' own right turns too where that was not enough, #1165)
             if (plan.Validate().Any(e => e.Contains("(Bike arm")))
             {
-                for (int k = 0; k < arms.Count; k++) arms[k] = arms[k] with { RiderRight = false };
+                for (int k = 0; k < arms.Count; k++) arms[k] = arms[k] with { RiderRight = false, RiderAll = false };
                 plan = SignalPlan.Build(arms, seed, amber, tramT);
             }
         }
@@ -230,6 +235,7 @@ public static partial class TileRewriter
         stats.TwoStage += arms.Count(x => x.TwoStage);
         stats.RiderRights += plan.Groups.Count(g => g is { Kind: SignalGroupKind.Bike, Moves: SignalMoves.Right });
         stats.RiderBoxes += Enumerable.Range(0, arms.Count).Count(k => arms[k].RiderBox && plan.Groups.Any(g => g.Kind == SignalGroupKind.Bike && g.Arm == k && g.Moves == SignalMoves.Left));
+        stats.RiderBoxAll += plan.Groups.Count(SignalPlan.BoxRiders);
         plan.PoleColour = PoleColour(canton);
 
         float SampleAt(ArmPlan a, Vec2 p) => net.Links[a.LinkId].Tag is Source s ? s.SampleHeight(p) : 0f;
