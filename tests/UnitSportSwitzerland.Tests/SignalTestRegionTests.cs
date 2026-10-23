@@ -58,7 +58,7 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
 {
     /// <summary>
     /// #1189: J21 and J22, 2+2 roads beside a motorway's ramps, get a lit gantry by the rule (#1110) on every approach: a sign and a
-    /// head per lane (left, through, right; J21's approach from the ramps left, through-right), named from OSM's destination:lanes;
+    /// head per lane (left, through, right), named from OSM's destination:lanes;
     /// green with the motorway symbol only on the lanes heading south toward the motorway, the others blue. The other junctions get
     /// none (no motorway near).
     /// </summary>
@@ -85,7 +85,7 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
             Assert.Contains(gantries.SelectMany(g => g.Signs), s => s.Colour == SignColour.Blue && s.Lines.SequenceEqual(["Seldwyla"]));
         }
         Assert.Equal(8, region.Tiles().Sum(t => t.Tile.Signals.Sum(s => s.Gantries.Count)));
-        Assert.Equal(23, region.Tiles().Sum(t => t.Tile.Signals.Sum(s => s.Gantries.Sum(g => g.Signs.Count))));
+        Assert.Equal(24, region.Tiles().Sum(t => t.Tile.Signals.Sum(s => s.Gantries.Sum(g => g.Signs.Count))));
     }
 
     [Fact]

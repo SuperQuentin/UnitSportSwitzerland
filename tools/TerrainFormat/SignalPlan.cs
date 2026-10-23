@@ -611,6 +611,36 @@ public sealed class SignalPlan
     private static bool Turning(Movement m, SignalGroup g) => m.Turn != SignalMoves.Through && g.Kind == SignalGroupKind.Car;
 
     /// <summary>
+    /// Whether group <paramref name="g"/> gives way to walkers' or riders' group <paramref name="h"/> while both are green (#1109,
+    /// #1192): their conflict is permissive and the yielding is <paramref name="g"/>'s. <see cref="Conflicts"/> is symmetric, so a
+    /// permissive pair says only that one of them yields: riders turning left out of a bike box give way to the oncoming traffic
+    /// (#1184), and the oncoming through cars or riders have nothing to give way to (no flasher). Against riders, <paramref name="g"/>
+    /// yields where a car of it turns across their way, where its right turn crosses their lane beside it, or where it is riders
+    /// out of a box turning left across theirs; walkers it yields to wherever permissive (it turns in across their crossing).
+    /// </summary>
+    public bool GivesWayTo(int g, int h, Conflict[,] conflicts, List<Movement>? moves = null)
+    {
+        if (g == h || conflicts[g, h] != Conflict.Permissive) return false;
+        var gg = Groups[g];
+        var gh = Groups[h];
+        if (gh.Kind == SignalGroupKind.Pedestrian) return true;
+        if (gh.Kind != SignalGroupKind.Bike) return false;
+        // a kerbside bike lane beside the cars of its own approach: the right turn crosses it (#351)
+        if (gg.Kind == SignalGroupKind.Car && gh.Arm == gg.Arm && !Arms[gh.Arm].BikeBetween && gh.Moves != SignalMoves.Right
+            && (gg.Moves & SignalMoves.Right) != 0) return true;
+        moves ??= Movements();
+        foreach (var a in moves)
+        {
+            if (a.Group != g || RidesRight(a, gg)) continue;
+            bool turns = Turning(a, gg), box = BoxRiders(gg) && a.Turn == SignalMoves.Left;
+            if (!turns && !box) continue;
+            foreach (var b in moves)
+                if (b.Group == h && b.From != a.From && !RidesRight(b, gh) && Meet(a, b) && (turns || b.Turn != SignalMoves.Left)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>
     /// Whether the movement from arm <paramref name="from"/> to <paramref name="to"/> (<paramref name="turn"/>, on group
     /// <paramref name="group"/>) has no absolute priority at <paramref name="t"/> (#971, the debug drawing): a flasher qualifies its
     /// group, or a group it yields to is green with it, by <see cref="Conflicts"/>' rules: a left turn from a shared lane to
@@ -768,7 +798,7 @@ public sealed class SignalPlan
     }
 
     private bool Warned(int g, int h, Conflict[,] conflicts, bool together) =>
-        conflicts[g, h] == Conflict.Permissive && Groups[h].Kind is SignalGroupKind.Pedestrian or SignalGroupKind.Bike
+        GivesWayTo(g, h, conflicts)
         && (!together || GreenTogether(g, h, Groups[h].Kind == SignalGroupKind.Pedestrian ? CrossingOf(h) / WalkSpeed : 0f));
 
     /// <summary>The turns of car group <paramref name="g"/> that cross group <paramref name="h"/> (walkers or riders), by <see cref="Conflicts"/>' rules.</summary>
@@ -1087,13 +1117,14 @@ public sealed class SignalPlan
         // flashers: beside a group whose turn shares a green with a pedestrian or bike group; the riders' too, turning right
         // across a crossing that is green with them (#971, the user)
         int count = plan.Groups.Count;
+        var flowMoves = plan.Movements();
         for (int g = 0; g < count; g++)
         {
             if (plan.Groups[g].Kind is not (SignalGroupKind.Car or SignalGroupKind.Bike)) continue;
             bool flashes = false;
+            // (only where g is the one giving way, #1192: not the oncoming through traffic of riders turning left out of a box)
             for (int h = 0; h < count && !flashes; h++)
-                flashes = conflicts[g, h] == Conflict.Permissive
-                    && plan.Groups[h].Kind is SignalGroupKind.Pedestrian or SignalGroupKind.Bike
+                flashes = plan.GivesWayTo(g, h, conflicts, flowMoves)
                     && phases.Any(p => p.Green.Contains(g) && p.Green.Contains(h));
             if (flashes) plan.Groups.Add(new SignalGroup { Kind = SignalGroupKind.Flasher, Arm = plan.Groups[g].Arm, Qualifies = g });
         }
@@ -1736,8 +1767,8 @@ public sealed class SignalPlan
             var fl = plan.Groups[f];
             if (fl.Kind != SignalGroupKind.Flasher) continue;
             var cuts = new SortedSet<float> { 0, plan.Cycle };
-            var watch = Enumerable.Range(0, conflicts.GetLength(0)).Where(h => conflicts[fl.Qualifies, h] == Conflict.Permissive
-                && plan.Groups[h].Kind is SignalGroupKind.Pedestrian or SignalGroupKind.Bike).Append(fl.Qualifies).ToList();
+            var watch = Enumerable.Range(0, conflicts.GetLength(0)).Where(h => plan.GivesWayTo(fl.Qualifies, h, conflicts))
+                .Append(fl.Qualifies).ToList();
             foreach (int h in watch)
                 foreach (var iv in plan.Groups[h].Intervals)
                 {
