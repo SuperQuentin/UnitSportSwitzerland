@@ -69,6 +69,9 @@ public partial class TrafficProbe
         }
     }
 
+    /// <summary>The longest cycle of the lights round the junction under test (s; 0 with none seen).</summary>
+    private double LongestCycle() => _queues.Keys.Select(a => (double)(a.Site?.Plan.Cycle ?? 0)).DefaultIfEmpty(0).Max();
+
     /// <summary>The world endpoints' report at the end (#1134); a failure, or null.</summary>
     private string? WorldReport()
     {
@@ -98,8 +101,15 @@ public partial class TrafficProbe
                     arms.Add($"{labels[g.Id].Arm}{(_traffic.EndpointPlaced(g.Id) ? "" : " (on no way)")} {g.PerMinute * _traffic.GeneratorRate:0.0}/min: made {m}, arrived {a}{(where.Length > 0 ? $" ({where})" : "")}{(q > 0 ? $", {q} waiting" : "")}{(_traffic.NoWayBy.GetValueOrDefault(g.Id) is > 0 and var nw ? $", {nw} with no way" : "")}");
                 }
                 GD.Print($"[trafficcheck] {junction} {mode.ToString().ToLowerInvariant()}s: made {made}, arrived {arrived}, waiting {waiting}; {string.Join("; ", arms)}");
+                // (only where the run gave the first cars time to get there: the nearest destination a generator feeds at 50 km/h, and
+                // a cycle of red; J8's endpoints lie 250 m out, 500 m apart, past the default 40 s run)
                 if (junction == _junction && mode == MoverKind.Car && made > 0 && arrived == 0)
-                    failure ??= $"{junction}: {made} cars made, none arrived";
+                {
+                    double need = gens.Select(g => (g.Shares ?? []).Select(sh => byId.TryGetValue(sh.To, out var d) ? Math.Sqrt((d.E - g.E) * (d.E - g.E) + (d.N - g.N) * (d.N - g.N)) : double.MaxValue)
+                        .DefaultIfEmpty(double.MaxValue).Min()).DefaultIfEmpty(double.MaxValue).Min() / (50 / 3.6) + LongestCycle();
+                    if (_t >= need) failure ??= $"{junction}: {made} cars made, none arrived";
+                    else GD.Print($"[trafficcheck] {junction}: no car arrived yet, the run ({_t:F0} s) shorter than the first could take ({need:F0} s): --seconds {Math.Ceiling(need / 10) * 10:F0} or more");
+                }
             }
         }
         if (Origin is { } origin)
