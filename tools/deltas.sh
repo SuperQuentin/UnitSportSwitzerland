@@ -3,11 +3,13 @@
 # published archives (exactly what players have; vB's are taken from test_output/release/ when the
 # release was just built there), then checked by applying each one to a copy of vA and comparing with vB.
 # --upload attaches them to vB's GitHub release; the game then updates vA -> vB with them.
+# A platform vB has no archive for gets no delta; one vA lacks starts from the newest earlier release that has
+# it (#1170: v0.104-v0.106 shipped no Windows build, the game steps over such releases).
 # Usage: tools/deltas.sh vA vB [--upload]      (Git Bash, WSL, Linux or macOS; needs gh, dotnet, unzip, tar)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ $# -ge 2 ] || { echo "usage: tools/deltas.sh vA vB [--upload]"; exit 2; }
-A=$1 B=$2 UPLOAD=0; [ "${3:-}" = "--upload" ] && UPLOAD=1
+A0=$1 B=$2 UPLOAD=0; [ "${3:-}" = "--upload" ] && UPLOAD=1
 OUT=test_output/release/deltas; mkdir -p "$OUT"
 dotnet build tools/DeltaGen -c Release -o "$OUT/deltagen" > "$OUT/deltagen-build.log" || { cat "$OUT/deltagen-build.log"; exit 1; }
 DG() { dotnet "$OUT/deltagen/DeltaGen.dll" "$@"; }
@@ -23,9 +25,25 @@ unpack() { # tag, asset suffix -> prints the unpacked folder
   echo "$dir"
 }
 
+ASSETS=$(mktemp); trap 'rm -f "$ASSETS"' EXIT
+has() { # tag, asset suffix: built here or published
+  [ -s "test_output/release/UnitSportSwitzerland-$1-$2" ] && return 0
+  gh release view "$1" --json assets --jq '.assets[].name' > "$ASSETS" 2>/dev/null || return 1
+  grep -qx "UnitSportSwitzerland-$1-$2" "$ASSETS"
+}
+base() { # asset suffix: vA, else the newest release before it with that archive
+  local t; for t in $(git tag -l 'v[0-9]*' --sort=-v:refname); do
+    [ "$(printf '%s\n' "$t" "$A0" | sort -V | tail -1)" = "$A0" ] || continue # newer than vA
+    if has "$t" "$1"; then echo "$t"; return 0; fi
+  done; return 1
+}
+
 made=()
 for p in windows:windows.zip linux-x86_64:linux-x86_64.tar.gz macos:macos.tar.gz; do
-  plat=${p%%:*} suffix=${p#*:}
+  plat=${p%%:*} suffix=${p#*:} A=$A0
+  if ! has "$B" "$suffix"; then echo "$plat: $B has no archive, no delta"; continue; fi
+  if ! A=$(base "$suffix"); then echo "$plat: no release up to $A0 has an archive, no delta"; continue; fi
+  [ "$A" = "$A0" ] || echo "$plat: $A0 has no archive, the delta starts from $A"
   old=$(unpack "$A" "$suffix") new=$(unpack "$B" "$suffix")
   exec=()
   case $plat in
@@ -46,6 +64,7 @@ for p in windows:windows.zip linux-x86_64:linux-x86_64.tar.gz macos:macos.tar.gz
   made+=("$delta")
 done
 
+[ ${#made[@]} -gt 0 ] || { echo "No delta made for $B"; exit 1; }
 if [ $UPLOAD = 1 ]; then
   gh release upload "$B" "${made[@]}" --clobber
   echo "Uploaded ${#made[@]} deltas to $B"
