@@ -527,9 +527,10 @@ public static partial class TileRewriter
     /// Where every arriving bike lane's riders stop at the lights (the user's rule, the same for the three moves): at an
     /// advanced line where the street their move goes into carries their way on (a departing bike lane or path), else in a
     /// bike box. A lane for several moves (kerbside, straight on and right) goes by its straight-on move.
-    /// A lone bike lane (the only one arriving) whose riders' other moves get no lane of their own (no left-turn bike lane, no
-    /// pocket shared with them) serves them all and leads into a bike box (the user, #1184: "a short bike lane leading into a
-    /// bike box, serving all movements"; J8 N): riders wait in front of the cars and leave every way from it.
+    /// A lone kerbside bike lane that would be turn-only (no straight on: a T's stem, J8 N's right-only one) while its riders'
+    /// other moves get no lane of their own (no left-turn bike lane, no pocket shared with them) serves them all and leads into
+    /// a bike box (the user, #1184: "a short bike lane leading into a bike box, serving all movements"; only turn-only lanes:
+    /// a lane straight on keeps its advanced line or box): riders wait in front of the cars and leave every way from it.
     /// </summary>
     private static void BikeStops(JunctionPlan jp)
     {
@@ -538,7 +539,8 @@ public static partial class TileRewriter
             var strips = a.Mouth.Strips.ToList();
             bool changed = false;
             var lone = strips.Select((x, k) => (x, k)).Where(p => p.x.Kind == StripKind.BikeLane && p.x.Way == StripWay.In).ToList();
-            if (lone.Count == 1 && lone[0].k == a.Mouth.LastCarriageway && lone[0].x.Moves != SignalMoves.None)
+            if (lone.Count == 1 && lone[0].k == a.Mouth.LastCarriageway && lone[0].x.Moves != SignalMoves.None
+                && (lone[0].x.Moves & SignalMoves.Through) == 0)
             {
                 var cars = strips.Where(x => x.IsCarLane && x.Way == StripWay.In).Aggregate(SignalMoves.None, (m, x) => m | x.Moves);
                 var served = lone[0].x.Moves | (strips.Any(x => x.SharedWithBikes) ? SignalMoves.Right : SignalMoves.None);
