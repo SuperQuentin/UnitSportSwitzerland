@@ -179,6 +179,7 @@ public partial class DebugMenu : CanvasLayer
             });
 
         AddTrafficSection(rows);
+        AddDespawnSection(rows);
 
         rows.AddChild(UiKit.Spacer(6));
         rows.AddChild(UiKit.Section("Streaming"));
@@ -415,6 +416,27 @@ public partial class DebugMenu : CanvasLayer
             + "Held, every generator and destination shows.";
         buttons.AddChild(tool);
         buttons.AddChild(ActionButton("Remove all endpoints", () => World.TrafficGenerators.Instance?.RequestRemove(0)));
+        rows.AddChild(buttons);
+    }
+
+    /// <summary>
+    /// Despawn (#1200): parked vehicles and dropped items taken out of the world, round the camera or
+    /// everywhere. Only sends <c>/despawn</c>, so online the server checks the admin and answers in the chat.
+    /// </summary>
+    private void AddDespawnSection(VBoxContainer rows)
+    {
+        rows.AddChild(UiKit.Spacer(6));
+        rows.AddChild(UiKit.Section("Despawn"));
+        var buttons = UiKit.HBox(6);
+        void Button(string label, string command, string tip)
+        {
+            var button = ActionButton(label, () => Items.ItemController.Instance?.RunCommand?.Invoke(command));
+            button.TooltipText = $"{tip}\n{command}";
+            buttons.AddChild(button);
+        }
+        Button("Vehicles near", "/despawn vehicles", "Every parked vehicle within 30 m.");
+        Button("Items near", "/despawn items", "Every dropped item within 30 m.");
+        Button("Everything everywhere", "/despawn all everywhere", "Every parked vehicle and dropped item in the world.");
         rows.AddChild(buttons);
     }
 
