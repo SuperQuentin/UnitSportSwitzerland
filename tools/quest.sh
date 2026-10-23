@@ -43,7 +43,7 @@ fi
 WT="$STAGE/wt"
 git worktree remove --force "$WT" 2>/dev/null || rm -rf "$WT"
 git worktree add -q --detach "$WT" HEAD
-trap 'cd "$REPO"; git worktree remove --force "$WT"' EXIT
+trap 'cd "$REPO"; git -c core.longpaths=true worktree remove --force "$WT" 2>/dev/null || { rm -rf "$WT"; git worktree prune; }' EXIT
 git diff HEAD --binary | (cd "$WT" && git apply --allow-empty)
 [ -z "$(git ls-files --others --exclude-standard)" ] || echo "WARNING: untracked files are not in the build: $(git ls-files --others --exclude-standard | head -5 | tr '\n' ' ')"
 cp -r "$ADDON" "$WT/addons/"
