@@ -881,10 +881,12 @@ public static partial class TileRewriter
                 if (retimed) stats.SignalsRetimed++; else stats.SignalsNotRetimed++;
                 SignalPlan.DebugTiming = false;
                 // its movements and the pairs that set each green start and end, for the debug view's trails and movers (#979, the user)
-                if (retimed && signalIndex >= 0 && capOfPlan.TryGetValue(jp, out var hc))
+                // (not timed from them: its walkers' lines all the same, the walk graph's crossings, #1176)
+                if (signalIndex >= 0 && capOfPlan.TryGetValue(jp, out var hc))
                 {
                     var record = Get(signals, hc.Home)[signalIndex];
                     var lines = ConflictTimes.Lines(jp, plan, rides, c => PathGroup(plan, jp.Arms.FindIndex(x => x.Arm == c.FromArm), c.Move, c.Kind), c => OntoPath(jp, c)?.Way, tramLines);
+                    if (!retimed) lines = lines.Where(l => l.Mover == ConflictTimes.Mover.Walker).ToList();
                     var timedLines = new Dictionary<ConflictTimes.Line, RoadConflictLine>(ReferenceEqualityComparer.Instance);
                     foreach (var l in lines)
                         record.ConflictLines.Add(timedLines[l] = new RoadConflictLine
@@ -903,7 +905,7 @@ public static partial class TileRewriter
                                     EnterSpeed = (float)ConflictTimes.WalkEnter, Amber = 0f, Length = (float)ConflictTimes.WalkLength,
                                     Points = Local(hc.Home, [from, to], p => capHere is null ? 0f : CapHeightAt(capHere, hc.Home, p), 0f),
                                 });
-                    record.ConflictPairs.AddRange(BindingPairs(plan, table, lines, timedLines));
+                    if (retimed) record.ConflictPairs.AddRange(BindingPairs(plan, table, lines, timedLines));
                     stats.ConflictPairs += record.ConflictPairs.Count;
                     stats.ConflictLines += record.ConflictLines.Count;
                 }

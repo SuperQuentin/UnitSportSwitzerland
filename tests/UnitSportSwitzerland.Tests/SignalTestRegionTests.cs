@@ -191,6 +191,63 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
         Assert.All(paths, p => Assert.Equal(SignalGroupKind.Tram, plan.Groups[p.Group].Kind));
     }
 
+    /// <summary>The signal of junction <paramref name="id"/>: its tile, index and record.</summary>
+    private (RoadTile Tile, int Index, RoadSignal Signal) SignalOf(string id)
+    {
+        var j = region.Junction(id);
+        var tile = region.Tile(j.E, j.N);
+        var home = TileId.FromLv95(j.E, j.N);
+        float x = (float)(j.E - home.MinE), z = (float)(home.MaxN - j.N);
+        int index = Enumerable.Range(0, tile.Signals.Count).MinBy(i => MathF.Abs(tile.Signals[i].X - x) + MathF.Abs(tile.Signals[i].Z - z));
+        return (tile, index, tile.Signals[index]);
+    }
+
+    [Fact]
+    public void J19s_crossings_over_the_tram_reservation_run_in_three_stages()
+    {
+        // #1176, the user: "a multi step crossing with islands on both sides of the center running tram lanes": each carriageway's
+        // crossing its own group, the tracks between the islands a third (the middle stage), stopped only by the trams over it
+        var (_, _, signal) = SignalOf("J19");
+        var plan = signal.Plan;
+        Assert.Empty(plan.Validate());
+        var conflicts = plan.Conflicts();
+        var middles = Enumerable.Range(0, plan.Groups.Count).Where(g => plan.Groups[g] is { Kind: SignalGroupKind.Pedestrian, Half: CrossingHalf.Middle }).ToList();
+        Assert.Equal(2, middles.Count);
+        foreach (int m in middles)
+        {
+            int arm = plan.Groups[m].Arm, twin = plan.Twin(arm);
+            Assert.True(plan.Arms[arm].In && twin >= 0 && plan.Arms[twin].Out);
+            // the carriageways' own crossings stay groups of their own
+            Assert.Contains(plan.Groups, g => g is { Kind: SignalGroupKind.Pedestrian, Half: CrossingHalf.Whole } && g.Arm == arm);
+            Assert.Contains(plan.Groups, g => g is { Kind: SignalGroupKind.Pedestrian, Half: CrossingHalf.Whole } && g.Arm == twin);
+            // only trams stop it, and the trams over it do
+            var hard = Enumerable.Range(0, plan.Groups.Count).Where(h => conflicts[m, h] == SignalPlan.Conflict.Hard).ToList();
+            Assert.NotEmpty(hard);
+            Assert.All(hard, h => Assert.Equal(SignalGroupKind.Tram, plan.Groups[h].Kind));
+            Assert.Contains(plan.Groups[m].Intervals, iv => iv.Aspect == SignalAspect.Green);
+            // its walkers' lines, island to island
+            Assert.Equal(2, signal.ConflictLines.Count(l => l.Group == m && l.Mover == ConflictMover.Walker));
+            // a walker reaching the island waits at most a cycle for its green
+            float green = plan.Groups[m].Intervals.Where(iv => iv.Aspect == SignalAspect.Green).Sum(iv => iv.To - iv.From);
+            Assert.InRange(plan.Cycle - green, 0f, plan.Cycle);
+        }
+        // a middle stage's head on each island, back to back with its carriageway crossing's
+        Assert.Equal(4, signal.Poles.Count(p => (p.Flags & SignalPoleFlags.MiddleStage) != 0));
+    }
+
+    [Fact]
+    public void J20s_middle_stages_over_the_tracks_are_unlit()
+    {
+        // "the middle section of the crossing (between the 2 islands) is uncontrolled by traffic lights, peds just yielding to trams":
+        // no group for it, its walkers' line of no group (both ways, each side of the junction)
+        var (_, _, signal) = SignalOf("J20");
+        var plan = signal.Plan;
+        Assert.Empty(plan.Validate());
+        Assert.DoesNotContain(plan.Groups, g => g.Half == CrossingHalf.Middle);
+        Assert.Equal(4, signal.ConflictLines.Count(l => l.Group == RoadConflictLine.NoGroup && l.Mover == ConflictMover.Walker));
+        Assert.DoesNotContain(signal.Poles, p => (p.Flags & SignalPoleFlags.MiddleStage) != 0);
+    }
+
     [Fact]
     public void Wide_approaches_carry_their_heads_overhead()
     {

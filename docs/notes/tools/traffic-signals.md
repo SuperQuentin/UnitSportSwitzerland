@@ -144,6 +144,24 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   crossings and lists island waits over a third. Test region: J7's east arm (3.4 m island, halves 5.9 / 4.3 m; tier 0
   `J7s_east_crosswalk_crosses_its_wide_island_in_two_stages`). Model viewer: "Traffic light - Two-stage island" (and
   Geneva). Walkers and riders as movers: #1033.
+- **Three-stage crossings over a tram reservation** (#1176, the user: "a multi step crossing with islands on both sides of the
+  center running tram lanes", and one "where the middle section of the crossing (between the 2 islands) is uncontrolled by
+  traffic lights, peds just yielding to trams"): at a junction merged across a divided road whose tram runs on the central
+  reservation (`tram-approaches`; pairs under 30 m apart with a tram between them merge, overlapping or not), each carriageway is
+  an arm with its own crossing and group; between their reservation-side ends (`ConflictTimes.MiddleStage`: the arriving
+  carriageway's left kerb, its twin's right, each end `IslandIn` 1.2 m in on the island) a **middle stage** over the tracks:
+  a pedestrian group of its own (`CrossingHalf.Middle` on the arriving arm, `SignalArm.MiddleM` its length, its clearance),
+  stopped only by the trams over it (from its arm, into its twin: `SignalPlan.Twin`, an arm within 30 degrees), green
+  wherever they are red. Its head back to back with the carriageway crossing's on each island's pole
+  (`SignalPoleFlags.MiddleStage`, facing `PedHeading` + 180°; a leaving carriageway's island gets a pole of its own 2 m out).
+  **Unlit** where OSM maps the walkers' crossing of the tracks there `railway=tram_crossing` + `crossing=uncontrolled` (within
+  12 m of the stage): no group, its walkers' line written with the signal's lines as group 255 (`RoadConflictLine.NoGroup`); the
+  walk graph makes it a `WalkCrossing.TramYield` between the islands, where a walker waits for a gap in the trams
+  (`Traffic.TramAtCrossing`: none on it, none reaching it within its walk over + 2 s), the trams never stopping for walkers.
+  A plan not timed from conflict times now writes its walkers' lines all the same (the walk graph's crossings). Test region J19
+  (lit) and J20 (unlit); tier 0 `J19s_crossings_*`, `J20s_middle_stages_*`, `AMiddleStageOverTheTramReservation_*`. Not done:
+  no zebra painted over the tracks, the islands are the reservation's verge (no paved refuge), the island waits between stages
+  are not bounded as #1030's halves are.
 - **Timing**: yellow 3/4/5 s by speed (SN 640 837 via SRF), red+yellow 2 s (cars, secondary
   source BASt V 149) / 1 s (bikes), all-red 2 s fixed (SN 640 838 computes it per conflict,
   paywalled), min green 4 s, pedestrian green >= 5 s, pedestrian clearance 2/3 of the crossing

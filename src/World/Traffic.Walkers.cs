@@ -102,7 +102,10 @@ public partial class Traffic
             switch (lit.Site!.Plan.State(lit.Group, SignalLamps.Clock()))
             {
                 case SignalAspect.Amber: WalkerAmberStarts++; break;
-                case SignalAspect.Red or SignalAspect.RedAmber: WalkerRedStarts++; break;
+                case SignalAspect.Red or SignalAspect.RedAmber:
+                    WalkerRedStarts++;
+                    if (WalkerRedStarts <= 5) GD.Print($"[traffic] a walker stepped onto a lit crossing at red at {route.Edge.Points[0]} (from {(LaneGraph.CrossingOf(route.Legs[Math.Max(0, route.Leg - 1)].Edge) is { } prev ? (prev.Island ? "an island" : prev.TramYield ? "an unlit stage" : "a crossing") : "a walkway")})");
+                    break;
             }
         }
         else if (here is { Zebra: true } && !ReferenceEquals(m.State, route.Edge))
@@ -168,10 +171,10 @@ public partial class Traffic
                 if (stopIn < 1f || m.Speed < 0.2f) m.Holding = true;
                 if (m.Holding && !wasHolding)
                 {
+                    if (c.TramYield) WalkerTramWaits++;
                     if (here is { Island: true }) WalkerIslandWaits++;
                     else if (c.Lit) WalkerLitWaits++;
                     else if (c.Unmarked) WalkerGapWaits++;
-                    else if (c.TramYield) WalkerTramWaits++;
                     else WalkerZebraWaits++;
                 }
             }

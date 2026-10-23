@@ -416,4 +416,37 @@ public class TramTests
         Assert.True(plan.Cycle > SignalPlan.MaxCycle);
         Assert.Equal(6, plan.PhaseCount);
     }
+
+    [Fact]
+    public void AMiddleStageOverTheTramReservation_IsStoppedOnlyByTheTramsOverIt()
+    {
+        // #1176: a divided road (its west carriageways arms 0 in and 3 out, east 1 out and 4 in) with its tram on the reservation,
+        // across a road (2, 5); the west crossing's middle stage over the tracks
+        var plan = SignalPlan.Build(
+        [
+            new SignalArm(Math.PI, true, false, Pedestrians: true, TramMoves: SignalMoves.Through, TramSide: -1, MiddleM: 9),
+            new SignalArm(0.05, false, true, Pedestrians: true),
+            new SignalArm(-Math.PI / 2, true, true, Pedestrians: true),
+            new SignalArm(Math.PI - 0.05, false, true, Pedestrians: true),
+            new SignalArm(0, true, false, Pedestrians: true, TramMoves: SignalMoves.Through, TramSide: -1),
+            new SignalArm(Math.PI / 2, true, true, Pedestrians: true),
+        ], 1176);
+        Assert.Empty(plan.Validate());
+        int middle = plan.Groups.FindIndex(g => g.Half == CrossingHalf.Middle);
+        Assert.Equal(0, plan.Groups[middle].Arm);
+        Assert.Equal(3, plan.Twin(0));
+        Assert.Equal(9f, plan.CrossingOf(middle));
+        var conflicts = plan.Conflicts();
+        // the eastbound trams entering by its arm and the westbound ones leaving by its twin
+        foreach (int tram in Enumerable.Range(0, plan.Groups.Count).Where(g => plan.Groups[g].Kind == SignalGroupKind.Tram))
+            Assert.Equal(SignalPlan.Conflict.Hard, conflicts[middle, tram]);
+        Assert.All(Enumerable.Range(0, plan.Groups.Count).Where(g => plan.Groups[g].Kind != SignalGroupKind.Tram),
+            g => Assert.NotEqual(SignalPlan.Conflict.Hard, conflicts[middle, g]));
+        // green while the trams are red, never with them
+        Assert.Contains(plan.Groups[middle].Intervals, iv => iv.Aspect == SignalAspect.Green);
+        for (double t = 0.05; t < plan.Cycle; t += 0.1)
+            if (plan.State(middle, t) == SignalAspect.Green)
+                Assert.All(Enumerable.Range(0, plan.Groups.Count).Where(g => plan.Groups[g].Kind == SignalGroupKind.Tram),
+                    g => Assert.NotEqual(SignalAspect.Green, plan.State(g, t)));
+    }
 }

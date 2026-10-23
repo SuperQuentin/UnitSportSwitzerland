@@ -366,7 +366,11 @@ public sealed class SignalPlan
                     if (from < 1e-3f && Groups[h].Intervals[^1].Aspect == SignalAspect.Green) continue;   // a green over the seam starts earlier
                     // the end of g's green that comes last before this start, round the cycle
                     float since = ends.Select(e => ((from - e) % Cycle + Cycle) % Cycle).Min();
-                    if (since < Math.Max(0f, times[g, h]) - 0.15f) return false;
+                    if (since < Math.Max(0f, times[g, h]) - 0.15f)
+                    {
+                        if (DebugTiming) Console.WriteLine($"[keeps] {g} {Groups[g].Kind}/{Groups[g].Moves}/{Groups[g].Half}/a{Groups[g].Arm} -> {h} {Groups[h].Kind}/{Groups[h].Moves}/{Groups[h].Half}/a{Groups[h].Arm}: {since:F1} < {times[g, h]:F1}");
+                        return false;
+                    }
                 }
             }
         return true;
