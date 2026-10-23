@@ -576,7 +576,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             _traffic.Generators = endpoints;
             endpoints.Changed += _traffic.EndpointsChanged;
-            _traffic.GeneratorsOnly = System.IO.File.Exists(System.IO.Path.Combine(TerrainPaths.FindChunkDir(), "signal_test_region.txt"));
+            string chunkDir = TerrainPaths.FindChunkDir();
+            _traffic.GeneratorsOnly = System.IO.File.Exists(System.IO.Path.Combine(chunkDir, "signal_test_region.txt"));
+            // the world's own endpoints (#1134: the test region's generators and destinations on every lit junction), every peer
+            // reading the same file
+            _traffic.LoadWorldEndpoints(Terrain.Format.TrafficEndpointsFile.Read(System.IO.Path.Combine(chunkDir, Terrain.Format.TrafficEndpointsFile.FileName)));
             _traffic.GeneratorRate = (float)(CmdArgs.Double("--traffic-rate") ?? 1.0);
         }
         if (Systems.On(Systems.Npcs) && World.NpcWatch.FromArgs() is { } npcWatch) AddChild(npcWatch);

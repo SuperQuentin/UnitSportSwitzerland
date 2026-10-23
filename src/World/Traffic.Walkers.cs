@@ -174,7 +174,19 @@ public partial class Traffic
     private float WalkerLateral(SlowMover m) => m.Lateral;
 
     /// <summary>A walker's next leg at a junction of the walk graph: any way on at random (back at a dead end).</summary>
-    private (LaneEdge, bool)? NextWalk(SlowMover m, (LaneEdge Edge, bool Forward) leg) => NextAny(_walks, leg);
+    private (LaneEdge, bool)? NextWalk(SlowMover m, (LaneEdge Edge, bool Forward) leg)
+    {
+        // a walker from an endpoint (#1134): on its shortest way to its destination
+        if (m.Goal is not null && _walks is { } g)
+        {
+            long key = leg.Forward ? leg.Edge.KeyEnd : leg.Edge.KeyStart;
+            _nextOptions.Clear();
+            foreach (var o in g.Leaving(key))
+                if (o.Edge != leg.Edge) _nextOptions.Add(o);
+            if (TowardGoal(m, _nextOptions) is { } way) return way;
+        }
+        return NextAny(_walks, leg);
+    }
 
     // ---- zebras: the cars stop for the walkers, the walkers for a car too close to stop --------------
 
