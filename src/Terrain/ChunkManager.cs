@@ -426,7 +426,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         WaterLayer? WaterLayer = null, SignalBuilder.Lamps? Lamps = null,
         ArrayMesh?[]? BuildingCells = null, Vector3[]? OccluderVertices = null, int[]? OccluderIndices = null,
         ArrayMesh? Sites = null, Construction.CraneRig[]? Cranes = null,
-        List<Construction.PitCut>? Pits = null, RoadSignBuilder.Label[]? SignNames = null);
+        List<Construction.PitCut>? Pits = null, RoadSignBuilder.Label[]? SignNames = null,
+        ArrayMesh?[]? BuildingProxies = null);
 
     private Material? _roadMaterial;
     private Material? _buildingMaterial;
@@ -1559,7 +1560,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             if (result.BuildingsRequested)
             {
                 if (result.BuildingCells != null)
-                    EnsureNode(result.Id, state).SetBuildingCells(result.BuildingCells, result.OccluderVertices, result.OccluderIndices);
+                    EnsureNode(result.Id, state).SetBuildingCells(result.BuildingCells, result.OccluderVertices, result.OccluderIndices, result.BuildingProxies);
                 else if (result.Buildings != null)
                     EnsureNode(result.Id, state).SetBuildings(result.Buildings);
                 // the building sites' shells (#608), or none: a rebuild without them clears them
@@ -1828,7 +1829,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             // as one mesh (#553), and only near the ground: from the air a building hides next to
             // nothing, and flying across a city rebuilt three tiles a crossing for no gain. Rebuilt
             // (buildings only) when it crosses, with a ring of slack so it does not flap.
-            bool wantCells = OcclusionCells && street && want.Buildings && want.Dist <= CellRings;
+            // a standalone headset (#1112) keeps them at every distance and height: each cell then picks
+            // its detail by its own distance from the eye (ChunkNode.ProxyFromM), whatever tile it is in
+            bool wantCells = OcclusionCells && want.Buildings && (Platform.IsStandaloneVr || (street && want.Dist <= CellRings));
             bool cellSwitch = state.HasBuildings && state.BuildingCells != wantCells
                 && (wantCells || want.Dist > CellRings + 1 || !street);
             bool needBuildings = want.Buildings && !state.PendingBuildings && (!state.HasBuildings || cellSwitch);
@@ -2303,7 +2306,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 // town tile), and only the tile a body stands on needs one. Empty faces still
                 // mark the tile done, so it is not asked again.
                 ArrayMesh? buildings = null;
-                ArrayMesh?[]? buildingCells = null;
+                ArrayMesh?[]? buildingCells = null, buildingProxies = null;
                 (Vector3[] Vertices, int[] Indices)? occluders = null;
                 Vector3[][]? buildingFaces = null;
                 Interiors.DoorSpot[]? doors = null;
@@ -2376,6 +2379,14 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                                 for (int c = 0; c < parts.Length; c++)
                                     if (parts[c] is { } part) buildingCells[c] = ChunkNode.ToArrayMesh(part, buildingMaterial);
                                 occluders = BuildingOcclusion.Occluders(bTile);
+                                // a standalone headset's far stand-ins, cut into the same cells (#1112)
+                                if (Platform.IsStandaloneVr && BuildingMeshBuilder.BuildProxies(bTile) is { } proxyData)
+                                {
+                                    var proxyParts = BuildingOcclusion.SplitByCell(proxyData);
+                                    buildingProxies = new ArrayMesh?[proxyParts.Length];
+                                    for (int c = 0; c < proxyParts.Length; c++)
+                                        if (proxyParts[c] is { } part) buildingProxies[c] = ChunkNode.ToArrayMesh(part, buildingMaterial);
+                                }
                             }
                             else buildings = ChunkNode.ToArrayMesh(buildingData, buildingMaterial);
                         }
@@ -2534,7 +2545,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     tailMesh, blendedCollision, roads, wantRoads,
                     holes, cover, buildings, buildingFaces, wantBuildings, trees, water,
                     bridgeCollision, stageMs, doors, bores, waterLayer, lamps,
-                    buildingCells, occluders?.Vertices, occluders?.Indices, siteMesh, craneRigs, plannedPits, signNames));
+                    buildingCells, occluders?.Vertices, occluders?.Indices, siteMesh, craneRigs, plannedPits, signNames,
+                    BuildingProxies: buildingProxies));
             }
             catch (OperationCanceledException)
             {

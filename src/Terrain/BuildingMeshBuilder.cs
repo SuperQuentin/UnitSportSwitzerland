@@ -205,6 +205,61 @@ public static partial class BuildingMeshBuilder
     /// above it) carries every pitched roof past its walls (<see cref="RoofOverhangs"/>, #1067);
     /// Low (PS1) draws the surveyed solid alone. Collision is the solid either way.
     /// </summary>
+    /// <summary>
+    /// Each building as one box (#1112): its plan box from the ground to halfway between the eave and the
+    /// ridge, walls in its wall colour and the top in its roof colour, no window grid (UV.y &lt; 0). Ten
+    /// triangles where the surveyed solid has a hundred or so: the far stand-in a standalone headset draws
+    /// past <see cref="ChunkNode.ProxyFromM"/>. Buildings without a plan box are left out.
+    /// </summary>
+    public static MeshData? BuildProxies(BuildingTile tile)
+    {
+        var types = BuildingTypes.For(tile);
+        var verts = new List<Vector3>();
+        var colors = new List<Color>();
+        for (int bi = 0; bi < tile.Buildings.Count && bi < types.Boxes.Length; bi++)
+        {
+            var b = tile.Buildings[bi];
+            if (!Drawn(b) || types.Boxes[bi] is not { } box) continue;
+            var type = types.TypeOf(bi);
+            var kind = KindOf(b, type);
+            var wall = WallColor(kind, b.YearBuilt, type).SrgbToLinear();
+            var roof = RoofColor(kind, type).SrgbToLinear();
+            float bottom = b.MinY, top = Math.Max(box.Eave, (box.Eave + b.MaxY) / 2f);
+            if (top <= bottom + 0.5f) continue;
+            var c = box.Corners();
+            var centre = new Vector3(box.Center.X, (bottom + top) / 2f, box.Center.Y);
+            for (int k = 0; k < 4; k++)
+            {
+                var p = c[k];
+                var q = c[(k + 1) % 4];
+                var a0 = new Vector3(p.X, bottom, p.Y);
+                var a1 = new Vector3(q.X, bottom, q.Y);
+                var b1 = new Vector3(q.X, top, q.Y);
+                var b0 = new Vector3(p.X, top, p.Y);
+                var outward = (a0 + b1) / 2f - centre;
+                ProxyQuad(verts, colors, a0, a1, b1, b0, outward with { Y = 0 }, wall);
+            }
+            ProxyQuad(verts, colors, new Vector3(c[0].X, top, c[0].Y), new Vector3(c[1].X, top, c[1].Y),
+                new Vector3(c[2].X, top, c[2].Y), new Vector3(c[3].X, top, c[3].Y), Vector3.Up, roof);
+        }
+        if (verts.Count == 0) return null;
+        int n = verts.Count;
+        var uvs = new Vector2[n];
+        Array.Fill(uvs, new Vector2(0f, -1f));   // no window grid
+        return new MeshData(verts.ToArray(), colors.ToArray(), uvs, new Vector2[n], new float[n * 4]);
+    }
+
+    /// <summary>A quad as two triangles wound so their front faces <paramref name="outward"/> (Godot culls the back).</summary>
+    private static void ProxyQuad(List<Vector3> verts, List<Color> colors, Vector3 a, Vector3 b, Vector3 c, Vector3 d,
+        Vector3 outward, Color color)
+    {
+        // Godot's front face is clockwise seen from in front: the right-hand normal then points away from the viewer
+        bool flip = (b - a).Cross(c - a).Dot(outward) > 0f;
+        if (flip) { verts.Add(a); verts.Add(c); verts.Add(b); verts.Add(a); verts.Add(d); verts.Add(c); }
+        else { verts.Add(a); verts.Add(b); verts.Add(c); verts.Add(a); verts.Add(c); verts.Add(d); }
+        for (int i = 0; i < 6; i++) colors.Add(color);
+    }
+
     public static MeshData? Build(BuildingTile tile, Styles.MeshDetail detail = Styles.MeshDetail.Low)
     {
         var types = BuildingTypes.For(tile);

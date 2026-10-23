@@ -290,11 +290,17 @@ public partial class ChunkNode : Node3D
     private OccluderInstance3D? _occluder;
 
     /// <summary>
+    /// A standalone headset draws a building cell's own mesh up to this far from the eye, and its boxes
+    /// (<see cref="BuildingMeshBuilder.BuildProxies"/>) beyond: a 3D distance per cell, whatever tile it is in (#1112).
+    /// </summary>
+    public const float ProxyFromM = 300f;
+
+    /// <summary>
     /// The buildings cut into cells, with the tile's occluders (#553, <see cref="BuildingOcclusion"/>):
     /// what a tile round the camera draws, so a block hidden behind a row of houses is culled.
     /// Replaces the one-mesh buildings; <see cref="SetBuildings"/> replaces these.
     /// </summary>
-    public void SetBuildingCells(ArrayMesh?[] cells, Vector3[]? occluderVertices, int[]? occluderIndices)
+    public void SetBuildingCells(ArrayMesh?[] cells, Vector3[]? occluderVertices, int[]? occluderIndices, ArrayMesh?[]? proxies = null)
     {
         ClearCells();
         if (_buildingInstance?.Mesh is { } whole)
@@ -307,9 +313,23 @@ public partial class ChunkNode : Node3D
         {
             if (cells[c] is not { } mesh) continue;
             var instance = new MeshInstance3D { Name = $"Buildings{c}", Mesh = mesh, Visible = Shows(TileLayers.Buildings) };
+            // no fade: Godot's fades dither with a discard, which a standalone headset's GPU cannot afford
+            if (proxies != null) instance.VisibilityRangeEnd = ProxyFromM;
             AddChild(instance);
             list.Add(instance);
         }
+        if (proxies != null)
+            for (int c = 0; c < proxies.Length; c++)
+            {
+                if (proxies[c] is not { } mesh) continue;
+                var proxy = new MeshInstance3D
+                {
+                    Name = $"BuildingProxies{c}", Mesh = mesh, Visible = Shows(TileLayers.Buildings),
+                    VisibilityRangeBegin = ProxyFromM, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                };
+                AddChild(proxy);
+                list.Add(proxy);
+            }
         _cellInstances = list.ToArray();
         if (occluderVertices != null && occluderIndices != null)
         {
