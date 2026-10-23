@@ -136,6 +136,8 @@ src/Loot/LootTables      quick  --sitecheck --systems ui
 src/Interiors/           quick  --doorcheck
 src/Interiors/           quick  --flatcheck
 src/Interiors/           quick  --stairwalkcheck
+src/Interiors/           quick  --houselayoutcheck
+tools/TerrainFormat/HouseLayout quick --houselayoutcheck
 # #598: the generated world's shaped buildings: outline, doors, interiors that follow it
 src/Interiors/           quick  --shapedcheck --systems ui
 src/Interiors/Church     quick  --churchstagecheck

@@ -196,6 +196,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.IkeaProbe { Name = "IkeaProbe" });
             return;
         }
+        // a house drawn on the web is the interior the game plans (#1186)
+        if (Interiors.HouseLayoutCheck.Requested)
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.HouseLayoutCheck { Name = "HouseLayoutCheck" });
+            return;
+        }
         // whether a block of flats' stairwells can be climbed, from their collision (#571)
         if (Interiors.StairWalkCheck.Requested)
         {

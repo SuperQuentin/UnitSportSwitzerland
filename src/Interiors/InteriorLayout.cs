@@ -462,9 +462,16 @@ public sealed class InteriorLayout
     /// <summary>Doors with a leaf inside the building: flats' front doors (#557).</summary>
     public List<InnerDoorPlan> InnerDoors { get; set; } = new();
 
+    /// <summary>
+    /// <see cref="HouseLayout.Hash"/> of the owner-drawn layout it was planned from (#1186), "" for a generated plan:
+    /// an approval, a new version or a withdrawal makes a stored plan stale.
+    /// </summary>
+    public string House { get; set; } = "";
+
     public bool Matches(Building b, string group) =>
         Version == CurrentVersion && TriangleCount == b.TriangleCount && Group == group
-        && Math.Abs(MinY - b.MinY) < 0.01f && Math.Abs(MaxY - b.MaxY) < 0.01f;
+        && Math.Abs(MinY - b.MinY) < 0.01f && Math.Abs(MaxY - b.MaxY) < 0.01f
+        && House == HouseLayouts.HashFor(b.Egid);
 
     /// <summary>Height of a floor's surface in the interior frame: the ground floor is 0, a cellar below it.</summary>
     public float FloorY(int floor) => (floor - Below) * StoreyHeight;
