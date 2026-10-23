@@ -23,7 +23,7 @@ namespace UnitSport.Avatar;
 public partial class Cyclist : Node3D
 {
     /// <summary>The bike and the rider's fit to it (#1124): the hips, pedals and cranks all come from here; per bike since #1159.</summary>
-    private Player.BikeFrame Frame { get; init; } = Player.BikeFrame.Default;
+    public Player.BikeFrame Frame { get; private init; } = Player.BikeFrame.Default;
 
     private MeshInstance3D _cranks = null!;
     private readonly MeshInstance3D[] _legs = new MeshInstance3D[2];

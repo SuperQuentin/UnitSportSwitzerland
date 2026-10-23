@@ -418,8 +418,13 @@ public partial class ChatManager : Node
         switch (verb)
         {
             case "help":
+                if (rest.Length > 0)
+                {
+                    Show(ChatCompleter.HelpFor(rest, online: false, isAdmin: true) ?? $"No command '/{rest.TrimStart('/')}' offline. /help lists them.", ChatKind.Private);
+                    return;
+                }
                 foreach (string line in ChatCompleter.Help(online: false, isAdmin: true)) Show(line, ChatKind.Private);
-                Show("Offline: the server commands (/race, /tp <player>, /kick ...) need a multiplayer game.", ChatKind.Private);
+                Show("  Offline: races, Battle Royale, parties and the other player commands need a multiplayer game.", ChatKind.Private);
                 return;
 
             case "who":
@@ -534,6 +539,18 @@ public partial class ChatManager : Node
                     foreach (string line in occasions.RunCommand(parts[1..], isAdmin: true))
                         Show(line, ChatKind.Private);
                 return;
+
+            case "concert" when IsConcertJoin(rest):
+            {
+                var (line, venue) = ConcertJoinReply(Concert.ConcertService.Instance?.HostedVenues(Here?.Invoke()));
+                Show(line, venue is null ? ChatKind.Error : ChatKind.Private);
+                if (venue is not null)
+                {
+                    if (Teleporter?.TeleportTo(venue.E, venue.N, venue.Name) == true) Show($"Teleported to {venue.Name}", ChatKind.System);
+                    else Show("Nothing to teleport here.", ChatKind.Error);
+                }
+                return;
+            }
 
             case "concert":
                 Show(Concert.ConcertService.Instance?.LocalCommand(string.Join(' ', parts[1..])) ?? "Concerts are not running.", ChatKind.Private);
@@ -830,7 +847,7 @@ public partial class ChatManager : Node
 
         switch (verb)
         {
-            case "help": SendHelp(sender); return;
+            case "help": SendHelp(sender, rest); return;
             // invites (#840): answering them, teleport requests anyone may send, parties
             case "invites" or "accept" or "decline" or "tpa" or "tphere" or "party": InviteCommand(sender, verb, rest); return;
             case "stream": ReportStreaming(sender); return;
@@ -891,6 +908,7 @@ public partial class ChatManager : Node
                 return;
             case "concert":
                 if (Concerts == null) ReplyTo(sender, "Concerts are not available on this server.", ChatKind.Error);
+                else if (IsConcertJoin(rest)) CommandConcertJoin(sender);
                 else ReplyTo(sender, Concerts.Command(sender, rest, IsAdmin(sender),
                     GetNodeOrNull<Player.FootPlayer>("../Players/" + sender)?.Global), ChatKind.Private);
                 return;
@@ -969,16 +987,19 @@ public partial class ChatManager : Node
     }
 
     /// <summary>
-    /// <c>/help</c>: the commands this sender may run, from the completer's table (#994), so a new
-    /// command shows here the day it is added.
+    /// <c>/help [command]</c>: the commands this sender may run, grouped, or one command's arguments,
+    /// from the completer's table (#994, #1173), so a new command shows here the day it is added.
     /// </summary>
-    private void SendHelp(long sender)
+    private void SendHelp(long sender, string command)
     {
+        if (command.Length > 0)
+        {
+            ReplyTo(sender, ChatCompleter.HelpFor(command, online: true, IsAdmin(sender))
+                ?? $"No command '/{command.TrimStart('/')}' for you. /help lists them.", ChatKind.Private);
+            return;
+        }
         foreach (string line in ChatCompleter.Help(online: true, IsAdmin(sender)))
             ReplyTo(sender, line, ChatKind.Private);
-
-        if (_registry?.LoginEnabled == true && !IsAdmin(sender))
-            ReplyTo(sender, "/login <password>  — become an operator", ChatKind.Private);
     }
 
     /// <summary>Client-side streaming stats, injected by ClientWorld.</summary>
@@ -1160,6 +1181,28 @@ public partial class ChatManager : Node
         foreach (string line in lines) ReplyTo(sender, line, failed ? ChatKind.Error : ChatKind.Private);
         if (venue is null || !RequiresAvatar(sender, "stadium") || !MayTeleport(sender)) return;
         RpcId(sender, MethodName.ForceTeleport, venue.E, venue.N, venue.Name);
+    }
+
+    private static bool IsConcertJoin(string rest) => rest.Trim().Equals("join", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// <c>/concert join</c> (#1173): a teleport to the venue where a set is hosted, the nearest if
+    /// several, on the same terms as <c>/stadium &lt;name&gt;</c>.
+    /// </summary>
+    private void CommandConcertJoin(long sender)
+    {
+        var (line, venue) = ConcertJoinReply(Concerts?.HostedVenues(_players?.GetNodeOrNull<Player.FootPlayer>(sender.ToString())?.Global));
+        ReplyTo(sender, line, venue is null ? ChatKind.Error : ChatKind.Private);
+        if (venue is null || !RequiresAvatar(sender, "concert join") || !MayTeleport(sender)) return;
+        RpcId(sender, MethodName.ForceTeleport, venue.E, venue.N, venue.Name);
+    }
+
+    /// <summary><c>/concert join</c>'s answer, the same on a server and offline: the line to show and the venue to go to (null: none).</summary>
+    private static (string Line, StadiumSpec? Go) ConcertJoinReply(List<StadiumSpec>? hosted)
+    {
+        if (hosted is not [var go, ..]) return ("No set is hosted right now. /stadium shows what plays tonight.", null);
+        string also = hosted.Count > 1 ? " Also hosted: " + string.Join(", ", hosted.Skip(1).Select(v => $"#{StadiumLookup.Number(v)} {v.Name}")) + " (/stadium <name>)." : "";
+        return ($"To {StadiumLookup.Label(go)}: {Concert.ConcertService.ShowAt(go)}.{also}", go);
     }
 
     /// <summary>

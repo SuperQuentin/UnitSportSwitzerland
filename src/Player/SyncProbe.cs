@@ -71,7 +71,7 @@ public partial class SyncProbe : Node
     private int _cockpitFrames, _cockpitMismatch, _driverless;
     private float _cockpitTurnErr, _cockpitTurnMax;
     private static readonly (double At, string Action)[] SwitchPresses =
-        { (20.0, PlayerInput.RoofToggle), (20.5, PlayerInput.LightsToggle), (23.0, PlayerInput.LightsToggle) };
+        { (27.0, PlayerInput.RoofToggle), (27.5, PlayerInput.LightsToggle), (30.0, PlayerInput.LightsToggle) };
     private readonly System.Collections.Generic.Dictionary<string, (float Basis, float Hand, float Crank, int N, float Speed, int Poses)> _byStage = new();
 
     public SyncProbe(ChunkManager? chunks, WorldOrigin origin)
@@ -84,8 +84,10 @@ public partial class SyncProbe : Node
         ProcessPriority = 1;
     }
 
-    private static readonly string[] Stages = { "walk", "sprint", "jump", "slide", "stand", "bike", "brake", "car", "moto", "africa", "heli", "plane" };
-    private static readonly double[] StageEnd = { 3, 5, 6.5, 8, 9.5, 15.5, 18.5, 25.5, 32.5, 39.5, 45.5, 52.5 };
+    private static readonly string[] Stages = { "walk", "sprint", "jump", "slide", "stand", "bike", "brake", "ebike", "car", "moto", "africa", "heli", "plane" };
+    private static readonly double[] StageEnd = { 3, 5, 6.5, 8, 9.5, 15.5, 18.5, 25.5, 32.5, 39.5, 46.5, 52.5, 59.5 };
+    // the e-bike (#1167): fresh frames where the mirror drew it, and those where it drew another bike's frame
+    private int _ebikeFrames, _ebikeWrongFrame;
     private double _stageStart;
     private int _ownerPoseKind;
     // a motorbike's wheelie (#410): the owner's pitch last frame, the highest seen, the worst fresh mismatch
@@ -155,6 +157,12 @@ public partial class SyncProbe : Node
         else if (_ownerPose != null && _mirror.Ride != _ownerKind && !_copiedLastFrame) _kindMismatch++;
         if (_copiedLastFrame && _ownerPitch is { } op && _mirror.Visual is Avatar.Motorcyclist seenBike && _mirror.Ride == _ownerKind)
             _pitchErr = Math.Max(_pitchErr, Mathf.Abs(op - seenBike.Pitch));
+        // the e-bike (#1167): the mirror draws the owner's own bike, its frame and fit, not the road bike's
+        if (_copiedLastFrame && _ownerKind == RideKind.EBike && _mirror.Ride == RideKind.EBike)
+        {
+            _ebikeFrames++;
+            if (_mirror.Visual is not Avatar.Cyclist { Frame.Spec.Kind: RideKind.EBike }) _ebikeWrongFrame++;
+        }
         if (_copiedLastFrame && _ownerSwitches is { } sw && _mirror.Visual is Avatar.CarRig mirrorCar
             && (mirrorCar.RoofOpen != sw.Roof || mirrorCar.Headlights != sw.Lights))
             _switchMismatch++;
@@ -256,6 +264,12 @@ public partial class SyncProbe : Node
             case "brake":
                 _owner!.RideControls = () => new RideInput(0f, 1f, 0f, false);
                 break;
+            case "ebike":
+                // the e-bike (#1167), weaving under its motor: its own frame and crank on the mirror
+                Mount(RideKind.OnFoot);
+                Mount(RideKind.EBike);
+                _owner!.RideControls = () => new RideInput(1f, 0f, Mathf.Sin((float)_t * 1.3f) * 0.7f, false);
+                break;
             case "car":
                 // a drift car sliding: throttle, a weaving wheel and handbrake stabs. The NA6CE,
                 // which has both a soft top and pop-ups for the switch presses.
@@ -318,10 +332,11 @@ public partial class SyncProbe : Node
         GD.Print($"[synccheck] cockpit: {_cockpitFrames} fresh frames, steering wheel up to {Mathf.RadToDeg(_cockpitTurnMax):F0}° "
             + $"off by {Mathf.RadToDeg(_cockpitTurnErr):F3}°, frames where the wheel or a pedal differed: {_cockpitMismatch} (must be 0), "
             + $"without a driver: {_driverless} (must be 0)");
+        GD.Print($"[synccheck] e-bike: {_ebikeFrames} fresh frames drawn, on another bike's frame: {_ebikeWrongFrame} (must be 0)");
         GD.Print($"[synccheck] wheelie: owner up to {Mathf.RadToDeg(_pitchMax):F0}° (> 8), mirror off by {Mathf.RadToDeg(_pitchErr):F2}° on fresh frames (< 3)");
         bool ok = _pitchMax > Mathf.DegToRad(8f) && _pitchErr < Mathf.DegToRad(3f) && _switchSeen == 7 && _switchMismatch == 0 && _cockpitFrames > 20 && _cockpitMismatch == 0 && _driverless == 0 && _samples > 200 && _basisErr < MaxBasisErr && _handErr < MaxHandErr && _crankErr < MaxCrankErr
             && _freshBasis < FreshErr && _freshHand < FreshErr && _freshCrank < FreshCrank
-            && _byStage.ContainsKey("bike") && _byStage.ContainsKey("moto") && _byStage.ContainsKey("africa") && _byStage.ContainsKey("plane");
+            && _byStage.ContainsKey("bike") && _byStage.ContainsKey("ebike") && _ebikeFrames > 20 && _ebikeWrongFrame == 0 && _byStage.ContainsKey("moto") && _byStage.ContainsKey("africa") && _byStage.ContainsKey("plane");
         GD.Print($"[synccheck] max pose {_basisErr:F3} (< {MaxBasisErr}), hand {_handErr:F3} m (< {MaxHandErr}), "
             + $"crank {_crankErr:F3} rad beyond a frame of cadence (< {MaxCrankErr}), {_samples} frames, {_kindMismatch} frames waiting on a ride change");
         GD.Print(ok ? "[synccheck] RESULT: ok" : "[synccheck] RESULT: FAILED");

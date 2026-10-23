@@ -183,22 +183,30 @@ public static class BikePhysics
     }
 
     /// <summary>
-    /// What a pedelec's motor adds at the cranks, W (#1159): <see cref="ElectricAssist.Support"/> × the
-    /// rider's watts, no more than its torque at this cadence nor its peak, and nothing without
-    /// pedalling. The help fades over the last km/h to the cut-off and is gone past it, so on the flat
-    /// the bike settles at 25 km/h and only the legs take it faster.
+    /// What a pedelec's motor adds at the cranks, W (#1159): <paramref name="support"/> (the assist
+    /// level's, <see cref="ElectricAssist.Support"/>) × the rider's watts, no more than its torque at
+    /// this cadence nor its peak, and nothing without pedalling. The help fades over the last km/h to
+    /// the cut-off and is gone past it, so on the flat the bike settles at 25 km/h and only the legs
+    /// take it faster.
     /// </summary>
     /// <param name="riderWatts">The rider's own power at the cranks.</param>
     /// <param name="cadence">rpm; the torque limit is torque × ω, so a grinding crank gets less.</param>
     /// <param name="speed">m/s.</param>
-    public static float AssistWatts(ElectricAssist assist, float riderWatts, float cadence, float speed)
+    public static float AssistWatts(ElectricAssist assist, float support, float riderWatts, float cadence, float speed)
     {
-        if (riderWatts <= 0f || cadence <= 0f) return 0f;
+        if (riderWatts <= 0f || cadence <= 0f || support <= 0f) return 0f;
         float fade = Mathf.Clamp((assist.CutOff - speed) / ElectricAssist.FadeBand, 0f, 1f);
         // a crank barely turning still gets the torque of a 30 rpm push: the motor reads pedal force, not just cadence
         float torqueLimit = assist.Torque * Mathf.Max(cadence, 30f) / 60f * Mathf.Tau;
-        return Mathf.Min(Mathf.Min(assist.Support * riderWatts, torqueLimit), assist.PeakWatts) * fade;
+        return Mathf.Min(Mathf.Min(support * riderWatts, torqueLimit), assist.PeakWatts) * fade;
     }
+
+    /// <summary>
+    /// What <paramref name="motorWatts"/> at the cranks for <paramref name="dt"/> s takes out of the
+    /// battery, Wh (#1167): the motor's output over <see cref="ElectricAssist.Efficiency"/>.
+    /// </summary>
+    public static float BatteryDrawWh(float motorWatts, float dt) =>
+        Mathf.Max(motorWatts, 0f) / ElectricAssist.Efficiency * dt / 3600f;
 
     /// <summary>
     /// A wider tyre at its lower pressure on a surface's rolling resistance from a 28 mm

@@ -11,9 +11,11 @@ namespace UnitSport.World;
 /// driving out past it, the other way. <see cref="Shares"/>: where its cars go, each a share of them (the user): to a
 /// destination endpoint (its id, the way found to it) or along the road it stands on, picking its way at random
 /// (<see cref="AlongHeading"/> its heading, <see cref="AgainstHeading"/> the other way); none is all along its heading.
+/// <see cref="Mode"/> (#1134): what it makes and takes, cars (the only ones the shared list carries), riders, walkers or trams
+/// (a world's own endpoints, <see cref="Traffic.WorldEndpoints"/>).
 /// </summary>
 public sealed record TrafficEndpoint(int Id, double E, double N, float Heading, bool Generates, bool Destination, float PerMinute,
-    TrafficShare[]? Shares = null)
+    TrafficShare[]? Shares = null, MoverKind Mode = MoverKind.Car)
 {
     /// <summary><see cref="TrafficShare.To"/> for cars that set off along the heading and pick their way at random.</summary>
     public const int AlongHeading = 0;

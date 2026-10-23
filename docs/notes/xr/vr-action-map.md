@@ -92,6 +92,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | snowboard: push (#922): a press of forward, the free foot | tap W / tap RT | ok: the pad (no poles: the pole push is skis only) | keep |
 | snowboard: heel-side skid stop (#922) | S / LT | ok: L trigger | keep |
 | engine_toggle | Z / D-pad ↑ | ok: R stick ↑ | keep (R3) |
+| e-bike assist level (#1167): engine_toggle steps Off, Eco, Tour, Sport, Turbo | Z / D-pad ↑ | ok: R stick ↑, or a **poke on the Bosch remote** inboard of the left grip (`XrCabControls` "ebike", placed from the drawn remote) | keep |
 | lights_toggle | L / D-pad → | ok: R stick → (#436) | keep |
 | cruise (speed regulator: car, truck, farm machine, motorbike, #494) | Y / hold D-pad → (a tap stays the lights) | ok: a **dash poke** in a car or truck (`XrCabControls`), or hold R stick → | keep |
 | roof / horn / couple | O H / D-pad ← | ok: R stick ← (#436) | keep |

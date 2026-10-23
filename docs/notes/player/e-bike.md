@@ -17,19 +17,42 @@
   rack, fenders, lights, kickstand, 27.2 kg (dealer sheet). The **frame chart is assumed** (Moustache
   prints it only from the shop's script): stack 625, reach 400, head 69.5°, seat 73.5°, chainstay 475,
   BB drop 65, offset 50, giving a 1133 mm wheelbase and 82 mm trail. Measure a real one to replace it.
-- **The motor** (`BikePhysics.AssistWatts`, pure, `EBikeTests`): Sport mode, 2.25 × the rider's watts,
+- **The motor** (`BikePhysics.AssistWatts`, pure, `EBikeTests`): the mode's factor × the rider's watts,
   no more than torque × crank speed (a 30 rpm floor) nor 600 W, only while pedalling, fading over the
   last km/h to 25 km/h (`ElectricAssist.FadeBand`). Its push at the wheel is capped at torque through the
-  gear (`Torque / (Ratio × r)`). One assist level, no key: a mode switch would be a new action for
-  keyboard, pad and VR. The battery is not drained yet.
+  gear (`Torque / (Ratio × r)`).
+- **Assist modes** (#1167, `AssistLevel`, `ElectricAssist.Support`): Off, Eco 60%, Tour 140%, Sport 225%,
+  Turbo 340% (Bosch Performance Line Smart). A fresh bike starts in Tour (`StartLevel`). The remote's
+  button is `engine_toggle`, the engine switch reused (an e-bike has no engine to start): **Z / pad D-pad ↑
+  / VR right stick ↑**, and in VR also a **poke on the remote** drawn inboard of the left grip
+  (`XrCabControls` "ebike", `EBikeRemote` = `BikeMeshBuilder.RemoteAt` from the rider's eye). Each press
+  steps one mode, Turbo round to Off (`Bicycle.CycleAssist`, which a bot calls directly). F1 and the
+  phone's More sheet list it as "Assist level" (`ControlsHelp` "E-bike", `TouchMore` "Bicycle").
+- **Battery** (#1167): 625 Wh, drawn by the motor's watts over `ElectricAssist.Efficiency` 0.78
+  (`BikePhysics.BatteryDrawWh`); flat, no help (the bike rides on as a 27 kg bike). Range for a 120 W
+  rider on 4%: Turbo ~25-70 km, Eco over 90 (`EBikeTests`). Not replicated (the owner's alone, as the
+  gears); a **parked e-bike keeps its mode and charge**: `PackFlags` = level | `ParkedBattery` (16) in
+  `VehicleState.Flags`, the charge 0..1 in `VehicleState.Load` (no new field, no protocol change),
+  read back by `VehicleState.CreateRide` and `FootPlayer`'s take. A state without the mark (a fresh
+  one from the picker, an old save) is full, in Tour. There is no charger: a flat one is swapped for
+  a fresh one from the picker.
 - **Riding sat up**: `BikeBar.Riser` makes `BikeFrame.Hood` the grip (swept back by `BarReach`, raised by
   `BarDrop`), `Upright` keeps the position on the hoods (no drops, no tuck), CdA 0.50 for the reference
   rider (`BicycleSpec.DragArea`). Balloon tyres: `TyreWidthFactor`, ×1.33 on smooth ground at 50 mm and
   ×√(28/width) off it.
-- **Numbers**: in game, `--ride ebike,10 --world flat --profile sim` (180 W) reaches 25 km/h in 6 s with
-  the motor at ~400 W, then the motor goes to 0 and the legs alone hold ~27 km/h. The road bike is at
-  21 km/h after 10 s. 100 W settles at 24-25 km/h, and 120 W climbs 8% three times as fast as unaided.
-  The trace prints `motor +N W`, and the HUD shows `+N W`.
+- **Numbers**: in game, `--ride ebike,10 --world flat --profile sim` (180 W, Tour) reaches 24 km/h in 7 s
+  with the motor at ~250 W (Sport: 25 km/h in 6 s at ~400 W), then the motor goes to 0 and the legs
+  alone hold ~25-27 km/h. The road bike is at 21 km/h after 10 s. In Sport 100 W settles at 24-25 km/h,
+  and 120 W climbs 8% three times as fast as unaided. The trace prints `TOUR +N W  battery N Wh`, the
+  HUD `TOUR +N W    N% [Z]`.
+- **Checks** (#1167): `--ebikecheck --world flat --systems physics,ui` (the remote on the real binding,
+  the drain against the motor's watts, Off, a flat battery, parked and taken again, the low frame, the
+  VR poke's place, the touch label); `--ridemenucheck --world flat --systems physics,ui` (the Bicycles
+  tab by pad buttons, by the VR controllers' pad events (device 7), and by the VR hand pointer's clicks;
+  headless, the picker's thumbnails log `Parameter "t" is null` from the dummy renderer, harmless);
+  `--synccheck`'s `ebike` stage (the mirror draws the e-bike's own frame); `tools/ebikenetcheck.sh`
+  (server + two clients: A rides the e-bike, B sees it on its frame, moving and pedalling, then the
+  other way round on the low frame).
 - **Mesh** (`BikeMeshBuilder.TrekkingFrame` / `TrekkingFront`, drawn when a spec has `Assist` or `Kit`): the
   battery's fat down tube with the name band, the motor housing, the suspension fork, fenders (`Fender`:
   plates on an arc), the rack with the tail light, the headlight on the crown, the riser bar with the

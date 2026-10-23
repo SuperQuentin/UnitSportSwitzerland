@@ -10,6 +10,7 @@ public class EBikeTests
     private static readonly BicycleSpec Samedi = BicycleCatalog.MoustacheSamedi;
     private static readonly BikeFrame Frame = new(Samedi);
     private static readonly ElectricAssist Motor = Samedi.Assist!;
+    private static readonly float Sport = ElectricAssist.Support(AssistLevel.Sport);
 
     [Fact]
     public void Every_catalogue_bike_is_its_own_ride_kind()
@@ -68,33 +69,33 @@ public class EBikeTests
     [Fact]
     public void The_motor_helps_only_while_pedalling()
     {
-        Assert.Equal(0f, BikePhysics.AssistWatts(Motor, 0f, 80f, 5f));
-        Assert.Equal(0f, BikePhysics.AssistWatts(Motor, 150f, 0f, 5f));
+        Assert.Equal(0f, BikePhysics.AssistWatts(Motor, Sport, 0f, 80f, 5f));
+        Assert.Equal(0f, BikePhysics.AssistWatts(Motor, Sport, 150f, 0f, 5f));
     }
 
     [Fact]
     public void The_motor_multiplies_the_legs_up_to_its_limits()
     {
         // Sport: 2.25 × 100 W
-        Assert.Equal(225f, BikePhysics.AssistWatts(Motor, 100f, 80f, 4f), 1);
+        Assert.Equal(225f, BikePhysics.AssistWatts(Motor, Sport, 100f, 80f, 4f), 1);
         // 400 W of legs would ask 900: the motor peaks at 600
-        Assert.Equal(Motor.PeakWatts, BikePhysics.AssistWatts(Motor, 400f, 90f, 4f), 1);
+        Assert.Equal(Motor.PeakWatts, BikePhysics.AssistWatts(Motor, Sport, 400f, 90f, 4f), 1);
         // grinding at 40 rpm, 75 N·m is all it has: 75 × 40/60 × 2π = 314 W
-        Assert.Equal(75f * 40f / 60f * Mathf.Tau, BikePhysics.AssistWatts(Motor, 250f, 40f, 2f), 1);
+        Assert.Equal(75f * 40f / 60f * Mathf.Tau, BikePhysics.AssistWatts(Motor, Sport, 250f, 40f, 2f), 1);
     }
 
     [Fact]
     public void The_help_fades_out_at_25_kmh()
     {
-        float full = BikePhysics.AssistWatts(Motor, 100f, 80f, 20f / 3.6f);
-        float half = BikePhysics.AssistWatts(Motor, 100f, 80f, 24.5f / 3.6f);
+        float full = BikePhysics.AssistWatts(Motor, Sport, 100f, 80f, 20f / 3.6f);
+        float half = BikePhysics.AssistWatts(Motor, Sport, 100f, 80f, 24.5f / 3.6f);
         Assert.Equal(full / 2f, half, 1);
-        Assert.Equal(0f, BikePhysics.AssistWatts(Motor, 100f, 80f, 25f / 3.6f));
-        Assert.Equal(0f, BikePhysics.AssistWatts(Motor, 300f, 80f, 40f / 3.6f));
+        Assert.Equal(0f, BikePhysics.AssistWatts(Motor, Sport, 100f, 80f, 25f / 3.6f));
+        Assert.Equal(0f, BikePhysics.AssistWatts(Motor, Sport, 300f, 80f, 40f / 3.6f));
     }
 
     /// <summary>The speed the legs and the motor hold, m/s: where the push at the wheel meets the resistance.</summary>
-    private static float SteadySpeed(float riderWatts, float grade, bool motor)
+    private static float SteadySpeed(float riderWatts, float grade, bool motor, AssistLevel level = AssistLevel.Sport)
     {
         float mass = 72.5f + Samedi.Mass + 1.5f;
         float dragArea = BikePhysics.DragArea(72.5f, RidingPosition.Hoods, Samedi.DragArea);
@@ -102,7 +103,7 @@ public class EBikeTests
         float air = BikePhysics.AirDensity(500f);
         float Surplus(float v)
         {
-            float watts = riderWatts + (motor ? BikePhysics.AssistWatts(Motor, riderWatts, 80f, v) : 0f);
+            float watts = riderWatts + (motor ? BikePhysics.AssistWatts(Motor, ElectricAssist.Support(level), riderWatts, 80f, v) : 0f);
             return BikePhysics.DrivetrainEfficiency * watts - v * BikePhysics.ResistingForce(v, mass, dragArea, 0f, crr, air, grade);
         }
         float lo = 0.3f, hi = 30f;
@@ -152,5 +153,54 @@ public class EBikeTests
         while (gears.ShiftEasier()) shifts--;
         Assert.Equal(0, shifts);
         Assert.Equal("38×39", gears.ToString());
+    }
+
+    [Fact]
+    public void The_remote_steps_through_the_modes_and_round()
+    {
+        var level = AssistLevel.Off;
+        var seen = new System.Collections.Generic.List<AssistLevel>();
+        for (int i = 0; i < 5; i++) seen.Add(level = ElectricAssist.Next(level));
+        Assert.Equal(new[] { AssistLevel.Eco, AssistLevel.Tour, AssistLevel.Sport, AssistLevel.Turbo, AssistLevel.Off }, seen);
+        Assert.Equal(AssistLevel.Tour, Motor.StartLevel);
+        Assert.Equal("SPORT", ElectricAssist.Name(AssistLevel.Sport));
+    }
+
+    [Fact]
+    public void Each_mode_multiplies_the_legs_by_its_factor_and_off_adds_nothing()
+    {
+        Assert.Equal(0f, BikePhysics.AssistWatts(Motor, ElectricAssist.Support(AssistLevel.Off), 100f, 80f, 4f));
+        Assert.Equal(60f, BikePhysics.AssistWatts(Motor, ElectricAssist.Support(AssistLevel.Eco), 100f, 80f, 4f), 1);
+        Assert.Equal(140f, BikePhysics.AssistWatts(Motor, ElectricAssist.Support(AssistLevel.Tour), 100f, 80f, 4f), 1);
+        Assert.Equal(340f, BikePhysics.AssistWatts(Motor, ElectricAssist.Support(AssistLevel.Turbo), 100f, 80f, 4f), 1);
+    }
+
+    [Fact]
+    public void An_hour_of_250_W_at_the_cranks_takes_320_Wh()
+    {
+        // 250 W out over 78% is 320 W drawn: half the battery in an hour of hard help
+        Assert.Equal(250f / ElectricAssist.Efficiency, BikePhysics.BatteryDrawWh(250f, 3600f), 1);
+        Assert.Equal(0f, BikePhysics.BatteryDrawWh(0f, 10f));
+    }
+
+    /// <summary>How far a full battery carries this rider up this grade in this mode, km.</summary>
+    private static float RangeKm(float riderWatts, float grade, AssistLevel level)
+    {
+        float v = SteadySpeed(riderWatts, grade, motor: true, level);
+        float motor = BikePhysics.AssistWatts(Motor, ElectricAssist.Support(level), riderWatts, 80f, v);
+        float hours = Motor.BatteryWh / Mathf.Max(BikePhysics.BatteryDrawWh(motor, 3600f), 1e-3f);
+        return v * 3.6f * hours;
+    }
+
+    [Fact]
+    public void The_more_help_the_shorter_the_range()
+    {
+        // a 120 W rider on a 4% road: Bosch's range assistant gives a 625 Wh Performance Line some 40 km in
+        // Turbo up to well over 100 in Eco on rolling roads
+        float eco = RangeKm(120f, 0.04f, AssistLevel.Eco), tour = RangeKm(120f, 0.04f, AssistLevel.Tour);
+        float sport = RangeKm(120f, 0.04f, AssistLevel.Sport), turbo = RangeKm(120f, 0.04f, AssistLevel.Turbo);
+        Assert.True(eco > tour && tour > sport && sport > turbo, $"eco {eco:F0}, tour {tour:F0}, sport {sport:F0}, turbo {turbo:F0} km");
+        Assert.InRange(turbo, 25f, 70f);
+        Assert.InRange(eco, 90f, 300f);
     }
 }

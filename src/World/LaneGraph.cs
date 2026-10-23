@@ -233,6 +233,8 @@ public sealed class LaneApproach
     public SignalSite? Site { get; init; }
     public int Arm { get; init; }
     public SignalMoves Banned { get; init; }
+    /// <summary>Its cars may enter without room past the junction (#1134, <see cref="RoadApproach.AllowBlock"/>).</summary>
+    public bool AllowBlock { get; init; }
     /// <summary>The original lane's centre, metres right of the road's centre line; the lanes' offsets are from it.</summary>
     public float LaneCentre { get; init; }
     /// <summary>Out of the junction along the arm (world, flat, unit).</summary>
@@ -262,7 +264,8 @@ public sealed class LaneApproach
     public double[] LastDischarge { get; private init; } = [];
     public int[] QueuePlace { get; private init; } = [];
 
-    public static LaneApproach Make(ApproachLane[] lanes, SignalSite? site, int arm, SignalMoves banned, float centre, Vector3 outDir)
+    public static LaneApproach Make(ApproachLane[] lanes, SignalSite? site, int arm, SignalMoves banned, float centre, Vector3 outDir,
+        bool allowBlock = false)
     {
         var parent = new int[lanes.Length];
         int cars = 0;
@@ -284,7 +287,7 @@ public sealed class LaneApproach
         }
         return new LaneApproach
         {
-            Lanes = lanes, Site = site, Arm = arm, Banned = banned, LaneCentre = centre, Out = outDir,
+            Lanes = lanes, Site = site, Arm = arm, Banned = banned, LaneCentre = centre, Out = outDir, AllowBlock = allowBlock,
             Parent = parent, MultiLane = cars > 1, Reach = reach, Crossings = new int[lanes.Length], OffsetSum = new float[lanes.Length],
             LastDischarge = Enumerable.Repeat(double.NegativeInfinity, Math.Max(1, lanes.Length)).ToArray(), QueuePlace = new int[Math.Max(1, lanes.Length)],
         };
@@ -596,7 +599,7 @@ public sealed partial class LaneGraph
             {
                 var site = r.Signal >= 0 && r.Signal < sites.Length && r.SignalArm < sites[r.Signal].Out.Length ? sites[r.Signal] : null;
                 if (site is not null) recorded.Add((r.Signal, r.SignalArm));
-                var approach = LaneApproach.Make(r.Lanes.ToArray(), site, r.SignalArm, r.Banned, r.LaneCentre, OutOf(r.Heading));
+                var approach = LaneApproach.Make(r.Lanes.ToArray(), site, r.SignalArm, r.Banned, r.LaneCentre, OutOf(r.Heading), r.AllowBlock);
                 g.Attach(approach, origin.ToWorld(tile.Id.MinE + r.X, tile.Id.MaxN - r.Z, r.Y), matched);
             }
             for (int k = 0; k < sites.Length; k++)

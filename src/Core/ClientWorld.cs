@@ -576,7 +576,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             _traffic.Generators = endpoints;
             endpoints.Changed += _traffic.EndpointsChanged;
-            _traffic.GeneratorsOnly = System.IO.File.Exists(System.IO.Path.Combine(TerrainPaths.FindChunkDir(), "signal_test_region.txt"));
+            string chunkDir = TerrainPaths.FindChunkDir();
+            _traffic.GeneratorsOnly = System.IO.File.Exists(System.IO.Path.Combine(chunkDir, "signal_test_region.txt"));
+            // the world's own endpoints (#1134: the test region's generators and destinations on every lit junction), every peer
+            // reading the same file
+            _traffic.LoadWorldEndpoints(Terrain.Format.TrafficEndpointsFile.Read(System.IO.Path.Combine(chunkDir, Terrain.Format.TrafficEndpointsFile.FileName)));
             _traffic.GeneratorRate = (float)(CmdArgs.Double("--traffic-rate") ?? 1.0);
         }
         if (Systems.On(Systems.Npcs) && World.NpcWatch.FromArgs() is { } npcWatch) AddChild(npcWatch);
@@ -907,6 +911,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.SwimNetProbe.Role != null) AddChild(new Player.SwimNetProbe(items));
         if (Player.EmoteNetProbe.Role != null) AddChild(new Player.EmoteNetProbe(items));
         if (Player.NameTagNetProbe.Role != null) AddChild(new Player.NameTagNetProbe(items));
+        if (Player.EBikeNetProbe.Role != null) AddChild(new Player.EBikeNetProbe(items));
         if (Occasions.SightingNetProbe.Role != null) AddChild(new Occasions.SightingNetProbe(items));
         if (Concert.ConcertNetProbe.Role != null) AddChild(new Concert.ConcertNetProbe(items));
         if (Phone.PhoneNetProbe.Role != null) AddChild(new Phone.PhoneNetProbe(items));

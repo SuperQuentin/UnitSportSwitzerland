@@ -60,6 +60,8 @@ public partial class TestWorld : Node3D
             : RollerCheck.Requested ? new RollerCheck(origin)
             : TelehandlerCheck.Requested ? new TelehandlerCheck(origin)
             : TipperCheck.Requested ? new TipperCheck(origin)
+            : EBikeCheck.Requested ? new EBikeCheck(origin)
+            : RideMenuCheck.Requested ? new RideMenuCheck(origin)
             : DumperCheck.Requested ? new DumperCheck(origin)
             : Items.BedCheck.Requested ? new Items.BedCheck(origin)
             : Items.PalletCheck.Requested ? new Items.PalletCheck()

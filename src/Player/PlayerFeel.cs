@@ -980,7 +980,10 @@ public partial class PlayerFeel : Node3D
                 sb.Append((int)(speed * 3.6f + 0.5f)).Append(" km/h    ").Append(gears.RingTeeth).Append('×').Append(gears.CogTeeth)
                   .Append("    ").Append((int)(bike.Cadence + 0.5f)).Append(" rpm");
                 // the e-bike's display (#1159): what the motor is adding
-                if (bike.Spec.Assist != null) sb.Append("    +").Append((int)(bike.MotorWatts + 0.5f)).Append(" W");
+                // and its mode and battery, as the Purion shows them (#1167)
+                if (bike.Spec.Assist != null)
+                    sb.Append("    ").Append(ElectricAssist.Name(bike.Level)).Append(" +").Append((int)(bike.MotorWatts + 0.5f))
+                      .Append(" W    ").Append((int)(bike.Charge * 100f + 0.5f)).Append("% [").Append(Core.InputHints.Label(Core.PlayerInput.EngineToggle)).Append(']');
                 // and the rider's body in Sim: the heart rate (the reserve is the bar under it)
                 if (!Rideable.Arcade) sb.Append("    ").Append((int)(bike.Body.HeartRate + 0.5f)).Append(" bpm");
             }

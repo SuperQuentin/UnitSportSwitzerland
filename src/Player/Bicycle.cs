@@ -28,7 +28,7 @@ public sealed class Bicycle : Rideable
     public override RideKind Kind => Spec.Kind;
     public override string Label => Spec.Label;
     public override string Blurb => Spec.Assist != null
-        ? "{throttle} pedal, {tuck_boost} pedal hard, {brake} brake, {move_left}/{move_right} steer — the motor helps to 25 km/h"
+        ? "{throttle} pedal, {tuck_boost} pedal hard, {brake} brake, {move_left}/{move_right} steer, {engine_toggle} assist level — the motor helps to 25 km/h"
         : "{throttle} pedal, {tuck_boost} sprint, {brake} brake, {move_left}/{move_right} steer — climbs cost you";
 
     // ---- the rider and the machine ----
@@ -107,6 +107,7 @@ public sealed class Bicycle : Rideable
         Spec = spec;
         Gears = new BikeDrivetrain(Spec);
         Frame = BikeFrame.For(Spec);
+        if (Spec.Assist is { } motor) { Level = motor.StartLevel; BatteryWh = motor.BatteryWh; }
         // the eye in each position on this bike's own fit (#1159), just proud of the face so the head never fills the lens
         _eyes = System.Array.ConvertAll(
             new[] { RidingPosition.Hoods, RidingPosition.Drops, RidingPosition.Tuck, RidingPosition.Standing },
@@ -116,6 +117,43 @@ public sealed class Bicycle : Rideable
 
     /// <summary>What the motor is adding at the cranks now, W (#1159): 0 on a bike without one.</summary>
     public float MotorWatts { get; private set; }
+
+    /// <summary>The remote's mode (#1167): Off on a bike without a motor.</summary>
+    public AssistLevel Level { get; set; }
+
+    /// <summary>What is left in the battery, Wh (#1167): 0 on a bike without one.</summary>
+    public float BatteryWh { get; set; }
+
+    /// <summary>The battery's charge, 0..1 (#1167): the display's percent and what a parked bike keeps.</summary>
+    public float Charge => Spec.Assist is { } a ? BatteryWh / a.BatteryWh : 0f;
+
+    /// <summary>
+    /// The remote's button (#1167, <c>engine_toggle</c>): one mode up, Turbo round to Off. A bot or a
+    /// probe calls it as the key does. False on a bike without a motor.
+    /// </summary>
+    public bool CycleAssist()
+    {
+        if (Spec.Assist == null) return false;
+        Level = ElectricAssist.Next(Level);
+        return true;
+    }
+
+    /// <summary>Set in <see cref="VehicleState.Flags"/> by an e-bike that parks: the charge in <c>Load</c> is its own (#1167).</summary>
+    public const int ParkedBattery = 1 << 4;
+
+    /// <summary>The mode and the battery's mark, for a parked e-bike's <c>VehicleState.Flags</c> (#1167).</summary>
+    public int PackFlags() => Spec.Assist == null ? 0 : (int)Level | ParkedBattery;
+
+    /// <summary>
+    /// A parked e-bike's mode and charge back (#1167). A state from before the battery, or a fresh one,
+    /// has no <see cref="ParkedBattery"/> mark and keeps the full battery and the start mode.
+    /// </summary>
+    public void UnpackFlags(int flags, float charge)
+    {
+        if (Spec.Assist is not { } a || (flags & ParkedBattery) == 0) return;
+        Level = (AssistLevel)Mathf.Clamp(flags & 7, 0, (int)AssistLevel.Turbo);
+        BatteryWh = Mathf.Clamp(charge, 0f, 1f) * a.BatteryWh;
+    }
 
     /// <summary>Steady effort, W. Roughly a fit rider's endurance power.</summary>
     public float RiderWatts { get; set; } = 180f;
@@ -256,7 +294,10 @@ public sealed class Bicycle : Rideable
 
         // the motor (#1159): its watts on top of the legs', through the same chain, and at the wheel no
         // more than its torque through this gear can push
-        MotorWatts = Spec.Assist is { } assist && pedalling ? BikePhysics.AssistWatts(assist, watts, rpm, v) : 0f;
+        // the remote's mode, and nothing once the battery is flat (#1167)
+        MotorWatts = Spec.Assist is { } assist && pedalling && BatteryWh > 0f
+            ? BikePhysics.AssistWatts(assist, ElectricAssist.Support(Level), watts, rpm, v) : 0f;
+        if (MotorWatts > 0f) BatteryWh = Mathf.Max(0f, BatteryWh - BikePhysics.BatteryDrawWh(MotorWatts, dt));
         if (MotorWatts > 0f)
             thrust += Mathf.Min(BikePhysics.DrivetrainEfficiency * MotorWatts / Mathf.Max(v, 0.5f),
                 Spec.Assist!.Torque / (Gears.Ratio * Spec.WheelRadius));

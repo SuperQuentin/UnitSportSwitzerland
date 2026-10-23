@@ -26,7 +26,7 @@ public static class ChatCheck
         };
 
         // commands
-        ExpectTexts(completer, "/", ["/help ", "/who ", "/me ", "/city ", "/occasion ", "/spawn "], "offline command list");
+        ExpectTexts(completer, "/", ["/help ", "/who ", "/me ", "/city ", "/stadium ", "/occasion "], "offline command list");
         ExpectTexts(completer, "/sp", ["/spawn "], "command prefix");
         ExpectTexts(completer, "/kic", [], "server-only command hidden offline");
 
@@ -222,12 +222,24 @@ public static class ChatCheck
         ExpectTexts(completer, "/concert cue fl", ["/concert cue flames"], "/concert cues complete");
         ExpectTexts(completer, "/concert input ", ["/concert input artnet", "/concert input osc"], "/concert input protocols complete");
 
-        var offline = ChatCompleter.Help(online: false, isAdmin: true).First();
-        Expect(offline.Contains("/stadium") && offline.Contains("/concert") && offline.Contains("/water") && !offline.Contains("/kick"), $"offline help: {offline}");
+        ExpectTexts(completer, "/concert j", ["/concert join"], "/concert join completes");
+        ExpectTexts(completer, "/help sta", ["/help stadium"], "/help completes a command");
+
+        // /help (#1173): one line per group, each command in exactly one of them
+        static string Group(List<string> help, string name) => help.FirstOrDefault(l => l.TrimStart().StartsWith(name + ":")) ?? "";
+        var offline = ChatCompleter.Help(online: false, isAdmin: true).ToList();
+        Expect(Group(offline, "Travel").Contains("/stadium") && Group(offline, "Concerts & media").Contains("/concert") && Group(offline, "World").Contains("/water")
+            && !offline.Any(l => l.Contains("/kick")), $"offline help: {string.Join(" | ", offline)}");
         var player = ChatCompleter.Help(online: true, isAdmin: false).ToList();
-        Expect(player[0].Contains("/fight") && player[0].Contains("/stadium") && !player[0].Contains("/kick") && !player.Any(l => l.StartsWith("admin")), $"a player's help: {player[0]}");
+        Expect(Group(player, "Activities").Contains("/fight") && Group(player, "Travel").Contains("/stadium") && !player.Any(l => l.Contains("/kick"))
+            && Group(player, "Admin") == "", $"a player's help: {string.Join(" | ", player)}");
         var admin = ChatCompleter.Help(online: true, isAdmin: true).ToList();
-        Expect(admin.Any(l => l.StartsWith("admin:") && l.Contains("/kick") && l.Contains("/tp")), "an operator's help has the admin commands");
+        Expect(Group(admin, "Admin").Contains("/kick") && Group(admin, "Travel").Contains("/tp "), $"an operator's help has the admin commands: {string.Join(" | ", admin)}");
+        var all = admin.Skip(1).SelectMany(l => l[(l.IndexOf(':') + 1)..].Split(' ', StringSplitOptions.RemoveEmptyEntries)).ToList();
+        Expect(all.Count == all.Distinct().Count() && all.Count == ChatCompleter.Visible(true, true).Count(), $"every command in one group: {all.Count} listed");
+        string? stadiumHelp = ChatCompleter.HelpFor("/stadium", online: true, isAdmin: false);
+        Expect(stadiumHelp?.StartsWith("/stadium [list") == true && stadiumHelp.Contains("— "), $"/help stadium: {stadiumHelp}");
+        Expect(ChatCompleter.HelpFor("kick", online: true, isAdmin: false) is null, "/help kick is nothing for a player");
 
         var chat = ChatManager.CreateClient();
         host.AddChild(chat);
@@ -247,6 +259,15 @@ public static class ChatCheck
         lines.Clear();
         chat.Send("/tp Bob");
         Expect(lines.Count == 1 && lines[0].Contains("multiplayer"), $"/tp to a player needs a server: {string.Join(" | ", lines)}");
+        lines.Clear();
+        chat.Send("/concert join");
+        Expect(lines.Count == 1 && lines[0].StartsWith("No set is hosted"), $"/concert join with nothing hosted: {string.Join(" | ", lines)}");
+        lines.Clear();
+        chat.Send("/help concert");
+        Expect(lines.Count == 1 && lines[0].StartsWith("/concert join |"), $"/help concert offline: {string.Join(" | ", lines)}");
+        lines.Clear();
+        chat.Send("/help");
+        Expect(lines.Count > 3 && lines[0].StartsWith("Commands") && lines.Any(l => l.Contains("Travel:")), $"/help offline: {string.Join(" | ", lines)}");
         chat.QueueFree();
     }
 
