@@ -60,3 +60,11 @@ Measured (PR #1065, headless `--fixed-fps 60`):
   walkway at an end); 101 onto lit crossings, 0 on red, 14 zebras crossed with cars standing 78 s for them, 28 unmarked crossed,
   5 waits for a gap. Car tick cost 3.6 ms mean without walkers, 4.0 ms with 200 massed at `--at` (same machine, back to back;
   `FollowCrossers` skips all when no crosser is in a lane).
+- **Three-stage crossings over a tram reservation** (#1176, `tools/traffic-signals`): the carriageway parts and the middle stage
+  over the tracks are lit crossings joined across their islands as #1030's halves; an unlit middle stage (group 255 in the
+  signal's lines) is a `WalkCrossing.TramYield`: the walker waits on the island for a gap in the trams (`TramAtCrossing`). The
+  probe counts unlit stages crossed, waits for the trams, and fails on a walker stepping on with a tram within its braking
+  distance. Test region (180 s, 150 walkers, 10 trams): J19 172 lit crossings, 9 island waits, 0 on red; J20 49 unlit stages
+  crossed, 6 waits for the trams, 0 stepped on with a tram near; trams 0 on red at both.
+  After #1179 (refuges, bounded waits, walkers never stepping on at red): J19 193 lit crossings, 0 on red, 62 island waits; J20
+  43 unlit stages crossed, 9 waits for the trams, 0 on red; J7 unchanged (0 on red).

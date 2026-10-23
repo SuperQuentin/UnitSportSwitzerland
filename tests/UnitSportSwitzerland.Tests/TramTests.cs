@@ -416,4 +416,68 @@ public class TramTests
         Assert.True(plan.Cycle > SignalPlan.MaxCycle);
         Assert.Equal(6, plan.PhaseCount);
     }
+
+    [Fact]
+    public void AMiddleStageOverTheTramReservation_IsStoppedOnlyByTheTramsOverIt()
+    {
+        // #1176: a divided road (its west carriageways arms 0 in and 3 out, east 1 out and 4 in) with its tram on the reservation,
+        // across a road (2, 5); the west crossing's middle stage over the tracks
+        var plan = SignalPlan.Build(
+        [
+            new SignalArm(Math.PI, true, false, Pedestrians: true, TramMoves: SignalMoves.Through, TramSide: -1, MiddleM: 9),
+            new SignalArm(0.05, false, true, Pedestrians: true),
+            new SignalArm(-Math.PI / 2, true, true, Pedestrians: true),
+            new SignalArm(Math.PI - 0.05, false, true, Pedestrians: true),
+            new SignalArm(0, true, false, Pedestrians: true, TramMoves: SignalMoves.Through, TramSide: -1),
+            new SignalArm(Math.PI / 2, true, true, Pedestrians: true),
+        ], 1176);
+        Assert.Empty(plan.Validate());
+        int middle = plan.Groups.FindIndex(g => g.Half == CrossingHalf.Middle);
+        Assert.Equal(0, plan.Groups[middle].Arm);
+        Assert.Equal(3, plan.Twin(0));
+        Assert.Equal(9f, plan.CrossingOf(middle));
+        var conflicts = plan.Conflicts();
+        // the eastbound trams entering by its arm and the westbound ones leaving by its twin
+        foreach (int tram in Enumerable.Range(0, plan.Groups.Count).Where(g => plan.Groups[g].Kind == SignalGroupKind.Tram))
+            Assert.Equal(SignalPlan.Conflict.Hard, conflicts[middle, tram]);
+        Assert.All(Enumerable.Range(0, plan.Groups.Count).Where(g => plan.Groups[g].Kind != SignalGroupKind.Tram),
+            g => Assert.NotEqual(SignalPlan.Conflict.Hard, conflicts[middle, g]));
+        // green while the trams are red, never with them
+        Assert.Contains(plan.Groups[middle].Intervals, iv => iv.Aspect == SignalAspect.Green);
+        for (double t = 0.05; t < plan.Cycle; t += 0.1)
+            if (plan.State(middle, t) == SignalAspect.Green)
+                Assert.All(Enumerable.Range(0, plan.Groups.Count).Where(g => plan.Groups[g].Kind == SignalGroupKind.Tram),
+                    g => Assert.NotEqual(SignalAspect.Green, plan.State(g, t)));
+    }
+
+    [Fact]
+    public void ACrossingOverABallastBed_PavesTheTrackUnderIt()
+    {
+        // #1179, the user: "a crossing should always cross concreted tracks, not raw tracks": a 3 m crossing across a track along x,
+        // at x 10: the track paved from 7.5 to 12.5 m (half its band and a margin either side), the rest its own bed
+        var track = new List<Vec2> { new(0, 0), new(30, 0) };
+        var runs = TileRewriter.PavedUnder(track, [(new Vec2(10, -5), new Vec2(10, 5))]);
+        var run = Assert.Single(runs);
+        Assert.Equal(10 - 1.5 - TileRewriter.PavedMargin, run.From, 0);
+        Assert.Equal(10 + 1.5 + TileRewriter.PavedMargin, run.To, 0);
+        // a crossing that never reaches it paves nothing
+        Assert.Empty(TileRewriter.PavedUnder(track, [(new Vec2(10, 6), new Vec2(10, 16))]));
+    }
+
+    [Fact]
+    public void AZebraWithoutLights_HasNoStripesOverTheTramTracks()
+    {
+        // #1179, the user: "a crossing who never has priority shouldn't get yellow stripes anyways": its walkers give way to the
+        // trams there; three bars at x 0, 2 and 4, a track zone around x 2
+        static float[] Bar(float x) => [x - 0.25f, 0, 0, x - 0.25f, 0, 3, x + 0.25f, 0, 3, x + 0.25f, 0, 0];
+        var zebra = new RoadPaint { Shape = PaintShape.Triangles, Type = PaintType.YellowSolid, Vertices = [.. Bar(0), .. Bar(2), .. Bar(4)],
+            Indices = [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 8, 9, 10, 8, 10, 11] };
+        bool Track(float x, float z) => MathF.Abs(x - 2) < 1;
+        var cut = UnitSport.Tools.RoadGen.Network.RailRoadOverlap.ZebraOffTracks(zebra, Track, null);
+        Assert.NotNull(cut);
+        Assert.Equal(24, cut!.Vertices.Length);
+        Assert.Equal(12, cut.Indices.Length);
+        // at lights its walkers' green stops the trams: it keeps them
+        Assert.Null(UnitSport.Tools.RoadGen.Network.RailRoadOverlap.ZebraOffTracks(zebra, Track, [(2f, 10f)]));
+    }
 }

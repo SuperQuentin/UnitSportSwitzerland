@@ -28,6 +28,7 @@ public static class SignalCheck
         // the plan stretches to 120 s at most, past that it stays two-stage)
         int stageArms = 0, stageJunctions = 0;
         var longWaits = new List<string>();
+        var stageWaits = new List<string>();
         // the flashers' plates and the permissive lefts (#1109): plates by kind, ball heads flashing their yellow, arrow heads with a
         // flasher on their left
         var plates = new SortedDictionary<string, int>(StringComparer.Ordinal);
@@ -89,7 +90,8 @@ public static class SignalCheck
                         poleMisses.Add(string.Create(c, $"    {where} arm {a} heading {p.Arms[a].Heading * 180 / Math.PI:F0} deg: {(main ? "" : "no main pole")}{(!main && p.Arms[a].LeftPocket && !second ? ", " : "")}{(p.Arms[a].LeftPocket && !second ? "no second head" : "")}"));
                 }
                 int stages = p.Groups.Count(g => g.Kind == SignalGroupKind.Pedestrian && g.Half == CrossingHalf.Arriving);
-                if (stages > 0)
+                // (and the crossings over a tram reservation in three stages, #1176: their islands' waits)
+                if (stages > 0 || p.Groups.Any(g => g.Half == CrossingHalf.Middle))
                 {
                     stageArms += stages;
                     stageJunctions++;
@@ -98,6 +100,11 @@ public static class SignalCheck
                     bool lines = s.ConflictLines.Any(l => l.Mover == ConflictMover.Walker);
                     foreach (var w in p.IslandWaits(Walk).Where(w => w.Wait > p.Cycle * SignalPlan.IslandWaitShare + 0.1f))
                         longWaits.Add(string.Create(c, $"    {where} arm {p.Groups[w.Group].Arm} {p.Groups[w.Group].Half}: {w.Wait:F1} s on the island, cycle {p.Cycle:F1} s{(lines ? "" : " (not timed from conflict times: halves guessed as half the road)")}"));
+                    // each crossing over a tram reservation's longest island wait, either way (#1176)
+                    var waits = p.IslandWaits(Walk);
+                    for (int g = 0; g < p.Groups.Count; g++)
+                        if (p.Groups[g].Half == CrossingHalf.Middle)
+                            stageWaits.Add(string.Create(c, $"    {where} arm {p.Groups[g].Arm}: longest island wait {waits.Where(w => w.Group == g || w.Other == g).Select(w => w.Wait).DefaultIfEmpty(0f).Max():F1} s (a third of the {p.Cycle:F1} s cycle: {p.Cycle * SignalPlan.IslandWaitShare:F1} s)"));
                 }
                 var conflicts = p.Conflicts();
                 for (int g = 0; g < p.Groups.Count; g++)
@@ -159,6 +166,8 @@ public static class SignalCheck
         log("  cycles s: " + string.Join(", ", cycles.Select(kv => $"{kv.Key} x{kv.Value}")));
         log(string.Create(c, $"  two-stage crossings (#1030): {stageArms} at {stageJunctions} junctions; island waits over a third of the cycle {longWaits.Count}"));
         foreach (var wait in longWaits.Take(list ? int.MaxValue : 10)) log(wait);
+        log(string.Create(c, $"  crossings over a tram reservation in three stages (#1176): {stageWaits.Count}"));
+        foreach (var wait in stageWaits.Take(list ? int.MaxValue : 10)) log(wait);
         log(string.Create(c, $"  flasher plates (#1109): {(plates.Count == 0 ? "none" : string.Join(", ", plates.Select(kv => $"{kv.Key} x{kv.Value}")))}; permissive lefts: {ballLefts} balls flashing their yellow, {arrowLefts} combined arrow heads with a left-turn lamp, {singleLefts} left arrows alone flashing their yellow for their green; right arrows alone flashing theirs: {singleRights} (pole heads; overhead lane heads not counted)"));
         log("  flasher lamps by pole (#1109, a left turn's by the left crosswalk): " + (sites.Count == 0 ? "none" : string.Join(", ", sites.Select(kv => $"{kv.Key} x{kv.Value}"))));
         foreach (var l in leftAt) log(l);

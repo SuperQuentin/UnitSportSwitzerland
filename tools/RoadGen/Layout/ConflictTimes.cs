@@ -186,6 +186,16 @@ public static class ConflictTimes
             if (plan.Groups[g].Kind != SignalGroupKind.Pedestrian) continue;
             int k = plan.Groups[g].Arm;
             var a = jp.Arms[k];
+            // a middle stage over the trams' reservation, island to island (#1176)
+            if (plan.Groups[g].Half == CrossingHalf.Middle)
+            {
+                if (plan.Twin(k) is int twin and >= 0 && MiddleStage(jp, a, jp.Arms[twin]) is var (ma, mb))
+                {
+                    lines.Add(new Line(g, Mover.Walker, [ma, mb], StageWidth, WalkClear, WalkEnter, WalkLength, plan.PassingTime(g)));
+                    lines.Add(new Line(g, Mover.Walker, [mb, ma], StageWidth, WalkClear, WalkEnter, WalkLength, plan.PassingTime(g)));
+                }
+                continue;
+            }
             var ex = jp.Exterior.FirstOrDefault(x => x.Arm == a);
             if (a.Axis is null || ex?.Bars.FirstOrDefault(b => b.Kind == BarKind.Crosswalk) is not { } bar) continue;
             var mouth = core.Mouths.First(m => m.Arm == a.Arm);
@@ -215,6 +225,49 @@ public static class ConflictTimes
         double from = section.PathBand(right: false) is var (cl, wl) ? Math.Min(bar.Left, cl - wl * 0.5) : bar.Left;
         double to = section.PathBand(right: true) is var (cr, wr) ? Math.Max(bar.Right, cr + wr * 0.5) : bar.Right;
         return (from, to);
+    }
+
+    /// <summary>A middle stage's crossing width (m): a zebra's.</summary>
+    public const double StageWidth = 3;
+
+    /// <summary>A walker waits on an island this far in from its kerb (m), clear of the carriageway and of the trams.</summary>
+    public const double IslandIn = 1.8;
+
+    /// <summary>
+    /// The middle stage of a crossing over a divided road with its tram on the central reservation (#1176): from the island beside
+    /// arriving carriageway <paramref name="inArm"/> to the island beside its twin <paramref name="outArm"/> (the other carriageway
+    /// pointing the same way), each end <see cref="IslandIn"/> in from the kerb where that carriageway's own crossing ends (their
+    /// walker lines' reservation ends); null where either has no crosswalk or the reservation is too narrow for two islands.
+    /// </summary>
+    public static (Vec2 A, Vec2 B)? MiddleStage(JunctionPlan jp, ArmPlan inArm, ArmPlan outArm)
+    {
+        if (jp.Core is null || inArm.Axis is null || outArm.Axis is null) return null;
+        (Vec2 Kerb, Vec2 Out)? End(ArmPlan a, bool left)
+        {
+            if (Crosswalk(jp, a, left) is not var (s, _, o)) return null;
+            var kerb = a.Axis!.At(s, o);
+            var beyond = a.Axis.At(s, left ? o - 1 : o + 1);
+            return (kerb, (beyond - kerb).Normalized());
+        }
+        // (the arriving carriageway's left kerb, the leaving one's right: the reservation's sides as their drivers see them)
+        if (End(inArm, true) is not var (ka, da) || End(outArm, false) is not var (kb, db)) return null;
+        if (ka.DistanceTo(kb) < 2 * IslandIn + 3) return null;
+        var dir = (kb - ka).Normalized();
+        if (dir.Dot(da) < 0.8 || (-dir).Dot(db) < 0.8) return null;
+        return (ka + dir * IslandIn, kb - dir * IslandIn);
+    }
+
+    /// <summary>
+    /// Where arm <paramref name="a"/>'s crosswalk lies (#1176): its middle's station along the arm's axis, half its width along it,
+    /// and the offset of its <paramref name="left"/> (else right) end, where its walkers' line ends; null without one.
+    /// </summary>
+    public static (double Station, double Half, double Kerb)? Crosswalk(JunctionPlan jp, ArmPlan a, bool left)
+    {
+        var ex = jp.Exterior.FirstOrDefault(x => x.Arm == a);
+        if (jp.Core is not { } core || a.Axis is null || ex?.Bars.FirstOrDefault(b => b.Kind == BarKind.Crosswalk) is not { } bar) return null;
+        var mouth = core.Mouths.First(m => m.Arm == a.Arm);
+        var (from, to) = WalkSpan(a, bar);
+        return (mouth.Station + bar.Middle, (bar.To - bar.From) * 0.5, left ? from : to);
     }
 
     /// <summary>The least radius along a line (m), from each three points in a row; a straight line's is infinite.</summary>
