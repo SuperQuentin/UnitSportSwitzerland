@@ -95,7 +95,8 @@
   (admins; offline, always) or OSC `/concert/host <seed>`: the server keeps the seed and the operator,
   tells every peer and every late joiner (`SendTo`), everyone rebuilds that stage and rig
   (`ConcertDirector.Rebuild`); a hosted set plays at any hour. `/concert release`, or the operator
-  leaving (`PeerLeft`), gives tonight's back. `/concert status`.
+  leaving (`PeerLeft`), gives tonight's back. `/concert status`. `/concert join` (anyone, #1173) teleports
+  to a hosted set (`net/chat-commands`).
 - **DMX live**: universes the input reads play at once on the operator's rig and go to the server at
   most 30 Hz each, `UnreliableOrdered` on ENet channel 4 (2 is tiles, 3 the web radio); the server
   takes them only from the operator and relays them to players within 1.5 km of the stadium. A rig

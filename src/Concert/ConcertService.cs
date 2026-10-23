@@ -122,6 +122,17 @@ public partial class ConcertService : Node
         return $"tonight {Clock(e.StartHour)}-{Clock(e.EndHour)}, {e.Artist} ({e.Genre})";
     }
 
+    /// <summary>
+    /// <c>/concert join</c> (#1173): the venues with a set hosted now, nearest <paramref name="at"/> first
+    /// (catalog order without a position); empty when nobody hosts.
+    /// </summary>
+    public List<StadiumSpec> HostedVenues(GlobalPos? at)
+    {
+        var venues = _hosted.Where(kv => kv.Value.Seed >= 0 && kv.Key >= 0 && kv.Key < StadiumCatalog.All.Length)
+            .OrderBy(kv => kv.Key).Select(kv => StadiumCatalog.All[kv.Key]);
+        return at is { } p ? [.. venues.OrderBy(v => p.HorizontalDistanceTo(new GlobalPos(v.E, v.N, 0)))] : [.. venues];
+    }
+
     /// <summary>The cues in force at a stadium, if a set is hosted there.</summary>
     public (int Held, bool Blackout, float Master)? CuesOf(int stadium) =>
         _hosted.TryGetValue(stadium, out var h) ? (h.Held, h.Blackout, h.Master) : null;
@@ -217,7 +228,7 @@ public partial class ConcertService : Node
                     ? $"{name}: set {h.Seed} ({ConcertPlanner.Plan(StadiumCatalog.All[stadium], h.Seed).Artist}), operator {h.Operator}"
                     : $"{name}: tonight's show; '/concert host [seed]' takes it";
             default:
-                return "/concert host [seed] | release | status | song [list | next | prev | <n | title> | stop | play | auto]; on your own game: /concert input artnet|sacn|osc on|off, /concert patch";
+                return "/concert join | host [seed] | release | status | song [list | next | prev | <n | title> | stop | play | auto]; on your own game: /concert input artnet|sacn|osc on|off, /concert patch";
         }
     }
 
