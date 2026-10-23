@@ -9,6 +9,7 @@
 //   PUBLIC_URL       the site the login link points at (default http://localhost:5080)
 //   ADMIN_EMAILS     comma-separated reviewer addresses
 //   COOKIE_SECURE    0 for a plain-http local run (default 1)
+//   LAYOUTS_WEB      a local run only: also serve this dir (tools/deploy/web) at /, so houses.html and /api share an origin
 //   LAYOUTS_URLS     where to listen (default http://127.0.0.1:5080); SMTP_*: see Mailer
 using System.Net.Mail;
 using System.Text.Json;
@@ -61,6 +62,9 @@ var app = builder.Build();
 app.UseForwardedHeaders();
 app.UseRateLimiter();
 var log = app.Logger;
+// a local run serves the page itself; deployed, Caddy does (tools/deploy/Caddyfile)
+if (Environment.GetEnvironmentVariable("LAYOUTS_WEB") is { Length: > 0 } web)
+    app.UseStaticFiles(new StaticFileOptions { FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(Path.GetFullPath(web)), RequestPath = "" });
 var store = app.Services.GetRequiredService<Store>();
 var buildings = app.Services.GetRequiredService<Buildings>();
 
