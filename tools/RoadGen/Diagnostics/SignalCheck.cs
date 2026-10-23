@@ -76,7 +76,7 @@ public static class SignalCheck
                 if (p.Cycle < 30) log($"  odd: {where} cycle {p.Cycle:F1} s ({shape})");
                 // 120 s is the legal maximum (the user)
                 // (a warning, #1161: past 120 s only with every green at its minimum, kept until #1120's planner has fewer phases)
-                if (p.Overflows) { overMax++; log(string.Create(c, $"  WARNING over 120 s (until #1120): {where} cycle {p.Cycle:F1} s, {Phases(p)} phases ({shape}{(p.ConflictTimed ? ", conflict-timed" : "")}{(p.Groups.Any(g => g.Kind == SignalGroupKind.Tram) ? ", trams" : "")})")); }
+                if (p.Overflows) { overMax++; log(string.Create(c, $"  WARNING over 120 s (until #1120): {where} cycle {p.Cycle:F1} s, {Phases(p)} green sets ({shape}{(p.ConflictTimed ? ", conflict-timed" : "")}{(p.Groups.Any(g => g.Kind == SignalGroupKind.Tram) ? ", trams" : "")})")); }
                 for (int a = 0; a < p.Arms.Count; a++)
                 {
                     if (!p.Arms[a].In) continue;

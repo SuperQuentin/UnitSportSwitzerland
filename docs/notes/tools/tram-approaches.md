@@ -18,8 +18,13 @@ The junction planner's cores (`junction-planner`) take the tram tracks running t
   does (`TileRewriter.Merge`): one plan for both carriageways and the tram, not two plans each blind to the other's trams.
   Geneva (#1161, `D:\UnitSportSwitzerland\test1161`, the 25 tiles of `test348\geneva` rewritten by main and by this): tracks
   through a core not from arm to arm 54 -> 34, tram paths 272 -> 280 (lit 105 -> 117), tram groups 103 -> 110, tram lanes 86 ->
-  95, lights 235 -> 233 (pairs merged), 0 invalid, none over 120 s; junctions with their trams out of the conflict times 2 -> 7,
-  approaches without a main pole 52 -> 63 (merged cores: open). Test region tram `--trafficcheck` at J16 (8 trams, 300 cars,
+  95, lights 235 -> 233 (pairs merged), 0 invalid. After the squeeze (`traffic-signals`, 120 s): 1 plan squeezed to 120 s, 4 kept
+  over it with every green at its minimum (2499654,1116550 133 s 7 phases, trams; 2499749,1118282 143 s 6; 2500974,1117838 150 s
+  9; 2502325,1118596 136 s 8: the three without trams were fixed-time fallbacks under 120 s before); 6 junctions still time their
+  trams out of the conflict times because `Retime` fails there for another reason than the cycle (main: 2). Approaches without a
+  main pole 52 -> 63, all at tram junctions (merged for the tram or with a bed beside the carriageway: open, the pole's foot not
+  clear). Own tram poles on a reservation: 0 in Geneva (the clearance takes the rail bed for a road: the nearest pole right of
+  the track takes the head). Test region tram `--trafficcheck` at J16 (8 trams, 300 cars,
   180 s): 7 lines crossed, 0 on red, no car red run. The signal check takes a tram path's end offset across its own track's way.
 - **Its side of the cars** (`SignalArm.TramSide`, `SignalGroup.TramSide`, stored in a tram group's moves byte, bits 3-4): -1 where
   its lane crosses the stop line left of every arriving car lane (a reservation, a track in the street's middle beside a shared
