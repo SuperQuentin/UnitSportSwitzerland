@@ -242,6 +242,23 @@ public static class StyleKit
     }
     private static bool _coverFirst = Core.Platform.IsStandaloneVr;
 
+    /// <summary>
+    /// Measuring only (<c>--hidetoggle @plainground</c>, #1112): every live ground material on the cheapest shader
+    /// there is (unshaded vertex colour) and back, to tell what the ground's shading costs from what its triangles do.
+    /// </summary>
+    public static void PlainGround(bool on)
+    {
+        var plain = GD.Load<Shader>("res://shaders/debug_plain_terrain.gdshader");
+        lock (Live)
+            foreach (var (weak, role) in Live)
+                if (role == MaterialRole.Terrain && weak.TryGetTarget(out var m))
+                {
+                    if (on) { if (m.Shader != plain) { m.SetMeta(PlainWas, m.Shader); m.Shader = plain; } }
+                    else if (m.HasMeta(PlainWas)) { m.Shader = m.GetMeta(PlainWas).As<Shader>(); m.RemoveMeta(PlainWas); }
+                }
+    }
+    private static readonly StringName PlainWas = "plain_was";
+
     /// <summary>Every material handed out that is still alive, and its role.</summary>
     private static readonly List<(System.WeakReference<ShaderMaterial> Material, MaterialRole Role)> Live = new();
 
