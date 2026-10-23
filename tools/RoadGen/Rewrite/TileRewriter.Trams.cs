@@ -4,6 +4,7 @@ using UnitSport.Terrain.Format;
 using UnitSport.Tools.RoadGen.Geometry;
 using UnitSport.Tools.RoadGen.Junctions;
 using UnitSport.Tools.RoadGen.Layout;
+using UnitSport.Tools.RoadGen.Meshing;
 
 /// <summary>
 /// Tram tracks as approach lanes of the junction planner's cores (#1057). A tram track is in the rail layer, not an arm: it runs
@@ -292,6 +293,17 @@ public static partial class TileRewriter
     /// <summary>A tram's width (m): a 2.3-2.4 m low-floor car.</summary>
     private const float TramWidth = 2.4f;
 
+    /// <summary>A tram's stop line reaches this far past the tram's sides (m, #1155).</summary>
+    internal const double TramStopLineOver = 0.2;
+
+    /// <summary>A tram's stop line from <paramref name="p0"/> to <paramref name="p1"/> (LV95) at height <paramref name="y"/> (#1155): white, the cars' line's width, <see cref="RoadPaint.OverTrack"/>.</summary>
+    internal static RoadPaint TramStopLine(TileId tile, Vec2 p0, Vec2 p1, float y) => new()
+    {
+        Shape = PaintShape.Polyline, Type = PaintType.StopLine, Variant = RoadPaint.OverTrack, Rgba = PaintEmitter.White,
+        Width = JunctionRules.StopLineWidth,
+        Vertices = [(float)(p0.X - tile.MinE), y, (float)(tile.MaxN - p0.Y), (float)(p1.X - tile.MinE), y, (float)(tile.MaxN - p1.Y)],
+    };
+
     /// <summary>
     /// The tram ways as conflict lines for the timing (#979, #1057): each from where its track crosses its approach's stop line,
     /// in its tram group; none for a way whose arm has no line or no tram group.
@@ -320,7 +332,8 @@ public static partial class TileRewriter
     /// Each lit approach a tram enters by gets a tram lane on its <c>LANE</c> record (#1057): where its track crosses the cars'
     /// line, from the street's own arriving lane as the record counts, its trams' moves.
     /// </summary>
-    private static void TramLanes(JunctionPlan jp, List<TramWay> ways, List<RoadApproach> records, short signalIndex, LayoutWriteStats stats)
+    private static void TramLanes(JunctionPlan jp, List<TramWay> ways, List<RoadApproach> records, short signalIndex, LayoutWriteStats stats,
+        Dictionary<TileId, List<RoadPaint>>? paint = null)
     {
         foreach (var byTrack in ways.GroupBy(w => (w.FromArm, Math.Round(w.Points[0].X, 1), Math.Round(w.Points[0].Y, 1))))
         {
@@ -330,7 +343,20 @@ public static partial class TileRewriter
             var ex = jp.Exterior.FirstOrDefault(x => x.Arm == a);
             if (ex?.CarStop is not { } stop || records.FirstOrDefault(r => r.Signal == signalIndex && r.SignalArm == k) is not { } record) continue;
             double mouth = jp.Core!.Mouths.First(m => m.Arm == a.Arm).Station;
-            if (TramStop(a, mouth, stop, w) is not var (_, lateral)) continue;
+            if (TramStop(a, mouth, stop, w) is not var (stopAt, lateral)) continue;
+            // its own stop line across its track (#1155, the user: "the stopline should be drawn for trams"): white as the cars', the
+            // cars' line's width, centred where the track crosses that line, as wide as a tram and a hand either side
+            if (paint is not null)
+            {
+                var axis = a.Axis!;
+                var right = axis.RightAt(mouth + stop);
+                double half = TramWidth * 0.5 + TramStopLineOver;
+                var p0 = stopAt - right * half;
+                var p1 = stopAt + right * half;
+                var tile = TileId.FromLv95(stopAt.X, stopAt.Y);
+                Get(paint, tile).Add(TramStopLine(tile, p0, p1, record.Y));
+                stats.TramStopLines++;
+            }
             var moves = SignalMoves.None;
             foreach (var x in byTrack) moves |= x.Move;
             // (left to right as the record keeps its lanes)

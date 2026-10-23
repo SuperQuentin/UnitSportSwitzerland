@@ -29,6 +29,13 @@ public sealed class SignalTestRegionFixture : IDisposable
         return RoadCodec.Decode(fs);
     }
 
+    /// <summary>The lights nearest a point in its tile (a tile may hold several, #1155).</summary>
+    public RoadSignal SignalAt(double e, double n)
+    {
+        var id = TileId.FromLv95(e, n);
+        return Tile(e, n).Signals.MinBy(s => Math.Pow(id.MinE + s.X - e, 2) + Math.Pow(id.MaxN - s.Z - n, 2))!;
+    }
+
     /// <summary>The junction whose id (its name up to the first dash) is <paramref name="id"/>: "J1" is not J10's.</summary>
     public SignalTestRegion.Junction Junction(string id) =>
         SignalTestRegion.Junctions.Single(j => j.Name.Split('-')[0] == id.TrimEnd('-'));
@@ -113,9 +120,8 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
         // and Bern's poles their colours (#1037), the rest alike
         var plans = new[] { "default", "GE", "VD", "BL", "BE" }
             .Select(c => SignalTestRegion.Junctions.Single(j => j.Name == $"J12-canton-{c}"))
-            // (the nearest: the Geneva and Vaud tiles hold J16-J18 too, #1161)
-            .Select(j => region.Tile(j.E, j.N).Signals.MinBy(s => Math.Abs(s.X - (j.E - TileId.FromLv95(j.E, j.N).MinE))
-                + Math.Abs(s.Z - (TileId.FromLv95(j.E, j.N).MaxN - j.N)))!.Plan).ToArray();
+            // (the nearest: the Geneva and Vaud tiles hold J15-J18 too, #1155, #1161)
+            .Select(j => region.SignalAt(j.E, j.N).Plan).ToArray();
         Assert.Equal((true, false), (plans[0].PedestrianAmber, plans[0].ArrowPlates));
         Assert.Equal((false, false), (plans[1].PedestrianAmber, plans[1].ArrowPlates));
         Assert.Equal((true, true), (plans[2].PedestrianAmber, plans[2].ArrowPlates));
@@ -846,5 +852,65 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
         var solid = tile.Paint.Where(p => p.Type == PaintType.YellowSolid).Select(p => Points(p.Vertices)
             .Select(q => Math.Sqrt((q.X - cx) * (q.X - cx) + (q.Z - cz) * (q.Z - cz))).ToList()).ToList();
         Assert.All(crossing, d => Assert.Contains(solid, s => Math.Abs(s.Max() - d.Min()) < 1.0));
+    }
+}
+
+/// <summary>J15, the Geneva tram junction (#1155): J14's tram junction in the Geneva zone, with Romandy's tram heads.</summary>
+public class GenevaTramJunctionTests(SignalTestRegionFixture region) : IClassFixture<SignalTestRegionFixture>
+{
+    [Fact]
+    public void J15_has_Romandy_tram_heads_and_a_group_per_tram_direction()
+    {
+        var j = region.Junction("J15");
+        Assert.Equal("GE", SignalTestRegion.CantonAt(j.E, j.N));
+        var signal = region.SignalAt(j.E, j.N);
+        var plan = signal.Plan;
+        Assert.True(plan.TramTHead, "Romandy's tram heads");
+        Assert.InRange(plan.Cycle, SignalPlan.MinCycle, SignalPlan.MaxCycle);
+        Assert.Empty(plan.Validate());
+        // the westbound trams go straight on and left from one track: one tram group per direction on that arm
+        var tram = plan.Groups.Where(g => g.Kind == SignalGroupKind.Tram).ToList();
+        var twoWays = tram.GroupBy(g => g.Arm).Where(a => a.Count() >= 2).ToList();
+        Assert.NotEmpty(twoWays);
+        Assert.Contains(twoWays, a => a.Any(g => g.Moves == SignalMoves.Left) && a.Any(g => g.Moves == SignalMoves.Through));
+        // turn lanes with their own heads (#1119), walkers and riders
+        Assert.Contains(plan.Groups, g => g.Kind == SignalGroupKind.LeftArrow);
+        Assert.Contains(plan.Groups, g => g.Kind == SignalGroupKind.Pedestrian);
+        Assert.Contains(plan.Groups, g => g.Kind == SignalGroupKind.Bike);
+    }
+}
+
+/// <summary>The trams' own stop lines (#1155, the user: "the stopline should be drawn for trams").</summary>
+public class TramStopLineTests(SignalTestRegionFixture region) : IClassFixture<SignalTestRegionFixture>
+{
+    [Fact]
+    public void Every_tram_lane_at_lights_has_its_stop_line_across_its_track_on_the_cars_line()
+    {
+        int lanes = 0;
+        foreach (var (_, tile) in region.Tiles())
+        {
+            var lines = tile.Paint.Where(p => p.Type == PaintType.StopLine && p.Variant == RoadPaint.OverTrack).ToList();
+            foreach (var a in tile.Approaches.Where(a => a.Signal >= 0 && a.Lanes.Any(l => l.Kind == ApproachLaneKind.Tram)))
+            {
+                // the arriving driver's way in (tile-local x east, z south): the arm's heading points out
+                double inE = -Math.Cos(a.Heading), inN = -Math.Sin(a.Heading);
+                int trams = a.Lanes.Count(l => l.Kind == ApproachLaneKind.Tram);
+                lanes += trams;
+                // on the cars' line (the record's stop, the line's middle) within 0.3 m along, beside it within 15 m: one per tram lane
+                var on = lines.Where(p =>
+                {
+                    double e = (p.Vertices[0] + p.Vertices[3]) / 2.0 - a.X, n = -(p.Vertices[2] + p.Vertices[5]) / 2.0 + a.Z;
+                    return Math.Abs(e * inE + n * inN) < 0.3 && Math.Abs(e * inN - n * inE) < 15;
+                }).ToList();
+                Assert.True(on.Count == trams, $"approach at {a.X:F0},{a.Z:F0}: {on.Count} tram stop lines on its line for {trams} tram lanes");
+                foreach (var p in on)
+                {
+                    double length = Math.Sqrt(Math.Pow(p.Vertices[3] - p.Vertices[0], 2) + Math.Pow(p.Vertices[5] - p.Vertices[2], 2));
+                    Assert.InRange(length, 2.5, 3.2);
+                    Assert.Equal(0.5f, p.Width, 3);
+                }
+            }
+        }
+        Assert.True(lanes >= 8, $"{lanes} tram lanes at lights");
     }
 }
