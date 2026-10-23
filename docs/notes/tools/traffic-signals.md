@@ -102,6 +102,13 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   early end would have those cars run into them from behind; an early start (the lead) stays. `SignalArm.RiderBox` (not
   stored: the arm's exterior has a `BarKind.BikeBox`) makes their left-turn group count with the cars in `Time` (not slow:
   it sets the gap, its green ends with the phase). Test region: 7 such groups, J6 78 -> 81 s for it (`RidersInABikeBox_...` tier 0).
+  **A lone bike lane into a box** (#1184, `junction-planner`): one bike group with every move of the approach (`SignalArm.RiderAll`,
+  in place of the through, left and #1165 right-only ones; one bike head), read back from the group alone by `SignalPlan.BoxRiders`
+  (a bike group turning left and another way): never slow (ends with its cars), and turning left it gives way to the oncoming
+  traffic, to the walkers it turns across and to a tram beside it as the cars behind it do (permissive). Its clearing is also
+  timed to a start two phase changes on (`Time`: at least the least green and that gap between; it ends with its cars, so
+  its slow clearing sets the gaps: the rule's first, wider form lengthened J3 74 -> 84 s). Test region: 4 groups (the T stems),
+  cycles unchanged. Geneva centre: 59 approaches, 48 groups; 222 of 240 timed as on main; 2502325,1118596 125 -> 136 s.
   Geneva centre with all of #1030 against main (246 lit junctions): longest cycle 150 -> 115 s, none over 120; 165 -> 211 timed
   from conflict times; 195 cycles the same, 39 shorter, 12 longer (8 by 1 s; 2499106,1117630 78 -> 99 s, now timed from its
   conflict times); the 5 two-stage junctions keep their cycles. The bike lead (Vorgrün) only where a car group turning across the riders goes green with them. A plan so timed

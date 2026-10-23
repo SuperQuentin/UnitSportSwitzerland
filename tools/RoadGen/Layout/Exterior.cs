@@ -305,12 +305,21 @@ public static class ExteriorPlanner
             var x = sec.Strips[k];
             if (!BikeIn(x) || x.Stop != BikeStop.Box) continue;
             var (bl, br) = sec.Span(k);
-            var move = (x.Moves & SignalMoves.Through) != 0 ? SignalMoves.Through : (x.Moves & SignalMoves.Left) != 0 ? SignalMoves.Left : SignalMoves.Right;
             double mid = (bl + br) * 0.5;
-            var lane = cars.Where(c => c.Moves == SignalMoves.None || (c.Moves & move) != 0)
-                .OrderBy(c => Math.Abs((c.Span.From + c.Span.To) * 0.5 - mid)).Select(c => ((double From, double To)?)c.Span).FirstOrDefault()
-                ?? cars.OrderBy(c => Math.Abs((c.Span.From + c.Span.To) * 0.5 - mid)).Select(c => ((double From, double To)?)c.Span).FirstOrDefault();
-            boxes.Add(lane is { } c0 ? (Math.Min(bl, c0.From), Math.Max(br, c0.To)) : (bl, br));
+            // a lane by its straight-on move; one whose riders also turn left from the box (a lone lane serving every move, #1184)
+            // reaches the nearest car lane making each of its moves
+            var first = (x.Moves & SignalMoves.Through) != 0 ? SignalMoves.Through : (x.Moves & SignalMoves.Left) != 0 ? SignalMoves.Left : SignalMoves.Right;
+            var all = (x.Moves & SignalMoves.Left) != 0 && x.Moves != SignalMoves.Left ? x.Moves : first;
+            var box = (L: bl, R: br);
+            foreach (var move in (ReadOnlySpan<SignalMoves>)[SignalMoves.Left, SignalMoves.Through, SignalMoves.Right])
+            {
+                if ((all & move) == 0) continue;
+                var lane = cars.Where(c => c.Moves == SignalMoves.None || (c.Moves & move) != 0)
+                    .OrderBy(c => Math.Abs((c.Span.From + c.Span.To) * 0.5 - mid)).Select(c => ((double From, double To)?)c.Span).FirstOrDefault()
+                    ?? cars.OrderBy(c => Math.Abs((c.Span.From + c.Span.To) * 0.5 - mid)).Select(c => ((double From, double To)?)c.Span).FirstOrDefault();
+                if (lane is { } c0) box = (Math.Min(box.L, c0.From), Math.Max(box.R, c0.To));
+            }
+            boxes.Add(box);
         }
         boxes.Sort((p, q) => p.Left.CompareTo(q.Left));
         var merged = new List<(double Left, double Right)>();

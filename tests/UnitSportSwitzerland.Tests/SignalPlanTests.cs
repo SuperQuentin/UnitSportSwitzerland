@@ -470,6 +470,42 @@ public class SignalPlanTests(ITestOutputHelper output)
         Assert.True(Start(riders) <= Start(cars) + 0.05f, "the riders never start after their cars");
     }
 
+    [Fact]
+    public void LoneBikeLaneIntoABox_OneRidersGroupWithEveryMove()
+    {
+        // #1184 (the user, J8 N): a T's stem with one bike lane serving its riders' left and right into a bike box: one bike group
+        // with both moves (no right-only one), going with the stem's cars, never ending before them (the riders wait in front)
+        var arms = new List<SignalArm> { Arm(N) with { RiderAll = true, RiderBox = true, RiderRight = true }, Arm(E), Arm(W) };
+        var plan = SignalPlan.Build(arms, 7);
+        AssertValid(plan);
+        var riders = plan.Groups.Select((g, k) => (g, k)).Where(p => p.g.Kind == SignalGroupKind.Bike && p.g.Arm == 0).ToList();
+        Assert.Single(riders);
+        Assert.Equal(SignalMoves.Left | SignalMoves.Right, riders[0].g.Moves);
+        Assert.True(SignalPlan.BoxRiders(riders[0].g));
+        int box = riders[0].k, cars = Group(plan, SignalGroupKind.Car, 0);
+        Assert.NotEmpty(WhenGreen(plan, box, cars));
+        var conflicts = plan.Conflicts();
+        int n = plan.Groups.Count;
+        var times = new float[n, n];
+        for (int g = 0; g < n; g++)
+            for (int h = 0; h < n; h++)
+                times[g, h] = conflicts[g, h] == SignalPlan.Conflict.Hard ? (g == box ? 8f : 3f) : float.NaN;
+        Assert.True(plan.Retime(times), "retimed");
+        AssertValid(plan);
+        float End(int g) => plan.Groups[g].Intervals.Where(v => v.Aspect == SignalAspect.Green).Select(v => v.To).First();
+        Assert.True(End(box) >= End(cars) - 0.05f, "the box's riders end before the cars behind them");
+
+        // on a crossroads the box's riders turning left give way to the oncoming traffic as the cars behind them do: they share
+        // the oncoming cars' green; turning they give way to the walkers too
+        var cross = new List<SignalArm> { Arm(N) with { RiderAll = true, RiderBox = true }, Arm(E), Arm(S), Arm(W) };
+        var four = SignalPlan.Build(cross, 7);
+        AssertValid(four);
+        int all = four.Groups.FindIndex(g => g.Kind == SignalGroupKind.Bike && g.Arm == N);
+        Assert.Equal(SignalMoves.Left | SignalMoves.Through | SignalMoves.Right, four.Groups[all].Moves);
+        Assert.NotEmpty(WhenGreen(four, all, Group(four, SignalGroupKind.Car, S)));
+        Assert.Equal(SignalPlan.Conflict.Permissive, four.Conflicts()[all, Group(four, SignalGroupKind.Pedestrian, E)]);
+    }
+
     /// <summary>
     /// Geneva's 10-arm node at LV95 2500974,1117838 (#1030): split phasing ran its 9 approaches one by one, 5 s greens, to 157 s
     /// once timed from conflict times. 120 s is the legal maximum (the user): approaches that never conflict share a phase.
