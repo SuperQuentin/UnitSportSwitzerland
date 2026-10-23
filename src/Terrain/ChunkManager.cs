@@ -427,7 +427,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         ArrayMesh?[]? BuildingCells = null, Vector3[]? OccluderVertices = null, int[]? OccluderIndices = null,
         ArrayMesh? Sites = null, Construction.CraneRig[]? Cranes = null,
         List<Construction.PitCut>? Pits = null, RoadSignBuilder.Label[]? SignNames = null,
-        ArrayMesh?[]? BuildingProxies = null);
+        ArrayMesh?[]? BuildingProxies = null, ArrayMesh?[]? RoadCells = null, ArrayMesh?[]? RoadPaintCells = null);
 
     private Material? _roadMaterial;
     private Material? _buildingMaterial;
@@ -1550,6 +1550,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 {
                     var node = EnsureNode(result.Id, state);
                     node.SetRoads(result.Roads);
+                    node.SetRoadCells(result.RoadCells, result.RoadPaintCells);
                     node.SetSignalLamps(result.Lamps);
                     node.SetSignNames(result.SignNames);
                 }
@@ -2234,6 +2235,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         null, null, false, null, null, WaterLayer: waterLayer));
 
                 ArrayMesh? roads = null;
+                ArrayMesh?[]? roadCells = null, roadPaintCells = null;
                 SignalBuilder.Lamps? lamps = null;   // traffic-light lenses (#350)
                 RoadSignBuilder.Label[]? signNames = null;   // canton signs' names (#1038)
                 RoadTile? roadTile = null;
@@ -2250,7 +2252,16 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         && RoadMeshBuilder.Build(roadTile, grid, detail) is { } roadData)
                     {
                         ct.ThrowIfCancellationRequested();
-                        roads = ChunkNode.ToArrayMesh(roadData, roadMaterial, RoadPaintBuilder.Build(roadTile));
+                        var paintData = RoadPaintBuilder.Build(roadTile);
+                        if (Platform.IsStandaloneVr)
+                        {
+                            // a standalone headset's roads in the buildings' cells (#1112): what is behind the
+                            // eye or a block is culled, and the paint goes beyond a few hundred metres
+                            roadCells = ChunkNode.ToArrayMeshes(ChunkNode.SplitByCell(roadData), roadMaterial);
+                            if (paintData != null) roadPaintCells = ChunkNode.ToArrayMeshes(ChunkNode.SplitByCell(paintData), roadMaterial);
+                            roads = new ArrayMesh();
+                        }
+                        else roads = ChunkNode.ToArrayMesh(roadData, roadMaterial, paintData);
                         lamps = SignalBuilder.BuildLamps(roadTile);
                         signNames = RoadSignBuilder.Labels(roadTile);
                         if (RoadSignBuilder.GantryLabels(roadTile) is { } gantryNames) signNames = [.. signNames ?? [], .. gantryNames];   // #1110
@@ -2546,7 +2557,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     holes, cover, buildings, buildingFaces, wantBuildings, trees, water,
                     bridgeCollision, stageMs, doors, bores, waterLayer, lamps,
                     buildingCells, occluders?.Vertices, occluders?.Indices, siteMesh, craneRigs, plannedPits, signNames,
-                    BuildingProxies: buildingProxies));
+                    BuildingProxies: buildingProxies, RoadCells: roadCells, RoadPaintCells: roadPaintCells));
             }
             catch (OperationCanceledException)
             {
