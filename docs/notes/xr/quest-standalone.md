@@ -55,3 +55,23 @@ The same VR mode as over Link (`setup`, `rig`, `controls`), run on the headset's
   `adb shell run-as ch.unitsport.switzerland.quest ls files/perf_logs` (then `cat` each file) works on it, never on a
   release one. `adb logcat -s godot:*` works on both.
 - **Meta's own view:** OVR Metrics Tool (from the Meta Horizon Store) overlays FPS, GPU and CPU levels and GPU %.
+- **A scripted run:** `tools/quest-measure.sh <label> 150 <game args>` puts the arguments in `user://cmdline.txt`
+  (`Core/CmdArgs` reads it on Android), keeps the headset worn and awake (`prox_close`, Guardian paused), starts the
+  game and prints VrApi's averages over the last 40 s (startup takes ~90 s). Real tiles for a deterministic run: copy
+  a few tiles plus a manifest listing only them into `files/terrain_chunks` (through `/data/local/tmp` and `run-as`),
+  then `--chunks terrain_chunks`. Two runs of the same scene differ by about 2 ms of GPU time.
+- **Splitting the frame:** `--hidenodes Ground,Roads,Trees,Broadleaves,Water,Horizon,Buildings` hides those tile
+  layers (`Core/RenderCensus`), `--rendercensus` prints triangles per branch. `adb shell ovrgpuprofiler -r` reads the
+  GPU's counters; `adb shell simpleperf record --app <package> -g` samples the CPU (a debug export only; C# shows as
+  `unknown`, so rank it with `dotnet-trace` on a `--xrsim --quest` desktop run of the same place).
+
+## What a Quest 2's GPU cannot afford
+
+- **`discard`** in any shader turns off the Adreno's early depth rejection (LRZ) for everything drawn after it, so
+  every hidden layer is shaded: the `_standalone` shader variants (`StyleKit` takes `<shader>_standalone` where it
+  exists) define `NO_DISCARD`, `NO_SCENE_DEPTH` (water: no depth read, opaque) and `STANDALONE` (flat windows, no
+  ground patterns).
+- **Whole-tile meshes:** a tile's buildings and roads are cut into 125 m cells (`BuildingOcclusion.Cells`), so the
+  frustum and occlusion culling drop what is behind the eye or a block. Past `ChunkNode.ProxyFromM` (300 m, by 3D
+  distance from the eye to the cell, at any height) a cell's buildings are one box each
+  (`BuildingMeshBuilder.BuildProxies`); road paint stops at `ChunkNode.PaintToM`.
