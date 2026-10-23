@@ -37,6 +37,27 @@ public static class DoorIndex
 
     private static readonly Dictionary<TileId, Entry[]> Tiles = new();
 
+    /// <summary>
+    /// Each tile's doors' extent in the ground plane (world X/Z), so a search within a reach skips the
+    /// tiles it cannot touch: a city's thousands of doors were measured every frame, on a Quest's CPU (#1112).
+    /// </summary>
+    private static readonly Dictionary<TileId, Rect2> Bounds = new();
+
+    /// <summary>A door can be this much nearer than its centre: half a wide door plus the leaves' reach out in front.</summary>
+    private const float BoundsSlack = 8f;
+
+    private static Rect2 BoundsOf(Entry[] doors)
+    {
+        if (doors.Length == 0) return new Rect2();
+        var r = new Rect2(doors[0].World.X, doors[0].World.Z, 0, 0);
+        foreach (var e in doors) r = r.Expand(new Vector2(e.World.X, e.World.Z));
+        return r;
+    }
+
+    /// <summary>Whether a tile's doors may be within <paramref name="reach"/> of <paramref name="at"/>.</summary>
+    private static bool MayReach(TileId id, Vector3 at, float reach) =>
+        !Bounds.TryGetValue(id, out var r) || r.Grow(reach + BoundsSlack).HasPoint(new Vector2(at.X, at.Z));
+
     public static void SetTile(TileId id, Vector3 tileOrigin, DoorSpot[] doors)
     {
         var list = new List<Entry>(doors.Length);
@@ -47,16 +68,24 @@ public static class DoorIndex
                     Hang = d.Hang, Vehicle = d.Vehicle, Link = d.Link, Ramp = d.Ramp, RampDir = d.RampDir, Shop = d.Shop, Level = d.Level,
                 });
         Tiles[id] = list.ToArray();
+        Bounds[id] = BoundsOf(Tiles[id]);
     }
 
-    public static void ClearTile(TileId id) => Tiles.Remove(id);
+    public static void ClearTile(TileId id)
+    {
+        Tiles.Remove(id);
+        Bounds.Remove(id);
+    }
 
     /// <summary>The origin moved (#185): every door is now somewhere else in world space.</summary>
     public static void Shift(Core.OriginShift shift)
     {
-        foreach (var doors in Tiles.Values)
+        foreach (var (id, doors) in Tiles)
+        {
             for (int i = 0; i < doors.Length; i++)
                 doors[i] = doors[i] with { World = shift.Point(doors[i].World), Outward = shift.Direction(doors[i].Outward) };
+            Bounds[id] = BoundsOf(doors);
+        }
     }
 
     /// <summary>A given door, if its tile is drawn and the building has it.</summary>
@@ -68,7 +97,11 @@ public static class DoorIndex
         return null;
     }
 
-    public static void Clear() => Tiles.Clear();
+    public static void Clear()
+    {
+        Tiles.Clear();
+        Bounds.Clear();
+    }
 
     /// <summary>Every door currently drawn (for probes).</summary>
     public static IEnumerable<Entry> All() => Tiles.Values.SelectMany(t => t);
@@ -229,7 +262,9 @@ public static class DoorIndex
         // a door at the player's level before one that is not (#827), the nearest of each
         Entry? best = null, off = null;
         float bestD = reach, offD = reach;
-        foreach (var doors in Tiles.Values)
+        foreach (var (id, doors) in Tiles)
+        {
+            if (!MayReach(id, at, reach)) continue;
             foreach (var e in doors)
             {
                 if (!wanted(e)) continue;
@@ -247,6 +282,7 @@ public static class DoorIndex
                     off = e;
                 }
             }
+        }
         return best ?? off;
     }
 
