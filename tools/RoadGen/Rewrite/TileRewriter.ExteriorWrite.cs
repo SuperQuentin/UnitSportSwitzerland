@@ -119,8 +119,8 @@ public static partial class TileRewriter
     /// <summary>A refuge between a carriageway and the tram bed (#1179): at most and at least this wide (m), and running on this far past its crosswalk either way (room for its pole).</summary>
     private const double RefugeMost = 4, RefugeLeast = 1.5, RefugeBeyond = 2.5;
 
-    /// <summary>An island's own pole for a middle stage stands this far out along the arm from the stage's end (m): beside the zebra.</summary>
-    private const double IslandPoleBack = 2;
+    /// <summary>An island's own pole for a middle stage stands this far out along the arm past its zebra's edge (m).</summary>
+    private const double IslandPoleBack = 1.2;
 
     /// <summary>The unlit middle stages of each signal written (#1176): their walkers' lines go with the signal's, no group (255).</summary>
     internal static readonly System.Runtime.CompilerServices.ConditionalWeakTable<SignalPlan, List<(Vec2 A, Vec2 B)>> UnlitStages = new();
@@ -423,8 +423,10 @@ public static partial class TileRewriter
                 // carriageway's walkers facing its far kerb, the middle stage's back to back with it)
                 var a = jp.Arms[arm];
                 double m0 = jp.Core!.Mouths.First(m => m.Arm == a.Arm).Station;
-                var foot = end + a.Axis!.DirAt(m0) * IslandPoleBack;
-                if (!clear(foot)) continue;
+                // (on the raised part of its refuge beside the crosswalk, #1179: the refuge is the pole's own ground)
+                double past = ConflictTimes.Crosswalk(jp, a, left: false) is var (_, half, _) ? half + IslandPoleBack : 2 * IslandPoleBack;
+                var foot = end + a.Axis!.DirAt(m0) * past;
+                if (areas is null && !clear(foot)) continue;
                 var local = Local(home, [foot], q => SampleAt(a, q), 0.12f);
                 poles.Add(new SignalPole(local[0], local[1], local[2], Heading(a.Axis.DirAt(m0)), Heading(-a.Axis.RightAt(m0)), (byte)arm,
                     SignalPoleFlags.Pedestrian | SignalPoleFlags.MiddleStage));
