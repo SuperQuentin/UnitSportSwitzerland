@@ -83,6 +83,14 @@ public static partial class SignalTestRegion
     /// <see cref="TwinRowN"/>'s tile row (N <see cref="PortalN"/>), and J6 again as a tram street (a span wire) on the canton row's.
     /// </summary>
     public const double OverheadE = 2917500, PortalN = 1321500;
+
+    /// <summary>
+    /// The Geneva tram junction (#1155, J15): J14's artery with its tram and branch inside the Geneva zone's tile (2913/1323), south-west
+    /// of the canton row's GE crossroads (whose arms stay as they are), arms 200 m, so its tram heads are Romandy ones.
+    /// </summary>
+    public const double GenevaTramE = 2913230, GenevaTramN = 1323230;
+    /// <summary>J15's arms run this far out (m): inside its tile, clear of the canton row and the GE crossroads.</summary>
+    private const double GenevaTramArm = 200;
     /// <summary>
     /// Reserved tram track (#1161): J16, a divided road with its double track on its own bed between the carriageways across a cross
     /// road, in the Geneva tile's north-east quarter (Romandy heads).
@@ -464,6 +472,46 @@ public static partial class SignalTestRegion
             lines.Add(new Line("TTR", "", "", "", [.. right], "", Rail: RoadFlags.Tramway, OnStreet: true));
             junctions.Add(new Junction("J14-tram", OverheadE, nb,"J13's 4+4 artery with trams between houses: heads overhead on a span wire between facades",
                 Arms("L|T|T|TR", "L|T|T|TR", "L|TR", "L|TR")));
+
+            // 15b. J15, the Geneva tram junction (#1155, the user: "test world is missing a tram intersection in geneva"): J14 again in
+            // the Geneva zone, arms 200 m, no houses: the westbound trams go straight on or left down the south arm from one track
+            // (two Romandy heads with arrow plates, each direction its own group), the northbound ones from the south arm turn right
+            {
+                const double ge = GenevaTramE, gn = GenevaTramN, arm = GenevaTramArm;
+                lines.Add(new Line("GTW", "10m Strasse", "Durchgangsstrasse", "Kanton", [(ge - arm, gn), (ge, gn)], "secondary", "yes",
+                    Rows: [new OsmRow(0, arm, Lanes: "8", TurnFwd: Wide, TurnBwd: Wide, Tram: true)]));
+                lines.Add(new Line("GTE", "10m Strasse", "Durchgangsstrasse", "Kanton", [(ge, gn), (ge + arm, gn)], "secondary", "yes",
+                    Rows: [new OsmRow(0, arm, Lanes: "8", TurnFwd: Wide, TurnBwd: Wide, Tram: true)]));
+                lines.Add(new Line("GTS", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(ge, gn - arm), (ge, gn)], "secondary", "yes",
+                    Rows: [new OsmRow(0, arm, TurnFwd: Arrows)]));
+                lines.Add(new Line("GTN", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(ge, gn), (ge, gn + arm)], "secondary", "yes",
+                    Rows: [new OsmRow(0, arm, TurnBwd: Arrows)]));
+                double gb = ge + 12;
+                foreach (var (id, side) in (ReadOnlySpan<(string, double)>)[("GTTS", -1.6), ("GTTN", 1.6)])
+                {
+                    lines.Add(new Line(id + "W", "", "", "", [(ge - arm, gn + side), (gb, gn + side)], "", Rail: RoadFlags.Tramway, OnStreet: true));
+                    lines.Add(new Line(id + "E", "", "", "", [(gb, gn + side), (ge + arm, gn + side)], "", Rail: RoadFlags.Tramway, OnStreet: true));
+                }
+                List<(double E, double N)> GArc(double radius)
+                {
+                    var arc = new List<(double E, double N)>();
+                    for (int k = 0; k <= 12; k++)
+                    {
+                        double a = Math.PI / 2 * k / 12;
+                        arc.Add((gb - radius * Math.Sin(a), gn - 12 + radius * Math.Cos(a)));
+                    }
+                    return arc;
+                }
+                var gl = GArc(13.6);
+                gl.Add((ge - 1.6, gn - arm));
+                lines.Add(new Line("GTTL", "", "", "", [.. gl], "", Rail: RoadFlags.Tramway, OnStreet: true));
+                var gr = GArc(10.4);
+                gr.Reverse();
+                gr.Insert(0, (ge + 1.6, gn - arm));
+                lines.Add(new Line("GTTR", "", "", "", [.. gr], "", Rail: RoadFlags.Tramway, OnStreet: true));
+                junctions.Add(new Junction("J15-geneva-tram", ge, gn, "J14's artery and tram in the Geneva zone: Romandy tram heads, arrow plates",
+                    Arms(null, null, null, null)));
+            }
         }
 
         junctions.Add(new Junction("J9-stagger-west", StaggerE + 300, TwinRowN, "staggered T's 24 m apart, both lit: the west one", Arms(null, null, null, null)));
@@ -627,7 +675,8 @@ public static partial class SignalTestRegion
         WriteOverlay(tempDir, design.Lines);
         // J14's tram stops (#1057): two stops on the artery, 150 m either side of the junction, as swissTLM3D gives a stop: one point
         File.WriteAllText(Path.Combine(tempDir, "tram_stops.tsv"), string.Create(CultureInfo.InvariantCulture,
-            $"name\te\tn\nJ14 west\t{OverheadE - 150:F2}\t{BetweenN:F2}\nJ14 east\t{OverheadE + 150:F2}\t{BetweenN:F2}\n"));
+            $"name\te\tn\nJ14 west\t{OverheadE - 150:F2}\t{BetweenN:F2}\nJ14 east\t{OverheadE + 150:F2}\t{BetweenN:F2}\n"
+            + $"J15 west\t{GenevaTramE - 100:F2}\t{GenevaTramN:F2}\nJ15 east\t{GenevaTramE + 100:F2}\t{GenevaTramN:F2}\n"));
         WriteSignals(tempDir, design);
         string about = About(design);
         foreach (string dir in new[] { chunkDir, tempDir })

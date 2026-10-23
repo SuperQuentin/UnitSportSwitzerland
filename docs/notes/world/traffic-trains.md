@@ -162,3 +162,31 @@
   usual 2.2 m/s² (3-4 m by 2.5 s after the green).
 - **Walkers, riders, trams** (#1058): the modes plug into this traffic through a shared base (#1060): their own graphs, box
   movers, and the crossers list that `Coming` and the cars' following read: `traffic-modes`.
+- **Cars stacked in one lane, lanes in a standing queue, the merge probe** (#1172):
+  - **Following what lies on its way further on**: a car counted one ahead only within 2 m of its line *now* (or of its lane at
+    the line). One easing onto the through lane (a pocket not open yet rides it, a transition's strip leads onto it) or on a bend or
+    junction path saw the standing queue 12 m short at 40-60 km/h and stopped on its last car (the `--trafficcheck` overlap:
+    J1 40 s, J3b 120 s, J5a 222 s, J5b 57 s, J8 204 s). Now also a car on its route's line at that distance, anywhere across it from
+    where it drives now to the lane it will be in there, 2 m either side (`OnLineAhead`, `LineAhead`: a path's line, the strip at
+    that station on this piece or one ahead, else the approach lane; its lane lags the one it wants, so it may be anywhere between). Side by side (only one yields, #1134) only with middles within 2 m along (`SideBySide`): a car 2-4 m ahead
+    merging in, or on a joining junction path, was ignored and driven onto. After: 0 s at all five.
+  - **Lane changes planned to the queue's tail** (`tailAhead`): `LaneChoice.Aim` gets the distance to the nearest car standing or
+    crawling ahead (less 7.5 m) when nearer than the line, so the spaced changes hurry to end before the tail: a car moves over only
+    while it rolls, and one that reached the tail first kept its lane.
+  - **Its lane where the road already has it** (`HasLane`): J13's `LANE` record has its four lanes only over the last 24 m, the
+    artery four lanes all along; beyond the record every car rode its usual line (the west queue at its longest: L 0, T 5, T 9, TR
+    20). A car whose lane at the line is a lane of the road where it drives now goes straight to it.
+  - **A generator's room where the car will be**: `RoomFor` measured from the road's centre; on the 4+4 artery the lanes are 7-10 m
+    off it, so cars started 4 m behind a queue standing at the generator (#1137's cars "dropped 24 m past the artery generators").
+    Now from the car's usual line (its habit drawn first).
+  - **The box rule by lane** (`RoomPast`): on an exit whose next approach has lanes side by side, a car on it counts against the
+    entering car's room only where its lane (`Lateral` at its distance from that line) lies within 2 m of the lane the entering car
+    will take there (its path's, else `LaneFor` its turn). A car in the other lane (the J5a/J5b strip's L beside its TR) took 7.5 m
+    of the one lane, so the strip read full at half its cars.
+  - **`--trafficcheck --at E,N --merge`** (`TrafficProbe.Merge`, `Traffic.SpawnMergePair`): no other traffic (a world's endpoints
+    off); at the nearest lit approach with two car lanes side by side where one shows a move the other does not, two cars start side
+    by side (up to 60 m before the line, 8 m/s), both taking that move, so one merges into the other's lane. Passes when both are past
+    the line within a cycle + 30 s and their bodies never overlapped (middles under 4.4 m along and 1.8 m across). J13 (`--at
+    2917470,1321500`, its north approach L | T): both past in 48 s (a red on the way), closest 1.38 of a body.
+  - The probe logs a car's first contact with one ahead going its way (`[traffic] contact at`, both cars' lanes, strips, turns; at
+    most 40), and per lit approach with lanes the queue's split by lane at its longest (`longest N standing (by lane L 3 | T 5 ...)`).

@@ -374,6 +374,8 @@ public sealed class RailRoadOverlap
         {
             var paintLine = paint[pi];
             if (paintLine.Shape != PaintShape.Polyline || paintLine.Type == PaintType.RailGroove) continue;
+            // (a tram's own stop line across its track, #1155)
+            if (paintLine.Type == PaintType.StopLine && paintLine.Variant == RoadPaint.OverTrack) continue;
             // a line along its segment is cut on its unsimplified line, and stays a reference
             var v = paintLine.Segment is { } along
                 ? RoadPaintGeometry.Cut(RoadPaintGeometry.Offset(along, paintLine.Offset), paintLine.From, paintLine.To)
