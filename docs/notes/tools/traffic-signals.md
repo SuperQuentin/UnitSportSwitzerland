@@ -62,6 +62,21 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   green, `Expand`), which gives the bike group a flasher: the bike head's own yellow lens flashes during its green
   (`SignalBuilder.Lens.Flash`, no lamp of its own). J2: on every arm. **Riders turning left** from the left-turn bike lane
   go with the arm's left arrow (`WritePaths`' group; they went with the through green, across the oncoming traffic).
+  **Riders with a right-turn lane of their own** (#1165, the user: "right turn only bike lanes should get their own light
+  instead of the single combined one"; layout (b)'s kerbside right-turn bike lane, `SignalArm.RiderRight`, not stored):
+  a bike group turning right only, after the others, the through riders' group then straight on only; a shared lane keeps
+  the combined group. `Expand` gives it a phase last, with its approach's right turn green there: protected where that is
+  a right arrow (nothing it crosses green, #1119), else beside the cars' permissive right, giving way to the exit's walkers
+  (its flasher). No conflict with the right pocket's cars (they turn beside it), nor in `YieldsAt`/`TurnsAcross`. Its head
+  stands right of the through riders' head on the main pole (`BikeRightBeside`), its right arrow on its plate; signal 5.18
+  moves onto it. Model viewer: "Traffic light - Bike right-turn head" (five). Test region: 8 such groups (J10 every arm,
+  J4, J8, J9 x2), cycles unchanged; riders' paths and `Traffic.Riders` pick it by move (no runtime change).
+  **An arrow only ever permissive flashes an amber lens in its green's place** (#1165, the user: "when an arrow signal (or
+  bike signal with an arrow) is only ever permissive in the light cycle, make its green light a flashing amber (not the
+  middle light, this stays as the transitional light)"): an uncombined arrow head (pole or overhead) or a bike head turning
+  one way whose turn flasher flashes over every moment of its green (`SignalBuilder.PermissiveThroughout`) gets
+  `Lens.AmberGreen`: amber glass at the bottom, flashing with the flasher, the middle yellow steady (amber, red-amber).
+  A head protected for part of its green keeps #1109's rules (its middle yellow flashes, the green dark meanwhile).
 - **Conflict times** (#979, plan `docs/plans/intergreen-times.md` on `main`): RoadGen times each lit plan from the conflict times
   between its movements (`Layout/ConflictTimes`), not a fixed all-red. A green movement is a trail (the user): its path held
   from when its first mover reaches a point to when its last (crossing its line as its amber ends) has left it, however many
@@ -184,9 +199,13 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   junction) has a bike lane or path on the side riders join, and the approach gives riders a line
   of their own (Art. 69a, the user's choice "both"): a path stopping at its line by a crosswalk, a
   kerbside bike lane whose cars' line stands back (its yellow line ahead), or a right-turn pocket.
-  Sion: 8 approaches. Drawn by `SignalBuilder.RightOnRedSign`: a black square the size of a lens
+  Sion: 8 approaches. **The junction planner never set it** (#1165: only the old layout's path did, 0 since #818):
+  `TileRewriter.RidersRightOnRed` / `RidersTurnRightFrom` now do, same rule: a path at the kerb with a crosswalk, a bike
+  lane at the kerb turning right with its riders' line, or (the user) a right-turn car lane at the kerb where no bike
+  lane turns right; the sharpest-right exit not inside the lights and `CarriesBikesAway`. Test region 0 -> 80 of ~89
+  approaches (bike infrastructure on every street: 37 from a path, 43 from a bike lane). Drawn by `SignalBuilder.RightOnRedSign`: a black square the size of a lens
   right against the red lamp's visor, in front of the white band (the user's review), on
-  the bike head where the arm has one, else on the main pole's rightmost car head (the user's
+  the bike head where the arm has one (the riders' right-turn head where there is one, #1165), else on the main pole's rightmost car head (the user's
   choice: always right of red). The bike is `SignalGlyphs.Bike`, shared with the bike lens. Sign
   only: no game rule reads it yet. Model viewer: "Traffic light - Bike right on red" (two).
 - **The cars' stop line where the kerb's curve begins** (the user's review, #711: in the test region's J3 it stood inside

@@ -30,6 +30,50 @@ public static partial class TileRewriter
     private const float LongRiders = 2f;
 
     /// <summary>
+    /// Riders may turn right on red (the user's rule, #711: SSV Art. 69a, signal 5.18; the old layout's, ported to the junction
+    /// planner for #1165) where the approach gives them a line of their own (a path at the kerb beside a crosswalk, or a bike lane at
+    /// the kerb that turns right, ahead of the cars' line: a kerbside lane or the riders' own right-turn lane; or, with no bike lane,
+    /// a right-turn lane of the cars' at the kerb, which the riders turn from: the user) and the street directly on the right carries
+    /// riders away on the side they join (a departing bike lane or path).
+    /// </summary>
+    /// <summary>
+    /// Whether an approach (its <paramref name="mouth"/>) gives riders turning right a place of their own to do it from on red (#711,
+    /// #1165): a path at the kerb beside a crosswalk, a bike lane at the kerb turning right with its riders' line, or, with no bike
+    /// lane turning right, a right-turn car lane at the kerb.
+    /// </summary>
+    public static bool RidersTurnRightFrom(Section mouth, bool crosswalk, bool ridersLine)
+    {
+        int last = mouth.LastCarriageway;
+        if (last < 0) return false;
+        bool path = crosswalk && mouth.Strips.Skip(last + 1).Any(x => x.Kind == StripKind.Path);
+        bool lane = ridersLine && mouth.Strips[last] is { Kind: StripKind.BikeLane, Way: StripWay.In } kerb && (kerb.Moves & SignalMoves.Right) != 0;
+        bool pocket = mouth.Strips[last] is { Kind: StripKind.CarLane, Way: StripWay.In, Moves: SignalMoves.Right }
+            && !mouth.Strips.Any(x => x is { Kind: StripKind.BikeLane, Way: StripWay.In } && (x.Moves & SignalMoves.Right) != 0);
+        return path || lane || pocket;
+    }
+
+    private static void RidersRightOnRed(JunctionPlan jp, List<SignalArm> arms, List<ArmExterior> exterior, LayoutWriteStats stats)
+    {
+        for (int k = 0; k < arms.Count; k++)
+        {
+            if (!arms[k].In) continue;
+            var ex = exterior[k];
+            if (!RidersTurnRightFrom(ex.Arm.Mouth, ex.Crosswalk is not null, ex.RiderStop is not null)) continue;
+            int target = -1;
+            double sharpest = 0;
+            for (int j = 0; j < arms.Count; j++)
+            {
+                if (j == k || !arms[j].Out || SignalPlan.Turn(arms, k, j) != SignalMoves.Right) continue;
+                double delta = Math.IEEERemainder(arms[j].Heading - (arms[k].Heading + Math.PI), 2 * Math.PI);
+                if (target < 0 || delta < sharpest) (target, sharpest) = (j, delta);
+            }
+            if (target < 0 || exterior[target].Arm.InsideLights || !exterior[target].Arm.Mouth.CarriesBikesAway) continue;
+            arms[k] = arms[k] with { BikeRightOnRed = true };
+            stats.RidersRightOnRed++;
+        }
+    }
+
+    /// <summary>
     /// Where a tram lane crossing the stop line <paramref name="lateral"/> m right of the arm's axis lies beside the arriving car lanes
     /// of <paramref name="mouth"/> (#1161, <see cref="SignalArm.TramSide"/>): -1 left of them all, +1 right, 0 among them.
     /// </summary>
@@ -85,14 +129,16 @@ public static partial class TileRewriter
             bool approach = ins.Count > 0 && ex.CarStop is not null, leaves = mouth.CarLanes(StripWay.Out).Any();
             var info = InfoOf(net.Links[a.LinkId]);
             bool urban = mouth.KerbLeftCm > 0 || mouth.KerbRightCm > 0;
-            // riders get their own signal on a path, or on a bike lane kerbside of a right pocket (layout a); not on layout (b)'s
-            // right-turn bike lane at the kerb, its riders turning with the pocket's cars (#854: it held the right arrow back)
+            // riders get their own signal on a path, or on a bike lane kerbside of a right pocket (layout a); layout (b)'s right-turn
+            // bike lane at the kerb a group of its own, turning right only (#1165, the user; #854: as the through riders' it held the
+            // right arrow back)
             int last = mouth.LastCarriageway;
             bool path = mouth.Strips.Skip(last + 1).Any(x => x.Kind == StripKind.Path);
             bool kerbside = a.HasRight && last >= 0 && mouth.Strips[last] is { Kind: StripKind.BikeLane, Way: StripWay.In } kerbLane
                 && kerbLane.Moves != SignalMoves.Right;
             // the bike lane between the through lane and the right pocket (layout b): no conflict with that pocket's arrow (#979)
             bool between = a.HasRight && !kerbside && mouth.Strips.Any(x => x.Kind == StripKind.BikeLane && x.Way == StripWay.In && x.Moves != SignalMoves.Right && x.Moves != SignalMoves.Left);
+            bool riderRight = approach && mouth.Strips.Any(x => x is { Kind: StripKind.BikeLane, Way: StripWay.In, Moves: SignalMoves.Right });
             // a two-stage crossing's halves (#1030): from where its walkers set off on the arriving side to the island, from the
             // island to the departing side, as they are timed (ConflictTimes.WalkSpan)
             var zebra = ex.Bars.FirstOrDefault(b => b.Kind == BarKind.Crosswalk);
@@ -110,9 +156,10 @@ public static partial class TileRewriter
                 StorageM: Room(a.Length), LeftStorageM: Room(Run(PocketRules.Left)), RightStorageM: Room(Run(PocketRules.Right)),
                 HalfInM: halfIn, HalfOutM: halfOut, RiderBox: ex.Bars.Any(b => b.Kind == BarKind.BikeBox),
                 TramMoves: trams?.GetValueOrDefault(arms.Count).Moves ?? SignalMoves.None,
-                TramSide: trams is not null && trams.TryGetValue(arms.Count, out var tram) ? TramSide(mouth, tram.Lateral) : (sbyte)0));
+                TramSide: trams is not null && trams.TryGetValue(arms.Count, out var tram) ? TramSide(mouth, tram.Lateral) : (sbyte)0, RiderRight: riderRight));
         }
         if (arms.Count(x => x.In) < 2) return null;
+        RidersRightOnRed(jp, arms, exterior, stats);
         string? canton = cantons?.CodeAt(jp.Centre.X, jp.Centre.Y);
         bool amber = PedestrianAmber(canton), tramT = RomandyTramHead(canton, jp.Centre.X);
         uint seed = (uint)(long)Math.Round(jp.Centre.X) * 73856093u ^ (uint)(long)Math.Round(jp.Centre.Y) * 19349663u;
@@ -152,6 +199,12 @@ public static partial class TileRewriter
         {
             for (int k = 0; k < arms.Count; k++) arms[k] = arms[k] with { BikeSignal = false };
             plan = SignalPlan.Build(arms, seed, amber, tramT);
+            // (the riders' own right turns too where that was not enough, #1165)
+            if (plan.Validate().Any(e => e.Contains("(Bike arm")))
+            {
+                for (int k = 0; k < arms.Count; k++) arms[k] = arms[k] with { RiderRight = false };
+                plan = SignalPlan.Build(arms, seed, amber, tramT);
+            }
         }
 
         // a two-stage crossing whose island wait the cycle cannot keep (3 s longer at most) crosses in one go, as without the
@@ -175,6 +228,7 @@ public static partial class TileRewriter
         }
         plan.ArrowPlates = ArrowPlates(canton);
         stats.TwoStage += arms.Count(x => x.TwoStage);
+        stats.RiderRights += plan.Groups.Count(g => g is { Kind: SignalGroupKind.Bike, Moves: SignalMoves.Right });
         stats.RiderBoxes += Enumerable.Range(0, arms.Count).Count(k => arms[k].RiderBox && plan.Groups.Any(g => g.Kind == SignalGroupKind.Bike && g.Arm == k && g.Moves == SignalMoves.Left));
         plan.PoleColour = PoleColour(canton);
 

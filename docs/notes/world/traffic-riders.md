@@ -37,8 +37,8 @@ In the test world riders come only from its bike generators (#1134, `traffic-gen
   a path's `Path`), else any riders' own, else the cars' (from the lane nearest its line); a rider in the car lane takes the
   cars'. One exit at random, straight on twice as likely. Off a path, its road. Elsewhere ways with a lane or path 3x as
   likely; never straight back but at a dead end.
-- **Lights** (`RideLights`): its group is its path's (a bike group, a left-turn bike lane's own phase #979, the lead green
-  are in the plan) or the arm's bike group of its move, else the cars'. Its line is its bike lane's (`StopBehind`: an
+- **Lights** (`RideLights`): its group is its path's (a bike group, a left-turn bike lane's own phase #979, a right-turn bike lane's own group #1165, the lead
+  green are in the plan) or the arm's bike group of its move, else the cars'. Its line is its bike lane's (`StopBehind`: an
   advanced stop line lies ahead of the cars', #351; a bike box lies in front of the cars' line). Red: stops (2.5 m/s²),
   `Holding`. Amber: stops if it can. **Right on red** where the arm has `BikeRightOnRed` (5.18, #711): goes at 3 m/s.
   Without a junction path the turn is read 20 m past the approach's end along its legs.
