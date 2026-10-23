@@ -261,8 +261,14 @@ public static class BikeMeshBuilder
             s.Tube(lever, lever + new Vector3(x * 0.085f, -0.012f, 0.055f), 0.006f, 0.005f, Alloy, 4);
         }
         // the Bosch remote at the left grip (the rider's left is +X)
-        s.Box(new Vector3(half - 0.085f, f.Hood.Y + 0.012f, f.Hood.Z + 0.014f), new Vector3(0.030f, 0.020f, 0.028f), Alloy);
+        s.Box(RemoteAt(f), new Vector3(0.030f, 0.020f, 0.028f), Alloy);
     }
+
+    /// <summary>
+    /// The Bosch remote on the bar inboard of the left grip, bike space (+X the rider's left, +Z
+    /// forward): drawn there, and the VR hand pokes it there to step the assist level (#1167).
+    /// </summary>
+    public static Vector3 RemoteAt(BikeFrame f) => new(f.Hood.X - 0.085f, f.Hood.Y + 0.012f, f.Hood.Z + 0.014f);
 
     /// <summary>
     /// A fender over a wheel, from <paramref name="fromDeg"/> to <paramref name="toDeg"/> about the axle

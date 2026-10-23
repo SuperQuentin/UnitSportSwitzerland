@@ -30,20 +30,50 @@ namespace UnitSport.Player
     /// <summary>The bar the hands are on (#1159): a road bike's drops, or a trekking bike's swept riser bar.</summary>
     public enum BikeBar { Drop, Riser }
 
+    /// <summary>The Bosch remote's assist modes (#1167), in the order its button steps through them.</summary>
+    public enum AssistLevel { Off, Eco, Tour, Sport, Turbo }
+
     /// <summary>
-    /// A pedelec's mid motor (#1159): it adds <see cref="Support"/> × the rider's own watts, up to its
-    /// torque at the cranks and its peak power, and stops helping at <see cref="CutOff"/> (25 km/h,
-    /// the Swiss "slow e-bike" that needs no plate).
+    /// A pedelec's mid motor (#1159): it adds the assist level's factor × the rider's own watts, up to
+    /// its torque at the cranks and its peak power, and stops helping at <see cref="CutOff"/> (25 km/h,
+    /// the Swiss "slow e-bike" that needs no plate). It runs off <see cref="BatteryWh"/> (#1167).
     /// </summary>
     /// <param name="Torque">At the cranks, N·m (the maker's figure).</param>
     /// <param name="PeakWatts">The motor's short-term most, W.</param>
-    /// <param name="Support">The assist mode's factor: Bosch Eco 0.6, Tour 1.4, Sport 2.25, Turbo 3.4.</param>
+    /// <param name="StartLevel">The mode a fresh bike is switched on in.</param>
     /// <param name="CutOff">Assist off at, m/s.</param>
-    /// <param name="BatteryWh">The battery, Wh (described, not drained yet).</param>
-    public sealed record ElectricAssist(string Motor, float Torque, float PeakWatts, float Support, float CutOff, float BatteryWh)
+    /// <param name="BatteryWh">The battery, Wh: what a full one holds.</param>
+    public sealed record ElectricAssist(string Motor, float Torque, float PeakWatts, AssistLevel StartLevel, float CutOff, float BatteryWh)
     {
         /// <summary>The help fades over the last km/h before the cut-off, as the Bosch firmware does.</summary>
         public const float FadeBand = 1f / 3.6f;
+
+        /// <summary>
+        /// Battery to cranks (#1167): a mid motor's ~80% at load, its controller and the cell
+        /// resistance a few more. Every watt the motor adds draws 1/0.78 from the battery.
+        /// </summary>
+        public const float Efficiency = 0.78f;
+
+        /// <summary>
+        /// The rider's watts are multiplied by this (#1167): Bosch Performance Line (Smart System) Eco
+        /// 60%, Tour 140%, Sport 225% (its Sport sits between Tour+ and Turbo), Turbo 340%.
+        /// </summary>
+        public static float Support(AssistLevel level) => level switch
+        {
+            AssistLevel.Eco => 0.6f,
+            AssistLevel.Tour => 1.4f,
+            AssistLevel.Sport => 2.25f,
+            AssistLevel.Turbo => 3.4f,
+            _ => 0f,
+        };
+
+        /// <summary>The remote's button: one mode up, Turbo back round to Off.</summary>
+        public static AssistLevel Next(AssistLevel level) => level == AssistLevel.Turbo ? AssistLevel.Off : level + 1;
+
+        /// <summary>The display's word for it, upper case as the Bosch Purion's.</summary>
+        public static string Name(AssistLevel level) => Names[(int)level];
+
+        private static readonly string[] Names = { "OFF", "ECO", "TOUR", "SPORT", "TURBO" };
     }
 
     /// <summary>
@@ -174,7 +204,7 @@ namespace UnitSport.Player
         /// chainstay 475 (a Bosch motor's long stays), BB drop 65, fork offset 50 (the 700c NEX's),
         /// which derive a 1133 mm wheelbase and 82 mm of trail; a 38 t ring (Bosch's stock sprocket);
         /// a 70 mm +25° stem on 30 mm of spacers; 580 mm between the grips, swept back 90 mm.
-        /// Sport mode (225%) is the one assist level, with no key to change it.
+        /// It starts in Tour; the remote (engine_toggle) steps Off, Eco, Tour, Sport, Turbo (#1167).
         /// </para>
         /// </summary>
         public static readonly BicycleSpec MoustacheSamedi = new(
@@ -201,7 +231,7 @@ namespace UnitSport.Player
         {
             Label = "E-bike",
             Blurb = "Moustache Samedi 28.4, red: a Bosch motor helps your legs up to 25 km/h",
-            Assist = new ElectricAssist("Bosch Performance Line Smart System", Torque: 75f, PeakWatts: 600f, Support: 2.25f,
+            Assist = new ElectricAssist("Bosch Performance Line Smart System", Torque: 75f, PeakWatts: 600f, StartLevel: AssistLevel.Tour,
                 CutOff: 25f / 3.6f, BatteryWh: 625f),
             Kit = new BikeKit(Rack: true, Fenders: true, Lights: true, Kickstand: true, SuspensionFork: 0.063f, SuspensionSeatpost: true),
         };

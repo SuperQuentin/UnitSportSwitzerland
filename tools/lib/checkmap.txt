@@ -803,3 +803,18 @@ tools/deploy/web/map     net    tools/livemapcheck.sh
 # name tags over other players' heads, VR / MOBILE (#1136)
 src/Player/NameTag       net    tools/nametagnetcheck.sh
 src/Net/ChatManager      net    tools/nametagnetcheck.sh
+# #1167: the e-bike's remote and battery, the picker's Bicycles tab by pad / VR, two players watching each other ride
+src/Player/Bicycle        quick  --ebikecheck --world flat --systems physics,ui
+src/Player/BicycleCatalog quick  --ebikecheck --world flat --systems physics,ui
+src/Player/BikePhysics    quick  --ebikecheck --world flat --systems physics,ui
+src/Player/EBikeCheck     quick  --ebikecheck --world flat --systems physics,ui
+src/Vehicles/VehicleState quick  --ebikecheck --world flat --systems physics,ui
+src/XR/XrCabControls      quick  --ebikecheck --world flat --systems physics,ui
+src/Core/TouchMore        quick  --ebikecheck --world flat --systems physics,ui
+src/Player/RideUi         quick  --ridemenucheck --world flat --systems physics,ui
+src/Player/RideMenuCheck  quick  --ridemenucheck --world flat --systems physics,ui
+src/Player/BicycleCatalog quick  --ridemenucheck --world flat --systems physics,ui
+src/Player/Bicycle        net    tools/ebikenetcheck.sh
+src/Player/BicycleCatalog net    tools/ebikenetcheck.sh
+src/Avatar/Cyclist        net    tools/ebikenetcheck.sh
+src/Player/EBikeNetProbe  net    tools/ebikenetcheck.sh
