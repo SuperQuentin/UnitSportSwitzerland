@@ -238,7 +238,15 @@ else
   # a failed .NET publish still yields an APK, just without the game: never ship that
   # "A valid Android SDK path is required": Editor Settings > Export > Android > Android SDK Path (ANDROID_HOME
   # only seeds a fresh editor settings file, as on CI)
-  if export_preset "Android" "$APK"; then ASSETS+=("$APK"); fi
+  if export_preset "Android" "$APK"; then
+    ASSETS+=("$APK")
+    # the size gate (#1198): over budget it still ships, but the log, the notes and CI say by how much
+    APK_MB=$(( $(wc -c < "$APK") / 1000000 )); echo "Android APK: $APK_MB MB (budget ${APK_BUDGET_MB:-100} MB)"
+    if [ "$APK_MB" -gt "${APK_BUDGET_MB:-100}" ]; then
+      APK_OVER="the Android APK is $APK_MB MB, $((APK_MB - ${APK_BUDGET_MB:-100})) MB over its ${APK_BUDGET_MB:-100} MB budget"
+      echo "WARNING: $APK_OVER (tools/apksizecheck.sh names what the publish adds)"
+    fi
+  fi
 fi
 
 [ ${#ASSETS[@]} -gt 0 ] || { echo "Every export failed, nothing to release. Are the mono export templates installed?"; exit 1; }
@@ -247,6 +255,7 @@ if [ ${#SKIPPED[@]} -gt 0 ]; then
   printf '\n_Built on a host that could not export %s, so this release ships without it._\n' \
     "$(IFS=,; echo "${SKIPPED[*]}")" >> "$REPO/$OUT/notes.md"
 fi
+[ -n "${APK_OVER:-}" ] && printf '\n_Size: %s._\n' "$APK_OVER" >> "$REPO/$OUT/notes.md"
 if [ ${#MISSING_TOOLS[@]} -gt 0 ]; then
   printf '\n_Could not download %s for this release: those builds use the copy on your PATH instead._\n' \
     "$(IFS=,; echo "${MISSING_TOOLS[*]}")" >> "$REPO/$OUT/notes.md"
@@ -270,6 +279,7 @@ if [ -n "$last" ]; then
   (cd "$REPO" && tools/deltas.sh "$last" "v$V" --upload) || echo "Deltas failed; the release stands. Retry with: tools/deltas.sh $last v$V --upload"
 fi
 # On CI, a skipped platform is a run annotation, not only a log line: v0.28-v0.31.1 shipped no APK unnoticed
+[ $CI = 1 ] && [ -n "${APK_OVER:-}" ] && echo "::warning title=Android APK over budget::v$V: $APK_OVER"
 if [ $CI = 1 ] && [ ${#SKIPPED[@]} -gt 0 ]; then
   echo "::warning title=Release skipped platforms::v$V shipped without ${SKIPPED[*]} (see the export log above)"
 fi
