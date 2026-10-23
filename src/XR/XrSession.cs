@@ -108,6 +108,27 @@ public static class XrSession
             fov.FoveationDynamic = true;
             GD.Print($"[xr] foveation level {fov.FoveationLevel}, dynamic");
         }
+        // A standalone headset's clocks (#1112): left to the runtime they fell to levels 2 and 3 whenever the GPU
+        // waited on the main thread, slowing that thread, the one holding the frame back. Sustained high keeps
+        // them up; "--perflevel low|high|boost" (sustained low, sustained high, boost) to measure.
+        if (Platform.IsStandaloneVr && xr is OpenXRInterface perf)
+        {
+            var level = CmdArgs.Value("--perflevel") switch
+            {
+                "low" => OpenXRInterface.PerfSettingsLevel.SustainedLow,
+                "boost" => OpenXRInterface.PerfSettingsLevel.Boost,
+                _ => OpenXRInterface.PerfSettingsLevel.SustainedHigh,
+            };
+            void Apply()
+            {
+                perf.SetCpuLevel(level);
+                perf.SetGpuLevel(level);
+                GD.Print($"[xr] performance level {level}");
+            }
+            Apply();
+            // and again once the session runs, as the refresh rate: one asked before may be dropped
+            perf.SessionBegun += Apply;
+        }
         // "--vrmult 0.85": the eye buffers' size against the runtime's recommendation (a frame-time check)
         if (xr is OpenXRInterface mult && CmdArgs.Double("--vrmult") is double m)
         {
