@@ -77,8 +77,8 @@ public class HouseLayoutTests
                 Level = 0,
                 Rooms =
                 [
-                    new HouseRoom { X0 = -6, Z0 = -4, X1 = 0, Z1 = 4, Type = "Living" },
-                    new HouseRoom { X0 = 0, Z0 = -4, X1 = 6, Z1 = 4, Type = "Kitchen" },
+                    HouseRoom.Rect(-6, -4, 0, 4, "Living"),
+                    HouseRoom.Rect(0, -4, 6, 4, "Kitchen"),
                 ],
                 Openings =
                 [
@@ -88,7 +88,7 @@ public class HouseLayoutTests
                 ],
                 Stairs = [new HouseStair { X0 = 4, Z0 = 0, X1 = 5, Z1 = 3.5, Up = "+z" }],
             },
-            new HouseFloor { Level = 1, Rooms = [new HouseRoom { X0 = -6, Z0 = -4, X1 = 6, Z1 = 4, Type = "Bedroom" }] },
+            new HouseFloor { Level = 1, Rooms = [HouseRoom.Rect(-6, -4, 6, 4, "Bedroom")] },
         ],
     };
 
@@ -107,16 +107,14 @@ public class HouseLayoutTests
     public void Rules_catch_the_usual_mistakes()
     {
         var l = Good();
-        l.Floors[0].Rooms[1].X0 = -1;                                            // overlaps the living room
+        l.Floors[0].Rooms[1] = HouseRoom.Rect(-1, -4, 6, 4, "Kitchen");          // overlaps the living room
         l.Floors[0].Rooms[0].Type = "Vault";                                     // not a house room
-        l.Floors[0].Openings.Add(new HouseOpening { Kind = "door", X0 = -3, Z0 = 1, X1 = -2, Z1 = 2 }); // diagonal
         l.Floors[0].Openings.Add(new HouseOpening { Kind = "door", X0 = -3, Z0 = 1, X1 = -2, Z1 = 1 }); // mid-room
-        l.Floors[1].Rooms.Add(new HouseRoom { X0 = 6, Z0 = -4, X1 = 10, Z1 = 4, Type = "Bedroom" }); // outside
+        l.Floors[1].Rooms.Add(HouseRoom.Rect(6, -4, 10, 4, "Bedroom")); // outside
         l.Floors[1].Stairs.Add(new HouseStair { X0 = 0, Z0 = 0, X1 = 1, Z1 = 3, Up = "+z" });      // nothing above
         var err = string.Join("\n", l.Validate(Footprint));
         Assert.Contains("overlaps room 1", err);
         Assert.Contains("unknown type", err);
-        Assert.Contains("not straight", err);
         Assert.Contains("not on a room's wall", err);
         Assert.Contains("outside the building", err);
         Assert.Contains("no floor above", err);
@@ -136,7 +134,7 @@ public class HouseLayoutTests
         Assert.Contains("no front door", string.Join("\n", l.Validate(Footprint)));
 
         l = Good();
-        l.Floors[1].Rooms[0].X1 = 4;                          // the stair now arrives outside the bedroom
+        l.Floors[1].Rooms[0] = HouseRoom.Rect(-6, -4, 4, 4, "Bedroom"); // the stair now arrives outside the bedroom
         Assert.Contains("arrives outside any room", string.Join("\n", l.Validate(Footprint)));
     }
 
@@ -156,6 +154,98 @@ public class HouseLayoutTests
         Assert.Equal(Good().Hash(), HouseLayouts.HashFor(42));
         Assert.Equal("", HouseLayouts.HashFor(7));
         HouseLayouts.Set([]);
+    }
+
+    /// <summary>An L-shaped living room and a kitchen behind an angled wall, a door in that wall.</summary>
+    private static HouseLayout Shaped() => new()
+    {
+        Egid = 42,
+        Floors =
+        [
+            new HouseFloor
+            {
+                Level = 0,
+                Rooms =
+                [
+                    new HouseRoom { Type = "Living", Points = [[-6, -4], [2, -4], [-1, 4], [-6, 4]] },
+                    new HouseRoom { Type = "Kitchen", Points = [[2, -4], [6, -4], [6, 4], [-1, 4]] },
+                ],
+                Openings =
+                [
+                    new HouseOpening { Kind = "door", X0 = 0.875, Z0 = -1, X1 = 0.5, Z1 = 0 },  // in the angled wall
+                    new HouseOpening { Kind = "door", X0 = -5, Z0 = -4, X1 = -4, Z1 = -4 },     // front door
+                ],
+            },
+        ],
+    };
+
+    [Fact]
+    public void Polygon_rooms_with_an_angled_wall_and_a_door_in_it()
+    {
+        Assert.Empty(Shaped().Validate(Footprint));
+        var l = Shaped();
+        l.Floors[0].Rooms[1].Points[3] = [-1.5, 4];  // the kitchen now reaches 0.5 m into the living room along the wall
+        Assert.Contains("overlaps room 1", string.Join("\n", l.Validate(Footprint)));
+        l = Shaped();
+        l.Floors[0].Rooms[0].Points = [[-6, -4], [0, 4], [0, -4], [-6, 4]]; // a bow tie
+        Assert.Contains("cross each other", string.Join("\n", l.Validate(Footprint)));
+        l = Shaped();
+        l.Floors[0].Openings[0] = new HouseOpening { Kind = "door", X0 = 0.6, Z0 = -1, X1 = 0.5, Z1 = 0 }; // off the wall
+        Assert.Contains("not on a room's wall", string.Join("\n", l.Validate(Footprint)));
+    }
+
+    [Fact]
+    public void Cutting_a_right_angled_room_is_exact()
+    {
+        // an L: 6 x 4 with a 3 x 2 notch out of a corner
+        (double, double)[] l = [(0, 0), (6, 0), (6, 2), (3, 2), (3, 4), (0, 4)];
+        var (pieces, contacts) = RoomStrips.Cut([l], []);
+        Assert.Equal(2, pieces.Count);
+        Assert.Equal(6 * 4 - 3 * 2, pieces.Sum(p => p.Width * p.Depth), 6);
+        Assert.Single(contacts, c => c.Length >= 2.99);
+        // a rectangle stays one piece, and a stair in it is carved out as a lane of its own
+        var (one, _) = RoomStrips.Cut([[(0, 0), (5, 0), (5, 4), (0, 4)]], []);
+        Assert.Single(one);
+        var (carved, links) = RoomStrips.Cut([[(0, 0), (5, 0), (5, 4), (0, 4)]], [(1, 0.5, 2, 3.5)]);
+        Assert.Contains(carved, p => p is { X0: 1, X1: 2, Z0: 0.5, Z1: 3.5 });
+        Assert.Equal(20, carved.Sum(p => p.Width * p.Depth), 6);
+        Assert.True(links.Count >= carved.Count - 1);
+    }
+
+    [Fact]
+    public void Two_rooms_sharing_an_angled_wall_still_meet_after_the_cut()
+    {
+        var shaped = Shaped().Floors[0].Rooms.Select(r => r.Shape()!).ToList();
+        var (pieces, contacts) = RoomStrips.Cut(shaped, []);
+        // the steps follow the wall: each room keeps nearly its area, and nothing is lost between them
+        Assert.Equal(96, pieces.Sum(p => p.Width * p.Depth), 1);
+        Assert.Equal(Math.Abs(Poly.Area(shaped[0])), pieces.Where(p => p.Room == 0).Sum(p => p.Width * p.Depth), 0);
+        // every strip's living piece touches its kitchen piece
+        Assert.True(contacts.Count(c => pieces[c.A].Room != pieces[c.B].Room && !c.AlongX) >= 8);
+        // no two pieces overlap
+        for (int i = 0; i < pieces.Count; i++)
+            for (int j = i + 1; j < pieces.Count; j++)
+            {
+                var a = pieces[i];
+                var b = pieces[j];
+                Assert.False(a.X0 < b.X1 - 1e-6 && b.X0 < a.X1 - 1e-6 && a.Z0 < b.Z1 - 1e-6 && b.Z0 < a.Z1 - 1e-6, $"{a} and {b}");
+            }
+    }
+
+    [Fact]
+    public void A_drawing_a_few_centimetres_off_is_evened_out()
+    {
+        // the kitchen's wall drawn 4 cm into the living room, the bedroom's 6 cm short of it
+        (double, double)[] living = [(0, 0), (4, 0), (4, 5), (0, 5)];
+        (double, double)[] kitchen = [(3.96, 0), (8, 0), (8, 2.5), (3.96, 2.5)];
+        (double, double)[] bedroom = [(4.06, 2.5), (8, 2.5), (8, 5), (4.06, 5)];
+        var (pieces, contacts) = RoomStrips.Cut([living, kitchen, bedroom], []);
+        // the living room's wall meets each neighbour halfway, so it jogs by 5 cm: two pieces of it, joined
+        Assert.Equal(4, pieces.Count);
+        Assert.Contains(contacts, c => pieces[c.A].Room == 0 && pieces[c.B].Room == 0);
+        Assert.Contains(contacts, c => pieces[c.A].Room == 0 && pieces[c.B].Room == 1);
+        Assert.Contains(contacts, c => pieces[c.A].Room == 0 && pieces[c.B].Room == 2);
+        Assert.Contains(contacts, c => pieces[c.A].Room == 1 && pieces[c.B].Room == 2);
     }
 
     [Fact]
