@@ -166,9 +166,9 @@
   - **Following what lies on its way further on**: a car counted one ahead only within 2 m of its line *now* (or of its lane at
     the line). One easing onto the through lane (a pocket not open yet rides it, a transition's strip leads onto it) or on a bend or
     junction path saw the standing queue 12 m short at 40-60 km/h and stopped on its last car (the `--trafficcheck` overlap:
-    J1 40 s, J3b 120 s, J5a 222 s, J5b 57 s, J8 204 s). Now also a car within 2 m of its route's line at that distance, offset by
-    the lane it will be in there (`OnLineAhead`, `WantedAhead`: the strip at that station, on this piece or one ahead, else the
-    approach lane). Side by side (only one yields, #1134) only with middles within 2 m along (`SideBySide`): a car 2-4 m ahead
+    J1 40 s, J3b 120 s, J5a 222 s, J5b 57 s, J8 204 s). Now also a car on its route's line at that distance, anywhere across it from
+    where it drives now to the lane it will be in there, 2 m either side (`OnLineAhead`, `LineAhead`: a path's line, the strip at
+    that station on this piece or one ahead, else the approach lane; its lane lags the one it wants, so it may be anywhere between). Side by side (only one yields, #1134) only with middles within 2 m along (`SideBySide`): a car 2-4 m ahead
     merging in, or on a joining junction path, was ignored and driven onto. After: 0 s at all five.
   - **Lane changes planned to the queue's tail** (`tailAhead`): `LaneChoice.Aim` gets the distance to the nearest car standing or
     crawling ahead (less 7.5 m) when nearer than the line, so the spaced changes hurry to end before the tail: a car moves over only

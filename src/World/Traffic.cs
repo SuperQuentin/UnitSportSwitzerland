@@ -1790,8 +1790,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     }
 
     /// <summary>
-    /// <see cref="Standing"/> by the lane each car stands in (#1172, the probe: lanes filling evenly): the lane whose offset at the line
-    /// is nearest its line, into <paramref name="counts"/> (one per lane of the approach).
+    /// <see cref="Standing"/> by the lane each car stands in (#1172, the probe: lanes filling evenly): the lane whose centre where it
+    /// stands is nearest its line (before a pocket opens, the lane it branches from; a lane the road has there already, at its place), into <paramref name="counts"/> (one per lane of the approach).
     /// </summary>
     public void StandingByLane(LaneApproach approach, float within, int[] counts)
     {
@@ -1801,8 +1801,12 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             if (c.Approach != approach || c.ToLine <= -2f || c.ToLine >= within || c.Speed >= 0.5f) continue;
             float off = c.Lane - (approach.LaneCentre - KeepRight(c.Route.Edge, c.Route.Forward, c.Habit));
             int best = -1;
+            float bestGap = float.MaxValue, d = Mathf.Max(0f, c.ToLine);
             for (int k = 0; k < approach.Lanes.Length; k++)
-                if (approach.Lanes[k].Kind == ApproachLaneKind.Car && (best < 0 || Mathf.Abs(approach.Lanes[k].Offset - off) < Mathf.Abs(approach.Lanes[best].Offset - off))) best = k;
+                if (approach.Lanes[k].Kind == ApproachLaneKind.Car
+                    && Mathf.Min(Mathf.Abs(approach.Lateral(k, d) - off),
+                        HasLane(c.Route.Edge, c.Route.Forward, approach.LaneCentre + approach.Lanes[k].Offset) ? Mathf.Abs(approach.Lanes[k].Offset - off) : float.MaxValue)
+                       + (approach.Parent[k] >= 0 ? 0.01f : 0f) is var gap && gap < bestGap) (best, bestGap) = (k, gap);
             if (best >= 0 && best < counts.Length) counts[best]++;
         }
     }
@@ -1917,55 +1921,58 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     }
 
     /// <summary>
-    /// Whether <paramref name="at"/> lies on this car's way <paramref name="ahead"/> m on (#1172): within <see cref="AheadWidth"/> of the
-    /// line it will drive there, its route's line at that distance (round a bend, along a junction path) offset by the lane it will be in
-    /// (<see cref="WantedAhead"/>; on a junction path, the path's own line).
+    /// Whether <paramref name="at"/> lies on this car's way <paramref name="ahead"/> m on (#1172): its route's line at that distance (round
+    /// a bend, along a junction path), and across it anywhere from where the car drives now to the lane it will be in there
+    /// (<see cref="LineAhead"/>), with <see cref="AheadWidth"/> either side: its lane lags the one it wants, so it may still be anywhere
+    /// between the two when it gets there.
     /// </summary>
     private static bool OnLineAhead(Vehicle car, Vector3 at, float ahead)
     {
         var (p, t, leg) = car.Route.AtLeg(-ahead);
-        var (e, f) = car.Route.Legs[leg];
-        float offset = e.Path is not null ? 0f
-            : car.Route.Edge.Path is not null ? KeepRight(e, f, car.Habit)
-            : KeepRight(car.Route.Edge, car.Route.Forward, car.Habit) + car.Pull + WantedAhead(car, ahead);
         var side = new Vector3(-t.Z, 0f, t.X).Normalized();
         var r = MathX.Flat(at - p);
-        return Mathf.Abs(r.Dot(side) - offset) <= AheadWidth && Mathf.Abs(r.Dot(t)) < 4f;
+        if (Mathf.Abs(r.Dot(t)) > 4f) return false;
+        var (edge, forward) = (car.Route.Edge, car.Route.Forward);
+        float now = edge.Path is not null ? car.Lane : KeepRight(edge, forward, car.Habit) + car.Pull + car.Lane;
+        float then = LineAhead(car, leg, ahead);
+        float lat = r.Dot(side);
+        return lat >= Mathf.Min(now, then) - AheadWidth && lat <= Mathf.Max(now, then) + AheadWidth;
     }
 
     /// <summary>
-    /// Where a car's lane takes it <paramref name="ahead"/> m on, m right of its usual line here (#1172), as <see cref="Approach"/> and
-    /// <see cref="FollowTransition"/> will set <see cref="Vehicle.LaneWanted"/> there: on a transition's piece (this one or one ahead)
-    /// the strip it follows at that station, else its approach lane there; its wanted line now without either. A pocket not open yet
-    /// rides the through lane: a car bound for it from another line is on its way onto that lane.
+    /// Where a car will drive on leg <paramref name="leg"/> of its route, <paramref name="ahead"/> m on, m right of that leg's line (#1172),
+    /// as <see cref="Approach"/> and <see cref="FollowTransition"/> will set its lane there: on a junction path the path's line; on a
+    /// transition's piece (this one or one ahead) the strip it follows at that station (a pocket not open yet rides the through lane);
+    /// else its approach lane there, or its wanted line on this piece, or the next piece's usual line.
     /// </summary>
-    private static float WantedAhead(Vehicle car, float ahead)
+    private static float LineAhead(Vehicle car, int leg, float ahead)
     {
         var legs = car.Route.Legs;
-        var (edge, forward) = (car.Route.Edge, car.Route.Forward);
-        float s = car.Route.Arc + ahead;
-        int at = car.Route.Leg;
-        while (at + 1 < legs.Count && s > legs[at].Edge.Length) { s -= legs[at].Edge.Length; at++; }
-        var (e, f) = legs[at];
-        s = Mathf.Min(s, e.Length);
-        if (e.Transition is not null && e.Path is null)
+        var (e, f) = legs[leg];
+        bool here = leg == car.Route.Leg;
+        if (e.Path is not null) return here ? car.LaneWanted : 0f;
+        if (e.Transition is not null)
         {
-            int strip = at == car.Route.Leg ? car.Strip : -1;
-            for (int i = at + 1; strip < 0 && i < legs.Count; i++)
+            float s = car.Route.Arc + ahead;
+            for (int i = car.Route.Leg; i < leg; i++) s -= legs[i].Edge.Length;
+            int strip = here ? car.Strip : -1;
+            for (int i = leg + 1; strip < 0 && i < legs.Count; i++)
             {
                 if (legs[i].Edge.Path is { } path) { strip = legs[i - 1].Edge.StripAt(legs[i - 1].Forward, atTravelEnd: true, path.FromOffset); break; }
                 if (legs[i].Edge.Transition is null) break;
             }
-            if (strip >= 0 && e.LaneAt(f, s, strip) is { } lane) return lane - KeepRight(edge, forward, car.Habit);
+            if (strip >= 0 && e.LaneAt(f, Mathf.Clamp(s, 0f, e.Length), strip) is { } lane) return lane;
         }
-        if (e.Path is null && car.Approach is { MultiLane: true } a && car.LaneIndex >= 0 && car.ToLine < float.MaxValue)
+        var (edge, forward) = (car.Route.Edge, car.Route.Forward);
+        if (edge.Path is null && car.Approach is { MultiLane: true } a && car.LaneIndex >= 0 && car.ToLine < float.MaxValue)
         {
+            float keep = KeepRight(edge, forward, car.Habit);
+            if (HasLane(edge, forward, keep + car.LaneAim)) return keep + car.LaneAim;
             float d = Mathf.Max(0f, car.ToLine - ahead);
             float onto = Mathf.Clamp((a.Reach + 15f - d) / 15f, 0f, 1f);
-            if (HasLane(edge, forward, KeepRight(edge, forward, car.Habit) + car.LaneAim)) return car.LaneAim;
-            return (a.LaneCentre - KeepRight(edge, forward, car.Habit)) * onto + a.Lateral(car.LaneIndex, d);
+            return a.LaneCentre * onto + keep * (1f - onto) + a.Lateral(car.LaneIndex, d);
         }
-        return car.LaneWanted;
+        return here ? KeepRight(e, f, car.Habit) + car.Pull + car.LaneWanted : KeepRight(e, f, car.Habit);
     }
 
     /// <summary>
