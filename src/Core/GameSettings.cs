@@ -203,6 +203,17 @@ public sealed class GameSettings
 
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public RideProfile RideProfile { get; set; } = RideProfile.Game;
+    /// <summary>
+    /// The rider's weight in kit, kg (#1124): with the bike's, the mass the Simulation road bike's
+    /// watts have to move, so a home-trainer rider's real weight sets their speed up a climb. The
+    /// default keeps the reference rider (82 kg with the bike and bottles).
+    /// </summary>
+    public float RiderMass { get; set; } = 72.5f;
+    /// <summary>
+    /// The rider's critical power, W (#1124): what they hold for about an hour (FTP is ~95% of it).
+    /// Above it the Simulation road bike's keys and pad drain a 20 kJ reserve; empty, the rider is held to it.
+    /// </summary>
+    public float RiderCriticalPower { get; set; } = 240f;
     /// <summary>Cars' tyres wear with the sliding they do and lose grip (off by default).</summary>
     public bool TyreWear { get; set; }
     /// <summary>Cars' brakes heat up and fade, and their pads wear (off by default).</summary>
@@ -389,6 +400,20 @@ public sealed class GameSettings
     public const float MinVrRenderScale = 0.5f, MaxVrRenderScale = 1.5f;
     /// <summary>Foveated rendering: coarser shading towards the edge of each eye (variable rate shading).</summary>
     public bool VrFoveation { get; set; } = true;
+    /// <summary>
+    /// The headset's refresh rate, Hz: 72, 80, 90 or 120 (the nearest the runtime offers). Physics
+    /// ticks at it in VR, so every frame moves the view once. 72 by default: a Quest 2 over Air
+    /// Link holds 72 far more often than 90, and each frame gets more of the stream's bitrate (#1036).
+    /// </summary>
+    public int VrRefreshHz { get; set; } = 72;
+    public static readonly int[] VrRefreshRates = { 72, 80, 90, 120 };
+    /// <summary>
+    /// The terrain's detail preset in the headset, in place of <see cref="Detail"/>. Low by default:
+    /// a headset is held back by triangles (it draws the scene for each eye), and Medium has
+    /// three times Low's around the player (#1036).
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public DetailPreset VrDetail { get; set; } = DetailPreset.Low;
 
     // --- VR comfort (#439) ---
     /// <summary>The right stick's turn on foot: a snap of 15, 30 or 45 degrees, or 0 for a smooth turn.</summary>
@@ -558,6 +583,7 @@ public sealed class GameSettings
         ConcertScreenWidth = ConcertScreenWidth switch { <= 384 => 256, <= 768 => 512, _ => 1024 };
         VrMsaa = VrMsaa switch { <= 0 => 0, <= 2 => 2, <= 4 => 4, _ => 8 };
         VrRenderScale = Math.Clamp(VrRenderScale, MinVrRenderScale, MaxVrRenderScale);
+        if (Array.IndexOf(VrRefreshRates, VrRefreshHz) < 0) VrRefreshHz = 72;
         StickSensitivity = Math.Clamp(StickSensitivity, 0.2f, 3f);
         TouchLookSpeed = Math.Clamp(TouchLookSpeed, 0.3f, 4f);
         TouchScale = Math.Clamp(TouchScale, 0.75f, TouchLayout.MaxScale);
@@ -626,6 +652,10 @@ public sealed class GameSettings
                 case "--commit" when double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out double c):
                     CommitBudgetMs = c; break;
                 case "--profile" when Enum.TryParse<RideProfile>(v, true, out var rp): RideProfile = rp; break;
+                case "--rider-kg" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float kg):
+                    RiderMass = Mathf.Clamp(kg, 30f, 200f); break;
+                case "--rider-cp" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float cp):
+                    RiderCriticalPower = Mathf.Clamp(cp, 50f, 600f); break;
                 case "--tyrewear": TyreWear = v is "on" or "1" or "true"; break;
                 case "--brakewear": BrakeWear = v is "on" or "1" or "true"; break;
                 case "--boardwalkable": BoardWalkableFromOutside = v is "on" or "1" or "true"; break;
@@ -685,6 +715,9 @@ public sealed class GameSettings
                     VrMonitor = v switch { "off" => XR.MonitorView.Off, "eyes" => XR.MonitorView.BothEyes,
                         "third" => XR.MonitorView.ThirdPerson, _ => XR.MonitorView.FirstPerson };
                     break;
+                // the headset's refresh rate and terrain detail (#1036), for frame-time checks
+                case "--vrhz" when int.TryParse(v, out int hz): VrRefreshHz = hz; break;
+                case "--vrdetail" when Enum.TryParse<DetailPreset>(v, true, out var vd): VrDetail = vd; break;
                 case "--vsync": VSync = v is "on" or "1" or "true"; break;
                 // a film's render profile sets the picture itself (#924, tools/trailer.sh RENDER), never the player's file
                 case "--render-scale" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float rs):

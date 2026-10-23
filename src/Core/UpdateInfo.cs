@@ -101,14 +101,18 @@ public static class UpdateInfo
 
     /// <summary>
     /// The deltas that take <paramref name="current"/> to the latest stable release, one per step
-    /// between consecutive releases, oldest first; null when this version is not a release or a
-    /// step has no delta for this platform (then the full archive).
+    /// between consecutive releases of this platform, oldest first; null when this version is not a
+    /// release, the latest has no build for this platform, or a step has no delta (then the full archive).
+    /// A release without this platform's archive is stepped over (#1170: v0.104-v0.106 shipped no Windows
+    /// build): nobody can be on it, so <c>tools/deltas.sh</c> makes the next delta from the one before.
     /// </summary>
     public static IReadOnlyList<(string From, string To, Asset Delta)>? DeltaChain(IEnumerable<Release> releases, string current, string osName)
     {
         var cur = ParseVersion(current);
         if (cur == null || PlatformFor(osName) is not { } platform) return null;
-        var list = Stable(releases);
+        var all = Stable(releases);
+        if (all.Count == 0 || AssetFor(all[^1], osName) == null) return null;
+        var list = all.Where(r => ParseVersion(r.Tag) == cur || AssetFor(r, osName) != null).ToList();
         int at = list.FindIndex(r => ParseVersion(r.Tag) == cur);
         if (at < 0 || at == list.Count - 1) return null;
         var chain = new List<(string, string, Asset)>();

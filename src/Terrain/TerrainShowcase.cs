@@ -79,6 +79,14 @@ public static class TerrainShowcase
         // riders may turn right on red (#711, signal 5.18): beside the bike head's red lamp, else the car head's
         ("Bike right on red", () => TrafficLight(pedestrianAmber: true, rightOnRed: true)),
         ("Bike right on red, no bike head", () => TrafficLight(pedestrianAmber: true, rightOnRed: true, bikeHead: false)),
+        // a right-turn-only bike lane's own head (#1165, the user): right of the through riders' head, its right arrow on its plate;
+        // alone where the through riders follow the cars (layout b); with signal 5.18 beside its red
+        ("Bike right-turn head", () => TrafficLight(pedestrianAmber: true, rightPocket: true, riderRight: true)),
+        ("Bike right-turn head, Vaud plates", () => TrafficLight(pedestrianAmber: true, arrowPlates: true, rightPocket: true, riderRight: true)),
+        ("Bike right-turn head alone", () => TrafficLight(pedestrianAmber: true, bikeHead: false, rightPocket: true, riderRight: true)),
+        ("Bike right-turn head, right on red", () => TrafficLight(pedestrianAmber: true, rightOnRed: true, rightPocket: true, riderRight: true)),
+        // giving way to the exit's walkers all through its green (#1165, the user): an amber lens in the green's place, flashing
+        ("Bike right-turn head, giving way", () => TrafficLight(pedestrianAmber: true, bikeHead: false, leftPockets: false, rightPocket: true, riderRight: true)),
         // the canton's pole colour (#1037): Basel-Landschaft's anthracite, Bern's RAL 7042
         ("Basel-Landschaft", () => TrafficLight(pedestrianAmber: true, colour: SignalPoleColour.Anthracite)),
         ("Bern", () => TrafficLight(pedestrianAmber: true, colour: SignalPoleColour.TrafficGrey)),
@@ -112,8 +120,9 @@ public static class TerrainShowcase
         // crosswalk"): the right turn's lamp beside the head, the left turn's on the approach's left pole across the road
         ("Flasher, left turn on the left pole", () => TrafficLight(pedestrianAmber: true, bikeHead: false, leftPockets: false, leftPole: true)),
         ("Permissive left, arrow", () => TrafficLight(pedestrianAmber: true, bikeHead: false, leftPockets: false, rightPocket: true)),
-        // an uncombined arrow (the turn alone) flashes its yellow in place of its green (#1109, the user): the mast arm's head over
-        // the left lane of an approach without a left pocket, the right lane's head beside the pole
+        // an uncombined arrow (the turn alone) giving way all through its green: an amber lens in the green's place, flashing, its
+        // middle yellow steady (#1165, the user; was #1109's middle yellow): the mast arm's head over the left lane of an approach
+        // without a left pocket, the right lane's head beside the pole
         ("Permissive left, uncombined arrow", () => TrafficLight(pedestrianAmber: true, bikeHead: false, leftPockets: false, rightPocket: true,
             overhead: OverheadKind.Arm)),
     ];
@@ -121,12 +130,13 @@ public static class TerrainShowcase
     private static Node3D TrafficLight(bool pedestrianAmber, bool arrowPlates = false, bool rightOnRed = false, bool bikeHead = true,
         SignalPoleColour colour = SignalPoleColour.SilverGrey, OverheadKind? overhead = null, bool island = false, bool tram = false,
         bool tramT = false, bool tramTwo = false, bool peds = true, bool leftPockets = true, bool rightPocket = false, bool leftPole = false,
-        int gantry = 0)
+        int gantry = 0, bool riderRight = false)
     {
         var plan = SignalPlan.Build(
         [
             new SignalArm(0, true, true, LeftPocket: leftPockets, RightPocket: rightPocket, Pedestrians: peds, BikeSignal: bikeHead, Rank: 2, BikeRightOnRed: rightOnRed,
-                HalfInM: island ? 4 : 0, HalfOutM: island ? 3.5f : 0, TramMoves: !tram ? SignalMoves.None : tramTwo ? SignalMoves.Left | SignalMoves.Through : SignalMoves.Through),
+                HalfInM: island ? 4 : 0, HalfOutM: island ? 3.5f : 0, TramMoves: !tram ? SignalMoves.None : tramTwo ? SignalMoves.Left | SignalMoves.Through : SignalMoves.Through,
+                RiderRight: riderRight, BikeBetween: riderRight),
             new SignalArm(Math.PI / 2, true, true, Pedestrians: peds),
             new SignalArm(Math.PI, true, true, LeftPocket: leftPockets, Pedestrians: peds, Rank: 2),
             new SignalArm(-Math.PI / 2, true, true, Pedestrians: peds),

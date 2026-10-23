@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- Windows head so the real WinRT BLE transport can be referenced. The engine itself is
+         plain net8.0; only this demo and the BLE backend are Windows-specific. -->
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <RootNamespace>RideLink.Demo</RootNamespace>
+    <AssemblyName>ridelink-demo</AssemblyName>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\RideLink\RideLink.csproj" />
+    <ProjectReference Include="..\..\src\RideLink.Simulation\RideLink.Simulation.csproj" />
+    <ProjectReference Include="..\..\src\RideLink.Bluetooth.Windows\RideLink.Bluetooth.Windows.csproj" />
+    <ProjectReference Include="..\..\src\RideLink.Ant\RideLink.Ant.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.1" />
+  </ItemGroup>
+
+</Project>

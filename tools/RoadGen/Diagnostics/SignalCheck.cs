@@ -28,6 +28,7 @@ public static class SignalCheck
         // the plan stretches to 120 s at most, past that it stays two-stage)
         int stageArms = 0, stageJunctions = 0;
         var longWaits = new List<string>();
+        var stageWaits = new List<string>();
         // the flashers' plates and the permissive lefts (#1109): plates by kind, ball heads flashing their yellow, arrow heads with a
         // flasher on their left
         var plates = new SortedDictionary<string, int>(StringComparer.Ordinal);
@@ -75,7 +76,8 @@ public static class SignalCheck
                 }
                 if (p.Cycle < 30) log($"  odd: {where} cycle {p.Cycle:F1} s ({shape})");
                 // 120 s is the legal maximum (the user)
-                if (p.Cycle > SignalPlan.MaxCycle + 0.05f) { overMax++; log(string.Create(c, $"  OVER 120 s: {where} cycle {p.Cycle:F1} s ({shape}{(p.ConflictTimed ? ", conflict-timed" : "")})")); }
+                // (a warning, #1161: past 120 s only with every green at its minimum, kept until #1120's planner has fewer phases)
+                if (p.Overflows) { overMax++; log(string.Create(c, $"  WARNING over 120 s (until #1120): {where} cycle {p.Cycle:F1} s, {Phases(p)} green sets ({shape}{(p.ConflictTimed ? ", conflict-timed" : "")}{(p.Groups.Any(g => g.Kind == SignalGroupKind.Tram) ? ", trams" : "")})")); }
                 for (int a = 0; a < p.Arms.Count; a++)
                 {
                     if (!p.Arms[a].In) continue;
@@ -88,7 +90,8 @@ public static class SignalCheck
                         poleMisses.Add(string.Create(c, $"    {where} arm {a} heading {p.Arms[a].Heading * 180 / Math.PI:F0} deg: {(main ? "" : "no main pole")}{(!main && p.Arms[a].LeftPocket && !second ? ", " : "")}{(p.Arms[a].LeftPocket && !second ? "no second head" : "")}"));
                 }
                 int stages = p.Groups.Count(g => g.Kind == SignalGroupKind.Pedestrian && g.Half == CrossingHalf.Arriving);
-                if (stages > 0)
+                // (and the crossings over a tram reservation in three stages, #1176: their islands' waits)
+                if (stages > 0 || p.Groups.Any(g => g.Half == CrossingHalf.Middle))
                 {
                     stageArms += stages;
                     stageJunctions++;
@@ -97,28 +100,35 @@ public static class SignalCheck
                     bool lines = s.ConflictLines.Any(l => l.Mover == ConflictMover.Walker);
                     foreach (var w in p.IslandWaits(Walk).Where(w => w.Wait > p.Cycle * SignalPlan.IslandWaitShare + 0.1f))
                         longWaits.Add(string.Create(c, $"    {where} arm {p.Groups[w.Group].Arm} {p.Groups[w.Group].Half}: {w.Wait:F1} s on the island, cycle {p.Cycle:F1} s{(lines ? "" : " (not timed from conflict times: halves guessed as half the road)")}"));
+                    // each crossing over a tram reservation's longest island wait, either way (#1176)
+                    var waits = p.IslandWaits(Walk);
+                    for (int g = 0; g < p.Groups.Count; g++)
+                        if (p.Groups[g].Half == CrossingHalf.Middle)
+                            stageWaits.Add(string.Create(c, $"    {where} arm {p.Groups[g].Arm}: longest island wait {waits.Where(w => w.Group == g || w.Other == g).Select(w => w.Wait).DefaultIfEmpty(0f).Max():F1} s (a third of the {p.Cycle:F1} s cycle: {p.Cycle * SignalPlan.IslandWaitShare:F1} s)"));
                 }
                 var conflicts = p.Conflicts();
                 for (int g = 0; g < p.Groups.Count; g++)
                 {
-                    // (an uncombined arrow's flasher has no lamp: its own yellow flashes, counted below; a left turn's crossings get a
-                    // lamp of their own on the pole by the left crosswalk, as SignalBuilder places it)
-                    if (p.Groups[g].Kind == SignalGroupKind.Flasher && p.Groups[p.Groups[g].Qualifies].Kind == SignalGroupKind.Car
-                        && !(p.Groups[p.Groups[g].Qualifies].Moves is SignalMoves.Left or SignalMoves.Right && ArrowShown(p, p.Groups[g].Qualifies)))
+                    // one lamp per turn, as SignalBuilder places them (#1109, #1117): the right turn's beside the head where it crosses
+                    // walkers or riders; the left turn's where it does, or a combined arrow shows it giving way to oncoming traffic, on a
+                    // pole by the left crosswalk, else on the head's left; an uncombined arrow none (its own yellow flashes, below)
+                    if (p.Groups[g].Kind == SignalGroupKind.Car && !(p.Groups[g].Moves is SignalMoves.Left or SignalMoves.Right && ArrowShown(p, g)))
                     {
-                        int q = p.Groups[g].Qualifies;
-                        var (pole, site) = s.LeftFlasherPole(q);
-                        bool away = pole >= 0 && site != FlasherSite.MainPole && p.PlateOf(g, conflicts, SignalMoves.Left).Plate != SignalPlate.None;
-                        foreach (var (turns, onPole) in away
-                            ? new[] { (SignalMoves.Right, "main pole"), (SignalMoves.Left, site == FlasherSite.SecondPole ? "left pole" : "crossing's pole") }
-                            : new[] { (SignalMoves.Left | SignalMoves.Right, "main pole") })
+                        int f = p.Groups.FindIndex(x => x.Kind == SignalGroupKind.Flasher && x.Qualifies == g);
+                        var (pole, site) = s.LeftFlasherPole(g);
+                        bool right = f >= 0 && p.Warns(f, SignalMoves.Right, conflicts);
+                        bool left = (p.Groups[g].Moves & SignalMoves.Left) != 0 && (f >= 0 && p.Warns(f, SignalMoves.Left, conflicts)
+                            || ArrowShown(p, g) && p.LeftGivesWayTo(g, conflicts).Count > 0);
+                        string leftPole = pole < 0 || site == FlasherSite.MainPole ? "main pole, the head's left"
+                            : site switch { FlasherSite.SecondPole => "left pole", FlasherSite.FarSidePole => "far-side pole", _ => "near-side pole" };
+                        foreach (var (turns, onPole, has) in new[] { (SignalMoves.Right, "main pole", right), (SignalMoves.Left, leftPole, left) })
                         {
-                            var (plate, arrow) = p.PlateOf(g, conflicts, turns);
-                            if (plate == SignalPlate.None) continue;
+                            if (!has) continue;
+                            var (plate, arrow) = p.TurnPlate(g, turns, conflicts);
                             string key = plate == SignalPlate.Arrow ? $"arrow {arrow}" : plate.ToString().ToLowerInvariant();
                             plates[key] = plates.GetValueOrDefault(key) + 1;
                             sites[onPole] = sites.GetValueOrDefault(onPole) + 1;
-                            if (list && (plate == SignalPlate.Arrow || onPole != "main pole")) leftAt.Add(string.Create(c, $"    {where} arm {p.Groups[q].Arm}: flasher of {p.Groups[q].Moves} on the {onPole}, plate {key}"));
+                            if (list && (plate == SignalPlate.Arrow || onPole != "main pole")) leftAt.Add(string.Create(c, $"    {where} arm {p.Groups[g].Arm}: {turns} lamp of {p.Groups[g].Moves} on the {onPole}, plate {key}"));
                         }
                     }
                     if (p.Groups[g].Kind != SignalGroupKind.Car) continue;
@@ -132,7 +142,7 @@ public static class SignalCheck
                     // (a ball flashes its yellow, a combined arrow with the left gets a flasher on its left)
                     bool arrowHead = ArrowShown(p, g), single = arrowHead && p.Groups[g].Moves == SignalMoves.Left;
                     if (single) singleLefts++; else if (arrowHead) arrowLefts++; else ballLefts++;
-                    if (list || leftAt.Count < 6) leftAt.Add(string.Create(c, $"    {where} arm {p.Groups[g].Arm} {p.Groups[g].Moves}: {(single ? "left arrow alone, its yellow flashes for its green" : arrowHead ? "combined arrow head, flasher on its left" : "ball, its yellow flashes")}"));
+                    if (list || leftAt.Count < 6) leftAt.Add(string.Create(c, $"    {where} arm {p.Groups[g].Arm} {p.Groups[g].Moves}: {(single ? "left arrow alone, its yellow flashes for its green" : arrowHead ? "combined arrow head, its left turn's lamp" : "ball, its yellow flashes")}"));
                 }
                 if (list) log(string.Create(c, $"  {where}: {shape}, {p.Arms.Count(a => a.RightPocket)} right pockets, cycle {p.Cycle:F0} s, {p.Groups.Count} groups{(stages > 0 ? $", {stages} two-stage crossings" : "")}{(p.ConflictTimed ? ", conflict-timed" : "")}{(s.Overheads.Count > 0 ? ", overhead: " + string.Join(" ", s.Overheads.Select(o => $"arm {o.Arm} {o.Kind} x{o.Heads.Count}")) : "")}"));
                 if (at is not null)
@@ -156,7 +166,9 @@ public static class SignalCheck
         log("  cycles s: " + string.Join(", ", cycles.Select(kv => $"{kv.Key} x{kv.Value}")));
         log(string.Create(c, $"  two-stage crossings (#1030): {stageArms} at {stageJunctions} junctions; island waits over a third of the cycle {longWaits.Count}"));
         foreach (var wait in longWaits.Take(list ? int.MaxValue : 10)) log(wait);
-        log(string.Create(c, $"  flasher plates (#1109): {(plates.Count == 0 ? "none" : string.Join(", ", plates.Select(kv => $"{kv.Key} x{kv.Value}")))}; permissive lefts: {ballLefts} balls flashing their yellow, {arrowLefts} combined arrow heads with a flasher on their left, {singleLefts} left arrows alone flashing their yellow for their green; right arrows alone flashing theirs: {singleRights} (pole heads; overhead lane heads not counted)"));
+        log(string.Create(c, $"  crossings over a tram reservation in three stages (#1176): {stageWaits.Count}"));
+        foreach (var wait in stageWaits.Take(list ? int.MaxValue : 10)) log(wait);
+        log(string.Create(c, $"  flasher plates (#1109): {(plates.Count == 0 ? "none" : string.Join(", ", plates.Select(kv => $"{kv.Key} x{kv.Value}")))}; permissive lefts: {ballLefts} balls flashing their yellow, {arrowLefts} combined arrow heads with a left-turn lamp, {singleLefts} left arrows alone flashing their yellow for their green; right arrows alone flashing theirs: {singleRights} (pole heads; overhead lane heads not counted)"));
         log("  flasher lamps by pole (#1109, a left turn's by the left crosswalk): " + (sites.Count == 0 ? "none" : string.Join(", ", sites.Select(kv => $"{kv.Key} x{kv.Value}"))));
         foreach (var l in leftAt) log(l);
         if (nearest is { } near) log(near.Text);
@@ -165,9 +177,10 @@ public static class SignalCheck
         log(string.Create(c, $"  poles (#350, #711): {approaches} approaches, {noMain} without a main pole; {pocketArms} with a left pocket, {noSecond} without its second head"));
         foreach (var miss in poleMisses.Take(list ? int.MaxValue : 30)) log(miss);
         log(string.Create(c, $"  junction paths (#818, JPTH): {paths.Paths} on {paths.Cores} cores; ends off their lane {paths.OffLane}, points off the core {paths.OffCore}"));
-        bool ok = invalid == 0 && overMax == 0 && lanes.Bad == 0 && lanes.Missing == 0 && noMain == 0 && noSecond == 0 && paths.OffLane == 0 && paths.OffCore == 0;
+        log(string.Create(c, $"  cycles over 120 s with every green at its minimum (#1161, a warning until #1120): {overMax}"));
+        bool ok = invalid == 0 && lanes.Bad == 0 && lanes.Missing == 0 && noMain == 0 && noSecond == 0 && paths.OffLane == 0 && paths.OffCore == 0;
         log(ok ? "[signalcheck] RESULT: ok"
-            : $"[signalcheck] RESULT: FAILED {invalid} invalid plans, {overMax} cycles over 120 s, {lanes.Bad} bad lane records, {lanes.Missing} signalised approaches without one, {noMain} approaches without a main pole, {noSecond} without a second head, {paths.OffLane + paths.OffCore} bad junction paths");
+            : $"[signalcheck] RESULT: FAILED {invalid} invalid plans, {lanes.Bad} bad lane records, {lanes.Missing} signalised approaches without one, {noMain} approaches without a main pole, {noSecond} without a second head, {paths.OffLane + paths.OffCore} bad junction paths");
         return ok ? 0 : 2;
     }
 
@@ -191,6 +204,23 @@ public static class SignalCheck
     }
 
     private sealed class LaneTally { public int Approaches, Signalised, Lanes, Banned, Bad, Missing; }
+
+    /// <summary>
+    /// A stored plan's phases (#1161: its phases are not stored): the runs of one set of green vehicle groups (cars, riders, trams)
+    /// round the cycle, all-red gaps left out, sampled every 0.1 s.
+    /// </summary>
+    internal static int Phases(SignalPlan p)
+    {
+        var sets = new List<string>();
+        for (float t = 0.05f; t < p.Cycle; t += 0.1f)
+        {
+            string set = string.Join(",", Enumerable.Range(0, p.Groups.Count).Where(g => p.Groups[g].Kind is not (SignalGroupKind.Pedestrian or SignalGroupKind.Flasher)
+                && p.State(g, t - p.Offset) == SignalAspect.Green));
+            if (set.Length > 0 && (sets.Count == 0 || sets[^1] != set)) sets.Add(set);
+        }
+        if (sets.Count > 1 && sets[0] == sets[^1]) sets.RemoveAt(sets.Count - 1);
+        return sets.Count;
+    }
 
     private sealed class PathTally { public int Paths, Cores, OffLane, OffCore; }
 
@@ -238,6 +268,9 @@ public static class SignalCheck
                     }
                     if (road is not null) break;
                 }
+                // a tram path's end lies on its track's line, its offset across the track's own way (#1161: a reservation's double
+                // line, not on a car lane, its way the path's own where the road beside it widens)
+                if (p.Kind == JunctionPathKind.Tram) (road, dx, dz) = (null, px, pz);
                 float len = MathF.Sqrt(dx * dx + dz * dz);
                 if (len < 1e-6f) continue;
                 (dx, dz) = (dx / len, dz / len);

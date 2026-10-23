@@ -4,6 +4,7 @@ using UnitSport.Terrain.Format;
 using UnitSport.Tools.RoadGen.Geometry;
 using UnitSport.Tools.RoadGen.Junctions;
 using UnitSport.Tools.RoadGen.Layout;
+using UnitSport.Tools.RoadGen.Meshing;
 
 /// <summary>
 /// Tram tracks as approach lanes of the junction planner's cores (#1057). A tram track is in the rail layer, not an arm: it runs
@@ -107,6 +108,54 @@ public static partial class TileRewriter
     private const double TramStraightOn = 0.5;
 
     /// <summary>
+    /// A track on its own bed belongs to the arm it runs beside (#1161) within this of the carriageway's edge past the carriageway's
+    /// own width (m): a central reservation between a divided road's carriageways, a bed beside the road.
+    /// </summary>
+    public const double TramBedMargin = 4.0;
+
+    /// <summary>...and runs this close to the arm's way (cos of the angle: 30 degrees).</summary>
+    private const double TramBedParallel = 0.87;
+
+    /// <summary>...crossing the core's outline this far inside (-) or outside (+) the arm's mouth along its axis (m).</summary>
+    private const double TramBedInside = 6, TramBedOutside = 20;
+
+    /// <summary>
+    /// The attach rule (#1161, the user: "isn't it just like a bike lane?") on one arm: a track crossing a core's outline at
+    /// <paramref name="p"/>, running <paramref name="dir"/>, beside the mouth <paramref name="left"/>-<paramref name="right"/>
+    /// (its carriageway's kerbs; <paramref name="outward"/> the arm's way out): how far it lies past the carriageway's edge (m), or
+    /// null where it does not belong to the arm: running the arm's way (into the junction where it enters, out where it leaves) and
+    /// where the arm carries cars that way (<paramref name="lanesThatWay"/>), within <see cref="TramBedMargin"/> past the
+    /// carriageway's width, across from the mouth.
+    /// </summary>
+    public static double? Alongside(Vec2 left, Vec2 right, Vec2 outward, Vec2 p, Vec2 dir, bool entering, bool lanesThatWay)
+    {
+        if (!lanesThatWay || dir.Dot(entering ? -outward : outward) < TramBedParallel) return null;
+        double width = left.DistanceTo(right);
+        if (width < 1e-6) return null;
+        var across = (right - left) / width;
+        var mid = (left + right) * 0.5;
+        double along = (p - mid).Dot(outward);
+        if (along < -TramBedInside || along > TramBedOutside) return null;
+        double t = (p - left).Dot(across);
+        double gap = t < 0 ? -t : t > width ? t - width : 0;
+        return gap <= width + TramBedMargin ? gap : null;
+    }
+
+    /// <summary>The arm of <paramref name="jp"/> a track on its own bed runs beside where it crosses the core's outline (#1161), -1 none: the nearest.</summary>
+    private static int ArmAlongside(JunctionPlan jp, Vec2 p, Vec2 dir, bool entering)
+    {
+        int best = -1;
+        double near = double.MaxValue;
+        foreach (var m in jp.Core!.Mouths)
+        {
+            if (jp.Arms.FirstOrDefault(a => a.Arm == m.Arm) is not { Axis: { } axis } a || a.Internal) continue;
+            bool lanes = a.Mouth.CarLanes(entering ? StripWay.In : StripWay.Out).Any();
+            if (Alongside(m.Left, m.Right, axis.DirAt(m.Station), p, dir, entering, lanes) is double gap && gap < near) (near, best) = (gap, m.Arm);
+        }
+        return best;
+    }
+
+    /// <summary>
     /// Every way a tram takes through <paramref name="jp"/>'s core (see <see cref="TramWay"/>); ways that do not run from one arm's
     /// mouth to another's (a track across a corner, back out by the arm it came in by) are counted and left out.
     /// </summary>
@@ -116,8 +165,11 @@ public static partial class TileRewriter
         if (jp.Core is not { Outline.Count: >= 3 } core || net.Lines.Count == 0) return ways;
         var ring = core.Outline;
         double reach = ring.Max(p => p.DistanceTo(jp.Centre)) + 5;
-        var arms = jp.Arms.Select(a => new SignalArm(a.Heading, true, true)).ToList();
-        int MouthAt(Vec2 p)
+        // (a divided road's carriageways are two arms side by side, #1161: there an arm is a way out only where its cars leave by
+        // it, so a tram straight on beside them goes "through" to the carriageway leaving its way)
+        bool Twin(ArmPlan a) => jp.Arms.Any(b => b != a && Math.Abs(Math.IEEERemainder(b.Heading - a.Heading, 2 * Math.PI)) < Math.PI / 6);
+        var arms = jp.Arms.Select(a => new SignalArm(a.Heading, true, !Twin(a) || a.Mouth.CarLanes(StripWay.Out).Any())).ToList();
+        int MouthAt(Vec2 p, Vec2 dir, bool entering)
         {
             int best = -1;
             double near = TramMouthReach;
@@ -126,7 +178,7 @@ public static partial class TileRewriter
                 double d = Polyline.PointSegmentDistance(p, m.Left, m.Right);
                 if (d < near) (near, best) = (d, m.Arm);
             }
-            return best;
+            return best >= 0 ? best : ArmAlongside(jp, p, dir, entering);
         }
         for (int l = 0; l < net.Lines.Count; l++)
         {
@@ -142,7 +194,7 @@ public static partial class TileRewriter
                 foreach (var (points, last) in Trace(net, ring, l, i + 1, [entry], 0))
                 {
                     var exit = points[^1];
-                    int from = MouthAt(entry), to = MouthAt(exit);
+                    int from = MouthAt(entry, (p[i + 1] - p[i]).Normalized(), true), to = MouthAt(exit, (points[^1] - points[^2]).Normalized(), false);
                     if (from < 0 || to < 0 || from == to) { stats.TramWaysLeftOut++; continue; }
                     int fk = jp.Arms.FindIndex(a => a.Arm == from), tk = jp.Arms.FindIndex(a => a.Arm == to);
                     var move = SignalPlan.Turn(arms, fk, tk);
@@ -241,6 +293,155 @@ public static partial class TileRewriter
     /// <summary>A tram's width (m): a 2.3-2.4 m low-floor car.</summary>
     private const float TramWidth = 2.4f;
 
+    /// <summary>A tram's stop line reaches this far past the tram's sides (m, #1155).</summary>
+    internal const double TramStopLineOver = 0.2;
+
+    /// <summary>A track is paved this far either side of a walkers' crossing's band (m).</summary>
+    public const double PavedMargin = 0.5;
+
+    /// <summary>A walkers' crossing's band across its line (m): a zebra's 3 m.</summary>
+    private const double CrossingBand = 3;
+
+    /// <summary>
+    /// The stretches of a track (its points, LV95) under walkers' crossings (#1179, the user: "a crossing should always cross
+    /// concreted tracks, not raw tracks"): each, as arcs along the track, where it lies within half the crossing's band plus
+    /// <see cref="PavedMargin"/> of a crossing's line (A to B); merged where they touch.
+    /// </summary>
+    public static List<(double From, double To)> PavedUnder(IReadOnlyList<Vec2> track, IEnumerable<(Vec2 A, Vec2 B)> crossings)
+    {
+        var lines = crossings.ToList();
+        var runs = new List<(double From, double To)>();
+        double reach = CrossingBand * 0.5 + PavedMargin, along = 0, from = -1;
+        const double step = 0.25;
+        bool Under(Vec2 p) => lines.Any(c => Polyline.PointSegmentDistance(p, c.A, c.B) < reach);
+        for (int i = 0; i + 1 < track.Count; i++)
+        {
+            double len = track[i].DistanceTo(track[i + 1]);
+            int n = Math.Max(1, (int)Math.Ceiling(len / step));
+            for (int k = i == 0 ? 0 : 1; k <= n; k++)
+            {
+                double s = along + len * k / n;
+                bool under = Under(Vec2.Lerp(track[i], track[i + 1], (double)k / n));
+                if (under && from < 0) from = s;
+                else if (!under && from >= 0) { runs.Add((from, s)); from = -1; }
+            }
+            along += len;
+        }
+        if (from >= 0) runs.Add((from, along));
+        return runs;
+    }
+
+    /// <summary>
+    /// Paves the tram beds under the walkers' crossings at lights (#1179): every tram track on its own bed (not embedded, not a
+    /// paved bed already) that a crossing's walkers' line crosses is cut there, the piece under it a paved bed (flush, its rails as
+    /// grooves), so walkers never cross a raw ballast bed; the trams' way is unchanged (the pieces join end to end).
+    /// </summary>
+    private static void PaveTrackCrossings(Dictionary<TileId, List<RoadSegment>> output, Dictionary<TileId, List<RoadSignal>> signals,
+        Dictionary<TileId, List<RoadPaint>> paint, Network.RailRoadOverlap rails, LayoutWriteStats stats)
+    {
+        try { Pave(); }
+        finally { KeepStopLinesOnPavedTrack(output, paint, stats); }
+        void Pave()
+        {
+        var crossings = new List<(Vec2 A, Vec2 B)>();
+        foreach (var (tile, list) in signals)
+            foreach (var s in list)
+                foreach (var l in s.ConflictLines.Where(l => l.Mover == ConflictMover.Walker && l.Points.Length >= 6))
+                    crossings.Add((new Vec2(tile.MinE + l.Points[0], tile.MaxN - l.Points[2]), new Vec2(tile.MinE + l.Points[^3], tile.MaxN - l.Points[^1])));
+        if (crossings.Count == 0) return;
+        foreach (var (tile, segments) in output)
+            for (int i = segments.Count - 1; i >= 0; i--)
+            {
+                var seg = segments[i];
+                if (seg.Class != RoadClass.Railway || (seg.Flags & RoadFlags.Tramway) == 0
+                    || (seg.Attributes.Flags & (RoadAttrFlags.Embedded | RoadAttrFlags.PavedBed)) != 0 || seg.PointCount < 2) continue;
+                var plan = Enumerable.Range(0, seg.PointCount).Select(k => new Vec2(tile.MinE + seg.Points[k * 3], tile.MaxN - seg.Points[k * 3 + 2])).ToList();
+                var near = crossings.Where(c => plan.Any(p => p.DistanceTo((c.A + c.B) * 0.5) < c.A.DistanceTo(c.B) + 10)).ToList();
+                if (near.Count == 0) continue;
+                var runs = PavedUnder(plan, near);
+                if (runs.Count == 0) continue;
+                double length = Polyline.Length(plan);
+                var parts = new List<(double From, double To, bool Paved)>();
+                double at = 0;
+                foreach (var (f, t) in runs)
+                {
+                    if (f > at + 0.05) parts.Add((at, f, false));
+                    parts.Add((Math.Max(at, f), t, true));
+                    at = t;
+                }
+                if (at < length - 0.05) parts.Add((at, length, false));
+                segments.RemoveAt(i);
+                int insertAt = i;
+                foreach (var (f, t, paved) in parts)
+                {
+                    var points = Network.StreetPlanner.Slice(seg, f, t >= length - 0.05 ? double.PositiveInfinity : t);
+                    if (points.Length < 6) continue;
+                    var piece = new RoadSegment
+                    {
+                        Class = seg.Class, Surface = seg.Surface, Flags = seg.Flags, Width = seg.Width, Points = points,
+                        Attributes = paved ? seg.Attributes with { Flags = seg.Attributes.Flags | RoadAttrFlags.PavedBed } : seg.Attributes,
+                    };
+                    segments.Insert(insertAt++, piece);
+                    if (!paved) continue;
+                    var piecePlan = Enumerable.Range(0, points.Length / 3).Select(k => new Vec2(tile.MinE + points[k * 3], tile.MaxN - points[k * 3 + 2])).ToList();
+                    var heights = Enumerable.Range(0, points.Length / 3).Select(k => points[k * 3 + 1]).ToArray();
+                    rails.EmitGrooves(new Network.RailRoadOverlap.Piece(piecePlan, heights, false), piece, tile, Get(paint, tile), ownHeight: true);
+                    stats.TrackCrossingsPaved++;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// The trams' stop lines only where their track is paved there (#1179, the user: "tram stop line shouldn't be drawn on
+    /// non-concreted tracks"): in the street, embedded, on a paved bed (a crossing's patch too); one over a ballast bed goes.
+    /// </summary>
+    private static void KeepStopLinesOnPavedTrack(Dictionary<TileId, List<RoadSegment>> output, Dictionary<TileId, List<RoadPaint>> paint, LayoutWriteStats stats)
+    {
+        foreach (var (tile, list) in paint)
+            for (int i = list.Count - 1; i >= 0; i--)
+            {
+                var p = list[i];
+                if (p.Type != PaintType.StopLine || p.Variant != RoadPaint.OverTrack || p.Vertices.Length < 6) continue;
+                var mid = new Vec2(tile.MinE + (p.Vertices[0] + p.Vertices[^3]) / 2, tile.MaxN - (p.Vertices[2] + p.Vertices[^1]) / 2);
+                bool paved = false;
+                foreach (var (segTile, segments) in output)
+                {
+                    if (Math.Abs(segTile.MinE + 500 - mid.X) > 600 || Math.Abs(segTile.MaxN - 500 - mid.Y) > 600) continue;
+                    foreach (var seg in segments)
+                    {
+                        if (seg.Class != RoadClass.Railway || !TramStopLinePainted(seg.Attributes.Flags)) continue;
+                        for (int k = 0; k + 1 < seg.PointCount && !paved; k++)
+                            paved = Polyline.PointSegmentDistance(mid, new Vec2(segTile.MinE + seg.Points[k * 3], segTile.MaxN - seg.Points[k * 3 + 2]),
+                                new Vec2(segTile.MinE + seg.Points[k * 3 + 3], segTile.MaxN - seg.Points[k * 3 + 5])) < TrackOffsetMost;
+                        if (paved) break;
+                    }
+                    if (paved) break;
+                }
+                if (paved) continue;
+                list.RemoveAt(i);
+                stats.TramStopLines--;
+                stats.TramStopLinesUnpaved++;
+            }
+    }
+
+    /// <summary>A track's line lies at most this far from a track it carries (m): a double line's offset and a little.</summary>
+    private const double TrackOffsetMost = 2.6;
+
+    /// <summary>
+    /// Whether a tram track of these flags gets its stop line painted (#1158, the user: "tram stop line shouldn't be drawn on
+    /// non-concreted tracks"): one in a street (TLM auf_strasse) or embedded in a carriageway, not one on its own ballast or grass bed.
+    /// </summary>
+    public static bool TramStopLinePainted(RoadAttrFlags attrs) => (attrs & (RoadAttrFlags.OnStreet | RoadAttrFlags.Embedded | RoadAttrFlags.PavedBed)) != 0;
+
+    /// <summary>A tram's stop line from <paramref name="p0"/> to <paramref name="p1"/> (LV95) at height <paramref name="y"/> (#1155): white, the cars' line's width, <see cref="RoadPaint.OverTrack"/>.</summary>
+    internal static RoadPaint TramStopLine(TileId tile, Vec2 p0, Vec2 p1, float y) => new()
+    {
+        Shape = PaintShape.Polyline, Type = PaintType.StopLine, Variant = RoadPaint.OverTrack, Rgba = PaintEmitter.White,
+        Width = JunctionRules.StopLineWidth,
+        Vertices = [(float)(p0.X - tile.MinE), y, (float)(tile.MaxN - p0.Y), (float)(p1.X - tile.MinE), y, (float)(tile.MaxN - p1.Y)],
+    };
+
     /// <summary>
     /// The tram ways as conflict lines for the timing (#979, #1057): each from where its track crosses its approach's stop line,
     /// in its tram group; none for a way whose arm has no line or no tram group.
@@ -269,7 +470,8 @@ public static partial class TileRewriter
     /// Each lit approach a tram enters by gets a tram lane on its <c>LANE</c> record (#1057): where its track crosses the cars'
     /// line, from the street's own arriving lane as the record counts, its trams' moves.
     /// </summary>
-    private static void TramLanes(JunctionPlan jp, List<TramWay> ways, List<RoadApproach> records, short signalIndex, LayoutWriteStats stats)
+    private static void TramLanes(JunctionPlan jp, List<TramWay> ways, List<RoadApproach> records, short signalIndex, LayoutWriteStats stats,
+        Dictionary<TileId, List<RoadPaint>>? paint = null)
     {
         foreach (var byTrack in ways.GroupBy(w => (w.FromArm, Math.Round(w.Points[0].X, 1), Math.Round(w.Points[0].Y, 1))))
         {
@@ -279,7 +481,22 @@ public static partial class TileRewriter
             var ex = jp.Exterior.FirstOrDefault(x => x.Arm == a);
             if (ex?.CarStop is not { } stop || records.FirstOrDefault(r => r.Signal == signalIndex && r.SignalArm == k) is not { } record) continue;
             double mouth = jp.Core!.Mouths.First(m => m.Arm == a.Arm).Station;
-            if (TramStop(a, mouth, stop, w) is not var (_, lateral)) continue;
+            if (TramStop(a, mouth, stop, w) is not var (stopAt, lateral)) continue;
+            // its own stop line across its track (#1155, the user: "the stopline should be drawn for trams"): white as the cars', the
+            // cars' line's width, centred where the track crosses that line, as wide as a tram and a hand either side
+            // (only on a paved track: none on a ballast or grass bed, the user: "tram stop line shouldn't be drawn on non-concreted
+            // tracks"; the trams stop there all the same)
+            if (paint is not null)
+            {
+                var axis = a.Axis!;
+                var right = axis.RightAt(mouth + stop);
+                double half = TramWidth * 0.5 + TramStopLineOver;
+                var p0 = stopAt - right * half;
+                var p1 = stopAt + right * half;
+                var tile = TileId.FromLv95(stopAt.X, stopAt.Y);
+                Get(paint, tile).Add(TramStopLine(tile, p0, p1, record.Y));
+                stats.TramStopLines++;
+            }
             var moves = SignalMoves.None;
             foreach (var x in byTrack) moves |= x.Move;
             // (left to right as the record keeps its lanes)
@@ -306,6 +523,20 @@ public static partial class TileRewriter
             result[k] = (had.Moves | w.Move, had.Moves == SignalMoves.None ? lateral : had.Lateral);
         }
         return result;
+    }
+
+    /// <summary>
+    /// Whether a tram track runs between two nodes <paramref name="a"/> and <paramref name="b"/> (#1161: within the circle the street
+    /// between them spans: across it, on a central reservation between a divided road's carriageways, or turning off it).
+    /// </summary>
+    internal static bool TramAcross(TramNet net, Vec2 a, Vec2 b)
+    {
+        double reach = a.DistanceTo(b) * 0.5;
+        var mid = (a + b) * 0.5;
+        foreach (var (p, _) in net.Lines)
+            for (int i = 0; i + 1 < p.Length; i++)
+                if (Polyline.PointSegmentDistance(mid, p[i], p[i + 1]) <= reach) return true;
+        return false;
     }
 
     /// <summary>Where segment <paramref name="a"/>-<paramref name="b"/> (from outside to inside) crosses the ring: bisected.</summary>

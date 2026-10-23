@@ -65,6 +65,11 @@ src/Phone/               quick  --phonecheck --world fixture --photo-dir test_ou
 src/Player/FootPlayer    quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
 src/Core/Teleporter      quick  --phonecheck --world fixture --photo-dir test_output/phone_photos
 src/Phone/               quick  --phonevrcheck --xrsim --world fixture
+src/Trainer/             quick  --trainingcheck --trainer-sim --world fixture --chunks fixture:hairpin
+src/Phone/               quick  --trainingcheck --trainer-sim --world fixture --chunks fixture:hairpin
+tools/RideLink/          quick  --trainingcheck --trainer-sim --world fixture --chunks fixture:hairpin
+src/Trainer/             quick  --trainingcheck junctions --trainer-sim --world fixture --chunks fixture:junction --traffic 0
+src/Gpx/RoadNetwork      quick  --trainingcheck junctions --trainer-sim --world fixture --chunks fixture:junction --traffic 0
 src/XR/XrPhone           quick  --phonevrcheck --xrsim --world fixture
 src/Avatar/              quick  --cockpitcheck
 src/Core/Chat            quick  --chatcheck
@@ -83,6 +88,9 @@ src/Terrain/Stadiums/     quick --stadiumcheck --systems ui
 # #885: concerts: the generator's events, rigs, patches and stages, and the desk's DMX
 src/Concert/             quick --concertcheck --systems ui
 src/Concert/             quick --concertwalkcheck --world flat
+# #1150: the concert pogo QTE: jump on the beat, the Pogo emote on and off
+src/Concert/Pogo         quick --pogocheck --world fixture
+src/Player/FootPlayer.cs quick --pogocheck --world fixture
 src/Concert/             net   tools/concertnetcheck.sh
 # #608: a body walks every storey of hand-made sites' shells, on their real collision
 src/Terrain/Construction/ quick --shellwalkcheck --world flat
@@ -128,6 +136,8 @@ src/Loot/LootTables      quick  --sitecheck --systems ui
 src/Interiors/           quick  --doorcheck
 src/Interiors/           quick  --flatcheck
 src/Interiors/           quick  --stairwalkcheck
+src/Interiors/           quick  --houselayoutcheck
+tools/TerrainFormat/HouseLayout quick --houselayoutcheck
 # #598: the generated world's shaped buildings: outline, doors, interiors that follow it
 src/Interiors/           quick  --shapedcheck --systems ui
 src/Interiors/Church     quick  --churchstagecheck
@@ -180,6 +190,7 @@ src/Ui/WorldPick         quick  --worldpickcheck --world fixture
 src/Ui/SoloScreen        quick  --worldpickcheck --world fixture
 src/Core/TerrainPaths    quick  --worldpickcheck --world fixture
 src/Core/Debug           quick  --debugcheck --systems ui
+src/Terrain/LanePlanDebug quick  --debugcheck --systems ui
 src/Styles/StyleKit      quick  --debugcheck --systems ui
 src/Terrain/ChunkNode    quick  --debugcheck --systems ui
 src/BattleRoyale/        quick  --brcheck
@@ -792,3 +803,21 @@ src/Farming/CowMotion       net    tools/sightingnetcheck.sh
 src/Player/TractorBeams     net    tools/sightingnetcheck.sh
 src/Net/LiveMapFile      net    tools/livemapcheck.sh
 tools/deploy/web/map     net    tools/livemapcheck.sh
+# name tags over other players' heads, VR / MOBILE (#1136)
+src/Player/NameTag       net    tools/nametagnetcheck.sh
+src/Net/ChatManager      net    tools/nametagnetcheck.sh
+# #1167: the e-bike's remote and battery, the picker's Bicycles tab by pad / VR, two players watching each other ride
+src/Player/Bicycle        quick  --ebikecheck --world flat --systems physics,ui
+src/Player/BicycleCatalog quick  --ebikecheck --world flat --systems physics,ui
+src/Player/BikePhysics    quick  --ebikecheck --world flat --systems physics,ui
+src/Player/EBikeCheck     quick  --ebikecheck --world flat --systems physics,ui
+src/Vehicles/VehicleState quick  --ebikecheck --world flat --systems physics,ui
+src/XR/XrCabControls      quick  --ebikecheck --world flat --systems physics,ui
+src/Core/TouchMore        quick  --ebikecheck --world flat --systems physics,ui
+src/Player/RideUi         quick  --ridemenucheck --world flat --systems physics,ui
+src/Player/RideMenuCheck  quick  --ridemenucheck --world flat --systems physics,ui
+src/Player/BicycleCatalog quick  --ridemenucheck --world flat --systems physics,ui
+src/Player/Bicycle        net    tools/ebikenetcheck.sh
+src/Player/BicycleCatalog net    tools/ebikenetcheck.sh
+src/Avatar/Cyclist        net    tools/ebikenetcheck.sh
+src/Player/EBikeNetProbe  net    tools/ebikenetcheck.sh

@@ -521,9 +521,10 @@ public static class StyleKit
 
     /// <summary>
     /// Whether the applied style's screen-space and volumetric effects are on: the style asks for
-    /// them and this run is on Forward+. On Mobile a Realistic+ choice draws as Realistic−.
+    /// them and this run is on Forward+. On Mobile a Realistic+ choice draws as Realistic−, and so
+    /// does VR: each effect runs once an eye, at a headset's resolution (#1036).
     /// </summary>
-    public static bool EffectsOn => Pick(Applied, l => l.Effects).Value && OnForwardPlus;
+    public static bool EffectsOn => Pick(Applied, l => l.Effects).Value && OnForwardPlus && !XR.XrSession.Active;
 
     /// <summary>"--sdfgi": global illumination in Realistic+, off until measured on a gaming laptop.</summary>
     private static readonly bool Sdfgi = CmdArgs.Has("--sdfgi");

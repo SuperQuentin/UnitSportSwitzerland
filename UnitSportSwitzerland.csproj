@@ -38,6 +38,9 @@
     <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="7" />
   </ItemGroup>
 
+  <!-- home trainers (#901): RideLink, and the Windows TFM its Bluetooth needs -->
+  <Import Project="tools\RideLink\Game.props" />
+
   <ItemGroup>
     <ProjectReference Include="tools\TerrainFormat\TerrainFormat.csproj" />
     <!-- The map screen's country map, selection, plan and estimates, shared with the terminal
@@ -49,6 +52,7 @@
     <!-- the coarse heightmap the generated terrain is shaped on (tools/swiss_relief.py); LogicalName
          and WithCulture because MSBuild otherwise reads ".bin"-like infixes as a culture -->
     <EmbeddedResource Include="src/Terrain/swiss_relief.gz" LogicalName="swiss_relief.gz" WithCulture="false" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.30.0" />
     <PackageReference Include="ppy.SDL3-CS" Version="2026.722.0" />
   </ItemGroup>
 
