@@ -4,7 +4,7 @@
 # it on Android), keeps the headset "worn" and awake, starts the game, and after <seconds> prints the Quest's VrApi
 # averages over the run's last 40 s (fps, app GPU time, GPU and CPU use). Startup takes about 90 s: 150 is a good length.
 # The logs land in test_output/quest/runs/<label>.{log,vrapi}. Notes: docs/notes/xr/quest-standalone.md.
-# Example: tools/quest-measure.sh street 150 --chunks terrain_chunks --at 2500300,1118450 --heading 207 --seat kart
+# Example: tools/quest-measure.sh street 150 --at 2500300,1118450 --heading 207 --seat kart
 set -uo pipefail
 cd "$(dirname "$0")/.."
 export MSYS_NO_PATHCONV=1

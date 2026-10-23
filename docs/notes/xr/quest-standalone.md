@@ -59,7 +59,8 @@ The same VR mode as over Link (`setup`, `rig`, `controls`), run on the headset's
   (`Core/CmdArgs` reads it on Android), keeps the headset worn and awake (`prox_close`, Guardian paused), starts the
   game and prints VrApi's averages over the last 40 s (startup takes ~90 s). Real tiles for a deterministic run: copy
   a few tiles plus a manifest listing only them into `files/terrain_chunks` (through `/data/local/tmp` and `run-as`),
-  then `--chunks terrain_chunks`. Two runs of the same scene differ by about 2 ms of GPU time.
+  the folder Android reads anyway (no `--chunks`). `--seat kart` gives a street view that stays the same (a phone
+  or headset tries the seat for 90 s); two runs of the same scene still differ by about 2 ms of GPU time.
 - **Splitting the frame:** `--hidenodes Ground,Roads,Trees,Broadleaves,Water,Horizon,Buildings` hides those tile
   layers (`Core/RenderCensus`), `--rendercensus` prints triangles per branch. `adb shell ovrgpuprofiler -r` reads the
   GPU's counters; `adb shell simpleperf record --app <package> -g` samples the CPU (a debug export only; C# shows as
