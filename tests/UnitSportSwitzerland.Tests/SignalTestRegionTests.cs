@@ -1063,10 +1063,32 @@ public class TramStopLineTests(SignalTestRegionFixture region) : IClassFixture<S
                 // the arriving driver's way in (tile-local x east, z south): the arm's heading points out
                 double inE = -Math.Cos(a.Heading), inN = -Math.Sin(a.Heading);
                 int trams = a.Lanes.Count(l => l.Kind == ApproachLaneKind.Tram);
-                bool paved = tile.Segments.Any(s => s.Class == RoadClass.Railway
-                    && (s.Attributes.Flags & (RoadAttrFlags.OnStreet | RoadAttrFlags.Embedded | RoadAttrFlags.PavedBed)) != 0
+                // (a paved track at a point: a railway piece in the street, embedded or on a paved bed within 2.6 m, tile-local)
+                bool PavedAt(double x, double z, RoadAttrFlags kinds) => tile.Segments.Any(s => s.Class == RoadClass.Railway
+                    && (s.Attributes.Flags & kinds) != 0
+                    && Enumerable.Range(0, s.PointCount - 1).Any(k =>
+                    {
+                        double ax = s.Points[k * 3], az = s.Points[k * 3 + 2], bx = s.Points[k * 3 + 3], bz = s.Points[k * 3 + 5];
+                        double dx = bx - ax, dz = bz - az, len2 = dx * dx + dz * dz;
+                        double t = len2 < 1e-9 ? 0 : Math.Clamp(((x - ax) * dx + (z - az) * dz) / len2, 0, 1);
+                        return Math.Sqrt(Math.Pow(x - ax - t * dx, 2) + Math.Pow(z - az - t * dz, 2)) < 2.6;
+                    }));
+                const RoadAttrFlags Street = RoadAttrFlags.OnStreet, Paved = Street | RoadAttrFlags.Embedded | RoadAttrFlags.PavedBed;
+                // a track in the street (TLM auf_strasse) at the approach: its lines all there; else only those over a paved patch
+                bool street = tile.Segments.Any(s => s.Class == RoadClass.Railway && (s.Attributes.Flags & Street) != 0
                     && Enumerable.Range(0, s.PointCount).Any(k => Math.Abs(s.Points[k * 3] - a.X) < 15 && Math.Abs(s.Points[k * 3 + 2] - a.Z) < 15));
-                if (!paved) { unpaved += trams; trams = 0; }
+                if (!street)
+                {
+                    unpaved += trams;
+                    foreach (var p in lines)
+                    {
+                        double mx = (p.Vertices[0] + p.Vertices[3]) / 2.0, mz = (p.Vertices[2] + p.Vertices[5]) / 2.0;
+                        double e = mx - a.X, n = -mz + a.Z;
+                        if (Math.Abs(e * inE + n * inN) < 0.3 && Math.Abs(e * inN - n * inE) < 15)
+                            Assert.True(PavedAt(mx, mz, Paved), $"approach at {a.X:F0},{a.Z:F0}: a tram stop line over a ballast bed");
+                    }
+                    continue;
+                }
                 lanes += trams;
                 // on the cars' line (the record's stop, the line's middle) within 0.3 m along, beside it within 15 m: one per tram lane
                 var on = lines.Where(p =>
