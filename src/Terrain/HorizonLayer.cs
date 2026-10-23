@@ -60,6 +60,9 @@ public partial class HorizonLayer : Node3D, IOriginContainer, IOriginShiftAware
         _source = source;
         _origin = origin;
         _material = material;
+        // a standalone headset (#1112): drawn after the real tiles, so what lies under them is rejected
+        // by depth before it is shaded (opaque draws sort by priority first, Mobile renderer)
+        if (Core.Platform.IsStandaloneVr) material.RenderPriority = 1;
         _anchors = anchors;
         // deferred, so a source configured right after (the generated fill) is read once, not
         // twice: whoever reloads first this frame wins, and this then finds it loading

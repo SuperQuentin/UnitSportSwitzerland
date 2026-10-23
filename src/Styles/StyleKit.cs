@@ -353,6 +353,9 @@ public static class StyleKit
         // PS1's finish (shaders/common/retro.gdshaderinc) belongs to PS1: off wherever another
         // style draws with a PS1 body, borrowed or wrapped
         if (HasUniform(shader, "retro")) m.SetShaderParameter("retro", style == VisualStyle.Ps1);
+        // a standalone headset (#1112): the trees' dissolve discards, which turns a Quest's early depth
+        // rejection off for every draw after it, so they go last (opaque draws sort by priority first)
+        if (Core.Platform.IsStandaloneVr && role is MaterialRole.Tree or MaterialRole.TreeFar) m.RenderPriority = 2;
         switch (role)
         {
             case MaterialRole.Tree:
