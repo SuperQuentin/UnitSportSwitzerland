@@ -71,8 +71,13 @@ The junction planner's cores (`junction-planner`) take the tram tracks running t
     upright, slanted for a group that only turns; its arrow on a plate below where its trams go several ways.
 - **`LANE`**: a tram lane (`ApproachLaneKind.Tram`) on the lit approach's record where its track crosses the cars' line, left to
   right among the others; its moves the trams'.
-- **Poles** (the user: "pole only, repeated on both sides if repeater pole"): `SignalPoleFlags.Tram` (32) on the approach's main
-  pole and on its repeater (the left kerb's or the refuge's `Second` pole) where it has one; never on a span wire or an arm. Model
+- **Poles** (the user: "pole only, repeated on both sides if repeater pole"; #1161: "as long as it sits at least on the right of
+  the stop line, the closer the better (if there is an island)", and "a tram head can be on the left pole, just like for cars. It's
+  just not mandatory, the one on the right is"): `SignalPoleFlags.Tram` (32). The mandatory head right of the tram's own stop line:
+  on a pole of its own `TramPoleAside` 1.7 m right of the track where that is off the carriageway (half a metre past its kerb,
+  `TramPoleSpot`) and clear (a reservation between track and cars, a bed's far side), else on the arm's pole nearest to the right of
+  the track (J16: the reservation side's kerb pole; a track in the street: the right kerb's main pole). A repeat on the approach's
+  repeater (`Second`) pole where it stands left of the track. Never on a span wire or an arm. Model
   viewer: "Traffic light - Tram", "Tram, Romandy", "Tram, two ways", "Tram, Romandy, two ways".
 - **Stops**: OSM's (`--osm-overlay` writes `osm_tram_stops.tsv` beside `osm_overlay.tsv`: `railway=tram_stop`, and
   `public_transport=stop_position` with `tram=yes`) merged with swissTLM3D's (`tram_stops.tsv`, preprocessor `--tram-stops --out
@@ -87,7 +92,9 @@ The junction planner's cores (`junction-planner`) take the tram tracks running t
   (Vaud), J18 a T off it (Vaud). Tier 0: `SignalTestRegionTests.Trams_on_their_own_bed_*`, `TramTests` (the attach rule, the side).
 - **Switches**: tram tracks meeting at a node of their own run through it uncut (`PipelineOptions.ThroughNode`, the junction
   builder skips the node): a rail junction trimmed them back, a gap the trams could not cross (Geneva: 250 → 291 tram paths).
-- **120 s kept** (`LayoutWrite`, after `Retime`): where trams take a plan past the legal maximum, their leads go first, then the
+- **No trams dropped for the cycle** (#1161): a plan past 120 s is squeezed, then kept and reported (`traffic-signals`), never
+  timed without its trams or their leads for its length. Only where the conflict times cannot time it at all (`LayoutWrite`,
+  after `Retime` fails): their leads go first, then the
   plan is timed for a 26 m tram (`ConflictTimes.TramShortLength`), then for the cars' times alone (its trams out of the conflict
   times); the rewrite counts and names them. A tram group stays out of the phases where it would take the walkers' green it crosses
   (a turning tram over a crosswalk), keeping them at least one: J14's branch had grown a walkers' phase of its own (153 s).

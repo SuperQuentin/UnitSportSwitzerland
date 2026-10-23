@@ -177,6 +177,15 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
             var lane = Assert.Single(record.Lanes, l => l.Kind == ApproachLaneKind.Tram);
             if (g.TramSide < 0) Assert.True(record.Lanes.Where(l => l.Kind == ApproachLaneKind.Car).All(l => l.Offset > lane.Offset + 2));
         }
+        // its head right of its stop line, the nearest pole there: on the reservation's side (not the right kerb's main pole) where
+        // it runs left of the cars (#1161, the user)
+        foreach (var g in plan.Groups.Where(g => g.Kind == SignalGroupKind.Tram))
+        {
+            // (a repeat on the approach's repeater pole left of it may stand too, as the cars' second head)
+            var heads = signal.Poles.Where(p => p.Arm == g.Arm && (p.Flags & SignalPoleFlags.Tram) != 0).ToList();
+            Assert.NotEmpty(heads);
+            if (g.TramSide < 0) Assert.Contains(heads, p => (p.Flags & SignalPoleFlags.Main) == 0);
+        }
         var paths = tile.JunctionPaths.Where(p => p.Kind == JunctionPathKind.Tram && p.Signal == index).ToList();
         Assert.Equal(groups.Count, paths.Count);
         Assert.All(paths, p => Assert.Equal(SignalGroupKind.Tram, plan.Groups[p.Group].Kind));

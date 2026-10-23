@@ -353,4 +353,67 @@ public class TramTests
         int a2 = street.Groups.FindIndex(g => g.Kind == SignalGroupKind.LeftArrow && g.Arm == 0);
         Assert.Equal(SignalPlan.Conflict.None, street.Conflicts()[t2, a2]);
     }
+
+    [Fact]
+    public void ATramHead_StandsRightOfItsStopLine_OnTheReservationWhereThereIsRoom()
+    {
+        // #1161, the user: "at least on the right of the stop line, the closer the better (if there is an island)". A carriageway
+        // from -1.65 to 3.15 m: a track 4.8 m left of the axis (a reservation between it and the cars) gets a pole 1.7 m right of it
+        Assert.Equal(-4.8 + TileRewriter.TramPoleAside, TileRewriter.TramPoleSpot(-1.65, 3.15, -4.8)!.Value, 3);
+        // a bed beside the road, right of the cars: its pole beyond it, off the road
+        Assert.Equal(6 + TileRewriter.TramPoleAside, TileRewriter.TramPoleSpot(-1.65, 3.15, 6)!.Value, 3);
+        // no room: a reservation too narrow (the spot within half a metre of the kerb), a track in the street: the kerb pole then
+        Assert.Null(TileRewriter.TramPoleSpot(-1.65, 3.15, -3.5));
+        Assert.Null(TileRewriter.TramPoleSpot(-5, 5, -1.6));
+    }
+
+
+    /// <summary>
+    /// A crossroads with left pockets (40 m each: their turn phases' fixed greens clear a full queue) and walkers on every arm, timed
+    /// from conflict times of <paramref name="seconds"/> between every pair that never shares a green (#1161).
+    /// </summary>
+    private static SignalPlan TimedWithConflicts(float seconds)
+    {
+        var plan = SignalPlan.Build(
+        [
+            new SignalArm(0, true, true, LeftPocket: true, Pedestrians: true, LeftStorageM: 40, StorageM: 200),
+            new SignalArm(Math.PI / 2, true, true, LeftPocket: true, Pedestrians: true, LeftStorageM: 40, StorageM: 200),
+            new SignalArm(Math.PI, true, true, LeftPocket: true, Pedestrians: true, LeftStorageM: 40, StorageM: 200),
+            new SignalArm(-Math.PI / 2, true, true, LeftPocket: true, Pedestrians: true, LeftStorageM: 40, StorageM: 200),
+        ], 1161);
+        int n = plan.Groups.Count;
+        var conflicts = plan.Conflicts();
+        var times = new float[n, n];
+        for (int g = 0; g < n; g++)
+            for (int h = 0; h < n; h++)
+                times[g, h] = conflicts[g, h] == SignalPlan.Conflict.Hard ? seconds : float.NaN;
+        Assert.True(plan.Retime(times));
+        Assert.Empty(plan.Validate());
+        Assert.True(plan.KeepsTimes(times));
+        return plan;
+    }
+
+    [Fact]
+    public void APlanOverTheMaximum_IsSqueezedTo120s_ItsConflictTimesKept()
+    {
+        // #1161, the user: "squeeze to 120s": its turn phases' queue-clearing greens shrink toward the minimum, the conflict times stay
+        var plan = TimedWithConflicts(12);
+        Assert.True(plan.Squeezed);
+        Assert.True(plan.ConflictTimed);
+        Assert.False(plan.Overflows);
+        Assert.InRange(plan.Cycle, 100, SignalPlan.MaxCycle);
+        // (with short conflict times the greens keep what they want)
+        Assert.False(TimedWithConflicts(4).Squeezed);
+    }
+
+    [Fact]
+    public void APlanStillOverTheMaximumWithEveryGreenAtItsMinimum_IsKeptAndReported()
+    {
+        // "...and then only allow overflow but report until 1120 lands": the plan as it is, conflict-timed, over 120 s
+        var plan = TimedWithConflicts(24);
+        Assert.True(plan.ConflictTimed);
+        Assert.True(plan.Overflows);
+        Assert.True(plan.Cycle > SignalPlan.MaxCycle);
+        Assert.Equal(6, plan.PhaseCount);
+    }
 }
