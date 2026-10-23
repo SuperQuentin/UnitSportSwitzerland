@@ -117,7 +117,8 @@ public sealed class LodPolicy
         {
             Rings = rings.ToArray(),
             RoadMaxDist = Math.Min(roads, maxRings),
-            BuildingMaxDist = Math.Min(buildings, maxRings),
+            // "--buildingrings N": how far buildings reach, to measure what they cost (#1112)
+            BuildingMaxDist = Math.Min(Core.CmdArgs.Int("--buildingrings") ?? buildings, maxRings),
         };
     }
 
