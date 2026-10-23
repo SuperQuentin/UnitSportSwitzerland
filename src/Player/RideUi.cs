@@ -218,6 +218,9 @@ public partial class RideUi : CanvasLayer
         }
         AddTab(bar, pages, "Mounts", mounts);
 
+        // every catalogue bicycle (#1159): the road bike stays among the mounts, the others are chosen here
+        AddTab(bar, pages, "Bicycles", BicycleCatalog.All.Select(b => NewCard(b.Kind, b.Label, $"{b.Name}: {b.Blurb}", true,
+            $"{b.Kind}|{b.Name}", () => Rideable.Create(b.Kind)?.BuildParkedVisual(0))).ToList());
         AddTab(bar, pages, "Cars", CarCatalog.All.Select(c => NewCard(c.Kind, c.Label, c.Blurb, true,
             $"{c.Kind}|{c}", () => Rideable.Create(c.Kind)?.BuildParkedVisual(0))).ToList());
         // brand folders, then a model folder where a model comes in several variants (#410)

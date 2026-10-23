@@ -47,7 +47,9 @@ public sealed class OsmOverlayReader
             list.Add(new Row(D(c[2]), D(c[3]), c[6], c[7], c[8], c[9], c[10], c[11],
                 c[12], c[13], c[14], c[15], c[18] == "1", c[19] == "1", TurnLanes.Parse(c[16]), TurnLanes.Parse(c[17]),
                 c.Length > 21 ? Int(c[20]) : 0, c.Length > 21 ? Int(c[21]) : 0,   // v2: maxspeed_fwd, maxspeed_bwd (#711)
-                c.Length > 23 ? c[22] : "", c.Length > 23 ? c[23] : ""));   // v3: bicycle_lanes_fwd, bicycle_lanes_bwd (#854)
+                c.Length > 23 ? c[22] : "", c.Length > 23 ? c[23] : "",   // v3: bicycle_lanes_fwd, bicycle_lanes_bwd (#854)
+                c.Length > 27 ? c[24] : "", c.Length > 27 ? c[25] : "",   // v4: destination_fwd, destination_bwd (#1110; read since #1189)
+                c.Length > 27 ? c[26] : "", c.Length > 27 ? c[27] : ""));   // v4: destination_lanes_fwd, destination_lanes_bwd
             reader.RowCount++;
         }
         return reader;

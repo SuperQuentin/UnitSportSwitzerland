@@ -4,9 +4,10 @@ using UnitSport.Player;
 namespace UnitSport.XR;
 
 /// <summary>
-/// A Swiss watch on the left wrist (#439): the world's time, the altitude and the speed, on the back
-/// of the wrist, where looking at it for a moment opens the wrist menu (<see cref="XrWristMenu"/>).
-/// Drawn in the headset only; its text is set only when it changes, twice a second at most.
+/// A Swiss watch on the left wrist (#439): the world's time, the altitude and the speed. It sits on
+/// the drawn left hand's wrist (<see cref="XrHand.WatchSpot"/>, #1097), and reading it opens the
+/// radial menu over it (<see cref="XrWristRing"/>). Drawn in the headset only; its text is set only
+/// when it changes, twice a second at most.
 /// </summary>
 internal sealed partial class XrWatch : Node3D
 {
@@ -17,8 +18,6 @@ internal sealed partial class XrWatch : Node3D
     public override void _Ready()
     {
         Name = "Watch";
-        // on the back of the wrist (the controller's +X, the left hand's outside), face out
-        Transform = new Transform3D(new Basis(Vector3.Up, Mathf.Pi / 2), new Vector3(0.035f, 0.0f, 0.06f));
         var steel = Styles.StyleKit.Figure(new StandardMaterial3D { AlbedoColor = new Color(0.72f, 0.74f, 0.76f), Metallic = 0.6f, Roughness = 0.35f });
         var strap = Styles.StyleKit.Figure(new StandardMaterial3D { AlbedoColor = new Color(0.12f, 0.11f, 0.1f) });
         AddChild(new MeshInstance3D
@@ -78,10 +77,12 @@ internal sealed partial class XrWatch : Node3D
     }
 
     /// <summary>Twice a second: the time, the altitude above the sea and the speed, set only when they change.</summary>
-    public void Tick(FootPlayer? player, bool tracked, float dt)
+    /// <param name="spot">Where it sits on the hand it is a child of (<see cref="XrHand.WatchSpot"/>).</param>
+    public void Tick(FootPlayer? player, bool tracked, Transform3D spot, float dt)
     {
-        // an untracked controller sits inside the head: not drawn then, like the hand markers
+        // an untracked controller sits inside the head: not drawn then, like the hands
         Visible = tracked;
+        if (Transform != spot) Transform = spot;
         _wait -= dt;
         if (_wait > 0f) return;
         _wait = Every;

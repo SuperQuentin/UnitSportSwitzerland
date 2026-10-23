@@ -42,7 +42,9 @@ public partial class ControlsHelp : CanvasLayer
             new("Travel menu: mounts and vehicles", PlayerInput.RideMenu, Pad: "{interact_mount} (nothing near)"),
             new("First / third person (driving: chase, cockpit, cockpit without your body)", PlayerInput.CameraToggle),
             new("Camera over the other shoulder", PlayerInput.SwapShoulder, Pad: "R3 (aiming a gun)"),
+            new("Third person: camera zoom in / out, down to the face", Keys: "{view_zoom_in} / {view_zoom_out}", Pad: "R3 (hold) + right stick ↑ ↓"),
             new("Base jump: jump again while falling", PlayerInput.Jump),
+            new("Pogo at a concert: dancing, jump on the beat", PlayerInput.Jump),
         }),
         ("Items", new Row[]
         {
@@ -130,6 +132,18 @@ public partial class ControlsHelp : CanvasLayer
             new("At a car door: open it, then get in", PlayerInput.InteractMount),
             new("Open / shut the car door you are at", PlayerInput.CarDoor),
             new("Get out", PlayerInput.InteractMount),
+        }),
+        ("E-bike (#1167)", new Row[]
+        {
+            new("Assist level: Off, Eco, Tour, Sport, Turbo (the Bosch remote's button; in VR also a poke at the left grip)", PlayerInput.EngineToggle),
+        }),
+        ("Home-trainer training (phone › Training)", new Row[]
+        {
+            new("Next junction: take the road to the left / right", Keys: "{move_left} {move_right}", Pad: "{move_left} {move_right}"),
+            new("Back to the course from a road off it", PlayerInput.RideRejoin, Pad: "phone › Training › Rejoin"),
+            new("Turn round", PlayerInput.RideUTurn, Pad: "phone › Training › Turn round"),
+            new("ERG on / off (the trainer holds a power)", PlayerInput.RideErg, Pad: "phone › Training › ERG"),
+            new("ERG target +10 W / -10 W", Keys: "{ride_power_up} {ride_power_down}", Pad: "phone › Training › +10 W / -10 W"),
         }),
         ("Stadiums", new Row[]
         {

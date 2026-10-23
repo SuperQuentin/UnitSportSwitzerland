@@ -21,7 +21,12 @@ public sealed class WalkCrossing
     /// on a gap in the cars, the cars do not yield.
     /// </summary>
     public bool Unmarked { get; init; }
-    public bool Lit => Site is not null;
+    /// <summary>
+    /// The unlit middle stage of a crossing over a tram reservation (#1176): between two islands, no lights; the walkers give way
+    /// to the trams there (they have priority without lights, #1115). <see cref="Site"/> is the junction's, <see cref="Group"/> -1.
+    /// </summary>
+    public bool TramYield { get; init; }
+    public bool Lit => Site is not null && !TramYield;
     public bool Zebra => Site is null && !Island && !Unmarked;
     /// <summary>A zebra (main thread): the traffic clock when a walker last stood at it to cross or was on it; cars stop for it.</summary>
     public double Claimed = double.MinValue;
@@ -159,7 +164,9 @@ public sealed partial class LaneGraph
             foreach (var (line, points) in site.Lines)
             {
                 if (line.Mover != ConflictMover.Walker || points.Length < 2 || !Near(points[0])) continue;
-                var c = new WalkCrossing { Site = site, Group = line.Group };
+                // (an unlit middle stage over a tram reservation has no group, #1176)
+                var c = line.Group == RoadConflictLine.NoGroup ? new WalkCrossing { Site = site, TramYield = true }
+                    : new WalkCrossing { Site = site, Group = line.Group };
                 var proto = new WalkProto { P = new List<Vector3>(points), Kind = WalkKind.Crossing, Class = RoadClass.Path, Width = 3f, Crossing = c };
                 protos.Add(proto);
                 litLines.Add((points[0], points[^1]));

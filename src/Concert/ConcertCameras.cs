@@ -316,6 +316,10 @@ public partial class ConcertPerformers : Node3D
     private ArrayMesh? _scratch;
     private Audio.Cd.MusicStyle _style;
 
+    /// <summary>The lead artist (centre stage, the first) sings the song's vocal (#1153); the others keep the shader's idle face.</summary>
+    private const int Singer = 0;
+    private readonly Avatar.Face.FaceAnimator _singerFace = new();
+
     public ConcertPerformers(StagePlan plan, LightDesk desk)
     {
         _plan = plan;
@@ -357,14 +361,30 @@ public partial class ConcertPerformers : Node3D
         }
     }
 
-    /// <summary>One frame: each artist's move, on the beat; still between songs.</summary>
+    /// <summary>
+    /// The singer's lips on the CD's vocal at <paramref name="heardT"/> (the listener's delayed song
+    /// time): the jaw on the voice and its syllables, the lips' "oo" and "ee". Without a vocal
+    /// analysis, or between songs, a closed-mouthed smile.
+    /// </summary>
+    private void Sing(Audio.Cd.CdInfo? song, double heardT, float dt)
+    {
+        if (_people.Count <= Singer || dt <= 0f) return;
+        var face = Avatar.Face.FaceState.Neutral;
+        face.Smile = 0.3f;
+        if (song != null && heardT >= 0
+            && Audio.Cd.CdAnalysisRuntime.SampleVocal(song, heardT, out float voice, out float syllable, out float vowel, out _))
+            Avatar.Face.DanceFace.Sing(ref face, voice, syllable, vowel, 1f);
+        _singerFace.Step(_people[Singer].Node, face, null, dt, ease: Avatar.Face.FaceAnimator.LipEase);
+    }
+
     /// <summary>
     /// One frame: each artist's move, on the beat; still between songs. Under a fast strobe
     /// (<paramref name="strobeHz"/>, on the rig's clock <paramref name="strobeT"/>) each flash shows a
     /// new pose, a move's hit picked at random, held until the next: the freeze-frame dance of a strobe.
     /// </summary>
-    public void Step(float strobeHz = 0f, float strobeT = 0f)
+    public void Step(float strobeHz = 0f, float strobeT = 0f, Audio.Cd.CdInfo? song = null, double heardT = -1, float dt = 0f)
     {
+        Sing(song, heardT, dt);
         float beat = _desk.Beat, phase = beat - MathF.Floor(beat);
         int bar = (int)MathF.Floor(beat / 4f);
         float barPhase = beat / 4f - bar;

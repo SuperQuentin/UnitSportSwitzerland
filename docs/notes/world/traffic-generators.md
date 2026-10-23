@@ -18,9 +18,49 @@
   checked with `ChatManager.IsAdminPeer`; the server sends `Set` / `Remove` to every peer and a `Snapshot` to joiners
   (protocol 35). Every client runs them on its own traffic (traffic stays local and cosmetic). Offline the client serves
   itself through the same methods (the probe's way). At most 64 endpoints, 400 generated cars at once.
-- **Test world** (`signal_test_region.txt` beside the tiles): cars only from endpoints (`Traffic.GeneratorsOnly`: no random
-  spawn, no cull for being one too many). The real world keeps its random cars; its endpoints will be implicit, later.
-- **`--trafficcheck --at E,N` in the test world**: a generator + destination 15 m in from the far end of each arm of the
+- **Test world** (`signal_test_region.txt` beside the tiles): cars, riders, walkers and trams only from endpoints
+  (`Traffic.GeneratorsOnly`: no density spawn of any mode, no cull for being one too many; the modes' graphs are built for the
+  modes its endpoints make). The real world keeps its random traffic; its endpoints will be implicit, later.
+- **The world's own endpoints** (#1134): the region build writes `traffic_endpoints.tsv` beside the tiles
+  (`TrafficEndpointsFile`, `SignalTestRegion.Traffic.cs`); every peer reads it (`Traffic.LoadWorldEndpoints`, ids from 100000,
+  not in the shared list: no protocol change) and runs it like the shared list's. `TrafficEndpoint.Mode`: car, rider, walker,
+  tram, each snapped on its mode's graph. A generator makes movers only within 0.75 of its mode's drop distance from the view.
+  Walkers and riders go to their destination by a search back from it (`CostTo`: from each leg the length to it, only as
+  movers may go on: a road where junction paths start takes one of them, a path ends on a road); a rider takes the move of the
+  cheapest path whatever its tier (its own paths may end elsewhere than the cars'). A walker or rider whose destination cannot be
+  reached from its spot is not made (`NoWayBy`). Trams follow their track (`NextTrack`), spawned standing with their sections on
+  the track behind, a destination at the far end.
+- **Where they stand** (one general rule, no junction special-cased): per arm of every lit junction a car and a bike endpoint
+  on the arm's road (the design's lines followed out): 250 m out (`ArmReach`), or halfway to the next lights less 10 m (a
+  stretch between two lights carries each junction's own endpoint, each taking the other's traffic: no double feeding), or 15 m
+  short of the next unlit junction or dead end; lights closer than 150 m (`ClusterReach`: J5a/J5b, the staggered J9) are one
+  junction for the traffic: no endpoint between them, the cars carry on through both by the next lights' shares from the arm
+  they arrive on. Walkers: on either sidewalk of each arm with a crossing, 40 m out, each over the crossing to the other (the
+  region's walk graph has no way round a corner: its corners are riders' paths). Trams: 60 m in from each tram track end, a
+  generator where the trams keep right (a double track both ways), a tram every 6 min each way (`TramHeadwayMinutes`).
+- **Rates** (`SignalCapacity`, tools/TerrainFormat, one formula for every junction): per movement (`SignalPlan.Movements`),
+  cars/min = `Degree` x `CarSaturation` x turn factor x lanes x effective green / cycle / 60. Effective green: the time any of
+  its groups is green plus their amber, less `SignalPlan.StartLoss` (2 s) per green start; the part of it a turn from a full
+  head gives way (a `Permissive` conflict green with it) counts `YieldToCars` 0.4 (a left against oncoming cars) or
+  `YieldToCrossers` 0.75 (walkers, riders). `CarSaturation` 1800 veh/h a lane (`SignalPlan.Headway` 2 s), turn factors left
+  0.95, right 0.85, `Degree` 0.75. Lanes: the `LANE` car lanes showing the move, a shared lane split straight on 2 : turn 1.
+  Riders: their bike groups where the arm has them (else the cars' groups for its bike lanes), bike lanes showing the move (a
+  separated path: 1), `BikeSaturation` 3600/h x `BikeShare` 0.08, start loss 1 s. Walkers: per crossing `WalkersPerMetre` 0.6 x
+  crossing length x its group's green share (a two-stage crossing's least half), both ways together. A generator's rate is
+  the sum of its movements' with somewhere to go, its shares those movements to the arms' destinations.
+- **Measured and constants** (#1134 runs, `--fixed-fps 60`, 400-480 s): queues discharge at ~2 s headways as the formula
+  assumes; at 0.8 the 69 s J7's west arm (double left, 22.8/min) kept 3-6 cars through a cycle, so the degree is 0.75. Two
+  traffic fixes the rates showed: a generated car's way was found along one lane's path, so every through car took the same
+  lane of J13/J14's three (now the car's habit picks among side-by-side paths to the same exit, as `LaneFor` does); and the back
+  of a queue longer than the 110 m the cars read the lights from was dropped as stuck after 20 s (now a car standing right
+  behind one that waits, or behind a tram or rider, is `Queued`, not stuck).
+- **`--trafficcheck --at E,N` in a world with its own endpoints** (#1134, `TrafficProbe.World.cs`): they run (the probe puts
+  none unless `--feed-turns`); the junction under test is the one whose car endpoints centre nearest `--at` (`--junction NAME`).
+  At the end per junction that made anything, per mode and arm: made, arrived (cars and riders by turn), waiting in the
+  queue, with no way; per approach of the junction under test the longest queue standing and the shortest in each cycle;
+  movers dropped as stuck; red runs of every mode. Fails on a red run, cars made and none arrived, or a queue over 4 cars
+  through each of the last two cycles.
+- **`--trafficcheck --at E,N` in the test world without them** (an older copy, or with `--feed-turns`): a generator + destination 15 m in from the far end of each arm of the
   junction (each signalised approach within 60 m followed back up its road, `ArmEnds`), 12 cars a minute each.
   `--feed-turns L,T,R` gives each generator shares to the other arms' destinations by the turn that takes (the demo's split,
   the user: a share of destinations); `--feed`, `--dense` are off there. The probe prints cars made, arrived (by turn),

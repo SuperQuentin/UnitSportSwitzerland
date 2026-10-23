@@ -43,6 +43,24 @@ public static partial class InteriorGenerator
     public static InteriorLayout Generate(Footprint fp, Building b, bool rural = false,
         BuildingType type = BuildingType.None)
     {
+        // a house its owner drew on the web, approved (#1186): used when it plans into a valid interior
+        if (type == BuildingType.None && HouseLayouts.For(b.Egid) is { } house)
+        {
+            var drawn = Generate(fp, b, rural, type, house, out string why);
+            if (drawn != null)
+            {
+                var problems = InteriorValidator.Validate(drawn);
+                if (problems.Count == 0) return drawn;
+                why = string.Join("; ", problems.Take(3));
+            }
+            HouseLayouts.Warn?.Invoke($"house layout {b.Egid} ({fp.Key}) not used, the generated interior stays: {why}");
+        }
+        return Generate(fp, b, rural, type, null, out _);
+    }
+
+    private static InteriorLayout? Generate(Footprint fp, Building b, bool rural, BuildingType type, HouseLayout? house, out string why)
+    {
+        why = "";
         var rng = new Random(StableHash(fp.Key.ToString()));
         var (h, n) = Storeys(b);
 
@@ -81,6 +99,16 @@ public static partial class InteriorGenerator
         // Furnish, so anything that has to run over every finished plan (#498 cuts the facade
         // doors' doorways here) is written once and cannot miss either path.
         var site = BuildingTypes.SiteFor(fp.Key.ToString(), b.Kind, fp.Width, fp.Depth, b.MaxY - b.MinY);
+        if (house != null)
+        {
+            if (!TryHouse(layout, fp, house, new TileId(fp.Key.TileE, fp.Key.TileN), out why, out var extra)) return null;
+            if (fp.Extra.Count > 0) Entrances(layout, fp);
+            // a room cut into pieces is furnished once, in its biggest piece
+            foreach (var (piece, _) in extra) piece.Type = RoomType.Corridor;
+            Furnish(layout, rng);
+            foreach (var (piece, t) in extra) piece.Type = t;
+            return layout;
+        }
         bool planned = type == BuildingType.Ikea
             ? TryIkea(layout, fp.Door.Height)
             : site != BuildingType.None && TryIndustrial(layout, site, fp.Door.Height, rng);

@@ -21,7 +21,9 @@ done
 [ $NOCHUNKS = 1 ] && S_CHUNKS=0
 
 # --- config: tools/deploy.env, but variables already set in the environment win ---
-VARS="DEPLOY_HOST DEPLOY_PORT_SSH DEPLOY_DIR DEPLOY_CHUNKS_DIR GAME_PORT WEB_PORTS MDNS_NAME SERVER_ARGS SPACE_MARGIN_MB CHUNKS_SRC GODOT TILES TILES_DOMAIN TILES_URL TILES_PRECOMPRESS WEB_MEDIA WEB_ANTENNAS NAKAMA NAKAMA_DIR NAKAMA_PORT NAKAMA_URL ACCOUNTS"
+VARS="DEPLOY_HOST DEPLOY_PORT_SSH DEPLOY_DIR DEPLOY_CHUNKS_DIR GAME_PORT WEB_PORTS MDNS_NAME SERVER_ARGS SPACE_MARGIN_MB CHUNKS_SRC GODOT TILES TILES_DOMAIN TILES_URL TILES_PRECOMPRESS WEB_MEDIA WEB_ANTENNAS"
+VARS+=" LAYOUTS LAYOUTS_ADMINS LAYOUTS_PUBLIC_URL LAYOUTS_DB LAYOUTS_PORT LAYOUTS_TRUSTED_PROXIES SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASS SMTP_FROM"
+VARS+=" NAKAMA NAKAMA_DIR NAKAMA_PORT NAKAMA_URL ACCOUNTS"
 for v in $VARS; do [ -n "${!v+x}" ] && eval "_keep_$v=\${$v}"; done
 [ -f tools/deploy.env ] && . tools/deploy.env
 for v in $VARS; do k="_keep_$v"; [ -n "${!k+x}" ] && eval "$v=\${$k}"; done
@@ -36,6 +38,10 @@ elif [ -z "${TILES_URL:-}" ]; then TILES_URL=$([ -n "$TILES_DOMAIN" ] && echo "h
 WEB=$([ "$TILES" = 1 ] && echo "$DEPLOY_DIR/web" || true)   # the status page (#740) needs the tiles' Caddy
 WEB_MEDIA=${WEB_MEDIA:-test_output/web-media}                # its clips and pictures, made by tools/web-media.sh
 WEB_ANTENNAS=${WEB_ANTENNAS:-test_output/web-antennas/antennas-4g.json}   # the live map's 4G sites (#896), tools/deploy/antennas.py
+# house layouts (#1186): the layout service behind the same Caddy at /api/, its data in $DEPLOY_DIR/layouts
+LAYOUTS=$([ -n "$WEB" ] && echo "${LAYOUTS:-1}" || echo 0) LAYOUTS_PORT=${LAYOUTS_PORT:-5080} LAYOUTS_DIR=$DEPLOY_DIR/layouts
+LAYOUTS_PUBLIC_URL=${LAYOUTS_PUBLIC_URL:-$([ -n "$TILES_DOMAIN" ] && echo "https://$TILES_DOMAIN" || echo "${TILES_URL%/tiles/}")}
+LBUILD=build/layouts
 # Nakama, the account server (#1121, docs/notes/net/nakama.md): a step of its own (--nakama), in "everything" when NAKAMA=1
 NAKAMA=${NAKAMA:-0} NAKAMA_DIR=${NAKAMA_DIR:-$DEPLOY_DIR/nakama} NAKAMA_PORT=${NAKAMA_PORT:-7350}
 # the game server's account step (#1123, net/accounts): off, optional or required, against the Nakama players sign in to
@@ -135,6 +141,11 @@ if [ $S_BUILD = 1 ]; then
   "$GODOT" --headless --path . --export-release "Linux Server" "$BUILD/$BIN"
   [ -f "$BUILD/$BIN" ] || die "export failed, no $BUILD/$BIN"
   echo "  $BUILD: $(human "$(du -sb "$BUILD" | cut -f1)")"
+  if [ "$LAYOUTS" = 1 ]; then
+    rm -rf "$LBUILD"
+    dotnet publish tools/LayoutService -c Release -r linux-x64 --self-contained -v q -nologo -o "$LBUILD" >/dev/null || die "layout service publish failed"
+    echo "  $LBUILD: $(human "$(du -sb "$LBUILD" | cut -f1)") (house layouts, #1186)"
+  fi
 fi
 
 # .NET: Godot C# exports normally bundle the runtime (self-contained); only a framework-dependent export needs one on the host.
@@ -147,11 +158,12 @@ fi
 # --- 3. host setup: packages, .NET, dirs, mDNS, firewall, cron -----------------------------
 if [ $S_SETUP = 1 ]; then
   say "Host setup$([ $DRY = 1 ] && echo ' (report only)')"
-  rdir=$(tar -C tools/deploy -cf - remote-setup.sh unitsport.service.xml Caddyfile | rq 'd=$(mktemp -d) && tar -xf - -C "$d" && echo "$d"')
+  rdir=$(tar -C tools/deploy -cf - remote-setup.sh get-vocal-model.sh unitsport.service.xml Caddyfile | rq 'd=$(mktemp -d) && tar -xf - -C "$d" && echo "$d"')
   envs="DRY=$DRY TARGET_USER=\$(id -un) DEPLOY_DIR=$(qd "$DEPLOY_DIR") CHUNKS_DIR=$(qd "$CHUNKS_DIR") GAME_PORT=$GAME_PORT"
   envs+=" SSH_PORT=$DEPLOY_PORT_SSH WEB_PORTS=$(qd "$WEB_PORTS") MDNS_NAME=$(qd "$MDNS_NAME") VERSION=$(qd "$VERSION")"
   envs+=" DOTNET_MAJOR=$DOTNET_MAJOR NEED_DOTNET=$NEED_DOTNET HERE=$rdir"
   envs+=" TILES=$TILES TILES_SITE=$(qd "$TILES_SITE") TILES_PRECOMPRESS=$TILES_PRECOMPRESS"
+  envs+=" LAYOUTS_PORT=$LAYOUTS_PORT LAYOUTS_TRUSTED_PROXIES=$(qd "${LAYOUTS_TRUSTED_PROXIES:-}")"
   set +e
   "${SSH[@]}" "${SUDO_TTY[@]}" "$DEPLOY_HOST" "$SUDO env $envs bash $rdir/remote-setup.sh; rc=\$?; rm -rf $rdir; exit \$rc"
   rc=$?; set -e
@@ -161,7 +173,7 @@ fi
 stopped=0
 install_start() { # start-server.sh with this config baked in; cron and every restart run it
   sed -e "s|@DEPLOY_DIR@|$DEPLOY_DIR|; s|@CHUNKS_DIR@|$CHUNKS_DIR|; s|@GAME_PORT@|$GAME_PORT|" tools/deploy/start-server.sh \
-    | awk -v a="$SERVER_ARGS${TILES_URL:+ --tiles-url $TILES_URL}$([ "$ACCOUNTS" != off ] && echo " --accounts $ACCOUNTS --nakama-url $NAKAMA_URL")${WEB:+ --status-file $WEB/status.json --livemap-file $WEB/players.json}" '{gsub(/@SERVER_ARGS@/, a)} 1' > "$OUT/start-server.sh"
+    | awk -v a="$SERVER_ARGS${TILES_URL:+ --tiles-url $TILES_URL}$([ "$ACCOUNTS" != off ] && echo " --accounts $ACCOUNTS --nakama-url $NAKAMA_URL")${WEB:+ --status-file $WEB/status.json --livemap-file $WEB/players.json}$([ "$LAYOUTS" = 1 ] && echo " --house-layouts $LAYOUTS_DIR/house-layouts.json")" '{gsub(/@SERVER_ARGS@/, a)} 1' > "$OUT/start-server.sh"
   [ $DRY = 1 ] && return
   # the status page (#740), served by the same Caddy as the tiles; the server keeps status.json beside it
   [ -n "$WEB" ] && rq "mkdir -p $(qd "$WEB") && cat > $(qd "$WEB/index.html")" < tools/deploy/web/index.html
@@ -182,9 +194,28 @@ install_start() { # start-server.sh with this config baked in; cron and every re
       echo "  web media uploaded ($(du -sh "$WEB_MEDIA" | cut -f1))"
     fi
   elif [ -n "$WEB" ]; then echo "  no $WEB_MEDIA: the page shows its drawn background (make the clips with tools/web-media.sh)"; fi
+  if [ "$LAYOUTS" = 1 ]; then install_layouts; else rq "rm -f $(qd "$DEPLOY_DIR/start-layouts.sh")"; fi
   rq "cat > $(qd "$DEPLOY_DIR/start-server.sh") && chmod 755 $(qd "$DEPLOY_DIR/start-server.sh")" < "$OUT/start-server.sh"
   # the in-game /update (#730): fetches a release while the server runs, start-server.sh switches to it
   rq "cat > $(qd "$DEPLOY_DIR/update-server.sh") && chmod 755 $(qd "$DEPLOY_DIR/update-server.sh")" < tools/deploy/update-server.sh
+}
+install_layouts() { # house layouts (#1186): the page, the settings (secrets: a 0600 file, never a command line), the start script
+  rq "cat > $(qd "$WEB/houses.html")" < tools/deploy/web/houses.html
+  [ -z "${LAYOUTS_ADMINS:-}" ] && echo "  LAYOUTS_ADMINS is empty: nobody can approve a house layout (set it in tools/deploy.env)"
+  [ -z "${SMTP_HOST:-}" ] && echo "  SMTP_HOST is empty: login links go to $LAYOUTS_DIR/layouts.log instead of an email"
+  { for v in LAYOUTS_DB SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASS SMTP_FROM; do printf '%s=%q\n' "$v" "${!v:-}"; done
+    printf '%s=%q\n' ADMIN_EMAILS "${LAYOUTS_ADMINS:-}" PUBLIC_URL "$LAYOUTS_PUBLIC_URL" LAYOUTS_URLS "http://127.0.0.1:$LAYOUTS_PORT" \
+      LAYOUTS_DATA "$LAYOUTS_DIR" LAYOUTS_CHUNKS "$CHUNKS_DIR" LAYOUTS_EXPORT "$LAYOUTS_DIR/house-layouts.json"
+  } | rq "mkdir -p $(qd "$LAYOUTS_DIR") && umask 077 && cat > $(qd "$LAYOUTS_DIR/layouts.env")"
+  sed -e "s|@DEPLOY_DIR@|$DEPLOY_DIR|" tools/deploy/start-layouts.sh | rq "cat > $(qd "$DEPLOY_DIR/start-layouts.sh") && chmod 755 $(qd "$DEPLOY_DIR/start-layouts.sh")"
+}
+upload_layouts() { # the published service: a new app/ dir, then the session restarted on it
+  [ "$LAYOUTS" = 1 ] && [ -d "$LBUILD" ] || return 0
+  if [ $DRY = 1 ]; then echo "  [dry] upload $LBUILD -> $LAYOUTS_DIR/app, restart the layout service"; return; fi
+  tar -C "$LBUILD" -czf - . | rq "rm -rf $(qd "$LAYOUTS_DIR/app.new") && mkdir -p $(qd "$LAYOUTS_DIR/app.new") && tar -xzf - -C $(qd "$LAYOUTS_DIR/app.new") \
+    && chmod 755 $(qd "$LAYOUTS_DIR/app.new/LayoutService") && { tmux kill-session -t unitsport-layouts 2>/dev/null || true; } \
+    && rm -rf $(qd "$LAYOUTS_DIR/app") && mv $(qd "$LAYOUTS_DIR/app.new") $(qd "$LAYOUTS_DIR/app")" || die "layout service upload failed"
+  echo "  $LAYOUTS_DIR/app (house layout service; start-server.sh starts it)"
 }
 stop_server() { [ $stopped = 1 ] && return; rx "tmux kill-session -t unitsport 2>/dev/null || true"; stopped=1; }
 
@@ -202,6 +233,7 @@ if [ $S_BUILD = 1 ]; then
       && cd $(qd "$DEPLOY_DIR/releases") && ls -1dt */ | tail -n +4 | xargs -r rm -rf"
     echo "  $rel (current), older than the last 3 releases removed"
   fi
+  upload_layouts
 fi
 
 # --- 5. terrain chunks: copy what differs, never delete unless --prune ------------------------------

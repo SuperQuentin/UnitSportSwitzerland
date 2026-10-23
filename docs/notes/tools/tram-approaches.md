@@ -7,6 +7,31 @@ The junction planner's cores (`junction-planner`) take the tram tracks running t
   tracks offset by `TrackOffset`). For each written core, every track crossing its outline inward is traced over the switches
   inside (straight on, cos > 0.5, as the trains) to where it leaves; the arms are the mouths each crossing lies within 3 m of.
   Same arm or no arm: left out (counted). Move: `SignalPlan.Turn` on the arms' headings.
+- **On its own bed** (#1161, the user: "isn't it just like a bike lane?"): a crossing no mouth holds within 3 m belongs to the arm
+  it runs beside (`TileRewriter.Alongside`, `ArmAlongside`): within 30 degrees of the arm's way (inward where it enters, outward
+  where it leaves) and where the arm's cars go that way, up to the carriageway's width plus `TramBedMargin` 4 m past its kerb, from
+  6 m inside to 20 m outside the mouth; the nearest. So a double track on a central reservation between a divided road's
+  carriageways belongs to the carriageway its way (left of the cars), a bed beside the road to the road (right of them). In the
+  move (`SignalPlan.Turn`) an arm with a twin within 30 degrees (a divided road's other carriageway) is a way out only where its
+  cars leave by it. **One junction**: two overlapping cores (`junction-planner` 5c) with a tram track within the circle the street
+  between their nodes spans (`TramAcross`: across it on the reservation, or turning off it) merge, as a group failing its checks
+  does (`TileRewriter.Merge`): one plan for both carriageways and the tram, not two plans each blind to the other's trams.
+  Geneva (#1161, `D:\UnitSportSwitzerland\test1161`, the 25 tiles of `test348\geneva` rewritten by main and by this): tracks
+  through a core not from arm to arm 54 -> 34, tram paths 272 -> 280 (lit 105 -> 117), tram groups 103 -> 110, tram lanes 86 ->
+  95, lights 235 -> 233 (pairs merged), 0 invalid. After the squeeze (`traffic-signals`, 120 s): 1 plan squeezed to 120 s, 4 kept
+  over it with every green at its minimum (2499654,1116550 133 s 7 phases, trams; 2499749,1118282 143 s 6; 2500974,1117838 150 s
+  9; 2502325,1118596 136 s 8: the three without trams were fixed-time fallbacks under 120 s before); 6 junctions still time their
+  trams out of the conflict times because `Retime` fails there for another reason than the cycle (main: 2). Approaches without a
+  main pole 52 -> 63, all at tram junctions (merged for the tram or with a bed beside the carriageway: open, the pole's foot not
+  clear). Own tram poles on a reservation: 0 in Geneva (the clearance takes the rail bed for a road: the nearest pole right of
+  the track takes the head). Test region tram `--trafficcheck` at J16 (8 trams, 300 cars,
+  180 s): 7 lines crossed, 0 on red, no car red run. The signal check takes a tram path's end offset across its own track's way.
+- **Its side of the cars** (`SignalArm.TramSide`, `SignalGroup.TramSide`, stored in a tram group's moves byte, bits 3-4): -1 where
+  its lane crosses the stop line left of every arriving car lane (a reservation, a track in the street's middle beside a shared
+  lane), +1 right of them (a bed beside the road), 0 among them. Conflicts (`SignalPlan.Conflicts`, which the chords never saw: one
+  arm): its approach's shared-lane cars turning across it (left for -1, right for +1) give way to the tram (permissive: the flasher,
+  the riders' 3 s lead, the runtime's `ConflictPoints`), an arrow or riders turning across it never share its green (hard). The
+  trams never give way (#1115).
 - **`JPTH` kind `Tram`**: points on the track the trams run on, ends where the track's line crosses the mouths (not the road's
   axis), offsets as the track lies right of its line (+ at the start, - at the end, the usual convention), width 2.4 m, the
   approach's tram group at lights, -1 without.
@@ -51,8 +76,13 @@ The junction planner's cores (`junction-planner`) take the tram tracks running t
     upright, slanted for a group that only turns; its arrow on a plate below where its trams go several ways.
 - **`LANE`**: a tram lane (`ApproachLaneKind.Tram`) on the lit approach's record where its track crosses the cars' line, left to
   right among the others; its moves the trams'.
-- **Poles** (the user: "pole only, repeated on both sides if repeater pole"): `SignalPoleFlags.Tram` (32) on the approach's main
-  pole and on its repeater (the left kerb's or the refuge's `Second` pole) where it has one; never on a span wire or an arm. Model
+- **Poles** (the user: "pole only, repeated on both sides if repeater pole"; #1161: "as long as it sits at least on the right of
+  the stop line, the closer the better (if there is an island)", and "a tram head can be on the left pole, just like for cars. It's
+  just not mandatory, the one on the right is"): `SignalPoleFlags.Tram` (32). The mandatory head right of the tram's own stop line:
+  on a pole of its own `TramPoleAside` 1.7 m right of the track where that is off the carriageway (half a metre past its kerb,
+  `TramPoleSpot`) and clear (a reservation between track and cars, a bed's far side), else on the arm's pole nearest to the right of
+  the track (J16: the reservation side's kerb pole; a track in the street: the right kerb's main pole). A repeat on the approach's
+  repeater (`Second`) pole where it stands left of the track. Never on a span wire or an arm. Model
   viewer: "Traffic light - Tram", "Tram, Romandy", "Tram, two ways", "Tram, Romandy, two ways".
 - **Stops**: OSM's (`--osm-overlay` writes `osm_tram_stops.tsv` beside `osm_overlay.tsv`: `railway=tram_stop`, and
   `public_transport=stop_position` with `tram=yes`) merged with swissTLM3D's (`tram_stops.tsv`, preprocessor `--tram-stops --out
@@ -62,9 +92,14 @@ The junction planner's cores (`junction-planner`) take the tram tracks running t
   run, facing them; one per track and direction within 40 m. Geneva centre: 135 OSM + 81 TLM stops. Model viewer: "Road prop -
   TramStop".
 - **Test region**: J14 has two tracks 3.2 m apart in the artery (`TTS`, `TTN`, TLM-like, `OnStreet`) and stops 150 m either side.
+  Reserved track (#1161, `signal-test-region`): J16 a divided road (carriageways 14 m apart) with a double track on its
+  reservation straight across a cross road (Geneva tile), J17 the same tram turning left off it into the cross road's middle
+  (Vaud), J18 a T off it (Vaud). Tier 0: `SignalTestRegionTests.Trams_on_their_own_bed_*`, `TramTests` (the attach rule, the side).
 - **Switches**: tram tracks meeting at a node of their own run through it uncut (`PipelineOptions.ThroughNode`, the junction
   builder skips the node): a rail junction trimmed them back, a gap the trams could not cross (Geneva: 250 → 291 tram paths).
-- **120 s kept** (`LayoutWrite`, after `Retime`): where trams take a plan past the legal maximum, their leads go first, then the
+- **No trams dropped for the cycle** (#1161): a plan past 120 s is squeezed, then kept and reported (`traffic-signals`), never
+  timed without its trams or their leads for its length. Only where the conflict times cannot time it at all (`LayoutWrite`,
+  after `Retime` fails): their leads go first, then the
   plan is timed for a 26 m tram (`ConflictTimes.TramShortLength`), then for the cars' times alone (its trams out of the conflict
   times); the rewrite counts and names them. A tram group stays out of the phases where it would take the walkers' green it crosses
   (a turning tram over a crosswalk), keeping them at least one: J14's branch had grown a walkers' phase of its own (153 s).

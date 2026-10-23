@@ -188,6 +188,11 @@ public sealed class LightDesk
         var bands = Music is { HasBands: true } mb ? mb : (MusicMoment?)null;
         float bass = bands?.Bass ?? 0.5f, lift = ((bands?.Bright ?? 0.5f) - 0.5f) * 20f;
         _pixelGain = bands is { } hb ? 0.45f + 1.1f * hb.Hat : 1f;
+        // the tune (#1153): a climbing run lifts the heads and warms them, a falling one sinks and cools them;
+        // a build or a drop owns the rig, the melody waits
+        var melody = Music is { Melody.Has: true, Build: <= 0f, SinceDrop: >= 2.5f } mm ? mm.Melody : default;
+        _melodyLift = MelodyLift * melody.Rise;
+        _melodyTint = melody.Rise;
         uint ph32 = (uint)(_e.Seed * 7919 + (SectionBar / 2) * 104729 + (int)Section * 15485863 + (int)MathF.Floor(beat / 64f) * 32452843);
         ph32 ^= ph32 >> 13; ph32 *= 0x5bd1e995; ph32 ^= ph32 >> 15;
         _phraseHash = ph32;
@@ -271,6 +276,7 @@ public sealed class LightDesk
                 break;
         }
         if (bands is { } m && Section is not (ShowSection.Blackout or ShowSection.WalkIn)) Accents(m, beat);
+        if (melody.Has && Section is not (ShowSection.Blackout or ShowSection.WalkIn)) Singer(melody, beat);
         StrobeBursts();
         Effects(beat);
         Bands(beat);
@@ -428,6 +434,35 @@ public sealed class LightDesk
         if (m.SinceDrop < 2.5f)
             Blinders(MathF.Exp(-m.SinceDrop * 1.5f));
     }
+
+    /// <summary>How far a climbing run lifts the washes and beams at its top note, degrees of tilt.</summary>
+    private const float MelodyLift = 25f;
+    /// <summary>The colours a run leans to: up warm, down cool.</summary>
+    private static readonly Color RiseTint = new(1f, 0.55f, 0.15f), FallTint = new(0.2f, 0.35f, 1f);
+    private float _melodyLift, _melodyTint;
+
+    /// <summary>Whether the front spots are on the singer now (a long note, or the voice coming back), for the debug window.</summary>
+    public bool OnSinger { get; private set; }
+
+    /// <summary>
+    /// The front spots find the singer (centre stage): through a long note, full and narrow; as the
+    /// voice comes back after a break, snapped on and fading over four seconds.
+    /// </summary>
+    private void Singer(in MelodyMoment m, float beat)
+    {
+        float entry = m.SinceIn < 4f ? MathF.Exp(-m.SinceIn * 0.6f) : 0f;
+        float on = Math.Max(m.Hold > 0f ? 1f : 0f, entry);
+        OnSinger = on > 0.05f;
+        if (OnSinger) Spots(on, new Color(1f, 0.92f, 0.8f), aimCentre: true, beat, zoom: 0.12f);
+    }
+
+    /// <summary><paramref name="c"/> leaned towards the melody's colour: warm up a run, cool down one.</summary>
+    private Color Tinted(Color c) => _melodyTint switch
+    {
+        > 0f => c.Lerp(RiseTint, 0.45f * _melodyTint),
+        < 0f => c.Lerp(FallTint, -0.45f * _melodyTint),
+        _ => c,
+    };
 
     /// <summary>Whether the rig is in a strobe burst now (the debug window shows it).</summary>
     public bool Strobing { get; private set; }
@@ -611,8 +646,8 @@ public sealed class LightDesk
         for (int i = 0; i < g.Length; i++)
         {
             float a = (beat - Lag(i, g.Length)) * speed * MathF.Tau;
-            Aim(g[i], MathF.Sin(a) * sway * Mirror(i, g.Length), tilt + MathF.Cos(a) * sway * 0.5f);
-            Paint(g[i], color(i));
+            Aim(g[i], MathF.Sin(a) * sway * Mirror(i, g.Length), tilt + _melodyLift + MathF.Cos(a) * sway * 0.5f);
+            Paint(g[i], Tinted(color(i)));
             // the washes never go fully dark with a pattern: they light the stage
             Open(g[i], dim * (0.35f + 0.65f * Mask(i, g.Length)) * Rhythm(i, g.Length, 0.5f), zoom: 0.7f);
         }
@@ -645,8 +680,8 @@ public sealed class LightDesk
             // each head swings on its own lag: a wave, a mirror, or all together
             float w = (Beat - Lag(i, g.Length)) * MathF.PI / 2f;
             float wave = _phrase == Phrase.Sync ? 6f : 12f;
-            Aim(g[i], off * fan * 2f + MathF.Sin(w * 0.5f) * wave * Mirror(i, g.Length), tilt + MathF.Sin(w) * wave * 0.6f);
-            Paint(g[i], color);
+            Aim(g[i], off * fan * 2f + MathF.Sin(w * 0.5f) * wave * Mirror(i, g.Length), tilt + _melodyLift + MathF.Sin(w) * wave * 0.6f);
+            Paint(g[i], Tinted(color));
             Open(g[i], open ? dim(i) * Mask(i, g.Length) * Rhythm(i, g.Length, 1f) : 0f, zoom: 0.2f);
         }
     }
