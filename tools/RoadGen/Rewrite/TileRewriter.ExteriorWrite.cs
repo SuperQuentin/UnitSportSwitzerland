@@ -73,6 +73,44 @@ public static partial class TileRewriter
         }
     }
 
+    /// <summary>
+    /// Where a tram lane crossing the stop line <paramref name="lateral"/> m right of the arm's axis lies beside the arriving car lanes
+    /// of <paramref name="mouth"/> (#1161, <see cref="SignalArm.TramSide"/>): -1 left of them all, +1 right, 0 among them.
+    /// </summary>
+    internal static sbyte TramSide(Section mouth, double lateral)
+    {
+        double x = mouth.CarriagewayLeft, left = double.NaN, right = double.NaN;
+        for (int k = Math.Max(0, mouth.FirstCarriageway); k < mouth.Strips.Count; k++)
+        {
+            var strip = mouth.Strips[k];
+            if (strip.IsCarLane && strip.Way == StripWay.In)
+            {
+                if (double.IsNaN(left)) left = x;
+                right = x + strip.Width;
+            }
+            x += strip.Width;
+        }
+        return double.IsNaN(left) ? (sbyte)0 : lateral < left ? (sbyte)-1 : lateral > right ? (sbyte)1 : (sbyte)0;
+    }
+
+    /// <summary>A tram head's own pole stands this far right of its track's centre (m): past a tram's side (1.2 m) and its sway.</summary>
+    public const double TramPoleAside = 1.7;
+
+    /// <summary>...and at least this far off the carriageway's kerb (m).</summary>
+    public const double TramPoleKerb = 0.5;
+
+    /// <summary>
+    /// Where a tram head's own pole stands across its arm (#1161, m right of the axis) for a track crossing the stop line
+    /// <paramref name="lateral"/> m right of it, beside a carriageway from <paramref name="left"/> to <paramref name="right"/>:
+    /// <see cref="TramPoleAside"/> right of the track, where that is off the carriageway (a reservation between the track and the
+    /// cars, a bed's far side); null where it would stand in the carriageway (a track in the street: the kerb pole then).
+    /// </summary>
+    public static double? TramPoleSpot(double left, double right, double lateral)
+    {
+        double at = lateral + TramPoleAside;
+        return at < left - TramPoleKerb || at > right + TramPoleKerb ? at : null;
+    }
+
     private static SignalPlan? WriteSignals(JunctionPlan jp, RoadGenResult result, Dictionary<TileId, List<RoadSignal>> signals,
         Dictionary<TileId, List<RoadApproach>> approaches, Cantons? cantons, SignalStats signalStats, LayoutWriteStats stats,
         Dictionary<TileId, List<RoadPointProp>> signs, Func<Vec2, bool> clear, Func<Vec2, bool>? building = null,
@@ -117,7 +155,8 @@ public static partial class TileRewriter
                 Banned: approach ? a.Wants.Banned : SignalMoves.None, BikeBetween: between,
                 StorageM: Room(a.Length), LeftStorageM: Room(Run(PocketRules.Left)), RightStorageM: Room(Run(PocketRules.Right)),
                 HalfInM: halfIn, HalfOutM: halfOut, RiderBox: ex.Bars.Any(b => b.Kind == BarKind.BikeBox),
-                TramMoves: trams?.GetValueOrDefault(arms.Count).Moves ?? SignalMoves.None, RiderRight: riderRight));
+                TramMoves: trams?.GetValueOrDefault(arms.Count).Moves ?? SignalMoves.None,
+                TramSide: trams is not null && trams.TryGetValue(arms.Count, out var tram) ? TramSide(mouth, tram.Lateral) : (sbyte)0, RiderRight: riderRight));
         }
         if (arms.Count(x => x.In) < 2) return null;
         RidersRightOnRed(jp, arms, exterior, stats);
@@ -295,20 +334,43 @@ public static partial class TileRewriter
                 }
             }
         }
-        // the trams' heads (#1057, the user: "pole only, repeated on both sides if repeater pole"): on the approach's main pole and on
-        // its repeater (the left kerb's or the refuge's) where it has one; on any of the arm's poles where it has neither
-        foreach (var (k, (moves, _)) in trams ?? new Dictionary<int, (SignalMoves, double)>())
+        // the trams' heads (#1161, the user: "as long as it sits at least on the right of the stop line, the closer the better (if
+        // there is an island)"): on a pole of their own right of the tram's stop line, as close to its track as the tram allows, where
+        // that spot is off the carriageway and clear (a central reservation, a bed's side); else on the arm's pole nearest to the
+        // right of the track (the right kerb's main pole). A repeat left of its line where the cars have one (the user: "a tram head
+        // can be on the left pole, just like for cars. It's just not mandatory"): on the approach's repeater pole (#1057's rule)
+        foreach (var (k, (moves, lateral)) in trams ?? new Dictionary<int, (SignalMoves, double)>())
         {
             if (moves == SignalMoves.None || plan.Groups.All(g => g.Kind != SignalGroupKind.Tram || g.Arm != k)) continue;
-            bool any = false;
-            for (int i = 0; i < poles.Count; i++)
-                if (poles[i].Arm == k && (poles[i].Flags & (SignalPoleFlags.Main | SignalPoleFlags.Second)) != 0)
-                {
-                    poles[i] = poles[i] with { Flags = poles[i].Flags | SignalPoleFlags.Tram };
-                    any = true;
-                }
-            if (!any && poles.FindIndex(p => p.Arm == k) is var at and >= 0) poles[at] = poles[at] with { Flags = poles[at].Flags | SignalPoleFlags.Tram };
             stats.TramGroups += plan.Groups.Count(g => g.Kind == SignalGroupKind.Tram && g.Arm == k);
+            var ex = exterior[k];
+            var a = ex.Arm;
+            double m0 = jp.Core!.Mouths.First(m => m.Arm == a.Arm).Station;
+            var axis = a.Axis!;
+            double stop = ex.CarStop ?? 0;
+            var sec = ExteriorPlanner.SectionAt(a, stop);
+            double own = TramPoleSpot(sec.CarriagewayLeft, sec.CarriagewayRight, lateral) ?? double.NaN;
+            var foot = axis.At(m0 + stop, own);
+            // (each pole's place across the arm, m right of its axis at the stop line)
+            double Across(SignalPole p) => (new Vec2(p.X + home.MinE, home.MaxN - p.Z) - axis.At(m0 + stop, 0)).Dot(axis.RightAt(m0 + stop));
+            for (int i = 0; i < poles.Count; i++)
+                if (poles[i].Arm == k && (poles[i].Flags & SignalPoleFlags.Second) != 0 && Across(poles[i]) < lateral)
+                    poles[i] = poles[i] with { Flags = poles[i].Flags | SignalPoleFlags.Tram };
+            if (!double.IsNaN(own) && clear(foot))
+            {
+                var local = Local(home, [foot], q => SampleAt(a, q), 0f);
+                var u = axis.DirAt(m0);
+                poles.Add(new SignalPole(local[0], local[1], local[2], Heading(u), Heading(axis.RightAt(m0)), (byte)k, SignalPoleFlags.Tram));
+                stats.TramPolesOwn++;
+                continue;
+            }
+            int best = -1;
+            double near = double.MaxValue;
+            for (int i = 0; i < poles.Count; i++)
+                if (poles[i].Arm == k && Across(poles[i]) - lateral is var d and > -0.1 && d < near) (near, best) = (d, i);
+            if (best < 0) best = poles.FindIndex(p => p.Arm == k && (p.Flags & SignalPoleFlags.Main) != 0);
+            if (best < 0) best = poles.FindIndex(p => p.Arm == k);
+            if (best >= 0) poles[best] = poles[best] with { Flags = poles[best].Flags | SignalPoleFlags.Tram };
         }
         var centre = Local(home, [jp.Centre], p => SampleAt(jp.Arms[0], p), 0f);
         var record = new RoadSignal { X = centre[0], Y = centre[1], Z = centre[2], Stops = stops, Plan = plan, Poles = poles };

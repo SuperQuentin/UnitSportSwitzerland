@@ -47,8 +47,12 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   pocket), each only if that pocket exists, the higher ranked road first; a T: main, main left +
   its through, side; else split phasing (each approach on its own; one none of whose movements conflict hard with a phase's goes
   with it, #1030: Geneva's 10-arm node at 2500974,1117838 ran 9 phases to 157 s once timed from conflict times, now 107 s in
-  tier 0 `ManyArms_StayWithinTheLegalMaximum`). **120 s is the legal maximum** (the user): a conflict-timed plan past it is
-  not taken (`Retime`), and `--signal-check` fails on any cycle over it. Then each phase takes the pedestrians, bikes and right
+  tier 0 `ManyArms_StayWithinTheLegalMaximum`). **120 s is the legal maximum** (the user; #1161: "squeeze to 120s, and then only allow
+  overflow but report until 1120 lands"): a plan past it, fixed or conflict-timed, has every green squeezed toward its minimum
+  (4 s, walkers' 5 s; turn phases' queue-clearing greens and island stretches included, by what each has above it; intergreens,
+  leads and the trams' conflict times kept, `SignalPlan.Squeezed`); still over with every green at its minimum (too many phases)
+  it is kept as it is (`Overflows`) and reported: the rewrite's `cycles (#1161)` line lists each (where, cycle, phases), and
+  `--signal-check` warns per junction (`WARNING over 120 s`, its phases counted from the stored greens) without failing. Then each phase takes the pedestrians, bikes and right
   arrows nothing green stops; a right arrow no phase carries becomes a full green with its
   approach (+ flasher). The user's 6-phase table holds exactly (test `FullCrossroads_RunsTheSixPhases`).
   Correction found while building it: a T's side-road right overlap goes with the main left

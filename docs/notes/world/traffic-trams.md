@@ -46,5 +46,5 @@ Measured (Oct 21 2026, headless `--fixed-fps 60`):
   0 on red; cars: no red run.
 
 Not done: trams reverse at a stub terminus (they stand and are dropped), doors, OSM `railway=tram_stop`, cars keeping off tracks
-outside junctions, a right-turning car across a tram on its own bed beside the road at lights (same arm: the chord model sees no
-conflict).
+outside junctions. (A car turning across a tram on its own bed beside it at lights, same arm, gives way since #1161: the tram
+group's side, `tools/tram-approaches`.)
