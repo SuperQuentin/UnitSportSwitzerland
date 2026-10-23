@@ -226,15 +226,23 @@ internal sealed partial class XrCabControls : Node3D
             // the Bosch remote inboard of the left grip (#1167): where the mesh draws it, from the rider's
             // eye on this bike's fit. Both are bike space flipped to the eye frame's (−x the rider's left,
             // −z ahead), so the poke sits on the drawn remote; it steps the assist level
-            var bike = player?.Vehicle as Bicycle;
-            var remote = bike != null ? Avatar.BikeMeshBuilder.RemoteAt(bike.Frame) : new Vector3(0.2f, 1.15f, 0.3f);
-            var eye = bike?.FirstPersonEye ?? new Vector3(0f, 1.6f, -0.05f);
-            Add(Kind.Poke, new Vector3(-remote.X, remote.Y, -remote.Z) - eye, plus: PlayerInput.EngineToggle);
+            Add(Kind.Poke, player?.Vehicle is Bicycle bike ? EBikeRemote(bike) : new Vector3(-0.2f, -0.45f, -0.35f),
+                plus: PlayerInput.EngineToggle);
         }
         else if (context == "steamer")
             // the whistle cord overhead: pulled down, it blows
             Add(Kind.Hold, new(0.15f, 0.3f, -0.25f), Vector3.Down, PlayerInput.Horn, null);
         if (context != "") GD.Print($"[xr] cab controls: {context}, {_controls.Count}");
+    }
+
+    /// <summary>
+    /// The e-bike's remote in the eye frame (#1167): <see cref="Avatar.BikeMeshBuilder.RemoteAt"/> and the
+    /// rider's eye, both bike space flipped to the eye frame's (−x the rider's left, −z ahead).
+    /// </summary>
+    internal static Vector3 EBikeRemote(Bicycle bike)
+    {
+        var remote = Avatar.BikeMeshBuilder.RemoteAt(bike.Frame);
+        return new Vector3(-remote.X, remote.Y, -remote.Z) - bike.FirstPersonEye;
     }
 
     private void Add(Kind kind, Vector3 at, Vector3? axis = null, string? plus = null, string? minus = null, float step = 0.05f)

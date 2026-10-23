@@ -2954,7 +2954,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     }
 
     /// <summary>The vehicle as it is right now, to hand to the world.</summary>
-    private VehicleState CaptureVehicle(bool wrecked)
+    internal VehicleState CaptureVehicle(bool wrecked)
     {
         var heading = -GlobalTransform.Basis.Z with { Y = 0 };
         heading = heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector3.Forward;
