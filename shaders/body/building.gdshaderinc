@@ -676,9 +676,11 @@ void vertex() {
 }
 
 void fragment() {
+#ifndef NO_DISCARD
     if (portal_clipped(world_pos, CAMERA_POSITION_WORLD) || open_door_leaf(world_pos)) {
         discard;
     }
+#endif
     vec3 n = facet_normal(VERTEX, INV_VIEW_MATRIX);
     // faces are not consistently wound in the source TINs, so orient toward the viewer
     if (!FRONT_FACING) {
@@ -882,9 +884,11 @@ void fragment() {
     // dissolve anything between the camera and its subject, using the same 4x4 Bayer pattern
     // the colour quantiser below uses, so the fade reads as part of the renderer
     float keep = sightline_keep(world_pos);
+#ifndef NO_DISCARD
     if (keep < 1.0 && keep < bayer4(FRAGCOORD.xy)) {
         discard;
     }
+#endif
 
 #ifdef STYLE_LIT
     // valley mist of a running occasion; a no-op on an ordinary day

@@ -71,9 +71,11 @@ void vertex() {
 }
 
 void fragment() {
+#ifndef NO_DISCARD
     if (portal_clipped(world_pos, CAMERA_POSITION_WORLD)) {
         discard;
     }
+#endif
     vec3 col = COLOR.rgb;
     int s = int(style + 0.5);
     if (s == 8 && !FRONT_FACING) {
@@ -100,9 +102,11 @@ void fragment() {
         // of aliasing into broken dots. Triangle paint has a constant lat, so it always draws.
         // Anti-aliasing, not the PS1 finish: it keeps the dither in every style.
         float px = 2.0 / max(fwidth(lat), 1e-4);
+#ifndef NO_DISCARD
         if (clamp(px - 0.5, 0.0, 1.0) < bayer4(FRAGCOORD.xy) + 0.5 / 16.0) {
             discard;
         }
+#endif
     } else if (s == 4) {
         // sleepers across the ballast, roughly prototypical 0.65 m spacing
         if (fract(along / 0.65) < 0.45) {

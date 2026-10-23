@@ -37,9 +37,11 @@ void vertex() {
 }
 
 void fragment() {
+#ifndef NO_DISCARD
     if (portal_clipped(world_pos, CAMERA_POSITION_WORLD)) {
         discard;
     }
+#endif
     vec3 n = facet_normal(VERTEX, INV_VIEW_MATRIX);
 
     float mask = COLOR.a;

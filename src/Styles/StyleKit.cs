@@ -339,16 +339,14 @@ public static class StyleKit
     private static void Configure(ShaderMaterial m, MaterialRole role, VisualStyle style)
     {
         var (from, path) = Resolve(style, role);
-        // a standalone headset's water never reads the scene's depth (#1112, shaders/body/water.gdshaderinc)
-        if (role == MaterialRole.Water && Core.Platform.IsStandaloneVr
-            && (path.EndsWith("ps1_water.gdshader") || path.EndsWith("cartoon_water.gdshader")))
-            path = path.Replace(".gdshader", "_standalone.gdshader");
+        // a standalone headset's own variant where a style has one (#1112): no discard (it turned a Quest's
+        // early depth rejection off), no read of the scene's depth, a lighter finish (NO_DISCARD, STANDALONE)
+        if (Core.Platform.IsStandaloneVr && path.Replace(".gdshader", "_standalone.gdshader") is var standalone
+            && ResourceLoader.Exists(standalone))
+            path = standalone;
         if (role == MaterialRole.Terrain && Core.CmdArgs.Has("--plainterrain")) path = "res://shaders/debug_plain_terrain.gdshader";
         if (role == MaterialRole.Terrain && Core.CmdArgs.Has("--litterrain")) path = "res://shaders/debug_lit_terrain.gdshader";
         if (role == MaterialRole.Terrain && Core.CmdArgs.Int("--terrainvariant") is int tv) path = $"res://shaders/debug_terrain_variant_{tv}.gdshader";
-        // and its terrain has no discard (shaders/body/terrain.gdshaderinc, NO_DISCARD)
-        if (role == MaterialRole.Terrain && Core.Platform.IsStandaloneVr && path.EndsWith("cartoon_terrain.gdshader"))
-            path = path.Replace(".gdshader", "_standalone.gdshader");
         var shader = GD.Load<Shader>(path);
         if (m.Shader != shader) m.Shader = shader;
         // PS1's finish (shaders/common/retro.gdshaderinc) belongs to PS1: off wherever another

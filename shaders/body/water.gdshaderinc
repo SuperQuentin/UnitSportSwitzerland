@@ -156,9 +156,11 @@ float wave_height_here() {
 }
 
 void fragment() {
+#ifndef NO_DISCARD
     if (portal_clipped(world_pos, CAMERA_POSITION_WORLD)) {
         discard;
     }
+#endif
     vec2 ground = pattern_xz(world_pos);
     float dist = length(VERTEX);
     vec3 det = water_detail(ground);

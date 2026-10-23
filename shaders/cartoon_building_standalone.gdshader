@@ -1,0 +1,8 @@
+shader_type spatial;
+// cartoon_building without discard, for a standalone headset (#1112, Styles/StyleKit): a discard turned a
+// Quest's early depth rejection off, and a city's every hidden layer was shaded
+#define NO_DISCARD
+#define STANDALONE
+#define STYLE_LIT
+#define STYLE_CARTOON
+#include "res://shaders/body/building.gdshaderinc"
