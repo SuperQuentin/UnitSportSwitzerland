@@ -79,9 +79,9 @@ public static class RenderCensus
         }
         foreach (var (kind, count) in phys.OrderByDescending(kv => kv.Value))
             sb.Append(System.FormattableString.Invariant($"\n  physics {count,5}  {kind}"));
-        // where the areas are
+        // where the areas and the moving bodies are
         var areas = new Dictionary<string, int>();
-        foreach (var n in root.FindChildren("*", nameof(Area3D), true, false))
+        foreach (var n in root.FindChildren("*", nameof(Area3D), true, false).Concat(root.FindChildren("*", nameof(AnimatableBody3D), true, false)))
         {
             string owner = System.Text.RegularExpressions.Regex.Replace(n.GetParent()?.Name.ToString() ?? "", "[0-9_@]+", "") + "/" + System.Text.RegularExpressions.Regex.Replace(n.Name.ToString(), "[0-9_@]+", "");
             areas[owner] = areas.GetValueOrDefault(owner) + 1;
