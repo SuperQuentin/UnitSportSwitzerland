@@ -307,7 +307,11 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
             + $"{RenderingServer.GetRenderingInfo(RenderingServer.RenderingInfo.TotalPrimitivesInFrame) / 1e6:F1} M prims, "
             + $"{RenderingServer.GetRenderingInfo(RenderingServer.RenderingInfo.TotalDrawCallsInFrame)} draws, "
             + (Resolution is { } dyn ? $"resolution {dyn.Scale * 100:F0} %, " : "")
-            + $"physics {Engine.PhysicsTicksPerSecond} Hz");
+            + $"physics {Engine.PhysicsTicksPerSecond} Hz, "
+            + $"{Performance.GetMonitor(Performance.Monitor.Physics3DActiveObjects):F0} active bodies, "
+            + $"{Performance.GetMonitor(Performance.Monitor.Physics3DCollisionPairs):F0} pairs, "
+            + $"{Performance.GetMonitor(Performance.Monitor.Physics3DIslandCount):F0} islands, "
+            + $"{Performance.GetMonitor(Performance.Monitor.TimePhysicsProcess) * 1000:F1} ms");
         Array.Clear(_load);
     }
 
