@@ -507,6 +507,31 @@ public class SignalPlanTests(ITestOutputHelper output)
     }
 
     /// <summary>
+    /// #1192 (J21 in the test region, its approach from the ramps): a lone bike lane into a box on one arm, both pockets on every
+    /// arm, so the oncoming arm's car group goes straight on only. The box's riders turning left give way to those through cars
+    /// (a permissive pair), but the through cars give way to nobody: no flasher beside them (it had one with nothing on its plate).
+    /// Every car flasher left warns its turns of someone.
+    /// </summary>
+    [Fact]
+    public void BoxRidersTurningLeft_GiveTheOncomingThroughCarsNoFlasher()
+    {
+        var plan = SignalPlan.Build([Arm(N, true, true), Arm(E, true, true), Arm(S, true, true) with { RiderAll = true, RiderBox = true },
+            Arm(W, true, true)], 7);
+        AssertValid(plan);
+        int box = plan.Groups.FindIndex(g => g.Kind == SignalGroupKind.Bike && g.Arm == S);
+        Assert.True(SignalPlan.BoxRiders(plan.Groups[box]));
+        int through = Group(plan, SignalGroupKind.Car, N);
+        Assert.Equal(SignalMoves.Through, plan.Groups[through].Moves);
+        var conflicts = plan.Conflicts();
+        Assert.Equal(SignalPlan.Conflict.Permissive, conflicts[box, through]);
+        Assert.False(plan.GivesWayTo(through, box, conflicts));
+        Assert.DoesNotContain(plan.Groups, g => g.Kind == SignalGroupKind.Flasher && g.Qualifies == through);
+        for (int f = 0; f < plan.Groups.Count; f++)
+            if (plan.Groups[f].Kind == SignalGroupKind.Flasher && plan.Groups[plan.Groups[f].Qualifies].Kind == SignalGroupKind.Car)
+                Assert.NotEqual(SignalPlate.None, plan.PlateOf(f).Plate);
+    }
+
+    /// <summary>
     /// Geneva's 10-arm node at LV95 2500974,1117838 (#1030): split phasing ran its 9 approaches one by one, 5 s greens, to 157 s
     /// once timed from conflict times. 120 s is the legal maximum (the user): approaches that never conflict share a phase.
     /// </summary>

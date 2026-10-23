@@ -36,6 +36,37 @@ public partial class Traffic
         public bool LeadingIn;
     }
 
+    /// <summary>
+    /// The first rider leaving its bike lane for the cars' left-turn path (#1192, for <c>--trafficcheck</c>): where it rode across
+    /// its lane (m right of its line) as its lead-in began, 30 and 10 m before the path, the path's start, whether it stopped at a red
+    /// and the group it crossed on.
+    /// </summary>
+    public sealed class CarLeftTrace
+    {
+        internal object? Rider;
+        public bool Found => Rider is not null;
+        public float SeenAt, LaneLateral = float.NaN, At55 = float.NaN, At30 = float.NaN, At10 = float.NaN, PathOffset;
+        public bool StoppedAtRed;
+        public string? Crossed;
+        /// <summary>Forgets a rider that crossed without standing at its red: the trace waits for one that does.</summary>
+        public void Reset()
+        {
+            Rider = null;
+            (SeenAt, LaneLateral, At55, At30, At10, PathOffset, StoppedAtRed, Crossed) = (0f, float.NaN, float.NaN, float.NaN, float.NaN, 0f, false, null);
+        }
+    }
+    public readonly CarLeftTrace CarLeft = new();
+    /// <summary>The probe's junction: <see cref="CarLeft"/> traces only a rider within 100 m of it.</summary>
+    public Vector3? CarLeftNear;
+
+    /// <summary><c>--ride-trace DEG</c>: <see cref="CarLeft"/> traces only a rider heading that way (bearing from north), within 30 deg.</summary>
+    private static readonly float? RideTraceBearing = CmdArgs.Value("--ride-trace") is { } rb
+        && float.TryParse(rb, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float deg) ? deg : null;
+
+    /// <summary>The traced rider (<see cref="CarLeft"/>) where it stands at its red, for the probe's picture; null otherwise.</summary>
+    public (Vector3 Pos, Vector3 Dir)? CarLeftAtRed() => CarLeft.Rider is SlowMover { Holding: true } r && r.Vel.Length() < 0.3f && CarLeft.StoppedAtRed && CarLeft.Crossed is null
+        ? (r.Head, r.Route.At(r.Route.Arc).Dir) : null;
+
     /// <summary>What riders did, for <c>--trafficcheck --mover rider</c> (#1056).</summary>
     public sealed class RiderCounts
     {
@@ -59,6 +90,18 @@ public partial class Traffic
 
     /// <summary>A rider moves over to its junction path's first lane (a left-turn bike lane, the kerbside car lane) over these last metres.</summary>
     private const float RideLeadIn = 30f;
+
+    /// <summary>
+    /// A rider turning left on a cars' junction path (no left-turn bike lane or box of its own, or riding in the car lane, #1192: "bikes turning
+    /// left take the car lane") moves over earlier, over these last metres, before the pocket opens (within <see cref="RidePlan"/>).
+    /// </summary>
+    private const float RideLeadInCar = 55f;
+
+    /// <summary><c>--ride-turns L,T,R</c> (#1192, for a probe): how riders share left, straight on and right (their destinations ignored).</summary>
+    private static readonly float[]? RideTurns = CmdArgs.Value("--ride-turns") is { } rt
+        && rt.Split(',').Select(x => float.TryParse(x, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float f) ? f : -1f).ToArray() is { Length: 3 } t
+        && t.All(f => f >= 0f) && t.Sum() > 0f ? t : null;
+    private readonly List<(long Key, SignalMoves Move)> _rideExits = new();
 
     /// <summary>
     /// The ride graph (on a worker thread): bike lanes, bike paths, cycleways, <c>JPTH</c> bike paths, roads riders share, in
@@ -140,22 +183,40 @@ public partial class Traffic
     /// </summary>
     private float RideTarget(SlowMover m)
     {
+        static bool Heading(SlowMover m)
+        {
+            if (RideTraceBearing is not { } want) return true;
+            var d = m.Route.At(m.Route.Arc).Dir;
+            float bearing = Mathf.RadToDeg(Mathf.Atan2(d.X, -d.Z));
+            return Mathf.Abs(Mathf.Wrap(bearing - want, -180f, 180f)) < 30f;
+        }
         var (edge, forward) = (m.Route.Edge, m.Route.Forward);
         var way = LaneGraph.RideOf(edge);
         // the path ahead, and how far
         var legs = m.Route.Legs;
         JunctionPathInfo? path = null;
+        bool carPath = false;
         float to = edge.Length - m.Route.Arc;
         if (edge.Path is null)
-            for (int i = m.Route.Leg + 1; i < legs.Count && to < RideLeadIn + 15f; i++)
+            for (int i = m.Route.Leg + 1; i < legs.Count && to < RideLeadInCar + 5f; i++)
             {
-                if (legs[i].Edge.Path is { } p) { path = p; break; }
+                if (legs[i].Edge.Path is { } p) { path = p; carPath = LaneGraph.RideOf(legs[i].Edge)?.Bike is null; break; }
                 if (legs[i].Edge.Connector) break;
                 to += legs[i].Edge.Length;
             }
         float lateral = LaneGraph.RideLateral(edge, way, forward, m.Route.Arc, path?.Move ?? SignalMoves.None);
-        bool leading = path is not null && to < RideLeadIn;
-        if (leading) lateral = Mathf.Lerp(lateral, path!.FromOffset, Mathf.Clamp((RideLeadIn - to) / (RideLeadIn - 5f), 0f, 1f));
+        // (a left on the cars' path, into the left-turn lane before its pocket opens: earlier, #1192)
+        float leadIn = path is not null && carPath && path.Move == SignalMoves.Left ? RideLeadInCar : RideLeadIn;
+        bool leading = path is not null && to < leadIn;
+        if (path is { Move: SignalMoves.Left } && leadIn == RideLeadInCar && (CarLeft.Rider == m || CarLeft.Rider is null && to >= 25f && Heading(m)
+            && CarLeftNear is { } near && MathX.Flat(m.Head - near).Length() < 100f))
+        {
+            if (CarLeft.Rider is null) (CarLeft.Rider, CarLeft.PathOffset, CarLeft.LaneLateral, CarLeft.SeenAt) = (m, path.FromOffset, lateral, to);
+            if (to <= 55f && float.IsNaN(CarLeft.At55)) CarLeft.At55 = m.Lateral;
+            if (to <= 30f && float.IsNaN(CarLeft.At30)) CarLeft.At30 = m.Lateral;
+            if (to <= 10f && float.IsNaN(CarLeft.At10)) CarLeft.At10 = m.Lateral;
+        }
+        if (leading) lateral = Mathf.Lerp(lateral, path!.FromOffset, Mathf.Clamp((leadIn - to) / (leadIn - 5f), 0f, 1f));
         if (m.State is RiderState st) st.LeadingIn = leading;
         return lateral;
     }
@@ -272,6 +333,11 @@ public partial class Traffic
                 if (plan.Groups[group].Kind == SignalGroupKind.Bike && cars >= 0 && plan.State(cars, now) is SignalAspect.Red or SignalAspect.RedAmber)
                     Riders.Leads++;
                 if (turn == SignalMoves.Left && plan.Groups[group].Kind == SignalGroupKind.Bike) Riders.BikeLefts++;
+                if (CarLeft.Rider == m && CarLeft.Crossed is null)
+                {
+                    if (CarLeft.StoppedAtRed) CarLeft.Crossed = $"{plan.Groups[group].Kind} {plan.Groups[group].Moves}";
+                    else CarLeft.Reset();
+                }
             }
         }
         if (toLine > RideLook || toLine < -0.5f) return float.MaxValue;
@@ -288,6 +354,7 @@ public partial class Traffic
         }
         st.Clearing = false;
         if (!st.WasAtRed) { st.WasAtRed = true; Riders.RedStops++; }
+        if (CarLeft.Rider == m && m.Vel.Length() < 0.3f) CarLeft.StoppedAtRed = true;
         m.Holding = true;
         return Mathf.Sqrt(2f * RideBrake * Mathf.Max(0f, stopAt));
     }
@@ -352,27 +419,33 @@ public partial class Traffic
             var kind = side == RideSide.Track ? JunctionPathKind.Path : JunctionPathKind.Bike;
             // a rider from an endpoint (#1134): the move on its shortest way to its destination, by any path's (its own kind's may
             // end elsewhere than the cars' its way was found along)
-            var wanted = TowardGoal(m, options)?.Edge.Path?.Move;
-            int tier = 3;
-            foreach (var o in options)
-                if (o.Edge.Path is not null) tier = Math.Min(tier, PathTier(o.Edge, kind, side));
+            var wanted = RideTurns is null ? TowardGoal(m, options)?.Edge.Path?.Move : null;
             for (int i = options.Count - 1; i >= 0; i--)
-                if (options[i].Edge.Path is null || PathTier(options[i].Edge, kind, side) != tier) options.RemoveAt(i);
-            // one exit at random (straight on twice as likely), or the one on its way to its destination (#1134); then the lane
-            // nearest the rider's line
+                if (options[i].Edge.Path is null) options.RemoveAt(i);
+            // one exit at random (straight on twice as likely), or the one on its way to its destination (#1134); then, for that
+            // exit, the best kind of path (the riders' own where they have one, else the cars': riders turning left take the car
+            // lane where no left-turn bike lane or box serves them, #1192), the lane nearest the rider's line
+            // (each exit once, whatever kinds of path lead there)
+            var exits = _rideExits;
+            exits.Clear();
+            foreach (var o in options)
+                if (!exits.Exists(x => x.Key == o.Edge.KeyEnd)) exits.Add((o.Edge.KeyEnd, o.Edge.Path!.Move));
             float total = 0f;
-            foreach (var o in options) total += ExitWeight(o.Edge);
+            foreach (var x in exits) total += ExitWeight(x.Move);
             float pick = (float)_rng.NextDouble() * total;
-            long exit = options[^1].Edge.KeyEnd;
-            foreach (var o in options) if ((pick -= ExitWeight(o.Edge)) <= 0f) { exit = o.Edge.KeyEnd; break; }
+            long exit = exits[^1].Key;
+            foreach (var x in exits) if ((pick -= ExitWeight(x.Move)) <= 0f) { exit = x.Key; break; }
             if (wanted is { } move)
                 foreach (var o in options)
                     if (o.Edge.Path!.Move == move) { exit = o.Edge.KeyEnd; break; }
+            int tier = 3;
+            foreach (var o in options)
+                if (o.Edge.KeyEnd == exit) tier = Math.Min(tier, PathTier(o.Edge, kind, side));
             (LaneEdge, bool)? best = null;
             float bestGap = float.MaxValue;
             foreach (var o in options)
             {
-                if (o.Edge.KeyEnd != exit) continue;
+                if (o.Edge.KeyEnd != exit || PathTier(o.Edge, kind, side) != tier) continue;
                 float gap = Mathf.Abs(o.Edge.Path!.FromOffset - m.Lateral);
                 if (gap < bestGap) (best, bestGap) = (o, gap);
             }
@@ -396,7 +469,9 @@ public partial class Traffic
             if (side == RideSide.Road) return bike is null ? 0 : 1;
             return bike == kind ? 0 : bike is not null ? 1 : 2;
         }
-        static float ExitWeight(LaneEdge e) => e.Path!.Move == SignalMoves.Through ? 2f : 1f;
+        // (--ride-turns L,T,R: a probe's weights, #1192)
+        static float ExitWeight(SignalMoves move) => RideTurns is { } w
+            ? w[move == SignalMoves.Left ? 0 : move == SignalMoves.Through ? 1 : 2] : move == SignalMoves.Through ? 2f : 1f;
         static float RoadWeight((LaneEdge Edge, bool Forward) o) =>
             LaneGraph.RideOf(o.Edge)?.Side(o.Forward) is RideSide.Lane or RideSide.Track or RideSide.Way ? 3f : 1f;
     }
