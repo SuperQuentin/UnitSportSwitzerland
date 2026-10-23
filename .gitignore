@@ -112,3 +112,6 @@ tools/deploy.env
 # the layout service run from its folder (#1186)
 tools/LayoutService/layouts-data/
 tools/LayoutService/test_output/
+
+# Nakama keys (#1121): tools/nakama/up.sh writes them; never committed
+/tools/nakama/.env

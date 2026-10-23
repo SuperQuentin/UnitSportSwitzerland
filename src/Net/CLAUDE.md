@@ -39,6 +39,7 @@ touches its topic; search with `grep -ril <word> docs/notes/net`.
 - `arrival` — The server decides where a joining player starts (`--spawn E,N`) and whether players may teleport (`--no-teleport`): `World/Arrival.Rules` on accept, the client's loading screen waits for it; `--at` still wins; `tools/arrivalcheck.sh` (#799)
 - `sleepers` — A player who leaves lies asleep where they were (saved), and wakes there on return; identity is a per-install ECDSA key proven on join, never the name (#644)
 - `server-update` — `/update` (admin): newest GitHub release fetched while players play, then kick all and quit; `start-server.sh run` switches `current` and restarts (#730); automatic every 10 min, restart only once empty, admins told (`ServerAutoUpdate`, #1088)
+- `nakama` — Nakama in Docker (`tools/nakama/up.sh`, `check.sh`): accounts and `course:<id>` leaderboards for the trainer edition; only race servers write results (`submit_result` with the http key, a player session gets 403), the ride stays on ENet (#1121)
 - `console-link` — `World/ConsoleLink`: join for the chat only from a client of any version, no body, one's own name and rights (admins.json, /login), two RPCs that never change; Multiplayer › console button or the refusal banner (#1088)
 
 ## Commands
