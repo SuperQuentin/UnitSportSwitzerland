@@ -124,7 +124,10 @@ public sealed class PsxSpuVoice : IChipVoice
             {
                 float step = 1 << (12 - shift);
                 float s1 = _s1, s2 = _s2, err = 0;
-                for (int i = 0; i < BlockLen; i++)
+                int i = 0;
+                // the error only grows: a try already as bad as the best cannot win and stops there (the same
+                // choice for a fraction of the work: the search was a quarter of the main thread in a kart, #1112)
+                for (; i < BlockLen && err < bestErr; i++)
                 {
                     float pred = s1 * k1 + s2 * k2;
                     float q = MathF.Round((_in[i] - pred) / step);
@@ -135,7 +138,7 @@ public sealed class PsxSpuVoice : IChipVoice
                     _try[i] = r;
                     s2 = s1; s1 = r;
                 }
-                if (err < bestErr)
+                if (i == BlockLen && err < bestErr)
                 {
                     bestErr = err;
                     Array.Copy(_try, _best, BlockLen);
